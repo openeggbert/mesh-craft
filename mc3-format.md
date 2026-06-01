@@ -1,13 +1,13 @@
-# N3D Model Source Format
+# MC3 Model Source Format
 
 Version: 0.1 draft  
 Format type: human-readable source format for procedural / constructive 3D models  
-Recommended file extension: `.n3d.yaml` or `.n3d.yml`  
+Recommended file extension: `.mc3.yaml` or `.mc3.yml`  
 Recommended compiled/runtime export: `.glb` / `.gltf`
 
 ## 1. Purpose
 
-N3D is a simple YAML-based source format for describing 3D models as editable objects rather than only as final triangle meshes.
+MC3 is a simple YAML-based source format for describing 3D models as editable objects rather than only as final triangle meshes.
 
 It is intended for models built from primitives, constructive solid geometry, reusable parts, materials, textures, transforms, groups, and object actions.
 
@@ -20,17 +20,17 @@ Typical use cases:
 - editable source models that can later be compiled to meshes,
 - runtime-interactive objects such as doors, drawers, elevators, buttons, chairs, crates, and moving platforms.
 
-N3D is not meant to replace glTF as a final runtime asset format. Instead, N3D should be treated as a source format that can be compiled or exported to glTF/GLB, CNA/Nova-3D internal meshes, or another runtime representation.
+MC3 is not meant to replace glTF as a final runtime asset format. Instead, MC3 should be treated as a source format that can be compiled or exported to glTF/GLB, CNA/Nova-3D internal meshes, or another runtime representation.
 
 Recommended pipeline:
 
 ```text
-.n3d.yaml  ->  N3D compiler/importer  ->  mesh / scene graph / GLB
+.mc3.yaml  ->  MC3 compiler/importer  ->  mesh / scene graph / GLB
 ```
 
 ## 2. Design Goals
 
-N3D should be:
+MC3 should be:
 
 - readable by humans,
 - easy to generate by tools and AI,
@@ -41,7 +41,7 @@ N3D should be:
 - compatible with future export to glTF/GLB,
 - suitable as an input format for Nova-3D.
 
-N3D should avoid:
+MC3 should avoid:
 
 - storing low-level rendering state,
 - storing backend-specific details such as OpenGL, Vulkan, or DirectX handles,
@@ -51,7 +51,7 @@ N3D should avoid:
 ## 3. Minimal Example
 
 ```yaml
-n3d: 0.1
+mc3: 0.1
 model: House
 
 materials:
@@ -77,10 +77,10 @@ objects:
 
 ## 4. Top-Level Structure
 
-A N3D file contains a single top-level YAML object.
+An MC3 file contains a single top-level YAML object.
 
 ```yaml
-n3d: 0.1
+mc3: 0.1
 model: ExampleModel
 unit: meter
 coordinate_system: right_handed_y_up
@@ -96,7 +96,7 @@ actions: {}
 
 | Field | Type | Description |
 |---|---|---|
-| `n3d` | number/string | N3D format version. |
+| `mc3` | number/string | MC3 format version. |
 | `model` | string | Human-readable model name. |
 | `objects` | list | Main object list. |
 
@@ -111,6 +111,32 @@ actions: {}
 | `definitions` | map | Reusable object templates/prefabs. |
 | `actions` | map | Named actions affecting one or more objects. |
 | `metadata` | map | Author, license, notes, etc. |
+
+### 4.3 Metadata Keys
+
+The `metadata` field accepts any key-value pairs. Recommended keys:
+
+| Key | Type | Description |
+|---|---|---|
+| `author` | string | Name or identity of the model author. |
+| `license` | string | License identifier, e.g. `CC0`, `MIT`, `CC-BY-4.0`. |
+| `description` | string | Short human-readable description of the model. |
+| `version` | string | Model version, e.g. `1.0.0`. |
+| `created` | string | Creation date in ISO 8601 format, e.g. `2024-01-15`. |
+| `tags` | list | Searchable tags for asset libraries. |
+| `source_url` | string | URL of the original or upstream source. |
+| `notes` | string | Free-form notes for editors or importers. |
+
+Example:
+
+```yaml
+metadata:
+  author: Jane Doe
+  license: CC-BY-4.0
+  description: A simple interactive house model
+  version: 1.0.0
+  created: 2024-06-01
+```
 
 ## 5. Coordinates and Units
 
@@ -143,6 +169,10 @@ Angles are in degrees unless specified otherwise.
 angle_unit: degrees
 ```
 
+### 5.1 Rotation Order
+
+Rotation uses extrinsic XYZ Euler order: X (pitch) is applied first, then Y (yaw), then Z (roll), each around the fixed parent axes. This is equivalent to intrinsic ZYX order. Importers must use this convention to ensure consistent behavior across tools.
+
 ## 6. Object Basics
 
 Every object has a `type`. Most objects may also have `name`, `position`, `rotation`, `scale`, `material`, `visible`, `collision`, and `tags`.
@@ -168,7 +198,7 @@ Every object has a `type`. Most objects may also have `name`, `position`, `rotat
 | `name` | string | Unique or human-readable name. Recommended for interactive objects. |
 | `id` | string | Optional stable unique ID. Useful for tools and actions. |
 | `position` | vec3 | Local position. |
-| `rotation` | vec3 | Local Euler rotation in degrees. |
+| `rotation` | vec3 | Local Euler rotation in degrees (extrinsic XYZ order). |
 | `scale` | vec3/number | Local scale. |
 | `pivot` | vec3 | Pivot point for rotation/scale, in local coordinates. |
 | `material` | string | Material reference. |
@@ -176,6 +206,34 @@ Every object has a `type`. Most objects may also have `name`, `position`, `rotat
 | `collision` | string/bool/map | Collision behavior. |
 | `tags` | list | Tool/game/editor tags. |
 | `children` | list | Child objects for groups and compound objects. |
+
+### 6.2 Default Values
+
+| Field | Default |
+|---|---|
+| `position` | `[0, 0, 0]` |
+| `rotation` | `[0, 0, 0]` |
+| `scale` | `[1, 1, 1]` |
+| `pivot` | `[0, 0, 0]` |
+| `visible` | `true` |
+| `collision` | `none` |
+| `segments` (sphere, cylinder, cone) | `32` |
+| `axis` (cylinder, plane) | `y` |
+| `angle_unit` | `degrees` |
+| `coordinate_system` | `right_handed_y_up` |
+| `alpha_mode` | `opaque` |
+| `double_sided` | `false` |
+| `wrap_u` / `wrap_v` | `repeat` |
+| `filter` | `linear` |
+| `color_space` | `srgb` |
+| `uv.mode` | `default` |
+| `uv.scale` | `[1, 1]` |
+| `uv.offset` | `[0, 0]` |
+| `uv.rotation` | `0` |
+| `relative` (action) | depends on action type |
+| `trigger` (action) | `manual` |
+| `trigger_on` (area) | `enter` |
+| `state` (object) | first listed state, or none |
 
 ## 7. Primitive Objects
 
@@ -205,6 +263,8 @@ Shortcut for a box with equal dimensions.
   size: 1
   material: wood
 ```
+
+`cube` is a true alias for `box` with `size: [n, n, n]`. The compiler treats a `cube` as fully equivalent to a `box` with three equal side lengths. There is no behavioral or semantic difference between a `cube` with `size: 2` and a `box` with `size: [2, 2, 2]`.
 
 ### 7.3 Sphere
 
@@ -240,9 +300,13 @@ Fields:
 | Field | Type | Description |
 |---|---|---|
 | `radius` | number | Radius. |
-| `height` | number | Height along local Y axis by default. |
+| `height` | number | Height along the chosen axis. Default axis is Y. |
 | `segments` | integer | Optional mesh quality. |
 | `axis` | string | Optional: `x`, `y`, or `z`. Default: `y`. |
+
+The `axis` field is a mesh-generation hint: it selects which local axis runs along the cylinder's length during geometry generation. It does **not** apply a rotation transform. The generated mesh is oriented so that the specified axis is the height axis.
+
+`axis` and `rotation` may be combined freely. `axis` controls how the mesh is generated internally; `rotation` is then applied as a standard object transform on top of the generated geometry.
 
 ### 7.5 Cone
 
@@ -269,7 +333,7 @@ A plane is usually generated as a flat mesh.
 
 ### 7.7 Mesh Reference
 
-N3D may reference external mesh assets for complex objects.
+MC3 may reference external mesh assets for complex objects.
 
 ```yaml
 - type: mesh
@@ -279,7 +343,7 @@ N3D may reference external mesh assets for complex objects.
   material_override: varnished_wood
 ```
 
-This allows simple N3D objects and imported artist-made assets to coexist.
+This allows simple MC3 objects and imported artist-made assets to coexist.
 
 ## 8. Groups and Hierarchy
 
@@ -422,7 +486,7 @@ Example for cylinder:
 
 ## 12. Constructive Solid Geometry: CSG
 
-N3D supports CSG operations for creating objects from primitives.
+MC3 supports CSG operations for creating objects from primitives.
 
 Required CSG operations:
 
@@ -470,7 +534,7 @@ Subtracts one or more child shapes from the first child.
       name: DoorHole
       size: [1, 2.2, 0.5]
       position: [0, 1.1, 0]
-      material: cutter
+      role: cutter
       visible: false
 ```
 
@@ -479,6 +543,8 @@ Meaning:
 ```text
 result = WallBase - DoorHole
 ```
+
+The `role: cutter` field explicitly marks an object as a subtraction volume. This is a reserved role; importers must treat any object with `role: cutter` as a CSG subtracter regardless of its material name. Setting `visible: false` on cutter objects is recommended. The material assigned to a cutter object has no effect on the result.
 
 ### 12.3 Intersection
 
@@ -507,7 +573,7 @@ Recommended behavior:
 
 - CSG children should be evaluated in local coordinates.
 - Materials from the first child should be used by default.
-- Cutter objects should usually set `visible: false`.
+- Cutter objects should be identified by `role: cutter` and should usually also set `visible: false`.
 - CSG results should be cacheable.
 
 ## 13. Reusable Definitions / Prefabs
@@ -547,6 +613,14 @@ objects:
     position: [3, 0, 2]
     rotation: [0, 90, 0]
 ```
+
+### 13.1 Instance Field Override Rules
+
+Fields set directly on a `type: instance` node override the corresponding fields from the definition. If a field is not set on the instance node, the value from the definition is used.
+
+Fields that can be overridden on an instance: `position`, `rotation`, `scale`, `material`, `visible`, `collision`, `tags`, `state`.
+
+When `collision` is set on an instance node, it replaces any collision behavior defined inside the definition. The override applies to the instance as a whole and is intended to control the top-level physics body of the instanced object. Importers may propagate the collision override to the root-level children of the definition if the definition does not have a single top-level physics object.
 
 ## 14. Pivots
 
@@ -741,6 +815,10 @@ actions:
         duration: 0.5
 ```
 
+`toggle` is syntactic sugar over `set_state`. Each invocation of the toggle action advances the object to the next listed state in order, cycling back to the first state after the last. It is equivalent to calling `set_state` with the next state name.
+
+When a `toggle` action and a `states` block are both present on the same object, the toggle cycles through the states declared in the object's `states` map. The two mechanisms are complementary: use `states` on the object to declare named configurations (see section 18), and use a `toggle` action to cycle through them with a single call. Direct `set_state` actions remain available for explicit state targeting. Importers must not treat `toggle` and `states` as conflicting; they are independent layers of the same state machine.
+
 ## 17. Triggers
 
 Triggers are optional. They describe when an action should run.
@@ -812,6 +890,8 @@ actions:
     duration: 0.6
 ```
 
+`states` declares named configurations for an object. Each state is a partial set of object fields that override the base values when the object is in that state. A `toggle` action (section 16.9) is syntactic sugar that cycles through these states. For interactive objects with exactly two configurations (open/closed, on/off), either approach is acceptable; for objects with three or more configurations, use `states` with explicit `set_state` actions or a single `toggle`.
+
 ## 19. Collision and Physics
 
 Simple collision examples:
@@ -867,10 +947,21 @@ An invisible area can trigger actions.
     - open_front_door
 ```
 
+### 20.1 Area Fields
+
+| Field | Type | Description |
+|---|---|---|
+| `shape` | string | Shape of the area volume: `box`, `sphere`, or `cylinder`. |
+| `size` | vec3 / number / [number, number] | Dimensions of the area. For `box`: vec3 `[w, h, d]`. For `sphere`: number (radius). For `cylinder`: `[radius, height]`. |
+| `trigger_actions` | list | List of action names to invoke when the trigger fires. Actions are called in list order. |
+| `trigger_on` | string | When to fire: `enter` (default), `exit`, or `stay`. |
+| `collision_layer` | string | Collision layer this area belongs to. |
+| `collision_mask` | list | Layers whose objects can activate this area. If omitted, all layers activate the area. |
+
 ## 21. Complete House Example
 
 ```yaml
-n3d: 0.1
+mc3: 0.1
 model: InteractiveHouse
 unit: meter
 coordinate_system: right_handed_y_up
@@ -902,9 +993,6 @@ materials:
     alpha_mode: blend
     roughness: 0.05
 
-  cutter:
-    base_color: [1, 0, 1, 1]
-
 objects:
   - type: difference
     name: FrontWallWithDoorHole
@@ -922,7 +1010,7 @@ objects:
         name: DoorHole
         size: [1.1, 2.2, 0.5]
         position: [0, 1.1, -3]
-        material: cutter
+        role: cutter
         visible: false
 
   - type: box
@@ -1021,7 +1109,7 @@ actions:
 
 ## 22. Importer / Compiler Behavior
 
-A N3D importer should perform these steps:
+An MC3 importer should perform these steps:
 
 1. Parse YAML.
 2. Validate top-level fields.
@@ -1036,12 +1124,34 @@ A N3D importer should perform these steps:
 11. Register actions and triggers.
 12. Export or create runtime scene objects.
 
+### 22.1 Error Handling
+
+MC3 importers must define behavior for the following error conditions:
+
+| Condition | Recommended response |
+|---|---|
+| Unknown top-level field | Warning, ignore field. |
+| Unknown object `type` | Warning, skip object. |
+| Missing required field on object | Error, skip object. |
+| `type: instance` references unknown `definition` | Error, skip instance. |
+| Action `target` references unknown object name or ID | Warning, skip action. |
+| Object references unknown material name | Warning, use default material. |
+| Material references unknown texture name | Warning, use fallback texture. |
+
+**Missing definition reference**: When a `type: instance` node references a definition name that does not exist in the `definitions` map, the importer must report an error and skip that instance. The rest of the document must continue loading.
+
+**Missing action target**: When an action's `target` references an object name or ID that does not exist in the scene, the importer must report a warning and skip that action. The rest of the document must continue loading.
+
+**Missing material reference**: When an object references a material name that is not defined in the `materials` map, the importer must report a warning and substitute a default material (for example, a flat grey diffuse material).
+
+**Missing texture reference**: When a material references a texture name that is not defined in the `textures` map, the importer must report a warning and use a fallback texture (for example, a 1×1 white pixel).
+
 ## 23. Recommended C++ Runtime Mapping
 
 Possible Nova-3D mapping:
 
 ```text
-N3D object       -> Nova3D::Node / Entity
+MC3 object       -> Nova3D::Node / Entity
 primitive        -> Nova3D::Mesh
 material         -> Nova3D::Material
 texture          -> Nova3D::Texture2D
@@ -1053,23 +1163,23 @@ collision        -> Nova3D::Collider / PhysicsBody
 Suggested classes:
 
 ```text
-N3DDocument
-N3DTextureDef
-N3DMaterialDef
-N3DObjectDef
-N3DActionDef
-N3DImporter
-N3DMeshBuilder
-N3DCSGBuilder
-N3DActionSystem
+MC3Document
+MC3TextureDef
+MC3MaterialDef
+MC3ObjectDef
+MC3ActionDef
+MC3Importer
+MC3MeshBuilder
+MC3CSGBuilder
+MC3ActionSystem
 ```
 
 ## 24. Versioning
 
-The `n3d` field should be used for compatibility.
+The `mc3` field should be used for compatibility.
 
 ```yaml
-n3d: 0.1
+mc3: 0.1
 ```
 
 Breaking changes should increase the major or minor version.
@@ -1126,13 +1236,13 @@ If an object needs actions, keep it as a separate named object.
 
 - Give names to all objects that may be animated or referenced by actions.
 - Use `id` for stable tool references if object names may change.
-- Keep CSG cutters invisible.
+- Mark CSG subtracters with `role: cutter` and set `visible: false`.
 - Keep doors, drawers, chairs, crates, and buttons separate from static CSG geometry.
 - Use pivots for rotating objects.
 - Prefer top-level material definitions over inline materials.
 - Use definitions for repeated objects.
 - Use simple primitives first; add mesh references only when needed.
-- Keep the source `.n3d.yaml` as the editable truth.
+- Keep the source `.mc3.yaml` as the editable truth.
 - Treat `.glb` as compiled/exported output.
 
 ## 28. Future Extensions
@@ -1159,7 +1269,7 @@ Possible future features:
 
 ## 29. Summary
 
-N3D is a source format for describing 3D models as editable constructive objects.
+MC3 is a source format for describing 3D models as editable constructive objects.
 
 It should support:
 
@@ -1176,7 +1286,7 @@ It should support:
 The recommended architecture is:
 
 ```text
-N3D YAML source -> Nova-3D importer/compiler -> generated meshes and scene nodes -> optional GLB export
+MC3 YAML source -> Nova-3D importer/compiler -> generated meshes and scene nodes -> optional GLB export
 ```
 
 This keeps modeling simple and human-readable while still allowing the engine to use efficient runtime assets.
