@@ -6,19 +6,22 @@
 #include "MeshCraft/Scene/PropertiesPanel.hpp"
 #include "MeshCraft/Scene/SceneHierarchyPanel.hpp"
 
-#include <Nova3D/Application.h>
+#include <Microsoft/Xna/Framework/Game.hpp>
+#include <Microsoft/Xna/Framework/GameTime.hpp>
+#include <System/Object.hpp>
 #include <memory>
 
 namespace MeshCraft {
 
-class MeshCraftApplication : public Nova3D::Application {
+class MeshCraftApplication : public Microsoft::Xna::Framework::Game {
 public:
-    explicit MeshCraftApplication(Nova3D::Context* context);
+    GetTypeNameHPP()
 
-    void Setup() override;
-    void Start() override;
-    void Stop()  override;
-    void Update(float timeStep) override;
+    MeshCraftApplication();
+
+    void LoadContent() override;
+    void Update(Microsoft::Xna::Framework::GameTime& gameTime) override;
+    void Draw(const Microsoft::Xna::Framework::GameTime& gameTime) override;
 
 private:
     Mc3::Mc3Document document_;

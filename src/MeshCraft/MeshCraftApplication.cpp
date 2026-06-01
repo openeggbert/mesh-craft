@@ -1,43 +1,42 @@
 #include "MeshCraft/MeshCraftApplication.hpp"
 
-#include <Nova3D/Nova3D.h>
-
-using namespace Nova3D;
+#include <Microsoft/Xna/Framework/Input/Keyboard.hpp>
+#include <Microsoft/Xna/Framework/Input/Keys.hpp>
+#include <System/Object.hpp>
 
 namespace MeshCraft {
 
-MeshCraftApplication::MeshCraftApplication(Nova3D::Context* context)
-    : Application(context)
-{}
+GetTypeNameCPP(MeshCraftApplication, "MeshCraft::MeshCraftApplication")
 
-void MeshCraftApplication::Setup() {
-    // TODO: configure engine settings (window title, size, etc.)
+using namespace Microsoft::Xna::Framework;
+
+MeshCraftApplication::MeshCraftApplication() {
+    getWindowProperty().setTitleProperty("Mesh Craft");
 }
 
-void MeshCraftApplication::Start() {
+void MeshCraftApplication::LoadContent() {
     document_.model = "Untitled";
 
     hierarchyPanel_  = std::make_unique<Scene::SceneHierarchyPanel>(document_);
     propertiesPanel_ = std::make_unique<Scene::PropertiesPanel>();
 
-    // TODO: set up 3D viewport camera
+    // TODO: set up 3D viewport (camera, grid, default scene)
     // TODO: load last-used document if available
 }
 
-void MeshCraftApplication::Stop() {
-    // TODO: prompt to save unsaved changes
-}
+void MeshCraftApplication::Update(GameTime& /*gameTime*/) {
+    auto ks = Input::Keyboard::GetState();
 
-void MeshCraftApplication::Update(float /*timeStep*/) {
-    auto* input  = GetContext()->GetInput();
-    auto* engine = GetContext()->GetEngine();
-
-    if (input->GetKeyDown(KEY_ESCAPE))
-        engine->Exit();
+    if (ks.IsKeyDown(Input::Keys::Escape))
+        Exit();
 
     // TODO: forward input to active editor tool
-    // TODO: render viewport
-    // TODO: render UI panels
+    // TODO: camera controls in EditorViewport
+}
+
+void MeshCraftApplication::Draw(const GameTime& /*gameTime*/) {
+    // TODO: clear viewport and render 3D scene via CNA graphics device
+    // TODO: render UI panels (hierarchy, properties, tool palette)
 }
 
 } // namespace MeshCraft

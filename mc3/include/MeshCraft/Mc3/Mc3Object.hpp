@@ -18,9 +18,9 @@ enum class ObjectType {
     Cylinder,
     Cone,
     Plane,
-    Mesh,       // external mesh reference
+    Mesh,
     Group,
-    Instance,   // reference to a definition
+    Instance,
     Union,
     Difference,
     Intersection,
@@ -41,23 +41,16 @@ public:
     std::string collision{"none"};
     std::vector<std::string> tags;
 
-    // Set when type is a primitive shape.
     std::optional<Mc3Primitive> primitive;
-
-    // Set when type is a CSG operation.
     std::optional<Mc3CsgOperation> csgOperation;
 
-    // Set when type == Instance.
-    std::string definition;
-
-    // Set when type == Mesh.
-    std::string meshSource;
+    std::string definition;      // type == Instance
+    std::string meshSource;      // type == Mesh
     std::string materialOverride;
 
-    // role: cutter marks this object as a CSG subtraction volume.
+    // role: cutter — marks this as a CSG subtraction volume
     bool isCutter{false};
 
-    // Child objects (used by Group, CSG operations).
     std::vector<std::shared_ptr<Mc3Object>> children;
 
     // TODO: states, actions, uv mapping

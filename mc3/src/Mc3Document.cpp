@@ -5,7 +5,7 @@
 namespace MeshCraft::Mc3 {
 
 Mc3Document Mc3Document::loadFromFile(const std::filesystem::path& path) {
-    // TODO: parse YAML from path using a YAML library (e.g. yaml-cpp)
+    // TODO: parse YAML from path
     // Steps: parse top-level fields, load textures, create materials,
     //        resolve definitions and instances, build object hierarchy.
     throw std::runtime_error("Mc3Document::loadFromFile not yet implemented");

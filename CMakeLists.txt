@@ -9,8 +9,7 @@ message(STATUS "Compiler: ${CMAKE_CXX_COMPILER_ID} ${CMAKE_CXX_COMPILER_VERSION}
 
 if (NOT WIN32 AND CMAKE_BINARY_DIR MATCHES "build-windows")
     message(WARNING "Building in 'build-windows' directory, but WIN32 is not set. "
-            "Make sure you used -DCMAKE_TOOLCHAIN_FILE=cmake/toolchains/mingw-w64.cmake "
-            "on a CLEAN build directory.")
+            "Make sure you used -DCMAKE_TOOLCHAIN_FILE=<toolchain> on a CLEAN build directory.")
 endif()
 
 set(CMAKE_CXX_STANDARD 23)
@@ -21,15 +20,11 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 # Graphics backend selection
 # -----------------------------------------------------------------------------
 #
-# Android and Emscripten use SDL_RENDERER only.
-# Native desktop defaults to EASYGL.
-#
-# Override on desktop with:
-#
+# Override with:
 #   cmake -S . -B build -DMESH_CRAFT_GRAPHICS_BACKEND=SDL_RENDERER
 #   cmake -S . -B build -DMESH_CRAFT_GRAPHICS_BACKEND=EASYGL
 #
-# Supported values: SDL_RENDERER, EASYGL, BGFX, VULKAN
+# Supported: SDL_RENDERER, EASYGL, BGFX, VULKAN
 # -----------------------------------------------------------------------------
 
 set(MESH_CRAFT_GRAPHICS_BACKEND "EASYGL" CACHE STRING "MeshCraft graphics backend")
@@ -50,7 +45,6 @@ endif()
 
 message(STATUS "MeshCraft graphics backend: ${MESH_CRAFT_GRAPHICS_BACKEND_UPPER}")
 
-# Configure CNA backend before add_subdirectory(../nova-3d).
 if(MESH_CRAFT_GRAPHICS_BACKEND_UPPER STREQUAL "SDL_RENDERER")
     set(CNA_BACKEND_SDL_RENDERER ON  CACHE BOOL "" FORCE)
     set(CNA_BACKEND_EASY_GL      OFF CACHE BOOL "" FORCE)
@@ -83,30 +77,23 @@ endif()
 
 set(MESH_CRAFT_BUILD_TESTING "${BUILD_TESTING}" CACHE BOOL "Build MeshCraft tests")
 
-# Suppress tests/examples from vendored dependencies.
 set(BUILD_TESTING    OFF CACHE BOOL "" FORCE)
 set(BUILD_TESTS      OFF CACHE BOOL "" FORCE)
 set(BUILD_EXAMPLES   OFF CACHE BOOL "" FORCE)
-
 set(CNA_BUILD_TESTS    OFF CACHE BOOL "" FORCE)
 set(CNA_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
-
-set(NOVA3D_BUILD_TESTS    OFF CACHE BOOL "" FORCE)
-set(NOVA3D_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
-
 set(EASY_GL_BUILD_TESTS     OFF CACHE BOOL "" FORCE)
 set(EASY_GL_BUILD_EXAMPLES  OFF CACHE BOOL "" FORCE)
 set(EASYGL_BUILD_TESTS      OFF CACHE BOOL "" FORCE)
 set(EASYGL_BUILD_EXAMPLES   OFF CACHE BOOL "" FORCE)
 
-# TODO: add_subdirectory(../sharp-runtime SharpRuntime_dep) if sharp-runtime
-# is not already pulled in transitively through Nova3D/CNA.
-
-add_subdirectory(../nova-3d Nova3D_dep)
+# CNA — XNA-like runtime (window, input, audio, graphics)
+add_subdirectory(../cna CNA_dep)
 
 set(BUILD_TESTING "${MESH_CRAFT_BUILD_TESTING}" CACHE BOOL "" FORCE)
 
-include_directories(../nova-3d/include)
+# Mc3 — MC3 format library (pure C++, no graphics dependency)
+add_subdirectory(mc3)
 
 # -----------------------------------------------------------------------------
 # Sources
@@ -114,7 +101,6 @@ include_directories(../nova-3d/include)
 
 file(GLOB_RECURSE SOURCES
         "src/MeshCraft/*.cpp"
-        "src/MeshCraft/Mc3/*.cpp"
         "src/MeshCraft/Editor/*.cpp"
         "src/MeshCraft/Scene/*.cpp"
         "src/MeshCraft/Ui/*.cpp"
@@ -146,8 +132,33 @@ target_include_directories(${_target}
 # -----------------------------------------------------------------------------
 # Link
 # -----------------------------------------------------------------------------
+#
+# CNA provides: windowing, input, audio, graphics (XNA-style API).
+# SHARP_RUNTIME provides: math (Matrix, Vector3, …) used by the CNA backend.
+# Mc3 provides: MC3 format data structures (pure C++).
+#
+# CNA and the graphics backend may have circular symbol references on Linux,
+# so wrap them in a linker group (GNU ld / Clang ld on non-Windows).
+# -----------------------------------------------------------------------------
 
-target_link_libraries(${_target} PRIVATE Nova3D)
+if(MESH_CRAFT_GRAPHICS_BACKEND_UPPER STREQUAL "SDL_RENDERER")
+    set(_cna_backend_target cna_backend_graphics_sdl_renderer)
+elseif(MESH_CRAFT_GRAPHICS_BACKEND_UPPER STREQUAL "EASYGL")
+    set(_cna_backend_target cna_backend_graphics_easygl)
+elseif(MESH_CRAFT_GRAPHICS_BACKEND_UPPER STREQUAL "BGFX")
+    set(_cna_backend_target cna_backend_graphics_bgfx)
+elseif(MESH_CRAFT_GRAPHICS_BACKEND_UPPER STREQUAL "VULKAN")
+    set(_cna_backend_target cna_backend_graphics_vulkan)
+endif()
+
+if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang" AND NOT WIN32 AND NOT EMSCRIPTEN AND NOT ANDROID)
+    target_link_libraries(${_target} PRIVATE
+        -Wl,--start-group CNA ${_cna_backend_target} -Wl,--end-group
+        SHARP_RUNTIME
+        Mc3)
+else()
+    target_link_libraries(${_target} PRIVATE CNA ${_cna_backend_target} SHARP_RUNTIME Mc3)
+endif()
 
 # -----------------------------------------------------------------------------
 # Windows / MinGW runtime

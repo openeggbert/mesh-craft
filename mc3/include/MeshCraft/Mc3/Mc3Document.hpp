@@ -12,7 +12,7 @@
 
 namespace MeshCraft::Mc3 {
 
-// Top-level container for an MC3 model file.
+// Top-level container for an MC3 model file (.mc3.yaml).
 class Mc3Document {
 public:
     std::string version{"0.1"};
