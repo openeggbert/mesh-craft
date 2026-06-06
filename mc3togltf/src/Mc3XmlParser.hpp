@@ -11,8 +11,6 @@ class Mc3XmlParser {
 public:
     MeshCraft::Mc3::Mc3Document parse(const std::filesystem::path& path);
 
-private:
-    using XMLElement = void; // forward-declared to avoid tinyxml2 in header
 };
 
 } // namespace mc3togltf
