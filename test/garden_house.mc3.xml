@@ -349,12 +349,21 @@
          ROOF  (triangular cross-section extruded along Z)
          Path starts at z=-4.3 (front eave) and ends at z=+4.3 (rear eave).
     ============================================================ -->
+    <!--
+      Roof: triangular prism along Z axis.
+      For a Z-path the frame maps  cs.X → world.Y  and  cs.Y → world.(-X).
+      World points at base y=6.28 (offset relative to path start at y=6.28):
+        bottom-left  world(-6.5, 0) → cs(cx=0,   cy=6.5)
+        peak         world( 0, 2.82) → cs(cx=2.82, cy=0)
+        bottom-right world( 6.5, 0) → cs(cx=0,   cy=-6.5)
+      Order must be CW in CS space → CCW in world → outward normals.
+    -->
     <extrude name="Roof" material="roof_tile"
              position="0 6.28 -4.3" smooth="false" caps="true">
       <cross_section type="custom">
-        <point x="-6.5" y="0.0"/>
-        <point x=" 6.5" y="0.0"/>
-        <point x=" 0.0" y="2.82"/>
+        <point x="0"    y=" 6.5"/>
+        <point x="2.82" y=" 0.0"/>
+        <point x="0"    y="-6.5"/>
       </cross_section>
       <path type="line" axis="z" length="8.6"/>
     </extrude>
@@ -367,13 +376,16 @@
 
     <!-- ============================================================
          CHIMNEY  (right-rear quadrant, punches through roof)
+         At x=3.2, roof height ≈ 7.71 m; shaft tops out at 7.85 m
+         → chimney sticks ~0.14 m above roof slope there.
+         Cap slab and pot add the visual height.
     ============================================================ -->
-    <box name="ChimneyShaft" size="1.0 5.0 1.0"
-         position="3.2 6.3 2.0" material="brick_chimney"/>
+    <box name="ChimneyShaft" size="1.0 5.4 1.0"
+         position="3.2 5.00 2.0" material="brick_chimney"/>
     <box name="ChimneyCapSlab" size="1.22 0.18 1.22"
-         position="3.2 8.86 2.0" material="concrete_dark"/>
-    <cylinder name="ChimneyPot" radius="0.24" height="0.55" segments="12"
-              material="brick_chimney" position="3.2 9.12 2.0"/>
+         position="3.2 7.74 2.0" material="concrete_dark"/>
+    <cylinder name="ChimneyPot" radius="0.24" height="0.50" segments="12"
+              material="brick_chimney" position="3.2 7.99 2.0"/>
 
     <!-- ============================================================
          BALCONY  (first floor, front facade, centered)
