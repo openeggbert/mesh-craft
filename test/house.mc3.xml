@@ -1,0 +1,53 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<mc3 version="0.1" model="House">
+
+  <environment>
+    <background color="0.5 0.7 1.0"/>
+    <fog mode="linear" color="0.5 0.7 1.0" start="50" end="200"/>
+  </environment>
+
+  <lights>
+    <ambient color="0.3 0.3 0.4" brightness="0.5"/>
+    <directional name="Sun" color="1.0 0.95 0.8" brightness="2.0" direction="-0.5 -1.0 -0.5" cast_shadows="true"/>
+  </lights>
+
+  <cameras>
+    <camera name="MainCamera" type="perspective" position="8 5 12" target="0 1 0" fov="60" near="0.1" far="500"/>
+  </cameras>
+
+  <materials>
+    <material id="brick" roughness="0.8" metallic="0.0">
+      <base_color>0.8 0.2 0.1 1.0</base_color>
+    </material>
+    <material id="stone" roughness="0.7" metallic="0.0">
+      <base_color>0.55 0.55 0.5 1.0</base_color>
+    </material>
+    <material id="roof" roughness="0.6" metallic="0.0">
+      <base_color>0.25 0.15 0.1 1.0</base_color>
+    </material>
+    <material id="ground" roughness="0.9" metallic="0.0">
+      <base_color>0.3 0.5 0.2 1.0</base_color>
+    </material>
+  </materials>
+
+  <objects>
+
+    <group name="House">
+      <box name="FrontWall"  size="10 4 0.3" position="0 2 -5"   material="brick"/>
+      <box name="BackWall"   size="10 4 0.3" position="0 2  5"   material="brick"/>
+      <box name="LeftWall"   size="0.3 4 10" position="-5 2  0"  material="brick"/>
+      <box name="RightWall"  size="0.3 4 10" position=" 5 2  0"  material="brick"/>
+      <box name="Floor"      size="10 0.2 10" position="0 0 0"   material="stone"/>
+      <box name="Roof"       size="11 0.4 11" position="0 4.2 0" material="roof"/>
+    </group>
+
+    <cylinder name="LeftColumn"  radius="0.3" height="4" position="-4 2 -5" material="stone"/>
+    <cylinder name="RightColumn" radius="0.3" height="4" position=" 4 2 -5" material="stone"/>
+
+    <sphere name="Ornament" radius="0.4" segments="24" position="0 5 0" material="stone"/>
+
+    <plane name="Ground" size="50 50" axis="y" position="0 -0.1 0" material="ground"/>
+
+  </objects>
+
+</mc3>
