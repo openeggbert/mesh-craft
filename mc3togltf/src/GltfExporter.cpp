@@ -34,7 +34,18 @@ struct ExportCtx {
     tinygltf::Model& model;
     const std::unordered_map<std::string, int>& matNameToIdx;
     const std::map<std::string, std::shared_ptr<Mc3Object>>& definitions;
+    float unitScale{1.0f};           // conversion factor to metres
+    std::filesystem::path basePath;  // directory of source .mc3.xml (for OBJ paths)
 };
+
+static float unitScaleFactor(const std::string& unit) {
+    if (unit == "centimeter")  return 0.01f;
+    if (unit == "millimeter")  return 0.001f;
+    if (unit == "inch")        return 0.0254f;
+    if (unit == "foot")        return 0.3048f;
+    if (unit == "kilometer")   return 1000.0f;
+    return 1.0f; // "meter" or unknown
+}
 
 // Forward declaration
 static int buildNode(ExportCtx& ctx, const Mc3Object& obj);
@@ -195,11 +206,27 @@ static int buildMaterial(tinygltf::Model& model,
             pbr.baseColorTexture.texCoord = 0;
         }
     }
+    if (!mat.metallicRoughnessTexture.empty()) {
+        auto it = texIdx.find(mat.metallicRoughnessTexture);
+        if (it != texIdx.end()) {
+            pbr.metallicRoughnessTexture.index    = it->second;
+            pbr.metallicRoughnessTexture.texCoord = 0;
+        }
+    }
     if (!mat.normalTexture.empty()) {
         auto it = texIdx.find(mat.normalTexture);
         if (it != texIdx.end()) {
             m.normalTexture.index    = it->second;
             m.normalTexture.texCoord = 0;
+            m.normalTexture.scale    = mat.normalScale;
+        }
+    }
+    if (!mat.occlusionTexture.empty()) {
+        auto it = texIdx.find(mat.occlusionTexture);
+        if (it != texIdx.end()) {
+            m.occlusionTexture.index    = it->second;
+            m.occlusionTexture.texCoord = 0;
+            m.occlusionTexture.strength = mat.occlusionStrength;
         }
     }
     if (!mat.emissiveTexture.empty()) {
@@ -219,7 +246,7 @@ static int buildMaterial(tinygltf::Model& model,
     std::string am = mat.alphaMode;
     std::transform(am.begin(), am.end(), am.begin(), ::toupper);
     if (am == "BLEND")      m.alphaMode = "BLEND";
-    else if (am == "MASK")  m.alphaMode = "MASK";
+    else if (am == "MASK")  { m.alphaMode = "MASK"; m.alphaCutoff = mat.alphaCutoff; }
     else                    m.alphaMode = "OPAQUE";
 
     model.materials.push_back(std::move(m));
@@ -230,13 +257,21 @@ static int buildMaterial(tinygltf::Model& model,
 // Mesh builder (from Mc3Object)
 // ---------------------------------------------------------------------------
 
-static int buildMesh(tinygltf::Model& model,
+static int buildMesh(ExportCtx& ctx,
                      const Mc3Object& obj,
                      int materialIdx)
 {
+    tinygltf::Model& model = ctx.model;
     MeshData md;
 
-    if (obj.extrude.has_value()) {
+    if (obj.type == ObjectType::Mesh && !obj.meshSource.empty()) {
+        try {
+            md = loadObjMesh(ctx.basePath, obj.meshSource);
+        } catch (const std::exception& e) {
+            std::cerr << "Warning: " << e.what() << '\n';
+            return -1;
+        }
+    } else if (obj.extrude.has_value()) {
         md = buildExtrude(*obj.extrude);
     } else if (obj.primitive.has_value()) {
         md = buildPrimitive(*obj.primitive);
@@ -247,6 +282,10 @@ static int buildMesh(tinygltf::Model& model,
                       obj.deform->scale[1],
                       obj.deform->scale[2]);
     }
+
+    // Apply unit scale to geometry positions
+    if (ctx.unitScale != 1.0f)
+        md.applyScale(ctx.unitScale, ctx.unitScale, ctx.unitScale);
 
     if (md.empty()) return -1;
 
@@ -333,10 +372,11 @@ static int buildNode(ExportCtx& ctx, const Mc3Object& obj)
             if (matIdx >= 0) tmp.material = matName; // propagate override
             if (obj.deform.has_value()) tmp.deform = obj.deform;
 
-            directMesh = buildMesh(ctx.model, tmp, matIdx >= 0 ? matIdx : [&]{
+            int defMatIdx = matIdx >= 0 ? matIdx : [&]{
                 auto jt = ctx.matNameToIdx.find(defObj.material);
                 return jt != ctx.matNameToIdx.end() ? jt->second : -1;
-            }());
+            }();
+            directMesh = buildMesh(ctx, tmp, defMatIdx);
 
             // Add definition's children as our own children
             for (const auto& child : defObj.children) {
@@ -348,8 +388,9 @@ static int buildNode(ExportCtx& ctx, const Mc3Object& obj)
             std::cerr << "Warning: instance references unknown definition '"
                       << obj.definition << "'\n";
         }
-    } else if (obj.primitive.has_value() || obj.extrude.has_value()) {
-        directMesh = buildMesh(ctx.model, obj, matIdx);
+    } else if (obj.primitive.has_value() || obj.extrude.has_value() ||
+               (obj.type == ObjectType::Mesh && !obj.meshSource.empty())) {
+        directMesh = buildMesh(ctx, obj, matIdx);
     }
 
     // --- Logical children (for non-instance types) ---
@@ -375,6 +416,33 @@ static int buildNode(ExportCtx& ctx, const Mc3Object& obj)
         node.children.push_back(originIdx);
     } else {
         node.mesh = directMesh;
+    }
+
+    // Tags and collision → node extras (useful for game-engine import)
+    {
+        tinygltf::Value::Object extras;
+        bool hasExtras = false;
+
+        if (!obj.tags.empty()) {
+            tinygltf::Value::Array tagsArr;
+            for (const auto& tag : obj.tags)
+                tagsArr.push_back(tinygltf::Value(tag));
+            extras["tags"] = tinygltf::Value(tagsArr);
+            hasExtras = true;
+        }
+        if (!obj.collision.empty() && obj.collision != "none") {
+            extras["collision"] = tinygltf::Value(obj.collision);
+            hasExtras = true;
+        }
+        if (hasExtras)
+            node.extras = tinygltf::Value(extras);
+    }
+
+    // Apply unit scale to node translation
+    if (ctx.unitScale != 1.0f && !node.translation.empty()) {
+        node.translation[0] *= ctx.unitScale;
+        node.translation[1] *= ctx.unitScale;
+        node.translation[2] *= ctx.unitScale;
     }
 
     ctx.model.nodes.push_back(std::move(node));
@@ -586,7 +654,8 @@ void GltfExporter::exportDocument(const Mc3Document& doc,
     scene.name = doc.model.empty() ? "Scene" : doc.model;
 
     // Object nodes (recursive)
-    ExportCtx ctx{model, matNameToIdx, doc.definitions};
+    ExportCtx ctx{model, matNameToIdx, doc.definitions,
+                  unitScaleFactor(doc.unit), doc.sourcePath};
     for (const auto& objPtr : doc.objects) {
         if (!objPtr) continue;
         int nodeIdx = buildNode(ctx, *objPtr);

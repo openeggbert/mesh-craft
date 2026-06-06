@@ -13,11 +13,19 @@ struct Mc3Material {
     std::string normalTexture;
     std::string emissiveTexture;
 
+    // Combined metallic-roughness texture (ORM: R=occlusion, G=roughness, B=metallic)
+    std::string metallicRoughnessTexture;
+    std::string occlusionTexture;
+
     float roughness{0.5f};
     float metallic{0.0f};
+    float normalScale{1.0f};        // multiplier for the normal map
+    float occlusionStrength{1.0f};  // 0 = no occlusion, 1 = full
+
     std::array<float, 3> emissiveColor{0.0f, 0.0f, 0.0f};
 
     std::string alphaMode{"opaque"}; // opaque | mask | blend
+    float alphaCutoff{0.5f};         // used when alphaMode == "mask"
     bool doubleSided{false};
 };
 

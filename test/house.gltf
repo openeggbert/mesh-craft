@@ -955,6 +955,24 @@
   "scene": 0,
   "scenes": [
     {
+      "extras": {
+        "backgroundColor": [
+          0.5,
+          0.699999988079071,
+          1.0
+        ],
+        "fog": {
+          "color": [
+            0.5,
+            0.699999988079071,
+            1.0
+          ],
+          "density": 0.009999999776482582,
+          "end": 200.0,
+          "mode": "linear",
+          "start": 50.0
+        }
+      },
       "name": "House",
       "nodes": [
         6,

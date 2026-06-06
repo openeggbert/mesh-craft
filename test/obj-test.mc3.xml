@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<mc3 version="0.1" model="ObjTest" unit="meter">
+
+  <lights>
+    <directional name="Sun" color="1 1 1" brightness="2.0" direction="-1 -2 -1"/>
+  </lights>
+
+  <cameras>
+    <camera name="Cam" position="3 3 5" target="0 0 0" fov="50"/>
+  </cameras>
+
+  <materials>
+    <material id="shiny" roughness="0.1" metallic="0.9"
+              normal_scale="1.5" occlusion_strength="0.8"
+              alpha_cutoff="0.5">
+      <base_color>0.8 0.6 0.2 1.0</base_color>
+    </material>
+    <material id="ground" roughness="0.8"><base_color>0.4 0.6 0.3 1.0</base_color></material>
+  </materials>
+
+  <objects>
+    <!-- External OBJ mesh -->
+    <mesh name="Tetrahedron" source="tetra.obj" position="0 0.5 0" material="shiny"/>
+
+    <!-- Regular primitive next to it -->
+    <sphere name="Ball" radius="0.5" segments="20" position="2 0.5 0" material="shiny"/>
+
+    <plane name="Floor" size="8 8" axis="y" position="0 0 0" material="ground"/>
+  </objects>
+
+</mc3>

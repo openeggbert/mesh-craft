@@ -423,9 +423,14 @@ static void parseMaterials(const XMLElement* el, Mc3Document& doc) {
             auto v = mc3togltf::parseVec4(bcText, {0.8f,0.8f,0.8f,1.0f});
             mat.baseColor = {v[0], v[1], v[2], v[3]};
         }
-        mat.baseColorTexture = childText(c, "base_color_texture");
-        mat.normalTexture    = childText(c, "normal_texture");
-        mat.emissiveTexture  = childText(c, "emissive_texture");
+        mat.baseColorTexture         = childText(c, "base_color_texture");
+        mat.metallicRoughnessTexture = childText(c, "metallic_roughness_texture");
+        mat.normalTexture            = childText(c, "normal_texture");
+        mat.occlusionTexture         = childText(c, "occlusion_texture");
+        mat.emissiveTexture          = childText(c, "emissive_texture");
+        mat.normalScale      = attrF(c, "normal_scale",      1.0f);
+        mat.occlusionStrength = attrF(c, "occlusion_strength", 1.0f);
+        mat.alphaCutoff      = attrF(c, "alpha_cutoff",      0.5f);
 
         std::string ec = childText(c, "emissive_color");
         if (!ec.empty()) {
@@ -470,6 +475,7 @@ MeshCraft::Mc3::Mc3Document Mc3XmlParser::parse(const std::filesystem::path& pat
         throw std::runtime_error("Root element <mc3> not found in " + path.string());
 
     Mc3Document doc;
+    doc.sourcePath = path.parent_path();
     doc.version          = attr(root, "version", "0.1");
     doc.model            = attr(root, "model",   "unnamed");
     doc.unit             = attr(root, "unit",    "meter");

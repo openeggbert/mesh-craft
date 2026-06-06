@@ -23,6 +23,9 @@ public:
     std::string unit{"meter"};
     std::string coordinateSystem{"right_handed_y_up"};
 
+    // Directory of the source .mc3.xml file — used for resolving relative asset paths
+    std::filesystem::path sourcePath;
+
     std::optional<Mc3Environment> environment;
     std::vector<Mc3Light>   lights;
     std::vector<Mc3Camera>  cameras;

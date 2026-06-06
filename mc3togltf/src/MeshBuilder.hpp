@@ -2,6 +2,8 @@
 #include <MeshCraft/Mc3/Mc3Extrude.hpp>
 #include <MeshCraft/Mc3/Mc3Primitive.hpp>
 #include <cstdint>
+#include <filesystem>
+#include <string>
 #include <vector>
 
 namespace mc3togltf {
@@ -21,6 +23,11 @@ struct MeshData {
 
 MeshData buildPrimitive(const MeshCraft::Mc3::Mc3Primitive& prim);
 MeshData buildExtrude(const MeshCraft::Mc3::Mc3Extrude& ext);
+
+// Load an OBJ file and return its triangulated geometry.
+// source may be an absolute path or relative to basePath.
+MeshData loadObjMesh(const std::filesystem::path& basePath,
+                     const std::string& source);
 
 // Individual primitives (used by buildPrimitive)
 MeshData buildBox     (float w, float h, float d);

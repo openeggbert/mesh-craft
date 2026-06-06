@@ -1,5 +1,11 @@
 #include "MeshBuilder.hpp"
+
+#define TINYOBJLOADER_IMPLEMENTATION
+#include <tiny_obj_loader.h>
+
 #include <cmath>
+#include <filesystem>
+#include <iostream>
 #include <map>
 #include <numbers>
 #include <stdexcept>
@@ -617,6 +623,60 @@ MeshData buildPrimitive(const MeshCraft::Mc3::Mc3Primitive& p) {
         return buildPlane(p.size[0], p.size[2], p.axis);
     }
     return {};
+}
+
+// ---------------------------------------------------------------------------
+// OBJ mesh loading
+// ---------------------------------------------------------------------------
+
+MeshData loadObjMesh(const std::filesystem::path& basePath, const std::string& source)
+{
+    std::filesystem::path objPath = source;
+    if (objPath.is_relative()) objPath = basePath / source;
+
+    tinyobj::ObjReaderConfig cfg;
+    cfg.mtl_search_path = basePath.string();
+    cfg.triangulate     = true;
+
+    tinyobj::ObjReader reader;
+    if (!reader.ParseFromFile(objPath.string(), cfg)) {
+        throw std::runtime_error("OBJ load failed (" + objPath.string() + "): " + reader.Error());
+    }
+    if (!reader.Warning().empty())
+        std::cerr << "OBJ warning: " << reader.Warning() << '\n';
+
+    const auto& attrib = reader.GetAttrib();
+    const auto& shapes = reader.GetShapes();
+
+    MeshData m;
+    for (const auto& shape : shapes) {
+        for (const auto& idx : shape.mesh.indices) {
+            auto vi = static_cast<size_t>(idx.vertex_index);
+            m.positions.push_back(attrib.vertices[3*vi+0]);
+            m.positions.push_back(attrib.vertices[3*vi+1]);
+            m.positions.push_back(attrib.vertices[3*vi+2]);
+
+            if (idx.normal_index >= 0) {
+                auto ni = static_cast<size_t>(idx.normal_index);
+                m.normals.push_back(attrib.normals[3*ni+0]);
+                m.normals.push_back(attrib.normals[3*ni+1]);
+                m.normals.push_back(attrib.normals[3*ni+2]);
+            } else {
+                m.normals.insert(m.normals.end(), {0.0f, 1.0f, 0.0f});
+            }
+
+            if (idx.texcoord_index >= 0) {
+                auto ti = static_cast<size_t>(idx.texcoord_index);
+                m.texcoords.push_back(attrib.texcoords[2*ti+0]);
+                m.texcoords.push_back(1.0f - attrib.texcoords[2*ti+1]); // OBJ V is flipped vs glTF
+            } else {
+                m.texcoords.insert(m.texcoords.end(), {0.0f, 0.0f});
+            }
+
+            m.indices.push_back(static_cast<uint32_t>(m.indices.size()));
+        }
+    }
+    return m;
 }
 
 } // namespace mc3togltf

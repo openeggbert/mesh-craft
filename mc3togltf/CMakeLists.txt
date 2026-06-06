@@ -40,6 +40,17 @@ set(TINYGLTF_INSTALL              OFF CACHE BOOL "" FORCE)
 FetchContent_MakeAvailable(tinygltf)
 
 # --------------------------------------------------------------------------
+# tinyobjloader — header-only OBJ mesh loader
+# --------------------------------------------------------------------------
+FetchContent_Declare(
+    tinyobjloader
+    GIT_REPOSITORY https://github.com/tinyobjloader/tinyobjloader.git
+    GIT_TAG        v2.0.0rc13
+)
+set(TINYOBJLOADER_BUILD_TEST_LOADER OFF CACHE BOOL "" FORCE)
+FetchContent_MakeAvailable(tinyobjloader)
+
+# --------------------------------------------------------------------------
 # Executable
 # --------------------------------------------------------------------------
 add_executable(mc3togltf
@@ -52,11 +63,13 @@ add_executable(mc3togltf
 target_include_directories(mc3togltf PRIVATE
     src
     ${tinygltf_SOURCE_DIR}
+    ${tinyobjloader_SOURCE_DIR}
 )
 
 target_link_libraries(mc3togltf PRIVATE
     Mc3
     tinyxml2::tinyxml2
+    tinyobjloader
 )
 
 install(TARGETS mc3togltf RUNTIME DESTINATION bin)
