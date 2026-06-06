@@ -29,8 +29,10 @@ inline std::array<double, 4> directionToQuat(float dx, float dy, float dz) {
     if (len < 1e-6f) return {0.0, 0.0, 0.0, 1.0};
     dx /= len; dy /= len; dz /= len;
 
-    float yaw   = std::atan2(dx, dz);
-    float pitch = std::asin(-dy);
+    // Camera/light default forward is -Z (glTF convention).
+    // R_Y(yaw) * R_X(pitch) maps -Z to (dx,dy,dz)  →  yaw=atan2(-dx,-dz), pitch=asin(dy)
+    float yaw   = std::atan2(-dx, -dz);
+    float pitch = std::asin(dy);
 
     const float toDeg = 180.0f / std::numbers::pi_v<float>;
     return eulerXYZToQuat(pitch * toDeg, yaw * toDeg, 0.0f);

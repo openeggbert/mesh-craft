@@ -415,7 +415,11 @@ static int buildNode(ExportCtx& ctx, const Mc3Object& obj)
     if (hasPivot) {
         tinygltf::Node originNode;
         originNode.name        = obj.name + "_origin";
-        originNode.translation = {-t.pivot[0], -t.pivot[1], -t.pivot[2]};
+        originNode.translation = {
+            -t.pivot[0] * ctx.unitScale,
+            -t.pivot[1] * ctx.unitScale,
+            -t.pivot[2] * ctx.unitScale
+        };
         originNode.mesh        = directMesh;
         originNode.children    = node.children;
         node.children.clear();
@@ -532,6 +536,12 @@ static void addLights(tinygltf::Model& model,
         tinygltf::Value::Object nodeExt;
         nodeExt["light"] = tinygltf::Value(lightIdx);
         lnode.extensions["KHR_lights_punctual"] = tinygltf::Value(nodeExt);
+
+        if (light.castShadows) {
+            tinygltf::Value::Object extras;
+            extras["castShadows"] = tinygltf::Value(true);
+            lnode.extras = tinygltf::Value(extras);
+        }
 
         int nodeIdx = static_cast<int>(model.nodes.size());
         model.nodes.push_back(std::move(lnode));
