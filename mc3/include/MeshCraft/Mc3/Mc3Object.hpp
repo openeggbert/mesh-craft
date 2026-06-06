@@ -1,6 +1,8 @@
 #pragma once
 
 #include "MeshCraft/Mc3/Mc3CsgOperation.hpp"
+#include "MeshCraft/Mc3/Mc3Deform.hpp"
+#include "MeshCraft/Mc3/Mc3Extrude.hpp"
 #include "MeshCraft/Mc3/Mc3Primitive.hpp"
 #include "MeshCraft/Mc3/Mc3Transform.hpp"
 
@@ -19,6 +21,7 @@ enum class ObjectType {
     Cone,
     Plane,
     Mesh,
+    Extrude,
     Group,
     Instance,
     Union,
@@ -35,6 +38,7 @@ public:
     std::string id;
 
     Mc3Transform transform;
+    std::optional<Mc3Deform> deform;
 
     std::string material;
     bool visible{true};
@@ -43,13 +47,13 @@ public:
 
     std::optional<Mc3Primitive> primitive;
     std::optional<Mc3CsgOperation> csgOperation;
+    std::optional<Mc3Extrude> extrude;
 
     std::string definition;      // type == Instance
     std::string meshSource;      // type == Mesh
     std::string materialOverride;
 
-    // role: cutter — marks this as a CSG subtraction volume
-    bool isCutter{false};
+    bool isCutter{false};        // role: cutter — CSG subtraction volume
 
     std::vector<std::shared_ptr<Mc3Object>> children;
 

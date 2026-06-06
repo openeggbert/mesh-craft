@@ -1,0 +1,515 @@
+#include "MeshBuilder.hpp"
+#include <cmath>
+#include <numbers>
+#include <stdexcept>
+
+namespace mc3togltf {
+
+// ---------------------------------------------------------------------------
+// MeshData helpers
+// ---------------------------------------------------------------------------
+
+void MeshData::applyScale(float sx, float sy, float sz) {
+    for (size_t i = 0; i < positions.size(); i += 3) {
+        positions[i]   *= sx;
+        positions[i+1] *= sy;
+        positions[i+2] *= sz;
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Internal helpers
+// ---------------------------------------------------------------------------
+
+// Append one face quad (4 vertices, 2 triangles) to MeshData.
+// CCW winding when viewed from the direction of 'n'.
+static void addQuad(MeshData& m,
+                    std::array<float,3> v0, std::array<float,3> v1,
+                    std::array<float,3> v2, std::array<float,3> v3,
+                    std::array<float,3> n,
+                    std::array<float,2> uv0 = {0,0},
+                    std::array<float,2> uv1 = {1,0},
+                    std::array<float,2> uv2 = {1,1},
+                    std::array<float,2> uv3 = {0,1})
+{
+    auto base = static_cast<uint32_t>(m.vertexCount());
+    for (auto& v : {v0, v1, v2, v3}) {
+        m.positions.insert(m.positions.end(), v.begin(), v.end());
+        m.normals.insert(m.normals.end(), n.begin(), n.end());
+    }
+    m.texcoords.insert(m.texcoords.end(), {uv0[0], uv0[1]});
+    m.texcoords.insert(m.texcoords.end(), {uv1[0], uv1[1]});
+    m.texcoords.insert(m.texcoords.end(), {uv2[0], uv2[1]});
+    m.texcoords.insert(m.texcoords.end(), {uv3[0], uv3[1]});
+    m.indices.insert(m.indices.end(), {base, base+1, base+2,  base, base+2, base+3});
+}
+
+// Apply axis remapping so that the generated mesh uses the requested axis as height.
+static void remapAxis(MeshData& m, const std::string& axis) {
+    if (axis == "y") return; // default — no change
+    for (size_t i = 0; i < m.positions.size(); i += 3) {
+        float x = m.positions[i], y = m.positions[i+1], z = m.positions[i+2];
+        float nx = m.normals[i],  ny = m.normals[i+1],  nz = m.normals[i+2];
+        if (axis == "x") {
+            // y → x, -x → y: rotate -90° around Z
+            m.positions[i] = y; m.positions[i+1] = -x; m.positions[i+2] = z;
+            m.normals[i]   = ny; m.normals[i+1]  = -nx; m.normals[i+2]  = nz;
+        } else if (axis == "z") {
+            // y → z, -z → y: rotate +90° around X
+            m.positions[i] = x; m.positions[i+1] = -z; m.positions[i+2] = y;
+            m.normals[i]   = nx; m.normals[i+1]  = -nz; m.normals[i+2]  = ny;
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Box
+// ---------------------------------------------------------------------------
+
+MeshData buildBox(float w, float h, float d) {
+    MeshData m;
+    float hw = w * 0.5f, hh = h * 0.5f, hd = d * 0.5f;
+
+    // CCW winding verified with (v1-v0)×(v2-v0) · normal > 0 for each face
+    addQuad(m, {hw,-hh, hd}, {hw,-hh,-hd}, {hw, hh,-hd}, {hw, hh, hd}, { 1, 0, 0}); // +X
+    addQuad(m, {-hw,-hh,-hd},{-hw,-hh, hd},{-hw, hh, hd},{-hw, hh,-hd}, {-1, 0, 0}); // -X
+    addQuad(m, {-hw, hh,-hd},{-hw, hh, hd},{ hw, hh, hd},{ hw, hh,-hd}, { 0, 1, 0}); // +Y
+    addQuad(m, {-hw,-hh, hd},{-hw,-hh,-hd},{ hw,-hh,-hd},{ hw,-hh, hd}, { 0,-1, 0}); // -Y
+    addQuad(m, {-hw,-hh, hd},{ hw,-hh, hd},{ hw, hh, hd},{-hw, hh, hd}, { 0, 0, 1}); // +Z
+    addQuad(m, { hw,-hh,-hd},{-hw,-hh,-hd},{-hw, hh,-hd},{ hw, hh,-hd}, { 0, 0,-1}); // -Z
+
+    return m;
+}
+
+// ---------------------------------------------------------------------------
+// Sphere (UV sphere)
+// ---------------------------------------------------------------------------
+
+MeshData buildSphere(float radius, int segments) {
+    MeshData m;
+    int rings = segments / 2;
+    int sectors = segments;
+    const float pi = std::numbers::pi_v<float>;
+
+    // vertices (rings+1) * (sectors+1)
+    for (int r = 0; r <= rings; ++r) {
+        float phi   = pi * r / rings;          // 0..pi (top to bottom)
+        float sinPhi = std::sin(phi);
+        float cosPhi = std::cos(phi);
+
+        for (int s = 0; s <= sectors; ++s) {
+            float theta = 2.0f * pi * s / sectors; // 0..2pi
+            float x = std::cos(theta) * sinPhi;
+            float y = cosPhi;
+            float z = std::sin(theta) * sinPhi;
+
+            m.positions.insert(m.positions.end(), {x*radius, y*radius, z*radius});
+            m.normals.insert(m.normals.end(), {x, y, z});
+            m.texcoords.insert(m.texcoords.end(), {
+                static_cast<float>(s) / sectors,
+                static_cast<float>(r) / rings
+            });
+        }
+    }
+
+    // indices
+    for (int r = 0; r < rings; ++r) {
+        for (int s = 0; s < sectors; ++s) {
+            auto i0 = static_cast<uint32_t>(r * (sectors+1) + s);
+            auto i1 = i0 + 1;
+            auto i2 = i0 + (sectors+1);
+            auto i3 = i2 + 1;
+            m.indices.insert(m.indices.end(), {i0, i2, i1,  i1, i2, i3});
+        }
+    }
+    return m;
+}
+
+// ---------------------------------------------------------------------------
+// Cylinder
+// ---------------------------------------------------------------------------
+
+MeshData buildCylinder(float radius, float height, int segments, const std::string& axis) {
+    MeshData m;
+    const float pi = std::numbers::pi_v<float>;
+    float hh = height * 0.5f;
+
+    // Side
+    for (int i = 0; i < segments; ++i) {
+        float a0 = 2.0f * pi * i / segments;
+        float a1 = 2.0f * pi * (i+1) / segments;
+
+        float c0 = std::cos(a0), s0 = std::sin(a0);
+        float c1 = std::cos(a1), s1 = std::sin(a1);
+
+        // v0=bottom_i, v1=top_i, v2=top_{i+1}, v3=bottom_{i+1}  (CCW from outside)
+        std::array<float,3> b0 = {c0*radius, -hh, s0*radius};
+        std::array<float,3> t0 = {c0*radius,  hh, s0*radius};
+        std::array<float,3> t1 = {c1*radius,  hh, s1*radius};
+        std::array<float,3> b1 = {c1*radius, -hh, s1*radius};
+
+        float u0 = static_cast<float>(i)   / segments;
+        float u1 = static_cast<float>(i+1) / segments;
+
+        auto base = static_cast<uint32_t>(m.vertexCount());
+        for (auto& [v, nx, ny, nz, u, vt] : std::initializer_list<std::tuple<
+                std::array<float,3>, float,float,float, float,float>>{
+                {b0, c0,0,s0, u0,0},
+                {t0, c0,0,s0, u0,1},
+                {t1, c1,0,s1, u1,1},
+                {b1, c1,0,s1, u1,0}}) {
+            m.positions.insert(m.positions.end(), v.begin(), v.end());
+            m.normals.insert(m.normals.end(), {nx, ny, nz});
+            m.texcoords.insert(m.texcoords.end(), {u, vt});
+        }
+        m.indices.insert(m.indices.end(), {base, base+1, base+2,  base, base+2, base+3});
+    }
+
+    // Top cap (+Y, normal (0,1,0))
+    {
+        auto center = static_cast<uint32_t>(m.vertexCount());
+        m.positions.insert(m.positions.end(), {0, hh, 0});
+        m.normals.insert(m.normals.end(), {0,1,0});
+        m.texcoords.insert(m.texcoords.end(), {0.5f, 0.5f});
+
+        uint32_t rimBase = center + 1;
+        for (int i = 0; i <= segments; ++i) {
+            float a = 2.0f * pi * i / segments;
+            float c = std::cos(a), s = std::sin(a);
+            m.positions.insert(m.positions.end(), {c*radius, hh, s*radius});
+            m.normals.insert(m.normals.end(), {0,1,0});
+            m.texcoords.insert(m.texcoords.end(), {0.5f+c*0.5f, 0.5f+s*0.5f});
+        }
+        for (int i = 0; i < segments; ++i) {
+            // CCW from above: center, rim[i+1], rim[i]
+            m.indices.insert(m.indices.end(), {center, rimBase+i+1, rimBase+i});
+        }
+    }
+
+    // Bottom cap (-Y, normal (0,-1,0))
+    {
+        auto center = static_cast<uint32_t>(m.vertexCount());
+        m.positions.insert(m.positions.end(), {0, -hh, 0});
+        m.normals.insert(m.normals.end(), {0,-1,0});
+        m.texcoords.insert(m.texcoords.end(), {0.5f, 0.5f});
+
+        uint32_t rimBase = center + 1;
+        for (int i = 0; i <= segments; ++i) {
+            float a = 2.0f * pi * i / segments;
+            float c = std::cos(a), s = std::sin(a);
+            m.positions.insert(m.positions.end(), {c*radius, -hh, s*radius});
+            m.normals.insert(m.normals.end(), {0,-1,0});
+            m.texcoords.insert(m.texcoords.end(), {0.5f+c*0.5f, 0.5f+s*0.5f});
+        }
+        for (int i = 0; i < segments; ++i) {
+            // CCW from below: center, rim[i], rim[i+1]
+            m.indices.insert(m.indices.end(), {center, rimBase+i, rimBase+i+1});
+        }
+    }
+
+    remapAxis(m, axis);
+    return m;
+}
+
+// ---------------------------------------------------------------------------
+// Cone
+// ---------------------------------------------------------------------------
+
+MeshData buildCone(float radius, float height, int segments) {
+    MeshData m;
+    const float pi = std::numbers::pi_v<float>;
+    float hh = height * 0.5f;
+
+    // Side: from rim at -hh to apex at +hh
+    // Slant normal: outward at angle
+    float slopeLen = std::sqrt(radius*radius + height*height);
+    float ny = radius / slopeLen;
+    float nr = height / slopeLen; // radial component of normal
+
+    for (int i = 0; i < segments; ++i) {
+        float a0 = 2.0f * pi * i / segments;
+        float a1 = 2.0f * pi * (i+1) / segments;
+        float c0 = std::cos(a0), s0 = std::sin(a0);
+        float c1 = std::cos(a1), s1 = std::sin(a1);
+
+        auto apex = static_cast<uint32_t>(m.vertexCount());
+        // Apex (shared normal = average of its two edges)
+        float amidC = std::cos((a0+a1)*0.5f), amidS = std::sin((a0+a1)*0.5f);
+        m.positions.insert(m.positions.end(), {0, hh, 0});
+        m.normals.insert(m.normals.end(), {amidC*nr, ny, amidS*nr});
+        m.texcoords.insert(m.texcoords.end(), {(static_cast<float>(i)+0.5f)/segments, 1});
+
+        m.positions.insert(m.positions.end(), {c0*radius, -hh, s0*radius});
+        m.normals.insert(m.normals.end(), {c0*nr, ny, s0*nr});
+        m.texcoords.insert(m.texcoords.end(), {static_cast<float>(i)/segments, 0});
+
+        m.positions.insert(m.positions.end(), {c1*radius, -hh, s1*radius});
+        m.normals.insert(m.normals.end(), {c1*nr, ny, s1*nr});
+        m.texcoords.insert(m.texcoords.end(), {static_cast<float>(i+1)/segments, 0});
+
+        m.indices.insert(m.indices.end(), {apex, apex+1, apex+2});
+    }
+
+    // Bottom cap
+    {
+        auto center = static_cast<uint32_t>(m.vertexCount());
+        m.positions.insert(m.positions.end(), {0, -hh, 0});
+        m.normals.insert(m.normals.end(), {0,-1,0});
+        m.texcoords.insert(m.texcoords.end(), {0.5f, 0.5f});
+
+        uint32_t rimBase = center + 1;
+        for (int i = 0; i <= segments; ++i) {
+            float a = 2.0f * pi * i / segments;
+            float c = std::cos(a), s = std::sin(a);
+            m.positions.insert(m.positions.end(), {c*radius, -hh, s*radius});
+            m.normals.insert(m.normals.end(), {0,-1,0});
+            m.texcoords.insert(m.texcoords.end(), {0.5f+c*0.5f, 0.5f+s*0.5f});
+        }
+        for (int i = 0; i < segments; ++i)
+            m.indices.insert(m.indices.end(), {center, rimBase+i, rimBase+i+1});
+    }
+
+    return m;
+}
+
+// ---------------------------------------------------------------------------
+// Plane
+// ---------------------------------------------------------------------------
+
+MeshData buildPlane(float w, float d, const std::string& axis) {
+    MeshData m;
+    float hw = w * 0.5f, hd = d * 0.5f;
+    // Flat quad in XZ plane (normal = +Y)
+    addQuad(m,
+        {-hw, 0, -hd}, {-hw, 0, hd}, {hw, 0, hd}, {hw, 0, -hd},
+        {0, 1, 0},
+        {0,0}, {0,1}, {1,1}, {1,0});
+    remapAxis(m, axis);
+    return m;
+}
+
+// ---------------------------------------------------------------------------
+// Extrude
+// ---------------------------------------------------------------------------
+
+// Sample the cross-section as a flat polygon in the XY plane
+static std::vector<std::array<float,2>> sampleCrossSection(
+    const MeshCraft::Mc3::Mc3CrossSection& cs)
+{
+    using CT = MeshCraft::Mc3::CrossSectionType;
+    const float pi = std::numbers::pi_v<float>;
+    std::vector<std::array<float,2>> pts;
+
+    switch (cs.type) {
+    case CT::Rect: {
+        float hw = cs.width * 0.5f, hh = cs.height * 0.5f;
+        pts = {{-hw,-hh},{hw,-hh},{hw,hh},{-hw,hh}};
+        break;
+    }
+    case CT::Circle: {
+        for (int i = 0; i < cs.segments; ++i) {
+            float a = 2.0f * pi * i / cs.segments;
+            pts.push_back({std::cos(a)*cs.radius, std::sin(a)*cs.radius});
+        }
+        break;
+    }
+    case CT::Polygon: {
+        for (int i = 0; i < cs.sides; ++i) {
+            float a = 2.0f * pi * i / cs.sides;
+            pts.push_back({std::cos(a)*cs.radius, std::sin(a)*cs.radius});
+        }
+        break;
+    }
+    case CT::Custom:
+        for (auto& p : cs.customPoints) pts.push_back({p.x, p.y});
+        break;
+    }
+    return pts;
+}
+
+// Sample the extrusion path as a list of (position, tangent) frames
+struct PathFrame {
+    std::array<float,3> pos;
+    std::array<float,3> tangent;
+};
+
+static std::vector<PathFrame> samplePath(const MeshCraft::Mc3::Mc3ExtrudePath& path,
+                                          int segments) {
+    using PT = MeshCraft::Mc3::ExtrudePathType;
+    const float pi = std::numbers::pi_v<float>;
+    std::vector<PathFrame> frames;
+
+    switch (path.type) {
+    case PT::Line: {
+        float len = path.length;
+        float dy = 1.0f; // default axis = y
+        if (path.axis == "x") { for (int i=0;i<=segments;++i) frames.push_back({{len*i/segments,0,0},{1,0,0}}); break; }
+        if (path.axis == "z") { for (int i=0;i<=segments;++i) frames.push_back({{0,0,len*i/segments},{0,0,1}}); break; }
+        for (int i = 0; i <= segments; ++i)
+            frames.push_back({{0, len*i/segments, 0}, {0, 1, 0}});
+        break;
+    }
+    case PT::Arc: {
+        float r = path.arcRadius;
+        float totalAngle = path.arcAngle * pi / 180.0f;
+        for (int i = 0; i <= segments; ++i) {
+            float t = totalAngle * i / segments;
+            float x = r * std::sin(t);
+            float y = r * (1.0f - std::cos(t));
+            float tx = std::cos(t), ty = std::sin(t);
+            frames.push_back({{x, y, 0}, {tx, ty, 0}});
+        }
+        break;
+    }
+    case PT::Helix: {
+        float r = path.helixRadius, h = path.helixHeight, turns = path.helixTurns;
+        float totalAngle = 2.0f * pi * turns;
+        for (int i = 0; i <= segments; ++i) {
+            float t = totalAngle * i / segments;
+            float x = r * std::cos(t);
+            float z = r * std::sin(t);
+            float y = h * i / segments;
+            float tx = -std::sin(t), ty = h / (r * totalAngle), tz = std::cos(t);
+            float tl = std::sqrt(tx*tx+ty*ty+tz*tz);
+            frames.push_back({{x, y, z}, {tx/tl, ty/tl, tz/tl}});
+        }
+        break;
+    }
+    default:
+        // Polyline / Bezier: not fully implemented — fall through to empty
+        frames.push_back({{0,0,0},{0,1,0}});
+        frames.push_back({{0,1,0},{0,1,0}});
+        break;
+    }
+    return frames;
+}
+
+MeshData buildExtrude(const MeshCraft::Mc3::Mc3Extrude& ext) {
+    MeshData m;
+    auto csPoints = sampleCrossSection(ext.crossSection);
+    if (csPoints.empty()) return m;
+
+    auto frames = samplePath(ext.path, ext.segments);
+    if (frames.size() < 2) return m;
+
+    int ncs = static_cast<int>(csPoints.size());
+    int nf  = static_cast<int>(frames.size());
+
+    const float pi = std::numbers::pi_v<float>;
+    float twistPerFrame = (ext.twist * pi / 180.0f) / (nf - 1);
+
+    // For each frame, compute a local coordinate frame (tangent, normal, binormal)
+    // and place the cross-section points in world space.
+    auto buildFrame = [&](const PathFrame& pf, int fi) {
+        auto [tx, ty, tz] = pf.tangent;
+        // Construct a stable perpendicular using Gram-Schmidt
+        std::array<float,3> up = {0,1,0};
+        if (std::abs(ty) > 0.99f) up = {1,0,0};
+        // binormal = tangent × up
+        float bx = ty*up[2] - tz*up[1], by = tz*up[0] - tx*up[2], bz = tx*up[1] - ty*up[0];
+        float bl = std::sqrt(bx*bx+by*by+bz*bz);
+        bx /= bl; by /= bl; bz /= bl;
+        // normal = binormal × tangent
+        float nx = by*tz - bz*ty, ny = bz*tx - bx*tz, nz = bx*ty - by*tx;
+
+        // Apply twist rotation in the cross-section plane
+        float twistAngle = twistPerFrame * fi;
+        float ct = std::cos(twistAngle), st = std::sin(twistAngle);
+
+        std::vector<std::array<float,3>> worldPts;
+        for (auto& [cx, cy] : csPoints) {
+            float rx = cx*ct - cy*st;
+            float ry = cx*st + cy*ct;
+            worldPts.push_back({
+                pf.pos[0] + rx*nx + ry*bx,
+                pf.pos[1] + rx*ny + ry*by,
+                pf.pos[2] + rx*nz + ry*bz
+            });
+        }
+        return worldPts;
+    };
+
+    // Build quads between consecutive frames
+    auto prev = buildFrame(frames[0], 0);
+    for (int fi = 1; fi < nf; ++fi) {
+        auto curr = buildFrame(frames[fi], fi);
+
+        for (int ci = 0; ci < ncs; ++ci) {
+            int ci1 = (ci + 1) % ncs;
+            auto& p00 = prev[ci]; auto& p10 = curr[ci];
+            auto& p01 = prev[ci1]; auto& p11 = curr[ci1];
+
+            // Normal: cross product of two edges
+            auto cross = [](std::array<float,3> a, std::array<float,3> b) {
+                return std::array<float,3>{
+                    a[1]*b[2]-a[2]*b[1], a[2]*b[0]-a[0]*b[2], a[0]*b[1]-a[1]*b[0]};
+            };
+            std::array<float,3> e1 = {p10[0]-p00[0], p10[1]-p00[1], p10[2]-p00[2]};
+            std::array<float,3> e2 = {p01[0]-p00[0], p01[1]-p00[1], p01[2]-p00[2]};
+            auto n = cross(e1, e2);
+            float nl = std::sqrt(n[0]*n[0]+n[1]*n[1]+n[2]*n[2]);
+            if (nl > 1e-6f) { n[0]/=nl; n[1]/=nl; n[2]/=nl; }
+
+            float u0 = static_cast<float>(ci)  / ncs;
+            float u1 = static_cast<float>(ci+1) / ncs;
+            float v0 = static_cast<float>(fi-1) / (nf-1);
+            float v1 = static_cast<float>(fi)   / (nf-1);
+
+            addQuad(m, p00, p10, p11, p01, n,
+                    {u0,v0}, {u0,v1}, {u1,v1}, {u1,v0});
+        }
+        prev = curr;
+    }
+
+    // Caps
+    if (ext.caps && ncs >= 3) {
+        // Helper: fan triangulate a flat polygon
+        auto addCap = [&](const std::vector<std::array<float,3>>& ring,
+                          std::array<float,3> n, bool flip) {
+            auto base = static_cast<uint32_t>(m.vertexCount());
+            for (size_t i = 0; i < ring.size(); ++i) {
+                m.positions.insert(m.positions.end(), ring[i].begin(), ring[i].end());
+                m.normals.insert(m.normals.end(), n.begin(), n.end());
+                float a = 2.0f * pi * i / ring.size();
+                m.texcoords.insert(m.texcoords.end(), {0.5f+std::cos(a)*0.5f, 0.5f+std::sin(a)*0.5f});
+            }
+            for (uint32_t i = 1; i + 1 < ring.size(); ++i) {
+                if (flip) m.indices.insert(m.indices.end(), {base, base+i+1, base+i});
+                else      m.indices.insert(m.indices.end(), {base, base+i,   base+i+1});
+            }
+        };
+
+        auto startRing = buildFrame(frames.front(), 0);
+        auto endRing   = buildFrame(frames.back(), nf-1);
+        auto& tf = frames.front().tangent;
+        auto& tb = frames.back().tangent;
+        addCap(startRing, {-tf[0],-tf[1],-tf[2]}, true);
+        addCap(endRing,   { tb[0], tb[1], tb[2]}, false);
+    }
+
+    return m;
+}
+
+// ---------------------------------------------------------------------------
+// Dispatch
+// ---------------------------------------------------------------------------
+
+MeshData buildPrimitive(const MeshCraft::Mc3::Mc3Primitive& p) {
+    using PT = MeshCraft::Mc3::PrimitiveType;
+    switch (p.primitiveType) {
+    case PT::Box:
+    case PT::Cube:
+        return buildBox(p.size[0], p.size[1], p.size[2]);
+    case PT::Sphere:
+        return buildSphere(p.radius, p.segments);
+    case PT::Cylinder:
+        return buildCylinder(p.radius, p.height, p.segments, p.axis);
+    case PT::Cone:
+        return buildCone(p.radius, p.height, p.segments);
+    case PT::Plane:
+        return buildPlane(p.size[0], p.size[2], p.axis);
+    }
+    return {};
+}
+
+} // namespace mc3togltf
