@@ -1,6 +1,7 @@
 #include "MeshCraft/MeshCraftApplication.hpp"
 
 #include <Microsoft/Xna/Framework/Color.hpp>
+#include <Microsoft/Xna/Framework/Rectangle.hpp>
 #include <Microsoft/Xna/Framework/Input/Keyboard.hpp>
 #include <Microsoft/Xna/Framework/Input/Keys.hpp>
 #include <Microsoft/Xna/Framework/Input/Mouse.hpp>
@@ -9,9 +10,11 @@
 #include <Microsoft/Xna/Framework/Graphics/Viewport.hpp>
 #include <System/Object.hpp>
 
+#include <dlfcn.h>
 #include <algorithm>
 #include <cstdio>
 #include <cstring>
+#include <fstream>
 #include <iostream>
 #include <numbers>
 #include <stdexcept>
@@ -40,6 +43,15 @@ MeshCraftApplication::MeshCraftApplication(std::filesystem::path filePath)
     setIsMouseVisibleProperty(true);
 }
 
+MeshCraftApplication::MeshCraftApplication(std::filesystem::path filePath, std::string screenshotPath)
+    : currentFile_(std::move(filePath))
+    , autoScreenshotPath_(std::move(screenshotPath))
+    , autoScreenshotCountdown_(120) // take screenshot after 120 frames (~2s)
+{
+    getWindowProperty().setTitleProperty("Mesh Craft");
+    setIsMouseVisibleProperty(true);
+}
+
 // ---------------------------------------------------------------------------
 // LoadContent
 // ---------------------------------------------------------------------------
@@ -52,6 +64,12 @@ void MeshCraftApplication::LoadContent() {
 
     hierarchyPanel_  = std::make_unique<Scene::SceneHierarchyPanel>(document_);
     propertiesPanel_ = std::make_unique<Scene::PropertiesPanel>();
+
+    // 2D UI: white pixel texture + SpriteBatch
+    spriteBatch_ = std::make_unique<Graphics::SpriteBatch>(gd);
+    whitePx_ = Graphics::Texture2D(gd, 1, 1);
+    Color white(255, 255, 255, 255);
+    whitePx_.SetData(&white, 1);
 
     if (!currentFile_.empty() && std::filesystem::exists(currentFile_)) {
         try {
@@ -92,7 +110,30 @@ void MeshCraftApplication::Update(GameTime& /*gameTime*/) {
 void MeshCraftApplication::Draw(const GameTime& /*gameTime*/) {
     auto& gd = getGraphicsDeviceProperty();
 
-    // Background color from scene environment
+    // Full screen dimensions
+    const auto& vpFull = gd.getViewportProperty();
+    int screenW = vpFull.getWidthProperty();
+    int screenH = vpFull.getHeightProperty();
+
+    // Panel background — clear entire screen dark first
+    gd.Clear(Color(18, 20, 36, 255));
+
+
+    // Compute 3D viewport (center area excluding panels)
+    int viewX = kLeftPanelW;
+    int viewY = kToolbarH;
+    int viewW = std::max(1, screenW - kLeftPanelW - kRightPanelW);
+    int viewH = std::max(1, screenH - kToolbarH - kStatusH);
+
+    // Restrict rendering to 3D viewport
+    Graphics::Viewport vp3d;
+    vp3d.x = viewX;
+    vp3d.y = viewY;
+    vp3d.setWidthProperty(viewW);
+    vp3d.setHeightProperty(viewH);
+    gd.setViewportProperty(vp3d);
+
+    // Scene background color
     Color bgColor(64, 72, 80, 255);
     if (document_.environment) {
         const auto& bc = document_.environment->backgroundColor;
@@ -104,11 +145,7 @@ void MeshCraftApplication::Draw(const GameTime& /*gameTime*/) {
     }
     gd.Clear(bgColor);
 
-    const auto& vp = gd.getViewportProperty();
-    float aspect = (vp.getHeightProperty() > 0)
-        ? static_cast<float>(vp.getWidthProperty()) / vp.getHeightProperty()
-        : 16.0f / 9.0f;
-
+    float aspect = (viewH > 0) ? static_cast<float>(viewW) / viewH : 16.0f / 9.0f;
     Matrix view = camera_.viewMatrix();
     Matrix proj = camera_.projectionMatrix(aspect);
 
@@ -120,6 +157,29 @@ void MeshCraftApplication::Draw(const GameTime& /*gameTime*/) {
     gd.SetDepthTestEnabled(true);
     auto selPtrs = selectedPointers();
     sceneRenderer_->draw(document_, view, proj, selPtrs);
+
+    // Restore full viewport and draw 2D UI overlay
+    Graphics::Viewport vpReset;
+    vpReset.x = 0;
+    vpReset.y = 0;
+    vpReset.setWidthProperty(screenW);
+    vpReset.setHeightProperty(screenH);
+    gd.setViewportProperty(vpReset);
+
+    gd.SetDepthTestEnabled(false);
+    spriteBatch_->Begin();
+    drawUi(screenW, screenH);
+    spriteBatch_->End();
+
+    // Auto-screenshot countdown
+    if (autoScreenshotCountdown_ > 0) {
+        --autoScreenshotCountdown_;
+        if (autoScreenshotCountdown_ == 0 && !autoScreenshotPath_.empty()) {
+            saveScreenshot(autoScreenshotPath_);
+            std::cout << "[MeshCraft] Auto-screenshot saved to: " << autoScreenshotPath_ << "\n";
+            Exit();
+        }
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -144,6 +204,13 @@ void MeshCraftApplication::handleKeyboardShortcuts(const KeyboardState& ks, cons
         } else {
             Exit();
         }
+        return;
+    }
+
+    // Screenshot (F11)
+    if (justPressed(ks, prevKs, Keys::F11)) {
+        saveScreenshot("screenshot.ppm");
+        std::cout << "[MeshCraft] Screenshot saved to screenshot.ppm\n";
         return;
     }
 
@@ -259,13 +326,35 @@ void MeshCraftApplication::handleMouseInput(const MouseState& ms, const MouseSta
         camera_.zoom(static_cast<float>(dscroll) / 120.0f);
     }
 
-    // Left click: select object (simple pick by proximity to click)
+    // Left click
     if (leftBtn && !prevLeft) {
-        // For now, just clear selection on click (proper ray-cast to be added)
+        int mx = ms.getXProperty();
+        int my = ms.getYProperty();
         bool ctrl = (Keyboard::GetState().IsKeyDown(Keys::LeftControl) ||
                      Keyboard::GetState().IsKeyDown(Keys::RightControl));
-        if (!ctrl) selection_.clear();
-        // TODO: ray-cast pick into scene
+
+        // Click inside left hierarchy panel
+        if (mx < kLeftPanelW && my >= kToolbarH + kPanelHdrH) {
+            int row = (my - kToolbarH - kPanelHdrH) / kObjRowH;
+            if (row >= 0 && row < static_cast<int>(document_.objects.size())) {
+                if (!ctrl) selection_.clear();
+                selection_.select(document_.objects[row]);
+                updateWindowTitle();
+            }
+            return;
+        }
+
+        // Click in 3D viewport
+        auto& gd = getGraphicsDeviceProperty();
+        int screenW = gd.getViewportProperty().getWidthProperty();
+        int screenH = gd.getViewportProperty().getHeightProperty();
+        bool in3d = (mx >= kLeftPanelW && mx < screenW - kRightPanelW &&
+                     my >= kToolbarH   && my < screenH - kStatusH);
+        if (in3d) {
+            if (!ctrl) selection_.clear();
+            updateWindowTitle();
+            // TODO: ray-cast pick into scene
+        }
     }
 }
 
@@ -448,7 +537,6 @@ void MeshCraftApplication::updateWindowTitle() {
         title += " [" + currentFile_.filename().string() + "]";
     if (modified_) title += " *";
 
-    // Append active tool
     const char* toolNames[] = {
         "Select","Move","Rotate","Scale","Add Box","Add Sphere","Add Cylinder","Add Cone","Add Plane"
     };
@@ -456,6 +544,292 @@ void MeshCraftApplication::updateWindowTitle() {
     title += toolNames[static_cast<int>(activeTool_)];
 
     getWindowProperty().setTitleProperty(title);
+}
+
+// ---------------------------------------------------------------------------
+// UI drawing helpers
+// ---------------------------------------------------------------------------
+
+void MeshCraftApplication::drawRect(int x, int y, int w, int h, Color col) {
+    if (w <= 0 || h <= 0) return;
+    spriteBatch_->Draw(whitePx_,
+                       Rectangle(x, y, w, h),
+                       Rectangle(0, 0, 1, 1),
+                       col);
+}
+
+Color MeshCraftApplication::objectTypeColor(Mc3::ObjectType type) const {
+    switch (type) {
+    case Mc3::ObjectType::Box:
+    case Mc3::ObjectType::Cube:        return Color(210, 120, 55, 255);
+    case Mc3::ObjectType::Sphere:      return Color(55, 120, 210, 255);
+    case Mc3::ObjectType::Cylinder:    return Color(55, 185, 100, 255);
+    case Mc3::ObjectType::Cone:        return Color(185, 55, 185, 255);
+    case Mc3::ObjectType::Plane:       return Color(205, 205, 55, 255);
+    case Mc3::ObjectType::Group:       return Color(160, 160, 160, 255);
+    case Mc3::ObjectType::Extrude:     return Color(55, 205, 185, 255);
+    case Mc3::ObjectType::Instance:    return Color(185, 160, 55, 255);
+    case Mc3::ObjectType::Union:       return Color(55, 185, 55, 255);
+    case Mc3::ObjectType::Difference:  return Color(205, 55, 55, 255);
+    case Mc3::ObjectType::Intersection:return Color(55, 120, 185, 255);
+    default:                           return Color(140, 140, 140, 255);
+    }
+}
+
+void MeshCraftApplication::drawUi(int screenW, int screenH) {
+    // -----------------------------------------------------------------------
+    // Toolbar (top)
+    // -----------------------------------------------------------------------
+    drawRect(0, 0, screenW, kToolbarH, Color(22, 24, 45, 255));
+    // bottom separator
+    drawRect(0, kToolbarH - 1, screenW, 1, Color(55, 60, 100, 255));
+
+    // Tool buttons: Q=Select G=Move R=Rotate S=Scale
+    struct ToolBtn { ActiveTool tool; Color activeCol; };
+    ToolBtn toolBtns[] = {
+        {ActiveTool::Select,  Color(80, 150, 210, 255)},
+        {ActiveTool::Move,    Color(55, 190, 100, 255)},
+        {ActiveTool::Rotate,  Color(205, 165, 55, 255)},
+        {ActiveTool::Scale,   Color(210, 75, 75, 255)},
+    };
+    for (int i = 0; i < 4; ++i) {
+        bool active = (activeTool_ == toolBtns[i].tool);
+        int bx = 4 + i * 40;
+        Color bg = active ? toolBtns[i].activeCol : Color(38, 44, 72, 255);
+        drawRect(bx,      2, 36, 36, bg);
+        drawRect(bx,      2, 36,  1, Color(75, 85, 120, 255)); // top border
+        drawRect(bx,     37, 36,  1, Color(75, 85, 120, 255)); // bottom
+        drawRect(bx,      2,  1, 36, Color(75, 85, 120, 255)); // left
+        drawRect(bx + 35, 2,  1, 36, Color(75, 85, 120, 255)); // right
+        // inner icon: a small filled square
+        Color ico = active ? Color(255, 255, 255, 200) : Color(160, 170, 200, 255);
+        drawRect(bx + 13, 15, 10, 10, ico);
+    }
+
+    // Add-primitive buttons (right of tool buttons)
+    Color addCols[] = {
+        Color(210, 120, 55, 255),  // Box
+        Color(55, 120, 210, 255),  // Sphere
+        Color(55, 185, 100, 255),  // Cylinder
+        Color(185, 55, 185, 255),  // Cone
+        Color(205, 205, 55, 255),  // Plane
+    };
+    for (int i = 0; i < 5; ++i) {
+        int bx = 175 + i * 40;
+        drawRect(bx,      2, 36, 36, addCols[i]);
+        drawRect(bx,      2, 36,  1, Color(200, 200, 200, 120));
+        drawRect(bx,     37, 36,  1, Color(200, 200, 200, 120));
+        drawRect(bx,      2,  1, 36, Color(200, 200, 200, 120));
+        drawRect(bx + 35, 2,  1, 36, Color(200, 200, 200, 120));
+        // "+" symbol: vertical + horizontal bars
+        drawRect(bx + 17, 10, 2, 20, Color(255, 255, 255, 220));
+        drawRect(bx + 10, 17, 16, 2, Color(255, 255, 255, 220));
+    }
+
+    // Separator between toolbar sections
+    drawRect(170, 4, 1, 32, Color(75, 85, 120, 255));
+
+    // -----------------------------------------------------------------------
+    // Left panel — Scene Hierarchy
+    // -----------------------------------------------------------------------
+    int panelH = screenH - kToolbarH - kStatusH;
+    drawRect(0, kToolbarH, kLeftPanelW, panelH, Color(26, 28, 50, 240));
+    // right edge
+    drawRect(kLeftPanelW - 1, kToolbarH, 1, panelH, Color(55, 60, 100, 255));
+
+    // Header
+    drawRect(0, kToolbarH, kLeftPanelW - 1, kPanelHdrH, Color(38, 42, 72, 255));
+    // accent strip
+    drawRect(0, kToolbarH, 4, kPanelHdrH, Color(80, 130, 210, 255));
+    // header bottom line
+    drawRect(0, kToolbarH + kPanelHdrH - 1, kLeftPanelW - 1, 1, Color(55, 60, 100, 255));
+
+    // Object list rows
+    const auto& objs = document_.objects;
+    int rowY = kToolbarH + kPanelHdrH;
+    int maxY  = screenH - kStatusH - kObjRowH;
+    for (size_t i = 0; i < objs.size() && rowY <= maxY; ++i) {
+        const auto& obj = objs[i];
+        bool sel = selection_.isSelected(obj.get());
+
+        Color rowBg = sel
+            ? ((i % 2 == 0) ? Color(62, 70, 118, 255) : Color(58, 66, 112, 255))
+            : ((i % 2 == 0) ? Color(32, 35, 60, 255)  : Color(28, 31, 54, 255));
+        drawRect(0, rowY, kLeftPanelW - 1, kObjRowH, rowBg);
+
+        // Type color strip on left
+        Color tc = objectTypeColor(obj->type);
+        drawRect(0, rowY, 5, kObjRowH, tc);
+
+        // Inner icon: small colored square
+        drawRect(10, rowY + 5, 12, 12, tc);
+
+        // Selection right indicator
+        if (sel) {
+            drawRect(kLeftPanelW - 8, rowY, 7, kObjRowH, Color(80, 130, 210, 255));
+        }
+
+        // Row bottom separator
+        drawRect(5, rowY + kObjRowH - 1, kLeftPanelW - 6, 1, Color(40, 44, 72, 100));
+
+        rowY += kObjRowH;
+    }
+
+    // -----------------------------------------------------------------------
+    // Right panel — Properties
+    // -----------------------------------------------------------------------
+    int rpX = screenW - kRightPanelW;
+    drawRect(rpX, kToolbarH, kRightPanelW, panelH, Color(26, 28, 50, 240));
+    // left edge
+    drawRect(rpX, kToolbarH, 1, panelH, Color(55, 60, 100, 255));
+
+    // Header
+    drawRect(rpX + 1, kToolbarH, kRightPanelW - 1, kPanelHdrH, Color(38, 42, 72, 255));
+    drawRect(rpX + kRightPanelW - 4, kToolbarH, 3, kPanelHdrH, Color(210, 110, 80, 255));
+    drawRect(rpX + 1, kToolbarH + kPanelHdrH - 1, kRightPanelW - 1, 1, Color(55, 60, 100, 255));
+
+    if (selection_.hasSelection()) {
+        const auto& sel0 = selection_.selection().front();
+        int py = kToolbarH + kPanelHdrH + 6;
+        int pw = kRightPanelW - 12;
+        int px = rpX + 6;
+
+        // Object type indicator
+        Color tc = objectTypeColor(sel0->type);
+        drawRect(px, py, pw, 18, tc);
+        py += 24;
+
+        // ----- Position section -----
+        drawRect(px, py, pw, 18, Color(38, 42, 72, 255));
+        drawRect(px, py, 3, 18, Color(80, 130, 210, 255));
+        py += 20;
+        const char* axisLabels[3] = {"X", "Y", "Z"};
+        Color axisCols[3] = {Color(210, 60, 60, 255), Color(60, 210, 60, 255), Color(60, 60, 210, 255)};
+        for (int a = 0; a < 3; ++a) {
+            float v = sel0->transform.position[a];
+            int filled = static_cast<int>(std::clamp(std::abs(v) / 20.0f, 0.0f, 1.0f) * (pw - 4));
+            drawRect(px, py, pw, 14, Color(22, 24, 44, 255));
+            drawRect(px, py, filled + 2, 14, axisCols[a]);
+            drawRect(px, py, pw, 14, Color(0, 0, 0, 0)); // transparent overlay space
+            py += 16;
+        }
+        py += 4;
+
+        // ----- Rotation section -----
+        drawRect(px, py, pw, 18, Color(38, 42, 72, 255));
+        drawRect(px, py, 3, 18, Color(205, 165, 55, 255));
+        py += 20;
+        for (int a = 0; a < 3; ++a) {
+            float v = sel0->transform.rotation[a];
+            int filled = static_cast<int>(std::clamp(std::abs(v) / 360.0f, 0.0f, 1.0f) * (pw - 4));
+            drawRect(px, py, pw, 14, Color(22, 24, 44, 255));
+            drawRect(px, py, filled + 2, 14, axisCols[a]);
+            py += 16;
+        }
+        py += 4;
+
+        // ----- Scale section -----
+        drawRect(px, py, pw, 18, Color(38, 42, 72, 255));
+        drawRect(px, py, 3, 18, Color(210, 75, 75, 255));
+        py += 20;
+        for (int a = 0; a < 3; ++a) {
+            float v = sel0->transform.scale[a];
+            int filled = static_cast<int>(std::clamp(v / 4.0f, 0.0f, 1.0f) * (pw - 4));
+            drawRect(px, py, pw, 14, Color(22, 24, 44, 255));
+            drawRect(px, py, std::max(2, filled), 14, axisCols[a]);
+            py += 16;
+        }
+        py += 8;
+
+        // Material color swatch
+        if (!sel0->material.empty()) {
+            drawRect(px, py, pw, 18, Color(38, 42, 72, 255));
+            drawRect(px, py, 3, 18, Color(55, 185, 185, 255));
+            for (const auto& [key, mat] : document_.materials) {
+                if (key == sel0->material) {
+                    Color mc(
+                        static_cast<int>(std::clamp(mat.baseColor[0], 0.0f, 1.0f) * 255),
+                        static_cast<int>(std::clamp(mat.baseColor[1], 0.0f, 1.0f) * 255),
+                        static_cast<int>(std::clamp(mat.baseColor[2], 0.0f, 1.0f) * 255),
+                        255);
+                    drawRect(rpX + kRightPanelW - 28, py, 22, 18, mc);
+                    break;
+                }
+            }
+        }
+    }
+
+    // -----------------------------------------------------------------------
+    // Status bar (bottom)
+    // -----------------------------------------------------------------------
+    drawRect(0, screenH - kStatusH, screenW, kStatusH, Color(22, 24, 45, 255));
+    drawRect(0, screenH - kStatusH, screenW, 1, Color(55, 60, 100, 255));
+
+    // Object count dots (type-colored, up to 24)
+    int dotX = 6;
+    int dotSize = 14;
+    size_t limit = std::min(objs.size(), static_cast<size_t>(24));
+    for (size_t i = 0; i < limit; ++i) {
+        bool sel = selection_.isSelected(objs[i].get());
+        Color dc = sel ? Color(255, 255, 255, 255) : objectTypeColor(objs[i]->type);
+        drawRect(dotX, screenH - kStatusH + 5, dotSize, dotSize, dc);
+        if (sel) drawRect(dotX, screenH - kStatusH + 5, dotSize, 2, Color(255, 255, 100, 255));
+        dotX += dotSize + 2;
+    }
+
+    // Selection count indicator strip on far right
+    if (selection_.hasSelection()) {
+        int selCount = static_cast<int>(selection_.selection().size());
+        int barW = std::min(selCount * 16, 80);
+        drawRect(screenW - barW - 4, screenH - kStatusH + 4, barW, dotSize,
+                 Color(80, 130, 210, 255));
+    }
+
+    // Tool indicator strip at bottom right corner
+    Color toolStrip(40, 50, 80, 255);
+    drawRect(screenW - kRightPanelW, screenH - kStatusH + 2, 20, dotSize, toolStrip);
+}
+
+// ---------------------------------------------------------------------------
+// Screenshot
+// ---------------------------------------------------------------------------
+
+void MeshCraftApplication::saveScreenshot(const std::string& path) {
+    auto& gd = getGraphicsDeviceProperty();
+    int w = gd.getViewportProperty().getWidthProperty();
+    int h = gd.getViewportProperty().getHeightProperty();
+    if (w <= 0 || h <= 0) return;
+
+    // Load GL functions from already-loaded GL library via dlsym
+    using PFNGLFINISH = void(*)();
+    using PFNGLBINDBUFFER = void(*)(unsigned int, unsigned int);
+    using PFNGLREADPIXELS = void(*)(int, int, int, int, unsigned int, unsigned int, void*);
+    auto fnFinish      = (PFNGLFINISH)     dlsym(RTLD_DEFAULT, "glFinish");
+    auto fnBindBuffer  = (PFNGLBINDBUFFER) dlsym(RTLD_DEFAULT, "glBindBuffer");
+    auto fnReadPixels  = (PFNGLREADPIXELS) dlsym(RTLD_DEFAULT, "glReadPixels");
+    if (!fnReadPixels) {
+        std::cerr << "[Screenshot] glReadPixels not available\n";
+        return;
+    }
+    if (fnFinish) fnFinish();
+    if (fnBindBuffer) fnBindBuffer(0x88EC, 0); // GL_PIXEL_PACK_BUFFER = 0x88EC
+
+    // OpenGL ES guarantees RGBA + GL_UNSIGNED_BYTE
+    constexpr unsigned int GL_RGBA          = 0x1908;
+    constexpr unsigned int GL_UNSIGNED_BYTE = 0x1401;
+    std::vector<unsigned char> pixels(w * h * 4);
+    fnReadPixels(0, 0, w, h, GL_RGBA, GL_UNSIGNED_BYTE, pixels.data());
+
+    // PPM P6 is RGB; strip alpha. glReadPixels gives bottom-to-top — flip vertically.
+    std::ofstream f(path, std::ios::binary);
+    f << "P6\n" << w << " " << h << "\n255\n";
+    for (int row = h - 1; row >= 0; --row) {
+        for (int col = 0; col < w; ++col) {
+            int idx = (row * w + col) * 4;
+            f.write(reinterpret_cast<char*>(&pixels[idx]), 3);
+        }
+    }
+    std::cout << "[Screenshot] written " << path << "\n";
 }
 
 } // namespace MeshCraft

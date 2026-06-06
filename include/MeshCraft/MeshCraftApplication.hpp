@@ -11,9 +11,12 @@
 #include "MeshCraft/Scene/PropertiesPanel.hpp"
 #include "MeshCraft/Scene/SceneHierarchyPanel.hpp"
 
+#include <Microsoft/Xna/Framework/Color.hpp>
 #include <Microsoft/Xna/Framework/Game.hpp>
 #include <Microsoft/Xna/Framework/GameTime.hpp>
 #include <Microsoft/Xna/Framework/Graphics/BasicEffect.hpp>
+#include <Microsoft/Xna/Framework/Graphics/SpriteBatch.hpp>
+#include <Microsoft/Xna/Framework/Graphics/Texture2D.hpp>
 #include <Microsoft/Xna/Framework/Input/Keyboard.hpp>
 #include <Microsoft/Xna/Framework/Input/KeyboardState.hpp>
 #include <Microsoft/Xna/Framework/Input/MouseState.hpp>
@@ -33,6 +36,7 @@ public:
 
     MeshCraftApplication();
     explicit MeshCraftApplication(std::filesystem::path filePath);
+    MeshCraftApplication(std::filesystem::path filePath, std::string screenshotPath);  // auto-screenshot mode
 
     void LoadContent() override;
     void Update(Microsoft::Xna::Framework::GameTime& gameTime) override;
@@ -56,6 +60,10 @@ private:
     std::unique_ptr<Scene::SceneHierarchyPanel> hierarchyPanel_;
     std::unique_ptr<Scene::PropertiesPanel>     propertiesPanel_;
 
+    // 2D UI rendering
+    std::unique_ptr<Microsoft::Xna::Framework::Graphics::SpriteBatch> spriteBatch_;
+    Microsoft::Xna::Framework::Graphics::Texture2D whitePx_;
+
     // Input state (for drag-delta computation)
     Microsoft::Xna::Framework::Input::MouseState prevMouse_;
     bool firstFrame_{true};
@@ -63,6 +71,18 @@ private:
     // Transform dragging
     bool   dragging_{false};
     float  dragStartX_{0}, dragStartY_{0};
+
+    // Auto-screenshot mode: save screenshot after N frames then exit
+    std::string autoScreenshotPath_;
+    int autoScreenshotCountdown_{0};
+
+    // Panel layout
+    static constexpr int kToolbarH   = 40;
+    static constexpr int kStatusH    = 24;
+    static constexpr int kLeftPanelW = 220;
+    static constexpr int kRightPanelW = 220;
+    static constexpr int kObjRowH    = 22;
+    static constexpr int kPanelHdrH  = 26;
 
     // Helpers
     void newScene();
@@ -77,6 +97,12 @@ private:
     void handleMouseInput(const Microsoft::Xna::Framework::Input::MouseState& ms,
                           const Microsoft::Xna::Framework::Input::MouseState& prev);
     void updateWindowTitle();
+
+    // UI drawing
+    void drawRect(int x, int y, int w, int h, Microsoft::Xna::Framework::Color col);
+    void drawUi(int screenW, int screenH);
+    Microsoft::Xna::Framework::Color objectTypeColor(Mc3::ObjectType type) const;
+    void saveScreenshot(const std::string& path);
 
     std::vector<const Mc3::Mc3Object*> selectedPointers() const;
     Mc3::Mc3Object* flatFindById(const std::string& id) const;

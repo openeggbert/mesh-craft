@@ -60,7 +60,7 @@ void GridRenderer::draw(const Matrix& view, const Matrix& projection) {
     effect_->View       = view;
     effect_->Projection = projection;
 
-    for (auto& pass : effect_->CurrentTechnique().Passes()) {
+    for (auto& pass : effect_->getCurrentTechniqueProperty()->getPassesProperty()) {
         pass.Apply();
     }
 

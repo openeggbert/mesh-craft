@@ -277,7 +277,7 @@ void SceneRenderer::drawMesh(const RenderMesh& mesh,
     effect_->Projection = proj;
     effect_->VertexColorEnabled = true;
 
-    for (auto& pass : effect_->CurrentTechnique().Passes()) {
+    for (auto& pass : effect_->getCurrentTechniqueProperty()->getPassesProperty()) {
         pass.Apply();
     }
 
@@ -337,7 +337,7 @@ void SceneRenderer::drawObjectWireframe(const Mc3Object& obj,
     effect_->Projection = proj;
     effect_->VertexColorEnabled = true;
 
-    for (auto& pass : effect_->CurrentTechnique().Passes()) {
+    for (auto& pass : effect_->getCurrentTechniqueProperty()->getPassesProperty()) {
         pass.Apply();
     }
 
