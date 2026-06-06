@@ -36,6 +36,9 @@ struct ExportCtx {
     const std::map<std::string, std::shared_ptr<Mc3Object>>& definitions;
     float unitScale{1.0f};           // conversion factor to metres
     std::filesystem::path basePath;  // directory of source .mc3.xml (for OBJ paths)
+
+    // Cache (definition_id, material_idx) → glTF mesh index — avoids duplicate geometry
+    std::map<std::pair<std::string,int>, int> defMeshCache;
 };
 
 static float unitScaleFactor(const std::string& unit) {
@@ -362,23 +365,29 @@ static int buildNode(ExportCtx& ctx, const Mc3Object& obj)
     int directMesh = -1;
 
     if (obj.type == ObjectType::Instance && !obj.definition.empty()) {
-        // Resolve instance: copy definition geometry + children into this node
         auto it = ctx.definitions.find(obj.definition);
         if (it != ctx.definitions.end() && it->second) {
             const Mc3Object& defObj = *it->second;
 
-            // Build mesh from the definition (use this instance's material override if any)
-            Mc3Object tmp = defObj;
-            if (matIdx >= 0) tmp.material = matName; // propagate override
-            if (obj.deform.has_value()) tmp.deform = obj.deform;
-
-            int defMatIdx = matIdx >= 0 ? matIdx : [&]{
+            int effectiveMat = matIdx >= 0 ? matIdx : [&]{
                 auto jt = ctx.matNameToIdx.find(defObj.material);
                 return jt != ctx.matNameToIdx.end() ? jt->second : -1;
             }();
-            directMesh = buildMesh(ctx, tmp, defMatIdx);
 
-            // Add definition's children as our own children
+            // Reuse cached mesh if same definition+material was already built
+            auto cacheKey = std::make_pair(obj.definition, effectiveMat);
+            auto cacheIt  = ctx.defMeshCache.find(cacheKey);
+            if (cacheIt != ctx.defMeshCache.end()) {
+                directMesh = cacheIt->second;
+            } else {
+                Mc3Object tmp = defObj;
+                if (matIdx >= 0) tmp.material = matName;
+                if (obj.deform.has_value()) tmp.deform = obj.deform;
+                directMesh = buildMesh(ctx, tmp, effectiveMat);
+                ctx.defMeshCache[cacheKey] = directMesh;
+            }
+
+            // Recurse into definition's children
             for (const auto& child : defObj.children) {
                 if (!child) continue;
                 int ci = buildNode(ctx, *child);
@@ -418,10 +427,15 @@ static int buildNode(ExportCtx& ctx, const Mc3Object& obj)
         node.mesh = directMesh;
     }
 
-    // Tags and collision → node extras (useful for game-engine import)
+    // Tags, collision, and mc3_type → node extras (useful for game-engine import)
     {
         tinygltf::Value::Object extras;
         bool hasExtras = false;
+
+        if (obj.type == ObjectType::Area) {
+            extras["mc3_type"] = tinygltf::Value(std::string("area"));
+            hasExtras = true;
+        }
 
         if (!obj.tags.empty()) {
             tinygltf::Value::Array tagsArr;
@@ -638,6 +652,15 @@ void GltfExporter::exportDocument(const Mc3Document& doc,
     model.buffers[0].name = "buffer0";
     model.asset.version   = "2.0";
     model.asset.generator = "mc3togltf";
+
+    // Store MC3 document metadata in asset.extras
+    {
+        tinygltf::Value::Object ae;
+        if (!doc.model.empty())   ae["mc3_model"]   = tinygltf::Value(doc.model);
+        if (!doc.version.empty()) ae["mc3_version"]  = tinygltf::Value(doc.version);
+        if (doc.unit != "meter")  ae["mc3_unit"]     = tinygltf::Value(doc.unit);
+        if (!ae.empty()) model.asset.extras = tinygltf::Value(ae);
+    }
 
     // Textures
     auto texIdx = buildTextures(model, doc.textures);

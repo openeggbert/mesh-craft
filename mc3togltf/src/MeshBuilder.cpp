@@ -300,6 +300,29 @@ MeshData buildPlane(float w, float d, const std::string& axis) {
 // Extrude
 // ---------------------------------------------------------------------------
 
+// Shared math helpers
+static std::array<float,3> cross3(std::array<float,3> a, std::array<float,3> b) {
+    return {a[1]*b[2]-a[2]*b[1], a[2]*b[0]-a[0]*b[2], a[0]*b[1]-a[1]*b[0]};
+}
+static void norm3(std::array<float,3>& v) {
+    float l = std::sqrt(v[0]*v[0]+v[1]*v[1]+v[2]*v[2]);
+    if (l > 1e-6f) { v[0]/=l; v[1]/=l; v[2]/=l; }
+}
+
+// Compute the local frame axes (normal, binormal) from a tangent
+static void frameAxes(std::array<float,3> t,
+                      float& nx, float& ny, float& nz,
+                      float& bx, float& by, float& bz)
+{
+    std::array<float,3> up = (std::abs(t[1]) > 0.99f)
+                             ? std::array<float,3>{1,0,0}
+                             : std::array<float,3>{0,1,0};
+    bx = t[1]*up[2]-t[2]*up[1]; by = t[2]*up[0]-t[0]*up[2]; bz = t[0]*up[1]-t[1]*up[0];
+    float bl = std::sqrt(bx*bx+by*by+bz*bz);
+    bx/=bl; by/=bl; bz/=bl;
+    nx = by*t[2]-bz*t[1]; ny = bz*t[0]-bx*t[2]; nz = bx*t[1]-by*t[0];
+}
+
 // Sample the cross-section as a flat polygon in the XY plane
 static std::vector<std::array<float,2>> sampleCrossSection(
     const MeshCraft::Mc3::Mc3CrossSection& cs)
@@ -469,7 +492,143 @@ static std::vector<PathFrame> samplePath(const MeshCraft::Mc3::Mc3ExtrudePath& p
     return frames;
 }
 
+// ---------------------------------------------------------------------------
+// Hollow extrude (innerRadius > 0): outer wall + inner wall + annular caps
+// ---------------------------------------------------------------------------
+
+static MeshData buildHollowExtrude(const MeshCraft::Mc3::Mc3Extrude& ext) {
+    MeshData m;
+    const float pi = std::numbers::pi_v<float>;
+
+    auto frames = samplePath(ext.path, ext.segments);
+    if (static_cast<int>(frames.size()) < 2) return m;
+
+    const int   nf      = static_cast<int>(frames.size());
+    const int   ncs     = ext.crossSection.segments;
+    const float outerR  = ext.crossSection.radius;
+    const float innerR  = ext.crossSection.innerRadius;
+    const float twist   = ext.twist * pi / 180.0f;
+
+    // Build both rings for a single path frame
+    auto makeRings = [&](const PathFrame& pf, int fi)
+        -> std::pair<std::vector<std::array<float,3>>,
+                     std::vector<std::array<float,3>>>
+    {
+        float nx, ny, nz, bx, by, bz;
+        frameAxes(pf.tangent, nx, ny, nz, bx, by, bz);
+
+        float ta = (nf > 1) ? twist * fi / (nf - 1) : 0.0f;
+        float ct = std::cos(ta), st = std::sin(ta);
+
+        std::vector<std::array<float,3>> outer(ncs), inner(ncs);
+        for (int i = 0; i < ncs; ++i) {
+            float a  = 2.0f * pi * i / ncs;
+            float cx = std::cos(a), cy = std::sin(a);
+            float rx = cx*ct - cy*st, ry = cx*st + cy*ct;
+
+            auto place = [&](float r) -> std::array<float,3> {
+                return { pf.pos[0] + rx*r*nx + ry*r*bx,
+                         pf.pos[1] + rx*r*ny + ry*r*by,
+                         pf.pos[2] + rx*r*nz + ry*r*bz };
+            };
+            outer[i] = place(outerR);
+            inner[i] = place(innerR);
+        }
+        return {outer, inner};
+    };
+
+    auto [prevOuter, prevInner] = makeRings(frames[0], 0);
+
+    for (int fi = 1; fi < nf; ++fi) {
+        auto [currOuter, currInner] = makeRings(frames[fi], fi);
+
+        for (int ci = 0; ci < ncs; ++ci) {
+            int  ci1 = (ci + 1) % ncs;
+            float u0 = float(ci)   / ncs,  u1 = float(ci+1) / ncs;
+            float v0 = float(fi-1) / (nf-1), v1 = float(fi) / (nf-1);
+
+            // Outer face (normal outward)
+            {
+                auto e1 = std::array<float,3>{currOuter[ci][0]-prevOuter[ci][0],
+                                              currOuter[ci][1]-prevOuter[ci][1],
+                                              currOuter[ci][2]-prevOuter[ci][2]};
+                auto e2 = std::array<float,3>{prevOuter[ci1][0]-prevOuter[ci][0],
+                                              prevOuter[ci1][1]-prevOuter[ci][1],
+                                              prevOuter[ci1][2]-prevOuter[ci][2]};
+                auto n = cross3(e1, e2); norm3(n);
+                addQuad(m, prevOuter[ci], currOuter[ci], currOuter[ci1], prevOuter[ci1], n,
+                        {u0,v0},{u0,v1},{u1,v1},{u1,v0});
+            }
+            // Inner face (normal inward — reversed winding)
+            {
+                auto e1 = std::array<float,3>{prevInner[ci1][0]-prevInner[ci][0],
+                                              prevInner[ci1][1]-prevInner[ci][1],
+                                              prevInner[ci1][2]-prevInner[ci][2]};
+                auto e2 = std::array<float,3>{currInner[ci][0]-prevInner[ci][0],
+                                              currInner[ci][1]-prevInner[ci][1],
+                                              currInner[ci][2]-prevInner[ci][2]};
+                auto n = cross3(e1, e2); norm3(n);
+                addQuad(m, prevInner[ci], prevInner[ci1], currInner[ci1], currInner[ci], n,
+                        {u0,v0},{u1,v0},{u1,v1},{u0,v1});
+            }
+        }
+        prevOuter = currOuter;
+        prevInner = currInner;
+    }
+
+    // Annular caps
+    if (ext.caps) {
+        auto [s0, s1] = makeRings(frames[0],    0);
+        auto [e0, e1] = makeRings(frames[nf-1], nf-1);
+        const auto& st = frames[0].tangent;
+        const auto& et = frames[nf-1].tangent;
+
+        for (int ci = 0; ci < ncs; ++ci) {
+            int ci1 = (ci + 1) % ncs;
+            float u0 = float(ci) / ncs, u1 = float(ci+1) / ncs;
+
+            std::array<float,3> sn = {-st[0], -st[1], -st[2]};
+            addQuad(m, s0[ci], s1[ci], s1[ci1], s0[ci1], sn,
+                    {u0,0},{u0,1},{u1,1},{u1,0});
+
+            std::array<float,3> en = {et[0], et[1], et[2]};
+            addQuad(m, e0[ci], e0[ci1], e1[ci1], e1[ci], en,
+                    {u0,0},{u1,0},{u1,1},{u0,1});
+        }
+    }
+
+    // Smooth normals
+    if (ext.smooth) {
+        using PosKey = std::tuple<int,int,int>;
+        auto quant = [](float v){ return static_cast<int>(std::round(v*10000.0f)); };
+        std::map<PosKey, std::array<float,3>> acc;
+        int vc = m.vertexCount();
+        for (int i=0;i<vc;++i) {
+            PosKey k{quant(m.positions[i*3]),quant(m.positions[i*3+1]),quant(m.positions[i*3+2])};
+            auto& n=acc[k]; n[0]+=m.normals[i*3]; n[1]+=m.normals[i*3+1]; n[2]+=m.normals[i*3+2];
+        }
+        for (auto&[k,n]:acc){ float l=std::sqrt(n[0]*n[0]+n[1]*n[1]+n[2]*n[2]); if(l>1e-6f){n[0]/=l;n[1]/=l;n[2]/=l;} }
+        for (int i=0;i<vc;++i) {
+            PosKey k{quant(m.positions[i*3]),quant(m.positions[i*3+1]),quant(m.positions[i*3+2])};
+            auto& n=acc[k]; m.normals[i*3]=n[0]; m.normals[i*3+1]=n[1]; m.normals[i*3+2]=n[2];
+        }
+    }
+
+    return m;
+}
+
+// ---------------------------------------------------------------------------
+// Extrude (solid cross-section)
+// ---------------------------------------------------------------------------
+
 MeshData buildExtrude(const MeshCraft::Mc3::Mc3Extrude& ext) {
+    // Hollow circle cross-section → specialized path
+    if (ext.crossSection.type == MeshCraft::Mc3::CrossSectionType::Circle &&
+        ext.crossSection.innerRadius > 0.0f &&
+        ext.crossSection.innerRadius < ext.crossSection.radius) {
+        return buildHollowExtrude(ext);
+    }
+
     MeshData m;
     auto csPoints = sampleCrossSection(ext.crossSection);
     if (csPoints.empty()) return m;
@@ -486,16 +645,8 @@ MeshData buildExtrude(const MeshCraft::Mc3::Mc3Extrude& ext) {
     // For each frame, compute a local coordinate frame (tangent, normal, binormal)
     // and place the cross-section points in world space.
     auto buildFrame = [&](const PathFrame& pf, int fi) {
-        auto [tx, ty, tz] = pf.tangent;
-        // Construct a stable perpendicular using Gram-Schmidt
-        std::array<float,3> up = {0,1,0};
-        if (std::abs(ty) > 0.99f) up = {1,0,0};
-        // binormal = tangent × up
-        float bx = ty*up[2] - tz*up[1], by = tz*up[0] - tx*up[2], bz = tx*up[1] - ty*up[0];
-        float bl = std::sqrt(bx*bx+by*by+bz*bz);
-        bx /= bl; by /= bl; bz /= bl;
-        // normal = binormal × tangent
-        float nx = by*tz - bz*ty, ny = bz*tx - bx*tz, nz = bx*ty - by*tx;
+        float nx, ny, nz, bx, by, bz;
+        frameAxes(pf.tangent, nx, ny, nz, bx, by, bz);
 
         // Apply twist rotation in the cross-section plane
         float twistAngle = twistPerFrame * fi;
@@ -525,15 +676,10 @@ MeshData buildExtrude(const MeshCraft::Mc3::Mc3Extrude& ext) {
             auto& p01 = prev[ci1]; auto& p11 = curr[ci1];
 
             // Normal: cross product of two edges
-            auto cross = [](std::array<float,3> a, std::array<float,3> b) {
-                return std::array<float,3>{
-                    a[1]*b[2]-a[2]*b[1], a[2]*b[0]-a[0]*b[2], a[0]*b[1]-a[1]*b[0]};
-            };
             std::array<float,3> e1 = {p10[0]-p00[0], p10[1]-p00[1], p10[2]-p00[2]};
             std::array<float,3> e2 = {p01[0]-p00[0], p01[1]-p00[1], p01[2]-p00[2]};
-            auto n = cross(e1, e2);
-            float nl = std::sqrt(n[0]*n[0]+n[1]*n[1]+n[2]*n[2]);
-            if (nl > 1e-6f) { n[0]/=nl; n[1]/=nl; n[2]/=nl; }
+            auto n = cross3(e1, e2);
+            norm3(n);
 
             float u0 = static_cast<float>(ci)  / ncs;
             float u1 = static_cast<float>(ci+1) / ncs;
@@ -650,30 +796,57 @@ MeshData loadObjMesh(const std::filesystem::path& basePath, const std::string& s
 
     MeshData m;
     for (const auto& shape : shapes) {
-        for (const auto& idx : shape.mesh.indices) {
-            auto vi = static_cast<size_t>(idx.vertex_index);
-            m.positions.push_back(attrib.vertices[3*vi+0]);
-            m.positions.push_back(attrib.vertices[3*vi+1]);
-            m.positions.push_back(attrib.vertices[3*vi+2]);
+        const auto& idxList = shape.mesh.indices;
+        // tinyobjloader already triangulates, iterate in steps of 3
+        for (size_t i = 0; i + 2 < idxList.size(); i += 3) {
+            const tinyobj::index_t* tri[3] = {&idxList[i], &idxList[i+1], &idxList[i+2]};
 
-            if (idx.normal_index >= 0) {
-                auto ni = static_cast<size_t>(idx.normal_index);
-                m.normals.push_back(attrib.normals[3*ni+0]);
-                m.normals.push_back(attrib.normals[3*ni+1]);
-                m.normals.push_back(attrib.normals[3*ni+2]);
-            } else {
-                m.normals.insert(m.normals.end(), {0.0f, 1.0f, 0.0f});
+            // Compute face normal when any vertex is missing a normal
+            std::array<float,3> faceNormal{0.0f, 1.0f, 0.0f};
+            bool needFaceNormal = (tri[0]->normal_index < 0 ||
+                                   tri[1]->normal_index < 0 ||
+                                   tri[2]->normal_index < 0);
+            if (needFaceNormal) {
+                auto pos = [&](int k) -> std::array<float,3> {
+                    auto vi = static_cast<size_t>(tri[k]->vertex_index);
+                    return {attrib.vertices[3*vi], attrib.vertices[3*vi+1], attrib.vertices[3*vi+2]};
+                };
+                auto p0 = pos(0), p1 = pos(1), p2 = pos(2);
+                std::array<float,3> e1{p1[0]-p0[0], p1[1]-p0[1], p1[2]-p0[2]};
+                std::array<float,3> e2{p2[0]-p0[0], p2[1]-p0[1], p2[2]-p0[2]};
+                faceNormal = cross3(e1, e2);
+                norm3(faceNormal);
             }
 
-            if (idx.texcoord_index >= 0) {
-                auto ti = static_cast<size_t>(idx.texcoord_index);
-                m.texcoords.push_back(attrib.texcoords[2*ti+0]);
-                m.texcoords.push_back(1.0f - attrib.texcoords[2*ti+1]); // OBJ V is flipped vs glTF
-            } else {
-                m.texcoords.insert(m.texcoords.end(), {0.0f, 0.0f});
-            }
+            for (int k = 0; k < 3; ++k) {
+                const auto& idx = *tri[k];
+                auto vi = static_cast<size_t>(idx.vertex_index);
+                m.positions.push_back(attrib.vertices[3*vi+0]);
+                m.positions.push_back(attrib.vertices[3*vi+1]);
+                m.positions.push_back(attrib.vertices[3*vi+2]);
 
-            m.indices.push_back(static_cast<uint32_t>(m.indices.size()));
+                if (idx.normal_index >= 0) {
+                    auto ni = static_cast<size_t>(idx.normal_index);
+                    m.normals.push_back(attrib.normals[3*ni+0]);
+                    m.normals.push_back(attrib.normals[3*ni+1]);
+                    m.normals.push_back(attrib.normals[3*ni+2]);
+                } else {
+                    m.normals.push_back(faceNormal[0]);
+                    m.normals.push_back(faceNormal[1]);
+                    m.normals.push_back(faceNormal[2]);
+                }
+
+                if (idx.texcoord_index >= 0) {
+                    auto ti = static_cast<size_t>(idx.texcoord_index);
+                    m.texcoords.push_back(attrib.texcoords[2*ti+0]);
+                    m.texcoords.push_back(1.0f - attrib.texcoords[2*ti+1]); // flip V
+                } else {
+                    m.texcoords.push_back(0.0f);
+                    m.texcoords.push_back(0.0f);
+                }
+
+                m.indices.push_back(static_cast<uint32_t>(m.indices.size()));
+            }
         }
     }
     return m;
