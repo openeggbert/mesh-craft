@@ -16,6 +16,7 @@
 
 #include <algorithm>
 #include <cstring>
+#include <iostream>
 #include <numbers>
 #include <stdexcept>
 #include <string>
@@ -24,6 +25,19 @@
 
 using namespace MeshCraft::Mc3;
 namespace mc3togltf {
+
+// ---------------------------------------------------------------------------
+// Export context (passed through recursive node building)
+// ---------------------------------------------------------------------------
+
+struct ExportCtx {
+    tinygltf::Model& model;
+    const std::unordered_map<std::string, int>& matNameToIdx;
+    const std::map<std::string, std::shared_ptr<Mc3Object>>& definitions;
+};
+
+// Forward declaration
+static int buildNode(ExportCtx& ctx, const Mc3Object& obj);
 
 // ---------------------------------------------------------------------------
 // Buffer helpers
@@ -204,16 +218,16 @@ static int buildMaterial(tinygltf::Model& model,
 
     std::string am = mat.alphaMode;
     std::transform(am.begin(), am.end(), am.begin(), ::toupper);
-    if (am == "BLEND") m.alphaMode = "BLEND";
-    else if (am == "MASK") m.alphaMode = "MASK";
-    else m.alphaMode = "OPAQUE";
+    if (am == "BLEND")      m.alphaMode = "BLEND";
+    else if (am == "MASK")  m.alphaMode = "MASK";
+    else                    m.alphaMode = "OPAQUE";
 
     model.materials.push_back(std::move(m));
     return static_cast<int>(model.materials.size()) - 1;
 }
 
 // ---------------------------------------------------------------------------
-// Mesh from Mc3Object
+// Mesh builder (from Mc3Object)
 // ---------------------------------------------------------------------------
 
 static int buildMesh(tinygltf::Model& model,
@@ -260,17 +274,31 @@ static int buildMesh(tinygltf::Model& model,
 // Node building (recursive)
 // ---------------------------------------------------------------------------
 
-static int buildNode(tinygltf::Model& model,
-                     const Mc3Object& obj,
-                     const std::unordered_map<std::string, int>& matNameToIdx)
+static int buildNode(ExportCtx& ctx, const Mc3Object& obj)
 {
+    // Invisible objects (and their entire subtree) are skipped
+    if (!obj.visible) return -1;
+
     tinygltf::Node node;
     node.name = obj.name;
 
     const auto& t = obj.transform;
+    const bool hasPivot = (t.pivot[0] != 0.0f || t.pivot[1] != 0.0f || t.pivot[2] != 0.0f);
 
-    if (t.position[0] != 0.0f || t.position[1] != 0.0f || t.position[2] != 0.0f) {
-        node.translation = {t.position[0], t.position[1], t.position[2]};
+    // --- Transform ---
+    // With a non-zero pivot, the rotation/scale centre is at (position + pivot) in parent space.
+    // We represent this as:
+    //   outer node: T(position + pivot), R, S
+    //   inner "origin" child: T(-pivot)       ← mesh and logical children live here
+    if (!hasPivot) {
+        if (t.position[0] != 0.0f || t.position[1] != 0.0f || t.position[2] != 0.0f)
+            node.translation = {t.position[0], t.position[1], t.position[2]};
+    } else {
+        node.translation = {
+            t.position[0] + t.pivot[0],
+            t.position[1] + t.pivot[1],
+            t.position[2] + t.pivot[2]
+        };
     }
 
     if (t.rotation[0] != 0.0f || t.rotation[1] != 0.0f || t.rotation[2] != 0.0f) {
@@ -278,31 +306,79 @@ static int buildNode(tinygltf::Model& model,
         node.rotation = {q[0], q[1], q[2], q[3]};
     }
 
-    if (t.scale[0] != 1.0f || t.scale[1] != 1.0f || t.scale[2] != 1.0f) {
+    if (t.scale[0] != 1.0f || t.scale[1] != 1.0f || t.scale[2] != 1.0f)
         node.scale = {t.scale[0], t.scale[1], t.scale[2]};
-    }
 
-    // Build mesh if this object has geometry
+    // --- Material (materialOverride takes priority) ---
     int matIdx = -1;
-    if (!obj.material.empty()) {
-        auto it = matNameToIdx.find(obj.material);
-        if (it != matNameToIdx.end()) matIdx = it->second;
+    const std::string& matName = !obj.materialOverride.empty() ? obj.materialOverride : obj.material;
+    if (!matName.empty()) {
+        auto it = ctx.matNameToIdx.find(matName);
+        if (it != ctx.matNameToIdx.end()) matIdx = it->second;
     }
 
-    if (obj.primitive.has_value() || obj.extrude.has_value()) {
-        int meshIdx = buildMesh(model, obj, matIdx);
-        if (meshIdx >= 0) node.mesh = meshIdx;
+    // --- Geometry ---
+    // Nodes that own direct geometry: all types with a primitive or extrude,
+    // plus Instance (resolved via definitions).
+    int directMesh = -1;
+
+    if (obj.type == ObjectType::Instance && !obj.definition.empty()) {
+        // Resolve instance: copy definition geometry + children into this node
+        auto it = ctx.definitions.find(obj.definition);
+        if (it != ctx.definitions.end() && it->second) {
+            const Mc3Object& defObj = *it->second;
+
+            // Build mesh from the definition (use this instance's material override if any)
+            Mc3Object tmp = defObj;
+            if (matIdx >= 0) tmp.material = matName; // propagate override
+            if (obj.deform.has_value()) tmp.deform = obj.deform;
+
+            directMesh = buildMesh(ctx.model, tmp, matIdx >= 0 ? matIdx : [&]{
+                auto jt = ctx.matNameToIdx.find(defObj.material);
+                return jt != ctx.matNameToIdx.end() ? jt->second : -1;
+            }());
+
+            // Add definition's children as our own children
+            for (const auto& child : defObj.children) {
+                if (!child) continue;
+                int ci = buildNode(ctx, *child);
+                if (ci >= 0) node.children.push_back(ci);
+            }
+        } else {
+            std::cerr << "Warning: instance references unknown definition '"
+                      << obj.definition << "'\n";
+        }
+    } else if (obj.primitive.has_value() || obj.extrude.has_value()) {
+        directMesh = buildMesh(ctx.model, obj, matIdx);
     }
 
-    // Recurse into children
-    for (const auto& child : obj.children) {
-        if (!child) continue;
-        int childIdx = buildNode(model, *child, matNameToIdx);
-        node.children.push_back(childIdx);
+    // --- Logical children (for non-instance types) ---
+    if (obj.type != ObjectType::Instance) {
+        for (const auto& child : obj.children) {
+            if (!child) continue;
+            int ci = buildNode(ctx, *child);
+            if (ci >= 0) node.children.push_back(ci);
+        }
     }
 
-    model.nodes.push_back(std::move(node));
-    return static_cast<int>(model.nodes.size()) - 1;
+    // --- Apply pivot: wrap geometry/children in an inner offset node ---
+    if (hasPivot) {
+        tinygltf::Node originNode;
+        originNode.name        = obj.name + "_origin";
+        originNode.translation = {-t.pivot[0], -t.pivot[1], -t.pivot[2]};
+        originNode.mesh        = directMesh;
+        originNode.children    = node.children;
+        node.children.clear();
+
+        ctx.model.nodes.push_back(std::move(originNode));
+        int originIdx = static_cast<int>(ctx.model.nodes.size()) - 1;
+        node.children.push_back(originIdx);
+    } else {
+        node.mesh = directMesh;
+    }
+
+    ctx.model.nodes.push_back(std::move(node));
+    return static_cast<int>(ctx.model.nodes.size()) - 1;
 }
 
 // ---------------------------------------------------------------------------
@@ -320,10 +396,7 @@ static void addLights(tinygltf::Model& model,
     tinygltf::Value::Array lightsArray;
 
     for (const auto& light : lights) {
-        if (light.type == LightType::Ambient) {
-            // glTF 2.0 has no ambient light — skip
-            continue;
-        }
+        if (light.type == LightType::Ambient) continue; // no ambient in glTF 2.0
 
         tinygltf::Value::Object lo;
         lo["name"]  = tinygltf::Value(light.name);
@@ -343,9 +416,8 @@ static void addLights(tinygltf::Model& model,
         }
         lo["type"] = tinygltf::Value(typeStr);
 
-        if (light.range > 0.0f) {
+        if (light.range > 0.0f)
             lo["range"] = tinygltf::Value(static_cast<double>(light.range));
-        }
 
         if (light.type == LightType::Spot) {
             double halfAngle  = light.angle * std::numbers::pi / 360.0;
@@ -359,7 +431,6 @@ static void addLights(tinygltf::Model& model,
         int lightIdx = static_cast<int>(lightsArray.size());
         lightsArray.push_back(tinygltf::Value(lo));
 
-        // Node for this light
         tinygltf::Node lnode;
         lnode.name = light.name;
 
@@ -404,10 +475,10 @@ static void addCameraNodes(tinygltf::Model& model,
 
         if (cam.type == CameraType::Perspective) {
             gcam.type = "perspective";
-            gcam.perspective.yfov         = cam.fov * std::numbers::pi / 180.0;
-            gcam.perspective.znear        = cam.nearPlane;
-            gcam.perspective.zfar         = cam.farPlane;
-            gcam.perspective.aspectRatio  = 16.0 / 9.0;
+            gcam.perspective.yfov        = cam.fov * std::numbers::pi / 180.0;
+            gcam.perspective.znear       = cam.nearPlane;
+            gcam.perspective.zfar        = cam.farPlane;
+            gcam.perspective.aspectRatio = 16.0 / 9.0;
         } else {
             gcam.type = "orthographic";
             gcam.orthographic.xmag  = cam.orthoSize;
@@ -422,7 +493,6 @@ static void addCameraNodes(tinygltf::Model& model,
         tinygltf::Node cnode;
         cnode.name   = cam.name;
         cnode.camera = camIdx;
-
         cnode.translation = {
             static_cast<double>(cam.position[0]),
             static_cast<double>(cam.position[1]),
@@ -448,6 +518,44 @@ static void addCameraNodes(tinygltf::Model& model,
 }
 
 // ---------------------------------------------------------------------------
+// Environment → scene extras
+// ---------------------------------------------------------------------------
+
+static void applyEnvironment(tinygltf::Scene& scene,
+                              const std::optional<Mc3Environment>& env)
+{
+    if (!env.has_value()) return;
+
+    tinygltf::Value::Object extras;
+
+    extras["backgroundColor"] = tinygltf::Value(tinygltf::Value::Array{
+        tinygltf::Value(static_cast<double>(env->backgroundColor[0])),
+        tinygltf::Value(static_cast<double>(env->backgroundColor[1])),
+        tinygltf::Value(static_cast<double>(env->backgroundColor[2]))
+    });
+
+    if (!env->backgroundTexture.empty())
+        extras["backgroundTexture"] = tinygltf::Value(env->backgroundTexture);
+
+    if (env->fog.has_value()) {
+        const auto& fog = *env->fog;
+        tinygltf::Value::Object fogObj;
+        fogObj["mode"]    = tinygltf::Value(fog.mode == FogMode::Linear ? "linear" : "exponential");
+        fogObj["color"]   = tinygltf::Value(tinygltf::Value::Array{
+            tinygltf::Value(static_cast<double>(fog.color[0])),
+            tinygltf::Value(static_cast<double>(fog.color[1])),
+            tinygltf::Value(static_cast<double>(fog.color[2]))
+        });
+        fogObj["start"]   = tinygltf::Value(static_cast<double>(fog.start));
+        fogObj["end"]     = tinygltf::Value(static_cast<double>(fog.end));
+        fogObj["density"] = tinygltf::Value(static_cast<double>(fog.density));
+        extras["fog"] = tinygltf::Value(fogObj);
+    }
+
+    scene.extras = tinygltf::Value(extras);
+}
+
+// ---------------------------------------------------------------------------
 // GltfExporter::exportDocument
 // ---------------------------------------------------------------------------
 
@@ -460,7 +568,6 @@ void GltfExporter::exportDocument(const Mc3Document& doc,
 
     model.buffers.emplace_back();
     model.buffers[0].name = "buffer0";
-
     model.asset.version   = "2.0";
     model.asset.generator = "mc3togltf";
 
@@ -478,22 +585,26 @@ void GltfExporter::exportDocument(const Mc3Document& doc,
     tinygltf::Scene scene;
     scene.name = doc.model.empty() ? "Scene" : doc.model;
 
-    // Object nodes
+    // Object nodes (recursive)
+    ExportCtx ctx{model, matNameToIdx, doc.definitions};
     for (const auto& objPtr : doc.objects) {
         if (!objPtr) continue;
-        int nodeIdx = buildNode(model, *objPtr, matNameToIdx);
-        scene.nodes.push_back(nodeIdx);
+        int nodeIdx = buildNode(ctx, *objPtr);
+        if (nodeIdx >= 0) scene.nodes.push_back(nodeIdx);
     }
 
     // Lights
-    std::vector<int> lightNodeIndices;
-    addLights(model, doc.lights, lightNodeIndices);
-    for (int idx : lightNodeIndices) scene.nodes.push_back(idx);
+    std::vector<int> lightNodes;
+    addLights(model, doc.lights, lightNodes);
+    for (int i : lightNodes) scene.nodes.push_back(i);
 
     // Cameras
-    std::vector<int> cameraNodeIndices;
-    addCameraNodes(model, doc.cameras, cameraNodeIndices);
-    for (int idx : cameraNodeIndices) scene.nodes.push_back(idx);
+    std::vector<int> cameraNodes;
+    addCameraNodes(model, doc.cameras, cameraNodes);
+    for (int i : cameraNodes) scene.nodes.push_back(i);
+
+    // Environment → scene extras
+    applyEnvironment(scene, doc.environment);
 
     model.scenes.push_back(std::move(scene));
     model.defaultScene = 0;
@@ -508,9 +619,8 @@ void GltfExporter::exportDocument(const Mc3Document& doc,
                                            /*embedBuffers=*/writeBinary,
                                            prettyPrint,
                                            writeBinary);
-    if (!ok) {
+    if (!ok)
         throw std::runtime_error("tinygltf: failed to write " + path);
-    }
 }
 
 } // namespace mc3togltf

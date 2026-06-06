@@ -1,0 +1,87 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<mc3 version="0.1" model="FeatureTest">
+
+  <environment>
+    <background color="0.1 0.2 0.4"/>
+    <fog mode="linear" color="0.1 0.2 0.4" start="20" end="80"/>
+  </environment>
+
+  <lights>
+    <ambient color="0.2 0.2 0.3" brightness="0.4"/>
+    <directional name="Sun" color="1.0 0.9 0.7" brightness="3.0" direction="-0.3 -1.0 -0.5"/>
+    <point name="Lamp" color="1.0 0.6 0.2" brightness="5.0" position="0 3 0" range="10"/>
+  </lights>
+
+  <cameras>
+    <camera name="Main" type="perspective" position="6 4 10" target="0 1 0" fov="55"/>
+  </cameras>
+
+  <materials>
+    <material id="red"   roughness="0.5"><base_color>0.9 0.1 0.1 1.0</base_color></material>
+    <material id="green" roughness="0.7"><base_color>0.1 0.7 0.1 1.0</base_color></material>
+    <material id="blue"  roughness="0.3" metallic="0.8"><base_color>0.1 0.3 0.9 1.0</base_color></material>
+    <material id="white" roughness="0.9"><base_color>0.9 0.9 0.9 1.0</base_color></material>
+    <material id="gold"  roughness="0.2" metallic="1.0"><base_color>1.0 0.8 0.1 1.0</base_color></material>
+  </materials>
+
+  <definitions>
+    <definition id="tree_trunk">
+      <cylinder name="trunk" radius="0.15" height="2.0" material="red"/>
+    </definition>
+    <definition id="tree_crown">
+      <sphere name="crown" radius="0.8" segments="20" material="green"/>
+    </definition>
+  </definitions>
+
+  <objects>
+
+    <!-- Ground plane -->
+    <plane name="Ground" size="20 20" axis="y" position="0 0 0" material="white"/>
+
+    <!-- Box with non-zero pivot (rotation center shifted) -->
+    <box name="PivotBox" size="1 1 1" position="2 0.5 0" rotation="0 45 0"
+         pivot="0.5 0 0" material="blue"/>
+
+    <!-- Instance usage: two trees placed at different positions -->
+    <group name="Tree1" position="-3 0 0">
+      <instance name="trunk1" definition="tree_trunk" position="0 1 0"/>
+      <instance name="crown1" definition="tree_crown" position="0 2.3 0"/>
+    </group>
+
+    <group name="Tree2" position="3 0 -2">
+      <instance name="trunk2" definition="tree_trunk" position="0 1 0"/>
+      <instance name="crown2" definition="tree_crown" position="0 2.3 0" material="gold"/>
+    </group>
+
+    <!-- Invisible object (should NOT appear in output) -->
+    <box name="HiddenBox" size="2 2 2" position="0 1 0" visible="false" material="red"/>
+
+    <!-- Extrude: arch (arc path, rect cross-section) — smooth normals -->
+    <extrude name="Arch" position="0 0 -4" material="blue"
+             twist="0" segments="24" smooth="true" caps="true">
+      <cross_section type="rect" width="0.3" height="0.2"/>
+      <path type="arc" radius="2.0" angle="180"/>
+    </extrude>
+
+    <!-- Extrude: helix spring -->
+    <extrude name="Spring" position="-5 0 0" material="gold"
+             twist="0" segments="64" smooth="true" caps="true">
+      <cross_section type="circle" radius="0.08" segments="10"/>
+      <path type="helix" radius="0.4" height="2.0" turns="5"/>
+    </extrude>
+
+    <!-- Extrude: polyline path -->
+    <extrude name="Pipe" position="5 0 0" material="blue"
+             segments="8" smooth="true" caps="true">
+      <cross_section type="circle" radius="0.15" segments="12"/>
+      <path type="polyline">
+        <point x="0" y="0" z="0"/>
+        <point x="0" y="1" z="0"/>
+        <point x="1" y="2" z="0"/>
+        <point x="1" y="3" z="0"/>
+      </path>
+    </extrude>
+
+  </objects>
+
+</mc3>

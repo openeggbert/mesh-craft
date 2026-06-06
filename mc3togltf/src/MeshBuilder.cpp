@@ -1,7 +1,9 @@
 #include "MeshBuilder.hpp"
 #include <cmath>
+#include <map>
 #include <numbers>
 #include <stdexcept>
+#include <tuple>
 
 namespace mc3togltf {
 
@@ -375,11 +377,88 @@ static std::vector<PathFrame> samplePath(const MeshCraft::Mc3::Mc3ExtrudePath& p
         }
         break;
     }
-    default:
-        // Polyline / Bezier: not fully implemented — fall through to empty
-        frames.push_back({{0,0,0},{0,1,0}});
-        frames.push_back({{0,1,0},{0,1,0}});
+    case PT::Polyline: {
+        if (path.points.size() < 2) {
+            frames.push_back({{0,0,0},{0,1,0}});
+            frames.push_back({{0,1,0},{0,1,0}});
+            break;
+        }
+        // Compute total arc length for uniform segment distribution
+        int np = static_cast<int>(path.points.size());
+        for (int seg = 0; seg < np - 1; ++seg) {
+            auto& p0 = path.points[seg].position;
+            auto& p1 = path.points[seg+1].position;
+            float dx = p1[0]-p0[0], dy = p1[1]-p0[1], dz = p1[2]-p0[2];
+            float len = std::sqrt(dx*dx+dy*dy+dz*dz);
+            float tang = len > 1e-6f ? 1.0f/len : 1.0f;
+            int subSegs = std::max(1, segments / std::max(1, np-1));
+            for (int i = 0; i <= subSegs; ++i) {
+                if (seg > 0 && i == 0) continue; // avoid duplicate at joints
+                float t2 = static_cast<float>(i) / subSegs;
+                PathFrame f;
+                f.pos = {p0[0]+dx*t2, p0[1]+dy*t2, p0[2]+dz*t2};
+                f.tangent = {dx*tang, dy*tang, dz*tang};
+                frames.push_back(f);
+            }
+        }
         break;
+    }
+    case PT::Bezier: {
+        // Catmull-Rom through path.points (auto-tangents from neighbours)
+        int np = static_cast<int>(path.points.size());
+        if (np < 2) {
+            frames.push_back({{0,0,0},{0,1,0}});
+            frames.push_back({{0,1,0},{0,1,0}});
+            break;
+        }
+        // Catmull-Rom tangent at point i = 0.5 * (P[i+1] - P[i-1])
+        // Clamp endpoints: tangent[0] = P[1]-P[0], tangent[n-1] = P[n-1]-P[n-2]
+        auto catmullPoint = [&](int i0, int i1, int i2, int i3, float t2)
+            -> std::pair<std::array<float,3>, std::array<float,3>>
+        {
+            const auto& p0 = path.points[i0].position;
+            const auto& p1 = path.points[i1].position;
+            const auto& p2 = path.points[i2].position;
+            const auto& p3 = path.points[i3].position;
+            // Position (Catmull-Rom cubic):
+            float t3 = t2*t2, t4 = t3*t2;
+            std::array<float,3> pos;
+            for (int k=0;k<3;++k) {
+                float a = -0.5f*p0[k] + 1.5f*p1[k] - 1.5f*p2[k] + 0.5f*p3[k];
+                float b =       p0[k] - 2.5f*p1[k] + 2.0f*p2[k] - 0.5f*p3[k];
+                float c = -0.5f*p0[k]               + 0.5f*p2[k];
+                float d =                    p1[k];
+                pos[k] = a*t4 + b*t3 + c*t2 + d;
+            }
+            // Tangent (derivative):
+            std::array<float,3> tan;
+            for (int k=0;k<3;++k) {
+                float a = -0.5f*p0[k] + 1.5f*p1[k] - 1.5f*p2[k] + 0.5f*p3[k];
+                float b =       p0[k] - 2.5f*p1[k] + 2.0f*p2[k] - 0.5f*p3[k];
+                float c = -0.5f*p0[k]               + 0.5f*p2[k];
+                tan[k] = 3.0f*a*t3 + 2.0f*b*t2 + c;
+            }
+            float tl = std::sqrt(tan[0]*tan[0]+tan[1]*tan[1]+tan[2]*tan[2]);
+            if (tl > 1e-6f) { tan[0]/=tl; tan[1]/=tl; tan[2]/=tl; }
+            else { tan = {0,1,0}; }
+            return {pos, tan};
+        };
+
+        int subSegs = std::max(1, segments / std::max(1, np-1));
+        for (int seg = 0; seg < np-1; ++seg) {
+            int i0 = std::max(0, seg-1);
+            int i1 = seg;
+            int i2 = seg+1;
+            int i3 = std::min(np-1, seg+2);
+            for (int i = 0; i <= subSegs; ++i) {
+                if (seg > 0 && i == 0) continue;
+                float t2 = static_cast<float>(i) / subSegs;
+                auto [pos, tan] = catmullPoint(i0, i1, i2, i3, t2);
+                frames.push_back({pos, tan});
+            }
+        }
+        break;
+    }
     }
     return frames;
 }
@@ -485,6 +564,34 @@ MeshData buildExtrude(const MeshCraft::Mc3::Mc3Extrude& ext) {
         auto& tb = frames.back().tangent;
         addCap(startRing, {-tf[0],-tf[1],-tf[2]}, true);
         addCap(endRing,   { tb[0], tb[1], tb[2]}, false);
+    }
+
+    // Smooth normals: average normals at coincident positions
+    if (ext.smooth) {
+        using PosKey = std::tuple<int,int,int>;
+        auto quant = [](float v) { return static_cast<int>(std::round(v * 10000.0f)); };
+
+        std::map<PosKey, std::array<float,3>> accumNorm;
+        int vc = m.vertexCount();
+
+        for (int i = 0; i < vc; ++i) {
+            PosKey k{quant(m.positions[i*3]), quant(m.positions[i*3+1]), quant(m.positions[i*3+2])};
+            auto& n = accumNorm[k];
+            n[0] += m.normals[i*3];
+            n[1] += m.normals[i*3+1];
+            n[2] += m.normals[i*3+2];
+        }
+        for (auto& [k, n] : accumNorm) {
+            float len = std::sqrt(n[0]*n[0]+n[1]*n[1]+n[2]*n[2]);
+            if (len > 1e-6f) { n[0]/=len; n[1]/=len; n[2]/=len; }
+        }
+        for (int i = 0; i < vc; ++i) {
+            PosKey k{quant(m.positions[i*3]), quant(m.positions[i*3+1]), quant(m.positions[i*3+2])};
+            auto& n = accumNorm[k];
+            m.normals[i*3]   = n[0];
+            m.normals[i*3+1] = n[1];
+            m.normals[i*3+2] = n[2];
+        }
     }
 
     return m;
