@@ -20,14 +20,18 @@ Recommended pipeline:
 - [Purpose and Goals](purpose-and-goals.md)
 - [Top-Level Structure](top-level-structure.md)
 - [Coordinates and Units](coordinates-and-units.md)
+- [Environment](environment.md) — background, fog
+- [Lights](lights.md) — ambient, directional, spot, point
+- [Cameras](cameras.md) — perspective, orthographic
 - [Versioning](versioning.md)
 - [Best Practices](best-practices.md)
 - [Future Extensions](future-extensions.md)
 
 ### Objects
 
-- [Object Basics](objects/README.md) — common fields, default values
+- [Object Basics](objects/README.md) — common fields, deform, default values
 - [Primitive Objects](objects/primitives.md) — box, cube, sphere, cylinder, cone, plane, mesh
+- [Extruded Shape](objects/extrude.md) — beams, pipes, arches, springs, custom profiles
 - [Groups and Hierarchy](objects/groups-and-hierarchy.md)
 - [CSG Operations](objects/csg.md) — union, difference, intersection
 - [Definitions and Instances](objects/definitions-and-instances.md)

@@ -10,6 +10,18 @@ An MC3 file is a valid XML document with a single root element `<mc3>`.
     ...
   </metadata>
 
+  <environment>
+    ...
+  </environment>
+
+  <lights>
+    ...
+  </lights>
+
+  <cameras default="GameCamera">
+    ...
+  </cameras>
+
   <textures>
     ...
   </textures>
@@ -54,6 +66,9 @@ The `<objects>` child element is required (may be empty).
 | Element | Description |
 |---|---|
 | `<metadata>` | Author, license, notes, etc. |
+| `<environment>` | Background color, fog. See [environment.md](environment.md). |
+| `<lights>` | Ambient, directional, spot, and point lights. See [lights.md](lights.md). |
+| `<cameras>` | Named camera definitions. See [cameras.md](cameras.md). |
 | `<textures>` | Texture definitions. |
 | `<materials>` | Material definitions. |
 | `<definitions>` | Reusable object templates/prefabs. |

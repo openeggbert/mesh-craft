@@ -24,7 +24,7 @@ Every object element has an element name that represents its `type` (e.g. `<box>
 | `id` | string | Optional stable unique ID. Useful for tools and actions. |
 | `position` | vec3 | Local position as space-separated `x y z`. |
 | `rotation` | vec3 | Local Euler rotation in degrees (extrinsic XYZ order), space-separated. |
-| `scale` | vec3/number | Local scale as space-separated `x y z`, or a single number for uniform scale. |
+| `scale` | vec3/number | Scene-transform scale: space-separated `x y z` or single number. Propagates to children. |
 | `pivot` | vec3 | Pivot point for rotation/scale, in local coordinates. |
 | `material` | string | Material reference (by `id`). |
 | `visible` | bool | Whether object is rendered. |
@@ -36,9 +36,30 @@ Every object element has an element name that represents its `type` (e.g. `<box>
 | Element | Description |
 |---|---|
 | `<tags>` | Space-separated tool/game/editor tags. |
+| `<deform>` | Geometry-level non-uniform scale, applied before the scene transform. Does not propagate to children. |
 | `<collision>` | Complex collision definition. |
 | `<uv>` | UV mapping settings. |
 | `<states>` | Named object state configurations. |
+
+## Deformation vs. Transform Scale
+
+`scale` is part of the scene transform and **propagates to children**. `<deform>` stretches only the primitive's own geometry before the transform is applied, and does **not** affect children.
+
+Use `scale` when the whole subtree should scale together. Use `<deform>` when you want to stretch a single primitive independently of its children.
+
+```xml
+<!-- stretch only this cylinder's geometry, children unaffected -->
+<cylinder name="TallColumn" radius="0.3" height="1" material="stone" position="0 0 0">
+  <deform scale="1 4 1"/>
+  <sphere name="Capital" radius="0.4" position="0 0.5 0" material="stone"/>
+</cylinder>
+```
+
+### `<deform>` Attributes
+
+| Attribute | Type | Description |
+|---|---|---|
+| `scale` | vec3 | Per-axis geometry scale as `x y z`. Values &lt; 1 compress, &gt; 1 stretch. |
 
 ## Default Values
 
@@ -67,3 +88,4 @@ Every object element has an element name that represents its `type` (e.g. `<box>
 | `trigger` (action) | `manual` |
 | `trigger_on` (area) | `enter` |
 | `state` (object) | first listed state, or none |
+| `deform scale` | `1 1 1` |
