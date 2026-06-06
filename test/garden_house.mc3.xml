@@ -1,0 +1,571 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Garden House scene — MC3 format showcase
+  House with ground floor + first floor, balcony, chimney,
+  garden with trees, fence, walkway, flower pots, blue sky.
+-->
+<mc3 version="0.1" model="GardenHouse" unit="meter">
+
+  <environment>
+    <background color="0.38 0.65 0.95"/>
+    <fog mode="linear" color="0.72 0.83 0.98" start="60" end="160" density="0.004"/>
+  </environment>
+
+  <lights>
+    <ambient color="0.45 0.55 0.75" brightness="0.4"/>
+    <directional name="Sun" color="1.0 0.96 0.82" brightness="3.5"
+                 direction="-0.55 -1.0 0.40" cast_shadows="true"/>
+  </lights>
+
+  <cameras>
+    <camera name="Overview"  position="22 15 -24" target="0 3 0" fov="45"/>
+    <camera name="FrontView" position="0 6 -20"   target="0 4 0" fov="50"/>
+    <camera name="Garden"    position="-16 8 -16" target="0 2 0" fov="55"/>
+  </cameras>
+
+  <!-- ================================================================
+       MATERIALS
+  ================================================================ -->
+  <materials>
+    <!-- House structure -->
+    <material id="brick" roughness="0.88" metallic="0.0">
+      <base_color>0.72 0.34 0.22 1.0</base_color>
+    </material>
+    <material id="brick_chimney" roughness="0.90" metallic="0.0">
+      <base_color>0.52 0.24 0.14 1.0</base_color>
+    </material>
+    <material id="concrete" roughness="0.82" metallic="0.0">
+      <base_color>0.76 0.74 0.70 1.0</base_color>
+    </material>
+    <material id="concrete_dark" roughness="0.85" metallic="0.0">
+      <base_color>0.50 0.50 0.48 1.0</base_color>
+    </material>
+    <material id="roof_tile" roughness="0.82" metallic="0.0">
+      <base_color>0.48 0.22 0.14 1.0</base_color>
+    </material>
+    <material id="white_plaster" roughness="0.88" metallic="0.0">
+      <base_color>0.92 0.90 0.86 1.0</base_color>
+    </material>
+    <!-- Woodwork -->
+    <material id="wood_dark" roughness="0.72" metallic="0.0">
+      <base_color>0.32 0.18 0.09 1.0</base_color>
+    </material>
+    <material id="wood_balcony" roughness="0.68" metallic="0.0">
+      <base_color>0.52 0.32 0.14 1.0</base_color>
+    </material>
+    <!-- Glass -->
+    <material id="glass_window" roughness="0.04" metallic="0.08" alpha_mode="blend">
+      <base_color>0.68 0.84 1.0 0.30</base_color>
+    </material>
+    <!-- Garden -->
+    <material id="grass" roughness="0.95" metallic="0.0">
+      <base_color>0.22 0.55 0.18 1.0</base_color>
+    </material>
+    <material id="stone_path" roughness="0.88" metallic="0.0">
+      <base_color>0.65 0.62 0.56 1.0</base_color>
+    </material>
+    <material id="fence_mat" roughness="0.80" metallic="0.0">
+      <base_color>0.30 0.18 0.09 1.0</base_color>
+    </material>
+    <!-- Nature -->
+    <material id="tree_trunk" roughness="0.90" metallic="0.0">
+      <base_color>0.34 0.21 0.11 1.0</base_color>
+    </material>
+    <material id="tree_leaves" roughness="0.85" metallic="0.0">
+      <base_color>0.16 0.46 0.13 1.0</base_color>
+    </material>
+    <material id="tree_leaves_dark" roughness="0.85" metallic="0.0">
+      <base_color>0.10 0.34 0.10 1.0</base_color>
+    </material>
+    <!-- Flower pots -->
+    <material id="flower_pot_mat" roughness="0.80" metallic="0.0">
+      <base_color>0.72 0.38 0.22 1.0</base_color>
+    </material>
+    <material id="soil" roughness="0.95" metallic="0.0">
+      <base_color>0.28 0.16 0.09 1.0</base_color>
+    </material>
+    <material id="flower_red" roughness="0.65" metallic="0.0">
+      <base_color>0.90 0.14 0.14 1.0</base_color>
+    </material>
+    <material id="flower_yellow" roughness="0.65" metallic="0.0">
+      <base_color>0.96 0.88 0.10 1.0</base_color>
+    </material>
+    <material id="flower_pink" roughness="0.65" metallic="0.0">
+      <base_color>0.96 0.50 0.70 1.0</base_color>
+    </material>
+    <material id="flower_white" roughness="0.65" metallic="0.0">
+      <base_color>0.96 0.94 0.90 1.0</base_color>
+    </material>
+  </materials>
+
+  <!-- ================================================================
+       DEFINITIONS  (reusable objects)
+  ================================================================ -->
+  <definitions>
+
+    <!-- Small tree: trunk + round canopy -->
+    <definition id="tree_small">
+      <group name="TreeSmall">
+        <cylinder name="Trunk"  radius="0.16" height="2.4" segments="10"
+                  material="tree_trunk"  position="0 1.2 0"/>
+        <sphere   name="Canopy" radius="1.4"  segments="14"
+                  material="tree_leaves" position="0 3.2 0"/>
+      </group>
+    </definition>
+
+    <!-- Large tree: trunk + layered canopy -->
+    <definition id="tree_large">
+      <group name="TreeLarge">
+        <cylinder name="Trunk"   radius="0.24" height="3.6" segments="10"
+                  material="tree_trunk"       position="0 1.8 0"/>
+        <sphere   name="Canopy1" radius="2.1"  segments="16"
+                  material="tree_leaves"      position="0 5.0 0"/>
+        <sphere   name="Canopy2" radius="1.5"  segments="12"
+                  material="tree_leaves_dark" position="0.9 5.9 0.6"/>
+        <sphere   name="Canopy3" radius="1.3"  segments="12"
+                  material="tree_leaves_dark" position="-0.7 6.0 -0.5"/>
+      </group>
+    </definition>
+
+    <!-- Standard window 1.2 × 1.2 m (local origin = wall surface center) -->
+    <definition id="window_std">
+      <group name="Window">
+        <box name="Frame"     size="1.30 1.30 0.18" material="wood_dark"    position="0 0 0"/>
+        <box name="Glass"     size="0.96 0.96 0.06" material="glass_window" position="0 0 0.06"/>
+        <box name="Bar_H"     size="0.96 0.06 0.08" material="wood_dark"    position="0 0 0.10"/>
+        <box name="Bar_V"     size="0.06 0.96 0.08" material="wood_dark"    position="0 0 0.10"/>
+      </group>
+    </definition>
+
+    <!-- Wide window 1.6 × 1.2 m for living area -->
+    <definition id="window_wide">
+      <group name="WideWindow">
+        <box name="Frame"  size="1.70 1.30 0.18" material="wood_dark"    position="0 0 0"/>
+        <box name="Glass"  size="1.36 0.96 0.06" material="glass_window" position="0 0 0.06"/>
+        <box name="Bar_H"  size="1.36 0.06 0.08" material="wood_dark"    position="0 0 0.10"/>
+        <box name="Bar_V1" size="0.06 0.96 0.08" material="wood_dark"    position="-0.34 0 0.10"/>
+        <box name="Bar_V2" size="0.06 0.96 0.08" material="wood_dark"    position=" 0.34 0 0.10"/>
+      </group>
+    </definition>
+
+    <!-- Front door 1.2 × 2.2 m -->
+    <definition id="door_front">
+      <group name="FrontDoor">
+        <box name="FrameL"   size="0.14 2.40 0.22" material="wood_dark" position="-0.62 1.20 0"/>
+        <box name="FrameR"   size="0.14 2.40 0.22" material="wood_dark" position=" 0.62 1.20 0"/>
+        <box name="FrameTop" size="1.38 0.16 0.22" material="wood_dark" position="0 2.48 0"/>
+        <box name="Panel"    size="1.10 2.10 0.08" material="wood_dark" position="0 1.05 0.07"/>
+        <box name="PanelWin" size="0.56 0.42 0.06" material="glass_window" position="0 1.72 0.08"/>
+      </group>
+    </definition>
+
+    <!-- Balcony door 1.4 × 2.3 m (floor-to-ceiling glass) -->
+    <definition id="door_balcony">
+      <group name="BalconyDoor">
+        <box name="FrameL"   size="0.14 2.40 0.22" material="wood_dark"    position="-0.72 1.20 0"/>
+        <box name="FrameR"   size="0.14 2.40 0.22" material="wood_dark"    position=" 0.72 1.20 0"/>
+        <box name="FrameTop" size="1.58 0.14 0.22" material="wood_dark"    position="0 2.47 0"/>
+        <box name="Glass"    size="1.28 2.10 0.06" material="glass_window" position="0 1.05 0.07"/>
+        <box name="Bar_H"    size="1.28 0.06 0.08" material="wood_dark"    position="0 1.20 0.08"/>
+        <box name="Bar_V"    size="0.06 2.10 0.08" material="wood_dark"    position="0 1.05 0.08"/>
+      </group>
+    </definition>
+
+    <!-- Flower pot with red flowers -->
+    <definition id="fpot_red">
+      <group name="FPotRed">
+        <cylinder name="Pot"    radius="0.16" height="0.22" segments="12"
+                  material="flower_pot_mat" position="0 0.11 0"/>
+        <sphere   name="Soil"   radius="0.13" segments="8"
+                  material="soil"           position="0 0.22 0"/>
+        <sphere   name="Flower" radius="0.17" segments="8"
+                  material="flower_red"     position="0 0.39 0"/>
+      </group>
+    </definition>
+
+    <!-- Flower pot with yellow flowers -->
+    <definition id="fpot_yellow">
+      <group name="FPotYellow">
+        <cylinder name="Pot"    radius="0.16" height="0.22" segments="12"
+                  material="flower_pot_mat" position="0 0.11 0"/>
+        <sphere   name="Soil"   radius="0.13" segments="8"
+                  material="soil"           position="0 0.22 0"/>
+        <sphere   name="Flower" radius="0.17" segments="8"
+                  material="flower_yellow"  position="0 0.39 0"/>
+      </group>
+    </definition>
+
+    <!-- Flower pot with pink flowers -->
+    <definition id="fpot_pink">
+      <group name="FPotPink">
+        <cylinder name="Pot"    radius="0.16" height="0.22" segments="12"
+                  material="flower_pot_mat" position="0 0.11 0"/>
+        <sphere   name="Soil"   radius="0.13" segments="8"
+                  material="soil"           position="0 0.22 0"/>
+        <sphere   name="Flower" radius="0.17" segments="8"
+                  material="flower_pink"    position="0 0.39 0"/>
+      </group>
+    </definition>
+
+    <!-- Flower pot with white flowers -->
+    <definition id="fpot_white">
+      <group name="FPotWhite">
+        <cylinder name="Pot"    radius="0.16" height="0.22" segments="12"
+                  material="flower_pot_mat" position="0 0.11 0"/>
+        <sphere   name="Soil"   radius="0.13" segments="8"
+                  material="soil"           position="0 0.22 0"/>
+        <sphere   name="Flower" radius="0.17" segments="8"
+                  material="flower_white"   position="0 0.39 0"/>
+      </group>
+    </definition>
+
+  </definitions>
+
+  <!-- ================================================================
+       SCENE OBJECTS
+       House layout:
+         X: -6 to +6  (12 m wide)
+         Z: -4 to +4  (8 m deep)
+         Ground floor: y = 0 to 3
+         First floor:  y = 3 to 6
+         Roof:         y = 6 to ~8.8
+         Front = -Z,  Back = +Z
+  ================================================================ -->
+  <objects>
+
+    <!-- ============================================================
+         GROUND — green lawn
+    ============================================================ -->
+    <plane name="Lawn" size="60 60" axis="y" position="0 0 0" material="grass"/>
+
+    <!-- ============================================================
+         GARDEN PATH
+    ============================================================ -->
+    <!-- Main walkway: gate → front door -->
+    <box name="WalkwayMain" size="2.20 0.06 12.0"
+         position="0 0.03 -10.0" material="stone_path"/>
+    <!-- Side path around left of house -->
+    <box name="WalkwaySide_L" size="1.40 0.06 10.0"
+         position="-7.2 0.03 0.5" material="stone_path"/>
+    <!-- Path around back -->
+    <box name="WalkwayBack" size="14.0 0.06 1.40"
+         position="0 0.03 4.7" material="stone_path"/>
+
+    <!-- ============================================================
+         HOUSE — foundation + slab
+    ============================================================ -->
+    <box name="Foundation" size="12.80 0.40 8.80"
+         position="0 -0.20 0" material="concrete_dark"/>
+    <box name="GF_Slab" size="12.0 0.24 8.0"
+         position="0 0.12 0" material="concrete"/>
+
+    <!-- ============================================================
+         GROUND FLOOR WALLS
+         Front wall split left/right around door (door at x=0, z=-4)
+    ============================================================ -->
+    <!-- Front wall — left section (x: -6 to -1.5) -->
+    <box name="GF_Front_L" size="4.50 3.0 0.30"
+         position="-3.75 1.50 -4.0" material="brick"/>
+    <!-- Front wall — right section (x: +1.5 to +6) -->
+    <box name="GF_Front_R" size="4.50 3.0 0.30"
+         position=" 3.75 1.50 -4.0" material="brick"/>
+    <!-- Front wall — above door (x: -0.8 to +0.8, y: 2.3 to 3) -->
+    <box name="GF_Front_DoorTop" size="1.60 0.70 0.30"
+         position="0 2.65 -4.0" material="brick"/>
+
+    <!-- Back wall -->
+    <box name="GF_Back" size="12.0 3.0 0.30"
+         position="0 1.50 4.0" material="brick"/>
+    <!-- Left wall -->
+    <box name="GF_Left" size="0.30 3.0 7.40"
+         position="-6.0 1.50 0.0" material="brick"/>
+    <!-- Right wall -->
+    <box name="GF_Right" size="0.30 3.0 7.40"
+         position=" 6.0 1.50 0.0" material="brick"/>
+
+    <!-- ============================================================
+         GROUND FLOOR — INTERNAL WALLS  (rooms)
+         Central corridor divides front/back half.
+         Room dividers create: kitchen, living room, hallway,
+         dining room (4 rooms on ground floor).
+    ============================================================ -->
+    <!-- Main corridor wall running E-W (splits front/back rooms) -->
+    <box name="GF_Wall_Corridor" size="11.40 2.80 0.25"
+         position="0 1.50 0.0" material="white_plaster"/>
+    <!-- Room divider right side -->
+    <box name="GF_Wall_DivR" size="0.25 2.80 3.85"
+         position="3.0 1.50 -1.925" material="white_plaster"/>
+    <!-- Room divider left side -->
+    <box name="GF_Wall_DivL" size="0.25 2.80 3.85"
+         position="-3.0 1.50 -1.925" material="white_plaster"/>
+
+    <!-- ============================================================
+         FLOOR/CEILING SLAB BETWEEN FLOORS
+    ============================================================ -->
+    <box name="FloorSlab" size="12.0 0.28 8.0"
+         position="0 3.14 0" material="concrete"/>
+
+    <!-- ============================================================
+         FIRST FLOOR WALLS
+         Front wall split around balcony door (centered, x: -0.9 to +0.9)
+    ============================================================ -->
+    <!-- First floor front — left section -->
+    <box name="FF_Front_L" size="4.20 3.0 0.30"
+         position="-3.90 4.50 -4.0" material="brick"/>
+    <!-- First floor front — right section -->
+    <box name="FF_Front_R" size="4.20 3.0 0.30"
+         position=" 3.90 4.50 -4.0" material="brick"/>
+    <!-- Above balcony door -->
+    <box name="FF_Front_DoorTop" size="2.00 0.60 0.30"
+         position="0 5.70 -4.0" material="brick"/>
+
+    <!-- First floor back wall -->
+    <box name="FF_Back" size="12.0 3.0 0.30"
+         position="0 4.50 4.0" material="brick"/>
+    <!-- First floor left wall -->
+    <box name="FF_Left" size="0.30 3.0 7.40"
+         position="-6.0 4.50 0.0" material="brick"/>
+    <!-- First floor right wall -->
+    <box name="FF_Right" size="0.30 3.0 7.40"
+         position=" 6.0 4.50 0.0" material="brick"/>
+
+    <!-- ============================================================
+         FIRST FLOOR — INTERNAL WALLS  (bedrooms, hallway, bathroom)
+    ============================================================ -->
+    <box name="FF_Wall_Hall" size="11.40 2.80 0.25"
+         position="0 4.50 0.5" material="white_plaster"/>
+    <box name="FF_Wall_BedR" size="0.25 2.80 3.60"
+         position="3.0 4.50 -1.70" material="white_plaster"/>
+    <box name="FF_Wall_BedL" size="0.25 2.80 3.60"
+         position="-3.0 4.50 -1.70" material="white_plaster"/>
+
+    <!-- ============================================================
+         TOP CEILING SLAB
+    ============================================================ -->
+    <box name="CeilingSlab" size="12.0 0.28 8.0"
+         position="0 6.14 0" material="concrete"/>
+
+    <!-- ============================================================
+         ROOF  (triangular cross-section extruded along Z)
+         Path starts at z=-4.3 (front eave) and ends at z=+4.3 (rear eave).
+    ============================================================ -->
+    <extrude name="Roof" material="roof_tile"
+             position="0 6.28 -4.3" smooth="false" caps="true">
+      <cross_section type="custom">
+        <point x="-6.5" y="0.0"/>
+        <point x=" 6.5" y="0.0"/>
+        <point x=" 0.0" y="2.82"/>
+      </cross_section>
+      <path type="line" axis="z" length="8.6"/>
+    </extrude>
+
+    <!-- Fascia boards at front and rear eaves -->
+    <box name="Fascia_Front" size="13.4 0.32 0.28"
+         position="0 6.22 -4.44" material="wood_dark"/>
+    <box name="Fascia_Back"  size="13.4 0.32 0.28"
+         position="0 6.22  4.44" material="wood_dark"/>
+
+    <!-- ============================================================
+         CHIMNEY  (right-rear quadrant, punches through roof)
+    ============================================================ -->
+    <box name="ChimneyShaft" size="1.0 5.0 1.0"
+         position="3.2 6.3 2.0" material="brick_chimney"/>
+    <box name="ChimneyCapSlab" size="1.22 0.18 1.22"
+         position="3.2 8.86 2.0" material="concrete_dark"/>
+    <cylinder name="ChimneyPot" radius="0.24" height="0.55" segments="12"
+              material="brick_chimney" position="3.2 9.12 2.0"/>
+
+    <!-- ============================================================
+         BALCONY  (first floor, front facade, centered)
+         Slab: 3.6 m wide, 1.9 m deep, 0.20 m thick
+         Bottom of slab at y=3.28 (sitting on floor slab + 0.14 clearance)
+    ============================================================ -->
+    <box name="BalconySlab" size="3.60 0.20 2.00"
+         position="0 3.38 -5.10" material="concrete"/>
+
+    <!-- Balcony railing: 4 corner posts -->
+    <box name="BR_PostFL" size="0.09 0.90 0.09" position="-1.76 3.93 -6.07" material="wood_balcony"/>
+    <box name="BR_PostFR" size="0.09 0.90 0.09" position=" 1.76 3.93 -6.07" material="wood_balcony"/>
+    <box name="BR_PostBL" size="0.09 0.90 0.09" position="-1.76 3.93 -4.18" material="wood_balcony"/>
+    <box name="BR_PostBR" size="0.09 0.90 0.09" position=" 1.76 3.93 -4.18" material="wood_balcony"/>
+    <!-- Intermediate posts -->
+    <box name="BR_PostFM" size="0.07 0.90 0.07" position="0 3.93 -6.07" material="wood_balcony"/>
+    <!-- Top rails -->
+    <box name="BR_RailFront" size="3.62 0.08 0.08"  position="0 4.73 -6.07" material="wood_balcony"/>
+    <box name="BR_RailSideL" size="0.08 0.08 1.89"  position="-1.76 4.73 -5.125" material="wood_balcony"/>
+    <box name="BR_RailSideR" size="0.08 0.08 1.89"  position=" 1.76 4.73 -5.125" material="wood_balcony"/>
+    <!-- Mid rails -->
+    <box name="BR_MidFront"  size="3.62 0.06 0.06"  position="0 4.30 -6.07" material="wood_balcony"/>
+    <box name="BR_MidSideL"  size="0.06 0.06 1.89"  position="-1.76 4.30 -5.125" material="wood_balcony"/>
+    <box name="BR_MidSideR"  size="0.06 0.06 1.89"  position=" 1.76 4.30 -5.125" material="wood_balcony"/>
+    <!-- Bottom rail -->
+    <box name="BR_BotFront"  size="3.62 0.05 0.05"  position="0 3.60 -6.07" material="wood_balcony"/>
+
+    <!-- ============================================================
+         STAIRS — front door approach (3 steps from ground to door threshold)
+         Door threshold at y=0.24 (top of foundation slab)
+    ============================================================ -->
+    <box name="Step1" size="2.20 0.18 0.36" position="0 0.09  -4.43" material="concrete"/>
+    <box name="Step2" size="2.20 0.18 0.36" position="0 0.27  -4.79" material="concrete"/>
+    <box name="Step3" size="2.20 0.22 0.36" position="0 0.47  -5.15" material="concrete"/>
+
+    <!-- ============================================================
+         DOORS — placed flush with wall surface (wall at z=-4, offset -0.15)
+    ============================================================ -->
+    <!-- Front door (ground floor, centered on front wall) -->
+    <instance name="FrontDoor" definition="door_front"
+              position="0 0.25 -4.15"/>
+    <!-- Balcony door (first floor, centered on front wall) -->
+    <instance name="BalconyDoor" definition="door_balcony"
+              position="0 3.28 -4.15"/>
+
+    <!-- ============================================================
+         WINDOWS
+    ============================================================ -->
+    <!-- Window sills (concrete ledges, 0.08 m thick, 0.22 m deep) -->
+    <!-- GF front left -->
+    <box name="Sill_GF_FL" size="1.42 0.08 0.26" position="-3.25 0.96 -4.14" material="concrete"/>
+    <!-- GF front right -->
+    <box name="Sill_GF_FR" size="1.42 0.08 0.26" position=" 3.25 0.96 -4.14" material="concrete"/>
+    <!-- FF front left -->
+    <box name="Sill_FF_FL" size="1.42 0.08 0.26" position="-3.25 3.94 -4.14" material="concrete"/>
+    <!-- FF front right -->
+    <box name="Sill_FF_FR" size="1.42 0.08 0.26" position=" 3.25 3.94 -4.14" material="concrete"/>
+    <!-- GF back left/right -->
+    <box name="Sill_GF_BL" size="1.42 0.08 0.26" position="-2.80 0.96  4.14" material="concrete"/>
+    <box name="Sill_GF_BR" size="1.42 0.08 0.26" position=" 2.80 0.96  4.14" material="concrete"/>
+    <!-- Side windows sills -->
+    <box name="Sill_Left"  size="0.26 0.08 1.42" position="-6.14 0.96 -1.0" material="concrete"/>
+    <box name="Sill_Right" size="0.26 0.08 1.42" position=" 6.14 0.96 -1.0" material="concrete"/>
+
+    <!-- Ground floor front windows -->
+    <instance name="Win_GF_FL" definition="window_std"
+              position="-3.25 1.60 -4.15"/>
+    <instance name="Win_GF_FR" definition="window_std"
+              position=" 3.25 1.60 -4.15"/>
+
+    <!-- Ground floor back windows (wide) -->
+    <instance name="Win_GF_BL" definition="window_wide"
+              position="-2.80 1.60  4.15" rotation="0 180 0"/>
+    <instance name="Win_GF_BR" definition="window_wide"
+              position=" 2.80 1.60  4.15" rotation="0 180 0"/>
+
+    <!-- Ground floor side windows -->
+    <instance name="Win_GF_LS" definition="window_std"
+              position="-6.15 1.60 -1.0" rotation="0 90 0"/>
+    <instance name="Win_GF_RS" definition="window_std"
+              position=" 6.15 1.60 -1.0" rotation="0 -90 0"/>
+
+    <!-- First floor front windows -->
+    <instance name="Win_FF_FL" definition="window_std"
+              position="-3.25 4.60 -4.15"/>
+    <instance name="Win_FF_FR" definition="window_std"
+              position=" 3.25 4.60 -4.15"/>
+
+    <!-- First floor back windows -->
+    <instance name="Win_FF_BL" definition="window_std"
+              position="-2.80 4.60  4.15" rotation="0 180 0"/>
+    <instance name="Win_FF_BR" definition="window_std"
+              position=" 2.80 4.60  4.15" rotation="0 180 0"/>
+
+    <!-- First floor side windows -->
+    <instance name="Win_FF_LS" definition="window_std"
+              position="-6.15 4.60 -1.0" rotation="0 90 0"/>
+    <instance name="Win_FF_RS" definition="window_std"
+              position=" 6.15 4.60 -1.0" rotation="0 -90 0"/>
+
+    <!-- ============================================================
+         FLOWER POTS on window sills
+         y offset = sill top (0.04 above sill center = sill_y + 0.04)
+    ============================================================ -->
+    <!-- GF front left sill (y=1.04 = 0.96+0.08) -->
+    <instance name="FP_GF_FL_1" definition="fpot_red"    position="-3.50 1.04 -4.08"/>
+    <instance name="FP_GF_FL_2" definition="fpot_yellow" position="-3.20 1.04 -4.08"/>
+    <instance name="FP_GF_FL_3" definition="fpot_pink"   position="-2.90 1.04 -4.08"/>
+
+    <!-- GF front right sill -->
+    <instance name="FP_GF_FR_1" definition="fpot_yellow" position=" 2.95 1.04 -4.08"/>
+    <instance name="FP_GF_FR_2" definition="fpot_red"    position=" 3.25 1.04 -4.08"/>
+    <instance name="FP_GF_FR_3" definition="fpot_white"  position=" 3.55 1.04 -4.08"/>
+
+    <!-- FF front left sill (y=4.02) -->
+    <instance name="FP_FF_FL_1" definition="fpot_pink"   position="-3.45 4.02 -4.08"/>
+    <instance name="FP_FF_FL_2" definition="fpot_red"    position="-3.15 4.02 -4.08"/>
+    <instance name="FP_FF_FL_3" definition="fpot_white"  position="-2.85 4.02 -4.08"/>
+
+    <!-- FF front right sill -->
+    <instance name="FP_FF_FR_1" definition="fpot_yellow" position=" 2.90 4.02 -4.08"/>
+    <instance name="FP_FF_FR_2" definition="fpot_pink"   position=" 3.20 4.02 -4.08"/>
+    <instance name="FP_FF_FR_3" definition="fpot_red"    position=" 3.50 4.02 -4.08"/>
+
+    <!-- Balcony railing pots -->
+    <instance name="FP_Balc_1" definition="fpot_red"    position="-1.40 4.78 -5.97"/>
+    <instance name="FP_Balc_2" definition="fpot_yellow" position="-0.50 4.78 -5.97"/>
+    <instance name="FP_Balc_3" definition="fpot_pink"   position=" 0.40 4.78 -5.97"/>
+    <instance name="FP_Balc_4" definition="fpot_white"  position=" 1.30 4.78 -5.97"/>
+
+    <!-- ============================================================
+         FENCE  (plot boundary: ±14 m in X and Z)
+         Solid board fence, 1.1 m high
+    ============================================================ -->
+    <!-- Front fence — left of gate (x: -14 to -2) -->
+    <box name="Fence_Front_L" size="12.0 1.10 0.10"
+         position="-8.0 0.55 -14.0" material="fence_mat"/>
+    <!-- Front fence — right of gate (x: +2 to +14) -->
+    <box name="Fence_Front_R" size="12.0 1.10 0.10"
+         position=" 8.0 0.55 -14.0" material="fence_mat"/>
+    <!-- Back fence -->
+    <box name="Fence_Back"  size="28.0 1.10 0.10"
+         position="0 0.55  14.0" material="fence_mat"/>
+    <!-- Left fence -->
+    <box name="Fence_Left"  size="0.10 1.10 28.0"
+         position="-14.0 0.55 0.0" material="fence_mat"/>
+    <!-- Right fence -->
+    <box name="Fence_Right" size="0.10 1.10 28.0"
+         position=" 14.0 0.55 0.0" material="fence_mat"/>
+
+    <!-- Fence top rails -->
+    <box name="Rail_Front_L" size="12.0 0.06 0.06" position="-8.0  1.10 -14.0" material="wood_dark"/>
+    <box name="Rail_Front_R" size="12.0 0.06 0.06" position=" 8.0  1.10 -14.0" material="wood_dark"/>
+    <box name="Rail_Back"    size="28.0 0.06 0.06" position=" 0.0  1.10  14.0" material="wood_dark"/>
+    <box name="Rail_Left"    size="0.06 0.06 28.0" position="-14.0 1.10   0.0" material="wood_dark"/>
+    <box name="Rail_Right"   size="0.06 0.06 28.0" position=" 14.0 1.10   0.0" material="wood_dark"/>
+
+    <!-- Gate posts and open gates -->
+    <box name="GatePost_L" size="0.18 1.42 0.18" position="-2.0 0.71 -14.0" material="fence_mat"/>
+    <box name="GatePost_R" size="0.18 1.42 0.18" position=" 2.0 0.71 -14.0" material="fence_mat"/>
+    <box name="Gate_L" size="1.90 1.10 0.06" position="-3.0 0.55 -13.10"
+         rotation="0 -38 0" material="fence_mat"/>
+    <box name="Gate_R" size="1.90 1.10 0.06" position=" 3.0 0.55 -13.10"
+         rotation="0  38 0" material="fence_mat"/>
+
+    <!-- Fence corner posts -->
+    <box name="CornerFL" size="0.18 1.42 0.18" position="-14.0 0.71 -14.0" material="fence_mat"/>
+    <box name="CornerFR" size="0.18 1.42 0.18" position=" 14.0 0.71 -14.0" material="fence_mat"/>
+    <box name="CornerBL" size="0.18 1.42 0.18" position="-14.0 0.71  14.0" material="fence_mat"/>
+    <box name="CornerBR" size="0.18 1.42 0.18" position=" 14.0 0.71  14.0" material="fence_mat"/>
+
+    <!-- ============================================================
+         TREES
+    ============================================================ -->
+    <!-- Front garden flanking the walkway -->
+    <instance name="Tree_Front_L1" definition="tree_large" position="-9.0 0 -10.5"/>
+    <instance name="Tree_Front_R1" definition="tree_large" position=" 9.0 0 -10.5"/>
+    <instance name="Tree_Front_L2" definition="tree_small" position="-5.5 0  -9.0"/>
+    <instance name="Tree_Front_R2" definition="tree_small" position=" 5.5 0  -9.0"/>
+
+    <!-- Back garden -->
+    <instance name="Tree_Back_L"  definition="tree_large" position="-9.0 0  10.5"/>
+    <instance name="Tree_Back_R"  definition="tree_large" position=" 9.0 0  10.5"/>
+    <instance name="Tree_Back_M"  definition="tree_small" position=" 0.0 0  11.0"/>
+    <instance name="Tree_Back_ML" definition="tree_small" position="-4.5 0  10.0"/>
+
+    <!-- Side yard trees -->
+    <instance name="Tree_Side_L1" definition="tree_small" position="-11.0 0  -5.0"/>
+    <instance name="Tree_Side_L2" definition="tree_small" position="-11.0 0   4.0"/>
+    <instance name="Tree_Side_R1" definition="tree_small" position=" 11.0 0  -5.0"/>
+    <instance name="Tree_Side_R2" definition="tree_small" position=" 11.0 0   4.0"/>
+
+  </objects>
+
+</mc3>
