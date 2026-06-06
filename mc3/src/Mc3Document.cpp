@@ -1,19 +1,17 @@
 #include "MeshCraft/Mc3/Mc3Document.hpp"
-
-#include <stdexcept>
+#include "Mc3XmlParser.hpp"
+#include "Mc3XmlWriter.hpp"
 
 namespace MeshCraft::Mc3 {
 
 Mc3Document Mc3Document::loadFromFile(const std::filesystem::path& path) {
-    // TODO: parse YAML from path
-    // Steps: parse top-level fields, load textures, create materials,
-    //        resolve definitions and instances, build object hierarchy.
-    throw std::runtime_error("Mc3Document::loadFromFile not yet implemented");
+    Internal::Mc3XmlParser parser;
+    return parser.parse(path);
 }
 
 void Mc3Document::saveToFile(const std::filesystem::path& path) const {
-    // TODO: serialise document back to YAML
-    throw std::runtime_error("Mc3Document::saveToFile not yet implemented");
+    Internal::Mc3XmlWriter writer;
+    writer.write(*this, path);
 }
 
 } // namespace MeshCraft::Mc3

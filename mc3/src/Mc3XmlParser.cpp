@@ -1,0 +1,458 @@
+#include "Mc3XmlParser.hpp"
+#include "MathUtils.hpp"
+
+#include "MeshCraft/Mc3/Mc3Camera.hpp"
+#include "MeshCraft/Mc3/Mc3Environment.hpp"
+#include "MeshCraft/Mc3/Mc3Extrude.hpp"
+#include "MeshCraft/Mc3/Mc3Light.hpp"
+
+#include <tinyxml2.h>
+
+#include <cstdlib>
+#include <iostream>
+#include <sstream>
+#include <stdexcept>
+#include <string>
+
+using namespace tinyxml2;
+using namespace MeshCraft::Mc3;
+using namespace MeshCraft::Mc3::Internal;
+
+// ---------------------------------------------------------------------------
+// Tiny helpers
+// ---------------------------------------------------------------------------
+
+static const char* attr(const XMLElement* el, const char* name, const char* def = "") {
+    const char* v = el->Attribute(name);
+    return v ? v : def;
+}
+
+static float attrF(const XMLElement* el, const char* name, float def = 0.0f) {
+    const char* v = el->Attribute(name);
+    return v ? std::stof(v) : def;
+}
+
+static int attrI(const XMLElement* el, const char* name, int def = 0) {
+    const char* v = el->Attribute(name);
+    return v ? std::stoi(v) : def;
+}
+
+static bool attrB(const XMLElement* el, const char* name, bool def = false) {
+    const char* v = el->Attribute(name);
+    if (!v) return def;
+    return parseBool(v);
+}
+
+static std::array<float,3> attrVec3(const XMLElement* el, const char* name,
+                                     std::array<float,3> def = {0,0,0}) {
+    const char* v = el->Attribute(name);
+    return v ? parseVec3(v, def) : def;
+}
+
+static std::string childText(const XMLElement* el, const char* childName) {
+    const XMLElement* c = el->FirstChildElement(childName);
+    if (!c || !c->GetText()) return {};
+    return c->GetText();
+}
+
+// ---------------------------------------------------------------------------
+// Transform
+// ---------------------------------------------------------------------------
+
+static Mc3Transform parseTransform(const XMLElement* el) {
+    Mc3Transform t;
+    t.position = attrVec3(el, "position");
+    t.rotation = attrVec3(el, "rotation");
+    const char* sv = el->Attribute("scale");
+    if (sv) {
+        std::string s = sv;
+        if (s.find(' ') == std::string::npos && s.find(',') == std::string::npos) {
+            float f = std::stof(s);
+            t.scale = {f, f, f};
+        } else {
+            t.scale = parseVec3(s, {1,1,1});
+        }
+    }
+    t.pivot = attrVec3(el, "pivot");
+    return t;
+}
+
+static std::optional<Mc3Deform> parseDeform(const XMLElement* el) {
+    const XMLElement* d = el->FirstChildElement("deform");
+    if (!d) return std::nullopt;
+    Mc3Deform def;
+    def.scale = attrVec3(d, "scale", {1,1,1});
+    return def;
+}
+
+// ---------------------------------------------------------------------------
+// Cross-section + path (extrude)
+// ---------------------------------------------------------------------------
+
+static Mc3CrossSection parseCrossSection(const XMLElement* el) {
+    Mc3CrossSection cs;
+    std::string t = attr(el, "type", "rect");
+    if      (t == "rect")    cs.type = CrossSectionType::Rect;
+    else if (t == "circle")  cs.type = CrossSectionType::Circle;
+    else if (t == "polygon") cs.type = CrossSectionType::Polygon;
+    else                     cs.type = CrossSectionType::Custom;
+    cs.width       = attrF(el, "width",        0.3f);
+    cs.height      = attrF(el, "height",       0.3f);
+    cs.radius      = attrF(el, "radius",       0.1f);
+    cs.innerRadius = attrF(el, "inner_radius", 0.0f);
+    cs.sides       = attrI(el, "sides",        6);
+    cs.segments    = attrI(el, "segments",     32);
+    for (const XMLElement* p = el->FirstChildElement("point"); p; p = p->NextSiblingElement("point")) {
+        Mc3CrossSection::Point2D pt;
+        pt.x = attrF(p, "x", 0);
+        pt.y = attrF(p, "y", 0);
+        cs.customPoints.push_back(pt);
+    }
+    return cs;
+}
+
+static Mc3ExtrudePath parsePath(const XMLElement* el) {
+    Mc3ExtrudePath path;
+    std::string t = attr(el, "type", "line");
+    if      (t == "line")     path.type = ExtrudePathType::Line;
+    else if (t == "arc")      path.type = ExtrudePathType::Arc;
+    else if (t == "helix")    path.type = ExtrudePathType::Helix;
+    else if (t == "polyline") path.type = ExtrudePathType::Polyline;
+    else if (t == "bezier")   path.type = ExtrudePathType::Bezier;
+    path.length      = attrF(el, "length",  1.0f);
+    path.axis        = attr (el, "axis",   "y");
+    path.arcRadius   = attrF(el, "radius", 1.0f);
+    path.arcAngle    = attrF(el, "angle",  180.0f);
+    path.helixRadius = attrF(el, "radius", 0.5f);
+    path.helixHeight = attrF(el, "height", 2.0f);
+    path.helixTurns  = attrF(el, "turns",  4.0f);
+    for (const XMLElement* p = el->FirstChildElement("point"); p; p = p->NextSiblingElement("point")) {
+        Mc3PathPoint pt;
+        pt.position = {attrF(p,"x",0), attrF(p,"y",0), attrF(p,"z",0)};
+        pt.controlIn = {attrF(p,"cx",0), attrF(p,"cy",0), attrF(p,"cz",0)};
+        path.points.push_back(pt);
+    }
+    return path;
+}
+
+static std::optional<Mc3Extrude> parseExtrude(const XMLElement* el) {
+    const XMLElement* cs = el->FirstChildElement("cross_section");
+    const XMLElement* pt = el->FirstChildElement("path");
+    if (!cs || !pt) {
+        std::cerr << "Warning: <extrude> missing <cross_section> or <path>, skipped.\n";
+        return std::nullopt;
+    }
+    Mc3Extrude ext;
+    ext.crossSection = parseCrossSection(cs);
+    ext.path         = parsePath(pt);
+    ext.twist    = attrF(el, "twist",    0.0f);
+    ext.segments = attrI(el, "segments", 32);
+    ext.smooth   = attrB(el, "smooth",   true);
+    ext.caps     = attrB(el, "caps",     true);
+    return ext;
+}
+
+// ---------------------------------------------------------------------------
+// Primitive
+// ---------------------------------------------------------------------------
+
+static Mc3Primitive parsePrimitive(const XMLElement* el, ObjectType type) {
+    Mc3Primitive p;
+    switch (type) {
+    case ObjectType::Box:      p.primitiveType = PrimitiveType::Box;      break;
+    case ObjectType::Cube:     p.primitiveType = PrimitiveType::Cube;     break;
+    case ObjectType::Sphere:   p.primitiveType = PrimitiveType::Sphere;   break;
+    case ObjectType::Cylinder: p.primitiveType = PrimitiveType::Cylinder; break;
+    case ObjectType::Cone:     p.primitiveType = PrimitiveType::Cone;     break;
+    case ObjectType::Plane:    p.primitiveType = PrimitiveType::Plane;    break;
+    default: break;
+    }
+    if (const char* sv = el->Attribute("size")) {
+        std::string s = sv;
+        if (s.find(' ') == std::string::npos && s.find(',') == std::string::npos) {
+            float f = std::stof(s);
+            p.size = {f, f, f};
+        } else {
+            auto v = parseVec3(s);
+            p.size = {v[0], v[1], v[2]};
+        }
+    }
+    p.radius   = attrF(el, "radius",   0.5f);
+    p.height   = attrF(el, "height",   1.0f);
+    p.segments = attrI(el, "segments", 32);
+    p.axis     = attr (el, "axis",    "y");
+    return p;
+}
+
+// ---------------------------------------------------------------------------
+// Object (forward declaration for recursive group parsing)
+// ---------------------------------------------------------------------------
+
+static std::shared_ptr<Mc3Object> parseObject(const XMLElement* el);
+
+static void parseCommonObjectAttribs(const XMLElement* el, Mc3Object& obj) {
+    obj.name      = attr(el, "name");
+    obj.id        = attr(el, "id");
+    obj.material  = attr(el, "material");
+    obj.visible   = attrB(el, "visible", true);
+    obj.collision = attr(el, "collision", "none");
+    obj.isCutter  = attrB(el, "role_cutter", false) || (std::string(attr(el, "role")) == "cutter");
+    obj.transform = parseTransform(el);
+    obj.deform    = parseDeform(el);
+    if (const char* tags = el->Attribute("tags")) {
+        std::istringstream ss(tags);
+        std::string token;
+        while (ss >> token) obj.tags.push_back(token);
+    }
+}
+
+static void parseChildren(const XMLElement* el, Mc3Object& obj) {
+    for (const XMLElement* c = el->FirstChildElement(); c; c = c->NextSiblingElement()) {
+        auto child = parseObject(c);
+        if (child) obj.children.push_back(child);
+    }
+}
+
+static std::shared_ptr<Mc3Object> parseObject(const XMLElement* el) {
+    if (!el) return nullptr;
+    std::string tag = el->Name();
+    auto obj = std::make_shared<Mc3Object>();
+
+    if (tag == "box") {
+        obj->type = ObjectType::Box;
+        obj->primitive = parsePrimitive(el, ObjectType::Box);
+    } else if (tag == "cube") {
+        obj->type = ObjectType::Cube;
+        obj->primitive = parsePrimitive(el, ObjectType::Cube);
+    } else if (tag == "sphere") {
+        obj->type = ObjectType::Sphere;
+        obj->primitive = parsePrimitive(el, ObjectType::Sphere);
+    } else if (tag == "cylinder") {
+        obj->type = ObjectType::Cylinder;
+        obj->primitive = parsePrimitive(el, ObjectType::Cylinder);
+    } else if (tag == "cone") {
+        obj->type = ObjectType::Cone;
+        obj->primitive = parsePrimitive(el, ObjectType::Cone);
+    } else if (tag == "plane") {
+        obj->type = ObjectType::Plane;
+        obj->primitive = parsePrimitive(el, ObjectType::Plane);
+    } else if (tag == "mesh") {
+        obj->type       = ObjectType::Mesh;
+        obj->meshSource = attr(el, "src");
+    } else if (tag == "extrude") {
+        obj->type   = ObjectType::Extrude;
+        obj->extrude = parseExtrude(el);
+    } else if (tag == "group") {
+        obj->type = ObjectType::Group;
+    } else if (tag == "instance") {
+        obj->type             = ObjectType::Instance;
+        obj->definition       = attr(el, "def");
+        obj->materialOverride = attr(el, "material_override");
+    } else if (tag == "union") {
+        obj->type = ObjectType::Union;
+        obj->csgOperation = Mc3CsgOperation{CsgType::Union};
+    } else if (tag == "difference") {
+        obj->type = ObjectType::Difference;
+        obj->csgOperation = Mc3CsgOperation{CsgType::Difference};
+    } else if (tag == "intersection") {
+        obj->type = ObjectType::Intersection;
+        obj->csgOperation = Mc3CsgOperation{CsgType::Intersection};
+    } else if (tag == "area") {
+        obj->type = ObjectType::Area;
+    } else {
+        std::cerr << "Warning: unknown object type <" << tag << ">, skipped.\n";
+        return nullptr;
+    }
+
+    parseCommonObjectAttribs(el, *obj);
+
+    bool isGroup = (tag == "group" || tag == "union" || tag == "difference" || tag == "intersection" || tag == "area");
+    if (isGroup) parseChildren(el, *obj);
+
+    return obj;
+}
+
+// ---------------------------------------------------------------------------
+// Top-level section parsers
+// ---------------------------------------------------------------------------
+
+static void parseEnvironment(const XMLElement* el, Mc3Document& doc) {
+    Mc3Environment env;
+    if (const XMLElement* bg = el->FirstChildElement("background"))
+        env.backgroundColor = attrVec3(bg, "color");
+    if (const XMLElement* bt = el->FirstChildElement("background_texture")) {
+        if (const char* t = bt->GetText()) env.backgroundTexture = t;
+    }
+    if (const XMLElement* fg = el->FirstChildElement("fog")) {
+        Mc3Fog fog;
+        fog.color   = attrVec3(fg, "color", {0.5f,0.5f,0.5f});
+        fog.start   = attrF(fg, "start",   10.0f);
+        fog.end     = attrF(fg, "end",     100.0f);
+        fog.density = attrF(fg, "density", 0.01f);
+        std::string mode = attr(fg, "mode", "linear");
+        fog.mode = (mode == "exponential") ? FogMode::Exponential : FogMode::Linear;
+        env.fog = fog;
+    }
+    doc.environment = env;
+}
+
+static void parseLights(const XMLElement* el, Mc3Document& doc) {
+    for (const XMLElement* c = el->FirstChildElement(); c; c = c->NextSiblingElement()) {
+        Mc3Light light;
+        std::string t = c->Name();
+        if (t == "ambient") {
+            light.type       = LightType::Ambient;
+            light.color      = attrVec3(c, "color", {1,1,1});
+            light.brightness = attrF(c, "brightness", 1.0f);
+        } else if (t == "directional") {
+            light.type       = LightType::Directional;
+            light.name       = attr(c, "name");
+            light.color      = attrVec3(c, "color", {1,1,1});
+            light.brightness = attrF(c, "brightness", 1.0f);
+            light.direction  = attrVec3(c, "direction", {0,-1,0});
+            light.castShadows = attrB(c, "cast_shadows");
+        } else if (t == "spot") {
+            light.type       = LightType::Spot;
+            light.name       = attr(c, "name");
+            light.color      = attrVec3(c, "color", {1,1,1});
+            light.brightness = attrF(c, "brightness", 1.0f);
+            light.position   = attrVec3(c, "position");
+            light.direction  = attrVec3(c, "direction", {0,-1,0});
+            light.angle      = attrF(c, "angle",   45.0f);
+            light.falloff    = attrF(c, "falloff", 0.0f);
+            light.range      = attrF(c, "range",   0.0f);
+            light.castShadows = attrB(c, "cast_shadows");
+        } else if (t == "point") {
+            light.type       = LightType::Point;
+            light.name       = attr(c, "name");
+            light.color      = attrVec3(c, "color", {1,1,1});
+            light.brightness = attrF(c, "brightness", 1.0f);
+            light.position   = attrVec3(c, "position");
+            light.range      = attrF(c, "range", 0.0f);
+            light.castShadows = attrB(c, "cast_shadows");
+        } else {
+            std::cerr << "Warning: unknown light type <" << t << ">, ignored.\n";
+            continue;
+        }
+        doc.lights.push_back(light);
+    }
+}
+
+static void parseCameras(const XMLElement* el, Mc3Document& doc) {
+    doc.defaultCamera = attr(el, "default");
+    for (const XMLElement* c = el->FirstChildElement("camera"); c;
+         c = c->NextSiblingElement("camera")) {
+        Mc3Camera cam;
+        cam.name      = attr(c, "name");
+        cam.position  = attrVec3(c, "position", {0,5,10});
+        cam.target    = attrVec3(c, "target",   {0,0,0});
+        cam.nearPlane = attrF(c, "near",  0.1f);
+        cam.farPlane  = attrF(c, "far",  1000.0f);
+        cam.fov       = attrF(c, "fov",   60.0f);
+        cam.orthoSize = attrF(c, "size",  10.0f);
+        std::string t = attr(c, "type", "perspective");
+        cam.type = (t == "orthographic") ? CameraType::Orthographic : CameraType::Perspective;
+        if (const char* rot = c->Attribute("rotation"))
+            cam.rotation = parseVec3(rot);
+        doc.cameras.push_back(cam);
+    }
+    if (doc.defaultCamera.empty() && !doc.cameras.empty())
+        doc.defaultCamera = doc.cameras.front().name;
+}
+
+static void parseTextures(const XMLElement* el, Mc3Document& doc) {
+    for (const XMLElement* c = el->FirstChildElement("texture"); c;
+         c = c->NextSiblingElement("texture")) {
+        Mc3Texture tex;
+        std::string id = attr(c, "id");
+        tex.name       = id;
+        tex.uri        = attr(c, "uri");
+        tex.wrapU      = attr(c, "wrap_u",      "repeat");
+        tex.wrapV      = attr(c, "wrap_v",      "repeat");
+        tex.filter     = attr(c, "filter",      "linear");
+        tex.colorSpace = attr(c, "color_space", "srgb");
+        doc.textures[id] = tex;
+    }
+}
+
+static void parseMaterials(const XMLElement* el, Mc3Document& doc) {
+    for (const XMLElement* c = el->FirstChildElement("material"); c;
+         c = c->NextSiblingElement("material")) {
+        Mc3Material mat;
+        std::string id = attr(c, "id");
+        mat.name        = id;
+        mat.roughness   = attrF(c, "roughness",    0.5f);
+        mat.metallic    = attrF(c, "metallic",     0.0f);
+        mat.alphaMode   = attr (c, "alpha_mode",  "opaque");
+        mat.doubleSided = attrB(c, "double_sided", false);
+        std::string bcText = childText(c, "base_color");
+        if (!bcText.empty()) {
+            auto v = parseVec4(bcText, {0.8f,0.8f,0.8f,1.0f});
+            mat.baseColor = {v[0], v[1], v[2], v[3]};
+        }
+        mat.baseColorTexture         = childText(c, "base_color_texture");
+        mat.metallicRoughnessTexture = childText(c, "metallic_roughness_texture");
+        mat.normalTexture            = childText(c, "normal_texture");
+        mat.occlusionTexture         = childText(c, "occlusion_texture");
+        mat.emissiveTexture          = childText(c, "emissive_texture");
+        mat.normalScale       = attrF(c, "normal_scale",      1.0f);
+        mat.occlusionStrength = attrF(c, "occlusion_strength", 1.0f);
+        mat.alphaCutoff       = attrF(c, "alpha_cutoff",      0.5f);
+        std::string ec = childText(c, "emissive_color");
+        if (!ec.empty()) {
+            auto v = parseVec3(ec);
+            mat.emissiveColor = {v[0], v[1], v[2]};
+        }
+        doc.materials[id] = mat;
+    }
+}
+
+static void parseDefinitions(const XMLElement* el, Mc3Document& doc) {
+    for (const XMLElement* c = el->FirstChildElement("definition"); c;
+         c = c->NextSiblingElement("definition")) {
+        std::string id = attr(c, "id");
+        for (const XMLElement* child = c->FirstChildElement(); child;
+             child = child->NextSiblingElement()) {
+            auto obj = parseObject(child);
+            if (obj) { doc.definitions[id] = obj; break; }
+        }
+    }
+}
+
+static void parseObjects(const XMLElement* el, Mc3Document& doc) {
+    for (const XMLElement* c = el->FirstChildElement(); c; c = c->NextSiblingElement()) {
+        auto obj = parseObject(c);
+        if (obj) doc.objects.push_back(obj);
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Entry point
+// ---------------------------------------------------------------------------
+
+Mc3Document Mc3XmlParser::parse(const std::filesystem::path& path) {
+    XMLDocument xml;
+    if (xml.LoadFile(path.string().c_str()) != XML_SUCCESS)
+        throw std::runtime_error("Failed to load XML: " + path.string() + ": " + xml.ErrorStr());
+
+    const XMLElement* root = xml.FirstChildElement("mc3");
+    if (!root)
+        throw std::runtime_error("Root element <mc3> not found in " + path.string());
+
+    Mc3Document doc;
+    doc.sourcePath       = path.parent_path();
+    doc.version          = attr(root, "version", "0.1");
+    doc.model            = attr(root, "model",   "unnamed");
+    doc.unit             = attr(root, "unit",    "meter");
+    doc.coordinateSystem = attr(root, "coordinate_system", "right_handed_y_up");
+
+    if (const XMLElement* env  = root->FirstChildElement("environment"))  parseEnvironment(env,  doc);
+    if (const XMLElement* lts  = root->FirstChildElement("lights"))       parseLights(lts,       doc);
+    if (const XMLElement* cams = root->FirstChildElement("cameras"))      parseCameras(cams,     doc);
+    if (const XMLElement* txs  = root->FirstChildElement("textures"))     parseTextures(txs,     doc);
+    if (const XMLElement* mats = root->FirstChildElement("materials"))    parseMaterials(mats,   doc);
+    if (const XMLElement* defs = root->FirstChildElement("definitions"))  parseDefinitions(defs, doc);
+    if (const XMLElement* objs = root->FirstChildElement("objects"))      parseObjects(objs,     doc);
+
+    return doc;
+}

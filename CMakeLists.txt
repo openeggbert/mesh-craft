@@ -102,6 +102,8 @@ add_subdirectory(mc3)
 file(GLOB_RECURSE SOURCES
         "src/MeshCraft/*.cpp"
         "src/MeshCraft/Editor/*.cpp"
+        "src/MeshCraft/Editor/Tools/*.cpp"
+        "src/MeshCraft/Renderer/*.cpp"
         "src/MeshCraft/Scene/*.cpp"
         "src/MeshCraft/Ui/*.cpp"
 )

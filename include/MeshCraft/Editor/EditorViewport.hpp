@@ -4,15 +4,11 @@
 
 namespace MeshCraft::Editor {
 
-// The main 3D viewport.
+// The 3D viewport controller — camera and gizmo state only.
+// Rendering is handled by MeshCraftApplication via SceneRenderer + GridRenderer.
 class EditorViewport {
 public:
     explicit EditorViewport() = default;
-
-    // TODO: camera position, orientation, projection
-    // TODO: grid rendering
-    // TODO: object rendering via Nova3D
-    // TODO: mouse picking
 
     [[nodiscard]] TransformGizmo& gizmo() { return gizmo_; }
 
