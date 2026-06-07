@@ -10,7 +10,6 @@
 #include <Microsoft/Xna/Framework/Graphics/Viewport.hpp>
 #include <System/Object.hpp>
 
-#include <dlfcn.h>
 #include <algorithm>
 #include <cstdio>
 #include <cstring>
@@ -18,6 +17,11 @@
 #include <iostream>
 #include <numbers>
 #include <stdexcept>
+
+// Forward-declare SDL3 GL proc address lookup without including SDL headers.
+// SDL_FunctionPointer is typedef void(*)(void) on all platforms.
+using SDL_FunctionPointer = void(*)(void);
+extern "C" SDL_FunctionPointer SDL_GL_GetProcAddress(const char*);
 
 namespace MeshCraft {
 
@@ -800,13 +804,12 @@ void MeshCraftApplication::saveScreenshot(const std::string& path) {
     int h = gd.getViewportProperty().getHeightProperty();
     if (w <= 0 || h <= 0) return;
 
-    // Load GL functions from already-loaded GL library via dlsym
     using PFNGLFINISH = void(*)();
     using PFNGLBINDBUFFER = void(*)(unsigned int, unsigned int);
     using PFNGLREADPIXELS = void(*)(int, int, int, int, unsigned int, unsigned int, void*);
-    auto fnFinish      = (PFNGLFINISH)     dlsym(RTLD_DEFAULT, "glFinish");
-    auto fnBindBuffer  = (PFNGLBINDBUFFER) dlsym(RTLD_DEFAULT, "glBindBuffer");
-    auto fnReadPixels  = (PFNGLREADPIXELS) dlsym(RTLD_DEFAULT, "glReadPixels");
+    auto fnFinish     = reinterpret_cast<PFNGLFINISH>    (SDL_GL_GetProcAddress("glFinish"));
+    auto fnBindBuffer = reinterpret_cast<PFNGLBINDBUFFER>(SDL_GL_GetProcAddress("glBindBuffer"));
+    auto fnReadPixels = reinterpret_cast<PFNGLREADPIXELS>(SDL_GL_GetProcAddress("glReadPixels"));
     if (!fnReadPixels) {
         std::cerr << "[Screenshot] glReadPixels not available\n";
         return;
