@@ -6,12 +6,11 @@
 
 **Main goal:** a working GUI editor that lets users visually build and edit MC3 scenes, save them back to `.mc3.xml`, and export to `.glb` via the `mc3togltf` converter.
 
-**Current phase:** Editor MVP. The application window, 3D viewport, grid, scene rendering, SpriteBatch UI panels, and basic keyboard/mouse input are all implemented. The editor can load and display `.mc3.xml` files and show them with colored UI panels.
-
 **Key architectural decisions:**
 - Built on **CNA** — an XNA-like C++ framework using SDL3 + OpenGL ES 3.2 (EasyGL backend).
-- UI panels drawn with `SpriteBatch` + a 1×1 white `Texture2D` (the "white pixel trick") — no text rendering yet.
-- MC3 scene data lives in `Mc3::Mc3Document` from the `mc3/` sublibrary (pure C++, no graphics dependency).
+- UI panels drawn with `SpriteBatch` + a 1×1 white `Texture2D` (the "white pixel trick").
+- Bitmap font: 5×7 pixel glyphs via `BitmapFont.hpp/cpp` — no CNA SpriteFont dependency.
+- MC3 scene data lives in `Mc3::Mc3Document` from the `mc3/` sublibrary (pure C++, no graphics).
 - CNA is a sibling repo (`../cna`) included via `add_subdirectory`.
 
 ---
@@ -20,72 +19,48 @@
 
 **Build:** succeeds cleanly.
 ```
-cmake-build-debug/ninja → [255/258] Linking CXX executable MeshCraft  ✓
+cd cmake-build-debug && ninja -j$(nproc)
 ```
 
-**Tests:** no automated tests for the editor itself. The `mc3/` library has its own build, and test assets exist in `test/`.
+**Tests:** `ctest -V` passes (smoke test: loads scene, screenshots, checks non-empty PPM, ~2.2 s).
 
-**Working:**
-- Loading `.mc3.xml` files on startup (`./MeshCraft test/house.mc3.xml`)
-- 3D scene rendering (primitives: box, sphere, cylinder, cone, plane, extrude)
+**Working features:**
+- Load `.mc3.xml` on startup; save (Ctrl+S); save-as; export GLB via `mc3togltf` (Ctrl+E)
+- 3D scene rendering: box, sphere, cylinder, cone, plane, extrude (as placeholder)
 - Grid renderer with XYZ axis colours
-- Orbit/pan/zoom camera (middle-drag, right-drag, scroll)
-- SpriteBatch-based UI: toolbar, left hierarchy panel, right properties panel, status bar
-- Hierarchy panel: click on a row to select an object
-- Keyboard shortcuts: new/open/save/export, tools (Q/G/R/S), add primitives (F1–F5), delete, nudge, camera reset (F), help (F12)
-- Window title shows tool / file / modified state
-- F11 shortcut triggers screenshot to `screenshot.ppm`
-- **`saveScreenshot()` — working**: uses `SDL_GL_GetProcAddress("glReadPixels")` via forward declaration; produces a valid PPM
-- **Viewport restriction — working**: 3D scene renders only in the center area bounded by panels; panel areas stay dark. Uses direct `glViewport`/`glScissor` calls via `SDL_GL_GetProcAddress` cached in `LoadContent()`.
-- **Window size 1024×768 — working**: `PresentationParameters` default constructor in CNA now uses 1024×768 (was 800×480); SDL window and logical viewport are 1024×768 on startup.
+- Orbit / pan / zoom camera (middle-drag, right-drag, scroll); reset (F)
+- SpriteBatch UI: toolbar, left hierarchy panel, right properties panel, status bar
+- Keyboard shortcuts: Q/G/R/S tools, F1–F5 add primitives, Delete, Ctrl+A, arrow nudge, F12 help
+- Window title shows tool / file / modified state; F11 saves `screenshot.ppm`
+- Ray-cast object picking (left-click, AABB slab method, recursive through children, Ctrl+click multi-select)
+- Bitmap font labels in both panels (object names, POS/ROT/SCL values, material name)
+- Hierarchy panel: recursive tree, depth indentation, ">" / "v" expand/collapse for groups
+- Properties panel: shows selected object's name, POS/ROT/SCL (read-only display), material swatch
+- Transform gizmo: X/Y/Z arrows when Move tool (G) active; drag handle moves object along axis
+- Automated smoke test via `ctest`
 
-**Working (recent additions):**
-- Ray-cast object picking: left-click in 3D viewport selects closest AABB hit; recursive through children; Ctrl+click for multi-select.
-- Bitmap font: 5×7 pixel font in hierarchy and properties panels; "SCENE"/"PROPERTIES" headers, object names, POS/ROT/SCL values.
-- Transform gizmo: X/Y/Z axis arrows drawn from selected object when Move tool (G) is active; click on axis tip (±12px) grabs handle; drag moves object along that axis via screen-space projection.
-
-**Not working:**
-- No file-open dialog — file path must be entered via console stdin.
-
----
-
-## 3. Recent changes
-
-- **`../cna/src/Microsoft/Xna/Framework/Graphics/PresentationParameters.cpp`** — Changed `PresentationParameters` default constructor from 800×480 to 1024×768; this sets the initial SDL window size and `virtualWidth_`/`virtualHeight_` for the EasyGL backend.
-- **`src/MeshCraft/MeshCraftApplication.cpp`** + **`include/MeshCraft/MeshCraftApplication.hpp`** — Fixed viewport restriction: cache `glViewport`/`glScissor`/`glEnable`/`glDisable` in `LoadContent()` via `SDL_GL_GetProcAddress`; in `Draw()` apply scissor before `gd.Clear(bgColor)` to restrict it to the 3D area, then re-apply GL viewport for 3D rendering, then disable scissor before SpriteBatch.
-- **`src/MeshCraft/MeshCraftApplication.cpp`** — Fixed `saveScreenshot()`: replaced `dlsym` with `SDL_GL_GetProcAddress` forward declaration.
-- **`CMakeLists.txt`** — Reverted accidental default backend change (VULKAN → EASYGL).
-- **`../cna/src/CNA/Internal/Backends/EasyGL/EasyGLGraphicsBackend.cpp`** — Fixed pre-existing CNA bug: moved anonymous namespace helpers before first use.
-- **`../cna/include/Microsoft/Xna/Framework/Graphics/EffectParameter.hpp`** + `.cpp` — Fixed pre-existing CNA bug: added `SetValue(Texture2D*)` overload; fixed `GetValueTexture2D()`.
-- **`../cna/include/Microsoft/Xna/Framework/Graphics/EffectParameter.hpp`** and **`.cpp`** — Fixed pre-existing CNA bug: added `SetValue(Texture2D*)` overload and `texture2DData_` field; changed `GetValueTexture2D()` to return `texture2DData_` directly (the `dynamic_cast<Texture2D*>(textureData_)` pattern was always returning null since `Texture2D` doesn't inherit `Texture`).
-- Earlier (previous session): Added SpriteBatch UI panels, auto-screenshot constructor, CNA API updates.
+**Not working / incomplete:**
+- Properties panel fields are read-only — no way to type a value directly
+- CSG objects (Union, Difference, Intersection) rendered as bounding-box placeholder only
+- No file-open dialog — path entered via console stdin
+- Add primitive (F1–F5) always inserts at top level, not as child of selected group
 
 ---
 
-## 4. Current blocker / main problem
-
-No critical blocker. Window size (1024×768), screenshot capture, and viewport restriction are all working.
-
----
-
-## 5. Known bugs and limitations
+## 3. Open bugs / limitations
 
 | # | Status | Description |
 |---|--------|-------------|
-| 1 | **fixed** | `saveScreenshot()` — now uses `SDL_GL_GetProcAddress`; verified working |
-| 2 | **fixed** | Viewport restriction — 3D scene now confined to center area via `glViewport`/`glScissor` called directly in `Draw()` |
-| 3 | **fixed** | Bitmap font: 5×7 pixel glyphs in hierarchy and properties panels; object names, POS/ROT/SCL values rendered |
-| 4 | **fixed** | Ray-cast picking — slab-method ray-AABB per object, recursive through children, selects closest hit |
-| 5 | **fixed** | Transform gizmo: X/Y/Z arrows from selected object (Move tool); drag handle moves object along axis |
-| 6 | **incomplete** | File-open dialog not available — user types path in terminal stdin |
-| 7 | **fixed** | Hierarchy panel: recursive tree with depth indentation, ">" / "v" expand/collapse for groups |
-| 8 | **suspected bug** | `prevKs_` field declared in header but `KeyboardState` may lack default constructor in older CNA builds |
-| 9 | **needs verification** | CNA commit `34ae601` renamed `CurrentTechnique()`/`Passes()` — any other call sites in MeshCraft not yet updated? |
-| 10 | **incomplete** | CSG operations (Union, Difference, Intersection) not handled in SceneRenderer |
+| 1 | **open** | File-open dialog not available — user types path in terminal stdin |
+| 2 | **open** | Properties panel is read-only; POS/ROT/SCL cannot be typed in |
+| 3 | **open** | CSG Union/Difference/Intersection rendered as placeholder box |
+| 4 | **open** | F1–F5 always adds primitive to top-level `document_.objects`, not inside selected group |
+| 5 | **open** | No undo/redo (Ctrl+Z / Ctrl+Y) |
+| 6 | **open** | No duplicate object (Ctrl+D) |
 
 ---
 
-## 6. Architecture notes
+## 4. Architecture notes
 
 **Main modules:**
 
@@ -93,29 +68,31 @@ No critical blocker. Window size (1024×768), screenshot capture, and viewport r
 |--------|----------|------|
 | `MeshCraftApplication` | `src/MeshCraft/MeshCraftApplication.cpp` | Game loop, input, scene state, UI draw |
 | `GridRenderer` | `src/MeshCraft/Renderer/GridRenderer.cpp` | XYZ grid lines via `BasicEffect` + `VertexBuffer` |
-| `SceneRenderer` | `src/MeshCraft/Renderer/SceneRenderer.cpp` | Renders MC3 scene objects via BasicEffect |
+| `SceneRenderer` | `src/MeshCraft/Renderer/SceneRenderer.cpp` | Renders MC3 scene objects + transform gizmo |
 | `EditorCamera` | `include/MeshCraft/Editor/EditorCamera.hpp` | Orbit/pan/zoom; produces view+projection matrices |
 | `SelectionManager` | `include/MeshCraft/Editor/SelectionManager.hpp` | Tracks selected `Mc3Object` shared_ptrs |
-| `TransformGizmo` | stub | Not yet implemented |
+| `TransformGizmo` | `include/MeshCraft/Editor/TransformGizmo.hpp` | GizmoAxis enum + drag state; rendering in SceneRenderer |
+| `BitmapFont` | `include/MeshCraft/Ui/BitmapFont.hpp` | 5×7 pixel font, 96 ASCII glyphs, column-major encoding |
 | `Mc3Document` | `mc3/` sublibrary | Pure C++ scene data; load/save XML |
 | CNA | `../cna/` sibling repo | SDL3 window, GL context, SpriteBatch, BasicEffect, Texture2D |
 
 **Data flow:**
 1. `LoadContent()` creates renderers; loads `Mc3Document` from XML.
 2. `Update()` polls `Keyboard`/`Mouse`; mutates camera, selection, document.
-3. `Draw()` clears screen, renders 3D scene, then overlays 2D UI via SpriteBatch.
+3. `Draw()` clears screen → renders 3D scene → draws gizmo → overlays 2D UI via SpriteBatch.
 
 **Important invariants:**
-- `Mc3Document.materials` is `std::map<std::string, Mc3Material>` — iterate with structured bindings `const auto& [key, mat]`.
+- `Mc3Document.materials` is `std::map<std::string, Mc3Material>` — iterate with `const auto& [key, mat]`.
 - `Mc3Material` uses `baseColor` (4-element float array), not `diffuse`.
-- `SpriteBatch::Begin()`/`End()` must bracket all `Draw()` calls; cannot nest.
-- CNA API (post-commit 34ae601): use `getCurrentTechniqueProperty()` and `getPassesProperty()` — old names `CurrentTechnique()`/`Passes()` are gone.
+- `SpriteBatch::Begin()`/`End()` must bracket all 2D `Draw()` calls; cannot nest.
+- CNA API: use `getCurrentTechniqueProperty()` and `getPassesProperty()` (old `CurrentTechnique()`/`Passes()` removed in commit 34ae601).
 - `Color` has no default constructor — always initialise with 4 args.
-- Do not add `${meta-gl_SOURCE_DIR}/include` to MeshCraft's CMakeLists.txt — it triggers full CNA recompilation with pre-existing CNA bugs.
+- Do not add `${meta-gl_SOURCE_DIR}/include` to MeshCraft's CMakeLists.txt — triggers full CNA recompile with pre-existing bugs.
+- `hierarchyRows_` is populated in `Draw()` and consumed in `Update()` (1-frame lag — intentional, invisible to user).
 
 ---
 
-## 7. Useful commands
+## 5. Useful commands
 
 ```bash
 # Configure (first time)
@@ -124,18 +101,14 @@ cmake -S . -B cmake-build-debug -DCMAKE_BUILD_TYPE=Debug -DMESH_CRAFT_GRAPHICS_B
 # Build
 cd cmake-build-debug && ninja -j$(nproc)
 
-# Run with a test scene
+# Run
 ./cmake-build-debug/MeshCraft test/house.mc3.xml
 
-# Run with auto-screenshot (exits after ~2s)
+# Run with auto-screenshot (exits after ~2 s)
 ./cmake-build-debug/MeshCraft test/house.mc3.xml --screenshot /tmp/editor.ppm
 
-# Run with garden house scene
-./cmake-build-debug/MeshCraft test/garden_house.mc3.xml
-
-# Screenshot (now working)
-./cmake-build-debug/MeshCraft test/house.mc3.xml --screenshot /tmp/test.ppm
-# Expected output: [Screenshot] written /tmp/test.ppm  → valid 800×480 PPM
+# Run smoke test
+ctest --test-dir cmake-build-debug -V
 
 # Convert MC3 to GLB
 ./cmake-build-debug/mc3/mc3togltf test/house.mc3.xml test/house.glb
@@ -143,44 +116,40 @@ cd cmake-build-debug && ninja -j$(nproc)
 
 ---
 
-## 8. Next smallest tasks
+## 6. Next smallest tasks
 
-1. **Ray-cast object picking — DONE**
-   - Implemented in `handleMouseInput()`: unprojects mouse NDC via `EditorCamera::screenRayDirection`, tests each object's world-space AABB (slab method), selects closest hit.
-   - Recursive through `children` (e.g. boxes inside House group are pickable).
-   - Top-level objects (LeftColumn, RightColumn, Ornament, Ground) highlight in hierarchy panel when clicked. Children of groups are selected but not shown in hierarchy panel (flat list only shows top-level).
+1. **Editable properties panel** *(most impactful for usability)*
+   - Goal: click on a POS/ROT/SCL value in the properties panel and type a new number.
+   - Approach: add a simple focused-field state; on click, capture keyboard input into a string buffer; on Enter or focus-loss, parse and apply to the selected object's transform.
+   - Files: `MeshCraftApplication.hpp/cpp` (input state), `drawUi` properties section.
 
-2. **Bitmap font — DONE**
-   - `include/MeshCraft/Ui/BitmapFont.hpp` + `src/MeshCraft/Ui/BitmapFont.cpp`: 5×7 pixel font, 96 printable ASCII glyphs, column-major encoding.
-   - Hierarchy panel: "SCENE" header, object name per row, color-coded text for selection state.
-   - Properties panel: "PROPERTIES" header, object name on type bar, "POS"/"ROT"/"SCL" section labels, X/Y/Z axis labels with numeric values, material name.
+2. **Add primitive as child of selected group**
+   - Goal: F1–F5 inserts into the selected group's `children` when a group is selected, not always at top level.
+   - Files: `MeshCraftApplication.cpp` — `addPrimitive()`.
 
-3. **Transform gizmo — DONE**
-   - `include/MeshCraft/Editor/TransformGizmo.hpp`: added `GizmoAxis` enum + `startDrag`/`endDrag`/`isDragging` state.
-   - `include/MeshCraft/Renderer/SceneRenderer.hpp` + `SceneRenderer.cpp`: `drawGizmo()` draws 3 colored axis lines + small cube tips from selected object; no depth test so always visible.
-   - `MeshCraftApplication.cpp`: gizmo drawn after scene render when Move tool active; handle hit test on left-click (12px radius); drag delta projected onto screen-space axis direction and converted to world units.
+3. **Duplicate object (Ctrl+D)**
+   - Goal: deep-copy the selected object(s) with a new name suffix and insert after the original.
+   - Files: `MeshCraftApplication.cpp`.
 
-4. **Add automated smoke test — DONE**
-   - `test/smoke_test.sh`: runs binary with `--screenshot`, uses `xvfb-run` if available, checks exit code 0 and non-empty PPM.
-   - `CMakeLists.txt`: `add_test(smoke_test ...)` gated on `MESH_CRAFT_BUILD_TESTING AND UNIX`; timeout 30 s.
-   - Verified: `ctest -V` passes in 2.2 s, screenshot is 2.36 MB.
+4. **CSG rendering**
+   - Goal: Union/Difference/Intersection display as the union of their children's meshes (even if just rendered children without boolean ops).
+   - Files: `SceneRenderer.cpp` — `drawObject()` CSG cases currently fall through to placeholder box.
 
 ---
 
-## 9. Do not do yet
+## 7. Do not do yet
 
-- **No refactor of CNA** — CNA still has other bugs that may surface when objects are recompiled; only fix what's blocking a build. The two pre-existing bugs fixed this session (`ToEasyGLCompareFunc` ordering, `SetValue(Texture2D*)`) were fixed because CNA was already being recompiled due to CMakeLists.txt timestamp change.
-- **No new features** until ray-cast picking works — it is the next key interaction needed before gizmo or other editing features make sense.
-- **No SpriteFont integration** until a simpler bitmap font approach is validated or CNA gains native text support.
-- **No CSG rendering** until the basic picking and gizmo are working.
+- **No refactor of CNA** — only fix what's blocking a build.
+- **No SpriteFont / native text widget** — bitmap font approach is sufficient for now.
+- **No GUI file dialog** — out of scope until a basic widget model exists.
+- **No undo/redo** — needs a command pattern; deferred until core editing is stable.
 - **No API changes in `Mc3Document`** without checking `mc3togltf` and all test scenes.
-- **No mass include path changes** in `CMakeLists.txt` — any change to `target_include_directories` that touches CNA's dependencies risks triggering a full CNA recompile with pre-existing bugs.
-- **No GUI file dialog** — out of scope until panels have text and a basic widget model.
+- **No mass include path changes** in `CMakeLists.txt` — risks triggering a full CNA recompile.
 
 ---
 
-## 10. Resume prompt
+## 8. Resume prompt
 
 ```
-Read NEXT.md first. Then implement the next task. Do not refactor unrelated code. Make one small verified improvement. Build with: cd cmake-build-debug && ninja -j$(nproc). Verify with: ./cmake-build-debug/MeshCraft test/house.mc3.xml --screenshot /tmp/test.ppm && ffmpeg -i /tmp/test.ppm /tmp/test.png -y && check the PNG. Update NEXT.md after finishing.
+Read NEXT.md first. Then implement the next task from section 6. Do not refactor unrelated code. Build with: cd cmake-build-debug && ninja -j$(nproc). Verify with: ./cmake-build-debug/MeshCraft test/house.mc3.xml --screenshot /tmp/test.ppm && ffmpeg -i /tmp/test.ppm /tmp/test.png -y && check the PNG. Update NEXT.md after finishing.
 ```
