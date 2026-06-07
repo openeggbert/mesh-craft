@@ -24,6 +24,7 @@
 #include <System/Object.hpp>
 #include <filesystem>
 #include <memory>
+#include <set>
 #include <string>
 #include <vector>
 
@@ -116,6 +117,14 @@ private:
 
     // Keyboard state from last frame
     Microsoft::Xna::Framework::Input::KeyboardState prevKs_;
+
+    // Hierarchy panel tree state
+    struct HierarchyRow {
+        int depth;
+        std::shared_ptr<Mc3::Mc3Object> obj;
+    };
+    std::vector<HierarchyRow> hierarchyRows_;   // rebuilt each Draw()
+    std::set<const Mc3::Mc3Object*> collapsedGroups_;
 };
 
 } // namespace MeshCraft

@@ -45,7 +45,6 @@ cmake-build-debug/ninja → [255/258] Linking CXX executable MeshCraft  ✓
 - Transform gizmo: X/Y/Z axis arrows drawn from selected object when Move tool (G) is active; click on axis tip (±12px) grabs handle; drag moves object along that axis via screen-space projection.
 
 **Not working:**
-- No transform gizmo (stub `TransformGizmo` class exists but does nothing).
 - No file-open dialog — file path must be entered via console stdin.
 
 ---
@@ -79,7 +78,7 @@ No critical blocker. Window size (1024×768), screenshot capture, and viewport r
 | 4 | **fixed** | Ray-cast picking — slab-method ray-AABB per object, recursive through children, selects closest hit |
 | 5 | **fixed** | Transform gizmo: X/Y/Z arrows from selected object (Move tool); drag handle moves object along axis |
 | 6 | **incomplete** | File-open dialog not available — user types path in terminal stdin |
-| 7 | **incomplete** | Hierarchy panel only shows flat top-level objects; groups/children not indented |
+| 7 | **fixed** | Hierarchy panel: recursive tree with depth indentation, ">" / "v" expand/collapse for groups |
 | 8 | **suspected bug** | `prevKs_` field declared in header but `KeyboardState` may lack default constructor in older CNA builds |
 | 9 | **needs verification** | CNA commit `34ae601` renamed `CurrentTechnique()`/`Passes()` — any other call sites in MeshCraft not yet updated? |
 | 10 | **incomplete** | CSG operations (Union, Difference, Intersection) not handled in SceneRenderer |
@@ -183,5 +182,5 @@ cd cmake-build-debug && ninja -j$(nproc)
 ## 10. Resume prompt
 
 ```
-Read NEXT.md first. Then implement the next task (hierarchy panel: indent groups/children, show expand/collapse triangle). Do not refactor unrelated code. Make one small verified improvement. Build with: cd cmake-build-debug && ninja -j$(nproc). Verify with: ./cmake-build-debug/MeshCraft test/house.mc3.xml --screenshot /tmp/test.ppm && ffmpeg -i /tmp/test.ppm /tmp/test.png -y && check the PNG. Update NEXT.md after finishing.
+Read NEXT.md first. Then implement the next task. Do not refactor unrelated code. Make one small verified improvement. Build with: cd cmake-build-debug && ninja -j$(nproc). Verify with: ./cmake-build-debug/MeshCraft test/house.mc3.xml --screenshot /tmp/test.ppm && ffmpeg -i /tmp/test.ppm /tmp/test.png -y && check the PNG. Update NEXT.md after finishing.
 ```

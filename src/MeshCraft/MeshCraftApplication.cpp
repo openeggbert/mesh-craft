@@ -411,9 +411,24 @@ void MeshCraftApplication::handleMouseInput(const MouseState& ms, const MouseSta
         // Click inside left hierarchy panel
         if (mx < kLeftPanelW && my >= kToolbarH + kPanelHdrH) {
             int row = (my - kToolbarH - kPanelHdrH) / kObjRowH;
-            if (row >= 0 && row < static_cast<int>(document_.objects.size())) {
+            if (row >= 0 && row < static_cast<int>(hierarchyRows_.size())) {
+                auto& hr = hierarchyRows_[row];
+                bool isGroup = !hr.obj->children.empty() ||
+                               hr.obj->type == Mc3::ObjectType::Group ||
+                               hr.obj->type == Mc3::ObjectType::Union ||
+                               hr.obj->type == Mc3::ObjectType::Difference ||
+                               hr.obj->type == Mc3::ObjectType::Intersection;
+                // Click on the triangle (expand/collapse region)
+                int triX = 5 + hr.depth * 14;
+                if (isGroup && mx >= triX && mx < triX + 12) {
+                    auto* ptr = hr.obj.get();
+                    if (collapsedGroups_.count(ptr)) collapsedGroups_.erase(ptr);
+                    else collapsedGroups_.insert(ptr);
+                    return;
+                }
+                // Select the object
                 if (!ctrl) selection_.clear();
-                selection_.select(document_.objects[row]);
+                selection_.select(hr.obj);
                 updateWindowTitle();
             }
             return;
@@ -577,6 +592,8 @@ void MeshCraftApplication::newScene() {
     document_ = Mc3::Mc3Document{};
     document_.model = "Untitled";
     selection_.clear();
+    collapsedGroups_.clear();
+    hierarchyRows_.clear();
     modified_ = false;
     currentFile_.clear();
     std::cout << "[MeshCraft] New scene\n";
@@ -862,50 +879,86 @@ void MeshCraftApplication::drawUi(int screenW, int screenH) {
     Ui::drawBitmapText("SCENE", 8, kToolbarH + (kPanelHdrH - 7) / 2, 1,
                        Color(160, 175, 210, 255), fillRect);
 
-    // Object list rows
+    // Object list rows — recursive tree with indent and expand/collapse
     const auto& objs = document_.objects;
     int rowY = kToolbarH + kPanelHdrH;
-    int maxY  = screenH - kStatusH - kObjRowH;
-    static constexpr int kTextX    = 26;   // x after icon
-    static constexpr int kTextMaxW = kLeftPanelW - 8 - kTextX - 2; // clip before right bar
-    for (size_t i = 0; i < objs.size() && rowY <= maxY; ++i) {
-        const auto& obj = objs[i];
-        bool sel = selection_.isSelected(obj.get());
+    int maxY = screenH - kStatusH - kObjRowH;
+    hierarchyRows_.clear();
 
-        Color rowBg = sel
-            ? ((i % 2 == 0) ? Color(62, 70, 118, 255) : Color(58, 66, 112, 255))
-            : ((i % 2 == 0) ? Color(32, 35, 60, 255)  : Color(28, 31, 54, 255));
-        drawRect(0, rowY, kLeftPanelW - 1, kObjRowH, rowBg);
+    std::function<void(const std::vector<std::shared_ptr<Mc3::Mc3Object>>&, int)> drawObjList;
+    drawObjList = [&](const std::vector<std::shared_ptr<Mc3::Mc3Object>>& list, int depth) {
+        for (const auto& obj : list) {
+            if (rowY > maxY) break;
 
-        // Type color strip on left
-        Color tc = objectTypeColor(obj->type);
-        drawRect(0, rowY, 5, kObjRowH, tc);
+            bool sel      = selection_.isSelected(obj.get());
+            bool isGroup  = !obj->children.empty() ||
+                            obj->type == Mc3::ObjectType::Group ||
+                            obj->type == Mc3::ObjectType::Union ||
+                            obj->type == Mc3::ObjectType::Difference ||
+                            obj->type == Mc3::ObjectType::Intersection;
+            bool expanded = !collapsedGroups_.count(obj.get());
 
-        // Inner icon: small colored square
-        drawRect(10, rowY + 5, 12, 12, tc);
+            hierarchyRows_.push_back({depth, obj});
+            int rowIdx = static_cast<int>(hierarchyRows_.size()) - 1;
 
-        // Object name text (truncate to fit available width)
-        {
-            const std::string& name = obj->name.empty() ? obj->id : obj->name;
-            // clip to kTextMaxW pixels at scale=1 (each char = 6px)
-            int maxChars = kTextMaxW / 6;
-            std::string label = name.size() > static_cast<size_t>(maxChars)
-                                ? name.substr(0, maxChars - 1) + "~"
-                                : name;
-            Color textCol = sel ? Color(235, 240, 255, 255) : Color(185, 195, 215, 255);
-            Ui::drawBitmapText(label, kTextX, rowY + (kObjRowH - 7) / 2, 1, textCol, fillRect);
+            int indent = depth * 14;
+            int iconX  = 7 + indent;
+            int textX  = iconX + 15;
+
+            // Row background
+            Color rowBg = sel
+                ? ((rowIdx % 2 == 0) ? Color(62, 70, 118, 255) : Color(58, 66, 112, 255))
+                : ((rowIdx % 2 == 0) ? Color(32, 35, 60, 255)  : Color(28, 31, 54, 255));
+            drawRect(0, rowY, kLeftPanelW - 1, kObjRowH, rowBg);
+
+            // Type color strip (always at x=0)
+            Color tc = objectTypeColor(obj->type);
+            drawRect(0, rowY, 5, kObjRowH, tc);
+
+            // Vertical indent guide for children
+            if (depth > 0) {
+                drawRect(5 + (depth - 1) * 14 + 9, rowY, 1, kObjRowH,
+                         Color(55, 60, 90, 200));
+            }
+
+            // Expand/collapse triangle (">" = collapsed, "v" = expanded)
+            if (isGroup) {
+                const char* tri = expanded ? "v" : ">";
+                Ui::drawBitmapText(tri, 5 + indent + 1, rowY + (kObjRowH - 7) / 2,
+                                   1, Color(160, 175, 210, 200), fillRect);
+            }
+
+            // Type icon
+            drawRect(iconX, rowY + (kObjRowH - 10) / 2, 10, 10, tc);
+
+            // Object name (truncated to fit)
+            {
+                const std::string& name = obj->name.empty() ? obj->id : obj->name;
+                int maxChars = std::max(1, (kLeftPanelW - 8 - textX - 2) / 6);
+                std::string label = (int)name.size() > maxChars
+                                    ? name.substr(0, maxChars - 1) + "~" : name;
+                Color textCol = sel ? Color(235, 240, 255, 255) : Color(185, 195, 215, 255);
+                Ui::drawBitmapText(label, textX, rowY + (kObjRowH - 7) / 2, 1,
+                                   textCol, fillRect);
+            }
+
+            // Selection right indicator
+            if (sel) {
+                drawRect(kLeftPanelW - 8, rowY, 7, kObjRowH, Color(80, 130, 210, 255));
+            }
+
+            // Row separator
+            drawRect(5, rowY + kObjRowH - 1, kLeftPanelW - 6, 1, Color(40, 44, 72, 100));
+
+            rowY += kObjRowH;
+
+            // Recurse into children when expanded
+            if (isGroup && expanded && !obj->children.empty()) {
+                drawObjList(obj->children, depth + 1);
+            }
         }
-
-        // Selection right indicator
-        if (sel) {
-            drawRect(kLeftPanelW - 8, rowY, 7, kObjRowH, Color(80, 130, 210, 255));
-        }
-
-        // Row bottom separator
-        drawRect(5, rowY + kObjRowH - 1, kLeftPanelW - 6, 1, Color(40, 44, 72, 100));
-
-        rowY += kObjRowH;
-    }
+    };
+    drawObjList(objs, 0);
 
     // -----------------------------------------------------------------------
     // Right panel — Properties
