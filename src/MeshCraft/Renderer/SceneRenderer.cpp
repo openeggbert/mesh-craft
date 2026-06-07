@@ -404,9 +404,11 @@ void SceneRenderer::drawObjectWireframe(const Mc3Object& obj,
 void SceneRenderer::drawObject(const Mc3Object& obj, const Mc3Document& doc,
                                 const Matrix& parentWorld,
                                 const Matrix& view, const Matrix& proj,
-                                const std::vector<const Mc3Object*>& selected)
+                                const std::vector<const Mc3Object*>& selected,
+                                int depth)
 {
     if (!obj.visible) return;
+    if (depth > 16) return; // guard against infinite instance recursion
 
     Matrix world = objectWorldMatrix(obj) * parentWorld;
     Color color  = materialColor(obj.material, doc);
@@ -455,8 +457,16 @@ void SceneRenderer::drawObject(const Mc3Object& obj, const Mc3Document& doc,
     case ObjectType::Intersection:
     case ObjectType::Area:
         for (const auto& child : obj.children)
-            drawObject(*child, doc, world, view, proj, selected);
+            drawObject(*child, doc, world, view, proj, selected, depth + 1);
         break;
+    case ObjectType::Instance: {
+        auto it = doc.definitions.find(obj.definition);
+        if (it != doc.definitions.end() && it->second)
+            drawObject(*it->second, doc, world, view, proj, selected, depth + 1);
+        else
+            drawMesh(unitBox_, world, view, proj, color); // definition not found
+        break;
+    }
     case ObjectType::Extrude: {
         if (!obj.extrude) { drawMesh(unitBox_, world, view, proj, color); break; }
         const auto& ex   = obj.extrude.value();

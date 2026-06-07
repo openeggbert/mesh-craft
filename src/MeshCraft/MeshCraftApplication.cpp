@@ -329,8 +329,58 @@ void MeshCraftApplication::handleKeyboardShortcuts(const KeyboardState& ks, cons
     // Delete selected
     if (justPressed(ks, prevKs, Keys::Delete)) { deleteSelected(); return; }
 
-    // Camera reset
-    if (!ctrl && justPressed(ks, prevKs, Keys::F)) { camera_.reset(); return; }
+    // Camera: F = focus on selection, or reset if nothing selected
+    if (!ctrl && justPressed(ks, prevKs, Keys::F)) {
+        if (selection_.hasSelection()) {
+            float bMinX = 1e30f, bMinY = 1e30f, bMinZ = 1e30f;
+            float bMaxX = -1e30f, bMaxY = -1e30f, bMaxZ = -1e30f;
+            for (const auto& s : selection_.selection()) {
+                float px = s->transform.position[0];
+                float py = s->transform.position[1];
+                float pz = s->transform.position[2];
+                float hx = 1.0f, hy = 1.0f, hz = 1.0f;
+                if (s->primitive) {
+                    const auto& p = *s->primitive;
+                    float sx = std::abs(s->transform.scale[0]);
+                    float sy = std::abs(s->transform.scale[1]);
+                    float sz = std::abs(s->transform.scale[2]);
+                    hx = hy = hz = 0.5f;
+                    switch (p.primitiveType) {
+                    case Mc3::PrimitiveType::Box:
+                    case Mc3::PrimitiveType::Cube:
+                        hx = p.size[0] * 0.5f * sx;
+                        hy = p.size[1] * 0.5f * sy;
+                        hz = p.size[2] * 0.5f * sz;
+                        break;
+                    case Mc3::PrimitiveType::Sphere:
+                        hx = hy = hz = p.radius * std::max({sx,sy,sz});
+                        break;
+                    case Mc3::PrimitiveType::Cylinder:
+                    case Mc3::PrimitiveType::Cone:
+                        hx = hz = p.radius * std::max(sx, sz);
+                        hy = p.height * 0.5f * sy;
+                        break;
+                    case Mc3::PrimitiveType::Plane:
+                        hx = p.size[0] * 0.5f * sx;
+                        hy = 0.05f;
+                        hz = p.size[2] * 0.5f * sz;
+                        break;
+                    }
+                }
+                bMinX = std::min(bMinX, px - hx); bMaxX = std::max(bMaxX, px + hx);
+                bMinY = std::min(bMinY, py - hy); bMaxY = std::max(bMaxY, py + hy);
+                bMinZ = std::min(bMinZ, pz - hz); bMaxZ = std::max(bMaxZ, pz + hz);
+            }
+            float cx = (bMinX + bMaxX) * 0.5f;
+            float cy = (bMinY + bMaxY) * 0.5f;
+            float cz = (bMinZ + bMaxZ) * 0.5f;
+            float radius = std::max({bMaxX-bMinX, bMaxY-bMinY, bMaxZ-bMinZ}) * 0.5f;
+            camera_.focusOn(cx, cy, cz, std::max(radius, 0.5f));
+        } else {
+            camera_.reset();
+        }
+        return;
+    }
 
     // Select all
     if (ctrl && justPressed(ks, prevKs, Keys::A)) {

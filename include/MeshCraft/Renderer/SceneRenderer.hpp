@@ -68,7 +68,8 @@ private:
                     const Microsoft::Xna::Framework::Matrix& parentWorld,
                     const Microsoft::Xna::Framework::Matrix& view,
                     const Microsoft::Xna::Framework::Matrix& projection,
-                    const std::vector<const Mc3::Mc3Object*>& selected);
+                    const std::vector<const Mc3::Mc3Object*>& selected,
+                    int depth = 0);
 
     void drawMesh(const RenderMesh& mesh,
                   const Microsoft::Xna::Framework::Matrix& world,

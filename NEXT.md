@@ -30,7 +30,7 @@ cd cmake-build-debug && ninja -j$(nproc)
 - Grid renderer with XYZ axis colours
 - Orbit / pan / zoom camera (middle-drag, right-drag, scroll); reset (F)
 - SpriteBatch UI: toolbar, left hierarchy panel, right properties panel, status bar
-- Keyboard shortcuts: Q/G/R/S tools, F1–F5 add primitives, Delete, Ctrl+A/D, arrow nudge, F12 help
+- Keyboard shortcuts: Q/G/R/S tools, F1–F5 add primitives, Delete, Ctrl+A/D, arrow nudge, F12 help; F focuses on selection (resets if nothing selected)
 - Window title shows tool / file / modified state; F11 saves `screenshot.ppm`
 - Ray-cast object picking (left-click, AABB slab method, recursive through children, Ctrl+click multi-select)
 - Bitmap font labels in both panels (object names, POS/ROT/SCL values, material name)
@@ -43,7 +43,7 @@ cd cmake-build-debug && ninja -j$(nproc)
 **Not working / incomplete:**
 - No file-open dialog — path entered via console stdin
 - Extrude: non-Line paths (Arc, Helix, Polyline, Bezier) and Custom cross-sections still show placeholder box
-- Instance objects rendered as placeholder box (definition lookup not implemented)
+- Mesh objects rendered as placeholder box (external mesh loading not implemented)
 
 ---
 
@@ -118,17 +118,16 @@ ctest --test-dir cmake-build-debug -V
 
 ## 6. Next smallest tasks
 
-1. **Camera focus on selection (F key)**
-   - Goal: pressing F with an object selected should orbit-zoom to fit that object, not just reset to the default view.
-   - Files: `MeshCraftApplication.cpp` (F key handler), `EditorCamera.hpp/cpp`.
-
-2. **Undo/redo (Ctrl+Z / Ctrl+Y)**
+1. **Undo/redo (Ctrl+Z / Ctrl+Y)**
    - Goal: command pattern to revert the last edit.
-   - Deferred until core editing is more stable.
+   - Approach: snapshot the `Mc3Document` (or a portion) before each mutating operation and store in a stack.
+   - Deferred — needs design thought.
 
-3. **Instance rendering**
-   - Goal: look up the `definition` field in the document and render the referenced object tree.
-   - Files: `SceneRenderer.cpp`.
+2. **Select-all within a group**
+   - Goal: when a group is selected, Ctrl+A should select its children rather than all top-level objects.
+
+3. **Toolbar click handling**
+   - Goal: clicking a toolbar button should switch the active tool (currently only keyboard shortcuts work).
 
 ---
 
