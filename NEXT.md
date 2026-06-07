@@ -26,11 +26,11 @@ cd cmake-build-debug && ninja -j$(nproc)
 
 **Working features:**
 - Load `.mc3.xml` on startup; save (Ctrl+S); save-as; export GLB via `mc3togltf` (Ctrl+E)
-- 3D scene rendering: box, sphere, cylinder, cone, plane, extrude (as placeholder)
+- 3D scene rendering: box, sphere, cylinder, cone, plane; extrude (Rect → box, Circle/Polygon → cylinder, Line path; other paths still placeholder)
 - Grid renderer with XYZ axis colours
 - Orbit / pan / zoom camera (middle-drag, right-drag, scroll); reset (F)
 - SpriteBatch UI: toolbar, left hierarchy panel, right properties panel, status bar
-- Keyboard shortcuts: Q/G/R/S tools, F1–F5 add primitives, Delete, Ctrl+A, arrow nudge, F12 help
+- Keyboard shortcuts: Q/G/R/S tools, F1–F5 add primitives, Delete, Ctrl+A/D, arrow nudge, F12 help
 - Window title shows tool / file / modified state; F11 saves `screenshot.ppm`
 - Ray-cast object picking (left-click, AABB slab method, recursive through children, Ctrl+click multi-select)
 - Bitmap font labels in both panels (object names, POS/ROT/SCL values, material name)
@@ -41,9 +41,9 @@ cd cmake-build-debug && ninja -j$(nproc)
 - F1–F5 adds primitive as child when a group is selected; Ctrl+D duplicates selected object(s)
 
 **Not working / incomplete:**
-- CSG objects (Union, Difference, Intersection) rendered as bounding-box placeholder only
 - No file-open dialog — path entered via console stdin
-- CSG children not rendered (Union/Difference/Intersection show placeholder box)
+- Extrude: non-Line paths (Arc, Helix, Polyline, Bezier) and Custom cross-sections still show placeholder box
+- Instance objects rendered as placeholder box (definition lookup not implemented)
 
 ---
 
@@ -53,7 +53,7 @@ cd cmake-build-debug && ninja -j$(nproc)
 |---|--------|-------------|
 | 1 | **open** | File-open dialog not available — user types path in terminal stdin |
 | 2 | **done** | Properties panel is read-only; POS/ROT/SCL cannot be typed in |
-| 3 | **open** | CSG Union/Difference/Intersection rendered as placeholder box |
+| 3 | **done** | CSG Union/Difference/Intersection rendered as placeholder box |
 | 4 | **done** | F1–F5 always adds primitive to top-level `document_.objects`, not inside selected group |
 | 5 | **open** | No undo/redo (Ctrl+Z / Ctrl+Y) |
 | 6 | **done** | No duplicate object (Ctrl+D) |
@@ -118,13 +118,17 @@ ctest --test-dir cmake-build-debug -V
 
 ## 6. Next smallest tasks
 
-1. **CSG rendering** *(next priority)*
-   - Goal: Union/Difference/Intersection display as the union of their children's meshes (even if just rendered children without boolean ops).
-   - Files: `SceneRenderer.cpp` — `drawObject()` CSG cases currently fall through to placeholder box.
+1. **Camera focus on selection (F key)**
+   - Goal: pressing F with an object selected should orbit-zoom to fit that object, not just reset to the default view.
+   - Files: `MeshCraftApplication.cpp` (F key handler), `EditorCamera.hpp/cpp`.
 
 2. **Undo/redo (Ctrl+Z / Ctrl+Y)**
    - Goal: command pattern to revert the last edit.
    - Deferred until core editing is more stable.
+
+3. **Instance rendering**
+   - Goal: look up the `definition` field in the document and render the referenced object tree.
+   - Files: `SceneRenderer.cpp`.
 
 ---
 

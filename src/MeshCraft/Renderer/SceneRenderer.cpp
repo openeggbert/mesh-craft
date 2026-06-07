@@ -457,8 +457,46 @@ void SceneRenderer::drawObject(const Mc3Object& obj, const Mc3Document& doc,
         for (const auto& child : obj.children)
             drawObject(*child, doc, world, view, proj, selected);
         break;
+    case ObjectType::Extrude: {
+        if (!obj.extrude) { drawMesh(unitBox_, world, view, proj, color); break; }
+        const auto& ex   = obj.extrude.value();
+        const auto& cs   = ex.crossSection;
+        const auto& path = ex.path;
+
+        float len = (path.type == ExtrudePathType::Line) ? path.length : 1.0f;
+
+        // Rotate so the unit Y-aligned shapes point along the chosen axis
+        Matrix axisRot = Matrix::getIdentityProperty();
+        if (path.type == ExtrudePathType::Line) {
+            constexpr float pih = std::numbers::pi_v<float> * 0.5f;
+            if (path.axis == "x")
+                axisRot = Matrix::CreateRotationZ(pih);
+            else if (path.axis == "z")
+                axisRot = Matrix::CreateRotationX(-pih);
+        }
+
+        switch (cs.type) {
+        case CrossSectionType::Rect:
+            drawMesh(unitBox_,
+                     Matrix::CreateScale({cs.width, len, cs.height}) * axisRot * world,
+                     view, proj, color);
+            break;
+        case CrossSectionType::Circle:
+        case CrossSectionType::Polygon: {
+            float r = cs.radius * 2.0f;
+            drawMesh(unitCylinder_,
+                     Matrix::CreateScale({r, len, r}) * axisRot * world,
+                     view, proj, color);
+            break;
+        }
+        default:
+            drawMesh(unitBox_, world, view, proj, color);
+            break;
+        }
+        break;
+    }
     default:
-        // Mesh, Extrude, Instance: render as a bounding box placeholder
+        // Mesh, Instance: render as a bounding box placeholder
         drawMesh(unitBox_, world, view, proj, color);
         break;
     }

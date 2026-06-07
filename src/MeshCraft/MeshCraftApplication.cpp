@@ -804,17 +804,19 @@ void MeshCraftApplication::addPrimitive(Mc3::ObjectType type) {
     updateWindowTitle();
 }
 
+static void removeFromList(std::vector<std::shared_ptr<Mc3::Mc3Object>>& list,
+                            const Mc3::Mc3Object* target)
+{
+    list.erase(std::remove_if(list.begin(), list.end(),
+        [&](const auto& o){ return o.get() == target; }), list.end());
+    for (auto& obj : list)
+        if (!obj->children.empty())
+            removeFromList(obj->children, target);
+}
+
 void MeshCraftApplication::deleteSelected() {
-    auto& sel = selection_.selection();
-    for (const auto& s : sel) {
-        auto& objs = document_.objects;
-        objs.erase(
-            std::remove_if(objs.begin(), objs.end(),
-                [&](const auto& o){ return o.get() == s.get(); }),
-            objs.end());
-    }
-    // Also check children (recursive)
-    // For simplicity: only top-level deletion for now
+    for (const auto& s : selection_.selection())
+        removeFromList(document_.objects, s.get());
     selection_.clear();
     modified_ = true;
     std::cout << "[MeshCraft] Deleted selected objects\n";
