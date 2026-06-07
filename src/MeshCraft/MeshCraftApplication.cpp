@@ -23,6 +23,7 @@
 using SDL_FunctionPointer = void(*)(void);
 extern "C" SDL_FunctionPointer SDL_GL_GetProcAddress(const char*);
 
+
 namespace MeshCraft {
 
 GetTypeNameCPP(MeshCraftApplication, "MeshCraft::MeshCraftApplication")

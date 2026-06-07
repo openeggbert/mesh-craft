@@ -37,6 +37,7 @@ cmake-build-debug/ninja → [255/258] Linking CXX executable MeshCraft  ✓
 - F11 shortcut triggers screenshot to `screenshot.ppm`
 - **`saveScreenshot()` — working**: uses `SDL_GL_GetProcAddress("glReadPixels")` via forward declaration; produces a valid PPM
 - **Viewport restriction — working**: 3D scene renders only in the center area bounded by panels; panel areas stay dark. Uses direct `glViewport`/`glScissor` calls via `SDL_GL_GetProcAddress` cached in `LoadContent()`.
+- **Window size 1024×768 — working**: `PresentationParameters` default constructor in CNA now uses 1024×768 (was 800×480); SDL window and logical viewport are 1024×768 on startup.
 
 **Not working:**
 - No text rendered in panels — all labels are colour-coded shapes only.
@@ -48,6 +49,7 @@ cmake-build-debug/ninja → [255/258] Linking CXX executable MeshCraft  ✓
 
 ## 3. Recent changes
 
+- **`../cna/src/Microsoft/Xna/Framework/Graphics/PresentationParameters.cpp`** — Changed `PresentationParameters` default constructor from 800×480 to 1024×768; this sets the initial SDL window size and `virtualWidth_`/`virtualHeight_` for the EasyGL backend.
 - **`src/MeshCraft/MeshCraftApplication.cpp`** + **`include/MeshCraft/MeshCraftApplication.hpp`** — Fixed viewport restriction: cache `glViewport`/`glScissor`/`glEnable`/`glDisable` in `LoadContent()` via `SDL_GL_GetProcAddress`; in `Draw()` apply scissor before `gd.Clear(bgColor)` to restrict it to the 3D area, then re-apply GL viewport for 3D rendering, then disable scissor before SpriteBatch.
 - **`src/MeshCraft/MeshCraftApplication.cpp`** — Fixed `saveScreenshot()`: replaced `dlsym` with `SDL_GL_GetProcAddress` forward declaration.
 - **`CMakeLists.txt`** — Reverted accidental default backend change (VULKAN → EASYGL).
@@ -60,7 +62,7 @@ cmake-build-debug/ninja → [255/258] Linking CXX executable MeshCraft  ✓
 
 ## 4. Current blocker / main problem
 
-No critical blocker. Screenshot capture is working. The next target is fixing the viewport restriction so the 3D scene clears only inside the panel-bounded area.
+No critical blocker. Window size (1024×768), screenshot capture, and viewport restriction are all working.
 
 ---
 
