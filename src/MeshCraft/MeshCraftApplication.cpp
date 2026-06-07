@@ -369,9 +369,105 @@ void MeshCraftApplication::handleMouseInput(const MouseState& ms, const MouseSta
         bool in3d = (mx >= kLeftPanelW && mx < screenW - kRightPanelW &&
                      my >= kToolbarH   && my < screenH - kStatusH);
         if (in3d) {
+            // Ray-cast picking: unproject click to world-space ray, test AABB per object
+            int viewX = kLeftPanelW;
+            int viewY = kToolbarH;
+            int viewW = std::max(1, screenW - kLeftPanelW - kRightPanelW);
+            int viewH = std::max(1, screenH - kToolbarH - kStatusH);
+            float ndcX = ((mx - viewX) / static_cast<float>(viewW)) * 2.0f - 1.0f;
+            float ndcY = 1.0f - ((my - viewY) / static_cast<float>(viewH)) * 2.0f;
+            float aspect = static_cast<float>(viewW) / static_cast<float>(viewH);
+
+            Vector3 rayOrig = camera_.position();
+            Vector3 rayDir  = camera_.screenRayDirection(ndcX, ndcY, aspect);
+
+            // Slab-method ray-AABB intersection; returns true and sets tHit if hit
+            auto rayAABB = [](const Vector3& ro, const Vector3& rd,
+                               const Vector3& bMin, const Vector3& bMax,
+                               float& tHit) -> bool {
+                float tNear = 0.0f, tFar = 1e30f;
+                const float* rov = &ro.X;
+                const float* rdv = &rd.X;
+                const float* bnv = &bMin.X;
+                const float* bxv = &bMax.X;
+                for (int i = 0; i < 3; ++i) {
+                    if (std::abs(rdv[i]) < 1e-9f) {
+                        if (rov[i] < bnv[i] || rov[i] > bxv[i]) return false;
+                    } else {
+                        float t1 = (bnv[i] - rov[i]) / rdv[i];
+                        float t2 = (bxv[i] - rov[i]) / rdv[i];
+                        if (t1 > t2) { float tmp = t1; t1 = t2; t2 = tmp; }
+                        tNear = std::max(tNear, t1);
+                        tFar  = std::min(tFar,  t2);
+                        if (tNear > tFar) return false;
+                    }
+                }
+                tHit = tNear;
+                return tNear >= 0.0f;
+            };
+
+            // Build world-space AABB for object (ignores rotation — AABB wraps shape)
+            auto objectAABB = [](const Mc3::Mc3Object& obj,
+                                  Vector3& bMin, Vector3& bMax) {
+                const auto& t = obj.transform;
+                float px = t.position[0], py = t.position[1], pz = t.position[2];
+                float sx = t.scale[0],    sy = t.scale[1],    sz = t.scale[2];
+
+                float hx = 0.5f, hy = 0.5f, hz = 0.5f;
+                if (obj.primitive) {
+                    const auto& p = *obj.primitive;
+                    switch (p.primitiveType) {
+                    case Mc3::PrimitiveType::Box:
+                    case Mc3::PrimitiveType::Cube:
+                        hx = p.size[0] * 0.5f;
+                        hy = p.size[1] * 0.5f;
+                        hz = p.size[2] * 0.5f;
+                        break;
+                    case Mc3::PrimitiveType::Sphere:
+                        hx = hy = hz = p.radius;
+                        break;
+                    case Mc3::PrimitiveType::Cylinder:
+                    case Mc3::PrimitiveType::Cone:
+                        hx = hz = p.radius;
+                        hy = p.height * 0.5f;
+                        break;
+                    case Mc3::PrimitiveType::Plane:
+                        hx = p.size[0] * 0.5f;
+                        hy = 0.05f;
+                        hz = p.size[1] * 0.5f;
+                        break;
+                    }
+                }
+                hx *= std::abs(sx); hy *= std::abs(sy); hz *= std::abs(sz);
+                bMin = { px - hx, py - hy, pz - hz };
+                bMax = { px + hx, py + hy, pz + hz };
+            };
+
+            // Find closest hit, searching recursively through children
+            float bestT = 1e30f;
+            std::shared_ptr<Mc3::Mc3Object> bestObj;
+
+            std::function<void(const std::vector<std::shared_ptr<Mc3::Mc3Object>>&)> testList;
+            testList = [&](const std::vector<std::shared_ptr<Mc3::Mc3Object>>& list) {
+                for (const auto& obj : list) {
+                    if (!obj || !obj->visible) continue;
+                    if (obj->primitive) {
+                        Vector3 bMin, bMax;
+                        objectAABB(*obj, bMin, bMax);
+                        float tHit = 0.0f;
+                        if (rayAABB(rayOrig, rayDir, bMin, bMax, tHit) && tHit < bestT) {
+                            bestT   = tHit;
+                            bestObj = obj;
+                        }
+                    }
+                    if (!obj->children.empty()) testList(obj->children);
+                }
+            };
+            testList(document_.objects);
+
             if (!ctrl) selection_.clear();
+            if (bestObj) selection_.select(bestObj);
             updateWindowTitle();
-            // TODO: ray-cast pick into scene
         }
     }
 }

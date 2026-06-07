@@ -73,7 +73,7 @@ No critical blocker. Window size (1024×768), screenshot capture, and viewport r
 | 1 | **fixed** | `saveScreenshot()` — now uses `SDL_GL_GetProcAddress`; verified working |
 | 2 | **fixed** | Viewport restriction — 3D scene now confined to center area via `glViewport`/`glScissor` called directly in `Draw()` |
 | 3 | **incomplete** | No text rendered in panels — labels are colour shapes only; no SpriteFont in CNA |
-| 4 | **incomplete** | Ray-cast picking not implemented — click in 3D viewport deselects, doesn't pick |
+| 4 | **fixed** | Ray-cast picking — slab-method ray-AABB per object, recursive through children, selects closest hit |
 | 5 | **incomplete** | `TransformGizmo` is a stub — no gizmo rendered or draggable |
 | 6 | **incomplete** | File-open dialog not available — user types path in terminal stdin |
 | 7 | **incomplete** | Hierarchy panel only shows flat top-level objects; groups/children not indented |
@@ -143,11 +143,16 @@ cd cmake-build-debug && ninja -j$(nproc)
 
 ## 8. Next smallest tasks
 
-1. **Ray-cast object picking**
-   - Goal: left-click in 3D viewport selects the object under the cursor.
-   - Files: `src/MeshCraft/MeshCraftApplication.cpp` (`handleMouseInput()`), `EditorCamera`, `SceneRenderer`.
-   - Approach: unproject click position using inverse view-projection, test ray against each object's bounding box.
-   - Verify: clicking a visible cube in the house scene selects it and highlights its row in the hierarchy panel.
+1. **Ray-cast object picking — DONE**
+   - Implemented in `handleMouseInput()`: unprojects mouse NDC via `EditorCamera::screenRayDirection`, tests each object's world-space AABB (slab method), selects closest hit.
+   - Recursive through `children` (e.g. boxes inside House group are pickable).
+   - Top-level objects (LeftColumn, RightColumn, Ornament, Ground) highlight in hierarchy panel when clicked. Children of groups are selected but not shown in hierarchy panel (flat list only shows top-level).
+
+2. **Display object names as coloured pixel characters (simple bitmap font)**
+   - Goal: show object names in the hierarchy panel without requiring SpriteFont.
+   - Files: new `src/MeshCraft/Ui/BitmapFont.cpp`, `drawUi()`.
+   - Approach: embed a minimal 5×7 or 8×8 bitmap font; render each glyph as small `drawRect` calls.
+   - Verify: hierarchy panel rows show object names in the running editor.
 
 5. **Display object names as coloured pixel characters (simple bitmap font)**
    - Goal: show object names in the hierarchy panel without requiring SpriteFont.
