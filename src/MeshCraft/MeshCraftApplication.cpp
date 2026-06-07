@@ -758,10 +758,19 @@ void MeshCraftApplication::drawUi(int screenW, int screenH) {
     // header bottom line
     drawRect(0, kToolbarH + kPanelHdrH - 1, kLeftPanelW - 1, 1, Color(55, 60, 100, 255));
 
+    // Helper: wrap drawRect for BitmapFont callback
+    auto fillRect = [this](int x, int y, int w, int h, Color c) { drawRect(x, y, w, h, c); };
+
+    // "SCENE" panel header label
+    Ui::drawBitmapText("SCENE", 8, kToolbarH + (kPanelHdrH - 7) / 2, 1,
+                       Color(160, 175, 210, 255), fillRect);
+
     // Object list rows
     const auto& objs = document_.objects;
     int rowY = kToolbarH + kPanelHdrH;
     int maxY  = screenH - kStatusH - kObjRowH;
+    static constexpr int kTextX    = 26;   // x after icon
+    static constexpr int kTextMaxW = kLeftPanelW - 8 - kTextX - 2; // clip before right bar
     for (size_t i = 0; i < objs.size() && rowY <= maxY; ++i) {
         const auto& obj = objs[i];
         bool sel = selection_.isSelected(obj.get());
@@ -777,6 +786,18 @@ void MeshCraftApplication::drawUi(int screenW, int screenH) {
 
         // Inner icon: small colored square
         drawRect(10, rowY + 5, 12, 12, tc);
+
+        // Object name text (truncate to fit available width)
+        {
+            const std::string& name = obj->name.empty() ? obj->id : obj->name;
+            // clip to kTextMaxW pixels at scale=1 (each char = 6px)
+            int maxChars = kTextMaxW / 6;
+            std::string label = name.size() > static_cast<size_t>(maxChars)
+                                ? name.substr(0, maxChars - 1) + "~"
+                                : name;
+            Color textCol = sel ? Color(235, 240, 255, 255) : Color(185, 195, 215, 255);
+            Ui::drawBitmapText(label, kTextX, rowY + (kObjRowH - 7) / 2, 1, textCol, fillRect);
+        }
 
         // Selection right indicator
         if (sel) {
@@ -801,6 +822,8 @@ void MeshCraftApplication::drawUi(int screenW, int screenH) {
     drawRect(rpX + 1, kToolbarH, kRightPanelW - 1, kPanelHdrH, Color(38, 42, 72, 255));
     drawRect(rpX + kRightPanelW - 4, kToolbarH, 3, kPanelHdrH, Color(210, 110, 80, 255));
     drawRect(rpX + 1, kToolbarH + kPanelHdrH - 1, kRightPanelW - 1, 1, Color(55, 60, 100, 255));
+    Ui::drawBitmapText("PROPERTIES", rpX + 8, kToolbarH + (kPanelHdrH - 7) / 2, 1,
+                       Color(160, 175, 210, 255), fillRect);
 
     if (selection_.hasSelection()) {
         const auto& sel0 = selection_.selection().front();
@@ -808,14 +831,19 @@ void MeshCraftApplication::drawUi(int screenW, int screenH) {
         int pw = kRightPanelW - 12;
         int px = rpX + 6;
 
-        // Object type indicator
+        // Object type indicator + name
         Color tc = objectTypeColor(sel0->type);
         drawRect(px, py, pw, 18, tc);
+        {
+            const std::string& nm = sel0->name.empty() ? sel0->id : sel0->name;
+            Ui::drawBitmapText(nm, px + 4, py + (18 - 7) / 2, 1, Color(255, 255, 255, 255), fillRect);
+        }
         py += 24;
 
         // ----- Position section -----
         drawRect(px, py, pw, 18, Color(38, 42, 72, 255));
         drawRect(px, py, 3, 18, Color(80, 130, 210, 255));
+        Ui::drawBitmapText("POS", px + 6, py + (18 - 7) / 2, 1, Color(160, 175, 210, 255), fillRect);
         py += 20;
         const char* axisLabels[3] = {"X", "Y", "Z"};
         Color axisCols[3] = {Color(210, 60, 60, 255), Color(60, 210, 60, 255), Color(60, 60, 210, 255)};
@@ -824,7 +852,9 @@ void MeshCraftApplication::drawUi(int screenW, int screenH) {
             int filled = static_cast<int>(std::clamp(std::abs(v) / 20.0f, 0.0f, 1.0f) * (pw - 4));
             drawRect(px, py, pw, 14, Color(22, 24, 44, 255));
             drawRect(px, py, filled + 2, 14, axisCols[a]);
-            drawRect(px, py, pw, 14, Color(0, 0, 0, 0)); // transparent overlay space
+            Ui::drawBitmapText(axisLabels[a], px + 3, py + (14 - 7) / 2, 1, Color(220, 220, 220, 255), fillRect);
+            char buf[16]; std::snprintf(buf, sizeof(buf), "%.2f", v);
+            Ui::drawBitmapText(buf, px + 12, py + (14 - 7) / 2, 1, Color(220, 220, 220, 255), fillRect);
             py += 16;
         }
         py += 4;
@@ -832,12 +862,16 @@ void MeshCraftApplication::drawUi(int screenW, int screenH) {
         // ----- Rotation section -----
         drawRect(px, py, pw, 18, Color(38, 42, 72, 255));
         drawRect(px, py, 3, 18, Color(205, 165, 55, 255));
+        Ui::drawBitmapText("ROT", px + 6, py + (18 - 7) / 2, 1, Color(160, 175, 210, 255), fillRect);
         py += 20;
         for (int a = 0; a < 3; ++a) {
             float v = sel0->transform.rotation[a];
             int filled = static_cast<int>(std::clamp(std::abs(v) / 360.0f, 0.0f, 1.0f) * (pw - 4));
             drawRect(px, py, pw, 14, Color(22, 24, 44, 255));
             drawRect(px, py, filled + 2, 14, axisCols[a]);
+            Ui::drawBitmapText(axisLabels[a], px + 3, py + (14 - 7) / 2, 1, Color(220, 220, 220, 255), fillRect);
+            char buf[16]; std::snprintf(buf, sizeof(buf), "%.1f", v);
+            Ui::drawBitmapText(buf, px + 12, py + (14 - 7) / 2, 1, Color(220, 220, 220, 255), fillRect);
             py += 16;
         }
         py += 4;
@@ -845,12 +879,16 @@ void MeshCraftApplication::drawUi(int screenW, int screenH) {
         // ----- Scale section -----
         drawRect(px, py, pw, 18, Color(38, 42, 72, 255));
         drawRect(px, py, 3, 18, Color(210, 75, 75, 255));
+        Ui::drawBitmapText("SCL", px + 6, py + (18 - 7) / 2, 1, Color(160, 175, 210, 255), fillRect);
         py += 20;
         for (int a = 0; a < 3; ++a) {
             float v = sel0->transform.scale[a];
             int filled = static_cast<int>(std::clamp(v / 4.0f, 0.0f, 1.0f) * (pw - 4));
             drawRect(px, py, pw, 14, Color(22, 24, 44, 255));
             drawRect(px, py, std::max(2, filled), 14, axisCols[a]);
+            Ui::drawBitmapText(axisLabels[a], px + 3, py + (14 - 7) / 2, 1, Color(220, 220, 220, 255), fillRect);
+            char buf[16]; std::snprintf(buf, sizeof(buf), "%.2f", v);
+            Ui::drawBitmapText(buf, px + 12, py + (14 - 7) / 2, 1, Color(220, 220, 220, 255), fillRect);
             py += 16;
         }
         py += 8;
@@ -859,6 +897,8 @@ void MeshCraftApplication::drawUi(int screenW, int screenH) {
         if (!sel0->material.empty()) {
             drawRect(px, py, pw, 18, Color(38, 42, 72, 255));
             drawRect(px, py, 3, 18, Color(55, 185, 185, 255));
+            Ui::drawBitmapText("MTL", px + 6, py + (18 - 7) / 2, 1, Color(160, 175, 210, 255), fillRect);
+            Ui::drawBitmapText(sel0->material, px + 28, py + (18 - 7) / 2, 1, Color(185, 220, 220, 255), fillRect);
             for (const auto& [key, mat] : document_.materials) {
                 if (key == sel0->material) {
                     Color mc(

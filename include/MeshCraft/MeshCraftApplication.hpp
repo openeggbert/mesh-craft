@@ -1,6 +1,7 @@
 #pragma once
 
 #include "MeshCraft/Editor/EditorCamera.hpp"
+#include "MeshCraft/Ui/BitmapFont.hpp"
 #include "MeshCraft/Editor/EditorTool.hpp"
 #include "MeshCraft/Editor/SelectionManager.hpp"
 #include "MeshCraft/Editor/TransformGizmo.hpp"
