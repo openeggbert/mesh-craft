@@ -30,7 +30,9 @@ cd cmake-build-debug && ninja -j$(nproc)
 - Grid renderer with XYZ axis colours
 - Orbit / pan / zoom camera (middle-drag, right-drag, scroll); reset (F)
 - SpriteBatch UI: toolbar, left hierarchy panel, right properties panel, status bar
-- Keyboard shortcuts: Q/G/R/S tools, F1–F5 add primitives, Delete, Ctrl+A/D, arrow nudge, F12 help; F focuses on selection (resets if nothing selected)
+- Keyboard shortcuts: Q/G/R/S tools, F1–F5 add primitives, Delete, Ctrl+A/D, arrow nudge, F12 help; F focuses on selection
+- Toolbar buttons clickable: tool select (Select/Move/Rotate/Scale) and add-primitive buttons
+- Ctrl+A selects children of the focused group if one is selected, else all top-level objects
 - Window title shows tool / file / modified state; F11 saves `screenshot.ppm`
 - Ray-cast object picking (left-click, AABB slab method, recursive through children, Ctrl+click multi-select)
 - Bitmap font labels in both panels (object names, POS/ROT/SCL values, material name)
@@ -123,11 +125,12 @@ ctest --test-dir cmake-build-debug -V
    - Approach: snapshot the `Mc3Document` (or a portion) before each mutating operation and store in a stack.
    - Deferred — needs design thought.
 
-2. **Select-all within a group**
-   - Goal: when a group is selected, Ctrl+A should select its children rather than all top-level objects.
+2. **Object name editing in properties panel**
+   - Goal: click the object name bar at the top of the properties panel to rename the selected object.
+   - Approach: same field-edit pattern as POS/ROT/SCL but for a string, not a float.
 
-3. **Toolbar click handling**
-   - Goal: clicking a toolbar button should switch the active tool (currently only keyboard shortcuts work).
+3. **Status bar object count label**
+   - Goal: show a text label like "3 objects" or "1 selected" in the status bar using BitmapFont.
 
 ---
 

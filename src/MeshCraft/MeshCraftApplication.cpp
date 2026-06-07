@@ -382,8 +382,22 @@ void MeshCraftApplication::handleKeyboardShortcuts(const KeyboardState& ks, cons
         return;
     }
 
-    // Select all
+    // Select all — within selected group if one is selected, else top-level
     if (ctrl && justPressed(ks, prevKs, Keys::A)) {
+        if (selection_.hasSelection()) {
+            auto& sel0 = selection_.selection().front();
+            bool isGroup = sel0->type == Mc3::ObjectType::Group   ||
+                           sel0->type == Mc3::ObjectType::Union   ||
+                           sel0->type == Mc3::ObjectType::Difference ||
+                           sel0->type == Mc3::ObjectType::Intersection ||
+                           !sel0->children.empty();
+            if (isGroup && !sel0->children.empty()) {
+                selection_.clear();
+                for (auto& child : sel0->children) selection_.select(child);
+                updateWindowTitle();
+                return;
+            }
+        }
         selection_.clear();
         for (auto& o : document_.objects) selection_.select(o);
         updateWindowTitle();
@@ -494,6 +508,36 @@ void MeshCraftApplication::handleMouseInput(const MouseState& ms, const MouseSta
         int my = ms.getYProperty();
         bool ctrl = (Keyboard::GetState().IsKeyDown(Keys::LeftControl) ||
                      Keyboard::GetState().IsKeyDown(Keys::RightControl));
+
+        // Click in toolbar — switch tool or add primitive
+        if (my < kToolbarH) {
+            cancelField();
+            // Tool buttons (Select/Move/Rotate/Scale) at x=4,44,84,124 each 36 wide
+            ActiveTool toolMap[] = { ActiveTool::Select, ActiveTool::Move,
+                                     ActiveTool::Rotate, ActiveTool::Scale };
+            for (int i = 0; i < 4; ++i) {
+                int bx = 4 + i * 40;
+                if (mx >= bx && mx < bx + 36 && my >= 2 && my < 38) {
+                    activeTool_ = toolMap[i];
+                    updateWindowTitle();
+                    return;
+                }
+            }
+            // Add-primitive buttons at x=175,215,255,295,335 each 36 wide
+            Mc3::ObjectType primMap[] = {
+                Mc3::ObjectType::Box, Mc3::ObjectType::Sphere,
+                Mc3::ObjectType::Cylinder, Mc3::ObjectType::Cone,
+                Mc3::ObjectType::Plane
+            };
+            for (int i = 0; i < 5; ++i) {
+                int bx = 175 + i * 40;
+                if (mx >= bx && mx < bx + 36 && my >= 2 && my < 38) {
+                    addPrimitive(primMap[i]);
+                    return;
+                }
+            }
+            return; // click elsewhere in toolbar: ignore
+        }
 
         // Click inside right properties panel — activate a field for editing
         auto& gd0 = getGraphicsDeviceProperty();
