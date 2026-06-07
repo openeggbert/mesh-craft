@@ -39,9 +39,11 @@ cmake-build-debug/ninja → [255/258] Linking CXX executable MeshCraft  ✓
 - **Viewport restriction — working**: 3D scene renders only in the center area bounded by panels; panel areas stay dark. Uses direct `glViewport`/`glScissor` calls via `SDL_GL_GetProcAddress` cached in `LoadContent()`.
 - **Window size 1024×768 — working**: `PresentationParameters` default constructor in CNA now uses 1024×768 (was 800×480); SDL window and logical viewport are 1024×768 on startup.
 
+**Working (recent additions):**
+- Ray-cast object picking: left-click in 3D viewport selects closest AABB hit; recursive through children; Ctrl+click for multi-select.
+- Bitmap font: 5×7 pixel font in hierarchy and properties panels; "SCENE"/"PROPERTIES" headers, object names, POS/ROT/SCL values.
+
 **Not working:**
-- No text rendered in panels — all labels are colour-coded shapes only.
-- No ray-cast picking — clicking in the 3D viewport does not select objects.
 - No transform gizmo (stub `TransformGizmo` class exists but does nothing).
 - No file-open dialog — file path must be entered via console stdin.
 
@@ -72,7 +74,7 @@ No critical blocker. Window size (1024×768), screenshot capture, and viewport r
 |---|--------|-------------|
 | 1 | **fixed** | `saveScreenshot()` — now uses `SDL_GL_GetProcAddress`; verified working |
 | 2 | **fixed** | Viewport restriction — 3D scene now confined to center area via `glViewport`/`glScissor` called directly in `Draw()` |
-| 3 | **incomplete** | No text rendered in panels — labels are colour shapes only; no SpriteFont in CNA |
+| 3 | **fixed** | Bitmap font: 5×7 pixel glyphs in hierarchy and properties panels; object names, POS/ROT/SCL values rendered |
 | 4 | **fixed** | Ray-cast picking — slab-method ray-AABB per object, recursive through children, selects closest hit |
 | 5 | **incomplete** | `TransformGizmo` is a stub — no gizmo rendered or draggable |
 | 6 | **incomplete** | File-open dialog not available — user types path in terminal stdin |
@@ -148,19 +150,18 @@ cd cmake-build-debug && ninja -j$(nproc)
    - Recursive through `children` (e.g. boxes inside House group are pickable).
    - Top-level objects (LeftColumn, RightColumn, Ornament, Ground) highlight in hierarchy panel when clicked. Children of groups are selected but not shown in hierarchy panel (flat list only shows top-level).
 
-2. **Display object names as coloured pixel characters (simple bitmap font)**
-   - Goal: show object names in the hierarchy panel without requiring SpriteFont.
-   - Files: new `src/MeshCraft/Ui/BitmapFont.cpp`, `drawUi()`.
-   - Approach: embed a minimal 5×7 or 8×8 bitmap font; render each glyph as small `drawRect` calls.
-   - Verify: hierarchy panel rows show object names in the running editor.
+2. **Bitmap font — DONE**
+   - `include/MeshCraft/Ui/BitmapFont.hpp` + `src/MeshCraft/Ui/BitmapFont.cpp`: 5×7 pixel font, 96 printable ASCII glyphs, column-major encoding.
+   - Hierarchy panel: "SCENE" header, object name per row, color-coded text for selection state.
+   - Properties panel: "PROPERTIES" header, object name on type bar, "POS"/"ROT"/"SCL" section labels, X/Y/Z axis labels with numeric values, material name.
 
-5. **Display object names as coloured pixel characters (simple bitmap font)**
-   - Goal: show object names in the hierarchy panel without requiring SpriteFont.
-   - Files: new `src/MeshCraft/Ui/BitmapFont.cpp`, `drawUi()`.
-   - Approach: embed a minimal 5×7 or 8×8 bitmap font; render each glyph as small `drawRect` calls.
-   - Verify: hierarchy panel rows show object names in the running editor.
+3. **Transform gizmo (stub — not yet implemented)**
+   - Goal: show X/Y/Z drag handles on the selected object in the 3D viewport.
+   - Files: `include/MeshCraft/Editor/TransformGizmo.hpp`, `src/MeshCraft/Renderer/SceneRenderer.cpp`.
+   - Approach: draw three axis lines from the selected object's position; detect mouse drag on a handle and update the transform.
+   - Verify: dragging a selected cube's X handle moves it along X in the scene.
 
-6. **Add automated smoke test**
+4. **Add automated smoke test**
    - Goal: CI can verify the binary loads a scene and exits cleanly.
    - Files: `CMakeLists.txt`, new `test/smoke_test.sh`.
    - Approach: run `MeshCraft test/house.mc3.xml --screenshot /tmp/smoke.ppm` in a virtual framebuffer (`xvfb-run`), check exit code 0 and that `/tmp/smoke.ppm` is non-empty.
@@ -183,5 +184,5 @@ cd cmake-build-debug && ninja -j$(nproc)
 ## 10. Resume prompt
 
 ```
-Read NEXT.md first. Then implement the first task (ray-cast object picking in src/MeshCraft/MeshCraftApplication.cpp handleMouseInput() + EditorCamera). Do not refactor unrelated code. Make one small verified improvement. Build with: cd cmake-build-debug && ninja -j$(nproc). Verify with: ./cmake-build-debug/MeshCraft test/house.mc3.xml --screenshot /tmp/test.ppm && ffmpeg -i /tmp/test.ppm /tmp/test.png -y && check the PNG. Update NEXT.md after finishing.
+Read NEXT.md first. Then implement the next task (transform gizmo: draw X/Y/Z axis lines from selected object position in 3D viewport; detect mouse drag on handle and update transform). Do not refactor unrelated code. Make one small verified improvement. Build with: cd cmake-build-debug && ninja -j$(nproc). Verify with: ./cmake-build-debug/MeshCraft test/house.mc3.xml --screenshot /tmp/test.ppm && ffmpeg -i /tmp/test.ppm /tmp/test.png -y && check the PNG. Update NEXT.md after finishing.
 ```
