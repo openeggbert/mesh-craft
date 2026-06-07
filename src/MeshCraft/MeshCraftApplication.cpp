@@ -172,6 +172,13 @@ void MeshCraftApplication::Draw(const GameTime& /*gameTime*/) {
     auto selPtrs = selectedPointers();
     sceneRenderer_->draw(document_, view, proj, selPtrs);
 
+    // Transform gizmo — draw on top of scene (depth-test off so always visible)
+    if (activeTool_ == ActiveTool::Move && selection_.hasSelection()) {
+        gd.SetDepthTestEnabled(false);
+        float gizmoLen = camera_.distance * 0.15f;
+        sceneRenderer_->drawGizmo(selection_.selection().front().get(), view, proj, gizmoLen);
+    }
+
     // Restore full GL viewport and disable scissor before 2D UI overlay
     if (fnGlDisable_)  fnGlDisable_(GL_SCISSOR_TEST);
     if (fnGlViewport_) fnGlViewport_(0, 0, screenW, screenH);
@@ -330,6 +337,11 @@ void MeshCraftApplication::handleMouseInput(const MouseState& ms, const MouseSta
 
     bool prevLeft  = prev.getLeftButtonProperty()  == ButtonState::Pressed;
 
+    // End gizmo drag on mouse release
+    if (!leftBtn && gizmo_.isDragging()) {
+        gizmo_.endDrag();
+    }
+
     // Middle-drag or right-drag: orbit camera
     if (middleBtn && (dx != 0 || dy != 0)) {
         camera_.orbit(dx * 0.005f, dy * 0.005f);
@@ -342,6 +354,51 @@ void MeshCraftApplication::handleMouseInput(const MouseState& ms, const MouseSta
     // Scroll: zoom
     if (dscroll != 0) {
         camera_.zoom(static_cast<float>(dscroll) / 120.0f);
+    }
+
+    // Apply gizmo drag while left button is held on a handle
+    if (activeTool_ == ActiveTool::Move && gizmo_.isDragging() && leftBtn && (dx != 0 || dy != 0)
+        && selection_.hasSelection())
+    {
+        auto& gd2 = getGraphicsDeviceProperty();
+        int sW2 = gd2.getViewportProperty().getWidthProperty();
+        int sH2 = gd2.getViewportProperty().getHeightProperty();
+        int vX2 = kLeftPanelW, vY2 = kToolbarH;
+        int vW2 = std::max(1, sW2 - kLeftPanelW - kRightPanelW);
+        int vH2 = std::max(1, sH2 - kToolbarH - kStatusH);
+        float asp2 = static_cast<float>(vW2) / static_cast<float>(vH2);
+        Matrix vw2 = camera_.viewMatrix();
+        Matrix pr2 = camera_.projectionMatrix(asp2);
+        Matrix vp2 = vw2 * pr2;
+
+        auto w2s2 = [&](float wx, float wy, float wz) -> std::pair<float,float> {
+            float cX = wx*vp2.M11 + wy*vp2.M21 + wz*vp2.M31 + vp2.M41;
+            float cY = wx*vp2.M12 + wy*vp2.M22 + wz*vp2.M32 + vp2.M42;
+            float cW = wx*vp2.M14 + wy*vp2.M24 + wz*vp2.M34 + vp2.M44;
+            if (std::abs(cW) < 1e-6f) return {-1e6f, -1e6f};
+            return { (cX/cW * 0.5f + 0.5f) * vW2 + vX2,
+                     (1.0f - (cY/cW * 0.5f + 0.5f)) * vH2 + vY2 };
+        };
+
+        auto* sel0 = selection_.selection().front().get();
+        float px2 = sel0->transform.position[0];
+        float py2 = sel0->transform.position[1];
+        float pz2 = sel0->transform.position[2];
+        float L2  = camera_.distance * 0.15f;
+        int axIdx = static_cast<int>(gizmo_.dragAxis()) - 1; // 0=X,1=Y,2=Z
+        float tipXYZ[3][3] = {{px2+L2,py2,pz2},{px2,py2+L2,pz2},{px2,py2,pz2+L2}};
+
+        auto [cx2, cy2] = w2s2(px2, py2, pz2);
+        auto [tx2, ty2] = w2s2(tipXYZ[axIdx][0], tipXYZ[axIdx][1], tipXYZ[axIdx][2]);
+        float axScrX = tx2 - cx2, axScrY = ty2 - cy2;
+        float len2d  = std::sqrt(axScrX*axScrX + axScrY*axScrY);
+        if (len2d > 0.5f) {
+            float dot = dx * (axScrX/len2d) + dy * (axScrY/len2d);
+            sel0->transform.position[axIdx] += dot * L2 / len2d;
+            modified_ = true;
+            updateWindowTitle();
+        }
+        return; // no other left-button logic during drag
     }
 
     // Left click
@@ -369,6 +426,46 @@ void MeshCraftApplication::handleMouseInput(const MouseState& ms, const MouseSta
         bool in3d = (mx >= kLeftPanelW && mx < screenW - kRightPanelW &&
                      my >= kToolbarH   && my < screenH - kStatusH);
         if (in3d) {
+            // Gizmo handle hit test (Move tool, no Ctrl)
+            if (activeTool_ == ActiveTool::Move && selection_.hasSelection() && !ctrl) {
+                auto* sel0 = selection_.selection().front().get();
+                float gpx = sel0->transform.position[0];
+                float gpy = sel0->transform.position[1];
+                float gpz = sel0->transform.position[2];
+                float gL  = camera_.distance * 0.15f;
+
+                int gvX = kLeftPanelW, gvY = kToolbarH;
+                int gvW = std::max(1, screenW - kLeftPanelW - kRightPanelW);
+                int gvH = std::max(1, screenH - kToolbarH - kStatusH);
+                float gasp = static_cast<float>(gvW) / static_cast<float>(gvH);
+                Matrix gvw = camera_.viewMatrix();
+                Matrix gpr = camera_.projectionMatrix(gasp);
+                Matrix gvp = gvw * gpr;
+
+                auto gw2s = [&](float wx, float wy, float wz) -> std::pair<float,float> {
+                    float cX = wx*gvp.M11 + wy*gvp.M21 + wz*gvp.M31 + gvp.M41;
+                    float cY = wx*gvp.M12 + wy*gvp.M22 + wz*gvp.M32 + gvp.M42;
+                    float cW = wx*gvp.M14 + wy*gvp.M24 + wz*gvp.M34 + gvp.M44;
+                    if (std::abs(cW) < 1e-6f) return {-1e6f, -1e6f};
+                    return { (cX/cW * 0.5f + 0.5f) * gvW + gvX,
+                             (1.0f - (cY/cW * 0.5f + 0.5f)) * gvH + gvY };
+                };
+
+                float gTips[3][3] = {
+                    {gpx+gL, gpy,    gpz   },
+                    {gpx,    gpy+gL, gpz   },
+                    {gpx,    gpy,    gpz+gL},
+                };
+                for (int gi = 0; gi < 3; ++gi) {
+                    auto [gsx, gsy] = gw2s(gTips[gi][0], gTips[gi][1], gTips[gi][2]);
+                    float gdist = std::sqrt((mx-gsx)*(mx-gsx) + (my-gsy)*(my-gsy));
+                    if (gdist < 12.0f) {
+                        gizmo_.startDrag(static_cast<Editor::GizmoAxis>(gi + 1));
+                        return; // click consumed by gizmo — skip picking
+                    }
+                }
+            }
+
             // Ray-cast picking: unproject click to world-space ray, test AABB per object
             int viewX = kLeftPanelW;
             int viewY = kToolbarH;

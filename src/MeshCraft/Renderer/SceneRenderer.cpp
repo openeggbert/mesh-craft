@@ -221,6 +221,61 @@ void SceneRenderer::buildWireBox() {
 }
 
 // ---------------------------------------------------------------------------
+// Gizmo
+// ---------------------------------------------------------------------------
+
+void SceneRenderer::drawGizmo(const Mc3Object* obj,
+                               const Matrix& view, const Matrix& proj,
+                               float gizmoLength)
+{
+    if (!obj) return;
+
+    float px = obj->transform.position[0];
+    float py = obj->transform.position[1];
+    float pz = obj->transform.position[2];
+    float L  = gizmoLength;
+
+    // 3 axis lines (6 verts)
+    VertexPositionColor lineVerts[6] = {
+        { {px,   py, pz}, Color(210, 60,  60,  255) },  // X from
+        { {px+L, py, pz}, Color(210, 60,  60,  255) },  // X to
+        { {px, py,   pz}, Color(60,  210, 60,  255) },  // Y from
+        { {px, py+L, pz}, Color(60,  210, 60,  255) },  // Y to
+        { {px, py, pz  }, Color(60,  60,  210, 255) },  // Z from
+        { {px, py, pz+L}, Color(60,  60,  210, 255) },  // Z to
+    };
+
+    VertexBuffer lineVB(device_, 6);
+    lineVB.SetData(lineVerts, 6);
+
+    effect_->World      = Matrix::getIdentityProperty();
+    effect_->View       = view;
+    effect_->Projection = proj;
+    effect_->VertexColorEnabled = true;
+
+    for (auto& pass : effect_->getCurrentTechniqueProperty()->getPassesProperty())
+        pass.Apply();
+
+    device_.SetVertexBuffer(&lineVB);
+    device_.DrawPrimitives(Graphics::PrimitiveType::LineList, 0, 3);
+    device_.SetVertexBuffer(nullptr);
+
+    // Small cube at each axis tip as a drag handle
+    float hs = L * 0.10f;
+    Color tipCols[3] = {
+        Color(210, 60,  60,  255),
+        Color(60,  210, 60,  255),
+        Color(60,  60,  210, 255),
+    };
+    float tips[3][3] = { {px+L, py, pz}, {px, py+L, pz}, {px, py, pz+L} };
+    for (int i = 0; i < 3; ++i) {
+        Matrix world = Matrix::CreateScale(hs) *
+                       Matrix::CreateTranslation({tips[i][0], tips[i][1], tips[i][2]});
+        drawMesh(unitBox_, world, view, proj, tipCols[i]);
+    }
+}
+
+// ---------------------------------------------------------------------------
 // Draw helpers
 // ---------------------------------------------------------------------------
 
