@@ -293,6 +293,7 @@ void MeshCraftApplication::handleKeyboardShortcuts(const KeyboardState& ks, cons
             "Edit:\n"
             "  Del           Delete selected\n"
             "  Ctrl+A        Select all\n"
+            "  Ctrl+D        Duplicate selected\n"
             "  Arrow keys    Nudge selected (Shift = 0.1 step)\n"
             "Camera:\n"
             "  Middle-drag   Orbit\n"
@@ -338,6 +339,9 @@ void MeshCraftApplication::handleKeyboardShortcuts(const KeyboardState& ks, cons
         updateWindowTitle();
         return;
     }
+
+    // Duplicate (Ctrl+D)
+    if (ctrl && justPressed(ks, prevKs, Keys::D)) { duplicateSelected(); return; }
 
     // Nudge selected objects with arrow keys
     if (!selection_.hasSelection()) return;
@@ -773,6 +777,25 @@ void MeshCraftApplication::addPrimitive(Mc3::ObjectType type) {
         camera_.target.Z
     };
 
+    // If a group-like object is selected, insert as its child
+    if (selection_.hasSelection()) {
+        auto& sel0 = selection_.selection().front();
+        bool isGroup = sel0->type == Mc3::ObjectType::Group   ||
+                       sel0->type == Mc3::ObjectType::Union   ||
+                       sel0->type == Mc3::ObjectType::Difference ||
+                       sel0->type == Mc3::ObjectType::Intersection ||
+                       !sel0->children.empty();
+        if (isGroup) {
+            sel0->children.push_back(obj);
+            selection_.clear();
+            selection_.select(obj);
+            modified_ = true;
+            std::cout << "[MeshCraft] Added " << obj->name << " as child\n";
+            updateWindowTitle();
+            return;
+        }
+    }
+
     document_.objects.push_back(obj);
     selection_.clear();
     selection_.select(obj);
@@ -796,6 +819,60 @@ void MeshCraftApplication::deleteSelected() {
     modified_ = true;
     std::cout << "[MeshCraft] Deleted selected objects\n";
     updateWindowTitle();
+}
+
+// ---------------------------------------------------------------------------
+// Helpers for duplicate
+
+static std::shared_ptr<Mc3::Mc3Object> deepCopyObject(const Mc3::Mc3Object& src) {
+    auto copy = std::make_shared<Mc3::Mc3Object>(src);
+    copy->children.clear();
+    for (const auto& child : src.children)
+        copy->children.push_back(deepCopyObject(*child));
+    return copy;
+}
+
+static std::vector<std::shared_ptr<Mc3::Mc3Object>>*
+findParentList(std::vector<std::shared_ptr<Mc3::Mc3Object>>& list,
+               const Mc3::Mc3Object* target)
+{
+    for (auto& obj : list) {
+        if (obj.get() == target) return &list;
+        if (!obj->children.empty()) {
+            auto* found = findParentList(obj->children, target);
+            if (found) return found;
+        }
+    }
+    return nullptr;
+}
+
+void MeshCraftApplication::duplicateSelected() {
+    if (!selection_.hasSelection()) return;
+    auto prev = selection_.selection(); // copy list before we mutate selection
+    std::vector<std::shared_ptr<Mc3::Mc3Object>> newObjs;
+
+    for (const auto& s : prev) {
+        auto* parent = findParentList(document_.objects, s.get());
+        if (!parent) continue;
+
+        auto copy = deepCopyObject(*s);
+        copy->name = s->name + "_copy";
+
+        // Insert immediately after the original
+        auto it = std::find_if(parent->begin(), parent->end(),
+            [&](const auto& o){ return o.get() == s.get(); });
+        if (it != parent->end()) ++it;
+        parent->insert(it, copy);
+        newObjs.push_back(copy);
+    }
+
+    if (!newObjs.empty()) {
+        selection_.clear();
+        for (auto& o : newObjs) selection_.select(o);
+        modified_ = true;
+        std::cout << "[MeshCraft] Duplicated " << newObjs.size() << " object(s)\n";
+        updateWindowTitle();
+    }
 }
 
 // ---------------------------------------------------------------------------

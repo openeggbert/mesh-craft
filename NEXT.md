@@ -38,11 +38,12 @@ cd cmake-build-debug && ninja -j$(nproc)
 - Properties panel: shows selected object's name, POS/ROT/SCL with inline editing (click field → type → Enter to apply)
 - Transform gizmo: X/Y/Z arrows when Move tool (G) active; drag handle moves object along axis
 - Automated smoke test via `ctest`
+- F1–F5 adds primitive as child when a group is selected; Ctrl+D duplicates selected object(s)
 
 **Not working / incomplete:**
 - CSG objects (Union, Difference, Intersection) rendered as bounding-box placeholder only
 - No file-open dialog — path entered via console stdin
-- Add primitive (F1–F5) always inserts at top level, not as child of selected group
+- CSG children not rendered (Union/Difference/Intersection show placeholder box)
 
 ---
 
@@ -53,9 +54,9 @@ cd cmake-build-debug && ninja -j$(nproc)
 | 1 | **open** | File-open dialog not available — user types path in terminal stdin |
 | 2 | **done** | Properties panel is read-only; POS/ROT/SCL cannot be typed in |
 | 3 | **open** | CSG Union/Difference/Intersection rendered as placeholder box |
-| 4 | **open** | F1–F5 always adds primitive to top-level `document_.objects`, not inside selected group |
+| 4 | **done** | F1–F5 always adds primitive to top-level `document_.objects`, not inside selected group |
 | 5 | **open** | No undo/redo (Ctrl+Z / Ctrl+Y) |
-| 6 | **open** | No duplicate object (Ctrl+D) |
+| 6 | **done** | No duplicate object (Ctrl+D) |
 
 ---
 
@@ -117,17 +118,13 @@ ctest --test-dir cmake-build-debug -V
 
 ## 6. Next smallest tasks
 
-1. **Add primitive as child of selected group**
-   - Goal: F1–F5 inserts into the selected group's `children` when a group is selected, not always at top level.
-   - Files: `MeshCraftApplication.cpp` — `addPrimitive()`.
-
-2. **Duplicate object (Ctrl+D)**
-   - Goal: deep-copy the selected object(s) with a new name suffix and insert after the original.
-   - Files: `MeshCraftApplication.cpp`.
-
-3. **CSG rendering**
+1. **CSG rendering** *(next priority)*
    - Goal: Union/Difference/Intersection display as the union of their children's meshes (even if just rendered children without boolean ops).
    - Files: `SceneRenderer.cpp` — `drawObject()` CSG cases currently fall through to placeholder box.
+
+2. **Undo/redo (Ctrl+Z / Ctrl+Y)**
+   - Goal: command pattern to revert the last edit.
+   - Deferred until core editing is more stable.
 
 ---
 
