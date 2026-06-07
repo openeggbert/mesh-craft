@@ -25,40 +25,42 @@ cd cmake-build-debug && ninja -j$(nproc)
 **Tests:** `ctest -V` passes (smoke test: loads scene, screenshots, checks non-empty PPM, ~2.2 s).
 
 **Working features:**
-- Load `.mc3.xml` on startup; save (Ctrl+S); save-as; export GLB via `mc3togltf` (Ctrl+E)
-- 3D scene rendering: box, sphere, cylinder, cone, plane; extrude (Rect → box, Circle/Polygon → cylinder, Line path; other paths still placeholder)
-- Grid renderer with XYZ axis colours
-- Orbit / pan / zoom camera (middle-drag, right-drag, scroll); reset (F)
-- SpriteBatch UI: toolbar, left hierarchy panel, right properties panel, status bar
-- Keyboard shortcuts: Q/G/R/S tools, F1–F5 add primitives, Delete, Ctrl+A/D, arrow nudge, F12 help; F focuses on selection
-- Toolbar buttons clickable: tool select (Select/Move/Rotate/Scale) and add-primitive buttons
-- Ctrl+A selects children of the focused group if one is selected, else all top-level objects
-- Window title shows tool / file / modified state; F11 saves `screenshot.ppm`
-- Ray-cast object picking (left-click, AABB slab method, recursive through children, Ctrl+click multi-select)
-- Bitmap font labels in both panels (object names, POS/ROT/SCL values, material name)
-- Hierarchy panel: recursive tree, depth indentation, ">" / "v" expand/collapse for groups
-- Properties panel: shows selected object's name, POS/ROT/SCL with inline editing (click field → type → Enter to apply)
-- Transform gizmo: X/Y/Z arrows when Move tool (G) active; drag handle moves object along axis
+- Load `.mc3.xml` on startup; save (Ctrl+S); save-as (Ctrl+Shift+S); export GLB via `mc3togltf` (Ctrl+E)
+- 3D scene rendering: box, sphere, cylinder, cone, plane
+- Extrude (Line path): Rect cross-section → box shape; Circle/Polygon → cylinder shape; aligned to x/y/z axis
+- CSG (Union/Difference/Intersection) and Group: render children recursively in parent transform space
+- Instance objects: resolved from `doc.definitions` map, rendered at instance transform
+- Grid with XYZ axis colours
+- Orbit (middle-drag), pan (right-drag), zoom (scroll); F focuses camera on selection, resets if nothing selected
+- Toolbar: tool buttons (Select/Move/Rotate/Scale) and add-primitive buttons (Box/Sphere/Cylinder/Cone/Plane) respond to mouse clicks and keyboard shortcuts (Q/G/R/S, F1–F5)
+- Left hierarchy panel: recursive tree with depth indentation, expand/collapse toggle for groups (click triangle), click to select
+- Right properties panel: object name + type colour; POS/ROT/SCL with inline editing (click field → type digits → Enter applies, Escape cancels)
+- Material colour swatch in properties panel
+- Ray-cast picking (left-click, AABB, recursive through children); Ctrl+click for multi-select
+- Transform gizmo: X/Y/Z axis arrows in Move mode (G); drag handle translates along axis
+- Ctrl+A selects children of selected group; without group selection selects all top-level objects
+- Ctrl+D deep-copies selected object(s) with `_copy` name suffix, inserted after original
+- Delete removes selected objects at any depth in the hierarchy
+- Arrow keys nudge selected object (Shift = 0.1 step); PageUp/PageDown nudge on Z
+- Window title reflects tool / file / modified state; F11 saves `screenshot.ppm`
 - Automated smoke test via `ctest`
-- F1–F5 adds primitive as child when a group is selected; Ctrl+D duplicates selected object(s)
 
-**Not working / incomplete:**
-- No file-open dialog — path entered via console stdin
-- Extrude: non-Line paths (Arc, Helix, Polyline, Bezier) and Custom cross-sections still show placeholder box
-- Mesh objects rendered as placeholder box (external mesh loading not implemented)
+**Known limitations:**
+- No file-open dialog — path typed via console stdin (Ctrl+O)
+- Extrude: non-Line paths (Arc, Helix, Polyline, Bezier) and Custom cross-sections show placeholder box
+- Mesh objects (external geometry) show placeholder box — loading not implemented
+- No undo/redo
 
 ---
 
-## 3. Open bugs / limitations
+## 3. Open bugs
 
-| # | Status | Description |
-|---|--------|-------------|
-| 1 | **open** | File-open dialog not available — user types path in terminal stdin |
-| 2 | **done** | Properties panel is read-only; POS/ROT/SCL cannot be typed in |
-| 3 | **done** | CSG Union/Difference/Intersection rendered as placeholder box |
-| 4 | **done** | F1–F5 always adds primitive to top-level `document_.objects`, not inside selected group |
-| 5 | **open** | No undo/redo (Ctrl+Z / Ctrl+Y) |
-| 6 | **done** | No duplicate object (Ctrl+D) |
+| # | Description |
+|---|-------------|
+| 1 | File-open dialog not available — user types path in terminal stdin |
+| 2 | No undo/redo (Ctrl+Z / Ctrl+Y) |
+| 3 | Extrude non-Line paths and Custom cross-sections unrendered |
+| 4 | Delete only removes top-level children of a group, not deeper descendants when the group itself is not deleted |
 
 ---
 
@@ -71,7 +73,7 @@ cd cmake-build-debug && ninja -j$(nproc)
 | `MeshCraftApplication` | `src/MeshCraft/MeshCraftApplication.cpp` | Game loop, input, scene state, UI draw |
 | `GridRenderer` | `src/MeshCraft/Renderer/GridRenderer.cpp` | XYZ grid lines via `BasicEffect` + `VertexBuffer` |
 | `SceneRenderer` | `src/MeshCraft/Renderer/SceneRenderer.cpp` | Renders MC3 scene objects + transform gizmo |
-| `EditorCamera` | `include/MeshCraft/Editor/EditorCamera.hpp` | Orbit/pan/zoom; produces view+projection matrices |
+| `EditorCamera` | `include/MeshCraft/Editor/EditorCamera.hpp` | Orbit/pan/zoom/focus; produces view+projection matrices |
 | `SelectionManager` | `include/MeshCraft/Editor/SelectionManager.hpp` | Tracks selected `Mc3Object` shared_ptrs |
 | `TransformGizmo` | `include/MeshCraft/Editor/TransformGizmo.hpp` | GizmoAxis enum + drag state; rendering in SceneRenderer |
 | `BitmapFont` | `include/MeshCraft/Ui/BitmapFont.hpp` | 5×7 pixel font, 96 ASCII glyphs, column-major encoding |
@@ -90,7 +92,7 @@ cd cmake-build-debug && ninja -j$(nproc)
 - CNA API: use `getCurrentTechniqueProperty()` and `getPassesProperty()` (old `CurrentTechnique()`/`Passes()` removed in commit 34ae601).
 - `Color` has no default constructor — always initialise with 4 args.
 - Do not add `${meta-gl_SOURCE_DIR}/include` to MeshCraft's CMakeLists.txt — triggers full CNA recompile with pre-existing bugs.
-- `hierarchyRows_` is populated in `Draw()` and consumed in `Update()` (1-frame lag — intentional, invisible to user).
+- `hierarchyRows_` and `propFieldHits_` are populated in `Draw()` and consumed in `Update()` (1-frame lag — intentional, invisible to user).
 
 ---
 
@@ -120,17 +122,19 @@ ctest --test-dir cmake-build-debug -V
 
 ## 6. Next smallest tasks
 
-1. **Undo/redo (Ctrl+Z / Ctrl+Y)**
-   - Goal: command pattern to revert the last edit.
-   - Approach: snapshot the `Mc3Document` (or a portion) before each mutating operation and store in a stack.
-   - Deferred — needs design thought.
+1. **Object name editing in properties panel**
+   - Goal: click the name bar at the top of the properties panel to rename the selected object.
+   - Approach: reuse the existing field-edit infrastructure (`fieldActive_`, `fieldBuffer_`), but store/apply a string instead of a float. Add a `nameFieldActive_` bool or extend the section enum with section=-1.
+   - Files: `MeshCraftApplication.hpp/cpp` — `drawUi` properties section, `handleMouseInput`, `handleKeyboardShortcuts`.
 
-2. **Object name editing in properties panel**
-   - Goal: click the object name bar at the top of the properties panel to rename the selected object.
-   - Approach: same field-edit pattern as POS/ROT/SCL but for a string, not a float.
+2. **Status bar info text**
+   - Goal: display object count and selection count as text in the status bar (e.g. "12 objects · 2 selected").
+   - Files: `MeshCraftApplication.cpp` — `drawUi` status bar section, using `drawBitmapText`.
 
-3. **Status bar object count label**
-   - Goal: show a text label like "3 objects" or "1 selected" in the status bar using BitmapFont.
+3. **Undo/redo (Ctrl+Z / Ctrl+Y)**
+   - Goal: revert/redo the last document mutation.
+   - Approach: before each mutating operation (`addPrimitive`, `deleteSelected`, `duplicateSelected`, field apply, nudge, gizmo drag end) push a copy of `document_` onto an undo stack (max ~20 entries). Ctrl+Z pops and restores; Ctrl+Y re-applies.
+   - Files: `MeshCraftApplication.hpp` (undo stack), `MeshCraftApplication.cpp` (push before mutations, handle shortcuts).
 
 ---
 
@@ -139,7 +143,6 @@ ctest --test-dir cmake-build-debug -V
 - **No refactor of CNA** — only fix what's blocking a build.
 - **No SpriteFont / native text widget** — bitmap font approach is sufficient for now.
 - **No GUI file dialog** — out of scope until a basic widget model exists.
-- **No undo/redo** — needs a command pattern; deferred until core editing is stable.
 - **No API changes in `Mc3Document`** without checking `mc3togltf` and all test scenes.
 - **No mass include path changes** in `CMakeLists.txt` — risks triggering a full CNA recompile.
 
@@ -148,5 +151,5 @@ ctest --test-dir cmake-build-debug -V
 ## 8. Resume prompt
 
 ```
-Read NEXT.md first. Then implement the next task from section 6. Do not refactor unrelated code. Build with: cd cmake-build-debug && ninja -j$(nproc). Verify with: ./cmake-build-debug/MeshCraft test/house.mc3.xml --screenshot /tmp/test.ppm && ffmpeg -i /tmp/test.ppm /tmp/test.png -y && check the PNG. Update NEXT.md after finishing.
+Read NEXT.md first. Then implement the next task from section 6. Do not refactor unrelated code. Build with: cd cmake-build-debug && ninja -j$(nproc). Verify with: ctest --test-dir cmake-build-debug -V. Update NEXT.md when done.
 ```
