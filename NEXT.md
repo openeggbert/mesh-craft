@@ -20,7 +20,7 @@
 
 **Build:** succeeds cleanly.
 ```
-cmake-build-debug/ninja → [253/256] Linking CXX executable MeshCraft  ✓
+cmake-build-debug/ninja → [255/258] Linking CXX executable MeshCraft  ✓
 ```
 
 **Tests:** no automated tests for the editor itself. The `mc3/` library has its own build, and test assets exist in `test/`.
@@ -35,22 +35,24 @@ cmake-build-debug/ninja → [253/256] Linking CXX executable MeshCraft  ✓
 - Keyboard shortcuts: new/open/save/export, tools (Q/G/R/S), add primitives (F1–F5), delete, nudge, camera reset (F), help (F12)
 - Window title shows tool / file / modified state
 - F11 shortcut triggers screenshot to `screenshot.ppm`
-- **`saveScreenshot()` — now working**: uses `SDL_GL_GetProcAddress("glReadPixels")` via forward declaration; produces a valid PPM (`./MeshCraft test/house.mc3.xml --screenshot /tmp/test.ppm` writes 800×480 image showing editor UI and scene)
+- **`saveScreenshot()` — working**: uses `SDL_GL_GetProcAddress("glReadPixels")` via forward declaration; produces a valid PPM
+- **Viewport restriction — working**: 3D scene renders only in the center area bounded by panels; panel areas stay dark. Uses direct `glViewport`/`glScissor` calls via `SDL_GL_GetProcAddress` cached in `LoadContent()`.
 
 **Not working:**
 - No text rendered in panels — all labels are colour-coded shapes only.
 - No ray-cast picking — clicking in the 3D viewport does not select objects.
 - No transform gizmo (stub `TransformGizmo` class exists but does nothing).
 - No file-open dialog — file path must be entered via console stdin.
-- Viewport restriction for 3D rendering does not work: `GraphicsDevice::setViewportProperty()` only updates CPU state; `EasyGLGraphicsBackend::Clear()` always resets the GL viewport to full window.
 
 ---
 
 ## 3. Recent changes
 
-- **`src/MeshCraft/MeshCraftApplication.cpp`** — Fixed `saveScreenshot()`: replaced `dlsym(RTLD_DEFAULT, ...)` with `SDL_GL_GetProcAddress` via `using SDL_FunctionPointer = void(*)(void); extern "C" SDL_FunctionPointer SDL_GL_GetProcAddress(const char*)` forward declaration. Screenshot now writes a valid 800×480 PPM showing the editor UI and scene.
+- **`src/MeshCraft/MeshCraftApplication.cpp`** + **`include/MeshCraft/MeshCraftApplication.hpp`** — Fixed viewport restriction: cache `glViewport`/`glScissor`/`glEnable`/`glDisable` in `LoadContent()` via `SDL_GL_GetProcAddress`; in `Draw()` apply scissor before `gd.Clear(bgColor)` to restrict it to the 3D area, then re-apply GL viewport for 3D rendering, then disable scissor before SpriteBatch.
+- **`src/MeshCraft/MeshCraftApplication.cpp`** — Fixed `saveScreenshot()`: replaced `dlsym` with `SDL_GL_GetProcAddress` forward declaration.
 - **`CMakeLists.txt`** — Reverted accidental default backend change (VULKAN → EASYGL).
-- **`../cna/src/CNA/Internal/Backends/EasyGL/EasyGLGraphicsBackend.cpp`** — Fixed pre-existing CNA bug: moved anonymous namespace helpers (`ToEasyGLBlendFactor`, `ToEasyGLBlendEquation`, `ToEasyGLCompareFunc`, `ToEasyGl`, `VertexCountForPrimitives`) before their first use — they were defined at line ~825 but used from line ~574.
+- **`../cna/src/CNA/Internal/Backends/EasyGL/EasyGLGraphicsBackend.cpp`** — Fixed pre-existing CNA bug: moved anonymous namespace helpers before first use.
+- **`../cna/include/Microsoft/Xna/Framework/Graphics/EffectParameter.hpp`** + `.cpp` — Fixed pre-existing CNA bug: added `SetValue(Texture2D*)` overload; fixed `GetValueTexture2D()`.
 - **`../cna/include/Microsoft/Xna/Framework/Graphics/EffectParameter.hpp`** and **`.cpp`** — Fixed pre-existing CNA bug: added `SetValue(Texture2D*)` overload and `texture2DData_` field; changed `GetValueTexture2D()` to return `texture2DData_` directly (the `dynamic_cast<Texture2D*>(textureData_)` pattern was always returning null since `Texture2D` doesn't inherit `Texture`).
 - Earlier (previous session): Added SpriteBatch UI panels, auto-screenshot constructor, CNA API updates.
 
@@ -67,7 +69,7 @@ No critical blocker. Screenshot capture is working. The next target is fixing th
 | # | Status | Description |
 |---|--------|-------------|
 | 1 | **fixed** | `saveScreenshot()` — now uses `SDL_GL_GetProcAddress`; verified working |
-| 2 | **incomplete** | Viewport restriction for 3D rendering does not work — `EasyGLGraphicsBackend::Clear()` resets GL viewport to full window, overriding CPU-side `setViewportProperty()` |
+| 2 | **fixed** | Viewport restriction — 3D scene now confined to center area via `glViewport`/`glScissor` called directly in `Draw()` |
 | 3 | **incomplete** | No text rendered in panels — labels are colour shapes only; no SpriteFont in CNA |
 | 4 | **incomplete** | Ray-cast picking not implemented — click in 3D viewport deselects, doesn't pick |
 | 5 | **incomplete** | `TransformGizmo` is a stub — no gizmo rendered or draggable |
@@ -139,13 +141,7 @@ cd cmake-build-debug && ninja -j$(nproc)
 
 ## 8. Next smallest tasks
 
-1. **Fix viewport restriction for 3D rendering**
-   - Goal: only the centre area (between panels) clears to the scene background colour; panel areas should stay dark.
-   - Files: `src/MeshCraft/MeshCraftApplication.cpp` (`Draw()`), EasyGL backend in `../cna/`.
-   - Approach: instead of using `setViewportProperty()` + `Clear()`, use a scissor test (`glScissor` + `glEnable(GL_SCISSOR_TEST)`) around the scene clear — or restrict only the `gd.Clear()` call, not the render viewport.
-   - Verify: screenshot shows dark panel areas and coloured scene background only in the 3D viewport region.
-
-4. **Ray-cast object picking**
+1. **Ray-cast object picking**
    - Goal: left-click in 3D viewport selects the object under the cursor.
    - Files: `src/MeshCraft/MeshCraftApplication.cpp` (`handleMouseInput()`), `EditorCamera`, `SceneRenderer`.
    - Approach: unproject click position using inverse view-projection, test ray against each object's bounding box.
@@ -168,7 +164,7 @@ cd cmake-build-debug && ninja -j$(nproc)
 ## 9. Do not do yet
 
 - **No refactor of CNA** — CNA still has other bugs that may surface when objects are recompiled; only fix what's blocking a build. The two pre-existing bugs fixed this session (`ToEasyGLCompareFunc` ordering, `SetValue(Texture2D*)`) were fixed because CNA was already being recompiled due to CMakeLists.txt timestamp change.
-- **No new features** until viewport restriction is fixed — that is the diagnostic tool needed to verify rendering is correct in the 3D viewport region.
+- **No new features** until ray-cast picking works — it is the next key interaction needed before gizmo or other editing features make sense.
 - **No SpriteFont integration** until a simpler bitmap font approach is validated or CNA gains native text support.
 - **No CSG rendering** until the basic picking and gizmo are working.
 - **No API changes in `Mc3Document`** without checking `mc3togltf` and all test scenes.
@@ -180,5 +176,5 @@ cd cmake-build-debug && ninja -j$(nproc)
 ## 10. Resume prompt
 
 ```
-Read NEXT.md first. Then implement the first task (fix viewport restriction for 3D rendering in src/MeshCraft/MeshCraftApplication.cpp). Do not refactor unrelated code. Make one small verified improvement. Build with: cd cmake-build-debug && ninja -j$(nproc). Verify with: ./cmake-build-debug/MeshCraft test/house.mc3.xml --screenshot /tmp/test.ppm && ffmpeg -i /tmp/test.ppm /tmp/test.png -y && view the PNG to confirm dark panel areas. Update NEXT.md after finishing.
+Read NEXT.md first. Then implement the first task (ray-cast object picking in src/MeshCraft/MeshCraftApplication.cpp handleMouseInput() + EditorCamera). Do not refactor unrelated code. Make one small verified improvement. Build with: cd cmake-build-debug && ninja -j$(nproc). Verify with: ./cmake-build-debug/MeshCraft test/house.mc3.xml --screenshot /tmp/test.ppm && ffmpeg -i /tmp/test.ppm /tmp/test.png -y && check the PNG. Update NEXT.md after finishing.
 ```

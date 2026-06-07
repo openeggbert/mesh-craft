@@ -75,6 +75,12 @@ void MeshCraftApplication::LoadContent() {
     Color white(255, 255, 255, 255);
     whitePx_.SetData(&white, 1);
 
+    // Load GL function pointers for direct viewport/scissor control
+    fnGlViewport_ = reinterpret_cast<void(*)(int,int,int,int)>(SDL_GL_GetProcAddress("glViewport"));
+    fnGlScissor_  = reinterpret_cast<void(*)(int,int,int,int)>(SDL_GL_GetProcAddress("glScissor"));
+    fnGlEnable_   = reinterpret_cast<void(*)(unsigned int)>   (SDL_GL_GetProcAddress("glEnable"));
+    fnGlDisable_  = reinterpret_cast<void(*)(unsigned int)>   (SDL_GL_GetProcAddress("glDisable"));
+
     if (!currentFile_.empty() && std::filesystem::exists(currentFile_)) {
         try {
             document_ = Mc3::Mc3Document::loadFromFile(currentFile_);
@@ -129,13 +135,13 @@ void MeshCraftApplication::Draw(const GameTime& /*gameTime*/) {
     int viewW = std::max(1, screenW - kLeftPanelW - kRightPanelW);
     int viewH = std::max(1, screenH - kToolbarH - kStatusH);
 
-    // Restrict rendering to 3D viewport
-    Graphics::Viewport vp3d;
-    vp3d.x = viewX;
-    vp3d.y = viewY;
-    vp3d.setWidthProperty(viewW);
-    vp3d.setHeightProperty(viewH);
-    gd.setViewportProperty(vp3d);
+    // GL uses bottom-left origin; flip Y for viewport/scissor
+    constexpr unsigned int GL_SCISSOR_TEST = 0x0C11;
+    int glViewY = screenH - viewY - viewH;
+
+    // Enable scissor to restrict the bgColor clear to the 3D area only
+    if (fnGlEnable_)  fnGlEnable_(GL_SCISSOR_TEST);
+    if (fnGlScissor_) fnGlScissor_(viewX, glViewY, viewW, viewH);
 
     // Scene background color
     Color bgColor(64, 72, 80, 255);
@@ -147,7 +153,10 @@ void MeshCraftApplication::Draw(const GameTime& /*gameTime*/) {
             static_cast<int>(std::clamp(bc[2], 0.0f, 1.0f) * 255),
             255);
     }
-    gd.Clear(bgColor);
+    gd.Clear(bgColor);  // Clear() resets GL viewport to full window; scissor limits it to 3D area
+
+    // Re-apply correct GL viewport for 3D rendering (Clear() reset it to full window)
+    if (fnGlViewport_) fnGlViewport_(viewX, glViewY, viewW, viewH);
 
     float aspect = (viewH > 0) ? static_cast<float>(viewW) / viewH : 16.0f / 9.0f;
     Matrix view = camera_.viewMatrix();
@@ -162,7 +171,11 @@ void MeshCraftApplication::Draw(const GameTime& /*gameTime*/) {
     auto selPtrs = selectedPointers();
     sceneRenderer_->draw(document_, view, proj, selPtrs);
 
-    // Restore full viewport and draw 2D UI overlay
+    // Restore full GL viewport and disable scissor before 2D UI overlay
+    if (fnGlDisable_)  fnGlDisable_(GL_SCISSOR_TEST);
+    if (fnGlViewport_) fnGlViewport_(0, 0, screenW, screenH);
+
+    // Update CPU-side viewport to match
     Graphics::Viewport vpReset;
     vpReset.x = 0;
     vpReset.y = 0;

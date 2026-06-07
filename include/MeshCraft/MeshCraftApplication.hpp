@@ -76,6 +76,12 @@ private:
     std::string autoScreenshotPath_;
     int autoScreenshotCountdown_{0};
 
+    // Cached GL function pointers for viewport/scissor control (loaded in LoadContent)
+    void (*fnGlViewport_)(int, int, int, int) = nullptr;
+    void (*fnGlScissor_)(int, int, int, int)  = nullptr;
+    void (*fnGlEnable_)(unsigned int)          = nullptr;
+    void (*fnGlDisable_)(unsigned int)         = nullptr;
+
     // Panel layout
     static constexpr int kToolbarH   = 40;
     static constexpr int kStatusH    = 24;
