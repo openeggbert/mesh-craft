@@ -161,11 +161,10 @@ cd cmake-build-debug && ninja -j$(nproc)
    - `include/MeshCraft/Renderer/SceneRenderer.hpp` + `SceneRenderer.cpp`: `drawGizmo()` draws 3 colored axis lines + small cube tips from selected object; no depth test so always visible.
    - `MeshCraftApplication.cpp`: gizmo drawn after scene render when Move tool active; handle hit test on left-click (12px radius); drag delta projected onto screen-space axis direction and converted to world units.
 
-4. **Add automated smoke test**
-   - Goal: CI can verify the binary loads a scene and exits cleanly.
-   - Files: `CMakeLists.txt`, new `test/smoke_test.sh`.
-   - Approach: run `MeshCraft test/house.mc3.xml --screenshot /tmp/smoke.ppm` in a virtual framebuffer (`xvfb-run`), check exit code 0 and that `/tmp/smoke.ppm` is non-empty.
-   - Verify: `ctest` passes.
+4. **Add automated smoke test — DONE**
+   - `test/smoke_test.sh`: runs binary with `--screenshot`, uses `xvfb-run` if available, checks exit code 0 and non-empty PPM.
+   - `CMakeLists.txt`: `add_test(smoke_test ...)` gated on `MESH_CRAFT_BUILD_TESTING AND UNIX`; timeout 30 s.
+   - Verified: `ctest -V` passes in 2.2 s, screenshot is 2.36 MB.
 
 ---
 
@@ -184,5 +183,5 @@ cd cmake-build-debug && ninja -j$(nproc)
 ## 10. Resume prompt
 
 ```
-Read NEXT.md first. Then implement the next task (automated smoke test: run MeshCraft with xvfb-run, check exit code and non-empty screenshot PPM via ctest). Do not refactor unrelated code. Make one small verified improvement. Build with: cd cmake-build-debug && ninja -j$(nproc). Verify with: ./cmake-build-debug/MeshCraft test/house.mc3.xml --screenshot /tmp/test.ppm && ffmpeg -i /tmp/test.ppm /tmp/test.png -y && check the PNG. Update NEXT.md after finishing.
+Read NEXT.md first. Then implement the next task (hierarchy panel: indent groups/children, show expand/collapse triangle). Do not refactor unrelated code. Make one small verified improvement. Build with: cd cmake-build-debug && ninja -j$(nproc). Verify with: ./cmake-build-debug/MeshCraft test/house.mc3.xml --screenshot /tmp/test.ppm && ffmpeg -i /tmp/test.ppm /tmp/test.png -y && check the PNG. Update NEXT.md after finishing.
 ```

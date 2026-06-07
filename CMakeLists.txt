@@ -174,3 +174,18 @@ if(MINGW)
     target_link_options(${_target} PRIVATE -static-libgcc -static-libstdc++)
     cna_copy_mingw_runtime(${_target})
 endif()
+
+# -----------------------------------------------------------------------------
+# Tests
+# -----------------------------------------------------------------------------
+
+if(MESH_CRAFT_BUILD_TESTING AND UNIX AND NOT ANDROID AND NOT EMSCRIPTEN)
+    add_test(
+        NAME smoke_test
+        COMMAND bash ${CMAKE_CURRENT_SOURCE_DIR}/test/smoke_test.sh
+                $<TARGET_FILE:MeshCraft>
+                ${CMAKE_CURRENT_SOURCE_DIR}/test/house.mc3.xml
+        WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
+    )
+    set_tests_properties(smoke_test PROPERTIES TIMEOUT 30)
+endif()
