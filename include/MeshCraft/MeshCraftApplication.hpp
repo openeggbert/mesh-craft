@@ -125,6 +125,24 @@ private:
     };
     std::vector<HierarchyRow> hierarchyRows_;   // rebuilt each Draw()
     std::set<const Mc3::Mc3Object*> collapsedGroups_;
+
+    // Properties panel clickable field positions (rebuilt each Draw())
+    struct PropFieldHit {
+        int y;        // screen y of the 14-px field row
+        int section;  // 0=POS, 1=ROT, 2=SCL
+        int axis;     // 0=X, 1=Y, 2=Z
+    };
+    std::vector<PropFieldHit> propFieldHits_;
+
+    // Inline field editing state
+    bool        fieldActive_ {false};
+    int         fieldSection_{0};   // 0=POS, 1=ROT, 2=SCL
+    int         fieldAxis_   {0};   // 0=X,   1=Y,   2=Z
+    std::string fieldBuffer_;
+
+    void activateField(int section, int axis);
+    void applyFieldValue();
+    void cancelField();
 };
 
 } // namespace MeshCraft

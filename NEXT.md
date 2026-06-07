@@ -35,12 +35,11 @@ cd cmake-build-debug && ninja -j$(nproc)
 - Ray-cast object picking (left-click, AABB slab method, recursive through children, Ctrl+click multi-select)
 - Bitmap font labels in both panels (object names, POS/ROT/SCL values, material name)
 - Hierarchy panel: recursive tree, depth indentation, ">" / "v" expand/collapse for groups
-- Properties panel: shows selected object's name, POS/ROT/SCL (read-only display), material swatch
+- Properties panel: shows selected object's name, POS/ROT/SCL with inline editing (click field → type → Enter to apply)
 - Transform gizmo: X/Y/Z arrows when Move tool (G) active; drag handle moves object along axis
 - Automated smoke test via `ctest`
 
 **Not working / incomplete:**
-- Properties panel fields are read-only — no way to type a value directly
 - CSG objects (Union, Difference, Intersection) rendered as bounding-box placeholder only
 - No file-open dialog — path entered via console stdin
 - Add primitive (F1–F5) always inserts at top level, not as child of selected group
@@ -52,7 +51,7 @@ cd cmake-build-debug && ninja -j$(nproc)
 | # | Status | Description |
 |---|--------|-------------|
 | 1 | **open** | File-open dialog not available — user types path in terminal stdin |
-| 2 | **open** | Properties panel is read-only; POS/ROT/SCL cannot be typed in |
+| 2 | **done** | Properties panel is read-only; POS/ROT/SCL cannot be typed in |
 | 3 | **open** | CSG Union/Difference/Intersection rendered as placeholder box |
 | 4 | **open** | F1–F5 always adds primitive to top-level `document_.objects`, not inside selected group |
 | 5 | **open** | No undo/redo (Ctrl+Z / Ctrl+Y) |
@@ -118,20 +117,15 @@ ctest --test-dir cmake-build-debug -V
 
 ## 6. Next smallest tasks
 
-1. **Editable properties panel** *(most impactful for usability)*
-   - Goal: click on a POS/ROT/SCL value in the properties panel and type a new number.
-   - Approach: add a simple focused-field state; on click, capture keyboard input into a string buffer; on Enter or focus-loss, parse and apply to the selected object's transform.
-   - Files: `MeshCraftApplication.hpp/cpp` (input state), `drawUi` properties section.
-
-2. **Add primitive as child of selected group**
+1. **Add primitive as child of selected group**
    - Goal: F1–F5 inserts into the selected group's `children` when a group is selected, not always at top level.
    - Files: `MeshCraftApplication.cpp` — `addPrimitive()`.
 
-3. **Duplicate object (Ctrl+D)**
+2. **Duplicate object (Ctrl+D)**
    - Goal: deep-copy the selected object(s) with a new name suffix and insert after the original.
    - Files: `MeshCraftApplication.cpp`.
 
-4. **CSG rendering**
+3. **CSG rendering**
    - Goal: Union/Difference/Intersection display as the union of their children's meshes (even if just rendered children without boolean ops).
    - Files: `SceneRenderer.cpp` — `drawObject()` CSG cases currently fall through to placeholder box.
 

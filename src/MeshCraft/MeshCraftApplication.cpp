@@ -220,6 +220,39 @@ void MeshCraftApplication::handleKeyboardShortcuts(const KeyboardState& ks, cons
     bool shift = ks.IsKeyDown(Keys::LeftShift)    || ks.IsKeyDown(Keys::RightShift);
     bool alt   = ks.IsKeyDown(Keys::LeftAlt)      || ks.IsKeyDown(Keys::RightAlt);
 
+    // Cancel field if selection was cleared externally
+    if (fieldActive_ && !selection_.hasSelection()) cancelField();
+
+    // When a properties field is active, capture text input exclusively
+    if (fieldActive_) {
+        if (justPressed(ks, prevKs, Keys::Escape)) { cancelField(); return; }
+        if (justPressed(ks, prevKs, Keys::Enter))  { applyFieldValue(); return; }
+        if (justPressed(ks, prevKs, Keys::Back) && !fieldBuffer_.empty()) {
+            fieldBuffer_.pop_back(); return;
+        }
+        // Digit row keys and numpad
+        struct { Keys key; char ch; } numKeys[] = {
+            {Keys::D0,'0'},{Keys::D1,'1'},{Keys::D2,'2'},{Keys::D3,'3'},{Keys::D4,'4'},
+            {Keys::D5,'5'},{Keys::D6,'6'},{Keys::D7,'7'},{Keys::D8,'8'},{Keys::D9,'9'},
+            {Keys::NumPad0,'0'},{Keys::NumPad1,'1'},{Keys::NumPad2,'2'},
+            {Keys::NumPad3,'3'},{Keys::NumPad4,'4'},{Keys::NumPad5,'5'},
+            {Keys::NumPad6,'6'},{Keys::NumPad7,'7'},{Keys::NumPad8,'8'},{Keys::NumPad9,'9'},
+        };
+        for (auto& nk : numKeys) {
+            if (justPressed(ks, prevKs, nk.key)) { fieldBuffer_ += nk.ch; return; }
+        }
+        // Period
+        if (justPressed(ks, prevKs, Keys::OemPeriod) || justPressed(ks, prevKs, Keys::Decimal)) {
+            if (fieldBuffer_.find('.') == std::string::npos) fieldBuffer_ += '.';
+            return;
+        }
+        // Minus (only at start for negative)
+        if (justPressed(ks, prevKs, Keys::OemMinus) || justPressed(ks, prevKs, Keys::Subtract)) {
+            if (fieldBuffer_.empty()) { fieldBuffer_ += '-'; return; }
+        }
+        return; // swallow all other keys while editing
+    }
+
     // Escape: first press deselects / resets tool; second press (already in select+empty) exits
     if (justPressed(ks, prevKs, Keys::Escape)) {
         if (activeTool_ != ActiveTool::Select || selection_.hasSelection()) {
@@ -407,6 +440,25 @@ void MeshCraftApplication::handleMouseInput(const MouseState& ms, const MouseSta
         int my = ms.getYProperty();
         bool ctrl = (Keyboard::GetState().IsKeyDown(Keys::LeftControl) ||
                      Keyboard::GetState().IsKeyDown(Keys::RightControl));
+
+        // Click inside right properties panel — activate a field for editing
+        auto& gd0 = getGraphicsDeviceProperty();
+        int sW0 = gd0.getViewportProperty().getWidthProperty();
+        if (mx >= sW0 - kRightPanelW && my >= kToolbarH + kPanelHdrH && my < sW0) {
+            if (fieldActive_) {
+                // clicking different field commits current edit first
+                applyFieldValue();
+            }
+            for (const auto& hit : propFieldHits_) {
+                if (my >= hit.y && my < hit.y + 14) {
+                    activateField(hit.section, hit.axis);
+                    return;
+                }
+            }
+            // Click in panel but not on a field — cancel active edit
+            if (fieldActive_) cancelField();
+            return;
+        }
 
         // Click inside left hierarchy panel
         if (mx < kLeftPanelW && my >= kToolbarH + kPanelHdrH) {
@@ -975,6 +1027,7 @@ void MeshCraftApplication::drawUi(int screenW, int screenH) {
     Ui::drawBitmapText("PROPERTIES", rpX + 8, kToolbarH + (kPanelHdrH - 7) / 2, 1,
                        Color(160, 175, 210, 255), fillRect);
 
+    propFieldHits_.clear();
     if (selection_.hasSelection()) {
         const auto& sel0 = selection_.selection().front();
         int py = kToolbarH + kPanelHdrH + 6;
@@ -990,23 +1043,47 @@ void MeshCraftApplication::drawUi(int screenW, int screenH) {
         }
         py += 24;
 
+        const char* axisLabels[3] = {"X", "Y", "Z"};
+        Color axisCols[3] = {Color(210, 60, 60, 255), Color(60, 210, 60, 255), Color(60, 60, 210, 255)};
+
+        // Helper: draw one editable transform field row
+        // section: 0=POS, 1=ROT, 2=SCL  axis: 0=X,1=Y,2=Z  v: current value  barScale: max value for bar
+        auto drawField = [&](int section, int axis, float v, float barScale, const char* fmt) {
+            bool active = fieldActive_ && fieldSection_ == section && fieldAxis_ == axis;
+            propFieldHits_.push_back({py, section, axis});
+
+            if (active) {
+                // Highlighted background for active editing field
+                drawRect(px, py, pw, 14, Color(50, 70, 140, 255));
+                drawRect(px, py, 2, 14, axisCols[axis]);
+            } else {
+                int filled = static_cast<int>(std::clamp(std::abs(v) / barScale, 0.0f, 1.0f) * (pw - 4));
+                drawRect(px, py, pw, 14, Color(22, 24, 44, 255));
+                drawRect(px, py, std::max(2, filled + 2), 14, axisCols[axis]);
+            }
+
+            Ui::drawBitmapText(axisLabels[axis], px + 3, py + (14 - 7) / 2, 1,
+                               Color(220, 220, 220, 255), fillRect);
+
+            if (active) {
+                std::string display = fieldBuffer_ + "_";
+                Ui::drawBitmapText(display, px + 12, py + (14 - 7) / 2, 1,
+                                   Color(255, 255, 160, 255), fillRect);
+            } else {
+                char buf[20]; std::snprintf(buf, sizeof(buf), fmt, v);
+                Ui::drawBitmapText(buf, px + 12, py + (14 - 7) / 2, 1,
+                                   Color(220, 220, 220, 255), fillRect);
+            }
+            py += 16;
+        };
+
         // ----- Position section -----
         drawRect(px, py, pw, 18, Color(38, 42, 72, 255));
         drawRect(px, py, 3, 18, Color(80, 130, 210, 255));
         Ui::drawBitmapText("POS", px + 6, py + (18 - 7) / 2, 1, Color(160, 175, 210, 255), fillRect);
         py += 20;
-        const char* axisLabels[3] = {"X", "Y", "Z"};
-        Color axisCols[3] = {Color(210, 60, 60, 255), Color(60, 210, 60, 255), Color(60, 60, 210, 255)};
-        for (int a = 0; a < 3; ++a) {
-            float v = sel0->transform.position[a];
-            int filled = static_cast<int>(std::clamp(std::abs(v) / 20.0f, 0.0f, 1.0f) * (pw - 4));
-            drawRect(px, py, pw, 14, Color(22, 24, 44, 255));
-            drawRect(px, py, filled + 2, 14, axisCols[a]);
-            Ui::drawBitmapText(axisLabels[a], px + 3, py + (14 - 7) / 2, 1, Color(220, 220, 220, 255), fillRect);
-            char buf[16]; std::snprintf(buf, sizeof(buf), "%.2f", v);
-            Ui::drawBitmapText(buf, px + 12, py + (14 - 7) / 2, 1, Color(220, 220, 220, 255), fillRect);
-            py += 16;
-        }
+        for (int a = 0; a < 3; ++a)
+            drawField(0, a, sel0->transform.position[a], 20.0f, "%.2f");
         py += 4;
 
         // ----- Rotation section -----
@@ -1014,16 +1091,8 @@ void MeshCraftApplication::drawUi(int screenW, int screenH) {
         drawRect(px, py, 3, 18, Color(205, 165, 55, 255));
         Ui::drawBitmapText("ROT", px + 6, py + (18 - 7) / 2, 1, Color(160, 175, 210, 255), fillRect);
         py += 20;
-        for (int a = 0; a < 3; ++a) {
-            float v = sel0->transform.rotation[a];
-            int filled = static_cast<int>(std::clamp(std::abs(v) / 360.0f, 0.0f, 1.0f) * (pw - 4));
-            drawRect(px, py, pw, 14, Color(22, 24, 44, 255));
-            drawRect(px, py, filled + 2, 14, axisCols[a]);
-            Ui::drawBitmapText(axisLabels[a], px + 3, py + (14 - 7) / 2, 1, Color(220, 220, 220, 255), fillRect);
-            char buf[16]; std::snprintf(buf, sizeof(buf), "%.1f", v);
-            Ui::drawBitmapText(buf, px + 12, py + (14 - 7) / 2, 1, Color(220, 220, 220, 255), fillRect);
-            py += 16;
-        }
+        for (int a = 0; a < 3; ++a)
+            drawField(1, a, sel0->transform.rotation[a], 360.0f, "%.1f");
         py += 4;
 
         // ----- Scale section -----
@@ -1031,16 +1100,8 @@ void MeshCraftApplication::drawUi(int screenW, int screenH) {
         drawRect(px, py, 3, 18, Color(210, 75, 75, 255));
         Ui::drawBitmapText("SCL", px + 6, py + (18 - 7) / 2, 1, Color(160, 175, 210, 255), fillRect);
         py += 20;
-        for (int a = 0; a < 3; ++a) {
-            float v = sel0->transform.scale[a];
-            int filled = static_cast<int>(std::clamp(v / 4.0f, 0.0f, 1.0f) * (pw - 4));
-            drawRect(px, py, pw, 14, Color(22, 24, 44, 255));
-            drawRect(px, py, std::max(2, filled), 14, axisCols[a]);
-            Ui::drawBitmapText(axisLabels[a], px + 3, py + (14 - 7) / 2, 1, Color(220, 220, 220, 255), fillRect);
-            char buf[16]; std::snprintf(buf, sizeof(buf), "%.2f", v);
-            Ui::drawBitmapText(buf, px + 12, py + (14 - 7) / 2, 1, Color(220, 220, 220, 255), fillRect);
-            py += 16;
-        }
+        for (int a = 0; a < 3; ++a)
+            drawField(2, a, sel0->transform.scale[a], 4.0f, "%.2f");
         py += 8;
 
         // Material color swatch
@@ -1092,6 +1153,45 @@ void MeshCraftApplication::drawUi(int screenW, int screenH) {
     // Tool indicator strip at bottom right corner
     Color toolStrip(40, 50, 80, 255);
     drawRect(screenW - kRightPanelW, screenH - kStatusH + 2, 20, dotSize, toolStrip);
+}
+
+// ---------------------------------------------------------------------------
+// Field editing
+// ---------------------------------------------------------------------------
+
+void MeshCraftApplication::activateField(int section, int axis) {
+    if (!selection_.hasSelection()) return;
+    fieldSection_ = section;
+    fieldAxis_    = axis;
+    const auto& t = selection_.selection().front()->transform;
+    float v = 0.0f;
+    if (section == 0) v = t.position[axis];
+    else if (section == 1) v = t.rotation[axis];
+    else                   v = t.scale[axis];
+    char buf[20];
+    std::snprintf(buf, sizeof(buf), "%g", v);
+    fieldBuffer_ = buf;
+    fieldActive_ = true;
+}
+
+void MeshCraftApplication::applyFieldValue() {
+    if (!fieldActive_ || !selection_.hasSelection()) { cancelField(); return; }
+    try {
+        float val = std::stof(fieldBuffer_);
+        auto& t = selection_.selection().front()->transform;
+        if (fieldSection_ == 0) t.position[fieldAxis_] = val;
+        else if (fieldSection_ == 1) t.rotation[fieldAxis_] = val;
+        else                         t.scale[fieldAxis_]    = val;
+        modified_ = true;
+        updateWindowTitle();
+    } catch (...) {}
+    fieldActive_ = false;
+    fieldBuffer_.clear();
+}
+
+void MeshCraftApplication::cancelField() {
+    fieldActive_ = false;
+    fieldBuffer_.clear();
 }
 
 // ---------------------------------------------------------------------------
