@@ -10,6 +10,7 @@
 - Status bar text — object count and selection count
 - Undo/Redo — Ctrl+Z/Y, 20 steps, deep-copy document snapshots
 - Scale gizmo (S) — flat-square tips, drag scales along axis
+- Rotate gizmo (R) — 3 coloured circles (XYZ), click circle to start drag, tangential mouse movement rotates
 
 ---
 
@@ -21,7 +22,8 @@ _(nothing)_
 
 ## Next up
 
-1. **Rotate gizmo (R)** — arc handles for X/Y/Z, click+drag = rotate
+1. **Properties panel: Visible toggle + Collision field** — add two small fields below the material swatch
+2. **Cut/Copy/Paste** — Ctrl+X/C/V for scene objects
 
 ---
 

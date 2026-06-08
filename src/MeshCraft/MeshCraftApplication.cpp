@@ -183,6 +183,9 @@ void MeshCraftApplication::Draw(const GameTime& /*gameTime*/) {
         } else if (activeTool_ == ActiveTool::Scale) {
             gd.SetDepthTestEnabled(false);
             sceneRenderer_->drawScaleGizmo(sel0, view, proj, gizmoLen);
+        } else if (activeTool_ == ActiveTool::Rotate) {
+            gd.SetDepthTestEnabled(false);
+            sceneRenderer_->drawRotateGizmo(sel0, view, proj, gizmoLen);
         }
     }
 
@@ -623,6 +626,59 @@ void MeshCraftApplication::handleMouseInput(const MouseState& ms, const MouseSta
         return;
     }
 
+    // Rotate gizmo drag
+    if (activeTool_ == ActiveTool::Rotate && gizmo_.isDragging() && leftBtn && (dx != 0 || dy != 0)
+        && selection_.hasSelection())
+    {
+        auto& gd4 = getGraphicsDeviceProperty();
+        int sW4 = gd4.getViewportProperty().getWidthProperty();
+        int sH4 = gd4.getViewportProperty().getHeightProperty();
+        int vX4 = kLeftPanelW, vY4 = kToolbarH;
+        int vW4 = std::max(1, sW4 - kLeftPanelW - kRightPanelW);
+        int vH4 = std::max(1, sH4 - kToolbarH - kStatusH);
+        float asp4 = static_cast<float>(vW4) / static_cast<float>(vH4);
+        Matrix vw4 = camera_.viewMatrix();
+        Matrix pr4 = camera_.projectionMatrix(asp4);
+        Matrix vp4 = vw4 * pr4;
+
+        auto w2s4 = [&](float wx, float wy, float wz) -> std::pair<float,float> {
+            float cX = wx*vp4.M11 + wy*vp4.M21 + wz*vp4.M31 + vp4.M41;
+            float cY = wx*vp4.M12 + wy*vp4.M22 + wz*vp4.M32 + vp4.M42;
+            float cW = wx*vp4.M14 + wy*vp4.M24 + wz*vp4.M34 + vp4.M44;
+            if (std::abs(cW) < 1e-6f) return {-1e6f, -1e6f};
+            return { (cX/cW * 0.5f + 0.5f) * vW4 + vX4,
+                     (1.0f - (cY/cW * 0.5f + 0.5f)) * vH4 + vY4 };
+        };
+
+        auto* sel0 = selection_.selection().front().get();
+        float px4 = sel0->transform.position[0];
+        float py4 = sel0->transform.position[1];
+        float pz4 = sel0->transform.position[2];
+        float L4  = camera_.distance * 0.15f;
+        int axIdx = static_cast<int>(gizmo_.dragAxis()) - 1;
+
+        auto [cx4, cy4] = w2s4(px4, py4, pz4);
+        // Screen-space radius: project a point on the circle perimeter
+        float refPts[3][3] = { {px4, py4+L4, pz4}, {px4+L4, py4, pz4}, {px4+L4, py4, pz4} };
+        auto [rx4s, ry4s]  = w2s4(refPts[axIdx][0], refPts[axIdx][1], refPts[axIdx][2]);
+        float r_screen = std::max(1.0f, std::sqrt((rx4s-cx4)*(rx4s-cx4) + (ry4s-cy4)*(ry4s-cy4)));
+
+        // Tangent at current mouse position (perpendicular to radius from projected centre)
+        float curMx = static_cast<float>(ms.getXProperty());
+        float curMy = static_cast<float>(ms.getYProperty());
+        float radX = curMx - cx4, radY = curMy - cy4;
+        float radLen = std::sqrt(radX*radX + radY*radY);
+        if (radLen > 2.0f) {
+            float tx = -radY/radLen, ty = radX/radLen;
+            float dot = dx * tx + dy * ty;
+            float degsPerPixel = 180.0f / (std::numbers::pi_v<float> * r_screen);
+            sel0->transform.rotation[axIdx] += dot * degsPerPixel;
+            modified_ = true;
+            updateWindowTitle();
+        }
+        return;
+    }
+
     // Left click
     if (leftBtn && !prevLeft) {
         int mx = ms.getXProperty();
@@ -754,6 +810,54 @@ void MeshCraftApplication::handleMouseInput(const MouseState& ms, const MouseSta
                         gizmo_.startDrag(static_cast<Editor::GizmoAxis>(gi + 1));
                         return; // click consumed by gizmo — skip picking
                     }
+                }
+            }
+
+            // Gizmo circle hit test (Rotate tool, no Ctrl)
+            if (activeTool_ == ActiveTool::Rotate && selection_.hasSelection() && !ctrl) {
+                auto* sel0 = selection_.selection().front().get();
+                float gpx = sel0->transform.position[0];
+                float gpy = sel0->transform.position[1];
+                float gpz = sel0->transform.position[2];
+                float gL  = camera_.distance * 0.15f;
+
+                int gvX2 = kLeftPanelW, gvY2 = kToolbarH;
+                int gvW2 = std::max(1, screenW - kLeftPanelW - kRightPanelW);
+                int gvH2 = std::max(1, screenH - kToolbarH - kStatusH);
+                float gasp2 = static_cast<float>(gvW2) / static_cast<float>(gvH2);
+                Matrix gvw2 = camera_.viewMatrix();
+                Matrix gpr2 = camera_.projectionMatrix(gasp2);
+                Matrix gvp2 = gvw2 * gpr2;
+
+                auto gw2s2 = [&](float wx, float wy, float wz) -> std::pair<float,float> {
+                    float cX = wx*gvp2.M11 + wy*gvp2.M21 + wz*gvp2.M31 + gvp2.M41;
+                    float cY = wx*gvp2.M12 + wy*gvp2.M22 + wz*gvp2.M32 + gvp2.M42;
+                    float cW = wx*gvp2.M14 + wy*gvp2.M24 + wz*gvp2.M34 + gvp2.M44;
+                    if (std::abs(cW) < 1e-6f) return {-1e6f, -1e6f};
+                    return { (cX/cW * 0.5f + 0.5f) * gvW2 + gvX2,
+                             (1.0f - (cY/cW * 0.5f + 0.5f)) * gvH2 + gvY2 };
+                };
+
+                const int CN = 32;
+                int bestAx = -1;
+                float bestDist = 11.0f; // pixel threshold
+                for (int ax = 0; ax < 3; ++ax) {
+                    for (int j = 0; j < CN; ++j) {
+                        float t = 2.0f * std::numbers::pi_v<float> * j / CN;
+                        float c = std::cos(t), s = std::sin(t);
+                        float wx, wy, wz;
+                        if      (ax == 0) { wx=gpx;      wy=gpy+gL*c; wz=gpz+gL*s; }
+                        else if (ax == 1) { wx=gpx+gL*c; wy=gpy;      wz=gpz+gL*s; }
+                        else              { wx=gpx+gL*c; wy=gpy+gL*s; wz=gpz;       }
+                        auto [sx, sy] = gw2s2(wx, wy, wz);
+                        float d = std::sqrt((mx-sx)*(mx-sx) + (my-sy)*(my-sy));
+                        if (d < bestDist) { bestDist = d; bestAx = ax; }
+                    }
+                }
+                if (bestAx >= 0) {
+                    pushUndo();
+                    gizmo_.startDrag(static_cast<Editor::GizmoAxis>(bestAx + 1));
+                    return;
                 }
             }
 

@@ -41,6 +41,12 @@ public:
                         const Microsoft::Xna::Framework::Matrix& projection,
                         float gizmoLength);
 
+    // Render rotate gizmo (X/Y/Z circles) for a selected object
+    void drawRotateGizmo(const Mc3::Mc3Object* obj,
+                         const Microsoft::Xna::Framework::Matrix& view,
+                         const Microsoft::Xna::Framework::Matrix& projection,
+                         float gizmoLength);
+
     // Render a single object's bounding box (wireframe)
     void drawObjectWireframe(const Mc3::Mc3Object& obj,
                              const Microsoft::Xna::Framework::Matrix& view,

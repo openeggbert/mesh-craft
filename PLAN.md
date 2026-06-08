@@ -86,7 +86,7 @@ environment settings. Output is `.glb` via the `mc3togltf` converter.
 |---------|--------|
 | Move gizmo (G) — axis arrows, drag = translate | ✅ |
 | Scale gizmo (S) — flat-square tips, drag = scale per axis | ✅ |
-| Rotate gizmo (R) — arc handles, drag = rotate per axis | 📋 |
+| Rotate gizmo (R) — arc handles, drag = rotate per axis | ✅ |
 | Arrow key nudge (Shift = 0.1 step), PageUp/Down = Z axis | ✅ |
 | Pivot point options (object centre / world origin / cursor) | 📋 |
 

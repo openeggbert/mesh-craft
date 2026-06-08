@@ -332,6 +332,50 @@ void SceneRenderer::drawScaleGizmo(const Mc3Object* obj,
     }
 }
 
+void SceneRenderer::drawRotateGizmo(const Mc3Object* obj,
+                                     const Matrix& view, const Matrix& proj,
+                                     float gizmoLength)
+{
+    if (!obj) return;
+
+    const float px = obj->transform.position[0];
+    const float py = obj->transform.position[1];
+    const float pz = obj->transform.position[2];
+    const float L  = gizmoLength;
+    const int   N  = 32;
+
+    effect_->World      = Matrix::getIdentityProperty();
+    effect_->View       = view;
+    effect_->Projection = proj;
+    effect_->VertexColorEnabled = true;
+    for (auto& pass : effect_->getCurrentTechniqueProperty()->getPassesProperty())
+        pass.Apply();
+
+    Color cols[3] = {
+        Color(210, 60,  60,  255),
+        Color(60,  210, 60,  255),
+        Color(60,  60,  210, 255),
+    };
+
+    for (int ax = 0; ax < 3; ++ax) {
+        std::vector<VertexPositionColor> verts(N + 1);
+        for (int j = 0; j <= N; ++j) {
+            float t = 2.0f * std::numbers::pi_v<float> * j / N;
+            float c = std::cos(t), s = std::sin(t);
+            float wx, wy, wz;
+            if      (ax == 0) { wx = px;       wy = py+L*c; wz = pz+L*s; } // X: circle in YZ
+            else if (ax == 1) { wx = px+L*c;   wy = py;     wz = pz+L*s; } // Y: circle in XZ
+            else              { wx = px+L*c;   wy = py+L*s; wz = pz;     } // Z: circle in XY
+            verts[j] = { {wx, wy, wz}, cols[ax] };
+        }
+        VertexBuffer circleVB(device_, N + 1);
+        circleVB.SetData(verts.data(), N + 1);
+        device_.SetVertexBuffer(&circleVB);
+        device_.DrawPrimitives(Graphics::PrimitiveType::LineStrip, 0, N);
+        device_.SetVertexBuffer(nullptr);
+    }
+}
+
 // ---------------------------------------------------------------------------
 // Draw helpers
 // ---------------------------------------------------------------------------
