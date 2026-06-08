@@ -35,7 +35,7 @@ environment settings. Output is `.glb` via the `mc3togltf` converter.
 | Save as (Ctrl+Shift+S) | ✅ |
 | Export to GLB via `mc3togltf` (Ctrl+E) | ✅ |
 | File-open dialog (GUI) | 📋 |
-| Open file — currently stdin (Ctrl+O) | 🔧 |
+| Open file — in-UI modal dialog (Ctrl+O) | ✅ |
 | Recent files list | 📋 |
 
 ---

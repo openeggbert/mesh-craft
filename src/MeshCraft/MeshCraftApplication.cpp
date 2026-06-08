@@ -236,6 +236,65 @@ void MeshCraftApplication::handleKeyboardShortcuts(const KeyboardState& ks, cons
     // Cancel field if selection was cleared externally
     if (fieldActive_ && !selection_.hasSelection()) cancelField();
 
+    // Open-file dialog — captures all input while active
+    if (openDialogActive_) {
+        if (justPressed(ks, prevKs, Keys::Escape)) { openDialogActive_ = false; return; }
+        if (justPressed(ks, prevKs, Keys::Back) && !openDialogBuffer_.empty()) {
+            openDialogBuffer_.pop_back(); return;
+        }
+        if (justPressed(ks, prevKs, Keys::Enter)) {
+            if (!openDialogBuffer_.empty()) {
+                try {
+                    document_ = Mc3::Mc3Document::loadFromFile(openDialogBuffer_);
+                    currentFile_ = openDialogBuffer_;
+                    selection_.clear();
+                    collapsedGroups_.clear();
+                    undoStack_.clear();
+                    redoStack_.clear();
+                    modified_ = false;
+                    openDialogActive_ = false;
+                    openDialogError_.clear();
+                    std::cout << "[MeshCraft] Loaded: " << openDialogBuffer_ << "\n";
+                    updateWindowTitle();
+                } catch (const std::exception& e) {
+                    openDialogError_ = e.what();
+                }
+            }
+            return;
+        }
+        // Path characters: letters, digits, common punctuation
+        struct { Keys key; char lo; char hi; } lk[] = {
+            {Keys::A,'a','A'},{Keys::B,'b','B'},{Keys::C,'c','C'},{Keys::D,'d','D'},
+            {Keys::E,'e','E'},{Keys::F,'f','F'},{Keys::G,'g','G'},{Keys::H,'h','H'},
+            {Keys::I,'i','I'},{Keys::J,'j','J'},{Keys::K,'k','K'},{Keys::L,'l','L'},
+            {Keys::M,'m','M'},{Keys::N,'n','N'},{Keys::O,'o','O'},{Keys::P,'p','P'},
+            {Keys::Q,'q','Q'},{Keys::R,'r','R'},{Keys::S,'s','S'},{Keys::T,'t','T'},
+            {Keys::U,'u','U'},{Keys::V,'v','V'},{Keys::W,'w','W'},{Keys::X,'x','X'},
+            {Keys::Y,'y','Y'},{Keys::Z,'z','Z'},
+        };
+        for (auto& k : lk) {
+            if (justPressed(ks, prevKs, k.key)) { openDialogBuffer_ += shift ? k.hi : k.lo; return; }
+        }
+        struct { Keys key; char ch; } dk[] = {
+            {Keys::D0,'0'},{Keys::D1,'1'},{Keys::D2,'2'},{Keys::D3,'3'},{Keys::D4,'4'},
+            {Keys::D5,'5'},{Keys::D6,'6'},{Keys::D7,'7'},{Keys::D8,'8'},{Keys::D9,'9'},
+            {Keys::NumPad0,'0'},{Keys::NumPad1,'1'},{Keys::NumPad2,'2'},
+            {Keys::NumPad3,'3'},{Keys::NumPad4,'4'},{Keys::NumPad5,'5'},
+            {Keys::NumPad6,'6'},{Keys::NumPad7,'7'},{Keys::NumPad8,'8'},{Keys::NumPad9,'9'},
+        };
+        for (auto& k : dk) {
+            if (justPressed(ks, prevKs, k.key)) { openDialogBuffer_ += k.ch; return; }
+        }
+        if (justPressed(ks, prevKs, Keys::OemPeriod))       { openDialogBuffer_ += '.';             return; }
+        if (justPressed(ks, prevKs, Keys::OemMinus))        { openDialogBuffer_ += shift ? '_' :'-'; return; }
+        if (justPressed(ks, prevKs, Keys::OemQuestion))     { openDialogBuffer_ += shift ? '?':'/';  return; }
+        if (justPressed(ks, prevKs, Keys::OemPipe))         { openDialogBuffer_ += shift ? '|':'\\'; return; }
+        if (justPressed(ks, prevKs, Keys::OemTilde))        { openDialogBuffer_ += shift ? '~':'`';  return; }
+        if (justPressed(ks, prevKs, Keys::OemSemicolon))    { openDialogBuffer_ += shift ? ':':';';  return; }
+        if (justPressed(ks, prevKs, Keys::Space))           { openDialogBuffer_ += ' ';              return; }
+        return; // swallow all other keys while dialog is open
+    }
+
     // When a properties field is active, capture text input exclusively
     if (fieldActive_) {
         if (justPressed(ks, prevKs, Keys::Escape)) { cancelField(); return; }
@@ -1096,22 +1155,10 @@ void MeshCraftApplication::newScene() {
 }
 
 void MeshCraftApplication::openFile() {
-    // Ask user for path via stdin (console) since no file dialog available in CNA yet
-    std::cout << "[MeshCraft] Enter file path to open (or press Enter to cancel): ";
-    std::string path;
-    std::getline(std::cin, path);
-    if (path.empty()) return;
-
-    try {
-        document_ = Mc3::Mc3Document::loadFromFile(path);
-        currentFile_ = path;
-        selection_.clear();
-        modified_ = false;
-        std::cout << "[MeshCraft] Loaded: " << path << "\n";
-        updateWindowTitle();
-    } catch (const std::exception& e) {
-        std::cerr << "[MeshCraft] Error: " << e.what() << "\n";
-    }
+    openDialogBuffer_.clear();
+    openDialogError_.clear();
+    openDialogActive_ = true;
+    if (fieldActive_) cancelField();
 }
 
 void MeshCraftApplication::saveFile() {
@@ -1929,6 +1976,53 @@ void MeshCraftApplication::drawUi(int screenW, int screenH) {
     // Tool indicator strip at bottom right corner
     Color toolStrip(40, 50, 80, 255);
     drawRect(screenW - kRightPanelW, screenH - kStatusH + 2, 20, dotSize, toolStrip);
+
+    // -----------------------------------------------------------------------
+    // Open-file modal dialog overlay
+    // -----------------------------------------------------------------------
+    if (openDialogActive_) {
+        // Dim the entire screen
+        drawRect(0, 0, screenW, screenH, Color(0, 0, 0, 160));
+
+        // Panel
+        int pw = std::min(400, screenW - 40);
+        int ph = openDialogError_.empty() ? 82 : 98;
+        int px = (screenW - pw) / 2;
+        int py = (screenH - ph) / 2;
+
+        drawRect(px,      py,      pw,  ph,  Color(28, 32, 55, 255));
+        // border
+        drawRect(px,      py,      pw,   1,  Color(80, 130, 210, 255));
+        drawRect(px,      py+ph-1, pw,   1,  Color(80, 130, 210, 255));
+        drawRect(px,      py,       1,  ph,  Color(80, 130, 210, 255));
+        drawRect(px+pw-1, py,       1,  ph,  Color(80, 130, 210, 255));
+        // title bar
+        drawRect(px+1, py+1, pw-2, 18, Color(38, 48, 90, 255));
+        drawRect(px+1, py+1, 3,   18,  Color(80, 130, 210, 255));
+        Ui::drawBitmapText("OPEN FILE", px+8, py+6, 1, Color(160, 175, 210, 255), fillRect);
+
+        // Input field
+        drawRect(px+8, py+24, pw-16, 18, Color(18, 20, 38, 255));
+        drawRect(px+8, py+24, pw-16,  1, Color(80, 130, 210, 180));
+        drawRect(px+8, py+41, pw-16,  1, Color(80, 130, 210, 180));
+        {
+            std::string display = openDialogBuffer_ + "_";
+            // Truncate from the left if too long to show the end
+            int maxChars = std::max(1, (pw - 20) / 6);
+            std::string shown = display.size() > static_cast<size_t>(maxChars)
+                                ? display.substr(display.size() - maxChars) : display;
+            Ui::drawBitmapText(shown, px+12, py+29, 1, Color(255, 255, 160, 255), fillRect);
+        }
+
+        // Hint / error
+        if (!openDialogError_.empty()) {
+            std::string err = openDialogError_.substr(0, (pw - 20) / 6);
+            Ui::drawBitmapText(err, px+8, py+48, 1, Color(220, 80, 80, 255), fillRect);
+            Ui::drawBitmapText("Enter=retry  Esc=cancel", px+8, py+62, 1, Color(100, 110, 140, 255), fillRect);
+        } else {
+            Ui::drawBitmapText("Enter=open   Esc=cancel", px+8, py+50, 1, Color(100, 110, 140, 255), fillRect);
+        }
+    }
 }
 
 // ---------------------------------------------------------------------------

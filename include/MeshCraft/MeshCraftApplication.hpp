@@ -83,6 +83,11 @@ private:
     std::string autoScreenshotPath_;
     int autoScreenshotCountdown_{0};
 
+    // Open-file modal dialog
+    bool        openDialogActive_{false};
+    std::string openDialogBuffer_;
+    std::string openDialogError_;   // shown in red when load fails
+
     // Cached GL function pointers for viewport/scissor control (loaded in LoadContent)
     void (*fnGlViewport_)(int, int, int, int) = nullptr;
     void (*fnGlScissor_)(int, int, int, int)  = nullptr;

@@ -18,6 +18,7 @@
 - Group/Ungroup — Ctrl+G wraps selection into a Group; Ctrl+Shift+G dissolves Group back to parent
 - Preset views — Num1/3/5/7/9 for Front/Right/Back/Top/Bottom camera angles
 - Box drag-select — drag in 3D viewport (Select tool) draws blue rectangle; release selects enclosed objects; Ctrl = additive
+- Open file dialog — Ctrl+O shows centered in-UI modal; type path, Enter loads, Esc cancels; error shown in red
 
 ---
 
@@ -29,9 +30,9 @@ _(nothing)_
 
 ## Next up
 
-1. **Drag-and-drop reparenting** — drag a hierarchy row onto another to reparent
-2. **Open file dialog** — Ctrl+O shows an in-UI path input field instead of stdin
-3. **Material editor** — create / rename / delete materials; edit baseColor RGBA sliders
+1. **Save As dialog** — Ctrl+Shift+S shows the same in-UI modal (currently stdin)
+2. **Material editor** — create / rename / delete materials; edit baseColor RGBA sliders
+3. **Drag-and-drop reparenting** — drag a hierarchy row onto another to reparent
 
 ---
 
