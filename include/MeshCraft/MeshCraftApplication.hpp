@@ -74,6 +74,11 @@ private:
     bool   dragging_{false};
     float  dragStartX_{0}, dragStartY_{0};
 
+    // Box-select drag state (Select tool, 3D viewport)
+    bool boxSelectActive_{false};
+    int  boxSelectX0_{0}, boxSelectY0_{0};  // anchor (press position)
+    int  boxSelectX1_{0}, boxSelectY1_{0};  // current endpoint
+
     // Auto-screenshot mode: save screenshot after N frames then exit
     std::string autoScreenshotPath_;
     int autoScreenshotCountdown_{0};

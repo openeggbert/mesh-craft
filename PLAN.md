@@ -76,7 +76,7 @@ environment settings. Output is `.glb` via the `mc3togltf` converter.
 | Left-click ray-cast AABB picking (recursive through groups) | ✅ |
 | Ctrl+click multi-select | ✅ |
 | Ctrl+A — select all / select children of group | ✅ |
-| Box/rectangle drag-select | 📋 |
+| Box/rectangle drag-select | ✅ |
 
 ---
 

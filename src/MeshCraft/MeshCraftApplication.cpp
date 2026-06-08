@@ -1006,6 +1006,77 @@ void MeshCraftApplication::handleMouseInput(const MouseState& ms, const MouseSta
             updateWindowTitle();
         }
     }
+
+    // -----------------------------------------------------------------------
+    // Box-select: drag in 3D viewport with Select tool
+    if (activeTool_ == ActiveTool::Select && !gizmo_.isDragging()) {
+        auto& gdB = getGraphicsDeviceProperty();
+        int sWB = gdB.getViewportProperty().getWidthProperty();
+        int sHB = gdB.getViewportProperty().getHeightProperty();
+        int mxB = ms.getXProperty(), myB = ms.getYProperty();
+        bool in3dB = (mxB >= kLeftPanelW && mxB < sWB - kRightPanelW &&
+                      myB >= kToolbarH   && myB < sHB - kStatusH);
+
+        // Record anchor when left is first pressed in the viewport
+        if (leftBtn && !prevLeft && in3dB)  {
+            boxSelectX0_ = mxB;  boxSelectY0_ = myB;
+        }
+        // Activate once threshold is exceeded (while held from a viewport press)
+        if (leftBtn && prevLeft && !boxSelectActive_ && in3dB) {
+            int ddx = mxB - boxSelectX0_, ddy = myB - boxSelectY0_;
+            if (std::abs(ddx) > 4 || std::abs(ddy) > 4)
+                boxSelectActive_ = true;
+        }
+        if (boxSelectActive_ && leftBtn) {
+            boxSelectX1_ = mxB;  boxSelectY1_ = myB;
+        }
+        // Finalize on release
+        if (boxSelectActive_ && !leftBtn && prevLeft) {
+            int vXB = kLeftPanelW, vYB = kToolbarH;
+            int vWB = std::max(1, sWB - kLeftPanelW - kRightPanelW);
+            int vHB = std::max(1, sHB - kToolbarH - kStatusH);
+            float aspB = static_cast<float>(vWB) / static_cast<float>(vHB);
+            Matrix vwB = camera_.viewMatrix();
+            Matrix prB = camera_.projectionMatrix(aspB);
+            Matrix vpB = vwB * prB;
+
+            auto w2sB = [&](float wx, float wy, float wz) -> std::pair<float,float> {
+                float cX = wx*vpB.M11 + wy*vpB.M21 + wz*vpB.M31 + vpB.M41;
+                float cY = wx*vpB.M12 + wy*vpB.M22 + wz*vpB.M32 + vpB.M42;
+                float cW = wx*vpB.M14 + wy*vpB.M24 + wz*vpB.M34 + vpB.M44;
+                if (std::abs(cW) < 1e-6f) return {-1e6f, -1e6f};
+                return { (cX/cW * 0.5f + 0.5f) * vWB + vXB,
+                         (1.0f - (cY/cW * 0.5f + 0.5f)) * vHB + vYB };
+            };
+
+            int bxMin = std::min(boxSelectX0_, mxB);
+            int bxMax = std::max(boxSelectX0_, mxB);
+            int byMin = std::min(boxSelectY0_, myB);
+            int byMax = std::max(boxSelectY0_, myB);
+
+            bool additive = (Keyboard::GetState().IsKeyDown(Keys::LeftControl) ||
+                             Keyboard::GetState().IsKeyDown(Keys::RightControl));
+            if (!additive) selection_.clear();
+
+            std::function<void(const std::vector<std::shared_ptr<Mc3::Mc3Object>>&)> boxTest;
+            boxTest = [&](const std::vector<std::shared_ptr<Mc3::Mc3Object>>& list) {
+                for (const auto& obj : list) {
+                    if (!obj || !obj->visible) continue;
+                    auto [sx, sy] = w2sB(obj->transform.position[0],
+                                         obj->transform.position[1],
+                                         obj->transform.position[2]);
+                    if (sx >= bxMin && sx <= bxMax && sy >= byMin && sy <= byMax)
+                        selection_.select(obj);
+                    if (!obj->children.empty()) boxTest(obj->children);
+                }
+            };
+            boxTest(document_.objects);
+            updateWindowTitle();
+            boxSelectActive_ = false;
+        }
+    }
+    // Clear box-select if tool changed away
+    if (activeTool_ != ActiveTool::Select) boxSelectActive_ = false;
 }
 
 // ---------------------------------------------------------------------------
@@ -1786,6 +1857,24 @@ void MeshCraftApplication::drawUi(int screenW, int screenH) {
                 Ui::drawBitmapText(joined, px + 28, py + (18 - 7) / 2, 1,
                                    Color(185, 185, 220, 255), fillRect);
             }
+        }
+    }
+
+    // -----------------------------------------------------------------------
+    // Box-select rectangle overlay
+    // -----------------------------------------------------------------------
+    if (boxSelectActive_) {
+        int bx0 = std::min(boxSelectX0_, boxSelectX1_);
+        int by0 = std::min(boxSelectY0_, boxSelectY1_);
+        int bx1 = std::max(boxSelectX0_, boxSelectX1_);
+        int by1 = std::max(boxSelectY0_, boxSelectY1_);
+        int bw  = bx1 - bx0, bh = by1 - by0;
+        if (bw > 0 && bh > 0) {
+            drawRect(bx0, by0, bw, bh, Color(60, 120, 200, 40));   // fill
+            drawRect(bx0, by0, bw,  1, Color(100, 160, 255, 220)); // top
+            drawRect(bx0, by1, bw,  1, Color(100, 160, 255, 220)); // bottom
+            drawRect(bx0, by0,  1, bh, Color(100, 160, 255, 220)); // left
+            drawRect(bx1, by0,  1, bh, Color(100, 160, 255, 220)); // right
         }
     }
 
