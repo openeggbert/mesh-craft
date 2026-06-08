@@ -103,6 +103,8 @@ private:
     void copySelected();
     void cutSelected();
     void pasteClipboard();
+    void groupSelected();
+    void ungroupSelected();
     void addPrimitive(Mc3::ObjectType type);
     void handleKeyboardShortcuts(const Microsoft::Xna::Framework::Input::KeyboardState& ks,
                                  const Microsoft::Xna::Framework::Input::KeyboardState& prevKs);

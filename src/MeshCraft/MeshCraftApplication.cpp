@@ -484,6 +484,10 @@ void MeshCraftApplication::handleKeyboardShortcuts(const KeyboardState& ks, cons
     if (ctrl && justPressed(ks, prevKs, Keys::X)) { cutSelected();    return; }
     if (ctrl && justPressed(ks, prevKs, Keys::V)) { pasteClipboard(); return; }
 
+    // Group / Ungroup
+    if (ctrl && !shift && justPressed(ks, prevKs, Keys::G)) { groupSelected();   return; }
+    if (ctrl &&  shift && justPressed(ks, prevKs, Keys::G)) { ungroupSelected(); return; }
+
     // Nudge selected objects with arrow keys
     if (!selection_.hasSelection()) return;
     float nudge = (shift ? 0.1f : 1.0f);
@@ -1290,6 +1294,82 @@ void MeshCraftApplication::pasteClipboard() {
     for (auto& o : newObjs) selection_.select(o);
     modified_ = true;
     std::cout << "[MeshCraft] Pasted " << newObjs.size() << " object(s)\n";
+    updateWindowTitle();
+}
+
+// ---------------------------------------------------------------------------
+// Group / Ungroup
+// ---------------------------------------------------------------------------
+
+void MeshCraftApplication::groupSelected() {
+    if (!selection_.hasSelection()) return;
+    pushUndo();
+
+    auto prev = selection_.selection(); // snapshot before mutation
+
+    // Record insertion index in top-level list (where first selected lives, if any)
+    size_t insertIdx = document_.objects.size();
+    for (const auto& s : prev) {
+        for (size_t i = 0; i < document_.objects.size(); ++i) {
+            if (document_.objects[i].get() == s.get()) {
+                insertIdx = std::min(insertIdx, i);
+                break;
+            }
+        }
+    }
+
+    // Create the Group node
+    auto group = std::make_shared<Mc3::Mc3Object>();
+    group->type = Mc3::ObjectType::Group;
+    static int groupCounter = 0;
+    char buf[32];
+    std::snprintf(buf, sizeof(buf), "Group%d", ++groupCounter);
+    group->name = buf;
+
+    // Move selected objects into the group (remove from wherever they are)
+    for (const auto& s : prev) {
+        group->children.push_back(s);
+        removeFromList(document_.objects, s.get());
+    }
+
+    // Insert group at (approximately) the original position
+    insertIdx = std::min(insertIdx, document_.objects.size());
+    document_.objects.insert(document_.objects.begin() + static_cast<std::ptrdiff_t>(insertIdx), group);
+
+    selection_.clear();
+    selection_.select(group);
+    modified_ = true;
+    std::cout << "[MeshCraft] Grouped " << prev.size() << " object(s) into " << group->name << "\n";
+    updateWindowTitle();
+}
+
+void MeshCraftApplication::ungroupSelected() {
+    if (!selection_.hasSelection()) return;
+    auto& sel0 = selection_.selection().front();
+    if (sel0->type != Mc3::ObjectType::Group || sel0->children.empty()) return;
+    pushUndo();
+
+    auto children = sel0->children; // copy child list before erasing group
+
+    // Find the group in its parent list
+    auto* parentList = findParentList(document_.objects, sel0.get());
+    if (!parentList) return;
+
+    auto it = std::find_if(parentList->begin(), parentList->end(),
+        [&](const auto& o) { return o.get() == sel0.get(); });
+    if (it == parentList->end()) return;
+
+    auto insertIt = parentList->erase(it); // remove group, get iterator to next element
+    // Insert children at that position (in original order)
+    for (const auto& child : children) {
+        insertIt = parentList->insert(insertIt, child);
+        ++insertIt;
+    }
+
+    selection_.clear();
+    for (auto& child : children) selection_.select(child);
+    modified_ = true;
+    std::cout << "[MeshCraft] Ungrouped " << children.size() << " object(s)\n";
     updateWindowTitle();
 }
 

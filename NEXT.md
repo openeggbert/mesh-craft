@@ -15,6 +15,7 @@
 - Cut/Copy/Paste — Ctrl+X/C/V; clipboard survives selection changes; paste offsets +1 X
 - Hierarchy visibility eye icon — click to toggle visible per row; hidden objects shown dimmed
 - Properties Tags field — click TAG row to edit comma-separated tags; Enter applies, Esc cancels
+- Group/Ungroup — Ctrl+G wraps selection into a Group; Ctrl+Shift+G dissolves Group back to parent
 
 ---
 
@@ -26,9 +27,9 @@ _(nothing)_
 
 ## Next up
 
-1. **Group selection** — Ctrl+G to wrap selected objects into a new Group node
-2. **Ungroup** — Ctrl+Shift+G to dissolve a group back to its parent
-3. **Preset views** — Numpad 1/3/7 for front/side/top orthographic-style views
+1. **Preset views** — Numpad 1/3/7 for front/side/top camera views
+2. **Drag-and-drop reparenting** — drag a hierarchy row onto another to reparent
+3. **Box/rectangle drag-select** — drag in the 3D viewport to multi-select
 
 ---
 

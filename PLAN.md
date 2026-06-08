@@ -128,8 +128,8 @@ environment settings. Output is `.glb` via the `mc3togltf` converter.
 | Ctrl+D — deep-copy with `_copy` name suffix | ✅ |
 | Undo/Redo Ctrl+Z/Y — 20 steps, deep-copy snapshots | ✅ |
 | Cut / Copy / Paste (Ctrl+X/C/V) | ✅ |
-| Group selection into a new group | 📋 |
-| Ungroup | 📋 |
+| Group selection into a new group | ✅ |
+| Ungroup | ✅ |
 
 ---
 
