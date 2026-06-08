@@ -101,7 +101,7 @@ environment settings. Output is `.glb` via the `mc3togltf` converter.
 | Click = select; Ctrl+click = multi-select | ✅ |
 | Type colour strip and icon | ✅ |
 | Drag-and-drop reparenting | 📋 |
-| Visibility toggle (eye icon) | 📋 |
+| Visibility toggle (eye icon) | ✅ |
 
 ---
 

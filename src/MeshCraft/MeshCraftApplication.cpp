@@ -767,6 +767,14 @@ void MeshCraftApplication::handleMouseInput(const MouseState& ms, const MouseSta
                                hr.obj->type == Mc3::ObjectType::Union ||
                                hr.obj->type == Mc3::ObjectType::Difference ||
                                hr.obj->type == Mc3::ObjectType::Intersection;
+                // Click on eye icon — toggle visibility without changing selection
+                if (mx >= kLeftPanelW - 22 && mx < kLeftPanelW - 10) {
+                    pushUndo();
+                    hr.obj->visible = !hr.obj->visible;
+                    modified_ = true;
+                    updateWindowTitle();
+                    return;
+                }
                 // Click on the triangle (expand/collapse region)
                 int triX = 5 + hr.depth * 14;
                 if (isGroup && mx >= triX && mx < triX + 12) {
@@ -1465,15 +1473,27 @@ void MeshCraftApplication::drawUi(int screenW, int screenH) {
             // Type icon
             drawRect(iconX, rowY + (kObjRowH - 10) / 2, 10, 10, tc);
 
-            // Object name (truncated to fit)
+            // Object name (truncated to fit, leaving room for eye icon)
             {
                 const std::string& name = obj->name.empty() ? obj->id : obj->name;
-                int maxChars = std::max(1, (kLeftPanelW - 8 - textX - 2) / 6);
+                int maxChars = std::max(1, (kLeftPanelW - 22 - textX - 2) / 6);
                 std::string label = (int)name.size() > maxChars
                                     ? name.substr(0, maxChars - 1) + "~" : name;
-                Color textCol = sel ? Color(235, 240, 255, 255) : Color(185, 195, 215, 255);
+                Color textCol = !obj->visible ? Color(110, 115, 130, 255)
+                               : sel          ? Color(235, 240, 255, 255)
+                                              : Color(185, 195, 215, 255);
                 Ui::drawBitmapText(label, textX, rowY + (kObjRowH - 7) / 2, 1,
                                    textCol, fillRect);
+            }
+
+            // Eye icon (visibility toggle) — drawn before selection indicator
+            {
+                int eyeX = kLeftPanelW - 21;
+                int eyeY = rowY + (kObjRowH - 8) / 2;
+                Color eyeCol = obj->visible ? Color(60, 190, 90, 210) : Color(70, 70, 80, 160);
+                drawRect(eyeX, eyeY, 10, 8, eyeCol);
+                if (obj->visible)
+                    drawRect(eyeX + 3, eyeY + 2, 4, 4, Color(20, 90, 35, 255));
             }
 
             // Selection right indicator

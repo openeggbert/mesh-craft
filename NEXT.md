@@ -13,6 +13,7 @@
 - Rotate gizmo (R) — 3 coloured circles (XYZ), click circle to start drag, tangential mouse movement rotates
 - Properties: Visible toggle (VIS row, click to flip on/off) + Collision field (COL row, click to edit string)
 - Cut/Copy/Paste — Ctrl+X/C/V; clipboard survives selection changes; paste offsets +1 X
+- Hierarchy visibility eye icon — click to toggle visible per row; hidden objects shown dimmed
 
 ---
 
@@ -24,9 +25,9 @@ _(nothing)_
 
 ## Next up
 
-1. **Hierarchy visibility toggle** — eye icon per row to toggle visible without selecting
-2. **Properties: Tags list** — display/edit `Mc3Object::tags` (comma-separated)
-3. **Group selection** — Ctrl+G to group selected objects into a new Group node
+1. **Properties: Tags list** — display/edit `Mc3Object::tags` (comma-separated)
+2. **Group selection** — Ctrl+G to wrap selected objects into a new Group node
+3. **Ungroup** — Ctrl+Shift+G to dissolve a group back to its parent
 
 ---
 
