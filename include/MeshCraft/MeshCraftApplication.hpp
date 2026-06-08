@@ -100,6 +100,9 @@ private:
     void exportGltf();
     void deleteSelected();
     void duplicateSelected();
+    void copySelected();
+    void cutSelected();
+    void pasteClipboard();
     void addPrimitive(Mc3::ObjectType type);
     void handleKeyboardShortcuts(const Microsoft::Xna::Framework::Input::KeyboardState& ks,
                                  const Microsoft::Xna::Framework::Input::KeyboardState& prevKs);
@@ -149,6 +152,9 @@ private:
     void activateField(int section, int axis);
     void applyFieldValue();
     void cancelField();
+
+    // Clipboard (deep copies of cut/copied objects)
+    std::vector<std::shared_ptr<Mc3::Mc3Object>> clipboard_;
 
     // Undo/redo
     static constexpr int kUndoMax = 20;

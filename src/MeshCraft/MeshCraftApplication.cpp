@@ -479,6 +479,11 @@ void MeshCraftApplication::handleKeyboardShortcuts(const KeyboardState& ks, cons
     // Duplicate (Ctrl+D)
     if (ctrl && justPressed(ks, prevKs, Keys::D)) { duplicateSelected(); return; }
 
+    // Cut / Copy / Paste
+    if (ctrl && justPressed(ks, prevKs, Keys::C)) { copySelected();   return; }
+    if (ctrl && justPressed(ks, prevKs, Keys::X)) { cutSelected();    return; }
+    if (ctrl && justPressed(ks, prevKs, Keys::V)) { pasteClipboard(); return; }
+
     // Nudge selected objects with arrow keys
     if (!selection_.hasSelection()) return;
     float nudge = (shift ? 0.1f : 1.0f);
@@ -1216,6 +1221,63 @@ void MeshCraftApplication::duplicateSelected() {
         std::cout << "[MeshCraft] Duplicated " << newObjs.size() << " object(s)\n";
         updateWindowTitle();
     }
+}
+
+// ---------------------------------------------------------------------------
+// Cut / Copy / Paste
+// ---------------------------------------------------------------------------
+
+void MeshCraftApplication::copySelected() {
+    if (!selection_.hasSelection()) return;
+    clipboard_.clear();
+    for (const auto& s : selection_.selection())
+        clipboard_.push_back(deepCopyObject(*s));
+    std::cout << "[MeshCraft] Copied " << clipboard_.size() << " object(s)\n";
+}
+
+void MeshCraftApplication::cutSelected() {
+    if (!selection_.hasSelection()) return;
+    copySelected();
+    deleteSelected(); // pushUndo is called inside deleteSelected
+}
+
+void MeshCraftApplication::pasteClipboard() {
+    if (clipboard_.empty()) return;
+    pushUndo();
+
+    std::vector<std::shared_ptr<Mc3::Mc3Object>> newObjs;
+    for (const auto& src : clipboard_) {
+        auto copy = deepCopyObject(*src);
+        // Offset slightly so paste doesn't land exactly on top of original
+        copy->transform.position[0] += 1.0f;
+        newObjs.push_back(copy);
+    }
+
+    // Paste into selected group, or at top level
+    if (selection_.hasSelection()) {
+        auto& sel0 = selection_.selection().front();
+        bool isGroup = sel0->type == Mc3::ObjectType::Group   ||
+                       sel0->type == Mc3::ObjectType::Union   ||
+                       sel0->type == Mc3::ObjectType::Difference ||
+                       sel0->type == Mc3::ObjectType::Intersection ||
+                       !sel0->children.empty();
+        if (isGroup) {
+            for (auto& o : newObjs) sel0->children.push_back(o);
+            selection_.clear();
+            for (auto& o : newObjs) selection_.select(o);
+            modified_ = true;
+            std::cout << "[MeshCraft] Pasted " << newObjs.size() << " object(s) into group\n";
+            updateWindowTitle();
+            return;
+        }
+    }
+
+    for (auto& o : newObjs) document_.objects.push_back(o);
+    selection_.clear();
+    for (auto& o : newObjs) selection_.select(o);
+    modified_ = true;
+    std::cout << "[MeshCraft] Pasted " << newObjs.size() << " object(s)\n";
+    updateWindowTitle();
 }
 
 // ---------------------------------------------------------------------------

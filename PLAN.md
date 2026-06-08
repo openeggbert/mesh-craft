@@ -113,8 +113,8 @@ environment settings. Output is `.glb` via the `mc3togltf` converter.
 | POS / ROT / SCL — inline editing (click field, type, Enter) | ✅ |
 | Material colour swatch display | ✅ |
 | Material assignment (pick from list) | 📋 |
-| Collision type field | 📋 |
-| Visible toggle | 📋 |
+| Collision type field | ✅ |
+| Visible toggle | ✅ |
 | Tags list | 📋 |
 
 ---
@@ -127,7 +127,7 @@ environment settings. Output is `.glb` via the `mc3togltf` converter.
 | Delete — removes selection at any depth | ✅ |
 | Ctrl+D — deep-copy with `_copy` name suffix | ✅ |
 | Undo/Redo Ctrl+Z/Y — 20 steps, deep-copy snapshots | ✅ |
-| Cut / Copy / Paste (Ctrl+X/C/V) | 📋 |
+| Cut / Copy / Paste (Ctrl+X/C/V) | ✅ |
 | Group selection into a new group | 📋 |
 | Ungroup | 📋 |
 

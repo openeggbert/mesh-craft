@@ -12,6 +12,7 @@
 - Scale gizmo (S) — flat-square tips, drag scales along axis
 - Rotate gizmo (R) — 3 coloured circles (XYZ), click circle to start drag, tangential mouse movement rotates
 - Properties: Visible toggle (VIS row, click to flip on/off) + Collision field (COL row, click to edit string)
+- Cut/Copy/Paste — Ctrl+X/C/V; clipboard survives selection changes; paste offsets +1 X
 
 ---
 
@@ -23,9 +24,9 @@ _(nothing)_
 
 ## Next up
 
-1. **Cut/Copy/Paste** — Ctrl+X/C/V for scene objects
-2. **Hierarchy visibility toggle** — eye icon per row to toggle visible without selecting
-3. **Properties: Tags list** — display/edit `Mc3Object::tags` (comma-separated)
+1. **Hierarchy visibility toggle** — eye icon per row to toggle visible without selecting
+2. **Properties: Tags list** — display/edit `Mc3Object::tags` (comma-separated)
+3. **Group selection** — Ctrl+G to group selected objects into a new Group node
 
 ---
 
