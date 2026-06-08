@@ -137,13 +137,22 @@ private:
 
     // Inline field editing state
     bool        fieldActive_ {false};
-    int         fieldSection_{0};   // 0=POS, 1=ROT, 2=SCL
+    int         fieldSection_{0};   // -1=NAME, 0=POS, 1=ROT, 2=SCL
     int         fieldAxis_   {0};   // 0=X,   1=Y,   2=Z
     std::string fieldBuffer_;
+
+    // Name bar click area (rebuilt each Draw(), -1 = not visible)
+    int nameFieldHitY_{-1};
 
     void activateField(int section, int axis);
     void applyFieldValue();
     void cancelField();
+
+    // Undo/redo
+    static constexpr int kUndoMax = 20;
+    std::vector<Mc3::Mc3Document> undoStack_;
+    std::vector<Mc3::Mc3Document> redoStack_;
+    void pushUndo();
 };
 
 } // namespace MeshCraft

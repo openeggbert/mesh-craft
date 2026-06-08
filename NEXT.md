@@ -34,7 +34,7 @@ cd cmake-build-debug && ninja -j$(nproc)
 - Orbit (middle-drag), pan (right-drag), zoom (scroll); F focuses camera on selection, resets if nothing selected
 - Toolbar: tool buttons (Select/Move/Rotate/Scale) and add-primitive buttons (Box/Sphere/Cylinder/Cone/Plane) respond to mouse clicks and keyboard shortcuts (Q/G/R/S, F1–F5)
 - Left hierarchy panel: recursive tree with depth indentation, expand/collapse toggle for groups (click triangle), click to select
-- Right properties panel: object name + type colour; POS/ROT/SCL with inline editing (click field → type digits → Enter applies, Escape cancels)
+- Right properties panel: object name + type colour; click name bar to rename (type text → Enter applies, Escape cancels); POS/ROT/SCL with inline editing (click field → type digits → Enter applies, Escape cancels)
 - Material colour swatch in properties panel
 - Ray-cast picking (left-click, AABB, recursive through children); Ctrl+click for multi-select
 - Transform gizmo: X/Y/Z axis arrows in Move mode (G); drag handle translates along axis
@@ -42,6 +42,8 @@ cd cmake-build-debug && ninja -j$(nproc)
 - Ctrl+D deep-copies selected object(s) with `_copy` name suffix, inserted after original
 - Delete removes selected objects at any depth in the hierarchy
 - Arrow keys nudge selected object (Shift = 0.1 step); PageUp/PageDown nudge on Z
+- Status bar shows total object count and selection count as text ("N objects · M selected")
+- Undo/redo (Ctrl+Z / Ctrl+Y); up to 20 steps; covers add, delete, duplicate, rename, transform field edits, nudge, gizmo drag
 - Window title reflects tool / file / modified state; F11 saves `screenshot.ppm`
 - Automated smoke test via `ctest`
 
@@ -49,7 +51,6 @@ cd cmake-build-debug && ninja -j$(nproc)
 - No file-open dialog — path typed via console stdin (Ctrl+O)
 - Extrude: non-Line paths (Arc, Helix, Polyline, Bezier) and Custom cross-sections show placeholder box
 - Mesh objects (external geometry) show placeholder box — loading not implemented
-- No undo/redo
 
 ---
 
@@ -58,9 +59,8 @@ cd cmake-build-debug && ninja -j$(nproc)
 | # | Description |
 |---|-------------|
 | 1 | File-open dialog not available — user types path in terminal stdin |
-| 2 | No undo/redo (Ctrl+Z / Ctrl+Y) |
-| 3 | Extrude non-Line paths and Custom cross-sections unrendered |
-| 4 | Delete only removes top-level children of a group, not deeper descendants when the group itself is not deleted |
+| 2 | Extrude non-Line paths and Custom cross-sections unrendered |
+| 3 | Delete only removes top-level children of a group, not deeper descendants when the group itself is not deleted |
 
 ---
 
@@ -121,20 +121,6 @@ ctest --test-dir cmake-build-debug -V
 ---
 
 ## 6. Next smallest tasks
-
-1. **Object name editing in properties panel**
-   - Goal: click the name bar at the top of the properties panel to rename the selected object.
-   - Approach: reuse the existing field-edit infrastructure (`fieldActive_`, `fieldBuffer_`), but store/apply a string instead of a float. Add a `nameFieldActive_` bool or extend the section enum with section=-1.
-   - Files: `MeshCraftApplication.hpp/cpp` — `drawUi` properties section, `handleMouseInput`, `handleKeyboardShortcuts`.
-
-2. **Status bar info text**
-   - Goal: display object count and selection count as text in the status bar (e.g. "12 objects · 2 selected").
-   - Files: `MeshCraftApplication.cpp` — `drawUi` status bar section, using `drawBitmapText`.
-
-3. **Undo/redo (Ctrl+Z / Ctrl+Y)**
-   - Goal: revert/redo the last document mutation.
-   - Approach: before each mutating operation (`addPrimitive`, `deleteSelected`, `duplicateSelected`, field apply, nudge, gizmo drag end) push a copy of `document_` onto an undo stack (max ~20 entries). Ctrl+Z pops and restores; Ctrl+Y re-applies.
-   - Files: `MeshCraftApplication.hpp` (undo stack), `MeshCraftApplication.cpp` (push before mutations, handle shortcuts).
 
 ---
 

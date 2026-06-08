@@ -14,6 +14,7 @@
 #include <cstdio>
 #include <cstring>
 #include <fstream>
+#include <functional>
 #include <iostream>
 #include <numbers>
 #include <stdexcept>
@@ -211,6 +212,9 @@ void MeshCraftApplication::Draw(const GameTime& /*gameTime*/) {
 // Keyboard shortcuts
 // ---------------------------------------------------------------------------
 
+static std::shared_ptr<Mc3::Mc3Object> deepCopyObj(const std::shared_ptr<Mc3::Mc3Object>& src);
+static Mc3::Mc3Document deepCopyDoc(const Mc3::Mc3Document& src);
+
 static bool justPressed(const KeyboardState& cur, const KeyboardState& prev, Keys k) {
     return cur.IsKeyDown(k) && prev.IsKeyUp(k);
 }
@@ -230,25 +234,56 @@ void MeshCraftApplication::handleKeyboardShortcuts(const KeyboardState& ks, cons
         if (justPressed(ks, prevKs, Keys::Back) && !fieldBuffer_.empty()) {
             fieldBuffer_.pop_back(); return;
         }
-        // Digit row keys and numpad
-        struct { Keys key; char ch; } numKeys[] = {
-            {Keys::D0,'0'},{Keys::D1,'1'},{Keys::D2,'2'},{Keys::D3,'3'},{Keys::D4,'4'},
-            {Keys::D5,'5'},{Keys::D6,'6'},{Keys::D7,'7'},{Keys::D8,'8'},{Keys::D9,'9'},
-            {Keys::NumPad0,'0'},{Keys::NumPad1,'1'},{Keys::NumPad2,'2'},
-            {Keys::NumPad3,'3'},{Keys::NumPad4,'4'},{Keys::NumPad5,'5'},
-            {Keys::NumPad6,'6'},{Keys::NumPad7,'7'},{Keys::NumPad8,'8'},{Keys::NumPad9,'9'},
-        };
-        for (auto& nk : numKeys) {
-            if (justPressed(ks, prevKs, nk.key)) { fieldBuffer_ += nk.ch; return; }
-        }
-        // Period
-        if (justPressed(ks, prevKs, Keys::OemPeriod) || justPressed(ks, prevKs, Keys::Decimal)) {
-            if (fieldBuffer_.find('.') == std::string::npos) fieldBuffer_ += '.';
-            return;
-        }
-        // Minus (only at start for negative)
-        if (justPressed(ks, prevKs, Keys::OemMinus) || justPressed(ks, prevKs, Keys::Subtract)) {
-            if (fieldBuffer_.empty()) { fieldBuffer_ += '-'; return; }
+        if (fieldSection_ == -1) {
+            // Name field: accept letters, digits, space, dash, underscore, period
+            struct { Keys key; char lo; char hi; } letterKeys[] = {
+                {Keys::A,'a','A'},{Keys::B,'b','B'},{Keys::C,'c','C'},{Keys::D,'d','D'},
+                {Keys::E,'e','E'},{Keys::F,'f','F'},{Keys::G,'g','G'},{Keys::H,'h','H'},
+                {Keys::I,'i','I'},{Keys::J,'j','J'},{Keys::K,'k','K'},{Keys::L,'l','L'},
+                {Keys::M,'m','M'},{Keys::N,'n','N'},{Keys::O,'o','O'},{Keys::P,'p','P'},
+                {Keys::Q,'q','Q'},{Keys::R,'r','R'},{Keys::S,'s','S'},{Keys::T,'t','T'},
+                {Keys::U,'u','U'},{Keys::V,'v','V'},{Keys::W,'w','W'},{Keys::X,'x','X'},
+                {Keys::Y,'y','Y'},{Keys::Z,'z','Z'},
+            };
+            for (auto& lk : letterKeys) {
+                if (justPressed(ks, prevKs, lk.key)) { fieldBuffer_ += shift ? lk.hi : lk.lo; return; }
+            }
+            struct { Keys key; char ch; } numKeys[] = {
+                {Keys::D0,'0'},{Keys::D1,'1'},{Keys::D2,'2'},{Keys::D3,'3'},{Keys::D4,'4'},
+                {Keys::D5,'5'},{Keys::D6,'6'},{Keys::D7,'7'},{Keys::D8,'8'},{Keys::D9,'9'},
+                {Keys::NumPad0,'0'},{Keys::NumPad1,'1'},{Keys::NumPad2,'2'},
+                {Keys::NumPad3,'3'},{Keys::NumPad4,'4'},{Keys::NumPad5,'5'},
+                {Keys::NumPad6,'6'},{Keys::NumPad7,'7'},{Keys::NumPad8,'8'},{Keys::NumPad9,'9'},
+            };
+            for (auto& nk : numKeys) {
+                if (justPressed(ks, prevKs, nk.key)) { fieldBuffer_ += nk.ch; return; }
+            }
+            if (justPressed(ks, prevKs, Keys::Space)) { fieldBuffer_ += ' '; return; }
+            if (justPressed(ks, prevKs, Keys::OemMinus) || justPressed(ks, prevKs, Keys::Subtract)) {
+                fieldBuffer_ += shift ? '_' : '-'; return;
+            }
+            if (justPressed(ks, prevKs, Keys::OemPeriod) || justPressed(ks, prevKs, Keys::Decimal)) {
+                fieldBuffer_ += '.'; return;
+            }
+        } else {
+            // Numeric transform fields: digits, decimal point, leading minus only
+            struct { Keys key; char ch; } numKeys[] = {
+                {Keys::D0,'0'},{Keys::D1,'1'},{Keys::D2,'2'},{Keys::D3,'3'},{Keys::D4,'4'},
+                {Keys::D5,'5'},{Keys::D6,'6'},{Keys::D7,'7'},{Keys::D8,'8'},{Keys::D9,'9'},
+                {Keys::NumPad0,'0'},{Keys::NumPad1,'1'},{Keys::NumPad2,'2'},
+                {Keys::NumPad3,'3'},{Keys::NumPad4,'4'},{Keys::NumPad5,'5'},
+                {Keys::NumPad6,'6'},{Keys::NumPad7,'7'},{Keys::NumPad8,'8'},{Keys::NumPad9,'9'},
+            };
+            for (auto& nk : numKeys) {
+                if (justPressed(ks, prevKs, nk.key)) { fieldBuffer_ += nk.ch; return; }
+            }
+            if (justPressed(ks, prevKs, Keys::OemPeriod) || justPressed(ks, prevKs, Keys::Decimal)) {
+                if (fieldBuffer_.find('.') == std::string::npos) fieldBuffer_ += '.';
+                return;
+            }
+            if (justPressed(ks, prevKs, Keys::OemMinus) || justPressed(ks, prevKs, Keys::Subtract)) {
+                if (fieldBuffer_.empty()) { fieldBuffer_ += '-'; return; }
+            }
         }
         return; // swallow all other keys while editing
     }
@@ -261,6 +296,34 @@ void MeshCraftApplication::handleKeyboardShortcuts(const KeyboardState& ks, cons
             updateWindowTitle();
         } else {
             Exit();
+        }
+        return;
+    }
+
+    // Undo / Redo
+    if (ctrl && justPressed(ks, prevKs, Keys::Z)) {
+        if (!undoStack_.empty()) {
+            redoStack_.push_back(deepCopyDoc(document_));
+            if (static_cast<int>(redoStack_.size()) > kUndoMax)
+                redoStack_.erase(redoStack_.begin());
+            document_ = std::move(undoStack_.back());
+            undoStack_.pop_back();
+            selection_.clear();
+            modified_ = true;
+            updateWindowTitle();
+        }
+        return;
+    }
+    if (ctrl && justPressed(ks, prevKs, Keys::Y)) {
+        if (!redoStack_.empty()) {
+            undoStack_.push_back(deepCopyDoc(document_));
+            if (static_cast<int>(undoStack_.size()) > kUndoMax)
+                undoStack_.erase(undoStack_.begin());
+            document_ = std::move(redoStack_.back());
+            redoStack_.pop_back();
+            selection_.clear();
+            modified_ = true;
+            updateWindowTitle();
         }
         return;
     }
@@ -411,6 +474,12 @@ void MeshCraftApplication::handleKeyboardShortcuts(const KeyboardState& ks, cons
     if (!selection_.hasSelection()) return;
     float nudge = (shift ? 0.1f : 1.0f);
     bool nudged = false;
+    // Check if any nudge key is pressed before doing anything (to avoid push without mutation)
+    bool anyNudgePressed =
+        justPressed(ks, prevKs, Keys::Left)  || justPressed(ks, prevKs, Keys::Right) ||
+        justPressed(ks, prevKs, Keys::Up)    || justPressed(ks, prevKs, Keys::Down)  ||
+        justPressed(ks, prevKs, Keys::PageUp)|| justPressed(ks, prevKs, Keys::PageDown);
+    if (anyNudgePressed) pushUndo();
     for (auto& selObj : selection_.selection()) {
         auto* obj = selObj.get();
         if (justPressed(ks, prevKs, Keys::Left))     { obj->transform.position[0] -= nudge; nudged = true; }
@@ -543,10 +612,13 @@ void MeshCraftApplication::handleMouseInput(const MouseState& ms, const MouseSta
         auto& gd0 = getGraphicsDeviceProperty();
         int sW0 = gd0.getViewportProperty().getWidthProperty();
         if (mx >= sW0 - kRightPanelW && my >= kToolbarH + kPanelHdrH && my < sW0) {
-            if (fieldActive_) {
-                // clicking different field commits current edit first
-                applyFieldValue();
+            if (fieldActive_) applyFieldValue();
+            // Name bar
+            if (nameFieldHitY_ >= 0 && my >= nameFieldHitY_ && my < nameFieldHitY_ + 18) {
+                activateField(-1, 0);
+                return;
             }
+            // Transform fields
             for (const auto& hit : propFieldHits_) {
                 if (my >= hit.y && my < hit.y + 14) {
                     activateField(hit.section, hit.axis);
@@ -625,6 +697,7 @@ void MeshCraftApplication::handleMouseInput(const MouseState& ms, const MouseSta
                     auto [gsx, gsy] = gw2s(gTips[gi][0], gTips[gi][1], gTips[gi][2]);
                     float gdist = std::sqrt((mx-gsx)*(mx-gsx) + (my-gsy)*(my-gsy));
                     if (gdist < 12.0f) {
+                        pushUndo();
                         gizmo_.startDrag(static_cast<Editor::GizmoAxis>(gi + 1));
                         return; // click consumed by gizmo — skip picking
                     }
@@ -829,6 +902,7 @@ void MeshCraftApplication::exportGltf() {
 // ---------------------------------------------------------------------------
 
 void MeshCraftApplication::addPrimitive(Mc3::ObjectType type) {
+    pushUndo();
     auto obj = std::make_shared<Mc3::Mc3Object>();
     obj->type = type;
 
@@ -909,6 +983,7 @@ static void removeFromList(std::vector<std::shared_ptr<Mc3::Mc3Object>>& list,
 }
 
 void MeshCraftApplication::deleteSelected() {
+    pushUndo();
     for (const auto& s : selection_.selection())
         removeFromList(document_.objects, s.get());
     selection_.clear();
@@ -944,6 +1019,7 @@ findParentList(std::vector<std::shared_ptr<Mc3::Mc3Object>>& list,
 
 void MeshCraftApplication::duplicateSelected() {
     if (!selection_.hasSelection()) return;
+    pushUndo();
     auto prev = selection_.selection(); // copy list before we mutate selection
     std::vector<std::shared_ptr<Mc3::Mc3Object>> newObjs;
 
@@ -1201,18 +1277,27 @@ void MeshCraftApplication::drawUi(int screenW, int screenH) {
                        Color(160, 175, 210, 255), fillRect);
 
     propFieldHits_.clear();
+    nameFieldHitY_ = -1;
     if (selection_.hasSelection()) {
         const auto& sel0 = selection_.selection().front();
         int py = kToolbarH + kPanelHdrH + 6;
         int pw = kRightPanelW - 12;
         int px = rpX + 6;
 
-        // Object type indicator + name
-        Color tc = objectTypeColor(sel0->type);
+        // Object type indicator + name (clickable to rename)
+        nameFieldHitY_ = py;
+        bool nameActive = fieldActive_ && fieldSection_ == -1;
+        Color tc = nameActive ? Color(50, 70, 140, 255) : objectTypeColor(sel0->type);
         drawRect(px, py, pw, 18, tc);
         {
-            const std::string& nm = sel0->name.empty() ? sel0->id : sel0->name;
-            Ui::drawBitmapText(nm, px + 4, py + (18 - 7) / 2, 1, Color(255, 255, 255, 255), fillRect);
+            std::string display;
+            if (nameActive) {
+                display = fieldBuffer_ + "_";
+                Ui::drawBitmapText(display, px + 4, py + (18 - 7) / 2, 1, Color(255, 255, 160, 255), fillRect);
+            } else {
+                const std::string& nm = sel0->name.empty() ? sel0->id : sel0->name;
+                Ui::drawBitmapText(nm, px + 4, py + (18 - 7) / 2, 1, Color(255, 255, 255, 255), fillRect);
+            }
         }
         py += 24;
 
@@ -1315,6 +1400,28 @@ void MeshCraftApplication::drawUi(int screenW, int screenH) {
         dotX += dotSize + 2;
     }
 
+    // Status info text: "N objects · M selected"
+    {
+        int totalObjs = 0;
+        std::function<void(const std::vector<std::shared_ptr<Mc3::Mc3Object>>&)> countAll =
+            [&](const std::vector<std::shared_ptr<Mc3::Mc3Object>>& list) {
+                totalObjs += static_cast<int>(list.size());
+                for (const auto& o : list) countAll(o->children);
+            };
+        countAll(objs);
+        int selCount = static_cast<int>(selection_.selection().size());
+
+        char infoBuf[48];
+        if (selCount > 0)
+            std::snprintf(infoBuf, sizeof(infoBuf), "%d objects  %d selected", totalObjs, selCount);
+        else
+            std::snprintf(infoBuf, sizeof(infoBuf), "%d objects", totalObjs);
+
+        int textX = dotX + 8;
+        int textY = screenH - kStatusH + (kStatusH - 7) / 2;
+        Ui::drawBitmapText(infoBuf, textX, textY, 1, Color(130, 145, 185, 255), fillRect);
+    }
+
     // Selection count indicator strip on far right
     if (selection_.hasSelection()) {
         int selCount = static_cast<int>(selection_.selection().size());
@@ -1329,6 +1436,36 @@ void MeshCraftApplication::drawUi(int screenW, int screenH) {
 }
 
 // ---------------------------------------------------------------------------
+// Undo/redo
+// ---------------------------------------------------------------------------
+
+static std::shared_ptr<Mc3::Mc3Object> deepCopyObj(const std::shared_ptr<Mc3::Mc3Object>& src) {
+    auto copy = std::make_shared<Mc3::Mc3Object>(*src);
+    copy->children.clear();
+    for (const auto& child : src->children)
+        copy->children.push_back(deepCopyObj(child));
+    return copy;
+}
+
+static Mc3::Mc3Document deepCopyDoc(const Mc3::Mc3Document& src) {
+    Mc3::Mc3Document copy = src;  // value fields (strings, maps of values) copy correctly
+    copy.objects.clear();
+    for (const auto& obj : src.objects)
+        copy.objects.push_back(deepCopyObj(obj));
+    copy.definitions.clear();
+    for (const auto& [key, obj] : src.definitions)
+        copy.definitions[key] = deepCopyObj(obj);
+    return copy;
+}
+
+void MeshCraftApplication::pushUndo() {
+    undoStack_.push_back(deepCopyDoc(document_));
+    if (static_cast<int>(undoStack_.size()) > kUndoMax)
+        undoStack_.erase(undoStack_.begin());
+    redoStack_.clear();
+}
+
+// ---------------------------------------------------------------------------
 // Field editing
 // ---------------------------------------------------------------------------
 
@@ -1336,28 +1473,39 @@ void MeshCraftApplication::activateField(int section, int axis) {
     if (!selection_.hasSelection()) return;
     fieldSection_ = section;
     fieldAxis_    = axis;
-    const auto& t = selection_.selection().front()->transform;
-    float v = 0.0f;
-    if (section == 0) v = t.position[axis];
-    else if (section == 1) v = t.rotation[axis];
-    else                   v = t.scale[axis];
-    char buf[20];
-    std::snprintf(buf, sizeof(buf), "%g", v);
-    fieldBuffer_ = buf;
+    if (section == -1) {
+        fieldBuffer_ = selection_.selection().front()->name;
+    } else {
+        const auto& t = selection_.selection().front()->transform;
+        float v = 0.0f;
+        if (section == 0) v = t.position[axis];
+        else if (section == 1) v = t.rotation[axis];
+        else                   v = t.scale[axis];
+        char buf[20];
+        std::snprintf(buf, sizeof(buf), "%g", v);
+        fieldBuffer_ = buf;
+    }
     fieldActive_ = true;
 }
 
 void MeshCraftApplication::applyFieldValue() {
     if (!fieldActive_ || !selection_.hasSelection()) { cancelField(); return; }
-    try {
-        float val = std::stof(fieldBuffer_);
-        auto& t = selection_.selection().front()->transform;
-        if (fieldSection_ == 0) t.position[fieldAxis_] = val;
-        else if (fieldSection_ == 1) t.rotation[fieldAxis_] = val;
-        else                         t.scale[fieldAxis_]    = val;
+    pushUndo();
+    if (fieldSection_ == -1) {
+        selection_.selection().front()->name = fieldBuffer_;
         modified_ = true;
         updateWindowTitle();
-    } catch (...) {}
+    } else {
+        try {
+            float val = std::stof(fieldBuffer_);
+            auto& t = selection_.selection().front()->transform;
+            if (fieldSection_ == 0) t.position[fieldAxis_] = val;
+            else if (fieldSection_ == 1) t.rotation[fieldAxis_] = val;
+            else                         t.scale[fieldAxis_]    = val;
+            modified_ = true;
+            updateWindowTitle();
+        } catch (...) {}
+    }
     fieldActive_ = false;
     fieldBuffer_.clear();
 }
