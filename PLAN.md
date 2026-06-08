@@ -32,7 +32,7 @@ environment settings. Output is `.glb` via the `mc3togltf` converter.
 | Load `.mc3.xml` on startup (path via argv) | ✅ |
 | New scene (Ctrl+N) | ✅ |
 | Save (Ctrl+S) | ✅ |
-| Save as (Ctrl+Shift+S) | ✅ |
+| Save as — in-UI modal dialog (Ctrl+Shift+S) | ✅ |
 | Export to GLB via `mc3togltf` (Ctrl+E) | ✅ |
 | File-open dialog (GUI) | 📋 |
 | Open file — in-UI modal dialog (Ctrl+O) | ✅ |

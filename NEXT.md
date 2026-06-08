@@ -19,6 +19,7 @@
 - Preset views — Num1/3/5/7/9 for Front/Right/Back/Top/Bottom camera angles
 - Box drag-select — drag in 3D viewport (Select tool) draws blue rectangle; release selects enclosed objects; Ctrl = additive
 - Open file dialog — Ctrl+O shows centered in-UI modal; type path, Enter loads, Esc cancels; error shown in red
+- Save As dialog — Ctrl+Shift+S reuses same modal; pre-fills current path; appends .mc3.xml if missing
 
 ---
 
@@ -30,9 +31,9 @@ _(nothing)_
 
 ## Next up
 
-1. **Save As dialog** — Ctrl+Shift+S shows the same in-UI modal (currently stdin)
-2. **Material editor** — create / rename / delete materials; edit baseColor RGBA sliders
-3. **Drag-and-drop reparenting** — drag a hierarchy row onto another to reparent
+1. **Material editor** — create / rename / delete materials; edit baseColor RGBA sliders
+2. **Drag-and-drop reparenting** — drag a hierarchy row onto another to reparent
+3. **Recent files list** — remember last N opened files, show in a dropdown or panel
 
 ---
 
