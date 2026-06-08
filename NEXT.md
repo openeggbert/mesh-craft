@@ -1,34 +1,34 @@
 # NEXT.md
 
-> Detailní plán funkcí a architektura jsou v **PLAN.md**.
+> Full feature plan and architecture reference are in **PLAN.md**.
 
 ---
 
-## Nedávno dokončeno
+## Recently completed
 
-- Object rename — klik na name bar v properties panelu, Enter/Esc
-- Status bar text — počet objektů a výběrů
-- Undo/Redo — Ctrl+Z/Y, 20 kroků, deep-copy snímků dokumentu
-- Scale gizmo (S) — flat-square tipy, drag škáluje po ose
-
----
-
-## Právě se dělá
-
-_(nic)_
+- Object rename — click name bar in properties panel, Enter/Esc
+- Status bar text — object count and selection count
+- Undo/Redo — Ctrl+Z/Y, 20 steps, deep-copy document snapshots
+- Scale gizmo (S) — flat-square tips, drag scales along axis
 
 ---
 
-## Další na řadě
+## In progress
 
-1. **Rotate gizmo (R)** — kruhové oblouky pro X/Y/Z, klik+drag = rotace
+_(nothing)_
+
+---
+
+## Next up
+
+1. **Rotate gizmo (R)** — arc handles for X/Y/Z, click+drag = rotate
 
 ---
 
 ## Resume prompt
 
 ```
-Přečti PLAN.md a NEXT.md. Implementuj další úkol z "Další na řadě".
-Nerefaktoruj nesouvisející kód. Build: cd cmake-build-debug && ninja -j$(nproc).
-Test: ctest --test-dir cmake-build-debug -V. Po dokončení aktualizuj NEXT.md.
+Read PLAN.md and NEXT.md. Implement the next task from "Next up".
+Do not refactor unrelated code. Build: cd cmake-build-debug && ninja -j$(nproc).
+Test: ctest --test-dir cmake-build-debug -V. Update NEXT.md when done.
 ```

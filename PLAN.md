@@ -1,251 +1,251 @@
 # PLAN.md — MeshCraft Feature Plan & Reference
 
-## Co je MeshCraft
+## What is MeshCraft
 
-**MeshCraft** je 3D scénový editor pro formát `.mc3.xml` — vlastní XML popis scény
-podporující primitiva, extruzi, CSG, instance, světla, kamery a prostředí.
-Výstupem je `.glb` via `mc3togltf` konvertoru.
+**MeshCraft** is a 3D scene editor for the `.mc3.xml` format — a custom XML-based scene
+description supporting primitives, extrusion, CSG, instances, lights, cameras, and
+environment settings. Output is `.glb` via the `mc3togltf` converter.
 
-**Architektura:**
-- Postaveno na **CNA** — XNA-like C++ framework (SDL3 + OpenGL ES 3.2, EasyGL backend)
-- UI panely: `SpriteBatch` + 1×1 bílá `Texture2D` (white pixel trick)
-- Bitmap font: 5×7 px glyphs, `BitmapFont.hpp/cpp`, 96 ASCII znaků
-- Scénová data: `Mc3::Mc3Document` v subknihovně `mc3/` (čisté C++, bez grafiky)
-- CNA jako sourozenecký repo `../cna` přes `add_subdirectory`
-
----
-
-## Legenda stavu
-
-| Symbol | Význam |
-|--------|--------|
-| ✅ | hotovo a funkční |
-| 🔧 | částečně — základy fungují, chybí části |
-| 📋 | plánováno, nezačato |
+**Architecture:**
+- Built on **CNA** — an XNA-like C++ framework (SDL3 + OpenGL ES 3.2, EasyGL backend)
+- UI panels: `SpriteBatch` + 1×1 white `Texture2D` (white pixel trick)
+- Bitmap font: 5×7 px glyphs, `BitmapFont.hpp/cpp`, 96 ASCII characters
+- Scene data: `Mc3::Mc3Document` in the `mc3/` sublibrary (pure C++, no graphics)
+- CNA as a sibling repo `../cna` included via `add_subdirectory`
 
 ---
 
-## Soubory & Načítání
+## Status legend
 
-| Funkce | Stav |
-|--------|------|
-| Načtení `.mc3.xml` při startu (cesta přes argv) | ✅ |
-| Nová scéna (Ctrl+N) | ✅ |
-| Uložit (Ctrl+S) | ✅ |
-| Uložit jako (Ctrl+Shift+S) | ✅ |
-| Export do GLB přes `mc3togltf` (Ctrl+E) | ✅ |
-| Otevřít soubor — GUI dialog | 📋 |
-| Otevřít soubor — zatím stdin (Ctrl+O) | 🔧 |
-| Seznam naposledy otevřených souborů | 📋 |
+| Symbol | Meaning |
+|--------|---------|
+| ✅ | done and working |
+| 🔧 | partial — basics work, parts missing |
+| 📋 | planned, not started |
 
 ---
 
-## 3D Viewport — Renderování
+## File Operations
 
-| Funkce | Stav |
-|--------|------|
+| Feature | Status |
+|---------|--------|
+| Load `.mc3.xml` on startup (path via argv) | ✅ |
+| New scene (Ctrl+N) | ✅ |
+| Save (Ctrl+S) | ✅ |
+| Save as (Ctrl+Shift+S) | ✅ |
+| Export to GLB via `mc3togltf` (Ctrl+E) | ✅ |
+| File-open dialog (GUI) | 📋 |
+| Open file — currently stdin (Ctrl+O) | 🔧 |
+| Recent files list | 📋 |
+
+---
+
+## 3D Viewport — Rendering
+
+| Feature | Status |
+|---------|--------|
 | Box, Sphere, Cylinder, Cone, Plane | ✅ |
-| Extrude s Line cestou (Rect→box, Circle/Polygon→cylinder) | ✅ |
-| Extrude s Arc, Helix, Polyline, Bezier cestami | 🔧 (placeholder box) |
-| Extrude s Custom cross-section | 🔧 (placeholder box) |
-| CSG: Union/Difference/Intersection — renderování dětí rekurzivně | ✅ |
-| Group — renderování rekurzivně | ✅ |
-| Instance — resolve z `definitions`, transformace | ✅ |
-| Mesh objekty (external geometry) | 🔧 (placeholder box) |
-| XYZ mřížka s barvami os | ✅ |
-| Wireframe highlight výběru | ✅ |
-| Skutečné CSG boolean operace (mesh evalutace) | 📋 |
+| Extrude with Line path (Rect→box, Circle/Polygon→cylinder) | ✅ |
+| Extrude with Arc, Helix, Polyline, Bezier paths | 🔧 (placeholder box) |
+| Extrude with Custom cross-section | 🔧 (placeholder box) |
+| CSG Union/Difference/Intersection — render children recursively | ✅ |
+| Group — render children recursively | ✅ |
+| Instance — resolve from `definitions`, apply transform | ✅ |
+| Mesh objects (external geometry) | 🔧 (placeholder box) |
+| XYZ grid with axis colours | ✅ |
+| Wireframe selection highlight | ✅ |
+| Actual CSG boolean mesh evaluation | 📋 |
 
 ---
 
-## Kamera
+## Camera
 
-| Funkce | Stav |
-|--------|------|
-| Orbit (middle-drag), Pan (right-drag), Zoom (scroll) | ✅ |
-| Focus na výběr / reset (F) | ✅ |
-| Přednastavené pohledy (top/front/side) | 📋 |
-| Ortografický mód | 📋 |
+| Feature | Status |
+|---------|--------|
+| Orbit (middle-drag), Pan (right-drag), Zoom (scroll wheel) | ✅ |
+| Focus on selection / reset (F) | ✅ |
+| Preset views (top / front / side) | 📋 |
+| Orthographic mode | 📋 |
 
 ---
 
-## Výběr objektů
+## Selection
 
-| Funkce | Stav |
-|--------|------|
-| Klik — ray-cast AABB picking (rekurzivně přes skupiny) | ✅ |
-| Ctrl+klik — multi-výběr | ✅ |
-| Ctrl+A — vybrat vše / děti skupiny | ✅ |
+| Feature | Status |
+|---------|--------|
+| Left-click ray-cast AABB picking (recursive through groups) | ✅ |
+| Ctrl+click multi-select | ✅ |
+| Ctrl+A — select all / select children of group | ✅ |
 | Box/rectangle drag-select | 📋 |
 
 ---
 
-## Transform nástroje
+## Transform Tools
 
-| Funkce | Stav |
-|--------|------|
-| Move gizmo (G) — šipky os, drag = translate | ✅ |
-| Scale gizmo (S) — flat-square tipy, drag = scale po ose | ✅ |
-| Rotate gizmo (R) — kruhové oblouky, drag = rotace po ose | 📋 |
-| Klávesy šipky: nudge (Shift = 0.1 krok), PageUp/Down = Z | ✅ |
-| Pivot point (střed objektu / střed světa / kurzor) | 📋 |
-
----
-
-## Panel hierarchie (levý)
-
-| Funkce | Stav |
-|--------|------|
-| Rekurzivní strom s odsazením hloubky | ✅ |
-| Expand/collapse pro skupiny (klik trojúhelník) | ✅ |
-| Klik = výběr, Ctrl+klik = multi-výběr | ✅ |
-| Barevný pruh a ikona podle typu objektu | ✅ |
-| Drag-and-drop přeřazení (reparenting) | 📋 |
-| Přepínač viditelnosti (ikonka oka) | 📋 |
+| Feature | Status |
+|---------|--------|
+| Move gizmo (G) — axis arrows, drag = translate | ✅ |
+| Scale gizmo (S) — flat-square tips, drag = scale per axis | ✅ |
+| Rotate gizmo (R) — arc handles, drag = rotate per axis | 📋 |
+| Arrow key nudge (Shift = 0.1 step), PageUp/Down = Z axis | ✅ |
+| Pivot point options (object centre / world origin / cursor) | 📋 |
 
 ---
 
-## Panel vlastností (pravý)
+## Hierarchy Panel (left)
 
-| Funkce | Stav |
-|--------|------|
-| Název objektu — klik pro přejmenování (Enter/Esc) | ✅ |
-| POS / ROT / SCL — inline editace (klik pole, čísla, Enter) | ✅ |
-| Zobrazení barevného vzorku materiálu | ✅ |
-| Přiřazení materiálu (výběr ze seznamu) | 📋 |
-| Pole Collision type | 📋 |
-| Přepínač Visible | 📋 |
-| Seznam Tags | 📋 |
+| Feature | Status |
+|---------|--------|
+| Recursive tree with depth indentation | ✅ |
+| Expand/collapse toggle for group types (click triangle) | ✅ |
+| Click = select; Ctrl+click = multi-select | ✅ |
+| Type colour strip and icon | ✅ |
+| Drag-and-drop reparenting | 📋 |
+| Visibility toggle (eye icon) | 📋 |
 
 ---
 
-## Editační operace
+## Properties Panel (right)
 
-| Funkce | Stav |
-|--------|------|
-| Přidat primitiv (toolbar nebo F1–F5) | ✅ |
-| Delete — smazání výběru rekurzivně do libovolné hloubky | ✅ |
-| Ctrl+D — deep-copy s příponou `_copy` | ✅ |
-| Undo/Redo Ctrl+Z/Y — 20 kroků, deep-copy snímků | ✅ |
+| Feature | Status |
+|---------|--------|
+| Object name — click to rename (Enter applies, Esc cancels) | ✅ |
+| POS / ROT / SCL — inline editing (click field, type, Enter) | ✅ |
+| Material colour swatch display | ✅ |
+| Material assignment (pick from list) | 📋 |
+| Collision type field | 📋 |
+| Visible toggle | 📋 |
+| Tags list | 📋 |
+
+---
+
+## Edit Operations
+
+| Feature | Status |
+|---------|--------|
+| Add primitive (toolbar or F1–F5) | ✅ |
+| Delete — removes selection at any depth | ✅ |
+| Ctrl+D — deep-copy with `_copy` name suffix | ✅ |
+| Undo/Redo Ctrl+Z/Y — 20 steps, deep-copy snapshots | ✅ |
 | Cut / Copy / Paste (Ctrl+X/C/V) | 📋 |
-| Skupinění výběru do nové skupiny | 📋 |
-| Rozgrupování (ungroup) | 📋 |
+| Group selection into a new group | 📋 |
+| Ungroup | 📋 |
 
 ---
 
-## Materiály & Textury
+## Materials & Textures
 
-| Funkce | Stav |
-|--------|------|
-| Zobrazení barevného vzorku materiálu v properties | ✅ |
-| Editor materiálů: vytvoření/editace/smazání `Mc3Material` | 📋 |
-| Přiřazení textury | 📋 |
-| Editace PBR parametrů (metalness, roughness, emissive) | 📋 |
-
----
-
-## Světla & Kamery (scénová data)
-
-| Funkce | Stav |
-|--------|------|
-| `Mc3Light` a `Mc3Camera` parsovány z XML | ✅ |
-| Světla zobrazena v hierarchii a properties | 📋 |
-| Editace světel (typ, barva, intenzita) | 📋 |
-| Editace a náhled kamer | 📋 |
+| Feature | Status |
+|---------|--------|
+| Material colour swatch in properties panel | ✅ |
+| Material editor: create / edit / delete `Mc3Material` entries | 📋 |
+| Texture assignment | 📋 |
+| PBR parameter editing (metalness, roughness, emissive) | 📋 |
 
 ---
 
-## Akce & Stavy (animace)
+## Lights & Cameras (scene data)
 
-| Funkce | Stav |
-|--------|------|
-| Datový model `Mc3Action` / `Mc3State` | 📋 |
-| Panel editoru akcí | 📋 |
-| Vizualizace stavového automatu | 📋 |
+| Feature | Status |
+|---------|--------|
+| `Mc3Light` and `Mc3Camera` parsed from XML | ✅ |
+| Lights shown in hierarchy and properties | 📋 |
+| Light editing (type, colour, intensity) | 📋 |
+| Camera editing and preview | 📋 |
+
+---
+
+## Actions & States (animation)
+
+| Feature | Status |
+|---------|--------|
+| `Mc3Action` / `Mc3State` data model | 📋 |
+| Action editor panel | 📋 |
+| State machine visualisation | 📋 |
 
 ---
 
 ## UI & Workflow
 
-| Funkce | Stav |
-|--------|------|
-| Toolbar s přepínáním nástrojů + přidáváním primitiv | ✅ |
-| Status bar: počet objektů a výběr | ✅ |
-| Titulek okna: nástroj / soubor / stav změn | ✅ |
-| F11 — uloží screenshot.ppm | ✅ |
-| F12 — vypíše klávesové zkratky do konzole | ✅ |
+| Feature | Status |
+|---------|--------|
+| Toolbar: tool switching + primitive adding | ✅ |
+| Status bar: object count and selection count | ✅ |
+| Window title: tool / file / modified state | ✅ |
+| F11 — save screenshot.ppm | ✅ |
+| F12 — print keyboard shortcuts to console | ✅ |
 
 ---
 
 ## Developer & Tooling
 
-| Funkce | Stav |
-|--------|------|
-| Automatický smoke test přes `ctest` | ✅ |
-| Auto-screenshot mód (`--screenshot` flag, ukončí po ~2 s) | ✅ |
-| Unit testy pro Mc3Document serializaci | 📋 |
+| Feature | Status |
+|---------|--------|
+| Automated smoke test via `ctest` | ✅ |
+| Auto-screenshot mode (`--screenshot` flag, exits after ~2 s) | ✅ |
+| Unit tests for `Mc3Document` serialisation round-trips | 📋 |
 | CI pipeline | 📋 |
 
 ---
 
-## Architektura — moduly
+## Architecture — modules
 
-| Modul | Umístění | Role |
-|-------|----------|------|
-| `MeshCraftApplication` | `src/MeshCraft/MeshCraftApplication.cpp` | Game loop, input, stav scény, UI draw |
-| `GridRenderer` | `src/MeshCraft/Renderer/GridRenderer.cpp` | XYZ mřížka přes `BasicEffect` + `VertexBuffer` |
-| `SceneRenderer` | `src/MeshCraft/Renderer/SceneRenderer.cpp` | Renderování MC3 objektů + gizma |
-| `EditorCamera` | `include/MeshCraft/Editor/EditorCamera.hpp` | Orbit/pan/zoom/focus; view+projection matice |
-| `SelectionManager` | `include/MeshCraft/Editor/SelectionManager.hpp` | Sleduje vybrané `Mc3Object` shared_ptry |
-| `TransformGizmo` | `include/MeshCraft/Editor/TransformGizmo.hpp` | GizmoAxis enum + drag stav |
-| `BitmapFont` | `include/MeshCraft/Ui/BitmapFont.hpp` | 5×7 font, 96 ASCII znaků, sloupcové kódování |
-| `Mc3Document` | `mc3/` sublibrary | Čistá C++ scénová data; load/save XML |
-| CNA | `../cna/` sourozenecký repo | SDL3 okno, GL kontext, SpriteBatch, BasicEffect |
+| Module | Location | Role |
+|--------|----------|------|
+| `MeshCraftApplication` | `src/MeshCraft/MeshCraftApplication.cpp` | Game loop, input, scene state, UI draw |
+| `GridRenderer` | `src/MeshCraft/Renderer/GridRenderer.cpp` | XYZ grid lines via `BasicEffect` + `VertexBuffer` |
+| `SceneRenderer` | `src/MeshCraft/Renderer/SceneRenderer.cpp` | Renders MC3 scene objects + transform gizmos |
+| `EditorCamera` | `include/MeshCraft/Editor/EditorCamera.hpp` | Orbit/pan/zoom/focus; produces view+projection matrices |
+| `SelectionManager` | `include/MeshCraft/Editor/SelectionManager.hpp` | Tracks selected `Mc3Object` shared_ptrs |
+| `TransformGizmo` | `include/MeshCraft/Editor/TransformGizmo.hpp` | GizmoAxis enum + drag state |
+| `BitmapFont` | `include/MeshCraft/Ui/BitmapFont.hpp` | 5×7 font, 96 ASCII glyphs, column-major encoding |
+| `Mc3Document` | `mc3/` sublibrary | Pure C++ scene data; load/save XML |
+| CNA | `../cna/` sibling repo | SDL3 window, GL context, SpriteBatch, BasicEffect |
 
-**Datový tok:**
-1. `LoadContent()` vytvoří renderery; načte `Mc3Document` z XML.
-2. `Update()` polluje `Keyboard`/`Mouse`; mutuje kameru, výběr, dokument.
-3. `Draw()` vyčistí → renderuje 3D → gizmo → 2D UI overlay přes SpriteBatch.
+**Data flow:**
+1. `LoadContent()` creates renderers; loads `Mc3Document` from XML.
+2. `Update()` polls `Keyboard`/`Mouse`; mutates camera, selection, document.
+3. `Draw()` clears → renders 3D scene → draws gizmo → overlays 2D UI via SpriteBatch.
 
-**Důležité invarianty:**
-- `Mc3Document.materials` je `std::map<std::string, Mc3Material>` — iteruj `const auto& [key, mat]`.
-- `Mc3Material` používá `baseColor` (4-prvkové float pole), ne `diffuse`.
-- `SpriteBatch::Begin()`/`End()` musí ohraničovat všechna 2D `Draw()` volání; nelze vnořovat.
-- CNA API: `getCurrentTechniqueProperty()` a `getPassesProperty()` (starší `CurrentTechnique()`/`Passes()` odstraněny v commitu 34ae601).
-- `Color` nemá defaultní konstruktor — vždy inicializuj se 4 argumenty.
-- Nepřidávat `${meta-gl_SOURCE_DIR}/include` do MeshCraft `CMakeLists.txt` — spustí plnou rekompilaci CNA s existujícími bugy.
-- `hierarchyRows_` a `propFieldHits_` se plní v `Draw()` a konzumují v `Update()` (1-frame lag — záměrné, uživatel nevidí).
+**Important invariants:**
+- `Mc3Document.materials` is `std::map<std::string, Mc3Material>` — iterate with `const auto& [key, mat]`.
+- `Mc3Material` uses `baseColor` (4-element float array), not `diffuse`.
+- `SpriteBatch::Begin()`/`End()` must bracket all 2D `Draw()` calls; cannot nest.
+- CNA API: use `getCurrentTechniqueProperty()` and `getPassesProperty()` (old `CurrentTechnique()`/`Passes()` removed in commit 34ae601).
+- `Color` has no default constructor — always initialise with 4 args.
+- Do not add `${meta-gl_SOURCE_DIR}/include` to MeshCraft's `CMakeLists.txt` — triggers full CNA recompile with pre-existing bugs.
+- `hierarchyRows_` and `propFieldHits_` are populated in `Draw()` and consumed in `Update()` (1-frame lag — intentional, invisible to user).
 
 ---
 
-## Příkazy
+## Useful commands
 
 ```bash
-# Konfigurace (poprvé)
+# Configure (first time)
 cmake -S . -B cmake-build-debug -DCMAKE_BUILD_TYPE=Debug -DMESH_CRAFT_GRAPHICS_BACKEND=EASYGL
 
 # Build
 cd cmake-build-debug && ninja -j$(nproc)
 
-# Spustit
+# Run
 ./cmake-build-debug/MeshCraft test/house.mc3.xml
 
-# Spustit s auto-screenshotem (ukončí se po ~2 s)
+# Run with auto-screenshot (exits after ~2 s)
 ./cmake-build-debug/MeshCraft test/house.mc3.xml --screenshot /tmp/editor.ppm
 
-# Smoke test
+# Run smoke test
 ctest --test-dir cmake-build-debug -V
 
-# Konverze MC3 → GLB
+# Convert MC3 to GLB
 ./cmake-build-debug/mc3/mc3togltf test/house.mc3.xml test/house.glb
 ```
 
 ---
 
-## Omezení — nedělat zatím
+## Constraints — do not do yet
 
-- **Žádný refaktoring CNA** — opravovat jen to, co blokuje build.
-- **Žádný SpriteFont / nativní textový widget** — bitmap font stačí.
-- **Žádný GUI file dialog** — mimo scope, dokud neexistuje widget model.
-- **Žádné API změny v `Mc3Document`** bez kontroly `mc3togltf` a všech testovacích scén.
-- **Žádné hromadné změny include cest** v `CMakeLists.txt` — riziko plné rekompilace CNA.
+- **No refactor of CNA** — only fix what's blocking a build.
+- **No SpriteFont / native text widget** — bitmap font approach is sufficient for now.
+- **No GUI file dialog** — out of scope until a basic widget model exists.
+- **No API changes in `Mc3Document`** without checking `mc3togltf` and all test scenes.
+- **No mass include path changes** in `CMakeLists.txt` — risks triggering a full CNA recompile.
