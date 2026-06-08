@@ -29,11 +29,17 @@ public:
               const Microsoft::Xna::Framework::Matrix& projection,
               const std::vector<const Mc3::Mc3Object*>& selected);
 
-    // Render translate gizmo (X/Y/Z axis arrows) for a selected object
+    // Render translate gizmo (X/Y/Z axis lines + cube tips) for a selected object
     void drawGizmo(const Mc3::Mc3Object* obj,
                    const Microsoft::Xna::Framework::Matrix& view,
                    const Microsoft::Xna::Framework::Matrix& projection,
                    float gizmoLength);
+
+    // Render scale gizmo (X/Y/Z axis lines + flat-square tips) for a selected object
+    void drawScaleGizmo(const Mc3::Mc3Object* obj,
+                        const Microsoft::Xna::Framework::Matrix& view,
+                        const Microsoft::Xna::Framework::Matrix& projection,
+                        float gizmoLength);
 
     // Render a single object's bounding box (wireframe)
     void drawObjectWireframe(const Mc3::Mc3Object& obj,

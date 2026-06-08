@@ -174,10 +174,16 @@ void MeshCraftApplication::Draw(const GameTime& /*gameTime*/) {
     sceneRenderer_->draw(document_, view, proj, selPtrs);
 
     // Transform gizmo — draw on top of scene (depth-test off so always visible)
-    if (activeTool_ == ActiveTool::Move && selection_.hasSelection()) {
-        gd.SetDepthTestEnabled(false);
+    if (selection_.hasSelection()) {
         float gizmoLen = camera_.distance * 0.15f;
-        sceneRenderer_->drawGizmo(selection_.selection().front().get(), view, proj, gizmoLen);
+        auto* sel0 = selection_.selection().front().get();
+        if (activeTool_ == ActiveTool::Move) {
+            gd.SetDepthTestEnabled(false);
+            sceneRenderer_->drawGizmo(sel0, view, proj, gizmoLen);
+        } else if (activeTool_ == ActiveTool::Scale) {
+            gd.SetDepthTestEnabled(false);
+            sceneRenderer_->drawScaleGizmo(sel0, view, proj, gizmoLen);
+        }
     }
 
     // Restore full GL viewport and disable scissor before 2D UI overlay
@@ -571,6 +577,52 @@ void MeshCraftApplication::handleMouseInput(const MouseState& ms, const MouseSta
         return; // no other left-button logic during drag
     }
 
+    // Scale gizmo drag
+    if (activeTool_ == ActiveTool::Scale && gizmo_.isDragging() && leftBtn && (dx != 0 || dy != 0)
+        && selection_.hasSelection())
+    {
+        auto& gd3 = getGraphicsDeviceProperty();
+        int sW3 = gd3.getViewportProperty().getWidthProperty();
+        int sH3 = gd3.getViewportProperty().getHeightProperty();
+        int vX3 = kLeftPanelW, vY3 = kToolbarH;
+        int vW3 = std::max(1, sW3 - kLeftPanelW - kRightPanelW);
+        int vH3 = std::max(1, sH3 - kToolbarH - kStatusH);
+        float asp3 = static_cast<float>(vW3) / static_cast<float>(vH3);
+        Matrix vw3 = camera_.viewMatrix();
+        Matrix pr3 = camera_.projectionMatrix(asp3);
+        Matrix vp3 = vw3 * pr3;
+
+        auto w2s3 = [&](float wx, float wy, float wz) -> std::pair<float,float> {
+            float cX = wx*vp3.M11 + wy*vp3.M21 + wz*vp3.M31 + vp3.M41;
+            float cY = wx*vp3.M12 + wy*vp3.M22 + wz*vp3.M32 + vp3.M42;
+            float cW = wx*vp3.M14 + wy*vp3.M24 + wz*vp3.M34 + vp3.M44;
+            if (std::abs(cW) < 1e-6f) return {-1e6f, -1e6f};
+            return { (cX/cW * 0.5f + 0.5f) * vW3 + vX3,
+                     (1.0f - (cY/cW * 0.5f + 0.5f)) * vH3 + vY3 };
+        };
+
+        auto* sel0 = selection_.selection().front().get();
+        float px3 = sel0->transform.position[0];
+        float py3 = sel0->transform.position[1];
+        float pz3 = sel0->transform.position[2];
+        float L3  = camera_.distance * 0.15f;
+        int axIdx = static_cast<int>(gizmo_.dragAxis()) - 1;
+        float tipXYZ[3][3] = {{px3+L3,py3,pz3},{px3,py3+L3,pz3},{px3,py3,pz3+L3}};
+
+        auto [cx3, cy3] = w2s3(px3, py3, pz3);
+        auto [tx3, ty3] = w2s3(tipXYZ[axIdx][0], tipXYZ[axIdx][1], tipXYZ[axIdx][2]);
+        float axScrX3 = tx3 - cx3, axScrY3 = ty3 - cy3;
+        float len3d   = std::sqrt(axScrX3*axScrX3 + axScrY3*axScrY3);
+        if (len3d > 0.5f) {
+            float dot = dx * (axScrX3/len3d) + dy * (axScrY3/len3d);
+            float& s = sel0->transform.scale[axIdx];
+            s = std::max(0.01f, s + dot / len3d);
+            modified_ = true;
+            updateWindowTitle();
+        }
+        return;
+    }
+
     // Left click
     if (leftBtn && !prevLeft) {
         int mx = ms.getXProperty();
@@ -663,8 +715,9 @@ void MeshCraftApplication::handleMouseInput(const MouseState& ms, const MouseSta
         bool in3d = (mx >= kLeftPanelW && mx < screenW - kRightPanelW &&
                      my >= kToolbarH   && my < screenH - kStatusH);
         if (in3d) {
-            // Gizmo handle hit test (Move tool, no Ctrl)
-            if (activeTool_ == ActiveTool::Move && selection_.hasSelection() && !ctrl) {
+            // Gizmo handle hit test (Move or Scale tool, no Ctrl)
+            if ((activeTool_ == ActiveTool::Move || activeTool_ == ActiveTool::Scale)
+                && selection_.hasSelection() && !ctrl) {
                 auto* sel0 = selection_.selection().front().get();
                 float gpx = sel0->transform.position[0];
                 float gpy = sel0->transform.position[1];

@@ -275,6 +275,63 @@ void SceneRenderer::drawGizmo(const Mc3Object* obj,
     }
 }
 
+void SceneRenderer::drawScaleGizmo(const Mc3Object* obj,
+                                    const Matrix& view, const Matrix& proj,
+                                    float gizmoLength)
+{
+    if (!obj) return;
+
+    float px = obj->transform.position[0];
+    float py = obj->transform.position[1];
+    float pz = obj->transform.position[2];
+    float L  = gizmoLength;
+
+    VertexPositionColor lineVerts[6] = {
+        { {px,   py, pz}, Color(210, 60,  60,  255) },
+        { {px+L, py, pz}, Color(210, 60,  60,  255) },
+        { {px, py,   pz}, Color(60,  210, 60,  255) },
+        { {px, py+L, pz}, Color(60,  210, 60,  255) },
+        { {px, py, pz  }, Color(60,  60,  210, 255) },
+        { {px, py, pz+L}, Color(60,  60,  210, 255) },
+    };
+
+    VertexBuffer lineVB(device_, 6);
+    lineVB.SetData(lineVerts, 6);
+
+    effect_->World      = Matrix::getIdentityProperty();
+    effect_->View       = view;
+    effect_->Projection = proj;
+    effect_->VertexColorEnabled = true;
+
+    for (auto& pass : effect_->getCurrentTechniqueProperty()->getPassesProperty())
+        pass.Apply();
+
+    device_.SetVertexBuffer(&lineVB);
+    device_.DrawPrimitives(Graphics::PrimitiveType::LineList, 0, 3);
+    device_.SetVertexBuffer(nullptr);
+
+    // Flat-square tips (thin slab perpendicular to each axis)
+    float hs = L * 0.12f;
+    float thin = hs * 0.25f;
+    Color tipCols[3] = {
+        Color(210, 60,  60,  255),
+        Color(60,  210, 60,  255),
+        Color(60,  60,  210, 255),
+    };
+    float tips[3][3] = { {px+L, py, pz}, {px, py+L, pz}, {px, py, pz+L} };
+    // Each tip is a flat box: thin along the axis direction, wide in the other two
+    Microsoft::Xna::Framework::Vector3 tipScales[3] = {
+        {thin, hs, hs},  // X tip: thin on X, square in YZ
+        {hs, thin, hs},  // Y tip: thin on Y, square in XZ
+        {hs, hs, thin},  // Z tip: thin on Z, square in XY
+    };
+    for (int i = 0; i < 3; ++i) {
+        Matrix world = Matrix::CreateScale(tipScales[i]) *
+                       Matrix::CreateTranslation({tips[i][0], tips[i][1], tips[i][2]});
+        drawMesh(unitBox_, world, view, proj, tipCols[i]);
+    }
+}
+
 // ---------------------------------------------------------------------------
 // Draw helpers
 // ---------------------------------------------------------------------------

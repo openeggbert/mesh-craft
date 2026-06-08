@@ -38,6 +38,7 @@ cd cmake-build-debug && ninja -j$(nproc)
 - Material colour swatch in properties panel
 - Ray-cast picking (left-click, AABB, recursive through children); Ctrl+click for multi-select
 - Transform gizmo: X/Y/Z axis arrows in Move mode (G); drag handle translates along axis
+- Scale gizmo: X/Y/Z axis arrows with flat-square tips in Scale mode (S); drag handle scales along axis
 - Ctrl+A selects children of selected group; without group selection selects all top-level objects
 - Ctrl+D deep-copies selected object(s) with `_copy` name suffix, inserted after original
 - Delete removes selected objects at any depth in the hierarchy
@@ -60,7 +61,6 @@ cd cmake-build-debug && ninja -j$(nproc)
 |---|-------------|
 | 1 | File-open dialog not available — user types path in terminal stdin |
 | 2 | Extrude non-Line paths and Custom cross-sections unrendered |
-| 3 | Delete only removes top-level children of a group, not deeper descendants when the group itself is not deleted |
 
 ---
 
