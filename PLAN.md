@@ -64,7 +64,7 @@ environment settings. Output is `.glb` via the `mc3togltf` converter.
 |---------|--------|
 | Orbit (middle-drag), Pan (right-drag), Zoom (scroll wheel) | ✅ |
 | Focus on selection / reset (F) | ✅ |
-| Preset views (top / front / side) | 📋 |
+| Preset views (top / front / side) | ✅ |
 | Orthographic mode | 📋 |
 
 ---

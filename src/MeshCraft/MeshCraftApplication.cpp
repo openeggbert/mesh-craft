@@ -371,7 +371,8 @@ void MeshCraftApplication::handleKeyboardShortcuts(const KeyboardState& ks, cons
             "  Middle-drag   Orbit\n"
             "  Right-drag    Pan\n"
             "  Scroll wheel  Zoom\n"
-            "  F             Reset camera\n"
+            "  F             Focus on selection / reset\n"
+            "  Num1/3/5/7/9  Front / Right / Back / Top / Bottom view\n"
             "Help:\n"
             "  F12           Print this help\n"
             "======================================\n\n";
@@ -390,6 +391,13 @@ void MeshCraftApplication::handleKeyboardShortcuts(const KeyboardState& ks, cons
     if (!ctrl && !alt && justPressed(ks, prevKs, Keys::R)) { activeTool_ = ActiveTool::Rotate; updateWindowTitle(); }
     if (!ctrl && !alt && justPressed(ks, prevKs, Keys::S)) { activeTool_ = ActiveTool::Scale;  updateWindowTitle(); }
     if (!ctrl && !alt && justPressed(ks, prevKs, Keys::Q)) { activeTool_ = ActiveTool::Select; updateWindowTitle(); }
+
+    // Preset camera views (Numpad, no Ctrl)
+    if (!ctrl && justPressed(ks, prevKs, Keys::NumPad1)) { camera_.yaw = 0.0f;                                camera_.pitch = 0.0f;  return; } // Front
+    if (!ctrl && justPressed(ks, prevKs, Keys::NumPad3)) { camera_.yaw = std::numbers::pi_v<float> * 0.5f;  camera_.pitch = 0.0f;  return; } // Right
+    if (!ctrl && justPressed(ks, prevKs, Keys::NumPad5)) { camera_.yaw = std::numbers::pi_v<float>;          camera_.pitch = 0.0f;  return; } // Back
+    if (!ctrl && justPressed(ks, prevKs, Keys::NumPad7)) { camera_.yaw = 0.0f;                                camera_.pitch = 1.47f; return; } // Top
+    if (!ctrl && justPressed(ks, prevKs, Keys::NumPad9)) { camera_.yaw = 0.0f;                                camera_.pitch =-1.47f; return; } // Bottom
 
     // Add primitives
     if (!ctrl && justPressed(ks, prevKs, Keys::F1)) { addPrimitive(Mc3::ObjectType::Box);      return; }

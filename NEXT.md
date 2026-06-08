@@ -16,6 +16,7 @@
 - Hierarchy visibility eye icon — click to toggle visible per row; hidden objects shown dimmed
 - Properties Tags field — click TAG row to edit comma-separated tags; Enter applies, Esc cancels
 - Group/Ungroup — Ctrl+G wraps selection into a Group; Ctrl+Shift+G dissolves Group back to parent
+- Preset views — Num1/3/5/7/9 for Front/Right/Back/Top/Bottom camera angles
 
 ---
 
@@ -27,9 +28,9 @@ _(nothing)_
 
 ## Next up
 
-1. **Preset views** — Numpad 1/3/7 for front/side/top camera views
-2. **Drag-and-drop reparenting** — drag a hierarchy row onto another to reparent
-3. **Box/rectangle drag-select** — drag in the 3D viewport to multi-select
+1. **Drag-and-drop reparenting** — drag a hierarchy row onto another to reparent
+2. **Box/rectangle drag-select** — drag in the 3D viewport to multi-select
+3. **Open file dialog** — Ctrl+O shows a path input dialog in the UI instead of stdin
 
 ---
 
