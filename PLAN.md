@@ -115,7 +115,7 @@ environment settings. Output is `.glb` via the `mc3togltf` converter.
 | Material assignment (pick from list) | 📋 |
 | Collision type field | ✅ |
 | Visible toggle | ✅ |
-| Tags list | 📋 |
+| Tags list | ✅ |
 
 ---
 

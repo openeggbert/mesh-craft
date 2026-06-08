@@ -14,6 +14,7 @@
 - Properties: Visible toggle (VIS row, click to flip on/off) + Collision field (COL row, click to edit string)
 - Cut/Copy/Paste — Ctrl+X/C/V; clipboard survives selection changes; paste offsets +1 X
 - Hierarchy visibility eye icon — click to toggle visible per row; hidden objects shown dimmed
+- Properties Tags field — click TAG row to edit comma-separated tags; Enter applies, Esc cancels
 
 ---
 
@@ -25,9 +26,9 @@ _(nothing)_
 
 ## Next up
 
-1. **Properties: Tags list** — display/edit `Mc3Object::tags` (comma-separated)
-2. **Group selection** — Ctrl+G to wrap selected objects into a new Group node
-3. **Ungroup** — Ctrl+Shift+G to dissolve a group back to its parent
+1. **Group selection** — Ctrl+G to wrap selected objects into a new Group node
+2. **Ungroup** — Ctrl+Shift+G to dissolve a group back to its parent
+3. **Preset views** — Numpad 1/3/7 for front/side/top orthographic-style views
 
 ---
 

@@ -140,7 +140,7 @@ private:
 
     // Inline field editing state
     bool        fieldActive_ {false};
-    int         fieldSection_{0};   // -2=COL, -1=NAME, 0=POS, 1=ROT, 2=SCL
+    int         fieldSection_{0};   // -3=TAGS, -2=COL, -1=NAME, 0=POS, 1=ROT, 2=SCL
     int         fieldAxis_   {0};   // 0=X,   1=Y,   2=Z
     std::string fieldBuffer_;
 
@@ -148,6 +148,7 @@ private:
     int nameFieldHitY_{-1};
     int visToggleHitY_{-1};
     int colFieldHitY_{-1};
+    int tagsFieldHitY_{-1};
 
     void activateField(int section, int axis);
     void applyFieldValue();
