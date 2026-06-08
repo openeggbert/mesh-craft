@@ -243,8 +243,8 @@ void MeshCraftApplication::handleKeyboardShortcuts(const KeyboardState& ks, cons
         if (justPressed(ks, prevKs, Keys::Back) && !fieldBuffer_.empty()) {
             fieldBuffer_.pop_back(); return;
         }
-        if (fieldSection_ == -1) {
-            // Name field: accept letters, digits, space, dash, underscore, period
+        if (fieldSection_ < 0) {
+            // String field (name / collision): accept letters, digits, space, dash, underscore, period
             struct { Keys key; char lo; char hi; } letterKeys[] = {
                 {Keys::A,'a','A'},{Keys::B,'b','B'},{Keys::C,'c','C'},{Keys::D,'d','D'},
                 {Keys::E,'e','E'},{Keys::F,'f','F'},{Keys::G,'g','G'},{Keys::H,'h','H'},
@@ -732,6 +732,20 @@ void MeshCraftApplication::handleMouseInput(const MouseState& ms, const MouseSta
                     activateField(hit.section, hit.axis);
                     return;
                 }
+            }
+            // Visible toggle
+            if (visToggleHitY_ >= 0 && my >= visToggleHitY_ && my < visToggleHitY_ + 18
+                && selection_.hasSelection()) {
+                pushUndo();
+                selection_.selection().front()->visible = !selection_.selection().front()->visible;
+                modified_ = true;
+                updateWindowTitle();
+                return;
+            }
+            // Collision field
+            if (colFieldHitY_ >= 0 && my >= colFieldHitY_ && my < colFieldHitY_ + 18) {
+                activateField(-2, 0);
+                return;
             }
             // Click in panel but not on a field — cancel active edit
             if (fieldActive_) cancelField();
@@ -1434,7 +1448,9 @@ void MeshCraftApplication::drawUi(int screenW, int screenH) {
                        Color(160, 175, 210, 255), fillRect);
 
     propFieldHits_.clear();
-    nameFieldHitY_ = -1;
+    nameFieldHitY_  = -1;
+    visToggleHitY_  = -1;
+    colFieldHitY_   = -1;
     if (selection_.hasSelection()) {
         const auto& sel0 = selection_.selection().front();
         int py = kToolbarH + kPanelHdrH + 6;
@@ -1536,6 +1552,39 @@ void MeshCraftApplication::drawUi(int screenW, int screenH) {
                     break;
                 }
             }
+            py += 22;
+        }
+        py += 4;
+
+        // Visible toggle
+        visToggleHitY_ = py;
+        {
+            bool vis = sel0->visible;
+            drawRect(px, py, pw, 18, Color(38, 42, 72, 255));
+            drawRect(px, py, 3, 18, Color(55, 185, 120, 255));
+            Ui::drawBitmapText("VIS", px + 6, py + (18 - 7) / 2, 1, Color(160, 175, 210, 255), fillRect);
+            Ui::drawBitmapText(vis ? "ON" : "OFF", px + 28, py + (18 - 7) / 2, 1,
+                               Color(185, 220, 185, 255), fillRect);
+            Color indCol = vis ? Color(60, 200, 80, 255) : Color(160, 50, 50, 255);
+            drawRect(rpX + kRightPanelW - 28, py + 3, 22, 12, indCol);
+        }
+        py += 22;
+
+        // Collision field (click to edit string)
+        colFieldHitY_ = py;
+        {
+            bool colActive = fieldActive_ && fieldSection_ == -2;
+            drawRect(px, py, pw, 18, colActive ? Color(50, 70, 140, 255) : Color(38, 42, 72, 255));
+            drawRect(px, py, 3, 18, Color(185, 120, 55, 255));
+            Ui::drawBitmapText("COL", px + 6, py + (18 - 7) / 2, 1, Color(160, 175, 210, 255), fillRect);
+            if (colActive) {
+                std::string display = fieldBuffer_ + "_";
+                Ui::drawBitmapText(display, px + 28, py + (18 - 7) / 2, 1,
+                                   Color(255, 255, 160, 255), fillRect);
+            } else {
+                Ui::drawBitmapText(sel0->collision, px + 28, py + (18 - 7) / 2, 1,
+                                   Color(185, 220, 220, 255), fillRect);
+            }
         }
     }
 
@@ -1632,6 +1681,8 @@ void MeshCraftApplication::activateField(int section, int axis) {
     fieldAxis_    = axis;
     if (section == -1) {
         fieldBuffer_ = selection_.selection().front()->name;
+    } else if (section == -2) {
+        fieldBuffer_ = selection_.selection().front()->collision;
     } else {
         const auto& t = selection_.selection().front()->transform;
         float v = 0.0f;
@@ -1650,6 +1701,10 @@ void MeshCraftApplication::applyFieldValue() {
     pushUndo();
     if (fieldSection_ == -1) {
         selection_.selection().front()->name = fieldBuffer_;
+        modified_ = true;
+        updateWindowTitle();
+    } else if (fieldSection_ == -2) {
+        selection_.selection().front()->collision = fieldBuffer_;
         modified_ = true;
         updateWindowTitle();
     } else {
