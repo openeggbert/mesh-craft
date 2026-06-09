@@ -64,6 +64,10 @@ public:
                           const Microsoft::Xna::Framework::Matrix& view,
                           const Microsoft::Xna::Framework::Matrix& projection);
 
+    void drawCsgGizmos(const Mc3::Mc3Document& doc,
+                       const Microsoft::Xna::Framework::Matrix& view,
+                       const Microsoft::Xna::Framework::Matrix& projection);
+
 private:
     Microsoft::Xna::Framework::Graphics::GraphicsDevice& device_;
     std::unique_ptr<Microsoft::Xna::Framework::Graphics::BasicEffect> effect_;

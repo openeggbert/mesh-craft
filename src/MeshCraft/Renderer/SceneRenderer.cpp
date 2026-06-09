@@ -558,12 +558,42 @@ void SceneRenderer::drawObject(const Mc3Object& obj, const Mc3Document& doc,
         break;
     }
     case ObjectType::Group:
-    case ObjectType::Union:
-    case ObjectType::Difference:
-    case ObjectType::Intersection:
     case ObjectType::Area:
         for (const auto& child : obj.children)
             drawObject(*child, doc, world, view, proj, selected, depth + 1);
+        break;
+    case ObjectType::Union:
+    case ObjectType::Intersection:
+        for (const auto& child : obj.children)
+            drawObject(*child, doc, world, view, proj, selected, depth + 1);
+        break;
+    case ObjectType::Difference:
+        for (const auto& child : obj.children)
+            drawObject(*child, doc, world, view, proj, selected, depth + 1);
+        // Overlay red wireframe on cutter children
+        for (const auto& child : obj.children) {
+            if (child->isCutter) {
+                Matrix childWorld = objectWorldMatrix(*child) * world;
+                // Build colored unit-box line list in world space
+                static const float P[][3] = {
+                    {-0.5f,-0.5f,-0.5f},{0.5f,-0.5f,-0.5f},{0.5f,0.5f,-0.5f},{-0.5f,0.5f,-0.5f},
+                    {-0.5f,-0.5f, 0.5f},{0.5f,-0.5f, 0.5f},{0.5f,0.5f, 0.5f},{-0.5f,0.5f, 0.5f},
+                };
+                static const int E[][2] = {
+                    {0,1},{1,2},{2,3},{3,0},{4,5},{5,6},{6,7},{7,4},{0,4},{1,5},{2,6},{3,7}
+                };
+                Color rc(220, 60, 60, 200);
+                std::vector<VertexPositionColor> lines;
+                lines.reserve(24);
+                for (auto& e : E) {
+                    Vector3 a = Vector3::Transform(Vector3{P[e[0]][0],P[e[0]][1],P[e[0]][2]}, childWorld);
+                    Vector3 b = Vector3::Transform(Vector3{P[e[1]][0],P[e[1]][1],P[e[1]][2]}, childWorld);
+                    lines.push_back({a, rc});
+                    lines.push_back({b, rc});
+                }
+                drawLineList(lines, view, proj);
+            }
+        }
         break;
     case ObjectType::Instance: {
         auto it = doc.definitions.find(obj.definition);
@@ -815,6 +845,57 @@ void SceneRenderer::drawCameraGizmos(
             addLine(corners[i], corners[(i+1)%4]);
         }
     }
+
+    if (!lines.empty())
+        drawLineList(lines, view, proj);
+}
+
+// ---------------------------------------------------------------------------
+// CSG gizmos — colored box outlines for Union / Difference / Intersection
+// ---------------------------------------------------------------------------
+
+void SceneRenderer::drawCsgGizmos(const Mc3::Mc3Document& doc,
+                                   const Matrix& view, const Matrix& proj)
+{
+    using namespace Mc3;
+
+    static const float P[][3] = {
+        {-0.5f,-0.5f,-0.5f},{0.5f,-0.5f,-0.5f},{0.5f,0.5f,-0.5f},{-0.5f,0.5f,-0.5f},
+        {-0.5f,-0.5f, 0.5f},{0.5f,-0.5f, 0.5f},{0.5f,0.5f, 0.5f},{-0.5f,0.5f, 0.5f},
+    };
+    static const int E[][2] = {
+        {0,1},{1,2},{2,3},{3,0},{4,5},{5,6},{6,7},{7,4},{0,4},{1,5},{2,6},{3,7}
+    };
+
+    std::vector<VertexPositionColor> lines;
+
+    std::function<void(const Mc3Object&, const Matrix&)> visit;
+    visit = [&](const Mc3Object& obj, const Matrix& parentWorld) {
+        Matrix world = objectWorldMatrix(obj) * parentWorld;
+
+        if (obj.type == ObjectType::Union ||
+            obj.type == ObjectType::Difference ||
+            obj.type == ObjectType::Intersection)
+        {
+            Color c = (obj.type == ObjectType::Union)        ? Color( 60, 220,  60, 200)
+                    : (obj.type == ObjectType::Difference)   ? Color(220,  60,  60, 200)
+                    :                                          Color( 60, 120, 220, 200);
+
+            for (auto& e : E) {
+                Vector3 a = Vector3::Transform(Vector3{P[e[0]][0],P[e[0]][1],P[e[0]][2]}, world);
+                Vector3 b = Vector3::Transform(Vector3{P[e[1]][0],P[e[1]][1],P[e[1]][2]}, world);
+                lines.push_back({a, c});
+                lines.push_back({b, c});
+            }
+        }
+
+        for (const auto& child : obj.children)
+            visit(*child, world);
+    };
+
+    Matrix identity = Matrix::getIdentityProperty();
+    for (const auto& obj : doc.objects)
+        visit(*obj, identity);
 
     if (!lines.empty())
         drawLineList(lines, view, proj);

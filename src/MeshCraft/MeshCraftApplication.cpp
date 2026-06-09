@@ -216,6 +216,7 @@ void MeshCraftApplication::Draw(const GameTime& /*gameTime*/) {
     gd.SetDepthTestEnabled(false);
     sceneRenderer_->drawLightGizmos(document_.lights, view, proj);
     sceneRenderer_->drawCameraGizmos(document_.cameras, view, proj);
+    sceneRenderer_->drawCsgGizmos(document_, view, proj);
     gd.SetDepthTestEnabled(true);
 
     if (selection_.hasSelection()) {
@@ -918,6 +919,18 @@ void MeshCraftApplication::addPrimitive(Mc3::ObjectType type) {
         obj->extrude = ex;
         break;
     }
+    case Mc3::ObjectType::Union: {
+        Mc3::Mc3CsgOperation csg; csg.csgType = Mc3::CsgType::Union;
+        obj->csgOperation = csg; break;
+    }
+    case Mc3::ObjectType::Difference: {
+        Mc3::Mc3CsgOperation csg; csg.csgType = Mc3::CsgType::Difference;
+        obj->csgOperation = csg; break;
+    }
+    case Mc3::ObjectType::Intersection: {
+        Mc3::Mc3CsgOperation csg; csg.csgType = Mc3::CsgType::Intersection;
+        obj->csgOperation = csg; break;
+    }
     default: break; // Group, Area, Mesh, Instance — no primitive
     }
     obj->transform.position = { camera_.target.X, camera_.target.Y + 0.5f, camera_.target.Z };
@@ -1187,6 +1200,13 @@ void MeshCraftApplication::drawImGuiUi(int screenW, int screenH) {
             if (ImGui::MenuItem("Mesh"))     addPrimitive(Mc3::ObjectType::Mesh);
             if (ImGui::MenuItem("Instance")) addPrimitive(Mc3::ObjectType::Instance);
             if (ImGui::MenuItem("Extrude"))  addPrimitive(Mc3::ObjectType::Extrude);
+            ImGui::Separator();
+            if (ImGui::BeginMenu("CSG")) {
+                if (ImGui::MenuItem("Union"))        addPrimitive(Mc3::ObjectType::Union);
+                if (ImGui::MenuItem("Difference"))   addPrimitive(Mc3::ObjectType::Difference);
+                if (ImGui::MenuItem("Intersection")) addPrimitive(Mc3::ObjectType::Intersection);
+                ImGui::EndMenu();
+            }
             ImGui::EndMenu();
         }
         if (ImGui::BeginMenu("View")) {
@@ -1288,10 +1308,17 @@ void MeshCraftApplication::drawImGuiUi(int screenW, int screenH) {
                     if (!hasChildren) flags |= ImGuiTreeNodeFlags_Leaf | ImGuiTreeNodeFlags_NoTreePushOnOpen;
                     if (sel)          flags |= ImGuiTreeNodeFlags_Selected;
 
-                    ImGui::PushStyleColor(ImGuiCol_Text,
-                        obj->visible ? ImVec4(1,1,1,1) : ImVec4(0.5f,0.5f,0.5f,1));
-                    const std::string& displayName = obj->name.empty() ? obj->id : obj->name;
-                    bool nodeOpen = ImGui::TreeNodeEx(displayName.c_str(), flags);
+                    // Determine type prefix and node color
+                    ImVec4 nodeColor = obj->visible ? ImVec4(1,1,1,1) : ImVec4(0.5f,0.5f,0.5f,1);
+                    const char* typePrefix = "";
+                    if      (obj->type == Mc3::ObjectType::Union)        { typePrefix = "[U] "; nodeColor = obj->visible ? ImVec4(0.3f,0.9f,0.3f,1) : ImVec4(0.2f,0.45f,0.2f,1); }
+                    else if (obj->type == Mc3::ObjectType::Difference)   { typePrefix = "[D] "; nodeColor = obj->visible ? ImVec4(0.9f,0.3f,0.3f,1) : ImVec4(0.45f,0.2f,0.2f,1); }
+                    else if (obj->type == Mc3::ObjectType::Intersection) { typePrefix = "[I] "; nodeColor = obj->visible ? ImVec4(0.3f,0.6f,1.0f,1) : ImVec4(0.2f,0.35f,0.5f,1); }
+                    else if (obj->type == Mc3::ObjectType::Group)        { typePrefix = "[G] "; }
+                    else if (obj->isCutter)                              { typePrefix = "[cut] "; nodeColor = obj->visible ? ImVec4(1.0f,0.5f,0.3f,1) : ImVec4(0.5f,0.3f,0.2f,1); }
+                    std::string displayLabel = typePrefix + (obj->name.empty() ? obj->id : obj->name);
+                    ImGui::PushStyleColor(ImGuiCol_Text, nodeColor);
+                    bool nodeOpen = ImGui::TreeNodeEx(displayLabel.c_str(), flags);
                     ImGui::PopStyleColor();
 
                     if (ImGui::IsItemClicked() && !ImGui::IsItemToggledOpen()) {
@@ -1980,6 +2007,54 @@ void MeshCraftApplication::drawImGuiUi(int screenW, int screenH) {
                     if (s != std::string::npos) sel0->tags.push_back(tok.substr(s, e - s + 1));
                 }
                 modified_ = true;
+            }
+        }
+
+        // CSG operation
+        if (sel0->type == Mc3::ObjectType::Union       ||
+            sel0->type == Mc3::ObjectType::Difference  ||
+            sel0->type == Mc3::ObjectType::Intersection)
+        {
+            ImGui::Spacing();
+            ImGui::Separator();
+            ImGui::Spacing();
+            ImGui::TextDisabled("CSG Operation");
+
+            if (!sel0->csgOperation) {
+                Mc3::Mc3CsgOperation csg;
+                csg.csgType = (sel0->type == Mc3::ObjectType::Union)      ? Mc3::CsgType::Union
+                            : (sel0->type == Mc3::ObjectType::Difference) ? Mc3::CsgType::Difference
+                            : Mc3::CsgType::Intersection;
+                sel0->csgOperation = csg;
+            }
+            auto& csg = *sel0->csgOperation;
+            const char* csgNames[] = { "Union", "Difference", "Intersection" };
+            int csgIdx = static_cast<int>(csg.csgType);
+            ImGui::SetNextItemWidth(-1);
+            if (ImGui::Combo("##csgtype", &csgIdx, csgNames, 3)) {
+                pushUndo();
+                csg.csgType = static_cast<Mc3::CsgType>(csgIdx);
+                sel0->type  = (csgIdx == 0) ? Mc3::ObjectType::Union
+                            : (csgIdx == 1) ? Mc3::ObjectType::Difference
+                            : Mc3::ObjectType::Intersection;
+                modified_ = true; updateWindowTitle();
+            }
+
+            if (sel0->type == Mc3::ObjectType::Difference && !sel0->children.empty()) {
+                ImGui::Spacing();
+                ImGui::TextDisabled("Children — check = cutter");
+                for (auto& child : sel0->children) {
+                    ImGui::PushID(child->id.c_str());
+                    bool isCut = child->isCutter;
+                    const std::string& cname = child->name.empty() ? child->id : child->name;
+                    if (ImGui::Checkbox(cname.c_str(), &isCut)) {
+                        pushUndo();
+                        child->isCutter = isCut;
+                        modified_ = true; updateWindowTitle();
+                    }
+                    if (ImGui::IsItemHovered()) ImGui::SetTooltip("Mark as cutter volume (subtracted from base)");
+                    ImGui::PopID();
+                }
             }
         }
 
