@@ -898,16 +898,14 @@ void MeshCraftApplication::addPrimitive(Mc3::ObjectType type) {
     std::snprintf(buf, sizeof(buf), "Object%d", ++counter);
     obj->name = buf;
 
-    Mc3::Mc3Primitive prim;
     switch (type) {
-    case Mc3::ObjectType::Box:      prim.primitiveType = Mc3::PrimitiveType::Box;      prim.size = {1.0f,1.0f,1.0f}; break;
-    case Mc3::ObjectType::Sphere:   prim.primitiveType = Mc3::PrimitiveType::Sphere;   prim.radius = 0.5f; break;
-    case Mc3::ObjectType::Cylinder: prim.primitiveType = Mc3::PrimitiveType::Cylinder; prim.radius = 0.5f; prim.height = 1.0f; break;
-    case Mc3::ObjectType::Cone:     prim.primitiveType = Mc3::PrimitiveType::Cone;     prim.radius = 0.5f; prim.height = 1.0f; break;
-    case Mc3::ObjectType::Plane:    prim.primitiveType = Mc3::PrimitiveType::Plane;    prim.size = {1.0f,0.0f,1.0f}; break;
-    default: break;
+    case Mc3::ObjectType::Box:      { Mc3::Mc3Primitive p; p.primitiveType = Mc3::PrimitiveType::Box;      p.size = {1.0f,1.0f,1.0f}; obj->primitive = p; } break;
+    case Mc3::ObjectType::Sphere:   { Mc3::Mc3Primitive p; p.primitiveType = Mc3::PrimitiveType::Sphere;   p.radius = 0.5f;            obj->primitive = p; } break;
+    case Mc3::ObjectType::Cylinder: { Mc3::Mc3Primitive p; p.primitiveType = Mc3::PrimitiveType::Cylinder; p.radius = 0.5f; p.height = 1.0f; obj->primitive = p; } break;
+    case Mc3::ObjectType::Cone:     { Mc3::Mc3Primitive p; p.primitiveType = Mc3::PrimitiveType::Cone;     p.radius = 0.5f; p.height = 1.0f; obj->primitive = p; } break;
+    case Mc3::ObjectType::Plane:    { Mc3::Mc3Primitive p; p.primitiveType = Mc3::PrimitiveType::Plane;    p.size = {1.0f,0.0f,1.0f};  obj->primitive = p; } break;
+    default: break; // Group, Area, Mesh, Instance — no primitive
     }
-    obj->primitive = prim;
     obj->transform.position = { camera_.target.X, camera_.target.Y + 0.5f, camera_.target.Z };
 
     if (selection_.hasSelection()) {
@@ -1165,11 +1163,15 @@ void MeshCraftApplication::drawImGuiUi(int screenW, int screenH) {
             ImGui::EndMenu();
         }
         if (ImGui::BeginMenu("Add")) {
-            if (ImGui::MenuItem("Box"))      addPrimitive(Mc3::ObjectType::Box);
-            if (ImGui::MenuItem("Sphere"))   addPrimitive(Mc3::ObjectType::Sphere);
-            if (ImGui::MenuItem("Cylinder")) addPrimitive(Mc3::ObjectType::Cylinder);
-            if (ImGui::MenuItem("Cone"))     addPrimitive(Mc3::ObjectType::Cone);
-            if (ImGui::MenuItem("Plane"))    addPrimitive(Mc3::ObjectType::Plane);
+            if (ImGui::MenuItem("Box",      "F1")) addPrimitive(Mc3::ObjectType::Box);
+            if (ImGui::MenuItem("Sphere",   "F2")) addPrimitive(Mc3::ObjectType::Sphere);
+            if (ImGui::MenuItem("Cylinder", "F3")) addPrimitive(Mc3::ObjectType::Cylinder);
+            if (ImGui::MenuItem("Cone",     "F4")) addPrimitive(Mc3::ObjectType::Cone);
+            if (ImGui::MenuItem("Plane",    "F5")) addPrimitive(Mc3::ObjectType::Plane);
+            ImGui::Separator();
+            if (ImGui::MenuItem("Area"))     addPrimitive(Mc3::ObjectType::Area);
+            if (ImGui::MenuItem("Mesh"))     addPrimitive(Mc3::ObjectType::Mesh);
+            if (ImGui::MenuItem("Instance")) addPrimitive(Mc3::ObjectType::Instance);
             ImGui::EndMenu();
         }
         if (ImGui::BeginMenu("View")) {
@@ -1921,6 +1923,52 @@ void MeshCraftApplication::drawImGuiUi(int screenW, int screenH) {
                 }
                 break;
             }
+            }
+        }
+
+        // Mesh source
+        if (sel0->type == Mc3::ObjectType::Mesh) {
+            ImGui::Spacing();
+            ImGui::Separator();
+            ImGui::Spacing();
+            ImGui::TextDisabled("Mesh Source");
+            char srcBuf[512];
+            std::strncpy(srcBuf, sel0->meshSource.c_str(), sizeof(srcBuf)-1); srcBuf[511]='\0';
+            ImGui::SetNextItemWidth(-1);
+            if (ImGui::InputText("##meshsrc", srcBuf, sizeof(srcBuf),
+                    ImGuiInputTextFlags_EnterReturnsTrue)) {
+                pushUndo(); sel0->meshSource = srcBuf; modified_ = true; updateWindowTitle();
+            }
+        }
+
+        // Instance definition + material override
+        if (sel0->type == Mc3::ObjectType::Instance) {
+            ImGui::Spacing();
+            ImGui::Separator();
+            ImGui::Spacing();
+            ImGui::TextDisabled("Definition");
+            const char* defPreview = sel0->definition.empty() ? "(none)" : sel0->definition.c_str();
+            ImGui::SetNextItemWidth(-1);
+            if (ImGui::BeginCombo("##instdef", defPreview)) {
+                if (ImGui::Selectable("(none)", sel0->definition.empty())) {
+                    pushUndo(); sel0->definition = ""; modified_ = true; updateWindowTitle();
+                }
+                for (const auto& [defId, _] : document_.definitions) {
+                    bool selected = (defId == sel0->definition);
+                    if (ImGui::Selectable(defId.c_str(), selected)) {
+                        pushUndo(); sel0->definition = defId; modified_ = true; updateWindowTitle();
+                    }
+                    if (selected) ImGui::SetItemDefaultFocus();
+                }
+                ImGui::EndCombo();
+            }
+            ImGui::TextDisabled("Material Override");
+            char moBuf[128];
+            std::strncpy(moBuf, sel0->materialOverride.c_str(), sizeof(moBuf)-1); moBuf[127]='\0';
+            ImGui::SetNextItemWidth(-1);
+            if (ImGui::InputText("##instmo", moBuf, sizeof(moBuf),
+                    ImGuiInputTextFlags_EnterReturnsTrue)) {
+                pushUndo(); sel0->materialOverride = moBuf; modified_ = true; updateWindowTitle();
             }
         }
 

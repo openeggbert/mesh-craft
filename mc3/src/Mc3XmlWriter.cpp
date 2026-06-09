@@ -85,6 +85,12 @@ static XMLElement* writeObject(XMLDocument& xmlDoc, const std::shared_ptr<Mc3Obj
     XMLElement* el = xmlDoc.NewElement(tag);
     setCommonAttribs(el, *obj);
 
+    if (obj->deform) {
+        XMLElement* de = xmlDoc.NewElement("deform");
+        de->SetAttribute("scale", vec3Str(obj->deform->scale).c_str());
+        el->InsertEndChild(de);
+    }
+
     if (obj->primitive) {
         const auto& p = *obj->primitive;
         switch (obj->type) {
@@ -227,15 +233,21 @@ void Mc3XmlWriter::write(const Mc3Document& doc, const std::filesystem::path& pa
             XMLElement* bc = xml.NewElement("base_color");
             bc->SetText(vec4Str(mat.baseColor).c_str());
             me->InsertEndChild(bc);
-            if (!mat.emissiveTexture.empty()) {
+            {
                 auto add = [&](const char* tag, const std::string& val) {
+                    if (val.empty()) return;
                     XMLElement* t = xml.NewElement(tag); t->SetText(val.c_str()); me->InsertEndChild(t);
                 };
-                if (!mat.baseColorTexture.empty())         add("base_color_texture",          mat.baseColorTexture);
-                if (!mat.normalTexture.empty())            add("normal_texture",               mat.normalTexture);
-                if (!mat.metallicRoughnessTexture.empty()) add("metallic_roughness_texture",   mat.metallicRoughnessTexture);
-                if (!mat.occlusionTexture.empty())         add("occlusion_texture",            mat.occlusionTexture);
-                if (!mat.emissiveTexture.empty())          add("emissive_texture",             mat.emissiveTexture);
+                add("base_color_texture",        mat.baseColorTexture);
+                add("normal_texture",            mat.normalTexture);
+                add("metallic_roughness_texture",mat.metallicRoughnessTexture);
+                add("occlusion_texture",         mat.occlusionTexture);
+                add("emissive_texture",          mat.emissiveTexture);
+                if (mat.emissiveColor[0] != 0 || mat.emissiveColor[1] != 0 || mat.emissiveColor[2] != 0)
+                    add("emissive_color", vec3Str(mat.emissiveColor));
+                if (mat.alphaCutoff != 0.5f) me->SetAttribute("alpha_cutoff", fStr(mat.alphaCutoff).c_str());
+                if (mat.normalScale != 1.0f) me->SetAttribute("normal_scale", fStr(mat.normalScale).c_str());
+                if (mat.occlusionStrength != 1.0f) me->SetAttribute("occlusion_strength", fStr(mat.occlusionStrength).c_str());
             }
             mEl->InsertEndChild(me);
         }
