@@ -1430,6 +1430,99 @@ void MeshCraftApplication::drawImGuiUi(int screenW, int screenH) {
             }
         }
 
+        // Geometry parameters
+        if (sel0->primitive) {
+            ImGui::Spacing();
+            ImGui::Separator();
+            ImGui::Spacing();
+            ImGui::TextDisabled("Geometry");
+
+            auto& p = *sel0->primitive;
+
+            switch (p.primitiveType) {
+            case Mc3::PrimitiveType::Box:
+            case Mc3::PrimitiveType::Cube: {
+                float sz[3] = { p.size[0], p.size[1], p.size[2] };
+                ImGui::TextDisabled("Size (W/H/D)");
+                ImGui::SetNextItemWidth(-1);
+                if (ImGui::DragFloat3("##psize", sz, 0.01f, 0.001f, 1000.0f)) {
+                    if (ImGui::IsItemActivated()) pushUndo();
+                    p.size[0] = std::max(0.001f, sz[0]);
+                    p.size[1] = std::max(0.001f, sz[1]);
+                    p.size[2] = std::max(0.001f, sz[2]);
+                    modified_ = true; updateWindowTitle();
+                }
+                break;
+            }
+            case Mc3::PrimitiveType::Sphere: {
+                ImGui::TextDisabled("Radius");
+                float r = p.radius;
+                ImGui::SetNextItemWidth(-1);
+                if (ImGui::DragFloat("##prad", &r, 0.01f, 0.001f, 1000.0f)) {
+                    if (ImGui::IsItemActivated()) pushUndo();
+                    p.radius = std::max(0.001f, r);
+                    modified_ = true; updateWindowTitle();
+                }
+                ImGui::TextDisabled("Segments");
+                int segs = p.segments;
+                ImGui::SetNextItemWidth(-1);
+                if (ImGui::SliderInt("##psegs", &segs, 4, 64)) {
+                    if (ImGui::IsItemActivated()) pushUndo();
+                    p.segments = segs;
+                    modified_ = true; updateWindowTitle();
+                }
+                break;
+            }
+            case Mc3::PrimitiveType::Cylinder:
+            case Mc3::PrimitiveType::Cone: {
+                ImGui::TextDisabled("Radius");
+                float r = p.radius;
+                ImGui::SetNextItemWidth(-1);
+                if (ImGui::DragFloat("##prad", &r, 0.01f, 0.001f, 1000.0f)) {
+                    if (ImGui::IsItemActivated()) pushUndo();
+                    p.radius = std::max(0.001f, r);
+                    modified_ = true; updateWindowTitle();
+                }
+                ImGui::TextDisabled("Height");
+                float h = p.height;
+                ImGui::SetNextItemWidth(-1);
+                if (ImGui::DragFloat("##phgt", &h, 0.01f, 0.001f, 1000.0f)) {
+                    if (ImGui::IsItemActivated()) pushUndo();
+                    p.height = std::max(0.001f, h);
+                    modified_ = true; updateWindowTitle();
+                }
+                ImGui::TextDisabled("Segments");
+                int segs = p.segments;
+                ImGui::SetNextItemWidth(-1);
+                if (ImGui::SliderInt("##psegs", &segs, 4, 64)) {
+                    if (ImGui::IsItemActivated()) pushUndo();
+                    p.segments = segs;
+                    modified_ = true; updateWindowTitle();
+                }
+                break;
+            }
+            case Mc3::PrimitiveType::Plane: {
+                ImGui::TextDisabled("Width");
+                float w = p.size[0];
+                ImGui::SetNextItemWidth(-1);
+                if (ImGui::DragFloat("##ppw", &w, 0.01f, 0.001f, 1000.0f)) {
+                    if (ImGui::IsItemActivated()) pushUndo();
+                    p.size[0] = std::max(0.001f, w);
+                    modified_ = true; updateWindowTitle();
+                }
+                ImGui::TextDisabled("Depth");
+                float d = p.size[2];
+                ImGui::SetNextItemWidth(-1);
+                if (ImGui::DragFloat("##ppd", &d, 0.01f, 0.001f, 1000.0f)) {
+                    if (ImGui::IsItemActivated()) pushUndo();
+                    p.size[2] = std::max(0.001f, d);
+                    modified_ = true; updateWindowTitle();
+                }
+                break;
+            }
+            }
+        }
+
         // Material swatch (read-only)
         if (!sel0->material.empty()) {
             ImGui::Spacing();
