@@ -1693,6 +1693,141 @@ void MeshCraftApplication::drawImGuiUi(int screenW, int screenH) {
             ImGui::EndTabItem();
         }
 
+        // -------------------------------------------------------------------
+        // Tab: Textures
+        // -------------------------------------------------------------------
+        if (ImGui::BeginTabItem("Tex")) {
+            // Validate selection
+            if (!selectedTextureKey_.empty() &&
+                !document_.textures.count(selectedTextureKey_))
+                selectedTextureKey_.clear();
+
+            // Toolbar: Add / Remove
+            if (ImGui::SmallButton("+")) {
+                pushUndo();
+                int n = 1;
+                std::string key;
+                do { key = "tex_" + std::to_string(n++); }
+                while (document_.textures.count(key));
+                Mc3::Mc3Texture tex;
+                tex.name = key;
+                document_.textures[key] = tex;
+                selectedTextureKey_ = key;
+                modified_ = true; updateWindowTitle();
+            }
+            ImGui::SameLine();
+            if (ImGui::SmallButton("-") && !selectedTextureKey_.empty()) {
+                pushUndo();
+                document_.textures.erase(selectedTextureKey_);
+                selectedTextureKey_.clear();
+                modified_ = true; updateWindowTitle();
+            }
+
+            // List
+            ImGui::Separator();
+            for (const auto& [key, tex] : document_.textures) {
+                bool sel = (key == selectedTextureKey_);
+                std::string label = key;
+                if (!tex.uri.empty()) {
+                    // Show just filename part
+                    auto slash = tex.uri.find_last_of("/\\");
+                    label += "  " + (slash != std::string::npos ? tex.uri.substr(slash+1) : tex.uri);
+                }
+                ImGui::PushID(key.c_str());
+                if (ImGui::Selectable(label.c_str(), sel))
+                    selectedTextureKey_ = key;
+                ImGui::PopID();
+            }
+
+            // Inline editor
+            if (!selectedTextureKey_.empty() &&
+                document_.textures.count(selectedTextureKey_))
+            {
+                auto& tex = document_.textures[selectedTextureKey_];
+                ImGui::Separator();
+                ImGui::Spacing();
+
+                // ID (read-only) with copy button
+                ImGui::TextDisabled("ID");
+                ImGui::SameLine();
+                if (ImGui::SmallButton("Copy##texid"))
+                    ImGui::SetClipboardText(selectedTextureKey_.c_str());
+                ImGui::TextUnformatted(selectedTextureKey_.c_str());
+
+                // Display name
+                ImGui::TextDisabled("Name");
+                {
+                    char buf[128];
+                    std::strncpy(buf, tex.name.c_str(), sizeof(buf)-1); buf[127]='\0';
+                    ImGui::SetNextItemWidth(-1);
+                    if (ImGui::InputText("##texname", buf, sizeof(buf),
+                            ImGuiInputTextFlags_EnterReturnsTrue)) {
+                        pushUndo(); tex.name = buf; modified_ = true; updateWindowTitle();
+                    }
+                }
+
+                // URI (file path)
+                ImGui::TextDisabled("URI (path)");
+                {
+                    char buf[512];
+                    std::strncpy(buf, tex.uri.c_str(), sizeof(buf)-1); buf[511]='\0';
+                    ImGui::SetNextItemWidth(-1);
+                    if (ImGui::InputText("##texuri", buf, sizeof(buf),
+                            ImGuiInputTextFlags_EnterReturnsTrue)) {
+                        pushUndo(); tex.uri = buf; modified_ = true; updateWindowTitle();
+                    }
+                }
+
+                // Wrap U
+                {
+                    const char* wraps[] = { "repeat", "clamp", "mirror" };
+                    int widx = 0;
+                    for (int i = 0; i < 3; ++i) if (tex.wrapU == wraps[i]) { widx = i; break; }
+                    ImGui::TextDisabled("Wrap U");
+                    ImGui::SetNextItemWidth(-1);
+                    if (ImGui::Combo("##twrapu", &widx, wraps, 3)) {
+                        pushUndo(); tex.wrapU = wraps[widx]; modified_ = true; updateWindowTitle();
+                    }
+                }
+
+                // Wrap V
+                {
+                    const char* wraps[] = { "repeat", "clamp", "mirror" };
+                    int widx = 0;
+                    for (int i = 0; i < 3; ++i) if (tex.wrapV == wraps[i]) { widx = i; break; }
+                    ImGui::TextDisabled("Wrap V");
+                    ImGui::SetNextItemWidth(-1);
+                    if (ImGui::Combo("##twrapv", &widx, wraps, 3)) {
+                        pushUndo(); tex.wrapV = wraps[widx]; modified_ = true; updateWindowTitle();
+                    }
+                }
+
+                // Filter
+                {
+                    const char* filters[] = { "linear", "nearest" };
+                    int fidx = (tex.filter == "nearest") ? 1 : 0;
+                    ImGui::TextDisabled("Filter");
+                    ImGui::SetNextItemWidth(-1);
+                    if (ImGui::Combo("##tfilter", &fidx, filters, 2)) {
+                        pushUndo(); tex.filter = filters[fidx]; modified_ = true; updateWindowTitle();
+                    }
+                }
+
+                // Color space
+                {
+                    const char* spaces[] = { "srgb", "linear" };
+                    int sidx = (tex.colorSpace == "linear") ? 1 : 0;
+                    ImGui::TextDisabled("Color Space");
+                    ImGui::SetNextItemWidth(-1);
+                    if (ImGui::Combo("##tcolorsp", &sidx, spaces, 2)) {
+                        pushUndo(); tex.colorSpace = spaces[sidx]; modified_ = true; updateWindowTitle();
+                    }
+                }
+            }
+
+            ImGui::EndTabItem();
+        }
+
         ImGui::EndTabBar();
     }
 

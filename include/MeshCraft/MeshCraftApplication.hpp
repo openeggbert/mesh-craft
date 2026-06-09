@@ -85,6 +85,9 @@ private:
     // Cameras panel selection
     int selectedCameraIdx_{-1};
 
+    // Textures panel selection
+    std::string selectedTextureKey_;
+
     // ImGui file dialog state (buffers persist across frames)
     bool openDialogOpen_{false};
     char openDialogBuf_[512]{};

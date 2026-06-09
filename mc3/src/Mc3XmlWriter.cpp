@@ -220,6 +220,29 @@ void Mc3XmlWriter::write(const Mc3Document& doc, const std::filesystem::path& pa
         root->InsertEndChild(cEl);
     }
 
+    // Textures
+    if (!doc.textures.empty()) {
+        XMLElement* tEl = xml.NewElement("textures");
+        for (const auto& [id, tex] : doc.textures) {
+            XMLElement* te = xml.NewElement("texture");
+            te->SetAttribute("id",  id.c_str());
+            if (!tex.name.empty() && tex.name != id)
+                te->SetAttribute("name", tex.name.c_str());
+            if (!tex.uri.empty())
+                te->SetAttribute("uri", tex.uri.c_str());
+            if (tex.wrapU != "repeat")
+                te->SetAttribute("wrap_u", tex.wrapU.c_str());
+            if (tex.wrapV != "repeat")
+                te->SetAttribute("wrap_v", tex.wrapV.c_str());
+            if (tex.filter != "linear")
+                te->SetAttribute("filter", tex.filter.c_str());
+            if (tex.colorSpace != "srgb")
+                te->SetAttribute("color_space", tex.colorSpace.c_str());
+            tEl->InsertEndChild(te);
+        }
+        root->InsertEndChild(tEl);
+    }
+
     // Materials
     if (!doc.materials.empty()) {
         XMLElement* mEl = xml.NewElement("materials");
