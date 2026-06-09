@@ -1,4 +1,5 @@
 #include "Mc3XmlWriter.hpp"
+#include <MeshCraft/Mc3/Mc3Extrude.hpp>
 #include <tinyxml2.h>
 #include <stdexcept>
 #include <cstdio>
@@ -115,6 +116,95 @@ static XMLElement* writeObject(XMLDocument& xmlDoc, const std::shared_ptr<Mc3Obj
             break;
         default: break;
         }
+    }
+
+    if (obj->extrude) {
+        const auto& ex = *obj->extrude;
+        if (ex.twist    != 0.0f) el->SetAttribute("twist",    fStr(ex.twist).c_str());
+        if (ex.segments != 32)   el->SetAttribute("segments", ex.segments);
+        if (!ex.smooth)          el->SetAttribute("smooth",   "false");
+        if (!ex.caps)            el->SetAttribute("caps",     "false");
+
+        // Cross-section
+        const auto& cs = ex.crossSection;
+        XMLElement* csEl = xmlDoc.NewElement("cross_section");
+        const char* csTypeStr = "rect";
+        switch (cs.type) {
+        case CrossSectionType::Circle:  csTypeStr = "circle";  break;
+        case CrossSectionType::Polygon: csTypeStr = "polygon"; break;
+        case CrossSectionType::Custom:  csTypeStr = "custom";  break;
+        default: break;
+        }
+        csEl->SetAttribute("type", csTypeStr);
+        switch (cs.type) {
+        case CrossSectionType::Rect:
+            if (cs.width  != 0.3f) csEl->SetAttribute("width",  fStr(cs.width).c_str());
+            if (cs.height != 0.3f) csEl->SetAttribute("height", fStr(cs.height).c_str());
+            break;
+        case CrossSectionType::Circle:
+            if (cs.radius      != 0.1f) csEl->SetAttribute("radius",       fStr(cs.radius).c_str());
+            if (cs.innerRadius != 0.0f) csEl->SetAttribute("inner_radius", fStr(cs.innerRadius).c_str());
+            if (cs.segments    != 32)   csEl->SetAttribute("segments",     cs.segments);
+            break;
+        case CrossSectionType::Polygon:
+            if (cs.radius      != 0.1f) csEl->SetAttribute("radius",       fStr(cs.radius).c_str());
+            if (cs.innerRadius != 0.0f) csEl->SetAttribute("inner_radius", fStr(cs.innerRadius).c_str());
+            if (cs.sides       != 6)    csEl->SetAttribute("sides",        cs.sides);
+            break;
+        case CrossSectionType::Custom:
+            for (const auto& pt : cs.customPoints) {
+                XMLElement* pe = xmlDoc.NewElement("point");
+                pe->SetAttribute("x", fStr(pt.x).c_str());
+                pe->SetAttribute("y", fStr(pt.y).c_str());
+                csEl->InsertEndChild(pe);
+            }
+            break;
+        }
+        el->InsertEndChild(csEl);
+
+        // Path
+        const auto& path = ex.path;
+        XMLElement* pathEl = xmlDoc.NewElement("path");
+        const char* pathTypeStr = "line";
+        switch (path.type) {
+        case ExtrudePathType::Arc:      pathTypeStr = "arc";      break;
+        case ExtrudePathType::Helix:    pathTypeStr = "helix";    break;
+        case ExtrudePathType::Polyline: pathTypeStr = "polyline"; break;
+        case ExtrudePathType::Bezier:   pathTypeStr = "bezier";   break;
+        default: break;
+        }
+        pathEl->SetAttribute("type", pathTypeStr);
+        switch (path.type) {
+        case ExtrudePathType::Line:
+            if (path.length != 1.0f) pathEl->SetAttribute("length", fStr(path.length).c_str());
+            if (path.axis   != "y")  pathEl->SetAttribute("axis",   path.axis.c_str());
+            break;
+        case ExtrudePathType::Arc:
+            pathEl->SetAttribute("radius", fStr(path.arcRadius).c_str());
+            pathEl->SetAttribute("angle",  fStr(path.arcAngle).c_str());
+            break;
+        case ExtrudePathType::Helix:
+            pathEl->SetAttribute("radius", fStr(path.helixRadius).c_str());
+            pathEl->SetAttribute("height", fStr(path.helixHeight).c_str());
+            pathEl->SetAttribute("turns",  fStr(path.helixTurns).c_str());
+            break;
+        case ExtrudePathType::Polyline:
+        case ExtrudePathType::Bezier:
+            for (const auto& pt : path.points) {
+                XMLElement* pe = xmlDoc.NewElement("point");
+                pe->SetAttribute("x",  fStr(pt.position[0]).c_str());
+                pe->SetAttribute("y",  fStr(pt.position[1]).c_str());
+                pe->SetAttribute("z",  fStr(pt.position[2]).c_str());
+                if (path.type == ExtrudePathType::Bezier) {
+                    pe->SetAttribute("cx", fStr(pt.controlIn[0]).c_str());
+                    pe->SetAttribute("cy", fStr(pt.controlIn[1]).c_str());
+                    pe->SetAttribute("cz", fStr(pt.controlIn[2]).c_str());
+                }
+                pathEl->InsertEndChild(pe);
+            }
+            break;
+        }
+        el->InsertEndChild(pathEl);
     }
 
     if (obj->type == ObjectType::Mesh && !obj->meshSource.empty())

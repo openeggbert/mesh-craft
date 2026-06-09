@@ -904,6 +904,20 @@ void MeshCraftApplication::addPrimitive(Mc3::ObjectType type) {
     case Mc3::ObjectType::Cylinder: { Mc3::Mc3Primitive p; p.primitiveType = Mc3::PrimitiveType::Cylinder; p.radius = 0.5f; p.height = 1.0f; obj->primitive = p; } break;
     case Mc3::ObjectType::Cone:     { Mc3::Mc3Primitive p; p.primitiveType = Mc3::PrimitiveType::Cone;     p.radius = 0.5f; p.height = 1.0f; obj->primitive = p; } break;
     case Mc3::ObjectType::Plane:    { Mc3::Mc3Primitive p; p.primitiveType = Mc3::PrimitiveType::Plane;    p.size = {1.0f,0.0f,1.0f};  obj->primitive = p; } break;
+    case Mc3::ObjectType::Extrude: {
+        Mc3::Mc3Extrude ex;
+        ex.crossSection.type   = Mc3::CrossSectionType::Rect;
+        ex.crossSection.width  = 0.3f;
+        ex.crossSection.height = 0.3f;
+        ex.path.type   = Mc3::ExtrudePathType::Line;
+        ex.path.length = 1.0f;
+        ex.path.axis   = "y";
+        ex.segments    = 8;
+        ex.smooth      = true;
+        ex.caps        = true;
+        obj->extrude = ex;
+        break;
+    }
     default: break; // Group, Area, Mesh, Instance — no primitive
     }
     obj->transform.position = { camera_.target.X, camera_.target.Y + 0.5f, camera_.target.Z };
@@ -1172,6 +1186,7 @@ void MeshCraftApplication::drawImGuiUi(int screenW, int screenH) {
             if (ImGui::MenuItem("Area"))     addPrimitive(Mc3::ObjectType::Area);
             if (ImGui::MenuItem("Mesh"))     addPrimitive(Mc3::ObjectType::Mesh);
             if (ImGui::MenuItem("Instance")) addPrimitive(Mc3::ObjectType::Instance);
+            if (ImGui::MenuItem("Extrude"))  addPrimitive(Mc3::ObjectType::Extrude);
             ImGui::EndMenu();
         }
         if (ImGui::BeginMenu("View")) {
@@ -2058,6 +2073,247 @@ void MeshCraftApplication::drawImGuiUi(int screenW, int screenH) {
                 }
                 break;
             }
+            }
+        }
+
+        // Extrude editor
+        if (sel0->type == Mc3::ObjectType::Extrude) {
+            ImGui::Spacing();
+            ImGui::Separator();
+            ImGui::Spacing();
+            ImGui::TextDisabled("Extrude");
+
+            if (!sel0->extrude) sel0->extrude = Mc3::Mc3Extrude{};
+            auto& ex = *sel0->extrude;
+
+            // General params
+            ImGui::TextDisabled("Twist (deg)");
+            ImGui::SetNextItemWidth(-1);
+            if (ImGui::DragFloat("##extwist", &ex.twist, 1.0f, -3600.0f, 3600.0f)) {
+                if (ImGui::IsItemActivated()) pushUndo();
+                modified_ = true; updateWindowTitle();
+            }
+            ImGui::TextDisabled("Path Segments");
+            ImGui::SetNextItemWidth(-1);
+            if (ImGui::SliderInt("##exsegs", &ex.segments, 1, 128)) {
+                if (ImGui::IsItemActivated()) pushUndo();
+                modified_ = true; updateWindowTitle();
+            }
+            if (ImGui::Checkbox("Smooth", &ex.smooth))  { modified_ = true; updateWindowTitle(); }
+            ImGui::SameLine();
+            if (ImGui::Checkbox("Caps",   &ex.caps))    { modified_ = true; updateWindowTitle(); }
+
+            // --- Cross-section ---
+            if (ImGui::TreeNodeEx("Cross-section", ImGuiTreeNodeFlags_DefaultOpen)) {
+                auto& cs = ex.crossSection;
+                const char* csTypes[] = { "Rect", "Circle", "Polygon", "Custom" };
+                int csIdx = static_cast<int>(cs.type);
+                ImGui::SetNextItemWidth(-1);
+                if (ImGui::Combo("##cstype", &csIdx, csTypes, 4)) {
+                    pushUndo();
+                    cs.type = static_cast<Mc3::CrossSectionType>(csIdx);
+                    modified_ = true; updateWindowTitle();
+                }
+                switch (cs.type) {
+                case Mc3::CrossSectionType::Rect:
+                    ImGui::TextDisabled("Width");
+                    ImGui::SetNextItemWidth(-1);
+                    if (ImGui::DragFloat("##csw", &cs.width, 0.01f, 0.001f, 1000.f)) {
+                        if (ImGui::IsItemActivated()) pushUndo();
+                        cs.width = std::max(0.001f, cs.width);
+                        modified_ = true; updateWindowTitle();
+                    }
+                    ImGui::TextDisabled("Height");
+                    ImGui::SetNextItemWidth(-1);
+                    if (ImGui::DragFloat("##csh", &cs.height, 0.01f, 0.001f, 1000.f)) {
+                        if (ImGui::IsItemActivated()) pushUndo();
+                        cs.height = std::max(0.001f, cs.height);
+                        modified_ = true; updateWindowTitle();
+                    }
+                    break;
+                case Mc3::CrossSectionType::Circle:
+                    ImGui::TextDisabled("Radius");
+                    ImGui::SetNextItemWidth(-1);
+                    if (ImGui::DragFloat("##csr", &cs.radius, 0.01f, 0.001f, 1000.f)) {
+                        if (ImGui::IsItemActivated()) pushUndo();
+                        cs.radius = std::max(0.001f, cs.radius);
+                        modified_ = true; updateWindowTitle();
+                    }
+                    ImGui::TextDisabled("Inner Radius");
+                    ImGui::SetNextItemWidth(-1);
+                    if (ImGui::DragFloat("##csir", &cs.innerRadius, 0.01f, 0.0f, cs.radius)) {
+                        if (ImGui::IsItemActivated()) pushUndo();
+                        cs.innerRadius = std::max(0.0f, cs.innerRadius);
+                        modified_ = true; updateWindowTitle();
+                    }
+                    ImGui::TextDisabled("Segments");
+                    ImGui::SetNextItemWidth(-1);
+                    if (ImGui::SliderInt("##csseg", &cs.segments, 3, 64)) {
+                        if (ImGui::IsItemActivated()) pushUndo();
+                        modified_ = true; updateWindowTitle();
+                    }
+                    break;
+                case Mc3::CrossSectionType::Polygon:
+                    ImGui::TextDisabled("Radius");
+                    ImGui::SetNextItemWidth(-1);
+                    if (ImGui::DragFloat("##cspr", &cs.radius, 0.01f, 0.001f, 1000.f)) {
+                        if (ImGui::IsItemActivated()) pushUndo();
+                        cs.radius = std::max(0.001f, cs.radius);
+                        modified_ = true; updateWindowTitle();
+                    }
+                    ImGui::TextDisabled("Inner Radius");
+                    ImGui::SetNextItemWidth(-1);
+                    if (ImGui::DragFloat("##cspir", &cs.innerRadius, 0.01f, 0.0f, cs.radius)) {
+                        if (ImGui::IsItemActivated()) pushUndo();
+                        cs.innerRadius = std::max(0.0f, cs.innerRadius);
+                        modified_ = true; updateWindowTitle();
+                    }
+                    ImGui::TextDisabled("Sides");
+                    ImGui::SetNextItemWidth(-1);
+                    if (ImGui::SliderInt("##cspsd", &cs.sides, 3, 32)) {
+                        if (ImGui::IsItemActivated()) pushUndo();
+                        modified_ = true; updateWindowTitle();
+                    }
+                    break;
+                case Mc3::CrossSectionType::Custom:
+                    ImGui::TextDisabled("Points (X Y)");
+                    for (int pi = 0; pi < static_cast<int>(cs.customPoints.size()); ++pi) {
+                        ImGui::PushID(pi);
+                        float xy[2] = { cs.customPoints[pi].x, cs.customPoints[pi].y };
+                        ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x - 20);
+                        if (ImGui::DragFloat2("##cpt", xy, 0.01f)) {
+                            if (ImGui::IsItemActivated()) pushUndo();
+                            cs.customPoints[pi].x = xy[0];
+                            cs.customPoints[pi].y = xy[1];
+                            modified_ = true; updateWindowTitle();
+                        }
+                        ImGui::SameLine();
+                        if (ImGui::SmallButton("x")) {
+                            pushUndo();
+                            cs.customPoints.erase(cs.customPoints.begin() + pi);
+                            modified_ = true; updateWindowTitle();
+                            ImGui::PopID(); break;
+                        }
+                        ImGui::PopID();
+                    }
+                    if (ImGui::SmallButton("+ Point")) {
+                        pushUndo();
+                        cs.customPoints.push_back({0.0f, 0.0f});
+                        modified_ = true; updateWindowTitle();
+                    }
+                    break;
+                }
+                ImGui::TreePop();
+            }
+
+            // --- Path ---
+            if (ImGui::TreeNodeEx("Path", ImGuiTreeNodeFlags_DefaultOpen)) {
+                auto& path = ex.path;
+                const char* pathTypes[] = { "Line", "Arc", "Helix", "Polyline", "Bezier" };
+                int ptIdx = static_cast<int>(path.type);
+                ImGui::SetNextItemWidth(-1);
+                if (ImGui::Combo("##pathtype", &ptIdx, pathTypes, 5)) {
+                    pushUndo();
+                    path.type = static_cast<Mc3::ExtrudePathType>(ptIdx);
+                    modified_ = true; updateWindowTitle();
+                }
+                switch (path.type) {
+                case Mc3::ExtrudePathType::Line: {
+                    ImGui::TextDisabled("Length");
+                    ImGui::SetNextItemWidth(-1);
+                    if (ImGui::DragFloat("##plen", &path.length, 0.01f, 0.001f, 10000.f)) {
+                        if (ImGui::IsItemActivated()) pushUndo();
+                        path.length = std::max(0.001f, path.length);
+                        modified_ = true; updateWindowTitle();
+                    }
+                    ImGui::TextDisabled("Axis");
+                    const char* axes[] = { "x", "y", "z" };
+                    int axIdx = (path.axis == "x") ? 0 : (path.axis == "z") ? 2 : 1;
+                    ImGui::SetNextItemWidth(-1);
+                    if (ImGui::Combo("##paxis", &axIdx, axes, 3)) {
+                        pushUndo();
+                        path.axis = axes[axIdx];
+                        modified_ = true; updateWindowTitle();
+                    }
+                    break;
+                }
+                case Mc3::ExtrudePathType::Arc:
+                    ImGui::TextDisabled("Radius");
+                    ImGui::SetNextItemWidth(-1);
+                    if (ImGui::DragFloat("##parr", &path.arcRadius, 0.01f, 0.001f, 10000.f)) {
+                        if (ImGui::IsItemActivated()) pushUndo();
+                        path.arcRadius = std::max(0.001f, path.arcRadius);
+                        modified_ = true; updateWindowTitle();
+                    }
+                    ImGui::TextDisabled("Angle (deg)");
+                    ImGui::SetNextItemWidth(-1);
+                    if (ImGui::DragFloat("##para", &path.arcAngle, 1.0f, -360.0f, 360.0f)) {
+                        if (ImGui::IsItemActivated()) pushUndo();
+                        modified_ = true; updateWindowTitle();
+                    }
+                    break;
+                case Mc3::ExtrudePathType::Helix:
+                    ImGui::TextDisabled("Radius");
+                    ImGui::SetNextItemWidth(-1);
+                    if (ImGui::DragFloat("##phr", &path.helixRadius, 0.01f, 0.001f, 10000.f)) {
+                        if (ImGui::IsItemActivated()) pushUndo();
+                        path.helixRadius = std::max(0.001f, path.helixRadius);
+                        modified_ = true; updateWindowTitle();
+                    }
+                    ImGui::TextDisabled("Height");
+                    ImGui::SetNextItemWidth(-1);
+                    if (ImGui::DragFloat("##phh", &path.helixHeight, 0.01f, 0.001f, 10000.f)) {
+                        if (ImGui::IsItemActivated()) pushUndo();
+                        path.helixHeight = std::max(0.001f, path.helixHeight);
+                        modified_ = true; updateWindowTitle();
+                    }
+                    ImGui::TextDisabled("Turns");
+                    ImGui::SetNextItemWidth(-1);
+                    if (ImGui::DragFloat("##pht", &path.helixTurns, 0.1f, 0.1f, 1000.f)) {
+                        if (ImGui::IsItemActivated()) pushUndo();
+                        path.helixTurns = std::max(0.1f, path.helixTurns);
+                        modified_ = true; updateWindowTitle();
+                    }
+                    break;
+                case Mc3::ExtrudePathType::Polyline:
+                case Mc3::ExtrudePathType::Bezier: {
+                    bool isBez = path.type == Mc3::ExtrudePathType::Bezier;
+                    ImGui::TextDisabled(isBez ? "Points (pos + ctrl)" : "Points");
+                    for (int pi = 0; pi < static_cast<int>(path.points.size()); ++pi) {
+                        ImGui::PushID(pi);
+                        auto& pt = path.points[pi];
+                        ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x - 20);
+                        if (ImGui::DragFloat3("##pp", pt.position.data(), 0.1f)) {
+                            if (ImGui::IsItemActivated()) pushUndo();
+                            modified_ = true; updateWindowTitle();
+                        }
+                        if (isBez) {
+                            ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x - 20);
+                            if (ImGui::DragFloat3("##pc", pt.controlIn.data(), 0.1f)) {
+                                if (ImGui::IsItemActivated()) pushUndo();
+                                modified_ = true; updateWindowTitle();
+                            }
+                        }
+                        ImGui::SameLine();
+                        if (ImGui::SmallButton("x")) {
+                            pushUndo();
+                            path.points.erase(path.points.begin() + pi);
+                            modified_ = true; updateWindowTitle();
+                            ImGui::PopID(); break;
+                        }
+                        ImGui::PopID();
+                    }
+                    if (ImGui::SmallButton("+ Point")) {
+                        pushUndo();
+                        Mc3::Mc3PathPoint pp;
+                        if (!path.points.empty()) pp.position = path.points.back().position;
+                        path.points.push_back(pp);
+                        modified_ = true; updateWindowTitle();
+                    }
+                    break;
+                }
+                }
+                ImGui::TreePop();
             }
         }
 
