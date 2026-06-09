@@ -1,6 +1,8 @@
 #pragma once
 
+#include <MeshCraft/Mc3/Mc3Camera.hpp>
 #include <MeshCraft/Mc3/Mc3Document.hpp>
+#include <MeshCraft/Mc3/Mc3Light.hpp>
 #include <MeshCraft/Mc3/Mc3Object.hpp>
 #include <Microsoft/Xna/Framework/Color.hpp>
 #include <Microsoft/Xna/Framework/Graphics/BasicEffect.hpp>
@@ -53,6 +55,15 @@ public:
                              const Microsoft::Xna::Framework::Matrix& projection,
                              Microsoft::Xna::Framework::Color color);
 
+    // Render scene-level gizmos (lights / cameras)
+    void drawLightGizmos(const std::vector<Mc3::Mc3Light>& lights,
+                         const Microsoft::Xna::Framework::Matrix& view,
+                         const Microsoft::Xna::Framework::Matrix& projection);
+
+    void drawCameraGizmos(const std::vector<Mc3::Mc3Camera>& cameras,
+                          const Microsoft::Xna::Framework::Matrix& view,
+                          const Microsoft::Xna::Framework::Matrix& projection);
+
 private:
     Microsoft::Xna::Framework::Graphics::GraphicsDevice& device_;
     std::unique_ptr<Microsoft::Xna::Framework::Graphics::BasicEffect> effect_;
@@ -82,6 +93,10 @@ private:
                     const Microsoft::Xna::Framework::Matrix& projection,
                     const std::vector<const Mc3::Mc3Object*>& selected,
                     int depth = 0);
+
+    void drawLineList(const std::vector<Microsoft::Xna::Framework::Graphics::VertexPositionColor>& verts,
+                      const Microsoft::Xna::Framework::Matrix& view,
+                      const Microsoft::Xna::Framework::Matrix& projection);
 
     void drawMesh(const RenderMesh& mesh,
                   const Microsoft::Xna::Framework::Matrix& world,

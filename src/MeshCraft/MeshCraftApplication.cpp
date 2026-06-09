@@ -212,6 +212,12 @@ void MeshCraftApplication::Draw(const GameTime& /*gameTime*/) {
     auto selPtrs = selectedPointers();
     sceneRenderer_->draw(document_, view, proj, selPtrs);
 
+    // Scene-level gizmos (lights / cameras)
+    gd.SetDepthTestEnabled(false);
+    sceneRenderer_->drawLightGizmos(document_.lights, view, proj);
+    sceneRenderer_->drawCameraGizmos(document_.cameras, view, proj);
+    gd.SetDepthTestEnabled(true);
+
     if (selection_.hasSelection()) {
         float gizmoLen = camera_.distance * 0.15f;
         auto* sel0 = selection_.selection().front().get();
@@ -1915,6 +1921,32 @@ void MeshCraftApplication::drawImGuiUi(int screenW, int screenH) {
                 }
                 break;
             }
+            }
+        }
+
+        // Deform (geometry-level non-uniform scale)
+        {
+            ImGui::Spacing();
+            ImGui::Separator();
+            ImGui::Spacing();
+            bool deformEnabled = sel0->deform.has_value();
+            if (ImGui::Checkbox("Deform", &deformEnabled)) {
+                pushUndo();
+                if (deformEnabled) sel0->deform = Mc3::Mc3Deform{};
+                else               sel0->deform.reset();
+                modified_ = true; updateWindowTitle();
+            }
+            if (sel0->deform.has_value()) {
+                auto& d = *sel0->deform;
+                ImGui::TextDisabled("Deform Scale");
+                ImGui::SetNextItemWidth(-1);
+                if (ImGui::DragFloat3("##deform", d.scale.data(), 0.01f, 0.001f, 1000.0f)) {
+                    if (ImGui::IsItemActivated()) pushUndo();
+                    d.scale[0] = std::max(0.001f, d.scale[0]);
+                    d.scale[1] = std::max(0.001f, d.scale[1]);
+                    d.scale[2] = std::max(0.001f, d.scale[2]);
+                    modified_ = true; updateWindowTitle();
+                }
             }
         }
 

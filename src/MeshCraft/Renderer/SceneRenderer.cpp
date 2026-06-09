@@ -515,40 +515,45 @@ void SceneRenderer::drawObject(const Mc3Object& obj, const Mc3Document& doc,
     Color color  = materialColor(obj.material, doc);
     bool  sel    = isSelected(obj, selected);
 
+    // Deform: geometry-level non-uniform scale, applied before primitive size and world transform
+    Matrix deform = obj.deform
+        ? Matrix::CreateScale({obj.deform->scale[0], obj.deform->scale[1], obj.deform->scale[2]})
+        : Matrix::getIdentityProperty();
+
     switch (obj.type) {
     case ObjectType::Box:
     case ObjectType::Cube: {
         float sx = obj.primitive ? obj.primitive->size[0] : 1.0f;
         float sy = obj.primitive ? obj.primitive->size[1] : 1.0f;
         float sz = obj.primitive ? obj.primitive->size[2] : 1.0f;
-        Matrix m = Matrix::CreateScale({sx,sy,sz}) * world;
+        Matrix m = deform * Matrix::CreateScale({sx,sy,sz}) * world;
         drawMesh(unitBox_, m, view, proj, color);
         break;
     }
     case ObjectType::Sphere: {
         float r = obj.primitive ? obj.primitive->radius * 2.0f : 1.0f;
-        Matrix m = Matrix::CreateScale({r,r,r}) * world;
+        Matrix m = deform * Matrix::CreateScale({r,r,r}) * world;
         drawMesh(unitSphere_, m, view, proj, color);
         break;
     }
     case ObjectType::Cylinder: {
         float r = obj.primitive ? obj.primitive->radius * 2.0f : 1.0f;
         float h = obj.primitive ? obj.primitive->height         : 1.0f;
-        Matrix m = Matrix::CreateScale({r,h,r}) * world;
+        Matrix m = deform * Matrix::CreateScale({r,h,r}) * world;
         drawMesh(unitCylinder_, m, view, proj, color);
         break;
     }
     case ObjectType::Cone: {
         float r = obj.primitive ? obj.primitive->radius * 2.0f : 1.0f;
         float h = obj.primitive ? obj.primitive->height         : 1.0f;
-        Matrix m = Matrix::CreateScale({r,h,r}) * world;
+        Matrix m = deform * Matrix::CreateScale({r,h,r}) * world;
         drawMesh(unitCone_, m, view, proj, color);
         break;
     }
     case ObjectType::Plane: {
         float w = obj.primitive ? obj.primitive->size[0] : 1.0f;
         float d = obj.primitive ? obj.primitive->size[2] : 1.0f;
-        Matrix m = Matrix::CreateScale({w,1.0f,d}) * world;
+        Matrix m = deform * Matrix::CreateScale({w,1.0f,d}) * world;
         drawMesh(unitPlane_, m, view, proj, color);
         break;
     }
@@ -633,6 +638,186 @@ void SceneRenderer::draw(const Mc3Document& doc,
 
     for (const auto& obj : doc.objects)
         drawObject(*obj, doc, identity, view, proj, selected);
+}
+
+// ---------------------------------------------------------------------------
+// Scene gizmos (lights / cameras)
+// ---------------------------------------------------------------------------
+
+void SceneRenderer::drawLineList(
+    const std::vector<VertexPositionColor>& verts,
+    const Matrix& view, const Matrix& proj)
+{
+    if (verts.empty() || verts.size() % 2 != 0) return;
+    VertexBuffer vb(device_, static_cast<int>(verts.size()));
+    vb.SetData(const_cast<VertexPositionColor*>(verts.data()),
+               static_cast<int>(verts.size()));
+
+    effect_->World      = Matrix::getIdentityProperty();
+    effect_->View       = view;
+    effect_->Projection = proj;
+    effect_->VertexColorEnabled = true;
+    for (auto& pass : effect_->getCurrentTechniqueProperty()->getPassesProperty())
+        pass.Apply();
+
+    device_.SetVertexBuffer(&vb);
+    device_.DrawPrimitives(Graphics::PrimitiveType::LineList, 0,
+                           static_cast<int>(verts.size()) / 2);
+    device_.SetVertexBuffer(nullptr);
+}
+
+void SceneRenderer::drawLightGizmos(
+    const std::vector<Mc3::Mc3Light>& lights,
+    const Matrix& view, const Matrix& proj)
+{
+    std::vector<VertexPositionColor> lines;
+
+    auto vc = [](std::array<float,3> p, Color c) -> VertexPositionColor {
+        return { Vector3{p[0], p[1], p[2]}, c };
+    };
+    auto addLine = [&](std::array<float,3> a, std::array<float,3> b, Color c) {
+        lines.push_back(vc(a, c));
+        lines.push_back(vc(b, c));
+    };
+
+    for (const auto& li : lights) {
+        Color col(
+            static_cast<int>(std::clamp(li.color[0], 0.0f, 1.0f) * 255),
+            static_cast<int>(std::clamp(li.color[1], 0.0f, 1.0f) * 255),
+            static_cast<int>(std::clamp(li.color[2], 0.0f, 1.0f) * 255),
+            220);
+
+        switch (li.type) {
+
+        case Mc3::LightType::Ambient:
+            break; // no position — nothing to draw
+
+        case Mc3::LightType::Directional: {
+            // Three parallel arrows from above showing direction
+            float dx = li.direction[0], dy = li.direction[1], dz = li.direction[2];
+            float len = std::sqrt(dx*dx + dy*dy + dz*dz);
+            if (len < 1e-5f) break;
+            dx /= len; dy /= len; dz /= len;
+            const float shaftLen = 1.5f;
+            std::array<float,3> offsets[] = {{-1.0f,0,-1.0f},{0,0,0},{1.0f,0,1.0f}};
+            for (auto& o : offsets) {
+                // anchor arrows up in the sky at a fixed symbolic position
+                std::array<float,3> from = { o[0], 6.0f + o[2], o[0] };
+                std::array<float,3> to   = { from[0]+dx*shaftLen,
+                                             from[1]+dy*shaftLen,
+                                             from[2]+dz*shaftLen };
+                addLine(from, to, col);
+            }
+            break;
+        }
+
+        case Mc3::LightType::Point: {
+            const auto& p = li.position;
+            const float r = 0.25f;
+            addLine({p[0]-r,p[1],p[2]}, {p[0]+r,p[1],p[2]}, col);
+            addLine({p[0],p[1]-r,p[2]}, {p[0],p[1]+r,p[2]}, col);
+            addLine({p[0],p[1],p[2]-r}, {p[0],p[1],p[2]+r}, col);
+            // diamond outline
+            addLine({p[0]+r,p[1],p[2]}, {p[0],p[1]+r,p[2]}, col);
+            addLine({p[0],p[1]+r,p[2]}, {p[0]-r,p[1],p[2]}, col);
+            addLine({p[0]-r,p[1],p[2]}, {p[0],p[1]-r,p[2]}, col);
+            addLine({p[0],p[1]-r,p[2]}, {p[0]+r,p[1],p[2]}, col);
+            break;
+        }
+
+        case Mc3::LightType::Spot: {
+            const auto& p = li.position;
+            float dx = li.direction[0], dy = li.direction[1], dz = li.direction[2];
+            float len = std::sqrt(dx*dx + dy*dy + dz*dz);
+            if (len < 1e-5f) break;
+            dx /= len; dy /= len; dz /= len;
+
+            const float coneLen = 1.0f;
+            float halfAngle = li.angle * (std::numbers::pi_v<float> / 180.0f);
+            float coneR = coneLen * std::tan(halfAngle);
+
+            // Build a perpendicular basis
+            Vector3 dir{dx, dy, dz};
+            Vector3 up = (std::abs(dy) < 0.9f) ? Vector3{0,1,0} : Vector3{1,0,0};
+            Vector3 right = Vector3::Cross(dir, up);
+            right = Vector3::Normalize(right);
+            Vector3 up2  = Vector3::Cross(right, dir);
+
+            std::array<float,3> tip = { p[0]+dx*coneLen, p[1]+dy*coneLen, p[2]+dz*coneLen };
+            const int segs = 8;
+            for (int s = 0; s < segs; ++s) {
+                float a0 = s      * 2.0f * std::numbers::pi_v<float> / segs;
+                float a1 = (s+1)  * 2.0f * std::numbers::pi_v<float> / segs;
+                std::array<float,3> e0 = {
+                    tip[0] + (right.X*std::cos(a0) + up2.X*std::sin(a0)) * coneR,
+                    tip[1] + (right.Y*std::cos(a0) + up2.Y*std::sin(a0)) * coneR,
+                    tip[2] + (right.Z*std::cos(a0) + up2.Z*std::sin(a0)) * coneR };
+                std::array<float,3> e1 = {
+                    tip[0] + (right.X*std::cos(a1) + up2.X*std::sin(a1)) * coneR,
+                    tip[1] + (right.Y*std::cos(a1) + up2.Y*std::sin(a1)) * coneR,
+                    tip[2] + (right.Z*std::cos(a1) + up2.Z*std::sin(a1)) * coneR };
+                addLine(p, e0, col);   // spoke from apex to ring
+                addLine(e0, e1, col);  // ring segment
+            }
+            break;
+        }
+        }
+    }
+
+    if (!lines.empty())
+        drawLineList(lines, view, proj);
+}
+
+void SceneRenderer::drawCameraGizmos(
+    const std::vector<Mc3::Mc3Camera>& cameras,
+    const Matrix& view, const Matrix& proj)
+{
+    std::vector<VertexPositionColor> lines;
+    Color col(180, 220, 255, 220); // light-blue
+
+    auto addLine = [&](std::array<float,3> a, std::array<float,3> b) {
+        lines.push_back({ Vector3{a[0],a[1],a[2]}, col });
+        lines.push_back({ Vector3{b[0],b[1],b[2]}, col });
+    };
+
+    for (const auto& cam : cameras) {
+        const auto& p = cam.position;
+        const auto& t = cam.target;
+
+        // Line from position to target
+        addLine(p, t);
+
+        // Frustum pyramid: 4 spokes to a small rect in the view direction
+        float dx = t[0]-p[0], dy = t[1]-p[1], dz = t[2]-p[2];
+        float len = std::sqrt(dx*dx + dy*dy + dz*dz);
+        if (len < 1e-5f) continue;
+        dx /= len; dy /= len; dz /= len;
+
+        Vector3 dir{dx, dy, dz};
+        Vector3 worldUp = (std::abs(dy) < 0.9f) ? Vector3{0,1,0} : Vector3{1,0,0};
+        Vector3 right = Vector3::Normalize(Vector3::Cross(dir, worldUp));
+        Vector3 up    = Vector3::Cross(right, dir);
+
+        const float d = 0.6f;   // distance to near-plane square
+        const float hw = 0.3f;  // half-width of the square
+
+        std::array<float,4> cx = { hw, hw, -hw, -hw };
+        std::array<float,4> cy = { hw, -hw, -hw, hw };
+        std::array<std::array<float,3>, 4> corners;
+        for (int i = 0; i < 4; ++i) {
+            corners[i] = {
+                p[0] + dx*d + right.X*cx[i] + up.X*cy[i],
+                p[1] + dy*d + right.Y*cx[i] + up.Y*cy[i],
+                p[2] + dz*d + right.Z*cx[i] + up.Z*cy[i] };
+        }
+        for (int i = 0; i < 4; ++i) {
+            addLine(p, corners[i]);
+            addLine(corners[i], corners[(i+1)%4]);
+        }
+    }
+
+    if (!lines.empty())
+        drawLineList(lines, view, proj);
 }
 
 } // namespace MeshCraft::Renderer
