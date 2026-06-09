@@ -6,75 +6,108 @@
 
 **MeshCraft** is a 3D scene editor for the `.mc3.xml` format — a custom XML-based scene
 description used by the OpenEggbert project. Scenes contain primitives, extrusion shapes,
-CSG operations, groups, instances, lights, cameras, and environment settings. The output
-pipeline exports to `.glb` via the `mc3togltf` converter.
+CSG operations, groups, instances, lights, cameras, textures, and environment settings.
+The output pipeline exports to `.glb` via the `mc3togltf` converter.
 
 **Main goal:** A fully usable desktop editor where a developer can build, edit, and export
 `.mc3.xml` scene files without hand-editing XML.
 
-**Current phase:** Core editor loop is complete (~70 % of planned features done). The editor
-is interactive and usable for basic scene composition. The next phase focuses on material
-editing, light/camera support, and polish.
+**Current phase:** ~90 % of planned editor features are implemented and working. The editor
+is fully interactive. The remaining work is advanced geometry (extrude path variants,
+actual CSG boolean evaluation), drag-and-drop hierarchy reparenting, and animation data.
 
 **Key architectural decisions:**
 - Built on **CNA** — an XNA-like C++ framework (SDL3 + OpenGL ES 3.2 via EasyGL backend).
   CNA lives at `../cna/` as a sibling repo included via `add_subdirectory`.
-- All 2D UI is drawn with `SpriteBatch` + a 1×1 white `Texture2D` (white-pixel trick).
-  No widget framework; all panels are hand-drawn rectangles + bitmap font.
-- Bitmap font: 5×7 px glyphs, 96 ASCII chars, `BitmapFont.hpp/cpp`, `Ui::drawBitmapText()`.
+- All UI is **Dear ImGui** (v1.91.6, SDL3 + OpenGL ES 3 backends, `#version 300 es`).
+  ImGui replaced the previous hand-drawn SpriteBatch UI in commit `8856fba`.
+- `BeginDraw()` / `EndDraw()` are virtual overrides on `Game`; ImGui frame wraps them.
+- SDL events forwarded to ImGui via `SDL_AddEventWatch` → `ImGui_ImplSDL3_ProcessEvent`.
 - Scene data (`Mc3Document`) is pure C++ in the `mc3/` sublibrary — no graphics dependency.
-- Undo/redo uses deep-copy snapshots (`deepCopyDoc`) of the entire `Mc3Document`.
+- Undo/redo uses deep-copy snapshots of the entire `Mc3Document` (20-step stack).
 
 ---
 
 ## 2. Current Status
 
 ### Build
-- **Builds cleanly** with `ninja MeshCraft` (targeted build).
-- Full `ninja -j$(nproc)` sometimes triggers a CNA partial-recompile bug (see §5).
+- **Builds cleanly** with `cmake --build cmake-build-debug --target MeshCraft -- -j$(nproc)`.
+- **Workaround required before each build** (SHARP_RUNTIME missing `<algorithm>` issue,
+  being fixed separately):
+  ```bash
+  touch cmake-build-debug/CNA_dep/SHARP_RUNTIME/libSHARP_RUNTIME.a cmake-build-debug/CNA_dep/libCNA.a
+  ```
 
 ### Tests
 - **1/1 smoke test passes** (`ctest --test-dir cmake-build-debug -V`).
-- Smoke test: launches editor with `test/house.mc3.xml --screenshot`, checks output file
-  is non-empty (≥ 1 MB). Exits after ~2 s automatically.
+- Smoke test: launches editor with `test/house.mc3.xml --screenshot`, checks screenshot
+  file is non-empty (≥ 1 MB). Exits after ~2 s automatically.
 
 ### Available binaries
 - `cmake-build-debug/MeshCraft` — the editor
 - `cmake-build-debug/mc3/mc3togltf` — XML→GLB converter
 
 ### What works
-- Load/Save/Save-As/Export (all via in-UI modal dialogs — no stdin dependency)
-- Add primitives (Box/Sphere/Cylinder/Cone/Plane), Delete, Duplicate (Ctrl+D)
-- Cut/Copy/Paste (Ctrl+X/C/V) with clipboard
-- Group (Ctrl+G) / Ungroup (Ctrl+Shift+G)
-- Undo/Redo (Ctrl+Z/Y, 20 steps, deep-copy snapshots)
-- Move/Scale/Rotate gizmos (G/S/R) with per-axis drag
-- Arrow-key nudge (Shift = 0.1 step, PageUp/Down = Z axis)
-- Orbit/Pan/Zoom camera; F = focus on selection
-- Preset views: Num1=Front, Num3=Right, Num5=Back, Num7=Top, Num9=Bottom
-- Left-click ray-cast picking; Ctrl+click multi-select; Ctrl+A select-all
-- Box drag-select (left-drag in Select tool, Ctrl = additive)
-- Hierarchy panel: tree, expand/collapse, eye icon (visibility toggle)
-- Properties panel: name, POS/ROT/SCL, material swatch, VIS toggle, COL field, TAG field
-- Object rename, inline transform editing (click field → type → Enter)
-- Status bar: object count + selection count; window title reflects tool/file/modified
-- F11 screenshot, F12 help to console
-- Extrude with Line paths rendered (Arc/Helix/Polyline/Bezier show placeholder box)
-- CSG Union/Difference/Intersection render children recursively (no boolean evaluation)
-- Instance objects resolve from `definitions` and apply transform
 
-### What does not work yet
-- Material editor (no create/edit/delete of `Mc3Material` entries)
-- Material assignment in properties panel (swatch displays, but can't change)
-- Light and camera objects: parsed from XML but not shown in hierarchy or editable
-- Extrude with Arc/Helix/Polyline/Bezier/Custom paths (renders as placeholder box)
-- Mesh objects (external geometry, renders as placeholder box)
-- Actual CSG boolean mesh evaluation (shapes rendered, not evaluated)
-- Orthographic camera mode
-- Drag-and-drop reparenting in hierarchy
-- Actions/States animation data model and editor
-- CI pipeline
-- Unit tests for `Mc3Document` XML round-trips
+**File operations**
+- Load / Save / Save As / Export to GLB — all via in-UI modal dialogs (no stdin)
+- Window title reflects tool / filename / modified state
+
+**Scene editing**
+- Add primitives: Box / Sphere / Cylinder / Cone / Plane
+- Add other types: Area / Mesh / Instance / Extrude
+- Add CSG containers: `Add > CSG > Union / Difference / Intersection`
+- Delete, Duplicate (Ctrl+D), Cut/Copy/Paste (Ctrl+X/C/V)
+- Group (Ctrl+G) / Ungroup (Ctrl+Shift+G)
+- Undo / Redo (Ctrl+Z / Ctrl+Y, 20 steps, deep-copy snapshots)
+
+**3D viewport**
+- Orbit / pan / zoom camera (mouse); F = focus on selection
+- Preset views: Num1=Front, Num3=Right, Num5=Back, Num7=Top, Num9=Bottom
+- Left-click ray-cast picking; Ctrl+click = additive; Ctrl+A = select all
+- Box drag-select (left-drag in Select tool; Ctrl = additive)
+- Move (G) / Scale (S) / Rotate (R) gizmos with per-axis drag
+- Arrow-key nudge (Shift = 0.1 step, PageUp/Down = Z axis)
+- Light gizmos: direction arrows (Directional), cross + ring (Point), spoke-cone (Spot)
+- Camera gizmos: position-to-target line + frustum pyramid
+- CSG gizmos: coloured box outlines (green=Union, red=Difference, blue=Intersection)
+- Difference: red wireframe overlay on cutter children
+- F11 screenshot; F12 help to console
+
+**Left panel — tabbed (Scene / Lights / Env / Cam / Tex)**
+- **Scene tab**: object tree with expand/collapse, visibility toggle, context menu
+  (Duplicate / Delete / Hide-Show); CSG nodes show coloured `[U]`/`[D]`/`[I]` prefix;
+  cutter children show `[cut]`; Group shows `[G]`
+- **Lights tab**: list of `Mc3Light` entries; add/remove; full properties per type
+  (Directional: color + intensity + direction; Point: color + intensity + range;
+  Spot: color + intensity + range + inner/outer angle; Ambient: color + intensity)
+- **Env tab**: sky color, fog (enable/color/near/far), ambient intensity
+- **Cam tab**: list of `Mc3Camera` entries; add/remove; Perspective (fov + near/far)
+  or Orthographic (size + near/far) + position/target/up
+- **Tex tab**: list of textures from `document_.textures`; add/remove;
+  edit URI, filter (Linear/Nearest), wrap (Repeat/Clamp/Mirror), mip-maps, sRGB
+
+**Right panel — Properties**
+- Name, ID (read-only), Tags, Collision
+- Transform: Position / Rotation / Scale (DragFloat3)
+- Visible checkbox
+- **CSG section** (Union / Difference / Intersection): type combo (Union/Difference/
+  Intersection); for Difference: children checklist to mark cutters
+- **Geometry section** (primitives): type-specific params (Box: size; Sphere: radius+segments;
+  Cylinder/Cone: radius+height+segments; Plane: width+depth)
+- **Extrude section**: twist, path-segments, smooth, caps; Cross-section TreeNode (Rect/
+  Circle/Polygon/Custom with point list); Path TreeNode (Line/Arc/Helix/Polyline/Bezier)
+- **Mesh Source** (Mesh type): URI field
+- **Instance** (Instance type): definition picker combo + material override combo
+- **Deform** checkbox + DragFloat3 (non-uniform geometry-level scale)
+- **Material editor**: full inline editor — name picker combo, baseColor RGBA,
+  metallic / roughness / emissive / alpha-mode / alpha-cutoff / normal-scale /
+  occlusion-strength; texture fields for base / metallic-roughness / emissive /
+  normal / occlusion
+
+**Serialization**
+- All fields round-trip correctly through XML (including extrude, deform,
+  textures block, material textures, emissive_color, alpha_cutoff)
 
 ---
 
@@ -82,119 +115,97 @@ editing, light/camera support, and polish.
 
 | Commit | Change |
 |--------|--------|
-| `c63a3ba` | Save As (Ctrl+Shift+S) now uses in-UI modal dialog (was stdin) |
-| `0d7826d` | Open file (Ctrl+O) now uses in-UI modal dialog (was stdin) |
-| `d426632` | Box drag-select in 3D viewport (Select tool); blue rect overlay |
-| `2dc1a1a` | Preset camera views on Numpad 1/3/5/7/9 |
-| `4c0b70e` | Group (Ctrl+G) and Ungroup (Ctrl+Shift+G) |
-| `7d8f1b0` | Tags field in properties panel (comma-separated, inline edit) |
-| `5bbec3c` | Hierarchy eye icon per row (click to toggle visible) |
-| `aaf7d52` | Cut/Copy/Paste (Ctrl+X/C/V) with deep-copy clipboard |
-| `4671b78` | Visible toggle (VIS) and Collision field (COL) in properties panel |
-| `b756bdc` | Rotate gizmo (R tool): 3 coloured circles, tangential drag |
-
-**Modified files (recent session):**
-- `src/MeshCraft/MeshCraftApplication.cpp` — all of the above
-- `include/MeshCraft/MeshCraftApplication.hpp` — state for new features
-- `src/MeshCraft/Renderer/SceneRenderer.cpp` — scale + rotate gizmo draw
-- `include/MeshCraft/Renderer/SceneRenderer.hpp` — gizmo declarations
-- `PLAN.md` — status table kept up to date
-- `NEXT.md` — this file
+| `7a6057b` | CSG visualization: Add menu, hierarchy badges, properties panel, viewport gizmos |
+| `771e6e1` | Extrude editor in properties panel; fix extrude XML serialization |
+| `097f19b` | Textures tab (left panel); fix texture serialization in XML writer |
+| `73403cd` | Area / Mesh / Instance types; type-specific properties sections |
+| `de89c2b` | Light and camera gizmos in viewport; Deform section in properties |
+| `8284603` | Cameras tab in left panel |
+| `5080c1b` | Environment tab in left panel |
+| `d9b7f7e` | Lights panel in left panel |
+| `dad11b0` | Full material editor in properties panel |
+| `20a784f` | Geometry section (primitive parameters) in properties panel |
+| `8856fba` | Replace hand-drawn SpriteBatch UI with Dear ImGui |
 
 ---
 
-## 4. Current Blocker / Main Problem
+## 4. Known Bugs and Limitations
 
-**No blocking bug.** The editor builds, tests pass, and all implemented features work.
+- **SHARP_RUNTIME rebuild workaround** — missing `<algorithm>` in SHARP_RUNTIME causes
+  rebuild failures. Workaround: `touch` the `.a` files before building. Being fixed
+  separately by another Claude Code instance working on CNA.
 
-The next meaningful work is the **material editor** — currently the most impactful missing
-feature for practical use. `Mc3Material` entries exist in `document_.materials` (a
-`std::map<std::string, Mc3Material>`) but there is no UI to create, edit, or assign them.
-Objects reference materials by name string (`sel0->material`) but the only feedback is a
-colour swatch in the properties panel when the material already exists in the scene XML.
+- **Extrude path visualization** — Arc, Helix, Polyline, Bezier, and Custom cross-section
+  extrusions render as a placeholder grey box. Only Line paths with Rect/Circle/Polygon
+  cross-sections are rendered correctly.
 
----
+- **CSG boolean evaluation not implemented** — Union/Difference/Intersection containers
+  render their children individually. No actual mesh boolean operations are performed.
+  The visual is informational only.
 
-## 5. Known Bugs and Limitations
+- **No drag-and-drop reparenting** — objects can only be moved by deleting and re-adding
+  as children. Reparenting requires drag state + drop indicator in the hierarchy.
 
-- **CNA partial-recompile bug** *(confirmed)* — `ninja -j$(nproc)` may trigger recompilation
-  of `ModelMeshPart.cpp` / `ModelMeshPartCollection.cpp` in CNA with a missing `NOXNA` macro,
-  causing a build failure. Workaround: always use `ninja MeshCraft` (targeted build).
-  Do not add `${meta-gl_SOURCE_DIR}/include` to MeshCraft's `CMakeLists.txt`.
+- **`Mc3Object.visible` XML round-trip** — not verified by a unit test; should be confirmed.
 
-- **Rotate gizmo reference point** *(incomplete)* — the tangent drag uses a fixed reference
-  point for the screen radius; for very oblique views the sensitivity can feel off.
+- **No CI pipeline** — tests run locally only.
 
-- **Box drag-select on initial click** *(minor, by design)* — clicking and then dragging
-  will briefly select the object under the cursor before the box-select finalises. The box
-  result replaces the selection on release. Acceptable UX trade-off.
-
-- **Extrude / Mesh / CSG placeholders** *(incomplete)* — Arc, Helix, Polyline, Bezier,
-  Custom cross-section extrusions, and Mesh objects all render as a placeholder grey box.
-  Boolean CSG evaluation (actual mesh subtraction) is not implemented.
-
-- **Lights and cameras in hierarchy** *(incomplete)* — `Mc3Light` and `Mc3Camera` are parsed
-  from XML and round-trip through save/load, but are not shown in the hierarchy panel and
-  have no properties UI.
-
-- **`Mc3Object` visibility not persisted in XML** *(needs verification)* — the `visible`
-  field is stored in the C++ struct but it is unknown whether the XML parser/writer
-  round-trips it correctly. Should be tested.
-
-- **No CI pipeline** *(planned)* — tests only run locally.
-
-- **Single smoke test only** *(incomplete)* — the smoke test checks that the window opens
-  and a screenshot is non-empty. There are no unit tests for XML serialisation, transform
-  maths, or scene operations.
+- **Single smoke test** — checks window opens and screenshot is non-empty. No unit tests
+  for XML serialisation, transform maths, or scene operations.
 
 ---
 
-## 6. Architecture Notes
+## 5. Architecture Notes
 
 ### Main modules
 
 | Module | Location | Role |
 |--------|----------|------|
-| `MeshCraftApplication` | `src/MeshCraft/MeshCraftApplication.cpp` | Game loop, all input, scene state, entire UI draw |
-| `SceneRenderer` | `src/MeshCraft/Renderer/SceneRenderer.cpp` | Renders MC3 objects + translate/scale/rotate gizmos |
+| `MeshCraftApplication` | `src/MeshCraft/MeshCraftApplication.cpp` | Game loop, all input, scene state, entire ImGui UI |
+| `SceneRenderer` | `src/MeshCraft/Renderer/SceneRenderer.cpp` | Renders MC3 objects + gizmos (translate/scale/rotate/lights/cameras/CSG) |
 | `GridRenderer` | `src/MeshCraft/Renderer/GridRenderer.cpp` | XYZ grid via `BasicEffect` + `VertexBuffer` |
 | `EditorCamera` | `include/MeshCraft/Editor/EditorCamera.hpp` | Orbit/pan/zoom/focus; yaw+pitch+distance model |
 | `SelectionManager` | `include/MeshCraft/Editor/SelectionManager.hpp` | Tracks selected `shared_ptr<Mc3Object>` |
 | `TransformGizmo` | `include/MeshCraft/Editor/TransformGizmo.hpp` | `GizmoMode` + `GizmoAxis` + drag state |
-| `BitmapFont` | `include/MeshCraft/Ui/BitmapFont.hpp` | 5×7 font, 96 ASCII glyphs, column-major |
 | `Mc3Document` | `mc3/` sublibrary | Pure C++ scene data; `loadFromFile` / `saveToFile` XML |
-| CNA | `../cna/` sibling repo | SDL3 window, GL context, SpriteBatch, BasicEffect, Input |
+| CNA | `../cna/` sibling repo | SDL3 window, GL context, BasicEffect, Input |
 
 ### Data flow
-1. `LoadContent()` — creates renderers, loads `Mc3Document` from XML.
-2. `Update()` — polls `Keyboard` / `Mouse`; calls `handleKeyboardShortcuts` + `handleMouseInput`.
-3. `Draw()` — clears → 3D scene → gizmo → 2D UI overlay via SpriteBatch.
+1. `LoadContent()` — creates renderers, loads `Mc3Document`, inits ImGui.
+2. `Update()` — polls `Keyboard` / `Mouse`; handles shortcuts + mouse input.
+3. `Draw()` — clears → 3D scene → gizmos → `drawImGuiUi()`.
+4. `BeginDraw()` — calls `ImGui::NewFrame()`.
+5. `EndDraw()` — calls `ImGui::Render()` + `ImGui_ImplOpenGL3_RenderDrawData()`,
+   then optional auto-screenshot, then `Game::EndDraw()`.
 
 ### Important invariants
 - `Mc3Document.materials` is `std::map<std::string, Mc3Material>`. Iterate with `const auto& [key, mat]`.
 - `Mc3Material` uses `baseColor` (float[4]), **not** `diffuse`.
-- `SpriteBatch::Begin()` / `End()` must bracket all 2D draws; cannot nest.
-- `hierarchyRows_` and `propFieldHits_` are **populated in `Draw()`** and consumed in `Update()` (1-frame lag — intentional).
-- `fieldSection_` encoding: `-3`=TAGS, `-2`=COL, `-1`=NAME, `0`=POS, `1`=ROT, `2`=SCL.
-- CNA API: use `getCurrentTechniqueProperty()` / `getPassesProperty()` (not `CurrentTechnique()`/`Passes()`).
-- `Color` has no default constructor — always initialise with 4 args: `Color(r, g, b, a)`.
-- Undo snapshots require **deep copy** (`deepCopyObj` recursion) because `Mc3Document` uses `shared_ptr<Mc3Object>` trees.
+- ImGui panels are fixed-position windows (`NoMove | NoResize | NoBringToFrontOnFocus`).
+- Viewport rect = `[kLeftPanelW, imguiTopH_]` to `[W - kRightPanelW, H - kStatusH]`.
+- `imguiTopH_` is updated each frame from actual menu bar + toolbar heights.
+- `pendingScreenshot_` flag: set in `Draw()`, consumed in `EndDraw()` after ImGui renders.
+- CNA API: use `getCurrentTechniqueProperty()` / `getPassesProperty()`.
+- `Color` has no default constructor — always init with 4 args: `Color(r, g, b, a)`.
+- Undo: call `pushUndo()` before any mutation of `document_` or object data.
 
 ### Boundaries to preserve
+- **No CNA changes without owner permission.** Another Claude Code instance handles CNA.
 - Do not add `${meta-gl_SOURCE_DIR}/include` to `CMakeLists.txt` — triggers full CNA recompile.
 - Do not change `Mc3Document` public API without checking `mc3togltf` and all test XMLs.
-- Do not refactor CNA unless it is blocking a build.
+- Do not refactor `MeshCraftApplication.cpp` structurally — it is large but functional.
 
 ---
 
-## 7. Useful Commands
+## 6. Useful Commands
 
 ```bash
 # Configure (first time only)
 cmake -S . -B cmake-build-debug -DCMAKE_BUILD_TYPE=Debug -DMESH_CRAFT_GRAPHICS_BACKEND=EASYGL
 
-# Build (always use targeted form to avoid CNA recompile bug)
-cd cmake-build-debug && ninja MeshCraft
+# Build (touch workaround required each time)
+touch cmake-build-debug/CNA_dep/SHARP_RUNTIME/libSHARP_RUNTIME.a cmake-build-debug/CNA_dep/libCNA.a
+cmake --build cmake-build-debug --target MeshCraft -- -j$(nproc)
 
 # Run editor with a scene
 ./cmake-build-debug/MeshCraft test/house.mc3.xml
@@ -211,74 +222,51 @@ ctest --test-dir cmake-build-debug -V
 
 ---
 
-## 8. Next Smallest Tasks
+## 7. What Remains
 
-### Task 1 — Material editor: list panel
-**Goal:** Show all materials from `document_.materials` in the properties panel (or a
-dedicated section) when no object is selected, or always at the bottom of the right panel.
-Each entry: coloured swatch + name label.
-**Files:** `src/MeshCraft/MeshCraftApplication.cpp` (drawUi, right panel section)
-**Verify:** Load `test/house.mc3.xml`, check that material names appear.
+### High priority
 
-### Task 2 — Material editor: create new material
-**Goal:** A "+ MTL" button at the bottom of the material list. Clicking it adds a new
-`Mc3Material` with a generated name (e.g. `Mat5`) and default `baseColor = {0.8, 0.8, 0.8, 1}`.
-**Files:** `src/MeshCraft/MeshCraftApplication.cpp` (handleMouseInput, drawUi)
-**Verify:** Click button, confirm new entry appears in the list.
+**A — Extrude path geometry rendering**
+Arc, Helix, Polyline, and Bezier paths, plus Custom cross-sections, all currently render
+as a grey placeholder box. Correct rendering requires runtime mesh generation from path
+parameters. This is a viewport-only improvement (serialization already works correctly).
+**Files:** `src/MeshCraft/Renderer/SceneRenderer.cpp` (`drawObject`, Extrude case)
+**Effort:** ~4–8 h
 
-### Task 3 — Material assignment in properties panel
-**Goal:** In the properties panel, clicking the MTL row cycles through available materials
-and assigns the clicked one to `sel0->material`.
-**Files:** `src/MeshCraft/MeshCraftApplication.cpp` (properties panel click handler)
-**Verify:** Select object, click MTL row, confirm swatch colour changes.
+**B — Drag-and-drop reparenting in hierarchy**
+Left-press + drag a hierarchy row onto another to reparent. Needs drag-pending state,
+drop indicator rendering, and tree mutation on release.
+**Files:** `src/MeshCraft/MeshCraftApplication.cpp` (Scene tab, hierarchy lambda)
+**Effort:** ~3–5 h
 
-### Task 4 — Material baseColor RGBA editing
-**Goal:** Clicking a material in the material list opens an inline editor showing 4 numeric
-fields (R, G, B, A in 0–1 range) using the existing `drawField` / `activateField` pattern.
-**Files:** `src/MeshCraft/MeshCraftApplication.cpp`
-**Verify:** Edit R value, confirm swatch colour updates live.
+### Lower priority / future
 
-### Task 5 — Lights in hierarchy panel
-**Goal:** Show `Mc3Light` entries from `document_.lights` in the hierarchy panel with a
-yellow type-colour strip. Clicking selects them.
-**Files:** `src/MeshCraft/MeshCraftApplication.cpp` (drawObjList equivalent for lights)
-**Verify:** Load a scene with lights, confirm they appear in hierarchy.
+**C — CSG boolean mesh evaluation**
+Actual Union / Difference / Intersection mesh computation. Requires an external geometry
+library (e.g. manifold or CGAL). Large scope; out of phase for now.
+**Effort:** ~20–30 h + library integration
 
-### Task 6 — XML round-trip unit test for `visible` field
-**Goal:** Add a ctest that creates an `Mc3Object` with `visible = false`, saves to XML,
-reloads, and asserts `visible == false`.
-**Files:** `test/` or new `mc3/test/` directory, `CMakeLists.txt`
-**Verify:** `ctest --test-dir cmake-build-debug -V` all pass.
+**D — XML round-trip unit tests**
+Add ctests for `visible`, `deform`, `extrude`, `csgOperation`, `isCutter` field round-trips.
+**Files:** `mc3/test/` or `test/`, `CMakeLists.txt`
 
-### Task 7 — Drag-and-drop reparenting in hierarchy
-**Goal:** Left-press + drag a hierarchy row to a different row; release inserts the dragged
-object as a child of the target. Requires drag-pending state and drop-indicator rendering.
-**Files:** `src/MeshCraft/MeshCraftApplication.cpp` (handleMouseInput, drawUi)
-**Verify:** Drag Box onto Group, confirm Box appears as child.
+**E — CI pipeline**
+GitHub Actions workflow that builds and runs ctest on push.
+
+**F — Actions / States animation data model and editor**
+Out of scope for current phase.
 
 ---
 
-## 9. Do Not Do Yet
-
-- **No CSG boolean mesh evaluation** — needs a geometry library; large scope.
-- **No animation / Actions / States** — out of scope for current phase.
-- **No SpriteFont / native text widget** — the 5×7 bitmap font is sufficient.
-- **No GUI file-open dialog via OS APIs** — the in-UI modal works; OS dialogs need platform code.
-- **No refactor of CNA** — only fix what blocks a build.
-- **No changes to `CMakeLists.txt` include paths** — risks triggering full CNA recompile.
-- **No API changes in `Mc3Document`** without verifying `mc3togltf` and all test scenes still convert correctly.
-- **No mass rename or restructure of `MeshCraftApplication`** — the file is large but functional; split only when a clear module boundary is identified.
-- **No speculative abstractions** — the UI is drawn inline; do not extract a widget framework prematurely.
-
----
-
-## 10. Resume Prompt
+## 8. Resume Prompt
 
 ```
-Read NEXT.md first. Then inspect only the files needed for the first task in section 8.
-Do not refactor unrelated code. Make one small, verified improvement. Build with:
-  cd cmake-build-debug && ninja MeshCraft
+Read NEXT.md first. Then inspect only the files needed for the chosen task.
+Do not refactor unrelated code. Do not modify CNA without permission.
+Build with:
+  touch cmake-build-debug/CNA_dep/SHARP_RUNTIME/libSHARP_RUNTIME.a cmake-build-debug/CNA_dep/libCNA.a
+  cmake --build cmake-build-debug --target MeshCraft -- -j$(nproc)
 Test with:
   ctest --test-dir cmake-build-debug -V
-Update NEXT.md when done (mark the task complete, add it to "Recent changes", update "Next smallest tasks").
+Update NEXT.md when done.
 ```
