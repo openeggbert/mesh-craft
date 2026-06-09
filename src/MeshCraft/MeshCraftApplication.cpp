@@ -1239,60 +1239,200 @@ void MeshCraftApplication::drawImGuiUi(int screenW, int screenH) {
     float panelH = static_cast<float>(screenH) - panelY - static_cast<float>(kStatusH);
 
     // -----------------------------------------------------------------------
-    // Left panel — Scene Hierarchy
+    // Left panel — tabbed (Scene / Lights)
     // -----------------------------------------------------------------------
     ImGui::SetNextWindowPos(ImVec2(0, panelY));
     ImGui::SetNextWindowSize(ImVec2(static_cast<float>(kLeftPanelW), panelH));
     ImGui::PushStyleColor(ImGuiCol_WindowBg, ImVec4(0.10f, 0.11f, 0.20f, 1.0f));
-    ImGui::Begin("Scene", nullptr,
-        ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove |
+    ImGui::Begin("##leftpanel", nullptr,
+        ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove |
         ImGuiWindowFlags_NoBringToFrontOnFocus | ImGuiWindowFlags_NoSavedSettings);
 
-    std::function<void(const std::vector<std::shared_ptr<Mc3::Mc3Object>>&)> drawHierarchy;
-    drawHierarchy = [&](const std::vector<std::shared_ptr<Mc3::Mc3Object>>& list) {
-        for (const auto& obj : list) {
-            ImGui::PushID(obj->id.c_str());
-            bool sel = selection_.isSelected(obj.get());
-            bool hasChildren = !obj->children.empty();
-            ImGuiTreeNodeFlags flags = ImGuiTreeNodeFlags_OpenOnArrow |
-                                       ImGuiTreeNodeFlags_SpanAvailWidth;
-            if (!hasChildren) flags |= ImGuiTreeNodeFlags_Leaf | ImGuiTreeNodeFlags_NoTreePushOnOpen;
-            if (sel)          flags |= ImGuiTreeNodeFlags_Selected;
+    if (ImGui::BeginTabBar("##lefttabs")) {
 
-            // Visibility indicator
-            ImGui::PushStyleColor(ImGuiCol_Text,
-                obj->visible ? ImVec4(1,1,1,1) : ImVec4(0.5f,0.5f,0.5f,1));
-            const std::string& displayName = obj->name.empty() ? obj->id : obj->name;
-            bool nodeOpen = ImGui::TreeNodeEx(displayName.c_str(), flags);
-            ImGui::PopStyleColor();
+        // -------------------------------------------------------------------
+        // Tab: Scene hierarchy
+        // -------------------------------------------------------------------
+        if (ImGui::BeginTabItem("Scene")) {
+            std::function<void(const std::vector<std::shared_ptr<Mc3::Mc3Object>>&)> drawHierarchy;
+            drawHierarchy = [&](const std::vector<std::shared_ptr<Mc3::Mc3Object>>& list) {
+                for (const auto& obj : list) {
+                    ImGui::PushID(obj->id.c_str());
+                    bool sel = selection_.isSelected(obj.get());
+                    bool hasChildren = !obj->children.empty();
+                    ImGuiTreeNodeFlags flags = ImGuiTreeNodeFlags_OpenOnArrow |
+                                               ImGuiTreeNodeFlags_SpanAvailWidth;
+                    if (!hasChildren) flags |= ImGuiTreeNodeFlags_Leaf | ImGuiTreeNodeFlags_NoTreePushOnOpen;
+                    if (sel)          flags |= ImGuiTreeNodeFlags_Selected;
 
-            if (ImGui::IsItemClicked() && !ImGui::IsItemToggledOpen()) {
-                bool ctrl = ImGui::GetIO().KeyCtrl;
-                if (!ctrl) selection_.clear();
-                selection_.select(obj);
-                updateWindowTitle();
-            }
+                    ImGui::PushStyleColor(ImGuiCol_Text,
+                        obj->visible ? ImVec4(1,1,1,1) : ImVec4(0.5f,0.5f,0.5f,1));
+                    const std::string& displayName = obj->name.empty() ? obj->id : obj->name;
+                    bool nodeOpen = ImGui::TreeNodeEx(displayName.c_str(), flags);
+                    ImGui::PopStyleColor();
 
-            // Context menu
-            if (ImGui::BeginPopupContextItem("##objctx")) {
-                if (ImGui::MenuItem("Duplicate")) duplicateSelected();
-                if (ImGui::MenuItem("Delete"))    deleteSelected();
-                ImGui::Separator();
-                if (ImGui::MenuItem(obj->visible ? "Hide" : "Show")) {
-                    pushUndo(); obj->visible = !obj->visible; modified_ = true; updateWindowTitle();
+                    if (ImGui::IsItemClicked() && !ImGui::IsItemToggledOpen()) {
+                        bool ctrl = ImGui::GetIO().KeyCtrl;
+                        if (!ctrl) selection_.clear();
+                        selection_.select(obj);
+                        updateWindowTitle();
+                    }
+                    if (ImGui::BeginPopupContextItem("##objctx")) {
+                        if (ImGui::MenuItem("Duplicate")) duplicateSelected();
+                        if (ImGui::MenuItem("Delete"))    deleteSelected();
+                        ImGui::Separator();
+                        if (ImGui::MenuItem(obj->visible ? "Hide" : "Show")) {
+                            pushUndo(); obj->visible = !obj->visible; modified_ = true; updateWindowTitle();
+                        }
+                        ImGui::EndPopup();
+                    }
+                    if (hasChildren && nodeOpen)
+                        drawHierarchy(obj->children);
+                    if (hasChildren && nodeOpen)
+                        ImGui::TreePop();
+                    ImGui::PopID();
                 }
-                ImGui::EndPopup();
+            };
+            drawHierarchy(document_.objects);
+            ImGui::EndTabItem();
+        }
+
+        // -------------------------------------------------------------------
+        // Tab: Lights
+        // -------------------------------------------------------------------
+        if (ImGui::BeginTabItem("Lights")) {
+            // Clamp selection in case lights were deleted
+            if (selectedLightIdx_ >= static_cast<int>(document_.lights.size()))
+                selectedLightIdx_ = static_cast<int>(document_.lights.size()) - 1;
+
+            // Toolbar: Add / Remove
+            if (ImGui::SmallButton("+")) {
+                pushUndo();
+                Mc3::Mc3Light newLight;
+                newLight.name = "Light " + std::to_string(document_.lights.size() + 1);
+                document_.lights.push_back(newLight);
+                selectedLightIdx_ = static_cast<int>(document_.lights.size()) - 1;
+                modified_ = true; updateWindowTitle();
+            }
+            ImGui::SameLine();
+            if (ImGui::SmallButton("-") && selectedLightIdx_ >= 0) {
+                pushUndo();
+                document_.lights.erase(document_.lights.begin() + selectedLightIdx_);
+                selectedLightIdx_ = std::min(selectedLightIdx_,
+                    static_cast<int>(document_.lights.size()) - 1);
+                modified_ = true; updateWindowTitle();
             }
 
-            if (hasChildren && nodeOpen)
-                drawHierarchy(obj->children);
-            if (hasChildren && nodeOpen)
-                ImGui::TreePop();
+            // Light list
+            ImGui::Separator();
+            for (int i = 0; i < static_cast<int>(document_.lights.size()); ++i) {
+                const auto& li = document_.lights[i];
+                const char* typeStr =
+                    li.type == Mc3::LightType::Ambient      ? "[Amb]" :
+                    li.type == Mc3::LightType::Directional  ? "[Dir]" :
+                    li.type == Mc3::LightType::Spot         ? "[Spt]" : "[Pnt]";
+                std::string label = std::string(typeStr) + " " +
+                    (li.name.empty() ? ("light_" + std::to_string(i)) : li.name);
+                ImGui::PushID(i);
+                if (ImGui::Selectable(label.c_str(), selectedLightIdx_ == i))
+                    selectedLightIdx_ = i;
+                ImGui::PopID();
+            }
 
-            ImGui::PopID();
+            // Inline editor for selected light
+            if (selectedLightIdx_ >= 0 && selectedLightIdx_ < static_cast<int>(document_.lights.size())) {
+                auto& li = document_.lights[selectedLightIdx_];
+                ImGui::Separator();
+                ImGui::Spacing();
+
+                // Name
+                {
+                    char buf[128];
+                    std::strncpy(buf, li.name.c_str(), sizeof(buf)-1); buf[127]='\0';
+                    ImGui::TextDisabled("Name");
+                    ImGui::SetNextItemWidth(-1);
+                    if (ImGui::InputText("##lname", buf, sizeof(buf),
+                            ImGuiInputTextFlags_EnterReturnsTrue)) {
+                        pushUndo(); li.name = buf; modified_ = true; updateWindowTitle();
+                    }
+                }
+
+                // Type
+                {
+                    const char* types[] = { "Ambient", "Directional", "Spot", "Point" };
+                    int tidx = static_cast<int>(li.type);
+                    ImGui::TextDisabled("Type");
+                    ImGui::SetNextItemWidth(-1);
+                    if (ImGui::Combo("##ltype", &tidx, types, 4)) {
+                        pushUndo(); li.type = static_cast<Mc3::LightType>(tidx);
+                        modified_ = true; updateWindowTitle();
+                    }
+                }
+
+                // Color
+                ImGui::TextDisabled("Color");
+                ImGui::SetNextItemWidth(-1);
+                if (ImGui::ColorEdit3("##lcol", li.color.data(),
+                        ImGuiColorEditFlags_NoLabel)) {
+                    modified_ = true; updateWindowTitle();
+                }
+
+                // Brightness
+                ImGui::TextDisabled("Brightness");
+                ImGui::SetNextItemWidth(-1);
+                if (ImGui::DragFloat("##lbrt", &li.brightness, 0.01f, 0.0f, 100.0f)) {
+                    modified_ = true; updateWindowTitle();
+                }
+
+                // Cast shadows
+                if (ImGui::Checkbox("Cast Shadows", &li.castShadows)) {
+                    modified_ = true; updateWindowTitle();
+                }
+
+                // Direction (Directional / Spot)
+                if (li.type == Mc3::LightType::Directional || li.type == Mc3::LightType::Spot) {
+                    ImGui::TextDisabled("Direction");
+                    ImGui::SetNextItemWidth(-1);
+                    if (ImGui::DragFloat3("##ldir", li.direction.data(), 0.01f, -1.0f, 1.0f)) {
+                        modified_ = true; updateWindowTitle();
+                    }
+                }
+
+                // Position (Spot / Point)
+                if (li.type == Mc3::LightType::Spot || li.type == Mc3::LightType::Point) {
+                    ImGui::TextDisabled("Position");
+                    ImGui::SetNextItemWidth(-1);
+                    if (ImGui::DragFloat3("##lpos", li.position.data(), 0.1f)) {
+                        modified_ = true; updateWindowTitle();
+                    }
+                    ImGui::TextDisabled("Range (0=unlimited)");
+                    ImGui::SetNextItemWidth(-1);
+                    if (ImGui::DragFloat("##lrng", &li.range, 0.1f, 0.0f, 10000.0f)) {
+                        modified_ = true; updateWindowTitle();
+                    }
+                }
+
+                // Spot-only params
+                if (li.type == Mc3::LightType::Spot) {
+                    ImGui::TextDisabled("Angle (deg)");
+                    ImGui::SetNextItemWidth(-1);
+                    if (ImGui::SliderFloat("##lang", &li.angle, 0.0f, 90.0f)) {
+                        modified_ = true; updateWindowTitle();
+                    }
+                    ImGui::TextDisabled("Falloff");
+                    ImGui::SetNextItemWidth(-1);
+                    if (ImGui::SliderFloat("##lfal", &li.falloff, 0.0f, 1.0f)) {
+                        modified_ = true; updateWindowTitle();
+                    }
+                }
+            }
+
+            ImGui::EndTabItem();
         }
-    };
-    drawHierarchy(document_.objects);
+
+        ImGui::EndTabBar();
+    }
+
     ImGui::End();
     ImGui::PopStyleColor();
 

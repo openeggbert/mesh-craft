@@ -79,6 +79,9 @@ private:
     int autoScreenshotCountdown_{0};
     bool pendingScreenshot_{false};
 
+    // Lights panel selection
+    int selectedLightIdx_{-1};
+
     // ImGui file dialog state (buffers persist across frames)
     bool openDialogOpen_{false};
     char openDialogBuf_[512]{};
