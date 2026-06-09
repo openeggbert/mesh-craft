@@ -1,7 +1,6 @@
 #pragma once
 
 #include "MeshCraft/Editor/EditorCamera.hpp"
-#include "MeshCraft/Ui/BitmapFont.hpp"
 #include "MeshCraft/Editor/EditorTool.hpp"
 #include "MeshCraft/Editor/SelectionManager.hpp"
 #include "MeshCraft/Editor/TransformGizmo.hpp"
@@ -12,12 +11,8 @@
 #include "MeshCraft/Scene/PropertiesPanel.hpp"
 #include "MeshCraft/Scene/SceneHierarchyPanel.hpp"
 
-#include <Microsoft/Xna/Framework/Color.hpp>
 #include <Microsoft/Xna/Framework/Game.hpp>
 #include <Microsoft/Xna/Framework/GameTime.hpp>
-#include <Microsoft/Xna/Framework/Graphics/BasicEffect.hpp>
-#include <Microsoft/Xna/Framework/Graphics/SpriteBatch.hpp>
-#include <Microsoft/Xna/Framework/Graphics/Texture2D.hpp>
 #include <Microsoft/Xna/Framework/Input/Keyboard.hpp>
 #include <Microsoft/Xna/Framework/Input/KeyboardState.hpp>
 #include <Microsoft/Xna/Framework/Input/MouseState.hpp>
@@ -38,11 +33,15 @@ public:
 
     MeshCraftApplication();
     explicit MeshCraftApplication(std::filesystem::path filePath);
-    MeshCraftApplication(std::filesystem::path filePath, std::string screenshotPath);  // auto-screenshot mode
+    MeshCraftApplication(std::filesystem::path filePath, std::string screenshotPath);
 
     void LoadContent() override;
     void Update(Microsoft::Xna::Framework::GameTime& gameTime) override;
     void Draw(const Microsoft::Xna::Framework::GameTime& gameTime) override;
+
+protected:
+    bool BeginDraw() override;
+    void EndDraw() override;
 
 private:
     // Scene data
@@ -62,11 +61,7 @@ private:
     std::unique_ptr<Scene::SceneHierarchyPanel> hierarchyPanel_;
     std::unique_ptr<Scene::PropertiesPanel>     propertiesPanel_;
 
-    // 2D UI rendering
-    std::unique_ptr<Microsoft::Xna::Framework::Graphics::SpriteBatch> spriteBatch_;
-    Microsoft::Xna::Framework::Graphics::Texture2D whitePx_;
-
-    // Input state (for drag-delta computation)
+    // Input state
     Microsoft::Xna::Framework::Input::MouseState prevMouse_;
     bool firstFrame_{true};
 
@@ -74,37 +69,38 @@ private:
     bool   dragging_{false};
     float  dragStartX_{0}, dragStartY_{0};
 
-    // Box-select drag state (Select tool, 3D viewport)
+    // Box-select drag state
     bool boxSelectActive_{false};
-    int  boxSelectX0_{0}, boxSelectY0_{0};  // anchor (press position)
-    int  boxSelectX1_{0}, boxSelectY1_{0};  // current endpoint
+    int  boxSelectX0_{0}, boxSelectY0_{0};
+    int  boxSelectX1_{0}, boxSelectY1_{0};
 
-    // Auto-screenshot mode: save screenshot after N frames then exit
+    // Auto-screenshot mode
     std::string autoScreenshotPath_;
     int autoScreenshotCountdown_{0};
+    bool pendingScreenshot_{false};
 
-    // Modal path dialogs (open / save-as)
-    bool        openDialogActive_{false};
-    std::string openDialogBuffer_;
-    std::string openDialogError_;
+    // ImGui file dialog state (buffers persist across frames)
+    bool openDialogOpen_{false};
+    char openDialogBuf_[512]{};
+    char openDialogErr_[256]{};
 
-    bool        saveDialogActive_{false};
-    std::string saveDialogBuffer_;
-    std::string saveDialogError_;
+    bool saveDialogOpen_{false};
+    char saveDialogBuf_[512]{};
+    char saveDialogErr_[256]{};
 
-    // Cached GL function pointers for viewport/scissor control (loaded in LoadContent)
+    // Cached GL function pointers for viewport/scissor control
     void (*fnGlViewport_)(int, int, int, int) = nullptr;
     void (*fnGlScissor_)(int, int, int, int)  = nullptr;
     void (*fnGlEnable_)(unsigned int)          = nullptr;
     void (*fnGlDisable_)(unsigned int)         = nullptr;
 
-    // Panel layout
-    static constexpr int kToolbarH   = 40;
-    static constexpr int kStatusH    = 24;
-    static constexpr int kLeftPanelW = 220;
+    // Panel layout constants (used for 3D viewport computation)
+    static constexpr int kLeftPanelW  = 220;
     static constexpr int kRightPanelW = 220;
-    static constexpr int kObjRowH    = 22;
-    static constexpr int kPanelHdrH  = 26;
+    static constexpr int kStatusH     = 22;
+
+    // Dynamic top-area height (menu bar + toolbar), updated each frame by drawImGuiUi()
+    int imguiTopH_{60};
 
     // Helpers
     void newScene();
@@ -125,12 +121,8 @@ private:
     void handleMouseInput(const Microsoft::Xna::Framework::Input::MouseState& ms,
                           const Microsoft::Xna::Framework::Input::MouseState& prev);
     void updateWindowTitle();
-
-    // UI drawing
-    void drawRect(int x, int y, int w, int h, Microsoft::Xna::Framework::Color col);
-    void drawUi(int screenW, int screenH);
-    Microsoft::Xna::Framework::Color objectTypeColor(Mc3::ObjectType type) const;
     void saveScreenshot(const std::string& path);
+    void drawImGuiUi(int screenW, int screenH);
 
     std::vector<const Mc3::Mc3Object*> selectedPointers() const;
     Mc3::Mc3Object* flatFindById(const std::string& id) const;
@@ -138,39 +130,7 @@ private:
     // Keyboard state from last frame
     Microsoft::Xna::Framework::Input::KeyboardState prevKs_;
 
-    // Hierarchy panel tree state
-    struct HierarchyRow {
-        int depth;
-        std::shared_ptr<Mc3::Mc3Object> obj;
-    };
-    std::vector<HierarchyRow> hierarchyRows_;   // rebuilt each Draw()
-    std::set<const Mc3::Mc3Object*> collapsedGroups_;
-
-    // Properties panel clickable field positions (rebuilt each Draw())
-    struct PropFieldHit {
-        int y;        // screen y of the 14-px field row
-        int section;  // 0=POS, 1=ROT, 2=SCL
-        int axis;     // 0=X, 1=Y, 2=Z
-    };
-    std::vector<PropFieldHit> propFieldHits_;
-
-    // Inline field editing state
-    bool        fieldActive_ {false};
-    int         fieldSection_{0};   // -3=TAGS, -2=COL, -1=NAME, 0=POS, 1=ROT, 2=SCL
-    int         fieldAxis_   {0};   // 0=X,   1=Y,   2=Z
-    std::string fieldBuffer_;
-
-    // Properties panel click areas (rebuilt each Draw(), -1 = not visible)
-    int nameFieldHitY_{-1};
-    int visToggleHitY_{-1};
-    int colFieldHitY_{-1};
-    int tagsFieldHitY_{-1};
-
-    void activateField(int section, int axis);
-    void applyFieldValue();
-    void cancelField();
-
-    // Clipboard (deep copies of cut/copied objects)
+    // Clipboard
     std::vector<std::shared_ptr<Mc3::Mc3Object>> clipboard_;
 
     // Undo/redo
@@ -178,6 +138,9 @@ private:
     std::vector<Mc3::Mc3Document> undoStack_;
     std::vector<Mc3::Mc3Document> redoStack_;
     void pushUndo();
+
+    // SDL event watcher for ImGui event forwarding
+    static bool sdlEventWatch(void* userdata, void* event);
 };
 
 } // namespace MeshCraft

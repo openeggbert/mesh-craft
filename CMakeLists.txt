@@ -95,6 +95,39 @@ set(BUILD_TESTING "${MESH_CRAFT_BUILD_TESTING}" CACHE BOOL "" FORCE)
 # Mc3 — MC3 format library (pure C++, no graphics dependency)
 add_subdirectory(mc3)
 
+# ImGui — immediate-mode UI (SDL3 + OpenGL ES 3 backends)
+include(FetchContent)
+FetchContent_Declare(imgui
+    GIT_REPOSITORY https://github.com/ocornut/imgui.git
+    GIT_TAG        v1.91.6
+    GIT_SHALLOW    TRUE
+)
+FetchContent_MakeAvailable(imgui)
+
+add_library(imgui STATIC
+    ${imgui_SOURCE_DIR}/imgui.cpp
+    ${imgui_SOURCE_DIR}/imgui_draw.cpp
+    ${imgui_SOURCE_DIR}/imgui_tables.cpp
+    ${imgui_SOURCE_DIR}/imgui_widgets.cpp
+    ${imgui_SOURCE_DIR}/backends/imgui_impl_sdl3.cpp
+    ${imgui_SOURCE_DIR}/backends/imgui_impl_opengl3.cpp
+)
+target_include_directories(imgui PUBLIC
+    ${imgui_SOURCE_DIR}
+    ${imgui_SOURCE_DIR}/backends
+)
+target_compile_definitions(imgui PUBLIC IMGUI_IMPL_OPENGL_ES3)
+
+# SDL3 headers: use prebuilt path from CNA's SDL3_DIR cache variable
+# SDL3_DIR is .../lib/cmake/SDL3, so include dir is 3 levels up + /include
+if(DEFINED SDL3_DIR)
+    get_filename_component(_sdl3_inc "${SDL3_DIR}/../../../include" ABSOLUTE)
+    target_include_directories(imgui PUBLIC "${_sdl3_inc}")
+elseif(TARGET SDL3::SDL3)
+    target_link_libraries(imgui PUBLIC SDL3::SDL3)
+endif()
+target_link_libraries(imgui PUBLIC GLESv2)
+
 # -----------------------------------------------------------------------------
 # Sources
 # -----------------------------------------------------------------------------
@@ -157,9 +190,10 @@ if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang" AND NOT WIN32 AND NOT EMSCRIPTEN AN
     target_link_libraries(${_target} PRIVATE
         -Wl,--start-group CNA ${_cna_backend_target} -Wl,--end-group
         SHARP_RUNTIME
-        Mc3)
+        Mc3
+        imgui)
 else()
-    target_link_libraries(${_target} PRIVATE CNA ${_cna_backend_target} SHARP_RUNTIME Mc3)
+    target_link_libraries(${_target} PRIVATE CNA ${_cna_backend_target} SHARP_RUNTIME Mc3 imgui)
 endif()
 
 # -----------------------------------------------------------------------------

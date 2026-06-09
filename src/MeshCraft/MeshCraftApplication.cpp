@@ -1,13 +1,20 @@
 #include "MeshCraft/MeshCraftApplication.hpp"
 
-#include <Microsoft/Xna/Framework/Color.hpp>
-#include <Microsoft/Xna/Framework/Rectangle.hpp>
+#include <imgui.h>
+#include <imgui_impl_sdl3.h>
+#include <imgui_impl_opengl3.h>
+#include <SDL3/SDL.h>
+
 #include <Microsoft/Xna/Framework/Input/Keyboard.hpp>
 #include <Microsoft/Xna/Framework/Input/Keys.hpp>
 #include <Microsoft/Xna/Framework/Input/Mouse.hpp>
 #include <Microsoft/Xna/Framework/Input/ButtonState.hpp>
 #include <Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp>
 #include <Microsoft/Xna/Framework/Graphics/Viewport.hpp>
+#include <Microsoft/Xna/Framework/Matrix.hpp>
+#include <Microsoft/Xna/Framework/Vector3.hpp>
+#include <Microsoft/Xna/Framework/Color.hpp>
+#include <Microsoft/Xna/Framework/Rectangle.hpp>
 #include <System/Object.hpp>
 
 #include <algorithm>
@@ -18,12 +25,6 @@
 #include <iostream>
 #include <numbers>
 #include <stdexcept>
-
-// Forward-declare SDL3 GL proc address lookup without including SDL headers.
-// SDL_FunctionPointer is typedef void(*)(void) on all platforms.
-using SDL_FunctionPointer = void(*)(void);
-extern "C" SDL_FunctionPointer SDL_GL_GetProcAddress(const char*);
-
 
 namespace MeshCraft {
 
@@ -52,10 +53,19 @@ MeshCraftApplication::MeshCraftApplication(std::filesystem::path filePath)
 MeshCraftApplication::MeshCraftApplication(std::filesystem::path filePath, std::string screenshotPath)
     : currentFile_(std::move(filePath))
     , autoScreenshotPath_(std::move(screenshotPath))
-    , autoScreenshotCountdown_(120) // take screenshot after 120 frames (~2s)
+    , autoScreenshotCountdown_(120)
 {
     getWindowProperty().setTitleProperty("Mesh Craft");
     setIsMouseVisibleProperty(true);
+}
+
+// ---------------------------------------------------------------------------
+// SDL event watcher — forwards each event to ImGui before CNA processes it
+// ---------------------------------------------------------------------------
+
+bool MeshCraftApplication::sdlEventWatch(void* /*userdata*/, void* eventPtr) {
+    ImGui_ImplSDL3_ProcessEvent(static_cast<SDL_Event*>(eventPtr));
+    return true;
 }
 
 // ---------------------------------------------------------------------------
@@ -71,17 +81,25 @@ void MeshCraftApplication::LoadContent() {
     hierarchyPanel_  = std::make_unique<Scene::SceneHierarchyPanel>(document_);
     propertiesPanel_ = std::make_unique<Scene::PropertiesPanel>();
 
-    // 2D UI: white pixel texture + SpriteBatch
-    spriteBatch_ = std::make_unique<Graphics::SpriteBatch>(gd);
-    whitePx_ = Graphics::Texture2D(gd, 1, 1);
-    Color white(255, 255, 255, 255);
-    whitePx_.SetData(&white, 1);
-
     // Load GL function pointers for direct viewport/scissor control
     fnGlViewport_ = reinterpret_cast<void(*)(int,int,int,int)>(SDL_GL_GetProcAddress("glViewport"));
     fnGlScissor_  = reinterpret_cast<void(*)(int,int,int,int)>(SDL_GL_GetProcAddress("glScissor"));
     fnGlEnable_   = reinterpret_cast<void(*)(unsigned int)>   (SDL_GL_GetProcAddress("glEnable"));
     fnGlDisable_  = reinterpret_cast<void(*)(unsigned int)>   (SDL_GL_GetProcAddress("glDisable"));
+
+    // ImGui init
+    IMGUI_CHECKVERSION();
+    ImGui::CreateContext();
+    ImGuiIO& io = ImGui::GetIO();
+    io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
+    ImGui::StyleColorsDark();
+
+    SDL_Window*    sdlWindow = reinterpret_cast<SDL_Window*>(getWindowProperty().getHandleProperty());
+    SDL_GLContext  glCtx     = SDL_GL_GetCurrentContext();
+    ImGui_ImplSDL3_InitForOpenGL(sdlWindow, glCtx);
+    ImGui_ImplOpenGL3_Init("#version 300 es");
+
+    SDL_AddEventWatch(reinterpret_cast<SDL_EventFilter>(sdlEventWatch), nullptr);
 
     if (!currentFile_.empty() && std::filesystem::exists(currentFile_)) {
         try {
@@ -98,6 +116,29 @@ void MeshCraftApplication::LoadContent() {
 }
 
 // ---------------------------------------------------------------------------
+// BeginDraw / EndDraw — ImGui frame lifecycle
+// ---------------------------------------------------------------------------
+
+bool MeshCraftApplication::BeginDraw() {
+    ImGui_ImplOpenGL3_NewFrame();
+    ImGui_ImplSDL3_NewFrame();
+    ImGui::NewFrame();
+    return Game::BeginDraw();
+}
+
+void MeshCraftApplication::EndDraw() {
+    ImGui::Render();
+    ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
+    if (pendingScreenshot_) {
+        pendingScreenshot_ = false;
+        saveScreenshot(autoScreenshotPath_);
+        std::cout << "[MeshCraft] Auto-screenshot saved to: " << autoScreenshotPath_ << "\n";
+        Exit();
+    }
+    Game::EndDraw();
+}
+
+// ---------------------------------------------------------------------------
 // Update
 // ---------------------------------------------------------------------------
 
@@ -106,8 +147,11 @@ void MeshCraftApplication::Update(GameTime& /*gameTime*/) {
     auto ms = Mouse::GetState();
 
     if (!firstFrame_) {
-        handleKeyboardShortcuts(ks, prevKs_);
-        handleMouseInput(ms, prevMouse_);
+        auto& io = ImGui::GetIO();
+        if (!io.WantCaptureKeyboard)
+            handleKeyboardShortcuts(ks, prevKs_);
+        if (!io.WantCaptureMouse)
+            handleMouseInput(ms, prevMouse_);
     }
 
     firstFrame_ = false;
@@ -122,30 +166,28 @@ void MeshCraftApplication::Update(GameTime& /*gameTime*/) {
 void MeshCraftApplication::Draw(const GameTime& /*gameTime*/) {
     auto& gd = getGraphicsDeviceProperty();
 
-    // Full screen dimensions
     const auto& vpFull = gd.getViewportProperty();
     int screenW = vpFull.getWidthProperty();
     int screenH = vpFull.getHeightProperty();
 
-    // Panel background — clear entire screen dark first
+    // Compute top area height from ImGui (menu bar + toolbar window).
+    // On the very first frame imguiTopH_ is 0; a reasonable fallback is 60.
+    int topH = imguiTopH_ > 0 ? imguiTopH_ : 60;
+
+    // Panel background
     gd.Clear(Color(18, 20, 36, 255));
 
-
-    // Compute 3D viewport (center area excluding panels)
     int viewX = kLeftPanelW;
-    int viewY = kToolbarH;
+    int viewY = topH;
     int viewW = std::max(1, screenW - kLeftPanelW - kRightPanelW);
-    int viewH = std::max(1, screenH - kToolbarH - kStatusH);
+    int viewH = std::max(1, screenH - topH - kStatusH);
 
-    // GL uses bottom-left origin; flip Y for viewport/scissor
     constexpr unsigned int GL_SCISSOR_TEST = 0x0C11;
     int glViewY = screenH - viewY - viewH;
 
-    // Enable scissor to restrict the bgColor clear to the 3D area only
     if (fnGlEnable_)  fnGlEnable_(GL_SCISSOR_TEST);
     if (fnGlScissor_) fnGlScissor_(viewX, glViewY, viewW, viewH);
 
-    // Scene background color
     Color bgColor(64, 72, 80, 255);
     if (document_.environment) {
         const auto& bc = document_.environment->backgroundColor;
@@ -155,25 +197,21 @@ void MeshCraftApplication::Draw(const GameTime& /*gameTime*/) {
             static_cast<int>(std::clamp(bc[2], 0.0f, 1.0f) * 255),
             255);
     }
-    gd.Clear(bgColor);  // Clear() resets GL viewport to full window; scissor limits it to 3D area
+    gd.Clear(bgColor);
 
-    // Re-apply correct GL viewport for 3D rendering (Clear() reset it to full window)
     if (fnGlViewport_) fnGlViewport_(viewX, glViewY, viewW, viewH);
 
     float aspect = (viewH > 0) ? static_cast<float>(viewW) / viewH : 16.0f / 9.0f;
     Matrix view = camera_.viewMatrix();
     Matrix proj = camera_.projectionMatrix(aspect);
 
-    // Grid
     gd.SetDepthTestEnabled(false);
     gridRenderer_->draw(view, proj);
 
-    // Scene objects
     gd.SetDepthTestEnabled(true);
     auto selPtrs = selectedPointers();
     sceneRenderer_->draw(document_, view, proj, selPtrs);
 
-    // Transform gizmo — draw on top of scene (depth-test off so always visible)
     if (selection_.hasSelection()) {
         float gizmoLen = camera_.distance * 0.15f;
         auto* sel0 = selection_.selection().front().get();
@@ -189,31 +227,23 @@ void MeshCraftApplication::Draw(const GameTime& /*gameTime*/) {
         }
     }
 
-    // Restore full GL viewport and disable scissor before 2D UI overlay
     if (fnGlDisable_)  fnGlDisable_(GL_SCISSOR_TEST);
     if (fnGlViewport_) fnGlViewport_(0, 0, screenW, screenH);
 
-    // Update CPU-side viewport to match
     Graphics::Viewport vpReset;
-    vpReset.x = 0;
-    vpReset.y = 0;
+    vpReset.x = 0; vpReset.y = 0;
     vpReset.setWidthProperty(screenW);
     vpReset.setHeightProperty(screenH);
     gd.setViewportProperty(vpReset);
 
+    // Box-select rectangle overlay drawn via ImGui in drawImGuiUi()
     gd.SetDepthTestEnabled(false);
-    spriteBatch_->Begin();
-    drawUi(screenW, screenH);
-    spriteBatch_->End();
+    drawImGuiUi(screenW, screenH);
 
-    // Auto-screenshot countdown
     if (autoScreenshotCountdown_ > 0) {
         --autoScreenshotCountdown_;
-        if (autoScreenshotCountdown_ == 0 && !autoScreenshotPath_.empty()) {
-            saveScreenshot(autoScreenshotPath_);
-            std::cout << "[MeshCraft] Auto-screenshot saved to: " << autoScreenshotPath_ << "\n";
-            Exit();
-        }
+        if (autoScreenshotCountdown_ == 0 && !autoScreenshotPath_.empty())
+            pendingScreenshot_ = true;
     }
 }
 
@@ -233,187 +263,7 @@ void MeshCraftApplication::handleKeyboardShortcuts(const KeyboardState& ks, cons
     bool shift = ks.IsKeyDown(Keys::LeftShift)    || ks.IsKeyDown(Keys::RightShift);
     bool alt   = ks.IsKeyDown(Keys::LeftAlt)      || ks.IsKeyDown(Keys::RightAlt);
 
-    // Cancel field if selection was cleared externally
-    if (fieldActive_ && !selection_.hasSelection()) cancelField();
-
-    // Open-file dialog — captures all input while active
-    if (openDialogActive_) {
-        if (justPressed(ks, prevKs, Keys::Escape)) { openDialogActive_ = false; return; }
-        if (justPressed(ks, prevKs, Keys::Back) && !openDialogBuffer_.empty()) {
-            openDialogBuffer_.pop_back(); return;
-        }
-        if (justPressed(ks, prevKs, Keys::Enter)) {
-            if (!openDialogBuffer_.empty()) {
-                try {
-                    document_ = Mc3::Mc3Document::loadFromFile(openDialogBuffer_);
-                    currentFile_ = openDialogBuffer_;
-                    selection_.clear();
-                    collapsedGroups_.clear();
-                    undoStack_.clear();
-                    redoStack_.clear();
-                    modified_ = false;
-                    openDialogActive_ = false;
-                    openDialogError_.clear();
-                    std::cout << "[MeshCraft] Loaded: " << openDialogBuffer_ << "\n";
-                    updateWindowTitle();
-                } catch (const std::exception& e) {
-                    openDialogError_ = e.what();
-                }
-            }
-            return;
-        }
-        // Path characters: letters, digits, common punctuation
-        struct { Keys key; char lo; char hi; } lk[] = {
-            {Keys::A,'a','A'},{Keys::B,'b','B'},{Keys::C,'c','C'},{Keys::D,'d','D'},
-            {Keys::E,'e','E'},{Keys::F,'f','F'},{Keys::G,'g','G'},{Keys::H,'h','H'},
-            {Keys::I,'i','I'},{Keys::J,'j','J'},{Keys::K,'k','K'},{Keys::L,'l','L'},
-            {Keys::M,'m','M'},{Keys::N,'n','N'},{Keys::O,'o','O'},{Keys::P,'p','P'},
-            {Keys::Q,'q','Q'},{Keys::R,'r','R'},{Keys::S,'s','S'},{Keys::T,'t','T'},
-            {Keys::U,'u','U'},{Keys::V,'v','V'},{Keys::W,'w','W'},{Keys::X,'x','X'},
-            {Keys::Y,'y','Y'},{Keys::Z,'z','Z'},
-        };
-        for (auto& k : lk) {
-            if (justPressed(ks, prevKs, k.key)) { openDialogBuffer_ += shift ? k.hi : k.lo; return; }
-        }
-        struct { Keys key; char ch; } dk[] = {
-            {Keys::D0,'0'},{Keys::D1,'1'},{Keys::D2,'2'},{Keys::D3,'3'},{Keys::D4,'4'},
-            {Keys::D5,'5'},{Keys::D6,'6'},{Keys::D7,'7'},{Keys::D8,'8'},{Keys::D9,'9'},
-            {Keys::NumPad0,'0'},{Keys::NumPad1,'1'},{Keys::NumPad2,'2'},
-            {Keys::NumPad3,'3'},{Keys::NumPad4,'4'},{Keys::NumPad5,'5'},
-            {Keys::NumPad6,'6'},{Keys::NumPad7,'7'},{Keys::NumPad8,'8'},{Keys::NumPad9,'9'},
-        };
-        for (auto& k : dk) {
-            if (justPressed(ks, prevKs, k.key)) { openDialogBuffer_ += k.ch; return; }
-        }
-        if (justPressed(ks, prevKs, Keys::OemPeriod))       { openDialogBuffer_ += '.';             return; }
-        if (justPressed(ks, prevKs, Keys::OemMinus))        { openDialogBuffer_ += shift ? '_' :'-'; return; }
-        if (justPressed(ks, prevKs, Keys::OemQuestion))     { openDialogBuffer_ += shift ? '?':'/';  return; }
-        if (justPressed(ks, prevKs, Keys::OemPipe))         { openDialogBuffer_ += shift ? '|':'\\'; return; }
-        if (justPressed(ks, prevKs, Keys::OemTilde))        { openDialogBuffer_ += shift ? '~':'`';  return; }
-        if (justPressed(ks, prevKs, Keys::OemSemicolon))    { openDialogBuffer_ += shift ? ':':';';  return; }
-        if (justPressed(ks, prevKs, Keys::Space))           { openDialogBuffer_ += ' ';              return; }
-        return; // swallow all other keys while open dialog is active
-    }
-
-    // Save-as dialog — same input set as open dialog
-    if (saveDialogActive_) {
-        if (justPressed(ks, prevKs, Keys::Escape)) { saveDialogActive_ = false; return; }
-        if (justPressed(ks, prevKs, Keys::Back) && !saveDialogBuffer_.empty()) {
-            saveDialogBuffer_.pop_back(); return;
-        }
-        if (justPressed(ks, prevKs, Keys::Enter)) {
-            if (!saveDialogBuffer_.empty()) {
-                std::string path = saveDialogBuffer_;
-                if (path.find(".mc3.xml") == std::string::npos) path += ".mc3.xml";
-                try {
-                    document_.saveToFile(path);
-                    currentFile_ = path;
-                    modified_ = false;
-                    saveDialogActive_ = false;
-                    saveDialogError_.clear();
-                    std::cout << "[MeshCraft] Saved: " << path << "\n";
-                    updateWindowTitle();
-                } catch (const std::exception& e) {
-                    saveDialogError_ = e.what();
-                }
-            }
-            return;
-        }
-        // Path characters (same table as open dialog)
-        struct { Keys key; char lo; char hi; } lk2[] = {
-            {Keys::A,'a','A'},{Keys::B,'b','B'},{Keys::C,'c','C'},{Keys::D,'d','D'},
-            {Keys::E,'e','E'},{Keys::F,'f','F'},{Keys::G,'g','G'},{Keys::H,'h','H'},
-            {Keys::I,'i','I'},{Keys::J,'j','J'},{Keys::K,'k','K'},{Keys::L,'l','L'},
-            {Keys::M,'m','M'},{Keys::N,'n','N'},{Keys::O,'o','O'},{Keys::P,'p','P'},
-            {Keys::Q,'q','Q'},{Keys::R,'r','R'},{Keys::S,'s','S'},{Keys::T,'t','T'},
-            {Keys::U,'u','U'},{Keys::V,'v','V'},{Keys::W,'w','W'},{Keys::X,'x','X'},
-            {Keys::Y,'y','Y'},{Keys::Z,'z','Z'},
-        };
-        for (auto& k : lk2) {
-            if (justPressed(ks, prevKs, k.key)) { saveDialogBuffer_ += shift ? k.hi : k.lo; return; }
-        }
-        struct { Keys key; char ch; } dk2[] = {
-            {Keys::D0,'0'},{Keys::D1,'1'},{Keys::D2,'2'},{Keys::D3,'3'},{Keys::D4,'4'},
-            {Keys::D5,'5'},{Keys::D6,'6'},{Keys::D7,'7'},{Keys::D8,'8'},{Keys::D9,'9'},
-            {Keys::NumPad0,'0'},{Keys::NumPad1,'1'},{Keys::NumPad2,'2'},
-            {Keys::NumPad3,'3'},{Keys::NumPad4,'4'},{Keys::NumPad5,'5'},
-            {Keys::NumPad6,'6'},{Keys::NumPad7,'7'},{Keys::NumPad8,'8'},{Keys::NumPad9,'9'},
-        };
-        for (auto& k : dk2) {
-            if (justPressed(ks, prevKs, k.key)) { saveDialogBuffer_ += k.ch; return; }
-        }
-        if (justPressed(ks, prevKs, Keys::OemPeriod))    { saveDialogBuffer_ += '.';              return; }
-        if (justPressed(ks, prevKs, Keys::OemMinus))     { saveDialogBuffer_ += shift ? '_' :'-'; return; }
-        if (justPressed(ks, prevKs, Keys::OemQuestion))  { saveDialogBuffer_ += shift ? '?':'/';  return; }
-        if (justPressed(ks, prevKs, Keys::OemPipe))      { saveDialogBuffer_ += shift ? '|':'\\'; return; }
-        if (justPressed(ks, prevKs, Keys::OemTilde))     { saveDialogBuffer_ += shift ? '~':'`';  return; }
-        if (justPressed(ks, prevKs, Keys::OemSemicolon)) { saveDialogBuffer_ += shift ? ':':';';  return; }
-        if (justPressed(ks, prevKs, Keys::Space))        { saveDialogBuffer_ += ' ';              return; }
-        return; // swallow all other keys while save dialog is active
-    }
-
-    // When a properties field is active, capture text input exclusively
-    if (fieldActive_) {
-        if (justPressed(ks, prevKs, Keys::Escape)) { cancelField(); return; }
-        if (justPressed(ks, prevKs, Keys::Enter))  { applyFieldValue(); return; }
-        if (justPressed(ks, prevKs, Keys::Back) && !fieldBuffer_.empty()) {
-            fieldBuffer_.pop_back(); return;
-        }
-        if (fieldSection_ < 0) {
-            // String field (name / collision): accept letters, digits, space, dash, underscore, period
-            struct { Keys key; char lo; char hi; } letterKeys[] = {
-                {Keys::A,'a','A'},{Keys::B,'b','B'},{Keys::C,'c','C'},{Keys::D,'d','D'},
-                {Keys::E,'e','E'},{Keys::F,'f','F'},{Keys::G,'g','G'},{Keys::H,'h','H'},
-                {Keys::I,'i','I'},{Keys::J,'j','J'},{Keys::K,'k','K'},{Keys::L,'l','L'},
-                {Keys::M,'m','M'},{Keys::N,'n','N'},{Keys::O,'o','O'},{Keys::P,'p','P'},
-                {Keys::Q,'q','Q'},{Keys::R,'r','R'},{Keys::S,'s','S'},{Keys::T,'t','T'},
-                {Keys::U,'u','U'},{Keys::V,'v','V'},{Keys::W,'w','W'},{Keys::X,'x','X'},
-                {Keys::Y,'y','Y'},{Keys::Z,'z','Z'},
-            };
-            for (auto& lk : letterKeys) {
-                if (justPressed(ks, prevKs, lk.key)) { fieldBuffer_ += shift ? lk.hi : lk.lo; return; }
-            }
-            struct { Keys key; char ch; } numKeys[] = {
-                {Keys::D0,'0'},{Keys::D1,'1'},{Keys::D2,'2'},{Keys::D3,'3'},{Keys::D4,'4'},
-                {Keys::D5,'5'},{Keys::D6,'6'},{Keys::D7,'7'},{Keys::D8,'8'},{Keys::D9,'9'},
-                {Keys::NumPad0,'0'},{Keys::NumPad1,'1'},{Keys::NumPad2,'2'},
-                {Keys::NumPad3,'3'},{Keys::NumPad4,'4'},{Keys::NumPad5,'5'},
-                {Keys::NumPad6,'6'},{Keys::NumPad7,'7'},{Keys::NumPad8,'8'},{Keys::NumPad9,'9'},
-            };
-            for (auto& nk : numKeys) {
-                if (justPressed(ks, prevKs, nk.key)) { fieldBuffer_ += nk.ch; return; }
-            }
-            if (justPressed(ks, prevKs, Keys::Space)) { fieldBuffer_ += ' '; return; }
-            if (justPressed(ks, prevKs, Keys::OemMinus) || justPressed(ks, prevKs, Keys::Subtract)) {
-                fieldBuffer_ += shift ? '_' : '-'; return;
-            }
-            if (justPressed(ks, prevKs, Keys::OemPeriod) || justPressed(ks, prevKs, Keys::Decimal)) {
-                fieldBuffer_ += '.'; return;
-            }
-        } else {
-            // Numeric transform fields: digits, decimal point, leading minus only
-            struct { Keys key; char ch; } numKeys[] = {
-                {Keys::D0,'0'},{Keys::D1,'1'},{Keys::D2,'2'},{Keys::D3,'3'},{Keys::D4,'4'},
-                {Keys::D5,'5'},{Keys::D6,'6'},{Keys::D7,'7'},{Keys::D8,'8'},{Keys::D9,'9'},
-                {Keys::NumPad0,'0'},{Keys::NumPad1,'1'},{Keys::NumPad2,'2'},
-                {Keys::NumPad3,'3'},{Keys::NumPad4,'4'},{Keys::NumPad5,'5'},
-                {Keys::NumPad6,'6'},{Keys::NumPad7,'7'},{Keys::NumPad8,'8'},{Keys::NumPad9,'9'},
-            };
-            for (auto& nk : numKeys) {
-                if (justPressed(ks, prevKs, nk.key)) { fieldBuffer_ += nk.ch; return; }
-            }
-            if (justPressed(ks, prevKs, Keys::OemPeriod) || justPressed(ks, prevKs, Keys::Decimal)) {
-                if (fieldBuffer_.find('.') == std::string::npos) fieldBuffer_ += '.';
-                return;
-            }
-            if (justPressed(ks, prevKs, Keys::OemMinus) || justPressed(ks, prevKs, Keys::Subtract)) {
-                if (fieldBuffer_.empty()) { fieldBuffer_ += '-'; return; }
-            }
-        }
-        return; // swallow all other keys while editing
-    }
-
-    // Escape: first press deselects / resets tool; second press (already in select+empty) exits
+    // Escape: deselect / reset tool / exit
     if (justPressed(ks, prevKs, Keys::Escape)) {
         if (activeTool_ != ActiveTool::Select || selection_.hasSelection()) {
             activeTool_ = ActiveTool::Select;
@@ -460,60 +310,25 @@ void MeshCraftApplication::handleKeyboardShortcuts(const KeyboardState& ks, cons
         return;
     }
 
-    // Print help to console (F12)
-    if (justPressed(ks, prevKs, Keys::F12)) {
-        std::cout <<
-            "\n=== Mesh Craft Keyboard Shortcuts ===\n"
-            "File:\n"
-            "  Ctrl+N        New scene\n"
-            "  Ctrl+O        Open mc3.xml file (enter path in console)\n"
-            "  Ctrl+S        Save\n"
-            "  Ctrl+Shift+S  Save As\n"
-            "  Ctrl+E        Export to GLB via mc3togltf\n"
-            "Tools:\n"
-            "  Q / Esc       Select tool (click to select — TODO ray cast)\n"
-            "  G             Move tool\n"
-            "  R             Rotate tool\n"
-            "  S             Scale tool\n"
-            "Add primitives:\n"
-            "  F1  Box       F2  Sphere    F3  Cylinder\n"
-            "  F4  Cone      F5  Plane\n"
-            "Edit:\n"
-            "  Del           Delete selected\n"
-            "  Ctrl+A        Select all\n"
-            "  Ctrl+D        Duplicate selected\n"
-            "  Arrow keys    Nudge selected (Shift = 0.1 step)\n"
-            "Camera:\n"
-            "  Middle-drag   Orbit\n"
-            "  Right-drag    Pan\n"
-            "  Scroll wheel  Zoom\n"
-            "  F             Focus on selection / reset\n"
-            "  Num1/3/5/7/9  Front / Right / Back / Top / Bottom view\n"
-            "Help:\n"
-            "  F12           Print this help\n"
-            "======================================\n\n";
-        return;
-    }
-
     // File ops
-    if (ctrl && !shift && justPressed(ks, prevKs, Keys::N)) { newScene(); return; }
-    if (ctrl && !shift && justPressed(ks, prevKs, Keys::O)) { openFile();  return; }
+    if (ctrl && !shift && justPressed(ks, prevKs, Keys::N)) { newScene();   return; }
+    if (ctrl && !shift && justPressed(ks, prevKs, Keys::O)) { openFile();   return; }
     if (ctrl &&  shift && justPressed(ks, prevKs, Keys::S)) { saveFileAs(); return; }
-    if (ctrl && !shift && justPressed(ks, prevKs, Keys::S)) { saveFile();  return; }
+    if (ctrl && !shift && justPressed(ks, prevKs, Keys::S)) { saveFile();   return; }
     if (ctrl && !shift && justPressed(ks, prevKs, Keys::E)) { exportGltf(); return; }
 
-    // Tool selection (Blender/SketchUp style shortcuts, no Ctrl modifier)
+    // Tool selection
     if (!ctrl && !alt && justPressed(ks, prevKs, Keys::G)) { activeTool_ = ActiveTool::Move;   updateWindowTitle(); }
     if (!ctrl && !alt && justPressed(ks, prevKs, Keys::R)) { activeTool_ = ActiveTool::Rotate; updateWindowTitle(); }
     if (!ctrl && !alt && justPressed(ks, prevKs, Keys::S)) { activeTool_ = ActiveTool::Scale;  updateWindowTitle(); }
     if (!ctrl && !alt && justPressed(ks, prevKs, Keys::Q)) { activeTool_ = ActiveTool::Select; updateWindowTitle(); }
 
-    // Preset camera views (Numpad, no Ctrl)
-    if (!ctrl && justPressed(ks, prevKs, Keys::NumPad1)) { camera_.yaw = 0.0f;                                camera_.pitch = 0.0f;  return; } // Front
-    if (!ctrl && justPressed(ks, prevKs, Keys::NumPad3)) { camera_.yaw = std::numbers::pi_v<float> * 0.5f;  camera_.pitch = 0.0f;  return; } // Right
-    if (!ctrl && justPressed(ks, prevKs, Keys::NumPad5)) { camera_.yaw = std::numbers::pi_v<float>;          camera_.pitch = 0.0f;  return; } // Back
-    if (!ctrl && justPressed(ks, prevKs, Keys::NumPad7)) { camera_.yaw = 0.0f;                                camera_.pitch = 1.47f; return; } // Top
-    if (!ctrl && justPressed(ks, prevKs, Keys::NumPad9)) { camera_.yaw = 0.0f;                                camera_.pitch =-1.47f; return; } // Bottom
+    // Preset camera views (Numpad)
+    if (!ctrl && justPressed(ks, prevKs, Keys::NumPad1)) { camera_.yaw = 0.0f;                                camera_.pitch = 0.0f;  return; }
+    if (!ctrl && justPressed(ks, prevKs, Keys::NumPad3)) { camera_.yaw = std::numbers::pi_v<float> * 0.5f;  camera_.pitch = 0.0f;  return; }
+    if (!ctrl && justPressed(ks, prevKs, Keys::NumPad5)) { camera_.yaw = std::numbers::pi_v<float>;          camera_.pitch = 0.0f;  return; }
+    if (!ctrl && justPressed(ks, prevKs, Keys::NumPad7)) { camera_.yaw = 0.0f;                                camera_.pitch = 1.47f; return; }
+    if (!ctrl && justPressed(ks, prevKs, Keys::NumPad9)) { camera_.yaw = 0.0f;                                camera_.pitch =-1.47f; return; }
 
     // Add primitives
     if (!ctrl && justPressed(ks, prevKs, Keys::F1)) { addPrimitive(Mc3::ObjectType::Box);      return; }
@@ -525,7 +340,7 @@ void MeshCraftApplication::handleKeyboardShortcuts(const KeyboardState& ks, cons
     // Delete selected
     if (justPressed(ks, prevKs, Keys::Delete)) { deleteSelected(); return; }
 
-    // Camera: F = focus on selection, or reset if nothing selected
+    // Camera: F = focus on selection or reset
     if (!ctrl && justPressed(ks, prevKs, Keys::F)) {
         if (selection_.hasSelection()) {
             float bMinX = 1e30f, bMinY = 1e30f, bMinZ = 1e30f;
@@ -544,22 +359,17 @@ void MeshCraftApplication::handleKeyboardShortcuts(const KeyboardState& ks, cons
                     switch (p.primitiveType) {
                     case Mc3::PrimitiveType::Box:
                     case Mc3::PrimitiveType::Cube:
-                        hx = p.size[0] * 0.5f * sx;
-                        hy = p.size[1] * 0.5f * sy;
-                        hz = p.size[2] * 0.5f * sz;
+                        hx = p.size[0] * 0.5f * sx; hy = p.size[1] * 0.5f * sy; hz = p.size[2] * 0.5f * sz;
                         break;
                     case Mc3::PrimitiveType::Sphere:
                         hx = hy = hz = p.radius * std::max({sx,sy,sz});
                         break;
                     case Mc3::PrimitiveType::Cylinder:
                     case Mc3::PrimitiveType::Cone:
-                        hx = hz = p.radius * std::max(sx, sz);
-                        hy = p.height * 0.5f * sy;
+                        hx = hz = p.radius * std::max(sx, sz); hy = p.height * 0.5f * sy;
                         break;
                     case Mc3::PrimitiveType::Plane:
-                        hx = p.size[0] * 0.5f * sx;
-                        hy = 0.05f;
-                        hz = p.size[2] * 0.5f * sz;
+                        hx = p.size[0] * 0.5f * sx; hy = 0.05f; hz = p.size[2] * 0.5f * sz;
                         break;
                     }
                 }
@@ -578,7 +388,7 @@ void MeshCraftApplication::handleKeyboardShortcuts(const KeyboardState& ks, cons
         return;
     }
 
-    // Select all — within selected group if one is selected, else top-level
+    // Select all
     if (ctrl && justPressed(ks, prevKs, Keys::A)) {
         if (selection_.hasSelection()) {
             auto& sel0 = selection_.selection().front();
@@ -600,23 +410,17 @@ void MeshCraftApplication::handleKeyboardShortcuts(const KeyboardState& ks, cons
         return;
     }
 
-    // Duplicate (Ctrl+D)
     if (ctrl && justPressed(ks, prevKs, Keys::D)) { duplicateSelected(); return; }
-
-    // Cut / Copy / Paste
     if (ctrl && justPressed(ks, prevKs, Keys::C)) { copySelected();   return; }
     if (ctrl && justPressed(ks, prevKs, Keys::X)) { cutSelected();    return; }
     if (ctrl && justPressed(ks, prevKs, Keys::V)) { pasteClipboard(); return; }
-
-    // Group / Ungroup
     if (ctrl && !shift && justPressed(ks, prevKs, Keys::G)) { groupSelected();   return; }
     if (ctrl &&  shift && justPressed(ks, prevKs, Keys::G)) { ungroupSelected(); return; }
 
-    // Nudge selected objects with arrow keys
+    // Nudge selected objects
     if (!selection_.hasSelection()) return;
     float nudge = (shift ? 0.1f : 1.0f);
     bool nudged = false;
-    // Check if any nudge key is pressed before doing anything (to avoid push without mutation)
     bool anyNudgePressed =
         justPressed(ks, prevKs, Keys::Left)  || justPressed(ks, prevKs, Keys::Right) ||
         justPressed(ks, prevKs, Keys::Up)    || justPressed(ks, prevKs, Keys::Down)  ||
@@ -646,111 +450,96 @@ void MeshCraftApplication::handleMouseInput(const MouseState& ms, const MouseSta
     bool leftBtn   = ms.getLeftButtonProperty()   == ButtonState::Pressed;
     bool rightBtn  = ms.getRightButtonProperty()  == ButtonState::Pressed;
     bool middleBtn = ms.getMiddleButtonProperty() == ButtonState::Pressed;
-
-    bool prevLeft  = prev.getLeftButtonProperty()  == ButtonState::Pressed;
+    bool prevLeft  = prev.getLeftButtonProperty() == ButtonState::Pressed;
 
     // End gizmo drag on mouse release
-    if (!leftBtn && gizmo_.isDragging()) {
+    if (!leftBtn && gizmo_.isDragging())
         gizmo_.endDrag();
-    }
 
-    // Middle-drag or right-drag: orbit camera
-    if (middleBtn && (dx != 0 || dy != 0)) {
+    // Camera orbit / pan / zoom
+    if (middleBtn && (dx != 0 || dy != 0))
         camera_.orbit(dx * 0.005f, dy * 0.005f);
-    }
-    // Shift + middle-drag: pan
-    else if (rightBtn && !middleBtn && (dx != 0 || dy != 0)) {
+    else if (rightBtn && !middleBtn && (dx != 0 || dy != 0))
         camera_.pan(static_cast<float>(-dx), static_cast<float>(dy));
-    }
 
-    // Scroll: zoom
-    if (dscroll != 0) {
+    if (dscroll != 0)
         camera_.zoom(static_cast<float>(dscroll) / 120.0f);
-    }
 
-    // Apply gizmo drag while left button is held on a handle
+    // Compute 3D viewport bounds (same formula as Draw())
+    auto& gd = getGraphicsDeviceProperty();
+    int screenW = gd.getViewportProperty().getWidthProperty();
+    int screenH = gd.getViewportProperty().getHeightProperty();
+    int topH    = imguiTopH_ > 0 ? imguiTopH_ : 60;
+    int vX = kLeftPanelW, vY = topH;
+    int vW = std::max(1, screenW - kLeftPanelW - kRightPanelW);
+    int vH = std::max(1, screenH - topH - kStatusH);
+    float asp = static_cast<float>(vW) / static_cast<float>(vH);
+
+    // Apply gizmo drag (Move)
     if (activeTool_ == ActiveTool::Move && gizmo_.isDragging() && leftBtn && (dx != 0 || dy != 0)
         && selection_.hasSelection())
     {
-        auto& gd2 = getGraphicsDeviceProperty();
-        int sW2 = gd2.getViewportProperty().getWidthProperty();
-        int sH2 = gd2.getViewportProperty().getHeightProperty();
-        int vX2 = kLeftPanelW, vY2 = kToolbarH;
-        int vW2 = std::max(1, sW2 - kLeftPanelW - kRightPanelW);
-        int vH2 = std::max(1, sH2 - kToolbarH - kStatusH);
-        float asp2 = static_cast<float>(vW2) / static_cast<float>(vH2);
-        Matrix vw2 = camera_.viewMatrix();
-        Matrix pr2 = camera_.projectionMatrix(asp2);
-        Matrix vp2 = vw2 * pr2;
+        Matrix vw = camera_.viewMatrix();
+        Matrix pr = camera_.projectionMatrix(asp);
+        Matrix vp = vw * pr;
 
-        auto w2s2 = [&](float wx, float wy, float wz) -> std::pair<float,float> {
-            float cX = wx*vp2.M11 + wy*vp2.M21 + wz*vp2.M31 + vp2.M41;
-            float cY = wx*vp2.M12 + wy*vp2.M22 + wz*vp2.M32 + vp2.M42;
-            float cW = wx*vp2.M14 + wy*vp2.M24 + wz*vp2.M34 + vp2.M44;
+        auto w2s = [&](float wx, float wy, float wz) -> std::pair<float,float> {
+            float cX = wx*vp.M11 + wy*vp.M21 + wz*vp.M31 + vp.M41;
+            float cY = wx*vp.M12 + wy*vp.M22 + wz*vp.M32 + vp.M42;
+            float cW = wx*vp.M14 + wy*vp.M24 + wz*vp.M34 + vp.M44;
             if (std::abs(cW) < 1e-6f) return {-1e6f, -1e6f};
-            return { (cX/cW * 0.5f + 0.5f) * vW2 + vX2,
-                     (1.0f - (cY/cW * 0.5f + 0.5f)) * vH2 + vY2 };
+            return { (cX/cW * 0.5f + 0.5f) * vW + vX,
+                     (1.0f - (cY/cW * 0.5f + 0.5f)) * vH + vY };
         };
 
         auto* sel0 = selection_.selection().front().get();
-        float px2 = sel0->transform.position[0];
-        float py2 = sel0->transform.position[1];
-        float pz2 = sel0->transform.position[2];
-        float L2  = camera_.distance * 0.15f;
-        int axIdx = static_cast<int>(gizmo_.dragAxis()) - 1; // 0=X,1=Y,2=Z
-        float tipXYZ[3][3] = {{px2+L2,py2,pz2},{px2,py2+L2,pz2},{px2,py2,pz2+L2}};
+        float px = sel0->transform.position[0], py2 = sel0->transform.position[1], pz = sel0->transform.position[2];
+        float L  = camera_.distance * 0.15f;
+        int axIdx = static_cast<int>(gizmo_.dragAxis()) - 1;
+        float tipXYZ[3][3] = {{px+L,py2,pz},{px,py2+L,pz},{px,py2,pz+L}};
 
-        auto [cx2, cy2] = w2s2(px2, py2, pz2);
-        auto [tx2, ty2] = w2s2(tipXYZ[axIdx][0], tipXYZ[axIdx][1], tipXYZ[axIdx][2]);
-        float axScrX = tx2 - cx2, axScrY = ty2 - cy2;
+        auto [cx, cy] = w2s(px, py2, pz);
+        auto [tx, ty] = w2s(tipXYZ[axIdx][0], tipXYZ[axIdx][1], tipXYZ[axIdx][2]);
+        float axScrX = tx - cx, axScrY = ty - cy;
         float len2d  = std::sqrt(axScrX*axScrX + axScrY*axScrY);
         if (len2d > 0.5f) {
             float dot = dx * (axScrX/len2d) + dy * (axScrY/len2d);
-            sel0->transform.position[axIdx] += dot * L2 / len2d;
+            sel0->transform.position[axIdx] += dot * L / len2d;
             modified_ = true;
             updateWindowTitle();
         }
-        return; // no other left-button logic during drag
+        return;
     }
 
-    // Scale gizmo drag
+    // Apply gizmo drag (Scale)
     if (activeTool_ == ActiveTool::Scale && gizmo_.isDragging() && leftBtn && (dx != 0 || dy != 0)
         && selection_.hasSelection())
     {
-        auto& gd3 = getGraphicsDeviceProperty();
-        int sW3 = gd3.getViewportProperty().getWidthProperty();
-        int sH3 = gd3.getViewportProperty().getHeightProperty();
-        int vX3 = kLeftPanelW, vY3 = kToolbarH;
-        int vW3 = std::max(1, sW3 - kLeftPanelW - kRightPanelW);
-        int vH3 = std::max(1, sH3 - kToolbarH - kStatusH);
-        float asp3 = static_cast<float>(vW3) / static_cast<float>(vH3);
-        Matrix vw3 = camera_.viewMatrix();
-        Matrix pr3 = camera_.projectionMatrix(asp3);
-        Matrix vp3 = vw3 * pr3;
+        Matrix vw = camera_.viewMatrix();
+        Matrix pr = camera_.projectionMatrix(asp);
+        Matrix vp = vw * pr;
 
-        auto w2s3 = [&](float wx, float wy, float wz) -> std::pair<float,float> {
-            float cX = wx*vp3.M11 + wy*vp3.M21 + wz*vp3.M31 + vp3.M41;
-            float cY = wx*vp3.M12 + wy*vp3.M22 + wz*vp3.M32 + vp3.M42;
-            float cW = wx*vp3.M14 + wy*vp3.M24 + wz*vp3.M34 + vp3.M44;
+        auto w2s = [&](float wx, float wy, float wz) -> std::pair<float,float> {
+            float cX = wx*vp.M11 + wy*vp.M21 + wz*vp.M31 + vp.M41;
+            float cY = wx*vp.M12 + wy*vp.M22 + wz*vp.M32 + vp.M42;
+            float cW = wx*vp.M14 + wy*vp.M24 + wz*vp.M34 + vp.M44;
             if (std::abs(cW) < 1e-6f) return {-1e6f, -1e6f};
-            return { (cX/cW * 0.5f + 0.5f) * vW3 + vX3,
-                     (1.0f - (cY/cW * 0.5f + 0.5f)) * vH3 + vY3 };
+            return { (cX/cW * 0.5f + 0.5f) * vW + vX,
+                     (1.0f - (cY/cW * 0.5f + 0.5f)) * vH + vY };
         };
 
         auto* sel0 = selection_.selection().front().get();
-        float px3 = sel0->transform.position[0];
-        float py3 = sel0->transform.position[1];
-        float pz3 = sel0->transform.position[2];
-        float L3  = camera_.distance * 0.15f;
+        float px = sel0->transform.position[0], py2 = sel0->transform.position[1], pz = sel0->transform.position[2];
+        float L  = camera_.distance * 0.15f;
         int axIdx = static_cast<int>(gizmo_.dragAxis()) - 1;
-        float tipXYZ[3][3] = {{px3+L3,py3,pz3},{px3,py3+L3,pz3},{px3,py3,pz3+L3}};
+        float tipXYZ[3][3] = {{px+L,py2,pz},{px,py2+L,pz},{px,py2,pz+L}};
 
-        auto [cx3, cy3] = w2s3(px3, py3, pz3);
-        auto [tx3, ty3] = w2s3(tipXYZ[axIdx][0], tipXYZ[axIdx][1], tipXYZ[axIdx][2]);
-        float axScrX3 = tx3 - cx3, axScrY3 = ty3 - cy3;
-        float len3d   = std::sqrt(axScrX3*axScrX3 + axScrY3*axScrY3);
+        auto [cx, cy] = w2s(px, py2, pz);
+        auto [tx, ty] = w2s(tipXYZ[axIdx][0], tipXYZ[axIdx][1], tipXYZ[axIdx][2]);
+        float axScrX = tx - cx, axScrY = ty - cy;
+        float len3d  = std::sqrt(axScrX*axScrX + axScrY*axScrY);
         if (len3d > 0.5f) {
-            float dot = dx * (axScrX3/len3d) + dy * (axScrY3/len3d);
+            float dot = dx * (axScrX/len3d) + dy * (axScrY/len3d);
             float& s = sel0->transform.scale[axIdx];
             s = std::max(0.01f, s + dot / len3d);
             modified_ = true;
@@ -759,47 +548,36 @@ void MeshCraftApplication::handleMouseInput(const MouseState& ms, const MouseSta
         return;
     }
 
-    // Rotate gizmo drag
+    // Apply gizmo drag (Rotate)
     if (activeTool_ == ActiveTool::Rotate && gizmo_.isDragging() && leftBtn && (dx != 0 || dy != 0)
         && selection_.hasSelection())
     {
-        auto& gd4 = getGraphicsDeviceProperty();
-        int sW4 = gd4.getViewportProperty().getWidthProperty();
-        int sH4 = gd4.getViewportProperty().getHeightProperty();
-        int vX4 = kLeftPanelW, vY4 = kToolbarH;
-        int vW4 = std::max(1, sW4 - kLeftPanelW - kRightPanelW);
-        int vH4 = std::max(1, sH4 - kToolbarH - kStatusH);
-        float asp4 = static_cast<float>(vW4) / static_cast<float>(vH4);
-        Matrix vw4 = camera_.viewMatrix();
-        Matrix pr4 = camera_.projectionMatrix(asp4);
-        Matrix vp4 = vw4 * pr4;
+        Matrix vw = camera_.viewMatrix();
+        Matrix pr = camera_.projectionMatrix(asp);
+        Matrix vp = vw * pr;
 
-        auto w2s4 = [&](float wx, float wy, float wz) -> std::pair<float,float> {
-            float cX = wx*vp4.M11 + wy*vp4.M21 + wz*vp4.M31 + vp4.M41;
-            float cY = wx*vp4.M12 + wy*vp4.M22 + wz*vp4.M32 + vp4.M42;
-            float cW = wx*vp4.M14 + wy*vp4.M24 + wz*vp4.M34 + vp4.M44;
+        auto w2s = [&](float wx, float wy, float wz) -> std::pair<float,float> {
+            float cX = wx*vp.M11 + wy*vp.M21 + wz*vp.M31 + vp.M41;
+            float cY = wx*vp.M12 + wy*vp.M22 + wz*vp.M32 + vp.M42;
+            float cW = wx*vp.M14 + wy*vp.M24 + wz*vp.M34 + vp.M44;
             if (std::abs(cW) < 1e-6f) return {-1e6f, -1e6f};
-            return { (cX/cW * 0.5f + 0.5f) * vW4 + vX4,
-                     (1.0f - (cY/cW * 0.5f + 0.5f)) * vH4 + vY4 };
+            return { (cX/cW * 0.5f + 0.5f) * vW + vX,
+                     (1.0f - (cY/cW * 0.5f + 0.5f)) * vH + vY };
         };
 
         auto* sel0 = selection_.selection().front().get();
-        float px4 = sel0->transform.position[0];
-        float py4 = sel0->transform.position[1];
-        float pz4 = sel0->transform.position[2];
-        float L4  = camera_.distance * 0.15f;
+        float px = sel0->transform.position[0], py2 = sel0->transform.position[1], pz = sel0->transform.position[2];
+        float L  = camera_.distance * 0.15f;
         int axIdx = static_cast<int>(gizmo_.dragAxis()) - 1;
 
-        auto [cx4, cy4] = w2s4(px4, py4, pz4);
-        // Screen-space radius: project a point on the circle perimeter
-        float refPts[3][3] = { {px4, py4+L4, pz4}, {px4+L4, py4, pz4}, {px4+L4, py4, pz4} };
-        auto [rx4s, ry4s]  = w2s4(refPts[axIdx][0], refPts[axIdx][1], refPts[axIdx][2]);
-        float r_screen = std::max(1.0f, std::sqrt((rx4s-cx4)*(rx4s-cx4) + (ry4s-cy4)*(ry4s-cy4)));
+        auto [cx, cy] = w2s(px, py2, pz);
+        float refPts[3][3] = { {px, py2+L, pz}, {px+L, py2, pz}, {px+L, py2, pz} };
+        auto [rx4s, ry4s]  = w2s(refPts[axIdx][0], refPts[axIdx][1], refPts[axIdx][2]);
+        float r_screen = std::max(1.0f, std::sqrt((rx4s-cx)*(rx4s-cx) + (ry4s-cy)*(ry4s-cy)));
 
-        // Tangent at current mouse position (perpendicular to radius from projected centre)
         float curMx = static_cast<float>(ms.getXProperty());
         float curMy = static_cast<float>(ms.getYProperty());
-        float radX = curMx - cx4, radY = curMy - cy4;
+        float radX = curMx - cx, radY = curMy - cy;
         float radLen = std::sqrt(radX*radX + radY*radY);
         if (radLen > 2.0f) {
             float tx = -radY/radLen, ty = radX/radLen;
@@ -812,140 +590,27 @@ void MeshCraftApplication::handleMouseInput(const MouseState& ms, const MouseSta
         return;
     }
 
-    // Left click
+    // Left click in 3D viewport
     if (leftBtn && !prevLeft) {
         int mx = ms.getXProperty();
         int my = ms.getYProperty();
         bool ctrl = (Keyboard::GetState().IsKeyDown(Keys::LeftControl) ||
                      Keyboard::GetState().IsKeyDown(Keys::RightControl));
 
-        // Click in toolbar — switch tool or add primitive
-        if (my < kToolbarH) {
-            cancelField();
-            // Tool buttons (Select/Move/Rotate/Scale) at x=4,44,84,124 each 36 wide
-            ActiveTool toolMap[] = { ActiveTool::Select, ActiveTool::Move,
-                                     ActiveTool::Rotate, ActiveTool::Scale };
-            for (int i = 0; i < 4; ++i) {
-                int bx = 4 + i * 40;
-                if (mx >= bx && mx < bx + 36 && my >= 2 && my < 38) {
-                    activeTool_ = toolMap[i];
-                    updateWindowTitle();
-                    return;
-                }
-            }
-            // Add-primitive buttons at x=175,215,255,295,335 each 36 wide
-            Mc3::ObjectType primMap[] = {
-                Mc3::ObjectType::Box, Mc3::ObjectType::Sphere,
-                Mc3::ObjectType::Cylinder, Mc3::ObjectType::Cone,
-                Mc3::ObjectType::Plane
-            };
-            for (int i = 0; i < 5; ++i) {
-                int bx = 175 + i * 40;
-                if (mx >= bx && mx < bx + 36 && my >= 2 && my < 38) {
-                    addPrimitive(primMap[i]);
-                    return;
-                }
-            }
-            return; // click elsewhere in toolbar: ignore
-        }
-
-        // Click inside right properties panel — activate a field for editing
-        auto& gd0 = getGraphicsDeviceProperty();
-        int sW0 = gd0.getViewportProperty().getWidthProperty();
-        if (mx >= sW0 - kRightPanelW && my >= kToolbarH + kPanelHdrH && my < sW0) {
-            if (fieldActive_) applyFieldValue();
-            // Name bar
-            if (nameFieldHitY_ >= 0 && my >= nameFieldHitY_ && my < nameFieldHitY_ + 18) {
-                activateField(-1, 0);
-                return;
-            }
-            // Transform fields
-            for (const auto& hit : propFieldHits_) {
-                if (my >= hit.y && my < hit.y + 14) {
-                    activateField(hit.section, hit.axis);
-                    return;
-                }
-            }
-            // Visible toggle
-            if (visToggleHitY_ >= 0 && my >= visToggleHitY_ && my < visToggleHitY_ + 18
-                && selection_.hasSelection()) {
-                pushUndo();
-                selection_.selection().front()->visible = !selection_.selection().front()->visible;
-                modified_ = true;
-                updateWindowTitle();
-                return;
-            }
-            // Collision field
-            if (colFieldHitY_ >= 0 && my >= colFieldHitY_ && my < colFieldHitY_ + 18) {
-                activateField(-2, 0);
-                return;
-            }
-            // Tags field
-            if (tagsFieldHitY_ >= 0 && my >= tagsFieldHitY_ && my < tagsFieldHitY_ + 18) {
-                activateField(-3, 0);
-                return;
-            }
-            // Click in panel but not on a field — cancel active edit
-            if (fieldActive_) cancelField();
-            return;
-        }
-
-        // Click inside left hierarchy panel
-        if (mx < kLeftPanelW && my >= kToolbarH + kPanelHdrH) {
-            int row = (my - kToolbarH - kPanelHdrH) / kObjRowH;
-            if (row >= 0 && row < static_cast<int>(hierarchyRows_.size())) {
-                auto& hr = hierarchyRows_[row];
-                bool isGroup = !hr.obj->children.empty() ||
-                               hr.obj->type == Mc3::ObjectType::Group ||
-                               hr.obj->type == Mc3::ObjectType::Union ||
-                               hr.obj->type == Mc3::ObjectType::Difference ||
-                               hr.obj->type == Mc3::ObjectType::Intersection;
-                // Click on eye icon — toggle visibility without changing selection
-                if (mx >= kLeftPanelW - 22 && mx < kLeftPanelW - 10) {
-                    pushUndo();
-                    hr.obj->visible = !hr.obj->visible;
-                    modified_ = true;
-                    updateWindowTitle();
-                    return;
-                }
-                // Click on the triangle (expand/collapse region)
-                int triX = 5 + hr.depth * 14;
-                if (isGroup && mx >= triX && mx < triX + 12) {
-                    auto* ptr = hr.obj.get();
-                    if (collapsedGroups_.count(ptr)) collapsedGroups_.erase(ptr);
-                    else collapsedGroups_.insert(ptr);
-                    return;
-                }
-                // Select the object
-                if (!ctrl) selection_.clear();
-                selection_.select(hr.obj);
-                updateWindowTitle();
-            }
-            return;
-        }
-
-        // Click in 3D viewport
-        auto& gd = getGraphicsDeviceProperty();
-        int screenW = gd.getViewportProperty().getWidthProperty();
-        int screenH = gd.getViewportProperty().getHeightProperty();
-        bool in3d = (mx >= kLeftPanelW && mx < screenW - kRightPanelW &&
-                     my >= kToolbarH   && my < screenH - kStatusH);
+        bool in3d = (mx >= vX && mx < vX + vW && my >= vY && my < vY + vH);
         if (in3d) {
-            // Gizmo handle hit test (Move or Scale tool, no Ctrl)
+            // Gizmo handle hit test (Move or Scale)
             if ((activeTool_ == ActiveTool::Move || activeTool_ == ActiveTool::Scale)
-                && selection_.hasSelection() && !ctrl) {
+                && selection_.hasSelection() && !ctrl)
+            {
                 auto* sel0 = selection_.selection().front().get();
                 float gpx = sel0->transform.position[0];
                 float gpy = sel0->transform.position[1];
                 float gpz = sel0->transform.position[2];
                 float gL  = camera_.distance * 0.15f;
 
-                int gvX = kLeftPanelW, gvY = kToolbarH;
-                int gvW = std::max(1, screenW - kLeftPanelW - kRightPanelW);
-                int gvH = std::max(1, screenH - kToolbarH - kStatusH);
-                float gasp = static_cast<float>(gvW) / static_cast<float>(gvH);
                 Matrix gvw = camera_.viewMatrix();
-                Matrix gpr = camera_.projectionMatrix(gasp);
+                Matrix gpr = camera_.projectionMatrix(asp);
                 Matrix gvp = gvw * gpr;
 
                 auto gw2s = [&](float wx, float wy, float wz) -> std::pair<float,float> {
@@ -953,27 +618,23 @@ void MeshCraftApplication::handleMouseInput(const MouseState& ms, const MouseSta
                     float cY = wx*gvp.M12 + wy*gvp.M22 + wz*gvp.M32 + gvp.M42;
                     float cW = wx*gvp.M14 + wy*gvp.M24 + wz*gvp.M34 + gvp.M44;
                     if (std::abs(cW) < 1e-6f) return {-1e6f, -1e6f};
-                    return { (cX/cW * 0.5f + 0.5f) * gvW + gvX,
-                             (1.0f - (cY/cW * 0.5f + 0.5f)) * gvH + gvY };
+                    return { (cX/cW * 0.5f + 0.5f) * vW + vX,
+                             (1.0f - (cY/cW * 0.5f + 0.5f)) * vH + vY };
                 };
 
-                float gTips[3][3] = {
-                    {gpx+gL, gpy,    gpz   },
-                    {gpx,    gpy+gL, gpz   },
-                    {gpx,    gpy,    gpz+gL},
-                };
+                float gTips[3][3] = {{gpx+gL,gpy,gpz},{gpx,gpy+gL,gpz},{gpx,gpy,gpz+gL}};
                 for (int gi = 0; gi < 3; ++gi) {
                     auto [gsx, gsy] = gw2s(gTips[gi][0], gTips[gi][1], gTips[gi][2]);
                     float gdist = std::sqrt((mx-gsx)*(mx-gsx) + (my-gsy)*(my-gsy));
                     if (gdist < 12.0f) {
                         pushUndo();
                         gizmo_.startDrag(static_cast<Editor::GizmoAxis>(gi + 1));
-                        return; // click consumed by gizmo — skip picking
+                        return;
                     }
                 }
             }
 
-            // Gizmo circle hit test (Rotate tool, no Ctrl)
+            // Gizmo circle hit test (Rotate)
             if (activeTool_ == ActiveTool::Rotate && selection_.hasSelection() && !ctrl) {
                 auto* sel0 = selection_.selection().front().get();
                 float gpx = sel0->transform.position[0];
@@ -981,26 +642,22 @@ void MeshCraftApplication::handleMouseInput(const MouseState& ms, const MouseSta
                 float gpz = sel0->transform.position[2];
                 float gL  = camera_.distance * 0.15f;
 
-                int gvX2 = kLeftPanelW, gvY2 = kToolbarH;
-                int gvW2 = std::max(1, screenW - kLeftPanelW - kRightPanelW);
-                int gvH2 = std::max(1, screenH - kToolbarH - kStatusH);
-                float gasp2 = static_cast<float>(gvW2) / static_cast<float>(gvH2);
-                Matrix gvw2 = camera_.viewMatrix();
-                Matrix gpr2 = camera_.projectionMatrix(gasp2);
-                Matrix gvp2 = gvw2 * gpr2;
+                Matrix gvw = camera_.viewMatrix();
+                Matrix gpr = camera_.projectionMatrix(asp);
+                Matrix gvp = gvw * gpr;
 
-                auto gw2s2 = [&](float wx, float wy, float wz) -> std::pair<float,float> {
-                    float cX = wx*gvp2.M11 + wy*gvp2.M21 + wz*gvp2.M31 + gvp2.M41;
-                    float cY = wx*gvp2.M12 + wy*gvp2.M22 + wz*gvp2.M32 + gvp2.M42;
-                    float cW = wx*gvp2.M14 + wy*gvp2.M24 + wz*gvp2.M34 + gvp2.M44;
+                auto gw2s = [&](float wx, float wy, float wz) -> std::pair<float,float> {
+                    float cX = wx*gvp.M11 + wy*gvp.M21 + wz*gvp.M31 + gvp.M41;
+                    float cY = wx*gvp.M12 + wy*gvp.M22 + wz*gvp.M32 + gvp.M42;
+                    float cW = wx*gvp.M14 + wy*gvp.M24 + wz*gvp.M34 + gvp.M44;
                     if (std::abs(cW) < 1e-6f) return {-1e6f, -1e6f};
-                    return { (cX/cW * 0.5f + 0.5f) * gvW2 + gvX2,
-                             (1.0f - (cY/cW * 0.5f + 0.5f)) * gvH2 + gvY2 };
+                    return { (cX/cW * 0.5f + 0.5f) * vW + vX,
+                             (1.0f - (cY/cW * 0.5f + 0.5f)) * vH + vY };
                 };
 
                 const int CN = 32;
                 int bestAx = -1;
-                float bestDist = 11.0f; // pixel threshold
+                float bestDist = 11.0f;
                 for (int ax = 0; ax < 3; ++ax) {
                     for (int j = 0; j < CN; ++j) {
                         float t = 2.0f * std::numbers::pi_v<float> * j / CN;
@@ -1009,7 +666,7 @@ void MeshCraftApplication::handleMouseInput(const MouseState& ms, const MouseSta
                         if      (ax == 0) { wx=gpx;      wy=gpy+gL*c; wz=gpz+gL*s; }
                         else if (ax == 1) { wx=gpx+gL*c; wy=gpy;      wz=gpz+gL*s; }
                         else              { wx=gpx+gL*c; wy=gpy+gL*s; wz=gpz;       }
-                        auto [sx, sy] = gw2s2(wx, wy, wz);
+                        auto [sx, sy] = gw2s(wx, wy, wz);
                         float d = std::sqrt((mx-sx)*(mx-sx) + (my-sy)*(my-sy));
                         if (d < bestDist) { bestDist = d; bestAx = ax; }
                     }
@@ -1021,27 +678,19 @@ void MeshCraftApplication::handleMouseInput(const MouseState& ms, const MouseSta
                 }
             }
 
-            // Ray-cast picking: unproject click to world-space ray, test AABB per object
-            int viewX = kLeftPanelW;
-            int viewY = kToolbarH;
-            int viewW = std::max(1, screenW - kLeftPanelW - kRightPanelW);
-            int viewH = std::max(1, screenH - kToolbarH - kStatusH);
-            float ndcX = ((mx - viewX) / static_cast<float>(viewW)) * 2.0f - 1.0f;
-            float ndcY = 1.0f - ((my - viewY) / static_cast<float>(viewH)) * 2.0f;
-            float aspect = static_cast<float>(viewW) / static_cast<float>(viewH);
+            // Ray-cast picking
+            float ndcX = ((mx - vX) / static_cast<float>(vW)) * 2.0f - 1.0f;
+            float ndcY = 1.0f - ((my - vY) / static_cast<float>(vH)) * 2.0f;
 
             Vector3 rayOrig = camera_.position();
-            Vector3 rayDir  = camera_.screenRayDirection(ndcX, ndcY, aspect);
+            Vector3 rayDir  = camera_.screenRayDirection(ndcX, ndcY, asp);
 
-            // Slab-method ray-AABB intersection; returns true and sets tHit if hit
             auto rayAABB = [](const Vector3& ro, const Vector3& rd,
                                const Vector3& bMin, const Vector3& bMax,
                                float& tHit) -> bool {
                 float tNear = 0.0f, tFar = 1e30f;
-                const float* rov = &ro.X;
-                const float* rdv = &rd.X;
-                const float* bnv = &bMin.X;
-                const float* bxv = &bMax.X;
+                const float* rov = &ro.X; const float* rdv = &rd.X;
+                const float* bnv = &bMin.X; const float* bxv = &bMax.X;
                 for (int i = 0; i < 3; ++i) {
                     if (std::abs(rdv[i]) < 1e-9f) {
                         if (rov[i] < bnv[i] || rov[i] > bxv[i]) return false;
@@ -1058,44 +707,29 @@ void MeshCraftApplication::handleMouseInput(const MouseState& ms, const MouseSta
                 return tNear >= 0.0f;
             };
 
-            // Build world-space AABB for object (ignores rotation — AABB wraps shape)
-            auto objectAABB = [](const Mc3::Mc3Object& obj,
-                                  Vector3& bMin, Vector3& bMax) {
+            auto objectAABB = [](const Mc3::Mc3Object& obj, Vector3& bMin, Vector3& bMax) {
                 const auto& t = obj.transform;
-                float px = t.position[0], py = t.position[1], pz = t.position[2];
-                float sx = t.scale[0],    sy = t.scale[1],    sz = t.scale[2];
-
+                float px = t.position[0], py2 = t.position[1], pz = t.position[2];
+                float sx = t.scale[0], sy = t.scale[1], sz = t.scale[2];
                 float hx = 0.5f, hy = 0.5f, hz = 0.5f;
                 if (obj.primitive) {
                     const auto& p = *obj.primitive;
                     switch (p.primitiveType) {
-                    case Mc3::PrimitiveType::Box:
-                    case Mc3::PrimitiveType::Cube:
-                        hx = p.size[0] * 0.5f;
-                        hy = p.size[1] * 0.5f;
-                        hz = p.size[2] * 0.5f;
-                        break;
+                    case Mc3::PrimitiveType::Box: case Mc3::PrimitiveType::Cube:
+                        hx = p.size[0] * 0.5f; hy = p.size[1] * 0.5f; hz = p.size[2] * 0.5f; break;
                     case Mc3::PrimitiveType::Sphere:
-                        hx = hy = hz = p.radius;
-                        break;
-                    case Mc3::PrimitiveType::Cylinder:
-                    case Mc3::PrimitiveType::Cone:
-                        hx = hz = p.radius;
-                        hy = p.height * 0.5f;
-                        break;
+                        hx = hy = hz = p.radius; break;
+                    case Mc3::PrimitiveType::Cylinder: case Mc3::PrimitiveType::Cone:
+                        hx = hz = p.radius; hy = p.height * 0.5f; break;
                     case Mc3::PrimitiveType::Plane:
-                        hx = p.size[0] * 0.5f;
-                        hy = 0.05f;
-                        hz = p.size[1] * 0.5f;
-                        break;
+                        hx = p.size[0] * 0.5f; hy = 0.05f; hz = p.size[1] * 0.5f; break;
                     }
                 }
                 hx *= std::abs(sx); hy *= std::abs(sy); hz *= std::abs(sz);
-                bMin = { px - hx, py - hy, pz - hz };
-                bMax = { px + hx, py + hy, pz + hz };
+                bMin = { px - hx, py2 - hy, pz - hz };
+                bMax = { px + hx, py2 + hy, pz + hz };
             };
 
-            // Find closest hit, searching recursively through children
             float bestT = 1e30f;
             std::shared_ptr<Mc3::Mc3Object> bestObj;
 
@@ -1108,8 +742,7 @@ void MeshCraftApplication::handleMouseInput(const MouseState& ms, const MouseSta
                         objectAABB(*obj, bMin, bMax);
                         float tHit = 0.0f;
                         if (rayAABB(rayOrig, rayDir, bMin, bMax, tHit) && tHit < bestT) {
-                            bestT   = tHit;
-                            bestObj = obj;
+                            bestT = tHit; bestObj = obj;
                         }
                     }
                     if (!obj->children.empty()) testList(obj->children);
@@ -1123,37 +756,25 @@ void MeshCraftApplication::handleMouseInput(const MouseState& ms, const MouseSta
         }
     }
 
-    // -----------------------------------------------------------------------
     // Box-select: drag in 3D viewport with Select tool
     if (activeTool_ == ActiveTool::Select && !gizmo_.isDragging()) {
-        auto& gdB = getGraphicsDeviceProperty();
-        int sWB = gdB.getViewportProperty().getWidthProperty();
-        int sHB = gdB.getViewportProperty().getHeightProperty();
         int mxB = ms.getXProperty(), myB = ms.getYProperty();
-        bool in3dB = (mxB >= kLeftPanelW && mxB < sWB - kRightPanelW &&
-                      myB >= kToolbarH   && myB < sHB - kStatusH);
+        bool in3dB = (mxB >= vX && mxB < vX + vW && myB >= vY && myB < vY + vH);
 
-        // Record anchor when left is first pressed in the viewport
-        if (leftBtn && !prevLeft && in3dB)  {
-            boxSelectX0_ = mxB;  boxSelectY0_ = myB;
+        if (leftBtn && !prevLeft && in3dB) {
+            boxSelectX0_ = mxB; boxSelectY0_ = myB;
         }
-        // Activate once threshold is exceeded (while held from a viewport press)
         if (leftBtn && prevLeft && !boxSelectActive_ && in3dB) {
             int ddx = mxB - boxSelectX0_, ddy = myB - boxSelectY0_;
             if (std::abs(ddx) > 4 || std::abs(ddy) > 4)
                 boxSelectActive_ = true;
         }
         if (boxSelectActive_ && leftBtn) {
-            boxSelectX1_ = mxB;  boxSelectY1_ = myB;
+            boxSelectX1_ = mxB; boxSelectY1_ = myB;
         }
-        // Finalize on release
         if (boxSelectActive_ && !leftBtn && prevLeft) {
-            int vXB = kLeftPanelW, vYB = kToolbarH;
-            int vWB = std::max(1, sWB - kLeftPanelW - kRightPanelW);
-            int vHB = std::max(1, sHB - kToolbarH - kStatusH);
-            float aspB = static_cast<float>(vWB) / static_cast<float>(vHB);
             Matrix vwB = camera_.viewMatrix();
-            Matrix prB = camera_.projectionMatrix(aspB);
+            Matrix prB = camera_.projectionMatrix(asp);
             Matrix vpB = vwB * prB;
 
             auto w2sB = [&](float wx, float wy, float wz) -> std::pair<float,float> {
@@ -1161,14 +782,12 @@ void MeshCraftApplication::handleMouseInput(const MouseState& ms, const MouseSta
                 float cY = wx*vpB.M12 + wy*vpB.M22 + wz*vpB.M32 + vpB.M42;
                 float cW = wx*vpB.M14 + wy*vpB.M24 + wz*vpB.M34 + vpB.M44;
                 if (std::abs(cW) < 1e-6f) return {-1e6f, -1e6f};
-                return { (cX/cW * 0.5f + 0.5f) * vWB + vXB,
-                         (1.0f - (cY/cW * 0.5f + 0.5f)) * vHB + vYB };
+                return { (cX/cW * 0.5f + 0.5f) * vW + vX,
+                         (1.0f - (cY/cW * 0.5f + 0.5f)) * vH + vY };
             };
 
-            int bxMin = std::min(boxSelectX0_, mxB);
-            int bxMax = std::max(boxSelectX0_, mxB);
-            int byMin = std::min(boxSelectY0_, myB);
-            int byMax = std::max(boxSelectY0_, myB);
+            int bxMin = std::min(boxSelectX0_, mxB), bxMax = std::max(boxSelectX0_, mxB);
+            int byMin = std::min(boxSelectY0_, myB), byMax = std::max(boxSelectY0_, myB);
 
             bool additive = (Keyboard::GetState().IsKeyDown(Keys::LeftControl) ||
                              Keyboard::GetState().IsKeyDown(Keys::RightControl));
@@ -1191,7 +810,6 @@ void MeshCraftApplication::handleMouseInput(const MouseState& ms, const MouseSta
             boxSelectActive_ = false;
         }
     }
-    // Clear box-select if tool changed away
     if (activeTool_ != ActiveTool::Select) boxSelectActive_ = false;
 }
 
@@ -1203,8 +821,6 @@ void MeshCraftApplication::newScene() {
     document_ = Mc3::Mc3Document{};
     document_.model = "Untitled";
     selection_.clear();
-    collapsedGroups_.clear();
-    hierarchyRows_.clear();
     modified_ = false;
     currentFile_.clear();
     std::cout << "[MeshCraft] New scene\n";
@@ -1212,10 +828,9 @@ void MeshCraftApplication::newScene() {
 }
 
 void MeshCraftApplication::openFile() {
-    openDialogBuffer_.clear();
-    openDialogError_.clear();
-    openDialogActive_ = true;
-    if (fieldActive_) cancelField();
+    openDialogBuf_[0] = '\0';
+    openDialogErr_[0] = '\0';
+    openDialogOpen_ = true;
 }
 
 void MeshCraftApplication::saveFile() {
@@ -1231,10 +846,11 @@ void MeshCraftApplication::saveFile() {
 }
 
 void MeshCraftApplication::saveFileAs() {
-    saveDialogBuffer_ = currentFile_.string();
-    saveDialogError_.clear();
-    saveDialogActive_ = true;
-    if (fieldActive_) cancelField();
+    auto s = currentFile_.string();
+    std::strncpy(saveDialogBuf_, s.c_str(), sizeof(saveDialogBuf_) - 1);
+    saveDialogBuf_[sizeof(saveDialogBuf_) - 1] = '\0';
+    saveDialogErr_[0] = '\0';
+    saveDialogOpen_ = true;
 }
 
 void MeshCraftApplication::exportGltf() {
@@ -1242,22 +858,15 @@ void MeshCraftApplication::exportGltf() {
         std::cerr << "[MeshCraft] Save the file first before exporting.\n";
         return;
     }
-    // Find mc3togltf binary
     std::string mc3togltf = "mc3togltf";
-    // Try relative path (sibling build-mc3togltf or cmake-build-debug)
-    auto exePath  = std::filesystem::current_path();
     for (const auto& candidate : {
         std::filesystem::path("build-mc3togltf/mc3togltf"),
         std::filesystem::path("cmake-build-debug/mc3togltf/mc3togltf"),
         std::filesystem::path("../build-mc3togltf/mc3togltf"),
     }) {
-        if (std::filesystem::exists(candidate)) {
-            mc3togltf = candidate.string();
-            break;
-        }
+        if (std::filesystem::exists(candidate)) { mc3togltf = candidate.string(); break; }
     }
     std::string outPath = currentFile_.string();
-    // Replace .mc3.xml with .glb
     auto pos = outPath.rfind(".mc3.xml");
     if (pos != std::string::npos) outPath.replace(pos, 8, ".glb");
     else outPath += ".glb";
@@ -1285,39 +894,16 @@ void MeshCraftApplication::addPrimitive(Mc3::ObjectType type) {
 
     Mc3::Mc3Primitive prim;
     switch (type) {
-    case Mc3::ObjectType::Box:
-        prim.primitiveType = Mc3::PrimitiveType::Box;
-        prim.size = {1.0f, 1.0f, 1.0f};
-        break;
-    case Mc3::ObjectType::Sphere:
-        prim.primitiveType = Mc3::PrimitiveType::Sphere;
-        prim.radius = 0.5f;
-        break;
-    case Mc3::ObjectType::Cylinder:
-        prim.primitiveType = Mc3::PrimitiveType::Cylinder;
-        prim.radius = 0.5f; prim.height = 1.0f;
-        break;
-    case Mc3::ObjectType::Cone:
-        prim.primitiveType = Mc3::PrimitiveType::Cone;
-        prim.radius = 0.5f; prim.height = 1.0f;
-        break;
-    case Mc3::ObjectType::Plane:
-        prim.primitiveType = Mc3::PrimitiveType::Plane;
-        prim.size = {1.0f, 0.0f, 1.0f};
-        break;
-    default:
-        break;
+    case Mc3::ObjectType::Box:      prim.primitiveType = Mc3::PrimitiveType::Box;      prim.size = {1.0f,1.0f,1.0f}; break;
+    case Mc3::ObjectType::Sphere:   prim.primitiveType = Mc3::PrimitiveType::Sphere;   prim.radius = 0.5f; break;
+    case Mc3::ObjectType::Cylinder: prim.primitiveType = Mc3::PrimitiveType::Cylinder; prim.radius = 0.5f; prim.height = 1.0f; break;
+    case Mc3::ObjectType::Cone:     prim.primitiveType = Mc3::PrimitiveType::Cone;     prim.radius = 0.5f; prim.height = 1.0f; break;
+    case Mc3::ObjectType::Plane:    prim.primitiveType = Mc3::PrimitiveType::Plane;    prim.size = {1.0f,0.0f,1.0f}; break;
+    default: break;
     }
     obj->primitive = prim;
+    obj->transform.position = { camera_.target.X, camera_.target.Y + 0.5f, camera_.target.Z };
 
-    // Place at camera target so it's visible
-    obj->transform.position = {
-        camera_.target.X,
-        camera_.target.Y + 0.5f,
-        camera_.target.Z
-    };
-
-    // If a group-like object is selected, insert as its child
     if (selection_.hasSelection()) {
         auto& sel0 = selection_.selection().front();
         bool isGroup = sel0->type == Mc3::ObjectType::Group   ||
@@ -1327,20 +913,14 @@ void MeshCraftApplication::addPrimitive(Mc3::ObjectType type) {
                        !sel0->children.empty();
         if (isGroup) {
             sel0->children.push_back(obj);
-            selection_.clear();
-            selection_.select(obj);
+            selection_.clear(); selection_.select(obj);
             modified_ = true;
-            std::cout << "[MeshCraft] Added " << obj->name << " as child\n";
-            updateWindowTitle();
-            return;
+            updateWindowTitle(); return;
         }
     }
-
     document_.objects.push_back(obj);
-    selection_.clear();
-    selection_.select(obj);
+    selection_.clear(); selection_.select(obj);
     modified_ = true;
-    std::cout << "[MeshCraft] Added " << obj->name << "\n";
     updateWindowTitle();
 }
 
@@ -1360,12 +940,8 @@ void MeshCraftApplication::deleteSelected() {
         removeFromList(document_.objects, s.get());
     selection_.clear();
     modified_ = true;
-    std::cout << "[MeshCraft] Deleted selected objects\n";
     updateWindowTitle();
 }
-
-// ---------------------------------------------------------------------------
-// Helpers for duplicate
 
 static std::shared_ptr<Mc3::Mc3Object> deepCopyObject(const Mc3::Mc3Object& src) {
     auto copy = std::make_shared<Mc3::Mc3Object>(src);
@@ -1376,8 +952,7 @@ static std::shared_ptr<Mc3::Mc3Object> deepCopyObject(const Mc3::Mc3Object& src)
 }
 
 static std::vector<std::shared_ptr<Mc3::Mc3Object>>*
-findParentList(std::vector<std::shared_ptr<Mc3::Mc3Object>>& list,
-               const Mc3::Mc3Object* target)
+findParentList(std::vector<std::shared_ptr<Mc3::Mc3Object>>& list, const Mc3::Mc3Object* target)
 {
     for (auto& obj : list) {
         if (obj.get() == target) return &list;
@@ -1392,17 +967,14 @@ findParentList(std::vector<std::shared_ptr<Mc3::Mc3Object>>& list,
 void MeshCraftApplication::duplicateSelected() {
     if (!selection_.hasSelection()) return;
     pushUndo();
-    auto prev = selection_.selection(); // copy list before we mutate selection
+    auto prev = selection_.selection();
     std::vector<std::shared_ptr<Mc3::Mc3Object>> newObjs;
 
     for (const auto& s : prev) {
         auto* parent = findParentList(document_.objects, s.get());
         if (!parent) continue;
-
         auto copy = deepCopyObject(*s);
         copy->name = s->name + "_copy";
-
-        // Insert immediately after the original
         auto it = std::find_if(parent->begin(), parent->end(),
             [&](const auto& o){ return o.get() == s.get(); });
         if (it != parent->end()) ++it;
@@ -1414,42 +986,32 @@ void MeshCraftApplication::duplicateSelected() {
         selection_.clear();
         for (auto& o : newObjs) selection_.select(o);
         modified_ = true;
-        std::cout << "[MeshCraft] Duplicated " << newObjs.size() << " object(s)\n";
         updateWindowTitle();
     }
 }
-
-// ---------------------------------------------------------------------------
-// Cut / Copy / Paste
-// ---------------------------------------------------------------------------
 
 void MeshCraftApplication::copySelected() {
     if (!selection_.hasSelection()) return;
     clipboard_.clear();
     for (const auto& s : selection_.selection())
         clipboard_.push_back(deepCopyObject(*s));
-    std::cout << "[MeshCraft] Copied " << clipboard_.size() << " object(s)\n";
 }
 
 void MeshCraftApplication::cutSelected() {
     if (!selection_.hasSelection()) return;
     copySelected();
-    deleteSelected(); // pushUndo is called inside deleteSelected
+    deleteSelected();
 }
 
 void MeshCraftApplication::pasteClipboard() {
     if (clipboard_.empty()) return;
     pushUndo();
-
     std::vector<std::shared_ptr<Mc3::Mc3Object>> newObjs;
     for (const auto& src : clipboard_) {
         auto copy = deepCopyObject(*src);
-        // Offset slightly so paste doesn't land exactly on top of original
         copy->transform.position[0] += 1.0f;
         newObjs.push_back(copy);
     }
-
-    // Paste into selected group, or at top level
     if (selection_.hasSelection()) {
         auto& sel0 = selection_.selection().front();
         bool isGroup = sel0->type == Mc3::ObjectType::Group   ||
@@ -1462,42 +1024,25 @@ void MeshCraftApplication::pasteClipboard() {
             selection_.clear();
             for (auto& o : newObjs) selection_.select(o);
             modified_ = true;
-            std::cout << "[MeshCraft] Pasted " << newObjs.size() << " object(s) into group\n";
-            updateWindowTitle();
-            return;
+            updateWindowTitle(); return;
         }
     }
-
     for (auto& o : newObjs) document_.objects.push_back(o);
     selection_.clear();
     for (auto& o : newObjs) selection_.select(o);
     modified_ = true;
-    std::cout << "[MeshCraft] Pasted " << newObjs.size() << " object(s)\n";
     updateWindowTitle();
 }
-
-// ---------------------------------------------------------------------------
-// Group / Ungroup
-// ---------------------------------------------------------------------------
 
 void MeshCraftApplication::groupSelected() {
     if (!selection_.hasSelection()) return;
     pushUndo();
-
-    auto prev = selection_.selection(); // snapshot before mutation
-
-    // Record insertion index in top-level list (where first selected lives, if any)
+    auto prev = selection_.selection();
     size_t insertIdx = document_.objects.size();
-    for (const auto& s : prev) {
-        for (size_t i = 0; i < document_.objects.size(); ++i) {
-            if (document_.objects[i].get() == s.get()) {
-                insertIdx = std::min(insertIdx, i);
-                break;
-            }
-        }
-    }
+    for (const auto& s : prev)
+        for (size_t i = 0; i < document_.objects.size(); ++i)
+            if (document_.objects[i].get() == s.get()) { insertIdx = std::min(insertIdx, i); break; }
 
-    // Create the Group node
     auto group = std::make_shared<Mc3::Mc3Object>();
     group->type = Mc3::ObjectType::Group;
     static int groupCounter = 0;
@@ -1505,20 +1050,14 @@ void MeshCraftApplication::groupSelected() {
     std::snprintf(buf, sizeof(buf), "Group%d", ++groupCounter);
     group->name = buf;
 
-    // Move selected objects into the group (remove from wherever they are)
     for (const auto& s : prev) {
         group->children.push_back(s);
         removeFromList(document_.objects, s.get());
     }
-
-    // Insert group at (approximately) the original position
     insertIdx = std::min(insertIdx, document_.objects.size());
     document_.objects.insert(document_.objects.begin() + static_cast<std::ptrdiff_t>(insertIdx), group);
-
-    selection_.clear();
-    selection_.select(group);
+    selection_.clear(); selection_.select(group);
     modified_ = true;
-    std::cout << "[MeshCraft] Grouped " << prev.size() << " object(s) into " << group->name << "\n";
     updateWindowTitle();
 }
 
@@ -1527,28 +1066,17 @@ void MeshCraftApplication::ungroupSelected() {
     auto& sel0 = selection_.selection().front();
     if (sel0->type != Mc3::ObjectType::Group || sel0->children.empty()) return;
     pushUndo();
-
-    auto children = sel0->children; // copy child list before erasing group
-
-    // Find the group in its parent list
+    auto children = sel0->children;
     auto* parentList = findParentList(document_.objects, sel0.get());
     if (!parentList) return;
-
     auto it = std::find_if(parentList->begin(), parentList->end(),
         [&](const auto& o) { return o.get() == sel0.get(); });
     if (it == parentList->end()) return;
-
-    auto insertIt = parentList->erase(it); // remove group, get iterator to next element
-    // Insert children at that position (in original order)
-    for (const auto& child : children) {
-        insertIt = parentList->insert(insertIt, child);
-        ++insertIt;
-    }
-
+    auto insertIt = parentList->erase(it);
+    for (const auto& child : children) { insertIt = parentList->insert(insertIt, child); ++insertIt; }
     selection_.clear();
     for (auto& child : children) selection_.select(child);
     modified_ = true;
-    std::cout << "[MeshCraft] Ungrouped " << children.size() << " object(s)\n";
     updateWindowTitle();
 }
 
@@ -1570,433 +1098,369 @@ void MeshCraftApplication::updateWindowTitle() {
     if (!currentFile_.empty())
         title += " [" + currentFile_.filename().string() + "]";
     if (modified_) title += " *";
-
-    const char* toolNames[] = {
-        "Select","Move","Rotate","Scale","Add Box","Add Sphere","Add Cylinder","Add Cone","Add Plane"
-    };
-    title += " | Tool: ";
-    title += toolNames[static_cast<int>(activeTool_)];
-
+    const char* toolNames[] = { "Select","Move","Rotate","Scale","Add Box","Add Sphere","Add Cylinder","Add Cone","Add Plane" };
+    title += " | "; title += toolNames[static_cast<int>(activeTool_)];
     getWindowProperty().setTitleProperty(title);
 }
 
 // ---------------------------------------------------------------------------
-// UI drawing helpers
+// ImGui UI
 // ---------------------------------------------------------------------------
 
-void MeshCraftApplication::drawRect(int x, int y, int w, int h, Color col) {
-    if (w <= 0 || h <= 0) return;
-    spriteBatch_->Draw(whitePx_,
-                       Rectangle(x, y, w, h),
-                       Rectangle(0, 0, 1, 1),
-                       col);
-}
-
-Color MeshCraftApplication::objectTypeColor(Mc3::ObjectType type) const {
-    switch (type) {
-    case Mc3::ObjectType::Box:
-    case Mc3::ObjectType::Cube:        return Color(210, 120, 55, 255);
-    case Mc3::ObjectType::Sphere:      return Color(55, 120, 210, 255);
-    case Mc3::ObjectType::Cylinder:    return Color(55, 185, 100, 255);
-    case Mc3::ObjectType::Cone:        return Color(185, 55, 185, 255);
-    case Mc3::ObjectType::Plane:       return Color(205, 205, 55, 255);
-    case Mc3::ObjectType::Group:       return Color(160, 160, 160, 255);
-    case Mc3::ObjectType::Extrude:     return Color(55, 205, 185, 255);
-    case Mc3::ObjectType::Instance:    return Color(185, 160, 55, 255);
-    case Mc3::ObjectType::Union:       return Color(55, 185, 55, 255);
-    case Mc3::ObjectType::Difference:  return Color(205, 55, 55, 255);
-    case Mc3::ObjectType::Intersection:return Color(55, 120, 185, 255);
-    default:                           return Color(140, 140, 140, 255);
-    }
-}
-
-void MeshCraftApplication::drawUi(int screenW, int screenH) {
+void MeshCraftApplication::drawImGuiUi(int screenW, int screenH) {
     // -----------------------------------------------------------------------
-    // Toolbar (top)
+    // Main menu bar
     // -----------------------------------------------------------------------
-    drawRect(0, 0, screenW, kToolbarH, Color(22, 24, 45, 255));
-    // bottom separator
-    drawRect(0, kToolbarH - 1, screenW, 1, Color(55, 60, 100, 255));
-
-    // Tool buttons: Q=Select G=Move R=Rotate S=Scale
-    struct ToolBtn { ActiveTool tool; Color activeCol; };
-    ToolBtn toolBtns[] = {
-        {ActiveTool::Select,  Color(80, 150, 210, 255)},
-        {ActiveTool::Move,    Color(55, 190, 100, 255)},
-        {ActiveTool::Rotate,  Color(205, 165, 55, 255)},
-        {ActiveTool::Scale,   Color(210, 75, 75, 255)},
-    };
-    for (int i = 0; i < 4; ++i) {
-        bool active = (activeTool_ == toolBtns[i].tool);
-        int bx = 4 + i * 40;
-        Color bg = active ? toolBtns[i].activeCol : Color(38, 44, 72, 255);
-        drawRect(bx,      2, 36, 36, bg);
-        drawRect(bx,      2, 36,  1, Color(75, 85, 120, 255)); // top border
-        drawRect(bx,     37, 36,  1, Color(75, 85, 120, 255)); // bottom
-        drawRect(bx,      2,  1, 36, Color(75, 85, 120, 255)); // left
-        drawRect(bx + 35, 2,  1, 36, Color(75, 85, 120, 255)); // right
-        // inner icon: a small filled square
-        Color ico = active ? Color(255, 255, 255, 200) : Color(160, 170, 200, 255);
-        drawRect(bx + 13, 15, 10, 10, ico);
+    float menuBarH = 0.0f;
+    if (ImGui::BeginMainMenuBar()) {
+        menuBarH = ImGui::GetWindowHeight();
+        if (ImGui::BeginMenu("File")) {
+            if (ImGui::MenuItem("New",     "Ctrl+N")) newScene();
+            if (ImGui::MenuItem("Open...", "Ctrl+O")) openFile();
+            ImGui::Separator();
+            if (ImGui::MenuItem("Save",    "Ctrl+S")) saveFile();
+            if (ImGui::MenuItem("Save As...","Ctrl+Shift+S")) saveFileAs();
+            ImGui::Separator();
+            if (ImGui::MenuItem("Export GLB", "Ctrl+E")) exportGltf();
+            ImGui::Separator();
+            if (ImGui::MenuItem("Exit")) Exit();
+            ImGui::EndMenu();
+        }
+        if (ImGui::BeginMenu("Edit")) {
+            if (ImGui::MenuItem("Undo", "Ctrl+Z", false, !undoStack_.empty())) {
+                if (!undoStack_.empty()) {
+                    redoStack_.push_back(deepCopyDoc(document_));
+                    document_ = std::move(undoStack_.back()); undoStack_.pop_back();
+                    selection_.clear(); modified_ = true; updateWindowTitle();
+                }
+            }
+            if (ImGui::MenuItem("Redo", "Ctrl+Y", false, !redoStack_.empty())) {
+                if (!redoStack_.empty()) {
+                    undoStack_.push_back(deepCopyDoc(document_));
+                    document_ = std::move(redoStack_.back()); redoStack_.pop_back();
+                    selection_.clear(); modified_ = true; updateWindowTitle();
+                }
+            }
+            ImGui::Separator();
+            if (ImGui::MenuItem("Cut",       "Ctrl+X")) cutSelected();
+            if (ImGui::MenuItem("Copy",      "Ctrl+C")) copySelected();
+            if (ImGui::MenuItem("Paste",     "Ctrl+V")) pasteClipboard();
+            if (ImGui::MenuItem("Duplicate", "Ctrl+D")) duplicateSelected();
+            if (ImGui::MenuItem("Delete",    "Del"))    deleteSelected();
+            ImGui::Separator();
+            if (ImGui::MenuItem("Select All","Ctrl+A")) {
+                selection_.clear();
+                for (auto& o : document_.objects) selection_.select(o);
+                updateWindowTitle();
+            }
+            ImGui::Separator();
+            if (ImGui::MenuItem("Group",   "Ctrl+G"))       groupSelected();
+            if (ImGui::MenuItem("Ungroup", "Ctrl+Shift+G")) ungroupSelected();
+            ImGui::EndMenu();
+        }
+        if (ImGui::BeginMenu("Add")) {
+            if (ImGui::MenuItem("Box"))      addPrimitive(Mc3::ObjectType::Box);
+            if (ImGui::MenuItem("Sphere"))   addPrimitive(Mc3::ObjectType::Sphere);
+            if (ImGui::MenuItem("Cylinder")) addPrimitive(Mc3::ObjectType::Cylinder);
+            if (ImGui::MenuItem("Cone"))     addPrimitive(Mc3::ObjectType::Cone);
+            if (ImGui::MenuItem("Plane"))    addPrimitive(Mc3::ObjectType::Plane);
+            ImGui::EndMenu();
+        }
+        if (ImGui::BeginMenu("View")) {
+            if (ImGui::MenuItem("Front",  "Num1")) { camera_.yaw = 0.0f;                               camera_.pitch = 0.0f; }
+            if (ImGui::MenuItem("Right",  "Num3")) { camera_.yaw = std::numbers::pi_v<float> * 0.5f;  camera_.pitch = 0.0f; }
+            if (ImGui::MenuItem("Back",   "Num5")) { camera_.yaw = std::numbers::pi_v<float>;          camera_.pitch = 0.0f; }
+            if (ImGui::MenuItem("Top",    "Num7")) { camera_.yaw = 0.0f;                               camera_.pitch = 1.47f; }
+            if (ImGui::MenuItem("Bottom", "Num9")) { camera_.yaw = 0.0f;                               camera_.pitch =-1.47f; }
+            ImGui::Separator();
+            if (ImGui::MenuItem("Focus on selection", "F")) {
+                if (selection_.hasSelection()) {
+                    auto* s = selection_.selection().front().get();
+                    camera_.focusOn(s->transform.position[0], s->transform.position[1], s->transform.position[2]);
+                } else { camera_.reset(); }
+            }
+            ImGui::EndMenu();
+        }
+        ImGui::EndMainMenuBar();
     }
 
-    // Add-primitive buttons (right of tool buttons)
-    Color addCols[] = {
-        Color(210, 120, 55, 255),  // Box
-        Color(55, 120, 210, 255),  // Sphere
-        Color(55, 185, 100, 255),  // Cylinder
-        Color(185, 55, 185, 255),  // Cone
-        Color(205, 205, 55, 255),  // Plane
+    // -----------------------------------------------------------------------
+    // Toolbar (below menu bar)
+    // -----------------------------------------------------------------------
+    ImGui::SetNextWindowPos(ImVec2(0, menuBarH));
+    ImGui::SetNextWindowSize(ImVec2(static_cast<float>(screenW), 40.0f));
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(4, 4));
+    ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(4, 4));
+    ImGui::Begin("##toolbar", nullptr,
+        ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove |
+        ImGuiWindowFlags_NoBringToFrontOnFocus | ImGuiWindowFlags_NoScrollbar |
+        ImGuiWindowFlags_NoScrollWithMouse | ImGuiWindowFlags_NoSavedSettings);
+
+    // Tool buttons
+    struct { ActiveTool tool; const char* label; ImVec4 col; } toolBtns[] = {
+        { ActiveTool::Select, "Select [Q]", ImVec4(0.31f,0.59f,0.82f,1.f) },
+        { ActiveTool::Move,   "Move   [G]", ImVec4(0.22f,0.74f,0.39f,1.f) },
+        { ActiveTool::Rotate, "Rotate [R]", ImVec4(0.80f,0.65f,0.22f,1.f) },
+        { ActiveTool::Scale,  "Scale  [S]", ImVec4(0.82f,0.29f,0.29f,1.f) },
     };
-    for (int i = 0; i < 5; ++i) {
-        int bx = 175 + i * 40;
-        drawRect(bx,      2, 36, 36, addCols[i]);
-        drawRect(bx,      2, 36,  1, Color(200, 200, 200, 120));
-        drawRect(bx,     37, 36,  1, Color(200, 200, 200, 120));
-        drawRect(bx,      2,  1, 36, Color(200, 200, 200, 120));
-        drawRect(bx + 35, 2,  1, 36, Color(200, 200, 200, 120));
-        // "+" symbol: vertical + horizontal bars
-        drawRect(bx + 17, 10, 2, 20, Color(255, 255, 255, 220));
-        drawRect(bx + 10, 17, 16, 2, Color(255, 255, 255, 220));
+    for (auto& tb : toolBtns) {
+        bool active = (activeTool_ == tb.tool);
+        if (active) ImGui::PushStyleColor(ImGuiCol_Button, tb.col);
+        if (ImGui::Button(tb.label, ImVec2(84, 30))) { activeTool_ = tb.tool; updateWindowTitle(); }
+        if (active) ImGui::PopStyleColor();
+        ImGui::SameLine();
     }
 
-    // Separator between toolbar sections
-    drawRect(170, 4, 1, 32, Color(75, 85, 120, 255));
+    ImGui::TextDisabled("|");
+    ImGui::SameLine();
+
+    // Add primitive buttons
+    struct { Mc3::ObjectType type; const char* label; ImVec4 col; } addBtns[] = {
+        { Mc3::ObjectType::Box,      "+Box",  ImVec4(0.82f,0.47f,0.22f,1.f) },
+        { Mc3::ObjectType::Sphere,   "+Sph",  ImVec4(0.22f,0.47f,0.82f,1.f) },
+        { Mc3::ObjectType::Cylinder, "+Cyl",  ImVec4(0.22f,0.73f,0.39f,1.f) },
+        { Mc3::ObjectType::Cone,     "+Con",  ImVec4(0.73f,0.22f,0.73f,1.f) },
+        { Mc3::ObjectType::Plane,    "+Pln",  ImVec4(0.80f,0.80f,0.22f,1.f) },
+    };
+    for (auto& ab : addBtns) {
+        ImGui::PushStyleColor(ImGuiCol_Button, ab.col);
+        if (ImGui::Button(ab.label, ImVec2(40, 30))) addPrimitive(ab.type);
+        ImGui::PopStyleColor();
+        ImGui::SameLine();
+    }
+
+    float toolbarH = ImGui::GetWindowHeight();
+    imguiTopH_ = static_cast<int>(menuBarH + toolbarH);
+
+    ImGui::End();
+    ImGui::PopStyleVar(2);
+
+    float panelY = menuBarH + toolbarH;
+    float panelH = static_cast<float>(screenH) - panelY - static_cast<float>(kStatusH);
 
     // -----------------------------------------------------------------------
     // Left panel — Scene Hierarchy
     // -----------------------------------------------------------------------
-    int panelH = screenH - kToolbarH - kStatusH;
-    drawRect(0, kToolbarH, kLeftPanelW, panelH, Color(26, 28, 50, 240));
-    // right edge
-    drawRect(kLeftPanelW - 1, kToolbarH, 1, panelH, Color(55, 60, 100, 255));
+    ImGui::SetNextWindowPos(ImVec2(0, panelY));
+    ImGui::SetNextWindowSize(ImVec2(static_cast<float>(kLeftPanelW), panelH));
+    ImGui::PushStyleColor(ImGuiCol_WindowBg, ImVec4(0.10f, 0.11f, 0.20f, 1.0f));
+    ImGui::Begin("Scene", nullptr,
+        ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove |
+        ImGuiWindowFlags_NoBringToFrontOnFocus | ImGuiWindowFlags_NoSavedSettings);
 
-    // Header
-    drawRect(0, kToolbarH, kLeftPanelW - 1, kPanelHdrH, Color(38, 42, 72, 255));
-    // accent strip
-    drawRect(0, kToolbarH, 4, kPanelHdrH, Color(80, 130, 210, 255));
-    // header bottom line
-    drawRect(0, kToolbarH + kPanelHdrH - 1, kLeftPanelW - 1, 1, Color(55, 60, 100, 255));
-
-    // Helper: wrap drawRect for BitmapFont callback
-    auto fillRect = [this](int x, int y, int w, int h, Color c) { drawRect(x, y, w, h, c); };
-
-    // "SCENE" panel header label
-    Ui::drawBitmapText("SCENE", 8, kToolbarH + (kPanelHdrH - 7) / 2, 1,
-                       Color(160, 175, 210, 255), fillRect);
-
-    // Object list rows — recursive tree with indent and expand/collapse
-    const auto& objs = document_.objects;
-    int rowY = kToolbarH + kPanelHdrH;
-    int maxY = screenH - kStatusH - kObjRowH;
-    hierarchyRows_.clear();
-
-    std::function<void(const std::vector<std::shared_ptr<Mc3::Mc3Object>>&, int)> drawObjList;
-    drawObjList = [&](const std::vector<std::shared_ptr<Mc3::Mc3Object>>& list, int depth) {
+    std::function<void(const std::vector<std::shared_ptr<Mc3::Mc3Object>>&)> drawHierarchy;
+    drawHierarchy = [&](const std::vector<std::shared_ptr<Mc3::Mc3Object>>& list) {
         for (const auto& obj : list) {
-            if (rowY > maxY) break;
+            ImGui::PushID(obj->id.c_str());
+            bool sel = selection_.isSelected(obj.get());
+            bool hasChildren = !obj->children.empty();
+            ImGuiTreeNodeFlags flags = ImGuiTreeNodeFlags_OpenOnArrow |
+                                       ImGuiTreeNodeFlags_SpanAvailWidth;
+            if (!hasChildren) flags |= ImGuiTreeNodeFlags_Leaf | ImGuiTreeNodeFlags_NoTreePushOnOpen;
+            if (sel)          flags |= ImGuiTreeNodeFlags_Selected;
 
-            bool sel      = selection_.isSelected(obj.get());
-            bool isGroup  = !obj->children.empty() ||
-                            obj->type == Mc3::ObjectType::Group ||
-                            obj->type == Mc3::ObjectType::Union ||
-                            obj->type == Mc3::ObjectType::Difference ||
-                            obj->type == Mc3::ObjectType::Intersection;
-            bool expanded = !collapsedGroups_.count(obj.get());
+            // Visibility indicator
+            ImGui::PushStyleColor(ImGuiCol_Text,
+                obj->visible ? ImVec4(1,1,1,1) : ImVec4(0.5f,0.5f,0.5f,1));
+            const std::string& displayName = obj->name.empty() ? obj->id : obj->name;
+            bool nodeOpen = ImGui::TreeNodeEx(displayName.c_str(), flags);
+            ImGui::PopStyleColor();
 
-            hierarchyRows_.push_back({depth, obj});
-            int rowIdx = static_cast<int>(hierarchyRows_.size()) - 1;
-
-            int indent = depth * 14;
-            int iconX  = 7 + indent;
-            int textX  = iconX + 15;
-
-            // Row background
-            Color rowBg = sel
-                ? ((rowIdx % 2 == 0) ? Color(62, 70, 118, 255) : Color(58, 66, 112, 255))
-                : ((rowIdx % 2 == 0) ? Color(32, 35, 60, 255)  : Color(28, 31, 54, 255));
-            drawRect(0, rowY, kLeftPanelW - 1, kObjRowH, rowBg);
-
-            // Type color strip (always at x=0)
-            Color tc = objectTypeColor(obj->type);
-            drawRect(0, rowY, 5, kObjRowH, tc);
-
-            // Vertical indent guide for children
-            if (depth > 0) {
-                drawRect(5 + (depth - 1) * 14 + 9, rowY, 1, kObjRowH,
-                         Color(55, 60, 90, 200));
+            if (ImGui::IsItemClicked() && !ImGui::IsItemToggledOpen()) {
+                bool ctrl = ImGui::GetIO().KeyCtrl;
+                if (!ctrl) selection_.clear();
+                selection_.select(obj);
+                updateWindowTitle();
             }
 
-            // Expand/collapse triangle (">" = collapsed, "v" = expanded)
-            if (isGroup) {
-                const char* tri = expanded ? "v" : ">";
-                Ui::drawBitmapText(tri, 5 + indent + 1, rowY + (kObjRowH - 7) / 2,
-                                   1, Color(160, 175, 210, 200), fillRect);
+            // Context menu
+            if (ImGui::BeginPopupContextItem("##objctx")) {
+                if (ImGui::MenuItem("Duplicate")) duplicateSelected();
+                if (ImGui::MenuItem("Delete"))    deleteSelected();
+                ImGui::Separator();
+                if (ImGui::MenuItem(obj->visible ? "Hide" : "Show")) {
+                    pushUndo(); obj->visible = !obj->visible; modified_ = true; updateWindowTitle();
+                }
+                ImGui::EndPopup();
             }
 
-            // Type icon
-            drawRect(iconX, rowY + (kObjRowH - 10) / 2, 10, 10, tc);
+            if (hasChildren && nodeOpen)
+                drawHierarchy(obj->children);
+            if (hasChildren && nodeOpen)
+                ImGui::TreePop();
 
-            // Object name (truncated to fit, leaving room for eye icon)
-            {
-                const std::string& name = obj->name.empty() ? obj->id : obj->name;
-                int maxChars = std::max(1, (kLeftPanelW - 22 - textX - 2) / 6);
-                std::string label = (int)name.size() > maxChars
-                                    ? name.substr(0, maxChars - 1) + "~" : name;
-                Color textCol = !obj->visible ? Color(110, 115, 130, 255)
-                               : sel          ? Color(235, 240, 255, 255)
-                                              : Color(185, 195, 215, 255);
-                Ui::drawBitmapText(label, textX, rowY + (kObjRowH - 7) / 2, 1,
-                                   textCol, fillRect);
-            }
-
-            // Eye icon (visibility toggle) — drawn before selection indicator
-            {
-                int eyeX = kLeftPanelW - 21;
-                int eyeY = rowY + (kObjRowH - 8) / 2;
-                Color eyeCol = obj->visible ? Color(60, 190, 90, 210) : Color(70, 70, 80, 160);
-                drawRect(eyeX, eyeY, 10, 8, eyeCol);
-                if (obj->visible)
-                    drawRect(eyeX + 3, eyeY + 2, 4, 4, Color(20, 90, 35, 255));
-            }
-
-            // Selection right indicator
-            if (sel) {
-                drawRect(kLeftPanelW - 8, rowY, 7, kObjRowH, Color(80, 130, 210, 255));
-            }
-
-            // Row separator
-            drawRect(5, rowY + kObjRowH - 1, kLeftPanelW - 6, 1, Color(40, 44, 72, 100));
-
-            rowY += kObjRowH;
-
-            // Recurse into children when expanded
-            if (isGroup && expanded && !obj->children.empty()) {
-                drawObjList(obj->children, depth + 1);
-            }
+            ImGui::PopID();
         }
     };
-    drawObjList(objs, 0);
+    drawHierarchy(document_.objects);
+    ImGui::End();
+    ImGui::PopStyleColor();
 
     // -----------------------------------------------------------------------
     // Right panel — Properties
     // -----------------------------------------------------------------------
-    int rpX = screenW - kRightPanelW;
-    drawRect(rpX, kToolbarH, kRightPanelW, panelH, Color(26, 28, 50, 240));
-    // left edge
-    drawRect(rpX, kToolbarH, 1, panelH, Color(55, 60, 100, 255));
+    ImGui::SetNextWindowPos(ImVec2(static_cast<float>(screenW - kRightPanelW), panelY));
+    ImGui::SetNextWindowSize(ImVec2(static_cast<float>(kRightPanelW), panelH));
+    ImGui::PushStyleColor(ImGuiCol_WindowBg, ImVec4(0.10f, 0.11f, 0.20f, 1.0f));
+    ImGui::Begin("Properties", nullptr,
+        ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove |
+        ImGuiWindowFlags_NoBringToFrontOnFocus | ImGuiWindowFlags_NoSavedSettings);
 
-    // Header
-    drawRect(rpX + 1, kToolbarH, kRightPanelW - 1, kPanelHdrH, Color(38, 42, 72, 255));
-    drawRect(rpX + kRightPanelW - 4, kToolbarH, 3, kPanelHdrH, Color(210, 110, 80, 255));
-    drawRect(rpX + 1, kToolbarH + kPanelHdrH - 1, kRightPanelW - 1, 1, Color(55, 60, 100, 255));
-    Ui::drawBitmapText("PROPERTIES", rpX + 8, kToolbarH + (kPanelHdrH - 7) / 2, 1,
-                       Color(160, 175, 210, 255), fillRect);
-
-    propFieldHits_.clear();
-    nameFieldHitY_  = -1;
-    visToggleHitY_  = -1;
-    colFieldHitY_   = -1;
-    tagsFieldHitY_  = -1;
     if (selection_.hasSelection()) {
-        const auto& sel0 = selection_.selection().front();
-        int py = kToolbarH + kPanelHdrH + 6;
-        int pw = kRightPanelW - 12;
-        int px = rpX + 6;
+        auto& sel0 = selection_.selection().front();
 
-        // Object type indicator + name (clickable to rename)
-        nameFieldHitY_ = py;
-        bool nameActive = fieldActive_ && fieldSection_ == -1;
-        Color tc = nameActive ? Color(50, 70, 140, 255) : objectTypeColor(sel0->type);
-        drawRect(px, py, pw, 18, tc);
+        // Object name
         {
-            std::string display;
-            if (nameActive) {
-                display = fieldBuffer_ + "_";
-                Ui::drawBitmapText(display, px + 4, py + (18 - 7) / 2, 1, Color(255, 255, 160, 255), fillRect);
-            } else {
-                const std::string& nm = sel0->name.empty() ? sel0->id : sel0->name;
-                Ui::drawBitmapText(nm, px + 4, py + (18 - 7) / 2, 1, Color(255, 255, 255, 255), fillRect);
+            char nameBuf[128];
+            std::strncpy(nameBuf, sel0->name.c_str(), sizeof(nameBuf) - 1);
+            nameBuf[sizeof(nameBuf)-1] = '\0';
+            ImGui::SetNextItemWidth(-1);
+            if (ImGui::InputText("##name", nameBuf, sizeof(nameBuf),
+                                 ImGuiInputTextFlags_EnterReturnsTrue))
+            {
+                pushUndo();
+                sel0->name = nameBuf;
+                modified_ = true;
+                updateWindowTitle();
             }
         }
-        py += 24;
 
-        const char* axisLabels[3] = {"X", "Y", "Z"};
-        Color axisCols[3] = {Color(210, 60, 60, 255), Color(60, 210, 60, 255), Color(60, 60, 210, 255)};
+        ImGui::Spacing();
 
-        // Helper: draw one editable transform field row
-        // section: 0=POS, 1=ROT, 2=SCL  axis: 0=X,1=Y,2=Z  v: current value  barScale: max value for bar
-        auto drawField = [&](int section, int axis, float v, float barScale, const char* fmt) {
-            bool active = fieldActive_ && fieldSection_ == section && fieldAxis_ == axis;
-            propFieldHits_.push_back({py, section, axis});
-
-            if (active) {
-                // Highlighted background for active editing field
-                drawRect(px, py, pw, 14, Color(50, 70, 140, 255));
-                drawRect(px, py, 2, 14, axisCols[axis]);
-            } else {
-                int filled = static_cast<int>(std::clamp(std::abs(v) / barScale, 0.0f, 1.0f) * (pw - 4));
-                drawRect(px, py, pw, 14, Color(22, 24, 44, 255));
-                drawRect(px, py, std::max(2, filled + 2), 14, axisCols[axis]);
+        // Transform: position
+        ImGui::TextDisabled("Position");
+        {
+            float pos[3] = { sel0->transform.position[0], sel0->transform.position[1], sel0->transform.position[2] };
+            ImGui::SetNextItemWidth(-1);
+            if (ImGui::DragFloat3("##pos", pos, 0.1f)) {
+                if (ImGui::IsItemActivated()) pushUndo();
+                sel0->transform.position[0] = pos[0];
+                sel0->transform.position[1] = pos[1];
+                sel0->transform.position[2] = pos[2];
+                modified_ = true; updateWindowTitle();
             }
+        }
 
-            Ui::drawBitmapText(axisLabels[axis], px + 3, py + (14 - 7) / 2, 1,
-                               Color(220, 220, 220, 255), fillRect);
-
-            if (active) {
-                std::string display = fieldBuffer_ + "_";
-                Ui::drawBitmapText(display, px + 12, py + (14 - 7) / 2, 1,
-                                   Color(255, 255, 160, 255), fillRect);
-            } else {
-                char buf[20]; std::snprintf(buf, sizeof(buf), fmt, v);
-                Ui::drawBitmapText(buf, px + 12, py + (14 - 7) / 2, 1,
-                                   Color(220, 220, 220, 255), fillRect);
+        // Transform: rotation
+        ImGui::TextDisabled("Rotation");
+        {
+            float rot[3] = { sel0->transform.rotation[0], sel0->transform.rotation[1], sel0->transform.rotation[2] };
+            ImGui::SetNextItemWidth(-1);
+            if (ImGui::DragFloat3("##rot", rot, 0.5f)) {
+                if (ImGui::IsItemActivated()) pushUndo();
+                sel0->transform.rotation[0] = rot[0];
+                sel0->transform.rotation[1] = rot[1];
+                sel0->transform.rotation[2] = rot[2];
+                modified_ = true; updateWindowTitle();
             }
-            py += 16;
-        };
+        }
 
-        // ----- Position section -----
-        drawRect(px, py, pw, 18, Color(38, 42, 72, 255));
-        drawRect(px, py, 3, 18, Color(80, 130, 210, 255));
-        Ui::drawBitmapText("POS", px + 6, py + (18 - 7) / 2, 1, Color(160, 175, 210, 255), fillRect);
-        py += 20;
-        for (int a = 0; a < 3; ++a)
-            drawField(0, a, sel0->transform.position[a], 20.0f, "%.2f");
-        py += 4;
+        // Transform: scale
+        ImGui::TextDisabled("Scale");
+        {
+            float scl[3] = { sel0->transform.scale[0], sel0->transform.scale[1], sel0->transform.scale[2] };
+            ImGui::SetNextItemWidth(-1);
+            if (ImGui::DragFloat3("##scl", scl, 0.01f, 0.001f, 100.0f)) {
+                if (ImGui::IsItemActivated()) pushUndo();
+                sel0->transform.scale[0] = std::max(0.001f, scl[0]);
+                sel0->transform.scale[1] = std::max(0.001f, scl[1]);
+                sel0->transform.scale[2] = std::max(0.001f, scl[2]);
+                modified_ = true; updateWindowTitle();
+            }
+        }
 
-        // ----- Rotation section -----
-        drawRect(px, py, pw, 18, Color(38, 42, 72, 255));
-        drawRect(px, py, 3, 18, Color(205, 165, 55, 255));
-        Ui::drawBitmapText("ROT", px + 6, py + (18 - 7) / 2, 1, Color(160, 175, 210, 255), fillRect);
-        py += 20;
-        for (int a = 0; a < 3; ++a)
-            drawField(1, a, sel0->transform.rotation[a], 360.0f, "%.1f");
-        py += 4;
+        ImGui::Spacing();
+        ImGui::Separator();
+        ImGui::Spacing();
 
-        // ----- Scale section -----
-        drawRect(px, py, pw, 18, Color(38, 42, 72, 255));
-        drawRect(px, py, 3, 18, Color(210, 75, 75, 255));
-        Ui::drawBitmapText("SCL", px + 6, py + (18 - 7) / 2, 1, Color(160, 175, 210, 255), fillRect);
-        py += 20;
-        for (int a = 0; a < 3; ++a)
-            drawField(2, a, sel0->transform.scale[a], 4.0f, "%.2f");
-        py += 8;
+        // Visible
+        {
+            bool vis = sel0->visible;
+            if (ImGui::Checkbox("Visible", &vis)) {
+                pushUndo(); sel0->visible = vis; modified_ = true; updateWindowTitle();
+            }
+        }
 
-        // Material color swatch
+        // Collision
+        {
+            char colBuf[128];
+            std::strncpy(colBuf, sel0->collision.c_str(), sizeof(colBuf) - 1);
+            colBuf[sizeof(colBuf)-1] = '\0';
+            ImGui::TextDisabled("Collision");
+            ImGui::SetNextItemWidth(-1);
+            if (ImGui::InputText("##col", colBuf, sizeof(colBuf),
+                                 ImGuiInputTextFlags_EnterReturnsTrue))
+            {
+                pushUndo(); sel0->collision = colBuf; modified_ = true;
+            }
+        }
+
+        // Tags
+        {
+            std::string joined;
+            for (size_t i = 0; i < sel0->tags.size(); ++i) {
+                if (i > 0) joined += ',';
+                joined += sel0->tags[i];
+            }
+            char tagsBuf[256];
+            std::strncpy(tagsBuf, joined.c_str(), sizeof(tagsBuf) - 1);
+            tagsBuf[sizeof(tagsBuf)-1] = '\0';
+            ImGui::TextDisabled("Tags (comma-separated)");
+            ImGui::SetNextItemWidth(-1);
+            if (ImGui::InputText("##tags", tagsBuf, sizeof(tagsBuf),
+                                 ImGuiInputTextFlags_EnterReturnsTrue))
+            {
+                pushUndo();
+                sel0->tags.clear();
+                std::string tok;
+                for (char ch : std::string(tagsBuf)) {
+                    if (ch == ',') {
+                        auto s = tok.find_first_not_of(" \t");
+                        auto e = tok.find_last_not_of(" \t");
+                        if (s != std::string::npos) sel0->tags.push_back(tok.substr(s, e - s + 1));
+                        tok.clear();
+                    } else tok += ch;
+                }
+                {
+                    auto s = tok.find_first_not_of(" \t");
+                    auto e = tok.find_last_not_of(" \t");
+                    if (s != std::string::npos) sel0->tags.push_back(tok.substr(s, e - s + 1));
+                }
+                modified_ = true;
+            }
+        }
+
+        // Material swatch (read-only)
         if (!sel0->material.empty()) {
-            drawRect(px, py, pw, 18, Color(38, 42, 72, 255));
-            drawRect(px, py, 3, 18, Color(55, 185, 185, 255));
-            Ui::drawBitmapText("MTL", px + 6, py + (18 - 7) / 2, 1, Color(160, 175, 210, 255), fillRect);
-            Ui::drawBitmapText(sel0->material, px + 28, py + (18 - 7) / 2, 1, Color(185, 220, 220, 255), fillRect);
+            ImGui::Spacing();
+            ImGui::TextDisabled("Material: %s", sel0->material.c_str());
             for (const auto& [key, mat] : document_.materials) {
                 if (key == sel0->material) {
-                    Color mc(
-                        static_cast<int>(std::clamp(mat.baseColor[0], 0.0f, 1.0f) * 255),
-                        static_cast<int>(std::clamp(mat.baseColor[1], 0.0f, 1.0f) * 255),
-                        static_cast<int>(std::clamp(mat.baseColor[2], 0.0f, 1.0f) * 255),
-                        255);
-                    drawRect(rpX + kRightPanelW - 28, py, 22, 18, mc);
+                    ImGui::ColorButton("##matcol",
+                        ImVec4(mat.baseColor[0], mat.baseColor[1], mat.baseColor[2], 1.0f),
+                        ImGuiColorEditFlags_NoTooltip | ImGuiColorEditFlags_NoPicker);
                     break;
                 }
             }
-            py += 22;
         }
-        py += 4;
-
-        // Visible toggle
-        visToggleHitY_ = py;
-        {
-            bool vis = sel0->visible;
-            drawRect(px, py, pw, 18, Color(38, 42, 72, 255));
-            drawRect(px, py, 3, 18, Color(55, 185, 120, 255));
-            Ui::drawBitmapText("VIS", px + 6, py + (18 - 7) / 2, 1, Color(160, 175, 210, 255), fillRect);
-            Ui::drawBitmapText(vis ? "ON" : "OFF", px + 28, py + (18 - 7) / 2, 1,
-                               Color(185, 220, 185, 255), fillRect);
-            Color indCol = vis ? Color(60, 200, 80, 255) : Color(160, 50, 50, 255);
-            drawRect(rpX + kRightPanelW - 28, py + 3, 22, 12, indCol);
-        }
-        py += 22;
-
-        // Collision field (click to edit string)
-        colFieldHitY_ = py;
-        {
-            bool colActive = fieldActive_ && fieldSection_ == -2;
-            drawRect(px, py, pw, 18, colActive ? Color(50, 70, 140, 255) : Color(38, 42, 72, 255));
-            drawRect(px, py, 3, 18, Color(185, 120, 55, 255));
-            Ui::drawBitmapText("COL", px + 6, py + (18 - 7) / 2, 1, Color(160, 175, 210, 255), fillRect);
-            if (colActive) {
-                std::string display = fieldBuffer_ + "_";
-                Ui::drawBitmapText(display, px + 28, py + (18 - 7) / 2, 1,
-                                   Color(255, 255, 160, 255), fillRect);
-            } else {
-                Ui::drawBitmapText(sel0->collision, px + 28, py + (18 - 7) / 2, 1,
-                                   Color(185, 220, 220, 255), fillRect);
-            }
-        }
-        py += 22;
-
-        // Tags field (click to edit comma-separated list)
-        tagsFieldHitY_ = py;
-        {
-            bool tagsActive = fieldActive_ && fieldSection_ == -3;
-            drawRect(px, py, pw, 18, tagsActive ? Color(50, 70, 140, 255) : Color(38, 42, 72, 255));
-            drawRect(px, py, 3, 18, Color(120, 90, 185, 255));
-            Ui::drawBitmapText("TAG", px + 6, py + (18 - 7) / 2, 1, Color(160, 175, 210, 255), fillRect);
-            if (tagsActive) {
-                std::string display = fieldBuffer_ + "_";
-                Ui::drawBitmapText(display, px + 28, py + (18 - 7) / 2, 1,
-                                   Color(255, 255, 160, 255), fillRect);
-            } else {
-                // Join tags with commas for display
-                std::string joined;
-                for (size_t i = 0; i < sel0->tags.size(); ++i) {
-                    if (i > 0) joined += ',';
-                    joined += sel0->tags[i];
-                }
-                if (joined.empty()) joined = "-";
-                Ui::drawBitmapText(joined, px + 28, py + (18 - 7) / 2, 1,
-                                   Color(185, 185, 220, 255), fillRect);
-            }
-        }
+    } else {
+        ImGui::TextDisabled("Nothing selected");
     }
 
-    // -----------------------------------------------------------------------
-    // Box-select rectangle overlay
-    // -----------------------------------------------------------------------
-    if (boxSelectActive_) {
-        int bx0 = std::min(boxSelectX0_, boxSelectX1_);
-        int by0 = std::min(boxSelectY0_, boxSelectY1_);
-        int bx1 = std::max(boxSelectX0_, boxSelectX1_);
-        int by1 = std::max(boxSelectY0_, boxSelectY1_);
-        int bw  = bx1 - bx0, bh = by1 - by0;
-        if (bw > 0 && bh > 0) {
-            drawRect(bx0, by0, bw, bh, Color(60, 120, 200, 40));   // fill
-            drawRect(bx0, by0, bw,  1, Color(100, 160, 255, 220)); // top
-            drawRect(bx0, by1, bw,  1, Color(100, 160, 255, 220)); // bottom
-            drawRect(bx0, by0,  1, bh, Color(100, 160, 255, 220)); // left
-            drawRect(bx1, by0,  1, bh, Color(100, 160, 255, 220)); // right
-        }
-    }
+    ImGui::End();
+    ImGui::PopStyleColor();
 
     // -----------------------------------------------------------------------
     // Status bar (bottom)
     // -----------------------------------------------------------------------
-    drawRect(0, screenH - kStatusH, screenW, kStatusH, Color(22, 24, 45, 255));
-    drawRect(0, screenH - kStatusH, screenW, 1, Color(55, 60, 100, 255));
-
-    // Object count dots (type-colored, up to 24)
-    int dotX = 6;
-    int dotSize = 14;
-    size_t limit = std::min(objs.size(), static_cast<size_t>(24));
-    for (size_t i = 0; i < limit; ++i) {
-        bool sel = selection_.isSelected(objs[i].get());
-        Color dc = sel ? Color(255, 255, 255, 255) : objectTypeColor(objs[i]->type);
-        drawRect(dotX, screenH - kStatusH + 5, dotSize, dotSize, dc);
-        if (sel) drawRect(dotX, screenH - kStatusH + 5, dotSize, 2, Color(255, 255, 100, 255));
-        dotX += dotSize + 2;
-    }
-
-    // Status info text: "N objects · M selected"
+    ImGui::SetNextWindowPos(ImVec2(0, static_cast<float>(screenH - kStatusH)));
+    ImGui::SetNextWindowSize(ImVec2(static_cast<float>(screenW), static_cast<float>(kStatusH)));
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(6, 3));
+    ImGui::PushStyleColor(ImGuiCol_WindowBg, ImVec4(0.086f, 0.094f, 0.176f, 1.0f));
+    ImGui::Begin("##statusbar", nullptr,
+        ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove |
+        ImGuiWindowFlags_NoBringToFrontOnFocus | ImGuiWindowFlags_NoScrollbar |
+        ImGuiWindowFlags_NoScrollWithMouse | ImGuiWindowFlags_NoSavedSettings);
     {
         int totalObjs = 0;
         std::function<void(const std::vector<std::shared_ptr<Mc3::Mc3Object>>&)> countAll =
@@ -2004,71 +1468,96 @@ void MeshCraftApplication::drawUi(int screenW, int screenH) {
                 totalObjs += static_cast<int>(list.size());
                 for (const auto& o : list) countAll(o->children);
             };
-        countAll(objs);
+        countAll(document_.objects);
         int selCount = static_cast<int>(selection_.selection().size());
-
-        char infoBuf[48];
-        if (selCount > 0)
-            std::snprintf(infoBuf, sizeof(infoBuf), "%d objects  %d selected", totalObjs, selCount);
-        else
-            std::snprintf(infoBuf, sizeof(infoBuf), "%d objects", totalObjs);
-
-        int textX = dotX + 8;
-        int textY = screenH - kStatusH + (kStatusH - 7) / 2;
-        Ui::drawBitmapText(infoBuf, textX, textY, 1, Color(130, 145, 185, 255), fillRect);
-    }
-
-    // Selection count indicator strip on far right
-    if (selection_.hasSelection()) {
-        int selCount = static_cast<int>(selection_.selection().size());
-        int barW = std::min(selCount * 16, 80);
-        drawRect(screenW - barW - 4, screenH - kStatusH + 4, barW, dotSize,
-                 Color(80, 130, 210, 255));
-    }
-
-    // Tool indicator strip at bottom right corner
-    Color toolStrip(40, 50, 80, 255);
-    drawRect(screenW - kRightPanelW, screenH - kStatusH + 2, 20, dotSize, toolStrip);
-
-    // -----------------------------------------------------------------------
-    // Modal path dialog overlay (open or save-as)
-    // -----------------------------------------------------------------------
-    auto drawPathDialog = [&](const char* title, const char* confirmHint,
-                               const std::string& buffer, const std::string& error) {
-        drawRect(0, 0, screenW, screenH, Color(0, 0, 0, 160));
-        int pw = std::min(400, screenW - 40);
-        int ph = error.empty() ? 82 : 98;
-        int px = (screenW - pw) / 2;
-        int py = (screenH - ph) / 2;
-        drawRect(px,      py,      pw,  ph,  Color(28, 32, 55, 255));
-        drawRect(px,      py,      pw,   1,  Color(80, 130, 210, 255));
-        drawRect(px,      py+ph-1, pw,   1,  Color(80, 130, 210, 255));
-        drawRect(px,      py,       1,  ph,  Color(80, 130, 210, 255));
-        drawRect(px+pw-1, py,       1,  ph,  Color(80, 130, 210, 255));
-        drawRect(px+1, py+1, pw-2, 18, Color(38, 48, 90, 255));
-        drawRect(px+1, py+1,  3,   18, Color(80, 130, 210, 255));
-        Ui::drawBitmapText(title, px+8, py+6, 1, Color(160, 175, 210, 255), fillRect);
-        drawRect(px+8, py+24, pw-16, 18, Color(18, 20, 38, 255));
-        drawRect(px+8, py+24, pw-16,  1, Color(80, 130, 210, 180));
-        drawRect(px+8, py+41, pw-16,  1, Color(80, 130, 210, 180));
-        {
-            std::string display = buffer + "_";
-            int maxChars = std::max(1, (pw - 20) / 6);
-            std::string shown = display.size() > static_cast<size_t>(maxChars)
-                                ? display.substr(display.size() - maxChars) : display;
-            Ui::drawBitmapText(shown, px+12, py+29, 1, Color(255, 255, 160, 255), fillRect);
-        }
-        if (!error.empty()) {
-            std::string err = error.substr(0, (pw - 20) / 6);
-            Ui::drawBitmapText(err,  px+8, py+48, 1, Color(220, 80, 80, 255),    fillRect);
-            Ui::drawBitmapText("Enter=retry  Esc=cancel", px+8, py+62, 1, Color(100, 110, 140, 255), fillRect);
+        if (selCount > 0) {
+            const std::string& selName = selection_.selection().front()->name;
+            ImGui::Text("%d objects | %d selected | %s", totalObjs, selCount, selName.c_str());
         } else {
-            char hint[40]; std::snprintf(hint, sizeof(hint), "%s   Esc=cancel", confirmHint);
-            Ui::drawBitmapText(hint, px+8, py+50, 1, Color(100, 110, 140, 255), fillRect);
+            ImGui::Text("%d objects", totalObjs);
         }
-    };
-    if (openDialogActive_) drawPathDialog("OPEN FILE", "Enter=open",    openDialogBuffer_, openDialogError_);
-    else if (saveDialogActive_) drawPathDialog("SAVE AS",  "Enter=save",    saveDialogBuffer_, saveDialogError_);
+    }
+    ImGui::End();
+    ImGui::PopStyleColor();
+    ImGui::PopStyleVar();
+
+    // -----------------------------------------------------------------------
+    // Box-select overlay (drawn via ImGui drawlist on top of everything)
+    // -----------------------------------------------------------------------
+    if (boxSelectActive_) {
+        int bx0 = std::min(boxSelectX0_, boxSelectX1_);
+        int by0 = std::min(boxSelectY0_, boxSelectY1_);
+        int bx1 = std::max(boxSelectX0_, boxSelectX1_);
+        int by1 = std::max(boxSelectY0_, boxSelectY1_);
+        if (bx1 > bx0 && by1 > by0) {
+            ImDrawList* dl = ImGui::GetBackgroundDrawList();
+            dl->AddRectFilled(ImVec2((float)bx0, (float)by0), ImVec2((float)bx1, (float)by1),
+                              IM_COL32(60, 120, 200, 40));
+            dl->AddRect(ImVec2((float)bx0, (float)by0), ImVec2((float)bx1, (float)by1),
+                        IM_COL32(100, 160, 255, 220));
+        }
+    }
+
+    // -----------------------------------------------------------------------
+    // File dialog modals
+    // -----------------------------------------------------------------------
+    if (openDialogOpen_) {
+        ImGui::OpenPopup("Open File##dlg");
+        openDialogOpen_ = false;
+    }
+    if (ImGui::BeginPopupModal("Open File##dlg", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
+        ImGui::Text("File path:");
+        ImGui::SetNextItemWidth(400);
+        ImGui::InputText("##openpath", openDialogBuf_, sizeof(openDialogBuf_));
+        if (openDialogErr_[0]) ImGui::TextColored(ImVec4(1,0.3f,0.3f,1), "%s", openDialogErr_);
+        if (ImGui::Button("Open") || ImGui::IsKeyPressed(ImGuiKey_Enter)) {
+            try {
+                document_ = Mc3::Mc3Document::loadFromFile(openDialogBuf_);
+                currentFile_ = openDialogBuf_;
+                selection_.clear();
+                undoStack_.clear(); redoStack_.clear();
+                modified_ = false;
+                openDialogErr_[0] = '\0';
+                std::cout << "[MeshCraft] Loaded: " << openDialogBuf_ << "\n";
+                updateWindowTitle();
+                ImGui::CloseCurrentPopup();
+            } catch (const std::exception& e) {
+                std::strncpy(openDialogErr_, e.what(), sizeof(openDialogErr_) - 1);
+            }
+        }
+        ImGui::SameLine();
+        if (ImGui::Button("Cancel")) ImGui::CloseCurrentPopup();
+        ImGui::EndPopup();
+    }
+
+    if (saveDialogOpen_) {
+        ImGui::OpenPopup("Save As##dlg");
+        saveDialogOpen_ = false;
+    }
+    if (ImGui::BeginPopupModal("Save As##dlg", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
+        ImGui::Text("File path:");
+        ImGui::SetNextItemWidth(400);
+        ImGui::InputText("##savepath", saveDialogBuf_, sizeof(saveDialogBuf_));
+        if (saveDialogErr_[0]) ImGui::TextColored(ImVec4(1,0.3f,0.3f,1), "%s", saveDialogErr_);
+        if (ImGui::Button("Save") || ImGui::IsKeyPressed(ImGuiKey_Enter)) {
+            std::string path = saveDialogBuf_;
+            if (path.find(".mc3.xml") == std::string::npos) path += ".mc3.xml";
+            try {
+                document_.saveToFile(path);
+                currentFile_ = path;
+                modified_ = false;
+                saveDialogErr_[0] = '\0';
+                std::cout << "[MeshCraft] Saved: " << path << "\n";
+                updateWindowTitle();
+                ImGui::CloseCurrentPopup();
+            } catch (const std::exception& e) {
+                std::strncpy(saveDialogErr_, e.what(), sizeof(saveDialogErr_) - 1);
+            }
+        }
+        ImGui::SameLine();
+        if (ImGui::Button("Cancel")) ImGui::CloseCurrentPopup();
+        ImGui::EndPopup();
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -2084,7 +1573,7 @@ static std::shared_ptr<Mc3::Mc3Object> deepCopyObj(const std::shared_ptr<Mc3::Mc
 }
 
 static Mc3::Mc3Document deepCopyDoc(const Mc3::Mc3Document& src) {
-    Mc3::Mc3Document copy = src;  // value fields (strings, maps of values) copy correctly
+    Mc3::Mc3Document copy = src;
     copy.objects.clear();
     for (const auto& obj : src.objects)
         copy.objects.push_back(deepCopyObj(obj));
@@ -2102,93 +1591,6 @@ void MeshCraftApplication::pushUndo() {
 }
 
 // ---------------------------------------------------------------------------
-// Field editing
-// ---------------------------------------------------------------------------
-
-void MeshCraftApplication::activateField(int section, int axis) {
-    if (!selection_.hasSelection()) return;
-    fieldSection_ = section;
-    fieldAxis_    = axis;
-    if (section == -1) {
-        fieldBuffer_ = selection_.selection().front()->name;
-    } else if (section == -2) {
-        fieldBuffer_ = selection_.selection().front()->collision;
-    } else if (section == -3) {
-        // Join tags with commas for editing
-        const auto& tags = selection_.selection().front()->tags;
-        fieldBuffer_.clear();
-        for (size_t i = 0; i < tags.size(); ++i) {
-            if (i > 0) fieldBuffer_ += ',';
-            fieldBuffer_ += tags[i];
-        }
-    } else {
-        const auto& t = selection_.selection().front()->transform;
-        float v = 0.0f;
-        if (section == 0) v = t.position[axis];
-        else if (section == 1) v = t.rotation[axis];
-        else                   v = t.scale[axis];
-        char buf[20];
-        std::snprintf(buf, sizeof(buf), "%g", v);
-        fieldBuffer_ = buf;
-    }
-    fieldActive_ = true;
-}
-
-void MeshCraftApplication::applyFieldValue() {
-    if (!fieldActive_ || !selection_.hasSelection()) { cancelField(); return; }
-    pushUndo();
-    if (fieldSection_ == -1) {
-        selection_.selection().front()->name = fieldBuffer_;
-        modified_ = true;
-        updateWindowTitle();
-    } else if (fieldSection_ == -2) {
-        selection_.selection().front()->collision = fieldBuffer_;
-        modified_ = true;
-        updateWindowTitle();
-    } else if (fieldSection_ == -3) {
-        // Split comma-separated buffer into tags, trimming whitespace
-        auto& tags = selection_.selection().front()->tags;
-        tags.clear();
-        std::string tok;
-        for (char ch : fieldBuffer_) {
-            if (ch == ',') {
-                // trim and push
-                size_t s = tok.find_first_not_of(" \t");
-                size_t e = tok.find_last_not_of(" \t");
-                if (s != std::string::npos) tags.push_back(tok.substr(s, e - s + 1));
-                tok.clear();
-            } else {
-                tok += ch;
-            }
-        }
-        {
-            size_t s = tok.find_first_not_of(" \t");
-            size_t e = tok.find_last_not_of(" \t");
-            if (s != std::string::npos) tags.push_back(tok.substr(s, e - s + 1));
-        }
-        modified_ = true;
-        updateWindowTitle();
-    } else {
-        try {
-            float val = std::stof(fieldBuffer_);
-            auto& t = selection_.selection().front()->transform;
-            if (fieldSection_ == 0) t.position[fieldAxis_] = val;
-            else if (fieldSection_ == 1) t.rotation[fieldAxis_] = val;
-            else                         t.scale[fieldAxis_]    = val;
-            modified_ = true;
-            updateWindowTitle();
-        } catch (...) {}
-    }
-    fieldActive_ = false;
-    fieldBuffer_.clear();
-}
-
-void MeshCraftApplication::cancelField() {
-    fieldActive_ = false;
-    fieldBuffer_.clear();
-}
-
-// ---------------------------------------------------------------------------
 // Screenshot
 // ---------------------------------------------------------------------------
 
@@ -2198,35 +1600,48 @@ void MeshCraftApplication::saveScreenshot(const std::string& path) {
     int h = gd.getViewportProperty().getHeightProperty();
     if (w <= 0 || h <= 0) return;
 
-    using PFNGLFINISH = void(*)();
+    using PFNGLFINISH     = void(*)();
     using PFNGLBINDBUFFER = void(*)(unsigned int, unsigned int);
     using PFNGLREADPIXELS = void(*)(int, int, int, int, unsigned int, unsigned int, void*);
     auto fnFinish     = reinterpret_cast<PFNGLFINISH>    (SDL_GL_GetProcAddress("glFinish"));
     auto fnBindBuffer = reinterpret_cast<PFNGLBINDBUFFER>(SDL_GL_GetProcAddress("glBindBuffer"));
     auto fnReadPixels = reinterpret_cast<PFNGLREADPIXELS>(SDL_GL_GetProcAddress("glReadPixels"));
-    if (!fnReadPixels) {
-        std::cerr << "[Screenshot] glReadPixels not available\n";
-        return;
-    }
-    if (fnFinish) fnFinish();
-    if (fnBindBuffer) fnBindBuffer(0x88EC, 0); // GL_PIXEL_PACK_BUFFER = 0x88EC
+    if (!fnReadPixels) { std::cerr << "[Screenshot] glReadPixels not available\n"; return; }
+    if (fnFinish)     fnFinish();
+    if (fnBindBuffer) fnBindBuffer(0x88EC, 0);
 
-    // OpenGL ES guarantees RGBA + GL_UNSIGNED_BYTE
     constexpr unsigned int GL_RGBA          = 0x1908;
     constexpr unsigned int GL_UNSIGNED_BYTE = 0x1401;
     std::vector<unsigned char> pixels(w * h * 4);
     fnReadPixels(0, 0, w, h, GL_RGBA, GL_UNSIGNED_BYTE, pixels.data());
 
-    // PPM P6 is RGB; strip alpha. glReadPixels gives bottom-to-top — flip vertically.
     std::ofstream f(path, std::ios::binary);
     f << "P6\n" << w << " " << h << "\n255\n";
-    for (int row = h - 1; row >= 0; --row) {
+    for (int row = h - 1; row >= 0; --row)
         for (int col = 0; col < w; ++col) {
             int idx = (row * w + col) * 4;
             f.write(reinterpret_cast<char*>(&pixels[idx]), 3);
         }
-    }
     std::cout << "[Screenshot] written " << path << "\n";
+}
+
+// ---------------------------------------------------------------------------
+// Misc helpers
+// ---------------------------------------------------------------------------
+
+Mc3::Mc3Object* MeshCraftApplication::flatFindById(const std::string& id) const {
+    std::function<Mc3::Mc3Object*(const std::vector<std::shared_ptr<Mc3::Mc3Object>>&)> find;
+    find = [&](const std::vector<std::shared_ptr<Mc3::Mc3Object>>& list) -> Mc3::Mc3Object* {
+        for (const auto& obj : list) {
+            if (obj->id == id) return obj.get();
+            if (!obj->children.empty()) {
+                auto* r = find(obj->children);
+                if (r) return r;
+            }
+        }
+        return nullptr;
+    };
+    return find(document_.objects);
 }
 
 } // namespace MeshCraft
