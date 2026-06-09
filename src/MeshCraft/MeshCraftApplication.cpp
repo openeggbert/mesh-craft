@@ -1430,6 +1430,102 @@ void MeshCraftApplication::drawImGuiUi(int screenW, int screenH) {
             ImGui::EndTabItem();
         }
 
+        // -------------------------------------------------------------------
+        // Tab: Environment
+        // -------------------------------------------------------------------
+        if (ImGui::BeginTabItem("Env")) {
+            // Enable / disable environment block
+            bool envEnabled = document_.environment.has_value();
+            if (ImGui::Checkbox("Enable", &envEnabled)) {
+                pushUndo();
+                if (envEnabled) document_.environment = Mc3::Mc3Environment{};
+                else            document_.environment.reset();
+                modified_ = true; updateWindowTitle();
+            }
+
+            if (document_.environment.has_value()) {
+                auto& env = *document_.environment;
+
+                ImGui::Spacing();
+
+                // Background color
+                ImGui::TextDisabled("Background Color");
+                ImGui::SetNextItemWidth(-1);
+                if (ImGui::ColorEdit3("##envbg", env.backgroundColor.data(),
+                        ImGuiColorEditFlags_NoLabel)) {
+                    modified_ = true; updateWindowTitle();
+                }
+
+                // Background texture
+                ImGui::TextDisabled("Background Texture");
+                {
+                    char buf[256];
+                    std::strncpy(buf, env.backgroundTexture.c_str(), sizeof(buf)-1); buf[255]='\0';
+                    ImGui::SetNextItemWidth(-1);
+                    if (ImGui::InputText("##envbgtex", buf, sizeof(buf),
+                            ImGuiInputTextFlags_EnterReturnsTrue)) {
+                        pushUndo(); env.backgroundTexture = buf;
+                        modified_ = true; updateWindowTitle();
+                    }
+                }
+
+                ImGui::Spacing();
+                ImGui::Separator();
+                ImGui::Spacing();
+
+                // Fog
+                bool fogEnabled = env.fog.has_value();
+                if (ImGui::Checkbox("Fog", &fogEnabled)) {
+                    pushUndo();
+                    if (fogEnabled) env.fog = Mc3::Mc3Fog{};
+                    else            env.fog.reset();
+                    modified_ = true; updateWindowTitle();
+                }
+
+                if (env.fog.has_value()) {
+                    auto& fog = *env.fog;
+
+                    ImGui::TextDisabled("Fog Color");
+                    ImGui::SetNextItemWidth(-1);
+                    if (ImGui::ColorEdit3("##fogcol", fog.color.data(),
+                            ImGuiColorEditFlags_NoLabel)) {
+                        modified_ = true; updateWindowTitle();
+                    }
+
+                    ImGui::TextDisabled("Mode");
+                    ImGui::SetNextItemWidth(-1);
+                    const char* fogModes[] = { "Linear", "Exponential" };
+                    int fogModeIdx = (fog.mode == Mc3::FogMode::Exponential) ? 1 : 0;
+                    if (ImGui::Combo("##fogmode", &fogModeIdx, fogModes, 2)) {
+                        pushUndo();
+                        fog.mode = fogModeIdx == 1 ? Mc3::FogMode::Exponential : Mc3::FogMode::Linear;
+                        modified_ = true; updateWindowTitle();
+                    }
+
+                    if (fog.mode == Mc3::FogMode::Linear) {
+                        ImGui::TextDisabled("Start");
+                        ImGui::SetNextItemWidth(-1);
+                        if (ImGui::DragFloat("##fogstart", &fog.start, 0.5f, 0.0f, 10000.0f)) {
+                            modified_ = true; updateWindowTitle();
+                        }
+                        ImGui::TextDisabled("End");
+                        ImGui::SetNextItemWidth(-1);
+                        if (ImGui::DragFloat("##fogend", &fog.end, 0.5f, 0.0f, 10000.0f)) {
+                            modified_ = true; updateWindowTitle();
+                        }
+                    } else {
+                        ImGui::TextDisabled("Density");
+                        ImGui::SetNextItemWidth(-1);
+                        if (ImGui::DragFloat("##fogdens", &fog.density, 0.001f, 0.0f, 1.0f, "%.4f")) {
+                            modified_ = true; updateWindowTitle();
+                        }
+                    }
+                }
+            }
+
+            ImGui::EndTabItem();
+        }
+
         ImGui::EndTabBar();
     }
 
