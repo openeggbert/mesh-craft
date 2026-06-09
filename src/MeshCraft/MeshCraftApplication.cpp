@@ -1523,16 +1523,139 @@ void MeshCraftApplication::drawImGuiUi(int screenW, int screenH) {
             }
         }
 
-        // Material swatch (read-only)
-        if (!sel0->material.empty()) {
+        // Material editor
+        {
             ImGui::Spacing();
-            ImGui::TextDisabled("Material: %s", sel0->material.c_str());
-            for (const auto& [key, mat] : document_.materials) {
-                if (key == sel0->material) {
-                    ImGui::ColorButton("##matcol",
-                        ImVec4(mat.baseColor[0], mat.baseColor[1], mat.baseColor[2], 1.0f),
-                        ImGuiColorEditFlags_NoTooltip | ImGuiColorEditFlags_NoPicker);
-                    break;
+            ImGui::Separator();
+            ImGui::Spacing();
+            ImGui::TextDisabled("Material");
+
+            // Assignment dropdown + New button
+            {
+                const char* preview = sel0->material.empty() ? "(none)" : sel0->material.c_str();
+                ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x - 36);
+                if (ImGui::BeginCombo("##matsel", preview)) {
+                    if (ImGui::Selectable("(none)", sel0->material.empty())) {
+                        pushUndo(); sel0->material = ""; modified_ = true; updateWindowTitle();
+                    }
+                    for (const auto& [key, _] : document_.materials) {
+                        bool selected = (key == sel0->material);
+                        if (ImGui::Selectable(key.c_str(), selected)) {
+                            pushUndo(); sel0->material = key; modified_ = true; updateWindowTitle();
+                        }
+                        if (selected) ImGui::SetItemDefaultFocus();
+                    }
+                    ImGui::EndCombo();
+                }
+                ImGui::SameLine();
+                if (ImGui::SmallButton("New")) {
+                    pushUndo();
+                    // Generate unique key
+                    int n = 1;
+                    std::string key;
+                    do { key = "material_" + std::to_string(n++); }
+                    while (document_.materials.count(key));
+                    Mc3::Mc3Material newMat;
+                    newMat.name = key;
+                    document_.materials[key] = newMat;
+                    sel0->material = key;
+                    modified_ = true; updateWindowTitle();
+                }
+            }
+
+            // Edit the assigned material's fields inline
+            auto matIt = document_.materials.find(sel0->material);
+            if (matIt != document_.materials.end()) {
+                auto& mat = matIt->second;
+
+                // Base color
+                ImGui::TextDisabled("Base Color");
+                ImGui::SetNextItemWidth(-1);
+                if (ImGui::ColorEdit4("##mbc", mat.baseColor.data(),
+                        ImGuiColorEditFlags_NoLabel)) {
+                    modified_ = true; updateWindowTitle();
+                }
+
+                // Roughness
+                ImGui::TextDisabled("Roughness");
+                ImGui::SetNextItemWidth(-1);
+                if (ImGui::SliderFloat("##mrough", &mat.roughness, 0.0f, 1.0f)) {
+                    modified_ = true; updateWindowTitle();
+                }
+
+                // Metallic
+                ImGui::TextDisabled("Metallic");
+                ImGui::SetNextItemWidth(-1);
+                if (ImGui::SliderFloat("##mmetal", &mat.metallic, 0.0f, 1.0f)) {
+                    modified_ = true; updateWindowTitle();
+                }
+
+                // Emissive color
+                ImGui::TextDisabled("Emissive");
+                ImGui::SetNextItemWidth(-1);
+                if (ImGui::ColorEdit3("##memit", mat.emissiveColor.data(),
+                        ImGuiColorEditFlags_NoLabel)) {
+                    modified_ = true; updateWindowTitle();
+                }
+
+                // Alpha mode
+                ImGui::TextDisabled("Alpha Mode");
+                ImGui::SetNextItemWidth(-1);
+                const char* alphaModes[] = { "opaque", "mask", "blend" };
+                int alphaIdx = 0;
+                for (int i = 0; i < 3; ++i)
+                    if (mat.alphaMode == alphaModes[i]) { alphaIdx = i; break; }
+                if (ImGui::Combo("##malpha", &alphaIdx, alphaModes, 3)) {
+                    mat.alphaMode = alphaModes[alphaIdx];
+                    modified_ = true; updateWindowTitle();
+                }
+                if (mat.alphaMode == "mask") {
+                    ImGui::TextDisabled("Alpha Cutoff");
+                    ImGui::SetNextItemWidth(-1);
+                    if (ImGui::SliderFloat("##mcut", &mat.alphaCutoff, 0.0f, 1.0f)) {
+                        modified_ = true; updateWindowTitle();
+                    }
+                }
+
+                // Double sided
+                if (ImGui::Checkbox("Double Sided", &mat.doubleSided)) {
+                    modified_ = true; updateWindowTitle();
+                }
+
+                // Normal scale + occlusion strength (collapsed by default)
+                if (ImGui::TreeNode("Advanced")) {
+                    ImGui::TextDisabled("Normal Scale");
+                    ImGui::SetNextItemWidth(-1);
+                    if (ImGui::DragFloat("##mnrmscl", &mat.normalScale, 0.01f, 0.0f, 10.0f)) {
+                        modified_ = true; updateWindowTitle();
+                    }
+                    ImGui::TextDisabled("Occlusion Strength");
+                    ImGui::SetNextItemWidth(-1);
+                    if (ImGui::DragFloat("##moccstr", &mat.occlusionStrength, 0.01f, 0.0f, 1.0f)) {
+                        modified_ = true; updateWindowTitle();
+                    }
+                    ImGui::TreePop();
+                }
+
+                // Textures (collapsed by default)
+                if (ImGui::TreeNode("Textures")) {
+                    auto texField = [&](const char* label, std::string& field) {
+                        ImGui::TextDisabled("%s", label);
+                        char buf[256];
+                        std::strncpy(buf, field.c_str(), sizeof(buf) - 1); buf[255] = '\0';
+                        ImGui::SetNextItemWidth(-1);
+                        std::string id = std::string("##t") + label;
+                        if (ImGui::InputText(id.c_str(), buf, sizeof(buf),
+                                ImGuiInputTextFlags_EnterReturnsTrue)) {
+                            field = buf; modified_ = true; updateWindowTitle();
+                        }
+                    };
+                    texField("Base Color",      mat.baseColorTexture);
+                    texField("Normal",          mat.normalTexture);
+                    texField("Emissive",        mat.emissiveTexture);
+                    texField("Metal/Roughness", mat.metallicRoughnessTexture);
+                    texField("Occlusion",       mat.occlusionTexture);
+                    ImGui::TreePop();
                 }
             }
         }
