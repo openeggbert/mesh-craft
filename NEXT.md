@@ -114,7 +114,7 @@ actual CSG boolean evaluation), drag-and-drop hierarchy reparenting, and animati
 ## 3. Recent Changes
 
 | Commit | Change |
-|--------|--------|
+|-----------|-------------------------------------------------------------------------|
 | `7a6057b` | CSG visualization: Add menu, hierarchy badges, properties panel, viewport gizmos |
 | `771e6e1` | Extrude editor in properties panel; fix extrude XML serialization |
 | `097f19b` | Textures tab (left panel); fix texture serialization in XML writer |
@@ -160,7 +160,7 @@ actual CSG boolean evaluation), drag-and-drop hierarchy reparenting, and animati
 ### Main modules
 
 | Module | Location | Role |
-|--------|----------|------|
+|----------------------|---------------------------------------------------|----------------------------------------------------------------------|
 | `MeshCraftApplication` | `src/MeshCraft/MeshCraftApplication.cpp` | Game loop, all input, scene state, entire ImGui UI |
 | `SceneRenderer` | `src/MeshCraft/Renderer/SceneRenderer.cpp` | Renders MC3 objects + gizmos (translate/scale/rotate/lights/cameras/CSG) |
 | `GridRenderer` | `src/MeshCraft/Renderer/GridRenderer.cpp` | XYZ grid via `BasicEffect` + `VertexBuffer` |
