@@ -1526,6 +1526,165 @@ void MeshCraftApplication::drawImGuiUi(int screenW, int screenH) {
             ImGui::EndTabItem();
         }
 
+        // -------------------------------------------------------------------
+        // Tab: Cameras
+        // -------------------------------------------------------------------
+        if (ImGui::BeginTabItem("Cam")) {
+            if (selectedCameraIdx_ >= static_cast<int>(document_.cameras.size()))
+                selectedCameraIdx_ = static_cast<int>(document_.cameras.size()) - 1;
+
+            // Toolbar
+            if (ImGui::SmallButton("+")) {
+                pushUndo();
+                Mc3::Mc3Camera cam;
+                cam.name = "Camera " + std::to_string(document_.cameras.size() + 1);
+                document_.cameras.push_back(cam);
+                selectedCameraIdx_ = static_cast<int>(document_.cameras.size()) - 1;
+                modified_ = true; updateWindowTitle();
+            }
+            ImGui::SameLine();
+            if (ImGui::SmallButton("-") && selectedCameraIdx_ >= 0) {
+                pushUndo();
+                const std::string& removedName = document_.cameras[selectedCameraIdx_].name;
+                if (document_.defaultCamera == removedName) document_.defaultCamera.clear();
+                document_.cameras.erase(document_.cameras.begin() + selectedCameraIdx_);
+                selectedCameraIdx_ = std::min(selectedCameraIdx_,
+                    static_cast<int>(document_.cameras.size()) - 1);
+                modified_ = true; updateWindowTitle();
+            }
+
+            // Camera list
+            ImGui::Separator();
+            for (int i = 0; i < static_cast<int>(document_.cameras.size()); ++i) {
+                const auto& cam = document_.cameras[i];
+                bool isDefault = (cam.name == document_.defaultCamera);
+                std::string label = (isDefault ? "* " : "  ") +
+                    (cam.name.empty() ? "camera_" + std::to_string(i) : cam.name) +
+                    (cam.type == Mc3::CameraType::Orthographic ? " [Ort]" : " [Per]");
+                ImGui::PushID(i);
+                if (ImGui::Selectable(label.c_str(), selectedCameraIdx_ == i))
+                    selectedCameraIdx_ = i;
+                ImGui::PopID();
+            }
+
+            // Inline editor
+            if (selectedCameraIdx_ >= 0 &&
+                selectedCameraIdx_ < static_cast<int>(document_.cameras.size()))
+            {
+                auto& cam = document_.cameras[selectedCameraIdx_];
+                ImGui::Separator();
+                ImGui::Spacing();
+
+                // Name
+                {
+                    char buf[128];
+                    std::strncpy(buf, cam.name.c_str(), sizeof(buf)-1); buf[127]='\0';
+                    ImGui::TextDisabled("Name");
+                    ImGui::SetNextItemWidth(-1);
+                    if (ImGui::InputText("##cname", buf, sizeof(buf),
+                            ImGuiInputTextFlags_EnterReturnsTrue)) {
+                        pushUndo();
+                        if (document_.defaultCamera == cam.name) document_.defaultCamera = buf;
+                        cam.name = buf;
+                        modified_ = true; updateWindowTitle();
+                    }
+                }
+
+                // Default camera toggle
+                {
+                    bool isDefault = (cam.name == document_.defaultCamera);
+                    if (ImGui::Checkbox("Default", &isDefault)) {
+                        pushUndo();
+                        document_.defaultCamera = isDefault ? cam.name : "";
+                        modified_ = true; updateWindowTitle();
+                    }
+                }
+
+                // Type
+                {
+                    const char* types[] = { "Perspective", "Orthographic" };
+                    int tidx = static_cast<int>(cam.type);
+                    ImGui::TextDisabled("Type");
+                    ImGui::SetNextItemWidth(-1);
+                    if (ImGui::Combo("##ctype", &tidx, types, 2)) {
+                        pushUndo();
+                        cam.type = static_cast<Mc3::CameraType>(tidx);
+                        modified_ = true; updateWindowTitle();
+                    }
+                }
+
+                // Position
+                ImGui::TextDisabled("Position");
+                ImGui::SetNextItemWidth(-1);
+                if (ImGui::DragFloat3("##cpos", cam.position.data(), 0.1f)) {
+                    if (ImGui::IsItemActivated()) pushUndo();
+                    modified_ = true; updateWindowTitle();
+                }
+
+                // Target
+                ImGui::TextDisabled("Target");
+                ImGui::SetNextItemWidth(-1);
+                if (ImGui::DragFloat3("##ctgt", cam.target.data(), 0.1f)) {
+                    if (ImGui::IsItemActivated()) pushUndo();
+                    modified_ = true; updateWindowTitle();
+                }
+
+                // Rotation override (optional)
+                {
+                    bool hasRot = cam.rotation.has_value();
+                    if (ImGui::Checkbox("Override Rotation", &hasRot)) {
+                        pushUndo();
+                        if (hasRot) cam.rotation = std::array<float,3>{0.0f,0.0f,0.0f};
+                        else        cam.rotation.reset();
+                        modified_ = true; updateWindowTitle();
+                    }
+                    if (cam.rotation.has_value()) {
+                        ImGui::SetNextItemWidth(-1);
+                        if (ImGui::DragFloat3("##crot", cam.rotation->data(), 0.5f)) {
+                            if (ImGui::IsItemActivated()) pushUndo();
+                            modified_ = true; updateWindowTitle();
+                        }
+                    }
+                }
+
+                // Near / Far
+                ImGui::TextDisabled("Near Plane");
+                ImGui::SetNextItemWidth(-1);
+                if (ImGui::DragFloat("##cnear", &cam.nearPlane, 0.01f, 0.001f, cam.farPlane)) {
+                    if (ImGui::IsItemActivated()) pushUndo();
+                    modified_ = true; updateWindowTitle();
+                }
+                ImGui::TextDisabled("Far Plane");
+                ImGui::SetNextItemWidth(-1);
+                if (ImGui::DragFloat("##cfar", &cam.farPlane, 1.0f, cam.nearPlane, 100000.0f)) {
+                    if (ImGui::IsItemActivated()) pushUndo();
+                    modified_ = true; updateWindowTitle();
+                }
+
+                // Perspective-only: FOV
+                if (cam.type == Mc3::CameraType::Perspective) {
+                    ImGui::TextDisabled("FOV (deg)");
+                    ImGui::SetNextItemWidth(-1);
+                    if (ImGui::SliderFloat("##cfov", &cam.fov, 1.0f, 170.0f)) {
+                        if (ImGui::IsItemActivated()) pushUndo();
+                        modified_ = true; updateWindowTitle();
+                    }
+                }
+
+                // Orthographic-only: ortho size
+                if (cam.type == Mc3::CameraType::Orthographic) {
+                    ImGui::TextDisabled("Ortho Size");
+                    ImGui::SetNextItemWidth(-1);
+                    if (ImGui::DragFloat("##cortho", &cam.orthoSize, 0.1f, 0.001f, 10000.0f)) {
+                        if (ImGui::IsItemActivated()) pushUndo();
+                        modified_ = true; updateWindowTitle();
+                    }
+                }
+            }
+
+            ImGui::EndTabItem();
+        }
+
         ImGui::EndTabBar();
     }
 

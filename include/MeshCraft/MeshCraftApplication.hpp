@@ -82,6 +82,9 @@ private:
     // Lights panel selection
     int selectedLightIdx_{-1};
 
+    // Cameras panel selection
+    int selectedCameraIdx_{-1};
+
     // ImGui file dialog state (buffers persist across frames)
     bool openDialogOpen_{false};
     char openDialogBuf_[512]{};
