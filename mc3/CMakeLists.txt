@@ -45,3 +45,23 @@ target_include_directories(Mc3
 )
 
 target_link_libraries(Mc3 PRIVATE tinyxml2::tinyxml2)
+
+# -----------------------------------------------------------------------------
+# Round-trip unit tests
+# -----------------------------------------------------------------------------
+
+if(BUILD_TESTING)
+    add_executable(mc3_roundtrip_test test/roundtrip_test.cpp)
+    target_link_libraries(mc3_roundtrip_test PRIVATE Mc3)
+
+    # Pass features.mc3.xml path so the test can exercise the full parser
+    # CMAKE_SOURCE_DIR is the top-level project root (may differ from mc3/ source dir)
+    set(MC3_FEATURES_XML "${CMAKE_SOURCE_DIR}/test/features.mc3.xml")
+    if(NOT EXISTS "${MC3_FEATURES_XML}")
+        set(MC3_FEATURES_XML "")
+    endif()
+
+    add_test(NAME mc3_roundtrip
+             COMMAND mc3_roundtrip_test ${MC3_FEATURES_XML})
+    set_tests_properties(mc3_roundtrip PROPERTIES TIMEOUT 15)
+endif()

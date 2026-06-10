@@ -117,7 +117,8 @@ actual CSG boolean evaluation), drag-and-drop hierarchy reparenting, and animati
 
 | Commit | Change |
 |-----------|-------------------------------------------------------------------------|
-| *(staged)* | Drag-and-drop reparenting in hierarchy; drop onto node = last child, drop on footer = root |
+| *(staged)* | XML round-trip unit tests: 54 checks (visible, deform, extrude all paths, CSG, isCutter, groups) |
+| `e792e6d` | Drag-and-drop reparenting in hierarchy; drop onto node = last child, drop on footer = root |
 | `27eb2b1` | Extrude path rendering: Arc, Helix, Polyline, Bezier, Custom cross-section — runtime sweep mesh |
 | `77451d6` | Edge overlay: black wireframe lines over all visible objects; Alt+W / View menu / toolbar Edges button |
 | `7a6057b` | CSG visualization: Add menu, hierarchy badges, properties panel, viewport gizmos |
@@ -248,9 +249,10 @@ Actual Union / Difference / Intersection mesh computation. Requires an external 
 library (e.g. manifold or CGAL). Large scope; out of phase for now.
 **Effort:** ~20–30 h + library integration
 
-**D — XML round-trip unit tests**
-Add ctests for `visible`, `deform`, `extrude`, `csgOperation`, `isCutter` field round-trips.
-**Files:** `mc3/test/` or `test/`, `CMakeLists.txt`
+**D — XML round-trip unit tests** ✅ DONE
+`mc3/test/roundtrip_test.cpp` — 54 checks covering `visible`, `deform`, all five extrude path
+types (Line/Arc/Helix/Polyline/Bezier), all cross-section types, `csgOperation`, `isCutter`,
+group children, and a full parse of `test/features.mc3.xml`. Registered as `mc3_roundtrip` in CTest.
 
 **E — CI pipeline**
 GitHub Actions workflow that builds and runs ctest on push.
