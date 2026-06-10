@@ -12,9 +12,10 @@ The output pipeline exports to `.glb` via the `mc3togltf` converter.
 **Main goal:** A fully usable desktop editor where a developer can build, edit, and export
 `.mc3.xml` scene files without hand-editing XML.
 
-**Current phase:** ~90 % of planned editor features are implemented and working. The editor
-is fully interactive. The remaining work is advanced geometry (extrude path variants,
-actual CSG boolean evaluation), drag-and-drop hierarchy reparenting, and animation data.
+**Current phase:** ~95 % of planned features implemented. All object types, all extrude
+paths/cross-sections, full light/camera/material/texture editors, drag-and-drop hierarchy,
+and XML round-trip tests are complete. Remaining work is pivot rendering, innerRadius
+hollow extrude, definitions panel, and CSG boolean evaluation.
 
 **Key architectural decisions:**
 - Built on **CNA** — an XNA-like C++ framework (SDL3 + OpenGL ES 3.2 via EasyGL backend).
@@ -32,92 +33,73 @@ actual CSG boolean evaluation), drag-and-drop hierarchy reparenting, and animati
 
 ### Build
 - **Builds cleanly** with `cmake --build cmake-build-debug --target MeshCraft -- -j$(nproc)`.
-- **Workaround required before each build** (SHARP_RUNTIME missing `<algorithm>` issue,
-  being fixed separately):
+- **Workaround required before each build** (SHARP_RUNTIME `<algorithm>` / CNA source sync):
   ```bash
+  find cmake-build-debug/CNA_dep/CMakeFiles -name "*.o" -exec touch {} \;
   touch cmake-build-debug/CNA_dep/SHARP_RUNTIME/libSHARP_RUNTIME.a cmake-build-debug/CNA_dep/libCNA.a
   ```
+  (only needed when CNA sources were updated since last build; plain `.a` touch suffices otherwise)
 
 ### Tests
-- **1/1 smoke test passes** (`ctest --test-dir cmake-build-debug -V`).
-- Smoke test: launches editor with `test/house.mc3.xml --screenshot`, checks screenshot
-  file is non-empty (≥ 1 MB). Exits after ~2 s automatically.
+- **2/2 tests pass** (`ctest --test-dir cmake-build-debug -V`):
+  1. `smoke_test` — launches editor, takes screenshot, checks ≥ 1 MB
+  2. `mc3_roundtrip` — 54 XML round-trip checks (all field types)
 
 ### Available binaries
 - `cmake-build-debug/MeshCraft` — the editor
 - `cmake-build-debug/mc3/mc3togltf` — XML→GLB converter
 
-### What works
+---
 
-**File operations**
-- Load / Save / Save As / Export to GLB — all via in-UI modal dialogs (no stdin)
-- Window title reflects tool / filename / modified state
+## 3. mc3 Format Coverage
 
-**Scene editing**
-- Add primitives: Box / Sphere / Cylinder / Cone / Plane
-- Add other types: Area / Mesh / Instance / Extrude
-- Add CSG containers: `Add > CSG > Union / Difference / Intersection`
-- Delete, Duplicate (Ctrl+D), Cut/Copy/Paste (Ctrl+X/C/V)
-- Group (Ctrl+G) / Ungroup (Ctrl+Shift+G)
-- Undo / Redo (Ctrl+Z / Ctrl+Y, 20 steps, deep-copy snapshots)
+### ✅ Fully covered
 
-**3D viewport**
-- Orbit / pan / zoom camera (mouse); F = focus on selection
-- Preset views: Num1=Front, Num3=Right, Num5=Back, Num7=Top, Num9=Bottom
-- Left-click ray-cast picking; Ctrl+click = additive; Ctrl+A = select all
-- Box drag-select (left-drag in Select tool; Ctrl = additive)
-- Move (G) / Scale (S) / Rotate (R) gizmos with per-axis drag
-- Arrow-key nudge (Shift = 0.1 step, PageUp/Down = Z axis)
-- Light gizmos: direction arrows (Directional), cross + ring (Point), spoke-cone (Spot)
-- Camera gizmos: position-to-target line + frustum pyramid
-- CSG gizmos: coloured box outlines (green=Union, red=Difference, blue=Intersection)
-- Difference: red wireframe overlay on cutter children
-- **Edge overlay** (Alt+W / View menu / toolbar): black wireframe lines over all visible objects;
-  slight scale push (1.003×) avoids z-fighting; recurses into Groups, Instances, and CSG containers
-- F11 screenshot; F12 help to console
+| Category | What's implemented |
+|---|---|
+| **File ops** | Load / Save / Save As / Export GLB |
+| **Primitives** | Box, Sphere, Cylinder, Cone, Plane — all params (size/radius/height/segments/axis) |
+| **Extrude** | All 5 path types (Line/Arc/Helix/Polyline/Bezier), all 4 cross-sections (Rect/Circle/Polygon/Custom), twist, segments, caps, innerRadius (UI + serialization) |
+| **CSG** | Union / Difference / Intersection + isCutter flag; gizmo overlays |
+| **Group** | Create, expand/collapse, drag-and-drop reparenting, Ungroup |
+| **Instance** | Definition picker, material override |
+| **Mesh** | URI field (viewport shows placeholder box) |
+| **Area** | Exists in scene graph; no special viewport representation |
+| **Transform** | Position / Rotation (XYZ Euler °) / Scale — DragFloat3 |
+| **Deform** | Non-uniform geometry scale (separate from transform.scale) |
+| **visible / collision / tags** | All editable in Properties panel |
+| **Lights** | Ambient / Directional / Point / Spot — all params incl. castShadows, falloff |
+| **Cameras** | Perspective + Orthographic — position/target/rotation override/near/far/fov/orthoSize |
+| **Environment** | backgroundColor, backgroundTexture, fog (Linear/Exponential + all params) |
+| **Textures** | URI, wrapU/V (Repeat/Clamp/Mirror), filter (Linear/Nearest), colorSpace, mipMaps |
+| **Materials** | Full inline editor: baseColor RGBA, metallic, roughness, emissive, alphaMode, alphaCutoff, normalScale, occlusionStrength + 5 texture slots |
+| **Serialization** | All fields listed above round-trip through XML (verified by 54 ctests) |
 
-**Left panel — tabbed (Scene / Lights / Env / Cam / Tex)**
-- **Scene tab**: object tree with expand/collapse, visibility toggle, context menu
-  (Duplicate / Delete / Hide-Show); CSG nodes show coloured `[U]`/`[D]`/`[I]` prefix;
-  cutter children show `[cut]`; Group shows `[G]`
-- **Lights tab**: list of `Mc3Light` entries; add/remove; full properties per type
-  (Directional: color + intensity + direction; Point: color + intensity + range;
-  Spot: color + intensity + range + inner/outer angle; Ambient: color + intensity)
-- **Env tab**: sky color, fog (enable/color/near/far), ambient intensity
-- **Cam tab**: list of `Mc3Camera` entries; add/remove; Perspective (fov + near/far)
-  or Orthographic (size + near/far) + position/target/up
-- **Tex tab**: list of textures from `document_.textures`; add/remove;
-  edit URI, filter (Linear/Nearest), wrap (Repeat/Clamp/Mirror), mip-maps, sRGB
+### ⚠️ Partially covered / bugs
 
-**Right panel — Properties**
-- Name, ID (read-only), Tags, Collision
-- Transform: Position / Rotation / Scale (DragFloat3)
-- Visible checkbox
-- **CSG section** (Union / Difference / Intersection): type combo (Union/Difference/
-  Intersection); for Difference: children checklist to mark cutters
-- **Geometry section** (primitives): type-specific params (Box: size; Sphere: radius+segments;
-  Cylinder/Cone: radius+height+segments; Plane: width+depth)
-- **Extrude section**: twist, path-segments, smooth, caps; Cross-section TreeNode (Rect/
-  Circle/Polygon/Custom with point list); Path TreeNode (Line/Arc/Helix/Polyline/Bezier)
-- **Mesh Source** (Mesh type): URI field
-- **Instance** (Instance type): definition picker combo + material override combo
-- **Deform** checkbox + DragFloat3 (non-uniform geometry-level scale)
-- **Material editor**: full inline editor — name picker combo, baseColor RGBA,
-  metallic / roughness / emissive / alpha-mode / alpha-cutoff / normal-scale /
-  occlusion-strength; texture fields for base / metallic-roughness / emissive /
-  normal / occlusion
+| Issue | Detail |
+|---|---|
+| **Pivot ignored in renderer** | `Mc3Transform.pivot` is parsed and written correctly, but `SceneRenderer::objectWorldMatrix()` doesn't apply it. Objects with non-zero `pivot` render at wrong position/rotation. Fix: `world = T(-pivot) * S * R * T(pos + pivot)` |
+| **Extrude innerRadius not rendered** | `Mc3CrossSection.innerRadius` is editable in the UI and serializes correctly, but `drawExtrudeDynamic` sweeps a solid profile — hollow pipes/tubes render solid. Fix: generate two concentric profile rings and connect with quads |
+| **Mesh viewport preview** | Mesh objects render as grey placeholder box regardless of `meshSource` URI. Fix would require a runtime OBJ/GLB loader in the editor (large scope) |
 
-**Serialization**
-- All fields round-trip correctly through XML (including extrude, deform,
-  textures block, material textures, emissive_color, alpha_cutoff)
+### ❌ Not implemented
+
+| Feature | Detail | Effort |
+|---|---|---|
+| **Definitions panel** | Definitions can be referenced by Instance objects (picker combo works), but there is no panel to create / list / edit / delete definitions. They can only exist in a file that was loaded with definitions already present. | ~3–5 h |
+| **CSG boolean mesh evaluation** | Union/Difference/Intersection render children individually. Actual boolean mesh ops need an external library (e.g. manifold or CGAL). | ~20–30 h + library |
+| **Actions / States animation** | `Mc3Document.TODO: actions map` and `Mc3Object.TODO: states, actions` — not modelled in the data layer yet. | Large scope |
+| **Texture rendering in viewport** | All objects render with flat material color. Textures from `baseColorTexture` etc. are never sampled. | ~10–15 h |
+| **Multi-selection transform** | When multiple objects are selected the gizmo and Properties panel show/operate only on the first selected object. | ~3 h |
 
 ---
 
-## 3. Recent Changes
+## 4. Recent Changes
 
 | Commit | Change |
 |-----------|-------------------------------------------------------------------------|
-| *(staged)* | Extrude edge overlay: traces actual sweep wireframe (rings + spines) for all path types |
+| `23f3534` | Extrude edge overlay: traces actual sweep wireframe (rings + spines) for all path types |
 | `8f742db` | XML round-trip unit tests: 54 checks (visible, deform, extrude all paths, CSG, isCutter, groups) |
 | `e792e6d` | Drag-and-drop reparenting in hierarchy; drop onto node = last child, drop on footer = root |
 | `27eb2b1` | Extrude path rendering: Arc, Helix, Polyline, Bezier, Custom cross-section — runtime sweep mesh |
@@ -133,32 +115,6 @@ actual CSG boolean evaluation), drag-and-drop hierarchy reparenting, and animati
 | `dad11b0` | Full material editor in properties panel |
 | `20a784f` | Geometry section (primitive parameters) in properties panel |
 | `8856fba` | Replace hand-drawn SpriteBatch UI with Dear ImGui |
-
----
-
-## 4. Known Bugs and Limitations
-
-- **SHARP_RUNTIME rebuild workaround** — missing `<algorithm>` in SHARP_RUNTIME causes
-  rebuild failures. Workaround: `touch` the `.a` files before building. Being fixed
-  separately by another Claude Code instance working on CNA.
-
-- **Extrude path visualization** — All path types and cross-section types generate a correct
-  sweep mesh via `drawExtrudeDynamic`. Twist and caps honoured. Edge overlay now traces the
-  actual sweep wireframe (profile rings + spine lines) for all path types.
-
-- **CSG boolean evaluation not implemented** — Union/Difference/Intersection containers
-  render their children individually. No actual mesh boolean operations are performed.
-  The visual is informational only.
-
-- **No drag-and-drop reparenting** — objects can only be moved by deleting and re-adding
-  as children. Reparenting requires drag state + drop indicator in the hierarchy.
-
-- **`Mc3Object.visible` XML round-trip** — not verified by a unit test; should be confirmed.
-
-- **No CI pipeline** — tests run locally only.
-
-- **Single smoke test** — checks window opens and screenshot is non-empty. No unit tests
-  for XML serialisation, transform maths, or scene operations.
 
 ---
 
@@ -195,6 +151,8 @@ actual CSG boolean evaluation), drag-and-drop hierarchy reparenting, and animati
 - CNA API: use `getCurrentTechniqueProperty()` / `getPassesProperty()`.
 - `Color` has no default constructor — always init with 4 args: `Color(r, g, b, a)`.
 - Undo: call `pushUndo()` before any mutation of `document_` or object data.
+- **Pivot transform formula** (not yet applied):
+  `world = T(-pivot) * S * R * T(pos + pivot)` — see `mc3togltf/src/GltfExporter.cpp:328`.
 
 ### Boundaries to preserve
 - **No CNA changes without owner permission.** Another Claude Code instance handles CNA.
@@ -207,7 +165,7 @@ actual CSG boolean evaluation), drag-and-drop hierarchy reparenting, and animati
 ## 6. Useful Commands
 
 ```bash
-# Configure (first time only)
+# Configure (first time only — add -DFETCHCONTENT_UPDATES_DISCONNECTED=ON if no network)
 cmake -S . -B cmake-build-debug -DCMAKE_BUILD_TYPE=Debug -DMESH_CRAFT_GRAPHICS_BACKEND=EASYGL
 
 # Build (touch workaround required each time)
@@ -217,7 +175,7 @@ cmake --build cmake-build-debug --target MeshCraft -- -j$(nproc)
 # Run editor with a scene
 ./cmake-build-debug/MeshCraft test/house.mc3.xml
 
-# Run smoke test
+# Run all tests
 ctest --test-dir cmake-build-debug -V
 
 # Auto-screenshot (non-interactive, exits after ~2 s)
@@ -229,33 +187,58 @@ ctest --test-dir cmake-build-debug -V
 
 ---
 
-## 7. What Remains
+## 7. What Remains (priority order)
 
-### High priority
+### Bugs / correctness
 
-**A — Extrude path geometry rendering** ✅ DONE
-All path types and cross-sections now render via `drawExtrudeDynamic` (sweep mesh generated
-each frame). Edge overlay still uses bounding-box approximation for non-Line paths.
+**G — Pivot rendering** ⚡ Easy win, correctness bug
+Objects with `pivot ≠ (0,0,0)` render at wrong position/rotation in the viewport.
+`SceneRenderer::objectWorldMatrix()` must apply the pivot:
+```cpp
+// src/MeshCraft/Renderer/SceneRenderer.cpp — objectWorldMatrix()
+Matrix world =
+    Matrix::CreateTranslation({-t.pivot[0], -t.pivot[1], -t.pivot[2]}) *
+    Matrix::CreateScale({t.scale[0], t.scale[1], t.scale[2]}) *
+    Matrix::CreateFromYawPitchRoll(ry, rx, rz) *
+    Matrix::CreateTranslation({t.position[0]+t.pivot[0], t.position[1]+t.pivot[1], t.position[2]+t.pivot[2]});
+```
+Also add a **Pivot** DragFloat3 row in the Properties panel.
+**Files:** `SceneRenderer.cpp` (`objectWorldMatrix`), `MeshCraftApplication.cpp` (Properties)
+**Effort:** ~1 h
 
-**B — Drag-and-drop reparenting in hierarchy** ✅ DONE
-Drag any hierarchy row onto another node to reparent (becomes its last child). Drag to
-the empty footer area to move back to top-level. Cycle detection prevents invalid drops.
-Undo supported.
+**H — Extrude innerRadius rendering** ⚡ Easy win
+`drawExtrudeDynamic` ignores `Mc3CrossSection.innerRadius` — hollow pipes render solid.
+Fix: for Circle/Polygon cross-sections with `innerRadius > 0`, generate an inner profile ring
+and connect outer/inner rings with quads (no caps, or annular caps).
+**Files:** `SceneRenderer.cpp` (`drawExtrudeDynamic`, `makeProfile`)
+**Effort:** ~2 h
 
-### Lower priority / future
+### New features
+
+**I — Definitions panel**
+There's no way to create or edit reusable object definitions from the editor UI.
+Add a **Defs** tab (or sub-panel) showing `document_.definitions`, with Add/Remove buttons
+and an inline tree editor for the definition's root object.
+**Files:** `MeshCraftApplication.cpp` (left panel tabs)
+**Effort:** ~3–5 h
+
+**J — Multi-selection transform**
+When multiple objects are selected, the move/rotate/scale gizmo operates on the first
+selection only. Extend to apply the same delta to all selected objects.
+**Files:** `MeshCraftApplication.cpp` (gizmo drag handlers)
+**Effort:** ~2–3 h
+
+### Large scope / future
 
 **C — CSG boolean mesh evaluation**
 Actual Union / Difference / Intersection mesh computation. Requires an external geometry
 library (e.g. manifold or CGAL). Large scope; out of phase for now.
 **Effort:** ~20–30 h + library integration
 
-**D — XML round-trip unit tests** ✅ DONE
-`mc3/test/roundtrip_test.cpp` — 54 checks covering `visible`, `deform`, all five extrude path
-types (Line/Arc/Helix/Polyline/Bezier), all cross-section types, `csgOperation`, `isCutter`,
-group children, and a full parse of `test/features.mc3.xml`. Registered as `mc3_roundtrip` in CTest.
-
-**E — CI pipeline**
-GitHub Actions workflow that builds and runs ctest on push.
+**K — Texture rendering in viewport**
+All objects render with flat material color. Requires loading image files referenced by
+texture URIs and sampling them in the shader (or tinting by UV). Depends on CNA Texture2D API.
+**Effort:** ~10–15 h
 
 **F — Actions / States animation data model and editor**
 Out of scope for current phase.
