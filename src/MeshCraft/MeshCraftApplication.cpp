@@ -1316,6 +1316,55 @@ void MeshCraftApplication::drawImGuiUi(int screenW, int screenH) {
         // Tab: Scene hierarchy
         // -------------------------------------------------------------------
         if (ImGui::BeginTabItem("Scene")) {
+            // --- Drag-and-drop helpers (all operate on the full document_ tree) ---
+            std::function<std::shared_ptr<Mc3::Mc3Object>(
+                const std::vector<std::shared_ptr<Mc3::Mc3Object>>&,
+                const std::string&)> findObj;
+            findObj = [&](const auto& list, const std::string& id)
+                    -> std::shared_ptr<Mc3::Mc3Object> {
+                for (const auto& o : list) {
+                    if (o->id == id) return o;
+                    if (auto f = findObj(o->children, id)) return f;
+                }
+                return nullptr;
+            };
+
+            std::function<std::shared_ptr<Mc3::Mc3Object>(
+                std::vector<std::shared_ptr<Mc3::Mc3Object>>&,
+                const std::string&)> detachObj;
+            detachObj = [&](auto& list, const std::string& id)
+                    -> std::shared_ptr<Mc3::Mc3Object> {
+                for (auto it = list.begin(); it != list.end(); ++it) {
+                    if ((*it)->id == id) { auto r = *it; list.erase(it); return r; }
+                    if (auto f = detachObj((*it)->children, id)) return f;
+                }
+                return nullptr;
+            };
+
+            // Returns true if targetId is 'root' itself or any descendant
+            std::function<bool(const Mc3::Mc3Object&, const std::string&)> inSubtree;
+            inSubtree = [&](const Mc3::Mc3Object& root, const std::string& targetId) -> bool {
+                if (root.id == targetId) return true;
+                for (const auto& c : root.children)
+                    if (inSubtree(*c, targetId)) return true;
+                return false;
+            };
+
+            auto doReparent = [&](const std::string& dragId,
+                                  std::shared_ptr<Mc3::Mc3Object> newParent) {
+                auto dragged = findObj(document_.objects, dragId);
+                if (!dragged) return;
+                if (newParent && (newParent->id == dragId || inSubtree(*dragged, newParent->id)))
+                    return; // would create cycle
+                pushUndo();
+                detachObj(document_.objects, dragId);
+                if (newParent) newParent->children.push_back(dragged);
+                else           document_.objects.push_back(dragged);
+                modified_ = true;
+                updateWindowTitle();
+            };
+
+            // --- Hierarchy draw ---
             std::function<void(const std::vector<std::shared_ptr<Mc3::Mc3Object>>&)> drawHierarchy;
             drawHierarchy = [&](const std::vector<std::shared_ptr<Mc3::Mc3Object>>& list) {
                 for (const auto& obj : list) {
@@ -1327,7 +1376,6 @@ void MeshCraftApplication::drawImGuiUi(int screenW, int screenH) {
                     if (!hasChildren) flags |= ImGuiTreeNodeFlags_Leaf | ImGuiTreeNodeFlags_NoTreePushOnOpen;
                     if (sel)          flags |= ImGuiTreeNodeFlags_Selected;
 
-                    // Determine type prefix and node color
                     ImVec4 nodeColor = obj->visible ? ImVec4(1,1,1,1) : ImVec4(0.5f,0.5f,0.5f,1);
                     const char* typePrefix = "";
                     if      (obj->type == Mc3::ObjectType::Union)        { typePrefix = "[U] "; nodeColor = obj->visible ? ImVec4(0.3f,0.9f,0.3f,1) : ImVec4(0.2f,0.45f,0.2f,1); }
@@ -1339,6 +1387,19 @@ void MeshCraftApplication::drawImGuiUi(int screenW, int screenH) {
                     ImGui::PushStyleColor(ImGuiCol_Text, nodeColor);
                     bool nodeOpen = ImGui::TreeNodeEx(displayLabel.c_str(), flags);
                     ImGui::PopStyleColor();
+
+                    // Drag source
+                    if (ImGui::BeginDragDropSource(ImGuiDragDropFlags_None)) {
+                        ImGui::SetDragDropPayload("MC3_OBJ", obj->id.c_str(), obj->id.size() + 1);
+                        ImGui::Text("%s", displayLabel.c_str());
+                        ImGui::EndDragDropSource();
+                    }
+                    // Drop target: dragged object becomes last child of this obj
+                    if (ImGui::BeginDragDropTarget()) {
+                        if (const ImGuiPayload* pl = ImGui::AcceptDragDropPayload("MC3_OBJ"))
+                            doReparent(std::string(static_cast<const char*>(pl->Data)), obj);
+                        ImGui::EndDragDropTarget();
+                    }
 
                     if (ImGui::IsItemClicked() && !ImGui::IsItemToggledOpen()) {
                         bool ctrl = ImGui::GetIO().KeyCtrl;
@@ -1363,6 +1424,20 @@ void MeshCraftApplication::drawImGuiUi(int screenW, int screenH) {
                 }
             };
             drawHierarchy(document_.objects);
+
+            // Root-level drop zone: drag here to make object a top-level item
+            ImGui::Dummy(ImVec2(-1.0f, 10.0f));
+            if (ImGui::BeginDragDropTarget()) {
+                if (const ImGuiPayload* pl = ImGui::AcceptDragDropPayload("MC3_OBJ")) {
+                    std::string dragId(static_cast<const char*>(pl->Data));
+                    bool alreadyRoot = false;
+                    for (const auto& o : document_.objects)
+                        if (o->id == dragId) { alreadyRoot = true; break; }
+                    if (!alreadyRoot) doReparent(dragId, nullptr);
+                }
+                ImGui::EndDragDropTarget();
+            }
+
             ImGui::EndTabItem();
         }
 

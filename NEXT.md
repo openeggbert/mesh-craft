@@ -117,7 +117,8 @@ actual CSG boolean evaluation), drag-and-drop hierarchy reparenting, and animati
 
 | Commit | Change |
 |-----------|-------------------------------------------------------------------------|
-| *(staged)* | Extrude path rendering: Arc, Helix, Polyline, Bezier, Custom cross-section — runtime sweep mesh |
+| *(staged)* | Drag-and-drop reparenting in hierarchy; drop onto node = last child, drop on footer = root |
+| `27eb2b1` | Extrude path rendering: Arc, Helix, Polyline, Bezier, Custom cross-section — runtime sweep mesh |
 | `77451d6` | Edge overlay: black wireframe lines over all visible objects; Alt+W / View menu / toolbar Edges button |
 | `7a6057b` | CSG visualization: Add menu, hierarchy badges, properties panel, viewport gizmos |
 | `771e6e1` | Extrude editor in properties panel; fix extrude XML serialization |
@@ -235,11 +236,10 @@ ctest --test-dir cmake-build-debug -V
 All path types and cross-sections now render via `drawExtrudeDynamic` (sweep mesh generated
 each frame). Edge overlay still uses bounding-box approximation for non-Line paths.
 
-**B — Drag-and-drop reparenting in hierarchy**
-Left-press + drag a hierarchy row onto another to reparent. Needs drag-pending state,
-drop indicator rendering, and tree mutation on release.
-**Files:** `src/MeshCraft/MeshCraftApplication.cpp` (Scene tab, hierarchy lambda)
-**Effort:** ~3–5 h
+**B — Drag-and-drop reparenting in hierarchy** ✅ DONE
+Drag any hierarchy row onto another node to reparent (becomes its last child). Drag to
+the empty footer area to move back to top-level. Cycle detection prevents invalid drops.
+Undo supported.
 
 ### Lower priority / future
 
