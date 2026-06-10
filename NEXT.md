@@ -12,10 +12,11 @@ The output pipeline exports to `.glb` via the `mc3togltf` converter.
 **Main goal:** A fully usable desktop editor where a developer can build, edit, and export
 `.mc3.xml` scene files without hand-editing XML.
 
-**Current phase:** ~95 % of planned features implemented. All object types, all extrude
-paths/cross-sections, full light/camera/material/texture editors, drag-and-drop hierarchy,
-and XML round-trip tests are complete. Remaining work is pivot rendering, innerRadius
-hollow extrude, definitions panel, and CSG boolean evaluation.
+**Current phase:** ~99 % of planned features implemented. All object types, all extrude
+paths/cross-sections (including hollow tubes), full light/camera/material/texture/definitions
+editors, drag-and-drop hierarchy, pivot rendering, multi-selection gizmo, and XML round-trip
+tests are complete. Only large-scope optional features remain (CSG boolean, texture rendering,
+animation).
 
 **Key architectural decisions:**
 - Built on **CNA** — an XNA-like C++ framework (SDL3 + OpenGL ES 3.2 via EasyGL backend).
@@ -39,6 +40,8 @@ hollow extrude, definitions panel, and CSG boolean evaluation.
   touch cmake-build-debug/CNA_dep/SHARP_RUNTIME/libSHARP_RUNTIME.a cmake-build-debug/CNA_dep/libCNA.a
   ```
   (only needed when CNA sources were updated since last build; plain `.a` touch suffices otherwise)
+- **tinyxml2 duplicate target fix** in `mc3/CMakeLists.txt`: guards against `sharp-runtime`
+  also bundling tinyxml2; creates `tinyxml2::tinyxml2` alias when only the bare target exists.
 
 ### Tests
 - **2/2 tests pass** (`ctest --test-dir cmake-build-debug -V`):
@@ -59,13 +62,14 @@ hollow extrude, definitions panel, and CSG boolean evaluation.
 |---|---|
 | **File ops** | Load / Save / Save As / Export GLB |
 | **Primitives** | Box, Sphere, Cylinder, Cone, Plane — all params (size/radius/height/segments/axis) |
-| **Extrude** | All 5 path types (Line/Arc/Helix/Polyline/Bezier), all 4 cross-sections (Rect/Circle/Polygon/Custom), twist, segments, caps, innerRadius (UI + serialization) |
-| **CSG** | Union / Difference / Intersection + isCutter flag; gizmo overlays |
+| **Extrude** | All 5 path types (Line/Arc/Helix/Polyline/Bezier), all 4 cross-sections (Rect/Circle/Polygon/Custom), twist, segments, caps, innerRadius hollow tubes (UI + rendering + serialization) |
+| **CSG** | Union / Difference / Intersection + isCutter flag; viewport gizmo overlays |
 | **Group** | Create, expand/collapse, drag-and-drop reparenting, Ungroup |
 | **Instance** | Definition picker, material override |
+| **Definitions** | Create/rename/remove via Defs tab; rename propagates to all Instance references |
 | **Mesh** | URI field (viewport shows placeholder box) |
 | **Area** | Exists in scene graph; no special viewport representation |
-| **Transform** | Position / Rotation (XYZ Euler °) / Scale — DragFloat3 |
+| **Transform** | Position / Rotation (XYZ Euler °) / Scale / Pivot — all DragFloat3; pivot applied as T(-pivot)*S*R*T(pos+pivot) |
 | **Deform** | Non-uniform geometry scale (separate from transform.scale) |
 | **visible / collision / tags** | All editable in Properties panel |
 | **Lights** | Ambient / Directional / Point / Spot — all params incl. castShadows, falloff |
@@ -73,21 +77,22 @@ hollow extrude, definitions panel, and CSG boolean evaluation.
 | **Environment** | backgroundColor, backgroundTexture, fog (Linear/Exponential + all params) |
 | **Textures** | URI, wrapU/V (Repeat/Clamp/Mirror), filter (Linear/Nearest), colorSpace, mipMaps |
 | **Materials** | Full inline editor: baseColor RGBA, metallic, roughness, emissive, alphaMode, alphaCutoff, normalScale, occlusionStrength + 5 texture slots |
+| **Multi-selection** | Move/Scale/Rotate gizmo applies delta to all selected objects simultaneously |
 | **Serialization** | All fields listed above round-trip through XML (verified by 54 ctests) |
 
-### ⚠️ Partially covered / bugs
+### ⚠️ Partially covered
 
 | Issue | Detail |
 |---|---|
-| **Mesh viewport preview** | Mesh objects render as grey placeholder box regardless of `meshSource` URI. Fix would require a runtime OBJ/GLB loader in the editor (large scope) |
+| **Mesh viewport preview** | Mesh objects render as grey placeholder box regardless of `meshSource` URI. Requires a runtime OBJ/GLB loader — large scope. |
 
 ### ❌ Not implemented
 
 | Feature | Detail | Effort |
 |---|---|---|
-| **CSG boolean mesh evaluation** | Union/Difference/Intersection render children individually. Actual boolean mesh ops need an external library (e.g. manifold or CGAL). | ~20–30 h + library |
-| **Actions / States animation** | `Mc3Document.TODO: actions map` and `Mc3Object.TODO: states, actions` — not modelled in the data layer yet. | Large scope |
-| **Texture rendering in viewport** | All objects render with flat material color. Textures from `baseColorTexture` etc. are never sampled. | ~10–15 h |
+| **Texture rendering in viewport** | All objects render with flat material color. Requires loading images referenced by texture URIs and sampling in shader. Depends on CNA Texture2D API. | ~10–15 h |
+| **CSG boolean mesh evaluation** | Union/Difference/Intersection render children individually. Actual boolean ops need an external library (e.g. manifold or CGAL). | ~20–30 h + library |
+| **Actions / States animation** | Not modelled in the data layer yet. Out of scope for current phase. | Large scope |
 
 ---
 
@@ -95,25 +100,16 @@ hollow extrude, definitions panel, and CSG boolean evaluation.
 
 | Commit | Change |
 |-----------|-------------------------------------------------------------------------|
-| pending   | Definitions panel: Defs tab with Add/Remove, rename (fixes Instance refs), Name/Type/Transform editor |
-| pending   | Multi-selection gizmo: Move/Scale/Rotate delta applied to all selected objects |
-| pending   | Extrude innerRadius: hollow tube rendering (outer+inner walls, annular caps, inner edge overlay rings) |
-| pending   | Pivot rendering: apply T(-pivot)*S*R*T(pos+pivot) in objectWorldMatrix; Pivot DragFloat3 in Properties |
-| `23f3534` | Extrude edge overlay: traces actual sweep wireframe (rings + spines) for all path types |
+| `066ffa9` | Definitions panel: Defs tab with Add/Remove, rename (fixes all Instance refs), Name/Type/Transform editor |
+| `23d7f23` | Multi-selection gizmo: Move/Scale/Rotate delta applied to all selected objects; fix tinyxml2 duplicate CMake target |
+| `92ce20a` | Extrude innerRadius: hollow tube rendering — outer+inner walls, annular caps, inner edge overlay rings |
+| `ce87854` | Pivot rendering: T(-pivot)*S*R*T(pos+pivot) in objectWorldMatrix; Pivot DragFloat3 in Properties panel |
+| `23f3534` | Extrude edge overlay: trace actual sweep wireframe (rings + spines) for all path types |
 | `8f742db` | XML round-trip unit tests: 54 checks (visible, deform, extrude all paths, CSG, isCutter, groups) |
 | `e792e6d` | Drag-and-drop reparenting in hierarchy; drop onto node = last child, drop on footer = root |
-| `27eb2b1` | Extrude path rendering: Arc, Helix, Polyline, Bezier, Custom cross-section — runtime sweep mesh |
-| `77451d6` | Edge overlay: black wireframe lines over all visible objects; Alt+W / View menu / toolbar Edges button |
+| `27eb2b1` | Extrude path rendering: sweep mesh for all 5 path types and 4 cross-section types |
+| `77451d6` | Edge overlay: black wireframe lines over all visible objects; Alt+W / View menu / toolbar |
 | `7a6057b` | CSG visualization: Add menu, hierarchy badges, properties panel, viewport gizmos |
-| `771e6e1` | Extrude editor in properties panel; fix extrude XML serialization |
-| `097f19b` | Textures tab (left panel); fix texture serialization in XML writer |
-| `73403cd` | Area / Mesh / Instance types; type-specific properties sections |
-| `de89c2b` | Light and camera gizmos in viewport; Deform section in properties |
-| `8284603` | Cameras tab in left panel |
-| `5080c1b` | Environment tab in left panel |
-| `d9b7f7e` | Lights panel in left panel |
-| `dad11b0` | Full material editor in properties panel |
-| `20a784f` | Geometry section (primitive parameters) in properties panel |
 | `8856fba` | Replace hand-drawn SpriteBatch UI with Dear ImGui |
 
 ---
@@ -128,7 +124,7 @@ hollow extrude, definitions panel, and CSG boolean evaluation.
 | `SceneRenderer` | `src/MeshCraft/Renderer/SceneRenderer.cpp` | Renders MC3 objects + gizmos (translate/scale/rotate/lights/cameras/CSG) |
 | `GridRenderer` | `src/MeshCraft/Renderer/GridRenderer.cpp` | XYZ grid via `BasicEffect` + `VertexBuffer` |
 | `EditorCamera` | `include/MeshCraft/Editor/EditorCamera.hpp` | Orbit/pan/zoom/focus; yaw+pitch+distance model |
-| `SelectionManager` | `include/MeshCraft/Editor/SelectionManager.hpp` | Tracks selected `shared_ptr<Mc3Object>` |
+| `SelectionManager` | `include/MeshCraft/Editor/SelectionManager.hpp` | Tracks selected `shared_ptr<Mc3Object>` (supports multi-select) |
 | `TransformGizmo` | `include/MeshCraft/Editor/TransformGizmo.hpp` | `GizmoMode` + `GizmoAxis` + drag state |
 | `Mc3Document` | `mc3/` sublibrary | Pure C++ scene data; `loadFromFile` / `saveToFile` XML |
 | CNA | `../cna/` sibling repo | SDL3 window, GL context, BasicEffect, Input |
@@ -151,8 +147,9 @@ hollow extrude, definitions panel, and CSG boolean evaluation.
 - CNA API: use `getCurrentTechniqueProperty()` / `getPassesProperty()`.
 - `Color` has no default constructor — always init with 4 args: `Color(r, g, b, a)`.
 - Undo: call `pushUndo()` before any mutation of `document_` or object data.
-- **Pivot transform formula** (not yet applied):
-  `world = T(-pivot) * S * R * T(pos + pivot)` — see `mc3togltf/src/GltfExporter.cpp:328`.
+- Pivot transform formula (already applied): `world = T(-pivot) * S * R * T(pos + pivot)`.
+- `document_.definitions` is `std::map<std::string, shared_ptr<Mc3Object>>`. When renaming a
+  definition key, also walk all scene objects and update `Instance.definition` references.
 
 ### Boundaries to preserve
 - **No CNA changes without owner permission.** Another Claude Code instance handles CNA.
@@ -166,11 +163,15 @@ hollow extrude, definitions panel, and CSG boolean evaluation.
 
 ```bash
 # Configure (first time only — add -DFETCHCONTENT_UPDATES_DISCONNECTED=ON if no network)
-cmake -S . -B cmake-build-debug -DCMAKE_BUILD_TYPE=Debug -DMESH_CRAFT_GRAPHICS_BACKEND=EASYGL
+cmake -S . -B cmake-build-debug -DCMAKE_BUILD_TYPE=Debug -DMESH_CRAFT_GRAPHICS_BACKEND=EASYGL -DFETCHCONTENT_UPDATES_DISCONNECTED=ON
 
-# Build (touch workaround required each time)
+# Build (touch workaround required each time CNA sources changed)
 touch cmake-build-debug/CNA_dep/SHARP_RUNTIME/libSHARP_RUNTIME.a cmake-build-debug/CNA_dep/libCNA.a
 cmake --build cmake-build-debug --target MeshCraft -- -j$(nproc)
+
+# Full workaround when CNA .o files are also stale
+find cmake-build-debug/CNA_dep/CMakeFiles -name "*.o" -exec touch {} \;
+touch cmake-build-debug/CNA_dep/SHARP_RUNTIME/libSHARP_RUNTIME.a cmake-build-debug/CNA_dep/libCNA.a
 
 # Run editor with a scene
 ./cmake-build-debug/MeshCraft test/house.mc3.xml
@@ -189,38 +190,26 @@ ctest --test-dir cmake-build-debug -V
 
 ## 7. What Remains (priority order)
 
-### Bugs / correctness
+All originally-planned features are now implemented. Remaining items are optional enhancements.
 
-~~**G — Pivot rendering** — DONE~~
-Applied `world = T(-pivot) * S * R * T(pos + pivot)` in `objectWorldMatrix()`; Pivot DragFloat3 added in Properties panel.
+### Medium scope
 
-~~**H — Extrude innerRadius rendering** — DONE~~
-Circle/Polygon cross-sections with `innerRadius > 0` now render as hollow tubes: outer wall, inner wall (reversed winding), and annular caps. Edge overlay also shows inner rings.
+**L — Texture rendering in viewport** (~10–15 h)
+All objects render with flat material color. To show textures:
+1. Load image files at texture URIs using stb_image or a CNA Texture2D API.
+2. Bind textures per-material before each draw call.
+3. Pass UV coordinates through the vertex buffer (requires shader changes or a separate textured effect).
+**Files:** `SceneRenderer.cpp`, possibly CNA shader/effect layer.
 
-### New features
+### Large scope
 
-~~**I — Definitions panel** — DONE~~
-"Defs" tab added to the left panel: Add/Remove buttons, selectable list, inline editor
-for ID (with rename + Instance reference fixup), Name, Type, and Transform.
+**C — CSG boolean mesh evaluation** (~20–30 h + library)
+Union/Difference/Intersection currently render children individually; no actual boolean geometry.
+Requires integrating an external library (manifold is the most practical choice — MIT license,
+modern C++, header-friendly). Would replace `drawObject` for CSG nodes with a pre-computed mesh.
 
-~~**J — Multi-selection transform** — DONE~~
-Gizmo drag (Move/Scale/Rotate) now applies the same delta to all selected objects.
-Gizmo is still drawn at and referenced from the first selected object.
-
-### Large scope / future
-
-**C — CSG boolean mesh evaluation**
-Actual Union / Difference / Intersection mesh computation. Requires an external geometry
-library (e.g. manifold or CGAL). Large scope; out of phase for now.
-**Effort:** ~20–30 h + library integration
-
-**K — Texture rendering in viewport**
-All objects render with flat material color. Requires loading image files referenced by
-texture URIs and sampling them in the shader (or tinting by UV). Depends on CNA Texture2D API.
-**Effort:** ~10–15 h
-
-**F — Actions / States animation data model and editor**
-Out of scope for current phase.
+**F — Actions / States animation** (large scope, out of phase)
+`Mc3Document` has no actions/states data model yet. Needs data layer design first.
 
 ---
 
