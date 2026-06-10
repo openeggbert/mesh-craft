@@ -130,6 +130,12 @@ private:
                        const Microsoft::Xna::Framework::Matrix& projection,
                        Microsoft::Xna::Framework::Color color);
 
+    void drawExtrudeDynamic(const Mc3::Mc3Extrude& ex,
+                            const Microsoft::Xna::Framework::Matrix& world,
+                            const Microsoft::Xna::Framework::Matrix& view,
+                            const Microsoft::Xna::Framework::Matrix& projection,
+                            Microsoft::Xna::Framework::Color color);
+
     void drawLineList(const std::vector<Microsoft::Xna::Framework::Graphics::VertexPositionColor>& verts,
                       const Microsoft::Xna::Framework::Matrix& view,
                       const Microsoft::Xna::Framework::Matrix& projection);

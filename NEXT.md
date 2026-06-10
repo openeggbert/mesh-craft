@@ -117,7 +117,8 @@ actual CSG boolean evaluation), drag-and-drop hierarchy reparenting, and animati
 
 | Commit | Change |
 |-----------|-------------------------------------------------------------------------|
-| *(staged)* | Edge overlay: black wireframe lines over all visible objects; Alt+W / View menu / toolbar Edges button |
+| *(staged)* | Extrude path rendering: Arc, Helix, Polyline, Bezier, Custom cross-section — runtime sweep mesh |
+| `77451d6` | Edge overlay: black wireframe lines over all visible objects; Alt+W / View menu / toolbar Edges button |
 | `7a6057b` | CSG visualization: Add menu, hierarchy badges, properties panel, viewport gizmos |
 | `771e6e1` | Extrude editor in properties panel; fix extrude XML serialization |
 | `097f19b` | Textures tab (left panel); fix texture serialization in XML writer |
@@ -138,9 +139,10 @@ actual CSG boolean evaluation), drag-and-drop hierarchy reparenting, and animati
   rebuild failures. Workaround: `touch` the `.a` files before building. Being fixed
   separately by another Claude Code instance working on CNA.
 
-- **Extrude path visualization** — Arc, Helix, Polyline, Bezier, and Custom cross-section
-  extrusions render as a placeholder grey box. Only Line paths with Rect/Circle/Polygon
-  cross-sections are rendered correctly.
+- **Extrude path visualization** — All path types (Line, Arc, Helix, Polyline, Bezier) and all
+  cross-section types (Rect, Circle, Polygon, Custom) now generate a correct sweep mesh at
+  runtime via `drawExtrudeDynamic`. Twist and caps are honoured. Edge overlay still uses
+  bounding-box approximation for non-Line paths.
 
 - **CSG boolean evaluation not implemented** — Union/Difference/Intersection containers
   render their children individually. No actual mesh boolean operations are performed.
@@ -229,12 +231,9 @@ ctest --test-dir cmake-build-debug -V
 
 ### High priority
 
-**A — Extrude path geometry rendering**
-Arc, Helix, Polyline, and Bezier paths, plus Custom cross-sections, all currently render
-as a grey placeholder box. Correct rendering requires runtime mesh generation from path
-parameters. This is a viewport-only improvement (serialization already works correctly).
-**Files:** `src/MeshCraft/Renderer/SceneRenderer.cpp` (`drawObject`, Extrude case)
-**Effort:** ~4–8 h
+**A — Extrude path geometry rendering** ✅ DONE
+All path types and cross-sections now render via `drawExtrudeDynamic` (sweep mesh generated
+each frame). Edge overlay still uses bounding-box approximation for non-Line paths.
 
 **B — Drag-and-drop reparenting in hierarchy**
 Left-press + drag a hierarchy row onto another to reparent. Needs drag-pending state,
