@@ -117,7 +117,8 @@ actual CSG boolean evaluation), drag-and-drop hierarchy reparenting, and animati
 
 | Commit | Change |
 |-----------|-------------------------------------------------------------------------|
-| *(staged)* | XML round-trip unit tests: 54 checks (visible, deform, extrude all paths, CSG, isCutter, groups) |
+| *(staged)* | Extrude edge overlay: traces actual sweep wireframe (rings + spines) for all path types |
+| `8f742db` | XML round-trip unit tests: 54 checks (visible, deform, extrude all paths, CSG, isCutter, groups) |
 | `e792e6d` | Drag-and-drop reparenting in hierarchy; drop onto node = last child, drop on footer = root |
 | `27eb2b1` | Extrude path rendering: Arc, Helix, Polyline, Bezier, Custom cross-section — runtime sweep mesh |
 | `77451d6` | Edge overlay: black wireframe lines over all visible objects; Alt+W / View menu / toolbar Edges button |
@@ -141,10 +142,9 @@ actual CSG boolean evaluation), drag-and-drop hierarchy reparenting, and animati
   rebuild failures. Workaround: `touch` the `.a` files before building. Being fixed
   separately by another Claude Code instance working on CNA.
 
-- **Extrude path visualization** — All path types (Line, Arc, Helix, Polyline, Bezier) and all
-  cross-section types (Rect, Circle, Polygon, Custom) now generate a correct sweep mesh at
-  runtime via `drawExtrudeDynamic`. Twist and caps are honoured. Edge overlay still uses
-  bounding-box approximation for non-Line paths.
+- **Extrude path visualization** — All path types and cross-section types generate a correct
+  sweep mesh via `drawExtrudeDynamic`. Twist and caps honoured. Edge overlay now traces the
+  actual sweep wireframe (profile rings + spine lines) for all path types.
 
 - **CSG boolean evaluation not implemented** — Union/Difference/Intersection containers
   render their children individually. No actual mesh boolean operations are performed.

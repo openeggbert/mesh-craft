@@ -1342,35 +1342,60 @@ void SceneRenderer::drawObjectEdges(const Mc3Object& obj, const Mc3Document& doc
         break;
     }
     case ObjectType::Extrude: {
-        if (!obj.extrude) { drawWireShape(wireShapeBox_, world, view, proj, edgeColor); break; }
-        const auto& ex   = obj.extrude.value();
-        const auto& cs   = ex.crossSection;
-        const auto& path = ex.path;
-        float len = (path.type == ExtrudePathType::Line) ? path.length : 1.0f;
-        Matrix axisRot = Matrix::getIdentityProperty();
-        if (path.type == ExtrudePathType::Line) {
-            constexpr float pih = std::numbers::pi_v<float> * 0.5f;
-            if      (path.axis == "x") axisRot = Matrix::CreateRotationZ(pih);
-            else if (path.axis == "z") axisRot = Matrix::CreateRotationX(-pih);
+        if (!obj.extrude) { drawWireShape(wireShapeBox_, deform * world, view, proj, edgeColor); break; }
+        const auto& ex = obj.extrude.value();
+
+        // Cap segments for overlay quality (no need to match the solid mesh exactly)
+        int pathSegs = std::max(3, std::min(ex.segments, 20));
+        auto frames  = makePathFrames(ex.path, pathSegs);
+        auto profile = makeProfile(ex.crossSection);
+
+        int M = static_cast<int>(frames.size());
+        int N = static_cast<int>(profile.size());
+        if (M < 2 || N < 2) { drawWireShape(wireShapeBox_, deform * world, view, proj, edgeColor); break; }
+
+        float twistRad     = ex.twist * (std::numbers::pi_v<float> / 180.0f);
+        float twistPerStep = (M > 1) ? twistRad / (M - 1) : 0.0f;
+        Matrix localToWorld = deform * world;
+
+        // Compute profile vertex in world space, with slight outward push to avoid z-fighting
+        auto wpos = [&](int i, int j) -> Vector3 {
+            const auto& f = frames[i];
+            float angle = twistPerStep * i;
+            float ca = std::cos(angle), sa = std::sin(angle);
+            float u = (profile[j].u * ca - profile[j].v * sa) * kPush;
+            float v = (profile[j].u * sa + profile[j].v * ca) * kPush;
+            return Vector3::Transform(f.pos + f.nor * u + f.bi * v, localToWorld);
+        };
+
+        std::vector<VertexPositionColor> lines;
+
+        // Profile rings — show up to 20 evenly-spaced rings (always include first and last)
+        int ringStep = std::max(1, (M - 1) / 19);
+        for (int i = 0; i < M; i += ringStep) {
+            for (int j = 0; j < N; ++j) {
+                lines.push_back({ wpos(i, j),       edgeColor });
+                lines.push_back({ wpos(i, (j+1)%N), edgeColor });
+            }
         }
-        switch (cs.type) {
-        case CrossSectionType::Rect:
-            drawWireShape(wireShapeBox_,
-                Matrix::CreateScale({cs.width*kPush, len*kPush, cs.height*kPush}) * axisRot * world,
-                view, proj, edgeColor);
-            break;
-        case CrossSectionType::Circle:
-        case CrossSectionType::Polygon: {
-            float r = cs.radius * 2.0f;
-            drawWireShape(wireShapeCylinder_,
-                Matrix::CreateScale({r*kPush, len*kPush, r*kPush}) * axisRot * world,
-                view, proj, edgeColor);
-            break;
+        if ((M - 1) % ringStep != 0) {
+            for (int j = 0; j < N; ++j) {
+                lines.push_back({ wpos(M-1, j),       edgeColor });
+                lines.push_back({ wpos(M-1, (j+1)%N), edgeColor });
+            }
         }
-        default:
-            drawWireShape(wireShapeBox_, world, view, proj, edgeColor);
-            break;
+
+        // Spine lines along the path — min(N, 8) evenly-spaced profile points
+        int spineN = std::min(N, 8);
+        for (int s = 0; s < spineN; ++s) {
+            int j = s * N / spineN;
+            for (int i = 0; i < M-1; ++i) {
+                lines.push_back({ wpos(i,   j), edgeColor });
+                lines.push_back({ wpos(i+1, j), edgeColor });
+            }
         }
+
+        if (!lines.empty()) drawLineList(lines, view, proj);
         break;
     }
     default:
