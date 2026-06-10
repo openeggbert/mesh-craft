@@ -2043,6 +2043,20 @@ void MeshCraftApplication::drawImGuiUi(int screenW, int screenH) {
             }
         }
 
+        // Transform: pivot
+        ImGui::TextDisabled("Pivot");
+        {
+            float piv[3] = { sel0->transform.pivot[0], sel0->transform.pivot[1], sel0->transform.pivot[2] };
+            ImGui::SetNextItemWidth(-1);
+            if (ImGui::DragFloat3("##piv", piv, 0.1f)) {
+                if (ImGui::IsItemActivated()) pushUndo();
+                sel0->transform.pivot[0] = piv[0];
+                sel0->transform.pivot[1] = piv[1];
+                sel0->transform.pivot[2] = piv[2];
+                modified_ = true; updateWindowTitle();
+            }
+        }
+
         ImGui::Spacing();
         ImGui::Separator();
         ImGui::Spacing();

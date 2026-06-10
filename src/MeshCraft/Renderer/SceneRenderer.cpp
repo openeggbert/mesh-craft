@@ -473,9 +473,13 @@ Matrix SceneRenderer::objectWorldMatrix(const Mc3Object& obj) const {
     float ry = t.rotation[1] * (std::numbers::pi_v<float> / 180.0f);
     float rz = t.rotation[2] * (std::numbers::pi_v<float> / 180.0f);
 
-    Matrix world = Matrix::CreateScale({ t.scale[0], t.scale[1], t.scale[2] });
-    world = world * Matrix::CreateFromYawPitchRoll(ry, rx, rz);
-    world.setTranslationProperty({ t.position[0], t.position[1], t.position[2] });
+    // Pivot: world = T(-pivot) * S * R * T(pos + pivot)
+    float px = t.pivot[0], py = t.pivot[1], pz = t.pivot[2];
+    Matrix world =
+        Matrix::CreateTranslation({-px, -py, -pz}) *
+        Matrix::CreateScale({t.scale[0], t.scale[1], t.scale[2]}) *
+        Matrix::CreateFromYawPitchRoll(ry, rx, rz) *
+        Matrix::CreateTranslation({t.position[0] + px, t.position[1] + py, t.position[2] + pz});
     return world;
 }
 

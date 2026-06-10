@@ -79,7 +79,6 @@ hollow extrude, definitions panel, and CSG boolean evaluation.
 
 | Issue | Detail |
 |---|---|
-| **Pivot ignored in renderer** | `Mc3Transform.pivot` is parsed and written correctly, but `SceneRenderer::objectWorldMatrix()` doesn't apply it. Objects with non-zero `pivot` render at wrong position/rotation. Fix: `world = T(-pivot) * S * R * T(pos + pivot)` |
 | **Extrude innerRadius not rendered** | `Mc3CrossSection.innerRadius` is editable in the UI and serializes correctly, but `drawExtrudeDynamic` sweeps a solid profile — hollow pipes/tubes render solid. Fix: generate two concentric profile rings and connect with quads |
 | **Mesh viewport preview** | Mesh objects render as grey placeholder box regardless of `meshSource` URI. Fix would require a runtime OBJ/GLB loader in the editor (large scope) |
 
@@ -99,6 +98,7 @@ hollow extrude, definitions panel, and CSG boolean evaluation.
 
 | Commit | Change |
 |-----------|-------------------------------------------------------------------------|
+| pending   | Pivot rendering: apply T(-pivot)*S*R*T(pos+pivot) in objectWorldMatrix; Pivot DragFloat3 in Properties |
 | `23f3534` | Extrude edge overlay: traces actual sweep wireframe (rings + spines) for all path types |
 | `8f742db` | XML round-trip unit tests: 54 checks (visible, deform, extrude all paths, CSG, isCutter, groups) |
 | `e792e6d` | Drag-and-drop reparenting in hierarchy; drop onto node = last child, drop on footer = root |
@@ -191,20 +191,8 @@ ctest --test-dir cmake-build-debug -V
 
 ### Bugs / correctness
 
-**G — Pivot rendering** ⚡ Easy win, correctness bug
-Objects with `pivot ≠ (0,0,0)` render at wrong position/rotation in the viewport.
-`SceneRenderer::objectWorldMatrix()` must apply the pivot:
-```cpp
-// src/MeshCraft/Renderer/SceneRenderer.cpp — objectWorldMatrix()
-Matrix world =
-    Matrix::CreateTranslation({-t.pivot[0], -t.pivot[1], -t.pivot[2]}) *
-    Matrix::CreateScale({t.scale[0], t.scale[1], t.scale[2]}) *
-    Matrix::CreateFromYawPitchRoll(ry, rx, rz) *
-    Matrix::CreateTranslation({t.position[0]+t.pivot[0], t.position[1]+t.pivot[1], t.position[2]+t.pivot[2]});
-```
-Also add a **Pivot** DragFloat3 row in the Properties panel.
-**Files:** `SceneRenderer.cpp` (`objectWorldMatrix`), `MeshCraftApplication.cpp` (Properties)
-**Effort:** ~1 h
+~~**G — Pivot rendering** — DONE~~
+Applied `world = T(-pivot) * S * R * T(pos + pivot)` in `objectWorldMatrix()`; Pivot DragFloat3 added in Properties panel.
 
 **H — Extrude innerRadius rendering** ⚡ Easy win
 `drawExtrudeDynamic` ignores `Mc3CrossSection.innerRadius` — hollow pipes render solid.
