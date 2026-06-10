@@ -79,7 +79,6 @@ hollow extrude, definitions panel, and CSG boolean evaluation.
 
 | Issue | Detail |
 |---|---|
-| **Extrude innerRadius not rendered** | `Mc3CrossSection.innerRadius` is editable in the UI and serializes correctly, but `drawExtrudeDynamic` sweeps a solid profile — hollow pipes/tubes render solid. Fix: generate two concentric profile rings and connect with quads |
 | **Mesh viewport preview** | Mesh objects render as grey placeholder box regardless of `meshSource` URI. Fix would require a runtime OBJ/GLB loader in the editor (large scope) |
 
 ### ❌ Not implemented
@@ -98,6 +97,7 @@ hollow extrude, definitions panel, and CSG boolean evaluation.
 
 | Commit | Change |
 |-----------|-------------------------------------------------------------------------|
+| pending   | Extrude innerRadius: hollow tube rendering (outer+inner walls, annular caps, inner edge overlay rings) |
 | pending   | Pivot rendering: apply T(-pivot)*S*R*T(pos+pivot) in objectWorldMatrix; Pivot DragFloat3 in Properties |
 | `23f3534` | Extrude edge overlay: traces actual sweep wireframe (rings + spines) for all path types |
 | `8f742db` | XML round-trip unit tests: 54 checks (visible, deform, extrude all paths, CSG, isCutter, groups) |
@@ -194,12 +194,8 @@ ctest --test-dir cmake-build-debug -V
 ~~**G — Pivot rendering** — DONE~~
 Applied `world = T(-pivot) * S * R * T(pos + pivot)` in `objectWorldMatrix()`; Pivot DragFloat3 added in Properties panel.
 
-**H — Extrude innerRadius rendering** ⚡ Easy win
-`drawExtrudeDynamic` ignores `Mc3CrossSection.innerRadius` — hollow pipes render solid.
-Fix: for Circle/Polygon cross-sections with `innerRadius > 0`, generate an inner profile ring
-and connect outer/inner rings with quads (no caps, or annular caps).
-**Files:** `SceneRenderer.cpp` (`drawExtrudeDynamic`, `makeProfile`)
-**Effort:** ~2 h
+~~**H — Extrude innerRadius rendering** — DONE~~
+Circle/Polygon cross-sections with `innerRadius > 0` now render as hollow tubes: outer wall, inner wall (reversed winding), and annular caps. Edge overlay also shows inner rings.
 
 ### New features
 

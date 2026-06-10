@@ -1164,12 +1164,18 @@ void SceneRenderer::drawExtrudeDynamic(const Mc3Extrude& ex,
     int N = static_cast<int>(profile.size());
     if (M < 2 || N < 3) { drawMesh(unitBox_, world, view, proj, color); return; }
 
+    bool hollow = (ex.crossSection.innerRadius > 0.0f) &&
+                  (ex.crossSection.type == CrossSectionType::Circle ||
+                   ex.crossSection.type == CrossSectionType::Polygon);
+    float innerScale = hollow ? (ex.crossSection.innerRadius / ex.crossSection.radius) : 0.0f;
+
     float twistRad     = ex.twist * (std::numbers::pi_v<float> / 180.0f);
     float twistPerStep = (M > 1) ? twistRad / (M - 1) : 0.0f;
 
     std::vector<VertexPositionColor> verts;
-    verts.reserve(M * N + 2);
+    verts.reserve(hollow ? 2*M*N : M*N + 2);
 
+    // Outer rings
     for (int i = 0; i < M; ++i) {
         const auto& f = frames[i];
         float angle = twistPerStep * i;
@@ -1181,39 +1187,99 @@ void SceneRenderer::drawExtrudeDynamic(const Mc3Extrude& ex,
         }
     }
 
-    int botCtrIdx = static_cast<int>(verts.size());
-    verts.push_back({ frames[0].pos,   color });
-    int topCtrIdx = static_cast<int>(verts.size());
-    verts.push_back({ frames[M-1].pos, color });
+    int innerBase = static_cast<int>(verts.size());
+    int botCtrIdx = -1, topCtrIdx = -1;
+
+    if (hollow) {
+        // Inner rings (scaled to innerRadius)
+        for (int i = 0; i < M; ++i) {
+            const auto& f = frames[i];
+            float angle = twistPerStep * i;
+            float ca = std::cos(angle), sa = std::sin(angle);
+            for (int j = 0; j < N; ++j) {
+                float u = profile[j].u * innerScale * ca - profile[j].v * innerScale * sa;
+                float v = profile[j].u * innerScale * sa + profile[j].v * innerScale * ca;
+                verts.push_back({ f.pos + f.nor * u + f.bi * v, color });
+            }
+        }
+    } else {
+        botCtrIdx = static_cast<int>(verts.size());
+        verts.push_back({ frames[0].pos,   color });
+        topCtrIdx = static_cast<int>(verts.size());
+        verts.push_back({ frames[M-1].pos, color });
+    }
 
     std::vector<uint16_t> indices;
-    indices.reserve((M-1)*N*6 + (ex.caps ? N*6 : 0));
+    indices.reserve(hollow ? (M-1)*N*12 + (ex.caps ? N*12 : 0)
+                           : (M-1)*N*6  + (ex.caps ? N*6  : 0));
 
-    auto vi = [N](int ring, int pt) -> uint16_t {
+    auto oVi = [N](int ring, int pt) -> uint16_t {
         return static_cast<uint16_t>(ring * N + pt % N);
     };
+    auto iVi = [N, innerBase](int ring, int pt) -> uint16_t {
+        return static_cast<uint16_t>(innerBase + ring * N + pt % N);
+    };
 
+    // Outer wall
     for (int i = 0; i < M-1; ++i) {
         for (int j = 0; j < N; ++j) {
             int j1 = (j+1) % N;
-            indices.push_back(vi(i,   j));
-            indices.push_back(vi(i+1, j));
-            indices.push_back(vi(i,   j1));
-            indices.push_back(vi(i+1, j));
-            indices.push_back(vi(i+1, j1));
-            indices.push_back(vi(i,   j1));
+            indices.push_back(oVi(i,   j));
+            indices.push_back(oVi(i+1, j));
+            indices.push_back(oVi(i,   j1));
+            indices.push_back(oVi(i+1, j));
+            indices.push_back(oVi(i+1, j1));
+            indices.push_back(oVi(i,   j1));
         }
     }
-    if (ex.caps) {
-        for (int j = 0; j < N; ++j) {
-            indices.push_back(static_cast<uint16_t>(botCtrIdx));
-            indices.push_back(vi(0, (j+1)%N));
-            indices.push_back(vi(0, j));
+
+    if (hollow) {
+        // Inner wall (reversed winding so normals face inward)
+        for (int i = 0; i < M-1; ++i) {
+            for (int j = 0; j < N; ++j) {
+                int j1 = (j+1) % N;
+                indices.push_back(iVi(i,   j));
+                indices.push_back(iVi(i,   j1));
+                indices.push_back(iVi(i+1, j));
+                indices.push_back(iVi(i+1, j));
+                indices.push_back(iVi(i,   j1));
+                indices.push_back(iVi(i+1, j1));
+            }
         }
-        for (int j = 0; j < N; ++j) {
-            indices.push_back(static_cast<uint16_t>(topCtrIdx));
-            indices.push_back(vi(M-1, j));
-            indices.push_back(vi(M-1, (j+1)%N));
+        if (ex.caps) {
+            // Bottom annular cap (facing -path direction)
+            for (int j = 0; j < N; ++j) {
+                int j1 = (j+1) % N;
+                indices.push_back(oVi(0, j));
+                indices.push_back(oVi(0, j1));
+                indices.push_back(iVi(0, j1));
+                indices.push_back(oVi(0, j));
+                indices.push_back(iVi(0, j1));
+                indices.push_back(iVi(0, j));
+            }
+            // Top annular cap (facing +path direction)
+            for (int j = 0; j < N; ++j) {
+                int j1 = (j+1) % N;
+                indices.push_back(oVi(M-1, j));
+                indices.push_back(iVi(M-1, j));
+                indices.push_back(iVi(M-1, j1));
+                indices.push_back(oVi(M-1, j));
+                indices.push_back(iVi(M-1, j1));
+                indices.push_back(oVi(M-1, j1));
+            }
+        }
+    } else {
+        if (ex.caps) {
+            for (int j = 0; j < N; ++j) {
+                indices.push_back(static_cast<uint16_t>(botCtrIdx));
+                indices.push_back(oVi(0, (j+1)%N));
+                indices.push_back(oVi(0, j));
+            }
+            for (int j = 0; j < N; ++j) {
+                indices.push_back(static_cast<uint16_t>(topCtrIdx));
+                indices.push_back(oVi(M-1, j));
+                indices.push_back(oVi(M-1, (j+1)%N));
+            }
         }
     }
 
@@ -1358,18 +1424,29 @@ void SceneRenderer::drawObjectEdges(const Mc3Object& obj, const Mc3Document& doc
         int N = static_cast<int>(profile.size());
         if (M < 2 || N < 2) { drawWireShape(wireShapeBox_, deform * world, view, proj, edgeColor); break; }
 
+        bool hollow = (ex.crossSection.innerRadius > 0.0f) &&
+                      (ex.crossSection.type == CrossSectionType::Circle ||
+                       ex.crossSection.type == CrossSectionType::Polygon);
+        float innerScale = hollow ? (ex.crossSection.innerRadius / ex.crossSection.radius) : 0.0f;
+
         float twistRad     = ex.twist * (std::numbers::pi_v<float> / 180.0f);
         float twistPerStep = (M > 1) ? twistRad / (M - 1) : 0.0f;
         Matrix localToWorld = deform * world;
 
-        // Compute profile vertex in world space, with slight outward push to avoid z-fighting
-        auto wpos = [&](int i, int j) -> Vector3 {
+        auto wposScaled = [&](int i, int j, float scale) -> Vector3 {
             const auto& f = frames[i];
             float angle = twistPerStep * i;
             float ca = std::cos(angle), sa = std::sin(angle);
-            float u = (profile[j].u * ca - profile[j].v * sa) * kPush;
-            float v = (profile[j].u * sa + profile[j].v * ca) * kPush;
+            float u = (profile[j].u * ca - profile[j].v * sa) * scale;
+            float v = (profile[j].u * sa + profile[j].v * ca) * scale;
             return Vector3::Transform(f.pos + f.nor * u + f.bi * v, localToWorld);
+        };
+
+        auto wpos = [&](int i, int j) -> Vector3 {
+            return wposScaled(i, j, kPush);
+        };
+        auto wposInner = [&](int i, int j) -> Vector3 {
+            return wposScaled(i, j, innerScale);
         };
 
         std::vector<VertexPositionColor> lines;
@@ -1381,11 +1458,23 @@ void SceneRenderer::drawObjectEdges(const Mc3Object& obj, const Mc3Document& doc
                 lines.push_back({ wpos(i, j),       edgeColor });
                 lines.push_back({ wpos(i, (j+1)%N), edgeColor });
             }
+            if (hollow) {
+                for (int j = 0; j < N; ++j) {
+                    lines.push_back({ wposInner(i, j),       edgeColor });
+                    lines.push_back({ wposInner(i, (j+1)%N), edgeColor });
+                }
+            }
         }
         if ((M - 1) % ringStep != 0) {
             for (int j = 0; j < N; ++j) {
                 lines.push_back({ wpos(M-1, j),       edgeColor });
                 lines.push_back({ wpos(M-1, (j+1)%N), edgeColor });
+            }
+            if (hollow) {
+                for (int j = 0; j < N; ++j) {
+                    lines.push_back({ wposInner(M-1, j),       edgeColor });
+                    lines.push_back({ wposInner(M-1, (j+1)%N), edgeColor });
+                }
             }
         }
 
@@ -1396,6 +1485,10 @@ void SceneRenderer::drawObjectEdges(const Mc3Object& obj, const Mc3Document& doc
             for (int i = 0; i < M-1; ++i) {
                 lines.push_back({ wpos(i,   j), edgeColor });
                 lines.push_back({ wpos(i+1, j), edgeColor });
+                if (hollow) {
+                    lines.push_back({ wposInner(i,   j), edgeColor });
+                    lines.push_back({ wposInner(i+1, j), edgeColor });
+                }
             }
         }
 
