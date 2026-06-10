@@ -518,8 +518,10 @@ void MeshCraftApplication::handleMouseInput(const MouseState& ms, const MouseSta
         float axScrX = tx - cx, axScrY = ty - cy;
         float len2d  = std::sqrt(axScrX*axScrX + axScrY*axScrY);
         if (len2d > 0.5f) {
-            float dot = dx * (axScrX/len2d) + dy * (axScrY/len2d);
-            sel0->transform.position[axIdx] += dot * L / len2d;
+            float delta = dx * (axScrX/len2d) + dy * (axScrY/len2d);
+            delta *= L / len2d;
+            for (const auto& s : selection_.selection())
+                s->transform.position[axIdx] += delta;
             modified_ = true;
             updateWindowTitle();
         }
@@ -554,9 +556,11 @@ void MeshCraftApplication::handleMouseInput(const MouseState& ms, const MouseSta
         float axScrX = tx - cx, axScrY = ty - cy;
         float len3d  = std::sqrt(axScrX*axScrX + axScrY*axScrY);
         if (len3d > 0.5f) {
-            float dot = dx * (axScrX/len3d) + dy * (axScrY/len3d);
-            float& s = sel0->transform.scale[axIdx];
-            s = std::max(0.01f, s + dot / len3d);
+            float delta = (dx * (axScrX/len3d) + dy * (axScrY/len3d)) / len3d;
+            for (const auto& s : selection_.selection()) {
+                float& sc = s->transform.scale[axIdx];
+                sc = std::max(0.01f, sc + delta);
+            }
             modified_ = true;
             updateWindowTitle();
         }
@@ -596,9 +600,10 @@ void MeshCraftApplication::handleMouseInput(const MouseState& ms, const MouseSta
         float radLen = std::sqrt(radX*radX + radY*radY);
         if (radLen > 2.0f) {
             float tx = -radY/radLen, ty = radX/radLen;
-            float dot = dx * tx + dy * ty;
             float degsPerPixel = 180.0f / (std::numbers::pi_v<float> * r_screen);
-            sel0->transform.rotation[axIdx] += dot * degsPerPixel;
+            float delta = (dx * tx + dy * ty) * degsPerPixel;
+            for (const auto& s : selection_.selection())
+                s->transform.rotation[axIdx] += delta;
             modified_ = true;
             updateWindowTitle();
         }

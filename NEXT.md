@@ -89,7 +89,6 @@ hollow extrude, definitions panel, and CSG boolean evaluation.
 | **CSG boolean mesh evaluation** | Union/Difference/Intersection render children individually. Actual boolean mesh ops need an external library (e.g. manifold or CGAL). | ~20–30 h + library |
 | **Actions / States animation** | `Mc3Document.TODO: actions map` and `Mc3Object.TODO: states, actions` — not modelled in the data layer yet. | Large scope |
 | **Texture rendering in viewport** | All objects render with flat material color. Textures from `baseColorTexture` etc. are never sampled. | ~10–15 h |
-| **Multi-selection transform** | When multiple objects are selected the gizmo and Properties panel show/operate only on the first selected object. | ~3 h |
 
 ---
 
@@ -97,6 +96,7 @@ hollow extrude, definitions panel, and CSG boolean evaluation.
 
 | Commit | Change |
 |-----------|-------------------------------------------------------------------------|
+| pending   | Multi-selection gizmo: Move/Scale/Rotate delta applied to all selected objects |
 | pending   | Extrude innerRadius: hollow tube rendering (outer+inner walls, annular caps, inner edge overlay rings) |
 | pending   | Pivot rendering: apply T(-pivot)*S*R*T(pos+pivot) in objectWorldMatrix; Pivot DragFloat3 in Properties |
 | `23f3534` | Extrude edge overlay: traces actual sweep wireframe (rings + spines) for all path types |
@@ -206,11 +206,9 @@ and an inline tree editor for the definition's root object.
 **Files:** `MeshCraftApplication.cpp` (left panel tabs)
 **Effort:** ~3–5 h
 
-**J — Multi-selection transform**
-When multiple objects are selected, the move/rotate/scale gizmo operates on the first
-selection only. Extend to apply the same delta to all selected objects.
-**Files:** `MeshCraftApplication.cpp` (gizmo drag handlers)
-**Effort:** ~2–3 h
+~~**J — Multi-selection transform** — DONE~~
+Gizmo drag (Move/Scale/Rotate) now applies the same delta to all selected objects.
+Gizmo is still drawn at and referenced from the first selected object.
 
 ### Large scope / future
 

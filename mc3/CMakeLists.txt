@@ -11,7 +11,7 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 
 include(FetchContent)
 
-if(NOT TARGET tinyxml2::tinyxml2)
+if(NOT TARGET tinyxml2 AND NOT TARGET tinyxml2::tinyxml2)
     FetchContent_Declare(
         tinyxml2
         GIT_REPOSITORY https://github.com/leethomason/tinyxml2.git
@@ -19,6 +19,10 @@ if(NOT TARGET tinyxml2::tinyxml2)
     )
     set(tinyxml2_BUILD_TESTING OFF CACHE BOOL "" FORCE)
     FetchContent_MakeAvailable(tinyxml2)
+endif()
+# Alias so Mc3 can always link tinyxml2::tinyxml2 regardless of where the target came from
+if(TARGET tinyxml2 AND NOT TARGET tinyxml2::tinyxml2)
+    add_library(tinyxml2::tinyxml2 ALIAS tinyxml2)
 endif()
 
 # -----------------------------------------------------------------------------
