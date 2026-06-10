@@ -33,6 +33,7 @@ SceneRenderer::SceneRenderer(GraphicsDevice& device)
     buildUnitCone(12);
     buildUnitPlane();
     buildWireBox();
+    buildWireShapes(16);
 }
 
 // ---------------------------------------------------------------------------
@@ -218,6 +219,92 @@ void SceneRenderer::buildWireBox() {
     wireBoxLineCount_ = 12;
     wireBoxVB_ = std::make_unique<VertexBuffer>(device_, static_cast<int>(verts.size()));
     wireBoxVB_->SetData(verts.data(), static_cast<int>(verts.size()));
+}
+
+void SceneRenderer::buildWireShapes(int segments) {
+    // Box: 12 edges
+    {
+        static const float P[][3] = {
+            {-0.5f,-0.5f,-0.5f},{0.5f,-0.5f,-0.5f},{0.5f,0.5f,-0.5f},{-0.5f,0.5f,-0.5f},
+            {-0.5f,-0.5f, 0.5f},{0.5f,-0.5f, 0.5f},{0.5f,0.5f, 0.5f},{-0.5f,0.5f, 0.5f},
+        };
+        static const int E[][2] = {
+            {0,1},{1,2},{2,3},{3,0},{4,5},{5,6},{6,7},{7,4},{0,4},{1,5},{2,6},{3,7}
+        };
+        for (auto& e : E) {
+            wireShapeBox_.positions.push_back({P[e[0]][0],P[e[0]][1],P[e[0]][2]});
+            wireShapeBox_.positions.push_back({P[e[1]][0],P[e[1]][1],P[e[1]][2]});
+            wireShapeBox_.lineCount++;
+        }
+    }
+
+    // Sphere: 3 great circles (XY, XZ, YZ planes)
+    {
+        int N = segments;
+        for (int plane = 0; plane < 3; ++plane) {
+            for (int i = 0; i < N; ++i) {
+                float a0 = 2.0f * std::numbers::pi_v<float> * i     / N;
+                float a1 = 2.0f * std::numbers::pi_v<float> * (i+1) / N;
+                float c0 = 0.5f*std::cos(a0), s0 = 0.5f*std::sin(a0);
+                float c1 = 0.5f*std::cos(a1), s1 = 0.5f*std::sin(a1);
+                Vector3 v0, v1;
+                if      (plane == 0) { v0={c0,s0,0};  v1={c1,s1,0};  }  // XY
+                else if (plane == 1) { v0={c0,0,s0};  v1={c1,0,s1};  }  // XZ
+                else                 { v0={0,c0,s0};  v1={0,c1,s1};  }  // YZ
+                wireShapeSphere_.positions.push_back(v0);
+                wireShapeSphere_.positions.push_back(v1);
+                wireShapeSphere_.lineCount++;
+            }
+        }
+    }
+
+    // Cylinder: bottom ring + top ring + 4 vertical lines
+    {
+        int N = segments;
+        for (int i = 0; i < N; ++i) {
+            float a0 = 2.0f*std::numbers::pi_v<float>*i    /N;
+            float a1 = 2.0f*std::numbers::pi_v<float>*(i+1)/N;
+            wireShapeCylinder_.positions.push_back({0.5f*std::cos(a0),-0.5f,0.5f*std::sin(a0)});
+            wireShapeCylinder_.positions.push_back({0.5f*std::cos(a1),-0.5f,0.5f*std::sin(a1)});
+            wireShapeCylinder_.lineCount++;
+            wireShapeCylinder_.positions.push_back({0.5f*std::cos(a0), 0.5f,0.5f*std::sin(a0)});
+            wireShapeCylinder_.positions.push_back({0.5f*std::cos(a1), 0.5f,0.5f*std::sin(a1)});
+            wireShapeCylinder_.lineCount++;
+        }
+        for (int i = 0; i < 4; ++i) {
+            float a = 2.0f*std::numbers::pi_v<float>*i/4;
+            float x = 0.5f*std::cos(a), z = 0.5f*std::sin(a);
+            wireShapeCylinder_.positions.push_back({x,-0.5f,z});
+            wireShapeCylinder_.positions.push_back({x, 0.5f,z});
+            wireShapeCylinder_.lineCount++;
+        }
+    }
+
+    // Cone: bottom ring + 4 lines to apex
+    {
+        int N = segments;
+        for (int i = 0; i < N; ++i) {
+            float a0 = 2.0f*std::numbers::pi_v<float>*i    /N;
+            float a1 = 2.0f*std::numbers::pi_v<float>*(i+1)/N;
+            wireShapeCone_.positions.push_back({0.5f*std::cos(a0),-0.5f,0.5f*std::sin(a0)});
+            wireShapeCone_.positions.push_back({0.5f*std::cos(a1),-0.5f,0.5f*std::sin(a1)});
+            wireShapeCone_.lineCount++;
+        }
+        for (int i = 0; i < 4; ++i) {
+            float a = 2.0f*std::numbers::pi_v<float>*i/4;
+            wireShapeCone_.positions.push_back({0.5f*std::cos(a),-0.5f,0.5f*std::sin(a)});
+            wireShapeCone_.positions.push_back({0.0f, 0.5f, 0.0f});
+            wireShapeCone_.lineCount++;
+        }
+    }
+
+    // Plane: 4 boundary edges
+    {
+        wireShapePlane_.positions.push_back({-0.5f,0,-0.5f}); wireShapePlane_.positions.push_back({ 0.5f,0,-0.5f}); wireShapePlane_.lineCount++;
+        wireShapePlane_.positions.push_back({ 0.5f,0,-0.5f}); wireShapePlane_.positions.push_back({ 0.5f,0, 0.5f}); wireShapePlane_.lineCount++;
+        wireShapePlane_.positions.push_back({ 0.5f,0, 0.5f}); wireShapePlane_.positions.push_back({-0.5f,0, 0.5f}); wireShapePlane_.lineCount++;
+        wireShapePlane_.positions.push_back({-0.5f,0, 0.5f}); wireShapePlane_.positions.push_back({-0.5f,0,-0.5f}); wireShapePlane_.lineCount++;
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -899,6 +986,151 @@ void SceneRenderer::drawCsgGizmos(const Mc3::Mc3Document& doc,
 
     if (!lines.empty())
         drawLineList(lines, view, proj);
+}
+
+// ---------------------------------------------------------------------------
+// Edge overlay
+// ---------------------------------------------------------------------------
+
+void SceneRenderer::drawWireShape(const WireShape& wire,
+                                   const Matrix& world, const Matrix& view, const Matrix& proj,
+                                   Color color)
+{
+    if (wire.positions.empty()) return;
+    int n = static_cast<int>(wire.positions.size());
+    std::vector<VertexPositionColor> verts(n);
+    for (int i = 0; i < n; ++i)
+        verts[i] = { wire.positions[i], color };
+
+    VertexBuffer vb(device_, n);
+    vb.SetData(verts.data(), n);
+
+    effect_->World      = world;
+    effect_->View       = view;
+    effect_->Projection = proj;
+    effect_->VertexColorEnabled = true;
+    for (auto& pass : effect_->getCurrentTechniqueProperty()->getPassesProperty())
+        pass.Apply();
+
+    device_.SetVertexBuffer(&vb);
+    device_.DrawPrimitives(Graphics::PrimitiveType::LineList, 0, wire.lineCount);
+    device_.SetVertexBuffer(nullptr);
+}
+
+void SceneRenderer::drawObjectEdges(const Mc3Object& obj, const Mc3Document& doc,
+                                     const Matrix& parentWorld, const Matrix& view, const Matrix& proj,
+                                     int depth)
+{
+    if (!obj.visible) return;
+    if (depth > 16) return;
+
+    Matrix world = objectWorldMatrix(obj) * parentWorld;
+    Color edgeColor(0, 0, 0, 220);
+
+    // Slight outward push (scale in local space) to avoid z-fighting with the solid mesh
+    constexpr float kPush = 1.003f;
+
+    Matrix deform = obj.deform
+        ? Matrix::CreateScale({obj.deform->scale[0], obj.deform->scale[1], obj.deform->scale[2]})
+        : Matrix::getIdentityProperty();
+
+    switch (obj.type) {
+    case ObjectType::Box:
+    case ObjectType::Cube: {
+        float sx = obj.primitive ? obj.primitive->size[0] : 1.0f;
+        float sy = obj.primitive ? obj.primitive->size[1] : 1.0f;
+        float sz = obj.primitive ? obj.primitive->size[2] : 1.0f;
+        Matrix m = deform * Matrix::CreateScale({sx*kPush, sy*kPush, sz*kPush}) * world;
+        drawWireShape(wireShapeBox_, m, view, proj, edgeColor);
+        break;
+    }
+    case ObjectType::Sphere: {
+        float r = obj.primitive ? obj.primitive->radius * 2.0f : 1.0f;
+        Matrix m = deform * Matrix::CreateScale({r*kPush, r*kPush, r*kPush}) * world;
+        drawWireShape(wireShapeSphere_, m, view, proj, edgeColor);
+        break;
+    }
+    case ObjectType::Cylinder: {
+        float r = obj.primitive ? obj.primitive->radius * 2.0f : 1.0f;
+        float h = obj.primitive ? obj.primitive->height         : 1.0f;
+        Matrix m = deform * Matrix::CreateScale({r*kPush, h*kPush, r*kPush}) * world;
+        drawWireShape(wireShapeCylinder_, m, view, proj, edgeColor);
+        break;
+    }
+    case ObjectType::Cone: {
+        float r = obj.primitive ? obj.primitive->radius * 2.0f : 1.0f;
+        float h = obj.primitive ? obj.primitive->height         : 1.0f;
+        Matrix m = deform * Matrix::CreateScale({r*kPush, h*kPush, r*kPush}) * world;
+        drawWireShape(wireShapeCone_, m, view, proj, edgeColor);
+        break;
+    }
+    case ObjectType::Plane: {
+        float w = obj.primitive ? obj.primitive->size[0] : 1.0f;
+        float d = obj.primitive ? obj.primitive->size[2] : 1.0f;
+        Matrix m = deform * Matrix::CreateScale({w*kPush, 1.0f, d*kPush}) * world;
+        drawWireShape(wireShapePlane_, m, view, proj, edgeColor);
+        break;
+    }
+    case ObjectType::Group:
+    case ObjectType::Area:
+    case ObjectType::Union:
+    case ObjectType::Intersection:
+    case ObjectType::Difference:
+        for (const auto& child : obj.children)
+            drawObjectEdges(*child, doc, world, view, proj, depth + 1);
+        break;
+    case ObjectType::Instance: {
+        auto it = doc.definitions.find(obj.definition);
+        if (it != doc.definitions.end() && it->second)
+            drawObjectEdges(*it->second, doc, world, view, proj, depth + 1);
+        else
+            drawWireShape(wireShapeBox_, world, view, proj, edgeColor);
+        break;
+    }
+    case ObjectType::Extrude: {
+        if (!obj.extrude) { drawWireShape(wireShapeBox_, world, view, proj, edgeColor); break; }
+        const auto& ex   = obj.extrude.value();
+        const auto& cs   = ex.crossSection;
+        const auto& path = ex.path;
+        float len = (path.type == ExtrudePathType::Line) ? path.length : 1.0f;
+        Matrix axisRot = Matrix::getIdentityProperty();
+        if (path.type == ExtrudePathType::Line) {
+            constexpr float pih = std::numbers::pi_v<float> * 0.5f;
+            if      (path.axis == "x") axisRot = Matrix::CreateRotationZ(pih);
+            else if (path.axis == "z") axisRot = Matrix::CreateRotationX(-pih);
+        }
+        switch (cs.type) {
+        case CrossSectionType::Rect:
+            drawWireShape(wireShapeBox_,
+                Matrix::CreateScale({cs.width*kPush, len*kPush, cs.height*kPush}) * axisRot * world,
+                view, proj, edgeColor);
+            break;
+        case CrossSectionType::Circle:
+        case CrossSectionType::Polygon: {
+            float r = cs.radius * 2.0f;
+            drawWireShape(wireShapeCylinder_,
+                Matrix::CreateScale({r*kPush, len*kPush, r*kPush}) * axisRot * world,
+                view, proj, edgeColor);
+            break;
+        }
+        default:
+            drawWireShape(wireShapeBox_, world, view, proj, edgeColor);
+            break;
+        }
+        break;
+    }
+    default:
+        drawWireShape(wireShapeBox_, world, view, proj, edgeColor);
+        break;
+    }
+}
+
+void SceneRenderer::drawEdgeOverlay(const Mc3Document& doc,
+                                     const Matrix& view, const Matrix& proj)
+{
+    Matrix identity = Matrix::getIdentityProperty();
+    for (const auto& obj : doc.objects)
+        drawObjectEdges(*obj, doc, identity, view, proj);
 }
 
 } // namespace MeshCraft::Renderer

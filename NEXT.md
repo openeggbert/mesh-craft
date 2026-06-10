@@ -72,6 +72,8 @@ actual CSG boolean evaluation), drag-and-drop hierarchy reparenting, and animati
 - Camera gizmos: position-to-target line + frustum pyramid
 - CSG gizmos: coloured box outlines (green=Union, red=Difference, blue=Intersection)
 - Difference: red wireframe overlay on cutter children
+- **Edge overlay** (Alt+W / View menu / toolbar): black wireframe lines over all visible objects;
+  slight scale push (1.003×) avoids z-fighting; recurses into Groups, Instances, and CSG containers
 - F11 screenshot; F12 help to console
 
 **Left panel — tabbed (Scene / Lights / Env / Cam / Tex)**
@@ -115,6 +117,7 @@ actual CSG boolean evaluation), drag-and-drop hierarchy reparenting, and animati
 
 | Commit | Change |
 |-----------|-------------------------------------------------------------------------|
+| *(staged)* | Edge overlay: black wireframe lines over all visible objects; Alt+W / View menu / toolbar Edges button |
 | `7a6057b` | CSG visualization: Add menu, hierarchy badges, properties panel, viewport gizmos |
 | `771e6e1` | Extrude editor in properties panel; fix extrude XML serialization |
 | `097f19b` | Textures tab (left panel); fix texture serialization in XML writer |

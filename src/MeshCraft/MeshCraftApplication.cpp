@@ -212,6 +212,11 @@ void MeshCraftApplication::Draw(const GameTime& /*gameTime*/) {
     auto selPtrs = selectedPointers();
     sceneRenderer_->draw(document_, view, proj, selPtrs);
 
+    if (showEdgeOverlay_) {
+        gd.SetDepthTestEnabled(true);
+        sceneRenderer_->drawEdgeOverlay(document_, view, proj);
+    }
+
     // Scene-level gizmos (lights / cameras)
     gd.SetDepthTestEnabled(false);
     sceneRenderer_->drawLightGizmos(document_.lights, view, proj);
@@ -329,6 +334,9 @@ void MeshCraftApplication::handleKeyboardShortcuts(const KeyboardState& ks, cons
     if (!ctrl && !alt && justPressed(ks, prevKs, Keys::R)) { activeTool_ = ActiveTool::Rotate; updateWindowTitle(); }
     if (!ctrl && !alt && justPressed(ks, prevKs, Keys::S)) { activeTool_ = ActiveTool::Scale;  updateWindowTitle(); }
     if (!ctrl && !alt && justPressed(ks, prevKs, Keys::Q)) { activeTool_ = ActiveTool::Select; updateWindowTitle(); }
+
+    // Edge overlay toggle
+    if (alt && justPressed(ks, prevKs, Keys::W)) { showEdgeOverlay_ = !showEdgeOverlay_; return; }
 
     // Preset camera views (Numpad)
     if (!ctrl && justPressed(ks, prevKs, Keys::NumPad1)) { camera_.yaw = 0.0f;                                camera_.pitch = 0.0f;  return; }
@@ -1222,6 +1230,8 @@ void MeshCraftApplication::drawImGuiUi(int screenW, int screenH) {
                     camera_.focusOn(s->transform.position[0], s->transform.position[1], s->transform.position[2]);
                 } else { camera_.reset(); }
             }
+            ImGui::Separator();
+            ImGui::MenuItem("Edge Overlay", "Alt+W", &showEdgeOverlay_);
             ImGui::EndMenu();
         }
         ImGui::EndMainMenuBar();
@@ -1271,6 +1281,15 @@ void MeshCraftApplication::drawImGuiUi(int screenW, int screenH) {
         ImGui::PopStyleColor();
         ImGui::SameLine();
     }
+
+    ImGui::TextDisabled("|");
+    ImGui::SameLine();
+
+    // Edge overlay toggle button
+    if (showEdgeOverlay_) ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.20f, 0.20f, 0.20f, 1.f));
+    if (ImGui::Button("Edges", ImVec2(50, 30))) showEdgeOverlay_ = !showEdgeOverlay_;
+    if (showEdgeOverlay_) ImGui::PopStyleColor();
+    ImGui::SameLine();
 
     float toolbarH = ImGui::GetWindowHeight();
     imguiTopH_ = static_cast<int>(menuBarH + toolbarH);

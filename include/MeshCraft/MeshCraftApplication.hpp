@@ -111,6 +111,9 @@ private:
     // Dynamic top-area height (menu bar + toolbar), updated each frame by drawImGuiUi()
     int imguiTopH_{60};
 
+    // Edge overlay toggle (black wireframe lines over all objects)
+    bool showEdgeOverlay_{false};
+
     // Helpers
     void newScene();
     void openFile();

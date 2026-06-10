@@ -22,6 +22,12 @@ struct RenderMesh {
     int primitiveCount{0};
 };
 
+// Line-list shape for edge overlay rendering
+struct WireShape {
+    std::vector<Microsoft::Xna::Framework::Vector3> positions; // interleaved pairs (LineList)
+    int lineCount{0};
+};
+
 class SceneRenderer {
 public:
     explicit SceneRenderer(Microsoft::Xna::Framework::Graphics::GraphicsDevice& device);
@@ -68,6 +74,11 @@ public:
                        const Microsoft::Xna::Framework::Matrix& view,
                        const Microsoft::Xna::Framework::Matrix& projection);
 
+    // Draw black edge lines over all visible objects (wireframe overlay)
+    void drawEdgeOverlay(const Mc3::Mc3Document& doc,
+                         const Microsoft::Xna::Framework::Matrix& view,
+                         const Microsoft::Xna::Framework::Matrix& projection);
+
 private:
     Microsoft::Xna::Framework::Graphics::GraphicsDevice& device_;
     std::unique_ptr<Microsoft::Xna::Framework::Graphics::BasicEffect> effect_;
@@ -83,12 +94,20 @@ private:
     std::unique_ptr<Microsoft::Xna::Framework::Graphics::VertexBuffer> wireBoxVB_;
     int wireBoxLineCount_{0};
 
+    // Pre-built wire shapes for edge overlay
+    WireShape wireShapeBox_;
+    WireShape wireShapeSphere_;
+    WireShape wireShapeCylinder_;
+    WireShape wireShapeCone_;
+    WireShape wireShapePlane_;
+
     void buildUnitBox();
     void buildUnitSphere(int segments);
     void buildUnitCylinder(int segments);
     void buildUnitCone(int segments);
     void buildUnitPlane();
     void buildWireBox();
+    void buildWireShapes(int segments);
 
     void drawObject(const Mc3::Mc3Object& obj,
                     const Mc3::Mc3Document& doc,
@@ -97,6 +116,19 @@ private:
                     const Microsoft::Xna::Framework::Matrix& projection,
                     const std::vector<const Mc3::Mc3Object*>& selected,
                     int depth = 0);
+
+    void drawObjectEdges(const Mc3::Mc3Object& obj,
+                         const Mc3::Mc3Document& doc,
+                         const Microsoft::Xna::Framework::Matrix& parentWorld,
+                         const Microsoft::Xna::Framework::Matrix& view,
+                         const Microsoft::Xna::Framework::Matrix& projection,
+                         int depth = 0);
+
+    void drawWireShape(const WireShape& wire,
+                       const Microsoft::Xna::Framework::Matrix& world,
+                       const Microsoft::Xna::Framework::Matrix& view,
+                       const Microsoft::Xna::Framework::Matrix& projection,
+                       Microsoft::Xna::Framework::Color color);
 
     void drawLineList(const std::vector<Microsoft::Xna::Framework::Graphics::VertexPositionColor>& verts,
                       const Microsoft::Xna::Framework::Matrix& view,
