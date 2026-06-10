@@ -85,7 +85,6 @@ hollow extrude, definitions panel, and CSG boolean evaluation.
 
 | Feature | Detail | Effort |
 |---|---|---|
-| **Definitions panel** | Definitions can be referenced by Instance objects (picker combo works), but there is no panel to create / list / edit / delete definitions. They can only exist in a file that was loaded with definitions already present. | ~3–5 h |
 | **CSG boolean mesh evaluation** | Union/Difference/Intersection render children individually. Actual boolean mesh ops need an external library (e.g. manifold or CGAL). | ~20–30 h + library |
 | **Actions / States animation** | `Mc3Document.TODO: actions map` and `Mc3Object.TODO: states, actions` — not modelled in the data layer yet. | Large scope |
 | **Texture rendering in viewport** | All objects render with flat material color. Textures from `baseColorTexture` etc. are never sampled. | ~10–15 h |
@@ -96,6 +95,7 @@ hollow extrude, definitions panel, and CSG boolean evaluation.
 
 | Commit | Change |
 |-----------|-------------------------------------------------------------------------|
+| pending   | Definitions panel: Defs tab with Add/Remove, rename (fixes Instance refs), Name/Type/Transform editor |
 | pending   | Multi-selection gizmo: Move/Scale/Rotate delta applied to all selected objects |
 | pending   | Extrude innerRadius: hollow tube rendering (outer+inner walls, annular caps, inner edge overlay rings) |
 | pending   | Pivot rendering: apply T(-pivot)*S*R*T(pos+pivot) in objectWorldMatrix; Pivot DragFloat3 in Properties |
@@ -199,12 +199,9 @@ Circle/Polygon cross-sections with `innerRadius > 0` now render as hollow tubes:
 
 ### New features
 
-**I — Definitions panel**
-There's no way to create or edit reusable object definitions from the editor UI.
-Add a **Defs** tab (or sub-panel) showing `document_.definitions`, with Add/Remove buttons
-and an inline tree editor for the definition's root object.
-**Files:** `MeshCraftApplication.cpp` (left panel tabs)
-**Effort:** ~3–5 h
+~~**I — Definitions panel** — DONE~~
+"Defs" tab added to the left panel: Add/Remove buttons, selectable list, inline editor
+for ID (with rename + Instance reference fixup), Name, Type, and Transform.
 
 ~~**J — Multi-selection transform** — DONE~~
 Gizmo drag (Move/Scale/Rotate) now applies the same delta to all selected objects.

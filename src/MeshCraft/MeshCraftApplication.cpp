@@ -1969,6 +1969,176 @@ void MeshCraftApplication::drawImGuiUi(int screenW, int screenH) {
             ImGui::EndTabItem();
         }
 
+        // -------------------------------------------------------------------
+        // Tab: Definitions
+        // -------------------------------------------------------------------
+        if (ImGui::BeginTabItem("Defs")) {
+            // Validate selection
+            if (!selectedDefId_.empty() && !document_.definitions.count(selectedDefId_))
+                selectedDefId_.clear();
+
+            // Toolbar: Add / Remove
+            if (ImGui::SmallButton("+")) {
+                pushUndo();
+                int n = 1;
+                std::string key;
+                do { key = "def_" + std::to_string(n++); }
+                while (document_.definitions.count(key));
+                auto defObj = std::make_shared<Mc3::Mc3Object>();
+                defObj->id   = key;
+                defObj->name = key;
+                defObj->type = Mc3::ObjectType::Box;
+                Mc3::Mc3Primitive p; p.primitiveType = Mc3::PrimitiveType::Box; p.size = {1.0f,1.0f,1.0f};
+                defObj->primitive = p;
+                document_.definitions[key] = defObj;
+                selectedDefId_ = key;
+                modified_ = true; updateWindowTitle();
+            }
+            ImGui::SameLine();
+            ImGui::BeginDisabled(selectedDefId_.empty());
+            if (ImGui::SmallButton("-")) {
+                pushUndo();
+                document_.definitions.erase(selectedDefId_);
+                selectedDefId_.clear();
+                modified_ = true; updateWindowTitle();
+            }
+            ImGui::EndDisabled();
+
+            // List
+            ImGui::Separator();
+            for (const auto& [key, defObj] : document_.definitions) {
+                bool sel = (key == selectedDefId_);
+                std::string label = key;
+                if (defObj && !defObj->name.empty() && defObj->name != key)
+                    label += "  (" + defObj->name + ")";
+                ImGui::PushID(key.c_str());
+                if (ImGui::Selectable(label.c_str(), sel))
+                    selectedDefId_ = key;
+                ImGui::PopID();
+            }
+
+            // Inline editor for selected definition
+            if (!selectedDefId_.empty() && document_.definitions.count(selectedDefId_)) {
+                auto& defObj = document_.definitions[selectedDefId_];
+                if (defObj) {
+                    ImGui::Separator();
+                    ImGui::Spacing();
+
+                    // ID (rename — updates map key + all Instance references)
+                    ImGui::TextDisabled("ID");
+                    {
+                        char idBuf[128];
+                        std::strncpy(idBuf, selectedDefId_.c_str(), sizeof(idBuf)-1);
+                        idBuf[127] = '\0';
+                        ImGui::SetNextItemWidth(-1);
+                        if (ImGui::InputText("##defid", idBuf, sizeof(idBuf),
+                                ImGuiInputTextFlags_EnterReturnsTrue)) {
+                            std::string newKey = idBuf;
+                            if (!newKey.empty() && newKey != selectedDefId_ &&
+                                !document_.definitions.count(newKey)) {
+                                pushUndo();
+                                // Move entry to new key
+                                auto node = document_.definitions.extract(selectedDefId_);
+                                node.key() = newKey;
+                                document_.definitions.insert(std::move(node));
+                                defObj->id = newKey;
+                                // Update all Instance references in the scene
+                                std::function<void(std::vector<std::shared_ptr<Mc3::Mc3Object>>&)> fixRefs;
+                                fixRefs = [&](auto& list) {
+                                    for (auto& o : list) {
+                                        if (o->type == Mc3::ObjectType::Instance &&
+                                            o->definition == selectedDefId_)
+                                            o->definition = newKey;
+                                        fixRefs(o->children);
+                                    }
+                                };
+                                fixRefs(document_.objects);
+                                selectedDefId_ = newKey;
+                                modified_ = true; updateWindowTitle();
+                            }
+                        }
+                    }
+
+                    // Name
+                    ImGui::TextDisabled("Name");
+                    {
+                        char nameBuf[128];
+                        std::strncpy(nameBuf, defObj->name.c_str(), sizeof(nameBuf)-1);
+                        nameBuf[127] = '\0';
+                        ImGui::SetNextItemWidth(-1);
+                        if (ImGui::InputText("##defname", nameBuf, sizeof(nameBuf),
+                                ImGuiInputTextFlags_EnterReturnsTrue)) {
+                            pushUndo(); defObj->name = nameBuf; modified_ = true; updateWindowTitle();
+                        }
+                    }
+
+                    // Type
+                    ImGui::TextDisabled("Type");
+                    {
+                        const char* typeNames[] = { "Box","Sphere","Cylinder","Cone","Plane",
+                                                    "Extrude","Group","Mesh","Area" };
+                        Mc3::ObjectType typeVals[] = {
+                            Mc3::ObjectType::Box, Mc3::ObjectType::Sphere,
+                            Mc3::ObjectType::Cylinder, Mc3::ObjectType::Cone,
+                            Mc3::ObjectType::Plane, Mc3::ObjectType::Extrude,
+                            Mc3::ObjectType::Group, Mc3::ObjectType::Mesh,
+                            Mc3::ObjectType::Area };
+                        int tidx = 0;
+                        for (int i = 0; i < 9; ++i)
+                            if (defObj->type == typeVals[i]) { tidx = i; break; }
+                        ImGui::SetNextItemWidth(-1);
+                        if (ImGui::Combo("##deftype", &tidx, typeNames, 9)) {
+                            pushUndo(); defObj->type = typeVals[tidx]; modified_ = true; updateWindowTitle();
+                        }
+                    }
+
+                    // Transform
+                    ImGui::Spacing();
+                    ImGui::Separator();
+                    ImGui::Spacing();
+
+                    ImGui::TextDisabled("Position");
+                    {
+                        float pos[3] = { defObj->transform.position[0], defObj->transform.position[1], defObj->transform.position[2] };
+                        ImGui::SetNextItemWidth(-1);
+                        if (ImGui::DragFloat3("##dpos", pos, 0.1f)) {
+                            if (ImGui::IsItemActivated()) pushUndo();
+                            defObj->transform.position[0] = pos[0];
+                            defObj->transform.position[1] = pos[1];
+                            defObj->transform.position[2] = pos[2];
+                            modified_ = true; updateWindowTitle();
+                        }
+                    }
+                    ImGui::TextDisabled("Rotation");
+                    {
+                        float rot[3] = { defObj->transform.rotation[0], defObj->transform.rotation[1], defObj->transform.rotation[2] };
+                        ImGui::SetNextItemWidth(-1);
+                        if (ImGui::DragFloat3("##drot", rot, 0.5f)) {
+                            if (ImGui::IsItemActivated()) pushUndo();
+                            defObj->transform.rotation[0] = rot[0];
+                            defObj->transform.rotation[1] = rot[1];
+                            defObj->transform.rotation[2] = rot[2];
+                            modified_ = true; updateWindowTitle();
+                        }
+                    }
+                    ImGui::TextDisabled("Scale");
+                    {
+                        float scl[3] = { defObj->transform.scale[0], defObj->transform.scale[1], defObj->transform.scale[2] };
+                        ImGui::SetNextItemWidth(-1);
+                        if (ImGui::DragFloat3("##dscl", scl, 0.01f, 0.001f, 100.0f)) {
+                            if (ImGui::IsItemActivated()) pushUndo();
+                            defObj->transform.scale[0] = std::max(0.001f, scl[0]);
+                            defObj->transform.scale[1] = std::max(0.001f, scl[1]);
+                            defObj->transform.scale[2] = std::max(0.001f, scl[2]);
+                            modified_ = true; updateWindowTitle();
+                        }
+                    }
+                }
+            }
+
+            ImGui::EndTabItem();
+        }
+
         ImGui::EndTabBar();
     }
 

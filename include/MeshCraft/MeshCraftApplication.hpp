@@ -88,6 +88,9 @@ private:
     // Textures panel selection
     std::string selectedTextureKey_;
 
+    // Definitions panel selection
+    std::string selectedDefId_;
+
     // ImGui file dialog state (buffers persist across frames)
     bool openDialogOpen_{false};
     char openDialogBuf_[512]{};
