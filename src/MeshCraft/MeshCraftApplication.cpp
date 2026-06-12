@@ -3028,6 +3028,7 @@ void MeshCraftApplication::pushUndo() {
     if (static_cast<int>(undoStack_.size()) > kUndoMax)
         undoStack_.erase(undoStack_.begin());
     redoStack_.clear();
+    sceneRenderer_->clearCsgCache();
 }
 
 // ---------------------------------------------------------------------------
