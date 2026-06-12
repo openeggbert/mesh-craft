@@ -86,11 +86,16 @@ animation).
 |---|---|
 | **Mesh viewport preview** | Mesh objects render as grey placeholder box regardless of `meshSource` URI. Requires a runtime OBJ/GLB loader — large scope. |
 
+### ✅ Recently completed
+
+| Feature | Detail |
+|---|---|
+| **Texture rendering in viewport** | Objects with `baseColorTexture` in their material render with the texture applied. UV+normal geometry built for all unit shapes; lazy texture cache via `loadOrGetTexture()`. Fallback to flat color when no texture. |
+
 ### ❌ Not implemented
 
 | Feature | Detail | Effort |
 |---|---|---|
-| **Texture rendering in viewport** | All objects render with flat material color. Requires loading images referenced by texture URIs and sampling in shader. Depends on CNA Texture2D API. | ~10–15 h |
 | **CSG boolean mesh evaluation** | Union/Difference/Intersection render children individually. Actual boolean ops need an external library (e.g. manifold or CGAL). | ~20–30 h + library |
 | **Actions / States animation** | Not modelled in the data layer yet. Out of scope for current phase. | Large scope |
 
@@ -100,6 +105,7 @@ animation).
 
 | Commit | Change |
 |-----------|-------------------------------------------------------------------------|
+| `2c3606d` | Texture rendering in viewport: UV+normal VBs for all unit shapes, per-material texture binding, lazy cache |
 | `066ffa9` | Definitions panel: Defs tab with Add/Remove, rename (fixes all Instance refs), Name/Type/Transform editor |
 | `23d7f23` | Multi-selection gizmo: Move/Scale/Rotate delta applied to all selected objects; fix tinyxml2 duplicate CMake target |
 | `92ce20a` | Extrude innerRadius: hollow tube rendering — outer+inner walls, annular caps, inner edge overlay rings |
