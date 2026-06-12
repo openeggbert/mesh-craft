@@ -1,11 +1,11 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
            elementFormDefault="qualified"
-           version="0.1">
+           version="0.2">
 
   <!-- ============================================================
        MC3 Scene Format — XML Schema
-       Version: 0.1
+       Version: 0.2
        ============================================================ -->
 
   <!-- ── Primitive types ──────────────────────────────────────── -->
@@ -32,6 +32,13 @@
   <xs:simpleType name="vec4Type">
     <xs:restriction base="xs:string">
       <xs:pattern value="\s*-?[0-9]*\.?[0-9]+([eE][+-]?[0-9]+)?(\s+-?[0-9]*\.?[0-9]+([eE][+-]?[0-9]+)?){3}\s*"/>
+    </xs:restriction>
+  </xs:simpleType>
+
+  <!-- vec3 OR vec4 — for base_color which accepts RGB or RGBA -->
+  <xs:simpleType name="colorType">
+    <xs:restriction base="xs:string">
+      <xs:pattern value="\s*-?[0-9]*\.?[0-9]+([eE][+-]?[0-9]+)?(\s+-?[0-9]*\.?[0-9]+([eE][+-]?[0-9]+)?){2,3}\s*"/>
     </xs:restriction>
   </xs:simpleType>
 
@@ -80,7 +87,7 @@
     </xs:restriction>
   </xs:simpleType>
 
-  <xs:simpleType name="cameraType">
+  <xs:simpleType name="cameraProjectionType">
     <xs:restriction base="xs:string">
       <xs:enumeration value="perspective"/>
       <xs:enumeration value="orthographic"/>
@@ -108,15 +115,63 @@
     </xs:restriction>
   </xs:simpleType>
 
-  <!-- ── Shared object attributes ─────────────────────────────── -->
+  <!-- rotation_units: degrees (default) or radians -->
+  <xs:simpleType name="rotationUnitsType">
+    <xs:restriction base="xs:string">
+      <xs:enumeration value="degrees"/>
+      <xs:enumeration value="radians"/>
+    </xs:restriction>
+  </xs:simpleType>
 
+  <!-- euler_order: which axis is applied first/last when composing rotations -->
+  <xs:simpleType name="eulerOrderType">
+    <xs:restriction base="xs:string">
+      <xs:enumeration value="XYZ"/>
+      <xs:enumeration value="XZY"/>
+      <xs:enumeration value="YXZ"/>
+      <xs:enumeration value="YZX"/>
+      <xs:enumeration value="ZXY"/>
+      <xs:enumeration value="ZYX"/>
+    </xs:restriction>
+  </xs:simpleType>
+
+  <!-- ── UV Mapping ───────────────────────────────────────────── -->
+
+  <xs:complexType name="uvMappingType">
+    <xs:attribute name="scale"    type="vec2Type"/>
+    <xs:attribute name="offset"   type="vec2Type"/>
+    <xs:attribute name="rotation" type="xs:float"/>
+  </xs:complexType>
+
+  <!-- ── Metadata ─────────────────────────────────────────────── -->
+  <!--
+    Key/value store for opaque pass-through data (e.g. source-format metadata
+    captured during import that has no first-class MC3 representation).
+  -->
+  <xs:complexType name="metadataType">
+    <xs:sequence>
+      <xs:element name="property" minOccurs="0" maxOccurs="unbounded">
+        <xs:complexType>
+          <xs:attribute name="name"  type="xs:string" use="required"/>
+          <xs:attribute name="value" type="xs:string" use="required"/>
+        </xs:complexType>
+      </xs:element>
+    </xs:sequence>
+  </xs:complexType>
+
+  <!-- ── Shared object attributes ─────────────────────────────── -->
+  <!--
+    Transform order: T(position+pivot) * R(rotation) * S(scale) * T(-pivot)
+    rotation values are interpreted according to the root rotation_units and
+    euler_order attributes.
+  -->
   <xs:attributeGroup name="objectAttrs">
     <xs:attribute name="name"      type="xs:string"/>
     <xs:attribute name="position"  type="vec3Type"/>
     <xs:attribute name="rotation"  type="vec3Type"/>
     <xs:attribute name="scale"     type="vec3Type"/>
     <xs:attribute name="pivot"     type="vec3Type"/>
-    <xs:attribute name="material"  type="xs:string"/>
+    <xs:attribute name="material"  type="xs:IDREF"/>   <!-- references material/@id -->
     <xs:attribute name="visible"   type="xs:boolean"  default="true"/>
     <xs:attribute name="collision" type="xs:string"   default="none"/>
     <xs:attribute name="tags"      type="xs:string"/>
@@ -193,7 +248,9 @@
   <!-- box -->
   <xs:complexType name="boxType">
     <xs:sequence>
-      <xs:element name="deform" type="deformType" minOccurs="0"/>
+      <xs:element name="deform"     type="deformType"    minOccurs="0"/>
+      <xs:element name="uv_mapping" type="uvMappingType" minOccurs="0"/>
+      <xs:element name="metadata"   type="metadataType"  minOccurs="0"/>
     </xs:sequence>
     <xs:attributeGroup ref="objectAttrs"/>
     <xs:attribute name="size"     type="vec3Type"/>
@@ -203,7 +260,9 @@
   <!-- sphere -->
   <xs:complexType name="sphereType">
     <xs:sequence>
-      <xs:element name="deform" type="deformType" minOccurs="0"/>
+      <xs:element name="deform"     type="deformType"    minOccurs="0"/>
+      <xs:element name="uv_mapping" type="uvMappingType" minOccurs="0"/>
+      <xs:element name="metadata"   type="metadataType"  minOccurs="0"/>
     </xs:sequence>
     <xs:attributeGroup ref="objectAttrs"/>
     <xs:attribute name="radius"   type="xs:float"/>
@@ -213,7 +272,9 @@
   <!-- cylinder -->
   <xs:complexType name="cylinderType">
     <xs:sequence>
-      <xs:element name="deform" type="deformType" minOccurs="0"/>
+      <xs:element name="deform"     type="deformType"    minOccurs="0"/>
+      <xs:element name="uv_mapping" type="uvMappingType" minOccurs="0"/>
+      <xs:element name="metadata"   type="metadataType"  minOccurs="0"/>
     </xs:sequence>
     <xs:attributeGroup ref="objectAttrs"/>
     <xs:attribute name="radius"   type="xs:float"/>
@@ -225,7 +286,9 @@
   <!-- cone -->
   <xs:complexType name="coneType">
     <xs:sequence>
-      <xs:element name="deform" type="deformType" minOccurs="0"/>
+      <xs:element name="deform"     type="deformType"    minOccurs="0"/>
+      <xs:element name="uv_mapping" type="uvMappingType" minOccurs="0"/>
+      <xs:element name="metadata"   type="metadataType"  minOccurs="0"/>
     </xs:sequence>
     <xs:attributeGroup ref="objectAttrs"/>
     <xs:attribute name="radius"   type="xs:float"/>
@@ -236,7 +299,9 @@
   <!-- plane -->
   <xs:complexType name="planeType">
     <xs:sequence>
-      <xs:element name="deform" type="deformType" minOccurs="0"/>
+      <xs:element name="deform"     type="deformType"    minOccurs="0"/>
+      <xs:element name="uv_mapping" type="uvMappingType" minOccurs="0"/>
+      <xs:element name="metadata"   type="metadataType"  minOccurs="0"/>
     </xs:sequence>
     <xs:attributeGroup ref="objectAttrs"/>
     <xs:attribute name="size"     type="vec2Type"/>
@@ -247,7 +312,9 @@
   <!-- mesh -->
   <xs:complexType name="meshType">
     <xs:sequence>
-      <xs:element name="deform" type="deformType" minOccurs="0"/>
+      <xs:element name="deform"     type="deformType"    minOccurs="0"/>
+      <xs:element name="uv_mapping" type="uvMappingType" minOccurs="0"/>
+      <xs:element name="metadata"   type="metadataType"  minOccurs="0"/>
     </xs:sequence>
     <xs:attributeGroup ref="objectAttrs"/>
     <xs:attribute name="src" type="xs:string" use="required"/>
@@ -256,9 +323,11 @@
   <!-- extrude -->
   <xs:complexType name="extrudeType">
     <xs:sequence>
-      <xs:element name="deform"        type="deformType"      minOccurs="0"/>
+      <xs:element name="deform"        type="deformType"       minOccurs="0"/>
+      <xs:element name="uv_mapping"    type="uvMappingType"    minOccurs="0"/>
       <xs:element name="cross_section" type="crossSectionType" minOccurs="1" maxOccurs="1"/>
       <xs:element name="path"          type="pathType"         minOccurs="1" maxOccurs="1"/>
+      <xs:element name="metadata"      type="metadataType"     minOccurs="0"/>
     </xs:sequence>
     <xs:attributeGroup ref="objectAttrs"/>
     <xs:attribute name="segments" type="xs:positiveInteger"/>
@@ -270,16 +339,18 @@
   <!-- instance -->
   <xs:complexType name="instanceType">
     <xs:sequence>
-      <xs:element name="deform" type="deformType" minOccurs="0"/>
+      <xs:element name="deform"   type="deformType"   minOccurs="0"/>
+      <xs:element name="metadata" type="metadataType" minOccurs="0"/>
     </xs:sequence>
     <xs:attributeGroup ref="objectAttrs"/>
-    <xs:attribute name="definition" type="xs:string" use="required"/>
+    <xs:attribute name="definition" type="xs:IDREF" use="required"/>  <!-- references definition/@id -->
   </xs:complexType>
 
   <!-- area -->
   <xs:complexType name="areaType">
     <xs:sequence>
-      <xs:element name="deform" type="deformType" minOccurs="0"/>
+      <xs:element name="deform"   type="deformType"   minOccurs="0"/>
+      <xs:element name="metadata" type="metadataType" minOccurs="0"/>
     </xs:sequence>
     <xs:attributeGroup ref="objectAttrs"/>
     <xs:attribute name="size" type="vec3Type"/>
@@ -289,7 +360,8 @@
 
   <xs:complexType name="objectsContainerType">
     <xs:sequence>
-      <xs:element name="deform" type="deformType" minOccurs="0"/>
+      <xs:element name="deform"   type="deformType"   minOccurs="0"/>
+      <xs:element name="metadata" type="metadataType" minOccurs="0"/>
       <xs:choice  minOccurs="0" maxOccurs="unbounded">
         <xs:element name="box"          type="boxType"/>
         <xs:element name="sphere"       type="sphereType"/>
@@ -383,7 +455,7 @@
 
   <xs:complexType name="cameraElementType">
     <xs:attribute name="name"     type="xs:string"/>
-    <xs:attribute name="type"     type="cameraType" default="perspective"/>
+    <xs:attribute name="type"     type="cameraProjectionType" default="perspective"/>
     <xs:attribute name="position" type="vec3Type"/>
     <xs:attribute name="target"   type="vec3Type"/>
     <xs:attribute name="rotation" type="vec3Type"/>
@@ -424,13 +496,16 @@
 
   <xs:complexType name="materialElementType">
     <xs:sequence>
-      <xs:element name="base_color"                type="xs:string" minOccurs="0"/>
-      <xs:element name="emissive_color"            type="xs:string" minOccurs="0"/>
-      <xs:element name="base_color_texture"        type="xs:string" minOccurs="0"/>
-      <xs:element name="metallic_roughness_texture" type="xs:string" minOccurs="0"/>
-      <xs:element name="normal_texture"            type="xs:string" minOccurs="0"/>
-      <xs:element name="occlusion_texture"         type="xs:string" minOccurs="0"/>
-      <xs:element name="emissive_texture"          type="xs:string" minOccurs="0"/>
+      <!-- base_color accepts RGB (vec3) or RGBA (vec4); alpha defaults to 1.0 if omitted -->
+      <xs:element name="base_color"                 minOccurs="0" type="colorType"/>
+      <!-- emissive_color is always RGB (no alpha) -->
+      <xs:element name="emissive_color"             minOccurs="0" type="vec3Type"/>
+      <!-- texture slots reference texture/@id via IDREF -->
+      <xs:element name="base_color_texture"         minOccurs="0" type="xs:IDREF"/>
+      <xs:element name="metallic_roughness_texture" minOccurs="0" type="xs:IDREF"/>
+      <xs:element name="normal_texture"             minOccurs="0" type="xs:IDREF"/>
+      <xs:element name="occlusion_texture"          minOccurs="0" type="xs:IDREF"/>
+      <xs:element name="emissive_texture"           minOccurs="0" type="xs:IDREF"/>
     </xs:sequence>
     <xs:attribute name="id"                 type="xs:ID"          use="required"/>
     <xs:attribute name="roughness"          type="xs:float"       default="0.5"/>
@@ -480,18 +555,22 @@
   <xs:element name="mc3">
     <xs:complexType>
       <xs:sequence>
-        <xs:element name="environment" type="environmentType" minOccurs="0"/>
-        <xs:element name="lights"      type="lightsType"      minOccurs="0"/>
-        <xs:element name="cameras"     type="camerasType"     minOccurs="0"/>
-        <xs:element name="textures"    type="texturesType"    minOccurs="0"/>
-        <xs:element name="materials"   type="materialsType"   minOccurs="0"/>
-        <xs:element name="definitions" type="definitionsType" minOccurs="0"/>
+        <xs:element name="metadata"    type="metadataType"         minOccurs="0"/>
+        <xs:element name="environment" type="environmentType"      minOccurs="0"/>
+        <xs:element name="lights"      type="lightsType"           minOccurs="0"/>
+        <xs:element name="cameras"     type="camerasType"          minOccurs="0"/>
+        <xs:element name="textures"    type="texturesType"         minOccurs="0"/>
+        <xs:element name="materials"   type="materialsType"        minOccurs="0"/>
+        <xs:element name="definitions" type="definitionsType"      minOccurs="0"/>
         <xs:element name="objects"     type="objectsContainerType" minOccurs="0"/>
       </xs:sequence>
-      <xs:attribute name="version"           type="xs:string"            default="0.1"/>
+      <xs:attribute name="version"           type="xs:string"            default="0.2"/>
       <xs:attribute name="model"             type="xs:string"/>
       <xs:attribute name="unit"              type="unitType"             default="meter"/>
       <xs:attribute name="coordinate_system" type="coordinateSystemType" default="right_handed_y_up"/>
+      <!-- rotation_units and euler_order apply to ALL rotation attributes in the document -->
+      <xs:attribute name="rotation_units"    type="rotationUnitsType"    default="degrees"/>
+      <xs:attribute name="euler_order"       type="eulerOrderType"       default="XYZ"/>
       <xs:attribute name="default_camera"    type="xs:string"/>
     </xs:complexType>
   </xs:element>

@@ -1,6 +1,6 @@
 # MC3 Scene Format — Reference Documentation
 
-**Version:** 0.1  
+**Version:** 0.2  
 **File extension:** `.mc3.xml`  
 **Encoding:** UTF-8  
 **Schema:** `mc3.xsd`
@@ -19,17 +19,19 @@ The output pipeline exports to `.glb` via `mc3togltf`.
 ## Root Element
 
 ```xml
-<mc3 version="0.1" model="MyScene" unit="meter">
+<mc3 version="0.2" model="MyScene" unit="meter" rotation_units="degrees" euler_order="XYZ">
   ...
 </mc3>
 ```
 
 | Attribute | Type | Default | Description |
 |---|---|---|---|
-| `version` | string | `0.1` | Format version |
+| `version` | string | `0.2` | Format version |
 | `model` | string | — | Scene/model name |
 | `unit` | `meter` \| `centimeter` \| `inch` | `meter` | World unit |
 | `coordinate_system` | `right_handed_y_up` \| `right_handed_z_up` | `right_handed_y_up` | Coordinate convention |
+| `rotation_units` | `degrees` \| `radians` | `degrees` | Units for all `rotation` attributes in the document |
+| `euler_order` | `XYZ` \| `XZY` \| `YXZ` \| `YZX` \| `ZXY` \| `ZYX` | `XYZ` | Euler rotation composition order for all objects |
 | `default_camera` | string | — | Name of the default camera |
 
 ---
@@ -198,17 +200,19 @@ All sections are optional and may appear in any order.
 | `alpha_cutoff` | float 0–1 | `0.5` | Alpha threshold for `mask` mode |
 | `double_sided` | boolean | `false` | Disable back-face culling |
 
-**Child elements** (all optional, content = texture id reference or color value):
+**Child elements** (all optional):
 
-| Element | Content | Description |
+| Element | Content type | Description |
 |---|---|---|
-| `<base_color>` | RGBA vec4 | Base color tint (multiplied with texture) |
-| `<emissive_color>` | RGB vec3 | Emissive light color |
-| `<base_color_texture>` | texture id | Albedo / diffuse map |
-| `<metallic_roughness_texture>` | texture id | ORM map: R=occlusion, G=roughness, B=metallic |
-| `<normal_texture>` | texture id | Tangent-space normal map |
-| `<occlusion_texture>` | texture id | Ambient occlusion map |
-| `<emissive_texture>` | texture id | Emissive map |
+| `<base_color>` | `colorType` (RGB vec3 or RGBA vec4) | Base color tint; alpha defaults to `1.0` when 3 components given |
+| `<emissive_color>` | `vec3Type` (RGB) | Emissive light color |
+| `<base_color_texture>` | IDREF → texture `id` | Albedo / diffuse map |
+| `<metallic_roughness_texture>` | IDREF → texture `id` | ORM map: R=occlusion, G=roughness, B=metallic |
+| `<normal_texture>` | IDREF → texture `id` | Tangent-space normal map |
+| `<occlusion_texture>` | IDREF → texture `id` | Ambient occlusion map |
+| `<emissive_texture>` | IDREF → texture `id` | Emissive map |
+
+Texture slot elements contain the texture `id` as text, validated by XSD as an `xs:IDREF` (the referenced `<texture>` must exist in `<textures>`).
 
 ---
 
@@ -243,23 +247,37 @@ All objects support these **common attributes** (plus type-specific ones):
 |---|---|---|---|
 | `name` | string | — | Object name / identifier |
 | `position` | vec3 | `0 0 0` | World position (XYZ) |
-| `rotation` | vec3 (°) | `0 0 0` | Euler rotation (XYZ, degrees) |
+| `rotation` | vec3 | `0 0 0` | Euler rotation — units and order set by root `rotation_units` / `euler_order` |
 | `scale` | vec3 | `1 1 1` | Scale per axis |
 | `pivot` | vec3 | `0 0 0` | Rotation/scale pivot offset (local space) |
-| `material` | string | — | Reference to a material id |
+| `material` | IDREF | — | Reference to a material `id` (validated by XSD) |
 | `visible` | boolean | `true` | Object visibility |
 | `collision` | string | `none` | Collision shape hint (`none`, `box`, `mesh`, …) |
 | `tags` | string | — | Space-separated tag list |
 | `role` | `cutter` | — | Marks object as a CSG cutter inside `<difference>` |
 
-All objects may contain an optional `<deform>` child:
+**Transform order:** `T(position + pivot) × R(rotation) × S(scale) × T(-pivot)`
+
+All objects may contain optional child elements in this order:
+
+1. `<deform>` — geometry-level scale, applied before the object transform
+2. `<uv_mapping>` — texture coordinate scale/offset/rotation (leaf objects only)
+3. `<metadata>` — opaque key/value store for import-time source data
 
 ```xml
 <deform scale="2.0 1.0 0.5"/>
 ```
 
-Deform applies a **geometry-level** non-uniform scale (applied before the transform),
-independent of the `scale` attribute (which is part of the transform).
+```xml
+<uv_mapping scale="2.5 1.5" offset="0 0" rotation="0"/>
+```
+
+```xml
+<metadata>
+  <property name="rd4_original_type" value="SweepObject"/>
+  <property name="rd4_source_line"   value="142"/>
+</metadata>
+```
 
 ---
 
@@ -421,8 +439,8 @@ Places a copy of a `<definition>` in the scene. May override the material.
 
 | Attribute | Type | Description |
 |---|---|---|
-| `definition` | string | Reference to a definition id |
-| `material` | string | Material override (replaces per-object materials in the definition) |
+| `definition` | IDREF | Reference to a definition `id` (validated by XSD) |
+| `material` | IDREF | Material override — replaces per-object materials inside the definition |
 
 ---
 
@@ -476,7 +494,7 @@ Invisible logical zone (collision, trigger, pathfinding, etc.).
 
 ```xml
 <?xml version="1.0" encoding="UTF-8"?>
-<mc3 version="0.1" model="Minimal">
+<mc3 version="0.2" model="Minimal">
 
   <environment>
     <background color="0.4 0.6 0.9"/>
@@ -507,7 +525,7 @@ Invisible logical zone (collision, trigger, pathfinding, etc.).
 
 ---
 
-## Proposed Improvements (v0.2+)
+## Proposed Improvements (v0.3+)
 
 These features are not yet implemented but are planned or recommended for future versions.
 
@@ -583,17 +601,7 @@ Allow swapping a set of materials at runtime without duplicating objects.
 </material_variant>
 ```
 
-### 7. Explicit UV Mapping on Primitives
-
-Control UV scale/offset per object to avoid atlas bleeding and seam issues.
-
-```xml
-<box name="Wall" size="5 3 0.3">
-  <uv_mapping scale="2.5 1.5" offset="0 0" rotation="0"/>
-</box>
-```
-
-### 8. Terrain
+### 7. Terrain
 
 Heightmap-based terrain with per-splat material blending.
 
@@ -606,7 +614,7 @@ Heightmap-based terrain with per-splat material blending.
 </terrain>
 ```
 
-### 9. Instanced Arrays (GPU Instancing Hint)
+### 8. Instanced Arrays (GPU Instancing Hint)
 
 Mark large groups for GPU instancing.
 
@@ -616,7 +624,7 @@ Mark large groups for GPU instancing.
 </instance_array>
 ```
 
-### 10. Schema Version Namespace
+### 9. Schema Version Namespace
 
 Use a proper XML namespace to allow forward compatibility.
 
