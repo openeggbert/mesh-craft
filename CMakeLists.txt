@@ -150,6 +150,14 @@ FetchContent_Declare(manifold
 )
 FetchContent_MakeAvailable(manifold)
 
+# tinyobjloader — OBJ mesh loading for viewport preview
+set(TINYOBJLOADER_BUILD_TEST_LOADER OFF CACHE BOOL "" FORCE)
+FetchContent_Declare(tinyobjloader
+    GIT_REPOSITORY https://github.com/tinyobjloader/tinyobjloader.git
+    GIT_TAG        v2.0.0rc13
+    GIT_SHALLOW    TRUE)
+FetchContent_MakeAvailable(tinyobjloader)
+
 # -----------------------------------------------------------------------------
 # Sources
 # -----------------------------------------------------------------------------
@@ -184,6 +192,7 @@ target_include_directories(${_target}
         ${CMAKE_CURRENT_SOURCE_DIR}/include
     PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}/src
+        ${tinyobjloader_SOURCE_DIR}
 )
 
 # -----------------------------------------------------------------------------
@@ -231,9 +240,10 @@ elseif(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang" AND NOT WIN32 AND NOT ANDROID)
         SHARP_RUNTIME
         Mc3
         imgui
-        manifold)
+        manifold
+        tinyobjloader)
 else()
-    target_link_libraries(${_target} PRIVATE CNA ${_cna_backend_target} SHARP_RUNTIME Mc3 imgui manifold)
+    target_link_libraries(${_target} PRIVATE CNA ${_cna_backend_target} SHARP_RUNTIME Mc3 imgui manifold tinyobjloader)
 endif()
 
 # -----------------------------------------------------------------------------

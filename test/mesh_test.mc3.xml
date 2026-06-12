@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<mc3 version="0.2" model="MeshTest">
+
+  <environment>
+    <background color="0.3 0.3 0.4"/>
+  </environment>
+
+  <lights>
+    <ambient     color="0.3 0.3 0.4" brightness="0.5"/>
+    <directional name="Sun" color="1 0.95 0.8" brightness="2" direction="-0.5 -1 -0.5"/>
+  </lights>
+
+  <cameras>
+    <camera name="Main" position="4 3 6" target="0 0 0" fov="60"/>
+  </cameras>
+
+  <materials>
+    <material id="gold" roughness="0.3" metallic="0.8">
+      <base_color>1.0 0.8 0.1 1.0</base_color>
+    </material>
+  </materials>
+
+  <objects>
+    <!-- Loaded OBJ mesh (pyramid) -->
+    <mesh name="Pyramid" src="meshes/teapot_minimal.obj" material="gold" position="0 0 0"/>
+    <!-- Primitives alongside for comparison -->
+    <box  name="RefBox" size="0.3 0.3 0.3" position="3 0 0"/>
+  </objects>
+
+</mc3>

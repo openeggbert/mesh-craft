@@ -165,6 +165,7 @@ private:
                           Microsoft::Xna::Framework::Graphics::Texture2D* tex);
 
     Microsoft::Xna::Framework::Graphics::Texture2D* loadOrGetTexture(const std::string& absPath);
+    const RenderMesh* loadOrGetMesh(const std::string& absPath);
 
     Microsoft::Xna::Framework::Matrix objectWorldMatrix(const Mc3::Mc3Object& obj) const;
     Microsoft::Xna::Framework::Color  materialColor(const std::string& matId,
@@ -172,6 +173,7 @@ private:
     bool isSelected(const Mc3::Mc3Object& obj, const std::vector<const Mc3::Mc3Object*>& sel) const;
 
     std::map<std::string, Microsoft::Xna::Framework::Graphics::Texture2D> textureCache_;
+    std::map<std::string, RenderMesh> meshCache_;
     std::map<const Mc3::Mc3Object*, RenderMesh> csgMeshCache_;
 };
 

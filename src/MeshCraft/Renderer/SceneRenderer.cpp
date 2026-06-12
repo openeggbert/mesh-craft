@@ -11,10 +11,12 @@
 #include <algorithm>
 #include <cmath>
 #include <filesystem>
+#include <numeric>
 #include <numbers>
 #include <vector>
 
 #include <manifold/manifold.h>
+#include <tiny_obj_loader.h>
 
 using namespace Microsoft::Xna::Framework;
 using namespace Microsoft::Xna::Framework::Graphics;
@@ -157,9 +159,108 @@ static RenderMesh manifoldToRenderMesh(GraphicsDevice& device, const manifold::M
 
     mesh.vb = std::make_unique<VertexBuffer>(device, nVerts);
     mesh.vb->SetData(verts.data(), nVerts);
-    mesh.ib = std::make_unique<IndexBuffer>(device, nTris * 3);
+    mesh.ib = std::make_unique<IndexBuffer>(device, IndexElementSize::ThirtyTwoBits, nTris * 3, BufferUsage::None);
     mesh.ib->SetData(idx32.data(), nTris * 3);
     mesh.primitiveCount = nTris;
+    return mesh;
+}
+
+// ---------------------------------------------------------------------------
+// OBJ mesh loader
+// ---------------------------------------------------------------------------
+
+// Load an OBJ file and return a RenderMesh with both a VertexPositionColor VB
+// (for flat-colour rendering) and a VertexPositionNormalTexture VB (for lit/
+// textured rendering). Both use triangle-soup layout with sequential uint32
+// indices to avoid vertex-count limits.
+// Returns an empty RenderMesh (no vb) on failure.
+static RenderMesh loadObjMesh(GraphicsDevice& device, const std::string& path)
+{
+    RenderMesh mesh;
+
+    tinyobj::ObjReaderConfig cfg;
+    cfg.triangulate     = true;
+    cfg.mtl_search_path = std::filesystem::path(path).parent_path().string();
+
+    tinyobj::ObjReader reader;
+    if (!reader.ParseFromFile(path, cfg)) return mesh;  // error → empty
+
+    const auto& attrib = reader.GetAttrib();
+    const auto& shapes = reader.GetShapes();
+    if (shapes.empty() || attrib.vertices.empty()) return mesh;
+
+    // Guard against enormous meshes
+    size_t totalTris = 0;
+    for (const auto& s : shapes)
+        for (auto fv : s.mesh.num_face_vertices)
+            if (fv == 3) ++totalTris;
+    if (totalTris > 300000) return mesh;   // too large for live preview
+
+    Color grey(180, 180, 180, 255);
+    std::vector<VertexPositionColor>          cverts;
+    std::vector<VertexPositionNormalTexture>  tverts;
+
+    for (const auto& shape : shapes) {
+        size_t off = 0;
+        for (size_t f = 0; f < shape.mesh.num_face_vertices.size(); ++f) {
+            int fv = shape.mesh.num_face_vertices[f];
+            if (fv != 3) { off += fv; continue; }
+
+            Vector3 p[3];
+            for (int v = 0; v < 3; ++v) {
+                int vi = shape.mesh.indices[off + v].vertex_index;
+                p[v] = {attrib.vertices[3*vi], attrib.vertices[3*vi+1], attrib.vertices[3*vi+2]};
+                cverts.push_back({p[v], grey});
+            }
+
+            // Face normal fallback
+            Vector3 e1 = {p[1].X-p[0].X, p[1].Y-p[0].Y, p[1].Z-p[0].Z};
+            Vector3 e2 = {p[2].X-p[0].X, p[2].Y-p[0].Y, p[2].Z-p[0].Z};
+            Vector3 faceN = Vector3::Cross(e1, e2);
+            faceN.Normalize();
+
+            for (int v = 0; v < 3; ++v) {
+                const auto& idx = shape.mesh.indices[off + v];
+                Vector3 n = faceN;
+                if (idx.normal_index >= 0) {
+                    int ni = idx.normal_index;
+                    n = {attrib.normals[3*ni], attrib.normals[3*ni+1], attrib.normals[3*ni+2]};
+                }
+                Vector2 uv = {0.0f, 0.0f};
+                if (idx.texcoord_index >= 0) {
+                    int ti = idx.texcoord_index;
+                    uv = {attrib.texcoords[2*ti], 1.0f - attrib.texcoords[2*ti+1]};
+                }
+                tverts.push_back({p[v], n, uv});
+            }
+            off += fv;
+        }
+    }
+
+    if (cverts.empty()) return mesh;
+
+    const int nV = static_cast<int>(cverts.size());  // = nTris * 3
+
+    // Sequential triangle-soup indices (same for both VBs)
+    std::vector<uint32_t> seq(nV);
+    std::iota(seq.begin(), seq.end(), 0u);
+
+    // Colored VB / IB
+    mesh.positions.reserve(nV);
+    for (auto& v : cverts) mesh.positions.push_back(v.Position);
+    mesh.vb = std::make_unique<VertexBuffer>(device, nV);
+    mesh.vb->SetData(cverts.data(), nV);
+    mesh.ib = std::make_unique<IndexBuffer>(device, IndexElementSize::ThirtyTwoBits, nV, BufferUsage::None);
+    mesh.ib->SetData(seq.data(), nV);
+    mesh.primitiveCount = nV / 3;
+
+    // Lit / textured VB / IB
+    mesh.texVB = std::make_unique<VertexBuffer>(device, nV);
+    mesh.texVB->SetData(tverts.data(), nV);
+    mesh.texIB = std::make_unique<IndexBuffer>(device, IndexElementSize::ThirtyTwoBits, nV, BufferUsage::None);
+    mesh.texIB->SetData(seq.data(), nV);
+    mesh.texPrimitiveCount = nV / 3;
+
     return mesh;
 }
 
@@ -864,8 +965,12 @@ void SceneRenderer::drawMeshTextured(const RenderMesh& mesh,
     effect_->View       = view;
     effect_->Projection = proj;
     effect_->VertexColorEnabled = false;
-    effect_->setTextureEnabledProperty(true);
-    effect_->setTextureProperty(tex);
+    if (tex) {
+        effect_->setTextureEnabledProperty(true);
+        effect_->setTextureProperty(tex);
+    } else {
+        effect_->setTextureEnabledProperty(false);
+    }
     effect_->setDiffuseColorProperty(Vector3{
         std::clamp(color.getRProperty() / 255.0f, 0.0f, 1.0f),
         std::clamp(color.getGProperty() / 255.0f, 0.0f, 1.0f),
@@ -904,6 +1009,17 @@ Texture2D* SceneRenderer::loadOrGetTexture(const std::string& absPath)
         // default invalid state. Just return nullptr and try again next frame (cheap miss).
         return nullptr;
     }
+}
+
+const RenderMesh* SceneRenderer::loadOrGetMesh(const std::string& absPath)
+{
+    auto it = meshCache_.find(absPath);
+    if (it != meshCache_.end()) return it->second.vb ? &it->second : nullptr;
+
+    RenderMesh loaded = loadObjMesh(device_, absPath);
+    auto [ins, ok] = meshCache_.emplace(absPath, std::move(loaded));
+    (void)ok;
+    return ins->second.vb ? &ins->second : nullptr;
 }
 
 void SceneRenderer::drawObjectWireframe(const Mc3Object& obj,
@@ -1064,8 +1180,20 @@ void SceneRenderer::drawObject(const Mc3Object& obj, const Mc3Document& doc,
         drawExtrudeDynamic(obj.extrude.value(), deform * world, view, proj, color);
         break;
     }
+    case ObjectType::Mesh: {
+        if (!obj.meshSource.empty() && !doc.sourcePath.empty()) {
+            auto absPath = (doc.sourcePath / obj.meshSource).string();
+            const RenderMesh* loaded = loadOrGetMesh(absPath);
+            if (loaded) {
+                // Always use the lit VPNT path (proper normals); tex may be nullptr
+                drawMeshTextured(*loaded, deform * world, view, proj, color, tex);
+                break;
+            }
+        }
+        drawMesh(unitBox_, deform * world, view, proj, color);  // fallback placeholder
+        break;
+    }
     default:
-        // Mesh, Instance: render as a bounding box placeholder
         drawMesh(unitBox_, world, view, proj, color);
         break;
     }

@@ -12,7 +12,7 @@ The output pipeline exports to `.glb` via the `mc3togltf` converter.
 **Main goal:** A fully usable desktop editor where a developer can build, edit, and export
 `.mc3.xml` scene files without hand-editing XML.
 
-**Current phase:** ~99 % of planned features implemented. All object types, all extrude
+**Current phase:** 100 % of planned features implemented. All object types, all extrude
 paths/cross-sections (including hollow tubes), full light/camera/material/texture/definitions
 editors, drag-and-drop hierarchy, pivot rendering, multi-selection gizmo, and XML round-trip
 tests are complete. Only large-scope optional features remain (CSG boolean, texture rendering,
@@ -80,11 +80,9 @@ animation).
 | **Multi-selection** | Move/Scale/Rotate gizmo applies delta to all selected objects simultaneously |
 | **Serialization** | All fields listed above round-trip through XML (verified by 54 ctests) |
 
-### ⚠️ Partially covered
+### ✅ Fully covered
 
-| Issue | Detail |
-|---|---|
-| **Mesh viewport preview** | Mesh objects render as grey placeholder box regardless of `meshSource` URI. Requires a runtime OBJ/GLB loader — large scope. |
+All originally-planned mc3 features are now implemented and rendered in the viewport.
 
 ### ✅ Recently completed
 
@@ -110,6 +108,7 @@ animation).
 
 | Commit | Change |
 |-----------|-------------------------------------------------------------------------|
+| (pending) | Mesh viewport preview: tinyobjloader FetchContent, loadObjMesh + loadOrGetMesh cache, lit VPNT path; fix manifold 32-bit IB |
 | (pending) | CSG boolean mesh evaluation: manifold v3 FetchContent, buildManifoldTree + manifoldToRenderMesh, cache in SceneRenderer |
 | `e4ea36b` | mc3 schema v0.2: IDREF refs, rotation_units/euler_order, metadata, uv_mapping child elements |
 | `2c3606d` | Texture rendering in viewport: UV+normal VBs for all unit shapes, per-material texture binding, lazy cache |
@@ -217,6 +216,18 @@ texture or load error.
 **Files:** `SceneRenderer.hpp`, `SceneRenderer.cpp`.
 
 ### ✅ Done
+
+**M — Mesh viewport preview** (completed)
+`<mesh src="...obj">` objects now load and render in the viewport via tinyobjloader.
+Implementation: `loadObjMesh()` (file scope, SceneRenderer.cpp) reads an OBJ file using
+the `ObjReader` API, builds a `VertexPositionColor` VB (triangle soup, for fallback) and a
+`VertexPositionNormalTexture` VB (with per-vertex or per-face normals, for lit rendering).
+Both use 32-bit sequential index buffers. Result cached in `meshCache_` by absolute path.
+`drawMeshTextured()` extended to handle `nullptr` texture (disables texture sampling, keeps
+lighting). The Mesh case in `drawObject()` always uses the lit VPNT path for loaded files.
+Limit: 300k triangles max (skips to placeholder box if exceeded).
+**Files:** `SceneRenderer.hpp`, `SceneRenderer.cpp`, `CMakeLists.txt` (tinyobjloader FetchContent).
+**Test file:** `test/mesh_test.mc3.xml` + `test/meshes/teapot_minimal.obj`.
 
 **C — CSG boolean mesh evaluation** (completed)
 Union/Difference/Intersection now produce real boolean geometry via the manifold v3 library.
