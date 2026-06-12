@@ -33,8 +33,15 @@ set_property(CACHE MESH_CRAFT_GRAPHICS_BACKEND PROPERTY STRINGS
 
 string(TOUPPER "${MESH_CRAFT_GRAPHICS_BACKEND}" MESH_CRAFT_GRAPHICS_BACKEND_UPPER)
 
-if(ANDROID OR EMSCRIPTEN)
+if(ANDROID)
     set(MESH_CRAFT_GRAPHICS_BACKEND_UPPER "SDL_RENDERER")
+elseif(EMSCRIPTEN)
+    set(MESH_CRAFT_GRAPHICS_BACKEND_UPPER "EASYGL")
+endif()
+
+if(EMSCRIPTEN)
+    add_compile_options(-fwasm-exceptions)
+    add_link_options(-fwasm-exceptions)
 endif()
 
 if(NOT MESH_CRAFT_GRAPHICS_BACKEND_UPPER MATCHES "^(SDL_RENDERER|EASYGL|BGFX|VULKAN)$")
@@ -126,7 +133,22 @@ if(DEFINED SDL3_DIR)
 elseif(TARGET SDL3::SDL3)
     target_link_libraries(imgui PUBLIC SDL3::SDL3)
 endif()
-target_link_libraries(imgui PUBLIC GLESv2)
+if(NOT EMSCRIPTEN)
+    target_link_libraries(imgui PUBLIC GLESv2)
+endif()
+
+# Manifold — CSG boolean mesh evaluation
+set(MANIFOLD_PAR           OFF CACHE BOOL "" FORCE)
+set(MANIFOLD_EXPORT        OFF CACHE BOOL "" FORCE)
+set(MANIFOLD_TEST          OFF CACHE BOOL "" FORCE)
+set(MANIFOLD_FUZZ          OFF CACHE BOOL "" FORCE)
+set(MANIFOLD_CROSS_SECTION OFF CACHE BOOL "" FORCE)
+FetchContent_Declare(manifold
+    GIT_REPOSITORY https://github.com/elalish/manifold.git
+    GIT_TAG        v3.0.0
+    GIT_SHALLOW    TRUE
+)
+FetchContent_MakeAvailable(manifold)
 
 # -----------------------------------------------------------------------------
 # Sources
@@ -186,14 +208,32 @@ elseif(MESH_CRAFT_GRAPHICS_BACKEND_UPPER STREQUAL "VULKAN")
     set(_cna_backend_target cna_backend_graphics_vulkan)
 endif()
 
-if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang" AND NOT WIN32 AND NOT EMSCRIPTEN AND NOT ANDROID)
+if(EMSCRIPTEN)
+    # SDL3 imported targets are directory-scoped; re-declare them in this scope.
+    find_package(SDL3 REQUIRED CONFIG)
+    target_link_libraries(${_target} PRIVATE
+        CNA ${_cna_backend_target} SHARP_RUNTIME Mc3 imgui SDL3::SDL3-static)
+    target_link_options(${_target} PRIVATE
+        -sALLOW_MEMORY_GROWTH=1
+        -sSTACK_SIZE=1048576
+        -sINITIAL_MEMORY=134217728
+        -sFORCE_FILESYSTEM=1
+        "-sEXPORTED_RUNTIME_METHODS=['FS','ccall','cwrap']"
+        "-sMIN_WEBGL_VERSION=2"
+        "-sMAX_WEBGL_VERSION=2"
+        -lidbfs.js
+        "SHELL:--pre-js ${CMAKE_CURRENT_SOURCE_DIR}/cmake/web/pre.js"
+        "SHELL:--preload-file ${CMAKE_CURRENT_SOURCE_DIR}/test@/test"
+    )
+elseif(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang" AND NOT WIN32 AND NOT ANDROID)
     target_link_libraries(${_target} PRIVATE
         -Wl,--start-group CNA ${_cna_backend_target} -Wl,--end-group
         SHARP_RUNTIME
         Mc3
-        imgui)
+        imgui
+        manifold)
 else()
-    target_link_libraries(${_target} PRIVATE CNA ${_cna_backend_target} SHARP_RUNTIME Mc3 imgui)
+    target_link_libraries(${_target} PRIVATE CNA ${_cna_backend_target} SHARP_RUNTIME Mc3 imgui manifold)
 endif()
 
 # -----------------------------------------------------------------------------

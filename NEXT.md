@@ -92,11 +92,16 @@ animation).
 |---|---|
 | **Texture rendering in viewport** | Objects with `baseColorTexture` in their material render with the texture applied. UV+normal geometry built for all unit shapes; lazy texture cache via `loadOrGetTexture()`. Fallback to flat color when no texture. |
 
+### ✅ Recently completed
+
+| Feature | Detail |
+|---|---|
+| **CSG boolean mesh evaluation** | Union/Difference/Intersection now evaluate actual boolean geometry via the manifold v3 library. Result cached per `Mc3Object*`, invalidated on `pushUndo()`. Falls back to individual child rendering if manifold returns empty. |
+
 ### ❌ Not implemented
 
 | Feature | Detail | Effort |
 |---|---|---|
-| **CSG boolean mesh evaluation** | Union/Difference/Intersection render children individually. Actual boolean ops need an external library (e.g. manifold or CGAL). | ~20–30 h + library |
 | **Actions / States animation** | Not modelled in the data layer yet. Out of scope for current phase. | Large scope |
 
 ---
@@ -105,6 +110,8 @@ animation).
 
 | Commit | Change |
 |-----------|-------------------------------------------------------------------------|
+| (pending) | CSG boolean mesh evaluation: manifold v3 FetchContent, buildManifoldTree + manifoldToRenderMesh, cache in SceneRenderer |
+| `e4ea36b` | mc3 schema v0.2: IDREF refs, rotation_units/euler_order, metadata, uv_mapping child elements |
 | `2c3606d` | Texture rendering in viewport: UV+normal VBs for all unit shapes, per-material texture binding, lazy cache |
 | `066ffa9` | Definitions panel: Defs tab with Add/Remove, rename (fixes all Instance refs), Name/Type/Transform editor |
 | `23d7f23` | Multi-selection gizmo: Move/Scale/Rotate delta applied to all selected objects; fix tinyxml2 duplicate CMake target |
@@ -209,12 +216,19 @@ caches textures by absolute path via `Texture2D(path, device)`. Fallback to flat
 texture or load error.
 **Files:** `SceneRenderer.hpp`, `SceneRenderer.cpp`.
 
-### Large scope
+### ✅ Done
 
-**C — CSG boolean mesh evaluation** (~20–30 h + library)
-Union/Difference/Intersection currently render children individually; no actual boolean geometry.
-Requires integrating an external library (manifold is the most practical choice — MIT license,
-modern C++, header-friendly). Would replace `drawObject` for CSG nodes with a pre-computed mesh.
+**C — CSG boolean mesh evaluation** (completed)
+Union/Difference/Intersection now produce real boolean geometry via the manifold v3 library.
+Architecture: `buildManifoldTree()` recursively converts the CSG subtree to `manifold::Manifold`
+objects in world space (parentWorld baked in), then `manifoldToRenderMesh()` converts the result
+to a `VertexPositionColor` `RenderMesh`. The result is cached in `csgMeshCache_` keyed by
+`const Mc3Object*` and cleared by `clearCsgCache()` (called from `pushUndo()`).
+Falls back to rendering children individually if the manifold result is empty.
+**Files:** `SceneRenderer.hpp`, `SceneRenderer.cpp`, `CMakeLists.txt` (manifold FetchContent).
+**Test file:** `test/csg_test.mc3.xml` — difference (box−sphere), union (two spheres), intersection (box∩sphere).
+
+### Large scope
 
 **F — Actions / States animation** (large scope, out of phase)
 `Mc3Document` has no actions/states data model yet. Needs data layer design first.

@@ -45,6 +45,9 @@ public:
               const Microsoft::Xna::Framework::Matrix& projection,
               const std::vector<const Mc3::Mc3Object*>& selected);
 
+    // Call after any document mutation so CSG meshes are re-evaluated
+    void clearCsgCache() { csgMeshCache_.clear(); }
+
     // Render translate gizmo (X/Y/Z axis lines + cube tips) for a selected object
     void drawGizmo(const Mc3::Mc3Object* obj,
                    const Microsoft::Xna::Framework::Matrix& view,
@@ -169,6 +172,7 @@ private:
     bool isSelected(const Mc3::Mc3Object& obj, const std::vector<const Mc3::Mc3Object*>& sel) const;
 
     std::map<std::string, Microsoft::Xna::Framework::Graphics::Texture2D> textureCache_;
+    std::map<const Mc3::Mc3Object*, RenderMesh> csgMeshCache_;
 };
 
 } // namespace MeshCraft::Renderer

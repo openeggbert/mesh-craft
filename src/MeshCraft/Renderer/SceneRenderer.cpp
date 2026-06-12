@@ -14,9 +14,154 @@
 #include <numbers>
 #include <vector>
 
+#include <manifold/manifold.h>
+
 using namespace Microsoft::Xna::Framework;
 using namespace Microsoft::Xna::Framework::Graphics;
 using namespace MeshCraft::Mc3;
+using namespace MeshCraft::Renderer;
+
+// ---------------------------------------------------------------------------
+// CSG helpers (file scope)
+// ---------------------------------------------------------------------------
+
+// XNA row-major → manifold mat3x4 (3 rows × 4 cols, linalg column-major storage)
+// XNA: v' = v * M  →  manifold Transform: v' = M * (v,1)
+// manifold mat3x4[col][row]: col0=X axis, col1=Y axis, col2=Z axis, col3=translation
+static manifold::mat3x4 xnaToManifoldMat(const Matrix& m) {
+    return manifold::mat3x4(
+        {m.M11, m.M12, m.M13},   // col 0: X basis
+        {m.M21, m.M22, m.M23},   // col 1: Y basis
+        {m.M31, m.M32, m.M33},   // col 2: Z basis
+        {m.M41, m.M42, m.M43}    // col 3: translation
+    );
+}
+
+static Matrix computeObjWorldMatrix(const Mc3Object& obj) {
+    const auto& t = obj.transform;
+    constexpr float d = std::numbers::pi_v<float> / 180.0f;
+    float px = t.pivot[0], py = t.pivot[1], pz = t.pivot[2];
+    return Matrix::CreateTranslation({-px,-py,-pz}) *
+           Matrix::CreateScale({t.scale[0], t.scale[1], t.scale[2]}) *
+           Matrix::CreateFromYawPitchRoll(t.rotation[1]*d, t.rotation[0]*d, t.rotation[2]*d) *
+           Matrix::CreateTranslation({t.position[0]+px, t.position[1]+py, t.position[2]+pz});
+}
+
+// Build a manifold::Manifold for `obj` and its subtree.
+// parentToWorld: cumulative transform from the CSG root's parent space to world.
+// Leaf primitives are placed in world space; result drawn with identity matrix.
+static manifold::Manifold buildManifoldTree(
+    const Mc3Object& obj, const Mc3Document& doc,
+    const Matrix& parentToWorld, int depth)
+{
+    using namespace manifold;
+    if (depth > 12 || !obj.visible) return Manifold{};
+
+    constexpr int SEG = 24;
+    Matrix objWorld = computeObjWorldMatrix(obj) * parentToWorld;
+    Matrix deformMat = obj.deform
+        ? Matrix::CreateScale({obj.deform->scale[0], obj.deform->scale[1], obj.deform->scale[2]})
+        : Matrix::getIdentityProperty();
+    Matrix fullWorld = deformMat * objWorld;
+
+    auto applyTransform = [&](Manifold m) {
+        return m.Transform(xnaToManifoldMat(fullWorld));
+    };
+
+    switch (obj.type) {
+    case ObjectType::Box:
+    case ObjectType::Cube: {
+        float sx = obj.primitive ? obj.primitive->size[0] : 1.0f;
+        float sy = obj.primitive ? obj.primitive->size[1] : 1.0f;
+        float sz = obj.primitive ? obj.primitive->size[2] : 1.0f;
+        return applyTransform(Manifold::Cube({sx, sy, sz}, /*center=*/true));
+    }
+    case ObjectType::Sphere: {
+        float r = obj.primitive ? obj.primitive->radius : 0.5f;
+        return applyTransform(Manifold::Sphere(r, SEG));
+    }
+    case ObjectType::Cylinder: {
+        float r = obj.primitive ? obj.primitive->radius : 0.5f;
+        float h = obj.primitive ? obj.primitive->height : 1.0f;
+        return applyTransform(Manifold::Cylinder(h, r, r, SEG, /*center=*/true));
+    }
+    case ObjectType::Cone: {
+        float r = obj.primitive ? obj.primitive->radius : 0.5f;
+        float h = obj.primitive ? obj.primitive->height : 1.0f;
+        return applyTransform(Manifold::Cylinder(h, r, 0.0f, SEG, /*center=*/true));
+    }
+    case ObjectType::Union: {
+        Manifold result;
+        for (const auto& child : obj.children)
+            result = result + buildManifoldTree(*child, doc, objWorld, depth + 1);
+        return result;
+    }
+    case ObjectType::Intersection: {
+        if (obj.children.empty()) return Manifold{};
+        Manifold result = buildManifoldTree(*obj.children[0], doc, objWorld, depth + 1);
+        for (size_t i = 1; i < obj.children.size(); ++i)
+            result = result ^ buildManifoldTree(*obj.children[i], doc, objWorld, depth + 1);
+        return result;
+    }
+    case ObjectType::Difference: {
+        Manifold base;
+        for (const auto& child : obj.children)
+            if (!child->isCutter)
+                base = base + buildManifoldTree(*child, doc, objWorld, depth + 1);
+        for (const auto& child : obj.children)
+            if (child->isCutter)
+                base = base - buildManifoldTree(*child, doc, objWorld, depth + 1);
+        return base;
+    }
+    case ObjectType::Group:
+    case ObjectType::Area: {
+        Manifold result;
+        for (const auto& child : obj.children)
+            result = result + buildManifoldTree(*child, doc, objWorld, depth + 1);
+        return result;
+    }
+    case ObjectType::Instance: {
+        auto it = doc.definitions.find(obj.definition);
+        if (it != doc.definitions.end() && it->second)
+            return buildManifoldTree(*it->second, doc, objWorld, depth + 1);
+        return Manifold{};
+    }
+    default:
+        return Manifold{};  // Extrude/Mesh: not supported in CSG boolean
+    }
+}
+
+// Convert a manifold::Manifold to a RenderMesh (VertexPositionColor, world-space)
+static RenderMesh manifoldToRenderMesh(GraphicsDevice& device, const manifold::Manifold& m) {
+    RenderMesh mesh;
+    if (m.IsEmpty()) return mesh;
+
+    manifold::MeshGL gl = m.GetMeshGL();
+    int nVerts = static_cast<int>(gl.vertProperties.size()) / static_cast<int>(gl.numProp);
+    int nTris  = static_cast<int>(gl.triVerts.size()) / 3;
+    if (nVerts <= 0 || nTris <= 0) return mesh;
+
+    Color c(180, 180, 180, 255);
+    std::vector<VertexPositionColor> verts(nVerts);
+    mesh.positions.reserve(nVerts);
+    for (int i = 0; i < nVerts; ++i) {
+        float x = gl.vertProperties[i * gl.numProp + 0];
+        float y = gl.vertProperties[i * gl.numProp + 1];
+        float z = gl.vertProperties[i * gl.numProp + 2];
+        verts[i] = {Vector3{x, y, z}, c};
+        mesh.positions.push_back({x, y, z});
+    }
+
+    // Use 32-bit indices to handle large manifold output
+    std::vector<uint32_t> idx32(gl.triVerts.begin(), gl.triVerts.end());
+
+    mesh.vb = std::make_unique<VertexBuffer>(device, nVerts);
+    mesh.vb->SetData(verts.data(), nVerts);
+    mesh.ib = std::make_unique<IndexBuffer>(device, nTris * 3);
+    mesh.ib->SetData(idx32.data(), nTris * 3);
+    mesh.primitiveCount = nTris;
+    return mesh;
+}
 
 namespace MeshCraft::Renderer {
 
@@ -889,37 +1034,23 @@ void SceneRenderer::drawObject(const Mc3Object& obj, const Mc3Document& doc,
         break;
     case ObjectType::Union:
     case ObjectType::Intersection:
-        for (const auto& child : obj.children)
-            drawObject(*child, doc, world, view, proj, selected, depth + 1);
-        break;
-    case ObjectType::Difference:
-        for (const auto& child : obj.children)
-            drawObject(*child, doc, world, view, proj, selected, depth + 1);
-        // Overlay red wireframe on cutter children
-        for (const auto& child : obj.children) {
-            if (child->isCutter) {
-                Matrix childWorld = objectWorldMatrix(*child) * world;
-                // Build colored unit-box line list in world space
-                static const float P[][3] = {
-                    {-0.5f,-0.5f,-0.5f},{0.5f,-0.5f,-0.5f},{0.5f,0.5f,-0.5f},{-0.5f,0.5f,-0.5f},
-                    {-0.5f,-0.5f, 0.5f},{0.5f,-0.5f, 0.5f},{0.5f,0.5f, 0.5f},{-0.5f,0.5f, 0.5f},
-                };
-                static const int E[][2] = {
-                    {0,1},{1,2},{2,3},{3,0},{4,5},{5,6},{6,7},{7,4},{0,4},{1,5},{2,6},{3,7}
-                };
-                Color rc(220, 60, 60, 200);
-                std::vector<VertexPositionColor> lines;
-                lines.reserve(24);
-                for (auto& e : E) {
-                    Vector3 a = Vector3::Transform(Vector3{P[e[0]][0],P[e[0]][1],P[e[0]][2]}, childWorld);
-                    Vector3 b = Vector3::Transform(Vector3{P[e[1]][0],P[e[1]][1],P[e[1]][2]}, childWorld);
-                    lines.push_back({a, rc});
-                    lines.push_back({b, rc});
-                }
-                drawLineList(lines, view, proj);
-            }
+    case ObjectType::Difference: {
+        // Look up or evaluate the CSG boolean mesh (world-space, drawn with identity)
+        auto cit = csgMeshCache_.find(&obj);
+        if (cit == csgMeshCache_.end()) {
+            manifold::Manifold m = buildManifoldTree(obj, doc, parentWorld, 0);
+            csgMeshCache_[&obj] = manifoldToRenderMesh(device_, m);
+            cit = csgMeshCache_.find(&obj);
+        }
+        if (cit->second.vb) {
+            drawMesh(cit->second, Matrix::getIdentityProperty(), view, proj, color);
+        } else {
+            // Fallback: manifold failed or empty — render children individually
+            for (const auto& child : obj.children)
+                drawObject(*child, doc, world, view, proj, selected, depth + 1);
         }
         break;
+    }
     case ObjectType::Instance: {
         auto it = doc.definitions.find(obj.definition);
         if (it != doc.definitions.end() && it->second)
