@@ -8,9 +8,12 @@
 #include <Microsoft/Xna/Framework/Graphics/BasicEffect.hpp>
 #include <Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp>
 #include <Microsoft/Xna/Framework/Graphics/IndexBuffer.hpp>
+#include <Microsoft/Xna/Framework/Graphics/Texture2D.hpp>
 #include <Microsoft/Xna/Framework/Graphics/VertexBuffer.hpp>
 #include <Microsoft/Xna/Framework/Matrix.hpp>
+#include <map>
 #include <memory>
+#include <string>
 #include <vector>
 
 namespace MeshCraft::Renderer {
@@ -20,6 +23,11 @@ struct RenderMesh {
     std::unique_ptr<Microsoft::Xna::Framework::Graphics::IndexBuffer>  ib;
     std::vector<Microsoft::Xna::Framework::Vector3> positions; // for dynamic recoloring
     int primitiveCount{0};
+
+    // UV+normal variant for texture rendering (VertexPositionNormalTexture)
+    std::unique_ptr<Microsoft::Xna::Framework::Graphics::VertexBuffer> texVB;
+    std::unique_ptr<Microsoft::Xna::Framework::Graphics::IndexBuffer>  texIB;
+    int texPrimitiveCount{0};
 };
 
 // Line-list shape for edge overlay rendering
@@ -146,10 +154,21 @@ private:
                   const Microsoft::Xna::Framework::Matrix& projection,
                   Microsoft::Xna::Framework::Color color);
 
+    void drawMeshTextured(const RenderMesh& mesh,
+                          const Microsoft::Xna::Framework::Matrix& world,
+                          const Microsoft::Xna::Framework::Matrix& view,
+                          const Microsoft::Xna::Framework::Matrix& projection,
+                          Microsoft::Xna::Framework::Color color,
+                          Microsoft::Xna::Framework::Graphics::Texture2D* tex);
+
+    Microsoft::Xna::Framework::Graphics::Texture2D* loadOrGetTexture(const std::string& absPath);
+
     Microsoft::Xna::Framework::Matrix objectWorldMatrix(const Mc3::Mc3Object& obj) const;
     Microsoft::Xna::Framework::Color  materialColor(const std::string& matId,
                                                      const Mc3::Mc3Document& doc) const;
     bool isSelected(const Mc3::Mc3Object& obj, const std::vector<const Mc3::Mc3Object*>& sel) const;
+
+    std::map<std::string, Microsoft::Xna::Framework::Graphics::Texture2D> textureCache_;
 };
 
 } // namespace MeshCraft::Renderer

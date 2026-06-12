@@ -4,10 +4,13 @@
 #include <Microsoft/Xna/Framework/Graphics/IndexElementSize.hpp>
 #include <Microsoft/Xna/Framework/Graphics/PrimitiveType.hpp>
 #include <Microsoft/Xna/Framework/Graphics/VertexPositionColor.hpp>
+#include <Microsoft/Xna/Framework/Graphics/VertexPositionNormalTexture.hpp>
 #include <Microsoft/Xna/Framework/MathHelper.hpp>
+#include <Microsoft/Xna/Framework/Vector2.hpp>
 #include <Microsoft/Xna/Framework/Vector3.hpp>
 #include <algorithm>
 #include <cmath>
+#include <filesystem>
 #include <numbers>
 #include <vector>
 
@@ -74,6 +77,33 @@ void SceneRenderer::buildUnitBox() {
     unitBox_.ib->SetData(IDX, 36);
     unitBox_.primitiveCount = 12;
     storePositions(verts, unitBox_);
+
+    // VPNT: 4 verts per face (unshared) with normals and UVs
+    struct Face { Vector3 n; float p[4][3]; };
+    static const Face FACES[6] = {
+        {{ 0, 0,-1}, {{-.5f,-.5f,-.5f},{ .5f,-.5f,-.5f},{ .5f, .5f,-.5f},{-.5f, .5f,-.5f}}},
+        {{ 0, 0, 1}, {{ .5f,-.5f, .5f},{-.5f,-.5f, .5f},{-.5f, .5f, .5f},{ .5f, .5f, .5f}}},
+        {{ 0,-1, 0}, {{-.5f,-.5f, .5f},{ .5f,-.5f, .5f},{ .5f,-.5f,-.5f},{-.5f,-.5f,-.5f}}},
+        {{ 0, 1, 0}, {{-.5f, .5f,-.5f},{ .5f, .5f,-.5f},{ .5f, .5f, .5f},{-.5f, .5f, .5f}}},
+        {{-1, 0, 0}, {{-.5f,-.5f, .5f},{-.5f,-.5f,-.5f},{-.5f, .5f,-.5f},{-.5f, .5f, .5f}}},
+        {{ 1, 0, 0}, {{ .5f,-.5f,-.5f},{ .5f,-.5f, .5f},{ .5f, .5f, .5f},{ .5f, .5f,-.5f}}},
+    };
+    static const Vector2 UVS[4] = {{0,1},{1,1},{1,0},{0,0}};
+    std::vector<VertexPositionNormalTexture> tverts;
+    std::vector<uint16_t> tidx;
+    tverts.reserve(24); tidx.reserve(36);
+    for (int f = 0; f < 6; ++f) {
+        int base = f * 4;
+        for (int v = 0; v < 4; ++v)
+            tverts.push_back({Vector3{FACES[f].p[v][0],FACES[f].p[v][1],FACES[f].p[v][2]}, FACES[f].n, UVS[v]});
+        tidx.push_back(ui16(base)); tidx.push_back(ui16(base+2)); tidx.push_back(ui16(base+1));
+        tidx.push_back(ui16(base)); tidx.push_back(ui16(base+3)); tidx.push_back(ui16(base+2));
+    }
+    unitBox_.texVB = std::make_unique<VertexBuffer>(device_, 24);
+    unitBox_.texVB->SetData(tverts.data(), 24);
+    unitBox_.texIB = std::make_unique<IndexBuffer>(device_, 36);
+    unitBox_.texIB->SetData(tidx.data(), 36);
+    unitBox_.texPrimitiveCount = 12;
 }
 
 void SceneRenderer::buildUnitSphere(int segments) {
@@ -110,6 +140,30 @@ void SceneRenderer::buildUnitSphere(int segments) {
     unitSphere_.ib->SetData(indices.data(), static_cast<int>(indices.size()));
     unitSphere_.primitiveCount = static_cast<int>(indices.size()) / 3;
     storePositions(verts, unitSphere_);
+
+    // VPNT: same topology, normals = pos*2 (unit sphere radius 0.5), UVs from ring/sector
+    {
+        std::vector<VertexPositionNormalTexture> tv;
+        tv.reserve(verts.size());
+        for (int r = 0; r <= rings; ++r) {
+            float phi = std::numbers::pi_v<float> * r / rings;
+            for (int s = 0; s <= sectors; ++s) {
+                float theta = 2.0f * std::numbers::pi_v<float> * s / sectors;
+                float x = std::sin(phi) * std::cos(theta) * 0.5f;
+                float y = std::cos(phi) * 0.5f;
+                float z = std::sin(phi) * std::sin(theta) * 0.5f;
+                Vector3 pos{x, y, z};
+                Vector3 norm{x * 2.0f, y * 2.0f, z * 2.0f};
+                Vector2 uv{static_cast<float>(s) / sectors, static_cast<float>(r) / rings};
+                tv.push_back({pos, norm, uv});
+            }
+        }
+        unitSphere_.texVB = std::make_unique<VertexBuffer>(device_, static_cast<int>(tv.size()));
+        unitSphere_.texVB->SetData(tv.data(), static_cast<int>(tv.size()));
+        unitSphere_.texIB = std::make_unique<IndexBuffer>(device_, static_cast<int>(indices.size()));
+        unitSphere_.texIB->SetData(indices.data(), static_cast<int>(indices.size()));
+        unitSphere_.texPrimitiveCount = unitSphere_.primitiveCount;
+    }
 }
 
 void SceneRenderer::buildUnitCylinder(int segments) {
@@ -150,6 +204,61 @@ void SceneRenderer::buildUnitCylinder(int segments) {
     unitCylinder_.ib->SetData(indices.data(), static_cast<int>(indices.size()));
     unitCylinder_.primitiveCount = static_cast<int>(indices.size()) / 3;
     storePositions(verts, unitCylinder_);
+
+    // VPNT: side with outward normals + flat cap normals
+    {
+        std::vector<VertexPositionNormalTexture> tv;
+        std::vector<uint16_t> ti;
+        // Side: segments+1 columns × 2 rows (seam duplicated for UV)
+        for (int i = 0; i <= segments; ++i) {
+            float a = 2.0f * std::numbers::pi_v<float> * i / segments;
+            float cx = std::cos(a), cz = std::sin(a);
+            float u = static_cast<float>(i) / segments;
+            Vector3 n{cx, 0.0f, cz};
+            tv.push_back({Vector3{0.5f*cx, -0.5f, 0.5f*cz}, n, Vector2{u, 1.0f}});
+            tv.push_back({Vector3{0.5f*cx,  0.5f, 0.5f*cz}, n, Vector2{u, 0.0f}});
+        }
+        for (int i = 0; i < segments; ++i) {
+            int b = i * 2;
+            ti.push_back(ui16(b));   ti.push_back(ui16(b+2)); ti.push_back(ui16(b+1));
+            ti.push_back(ui16(b+1)); ti.push_back(ui16(b+2)); ti.push_back(ui16(b+3));
+        }
+        // Bottom cap
+        int capBase = static_cast<int>(tv.size());
+        Vector3 botN{0,-1,0};
+        tv.push_back({Vector3{0,-0.5f,0}, botN, Vector2{0.5f,0.5f}});
+        for (int i = 0; i <= segments; ++i) {
+            float a = 2.0f * std::numbers::pi_v<float> * i / segments;
+            float cx = std::cos(a), cz = std::sin(a);
+            tv.push_back({Vector3{0.5f*cx,-0.5f,0.5f*cz}, botN,
+                          Vector2{0.5f+0.5f*cx, 0.5f+0.5f*cz}});
+        }
+        for (int i = 0; i < segments; ++i) {
+            ti.push_back(ui16(capBase));
+            ti.push_back(ui16(capBase+i+2));
+            ti.push_back(ui16(capBase+i+1));
+        }
+        // Top cap
+        int topBase = static_cast<int>(tv.size());
+        Vector3 topN{0,1,0};
+        tv.push_back({Vector3{0,0.5f,0}, topN, Vector2{0.5f,0.5f}});
+        for (int i = 0; i <= segments; ++i) {
+            float a = 2.0f * std::numbers::pi_v<float> * i / segments;
+            float cx = std::cos(a), cz = std::sin(a);
+            tv.push_back({Vector3{0.5f*cx,0.5f,0.5f*cz}, topN,
+                          Vector2{0.5f+0.5f*cx, 0.5f-0.5f*cz}});
+        }
+        for (int i = 0; i < segments; ++i) {
+            ti.push_back(ui16(topBase));
+            ti.push_back(ui16(topBase+i+1));
+            ti.push_back(ui16(topBase+i+2));
+        }
+        unitCylinder_.texVB = std::make_unique<VertexBuffer>(device_, static_cast<int>(tv.size()));
+        unitCylinder_.texVB->SetData(tv.data(), static_cast<int>(tv.size()));
+        unitCylinder_.texIB = std::make_unique<IndexBuffer>(device_, static_cast<int>(ti.size()));
+        unitCylinder_.texIB->SetData(ti.data(), static_cast<int>(ti.size()));
+        unitCylinder_.texPrimitiveCount = static_cast<int>(ti.size()) / 3;
+    }
 }
 
 void SceneRenderer::buildUnitCone(int segments) {
@@ -179,6 +288,46 @@ void SceneRenderer::buildUnitCone(int segments) {
     unitCone_.ib->SetData(indices.data(), static_cast<int>(indices.size()));
     unitCone_.primitiveCount = static_cast<int>(indices.size()) / 3;
     storePositions(verts, unitCone_);
+
+    // VPNT: side tris (apex vert per sector, with slant normal) + bottom cap
+    {
+        std::vector<VertexPositionNormalTexture> tv;
+        std::vector<uint16_t> ti;
+        // Side: per-sector quad-strip with interpolated normals
+        float slopeY = 0.5f; // normal Y component for 45° slope
+        for (int i = 0; i <= segments; ++i) {
+            float a = 2.0f * std::numbers::pi_v<float> * i / segments;
+            float cx = std::cos(a), cz = std::sin(a);
+            float u = static_cast<float>(i) / segments;
+            Vector3 n = Vector3::Normalize(Vector3{cx, slopeY, cz});
+            tv.push_back({Vector3{0.5f*cx, -0.5f, 0.5f*cz}, n, Vector2{u, 1.0f}});
+            tv.push_back({Vector3{0.0f, 0.5f, 0.0f}, n, Vector2{u + 0.5f / segments, 0.0f}});
+        }
+        for (int i = 0; i < segments; ++i) {
+            int b = i * 2;
+            ti.push_back(ui16(b)); ti.push_back(ui16(b+1)); ti.push_back(ui16(b+2));
+        }
+        // Bottom cap
+        int capBase = static_cast<int>(tv.size());
+        Vector3 botN{0,-1,0};
+        tv.push_back({Vector3{0,-0.5f,0}, botN, Vector2{0.5f,0.5f}});
+        for (int i = 0; i <= segments; ++i) {
+            float a = 2.0f * std::numbers::pi_v<float> * i / segments;
+            float cx = std::cos(a), cz = std::sin(a);
+            tv.push_back({Vector3{0.5f*cx,-0.5f,0.5f*cz}, botN,
+                          Vector2{0.5f+0.5f*cx, 0.5f+0.5f*cz}});
+        }
+        for (int i = 0; i < segments; ++i) {
+            ti.push_back(ui16(capBase));
+            ti.push_back(ui16(capBase+i+2));
+            ti.push_back(ui16(capBase+i+1));
+        }
+        unitCone_.texVB = std::make_unique<VertexBuffer>(device_, static_cast<int>(tv.size()));
+        unitCone_.texVB->SetData(tv.data(), static_cast<int>(tv.size()));
+        unitCone_.texIB = std::make_unique<IndexBuffer>(device_, static_cast<int>(ti.size()));
+        unitCone_.texIB->SetData(ti.data(), static_cast<int>(ti.size()));
+        unitCone_.texPrimitiveCount = static_cast<int>(ti.size()) / 3;
+    }
 }
 
 void SceneRenderer::buildUnitPlane() {
@@ -196,6 +345,22 @@ void SceneRenderer::buildUnitPlane() {
     unitPlane_.ib->SetData(IDX, 6);
     unitPlane_.primitiveCount = 2;
     storePositions(verts, unitPlane_);
+
+    // VPNT: same 4 verts + normal up + UVs
+    {
+        Vector3 n{0,1,0};
+        VertexPositionNormalTexture tv[4] = {
+            {Vector3{-0.5f,0,-0.5f}, n, Vector2{0,0}},
+            {Vector3{ 0.5f,0,-0.5f}, n, Vector2{1,0}},
+            {Vector3{ 0.5f,0, 0.5f}, n, Vector2{1,1}},
+            {Vector3{-0.5f,0, 0.5f}, n, Vector2{0,1}},
+        };
+        unitPlane_.texVB = std::make_unique<VertexBuffer>(device_, 4);
+        unitPlane_.texVB->SetData(tv, 4);
+        unitPlane_.texIB = std::make_unique<IndexBuffer>(device_, 6);
+        unitPlane_.texIB->SetData(IDX, 6);
+        unitPlane_.texPrimitiveCount = 2;
+    }
 }
 
 void SceneRenderer::buildWireBox() {
@@ -540,6 +705,62 @@ void SceneRenderer::drawMesh(const RenderMesh& mesh,
     device_.SetIndexBuffer(nullptr);
 }
 
+void SceneRenderer::drawMeshTextured(const RenderMesh& mesh,
+                                      const Matrix& world, const Matrix& view, const Matrix& proj,
+                                      Color color, Texture2D* tex)
+{
+    if (!mesh.texVB || !mesh.texIB) {
+        drawMesh(mesh, world, view, proj, color);
+        return;
+    }
+    int n = mesh.texVB->VertexCount();
+
+    effect_->World      = world;
+    effect_->View       = view;
+    effect_->Projection = proj;
+    effect_->VertexColorEnabled = false;
+    effect_->setTextureEnabledProperty(true);
+    effect_->setTextureProperty(tex);
+    effect_->setDiffuseColorProperty(Vector3{
+        std::clamp(color.getRProperty() / 255.0f, 0.0f, 1.0f),
+        std::clamp(color.getGProperty() / 255.0f, 0.0f, 1.0f),
+        std::clamp(color.getBProperty() / 255.0f, 0.0f, 1.0f)});
+    effect_->setAlphaProperty(std::clamp(color.getAProperty() / 255.0f, 0.0f, 1.0f));
+
+    for (auto& pass : effect_->getCurrentTechniqueProperty()->getPassesProperty())
+        pass.Apply();
+
+    device_.SetVertexBuffer(mesh.texVB.get());
+    device_.SetIndexBuffer(mesh.texIB.get());
+    device_.DrawIndexedPrimitives(
+        Graphics::PrimitiveType::TriangleList,
+        0, 0, n, 0, mesh.texPrimitiveCount);
+    device_.SetVertexBuffer(nullptr);
+    device_.SetIndexBuffer(nullptr);
+
+    effect_->setTextureProperty(nullptr);
+    effect_->setTextureEnabledProperty(false);
+    effect_->VertexColorEnabled = true;
+    effect_->setDiffuseColorProperty(Vector3{1,1,1});
+    effect_->setAlphaProperty(1.0f);
+}
+
+Texture2D* SceneRenderer::loadOrGetTexture(const std::string& absPath)
+{
+    auto it = textureCache_.find(absPath);
+    if (it != textureCache_.end()) return &it->second;
+    try {
+        Texture2D tex(absPath, device_);
+        auto [ins, ok] = textureCache_.emplace(absPath, std::move(tex));
+        (void)ok;
+        return &ins->second;
+    } catch (...) {
+        // Mark as failed with a sentinel by inserting an empty slot — but Texture2D has no
+        // default invalid state. Just return nullptr and try again next frame (cheap miss).
+        return nullptr;
+    }
+}
+
 void SceneRenderer::drawObjectWireframe(const Mc3Object& obj,
                                          const Matrix& view, const Matrix& proj, Color color)
 {
@@ -611,41 +832,54 @@ void SceneRenderer::drawObject(const Mc3Object& obj, const Mc3Document& doc,
         ? Matrix::CreateScale({obj.deform->scale[0], obj.deform->scale[1], obj.deform->scale[2]})
         : Matrix::getIdentityProperty();
 
+    // Resolve baseColorTexture → GPU texture (null if none or failed to load)
+    Texture2D* tex = nullptr;
+    if (!obj.material.empty()) {
+        auto matIt = doc.materials.find(obj.material);
+        if (matIt != doc.materials.end() && !matIt->second.baseColorTexture.empty()) {
+            auto texIt = doc.textures.find(matIt->second.baseColorTexture);
+            if (texIt != doc.textures.end() && !texIt->second.uri.empty()) {
+                auto absPath = (doc.sourcePath / texIt->second.uri).string();
+                tex = loadOrGetTexture(absPath);
+            }
+        }
+    }
+
+    auto drawAuto = [&](const RenderMesh& mesh, const Matrix& m) {
+        if (tex) drawMeshTextured(mesh, m, view, proj, color, tex);
+        else     drawMesh(mesh, m, view, proj, color);
+    };
+
     switch (obj.type) {
     case ObjectType::Box:
     case ObjectType::Cube: {
         float sx = obj.primitive ? obj.primitive->size[0] : 1.0f;
         float sy = obj.primitive ? obj.primitive->size[1] : 1.0f;
         float sz = obj.primitive ? obj.primitive->size[2] : 1.0f;
-        Matrix m = deform * Matrix::CreateScale({sx,sy,sz}) * world;
-        drawMesh(unitBox_, m, view, proj, color);
+        drawAuto(unitBox_, deform * Matrix::CreateScale({sx,sy,sz}) * world);
         break;
     }
     case ObjectType::Sphere: {
         float r = obj.primitive ? obj.primitive->radius * 2.0f : 1.0f;
-        Matrix m = deform * Matrix::CreateScale({r,r,r}) * world;
-        drawMesh(unitSphere_, m, view, proj, color);
+        drawAuto(unitSphere_, deform * Matrix::CreateScale({r,r,r}) * world);
         break;
     }
     case ObjectType::Cylinder: {
         float r = obj.primitive ? obj.primitive->radius * 2.0f : 1.0f;
         float h = obj.primitive ? obj.primitive->height         : 1.0f;
-        Matrix m = deform * Matrix::CreateScale({r,h,r}) * world;
-        drawMesh(unitCylinder_, m, view, proj, color);
+        drawAuto(unitCylinder_, deform * Matrix::CreateScale({r,h,r}) * world);
         break;
     }
     case ObjectType::Cone: {
         float r = obj.primitive ? obj.primitive->radius * 2.0f : 1.0f;
         float h = obj.primitive ? obj.primitive->height         : 1.0f;
-        Matrix m = deform * Matrix::CreateScale({r,h,r}) * world;
-        drawMesh(unitCone_, m, view, proj, color);
+        drawAuto(unitCone_, deform * Matrix::CreateScale({r,h,r}) * world);
         break;
     }
     case ObjectType::Plane: {
         float w = obj.primitive ? obj.primitive->size[0] : 1.0f;
         float d = obj.primitive ? obj.primitive->size[2] : 1.0f;
-        Matrix m = deform * Matrix::CreateScale({w,1.0f,d}) * world;
-        drawMesh(unitPlane_, m, view, proj, color);
+        drawAuto(unitPlane_, deform * Matrix::CreateScale({w,1.0f,d}) * world);
         break;
     }
     case ObjectType::Group:

@@ -192,14 +192,16 @@ ctest --test-dir cmake-build-debug -V
 
 All originally-planned features are now implemented. Remaining items are optional enhancements.
 
-### Medium scope
+### ✅ Done
 
-**L — Texture rendering in viewport** (~10–15 h)
-All objects render with flat material color. To show textures:
-1. Load image files at texture URIs using stb_image or a CNA Texture2D API.
-2. Bind textures per-material before each draw call.
-3. Pass UV coordinates through the vertex buffer (requires shader changes or a separate textured effect).
-**Files:** `SceneRenderer.cpp`, possibly CNA shader/effect layer.
+**L — Texture rendering in viewport** (completed)
+Objects with a `baseColorTexture` in their material now render with the texture applied.
+Implementation: `VertexPositionNormalTexture` VBs (with UVs + normals) added to all unit shapes
+alongside the existing colored VBs. `drawMeshTextured()` uses BasicEffect `TextureEnabled` + the
+lit-texture shader (stride 32, ambient+directional light). `loadOrGetTexture()` lazily loads and
+caches textures by absolute path via `Texture2D(path, device)`. Fallback to flat color when no
+texture or load error.
+**Files:** `SceneRenderer.hpp`, `SceneRenderer.cpp`.
 
 ### Large scope
 
