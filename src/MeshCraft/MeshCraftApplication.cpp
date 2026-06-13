@@ -2056,11 +2056,18 @@ void MeshCraftApplication::drawImGuiUi(int screenW, int screenH) {
                 updateWindowTitle();
             };
 
-            // --- Search filter ---
-            ImGui::SetNextItemWidth(-1);
+            // --- Search filter + expand/collapse all ---
+            float btnW = 22.0f;
+            ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x - btnW * 2 - ImGui::GetStyle().ItemSpacing.x * 2);
             ImGui::InputTextWithHint("##hfilter", "Search...", hierarchyFilter_, sizeof(hierarchyFilter_));
             if (ImGui::IsItemFocused() && ImGui::IsKeyPressed(ImGuiKey_Escape, false))
                 hierarchyFilter_[0] = '\0';
+            ImGui::SameLine();
+            bool expandAll   = ImGui::SmallButton("+##ea");
+            if (ImGui::IsItemHovered()) ImGui::SetTooltip("Expand All");
+            ImGui::SameLine();
+            bool collapseAll = ImGui::SmallButton("-##ca");
+            if (ImGui::IsItemHovered()) ImGui::SetTooltip("Collapse All");
             ImGui::Separator();
 
             // Build lowercase filter string once
@@ -2091,6 +2098,9 @@ void MeshCraftApplication::drawImGuiUi(int screenW, int screenH) {
                     if (!hasChildren) flags |= ImGuiTreeNodeFlags_Leaf | ImGuiTreeNodeFlags_NoTreePushOnOpen;
                     if (filtering && hasChildren) flags |= ImGuiTreeNodeFlags_DefaultOpen;
                     if (sel)          flags |= ImGuiTreeNodeFlags_Selected;
+                    // Expand / collapse all: override open state for this frame
+                    if (expandAll   && hasChildren) ImGui::SetNextItemOpen(true,  ImGuiCond_Always);
+                    if (collapseAll && hasChildren) ImGui::SetNextItemOpen(false, ImGuiCond_Always);
 
                     ImVec4 nodeColor = obj->visible ? ImVec4(1,1,1,1) : ImVec4(0.5f,0.5f,0.5f,1);
                     const char* typePrefix = "";
