@@ -174,6 +174,12 @@ private:
     char renameBuf_[256]{};
     bool renameNeedsFocus_{false};
 
+    // Timed status bar notification
+    std::string statusMsg_;
+    float statusMsgTimer_{0.0f};
+    bool  statusMsgIsError_{false};
+    void setStatusMsg(std::string msg, bool isError = false, float duration = 3.0f);
+
     // Undo/redo
     static constexpr int kUndoMax = 20;
     std::vector<Mc3::Mc3Document> undoStack_;

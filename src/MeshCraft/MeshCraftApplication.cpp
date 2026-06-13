@@ -148,6 +148,12 @@ void MeshCraftApplication::EndDraw() {
 // ---------------------------------------------------------------------------
 
 void MeshCraftApplication::Update(GameTime& gameTime) {
+    // Status bar notification countdown
+    {
+        float dt = static_cast<float>(gameTime.getElapsedGameTimeProperty().getTotalSecondsProperty());
+        if (statusMsgTimer_ > 0) statusMsgTimer_ -= dt;
+    }
+
     // Advance animation clock
     if (animPlaying_ && !currentActionName_.empty()) {
         auto it = document_.actions.find(currentActionName_);
@@ -889,6 +895,12 @@ void MeshCraftApplication::newScene() {
     updateWindowTitle();
 }
 
+void MeshCraftApplication::setStatusMsg(std::string msg, bool isError, float duration) {
+    statusMsg_ = std::move(msg);
+    statusMsgIsError_ = isError;
+    statusMsgTimer_ = duration;
+}
+
 static std::filesystem::path recentFilesPath() {
     const char* cfg = std::getenv("XDG_CONFIG_HOME");
     std::filesystem::path base = cfg && cfg[0]
@@ -940,9 +952,11 @@ void MeshCraftApplication::saveFile() {
         addRecentFile(currentFile_);
         modified_ = false;
         std::cout << "[MeshCraft] Saved: " << currentFile_ << "\n";
+        setStatusMsg("Saved " + currentFile_.filename().string(), false, 2.0f);
         updateWindowTitle();
     } catch (const std::exception& e) {
         std::cerr << "[MeshCraft] Save error: " << e.what() << "\n";
+        setStatusMsg(std::string("Save error: ") + e.what(), true);
     }
 }
 
@@ -956,7 +970,7 @@ void MeshCraftApplication::saveFileAs() {
 
 void MeshCraftApplication::exportGltf() {
     if (currentFile_.empty()) {
-        std::cerr << "[MeshCraft] Save the file first before exporting.\n";
+        setStatusMsg("Export failed: save the file first", true);
         return;
     }
     std::string mc3togltf = "mc3togltf";
@@ -977,8 +991,14 @@ void MeshCraftApplication::exportGltf() {
     std::string cmd = mc3togltf + " \"" + currentFile_.string() + "\" \"" + outPath + "\"";
     std::cout << "[MeshCraft] Exporting: " << cmd << "\n";
     int ret = std::system(cmd.c_str());
-    if (ret == 0) std::cout << "[MeshCraft] Exported to: " << outPath << "\n";
-    else          std::cerr << "[MeshCraft] Export failed (exit code " << ret << ")\n";
+    if (ret == 0) {
+        std::cout << "[MeshCraft] Exported to: " << outPath << "\n";
+        auto name = std::filesystem::path(outPath).filename().string();
+        setStatusMsg("Exported to " + name);
+    } else {
+        std::cerr << "[MeshCraft] Export failed (exit code " << ret << ")\n";
+        setStatusMsg("Export failed (exit " + std::to_string(ret) + ")", true);
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -3083,19 +3103,26 @@ void MeshCraftApplication::drawImGuiUi(int screenW, int screenH) {
         ImGuiWindowFlags_NoBringToFrontOnFocus | ImGuiWindowFlags_NoScrollbar |
         ImGuiWindowFlags_NoScrollWithMouse | ImGuiWindowFlags_NoSavedSettings);
     {
-        int totalObjs = 0;
-        std::function<void(const std::vector<std::shared_ptr<Mc3::Mc3Object>>&)> countAll =
-            [&](const std::vector<std::shared_ptr<Mc3::Mc3Object>>& list) {
-                totalObjs += static_cast<int>(list.size());
-                for (const auto& o : list) countAll(o->children);
-            };
-        countAll(document_.objects);
-        int selCount = static_cast<int>(selection_.selection().size());
-        if (selCount > 0) {
-            const std::string& selName = selection_.selection().front()->name;
-            ImGui::Text("%d objects | %d selected | %s", totalObjs, selCount, selName.c_str());
+        // Timed notification takes priority; falls back to scene info
+        if (statusMsgTimer_ > 0) {
+            ImVec4 col = statusMsgIsError_ ? ImVec4(1.0f, 0.45f, 0.45f, 1.0f)
+                                           : ImVec4(0.55f, 1.0f, 0.55f, 1.0f);
+            ImGui::TextColored(col, "%s", statusMsg_.c_str());
         } else {
-            ImGui::Text("%d objects", totalObjs);
+            int totalObjs = 0;
+            std::function<void(const std::vector<std::shared_ptr<Mc3::Mc3Object>>&)> countAll =
+                [&](const std::vector<std::shared_ptr<Mc3::Mc3Object>>& list) {
+                    totalObjs += static_cast<int>(list.size());
+                    for (const auto& o : list) countAll(o->children);
+                };
+            countAll(document_.objects);
+            int selCount = static_cast<int>(selection_.selection().size());
+            if (selCount > 0) {
+                const std::string& selName = selection_.selection().front()->name;
+                ImGui::Text("%d objects | %d selected | %s", totalObjs, selCount, selName.c_str());
+            } else {
+                ImGui::Text("%d objects", totalObjs);
+            }
         }
     }
     ImGui::End();
@@ -3141,6 +3168,7 @@ void MeshCraftApplication::drawImGuiUi(int screenW, int screenH) {
                 modified_ = false;
                 openDialogErr_[0] = '\0';
                 std::cout << "[MeshCraft] Loaded: " << openDialogBuf_ << "\n";
+                setStatusMsg("Opened " + currentFile_.filename().string(), false, 2.0f);
                 updateWindowTitle();
                 ImGui::CloseCurrentPopup();
             } catch (const std::exception& e) {
@@ -3171,6 +3199,7 @@ void MeshCraftApplication::drawImGuiUi(int screenW, int screenH) {
                 modified_ = false;
                 saveDialogErr_[0] = '\0';
                 std::cout << "[MeshCraft] Saved: " << path << "\n";
+                setStatusMsg("Saved " + currentFile_.filename().string(), false, 2.0f);
                 updateWindowTitle();
                 ImGui::CloseCurrentPopup();
             } catch (const std::exception& e) {
