@@ -413,6 +413,15 @@ void MeshCraftApplication::handleKeyboardShortcuts(const KeyboardState& ks, cons
         return;
     }
 
+    // Lock / unlock selected (Ctrl+L)
+    if (ctrl && justPressed(ks, prevKs, Keys::L)) {
+        for (const auto& s : selection_.selection()) {
+            if (lockedIds_.count(s->id)) lockedIds_.erase(s->id);
+            else                          lockedIds_.insert(s->id);
+        }
+        return;
+    }
+
     // Timeline toggle
     if (ctrl && justPressed(ks, prevKs, Keys::T)) { showTimeline_ = !showTimeline_; return; }
 
@@ -529,6 +538,7 @@ void MeshCraftApplication::handleKeyboardShortcuts(const KeyboardState& ks, cons
     if (anyNudgePressed) pushUndo();
     for (auto& selObj : selection_.selection()) {
         auto* obj = selObj.get();
+        if (lockedIds_.count(obj->id)) continue;
         if (justPressed(ks, prevKs, Keys::Left))     { obj->transform.position[0] -= nudge; nudged = true; }
         if (justPressed(ks, prevKs, Keys::Right))    { obj->transform.position[0] += nudge; nudged = true; }
         if (justPressed(ks, prevKs, Keys::Up))       { obj->transform.position[1] += nudge; nudged = true; }
@@ -608,6 +618,7 @@ void MeshCraftApplication::handleMouseInput(const MouseState& ms, const MouseSta
             float delta = dx * (axScrX/len2d) + dy * (axScrY/len2d);
             delta *= L / len2d;
             for (const auto& s : selection_.selection()) {
+                if (lockedIds_.count(s->id)) continue;
                 float& p = s->transform.position[axIdx];
                 p += delta;
                 if (snapEnabled_)
@@ -649,6 +660,7 @@ void MeshCraftApplication::handleMouseInput(const MouseState& ms, const MouseSta
         if (len3d > 0.5f) {
             float delta = (dx * (axScrX/len3d) + dy * (axScrY/len3d)) / len3d;
             for (const auto& s : selection_.selection()) {
+                if (lockedIds_.count(s->id)) continue;
                 float& sc = s->transform.scale[axIdx];
                 sc = std::max(0.01f, sc + delta);
                 if (snapEnabled_)
@@ -696,6 +708,7 @@ void MeshCraftApplication::handleMouseInput(const MouseState& ms, const MouseSta
             float degsPerPixel = 180.0f / (std::numbers::pi_v<float> * r_screen);
             float delta = (dx * tx + dy * ty) * degsPerPixel;
             for (const auto& s : selection_.selection()) {
+                if (lockedIds_.count(s->id)) continue;
                 float& r = s->transform.rotation[axIdx];
                 r += delta;
                 if (snapEnabled_)
@@ -1188,8 +1201,10 @@ static void removeFromList(std::vector<std::shared_ptr<Mc3::Mc3Object>>& list,
 
 void MeshCraftApplication::deleteSelected() {
     pushUndo();
-    for (const auto& s : selection_.selection())
+    for (const auto& s : selection_.selection()) {
+        if (lockedIds_.count(s->id)) continue;
         removeFromList(document_.objects, s.get());
+    }
     selection_.clear();
     modified_ = true;
     updateWindowTitle();
@@ -1424,6 +1439,13 @@ void MeshCraftApplication::drawImGuiUi(int screenW, int screenH) {
             ImGui::Separator();
             if (ImGui::MenuItem("Group",   "Ctrl+G"))       groupSelected();
             if (ImGui::MenuItem("Ungroup", "Ctrl+Shift+G")) ungroupSelected();
+            ImGui::Separator();
+            if (ImGui::MenuItem("Lock/Unlock Selected", "Ctrl+L", false, !selection_.selection().empty())) {
+                for (const auto& s : selection_.selection()) {
+                    if (lockedIds_.count(s->id)) lockedIds_.erase(s->id);
+                    else                          lockedIds_.insert(s->id);
+                }
+            }
             ImGui::Separator();
             if (ImGui::MenuItem("Hide Selected", "H", false, !selection_.selection().empty())) {
                 auto sel = selection_.selection();
@@ -1743,7 +1765,8 @@ void MeshCraftApplication::drawImGuiUi(int screenW, int screenH) {
                     else if (obj->type == Mc3::ObjectType::Intersection) { typePrefix = "[I] "; nodeColor = obj->visible ? ImVec4(0.3f,0.6f,1.0f,1) : ImVec4(0.2f,0.35f,0.5f,1); }
                     else if (obj->type == Mc3::ObjectType::Group)        { typePrefix = "[G] "; }
                     else if (obj->isCutter)                              { typePrefix = "[cut] "; nodeColor = obj->visible ? ImVec4(1.0f,0.5f,0.3f,1) : ImVec4(0.5f,0.3f,0.2f,1); }
-                    std::string displayLabel = typePrefix + (obj->name.empty() ? obj->id : obj->name);
+                    bool isLocked = lockedIds_.count(obj->id) > 0;
+                    std::string displayLabel = std::string(isLocked ? "[L] " : "") + typePrefix + (obj->name.empty() ? obj->id : obj->name);
                     if (obj->id == renamingId_) {
                         // Inline rename: leaf node + InputText
                         ImGui::TreeNodeEx("##rn",
@@ -1807,10 +1830,14 @@ void MeshCraftApplication::drawImGuiUi(int screenW, int screenH) {
                                 renameNeedsFocus_ = true;
                             }
                             if (ImGui::MenuItem("Duplicate")) duplicateSelected();
-                            if (ImGui::MenuItem("Delete"))    deleteSelected();
+                            if (ImGui::MenuItem("Delete", nullptr, false, !isLocked)) deleteSelected();
                             ImGui::Separator();
                             if (ImGui::MenuItem(obj->visible ? "Hide" : "Show")) {
                                 pushUndo(); obj->visible = !obj->visible; modified_ = true; updateWindowTitle();
+                            }
+                            if (ImGui::MenuItem(isLocked ? "Unlock\tCtrl+L" : "Lock\tCtrl+L")) {
+                                if (isLocked) lockedIds_.erase(obj->id);
+                                else          lockedIds_.insert(obj->id);
                             }
                             ImGui::EndPopup();
                         }
@@ -3543,6 +3570,7 @@ void MeshCraftApplication::drawImGuiUi(int screenW, int screenH) {
         kbSection("View / Visibility");
         kbRow("H",       "Hide selected objects");
         kbRow("Alt+H",   "Show all hidden objects");
+        kbRow("Ctrl+L",  "Lock / unlock selected (blocks gizmo, nudge, delete)");
         kbRow("Alt+W",   "Toggle edge overlay");
         kbRow("Ctrl+T",  "Toggle timeline panel");
 

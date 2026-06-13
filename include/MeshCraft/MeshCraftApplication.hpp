@@ -178,6 +178,9 @@ private:
     void saveRecentFiles();
     void addRecentFile(const std::filesystem::path& path);
 
+    // Locked object IDs (lock prevents gizmo/nudge/delete; persists in memory only)
+    std::set<std::string> lockedIds_;
+
     // Hierarchy search filter
     char hierarchyFilter_[128]{};
 
