@@ -2127,6 +2127,7 @@ void MeshCraftApplication::drawImGuiUi(int screenW, int screenH) {
                         }
                     } else {
                         ImGui::PushStyleColor(ImGuiCol_Text, nodeColor);
+                        ImGui::SetNextItemAllowOverlap();
                         bool nodeOpen = ImGui::TreeNodeEx(displayLabel.c_str(), flags);
                         ImGui::PopStyleColor();
 
@@ -2175,6 +2176,30 @@ void MeshCraftApplication::drawImGuiUi(int screenW, int screenH) {
                             }
                             ImGui::EndPopup();
                         }
+
+                        // Visibility eye button — right-aligned in the row
+                        {
+                            float btnX = ImGui::GetWindowContentRegionMax().x - 18.0f;
+                            ImGui::SameLine(btnX);
+                            bool vis = obj->visible;
+                            ImGui::PushStyleColor(ImGuiCol_Button,
+                                vis ? ImVec4(0.10f,0.40f,0.10f,0.70f)
+                                    : ImVec4(0.22f,0.22f,0.22f,0.50f));
+                            ImGui::PushStyleColor(ImGuiCol_ButtonHovered,
+                                vis ? ImVec4(0.20f,0.60f,0.20f,0.85f)
+                                    : ImVec4(0.35f,0.35f,0.35f,0.70f));
+                            ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(1,1));
+                            if (ImGui::SmallButton(vis ? "v##vs" : "h##vs")) {
+                                pushUndo();
+                                obj->visible = !obj->visible;
+                                modified_ = true; updateWindowTitle();
+                            }
+                            ImGui::PopStyleVar();
+                            ImGui::PopStyleColor(2);
+                            if (ImGui::IsItemHovered())
+                                ImGui::SetTooltip(vis ? "Hide" : "Show");
+                        }
+
                         if (hasChildren && nodeOpen)
                             drawHierarchy(obj->children);
                         if (hasChildren && nodeOpen)

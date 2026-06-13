@@ -57,8 +57,10 @@ viewport preview, and XML round-trip tests are complete.
 - **Song::GetHashCode() linker stub**: CNA's Song.cpp declares but never implements GetHashCode().
   If libCNA.a is recompiled and this symbol goes missing, inject a C stub:
   ```bash
-  echo 'int _ZNK9Microsoft3Xna9Framework5Media4Song11GetHashCodeEv(const void* s){return 0;}' > /tmp/s.c
-  gcc -c /tmp/s.c -o /tmp/s.o && ar r cmake-build-debug/CNA_dep/libCNA.a /tmp/s.o
+  echo 'int _ZNK9Microsoft3Xna9Framework5Media4Song11GetHashCodeEv(const void* s){return 0;}' > /tmp/hashstub.c
+  gcc -c /tmp/hashstub.c -o /tmp/hashstub.o
+  ar r cmake-build-debug/CNA_dep/libCNA.a /tmp/hashstub.o
+  ranlib cmake-build-debug/CNA_dep/libCNA.a   # REQUIRED: rebuilds archive index
   ```
 - **tinyxml2 duplicate target fix** in `mc3/CMakeLists.txt`: guards against `sharp-runtime`
   also bundling tinyxml2; creates `tinyxml2::tinyxml2` alias when only the bare target exists.
