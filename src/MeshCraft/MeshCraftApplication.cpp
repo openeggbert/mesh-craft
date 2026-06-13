@@ -919,9 +919,11 @@ void MeshCraftApplication::exportGltf() {
     }
     std::string mc3togltf = "mc3togltf";
     for (const auto& candidate : {
+        std::filesystem::path("mc3togltf/build/mc3togltf"),        // standalone build (default)
+        std::filesystem::path("cmake-build-debug/mc3togltf/mc3togltf"), // integrated root build
         std::filesystem::path("build-mc3togltf/mc3togltf"),
-        std::filesystem::path("cmake-build-debug/mc3togltf/mc3togltf"),
         std::filesystem::path("../build-mc3togltf/mc3togltf"),
+        std::filesystem::path("../mc3togltf/build/mc3togltf"),
     }) {
         if (std::filesystem::exists(candidate)) { mc3togltf = candidate.string(); break; }
     }

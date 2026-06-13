@@ -123,6 +123,7 @@ into `SceneRenderer` which overrides the effective `Mc3Transform` and visibility
 
 | Commit | Change |
 |-----------|-------------------------------------------------------------------------|
+| (pending) | exportGltf() binary discovery: add mc3togltf/build/mc3togltf as primary candidate; register mc3togltf_gltf in root ctest pointing to standalone binary |
 | (pending) | features.mc3.xml: bump to v0.3, add DemoSpin action (linear rotation + cubic bezier translation); roundtrip test extended to 114 checks |
 | `64b59ad` | mc3togltf test suite: gltf_test.py (38 checks — basic gltf/glb conversion, animation export structure, accessor types, dense sampling) registered as ctest mc3togltf_gltf |
 | `bc24fd7` | MC3_FORMAT.md updated to v0.3: full `<actions>` reference, animatable properties table with glTF export notes, proposed improvements renumbered |

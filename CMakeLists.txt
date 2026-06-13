@@ -272,4 +272,18 @@ if(MESH_CRAFT_BUILD_TESTING AND UNIX AND NOT ANDROID AND NOT EMSCRIPTEN)
         WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
     )
     set_tests_properties(smoke_test PROPERTIES TIMEOUT 30)
+
+    find_program(PYTHON3_EXEC python3)
+    set(_mc3togltf_bin "${CMAKE_CURRENT_SOURCE_DIR}/mc3togltf/build/mc3togltf")
+    if(PYTHON3_EXEC AND EXISTS "${_mc3togltf_bin}")
+        add_test(
+            NAME mc3togltf_gltf
+            COMMAND "${PYTHON3_EXEC}"
+                    "${CMAKE_CURRENT_SOURCE_DIR}/mc3togltf/test/gltf_test.py"
+                    "${_mc3togltf_bin}"
+                    "${CMAKE_CURRENT_SOURCE_DIR}/test/animation_test.mc3.xml"
+                    "${CMAKE_CURRENT_SOURCE_DIR}/test/house.mc3.xml"
+        )
+        set_tests_properties(mc3togltf_gltf PROPERTIES TIMEOUT 30)
+    endif()
 endif()
