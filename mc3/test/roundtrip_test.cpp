@@ -1,3 +1,4 @@
+#include <MeshCraft/Mc3/Mc3Animation.hpp>
 #include <MeshCraft/Mc3/Mc3Document.hpp>
 
 #include <cmath>
@@ -273,6 +274,179 @@ static void testGroupChildren() {
         CHECK(rt.objects[0]->children[2]->name == "Child2", "group: child[2].name");
 }
 
+// ---------------------------------------------------------------------------
+// Animation tests
+// ---------------------------------------------------------------------------
+
+static void testAnimationLinear() {
+    Mc3Document doc;
+    Mc3Action action;
+    action.name     = "Spin";
+    action.duration = 3.0f;
+    action.loop     = true;
+
+    Mc3Channel ch;
+    ch.targetObject = "Sphere1";
+    ch.property     = AnimatedProperty::RotationY;
+    ch.keyframes    = {
+        {0.0f,   0.0f, Interpolation::Linear},
+        {3.0f, 360.0f, Interpolation::Linear},
+    };
+    action.channels.push_back(ch);
+    doc.actions["Spin"] = std::move(action);
+
+    auto rt = roundtrip(doc);
+    CHECK(rt.actions.size() == 1, "anim linear: action count==1");
+    if (!rt.actions.count("Spin")) { fail("anim linear: action 'Spin' missing"); return; }
+    const auto& a = rt.actions.at("Spin");
+    CHECK(a.name == "Spin",     "anim linear: action.name");
+    CHECKF(a.duration, 3.0f,   "anim linear: action.duration");
+    CHECK(a.loop == true,       "anim linear: action.loop");
+    CHECK(a.channels.size() == 1, "anim linear: channel count");
+    if (a.channels.empty()) return;
+    const auto& c = a.channels[0];
+    CHECK(c.targetObject == "Sphere1",               "anim linear: channel.target");
+    CHECK(c.property == AnimatedProperty::RotationY, "anim linear: channel.property");
+    CHECK(c.keyframes.size() == 2,                   "anim linear: keyframe count");
+    if (c.keyframes.size() == 2) {
+        CHECKF(c.keyframes[0].time,   0.0f,   "anim linear: kf[0].time");
+        CHECKF(c.keyframes[0].value,  0.0f,   "anim linear: kf[0].value");
+        CHECK(c.keyframes[0].interpolation == Interpolation::Linear, "anim linear: kf[0].interp");
+        CHECKF(c.keyframes[1].time,   3.0f,   "anim linear: kf[1].time");
+        CHECKF(c.keyframes[1].value, 360.0f,  "anim linear: kf[1].value");
+    }
+}
+
+static void testAnimationCubicBezier() {
+    Mc3Document doc;
+    Mc3Action action;
+    action.name     = "Bounce";
+    action.duration = 2.0f;
+    action.loop     = true;
+
+    Mc3Channel ch;
+    ch.targetObject = "Box1";
+    ch.property     = AnimatedProperty::PositionY;
+    ch.keyframes    = {
+        {0.0f, 0.0f, Interpolation::CubicBezier, {-0.2f, 0.0f}, { 0.2f,  2.0f}},
+        {1.0f, 3.0f, Interpolation::CubicBezier, {-0.2f, 2.0f}, { 0.2f, -2.0f}},
+    };
+    action.channels.push_back(ch);
+    doc.actions["Bounce"] = std::move(action);
+
+    auto rt = roundtrip(doc);
+    if (!rt.actions.count("Bounce")) { fail("anim cubic: action missing"); return; }
+    const auto& a = rt.actions.at("Bounce");
+    CHECK(a.channels.size() == 1, "anim cubic: channel count");
+    if (a.channels.empty()) return;
+    const auto& c = a.channels[0];
+    CHECK(c.keyframes.size() == 2, "anim cubic: keyframe count");
+    if (c.keyframes.size() < 2) return;
+    const auto& k0 = c.keyframes[0];
+    CHECK(k0.interpolation == Interpolation::CubicBezier, "anim cubic: kf[0].interp==CubicBezier");
+    CHECKF(k0.handleLeft.dt,  -0.2f, "anim cubic: kf[0].handleLeft.dt");
+    CHECKF(k0.handleLeft.dv,   0.0f, "anim cubic: kf[0].handleLeft.dv");
+    CHECKF(k0.handleRight.dt,  0.2f, "anim cubic: kf[0].handleRight.dt");
+    CHECKF(k0.handleRight.dv,  2.0f, "anim cubic: kf[0].handleRight.dv");
+    const auto& k1 = c.keyframes[1];
+    CHECKF(k1.handleLeft.dt,  -0.2f, "anim cubic: kf[1].handleLeft.dt");
+    CHECKF(k1.handleRight.dv, -2.0f, "anim cubic: kf[1].handleRight.dv");
+}
+
+static void testAnimationStep() {
+    Mc3Document doc;
+    Mc3Action action;
+    action.name     = "Flash";
+    action.duration = 2.0f;
+    action.loop     = true;
+
+    Mc3Channel ch;
+    ch.targetObject = "Plane1";
+    ch.property     = AnimatedProperty::Visible;
+    ch.keyframes    = {
+        {0.0f, 1.0f, Interpolation::Step},
+        {0.5f, 0.0f, Interpolation::Step},
+        {1.0f, 1.0f, Interpolation::Step},
+    };
+    action.channels.push_back(ch);
+    doc.actions["Flash"] = std::move(action);
+
+    auto rt = roundtrip(doc);
+    if (!rt.actions.count("Flash")) { fail("anim step: action missing"); return; }
+    const auto& c = rt.actions.at("Flash").channels;
+    CHECK(c.size() == 1, "anim step: channel count");
+    if (c.empty()) return;
+    CHECK(c[0].property == AnimatedProperty::Visible, "anim step: property==Visible");
+    CHECK(c[0].keyframes.size() == 3, "anim step: keyframe count");
+    if (c[0].keyframes.size() == 3) {
+        CHECK(c[0].keyframes[0].interpolation == Interpolation::Step, "anim step: kf[0].interp==Step");
+        CHECKF(c[0].keyframes[1].time,  0.5f, "anim step: kf[1].time");
+        CHECKF(c[0].keyframes[1].value, 0.0f, "anim step: kf[1].value");
+        CHECK(c[0].keyframes[2].interpolation == Interpolation::Step, "anim step: kf[2].interp==Step");
+    }
+}
+
+static void testAnimationMultiAction() {
+    Mc3Document doc;
+
+    Mc3Action a1;
+    a1.name = "Walk"; a1.duration = 1.0f;
+    Mc3Channel c1; c1.targetObject = "Leg"; c1.property = AnimatedProperty::RotationX;
+    c1.keyframes = {{0.0f, -30.0f, Interpolation::Linear}, {0.5f, 30.0f, Interpolation::Linear}};
+    a1.channels.push_back(c1);
+    doc.actions["Walk"] = std::move(a1);
+
+    Mc3Action a2;
+    a2.name = "Jump"; a2.duration = 0.5f;
+    Mc3Channel c2; c2.targetObject = "Body"; c2.property = AnimatedProperty::PositionY;
+    c2.keyframes = {{0.0f, 0.0f, Interpolation::Linear}, {0.25f, 2.0f, Interpolation::Linear}};
+    a2.channels.push_back(c2);
+    doc.actions["Jump"] = std::move(a2);
+
+    auto rt = roundtrip(doc);
+    CHECK(rt.actions.size() == 2,        "anim multi: action count==2");
+    CHECK(rt.actions.count("Walk") == 1, "anim multi: 'Walk' present");
+    CHECK(rt.actions.count("Jump") == 1, "anim multi: 'Jump' present");
+    if (rt.actions.count("Walk"))
+        CHECKF(rt.actions.at("Walk").duration, 1.0f, "anim multi: Walk.duration");
+    if (rt.actions.count("Jump")) {
+        CHECKF(rt.actions.at("Jump").duration, 0.5f, "anim multi: Jump.duration");
+        const auto& jch = rt.actions.at("Jump").channels;
+        CHECK(jch.size() == 1, "anim multi: Jump channel count");
+        if (!jch.empty())
+            CHECK(jch[0].targetObject == "Body", "anim multi: Jump channel.target");
+    }
+}
+
+static void testAnimationEvaluate() {
+    // Linear 0→1 over 1 second
+    Mc3Channel lin;
+    lin.targetObject = "Obj";
+    lin.property     = AnimatedProperty::PositionX;
+    lin.keyframes    = {
+        {0.0f, 0.0f, Interpolation::Linear},
+        {1.0f, 1.0f, Interpolation::Linear},
+    };
+    CHECKF(evaluateChannel(lin, 0.0f),  0.0f, "eval linear: t=0");
+    CHECKF(evaluateChannel(lin, 0.5f),  0.5f, "eval linear: t=0.5");
+    CHECKF(evaluateChannel(lin, 1.0f),  1.0f, "eval linear: t=1");
+    CHECKF(evaluateChannel(lin, -1.0f), 0.0f, "eval linear: before start clamps");
+    CHECKF(evaluateChannel(lin, 2.0f),  1.0f, "eval linear: after end clamps");
+
+    // Step: value holds until next keyframe
+    Mc3Channel step;
+    step.targetObject = "Obj2";
+    step.property     = AnimatedProperty::Visible;
+    step.keyframes    = {
+        {0.0f, 1.0f, Interpolation::Step},
+        {0.5f, 0.0f, Interpolation::Step},
+    };
+    CHECKF(evaluateChannel(step, 0.0f),  1.0f, "eval step: t=0");
+    CHECKF(evaluateChannel(step, 0.49f), 1.0f, "eval step: just before 0.5");
+    CHECKF(evaluateChannel(step, 0.5f),  0.0f, "eval step: t=0.5");
+    CHECKF(evaluateChannel(step, 1.0f),  0.0f, "eval step: after end clamps");
+}
+
 static void testFeaturesXmlLoads(const std::string& path) {
     try {
         auto doc = Mc3Document::loadFromFile(path);
@@ -313,6 +487,11 @@ int main(int argc, char* argv[]) {
     testExtrudeBezier();
     testCsgDifferenceAndCutter();
     testGroupChildren();
+    testAnimationLinear();
+    testAnimationCubicBezier();
+    testAnimationStep();
+    testAnimationMultiAction();
+    testAnimationEvaluate();
 
     if (argc >= 2)
         testFeaturesXmlLoads(argv[1]);
