@@ -333,7 +333,7 @@ void MeshCraftApplication::handleKeyboardShortcuts(const KeyboardState& ks, cons
             selection_.clear();
             updateWindowTitle();
         } else {
-            Exit();
+            confirmIfModified(PendingAction::ExitApp);
         }
         return;
     }
@@ -376,8 +376,8 @@ void MeshCraftApplication::handleKeyboardShortcuts(const KeyboardState& ks, cons
     }
 
     // File ops
-    if (ctrl && !shift && justPressed(ks, prevKs, Keys::N)) { newScene();   return; }
-    if (ctrl && !shift && justPressed(ks, prevKs, Keys::O)) { openFile();   return; }
+    if (ctrl && !shift && justPressed(ks, prevKs, Keys::N)) { confirmIfModified(PendingAction::NewScene);  return; }
+    if (ctrl && !shift && justPressed(ks, prevKs, Keys::O)) { confirmIfModified(PendingAction::OpenFile);  return; }
     if (ctrl &&  shift && justPressed(ks, prevKs, Keys::S)) { saveFileAs(); return; }
     if (ctrl && !shift && justPressed(ks, prevKs, Keys::S)) { saveFile();   return; }
     if (ctrl && !shift && justPressed(ks, prevKs, Keys::E)) { exportGltf(); return; }
@@ -982,6 +982,44 @@ void MeshCraftApplication::addRecentFile(const std::filesystem::path& path) {
     saveRecentFiles();
 }
 
+void MeshCraftApplication::confirmIfModified(PendingAction action, std::filesystem::path path) {
+    pendingAction_   = action;
+    pendingOpenPath_ = std::move(path);
+    if (!modified_) executePendingAction();
+    else            unsavedDlgOpen_ = true;
+}
+
+void MeshCraftApplication::executePendingAction() {
+    switch (pendingAction_) {
+    case PendingAction::NewScene:
+        newScene();
+        break;
+    case PendingAction::OpenFile:
+        openFile();
+        break;
+    case PendingAction::OpenRecentFile:
+        if (!pendingOpenPath_.empty()) {
+            try {
+                document_ = Mc3::Mc3Document::loadFromFile(pendingOpenPath_);
+                currentFile_ = pendingOpenPath_;
+                addRecentFile(currentFile_);
+                selection_.clear();
+                undoStack_.clear(); redoStack_.clear();
+                modified_ = false;
+                setStatusMsg("Opened " + currentFile_.filename().string(), false, 2.0f);
+                updateWindowTitle();
+            } catch (...) {}
+        }
+        break;
+    case PendingAction::ExitApp:
+        Exit();
+        break;
+    default:
+        break;
+    }
+    pendingAction_ = PendingAction::None;
+}
+
 void MeshCraftApplication::openFile() {
     openDialogBuf_[0] = '\0';
     openDialogErr_[0] = '\0';
@@ -1307,23 +1345,14 @@ void MeshCraftApplication::drawImGuiUi(int screenW, int screenH) {
     if (ImGui::BeginMainMenuBar()) {
         menuBarH = ImGui::GetWindowHeight();
         if (ImGui::BeginMenu("File")) {
-            if (ImGui::MenuItem("New",     "Ctrl+N")) newScene();
-            if (ImGui::MenuItem("Open...", "Ctrl+O")) openFile();
+            if (ImGui::MenuItem("New",     "Ctrl+N")) confirmIfModified(PendingAction::NewScene);
+            if (ImGui::MenuItem("Open...", "Ctrl+O")) confirmIfModified(PendingAction::OpenFile);
             if (ImGui::BeginMenu("Open Recent", !recentFiles_.empty())) {
                 for (int i = 0; i < static_cast<int>(recentFiles_.size()); ++i) {
                     const auto& rf = recentFiles_[static_cast<size_t>(i)];
                     std::string label = rf.filename().string() + "##rf" + std::to_string(i);
-                    if (ImGui::MenuItem(label.c_str())) {
-                        try {
-                            document_ = Mc3::Mc3Document::loadFromFile(rf);
-                            currentFile_ = rf;
-                            addRecentFile(rf);
-                            selection_.clear();
-                            undoStack_.clear(); redoStack_.clear();
-                            modified_ = false;
-                            updateWindowTitle();
-                        } catch (...) {}
-                    }
+                    if (ImGui::MenuItem(label.c_str()))
+                        confirmIfModified(PendingAction::OpenRecentFile, rf);
                     if (ImGui::IsItemHovered())
                         ImGui::SetTooltip("%s", rf.string().c_str());
                 }
@@ -1340,7 +1369,7 @@ void MeshCraftApplication::drawImGuiUi(int screenW, int screenH) {
             ImGui::Separator();
             if (ImGui::MenuItem("Export GLB", "Ctrl+E")) exportGltf();
             ImGui::Separator();
-            if (ImGui::MenuItem("Exit")) Exit();
+            if (ImGui::MenuItem("Exit")) confirmIfModified(PendingAction::ExitApp);
             ImGui::EndMenu();
         }
         if (ImGui::BeginMenu("Edit")) {
@@ -3293,6 +3322,41 @@ void MeshCraftApplication::drawImGuiUi(int screenW, int screenH) {
         }
         ImGui::SameLine();
         if (ImGui::Button("Cancel")) ImGui::CloseCurrentPopup();
+        ImGui::EndPopup();
+    }
+
+    // -----------------------------------------------------------------------
+    // Unsaved-changes confirmation dialog
+    // -----------------------------------------------------------------------
+    if (unsavedDlgOpen_) {
+        ImGui::OpenPopup("Unsaved Changes##ucdlg");
+        unsavedDlgOpen_ = false;
+    }
+    if (ImGui::BeginPopupModal("Unsaved Changes##ucdlg", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
+        ImGui::Text("The scene has unsaved changes.");
+        ImGui::Text("Save before continuing?");
+        ImGui::Spacing();
+        if (ImGui::Button("Save", ImVec2(90, 0))) {
+            if (!currentFile_.empty()) {
+                saveFile();
+                executePendingAction();
+            } else {
+                setStatusMsg("Save the file first (Ctrl+S), then repeat the action", false, 4.0f);
+                pendingAction_ = PendingAction::None;
+            }
+            ImGui::CloseCurrentPopup();
+        }
+        ImGui::SameLine();
+        if (ImGui::Button("Don't Save", ImVec2(90, 0))) {
+            modified_ = false;
+            executePendingAction();
+            ImGui::CloseCurrentPopup();
+        }
+        ImGui::SameLine();
+        if (ImGui::Button("Cancel", ImVec2(90, 0)) || ImGui::IsKeyPressed(ImGuiKey_Escape, false)) {
+            pendingAction_ = PendingAction::None;
+            ImGui::CloseCurrentPopup();
+        }
         ImGui::EndPopup();
     }
 

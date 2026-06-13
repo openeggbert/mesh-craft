@@ -183,6 +183,14 @@ private:
     char renameBuf_[256]{};
     bool renameNeedsFocus_{false};
 
+    // Unsaved-changes guard
+    enum class PendingAction { None, NewScene, OpenFile, OpenRecentFile, ExitApp };
+    PendingAction         pendingAction_{PendingAction::None};
+    std::filesystem::path pendingOpenPath_;
+    bool                  unsavedDlgOpen_{false};
+    void confirmIfModified(PendingAction action, std::filesystem::path path = {});
+    void executePendingAction();
+
     // Help dialog
     bool showShortcutsDialog_{false};
 
