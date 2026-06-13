@@ -455,6 +455,18 @@ void MeshCraftApplication::handleKeyboardShortcuts(const KeyboardState& ks, cons
     if (!ctrl && justPressed(ks, prevKs, Keys::NumPad7)) { camera_.yaw = 0.0f;                                camera_.pitch = 1.47f; return; }
     if (!ctrl && justPressed(ks, prevKs, Keys::NumPad9)) { camera_.yaw = 0.0f;                                camera_.pitch =-1.47f; return; }
 
+    // Camera bookmarks: Ctrl+F1-F5 save, F6-F10 restore
+    if (ctrl && justPressed(ks, prevKs, Keys::F1)) { saveCameraBookmark(0); return; }
+    if (ctrl && justPressed(ks, prevKs, Keys::F2)) { saveCameraBookmark(1); return; }
+    if (ctrl && justPressed(ks, prevKs, Keys::F3)) { saveCameraBookmark(2); return; }
+    if (ctrl && justPressed(ks, prevKs, Keys::F4)) { saveCameraBookmark(3); return; }
+    if (ctrl && justPressed(ks, prevKs, Keys::F5)) { saveCameraBookmark(4); return; }
+    if (!ctrl && justPressed(ks, prevKs, Keys::F6))  { restoreCameraBookmark(0); return; }
+    if (!ctrl && justPressed(ks, prevKs, Keys::F7))  { restoreCameraBookmark(1); return; }
+    if (!ctrl && justPressed(ks, prevKs, Keys::F8))  { restoreCameraBookmark(2); return; }
+    if (!ctrl && justPressed(ks, prevKs, Keys::F9))  { restoreCameraBookmark(3); return; }
+    if (!ctrl && justPressed(ks, prevKs, Keys::F10)) { restoreCameraBookmark(4); return; }
+
     // Add primitives
     if (!ctrl && justPressed(ks, prevKs, Keys::F1)) { addPrimitive(Mc3::ObjectType::Box);      return; }
     if (!ctrl && justPressed(ks, prevKs, Keys::F2)) { addPrimitive(Mc3::ObjectType::Sphere);   return; }
@@ -1258,6 +1270,29 @@ void MeshCraftApplication::toggleIsolate() {
     updateWindowTitle();
 }
 
+void MeshCraftApplication::saveCameraBookmark(int slot) {
+    auto& bm     = cameraBookmarks_[slot];
+    bm.yaw       = camera_.yaw;
+    bm.pitch     = camera_.pitch;
+    bm.distance  = camera_.distance;
+    bm.targetX   = camera_.target.X;
+    bm.targetY   = camera_.target.Y;
+    bm.targetZ   = camera_.target.Z;
+    bm.valid     = true;
+    char msg[64];
+    std::snprintf(msg, sizeof(msg), "Camera saved to slot %d", slot + 1);
+    setStatusMsg(msg, false, 2.0f);
+}
+
+void MeshCraftApplication::restoreCameraBookmark(int slot) {
+    const auto& bm = cameraBookmarks_[slot];
+    if (!bm.valid) { setStatusMsg("Slot is empty", true, 1.5f); return; }
+    camera_.yaw      = bm.yaw;
+    camera_.pitch    = bm.pitch;
+    camera_.distance = bm.distance;
+    camera_.target   = { bm.targetX, bm.targetY, bm.targetZ };
+}
+
 static std::shared_ptr<Mc3::Mc3Object> deepCopyObject(const Mc3::Mc3Object& src) {
     auto copy = std::make_shared<Mc3::Mc3Object>(src);
     copy->children.clear();
@@ -1551,6 +1586,28 @@ void MeshCraftApplication::drawImGuiUi(int screenW, int screenH) {
                     auto* s = selection_.selection().front().get();
                     camera_.focusOn(s->transform.position[0], s->transform.position[1], s->transform.position[2]);
                 } else { camera_.reset(); }
+            }
+            ImGui::Separator();
+            if (ImGui::BeginMenu("Camera Bookmarks")) {
+                static const char* kSlotKeys[5] = {"Ctrl+F1","Ctrl+F2","Ctrl+F3","Ctrl+F4","Ctrl+F5"};
+                static const char* kRestKeys[5] = {"F6","F7","F8","F9","F10"};
+                for (int i = 0; i < 5; ++i) {
+                    const auto& bm = cameraBookmarks_[i];
+                    char saveLabel[48];
+                    std::snprintf(saveLabel, sizeof(saveLabel), "Save Slot %d", i + 1);
+                    if (ImGui::MenuItem(saveLabel, kSlotKeys[i]))
+                        saveCameraBookmark(i);
+                    char restLabel[80];
+                    if (bm.valid)
+                        std::snprintf(restLabel, sizeof(restLabel),
+                            "Go to Slot %d  [%.1f,%.1f,%.1f]", i+1, bm.targetX, bm.targetY, bm.targetZ);
+                    else
+                        std::snprintf(restLabel, sizeof(restLabel), "Go to Slot %d  (empty)", i+1);
+                    if (ImGui::MenuItem(restLabel, kRestKeys[i], false, bm.valid))
+                        restoreCameraBookmark(i);
+                    if (i < 4) ImGui::Separator();
+                }
+                ImGui::EndMenu();
             }
             ImGui::Separator();
             ImGui::MenuItem("Edge Overlay",    "Alt+W", &showEdgeOverlay_);
@@ -3666,6 +3723,10 @@ void MeshCraftApplication::drawImGuiUi(int screenW, int screenH) {
         kbRow("Num 5",  "Back");
         kbRow("Num 7",  "Top");
         kbRow("Num 9",  "Bottom");
+
+        kbSection("Viewport – Camera Bookmarks");
+        kbRow("Ctrl+F1 … Ctrl+F5",  "Save camera to bookmark slot 1–5");
+        kbRow("F6 … F10",           "Restore camera from bookmark slot 1–5");
 
         kbSection("Tools");
         kbRow("Q",  "Select");

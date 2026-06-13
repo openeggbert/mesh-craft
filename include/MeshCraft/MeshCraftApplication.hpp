@@ -18,6 +18,7 @@
 #include <Microsoft/Xna/Framework/Input/KeyboardState.hpp>
 #include <Microsoft/Xna/Framework/Input/MouseState.hpp>
 #include <System/Object.hpp>
+#include <array>
 #include <filesystem>
 #include <map>
 #include <memory>
@@ -209,6 +210,16 @@ private:
     // Viewport stats overlay
     bool  showStatsOverlay_{true};
     float displayFps_{0.0f};
+
+    // Camera bookmarks (5 slots)
+    struct CameraBookmark {
+        float yaw{0}, pitch{0.4f}, distance{15.0f};
+        float targetX{0}, targetY{0}, targetZ{0};
+        bool  valid{false};
+    };
+    std::array<CameraBookmark, 5> cameraBookmarks_{};
+    void saveCameraBookmark(int slot);
+    void restoreCameraBookmark(int slot);
 
     // Auto-save
     float autoSaveCountdown_{60.0f};
