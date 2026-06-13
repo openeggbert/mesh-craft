@@ -13,6 +13,7 @@
 #include <filesystem>
 #include <numeric>
 #include <numbers>
+#include <optional>
 #include <vector>
 
 #include <manifold/manifold.h>
@@ -878,20 +879,17 @@ void SceneRenderer::drawRotateGizmo(const Mc3Object* obj,
 // Draw helpers
 // ---------------------------------------------------------------------------
 
-Matrix SceneRenderer::objectWorldMatrix(const Mc3Object& obj) const {
-    const auto& t = obj.transform;
+Matrix SceneRenderer::objectWorldMatrix(const Mc3Transform& t) const {
     float rx = t.rotation[0] * (std::numbers::pi_v<float> / 180.0f);
     float ry = t.rotation[1] * (std::numbers::pi_v<float> / 180.0f);
     float rz = t.rotation[2] * (std::numbers::pi_v<float> / 180.0f);
 
     // Pivot: world = T(-pivot) * S * R * T(pos + pivot)
     float px = t.pivot[0], py = t.pivot[1], pz = t.pivot[2];
-    Matrix world =
-        Matrix::CreateTranslation({-px, -py, -pz}) *
-        Matrix::CreateScale({t.scale[0], t.scale[1], t.scale[2]}) *
-        Matrix::CreateFromYawPitchRoll(ry, rx, rz) *
-        Matrix::CreateTranslation({t.position[0] + px, t.position[1] + py, t.position[2] + pz});
-    return world;
+    return Matrix::CreateTranslation({-px, -py, -pz}) *
+           Matrix::CreateScale({t.scale[0], t.scale[1], t.scale[2]}) *
+           Matrix::CreateFromYawPitchRoll(ry, rx, rz) *
+           Matrix::CreateTranslation({t.position[0] + px, t.position[1] + py, t.position[2] + pz});
 }
 
 Color SceneRenderer::materialColor(const std::string& matId, const Mc3Document& doc) const {
@@ -1026,7 +1024,7 @@ void SceneRenderer::drawObjectWireframe(const Mc3Object& obj,
                                          const Matrix& view, const Matrix& proj, Color color)
 {
     (void)color;
-    Matrix world = objectWorldMatrix(obj);
+    Matrix world = objectWorldMatrix(obj.transform);
 
     // Scale wire box to object's bounding size
     float sx = 1.0f, sy = 1.0f, sz = 1.0f;
@@ -1081,10 +1079,28 @@ void SceneRenderer::drawObject(const Mc3Object& obj, const Mc3Document& doc,
                                 const std::vector<const Mc3Object*>& selected,
                                 int depth)
 {
-    if (!obj.visible) return;
     if (depth > 16) return; // guard against infinite instance recursion
 
-    Matrix world = objectWorldMatrix(obj) * parentWorld;
+    // Apply per-object animation overrides (transform + visibility)
+    bool effectiveVisible = obj.visible;
+    std::optional<Mc3Transform> animTransform;
+    if (!obj.name.empty()) {
+        auto oit = animOverrides_.find(obj.name);
+        if (oit != animOverrides_.end()) {
+            const auto& ov = oit->second;
+            if (ov.visible) effectiveVisible = *ov.visible;
+            if (ov.position || ov.rotation || ov.scale) {
+                animTransform = obj.transform;
+                if (ov.position) animTransform->position = *ov.position;
+                if (ov.rotation) animTransform->rotation = *ov.rotation;
+                if (ov.scale)    animTransform->scale    = *ov.scale;
+            }
+        }
+    }
+    if (!effectiveVisible) return;
+
+    const Mc3Transform& tf = animTransform.has_value() ? *animTransform : obj.transform;
+    Matrix world = objectWorldMatrix(tf) * parentWorld;
     Color color  = materialColor(obj.material, doc);
     bool  sel    = isSelected(obj, selected);
 
@@ -1422,7 +1438,7 @@ void SceneRenderer::drawCsgGizmos(const Mc3::Mc3Document& doc,
 
     std::function<void(const Mc3Object&, const Matrix&)> visit;
     visit = [&](const Mc3Object& obj, const Matrix& parentWorld) {
-        Matrix world = objectWorldMatrix(obj) * parentWorld;
+        Matrix world = objectWorldMatrix(obj.transform) * parentWorld;
 
         if (obj.type == ObjectType::Union ||
             obj.type == ObjectType::Difference ||
@@ -1841,7 +1857,7 @@ void SceneRenderer::drawObjectEdges(const Mc3Object& obj, const Mc3Document& doc
     if (!obj.visible) return;
     if (depth > 16) return;
 
-    Matrix world = objectWorldMatrix(obj) * parentWorld;
+    Matrix world = objectWorldMatrix(obj.transform) * parentWorld;
     Color edgeColor(0, 0, 0, 220);
 
     // Slight outward push (scale in local space) to avoid z-fighting with the solid mesh

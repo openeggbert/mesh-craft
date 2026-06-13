@@ -18,10 +18,12 @@
 #include <System/Object.hpp>
 
 #include <algorithm>
+#include <cmath>
 #include <cstdio>
 #include <cstring>
 #include <fstream>
 #include <functional>
+#include <initializer_list>
 #include <iostream>
 #include <numbers>
 #include <stdexcept>
@@ -142,7 +144,25 @@ void MeshCraftApplication::EndDraw() {
 // Update
 // ---------------------------------------------------------------------------
 
-void MeshCraftApplication::Update(GameTime& /*gameTime*/) {
+void MeshCraftApplication::Update(GameTime& gameTime) {
+    // Advance animation clock
+    if (animPlaying_ && !currentActionName_.empty()) {
+        auto it = document_.actions.find(currentActionName_);
+        if (it != document_.actions.end()) {
+            float dt = static_cast<float>(
+                gameTime.getElapsedGameTimeProperty().getTotalSecondsProperty());
+            animTime_ += dt;
+            float dur = it->second.duration;
+            if (animTime_ >= dur) {
+                if (it->second.loop) animTime_ = std::fmod(animTime_, dur);
+                else { animTime_ = dur; animPlaying_ = false; }
+            }
+            evaluateAndPushAnimOverrides();
+        } else {
+            animPlaying_ = false;
+        }
+    }
+
     auto ks = Keyboard::GetState();
     auto ms = Mouse::GetState();
 
@@ -180,7 +200,8 @@ void MeshCraftApplication::Draw(const GameTime& /*gameTime*/) {
     int viewX = kLeftPanelW;
     int viewY = topH;
     int viewW = std::max(1, screenW - kLeftPanelW - kRightPanelW);
-    int viewH = std::max(1, screenH - topH - kStatusH);
+    int timelineH = showTimeline_ ? kTimelineH : 0;
+    int viewH = std::max(1, screenH - topH - timelineH - kStatusH);
 
     constexpr unsigned int GL_SCISSOR_TEST = 0x0C11;
     int glViewY = screenH - viewY - viewH;
@@ -298,6 +319,7 @@ void MeshCraftApplication::handleKeyboardShortcuts(const KeyboardState& ks, cons
             selection_.clear();
             modified_ = true;
             updateWindowTitle();
+            evaluateAndPushAnimOverrides();
         }
         return;
     }
@@ -311,6 +333,7 @@ void MeshCraftApplication::handleKeyboardShortcuts(const KeyboardState& ks, cons
             selection_.clear();
             modified_ = true;
             updateWindowTitle();
+            evaluateAndPushAnimOverrides();
         }
         return;
     }
@@ -337,6 +360,17 @@ void MeshCraftApplication::handleKeyboardShortcuts(const KeyboardState& ks, cons
 
     // Edge overlay toggle
     if (alt && justPressed(ks, prevKs, Keys::W)) { showEdgeOverlay_ = !showEdgeOverlay_; return; }
+
+    // Timeline toggle
+    if (ctrl && justPressed(ks, prevKs, Keys::T)) { showTimeline_ = !showTimeline_; return; }
+
+    // Animation play/pause (Space)
+    if (!ctrl && !alt && justPressed(ks, prevKs, Keys::Space)) {
+        if (!currentActionName_.empty() && document_.actions.count(currentActionName_)) {
+            animPlaying_ = !animPlaying_;
+        }
+        return;
+    }
 
     // Preset camera views (Numpad)
     if (!ctrl && justPressed(ks, prevKs, Keys::NumPad1)) { camera_.yaw = 0.0f;                                camera_.pitch = 0.0f;  return; }
@@ -487,7 +521,8 @@ void MeshCraftApplication::handleMouseInput(const MouseState& ms, const MouseSta
     int topH    = imguiTopH_ > 0 ? imguiTopH_ : 60;
     int vX = kLeftPanelW, vY = topH;
     int vW = std::max(1, screenW - kLeftPanelW - kRightPanelW);
-    int vH = std::max(1, screenH - topH - kStatusH);
+    int tlH = showTimeline_ ? kTimelineH : 0;
+    int vH = std::max(1, screenH - topH - tlH - kStatusH);
     float asp = static_cast<float>(vW) / static_cast<float>(vH);
 
     // Apply gizmo drag (Move)
@@ -843,6 +878,10 @@ void MeshCraftApplication::newScene() {
     selection_.clear();
     modified_ = false;
     currentFile_.clear();
+    currentActionName_.clear();
+    animTime_    = 0.0f;
+    animPlaying_ = false;
+    if (sceneRenderer_) sceneRenderer_->setAnimOverrides({});
     std::cout << "[MeshCraft] New scene\n";
     updateWindowTitle();
 }
@@ -1237,6 +1276,7 @@ void MeshCraftApplication::drawImGuiUi(int screenW, int screenH) {
             }
             ImGui::Separator();
             ImGui::MenuItem("Edge Overlay", "Alt+W", &showEdgeOverlay_);
+            ImGui::MenuItem("Timeline",     "Ctrl+T", &showTimeline_);
             ImGui::EndMenu();
         }
         ImGui::EndMainMenuBar();
@@ -1303,7 +1343,8 @@ void MeshCraftApplication::drawImGuiUi(int screenW, int screenH) {
     ImGui::PopStyleVar(2);
 
     float panelY = menuBarH + toolbarH;
-    float panelH = static_cast<float>(screenH) - panelY - static_cast<float>(kStatusH);
+    int   tlPanelH = showTimeline_ ? kTimelineH : 0;
+    float panelH = static_cast<float>(screenH) - panelY - static_cast<float>(kStatusH + tlPanelH);
 
     // -----------------------------------------------------------------------
     // Left panel — tabbed (Scene / Lights)
@@ -2178,6 +2219,13 @@ void MeshCraftApplication::drawImGuiUi(int screenW, int screenH) {
 
         // Transform: position
         ImGui::TextDisabled("Position");
+        if (showTimeline_ && !currentActionName_.empty() && selection_.hasSelection()) {
+            ImGui::SameLine();
+            if (ImGui::SmallButton("K##kpos"))
+                insertAnimKeyframes(*sel0, {Mc3::AnimatedProperty::PositionX,
+                                            Mc3::AnimatedProperty::PositionY,
+                                            Mc3::AnimatedProperty::PositionZ});
+        }
         {
             float pos[3] = { sel0->transform.position[0], sel0->transform.position[1], sel0->transform.position[2] };
             ImGui::SetNextItemWidth(-1);
@@ -2192,6 +2240,13 @@ void MeshCraftApplication::drawImGuiUi(int screenW, int screenH) {
 
         // Transform: rotation
         ImGui::TextDisabled("Rotation");
+        if (showTimeline_ && !currentActionName_.empty() && selection_.hasSelection()) {
+            ImGui::SameLine();
+            if (ImGui::SmallButton("K##krot"))
+                insertAnimKeyframes(*sel0, {Mc3::AnimatedProperty::RotationX,
+                                            Mc3::AnimatedProperty::RotationY,
+                                            Mc3::AnimatedProperty::RotationZ});
+        }
         {
             float rot[3] = { sel0->transform.rotation[0], sel0->transform.rotation[1], sel0->transform.rotation[2] };
             ImGui::SetNextItemWidth(-1);
@@ -2206,6 +2261,13 @@ void MeshCraftApplication::drawImGuiUi(int screenW, int screenH) {
 
         // Transform: scale
         ImGui::TextDisabled("Scale");
+        if (showTimeline_ && !currentActionName_.empty() && selection_.hasSelection()) {
+            ImGui::SameLine();
+            if (ImGui::SmallButton("K##kscl"))
+                insertAnimKeyframes(*sel0, {Mc3::AnimatedProperty::ScaleX,
+                                            Mc3::AnimatedProperty::ScaleY,
+                                            Mc3::AnimatedProperty::ScaleZ});
+        }
         {
             float scl[3] = { sel0->transform.scale[0], sel0->transform.scale[1], sel0->transform.scale[2] };
             ImGui::SetNextItemWidth(-1);
@@ -2241,6 +2303,11 @@ void MeshCraftApplication::drawImGuiUi(int screenW, int screenH) {
             bool vis = sel0->visible;
             if (ImGui::Checkbox("Visible", &vis)) {
                 pushUndo(); sel0->visible = vis; modified_ = true; updateWindowTitle();
+            }
+            if (showTimeline_ && !currentActionName_.empty()) {
+                ImGui::SameLine();
+                if (ImGui::SmallButton("K##kvis"))
+                    insertAnimKeyframes(*sel0, {Mc3::AnimatedProperty::Visible});
             }
         }
 
@@ -2891,6 +2958,12 @@ void MeshCraftApplication::drawImGuiUi(int screenW, int screenH) {
     ImGui::PopStyleColor();
 
     // -----------------------------------------------------------------------
+    // Timeline panel (above status bar)
+    // -----------------------------------------------------------------------
+    if (showTimeline_)
+        drawTimelinePanel(screenW, screenH);
+
+    // -----------------------------------------------------------------------
     // Status bar (bottom)
     // -----------------------------------------------------------------------
     ImGui::SetNextWindowPos(ImVec2(0, static_cast<float>(screenH - kStatusH)));
@@ -3083,6 +3156,355 @@ Mc3::Mc3Object* MeshCraftApplication::flatFindById(const std::string& id) const 
         return nullptr;
     };
     return find(document_.objects);
+}
+
+Mc3::Mc3Object* MeshCraftApplication::flatFindByName(const std::string& name) const {
+    std::function<Mc3::Mc3Object*(const std::vector<std::shared_ptr<Mc3::Mc3Object>>&)> find;
+    find = [&](const std::vector<std::shared_ptr<Mc3::Mc3Object>>& list) -> Mc3::Mc3Object* {
+        for (const auto& obj : list) {
+            if (obj->name == name) return obj.get();
+            if (!obj->children.empty()) {
+                auto* r = find(obj->children);
+                if (r) return r;
+            }
+        }
+        return nullptr;
+    };
+    return find(document_.objects);
+}
+
+// ---------------------------------------------------------------------------
+// Animation helpers
+// ---------------------------------------------------------------------------
+
+void MeshCraftApplication::evaluateAndPushAnimOverrides() {
+    // If the current action no longer exists in the document, clear it
+    if (!currentActionName_.empty() && !document_.actions.count(currentActionName_)) {
+        currentActionName_.clear();
+        animPlaying_ = false;
+    }
+    if (currentActionName_.empty()) {
+        sceneRenderer_->setAnimOverrides({});
+        return;
+    }
+
+    const auto& action = document_.actions.at(currentActionName_);
+    std::unordered_map<std::string, Renderer::AnimOverride> overrides;
+
+    // First pass: for each target object that has channels, initialize the
+    // override from the object's current document-state transform.
+    for (const auto& ch : action.channels) {
+        if (ch.targetObject.empty() || overrides.count(ch.targetObject)) continue;
+        Mc3::Mc3Object* obj = flatFindByName(ch.targetObject);
+        if (!obj) continue;
+        auto& ov = overrides[ch.targetObject];
+        ov.position = obj->transform.position;
+        ov.rotation = obj->transform.rotation;
+        ov.scale    = obj->transform.scale;
+        ov.visible  = obj->visible;
+    }
+
+    // Second pass: apply evaluated channel values at the current time
+    using AP = Mc3::AnimatedProperty;
+    for (const auto& ch : action.channels) {
+        auto it = overrides.find(ch.targetObject);
+        if (it == overrides.end()) continue;
+        float v = Mc3::evaluateChannel(ch, animTime_);
+        auto& ov = it->second;
+        switch (ch.property) {
+        case AP::PositionX: (*ov.position)[0] = v; break;
+        case AP::PositionY: (*ov.position)[1] = v; break;
+        case AP::PositionZ: (*ov.position)[2] = v; break;
+        case AP::RotationX: (*ov.rotation)[0] = v; break;
+        case AP::RotationY: (*ov.rotation)[1] = v; break;
+        case AP::RotationZ: (*ov.rotation)[2] = v; break;
+        case AP::ScaleX:    (*ov.scale)[0]    = v; break;
+        case AP::ScaleY:    (*ov.scale)[1]    = v; break;
+        case AP::ScaleZ:    (*ov.scale)[2]    = v; break;
+        case AP::Visible:   ov.visible        = (v >= 0.5f); break;
+        default: break; // material props: channel stored/serialised, not yet wired to renderer
+        }
+    }
+
+    sceneRenderer_->setAnimOverrides(std::move(overrides));
+}
+
+void MeshCraftApplication::insertAnimKeyframes(
+    Mc3::Mc3Object& obj,
+    std::initializer_list<Mc3::AnimatedProperty> props)
+{
+    if (currentActionName_.empty()) return;
+    auto actionIt = document_.actions.find(currentActionName_);
+    if (actionIt == document_.actions.end()) return;
+
+    pushUndo();
+    auto& action = document_.actions[currentActionName_]; // re-find after pushUndo (safe: same map)
+
+    for (auto prop : props) {
+        // Find or create channel
+        int ci = -1;
+        for (int i = 0; i < (int)action.channels.size(); ++i) {
+            if (action.channels[i].targetObject == obj.name &&
+                action.channels[i].property == prop) { ci = i; break; }
+        }
+        if (ci < 0) {
+            Mc3::Mc3Channel ch;
+            ch.targetObject = obj.name;
+            ch.property     = prop;
+            action.channels.push_back(std::move(ch));
+            ci = static_cast<int>(action.channels.size()) - 1;
+        }
+
+        // Evaluate current value from the object
+        float value = 0.0f;
+        switch (prop) {
+        case Mc3::AnimatedProperty::PositionX: value = obj.transform.position[0]; break;
+        case Mc3::AnimatedProperty::PositionY: value = obj.transform.position[1]; break;
+        case Mc3::AnimatedProperty::PositionZ: value = obj.transform.position[2]; break;
+        case Mc3::AnimatedProperty::RotationX: value = obj.transform.rotation[0]; break;
+        case Mc3::AnimatedProperty::RotationY: value = obj.transform.rotation[1]; break;
+        case Mc3::AnimatedProperty::RotationZ: value = obj.transform.rotation[2]; break;
+        case Mc3::AnimatedProperty::ScaleX:    value = obj.transform.scale[0];    break;
+        case Mc3::AnimatedProperty::ScaleY:    value = obj.transform.scale[1];    break;
+        case Mc3::AnimatedProperty::ScaleZ:    value = obj.transform.scale[2];    break;
+        case Mc3::AnimatedProperty::Visible:   value = obj.visible ? 1.0f : 0.0f; break;
+        default:
+            value = Mc3::evaluateChannel(action.channels[ci], animTime_); break;
+        }
+
+        auto& ch = action.channels[ci];
+        // Replace existing keyframe at this time, or insert a new one
+        bool replaced = false;
+        for (auto& kf : ch.keyframes) {
+            if (std::abs(kf.time - animTime_) < 0.001f) { kf.value = value; replaced = true; break; }
+        }
+        if (!replaced) {
+            Mc3::Mc3Keyframe kf;
+            kf.time = animTime_; kf.value = value;
+            ch.keyframes.push_back(kf);
+            std::sort(ch.keyframes.begin(), ch.keyframes.end(),
+                [](const Mc3::Mc3Keyframe& a, const Mc3::Mc3Keyframe& b){ return a.time < b.time; });
+        }
+    }
+    modified_ = true;
+    evaluateAndPushAnimOverrides();
+}
+
+void MeshCraftApplication::drawTimelinePanel(int screenW, int screenH) {
+    int panelTop = screenH - kStatusH - kTimelineH;
+    ImGui::SetNextWindowPos(ImVec2(0.0f, static_cast<float>(panelTop)));
+    ImGui::SetNextWindowSize(ImVec2(static_cast<float>(screenW), static_cast<float>(kTimelineH)));
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(4.0f, 4.0f));
+    ImGui::PushStyleColor(ImGuiCol_WindowBg, ImVec4(0.08f, 0.09f, 0.15f, 1.0f));
+    ImGui::Begin("##timeline", nullptr,
+        ImGuiWindowFlags_NoTitleBar    | ImGuiWindowFlags_NoResize |
+        ImGuiWindowFlags_NoMove        | ImGuiWindowFlags_NoBringToFrontOnFocus |
+        ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoScrollbar |
+        ImGuiWindowFlags_NoScrollWithMouse);
+
+    // ----- Control bar (row 1) -----
+    {
+        ImGui::Text("Action:");
+        ImGui::SameLine();
+        const char* preview = currentActionName_.empty() ? "(none)" : currentActionName_.c_str();
+        ImGui::SetNextItemWidth(140.0f);
+        if (ImGui::BeginCombo("##asel", preview)) {
+            if (ImGui::Selectable("(none)", currentActionName_.empty())) {
+                currentActionName_.clear(); animPlaying_ = false;
+                sceneRenderer_->setAnimOverrides({});
+            }
+            for (auto& [nm, act] : document_.actions) {
+                bool isSel = (nm == currentActionName_);
+                if (ImGui::Selectable(nm.c_str(), isSel)) {
+                    currentActionName_ = nm; animTime_ = 0.0f; animPlaying_ = false;
+                    evaluateAndPushAnimOverrides();
+                }
+                if (isSel) ImGui::SetItemDefaultFocus();
+            }
+            ImGui::EndCombo();
+        }
+        ImGui::SameLine();
+        if (ImGui::SmallButton("+##naact")) {
+            int n = 1; std::string nm;
+            do { nm = "Action" + std::to_string(n++); } while (document_.actions.count(nm));
+            Mc3::Mc3Action act; act.name = nm; act.duration = 2.0f;
+            pushUndo(); document_.actions[nm] = std::move(act);
+            currentActionName_ = nm; animTime_ = 0.0f; animPlaying_ = false;
+            modified_ = true;
+        }
+        ImGui::SameLine();
+        bool hasAct = !currentActionName_.empty() && document_.actions.count(currentActionName_);
+        if (!hasAct) ImGui::BeginDisabled();
+        if (ImGui::SmallButton("Del##daact") && hasAct) {
+            pushUndo(); document_.actions.erase(currentActionName_);
+            currentActionName_.clear(); animPlaying_ = false;
+            sceneRenderer_->setAnimOverrides({}); modified_ = true;
+        }
+        if (!hasAct) ImGui::EndDisabled();
+
+        if (hasAct) {
+            auto& act = document_.actions[currentActionName_];
+            ImGui::SameLine(); ImGui::Text("|"); ImGui::SameLine();
+            ImGui::Text("Dur:"); ImGui::SameLine();
+            ImGui::SetNextItemWidth(55.0f);
+            float dur = act.duration;
+            if (ImGui::DragFloat("##dur", &dur, 0.01f, 0.01f, 3600.0f, "%.2f")) {
+                act.duration = std::max(0.01f, dur);
+                animTime_    = std::min(animTime_, act.duration);
+                modified_    = true;
+            }
+            ImGui::SameLine();
+            if (ImGui::Checkbox("Loop##lp", &act.loop)) modified_ = true;
+            ImGui::SameLine(); ImGui::Text("|"); ImGui::SameLine();
+            if (ImGui::SmallButton("|<##rew"))  { animTime_ = 0.0f; evaluateAndPushAnimOverrides(); }
+            ImGui::SameLine();
+            if (animPlaying_) { if (ImGui::SmallButton("||##pp")) animPlaying_ = false; }
+            else              { if (ImGui::SmallButton("|>##pp")) animPlaying_ = true;  }
+            ImGui::SameLine();
+            if (ImGui::SmallButton("[]##stp")) { animPlaying_ = false; animTime_ = 0.0f; evaluateAndPushAnimOverrides(); }
+            ImGui::SameLine(); ImGui::Text("|"); ImGui::SameLine();
+            ImGui::Text("T:"); ImGui::SameLine();
+            ImGui::SetNextItemWidth(70.0f);
+            if (ImGui::DragFloat("##at", &animTime_, 0.001f, 0.0f, act.duration, "%.3f")) {
+                animTime_ = std::clamp(animTime_, 0.0f, act.duration);
+                evaluateAndPushAnimOverrides();
+            }
+        }
+    }
+
+    // ----- Channel list + timeline track (row 2+) -----
+    const float rowH = 18.0f;
+    const float leftW = 240.0f;
+    float availH = ImGui::GetContentRegionAvail().y;
+
+    bool hasAct = !currentActionName_.empty() && document_.actions.count(currentActionName_);
+
+    // Left column — channel labels
+    ImGui::BeginChild("##tlchan", ImVec2(leftW, availH), false,
+        ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
+
+    if (hasAct) {
+        auto& act = document_.actions[currentActionName_];
+        int toDelete = -1;
+        for (int ci = 0; ci < (int)act.channels.size(); ++ci) {
+            ImGui::PushID(ci);
+            auto& ch = act.channels[ci];
+            std::string lbl = ch.targetObject + " / " +
+                              Mc3::animatedPropertyName(ch.property);
+            // Align text to row centre
+            float textY = ci * rowH + (rowH - ImGui::GetTextLineHeight()) * 0.5f;
+            ImGui::SetCursorPosY(textY);
+            ImGui::TextUnformatted(lbl.c_str());
+            ImGui::SameLine(leftW - 36.0f);
+            ImGui::SetCursorPosY(ci * rowH + 2.0f);
+            if (ImGui::SmallButton("X##dc")) toDelete = ci;
+            ImGui::PopID();
+        }
+        if (toDelete >= 0) {
+            pushUndo(); act.channels.erase(act.channels.begin() + toDelete);
+            modified_ = true; evaluateAndPushAnimOverrides();
+        }
+    }
+    ImGui::EndChild();
+
+    // Right column — timeline track with keyframe dots
+    ImGui::SameLine();
+    ImVec2 trackTL = ImGui::GetCursorScreenPos();
+    float  trackW  = ImGui::GetContentRegionAvail().x;
+
+    ImGui::BeginChild("##tltrack", ImVec2(trackW, availH), false,
+        ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
+
+    float dur = (hasAct) ? document_.actions[currentActionName_].duration : 2.0f;
+    ImDrawList* dl = ImGui::GetWindowDrawList();
+
+    // Ruler background
+    dl->AddRectFilled(trackTL,
+                      ImVec2(trackTL.x + trackW, trackTL.y + rowH),
+                      IM_COL32(22, 25, 40, 255));
+
+    // Time tick marks
+    float tickStep = 0.25f;
+    if      (dur > 30.0f) tickStep = 10.0f;
+    else if (dur > 10.0f) tickStep = 5.0f;
+    else if (dur > 5.0f)  tickStep = 1.0f;
+    else if (dur > 2.0f)  tickStep = 0.5f;
+
+    for (float t = 0.0f; t < dur + tickStep * 0.01f; t += tickStep) {
+        t = std::min(t, dur);
+        float x = trackTL.x + (t / dur) * trackW;
+        dl->AddLine(ImVec2(x, trackTL.y), ImVec2(x, trackTL.y + rowH),
+                    IM_COL32(60, 70, 100, 200));
+        char buf[16]; snprintf(buf, sizeof(buf), "%.2f", t);
+        dl->AddText(ImVec2(x + 2, trackTL.y + 2), IM_COL32(130, 145, 175, 230), buf);
+    }
+
+    // Current-time indicator
+    float curX = (dur > 0.0f)
+        ? trackTL.x + std::clamp(animTime_ / dur, 0.0f, 1.0f) * trackW
+        : trackTL.x;
+    dl->AddLine(ImVec2(curX, trackTL.y),
+                ImVec2(curX, trackTL.y + availH),
+                IM_COL32(255, 200, 50, 220), 2.0f);
+
+    // Click on ruler → seek
+    ImGui::SetCursorScreenPos(trackTL);
+    ImGui::InvisibleButton("##ruler", ImVec2(trackW, rowH));
+    if (ImGui::IsItemHovered() && ImGui::IsMouseDown(ImGuiMouseButton_Left)) {
+        float mx = ImGui::GetIO().MousePos.x;
+        animTime_ = std::clamp((mx - trackTL.x) / trackW * dur, 0.0f, dur);
+        evaluateAndPushAnimOverrides();
+    }
+
+    // Channel rows with keyframe dots
+    if (hasAct) {
+        auto& act = document_.actions[currentActionName_];
+        int kfDelChan = -1, kfDelIdx = -1;
+
+        for (int ci = 0; ci < (int)act.channels.size(); ++ci) {
+            float rowY = trackTL.y + rowH + ci * rowH;
+            ImU32 rowBg = (ci % 2 == 0) ? IM_COL32(18, 20, 34, 255)
+                                         : IM_COL32(23, 26, 42, 255);
+            dl->AddRectFilled(ImVec2(trackTL.x, rowY),
+                              ImVec2(trackTL.x + trackW, rowY + rowH), rowBg);
+
+            auto& ch = act.channels[ci];
+            for (int ki = 0; ki < (int)ch.keyframes.size(); ++ki) {
+                float kx = trackTL.x + (ch.keyframes[ki].time / std::max(dur, 0.001f)) * trackW;
+                float ky = rowY + rowH * 0.5f;
+                ImVec2 mp = ImGui::GetIO().MousePos;
+                float dx = mp.x - kx, dy = mp.y - ky;
+                bool hov = (dx*dx + dy*dy) < 36.0f;
+
+                dl->AddCircleFilled(ImVec2(kx, ky), 5.0f,
+                    hov ? IM_COL32(255, 215, 80, 255) : IM_COL32(200, 155, 50, 255));
+                dl->AddCircle(ImVec2(kx, ky), 5.5f, IM_COL32(255, 255, 200, 160));
+
+                if (hov && ImGui::IsMouseClicked(ImGuiMouseButton_Left)) {
+                    animTime_ = ch.keyframes[ki].time;
+                    evaluateAndPushAnimOverrides();
+                }
+                if (hov && ImGui::IsMouseClicked(ImGuiMouseButton_Right)) {
+                    kfDelChan = ci; kfDelIdx = ki;
+                }
+            }
+        }
+
+        if (kfDelChan >= 0) {
+            pushUndo();
+            act.channels[kfDelChan].keyframes.erase(
+                act.channels[kfDelChan].keyframes.begin() + kfDelIdx);
+            if (act.channels[kfDelChan].keyframes.empty())
+                act.channels.erase(act.channels.begin() + kfDelChan);
+            modified_ = true; evaluateAndPushAnimOverrides();
+        }
+    }
+
+    ImGui::EndChild();
+
+    ImGui::End();
+    ImGui::PopStyleColor();
+    ImGui::PopStyleVar();
 }
 
 } // namespace MeshCraft

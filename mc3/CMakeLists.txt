@@ -30,6 +30,7 @@ endif()
 # -----------------------------------------------------------------------------
 
 add_library(Mc3 STATIC
+    src/Mc3Animation.cpp
     src/Mc3Document.cpp
     src/Mc3Object.cpp
     src/Mc3Material.cpp

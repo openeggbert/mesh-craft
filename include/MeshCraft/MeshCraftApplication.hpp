@@ -4,6 +4,7 @@
 #include "MeshCraft/Editor/EditorTool.hpp"
 #include "MeshCraft/Editor/SelectionManager.hpp"
 #include "MeshCraft/Editor/TransformGizmo.hpp"
+#include "MeshCraft/Mc3/Mc3Animation.hpp"
 #include "MeshCraft/Mc3/Mc3Document.hpp"
 #include "MeshCraft/Mc3/Mc3Object.hpp"
 #include "MeshCraft/Renderer/GridRenderer.hpp"
@@ -110,12 +111,19 @@ private:
     static constexpr int kLeftPanelW  = 220;
     static constexpr int kRightPanelW = 220;
     static constexpr int kStatusH     = 22;
+    static constexpr int kTimelineH   = 190;
 
     // Dynamic top-area height (menu bar + toolbar), updated each frame by drawImGuiUi()
     int imguiTopH_{60};
 
     // Edge overlay toggle (black wireframe lines over all objects)
     bool showEdgeOverlay_{false};
+
+    // Animation playback state
+    std::string currentActionName_;
+    float       animTime_{0.0f};
+    bool        animPlaying_{false};
+    bool        showTimeline_{false};
 
     // Helpers
     void newScene();
@@ -141,6 +149,12 @@ private:
 
     std::vector<const Mc3::Mc3Object*> selectedPointers() const;
     Mc3::Mc3Object* flatFindById(const std::string& id) const;
+    Mc3::Mc3Object* flatFindByName(const std::string& name) const;
+
+    void evaluateAndPushAnimOverrides();
+    void insertAnimKeyframes(Mc3::Mc3Object& obj,
+                             std::initializer_list<Mc3::AnimatedProperty> props);
+    void drawTimelinePanel(int screenW, int screenH);
 
     // Keyboard state from last frame
     Microsoft::Xna::Framework::Input::KeyboardState prevKs_;

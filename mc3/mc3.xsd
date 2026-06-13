@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
            elementFormDefault="qualified"
-           version="0.2">
+           version="0.3">
 
   <!-- ============================================================
        MC3 Scene Format — XML Schema
@@ -550,6 +550,54 @@
     </xs:sequence>
   </xs:complexType>
 
+  <!-- ── Animation types (v0.3) ──────────────────────────────── -->
+
+  <xs:simpleType name="interpType">
+    <xs:restriction base="xs:string">
+      <xs:enumeration value="step"/>
+      <xs:enumeration value="linear"/>
+      <xs:enumeration value="cubic"/>
+    </xs:restriction>
+  </xs:simpleType>
+
+  <xs:complexType name="bezierHandleType">
+    <xs:attribute name="dt" type="xs:float" default="0"/>
+    <xs:attribute name="dv" type="xs:float" default="0"/>
+  </xs:complexType>
+
+  <xs:complexType name="mc3KeyframeType">
+    <xs:sequence>
+      <xs:element name="handle_left"  type="bezierHandleType" minOccurs="0"/>
+      <xs:element name="handle_right" type="bezierHandleType" minOccurs="0"/>
+    </xs:sequence>
+    <xs:attribute name="time"   type="xs:float"   use="required"/>
+    <xs:attribute name="value"  type="xs:float"   use="required"/>
+    <xs:attribute name="interp" type="interpType" default="linear"/>
+  </xs:complexType>
+
+  <xs:complexType name="mc3ChannelType">
+    <xs:sequence>
+      <xs:element name="keyframe" type="mc3KeyframeType" minOccurs="0" maxOccurs="unbounded"/>
+    </xs:sequence>
+    <xs:attribute name="target"   type="xs:string" use="required"/>
+    <xs:attribute name="property" type="xs:string" use="required"/>
+  </xs:complexType>
+
+  <xs:complexType name="mc3ActionType">
+    <xs:sequence>
+      <xs:element name="channel" type="mc3ChannelType" minOccurs="0" maxOccurs="unbounded"/>
+    </xs:sequence>
+    <xs:attribute name="name"     type="xs:string"  use="required"/>
+    <xs:attribute name="duration" type="xs:float"   default="1.0"/>
+    <xs:attribute name="loop"     type="xs:boolean" default="false"/>
+  </xs:complexType>
+
+  <xs:complexType name="mc3ActionsType">
+    <xs:sequence>
+      <xs:element name="action" type="mc3ActionType" minOccurs="0" maxOccurs="unbounded"/>
+    </xs:sequence>
+  </xs:complexType>
+
   <!-- ── Root element ─────────────────────────────────────────── -->
 
   <xs:element name="mc3">
@@ -563,8 +611,9 @@
         <xs:element name="materials"   type="materialsType"        minOccurs="0"/>
         <xs:element name="definitions" type="definitionsType"      minOccurs="0"/>
         <xs:element name="objects"     type="objectsContainerType" minOccurs="0"/>
+        <xs:element name="actions"     type="mc3ActionsType"       minOccurs="0"/>
       </xs:sequence>
-      <xs:attribute name="version"           type="xs:string"            default="0.2"/>
+      <xs:attribute name="version"           type="xs:string"            default="0.3"/>
       <xs:attribute name="model"             type="xs:string"/>
       <xs:attribute name="unit"              type="unitType"             default="meter"/>
       <xs:attribute name="coordinate_system" type="coordinateSystemType" default="right_handed_y_up"/>

@@ -1,5 +1,6 @@
 #pragma once
 
+#include "MeshCraft/Mc3/Mc3Animation.hpp"
 #include "MeshCraft/Mc3/Mc3Camera.hpp"
 #include "MeshCraft/Mc3/Mc3Environment.hpp"
 #include "MeshCraft/Mc3/Mc3Light.hpp"
@@ -35,8 +36,7 @@ public:
     std::map<std::string, Mc3Material> materials;
     std::map<std::string, std::shared_ptr<Mc3Object>> definitions;
     std::vector<std::shared_ptr<Mc3Object>> objects;
-
-    // TODO: actions map
+    std::map<std::string, Mc3Action> actions;
 
     // Load from MC3 XML (.mc3.xml) — implemented in mc3togltf
     static Mc3Document loadFromFile(const std::filesystem::path& path);

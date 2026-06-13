@@ -12,11 +12,10 @@ The output pipeline exports to `.glb` via the `mc3togltf` converter.
 **Main goal:** A fully usable desktop editor where a developer can build, edit, and export
 `.mc3.xml` scene files without hand-editing XML.
 
-**Current phase:** 100 % of planned features implemented. All object types, all extrude
-paths/cross-sections (including hollow tubes), full light/camera/material/texture/definitions
-editors, drag-and-drop hierarchy, pivot rendering, multi-selection gizmo, and XML round-trip
-tests are complete. Only large-scope optional features remain (CSG boolean, texture rendering,
-animation).
+**Current phase:** All planned features implemented, including keyframe animation. All object
+types, all extrude paths/cross-sections, full light/camera/material/texture/definitions editors,
+drag-and-drop hierarchy, pivot rendering, multi-selection gizmo, CSG boolean evaluation, mesh
+viewport preview, and XML round-trip tests are complete.
 
 **Key architectural decisions:**
 - Built on **CNA** — an XNA-like C++ framework (SDL3 + OpenGL ES 3.2 via EasyGL backend).
@@ -96,11 +95,27 @@ All originally-planned mc3 features are now implemented and rendered in the view
 |---|---|
 | **CSG boolean mesh evaluation** | Union/Difference/Intersection now evaluate actual boolean geometry via the manifold v3 library. Result cached per `Mc3Object*`, invalidated on `pushUndo()`. Falls back to individual child rendering if manifold returns empty. |
 
-### ❌ Not implemented
+### ✅ Done
 
-| Feature | Detail | Effort |
-|---|---|---|
-| **Actions / States animation** | Not modelled in the data layer yet. Out of scope for current phase. | Large scope |
+**F — Keyframe animation** (completed)
+Full keyframe animation system: `Mc3Action`, `Mc3Channel`, `Mc3Keyframe` data model in `mc3/`.
+Three interpolation modes: **Step**, **Linear**, **CubicBezier** (with per-keyframe tangent handles).
+Animated properties: position.x/y/z, rotation.x/y/z, scale.x/y/z, visible (+ deform + material
+properties stored/serialised for future renderer wiring).
+XML round-trip: `<actions><action><channel><keyframe>` parsed and written by `Mc3XmlParser` /
+`Mc3XmlWriter`.
+Editor: **Timeline panel** (Ctrl+T / View→Timeline) at the bottom of the viewport — action
+dropdown with create/delete, duration, loop toggle, play/pause/stop, time scrubber; per-channel
+rows with keyframe circles (click = seek, right-click = delete). **[K] buttons** in the
+Properties panel insert keyframes at the current time for Position / Rotation / Scale / Visible.
+Space bar = play/pause when an action is selected.
+Renderer: `AnimOverride` map evaluated each frame via `evaluateAndPushAnimOverrides()`; injected
+into `SceneRenderer` which overrides the effective `Mc3Transform` and visibility per named object.
+**Files:** `Mc3Animation.hpp/cpp`, `Mc3Document.hpp`, `Mc3XmlParser.cpp`, `Mc3XmlWriter.cpp`,
+`mc3/CMakeLists.txt`, `SceneRenderer.hpp/cpp`, `MeshCraftApplication.hpp/cpp`.
+**Test file:** `test/animation_test.mc3.xml` — Bounce (cubic), Spin (linear), Flash (step), Pulse (cubic).
+**Schema:** `mc3.xsd` v0.3 — `interpType`, `bezierHandleType`, `mc3KeyframeType`,
+`mc3ChannelType`, `mc3ActionType`, `mc3ActionsType`.
 
 ---
 
@@ -108,8 +123,10 @@ All originally-planned mc3 features are now implemented and rendered in the view
 
 | Commit | Change |
 |-----------|-------------------------------------------------------------------------|
-| (pending) | Mesh viewport preview: tinyobjloader FetchContent, loadObjMesh + loadOrGetMesh cache, lit VPNT path; fix manifold 32-bit IB |
-| (pending) | CSG boolean mesh evaluation: manifold v3 FetchContent, buildManifoldTree + manifoldToRenderMesh, cache in SceneRenderer |
+| (pending) | Keyframe animation: Mc3Action/Channel/Keyframe data model, XML round-trip, timeline panel, playback engine, [K] buttons in Properties panel |
+| `246a80e` | Mesh viewport preview: tinyobjloader FetchContent, loadObjMesh + loadOrGetMesh cache, lit VPNT path; fix manifold 32-bit IB |
+| `97a47a4` | Invalidate CSG mesh cache on undo/redo (`clearCsgCache` in `pushUndo`) |
+| `eef446e` | CSG boolean mesh evaluation: manifold v3 FetchContent, buildManifoldTree + manifoldToRenderMesh, cache in SceneRenderer |
 | `e4ea36b` | mc3 schema v0.2: IDREF refs, rotation_units/euler_order, metadata, uv_mapping child elements |
 | `2c3606d` | Texture rendering in viewport: UV+normal VBs for all unit shapes, per-material texture binding, lazy cache |
 | `066ffa9` | Definitions panel: Defs tab with Add/Remove, rename (fixes all Instance refs), Name/Type/Transform editor |

@@ -11,12 +11,24 @@
 #include <Microsoft/Xna/Framework/Graphics/Texture2D.hpp>
 #include <Microsoft/Xna/Framework/Graphics/VertexBuffer.hpp>
 #include <Microsoft/Xna/Framework/Matrix.hpp>
+#include <array>
 #include <map>
 #include <memory>
+#include <optional>
 #include <string>
+#include <unordered_map>
 #include <vector>
 
 namespace MeshCraft::Renderer {
+
+// Per-object transform/visibility override for animation playback.
+// Any optional that is set replaces the corresponding field in the object's transform.
+struct AnimOverride {
+    std::optional<std::array<float, 3>> position;
+    std::optional<std::array<float, 3>> rotation;
+    std::optional<std::array<float, 3>> scale;
+    std::optional<bool>                 visible;
+};
 
 struct RenderMesh {
     std::unique_ptr<Microsoft::Xna::Framework::Graphics::VertexBuffer> vb;
@@ -47,6 +59,11 @@ public:
 
     // Call after any document mutation so CSG meshes are re-evaluated
     void clearCsgCache() { csgMeshCache_.clear(); }
+
+    // Replace the per-object animation overrides used during the next draw() call.
+    void setAnimOverrides(std::unordered_map<std::string, AnimOverride> overrides) {
+        animOverrides_ = std::move(overrides);
+    }
 
     // Render translate gizmo (X/Y/Z axis lines + cube tips) for a selected object
     void drawGizmo(const Mc3::Mc3Object* obj,
@@ -167,7 +184,7 @@ private:
     Microsoft::Xna::Framework::Graphics::Texture2D* loadOrGetTexture(const std::string& absPath);
     const RenderMesh* loadOrGetMesh(const std::string& absPath);
 
-    Microsoft::Xna::Framework::Matrix objectWorldMatrix(const Mc3::Mc3Object& obj) const;
+    Microsoft::Xna::Framework::Matrix objectWorldMatrix(const Mc3::Mc3Transform& t) const;
     Microsoft::Xna::Framework::Color  materialColor(const std::string& matId,
                                                      const Mc3::Mc3Document& doc) const;
     bool isSelected(const Mc3::Mc3Object& obj, const std::vector<const Mc3::Mc3Object*>& sel) const;
@@ -175,6 +192,7 @@ private:
     std::map<std::string, Microsoft::Xna::Framework::Graphics::Texture2D> textureCache_;
     std::map<std::string, RenderMesh> meshCache_;
     std::map<const Mc3::Mc3Object*, RenderMesh> csgMeshCache_;
+    std::unordered_map<std::string, AnimOverride> animOverrides_;
 };
 
 } // namespace MeshCraft::Renderer

@@ -1,4 +1,5 @@
 #include "Mc3XmlWriter.hpp"
+#include <MeshCraft/Mc3/Mc3Animation.hpp>
 #include <MeshCraft/Mc3/Mc3Extrude.hpp>
 #include <tinyxml2.h>
 #include <stdexcept>
@@ -388,6 +389,53 @@ void Mc3XmlWriter::write(const Mc3Document& doc, const std::filesystem::path& pa
             if (oe) oEl->InsertEndChild(oe);
         }
         root->InsertEndChild(oEl);
+    }
+
+    // Actions
+    if (!doc.actions.empty()) {
+        static const auto interpStr = [](Interpolation i) -> const char* {
+            switch (i) {
+            case Interpolation::Step:        return "step";
+            case Interpolation::CubicBezier: return "cubic";
+            default:                         return "linear";
+            }
+        };
+
+        XMLElement* actsEl = xml.NewElement("actions");
+        for (const auto& [name, act] : doc.actions) {
+            XMLElement* ae = xml.NewElement("action");
+            ae->SetAttribute("name",     act.name.c_str());
+            ae->SetAttribute("duration", fStr(act.duration).c_str());
+            if (act.loop) ae->SetAttribute("loop", "true");
+
+            for (const auto& ch : act.channels) {
+                XMLElement* ce = xml.NewElement("channel");
+                ce->SetAttribute("target",   ch.targetObject.c_str());
+                ce->SetAttribute("property", animatedPropertyName(ch.property));
+
+                for (const auto& kf : ch.keyframes) {
+                    XMLElement* ke = xml.NewElement("keyframe");
+                    ke->SetAttribute("time",  fStr(kf.time).c_str());
+                    ke->SetAttribute("value", fStr(kf.value).c_str());
+                    if (kf.interpolation != Interpolation::Linear)
+                        ke->SetAttribute("interp", interpStr(kf.interpolation));
+                    if (kf.interpolation == Interpolation::CubicBezier) {
+                        XMLElement* hl = xml.NewElement("handle_left");
+                        hl->SetAttribute("dt", fStr(kf.handleLeft.dt).c_str());
+                        hl->SetAttribute("dv", fStr(kf.handleLeft.dv).c_str());
+                        ke->InsertEndChild(hl);
+                        XMLElement* hr = xml.NewElement("handle_right");
+                        hr->SetAttribute("dt", fStr(kf.handleRight.dt).c_str());
+                        hr->SetAttribute("dv", fStr(kf.handleRight.dv).c_str());
+                        ke->InsertEndChild(hr);
+                    }
+                    ce->InsertEndChild(ke);
+                }
+                ae->InsertEndChild(ce);
+            }
+            actsEl->InsertEndChild(ae);
+        }
+        root->InsertEndChild(actsEl);
     }
 
     if (xml.SaveFile(path.string().c_str()) != XML_SUCCESS)

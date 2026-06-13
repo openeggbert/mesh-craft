@@ -1,0 +1,105 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<mc3 version="0.3" model="AnimationTest">
+
+  <environment>
+    <background color="0.1 0.12 0.18"/>
+  </environment>
+
+  <lights>
+    <ambient color="0.3 0.3 0.35" brightness="0.5"/>
+    <directional name="Sun" color="1 0.95 0.8" brightness="2" direction="-0.5 -1 -0.5"/>
+  </lights>
+
+  <objects>
+    <!-- Bouncing box: position.y animated with cubic bezier -->
+    <box name="BouncingBox" size="1 1 1" position="0 0 0"/>
+
+    <!-- Spinning sphere: rotation.y animated with linear keyframes -->
+    <sphere name="SpinningSphere" radius="0.5" position="3 0 0"/>
+
+    <!-- Fading plane: visible animated with step keyframes -->
+    <plane name="FadingPlane" size="2 0 2" position="-3 0 0"/>
+
+    <!-- Scale-pulsing cone: scale.x/y/z animated -->
+    <cone name="PulsingCone" radius="0.5" height="1.5" position="0 0 3"/>
+  </objects>
+
+  <actions>
+    <!-- Bounce: BouncingBox moves up and back over 2 seconds, looping -->
+    <action name="Bounce" duration="2.0" loop="true">
+      <channel target="BouncingBox" property="position.y">
+        <keyframe time="0.0" value="0.0" interp="cubic">
+          <handle_left  dt="-0.2" dv="0.0"/>
+          <handle_right dt="0.2"  dv="2.0"/>
+        </keyframe>
+        <keyframe time="1.0" value="3.0" interp="cubic">
+          <handle_left  dt="-0.2" dv="2.0"/>
+          <handle_right dt="0.2"  dv="-2.0"/>
+        </keyframe>
+        <keyframe time="2.0" value="0.0" interp="cubic">
+          <handle_left  dt="-0.2" dv="-2.0"/>
+          <handle_right dt="0.2"  dv="0.0"/>
+        </keyframe>
+      </channel>
+    </action>
+
+    <!-- Spin: SpinningSphere rotates 360° over 3 seconds -->
+    <action name="Spin" duration="3.0" loop="true">
+      <channel target="SpinningSphere" property="rotation.y">
+        <keyframe time="0.0"  value="0.0"   interp="linear"/>
+        <keyframe time="3.0"  value="360.0" interp="linear"/>
+      </channel>
+    </action>
+
+    <!-- Flash: FadingPlane blinks on/off with step interpolation -->
+    <action name="Flash" duration="2.0" loop="true">
+      <channel target="FadingPlane" property="visible">
+        <keyframe time="0.0"  value="1.0" interp="step"/>
+        <keyframe time="0.5"  value="0.0" interp="step"/>
+        <keyframe time="1.0"  value="1.0" interp="step"/>
+        <keyframe time="1.5"  value="0.0" interp="step"/>
+      </channel>
+    </action>
+
+    <!-- Pulse: PulsingCone scale changes -->
+    <action name="Pulse" duration="1.0" loop="true">
+      <channel target="PulsingCone" property="scale.x">
+        <keyframe time="0.0" value="1.0" interp="cubic">
+          <handle_right dt="0.15" dv="0.5"/>
+        </keyframe>
+        <keyframe time="0.5" value="2.0" interp="cubic">
+          <handle_left  dt="-0.15" dv="0.5"/>
+          <handle_right dt="0.15"  dv="-0.5"/>
+        </keyframe>
+        <keyframe time="1.0" value="1.0" interp="cubic">
+          <handle_left  dt="-0.15" dv="-0.5"/>
+        </keyframe>
+      </channel>
+      <channel target="PulsingCone" property="scale.y">
+        <keyframe time="0.0" value="1.0" interp="cubic">
+          <handle_right dt="0.15" dv="0.5"/>
+        </keyframe>
+        <keyframe time="0.5" value="2.0" interp="cubic">
+          <handle_left  dt="-0.15" dv="0.5"/>
+          <handle_right dt="0.15"  dv="-0.5"/>
+        </keyframe>
+        <keyframe time="1.0" value="1.0" interp="cubic">
+          <handle_left  dt="-0.15" dv="-0.5"/>
+        </keyframe>
+      </channel>
+      <channel target="PulsingCone" property="scale.z">
+        <keyframe time="0.0" value="1.0" interp="cubic">
+          <handle_right dt="0.15" dv="0.5"/>
+        </keyframe>
+        <keyframe time="0.5" value="2.0" interp="cubic">
+          <handle_left  dt="-0.15" dv="0.5"/>
+          <handle_right dt="0.15"  dv="-0.5"/>
+        </keyframe>
+        <keyframe time="1.0" value="1.0" interp="cubic">
+          <handle_left  dt="-0.15" dv="-0.5"/>
+        </keyframe>
+      </channel>
+    </action>
+  </actions>
+
+</mc3>
