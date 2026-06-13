@@ -1713,6 +1713,24 @@ void MeshCraftApplication::drawImGuiUi(int screenW, int screenH) {
                 }
                 ImGui::EndMenu();
             }
+            {
+                bool hasSel2c = !selection_.selection().empty();
+                if (ImGui::MenuItem("Snap Selection to Grid", nullptr, false, hasSel2c)) {
+                    int snapped = 0;
+                    pushUndo();
+                    for (const auto& s : selection_.selection()) {
+                        if (lockedIds_.count(s->id)) continue;
+                        for (int i = 0; i < 3; ++i)
+                            s->transform.position[i] =
+                                std::round(s->transform.position[i] / gridSpacing_) * gridSpacing_;
+                        ++snapped;
+                    }
+                    modified_ = true; updateWindowTitle();
+                    char gsbuf[64];
+                    std::snprintf(gsbuf, sizeof(gsbuf), "Snapped %d object(s) to grid (%.4g u)", snapped, gridSpacing_);
+                    setStatusMsg(gsbuf);
+                }
+            }
             ImGui::Separator();
             if (ImGui::MenuItem("Lock/Unlock Selected", "Ctrl+L", false, !selection_.selection().empty())) {
                 for (const auto& s : selection_.selection()) {
