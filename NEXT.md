@@ -33,15 +33,18 @@ viewport preview, and XML round-trip tests are complete.
 
 ### Build
 - **Builds cleanly** with `cmake --build cmake-build-debug --target MeshCraft -- -j$(nproc)`.
-- **Workaround required before each build** (SHARP_RUNTIME `<algorithm>` / CNA source sync):
+- **Workaround required before each build** (CNA / SHARP_RUNTIME source sync):
   ```bash
   find cmake-build-debug/CNA_dep/CMakeFiles -name "*.o" -exec touch {} \;
+  find cmake-build-debug/CNA_dep/SHARP_RUNTIME/CMakeFiles -name "*.o" -exec touch {} \;
   find /rv/data/development/github.com/openeggbert/cna/include -name "*.hpp" -exec touch {} \;
+  find /rv/data/development/github.com/openeggbert/sharp-runtime/include -name "*.hpp" -exec touch {} \;
+  find /rv/data/development/github.com/openeggbert/sharp-runtime/src -name "*.cpp" -exec touch {} \;
   touch cmake-build-debug/CNA_dep/SHARP_RUNTIME/libSHARP_RUNTIME.a cmake-build-debug/CNA_dep/libCNA.a
   ```
-  Must touch BOTH `.o` files AND CNA headers — if any CNA header is newer than a `.o`, ninja
-  will recompile, which fails because CNA has private-constructor / NOXNA errors in recent commits.
-  The plain `.a`-only touch is no longer sufficient.
+  Must touch all `.o` files, all CNA/SHARP_RUNTIME headers, and SHARP_RUNTIME `.cpp` sources.
+  Both CNA and SHARP_RUNTIME have private-member / NOXNA errors in recent commits that break
+  recompilation — the workaround makes all build artifacts appear newer than the sources.
 - **tinyxml2 duplicate target fix** in `mc3/CMakeLists.txt`: guards against `sharp-runtime`
   also bundling tinyxml2; creates `tinyxml2::tinyxml2` alias when only the bare target exists.
 
@@ -127,7 +130,8 @@ into `SceneRenderer` which overrides the effective `Mc3Transform` and visibility
 
 | Commit | Change |
 |-----------|-------------------------------------------------------------------------|
-| (pending) | Status bar notifications: timed coloured messages for save/open/export results (green success, red error, 2-3 s auto-dismiss) |
+| (pending) | Hierarchy search: "Search..." filter box in Scene tab; case-insensitive, hides non-matching subtrees, auto-expands nodes while active, Escape clears |
+| `8d0bf97` | Status bar notifications: timed coloured messages for save/open/export results (green success, red error, 2-3 s auto-dismiss) |
 | `ba431ca` | Inline rename: double-click or right-click > Rename in hierarchy to edit object name in-place; Enter commits, Escape cancels |
 | `d8d1b97` | Recent Files: File > Open Recent submenu, persisted to ~/.config/meshcraft/recent.txt, max 10 entries with tooltips and Clear Recent |
 | `b50e2b8` | Web build: build-web.sh + cmake/web/pre.js (IDBFS persistent storage); NEXT.md cleanup |

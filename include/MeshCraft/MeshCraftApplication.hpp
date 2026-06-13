@@ -169,6 +169,9 @@ private:
     void saveRecentFiles();
     void addRecentFile(const std::filesystem::path& path);
 
+    // Hierarchy search filter
+    char hierarchyFilter_[128]{};
+
     // Inline rename state (hierarchy panel)
     std::string renamingId_;
     char renameBuf_[256]{};

@@ -18,6 +18,7 @@
 #include <System/Object.hpp>
 
 #include <algorithm>
+#include <cctype>
 #include <cmath>
 #include <cstdio>
 #include <cstring>
@@ -1499,16 +1500,40 @@ void MeshCraftApplication::drawImGuiUi(int screenW, int screenH) {
                 updateWindowTitle();
             };
 
+            // --- Search filter ---
+            ImGui::SetNextItemWidth(-1);
+            ImGui::InputTextWithHint("##hfilter", "Search...", hierarchyFilter_, sizeof(hierarchyFilter_));
+            if (ImGui::IsItemFocused() && ImGui::IsKeyPressed(ImGuiKey_Escape, false))
+                hierarchyFilter_[0] = '\0';
+            ImGui::Separator();
+
+            // Build lowercase filter string once
+            std::string filterLower = hierarchyFilter_;
+            for (auto& ch : filterLower) ch = static_cast<char>(std::tolower(static_cast<unsigned char>(ch)));
+            bool filtering = !filterLower.empty();
+
+            // Returns true if obj itself or any descendant matches the filter
+            std::function<bool(const Mc3::Mc3Object&)> matchesFilter;
+            matchesFilter = [&](const Mc3::Mc3Object& o) -> bool {
+                std::string nl = o.name.empty() ? o.id : o.name;
+                for (auto& ch : nl) ch = static_cast<char>(std::tolower(static_cast<unsigned char>(ch)));
+                if (nl.find(filterLower) != std::string::npos) return true;
+                for (const auto& c : o.children) if (matchesFilter(*c)) return true;
+                return false;
+            };
+
             // --- Hierarchy draw ---
             std::function<void(const std::vector<std::shared_ptr<Mc3::Mc3Object>>&)> drawHierarchy;
             drawHierarchy = [&](const std::vector<std::shared_ptr<Mc3::Mc3Object>>& list) {
                 for (const auto& obj : list) {
+                    if (filtering && !matchesFilter(*obj)) continue;
                     ImGui::PushID(obj->id.c_str());
                     bool sel = selection_.isSelected(obj.get());
                     bool hasChildren = !obj->children.empty();
                     ImGuiTreeNodeFlags flags = ImGuiTreeNodeFlags_OpenOnArrow |
                                                ImGuiTreeNodeFlags_SpanAvailWidth;
                     if (!hasChildren) flags |= ImGuiTreeNodeFlags_Leaf | ImGuiTreeNodeFlags_NoTreePushOnOpen;
+                    if (filtering && hasChildren) flags |= ImGuiTreeNodeFlags_DefaultOpen;
                     if (sel)          flags |= ImGuiTreeNodeFlags_Selected;
 
                     ImVec4 nodeColor = obj->visible ? ImVec4(1,1,1,1) : ImVec4(0.5f,0.5f,0.5f,1);
