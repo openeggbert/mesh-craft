@@ -183,6 +183,9 @@ private:
     char renameBuf_[256]{};
     bool renameNeedsFocus_{false};
 
+    // Help dialog
+    bool showShortcutsDialog_{false};
+
     // Timed status bar notification
     std::string statusMsg_;
     float statusMsgTimer_{0.0f};

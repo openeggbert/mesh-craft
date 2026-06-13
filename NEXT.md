@@ -130,7 +130,8 @@ into `SceneRenderer` which overrides the effective `Mc3Transform` and visibility
 
 | Commit | Change |
 |-----------|-------------------------------------------------------------------------|
-| (pending) | Snap to grid: toolbar Snap button + View menu toggle; Move snaps 0.5 u, Rotate 15°, Scale 0.25 — applied during gizmo drag |
+| (pending) | Help > Keyboard Shortcuts dialog: scrollable modal table of all shortcuts grouped by category (File/Edit/Add/View/Tools/etc.) |
+| `1a7d06a` | Snap to grid: toolbar Snap button + View menu toggle; Move snaps 0.5 u, Rotate 15°, Scale 0.25 — applied during gizmo drag |
 | `332ff97` | Hierarchy search: "Search..." filter box in Scene tab; case-insensitive, hides non-matching subtrees, auto-expands nodes while active, Escape clears |
 | `8d0bf97` | Status bar notifications: timed coloured messages for save/open/export results (green success, red error, 2-3 s auto-dismiss) |
 | `ba431ca` | Inline rename: double-click or right-click > Rename in hierarchy to edit object name in-place; Enter commits, Escape cancels |

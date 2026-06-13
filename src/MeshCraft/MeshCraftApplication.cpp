@@ -1380,6 +1380,10 @@ void MeshCraftApplication::drawImGuiUi(int screenW, int screenH) {
             ImGui::MenuItem("Timeline",     "Ctrl+T", &showTimeline_);
             ImGui::EndMenu();
         }
+        if (ImGui::BeginMenu("Help")) {
+            if (ImGui::MenuItem("Keyboard Shortcuts...")) showShortcutsDialog_ = true;
+            ImGui::EndMenu();
+        }
         ImGui::EndMainMenuBar();
     }
 
@@ -3253,6 +3257,95 @@ void MeshCraftApplication::drawImGuiUi(int screenW, int screenH) {
         }
         ImGui::SameLine();
         if (ImGui::Button("Cancel")) ImGui::CloseCurrentPopup();
+        ImGui::EndPopup();
+    }
+
+    // -----------------------------------------------------------------------
+    // Keyboard Shortcuts dialog
+    // -----------------------------------------------------------------------
+    if (showShortcutsDialog_) {
+        ImGui::OpenPopup("Keyboard Shortcuts##kbdlg");
+        showShortcutsDialog_ = false;
+    }
+    if (ImGui::BeginPopupModal("Keyboard Shortcuts##kbdlg", nullptr,
+                               ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove)) {
+        ImGui::SetNextWindowSize(ImVec2(480, 500));
+        ImGui::BeginChild("##kbscroll", ImVec2(460, 420), false, ImGuiWindowFlags_HorizontalScrollbar);
+
+        auto kbSection = [](const char* name) {
+            ImGui::Spacing();
+            ImGui::TextColored(ImVec4(0.50f, 0.85f, 1.00f, 1.f), "%s", name);
+            ImGui::Separator();
+        };
+        auto kbRow = [](const char* key, const char* desc) {
+            ImGui::TextColored(ImVec4(0.95f, 0.90f, 0.50f, 1.f), "%-26s", key);
+            ImGui::SameLine();
+            ImGui::Text("%s", desc);
+        };
+
+        kbSection("File");
+        kbRow("Ctrl+N",         "New scene");
+        kbRow("Ctrl+O",         "Open...");
+        kbRow("Ctrl+S",         "Save");
+        kbRow("Ctrl+Shift+S",   "Save As...");
+        kbRow("Ctrl+E",         "Export GLB");
+
+        kbSection("Edit");
+        kbRow("Ctrl+Z / Ctrl+Y",    "Undo / Redo");
+        kbRow("Ctrl+X",             "Cut");
+        kbRow("Ctrl+C",             "Copy");
+        kbRow("Ctrl+V",             "Paste");
+        kbRow("Ctrl+D",             "Duplicate selected");
+        kbRow("Del",                "Delete selected");
+        kbRow("Ctrl+A",             "Select all");
+        kbRow("Ctrl+G",             "Group selected");
+        kbRow("Ctrl+Shift+G",       "Ungroup");
+
+        kbSection("Add Object");
+        kbRow("F1",  "Box");
+        kbRow("F2",  "Sphere");
+        kbRow("F3",  "Cylinder");
+        kbRow("F4",  "Cone");
+        kbRow("F5",  "Plane");
+
+        kbSection("Viewport – Navigation");
+        kbRow("Left drag",          "Orbit camera");
+        kbRow("Shift + left drag",  "Pan camera");
+        kbRow("Scroll wheel",       "Zoom");
+        kbRow("F",                  "Focus on selection");
+
+        kbSection("Viewport – Camera Presets");
+        kbRow("Num 1",  "Front");
+        kbRow("Num 3",  "Right");
+        kbRow("Num 5",  "Back");
+        kbRow("Num 7",  "Top");
+        kbRow("Num 9",  "Bottom");
+
+        kbSection("Tools");
+        kbRow("Q",  "Select");
+        kbRow("W",  "Move (translate)");
+        kbRow("E",  "Scale");
+        kbRow("R",  "Rotate");
+
+        kbSection("View");
+        kbRow("Alt+W",   "Toggle edge overlay");
+        kbRow("Ctrl+T",  "Toggle timeline panel");
+
+        kbSection("Hierarchy");
+        kbRow("Double-click node",    "Rename object inline");
+        kbRow("Esc (in search box)",  "Clear search filter");
+
+        kbSection("Animation");
+        kbRow("Space",  "Play / pause current action");
+        kbRow("[K] (Properties panel)", "Insert keyframe at current time");
+
+        kbSection("Other");
+        kbRow("F11",  "Save screenshot");
+
+        ImGui::EndChild();
+        ImGui::Separator();
+        if (ImGui::Button("Close", ImVec2(120, 0)) || ImGui::IsKeyPressed(ImGuiKey_Escape, false))
+            ImGui::CloseCurrentPopup();
         ImGui::EndPopup();
     }
 }
