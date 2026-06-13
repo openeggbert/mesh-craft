@@ -18,6 +18,7 @@
 #include <cstring>
 #include <iostream>
 #include <numbers>
+#include <set>
 #include <stdexcept>
 #include <string>
 #include <unordered_map>
@@ -648,6 +649,188 @@ static void applyEnvironment(tinygltf::Scene& scene,
 }
 
 // ---------------------------------------------------------------------------
+// Animation export
+// ---------------------------------------------------------------------------
+
+static void collectBaseTransforms(
+    const std::vector<std::shared_ptr<Mc3Object>>& objects,
+    std::unordered_map<std::string, Mc3Transform>& out)
+{
+    for (const auto& obj : objects) {
+        if (!obj) continue;
+        if (!obj->name.empty()) out[obj->name] = obj->transform;
+        collectBaseTransforms(obj->children, out);
+    }
+}
+
+static void exportAnimations(
+    tinygltf::Model& model,
+    const std::map<std::string, Mc3Action>& actions,
+    const std::unordered_map<std::string, int>& nodeNameMap,
+    const std::unordered_map<std::string, Mc3Transform>& baseTransforms,
+    float unitScale)
+{
+    if (actions.empty()) return;
+
+    for (const auto& [actionName, action] : actions) {
+        // Group per-scalar mc3 channels by (target object, glTF path).
+        struct PathGroup {
+            std::string path;
+            const Mc3Channel* ch[3]{nullptr, nullptr, nullptr};
+        };
+        std::map<std::string, std::map<std::string, PathGroup>> groups;
+
+        for (const auto& ch : action.channels) {
+            std::string path;
+            int comp = -1;
+            switch (ch.property) {
+                case AnimatedProperty::PositionX: path = "translation"; comp = 0; break;
+                case AnimatedProperty::PositionY: path = "translation"; comp = 1; break;
+                case AnimatedProperty::PositionZ: path = "translation"; comp = 2; break;
+                case AnimatedProperty::RotationX: path = "rotation";    comp = 0; break;
+                case AnimatedProperty::RotationY: path = "rotation";    comp = 1; break;
+                case AnimatedProperty::RotationZ: path = "rotation";    comp = 2; break;
+                case AnimatedProperty::ScaleX:    path = "scale";       comp = 0; break;
+                case AnimatedProperty::ScaleY:    path = "scale";       comp = 1; break;
+                case AnimatedProperty::ScaleZ:    path = "scale";       comp = 2; break;
+                default: continue; // visible/material/deform not representable in glTF transforms
+            }
+            auto& pg = groups[ch.targetObject][path];
+            pg.path = path;
+            pg.ch[comp] = &ch;
+        }
+
+        if (groups.empty()) continue;
+
+        tinygltf::Animation anim;
+        anim.name = action.name;
+
+        for (const auto& [objName, pathMap] : groups) {
+            auto nodeIt = nodeNameMap.find(objName);
+            if (nodeIt == nodeNameMap.end()) continue;
+            int nodeIdx = nodeIt->second;
+
+            // Fallback base transform for non-animated components.
+            Mc3Transform baseT;
+            baseT.scale = {1.0f, 1.0f, 1.0f};
+            auto btIt = baseTransforms.find(objName);
+            if (btIt != baseTransforms.end()) baseT = btIt->second;
+
+            for (const auto& [path, pg] : pathMap) {
+                // Collect union of keyframe times from all present component channels.
+                std::set<float> timeSet;
+                bool hasCubic = false;
+                bool allStep  = true;
+
+                for (int i = 0; i < 3; ++i) {
+                    if (!pg.ch[i]) continue;
+                    for (const auto& kf : pg.ch[i]->keyframes) {
+                        timeSet.insert(kf.time);
+                        if (kf.interpolation == Interpolation::CubicBezier) hasCubic = true;
+                        if (kf.interpolation != Interpolation::Step)        allStep  = false;
+                    }
+                }
+                if (timeSet.empty()) continue;
+
+                // Dense sampling for cubic bezier to preserve curve shape in LINEAR glTF output.
+                if (hasCubic) {
+                    float minT = *timeSet.begin(), maxT = *timeSet.rbegin();
+                    for (float t = minT; t <= maxT + 1e-5f; t += 1.0f / 30.0f)
+                        timeSet.insert(t);
+                }
+
+                std::vector<float> times(timeSet.begin(), timeSet.end());
+                std::string interp = allStep ? "STEP" : "LINEAR";
+
+                // Base component values for non-animated axes.
+                float base[3];
+                if (path == "translation") {
+                    base[0] = baseT.position[0]; base[1] = baseT.position[1]; base[2] = baseT.position[2];
+                } else if (path == "rotation") {
+                    base[0] = baseT.rotation[0]; base[1] = baseT.rotation[1]; base[2] = baseT.rotation[2];
+                } else {
+                    base[0] = baseT.scale[0]; base[1] = baseT.scale[1]; base[2] = baseT.scale[2];
+                }
+
+                // Build output value data.
+                std::vector<float> valueData;
+                if (path == "rotation") {
+                    valueData.reserve(times.size() * 4);
+                    for (float t : times) {
+                        float euler[3];
+                        for (int i = 0; i < 3; ++i)
+                            euler[i] = pg.ch[i] ? evaluateChannel(*pg.ch[i], t) : base[i];
+                        auto q = eulerXYZToQuat(euler[0], euler[1], euler[2]);
+                        valueData.push_back(static_cast<float>(q[0]));
+                        valueData.push_back(static_cast<float>(q[1]));
+                        valueData.push_back(static_cast<float>(q[2]));
+                        valueData.push_back(static_cast<float>(q[3]));
+                    }
+                } else {
+                    float tScale = (path == "translation") ? unitScale : 1.0f;
+                    valueData.reserve(times.size() * 3);
+                    for (float t : times) {
+                        for (int i = 0; i < 3; ++i) {
+                            float v = pg.ch[i] ? evaluateChannel(*pg.ch[i], t) : base[i];
+                            valueData.push_back(v * tScale);
+                        }
+                    }
+                }
+
+                // Time accessor (SCALAR, min/max required by glTF spec).
+                {
+                    int bv = addBufferView(model, times.data(), times.size() * sizeof(float), 0);
+                    tinygltf::Accessor acc;
+                    acc.bufferView    = bv;
+                    acc.byteOffset    = 0;
+                    acc.componentType = TINYGLTF_COMPONENT_TYPE_FLOAT;
+                    acc.count         = static_cast<int>(times.size());
+                    acc.type          = TINYGLTF_TYPE_SCALAR;
+                    acc.minValues     = {static_cast<double>(times.front())};
+                    acc.maxValues     = {static_cast<double>(times.back())};
+                    model.accessors.push_back(std::move(acc));
+                }
+                int inputAcc = static_cast<int>(model.accessors.size()) - 1;
+
+                // Value accessor (VEC3 or VEC4).
+                {
+                    int bv = addBufferView(model, valueData.data(), valueData.size() * sizeof(float), 0);
+                    tinygltf::Accessor acc;
+                    acc.bufferView    = bv;
+                    acc.byteOffset    = 0;
+                    acc.componentType = TINYGLTF_COMPONENT_TYPE_FLOAT;
+                    if (path == "rotation") {
+                        acc.count = static_cast<int>(valueData.size()) / 4;
+                        acc.type  = TINYGLTF_TYPE_VEC4;
+                    } else {
+                        acc.count = static_cast<int>(valueData.size()) / 3;
+                        acc.type  = TINYGLTF_TYPE_VEC3;
+                    }
+                    model.accessors.push_back(std::move(acc));
+                }
+                int outputAcc = static_cast<int>(model.accessors.size()) - 1;
+
+                tinygltf::AnimationSampler sampler;
+                sampler.input         = inputAcc;
+                sampler.output        = outputAcc;
+                sampler.interpolation = interp;
+                int sampIdx = static_cast<int>(anim.samplers.size());
+                anim.samplers.push_back(std::move(sampler));
+
+                tinygltf::AnimationChannel chan;
+                chan.sampler     = sampIdx;
+                chan.target_node = nodeIdx;
+                chan.target_path = path;
+                anim.channels.push_back(std::move(chan));
+            }
+        }
+
+        if (!anim.channels.empty())
+            model.animations.push_back(std::move(anim));
+    }
+}
+
+// ---------------------------------------------------------------------------
 // GltfExporter::exportDocument
 // ---------------------------------------------------------------------------
 
@@ -704,6 +887,20 @@ void GltfExporter::exportDocument(const Mc3Document& doc,
     std::vector<int> cameraNodes;
     addCameraNodes(model, doc.cameras, cameraNodes);
     for (int i : cameraNodes) scene.nodes.push_back(i);
+
+    // Animations
+    if (!doc.actions.empty()) {
+        std::unordered_map<std::string, Mc3Transform> baseTransforms;
+        collectBaseTransforms(doc.objects, baseTransforms);
+
+        std::unordered_map<std::string, int> nodeNameMap;
+        for (int i = 0; i < static_cast<int>(model.nodes.size()); ++i) {
+            if (!model.nodes[i].name.empty())
+                nodeNameMap[model.nodes[i].name] = i;
+        }
+
+        exportAnimations(model, doc.actions, nodeNameMap, baseTransforms, ctx.unitScale);
+    }
 
     // Environment → scene extras
     applyEnvironment(scene, doc.environment);

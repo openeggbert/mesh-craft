@@ -1,6 +1,7 @@
 #include "Mc3XmlParser.hpp"
 #include "MathUtils.hpp"
 
+#include <MeshCraft/Mc3/Mc3Animation.hpp>
 #include <MeshCraft/Mc3/Mc3Camera.hpp>
 #include <MeshCraft/Mc3/Mc3Environment.hpp>
 #include <MeshCraft/Mc3/Mc3Extrude.hpp>
@@ -8,6 +9,7 @@
 
 #include <tinyxml2.h>
 
+#include <algorithm>
 #include <cstdlib>
 #include <iostream>
 #include <sstream>
@@ -462,6 +464,59 @@ static void parseObjects(const XMLElement* el, Mc3Document& doc) {
 }
 
 // ---------------------------------------------------------------------------
+// Actions (animation)
+// ---------------------------------------------------------------------------
+
+static Interpolation parseInterpolation(const char* s) {
+    if (!s) return Interpolation::Linear;
+    std::string_view sv(s);
+    if (sv == "step")  return Interpolation::Step;
+    if (sv == "cubic") return Interpolation::CubicBezier;
+    return Interpolation::Linear;
+}
+
+static void parseActions(const XMLElement* el, Mc3Document& doc) {
+    for (const XMLElement* ae = el->FirstChildElement("action"); ae;
+         ae = ae->NextSiblingElement("action")) {
+        Mc3Action action;
+        action.name     = attr(ae, "name");
+        action.duration = attrF(ae, "duration", 1.0f);
+        action.loop     = attrB(ae, "loop", false);
+
+        for (const XMLElement* ce = ae->FirstChildElement("channel"); ce;
+             ce = ce->NextSiblingElement("channel")) {
+            Mc3Channel ch;
+            ch.targetObject = attr(ce, "target");
+            auto prop = animatedPropertyFromName(attr(ce, "property", ""));
+            if (!prop || ch.targetObject.empty()) continue;
+            ch.property = *prop;
+
+            for (const XMLElement* ke = ce->FirstChildElement("keyframe"); ke;
+                 ke = ke->NextSiblingElement("keyframe")) {
+                Mc3Keyframe kf;
+                kf.time          = attrF(ke, "time",  0.0f);
+                kf.value         = attrF(ke, "value", 0.0f);
+                kf.interpolation = parseInterpolation(ke->Attribute("interp"));
+
+                if (const XMLElement* hl = ke->FirstChildElement("handle_left")) {
+                    kf.handleLeft.dt = attrF(hl, "dt", -0.1f);
+                    kf.handleLeft.dv = attrF(hl, "dv",  0.0f);
+                }
+                if (const XMLElement* hr = ke->FirstChildElement("handle_right")) {
+                    kf.handleRight.dt = attrF(hr, "dt", 0.1f);
+                    kf.handleRight.dv = attrF(hr, "dv", 0.0f);
+                }
+                ch.keyframes.push_back(kf);
+            }
+            std::sort(ch.keyframes.begin(), ch.keyframes.end(),
+                      [](const Mc3Keyframe& a, const Mc3Keyframe& b){ return a.time < b.time; });
+            action.channels.push_back(std::move(ch));
+        }
+        doc.actions[action.name] = std::move(action);
+    }
+}
+
+// ---------------------------------------------------------------------------
 // Entry point
 // ---------------------------------------------------------------------------
 
@@ -495,6 +550,8 @@ MeshCraft::Mc3::Mc3Document Mc3XmlParser::parse(const std::filesystem::path& pat
         parseDefinitions(defs, doc);
     if (const XMLElement* objs = root->FirstChildElement("objects"))
         parseObjects(objs, doc);
+    if (const XMLElement* acts = root->FirstChildElement("actions"))
+        parseActions(acts, doc);
 
     return doc;
 }

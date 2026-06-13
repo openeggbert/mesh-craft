@@ -123,7 +123,8 @@ into `SceneRenderer` which overrides the effective `Mc3Transform` and visibility
 
 | Commit | Change |
 |-----------|-------------------------------------------------------------------------|
-| (pending) | Keyframe animation: Mc3Action/Channel/Keyframe data model, XML round-trip, timeline panel, playback engine, [K] buttons in Properties panel |
+| (pending) | mc3togltf animation export: parse `<actions>` in Mc3XmlParser, emit glTF `animations[]` from Mc3Action channels (translation/rotation/scale with LINEAR/STEP interpolation, cubic bezier sampled at 30fps) |
+| `bfa8b19` | Keyframe animation: Mc3Action/Channel/Keyframe data model, XML round-trip, timeline panel, playback engine, [K] buttons in Properties panel |
 | `246a80e` | Mesh viewport preview: tinyobjloader FetchContent, loadObjMesh + loadOrGetMesh cache, lit VPNT path; fix manifold 32-bit IB |
 | `97a47a4` | Invalidate CSG mesh cache on undo/redo (`clearCsgCache` in `pushUndo`) |
 | `eef446e` | CSG boolean mesh evaluation: manifold v3 FetchContent, buildManifoldTree + manifoldToRenderMesh, cache in SceneRenderer |
