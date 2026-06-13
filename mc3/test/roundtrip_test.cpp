@@ -470,6 +470,41 @@ static void testFeaturesXmlLoads(const std::string& path) {
         if (arch && arch->extrude)
             CHECK(arch->extrude->path.type == ExtrudePathType::Arc,
                   "features.mc3.xml: Arch path.type==Arc");
+
+        // Animation checks
+        CHECK(!doc.actions.empty(), "features.mc3.xml: actions not empty");
+        CHECK(doc.actions.count("DemoSpin") == 1, "features.mc3.xml: DemoSpin action present");
+        if (doc.actions.count("DemoSpin")) {
+            const auto& a = doc.actions.at("DemoSpin");
+            CHECKF(a.duration, 4.0f, "features.mc3.xml: DemoSpin.duration==4.0");
+            CHECK(a.loop == true, "features.mc3.xml: DemoSpin.loop==true");
+            CHECK(a.channels.size() == 2, "features.mc3.xml: DemoSpin has 2 channels");
+            // First channel: PivotBox rotation.y, linear, 2 keyframes
+            if (!a.channels.empty()) {
+                const auto& c0 = a.channels[0];
+                CHECK(c0.targetObject == "PivotBox", "features.mc3.xml: ch[0].target==PivotBox");
+                CHECK(c0.property == AnimatedProperty::RotationY, "features.mc3.xml: ch[0].property==RotationY");
+                CHECK(c0.keyframes.size() == 2, "features.mc3.xml: ch[0] has 2 keyframes");
+                if (c0.keyframes.size() == 2) {
+                    CHECK(c0.keyframes[0].interpolation == Interpolation::Linear,
+                          "features.mc3.xml: ch[0].kf[0].interp==Linear");
+                    CHECKF(c0.keyframes[1].value, 360.0f, "features.mc3.xml: ch[0].kf[1].value==360");
+                }
+            }
+            // Second channel: Spring position.y, cubic, 3 keyframes with handles
+            if (a.channels.size() >= 2) {
+                const auto& c1 = a.channels[1];
+                CHECK(c1.targetObject == "Spring", "features.mc3.xml: ch[1].target==Spring");
+                CHECK(c1.property == AnimatedProperty::PositionY, "features.mc3.xml: ch[1].property==PositionY");
+                CHECK(c1.keyframes.size() == 3, "features.mc3.xml: ch[1] has 3 keyframes");
+                if (!c1.keyframes.empty()) {
+                    CHECK(c1.keyframes[0].interpolation == Interpolation::CubicBezier,
+                          "features.mc3.xml: ch[1].kf[0].interp==CubicBezier");
+                    CHECKF(c1.keyframes[0].handleRight.dt, 0.5f,
+                           "features.mc3.xml: ch[1].kf[0].handleRight.dt==0.5");
+                }
+            }
+        }
     } catch (const std::exception& e) {
         fail(std::string("features.mc3.xml threw: ") + e.what());
     }

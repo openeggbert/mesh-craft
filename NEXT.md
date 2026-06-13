@@ -123,7 +123,8 @@ into `SceneRenderer` which overrides the effective `Mc3Transform` and visibility
 
 | Commit | Change |
 |-----------|-------------------------------------------------------------------------|
-| (pending) | mc3togltf test suite: gltf_test.py (38 checks — basic gltf/glb conversion, animation export structure, accessor types, dense sampling) registered as ctest mc3togltf_gltf |
+| (pending) | features.mc3.xml: bump to v0.3, add DemoSpin action (linear rotation + cubic bezier translation); roundtrip test extended to 114 checks |
+| `64b59ad` | mc3togltf test suite: gltf_test.py (38 checks — basic gltf/glb conversion, animation export structure, accessor types, dense sampling) registered as ctest mc3togltf_gltf |
 | `bc24fd7` | MC3_FORMAT.md updated to v0.3: full `<actions>` reference, animatable properties table with glTF export notes, proposed improvements renumbered |
 | `3fb9673` | Animation round-trip tests: 43 new checks covering linear/cubic-bezier/step XML round-trip, multi-action round-trip, and evaluateChannel correctness (97 total) |
 | `d8cc59e` | mc3togltf animation export: parse `<actions>` in Mc3XmlParser, emit glTF `animations[]` from Mc3Action channels (translation/rotation/scale with LINEAR/STEP interpolation, cubic bezier sampled at 30fps) |

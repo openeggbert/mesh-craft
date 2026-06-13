@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<mc3 version="0.1" model="FeatureTest">
+<mc3 version="0.3" model="FeatureTest">
 
   <environment>
     <background color="0.1 0.2 0.4"/>
@@ -83,5 +83,27 @@
     </extrude>
 
   </objects>
+
+  <actions>
+    <!-- Linear rotation + cubic bezier translation to exercise both interp modes -->
+    <action name="DemoSpin" duration="4.0" loop="true">
+      <channel target="PivotBox" property="rotation.y">
+        <keyframe time="0.0"  value="0.0"   interp="linear"/>
+        <keyframe time="4.0"  value="360.0" interp="linear"/>
+      </channel>
+      <channel target="Spring" property="position.y">
+        <keyframe time="0.0" value="0.0" interp="cubic">
+          <handle_right dt="0.5" dv="1.0"/>
+        </keyframe>
+        <keyframe time="2.0" value="2.0" interp="cubic">
+          <handle_left  dt="-0.5" dv="1.0"/>
+          <handle_right dt=" 0.5" dv="-1.0"/>
+        </keyframe>
+        <keyframe time="4.0" value="0.0" interp="cubic">
+          <handle_left dt="-0.5" dv="-1.0"/>
+        </keyframe>
+      </channel>
+    </action>
+  </actions>
 
 </mc3>
