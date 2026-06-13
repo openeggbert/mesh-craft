@@ -186,6 +186,11 @@ private:
     // Help dialog
     bool showShortcutsDialog_{false};
 
+    // Auto-save
+    float autoSaveCountdown_{60.0f};
+    void  performAutoSave();
+    static std::filesystem::path autoSavePath(const std::filesystem::path& file);
+
     // Timed status bar notification
     std::string statusMsg_;
     float statusMsgTimer_{0.0f};

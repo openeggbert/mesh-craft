@@ -51,7 +51,7 @@ viewport preview, and XML round-trip tests are complete.
 ### Tests
 - **2/2 tests pass** (`ctest --test-dir cmake-build-debug -V`):
   1. `smoke_test` — launches editor, takes screenshot, checks ≥ 1 MB
-  2. `mc3_roundtrip` — 54 XML round-trip checks (all field types)
+  2. `mc3_roundtrip` — 114 XML round-trip checks (all field types + animation)
 
 ### Available binaries
 - `cmake-build-debug/MeshCraft` — the editor (desktop, debug)
@@ -130,7 +130,8 @@ into `SceneRenderer` which overrides the effective `Mc3Transform` and visibility
 
 | Commit | Change |
 |-----------|-------------------------------------------------------------------------|
-| (pending) | Help > Keyboard Shortcuts dialog: scrollable modal table of all shortcuts grouped by category (File/Edit/Add/View/Tools/etc.) |
+| (pending) | Auto-save: every 60 s when modified, writes <file>.autosave; cleared on manual save; startup warns if autosave is newer than saved file |
+| `421ae9c` | Help > Keyboard Shortcuts dialog: scrollable modal table of all shortcuts grouped by category (File/Edit/Add/View/Tools/etc.) |
 | `1a7d06a` | Snap to grid: toolbar Snap button + View menu toggle; Move snaps 0.5 u, Rotate 15°, Scale 0.25 — applied during gizmo drag |
 | `332ff97` | Hierarchy search: "Search..." filter box in Scene tab; case-insensitive, hides non-matching subtrees, auto-expands nodes while active, Escape clears |
 | `8d0bf97` | Status bar notifications: timed coloured messages for save/open/export results (green success, red error, 2-3 s auto-dismiss) |

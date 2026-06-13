@@ -111,6 +111,16 @@ void MeshCraftApplication::LoadContent() {
             document_ = Mc3::Mc3Document::loadFromFile(currentFile_);
             addRecentFile(currentFile_);
             std::cout << "[MeshCraft] Loaded: " << currentFile_ << "\n";
+            // Warn if a newer autosave exists (unsaved crash recovery hint)
+            auto asPath = autoSavePath(currentFile_);
+            std::error_code ec;
+            if (std::filesystem::exists(asPath, ec)) {
+                auto savedTime = std::filesystem::last_write_time(currentFile_,  ec);
+                auto asTime    = std::filesystem::last_write_time(asPath, ec);
+                if (asTime > savedTime)
+                    setStatusMsg("Autosave found — may be newer than saved file: " +
+                                 asPath.filename().string(), true, 8.0f);
+            }
         } catch (const std::exception& e) {
             std::cerr << "[MeshCraft] Failed to load file: " << e.what() << "\n";
         }
@@ -149,10 +159,20 @@ void MeshCraftApplication::EndDraw() {
 // ---------------------------------------------------------------------------
 
 void MeshCraftApplication::Update(GameTime& gameTime) {
-    // Status bar notification countdown
+    // Status bar notification countdown + auto-save
     {
         float dt = static_cast<float>(gameTime.getElapsedGameTimeProperty().getTotalSecondsProperty());
         if (statusMsgTimer_ > 0) statusMsgTimer_ -= dt;
+
+        if (!currentFile_.empty() && modified_) {
+            autoSaveCountdown_ -= dt;
+            if (autoSaveCountdown_ <= 0.0f) {
+                performAutoSave();
+                autoSaveCountdown_ = 60.0f;
+            }
+        } else {
+            autoSaveCountdown_ = 60.0f;
+        }
     }
 
     // Advance animation clock
@@ -906,6 +926,18 @@ void MeshCraftApplication::newScene() {
     updateWindowTitle();
 }
 
+std::filesystem::path MeshCraftApplication::autoSavePath(const std::filesystem::path& file) {
+    return std::filesystem::path(file.string() + ".autosave");
+}
+
+void MeshCraftApplication::performAutoSave() {
+    if (currentFile_.empty()) return;
+    try {
+        document_.saveToFile(autoSavePath(currentFile_));
+        setStatusMsg("Auto-saved", false, 1.5f);
+    } catch (...) {}
+}
+
 void MeshCraftApplication::setStatusMsg(std::string msg, bool isError, float duration) {
     statusMsg_ = std::move(msg);
     statusMsgIsError_ = isError;
@@ -962,6 +994,8 @@ void MeshCraftApplication::saveFile() {
         document_.saveToFile(currentFile_);
         addRecentFile(currentFile_);
         modified_ = false;
+        autoSaveCountdown_ = 60.0f;
+        { std::error_code ec; std::filesystem::remove(autoSavePath(currentFile_), ec); }
         std::cout << "[MeshCraft] Saved: " << currentFile_ << "\n";
         setStatusMsg("Saved " + currentFile_.filename().string(), false, 2.0f);
         updateWindowTitle();
@@ -3246,6 +3280,8 @@ void MeshCraftApplication::drawImGuiUi(int screenW, int screenH) {
                 currentFile_ = path;
                 addRecentFile(currentFile_);
                 modified_ = false;
+                autoSaveCountdown_ = 60.0f;
+                { std::error_code ec; std::filesystem::remove(autoSavePath(currentFile_), ec); }
                 saveDialogErr_[0] = '\0';
                 std::cout << "[MeshCraft] Saved: " << path << "\n";
                 setStatusMsg("Saved " + currentFile_.filename().string(), false, 2.0f);
