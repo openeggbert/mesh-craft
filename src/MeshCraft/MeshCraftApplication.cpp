@@ -1583,6 +1583,63 @@ void MeshCraftApplication::drawImGuiUi(int screenW, int screenH) {
                 for (auto& o : document_.objects) selection_.select(o);
                 updateWindowTitle();
             }
+            if (ImGui::BeginMenu("Select by Type")) {
+                // collect which types exist in scene (recursive)
+                std::set<Mc3::ObjectType> presentTypes;
+                std::function<void(const std::vector<std::shared_ptr<Mc3::Mc3Object>>&)> collectTypes;
+                collectTypes = [&](const auto& list) {
+                    for (const auto& o : list) { presentTypes.insert(o->type); collectTypes(o->children); }
+                };
+                collectTypes(document_.objects);
+
+                auto typeName = [](Mc3::ObjectType t) -> const char* {
+                    switch (t) {
+                        case Mc3::ObjectType::Box:          return "Box";
+                        case Mc3::ObjectType::Cube:         return "Cube";
+                        case Mc3::ObjectType::Sphere:       return "Sphere";
+                        case Mc3::ObjectType::Cylinder:     return "Cylinder";
+                        case Mc3::ObjectType::Cone:         return "Cone";
+                        case Mc3::ObjectType::Plane:        return "Plane";
+                        case Mc3::ObjectType::Mesh:         return "Mesh";
+                        case Mc3::ObjectType::Extrude:      return "Extrude";
+                        case Mc3::ObjectType::Group:        return "Group";
+                        case Mc3::ObjectType::Instance:     return "Instance";
+                        case Mc3::ObjectType::Union:        return "Union (CSG)";
+                        case Mc3::ObjectType::Difference:   return "Difference (CSG)";
+                        case Mc3::ObjectType::Intersection: return "Intersection (CSG)";
+                        case Mc3::ObjectType::Area:         return "Area";
+                        default:                            return "?";
+                    }
+                };
+
+                static const Mc3::ObjectType kAllTypes[] = {
+                    Mc3::ObjectType::Box, Mc3::ObjectType::Cube, Mc3::ObjectType::Sphere,
+                    Mc3::ObjectType::Cylinder, Mc3::ObjectType::Cone, Mc3::ObjectType::Plane,
+                    Mc3::ObjectType::Mesh, Mc3::ObjectType::Extrude, Mc3::ObjectType::Group,
+                    Mc3::ObjectType::Instance, Mc3::ObjectType::Union,
+                    Mc3::ObjectType::Difference, Mc3::ObjectType::Intersection,
+                    Mc3::ObjectType::Area
+                };
+                bool anyPresent = false;
+                for (auto t : kAllTypes) {
+                    if (!presentTypes.count(t)) continue;
+                    anyPresent = true;
+                    if (ImGui::MenuItem(typeName(t))) {
+                        selection_.clear();
+                        std::function<void(const std::vector<std::shared_ptr<Mc3::Mc3Object>>&)> walk;
+                        walk = [&](const auto& list) {
+                            for (const auto& o : list) {
+                                if (o->type == t) selection_.select(o);
+                                walk(o->children);
+                            }
+                        };
+                        walk(document_.objects);
+                        updateWindowTitle();
+                    }
+                }
+                if (!anyPresent) ImGui::TextDisabled("(scene is empty)");
+                ImGui::EndMenu();
+            }
             ImGui::Separator();
             if (ImGui::MenuItem("Group",   "Ctrl+G"))       groupSelected();
             if (ImGui::MenuItem("Ungroup", "Ctrl+Shift+G")) ungroupSelected();
