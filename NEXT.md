@@ -130,6 +130,7 @@ into `SceneRenderer` which overrides the effective `Mc3Transform` and visibility
 
 | Commit | Change |
 |-----------|-------------------------------------------------------------------------|
+| (pending) | Hide selected (H) / Show all hidden (Alt+H): keyboard shortcuts + Edit menu items; clears selection on hide; both push undo; documented in Keyboard Shortcuts dialog |
 | `1b3ce1c` | Snap interval configurator: right-click Snap button → popup with Move/Rotate/Scale presets (0.1–2 u, 5–90°, 0.05–1) + DragFloat custom inputs; active preset highlighted green |
 | `e0f27c7` | Unsaved-changes guard: New/Open/Open Recent/Exit prompt "Save / Don't Save / Cancel" when scene is modified |
 | `f1320f4` | Auto-save: every 60 s when modified, writes <file>.autosave; cleared on manual save; startup warns if autosave is newer than saved file |

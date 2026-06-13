@@ -391,6 +391,28 @@ void MeshCraftApplication::handleKeyboardShortcuts(const KeyboardState& ks, cons
     // Edge overlay toggle
     if (alt && justPressed(ks, prevKs, Keys::W)) { showEdgeOverlay_ = !showEdgeOverlay_; return; }
 
+    // Hide selected (H) / show all hidden (Alt+H)
+    if (!ctrl && !alt && justPressed(ks, prevKs, Keys::H)) {
+        auto sel = selection_.selection();
+        if (!sel.empty()) {
+            pushUndo();
+            for (auto& s : sel) { s->visible = false; }
+            selection_.clear();
+            modified_ = true; updateWindowTitle();
+        }
+        return;
+    }
+    if (!ctrl && alt && justPressed(ks, prevKs, Keys::H)) {
+        std::function<void(std::vector<std::shared_ptr<Mc3::Mc3Object>>&)> showAll;
+        showAll = [&](auto& list) {
+            for (auto& o : list) { o->visible = true; showAll(o->children); }
+        };
+        pushUndo();
+        showAll(document_.objects);
+        modified_ = true; updateWindowTitle();
+        return;
+    }
+
     // Timeline toggle
     if (ctrl && justPressed(ks, prevKs, Keys::T)) { showTimeline_ = !showTimeline_; return; }
 
@@ -1402,6 +1424,23 @@ void MeshCraftApplication::drawImGuiUi(int screenW, int screenH) {
             ImGui::Separator();
             if (ImGui::MenuItem("Group",   "Ctrl+G"))       groupSelected();
             if (ImGui::MenuItem("Ungroup", "Ctrl+Shift+G")) ungroupSelected();
+            ImGui::Separator();
+            if (ImGui::MenuItem("Hide Selected", "H", false, !selection_.selection().empty())) {
+                auto sel = selection_.selection();
+                pushUndo();
+                for (auto& s : sel) s->visible = false;
+                selection_.clear();
+                modified_ = true; updateWindowTitle();
+            }
+            if (ImGui::MenuItem("Show All Hidden", "Alt+H")) {
+                std::function<void(std::vector<std::shared_ptr<Mc3::Mc3Object>>&)> showAll;
+                showAll = [&](auto& list) {
+                    for (auto& o : list) { o->visible = true; showAll(o->children); }
+                };
+                pushUndo();
+                showAll(document_.objects);
+                modified_ = true; updateWindowTitle();
+            }
             ImGui::EndMenu();
         }
         if (ImGui::BeginMenu("Add")) {
@@ -3473,7 +3512,9 @@ void MeshCraftApplication::drawImGuiUi(int screenW, int screenH) {
         kbRow("E",  "Scale");
         kbRow("R",  "Rotate");
 
-        kbSection("View");
+        kbSection("View / Visibility");
+        kbRow("H",       "Hide selected objects");
+        kbRow("Alt+H",   "Show all hidden objects");
         kbRow("Alt+W",   "Toggle edge overlay");
         kbRow("Ctrl+T",  "Toggle timeline panel");
 
