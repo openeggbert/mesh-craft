@@ -19,6 +19,7 @@
 #include <Microsoft/Xna/Framework/Input/MouseState.hpp>
 #include <System/Object.hpp>
 #include <filesystem>
+#include <map>
 #include <memory>
 #include <set>
 #include <string>
@@ -180,6 +181,11 @@ private:
 
     // Locked object IDs (lock prevents gizmo/nudge/delete; persists in memory only)
     std::set<std::string> lockedIds_;
+
+    // Isolation mode: hides all non-selected objects; Alt+I to toggle
+    bool isolateActive_{false};
+    std::map<std::string, bool> preisolateVisibility_;
+    void toggleIsolate();
 
     // Hierarchy search filter
     char hierarchyFilter_[128]{};

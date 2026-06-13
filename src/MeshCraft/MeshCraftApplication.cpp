@@ -422,6 +422,12 @@ void MeshCraftApplication::handleKeyboardShortcuts(const KeyboardState& ks, cons
         return;
     }
 
+    // Isolate selection (Alt+I) — hide all non-selected; toggle again to restore
+    if (!ctrl && alt && justPressed(ks, prevKs, Keys::I)) {
+        toggleIsolate();
+        return;
+    }
+
     // Lock / unlock selected (Ctrl+L)
     if (ctrl && justPressed(ks, prevKs, Keys::L)) {
         for (const auto& s : selection_.selection()) {
@@ -1219,6 +1225,39 @@ void MeshCraftApplication::deleteSelected() {
     updateWindowTitle();
 }
 
+void MeshCraftApplication::toggleIsolate() {
+    std::function<void(std::vector<std::shared_ptr<Mc3::Mc3Object>>&)> walk;
+    if (!isolateActive_) {
+        // Activate: save visibility, hide non-selected
+        preisolateVisibility_.clear();
+        walk = [&](auto& list) {
+            for (auto& o : list) {
+                preisolateVisibility_[o->id] = o->visible;
+                if (!selection_.isSelected(o.get())) o->visible = false;
+                walk(o->children);
+            }
+        };
+        walk(document_.objects);
+        isolateActive_ = true;
+        setStatusMsg("Isolation ON — Alt+I to exit", false, 2.5f);
+    } else {
+        // Deactivate: restore saved visibility
+        walk = [&](auto& list) {
+            for (auto& o : list) {
+                auto it = preisolateVisibility_.find(o->id);
+                if (it != preisolateVisibility_.end()) o->visible = it->second;
+                walk(o->children);
+            }
+        };
+        walk(document_.objects);
+        preisolateVisibility_.clear();
+        isolateActive_ = false;
+        setStatusMsg("Isolation OFF", false, 1.5f);
+    }
+    modified_ = true;
+    updateWindowTitle();
+}
+
 static std::shared_ptr<Mc3::Mc3Object> deepCopyObject(const Mc3::Mc3Object& src) {
     auto copy = std::make_shared<Mc3::Mc3Object>(src);
     copy->children.clear();
@@ -1454,6 +1493,12 @@ void MeshCraftApplication::drawImGuiUi(int screenW, int screenH) {
                     if (lockedIds_.count(s->id)) lockedIds_.erase(s->id);
                     else                          lockedIds_.insert(s->id);
                 }
+            }
+            ImGui::Separator();
+            if (ImGui::MenuItem(isolateActive_ ? "Exit Isolation" : "Isolate Selection",
+                               "Alt+I", false,
+                               isolateActive_ || !selection_.selection().empty())) {
+                toggleIsolate();
             }
             ImGui::Separator();
             if (ImGui::MenuItem("Hide Selected", "H", false, !selection_.selection().empty())) {
@@ -3384,6 +3429,8 @@ void MeshCraftApplication::drawImGuiUi(int screenW, int screenH) {
             ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoSavedSettings |
             ImGuiWindowFlags_NoBringToFrontOnFocus);
         ImGui::TextColored(ImVec4(1.0f, 0.85f, 0.3f, 1.0f), "%.0f FPS", displayFps_);
+        if (isolateActive_)
+            ImGui::TextColored(ImVec4(1.0f, 0.5f, 0.1f, 1.0f), "ISOLATED");
         ImGui::Separator();
         ImGui::Text("Objects: %d", totalObjs);
         ImGui::Text("Visible: %d", visibleObjs);
@@ -3627,6 +3674,7 @@ void MeshCraftApplication::drawImGuiUi(int screenW, int screenH) {
         kbRow("R",  "Rotate");
 
         kbSection("View / Visibility");
+        kbRow("Alt+I",   "Isolate selection (hide all others); repeat to restore");
         kbRow("H",       "Hide selected objects");
         kbRow("Alt+H",   "Show all hidden objects");
         kbRow("Ctrl+L",  "Lock / unlock selected (blocks gizmo, nudge, delete)");
