@@ -119,6 +119,12 @@ private:
     // Edge overlay toggle (black wireframe lines over all objects)
     bool showEdgeOverlay_{false};
 
+    // Gizmo snap-to-grid
+    bool  snapEnabled_{false};
+    float snapTranslate_{0.5f};   // world units
+    float snapRotate_{15.0f};     // degrees
+    float snapScale_{0.25f};      // scale units
+
     // Animation playback state
     std::string currentActionName_;
     float       animTime_{0.0f};

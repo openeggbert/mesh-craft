@@ -565,8 +565,12 @@ void MeshCraftApplication::handleMouseInput(const MouseState& ms, const MouseSta
         if (len2d > 0.5f) {
             float delta = dx * (axScrX/len2d) + dy * (axScrY/len2d);
             delta *= L / len2d;
-            for (const auto& s : selection_.selection())
-                s->transform.position[axIdx] += delta;
+            for (const auto& s : selection_.selection()) {
+                float& p = s->transform.position[axIdx];
+                p += delta;
+                if (snapEnabled_)
+                    p = std::round(p / snapTranslate_) * snapTranslate_;
+            }
             modified_ = true;
             updateWindowTitle();
         }
@@ -605,6 +609,8 @@ void MeshCraftApplication::handleMouseInput(const MouseState& ms, const MouseSta
             for (const auto& s : selection_.selection()) {
                 float& sc = s->transform.scale[axIdx];
                 sc = std::max(0.01f, sc + delta);
+                if (snapEnabled_)
+                    sc = std::max(snapScale_, std::round(sc / snapScale_) * snapScale_);
             }
             modified_ = true;
             updateWindowTitle();
@@ -647,8 +653,12 @@ void MeshCraftApplication::handleMouseInput(const MouseState& ms, const MouseSta
             float tx = -radY/radLen, ty = radX/radLen;
             float degsPerPixel = 180.0f / (std::numbers::pi_v<float> * r_screen);
             float delta = (dx * tx + dy * ty) * degsPerPixel;
-            for (const auto& s : selection_.selection())
-                s->transform.rotation[axIdx] += delta;
+            for (const auto& s : selection_.selection()) {
+                float& r = s->transform.rotation[axIdx];
+                r += delta;
+                if (snapEnabled_)
+                    r = std::round(r / snapRotate_) * snapRotate_;
+            }
             modified_ = true;
             updateWindowTitle();
         }
@@ -1366,6 +1376,7 @@ void MeshCraftApplication::drawImGuiUi(int screenW, int screenH) {
             }
             ImGui::Separator();
             ImGui::MenuItem("Edge Overlay", "Alt+W", &showEdgeOverlay_);
+            ImGui::MenuItem("Snap to Grid", nullptr, &snapEnabled_);
             ImGui::MenuItem("Timeline",     "Ctrl+T", &showTimeline_);
             ImGui::EndMenu();
         }
@@ -1424,6 +1435,15 @@ void MeshCraftApplication::drawImGuiUi(int screenW, int screenH) {
     if (showEdgeOverlay_) ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.20f, 0.20f, 0.20f, 1.f));
     if (ImGui::Button("Edges", ImVec2(50, 30))) showEdgeOverlay_ = !showEdgeOverlay_;
     if (showEdgeOverlay_) ImGui::PopStyleColor();
+    ImGui::SameLine();
+
+    // Snap-to-grid toggle button
+    if (snapEnabled_) ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.20f, 0.45f, 0.20f, 1.f));
+    if (ImGui::Button("Snap", ImVec2(44, 30))) snapEnabled_ = !snapEnabled_;
+    if (snapEnabled_) ImGui::PopStyleColor();
+    if (ImGui::IsItemHovered())
+        ImGui::SetTooltip("Snap to grid  Move: %.2g u  Rotate: %.0f°  Scale: %.2g",
+                          snapTranslate_, snapRotate_, snapScale_);
     ImGui::SameLine();
 
     float toolbarH = ImGui::GetWindowHeight();

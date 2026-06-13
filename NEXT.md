@@ -130,7 +130,8 @@ into `SceneRenderer` which overrides the effective `Mc3Transform` and visibility
 
 | Commit | Change |
 |-----------|-------------------------------------------------------------------------|
-| (pending) | Hierarchy search: "Search..." filter box in Scene tab; case-insensitive, hides non-matching subtrees, auto-expands nodes while active, Escape clears |
+| (pending) | Snap to grid: toolbar Snap button + View menu toggle; Move snaps 0.5 u, Rotate 15°, Scale 0.25 — applied during gizmo drag |
+| `332ff97` | Hierarchy search: "Search..." filter box in Scene tab; case-insensitive, hides non-matching subtrees, auto-expands nodes while active, Escape clears |
 | `8d0bf97` | Status bar notifications: timed coloured messages for save/open/export results (green success, red error, 2-3 s auto-dismiss) |
 | `ba431ca` | Inline rename: double-click or right-click > Rename in hierarchy to edit object name in-place; Enter commits, Escape cancels |
 | `d8d1b97` | Recent Files: File > Open Recent submenu, persisted to ~/.config/meshcraft/recent.txt, max 10 entries with tooltips and Clear Recent |
