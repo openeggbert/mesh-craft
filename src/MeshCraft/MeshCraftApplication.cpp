@@ -1223,6 +1223,7 @@ void MeshCraftApplication::addPrimitive(Mc3::ObjectType type) {
     char buf[32];
     std::snprintf(buf, sizeof(buf), "Object%d", ++counter);
     obj->name = buf;
+    obj->id   = buf;
 
     switch (type) {
     case Mc3::ObjectType::Box:      { Mc3::Mc3Primitive p; p.primitiveType = Mc3::PrimitiveType::Box;      p.size = {1.0f,1.0f,1.0f}; obj->primitive = p; } break;
@@ -1389,6 +1390,7 @@ void MeshCraftApplication::duplicateSelected() {
         if (!parent) continue;
         auto copy = deepCopyObject(*s);
         copy->name = s->name + "_copy";
+        copy->id = s->id.empty() ? copy->name : s->id + "_copy";
         auto it = std::find_if(parent->begin(), parent->end(),
             [&](const auto& o){ return o.get() == s.get(); });
         if (it != parent->end()) ++it;
@@ -2081,7 +2083,7 @@ void MeshCraftApplication::drawImGuiUi(int screenW, int screenH) {
             drawHierarchy = [&](const std::vector<std::shared_ptr<Mc3::Mc3Object>>& list) {
                 for (const auto& obj : list) {
                     if (filtering && !matchesFilter(*obj)) continue;
-                    ImGui::PushID(obj->id.c_str());
+                    ImGui::PushID(obj.get()); // pointer-stable; avoids conflicts when id is empty
                     bool sel = selection_.isSelected(obj.get());
                     bool hasChildren = !obj->children.empty();
                     ImGuiTreeNodeFlags flags = ImGuiTreeNodeFlags_OpenOnArrow |
