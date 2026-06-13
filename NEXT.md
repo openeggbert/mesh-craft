@@ -145,7 +145,7 @@ into `SceneRenderer` which overrides the effective `Mc3Transform` and visibility
 
 | Commit | Change |
 |-----------|-------------------------------------------------------------------------|
-| (pending) | Transform reset: Alt+G/R/S resets position/rotation/scale to default for all selected (skips locked); Edit > Reset Transform submenu includes All option |
+| `27261f7` | Transform reset: Alt+G/R/S resets position/rotation/scale to default for all selected (skips locked); Edit > Reset Transform submenu includes All option |
 | `00ac877` | Camera bookmarks: 5 slots; Ctrl+F1–F5 save, F6–F10 restore; View > Camera Bookmarks submenu shows target coords; status bar confirms save; Keyboard Shortcuts dialog updated |
 | `ddb626c` | Isolate selection: Alt+I hides all non-selected objects and saves prior visibility; Alt+I again restores exact previous state; ISOLATED badge in stats overlay; Edit menu |
 | `9d57075` | Viewport stats overlay: FPS (exp. smoothed), Objects/Visible/Locked counts, Selected count, camera dist+target; top-right of viewport; toggle via View > Stats Overlay |
