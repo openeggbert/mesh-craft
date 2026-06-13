@@ -162,6 +162,13 @@ private:
     // Clipboard
     std::vector<std::shared_ptr<Mc3::Mc3Object>> clipboard_;
 
+    // Recent files
+    static constexpr int kMaxRecentFiles = 10;
+    std::vector<std::filesystem::path> recentFiles_;
+    void loadRecentFiles();
+    void saveRecentFiles();
+    void addRecentFile(const std::filesystem::path& path);
+
     // Undo/redo
     static constexpr int kUndoMax = 20;
     std::vector<Mc3::Mc3Document> undoStack_;

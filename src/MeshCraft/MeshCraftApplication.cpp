@@ -103,9 +103,12 @@ void MeshCraftApplication::LoadContent() {
 
     SDL_AddEventWatch(reinterpret_cast<SDL_EventFilter>(sdlEventWatch), nullptr);
 
+    loadRecentFiles();
+
     if (!currentFile_.empty() && std::filesystem::exists(currentFile_)) {
         try {
             document_ = Mc3::Mc3Document::loadFromFile(currentFile_);
+            addRecentFile(currentFile_);
             std::cout << "[MeshCraft] Loaded: " << currentFile_ << "\n";
         } catch (const std::exception& e) {
             std::cerr << "[MeshCraft] Failed to load file: " << e.what() << "\n";
@@ -886,6 +889,44 @@ void MeshCraftApplication::newScene() {
     updateWindowTitle();
 }
 
+static std::filesystem::path recentFilesPath() {
+    const char* cfg = std::getenv("XDG_CONFIG_HOME");
+    std::filesystem::path base = cfg && cfg[0]
+        ? std::filesystem::path(cfg)
+        : std::filesystem::path(std::getenv("HOME") ? std::getenv("HOME") : ".") / ".config";
+    return base / "meshcraft" / "recent.txt";
+}
+
+void MeshCraftApplication::loadRecentFiles() {
+    std::ifstream f(recentFilesPath());
+    std::string line;
+    while (std::getline(f, line) && static_cast<int>(recentFiles_.size()) < kMaxRecentFiles) {
+        if (!line.empty() && std::filesystem::exists(line))
+            recentFiles_.emplace_back(line);
+    }
+}
+
+void MeshCraftApplication::saveRecentFiles() {
+    auto p = recentFilesPath();
+    std::error_code ec;
+    std::filesystem::create_directories(p.parent_path(), ec);
+    std::ofstream f(p);
+    for (const auto& r : recentFiles_)
+        f << r.string() << "\n";
+}
+
+void MeshCraftApplication::addRecentFile(const std::filesystem::path& path) {
+    auto abs = std::filesystem::absolute(path);
+    recentFiles_.erase(
+        std::remove_if(recentFiles_.begin(), recentFiles_.end(),
+            [&](const auto& r){ return r == abs; }),
+        recentFiles_.end());
+    recentFiles_.insert(recentFiles_.begin(), abs);
+    if (static_cast<int>(recentFiles_.size()) > kMaxRecentFiles)
+        recentFiles_.resize(static_cast<size_t>(kMaxRecentFiles));
+    saveRecentFiles();
+}
+
 void MeshCraftApplication::openFile() {
     openDialogBuf_[0] = '\0';
     openDialogErr_[0] = '\0';
@@ -896,6 +937,7 @@ void MeshCraftApplication::saveFile() {
     if (currentFile_.empty()) { saveFileAs(); return; }
     try {
         document_.saveToFile(currentFile_);
+        addRecentFile(currentFile_);
         modified_ = false;
         std::cout << "[MeshCraft] Saved: " << currentFile_ << "\n";
         updateWindowTitle();
@@ -1202,6 +1244,31 @@ void MeshCraftApplication::drawImGuiUi(int screenW, int screenH) {
         if (ImGui::BeginMenu("File")) {
             if (ImGui::MenuItem("New",     "Ctrl+N")) newScene();
             if (ImGui::MenuItem("Open...", "Ctrl+O")) openFile();
+            if (ImGui::BeginMenu("Open Recent", !recentFiles_.empty())) {
+                for (int i = 0; i < static_cast<int>(recentFiles_.size()); ++i) {
+                    const auto& rf = recentFiles_[static_cast<size_t>(i)];
+                    std::string label = rf.filename().string() + "##rf" + std::to_string(i);
+                    if (ImGui::MenuItem(label.c_str())) {
+                        try {
+                            document_ = Mc3::Mc3Document::loadFromFile(rf);
+                            currentFile_ = rf;
+                            addRecentFile(rf);
+                            selection_.clear();
+                            undoStack_.clear(); redoStack_.clear();
+                            modified_ = false;
+                            updateWindowTitle();
+                        } catch (...) {}
+                    }
+                    if (ImGui::IsItemHovered())
+                        ImGui::SetTooltip("%s", rf.string().c_str());
+                }
+                ImGui::Separator();
+                if (ImGui::MenuItem("Clear Recent")) {
+                    recentFiles_.clear();
+                    saveRecentFiles();
+                }
+                ImGui::EndMenu();
+            }
             ImGui::Separator();
             if (ImGui::MenuItem("Save",    "Ctrl+S")) saveFile();
             if (ImGui::MenuItem("Save As...","Ctrl+Shift+S")) saveFileAs();
@@ -3029,6 +3096,7 @@ void MeshCraftApplication::drawImGuiUi(int screenW, int screenH) {
             try {
                 document_ = Mc3::Mc3Document::loadFromFile(openDialogBuf_);
                 currentFile_ = openDialogBuf_;
+                addRecentFile(currentFile_);
                 selection_.clear();
                 undoStack_.clear(); redoStack_.clear();
                 modified_ = false;
@@ -3060,6 +3128,7 @@ void MeshCraftApplication::drawImGuiUi(int screenW, int screenH) {
             try {
                 document_.saveToFile(path);
                 currentFile_ = path;
+                addRecentFile(currentFile_);
                 modified_ = false;
                 saveDialogErr_[0] = '\0';
                 std::cout << "[MeshCraft] Saved: " << path << "\n";

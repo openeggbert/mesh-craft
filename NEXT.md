@@ -36,9 +36,12 @@ viewport preview, and XML round-trip tests are complete.
 - **Workaround required before each build** (SHARP_RUNTIME `<algorithm>` / CNA source sync):
   ```bash
   find cmake-build-debug/CNA_dep/CMakeFiles -name "*.o" -exec touch {} \;
+  find /rv/data/development/github.com/openeggbert/cna/include -name "*.hpp" -exec touch {} \;
   touch cmake-build-debug/CNA_dep/SHARP_RUNTIME/libSHARP_RUNTIME.a cmake-build-debug/CNA_dep/libCNA.a
   ```
-  (only needed when CNA sources were updated since last build; plain `.a` touch suffices otherwise)
+  Must touch BOTH `.o` files AND CNA headers — if any CNA header is newer than a `.o`, ninja
+  will recompile, which fails because CNA has private-constructor / NOXNA errors in recent commits.
+  The plain `.a`-only touch is no longer sufficient.
 - **tinyxml2 duplicate target fix** in `mc3/CMakeLists.txt`: guards against `sharp-runtime`
   also bundling tinyxml2; creates `tinyxml2::tinyxml2` alias when only the bare target exists.
 
@@ -124,7 +127,8 @@ into `SceneRenderer` which overrides the effective `Mc3Transform` and visibility
 
 | Commit | Change |
 |-----------|-------------------------------------------------------------------------|
-| (pending) | Web build: build-web.sh + cmake/web/pre.js (IDBFS persistent storage); NEXT.md cleanup |
+| (pending) | Recent Files: File > Open Recent submenu, persisted to ~/.config/meshcraft/recent.txt, max 10 entries with tooltips and Clear Recent |
+| `b50e2b8` | Web build: build-web.sh + cmake/web/pre.js (IDBFS persistent storage); NEXT.md cleanup |
 | `9ab45e5` | exportGltf() binary discovery: add mc3togltf/build/mc3togltf as primary candidate; register mc3togltf_gltf in root ctest pointing to standalone binary |
 | (pending) | features.mc3.xml: bump to v0.3, add DemoSpin action (linear rotation + cubic bezier translation); roundtrip test extended to 114 checks |
 | `64b59ad` | mc3togltf test suite: gltf_test.py (38 checks — basic gltf/glb conversion, animation export structure, accessor types, dense sampling) registered as ctest mc3togltf_gltf |
