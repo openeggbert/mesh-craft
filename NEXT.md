@@ -130,7 +130,7 @@ into `SceneRenderer` which overrides the effective `Mc3Transform` and visibility
 
 | Commit | Change |
 |-----------|-------------------------------------------------------------------------|
-| (pending) | Camera bookmarks: 5 slots; Ctrl+F1–F5 save, F6–F10 restore; View > Camera Bookmarks submenu shows target coords; status bar confirms save; Keyboard Shortcuts dialog updated |
+| `00ac877` | Camera bookmarks: 5 slots; Ctrl+F1–F5 save, F6–F10 restore; View > Camera Bookmarks submenu shows target coords; status bar confirms save; Keyboard Shortcuts dialog updated |
 | `ddb626c` | Isolate selection: Alt+I hides all non-selected objects and saves prior visibility; Alt+I again restores exact previous state; ISOLATED badge in stats overlay; Edit menu |
 | `9d57075` | Viewport stats overlay: FPS (exp. smoothed), Objects/Visible/Locked counts, Selected count, camera dist+target; top-right of viewport; toggle via View > Stats Overlay |
 | `ce64962` | Object locking: Ctrl+L / Edit menu / hierarchy context menu; [L] prefix in hierarchy; locked objects immune to gizmo, nudge and delete; stored as set<id> in editor |
