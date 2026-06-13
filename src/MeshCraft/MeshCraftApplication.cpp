@@ -159,6 +159,15 @@ void MeshCraftApplication::EndDraw() {
 // ---------------------------------------------------------------------------
 
 void MeshCraftApplication::Update(GameTime& gameTime) {
+    // FPS (exponential moving average, α=0.1 per frame)
+    {
+        float dt = static_cast<float>(gameTime.getElapsedGameTimeProperty().getTotalSecondsProperty());
+        if (dt > 0.0f) {
+            float instant = 1.0f / dt;
+            displayFps_ = displayFps_ < 1.0f ? instant : displayFps_ * 0.9f + instant * 0.1f;
+        }
+    }
+
     // Status bar notification countdown + auto-save
     {
         float dt = static_cast<float>(gameTime.getElapsedGameTimeProperty().getTotalSecondsProperty());
@@ -1499,7 +1508,8 @@ void MeshCraftApplication::drawImGuiUi(int screenW, int screenH) {
                 } else { camera_.reset(); }
             }
             ImGui::Separator();
-            ImGui::MenuItem("Edge Overlay", "Alt+W", &showEdgeOverlay_);
+            ImGui::MenuItem("Edge Overlay",    "Alt+W", &showEdgeOverlay_);
+            ImGui::MenuItem("Stats Overlay",   nullptr,  &showStatsOverlay_);
             ImGui::MenuItem("Snap to Grid", nullptr, &snapEnabled_);
             ImGui::MenuItem("Timeline",     "Ctrl+T", &showTimeline_);
             ImGui::EndMenu();
@@ -3342,6 +3352,55 @@ void MeshCraftApplication::drawImGuiUi(int screenW, int screenH) {
     // -----------------------------------------------------------------------
     if (showTimeline_)
         drawTimelinePanel(screenW, screenH);
+
+    // -----------------------------------------------------------------------
+    // Viewport stats overlay (top-right corner of 3D viewport)
+    // -----------------------------------------------------------------------
+    if (showStatsOverlay_) {
+        int tlH2 = showTimeline_ ? kTimelineH : 0;
+        float vpRight = static_cast<float>(screenW - kRightPanelW);
+        float vpTop   = static_cast<float>(imguiTopH_);
+
+        // Count objects (total / visible / locked)
+        int totalObjs = 0, visibleObjs = 0, lockedObjs = 0;
+        std::function<void(const std::vector<std::shared_ptr<Mc3::Mc3Object>>&)> countStats;
+        countStats = [&](const std::vector<std::shared_ptr<Mc3::Mc3Object>>& list) {
+            for (const auto& o : list) {
+                ++totalObjs;
+                if (o->visible)                ++visibleObjs;
+                if (lockedIds_.count(o->id))   ++lockedObjs;
+                countStats(o->children);
+            }
+        };
+        countStats(document_.objects);
+        int selCount = static_cast<int>(selection_.selection().size());
+
+        ImGui::SetNextWindowPos(ImVec2(vpRight - 8.0f, vpTop + 8.0f), ImGuiCond_Always, ImVec2(1.0f, 0.0f));
+        ImGui::SetNextWindowBgAlpha(0.50f);
+        ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(8, 6));
+        ImGui::Begin("##statsoverlay", nullptr,
+            ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoInputs |
+            ImGuiWindowFlags_NoNav        | ImGuiWindowFlags_NoMove   |
+            ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoSavedSettings |
+            ImGuiWindowFlags_NoBringToFrontOnFocus);
+        ImGui::TextColored(ImVec4(1.0f, 0.85f, 0.3f, 1.0f), "%.0f FPS", displayFps_);
+        ImGui::Separator();
+        ImGui::Text("Objects: %d", totalObjs);
+        ImGui::Text("Visible: %d", visibleObjs);
+        if (lockedObjs > 0) ImGui::Text("Locked:  %d", lockedObjs);
+        ImGui::Separator();
+        if (selCount > 0)
+            ImGui::TextColored(ImVec4(0.55f, 1.0f, 0.55f, 1.0f), "Selected: %d", selCount);
+        else
+            ImGui::TextDisabled("Selected: 0");
+        ImGui::Separator();
+        ImGui::TextDisabled("Cam dist: %.2f", camera_.distance);
+        ImGui::TextDisabled("Target: %.1f, %.1f, %.1f",
+            camera_.target.X, camera_.target.Y, camera_.target.Z);
+        ImGui::End();
+        ImGui::PopStyleVar();
+        (void)tlH2;
+    }
 
     // -----------------------------------------------------------------------
     // Status bar (bottom)

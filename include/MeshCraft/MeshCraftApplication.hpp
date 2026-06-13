@@ -200,6 +200,10 @@ private:
     // Help dialog
     bool showShortcutsDialog_{false};
 
+    // Viewport stats overlay
+    bool  showStatsOverlay_{true};
+    float displayFps_{0.0f};
+
     // Auto-save
     float autoSaveCountdown_{60.0f};
     void  performAutoSave();

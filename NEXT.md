@@ -130,6 +130,7 @@ into `SceneRenderer` which overrides the effective `Mc3Transform` and visibility
 
 | Commit | Change |
 |-----------|-------------------------------------------------------------------------|
+| (pending) | Viewport stats overlay: FPS (exp. smoothed), Objects/Visible/Locked counts, Selected count, camera dist+target; top-right of viewport; toggle via View > Stats Overlay |
 | `ce64962` | Object locking: Ctrl+L / Edit menu / hierarchy context menu; [L] prefix in hierarchy; locked objects immune to gizmo, nudge and delete; stored as set<id> in editor |
 | `d003c49` | Grid cell size control: "Grid" toolbar button; right-click popup with presets 0.25/0.5/1/2/5/10 u + DragFloat; GridRenderer.setSpacing() rebuilds VB keeping 20 u extent |
 | `09282bc` | Hide selected (H) / Show all hidden (Alt+H): keyboard shortcuts + Edit menu items; clears selection on hide; both push undo; documented in Keyboard Shortcuts dialog |
