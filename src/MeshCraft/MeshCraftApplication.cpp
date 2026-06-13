@@ -1643,6 +1643,45 @@ void MeshCraftApplication::drawImGuiUi(int screenW, int screenH) {
             ImGui::Separator();
             if (ImGui::MenuItem("Group",   "Ctrl+G"))       groupSelected();
             if (ImGui::MenuItem("Ungroup", "Ctrl+Shift+G")) ungroupSelected();
+            bool hasSel2 = !selection_.selection().empty();
+            if (ImGui::BeginMenu("Align Selection", hasSel2)) {
+                // Compute bounding box of selected objects' pivot positions
+                float minV[3] = {1e30f, 1e30f, 1e30f};
+                float maxV[3] = {-1e30f,-1e30f,-1e30f};
+                for (const auto& s : selection_.selection()) {
+                    for (int i = 0; i < 3; ++i) {
+                        float v = s->transform.position[i];
+                        minV[i] = std::min(minV[i], v);
+                        maxV[i] = std::max(maxV[i], v);
+                    }
+                }
+                float cenV[3] = {
+                    (minV[0]+maxV[0])*0.5f,
+                    (minV[1]+maxV[1])*0.5f,
+                    (minV[2]+maxV[2])*0.5f
+                };
+
+                auto doAlign = [&](int axis, float target) {
+                    pushUndo();
+                    for (const auto& s : selection_.selection()) {
+                        if (lockedIds_.count(s->id)) continue;
+                        s->transform.position[axis] = target;
+                    }
+                    modified_ = true; updateWindowTitle();
+                };
+
+                static const char* minLabel[3] = {"Min X (left)",  "Min Y (bottom)", "Min Z (front)"};
+                static const char* cenLabel[3] = {"Center X",      "Center Y",       "Center Z"     };
+                static const char* maxLabel[3] = {"Max X (right)", "Max Y (top)",    "Max Z (back)" };
+
+                for (int ax = 0; ax < 3; ++ax) {
+                    if (ax > 0) ImGui::Separator();
+                    if (ImGui::MenuItem(minLabel[ax])) doAlign(ax, minV[ax]);
+                    if (ImGui::MenuItem(cenLabel[ax])) doAlign(ax, cenV[ax]);
+                    if (ImGui::MenuItem(maxLabel[ax])) doAlign(ax, maxV[ax]);
+                }
+                ImGui::EndMenu();
+            }
             ImGui::Separator();
             if (ImGui::MenuItem("Lock/Unlock Selected", "Ctrl+L", false, !selection_.selection().empty())) {
                 for (const auto& s : selection_.selection()) {
