@@ -26,6 +26,11 @@ GridRenderer::GridRenderer(GraphicsDevice& device)
     effect_->VertexColorEnabled = true;
 }
 
+void GridRenderer::setSpacing(float spacing) {
+    int halfExtent = std::max(4, static_cast<int>(20.0f / spacing));
+    buildGrid(halfExtent, spacing);
+}
+
 void GridRenderer::buildGrid(int halfExtent, float spacing) {
     std::vector<VertexPositionColor> verts;
     verts.reserve(4 * (2 * halfExtent + 1));

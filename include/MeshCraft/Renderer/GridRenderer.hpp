@@ -15,6 +15,8 @@ public:
     void draw(const Microsoft::Xna::Framework::Matrix& view,
               const Microsoft::Xna::Framework::Matrix& projection);
 
+    void setSpacing(float spacing);
+
 private:
     Microsoft::Xna::Framework::Graphics::GraphicsDevice& device_;
     std::unique_ptr<Microsoft::Xna::Framework::Graphics::VertexBuffer> vb_;

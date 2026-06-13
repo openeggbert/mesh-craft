@@ -1598,6 +1598,34 @@ void MeshCraftApplication::drawImGuiUi(int screenW, int screenH) {
     }
     ImGui::SameLine();
 
+    // Grid cell size button (right-click to configure)
+    if (ImGui::Button("Grid", ImVec2(40, 30))) {}
+    if (ImGui::IsItemHovered())
+        ImGui::SetTooltip("Grid cell size: %.4g u\nRight-click to change", gridSpacing_);
+    if (ImGui::BeginPopupContextItem("##gridcfg")) {
+        ImGui::TextDisabled("Grid Cell Size");
+        ImGui::Separator();
+        for (float v : {0.25f, 0.5f, 1.0f, 2.0f, 5.0f, 10.0f}) {
+            bool sel = (gridSpacing_ == v);
+            if (sel) ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.20f, 0.45f, 0.20f, 1.f));
+            char lbl[20]; std::snprintf(lbl, sizeof(lbl), "%.4g u##g%.4g", v, v);
+            if (ImGui::Button(lbl, ImVec2(72, 0))) {
+                gridSpacing_ = v;
+                gridRenderer_->setSpacing(v);
+            }
+            if (sel) ImGui::PopStyleColor();
+        }
+        ImGui::Spacing();
+        ImGui::SetNextItemWidth(120);
+        float tmp = gridSpacing_;
+        if (ImGui::DragFloat("##gs", &tmp, 0.05f, 0.05f, 50.0f, "%.4g u")) {
+            gridSpacing_ = tmp;
+            gridRenderer_->setSpacing(tmp);
+        }
+        ImGui::EndPopup();
+    }
+    ImGui::SameLine();
+
     float toolbarH = ImGui::GetWindowHeight();
     imguiTopH_ = static_cast<int>(menuBarH + toolbarH);
 

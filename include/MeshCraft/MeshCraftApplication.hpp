@@ -125,6 +125,9 @@ private:
     float snapRotate_{15.0f};     // degrees
     float snapScale_{0.25f};      // scale units
 
+    // Grid cell spacing (world units per cell)
+    float gridSpacing_{1.0f};
+
     // Animation playback state
     std::string currentActionName_;
     float       animTime_{0.0f};
