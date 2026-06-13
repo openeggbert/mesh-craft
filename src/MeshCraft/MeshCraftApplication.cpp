@@ -1504,13 +1504,59 @@ void MeshCraftApplication::drawImGuiUi(int screenW, int screenH) {
     if (showEdgeOverlay_) ImGui::PopStyleColor();
     ImGui::SameLine();
 
-    // Snap-to-grid toggle button
+    // Snap-to-grid toggle button (left-click toggles, right-click configures)
     if (snapEnabled_) ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.20f, 0.45f, 0.20f, 1.f));
     if (ImGui::Button("Snap", ImVec2(44, 30))) snapEnabled_ = !snapEnabled_;
     if (snapEnabled_) ImGui::PopStyleColor();
     if (ImGui::IsItemHovered())
-        ImGui::SetTooltip("Snap to grid  Move: %.2g u  Rotate: %.0f°  Scale: %.2g",
+        ImGui::SetTooltip("Snap to grid  Move: %.2g u  Rotate: %.0f°  Scale: %.2g\nRight-click to configure",
                           snapTranslate_, snapRotate_, snapScale_);
+    if (ImGui::BeginPopupContextItem("##snapcfg")) {
+        ImGui::TextDisabled("Snap Intervals");
+        ImGui::Separator();
+        // Move presets
+        ImGui::Text("Move (u):");
+        for (float v : {0.1f, 0.25f, 0.5f, 1.0f, 2.0f}) {
+            bool sel = (snapTranslate_ == v);
+            if (sel) ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.20f, 0.45f, 0.20f, 1.f));
+            char lbl[16]; std::snprintf(lbl, sizeof(lbl), "%.2g##mt%.2g", v, v);
+            if (ImGui::SmallButton(lbl)) snapTranslate_ = v;
+            if (sel) ImGui::PopStyleColor();
+            ImGui::SameLine();
+        }
+        ImGui::NewLine();
+        ImGui::SetNextItemWidth(120);
+        ImGui::DragFloat("##st", &snapTranslate_, 0.01f, 0.01f, 100.0f, "%.3g u");
+        ImGui::Spacing();
+        // Rotate presets
+        ImGui::Text("Rotate (°):");
+        for (float v : {5.0f, 10.0f, 15.0f, 30.0f, 45.0f, 90.0f}) {
+            bool sel = (snapRotate_ == v);
+            if (sel) ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.20f, 0.45f, 0.20f, 1.f));
+            char lbl[16]; std::snprintf(lbl, sizeof(lbl), "%.4g°##mr%.4g", v, v);
+            if (ImGui::SmallButton(lbl)) snapRotate_ = v;
+            if (sel) ImGui::PopStyleColor();
+            ImGui::SameLine();
+        }
+        ImGui::NewLine();
+        ImGui::SetNextItemWidth(120);
+        ImGui::DragFloat("##sr", &snapRotate_, 0.5f, 1.0f, 180.0f, "%.4g°");
+        ImGui::Spacing();
+        // Scale presets
+        ImGui::Text("Scale:");
+        for (float v : {0.05f, 0.1f, 0.25f, 0.5f, 1.0f}) {
+            bool sel = (snapScale_ == v);
+            if (sel) ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.20f, 0.45f, 0.20f, 1.f));
+            char lbl[16]; std::snprintf(lbl, sizeof(lbl), "%.2g##ms%.2g", v, v);
+            if (ImGui::SmallButton(lbl)) snapScale_ = v;
+            if (sel) ImGui::PopStyleColor();
+            ImGui::SameLine();
+        }
+        ImGui::NewLine();
+        ImGui::SetNextItemWidth(120);
+        ImGui::DragFloat("##ss", &snapScale_, 0.01f, 0.01f, 10.0f, "%.3g");
+        ImGui::EndPopup();
+    }
     ImGui::SameLine();
 
     float toolbarH = ImGui::GetWindowHeight();

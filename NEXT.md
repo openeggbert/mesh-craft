@@ -130,7 +130,8 @@ into `SceneRenderer` which overrides the effective `Mc3Transform` and visibility
 
 | Commit | Change |
 |-----------|-------------------------------------------------------------------------|
-| (pending) | Unsaved-changes guard: New/Open/Open Recent/Exit prompt "Save / Don't Save / Cancel" when scene is modified |
+| (pending) | Snap interval configurator: right-click Snap button → popup with Move/Rotate/Scale presets (0.1–2 u, 5–90°, 0.05–1) + DragFloat custom inputs; active preset highlighted green |
+| `e0f27c7` | Unsaved-changes guard: New/Open/Open Recent/Exit prompt "Save / Don't Save / Cancel" when scene is modified |
 | `f1320f4` | Auto-save: every 60 s when modified, writes <file>.autosave; cleared on manual save; startup warns if autosave is newer than saved file |
 | `421ae9c` | Help > Keyboard Shortcuts dialog: scrollable modal table of all shortcuts grouped by category (File/Edit/Add/View/Tools/etc.) |
 | `1a7d06a` | Snap to grid: toolbar Snap button + View menu toggle; Move snaps 0.5 u, Rotate 15°, Scale 0.25 — applied during gizmo drag |
