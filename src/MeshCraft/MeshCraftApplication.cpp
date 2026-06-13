@@ -2187,10 +2187,30 @@ void MeshCraftApplication::drawImGuiUi(int screenW, int screenH) {
                             ImGui::EndPopup();
                         }
 
-                        // Visibility eye button — right-aligned in the row
+                        // Lock + visibility buttons — right-aligned in the row
                         {
-                            float btnX = ImGui::GetWindowContentRegionMax().x - 18.0f;
-                            ImGui::SameLine(btnX);
+                            ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(1,1));
+
+                            // Lock button
+                            float lockX = ImGui::GetWindowContentRegionMax().x - 36.0f;
+                            ImGui::SameLine(lockX);
+                            ImGui::PushStyleColor(ImGuiCol_Button,
+                                isLocked ? ImVec4(0.55f,0.35f,0.05f,0.80f)
+                                         : ImVec4(0.18f,0.18f,0.18f,0.45f));
+                            ImGui::PushStyleColor(ImGuiCol_ButtonHovered,
+                                isLocked ? ImVec4(0.75f,0.50f,0.10f,0.90f)
+                                         : ImVec4(0.32f,0.32f,0.32f,0.65f));
+                            if (ImGui::SmallButton(isLocked ? "L##lk" : "l##lk")) {
+                                if (isLocked) lockedIds_.erase(obj->id);
+                                else          lockedIds_.insert(obj->id);
+                            }
+                            ImGui::PopStyleColor(2);
+                            if (ImGui::IsItemHovered())
+                                ImGui::SetTooltip(isLocked ? "Unlock (Ctrl+L)" : "Lock (Ctrl+L)");
+
+                            // Visibility button
+                            float visX = ImGui::GetWindowContentRegionMax().x - 18.0f;
+                            ImGui::SameLine(visX);
                             bool vis = obj->visible;
                             ImGui::PushStyleColor(ImGuiCol_Button,
                                 vis ? ImVec4(0.10f,0.40f,0.10f,0.70f)
@@ -2198,16 +2218,16 @@ void MeshCraftApplication::drawImGuiUi(int screenW, int screenH) {
                             ImGui::PushStyleColor(ImGuiCol_ButtonHovered,
                                 vis ? ImVec4(0.20f,0.60f,0.20f,0.85f)
                                     : ImVec4(0.35f,0.35f,0.35f,0.70f));
-                            ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(1,1));
                             if (ImGui::SmallButton(vis ? "v##vs" : "h##vs")) {
                                 pushUndo();
                                 obj->visible = !obj->visible;
                                 modified_ = true; updateWindowTitle();
                             }
-                            ImGui::PopStyleVar();
                             ImGui::PopStyleColor(2);
                             if (ImGui::IsItemHovered())
                                 ImGui::SetTooltip(vis ? "Hide" : "Show");
+
+                            ImGui::PopStyleVar();
                         }
 
                         if (hasChildren && nodeOpen)
