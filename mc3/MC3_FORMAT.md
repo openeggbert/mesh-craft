@@ -1,6 +1,6 @@
 # MC3 Scene Format — Reference Documentation
 
-**Version:** 0.2  
+**Version:** 0.3  
 **File extension:** `.mc3.xml`  
 **Encoding:** UTF-8  
 **Schema:** `mc3.xsd`
@@ -11,22 +11,23 @@
 
 MC3 is an XML-based 3D scene description format used by the OpenEggbert project.
 A scene is composed of geometric objects (primitives, extrusions, CSG booleans,
-instances of reusable definitions), lights, cameras, materials, and textures.
-The output pipeline exports to `.glb` via `mc3togltf`.
+instances of reusable definitions), lights, cameras, materials, textures, and
+keyframe animations. The output pipeline exports to `.glb` via `mc3togltf`
+(animations are exported as glTF `animations[]`).
 
 ---
 
 ## Root Element
 
 ```xml
-<mc3 version="0.2" model="MyScene" unit="meter" rotation_units="degrees" euler_order="XYZ">
+<mc3 version="0.3" model="MyScene" unit="meter" rotation_units="degrees" euler_order="XYZ">
   ...
 </mc3>
 ```
 
 | Attribute | Type | Default | Description |
 |---|---|---|---|
-| `version` | string | `0.2` | Format version |
+| `version` | string | `0.3` | Format version |
 | `model` | string | — | Scene/model name |
 | `unit` | `meter` \| `centimeter` \| `inch` | `meter` | World unit |
 | `coordinate_system` | `right_handed_y_up` \| `right_handed_z_up` | `right_handed_y_up` | Coordinate convention |
@@ -47,6 +48,7 @@ The output pipeline exports to `.glb` via `mc3togltf`.
   <materials>…</materials>
   <definitions>…</definitions>
   <objects>…</objects>
+  <actions>…</actions>
 </mc3>
 ```
 
@@ -494,7 +496,7 @@ Invisible logical zone (collision, trigger, pathfinding, etc.).
 
 ```xml
 <?xml version="1.0" encoding="UTF-8"?>
-<mc3 version="0.2" model="Minimal">
+<mc3 version="0.3" model="Minimal">
 
   <environment>
     <background color="0.4 0.6 0.9"/>
@@ -525,30 +527,129 @@ Invisible logical zone (collision, trigger, pathfinding, etc.).
 
 ---
 
-## Proposed Improvements (v0.3+)
+## `<actions>` — Keyframe Animation
 
-These features are not yet implemented but are planned or recommended for future versions.
-
-### 1. Animation — Actions & States
-
-Add an `<actions>` section to define keyframe animations and state machines.
+Defines named animation clips. Each action contains channels; each channel animates one
+scalar property of one named scene object over time.
 
 ```xml
 <actions>
-  <action name="door_open">
-    <keyframe time="0"   target="Door" property="rotation" value="0 0 0"/>
-    <keyframe time="1.5" target="Door" property="rotation" value="0 90 0"/>
+  <action name="Bounce" duration="2.0" loop="true">
+    <channel target="BouncingBox" property="position.y">
+      <keyframe time="0.0" value="0.0" interp="cubic">
+        <handle_left  dt="-0.2" dv="0.0"/>
+        <handle_right dt=" 0.2" dv="2.0"/>
+      </keyframe>
+      <keyframe time="1.0" value="3.0" interp="cubic">
+        <handle_left  dt="-0.2" dv="2.0"/>
+        <handle_right dt=" 0.2" dv="-2.0"/>
+      </keyframe>
+      <keyframe time="2.0" value="0.0" interp="cubic">
+        <handle_left  dt="-0.2" dv="-2.0"/>
+        <handle_right dt=" 0.2" dv="0.0"/>
+      </keyframe>
+    </channel>
+  </action>
+
+  <action name="Spin" duration="3.0" loop="true">
+    <channel target="SpinningSphere" property="rotation.y">
+      <keyframe time="0.0"  value="0.0"   interp="linear"/>
+      <keyframe time="3.0"  value="360.0" interp="linear"/>
+    </channel>
+  </action>
+
+  <action name="Flash" duration="2.0" loop="true">
+    <channel target="FadingPlane" property="visible">
+      <keyframe time="0.0" value="1.0" interp="step"/>
+      <keyframe time="0.5" value="0.0" interp="step"/>
+      <keyframe time="1.0" value="1.0" interp="step"/>
+    </channel>
   </action>
 </actions>
-
-<states>
-  <state name="idle"  on_enter="door_close"/>
-  <state name="open"  on_enter="door_open"/>
-  <transition from="idle" to="open" on="interact"/>
-</states>
 ```
 
-### 2. LOD (Level of Detail)
+### `<action>`
+
+| Attribute | Type | Default | Description |
+|---|---|---|---|
+| `name` | string | — | Unique clip name |
+| `duration` | float | `1.0` | Clip length in seconds |
+| `loop` | boolean | `false` | Loop when end is reached |
+
+### `<channel>`
+
+| Attribute | Type | Description |
+|---|---|---|
+| `target` | string | Name of the scene object to animate |
+| `property` | string | Animatable property (see table below) |
+
+Keyframes in a channel are automatically sorted by `time` on load.
+
+### `<keyframe>`
+
+| Attribute | Type | Default | Description |
+|---|---|---|---|
+| `time` | float | — | Time in seconds |
+| `value` | float | — | Property value at this time |
+| `interp` | `linear` \| `step` \| `cubic` | `linear` | Interpolation to the **next** keyframe |
+
+For `interp="cubic"`, two optional child elements define the cubic bezier tangent handles
+(expressed as offsets relative to the owning keyframe's `(time, value)` point):
+
+```xml
+<handle_left  dt="-0.2" dv="0.0"/>   <!-- in-tangent -->
+<handle_right dt=" 0.2" dv="1.5"/>   <!-- out-tangent -->
+```
+
+| Attribute | Type | Default | Description |
+|---|---|---|---|
+| `dt` | float | `±0.1` | Time offset of the handle (negative for left, positive for right) |
+| `dv` | float | `0.0` | Value offset of the handle |
+
+### Animatable Properties
+
+All properties are float-valued. `visible` uses `0.0` = false, `≥ 0.5` = true.
+
+| Property | Unit / Range | glTF export |
+|---|---|---|
+| `position.x` | world units | `translation.x` |
+| `position.y` | world units | `translation.y` |
+| `position.z` | world units | `translation.z` |
+| `rotation.x` | degrees | combined into quaternion `rotation` |
+| `rotation.y` | degrees | combined into quaternion `rotation` |
+| `rotation.z` | degrees | combined into quaternion `rotation` |
+| `scale.x` | factor | `scale.x` |
+| `scale.y` | factor | `scale.y` |
+| `scale.z` | factor | `scale.z` |
+| `visible` | 0 or 1 | *(not exported)* |
+| `deform.x` | factor | *(not exported)* |
+| `deform.y` | factor | *(not exported)* |
+| `deform.z` | factor | *(not exported)* |
+| `material.baseColor.r` | 0–1 | *(not exported)* |
+| `material.baseColor.g` | 0–1 | *(not exported)* |
+| `material.baseColor.b` | 0–1 | *(not exported)* |
+| `material.baseColor.a` | 0–1 | *(not exported)* |
+| `material.roughness` | 0–1 | *(not exported)* |
+| `material.metallic` | 0–1 | *(not exported)* |
+| `material.emissive.r` | 0–1 | *(not exported)* |
+| `material.emissive.g` | 0–1 | *(not exported)* |
+| `material.emissive.b` | 0–1 | *(not exported)* |
+
+**glTF export notes:**
+- Position/rotation/scale channels are exported as glTF `animations[]`.
+- Per-component mc3 channels (e.g., `position.y` only) are merged into VEC3/VEC4 at export time;
+  non-animated components fall back to the object's base transform value.
+- Cubic bezier channels are sampled at 30 fps and exported as `LINEAR` glTF interpolation.
+- `visible`, `deform.*`, and `material.*` channels have no glTF node-transform equivalent
+  and are silently skipped during export.
+
+---
+
+## Proposed Improvements (v0.4+)
+
+These features are not yet implemented but are planned or recommended for future versions.
+
+### 1. LOD (Level of Detail)
 
 Group multiple mesh representations of the same object by screen size.
 
@@ -561,7 +662,7 @@ Group multiple mesh representations of the same object by screen size.
 </lod>
 ```
 
-### 3. Physics Properties
+### 2. Physics Properties
 
 Per-object physics parameters.
 
@@ -571,7 +672,7 @@ Per-object physics parameters.
 </box>
 ```
 
-### 4. Procedural Noise / Scatter
+### 3. Procedural Noise / Scatter
 
 Place objects on a surface following noise or distribution rules.
 
@@ -582,7 +683,7 @@ Place objects on a surface following noise or distribution rules.
 </scatter>
 ```
 
-### 5. Named Coordinate Spaces / Anchors
+### 4. Named Coordinate Spaces / Anchors
 
 Named world-space points for attaching objects or logic.
 
@@ -590,7 +691,7 @@ Named world-space points for attaching objects or logic.
 <anchor name="door_handle" position="0.55 1.05 -4.05"/>
 ```
 
-### 6. Material Variants
+### 5. Material Variants
 
 Allow swapping a set of materials at runtime without duplicating objects.
 
@@ -601,7 +702,7 @@ Allow swapping a set of materials at runtime without duplicating objects.
 </material_variant>
 ```
 
-### 7. Terrain
+### 6. Terrain
 
 Heightmap-based terrain with per-splat material blending.
 
@@ -614,7 +715,7 @@ Heightmap-based terrain with per-splat material blending.
 </terrain>
 ```
 
-### 8. Instanced Arrays (GPU Instancing Hint)
+### 7. Instanced Arrays (GPU Instancing Hint)
 
 Mark large groups for GPU instancing.
 
@@ -624,10 +725,10 @@ Mark large groups for GPU instancing.
 </instance_array>
 ```
 
-### 9. Schema Version Namespace
+### 8. Schema Version Namespace
 
 Use a proper XML namespace to allow forward compatibility.
 
 ```xml
-<mc3 xmlns="https://openeggbert.org/mc3/0.2" version="0.2">
+<mc3 xmlns="https://openeggbert.org/mc3/0.3" version="0.3">
 ```
