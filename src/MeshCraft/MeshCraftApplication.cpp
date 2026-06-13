@@ -1684,6 +1684,35 @@ void MeshCraftApplication::drawImGuiUi(int screenW, int screenH) {
                 }
                 ImGui::EndMenu();
             }
+            bool hasSel2b = selection_.selection().size() >= 2;
+            if (ImGui::BeginMenu("Distribute Selection", hasSel2b)) {
+                static const char* distLabel[3] = {
+                    "Distribute X (spacing)", "Distribute Y (spacing)", "Distribute Z (spacing)"
+                };
+                for (int ax = 0; ax < 3; ++ax) {
+                    if (ImGui::MenuItem(distLabel[ax])) {
+                        // Collect & sort by position on this axis
+                        auto objs = selection_.selection();
+                        std::sort(objs.begin(), objs.end(),
+                            [ax](const auto& a, const auto& b) {
+                                return a->transform.position[ax] < b->transform.position[ax];
+                            });
+                        int n = static_cast<int>(objs.size());
+                        if (n >= 2) {
+                            pushUndo();
+                            float lo = objs.front()->transform.position[ax];
+                            float hi = objs.back()->transform.position[ax];
+                            for (int i = 1; i < n - 1; ++i) {
+                                if (lockedIds_.count(objs[i]->id)) continue;
+                                objs[i]->transform.position[ax] =
+                                    lo + static_cast<float>(i) * (hi - lo) / static_cast<float>(n - 1);
+                            }
+                            modified_ = true; updateWindowTitle();
+                        }
+                    }
+                }
+                ImGui::EndMenu();
+            }
             ImGui::Separator();
             if (ImGui::MenuItem("Lock/Unlock Selected", "Ctrl+L", false, !selection_.selection().empty())) {
                 for (const auto& s : selection_.selection()) {
