@@ -73,3 +73,27 @@ target_link_libraries(mc3togltf PRIVATE
 )
 
 install(TARGETS mc3togltf RUNTIME DESTINATION bin)
+
+# --------------------------------------------------------------------------
+# Tests
+# --------------------------------------------------------------------------
+include(CTest)
+
+if(BUILD_TESTING)
+    find_program(PYTHON3_EXEC python3)
+    if(PYTHON3_EXEC)
+        set(_anim_xml "${CMAKE_CURRENT_SOURCE_DIR}/../test/animation_test.mc3.xml")
+        set(_house_xml "${CMAKE_CURRENT_SOURCE_DIR}/../test/house.mc3.xml")
+        if(EXISTS "${_anim_xml}" AND EXISTS "${_house_xml}")
+            add_test(
+                NAME mc3togltf_gltf
+                COMMAND "${PYTHON3_EXEC}"
+                        "${CMAKE_CURRENT_SOURCE_DIR}/test/gltf_test.py"
+                        "$<TARGET_FILE:mc3togltf>"
+                        "${_anim_xml}"
+                        "${_house_xml}"
+            )
+            set_tests_properties(mc3togltf_gltf PROPERTIES TIMEOUT 30)
+        endif()
+    endif()
+endif()
