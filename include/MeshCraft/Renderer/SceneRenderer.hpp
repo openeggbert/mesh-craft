@@ -21,13 +21,22 @@
 
 namespace MeshCraft::Renderer {
 
-// Per-object transform/visibility override for animation playback.
-// Any optional that is set replaces the corresponding field in the object's transform.
+// Per-object transform/visibility/material override for animation playback.
+// Any optional that is set replaces the corresponding field during rendering.
 struct AnimOverride {
     std::optional<std::array<float, 3>> position;
     std::optional<std::array<float, 3>> rotation;
     std::optional<std::array<float, 3>> scale;
     std::optional<bool>                 visible;
+
+    // Material property overrides (animated material channels)
+    std::optional<std::array<float, 4>> baseColor;  // RGBA
+    std::optional<float>                roughness;
+    std::optional<float>                metallic;
+    std::optional<std::array<float, 3>> emissive;   // RGB
+
+    // Deform override (animated deform.x/y/z channels)
+    std::optional<std::array<float, 3>> deformScale;
 };
 
 struct RenderMesh {
@@ -69,19 +78,22 @@ public:
     void drawGizmo(const Mc3::Mc3Object* obj,
                    const Microsoft::Xna::Framework::Matrix& view,
                    const Microsoft::Xna::Framework::Matrix& projection,
-                   float gizmoLength);
+                   float gizmoLength,
+                   bool localSpace = false);
 
     // Render scale gizmo (X/Y/Z axis lines + flat-square tips) for a selected object
     void drawScaleGizmo(const Mc3::Mc3Object* obj,
                         const Microsoft::Xna::Framework::Matrix& view,
                         const Microsoft::Xna::Framework::Matrix& projection,
-                        float gizmoLength);
+                        float gizmoLength,
+                        bool localSpace = false);
 
     // Render rotate gizmo (X/Y/Z circles) for a selected object
     void drawRotateGizmo(const Mc3::Mc3Object* obj,
                          const Microsoft::Xna::Framework::Matrix& view,
                          const Microsoft::Xna::Framework::Matrix& projection,
-                         float gizmoLength);
+                         float gizmoLength,
+                         bool localSpace = false);
 
     // Render a single object's bounding box (wireframe)
     void drawObjectWireframe(const Mc3::Mc3Object& obj,

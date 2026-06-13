@@ -1,0 +1,467 @@
+#include "MeshCraft/MeshCraftApplication.hpp"
+#include "MeshCraftPrivate.hpp"
+
+#include <Microsoft/Xna/Framework/Input/Keys.hpp>
+#include <Microsoft/Xna/Framework/Input/KeyboardState.hpp>
+#include <Microsoft/Xna/Framework/Matrix.hpp>
+#include <Microsoft/Xna/Framework/Vector3.hpp>
+#include <Microsoft/Xna/Framework/Color.hpp>
+
+#include <algorithm>
+#include <cmath>
+#include <cstdio>
+#include <cstring>
+#include <fstream>
+#include <functional>
+#include <iostream>
+#include <numbers>
+#include <string>
+
+namespace MeshCraft {
+
+using namespace Microsoft::Xna::Framework;
+using namespace Microsoft::Xna::Framework::Input;
+using namespace Microsoft::Xna::Framework::Graphics;
+
+void MeshCraftApplication::handleMouseInput(const MouseState& ms, const MouseState& prev) {
+    int dx = ms.getXProperty() - prev.getXProperty();
+    int dy = ms.getYProperty() - prev.getYProperty();
+    int dscroll = ms.getScrollWheelValueProperty() - prev.getScrollWheelValueProperty();
+
+    bool leftBtn   = ms.getLeftButtonProperty()   == ButtonState::Pressed;
+    bool rightBtn  = ms.getRightButtonProperty()  == ButtonState::Pressed;
+    bool middleBtn = ms.getMiddleButtonProperty() == ButtonState::Pressed;
+    bool prevLeft  = prev.getLeftButtonProperty() == ButtonState::Pressed;
+
+    // End gizmo drag on mouse release
+    if (!leftBtn && gizmo_.isDragging())
+        gizmo_.endDrag();
+
+    // Camera orbit / pan / zoom
+    if (middleBtn && (dx != 0 || dy != 0))
+        camera_.orbit(dx * 0.005f, dy * 0.005f);
+    else if (rightBtn && !middleBtn && (dx != 0 || dy != 0))
+        camera_.pan(static_cast<float>(-dx), static_cast<float>(dy));
+
+    if (dscroll != 0)
+        camera_.zoom(static_cast<float>(dscroll) / 120.0f);
+
+    // Compute 3D viewport bounds (same formula as Draw())
+    auto& gd = getGraphicsDeviceProperty();
+    int screenW = gd.getViewportProperty().getWidthProperty();
+    int screenH = gd.getViewportProperty().getHeightProperty();
+    int topH    = imguiTopH_ > 0 ? imguiTopH_ : 60;
+    int vX = kLeftPanelW, vY = topH;
+    int vW = std::max(1, screenW - kLeftPanelW - kRightPanelW);
+    int tlH = showTimeline_ ? kTimelineH : 0;
+    int vH = std::max(1, screenH - topH - tlH - kStatusH);
+    float asp = static_cast<float>(vW) / static_cast<float>(vH);
+
+    // Helper: compute local or world axis vectors for a given object
+    auto getLocalAxes = [&](const Mc3::Mc3Object* obj, Vector3 axes[3]) {
+        if (gizmoLocalSpace_) {
+            const float d = std::numbers::pi_v<float> / 180.0f;
+            Matrix rotM = Matrix::CreateFromYawPitchRoll(
+                obj->transform.rotation[1]*d, obj->transform.rotation[0]*d, obj->transform.rotation[2]*d);
+            axes[0] = rotM.getRightProperty();
+            axes[1] = rotM.getUpProperty();
+            Vector3 fwd = rotM.getForwardProperty();
+            axes[2] = {-fwd.X, -fwd.Y, -fwd.Z};
+        } else {
+            axes[0] = {1,0,0};
+            axes[1] = {0,1,0};
+            axes[2] = {0,0,1};
+        }
+    };
+
+    // Apply gizmo drag (Move)
+    if (activeTool_ == ActiveTool::Move && gizmo_.isDragging() && leftBtn && (dx != 0 || dy != 0)
+        && selection_.hasSelection())
+    {
+        Matrix vw = camera_.viewMatrix();
+        Matrix pr = camera_.projectionMatrix(asp);
+        Matrix vp = vw * pr;
+
+        auto w2s = [&](float wx, float wy, float wz) -> std::pair<float,float> {
+            float cX = wx*vp.M11 + wy*vp.M21 + wz*vp.M31 + vp.M41;
+            float cY = wx*vp.M12 + wy*vp.M22 + wz*vp.M32 + vp.M42;
+            float cW = wx*vp.M14 + wy*vp.M24 + wz*vp.M34 + vp.M44;
+            if (std::abs(cW) < 1e-6f) return {-1e6f, -1e6f};
+            return { (cX/cW * 0.5f + 0.5f) * vW + vX,
+                     (1.0f - (cY/cW * 0.5f + 0.5f)) * vH + vY };
+        };
+
+        auto* sel0 = selection_.selection().front().get();
+        float px = sel0->transform.position[0], py2 = sel0->transform.position[1], pz = sel0->transform.position[2];
+        float L  = camera_.distance * 0.15f;
+        int axIdx = static_cast<int>(gizmo_.dragAxis()) - 1;
+
+        Vector3 localAxes[3];
+        getLocalAxes(sel0, localAxes);
+        const Vector3& ax = localAxes[axIdx];
+        float tipX = px + L*ax.X, tipY = py2 + L*ax.Y, tipZ = pz + L*ax.Z;
+
+        auto [cx, cy] = w2s(px, py2, pz);
+        auto [tx, ty] = w2s(tipX, tipY, tipZ);
+        float axScrX = tx - cx, axScrY = ty - cy;
+        float len2d  = std::sqrt(axScrX*axScrX + axScrY*axScrY);
+        if (len2d > 0.5f) {
+            float delta = dx * (axScrX/len2d) + dy * (axScrY/len2d);
+            delta *= L / len2d;
+            for (const auto& s : selection_.selection()) {
+                if (lockedIds_.count(s->id)) continue;
+                s->transform.position[0] += delta * ax.X;
+                s->transform.position[1] += delta * ax.Y;
+                s->transform.position[2] += delta * ax.Z;
+                if (snapEnabled_) {
+                    for (int i = 0; i < 3; ++i)
+                        s->transform.position[i] = std::round(s->transform.position[i] / snapTranslate_) * snapTranslate_;
+                }
+            }
+            modified_ = true;
+            updateWindowTitle();
+        }
+        return;
+    }
+
+    // Apply gizmo drag (Scale)
+    if (activeTool_ == ActiveTool::Scale && gizmo_.isDragging() && leftBtn && (dx != 0 || dy != 0)
+        && selection_.hasSelection())
+    {
+        Matrix vw = camera_.viewMatrix();
+        Matrix pr = camera_.projectionMatrix(asp);
+        Matrix vp = vw * pr;
+
+        auto w2s = [&](float wx, float wy, float wz) -> std::pair<float,float> {
+            float cX = wx*vp.M11 + wy*vp.M21 + wz*vp.M31 + vp.M41;
+            float cY = wx*vp.M12 + wy*vp.M22 + wz*vp.M32 + vp.M42;
+            float cW = wx*vp.M14 + wy*vp.M24 + wz*vp.M34 + vp.M44;
+            if (std::abs(cW) < 1e-6f) return {-1e6f, -1e6f};
+            return { (cX/cW * 0.5f + 0.5f) * vW + vX,
+                     (1.0f - (cY/cW * 0.5f + 0.5f)) * vH + vY };
+        };
+
+        auto* sel0 = selection_.selection().front().get();
+        float px = sel0->transform.position[0], py2 = sel0->transform.position[1], pz = sel0->transform.position[2];
+        float L  = camera_.distance * 0.15f;
+        int axIdx = static_cast<int>(gizmo_.dragAxis()) - 1;
+
+        Vector3 localAxes[3];
+        getLocalAxes(sel0, localAxes);
+        const Vector3& ax = localAxes[axIdx];
+        float tipX = px + L*ax.X, tipY = py2 + L*ax.Y, tipZ = pz + L*ax.Z;
+
+        auto [cx, cy] = w2s(px, py2, pz);
+        auto [tx, ty] = w2s(tipX, tipY, tipZ);
+        float axScrX = tx - cx, axScrY = ty - cy;
+        float len3d  = std::sqrt(axScrX*axScrX + axScrY*axScrY);
+        if (len3d > 0.5f) {
+            float delta = (dx * (axScrX/len3d) + dy * (axScrY/len3d)) / len3d;
+            for (const auto& s : selection_.selection()) {
+                if (lockedIds_.count(s->id)) continue;
+                float& sc = s->transform.scale[axIdx];
+                sc = std::max(0.01f, sc + delta);
+                if (snapEnabled_)
+                    sc = std::max(snapScale_, std::round(sc / snapScale_) * snapScale_);
+            }
+            modified_ = true;
+            updateWindowTitle();
+        }
+        return;
+    }
+
+    // Apply gizmo drag (Rotate)
+    if (activeTool_ == ActiveTool::Rotate && gizmo_.isDragging() && leftBtn && (dx != 0 || dy != 0)
+        && selection_.hasSelection())
+    {
+        Matrix vw = camera_.viewMatrix();
+        Matrix pr = camera_.projectionMatrix(asp);
+        Matrix vp = vw * pr;
+
+        auto w2s = [&](float wx, float wy, float wz) -> std::pair<float,float> {
+            float cX = wx*vp.M11 + wy*vp.M21 + wz*vp.M31 + vp.M41;
+            float cY = wx*vp.M12 + wy*vp.M22 + wz*vp.M32 + vp.M42;
+            float cW = wx*vp.M14 + wy*vp.M24 + wz*vp.M34 + vp.M44;
+            if (std::abs(cW) < 1e-6f) return {-1e6f, -1e6f};
+            return { (cX/cW * 0.5f + 0.5f) * vW + vX,
+                     (1.0f - (cY/cW * 0.5f + 0.5f)) * vH + vY };
+        };
+
+        auto* sel0 = selection_.selection().front().get();
+        float px = sel0->transform.position[0], py2 = sel0->transform.position[1], pz = sel0->transform.position[2];
+        float L  = camera_.distance * 0.15f;
+        int axIdx = static_cast<int>(gizmo_.dragAxis()) - 1;
+
+        auto [cx, cy] = w2s(px, py2, pz);
+        float refPts[3][3] = { {px, py2+L, pz}, {px+L, py2, pz}, {px+L, py2, pz} };
+        auto [rx4s, ry4s]  = w2s(refPts[axIdx][0], refPts[axIdx][1], refPts[axIdx][2]);
+        float r_screen = std::max(1.0f, std::sqrt((rx4s-cx)*(rx4s-cx) + (ry4s-cy)*(ry4s-cy)));
+
+        float curMx = static_cast<float>(ms.getXProperty());
+        float curMy = static_cast<float>(ms.getYProperty());
+        float radX = curMx - cx, radY = curMy - cy;
+        float radLen = std::sqrt(radX*radX + radY*radY);
+        if (radLen > 2.0f) {
+            float tx = -radY/radLen, ty = radX/radLen;
+            float degsPerPixel = 180.0f / (std::numbers::pi_v<float> * r_screen);
+            float delta = (dx * tx + dy * ty) * degsPerPixel;
+            for (const auto& s : selection_.selection()) {
+                if (lockedIds_.count(s->id)) continue;
+                float& r = s->transform.rotation[axIdx];
+                r += delta;
+                if (snapEnabled_)
+                    r = std::round(r / snapRotate_) * snapRotate_;
+            }
+            modified_ = true;
+            updateWindowTitle();
+        }
+        return;
+    }
+
+    // Left click in 3D viewport
+    if (leftBtn && !prevLeft) {
+        int mx = ms.getXProperty();
+        int my = ms.getYProperty();
+        bool ctrl = (Keyboard::GetState().IsKeyDown(Keys::LeftControl) ||
+                     Keyboard::GetState().IsKeyDown(Keys::RightControl));
+
+        bool in3d = (mx >= vX && mx < vX + vW && my >= vY && my < vY + vH);
+        if (in3d) {
+            // Gizmo handle hit test (Move or Scale)
+            if ((activeTool_ == ActiveTool::Move || activeTool_ == ActiveTool::Scale)
+                && selection_.hasSelection() && !ctrl)
+            {
+                auto* sel0 = selection_.selection().front().get();
+                float gpx = sel0->transform.position[0];
+                float gpy = sel0->transform.position[1];
+                float gpz = sel0->transform.position[2];
+                float gL  = camera_.distance * 0.15f;
+
+                Matrix gvw = camera_.viewMatrix();
+                Matrix gpr = camera_.projectionMatrix(asp);
+                Matrix gvp = gvw * gpr;
+
+                auto gw2s = [&](float wx, float wy, float wz) -> std::pair<float,float> {
+                    float cX = wx*gvp.M11 + wy*gvp.M21 + wz*gvp.M31 + gvp.M41;
+                    float cY = wx*gvp.M12 + wy*gvp.M22 + wz*gvp.M32 + gvp.M42;
+                    float cW = wx*gvp.M14 + wy*gvp.M24 + wz*gvp.M34 + gvp.M44;
+                    if (std::abs(cW) < 1e-6f) return {-1e6f, -1e6f};
+                    return { (cX/cW * 0.5f + 0.5f) * vW + vX,
+                             (1.0f - (cY/cW * 0.5f + 0.5f)) * vH + vY };
+                };
+
+                Vector3 htAxes[3];
+                getLocalAxes(sel0, htAxes);
+                float gTips[3][3] = {
+                    {gpx+gL*htAxes[0].X, gpy+gL*htAxes[0].Y, gpz+gL*htAxes[0].Z},
+                    {gpx+gL*htAxes[1].X, gpy+gL*htAxes[1].Y, gpz+gL*htAxes[1].Z},
+                    {gpx+gL*htAxes[2].X, gpy+gL*htAxes[2].Y, gpz+gL*htAxes[2].Z},
+                };
+                for (int gi = 0; gi < 3; ++gi) {
+                    auto [gsx, gsy] = gw2s(gTips[gi][0], gTips[gi][1], gTips[gi][2]);
+                    float gdist = std::sqrt((mx-gsx)*(mx-gsx) + (my-gsy)*(my-gsy));
+                    if (gdist < 12.0f) {
+                        pushUndo();
+                        gizmo_.startDrag(static_cast<Editor::GizmoAxis>(gi + 1));
+                        gizmoDragAxisIdx_ = gi;
+                        if (activeTool_ == ActiveTool::Move)
+                            gizmoDragStartVal_ = sel0->transform.position[gi];
+                        else
+                            gizmoDragStartVal_ = sel0->transform.scale[gi];
+                        return;
+                    }
+                }
+            }
+
+            // Gizmo circle hit test (Rotate)
+            if (activeTool_ == ActiveTool::Rotate && selection_.hasSelection() && !ctrl) {
+                auto* sel0 = selection_.selection().front().get();
+                float gpx = sel0->transform.position[0];
+                float gpy = sel0->transform.position[1];
+                float gpz = sel0->transform.position[2];
+                float gL  = camera_.distance * 0.15f;
+
+                Matrix gvw = camera_.viewMatrix();
+                Matrix gpr = camera_.projectionMatrix(asp);
+                Matrix gvp = gvw * gpr;
+
+                auto gw2s = [&](float wx, float wy, float wz) -> std::pair<float,float> {
+                    float cX = wx*gvp.M11 + wy*gvp.M21 + wz*gvp.M31 + gvp.M41;
+                    float cY = wx*gvp.M12 + wy*gvp.M22 + wz*gvp.M32 + gvp.M42;
+                    float cW = wx*gvp.M14 + wy*gvp.M24 + wz*gvp.M34 + gvp.M44;
+                    if (std::abs(cW) < 1e-6f) return {-1e6f, -1e6f};
+                    return { (cX/cW * 0.5f + 0.5f) * vW + vX,
+                             (1.0f - (cY/cW * 0.5f + 0.5f)) * vH + vY };
+                };
+
+                Vector3 rotAxes[3];
+                getLocalAxes(sel0, rotAxes);
+                // Circle for axis[ax] lies in plane spanned by the other two axes
+                Vector3 rotPlaneU[3] = { rotAxes[1], rotAxes[2], rotAxes[0] };
+                Vector3 rotPlaneV[3] = { rotAxes[2], rotAxes[0], rotAxes[1] };
+
+                const int CN = 32;
+                int bestAx = -1;
+                float bestDist = 11.0f;
+                for (int ax = 0; ax < 3; ++ax) {
+                    for (int j = 0; j < CN; ++j) {
+                        float t = 2.0f * std::numbers::pi_v<float> * j / CN;
+                        float c = std::cos(t), s = std::sin(t);
+                        float wx = gpx + gL*(c*rotPlaneU[ax].X + s*rotPlaneV[ax].X);
+                        float wy = gpy + gL*(c*rotPlaneU[ax].Y + s*rotPlaneV[ax].Y);
+                        float wz = gpz + gL*(c*rotPlaneU[ax].Z + s*rotPlaneV[ax].Z);
+                        auto [sx, sy] = gw2s(wx, wy, wz);
+                        float d = std::sqrt((mx-sx)*(mx-sx) + (my-sy)*(my-sy));
+                        if (d < bestDist) { bestDist = d; bestAx = ax; }
+                    }
+                }
+                if (bestAx >= 0) {
+                    pushUndo();
+                    gizmo_.startDrag(static_cast<Editor::GizmoAxis>(bestAx + 1));
+                    gizmoDragAxisIdx_  = bestAx;
+                    gizmoDragStartVal_ = sel0->transform.rotation[bestAx];
+                    return;
+                }
+            }
+
+            // Ray-cast picking
+            float ndcX = ((mx - vX) / static_cast<float>(vW)) * 2.0f - 1.0f;
+            float ndcY = 1.0f - ((my - vY) / static_cast<float>(vH)) * 2.0f;
+
+            Vector3 rayOrig = camera_.position();
+            Vector3 rayDir  = camera_.screenRayDirection(ndcX, ndcY, asp);
+
+            auto rayAABB = [](const Vector3& ro, const Vector3& rd,
+                               const Vector3& bMin, const Vector3& bMax,
+                               float& tHit) -> bool {
+                float tNear = 0.0f, tFar = 1e30f;
+                const float* rov = &ro.X; const float* rdv = &rd.X;
+                const float* bnv = &bMin.X; const float* bxv = &bMax.X;
+                for (int i = 0; i < 3; ++i) {
+                    if (std::abs(rdv[i]) < 1e-9f) {
+                        if (rov[i] < bnv[i] || rov[i] > bxv[i]) return false;
+                    } else {
+                        float t1 = (bnv[i] - rov[i]) / rdv[i];
+                        float t2 = (bxv[i] - rov[i]) / rdv[i];
+                        if (t1 > t2) { float tmp = t1; t1 = t2; t2 = tmp; }
+                        tNear = std::max(tNear, t1);
+                        tFar  = std::min(tFar,  t2);
+                        if (tNear > tFar) return false;
+                    }
+                }
+                tHit = tNear;
+                return tNear >= 0.0f;
+            };
+
+            auto objectAABB = [](const Mc3::Mc3Object& obj, Vector3& bMin, Vector3& bMax) {
+                const auto& t = obj.transform;
+                float px = t.position[0], py2 = t.position[1], pz = t.position[2];
+                float sx = t.scale[0], sy = t.scale[1], sz = t.scale[2];
+                float hx = 0.5f, hy = 0.5f, hz = 0.5f;
+                if (obj.primitive) {
+                    const auto& p = *obj.primitive;
+                    switch (p.primitiveType) {
+                    case Mc3::PrimitiveType::Box: case Mc3::PrimitiveType::Cube:
+                        hx = p.size[0] * 0.5f; hy = p.size[1] * 0.5f; hz = p.size[2] * 0.5f; break;
+                    case Mc3::PrimitiveType::Sphere:
+                        hx = hy = hz = p.radius; break;
+                    case Mc3::PrimitiveType::Cylinder: case Mc3::PrimitiveType::Cone:
+                        hx = hz = p.radius; hy = p.height * 0.5f; break;
+                    case Mc3::PrimitiveType::Plane:
+                        hx = p.size[0] * 0.5f; hy = 0.05f; hz = p.size[1] * 0.5f; break;
+                    }
+                }
+                hx *= std::abs(sx); hy *= std::abs(sy); hz *= std::abs(sz);
+                bMin = { px - hx, py2 - hy, pz - hz };
+                bMax = { px + hx, py2 + hy, pz + hz };
+            };
+
+            float bestT = 1e30f;
+            std::shared_ptr<Mc3::Mc3Object> bestObj;
+
+            std::function<void(const std::vector<std::shared_ptr<Mc3::Mc3Object>>&)> testList;
+            testList = [&](const std::vector<std::shared_ptr<Mc3::Mc3Object>>& list) {
+                for (const auto& obj : list) {
+                    if (!obj || !obj->visible) continue;
+                    if (obj->primitive) {
+                        Vector3 bMin, bMax;
+                        objectAABB(*obj, bMin, bMax);
+                        float tHit = 0.0f;
+                        if (rayAABB(rayOrig, rayDir, bMin, bMax, tHit) && tHit < bestT) {
+                            bestT = tHit; bestObj = obj;
+                        }
+                    }
+                    if (!obj->children.empty()) testList(obj->children);
+                }
+            };
+            testList(document_.objects);
+
+            if (!ctrl) selection_.clear();
+            if (bestObj) selection_.select(bestObj);
+            updateWindowTitle();
+        }
+    }
+
+    // Box-select: drag in 3D viewport with Select tool
+    if (activeTool_ == ActiveTool::Select && !gizmo_.isDragging()) {
+        int mxB = ms.getXProperty(), myB = ms.getYProperty();
+        bool in3dB = (mxB >= vX && mxB < vX + vW && myB >= vY && myB < vY + vH);
+
+        if (leftBtn && !prevLeft && in3dB) {
+            boxSelectX0_ = mxB; boxSelectY0_ = myB;
+        }
+        if (leftBtn && prevLeft && !boxSelectActive_ && in3dB) {
+            int ddx = mxB - boxSelectX0_, ddy = myB - boxSelectY0_;
+            if (std::abs(ddx) > 4 || std::abs(ddy) > 4)
+                boxSelectActive_ = true;
+        }
+        if (boxSelectActive_ && leftBtn) {
+            boxSelectX1_ = mxB; boxSelectY1_ = myB;
+        }
+        if (boxSelectActive_ && !leftBtn && prevLeft) {
+            Matrix vwB = camera_.viewMatrix();
+            Matrix prB = camera_.projectionMatrix(asp);
+            Matrix vpB = vwB * prB;
+
+            auto w2sB = [&](float wx, float wy, float wz) -> std::pair<float,float> {
+                float cX = wx*vpB.M11 + wy*vpB.M21 + wz*vpB.M31 + vpB.M41;
+                float cY = wx*vpB.M12 + wy*vpB.M22 + wz*vpB.M32 + vpB.M42;
+                float cW = wx*vpB.M14 + wy*vpB.M24 + wz*vpB.M34 + vpB.M44;
+                if (std::abs(cW) < 1e-6f) return {-1e6f, -1e6f};
+                return { (cX/cW * 0.5f + 0.5f) * vW + vX,
+                         (1.0f - (cY/cW * 0.5f + 0.5f)) * vH + vY };
+            };
+
+            int bxMin = std::min(boxSelectX0_, mxB), bxMax = std::max(boxSelectX0_, mxB);
+            int byMin = std::min(boxSelectY0_, myB), byMax = std::max(boxSelectY0_, myB);
+
+            bool additive = (Keyboard::GetState().IsKeyDown(Keys::LeftControl) ||
+                             Keyboard::GetState().IsKeyDown(Keys::RightControl));
+            if (!additive) selection_.clear();
+
+            std::function<void(const std::vector<std::shared_ptr<Mc3::Mc3Object>>&)> boxTest;
+            boxTest = [&](const std::vector<std::shared_ptr<Mc3::Mc3Object>>& list) {
+                for (const auto& obj : list) {
+                    if (!obj || !obj->visible) continue;
+                    auto [sx, sy] = w2sB(obj->transform.position[0],
+                                         obj->transform.position[1],
+                                         obj->transform.position[2]);
+                    if (sx >= bxMin && sx <= bxMax && sy >= byMin && sy <= byMax)
+                        selection_.select(obj);
+                    if (!obj->children.empty()) boxTest(obj->children);
+                }
+            };
+            boxTest(document_.objects);
+            updateWindowTitle();
+            boxSelectActive_ = false;
+        }
+    }
+    if (activeTool_ != ActiveTool::Select) boxSelectActive_ = false;
+}
+
+// ---------------------------------------------------------------------------
+// Scene / file operations
+// ---------------------------------------------------------------------------
+
+
+} // namespace MeshCraft

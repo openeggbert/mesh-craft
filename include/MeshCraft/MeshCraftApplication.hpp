@@ -72,6 +72,10 @@ private:
     bool   dragging_{false};
     float  dragStartX_{0}, dragStartY_{0};
 
+    // Gizmo drag delta overlay state
+    float gizmoDragStartVal_{0.0f}; // value of the dragged axis at drag start
+    int   gizmoDragAxisIdx_{0};     // 0=X 1=Y 2=Z
+
     // Box-select drag state
     bool boxSelectActive_{false};
     int  boxSelectX0_{0}, boxSelectY0_{0};
@@ -90,6 +94,10 @@ private:
 
     // Textures panel selection
     std::string selectedTextureKey_;
+
+    // Materials panel selection
+    std::string selectedMaterialKey_;
+    char newMaterialNameBuf_[128]{};
 
     // Definitions panel selection
     std::string selectedDefId_;
@@ -121,6 +129,9 @@ private:
     // Edge overlay toggle (black wireframe lines over all objects)
     bool showEdgeOverlay_{false};
 
+    // Gizmo space toggle (false = World, true = Local)
+    bool gizmoLocalSpace_{false};
+
     // Gizmo snap-to-grid
     bool  snapEnabled_{false};
     float snapTranslate_{0.5f};   // world units
@@ -135,6 +146,17 @@ private:
     float       animTime_{0.0f};
     bool        animPlaying_{false};
     bool        showTimeline_{false};
+
+    // Timeline keyframe drag & selection state
+    int   tlDragChan_{-1};
+    int   tlDragKf_{-1};
+    int   tlSelChan_{-1};
+    int   tlSelKf_{-1};
+
+    // Add Channel dialog state
+    bool addChannelOpen_{false};
+    char addChannelObjBuf_[128]{};
+    int  addChannelPropIdx_{0};
 
     // Helpers
     void newScene();
@@ -157,6 +179,15 @@ private:
     void updateWindowTitle();
     void saveScreenshot(const std::string& path);
     void drawImGuiUi(int screenW, int screenH);
+
+    // drawImGuiUi sub-sections
+    float drawMenuBar();
+    float drawToolbar(float menuBarH, int screenW);
+    void  drawLeftPanel(float panelY, float panelH);
+    void  drawPropertiesPanel(float panelY, float panelH, int screenW, int screenH);
+    void  drawStatsOverlay(int screenW, int screenH);
+    void  drawStatusBar(int screenW, int screenH);
+    void  drawDialogs();
 
     std::vector<const Mc3::Mc3Object*> selectedPointers() const;
     Mc3::Mc3Object* flatFindById(const std::string& id) const;
@@ -191,6 +222,10 @@ private:
     // Hierarchy search filter
     char hierarchyFilter_[128]{};
 
+    // Hierarchy shift-click range selection
+    std::string hierarchyAnchorId_;
+    std::vector<std::shared_ptr<Mc3::Mc3Object>> hierarchyFlatOrder_;
+
     // Inline rename state (hierarchy panel)
     std::string renamingId_;
     char renameBuf_[256]{};
@@ -206,6 +241,49 @@ private:
 
     // Help dialog
     bool showShortcutsDialog_{false};
+
+    // Command palette
+    bool cmdPaletteOpen_{false};
+    char cmdPaletteBuf_[256]{};
+
+    // Batch rename dialog
+    bool batchRenameOpen_{false};
+    char batchRenameBuf_[256]{};
+    void batchRenameSelected();
+    void selectParent();
+    void randomizeTransformSelected();
+
+    // Find & Replace names dialog
+    bool findReplaceOpen_{false};
+    char findBuf_[128]{};
+    char replaceBuf_[128]{};
+    bool findCaseSensitive_{false};
+    bool findSelectedOnly_{false};
+    void findReplaceNames();
+
+    // Linear Array dialog
+    bool  arrayDupOpen_{false};
+    int   arrayDupCount_{3};
+    int   arrayDupAxis_{0};     // 0=X, 1=Y, 2=Z
+    float arrayDupSpacing_{1.0f};
+    bool  arrayDupRelative_{true};
+    void  arrayDuplicate();
+
+    // Copy Properties to Selected dialog
+    bool copyPropsOpen_{false};
+    bool copyPropsMaterial_{true};
+    bool copyPropsMaterialOverride_{false};
+    bool copyPropsCollision_{false};
+    bool copyPropsTags_{false};
+    bool copyPropsVisibility_{false};
+    bool copyPropsIsCutter_{false};
+    void copyPropsToSelected();
+
+    // Randomize Transform dialog state
+    bool  randomizeOpen_{false};
+    float scatterPosRange_[3]{1.0f, 0.0f, 1.0f};
+    float scatterRotRange_[3]{0.0f, 180.0f, 0.0f};
+    float scatterScaleRange_{0.0f};
 
     // Viewport stats overlay
     bool  showStatsOverlay_{true};
