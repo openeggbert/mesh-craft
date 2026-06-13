@@ -457,6 +457,35 @@ void MeshCraftApplication::handleKeyboardShortcuts(const KeyboardState& ks, cons
         return;
     }
 
+    // Copy / paste transform (Ctrl+Shift+C / Ctrl+Shift+V)
+    if (ctrl && shift && justPressed(ks, prevKs, Keys::C)) {
+        if (selection_.hasSelection()) {
+            const auto& src = selection_.selection().front();
+            transformClipboard_.position = src->transform.position;
+            transformClipboard_.rotation = src->transform.rotation;
+            transformClipboard_.scale    = src->transform.scale;
+            transformClipboard_.valid    = true;
+            setStatusMsg("Transform copied from \"" + src->name + "\"");
+        }
+        return;
+    }
+    if (ctrl && shift && justPressed(ks, prevKs, Keys::V)) {
+        if (transformClipboard_.valid && selection_.hasSelection()) {
+            pushUndo();
+            for (const auto& s : selection_.selection()) {
+                if (lockedIds_.count(s->id)) continue;
+                s->transform.position = transformClipboard_.position;
+                s->transform.rotation = transformClipboard_.rotation;
+                s->transform.scale    = transformClipboard_.scale;
+            }
+            modified_ = true; updateWindowTitle();
+            setStatusMsg("Transform pasted to " + std::to_string(selection_.selection().size()) + " object(s)");
+        } else if (!transformClipboard_.valid) {
+            setStatusMsg("Transform clipboard is empty — copy first with Ctrl+Shift+C", true);
+        }
+        return;
+    }
+
     // Isolate selection (Alt+I) — hide all non-selected; toggle again to restore
     if (!ctrl && alt && justPressed(ks, prevKs, Keys::I)) {
         toggleIsolate();
@@ -1603,6 +1632,26 @@ void MeshCraftApplication::drawImGuiUi(int screenW, int screenH) {
                     modified_ = true; updateWindowTitle();
                 }
                 ImGui::EndMenu();
+            }
+            ImGui::Separator();
+            if (ImGui::MenuItem("Copy Transform", "Ctrl+Shift+C", false, hasSel)) {
+                const auto& src = selection_.selection().front();
+                transformClipboard_.position = src->transform.position;
+                transformClipboard_.rotation = src->transform.rotation;
+                transformClipboard_.scale    = src->transform.scale;
+                transformClipboard_.valid    = true;
+                setStatusMsg("Transform copied from \"" + src->name + "\"");
+            }
+            if (ImGui::MenuItem("Paste Transform", "Ctrl+Shift+V", false, hasSel && transformClipboard_.valid)) {
+                pushUndo();
+                for (const auto& s : selection_.selection()) {
+                    if (lockedIds_.count(s->id)) continue;
+                    s->transform.position = transformClipboard_.position;
+                    s->transform.rotation = transformClipboard_.rotation;
+                    s->transform.scale    = transformClipboard_.scale;
+                }
+                modified_ = true; updateWindowTitle();
+                setStatusMsg("Transform pasted to " + std::to_string(selection_.selection().size()) + " object(s)");
             }
             ImGui::Separator();
             if (ImGui::MenuItem(isolateActive_ ? "Exit Isolation" : "Isolate Selection",
@@ -3808,6 +3857,10 @@ void MeshCraftApplication::drawImGuiUi(int screenW, int screenH) {
         kbRow("W",  "Move (translate)");
         kbRow("E",  "Scale");
         kbRow("R",  "Rotate");
+
+        kbSection("Transform Clipboard");
+        kbRow("Ctrl+Shift+C", "Copy transform (position/rotation/scale) from first selected");
+        kbRow("Ctrl+Shift+V", "Paste transform to all selected (skips locked; pushes undo)");
 
         kbSection("Transform Reset");
         kbRow("Alt+G",  "Reset position to (0, 0, 0)");

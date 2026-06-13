@@ -221,6 +221,15 @@ private:
     void saveCameraBookmark(int slot);
     void restoreCameraBookmark(int slot);
 
+    // Transform clipboard (Ctrl+Shift+C / Ctrl+Shift+V)
+    struct TransformClipboard {
+        std::array<float, 3> position{0, 0, 0};
+        std::array<float, 3> rotation{0, 0, 0};
+        std::array<float, 3> scale{1, 1, 1};
+        bool valid{false};
+    };
+    TransformClipboard transformClipboard_;
+
     // Auto-save
     float autoSaveCountdown_{60.0f};
     void  performAutoSave();
