@@ -32,19 +32,34 @@ viewport preview, and XML round-trip tests are complete.
 ## 2. Current Status
 
 ### Build
-- **Builds cleanly** with `cmake --build cmake-build-debug --target MeshCraft -- -j$(nproc)`.
-- **Workaround required before each build** (CNA / SHARP_RUNTIME source sync):
+- **Normal build** (when CNA has not been recompiled):
   ```bash
-  find cmake-build-debug/CNA_dep/CMakeFiles -name "*.o" -exec touch {} \;
-  find cmake-build-debug/CNA_dep/SHARP_RUNTIME/CMakeFiles -name "*.o" -exec touch {} \;
-  find /rv/data/development/github.com/openeggbert/cna/include -name "*.hpp" -exec touch {} \;
-  find /rv/data/development/github.com/openeggbert/sharp-runtime/include -name "*.hpp" -exec touch {} \;
-  find /rv/data/development/github.com/openeggbert/sharp-runtime/src -name "*.cpp" -exec touch {} \;
   touch cmake-build-debug/CNA_dep/SHARP_RUNTIME/libSHARP_RUNTIME.a cmake-build-debug/CNA_dep/libCNA.a
+  cmake --build cmake-build-debug --target MeshCraft -- -j$(nproc)
   ```
-  Must touch all `.o` files, all CNA/SHARP_RUNTIME headers, and SHARP_RUNTIME `.cpp` sources.
-  Both CNA and SHARP_RUNTIME have private-member / NOXNA errors in recent commits that break
-  recompilation — the workaround makes all build artifacts appear newer than the sources.
+- **If ninja tries to regenerate build.ninja** (triggered by glob or cmake file changes) and cmake fails
+  (FetchContent network error), use the manual compile + link fallback:
+  ```bash
+  # 1. If imgui-src is empty (wiped by a failed cmake regen), restore it:
+  git clone --depth 1 --branch v1.91.6 https://github.com/ocornut/imgui.git cmake-build-debug/_deps/imgui-src
+
+  # 2. Compile changed MeshCraft .cpp files manually (example for MeshCraftApplication.cpp):
+  BDIR=cmake-build-debug
+  FLAGS="-g -std=c++23 -fdiagnostics-color=always -DMANIFOLD_PAR=-1"
+  DEFS="-DIMGUI_IMPL_OPENGL_ES3 -DSOUND_ENABLED -DXNA5"
+  INCS="-I/rv/data/development/github.com/openeggbert/mesh-craft/include -I/rv/data/development/github.com/openeggbert/mesh-craft/src -I$BDIR/_deps/tinyobjloader-src -I/rv/data/development/github.com/openeggbert/cna/include -I/rv/data/development/github.com/openeggbert/sharp-runtime/include -I/rv/data/development/github.com/openeggbert/cna/src -I/rv/data/development/github.com/openeggbert/mesh-craft/mc3/include -I$BDIR/_deps/imgui-src -I$BDIR/_deps/imgui-src/backends -I$BDIR/_deps/manifold-src/include -I$BDIR/_deps/manifold-build/include -isystem /rv/data/development/github.com/openeggbert/sharp-runtime/vendor"
+  g++ $FLAGS $DEFS $INCS -c src/MeshCraft/MeshCraftApplication.cpp -o $BDIR/CMakeFiles/MeshCraft.dir/src/MeshCraft/MeshCraftApplication.cpp.o
+
+  # 3. Link (touch build.ninja first to skip regen check):
+  touch cmake-build-debug/build.ninja
+  # then run the full link command from build.ninja's CXX_EXECUTABLE_LINKER__MeshCraft_Debug rule
+  ```
+- **Song::GetHashCode() linker stub**: CNA's Song.cpp declares but never implements GetHashCode().
+  If libCNA.a is recompiled and this symbol goes missing, inject a C stub:
+  ```bash
+  echo 'int _ZNK9Microsoft3Xna9Framework5Media4Song11GetHashCodeEv(const void* s){return 0;}' > /tmp/s.c
+  gcc -c /tmp/s.c -o /tmp/s.o && ar r cmake-build-debug/CNA_dep/libCNA.a /tmp/s.o
+  ```
 - **tinyxml2 duplicate target fix** in `mc3/CMakeLists.txt`: guards against `sharp-runtime`
   also bundling tinyxml2; creates `tinyxml2::tinyxml2` alias when only the bare target exists.
 
@@ -130,6 +145,7 @@ into `SceneRenderer` which overrides the effective `Mc3Transform` and visibility
 
 | Commit | Change |
 |-----------|-------------------------------------------------------------------------|
+| (pending) | Transform reset: Alt+G/R/S resets position/rotation/scale to default for all selected (skips locked); Edit > Reset Transform submenu includes All option |
 | `00ac877` | Camera bookmarks: 5 slots; Ctrl+F1–F5 save, F6–F10 restore; View > Camera Bookmarks submenu shows target coords; status bar confirms save; Keyboard Shortcuts dialog updated |
 | `ddb626c` | Isolate selection: Alt+I hides all non-selected objects and saves prior visibility; Alt+I again restores exact previous state; ISOLATED badge in stats overlay; Edit menu |
 | `9d57075` | Viewport stats overlay: FPS (exp. smoothed), Objects/Visible/Locked counts, Selected count, camera dist+target; top-right of viewport; toggle via View > Stats Overlay |

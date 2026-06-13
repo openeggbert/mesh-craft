@@ -422,6 +422,41 @@ void MeshCraftApplication::handleKeyboardShortcuts(const KeyboardState& ks, cons
         return;
     }
 
+    // Reset transforms (Alt+G/R/S — position/rotation/scale to default)
+    if (!ctrl && alt && justPressed(ks, prevKs, Keys::G)) {
+        if (selection_.hasSelection()) {
+            pushUndo();
+            for (const auto& s : selection_.selection()) {
+                if (lockedIds_.count(s->id)) continue;
+                s->transform.position = {0.0f, 0.0f, 0.0f};
+            }
+            modified_ = true; updateWindowTitle();
+        }
+        return;
+    }
+    if (!ctrl && alt && justPressed(ks, prevKs, Keys::R)) {
+        if (selection_.hasSelection()) {
+            pushUndo();
+            for (const auto& s : selection_.selection()) {
+                if (lockedIds_.count(s->id)) continue;
+                s->transform.rotation = {0.0f, 0.0f, 0.0f};
+            }
+            modified_ = true; updateWindowTitle();
+        }
+        return;
+    }
+    if (!ctrl && alt && justPressed(ks, prevKs, Keys::S)) {
+        if (selection_.hasSelection()) {
+            pushUndo();
+            for (const auto& s : selection_.selection()) {
+                if (lockedIds_.count(s->id)) continue;
+                s->transform.scale = {1.0f, 1.0f, 1.0f};
+            }
+            modified_ = true; updateWindowTitle();
+        }
+        return;
+    }
+
     // Isolate selection (Alt+I) — hide all non-selected; toggle again to restore
     if (!ctrl && alt && justPressed(ks, prevKs, Keys::I)) {
         toggleIsolate();
@@ -1528,6 +1563,46 @@ void MeshCraftApplication::drawImGuiUi(int screenW, int screenH) {
                     if (lockedIds_.count(s->id)) lockedIds_.erase(s->id);
                     else                          lockedIds_.insert(s->id);
                 }
+            }
+            ImGui::Separator();
+            bool hasSel = !selection_.selection().empty();
+            if (ImGui::BeginMenu("Reset Transform", hasSel)) {
+                if (ImGui::MenuItem("Position", "Alt+G")) {
+                    pushUndo();
+                    for (const auto& s : selection_.selection()) {
+                        if (lockedIds_.count(s->id)) continue;
+                        s->transform.position = {0.0f, 0.0f, 0.0f};
+                    }
+                    modified_ = true; updateWindowTitle();
+                }
+                if (ImGui::MenuItem("Rotation", "Alt+R")) {
+                    pushUndo();
+                    for (const auto& s : selection_.selection()) {
+                        if (lockedIds_.count(s->id)) continue;
+                        s->transform.rotation = {0.0f, 0.0f, 0.0f};
+                    }
+                    modified_ = true; updateWindowTitle();
+                }
+                if (ImGui::MenuItem("Scale", "Alt+S")) {
+                    pushUndo();
+                    for (const auto& s : selection_.selection()) {
+                        if (lockedIds_.count(s->id)) continue;
+                        s->transform.scale = {1.0f, 1.0f, 1.0f};
+                    }
+                    modified_ = true; updateWindowTitle();
+                }
+                ImGui::Separator();
+                if (ImGui::MenuItem("All")) {
+                    pushUndo();
+                    for (const auto& s : selection_.selection()) {
+                        if (lockedIds_.count(s->id)) continue;
+                        s->transform.position = {0.0f, 0.0f, 0.0f};
+                        s->transform.rotation = {0.0f, 0.0f, 0.0f};
+                        s->transform.scale    = {1.0f, 1.0f, 1.0f};
+                    }
+                    modified_ = true; updateWindowTitle();
+                }
+                ImGui::EndMenu();
             }
             ImGui::Separator();
             if (ImGui::MenuItem(isolateActive_ ? "Exit Isolation" : "Isolate Selection",
@@ -3733,6 +3808,11 @@ void MeshCraftApplication::drawImGuiUi(int screenW, int screenH) {
         kbRow("W",  "Move (translate)");
         kbRow("E",  "Scale");
         kbRow("R",  "Rotate");
+
+        kbSection("Transform Reset");
+        kbRow("Alt+G",  "Reset position to (0, 0, 0)");
+        kbRow("Alt+R",  "Reset rotation to (0°, 0°, 0°)");
+        kbRow("Alt+S",  "Reset scale to (1, 1, 1)");
 
         kbSection("View / Visibility");
         kbRow("Alt+I",   "Isolate selection (hide all others); repeat to restore");
