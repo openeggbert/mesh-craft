@@ -48,8 +48,9 @@ viewport preview, and XML round-trip tests are complete.
   2. `mc3_roundtrip` — 54 XML round-trip checks (all field types)
 
 ### Available binaries
-- `cmake-build-debug/MeshCraft` — the editor
-- `cmake-build-debug/mc3/mc3togltf` — XML→GLB converter
+- `cmake-build-debug/MeshCraft` — the editor (desktop, debug)
+- `mc3togltf/build/mc3togltf` — XML→GLB converter (standalone build; required for File > Export GLB)
+- `cmake-build-web/MeshCraft.html` — editor for the browser (requires Emscripten build)
 
 ---
 
@@ -123,7 +124,8 @@ into `SceneRenderer` which overrides the effective `Mc3Transform` and visibility
 
 | Commit | Change |
 |-----------|-------------------------------------------------------------------------|
-| (pending) | exportGltf() binary discovery: add mc3togltf/build/mc3togltf as primary candidate; register mc3togltf_gltf in root ctest pointing to standalone binary |
+| (pending) | Web build: build-web.sh + cmake/web/pre.js (IDBFS persistent storage); NEXT.md cleanup |
+| `9ab45e5` | exportGltf() binary discovery: add mc3togltf/build/mc3togltf as primary candidate; register mc3togltf_gltf in root ctest pointing to standalone binary |
 | (pending) | features.mc3.xml: bump to v0.3, add DemoSpin action (linear rotation + cubic bezier translation); roundtrip test extended to 114 checks |
 | `64b59ad` | mc3togltf test suite: gltf_test.py (38 checks — basic gltf/glb conversion, animation export structure, accessor types, dense sampling) registered as ctest mc3togltf_gltf |
 | `bc24fd7` | MC3_FORMAT.md updated to v0.3: full `<actions>` reference, animatable properties table with glTF export notes, proposed improvements renumbered |
@@ -219,6 +221,15 @@ ctest --test-dir cmake-build-debug -V
 
 # Convert MC3 to GLB
 ./cmake-build-debug/mc3/mc3togltf test/house.mc3.xml test/house.glb
+
+# Build mc3togltf standalone (required for File > Export GLB)
+cmake -S mc3togltf -B mc3togltf/build -DCMAKE_BUILD_TYPE=Release
+cmake --build mc3togltf/build --parallel
+
+# Web/WASM build (requires emsdk; source emsdk_env.sh first)
+./build-web.sh
+# Then: cd cmake-build-web && python3 -m http.server 8080
+# Open: http://localhost:8080/MeshCraft.html
 ```
 
 ---
@@ -262,10 +273,20 @@ Falls back to rendering children individually if the manifold result is empty.
 **Files:** `SceneRenderer.hpp`, `SceneRenderer.cpp`, `CMakeLists.txt` (manifold FetchContent).
 **Test file:** `test/csg_test.mc3.xml` — difference (box−sphere), union (two spheres), intersection (box∩sphere).
 
-### Large scope
+### ✅ Done
 
-**F — Actions / States animation** (large scope, out of phase)
-`Mc3Document` has no actions/states data model yet. Needs data layer design first.
+**F — Keyframe animation** (completed — see section 4 for full notes)
+`Mc3Action` / `Mc3Channel` / `Mc3Keyframe` data model; Step/Linear/CubicBezier interpolation;
+timeline panel with play/pause/scrub; [K] keyframe buttons in Properties; glTF animation export
+via mc3togltf (cubic bezier densely sampled at 30fps). 114 round-trip test checks.
+
+### ✅ Done
+
+**W — Web / WASM build** (completed)
+Emscripten build support via `build-web.sh`. Output: `cmake-build-web/MeshCraft.html`.
+IDBFS mount in `cmake/web/pre.js` makes `/home/user` persistent across reloads via IndexedDB.
+Test files preloaded at `/test`. Run locally with `python3 -m http.server 8080`.
+See section 6 for build commands.
 
 ---
 
