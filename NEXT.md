@@ -130,7 +130,7 @@ into `SceneRenderer` which overrides the effective `Mc3Transform` and visibility
 
 | Commit | Change |
 |-----------|-------------------------------------------------------------------------|
-| (pending) | Grid cell size control: "Grid" toolbar button; right-click popup with presets 0.25/0.5/1/2/5/10 u + DragFloat; GridRenderer.setSpacing() rebuilds VB keeping 20 u extent |
+| `d003c49` | Grid cell size control: "Grid" toolbar button; right-click popup with presets 0.25/0.5/1/2/5/10 u + DragFloat; GridRenderer.setSpacing() rebuilds VB keeping 20 u extent |
 | `09282bc` | Hide selected (H) / Show all hidden (Alt+H): keyboard shortcuts + Edit menu items; clears selection on hide; both push undo; documented in Keyboard Shortcuts dialog |
 | `1b3ce1c` | Snap interval configurator: right-click Snap button → popup with Move/Rotate/Scale presets (0.1–2 u, 5–90°, 0.05–1) + DragFloat custom inputs; active preset highlighted green |
 | `e0f27c7` | Unsaved-changes guard: New/Open/Open Recent/Exit prompt "Save / Don't Save / Cancel" when scene is modified |
