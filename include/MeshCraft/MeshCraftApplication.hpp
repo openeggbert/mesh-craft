@@ -169,6 +169,11 @@ private:
     void saveRecentFiles();
     void addRecentFile(const std::filesystem::path& path);
 
+    // Inline rename state (hierarchy panel)
+    std::string renamingId_;
+    char renameBuf_[256]{};
+    bool renameNeedsFocus_{false};
+
     // Undo/redo
     static constexpr int kUndoMax = 20;
     std::vector<Mc3::Mc3Document> undoStack_;

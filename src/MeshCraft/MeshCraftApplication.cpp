@@ -1499,42 +1499,81 @@ void MeshCraftApplication::drawImGuiUi(int screenW, int screenH) {
                     else if (obj->type == Mc3::ObjectType::Group)        { typePrefix = "[G] "; }
                     else if (obj->isCutter)                              { typePrefix = "[cut] "; nodeColor = obj->visible ? ImVec4(1.0f,0.5f,0.3f,1) : ImVec4(0.5f,0.3f,0.2f,1); }
                     std::string displayLabel = typePrefix + (obj->name.empty() ? obj->id : obj->name);
-                    ImGui::PushStyleColor(ImGuiCol_Text, nodeColor);
-                    bool nodeOpen = ImGui::TreeNodeEx(displayLabel.c_str(), flags);
-                    ImGui::PopStyleColor();
-
-                    // Drag source
-                    if (ImGui::BeginDragDropSource(ImGuiDragDropFlags_None)) {
-                        ImGui::SetDragDropPayload("MC3_OBJ", obj->id.c_str(), obj->id.size() + 1);
-                        ImGui::Text("%s", displayLabel.c_str());
-                        ImGui::EndDragDropSource();
-                    }
-                    // Drop target: dragged object becomes last child of this obj
-                    if (ImGui::BeginDragDropTarget()) {
-                        if (const ImGuiPayload* pl = ImGui::AcceptDragDropPayload("MC3_OBJ"))
-                            doReparent(std::string(static_cast<const char*>(pl->Data)), obj);
-                        ImGui::EndDragDropTarget();
-                    }
-
-                    if (ImGui::IsItemClicked() && !ImGui::IsItemToggledOpen()) {
-                        bool ctrl = ImGui::GetIO().KeyCtrl;
-                        if (!ctrl) selection_.clear();
-                        selection_.select(obj);
-                        updateWindowTitle();
-                    }
-                    if (ImGui::BeginPopupContextItem("##objctx")) {
-                        if (ImGui::MenuItem("Duplicate")) duplicateSelected();
-                        if (ImGui::MenuItem("Delete"))    deleteSelected();
-                        ImGui::Separator();
-                        if (ImGui::MenuItem(obj->visible ? "Hide" : "Show")) {
-                            pushUndo(); obj->visible = !obj->visible; modified_ = true; updateWindowTitle();
+                    if (obj->id == renamingId_) {
+                        // Inline rename: leaf node + InputText
+                        ImGui::TreeNodeEx("##rn",
+                            ImGuiTreeNodeFlags_Leaf | ImGuiTreeNodeFlags_NoTreePushOnOpen |
+                            ImGuiTreeNodeFlags_SpanAvailWidth);
+                        ImGui::SameLine(0, 4);
+                        ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x);
+                        if (renameNeedsFocus_) {
+                            ImGui::SetKeyboardFocusHere();
+                            renameNeedsFocus_ = false;
                         }
-                        ImGui::EndPopup();
+                        bool enter = ImGui::InputText("##ri", renameBuf_, sizeof(renameBuf_),
+                            ImGuiInputTextFlags_EnterReturnsTrue | ImGuiInputTextFlags_AutoSelectAll);
+                        bool deact = ImGui::IsItemDeactivated();
+                        if (ImGui::IsKeyPressed(ImGuiKey_Escape, false)) {
+                            renamingId_.clear();
+                        } else if (enter || deact) {
+                            if (renameBuf_[0]) {
+                                pushUndo();
+                                obj->name = renameBuf_;
+                                modified_ = true; updateWindowTitle();
+                            }
+                            renamingId_.clear();
+                        }
+                    } else {
+                        ImGui::PushStyleColor(ImGuiCol_Text, nodeColor);
+                        bool nodeOpen = ImGui::TreeNodeEx(displayLabel.c_str(), flags);
+                        ImGui::PopStyleColor();
+
+                        // Drag source
+                        if (ImGui::BeginDragDropSource(ImGuiDragDropFlags_None)) {
+                            ImGui::SetDragDropPayload("MC3_OBJ", obj->id.c_str(), obj->id.size() + 1);
+                            ImGui::Text("%s", displayLabel.c_str());
+                            ImGui::EndDragDropSource();
+                        }
+                        // Drop target: dragged object becomes last child of this obj
+                        if (ImGui::BeginDragDropTarget()) {
+                            if (const ImGuiPayload* pl = ImGui::AcceptDragDropPayload("MC3_OBJ"))
+                                doReparent(std::string(static_cast<const char*>(pl->Data)), obj);
+                            ImGui::EndDragDropTarget();
+                        }
+
+                        if (ImGui::IsItemClicked() && !ImGui::IsItemToggledOpen()) {
+                            bool ctrl = ImGui::GetIO().KeyCtrl;
+                            if (!ctrl) selection_.clear();
+                            selection_.select(obj);
+                            updateWindowTitle();
+                        }
+                        // Double-click to rename
+                        if (ImGui::IsMouseDoubleClicked(0) && ImGui::IsItemHovered()) {
+                            renamingId_ = obj->id;
+                            std::strncpy(renameBuf_, obj->name.c_str(), sizeof(renameBuf_) - 1);
+                            renameBuf_[sizeof(renameBuf_) - 1] = '\0';
+                            renameNeedsFocus_ = true;
+                        }
+                        if (ImGui::BeginPopupContextItem("##objctx")) {
+                            if (ImGui::MenuItem("Rename")) {
+                                renamingId_ = obj->id;
+                                std::strncpy(renameBuf_, obj->name.c_str(), sizeof(renameBuf_) - 1);
+                                renameBuf_[sizeof(renameBuf_) - 1] = '\0';
+                                renameNeedsFocus_ = true;
+                            }
+                            if (ImGui::MenuItem("Duplicate")) duplicateSelected();
+                            if (ImGui::MenuItem("Delete"))    deleteSelected();
+                            ImGui::Separator();
+                            if (ImGui::MenuItem(obj->visible ? "Hide" : "Show")) {
+                                pushUndo(); obj->visible = !obj->visible; modified_ = true; updateWindowTitle();
+                            }
+                            ImGui::EndPopup();
+                        }
+                        if (hasChildren && nodeOpen)
+                            drawHierarchy(obj->children);
+                        if (hasChildren && nodeOpen)
+                            ImGui::TreePop();
                     }
-                    if (hasChildren && nodeOpen)
-                        drawHierarchy(obj->children);
-                    if (hasChildren && nodeOpen)
-                        ImGui::TreePop();
                     ImGui::PopID();
                 }
             };

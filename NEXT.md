@@ -127,7 +127,8 @@ into `SceneRenderer` which overrides the effective `Mc3Transform` and visibility
 
 | Commit | Change |
 |-----------|-------------------------------------------------------------------------|
-| (pending) | Recent Files: File > Open Recent submenu, persisted to ~/.config/meshcraft/recent.txt, max 10 entries with tooltips and Clear Recent |
+| (pending) | Inline rename: double-click or right-click > Rename in hierarchy to edit object name in-place; Enter commits, Escape cancels |
+| `d8d1b97` | Recent Files: File > Open Recent submenu, persisted to ~/.config/meshcraft/recent.txt, max 10 entries with tooltips and Clear Recent |
 | `b50e2b8` | Web build: build-web.sh + cmake/web/pre.js (IDBFS persistent storage); NEXT.md cleanup |
 | `9ab45e5` | exportGltf() binary discovery: add mc3togltf/build/mc3togltf as primary candidate; register mc3togltf_gltf in root ctest pointing to standalone binary |
 | (pending) | features.mc3.xml: bump to v0.3, add DemoSpin action (linear rotation + cubic bezier translation); roundtrip test extended to 114 checks |
