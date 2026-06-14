@@ -70,6 +70,12 @@ void MeshCraftApplication::handleKeyboardShortcuts(const KeyboardState& ks, cons
         return;
     }
 
+    // Walk mode toggle (F5)
+    if (justPressed(ks, prevKs, Keys::F5)) {
+        if (walkModeEnabled_) exitWalkMode(); else enterWalkMode();
+        return;
+    }
+
     // Screenshot (F11)
     if (justPressed(ks, prevKs, Keys::F11)) {
         saveScreenshot("screenshot.ppm");

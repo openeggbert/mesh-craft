@@ -263,10 +263,21 @@ void MeshCraftApplication::Update(GameTime& gameTime) {
 
     if (!firstFrame_) {
         auto& io = ImGui::GetIO();
-        if (!io.WantCaptureKeyboard)
-            handleKeyboardShortcuts(ks, prevKs_);
-        if (!io.WantCaptureMouse)
-            handleMouseInput(ms, prevMouse_);
+
+        if (walkModeEnabled_) {
+            // Walk mode consumes all keyboard + mouse; skip normal handlers
+            float dt = static_cast<float>(
+                gameTime.getElapsedGameTimeProperty().getTotalSecondsProperty());
+            int mdx = ms.getXProperty() - prevMouse_.getXProperty();
+            int mdy = ms.getYProperty() - prevMouse_.getYProperty();
+            if (!io.WantCaptureKeyboard)
+                updateWalkMode(dt, ks, mdx, mdy);
+        } else {
+            if (!io.WantCaptureKeyboard)
+                handleKeyboardShortcuts(ks, prevKs_);
+            if (!io.WantCaptureMouse)
+                handleMouseInput(ms, prevMouse_);
+        }
     }
 
     firstFrame_ = false;
@@ -325,6 +336,21 @@ void MeshCraftApplication::Draw(const GameTime& /*gameTime*/) {
     float aspect = (viewH > 0) ? static_cast<float>(viewW) / viewH : 16.0f / 9.0f;
     Matrix view = camera_.viewMatrix();
     Matrix proj = camera_.projectionMatrix(aspect);
+
+    // Walk mode: override view with first-person camera
+    if (walkModeEnabled_) {
+        const float pi = std::numbers::pi_v<float>;
+        float cosP = std::cos(walkPitch_), sinP = std::sin(walkPitch_);
+        float sinY = std::sin(walkYaw_),   cosY = std::cos(walkYaw_);
+        float eyeX = walkPosX_, eyeY = walkPosY_ + walkHeight_, eyeZ = walkPosZ_;
+        Vector3 eye(eyeX, eyeY, eyeZ);
+        Vector3 target(eyeX + sinY * cosP, eyeY + sinP, eyeZ - cosY * cosP);
+        Vector3 up(0.0f, 1.0f, 0.0f);
+        view = Matrix::CreateLookAt(eye, target, up);
+        float fovRad = camera_.fovDegrees * pi / 180.0f;
+        proj = Matrix::CreatePerspectiveFieldOfView(fovRad, aspect,
+                                                     camera_.nearPlane, camera_.farPlane);
+    }
 
     // Look-through-camera mode: override view/proj from selected Mc3Camera
     if (lookThroughCamera_ && selectedCameraIdx_ >= 0 &&
@@ -455,9 +481,13 @@ void MeshCraftApplication::drawImGuiUi(int screenW, int screenH)
     if (showTimeline_)
         drawTimelinePanel(screenW, screenH);
 
-    drawStatsOverlay(screenW, screenH);
+    if (walkModeEnabled_)
+        drawWalkModeHud(screenW, screenH);
+    else
+        drawStatsOverlay(screenW, screenH);
     drawStatusBar(screenW, screenH);
-    drawPanelSplitters(screenW, screenH);
+    if (!walkModeEnabled_)
+        drawPanelSplitters(screenW, screenH);
     drawDialogs();
 }
 

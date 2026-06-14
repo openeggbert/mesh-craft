@@ -467,6 +467,26 @@ private:
 
     // SDL event watcher for ImGui event forwarding
     static bool sdlEventWatch(void* userdata, void* event);
+
+    // -----------------------------------------------------------------------
+    // Walk mode (H15) — first-person exploration
+    // -----------------------------------------------------------------------
+    bool  walkModeEnabled_{false};
+    float walkPosX_{0.0f}, walkPosY_{0.0f}, walkPosZ_{5.0f};
+    float walkYaw_{0.0f};        // radians, horizontal look
+    float walkPitch_{0.0f};      // radians, vertical look (clamped ±85°)
+    float walkVelY_{0.0f};       // vertical velocity (gravity / jump)
+    bool  walkOnGround_{true};
+    float walkHeight_{1.8f};     // eye height above ground (meters)
+    float walkSpeed_{5.0f};      // movement speed (m/s)
+    float walkTurnSpeed_{1.5f};  // keyboard yaw speed (rad/s)
+    float walkMouseSens_{0.003f};// mouse sensitivity (rad/px)
+    bool  walkSettingsOpen_{false};
+    void  updateWalkMode(float dt, const Microsoft::Xna::Framework::Input::KeyboardState& ks,
+                         int mouseDx, int mouseDy);
+    void  enterWalkMode();
+    void  exitWalkMode();
+    void  drawWalkModeHud(int screenW, int screenH);
 };
 
 } // namespace MeshCraft

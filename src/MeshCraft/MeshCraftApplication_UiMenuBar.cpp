@@ -589,6 +589,10 @@ float MeshCraftApplication::drawMenuBar()
                 ImGui::EndMenu();
             }
             ImGui::Separator();
+            if (ImGui::MenuItem("Walk Mode", "F5", walkModeEnabled_)) {
+                if (walkModeEnabled_) exitWalkMode(); else enterWalkMode();
+            }
+            ImGui::Separator();
             ImGui::MenuItem("Edge Overlay",    "Alt+W", &showEdgeOverlay_);
             ImGui::MenuItem("Wireframe Mode",  nullptr,  &showWireframeMode_);
             ImGui::MenuItem("Stats Overlay",   nullptr,  &showStatsOverlay_);

@@ -122,6 +122,7 @@ Legend: ✅ done · 🔧 partial · 📋 planned
 | # | Task | Files |
 |---|------|-------|
 | H1 ✅ | Proportional editing (transform falloff — influence nearby objects) | MeshCraftApplication_Mouse.cpp |
+| H15 | Walk mode: explore scene in first-person (WASD/arrows = move, Left/Right = yaw, Ctrl = jump, PageUp/Down or mouse = pitch, gravity, configurable person height) | MeshCraftApplication_WalkMode.cpp, MeshCraftApplication.hpp |
 | H2 ✅ | Measurement tool (click two points → show distance in overlay) | UiOverlays.cpp, new tool state |
 | H3 ✅ | Align to object (align to a specific target object, not just selection average) | MeshCraftApplication_Commands.cpp |
 | H4 ✅ | Scatter/Place: distribute copies along a curve | MeshCraftApplication_Commands.cpp |
