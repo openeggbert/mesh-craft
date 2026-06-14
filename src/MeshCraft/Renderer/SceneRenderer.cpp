@@ -976,6 +976,50 @@ Matrix SceneRenderer::computeObjectWorldMatrix(const Mc3Object& target,
     return result;
 }
 
+void SceneRenderer::objectPolyStats(const Mc3::Mc3Object& obj,
+                                    int& verts, int& tris) const {
+    verts = 0; tris = 0;
+    std::function<void(const Mc3::Mc3Object&)> walk;
+    walk = [&](const Mc3::Mc3Object& o) {
+        const RenderMesh* rm = nullptr;
+        switch (o.type) {
+        case Mc3::ObjectType::Box:
+        case Mc3::ObjectType::Cube:      rm = &unitBox_;       break;
+        case Mc3::ObjectType::Sphere:    rm = &unitSphere_;    break;
+        case Mc3::ObjectType::Cylinder:  rm = &unitCylinder_;  break;
+        case Mc3::ObjectType::Cone:      rm = &unitCone_;      break;
+        case Mc3::ObjectType::Plane:     rm = &unitPlane_;     break;
+        case Mc3::ObjectType::Torus:     rm = &unitTorus_;     break;
+        case Mc3::ObjectType::Capsule:   rm = &unitCapsule_;   break;
+        case Mc3::ObjectType::IcoSphere: rm = &unitIcoSphere_; break;
+        case Mc3::ObjectType::Disk: {
+            int segs = o.primitive ? o.primitive->segments : 32;
+            verts += segs * 2; tris += segs * 2; break;
+        }
+        case Mc3::ObjectType::Grid: {
+            int subX = o.primitive ? o.primitive->subdivisionsX : 4;
+            int subZ = o.primitive ? o.primitive->subdivisionsZ : 4;
+            verts += (subX + 1) * (subZ + 1);
+            tris  += subX * subZ * 2; break;
+        }
+        case Mc3::ObjectType::Mesh: {
+            if (!o.meshSource.empty()) {
+                auto it = meshCache_.find(o.meshSource);
+                if (it != meshCache_.end()) rm = &it->second;
+            }
+            break;
+        }
+        default: break;
+        }
+        if (rm) {
+            verts += static_cast<int>(rm->positions.size());
+            tris  += rm->primitiveCount;
+        }
+        for (const auto& child : o.children) if (child) walk(*child);
+    };
+    walk(obj);
+}
+
 void SceneRenderer::scenePolyStats(const Mc3::Mc3Document& doc,
                                     int& totalVerts, int& totalTris) const {
     totalVerts = 0;
@@ -985,46 +1029,10 @@ void SceneRenderer::scenePolyStats(const Mc3::Mc3Document& doc,
     walk = [&](const std::vector<std::shared_ptr<Mc3::Mc3Object>>& list) {
         for (const auto& obj : list) {
             if (!obj->visible) { walk(obj->children); continue; }
-            const RenderMesh* rm = nullptr;
-            switch (obj->type) {
-            case Mc3::ObjectType::Box:
-            case Mc3::ObjectType::Cube:      rm = &unitBox_;      break;
-            case Mc3::ObjectType::Sphere:    rm = &unitSphere_;   break;
-            case Mc3::ObjectType::Cylinder:  rm = &unitCylinder_; break;
-            case Mc3::ObjectType::Cone:      rm = &unitCone_;     break;
-            case Mc3::ObjectType::Plane:     rm = &unitPlane_;    break;
-            case Mc3::ObjectType::Torus:     rm = &unitTorus_;    break;
-            case Mc3::ObjectType::Capsule:   rm = &unitCapsule_;   break;
-            case Mc3::ObjectType::IcoSphere: rm = &unitIcoSphere_; break;
-            // Disk: dynamic geometry, approximate poly count
-            case Mc3::ObjectType::Disk: {
-                int segs = obj->primitive ? obj->primitive->segments : 32;
-                totalVerts += segs * 2;
-                totalTris  += segs * 2;
-                rm = nullptr; break;
-            }
-            // Grid: dynamic geometry, exact poly count
-            case Mc3::ObjectType::Grid: {
-                int subX = obj->primitive ? obj->primitive->subdivisionsX : 4;
-                int subZ = obj->primitive ? obj->primitive->subdivisionsZ : 4;
-                totalVerts += (subX + 1) * (subZ + 1);
-                totalTris  += subX * subZ * 2;
-                rm = nullptr; break;
-            }
-            case Mc3::ObjectType::Mesh: {
-                if (!obj->meshSource.empty()) {
-                    auto it = meshCache_.find(obj->meshSource);
-                    if (it != meshCache_.end()) rm = &it->second;
-                }
-                break;
-            }
-            default: break;
-            }
-            if (rm) {
-                totalVerts += static_cast<int>(rm->positions.size());
-                totalTris  += rm->primitiveCount;
-            }
-            walk(obj->children);
+            int v = 0, t = 0;
+            objectPolyStats(*obj, v, t);
+            totalVerts += v;
+            totalTris  += t;
         }
     };
     walk(doc.objects);

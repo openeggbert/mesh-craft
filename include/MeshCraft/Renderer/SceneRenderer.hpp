@@ -122,6 +122,9 @@ public:
     // Compute vertex and triangle counts for all visible objects in the scene
     void scenePolyStats(const Mc3::Mc3Document& doc, int& totalVerts, int& totalTris) const;
 
+    // Compute vertex and triangle counts for a single object (including children)
+    void objectPolyStats(const Mc3::Mc3Object& obj, int& verts, int& tris) const;
+
     // Compute the world-space matrix for a specific object (accumulates parent transforms)
     Microsoft::Xna::Framework::Matrix computeObjectWorldMatrix(
         const Mc3::Mc3Object& obj, const Mc3::Mc3Document& doc) const;

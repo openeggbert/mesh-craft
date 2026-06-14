@@ -1179,6 +1179,17 @@ void MeshCraftApplication::drawPropertiesPanel(float panelY, float panelH, int s
             }
         }
 
+        // Poly stats (C6)
+        {
+            int v = 0, t = 0;
+            sceneRenderer_->objectPolyStats(*sel0, v, t);
+            if (v > 0 || t > 0) {
+                ImGui::Spacing();
+                ImGui::Separator();
+                ImGui::TextDisabled("Vertices: %d   Triangles: %d", v, t);
+            }
+        }
+
         ImGui::EndTabItem();
         } // end Geometry tab
 
