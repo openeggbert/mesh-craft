@@ -1380,6 +1380,70 @@ void MeshCraftApplication::drawDialogs()
     }
 
     // -----------------------------------------------------------------------
+    // GLB Export Settings dialog (F8)
+    // -----------------------------------------------------------------------
+    if (glbExportOpen_) {
+        ImGui::OpenPopup("Export Settings##glbexpdlg");
+        glbExportOpen_ = false;
+    }
+    if (ImGui::BeginPopupModal("Export Settings##glbexpdlg", nullptr,
+                               ImGuiWindowFlags_AlwaysAutoResize)) {
+        ImGui::SeparatorText("Format");
+        ImGui::RadioButton("GLB  (binary, self-contained)", &glbExportFmt_, 0);
+        ImGui::RadioButton("GLTF (JSON + external .bin)",   &glbExportFmt_, 1);
+
+        // Keep extension in sync when user switches format
+        {
+            std::string cur = glbExportOutBuf_;
+            const char* wantExt = (glbExportFmt_ == 1) ? ".gltf" : ".glb";
+            const char* otherExt = (glbExportFmt_ == 1) ? ".glb" : ".gltf";
+            auto pos = cur.rfind(otherExt);
+            if (pos != std::string::npos && pos == cur.size() - std::strlen(otherExt)) {
+                cur.replace(pos, std::strlen(otherExt), wantExt);
+                std::strncpy(glbExportOutBuf_, cur.c_str(), sizeof(glbExportOutBuf_)-1);
+            }
+        }
+
+        ImGui::SeparatorText("Output path");
+        ImGui::SetNextItemWidth(420);
+        if (ImGui::IsWindowAppearing()) ImGui::SetKeyboardFocusHere();
+        bool enter = ImGui::InputText("##glboutpath", glbExportOutBuf_, sizeof(glbExportOutBuf_),
+                                      ImGuiInputTextFlags_EnterReturnsTrue);
+
+        ImGui::SeparatorText("Options");
+        ImGui::BeginDisabled();
+        bool embedTex = true;
+        ImGui::Checkbox("Embed textures", &embedTex);
+        ImGui::SameLine(); ImGui::TextDisabled("(not yet supported by mc3togltf)");
+        bool quantize = false;
+        ImGui::Checkbox("Quantize meshes", &quantize);
+        ImGui::SameLine(); ImGui::TextDisabled("(not yet supported by mc3togltf)");
+        ImGui::EndDisabled();
+
+        if (glbExportErr_[0])
+            ImGui::TextColored(ImVec4(1.f, 0.3f, 0.3f, 1.f), "%s", glbExportErr_);
+
+        ImGui::Spacing();
+        bool canExp = glbExportOutBuf_[0] != '\0' && !currentFile_.empty();
+        if (!canExp) ImGui::BeginDisabled();
+        if ((enter || ImGui::Button("Export", ImVec2(100, 0))) && canExp) {
+            glbExportErr_[0] = '\0';
+            try {
+                runGltfExport(glbExportOutBuf_);
+                ImGui::CloseCurrentPopup();
+            } catch (const std::exception& ex) {
+                std::strncpy(glbExportErr_, ex.what(), sizeof(glbExportErr_)-1);
+                glbExportErr_[sizeof(glbExportErr_)-1] = '\0';
+            }
+        }
+        if (!canExp) ImGui::EndDisabled();
+        ImGui::SameLine();
+        if (ImGui::Button("Cancel", ImVec2(90, 0)) || ImGui::IsKeyPressed(ImGuiKey_Escape, false))
+            ImGui::CloseCurrentPopup();
+        ImGui::EndPopup();
+    }
+
+    // -----------------------------------------------------------------------
     // Preferences dialog (F5)
     // -----------------------------------------------------------------------
     if (prefsOpen_) {

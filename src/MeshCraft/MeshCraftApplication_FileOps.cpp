@@ -9,6 +9,7 @@
 #include <functional>
 #include <iostream>
 #include <set>
+#include <stdexcept>
 #include <string>
 
 namespace MeshCraft {
@@ -159,31 +160,38 @@ void MeshCraftApplication::exportGltf() {
         setStatusMsg("Export failed: save the file first", true);
         return;
     }
+    // Derive default output path based on current format selection
+    std::string outPath = currentFile_.string();
+    const char* ext = (glbExportFmt_ == 1) ? ".gltf" : ".glb";
+    auto pos = outPath.rfind(".mc3.xml");
+    if (pos != std::string::npos) outPath.replace(pos, 8, ext);
+    else outPath += ext;
+
+    std::strncpy(glbExportOutBuf_, outPath.c_str(), sizeof(glbExportOutBuf_) - 1);
+    glbExportErr_[0]  = '\0';
+    glbExportOpen_    = true;
+}
+
+void MeshCraftApplication::runGltfExport(const std::string& outPath) {
     std::string mc3togltf = "mc3togltf";
     for (const auto& candidate : {
-        std::filesystem::path("mc3togltf/build/mc3togltf"),        // standalone build (default)
-        std::filesystem::path("cmake-build-debug/mc3togltf/mc3togltf"), // integrated root build
+        std::filesystem::path("mc3togltf/build/mc3togltf"),
+        std::filesystem::path("cmake-build-debug/mc3togltf/mc3togltf"),
         std::filesystem::path("build-mc3togltf/mc3togltf"),
         std::filesystem::path("../build-mc3togltf/mc3togltf"),
         std::filesystem::path("../mc3togltf/build/mc3togltf"),
     }) {
         if (std::filesystem::exists(candidate)) { mc3togltf = candidate.string(); break; }
     }
-    std::string outPath = currentFile_.string();
-    auto pos = outPath.rfind(".mc3.xml");
-    if (pos != std::string::npos) outPath.replace(pos, 8, ".glb");
-    else outPath += ".glb";
-
     std::string cmd = mc3togltf + " \"" + currentFile_.string() + "\" \"" + outPath + "\"";
     std::cout << "[MeshCraft] Exporting: " << cmd << "\n";
     int ret = std::system(cmd.c_str());
     if (ret == 0) {
-        std::cout << "[MeshCraft] Exported to: " << outPath << "\n";
         auto name = std::filesystem::path(outPath).filename().string();
         setStatusMsg("Exported to " + name);
     } else {
-        std::cerr << "[MeshCraft] Export failed (exit code " << ret << ")\n";
         setStatusMsg("Export failed (exit " + std::to_string(ret) + ")", true);
+        throw std::runtime_error("mc3togltf exited with code " + std::to_string(ret));
     }
 }
 

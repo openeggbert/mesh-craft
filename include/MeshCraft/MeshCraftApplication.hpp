@@ -148,6 +148,13 @@ private:
     char mergeSceneErr_[256]{};
     void mergeSceneFromFile(const std::string& path);
 
+    // GLB export settings dialog state (F8)
+    bool glbExportOpen_{false};
+    int  glbExportFmt_{0};          // 0 = GLB, 1 = GLTF
+    char glbExportOutBuf_[512]{};
+    char glbExportErr_[256]{};
+    void runGltfExport(const std::string& outPath);
+
     // Subtree export as template dialog state (E8)
     bool subtreeExportOpen_{false};
     char subtreeExportNameBuf_[128]{};  // definition name
