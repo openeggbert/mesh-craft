@@ -1245,6 +1245,47 @@ void MeshCraftApplication::drawDialogs()
     }
 
     // -----------------------------------------------------------------------
+    // Texture drop slot-picker (D6) — shown when image dropped but no slot hovered
+    // -----------------------------------------------------------------------
+    if (dropTexPickerOpen_) {
+        ImGui::OpenPopup("Assign Texture##texdropdlg");
+        dropTexPickerOpen_ = false;
+    }
+    if (ImGui::BeginPopupModal("Assign Texture##texdropdlg", nullptr,
+                               ImGuiWindowFlags_AlwaysAutoResize)) {
+        ImGui::Text("Assign dropped texture to which slot?");
+        ImGui::TextDisabled("%s", dropTexPickerPath_.c_str());
+        ImGui::Spacing();
+        bool hasMat = !dropTexPickerMatId_.empty() &&
+                      document_.materials.count(dropTexPickerMatId_);
+        if (!hasMat) {
+            ImGui::TextColored(ImVec4(1.f,0.4f,0.4f,1.f), "No material selected.");
+        } else {
+            auto& mat = document_.materials[dropTexPickerMatId_];
+            auto assign = [&](std::string& slot) {
+                pushUndo(); slot = dropTexPickerPath_;
+                modified_ = true;
+                setStatusMsg("Texture assigned → " + dropTexPickerMatId_);
+                ImGui::CloseCurrentPopup();
+            };
+            if (ImGui::Button("Base Color",      ImVec2(130,0))) assign(mat.baseColorTexture);
+            ImGui::SameLine();
+            if (ImGui::Button("Normal",          ImVec2(130,0))) assign(mat.normalTexture);
+            if (ImGui::Button("Emissive",        ImVec2(130,0))) assign(mat.emissiveTexture);
+            ImGui::SameLine();
+            if (ImGui::Button("Metal/Roughness", ImVec2(130,0))) assign(mat.metallicRoughnessTexture);
+            if (ImGui::Button("Occlusion",       ImVec2(130,0))) assign(mat.occlusionTexture);
+        }
+        ImGui::Spacing();
+        if (ImGui::Button("Cancel", ImVec2(90, 0)) ||
+            ImGui::IsKeyPressed(ImGuiKey_Escape, false)) {
+            dropTexPickerPath_.clear();
+            ImGui::CloseCurrentPopup();
+        }
+        ImGui::EndPopup();
+    }
+
+    // -----------------------------------------------------------------------
     // Material Export dialog (D5)
     // -----------------------------------------------------------------------
     if (matExportOpen_) {

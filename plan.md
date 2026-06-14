@@ -65,7 +65,7 @@ Legend: ✅ done · 🔧 partial · 📋 planned
 | D3 ~~skipped~~ | Material: duplicate material (copy in material list) | UiLeftPanel.cpp |
 | D4 ✅ | Material: apply material from list to selection (button "Apply to selection") | UiLeftPanel.cpp |
 | D5 | Material: export/import as standalone JSON or XML snippet | MeshCraftApplication_Commands.cpp |
-| D6 | Texture: drag-and-drop URI file from OS into texture field | UiLeftPanel.cpp |
+| D6 ✅ | Texture: drag-and-drop URI file from OS into texture field | UiLeftPanel.cpp |
 | D7 | Material: material preview (small UV sphere with applied material) | UiLeftPanel.cpp, SceneRenderer |
 | D8 ✅ | Material: search filter in material list | UiLeftPanel.cpp |
 

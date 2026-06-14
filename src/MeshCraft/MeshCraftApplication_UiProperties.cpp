@@ -1451,22 +1451,36 @@ void MeshCraftApplication::drawPropertiesPanel(float panelY, float panelH, int s
 
                 // Textures (collapsed by default)
                 if (ImGui::TreeNode("Textures")) {
-                    auto texField = [&](const char* label, std::string& field) {
+                    bool hasPendingTex = !pendingDropTexture_.empty();
+                    // texField: tracks hover for OS drag-drop (D6)
+                    auto texField = [&](const char* label, std::string& field, const char* slot) {
                         ImGui::TextDisabled("%s", label);
-                        char buf[256];
-                        std::strncpy(buf, field.c_str(), sizeof(buf) - 1); buf[255] = '\0';
+                        char buf[512];
+                        std::strncpy(buf, field.c_str(), sizeof(buf) - 1); buf[511] = '\0';
                         ImGui::SetNextItemWidth(-1);
+                        // Highlight field that is the current drop target
+                        bool isHov = (hoveredTexSlot_ == slot && hoveredTexMatId_ == selectedMaterialKey_);
+                        if (isHov && hasPendingTex)
+                            ImGui::PushStyleColor(ImGuiCol_FrameBg, ImVec4(0.2f, 0.5f, 0.2f, 0.6f));
                         std::string id = std::string("##t") + label;
                         if (ImGui::InputText(id.c_str(), buf, sizeof(buf),
                                 ImGuiInputTextFlags_EnterReturnsTrue)) {
                             field = buf; modified_ = true; updateWindowTitle();
                         }
+                        if (isHov && hasPendingTex) ImGui::PopStyleColor();
+                        if (ImGui::IsItemHovered()) {
+                            hoveredTexSlot_  = slot;
+                            hoveredTexMatId_ = selectedMaterialKey_;
+                        }
                     };
-                    texField("Base Color",      mat.baseColorTexture);
-                    texField("Normal",          mat.normalTexture);
-                    texField("Emissive",        mat.emissiveTexture);
-                    texField("Metal/Roughness", mat.metallicRoughnessTexture);
-                    texField("Occlusion",       mat.occlusionTexture);
+                    if (hasPendingTex)
+                        ImGui::TextColored(ImVec4(0.3f,0.9f,0.4f,1.f),
+                            "Drop: hover a slot then release");
+                    texField("Base Color",      mat.baseColorTexture,         "base");
+                    texField("Normal",          mat.normalTexture,            "normal");
+                    texField("Emissive",        mat.emissiveTexture,          "emissive");
+                    texField("Metal/Roughness", mat.metallicRoughnessTexture, "metalrough");
+                    texField("Occlusion",       mat.occlusionTexture,         "occlusion");
                     ImGui::TreePop();
                 }
             }

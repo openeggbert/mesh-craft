@@ -84,6 +84,14 @@ private:
     // Drag-and-drop file open (set from SDL event watcher, consumed in Update)
     std::string pendingDropFile_;
 
+    // Drag-and-drop texture onto material texture fields (D6)
+    std::string pendingDropTexture_;   // image file dropped from OS
+    std::string hoveredTexSlot_;       // last-hovered slot: "base","normal","emissive","metalrough","occlusion"
+    std::string hoveredTexMatId_;      // material being edited when that slot was hovered
+    bool        dropTexPickerOpen_{false}; // slot-picker popup trigger
+    std::string dropTexPickerPath_;        // image path pending slot assignment
+    std::string dropTexPickerMatId_;       // material to assign to
+
     // Auto-screenshot mode
     std::string autoScreenshotPath_;
     int autoScreenshotCountdown_{0};

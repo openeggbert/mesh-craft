@@ -71,7 +71,20 @@ bool MeshCraftApplication::sdlEventWatch(void* userdata, void* eventPtr) {
     auto* ev = static_cast<SDL_Event*>(eventPtr);
     ImGui_ImplSDL3_ProcessEvent(ev);
     if (userdata && ev->type == SDL_EVENT_DROP_FILE && ev->drop.data) {
-        static_cast<MeshCraftApplication*>(userdata)->pendingDropFile_ = ev->drop.data;
+        std::string path = ev->drop.data;
+        auto* self = static_cast<MeshCraftApplication*>(userdata);
+        // Route image files to texture drop handler; everything else opens as scene
+        auto ext = std::filesystem::path(path).extension().string();
+        for (auto& c : ext) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+        static const char* kImgExts[] = {
+            ".png",".jpg",".jpeg",".webp",".tga",".bmp",".gif",".hdr",".exr",nullptr
+        };
+        bool isImage = false;
+        for (int i = 0; kImgExts[i]; ++i) if (ext == kImgExts[i]) { isImage = true; break; }
+        if (isImage)
+            self->pendingDropTexture_ = path;
+        else
+            self->pendingDropFile_ = path;
     }
     return true;
 }
@@ -215,6 +228,30 @@ void MeshCraftApplication::Update(GameTime& gameTime) {
             confirmIfModified(PendingAction::OpenRecentFile, dropPath);
         else
             setStatusMsg("Unsupported file type: " + dropPath.filename().string(), true, 3.0f);
+    }
+
+    // Consume dropped texture image (D6)
+    if (!pendingDropTexture_.empty()) {
+        std::string texPath = std::move(pendingDropTexture_);
+        pendingDropTexture_.clear();
+        if (!hoveredTexSlot_.empty() && !hoveredTexMatId_.empty() &&
+            document_.materials.count(hoveredTexMatId_)) {
+            // Assign directly to the hovered slot
+            pushUndo();
+            auto& mat = document_.materials[hoveredTexMatId_];
+            if      (hoveredTexSlot_ == "base")       mat.baseColorTexture         = texPath;
+            else if (hoveredTexSlot_ == "normal")     mat.normalTexture            = texPath;
+            else if (hoveredTexSlot_ == "emissive")   mat.emissiveTexture          = texPath;
+            else if (hoveredTexSlot_ == "metalrough") mat.metallicRoughnessTexture = texPath;
+            else if (hoveredTexSlot_ == "occlusion")  mat.occlusionTexture         = texPath;
+            modified_ = true;
+            setStatusMsg("Texture dropped into " + hoveredTexSlot_ + " slot");
+        } else {
+            // No hovered slot — open picker popup
+            dropTexPickerPath_   = texPath;
+            dropTexPickerMatId_  = selectedMaterialKey_;
+            dropTexPickerOpen_   = true;
+        }
     }
 
     auto ks = Keyboard::GetState();
