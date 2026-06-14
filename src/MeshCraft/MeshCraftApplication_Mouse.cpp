@@ -119,7 +119,10 @@ void MeshCraftApplication::handleMouseInput(const MouseState& ms, const MouseSta
         };
 
         auto* sel0 = selection_.selection().front().get();
-        float px = sel0->transform.position[0], py2 = sel0->transform.position[1], pz = sel0->transform.position[2];
+        // In pivot edit mode the gizmo lives at position + pivot
+        float px = sel0->transform.position[0] + (pivotEditMode_ ? sel0->transform.pivot[0] : 0.0f);
+        float py2= sel0->transform.position[1] + (pivotEditMode_ ? sel0->transform.pivot[1] : 0.0f);
+        float pz = sel0->transform.position[2] + (pivotEditMode_ ? sel0->transform.pivot[2] : 0.0f);
         float L  = camera_.distance * 0.15f;
         int axIdx = static_cast<int>(gizmo_.dragAxis()) - 1;
 
@@ -137,12 +140,31 @@ void MeshCraftApplication::handleMouseInput(const MouseState& ms, const MouseSta
             delta *= L / len2d;
             for (const auto& s : selection_.selection()) {
                 if (lockedIds_.count(s->id)) continue;
-                s->transform.position[0] += delta * ax.X;
-                s->transform.position[1] += delta * ax.Y;
-                s->transform.position[2] += delta * ax.Z;
-                if (snapEnabled_) {
-                    for (int i = 0; i < 3; ++i)
-                        s->transform.position[i] = std::round(s->transform.position[i] / snapTranslate_) * snapTranslate_;
+                if (pivotEditMode_) {
+                    // Move pivot only; compensate position so geometry stays in world space.
+                    // pos_new = pos_old + d*R - d  (where d = delta*axis, R = object rotation matrix)
+                    const float deg = std::numbers::pi_v<float> / 180.0f;
+                    const auto& rot = s->transform.rotation;
+                    Matrix R = Matrix::CreateFromYawPitchRoll(rot[1]*deg, rot[0]*deg, rot[2]*deg);
+                    float dX = delta * ax.X, dY = delta * ax.Y, dZ = delta * ax.Z;
+                    // d * R (row vector × matrix)
+                    float rX = dX*R.M11 + dY*R.M21 + dZ*R.M31;
+                    float rY = dX*R.M12 + dY*R.M22 + dZ*R.M32;
+                    float rZ = dX*R.M13 + dY*R.M23 + dZ*R.M33;
+                    s->transform.pivot[0] += dX;
+                    s->transform.pivot[1] += dY;
+                    s->transform.pivot[2] += dZ;
+                    s->transform.position[0] += rX - dX;
+                    s->transform.position[1] += rY - dY;
+                    s->transform.position[2] += rZ - dZ;
+                } else {
+                    s->transform.position[0] += delta * ax.X;
+                    s->transform.position[1] += delta * ax.Y;
+                    s->transform.position[2] += delta * ax.Z;
+                    if (snapEnabled_) {
+                        for (int i = 0; i < 3; ++i)
+                            s->transform.position[i] = std::round(s->transform.position[i] / snapTranslate_) * snapTranslate_;
+                    }
                 }
             }
 

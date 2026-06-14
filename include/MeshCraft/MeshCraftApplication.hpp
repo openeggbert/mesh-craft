@@ -468,6 +468,10 @@ private:
     // SDL event watcher for ImGui event forwarding
     static bool sdlEventWatch(void* userdata, void* event);
 
+    // H5 — pivot edit mode
+    bool pivotEditMode_{false};
+    void resetPivot(); // zero pivot, compensate position so world geometry stays fixed
+
     // -----------------------------------------------------------------------
     // Walk mode (H15) — first-person exploration
     // -----------------------------------------------------------------------

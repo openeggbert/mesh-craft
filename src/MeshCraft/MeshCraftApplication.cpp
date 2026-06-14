@@ -403,7 +403,17 @@ void MeshCraftApplication::Draw(const GameTime& /*gameTime*/) {
         auto* sel0 = selection_.selection().front().get();
         if (activeTool_ == ActiveTool::Move) {
             gd.SetDepthTestEnabled(false);
-            sceneRenderer_->drawGizmo(sel0, view, proj, gizmoLen, gizmoLocalSpace_);
+            if (pivotEditMode_) {
+                // Render gizmo at position + pivot
+                Mc3::Mc3Object pivProxy = *sel0;
+                for (int i = 0; i < 3; ++i) {
+                    pivProxy.transform.position[i] += pivProxy.transform.pivot[i];
+                    pivProxy.transform.pivot[i] = 0.0f;
+                }
+                sceneRenderer_->drawGizmo(&pivProxy, view, proj, gizmoLen, gizmoLocalSpace_);
+            } else {
+                sceneRenderer_->drawGizmo(sel0, view, proj, gizmoLen, gizmoLocalSpace_);
+            }
         } else if (activeTool_ == ActiveTool::Scale) {
             gd.SetDepthTestEnabled(false);
             sceneRenderer_->drawScaleGizmo(sel0, view, proj, gizmoLen, gizmoLocalSpace_);

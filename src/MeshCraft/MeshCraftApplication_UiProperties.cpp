@@ -263,10 +263,23 @@ void MeshCraftApplication::drawPropertiesPanel(float panelY, float panelH, int s
         }
 
         // Transform: pivot
+        {
+            ImVec4 btnCol = pivotEditMode_
+                ? ImVec4(0.9f,0.5f,0.1f,1.f)
+                : ImGui::GetStyleColorVec4(ImGuiCol_Button);
+            ImGui::PushStyleColor(ImGuiCol_Button, btnCol);
+            if (ImGui::Button(pivotEditMode_ ? "Pivot (ON)" : "Pivot", ImVec2(-1,0))) {
+                pivotEditMode_ = !pivotEditMode_;
+                if (pivotEditMode_) activeTool_ = ActiveTool::Move;
+            }
+            ImGui::PopStyleColor();
+            if (ImGui::IsItemHovered())
+                ImGui::SetTooltip("Toggle Move-Pivot mode: gizmo moves the pivot\nwithout moving the geometry");
+        }
         multiLabel("Pivot", !allMatchF3([](const Mc3::Mc3Object* o){ return o->transform.pivot; }));
         {
             float piv[3] = { sel0->transform.pivot[0], sel0->transform.pivot[1], sel0->transform.pivot[2] };
-            ImGui::SetNextItemWidth(-1);
+            ImGui::SetNextItemWidth(-60);
             if (ImGui::DragFloat3("##piv", piv, 0.1f)) {
                 if (ImGui::IsItemActivated()) pushUndo();
                 float dp[3] = { piv[0]-sel0->transform.pivot[0],
@@ -278,6 +291,13 @@ void MeshCraftApplication::drawPropertiesPanel(float panelY, float panelH, int s
                 }
                 modified_ = true; updateWindowTitle();
             }
+            ImGui::SameLine();
+            if (ImGui::Button("Reset##piv", ImVec2(-1,0))) {
+                pushUndo();
+                resetPivot();
+            }
+            if (ImGui::IsItemHovered())
+                ImGui::SetTooltip("Zero the pivot and compensate position\nso geometry stays in place");
         }
 
         ImGui::Spacing();

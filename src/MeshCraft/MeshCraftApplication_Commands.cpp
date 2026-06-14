@@ -910,4 +910,31 @@ void MeshCraftApplication::copyPropsToSelected() {
 // Animation helpers
 // ---------------------------------------------------------------------------
 
+// ---------------------------------------------------------------------------
+// H5 — Reset pivot to (0,0,0) while keeping geometry in world space
+// ---------------------------------------------------------------------------
+
+void MeshCraftApplication::resetPivot() {
+    using namespace Microsoft::Xna::Framework;
+    const float deg = std::numbers::pi_v<float> / 180.0f;
+    for (const auto& s : selection_.selection()) {
+        if (lockedIds_.count(s->id)) continue;
+        const auto& p = s->transform.pivot;
+        const auto& rot = s->transform.rotation;
+        // Compensation: pos_new = pos + d*R - d  where d = -pivot (zeroing pivot)
+        float dX = -p[0], dY = -p[1], dZ = -p[2];
+        Matrix R = Matrix::CreateFromYawPitchRoll(rot[1]*deg, rot[0]*deg, rot[2]*deg);
+        float rX = dX*R.M11 + dY*R.M21 + dZ*R.M31;
+        float rY = dX*R.M12 + dY*R.M22 + dZ*R.M32;
+        float rZ = dX*R.M13 + dY*R.M23 + dZ*R.M33;
+        s->transform.position[0] += rX - dX;
+        s->transform.position[1] += rY - dY;
+        s->transform.position[2] += rZ - dZ;
+        s->transform.pivot = {0.0f, 0.0f, 0.0f};
+    }
+    modified_ = true;
+    updateWindowTitle();
+    setStatusMsg("Pivot reset to origin", false, 1.5f);
+}
+
 } // namespace MeshCraft
