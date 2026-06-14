@@ -1,6 +1,9 @@
 #include "MeshCraft/MeshCraftApplication.hpp"
 #include "MeshCraftPrivate.hpp"
 
+#include "MeshCraft/Mcb/McbReader.hpp"
+#include "MeshCraft/Mcb/McbWriter.hpp"
+
 #include <imgui.h>
 
 #include <Microsoft/Xna/Framework/Matrix.hpp>
@@ -1112,7 +1115,11 @@ void MeshCraftApplication::drawDialogs()
         if (openDialogErr_[0]) ImGui::TextColored(ImVec4(1,0.3f,0.3f,1), "%s", openDialogErr_);
         if (ImGui::Button("Open") || ImGui::IsKeyPressed(ImGuiKey_Enter)) {
             try {
-                document_ = Mc3::Mc3Document::loadFromFile(openDialogBuf_);
+                std::filesystem::path p{openDialogBuf_};
+                if (p.extension() == ".mcb")
+                    document_ = Mcb::loadFromFile(p);
+                else
+                    document_ = Mc3::Mc3Document::loadFromFile(p);
                 currentFile_ = openDialogBuf_;
                 addRecentFile(currentFile_);
                 selection_.clear();
@@ -1143,9 +1150,11 @@ void MeshCraftApplication::drawDialogs()
         if (saveDialogErr_[0]) ImGui::TextColored(ImVec4(1,0.3f,0.3f,1), "%s", saveDialogErr_);
         if (ImGui::Button("Save") || ImGui::IsKeyPressed(ImGuiKey_Enter)) {
             std::string path = saveDialogBuf_;
-            if (path.find(".mc3.xml") == std::string::npos) path += ".mc3.xml";
+            bool isMcb = path.size() >= 4 && path.substr(path.size() - 4) == ".mcb";
+            if (!isMcb && path.find(".mc3.xml") == std::string::npos) path += ".mc3.xml";
             try {
-                document_.saveToFile(path);
+                if (isMcb) Mcb::saveToFile(document_, path);
+                else        document_.saveToFile(path);
                 currentFile_ = path;
                 addRecentFile(currentFile_);
                 modified_ = false;

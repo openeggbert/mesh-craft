@@ -102,6 +102,12 @@ set(BUILD_TESTING "${MESH_CRAFT_BUILD_TESTING}" CACHE BOOL "" FORCE)
 # Mc3 — MC3 format library (pure C++, no graphics dependency)
 add_subdirectory(mc3)
 
+# Mcb — MCB binary format library
+add_subdirectory(mcb)
+
+# mc3tomcb — CLI converter between MC3 XML and MCB binary
+add_subdirectory(mc3tomcb)
+
 # ImGui — immediate-mode UI (SDL3 + OpenGL ES 3 backends)
 include(FetchContent)
 FetchContent_Declare(imgui
@@ -221,7 +227,7 @@ if(EMSCRIPTEN)
     # SDL3 imported targets are directory-scoped; re-declare them in this scope.
     find_package(SDL3 REQUIRED CONFIG)
     target_link_libraries(${_target} PRIVATE
-        CNA ${_cna_backend_target} SHARP_RUNTIME Mc3 imgui SDL3::SDL3-static)
+        CNA ${_cna_backend_target} SHARP_RUNTIME Mc3 Mcb imgui SDL3::SDL3-static)
     target_link_options(${_target} PRIVATE
         -sALLOW_MEMORY_GROWTH=1
         -sSTACK_SIZE=1048576
@@ -239,11 +245,12 @@ elseif(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang" AND NOT WIN32 AND NOT ANDROID)
         -Wl,--start-group CNA ${_cna_backend_target} -Wl,--end-group
         SHARP_RUNTIME
         Mc3
+        Mcb
         imgui
         manifold
         tinyobjloader)
 else()
-    target_link_libraries(${_target} PRIVATE CNA ${_cna_backend_target} SHARP_RUNTIME Mc3 imgui manifold tinyobjloader)
+    target_link_libraries(${_target} PRIVATE CNA ${_cna_backend_target} SHARP_RUNTIME Mc3 Mcb imgui manifold tinyobjloader)
 endif()
 
 # -----------------------------------------------------------------------------
