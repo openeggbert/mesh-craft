@@ -1344,33 +1344,162 @@ void MeshCraftApplication::drawPropertiesPanel(float panelY, float panelH, int s
             ImGui::TextDisabled("No action selected.");
             ImGui::TextDisabled("Open Timeline and select an animation action.");
         } else {
-            ImGui::TextDisabled("Keyframe all:");
+            using AP = Mc3::AnimatedProperty;
+
+            // Helper: check if this object has a channel for the given property in the current action
+            const auto& act = document_.actions.at(currentActionName_);
+            auto hasChan = [&](AP prop) -> bool {
+                for (const auto& ch : act.channels)
+                    if (ch.targetObject == sel0->name && ch.property == prop) return true;
+                return false;
+            };
+            auto hasAnyOf = [&](std::initializer_list<AP> props) -> bool {
+                for (auto p : props) if (hasChan(p)) return true;
+                return false;
+            };
+
+            // Dot indicator colour: green = channel exists, grey = not yet
+            auto dot = [&](std::initializer_list<AP> props) {
+                if (hasAnyOf(props))
+                    ImGui::TextColored(ImVec4(0.3f, 0.9f, 0.4f, 1.f), "\xe2\x97\x8f");
+                else
+                    ImGui::TextDisabled("\xe2\x97\x8f");
+                ImGui::SameLine();
+            };
+
+            // ── K All ──────────────────────────────────────────────────────
+            if (ImGui::SmallButton("K All")) {
+                insertAnimKeyframes(*sel0, {
+                    AP::PositionX, AP::PositionY, AP::PositionZ,
+                    AP::RotationX, AP::RotationY, AP::RotationZ,
+                    AP::ScaleX,    AP::ScaleY,    AP::ScaleZ,
+                    AP::Visible,
+                    AP::DeformX,   AP::DeformY,   AP::DeformZ,
+                    AP::MaterialBaseColorR, AP::MaterialBaseColorG,
+                    AP::MaterialBaseColorB, AP::MaterialBaseColorA,
+                    AP::MaterialRoughness,  AP::MaterialMetallic,
+                    AP::MaterialEmissiveR,  AP::MaterialEmissiveG,  AP::MaterialEmissiveB,
+                });
+            }
+            if (ImGui::IsItemHovered()) ImGui::SetTooltip("Insert keyframe for every animatable property");
+
+            ImGui::Spacing();
+            ImGui::Separator();
+
+            // ── Transform ──────────────────────────────────────────────────
+            ImGui::TextDisabled("Transform");
+
+            // Position group + per-axis
+            dot({AP::PositionX, AP::PositionY, AP::PositionZ});
             if (ImGui::SmallButton("K Pos"))
-                insertAnimKeyframes(*sel0, {Mc3::AnimatedProperty::PositionX, Mc3::AnimatedProperty::PositionY, Mc3::AnimatedProperty::PositionZ});
+                insertAnimKeyframes(*sel0, {AP::PositionX, AP::PositionY, AP::PositionZ});
             ImGui::SameLine();
+            { bool a = hasChan(AP::PositionX);
+              if (a) ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.2f,0.45f,0.2f,1.f));
+              if (ImGui::SmallButton("KX##px")) insertAnimKeyframes(*sel0, {AP::PositionX});
+              if (a) ImGui::PopStyleColor(); }
+            ImGui::SameLine();
+            { bool a = hasChan(AP::PositionY);
+              if (a) ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.2f,0.45f,0.2f,1.f));
+              if (ImGui::SmallButton("KY##py")) insertAnimKeyframes(*sel0, {AP::PositionY});
+              if (a) ImGui::PopStyleColor(); }
+            ImGui::SameLine();
+            { bool a = hasChan(AP::PositionZ);
+              if (a) ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.2f,0.45f,0.2f,1.f));
+              if (ImGui::SmallButton("KZ##pz")) insertAnimKeyframes(*sel0, {AP::PositionZ});
+              if (a) ImGui::PopStyleColor(); }
+
+            // Rotation group + per-axis
+            dot({AP::RotationX, AP::RotationY, AP::RotationZ});
             if (ImGui::SmallButton("K Rot"))
-                insertAnimKeyframes(*sel0, {Mc3::AnimatedProperty::RotationX, Mc3::AnimatedProperty::RotationY, Mc3::AnimatedProperty::RotationZ});
+                insertAnimKeyframes(*sel0, {AP::RotationX, AP::RotationY, AP::RotationZ});
             ImGui::SameLine();
+            { bool a = hasChan(AP::RotationX);
+              if (a) ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.2f,0.45f,0.2f,1.f));
+              if (ImGui::SmallButton("KX##rx")) insertAnimKeyframes(*sel0, {AP::RotationX});
+              if (a) ImGui::PopStyleColor(); }
+            ImGui::SameLine();
+            { bool a = hasChan(AP::RotationY);
+              if (a) ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.2f,0.45f,0.2f,1.f));
+              if (ImGui::SmallButton("KY##ry")) insertAnimKeyframes(*sel0, {AP::RotationY});
+              if (a) ImGui::PopStyleColor(); }
+            ImGui::SameLine();
+            { bool a = hasChan(AP::RotationZ);
+              if (a) ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.2f,0.45f,0.2f,1.f));
+              if (ImGui::SmallButton("KZ##rz")) insertAnimKeyframes(*sel0, {AP::RotationZ});
+              if (a) ImGui::PopStyleColor(); }
+
+            // Scale group + per-axis
+            dot({AP::ScaleX, AP::ScaleY, AP::ScaleZ});
             if (ImGui::SmallButton("K Scl"))
-                insertAnimKeyframes(*sel0, {Mc3::AnimatedProperty::ScaleX, Mc3::AnimatedProperty::ScaleY, Mc3::AnimatedProperty::ScaleZ});
+                insertAnimKeyframes(*sel0, {AP::ScaleX, AP::ScaleY, AP::ScaleZ});
             ImGui::SameLine();
+            { bool a = hasChan(AP::ScaleX);
+              if (a) ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.2f,0.45f,0.2f,1.f));
+              if (ImGui::SmallButton("KX##sx")) insertAnimKeyframes(*sel0, {AP::ScaleX});
+              if (a) ImGui::PopStyleColor(); }
+            ImGui::SameLine();
+            { bool a = hasChan(AP::ScaleY);
+              if (a) ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.2f,0.45f,0.2f,1.f));
+              if (ImGui::SmallButton("KY##sy")) insertAnimKeyframes(*sel0, {AP::ScaleY});
+              if (a) ImGui::PopStyleColor(); }
+            ImGui::SameLine();
+            { bool a = hasChan(AP::ScaleZ);
+              if (a) ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.2f,0.45f,0.2f,1.f));
+              if (ImGui::SmallButton("KZ##sz")) insertAnimKeyframes(*sel0, {AP::ScaleZ});
+              if (a) ImGui::PopStyleColor(); }
+
+            // Visibility
+            dot({AP::Visible});
             if (ImGui::SmallButton("K Vis"))
-                insertAnimKeyframes(*sel0, {Mc3::AnimatedProperty::Visible});
+                insertAnimKeyframes(*sel0, {AP::Visible});
+
             ImGui::Spacing();
+            ImGui::Separator();
+
+            // ── Deform ─────────────────────────────────────────────────────
+            ImGui::TextDisabled("Deform");
+            dot({AP::DeformX, AP::DeformY, AP::DeformZ});
             if (ImGui::SmallButton("K Deform"))
-                insertAnimKeyframes(*sel0, {Mc3::AnimatedProperty::DeformX, Mc3::AnimatedProperty::DeformY, Mc3::AnimatedProperty::DeformZ});
+                insertAnimKeyframes(*sel0, {AP::DeformX, AP::DeformY, AP::DeformZ});
+            ImGui::SameLine();
+            { bool a = hasChan(AP::DeformX);
+              if (a) ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.2f,0.45f,0.2f,1.f));
+              if (ImGui::SmallButton("KX##dx")) insertAnimKeyframes(*sel0, {AP::DeformX});
+              if (a) ImGui::PopStyleColor(); }
+            ImGui::SameLine();
+            { bool a = hasChan(AP::DeformY);
+              if (a) ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.2f,0.45f,0.2f,1.f));
+              if (ImGui::SmallButton("KY##dy")) insertAnimKeyframes(*sel0, {AP::DeformY});
+              if (a) ImGui::PopStyleColor(); }
+            ImGui::SameLine();
+            { bool a = hasChan(AP::DeformZ);
+              if (a) ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.2f,0.45f,0.2f,1.f));
+              if (ImGui::SmallButton("KZ##dz")) insertAnimKeyframes(*sel0, {AP::DeformZ});
+              if (a) ImGui::PopStyleColor(); }
+
             ImGui::Spacing();
+            ImGui::Separator();
+
+            // ── Material ───────────────────────────────────────────────────
+            ImGui::TextDisabled("Material");
+            dot({AP::MaterialBaseColorR, AP::MaterialBaseColorG,
+                 AP::MaterialBaseColorB, AP::MaterialBaseColorA});
             if (ImGui::SmallButton("K Color"))
-                insertAnimKeyframes(*sel0, {Mc3::AnimatedProperty::MaterialBaseColorR, Mc3::AnimatedProperty::MaterialBaseColorG, Mc3::AnimatedProperty::MaterialBaseColorB, Mc3::AnimatedProperty::MaterialBaseColorA});
+                insertAnimKeyframes(*sel0, {AP::MaterialBaseColorR, AP::MaterialBaseColorG,
+                                            AP::MaterialBaseColorB, AP::MaterialBaseColorA});
             ImGui::SameLine();
-            if (ImGui::SmallButton("K Rough"))
-                insertAnimKeyframes(*sel0, {Mc3::AnimatedProperty::MaterialRoughness});
-            ImGui::SameLine();
-            if (ImGui::SmallButton("K Metal"))
-                insertAnimKeyframes(*sel0, {Mc3::AnimatedProperty::MaterialMetallic});
-            ImGui::SameLine();
+            dot({AP::MaterialEmissiveR, AP::MaterialEmissiveG, AP::MaterialEmissiveB});
             if (ImGui::SmallButton("K Emit"))
-                insertAnimKeyframes(*sel0, {Mc3::AnimatedProperty::MaterialEmissiveR, Mc3::AnimatedProperty::MaterialEmissiveG, Mc3::AnimatedProperty::MaterialEmissiveB});
+                insertAnimKeyframes(*sel0, {AP::MaterialEmissiveR, AP::MaterialEmissiveG,
+                                            AP::MaterialEmissiveB});
+            dot({AP::MaterialRoughness});
+            if (ImGui::SmallButton("K Rough"))
+                insertAnimKeyframes(*sel0, {AP::MaterialRoughness});
+            ImGui::SameLine();
+            dot({AP::MaterialMetallic});
+            if (ImGui::SmallButton("K Metal"))
+                insertAnimKeyframes(*sel0, {AP::MaterialMetallic});
         }
         ImGui::EndTabItem();
         } // end Anim tab

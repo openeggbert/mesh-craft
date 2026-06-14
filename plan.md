@@ -50,7 +50,7 @@ Legend: ✅ done · 🔧 partial · 📋 planned
 | C5 ✅ | UV Mapping: basic UI (planar/box/sphere projection, scale/offset) | Mc3Object.hpp, UiProperties.cpp |
 | C6 ✅ | Properties: show vertex/face count for Mesh objects (from SceneRenderer cache) | UiProperties.cpp, SceneRenderer.hpp |
 | C7 ✅ | Properties: show world-space position (computed matrix result) beside local transform | UiProperties.cpp |
-| C8 | Properties: extend K keyframe button to all animatable properties (material, deform) | UiProperties.cpp |
+| C8 ✅ | Properties: extend K keyframe button to all animatable properties (material, deform) | UiProperties.cpp |
 | C9 ✅ | Properties: tabs to separate Transform / Geometry / Material / Animation sections | UiProperties.cpp |
 | C10 | Object: per-object action/state system (Mc3Object TODO) | Mc3Object.hpp |
 
