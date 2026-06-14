@@ -106,21 +106,77 @@ void MeshCraftApplication::drawLeftPanel(float panelY, float panelH)
             ImGui::SameLine();
             bool collapseAll = ImGui::SmallButton("-##ca");
             if (ImGui::IsItemHovered()) ImGui::SetTooltip("Collapse All");
+
+            // --- Type filter bar (E5) ---
+            {
+                struct TypeBtn { const char* label; int id; const char* tip; };
+                static const TypeBtn kBtns[] = {
+                    {"All",  0, "Show all objects"},
+                    {"Prim", 1, "Primitives (box, sphere, cylinder…)"},
+                    {"Mesh", 2, "External mesh objects"},
+                    {"Grp",  3, "Group nodes"},
+                    {"Inst", 4, "Instances (prefab references)"},
+                    {"CSG",  5, "CSG operations (union, difference, intersection)"},
+                    {"Ext",  6, "Extrude objects"},
+                };
+                for (const auto& b : kBtns) {
+                    bool active = (hierTypeFilter_ == b.id);
+                    if (active) ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.20f, 0.45f, 0.20f, 1.f));
+                    if (ImGui::SmallButton(b.label)) hierTypeFilter_ = b.id;
+                    if (active) ImGui::PopStyleColor();
+                    if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s", b.tip);
+                    ImGui::SameLine();
+                }
+                ImGui::NewLine();
+            }
             ImGui::Separator();
 
             // Build lowercase filter string once
             std::string filterLower = hierarchyFilter_;
             for (auto& ch : filterLower) ch = static_cast<char>(std::tolower(static_cast<unsigned char>(ch)));
             bool filtering = !filterLower.empty();
+            bool typeFiltering = (hierTypeFilter_ != 0);
+
+            // Returns true if obj's type matches the selected type filter
+            auto matchesType = [&](const Mc3::Mc3Object& o) -> bool {
+                if (!typeFiltering) return true;
+                using OT = Mc3::ObjectType;
+                switch (hierTypeFilter_) {
+                case 1: // Prim
+                    return o.type == OT::Box || o.type == OT::Cube || o.type == OT::Sphere ||
+                           o.type == OT::Cylinder || o.type == OT::Cone || o.type == OT::Plane ||
+                           o.type == OT::Torus || o.type == OT::Capsule || o.type == OT::Disk ||
+                           o.type == OT::Grid || o.type == OT::IcoSphere;
+                case 2: return o.type == OT::Mesh;
+                case 3: return o.type == OT::Group || o.type == OT::Area;
+                case 4: return o.type == OT::Instance;
+                case 5: return o.type == OT::Union || o.type == OT::Difference ||
+                               o.type == OT::Intersection;
+                case 6: return o.type == OT::Extrude;
+                default: return true;
+                }
+            };
 
             // Returns true if obj itself or any descendant matches the filter
             std::function<bool(const Mc3::Mc3Object&)> matchesFilter;
             matchesFilter = [&](const Mc3::Mc3Object& o) -> bool {
-                std::string nl = o.name.empty() ? o.id : o.name;
-                for (auto& ch : nl) ch = static_cast<char>(std::tolower(static_cast<unsigned char>(ch)));
-                if (nl.find(filterLower) != std::string::npos) return true;
-                for (const auto& c : o.children) if (matchesFilter(*c)) return true;
-                return false;
+                // text filter
+                if (filtering) {
+                    std::string nl = o.name.empty() ? o.id : o.name;
+                    for (auto& ch : nl) ch = static_cast<char>(std::tolower(static_cast<unsigned char>(ch)));
+                    bool textOk = nl.find(filterLower) != std::string::npos;
+                    if (!textOk) {
+                        for (const auto& c : o.children) if (matchesFilter(*c)) return true;
+                        return false;
+                    }
+                }
+                // type filter: show if self matches OR any child matches
+                if (typeFiltering) {
+                    if (matchesType(o)) return true;
+                    for (const auto& c : o.children) if (matchesFilter(*c)) return true;
+                    return false;
+                }
+                return true;
             };
 
             // Rebuild flat order for shift-click range selection
