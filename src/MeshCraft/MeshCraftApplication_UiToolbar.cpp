@@ -185,6 +185,21 @@ float MeshCraftApplication::drawToolbar(float menuBarH, int screenW)
         ImGui::SetTooltip("Surface snap: snap Y to the top of the surface below the object");
     ImGui::SameLine();
 
+    // Proportional editing toggle + radius (H1)
+    { bool was = propEditEnabled_;
+      if (was) ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.45f, 0.20f, 0.45f, 1.f));
+      if (ImGui::Button("Prop", ImVec2(40, 30))) propEditEnabled_ = !propEditEnabled_;
+      if (was) ImGui::PopStyleColor(); }
+    if (ImGui::IsItemHovered())
+        ImGui::SetTooltip("Proportional editing: Move influences nearby objects (Gaussian falloff)\nRadius: %.2f u", propEditRadius_);
+    if (propEditEnabled_) {
+        ImGui::SameLine();
+        ImGui::SetNextItemWidth(70);
+        ImGui::SliderFloat("##propR", &propEditRadius_, 0.5f, 50.0f, "R:%.1f");
+        if (ImGui::IsItemHovered()) ImGui::SetTooltip("Proportional edit radius (world units)");
+    }
+    ImGui::SameLine();
+
     // Grid cell size button (right-click to configure)
     if (ImGui::Button("Grid", ImVec2(40, 30))) {}
     if (ImGui::IsItemHovered())

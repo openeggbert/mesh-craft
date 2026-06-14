@@ -206,6 +206,10 @@ private:
     // Gizmo space toggle (false = World, true = Local)
     bool gizmoLocalSpace_{false};
 
+    // Proportional editing (H1): influence falloff on nearby objects during Move
+    bool  propEditEnabled_{false};
+    float propEditRadius_{5.0f};   // world-unit influence radius
+
     // Gizmo snap-to-grid
     bool  snapEnabled_{false};
     float snapTranslate_{0.5f};   // world units
