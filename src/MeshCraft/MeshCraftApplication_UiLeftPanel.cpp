@@ -1161,6 +1161,31 @@ void MeshCraftApplication::drawLeftPanel(float panelY, float panelH)
                 ImGui::SetTooltip(selection_.hasSelection()
                     ? "Apply selected material to all selected objects"
                     : "Select objects in the scene first");
+            ImGui::SameLine();
+            // Export (D5)
+            {
+                bool canExp = !selectedMaterialKey_.empty();
+                if (!canExp) ImGui::BeginDisabled();
+                if (ImGui::SmallButton("Exp##matexp")) {
+                    matExportOpen_ = true;
+                    matExportId_   = selectedMaterialKey_;
+                    std::string def = selectedMaterialKey_ + ".mc3mat.xml";
+                    std::strncpy(matExportBuf_, def.c_str(), sizeof(matExportBuf_)-1);
+                    matExportBuf_[sizeof(matExportBuf_)-1] = '\0';
+                    matExportErr_[0] = '\0';
+                }
+                if (!canExp) ImGui::EndDisabled();
+            }
+            if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
+                ImGui::SetTooltip("Export selected material to .mc3mat.xml file");
+            ImGui::SameLine();
+            // Import (D5)
+            if (ImGui::SmallButton("Imp##matimp")) {
+                matImportOpen_ = true;
+                matImportBuf_[0] = '\0';
+                matImportErr_[0] = '\0';
+            }
+            if (ImGui::IsItemHovered()) ImGui::SetTooltip("Import material from .mc3mat.xml file");
             ImGui::Separator();
 
             // Search filter

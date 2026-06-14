@@ -1244,6 +1244,100 @@ void MeshCraftApplication::drawDialogs()
         ImGui::EndPopup();
     }
 
+    // -----------------------------------------------------------------------
+    // Material Export dialog (D5)
+    // -----------------------------------------------------------------------
+    if (matExportOpen_) {
+        ImGui::OpenPopup("Export Material##matexpdlg");
+        matExportOpen_ = false;
+    }
+    if (ImGui::BeginPopupModal("Export Material##matexpdlg", nullptr,
+                               ImGuiWindowFlags_AlwaysAutoResize)) {
+        ImGui::Text("Export material \"%s\" to:", matExportId_.c_str());
+        ImGui::SetNextItemWidth(400);
+        if (ImGui::IsWindowAppearing()) ImGui::SetKeyboardFocusHere();
+        bool enter = ImGui::InputText("##matexppath", matExportBuf_, sizeof(matExportBuf_),
+                                      ImGuiInputTextFlags_EnterReturnsTrue);
+        if (matExportErr_[0])
+            ImGui::TextColored(ImVec4(1.f, 0.3f, 0.3f, 1.f), "%s", matExportErr_);
+        ImGui::Spacing();
+        bool canExp = matExportBuf_[0] != '\0' && document_.materials.count(matExportId_);
+        if (!canExp) ImGui::BeginDisabled();
+        if ((enter || ImGui::Button("Export", ImVec2(90, 0))) && canExp) {
+            try {
+                Mc3::Mc3Document tmp;
+                tmp.materials[matExportId_] = document_.materials.at(matExportId_);
+                tmp.saveToFile(matExportBuf_);
+                setStatusMsg("Exported material '" + matExportId_ + "' → " + matExportBuf_);
+                ImGui::CloseCurrentPopup();
+            } catch (const std::exception& ex) {
+                std::strncpy(matExportErr_, ex.what(), sizeof(matExportErr_)-1);
+                matExportErr_[sizeof(matExportErr_)-1] = '\0';
+            }
+        }
+        if (!canExp) ImGui::EndDisabled();
+        ImGui::SameLine();
+        if (ImGui::Button("Cancel", ImVec2(90, 0)) || ImGui::IsKeyPressed(ImGuiKey_Escape, false))
+            ImGui::CloseCurrentPopup();
+        ImGui::EndPopup();
+    }
+
+    // -----------------------------------------------------------------------
+    // Material Import dialog (D5)
+    // -----------------------------------------------------------------------
+    if (matImportOpen_) {
+        ImGui::OpenPopup("Import Material##matimpdlg");
+        matImportOpen_ = false;
+    }
+    if (ImGui::BeginPopupModal("Import Material##matimpdlg", nullptr,
+                               ImGuiWindowFlags_AlwaysAutoResize)) {
+        ImGui::Text("Import from .mc3mat.xml file:");
+        ImGui::SetNextItemWidth(400);
+        if (ImGui::IsWindowAppearing()) ImGui::SetKeyboardFocusHere();
+        bool enter = ImGui::InputText("##matimppath", matImportBuf_, sizeof(matImportBuf_),
+                                      ImGuiInputTextFlags_EnterReturnsTrue);
+        if (matImportErr_[0])
+            ImGui::TextColored(ImVec4(1.f, 0.3f, 0.3f, 1.f), "%s", matImportErr_);
+        ImGui::Spacing();
+        bool canImp = matImportBuf_[0] != '\0';
+        if (!canImp) ImGui::BeginDisabled();
+        if ((enter || ImGui::Button("Import", ImVec2(90, 0))) && canImp) {
+            try {
+                Mc3::Mc3Document loaded = Mc3::Mc3Document::loadFromFile(matImportBuf_);
+                if (loaded.materials.empty()) {
+                    std::strncpy(matImportErr_, "No materials found in file.",
+                                 sizeof(matImportErr_)-1);
+                } else {
+                    pushUndo();
+                    int added = 0;
+                    for (auto& [id, mat] : loaded.materials) {
+                        // avoid overwriting without confirmation: suffix if exists
+                        std::string key = id;
+                        int n = 2;
+                        while (document_.materials.count(key))
+                            key = id + "_" + std::to_string(n++);
+                        document_.materials[key] = mat;
+                        document_.materials[key].name = key;
+                        selectedMaterialKey_ = key;
+                        ++added;
+                    }
+                    modified_ = true; updateWindowTitle();
+                    setStatusMsg("Imported " + std::to_string(added) + " material(s) from " +
+                                 std::string(matImportBuf_));
+                    ImGui::CloseCurrentPopup();
+                }
+            } catch (const std::exception& ex) {
+                std::strncpy(matImportErr_, ex.what(), sizeof(matImportErr_)-1);
+                matImportErr_[sizeof(matImportErr_)-1] = '\0';
+            }
+        }
+        if (!canImp) ImGui::EndDisabled();
+        ImGui::SameLine();
+        if (ImGui::Button("Cancel", ImVec2(90, 0)) || ImGui::IsKeyPressed(ImGuiKey_Escape, false))
+            ImGui::CloseCurrentPopup();
+        ImGui::EndPopup();
+    }
+
 }
 
 void MeshCraftApplication::drawPanelSplitters(int screenW, int screenH)

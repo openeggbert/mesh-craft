@@ -63,7 +63,7 @@ Legend: ✅ done · 🔧 partial · 📋 planned
 | D1 ✅ | Material list: color swatch (small baseColor square) next to each material name | UiLeftPanel.cpp |
 | D2 ✅ | Texture tab: make fields editable (wrapU/V, filter, colorSpace as editable combos, not read-only) | UiLeftPanel.cpp |
 | D3 ~~skipped~~ | Material: duplicate material (copy in material list) | UiLeftPanel.cpp |
-| D4 | Material: apply material from list to selection (button "Apply to selection") | UiLeftPanel.cpp |
+| D4 ✅ | Material: apply material from list to selection (button "Apply to selection") | UiLeftPanel.cpp |
 | D5 | Material: export/import as standalone JSON or XML snippet | MeshCraftApplication_Commands.cpp |
 | D6 | Texture: drag-and-drop URI file from OS into texture field | UiLeftPanel.cpp |
 | D7 | Material: material preview (small UV sphere with applied material) | UiLeftPanel.cpp, SceneRenderer |

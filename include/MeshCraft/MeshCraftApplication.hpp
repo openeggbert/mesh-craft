@@ -114,6 +114,15 @@ private:
     char saveDialogBuf_[512]{};
     char saveDialogErr_[256]{};
 
+    // Material export/import dialog state (D5)
+    bool        matExportOpen_{false};
+    std::string matExportId_;
+    char        matExportBuf_[512]{};
+    char        matExportErr_[256]{};
+    bool        matImportOpen_{false};
+    char        matImportBuf_[512]{};
+    char        matImportErr_[256]{};
+
     // Cached GL function pointers for viewport/scissor control
     void (*fnGlViewport_)(int, int, int, int) = nullptr;
     void (*fnGlScissor_)(int, int, int, int)  = nullptr;
