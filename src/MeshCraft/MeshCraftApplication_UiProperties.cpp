@@ -1175,7 +1175,7 @@ void MeshCraftApplication::drawPropertiesPanel(float panelY, float panelH, int s
             }
         }
 
-        // Mesh source
+        // Mesh source (F2)
         if (sel0->type == Mc3::ObjectType::Mesh) {
             ImGui::Spacing();
             ImGui::Separator();
@@ -1183,11 +1183,18 @@ void MeshCraftApplication::drawPropertiesPanel(float panelY, float panelH, int s
             ImGui::TextDisabled("Mesh Source");
             char srcBuf[512];
             std::strncpy(srcBuf, sel0->meshSource.c_str(), sizeof(srcBuf)-1); srcBuf[511]='\0';
-            ImGui::SetNextItemWidth(-1);
+            ImGui::SetNextItemWidth(-46);
             if (ImGui::InputText("##meshsrc", srcBuf, sizeof(srcBuf),
                     ImGuiInputTextFlags_EnterReturnsTrue)) {
                 pushUndo(); sel0->meshSource = srcBuf; modified_ = true; updateWindowTitle();
             }
+            ImGui::SameLine(0, 4);
+            if (ImGui::Button("...##meshbrw", ImVec2(38, 0))) {
+                std::strncpy(meshBrowseBuf_, sel0->meshSource.c_str(), sizeof(meshBrowseBuf_)-1);
+                meshBrowseErr_[0]  = '\0';
+                meshBrowseOpen_    = true;
+            }
+            ImGui::SetItemTooltip("Browse for mesh file (.obj / .glb / .gltf)");
         }
 
         // Instance definition + material override

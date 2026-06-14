@@ -1380,6 +1380,42 @@ void MeshCraftApplication::drawDialogs()
     }
 
     // -----------------------------------------------------------------------
+    // Mesh source browse dialog (F2)
+    // -----------------------------------------------------------------------
+    if (meshBrowseOpen_) {
+        ImGui::OpenPopup("Mesh Source##meshbrwdlg");
+        meshBrowseOpen_ = false;
+    }
+    if (ImGui::BeginPopupModal("Mesh Source##meshbrwdlg", nullptr,
+                               ImGuiWindowFlags_AlwaysAutoResize)) {
+        ImGui::Text("Path to mesh file (.obj / .glb / .gltf):");
+        ImGui::SetNextItemWidth(420);
+        if (ImGui::IsWindowAppearing()) ImGui::SetKeyboardFocusHere();
+        bool enter = ImGui::InputText("##meshbrwpath", meshBrowseBuf_, sizeof(meshBrowseBuf_),
+                                      ImGuiInputTextFlags_EnterReturnsTrue);
+        if (meshBrowseErr_[0])
+            ImGui::TextColored(ImVec4(1.f, 0.3f, 0.3f, 1.f), "%s", meshBrowseErr_);
+        ImGui::Spacing();
+        bool canSet = meshBrowseBuf_[0] != '\0';
+        if (!canSet) ImGui::BeginDisabled();
+        if ((enter || ImGui::Button("Set", ImVec2(90, 0))) && canSet) {
+            if (!selection_.hasSelection()) {
+                std::strncpy(meshBrowseErr_, "No object selected.", sizeof(meshBrowseErr_)-1);
+            } else {
+                pushUndo();
+                selection_.selection().front()->meshSource = meshBrowseBuf_;
+                modified_ = true; updateWindowTitle();
+                ImGui::CloseCurrentPopup();
+            }
+        }
+        if (!canSet) ImGui::EndDisabled();
+        ImGui::SameLine();
+        if (ImGui::Button("Cancel", ImVec2(90, 0)) || ImGui::IsKeyPressed(ImGuiKey_Escape, false))
+            ImGui::CloseCurrentPopup();
+        ImGui::EndPopup();
+    }
+
+    // -----------------------------------------------------------------------
     // Subtree Export as Template dialog (E8)
     // -----------------------------------------------------------------------
     if (subtreeExportOpen_) {

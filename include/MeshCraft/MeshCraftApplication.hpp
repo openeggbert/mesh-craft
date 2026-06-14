@@ -131,6 +131,11 @@ private:
     char        matImportBuf_[512]{};
     char        matImportErr_[256]{};
 
+    // Mesh source browse dialog state (F2)
+    bool meshBrowseOpen_{false};
+    char meshBrowseBuf_[512]{};
+    char meshBrowseErr_[256]{};
+
     // Subtree export as template dialog state (E8)
     bool subtreeExportOpen_{false};
     char subtreeExportNameBuf_[128]{};  // definition name
