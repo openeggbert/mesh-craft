@@ -1380,6 +1380,44 @@ void MeshCraftApplication::drawDialogs()
     }
 
     // -----------------------------------------------------------------------
+    // Export Selection dialog (F3)
+    // -----------------------------------------------------------------------
+    if (selExportOpen_) {
+        ImGui::OpenPopup("Export Selection##selexpdlg");
+        selExportOpen_ = false;
+    }
+    if (ImGui::BeginPopupModal("Export Selection##selexpdlg", nullptr,
+                               ImGuiWindowFlags_AlwaysAutoResize)) {
+        int n = static_cast<int>(selection_.selection().size());
+        ImGui::Text("Export %d selected object(s) to MC3 XML file:", n);
+        ImGui::SetNextItemWidth(420);
+        if (ImGui::IsWindowAppearing()) ImGui::SetKeyboardFocusHere();
+        bool enter = ImGui::InputText("##selexppath", selExportBuf_, sizeof(selExportBuf_),
+                                      ImGuiInputTextFlags_EnterReturnsTrue);
+        ImGui::SetItemTooltip("e.g. /home/user/export.mc3.xml");
+        if (selExportErr_[0])
+            ImGui::TextColored(ImVec4(1.f, 0.3f, 0.3f, 1.f), "%s", selExportErr_);
+        ImGui::Spacing();
+        bool canExp = selExportBuf_[0] != '\0' && !selection_.selection().empty();
+        if (!canExp) ImGui::BeginDisabled();
+        if ((enter || ImGui::Button("Export", ImVec2(100, 0))) && canExp) {
+            selExportErr_[0] = '\0';
+            try {
+                exportSelectionToFile(selExportBuf_);
+                ImGui::CloseCurrentPopup();
+            } catch (const std::exception& ex) {
+                std::strncpy(selExportErr_, ex.what(), sizeof(selExportErr_)-1);
+                selExportErr_[sizeof(selExportErr_)-1] = '\0';
+            }
+        }
+        if (!canExp) ImGui::EndDisabled();
+        ImGui::SameLine();
+        if (ImGui::Button("Cancel", ImVec2(90, 0)) || ImGui::IsKeyPressed(ImGuiKey_Escape, false))
+            ImGui::CloseCurrentPopup();
+        ImGui::EndPopup();
+    }
+
+    // -----------------------------------------------------------------------
     // Mesh source browse dialog (F2)
     // -----------------------------------------------------------------------
     if (meshBrowseOpen_) {

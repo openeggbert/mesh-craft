@@ -136,6 +136,12 @@ private:
     char meshBrowseBuf_[512]{};
     char meshBrowseErr_[256]{};
 
+    // Export selection dialog state (F3)
+    bool selExportOpen_{false};
+    char selExportBuf_[512]{};
+    char selExportErr_[256]{};
+    void exportSelectionToFile(const std::string& path);
+
     // Subtree export as template dialog state (E8)
     bool subtreeExportOpen_{false};
     char subtreeExportNameBuf_[128]{};  // definition name

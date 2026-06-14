@@ -58,6 +58,16 @@ float MeshCraftApplication::drawMenuBar()
             if (ImGui::MenuItem("Save As...","Ctrl+Shift+S")) saveFileAs();
             ImGui::Separator();
             if (ImGui::MenuItem("Export GLB", "Ctrl+E")) exportGltf();
+            {
+                bool hasSel = !selection_.selection().empty();
+                if (!hasSel) ImGui::BeginDisabled();
+                if (ImGui::MenuItem("Export Selection...", nullptr, false, hasSel)) {
+                    selExportBuf_[0] = '\0';
+                    selExportErr_[0] = '\0';
+                    selExportOpen_   = true;
+                }
+                if (!hasSel) ImGui::EndDisabled();
+            }
             ImGui::Separator();
             if (ImGui::MenuItem("Exit")) confirmIfModified(PendingAction::ExitApp);
             ImGui::EndMenu();
