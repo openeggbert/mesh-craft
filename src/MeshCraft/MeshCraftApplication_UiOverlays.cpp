@@ -1379,6 +1379,56 @@ void MeshCraftApplication::drawDialogs()
         ImGui::EndPopup();
     }
 
+    // -----------------------------------------------------------------------
+    // Subtree Export as Template dialog (E8)
+    // -----------------------------------------------------------------------
+    if (subtreeExportOpen_) {
+        ImGui::OpenPopup("Export Subtree as Template##stexpdlg");
+        subtreeExportOpen_ = false;
+    }
+    if (ImGui::BeginPopupModal("Export Subtree as Template##stexpdlg", nullptr,
+                               ImGuiWindowFlags_AlwaysAutoResize)) {
+        ImGui::Text("Definition name:");
+        ImGui::SetNextItemWidth(320);
+        if (ImGui::IsWindowAppearing()) ImGui::SetKeyboardFocusHere();
+        ImGui::InputText("##stexpname", subtreeExportNameBuf_, sizeof(subtreeExportNameBuf_));
+
+        ImGui::Text("Save to file (optional, leave blank to skip):");
+        ImGui::SetNextItemWidth(320);
+        ImGui::InputText("##stexpfile", subtreeExportFileBuf_, sizeof(subtreeExportFileBuf_));
+        ImGui::SetItemTooltip("e.g. /home/user/templates/tree.mc3.xml");
+
+        if (subtreeExportErr_[0])
+            ImGui::TextColored(ImVec4(1.f, 0.3f, 0.3f, 1.f), "%s", subtreeExportErr_);
+
+        // Warn if definition name is already in use
+        bool nameUsed = subtreeExportNameBuf_[0] != '\0' &&
+                        document_.definitions.count(subtreeExportNameBuf_);
+        if (nameUsed)
+            ImGui::TextColored(ImVec4(1.f, 0.75f, 0.2f, 1.f),
+                               "Warning: definition '%s' already exists and will be overwritten.",
+                               subtreeExportNameBuf_);
+
+        ImGui::Spacing();
+        bool canExport = subtreeExportNameBuf_[0] != '\0' && selection_.hasSelection();
+        if (!canExport) ImGui::BeginDisabled();
+        if (ImGui::Button("Export", ImVec2(110, 0))) {
+            subtreeExportErr_[0] = '\0';
+            try {
+                exportSubtreeAsTemplate(subtreeExportNameBuf_, subtreeExportFileBuf_);
+                ImGui::CloseCurrentPopup();
+            } catch (const std::exception& ex) {
+                std::strncpy(subtreeExportErr_, ex.what(), sizeof(subtreeExportErr_)-1);
+                subtreeExportErr_[sizeof(subtreeExportErr_)-1] = '\0';
+            }
+        }
+        if (!canExport) ImGui::EndDisabled();
+        ImGui::SameLine();
+        if (ImGui::Button("Cancel", ImVec2(90, 0)) || ImGui::IsKeyPressed(ImGuiKey_Escape, false))
+            ImGui::CloseCurrentPopup();
+        ImGui::EndPopup();
+    }
+
 }
 
 void MeshCraftApplication::drawPanelSplitters(int screenW, int screenH)

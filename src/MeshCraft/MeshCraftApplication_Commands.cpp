@@ -537,6 +537,58 @@ void MeshCraftApplication::convertToDefinition() {
     setStatusMsg("Converted to definition: " + defKey, false, 2.5f);
 }
 
+void MeshCraftApplication::exportSubtreeAsTemplate(const std::string& defName,
+                                                   const std::string& filePath) {
+    if (!selection_.hasSelection()) return;
+    if (defName.empty()) return;
+
+    auto src = selection_.selection().front();
+    pushUndo();
+
+    // Deep-copy subtree into definitions map (reset transform to identity)
+    auto defObj = deepCopyObject(*src);
+    defObj->id   = defName;
+    defObj->name = defName;
+    defObj->transform.position = {0.0f, 0.0f, 0.0f};
+    defObj->transform.rotation = {0.0f, 0.0f, 0.0f};
+    defObj->transform.scale    = {1.0f, 1.0f, 1.0f};
+    document_.definitions[defName] = defObj;
+
+    // Optionally save the subtree to a file
+    if (!filePath.empty()) {
+        Mc3::Mc3Document tmp;
+        tmp.definitions[defName] = defObj;
+        tmp.saveToFile(filePath);
+    }
+
+    // Replace original with an Instance pointing to the new definition
+    auto inst = std::make_shared<Mc3::Mc3Object>();
+    inst->id         = src->id;
+    inst->name       = src->name.empty() ? defName : src->name;
+    inst->type       = Mc3::ObjectType::Instance;
+    inst->definition = defName;
+    inst->transform  = src->transform;
+    inst->visible    = src->visible;
+    inst->layer      = src->layer;
+    inst->tags       = src->tags;
+
+    auto* parentList = findParentList(document_.objects, src.get());
+    if (parentList) {
+        for (auto& obj : *parentList) {
+            if (obj.get() == src.get()) { obj = inst; break; }
+        }
+    } else {
+        document_.objects.push_back(inst);
+    }
+
+    selection_.clear();
+    selection_.select(inst);
+    modified_ = true; updateWindowTitle();
+    std::string msg = "Exported as template: " + defName;
+    if (!filePath.empty()) msg += " → " + filePath;
+    setStatusMsg(msg, false, 3.0f);
+}
+
 void MeshCraftApplication::alignToObject() {
     if (selection_.selection().size() < 2) return;
     const auto& src = selection_.selection().front();

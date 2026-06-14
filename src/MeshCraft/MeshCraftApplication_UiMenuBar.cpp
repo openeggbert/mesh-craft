@@ -250,6 +250,14 @@ float MeshCraftApplication::drawMenuBar()
             if (ImGui::MenuItem("Ungroup", "Ctrl+Shift+G")) ungroupSelected();
             if (ImGui::MenuItem("Convert to Definition", nullptr, false, !selection_.selection().empty()))
                 convertToDefinition();
+            if (ImGui::MenuItem("Export Subtree as Template...", nullptr, false, !selection_.selection().empty())) {
+                auto* src = selection_.selection().front().get();
+                std::string suggested = src->name.empty() ? src->id : src->name;
+                std::strncpy(subtreeExportNameBuf_, suggested.c_str(), sizeof(subtreeExportNameBuf_)-1);
+                subtreeExportFileBuf_[0] = '\0';
+                subtreeExportErr_[0]     = '\0';
+                subtreeExportOpen_       = true;
+            }
             {
                 bool isInst = !selection_.selection().empty() &&
                               selection_.selection().front()->type == Mc3::ObjectType::Instance;

@@ -131,6 +131,13 @@ private:
     char        matImportBuf_[512]{};
     char        matImportErr_[256]{};
 
+    // Subtree export as template dialog state (E8)
+    bool subtreeExportOpen_{false};
+    char subtreeExportNameBuf_[128]{};  // definition name
+    char subtreeExportFileBuf_[512]{};  // optional file path to also save
+    char subtreeExportErr_[256]{};
+    void exportSubtreeAsTemplate(const std::string& defName, const std::string& filePath);
+
     // Cached GL function pointers for viewport/scissor control
     void (*fnGlViewport_)(int, int, int, int) = nullptr;
     void (*fnGlScissor_)(int, int, int, int)  = nullptr;
