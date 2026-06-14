@@ -126,7 +126,7 @@ void MeshCraftApplication::saveFile() {
         document_.saveToFile(currentFile_);
         addRecentFile(currentFile_);
         modified_ = false;
-        autoSaveCountdown_ = 60.0f;
+        autoSaveCountdown_ = autoSaveInterval_ > 0.0f ? autoSaveInterval_ : 60.0f;
         { std::error_code ec; std::filesystem::remove(autoSavePath(currentFile_), ec); }
         std::cout << "[MeshCraft] Saved: " << currentFile_ << "\n";
         setStatusMsg("Saved " + currentFile_.filename().string(), false, 2.0f);

@@ -594,6 +594,8 @@ float MeshCraftApplication::drawMenuBar()
             ImGui::EndMenu();
         }
         if (ImGui::BeginMenu("Help")) {
+            if (ImGui::MenuItem("Preferences...")) prefsOpen_ = true;
+            ImGui::Separator();
             if (ImGui::MenuItem("Command Palette...", "Ctrl+P")) cmdPaletteOpen_ = true;
             ImGui::Separator();
             if (ImGui::MenuItem("Keyboard Shortcuts...")) showShortcutsDialog_ = true;

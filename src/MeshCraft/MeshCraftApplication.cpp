@@ -191,14 +191,14 @@ void MeshCraftApplication::Update(GameTime& gameTime) {
         float dt = static_cast<float>(gameTime.getElapsedGameTimeProperty().getTotalSecondsProperty());
         if (statusMsgTimer_ > 0) statusMsgTimer_ -= dt;
 
-        if (!currentFile_.empty() && modified_) {
+        if (!currentFile_.empty() && modified_ && autoSaveInterval_ > 0.0f) {
             autoSaveCountdown_ -= dt;
             if (autoSaveCountdown_ <= 0.0f) {
                 performAutoSave();
-                autoSaveCountdown_ = 60.0f;
+                autoSaveCountdown_ = autoSaveInterval_;
             }
         } else {
-            autoSaveCountdown_ = 60.0f;
+            autoSaveCountdown_ = autoSaveInterval_ > 0.0f ? autoSaveInterval_ : 60.0f;
         }
     }
 

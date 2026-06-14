@@ -423,9 +423,13 @@ private:
     TransformClipboard transformClipboard_;
 
     // Auto-save
+    float autoSaveInterval_{60.0f};  // seconds; 0 = disabled (F5)
     float autoSaveCountdown_{60.0f};
     void  performAutoSave();
     static std::filesystem::path autoSavePath(const std::filesystem::path& file);
+
+    // Preferences dialog (F5)
+    bool prefsOpen_{false};
 
     // Timed status bar notification
     std::string statusMsg_;

@@ -1380,6 +1380,51 @@ void MeshCraftApplication::drawDialogs()
     }
 
     // -----------------------------------------------------------------------
+    // Preferences dialog (F5)
+    // -----------------------------------------------------------------------
+    if (prefsOpen_) {
+        ImGui::OpenPopup("Preferences##prefsdlg");
+        prefsOpen_ = false;
+    }
+    if (ImGui::BeginPopupModal("Preferences##prefsdlg", nullptr,
+                               ImGuiWindowFlags_AlwaysAutoResize)) {
+        ImGui::SeparatorText("Auto-Save");
+
+        int asInterval = static_cast<int>(autoSaveInterval_);
+        ImGui::SetNextItemWidth(160);
+        if (ImGui::SliderInt("Interval (s)##asint", &asInterval, 0, 300)) {
+            autoSaveInterval_ = static_cast<float>(asInterval);
+            if (autoSaveInterval_ > 0.0f && autoSaveCountdown_ > autoSaveInterval_)
+                autoSaveCountdown_ = autoSaveInterval_;
+        }
+        ImGui::SameLine();
+        if (asInterval == 0)
+            ImGui::TextDisabled("(disabled)");
+        else
+            ImGui::Text("every %d s", asInterval);
+        ImGui::SetItemTooltip("0 = auto-save disabled");
+
+        ImGui::Spacing();
+        ImGui::SeparatorText("Grid");
+        ImGui::SetNextItemWidth(160);
+        ImGui::SliderFloat("Cell spacing##gs", &gridSpacing_, 0.1f, 10.0f, "%.2f");
+
+        ImGui::Spacing();
+        ImGui::SeparatorText("Snap");
+        ImGui::SetNextItemWidth(160);
+        ImGui::SliderFloat("Translate##snt", &snapTranslate_, 0.01f, 5.0f, "%.2f");
+        ImGui::SetNextItemWidth(160);
+        ImGui::SliderFloat("Rotate (°)##snr", &snapRotate_, 1.0f, 90.0f, "%.1f");
+        ImGui::SetNextItemWidth(160);
+        ImGui::SliderFloat("Scale##sns", &snapScale_, 0.01f, 1.0f, "%.2f");
+
+        ImGui::Spacing();
+        if (ImGui::Button("Close", ImVec2(100, 0)) || ImGui::IsKeyPressed(ImGuiKey_Escape, false))
+            ImGui::CloseCurrentPopup();
+        ImGui::EndPopup();
+    }
+
+    // -----------------------------------------------------------------------
     // Merge Scene dialog (F4)
     // -----------------------------------------------------------------------
     if (mergeSceneOpen_) {
