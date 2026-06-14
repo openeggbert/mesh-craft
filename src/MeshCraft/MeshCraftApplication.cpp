@@ -122,6 +122,10 @@ void MeshCraftApplication::LoadContent() {
 
     SDL_AddEventWatch(reinterpret_cast<SDL_EventFilter>(sdlEventWatch), this);
 
+    // F7: hide window in screenshot/headless mode
+    if (!autoScreenshotPath_.empty())
+        SDL_HideWindow(sdlWindow);
+
     loadRecentFiles();
 
     if (!currentFile_.empty() && std::filesystem::exists(currentFile_)) {
