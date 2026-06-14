@@ -15,6 +15,17 @@
 
 namespace MeshCraft::Mc3 {
 
+enum class UvProjection { Planar, Box, Sphere };
+
+struct Mc3UvMapping {
+    UvProjection projection{UvProjection::Planar};
+    float scaleU{1.0f};
+    float scaleV{1.0f};
+    float offsetU{0.0f};
+    float offsetV{0.0f};
+    float rotation{0.0f}; // degrees
+};
+
 struct Mc3ObjectState {
     std::optional<std::array<float,3>> position;
     std::optional<std::array<float,3>> rotation;
@@ -75,7 +86,9 @@ public:
 
     std::map<std::string, Mc3ObjectState> states;
 
-    // TODO: actions, uv mapping
+    std::optional<Mc3UvMapping> uvMapping;
+
+    // TODO: actions
 };
 
 } // namespace MeshCraft::Mc3

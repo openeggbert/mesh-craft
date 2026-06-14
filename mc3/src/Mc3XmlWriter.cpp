@@ -98,6 +98,21 @@ static XMLElement* writeObject(XMLDocument& xmlDoc, const std::shared_ptr<Mc3Obj
         el->InsertEndChild(de);
     }
 
+    if (obj->uvMapping) {
+        const auto& m = *obj->uvMapping;
+        XMLElement* uve = xmlDoc.NewElement("uv_mapping");
+        const char* projStr = "planar";
+        if (m.projection == UvProjection::Box)    projStr = "box";
+        if (m.projection == UvProjection::Sphere) projStr = "sphere";
+        uve->SetAttribute("projection", projStr);
+        if (m.scaleU   != 1.0f) uve->SetAttribute("scale_u",  m.scaleU);
+        if (m.scaleV   != 1.0f) uve->SetAttribute("scale_v",  m.scaleV);
+        if (m.offsetU  != 0.0f) uve->SetAttribute("offset_u", m.offsetU);
+        if (m.offsetV  != 0.0f) uve->SetAttribute("offset_v", m.offsetV);
+        if (m.rotation != 0.0f) uve->SetAttribute("rotation", m.rotation);
+        el->InsertEndChild(uve);
+    }
+
     if (obj->primitive) {
         const auto& p = *obj->primitive;
         switch (obj->type) {

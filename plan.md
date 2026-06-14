@@ -47,7 +47,7 @@ Legend: ✅ done · 🔧 partial · 📋 planned
 | C2 ✅ | Properties: pivot/origin offset UI (Mc3Transform pivot field or equivalent) | Mc3Transform.hpp, UiProperties.cpp |
 | C3 ✅ | Properties: quick-assign material button from Material List to selected objects | UiLeftPanel.cpp |
 | C4 ✅ | States: UI editor for Mc3Object states (TODO in Mc3Object.hpp) | Mc3Object.hpp, UiProperties.cpp |
-| C5 | UV Mapping: basic UI (planar/box/sphere projection, scale/offset) | Mc3Object.hpp, UiProperties.cpp |
+| C5 ✅ | UV Mapping: basic UI (planar/box/sphere projection, scale/offset) | Mc3Object.hpp, UiProperties.cpp |
 | C6 | Properties: show vertex/face count for Mesh objects (from SceneRenderer cache) | UiProperties.cpp, SceneRenderer.hpp |
 | C7 ✅ | Properties: show world-space position (computed matrix result) beside local transform | UiProperties.cpp |
 | C8 | Properties: extend K keyframe button to all animatable properties (material, deform) | UiProperties.cpp |

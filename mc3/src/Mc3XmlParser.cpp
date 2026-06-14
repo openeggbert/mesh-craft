@@ -215,6 +215,18 @@ static void parseCommonObjectAttribs(const XMLElement* el, Mc3Object& obj) {
         std::string token;
         while (ss >> token) obj.tags.push_back(token);
     }
+    if (const XMLElement* uv = el->FirstChildElement("uv_mapping")) {
+        Mc3UvMapping m;
+        std::string proj = attr(uv, "projection", "planar");
+        if      (proj == "box")    m.projection = UvProjection::Box;
+        else if (proj == "sphere") m.projection = UvProjection::Sphere;
+        m.scaleU   = attrF(uv, "scale_u",  1.0f);
+        m.scaleV   = attrF(uv, "scale_v",  1.0f);
+        m.offsetU  = attrF(uv, "offset_u", 0.0f);
+        m.offsetV  = attrF(uv, "offset_v", 0.0f);
+        m.rotation = attrF(uv, "rotation", 0.0f);
+        obj.uvMapping = m;
+    }
 }
 
 static void parseChildren(const XMLElement* el, Mc3Object& obj) {

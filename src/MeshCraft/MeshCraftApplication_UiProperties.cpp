@@ -1364,6 +1364,50 @@ void MeshCraftApplication::drawPropertiesPanel(float panelY, float panelH, int s
         ImGui::EndTabItem();
         } // end Anim tab
 
+        if (ImGui::BeginTabItem("UV")) {
+        bool hasUV = sel0->uvMapping.has_value();
+        if (ImGui::Checkbox("Enable UV mapping##uven", &hasUV)) {
+            pushUndo();
+            if (hasUV) sel0->uvMapping = Mc3::Mc3UvMapping{};
+            else       sel0->uvMapping.reset();
+            modified_ = true;
+        }
+        if (sel0->uvMapping) {
+            auto& m = *sel0->uvMapping;
+            ImGui::Spacing();
+            ImGui::Text("Projection:");
+            ImGui::SameLine();
+            int proj = static_cast<int>(m.projection);
+            const char* projNames[] = {"Planar", "Box", "Sphere"};
+            ImGui::SetNextItemWidth(100.0f);
+            if (ImGui::Combo("##uvproj", &proj, projNames, 3)) {
+                pushUndo();
+                m.projection = static_cast<Mc3::UvProjection>(proj);
+                modified_ = true;
+            }
+            ImGui::Spacing();
+            ImGui::Text("Scale  U/V:");
+            float sc[2] = {m.scaleU, m.scaleV};
+            ImGui::SetNextItemWidth(130.0f);
+            if (ImGui::DragFloat2("##uvsc", sc, 0.01f, 0.001f, 100.0f, "%.3f")) {
+                pushUndo(); m.scaleU = sc[0]; m.scaleV = sc[1]; modified_ = true;
+            }
+            ImGui::Text("Offset U/V:");
+            float of[2] = {m.offsetU, m.offsetV};
+            ImGui::SetNextItemWidth(130.0f);
+            if (ImGui::DragFloat2("##uvof", of, 0.005f, -100.0f, 100.0f, "%.3f")) {
+                pushUndo(); m.offsetU = of[0]; m.offsetV = of[1]; modified_ = true;
+            }
+            ImGui::Text("Rotation:  ");
+            ImGui::SameLine();
+            ImGui::SetNextItemWidth(80.0f);
+            if (ImGui::DragFloat("##uvrot", &m.rotation, 0.5f, -360.0f, 360.0f, "%.1f\xc2\xb0")) {
+                pushUndo(); modified_ = true;
+            }
+        }
+        ImGui::EndTabItem();
+        } // end UV tab
+
         ImGui::EndTabBar();
         } // end tab bar
 
