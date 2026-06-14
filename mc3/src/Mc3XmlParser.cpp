@@ -166,6 +166,7 @@ static Mc3Primitive parsePrimitive(const XMLElement* el, ObjectType type) {
     case ObjectType::Cylinder: p.primitiveType = PrimitiveType::Cylinder; break;
     case ObjectType::Cone:     p.primitiveType = PrimitiveType::Cone;     break;
     case ObjectType::Plane:    p.primitiveType = PrimitiveType::Plane;    break;
+    case ObjectType::Torus:    p.primitiveType = PrimitiveType::Torus;    break;
     default: break;
     }
     if (const char* sv = el->Attribute("size")) {
@@ -178,10 +179,12 @@ static Mc3Primitive parsePrimitive(const XMLElement* el, ObjectType type) {
             p.size = {v[0], v[1], v[2]};
         }
     }
-    p.radius   = attrF(el, "radius",   0.5f);
-    p.height   = attrF(el, "height",   1.0f);
-    p.segments = attrI(el, "segments", 32);
-    p.axis     = attr (el, "axis",    "y");
+    p.radius      = attrF(el, "radius",       0.5f);
+    p.height      = attrF(el, "height",       1.0f);
+    p.segments    = attrI(el, "segments",     32);
+    p.axis        = attr (el, "axis",        "y");
+    p.majorRadius = attrF(el, "major_radius", 0.35f);
+    p.minorRadius = attrF(el, "minor_radius", 0.15f);
     return p;
 }
 
@@ -237,6 +240,9 @@ static std::shared_ptr<Mc3Object> parseObject(const XMLElement* el) {
     } else if (tag == "plane") {
         obj->type = ObjectType::Plane;
         obj->primitive = parsePrimitive(el, ObjectType::Plane);
+    } else if (tag == "torus") {
+        obj->type = ObjectType::Torus;
+        obj->primitive = parsePrimitive(el, ObjectType::Torus);
     } else if (tag == "mesh") {
         obj->type       = ObjectType::Mesh;
         obj->meshSource = attr(el, "src");

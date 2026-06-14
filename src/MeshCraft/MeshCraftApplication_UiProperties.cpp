@@ -201,6 +201,10 @@ void MeshCraftApplication::drawPropertiesPanel(float panelY, float panelH, int s
                     case Mc3::PrimitiveType::Plane:
                         w = p.size[0]*sx; h = 0.0f; d = p.size[2]*sz;
                         sizeKnown = true; break;
+                    case Mc3::PrimitiveType::Torus:
+                        w = d = (p.majorRadius + p.minorRadius) * 2.0f * std::max(sx,sz);
+                        h = p.minorRadius * 2.0f * sy;
+                        sizeKnown = true; break;
                     default: break;
                 }
             }
@@ -517,6 +521,33 @@ void MeshCraftApplication::drawPropertiesPanel(float panelY, float panelH, int s
                 if (ImGui::DragFloat("##ppd", &d, 0.01f, 0.001f, 1000.0f)) {
                     if (ImGui::IsItemActivated()) pushUndo();
                     p.size[2] = std::max(0.001f, d);
+                    modified_ = true; updateWindowTitle();
+                }
+                break;
+            }
+            case Mc3::PrimitiveType::Torus: {
+                ImGui::TextDisabled("Major Radius");
+                float mr = p.majorRadius;
+                ImGui::SetNextItemWidth(-1);
+                if (ImGui::DragFloat("##ptor_mr", &mr, 0.01f, 0.001f, 1000.0f)) {
+                    if (ImGui::IsItemActivated()) pushUndo();
+                    p.majorRadius = std::max(0.001f, mr);
+                    modified_ = true; updateWindowTitle();
+                }
+                ImGui::TextDisabled("Minor Radius");
+                float rr = p.minorRadius;
+                ImGui::SetNextItemWidth(-1);
+                if (ImGui::DragFloat("##ptor_rr", &rr, 0.01f, 0.001f, p.majorRadius)) {
+                    if (ImGui::IsItemActivated()) pushUndo();
+                    p.minorRadius = std::clamp(rr, 0.001f, p.majorRadius);
+                    modified_ = true; updateWindowTitle();
+                }
+                ImGui::TextDisabled("Segments");
+                int segs = p.segments;
+                ImGui::SetNextItemWidth(-1);
+                if (ImGui::SliderInt("##ptor_segs", &segs, 4, 64)) {
+                    if (ImGui::IsItemActivated()) pushUndo();
+                    p.segments = segs;
                     modified_ = true; updateWindowTitle();
                 }
                 break;

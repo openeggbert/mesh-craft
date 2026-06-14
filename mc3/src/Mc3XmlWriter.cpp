@@ -74,6 +74,7 @@ static XMLElement* writeObject(XMLDocument& xmlDoc, const std::shared_ptr<Mc3Obj
     case ObjectType::Cylinder:     tag = "cylinder";    break;
     case ObjectType::Cone:         tag = "cone";        break;
     case ObjectType::Plane:        tag = "plane";       break;
+    case ObjectType::Torus:        tag = "torus";       break;
     case ObjectType::Mesh:         tag = "mesh";        break;
     case ObjectType::Extrude:      tag = "extrude";     break;
     case ObjectType::Group:        tag = "group";       break;
@@ -114,6 +115,11 @@ static XMLElement* writeObject(XMLDocument& xmlDoc, const std::shared_ptr<Mc3Obj
         case ObjectType::Plane:
             el->SetAttribute("size", vec3Str(p.size).c_str());
             if (p.axis != "y") el->SetAttribute("axis", p.axis.c_str());
+            break;
+        case ObjectType::Torus:
+            if (p.majorRadius != 0.35f) el->SetAttribute("major_radius", fStr(p.majorRadius).c_str());
+            if (p.minorRadius != 0.15f) el->SetAttribute("minor_radius", fStr(p.minorRadius).c_str());
+            if (p.segments != 32)       el->SetAttribute("segments", p.segments);
             break;
         default: break;
         }

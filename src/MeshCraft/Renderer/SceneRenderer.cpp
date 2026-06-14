@@ -282,6 +282,7 @@ SceneRenderer::SceneRenderer(GraphicsDevice& device)
     buildUnitCylinder(12);
     buildUnitCone(12);
     buildUnitPlane();
+    buildUnitTorus(32, 16);
     buildWireBox();
     buildWireShapes(16);
 }
@@ -454,6 +455,8 @@ void SceneRenderer::drawObjectWireframe(const Mc3Object& obj,
             sx = sz = p.radius * 2.0f; sy = p.height; break;
         case ObjectType::Plane:
             sx = p.size[0]; sy = 0.01f; sz = p.size[2]; break;
+        case ObjectType::Torus:
+            sx = sz = (p.majorRadius + p.minorRadius) * 2.0f; sy = p.minorRadius * 2.0f; break;
         default: break;
         }
     }
@@ -590,6 +593,15 @@ void SceneRenderer::drawObject(const Mc3Object& obj, const Mc3Document& doc,
         float w = obj.primitive ? obj.primitive->size[0] : 1.0f;
         float d = obj.primitive ? obj.primitive->size[2] : 1.0f;
         drawAuto(unitPlane_, deform * Matrix::CreateScale({w,1.0f,d}) * world);
+        break;
+    }
+    case ObjectType::Torus: {
+        float R = obj.primitive ? obj.primitive->majorRadius : 0.35f;
+        float r = obj.primitive ? obj.primitive->minorRadius : 0.15f;
+        // Scale unit torus (built with R=0.35, r=0.15) to match parameters
+        float sxz = R / 0.35f;
+        float sy  = r / 0.15f;
+        drawAuto(unitTorus_, deform * Matrix::CreateScale({sxz, sy, sxz}) * world);
         break;
     }
     case ObjectType::Group:

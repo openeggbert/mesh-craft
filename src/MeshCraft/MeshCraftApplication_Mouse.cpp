@@ -457,6 +457,65 @@ void MeshCraftApplication::handleMouseInput(const MouseState& ms, const MouseSta
         }
     }
     if (activeTool_ != ActiveTool::Select) boxSelectActive_ = false;
+
+    // Measurement tool: left-click places/advances points, right-click clears
+    if (activeTool_ == ActiveTool::Measure) {
+        int mx = ms.getXProperty(), my = ms.getYProperty();
+        bool in3d = (mx >= vX && mx < vX + vW && my >= vY && my < vY + vH);
+
+        if (rightBtn && !leftBtn) {
+            mPt1Set_ = false; mPt2Set_ = false; mDist_ = 0.0f;
+        }
+
+        if (leftBtn && !prevLeft && in3d) {
+            // Ray-cast to y=0 ground plane
+            float ndcX = (static_cast<float>(mx - vX) / vW) * 2.0f - 1.0f;
+            float ndcY = 1.0f - (static_cast<float>(my - vY) / vH) * 2.0f;
+            Matrix vw = camera_.viewMatrix();
+            Matrix pr = camera_.projectionMatrix(asp);
+            Vector3 origin = camera_.position();
+            Vector3 dir    = camera_.screenRayDirection(ndcX, ndcY, asp);
+            (void)vw; (void)pr;
+
+            std::array<float,3> hitPt{};
+            bool gotHit = false;
+            if (std::abs(dir.Y) > 1e-5f) {
+                float t = -origin.Y / dir.Y;
+                if (t > 0.0f) {
+                    hitPt = { origin.X + t * dir.X, 0.0f, origin.Z + t * dir.Z };
+                    gotHit = true;
+                }
+            }
+            if (!gotHit) {
+                // Fallback: use a plane at camera target height
+                float planeY = camera_.target.Y;
+                float dy = dir.Y;
+                if (std::abs(dy) > 1e-5f) {
+                    float t = (planeY - origin.Y) / dy;
+                    if (t > 0.0f) {
+                        hitPt = { origin.X + t*dir.X, planeY, origin.Z + t*dir.Z };
+                        gotHit = true;
+                    }
+                }
+            }
+
+            if (gotHit) {
+                if (!mPt1Set_) {
+                    mPt1_ = hitPt;
+                    mPt1Set_ = true;
+                    mPt2Set_ = false;
+                    mDist_ = 0.0f;
+                } else {
+                    mPt2_ = hitPt;
+                    mPt2Set_ = true;
+                    float dx2 = mPt2_[0]-mPt1_[0];
+                    float dy2 = mPt2_[1]-mPt1_[1];
+                    float dz2 = mPt2_[2]-mPt1_[2];
+                    mDist_ = std::sqrt(dx2*dx2 + dy2*dy2 + dz2*dz2);
+                }
+            }
+        }
+    }
 }
 
 // ---------------------------------------------------------------------------

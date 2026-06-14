@@ -42,10 +42,11 @@ float MeshCraftApplication::drawToolbar(float menuBarH, int screenW)
 
     // Tool buttons
     struct { ActiveTool tool; const char* label; ImVec4 col; } toolBtns[] = {
-        { ActiveTool::Select, "Select [Q]", ImVec4(0.31f,0.59f,0.82f,1.f) },
-        { ActiveTool::Move,   "Move   [G]", ImVec4(0.22f,0.74f,0.39f,1.f) },
-        { ActiveTool::Rotate, "Rotate [R]", ImVec4(0.80f,0.65f,0.22f,1.f) },
-        { ActiveTool::Scale,  "Scale  [S]", ImVec4(0.82f,0.29f,0.29f,1.f) },
+        { ActiveTool::Select,  "Select [Q]", ImVec4(0.31f,0.59f,0.82f,1.f) },
+        { ActiveTool::Move,    "Move   [G]", ImVec4(0.22f,0.74f,0.39f,1.f) },
+        { ActiveTool::Rotate,  "Rotate [R]", ImVec4(0.80f,0.65f,0.22f,1.f) },
+        { ActiveTool::Scale,   "Scale  [S]", ImVec4(0.82f,0.29f,0.29f,1.f) },
+        { ActiveTool::Measure, "Ruler",      ImVec4(0.60f,0.82f,0.82f,1.f) },
     };
     for (auto& tb : toolBtns) {
         bool active = (activeTool_ == tb.tool);
@@ -65,6 +66,7 @@ float MeshCraftApplication::drawToolbar(float menuBarH, int screenW)
         { Mc3::ObjectType::Cylinder, "+Cyl",  ImVec4(0.22f,0.73f,0.39f,1.f) },
         { Mc3::ObjectType::Cone,     "+Con",  ImVec4(0.73f,0.22f,0.73f,1.f) },
         { Mc3::ObjectType::Plane,    "+Pln",  ImVec4(0.80f,0.80f,0.22f,1.f) },
+        { Mc3::ObjectType::Torus,    "+Tor",  ImVec4(0.22f,0.70f,0.80f,1.f) },
     };
     for (auto& ab : addBtns) {
         ImGui::PushStyleColor(ImGuiCol_Button, ab.col);

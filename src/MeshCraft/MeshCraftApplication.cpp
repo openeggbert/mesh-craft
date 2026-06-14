@@ -269,6 +269,10 @@ void MeshCraftApplication::Draw(const GameTime& /*gameTime*/) {
     Matrix view = camera_.viewMatrix();
     Matrix proj = camera_.projectionMatrix(aspect);
 
+    // Cache for measurement overlay projection
+    cachedVP_ = view * proj;
+    cachedVX_ = viewX; cachedVY_ = viewY; cachedVW_ = viewW; cachedVH_ = viewH;
+
     gd.SetDepthTestEnabled(false);
     gridRenderer_->draw(view, proj);
 

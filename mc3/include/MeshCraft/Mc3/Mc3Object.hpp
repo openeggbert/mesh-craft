@@ -20,6 +20,7 @@ enum class ObjectType {
     Cylinder,
     Cone,
     Plane,
+    Torus,
     Mesh,
     Extrude,
     Group,

@@ -28,7 +28,7 @@
 
 namespace MeshCraft {
 
-enum class ActiveTool { Select, Move, Rotate, Scale, AddBox, AddSphere, AddCylinder, AddCone, AddPlane };
+enum class ActiveTool { Select, Move, Rotate, Scale, AddBox, AddSphere, AddCylinder, AddCone, AddPlane, Measure };
 
 class MeshCraftApplication : public Microsoft::Xna::Framework::Game {
 public:
@@ -128,6 +128,17 @@ private:
 
     // Edge overlay toggle (black wireframe lines over all objects)
     bool showEdgeOverlay_{false};
+
+    // Measurement tool state
+    bool mPt1Set_{false};
+    bool mPt2Set_{false};
+    std::array<float,3> mPt1_{};
+    std::array<float,3> mPt2_{};
+    float mDist_{0.0f};
+
+    // Cached view-projection + viewport for overlay projection
+    Microsoft::Xna::Framework::Matrix cachedVP_;
+    int   cachedVX_{0}, cachedVY_{0}, cachedVW_{1}, cachedVH_{1};
 
     // Gizmo space toggle (false = World, true = Local)
     bool gizmoLocalSpace_{false};

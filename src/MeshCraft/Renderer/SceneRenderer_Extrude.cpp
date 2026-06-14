@@ -455,6 +455,15 @@ void SceneRenderer::drawObjectEdges(const Mc3Object& obj, const Mc3Document& doc
         drawWireShape(wireShapePlane_, m, view, proj, edgeColor);
         break;
     }
+    case ObjectType::Torus: {
+        float R = obj.primitive ? obj.primitive->majorRadius : 0.35f;
+        float r = obj.primitive ? obj.primitive->minorRadius : 0.15f;
+        float sxz = R / 0.35f * kPush;
+        float sy  = r / 0.15f * kPush;
+        Matrix m = deform * Matrix::CreateScale({sxz, sy, sxz}) * world;
+        drawWireShape(wireShapeTorus_, m, view, proj, edgeColor);
+        break;
+    }
     case ObjectType::Group:
     case ObjectType::Area:
     case ObjectType::Union:

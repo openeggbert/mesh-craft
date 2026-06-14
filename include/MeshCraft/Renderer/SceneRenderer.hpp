@@ -129,6 +129,7 @@ private:
     RenderMesh unitCylinder_;
     RenderMesh unitCone_;
     RenderMesh unitPlane_;
+    RenderMesh unitTorus_;
 
     // Wire box for selection highlight
     std::unique_ptr<Microsoft::Xna::Framework::Graphics::VertexBuffer> wireBoxVB_;
@@ -140,12 +141,14 @@ private:
     WireShape wireShapeCylinder_;
     WireShape wireShapeCone_;
     WireShape wireShapePlane_;
+    WireShape wireShapeTorus_;
 
     void buildUnitBox();
     void buildUnitSphere(int segments);
     void buildUnitCylinder(int segments);
     void buildUnitCone(int segments);
     void buildUnitPlane();
+    void buildUnitTorus(int ringSeg, int tubeSeg);
     void buildWireBox();
     void buildWireShapes(int segments);
 

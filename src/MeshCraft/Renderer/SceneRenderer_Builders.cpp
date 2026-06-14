@@ -344,6 +344,77 @@ void SceneRenderer::buildUnitPlane() {
     }
 }
 
+void SceneRenderer::buildUnitTorus(int ringSeg, int tubeSeg) {
+    // Unit torus: majorRadius R=0.35, minorRadius r=0.15 (outer edge at 0.5)
+    const float R = 0.35f;
+    const float r = 0.15f;
+    const float pi2 = 2.0f * std::numbers::pi_v<float>;
+    Color c(200, 200, 200, 255);
+
+    std::vector<VertexPositionColor> verts;
+    std::vector<uint16_t> indices;
+    verts.reserve((ringSeg+1)*(tubeSeg+1));
+    indices.reserve(ringSeg*tubeSeg*6);
+
+    for (int i = 0; i <= ringSeg; ++i) {
+        float theta = pi2 * i / ringSeg;
+        float ct = std::cos(theta), st = std::sin(theta);
+        for (int j = 0; j <= tubeSeg; ++j) {
+            float phi = pi2 * j / tubeSeg;
+            float cp = std::cos(phi), sp = std::sin(phi);
+            float x = (R + r * cp) * ct;
+            float y = r * sp;
+            float z = (R + r * cp) * st;
+            verts.push_back({ Vector3{x, y, z}, c });
+        }
+    }
+    for (int i = 0; i < ringSeg; ++i) {
+        for (int j = 0; j < tubeSeg; ++j) {
+            int a = i * (tubeSeg+1) + j;
+            int b = a + 1;
+            int c2 = (i+1) * (tubeSeg+1) + j;
+            int d  = c2 + 1;
+            indices.push_back(ui16(a)); indices.push_back(ui16(b)); indices.push_back(ui16(d));
+            indices.push_back(ui16(a)); indices.push_back(ui16(d)); indices.push_back(ui16(c2));
+        }
+    }
+
+    int nv = static_cast<int>(verts.size());
+    int ni = static_cast<int>(indices.size());
+    unitTorus_.vb = std::make_unique<VertexBuffer>(device_, nv);
+    unitTorus_.vb->SetData(verts.data(), nv);
+    unitTorus_.ib = std::make_unique<IndexBuffer>(device_, ni);
+    unitTorus_.ib->SetData(indices.data(), ni);
+    unitTorus_.primitiveCount = ni / 3;
+    storePositions(verts, unitTorus_);
+
+    // VPNT version: normals + UVs
+    {
+        std::vector<VertexPositionNormalTexture> tv;
+        tv.reserve(verts.size());
+        for (int i = 0; i <= ringSeg; ++i) {
+            float theta = pi2 * i / ringSeg;
+            float ct = std::cos(theta), st = std::sin(theta);
+            for (int j = 0; j <= tubeSeg; ++j) {
+                float phi = pi2 * j / tubeSeg;
+                float cp = std::cos(phi), sp = std::sin(phi);
+                float x = (R + r * cp) * ct;
+                float y = r * sp;
+                float z = (R + r * cp) * st;
+                Vector3 pos{x, y, z};
+                Vector3 norm = Vector3::Normalize({cp * ct, sp, cp * st});
+                Vector2 uv{static_cast<float>(i)/ringSeg, static_cast<float>(j)/tubeSeg};
+                tv.push_back({pos, norm, uv});
+            }
+        }
+        unitTorus_.texVB = std::make_unique<VertexBuffer>(device_, nv);
+        unitTorus_.texVB->SetData(tv.data(), nv);
+        unitTorus_.texIB = std::make_unique<IndexBuffer>(device_, ni);
+        unitTorus_.texIB->SetData(indices.data(), ni);
+        unitTorus_.texPrimitiveCount = ni / 3;
+    }
+}
+
 void SceneRenderer::buildWireBox() {
     // 12 edges of a unit box
     Color c(255, 165, 0, 255); // orange for selection
@@ -450,6 +521,35 @@ void SceneRenderer::buildWireShapes(int segments) {
         wireShapePlane_.positions.push_back({ 0.5f,0,-0.5f}); wireShapePlane_.positions.push_back({ 0.5f,0, 0.5f}); wireShapePlane_.lineCount++;
         wireShapePlane_.positions.push_back({ 0.5f,0, 0.5f}); wireShapePlane_.positions.push_back({-0.5f,0, 0.5f}); wireShapePlane_.lineCount++;
         wireShapePlane_.positions.push_back({-0.5f,0, 0.5f}); wireShapePlane_.positions.push_back({-0.5f,0,-0.5f}); wireShapePlane_.lineCount++;
+    }
+
+    // Torus (R=0.35, r=0.15): outer ring, inner ring, 4 tube cross-sections
+    {
+        const float R = 0.35f, r = 0.15f;
+        const float pi2 = 2.0f * std::numbers::pi_v<float>;
+        // Outer and inner circles in XZ plane
+        for (int ring = 0; ring < 2; ++ring) {
+            float rad = (ring == 0) ? (R + r) : (R - r);
+            for (int i = 0; i < segments; ++i) {
+                float a0 = pi2 * i / segments;
+                float a1 = pi2 * (i+1) / segments;
+                wireShapeTorus_.positions.push_back({rad*std::cos(a0), 0.0f, rad*std::sin(a0)});
+                wireShapeTorus_.positions.push_back({rad*std::cos(a1), 0.0f, rad*std::sin(a1)});
+                wireShapeTorus_.lineCount++;
+            }
+        }
+        // 4 tube cross-section circles at 0, 90, 180, 270 degrees
+        for (int q = 0; q < 4; ++q) {
+            float theta = pi2 * q / 4;
+            float ct = std::cos(theta), st = std::sin(theta);
+            for (int i = 0; i < segments; ++i) {
+                float phi0 = pi2 * i / segments;
+                float phi1 = pi2 * (i+1) / segments;
+                wireShapeTorus_.positions.push_back({(R+r*std::cos(phi0))*ct, r*std::sin(phi0), (R+r*std::cos(phi0))*st});
+                wireShapeTorus_.positions.push_back({(R+r*std::cos(phi1))*ct, r*std::sin(phi1), (R+r*std::cos(phi1))*st});
+                wireShapeTorus_.lineCount++;
+            }
+        }
     }
 }
 

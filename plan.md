@@ -28,7 +28,7 @@ Legend: ✅ done · 🔧 partial · 📋 planned
 |---|------|-------|
 | B1 ✅ | Gizmo: Local/World space toggle (toolbar button or shortcut) | SceneRenderer_Gizmos.cpp, TransformGizmo.hpp |
 | B2 ✅ | Gizmo: show delta value overlay while dragging ("Δ +2.50 m") | MeshCraftApplication_Mouse.cpp, UiOverlays.cpp |
-| B3 | Viewport: overlay buttons for camera presets (Front/Top/Right clickable icons in viewport corner) | UiOverlays.cpp |
+| B3 ✅ | Viewport: overlay buttons for camera presets (Front/Top/Right clickable icons in viewport corner) | UiOverlays.cpp |
 | B4 | Viewport: one-click perspective/orthographic toggle (button in overlay) | MeshCraftApplication.cpp, EditorCamera |
 | B5 | Viewport: bounding box toggle (show AABB around selected objects) | SceneRenderer.cpp |
 | B6 | Viewport: "Look through selected camera" (use selected Mc3Camera as viewport view) | MeshCraftApplication.cpp |
@@ -60,7 +60,7 @@ Legend: ✅ done · 🔧 partial · 📋 planned
 
 | # | Task | Files |
 |---|------|-------|
-| D1 | Material list: color swatch (small baseColor square) next to each material name | UiLeftPanel.cpp |
+| D1 ✅ | Material list: color swatch (small baseColor square) next to each material name | UiLeftPanel.cpp |
 | D2 | Texture tab: make fields editable (wrapU/V, filter, colorSpace as editable combos, not read-only) | UiLeftPanel.cpp |
 | D3 | Material: duplicate material (copy in material list) | UiLeftPanel.cpp |
 | D4 | Material: apply material from list to selection (button "Apply to selection") | UiLeftPanel.cpp |
@@ -75,7 +75,7 @@ Legend: ✅ done · 🔧 partial · 📋 planned
 
 | # | Task | Files |
 |---|------|-------|
-| E1 | Hierarchy: enrich right-click context menu (Rename, Duplicate, Delete, Group, Set as Root) | UiLeftPanel.cpp |
+| E1 ✅ | Hierarchy: enrich right-click context menu (Rename, Duplicate, Delete, Group, Set as Root) | UiLeftPanel.cpp |
 | E2 | Hierarchy: type icons next to each row (small Box/Sphere/Group/Light symbols) | UiLeftPanel.cpp |
 | E3 | Hierarchy: color row by first tag | UiLeftPanel.cpp |
 | E4 | Hierarchy: show lock icon on locked objects | UiLeftPanel.cpp |
@@ -91,7 +91,7 @@ Legend: ✅ done · 🔧 partial · 📋 planned
 
 | # | Task | Files |
 |---|------|-------|
-| F1 | Native file picker — replace text buffers with system dialog (zenity/kdialog or imgui-filebrowser) | MeshCraftApplication_FileOps.cpp |
+| F1 ~~přeskočeno~~ | Native file picker — replace text buffers with system dialog (zenity/kdialog or imgui-filebrowser) | MeshCraftApplication_FileOps.cpp |
 | F2 | OBJ import via Mesh object (Browse button for meshSource field) | UiProperties.cpp |
 | F3 | Export selection (export only selected objects to a new MC3 XML file) | MeshCraftApplication_FileOps.cpp |
 | F4 | Merge scene (open second MC3 XML and insert its objects into current scene) | MeshCraftApplication_FileOps.cpp |
@@ -106,7 +106,7 @@ Legend: ✅ done · 🔧 partial · 📋 planned
 
 | # | Task | Files |
 |---|------|-------|
-| G1 | Torus primitive (Mc3PrimitiveType::Torus — majorRadius, minorRadius, segments) | Mc3Primitive.hpp, SceneRenderer_Builders.cpp |
+| G1 ✅ | Torus primitive (Mc3PrimitiveType::Torus — majorRadius, minorRadius, segments) | Mc3Primitive.hpp, SceneRenderer_Builders.cpp |
 | G2 | Capsule primitive (cylinder + hemisphere caps) | Mc3Primitive.hpp, SceneRenderer_Builders.cpp |
 | G3 | Disk primitive (circle/annulus — outerRadius, innerRadius, segments) | Mc3Primitive.hpp, SceneRenderer_Builders.cpp |
 | G4 | Grid/Ground primitive (flat plane with N×M subdivisions) | Mc3Primitive.hpp, SceneRenderer_Builders.cpp |
@@ -122,7 +122,7 @@ Legend: ✅ done · 🔧 partial · 📋 planned
 | # | Task | Files |
 |---|------|-------|
 | H1 | Proportional editing (transform falloff — influence nearby objects) | MeshCraftApplication_Mouse.cpp |
-| H2 | Measurement tool (click two points → show distance in overlay) | UiOverlays.cpp, new tool state |
+| H2 ✅ | Measurement tool (click two points → show distance in overlay) | UiOverlays.cpp, new tool state |
 | H3 | Align to object (align to a specific target object, not just selection average) | MeshCraftApplication_Commands.cpp |
 | H4 | Scatter/Place: distribute copies along a curve | MeshCraftApplication_Commands.cpp |
 | H5 | Pivot: UI to move pivot independently from geometry | UiProperties.cpp |
@@ -192,14 +192,14 @@ Legend: ✅ done · 🔧 partial · 📋 planned
 1. **A1** ✅ — Wire material animation to renderer
 2. **A2** ✅ — Wire Deform animation to renderer
 3. **B2** ✅ — Delta overlay while gizmo dragging
-4. **C1** — Multi-edit properties
-4. **B1** — Local/World gizmo space toggle
-5. **D1** — Material color swatch in list
-6. **E1** — Enrich hierarchy right-click menu
-7. **B3** — Viewport camera preset overlay buttons
-8. **G1** — Torus primitive
-9. **H2** — Measurement tool
-10. **F1** — Native file picker
+4. **C1** ✅ — Multi-edit properties
+4. **B1** ✅ — Local/World gizmo space toggle
+5. **D1** ✅ — Material color swatch in list
+6. **E1** ✅ — Enrich hierarchy right-click menu
+7. **B3** ✅ — Viewport camera preset overlay buttons
+8. **G1** ✅ — Torus primitive
+9. **H2** ✅ — Measurement tool
+10. **F1** ~~přeskočeno~~ — Native file picker
 
 ---
 

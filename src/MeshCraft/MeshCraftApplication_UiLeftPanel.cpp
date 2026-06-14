@@ -252,6 +252,31 @@ void MeshCraftApplication::drawLeftPanel(float panelY, float panelH)
                             if (ImGui::MenuItem("Duplicate")) duplicateSelected();
                             if (ImGui::MenuItem("Delete", nullptr, false, !isLocked)) deleteSelected();
                             ImGui::Separator();
+                            if (ImGui::MenuItem("Group Selection")) {
+                                pushUndo();
+                                int gn = 1;
+                                std::string gid;
+                                do { gid = "group_" + std::to_string(gn++); }
+                                while (findObj(document_.objects, gid) != nullptr);
+                                auto grp = std::make_shared<Mc3::Mc3Object>();
+                                grp->id   = gid;
+                                grp->name = gid;
+                                grp->type = Mc3::ObjectType::Group;
+                                grp->transform.scale = {1.0f, 1.0f, 1.0f};
+                                auto selCopy = selection_.selection();
+                                for (const auto& s : selCopy) {
+                                    detachObj(document_.objects, s->id);
+                                    grp->children.push_back(s);
+                                }
+                                document_.objects.push_back(grp);
+                                selection_.clear();
+                                selection_.select(grp);
+                                modified_ = true; updateWindowTitle();
+                            }
+                            if (ImGui::MenuItem("Set as Root")) {
+                                doReparent(obj->id, nullptr);
+                            }
+                            ImGui::Separator();
                             if (ImGui::MenuItem(obj->visible ? "Hide" : "Show")) {
                                 pushUndo(); obj->visible = !obj->visible; modified_ = true; updateWindowTitle();
                             }

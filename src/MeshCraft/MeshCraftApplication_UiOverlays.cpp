@@ -130,6 +130,106 @@ void MeshCraftApplication::drawStatsOverlay(int screenW, int screenH)
         ImGui::PopStyleVar();
         (void)axName;
     }
+
+    // Measurement tool overlay
+    if (activeTool_ == ActiveTool::Measure && mPt1Set_) {
+        // Project 3D world point to screen using cached VP matrix
+        auto w2s = [&](float wx, float wy, float wz) -> ImVec2 {
+            float cX = wx*cachedVP_.M11 + wy*cachedVP_.M21 + wz*cachedVP_.M31 + cachedVP_.M41;
+            float cY = wx*cachedVP_.M12 + wy*cachedVP_.M22 + wz*cachedVP_.M32 + cachedVP_.M42;
+            float cW = wx*cachedVP_.M14 + wy*cachedVP_.M24 + wz*cachedVP_.M34 + cachedVP_.M44;
+            if (std::abs(cW) < 1e-6f) return {-9999, -9999};
+            float sx = (cX/cW * 0.5f + 0.5f) * cachedVW_ + cachedVX_;
+            float sy = (1.0f - (cY/cW * 0.5f + 0.5f)) * cachedVH_ + cachedVY_;
+            return {sx, sy};
+        };
+
+        ImDrawList* dl = ImGui::GetBackgroundDrawList();
+        ImVec2 s1 = w2s(mPt1_[0], mPt1_[1], mPt1_[2]);
+        // Draw point 1 marker
+        dl->AddCircleFilled(s1, 5.0f, IM_COL32(80, 220, 220, 220));
+
+        if (mPt2Set_) {
+            ImVec2 s2 = w2s(mPt2_[0], mPt2_[1], mPt2_[2]);
+            // Draw line and point 2
+            dl->AddLine(s1, s2, IM_COL32(80, 220, 220, 200), 2.0f);
+            dl->AddCircleFilled(s2, 5.0f, IM_COL32(80, 220, 220, 220));
+
+            // Distance label near midpoint
+            float mx2 = (s1.x + s2.x) * 0.5f, my2 = (s1.y + s2.y) * 0.5f;
+            char buf[64];
+            std::snprintf(buf, sizeof(buf), "%.4g u", mDist_);
+            dl->AddText(ImVec2(mx2 + 8, my2 - 8), IM_COL32(200, 255, 200, 255), buf);
+        } else {
+            // Show hint
+            ImGui::SetNextWindowPos(ImVec2(s1.x + 12, s1.y - 24), ImGuiCond_Always);
+            ImGui::SetNextWindowBgAlpha(0.60f);
+            ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(4, 3));
+            ImGui::Begin("##mhint", nullptr,
+                ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoInputs |
+                ImGuiWindowFlags_NoNav | ImGuiWindowFlags_NoMove |
+                ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoSavedSettings |
+                ImGuiWindowFlags_NoBringToFrontOnFocus);
+            ImGui::TextDisabled("Click second point");
+            ImGui::End();
+            ImGui::PopStyleVar();
+        }
+
+        // Info panel bottom-left of viewport
+        if (mPt2Set_) {
+            ImGui::SetNextWindowPos(ImVec2(static_cast<float>(cachedVX_) + 8,
+                                          static_cast<float>(cachedVY_ + cachedVH_) - 8),
+                                    ImGuiCond_Always, ImVec2(0.0f, 1.0f));
+            ImGui::SetNextWindowBgAlpha(0.65f);
+            ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(8, 6));
+            ImGui::Begin("##minfo", nullptr,
+                ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoInputs |
+                ImGuiWindowFlags_NoNav | ImGuiWindowFlags_NoMove |
+                ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoSavedSettings |
+                ImGuiWindowFlags_NoBringToFrontOnFocus);
+            ImGui::TextColored(ImVec4(0.4f,1.0f,1.0f,1.0f), "Distance: %.4g u", mDist_);
+            ImGui::TextDisabled("A: %.2f, %.2f, %.2f", mPt1_[0], mPt1_[1], mPt1_[2]);
+            ImGui::TextDisabled("B: %.2f, %.2f, %.2f", mPt2_[0], mPt2_[1], mPt2_[2]);
+            ImGui::TextDisabled("Right-click to reset");
+            ImGui::End();
+            ImGui::PopStyleVar();
+        }
+    }
+
+    // Camera preset buttons — top-left corner of the 3D viewport
+    {
+        const float vpLeft = static_cast<float>(kLeftPanelW) + 8.0f;
+        const float vpTopY = static_cast<float>(imguiTopH_)  + 8.0f;
+        ImGui::SetNextWindowPos(ImVec2(vpLeft, vpTopY), ImGuiCond_Always);
+        ImGui::SetNextWindowBgAlpha(0.45f);
+        ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(4, 4));
+        ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing,   ImVec2(3, 3));
+        ImGui::Begin("##campresets", nullptr,
+            ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoNav |
+            ImGuiWindowFlags_NoMove | ImGuiWindowFlags_AlwaysAutoResize |
+            ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoBringToFrontOnFocus);
+
+        struct Preset { const char* label; float yaw; float pitch; bool reset; };
+        static const Preset presets[] = {
+            { "Front", 0.0f,     0.0f,  false },
+            { "Top",   0.0f,     1.47f, false },
+            { "Right", 1.5708f,  0.0f,  false },
+            { "Persp", 0.0f,     0.0f,  true  },
+        };
+        for (const auto& p : presets) {
+            if (ImGui::Button(p.label, ImVec2(38, 18))) {
+                if (p.reset) { camera_.reset(); }
+                else         { camera_.yaw = p.yaw; camera_.pitch = p.pitch; }
+            }
+            if (ImGui::IsItemHovered()) {
+                if (p.reset) ImGui::SetTooltip("Reset to default perspective view");
+                else         ImGui::SetTooltip("Set camera to %s view", p.label);
+            }
+            ImGui::SameLine();
+        }
+        ImGui::End();
+        ImGui::PopStyleVar(2);
+    }
 }
 
 void MeshCraftApplication::drawStatusBar(int screenW, int screenH)
