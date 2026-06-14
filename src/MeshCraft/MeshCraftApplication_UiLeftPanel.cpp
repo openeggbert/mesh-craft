@@ -155,12 +155,43 @@ void MeshCraftApplication::drawLeftPanel(float panelY, float panelH)
                     const char* typePrefix = "";
                     if      (obj->type == Mc3::ObjectType::Union)        { typePrefix = "[U] "; nodeColor = obj->visible ? ImVec4(0.3f,0.9f,0.3f,1) : ImVec4(0.2f,0.45f,0.2f,1); }
                     else if (obj->type == Mc3::ObjectType::Difference)   { typePrefix = "[D] "; nodeColor = obj->visible ? ImVec4(0.9f,0.3f,0.3f,1) : ImVec4(0.45f,0.2f,0.2f,1); }
-                    else if (obj->type == Mc3::ObjectType::Intersection) { typePrefix = "[I] "; nodeColor = obj->visible ? ImVec4(0.3f,0.6f,1.0f,1) : ImVec4(0.2f,0.35f,0.5f,1); }
+                    else if (obj->type == Mc3::ObjectType::Intersection) { typePrefix = "[X] "; nodeColor = obj->visible ? ImVec4(0.3f,0.6f,1.0f,1) : ImVec4(0.2f,0.35f,0.5f,1); }
                     else if (obj->type == Mc3::ObjectType::Group)        { typePrefix = "[G] "; }
+                    else if (obj->type == Mc3::ObjectType::Box ||
+                             obj->type == Mc3::ObjectType::Cube)         { typePrefix = "[B] "; }
+                    else if (obj->type == Mc3::ObjectType::Sphere)       { typePrefix = "[S] "; }
+                    else if (obj->type == Mc3::ObjectType::Cylinder)     { typePrefix = "[C] "; }
+                    else if (obj->type == Mc3::ObjectType::Cone)         { typePrefix = "[K] "; }
+                    else if (obj->type == Mc3::ObjectType::Plane)        { typePrefix = "[P] "; }
+                    else if (obj->type == Mc3::ObjectType::Torus)        { typePrefix = "[T] "; }
+                    else if (obj->type == Mc3::ObjectType::Capsule)      { typePrefix = "[Q] "; }
+                    else if (obj->type == Mc3::ObjectType::Disk)         { typePrefix = "[O] "; }
+                    else if (obj->type == Mc3::ObjectType::Grid)         { typePrefix = "[#] "; }
+                    else if (obj->type == Mc3::ObjectType::IcoSphere)    { typePrefix = "[I] "; }
+                    else if (obj->type == Mc3::ObjectType::Mesh)         { typePrefix = "[M] "; }
+                    else if (obj->type == Mc3::ObjectType::Extrude)      { typePrefix = "[E] "; }
+                    else if (obj->type == Mc3::ObjectType::Instance)     { typePrefix = "[i] "; }
+                    else if (obj->type == Mc3::ObjectType::Area)         { typePrefix = "[A] "; }
                     else if (obj->isCutter)                              { typePrefix = "[cut] "; nodeColor = obj->visible ? ImVec4(1.0f,0.5f,0.3f,1) : ImVec4(0.5f,0.3f,0.2f,1); }
+
+                    // Tag-based row color: hash first tag to a hue
+                    if (!obj->tags.empty() &&
+                        obj->type != Mc3::ObjectType::Union &&
+                        obj->type != Mc3::ObjectType::Difference &&
+                        obj->type != Mc3::ObjectType::Intersection &&
+                        !obj->isCutter)
+                    {
+                        size_t h = std::hash<std::string>{}(obj->tags[0]);
+                        float hue = static_cast<float>(h % 1000) / 1000.0f;
+                        float r, g, b;
+                        float sat = obj->visible ? 0.65f : 0.35f;
+                        float val = obj->visible ? 0.95f : 0.55f;
+                        ImGui::ColorConvertHSVtoRGB(hue, sat, val, r, g, b);
+                        nodeColor = ImVec4(r, g, b, 1.0f);
+                    }
                     bool isLocked = lockedIds_.count(obj->id) > 0;
-                    std::string displayLabel = std::string(isLocked ? "[L] " : "") + typePrefix + (obj->name.empty() ? obj->id : obj->name);
-                    if (obj->id == renamingId_) {
+                    std::string displayLabel = std::string(typePrefix) + (obj->name.empty() ? obj->id : obj->name);
+                    if (!renamingId_.empty() && obj->id == renamingId_) {
                         // Inline rename: leaf node + InputText
                         ImGui::TreeNodeEx("##rn",
                             ImGuiTreeNodeFlags_Leaf | ImGuiTreeNodeFlags_NoTreePushOnOpen |
@@ -185,10 +216,30 @@ void MeshCraftApplication::drawLeftPanel(float panelY, float panelH)
                             renamingId_.clear();
                         }
                     } else {
+                        // If command palette requested scroll-to this object, force open and scroll
+                        if (!hierarchyScrollToId_.empty() && obj->id == hierarchyScrollToId_) {
+                            ImGui::SetNextItemOpen(true, ImGuiCond_Always);
+                            ImGui::SetScrollHereY(0.5f);
+                            hierarchyScrollToId_.clear();
+                        }
+
                         ImGui::PushStyleColor(ImGuiCol_Text, nodeColor);
                         ImGui::SetNextItemAllowOverlap();
                         bool nodeOpen = ImGui::TreeNodeEx(displayLabel.c_str(), flags);
                         ImGui::PopStyleColor();
+
+                        // Lock tint: draw semi-transparent orange stripe over the row
+                        if (isLocked) {
+                            ImVec2 rMin = ImGui::GetItemRectMin();
+                            ImVec2 rMax = ImGui::GetItemRectMax();
+                            // Left-edge accent bar (4 px)
+                            ImGui::GetWindowDrawList()->AddRectFilled(
+                                rMin, ImVec2(rMin.x + 4.0f, rMax.y),
+                                IM_COL32(230, 140, 20, 200));
+                            // Full-row semi-transparent tint
+                            ImGui::GetWindowDrawList()->AddRectFilled(
+                                rMin, rMax, IM_COL32(230, 140, 20, 28));
+                        }
 
                         // Drag source
                         if (ImGui::BeginDragDropSource(ImGuiDragDropFlags_None)) {
@@ -241,6 +292,8 @@ void MeshCraftApplication::drawLeftPanel(float panelY, float panelH)
                         }
                         if (ImGui::BeginPopupContextItem("##objctx")) {
                             if (ImGui::MenuItem("Select Parent\tP")) selectParent();
+                            if (ImGui::MenuItem("Select Children", nullptr, false, !obj->children.empty()))
+                                selectChildren();
                             ImGui::Separator();
                             if (ImGui::MenuItem("Rename")) {
                                 renamingId_ = obj->id;
@@ -295,18 +348,21 @@ void MeshCraftApplication::drawLeftPanel(float panelY, float panelH)
                             float lockX = ImGui::GetWindowContentRegionMax().x - 36.0f;
                             ImGui::SameLine(lockX);
                             ImGui::PushStyleColor(ImGuiCol_Button,
-                                isLocked ? ImVec4(0.55f,0.35f,0.05f,0.80f)
+                                isLocked ? ImVec4(0.70f,0.42f,0.05f,0.90f)
                                          : ImVec4(0.18f,0.18f,0.18f,0.45f));
                             ImGui::PushStyleColor(ImGuiCol_ButtonHovered,
-                                isLocked ? ImVec4(0.75f,0.50f,0.10f,0.90f)
+                                isLocked ? ImVec4(0.90f,0.58f,0.10f,1.00f)
                                          : ImVec4(0.32f,0.32f,0.32f,0.65f));
-                            if (ImGui::SmallButton(isLocked ? "L##lk" : "l##lk")) {
+                            ImGui::PushStyleColor(ImGuiCol_Text,
+                                isLocked ? ImVec4(1.0f, 0.92f, 0.4f, 1.0f)
+                                         : ImVec4(0.55f, 0.55f, 0.55f, 1.0f));
+                            if (ImGui::SmallButton(isLocked ? "\xe2\x96\xa0##lk" : "\xe2\x96\xa1##lk")) {
                                 if (isLocked) lockedIds_.erase(obj->id);
                                 else          lockedIds_.insert(obj->id);
                             }
-                            ImGui::PopStyleColor(2);
+                            ImGui::PopStyleColor(3);
                             if (ImGui::IsItemHovered())
-                                ImGui::SetTooltip(isLocked ? "Unlock (Ctrl+L)" : "Lock (Ctrl+L)");
+                                ImGui::SetTooltip(isLocked ? "Locked — click to unlock (Ctrl+L)" : "Click to lock (Ctrl+L)");
 
                             // Visibility button
                             float visX = ImGui::GetWindowContentRegionMax().x - 18.0f;
@@ -1085,10 +1141,55 @@ void MeshCraftApplication::drawLeftPanel(float panelY, float panelH)
             }
             if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
                 ImGui::SetTooltip("Remove selected material");
+            ImGui::SameLine();
+            {
+                bool canApply = !selectedMaterialKey_.empty() && selection_.hasSelection();
+                if (!canApply) ImGui::BeginDisabled();
+                if (ImGui::SmallButton("Apply##matapply")) {
+                    pushUndo();
+                    for (const auto& s : selection_.selection()) {
+                        if (!lockedIds_.count(s->id))
+                            s->material = selectedMaterialKey_;
+                    }
+                    modified_ = true; updateWindowTitle();
+                    setStatusMsg("Material '" + selectedMaterialKey_ + "' applied to " +
+                                 std::to_string(selection_.selection().size()) + " object(s)");
+                }
+                if (!canApply) ImGui::EndDisabled();
+            }
+            if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
+                ImGui::SetTooltip(selection_.hasSelection()
+                    ? "Apply selected material to all selected objects"
+                    : "Select objects in the scene first");
             ImGui::Separator();
 
+            // Search filter
+            ImGui::SetNextItemWidth(-1);
+            ImGui::InputTextWithHint("##matfilter", "Search materials…", matFilter_, sizeof(matFilter_));
+            if (ImGui::IsItemHovered() && matFilter_[0] != '\0') {
+                ImGui::SameLine();
+            }
+            if (matFilter_[0] != '\0') {
+                ImGui::SameLine();
+                if (ImGui::SmallButton("×##matfilterclear")) matFilter_[0] = '\0';
+            }
+
+            // Build lowercase filter string
+            std::string matFiltLow(matFilter_);
+            for (auto& ch : matFiltLow)
+                ch = static_cast<char>(std::tolower(static_cast<unsigned char>(ch)));
+
             // Material list
+            int matShown = 0;
             for (auto& [key, mat] : document_.materials) {
+                // Apply filter
+                if (!matFiltLow.empty()) {
+                    std::string keyLow = key;
+                    for (auto& ch : keyLow)
+                        ch = static_cast<char>(std::tolower(static_cast<unsigned char>(ch)));
+                    if (keyLow.find(matFiltLow) == std::string::npos) continue;
+                }
+                ++matShown;
                 bool isSel = (key == selectedMaterialKey_);
                 // Colored square preview
                 ImGui::PushID(key.c_str());
@@ -1105,6 +1206,8 @@ void MeshCraftApplication::drawLeftPanel(float panelY, float panelH)
             }
             if (document_.materials.empty())
                 ImGui::TextDisabled("No materials — press + to add");
+            else if (matShown == 0)
+                ImGui::TextDisabled("No match for \"%s\"", matFilter_);
 
             // Editor for selected material
             if (!selectedMaterialKey_.empty() && document_.materials.count(selectedMaterialKey_)) {

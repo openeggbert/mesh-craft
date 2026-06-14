@@ -81,6 +81,9 @@ private:
     int  boxSelectX0_{0}, boxSelectY0_{0};
     int  boxSelectX1_{0}, boxSelectY1_{0};
 
+    // Drag-and-drop file open (set from SDL event watcher, consumed in Update)
+    std::string pendingDropFile_;
+
     // Auto-screenshot mode
     std::string autoScreenshotPath_;
     int autoScreenshotCountdown_{0};
@@ -117,9 +120,9 @@ private:
     void (*fnGlEnable_)(unsigned int)          = nullptr;
     void (*fnGlDisable_)(unsigned int)         = nullptr;
 
-    // Panel layout constants (used for 3D viewport computation)
-    static constexpr int kLeftPanelW  = 220;
-    static constexpr int kRightPanelW = 220;
+    // Panel layout (widths are user-resizable via splitter drag)
+    int kLeftPanelW  = 220;
+    int kRightPanelW = 220;
     static constexpr int kStatusH     = 22;
     static constexpr int kTimelineH   = 190;
 
@@ -129,12 +132,24 @@ private:
     // Edge overlay toggle (black wireframe lines over all objects)
     bool showEdgeOverlay_{false};
 
+    // Full wireframe mode (skip solid rendering, show only edges)
+    bool showWireframeMode_{false};
+
+    // Bounding box overlay toggle
+    bool showBoundingBox_{false};
+
+    // Look-through-camera mode
+    bool lookThroughCamera_{false};
+
     // Measurement tool state
     bool mPt1Set_{false};
     bool mPt2Set_{false};
     std::array<float,3> mPt1_{};
     std::array<float,3> mPt2_{};
     float mDist_{0.0f};
+
+    // Cached screen dimensions (from io.DisplaySize, updated every Draw frame)
+    int cachedScreenW_{1}, cachedScreenH_{1};
 
     // Cached view-projection + viewport for overlay projection
     Microsoft::Xna::Framework::Matrix cachedVP_;
@@ -163,11 +178,32 @@ private:
     int   tlDragKf_{-1};
     int   tlSelChan_{-1};
     int   tlSelKf_{-1};
+    // Multi-select
+    std::set<std::pair<int,int>> tlMultiSel_;
+    bool  tlGroupDrag_{false};
+    float tlGroupDragPrev_{0.0f};
+    bool  tlBoxActive_{false};
+    float tlBoxX0_{0.0f}, tlBoxY0_{0.0f};
+    float tlBoxX1_{0.0f}, tlBoxY1_{0.0f};
 
     // Add Channel dialog state
     bool addChannelOpen_{false};
     char addChannelObjBuf_[128]{};
     int  addChannelPropIdx_{0};
+    // Rename Action dialog state
+    bool renameActionOpen_{false};
+    char renameActionBuf_[128]{};
+
+    // Keyframe clipboard (copy/paste)
+    struct KfClipEntry {
+        std::string targetObject;
+        Mc3::AnimatedProperty property;
+        float relTime{0.0f};
+        float value{0.0f};
+        Mc3::Interpolation interpolation{Mc3::Interpolation::Linear};
+        Mc3::Mc3BezierHandle handleLeft, handleRight;
+    };
+    std::vector<KfClipEntry> kfClipboard_;
 
     // Helpers
     void newScene();
@@ -199,6 +235,7 @@ private:
     void  drawStatsOverlay(int screenW, int screenH);
     void  drawStatusBar(int screenW, int screenH);
     void  drawDialogs();
+    void  drawPanelSplitters(int screenW, int screenH);
 
     std::vector<const Mc3::Mc3Object*> selectedPointers() const;
     Mc3::Mc3Object* flatFindById(const std::string& id) const;
@@ -233,6 +270,12 @@ private:
     // Hierarchy search filter
     char hierarchyFilter_[128]{};
 
+    // ID to scroll into view in hierarchy next frame (set by command palette object selection)
+    std::string hierarchyScrollToId_;
+
+    // Material list search filter
+    char matFilter_[128]{};
+
     // Hierarchy shift-click range selection
     std::string hierarchyAnchorId_;
     std::vector<std::shared_ptr<Mc3::Mc3Object>> hierarchyFlatOrder_;
@@ -253,6 +296,9 @@ private:
     // Help dialog
     bool showShortcutsDialog_{false};
 
+    // Undo history dialog
+    bool undoHistoryOpen_{false};
+
     // Command palette
     bool cmdPaletteOpen_{false};
     char cmdPaletteBuf_[256]{};
@@ -262,6 +308,10 @@ private:
     char batchRenameBuf_[256]{};
     void batchRenameSelected();
     void selectParent();
+    void selectChildren();
+    void alignToObject();
+    void convertToDefinition();
+    void breakInstance();
     void randomizeTransformSelected();
 
     // Find & Replace names dialog

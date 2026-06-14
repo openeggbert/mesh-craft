@@ -8,6 +8,7 @@
 #include <cstring>
 #include <functional>
 #include <string>
+#include <utility>
 
 namespace MeshCraft {
 
@@ -201,6 +202,25 @@ void MeshCraftApplication::drawTimelinePanel(int screenW, int screenH) {
             currentActionName_.clear(); animPlaying_ = false;
             sceneRenderer_->setAnimOverrides({}); modified_ = true;
         }
+        ImGui::SameLine();
+        if (ImGui::SmallButton("Dup##daact") && hasAct) {
+            pushUndo();
+            std::string base = currentActionName_ + "_copy";
+            std::string nm = base;
+            int n = 2;
+            while (document_.actions.count(nm)) nm = base + std::to_string(n++);
+            document_.actions[nm] = document_.actions[currentActionName_];
+            document_.actions[nm].name = nm;
+            currentActionName_ = nm;
+            modified_ = true;
+        }
+        ImGui::SameLine();
+        if (ImGui::SmallButton("Ren##raact") && hasAct) {
+            renameActionOpen_ = true;
+            std::strncpy(renameActionBuf_, currentActionName_.c_str(),
+                         sizeof(renameActionBuf_) - 1);
+            renameActionBuf_[sizeof(renameActionBuf_)-1] = '\0';
+        }
         if (!hasAct) ImGui::EndDisabled();
 
         if (hasAct) {
@@ -263,6 +283,7 @@ void MeshCraftApplication::drawTimelinePanel(int screenW, int screenH) {
         if (toDelete >= 0) {
             pushUndo(); act.channels.erase(act.channels.begin() + toDelete);
             if (tlSelChan_ == toDelete) { tlSelChan_ = -1; tlSelKf_ = -1; }
+            tlMultiSel_.clear();
             modified_ = true; evaluateAndPushAnimOverrides();
         }
 
@@ -404,6 +425,43 @@ void MeshCraftApplication::drawTimelinePanel(int screenW, int screenH) {
         ImGui::EndPopup();
     }
 
+    // Rename Action popup
+    if (renameActionOpen_) {
+        ImGui::OpenPopup("Rename Action##radlg");
+        renameActionOpen_ = false;
+    }
+    if (ImGui::BeginPopupModal("Rename Action##radlg", nullptr,
+                               ImGuiWindowFlags_AlwaysAutoResize)) {
+        ImGui::TextDisabled("New name:");
+        if (ImGui::IsWindowAppearing()) ImGui::SetKeyboardFocusHere();
+        bool enter = ImGui::InputText("##ranm", renameActionBuf_, sizeof(renameActionBuf_),
+                                      ImGuiInputTextFlags_EnterReturnsTrue);
+        bool nameTaken = document_.actions.count(renameActionBuf_) &&
+                         std::string(renameActionBuf_) != currentActionName_;
+        bool empty = (renameActionBuf_[0] == '\0');
+        if (nameTaken)
+            ImGui::TextColored(ImVec4(1.0f, 0.5f, 0.2f, 1.0f), "Name already in use.");
+        bool canRen = !empty && !nameTaken;
+        if (!canRen) ImGui::BeginDisabled();
+        if ((enter || ImGui::Button("Rename", ImVec2(90, 0))) && canRen) {
+            pushUndo();
+            std::string newName(renameActionBuf_);
+            auto node = document_.actions.extract(currentActionName_);
+            node.key() = newName;
+            node.mapped().name = newName;
+            document_.actions.insert(std::move(node));
+            currentActionName_ = newName;
+            modified_ = true;
+            ImGui::CloseCurrentPopup();
+        }
+        if (!canRen) ImGui::EndDisabled();
+        ImGui::SameLine();
+        if (ImGui::Button("Cancel", ImVec2(90, 0)) ||
+            ImGui::IsKeyPressed(ImGuiKey_Escape, false))
+            ImGui::CloseCurrentPopup();
+        ImGui::EndPopup();
+    }
+
     // Right column — timeline track with keyframe dots
     ImGui::SameLine();
     ImVec2 trackTL = ImGui::GetCursorScreenPos();
@@ -464,35 +522,88 @@ void MeshCraftApplication::drawTimelinePanel(int screenW, int screenH) {
         bool mbPressed = ImGui::IsMouseClicked(ImGuiMouseButton_Left);
         bool mbReleased= ImGui::IsMouseReleased(ImGuiMouseButton_Left);
 
-        // Handle active drag
+        // Handle active drag (single or group)
         if (tlDragChan_ >= 0 && tlDragChan_ < (int)act.channels.size()) {
             auto& dch = act.channels[tlDragChan_];
             if (tlDragKf_ >= 0 && tlDragKf_ < (int)dch.keyframes.size()) {
                 if (mbDown) {
                     float newT = std::clamp((mp.x - trackTL.x) / std::max(trackW, 1.0f) * dur,
                                             0.0f, dur);
-                    dch.keyframes[tlDragKf_].time = newT;
+                    if (tlGroupDrag_ && !tlMultiSel_.empty()) {
+                        float delta = newT - tlGroupDragPrev_;
+                        tlGroupDragPrev_ = newT;
+                        for (const auto& [sc, sk] : tlMultiSel_) {
+                            if (sc < (int)act.channels.size() &&
+                                sk < (int)act.channels[sc].keyframes.size())
+                                act.channels[sc].keyframes[sk].time =
+                                    std::clamp(act.channels[sc].keyframes[sk].time + delta,
+                                               0.0f, dur);
+                        }
+                    } else {
+                        dch.keyframes[tlDragKf_].time = newT;
+                    }
                     animTime_ = newT;
                     evaluateAndPushAnimOverrides();
                 } else if (mbReleased) {
-                    // Sort keyframes by time; track where our kf ended up
+                    // Save times to rebuild indices after sort
+                    std::vector<std::pair<int,float>> savedTimes;
+                    if (tlGroupDrag_) {
+                        for (const auto& [sc, sk] : tlMultiSel_)
+                            if (sc < (int)act.channels.size() &&
+                                sk < (int)act.channels[sc].keyframes.size())
+                                savedTimes.push_back({sc, act.channels[sc].keyframes[sk].time});
+                    }
                     float movedTime = dch.keyframes[tlDragKf_].time;
-                    std::stable_sort(dch.keyframes.begin(), dch.keyframes.end(),
-                        [](const Mc3::Mc3Keyframe& a, const Mc3::Mc3Keyframe& b){
-                            return a.time < b.time;
-                        });
-                    // Re-find selection after sort
-                    tlSelChan_ = tlDragChan_;
-                    tlSelKf_ = 0;
-                    for (int i = 0; i < (int)dch.keyframes.size(); ++i)
-                        if (std::abs(dch.keyframes[i].time - movedTime) < 1e-5f) { tlSelKf_ = i; break; }
-                    tlDragChan_ = -1; tlDragKf_ = -1;
+                    std::set<int> chansToSort;
+                    if (tlGroupDrag_) for (const auto& [sc, sk] : tlMultiSel_) chansToSort.insert(sc);
+                    else chansToSort.insert(tlDragChan_);
+                    for (int sc : chansToSort)
+                        if (sc < (int)act.channels.size())
+                            std::stable_sort(act.channels[sc].keyframes.begin(),
+                                             act.channels[sc].keyframes.end(),
+                                [](const Mc3::Mc3Keyframe& a, const Mc3::Mc3Keyframe& b){
+                                    return a.time < b.time; });
+                    if (tlGroupDrag_) {
+                        tlMultiSel_.clear();
+                        for (const auto& [sc, t] : savedTimes) {
+                            if (sc >= (int)act.channels.size()) continue;
+                            for (int i = 0; i < (int)act.channels[sc].keyframes.size(); ++i)
+                                if (std::abs(act.channels[sc].keyframes[i].time - t) < 1e-5f) {
+                                    tlMultiSel_.insert({sc, i}); break;
+                                }
+                        }
+                    } else {
+                        tlSelChan_ = tlDragChan_; tlSelKf_ = 0;
+                        for (int i = 0; i < (int)dch.keyframes.size(); ++i)
+                            if (std::abs(dch.keyframes[i].time - movedTime) < 1e-5f) { tlSelKf_ = i; break; }
+                    }
+                    tlDragChan_ = -1; tlDragKf_ = -1; tlGroupDrag_ = false;
                     modified_ = true;
                 }
             }
         }
 
+        // Finalize box select
+        if (tlBoxActive_ && !mbDown) {
+            float bx0 = std::min(tlBoxX0_, tlBoxX1_), bx1 = std::max(tlBoxX0_, tlBoxX1_);
+            float by0 = std::min(tlBoxY0_, tlBoxY1_), by1 = std::max(tlBoxY0_, tlBoxY1_);
+            if (!ImGui::GetIO().KeyShift) tlMultiSel_.clear();
+            for (int ci = 0; ci < (int)act.channels.size(); ++ci) {
+                float rowY = trackTL.y + rowH + ci * rowH;
+                float ky = rowY + rowH * 0.5f;
+                if (ky < by0 || ky > by1) continue;
+                for (int ki = 0; ki < (int)act.channels[ci].keyframes.size(); ++ki) {
+                    float kx = trackTL.x + (act.channels[ci].keyframes[ki].time /
+                                            std::max(dur, 0.001f)) * trackW;
+                    if (kx >= bx0 && kx <= bx1) tlMultiSel_.insert({ci, ki});
+                }
+            }
+            tlBoxActive_ = false;
+        }
+        if (tlBoxActive_) { tlBoxX1_ = mp.x; tlBoxY1_ = mp.y; }
+
         int kfDelChan = -1, kfDelIdx = -1;
+        bool anyKfHit = false;
 
         for (int ci = 0; ci < (int)act.channels.size(); ++ci) {
             float rowY = trackTL.y + rowH + ci * rowH;
@@ -502,33 +613,179 @@ void MeshCraftApplication::drawTimelinePanel(int screenW, int screenH) {
                               ImVec2(trackTL.x + trackW, rowY + rowH), rowBg);
 
             auto& ch = act.channels[ci];
+
+            // Mini curve — sample evaluateChannel across track width
+            if (!ch.keyframes.empty() && dur > 0.001f) {
+                float vmin = ch.keyframes[0].value, vmax = vmin;
+                for (const auto& kf : ch.keyframes) {
+                    vmin = std::min(vmin, kf.value);
+                    vmax = std::max(vmax, kf.value);
+                }
+                float vrange = vmax - vmin;
+                if (vrange < 1e-5f) { vmin -= 0.5f; vrange = 1.0f; }
+                const float marg   = 2.0f;
+                const float usable = rowH - 2.0f * marg;
+                const int   ns     = std::min(160, std::max(2, static_cast<int>(trackW / 3)));
+                ImVec2 prev{};
+                for (int si = 0; si < ns; ++si) {
+                    float t  = static_cast<float>(si) / (ns - 1) * dur;
+                    float v  = Mc3::evaluateChannel(ch, t);
+                    float sx = trackTL.x + (t / dur) * trackW;
+                    float sy = rowY + marg + usable * (1.0f - (v - vmin) / vrange);
+                    ImVec2 cur(sx, sy);
+                    if (si > 0) dl->AddLine(prev, cur, IM_COL32(70, 200, 95, 140), 1.0f);
+                    prev = cur;
+                }
+            }
+
             for (int ki = 0; ki < (int)ch.keyframes.size(); ++ki) {
                 float kx = trackTL.x + (ch.keyframes[ki].time / std::max(dur, 0.001f)) * trackW;
                 float ky = rowY + rowH * 0.5f;
                 float dx = mp.x - kx, dy = mp.y - ky;
                 bool hov = (dx*dx + dy*dy) < 36.0f;
-                bool isSel = (tlSelChan_ == ci && tlSelKf_ == ki);
+                bool isSel = (tlSelChan_ == ci && tlSelKf_ == ki) ||
+                             tlMultiSel_.count({ci, ki});
                 bool isDrag = (tlDragChan_ == ci && tlDragKf_ == ki);
 
-                ImU32 col = isSel  ? IM_COL32(100, 210, 255, 255)
-                          : isDrag ? IM_COL32(255, 240, 100, 255)
+                ImU32 col = isDrag ? IM_COL32(255, 240, 100, 255)
+                          : isSel  ? IM_COL32(100, 210, 255, 255)
                           : hov    ? IM_COL32(255, 215,  80, 255)
                                    : IM_COL32(200, 155,  50, 255);
                 dl->AddCircleFilled(ImVec2(kx, ky), 5.5f, col);
                 dl->AddCircle(ImVec2(kx, ky), 6.0f, IM_COL32(255, 255, 200, 160));
 
-                if (hov && mbPressed && tlDragChan_ < 0) {
-                    // Start drag + select
-                    pushUndo();
-                    tlDragChan_ = ci; tlDragKf_ = ki;
-                    tlSelChan_ = ci;  tlSelKf_  = ki;
-                    animTime_ = ch.keyframes[ki].time;
-                    evaluateAndPushAnimOverrides();
+                if (hov && mbPressed && tlDragChan_ < 0 && !tlBoxActive_) {
+                    anyKfHit = true;
+                    if (ImGui::GetIO().KeyShift) {
+                        auto key = std::make_pair(ci, ki);
+                        if (tlMultiSel_.count(key)) tlMultiSel_.erase(key);
+                        else { tlMultiSel_.insert(key); tlSelChan_ = ci; tlSelKf_ = ki; }
+                    } else {
+                        pushUndo();
+                        tlDragChan_ = ci; tlDragKf_ = ki;
+                        animTime_ = ch.keyframes[ki].time;
+                        evaluateAndPushAnimOverrides();
+                        if (!tlMultiSel_.empty() && tlMultiSel_.count({ci, ki})) {
+                            tlGroupDrag_ = true;
+                            tlGroupDragPrev_ = ch.keyframes[ki].time;
+                        } else {
+                            tlMultiSel_.clear(); tlGroupDrag_ = false;
+                            tlSelChan_ = ci; tlSelKf_ = ki;
+                        }
+                    }
                 }
                 if (hov && ImGui::IsMouseClicked(ImGuiMouseButton_Right)) {
+                    anyKfHit = true;
                     kfDelChan = ci; kfDelIdx = ki;
                 }
             }
+        }
+
+        // Start box select on empty area
+        if (mbPressed && !anyKfHit && !tlBoxActive_ && tlDragChan_ < 0) {
+            if (mp.y > trackTL.y + rowH && mp.x > trackTL.x && mp.x < trackTL.x + trackW) {
+                tlBoxX0_ = tlBoxX1_ = mp.x;
+                tlBoxY0_ = tlBoxY1_ = mp.y;
+                tlBoxActive_ = true;
+                if (!ImGui::GetIO().KeyShift) { tlMultiSel_.clear(); tlSelChan_ = -1; tlSelKf_ = -1; }
+            }
+        }
+
+        // Draw box select rectangle
+        if (tlBoxActive_) {
+            float bx0 = std::min(tlBoxX0_, tlBoxX1_), bx1 = std::max(tlBoxX0_, tlBoxX1_);
+            float by0 = std::min(tlBoxY0_, tlBoxY1_), by1 = std::max(tlBoxY0_, tlBoxY1_);
+            dl->AddRectFilled(ImVec2(bx0, by0), ImVec2(bx1, by1), IM_COL32(100, 180, 255, 40));
+            dl->AddRect(ImVec2(bx0, by0), ImVec2(bx1, by1), IM_COL32(100, 180, 255, 200));
+        }
+
+        // Ctrl+C: copy selected keyframes to clipboard
+        if (ImGui::GetIO().KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_C)) {
+            std::vector<std::pair<int,int>> toCopy;
+            if (!tlMultiSel_.empty())
+                toCopy.assign(tlMultiSel_.begin(), tlMultiSel_.end());
+            else if (tlSelChan_ >= 0 && tlSelKf_ >= 0 &&
+                     tlSelChan_ < (int)act.channels.size() &&
+                     tlSelKf_ < (int)act.channels[tlSelChan_].keyframes.size())
+                toCopy.push_back({tlSelChan_, tlSelKf_});
+            if (!toCopy.empty()) {
+                float minT = 1e30f;
+                for (const auto& [sc, sk] : toCopy)
+                    if (sc < (int)act.channels.size() && sk < (int)act.channels[sc].keyframes.size())
+                        minT = std::min(minT, act.channels[sc].keyframes[sk].time);
+                kfClipboard_.clear();
+                for (const auto& [sc, sk] : toCopy) {
+                    if (sc >= (int)act.channels.size()) continue;
+                    const auto& ch = act.channels[sc];
+                    if (sk >= (int)ch.keyframes.size()) continue;
+                    const auto& kf = ch.keyframes[sk];
+                    KfClipEntry e;
+                    e.targetObject = ch.targetObject;
+                    e.property     = ch.property;
+                    e.relTime      = kf.time - minT;
+                    e.value        = kf.value;
+                    e.interpolation = kf.interpolation;
+                    e.handleLeft   = kf.handleLeft;
+                    e.handleRight  = kf.handleRight;
+                    kfClipboard_.push_back(e);
+                }
+            }
+        }
+
+        // Ctrl+V: paste clipboard keyframes at animTime_
+        if (ImGui::GetIO().KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_V) && !kfClipboard_.empty()) {
+            pushUndo();
+            tlMultiSel_.clear();
+            for (const auto& e : kfClipboard_) {
+                int ci = -1;
+                for (int i = 0; i < (int)act.channels.size(); ++i)
+                    if (act.channels[i].targetObject == e.targetObject &&
+                        act.channels[i].property == e.property) { ci = i; break; }
+                if (ci < 0) {
+                    Mc3::Mc3Channel ch;
+                    ch.targetObject = e.targetObject;
+                    ch.property     = e.property;
+                    act.channels.push_back(std::move(ch));
+                    ci = static_cast<int>(act.channels.size()) - 1;
+                }
+                Mc3::Mc3Keyframe kf;
+                kf.time          = std::clamp(animTime_ + e.relTime, 0.0f, dur);
+                kf.value         = e.value;
+                kf.interpolation = e.interpolation;
+                kf.handleLeft    = e.handleLeft;
+                kf.handleRight   = e.handleRight;
+                act.channels[ci].keyframes.push_back(kf);
+                float pastedTime = kf.time;
+                float pastedVal  = kf.value;
+                std::stable_sort(act.channels[ci].keyframes.begin(),
+                                 act.channels[ci].keyframes.end(),
+                    [](const Mc3::Mc3Keyframe& a, const Mc3::Mc3Keyframe& b){
+                        return a.time < b.time; });
+                for (int i = 0; i < (int)act.channels[ci].keyframes.size(); ++i)
+                    if (std::abs(act.channels[ci].keyframes[i].time - pastedTime) < 1e-5f &&
+                        act.channels[ci].keyframes[i].value == pastedVal) {
+                        tlMultiSel_.insert({ci, i}); break;
+                    }
+            }
+            modified_ = true;
+            evaluateAndPushAnimOverrides();
+        }
+
+        // Delete key: remove all selected keyframes
+        if (ImGui::IsKeyPressed(ImGuiKey_Delete) && !tlMultiSel_.empty()) {
+            pushUndo();
+            std::vector<std::pair<int,int>> toRemove(tlMultiSel_.begin(), tlMultiSel_.end());
+            std::sort(toRemove.begin(), toRemove.end(), [](const auto& a, const auto& b){
+                return a.first != b.first ? a.first > b.first : a.second > b.second; });
+            for (const auto& [sc, sk] : toRemove) {
+                if (sc < (int)act.channels.size() && sk < (int)act.channels[sc].keyframes.size()) {
+                    act.channels[sc].keyframes.erase(act.channels[sc].keyframes.begin() + sk);
+                    if (act.channels[sc].keyframes.empty())
+                        act.channels.erase(act.channels.begin() + sc);
+                }
+            }
+            tlMultiSel_.clear(); tlSelChan_ = -1; tlSelKf_ = -1;
+            modified_ = true; evaluateAndPushAnimOverrides();
         }
 
         if (kfDelChan >= 0) {
@@ -538,6 +795,7 @@ void MeshCraftApplication::drawTimelinePanel(int screenW, int screenH) {
             if (act.channels[kfDelChan].keyframes.empty())
                 act.channels.erase(act.channels.begin() + kfDelChan);
             if (tlSelChan_ == kfDelChan) { tlSelChan_ = -1; tlSelKf_ = -1; }
+            tlMultiSel_.erase({kfDelChan, kfDelIdx});
             modified_ = true; evaluateAndPushAnimOverrides();
         }
     }
@@ -545,6 +803,12 @@ void MeshCraftApplication::drawTimelinePanel(int screenW, int screenH) {
     ImGui::EndChild();
 
     // ----- Selected keyframe info bar -----
+    if (hasAct && !tlMultiSel_.empty() && tlMultiSel_.size() > 1) {
+        ImGui::Separator();
+        ImGui::Text("%d keyframes selected", static_cast<int>(tlMultiSel_.size()));
+        ImGui::SameLine();
+        if (ImGui::SmallButton("Desel")) { tlMultiSel_.clear(); }
+    }
     if (hasAct && tlSelChan_ >= 0) {
         auto& act = document_.actions[currentActionName_];
         if (tlSelChan_ < (int)act.channels.size()) {

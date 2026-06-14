@@ -47,9 +47,11 @@ void MeshCraftApplication::handleMouseInput(const MouseState& ms, const MouseSta
         camera_.zoom(static_cast<float>(dscroll) / 120.0f);
 
     // Compute 3D viewport bounds (same formula as Draw())
+    // Use cachedScreenW_/H_ set each frame by Draw() from io.DisplaySize (logical pixels)
+    // — avoids the one-frame lag that gd.getViewportProperty() has after window resize.
     auto& gd = getGraphicsDeviceProperty();
-    int screenW = gd.getViewportProperty().getWidthProperty();
-    int screenH = gd.getViewportProperty().getHeightProperty();
+    int screenW = cachedScreenW_ > 1 ? cachedScreenW_ : gd.getViewportProperty().getWidthProperty();
+    int screenH = cachedScreenH_ > 1 ? cachedScreenH_ : gd.getViewportProperty().getHeightProperty();
     int topH    = imguiTopH_ > 0 ? imguiTopH_ : 60;
     int vX = kLeftPanelW, vY = topH;
     int vW = std::max(1, screenW - kLeftPanelW - kRightPanelW);
@@ -118,6 +120,49 @@ void MeshCraftApplication::handleMouseInput(const MouseState& ms, const MouseSta
                         s->transform.position[i] = std::round(s->transform.position[i] / snapTranslate_) * snapTranslate_;
                 }
             }
+
+            // Vertex snap (Shift): snap to nearest other object's pivot
+            bool shiftHeld = (Keyboard::GetState().IsKeyDown(Keys::LeftShift) ||
+                              Keyboard::GetState().IsKeyDown(Keys::RightShift));
+            if (shiftHeld) {
+                float nx = sel0->transform.position[0];
+                float ny = sel0->transform.position[1];
+                float nz = sel0->transform.position[2];
+                float threshold = camera_.distance * 0.08f;
+                float bestDist = threshold;
+                float bestX = nx, bestY = ny, bestZ = nz;
+
+                std::function<void(const std::vector<std::shared_ptr<Mc3::Mc3Object>>&)> findNearest;
+                findNearest = [&](const std::vector<std::shared_ptr<Mc3::Mc3Object>>& list) {
+                    for (const auto& obj : list) {
+                        if (!selection_.isSelected(obj.get())) {
+                            float ddx = obj->transform.position[0] - nx;
+                            float ddy = obj->transform.position[1] - ny;
+                            float ddz = obj->transform.position[2] - nz;
+                            float d = std::sqrt(ddx*ddx + ddy*ddy + ddz*ddz);
+                            if (d < bestDist) {
+                                bestDist = d;
+                                bestX = obj->transform.position[0];
+                                bestY = obj->transform.position[1];
+                                bestZ = obj->transform.position[2];
+                            }
+                        }
+                        findNearest(obj->children);
+                    }
+                };
+                findNearest(document_.objects);
+
+                if (bestDist < threshold) {
+                    float offX = bestX - nx, offY = bestY - ny, offZ = bestZ - nz;
+                    for (const auto& s : selection_.selection()) {
+                        if (lockedIds_.count(s->id)) continue;
+                        s->transform.position[0] += offX;
+                        s->transform.position[1] += offY;
+                        s->transform.position[2] += offZ;
+                    }
+                }
+            }
+
             modified_ = true;
             updateWindowTitle();
         }
@@ -205,11 +250,13 @@ void MeshCraftApplication::handleMouseInput(const MouseState& ms, const MouseSta
             float tx = -radY/radLen, ty = radX/radLen;
             float degsPerPixel = 180.0f / (std::numbers::pi_v<float> * r_screen);
             float delta = (dx * tx + dy * ty) * degsPerPixel;
+            bool ctrlHeld = (Keyboard::GetState().IsKeyDown(Keys::LeftControl) ||
+                             Keyboard::GetState().IsKeyDown(Keys::RightControl));
             for (const auto& s : selection_.selection()) {
                 if (lockedIds_.count(s->id)) continue;
                 float& r = s->transform.rotation[axIdx];
                 r += delta;
-                if (snapEnabled_)
+                if (snapEnabled_ || ctrlHeld)
                     r = std::round(r / snapRotate_) * snapRotate_;
             }
             modified_ = true;

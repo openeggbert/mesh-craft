@@ -67,8 +67,12 @@ MeshCraftApplication::MeshCraftApplication(std::filesystem::path filePath, std::
 // SDL event watcher — forwards each event to ImGui before CNA processes it
 // ---------------------------------------------------------------------------
 
-bool MeshCraftApplication::sdlEventWatch(void* /*userdata*/, void* eventPtr) {
-    ImGui_ImplSDL3_ProcessEvent(static_cast<SDL_Event*>(eventPtr));
+bool MeshCraftApplication::sdlEventWatch(void* userdata, void* eventPtr) {
+    auto* ev = static_cast<SDL_Event*>(eventPtr);
+    ImGui_ImplSDL3_ProcessEvent(ev);
+    if (userdata && ev->type == SDL_EVENT_DROP_FILE && ev->drop.data) {
+        static_cast<MeshCraftApplication*>(userdata)->pendingDropFile_ = ev->drop.data;
+    }
     return true;
 }
 
@@ -103,7 +107,7 @@ void MeshCraftApplication::LoadContent() {
     ImGui_ImplSDL3_InitForOpenGL(sdlWindow, glCtx);
     ImGui_ImplOpenGL3_Init("#version 300 es");
 
-    SDL_AddEventWatch(reinterpret_cast<SDL_EventFilter>(sdlEventWatch), nullptr);
+    SDL_AddEventWatch(reinterpret_cast<SDL_EventFilter>(sdlEventWatch), this);
 
     loadRecentFiles();
 
@@ -203,6 +207,16 @@ void MeshCraftApplication::Update(GameTime& gameTime) {
         }
     }
 
+    // Consume dropped file path (set by SDL event watcher)
+    if (!pendingDropFile_.empty()) {
+        std::filesystem::path dropPath = std::move(pendingDropFile_);
+        pendingDropFile_.clear();
+        if (dropPath.extension() == ".xml" || dropPath.string().find(".mc3") != std::string::npos)
+            confirmIfModified(PendingAction::OpenRecentFile, dropPath);
+        else
+            setStatusMsg("Unsupported file type: " + dropPath.filename().string(), true, 3.0f);
+    }
+
     auto ks = Keyboard::GetState();
     auto ms = Mouse::GetState();
 
@@ -232,6 +246,8 @@ void MeshCraftApplication::Draw(const GameTime& /*gameTime*/) {
     const ImVec2 dsz = ImGui::GetIO().DisplaySize;
     int screenW = (dsz.x > 0) ? static_cast<int>(dsz.x) : gd.getViewportProperty().getWidthProperty();
     int screenH = (dsz.y > 0) ? static_cast<int>(dsz.y) : gd.getViewportProperty().getHeightProperty();
+    cachedScreenW_ = screenW;
+    cachedScreenH_ = screenH;
 
     // Compute top area height from ImGui (menu bar + toolbar window).
     // On the very first frame imguiTopH_ is 0; a reasonable fallback is 60.
@@ -269,6 +285,28 @@ void MeshCraftApplication::Draw(const GameTime& /*gameTime*/) {
     Matrix view = camera_.viewMatrix();
     Matrix proj = camera_.projectionMatrix(aspect);
 
+    // Look-through-camera mode: override view/proj from selected Mc3Camera
+    if (lookThroughCamera_ && selectedCameraIdx_ >= 0 &&
+        selectedCameraIdx_ < static_cast<int>(document_.cameras.size())) {
+        const auto& cam = document_.cameras[selectedCameraIdx_];
+        const float pi = std::numbers::pi_v<float>;
+        Vector3 camPos(cam.position[0], cam.position[1], cam.position[2]);
+        Vector3 camTarget(cam.target[0], cam.target[1], cam.target[2]);
+        Vector3 up(0.0f, 1.0f, 0.0f);
+        view = Matrix::CreateLookAt(camPos, camTarget, up);
+        if (cam.type == Mc3::CameraType::Orthographic) {
+            float hw = cam.orthoSize * aspect;
+            proj = Matrix::CreateOrthographic(hw * 2.0f, cam.orthoSize * 2.0f,
+                                               cam.nearPlane, cam.farPlane);
+        } else {
+            float fovRad = cam.fov * pi / 180.0f;
+            proj = Matrix::CreatePerspectiveFieldOfView(fovRad, aspect,
+                                                         cam.nearPlane, cam.farPlane);
+        }
+    } else {
+        lookThroughCamera_ = false; // auto-clear if camera removed
+    }
+
     // Cache for measurement overlay projection
     cachedVP_ = view * proj;
     cachedVX_ = viewX; cachedVY_ = viewY; cachedVW_ = viewW; cachedVH_ = viewH;
@@ -278,9 +316,10 @@ void MeshCraftApplication::Draw(const GameTime& /*gameTime*/) {
 
     gd.SetDepthTestEnabled(true);
     auto selPtrs = selectedPointers();
-    sceneRenderer_->draw(document_, view, proj, selPtrs);
+    if (!showWireframeMode_)
+        sceneRenderer_->draw(document_, view, proj, selPtrs);
 
-    if (showEdgeOverlay_) {
+    if (showEdgeOverlay_ || showWireframeMode_) {
         gd.SetDepthTestEnabled(true);
         sceneRenderer_->drawEdgeOverlay(document_, view, proj);
     }
@@ -305,6 +344,29 @@ void MeshCraftApplication::Draw(const GameTime& /*gameTime*/) {
             gd.SetDepthTestEnabled(false);
             sceneRenderer_->drawRotateGizmo(sel0, view, proj, gizmoLen, gizmoLocalSpace_);
         }
+
+        // Bounding box overlay (cyan wire box for each selected object)
+        if (showBoundingBox_) {
+            gd.SetDepthTestEnabled(false);
+            Color bboxColor(80, 220, 255, 200);
+            for (const auto& selObj : selection_.selection())
+                sceneRenderer_->drawObjectWireframe(*selObj, view, proj, bboxColor);
+        }
+    }
+
+    // Locked-object outline (red wireframe around every locked object)
+    if (!lockedIds_.empty()) {
+        gd.SetDepthTestEnabled(false);
+        Color lockColor(220, 60, 60, 180);
+        std::function<void(const std::vector<std::shared_ptr<Mc3::Mc3Object>>&)> drawLocked;
+        drawLocked = [&](const std::vector<std::shared_ptr<Mc3::Mc3Object>>& list) {
+            for (const auto& obj : list) {
+                if (lockedIds_.count(obj->id))
+                    sceneRenderer_->drawObjectWireframe(*obj, view, proj, lockColor);
+                if (!obj->children.empty()) drawLocked(obj->children);
+            }
+        };
+        drawLocked(document_.objects);
     }
 
     if (fnGlDisable_)  fnGlDisable_(GL_SCISSOR_TEST);
@@ -354,6 +416,7 @@ void MeshCraftApplication::drawImGuiUi(int screenW, int screenH)
 
     drawStatsOverlay(screenW, screenH);
     drawStatusBar(screenW, screenH);
+    drawPanelSplitters(screenW, screenH);
     drawDialogs();
 }
 

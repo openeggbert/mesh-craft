@@ -58,6 +58,10 @@ void MeshCraftApplication::drawStatsOverlay(int screenW, int screenH)
         ImGui::TextColored(ImVec4(1.0f, 0.85f, 0.3f, 1.0f), "%.0f FPS", displayFps_);
         if (isolateActive_)
             ImGui::TextColored(ImVec4(1.0f, 0.5f, 0.1f, 1.0f), "ISOLATED");
+        if (lookThroughCamera_ && selectedCameraIdx_ >= 0 &&
+            selectedCameraIdx_ < static_cast<int>(document_.cameras.size()))
+            ImGui::TextColored(ImVec4(0.75f, 0.45f, 1.0f, 1.0f), "CAM: %s",
+                               document_.cameras[selectedCameraIdx_].name.c_str());
         ImGui::Separator();
         ImGui::Text("Objects: %d", totalObjs);
         ImGui::Text("Visible: %d", visibleObjs);
@@ -71,6 +75,13 @@ void MeshCraftApplication::drawStatsOverlay(int screenW, int screenH)
         ImGui::TextDisabled("Cam dist: %.2f", camera_.distance);
         ImGui::TextDisabled("Target: %.1f, %.1f, %.1f",
             camera_.target.X, camera_.target.Y, camera_.target.Z);
+        ImGui::Separator();
+        {
+            int sv = 0, st = 0;
+            sceneRenderer_->scenePolyStats(document_, sv, st);
+            ImGui::TextDisabled("Verts: %d", sv);
+            ImGui::TextDisabled("Tris:  %d", st);
+        }
         ImGui::End();
         ImGui::PopStyleVar();
         (void)tlH2;
@@ -126,6 +137,14 @@ void MeshCraftApplication::drawStatsOverlay(int screenW, int screenH)
             ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.8f, 1.0f), "%.4g%s", delta, unit);
         ImGui::SameLine(0, 6);
         ImGui::TextDisabled("(%.4g)", curVal);
+        // Show snap indicator for rotate when Ctrl or snap grid is active
+        if (activeTool_ == ActiveTool::Rotate) {
+            bool ctrlDown = ImGui::GetIO().KeyCtrl;
+            if (ctrlDown || snapEnabled_) {
+                ImGui::SameLine(0, 6);
+                ImGui::TextColored(ImVec4(1.0f, 0.85f, 0.3f, 1.0f), "[snap %.4g\xc2\xb0]", snapRotate_);
+            }
+        }
         ImGui::End();
         ImGui::PopStyleVar();
         (void)axName;
@@ -218,7 +237,7 @@ void MeshCraftApplication::drawStatsOverlay(int screenW, int screenH)
         };
         for (const auto& p : presets) {
             if (ImGui::Button(p.label, ImVec2(38, 18))) {
-                if (p.reset) { camera_.reset(); }
+                if (p.reset) { camera_.reset(); camera_.orthographic = false; }
                 else         { camera_.yaw = p.yaw; camera_.pitch = p.pitch; }
             }
             if (ImGui::IsItemHovered()) {
@@ -227,6 +246,39 @@ void MeshCraftApplication::drawStatsOverlay(int screenW, int screenH)
             }
             ImGui::SameLine();
         }
+
+        // Orthographic / Perspective toggle
+        if (camera_.orthographic)
+            ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.25f, 0.55f, 0.80f, 1.f));
+        if (ImGui::Button(camera_.orthographic ? "Ortho" : "Persp", ImVec2(42, 18)))
+            camera_.orthographic = !camera_.orthographic;
+        if (camera_.orthographic)
+            ImGui::PopStyleColor();
+        if (ImGui::IsItemHovered())
+            ImGui::SetTooltip(camera_.orthographic
+                ? "Orthographic projection (click for Perspective)"
+                : "Perspective projection (click for Orthographic)");
+        ImGui::SameLine();
+
+        // Look-through-camera button (shown when a camera is selected in the Cameras tab)
+        if (selectedCameraIdx_ >= 0 &&
+            selectedCameraIdx_ < static_cast<int>(document_.cameras.size())) {
+            if (lookThroughCamera_)
+                ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.60f, 0.30f, 0.80f, 1.f));
+            if (ImGui::Button("Cam", ImVec2(34, 18)))
+                lookThroughCamera_ = !lookThroughCamera_;
+            if (lookThroughCamera_)
+                ImGui::PopStyleColor();
+            if (ImGui::IsItemHovered()) {
+                const auto& cam = document_.cameras[selectedCameraIdx_];
+                if (lookThroughCamera_)
+                    ImGui::SetTooltip("Looking through: %s\nClick to exit", cam.name.c_str());
+                else
+                    ImGui::SetTooltip("Look through camera: %s", cam.name.c_str());
+            }
+            ImGui::SameLine();
+        }
+
         ImGui::End();
         ImGui::PopStyleVar(2);
     }
@@ -411,6 +463,13 @@ void MeshCraftApplication::drawDialogs()
                 }
             }
             if (entry("Edit", cEdit, "Select Parent",  "P"))        selectParent();
+            if (hasSel && entry("Edit", cEdit, "Convert to Definition", "")) convertToDefinition();
+            if (hasSel && !selection_.selection().empty() &&
+                selection_.selection().front()->type == Mc3::ObjectType::Instance)
+                if (entry("Edit", cEdit, "Break Instance", "")) breakInstance();
+            if (entry("Edit", cEdit, "Select Children", ""))        selectChildren();
+            if (selection_.selection().size() >= 2)
+                if (entry("Edit", cEdit, "Align to First Selected", "")) alignToObject();
         }
 
         // ---- Add commands ----
@@ -425,24 +484,82 @@ void MeshCraftApplication::drawDialogs()
         // ---- View commands ----
         if (entry("View", cFile, "Toggle Stats Overlay",   "")) showStatsOverlay_ = !showStatsOverlay_;
         if (entry("View", cFile, "Toggle Edge Overlay", "Alt+W")) showEdgeOverlay_ = !showEdgeOverlay_;
+        if (entry("View", cFile, "Toggle Wireframe Mode", ""))    showWireframeMode_ = !showWireframeMode_;
         if (entry("View", cFile, "Toggle Timeline",  "Ctrl+T"))  showTimeline_ = !showTimeline_;
         if (entry("View", cFile, "Toggle Snap to Grid",  ""))    snapEnabled_  = !snapEnabled_;
 
         // ---- Scene objects (only shown when filtering) ----
         if (hasFilter) {
             if (shown > 0 && shown < kMaxShown) ImGui::Separator();
-            std::function<void(const std::vector<std::shared_ptr<Mc3::Mc3Object>>&)> addObjs;
-            addObjs = [&](const auto& list) {
+
+            // Recursively walk objects; build breadcrumb path and match name/id/tags
+            std::function<void(const std::vector<std::shared_ptr<Mc3::Mc3Object>>&, const std::string&)> addObjs;
+            addObjs = [&](const auto& list, const std::string& parentPath) {
                 for (const auto& obj : list) {
-                    if (entry("Object", cObj, obj->name.empty() ? obj->id.c_str() : obj->name.c_str(), "")) {
-                        selection_.clear();
-                        selection_.select(obj);
-                        updateWindowTitle();
+                    const std::string& displayName = obj->name.empty() ? obj->id : obj->name;
+
+                    // Determine type prefix (same as hierarchy panel)
+                    const char* tp = "";
+                    if      (obj->type == Mc3::ObjectType::Box || obj->type == Mc3::ObjectType::Cube) tp = "[B] ";
+                    else if (obj->type == Mc3::ObjectType::Sphere)       tp = "[S] ";
+                    else if (obj->type == Mc3::ObjectType::Cylinder)     tp = "[C] ";
+                    else if (obj->type == Mc3::ObjectType::Cone)         tp = "[K] ";
+                    else if (obj->type == Mc3::ObjectType::Plane)        tp = "[P] ";
+                    else if (obj->type == Mc3::ObjectType::Torus)        tp = "[T] ";
+                    else if (obj->type == Mc3::ObjectType::Mesh)         tp = "[M] ";
+                    else if (obj->type == Mc3::ObjectType::Extrude)      tp = "[E] ";
+                    else if (obj->type == Mc3::ObjectType::Instance)     tp = "[i] ";
+                    else if (obj->type == Mc3::ObjectType::Group)        tp = "[G] ";
+                    else if (obj->type == Mc3::ObjectType::Union)        tp = "[U] ";
+                    else if (obj->type == Mc3::ObjectType::Difference)   tp = "[D] ";
+                    else if (obj->type == Mc3::ObjectType::Intersection) tp = "[X] ";
+
+                    // Build label: "prefix + name" and hint: breadcrumb path
+                    std::string label = std::string(tp) + displayName;
+                    std::string path = parentPath.empty() ? displayName : parentPath + " / " + displayName;
+
+                    // Match: check label AND tags
+                    std::string labelLow = label;
+                    for (auto& c : labelLow) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+                    bool tagMatch = false;
+                    for (const auto& tag : obj->tags) {
+                        std::string tl = tag;
+                        for (auto& c : tl) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+                        if (tl.find(filt) != std::string::npos) { tagMatch = true; break; }
                     }
-                    addObjs(obj->children);
+
+                    if (labelLow.find(filt) != std::string::npos || tagMatch) {
+                        // Show hint as parent path (right-aligned)
+                        if (shown < kMaxShown) {
+                            ++shown;
+                            ImGui::PushID(obj->id.c_str());
+                            ImGui::TextColored(cObj, "%-6s", "Object");
+                            ImGui::SameLine(0, 6);
+                            bool clicked = ImGui::Selectable(label.c_str(), false,
+                                ImGuiSelectableFlags_SpanAllColumns | ImGuiSelectableFlags_AllowOverlap);
+                            if (!parentPath.empty()) {
+                                ImGui::SameLine();
+                                float rightEdge = ImGui::GetWindowWidth() - ImGui::CalcTextSize(parentPath.c_str()).x - 12.0f;
+                                if (rightEdge > ImGui::GetCursorPosX() + 6.0f) {
+                                    ImGui::SetCursorPosX(rightEdge);
+                                    ImGui::TextDisabled("%s", parentPath.c_str());
+                                }
+                            }
+                            ImGui::PopID();
+                            if (clicked) {
+                                selection_.clear();
+                                selection_.select(obj);
+                                hierarchyScrollToId_ = obj->id;
+                                updateWindowTitle();
+                                closePalette = true;
+                            }
+                        }
+                    }
+
+                    addObjs(obj->children, path);
                 }
             };
-            addObjs(document_.objects);
+            addObjs(document_.objects, "");
         }
 
         if (shown == 0) ImGui::TextDisabled("No results for \"%s\"", cmdPaletteBuf_);
@@ -849,6 +966,49 @@ void MeshCraftApplication::drawDialogs()
         }
     }
 
+    // -----------------------------------------------------------------------
+    // Undo History dialog
+    // -----------------------------------------------------------------------
+    if (undoHistoryOpen_) {
+        ImGui::OpenPopup("Undo History##uhdlg");
+        undoHistoryOpen_ = false;
+    }
+    if (ImGui::BeginPopupModal("Undo History##uhdlg", nullptr,
+                               ImGuiWindowFlags_AlwaysAutoResize)) {
+        int n = static_cast<int>(undoStack_.size());
+        ImGui::TextDisabled("%d step(s) available  (newest first)", n);
+        ImGui::Separator();
+        ImGui::BeginChild("##uhscroll", ImVec2(340, std::min(n * 22 + 8, 300)), false);
+
+        // Current state (top of stack = most recent undo point)
+        ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.55f, 1.0f, 0.55f, 1.0f));
+        ImGui::Selectable("  Current  (active)", false, ImGuiSelectableFlags_Disabled);
+        ImGui::PopStyleColor();
+
+        for (int i = n - 1; i >= 0; --i) {
+            int stepsAgo = n - i;
+            char label[64];
+            std::snprintf(label, sizeof(label), "  Step -%d  (%d step%s ago)",
+                          stepsAgo, stepsAgo, stepsAgo == 1 ? "" : "s");
+            if (ImGui::Selectable(label)) {
+                // Restore: push current + everything newer onto redo, then restore this state
+                redoStack_.push_back(deepCopyDoc(document_));
+                for (int j = n - 1; j > i; --j)
+                    redoStack_.push_back(std::move(undoStack_[j]));
+                document_ = std::move(undoStack_[i]);
+                undoStack_.resize(i);
+                selection_.clear();
+                modified_ = true; updateWindowTitle();
+                ImGui::CloseCurrentPopup();
+            }
+        }
+        ImGui::EndChild();
+        ImGui::Separator();
+        if (ImGui::Button("Close", ImVec2(100, 0)) || ImGui::IsKeyPressed(ImGuiKey_Escape, false))
+            ImGui::CloseCurrentPopup();
+        ImGui::EndPopup();
+    }
+
     // Box-select overlay (drawn via ImGui drawlist on top of everything)
     // -----------------------------------------------------------------------
     if (boxSelectActive_) {
@@ -1084,6 +1244,50 @@ void MeshCraftApplication::drawDialogs()
         ImGui::EndPopup();
     }
 
+}
+
+void MeshCraftApplication::drawPanelSplitters(int screenW, int screenH)
+{
+    // Full-screen pass-through window for splitter hit areas
+    ImGui::SetNextWindowPos(ImVec2(0, 0));
+    ImGui::SetNextWindowSize(ImVec2(static_cast<float>(screenW), static_cast<float>(screenH)));
+    ImGui::SetNextWindowBgAlpha(0.0f);
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0, 0));
+    ImGui::Begin("##splitters", nullptr,
+        ImGuiWindowFlags_NoTitleBar    | ImGuiWindowFlags_NoResize |
+        ImGuiWindowFlags_NoMove        | ImGuiWindowFlags_NoScrollbar |
+        ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoBringToFrontOnFocus |
+        ImGuiWindowFlags_NoNav         | ImGuiWindowFlags_NoDecoration |
+        ImGuiWindowFlags_NoBackground  | ImGuiWindowFlags_NoInputs);
+
+    const float panelY  = static_cast<float>(imguiTopH_);
+    const int   tlH     = showTimeline_ ? kTimelineH : 0;
+    const float panelH  = static_cast<float>(screenH - imguiTopH_ - kStatusH - tlH);
+
+    constexpr float kSplitW = 6.0f;
+
+    // Left panel splitter
+    ImGui::SetCursorScreenPos(ImVec2(static_cast<float>(kLeftPanelW) - kSplitW * 0.5f, panelY));
+    ImGui::InvisibleButton("##split_left", ImVec2(kSplitW, panelH));
+    if (ImGui::IsItemHovered() || ImGui::IsItemActive())
+        ImGui::SetMouseCursor(ImGuiMouseCursor_ResizeEW);
+    if (ImGui::IsItemActive()) {
+        kLeftPanelW += static_cast<int>(ImGui::GetIO().MouseDelta.x);
+        kLeftPanelW  = std::clamp(kLeftPanelW, 80, screenW / 2 - 40);
+    }
+
+    // Right panel splitter
+    ImGui::SetCursorScreenPos(ImVec2(static_cast<float>(screenW - kRightPanelW) - kSplitW * 0.5f, panelY));
+    ImGui::InvisibleButton("##split_right", ImVec2(kSplitW, panelH));
+    if (ImGui::IsItemHovered() || ImGui::IsItemActive())
+        ImGui::SetMouseCursor(ImGuiMouseCursor_ResizeEW);
+    if (ImGui::IsItemActive()) {
+        kRightPanelW -= static_cast<int>(ImGui::GetIO().MouseDelta.x);
+        kRightPanelW  = std::clamp(kRightPanelW, 80, screenW / 2 - 40);
+    }
+
+    ImGui::End();
+    ImGui::PopStyleVar();
 }
 
 } // namespace MeshCraft

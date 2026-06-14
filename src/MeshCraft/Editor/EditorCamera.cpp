@@ -67,6 +67,11 @@ Matrix EditorCamera::viewMatrix() const {
 }
 
 Matrix EditorCamera::projectionMatrix(float aspectRatio) const {
+    if (orthographic) {
+        float halfH = distance * std::tan(fovDegrees * (3.14159265f / 180.0f) * 0.5f);
+        float halfW = halfH * aspectRatio;
+        return Matrix::CreateOrthographic(halfW * 2.0f, halfH * 2.0f, nearPlane, farPlane);
+    }
     float fovRad = fovDegrees * (3.14159265f / 180.0f);
     return Matrix::CreatePerspectiveFieldOfView(fovRad, aspectRatio, nearPlane, farPlane);
 }
@@ -84,7 +89,7 @@ Vector3 EditorCamera::screenRayDirection(float ndcX, float ndcY, float aspectRat
     float cosP = std::cos(pitch), sinP = std::sin(pitch);
     float cosY = std::cos(yaw),   sinY = std::sin(yaw);
 
-    Vector3 forward{ -cosP * sinY,  sinP, -cosP * cosY };
+    Vector3 forward{  cosP * sinY,  sinP,  cosP * cosY };
     Vector3 right  {  cosY,         0.0f, -sinY        };
     Vector3 up     {  sinP * sinY, -cosP,  sinP * cosY };
 

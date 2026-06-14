@@ -64,7 +64,7 @@ static std::vector<ExtFrame> makePathFrames(const Mc3ExtrudePath& path, int segs
     case ExtrudePathType::Line: {
         Vector3 dir, nor, bi;
         if      (path.axis == "x") { dir={1,0,0}; nor={0,1,0}; bi={0,0,1}; }
-        else if (path.axis == "z") { dir={0,0,1}; nor={1,0,0}; bi={0,1,0}; }
+        else if (path.axis == "z") { dir={0,0,1}; nor={0,1,0}; bi={-1,0,0}; }
         else                        { dir={0,1,0}; nor={1,0,0}; bi={0,0,1}; }
         for (int i = 0; i <= segs; ++i) {
             float t = static_cast<float>(i) / segs * path.length;
@@ -197,6 +197,21 @@ static std::vector<Pt2> makeProfile(const Mc3CrossSection& cs) {
         for (int i = 0; i < N; ++i) {
             float a = 2.0f * std::numbers::pi_v<float> * i / N;
             pts.push_back({ cs.radius * std::cos(a), cs.radius * std::sin(a) });
+        }
+        break;
+    }
+    case CrossSectionType::Star: {
+        int N = std::max(3, cs.sides);
+        float outerR = cs.radius;
+        float innerR = (cs.innerRadius > 0.0f && cs.innerRadius < cs.radius)
+            ? cs.innerRadius : cs.radius * 0.5f;
+        const float pi2 = 2.0f * std::numbers::pi_v<float>;
+        const float offset = -std::numbers::pi_v<float> / 2.0f; // start from top
+        for (int i = 0; i < N; ++i) {
+            float aOuter = pi2 * i / N + offset;
+            float aInner = aOuter + pi2 / (2 * N);
+            pts.push_back({ outerR * std::cos(aOuter), outerR * std::sin(aOuter) });
+            pts.push_back({ innerR * std::cos(aInner), innerR * std::sin(aInner) });
         }
         break;
     }
@@ -464,6 +479,36 @@ void SceneRenderer::drawObjectEdges(const Mc3Object& obj, const Mc3Document& doc
         drawWireShape(wireShapeTorus_, m, view, proj, edgeColor);
         break;
     }
+    case ObjectType::Capsule: {
+        float r = obj.primitive ? obj.primitive->radius * 2.0f : 1.0f;
+        float h = obj.primitive ? obj.primitive->height : 1.0f;
+        float sxz = r * kPush;
+        float sy  = (h + r) / 2.0f * kPush;
+        Matrix m = deform * Matrix::CreateScale({sxz, sy, sxz}) * world;
+        drawWireShape(wireShapeCapsule_, m, view, proj, edgeColor);
+        break;
+    }
+    case ObjectType::Disk: {
+        float r = obj.primitive ? obj.primitive->radius : 0.5f;
+        float s = r * 2.0f * kPush;
+        Matrix m = deform * Matrix::CreateScale({s, 1.0f, s}) * world;
+        drawWireShape(wireShapeDisk_, m, view, proj, edgeColor);
+        break;
+    }
+    case ObjectType::Grid: {
+        float sx = obj.primitive ? obj.primitive->size[0] : 1.0f;
+        float sz = obj.primitive ? obj.primitive->size[2] : 1.0f;
+        Matrix m = deform * Matrix::CreateScale({sx*kPush, 1.0f, sz*kPush}) * world;
+        drawWireShape(wireShapeGrid_, m, view, proj, edgeColor);
+        break;
+    }
+    case ObjectType::IcoSphere: {
+        float r = obj.primitive ? obj.primitive->radius * 2.0f : 1.0f;
+        float s = r * kPush;
+        Matrix m = deform * Matrix::CreateScale({s, s, s}) * world;
+        drawWireShape(wireShapeSphere_, m, view, proj, edgeColor);
+        break;
+    }
     case ObjectType::Group:
     case ObjectType::Area:
     case ObjectType::Union:
@@ -568,6 +613,133 @@ void SceneRenderer::drawObjectEdges(const Mc3Object& obj, const Mc3Document& doc
         drawWireShape(wireShapeBox_, world, view, proj, edgeColor);
         break;
     }
+}
+
+void SceneRenderer::drawDiskDynamic(float outerR, float innerR, int segments,
+                                     const Matrix& world,
+                                     const Matrix& view, const Matrix& proj,
+                                     Color color)
+{
+    const int segs = std::max(3, segments);
+    const float pi2 = 2.0f * std::numbers::pi_v<float>;
+    const bool solid = (innerR <= 0.0f || innerR >= outerR);
+
+    std::vector<VertexPositionColor> verts;
+    std::vector<uint16_t> indices;
+
+    if (solid) {
+        // Fan: center + outer ring
+        int ctr = 0;
+        verts.push_back({ Vector3{0.0f, 0.0f, 0.0f}, color });
+        for (int i = 0; i < segs; ++i) {
+            float a = pi2 * i / segs;
+            verts.push_back({ Vector3{ outerR * std::cos(a), 0.0f, outerR * std::sin(a) }, color });
+        }
+        for (int i = 0; i < segs; ++i) {
+            int j = (i + 1) % segs;
+            indices.push_back(static_cast<uint16_t>(ctr));
+            indices.push_back(static_cast<uint16_t>(1 + i));
+            indices.push_back(static_cast<uint16_t>(1 + j));
+        }
+    } else {
+        // Annulus: inner ring then outer ring
+        for (int i = 0; i < segs; ++i) {
+            float a = pi2 * i / segs;
+            float ca = std::cos(a), sa = std::sin(a);
+            verts.push_back({ Vector3{ innerR * ca, 0.0f, innerR * sa }, color }); // inner
+            verts.push_back({ Vector3{ outerR * ca, 0.0f, outerR * sa }, color }); // outer
+        }
+        for (int i = 0; i < segs; ++i) {
+            int j = (i + 1) % segs;
+            int in0 = i * 2, out0 = i * 2 + 1;
+            int in1 = j * 2, out1 = j * 2 + 1;
+            indices.push_back(static_cast<uint16_t>(in0));  indices.push_back(static_cast<uint16_t>(out0)); indices.push_back(static_cast<uint16_t>(out1));
+            indices.push_back(static_cast<uint16_t>(in0));  indices.push_back(static_cast<uint16_t>(out1)); indices.push_back(static_cast<uint16_t>(in1));
+        }
+    }
+
+    if (indices.empty()) return;
+    int nv = static_cast<int>(verts.size());
+    int nt = static_cast<int>(indices.size()) / 3;
+
+    VertexBuffer tmpVB(device_, nv);
+    tmpVB.SetData(verts.data(), nv);
+    IndexBuffer  tmpIB(device_, static_cast<int>(indices.size()));
+    tmpIB.SetData(indices.data(), static_cast<int>(indices.size()));
+
+    effect_->World      = world;
+    effect_->View       = view;
+    effect_->Projection = proj;
+    effect_->VertexColorEnabled = true;
+    for (auto& pass : effect_->getCurrentTechniqueProperty()->getPassesProperty())
+        pass.Apply();
+
+    device_.SetVertexBuffer(&tmpVB);
+    device_.SetIndexBuffer(&tmpIB);
+    device_.DrawIndexedPrimitives(Graphics::PrimitiveType::TriangleList, 0, 0, nv, 0, nt);
+    device_.SetVertexBuffer(nullptr);
+    device_.SetIndexBuffer(nullptr);
+}
+
+void SceneRenderer::drawGridDynamic(float sizeX, float sizeZ, int subX, int subZ,
+                                     const Matrix& world,
+                                     const Matrix& view, const Matrix& proj,
+                                     Color color)
+{
+    subX = std::max(1, subX);
+    subZ = std::max(1, subZ);
+
+    const int cols = subX + 1;
+    const int rows = subZ + 1;
+    std::vector<VertexPositionColor> verts;
+    verts.reserve(cols * rows);
+
+    for (int iz = 0; iz < rows; ++iz) {
+        float z = (-0.5f + static_cast<float>(iz) / subZ) * sizeZ;
+        for (int ix = 0; ix < cols; ++ix) {
+            float x = (-0.5f + static_cast<float>(ix) / subX) * sizeX;
+            verts.push_back({ Vector3{x, 0.0f, z}, color });
+        }
+    }
+
+    std::vector<uint16_t> indices;
+    indices.reserve(subX * subZ * 6);
+    for (int iz = 0; iz < subZ; ++iz) {
+        for (int ix = 0; ix < subX; ++ix) {
+            int v00 = iz * cols + ix;
+            int v10 = v00 + 1;
+            int v01 = v00 + cols;
+            int v11 = v01 + 1;
+            indices.push_back(static_cast<uint16_t>(v00));
+            indices.push_back(static_cast<uint16_t>(v10));
+            indices.push_back(static_cast<uint16_t>(v11));
+            indices.push_back(static_cast<uint16_t>(v00));
+            indices.push_back(static_cast<uint16_t>(v11));
+            indices.push_back(static_cast<uint16_t>(v01));
+        }
+    }
+
+    if (indices.empty()) return;
+    int nv = static_cast<int>(verts.size());
+    int nt = static_cast<int>(indices.size()) / 3;
+
+    VertexBuffer tmpVB(device_, nv);
+    tmpVB.SetData(verts.data(), nv);
+    IndexBuffer  tmpIB(device_, static_cast<int>(indices.size()));
+    tmpIB.SetData(indices.data(), static_cast<int>(indices.size()));
+
+    effect_->World      = world;
+    effect_->View       = view;
+    effect_->Projection = proj;
+    effect_->VertexColorEnabled = true;
+    for (auto& pass : effect_->getCurrentTechniqueProperty()->getPassesProperty())
+        pass.Apply();
+
+    device_.SetVertexBuffer(&tmpVB);
+    device_.SetIndexBuffer(&tmpIB);
+    device_.DrawIndexedPrimitives(Graphics::PrimitiveType::TriangleList, 0, 0, nv, 0, nt);
+    device_.SetVertexBuffer(nullptr);
+    device_.SetIndexBuffer(nullptr);
 }
 
 void SceneRenderer::drawEdgeOverlay(const Mc3Document& doc,

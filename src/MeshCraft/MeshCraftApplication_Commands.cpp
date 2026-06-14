@@ -43,6 +43,10 @@ void MeshCraftApplication::addPrimitive(Mc3::ObjectType type) {
     case Mc3::ObjectType::Cone:     { Mc3::Mc3Primitive p; p.primitiveType = Mc3::PrimitiveType::Cone;     p.radius = 0.5f; p.height = 1.0f; obj->primitive = p; } break;
     case Mc3::ObjectType::Plane:    { Mc3::Mc3Primitive p; p.primitiveType = Mc3::PrimitiveType::Plane;    p.size = {1.0f,0.0f,1.0f};  obj->primitive = p; } break;
     case Mc3::ObjectType::Torus:    { Mc3::Mc3Primitive p; p.primitiveType = Mc3::PrimitiveType::Torus; p.majorRadius = 0.35f; p.minorRadius = 0.15f; p.segments = 32; obj->primitive = p; } break;
+    case Mc3::ObjectType::Capsule:  { Mc3::Mc3Primitive p; p.primitiveType = Mc3::PrimitiveType::Capsule; p.radius = 0.5f; p.height = 1.0f; p.segments = 16; obj->primitive = p; } break;
+    case Mc3::ObjectType::Disk:     { Mc3::Mc3Primitive p; p.primitiveType = Mc3::PrimitiveType::Disk; p.radius = 0.5f; p.minorRadius = 0.0f; p.segments = 32; obj->primitive = p; } break;
+    case Mc3::ObjectType::Grid:      { Mc3::Mc3Primitive p; p.primitiveType = Mc3::PrimitiveType::Grid; p.size = {1.0f,0.0f,1.0f}; p.subdivisionsX = 4; p.subdivisionsZ = 4; obj->primitive = p; } break;
+    case Mc3::ObjectType::IcoSphere: { Mc3::Mc3Primitive p; p.primitiveType = Mc3::PrimitiveType::IcoSphere; p.radius = 0.5f; obj->primitive = p; } break;
     case Mc3::ObjectType::Extrude: {
         Mc3::Mc3Extrude ex;
         ex.crossSection.type   = Mc3::CrossSectionType::Rect;
@@ -437,6 +441,139 @@ void MeshCraftApplication::selectParent() {
     selection_.select(parentSptr);
     updateWindowTitle();
     setStatusMsg("Selected parent: " + parentSptr->name, false, 1.5f);
+}
+
+void MeshCraftApplication::breakInstance() {
+    if (!selection_.hasSelection()) return;
+    auto inst = selection_.selection().front();
+    if (inst->type != Mc3::ObjectType::Instance) {
+        setStatusMsg("Selected object is not an Instance", true, 2.0f);
+        return;
+    }
+    auto defIt = document_.definitions.find(inst->definition);
+    if (defIt == document_.definitions.end()) {
+        setStatusMsg("Definition not found: " + inst->definition, true, 2.0f);
+        return;
+    }
+
+    pushUndo();
+
+    // Deep-copy definition content, preserve instance transform + metadata
+    auto copy = deepCopyObject(*defIt->second);
+    copy->id        = inst->id;
+    copy->name      = inst->name;
+    copy->transform = inst->transform;
+    copy->visible   = inst->visible;
+    copy->tags      = inst->tags;
+
+    // Generate a fresh unique id to avoid collision if definition is used elsewhere
+    int n = 1;
+    std::string newId;
+    do { newId = copy->name + "_" + std::to_string(n++); }
+    while (flatFindById(newId) != nullptr);
+    copy->id = newId;
+
+    // Replace instance in hierarchy
+    auto* parentList = findParentList(document_.objects, inst.get());
+    if (parentList) {
+        for (auto& obj : *parentList) {
+            if (obj.get() == inst.get()) { obj = copy; break; }
+        }
+    } else {
+        document_.objects.push_back(copy);
+    }
+
+    selection_.clear();
+    selection_.select(copy);
+    modified_ = true; updateWindowTitle();
+    setStatusMsg("Instance broken: " + inst->definition, false, 2.0f);
+}
+
+void MeshCraftApplication::convertToDefinition() {
+    if (!selection_.hasSelection()) return;
+    auto src = selection_.selection().front();
+
+    // Generate unique definition key
+    int n = 1;
+    std::string defKey;
+    do { defKey = "def_" + std::to_string(n++); }
+    while (document_.definitions.count(defKey));
+
+    pushUndo();
+
+    // Deep-copy selected object into definitions map (reset transform to identity)
+    auto defObj = deepCopyObject(*src);
+    defObj->id   = defKey;
+    defObj->name = defKey;
+    defObj->transform.position = {0.0f, 0.0f, 0.0f};
+    defObj->transform.rotation = {0.0f, 0.0f, 0.0f};
+    defObj->transform.scale    = {1.0f, 1.0f, 1.0f};
+    document_.definitions[defKey] = defObj;
+
+    // Build Instance object preserving original transform
+    auto inst = std::make_shared<Mc3::Mc3Object>();
+    inst->id         = src->id;
+    inst->name       = src->name.empty() ? defKey : src->name;
+    inst->type       = Mc3::ObjectType::Instance;
+    inst->definition = defKey;
+    inst->transform  = src->transform;
+    inst->visible    = src->visible;
+    inst->tags       = src->tags;
+
+    // Replace src with inst in place (find parent list)
+    auto* parentList = findParentList(document_.objects, src.get());
+    if (parentList) {
+        for (auto& obj : *parentList) {
+            if (obj.get() == src.get()) { obj = inst; break; }
+        }
+    } else {
+        // Not found in main list — shouldn't happen, but add to root as fallback
+        document_.objects.push_back(inst);
+    }
+
+    selection_.clear();
+    selection_.select(inst);
+    modified_ = true; updateWindowTitle();
+    setStatusMsg("Converted to definition: " + defKey, false, 2.5f);
+}
+
+void MeshCraftApplication::alignToObject() {
+    if (selection_.selection().size() < 2) return;
+    const auto& src = selection_.selection().front();
+    float tx = src->transform.position[0];
+    float ty = src->transform.position[1];
+    float tz = src->transform.position[2];
+    pushUndo();
+    for (size_t i = 1; i < selection_.selection().size(); ++i) {
+        const auto& s = selection_.selection()[i];
+        if (lockedIds_.count(s->id)) continue;
+        s->transform.position[0] = tx;
+        s->transform.position[1] = ty;
+        s->transform.position[2] = tz;
+    }
+    modified_ = true; updateWindowTitle();
+    setStatusMsg("Aligned " + std::to_string(selection_.selection().size() - 1) +
+                 " object(s) to " + src->name, false, 2.0f);
+}
+
+void MeshCraftApplication::selectChildren() {
+    if (!selection_.hasSelection()) return;
+    const auto& sel0 = selection_.selection().front();
+    if (sel0->children.empty()) {
+        setStatusMsg("No children", false, 1.5f);
+        return;
+    }
+    selection_.clear();
+    std::function<void(const std::vector<std::shared_ptr<Mc3::Mc3Object>>&)> addAll;
+    addAll = [&](const std::vector<std::shared_ptr<Mc3::Mc3Object>>& list) {
+        for (const auto& c : list) {
+            selection_.select(c);
+            addAll(c->children);
+        }
+    };
+    addAll(sel0->children);
+    updateWindowTitle();
+    setStatusMsg("Selected " + std::to_string(selection_.selection().size()) + " child object(s)", false, 1.5f);
 }
 
 // ---------------------------------------------------------------------------

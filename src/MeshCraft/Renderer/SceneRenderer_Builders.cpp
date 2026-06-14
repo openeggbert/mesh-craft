@@ -10,6 +10,7 @@
 #include <Microsoft/Xna/Framework/Vector3.hpp>
 #include <algorithm>
 #include <cmath>
+#include <map>
 #include <numbers>
 #include <vector>
 
@@ -415,6 +416,276 @@ void SceneRenderer::buildUnitTorus(int ringSeg, int tubeSeg) {
     }
 }
 
+void SceneRenderer::buildUnitCapsule(int segments) {
+    // Unit capsule: radius=0.5, cylinder height=1.0, total height=2.0 (y=-1..+1)
+    // Bottom hemisphere center at y=-0.5, top at y=+0.5.
+    // Rendering scales: x,z by radius*2; y by (height + radius*2) / 2.
+    const int hRings = std::max(4, segments / 4);
+    const float pi  = std::numbers::pi_v<float>;
+    const float pi2 = 2.0f * pi;
+    Color c(200, 200, 200, 255);
+
+    // Helper: add a ring of vertices at given y center offset, rXZ radius
+    // Returns start index in verts
+    auto addRing = [&](std::vector<VertexPositionColor>& verts, float y, float rXZ) {
+        int base = static_cast<int>(verts.size());
+        for (int i = 0; i < segments; ++i) {
+            float a = pi2 * i / segments;
+            verts.push_back({ Vector3{ rXZ * std::cos(a), y, rXZ * std::sin(a) }, c });
+        }
+        return base;
+    };
+
+    std::vector<VertexPositionColor> verts;
+    std::vector<uint16_t> indices;
+
+    // Collect ring base indices
+    std::vector<int> ringBases;
+
+    // Bottom hemisphere: rings from pole (y=-1) to equator (y=-0.5)
+    int botPole = static_cast<int>(verts.size());
+    verts.push_back({ Vector3{0.0f, -1.0f, 0.0f}, c }); // bottom pole
+    for (int ri = 1; ri <= hRings; ++ri) {
+        float phi = -pi / 2.0f + (pi / 2.0f) * float(ri) / hRings;
+        float y   = -0.5f + 0.5f * std::sin(phi);
+        float r   =  0.5f * std::cos(phi);
+        ringBases.push_back(addRing(verts, y, r));
+    }
+
+    // Cylinder top ring at y=+0.5, r=0.5
+    ringBases.push_back(addRing(verts, 0.5f, 0.5f));
+
+    // Top hemisphere: rings from equator (y=+0.5) to pole (y=+1)
+    for (int ri = 1; ri < hRings; ++ri) {
+        float phi = (pi / 2.0f) * float(ri) / hRings;
+        float y   =  0.5f + 0.5f * std::sin(phi);
+        float r   =  0.5f * std::cos(phi);
+        ringBases.push_back(addRing(verts, y, r));
+    }
+    int topPole = static_cast<int>(verts.size());
+    verts.push_back({ Vector3{0.0f, 1.0f, 0.0f}, c }); // top pole
+
+    // Triangulate: bottom pole cap
+    {
+        int rb = ringBases[0];
+        for (int i = 0; i < segments; ++i) {
+            int j = (i + 1) % segments;
+            indices.push_back(ui16(botPole));
+            indices.push_back(ui16(rb + j));
+            indices.push_back(ui16(rb + i));
+        }
+    }
+    // Quads between consecutive rings
+    for (int r0 = 0; r0 + 1 < static_cast<int>(ringBases.size()); ++r0) {
+        int ra = ringBases[r0], rb = ringBases[r0 + 1];
+        for (int i = 0; i < segments; ++i) {
+            int j = (i + 1) % segments;
+            indices.push_back(ui16(ra + i)); indices.push_back(ui16(rb + i)); indices.push_back(ui16(rb + j));
+            indices.push_back(ui16(ra + i)); indices.push_back(ui16(rb + j)); indices.push_back(ui16(ra + j));
+        }
+    }
+    // Top pole cap
+    {
+        int rt = ringBases.back();
+        for (int i = 0; i < segments; ++i) {
+            int j = (i + 1) % segments;
+            indices.push_back(ui16(topPole));
+            indices.push_back(ui16(rt + i));
+            indices.push_back(ui16(rt + j));
+        }
+    }
+
+    unitCapsule_.vb = std::make_unique<VertexBuffer>(device_, static_cast<int>(verts.size()));
+    unitCapsule_.vb->SetData(verts.data(), static_cast<int>(verts.size()));
+    unitCapsule_.ib = std::make_unique<IndexBuffer>(device_, static_cast<int>(indices.size()));
+    unitCapsule_.ib->SetData(indices.data(), static_cast<int>(indices.size()));
+    unitCapsule_.primitiveCount = static_cast<int>(indices.size()) / 3;
+    storePositions(verts, unitCapsule_);
+
+    // VPNT with normals (for textured rendering)
+    {
+        std::vector<VertexPositionNormalTexture> tv;
+        std::vector<uint16_t> ti;
+        std::vector<int> tRingBases;
+
+        // Pole vertices handled specially; add rings with seam duplicate
+        auto addTexRing = [&](float y, float rXZ, float yCenterOffset) {
+            int base = static_cast<int>(tv.size());
+            for (int i = 0; i <= segments; ++i) {
+                float a = pi2 * i / segments;
+                float cx = std::cos(a), cz = std::sin(a);
+                Vector3 pos{ rXZ * cx, y, rXZ * cz };
+                // Normal from hemisphere center (yCenterOffset = -0.5 or +0.5) or horizontal for cylinder
+                Vector3 norm;
+                if (std::abs(yCenterOffset) > 0.01f) {
+                    // hemisphere
+                    norm = Vector3::Normalize({ cx * rXZ, y - yCenterOffset, cz * rXZ });
+                } else {
+                    norm = Vector3{ cx, 0.0f, cz };
+                }
+                float u = static_cast<float>(i) / segments;
+                tv.push_back({ pos, norm, Vector2{ u, 0.0f } }); // v assigned later
+            }
+            return base;
+        };
+        (void)addTexRing; // suppress unused warning if we simplify
+
+        // Simplified VPNT: same topology as VPC but with normals computed per vertex
+        for (const auto& v : verts) {
+            Vector3 p = v.Position;
+            Vector3 n;
+            if (p.Y < -0.49f && std::abs(p.X) < 0.01f && std::abs(p.Z) < 0.01f)
+                n = {0, -1, 0};
+            else if (p.Y > 0.99f)
+                n = {0, 1, 0};
+            else if (p.Y <= -0.5f + 0.001f) {
+                n = Vector3::Normalize({ p.X, p.Y + 0.5f, p.Z }); // bottom hemisphere
+            } else if (p.Y >= 0.5f - 0.001f && p.Y < 0.99f) {
+                n = Vector3::Normalize({ p.X, p.Y - 0.5f, p.Z }); // top hemisphere
+            } else {
+                // cylinder body
+                float r2 = std::sqrt(p.X * p.X + p.Z * p.Z);
+                n = r2 > 0.001f ? Vector3{ p.X / r2, 0.0f, p.Z / r2 } : Vector3{0, 1, 0};
+            }
+            tv.push_back({ p, n, Vector2{0.5f, 0.5f} }); // simple UV
+        }
+        for (auto idx : indices) ti.push_back(idx);
+
+        unitCapsule_.texVB = std::make_unique<VertexBuffer>(device_, static_cast<int>(tv.size()));
+        unitCapsule_.texVB->SetData(tv.data(), static_cast<int>(tv.size()));
+        unitCapsule_.texIB = std::make_unique<IndexBuffer>(device_, static_cast<int>(ti.size()));
+        unitCapsule_.texIB->SetData(ti.data(), static_cast<int>(ti.size()));
+        unitCapsule_.texPrimitiveCount = static_cast<int>(ti.size()) / 3;
+    }
+
+    // Wire shape for capsule: equator ring + 4 meridian arcs + cylinder edges
+    {
+        // Equator at y=-0.5 and y=0.5 (cylinder rings)
+        for (int bot = 0; bot < 2; ++bot) {
+            float yw = bot ? -0.5f : 0.5f;
+            for (int i = 0; i < segments; ++i) {
+                float a0 = pi2 * i / segments;
+                float a1 = pi2 * (i+1) / segments;
+                wireShapeCapsule_.positions.push_back({0.5f*std::cos(a0), yw, 0.5f*std::sin(a0)});
+                wireShapeCapsule_.positions.push_back({0.5f*std::cos(a1), yw, 0.5f*std::sin(a1)});
+                wireShapeCapsule_.lineCount++;
+            }
+        }
+        // 4 vertical cylinder edges
+        for (int q = 0; q < 4; ++q) {
+            float a = pi2 * q / 4;
+            float x = 0.5f * std::cos(a), z = 0.5f * std::sin(a);
+            wireShapeCapsule_.positions.push_back({x, -0.5f, z});
+            wireShapeCapsule_.positions.push_back({x,  0.5f, z});
+            wireShapeCapsule_.lineCount++;
+        }
+        // 2 hemisphere arcs (XZ and YZ planes)
+        for (int plane = 0; plane < 2; ++plane) {
+            for (int cap = 0; cap < 2; ++cap) {
+                float yOff = cap ? -0.5f : 0.5f;
+                float ySign = cap ? -1.0f : 1.0f;
+                for (int i = 0; i < segments / 2; ++i) {
+                    float phi0 = pi * i / (segments / 2);
+                    float phi1 = pi * (i+1) / (segments / 2);
+                    float y0 = yOff + 0.5f * std::sin(phi0) * ySign;
+                    float y1 = yOff + 0.5f * std::sin(phi1) * ySign;
+                    float r0 = 0.5f * std::cos(phi0);
+                    float r1 = 0.5f * std::cos(phi1);
+                    if (plane == 0) {
+                        wireShapeCapsule_.positions.push_back({r0, y0, 0.0f});
+                        wireShapeCapsule_.positions.push_back({r1, y1, 0.0f});
+                    } else {
+                        wireShapeCapsule_.positions.push_back({0.0f, y0, r0});
+                        wireShapeCapsule_.positions.push_back({0.0f, y1, r1});
+                    }
+                    wireShapeCapsule_.lineCount++;
+                }
+            }
+        }
+    }
+}
+
+void SceneRenderer::buildUnitIcoSphere(int subdivisions) {
+    const float phi = (1.0f + std::sqrt(5.0f)) / 2.0f;
+
+    // Normalize raw vertex to radius 0.5 (unit form)
+    auto norm05 = [](float x, float y, float z) -> std::array<float,3> {
+        float len = std::sqrt(x*x + y*y + z*z);
+        return { 0.5f*x/len, 0.5f*y/len, 0.5f*z/len };
+    };
+
+    const float p = phi;
+    std::vector<std::array<float,3>> pos = {
+        norm05(-1, p, 0), norm05( 1, p, 0), norm05(-1,-p, 0), norm05( 1,-p, 0),
+        norm05( 0,-1, p), norm05( 0, 1, p), norm05( 0,-1,-p), norm05( 0, 1,-p),
+        norm05( p, 0,-1), norm05( p, 0, 1), norm05(-p, 0,-1), norm05(-p, 0, 1),
+    };
+
+    std::vector<std::array<int,3>> faces = {
+        {0,11,5}, {0,5,1}, {0,1,7}, {0,7,10}, {0,10,11},
+        {1,5,9},  {5,11,4},{11,10,2},{10,7,6}, {7,1,8},
+        {3,9,4},  {3,4,2}, {3,2,6}, {3,6,8},  {3,8,9},
+        {4,9,5},  {2,4,11},{6,2,10},{8,6,7},   {9,8,1},
+    };
+
+    std::map<std::pair<int,int>, int> midCache;
+    for (int d = 0; d < subdivisions; ++d) {
+        midCache.clear();
+        std::vector<std::array<int,3>> newFaces;
+        newFaces.reserve(faces.size() * 4);
+
+        auto getMid = [&](int a, int b) -> int {
+            auto key = std::make_pair(std::min(a,b), std::max(a,b));
+            auto it = midCache.find(key);
+            if (it != midCache.end()) return it->second;
+            const auto& pa = pos[a];
+            const auto& pb = pos[b];
+            float mx = (pa[0]+pb[0]) * 0.5f;
+            float my = (pa[1]+pb[1]) * 0.5f;
+            float mz = (pa[2]+pb[2]) * 0.5f;
+            float len = std::sqrt(mx*mx+my*my+mz*mz);
+            int idx = static_cast<int>(pos.size());
+            pos.push_back({ 0.5f*mx/len, 0.5f*my/len, 0.5f*mz/len });
+            midCache[key] = idx;
+            return idx;
+        };
+
+        for (auto& f : faces) {
+            int m01 = getMid(f[0], f[1]);
+            int m12 = getMid(f[1], f[2]);
+            int m20 = getMid(f[2], f[0]);
+            newFaces.push_back({f[0], m01, m20});
+            newFaces.push_back({f[1], m12, m01});
+            newFaces.push_back({f[2], m20, m12});
+            newFaces.push_back({m01, m12, m20});
+        }
+        faces = std::move(newFaces);
+    }
+
+    Color c(200, 200, 200, 255);
+    int nv = static_cast<int>(pos.size());
+
+    std::vector<VertexPositionColor> verts(nv);
+    for (int i = 0; i < nv; ++i)
+        verts[i] = { Vector3{pos[i][0], pos[i][1], pos[i][2]}, c };
+
+    std::vector<uint16_t> indices;
+    indices.reserve(faces.size() * 3);
+    for (auto& f : faces) {
+        indices.push_back(ui16(f[0]));
+        indices.push_back(ui16(f[1]));
+        indices.push_back(ui16(f[2]));
+    }
+
+    int ni = static_cast<int>(indices.size());
+    unitIcoSphere_.vb = std::make_unique<VertexBuffer>(device_, nv);
+    unitIcoSphere_.vb->SetData(verts.data(), nv);
+    unitIcoSphere_.ib = std::make_unique<IndexBuffer>(device_, ni);
+    unitIcoSphere_.ib->SetData(indices.data(), ni);
+    unitIcoSphere_.primitiveCount = static_cast<int>(faces.size());
+    storePositions(verts, unitIcoSphere_);
+}
+
 void SceneRenderer::buildWireBox() {
     // 12 edges of a unit box
     Color c(255, 165, 0, 255); // orange for selection
@@ -523,6 +794,32 @@ void SceneRenderer::buildWireShapes(int segments) {
         wireShapePlane_.positions.push_back({-0.5f,0, 0.5f}); wireShapePlane_.positions.push_back({-0.5f,0,-0.5f}); wireShapePlane_.lineCount++;
     }
 
+    // Disk: outer circle + inner circle (at 50% ratio) + 4 radial lines in XZ plane
+    {
+        const float pi2 = 2.0f * std::numbers::pi_v<float>;
+        // Outer circle
+        for (int i = 0; i < segments; ++i) {
+            float a0 = pi2 * i / segments, a1 = pi2 * (i+1) / segments;
+            wireShapeDisk_.positions.push_back({0.5f*std::cos(a0), 0.0f, 0.5f*std::sin(a0)});
+            wireShapeDisk_.positions.push_back({0.5f*std::cos(a1), 0.0f, 0.5f*std::sin(a1)});
+            wireShapeDisk_.lineCount++;
+        }
+        // Inner circle at 50% radius
+        for (int i = 0; i < segments; ++i) {
+            float a0 = pi2 * i / segments, a1 = pi2 * (i+1) / segments;
+            wireShapeDisk_.positions.push_back({0.25f*std::cos(a0), 0.0f, 0.25f*std::sin(a0)});
+            wireShapeDisk_.positions.push_back({0.25f*std::cos(a1), 0.0f, 0.25f*std::sin(a1)});
+            wireShapeDisk_.lineCount++;
+        }
+        // 4 radial spokes
+        for (int q = 0; q < 4; ++q) {
+            float a = pi2 * q / 4;
+            wireShapeDisk_.positions.push_back({0.25f*std::cos(a), 0.0f, 0.25f*std::sin(a)});
+            wireShapeDisk_.positions.push_back({0.50f*std::cos(a), 0.0f, 0.50f*std::sin(a)});
+            wireShapeDisk_.lineCount++;
+        }
+    }
+
     // Torus (R=0.35, r=0.15): outer ring, inner ring, 4 tube cross-sections
     {
         const float R = 0.35f, r = 0.15f;
@@ -549,6 +846,22 @@ void SceneRenderer::buildWireShapes(int segments) {
                 wireShapeTorus_.positions.push_back({(R+r*std::cos(phi1))*ct, r*std::sin(phi1), (R+r*std::cos(phi1))*st});
                 wireShapeTorus_.lineCount++;
             }
+        }
+    }
+
+    // Grid wire shape: 1×1 unit XZ plane with 4×4 subdivisions (5 lines each axis)
+    {
+        const int N = 4; // subdivisions per axis
+        for (int i = 0; i <= N; ++i) {
+            float t = -0.5f + static_cast<float>(i) / N;
+            // Horizontal line (parallel to X axis, constant Z)
+            wireShapeGrid_.positions.push_back({-0.5f, 0.0f, t});
+            wireShapeGrid_.positions.push_back({ 0.5f, 0.0f, t});
+            wireShapeGrid_.lineCount++;
+            // Vertical line (parallel to Z axis, constant X)
+            wireShapeGrid_.positions.push_back({t, 0.0f, -0.5f});
+            wireShapeGrid_.positions.push_back({t, 0.0f,  0.5f});
+            wireShapeGrid_.lineCount++;
         }
     }
 }

@@ -13,6 +13,10 @@ enum class PrimitiveType {
     Cone,
     Plane,
     Torus,
+    Capsule,
+    Disk,
+    Grid,
+    IcoSphere,
 };
 
 // Primitive shape parameters.
@@ -27,6 +31,8 @@ struct Mc3Primitive {
     std::string axis{"y"};                         // cylinder/plane: mesh-generation axis hint
     float majorRadius{0.35f};                      // torus: ring radius
     float minorRadius{0.15f};                      // torus: tube radius
+    int subdivisionsX{4};                          // grid: columns
+    int subdivisionsZ{4};                          // grid: rows
 };
 
 } // namespace MeshCraft::Mc3

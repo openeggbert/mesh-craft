@@ -99,6 +99,10 @@ void MeshCraftApplication::drawPropertiesPanel(float panelY, float panelH, int s
             }
         };
 
+        if (ImGui::BeginTabBar("##proptabs")) {
+
+        if (ImGui::BeginTabItem("Transform")) {
+
         // Transform: position (delta applied to all selected, skipping locked)
         multiLabel("Position", !allMatchF3([](const Mc3::Mc3Object* o){ return o->transform.position; }));
         if (showTimeline_ && !currentActionName_.empty()) {
@@ -121,6 +125,13 @@ void MeshCraftApplication::drawPropertiesPanel(float panelY, float panelH, int s
                     for (int i = 0; i < 3; ++i) s->transform.position[i] += dp[i];
                 }
                 modified_ = true; updateWindowTitle();
+            }
+            // World-space position (read-only, shown when object is parented)
+            {
+                auto wm = sceneRenderer_->computeObjectWorldMatrix(*sel0, document_);
+                ImGui::TextDisabled("World: %.3f, %.3f, %.3f", wm.M41, wm.M42, wm.M43);
+                if (ImGui::IsItemHovered())
+                    ImGui::SetTooltip("World-space position (after parent transforms)");
             }
         }
 
@@ -204,6 +215,20 @@ void MeshCraftApplication::drawPropertiesPanel(float panelY, float panelH, int s
                     case Mc3::PrimitiveType::Torus:
                         w = d = (p.majorRadius + p.minorRadius) * 2.0f * std::max(sx,sz);
                         h = p.minorRadius * 2.0f * sy;
+                        sizeKnown = true; break;
+                    case Mc3::PrimitiveType::Capsule:
+                        w = d = p.radius * 2.0f * std::max(sx,sz);
+                        h = (p.height + p.radius * 2.0f) * sy;
+                        sizeKnown = true; break;
+                    case Mc3::PrimitiveType::Disk:
+                        w = d = p.radius * 2.0f * std::max(sx,sz);
+                        h = 0.0f;
+                        sizeKnown = true; break;
+                    case Mc3::PrimitiveType::Grid:
+                        w = p.size[0]*sx; h = 0.0f; d = p.size[2]*sz;
+                        sizeKnown = true; break;
+                    case Mc3::PrimitiveType::IcoSphere:
+                        w = h = d = p.radius * 2.0f * std::max({sx,sy,sz});
                         sizeKnown = true; break;
                     default: break;
                 }
@@ -387,6 +412,68 @@ void MeshCraftApplication::drawPropertiesPanel(float panelY, float panelH, int s
             }
         }
 
+        // States
+        {
+            ImGui::Spacing();
+            ImGui::Separator();
+            ImGui::Spacing();
+            if (ImGui::TreeNodeEx("States##xf", ImGuiTreeNodeFlags_None)) {
+                auto& states = sel0->states;
+                std::string toDelete;
+                for (auto& [stId, st] : states) {
+                    ImGui::PushID(stId.c_str());
+                    ImGui::TextUnformatted(stId.c_str());
+                    ImGui::SameLine();
+                    if (ImGui::SmallButton("Apply")) {
+                        pushUndo();
+                        if (st.position) sel0->transform.position = *st.position;
+                        if (st.rotation) sel0->transform.rotation = *st.rotation;
+                        if (st.scale)    sel0->transform.scale    = *st.scale;
+                        if (st.visible)  sel0->visible            = *st.visible;
+                        if (st.material) sel0->material           = *st.material;
+                        modified_ = true; updateWindowTitle();
+                    }
+                    if (ImGui::IsItemHovered()) ImGui::SetTooltip("Apply this state to the object");
+                    ImGui::SameLine();
+                    if (ImGui::SmallButton("Del")) {
+                        pushUndo();
+                        toDelete = stId;
+                        modified_ = true; updateWindowTitle();
+                    }
+                    ImGui::PopID();
+                }
+                if (!toDelete.empty()) states.erase(toDelete);
+                ImGui::Separator();
+                static char newStateName[64] = {};
+                ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x - 76);
+                ImGui::InputText("##stname", newStateName, sizeof(newStateName));
+                ImGui::SameLine();
+                if (ImGui::SmallButton("Capture")) {
+                    std::string n(newStateName);
+                    if (!n.empty()) {
+                        pushUndo();
+                        Mc3::Mc3ObjectState st;
+                        st.position = sel0->transform.position;
+                        st.rotation = sel0->transform.rotation;
+                        st.scale    = sel0->transform.scale;
+                        st.visible  = sel0->visible;
+                        if (!sel0->material.empty()) st.material = sel0->material;
+                        states[n] = st;
+                        modified_ = true; updateWindowTitle();
+                        newStateName[0] = '\0';
+                    }
+                }
+                if (ImGui::IsItemHovered())
+                    ImGui::SetTooltip("Save current transform+visibility as a named state");
+                ImGui::TreePop();
+            }
+        }
+
+        ImGui::EndTabItem();
+        } // end Transform tab
+
+        if (ImGui::BeginTabItem("Geometry")) {
+
         // CSG operation
         if (sel0->type == Mc3::ObjectType::Union       ||
             sel0->type == Mc3::ObjectType::Difference  ||
@@ -525,6 +612,107 @@ void MeshCraftApplication::drawPropertiesPanel(float panelY, float panelH, int s
                 }
                 break;
             }
+            case Mc3::PrimitiveType::Disk: {
+                ImGui::TextDisabled("Outer Radius");
+                float r = p.radius;
+                ImGui::SetNextItemWidth(-1);
+                if (ImGui::DragFloat("##pdsk_r", &r, 0.01f, 0.001f, 1000.0f)) {
+                    if (ImGui::IsItemActivated()) pushUndo();
+                    p.radius = std::max(0.001f, r);
+                    modified_ = true; updateWindowTitle();
+                }
+                ImGui::TextDisabled("Inner Radius (0 = solid)");
+                float ir = p.minorRadius;
+                ImGui::SetNextItemWidth(-1);
+                if (ImGui::DragFloat("##pdsk_ir", &ir, 0.01f, 0.0f, p.radius - 0.001f)) {
+                    if (ImGui::IsItemActivated()) pushUndo();
+                    p.minorRadius = std::clamp(ir, 0.0f, p.radius - 0.001f);
+                    modified_ = true; updateWindowTitle();
+                }
+                ImGui::TextDisabled("Segments");
+                int segs = p.segments;
+                ImGui::SetNextItemWidth(-1);
+                if (ImGui::SliderInt("##pdsk_segs", &segs, 3, 128)) {
+                    if (ImGui::IsItemActivated()) pushUndo();
+                    p.segments = segs;
+                    modified_ = true; updateWindowTitle();
+                }
+                break;
+            }
+            case Mc3::PrimitiveType::Capsule: {
+                ImGui::TextDisabled("Radius");
+                float r = p.radius;
+                ImGui::SetNextItemWidth(-1);
+                if (ImGui::DragFloat("##pcap_r", &r, 0.01f, 0.001f, 1000.0f)) {
+                    if (ImGui::IsItemActivated()) pushUndo();
+                    p.radius = std::max(0.001f, r);
+                    modified_ = true; updateWindowTitle();
+                }
+                ImGui::TextDisabled("Height (cylinder part)");
+                float h = p.height;
+                ImGui::SetNextItemWidth(-1);
+                if (ImGui::DragFloat("##pcap_h", &h, 0.01f, 0.0f, 1000.0f)) {
+                    if (ImGui::IsItemActivated()) pushUndo();
+                    p.height = std::max(0.0f, h);
+                    modified_ = true; updateWindowTitle();
+                }
+                ImGui::TextDisabled("Segments");
+                int segs = p.segments;
+                ImGui::SetNextItemWidth(-1);
+                if (ImGui::SliderInt("##pcap_segs", &segs, 6, 64)) {
+                    if (ImGui::IsItemActivated()) pushUndo();
+                    p.segments = segs;
+                    modified_ = true; updateWindowTitle();
+                }
+                break;
+            }
+            case Mc3::PrimitiveType::Grid: {
+                ImGui::TextDisabled("Width (X)");
+                float sx = p.size[0];
+                ImGui::SetNextItemWidth(-1);
+                if (ImGui::DragFloat("##pgrd_sx", &sx, 0.01f, 0.001f, 1000.0f)) {
+                    if (ImGui::IsItemActivated()) pushUndo();
+                    p.size[0] = std::max(0.001f, sx);
+                    modified_ = true; updateWindowTitle();
+                }
+                ImGui::TextDisabled("Depth (Z)");
+                float sz = p.size[2];
+                ImGui::SetNextItemWidth(-1);
+                if (ImGui::DragFloat("##pgrd_sz", &sz, 0.01f, 0.001f, 1000.0f)) {
+                    if (ImGui::IsItemActivated()) pushUndo();
+                    p.size[2] = std::max(0.001f, sz);
+                    modified_ = true; updateWindowTitle();
+                }
+                ImGui::TextDisabled("Subdivisions X");
+                int subX = p.subdivisionsX;
+                ImGui::SetNextItemWidth(-1);
+                if (ImGui::SliderInt("##pgrd_subx", &subX, 1, 64)) {
+                    if (ImGui::IsItemActivated()) pushUndo();
+                    p.subdivisionsX = std::max(1, subX);
+                    modified_ = true; updateWindowTitle();
+                }
+                ImGui::TextDisabled("Subdivisions Z");
+                int subZ = p.subdivisionsZ;
+                ImGui::SetNextItemWidth(-1);
+                if (ImGui::SliderInt("##pgrd_subz", &subZ, 1, 64)) {
+                    if (ImGui::IsItemActivated()) pushUndo();
+                    p.subdivisionsZ = std::max(1, subZ);
+                    modified_ = true; updateWindowTitle();
+                }
+                break;
+            }
+            case Mc3::PrimitiveType::IcoSphere: {
+                ImGui::TextDisabled("Radius");
+                float r = p.radius;
+                ImGui::SetNextItemWidth(-1);
+                if (ImGui::DragFloat("##pico_r", &r, 0.01f, 0.001f, 1000.0f)) {
+                    if (ImGui::IsItemActivated()) pushUndo();
+                    p.radius = std::max(0.001f, r);
+                    modified_ = true; updateWindowTitle();
+                }
+                ImGui::TextDisabled("320 triangles (2 subdivisions)");
+                break;
+            }
             case Mc3::PrimitiveType::Torus: {
                 ImGui::TextDisabled("Major Radius");
                 float mr = p.majorRadius;
@@ -585,10 +773,10 @@ void MeshCraftApplication::drawPropertiesPanel(float panelY, float panelH, int s
             // --- Cross-section ---
             if (ImGui::TreeNodeEx("Cross-section", ImGuiTreeNodeFlags_DefaultOpen)) {
                 auto& cs = ex.crossSection;
-                const char* csTypes[] = { "Rect", "Circle", "Polygon", "Custom" };
+                const char* csTypes[] = { "Rect", "Circle", "Polygon", "Custom", "Star" };
                 int csIdx = static_cast<int>(cs.type);
                 ImGui::SetNextItemWidth(-1);
-                if (ImGui::Combo("##cstype", &csIdx, csTypes, 4)) {
+                if (ImGui::Combo("##cstype", &csIdx, csTypes, 5)) {
                     pushUndo();
                     cs.type = static_cast<Mc3::CrossSectionType>(csIdx);
                     modified_ = true; updateWindowTitle();
@@ -651,6 +839,29 @@ void MeshCraftApplication::drawPropertiesPanel(float panelY, float panelH, int s
                     ImGui::SetNextItemWidth(-1);
                     if (ImGui::SliderInt("##cspsd", &cs.sides, 3, 32)) {
                         if (ImGui::IsItemActivated()) pushUndo();
+                        modified_ = true; updateWindowTitle();
+                    }
+                    break;
+                case Mc3::CrossSectionType::Star:
+                    ImGui::TextDisabled("Points (tips)");
+                    ImGui::SetNextItemWidth(-1);
+                    if (ImGui::SliderInt("##csstpts", &cs.sides, 3, 16)) {
+                        if (ImGui::IsItemActivated()) pushUndo();
+                        cs.sides = std::max(3, cs.sides);
+                        modified_ = true; updateWindowTitle();
+                    }
+                    ImGui::TextDisabled("Outer Radius");
+                    ImGui::SetNextItemWidth(-1);
+                    if (ImGui::DragFloat("##csstr", &cs.radius, 0.01f, 0.001f, 1000.f)) {
+                        if (ImGui::IsItemActivated()) pushUndo();
+                        cs.radius = std::max(0.001f, cs.radius);
+                        modified_ = true; updateWindowTitle();
+                    }
+                    ImGui::TextDisabled("Inner Radius (0 = 50%)");
+                    ImGui::SetNextItemWidth(-1);
+                    if (ImGui::DragFloat("##csstir", &cs.innerRadius, 0.01f, 0.0f, cs.radius)) {
+                        if (ImGui::IsItemActivated()) pushUndo();
+                        cs.innerRadius = std::clamp(cs.innerRadius, 0.0f, cs.radius);
                         modified_ = true; updateWindowTitle();
                     }
                     break;
@@ -753,6 +964,20 @@ void MeshCraftApplication::drawPropertiesPanel(float panelY, float panelH, int s
                         path.helixTurns = std::max(0.1f, path.helixTurns);
                         modified_ = true; updateWindowTitle();
                     }
+                    ImGui::TextDisabled("Pitch (height per turn)");
+                    ImGui::SetNextItemWidth(-1);
+                    {
+                        float pitch = (path.helixTurns > 0.0f)
+                            ? path.helixHeight / path.helixTurns : 0.0f;
+                        if (ImGui::DragFloat("##php", &pitch, 0.01f, 0.001f, 10000.f)) {
+                            if (ImGui::IsItemActivated()) pushUndo();
+                            pitch = std::max(0.001f, pitch);
+                            path.helixHeight = pitch * path.helixTurns;
+                            modified_ = true; updateWindowTitle();
+                        }
+                        if (ImGui::IsItemHovered())
+                            ImGui::SetTooltip("Pitch = Height / Turns\nChanging pitch updates Height.");
+                    }
                     break;
                 case Mc3::ExtrudePathType::Polyline:
                 case Mc3::ExtrudePathType::Bezier: {
@@ -832,6 +1057,92 @@ void MeshCraftApplication::drawPropertiesPanel(float panelY, float panelH, int s
                 }
                 ImGui::EndCombo();
             }
+
+            // Definition content preview
+            if (!sel0->definition.empty()) {
+                auto defIt = document_.definitions.find(sel0->definition);
+                if (defIt != document_.definitions.end() && defIt->second) {
+                    const auto& defRoot = *defIt->second;
+                    // Count total nodes (root + all descendants)
+                    std::function<int(const Mc3::Mc3Object&)> countNodes;
+                    countNodes = [&](const Mc3::Mc3Object& n) -> int {
+                        int c = 1;
+                        for (const auto& ch : n.children) c += countNodes(*ch);
+                        return c;
+                    };
+                    int nodeCount = countNodes(defRoot);
+                    ImGui::Spacing();
+                    ImGui::TextDisabled("Definition content (%d object%s)", nodeCount, nodeCount == 1 ? "" : "s");
+                    int rows = std::min(nodeCount, 8);
+                    ImVec2 listSize(-1, rows * ImGui::GetTextLineHeightWithSpacing() + 6);
+                    ImGui::PushStyleColor(ImGuiCol_ChildBg, ImVec4(0.12f, 0.12f, 0.12f, 1.f));
+                    if (ImGui::BeginChild("##defpreview", listSize, true)) {
+                        std::function<void(const Mc3::Mc3Object&, int)> showTree;
+                        showTree = [&](const Mc3::Mc3Object& node, int depth) {
+                            std::string indent(depth * 2, ' ');
+                            const char* label = node.name.empty() ? node.id.c_str() : node.name.c_str();
+                            ImGui::TextDisabled("%s%s", indent.c_str(), label);
+                            for (const auto& ch : node.children)
+                                showTree(*ch, depth + 1);
+                        };
+                        showTree(defRoot, 0);
+                    }
+                    ImGui::EndChild();
+                    ImGui::PopStyleColor();
+                }
+            }
+            // Variants list (random pool)
+            ImGui::Spacing();
+            ImGui::Separator();
+            ImGui::Spacing();
+            ImGui::TextDisabled("Random Variants (%d)", static_cast<int>(sel0->variantDefinitions.size()));
+            if (ImGui::IsItemHovered())
+                ImGui::SetTooltip("Each instance picks one variant deterministically\nbased on its ID hash. Empty = use Definition above.");
+            // Show existing variants with Remove buttons
+            for (int vi = 0; vi < static_cast<int>(sel0->variantDefinitions.size()); ++vi) {
+                ImGui::PushID(vi);
+                ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x - 26);
+                std::string& vref = sel0->variantDefinitions[vi];
+                char vbuf[128]; std::strncpy(vbuf, vref.c_str(), sizeof(vbuf)-1); vbuf[127]='\0';
+                if (ImGui::InputText("##vdef", vbuf, sizeof(vbuf), ImGuiInputTextFlags_EnterReturnsTrue)) {
+                    pushUndo(); vref = vbuf; modified_ = true; updateWindowTitle();
+                }
+                ImGui::SameLine(0, 4);
+                if (ImGui::SmallButton("x")) {
+                    pushUndo();
+                    sel0->variantDefinitions.erase(sel0->variantDefinitions.begin() + vi);
+                    modified_ = true; updateWindowTitle();
+                    ImGui::PopID(); break;
+                }
+                ImGui::PopID();
+            }
+            // Add variant combo
+            {
+                static char addVarBuf[128]{};
+                ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x - 50);
+                ImGui::InputTextWithHint("##addvar", "definition id…", addVarBuf, sizeof(addVarBuf));
+                ImGui::SameLine(0, 4);
+                if (ImGui::Button("+Add", ImVec2(46, 0)) && addVarBuf[0]) {
+                    pushUndo();
+                    sel0->variantDefinitions.emplace_back(addVarBuf);
+                    addVarBuf[0] = '\0';
+                    modified_ = true; updateWindowTitle();
+                }
+                // Quick-add from existing definitions
+                if (ImGui::BeginCombo("##vardefpick", nullptr, ImGuiComboFlags_NoPreview)) {
+                    for (const auto& [defId, _] : document_.definitions) {
+                        if (ImGui::Selectable(defId.c_str())) {
+                            pushUndo();
+                            sel0->variantDefinitions.push_back(defId);
+                            modified_ = true; updateWindowTitle();
+                        }
+                    }
+                    ImGui::EndCombo();
+                }
+                if (ImGui::IsItemHovered()) ImGui::SetTooltip("Pick from existing definitions");
+            }
+
+            ImGui::Spacing();
             ImGui::TextDisabled("Material Override");
             char moBuf[128];
             std::strncpy(moBuf, sel0->materialOverride.c_str(), sizeof(moBuf)-1); moBuf[127]='\0';
@@ -867,6 +1178,11 @@ void MeshCraftApplication::drawPropertiesPanel(float panelY, float panelH, int s
                 }
             }
         }
+
+        ImGui::EndTabItem();
+        } // end Geometry tab
+
+        if (ImGui::BeginTabItem("Material")) {
 
         // Material editor
         {
@@ -1009,6 +1325,48 @@ void MeshCraftApplication::drawPropertiesPanel(float panelY, float panelH, int s
                 }
             }
         }
+        ImGui::EndTabItem();
+        } // end Material tab
+
+        if (ImGui::BeginTabItem("Anim")) {
+        if (!showTimeline_ || currentActionName_.empty()) {
+            ImGui::TextDisabled("No action selected.");
+            ImGui::TextDisabled("Open Timeline and select an animation action.");
+        } else {
+            ImGui::TextDisabled("Keyframe all:");
+            if (ImGui::SmallButton("K Pos"))
+                insertAnimKeyframes(*sel0, {Mc3::AnimatedProperty::PositionX, Mc3::AnimatedProperty::PositionY, Mc3::AnimatedProperty::PositionZ});
+            ImGui::SameLine();
+            if (ImGui::SmallButton("K Rot"))
+                insertAnimKeyframes(*sel0, {Mc3::AnimatedProperty::RotationX, Mc3::AnimatedProperty::RotationY, Mc3::AnimatedProperty::RotationZ});
+            ImGui::SameLine();
+            if (ImGui::SmallButton("K Scl"))
+                insertAnimKeyframes(*sel0, {Mc3::AnimatedProperty::ScaleX, Mc3::AnimatedProperty::ScaleY, Mc3::AnimatedProperty::ScaleZ});
+            ImGui::SameLine();
+            if (ImGui::SmallButton("K Vis"))
+                insertAnimKeyframes(*sel0, {Mc3::AnimatedProperty::Visible});
+            ImGui::Spacing();
+            if (ImGui::SmallButton("K Deform"))
+                insertAnimKeyframes(*sel0, {Mc3::AnimatedProperty::DeformX, Mc3::AnimatedProperty::DeformY, Mc3::AnimatedProperty::DeformZ});
+            ImGui::Spacing();
+            if (ImGui::SmallButton("K Color"))
+                insertAnimKeyframes(*sel0, {Mc3::AnimatedProperty::MaterialBaseColorR, Mc3::AnimatedProperty::MaterialBaseColorG, Mc3::AnimatedProperty::MaterialBaseColorB, Mc3::AnimatedProperty::MaterialBaseColorA});
+            ImGui::SameLine();
+            if (ImGui::SmallButton("K Rough"))
+                insertAnimKeyframes(*sel0, {Mc3::AnimatedProperty::MaterialRoughness});
+            ImGui::SameLine();
+            if (ImGui::SmallButton("K Metal"))
+                insertAnimKeyframes(*sel0, {Mc3::AnimatedProperty::MaterialMetallic});
+            ImGui::SameLine();
+            if (ImGui::SmallButton("K Emit"))
+                insertAnimKeyframes(*sel0, {Mc3::AnimatedProperty::MaterialEmissiveR, Mc3::AnimatedProperty::MaterialEmissiveG, Mc3::AnimatedProperty::MaterialEmissiveB});
+        }
+        ImGui::EndTabItem();
+        } // end Anim tab
+
+        ImGui::EndTabBar();
+        } // end tab bar
+
     } else {
         // ------------------------------------------------------------------
         // Scene Properties — shown when nothing is selected

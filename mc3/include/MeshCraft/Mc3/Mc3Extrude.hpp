@@ -9,7 +9,7 @@ namespace MeshCraft::Mc3 {
 // Cross-section types
 // ------------------------------------------------------------------
 
-enum class CrossSectionType { Rect, Circle, Polygon, Custom };
+enum class CrossSectionType { Rect, Circle, Polygon, Custom, Star };
 
 struct Mc3CrossSection {
     CrossSectionType type{CrossSectionType::Rect};

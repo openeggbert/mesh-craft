@@ -67,6 +67,10 @@ float MeshCraftApplication::drawToolbar(float menuBarH, int screenW)
         { Mc3::ObjectType::Cone,     "+Con",  ImVec4(0.73f,0.22f,0.73f,1.f) },
         { Mc3::ObjectType::Plane,    "+Pln",  ImVec4(0.80f,0.80f,0.22f,1.f) },
         { Mc3::ObjectType::Torus,    "+Tor",  ImVec4(0.22f,0.70f,0.80f,1.f) },
+        { Mc3::ObjectType::Capsule,  "+Cap",  ImVec4(0.70f,0.35f,0.70f,1.f) },
+        { Mc3::ObjectType::Disk,     "+Dsk",  ImVec4(0.80f,0.65f,0.20f,1.f) },
+        { Mc3::ObjectType::Grid,     "+Grd",  ImVec4(0.30f,0.65f,0.50f,1.f) },
+        { Mc3::ObjectType::IcoSphere,"+Ico",  ImVec4(0.25f,0.55f,0.80f,1.f) },
     };
     for (auto& ab : addBtns) {
         ImGui::PushStyleColor(ImGuiCol_Button, ab.col);
@@ -81,9 +85,10 @@ float MeshCraftApplication::drawToolbar(float menuBarH, int screenW)
     // Local/World space toggle for gizmo
     {
         const char* spaceLabel = gizmoLocalSpace_ ? "Local" : "World";
-        if (gizmoLocalSpace_) ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.55f, 0.35f, 0.70f, 1.f));
+        bool wasLocal = gizmoLocalSpace_;
+        if (wasLocal) ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.55f, 0.35f, 0.70f, 1.f));
         if (ImGui::Button(spaceLabel, ImVec2(48, 30))) gizmoLocalSpace_ = !gizmoLocalSpace_;
-        if (gizmoLocalSpace_) ImGui::PopStyleColor();
+        if (wasLocal) ImGui::PopStyleColor();
         if (ImGui::IsItemHovered()) ImGui::SetTooltip("Gizmo space: %s  (click to toggle)", spaceLabel);
         ImGui::SameLine();
     }
@@ -92,15 +97,34 @@ float MeshCraftApplication::drawToolbar(float menuBarH, int screenW)
     ImGui::SameLine();
 
     // Edge overlay toggle button
-    if (showEdgeOverlay_) ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.20f, 0.20f, 0.20f, 1.f));
-    if (ImGui::Button("Edges", ImVec2(50, 30))) showEdgeOverlay_ = !showEdgeOverlay_;
-    if (showEdgeOverlay_) ImGui::PopStyleColor();
+    { bool was = showEdgeOverlay_;
+      if (was) ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.20f, 0.20f, 0.20f, 1.f));
+      if (ImGui::Button("Edges", ImVec2(50, 30))) showEdgeOverlay_ = !showEdgeOverlay_;
+      if (was) ImGui::PopStyleColor(); }
+    if (ImGui::IsItemHovered()) ImGui::SetTooltip("Edge overlay (wireframe lines over solid objects)");
+    ImGui::SameLine();
+
+    // Full wireframe mode toggle button
+    { bool was = showWireframeMode_;
+      if (was) ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.15f, 0.55f, 0.30f, 1.f));
+      if (ImGui::Button("Wire", ImVec2(44, 30))) showWireframeMode_ = !showWireframeMode_;
+      if (was) ImGui::PopStyleColor(); }
+    if (ImGui::IsItemHovered()) ImGui::SetTooltip("Full wireframe mode (hide solid fills, show only edges)");
+    ImGui::SameLine();
+
+    // Bounding box toggle button
+    { bool was = showBoundingBox_;
+      if (was) ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.10f, 0.45f, 0.55f, 1.f));
+      if (ImGui::Button("BBox", ImVec2(44, 30))) showBoundingBox_ = !showBoundingBox_;
+      if (was) ImGui::PopStyleColor(); }
+    if (ImGui::IsItemHovered()) ImGui::SetTooltip("Show bounding box for selected objects");
     ImGui::SameLine();
 
     // Snap-to-grid toggle button (left-click toggles, right-click configures)
-    if (snapEnabled_) ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.20f, 0.45f, 0.20f, 1.f));
-    if (ImGui::Button("Snap", ImVec2(44, 30))) snapEnabled_ = !snapEnabled_;
-    if (snapEnabled_) ImGui::PopStyleColor();
+    { bool was = snapEnabled_;
+      if (was) ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.20f, 0.45f, 0.20f, 1.f));
+      if (ImGui::Button("Snap", ImVec2(44, 30))) snapEnabled_ = !snapEnabled_;
+      if (was) ImGui::PopStyleColor(); }
     if (ImGui::IsItemHovered())
         ImGui::SetTooltip("Snap to grid  Move: %.2g u  Rotate: %.0f°  Scale: %.2g\nRight-click to configure",
                           snapTranslate_, snapRotate_, snapScale_);

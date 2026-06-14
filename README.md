@@ -2,6 +2,8 @@
 
 A 3D modeling and editing application for creating game-ready models, inspired by Ray Dream Studio and Google SketchUp.
 
+![MeshCraft screenshot](mesh_craft_screenshot.png)
+
 ## Description
 
 Mesh Craft is a C++23 application for building and editing 3D models from primitive shapes, groups, materials, and constructive solid geometry (CSG). Models are stored in the `.mc3` format — a human-readable YAML-based source format that can be compiled to glTF/GLB for use in games and real-time applications.

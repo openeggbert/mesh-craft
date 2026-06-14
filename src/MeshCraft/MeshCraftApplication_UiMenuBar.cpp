@@ -77,6 +77,8 @@ float MeshCraftApplication::drawMenuBar()
                     selection_.clear(); modified_ = true; updateWindowTitle();
                 }
             }
+            if (ImGui::MenuItem("Undo History...", nullptr, false, !undoStack_.empty()))
+                undoHistoryOpen_ = true;
             ImGui::Separator();
             if (ImGui::MenuItem("Cut",       "Ctrl+X")) cutSelected();
             if (ImGui::MenuItem("Copy",      "Ctrl+C")) copySelected();
@@ -246,6 +248,14 @@ float MeshCraftApplication::drawMenuBar()
             ImGui::Separator();
             if (ImGui::MenuItem("Group",   "Ctrl+G"))       groupSelected();
             if (ImGui::MenuItem("Ungroup", "Ctrl+Shift+G")) ungroupSelected();
+            if (ImGui::MenuItem("Convert to Definition", nullptr, false, !selection_.selection().empty()))
+                convertToDefinition();
+            {
+                bool isInst = !selection_.selection().empty() &&
+                              selection_.selection().front()->type == Mc3::ObjectType::Instance;
+                if (ImGui::MenuItem("Break Instance", nullptr, false, isInst))
+                    breakInstance();
+            }
             bool hasSel2 = !selection_.selection().empty();
             if (ImGui::BeginMenu("Align Selection", hasSel2)) {
                 // Compute bounding box of selected objects' pivot positions
@@ -282,6 +292,12 @@ float MeshCraftApplication::drawMenuBar()
                     if (ImGui::MenuItem(minLabel[ax])) doAlign(ax, minV[ax]);
                     if (ImGui::MenuItem(cenLabel[ax])) doAlign(ax, cenV[ax]);
                     if (ImGui::MenuItem(maxLabel[ax])) doAlign(ax, maxV[ax]);
+                }
+                ImGui::Separator();
+                if (ImGui::MenuItem("To First Selected (XYZ)",
+                                    nullptr, false,
+                                    selection_.selection().size() >= 2)) {
+                    alignToObject();
                 }
                 ImGui::EndMenu();
             }
@@ -548,6 +564,7 @@ float MeshCraftApplication::drawMenuBar()
             }
             ImGui::Separator();
             ImGui::MenuItem("Edge Overlay",    "Alt+W", &showEdgeOverlay_);
+            ImGui::MenuItem("Wireframe Mode",  nullptr,  &showWireframeMode_);
             ImGui::MenuItem("Stats Overlay",   nullptr,  &showStatsOverlay_);
             ImGui::MenuItem("Snap to Grid", nullptr, &snapEnabled_);
             ImGui::MenuItem("Timeline",     "Ctrl+T", &showTimeline_);

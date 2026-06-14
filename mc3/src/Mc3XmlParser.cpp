@@ -96,6 +96,7 @@ static Mc3CrossSection parseCrossSection(const XMLElement* el) {
     if      (t == "rect")    cs.type = CrossSectionType::Rect;
     else if (t == "circle")  cs.type = CrossSectionType::Circle;
     else if (t == "polygon") cs.type = CrossSectionType::Polygon;
+    else if (t == "star")    cs.type = CrossSectionType::Star;
     else                     cs.type = CrossSectionType::Custom;
     cs.width       = attrF(el, "width",        0.3f);
     cs.height      = attrF(el, "height",       0.3f);
@@ -167,6 +168,10 @@ static Mc3Primitive parsePrimitive(const XMLElement* el, ObjectType type) {
     case ObjectType::Cone:     p.primitiveType = PrimitiveType::Cone;     break;
     case ObjectType::Plane:    p.primitiveType = PrimitiveType::Plane;    break;
     case ObjectType::Torus:    p.primitiveType = PrimitiveType::Torus;    break;
+    case ObjectType::Capsule:  p.primitiveType = PrimitiveType::Capsule;  break;
+    case ObjectType::Disk:     p.primitiveType = PrimitiveType::Disk;     break;
+    case ObjectType::Grid:      p.primitiveType = PrimitiveType::Grid;      break;
+    case ObjectType::IcoSphere: p.primitiveType = PrimitiveType::IcoSphere; break;
     default: break;
     }
     if (const char* sv = el->Attribute("size")) {
@@ -179,12 +184,14 @@ static Mc3Primitive parsePrimitive(const XMLElement* el, ObjectType type) {
             p.size = {v[0], v[1], v[2]};
         }
     }
-    p.radius      = attrF(el, "radius",       0.5f);
-    p.height      = attrF(el, "height",       1.0f);
-    p.segments    = attrI(el, "segments",     32);
-    p.axis        = attr (el, "axis",        "y");
-    p.majorRadius = attrF(el, "major_radius", 0.35f);
-    p.minorRadius = attrF(el, "minor_radius", 0.15f);
+    p.radius        = attrF(el, "radius",         0.5f);
+    p.height        = attrF(el, "height",         1.0f);
+    p.segments      = attrI(el, "segments",       32);
+    p.axis          = attr (el, "axis",           "y");
+    p.majorRadius   = attrF(el, "major_radius",   0.35f);
+    p.minorRadius   = attrF(el, "minor_radius",   0.15f);
+    p.subdivisionsX = attrI(el, "subdivisions_x", 4);
+    p.subdivisionsZ = attrI(el, "subdivisions_z", 4);
     return p;
 }
 
@@ -220,6 +227,7 @@ static void parseChildren(const XMLElement* el, Mc3Object& obj) {
 static std::shared_ptr<Mc3Object> parseObject(const XMLElement* el) {
     if (!el) return nullptr;
     std::string tag = el->Name();
+    if (tag == "state" || tag == "deform") return nullptr; // handled by parent parsers
     auto obj = std::make_shared<Mc3Object>();
 
     if (tag == "box") {
@@ -243,6 +251,18 @@ static std::shared_ptr<Mc3Object> parseObject(const XMLElement* el) {
     } else if (tag == "torus") {
         obj->type = ObjectType::Torus;
         obj->primitive = parsePrimitive(el, ObjectType::Torus);
+    } else if (tag == "capsule") {
+        obj->type = ObjectType::Capsule;
+        obj->primitive = parsePrimitive(el, ObjectType::Capsule);
+    } else if (tag == "disk") {
+        obj->type = ObjectType::Disk;
+        obj->primitive = parsePrimitive(el, ObjectType::Disk);
+    } else if (tag == "grid") {
+        obj->type = ObjectType::Grid;
+        obj->primitive = parsePrimitive(el, ObjectType::Grid);
+    } else if (tag == "icosphere") {
+        obj->type = ObjectType::IcoSphere;
+        obj->primitive = parsePrimitive(el, ObjectType::IcoSphere);
     } else if (tag == "mesh") {
         obj->type       = ObjectType::Mesh;
         obj->meshSource = attr(el, "src");
@@ -253,8 +273,15 @@ static std::shared_ptr<Mc3Object> parseObject(const XMLElement* el) {
         obj->type = ObjectType::Group;
     } else if (tag == "instance") {
         obj->type             = ObjectType::Instance;
-        obj->definition       = attr(el, "def");
+        obj->definition       = attr(el, "definition");
         obj->materialOverride = attr(el, "material_override");
+        // variants: space-separated list of definition IDs
+        std::string varStr = attr(el, "variants");
+        if (!varStr.empty()) {
+            std::istringstream iss(varStr);
+            std::string tok;
+            while (iss >> tok) obj->variantDefinitions.push_back(tok);
+        }
     } else if (tag == "union") {
         obj->type = ObjectType::Union;
         obj->csgOperation = Mc3CsgOperation{CsgType::Union};
@@ -272,6 +299,19 @@ static std::shared_ptr<Mc3Object> parseObject(const XMLElement* el) {
     }
 
     parseCommonObjectAttribs(el, *obj);
+
+    // Parse named states (<state id="open" position="..." .../>)
+    for (const XMLElement* s = el->FirstChildElement("state"); s; s = s->NextSiblingElement("state")) {
+        std::string stateId = attr(s, "id");
+        if (stateId.empty()) continue;
+        Mc3ObjectState st;
+        if (s->Attribute("position")) st.position = attrVec3(s, "position");
+        if (s->Attribute("rotation")) st.rotation = attrVec3(s, "rotation");
+        if (s->Attribute("scale"))    st.scale    = attrVec3(s, "scale", {1,1,1});
+        if (s->Attribute("visible"))  st.visible  = attrB(s, "visible", true);
+        if (s->Attribute("material")) st.material = std::string(attr(s, "material"));
+        obj->states[stateId] = st;
+    }
 
     bool isGroup = (tag == "group" || tag == "union" || tag == "difference" || tag == "intersection" || tag == "area");
     if (isGroup) parseChildren(el, *obj);

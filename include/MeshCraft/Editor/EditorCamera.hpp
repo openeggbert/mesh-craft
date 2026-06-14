@@ -31,6 +31,7 @@ public:
     float fovDegrees{60.0f};
     float nearPlane{0.1f};
     float farPlane{2000.0f};
+    bool  orthographic{false};
 
     Microsoft::Xna::Framework::Vector3 target{0.0f, 0.0f, 0.0f};
 

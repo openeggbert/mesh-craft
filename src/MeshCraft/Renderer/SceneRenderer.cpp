@@ -28,6 +28,16 @@ using namespace MeshCraft::Renderer;
 // CSG helpers (file scope)
 // ---------------------------------------------------------------------------
 
+// Pick the resolved definition key for an Instance object.
+// When variantDefinitions is non-empty, selects deterministically by hashing the object id.
+static const std::string& pickInstanceDef(const Mc3Object& obj) {
+    if (!obj.variantDefinitions.empty()) {
+        std::size_t idx = std::hash<std::string>{}(obj.id) % obj.variantDefinitions.size();
+        return obj.variantDefinitions[idx];
+    }
+    return obj.definition;
+}
+
 // XNA row-major → manifold mat3x4 (3 rows × 4 cols, linalg column-major storage)
 // XNA: v' = v * M  →  manifold Transform: v' = M * (v,1)
 // manifold mat3x4[col][row]: col0=X axis, col1=Y axis, col2=Z axis, col3=translation
@@ -124,7 +134,7 @@ static manifold::Manifold buildManifoldTree(
         return result;
     }
     case ObjectType::Instance: {
-        auto it = doc.definitions.find(obj.definition);
+        auto it = doc.definitions.find(pickInstanceDef(obj));
         if (it != doc.definitions.end() && it->second)
             return buildManifoldTree(*it->second, doc, objWorld, depth + 1);
         return Manifold{};
@@ -283,6 +293,8 @@ SceneRenderer::SceneRenderer(GraphicsDevice& device)
     buildUnitCone(12);
     buildUnitPlane();
     buildUnitTorus(32, 16);
+    buildUnitCapsule(16);
+    buildUnitIcoSphere(2);
     buildWireBox();
     buildWireShapes(16);
 }
@@ -436,10 +448,7 @@ const RenderMesh* SceneRenderer::loadOrGetMesh(const std::string& absPath)
 void SceneRenderer::drawObjectWireframe(const Mc3Object& obj,
                                          const Matrix& view, const Matrix& proj, Color color)
 {
-    (void)color;
-    Matrix world = objectWorldMatrix(obj.transform);
-
-    // Scale wire box to object's bounding size
+    // Scale wire shape to object's bounding size
     float sx = 1.0f, sy = 1.0f, sz = 1.0f;
     if (obj.primitive) {
         const auto& p = obj.primitive.value();
@@ -457,6 +466,14 @@ void SceneRenderer::drawObjectWireframe(const Mc3Object& obj,
             sx = p.size[0]; sy = 0.01f; sz = p.size[2]; break;
         case ObjectType::Torus:
             sx = sz = (p.majorRadius + p.minorRadius) * 2.0f; sy = p.minorRadius * 2.0f; break;
+        case ObjectType::Capsule:
+            sx = sz = p.radius * 2.0f; sy = p.height + p.radius * 2.0f; break;
+        case ObjectType::Disk:
+            sx = sz = p.radius * 2.0f; sy = 0.01f; break;
+        case ObjectType::Grid:
+            sx = p.size[0]; sy = 0.01f; sz = p.size[2]; break;
+        case ObjectType::IcoSphere:
+            sx = sy = sz = p.radius * 2.0f; break;
         default: break;
         }
     }
@@ -474,18 +491,17 @@ void SceneRenderer::drawObjectWireframe(const Mc3Object& obj,
                                     obj.transform.position[2] });
     Matrix wireWorld = scaleM * rotM * transM;
 
-    effect_->World      = wireWorld;
-    effect_->View       = view;
-    effect_->Projection = proj;
-    effect_->VertexColorEnabled = true;
-
-    for (auto& pass : effect_->getCurrentTechniqueProperty()->getPassesProperty()) {
-        pass.Apply();
-    }
-
-    device_.SetVertexBuffer(wireBoxVB_.get());
-    device_.DrawPrimitives(Graphics::PrimitiveType::LineList, 0, wireBoxLineCount_);
-    device_.SetVertexBuffer(nullptr);
+    const WireShape* ws = &wireShapeBox_;
+    if      (obj.type == ObjectType::Sphere)   ws = &wireShapeSphere_;
+    else if (obj.type == ObjectType::Cylinder) ws = &wireShapeCylinder_;
+    else if (obj.type == ObjectType::Cone)     ws = &wireShapeCone_;
+    else if (obj.type == ObjectType::Plane)    ws = &wireShapePlane_;
+    else if (obj.type == ObjectType::Torus)    ws = &wireShapeTorus_;
+    else if (obj.type == ObjectType::Capsule)  ws = &wireShapeCapsule_;
+    else if (obj.type == ObjectType::Disk)     ws = &wireShapeDisk_;
+    else if (obj.type == ObjectType::Grid)      ws = &wireShapeGrid_;
+    else if (obj.type == ObjectType::IcoSphere) ws = &wireShapeSphere_;
+    drawWireShape(*ws, wireWorld, view, proj, color);
 }
 
 void SceneRenderer::drawObject(const Mc3Object& obj, const Mc3Document& doc,
@@ -604,6 +620,35 @@ void SceneRenderer::drawObject(const Mc3Object& obj, const Mc3Document& doc,
         drawAuto(unitTorus_, deform * Matrix::CreateScale({sxz, sy, sxz}) * world);
         break;
     }
+    case ObjectType::Capsule: {
+        float r = obj.primitive ? obj.primitive->radius : 0.5f;
+        float h = obj.primitive ? obj.primitive->height : 1.0f;
+        // Unit capsule: total height=2.0 (y=-1..+1), radius=0.5
+        float sxz = r * 2.0f;
+        float sy  = (h + r * 2.0f) / 2.0f;
+        drawAuto(unitCapsule_, deform * Matrix::CreateScale({sxz, sy, sxz}) * world);
+        break;
+    }
+    case ObjectType::Disk: {
+        float outerR = obj.primitive ? obj.primitive->radius    : 0.5f;
+        float innerR = obj.primitive ? obj.primitive->minorRadius : 0.0f;
+        int   segs   = obj.primitive ? obj.primitive->segments  : 32;
+        drawDiskDynamic(outerR, innerR, segs, deform * world, view, proj, color);
+        break;
+    }
+    case ObjectType::Grid: {
+        float sX  = obj.primitive ? obj.primitive->size[0]      : 1.0f;
+        float sZ  = obj.primitive ? obj.primitive->size[2]      : 1.0f;
+        int   subX = obj.primitive ? obj.primitive->subdivisionsX : 4;
+        int   subZ = obj.primitive ? obj.primitive->subdivisionsZ : 4;
+        drawGridDynamic(sX, sZ, subX, subZ, deform * world, view, proj, color);
+        break;
+    }
+    case ObjectType::IcoSphere: {
+        float r = obj.primitive ? obj.primitive->radius * 2.0f : 1.0f;
+        drawAuto(unitIcoSphere_, deform * Matrix::CreateScale({r,r,r}) * world);
+        break;
+    }
     case ObjectType::Group:
     case ObjectType::Area:
         for (const auto& child : obj.children)
@@ -629,7 +674,7 @@ void SceneRenderer::drawObject(const Mc3Object& obj, const Mc3Document& doc,
         break;
     }
     case ObjectType::Instance: {
-        auto it = doc.definitions.find(obj.definition);
+        auto it = doc.definitions.find(pickInstanceDef(obj));
         if (it != doc.definitions.end() && it->second)
             drawObject(*it->second, doc, world, view, proj, selected, depth + 1);
         else
@@ -914,5 +959,75 @@ void SceneRenderer::drawCsgGizmos(const Mc3::Mc3Document& doc,
 }
 
 
+
+Matrix SceneRenderer::computeObjectWorldMatrix(const Mc3Object& target,
+                                               const Mc3Document& doc) const {
+    Matrix result = Matrix::getIdentityProperty();
+    std::function<bool(const std::vector<std::shared_ptr<Mc3Object>>&, const Matrix&)> find;
+    find = [&](const std::vector<std::shared_ptr<Mc3Object>>& list, const Matrix& parent) -> bool {
+        for (const auto& obj : list) {
+            Matrix world = objectWorldMatrix(obj->transform) * parent;
+            if (obj.get() == &target) { result = world; return true; }
+            if (!obj->children.empty() && find(obj->children, world)) return true;
+        }
+        return false;
+    };
+    find(doc.objects, Matrix::getIdentityProperty());
+    return result;
+}
+
+void SceneRenderer::scenePolyStats(const Mc3::Mc3Document& doc,
+                                    int& totalVerts, int& totalTris) const {
+    totalVerts = 0;
+    totalTris  = 0;
+
+    std::function<void(const std::vector<std::shared_ptr<Mc3::Mc3Object>>&)> walk;
+    walk = [&](const std::vector<std::shared_ptr<Mc3::Mc3Object>>& list) {
+        for (const auto& obj : list) {
+            if (!obj->visible) { walk(obj->children); continue; }
+            const RenderMesh* rm = nullptr;
+            switch (obj->type) {
+            case Mc3::ObjectType::Box:
+            case Mc3::ObjectType::Cube:      rm = &unitBox_;      break;
+            case Mc3::ObjectType::Sphere:    rm = &unitSphere_;   break;
+            case Mc3::ObjectType::Cylinder:  rm = &unitCylinder_; break;
+            case Mc3::ObjectType::Cone:      rm = &unitCone_;     break;
+            case Mc3::ObjectType::Plane:     rm = &unitPlane_;    break;
+            case Mc3::ObjectType::Torus:     rm = &unitTorus_;    break;
+            case Mc3::ObjectType::Capsule:   rm = &unitCapsule_;   break;
+            case Mc3::ObjectType::IcoSphere: rm = &unitIcoSphere_; break;
+            // Disk: dynamic geometry, approximate poly count
+            case Mc3::ObjectType::Disk: {
+                int segs = obj->primitive ? obj->primitive->segments : 32;
+                totalVerts += segs * 2;
+                totalTris  += segs * 2;
+                rm = nullptr; break;
+            }
+            // Grid: dynamic geometry, exact poly count
+            case Mc3::ObjectType::Grid: {
+                int subX = obj->primitive ? obj->primitive->subdivisionsX : 4;
+                int subZ = obj->primitive ? obj->primitive->subdivisionsZ : 4;
+                totalVerts += (subX + 1) * (subZ + 1);
+                totalTris  += subX * subZ * 2;
+                rm = nullptr; break;
+            }
+            case Mc3::ObjectType::Mesh: {
+                if (!obj->meshSource.empty()) {
+                    auto it = meshCache_.find(obj->meshSource);
+                    if (it != meshCache_.end()) rm = &it->second;
+                }
+                break;
+            }
+            default: break;
+            }
+            if (rm) {
+                totalVerts += static_cast<int>(rm->positions.size());
+                totalTris  += rm->primitiveCount;
+            }
+            walk(obj->children);
+        }
+    };
+    walk(doc.objects);
+}
 
 } // namespace MeshCraft::Renderer

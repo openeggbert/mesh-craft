@@ -6,12 +6,22 @@
 #include "MeshCraft/Mc3/Mc3Primitive.hpp"
 #include "MeshCraft/Mc3/Mc3Transform.hpp"
 
+#include <array>
+#include <map>
 #include <memory>
 #include <optional>
 #include <string>
 #include <vector>
 
 namespace MeshCraft::Mc3 {
+
+struct Mc3ObjectState {
+    std::optional<std::array<float,3>> position;
+    std::optional<std::array<float,3>> rotation;
+    std::optional<std::array<float,3>> scale;
+    std::optional<bool>                visible;
+    std::optional<std::string>         material;
+};
 
 enum class ObjectType {
     Box,
@@ -21,6 +31,10 @@ enum class ObjectType {
     Cone,
     Plane,
     Torus,
+    Capsule,
+    Disk,
+    Grid,
+    IcoSphere,
     Mesh,
     Extrude,
     Group,
@@ -50,7 +64,8 @@ public:
     std::optional<Mc3CsgOperation> csgOperation;
     std::optional<Mc3Extrude> extrude;
 
-    std::string definition;      // type == Instance
+    std::string definition;                       // type == Instance (primary / fallback)
+    std::vector<std::string> variantDefinitions;  // type == Instance: random pool of definitions
     std::string meshSource;      // type == Mesh
     std::string materialOverride;
 
@@ -58,7 +73,9 @@ public:
 
     std::vector<std::shared_ptr<Mc3Object>> children;
 
-    // TODO: states, actions, uv mapping
+    std::map<std::string, Mc3ObjectState> states;
+
+    // TODO: actions, uv mapping
 };
 
 } // namespace MeshCraft::Mc3

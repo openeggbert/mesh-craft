@@ -13,11 +13,11 @@ Legend: ✅ done · 🔧 partial · 📋 planned
 |---|------|-------|
 | A1 ✅ | Wire material property animations to renderer (material.baseColor, roughness, metallic, emissive are serialized and evaluated but not passed to renderer) | MeshCraftApplication_Anim.cpp:61, SceneRenderer.cpp |
 | A2 ✅ | Wire Deform animation to renderer (deform.x/y/z channel evaluated but not forwarded to geometry) | MeshCraftApplication_Anim.cpp, SceneRenderer.cpp |
-| A3 | Timeline: multi-select keyframes (Shift+click, drag-box, move/delete group) | MeshCraftApplication_Anim.cpp |
-| A4 | Timeline: mini curve editor — show interpolation curve inside each channel row | MeshCraftApplication_Anim.cpp |
-| A5 | Timeline: duplicate action (copy entire action under a new name) | MeshCraftApplication_Anim.cpp |
-| A6 | Timeline: rename action inline (double-click on name in dropdown) | MeshCraftApplication_Anim.cpp |
-| A7 | Timeline: copy/paste selected keyframes (Ctrl+C/V inside timeline) | MeshCraftApplication_Anim.cpp |
+| A3 ✅ | Timeline: multi-select keyframes (Shift+click, drag-box, move/delete group) | MeshCraftApplication_Anim.cpp |
+| A4 ✅ | Timeline: mini curve editor — show interpolation curve inside each channel row | MeshCraftApplication_Anim.cpp |
+| A5 ✅ | Timeline: duplicate action (copy entire action under a new name) | MeshCraftApplication_Anim.cpp |
+| A6 ✅ | Timeline: rename action inline (double-click on name in dropdown) | MeshCraftApplication_Anim.cpp |
+| A7 ✅ | Timeline: copy/paste selected keyframes (Ctrl+C/V inside timeline) | MeshCraftApplication_Anim.cpp |
 | A8 | Timeline: scale time (stretch/compress all keyframes of a channel) | MeshCraftApplication_Anim.cpp |
 
 ---
@@ -29,13 +29,13 @@ Legend: ✅ done · 🔧 partial · 📋 planned
 | B1 ✅ | Gizmo: Local/World space toggle (toolbar button or shortcut) | SceneRenderer_Gizmos.cpp, TransformGizmo.hpp |
 | B2 ✅ | Gizmo: show delta value overlay while dragging ("Δ +2.50 m") | MeshCraftApplication_Mouse.cpp, UiOverlays.cpp |
 | B3 ✅ | Viewport: overlay buttons for camera presets (Front/Top/Right clickable icons in viewport corner) | UiOverlays.cpp |
-| B4 | Viewport: one-click perspective/orthographic toggle (button in overlay) | MeshCraftApplication.cpp, EditorCamera |
-| B5 | Viewport: bounding box toggle (show AABB around selected objects) | SceneRenderer.cpp |
-| B6 | Viewport: "Look through selected camera" (use selected Mc3Camera as viewport view) | MeshCraftApplication.cpp |
-| B7 | Snapping: vertex snap (hold Shift while dragging → snap to another object's position) | MeshCraftApplication_Mouse.cpp |
+| B4 ✅ | Viewport: one-click perspective/orthographic toggle (button in overlay) | MeshCraftApplication.cpp, EditorCamera |
+| B5 ✅ | Viewport: bounding box toggle (show AABB around selected objects) | SceneRenderer.cpp |
+| B6 ✅ | Viewport: "Look through selected camera" (use selected Mc3Camera as viewport view) | MeshCraftApplication.cpp |
+| B7 ✅ | Snapping: vertex snap (hold Shift while dragging → snap to another object's position) | MeshCraftApplication_Mouse.cpp |
 | B8 | Snapping: surface snap (snap to surface of another object) | MeshCraftApplication_Mouse.cpp |
-| B9 | Viewport: render locked objects with a distinct outline (red/grey border) | SceneRenderer.cpp |
-| B10 | Viewport: polygon statistics (vertex/face count) in stats overlay | UiOverlays.cpp, SceneRenderer.hpp |
+| B9 ✅ | Viewport: render locked objects with a distinct outline (red/grey border) | SceneRenderer.cpp |
+| B10 ✅ | Viewport: polygon statistics (vertex/face count) in stats overlay | UiOverlays.cpp, SceneRenderer.hpp |
 
 ---
 
@@ -44,14 +44,14 @@ Legend: ✅ done · 🔧 partial · 📋 planned
 | # | Task | Files |
 |---|------|-------|
 | C1 ✅ | Properties: multi-edit — when N objects selected, show "—" for differing values; editing writes to all | UiProperties.cpp |
-| C2 | Properties: pivot/origin offset UI (Mc3Transform pivot field or equivalent) | Mc3Transform.hpp, UiProperties.cpp |
-| C3 | Properties: quick-assign material button from Material List to selected objects | UiLeftPanel.cpp |
-| C4 | States: UI editor for Mc3Object states (TODO in Mc3Object.hpp) | Mc3Object.hpp, UiProperties.cpp |
+| C2 ✅ | Properties: pivot/origin offset UI (Mc3Transform pivot field or equivalent) | Mc3Transform.hpp, UiProperties.cpp |
+| C3 ✅ | Properties: quick-assign material button from Material List to selected objects | UiLeftPanel.cpp |
+| C4 ✅ | States: UI editor for Mc3Object states (TODO in Mc3Object.hpp) | Mc3Object.hpp, UiProperties.cpp |
 | C5 | UV Mapping: basic UI (planar/box/sphere projection, scale/offset) | Mc3Object.hpp, UiProperties.cpp |
 | C6 | Properties: show vertex/face count for Mesh objects (from SceneRenderer cache) | UiProperties.cpp, SceneRenderer.hpp |
-| C7 | Properties: show world-space position (computed matrix result) beside local transform | UiProperties.cpp |
+| C7 ✅ | Properties: show world-space position (computed matrix result) beside local transform | UiProperties.cpp |
 | C8 | Properties: extend K keyframe button to all animatable properties (material, deform) | UiProperties.cpp |
-| C9 | Properties: tabs to separate Transform / Geometry / Material / Animation sections | UiProperties.cpp |
+| C9 ✅ | Properties: tabs to separate Transform / Geometry / Material / Animation sections | UiProperties.cpp |
 | C10 | Object: per-object action/state system (Mc3Object TODO) | Mc3Object.hpp |
 
 ---
@@ -61,13 +61,13 @@ Legend: ✅ done · 🔧 partial · 📋 planned
 | # | Task | Files |
 |---|------|-------|
 | D1 ✅ | Material list: color swatch (small baseColor square) next to each material name | UiLeftPanel.cpp |
-| D2 | Texture tab: make fields editable (wrapU/V, filter, colorSpace as editable combos, not read-only) | UiLeftPanel.cpp |
-| D3 | Material: duplicate material (copy in material list) | UiLeftPanel.cpp |
+| D2 ✅ | Texture tab: make fields editable (wrapU/V, filter, colorSpace as editable combos, not read-only) | UiLeftPanel.cpp |
+| D3 ~~skipped~~ | Material: duplicate material (copy in material list) | UiLeftPanel.cpp |
 | D4 | Material: apply material from list to selection (button "Apply to selection") | UiLeftPanel.cpp |
 | D5 | Material: export/import as standalone JSON or XML snippet | MeshCraftApplication_Commands.cpp |
 | D6 | Texture: drag-and-drop URI file from OS into texture field | UiLeftPanel.cpp |
 | D7 | Material: material preview (small UV sphere with applied material) | UiLeftPanel.cpp, SceneRenderer |
-| D8 | Material: search filter in material list | UiLeftPanel.cpp |
+| D8 ✅ | Material: search filter in material list | UiLeftPanel.cpp |
 
 ---
 
@@ -76,14 +76,14 @@ Legend: ✅ done · 🔧 partial · 📋 planned
 | # | Task | Files |
 |---|------|-------|
 | E1 ✅ | Hierarchy: enrich right-click context menu (Rename, Duplicate, Delete, Group, Set as Root) | UiLeftPanel.cpp |
-| E2 | Hierarchy: type icons next to each row (small Box/Sphere/Group/Light symbols) | UiLeftPanel.cpp |
-| E3 | Hierarchy: color row by first tag | UiLeftPanel.cpp |
-| E4 | Hierarchy: show lock icon on locked objects | UiLeftPanel.cpp |
+| E2 ✅ | Hierarchy: type icons next to each row (small Box/Sphere/Group/Light symbols) | UiLeftPanel.cpp |
+| E3 ✅ | Hierarchy: color row by first tag | UiLeftPanel.cpp |
+| E4 ✅ | Hierarchy: show lock icon on locked objects | UiLeftPanel.cpp |
 | E5 | Hierarchy: filter by multiple criteria (tag AND/OR, type, material) | UiLeftPanel.cpp |
-| E6 | Hierarchy: Select Children command (complement to Select Parent P) | MeshCraftApplication_Commands.cpp |
+| E6 ✅ | Hierarchy: Select Children command (complement to Select Parent P) | MeshCraftApplication_Commands.cpp |
 | E7 | Scene: named layers (visibility groups, without changing hierarchy) | Mc3Document, UiLeftPanel |
 | E8 | Scene: export/import subtree as template (save subtree as new definition) | MeshCraftApplication_Commands.cpp |
-| E9 | Scene: total polycount statistic for entire scene | UiOverlays.cpp or Scene Properties |
+| E9 ✅ | Scene: total polycount statistic for entire scene | UiOverlays.cpp or Scene Properties |
 
 ---
 
@@ -91,7 +91,7 @@ Legend: ✅ done · 🔧 partial · 📋 planned
 
 | # | Task | Files |
 |---|------|-------|
-| F1 ~~přeskočeno~~ | Native file picker — replace text buffers with system dialog (zenity/kdialog or imgui-filebrowser) | MeshCraftApplication_FileOps.cpp |
+| F1 ~~skipped~~ | Native file picker — replace text buffers with system dialog (zenity/kdialog or imgui-filebrowser) | MeshCraftApplication_FileOps.cpp |
 | F2 | OBJ import via Mesh object (Browse button for meshSource field) | UiProperties.cpp |
 | F3 | Export selection (export only selected objects to a new MC3 XML file) | MeshCraftApplication_FileOps.cpp |
 | F4 | Merge scene (open second MC3 XML and insert its objects into current scene) | MeshCraftApplication_FileOps.cpp |
@@ -107,12 +107,12 @@ Legend: ✅ done · 🔧 partial · 📋 planned
 | # | Task | Files |
 |---|------|-------|
 | G1 ✅ | Torus primitive (Mc3PrimitiveType::Torus — majorRadius, minorRadius, segments) | Mc3Primitive.hpp, SceneRenderer_Builders.cpp |
-| G2 | Capsule primitive (cylinder + hemisphere caps) | Mc3Primitive.hpp, SceneRenderer_Builders.cpp |
-| G3 | Disk primitive (circle/annulus — outerRadius, innerRadius, segments) | Mc3Primitive.hpp, SceneRenderer_Builders.cpp |
-| G4 | Grid/Ground primitive (flat plane with N×M subdivisions) | Mc3Primitive.hpp, SceneRenderer_Builders.cpp |
-| G5 | Ico-sphere (uniform triangle subdivision) | SceneRenderer_Builders.cpp |
-| G6 | Extrude: spiral path with pitch UI (currently Helix exists but pitch UI is missing) | UiProperties.cpp |
-| G7 | Extrude: star polygon cross-section (N-pointed star) | Mc3Extrude.hpp, SceneRenderer_Extrude.cpp |
+| G2 ✅ | Capsule primitive (cylinder + hemisphere caps) | Mc3Primitive.hpp, SceneRenderer_Builders.cpp |
+| G3 ✅ | Disk primitive (circle/annulus — outerRadius, innerRadius, segments) | Mc3Primitive.hpp, SceneRenderer_Builders.cpp |
+| G4 ✅ | Grid/Ground primitive (flat plane with N×M subdivisions) | Mc3Primitive.hpp, SceneRenderer_Builders.cpp |
+| G5 ✅ | Ico-sphere (uniform triangle subdivision) | SceneRenderer_Builders.cpp |
+| G6 ✅ | Extrude: spiral path with pitch UI (currently Helix exists but pitch UI is missing) | UiProperties.cpp |
+| G7 ✅ | Extrude: star polygon cross-section (N-pointed star) | Mc3Extrude.hpp, SceneRenderer_Extrude.cpp |
 | G8 | Procedural LOD (level-of-detail segments for primitives based on camera distance) | SceneRenderer.cpp |
 
 ---
@@ -123,17 +123,17 @@ Legend: ✅ done · 🔧 partial · 📋 planned
 |---|------|-------|
 | H1 | Proportional editing (transform falloff — influence nearby objects) | MeshCraftApplication_Mouse.cpp |
 | H2 ✅ | Measurement tool (click two points → show distance in overlay) | UiOverlays.cpp, new tool state |
-| H3 | Align to object (align to a specific target object, not just selection average) | MeshCraftApplication_Commands.cpp |
+| H3 ✅ | Align to object (align to a specific target object, not just selection average) | MeshCraftApplication_Commands.cpp |
 | H4 | Scatter/Place: distribute copies along a curve | MeshCraftApplication_Commands.cpp |
 | H5 | Pivot: UI to move pivot independently from geometry | UiProperties.cpp |
-| H6 | Panel resize: drag left/right panel width | MeshCraftApplication.cpp |
+| H6 ✅ | Panel resize: drag left/right panel width | MeshCraftApplication.cpp |
 | H7 | Preferences dialog (autosave interval, snap defaults, grid defaults, theme) | new file |
-| H8 | Undo: show undo stack as list (UI in Edit menu) | MeshCraftApplication.hpp |
+| H8 ✅ | Undo: show undo stack as list (UI in Edit menu) | MeshCraftApplication.hpp |
 | H9 | Keyboard shortcuts: customizable bindings | new file |
-| H10 | Drag-and-drop MC3 file from OS into app window (SDL drop event) | MeshCraftApplication.cpp |
-| H11 | Command palette: search object names in addition to commands | UiOverlays.cpp |
+| H10 ✅ | Drag-and-drop MC3 file from OS into app window (SDL drop event) | MeshCraftApplication.cpp |
+| H11 ✅ | Command palette: search object names in addition to commands | UiOverlays.cpp |
 | H12 | Macro recorder (record a sequence of actions, replay) | new file |
-| H13 | Gizmo: snap to fixed angles (15°/45°/90° during rotate with Ctrl) | MeshCraftApplication_Mouse.cpp |
+| H13 ✅ | Gizmo: snap to fixed angles (15°/45°/90° during rotate with Ctrl) | MeshCraftApplication_Mouse.cpp |
 | H14 | Proportional scale from group center (scale around group center, not each object's own pivot) | MeshCraftApplication_Commands.cpp |
 
 ---
@@ -149,7 +149,7 @@ Legend: ✅ done · 🔧 partial · 📋 planned
 | I5 | Rendering: SSAO (ambient occlusion post-process) | SceneRenderer.cpp |
 | I6 | Rendering: bloom (post-process for emissive materials) | SceneRenderer.cpp |
 | I7 | Rendering: shadow map debug overlay | SceneRenderer.cpp |
-| I8 | Rendering: full wireframe mode toggle for entire scene | SceneRenderer.cpp |
+| I8 ✅ | Rendering: full wireframe mode toggle for entire scene | SceneRenderer.cpp |
 
 ---
 
@@ -157,10 +157,10 @@ Legend: ✅ done · 🔧 partial · 📋 planned
 
 | # | Task | Files |
 |---|------|-------|
-| J1 | Convert to Definition (selected objects → new Definition + Instance in place) | MeshCraftApplication_Commands.cpp |
-| J2 | Instance: preview definition content in Properties panel | UiProperties.cpp |
-| J3 | Instance: break instance (expand Instance into a copy of its content, removing the link) | MeshCraftApplication_Commands.cpp |
-| J4 | Instance: random variant (each instance randomly picks from N definitions) | Mc3Object, MeshCraftApplication_Commands |
+| J1 ✅ | Convert to Definition (selected objects → new Definition + Instance in place) | MeshCraftApplication_Commands.cpp |
+| J2 ✅ | Instance: preview definition content in Properties panel | UiProperties.cpp |
+| J3 ✅ | Instance: break instance (expand Instance into a copy of its content, removing the link) | MeshCraftApplication_Commands.cpp |
+| J4 ✅ | Instance: random variant (each instance randomly picks from N definitions) | Mc3Object, MeshCraftApplication_Commands |
 
 ---
 
@@ -199,7 +199,7 @@ Legend: ✅ done · 🔧 partial · 📋 planned
 7. **B3** ✅ — Viewport camera preset overlay buttons
 8. **G1** ✅ — Torus primitive
 9. **H2** ✅ — Measurement tool
-10. **F1** ~~přeskočeno~~ — Native file picker
+10. **F1** ~~skipped~~ — Native file picker
 
 ---
 

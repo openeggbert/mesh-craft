@@ -119,6 +119,13 @@ public:
                          const Microsoft::Xna::Framework::Matrix& view,
                          const Microsoft::Xna::Framework::Matrix& projection);
 
+    // Compute vertex and triangle counts for all visible objects in the scene
+    void scenePolyStats(const Mc3::Mc3Document& doc, int& totalVerts, int& totalTris) const;
+
+    // Compute the world-space matrix for a specific object (accumulates parent transforms)
+    Microsoft::Xna::Framework::Matrix computeObjectWorldMatrix(
+        const Mc3::Mc3Object& obj, const Mc3::Mc3Document& doc) const;
+
 private:
     Microsoft::Xna::Framework::Graphics::GraphicsDevice& device_;
     std::unique_ptr<Microsoft::Xna::Framework::Graphics::BasicEffect> effect_;
@@ -130,6 +137,8 @@ private:
     RenderMesh unitCone_;
     RenderMesh unitPlane_;
     RenderMesh unitTorus_;
+    RenderMesh unitCapsule_;
+    RenderMesh unitIcoSphere_;
 
     // Wire box for selection highlight
     std::unique_ptr<Microsoft::Xna::Framework::Graphics::VertexBuffer> wireBoxVB_;
@@ -142,6 +151,9 @@ private:
     WireShape wireShapeCone_;
     WireShape wireShapePlane_;
     WireShape wireShapeTorus_;
+    WireShape wireShapeCapsule_;
+    WireShape wireShapeDisk_;
+    WireShape wireShapeGrid_;
 
     void buildUnitBox();
     void buildUnitSphere(int segments);
@@ -149,6 +161,8 @@ private:
     void buildUnitCone(int segments);
     void buildUnitPlane();
     void buildUnitTorus(int ringSeg, int tubeSeg);
+    void buildUnitCapsule(int segments);
+    void buildUnitIcoSphere(int subdivisions);
     void buildWireBox();
     void buildWireShapes(int segments);
 
@@ -178,6 +192,18 @@ private:
                             const Microsoft::Xna::Framework::Matrix& view,
                             const Microsoft::Xna::Framework::Matrix& projection,
                             Microsoft::Xna::Framework::Color color);
+
+    void drawDiskDynamic(float outerR, float innerR, int segments,
+                         const Microsoft::Xna::Framework::Matrix& world,
+                         const Microsoft::Xna::Framework::Matrix& view,
+                         const Microsoft::Xna::Framework::Matrix& projection,
+                         Microsoft::Xna::Framework::Color color);
+
+    void drawGridDynamic(float sizeX, float sizeZ, int subX, int subZ,
+                         const Microsoft::Xna::Framework::Matrix& world,
+                         const Microsoft::Xna::Framework::Matrix& view,
+                         const Microsoft::Xna::Framework::Matrix& projection,
+                         Microsoft::Xna::Framework::Color color);
 
     void drawLineList(const std::vector<Microsoft::Xna::Framework::Graphics::VertexPositionColor>& verts,
                       const Microsoft::Xna::Framework::Matrix& view,

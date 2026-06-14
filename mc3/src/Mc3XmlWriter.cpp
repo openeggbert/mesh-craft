@@ -75,6 +75,10 @@ static XMLElement* writeObject(XMLDocument& xmlDoc, const std::shared_ptr<Mc3Obj
     case ObjectType::Cone:         tag = "cone";        break;
     case ObjectType::Plane:        tag = "plane";       break;
     case ObjectType::Torus:        tag = "torus";       break;
+    case ObjectType::Capsule:      tag = "capsule";     break;
+    case ObjectType::Disk:         tag = "disk";        break;
+    case ObjectType::Grid:         tag = "grid";        break;
+    case ObjectType::IcoSphere:    tag = "icosphere";   break;
     case ObjectType::Mesh:         tag = "mesh";        break;
     case ObjectType::Extrude:      tag = "extrude";     break;
     case ObjectType::Group:        tag = "group";       break;
@@ -121,6 +125,14 @@ static XMLElement* writeObject(XMLDocument& xmlDoc, const std::shared_ptr<Mc3Obj
             if (p.minorRadius != 0.15f) el->SetAttribute("minor_radius", fStr(p.minorRadius).c_str());
             if (p.segments != 32)       el->SetAttribute("segments", p.segments);
             break;
+        case ObjectType::Grid:
+            el->SetAttribute("size", vec3Str(p.size).c_str());
+            if (p.subdivisionsX != 4) el->SetAttribute("subdivisions_x", p.subdivisionsX);
+            if (p.subdivisionsZ != 4) el->SetAttribute("subdivisions_z", p.subdivisionsZ);
+            break;
+        case ObjectType::IcoSphere:
+            if (p.radius != 0.5f) el->SetAttribute("radius", fStr(p.radius).c_str());
+            break;
         default: break;
         }
     }
@@ -140,6 +152,7 @@ static XMLElement* writeObject(XMLDocument& xmlDoc, const std::shared_ptr<Mc3Obj
         case CrossSectionType::Circle:  csTypeStr = "circle";  break;
         case CrossSectionType::Polygon: csTypeStr = "polygon"; break;
         case CrossSectionType::Custom:  csTypeStr = "custom";  break;
+        case CrossSectionType::Star:    csTypeStr = "star";    break;
         default: break;
         }
         csEl->SetAttribute("type", csTypeStr);
@@ -154,6 +167,11 @@ static XMLElement* writeObject(XMLDocument& xmlDoc, const std::shared_ptr<Mc3Obj
             if (cs.segments    != 32)   csEl->SetAttribute("segments",     cs.segments);
             break;
         case CrossSectionType::Polygon:
+            if (cs.radius      != 0.1f) csEl->SetAttribute("radius",       fStr(cs.radius).c_str());
+            if (cs.innerRadius != 0.0f) csEl->SetAttribute("inner_radius", fStr(cs.innerRadius).c_str());
+            if (cs.sides       != 6)    csEl->SetAttribute("sides",        cs.sides);
+            break;
+        case CrossSectionType::Star:
             if (cs.radius      != 0.1f) csEl->SetAttribute("radius",       fStr(cs.radius).c_str());
             if (cs.innerRadius != 0.0f) csEl->SetAttribute("inner_radius", fStr(cs.innerRadius).c_str());
             if (cs.sides       != 6)    csEl->SetAttribute("sides",        cs.sides);
@@ -218,9 +236,29 @@ static XMLElement* writeObject(XMLDocument& xmlDoc, const std::shared_ptr<Mc3Obj
         el->SetAttribute("src", obj->meshSource.c_str());
 
     if (obj->type == ObjectType::Instance) {
-        el->SetAttribute("def", obj->definition.c_str());
+        el->SetAttribute("definition", obj->definition.c_str());
         if (!obj->materialOverride.empty())
             el->SetAttribute("material_override", obj->materialOverride.c_str());
+        if (!obj->variantDefinitions.empty()) {
+            std::string varStr;
+            for (const auto& v : obj->variantDefinitions) {
+                if (!varStr.empty()) varStr += ' ';
+                varStr += v;
+            }
+            el->SetAttribute("variants", varStr.c_str());
+        }
+    }
+
+    // Named states
+    for (const auto& [stateId, st] : obj->states) {
+        XMLElement* se = xmlDoc.NewElement("state");
+        se->SetAttribute("id", stateId.c_str());
+        if (st.position) se->SetAttribute("position", vec3Str(*st.position).c_str());
+        if (st.rotation) se->SetAttribute("rotation", vec3Str(*st.rotation).c_str());
+        if (st.scale)    se->SetAttribute("scale",    vec3Str(*st.scale).c_str());
+        if (st.visible.has_value() && !*st.visible) se->SetAttribute("visible", "false");
+        if (st.material) se->SetAttribute("material", st.material->c_str());
+        el->InsertEndChild(se);
     }
 
     for (const auto& child : obj->children) {

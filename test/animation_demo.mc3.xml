@@ -1,0 +1,266 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Animation Demo — mc3 animation showcase
+  Demonstrates all major animation channel types:
+
+    position.y    — bouncing ball (cubic bezier ease)
+    rotation.y    — spinning platform + disc
+    scale.x/y/z   — pulsing sphere (uniform scale)
+    material.emissive.r/g/b — color-cycling glowing cube (R→G→B→R)
+    material.roughness      — surface shimmer on the tall pole
+
+  Duration: 8 s, looping.
+
+  How to play in MeshCraft:
+    1. Open this file:  File > Open  (or drag onto the window)
+    2. Open the timeline:  View > Timeline  (or press T)
+    3. In the timeline dropdown, select "Showcase"
+    4. Click the ▶ Play button  (or press Space while timeline is focused)
+    5. Press Space again to pause, or rewind with the time slider.
+-->
+<mc3 version="0.1" model="AnimationDemo" unit="meter">
+
+  <environment>
+    <background color="0.07 0.07 0.12"/>
+    <fog mode="linear" color="0.07 0.07 0.12" start="40" end="80" density="0.01"/>
+  </environment>
+
+  <lights>
+    <ambient color="0.35 0.38 0.50" brightness="0.5"/>
+    <directional name="Sun" color="1.0 0.95 0.82" brightness="2.8"
+                 direction="-0.6 -1.0 0.4" cast_shadows="true"/>
+  </lights>
+
+  <cameras>
+    <camera name="Demo" position="14 9 -18" target="0 2.5 1" fov="48"/>
+    <camera name="Close" position="5 4 -8"  target="0 2 0"   fov="55"/>
+  </cameras>
+
+  <!-- ================================================================
+       MATERIALS
+  ================================================================ -->
+  <materials>
+    <!-- Stage / ground -->
+    <material id="stage_mat" roughness="0.80" metallic="0.10">
+      <base_color>0.18 0.20 0.24 1.0</base_color>
+    </material>
+
+    <!-- Rotating platform: brushed steel -->
+    <material id="platform_mat" roughness="0.28" metallic="0.90">
+      <base_color>0.60 0.62 0.68 1.0</base_color>
+    </material>
+
+    <!-- Bouncing ball: vivid orange rubber -->
+    <material id="ball_mat" roughness="0.55" metallic="0.0">
+      <base_color>0.95 0.38 0.08 1.0</base_color>
+    </material>
+
+    <!-- Glowing cube: near-black with emissive driven by animation -->
+    <material id="glow_mat" roughness="0.05" metallic="0.0">
+      <base_color>0.04 0.04 0.06 1.0</base_color>
+      <emissive_color>2.0 0.0 0.0</emissive_color>
+    </material>
+
+    <!-- Pulsing sphere: bright green -->
+    <material id="pulse_mat" roughness="0.30" metallic="0.0">
+      <base_color>0.12 0.82 0.30 1.0</base_color>
+    </material>
+
+    <!-- Spinning disc: gold -->
+    <material id="disc_mat" roughness="0.20" metallic="0.95">
+      <base_color>0.90 0.78 0.28 1.0</base_color>
+    </material>
+
+    <!-- Support poles -->
+    <material id="pole_mat" roughness="0.45" metallic="0.75">
+      <base_color>0.55 0.55 0.60 1.0</base_color>
+    </material>
+  </materials>
+
+  <!-- ================================================================
+       SCENE OBJECTS
+       Layout (top view):
+           PulseSphere  ·  GlowCube
+                  ·  Platform/Ball  ·
+                  ·   SpinDisc  ·
+  ================================================================ -->
+  <objects>
+
+    <!-- Ground stage -->
+    <plane name="Stage" size="40 40" axis="y" position="0 0 0" material="stage_mat"/>
+
+    <!-- ── A: Bouncing ball on a rotating platform ─────────────────── -->
+    <cylinder name="Platform" radius="1.8" height="0.25" segments="32"
+              material="platform_mat" position="0 0.12 0"/>
+
+    <sphere name="Ball" radius="0.55" segments="24"
+            material="ball_mat" position="0 1.3 0"/>
+
+    <!-- ── B: Spinning disc on a pole (right side) ──────────────────── -->
+    <cylinder name="SpinPole"  radius="0.12" height="4.0" segments="12"
+              material="pole_mat" position="5 2.0 3"/>
+    <cylinder name="SpinDisc"  radius="1.6"  height="0.18" segments="32"
+              material="disc_mat" position="5 4.1 3"/>
+    <!-- Two small spheres at disc tips to accentuate the spin -->
+    <sphere name="SpinTip1"  radius="0.28" segments="12"
+            material="ball_mat" position="6.6 4.1 3"/>
+    <sphere name="SpinTip2"  radius="0.28" segments="12"
+            material="ball_mat" position="3.4 4.1 3"/>
+
+    <!-- ── C: Color-cycling glowing cube (left side) ─────────────────── -->
+    <cylinder name="GlowPole" radius="0.10" height="1.6" segments="8"
+              material="pole_mat" position="-5 0.8 2"/>
+    <box name="GlowCube" size="1.4 1.4 1.4"
+         material="glow_mat" position="-5 2.3 2"/>
+
+    <!-- ── D: Pulsing sphere (back center) ──────────────────────────── -->
+    <cylinder name="PulsePole" radius="0.10" height="2.2" segments="8"
+              material="pole_mat" position="0 1.1 6"/>
+    <sphere name="PulseSphere" radius="0.9" segments="24"
+            material="pulse_mat" position="0 3.0 6"/>
+
+  </objects>
+
+  <!-- ================================================================
+       ANIMATION ACTIONS
+  ================================================================ -->
+  <actions>
+
+    <!--
+      "Showcase" — 8-second loop demonstrating all channel types.
+      Select this action in the timeline dropdown, then press Play.
+    -->
+    <action name="Showcase" duration="8.0" loop="true">
+
+      <!-- ── A1: Platform slow rotation (linear, 1 full turn / 8 s) ── -->
+      <channel target="Platform" property="rotation.y">
+        <keyframe time="0.0" value="0.0"   interp="linear"/>
+        <keyframe time="8.0" value="360.0" interp="linear"/>
+      </channel>
+
+      <!-- ── A2: Ball bounce — 4 complete arcs (cubic bezier) ──────── -->
+      <!-- Handles: steep up-ramp at ground, flat tangent at peak -->
+      <channel target="Ball" property="position.y">
+        <keyframe time="0.0" value="1.3" interp="cubic">
+          <handle_right dt="0.22" dv="3.0"/>
+        </keyframe>
+        <keyframe time="1.0" value="4.8" interp="cubic">
+          <handle_left  dt="-0.35" dv="0.0"/>
+          <handle_right dt=" 0.35" dv="0.0"/>
+        </keyframe>
+        <keyframe time="2.0" value="1.3" interp="cubic">
+          <handle_left  dt="-0.22" dv="3.0"/>
+          <handle_right dt=" 0.22" dv="3.0"/>
+        </keyframe>
+        <keyframe time="3.0" value="4.8" interp="cubic">
+          <handle_left  dt="-0.35" dv="0.0"/>
+          <handle_right dt=" 0.35" dv="0.0"/>
+        </keyframe>
+        <keyframe time="4.0" value="1.3" interp="cubic">
+          <handle_left  dt="-0.22" dv="3.0"/>
+          <handle_right dt=" 0.22" dv="3.0"/>
+        </keyframe>
+        <keyframe time="5.0" value="4.8" interp="cubic">
+          <handle_left  dt="-0.35" dv="0.0"/>
+          <handle_right dt=" 0.35" dv="0.0"/>
+        </keyframe>
+        <keyframe time="6.0" value="1.3" interp="cubic">
+          <handle_left  dt="-0.22" dv="3.0"/>
+          <handle_right dt=" 0.22" dv="3.0"/>
+        </keyframe>
+        <keyframe time="7.0" value="4.8" interp="cubic">
+          <handle_left  dt="-0.35" dv="0.0"/>
+          <handle_right dt=" 0.35" dv="0.0"/>
+        </keyframe>
+        <keyframe time="8.0" value="1.3" interp="cubic">
+          <handle_left  dt="-0.22" dv="3.0"/>
+        </keyframe>
+      </channel>
+
+      <!-- ── B: SpinDisc fast rotation (2 full turns / 8 s) ─────────── -->
+      <channel target="SpinDisc" property="rotation.y">
+        <keyframe time="0.0" value="0.0"   interp="linear"/>
+        <keyframe time="8.0" value="720.0" interp="linear"/>
+      </channel>
+      <!-- Tips counter-rotate for visual effect -->
+      <channel target="SpinTip1" property="rotation.y">
+        <keyframe time="0.0" value="0.0"    interp="linear"/>
+        <keyframe time="8.0" value="-360.0" interp="linear"/>
+      </channel>
+      <channel target="SpinTip2" property="rotation.y">
+        <keyframe time="0.0" value="0.0"    interp="linear"/>
+        <keyframe time="8.0" value="-360.0" interp="linear"/>
+      </channel>
+
+      <!-- ── C: GlowCube color cycle R → G → B → R (linear) ────────── -->
+      <channel target="GlowCube" property="material.emissive.r">
+        <keyframe time="0.00" value="2.0" interp="linear"/>
+        <keyframe time="2.67" value="0.0" interp="linear"/>
+        <keyframe time="5.33" value="0.0" interp="linear"/>
+        <keyframe time="8.00" value="2.0" interp="linear"/>
+      </channel>
+      <channel target="GlowCube" property="material.emissive.g">
+        <keyframe time="0.00" value="0.0" interp="linear"/>
+        <keyframe time="2.67" value="2.0" interp="linear"/>
+        <keyframe time="5.33" value="0.0" interp="linear"/>
+        <keyframe time="8.00" value="0.0" interp="linear"/>
+      </channel>
+      <channel target="GlowCube" property="material.emissive.b">
+        <keyframe time="0.00" value="0.0" interp="linear"/>
+        <keyframe time="2.67" value="0.0" interp="linear"/>
+        <keyframe time="5.33" value="2.0" interp="linear"/>
+        <keyframe time="8.00" value="0.0" interp="linear"/>
+      </channel>
+      <!-- GlowCube slow Y-rotation so all faces are visible -->
+      <channel target="GlowCube" property="rotation.y">
+        <keyframe time="0.0" value="0.0"   interp="linear"/>
+        <keyframe time="8.0" value="180.0" interp="linear"/>
+      </channel>
+
+      <!-- ── D: PulseSphere uniform scale 1.0 → 1.6 → 1.0 (4 pulses) ─ -->
+      <channel target="PulseSphere" property="scale.x">
+        <keyframe time="0.0" value="1.0" interp="cubic"><handle_right dt="0.25" dv="0.6"/></keyframe>
+        <keyframe time="1.0" value="1.6" interp="cubic"><handle_left dt="-0.30" dv="0.0"/><handle_right dt="0.30" dv="0.0"/></keyframe>
+        <keyframe time="2.0" value="1.0" interp="cubic"><handle_left dt="-0.25" dv="0.6"/><handle_right dt="0.25" dv="0.6"/></keyframe>
+        <keyframe time="3.0" value="1.6" interp="cubic"><handle_left dt="-0.30" dv="0.0"/><handle_right dt="0.30" dv="0.0"/></keyframe>
+        <keyframe time="4.0" value="1.0" interp="cubic"><handle_left dt="-0.25" dv="0.6"/><handle_right dt="0.25" dv="0.6"/></keyframe>
+        <keyframe time="5.0" value="1.6" interp="cubic"><handle_left dt="-0.30" dv="0.0"/><handle_right dt="0.30" dv="0.0"/></keyframe>
+        <keyframe time="6.0" value="1.0" interp="cubic"><handle_left dt="-0.25" dv="0.6"/><handle_right dt="0.25" dv="0.6"/></keyframe>
+        <keyframe time="7.0" value="1.6" interp="cubic"><handle_left dt="-0.30" dv="0.0"/><handle_right dt="0.30" dv="0.0"/></keyframe>
+        <keyframe time="8.0" value="1.0" interp="cubic"><handle_left dt="-0.25" dv="0.6"/></keyframe>
+      </channel>
+      <channel target="PulseSphere" property="scale.y">
+        <keyframe time="0.0" value="1.0" interp="cubic"><handle_right dt="0.25" dv="0.6"/></keyframe>
+        <keyframe time="1.0" value="1.6" interp="cubic"><handle_left dt="-0.30" dv="0.0"/><handle_right dt="0.30" dv="0.0"/></keyframe>
+        <keyframe time="2.0" value="1.0" interp="cubic"><handle_left dt="-0.25" dv="0.6"/><handle_right dt="0.25" dv="0.6"/></keyframe>
+        <keyframe time="3.0" value="1.6" interp="cubic"><handle_left dt="-0.30" dv="0.0"/><handle_right dt="0.30" dv="0.0"/></keyframe>
+        <keyframe time="4.0" value="1.0" interp="cubic"><handle_left dt="-0.25" dv="0.6"/><handle_right dt="0.25" dv="0.6"/></keyframe>
+        <keyframe time="5.0" value="1.6" interp="cubic"><handle_left dt="-0.30" dv="0.0"/><handle_right dt="0.30" dv="0.0"/></keyframe>
+        <keyframe time="6.0" value="1.0" interp="cubic"><handle_left dt="-0.25" dv="0.6"/><handle_right dt="0.25" dv="0.6"/></keyframe>
+        <keyframe time="7.0" value="1.6" interp="cubic"><handle_left dt="-0.30" dv="0.0"/><handle_right dt="0.30" dv="0.0"/></keyframe>
+        <keyframe time="8.0" value="1.0" interp="cubic"><handle_left dt="-0.25" dv="0.6"/></keyframe>
+      </channel>
+      <channel target="PulseSphere" property="scale.z">
+        <keyframe time="0.0" value="1.0" interp="cubic"><handle_right dt="0.25" dv="0.6"/></keyframe>
+        <keyframe time="1.0" value="1.6" interp="cubic"><handle_left dt="-0.30" dv="0.0"/><handle_right dt="0.30" dv="0.0"/></keyframe>
+        <keyframe time="2.0" value="1.0" interp="cubic"><handle_left dt="-0.25" dv="0.6"/><handle_right dt="0.25" dv="0.6"/></keyframe>
+        <keyframe time="3.0" value="1.6" interp="cubic"><handle_left dt="-0.30" dv="0.0"/><handle_right dt="0.30" dv="0.0"/></keyframe>
+        <keyframe time="4.0" value="1.0" interp="cubic"><handle_left dt="-0.25" dv="0.6"/><handle_right dt="0.25" dv="0.6"/></keyframe>
+        <keyframe time="5.0" value="1.6" interp="cubic"><handle_left dt="-0.30" dv="0.0"/><handle_right dt="0.30" dv="0.0"/></keyframe>
+        <keyframe time="6.0" value="1.0" interp="cubic"><handle_left dt="-0.25" dv="0.6"/><handle_right dt="0.25" dv="0.6"/></keyframe>
+        <keyframe time="7.0" value="1.6" interp="cubic"><handle_left dt="-0.30" dv="0.0"/><handle_right dt="0.30" dv="0.0"/></keyframe>
+        <keyframe time="8.0" value="1.0" interp="cubic"><handle_left dt="-0.25" dv="0.6"/></keyframe>
+      </channel>
+
+      <!-- ── E: Pole roughness shimmer (subtle surface change) ──────── -->
+      <channel target="SpinPole" property="material.roughness">
+        <keyframe time="0.0" value="0.45" interp="linear"/>
+        <keyframe time="4.0" value="0.10" interp="linear"/>
+        <keyframe time="8.0" value="0.45" interp="linear"/>
+      </channel>
+
+    </action>
+
+  </actions>
+
+</mc3>
