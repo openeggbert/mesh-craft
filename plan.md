@@ -96,7 +96,7 @@ Legend: ✅ done · 🔧 partial · 📋 planned
 | F3 ✅ | Export selection (export only selected objects to a new MC3 XML file) | MeshCraftApplication_FileOps.cpp |
 | F4 ✅ | Merge scene (open second MC3 XML and insert its objects into current scene) | MeshCraftApplication_FileOps.cpp |
 | F5 ✅ | Auto-save interval configurable in UI (currently hardcoded 60 s) | MeshCraftApplication.hpp, Settings |
-| F6 | Backups (backup.1, backup.2 on each Save) | MeshCraftApplication_FileOps.cpp |
+| F6 ✅ | Backups (backup.1, backup.2 on each Save) | MeshCraftApplication_FileOps.cpp |
 | F7 | Export PNG screenshot from command line (headless, no GUI) | main.cpp |
 | F8 | GLB export settings UI (textures embedded/external, quantization) | MeshCraftApplication_FileOps.cpp |
 

@@ -123,6 +123,15 @@ void MeshCraftApplication::openFile() {
 void MeshCraftApplication::saveFile() {
     if (currentFile_.empty()) { saveFileAs(); return; }
     try {
+        // F6: rotate backups before overwriting
+        if (std::filesystem::exists(currentFile_)) {
+            auto b1 = std::filesystem::path(currentFile_.string() + ".backup.1");
+            auto b2 = std::filesystem::path(currentFile_.string() + ".backup.2");
+            std::error_code ec;
+            if (std::filesystem::exists(b1)) std::filesystem::rename(b1, b2, ec);
+            std::filesystem::copy_file(currentFile_, b1,
+                std::filesystem::copy_options::overwrite_existing, ec);
+        }
         document_.saveToFile(currentFile_);
         addRecentFile(currentFile_);
         modified_ = false;
