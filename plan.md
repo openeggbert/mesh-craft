@@ -52,7 +52,7 @@ Legend: ✅ done · 🔧 partial · 📋 planned
 | C7 ✅ | Properties: show world-space position (computed matrix result) beside local transform | UiProperties.cpp |
 | C8 ✅ | Properties: extend K keyframe button to all animatable properties (material, deform) | UiProperties.cpp |
 | C9 ✅ | Properties: tabs to separate Transform / Geometry / Material / Animation sections | UiProperties.cpp |
-| C10 | Object: per-object action/state system (Mc3Object TODO) | Mc3Object.hpp |
+| C10 ✅ | Object: per-object action/state system (Mc3Object TODO) | Mc3Object.hpp |
 
 ---
 

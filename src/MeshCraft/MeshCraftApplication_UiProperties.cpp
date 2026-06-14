@@ -412,61 +412,196 @@ void MeshCraftApplication::drawPropertiesPanel(float panelY, float panelH, int s
             }
         }
 
-        // States
+        // States (C10: per-object state system)
         {
             ImGui::Spacing();
             ImGui::Separator();
             ImGui::Spacing();
-            if (ImGui::TreeNodeEx("States##xf", ImGuiTreeNodeFlags_None)) {
-                auto& states = sel0->states;
-                std::string toDelete;
-                for (auto& [stId, st] : states) {
-                    ImGui::PushID(stId.c_str());
-                    ImGui::TextUnformatted(stId.c_str());
-                    ImGui::SameLine();
-                    if (ImGui::SmallButton("Apply")) {
-                        pushUndo();
-                        if (st.position) sel0->transform.position = *st.position;
-                        if (st.rotation) sel0->transform.rotation = *st.rotation;
-                        if (st.scale)    sel0->transform.scale    = *st.scale;
-                        if (st.visible)  sel0->visible            = *st.visible;
-                        if (st.material) sel0->material           = *st.material;
-                        modified_ = true; updateWindowTitle();
-                    }
-                    if (ImGui::IsItemHovered()) ImGui::SetTooltip("Apply this state to the object");
-                    ImGui::SameLine();
-                    if (ImGui::SmallButton("Del")) {
-                        pushUndo();
-                        toDelete = stId;
-                        modified_ = true; updateWindowTitle();
-                    }
-                    ImGui::PopID();
+            ImGui::TextDisabled("States");
+            ImGui::SameLine();
+            ImGui::TextDisabled("(%d)", static_cast<int>(sel0->states.size()));
+
+            auto& states = sel0->states;
+            std::string toDelete;
+
+            for (auto& [stId, st] : states) {
+                ImGui::PushID(stId.c_str());
+
+                bool open = ImGui::CollapsingHeader(stId.c_str(), ImGuiTreeNodeFlags_None);
+
+                // Inline action buttons (always visible, right side)
+                float bw = ImGui::GetContentRegionAvail().x;
+                ImGui::SameLine(bw - 90.0f);
+                if (ImGui::SmallButton("Apply##stap")) {
+                    pushUndo();
+                    if (st.position) sel0->transform.position = *st.position;
+                    if (st.rotation) sel0->transform.rotation = *st.rotation;
+                    if (st.scale)    sel0->transform.scale    = *st.scale;
+                    if (st.visible.has_value()) sel0->visible = *st.visible;
+                    if (st.material) sel0->material = *st.material;
+                    modified_ = true; updateWindowTitle();
                 }
-                if (!toDelete.empty()) states.erase(toDelete);
-                ImGui::Separator();
-                static char newStateName[64] = {};
-                ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x - 76);
-                ImGui::InputText("##stname", newStateName, sizeof(newStateName));
+                if (ImGui::IsItemHovered()) ImGui::SetTooltip("Apply this state to the object now");
                 ImGui::SameLine();
-                if (ImGui::SmallButton("Capture")) {
-                    std::string n(newStateName);
-                    if (!n.empty()) {
-                        pushUndo();
-                        Mc3::Mc3ObjectState st;
-                        st.position = sel0->transform.position;
-                        st.rotation = sel0->transform.rotation;
-                        st.scale    = sel0->transform.scale;
-                        st.visible  = sel0->visible;
-                        if (!sel0->material.empty()) st.material = sel0->material;
-                        states[n] = st;
-                        modified_ = true; updateWindowTitle();
-                        newStateName[0] = '\0';
-                    }
+                if (ImGui::SmallButton("Cap##stcp")) {
+                    pushUndo();
+                    if (st.position) st.position = sel0->transform.position;
+                    if (st.rotation) st.rotation = sel0->transform.rotation;
+                    if (st.scale)    st.scale    = sel0->transform.scale;
+                    if (st.visible.has_value()) st.visible = sel0->visible;
+                    if (st.material) st.material = sel0->material;
+                    modified_ = true;
                 }
-                if (ImGui::IsItemHovered())
-                    ImGui::SetTooltip("Save current transform+visibility as a named state");
-                ImGui::TreePop();
+                if (ImGui::IsItemHovered()) ImGui::SetTooltip("Re-capture from current object values");
+                ImGui::SameLine();
+                if (ImGui::SmallButton("Del##stdel")) {
+                    pushUndo(); toDelete = stId; modified_ = true; updateWindowTitle();
+                }
+
+                if (open) {
+                    ImGui::Indent();
+
+                    // ── Position ────────────────────────────────────────────
+                    {
+                        bool hasP = st.position.has_value();
+                        if (ImGui::Checkbox("Position##stp", &hasP)) {
+                            pushUndo();
+                            if (hasP) st.position = sel0->transform.position;
+                            else      st.position.reset();
+                            modified_ = true;
+                        }
+                        if (st.position) {
+                            ImGui::SameLine();
+                            ImGui::SetNextItemWidth(-1);
+                            if (ImGui::DragFloat3("##stpv", st.position->data(), 0.01f))
+                                { pushUndo(); modified_ = true; }
+                        }
+                    }
+
+                    // ── Rotation ────────────────────────────────────────────
+                    {
+                        bool hasR = st.rotation.has_value();
+                        if (ImGui::Checkbox("Rotation##str", &hasR)) {
+                            pushUndo();
+                            if (hasR) st.rotation = sel0->transform.rotation;
+                            else      st.rotation.reset();
+                            modified_ = true;
+                        }
+                        if (st.rotation) {
+                            ImGui::SameLine();
+                            ImGui::SetNextItemWidth(-1);
+                            if (ImGui::DragFloat3("##strv", st.rotation->data(), 0.5f))
+                                { pushUndo(); modified_ = true; }
+                        }
+                    }
+
+                    // ── Scale ───────────────────────────────────────────────
+                    {
+                        bool hasS = st.scale.has_value();
+                        if (ImGui::Checkbox("Scale##sts", &hasS)) {
+                            pushUndo();
+                            if (hasS) st.scale = sel0->transform.scale;
+                            else      st.scale.reset();
+                            modified_ = true;
+                        }
+                        if (st.scale) {
+                            ImGui::SameLine();
+                            ImGui::SetNextItemWidth(-1);
+                            if (ImGui::DragFloat3("##stsv", st.scale->data(), 0.01f, 0.001f, 1000.f))
+                                { pushUndo(); modified_ = true; }
+                        }
+                    }
+
+                    // ── Visible ─────────────────────────────────────────────
+                    {
+                        bool hasVis = st.visible.has_value();
+                        if (ImGui::Checkbox("Visible##stv", &hasVis)) {
+                            pushUndo();
+                            if (hasVis) st.visible = sel0->visible;
+                            else        st.visible.reset();
+                            modified_ = true;
+                        }
+                        if (st.visible.has_value()) {
+                            ImGui::SameLine();
+                            bool v = *st.visible;
+                            if (ImGui::Checkbox("##stvv", &v)) {
+                                pushUndo(); st.visible = v; modified_ = true;
+                            }
+                        }
+                    }
+
+                    // ── Material ────────────────────────────────────────────
+                    {
+                        bool hasMat = st.material.has_value();
+                        if (ImGui::Checkbox("Material##stm", &hasMat)) {
+                            pushUndo();
+                            if (hasMat) st.material = sel0->material;
+                            else        st.material.reset();
+                            modified_ = true;
+                        }
+                        if (st.material) {
+                            ImGui::SameLine();
+                            ImGui::SetNextItemWidth(-1);
+                            // Combo from document materials
+                            const std::string& cur = *st.material;
+                            if (ImGui::BeginCombo("##stmv", cur.empty() ? "(none)" : cur.c_str())) {
+                                if (ImGui::Selectable("(none)", cur.empty())) {
+                                    pushUndo(); st.material = std::string{}; modified_ = true;
+                                }
+                                for (const auto& [mk, _] : document_.materials) {
+                                    bool sel = (mk == cur);
+                                    if (ImGui::Selectable(mk.c_str(), sel)) {
+                                        pushUndo(); *st.material = mk; modified_ = true;
+                                    }
+                                    if (sel) ImGui::SetItemDefaultFocus();
+                                }
+                                ImGui::EndCombo();
+                            }
+                        }
+                    }
+
+                    ImGui::Unindent();
+                    ImGui::Spacing();
+                }
+
+                ImGui::PopID();
             }
+            if (!toDelete.empty()) states.erase(toDelete);
+
+            // Add new state
+            ImGui::Separator();
+            static char newStateName[64] = {};
+            ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x - 132);
+            ImGui::InputTextWithHint("##stname", "state name…", newStateName, sizeof(newStateName));
+            ImGui::SameLine();
+            bool nameOk = newStateName[0] != '\0' && !states.count(newStateName);
+            if (!nameOk) ImGui::BeginDisabled();
+            if (ImGui::SmallButton("+ Empty")) {
+                pushUndo();
+                states[newStateName] = Mc3::Mc3ObjectState{};
+                modified_ = true; updateWindowTitle();
+                newStateName[0] = '\0';
+            }
+            if (!nameOk) ImGui::EndDisabled();
+            ImGui::SameLine();
+            if (!nameOk) ImGui::BeginDisabled();
+            if (ImGui::SmallButton("+ Capture")) {
+                pushUndo();
+                Mc3::Mc3ObjectState st;
+                st.position = sel0->transform.position;
+                st.rotation = sel0->transform.rotation;
+                st.scale    = sel0->transform.scale;
+                st.visible  = sel0->visible;
+                if (!sel0->material.empty()) st.material = sel0->material;
+                states[newStateName] = st;
+                modified_ = true; updateWindowTitle();
+                newStateName[0] = '\0';
+            }
+            if (!nameOk) ImGui::EndDisabled();
+            if (ImGui::IsItemHovered())
+                ImGui::SetTooltip("Capture current transform + visibility + material as a new state");
+            if (states.count(newStateName))
+                ImGui::TextColored(ImVec4(1.f, 0.5f, 0.2f, 1.f), "Name already exists.");
         }
 
         ImGui::EndTabItem();
