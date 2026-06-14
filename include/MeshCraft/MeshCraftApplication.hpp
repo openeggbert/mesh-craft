@@ -163,6 +163,7 @@ private:
     float snapTranslate_{0.5f};   // world units
     float snapRotate_{15.0f};     // degrees
     float snapScale_{0.25f};      // scale units
+    bool  surfaceSnapEnabled_{false}; // B8: snap Y to surface below object
 
     // Grid cell spacing (world units per cell)
     float gridSpacing_{1.0f};

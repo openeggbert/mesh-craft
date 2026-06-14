@@ -33,7 +33,7 @@ Legend: ✅ done · 🔧 partial · 📋 planned
 | B5 ✅ | Viewport: bounding box toggle (show AABB around selected objects) | SceneRenderer.cpp |
 | B6 ✅ | Viewport: "Look through selected camera" (use selected Mc3Camera as viewport view) | MeshCraftApplication.cpp |
 | B7 ✅ | Snapping: vertex snap (hold Shift while dragging → snap to another object's position) | MeshCraftApplication_Mouse.cpp |
-| B8 | Snapping: surface snap (snap to surface of another object) | MeshCraftApplication_Mouse.cpp |
+| B8 ✅ | Snapping: surface snap (snap to surface of another object) | MeshCraftApplication_Mouse.cpp |
 | B9 ✅ | Viewport: render locked objects with a distinct outline (red/grey border) | SceneRenderer.cpp |
 | B10 ✅ | Viewport: polygon statistics (vertex/face count) in stats overlay | UiOverlays.cpp, SceneRenderer.hpp |
 

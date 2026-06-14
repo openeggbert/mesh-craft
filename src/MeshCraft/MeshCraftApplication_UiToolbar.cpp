@@ -176,6 +176,15 @@ float MeshCraftApplication::drawToolbar(float menuBarH, int screenW)
     }
     ImGui::SameLine();
 
+    // Surface snap toggle (B8)
+    { bool was = surfaceSnapEnabled_;
+      if (was) ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.20f, 0.45f, 0.20f, 1.f));
+      if (ImGui::Button("Surf", ImVec2(40, 30))) surfaceSnapEnabled_ = !surfaceSnapEnabled_;
+      if (was) ImGui::PopStyleColor(); }
+    if (ImGui::IsItemHovered())
+        ImGui::SetTooltip("Surface snap: snap Y to the top of the surface below the object");
+    ImGui::SameLine();
+
     // Grid cell size button (right-click to configure)
     if (ImGui::Button("Grid", ImVec2(40, 30))) {}
     if (ImGui::IsItemHovered())

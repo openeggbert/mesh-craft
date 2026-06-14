@@ -59,6 +59,31 @@ void MeshCraftApplication::handleMouseInput(const MouseState& ms, const MouseSta
     int vH = std::max(1, screenH - topH - tlH - kStatusH);
     float asp = static_cast<float>(vW) / static_cast<float>(vH);
 
+    // Helper: compute axis-aligned bounding box for an object
+    auto objectAABB = [](const Mc3::Mc3Object& obj, Vector3& bMin, Vector3& bMax) {
+        const auto& t = obj.transform;
+        float opx = t.position[0], opy = t.position[1], opz = t.position[2];
+        float osx = t.scale[0],    osy = t.scale[1],    osz = t.scale[2];
+        float hx = 0.5f, hy = 0.5f, hz = 0.5f;
+        if (obj.primitive) {
+            const auto& p = *obj.primitive;
+            switch (p.primitiveType) {
+            case Mc3::PrimitiveType::Box: case Mc3::PrimitiveType::Cube:
+                hx = p.size[0]*0.5f; hy = p.size[1]*0.5f; hz = p.size[2]*0.5f; break;
+            case Mc3::PrimitiveType::Sphere:
+                hx = hy = hz = p.radius; break;
+            case Mc3::PrimitiveType::Cylinder: case Mc3::PrimitiveType::Cone:
+                hx = hz = p.radius; hy = p.height*0.5f; break;
+            case Mc3::PrimitiveType::Plane:
+                hx = p.size[0]*0.5f; hy = 0.05f; hz = p.size[1]*0.5f; break;
+            default: break;
+            }
+        }
+        hx *= std::abs(osx); hy *= std::abs(osy); hz *= std::abs(osz);
+        bMin = {opx-hx, opy-hy, opz-hz};
+        bMax = {opx+hx, opy+hy, opz+hz};
+    };
+
     // Helper: compute local or world axis vectors for a given object
     auto getLocalAxes = [&](const Mc3::Mc3Object* obj, Vector3 axes[3]) {
         if (gizmoLocalSpace_) {
@@ -160,6 +185,39 @@ void MeshCraftApplication::handleMouseInput(const MouseState& ms, const MouseSta
                         s->transform.position[1] += offY;
                         s->transform.position[2] += offZ;
                     }
+                }
+            }
+
+            // Surface snap (B8): snap Y to the top surface directly below each selected object
+            if (surfaceSnapEnabled_) {
+                for (const auto& s : selection_.selection()) {
+                    if (lockedIds_.count(s->id)) continue;
+                    float spx = s->transform.position[0];
+                    float spz = s->transform.position[2];
+                    float highY = s->transform.position[1] + 200.0f;
+                    float bestSurfY = -1e30f;
+                    bool  foundSurf = false;
+
+                    std::function<void(const std::vector<std::shared_ptr<Mc3::Mc3Object>>&)> scanSurf;
+                    scanSurf = [&](const std::vector<std::shared_ptr<Mc3::Mc3Object>>& list) {
+                        for (const auto& obj : list) {
+                            if (!obj || !obj->visible || selection_.isSelected(obj.get())) continue;
+                            Vector3 bMin, bMax;
+                            objectAABB(*obj, bMin, bMax);
+                            // vertical ray through (spx, spz) hits the top of this AABB?
+                            if (spx >= bMin.X && spx <= bMax.X &&
+                                spz >= bMin.Z && spz <= bMax.Z &&
+                                bMax.Y < highY && bMax.Y > bestSurfY)
+                            {
+                                bestSurfY = bMax.Y;
+                                foundSurf = true;
+                            }
+                            if (!obj->children.empty()) scanSurf(obj->children);
+                        }
+                    };
+                    scanSurf(document_.objects);
+
+                    if (foundSurf) s->transform.position[1] = bestSurfY;
                 }
             }
 
@@ -398,29 +456,6 @@ void MeshCraftApplication::handleMouseInput(const MouseState& ms, const MouseSta
                 }
                 tHit = tNear;
                 return tNear >= 0.0f;
-            };
-
-            auto objectAABB = [](const Mc3::Mc3Object& obj, Vector3& bMin, Vector3& bMax) {
-                const auto& t = obj.transform;
-                float px = t.position[0], py2 = t.position[1], pz = t.position[2];
-                float sx = t.scale[0], sy = t.scale[1], sz = t.scale[2];
-                float hx = 0.5f, hy = 0.5f, hz = 0.5f;
-                if (obj.primitive) {
-                    const auto& p = *obj.primitive;
-                    switch (p.primitiveType) {
-                    case Mc3::PrimitiveType::Box: case Mc3::PrimitiveType::Cube:
-                        hx = p.size[0] * 0.5f; hy = p.size[1] * 0.5f; hz = p.size[2] * 0.5f; break;
-                    case Mc3::PrimitiveType::Sphere:
-                        hx = hy = hz = p.radius; break;
-                    case Mc3::PrimitiveType::Cylinder: case Mc3::PrimitiveType::Cone:
-                        hx = hz = p.radius; hy = p.height * 0.5f; break;
-                    case Mc3::PrimitiveType::Plane:
-                        hx = p.size[0] * 0.5f; hy = 0.05f; hz = p.size[1] * 0.5f; break;
-                    }
-                }
-                hx *= std::abs(sx); hy *= std::abs(sy); hz *= std::abs(sz);
-                bMin = { px - hx, py2 - hy, pz - hz };
-                bMax = { px + hx, py2 + hy, pz + hz };
             };
 
             float bestT = 1e30f;
