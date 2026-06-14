@@ -1380,6 +1380,43 @@ void MeshCraftApplication::drawDialogs()
     }
 
     // -----------------------------------------------------------------------
+    // Merge Scene dialog (F4)
+    // -----------------------------------------------------------------------
+    if (mergeSceneOpen_) {
+        ImGui::OpenPopup("Merge Scene##mergedlg");
+        mergeSceneOpen_ = false;
+    }
+    if (ImGui::BeginPopupModal("Merge Scene##mergedlg", nullptr,
+                               ImGuiWindowFlags_AlwaysAutoResize)) {
+        ImGui::Text("Insert objects from another MC3 XML into this scene:");
+        ImGui::SetNextItemWidth(420);
+        if (ImGui::IsWindowAppearing()) ImGui::SetKeyboardFocusHere();
+        bool enter = ImGui::InputText("##mergepath", mergeSceneBuf_, sizeof(mergeSceneBuf_),
+                                      ImGuiInputTextFlags_EnterReturnsTrue);
+        ImGui::SetItemTooltip("e.g. /home/user/other.mc3.xml");
+        if (mergeSceneErr_[0])
+            ImGui::TextColored(ImVec4(1.f, 0.3f, 0.3f, 1.f), "%s", mergeSceneErr_);
+        ImGui::Spacing();
+        bool canMerge = mergeSceneBuf_[0] != '\0';
+        if (!canMerge) ImGui::BeginDisabled();
+        if ((enter || ImGui::Button("Merge", ImVec2(100, 0))) && canMerge) {
+            mergeSceneErr_[0] = '\0';
+            try {
+                mergeSceneFromFile(mergeSceneBuf_);
+                ImGui::CloseCurrentPopup();
+            } catch (const std::exception& ex) {
+                std::strncpy(mergeSceneErr_, ex.what(), sizeof(mergeSceneErr_)-1);
+                mergeSceneErr_[sizeof(mergeSceneErr_)-1] = '\0';
+            }
+        }
+        if (!canMerge) ImGui::EndDisabled();
+        ImGui::SameLine();
+        if (ImGui::Button("Cancel", ImVec2(90, 0)) || ImGui::IsKeyPressed(ImGuiKey_Escape, false))
+            ImGui::CloseCurrentPopup();
+        ImGui::EndPopup();
+    }
+
+    // -----------------------------------------------------------------------
     // Export Selection dialog (F3)
     // -----------------------------------------------------------------------
     if (selExportOpen_) {

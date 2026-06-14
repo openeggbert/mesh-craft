@@ -142,6 +142,12 @@ private:
     char selExportErr_[256]{};
     void exportSelectionToFile(const std::string& path);
 
+    // Merge scene dialog state (F4)
+    bool mergeSceneOpen_{false};
+    char mergeSceneBuf_[512]{};
+    char mergeSceneErr_[256]{};
+    void mergeSceneFromFile(const std::string& path);
+
     // Subtree export as template dialog state (E8)
     bool subtreeExportOpen_{false};
     char subtreeExportNameBuf_[128]{};  // definition name

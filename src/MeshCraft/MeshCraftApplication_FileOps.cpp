@@ -228,4 +228,37 @@ void MeshCraftApplication::exportSelectionToFile(const std::string& path) {
                  " object(s) → " + path, false, 3.0f);
 }
 
+// ---------------------------------------------------------------------------
+// F4: Merge scene from MC3 XML
+// ---------------------------------------------------------------------------
+void MeshCraftApplication::mergeSceneFromFile(const std::string& path) {
+    Mc3::Mc3Document src = Mc3::Mc3Document::loadFromFile(path);
+    pushUndo();
+
+    // Merge textures (skip on key collision — existing wins)
+    for (auto& [key, tex] : src.textures) {
+        if (!document_.textures.count(key))
+            document_.textures[key] = tex;
+    }
+
+    // Merge materials (suffix on collision)
+    for (auto& [key, mat] : src.materials) {
+        std::string k = key;
+        int n = 2;
+        while (document_.materials.count(k)) k = key + "_" + std::to_string(n++);
+        document_.materials[k] = mat;
+        document_.materials[k].name = k;
+    }
+
+    // Append objects (deep-copy already done by loadFromFile)
+    int added = 0;
+    for (auto& obj : src.objects) {
+        document_.objects.push_back(obj);
+        ++added;
+    }
+
+    modified_ = true; updateWindowTitle();
+    setStatusMsg("Merged " + std::to_string(added) + " object(s) from " + path, false, 3.0f);
+}
+
 } // namespace MeshCraft

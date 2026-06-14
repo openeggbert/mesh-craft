@@ -68,6 +68,11 @@ float MeshCraftApplication::drawMenuBar()
                 }
                 if (!hasSel) ImGui::EndDisabled();
             }
+            if (ImGui::MenuItem("Merge Scene...")) {
+                mergeSceneBuf_[0] = '\0';
+                mergeSceneErr_[0] = '\0';
+                mergeSceneOpen_   = true;
+            }
             ImGui::Separator();
             if (ImGui::MenuItem("Exit")) confirmIfModified(PendingAction::ExitApp);
             ImGui::EndMenu();
