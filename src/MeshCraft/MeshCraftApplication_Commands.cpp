@@ -10,12 +10,15 @@
 #include <Microsoft/Xna/Framework/Graphics/Viewport.hpp>
 
 #include <algorithm>
+#include <chrono>
+#include <cmath>
 #include <cstdio>
 #include <cstring>
 #include <filesystem>
 #include <fstream>
 #include <functional>
 #include <iostream>
+#include <numbers>
 #include <random>
 #include <string>
 
@@ -789,6 +792,89 @@ void MeshCraftApplication::arrayDuplicate() {
         std::snprintf(msg, sizeof(msg), "Array: %d object(s) created",
                       static_cast<int>(newObjs.size()));
         setStatusMsg(msg);
+    }
+}
+
+// ---------------------------------------------------------------------------
+// H4: Scatter Along Curve
+// ---------------------------------------------------------------------------
+void MeshCraftApplication::scatterAlongCurve() {
+    if (!selection_.hasSelection() || scatterCurveCount_ < 2) return;
+
+    auto prev = selection_.selection();
+    pushUndo();
+    std::vector<std::shared_ptr<Mc3::Mc3Object>> newObjs;
+
+    // Jitter seed per call
+    unsigned seed = static_cast<unsigned>(
+        std::chrono::steady_clock::now().time_since_epoch().count());
+    auto rng = [&]() -> float {
+        seed = seed * 1664525u + 1013904223u;
+        return static_cast<float>(seed & 0xFFFF) / 65535.0f * 2.0f - 1.0f;
+    };
+
+    const int   count = scatterCurveCount_;
+    const float jitter = scatterCurveJitter_;
+
+    // Compute position for copy index i (0 = original position)
+    auto computePos = [&](const Mc3::Mc3Object& src, int i)
+        -> std::array<float,3>
+    {
+        float bx = src.transform.position[0];
+        float by = src.transform.position[1];
+        float bz = src.transform.position[2];
+
+        if (scatterCurveMode_ == 0) {
+            // Straight line along chosen axis
+            float offset = static_cast<float>(i) * scatterCurveSpacing_;
+            std::array<float,3> p = {bx, by, bz};
+            p[scatterCurveAxis_] += offset;
+            return p;
+        } else {
+            // Arc in the plane perpendicular to the chosen axis
+            // Arc starts at source, sweeps scatterCurveArcAngle_ degrees
+            float t = static_cast<float>(i) / static_cast<float>(count - 1);
+            float angle = t * scatterCurveArcAngle_ * (std::numbers::pi_v<float> / 180.0f);
+            float R = scatterCurveRadius_;
+            float dx = R * std::cos(angle) - R;  // offset from start (at angle=0 → 0)
+            float dz = R * std::sin(angle);
+            // Map dx/dz into world axes based on scatterCurveAxis_ (the "up" axis of arc plane)
+            switch (scatterCurveAxis_) {
+            case 0: return {bx,       by + dx, bz + dz}; // arc in YZ plane (X is up)
+            case 1: return {bx + dx,  by,      bz + dz}; // arc in XZ plane (Y is up)
+            default:return {bx + dx,  by + dz, bz};      // arc in XY plane (Z is up)
+            }
+        }
+    };
+
+    for (const auto& src : prev) {
+        auto* parentList = findParentList(document_.objects, src.get());
+        if (!parentList) continue;
+        auto it = std::find_if(parentList->begin(), parentList->end(),
+            [&](const auto& o){ return o.get() == src.get(); });
+        if (it == parentList->end()) continue;
+        auto insertIt = it + 1;
+
+        for (int i = 1; i < count; ++i) {
+            auto copy = deepCopyObject(*src);
+            copy->name = src->name + "_sc" + std::to_string(i);
+            copy->id   = src->id + "_sc" + std::to_string(i);
+            auto p = computePos(*src, i);
+            copy->transform.position[0] = p[0] + rng() * jitter;
+            copy->transform.position[1] = p[1] + rng() * jitter;
+            copy->transform.position[2] = p[2] + rng() * jitter;
+            insertIt = parentList->insert(insertIt, copy);
+            ++insertIt;
+            newObjs.push_back(copy);
+        }
+    }
+
+    if (!newObjs.empty()) {
+        selection_.clear();
+        for (const auto& s : prev) selection_.select(s);
+        for (auto& o : newObjs) selection_.select(o);
+        modified_ = true; updateWindowTitle();
+        setStatusMsg("Scattered " + std::to_string(newObjs.size()) + " copies along curve");
     }
 }
 

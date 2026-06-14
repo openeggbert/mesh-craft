@@ -430,6 +430,9 @@ float MeshCraftApplication::drawMenuBar()
             if (ImGui::MenuItem("Linear Array...", nullptr, false,
                                 !selection_.selection().empty()))
                 arrayDupOpen_ = true;
+            if (ImGui::MenuItem("Scatter Along Curve...", nullptr, false,
+                                !selection_.selection().empty()))
+                scatterCurveOpen_ = true;
             if (ImGui::MenuItem("Batch Rename...", "Ctrl+Shift+R", false,
                                 !selection_.selection().empty()))
                 batchRenameOpen_ = true;

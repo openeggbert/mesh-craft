@@ -124,7 +124,7 @@ Legend: ✅ done · 🔧 partial · 📋 planned
 | H1 ✅ | Proportional editing (transform falloff — influence nearby objects) | MeshCraftApplication_Mouse.cpp |
 | H2 ✅ | Measurement tool (click two points → show distance in overlay) | UiOverlays.cpp, new tool state |
 | H3 ✅ | Align to object (align to a specific target object, not just selection average) | MeshCraftApplication_Commands.cpp |
-| H4 | Scatter/Place: distribute copies along a curve | MeshCraftApplication_Commands.cpp |
+| H4 ✅ | Scatter/Place: distribute copies along a curve | MeshCraftApplication_Commands.cpp |
 | H5 | Pivot: UI to move pivot independently from geometry | UiProperties.cpp |
 | H6 ✅ | Panel resize: drag left/right panel width | MeshCraftApplication.cpp |
 | H7 | Preferences dialog (autosave interval, snap defaults, grid defaults, theme) | new file |

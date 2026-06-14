@@ -760,6 +760,79 @@ void MeshCraftApplication::drawDialogs()
     }
 
     // -----------------------------------------------------------------------
+    // Scatter Along Curve dialog (H4)
+    // -----------------------------------------------------------------------
+    if (scatterCurveOpen_) {
+        ImGui::OpenPopup("Scatter Along Curve##scatdlg");
+        scatterCurveOpen_ = false;
+    }
+    if (ImGui::BeginPopupModal("Scatter Along Curve##scatdlg", nullptr,
+                               ImGuiWindowFlags_AlwaysAutoResize)) {
+        int selCount = static_cast<int>(selection_.selection().size());
+        ImGui::Text("%d source object(s) selected", selCount);
+        ImGui::Separator();
+
+        // Count
+        ImGui::TextColored(ImVec4(0.55f,1.0f,0.55f,1.0f), "Copies (total incl. original)");
+        ImGui::SetNextItemWidth(200);
+        ImGui::SliderInt("##sccount", &scatterCurveCount_, 2, 20);
+        ImGui::SameLine();
+        ImGui::TextDisabled("(%d new)", scatterCurveCount_ - 1);
+
+        // Mode
+        ImGui::Spacing();
+        ImGui::TextColored(ImVec4(1.0f,0.85f,0.4f,1.0f), "Path type");
+        ImGui::SameLine();
+        if (ImGui::RadioButton("Line##scm", scatterCurveMode_ == 0)) scatterCurveMode_ = 0;
+        ImGui::SameLine();
+        if (ImGui::RadioButton("Arc##scm",  scatterCurveMode_ == 1)) scatterCurveMode_ = 1;
+
+        // Axis
+        ImGui::TextColored(ImVec4(1.0f,0.85f,0.4f,1.0f), "Axis");
+        ImGui::SameLine();
+        if (ImGui::RadioButton("X##sca", scatterCurveAxis_ == 0)) scatterCurveAxis_ = 0;
+        ImGui::SameLine();
+        if (ImGui::RadioButton("Y##sca", scatterCurveAxis_ == 1)) scatterCurveAxis_ = 1;
+        ImGui::SameLine();
+        if (ImGui::RadioButton("Z##sca", scatterCurveAxis_ == 2)) scatterCurveAxis_ = 2;
+
+        ImGui::Spacing();
+        if (scatterCurveMode_ == 0) {
+            // Line mode
+            ImGui::TextColored(ImVec4(1.0f,0.55f,0.55f,1.0f), "Spacing (units)");
+            ImGui::SetNextItemWidth(200);
+            ImGui::DragFloat("##scspacing", &scatterCurveSpacing_, 0.05f, -100.0f, 100.0f, "%.2f u");
+        } else {
+            // Arc mode
+            ImGui::TextColored(ImVec4(1.0f,0.55f,0.55f,1.0f), "Radius");
+            ImGui::SetNextItemWidth(200);
+            ImGui::DragFloat("##scradius", &scatterCurveRadius_, 0.05f, 0.1f, 100.0f, "%.2f u");
+            ImGui::TextColored(ImVec4(1.0f,0.55f,0.55f,1.0f), "Arc angle");
+            ImGui::SetNextItemWidth(200);
+            ImGui::SliderFloat("##scarc", &scatterCurveArcAngle_, 10.0f, 360.0f, "%.0f°");
+        }
+
+        ImGui::Spacing();
+        ImGui::TextColored(ImVec4(0.8f,0.8f,1.0f,1.0f), "Jitter (random offset)");
+        ImGui::SetNextItemWidth(200);
+        ImGui::DragFloat("##scjitter", &scatterCurveJitter_, 0.01f, 0.0f, 10.0f, "%.2f u");
+
+        ImGui::Spacing();
+        ImGui::Separator();
+        bool canApply = selCount > 0 && scatterCurveCount_ >= 2;
+        if (!canApply) ImGui::BeginDisabled();
+        if (ImGui::Button("Scatter", ImVec2(120, 0))) {
+            scatterAlongCurve();
+            ImGui::CloseCurrentPopup();
+        }
+        if (!canApply) ImGui::EndDisabled();
+        ImGui::SameLine();
+        if (ImGui::Button("Cancel", ImVec2(90, 0)) || ImGui::IsKeyPressed(ImGuiKey_Escape, false))
+            ImGui::CloseCurrentPopup();
+        ImGui::EndPopup();
+    }
+
+    // -----------------------------------------------------------------------
     // Find & Replace Names dialog (Ctrl+H)
     // -----------------------------------------------------------------------
     if (findReplaceOpen_) {

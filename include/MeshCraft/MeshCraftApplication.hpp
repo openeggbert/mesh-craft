@@ -394,6 +394,17 @@ private:
     bool  arrayDupRelative_{true};
     void  arrayDuplicate();
 
+    // Scatter Along Curve dialog (H4)
+    bool  scatterCurveOpen_{false};
+    int   scatterCurveCount_{6};
+    int   scatterCurveMode_{0};     // 0=Line, 1=Arc
+    int   scatterCurveAxis_{0};     // 0=X, 1=Y, 2=Z
+    float scatterCurveSpacing_{1.5f};
+    float scatterCurveRadius_{4.0f};
+    float scatterCurveArcAngle_{180.0f}; // degrees of arc (360=full circle)
+    float scatterCurveJitter_{0.0f};
+    void  scatterAlongCurve();
+
     // Copy Properties to Selected dialog
     bool copyPropsOpen_{false};
     bool copyPropsMaterial_{true};
