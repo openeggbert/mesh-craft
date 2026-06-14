@@ -361,6 +361,25 @@ void MeshCraftApplication::drawPropertiesPanel(float panelY, float panelH, int s
             }
         }
 
+        // Layer (E7)
+        {
+            bool layerMixed = !allMatchStr([](const Mc3::Mc3Object* o){ return o->layer; });
+            ImGui::TextDisabled("Layer");
+            if (layerMixed) { ImGui::SameLine(); ImGui::TextColored(ImVec4(1.0f,0.75f,0.2f,1.0f),"~"); if (ImGui::IsItemHovered()) ImGui::SetTooltip("Values differ across selection"); }
+            static char layerBuf[64]{};
+            if (!layerMixed)
+                std::strncpy(layerBuf, sel0->layer.c_str(), sizeof(layerBuf) - 1);
+            else
+                layerBuf[0] = '\0';
+            ImGui::SetNextItemWidth(-1);
+            if (ImGui::InputText("##layer", layerBuf, sizeof(layerBuf), ImGuiInputTextFlags_EnterReturnsTrue)) {
+                pushUndo();
+                for (const auto& s : selAll) s->layer = layerBuf;
+                modified_ = true;
+            }
+            ImGui::SetItemTooltip("Named layer (press Enter to apply). Empty = default layer.");
+        }
+
         // Tags — chip display with per-chip remove button + typed-add field
         {
             ImGui::TextDisabled("Tags");

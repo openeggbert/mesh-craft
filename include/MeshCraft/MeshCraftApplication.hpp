@@ -296,6 +296,9 @@ private:
     // Hierarchy type filter (E5): 0=All 1=Prim 2=Mesh 3=Group 4=Instance 5=CSG 6=Extrude
     int  hierTypeFilter_{0};
 
+    // Hierarchy layer filter (E7): empty = show all layers
+    std::string hierLayerFilter_;
+
     // ID to scroll into view in hierarchy next frame (set by command palette object selection)
     std::string hierarchyScrollToId_;
 

@@ -69,6 +69,7 @@ public:
     std::string material;
     bool visible{true};
     std::string collision{"none"};
+    std::string layer;   // named layer — empty = default layer
     std::vector<std::string> tags;
 
     std::optional<Mc3Primitive> primitive;

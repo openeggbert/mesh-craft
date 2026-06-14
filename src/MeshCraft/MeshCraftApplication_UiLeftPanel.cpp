@@ -129,13 +129,51 @@ void MeshCraftApplication::drawLeftPanel(float panelY, float panelH)
                 }
                 ImGui::NewLine();
             }
+
+            // --- Layer filter (E7) ---
+            {
+                // Collect all layer names used in the document
+                std::set<std::string> layerNames;
+                std::function<void(const std::vector<std::shared_ptr<Mc3::Mc3Object>>&)> collectLayers;
+                collectLayers = [&](const auto& list) {
+                    for (const auto& o : list) {
+                        if (!o->layer.empty()) layerNames.insert(o->layer);
+                        collectLayers(o->children);
+                    }
+                };
+                collectLayers(document_.objects);
+
+                if (!layerNames.empty()) {
+                    ImGui::Text("Layer:");
+                    ImGui::SameLine();
+                    ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x - 28.0f);
+                    const std::string& curLay = hierLayerFilter_;
+                    if (ImGui::BeginCombo("##layfilter",
+                                          curLay.empty() ? "(all layers)" : curLay.c_str())) {
+                        if (ImGui::Selectable("(all layers)", curLay.empty()))
+                            hierLayerFilter_.clear();
+                        for (const auto& ln : layerNames) {
+                            bool sel = (ln == curLay);
+                            if (ImGui::Selectable(ln.c_str(), sel)) hierLayerFilter_ = ln;
+                            if (sel) ImGui::SetItemDefaultFocus();
+                        }
+                        ImGui::EndCombo();
+                    }
+                    if (!hierLayerFilter_.empty()) {
+                        ImGui::SameLine();
+                        if (ImGui::SmallButton("×##layclr")) hierLayerFilter_.clear();
+                        if (ImGui::IsItemHovered()) ImGui::SetTooltip("Clear layer filter");
+                    }
+                }
+            }
             ImGui::Separator();
 
             // Build lowercase filter string once
             std::string filterLower = hierarchyFilter_;
             for (auto& ch : filterLower) ch = static_cast<char>(std::tolower(static_cast<unsigned char>(ch)));
             bool filtering = !filterLower.empty();
-            bool typeFiltering = (hierTypeFilter_ != 0);
+            bool typeFiltering  = (hierTypeFilter_ != 0);
+            bool layerFiltering = !hierLayerFilter_.empty();
 
             // Returns true if obj's type matches the selected type filter
             auto matchesType = [&](const Mc3::Mc3Object& o) -> bool {
@@ -157,7 +195,7 @@ void MeshCraftApplication::drawLeftPanel(float panelY, float panelH)
                 }
             };
 
-            // Returns true if obj itself or any descendant matches the filter
+            // Returns true if obj itself or any descendant matches all active filters
             std::function<bool(const Mc3::Mc3Object&)> matchesFilter;
             matchesFilter = [&](const Mc3::Mc3Object& o) -> bool {
                 // text filter
@@ -170,11 +208,19 @@ void MeshCraftApplication::drawLeftPanel(float panelY, float panelH)
                         return false;
                     }
                 }
-                // type filter: show if self matches OR any child matches
+                // type filter
                 if (typeFiltering) {
-                    if (matchesType(o)) return true;
-                    for (const auto& c : o.children) if (matchesFilter(*c)) return true;
-                    return false;
+                    if (!matchesType(o)) {
+                        for (const auto& c : o.children) if (matchesFilter(*c)) return true;
+                        return false;
+                    }
+                }
+                // layer filter
+                if (layerFiltering) {
+                    if (o.layer != hierLayerFilter_) {
+                        for (const auto& c : o.children) if (matchesFilter(*c)) return true;
+                        return false;
+                    }
                 }
                 return true;
             };

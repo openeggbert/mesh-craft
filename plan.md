@@ -81,7 +81,7 @@ Legend: ✅ done · 🔧 partial · 📋 planned
 | E4 ✅ | Hierarchy: show lock icon on locked objects | UiLeftPanel.cpp |
 | E5 | Hierarchy: filter by multiple criteria (tag AND/OR, type, material) | UiLeftPanel.cpp |
 | E6 ✅ | Hierarchy: Select Children command (complement to Select Parent P) | MeshCraftApplication_Commands.cpp |
-| E7 | Scene: named layers (visibility groups, without changing hierarchy) | Mc3Document, UiLeftPanel |
+| E7 ✅ | Scene: named layers (visibility groups, without changing hierarchy) | Mc3Document, UiLeftPanel |
 | E8 | Scene: export/import subtree as template (save subtree as new definition) | MeshCraftApplication_Commands.cpp |
 | E9 ✅ | Scene: total polycount statistic for entire scene | UiOverlays.cpp or Scene Properties |
 

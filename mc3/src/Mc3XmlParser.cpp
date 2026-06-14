@@ -207,6 +207,7 @@ static void parseCommonObjectAttribs(const XMLElement* el, Mc3Object& obj) {
     obj.material  = attr(el, "material");
     obj.visible   = attrB(el, "visible", true);
     obj.collision = attr(el, "collision", "none");
+    obj.layer     = attr(el, "layer");
     obj.isCutter  = attrB(el, "role_cutter", false) || (std::string(attr(el, "role")) == "cutter");
     obj.transform = parseTransform(el);
     obj.deform    = parseDeform(el);
