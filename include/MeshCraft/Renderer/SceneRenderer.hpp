@@ -133,7 +133,7 @@ private:
     Microsoft::Xna::Framework::Graphics::GraphicsDevice& device_;
     std::unique_ptr<Microsoft::Xna::Framework::Graphics::BasicEffect> effect_;
 
-    // Pre-built unit shapes
+    // Pre-built unit shapes (full quality)
     RenderMesh unitBox_;
     RenderMesh unitSphere_;
     RenderMesh unitCylinder_;
@@ -142,6 +142,21 @@ private:
     RenderMesh unitTorus_;
     RenderMesh unitCapsule_;
     RenderMesh unitIcoSphere_;
+
+    // LOD variants: L1 = half segments, L2 = quarter segments (G8)
+    RenderMesh unitSphereL1_;    // 16 seg
+    RenderMesh unitSphereL2_;    // 6 seg
+    RenderMesh unitCylinderL1_;  // 12 seg
+    RenderMesh unitCylinderL2_;  // 6 seg
+    RenderMesh unitConeL1_;      // 12 seg
+    RenderMesh unitConeL2_;      // 6 seg
+    RenderMesh unitTorusL1_;     // 16/8 seg
+    RenderMesh unitTorusL2_;     // 8/4 seg
+    RenderMesh unitCapsuleL1_;   // 8 seg
+    RenderMesh unitCapsuleL2_;   // 4 seg
+
+    // Camera world position stored by draw() for use in drawObject() LOD (G8)
+    float camPosX_{0.0f}, camPosY_{0.0f}, camPosZ_{0.0f};
 
     // Wire box for selection highlight
     std::unique_ptr<Microsoft::Xna::Framework::Graphics::VertexBuffer> wireBoxVB_;
@@ -159,12 +174,12 @@ private:
     WireShape wireShapeGrid_;
 
     void buildUnitBox();
-    void buildUnitSphere(int segments);
-    void buildUnitCylinder(int segments);
-    void buildUnitCone(int segments);
+    void buildUnitSphere(int segments, RenderMesh& target);
+    void buildUnitCylinder(int segments, RenderMesh& target);
+    void buildUnitCone(int segments, RenderMesh& target);
     void buildUnitPlane();
-    void buildUnitTorus(int ringSeg, int tubeSeg);
-    void buildUnitCapsule(int segments);
+    void buildUnitTorus(int ringSeg, int tubeSeg, RenderMesh& target);
+    void buildUnitCapsule(int segments, RenderMesh& target);
     void buildUnitIcoSphere(int subdivisions);
     void buildWireBox();
     void buildWireShapes(int segments);

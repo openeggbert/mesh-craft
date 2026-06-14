@@ -288,12 +288,12 @@ SceneRenderer::SceneRenderer(GraphicsDevice& device)
     effect_->VertexColorEnabled = true;
 
     buildUnitBox();
-    buildUnitSphere(12);
-    buildUnitCylinder(12);
-    buildUnitCone(12);
+    buildUnitSphere(32, unitSphere_);    buildUnitSphere(16, unitSphereL1_);   buildUnitSphere(6,  unitSphereL2_);
+    buildUnitCylinder(24, unitCylinder_); buildUnitCylinder(12, unitCylinderL1_); buildUnitCylinder(6, unitCylinderL2_);
+    buildUnitCone(24, unitCone_);         buildUnitCone(12, unitConeL1_);          buildUnitCone(6,  unitConeL2_);
     buildUnitPlane();
-    buildUnitTorus(32, 16);
-    buildUnitCapsule(16);
+    buildUnitTorus(32, 16, unitTorus_);   buildUnitTorus(16, 8, unitTorusL1_);   buildUnitTorus(8, 4, unitTorusL2_);
+    buildUnitCapsule(16, unitCapsule_);   buildUnitCapsule(8,  unitCapsuleL1_);   buildUnitCapsule(4, unitCapsuleL2_);
     buildUnitIcoSphere(2);
     buildWireBox();
     buildWireShapes(16);
@@ -579,6 +579,18 @@ void SceneRenderer::drawObject(const Mc3Object& obj, const Mc3Document& doc,
         else     drawMesh(mesh, m, view, proj, color);
     };
 
+    // G8: pick LOD level based on camera distance to object pivot
+    float objX = world.M41, objY = world.M42, objZ = world.M43;
+    float dx = camPosX_ - objX, dy = camPosY_ - objY, dz = camPosZ_ - objZ;
+    float distSq = dx*dx + dy*dy + dz*dz;
+    // 0 = full quality (<10 units), 1 = mid (10..40), 2 = lo (>40)
+    int lodLevel = (distSq > 40.0f*40.0f) ? 2 : (distSq > 10.0f*10.0f) ? 1 : 0;
+
+    auto lodMesh = [&](const RenderMesh& hi, const RenderMesh& mid, const RenderMesh& lo)
+        -> const RenderMesh& {
+        return lodLevel == 2 ? lo : lodLevel == 1 ? mid : hi;
+    };
+
     switch (obj.type) {
     case ObjectType::Box:
     case ObjectType::Cube: {
@@ -590,19 +602,22 @@ void SceneRenderer::drawObject(const Mc3Object& obj, const Mc3Document& doc,
     }
     case ObjectType::Sphere: {
         float r = obj.primitive ? obj.primitive->radius * 2.0f : 1.0f;
-        drawAuto(unitSphere_, deform * Matrix::CreateScale({r,r,r}) * world);
+        drawAuto(lodMesh(unitSphere_, unitSphereL1_, unitSphereL2_),
+                 deform * Matrix::CreateScale({r,r,r}) * world);
         break;
     }
     case ObjectType::Cylinder: {
         float r = obj.primitive ? obj.primitive->radius * 2.0f : 1.0f;
         float h = obj.primitive ? obj.primitive->height         : 1.0f;
-        drawAuto(unitCylinder_, deform * Matrix::CreateScale({r,h,r}) * world);
+        drawAuto(lodMesh(unitCylinder_, unitCylinderL1_, unitCylinderL2_),
+                 deform * Matrix::CreateScale({r,h,r}) * world);
         break;
     }
     case ObjectType::Cone: {
         float r = obj.primitive ? obj.primitive->radius * 2.0f : 1.0f;
         float h = obj.primitive ? obj.primitive->height         : 1.0f;
-        drawAuto(unitCone_, deform * Matrix::CreateScale({r,h,r}) * world);
+        drawAuto(lodMesh(unitCone_, unitConeL1_, unitConeL2_),
+                 deform * Matrix::CreateScale({r,h,r}) * world);
         break;
     }
     case ObjectType::Plane: {
@@ -614,19 +629,19 @@ void SceneRenderer::drawObject(const Mc3Object& obj, const Mc3Document& doc,
     case ObjectType::Torus: {
         float R = obj.primitive ? obj.primitive->majorRadius : 0.35f;
         float r = obj.primitive ? obj.primitive->minorRadius : 0.15f;
-        // Scale unit torus (built with R=0.35, r=0.15) to match parameters
         float sxz = R / 0.35f;
         float sy  = r / 0.15f;
-        drawAuto(unitTorus_, deform * Matrix::CreateScale({sxz, sy, sxz}) * world);
+        drawAuto(lodMesh(unitTorus_, unitTorusL1_, unitTorusL2_),
+                 deform * Matrix::CreateScale({sxz, sy, sxz}) * world);
         break;
     }
     case ObjectType::Capsule: {
         float r = obj.primitive ? obj.primitive->radius : 0.5f;
         float h = obj.primitive ? obj.primitive->height : 1.0f;
-        // Unit capsule: total height=2.0 (y=-1..+1), radius=0.5
         float sxz = r * 2.0f;
         float sy  = (h + r * 2.0f) / 2.0f;
-        drawAuto(unitCapsule_, deform * Matrix::CreateScale({sxz, sy, sxz}) * world);
+        drawAuto(lodMesh(unitCapsule_, unitCapsuleL1_, unitCapsuleL2_),
+                 deform * Matrix::CreateScale({sxz, sy, sxz}) * world);
         break;
     }
     case ObjectType::Disk: {
@@ -720,6 +735,11 @@ void SceneRenderer::draw(const Mc3Document& doc,
 {
     device_.SetDepthTestEnabled(true);
     device_.SetDepthWriteEnabled(true);
+
+    // Extract camera world position from view matrix for LOD (G8)
+    camPosX_ = -(view.M41*view.M11 + view.M42*view.M21 + view.M43*view.M31);
+    camPosY_ = -(view.M41*view.M12 + view.M42*view.M22 + view.M43*view.M32);
+    camPosZ_ = -(view.M41*view.M13 + view.M42*view.M23 + view.M43*view.M33);
 
     Matrix identity = Matrix::getIdentityProperty();
 

@@ -113,7 +113,7 @@ Legend: ✅ done · 🔧 partial · 📋 planned
 | G5 ✅ | Ico-sphere (uniform triangle subdivision) | SceneRenderer_Builders.cpp |
 | G6 ✅ | Extrude: spiral path with pitch UI (currently Helix exists but pitch UI is missing) | UiProperties.cpp |
 | G7 ✅ | Extrude: star polygon cross-section (N-pointed star) | Mc3Extrude.hpp, SceneRenderer_Extrude.cpp |
-| G8 | Procedural LOD (level-of-detail segments for primitives based on camera distance) | SceneRenderer.cpp |
+| G8 ✅ | Procedural LOD (level-of-detail segments for primitives based on camera distance) | SceneRenderer.cpp |
 
 ---
 

@@ -88,7 +88,7 @@ void SceneRenderer::buildUnitBox() {
     unitBox_.texPrimitiveCount = 12;
 }
 
-void SceneRenderer::buildUnitSphere(int segments) {
+void SceneRenderer::buildUnitSphere(int segments, RenderMesh& target) {
     Color c(200, 200, 200, 255);
     std::vector<VertexPositionColor> verts;
     std::vector<uint16_t> indices;
@@ -116,12 +116,12 @@ void SceneRenderer::buildUnitSphere(int segments) {
             indices.push_back(ui16(b)); indices.push_back(ui16(c2)); indices.push_back(ui16(d));
         }
     }
-    unitSphere_.vb = std::make_unique<VertexBuffer>(device_, static_cast<int>(verts.size()));
-    unitSphere_.vb->SetData(verts.data(), static_cast<int>(verts.size()));
-    unitSphere_.ib = std::make_unique<IndexBuffer>(device_, static_cast<int>(indices.size()));
-    unitSphere_.ib->SetData(indices.data(), static_cast<int>(indices.size()));
-    unitSphere_.primitiveCount = static_cast<int>(indices.size()) / 3;
-    storePositions(verts, unitSphere_);
+    target.vb = std::make_unique<VertexBuffer>(device_, static_cast<int>(verts.size()));
+    target.vb->SetData(verts.data(), static_cast<int>(verts.size()));
+    target.ib = std::make_unique<IndexBuffer>(device_, static_cast<int>(indices.size()));
+    target.ib->SetData(indices.data(), static_cast<int>(indices.size()));
+    target.primitiveCount = static_cast<int>(indices.size()) / 3;
+    storePositions(verts, target);
 
     // VPNT: same topology, normals = pos*2 (unit sphere radius 0.5), UVs from ring/sector
     {
@@ -140,15 +140,15 @@ void SceneRenderer::buildUnitSphere(int segments) {
                 tv.push_back({pos, norm, uv});
             }
         }
-        unitSphere_.texVB = std::make_unique<VertexBuffer>(device_, static_cast<int>(tv.size()));
-        unitSphere_.texVB->SetData(tv.data(), static_cast<int>(tv.size()));
-        unitSphere_.texIB = std::make_unique<IndexBuffer>(device_, static_cast<int>(indices.size()));
-        unitSphere_.texIB->SetData(indices.data(), static_cast<int>(indices.size()));
-        unitSphere_.texPrimitiveCount = unitSphere_.primitiveCount;
+        target.texVB = std::make_unique<VertexBuffer>(device_, static_cast<int>(tv.size()));
+        target.texVB->SetData(tv.data(), static_cast<int>(tv.size()));
+        target.texIB = std::make_unique<IndexBuffer>(device_, static_cast<int>(indices.size()));
+        target.texIB->SetData(indices.data(), static_cast<int>(indices.size()));
+        target.texPrimitiveCount = target.texPrimitiveCount;
     }
 }
 
-void SceneRenderer::buildUnitCylinder(int segments) {
+void SceneRenderer::buildUnitCylinder(int segments, RenderMesh& target) {
     Color c(200, 200, 200, 255);
     std::vector<VertexPositionColor> verts;
     std::vector<uint16_t> indices;
@@ -180,12 +180,12 @@ void SceneRenderer::buildUnitCylinder(int segments) {
         // Top cap
         indices.push_back(ui16(topCenter)); indices.push_back(ui16(i+segments)); indices.push_back(ui16(j+segments));
     }
-    unitCylinder_.vb = std::make_unique<VertexBuffer>(device_, static_cast<int>(verts.size()));
-    unitCylinder_.vb->SetData(verts.data(), static_cast<int>(verts.size()));
-    unitCylinder_.ib = std::make_unique<IndexBuffer>(device_, static_cast<int>(indices.size()));
-    unitCylinder_.ib->SetData(indices.data(), static_cast<int>(indices.size()));
-    unitCylinder_.primitiveCount = static_cast<int>(indices.size()) / 3;
-    storePositions(verts, unitCylinder_);
+    target.vb = std::make_unique<VertexBuffer>(device_, static_cast<int>(verts.size()));
+    target.vb->SetData(verts.data(), static_cast<int>(verts.size()));
+    target.ib = std::make_unique<IndexBuffer>(device_, static_cast<int>(indices.size()));
+    target.ib->SetData(indices.data(), static_cast<int>(indices.size()));
+    target.primitiveCount = static_cast<int>(indices.size()) / 3;
+    storePositions(verts, target);
 
     // VPNT: side with outward normals + flat cap normals
     {
@@ -235,15 +235,15 @@ void SceneRenderer::buildUnitCylinder(int segments) {
             ti.push_back(ui16(topBase+i+1));
             ti.push_back(ui16(topBase+i+2));
         }
-        unitCylinder_.texVB = std::make_unique<VertexBuffer>(device_, static_cast<int>(tv.size()));
-        unitCylinder_.texVB->SetData(tv.data(), static_cast<int>(tv.size()));
-        unitCylinder_.texIB = std::make_unique<IndexBuffer>(device_, static_cast<int>(ti.size()));
-        unitCylinder_.texIB->SetData(ti.data(), static_cast<int>(ti.size()));
-        unitCylinder_.texPrimitiveCount = static_cast<int>(ti.size()) / 3;
+        target.texVB = std::make_unique<VertexBuffer>(device_, static_cast<int>(tv.size()));
+        target.texVB->SetData(tv.data(), static_cast<int>(tv.size()));
+        target.texIB = std::make_unique<IndexBuffer>(device_, static_cast<int>(ti.size()));
+        target.texIB->SetData(ti.data(), static_cast<int>(ti.size()));
+        target.primitiveCount = static_cast<int>(ti.size()) / 3;
     }
 }
 
-void SceneRenderer::buildUnitCone(int segments) {
+void SceneRenderer::buildUnitCone(int segments, RenderMesh& target) {
     Color c(200, 200, 200, 255);
     std::vector<VertexPositionColor> verts;
     std::vector<uint16_t> indices;
@@ -264,12 +264,12 @@ void SceneRenderer::buildUnitCone(int segments) {
         // Bottom cap
         indices.push_back(ui16(botCtr)); indices.push_back(ui16(j)); indices.push_back(ui16(i));
     }
-    unitCone_.vb = std::make_unique<VertexBuffer>(device_, static_cast<int>(verts.size()));
-    unitCone_.vb->SetData(verts.data(), static_cast<int>(verts.size()));
-    unitCone_.ib = std::make_unique<IndexBuffer>(device_, static_cast<int>(indices.size()));
-    unitCone_.ib->SetData(indices.data(), static_cast<int>(indices.size()));
-    unitCone_.primitiveCount = static_cast<int>(indices.size()) / 3;
-    storePositions(verts, unitCone_);
+    target.vb = std::make_unique<VertexBuffer>(device_, static_cast<int>(verts.size()));
+    target.vb->SetData(verts.data(), static_cast<int>(verts.size()));
+    target.ib = std::make_unique<IndexBuffer>(device_, static_cast<int>(indices.size()));
+    target.ib->SetData(indices.data(), static_cast<int>(indices.size()));
+    target.primitiveCount = static_cast<int>(indices.size()) / 3;
+    storePositions(verts, target);
 
     // VPNT: side tris (apex vert per sector, with slant normal) + bottom cap
     {
@@ -304,11 +304,11 @@ void SceneRenderer::buildUnitCone(int segments) {
             ti.push_back(ui16(capBase+i+2));
             ti.push_back(ui16(capBase+i+1));
         }
-        unitCone_.texVB = std::make_unique<VertexBuffer>(device_, static_cast<int>(tv.size()));
-        unitCone_.texVB->SetData(tv.data(), static_cast<int>(tv.size()));
-        unitCone_.texIB = std::make_unique<IndexBuffer>(device_, static_cast<int>(ti.size()));
-        unitCone_.texIB->SetData(ti.data(), static_cast<int>(ti.size()));
-        unitCone_.texPrimitiveCount = static_cast<int>(ti.size()) / 3;
+        target.texVB = std::make_unique<VertexBuffer>(device_, static_cast<int>(tv.size()));
+        target.texVB->SetData(tv.data(), static_cast<int>(tv.size()));
+        target.texIB = std::make_unique<IndexBuffer>(device_, static_cast<int>(ti.size()));
+        target.texIB->SetData(ti.data(), static_cast<int>(ti.size()));
+        target.texPrimitiveCount = static_cast<int>(ti.size()) / 3;
     }
 }
 
@@ -345,7 +345,7 @@ void SceneRenderer::buildUnitPlane() {
     }
 }
 
-void SceneRenderer::buildUnitTorus(int ringSeg, int tubeSeg) {
+void SceneRenderer::buildUnitTorus(int ringSeg, int tubeSeg, RenderMesh& target) {
     // Unit torus: majorRadius R=0.35, minorRadius r=0.15 (outer edge at 0.5)
     const float R = 0.35f;
     const float r = 0.15f;
@@ -382,12 +382,12 @@ void SceneRenderer::buildUnitTorus(int ringSeg, int tubeSeg) {
 
     int nv = static_cast<int>(verts.size());
     int ni = static_cast<int>(indices.size());
-    unitTorus_.vb = std::make_unique<VertexBuffer>(device_, nv);
-    unitTorus_.vb->SetData(verts.data(), nv);
-    unitTorus_.ib = std::make_unique<IndexBuffer>(device_, ni);
-    unitTorus_.ib->SetData(indices.data(), ni);
-    unitTorus_.primitiveCount = ni / 3;
-    storePositions(verts, unitTorus_);
+    target.vb = std::make_unique<VertexBuffer>(device_, nv);
+    target.vb->SetData(verts.data(), nv);
+    target.ib = std::make_unique<IndexBuffer>(device_, ni);
+    target.ib->SetData(indices.data(), ni);
+    target.primitiveCount = ni / 3;
+    storePositions(verts, target);
 
     // VPNT version: normals + UVs
     {
@@ -408,15 +408,15 @@ void SceneRenderer::buildUnitTorus(int ringSeg, int tubeSeg) {
                 tv.push_back({pos, norm, uv});
             }
         }
-        unitTorus_.texVB = std::make_unique<VertexBuffer>(device_, nv);
-        unitTorus_.texVB->SetData(tv.data(), nv);
-        unitTorus_.texIB = std::make_unique<IndexBuffer>(device_, ni);
-        unitTorus_.texIB->SetData(indices.data(), ni);
-        unitTorus_.texPrimitiveCount = ni / 3;
+        target.texVB = std::make_unique<VertexBuffer>(device_, nv);
+        target.texVB->SetData(tv.data(), nv);
+        target.texIB = std::make_unique<IndexBuffer>(device_, ni);
+        target.texIB->SetData(indices.data(), ni);
+        target.texPrimitiveCount = ni / 3;
     }
 }
 
-void SceneRenderer::buildUnitCapsule(int segments) {
+void SceneRenderer::buildUnitCapsule(int segments, RenderMesh& target) {
     // Unit capsule: radius=0.5, cylinder height=1.0, total height=2.0 (y=-1..+1)
     // Bottom hemisphere center at y=-0.5, top at y=+0.5.
     // Rendering scales: x,z by radius*2; y by (height + radius*2) / 2.
@@ -495,12 +495,12 @@ void SceneRenderer::buildUnitCapsule(int segments) {
         }
     }
 
-    unitCapsule_.vb = std::make_unique<VertexBuffer>(device_, static_cast<int>(verts.size()));
-    unitCapsule_.vb->SetData(verts.data(), static_cast<int>(verts.size()));
-    unitCapsule_.ib = std::make_unique<IndexBuffer>(device_, static_cast<int>(indices.size()));
-    unitCapsule_.ib->SetData(indices.data(), static_cast<int>(indices.size()));
-    unitCapsule_.primitiveCount = static_cast<int>(indices.size()) / 3;
-    storePositions(verts, unitCapsule_);
+    target.vb = std::make_unique<VertexBuffer>(device_, static_cast<int>(verts.size()));
+    target.vb->SetData(verts.data(), static_cast<int>(verts.size()));
+    target.ib = std::make_unique<IndexBuffer>(device_, static_cast<int>(indices.size()));
+    target.ib->SetData(indices.data(), static_cast<int>(indices.size()));
+    target.primitiveCount = static_cast<int>(indices.size()) / 3;
+    storePositions(verts, target);
 
     // VPNT with normals (for textured rendering)
     {
@@ -551,11 +551,11 @@ void SceneRenderer::buildUnitCapsule(int segments) {
         }
         for (auto idx : indices) ti.push_back(idx);
 
-        unitCapsule_.texVB = std::make_unique<VertexBuffer>(device_, static_cast<int>(tv.size()));
-        unitCapsule_.texVB->SetData(tv.data(), static_cast<int>(tv.size()));
-        unitCapsule_.texIB = std::make_unique<IndexBuffer>(device_, static_cast<int>(ti.size()));
-        unitCapsule_.texIB->SetData(ti.data(), static_cast<int>(ti.size()));
-        unitCapsule_.texPrimitiveCount = static_cast<int>(ti.size()) / 3;
+        target.texVB = std::make_unique<VertexBuffer>(device_, static_cast<int>(tv.size()));
+        target.texVB->SetData(tv.data(), static_cast<int>(tv.size()));
+        target.texIB = std::make_unique<IndexBuffer>(device_, static_cast<int>(ti.size()));
+        target.texIB->SetData(ti.data(), static_cast<int>(ti.size()));
+        target.texPrimitiveCount = static_cast<int>(ti.size()) / 3;
     }
 
     // Wire shape for capsule: equator ring + 4 meridian arcs + cylinder edges
