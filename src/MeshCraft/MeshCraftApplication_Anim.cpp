@@ -275,7 +275,14 @@ void MeshCraftApplication::drawTimelinePanel(int screenW, int screenH) {
             float textY = ci * rowH + (rowH - ImGui::GetTextLineHeight()) * 0.5f;
             ImGui::SetCursorPosY(textY);
             ImGui::TextUnformatted(lbl.c_str());
-            ImGui::SameLine(leftW - 36.0f);
+            ImGui::SameLine(leftW - 62.0f);
+            ImGui::SetCursorPosY(ci * rowH + 2.0f);
+            if (ImGui::SmallButton("S\xc3\x97##sc")) {
+                scaleChannelOpen_ = true;
+                scaleChannelIdx_  = ci;
+                scaleChannelFactor_ = 1.0f;
+            }
+            ImGui::SameLine();
             ImGui::SetCursorPosY(ci * rowH + 2.0f);
             if (ImGui::SmallButton("X##dc")) toDelete = ci;
             ImGui::PopID();
@@ -455,6 +462,53 @@ void MeshCraftApplication::drawTimelinePanel(int screenW, int screenH) {
             ImGui::CloseCurrentPopup();
         }
         if (!canRen) ImGui::EndDisabled();
+        ImGui::SameLine();
+        if (ImGui::Button("Cancel", ImVec2(90, 0)) ||
+            ImGui::IsKeyPressed(ImGuiKey_Escape, false))
+            ImGui::CloseCurrentPopup();
+        ImGui::EndPopup();
+    }
+
+    // Scale Channel popup (A8)
+    if (scaleChannelOpen_) {
+        ImGui::OpenPopup("Scale Channel##scdlg");
+        scaleChannelOpen_ = false;
+    }
+    if (ImGui::BeginPopupModal("Scale Channel##scdlg", nullptr,
+                               ImGuiWindowFlags_AlwaysAutoResize)) {
+        ImGui::TextDisabled("Stretch / compress keyframe times");
+        ImGui::Spacing();
+        ImGui::Text("Scale factor:");
+        ImGui::SetNextItemWidth(140.0f);
+        if (ImGui::IsWindowAppearing()) ImGui::SetKeyboardFocusHere();
+        ImGui::DragFloat("##scf", &scaleChannelFactor_, 0.01f, 0.01f, 100.0f, "%.3f\xc3\x97");
+        ImGui::TextDisabled("1.0 = unchanged   2.0 = twice as long");
+        ImGui::Spacing();
+
+        bool canScale = hasAct && scaleChannelIdx_ >= 0 &&
+                        scaleChannelIdx_ < (int)document_.actions[currentActionName_].channels.size() &&
+                        scaleChannelFactor_ > 0.001f;
+        if (!canScale) ImGui::BeginDisabled();
+        if (ImGui::Button("Apply", ImVec2(90, 0)) && canScale) {
+            auto& act2  = document_.actions[currentActionName_];
+            auto& ch2   = act2.channels[scaleChannelIdx_];
+            float t0    = ch2.keyframes.empty() ? 0.0f : ch2.keyframes.front().time;
+            float f     = scaleChannelFactor_;
+            float maxT  = act2.duration;
+            pushUndo();
+            for (auto& kf : ch2.keyframes) {
+                kf.time = std::clamp(t0 + (kf.time - t0) * f, 0.0f, maxT);
+                kf.handleLeft.dt  *= f;
+                kf.handleRight.dt *= f;
+            }
+            std::stable_sort(ch2.keyframes.begin(), ch2.keyframes.end(),
+                [](const Mc3::Mc3Keyframe& a, const Mc3::Mc3Keyframe& b){
+                    return a.time < b.time; });
+            modified_ = true;
+            evaluateAndPushAnimOverrides();
+            ImGui::CloseCurrentPopup();
+        }
+        if (!canScale) ImGui::EndDisabled();
         ImGui::SameLine();
         if (ImGui::Button("Cancel", ImVec2(90, 0)) ||
             ImGui::IsKeyPressed(ImGuiKey_Escape, false))

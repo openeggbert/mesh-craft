@@ -30,7 +30,6 @@ Mesh Craft is built on top of:
 
 - **CNA** — XNA-like C++ runtime (windowing, input, audio, graphics abstraction)
 - **sharp-runtime** — C++ sharp/System layer used by CNA
-- **Nova3D** — 3D engine built on top of CNA (used for 3D viewport rendering)
 
 CNA and sharp-runtime APIs are publicly exposed through the Mesh Craft public API, unlike other applications in this family.
 
@@ -43,7 +42,6 @@ CNA and sharp-runtime APIs are publicly exposed through the Mesh Craft public AP
 - The following sibling repositories checked out next to `mesh-craft`:
   - `cna`
   - `sharp-runtime`
-  - `nova-3d`
 
 ### Build (Linux / macOS)
 

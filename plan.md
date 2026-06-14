@@ -18,7 +18,7 @@ Legend: ✅ done · 🔧 partial · 📋 planned
 | A5 ✅ | Timeline: duplicate action (copy entire action under a new name) | MeshCraftApplication_Anim.cpp |
 | A6 ✅ | Timeline: rename action inline (double-click on name in dropdown) | MeshCraftApplication_Anim.cpp |
 | A7 ✅ | Timeline: copy/paste selected keyframes (Ctrl+C/V inside timeline) | MeshCraftApplication_Anim.cpp |
-| A8 | Timeline: scale time (stretch/compress all keyframes of a channel) | MeshCraftApplication_Anim.cpp |
+| A8 ✅ | Timeline: scale time (stretch/compress all keyframes of a channel) | MeshCraftApplication_Anim.cpp |
 
 ---
 

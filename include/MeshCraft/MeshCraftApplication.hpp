@@ -194,6 +194,11 @@ private:
     bool renameActionOpen_{false};
     char renameActionBuf_[128]{};
 
+    // Scale Channel dialog state (A8)
+    bool  scaleChannelOpen_{false};
+    int   scaleChannelIdx_{-1};
+    float scaleChannelFactor_{1.0f};
+
     // Keyframe clipboard (copy/paste)
     struct KfClipEntry {
         std::string targetObject;
