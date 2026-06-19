@@ -133,6 +133,19 @@ void MeshCraftApplication::LoadContent() {
             document_ = Mc3::Mc3Document::loadFromFile(currentFile_);
             addRecentFile(currentFile_);
             std::cout << "[MeshCraft] Loaded: " << currentFile_ << "\n";
+            // In screenshot mode, auto-activate the default_camera so the render
+            // uses the scene's own camera instead of the editor viewport camera.
+            if (!autoScreenshotPath_.empty() && !document_.defaultCamera.empty()) {
+                for (int i = 0; i < static_cast<int>(document_.cameras.size()); ++i) {
+                    if (document_.cameras[i].name == document_.defaultCamera) {
+                        selectedCameraIdx_ = i;
+                        lookThroughCamera_ = true;
+                        std::cout << "[Screenshot] Using scene camera: "
+                                  << document_.defaultCamera << "\n";
+                        break;
+                    }
+                }
+            }
             // Warn if a newer autosave exists (unsaved crash recovery hint)
             auto asPath = autoSavePath(currentFile_);
             std::error_code ec;

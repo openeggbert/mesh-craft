@@ -609,8 +609,12 @@ void SceneRenderer::drawObject(const Mc3Object& obj, const Mc3Document& doc,
     case ObjectType::Cylinder: {
         float r = obj.primitive ? obj.primitive->radius * 2.0f : 1.0f;
         float h = obj.primitive ? obj.primitive->height         : 1.0f;
+        const std::string& cylAxis = obj.primitive ? obj.primitive->axis : "y";
+        Matrix axisRot = Matrix::getIdentityProperty();
+        if      (cylAxis == "x") axisRot = Matrix::CreateRotationZ(-std::numbers::pi_v<float> / 2.0f);
+        else if (cylAxis == "z") axisRot = Matrix::CreateRotationX( std::numbers::pi_v<float> / 2.0f);
         drawAuto(lodMesh(unitCylinder_, unitCylinderL1_, unitCylinderL2_),
-                 deform * Matrix::CreateScale({r,h,r}) * world);
+                 deform * Matrix::CreateScale({r,h,r}) * axisRot * world);
         break;
     }
     case ObjectType::Cone: {
