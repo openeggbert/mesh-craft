@@ -79,10 +79,12 @@
 - Fix: each unimplemented type now emits `Warning: mc3togltf: 'X' export not yet implemented — object skipped.`
 - Verified: torus and icosphere in test XML produce correct warning output
 
-**S10** — CSG export audit
-- Determine whether mc3togltf evaluates CSG (union/difference/intersection) or ignores it
-- Either implement (Manifold?) or add a clear error message
-- Status: 📋
+**S10** ✅ — CSG export audit
+- **Finding**: CSG nodes (Union/Difference/Intersection) were silently exported as empty group nodes; children (including cutters) exported as individual meshes without boolean evaluation
+- **Fix** (`GltfExporter.cpp`): added warning when any CSG node is encountered:
+  `Warning: mc3togltf: <difference> node 'X' — CSG boolean not evaluated; children exported as separate meshes.`
+- Implementing Manifold-based CSG evaluation is out of scope for this stabilization pass
+- Verified: csg_test.mc3.xml emits correct warnings for union/difference/intersection nodes
 
 ---
 

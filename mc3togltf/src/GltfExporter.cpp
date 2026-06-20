@@ -403,6 +403,18 @@ static int buildNode(ExportCtx& ctx, const Mc3Object& obj)
         directMesh = buildMesh(ctx, obj, matIdx);
     }
 
+    // CSG nodes: boolean not evaluated — warn and export children as separate meshes
+    if (obj.type == ObjectType::Union ||
+        obj.type == ObjectType::Difference ||
+        obj.type == ObjectType::Intersection) {
+        const char* op = (obj.type == ObjectType::Union)      ? "union"
+                       : (obj.type == ObjectType::Difference) ? "difference"
+                       :                                        "intersection";
+        std::cerr << "Warning: mc3togltf: <" << op << "> node '"
+                  << (obj.name.empty() ? "(unnamed)" : obj.name)
+                  << "' — CSG boolean not evaluated; children exported as separate meshes.\n";
+    }
+
     // --- Logical children (for non-instance types) ---
     if (obj.type != ObjectType::Instance) {
         for (const auto& child : obj.children) {
