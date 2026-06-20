@@ -98,12 +98,13 @@
 - Added "Current Limitations" section
 - Status: ✅
 
-**S12** — Review and update MC3_FORMAT.md
-- Canonical `src` attribute for mesh
-- Plane size = vec2
-- Supported primitives list
-- CSG export status
-- Status: 📋
+**S12** ✅ — Review and update MC3_FORMAT.md
+- Created `MC3_FORMAT.md` (file did not exist)
+- Documents all sections: root, environment, lights, cameras, textures, materials, objects, animations
+- Canonical `src` attribute for `<mesh>` (not `source`)
+- Plane `size` documented as vec2 (W × D)
+- Export support matrix: which primitives/features mc3togltf handles vs. warns/skips
+- Validation section pointing to `test/validate_xsd.py`
 
 ---
 
