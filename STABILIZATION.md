@@ -60,15 +60,14 @@
 - All 11 test XML files pass validation
 - Status: ✅
 
-**S7** — Roundtrip test: load → save → reload → compare
-- Add a C++ test or CMake/ctest script
-- Compare semantic fields (not byte-for-byte)
-- Status: 📋
+**S7** ✅ — Roundtrip test: load → save → reload → compare
+- `mc3/test/roundtrip_test.cpp`: C++ CTest, 110 tests, covers all field types
+- Already existed and passes; no new work needed beyond confirming it still passes after S1–S6
 
-**S8** — mc3togltf export tests
-- Export simple scenes (box, sphere, cylinder…) to .gltf and .glb
-- Verify test suite uses top-level-built binary
-- Status: 📋
+**S8** ✅ — mc3togltf export tests
+- `mc3togltf/test/gltf_test.py`: tests basic conversion, animation export (3 actions), GLB magic bytes
+- S4 already wired test to `$<TARGET_FILE:mc3togltf>` (top-level build binary)
+- All 39 gltf_test assertions pass with top-level-built `cmake-build-debug/mc3togltf/mc3togltf`
 
 ---
 
