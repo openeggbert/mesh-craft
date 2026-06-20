@@ -1,0 +1,571 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Speedy Blupi — skutečný 3D svět složený z bloků
+
+  Mřížka: X=0..10, Y=0..8, Z=0..10 (každý blok 1m × 1m × 1m)
+  Většina buněk je prázdná (vzduch), tuhé bloky tvoří terén.
+
+  Pevné struktury:
+    PlatformL  : X=0-3,  Y=0-3,  Z=1-9   levá vyvýšená plošina
+    PlatformR  : X=7-10, Y=0-2,  Z=1-9   pravá nižší plošina
+    PillarC    : X=4-5,  Y=0-5,  Z=4-5   centrální sloup uprostřed jámy
+    StepMid    : X=3-4,  Y=2-3,  Z=3-7   schodek mezi plošinou a pilířem
+    SlabHigh   : X=1-9,  Y=5.5-6,Z=3-7   vznášející se deska nahoře
+    Outer shell: zeď vlevo/vpravo/vzadu + strop + podlaha
+
+  Kopulové sféry se přidávají jen na viditelné povrchy (tři orientace):
+    dome    (+Y) : horní plochy
+    dome_fz (+Z) : přední plochy (viditelné z kamery přes +Z)
+    dome_rx (+X) : pravé plochy  (viditelné z kamery přes +X)
+
+  Kamera: (18, 14, 16) → target (5, 2, 5), izometrický pohled shora-zprava-zepředu
+-->
+<mc3 version="0.3" model="SpeedyBlupi3D" unit="meter"
+     rotation_units="degrees" euler_order="XYZ" default_camera="Main">
+
+  <environment>
+    <background color="0.25 0.60 0.82"/>
+    <fog mode="linear" color="0.18 0.50 0.72" start="30" end="65"/>
+  </environment>
+
+  <lights>
+    <ambient color="0.38 0.50 0.65" brightness="0.52"/>
+    <directional name="Sun"  color="1.0 0.96 0.88" brightness="2.8"
+                 direction="-0.30 -0.80 -0.55" cast_shadows="true"/>
+    <directional name="Fill" color="0.45 0.65 1.0" brightness="0.70"
+                 direction="0.60 -0.15 0.45"/>
+    <!-- Odlesk ohně v jámě mezi plošinami -->
+    <point name="FireGlow" color="1.0 0.42 0.05" brightness="18"
+           position="5 0.6 5" range="8"/>
+  </lights>
+
+  <cameras>
+    <!-- Izometrický pohled: zprava-shora-zepředu — vidíme celou 3D hloubku -->
+    <camera name="Main"  type="perspective"
+            position="18 14 16" target="5 2 5" fov="50" near="0.1" far="140"/>
+    <!-- Přímý přední pohled (jako 2D hra) -->
+    <camera name="Front" type="perspective"
+            position="5 5 20" target="5 2 5" fov="50"/>
+    <!-- Pohled shora -->
+    <camera name="Top"   type="orthographic"
+            position="5 20 5" target="5 0 5" size="14"/>
+  </cameras>
+
+  <!-- ============================================================
+       MATERIÁLY
+  ============================================================ -->
+  <materials>
+    <material id="dome_bright" roughness="0.22" metallic="0.06">
+      <base_color>0.22 0.71 0.88 1.0</base_color>
+    </material>
+    <material id="dome_dark" roughness="0.40" metallic="0.04">
+      <base_color>0.09 0.48 0.66 1.0</base_color>
+    </material>
+    <material id="gap_dark" roughness="0.90" metallic="0.0">
+      <base_color>0.03 0.14 0.22 1.0</base_color>
+    </material>
+    <material id="fire_outer" roughness="0.80" metallic="0.0">
+      <base_color>1.0 0.52 0.04 1.0</base_color>
+      <emissive_color>1.0 0.38 0.0</emissive_color>
+    </material>
+    <material id="fire_inner" roughness="0.80" metallic="0.0">
+      <base_color>1.0 0.88 0.12 1.0</base_color>
+      <emissive_color>0.80 0.62 0.0</emissive_color>
+    </material>
+    <material id="spike_metal" roughness="0.28" metallic="0.90">
+      <base_color>0.18 0.20 0.22 1.0</base_color>
+    </material>
+    <material id="blupi_mat" roughness="0.36" metallic="0.0">
+      <base_color>0.99 0.88 0.03 1.0</base_color>
+    </material>
+    <material id="eye_white" roughness="0.22" metallic="0.0">
+      <base_color>0.96 0.96 0.94 1.0</base_color>
+    </material>
+    <material id="black_mat" roughness="0.28" metallic="0.0">
+      <base_color>0.04 0.04 0.05 1.0</base_color>
+    </material>
+    <material id="red_dot" roughness="0.50" metallic="0.0">
+      <base_color>0.90 0.07 0.07 1.0</base_color>
+    </material>
+    <material id="enemy_mat" roughness="0.40" metallic="0.0">
+      <base_color>0.08 0.82 0.12 1.0</base_color>
+    </material>
+    <material id="candy_blue" roughness="0.28" metallic="0.06">
+      <base_color>0.15 0.28 0.95 1.0</base_color>
+    </material>
+    <material id="candy_green" roughness="0.28" metallic="0.06">
+      <base_color>0.10 0.80 0.28 1.0</base_color>
+    </material>
+    <material id="arrow_mat" roughness="0.55" metallic="0.0">
+      <base_color>0.92 0.10 0.10 1.0</base_color>
+    </material>
+  </materials>
+
+  <!-- ============================================================
+       DEFINICE — tři orientace kopulových dlaždic + herní prvky
+  ============================================================ -->
+  <definitions>
+
+    <!-- Kopule na HORNÍM povrchu: sféra vystupuje v +Y
+         Pozice instance = střed (X, Y_povrch, Z) kde Y_povrch je horní hrana bloku. -->
+    <definition id="dome">
+      <group name="DomeTile">
+        <box    name="Base" size="1.0 0.50 1.0" position="0  0.25  0" material="dome_dark"/>
+        <sphere name="Ball" radius="0.52"         position="0  0.77  0" material="dome_bright"/>
+      </group>
+    </definition>
+
+    <!-- Kopule na PŘEDNÍ ploše (+Z): sféra vystupuje v +Z
+         Pozice instance = střed (X, Y, Z_face) kde Z_face je Z-max hrana bloku. -->
+    <definition id="dome_fz">
+      <group name="DomeFZ">
+        <box    name="Base" size="1.0 1.0 0.50" position="0 0 0.25" material="dome_dark"/>
+        <sphere name="Ball" radius="0.52"         position="0 0 0.77" material="dome_bright"/>
+      </group>
+    </definition>
+
+    <!-- Kopule na PRAVÉ ploše (+X): sféra vystupuje v +X
+         Pozice instance = střed (X_face, Y, Z) kde X_face je X-max hrana bloku. -->
+    <definition id="dome_rx">
+      <group name="DomeRX">
+        <box    name="Base" size="0.50 1.0 1.0" position="0.25 0 0" material="dome_dark"/>
+        <sphere name="Ball" radius="0.52"         position="0.77 0 0" material="dome_bright"/>
+      </group>
+    </definition>
+
+    <!-- Plamen ohně -->
+    <definition id="flame">
+      <group name="Flame">
+        <cone name="Outer" radius="0.30" height="0.75"
+              position="0 0.375 0" material="fire_outer"/>
+        <cone name="Inner" radius="0.14" height="0.58"
+              position="0 0.460 0" material="fire_inner"/>
+      </group>
+    </definition>
+
+    <!-- Spike bar překážka (5 m v ose X) -->
+    <definition id="spike_bar">
+      <group name="SpikeBar">
+        <cylinder name="Rod" radius="0.065" height="5.0" axis="x"
+                  position="0 0 0" material="spike_metal"/>
+        <box name="T1" size="0.09 0.28 0.09" position="-2.0 -0.19 0" material="spike_metal"/>
+        <box name="T2" size="0.09 0.28 0.09" position="-1.0 -0.19 0" material="spike_metal"/>
+        <box name="T3" size="0.09 0.28 0.09" position=" 0.0 -0.19 0" material="spike_metal"/>
+        <box name="T4" size="0.09 0.28 0.09" position=" 1.0 -0.19 0" material="spike_metal"/>
+        <box name="T5" size="0.09 0.28 0.09" position=" 2.0 -0.19 0" material="spike_metal"/>
+      </group>
+    </definition>
+
+    <!-- Candy collectible tyč (helikální spirála) -->
+    <definition id="candy_pole">
+      <group name="CandyPole">
+        <cylinder name="Stem" radius="0.10" height="1.80"
+                  position="0 0.90 0" material="candy_blue"/>
+        <extrude name="Stripe" position="0 0 0"
+                 segments="60" caps="false" smooth="true" material="candy_green">
+          <cross_section type="rect" width="0.07" height="0.04"/>
+          <path type="helix" radius="0.12" height="1.80" turns="3"/>
+        </extrude>
+      </group>
+    </definition>
+
+    <!-- Nepřítel — malý zelený tvor jako Blupi -->
+    <definition id="enemy">
+      <group name="Enemy">
+        <sphere name="Body"   radius="0.38" position="0 0 0" material="enemy_mat">
+          <deform scale="0.88 1.12 0.84"/>
+        </sphere>
+        <sphere name="EyeWL"  radius="0.110" position="-0.13  0.08 -0.25" material="eye_white">
+          <deform scale="0.88 1.28 0.48"/>
+        </sphere>
+        <sphere name="PupilL" radius="0.062" position="-0.12  0.06 -0.32" material="black_mat"/>
+        <sphere name="EyeWR"  radius="0.110" position=" 0.13  0.08 -0.25" material="eye_white">
+          <deform scale="0.88 1.28 0.48"/>
+        </sphere>
+        <sphere name="PupilR" radius="0.062" position=" 0.12  0.06 -0.32" material="black_mat"/>
+        <cone   name="Spike"  radius="0.038" height="0.22"
+                position="0 0.44 0.04" rotation="-12 0 0" material="black_mat"/>
+        <cylinder name="LegL" radius="0.042" height="0.22"
+                  position="-0.10 -0.44 0.02" rotation="6 0 -8" material="enemy_mat"/>
+        <cylinder name="LegR" radius="0.042" height="0.22"
+                  position=" 0.10 -0.44 0.02" rotation="6 0  8" material="enemy_mat"/>
+      </group>
+    </definition>
+
+  </definitions>
+
+  <!-- ============================================================
+       OBJEKTY SCÉNY
+  ============================================================ -->
+  <objects>
+
+    <!-- =========================================================
+         KONSTRUKČNÍ TĚLESA (pevné bloky tvořící terén)
+
+         Souřadnicový systém:
+           PlatformL : box center (1.5, 1.5, 5.0), size (3, 3, 8)  → X:0-3, Y:0-3, Z:1-9
+           PlatformR : box center (8.5, 1.0, 5.0), size (3, 2, 8)  → X:7-10,Y:0-2, Z:1-9
+           PillarC   : box center (4.5, 2.5, 4.5), size (1, 5, 1)  → X:4-5, Y:0-5, Z:4-5
+           StepMid   : box center (3.5, 2.5, 5.0), size (1, 1, 4)  → X:3-4, Y:2-3, Z:3-7
+           SlabHigh  : box center (5.0, 5.75,5.0), size (8, 0.5, 4)→ X:1-9, Y:5.5-6,Z:3-7
+    ========================================================= -->
+
+    <!-- Podlaha (celá plocha scény) -->
+    <box name="FloorBase"  size="12.0 0.50 12.0" position="5 -0.25 5" material="dome_dark"/>
+
+    <!-- Vnější zdi -->
+    <box name="WallLeft"   size=" 0.5 8.0 12.0" position="-0.25  4.0  5" material="dome_dark"/>
+    <box name="WallRight"  size=" 0.5 8.0 12.0" position="10.25  4.0  5" material="dome_dark"/>
+    <box name="WallBack"   size="11.0 8.0  0.5" position=" 5.0   4.0 -0.25" material="dome_dark"/>
+
+    <!-- Strop -->
+    <box name="CeilingBox" size="11.0 0.50 12.0" position=" 5.0  7.75  5" material="dome_dark"/>
+
+    <!-- Levá vyvýšená plošina: X=0-3, Y=0-3, Z=1-9 -->
+    <box name="PlatformL"  size=" 3.0 3.0  8.0" position="1.5 1.5 5.0" material="dome_dark"/>
+
+    <!-- Pravá nižší plošina: X=7-10, Y=0-2, Z=1-9 -->
+    <box name="PlatformR"  size=" 3.0 2.0  8.0" position="8.5 1.0 5.0" material="dome_dark"/>
+
+    <!-- Centrální sloup (tenký, vysoký): X=4-5, Y=0-5, Z=4-5 -->
+    <box name="PillarC"    size=" 1.0 5.0  1.0" position="4.5 2.5 4.5" material="dome_dark"/>
+
+    <!-- Střední schodek: X=3-4, Y=2-3, Z=3-7 -->
+    <box name="StepMid"    size=" 1.0 1.0  4.0" position="3.5 2.5 5.0" material="dome_dark"/>
+
+    <!-- Vznášející se deska nahoře: X=1-9, Y=5.5-6, Z=3-7 -->
+    <box name="SlabHigh"   size=" 8.0 0.5  4.0" position="5.0 5.75 5.0" material="dome_dark"/>
+
+    <!-- =========================================================
+         KOPULOVÉ DLAŽDICE — HORNÍ POVRCHY (dome, sféra v +Y)
+
+         Větvení:
+           DT001-008  PlatformL top  (Y=3): X=1,2  × Z=2,4,6,8
+           DT009-020  PlatformR top  (Y=2): X=7,8,9× Z=2,4,6,8
+           DT021-024  PillarC top    (Y=5): X=4,5  × Z=4,5
+           DT025-027  StepMid top    (Y=3): X=3    × Z=3,5,7
+    ========================================================= -->
+
+    <!-- PlatformL horní plocha Y=3 -->
+    <instance name="DT001" definition="dome" position="1 3 2"/>
+    <instance name="DT002" definition="dome" position="1 3 4"/>
+    <instance name="DT003" definition="dome" position="1 3 6"/>
+    <instance name="DT004" definition="dome" position="1 3 8"/>
+    <instance name="DT005" definition="dome" position="2 3 2"/>
+    <instance name="DT006" definition="dome" position="2 3 4"/>
+    <instance name="DT007" definition="dome" position="2 3 6"/>
+    <instance name="DT008" definition="dome" position="2 3 8"/>
+
+    <!-- PlatformR horní plocha Y=2 -->
+    <instance name="DT009" definition="dome" position="7 2 2"/>
+    <instance name="DT010" definition="dome" position="7 2 4"/>
+    <instance name="DT011" definition="dome" position="7 2 6"/>
+    <instance name="DT012" definition="dome" position="7 2 8"/>
+    <instance name="DT013" definition="dome" position="8 2 2"/>
+    <instance name="DT014" definition="dome" position="8 2 4"/>
+    <instance name="DT015" definition="dome" position="8 2 6"/>
+    <instance name="DT016" definition="dome" position="8 2 8"/>
+    <instance name="DT017" definition="dome" position="9 2 2"/>
+    <instance name="DT018" definition="dome" position="9 2 4"/>
+    <instance name="DT019" definition="dome" position="9 2 6"/>
+    <instance name="DT020" definition="dome" position="9 2 8"/>
+
+    <!-- PillarC horní plocha Y=5 -->
+    <instance name="DT021" definition="dome" position="4 5 4"/>
+    <instance name="DT022" definition="dome" position="4 5 5"/>
+    <instance name="DT023" definition="dome" position="5 5 4"/>
+    <instance name="DT024" definition="dome" position="5 5 5"/>
+
+    <!-- StepMid horní plocha Y=3 -->
+    <instance name="DT025" definition="dome" position="3 3 3"/>
+    <instance name="DT026" definition="dome" position="3 3 5"/>
+    <instance name="DT027" definition="dome" position="3 3 7"/>
+
+    <!-- =========================================================
+         KOPULOVÉ DLAŽDICE — PŘEDNÍ PLOCHY (dome_fz, sféra v +Z)
+
+         Umísťují se na Z-MAX hranu každé struktury (kamera vidí +Z plochy).
+           DF001-008  PlatformL  přední (Z=9)  : X=1,2   × Y=0,1,2,3
+           DF009-017  PlatformR  přední (Z=9)  : X=7,8,9 × Y=0,1,2
+           DF018-029  PillarC    přední (Z=5)  : X=4,5   × Y=0,1,2,3,4,5
+           DF030-031  StepMid    přední (Z=7)  : X=3     × Y=2,3
+           DF032-035  SlabHigh   přední (Z=7)  : X=2,4,6,8 × Y=5.75
+    ========================================================= -->
+
+    <!-- PlatformL přední plocha Z=9 -->
+    <instance name="DF001" definition="dome_fz" position="1 0 9"/>
+    <instance name="DF002" definition="dome_fz" position="1 1 9"/>
+    <instance name="DF003" definition="dome_fz" position="1 2 9"/>
+    <instance name="DF004" definition="dome_fz" position="1 3 9"/>
+    <instance name="DF005" definition="dome_fz" position="2 0 9"/>
+    <instance name="DF006" definition="dome_fz" position="2 1 9"/>
+    <instance name="DF007" definition="dome_fz" position="2 2 9"/>
+    <instance name="DF008" definition="dome_fz" position="2 3 9"/>
+
+    <!-- PlatformR přední plocha Z=9 -->
+    <instance name="DF009" definition="dome_fz" position="7 0 9"/>
+    <instance name="DF010" definition="dome_fz" position="7 1 9"/>
+    <instance name="DF011" definition="dome_fz" position="7 2 9"/>
+    <instance name="DF012" definition="dome_fz" position="8 0 9"/>
+    <instance name="DF013" definition="dome_fz" position="8 1 9"/>
+    <instance name="DF014" definition="dome_fz" position="8 2 9"/>
+    <instance name="DF015" definition="dome_fz" position="9 0 9"/>
+    <instance name="DF016" definition="dome_fz" position="9 1 9"/>
+    <instance name="DF017" definition="dome_fz" position="9 2 9"/>
+
+    <!-- PillarC přední plocha Z=5 (celá výška pilíře 0..5) -->
+    <instance name="DF018" definition="dome_fz" position="4 0 5"/>
+    <instance name="DF019" definition="dome_fz" position="4 1 5"/>
+    <instance name="DF020" definition="dome_fz" position="4 2 5"/>
+    <instance name="DF021" definition="dome_fz" position="4 3 5"/>
+    <instance name="DF022" definition="dome_fz" position="4 4 5"/>
+    <instance name="DF023" definition="dome_fz" position="4 5 5"/>
+    <instance name="DF024" definition="dome_fz" position="5 0 5"/>
+    <instance name="DF025" definition="dome_fz" position="5 1 5"/>
+    <instance name="DF026" definition="dome_fz" position="5 2 5"/>
+    <instance name="DF027" definition="dome_fz" position="5 3 5"/>
+    <instance name="DF028" definition="dome_fz" position="5 4 5"/>
+    <instance name="DF029" definition="dome_fz" position="5 5 5"/>
+
+    <!-- StepMid přední plocha Z=7 -->
+    <instance name="DF030" definition="dome_fz" position="3 2 7"/>
+    <instance name="DF031" definition="dome_fz" position="3 3 7"/>
+
+    <!-- SlabHigh přední plocha Z=7 (Y=5.75 = střed slab výšky 5.5-6) -->
+    <instance name="DF032" definition="dome_fz" position="2 5.75 7"/>
+    <instance name="DF033" definition="dome_fz" position="4 5.75 7"/>
+    <instance name="DF034" definition="dome_fz" position="6 5.75 7"/>
+    <instance name="DF035" definition="dome_fz" position="8 5.75 7"/>
+
+    <!-- =========================================================
+         KOPULOVÉ DLAŽDICE — PRAVÉ PLOCHY (dome_rx, sféra v +X)
+
+         Umísťují se na X-MAX hranu každé struktury (kamera vidí +X plochy).
+           DR001-016  PlatformL pravá plocha (X=3): Y=0,1,2,3 × Z=2,4,6,8
+           DR017-028  PillarC   pravá plocha (X=5): Y=0,1,2,3,4,5 × Z=4,5
+    ========================================================= -->
+
+    <!-- PlatformL pravá plocha X=3 (otevřená do jámy) -->
+    <instance name="DR001" definition="dome_rx" position="3 0 2"/>
+    <instance name="DR002" definition="dome_rx" position="3 0 4"/>
+    <instance name="DR003" definition="dome_rx" position="3 0 6"/>
+    <instance name="DR004" definition="dome_rx" position="3 0 8"/>
+    <instance name="DR005" definition="dome_rx" position="3 1 2"/>
+    <instance name="DR006" definition="dome_rx" position="3 1 4"/>
+    <instance name="DR007" definition="dome_rx" position="3 1 6"/>
+    <instance name="DR008" definition="dome_rx" position="3 1 8"/>
+    <instance name="DR009" definition="dome_rx" position="3 2 2"/>
+    <instance name="DR010" definition="dome_rx" position="3 2 4"/>
+    <instance name="DR011" definition="dome_rx" position="3 2 6"/>
+    <instance name="DR012" definition="dome_rx" position="3 2 8"/>
+    <instance name="DR013" definition="dome_rx" position="3 3 2"/>
+    <instance name="DR014" definition="dome_rx" position="3 3 4"/>
+    <instance name="DR015" definition="dome_rx" position="3 3 6"/>
+    <instance name="DR016" definition="dome_rx" position="3 3 8"/>
+
+    <!-- PillarC pravá plocha X=5 (celá výška pilíře) -->
+    <instance name="DR017" definition="dome_rx" position="5 0 4"/>
+    <instance name="DR018" definition="dome_rx" position="5 0 5"/>
+    <instance name="DR019" definition="dome_rx" position="5 1 4"/>
+    <instance name="DR020" definition="dome_rx" position="5 1 5"/>
+    <instance name="DR021" definition="dome_rx" position="5 2 4"/>
+    <instance name="DR022" definition="dome_rx" position="5 2 5"/>
+    <instance name="DR023" definition="dome_rx" position="5 3 4"/>
+    <instance name="DR024" definition="dome_rx" position="5 3 5"/>
+    <instance name="DR025" definition="dome_rx" position="5 4 4"/>
+    <instance name="DR026" definition="dome_rx" position="5 4 5"/>
+    <instance name="DR027" definition="dome_rx" position="5 5 4"/>
+    <instance name="DR028" definition="dome_rx" position="5 5 5"/>
+
+    <!-- =========================================================
+         OHEŇ V JÁMĚ
+         Jáma: vzduch v X=3-7, Y=0-3 (obklopena PlatformL, PillarC, PlatformR)
+         Plameny stoupají od Y=0.15 (těsně nad podlahou)
+    ========================================================= -->
+    <instance name="FireA" definition="flame" position="4.0 0.15 3.5"/>
+    <instance name="FireB" definition="flame" position="5.0 0.15 4.2"/>
+    <instance name="FireC" definition="flame" position="6.0 0.15 3.8"/>
+    <instance name="FireD" definition="flame" position="4.5 0.15 5.5"/>
+    <instance name="FireE" definition="flame" position="5.5 0.15 6.2"/>
+    <instance name="FireF" definition="flame" position="4.2 0.15 6.6"/>
+    <instance name="FireG" definition="flame" position="5.8 0.15 5.8"/>
+    <instance name="FireH" definition="flame" position="6.3 0.15 4.8"/>
+
+    <!-- =========================================================
+         SPIKE BAR
+         Překáží v koridoru nad jámou, svisle osciluje.
+         Centrum X=5, Y=4.5, Z=5; tyč 5 m v ose X (X=2.5..7.5)
+    ========================================================= -->
+    <instance name="SpikBar" definition="spike_bar" position="5 4.5 5"/>
+
+    <!-- =========================================================
+         CANDY SBĚRATELNÉ TYČE
+         Stojí na povrchu kopulové dlaždice.
+         DT006 je na (2,3,4): dome sféra vrchol = 3 + 0.77 + 0.52 = 4.29
+         DT014 je na (8,2,4): dome sféra vrchol = 2 + 1.29 = 3.29
+    ========================================================= -->
+    <instance name="Candy1" definition="candy_pole" position="1.5 4.29 7.0"/>
+    <instance name="Candy2" definition="candy_pole" position="8.5 3.29 3.0"/>
+
+    <!-- =========================================================
+         ŠIPKA (na levé zdi, ukazuje doprava do hry)
+         Hřídel: X=0.15 (na stěně), Y=4.0, Z=5
+         Kužel rotation "0 0 -90" = +Y → +X (ukazuje doprava)
+    ========================================================= -->
+    <group name="ArrowSign">
+      <box  name="ArrowShaft" size="0.70 0.13 0.08"
+            position="0.20 4.0 5" material="arrow_mat"/>
+      <cone name="ArrowHead"  radius="0.22" height="0.30"
+            position="0.70 4.0 5" rotation="0 0 -90" material="arrow_mat"/>
+    </group>
+
+    <!-- =========================================================
+         BLUPI — stojí na levé plošině (PlatformL)
+         Dome DT006 na (2, 3, 4): sphere vrchol Y = 4.29
+         Tělo střed:  Y = 4.29 + 0.46 = 4.75  (Blupi výška ~0.9 m)
+         Obličej míří v +Z (dopředu do scény)
+    ========================================================= -->
+
+    <!-- Tělo (vejčitý tvar) -->
+    <sphere name="BlupiBody"   radius="0.40" position="2.0 5.00 4.80" material="blupi_mat">
+      <deform scale="0.90 1.16 0.88"/>
+    </sphere>
+    <!-- Spodní bříško -->
+    <sphere name="BlupiBelly"  radius="0.28" position="2.0 4.64 4.84" material="blupi_mat">
+      <deform scale="0.94 0.68 0.90"/>
+    </sphere>
+
+    <!-- Oči (obličej v +Z): osy symetrie na X=±0.16 od středu těla X=2 -->
+    <sphere name="BlupiEyeWL"  radius="0.122" position="1.845 5.09 5.12" material="eye_white">
+      <deform scale="0.84 1.30 0.48"/>
+    </sphere>
+    <sphere name="BlupiPupilL" radius="0.074" position="1.855 5.07 5.20" material="black_mat"/>
+    <sphere name="BlupiHighL"  radius="0.024" position="1.835 5.10 5.23" material="eye_white"/>
+    <sphere name="BlupiEyeWR"  radius="0.122" position="2.155 5.09 5.12" material="eye_white">
+      <deform scale="0.84 1.30 0.48"/>
+    </sphere>
+    <sphere name="BlupiPupilR" radius="0.074" position="2.145 5.07 5.20" material="black_mat"/>
+    <sphere name="BlupiHighR"  radius="0.024" position="2.175 5.10 5.23" material="eye_white"/>
+
+    <!-- Nos a ústa -->
+    <sphere name="BlupiNose"   radius="0.080" position="2.0 4.95 5.28" material="blupi_mat"/>
+    <sphere name="BlupiMouth"  radius="0.030" position="2.0 4.81 5.22" material="red_dot"/>
+
+    <!-- Tři trny na hlavě (výška těla max Y = 5 + 0.40*1.16 ≈ 5.46) -->
+    <cone name="BlupiSpikeC" radius="0.036" height="0.20"
+          position="2.00  5.52 4.82" rotation="-12  0   0" material="black_mat"/>
+    <cone name="BlupiSpikeL" radius="0.032" height="0.17"
+          position="1.840 5.48 4.82" rotation=" -8  0 -28" material="black_mat"/>
+    <cone name="BlupiSpikeR" radius="0.032" height="0.17"
+          position="2.160 5.48 4.82" rotation=" -8  0  28" material="black_mat"/>
+
+    <!-- Nohy (běžecký postoj: levá mírně dozadu, pravá dopředu) -->
+    <cylinder name="BlupiLegL"  radius="0.050" height="0.28"
+              position="1.90 4.40 4.88" rotation="-22  0 -5" material="blupi_mat"/>
+    <sphere   name="BlupiFootL" radius="0.060" position="1.87 4.22 4.96" material="blupi_mat"/>
+    <cylinder name="BlupiLegR"  radius="0.050" height="0.28"
+              position="2.10 4.40 4.72" rotation=" 22  0  5" material="blupi_mat"/>
+    <sphere   name="BlupiFootR" radius="0.060" position="2.13 4.22 4.62" material="blupi_mat"/>
+
+    <!-- Ruce (pohyb při běhu) -->
+    <cylinder name="BlupiArmR"  radius="0.042" height="0.28"
+              position="2.32 4.96 4.74" rotation=" 32  0  28" material="blupi_mat"/>
+    <sphere   name="BlupiHandR" radius="0.052" position="2.42 4.80 4.80" material="blupi_mat"/>
+    <cylinder name="BlupiArmL"  radius="0.042" height="0.28"
+              position="1.68 4.92 4.86" rotation="-28  0 -24" material="blupi_mat"/>
+    <sphere   name="BlupiHandL" radius="0.052" position="1.60 5.08 4.92" material="blupi_mat"/>
+
+    <!-- =========================================================
+         NEPŘÁTELÉ (zelení tvorové)
+
+         Enemy1, Enemy2 na pravé plošině (PlatformR):
+           Dome top Y = 2 + 1.29 = 3.29
+           Enemy center Y = 3.29 + 0.55 = 3.84
+
+         Enemy3 na vznášející se desce (SlabHigh top = 6.0):
+           Enemy center Y = 6.0 + 0.55 = 6.55  (bez dome, přímý povrch boxu)
+    ========================================================= -->
+    <!-- Nepřítel 1: pravá plošina, hlídkuje v Z ose -->
+    <instance name="Enemy1" definition="enemy"
+              position="8.5 3.84 5.0" rotation="0 180 0"/>
+    <!-- Nepřítel 2: pravá plošina, opačná hlídka -->
+    <instance name="Enemy2" definition="enemy"
+              position="8.5 3.84 7.0" rotation="0 150 0"/>
+    <!-- Nepřítel 3: vznášející se deska nahoře, hlídkuje v X ose -->
+    <instance name="Enemy3" definition="enemy"
+              position="5.5 6.55 5.0" rotation="0 220 0"/>
+
+  </objects>
+
+  <!-- ============================================================
+       ANIMACE
+  ============================================================ -->
+  <actions>
+
+    <!-- Blikání ohně — 3 plameny fázově posunuty -->
+    <action name="FireFlicker" duration="0.45" loop="true">
+      <channel target="FireA" property="scale.y">
+        <keyframe time="0.00" value="1.00" interp="cubic"/>
+        <keyframe time="0.22" value="1.45" interp="cubic"/>
+        <keyframe time="0.45" value="1.00" interp="cubic"/>
+      </channel>
+      <channel target="FireC" property="scale.y">
+        <keyframe time="0.00" value="0.85" interp="cubic"/>
+        <keyframe time="0.28" value="1.40" interp="cubic"/>
+        <keyframe time="0.45" value="0.85" interp="cubic"/>
+      </channel>
+      <channel target="FireE" property="scale.y">
+        <keyframe time="0.00" value="1.10" interp="cubic"/>
+        <keyframe time="0.15" value="0.75" interp="cubic"/>
+        <keyframe time="0.45" value="1.10" interp="cubic"/>
+      </channel>
+    </action>
+
+    <!-- Blupi: poskok při běhu -->
+    <action name="BlupiRun" duration="0.55" loop="true">
+      <channel target="BlupiBody" property="position.y">
+        <keyframe time="0.00" value="5.00" interp="cubic"/>
+        <keyframe time="0.28" value="5.16" interp="cubic"/>
+        <keyframe time="0.55" value="5.00" interp="cubic"/>
+      </channel>
+    </action>
+
+    <!-- Spike bar: svisle osciluje (hrozba pro Blupiho skákajícího přes jámu) -->
+    <action name="SpikePulse" duration="1.80" loop="true">
+      <channel target="SpikBar" property="position.y">
+        <keyframe time="0.00" value="4.50" interp="cubic"/>
+        <keyframe time="0.90" value="4.10" interp="cubic"/>
+        <keyframe time="1.80" value="4.50" interp="cubic"/>
+      </channel>
+    </action>
+
+    <!-- Nepřítel 1: hlídkuje v Z ose po pravé plošině (3D pohyb do hloubky!) -->
+    <action name="Enemy1Patrol" duration="4.0" loop="true">
+      <channel target="Enemy1" property="position.z">
+        <keyframe time="0.0" value="5.0" interp="linear"/>
+        <keyframe time="2.0" value="8.5" interp="linear"/>
+        <keyframe time="4.0" value="5.0" interp="linear"/>
+      </channel>
+    </action>
+
+    <!-- Nepřítel 2: hlídkuje v Z ose opačně (míjejí se) -->
+    <action name="Enemy2Patrol" duration="4.0" loop="true">
+      <channel target="Enemy2" property="position.z">
+        <keyframe time="0.0" value="7.0" interp="linear"/>
+        <keyframe time="2.0" value="2.5" interp="linear"/>
+        <keyframe time="4.0" value="7.0" interp="linear"/>
+      </channel>
+    </action>
+
+    <!-- Nepřítel 3: hlídkuje v X ose po vznášející se desce -->
+    <action name="Enemy3Patrol" duration="5.0" loop="true">
+      <channel target="Enemy3" property="position.x">
+        <keyframe time="0.0" value="5.5" interp="linear"/>
+        <keyframe time="2.5" value="8.5" interp="linear"/>
+        <keyframe time="5.0" value="5.5" interp="linear"/>
+      </channel>
+    </action>
+
+  </actions>
+
+</mc3>

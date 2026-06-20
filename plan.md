@@ -148,7 +148,7 @@ Legend: ✅ done · 🔧 partial · 📋 planned
 | I3 | Environment: fog visualization in viewport (data exists, not rendered) | SceneRenderer.cpp |
 | I4 | Lighting: colored point-light sphere gizmos (sphere in light color) | SceneRenderer.cpp |
 | I5 | Rendering: SSAO (ambient occlusion post-process) | SceneRenderer.cpp |
-| I6 | Rendering: bloom (post-process for emissive materials) | SceneRenderer.cpp |
+| I6 🔧 | Rendering: bloom — pipeline běží (FBO+blur+composite, 17 emissive objektů kresleno), ale efekt není viditelný. Prozkoumáno: depth test, FBO format (GL_RGB→GL_RGBA8), lighting disable, blur krok/iterace/strength. Pravděpodobná příčina zatím neodhalena. | MeshCraftApplication.cpp, SceneRenderer.cpp |
 | I7 | Rendering: shadow map debug overlay | SceneRenderer.cpp |
 | I8 ✅ | Rendering: full wireframe mode toggle for entire scene | SceneRenderer.cpp |
 

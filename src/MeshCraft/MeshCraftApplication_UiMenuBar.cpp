@@ -596,6 +596,7 @@ float MeshCraftApplication::drawMenuBar()
             ImGui::MenuItem("Edge Overlay",    "Alt+W", &showEdgeOverlay_);
             ImGui::MenuItem("Wireframe Mode",  nullptr,  &showWireframeMode_);
             ImGui::MenuItem("Stats Overlay",   nullptr,  &showStatsOverlay_);
+            ImGui::MenuItem("Bloom (emissive glow)", nullptr, &bloomEnabled_);
             ImGui::MenuItem("Snap to Grid", nullptr, &snapEnabled_);
             ImGui::MenuItem("Timeline",     "Ctrl+T", &showTimeline_);
             ImGui::EndMenu();

@@ -119,6 +119,11 @@ public:
                          const Microsoft::Xna::Framework::Matrix& view,
                          const Microsoft::Xna::Framework::Matrix& projection);
 
+    // Render only objects with non-zero emissive_color, using emissive as draw color (for bloom)
+    void drawEmissivePass(const Mc3::Mc3Document& doc,
+                          const Microsoft::Xna::Framework::Matrix& view,
+                          const Microsoft::Xna::Framework::Matrix& projection);
+
     // Compute vertex and triangle counts for all visible objects in the scene
     void scenePolyStats(const Mc3::Mc3Document& doc, int& totalVerts, int& totalTris) const;
 
@@ -161,6 +166,7 @@ private:
     // Wire box for selection highlight
     std::unique_ptr<Microsoft::Xna::Framework::Graphics::VertexBuffer> wireBoxVB_;
     int wireBoxLineCount_{0};
+    int emissiveDrawCount_{0};
 
     // Pre-built wire shapes for edge overlay
     WireShape wireShapeBox_;
@@ -191,6 +197,13 @@ private:
                     const Microsoft::Xna::Framework::Matrix& projection,
                     const std::vector<const Mc3::Mc3Object*>& selected,
                     int depth = 0);
+
+    void drawEmissiveObject(const Mc3::Mc3Object& obj,
+                            const Mc3::Mc3Document& doc,
+                            const Microsoft::Xna::Framework::Matrix& parentWorld,
+                            const Microsoft::Xna::Framework::Matrix& view,
+                            const Microsoft::Xna::Framework::Matrix& projection,
+                            int depth = 0);
 
     void drawObjectEdges(const Mc3::Mc3Object& obj,
                          const Mc3::Mc3Document& doc,

@@ -35,7 +35,7 @@ void MeshCraftApplication::drawLeftPanel(float panelY, float panelH)
     // -----------------------------------------------------------------------
     ImGui::SetNextWindowPos(ImVec2(0, panelY));
     ImGui::SetNextWindowSize(ImVec2(static_cast<float>(kLeftPanelW), panelH));
-    ImGui::PushStyleColor(ImGuiCol_WindowBg, ImVec4(0.10f, 0.11f, 0.20f, 1.0f));
+    ImGui::PushStyleColor(ImGuiCol_WindowBg, ImVec4(0.155f, 0.155f, 0.155f, 1.0f));
     ImGui::Begin("##leftpanel", nullptr,
         ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove |
         ImGuiWindowFlags_NoBringToFrontOnFocus | ImGuiWindowFlags_NoSavedSettings);

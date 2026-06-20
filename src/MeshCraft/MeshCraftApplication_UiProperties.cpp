@@ -33,7 +33,7 @@ void MeshCraftApplication::drawPropertiesPanel(float panelY, float panelH, int s
     // -----------------------------------------------------------------------
     ImGui::SetNextWindowPos(ImVec2(static_cast<float>(screenW - kRightPanelW), panelY));
     ImGui::SetNextWindowSize(ImVec2(static_cast<float>(kRightPanelW), panelH));
-    ImGui::PushStyleColor(ImGuiCol_WindowBg, ImVec4(0.10f, 0.11f, 0.20f, 1.0f));
+    ImGui::PushStyleColor(ImGuiCol_WindowBg, ImVec4(0.155f, 0.155f, 0.155f, 1.0f));
     ImGui::Begin("Properties", nullptr,
         ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove |
         ImGuiWindowFlags_NoBringToFrontOnFocus | ImGuiWindowFlags_NoSavedSettings);

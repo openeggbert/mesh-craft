@@ -1,0 +1,1044 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Medieval Castle — MC3 Format  v2  (improved)
+  =====================================================
+  IMPROVEMENTS over v1:
+    KEEP        — 3-level silhouette: wide base plinth + main body + upper
+                  fighting platform; 4 corner buttresses; arched entrance; better steps
+    GATEHOUSE   — span building between towers above gate passage; outer barbican
+                  pylons at moat far edge; arrow slits in flanking towers
+    WALLS       — 2 traversable staircases to rampart level (NW + SE areas)
+    BARRACKS    — proper triangular pitched roof (extrude) + stone chimney
+    FORGE       — new open-fronted blacksmith building with anvil, chimney, fire
+    COURTYARD   — communal table + benches near fire; log pile; storage lean-to;
+                  guard booth at gate; better barrel clusters; more torches
+    TOWERS      — arrow slits on all 4 corner towers; wall sconces
+    ENVIRONMENT — organic tree cluster offsets (no more perfect left/right mirror);
+                  small pond NE of castle; more varied boulder/rock placement
+    ROAD/MOAT   — wider road with verge strips; moat reeds hint (sphere clusters)
+
+  Coordinate system:
+    Front/Gate = -Z    Back = +Z
+    Outer wall faces at x=±22, z=±22   (wall centres ±21, thickness 2m, h=8m)
+    Corner tower centres (±22, 0, ±22)  radius=4  height=12m
+    Moat ring: wall outer face ±22 → ±27
+-->
+<mc3 version="0.3" model="MedievalCastle" unit="meter">
+
+  <environment>
+    <background color="0.44 0.64 0.90"/>
+    <fog mode="linear" color="0.52 0.70 0.90" start="90" end="280"/>
+  </environment>
+
+  <lights>
+    <ambient color="0.30 0.40 0.58" brightness="0.44"/>
+    <directional name="Sun" color="1.0 0.94 0.80" brightness="3.2"
+                 direction="-0.45 -1.0 0.35" cast_shadows="true"/>
+    <point name="FirePit"   color="1.0 0.55 0.15" brightness="7.0" position=" 0   1.2 -10" range="14"/>
+    <point name="ForgeGlow" color="1.0 0.40 0.10" brightness="4.0" position="13   1.0  -7" range="8"/>
+  </lights>
+
+  <cameras>
+    <camera name="Overview"  position="58 32 -78"   target="0 5 0"    fov="45"/>
+    <camera name="Gate"      position="0  6 -50"    target="0 5 -21"  fov="50"/>
+    <camera name="Courtyard" position="0  9 -15"    target="0 7 12"   fov="55"/>
+    <camera name="KeepClose" position="8  5  -2"    target="0 6 12"   fov="60"/>
+    <camera name="Aerial"    position="0 95 -5"     target="0 0 0"    fov="60"/>
+  </cameras>
+
+  <!-- ================================================================
+       MATERIALS
+  ================================================================ -->
+  <materials>
+    <material id="castle_wall"  roughness="0.88" metallic="0.0"><base_color>0.70 0.67 0.60 1.0</base_color></material>
+    <material id="tower_stone"  roughness="0.85" metallic="0.0"><base_color>0.60 0.57 0.52 1.0</base_color></material>
+    <material id="keep_stone"   roughness="0.90" metallic="0.0"><base_color>0.50 0.48 0.44 1.0</base_color></material>
+    <material id="keep_base"    roughness="0.92" metallic="0.0"><base_color>0.45 0.43 0.40 1.0</base_color></material>
+    <material id="gate_stone"   roughness="0.86" metallic="0.0"><base_color>0.56 0.54 0.49 1.0</base_color></material>
+    <material id="cobblestone"  roughness="0.90" metallic="0.0"><base_color>0.54 0.51 0.47 1.0</base_color></material>
+    <material id="roof_slate"   roughness="0.80" metallic="0.0"><base_color>0.24 0.23 0.27 1.0</base_color></material>
+    <material id="wood_gate"    roughness="0.75" metallic="0.0"><base_color>0.28 0.16 0.08 1.0</base_color></material>
+    <material id="wood_bridge"  roughness="0.82" metallic="0.0"><base_color>0.46 0.30 0.16 1.0</base_color></material>
+    <material id="wood_light"   roughness="0.72" metallic="0.0"><base_color>0.56 0.40 0.22 1.0</base_color></material>
+    <material id="chimney_stone" roughness="0.92" metallic="0.0"><base_color>0.38 0.35 0.32 1.0</base_color></material>
+    <material id="iron_metal"   roughness="0.45" metallic="0.88"><base_color>0.22 0.22 0.24 1.0</base_color></material>
+    <material id="moat_water"   roughness="0.04" metallic="0.04" alpha_mode="blend"><base_color>0.07 0.20 0.38 0.80</base_color></material>
+    <material id="pond_water"   roughness="0.04" metallic="0.04" alpha_mode="blend"><base_color>0.10 0.28 0.46 0.75</base_color></material>
+    <material id="grass"        roughness="0.95" metallic="0.0"><base_color>0.20 0.50 0.14 1.0</base_color></material>
+    <material id="dirt_road"    roughness="0.92" metallic="0.0"><base_color>0.52 0.40 0.26 1.0</base_color></material>
+    <material id="road_verge"   roughness="0.94" metallic="0.0"><base_color>0.40 0.30 0.18 1.0</base_color></material>
+    <material id="earth_bank"   roughness="0.94" metallic="0.0"><base_color>0.44 0.32 0.18 1.0</base_color></material>
+    <material id="tree_trunk"   roughness="0.90" metallic="0.0"><base_color>0.32 0.20 0.10 1.0</base_color></material>
+    <material id="oak_leaves"   roughness="0.88" metallic="0.0"><base_color>0.18 0.46 0.12 1.0</base_color></material>
+    <material id="oak_dark"     roughness="0.88" metallic="0.0"><base_color>0.11 0.32 0.08 1.0</base_color></material>
+    <material id="pine_leaves"  roughness="0.88" metallic="0.0"><base_color>0.10 0.34 0.12 1.0</base_color></material>
+    <material id="reed"         roughness="0.90" metallic="0.0"><base_color>0.55 0.48 0.22 1.0</base_color></material>
+    <material id="rock"         roughness="0.86" metallic="0.0"><base_color>0.42 0.40 0.38 1.0</base_color></material>
+    <material id="flag_red"     roughness="0.68" metallic="0.0"><base_color>0.82 0.10 0.10 1.0</base_color></material>
+    <material id="flag_blue"    roughness="0.68" metallic="0.0"><base_color>0.12 0.20 0.80 1.0</base_color></material>
+    <material id="flag_gold"    roughness="0.60" metallic="0.20"><base_color>0.90 0.72 0.10 1.0</base_color></material>
+    <material id="barrel_wood"  roughness="0.76" metallic="0.0"><base_color>0.38 0.22 0.10 1.0</base_color></material>
+    <material id="rope"         roughness="0.86" metallic="0.0"><base_color>0.72 0.60 0.36 1.0</base_color></material>
+    <material id="fire_glow"    roughness="0.55" metallic="0.0"><base_color>1.0 0.48 0.04 1.0</base_color><emissive_color>2.4 0.9 0.05</emissive_color></material>
+    <material id="charcoal"     roughness="0.92" metallic="0.0"><base_color>0.14 0.10 0.08 1.0</base_color><emissive_color>0.6 0.10 0.02</emissive_color></material>
+    <material id="pole_wood"    roughness="0.80" metallic="0.0"><base_color>0.46 0.30 0.14 1.0</base_color></material>
+    <material id="chapel_stone" roughness="0.86" metallic="0.0"><base_color>0.62 0.60 0.55 1.0</base_color></material>
+    <material id="chapel_roof"  roughness="0.82" metallic="0.0"><base_color>0.38 0.18 0.12 1.0</base_color></material>
+    <material id="glass_window" roughness="0.05" metallic="0.05" alpha_mode="blend"><base_color>0.68 0.84 1.0 0.32</base_color></material>
+    <material id="thatch"       roughness="0.92" metallic="0.0"><base_color>0.68 0.56 0.24 1.0</base_color></material>
+  </materials>
+
+  <!-- ================================================================
+       DEFINITIONS
+  ================================================================ -->
+  <definitions>
+
+    <!-- TOWER ROOF: stepped-cone with red flag. All 4 corner towers use this. -->
+    <definition id="tower_roof">
+      <group name="TowerRoof">
+        <cylinder name="Eave" radius="4.8" height="0.5"   segments="20" position="0 0.25 0"  material="roof_slate"/>
+        <cylinder name="R1"   radius="4.0" height="0.9"   segments="18" position="0 0.95 0"  material="roof_slate"/>
+        <cylinder name="R2"   radius="3.0" height="0.9"   segments="16" position="0 1.85 0"  material="roof_slate"/>
+        <cylinder name="R3"   radius="2.0" height="0.9"   segments="14" position="0 2.75 0"  material="roof_slate"/>
+        <cylinder name="R4"   radius="1.1" height="0.9"   segments="12" position="0 3.65 0"  material="roof_slate"/>
+        <cylinder name="Tip"  radius="0.4" height="1.2"   segments="10" position="0 4.75 0"  material="roof_slate"/>
+        <cylinder name="Pole" radius="0.06" height="3.8"  segments="8"  position="0 5.95 0"  material="pole_wood"/>
+        <box      name="Flag" size="2.0 1.2 0.04"         position="1.0 8.4 0"               material="flag_red"/>
+      </group>
+    </definition>
+
+    <!-- GATEHOUSE ROOF: smaller stepped-cone with blue flag -->
+    <definition id="gatehouse_roof">
+      <group name="GatehouseRoof">
+        <cylinder name="Eave" radius="3.2" height="0.4"  segments="16" position="0 0.20 0"  material="roof_slate"/>
+        <cylinder name="R1"   radius="2.5" height="0.7"  segments="14" position="0 0.75 0"  material="roof_slate"/>
+        <cylinder name="R2"   radius="1.7" height="0.7"  segments="12" position="0 1.45 0"  material="roof_slate"/>
+        <cylinder name="R3"   radius="0.9" height="0.7"  segments="10" position="0 2.15 0"  material="roof_slate"/>
+        <cylinder name="Tip"  radius="0.3" height="0.8"  segments="8"  position="0 2.85 0"  material="roof_slate"/>
+        <cylinder name="Pole" radius="0.05" height="3.2" segments="8"  position="0 3.45 0"  material="pole_wood"/>
+        <box      name="Flag" size="1.5 0.9 0.04"        position="0.75 6.35 0"             material="flag_blue"/>
+      </group>
+    </definition>
+
+    <!-- OAK TREE: thick trunk + asymmetric multi-sphere canopy -->
+    <definition id="tree_oak">
+      <group name="OakTree">
+        <cylinder name="Trunk"   radius="0.28" height="5.0" segments="10" position="0    2.50  0"    material="tree_trunk"/>
+        <sphere   name="CanopyM" radius="3.0"  segments="16"              position="0    7.50  0"    material="oak_leaves"/>
+        <sphere   name="CanopyL" radius="2.4"  segments="14"              position="-1.4 7.0   0.5"  material="oak_dark"/>
+        <sphere   name="CanopyR" radius="2.2"  segments="12"              position=" 1.2 7.2  -0.6"  material="oak_leaves"/>
+        <sphere   name="CanopyT" radius="1.6"  segments="12"              position=" 0.4 9.5   0.2"  material="oak_dark"/>
+      </group>
+    </definition>
+
+    <!-- PINE TREE: thin trunk + stacked narrowing cones -->
+    <definition id="tree_pine">
+      <group name="PineTree">
+        <cylinder name="Trunk"  radius="0.20" height="5.5" segments="8"  position="0 2.75 0"  material="tree_trunk"/>
+        <cylinder name="Cone1"  radius="3.2"  height="3.0" segments="14" position="0 6.0  0"  material="pine_leaves"/>
+        <cylinder name="Cone2"  radius="2.4"  height="2.5" segments="12" position="0 8.0  0"  material="pine_leaves"/>
+        <cylinder name="Cone3"  radius="1.6"  height="2.2" segments="10" position="0 9.8  0"  material="pine_leaves"/>
+        <cylinder name="Cone4"  radius="0.8"  height="1.8" segments="8"  position="0 11.2 0"  material="pine_leaves"/>
+        <cylinder name="Tip"    radius="0.2"  height="1.5" segments="6"  position="0 12.5 0"  material="pine_leaves"/>
+      </group>
+    </definition>
+
+    <!-- BUSH: 3-sphere shrub -->
+    <definition id="bush">
+      <group name="Bush">
+        <sphere name="B1" radius="0.85" segments="10" position="0    0.85  0"    material="oak_leaves"/>
+        <sphere name="B2" radius="0.60" segments="8"  position="0.65 0.62  0.3"  material="oak_dark"/>
+        <sphere name="B3" radius="0.50" segments="8"  position="-0.4 0.58 -0.4"  material="oak_leaves"/>
+      </group>
+    </definition>
+
+    <!-- WALL MERLON: 1m × 1m × 2.4m deep (straddles full wall thickness) -->
+    <definition id="wall_merlon">
+      <box name="M" size="1.0 1.0 2.4" material="castle_wall"/>
+    </definition>
+
+    <!-- TOWER MERLON: compact cube for cylindrical tower tops -->
+    <definition id="tower_merlon">
+      <box name="M" size="0.9 1.0 0.9" material="tower_stone"/>
+    </definition>
+
+    <!-- KEEP MERLON: taller, slightly deeper for the fighting platform -->
+    <definition id="keep_merlon">
+      <box name="M" size="1.0 1.3 1.6" material="keep_stone"/>
+    </definition>
+
+    <!-- BARREL: cylindrical with 3 iron hoops -->
+    <definition id="barrel">
+      <group name="Barrel">
+        <cylinder name="Body" radius="0.38" height="0.72" segments="12" position="0 0.36 0" material="barrel_wood"/>
+        <cylinder name="H1"   radius="0.40" height="0.06" segments="12" position="0 0.68 0" material="iron_metal"/>
+        <cylinder name="H2"   radius="0.40" height="0.06" segments="12" position="0 0.36 0" material="iron_metal"/>
+        <cylinder name="H3"   radius="0.40" height="0.06" segments="12" position="0 0.04 0" material="iron_metal"/>
+      </group>
+    </definition>
+
+    <!-- BOULDER: two-sphere rough cluster -->
+    <definition id="boulder">
+      <group name="Boulder">
+        <sphere name="R1" radius="1.2" segments="8" position="0   0.8  0"   material="rock"/>
+        <sphere name="R2" radius="0.8" segments="6" position="0.9 0.5  0.4" material="rock"/>
+      </group>
+    </definition>
+
+    <!-- SMALL ROCK: single sphere -->
+    <definition id="rock_small">
+      <sphere name="R" radius="0.55" segments="6" material="rock"/>
+    </definition>
+
+    <!-- TORCH: bracket-mounted with flame -->
+    <definition id="torch">
+      <group name="Torch">
+        <cylinder name="Handle" radius="0.04" height="0.6"  segments="6" position="0 0.30 0" material="wood_light"/>
+        <cylinder name="Cup"    radius="0.08" height="0.10" segments="8" position="0 0.65 0" material="iron_metal"/>
+        <sphere   name="Flame"  radius="0.09" segments="6"               position="0 0.80 0" material="fire_glow"/>
+      </group>
+    </definition>
+
+    <!-- REED: moat reed/rush for aquatic detail -->
+    <definition id="reed_cluster">
+      <group name="Reed">
+        <cylinder name="R1" radius="0.04" height="1.4" segments="4" position="-0.2 0.7  0"    material="reed"/>
+        <cylinder name="R2" radius="0.04" height="1.6" segments="4" position=" 0.1 0.8  0.15" material="reed"/>
+        <cylinder name="R3" radius="0.04" height="1.2" segments="4" position=" 0.25 0.6 -0.1" material="reed"/>
+      </group>
+    </definition>
+
+  </definitions>
+
+  <!-- ================================================================
+       SCENE OBJECTS
+  ================================================================ -->
+  <objects>
+
+    <!-- ==============================================================
+         TERRAIN
+    ============================================================== -->
+    <plane name="Lawn"      size="300 300" axis="y" position="0 0    0" material="grass"/>
+    <!-- Courtyard surface slightly raised above grass to read as distinct paving -->
+    <plane name="Courtyard" size="40  40"  axis="y" position="0 0.06 0" material="cobblestone"/>
+
+    <!-- ==============================================================
+         MOAT  (water ring, slightly below grade)
+         N/S boxes extend to ±32 in X to cover corners cleanly.
+    ============================================================== -->
+    <box name="MoatN" size="64 0.5 5"  position="0     -0.25  24.5"  material="moat_water"/>
+    <box name="MoatS" size="64 0.5 5"  position="0     -0.25 -24.5"  material="moat_water"/>
+    <box name="MoatW" size="5  0.5 44" position="-24.5 -0.25   0"    material="moat_water"/>
+    <box name="MoatE" size="5  0.5 44" position=" 24.5 -0.25   0"    material="moat_water"/>
+
+    <!-- Moat earth banks (pronounced ridges at inner and outer edges) -->
+    <box name="BnkNi"  size="64  0.4 1.0" position="0     0.20  22.5"  material="earth_bank"/>
+    <box name="BnkNo"  size="64  0.4 1.0" position="0     0.20  27.5"  material="earth_bank"/>
+    <box name="BnkSi"  size="64  0.4 1.0" position="0     0.20 -22.5"  material="earth_bank"/>
+    <box name="BnkSo"  size="64  0.4 1.0" position="0     0.20 -27.5"  material="earth_bank"/>
+    <box name="BnkWi"  size="1.0 0.4 44"  position="-22.5 0.20   0"    material="earth_bank"/>
+    <box name="BnkWo"  size="1.0 0.4 44"  position="-27.5 0.20   0"    material="earth_bank"/>
+    <box name="BnkEi"  size="1.0 0.4 44"  position=" 22.5 0.20   0"    material="earth_bank"/>
+    <box name="BnkEo"  size="1.0 0.4 44"  position=" 27.5 0.20   0"    material="earth_bank"/>
+
+    <!-- Moat reed clusters (scattered along inner edge for aquatic feel) -->
+    <instance name="Reed1"  definition="reed_cluster" position="-18 0 23.5"/>
+    <instance name="Reed2"  definition="reed_cluster" position="  4 0 23.0"/>
+    <instance name="Reed3"  definition="reed_cluster" position=" 14 0 23.8"/>
+    <instance name="Reed4"  definition="reed_cluster" position="-16 0 -23.2"/>
+    <instance name="Reed5"  definition="reed_cluster" position=" 18 0 -23.6"/>
+    <instance name="Reed6"  definition="reed_cluster" position="-23.0 0  8"/>
+    <instance name="Reed7"  definition="reed_cluster" position="-23.5 0 -12"/>
+    <instance name="Reed8"  definition="reed_cluster" position=" 23.2 0  16"/>
+
+    <!-- ==============================================================
+         APPROACH ROAD  (south, leading to drawbridge)
+         Road + verge strips on each side add visual width
+    ============================================================== -->
+    <box name="Road"      size="8  0.10 56" position="0    0.05 -55"  material="dirt_road"/>
+    <box name="RoadVrgL"  size="2  0.08 56" position="-5.0 0.04 -55"  material="road_verge"/>
+    <box name="RoadVrgR"  size="2  0.08 56" position=" 5.0 0.04 -55"  material="road_verge"/>
+
+    <!-- ==============================================================
+         DRAWBRIDGE  (lowered, spanning south moat z=-22 to z=-27)
+    ============================================================== -->
+    <box name="Drawbridge" size="8    0.28 5"    position="0    0.09 -24.5" material="wood_bridge"/>
+    <!-- Plank detail strips -->
+    <box name="DBPl1"  size="7.6  0.06 0.14" position="-1.2 0.23 -24.0" material="wood_light"/>
+    <box name="DBPl2"  size="7.6  0.06 0.14" position=" 1.2 0.23 -24.0" material="wood_light"/>
+    <box name="DBPl3"  size="7.6  0.06 0.14" position="-1.2 0.23 -25.0" material="wood_light"/>
+    <box name="DBPl4"  size="7.6  0.06 0.14" position=" 1.2 0.23 -25.0" material="wood_light"/>
+    <!-- Side rails on the drawbridge -->
+    <box name="DBRailL" size="0.14 0.4 5"    position="-3.9 0.45 -24.5" material="wood_light"/>
+    <box name="DBRailR" size="0.14 0.4 5"    position=" 3.9 0.45 -24.5" material="wood_light"/>
+    <!-- Chains angled from gatehouse towers down to bridge edge -->
+    <box name="ChainL" size="0.10 0.10 5.8" position="-3.5 2.0 -23.5" rotation="-22 0 0" material="iron_metal"/>
+    <box name="ChainR" size="0.10 0.10 5.8" position=" 3.5 2.0 -23.5" rotation="-22 0 0" material="iron_metal"/>
+
+    <!-- OUTER BARBICAN PYLONS at moat far edge (z=-28), framing approach -->
+    <cylinder name="BarbicanL" radius="0.9" height="4.5" segments="12" position="-5.0 2.25 -28.5" material="gate_stone"/>
+    <cylinder name="BarbicanR" radius="0.9" height="4.5" segments="12" position=" 5.0 2.25 -28.5" material="gate_stone"/>
+    <!-- Pylon caps -->
+    <cylinder name="BarbCapL"  radius="1.1" height="0.4" segments="10" position="-5.0 4.7 -28.5"  material="roof_slate"/>
+    <cylinder name="BarbCapR"  radius="1.1" height="0.4" segments="10" position=" 5.0 4.7 -28.5"  material="roof_slate"/>
+    <!-- Chain sockets on pylons -->
+    <box name="SockL" size="0.22 0.22 0.22" position="-4.2 3.6 -28.2" material="iron_metal"/>
+    <box name="SockR" size="0.22 0.22 0.22" position=" 4.2 3.6 -28.2" material="iron_metal"/>
+
+    <!-- ==============================================================
+         CURTAIN WALLS  (height=8m, thickness=2m, centres at ±21)
+    ============================================================== -->
+    <box name="WallN"  size="44 8 2" position="0      4  21"  material="castle_wall"/>
+    <box name="WallSL" size="17 8 2" position="-13.5  4 -21"  material="castle_wall"/>
+    <box name="WallSR" size="17 8 2" position=" 13.5  4 -21"  material="castle_wall"/>
+    <box name="WallW"  size="2  8 44" position="-21   4   0"  material="castle_wall"/>
+    <box name="WallE"  size="2  8 44" position=" 21   4   0"  material="castle_wall"/>
+
+    <!-- Parapet walkway floors (slab on top of each wall, slightly wider for railing feel) -->
+    <box name="ParN"   size="44  0.28 2.5" position="0      8.14  21"   material="castle_wall"/>
+    <box name="ParSL"  size="17  0.28 2.5" position="-13.5  8.14 -21"   material="castle_wall"/>
+    <box name="ParSR"  size="17  0.28 2.5" position=" 13.5  8.14 -21"   material="castle_wall"/>
+    <box name="ParW"   size="2.5 0.28 44"  position="-21    8.14   0"   material="castle_wall"/>
+    <box name="ParE"   size="2.5 0.28 44"  position=" 21    8.14   0"   material="castle_wall"/>
+
+    <!-- Arrow slits on outer wall faces (thin glass panels) -->
+    <!-- West outer face x=-22 -->
+    <box name="SlitW1" size="0.08 1.8 0.4" position="-22 4 -14"  material="glass_window"/>
+    <box name="SlitW2" size="0.08 1.8 0.4" position="-22 4  -7"  material="glass_window"/>
+    <box name="SlitW3" size="0.08 1.8 0.4" position="-22 4   0"  material="glass_window"/>
+    <box name="SlitW4" size="0.08 1.8 0.4" position="-22 4   7"  material="glass_window"/>
+    <box name="SlitW5" size="0.08 1.8 0.4" position="-22 4  14"  material="glass_window"/>
+    <!-- East outer face x=22 -->
+    <box name="SlitE1" size="0.08 1.8 0.4" position=" 22 4 -14"  material="glass_window"/>
+    <box name="SlitE2" size="0.08 1.8 0.4" position=" 22 4  -7"  material="glass_window"/>
+    <box name="SlitE3" size="0.08 1.8 0.4" position=" 22 4   0"  material="glass_window"/>
+    <box name="SlitE4" size="0.08 1.8 0.4" position=" 22 4   7"  material="glass_window"/>
+    <box name="SlitE5" size="0.08 1.8 0.4" position=" 22 4  14"  material="glass_window"/>
+    <!-- North outer face z=22 -->
+    <box name="SlitN1" size="0.4 1.8 0.08" position="-14 4 22"   material="glass_window"/>
+    <box name="SlitN2" size="0.4 1.8 0.08" position=" -7 4 22"   material="glass_window"/>
+    <box name="SlitN3" size="0.4 1.8 0.08" position="  0 4 22"   material="glass_window"/>
+    <box name="SlitN4" size="0.4 1.8 0.08" position="  7 4 22"   material="glass_window"/>
+    <box name="SlitN5" size="0.4 1.8 0.08" position=" 14 4 22"   material="glass_window"/>
+
+    <!-- ==============================================================
+         WALL-WALK STAIRCASES  (2 traversable ramps to rampart at y=8)
+
+         Technique: "pyramid staircase" — each block is the full solid
+         height from ground to step surface, giving a clear stair profile
+         when seen from the side.  Width 2m. Rise 1.6m per step.
+
+         STAIR A — North wall, NW area (x=-16, going south→north)
+         Block order z: 12.0→13.6→15.2→16.8→18.4→20.0 (north wall inner face)
+    ============================================================== -->
+    <box name="StairA1" size="2 1.6 1.6" position="-16 0.8  12.8" material="castle_wall"/>
+    <box name="StairA2" size="2 3.2 1.6" position="-16 1.6  14.4" material="castle_wall"/>
+    <box name="StairA3" size="2 4.8 1.6" position="-16 2.4  16.0" material="castle_wall"/>
+    <box name="StairA4" size="2 6.4 1.6" position="-16 3.2  17.6" material="castle_wall"/>
+    <box name="StairA5" size="2 8.0 1.6" position="-16 4.0  19.2" material="castle_wall"/>
+    <!-- Guard rail on open side of Stair A -->
+    <box name="StairA_RailL" size="0.12 0.7 8.0" position="-17.1 8.65 16.0" material="castle_wall"/>
+    <box name="StairA_RailR" size="0.12 0.7 8.0" position="-14.9 8.65 16.0" material="castle_wall"/>
+
+    <!-- STAIR B — East wall, SE area (z=14, going west→east)
+         Blocks x: 12.0→13.6→15.2→16.8→18.4→20.0 (east wall inner face)
+    -->
+    <box name="StairB1" size="1.6 1.6 2" position="12.8 0.8  14" material="castle_wall"/>
+    <box name="StairB2" size="1.6 3.2 2" position="14.4 1.6  14" material="castle_wall"/>
+    <box name="StairB3" size="1.6 4.8 2" position="16.0 2.4  14" material="castle_wall"/>
+    <box name="StairB4" size="1.6 6.4 2" position="17.6 3.2  14" material="castle_wall"/>
+    <box name="StairB5" size="1.6 8.0 2" position="19.2 4.0  14" material="castle_wall"/>
+    <!-- Guard rail on Stair B open side (north) -->
+    <box name="StairB_Rail" size="8.0 0.7 0.12" position="16.0 8.65 12.9" material="castle_wall"/>
+
+    <!-- ==============================================================
+         BATTLEMENTS — North wall (17 merlons @ 2.4m spacing)
+    ============================================================== -->
+    <instance name="MN01" definition="wall_merlon" position="-19.2 8.3 21"/>
+    <instance name="MN02" definition="wall_merlon" position="-16.8 8.3 21"/>
+    <instance name="MN03" definition="wall_merlon" position="-14.4 8.3 21"/>
+    <instance name="MN04" definition="wall_merlon" position="-12.0 8.3 21"/>
+    <instance name="MN05" definition="wall_merlon" position=" -9.6 8.3 21"/>
+    <instance name="MN06" definition="wall_merlon" position=" -7.2 8.3 21"/>
+    <instance name="MN07" definition="wall_merlon" position=" -4.8 8.3 21"/>
+    <instance name="MN08" definition="wall_merlon" position=" -2.4 8.3 21"/>
+    <instance name="MN09" definition="wall_merlon" position="  0.0 8.3 21"/>
+    <instance name="MN10" definition="wall_merlon" position="  2.4 8.3 21"/>
+    <instance name="MN11" definition="wall_merlon" position="  4.8 8.3 21"/>
+    <instance name="MN12" definition="wall_merlon" position="  7.2 8.3 21"/>
+    <instance name="MN13" definition="wall_merlon" position="  9.6 8.3 21"/>
+    <instance name="MN14" definition="wall_merlon" position=" 12.0 8.3 21"/>
+    <instance name="MN15" definition="wall_merlon" position=" 14.4 8.3 21"/>
+    <instance name="MN16" definition="wall_merlon" position=" 16.8 8.3 21"/>
+    <instance name="MN17" definition="wall_merlon" position=" 19.2 8.3 21"/>
+
+    <!-- Battlements — West wall (17, Y-rotated 90° so depth goes through wall) -->
+    <instance name="MW01" definition="wall_merlon" position="-21 8.3 -19.2" rotation="0 90 0"/>
+    <instance name="MW02" definition="wall_merlon" position="-21 8.3 -16.8" rotation="0 90 0"/>
+    <instance name="MW03" definition="wall_merlon" position="-21 8.3 -14.4" rotation="0 90 0"/>
+    <instance name="MW04" definition="wall_merlon" position="-21 8.3 -12.0" rotation="0 90 0"/>
+    <instance name="MW05" definition="wall_merlon" position="-21 8.3  -9.6" rotation="0 90 0"/>
+    <instance name="MW06" definition="wall_merlon" position="-21 8.3  -7.2" rotation="0 90 0"/>
+    <instance name="MW07" definition="wall_merlon" position="-21 8.3  -4.8" rotation="0 90 0"/>
+    <instance name="MW08" definition="wall_merlon" position="-21 8.3  -2.4" rotation="0 90 0"/>
+    <instance name="MW09" definition="wall_merlon" position="-21 8.3   0.0" rotation="0 90 0"/>
+    <instance name="MW10" definition="wall_merlon" position="-21 8.3   2.4" rotation="0 90 0"/>
+    <instance name="MW11" definition="wall_merlon" position="-21 8.3   4.8" rotation="0 90 0"/>
+    <instance name="MW12" definition="wall_merlon" position="-21 8.3   7.2" rotation="0 90 0"/>
+    <instance name="MW13" definition="wall_merlon" position="-21 8.3   9.6" rotation="0 90 0"/>
+    <instance name="MW14" definition="wall_merlon" position="-21 8.3  12.0" rotation="0 90 0"/>
+    <instance name="MW15" definition="wall_merlon" position="-21 8.3  14.4" rotation="0 90 0"/>
+    <instance name="MW16" definition="wall_merlon" position="-21 8.3  16.8" rotation="0 90 0"/>
+    <instance name="MW17" definition="wall_merlon" position="-21 8.3  19.2" rotation="0 90 0"/>
+
+    <!-- Battlements — East wall (17) -->
+    <instance name="ME01" definition="wall_merlon" position="21 8.3 -19.2" rotation="0 90 0"/>
+    <instance name="ME02" definition="wall_merlon" position="21 8.3 -16.8" rotation="0 90 0"/>
+    <instance name="ME03" definition="wall_merlon" position="21 8.3 -14.4" rotation="0 90 0"/>
+    <instance name="ME04" definition="wall_merlon" position="21 8.3 -12.0" rotation="0 90 0"/>
+    <instance name="ME05" definition="wall_merlon" position="21 8.3  -9.6" rotation="0 90 0"/>
+    <instance name="ME06" definition="wall_merlon" position="21 8.3  -7.2" rotation="0 90 0"/>
+    <instance name="ME07" definition="wall_merlon" position="21 8.3  -4.8" rotation="0 90 0"/>
+    <instance name="ME08" definition="wall_merlon" position="21 8.3  -2.4" rotation="0 90 0"/>
+    <instance name="ME09" definition="wall_merlon" position="21 8.3   0.0" rotation="0 90 0"/>
+    <instance name="ME10" definition="wall_merlon" position="21 8.3   2.4" rotation="0 90 0"/>
+    <instance name="ME11" definition="wall_merlon" position="21 8.3   4.8" rotation="0 90 0"/>
+    <instance name="ME12" definition="wall_merlon" position="21 8.3   7.2" rotation="0 90 0"/>
+    <instance name="ME13" definition="wall_merlon" position="21 8.3   9.6" rotation="0 90 0"/>
+    <instance name="ME14" definition="wall_merlon" position="21 8.3  12.0" rotation="0 90 0"/>
+    <instance name="ME15" definition="wall_merlon" position="21 8.3  14.4" rotation="0 90 0"/>
+    <instance name="ME16" definition="wall_merlon" position="21 8.3  16.8" rotation="0 90 0"/>
+    <instance name="ME17" definition="wall_merlon" position="21 8.3  19.2" rotation="0 90 0"/>
+
+    <!-- Battlements — South wall left + right sections -->
+    <instance name="MSL1" definition="wall_merlon" position="-19.2 8.3 -21"/>
+    <instance name="MSL2" definition="wall_merlon" position="-16.8 8.3 -21"/>
+    <instance name="MSL3" definition="wall_merlon" position="-14.4 8.3 -21"/>
+    <instance name="MSL4" definition="wall_merlon" position="-12.0 8.3 -21"/>
+    <instance name="MSL5" definition="wall_merlon" position=" -9.6 8.3 -21"/>
+    <instance name="MSL6" definition="wall_merlon" position=" -7.2 8.3 -21"/>
+    <instance name="MSR1" definition="wall_merlon" position="  7.2 8.3 -21"/>
+    <instance name="MSR2" definition="wall_merlon" position="  9.6 8.3 -21"/>
+    <instance name="MSR3" definition="wall_merlon" position=" 12.0 8.3 -21"/>
+    <instance name="MSR4" definition="wall_merlon" position=" 14.4 8.3 -21"/>
+    <instance name="MSR5" definition="wall_merlon" position=" 16.8 8.3 -21"/>
+    <instance name="MSR6" definition="wall_merlon" position=" 19.2 8.3 -21"/>
+
+    <!-- Wall sconces (torches on inner wall face at intervals) -->
+    <instance name="TC1" definition="torch" position="-19.8 3.5  -8.0" rotation="0  90 -25"/>
+    <instance name="TC2" definition="torch" position="-19.8 3.5   8.0" rotation="0  90 -25"/>
+    <instance name="TC3" definition="torch" position=" 19.8 3.5  -8.0" rotation="0 -90  25"/>
+    <instance name="TC4" definition="torch" position=" 19.8 3.5   8.0" rotation="0 -90  25"/>
+    <instance name="TC5" definition="torch" position="  0.0 3.5  20.4" rotation="0   0 -25"/>
+    <instance name="TC6" definition="torch" position=" -8.0 3.5  20.4" rotation="0   0 -25"/>
+    <instance name="TC7" definition="torch" position="  8.0 3.5  20.4" rotation="0   0 -25"/>
+    <!-- Torches near stairs -->
+    <instance name="TC8" definition="torch" position="-19.8 3.5  17.5" rotation="0  90 -25"/>
+    <instance name="TC9" definition="torch" position=" 19.8 3.5  13.5" rotation="0 -90  25"/>
+
+    <!-- ==============================================================
+         CORNER TOWERS  (radius=4, height=12m, centres ±22)
+    ============================================================== -->
+    <cylinder name="TowerNW" radius="4" height="12" segments="24" position="-22 6  22" material="tower_stone"/>
+    <cylinder name="TowerNE" radius="4" height="12" segments="24" position=" 22 6  22" material="tower_stone"/>
+    <cylinder name="TowerSW" radius="4" height="12" segments="24" position="-22 6 -22" material="tower_stone"/>
+    <cylinder name="TowerSE" radius="4" height="12" segments="24" position=" 22 6 -22" material="tower_stone"/>
+
+    <!-- Arrow slits on each tower body (4 cardinal directions, mid + upper height) -->
+    <!-- NW tower centre (-22, 22) -->
+    <box name="TWSlitNW_S" size="0.4 1.8 0.08" position="-22   5 18.05" material="glass_window"/>
+    <box name="TWSlitNW_E" size="0.08 1.8 0.4" position="-18.05 5 22"   material="glass_window"/>
+    <box name="TWSlitNW_N" size="0.4 1.8 0.08" position="-22   5 25.95" material="glass_window"/>
+    <box name="TWSlitNW_W" size="0.08 1.8 0.4" position="-25.95 5 22"   material="glass_window"/>
+    <box name="TWSlitNW_S2" size="0.4 1.8 0.08" position="-22  9.5 18.05" material="glass_window"/>
+    <box name="TWSlitNW_E2" size="0.08 1.8 0.4" position="-18.05 9.5 22"  material="glass_window"/>
+    <!-- NE tower centre (22, 22) -->
+    <box name="TWSlitNE_S" size="0.4 1.8 0.08" position=" 22   5 18.05" material="glass_window"/>
+    <box name="TWSlitNE_W" size="0.08 1.8 0.4" position=" 18.05 5 22"   material="glass_window"/>
+    <box name="TWSlitNE_N" size="0.4 1.8 0.08" position=" 22   5 25.95" material="glass_window"/>
+    <box name="TWSlitNE_E" size="0.08 1.8 0.4" position=" 25.95 5 22"   material="glass_window"/>
+    <box name="TWSlitNE_S2" size="0.4 1.8 0.08" position=" 22  9.5 18.05" material="glass_window"/>
+    <!-- SW tower centre (-22, -22) -->
+    <box name="TWSlitSW_N" size="0.4 1.8 0.08" position="-22   5 -18.05" material="glass_window"/>
+    <box name="TWSlitSW_E" size="0.08 1.8 0.4" position="-18.05 5 -22"   material="glass_window"/>
+    <box name="TWSlitSW_S" size="0.4 1.8 0.08" position="-22   5 -25.95" material="glass_window"/>
+    <box name="TWSlitSW_W" size="0.08 1.8 0.4" position="-25.95 5 -22"   material="glass_window"/>
+    <!-- SE tower centre (22, -22) -->
+    <box name="TWSlitSE_N" size="0.4 1.8 0.08" position=" 22   5 -18.05" material="glass_window"/>
+    <box name="TWSlitSE_W" size="0.08 1.8 0.4" position=" 18.05 5 -22"   material="glass_window"/>
+    <box name="TWSlitSE_S" size="0.4 1.8 0.08" position=" 22   5 -25.95" material="glass_window"/>
+    <box name="TWSlitSE_E" size="0.08 1.8 0.4" position=" 25.95 5 -22"   material="glass_window"/>
+
+    <!-- Tower stepped-cone roofs (y=12 = top of each tower body) -->
+    <instance name="RoofNW" definition="tower_roof" position="-22 12  22"/>
+    <instance name="RoofNE" definition="tower_roof" position=" 22 12  22"/>
+    <instance name="RoofSW" definition="tower_roof" position="-22 12 -22"/>
+    <instance name="RoofSE" definition="tower_roof" position=" 22 12 -22"/>
+
+    <!-- Tower battlements — 8 merlons per tower at r≈4 from centre -->
+    <!-- NW (−22, 22) -->
+    <instance name="TNW1" definition="tower_merlon" position="-22.0  8.3  18.0"/>
+    <instance name="TNW2" definition="tower_merlon" position="-24.83 8.3  19.17" rotation="0  45 0"/>
+    <instance name="TNW3" definition="tower_merlon" position="-26.0  8.3  22.0"  rotation="0  90 0"/>
+    <instance name="TNW4" definition="tower_merlon" position="-24.83 8.3  24.83" rotation="0 135 0"/>
+    <instance name="TNW5" definition="tower_merlon" position="-22.0  8.3  26.0"/>
+    <instance name="TNW6" definition="tower_merlon" position="-19.17 8.3  24.83" rotation="0 -45 0"/>
+    <instance name="TNW7" definition="tower_merlon" position="-18.0  8.3  22.0"  rotation="0  90 0"/>
+    <instance name="TNW8" definition="tower_merlon" position="-19.17 8.3  19.17" rotation="0 -135 0"/>
+    <!-- NE (22, 22) -->
+    <instance name="TNE1" definition="tower_merlon" position=" 22.0  8.3  18.0"/>
+    <instance name="TNE2" definition="tower_merlon" position=" 24.83 8.3  19.17" rotation="0 -45 0"/>
+    <instance name="TNE3" definition="tower_merlon" position=" 26.0  8.3  22.0"  rotation="0  90 0"/>
+    <instance name="TNE4" definition="tower_merlon" position=" 24.83 8.3  24.83" rotation="0 -135 0"/>
+    <instance name="TNE5" definition="tower_merlon" position=" 22.0  8.3  26.0"/>
+    <instance name="TNE6" definition="tower_merlon" position=" 19.17 8.3  24.83" rotation="0  45 0"/>
+    <instance name="TNE7" definition="tower_merlon" position=" 18.0  8.3  22.0"  rotation="0  90 0"/>
+    <instance name="TNE8" definition="tower_merlon" position=" 19.17 8.3  19.17" rotation="0 135 0"/>
+    <!-- SW (−22, −22) -->
+    <instance name="TSW1" definition="tower_merlon" position="-22.0  8.3 -26.0"/>
+    <instance name="TSW2" definition="tower_merlon" position="-24.83 8.3 -24.83" rotation="0  45 0"/>
+    <instance name="TSW3" definition="tower_merlon" position="-26.0  8.3 -22.0"  rotation="0  90 0"/>
+    <instance name="TSW4" definition="tower_merlon" position="-24.83 8.3 -19.17" rotation="0 135 0"/>
+    <instance name="TSW5" definition="tower_merlon" position="-22.0  8.3 -18.0"/>
+    <instance name="TSW6" definition="tower_merlon" position="-19.17 8.3 -19.17" rotation="0 -135 0"/>
+    <instance name="TSW7" definition="tower_merlon" position="-18.0  8.3 -22.0"  rotation="0  90 0"/>
+    <instance name="TSW8" definition="tower_merlon" position="-19.17 8.3 -24.83" rotation="0 -45 0"/>
+    <!-- SE (22, −22) -->
+    <instance name="TSE1" definition="tower_merlon" position=" 22.0  8.3 -26.0"/>
+    <instance name="TSE2" definition="tower_merlon" position=" 19.17 8.3 -24.83" rotation="0 -45 0"/>
+    <instance name="TSE3" definition="tower_merlon" position=" 18.0  8.3 -22.0"  rotation="0  90 0"/>
+    <instance name="TSE4" definition="tower_merlon" position=" 19.17 8.3 -19.17" rotation="0 -135 0"/>
+    <instance name="TSE5" definition="tower_merlon" position=" 22.0  8.3 -18.0"/>
+    <instance name="TSE6" definition="tower_merlon" position=" 24.83 8.3 -19.17" rotation="0  45 0"/>
+    <instance name="TSE7" definition="tower_merlon" position=" 26.0  8.3 -22.0"  rotation="0  90 0"/>
+    <instance name="TSE8" definition="tower_merlon" position=" 24.83 8.3 -24.83" rotation="0 135 0"/>
+
+    <!-- ==============================================================
+         GATEHOUSE  (south wall, gate opening x=±5)
+         Flanking towers + gatehouse span building above passage
+    ============================================================== -->
+    <!-- Two cylindrical flanking towers -->
+    <cylinder name="GateL" radius="2.5" height="10" segments="18" position="-5.5 5 -23" material="gate_stone"/>
+    <cylinder name="GateR" radius="2.5" height="10" segments="18" position=" 5.5 5 -23" material="gate_stone"/>
+
+    <!-- Arrow slits in flanking towers (mid and upper height) -->
+    <box name="GSlitL_S"  size="0.4 1.6 0.08" position="-5.5  4.5 -25.48" material="glass_window"/>
+    <box name="GSlitL_E"  size="0.08 1.6 0.4" position="-3.02 4.5 -23"    material="glass_window"/>
+    <box name="GSlitL_W"  size="0.08 1.6 0.4" position="-7.98 4.5 -23"    material="glass_window"/>
+    <box name="GSlitR_S"  size="0.4 1.6 0.08" position=" 5.5  4.5 -25.48" material="glass_window"/>
+    <box name="GSlitR_W"  size="0.08 1.6 0.4" position=" 3.02 4.5 -23"    material="glass_window"/>
+    <box name="GSlitR_E"  size="0.08 1.6 0.4" position=" 7.98 4.5 -23"    material="glass_window"/>
+    <!-- Upper slits -->
+    <box name="GSlitL_Su" size="0.4 1.6 0.08" position="-5.5  8.5 -25.48" material="glass_window"/>
+    <box name="GSlitR_Su" size="0.4 1.6 0.08" position=" 5.5  8.5 -25.48" material="glass_window"/>
+
+    <!-- GATEHOUSE SPAN BUILDING above gate passage
+         Connects the two towers y=10→14; gives the "gatehouse head" silhouette -->
+    <box name="GateSpan"      size="11  4    3.5" position="0 12   -22.75" material="gate_stone"/>
+    <box name="GateSpanFloor" size="11  0.25 3.5" position="0 10.12 -22.75" material="gate_stone"/>
+    <!-- Arrow slits on gatehouse span south face -->
+    <box name="GSpanSlit1"  size="0.5 1.5 0.08" position="-3.0 12.5 -24.55" material="glass_window"/>
+    <box name="GSpanSlit2"  size="0.5 1.5 0.08" position=" 0.0 12.5 -24.55" material="glass_window"/>
+    <box name="GSpanSlit3"  size="0.5 1.5 0.08" position=" 3.0 12.5 -24.55" material="glass_window"/>
+    <!-- Merlons on top of span building (south-facing) -->
+    <box name="GSpanM1" size="1.2 1.0 3.6" position="-4.0 14.5 -22.75" material="gate_stone"/>
+    <box name="GSpanM2" size="1.2 1.0 3.6" position="-1.5 14.5 -22.75" material="gate_stone"/>
+    <box name="GSpanM3" size="1.2 1.0 3.6" position=" 1.0 14.5 -22.75" material="gate_stone"/>
+    <box name="GSpanM4" size="1.2 1.0 3.6" position=" 3.5 14.5 -22.75" material="gate_stone"/>
+    <!-- Gold pennant on span building -->
+    <cylinder name="GSpanPole" radius="0.05" height="2.8" segments="6" position="0 15.5 -23" material="pole_wood"/>
+    <box      name="GSpanFlag" size="1.8 1.0 0.04"       position="0.9 17.0 -23" material="flag_gold"/>
+
+    <!-- Gatehouse tower roofs -->
+    <instance name="RoofGL" definition="gatehouse_roof" position="-5.5 10 -23"/>
+    <instance name="RoofGR" definition="gatehouse_roof" position=" 5.5 10 -23"/>
+
+    <!-- Stone arch above gate opening (semicircle radius 4.2, base at y=6) -->
+    <extrude name="GateArch" position="0 6 -21" material="castle_wall"
+             segments="24" smooth="true" caps="true">
+      <cross_section type="rect" width="2.2" height="0.55"/>
+      <path type="arc" radius="4.2" angle="180"/>
+    </extrude>
+
+    <!-- Lintel block above arch, filling up to gatehouse span -->
+    <box name="GateLintel" size="8.5 2.8 2.2" position="0 9.6 -21" material="castle_wall"/>
+
+    <!-- Portcullis iron grating -->
+    <cylinder name="PG1" radius="0.07" height="5.8" segments="6" position="-3.6 2.9 -21.2" material="iron_metal"/>
+    <cylinder name="PG2" radius="0.07" height="5.8" segments="6" position="-2.4 2.9 -21.2" material="iron_metal"/>
+    <cylinder name="PG3" radius="0.07" height="5.8" segments="6" position="-1.2 2.9 -21.2" material="iron_metal"/>
+    <cylinder name="PG4" radius="0.07" height="5.8" segments="6" position=" 0.0 2.9 -21.2" material="iron_metal"/>
+    <cylinder name="PG5" radius="0.07" height="5.8" segments="6" position=" 1.2 2.9 -21.2" material="iron_metal"/>
+    <cylinder name="PG6" radius="0.07" height="5.8" segments="6" position=" 2.4 2.9 -21.2" material="iron_metal"/>
+    <cylinder name="PG7" radius="0.07" height="5.8" segments="6" position=" 3.6 2.9 -21.2" material="iron_metal"/>
+    <box name="PGH1" size="7.8 0.10 0.10" position="0 1.8 -21.2" material="iron_metal"/>
+    <box name="PGH2" size="7.8 0.10 0.10" position="0 3.6 -21.2" material="iron_metal"/>
+    <box name="PGH3" size="7.8 0.10 0.10" position="0 5.6 -21.2" material="iron_metal"/>
+
+    <!-- Wooden gate doors (slightly ajar — peace time) -->
+    <box name="GDoorL" size="4.5 5.8 0.18" position="-2.8 2.9 -21.5" rotation="0 -12 0" material="wood_gate"/>
+    <box name="GDoorR" size="4.5 5.8 0.18" position=" 2.8 2.9 -21.5" rotation="0  12 0" material="wood_gate"/>
+
+    <!-- Gate passage floor -->
+    <box name="GateFloor" size="8 0.14 2.6" position="0 0.07 -21" material="cobblestone"/>
+
+    <!-- Torches inside gate passage -->
+    <instance name="TGate1" definition="torch" position="-3.2 5.0 -20.3" rotation="0 180 -30"/>
+    <instance name="TGate2" definition="torch" position=" 3.2 5.0 -20.3" rotation="0 180  30"/>
+
+    <!-- GUARD BOOTH near gate interior (simple shelter for gatekeeper) -->
+    <group name="GuardBooth" position="-8.5 0 -18.5">
+      <box name="GB_W"   size="2.5 3.0 0.3"  position="0    1.5  -1.1" material="castle_wall"/>
+      <box name="GB_L"   size="0.3 3.0 2.2"  position="-1.1 1.5   0"   material="castle_wall"/>
+      <box name="GB_Rf"  size="3.0 0.2 2.8"  position="0    3.1   0"   material="wood_light"/>
+      <box name="GB_Fl"  size="2.5 0.12 2.2" position="0    0.06  0"   material="cobblestone"/>
+      <!-- Bench inside booth -->
+      <box name="GB_Bnch" size="1.8 0.25 0.4" position="0   0.8  -0.7"  material="wood_light"/>
+    </group>
+
+    <!-- ==============================================================
+         KEEP (great tower, centre-north of courtyard)
+         IMPROVED: 3-level silhouette
+           Level 0 — base plinth    12×3×12  (y: 0–3)
+           Level 1 — main body      10×12×10 (y: 3–15) + corner buttresses
+           Level 2 — upper platform  10×2×10  (y: 15–17)
+           Slab     — slight overhang 11×0.8×11 (y: 17)
+    ============================================================== -->
+
+    <!-- Level 0: wide base plinth (keep_base is slightly darker) -->
+    <box name="KeepPlinth"  size="12 3  12"   position="0 1.5  12" material="keep_base"/>
+
+    <!-- Level 1: main tower body -->
+    <box name="KeepBody"    size="10 12 10"   position="0 9    12" material="keep_stone"/>
+
+    <!-- Corner buttresses on Level 1 (vertical strips at each corner) -->
+    <!-- SW corner of main body: main body x=-5, z=7 -->
+    <box name="KButtSW" size="1.0 12 1.0" position="-5.5 9  7.5" material="keep_stone"/>
+    <box name="KButtNW" size="1.0 12 1.0" position="-5.5 9 16.5" material="keep_stone"/>
+    <box name="KButtSE" size="1.0 12 1.0" position=" 5.5 9  7.5" material="keep_stone"/>
+    <box name="KButtNE" size="1.0 12 1.0" position=" 5.5 9 16.5" material="keep_stone"/>
+
+    <!-- Level 2: upper fighting platform (slightly raised to break silhouette) -->
+    <box name="KeepUpper"   size="10 2  10"   position="0 16   12" material="keep_stone"/>
+
+    <!-- Top slab with slight overhang (machicolation feel) -->
+    <box name="KeepSlab"    size="11 0.8 11"  position="0 17.4 12" material="keep_stone"/>
+
+    <!-- Entrance: approach steps (south face of plinth at z=6, main body south at z=7) -->
+    <box name="KStep1" size="4.0 0.4 0.6" position="0 0.2  5.8" material="cobblestone"/>
+    <box name="KStep2" size="3.5 0.4 0.6" position="0 0.6  6.4" material="cobblestone"/>
+    <box name="KStep3" size="3.0 0.4 0.6" position="0 1.0  7.0" material="cobblestone"/>
+
+    <!-- Keep door (in south face of main body at z=7) -->
+    <box name="KeepDoor"    size="2.0 2.8 0.2"  position="0  1.4 7.05" material="wood_gate"/>
+
+    <!-- Entrance arch above door (semicircle, base at y=2.8) -->
+    <extrude name="KeepEntArch" position="0 2.8 7.08" material="keep_stone"
+             segments="12" smooth="true" caps="true">
+      <cross_section type="rect" width="1.5" height="0.4"/>
+      <path type="arc" radius="1.2" angle="180"/>
+    </extrude>
+
+    <!-- Windows (south face ground + mid + upper floors) -->
+    <box name="KWinF1" size="1.0 1.6 0.08" position="-2.5  6.5 7.04"  material="glass_window"/>
+    <box name="KWinF2" size="1.0 1.6 0.08" position=" 2.5  6.5 7.04"  material="glass_window"/>
+    <box name="KWinF3" size="1.0 1.6 0.08" position="-2.5 11.0 7.04"  material="glass_window"/>
+    <box name="KWinF4" size="1.0 1.6 0.08" position=" 2.5 11.0 7.04"  material="glass_window"/>
+    <box name="KWinF5" size="1.0 1.6 0.08" position=" 0.0 15.5 7.04"  material="glass_window"/>
+    <!-- Arrow slits sides & back -->
+    <box name="KSlitW1" size="0.08 1.8 0.4" position="-5.04  6.5 12"   material="glass_window"/>
+    <box name="KSlitW2" size="0.08 1.8 0.4" position="-5.04 11.0 12"   material="glass_window"/>
+    <box name="KSlitE1" size="0.08 1.8 0.4" position=" 5.04  6.5 12"   material="glass_window"/>
+    <box name="KSlitE2" size="0.08 1.8 0.4" position=" 5.04 11.0 12"   material="glass_window"/>
+    <box name="KSlitN1" size="0.4 1.8 0.08" position="-2.5  7.5 17.04" material="glass_window"/>
+    <box name="KSlitN2" size="0.4 1.8 0.08" position=" 2.5  7.5 17.04" material="glass_window"/>
+    <box name="KSlitN3" size="0.4 1.8 0.08" position=" 0.0 12.0 17.04" material="glass_window"/>
+
+    <!-- Keep battlements (taller keep_merlon, all 4 sides of slab at y=17.4+0.4=17.8) -->
+    <!-- South -->
+    <instance name="KMS1" definition="keep_merlon" position="-4.0 18.05  7.0"/>
+    <instance name="KMS2" definition="keep_merlon" position="-2.0 18.05  7.0"/>
+    <instance name="KMS3" definition="keep_merlon" position=" 0.0 18.05  7.0"/>
+    <instance name="KMS4" definition="keep_merlon" position=" 2.0 18.05  7.0"/>
+    <instance name="KMS5" definition="keep_merlon" position=" 4.0 18.05  7.0"/>
+    <!-- North -->
+    <instance name="KMN1" definition="keep_merlon" position="-4.0 18.05 17.0"/>
+    <instance name="KMN2" definition="keep_merlon" position="-2.0 18.05 17.0"/>
+    <instance name="KMN3" definition="keep_merlon" position=" 0.0 18.05 17.0"/>
+    <instance name="KMN4" definition="keep_merlon" position=" 2.0 18.05 17.0"/>
+    <instance name="KMN5" definition="keep_merlon" position=" 4.0 18.05 17.0"/>
+    <!-- West -->
+    <instance name="KMW1" definition="keep_merlon" position="-5.5 18.05  9.0" rotation="0 90 0"/>
+    <instance name="KMW2" definition="keep_merlon" position="-5.5 18.05 12.0" rotation="0 90 0"/>
+    <instance name="KMW3" definition="keep_merlon" position="-5.5 18.05 15.0" rotation="0 90 0"/>
+    <!-- East -->
+    <instance name="KME1" definition="keep_merlon" position=" 5.5 18.05  9.0" rotation="0 90 0"/>
+    <instance name="KME2" definition="keep_merlon" position=" 5.5 18.05 12.0" rotation="0 90 0"/>
+    <instance name="KME3" definition="keep_merlon" position=" 5.5 18.05 15.0" rotation="0 90 0"/>
+
+    <!-- Keep flagpole and gold flag (tallest point of castle) -->
+    <cylinder name="KeepPole" radius="0.08" height="5.5" segments="8" position="0 18.8 12" material="pole_wood"/>
+    <box      name="KeepFlag" size="2.2 1.4 0.04"        position="1.1 22.2 12" material="flag_red"/>
+
+    <!-- ==============================================================
+         CHAPEL  (east side, world centre x=14, z=2)
+         7×5m footprint, 5.5m walls, triangular roof, bell tower
+    ============================================================== -->
+    <group name="Chapel" position="14 0 2">
+      <box name="CWF"  size="7.0 5.5 0.38" position="0 2.75 -2.5"  material="chapel_stone"/>
+      <box name="CWB"  size="7.0 5.5 0.38" position="0 2.75  2.5"  material="chapel_stone"/>
+      <box name="CWL"  size="0.38 5.5 5.0" position="-3.5 2.75 0"  material="chapel_stone"/>
+      <box name="CWR"  size="0.38 5.5 5.0" position=" 3.5 2.75 0"  material="chapel_stone"/>
+      <box name="CWFl" size="7.0 0.18 5.0" position="0 0.09 0"     material="cobblestone"/>
+      <!-- Triangular roof: cs.X→world.Y, cs.Y→world.(-X) for Z-path -->
+      <extrude name="ChapelRoof" position="0 5.5 -2.7" material="chapel_roof"
+               smooth="false" caps="true">
+        <cross_section type="custom">
+          <point x="0"   y=" 3.8"/>
+          <point x="2.2" y=" 0.0"/>
+          <point x="0"   y="-3.8"/>
+        </cross_section>
+        <path type="line" axis="z" length="5.4"/>
+      </extrude>
+      <!-- Bell tower (NW corner) -->
+      <box      name="BellTwr"   size="1.8 3.5 1.8"      position="-3.8 6.5  -2.4"  material="chapel_stone"/>
+      <cylinder name="BellSpire" radius="1.0" height="2.5" segments="12"
+                position="-3.8 9.25 -2.4" material="roof_slate"/>
+      <cylinder name="BellTip"   radius="0.3" height="1.0" segments="8"
+                position="-3.8 10.5 -2.4" material="roof_slate"/>
+      <!-- Iron cross -->
+      <box name="CrossV" size="0.08 1.0 0.08" position="-3.8 11.3 -2.4" material="iron_metal"/>
+      <box name="CrossH" size="0.50 0.08 0.08" position="-3.8 11.5 -2.4" material="iron_metal"/>
+      <!-- Windows + rose window -->
+      <box    name="CWin1"    size="0.8 1.4 0.08" position="-1.4 2.8  -2.48" material="glass_window"/>
+      <box    name="CWin2"    size="0.8 1.4 0.08" position=" 1.4 2.8  -2.48" material="glass_window"/>
+      <sphere name="CWinRose" radius="0.46" segments="12"  position="0 4.5 -2.52" material="glass_window"/>
+      <!-- Door -->
+      <box name="CDoor" size="1.5 2.5 0.14" position="0 1.25 -2.48" material="wood_gate"/>
+    </group>
+
+    <!-- ==============================================================
+         BARRACKS  (west side, world centre x=-13, z=5)
+         IMPROVED: wider 12×5m, proper PITCHED ROOF via extrude + chimney
+    ============================================================== -->
+    <group name="Barracks" position="-13 0 5">
+      <!-- Walls (5m tall for better proportion) -->
+      <box name="BWF"  size="12.0 5.0 0.40" position="0 2.5 -2.5"   material="castle_wall"/>
+      <box name="BWB"  size="12.0 5.0 0.40" position="0 2.5  2.5"   material="castle_wall"/>
+      <box name="BWL"  size="0.40 5.0 5.0"  position="-6 2.5 0"     material="castle_wall"/>
+      <box name="BWR"  size="0.40 5.0 5.0"  position=" 6 2.5 0"     material="castle_wall"/>
+      <box name="BWFl" size="12.0 0.15 5.0" position="0 0.08 0"     material="cobblestone"/>
+      <!-- Pitched triangular roof: same cs.X→world.Y mapping -->
+      <extrude name="BarracksRoof" position="0 5 -2.7" material="chapel_roof"
+               smooth="false" caps="true">
+        <cross_section type="custom">
+          <point x="0"   y=" 6.5"/>
+          <point x="2.2" y=" 0.0"/>
+          <point x="0"   y="-6.5"/>
+        </cross_section>
+        <path type="line" axis="z" length="5.4"/>
+      </extrude>
+      <!-- Stone chimney (left side, rear of building) -->
+      <box name="BChim"    size="1.0 4.0 1.0" position="-3 7.5 0"   material="chimney_stone"/>
+      <box name="BChimCap" size="1.3 0.2 1.3" position="-3 9.6 0"   material="castle_wall"/>
+      <!-- Front windows + door -->
+      <box name="BWin1" size="0.9 0.9 0.08" position="-4.0 2.8 -2.5" material="glass_window"/>
+      <box name="BWin2" size="0.9 0.9 0.08" position=" 0.0 2.8 -2.5" material="glass_window"/>
+      <box name="BWin3" size="0.9 0.9 0.08" position=" 4.0 2.8 -2.5" material="glass_window"/>
+      <box name="BDoor" size="1.4 2.6 0.14" position="2.5 1.3 -2.5"  material="wood_gate"/>
+      <!-- Door step -->
+      <box name="BStep" size="2.0 0.2 0.5"  position="2.5 0.1 -2.9"  material="cobblestone"/>
+    </group>
+
+    <!-- ==============================================================
+         FORGE / SMITHY  (NE courtyard, world centre x=13, z=-7)
+         Open-fronted (south side) 3-wall building
+    ============================================================== -->
+    <group name="Forge" position="13 0 -7">
+      <!-- 3 walls (no south/front wall — open smithy) -->
+      <box name="FW_B"  size="7.0 4.5 0.38" position="0 2.25 2.2"   material="castle_wall"/>
+      <box name="FW_L"  size="0.38 4.5 4.4" position="-3.5 2.25 0"  material="castle_wall"/>
+      <box name="FW_R"  size="0.38 4.5 4.4" position=" 3.5 2.25 0"  material="castle_wall"/>
+      <box name="FW_Fl" size="7.0 0.12 4.4" position="0 0.06 0"     material="cobblestone"/>
+      <!-- Lean-to flat roof (slightly slanted: back higher, front open) -->
+      <box name="FW_Rf" size="7.4 0.2 5.2"  position="0 4.6 0.4"    material="wood_light"/>
+      <!-- Chimney through roof to vent smoke -->
+      <box name="FChim"    size="0.9 4.2 0.9" position="1.0 7.0 1.5"  material="chimney_stone"/>
+      <box name="FChimCap" size="1.2 0.18 1.2" position="1.0 9.2 1.5" material="castle_wall"/>
+      <!-- Forge fire base (stone floor hearth) -->
+      <box      name="FHearth" size="1.2 0.35 1.2" position="-0.5 0.18 1.2"  material="chimney_stone"/>
+      <!-- Glowing forge fire (small, covered by chimney above) -->
+      <sphere   name="FForge"  radius="0.22" segments="8"              position="-0.5 0.70 1.2"  material="fire_glow"/>
+      <sphere   name="FGlow2"  radius="0.14" segments="6"              position="-0.5 0.90 1.2"  material="fire_glow"/>
+      <!-- Anvil (two-box: base + horn) -->
+      <box name="AnvilBase" size="0.5 0.45 0.4" position="-1.8 0.23 -0.5"  material="chimney_stone"/>
+      <box name="AnvilTop"  size="0.6 0.18 0.3" position="-1.8 0.54 -0.5"  material="iron_metal"/>
+      <box name="AnvilHorn" size="0.3 0.10 0.14" position="-2.1 0.56 -0.5" material="iron_metal"/>
+      <!-- Quench bucket (small barrel) -->
+      <cylinder name="Quench" radius="0.22" height="0.35" segments="10" position="-1.0 0.18 -1.0" material="barrel_wood"/>
+      <!-- Bellows (two boxes) -->
+      <box name="BellowsB" size="0.45 0.22 0.7" position="0.4 0.7  1.2" material="wood_light"/>
+      <box name="BellowsN" size="0.08 0.08 0.4" position="0.4 0.7  0.6" material="iron_metal"/>
+    </group>
+
+    <!-- Barrels clustered near forge (storage of materials) -->
+    <instance name="FBr1" definition="barrel" position="17.0 0 -8.0"/>
+    <instance name="FBr2" definition="barrel" position="17.0 0 -7.0"/>
+    <instance name="FBr3" definition="barrel" position="17.0 0.72 -7.5"/>
+
+    <!-- ==============================================================
+         WELL  (centre courtyard, world (0, 0, -4))
+    ============================================================== -->
+    <group name="Well" position="0 0 -4">
+      <cylinder name="WBase"  radius="1.3"  height="0.95" segments="16" position="0    0.48 0" material="castle_wall"/>
+      <cylinder name="WInner" radius="0.85" height="0.20" segments="12" position="0    0.10 0" material="moat_water"/>
+      <cylinder name="WPst1"  radius="0.10" height="2.4"  segments="8"  position="-0.95 1.65 0" material="wood_light"/>
+      <cylinder name="WPst2"  radius="0.10" height="2.4"  segments="8"  position=" 0.95 1.65 0" material="wood_light"/>
+      <box      name="WBeam"  size="2.4 0.14 0.14"        position="0    2.87 0" material="wood_light"/>
+      <cylinder name="WWindl" radius="0.12" height="1.8"  segments="8"  position="0    2.87 0" material="wood_light"/>
+      <!-- Peaked roof -->
+      <extrude name="WRoof" position="0 3.0 -1.5" material="chapel_roof"
+               smooth="false" caps="true">
+        <cross_section type="custom">
+          <point x="0"   y=" 1.6"/>
+          <point x="1.1" y=" 0.0"/>
+          <point x="0"   y="-1.6"/>
+        </cross_section>
+        <path type="line" axis="z" length="3.0"/>
+      </extrude>
+      <cylinder name="WRope"   radius="0.04" height="1.8"  segments="6"  position="0 2.0  0" material="rope"/>
+      <cylinder name="WBucket" radius="0.17" height="0.28" segments="10" position="0 1.1  0" material="barrel_wood"/>
+    </group>
+
+    <!-- Stone bench beside the well -->
+    <box name="WellBench" size="1.6 0.35 0.4" position="1.8 0.18 -4" material="castle_wall"/>
+
+    <!-- ==============================================================
+         CAMPFIRE  (courtyard south-centre, world (0, 0, -10))
+    ============================================================== -->
+    <group name="Campfire" position="0 0 -10">
+      <cylinder name="FireRing" radius="0.60" height="0.16" segments="12" position="0 0.08 0" material="rock"/>
+      <cylinder name="LogA" radius="0.09" height="0.9" segments="6" position="-0.25 0.10  0"  rotation="0  25 76" material="wood_light"/>
+      <cylinder name="LogB" radius="0.09" height="0.9" segments="6" position=" 0.25 0.10  0"  rotation="0 -25 76" material="wood_light"/>
+      <cylinder name="LogC" radius="0.09" height="0.9" segments="6" position=" 0    0.10 -0.25" rotation="76 0 -8" material="wood_light"/>
+      <sphere name="Embers" radius="0.22" segments="6"              position="0 0.08 0"      material="charcoal"/>
+      <sphere name="Flame1" radius="0.24" segments="8"              position=" 0.0  0.40 0"  material="fire_glow"/>
+      <sphere name="Flame2" radius="0.17" segments="6"              position=" 0.08 0.58 0"  material="fire_glow"/>
+      <sphere name="Flame3" radius="0.10" segments="6"              position="-0.05 0.72 0"  material="fire_glow"/>
+    </group>
+
+    <!-- LOG PILE beside campfire (stored firewood) -->
+    <cylinder name="LogP1" radius="0.10" height="0.9" segments="6" position="-2.2 0.10 -10.2" rotation="0  8 90" material="wood_light"/>
+    <cylinder name="LogP2" radius="0.10" height="0.9" segments="6" position="-2.2 0.28 -10.4" rotation="0 15 90" material="wood_light"/>
+    <cylinder name="LogP3" radius="0.10" height="0.9" segments="6" position="-2.2 0.46 -10.2" rotation="0  5 90" material="wood_light"/>
+    <cylinder name="LogP4" radius="0.10" height="0.9" segments="6" position="-2.4 0.10 -10.0" rotation="0 12 90" material="wood_light"/>
+
+    <!-- COMMUNAL TABLE + BENCHES near campfire -->
+    <group name="EatingArea" position="3.5 0 -11">
+      <!-- Table top + legs -->
+      <box name="TableTop"  size="2.5 0.10 0.8" position="0 0.80 0"    material="wood_light"/>
+      <cylinder name="TLeg1" radius="0.06" height="0.76" segments="6"  position="-1.0 0.38 -0.3" material="wood_light"/>
+      <cylinder name="TLeg2" radius="0.06" height="0.76" segments="6"  position=" 1.0 0.38 -0.3" material="wood_light"/>
+      <cylinder name="TLeg3" radius="0.06" height="0.76" segments="6"  position="-1.0 0.38  0.3" material="wood_light"/>
+      <cylinder name="TLeg4" radius="0.06" height="0.76" segments="6"  position=" 1.0 0.38  0.3" material="wood_light"/>
+      <!-- Two benches -->
+      <box name="Bench1"    size="2.2 0.12 0.3" position="0 0.40 -0.65" material="wood_light"/>
+      <box name="Bench2"    size="2.2 0.12 0.3" position="0 0.40  0.65" material="wood_light"/>
+      <!-- Bench legs -->
+      <cylinder name="BL1" radius="0.05" height="0.36" segments="4" position="-0.9 0.18 -0.65" material="wood_light"/>
+      <cylinder name="BL2" radius="0.05" height="0.36" segments="4" position=" 0.9 0.18 -0.65" material="wood_light"/>
+      <cylinder name="BL3" radius="0.05" height="0.36" segments="4" position="-0.9 0.18  0.65" material="wood_light"/>
+      <cylinder name="BL4" radius="0.05" height="0.36" segments="4" position=" 0.9 0.18  0.65" material="wood_light"/>
+      <!-- A bowl and mug on the table -->
+      <cylinder name="Bowl" radius="0.14" height="0.10" segments="8" position="-0.6 0.87 0" material="barrel_wood"/>
+      <cylinder name="Mug"  radius="0.07" height="0.14" segments="8" position=" 0.6 0.87 0" material="barrel_wood"/>
+    </group>
+
+    <!-- ==============================================================
+         STORAGE LEAN-TO  (against west inner wall, world ≈-19.5, z=13)
+         2 posts + flat roof; barrels underneath
+    ============================================================== -->
+    <cylinder name="LT_P1" radius="0.14" height="3.8" segments="6" position="-18.0 1.9 11.5" material="wood_light"/>
+    <cylinder name="LT_P2" radius="0.14" height="3.8" segments="6" position="-18.0 1.9 14.5" material="wood_light"/>
+    <box      name="LT_Rf" size="1.8 0.18 3.8" position="-18.9 3.8 13.0" material="thatch"/>
+    <!-- Barrels under lean-to -->
+    <instance name="LTBr1" definition="barrel" position="-19.2 0 12.0"/>
+    <instance name="LTBr2" definition="barrel" position="-19.2 0 13.0"/>
+    <instance name="LTBr3" definition="barrel" position="-19.2 0.72 12.5"/>
+
+    <!-- ==============================================================
+         COURTYARD SUPPLIES  (barrel clusters, crates, hay, weapon rack, trough)
+    ============================================================== -->
+    <!-- Barrel cluster — SW courtyard corner (near west wall, south) -->
+    <instance name="Br1" definition="barrel" position="-18.5 0.00 -13.0"/>
+    <instance name="Br2" definition="barrel" position="-18.5 0.00 -12.0"/>
+    <instance name="Br3" definition="barrel" position="-18.5 0.72 -12.5"/>
+    <instance name="Br4" definition="barrel" position="-17.5 0.00 -13.0"/>
+    <!-- Barrel near east wall (ammunition/supplies) -->
+    <instance name="Br5" definition="barrel" position=" 18.5 0.00 -10.0"/>
+    <instance name="Br6" definition="barrel" position=" 18.5 0.00 -11.0"/>
+    <instance name="Br7" definition="barrel" position=" 17.5 0.00 -10.5"/>
+
+    <!-- Supply crate stack (SW area) -->
+    <box name="Crate1" size="0.85 0.85 0.85" position="-10.0 0.43 -9.0"  material="wood_light"/>
+    <box name="Crate2" size="0.85 0.85 0.85" position="-11.0 0.43 -9.0"  material="wood_light"/>
+    <box name="Crate3" size="0.85 0.85 0.85" position="-10.5 1.28 -9.0"  material="wood_light"/>
+    <box name="Crate4" size="0.85 0.85 0.85" position="-10.0 0.43 -10.0" material="wood_light"/>
+
+    <!-- Hay bales near barracks (north-west) -->
+    <box name="Hay1" size="1.4 1.0 0.9" position="-18.5 0.5  8.0"  material="thatch"/>
+    <box name="Hay2" size="1.4 1.0 0.9" position="-18.5 0.5  9.6"  material="thatch"/>
+    <box name="Hay3" size="1.4 1.0 0.9" position="-18.5 0.5 11.2"  material="thatch"/>
+    <box name="Hay4" size="1.4 1.0 0.9" position="-17.2 0.5  9.6"  material="thatch"/>
+
+    <!-- Weapon rack (east wall) -->
+    <cylinder name="RackP1"  radius="0.06" height="1.8" segments="6" position="10.0 0.9 -8.0"  material="wood_light"/>
+    <cylinder name="RackP2"  radius="0.06" height="1.8" segments="6" position="10.0 0.9 -9.5"  material="wood_light"/>
+    <box      name="RackBar" size="0.08 0.08 2.5"       position="10.0 1.4 -8.75" material="wood_light"/>
+    <!-- Spears leaning on rack (simplified cylinders) -->
+    <cylinder name="Spear1" radius="0.03" height="2.2" segments="4" position="10.2 1.1 -8.2"  rotation="-10 0 0" material="pole_wood"/>
+    <cylinder name="Spear2" radius="0.03" height="2.2" segments="4" position="10.2 1.1 -8.8"  rotation=" -8 0 0" material="pole_wood"/>
+    <cylinder name="Spear3" radius="0.03" height="2.2" segments="4" position="10.2 1.1 -9.4"  rotation="-12 0 0" material="pole_wood"/>
+
+    <!-- Stone water trough -->
+    <box name="Trough"  size="2.5 0.5 0.9"  position="-7.0 0.25 -17.5" material="castle_wall"/>
+    <box name="TroughW" size="2.1 0.25 0.5" position="-7.0 0.48 -17.5" material="moat_water"/>
+
+    <!-- ==============================================================
+         SMALL POND  (NE outside the castle, beyond moat, ~50m NE)
+         Adds environment variety and composition depth
+    ============================================================== -->
+    <box name="PondW" size="14 0.3 10" position="46 -0.15 50" material="pond_water"/>
+    <box name="PondBnk1" size="14 0.3 0.8" position="46 0.15 44.6" material="earth_bank"/>
+    <box name="PondBnk2" size="14 0.3 0.8" position="46 0.15 55.4" material="earth_bank"/>
+    <box name="PondBnk3" size="0.8 0.3 10" position="38.6 0.15 50"  material="earth_bank"/>
+    <box name="PondBnk4" size="0.8 0.3 10" position="53.4 0.15 50"  material="earth_bank"/>
+    <!-- Reeds around pond -->
+    <instance name="PReed1" definition="reed_cluster" position="39  0 48"/>
+    <instance name="PReed2" definition="reed_cluster" position="39  0 52"/>
+    <instance name="PReed3" definition="reed_cluster" position="44  0 56"/>
+    <instance name="PReed4" definition="reed_cluster" position="54  0 46"/>
+
+    <!-- ==============================================================
+         TREES  (organic clustering — intentionally asymmetric positions)
+    ============================================================== -->
+
+    <!-- Flanking approach road (south), with slight organic offsets -->
+    <instance name="TRL1" definition="tree_oak"  position="-11 0 -37"/>
+    <instance name="TRR1" definition="tree_oak"  position=" 12 0 -35"/>
+    <instance name="TRL2" definition="tree_pine" position="-14 0 -45"/>
+    <instance name="TRR2" definition="tree_pine" position=" 12 0 -46"/>
+    <instance name="TRL3" definition="tree_oak"  position="-13 0 -55"/>
+    <instance name="TRR3" definition="tree_oak"  position=" 15 0 -53"/>
+    <instance name="TRL4" definition="tree_pine" position="-10 0 -63"/>
+    <instance name="TRR4" definition="tree_pine" position=" 12 0 -62"/>
+    <instance name="TRL5" definition="tree_oak"  position="-17 0 -73"/>
+    <instance name="TRR5" definition="tree_oak"  position=" 14 0 -74"/>
+    <!-- A few extra trees flanking wider -->
+    <instance name="TRL6" definition="tree_pine" position="-20 0 -48"/>
+    <instance name="TRR6" definition="tree_pine" position=" 21 0 -52"/>
+
+    <!-- South-west forest (denser, shifted to feel organic) -->
+    <instance name="TSW01" definition="tree_oak"  position="-36  0 -30"/>
+    <instance name="TSW02" definition="tree_pine" position="-41  0 -19"/>
+    <instance name="TSW03" definition="tree_oak"  position="-45  0 -37"/>
+    <instance name="TSW04" definition="tree_pine" position="-49  0 -25"/>
+    <instance name="TSW05" definition="tree_oak"  position="-53  0 -43"/>
+    <instance name="TSW06" definition="tree_pine" position="-35  0 -47"/>
+    <instance name="TSW07" definition="tree_oak"  position="-58  0 -15"/>
+    <instance name="TSW08" definition="tree_pine" position="-39  0 -57"/>
+    <instance name="TSW09" definition="tree_oak"  position="-62  0 -32"/>
+
+    <!-- South-east forest (slightly different density) -->
+    <instance name="TSE01" definition="tree_oak"  position=" 33  0 -31"/>
+    <instance name="TSE02" definition="tree_pine" position=" 41  0 -18"/>
+    <instance name="TSE03" definition="tree_oak"  position=" 46  0 -38"/>
+    <instance name="TSE04" definition="tree_pine" position=" 47  0 -27"/>
+    <instance name="TSE05" definition="tree_oak"  position=" 54  0 -41"/>
+    <instance name="TSE06" definition="tree_pine" position=" 33  0 -48"/>
+    <instance name="TSE07" definition="tree_oak"  position=" 57  0 -17"/>
+    <instance name="TSE08" definition="tree_pine" position=" 37  0 -58"/>
+
+    <!-- West forest (irregular column) -->
+    <instance name="TW01" definition="tree_pine" position="-37  0  -5"/>
+    <instance name="TW02" definition="tree_oak"  position="-43  0   5"/>
+    <instance name="TW03" definition="tree_pine" position="-35  0  15"/>
+    <instance name="TW04" definition="tree_oak"  position="-47  0  23"/>
+    <instance name="TW05" definition="tree_pine" position="-41  0  31"/>
+    <instance name="TW06" definition="tree_oak"  position="-33  0  39"/>
+    <instance name="TW07" definition="tree_pine" position="-51  0   1"/>
+    <instance name="TW08" definition="tree_oak"  position="-56  0  16"/>
+    <instance name="TW09" definition="tree_pine" position="-45  0  43"/>
+    <instance name="TW10" definition="tree_oak"  position="-38  0  52"/>
+
+    <!-- East forest (pond side — slightly sparser due to pond) -->
+    <instance name="TE01" definition="tree_pine" position=" 35  0  -7"/>
+    <instance name="TE02" definition="tree_oak"  position=" 42  0   3"/>
+    <instance name="TE03" definition="tree_pine" position=" 37  0  13"/>
+    <instance name="TE04" definition="tree_oak"  position=" 47  0  21"/>
+    <instance name="TE05" definition="tree_pine" position=" 39  0  32"/>
+    <instance name="TE06" definition="tree_oak"  position=" 35  0  40"/>
+    <instance name="TE07" definition="tree_pine" position=" 52  0   2"/>
+    <instance name="TE08" definition="tree_oak"  position=" 58  0  16"/>
+    <!-- Pond-side trees (wider spacing near water) -->
+    <instance name="TE09" definition="tree_oak"  position=" 38  0  60"/>
+    <instance name="TE10" definition="tree_pine" position=" 56  0  58"/>
+    <instance name="TE11" definition="tree_oak"  position=" 42  0  66"/>
+
+    <!-- North forest (behind castle, dense) -->
+    <instance name="TN01" definition="tree_oak"  position="-19 0  37"/>
+    <instance name="TN02" definition="tree_pine" position=" -5 0  41"/>
+    <instance name="TN03" definition="tree_oak"  position="  9 0  37"/>
+    <instance name="TN04" definition="tree_pine" position=" 23 0  43"/>
+    <instance name="TN05" definition="tree_oak"  position="-29 0  47"/>
+    <instance name="TN06" definition="tree_pine" position="  1 0  51"/>
+    <instance name="TN07" definition="tree_oak"  position=" 31 0  47"/>
+    <instance name="TN08" definition="tree_pine" position="-15 0  55"/>
+    <instance name="TN09" definition="tree_oak"  position=" 17 0  57"/>
+    <instance name="TN10" definition="tree_pine" position="-37 0  55"/>
+    <instance name="TN11" definition="tree_oak"  position=" 37 0  53"/>
+    <instance name="TN12" definition="tree_pine" position="-10 0  64"/>
+    <instance name="TN13" definition="tree_oak"  position="  6 0  67"/>
+
+    <!-- ==============================================================
+         BOULDERS AND ROCKS (varied placement, avoid mirror symmetry)
+    ============================================================== -->
+    <instance name="Bl1" definition="boulder"    position="-45  0 -11"/>
+    <instance name="Bl2" definition="boulder"    position=" 39  0  19"/>
+    <instance name="Bl3" definition="boulder"    position="-31  0  36"/>
+    <instance name="Bl4" definition="rock_small" position="-49  0  25"/>
+    <instance name="Bl5" definition="rock_small" position="  7  0 -63"/>
+    <instance name="Bl6" definition="boulder"    position=" 33  0 -51"/>
+    <instance name="Bl7" definition="rock_small" position=" -9  0 -59"/>
+    <instance name="Bl8" definition="boulder"    position=" 51  0 -13"/>
+    <instance name="Bl9" definition="rock_small" position="-18  0 -65"/>
+    <instance name="Bl10" definition="boulder"   position=" 28  0  62"/>
+    <!-- Rocks near moat outer edge -->
+    <sphere name="Rk1" radius="0.9" segments="6" position="-29 0.5  25"  material="rock"/>
+    <sphere name="Rk2" radius="0.6" segments="6" position=" 29 0.4 -24"  material="rock"/>
+    <sphere name="Rk3" radius="0.7" segments="6" position=" 30 0.4  25"  material="rock"/>
+    <sphere name="Rk4" radius="0.5" segments="6" position="-31 0.3 -21"  material="rock"/>
+    <sphere name="Rk5" radius="0.8" segments="6" position=" 16 0.4 -29"  material="rock"/>
+
+    <!-- ==============================================================
+         BUSHES (scattered, slightly asymmetric placement)
+    ============================================================== -->
+    <instance name="Bu01" definition="bush" position="-35  0  -3"/>
+    <instance name="Bu02" definition="bush" position=" 37  0   7"/>
+    <instance name="Bu03" definition="bush" position="-11  0  39"/>
+    <instance name="Bu04" definition="bush" position=" 19  0  41"/>
+    <instance name="Bu05" definition="bush" position=" -8  0 -37"/>
+    <instance name="Bu06" definition="bush" position="  8  0 -33"/>
+    <instance name="Bu07" definition="bush" position="-31  0  11"/>
+    <instance name="Bu08" definition="bush" position=" 29  0  13"/>
+    <instance name="Bu09" definition="bush" position="-27  0 -31"/>
+    <instance name="Bu10" definition="bush" position=" 25  0 -33"/>
+    <instance name="Bu11" definition="bush" position=" 44  0  42"/>
+    <instance name="Bu12" definition="bush" position="-20  0  60"/>
+    <!-- Bushes near pond -->
+    <instance name="Bu13" definition="bush" position=" 36  0  56"/>
+    <instance name="Bu14" definition="bush" position=" 55  0  52"/>
+
+  </objects>
+
+</mc3>

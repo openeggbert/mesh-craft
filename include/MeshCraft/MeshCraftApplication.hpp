@@ -168,6 +168,14 @@ private:
     void (*fnGlEnable_)(unsigned int)          = nullptr;
     void (*fnGlDisable_)(unsigned int)         = nullptr;
 
+    // Bloom post-processing (I6)
+    bool bloomEnabled_{false};
+    int  bloomFboW_{0}, bloomFboH_{0};
+    void initBloom(int w, int h);
+    void applyBloom(int vx, int glViewY, int vw, int vh,
+                    const Microsoft::Xna::Framework::Matrix& view,
+                    const Microsoft::Xna::Framework::Matrix& proj);
+
     // Panel layout (widths are user-resizable via splitter drag)
     int kLeftPanelW  = 220;
     int kRightPanelW = 220;

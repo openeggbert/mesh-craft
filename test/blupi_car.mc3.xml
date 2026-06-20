@@ -1,0 +1,356 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Blupi v autě — přepracovaná verze
+  Klíčové opravy:
+    - kamera vpředu-vpravo, vidíme Blupiho obličej
+    - kola: velký červený hub disc + černá pneumatika
+    - Blupi: větší, kulatější, výraznější oči a nos
+    - ruka přesně míří na volant
+-->
+<mc3 version="0.3" model="BlupiCar" unit="meter" rotation_units="degrees" euler_order="XYZ"
+     default_camera="Main">
+
+  <environment>
+    <background color="0.52 0.72 0.96"/>
+  </environment>
+
+  <lights>
+    <ambient color="0.42 0.45 0.55" brightness="0.55"/>
+    <directional name="Sun" color="1.0 0.96 0.88" brightness="3.5"
+                 direction="-0.4 -1.0 -0.3" cast_shadows="true"/>
+    <directional name="Fill" color="0.55 0.65 1.0" brightness="0.8"
+                 direction="0.8 -0.2 0.5"/>
+  </lights>
+
+  <cameras>
+    <!--
+      Kamera vpředu-vpravo od Blupiho (auto jede do -Z, přední část = nízké Z).
+      Z: -4.2  → jsme PŘED autem, vidíme Blupiho obličej.
+      X: +2.2  → jsme vpravo, vidíme 3/4 pohled.
+      Y: +3.0  → mírně shora.
+    -->
+    <camera name="Main" type="perspective"
+            position="1.8 2.6 -3.6" target="0.0 1.10 0.0" fov="54" near="0.05" far="150"/>
+    <camera name="Wide" type="perspective"
+            position="3.2 3.8 -5.5" target="0.0 1.00 0.0" fov="46"/>
+  </cameras>
+
+  <!-- ============================================================
+       MATERIÁLY
+  ============================================================ -->
+  <materials>
+
+    <material id="road" roughness="0.95" metallic="0.0">
+      <base_color>0.28 0.28 0.28 1.0</base_color>
+    </material>
+
+    <!-- Karoserie: sytá červená -->
+    <material id="car_red" roughness="0.42" metallic="0.10">
+      <base_color>0.92 0.08 0.08 1.0</base_color>
+    </material>
+    <!-- Šedé části: přední kapota, nárazníky -->
+    <material id="car_grey" roughness="0.58" metallic="0.32">
+      <base_color>0.56 0.58 0.60 1.0</base_color>
+    </material>
+
+    <!-- Pneumatika: téměř černá -->
+    <material id="tire" roughness="0.96" metallic="0.0">
+      <base_color>0.06 0.06 0.07 1.0</base_color>
+    </material>
+    <!-- Hub: červený, shodný s karoserií -->
+    <material id="hub" roughness="0.46" metallic="0.08">
+      <base_color>0.92 0.08 0.08 1.0</base_color>
+    </material>
+    <!-- Střed kola: malý šedý klobouček -->
+    <material id="hub_center" roughness="0.55" metallic="0.50">
+      <base_color>0.70 0.72 0.75 1.0</base_color>
+    </material>
+
+    <!-- Řídítka: zlatý sloupek -->
+    <material id="steer_gold" roughness="0.35" metallic="0.70">
+      <base_color>0.95 0.80 0.18 1.0</base_color>
+    </material>
+    <!-- Věnec volantu: tmavě hnědý -->
+    <material id="steer_ring" roughness="0.70" metallic="0.0">
+      <base_color>0.48 0.28 0.10 1.0</base_color>
+    </material>
+
+    <!-- Blupi: syté žluté -->
+    <material id="blupi" roughness="0.36" metallic="0.0">
+      <base_color>0.99 0.88 0.03 1.0</base_color>
+    </material>
+    <!-- Bílky očí -->
+    <material id="eye_white" roughness="0.22" metallic="0.0">
+      <base_color>0.96 0.96 0.94 1.0</base_color>
+    </material>
+    <!-- Zorničky / trny: téměř černá -->
+    <material id="black" roughness="0.28" metallic="0.0">
+      <base_color>0.04 0.04 0.05 1.0</base_color>
+    </material>
+    <!-- Červená tečka (nos/ústa) -->
+    <material id="red_dot" roughness="0.50" metallic="0.0">
+      <base_color>0.90 0.07 0.07 1.0</base_color>
+    </material>
+
+  </materials>
+
+  <!-- ============================================================
+       DEFINICE — kolo
+       Kolo má axis="x" (otáčí se kolem osy X).
+       Pneumatika (černá, radius 0.30, height 0.22) je tenčí než hub.
+       Hub (červený, radius 0.24, height 0.26) přesahuje pneumatiku
+       o 0.02 na každé straně → červená plocha kola je vidět.
+       Malý šedý středový knoflík.
+  ============================================================ -->
+  <definitions>
+
+    <definition id="wheel">
+      <group name="Wheel">
+        <!-- Černá pneumatika (užší) -->
+        <cylinder name="Tire"   radius="0.30" height="0.18" axis="x" material="tire"/>
+        <!-- Červený hub — přesahuje pneumatiku o 4 cm na každé straně → velký červený disk! -->
+        <cylinder name="Hub"    radius="0.25" height="0.26" axis="x" material="hub"/>
+        <!-- Malý šedý středový knoflík -->
+        <sphere   name="Cap"    radius="0.045" position="0 0 0" material="hub_center"/>
+      </group>
+    </definition>
+
+  </definitions>
+
+  <!-- ============================================================
+       OBJEKTY SCÉNY
+       Souřadnicový systém:
+         Auto míří do -Z (přední část u menšího Z).
+         Kamera je na -Z a +X straně → vidíme Blupiho obličej.
+         Střed Blupiho v X=0, Z≈+0.15 (sedí mírně vzadu v autě).
+         Osa Y: kolesa střed Y=0.30 (rádius 0.30, dotýká se Y=0).
+         Spodek karoserie Y≈0.26, vršek karoserie Y≈0.70.
+  ============================================================ -->
+  <objects>
+
+    <!-- Silnice -->
+    <plane name="Ground" size="22 22" axis="y" position="0 0 0" material="road"/>
+
+    <!-- ============================================================
+         AUTO
+    ============================================================ -->
+
+    <!-- Hlavní červená karoserie -->
+    <box name="CarBody"
+         size="1.62 0.44 1.76"
+         position="0 0.48 0.00"
+         material="car_red"/>
+
+    <!-- Přední šedá kapota (nižší, menší box vpředu) -->
+    <box name="Hood"
+         size="1.28 0.25 0.55"
+         position="0 0.375 -1.16"
+         material="car_grey"/>
+
+    <!-- Přední nárazník (nízký šedý panel) -->
+    <box name="FrontBumper"
+         size="1.48 0.11 0.09"
+         position="0 0.245 -1.44"
+         material="car_grey"/>
+
+    <!-- Opěradlo sedadla (vyšší červený panel vzadu) -->
+    <box name="SeatBack"
+         size="1.18 0.64 0.22"
+         position="0 0.74 0.80"
+         material="car_red"/>
+
+    <!-- Boční vedení — červené shodně s karoserií -->
+    <box name="SideL"
+         size="0.11 0.16 1.76"
+         position="-0.865 0.305 0.00"
+         material="car_red"/>
+    <box name="SideR"
+         size="0.11 0.16 1.76"
+         position=" 0.865 0.305 0.00"
+         material="car_red"/>
+
+    <!--
+      Řídící sloupek — jde od podlahy kokpitu (Y=0.70) do výšky Y=1.02.
+      Volant je na úrovni hrudníku Blupiho (ne u tváře).
+      Blupi střed vejce Y=1.30 → hrudník ≈ Y=1.02. ✓
+    -->
+    <cylinder name="SteerCol"
+              radius="0.030" height="0.32" axis="y"
+              position="0.10 0.86 -0.36"
+              material="steer_gold"/>
+
+    <!-- Kulička na vrcholu sloupku -->
+    <sphere name="SteerTopBall"
+            radius="0.042"
+            position="0.10 1.02 -0.36"
+            material="steer_gold"/>
+
+    <!-- Volant (svislý kruh, rotation="90 0 0" otočí XZ arc do roviny XY) -->
+    <extrude name="SteerWheel"
+             position="0.10 1.04 -0.36"
+             rotation="90 0 0"
+             segments="28" caps="false" smooth="true"
+             material="steer_ring">
+      <cross_section type="circle" radius="0.030" segments="10"/>
+      <path type="arc" radius="0.18" angle="360"/>
+    </extrude>
+
+    <!-- Středový hub volantu -->
+    <sphere name="SteerHub"
+            radius="0.040"
+            position="0.10 1.04 -0.36"
+            material="steer_gold"/>
+
+    <!-- Kola — 4 instance definice "wheel" -->
+    <!-- Karoserie half-width = 0.81; kolo center X = ±0.94 -->
+    <!-- Přední osa Z = -0.62; zadní osa Z = +0.64 -->
+    <instance name="WheelFL" definition="wheel" position="-0.94 0.30 -0.62"/>
+    <instance name="WheelFR" definition="wheel" position=" 0.94 0.30 -0.62"/>
+    <instance name="WheelRL" definition="wheel" position="-0.94 0.30  0.64"/>
+    <instance name="WheelRR" definition="wheel" position=" 0.94 0.30  0.64"/>
+
+    <!-- ============================================================
+         BLUPI
+         Vejcovitý tvar: sphere radius=0.60, deform scale="0.90 1.18 0.88"
+           půlrozměry: X=0.54, Y=0.708, Z=0.528
+         Střed vejce: position="0 1.30 0.14"
+           spodek vejce: Y=1.30-0.708=0.592 (sedí mírně pod vrškem karoserie 0.70)
+           vršek vejce:  Y=1.30+0.708=2.008
+           přední stěna: Z=0.14-0.528=-0.388 (tvář Blupiho)
+    ============================================================ -->
+
+    <!-- Vejce — hlavní tělo (větší, kulatější jako na referenci) -->
+    <sphere name="BlupiBody"
+            radius="0.63"
+            position="0 1.32 0.14"
+            material="blupi">
+      <deform scale="0.92 1.14 0.90"/>
+    </sphere>
+
+    <!-- Spodní zaoblení (bříško, vyplňuje kokpit) -->
+    <sphere name="BlupiBelly"
+            radius="0.45"
+            position="0 0.82 0.18"
+            material="blupi">
+      <deform scale="0.94 0.70 0.90"/>
+    </sphere>
+
+    <!-- ====== OČI ====== -->
+    <!--
+      Přední stěna vejce ≈ Z = -0.39.
+      Oční bílky: mírně před povrchem vejce, Z=-0.34 (center), deform Z~0.48.
+      Zorničky: Z=-0.43 (o kus dál před bílkem).
+      Odlesky: Z=-0.46.
+    -->
+
+    <!-- Pravé oko (Blupiho pravá = +X; od kamery (vpravo) = vlevo v obraze) -->
+    <sphere name="EyeWhiteR"
+            radius="0.190"
+            position="0.225 1.47 -0.36"
+            material="eye_white">
+      <deform scale="0.84 1.32 0.46"/>
+    </sphere>
+    <sphere name="PupilR"
+            radius="0.118"
+            position="0.214 1.45 -0.45"
+            material="black"/>
+    <sphere name="HighR"
+            radius="0.036"
+            position="0.236 1.47 -0.48"
+            material="eye_white"/>
+
+    <!-- Levé oko (Blupiho levá = -X strana) -->
+    <sphere name="EyeWhiteL"
+            radius="0.190"
+            position="-0.225 1.47 -0.36"
+            material="eye_white">
+      <deform scale="0.84 1.32 0.46"/>
+    </sphere>
+    <sphere name="PupilL"
+            radius="0.118"
+            position="-0.214 1.45 -0.45"
+            material="black"/>
+    <sphere name="HighL"
+            radius="0.036"
+            position="-0.236 1.47 -0.48"
+            material="eye_white"/>
+
+    <!-- ====== NOS — velká kulatá žlutá kulička ====== -->
+    <sphere name="Nose"
+            radius="0.125"
+            position="0.0 1.28 -0.50"
+            material="blupi"/>
+
+    <!-- ====== ČERVENÁ TEČKA (nosní dírka / ústa) ====== -->
+    <sphere name="RedDot"
+            radius="0.045"
+            position="0.0 1.15 -0.44"
+            material="red_dot"/>
+
+    <!-- ====== TRNY NA HLAVĚ (3 černé kužele) ====== -->
+    <!-- Vršek vejce ≈ Y=2.008, Z center = 0.14 -->
+    <!-- Středový trn (nejvyšší, mírně nakloněn dozadu) -->
+    <cone name="SpikeC"
+          radius="0.054" height="0.26"
+          position=" 0.00 1.97 0.08"
+          rotation="-16  0   0"
+          material="black"/>
+    <!-- Levý trn -->
+    <cone name="SpikeL"
+          radius="0.050" height="0.22"
+          position="-0.17 1.94 0.10"
+          rotation="-9   0 -30"
+          material="black"/>
+    <!-- Pravý trn -->
+    <cone name="SpikeR"
+          radius="0.050" height="0.22"
+          position=" 0.17 1.94 0.10"
+          rotation="-9   0  30"
+          material="black"/>
+
+    <!-- ====== PRAVÁ RUKA (míří na volant) ====== -->
+    <!--
+      Rameno Blupiho: (0.50, 1.30, 0.14)
+      Volant:         (0.10, 1.04, -0.36)
+      Vektor:  (-0.40, -0.26, -0.50), délka ≈ 0.695 m
+
+      axis="z" + rotation="180 42 31":
+        Po Rx(180°): +Z → (0, 0, -1)
+        Po Ry(42°):  → (-sin42°, 0, -cos42°) = (-0.669, 0, -0.743)
+        Po Rz(31°):  → (-0.669*cos31°, -0.669*sin31°, -0.743)
+                     = (-0.573, -0.345, -0.743)
+      ≈ normalizace (-0.40, -0.26, -0.50) ✓
+
+      Střed válce = midpoint((0.50,1.30,0.14),(0.10,1.04,-0.36)) = (0.30, 1.17, -0.11)
+    -->
+    <cylinder name="ArmR"
+              radius="0.068" height="0.70"
+              axis="z"
+              position="0.30 1.17 -0.11"
+              rotation="180 42 31"
+              material="blupi"/>
+
+    <!-- Dlaň drží volant -->
+    <sphere name="HandR"
+            radius="0.092"
+            position="0.10 1.04 -0.38"
+            material="blupi"/>
+
+    <!-- ====== LEVÁ RUKA (leží podél těla) ====== -->
+    <!--
+      Ruka visí dolů vlevo, mírně dopředu.
+      rotation="20 0 -25": válec (axis="y") mírně nakloněn dopředu a doleva.
+    -->
+    <cylinder name="ArmL"
+              radius="0.062" height="0.34"
+              position="-0.46 1.18 0.06"
+              rotation="20 0 -25"
+              material="blupi"/>
+    <sphere name="HandL"
+            radius="0.082"
+            position="-0.52 0.99 0.10"
+            material="blupi"/>
+
+  </objects>
+
+</mc3>

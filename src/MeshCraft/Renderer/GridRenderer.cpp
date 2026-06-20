@@ -1,9 +1,12 @@
 #include "MeshCraft/Renderer/GridRenderer.hpp"
 
 #include <Microsoft/Xna/Framework/Color.hpp>
+#include <Microsoft/Xna/Framework/Graphics/BlendState.hpp>
 #include <Microsoft/Xna/Framework/Graphics/PrimitiveType.hpp>
 #include <Microsoft/Xna/Framework/Graphics/VertexPositionColor.hpp>
 #include <Microsoft/Xna/Framework/Vector3.hpp>
+#include <algorithm>
+#include <cmath>
 #include <vector>
 
 using namespace Microsoft::Xna::Framework;
@@ -38,17 +41,26 @@ void GridRenderer::buildGrid(int halfExtent, float spacing) {
     float ext = halfExtent * spacing;
 
     for (int i = -halfExtent; i <= halfExtent; ++i) {
-        float t = i * spacing;
-        Color colX = (i == 0) ? kAxisZ : ((i % 5 == 0) ? kGridMajor : kGridMinor);
-        Color colZ = (i == 0) ? kAxisX : ((i % 5 == 0) ? kGridMajor : kGridMinor);
+        float pos = i * spacing;
+        // Alpha fades quadratically from center (full) to edge (transparent)
+        float distFactor = static_cast<float>(std::abs(i)) / static_cast<float>(std::max(halfExtent, 1));
+        int fadeAlpha = static_cast<int>(
+            std::clamp(1.0f - distFactor * distFactor, 0.0f, 1.0f) * 255.0f);
 
-        // Line along Z axis at x=t
-        verts.push_back({ Vector3{t, 0.0f, -ext}, colX });
-        verts.push_back({ Vector3{t, 0.0f,  ext}, colX });
+        Color colX = (i == 0) ? kAxisZ
+                   : ((i % 5 == 0) ? Color(120, 120, 120, fadeAlpha)
+                                   : Color(80,  80,  80,  fadeAlpha));
+        Color colZ = (i == 0) ? kAxisX
+                   : ((i % 5 == 0) ? Color(120, 120, 120, fadeAlpha)
+                                   : Color(80,  80,  80,  fadeAlpha));
 
-        // Line along X axis at z=t
-        verts.push_back({ Vector3{-ext, 0.0f, t}, colZ });
-        verts.push_back({ Vector3{ ext, 0.0f, t}, colZ });
+        // Line along Z axis at x=pos
+        verts.push_back({ Vector3{pos, 0.0f, -ext}, colX });
+        verts.push_back({ Vector3{pos, 0.0f,  ext}, colX });
+
+        // Line along X axis at z=pos
+        verts.push_back({ Vector3{-ext, 0.0f, pos}, colZ });
+        verts.push_back({ Vector3{ ext, 0.0f, pos}, colZ });
     }
 
     // Y axis
@@ -61,6 +73,9 @@ void GridRenderer::buildGrid(int halfExtent, float spacing) {
 }
 
 void GridRenderer::draw(const Matrix& view, const Matrix& projection) {
+    device_.SetBlendEnabled(true);
+    device_.setBlendStateProperty(Microsoft::Xna::Framework::Graphics::BlendState::AlphaBlend);
+
     effect_->World      = Matrix::getIdentityProperty();
     effect_->View       = view;
     effect_->Projection = projection;
@@ -72,6 +87,8 @@ void GridRenderer::draw(const Matrix& view, const Matrix& projection) {
     device_.SetVertexBuffer(vb_.get());
     device_.DrawPrimitives(Microsoft::Xna::Framework::Graphics::PrimitiveType::LineList, 0, lineCount_);
     device_.SetVertexBuffer(nullptr);
+
+    device_.SetBlendEnabled(false);
 }
 
 } // namespace MeshCraft::Renderer

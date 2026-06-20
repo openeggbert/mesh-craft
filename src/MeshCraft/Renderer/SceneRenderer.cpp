@@ -1,4 +1,5 @@
 #include "MeshCraft/Renderer/SceneRenderer.hpp"
+#include <iostream>
 
 #include <Microsoft/Xna/Framework/Graphics/BufferUsage.hpp>
 #include <Microsoft/Xna/Framework/Graphics/IndexElementSize.hpp>
@@ -724,8 +725,10 @@ void SceneRenderer::drawObject(const Mc3Object& obj, const Mc3Document& doc,
     }
 
     if (sel) {
-        // Draw orange wireframe over selected object
-        drawObjectWireframe(obj, view, proj, Color(255,165,0,255));
+        // Draw bright wireframe always-on-top (depth test off) for Blender-like visibility
+        device_.SetDepthTestEnabled(false);
+        drawObjectWireframe(obj, view, proj, Color(255, 210, 0, 255));
+        device_.SetDepthTestEnabled(true);
     }
 }
 
@@ -740,6 +743,17 @@ void SceneRenderer::draw(const Mc3Document& doc,
     device_.SetDepthTestEnabled(true);
     device_.SetDepthWriteEnabled(true);
 
+    // Fog visualization (I3): apply fog from environment to BasicEffect
+    if (doc.environment && doc.environment->fog) {
+        const auto& f = *doc.environment->fog;
+        effect_->setFogEnabledProperty(true);
+        effect_->setFogColorProperty(Vector3{f.color[0], f.color[1], f.color[2]});
+        effect_->setFogStartProperty(f.start);
+        effect_->setFogEndProperty(f.end);
+    } else {
+        effect_->setFogEnabledProperty(false);
+    }
+
     // Extract camera world position from view matrix for LOD (G8)
     camPosX_ = -(view.M41*view.M11 + view.M42*view.M21 + view.M43*view.M31);
     camPosY_ = -(view.M41*view.M12 + view.M42*view.M22 + view.M43*view.M32);
@@ -749,6 +763,139 @@ void SceneRenderer::draw(const Mc3Document& doc,
 
     for (const auto& obj : doc.objects)
         drawObject(*obj, doc, identity, view, proj, selected);
+
+    effect_->setFogEnabledProperty(false);
+}
+
+// ---------------------------------------------------------------------------
+// Bloom emissive pass (I6)
+// ---------------------------------------------------------------------------
+
+void SceneRenderer::drawEmissiveObject(
+    const Mc3Object& obj, const Mc3Document& doc,
+    const Matrix& parentWorld, const Matrix& view, const Matrix& proj, int depth)
+{
+    if (depth > 16 || !obj.visible) return;
+
+    const Mc3Transform& tf = obj.transform;
+    Matrix world  = objectWorldMatrix(tf) * parentWorld;
+    Matrix deform = obj.deform
+        ? Matrix::CreateScale({obj.deform->scale[0], obj.deform->scale[1], obj.deform->scale[2]})
+        : Matrix::getIdentityProperty();
+
+    // Only render if the material has a non-zero emissive color
+    Color eCol(0, 0, 0, 255);
+    bool  hasEmissive = false;
+    if (!obj.material.empty()) {
+        auto matIt = doc.materials.find(obj.material);
+        if (matIt != doc.materials.end()) {
+            const auto& ec = matIt->second.emissiveColor;
+            if (ec[0] > 0.005f || ec[1] > 0.005f || ec[2] > 0.005f) {
+                eCol = Color(
+                    static_cast<int>(std::min(ec[0], 1.0f) * 255),
+                    static_cast<int>(std::min(ec[1], 1.0f) * 255),
+                    static_cast<int>(std::min(ec[2], 1.0f) * 255),
+                    255);
+                hasEmissive = true;
+            }
+        }
+    }
+
+    auto drawE = [&](const RenderMesh& mesh, const Matrix& m) {
+        if (hasEmissive) { drawMesh(mesh, m, view, proj, eCol); ++emissiveDrawCount_; }
+    };
+
+    bool recurseChildren = true;
+    switch (obj.type) {
+    case ObjectType::Box:
+    case ObjectType::Cube: {
+        float sx = obj.primitive ? obj.primitive->size[0] : 1.0f;
+        float sy = obj.primitive ? obj.primitive->size[1] : 1.0f;
+        float sz = obj.primitive ? obj.primitive->size[2] : 1.0f;
+        drawE(unitBox_, deform * Matrix::CreateScale({sx, sy, sz}) * world);
+        break;
+    }
+    case ObjectType::Sphere: {
+        float r = obj.primitive ? obj.primitive->radius * 2.0f : 1.0f;
+        drawE(unitSphere_, deform * Matrix::CreateScale({r, r, r}) * world);
+        break;
+    }
+    case ObjectType::Cylinder: {
+        float r  = obj.primitive ? obj.primitive->radius * 2.0f : 1.0f;
+        float h  = obj.primitive ? obj.primitive->height         : 1.0f;
+        const std::string& ax = obj.primitive ? obj.primitive->axis : "y";
+        Matrix axisRot = Matrix::getIdentityProperty();
+        if      (ax == "x") axisRot = Matrix::CreateRotationZ(-std::numbers::pi_v<float> / 2.0f);
+        else if (ax == "z") axisRot = Matrix::CreateRotationX( std::numbers::pi_v<float> / 2.0f);
+        drawE(unitCylinder_, deform * Matrix::CreateScale({r, h, r}) * axisRot * world);
+        break;
+    }
+    case ObjectType::Cone: {
+        float r = obj.primitive ? obj.primitive->radius * 2.0f : 1.0f;
+        float h = obj.primitive ? obj.primitive->height         : 1.0f;
+        drawE(unitCone_, deform * Matrix::CreateScale({r, h, r}) * world);
+        break;
+    }
+    case ObjectType::Plane: {
+        float w = obj.primitive ? obj.primitive->size[0] : 1.0f;
+        float d = obj.primitive ? obj.primitive->size[2] : 1.0f;
+        drawE(unitPlane_, deform * Matrix::CreateScale({w, 1.0f, d}) * world);
+        break;
+    }
+    case ObjectType::Torus: {
+        float R = obj.primitive ? obj.primitive->majorRadius : 0.35f;
+        float r = obj.primitive ? obj.primitive->minorRadius : 0.15f;
+        drawE(unitTorus_, deform * Matrix::CreateScale({R / 0.35f, r / 0.15f, R / 0.35f}) * world);
+        break;
+    }
+    case ObjectType::Capsule: {
+        float r = obj.primitive ? obj.primitive->radius : 0.5f;
+        float h = obj.primitive ? obj.primitive->height : 1.0f;
+        drawE(unitCapsule_, deform * Matrix::CreateScale({r*2.0f, (h+r*2.0f)/2.0f, r*2.0f}) * world);
+        break;
+    }
+    case ObjectType::IcoSphere: {
+        float r = obj.primitive ? obj.primitive->radius * 2.0f : 1.0f;
+        drawE(unitIcoSphere_, deform * Matrix::CreateScale({r, r, r}) * world);
+        break;
+    }
+    case ObjectType::Group:
+    case ObjectType::Area:
+        for (const auto& child : obj.children)
+            drawEmissiveObject(*child, doc, world, view, proj, depth + 1);
+        recurseChildren = false;
+        break;
+    case ObjectType::Instance: {
+        auto it = doc.definitions.find(pickInstanceDef(obj));
+        if (it != doc.definitions.end() && it->second)
+            drawEmissiveObject(*it->second, doc, world, view, proj, depth + 1);
+        recurseChildren = false;
+        break;
+    }
+    default:
+        break;
+    }
+
+    if (recurseChildren) {
+        for (const auto& child : obj.children)
+            drawEmissiveObject(*child, doc, world, view, proj, depth + 1);
+    }
+}
+
+void SceneRenderer::drawEmissivePass(
+    const Mc3Document& doc, const Matrix& view, const Matrix& proj)
+{
+    device_.SetDepthTestEnabled(false);
+    device_.SetDepthWriteEnabled(false);
+    // Flat unlit rendering — emissive color must not be modulated by directional light
+    const bool prevLighting = effect_->getLightingEnabledProperty();
+    effect_->setLightingEnabledProperty(false);
+    Matrix identity = Matrix::getIdentityProperty();
+    for (const auto& obj : doc.objects)
+        drawEmissiveObject(*obj, doc, identity, view, proj, 0);
+    effect_->setLightingEnabledProperty(prevLighting);
+    device_.SetDepthTestEnabled(true);
+    device_.SetDepthWriteEnabled(true);
 }
 
 // ---------------------------------------------------------------------------
@@ -824,11 +971,15 @@ void SceneRenderer::drawLightGizmos(
 
         case Mc3::LightType::Point: {
             const auto& p = li.position;
-            const float r = 0.25f;
+            // Solid sphere gizmo in light color
+            Matrix sph = Matrix::CreateScale({0.13f, 0.13f, 0.13f}) *
+                         Matrix::CreateTranslation({p[0], p[1], p[2]});
+            drawMesh(unitSphere_, sph, view, proj, col);
+            // Diamond ray lines radiating outward
+            const float r = 0.28f;
             addLine({p[0]-r,p[1],p[2]}, {p[0]+r,p[1],p[2]}, col);
             addLine({p[0],p[1]-r,p[2]}, {p[0],p[1]+r,p[2]}, col);
             addLine({p[0],p[1],p[2]-r}, {p[0],p[1],p[2]+r}, col);
-            // diamond outline
             addLine({p[0]+r,p[1],p[2]}, {p[0],p[1]+r,p[2]}, col);
             addLine({p[0],p[1]+r,p[2]}, {p[0]-r,p[1],p[2]}, col);
             addLine({p[0]-r,p[1],p[2]}, {p[0],p[1]-r,p[2]}, col);
@@ -838,6 +989,11 @@ void SceneRenderer::drawLightGizmos(
 
         case Mc3::LightType::Spot: {
             const auto& p = li.position;
+            // Small sphere at spotlight apex
+            Matrix spotSph = Matrix::CreateScale({0.10f, 0.10f, 0.10f}) *
+                             Matrix::CreateTranslation({p[0], p[1], p[2]});
+            drawMesh(unitSphere_, spotSph, view, proj, col);
+
             float dx = li.direction[0], dy = li.direction[1], dz = li.direction[2];
             float len = std::sqrt(dx*dx + dy*dy + dz*dz);
             if (len < 1e-5f) break;
