@@ -5,6 +5,7 @@
 #include <iostream>
 #include <stdexcept>
 #include <string>
+#include <vector>
 
 namespace fs = std::filesystem;
 using namespace mc3togltf;
@@ -29,22 +30,31 @@ static OutputFormat formatFromPath(const fs::path& p) {
 }
 
 int main(int argc, char* argv[]) {
-    if (argc < 2) {
+    bool allowApproxCSG = false;
+
+    // Collect non-flag arguments
+    std::vector<std::string> args;
+    for (int i = 1; i < argc; ++i) {
+        std::string a = argv[i];
+        if (a == "--allow-approximate-csg") allowApproxCSG = true;
+        else args.push_back(a);
+    }
+
+    if (args.empty()) {
         printUsage(argv[0]);
         return 1;
     }
 
-    fs::path inputPath  = argv[1];
+    fs::path inputPath  = args[0];
     fs::path outputPath;
 
-    if (argc >= 3) {
-        outputPath = argv[2];
+    if (args.size() >= 2) {
+        outputPath = args[1];
     } else {
-        outputPath = inputPath;
-        // strip .xml, then replace/append .gltf
-        if (outputPath.extension() == ".xml") {
-            outputPath = outputPath.stem(); // removes .xml  (e.g. foo.mc3)
-        }
+        fs::path stem = inputPath.filename();
+        if (stem.extension() == ".xml") stem = stem.stem();   // foo.mc3.xml → foo.mc3
+        if (stem.extension() == ".mc3") stem = stem.stem();   // foo.mc3 → foo
+        outputPath = inputPath.parent_path() / stem;
         outputPath.replace_extension(".gltf");
     }
 
@@ -59,6 +69,7 @@ int main(int argc, char* argv[]) {
         OutputFormat fmt = formatFromPath(outputPath);
 
         GltfExporter exporter;
+        exporter.allowApproximateCSG = allowApproxCSG;
         exporter.exportDocument(doc, outputPath, fmt);
 
         std::cout << "Written: " << outputPath << '\n';

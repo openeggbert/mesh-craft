@@ -37,6 +37,7 @@ struct ExportCtx {
     const std::map<std::string, std::shared_ptr<Mc3Object>>& definitions;
     float unitScale{1.0f};           // conversion factor to metres
     std::filesystem::path basePath;  // directory of source .mc3.xml (for OBJ paths)
+    bool allowApproximateCSG{false};
 
     // Cache (definition_id, material_idx) → glTF mesh index — avoids duplicate geometry
     std::map<std::pair<std::string,int>, int> defMeshCache;
@@ -403,13 +404,23 @@ static int buildNode(ExportCtx& ctx, const Mc3Object& obj)
         directMesh = buildMesh(ctx, obj, matIdx);
     }
 
-    // CSG nodes: boolean not evaluated — warn and export children as separate meshes
+    // CSG nodes: boolean evaluation not supported in mc3togltf.
+    // union: export children separately with a warning (visually approximate).
+    // difference/intersection: produce semantically wrong geometry — fail unless
+    // --allow-approximate-csg is passed.
     if (obj.type == ObjectType::Union ||
         obj.type == ObjectType::Difference ||
         obj.type == ObjectType::Intersection) {
         const char* op = (obj.type == ObjectType::Union)      ? "union"
                        : (obj.type == ObjectType::Difference) ? "difference"
                        :                                        "intersection";
+        if (obj.type != ObjectType::Union && !ctx.allowApproximateCSG) {
+            throw std::runtime_error(
+                std::string("CSG <") + op + "> node '" +
+                (obj.name.empty() ? "(unnamed)" : obj.name) +
+                "' cannot be exported correctly (boolean not evaluated). "
+                "Pass --allow-approximate-csg to export children as separate meshes instead.");
+        }
         std::cerr << "Warning: mc3togltf: <" << op << "> node '"
                   << (obj.name.empty() ? "(unnamed)" : obj.name)
                   << "' — CSG boolean not evaluated; children exported as separate meshes.\n";
@@ -883,7 +894,8 @@ void GltfExporter::exportDocument(const Mc3Document& doc,
 
     // Object nodes (recursive)
     ExportCtx ctx{model, matNameToIdx, doc.definitions,
-                  unitScaleFactor(doc.unit), doc.sourcePath};
+                  unitScaleFactor(doc.unit), doc.sourcePath,
+                  allowApproximateCSG};
     for (const auto& objPtr : doc.objects) {
         if (!objPtr) continue;
         int nodeIdx = buildNode(ctx, *objPtr);

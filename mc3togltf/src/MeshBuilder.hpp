@@ -30,10 +30,15 @@ MeshData loadObjMesh(const std::filesystem::path& basePath,
                      const std::string& source);
 
 // Individual primitives (used by buildPrimitive)
-MeshData buildBox     (float w, float h, float d);
-MeshData buildSphere  (float radius, int segments);
-MeshData buildCylinder(float radius, float height, int segments, const std::string& axis);
-MeshData buildCone    (float radius, float height, int segments);
-MeshData buildPlane   (float w, float d, const std::string& axis);
+MeshData buildBox      (float w, float h, float d);
+MeshData buildSphere   (float radius, int segments);
+MeshData buildCylinder (float radius, float height, int segments, const std::string& axis);
+MeshData buildCone     (float radius, float height, int segments);
+MeshData buildPlane    (float w, float d, const std::string& axis);
+MeshData buildTorus    (float majorRadius, float minorRadius, int segments);
+MeshData buildCapsule  (float radius, float height, int segments, const std::string& axis);
+MeshData buildDisk     (float radius, int segments, const std::string& axis);
+MeshData buildGrid     (float w, float d, int subdX, int subdZ);
+MeshData buildIcoSphere(float radius, int subdivisions);
 
 } // namespace mc3togltf

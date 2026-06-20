@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<mc3 version="0.3" model="AllPrimitives">
+
+  <objects>
+
+    <box      name="Box"       size="1 1 1"                position="-6 0  0"/>
+    <cube     name="Cube"                                  position="-4 0  0"/>
+    <sphere   name="Sphere"    radius="0.5" segments="32"  position="-2 0  0"/>
+    <cylinder name="Cylinder"  radius="0.4" height="1.0"   position=" 0 0  0"/>
+    <cone     name="Cone"      radius="0.5" height="1.0"   position=" 2 0  0"/>
+    <plane    name="Plane"     size="2 2"                  position=" 4 0  0"/>
+
+    <torus    name="Torus"     major_radius="0.4" minor_radius="0.15" segments="32"  position="-6 0  3"/>
+    <capsule  name="Capsule"   radius="0.3" height="0.8"              position="-4 0  3"/>
+    <disk     name="Disk"      radius="0.5" segments="32"             position="-2 0  3"/>
+    <grid     name="Grid"      size="1 1 1" subdivisions_x="4" subdivisions_z="4"  position=" 0 0  3"/>
+    <icosphere name="IcoSphere" radius="0.5" segments="32"            position=" 2 0  3"/>
+
+  </objects>
+
+</mc3>

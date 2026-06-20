@@ -67,7 +67,7 @@ A plane is usually generated as a flat mesh.
 MC3 may reference external mesh assets for complex objects.
 
 ```xml
-<mesh name="ChairDetailed" source="assets/chair.glb" position="2 0 3" material_override="varnished_wood"/>
+<mesh name="ChairDetailed" src="assets/chair.glb" position="2 0 3" material="varnished_wood"/>
 ```
 
 This allows simple MC3 objects and imported artist-made assets to coexist.

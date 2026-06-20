@@ -203,6 +203,7 @@
           <xs:enumeration value="circle"/>
           <xs:enumeration value="polygon"/>
           <xs:enumeration value="custom"/>
+          <xs:enumeration value="star"/>
         </xs:restriction>
       </xs:simpleType>
     </xs:attribute>
@@ -309,6 +310,83 @@
     <xs:attribute name="segments" type="xs:positiveInteger"/>
   </xs:complexType>
 
+  <!-- cube (unit box, same attributes as box) -->
+  <xs:complexType name="cubeType">
+    <xs:sequence>
+      <xs:element name="deform"     type="deformType"    minOccurs="0"/>
+      <xs:element name="uv_mapping" type="uvMappingType" minOccurs="0"/>
+      <xs:element name="metadata"   type="metadataType"  minOccurs="0"/>
+    </xs:sequence>
+    <xs:attributeGroup ref="objectAttrs"/>
+    <xs:attribute name="size"     type="vec3Type"/>
+    <xs:attribute name="segments" type="xs:positiveInteger"/>
+  </xs:complexType>
+
+  <!-- torus -->
+  <xs:complexType name="torusType">
+    <xs:sequence>
+      <xs:element name="deform"     type="deformType"    minOccurs="0"/>
+      <xs:element name="uv_mapping" type="uvMappingType" minOccurs="0"/>
+      <xs:element name="metadata"   type="metadataType"  minOccurs="0"/>
+    </xs:sequence>
+    <xs:attributeGroup ref="objectAttrs"/>
+    <xs:attribute name="major_radius" type="xs:float"/>
+    <xs:attribute name="minor_radius" type="xs:float"/>
+    <xs:attribute name="segments"     type="xs:positiveInteger"/>
+  </xs:complexType>
+
+  <!-- capsule -->
+  <xs:complexType name="capsuleType">
+    <xs:sequence>
+      <xs:element name="deform"     type="deformType"    minOccurs="0"/>
+      <xs:element name="uv_mapping" type="uvMappingType" minOccurs="0"/>
+      <xs:element name="metadata"   type="metadataType"  minOccurs="0"/>
+    </xs:sequence>
+    <xs:attributeGroup ref="objectAttrs"/>
+    <xs:attribute name="radius"   type="xs:float"/>
+    <xs:attribute name="height"   type="xs:float"/>
+    <xs:attribute name="segments" type="xs:positiveInteger"/>
+    <xs:attribute name="axis"     type="axisType"/>
+  </xs:complexType>
+
+  <!-- disk -->
+  <xs:complexType name="diskType">
+    <xs:sequence>
+      <xs:element name="deform"     type="deformType"    minOccurs="0"/>
+      <xs:element name="uv_mapping" type="uvMappingType" minOccurs="0"/>
+      <xs:element name="metadata"   type="metadataType"  minOccurs="0"/>
+    </xs:sequence>
+    <xs:attributeGroup ref="objectAttrs"/>
+    <xs:attribute name="radius"   type="xs:float"/>
+    <xs:attribute name="segments" type="xs:positiveInteger"/>
+    <xs:attribute name="axis"     type="axisType"/>
+  </xs:complexType>
+
+  <!-- grid -->
+  <xs:complexType name="gridType">
+    <xs:sequence>
+      <xs:element name="deform"     type="deformType"    minOccurs="0"/>
+      <xs:element name="uv_mapping" type="uvMappingType" minOccurs="0"/>
+      <xs:element name="metadata"   type="metadataType"  minOccurs="0"/>
+    </xs:sequence>
+    <xs:attributeGroup ref="objectAttrs"/>
+    <xs:attribute name="size"           type="vec3Type"/>
+    <xs:attribute name="subdivisions_x" type="xs:positiveInteger"/>
+    <xs:attribute name="subdivisions_z" type="xs:positiveInteger"/>
+  </xs:complexType>
+
+  <!-- icosphere -->
+  <xs:complexType name="icosphereType">
+    <xs:sequence>
+      <xs:element name="deform"     type="deformType"    minOccurs="0"/>
+      <xs:element name="uv_mapping" type="uvMappingType" minOccurs="0"/>
+      <xs:element name="metadata"   type="metadataType"  minOccurs="0"/>
+    </xs:sequence>
+    <xs:attributeGroup ref="objectAttrs"/>
+    <xs:attribute name="radius"   type="xs:float"/>
+    <xs:attribute name="segments" type="xs:positiveInteger"/>
+  </xs:complexType>
+
   <!-- mesh -->
   <xs:complexType name="meshType">
     <xs:sequence>
@@ -364,10 +442,16 @@
       <xs:element name="metadata" type="metadataType" minOccurs="0"/>
       <xs:choice  minOccurs="0" maxOccurs="unbounded">
         <xs:element name="box"          type="boxType"/>
+        <xs:element name="cube"         type="cubeType"/>
         <xs:element name="sphere"       type="sphereType"/>
         <xs:element name="cylinder"     type="cylinderType"/>
         <xs:element name="cone"         type="coneType"/>
         <xs:element name="plane"        type="planeType"/>
+        <xs:element name="torus"        type="torusType"/>
+        <xs:element name="capsule"      type="capsuleType"/>
+        <xs:element name="disk"         type="diskType"/>
+        <xs:element name="grid"         type="gridType"/>
+        <xs:element name="icosphere"    type="icosphereType"/>
         <xs:element name="mesh"         type="meshType"/>
         <xs:element name="extrude"      type="extrudeType"/>
         <xs:element name="instance"     type="instanceType"/>
@@ -529,10 +613,16 @@
     <xs:sequence>
       <xs:choice minOccurs="1" maxOccurs="1">
         <xs:element name="box"          type="boxType"/>
+        <xs:element name="cube"         type="cubeType"/>
         <xs:element name="sphere"       type="sphereType"/>
         <xs:element name="cylinder"     type="cylinderType"/>
         <xs:element name="cone"         type="coneType"/>
         <xs:element name="plane"        type="planeType"/>
+        <xs:element name="torus"        type="torusType"/>
+        <xs:element name="capsule"      type="capsuleType"/>
+        <xs:element name="disk"         type="diskType"/>
+        <xs:element name="grid"         type="gridType"/>
+        <xs:element name="icosphere"    type="icosphereType"/>
         <xs:element name="mesh"         type="meshType"/>
         <xs:element name="extrude"      type="extrudeType"/>
         <xs:element name="group"        type="objectsContainerType"/>

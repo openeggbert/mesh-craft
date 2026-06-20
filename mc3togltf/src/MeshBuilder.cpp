@@ -3,6 +3,7 @@
 #define TINYOBJLOADER_IMPLEMENTATION
 #include <tiny_obj_loader.h>
 
+#include <algorithm>
 #include <cmath>
 #include <filesystem>
 #include <iostream>
@@ -293,6 +294,224 @@ MeshData buildPlane(float w, float d, const std::string& axis) {
         {0, 1, 0},
         {0,0}, {0,1}, {1,1}, {1,0});
     remapAxis(m, axis);
+    return m;
+}
+
+// ---------------------------------------------------------------------------
+// Torus
+// ---------------------------------------------------------------------------
+
+MeshData buildTorus(float majorRadius, float minorRadius, int segments) {
+    MeshData m;
+    const float pi = std::numbers::pi_v<float>;
+    int rings = segments;
+    int sides = std::max(4, segments / 2);
+    int rowSize = sides + 1;
+
+    for (int r = 0; r <= rings; ++r) {
+        float theta = 2.0f * pi * r / rings;
+        float cosT = std::cos(theta), sinT = std::sin(theta);
+
+        for (int s = 0; s <= sides; ++s) {
+            float phi = 2.0f * pi * s / sides;
+            float cosP = std::cos(phi), sinP = std::sin(phi);
+
+            float x = (majorRadius + minorRadius * cosP) * cosT;
+            float y = minorRadius * sinP;
+            float z = (majorRadius + minorRadius * cosP) * sinT;
+
+            m.positions.insert(m.positions.end(), {x, y, z});
+            m.normals.insert(m.normals.end(), {cosP * cosT, sinP, cosP * sinT});
+            m.texcoords.insert(m.texcoords.end(), {float(r)/rings, float(s)/sides});
+        }
+    }
+
+    for (int r = 0; r < rings; ++r) {
+        for (int s = 0; s < sides; ++s) {
+            uint32_t i0 = uint32_t(r * rowSize + s);
+            uint32_t i1 = i0 + 1;
+            uint32_t i2 = uint32_t((r+1) * rowSize + s);
+            uint32_t i3 = i2 + 1;
+            m.indices.insert(m.indices.end(), {i0, i2, i1,  i1, i2, i3});
+        }
+    }
+    return m;
+}
+
+// ---------------------------------------------------------------------------
+// Capsule
+// ---------------------------------------------------------------------------
+
+MeshData buildCapsule(float radius, float height, int segments, const std::string& axis) {
+    MeshData m;
+    const float pi = std::numbers::pi_v<float>;
+    int rings   = std::max(2, segments / 4);  // per hemisphere
+    int sectors = segments;
+    float hh    = height * 0.5f;
+
+    // rows 0..rings = top hemisphere (phi 0..π/2, shifted +hh)
+    // rows rings+1..2*rings+1 = bottom hemisphere (phi π/2..π, shifted -hh)
+    int totalRows = 2 * rings + 2;
+    int rowSize   = sectors + 1;
+
+    for (int r = 0; r < totalRows; ++r) {
+        float phi, yOff;
+        if (r <= rings) {
+            phi  = (pi * 0.5f) * float(r) / rings;
+            yOff = +hh;
+        } else {
+            phi  = (pi * 0.5f) + (pi * 0.5f) * float(r - rings) / rings;
+            yOff = -hh;
+        }
+        float sinP = std::sin(phi), cosP = std::cos(phi);
+
+        for (int s = 0; s <= sectors; ++s) {
+            float theta = 2.0f * pi * s / sectors;
+            float cosT = std::cos(theta), sinT = std::sin(theta);
+
+            float nx = cosT * sinP, ny = cosP, nz = sinT * sinP;
+            m.positions.insert(m.positions.end(), {nx*radius, ny*radius + yOff, nz*radius});
+            m.normals.insert(m.normals.end(), {nx, ny, nz});
+            m.texcoords.insert(m.texcoords.end(), {float(s)/sectors, float(r)/(totalRows-1)});
+        }
+    }
+
+    for (int r = 0; r < totalRows - 1; ++r) {
+        for (int s = 0; s < sectors; ++s) {
+            uint32_t i0 = uint32_t(r * rowSize + s);
+            uint32_t i1 = i0 + 1;
+            uint32_t i2 = uint32_t((r+1) * rowSize + s);
+            uint32_t i3 = i2 + 1;
+            m.indices.insert(m.indices.end(), {i0, i2, i1,  i1, i2, i3});
+        }
+    }
+
+    remapAxis(m, axis);
+    return m;
+}
+
+// ---------------------------------------------------------------------------
+// Disk
+// ---------------------------------------------------------------------------
+
+MeshData buildDisk(float radius, int segments, const std::string& axis) {
+    MeshData m;
+    const float pi = std::numbers::pi_v<float>;
+
+    m.positions.insert(m.positions.end(), {0.0f, 0.0f, 0.0f});
+    m.normals.insert(m.normals.end(), {0.0f, 1.0f, 0.0f});
+    m.texcoords.insert(m.texcoords.end(), {0.5f, 0.5f});
+
+    for (int i = 0; i <= segments; ++i) {
+        float a = 2.0f * pi * i / segments;
+        float c = std::cos(a), s = std::sin(a);
+        m.positions.insert(m.positions.end(), {c*radius, 0.0f, s*radius});
+        m.normals.insert(m.normals.end(), {0.0f, 1.0f, 0.0f});
+        m.texcoords.insert(m.texcoords.end(), {0.5f+c*0.5f, 0.5f+s*0.5f});
+    }
+
+    for (int i = 0; i < segments; ++i)
+        m.indices.insert(m.indices.end(), {0u, uint32_t(i+2), uint32_t(i+1)});
+
+    remapAxis(m, axis);
+    return m;
+}
+
+// ---------------------------------------------------------------------------
+// Grid
+// ---------------------------------------------------------------------------
+
+MeshData buildGrid(float w, float d, int subdX, int subdZ) {
+    MeshData m;
+    float hw = w * 0.5f, hd = d * 0.5f;
+    int rowSize = subdX + 1;
+
+    for (int iz = 0; iz <= subdZ; ++iz) {
+        float tz = float(iz) / subdZ;
+        float z  = -hd + tz * d;
+        for (int ix = 0; ix <= subdX; ++ix) {
+            float tx = float(ix) / subdX;
+            float x  = -hw + tx * w;
+            m.positions.insert(m.positions.end(), {x, 0.0f, z});
+            m.normals.insert(m.normals.end(), {0.0f, 1.0f, 0.0f});
+            m.texcoords.insert(m.texcoords.end(), {tx, tz});
+        }
+    }
+
+    for (int iz = 0; iz < subdZ; ++iz) {
+        for (int ix = 0; ix < subdX; ++ix) {
+            uint32_t i0 = uint32_t(iz * rowSize + ix);
+            uint32_t i1 = i0 + 1;
+            uint32_t i2 = uint32_t((iz+1) * rowSize + ix);
+            uint32_t i3 = i2 + 1;
+            m.indices.insert(m.indices.end(), {i0, i2, i3,  i0, i3, i1});
+        }
+    }
+    return m;
+}
+
+// ---------------------------------------------------------------------------
+// IcoSphere
+// ---------------------------------------------------------------------------
+
+MeshData buildIcoSphere(float radius, int subdivisions) {
+    const float pi  = std::numbers::pi_v<float>;
+    const float phi = (1.0f + std::sqrt(5.0f)) * 0.5f;
+
+    // Icosahedron vertices (normalized)
+    auto norm3v = [](std::array<float,3> v) {
+        float l = std::sqrt(v[0]*v[0]+v[1]*v[1]+v[2]*v[2]);
+        return std::array<float,3>{v[0]/l, v[1]/l, v[2]/l};
+    };
+    std::vector<std::array<float,3>> verts;
+    for (auto& v : std::initializer_list<std::array<float,3>>{
+            {-1,phi,0},{1,phi,0},{-1,-phi,0},{1,-phi,0},
+            {0,-1,phi},{0,1,phi},{0,-1,-phi},{0,1,-phi},
+            {phi,0,-1},{phi,0,1},{-phi,0,-1},{-phi,0,1}})
+        verts.push_back(norm3v(v));
+
+    std::vector<std::array<int,3>> faces = {
+        {0,11,5},{0,5,1},{0,1,7},{0,7,10},{0,10,11},
+        {1,5,9},{5,11,4},{11,10,2},{10,7,6},{7,1,8},
+        {3,9,4},{3,4,2},{3,2,6},{3,6,8},{3,8,9},
+        {4,9,5},{2,4,11},{6,2,10},{8,6,7},{9,8,1}
+    };
+
+    for (int sub = 0; sub < subdivisions; ++sub) {
+        std::vector<std::array<int,3>> newFaces;
+        std::map<std::pair<int,int>, int> cache;
+
+        auto mid = [&](int a, int b) -> int {
+            auto key = std::make_pair(std::min(a,b), std::max(a,b));
+            auto it = cache.find(key);
+            if (it != cache.end()) return it->second;
+            int idx = int(verts.size());
+            verts.push_back(norm3v({(verts[a][0]+verts[b][0])*0.5f,
+                                    (verts[a][1]+verts[b][1])*0.5f,
+                                    (verts[a][2]+verts[b][2])*0.5f}));
+            cache[key] = idx;
+            return idx;
+        };
+
+        for (auto& f : faces) {
+            int a = mid(f[0], f[1]), b = mid(f[1], f[2]), c = mid(f[2], f[0]);
+            newFaces.insert(newFaces.end(), {{f[0],a,c},{f[1],b,a},{f[2],c,b},{a,b,c}});
+        }
+        faces = newFaces;
+    }
+
+    MeshData m;
+    for (auto& f : faces) {
+        for (int vi : f) {
+            auto& v = verts[vi];
+            m.positions.insert(m.positions.end(), {v[0]*radius, v[1]*radius, v[2]*radius});
+            m.normals.insert(m.normals.end(), {v[0], v[1], v[2]});
+            float u  = 0.5f + std::atan2(v[2], v[0]) / (2.0f * pi);
+            float vt = 0.5f - std::asin(std::clamp(v[1], -1.0f, 1.0f)) / pi;
+            m.texcoords.insert(m.texcoords.end(), {u, vt});
+            m.indices.push_back(uint32_t(m.indices.size()));
+        }
+    }
     return m;
 }
 
@@ -762,22 +981,11 @@ MeshData buildPrimitive(const MeshCraft::Mc3::Mc3Primitive& p) {
     case PT::Cylinder:  return buildCylinder(p.radius, p.height, p.segments, p.axis);
     case PT::Cone:      return buildCone(p.radius, p.height, p.segments);
     case PT::Plane:     return buildPlane(p.size[0], p.size[2], p.axis);
-    // Not yet implemented — emit a clear warning instead of silently producing an empty mesh
-    case PT::Torus:
-        std::cerr << "Warning: mc3togltf: 'torus' export not yet implemented — object skipped.\n";
-        return {};
-    case PT::Capsule:
-        std::cerr << "Warning: mc3togltf: 'capsule' export not yet implemented — object skipped.\n";
-        return {};
-    case PT::Disk:
-        std::cerr << "Warning: mc3togltf: 'disk' export not yet implemented — object skipped.\n";
-        return {};
-    case PT::Grid:
-        std::cerr << "Warning: mc3togltf: 'grid' export not yet implemented — object skipped.\n";
-        return {};
-    case PT::IcoSphere:
-        std::cerr << "Warning: mc3togltf: 'icosphere' export not yet implemented — object skipped.\n";
-        return {};
+    case PT::Torus:    return buildTorus(p.majorRadius, p.minorRadius, p.segments);
+    case PT::Capsule:  return buildCapsule(p.radius, p.height, p.segments, p.axis);
+    case PT::Disk:     return buildDisk(p.radius, p.segments, p.axis);
+    case PT::Grid:     return buildGrid(p.size[0], p.size[2], p.subdivisionsX, p.subdivisionsZ);
+    case PT::IcoSphere: return buildIcoSphere(p.radius, std::max(1, std::min(4, p.segments/8)));
     }
     return {};
 }

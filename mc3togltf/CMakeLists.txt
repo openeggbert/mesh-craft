@@ -69,8 +69,9 @@ include(CTest)
 if(BUILD_TESTING)
     find_program(PYTHON3_EXEC python3)
     if(PYTHON3_EXEC)
-        set(_anim_xml "${CMAKE_CURRENT_SOURCE_DIR}/../test/animation_test.mc3.xml")
-        set(_house_xml "${CMAKE_CURRENT_SOURCE_DIR}/../test/house.mc3.xml")
+        set(_anim_xml        "${CMAKE_CURRENT_SOURCE_DIR}/../test/animation_test.mc3.xml")
+        set(_house_xml       "${CMAKE_CURRENT_SOURCE_DIR}/../test/house.mc3.xml")
+        set(_primitives_xml  "${CMAKE_CURRENT_SOURCE_DIR}/../test/all_primitives.mc3.xml")
         if(EXISTS "${_anim_xml}" AND EXISTS "${_house_xml}")
             add_test(
                 NAME mc3togltf_gltf
@@ -81,6 +82,15 @@ if(BUILD_TESTING)
                         "${_house_xml}"
             )
             set_tests_properties(mc3togltf_gltf PROPERTIES TIMEOUT 30)
+        endif()
+        if(EXISTS "${_primitives_xml}")
+            add_test(
+                NAME mc3togltf_all_primitives
+                COMMAND "$<TARGET_FILE:mc3togltf>"
+                        "${_primitives_xml}"
+                        "${CMAKE_CURRENT_BINARY_DIR}/all_primitives_test.glb"
+            )
+            set_tests_properties(mc3togltf_all_primitives PROPERTIES TIMEOUT 30)
         endif()
     endif()
 endif()

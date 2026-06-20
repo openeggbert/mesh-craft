@@ -288,6 +288,8 @@ static std::shared_ptr<Mc3Object> parseObject(const XMLElement* el) {
     } else if (tag == "mesh") {
         obj->type       = ObjectType::Mesh;
         obj->meshSource = attr(el, "src");
+        if (obj->meshSource.empty())          // accept legacy source= attribute
+            obj->meshSource = attr(el, "source");
     } else if (tag == "extrude") {
         obj->type   = ObjectType::Extrude;
         obj->extrude = parseExtrude(el);
