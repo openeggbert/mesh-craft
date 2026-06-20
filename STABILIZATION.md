@@ -1,123 +1,123 @@
-# MeshCraft Stabilization — Podúkoly
+# MeshCraft Stabilization — Sub-tasks
 
-Cíl: stabilizovat MC3 formát, export pipeline a build bez přepisování editoru.
+**Goal:** Stabilize the MC3 format, export pipeline, and build without rewriting the editor.
 
-Stav auditu (2026-06-20):
-- README říká "YAML-based" — zastaralé, MC3 je XML
-- `mc3togltf` má vlastní duplicitní `Mc3XmlParser` (uses `source`, core uses `src`)
-- Top-level CMake neobsahuje `add_subdirectory(mc3togltf)` — testuje se z hardcoded `mc3togltf/build/`
-- XSD: `<plane>` má `size` jako `vec2`, ale core parser čte vec3
-- `mc3togltf` není buildovaný z root CMake
-
----
-
-## Fáze 1: Formát — atribut `src` vs `source`
-
-**S1** — Kanonizovat mesh atribut na `src` v mc3togltf parseru
-- Soubor: `mc3togltf/src/Mc3XmlParser.cpp` řádek 264: `attr(el, "source")` → `attr(el, "src")`
-- Ověřit že `mc3/src/Mc3XmlParser.cpp:281` již používá `src` ✓
-- Ověřit XSD
-- Status: 📋
-
-**S2** — Ověřit a sjednotit plane size (vec2 vs vec3)
-- XSD má `vec2`, core parser čte vec3 (řádek 177-184 Mc3XmlParser.cpp)
-- Rozhodnutí: plane je 2D, size = vec2 (width × depth = X × Z)
-- Opravit: parser, writer, XSD, test XML soubory
-- Status: 📋
+**Audit findings (2026-06-20):**
+- README says "YAML-based" — outdated; MC3 is XML
+- `mc3togltf` has its own duplicate `Mc3XmlParser` (uses `source`; core uses `src`)
+- Top-level CMake does not include `add_subdirectory(mc3togltf)` — tests reference hardcoded `mc3togltf/build/`
+- XSD: `<plane>` has `size` as `vec2`, but the core parser reads it as vec3
+- `mc3togltf` is not built from the root CMake
 
 ---
 
-## Fáze 2: mc3togltf refaktoring
+## Phase 1: Format — `src` vs `source` attribute
 
-**S3** — Odstranit duplicitní parser z mc3togltf, použít core mc3
-- `mc3togltf/src/Mc3XmlParser.*` nahradit voláním `Mc3Document::loadFromFile()`
-- `mc3togltf/CMakeLists.txt`: přidat závislost na `mc3` library
-- Ověřit že `GltfExporter.cpp` konzumuje `Mc3Document` model
+**S1** — Canonicalize mesh attribute to `src` in mc3togltf parser
+- File: `mc3togltf/src/Mc3XmlParser.cpp` line 264: `attr(el, "source")` → `attr(el, "src")`
+- Verify that `mc3/src/Mc3XmlParser.cpp:281` already uses `src` ✓
+- Verify XSD
 - Status: 📋
 
-**S4** — Přidat `mc3togltf` do top-level CMake
-- `CMakeLists.txt`: přidat `add_subdirectory(mc3togltf)`
-- Opravit hardcoded cestu `mc3togltf/build/mc3togltf` v testech
+**S2** — Verify and unify plane size (vec2 vs vec3)
+- XSD has `vec2`, core parser reads vec3 (lines 177–184 of Mc3XmlParser.cpp)
+- Decision: plane is 2D, size = vec2 (width × depth = X × Z)
+- Fix: parser, writer, XSD, test XML files
 - Status: 📋
 
 ---
 
-## Fáze 3: Build a testy
+## Phase 2: mc3togltf refactoring
 
-**S5** — Ověřit top-level build: mc3 + mcb + mc3tomcb + mc3togltf + MeshCraft
-- Spustit `cmake .. && ninja` z root
-- Opravit případné chyby
+**S3** — Remove duplicate parser from mc3togltf; use core mc3
+- Replace `mc3togltf/src/Mc3XmlParser.*` with a call to `Mc3Document::loadFromFile()`
+- `mc3togltf/CMakeLists.txt`: add dependency on `mc3` library
+- Verify that `GltfExporter.cpp` consumes the `Mc3Document` model
 - Status: 📋
 
-**S6** — Validace test XML souborů proti XSD
-- Přidat CMake/CTest target pro `xmllint --schema mc3.xsd`
-- Opravit test soubory pokud nevalidují
-- Status: 📋
-
-**S7** — Roundtrip test: load → save → reload → porovnat
-- Přidat C++ test nebo CMake/ctest skript
-- Porovnat sémantická pole (ne byte-for-byte)
-- Status: 📋
-
-**S8** — mc3togltf export testy
-- Export jednoduchých scén (box, sphere, cylinder...) do .gltf a .glb
-- Ověřit že testsuite používá top-level-buildnutý binary
+**S4** — Add `mc3togltf` to top-level CMake
+- `CMakeLists.txt`: add `add_subdirectory(mc3togltf)`
+- Fix hardcoded path `mc3togltf/build/mc3togltf` in tests
 - Status: 📋
 
 ---
 
-## Fáze 4: Primitiva a CSG
+## Phase 3: Build and tests
 
-**S9** — Audit primitive support v mc3togltf MeshBuilder
-- Které primitiva MeshBuilder umí: Box, Sphere, Cylinder, Cone, Plane, Torus, Capsule, Disk, Grid, IcoSphere
-- Neimplementovaná: jasná chybová hláška místo tiché ignorace
+**S5** — Verify top-level build: mc3 + mcb + mc3tomcb + mc3togltf + MeshCraft
+- Run `cmake .. && ninja` from root
+- Fix any errors
+- Status: 📋
+
+**S6** — Validate test XML files against XSD
+- Add CMake/CTest target for `xmllint --schema mc3.xsd`
+- Fix test files if they fail validation
+- Status: 📋
+
+**S7** — Roundtrip test: load → save → reload → compare
+- Add a C++ test or CMake/ctest script
+- Compare semantic fields (not byte-for-byte)
+- Status: 📋
+
+**S8** — mc3togltf export tests
+- Export simple scenes (box, sphere, cylinder…) to .gltf and .glb
+- Verify test suite uses top-level-built binary
+- Status: 📋
+
+---
+
+## Phase 4: Primitives and CSG
+
+**S9** — Audit primitive support in mc3togltf MeshBuilder
+- Which primitives MeshBuilder supports: Box, Sphere, Cylinder, Cone, Plane, Torus, Capsule, Disk, Grid, IcoSphere
+- Unimplemented ones: emit a clear error instead of silently ignoring
 - Status: 📋
 
 **S10** — CSG export audit
-- Zjistit zda mc3togltf vyhodnocuje CSG (union/difference/intersection) nebo ignoruje
-- Buď implementovat (Manifold?) nebo přidat jasnou error hlášku
+- Determine whether mc3togltf evaluates CSG (union/difference/intersection) or ignores it
+- Either implement (Manifold?) or add a clear error message
 - Status: 📋
 
 ---
 
-## Fáze 5: Dokumentace
+## Phase 5: Documentation
 
-**S11** — Opravit README
-- Odstranit "YAML-based" → "XML-based (.mc3.xml)"
-- Dokumentovat architekuru: mc3, mcb, mc3tomcb, mc3togltf, MeshCraft editor
-- Opravit build instrukce (cmake -S . -B build → fungující příkazy)
-- Přidat sekci "Current limitations"
+**S11** — Fix README
+- Remove "YAML-based" → "XML-based (.mc3.xml)"
+- Document architecture: mc3, mcb, mc3tomcb, mc3togltf, MeshCraft editor
+- Fix build instructions (working cmake commands)
+- Add "Current limitations" section
 - Status: 📋
 
-**S12** — Zkontrolovat a doplnit MC3_FORMAT.md
-- Kanonický atribut `src` pro mesh
+**S12** — Review and update MC3_FORMAT.md
+- Canonical `src` attribute for mesh
 - Plane size = vec2
 - Supported primitives list
-- CSG status
+- CSG export status
 - Status: 📋
 
 ---
 
-## Prioritní pořadí
+## Priority order
 
-1. **S1** — src/source (malá, bezpečná oprava)
-2. **S3** — odstranit duplicitní parser (kritické pro konzistenci)
-3. **S4** — mc3togltf do top-level CMake
-4. **S5** — ověřit top-level build
+1. **S1** — src/source fix (small, safe change)
+2. **S3** — remove duplicate parser (critical for consistency)
+3. **S4** — mc3togltf into top-level CMake
+4. **S5** — verify top-level build
 5. **S2** — plane size
-6. **S6** — XSD validace
+6. **S6** — XSD validation
 7. **S11** — README
-8. **S9** — primitiva audit
-9. **S7** + **S8** — roundtrip + export testy
+8. **S9** — primitives audit
+9. **S7** + **S8** — roundtrip + export tests
 10. **S10** — CSG
 11. **S12** — MC3_FORMAT.md
 
 ---
 
-## Poznámky z auditu
+## Audit notes
 
-- `mc3/src/Mc3XmlParser.cpp:281` — core používá `src` ✓
-- `mc3togltf/src/Mc3XmlParser.cpp:264` — togltf používá `source` ✗
-- `mc3.xsd` plane: `vec2` — ale core parser čte vec3 (pozor na zpětnou kompatibilitu)
-- Top-level `CMakeLists.txt` neobsahuje `add_subdirectory(mc3togltf)`
-- `mc3togltf` se builduje samostatně do `mc3togltf/build/`
+- `mc3/src/Mc3XmlParser.cpp:281` — core uses `src` ✓
+- `mc3togltf/src/Mc3XmlParser.cpp:264` — togltf uses `source` ✗
+- `mc3.xsd` plane: `vec2` — but core parser reads vec3 (watch backward compatibility)
+- Top-level `CMakeLists.txt` does not include `add_subdirectory(mc3togltf)`
+- `mc3togltf` builds standalone into `mc3togltf/build/`
