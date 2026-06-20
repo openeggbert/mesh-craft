@@ -40,24 +40,32 @@ set(TINYOBJLOADER_BUILD_TEST_LOADER OFF CACHE BOOL "" FORCE)
 FetchContent_MakeAvailable(tinyobjloader)
 
 # --------------------------------------------------------------------------
-# Executable
+# Static library — GltfExporter + MeshBuilder (used by mc3togltf AND MeshCraft)
 # --------------------------------------------------------------------------
-add_executable(mc3togltf
-    src/main.cpp
+add_library(mc3togltf_lib STATIC
     src/MeshBuilder.cpp
     src/GltfExporter.cpp
 )
 
-target_include_directories(mc3togltf PRIVATE
-    src
-    ${tinygltf_SOURCE_DIR}
-    ${tinyobjloader_SOURCE_DIR}
+target_include_directories(mc3togltf_lib
+    PUBLIC
+        ${CMAKE_CURRENT_SOURCE_DIR}/src   # exposes GltfExporter.hpp, MeshBuilder.hpp
+        ${tinygltf_SOURCE_DIR}
+        ${tinyobjloader_SOURCE_DIR}
 )
 
-target_link_libraries(mc3togltf PRIVATE
-    Mc3
-    tinyobjloader
+target_link_libraries(mc3togltf_lib PUBLIC Mc3 tinyobjloader)
+
+# --------------------------------------------------------------------------
+# Executable — thin wrapper around the library
+# --------------------------------------------------------------------------
+add_executable(mc3togltf src/main.cpp)
+
+target_include_directories(mc3togltf PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/src
 )
+
+target_link_libraries(mc3togltf PRIVATE mc3togltf_lib)
 
 install(TARGETS mc3togltf RUNTIME DESTINATION bin)
 

@@ -249,11 +249,12 @@ elseif(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang" AND NOT WIN32 AND NOT ANDROID)
         SHARP_RUNTIME
         Mc3
         Mcb
+        mc3togltf_lib
         imgui
         manifold
         tinyobjloader)
 else()
-    target_link_libraries(${_target} PRIVATE CNA ${_cna_backend_target} SHARP_RUNTIME Mc3 Mcb imgui manifold tinyobjloader)
+    target_link_libraries(${_target} PRIVATE CNA ${_cna_backend_target} SHARP_RUNTIME Mc3 Mcb mc3togltf_lib imgui manifold tinyobjloader)
 endif()
 
 # -----------------------------------------------------------------------------

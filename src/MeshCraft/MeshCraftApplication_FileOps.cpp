@@ -1,6 +1,8 @@
 #include "MeshCraft/MeshCraftApplication.hpp"
 #include "MeshCraftPrivate.hpp"
 
+#include "GltfExporter.hpp"
+
 #include <algorithm>
 #include <cstdio>
 #include <cstring>
@@ -173,26 +175,18 @@ void MeshCraftApplication::exportGltf() {
 }
 
 void MeshCraftApplication::runGltfExport(const std::string& outPath) {
-    std::string mc3togltf = "mc3togltf";
-    for (const auto& candidate : {
-        std::filesystem::path("mc3togltf/build/mc3togltf"),
-        std::filesystem::path("cmake-build-debug/mc3togltf/mc3togltf"),
-        std::filesystem::path("build-mc3togltf/mc3togltf"),
-        std::filesystem::path("../build-mc3togltf/mc3togltf"),
-        std::filesystem::path("../mc3togltf/build/mc3togltf"),
-    }) {
-        if (std::filesystem::exists(candidate)) { mc3togltf = candidate.string(); break; }
-    }
-    std::string cmd = mc3togltf + " \"" + currentFile_.string() + "\" \"" + outPath + "\"";
-    std::cout << "[MeshCraft] Exporting: " << cmd << "\n";
-    int ret = std::system(cmd.c_str());
-    if (ret == 0) {
-        auto name = std::filesystem::path(outPath).filename().string();
-        setStatusMsg("Exported to " + name);
-    } else {
-        setStatusMsg("Export failed (exit " + std::to_string(ret) + ")", true);
-        throw std::runtime_error("mc3togltf exited with code " + std::to_string(ret));
-    }
+    std::filesystem::path out(outPath);
+    mc3togltf::OutputFormat fmt = (out.extension() == ".glb")
+                                  ? mc3togltf::OutputFormat::GLB
+                                  : mc3togltf::OutputFormat::GLTF;
+
+    std::cout << "[MeshCraft] Exporting to " << outPath << "\n";
+
+    mc3togltf::GltfExporter exporter;
+    exporter.allowApproximateCSG = true;  // editor previews: warn, don't abort
+    exporter.exportDocument(document_, out, fmt);
+
+    setStatusMsg("Exported to " + out.filename().string());
 }
 
 // ---------------------------------------------------------------------------
