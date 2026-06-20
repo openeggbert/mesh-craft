@@ -20,11 +20,13 @@
 - `mc3/mc3.xsd:320` defines `src` ✓
 - `test/obj-test.mc3.xml`: `source=` → `src=` ✓
 
-**S2** — Verify and unify plane size (vec2 vs vec3)
-- XSD has `vec2`, core parser reads vec3 (lines 177–184 of Mc3XmlParser.cpp)
-- Decision: plane is 2D, size = vec2 (width × depth = X × Z)
-- Fix: parser, writer, XSD, test XML files
-- Status: 📋
+**S2** ✅ — Verify and unify plane size (vec2 vs vec3)
+- XSD had vec2 for plane, parser read it as vec3 → `"8 8"` parsed to `{8,8,0}` → renderer used `size[2]=0` → zero-depth planes (silent bug)
+- **Parser fix** (`Mc3XmlParser.cpp:parsePrimitive`): special-case `ObjectType::Plane`; canonical "W D" maps to `{W, 1, D}`; legacy "W 0 D" (3-value) maps to `{W, 0, D}` via existing path
+- **Writer fix** (`Mc3XmlWriter.cpp`): plane case now writes `"size[0] size[2]"` (vec2) instead of vec3
+- **`test/animation_test.mc3.xml`**: `size="2 0 2"` → `size="2 2"` (canonical)
+- XSD: already correct (vec2Type for planeType.size), no change needed
+- Roundtrip test: all 110 tests pass; `"50 50"` roundtrips correctly
 
 ---
 

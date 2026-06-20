@@ -179,6 +179,15 @@ static Mc3Primitive parsePrimitive(const XMLElement* el, ObjectType type) {
         if (s.find(' ') == std::string::npos && s.find(',') == std::string::npos) {
             float f = std::stof(s);
             p.size = {f, f, f};
+        } else if (type == ObjectType::Plane) {
+            // Plane size is vec2 (width × depth = X × Z). Legacy XMLs may have "W 0 D" (3 values).
+            std::istringstream iss(s);
+            float a = 1.0f, b = 1.0f, c = 0.0f;
+            iss >> a >> b;
+            if (iss >> c)
+                p.size = {a, b, c};       // legacy 3-value "W 0 D" → size[0]=W, size[2]=D
+            else
+                p.size = {a, 1.0f, b};   // canonical vec2 "W D" → size[0]=W, size[2]=D
         } else {
             auto v = parseVec3(s);
             p.size = {v[0], v[1], v[2]};

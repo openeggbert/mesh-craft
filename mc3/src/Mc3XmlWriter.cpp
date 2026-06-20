@@ -132,10 +132,13 @@ static XMLElement* writeObject(XMLDocument& xmlDoc, const std::shared_ptr<Mc3Obj
             if (p.height != 1.0f) el->SetAttribute("height", fStr(p.height).c_str());
             if (p.segments != 32) el->SetAttribute("segments", p.segments);
             break;
-        case ObjectType::Plane:
-            el->SetAttribute("size", vec3Str(p.size).c_str());
+        case ObjectType::Plane: {
+            char buf[64];
+            std::snprintf(buf, sizeof(buf), "%.6g %.6g", p.size[0], p.size[2]);
+            el->SetAttribute("size", buf);
             if (p.axis != "y") el->SetAttribute("axis", p.axis.c_str());
             break;
+        }
         case ObjectType::Torus:
             if (p.majorRadius != 0.35f) el->SetAttribute("major_radius", fStr(p.majorRadius).c_str());
             if (p.minorRadius != 0.15f) el->SetAttribute("minor_radius", fStr(p.minorRadius).c_str());

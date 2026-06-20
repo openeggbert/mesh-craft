@@ -18,7 +18,7 @@
     <sphere name="SpinningSphere" radius="0.5" position="3 0 0"/>
 
     <!-- Fading plane: visible animated with step keyframes -->
-    <plane name="FadingPlane" size="2 0 2" position="-3 0 0"/>
+    <plane name="FadingPlane" size="2 2" position="-3 0 0"/>
 
     <!-- Scale-pulsing cone: scale.x/y/z animated -->
     <cone name="PulsingCone" radius="0.5" height="1.5" position="0 0 3"/>
