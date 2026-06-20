@@ -16,17 +16,6 @@ if(NOT TARGET Mc3)
 endif()
 
 # --------------------------------------------------------------------------
-# tinyxml2 — lightweight XML parser
-# --------------------------------------------------------------------------
-FetchContent_Declare(
-    tinyxml2
-    GIT_REPOSITORY https://github.com/leethomason/tinyxml2.git
-    GIT_TAG        10.0.0
-)
-set(tinyxml2_BUILD_TESTING OFF CACHE BOOL "" FORCE)
-FetchContent_MakeAvailable(tinyxml2)
-
-# --------------------------------------------------------------------------
 # tinygltf — header-only glTF 2.0 reader/writer
 # --------------------------------------------------------------------------
 FetchContent_Declare(
@@ -55,7 +44,6 @@ FetchContent_MakeAvailable(tinyobjloader)
 # --------------------------------------------------------------------------
 add_executable(mc3togltf
     src/main.cpp
-    src/Mc3XmlParser.cpp
     src/MeshBuilder.cpp
     src/GltfExporter.cpp
 )
@@ -68,7 +56,6 @@ target_include_directories(mc3togltf PRIVATE
 
 target_link_libraries(mc3togltf PRIVATE
     Mc3
-    tinyxml2::tinyxml2
     tinyobjloader
 )
 

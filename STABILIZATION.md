@@ -30,11 +30,12 @@
 
 ## Phase 2: mc3togltf refactoring
 
-**S3** — Remove duplicate parser from mc3togltf; use core mc3
-- Replace `mc3togltf/src/Mc3XmlParser.*` with a call to `Mc3Document::loadFromFile()`
-- `mc3togltf/CMakeLists.txt`: add dependency on `mc3` library
-- Verify that `GltfExporter.cpp` consumes the `Mc3Document` model
-- Status: 📋
+**S3** ✅ — Remove duplicate parser from mc3togltf; use core mc3
+- Deleted `mc3togltf/src/Mc3XmlParser.cpp` and `Mc3XmlParser.hpp` (duplicate 560-line parser)
+- `main.cpp`: replaced `Mc3XmlParser::parse()` with `Mc3Document::loadFromFile()`
+- `mc3togltf/CMakeLists.txt`: removed standalone tinyxml2 fetch + link (now used from `Mc3` lib)
+- `GltfExporter.cpp` already consumed `Mc3Document` directly — no change needed
+- Build clean; `house.mc3.xml` and `obj-test.mc3.xml` export correctly
 
 **S4** — Add `mc3togltf` to top-level CMake
 - `CMakeLists.txt`: add `add_subdirectory(mc3togltf)`

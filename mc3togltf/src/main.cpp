@@ -1,6 +1,6 @@
 #include "GltfExporter.hpp"
-#include "Mc3XmlParser.hpp"
 
+#include <MeshCraft/Mc3/Mc3Document.hpp>
 #include <filesystem>
 #include <iostream>
 #include <stdexcept>
@@ -8,6 +8,7 @@
 
 namespace fs = std::filesystem;
 using namespace mc3togltf;
+using MeshCraft::Mc3::Mc3Document;
 
 static void printUsage(const char* prog) {
     std::cerr << "Usage: " << prog << " <input.mc3.xml> [output.gltf|output.glb]\n"
@@ -53,8 +54,7 @@ int main(int argc, char* argv[]) {
     }
 
     try {
-        Mc3XmlParser parser;
-        auto doc = parser.parse(inputPath);
+        auto doc = Mc3Document::loadFromFile(inputPath);
 
         OutputFormat fmt = formatFromPath(outputPath);
 
