@@ -88,12 +88,13 @@
 
 ## Phase 5: Documentation
 
-**S11** — Fix README
-- Remove "YAML-based" → "XML-based (.mc3.xml)"
-- Document architecture: mc3, mcb, mc3tomcb, mc3togltf, MeshCraft editor
-- Fix build instructions (working cmake commands)
-- Add "Current limitations" section
-- Status: 📋
+**S11** ✅ — Fix README
+- Removed "YAML-based" → "XML-based (.mc3.xml)"
+- Removed "Early prototype / No rendering" → accurate feature list
+- Documented architecture table: mc3, mcb, mc3tomcb, mc3togltf, MeshCraft, CNA
+- Fixed build instructions (ninja, cmake-build-debug paths)
+- Added "Current Limitations" section
+- Status: ✅
 
 **S12** — Review and update MC3_FORMAT.md
 - Canonical `src` attribute for mesh
