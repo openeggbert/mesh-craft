@@ -13,11 +13,12 @@
 
 ## Phase 1: Format — `src` vs `source` attribute
 
-**S1** — Canonicalize mesh attribute to `src` in mc3togltf parser
-- File: `mc3togltf/src/Mc3XmlParser.cpp` line 264: `attr(el, "source")` → `attr(el, "src")`
-- Verify that `mc3/src/Mc3XmlParser.cpp:281` already uses `src` ✓
-- Verify XSD
-- Status: 📋
+**S1** ✅ — Canonicalize mesh attribute to `src` in mc3togltf parser
+- `mc3togltf/src/Mc3XmlParser.cpp:264`: `attr(el, "source")` → `attr(el, "src")`
+- Core `mc3/src/Mc3XmlParser.cpp:281` already uses `src` ✓
+- Core `mc3/src/Mc3XmlWriter.cpp:252` emits `src` ✓
+- `mc3/mc3.xsd:320` defines `src` ✓
+- `test/obj-test.mc3.xml`: `source=` → `src=` ✓
 
 **S2** — Verify and unify plane size (vec2 vs vec3)
 - XSD has `vec2`, core parser reads vec3 (lines 177–184 of Mc3XmlParser.cpp)

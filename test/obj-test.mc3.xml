@@ -20,7 +20,7 @@
 
   <objects>
     <!-- External OBJ mesh -->
-    <mesh name="Tetrahedron" source="tetra.obj" position="0 0.5 0" material="shiny"/>
+    <mesh name="Tetrahedron" src="tetra.obj" position="0 0.5 0" material="shiny"/>
 
     <!-- Regular primitive next to it -->
     <sphere name="Ball" radius="0.5" segments="20" position="2 0.5 0" material="shiny"/>

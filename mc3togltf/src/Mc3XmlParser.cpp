@@ -261,7 +261,7 @@ static std::shared_ptr<Mc3Object> parseObject(const XMLElement* el) {
         obj->primitive = parsePrimitive(el, obj->type);
         break;
     case ObjectType::Mesh:
-        obj->meshSource       = attr(el, "source");
+        obj->meshSource       = attr(el, "src");   // canonical: "src" (legacy "source" no longer read)
         obj->materialOverride = attr(el, "material_override");
         break;
     case ObjectType::Instance:
