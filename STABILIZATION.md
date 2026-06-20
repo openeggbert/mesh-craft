@@ -46,10 +46,10 @@
 
 ## Phase 3: Build and tests
 
-**S5** — Verify top-level build: mc3 + mcb + mc3tomcb + mc3togltf + MeshCraft
-- Run `cmake .. && ninja` from root
-- Fix any errors
-- Status: 📋
+**S5** ✅ — Verify top-level build: mc3 + mcb + mc3tomcb + mc3togltf + MeshCraft
+- `ninja` from cmake-build-debug: all targets build clean, no errors
+- Binaries confirmed: MeshCraft (36M), mc3tomcb (3.5M), mc3togltf (11M), mc3_roundtrip_test (3.1M)
+- Smoke test: PASS; MCB roundtrip: OK
 
 **S6** — Validate test XML files against XSD
 - Add CMake/CTest target for `xmllint --schema mc3.xsd`
