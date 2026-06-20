@@ -37,10 +37,10 @@
 - `GltfExporter.cpp` already consumed `Mc3Document` directly — no change needed
 - Build clean; `house.mc3.xml` and `obj-test.mc3.xml` export correctly
 
-**S4** — Add `mc3togltf` to top-level CMake
-- `CMakeLists.txt`: add `add_subdirectory(mc3togltf)`
-- Fix hardcoded path `mc3togltf/build/mc3togltf` in tests
-- Status: 📋
+**S4** ✅ — Add `mc3togltf` to top-level CMake
+- `CMakeLists.txt`: added `add_subdirectory(mc3togltf)` after tinyobjloader fetch
+- Removed hardcoded `mc3togltf/build/mc3togltf` test; mc3togltf/CMakeLists.txt registers its own test via `$<TARGET_FILE:mc3togltf>`
+- `ninja mc3togltf` now works from root build dir; `./mc3togltf/mc3togltf` in cmake-build-debug
 
 ---
 
