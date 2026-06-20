@@ -53,10 +53,12 @@
 - Binaries confirmed: MeshCraft (36M), mc3tomcb (3.5M), mc3togltf (11M), mc3_roundtrip_test (3.1M)
 - Smoke test: PASS; MCB roundtrip: OK
 
-**S6** — Validate test XML files against XSD
-- Add CMake/CTest target for `xmllint --schema mc3.xsd`
-- Fix test files if they fail validation
-- Status: 📋
+**S6** ✅ — Validate test XML files against XSD
+- `xmllint` not available in build env; validator written in Python (lxml)
+- `test/validate_xsd.py`: validates any number of mc3.xml files against mc3.xsd
+- `CMakeLists.txt`: `xsd_validation` CTest target (requires python3 + lxml)
+- All 11 test XML files pass validation
+- Status: ✅
 
 **S7** — Roundtrip test: load → save → reload → compare
 - Add a C++ test or CMake/ctest script

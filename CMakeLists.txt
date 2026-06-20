@@ -283,5 +283,18 @@ if(MESH_CRAFT_BUILD_TESTING AND UNIX AND NOT ANDROID AND NOT EMSCRIPTEN)
     )
     set_tests_properties(smoke_test PROPERTIES TIMEOUT 30)
 
+    find_program(PYTHON3_EXEC python3)
+    if(PYTHON3_EXEC)
+        file(GLOB _mc3_xml_files "${CMAKE_CURRENT_SOURCE_DIR}/test/*.mc3.xml")
+        add_test(
+            NAME xsd_validation
+            COMMAND "${PYTHON3_EXEC}"
+                    "${CMAKE_CURRENT_SOURCE_DIR}/test/validate_xsd.py"
+                    "${CMAKE_CURRENT_SOURCE_DIR}/mc3/mc3.xsd"
+                    ${_mc3_xml_files}
+        )
+        set_tests_properties(xsd_validation PROPERTIES TIMEOUT 30)
+    endif()
+
     # mc3togltf_gltf test is registered by mc3togltf/CMakeLists.txt via $<TARGET_FILE:mc3togltf>
 endif()
