@@ -74,10 +74,11 @@
 
 ## Phase 4: Primitives and CSG
 
-**S9** — Audit primitive support in mc3togltf MeshBuilder
-- Which primitives MeshBuilder supports: Box, Sphere, Cylinder, Cone, Plane, Torus, Capsule, Disk, Grid, IcoSphere
-- Unimplemented ones: emit a clear error instead of silently ignoring
-- Status: 📋
+**S9** ✅ — Audit primitive support in mc3togltf MeshBuilder
+- **Implemented**: Box, Cube, Sphere, Cylinder, Cone, Plane, Extrude (all path types), OBJ mesh
+- **Not implemented**: Torus, Capsule, Disk, Grid, IcoSphere — previously returned empty MeshData silently
+- Fix: each unimplemented type now emits `Warning: mc3togltf: 'X' export not yet implemented — object skipped.`
+- Verified: torus and icosphere in test XML produce correct warning output
 
 **S10** — CSG export audit
 - Determine whether mc3togltf evaluates CSG (union/difference/intersection) or ignores it

@@ -757,16 +757,27 @@ MeshData buildPrimitive(const MeshCraft::Mc3::Mc3Primitive& p) {
     using PT = MeshCraft::Mc3::PrimitiveType;
     switch (p.primitiveType) {
     case PT::Box:
-    case PT::Cube:
-        return buildBox(p.size[0], p.size[1], p.size[2]);
-    case PT::Sphere:
-        return buildSphere(p.radius, p.segments);
-    case PT::Cylinder:
-        return buildCylinder(p.radius, p.height, p.segments, p.axis);
-    case PT::Cone:
-        return buildCone(p.radius, p.height, p.segments);
-    case PT::Plane:
-        return buildPlane(p.size[0], p.size[2], p.axis);
+    case PT::Cube:      return buildBox(p.size[0], p.size[1], p.size[2]);
+    case PT::Sphere:    return buildSphere(p.radius, p.segments);
+    case PT::Cylinder:  return buildCylinder(p.radius, p.height, p.segments, p.axis);
+    case PT::Cone:      return buildCone(p.radius, p.height, p.segments);
+    case PT::Plane:     return buildPlane(p.size[0], p.size[2], p.axis);
+    // Not yet implemented — emit a clear warning instead of silently producing an empty mesh
+    case PT::Torus:
+        std::cerr << "Warning: mc3togltf: 'torus' export not yet implemented — object skipped.\n";
+        return {};
+    case PT::Capsule:
+        std::cerr << "Warning: mc3togltf: 'capsule' export not yet implemented — object skipped.\n";
+        return {};
+    case PT::Disk:
+        std::cerr << "Warning: mc3togltf: 'disk' export not yet implemented — object skipped.\n";
+        return {};
+    case PT::Grid:
+        std::cerr << "Warning: mc3togltf: 'grid' export not yet implemented — object skipped.\n";
+        return {};
+    case PT::IcoSphere:
+        std::cerr << "Warning: mc3togltf: 'icosphere' export not yet implemented — object skipped.\n";
+        return {};
     }
     return {};
 }
