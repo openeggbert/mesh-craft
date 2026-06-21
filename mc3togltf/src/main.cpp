@@ -23,8 +23,11 @@ static void printUsage(const char* prog) {
               << "    .glb   → Binary GLB 2.0 (self-contained)\n"
               << "\n"
               << "  --allow-approximate-csg\n"
-              << "    Export CSG nodes by exporting children separately (geometrically\n"
-              << "    incorrect). Without this flag CSG nodes cause an error.\n";
+              << "    By default, CSG nodes (union/difference/intersection) are evaluated\n"
+              << "    using the Manifold library and exported as a single merged mesh.\n"
+              << "    This flag disables Manifold evaluation and exports CSG children as\n"
+              << "    separate meshes instead — geometrically incorrect and intended only\n"
+              << "    as a debug fallback.\n";
 }
 
 
@@ -62,10 +65,17 @@ int main(int argc, char* argv[]) {
         return 1;
     }
 
+    // Validate output extension before loading the document (fast failure).
+    OutputFormat fmt;
+    try {
+        fmt = outputFormatFromPath(outputPath);
+    } catch (const std::exception& e) {
+        std::cerr << "Error: " << e.what() << '\n';
+        return 1;
+    }
+
     try {
         auto doc = Mc3Document::loadFromFile(inputPath);
-
-        OutputFormat fmt = outputFormatFromPath(outputPath);
 
         GltfExporter exporter;
         exporter.allowApproximateCSG = allowApproxCSG;

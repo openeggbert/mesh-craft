@@ -102,9 +102,10 @@ if(BUILD_TESTING)
         set(_primitives_xml  "${CMAKE_CURRENT_SOURCE_DIR}/../test/all_primitives.mc3.xml")
         set(_objects_xml     "${CMAKE_CURRENT_SOURCE_DIR}/../test/all_objects.mc3.xml")
         set(_csg_xml         "${CMAKE_CURRENT_SOURCE_DIR}/../test/csg_test.mc3.xml")
-        set(_csg_union_xml   "${CMAKE_CURRENT_SOURCE_DIR}/../test/csg_union_export.mc3.xml")
-        set(_csg_diff_xml    "${CMAKE_CURRENT_SOURCE_DIR}/../test/csg_difference_export.mc3.xml")
-        set(_csg_isect_xml   "${CMAKE_CURRENT_SOURCE_DIR}/../test/csg_intersection_export.mc3.xml")
+        set(_csg_union_xml        "${CMAKE_CURRENT_SOURCE_DIR}/../test/csg_union_export.mc3.xml")
+        set(_csg_diff_xml         "${CMAKE_CURRENT_SOURCE_DIR}/../test/csg_difference_export.mc3.xml")
+        set(_csg_isect_xml        "${CMAKE_CURRENT_SOURCE_DIR}/../test/csg_intersection_export.mc3.xml")
+        set(_csg_unsupported_xml  "${CMAKE_CURRENT_SOURCE_DIR}/../test/csg_unsupported_child.mc3.xml")
         if(EXISTS "${_anim_xml}" AND EXISTS "${_house_xml}")
             add_test(
                 NAME mc3togltf_gltf
@@ -158,6 +159,16 @@ if(BUILD_TESTING)
                         "${_csg_isect_xml}"
             )
             set_tests_properties(mc3togltf_csg_export PROPERTIES TIMEOUT 60)
+        endif()
+        if(EXISTS "${_csg_unsupported_xml}")
+            add_test(
+                NAME mc3togltf_csg_unsupported
+                COMMAND "${PYTHON3_EXEC}"
+                        "${CMAKE_CURRENT_SOURCE_DIR}/test/csg_unsupported_test.py"
+                        "$<TARGET_FILE:mc3togltf>"
+                        "${_csg_unsupported_xml}"
+            )
+            set_tests_properties(mc3togltf_csg_unsupported PROPERTIES TIMEOUT 30)
         endif()
     endif()
 endif()

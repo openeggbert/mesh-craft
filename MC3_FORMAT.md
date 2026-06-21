@@ -228,11 +228,15 @@ Path types: `line` (length, axis), `arc` (radius, angle), `helix` (radius, heigh
 <intersection name="Cut">...</intersection>
 ```
 
-**Export note:** `mc3togltf` evaluates CSG booleans using the [Manifold](https://github.com/elalish/manifold) library and exports the result as a single merged mesh.
+**Export note:** `mc3togltf` evaluates CSG booleans using the [Manifold](https://github.com/elalish/manifold) library and exports the result as a single merged mesh. The CSG root's transform (position/rotation/scale) is preserved as a glTF node TRS; children are fully baked into the boolean result and do not appear as separate glTF nodes.
 
-Supported child primitives for CSG: Box, Cube, Sphere, Cylinder, Cone (analytic), Torus, Capsule, IcoSphere (triangulated). Plane, Disk, Grid, Mesh (OBJ), and Extrude are not watertight or too complex — they are skipped with a warning when encountered inside a CSG node.
+Supported child primitives for CSG: Box, Cube, Sphere, Cylinder, Cone (analytic), Torus, Capsule, IcoSphere (triangulated), nested CSG/Group/Instance (if their children are also supported).
 
-Pass `--allow-approximate-csg` (CLI) or enable the "Allow approximate CSG export" checkbox (editor) to bypass Manifold evaluation and export children as separate meshes instead (geometrically incorrect — for debugging only).
+Unsupported child types cause the export to **fail with an error** in default mode: Plane, Disk, Grid (not watertight), Mesh (OBJ), Extrude (complex topology).
+
+Pass `--allow-approximate-csg` (CLI) or enable the "Allow approximate CSG export" checkbox (editor) to bypass Manifold evaluation and export children as separate meshes instead. This mode is **geometrically incorrect** and intended only as a debug fallback.
+
+**Limitations of CSG output:** result mesh has flat normals (no smooth shading); UVs are not generated; child material assignments are not preserved — the CSG root's material is used for the merged mesh.
 
 ---
 
@@ -271,7 +275,7 @@ Pass `--allow-approximate-csg` (CLI) or enable the "Allow approximate CSG export
 | Animations (position/rotation/scale) | ✅ |
 | Animations (visible, emissive, deform) | ❌ (no glTF equivalent) |
 | Torus, Capsule, Disk, Grid, IcoSphere | ✅ |
-| CSG (union/difference/intersection) | ✅ (evaluated by Manifold; `--allow-approximate-csg` exports children separately as debug fallback) |
+| CSG (union/difference/intersection) | ✅ (evaluated by Manifold; unsupported child types fail the export; `--allow-approximate-csg` exports children separately as debug fallback) |
 | Instance (via definitions) | ✅ |
 
 ---

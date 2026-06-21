@@ -174,11 +174,19 @@ static manifold::Manifold buildManifoldNode(
     const Mc3Object& obj,
     const std::map<std::string, std::shared_ptr<Mc3Object>>& definitions,
     const Mat4& parentMat,
-    int depth)
+    int depth,
+    const std::string& csgRootName)
 {
     using namespace manifold;
 
-    if (depth > CSG_MAX_DEPTH || !obj.visible) return Manifold{};
+    if (depth > CSG_MAX_DEPTH)
+        throw std::runtime_error(
+            std::string("CSG evaluation failed for '") + csgRootName +
+            "': nesting depth exceeds " + std::to_string(CSG_MAX_DEPTH) +
+            " levels (possible infinite recursion or excessively deep hierarchy).\n"
+            "Use --allow-approximate-csg to export children separately as a debug fallback.");
+
+    if (!obj.visible) return Manifold{};
 
     // Accumulated transform: parentMat * this object's SRT
     Mat4 nodeMat = parentMat * computeObjMat(obj);
@@ -222,56 +230,72 @@ static manifold::Manifold buildManifoldNode(
         gl.vertProperties.assign(md.positions.begin(), md.positions.end());
         gl.triVerts.assign(md.indices.begin(), md.indices.end());
         Manifold m(gl);
-        if (m.Status() != Manifold::Error::NoError) {
-            std::cerr << "Warning: mc3togltf CSG: '" << obj.name
-                      << "' could not be converted to a manifold mesh — skipped.\n";
-            return Manifold{};
-        }
+        if (m.Status() != Manifold::Error::NoError)
+            throw std::runtime_error(
+                std::string("CSG evaluation failed for '") + csgRootName +
+                "':\nchild '" + obj.name + "' could not be converted to a manifold mesh "
+                "(triangulation produced non-manifold geometry).\n"
+                "Use --allow-approximate-csg to export children separately as a debug fallback.");
         return applyXf(m);
     }
 
-    // --- Non-watertight primitives: skip ---
+    // --- Non-watertight primitives: hard failure in real CSG mode ---
     case ObjectType::Plane:
     case ObjectType::Disk:
     case ObjectType::Grid: {
-        std::cerr << "Warning: mc3togltf CSG: '" << obj.name
-                  << "' is a " << static_cast<int>(obj.type)
-                  << "-type primitive (non-watertight) — skipped in CSG evaluation.\n";
-        return Manifold{};
+        const char* typeName = (obj.type == ObjectType::Plane) ? "Plane"
+                             : (obj.type == ObjectType::Disk)  ? "Disk"
+                             :                                   "Grid";
+        throw std::runtime_error(
+            std::string("CSG evaluation failed for '") + csgRootName +
+            "':\nchild '" + obj.name + "' of type " + typeName +
+            " is not watertight and cannot be used in real CSG export.\n"
+            "Use --allow-approximate-csg to export children separately as a debug fallback.");
     }
 
-    // --- Complex geometry: skip ---
+    // --- Complex geometry: hard failure in real CSG mode ---
     case ObjectType::Mesh:
     case ObjectType::Extrude: {
-        std::cerr << "Warning: mc3togltf CSG: '" << obj.name
-                  << "' is a Mesh/Extrude type — not supported in CSG evaluation, skipped.\n";
-        return Manifold{};
+        const char* typeName = (obj.type == ObjectType::Mesh) ? "Mesh" : "Extrude";
+        throw std::runtime_error(
+            std::string("CSG evaluation failed for '") + csgRootName +
+            "':\nchild '" + obj.name + "' of type " + typeName +
+            " is not supported in real CSG export.\n"
+            "Use --allow-approximate-csg to export children separately as a debug fallback.");
     }
 
     // --- CSG nodes (nested) ---
     case ObjectType::Union: {
         Manifold result;
         for (const auto& child : obj.children)
-            if (child) result = result + buildManifoldNode(*child, definitions, nodeMat, depth + 1);
+            if (child) result = result + buildManifoldNode(*child, definitions, nodeMat, depth + 1, csgRootName);
         return result;
     }
     case ObjectType::Intersection: {
         if (obj.children.empty()) return Manifold{};
-        // Use nodeMat as parent for children (they're in this node's local space)
-        Manifold result = buildManifoldNode(*obj.children[0], definitions, nodeMat, depth + 1);
+        Manifold result = buildManifoldNode(*obj.children[0], definitions, nodeMat, depth + 1, csgRootName);
         for (size_t i = 1; i < obj.children.size(); ++i)
             if (obj.children[i])
-                result = result ^ buildManifoldNode(*obj.children[i], definitions, nodeMat, depth + 1);
+                result = result ^ buildManifoldNode(*obj.children[i], definitions, nodeMat, depth + 1, csgRootName);
         return result;
     }
     case ObjectType::Difference: {
+        bool hasBase = false;
         Manifold base;
         for (const auto& child : obj.children)
-            if (child && !child->isCutter)
-                base = base + buildManifoldNode(*child, definitions, nodeMat, depth + 1);
+            if (child && !child->isCutter) {
+                base = base + buildManifoldNode(*child, definitions, nodeMat, depth + 1, csgRootName);
+                hasBase = true;
+            }
+        if (!hasBase)
+            throw std::runtime_error(
+                std::string("CSG evaluation failed for '") + csgRootName +
+                "':\nnested difference node '" + obj.name +
+                "' has no non-cutter children — base volume is empty.\n"
+                "Use --allow-approximate-csg to export children separately as a debug fallback.");
         for (const auto& child : obj.children)
             if (child && child->isCutter)
-                base = base - buildManifoldNode(*child, definitions, nodeMat, depth + 1);
+                base = base - buildManifoldNode(*child, definitions, nodeMat, depth + 1, csgRootName);
         return base;
     }
 
@@ -280,7 +304,7 @@ static manifold::Manifold buildManifoldNode(
     case ObjectType::Area: {
         Manifold result;
         for (const auto& child : obj.children)
-            if (child) result = result + buildManifoldNode(*child, definitions, nodeMat, depth + 1);
+            if (child) result = result + buildManifoldNode(*child, definitions, nodeMat, depth + 1, csgRootName);
         return result;
     }
 
@@ -292,12 +316,19 @@ static manifold::Manifold buildManifoldNode(
                 std::hash<std::string>{}(obj.id) % obj.variantDefinitions.size()];
         auto it = definitions.find(defKey);
         if (it != definitions.end() && it->second)
-            return buildManifoldNode(*it->second, definitions, nodeMat, depth + 1);
-        return Manifold{};
+            return buildManifoldNode(*it->second, definitions, nodeMat, depth + 1, csgRootName);
+        throw std::runtime_error(
+            std::string("CSG evaluation failed for '") + csgRootName +
+            "':\ninstance '" + obj.name + "' references unknown definition '" + defKey +
+            "'.\nUse --allow-approximate-csg to export children separately as a debug fallback.");
     }
 
     default:
-        return Manifold{};
+        throw std::runtime_error(
+            std::string("CSG evaluation failed for '") + csgRootName +
+            "':\nchild '" + obj.name +
+            "' has an object type that is not supported in real CSG export.\n"
+            "Use --allow-approximate-csg to export children separately as a debug fallback.");
     }
 }
 
@@ -318,29 +349,39 @@ MeshData evaluateCsgNode(
 
     // Start with identity: children are evaluated in the CSG root's local space.
     // The CSG root's own transform is carried by the glTF node TRS, not baked here.
-    Mat4 identity = Mat4::identity();
+    const Mat4 identity = Mat4::identity();
+    const std::string& rootName = csgObj.name;
 
     Manifold result;
 
     if (csgObj.type == ObjectType::Union) {
         for (const auto& child : csgObj.children)
-            if (child) result = result + buildManifoldNode(*child, definitions, identity, 0);
+            if (child) result = result + buildManifoldNode(*child, definitions, identity, 0, rootName);
 
     } else if (csgObj.type == ObjectType::Difference) {
+        bool hasBase = false;
         Manifold base;
         for (const auto& child : csgObj.children)
-            if (child && !child->isCutter)
-                base = base + buildManifoldNode(*child, definitions, identity, 0);
+            if (child && !child->isCutter) {
+                base = base + buildManifoldNode(*child, definitions, identity, 0, rootName);
+                hasBase = true;
+            }
+        if (!hasBase)
+            throw std::runtime_error(
+                std::string("CSG evaluation failed for '") + rootName +
+                "': difference node has no non-cutter children — base volume is empty.\n"
+                "Add at least one child without role=\"cutter\", or use "
+                "--allow-approximate-csg as a debug fallback.");
         for (const auto& child : csgObj.children)
             if (child && child->isCutter)
-                base = base - buildManifoldNode(*child, definitions, identity, 0);
+                base = base - buildManifoldNode(*child, definitions, identity, 0, rootName);
         result = base;
 
     } else { // Intersection
         bool first = true;
         for (const auto& child : csgObj.children) {
             if (!child) continue;
-            Manifold m = buildManifoldNode(*child, definitions, identity, 0);
+            Manifold m = buildManifoldNode(*child, definitions, identity, 0, rootName);
             if (first) { result = m; first = false; }
             else        result = result ^ m;
         }
@@ -348,8 +389,16 @@ MeshData evaluateCsgNode(
 
     if (result.Status() != Manifold::Error::NoError) {
         throw std::runtime_error(
-            std::string("CSG evaluation failed for '") + csgObj.name +
-            "': Manifold error " + std::to_string(static_cast<int>(result.Status())));
+            std::string("CSG evaluation failed for '") + rootName +
+            "': Manifold returned error code " +
+            std::to_string(static_cast<int>(result.Status())) + ".\n"
+            "Use --allow-approximate-csg to export children separately as a debug fallback.");
+    }
+
+    if (result.IsEmpty()) {
+        std::cerr << "Warning: mc3togltf CSG: '" << rootName
+                  << "' — boolean operation produced an empty volume "
+                     "(no geometry; check for non-overlapping inputs).\n";
     }
 
     return manifoldToMeshData(result);

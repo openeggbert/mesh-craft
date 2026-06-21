@@ -114,7 +114,7 @@ ctest -V --test-dir cmake-build-debug
 - Preferences dialog: only auto-save interval is persisted; snap/grid/theme not saved
 - Headless screenshot: always writes PPM regardless of file extension
 - MCB: compression flag reserved in header but not implemented
-- CSG export to glTF: evaluated by Manifold (union/difference/intersection). Plane, Disk, Grid, Mesh, and Extrude nodes inside CSG are skipped with a warning (non-watertight). The "Allow approximate CSG export" checkbox bypasses Manifold and exports children separately (debug only)
+- CSG export to glTF: evaluated by Manifold (union/difference/intersection). Unsupported child types inside a CSG node (Plane, Disk, Grid, Mesh, Extrude) cause the export to fail with a clear error in default mode. Pass `--allow-approximate-csg` (CLI) or enable "Allow approximate CSG export" (editor) to bypass Manifold and export children separately (debug fallback, geometrically incorrect). CSG result mesh has flat normals; child materials are not preserved (CSG root material is used)
 - No automated UI tests; only XML roundtrip and smoke test
 
 ## License

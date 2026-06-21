@@ -20,7 +20,7 @@ def run(cmd):
 
 
 def check_csg_result(gltf, root_name, expected_child_names=()):
-    """Verify that root_name has a mesh with geometry, and children are baked in."""
+    """Verify that root_name has a mesh with geometry, and children are fully baked in."""
     nmap = {n.get("name", ""): n for n in gltf.get("nodes", [])}
     assert root_name in nmap, (
         f"CSG root '{root_name}' missing from output.\n"
@@ -41,14 +41,14 @@ def check_csg_result(gltf, root_name, expected_child_names=()):
     vc = accs[pos_acc_idx].get("count", 0) if 0 <= pos_acc_idx < len(accs) else 0
     assert vc > 0, f"CSG root '{root_name}' has 0 vertices"
 
-    # Child nodes should not appear as glTF children of the CSG root
+    # Child nodes must NOT appear anywhere in the glTF node list —
+    # they are fully baked into the CSG boolean mesh.
+    all_node_names = {n.get("name", "") for n in gltf.get("nodes", [])}
     for child_name in expected_child_names:
-        for ci in node.get("children", []):
-            cn = gltf["nodes"][ci].get("name", "")
-            assert cn != child_name, (
-                f"CSG child '{child_name}' appears as a glTF child of '{root_name}'"
-                " — children should be baked into the CSG boolean result"
-            )
+        assert child_name not in all_node_names, (
+            f"CSG child '{child_name}' appears as a glTF node after real CSG export of "
+            f"'{root_name}' — it should be fully baked into the boolean result mesh."
+        )
 
     return vc
 
@@ -95,7 +95,7 @@ def test_intersection(mc3togltf, xml_path, tmpdir):
 
 
 if __name__ == "__main__":
-    if len(sys.argv) < 4:
+    if len(sys.argv) < 5:
         print(f"Usage: {sys.argv[0]} <mc3togltf> <csg_union.mc3.xml> "
               f"<csg_diff.mc3.xml> <csg_isect.mc3.xml>")
         sys.exit(1)

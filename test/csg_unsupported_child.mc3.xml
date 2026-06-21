@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- CSG node with an unsupported child type (Disk is not watertight).
+     Real CSG export must fail with an error.
+     Approximate mode exports children separately. -->
+<mc3 version="0.3" model="CsgUnsupportedChild">
+  <objects>
+    <union name="BadCsg">
+      <box name="BaseBox" size="1 1 1"/>
+      <disk name="DiskInsideCsg" radius="0.5"/>
+    </union>
+  </objects>
+</mc3>

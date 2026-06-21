@@ -1494,7 +1494,7 @@ void MeshCraftApplication::drawDialogs()
 
         ImGui::SeparatorText("Options");
         ImGui::Checkbox("Allow approximate CSG export", &glbAllowApproxCSG_);
-        ImGui::SameLine(); ImGui::TextDisabled("(CSG booleans not evaluated — children exported separately)");
+        ImGui::SameLine(); ImGui::TextDisabled("(debug fallback: disables Manifold CSG; children exported separately)");
         ImGui::BeginDisabled();
         bool embedTex = true;
         ImGui::Checkbox("Embed textures", &embedTex);
