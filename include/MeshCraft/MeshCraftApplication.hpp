@@ -1,5 +1,6 @@
 #pragma once
 
+#include "MeshCraft/ModelRegistry.hpp"
 #include "MeshCraft/Editor/EditorCamera.hpp"
 #include "MeshCraft/Editor/EditorTool.hpp"
 #include "MeshCraft/Editor/SelectionManager.hpp"
@@ -476,6 +477,20 @@ private:
 
     // SDL event watcher for ImGui event forwarding
     static bool sdlEventWatch(void* userdata, void* event);
+
+    // Model Registry (M2)
+    ModelRegistry registry_;
+    bool showRegistryPanel_{false};
+    char regSearchBuf_[128]{};
+    bool regSaveDlgOpen_{false};
+    char regSaveGroupBuf_[64]{};
+    char regSaveNameBuf_[64]{};
+    char regSaveVariantBuf_[64]{};
+    char regSaveTagsBuf_[128]{};
+    std::string regSaveDefId_;
+    std::vector<ModelRegistry::Entry> regCachedResults_;
+    bool regResultsDirty_{true};
+    void drawRegistryPanel();
 
     // H5 — pivot edit mode
     bool pivotEditMode_{false};

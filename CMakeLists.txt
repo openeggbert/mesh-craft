@@ -167,6 +167,12 @@ FetchContent_MakeAvailable(tinyobjloader)
 # mc3togltf — MC3 to glTF/GLB export tool (uses Mc3 + tinyobjloader already fetched above)
 add_subdirectory(mc3togltf)
 
+# SQLite3 — model registry persistence (desktop builds only)
+if(NOT EMSCRIPTEN AND NOT ANDROID)
+    find_package(SQLite3 REQUIRED)
+    message(STATUS "SQLite3 found: ${SQLite3_VERSION}")
+endif()
+
 # -----------------------------------------------------------------------------
 # Sources
 # -----------------------------------------------------------------------------
@@ -203,6 +209,12 @@ target_include_directories(${_target}
         ${CMAKE_CURRENT_SOURCE_DIR}/src
         ${tinyobjloader_SOURCE_DIR}
 )
+
+# Enable SQLite3-backed ModelRegistry on desktop builds
+if(SQLite3_FOUND)
+    target_compile_definitions(${_target} PRIVATE MESHCRAFT_HAS_SQLITE3)
+    target_include_directories(${_target} PRIVATE ${SQLite3_INCLUDE_DIRS})
+endif()
 
 # -----------------------------------------------------------------------------
 # Link
@@ -253,8 +265,14 @@ elseif(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang" AND NOT WIN32 AND NOT ANDROID)
         imgui
         manifold
         tinyobjloader)
+    if(SQLite3_FOUND)
+        target_link_libraries(${_target} PRIVATE ${SQLite3_LIBRARIES})
+    endif()
 else()
     target_link_libraries(${_target} PRIVATE CNA ${_cna_backend_target} SHARP_RUNTIME Mc3 Mcb mc3togltf_lib imgui manifold tinyobjloader)
+    if(SQLite3_FOUND)
+        target_link_libraries(${_target} PRIVATE ${SQLite3_LIBRARIES})
+    endif()
 endif()
 
 # -----------------------------------------------------------------------------

@@ -1733,6 +1733,7 @@ void MeshCraftApplication::drawDialogs()
         ImGui::EndPopup();
     }
 
+    drawRegistryPanel();
 }
 
 void MeshCraftApplication::drawPanelSplitters(int screenW, int screenH)
