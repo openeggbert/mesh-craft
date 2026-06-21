@@ -52,22 +52,15 @@ if __name__ == "__main__":
                 f"(children may have been exported instead of the boolean result)"
             )
 
-        # Child nodes (BoxA, s1, s2, etc.) must NOT appear as top-level nodes
-        # or as children of the CSG node — they are merged into the CSG mesh.
+        # Child nodes must NOT appear anywhere in the glTF node list —
+        # they are fully baked into the CSG boolean mesh.
+        all_node_names = {n.get("name", "") for n in gltf.get("nodes", [])}
         child_names = {"block", "cavity", "s1", "s2", "b", "s"}
         for child in child_names:
-            if child in nmap:
-                # The child is a glTF node — make sure it's NOT a child of any
-                # of the CSG nodes (it should be gone entirely).
-                for csg_name in ("ArchHole", "Merged", "RoundedBlock"):
-                    assert csg_name in nmap, "already checked above"
-                    csg_node = nmap[csg_name]
-                    for ci in csg_node.get("children", []):
-                        cn = gltf["nodes"][ci].get("name", "")
-                        assert cn != child, (
-                            f"CSG child '{child}' appears as a glTF child of '{csg_name}'"
-                            " — should be baked into the CSG mesh"
-                        )
+            assert child not in all_node_names, (
+                f"CSG child '{child}' appears as a glTF node after real CSG export "
+                "— it should be fully baked into the boolean result mesh"
+            )
 
         print("Real CSG export (default mode): PASS")
 

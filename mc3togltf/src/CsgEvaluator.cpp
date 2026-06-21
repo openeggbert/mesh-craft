@@ -222,20 +222,27 @@ static manifold::Manifold buildManifoldNode(
     case ObjectType::Torus:
     case ObjectType::Capsule:
     case ObjectType::IcoSphere: {
-        if (!obj.primitive) return Manifold{};
+        const char* typeName = (obj.type == ObjectType::Torus)     ? "Torus"
+                             : (obj.type == ObjectType::Capsule)   ? "Capsule"
+                             :                                        "IcoSphere";
+        auto failMsg = [&](const char* reason) {
+            return std::string("CSG evaluation failed for '") + csgRootName +
+                   "':\nchild '" + obj.name + "' of type " + typeName +
+                   " — " + reason + ".\n"
+                   "Use --allow-approximate-csg to export children separately as a debug fallback.";
+        };
+        if (!obj.primitive)
+            throw std::runtime_error(failMsg("missing primitive data"));
         MeshData md = buildPrimitive(*obj.primitive);
-        if (md.empty()) return Manifold{};
+        if (md.empty() || md.positions.empty() || md.indices.empty())
+            throw std::runtime_error(failMsg("buildPrimitive produced empty geometry"));
         MeshGL gl;
         gl.numProp = 3;
         gl.vertProperties.assign(md.positions.begin(), md.positions.end());
         gl.triVerts.assign(md.indices.begin(), md.indices.end());
         Manifold m(gl);
         if (m.Status() != Manifold::Error::NoError)
-            throw std::runtime_error(
-                std::string("CSG evaluation failed for '") + csgRootName +
-                "':\nchild '" + obj.name + "' could not be converted to a manifold mesh "
-                "(triangulation produced non-manifold geometry).\n"
-                "Use --allow-approximate-csg to export children separately as a debug fallback.");
+            throw std::runtime_error(failMsg("triangulation produced non-manifold geometry"));
         return applyXf(m);
     }
 
