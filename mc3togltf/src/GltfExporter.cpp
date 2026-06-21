@@ -21,6 +21,7 @@
 #include <iostream>
 #include <numbers>
 #include <set>
+#include <sstream>
 #include <stdexcept>
 #include <string>
 #include <unordered_map>
@@ -53,8 +54,63 @@ struct ExportCtx {
     bool allowApproximateCSG{false};
 
     // Cache (definition_id, material_idx) → glTF mesh index — avoids duplicate geometry
+    // for MC3 <instance> nodes that reference the same definition.
     std::map<std::pair<std::string,int>, int> defMeshCache;
+
+    // Cache geometry_key → glTF mesh index — avoids duplicate geometry for repeated
+    // primitives (boxes, spheres, cylinders…), OBJ meshes, and extrude shapes.
+    std::map<std::string, int> geomMeshCache;
+
+    // Accumulated export statistics — copied to GltfExporter::stats after export.
+    ExportStats stats;
 };
+
+// ---------------------------------------------------------------------------
+// Geometry cache key: serialise all parameters that affect vertex/index data.
+// Includes deform (which modifies vertex positions) and material (baked into
+// the glTF primitive).  Does NOT include node-level transform (handled as TRS).
+// ---------------------------------------------------------------------------
+
+static std::string buildGeomCacheKey(const Mc3Object& obj, int matIdx) {
+    std::ostringstream k;
+    k << static_cast<int>(obj.type) << '|';
+
+    if (obj.type == ObjectType::Mesh) {
+        k << obj.meshSource;
+    } else if (obj.primitive.has_value()) {
+        const auto& p = *obj.primitive;
+        k << p.size[0]        << ',' << p.size[1]       << ',' << p.size[2]      << '|'
+          << p.radius          << '|' << p.height         << '|' << p.segments     << '|'
+          << p.axis            << '|' << p.majorRadius    << '|' << p.minorRadius  << '|'
+          << p.subdivisionsX   << '|' << p.subdivisionsZ;
+    } else if (obj.extrude.has_value()) {
+        const auto& e  = *obj.extrude;
+        const auto& cs = e.crossSection;
+        const auto& pt = e.path;
+        k << static_cast<int>(cs.type) << ','
+          << cs.width   << ',' << cs.height      << ','
+          << cs.radius  << ',' << cs.innerRadius  << ','
+          << cs.sides   << ',' << cs.segments     << ',';
+        for (const auto& cp : cs.customPoints)
+            k << cp.x << '.' << cp.y << ';';
+        k << '|' << static_cast<int>(pt.type) << ','
+          << pt.length      << ',' << pt.axis       << ','
+          << pt.arcRadius   << ',' << pt.arcAngle   << ','
+          << pt.helixRadius << ',' << pt.helixHeight << ',' << pt.helixTurns << ',';
+        for (const auto& pp : pt.points)
+            k << pp.position[0]  << ',' << pp.position[1]  << ',' << pp.position[2]  << ','
+              << pp.controlIn[0] << ',' << pp.controlIn[1] << ',' << pp.controlIn[2] << ';';
+        k << '|' << e.twist << ',' << e.segments << ',' << e.smooth << ',' << e.caps;
+    }
+
+    if (obj.deform.has_value()) {
+        const auto& d = *obj.deform;
+        k << "|D" << d.scale[0] << ',' << d.scale[1] << ',' << d.scale[2];
+    }
+
+    k << "|M" << matIdx;
+    return k.str();
+}
 
 static float unitScaleFactor(const std::string& unit) {
     if (unit == "centimeter")  return 0.01f;
@@ -287,6 +343,7 @@ static int buildMesh(ExportCtx& ctx,
             md = loadObjMesh(ctx.basePath, obj.meshSource);
         } catch (const std::exception& e) {
             std::cerr << "Warning: " << e.what() << '\n';
+            ctx.stats.warnings++;
             return -1;
         }
     } else if (obj.extrude.has_value()) {
@@ -368,6 +425,8 @@ static int addMeshDataToGltf(ExportCtx& ctx, MeshData md,
 
 static int buildNode(ExportCtx& ctx, const Mc3Object& obj)
 {
+    ctx.stats.objectsProcessed++;
+
     // Invisible objects (and their entire subtree) are skipped
     if (!obj.visible) return -1;
 
@@ -429,6 +488,7 @@ static int buildNode(ExportCtx& ctx, const Mc3Object& obj)
             auto cacheIt  = ctx.defMeshCache.find(cacheKey);
             if (cacheIt != ctx.defMeshCache.end()) {
                 directMesh = cacheIt->second;
+                ctx.stats.reusedMeshRefs++;
             } else {
                 Mc3Object tmp = defObj;
                 if (matIdx >= 0) tmp.material = matName;
@@ -446,10 +506,20 @@ static int buildNode(ExportCtx& ctx, const Mc3Object& obj)
         } else {
             std::cerr << "Warning: instance references unknown definition '"
                       << obj.definition << "'\n";
+            ctx.stats.warnings++;
         }
     } else if (obj.primitive.has_value() || obj.extrude.has_value() ||
                (obj.type == ObjectType::Mesh && !obj.meshSource.empty())) {
-        directMesh = buildMesh(ctx, obj, matIdx);
+        std::string geomKey = buildGeomCacheKey(obj, matIdx);
+        auto gIt = ctx.geomMeshCache.find(geomKey);
+        if (gIt != ctx.geomMeshCache.end()) {
+            directMesh = gIt->second;
+            if (directMesh >= 0) ctx.stats.reusedMeshRefs++;
+        } else {
+            directMesh = buildMesh(ctx, obj, matIdx);
+            ctx.geomMeshCache[geomKey] = directMesh;
+            if (obj.type == ObjectType::Mesh) ctx.stats.objMeshesLoaded++;
+        }
     }
 
     // --- CSG nodes: real boolean evaluation via Manifold ---
@@ -468,6 +538,7 @@ static int buildNode(ExportCtx& ctx, const Mc3Object& obj)
             MeshData csgData = evaluateCsgNode(obj, ctx.definitions);
             if (!csgData.empty())
                 directMesh = addMeshDataToGltf(ctx, std::move(csgData), obj.name, matIdx);
+            ctx.stats.csgMeshesEvaluated++;
             csgEvaluated = true;   // skip children — they are baked into the mesh
         } else {
             // Approximate mode (--allow-approximate-csg / editor checkbox):
@@ -475,6 +546,7 @@ static int buildNode(ExportCtx& ctx, const Mc3Object& obj)
             std::cerr << "Warning: mc3togltf: <" << op << "> node '"
                       << (obj.name.empty() ? "(unnamed)" : obj.name)
                       << "' — approximate CSG mode; children exported as separate meshes.\n";
+            ctx.stats.warnings++;
         }
     }
 
@@ -1001,6 +1073,23 @@ void GltfExporter::exportDocument(const Mc3Document& doc,
                                            writeBinary);
     if (!ok)
         throw std::runtime_error("tinygltf: failed to write " + path);
+
+    // Populate export statistics from accumulated ctx.stats + model aggregate counts.
+    stats = ctx.stats;
+    stats.gltfNodes    = static_cast<int>(model.nodes.size());
+    stats.uniqueMeshes = static_cast<int>(model.meshes.size());
+    for (const auto& mesh : model.meshes) {
+        for (const auto& prim : mesh.primitives) {
+            auto posIt = prim.attributes.find("POSITION");
+            if (posIt != prim.attributes.end() &&
+                posIt->second >= 0 &&
+                posIt->second < static_cast<int>(model.accessors.size()))
+                stats.totalVertices += model.accessors[posIt->second].count;
+            if (prim.indices >= 0 &&
+                prim.indices < static_cast<int>(model.accessors.size()))
+                stats.totalTriangles += model.accessors[prim.indices].count / 3;
+        }
+    }
 }
 
 } // namespace mc3togltf

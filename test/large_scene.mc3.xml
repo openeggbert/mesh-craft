@@ -1,0 +1,82 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Large repeated-geometry scene for export efficiency regression tests.
+     Contains many repeated instances and identical primitives to exercise
+     the geometry cache and instance mesh-reuse path. -->
+<mc3 version="0.3" model="LargeScene">
+
+  <definitions>
+    <definition id="stone_block">
+      <box name="StoneBlock" size="1 0.5 1"/>
+    </definition>
+    <definition id="column">
+      <cylinder name="Column" radius="0.15" height="3.0" segments="12"/>
+    </definition>
+    <definition id="arch_window">
+      <box name="WindowFrame" size="0.8 1.2 0.1"/>
+    </definition>
+  </definitions>
+
+  <objects>
+
+    <!-- 20 stone_block instances — all share one glTF mesh via defMeshCache -->
+    <instance name="Block_01" definition="stone_block" position="0 0 0"/>
+    <instance name="Block_02" definition="stone_block" position="1.2 0 0"/>
+    <instance name="Block_03" definition="stone_block" position="2.4 0 0"/>
+    <instance name="Block_04" definition="stone_block" position="3.6 0 0"/>
+    <instance name="Block_05" definition="stone_block" position="4.8 0 0"/>
+    <instance name="Block_06" definition="stone_block" position="6.0 0 0"/>
+    <instance name="Block_07" definition="stone_block" position="7.2 0 0"/>
+    <instance name="Block_08" definition="stone_block" position="8.4 0 0"/>
+    <instance name="Block_09" definition="stone_block" position="9.6 0 0"/>
+    <instance name="Block_10" definition="stone_block" position="10.8 0 0"/>
+    <instance name="Block_11" definition="stone_block" position="0 0 1.2"/>
+    <instance name="Block_12" definition="stone_block" position="1.2 0 1.2"/>
+    <instance name="Block_13" definition="stone_block" position="2.4 0 1.2"/>
+    <instance name="Block_14" definition="stone_block" position="3.6 0 1.2"/>
+    <instance name="Block_15" definition="stone_block" position="4.8 0 1.2"/>
+    <instance name="Block_16" definition="stone_block" position="6.0 0 1.2"/>
+    <instance name="Block_17" definition="stone_block" position="7.2 0 1.2"/>
+    <instance name="Block_18" definition="stone_block" position="8.4 0 1.2"/>
+    <instance name="Block_19" definition="stone_block" position="9.6 0 1.2"/>
+    <instance name="Block_20" definition="stone_block" position="10.8 0 1.2"/>
+
+    <!-- 10 wall segments: direct boxes, identical size — all share one glTF mesh via geomMeshCache -->
+    <box name="Wall_01" size="2 1 0.3" position="0 0 5"/>
+    <box name="Wall_02" size="2 1 0.3" position="2 0 5"/>
+    <box name="Wall_03" size="2 1 0.3" position="4 0 5"/>
+    <box name="Wall_04" size="2 1 0.3" position="6 0 5"/>
+    <box name="Wall_05" size="2 1 0.3" position="8 0 5"/>
+    <box name="Wall_06" size="2 1 0.3" position="0 1 5"/>
+    <box name="Wall_07" size="2 1 0.3" position="2 1 5"/>
+    <box name="Wall_08" size="2 1 0.3" position="4 1 5"/>
+    <box name="Wall_09" size="2 1 0.3" position="6 1 5"/>
+    <box name="Wall_10" size="2 1 0.3" position="8 1 5"/>
+
+    <!-- 5 decorative spheres: identical radius — share one glTF mesh via geomMeshCache -->
+    <sphere name="Orb_01" radius="0.4" segments="16" position="0 2 9"/>
+    <sphere name="Orb_02" radius="0.4" segments="16" position="2.5 2 9"/>
+    <sphere name="Orb_03" radius="0.4" segments="16" position="5 2 9"/>
+    <sphere name="Orb_04" radius="0.4" segments="16" position="7.5 2 9"/>
+    <sphere name="Orb_05" radius="0.4" segments="16" position="10 2 9"/>
+
+    <!-- 10 column instances — all share one glTF mesh via defMeshCache -->
+    <instance name="Col_01" definition="column" position="0 0 14"/>
+    <instance name="Col_02" definition="column" position="3 0 14"/>
+    <instance name="Col_03" definition="column" position="6 0 14"/>
+    <instance name="Col_04" definition="column" position="9 0 14"/>
+    <instance name="Col_05" definition="column" position="12 0 14"/>
+    <instance name="Col_06" definition="column" position="0 0 17"/>
+    <instance name="Col_07" definition="column" position="3 0 17"/>
+    <instance name="Col_08" definition="column" position="6 0 17"/>
+    <instance name="Col_09" definition="column" position="9 0 17"/>
+    <instance name="Col_10" definition="column" position="12 0 17"/>
+
+    <!-- 5 arch window instances — all share one glTF mesh via defMeshCache -->
+    <instance name="Win_01" definition="arch_window" position="0 1 20"/>
+    <instance name="Win_02" definition="arch_window" position="2 1 20"/>
+    <instance name="Win_03" definition="arch_window" position="4 1 20"/>
+    <instance name="Win_04" definition="arch_window" position="6 1 20"/>
+    <instance name="Win_05" definition="arch_window" position="8 1 20"/>
+
+  </objects>
+</mc3>

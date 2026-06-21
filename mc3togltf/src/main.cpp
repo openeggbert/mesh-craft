@@ -13,7 +13,7 @@ using namespace mc3togltf;
 using MeshCraft::Mc3::Mc3Document;
 
 static void printUsage(const char* prog) {
-    std::cerr << "Usage: " << prog << " [--allow-approximate-csg] <input.mc3.xml> [output.gltf|output.glb]\n"
+    std::cerr << "Usage: " << prog << " [options] <input.mc3.xml> [output.gltf|output.glb]\n"
               << "\n"
               << "  If the output path is omitted, the input filename is used\n"
               << "  with its extension replaced by .gltf\n"
@@ -22,23 +22,29 @@ static void printUsage(const char* prog) {
               << "    .gltf  → JSON glTF 2.0 (external buffer .bin)\n"
               << "    .glb   → Binary GLB 2.0 (self-contained)\n"
               << "\n"
+              << "Options:\n"
               << "  --allow-approximate-csg\n"
               << "    By default, CSG nodes (union/difference/intersection) are evaluated\n"
               << "    using the Manifold library and exported as a single merged mesh.\n"
               << "    This flag disables Manifold evaluation and exports CSG children as\n"
               << "    separate meshes instead — geometrically incorrect and intended only\n"
-              << "    as a debug fallback.\n";
+              << "    as a debug fallback.\n"
+              << "\n"
+              << "  --stats\n"
+              << "    Print export statistics after writing the output file.\n";
 }
 
 
 int main(int argc, char* argv[]) {
     bool allowApproxCSG = false;
+    bool showStats      = false;
 
     // Collect non-flag arguments
     std::vector<std::string> args;
     for (int i = 1; i < argc; ++i) {
         std::string a = argv[i];
         if (a == "--allow-approximate-csg") allowApproxCSG = true;
+        else if (a == "--stats")            showStats = true;
         else args.push_back(a);
     }
 
@@ -82,6 +88,20 @@ int main(int argc, char* argv[]) {
         exporter.exportDocument(doc, outputPath, fmt);
 
         std::cout << "Written: " << outputPath << '\n';
+
+        if (showStats) {
+            const auto& s = exporter.stats;
+            std::cout << "Export statistics:\n"
+                      << "  Objects processed: " << s.objectsProcessed   << "\n"
+                      << "  glTF nodes:        " << s.gltfNodes           << "\n"
+                      << "  Unique meshes:     " << s.uniqueMeshes        << "\n"
+                      << "  Reused mesh refs:  " << s.reusedMeshRefs      << "\n"
+                      << "  Total vertices:    " << s.totalVertices        << "\n"
+                      << "  Total triangles:   " << s.totalTriangles       << "\n"
+                      << "  OBJ files loaded:  " << s.objMeshesLoaded     << "\n"
+                      << "  CSG evaluations:   " << s.csgMeshesEvaluated  << "\n"
+                      << "  Warnings:          " << s.warnings             << "\n";
+        }
     } catch (const std::exception& e) {
         std::cerr << "Error: " << e.what() << '\n';
         return 1;

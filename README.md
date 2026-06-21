@@ -73,6 +73,7 @@ ninja -C cmake-build-debug
 
 ```sh
 ./cmake-build-debug/mc3togltf/mc3togltf scene.mc3.xml scene.glb
+./cmake-build-debug/mc3togltf/mc3togltf --stats scene.mc3.xml scene.glb  # print export statistics
 ```
 
 ### Convert to MCB
@@ -105,7 +106,7 @@ ctest -V --test-dir cmake-build-debug
 - Undo/redo (20-step deep-copy stack)
 - Auto-save with rotating backups
 - MCB binary format (`mc3tomcb`)
-- glTF/GLB export (`mc3togltf`)
+- glTF/GLB export (`mc3togltf`) with geometry reuse — repeated identical primitives, OBJ meshes, extrude shapes, and `<instance>` nodes share one glTF mesh buffer per unique geometry+material combination
 
 ## Current Limitations
 
