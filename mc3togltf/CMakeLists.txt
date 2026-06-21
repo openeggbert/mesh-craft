@@ -102,11 +102,13 @@ if(BUILD_TESTING)
         set(_primitives_xml  "${CMAKE_CURRENT_SOURCE_DIR}/../test/all_primitives.mc3.xml")
         set(_objects_xml     "${CMAKE_CURRENT_SOURCE_DIR}/../test/all_objects.mc3.xml")
         set(_csg_xml         "${CMAKE_CURRENT_SOURCE_DIR}/../test/csg_test.mc3.xml")
-        set(_large_scene_xml      "${CMAKE_CURRENT_SOURCE_DIR}/../test/large_scene.mc3.xml")
-        set(_csg_union_xml        "${CMAKE_CURRENT_SOURCE_DIR}/../test/csg_union_export.mc3.xml")
-        set(_csg_diff_xml         "${CMAKE_CURRENT_SOURCE_DIR}/../test/csg_difference_export.mc3.xml")
-        set(_csg_isect_xml        "${CMAKE_CURRENT_SOURCE_DIR}/../test/csg_intersection_export.mc3.xml")
-        set(_csg_unsupported_xml  "${CMAKE_CURRENT_SOURCE_DIR}/../test/csg_unsupported_child.mc3.xml")
+        set(_large_scene_xml          "${CMAKE_CURRENT_SOURCE_DIR}/../test/large_scene.mc3.xml")
+        set(_csg_union_xml            "${CMAKE_CURRENT_SOURCE_DIR}/../test/csg_union_export.mc3.xml")
+        set(_csg_diff_xml             "${CMAKE_CURRENT_SOURCE_DIR}/../test/csg_difference_export.mc3.xml")
+        set(_csg_isect_xml            "${CMAKE_CURRENT_SOURCE_DIR}/../test/csg_intersection_export.mc3.xml")
+        set(_csg_unsupported_xml      "${CMAKE_CURRENT_SOURCE_DIR}/../test/csg_unsupported_child.mc3.xml")
+        set(_instance_deform_xml      "${CMAKE_CURRENT_SOURCE_DIR}/../test/instance_deform_cache.mc3.xml")
+        set(_close_dimensions_xml     "${CMAKE_CURRENT_SOURCE_DIR}/../test/close_dimensions.mc3.xml")
         if(EXISTS "${_anim_xml}" AND EXISTS "${_house_xml}")
             add_test(
                 NAME mc3togltf_gltf
@@ -181,5 +183,32 @@ if(BUILD_TESTING)
             )
             set_tests_properties(mc3togltf_csg_unsupported PROPERTIES TIMEOUT 30)
         endif()
+        if(EXISTS "${_instance_deform_xml}")
+            add_test(
+                NAME mc3togltf_instance_deform_cache
+                COMMAND "${PYTHON3_EXEC}"
+                        "${CMAKE_CURRENT_SOURCE_DIR}/test/instance_deform_cache_test.py"
+                        "$<TARGET_FILE:mc3togltf>"
+                        "${_instance_deform_xml}"
+            )
+            set_tests_properties(mc3togltf_instance_deform_cache PROPERTIES TIMEOUT 30)
+        endif()
+        if(EXISTS "${_close_dimensions_xml}")
+            add_test(
+                NAME mc3togltf_float_cache_key
+                COMMAND "${PYTHON3_EXEC}"
+                        "${CMAKE_CURRENT_SOURCE_DIR}/test/float_cache_key_test.py"
+                        "$<TARGET_FILE:mc3togltf>"
+                        "${_close_dimensions_xml}"
+            )
+            set_tests_properties(mc3togltf_float_cache_key PROPERTIES TIMEOUT 30)
+        endif()
+        add_test(
+            NAME mc3togltf_large_scene_generated
+            COMMAND "${PYTHON3_EXEC}"
+                    "${CMAKE_CURRENT_SOURCE_DIR}/test/large_scene_generated_test.py"
+                    "$<TARGET_FILE:mc3togltf>"
+        )
+        set_tests_properties(mc3togltf_large_scene_generated PROPERTIES TIMEOUT 60)
     endif()
 endif()

@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Float cache key precision test.
+     NearlyEqual1 and NearlyEqual2 have sizes that differ only in the 7th
+     significant digit.  Default ostream precision (6 sig figs) would print
+     both as "1", causing a false cache collision.  With max_digits10 (9 sig
+     figs) they are serialised distinctly and must NOT share a glTF mesh. -->
+<mc3 version="0.3" model="CloseDimensions">
+
+  <objects>
+    <box name="NearlyEqual1" size="1.0000010 1 1"/>
+    <box name="NearlyEqual2" size="1.0000020 1 1"/>
+  </objects>
+
+</mc3>

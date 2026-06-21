@@ -18,7 +18,10 @@
 #include <algorithm>
 #include <cctype>
 #include <cstring>
+#include <iomanip>
 #include <iostream>
+#include <limits>
+#include <map>
 #include <numbers>
 #include <set>
 #include <sstream>
@@ -53,9 +56,10 @@ struct ExportCtx {
     std::filesystem::path basePath;  // directory of source .mc3.xml (for OBJ paths)
     bool allowApproximateCSG{false};
 
-    // Cache (definition_id, material_idx) → glTF mesh index — avoids duplicate geometry
-    // for MC3 <instance> nodes that reference the same definition.
-    std::map<std::pair<std::string,int>, int> defMeshCache;
+    // Cache key → glTF mesh index for MC3 <instance> nodes that share a definition.
+    // Key built by buildDefCacheKey(): includes definition ID, material, and deform scale.
+    // Instances with identical geometry (same def + mat + deform) share one glTF mesh.
+    std::map<std::string, int> defMeshCache;
 
     // Cache geometry_key → glTF mesh index — avoids duplicate geometry for repeated
     // primitives (boxes, spheres, cylinders…), OBJ meshes, and extrude shapes.
@@ -66,13 +70,33 @@ struct ExportCtx {
 };
 
 // ---------------------------------------------------------------------------
+// Instance cache key: definition ID + effective material + optional deform scale.
+// Two instances with different deform must NOT share a glTF mesh because deform
+// changes vertex positions before they are baked into the buffer.
+// ---------------------------------------------------------------------------
+
+static std::string buildDefCacheKey(const std::string& defId, int matIdx,
+                                     const std::optional<Mc3Deform>& deform) {
+    std::ostringstream k;
+    k << defId << '|' << matIdx;
+    if (deform.has_value()) {
+        k << "|D" << std::setprecision(std::numeric_limits<float>::max_digits10)
+          << deform->scale[0] << ',' << deform->scale[1] << ',' << deform->scale[2];
+    }
+    return k.str();
+}
+
+// ---------------------------------------------------------------------------
 // Geometry cache key: serialise all parameters that affect vertex/index data.
+// Uses max_digits10 float precision so close-but-distinct float values produce
+// distinct keys and do not incorrectly share the same glTF mesh.
 // Includes deform (which modifies vertex positions) and material (baked into
 // the glTF primitive).  Does NOT include node-level transform (handled as TRS).
 // ---------------------------------------------------------------------------
 
 static std::string buildGeomCacheKey(const Mc3Object& obj, int matIdx) {
     std::ostringstream k;
+    k << std::setprecision(std::numeric_limits<float>::max_digits10);
     k << static_cast<int>(obj.type) << '|';
 
     if (obj.type == ObjectType::Mesh) {
@@ -318,7 +342,8 @@ static int buildMaterial(tinygltf::Model& model,
     m.doubleSided = mat.doubleSided;
 
     std::string am = mat.alphaMode;
-    std::transform(am.begin(), am.end(), am.begin(), ::toupper);
+    std::transform(am.begin(), am.end(), am.begin(),
+                   [](unsigned char c){ return std::toupper(c); });
     if (am == "BLEND")      m.alphaMode = "BLEND";
     else if (am == "MASK")  { m.alphaMode = "MASK"; m.alphaCutoff = mat.alphaCutoff; }
     else                    m.alphaMode = "OPAQUE";
@@ -483,8 +508,8 @@ static int buildNode(ExportCtx& ctx, const Mc3Object& obj)
                 return jt != ctx.matNameToIdx.end() ? jt->second : -1;
             }();
 
-            // Reuse cached mesh if same definition+material was already built
-            auto cacheKey = std::make_pair(obj.definition, effectiveMat);
+            // Reuse cached mesh if same definition+material+deform was already built
+            auto cacheKey = buildDefCacheKey(obj.definition, effectiveMat, obj.deform);
             auto cacheIt  = ctx.defMeshCache.find(cacheKey);
             if (cacheIt != ctx.defMeshCache.end()) {
                 directMesh = cacheIt->second;

@@ -186,7 +186,12 @@ void MeshCraftApplication::runGltfExport(const std::string& outPath) {
     exporter.allowApproximateCSG = glbAllowApproxCSG_;
     exporter.exportDocument(document_, out, fmt);
 
-    setStatusMsg("Exported to " + out.filename().string());
+    const auto& s = exporter.stats;
+    std::string statusMsg = "Exported " + out.filename().string()
+        + " (" + std::to_string(s.uniqueMeshes) + " meshes"
+        + (s.reusedMeshRefs > 0 ? ", " + std::to_string(s.reusedMeshRefs) + " reused" : "")
+        + ")";
+    setStatusMsg(statusMsg);
 }
 
 // ---------------------------------------------------------------------------

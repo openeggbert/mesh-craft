@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Instance deform cache-correctness test.
+     Verifies that the defMeshCache correctly separates instances that share a
+     definition but carry different per-instance deform overrides. -->
+<mc3 version="0.3" model="InstanceDeformCache">
+
+  <definitions>
+    <definition id="stone_block">
+      <box name="StoneBlock" size="1 1 1"/>
+    </definition>
+  </definitions>
+
+  <objects>
+    <!-- No deform: BlockA and BlockB must share one glTF mesh -->
+    <instance name="BlockA" definition="stone_block" position="0 0 0"/>
+    <instance name="BlockB" definition="stone_block" position="3 0 0"/>
+
+    <!-- Deform 2x on X: WideBlockA and WideBlockB must share one glTF mesh,
+         but that mesh must differ from the undeformed BlockA mesh. -->
+    <instance name="WideBlockA" definition="stone_block" position="0 0 3">
+      <deform scale="2 1 1"/>
+    </instance>
+    <instance name="WideBlockB" definition="stone_block" position="3 0 3">
+      <deform scale="2 1 1"/>
+    </instance>
+
+    <!-- Deform 2x on Y: TallBlock must have its own mesh, distinct from both
+         undeformed and wide-deformed instances. -->
+    <instance name="TallBlock" definition="stone_block" position="0 0 6">
+      <deform scale="1 2 1"/>
+    </instance>
+
+  </objects>
+</mc3>
