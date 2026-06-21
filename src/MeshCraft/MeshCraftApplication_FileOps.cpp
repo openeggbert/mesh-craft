@@ -176,9 +176,9 @@ void MeshCraftApplication::exportGltf() {
 
 void MeshCraftApplication::runGltfExport(const std::string& outPath) {
     std::filesystem::path out(outPath);
-    mc3togltf::OutputFormat fmt = (out.extension() == ".glb")
-                                  ? mc3togltf::OutputFormat::GLB
-                                  : mc3togltf::OutputFormat::GLTF;
+    // outputFormatFromPath throws std::runtime_error for unknown extensions;
+    // the export dialog catches it and displays it in glbExportErr_.
+    mc3togltf::OutputFormat fmt = mc3togltf::outputFormatFromPath(out);
 
     std::cout << "[MeshCraft] Exporting to " << outPath << "\n";
 

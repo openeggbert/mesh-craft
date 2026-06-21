@@ -74,17 +74,18 @@
 ## Phase 4: Primitives and CSG
 
 **S9** ✅ — Audit primitive support in mc3togltf MeshBuilder
-- **Implemented**: Box, Cube, Sphere, Cylinder, Cone, Plane, Extrude (all path types), OBJ mesh
-- **Not implemented**: Torus, Capsule, Disk, Grid, IcoSphere — previously returned empty MeshData silently
-- Fix: each unimplemented type now emits `Warning: mc3togltf: 'X' export not yet implemented — object skipped.`
-- Verified: torus and icosphere in test XML produce correct warning output
+- **Originally**: Torus, Capsule, Disk, Grid, IcoSphere returned empty MeshData silently
+- **Round 2**: each unimplemented type emitted a warning and was skipped
+- **Round 3**: all five are now fully implemented in MeshBuilder and exported correctly
+  - Disk supports solid (inner_radius=0) and ring (inner_radius>0) topology
+  - Verified by `mc3togltf_all_primitives` and `mc3togltf_export_verification` CTests
 
 **S10** ✅ — CSG export audit
-- **Finding**: CSG nodes (Union/Difference/Intersection) were silently exported as empty group nodes; children (including cutters) exported as individual meshes without boolean evaluation
-- **Fix** (`GltfExporter.cpp`): added warning when any CSG node is encountered:
-  `Warning: mc3togltf: <difference> node 'X' — CSG boolean not evaluated; children exported as separate meshes.`
-- Implementing Manifold-based CSG evaluation is out of scope for this stabilization pass
-- Verified: csg_test.mc3.xml emits correct warnings for union/difference/intersection nodes
+- **Finding**: CSG nodes were silently exported as empty group nodes
+- **Round 2 fix**: warning emitted when any CSG node encountered
+- **Round 3 fix** (`GltfExporter.cpp`): all CSG nodes (union/difference/intersection) now **fail hard** by default with a descriptive error
+  - Use `--allow-approximate-csg` (CLI) or the "Allow approximate CSG export" checkbox (editor) to export children separately
+  - Verified by `mc3togltf_csg_strict` CTest
 
 ---
 

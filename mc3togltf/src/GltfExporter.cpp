@@ -15,6 +15,7 @@
 #include <MeshCraft/Mc3/Mc3Primitive.hpp>
 
 #include <algorithm>
+#include <cctype>
 #include <cstring>
 #include <iostream>
 #include <numbers>
@@ -26,6 +27,17 @@
 
 using namespace MeshCraft::Mc3;
 namespace mc3togltf {
+
+OutputFormat outputFormatFromPath(const std::filesystem::path& path) {
+    std::string ext = path.extension().string();
+    for (char& c : ext)
+        c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+    if (ext == ".glb")  return OutputFormat::GLB;
+    if (ext == ".gltf") return OutputFormat::GLTF;
+    throw std::runtime_error(
+        std::string("Unknown output extension '") + path.extension().string() +
+        "'. Only .gltf and .glb are supported.");
+}
 
 // ---------------------------------------------------------------------------
 // Export context (passed through recursive node building)

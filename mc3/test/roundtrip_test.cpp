@@ -3,6 +3,7 @@
 
 #include <cmath>
 #include <filesystem>
+#include <fstream>
 #include <functional>
 #include <iostream>
 #include <memory>
@@ -511,6 +512,100 @@ static void testFeaturesXmlLoads(const std::string& path) {
 }
 
 // ---------------------------------------------------------------------------
+// Disk inner-radius roundtrip tests (Task 1 regression lock)
+// ---------------------------------------------------------------------------
+
+static void testDiskRingRoundtrip() {
+    Mc3Document doc;
+    auto obj = std::make_shared<Mc3Object>();
+    obj->id   = "disk1";
+    obj->name = "RingDisk";
+    obj->type = ObjectType::Disk;
+    Mc3Primitive p;
+    p.primitiveType = PrimitiveType::Disk;
+    p.radius        = 0.5f;
+    p.minorRadius   = 0.25f;  // inner radius
+    p.segments      = 16;
+    obj->primitive  = p;
+    doc.objects.push_back(obj);
+
+    auto rt = roundtrip(doc);
+    CHECK(!rt.objects.empty(), "disk ring: object present");
+    if (rt.objects.empty()) return;
+    const auto& o = rt.objects[0];
+    CHECK(o->primitive.has_value(), "disk ring: primitive present");
+    if (!o->primitive) return;
+    CHECK(o->primitive->primitiveType == PrimitiveType::Disk, "disk ring: type==Disk");
+    CHECKF(o->primitive->radius,      0.5f,  "disk ring: radius==0.5");
+    CHECKF(o->primitive->minorRadius, 0.25f, "disk ring: minorRadius (inner_radius)==0.25");
+    CHECK(o->primitive->segments == 16,      "disk ring: segments==16");
+}
+
+static void testDiskSolidRoundtrip() {
+    Mc3Document doc;
+    auto obj = std::make_shared<Mc3Object>();
+    obj->id   = "disk2";
+    obj->name = "SolidDisk";
+    obj->type = ObjectType::Disk;
+    Mc3Primitive p;
+    p.primitiveType = PrimitiveType::Disk;
+    p.radius        = 0.4f;
+    p.minorRadius   = 0.0f;  // solid — inner_radius must not be written
+    p.segments      = 24;
+    obj->primitive  = p;
+    doc.objects.push_back(obj);
+
+    auto rt = roundtrip(doc);
+    CHECK(!rt.objects.empty(), "disk solid: object present");
+    if (rt.objects.empty()) return;
+    const auto& o = rt.objects[0];
+    CHECK(o->primitive.has_value(), "disk solid: primitive present");
+    if (!o->primitive) return;
+    CHECK(o->primitive->primitiveType == PrimitiveType::Disk, "disk solid: type==Disk");
+    CHECKF(o->primitive->radius,      0.4f, "disk solid: radius==0.4");
+    CHECKF(o->primitive->minorRadius, 0.0f, "disk solid: minorRadius==0.0 (solid)");
+}
+
+static void testDiskLegacyMinorRadius() {
+    // Legacy XML uses minor_radius="..." for disk; parser must accept it and
+    // treat it as inner_radius. On save, the canonical inner_radius attr must be used.
+    auto xmlPath = tmpPath();
+    {
+        std::ofstream f(xmlPath);
+        f << R"(<?xml version="1.0" encoding="UTF-8"?>
+<mc3 version="0.3" model="LegacyDisk">
+  <objects>
+    <disk name="LegacyRing" radius="0.5" minor_radius="0.2" segments="32"/>
+  </objects>
+</mc3>)";
+    }
+    try {
+        auto doc = Mc3Document::loadFromFile(xmlPath);
+        std::filesystem::remove(xmlPath);
+
+        CHECK(!doc.objects.empty(),           "disk legacy: object loaded");
+        if (doc.objects.empty()) return;
+        const auto& o = doc.objects[0];
+        CHECK(o->primitive.has_value(),       "disk legacy: primitive present");
+        if (!o->primitive) return;
+        CHECKF(o->primitive->minorRadius, 0.2f,
+               "disk legacy: minor_radius='0.2' parsed as inner radius");
+
+        // Roundtrip: saved XML must use inner_radius; loading it back must preserve value.
+        auto rt = roundtrip(doc);
+        CHECK(!rt.objects.empty(), "disk legacy rt: object present");
+        if (rt.objects.empty()) return;
+        const auto& ro = rt.objects[0];
+        if (ro->primitive)
+            CHECKF(ro->primitive->minorRadius, 0.2f,
+                   "disk legacy rt: inner_radius preserved through save/load");
+    } catch (const std::exception& e) {
+        std::filesystem::remove(xmlPath);
+        fail(std::string("disk legacy: exception: ") + e.what());
+    }
+}
+
+// ---------------------------------------------------------------------------
 
 int main(int argc, char* argv[]) {
     testVisible();
@@ -522,6 +617,9 @@ int main(int argc, char* argv[]) {
     testExtrudeBezier();
     testCsgDifferenceAndCutter();
     testGroupChildren();
+    testDiskRingRoundtrip();
+    testDiskSolidRoundtrip();
+    testDiskLegacyMinorRadius();
     testAnimationLinear();
     testAnimationCubicBezier();
     testAnimationStep();

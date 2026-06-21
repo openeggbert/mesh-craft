@@ -172,7 +172,7 @@ All objects share common transform attributes:
 
 #### `<torus>`, `<capsule>`, `<disk>`, `<grid>`, `<icosphere>`
 
-Supported by the MeshCraft editor. **Not yet exported by `mc3togltf`** (objects skipped with a warning).
+Supported by the MeshCraft editor and exported by `mc3togltf`.
 
 ### `<mesh>` — external OBJ file
 
@@ -228,7 +228,7 @@ Path types: `line` (length, axis), `arc` (radius, angle), `helix` (radius, heigh
 <intersection name="Cut">...</intersection>
 ```
 
-**Export note:** `mc3togltf` does **not** evaluate CSG booleans. Children are exported as individual meshes with a warning.
+**Export note:** `mc3togltf` does **not** evaluate CSG booleans. By default any CSG node causes an error. Pass `--allow-approximate-csg` (CLI) or enable the "Allow approximate CSG export" checkbox (editor) to export children as separate meshes instead.
 
 ---
 
@@ -266,8 +266,8 @@ Path types: `line` (length, axis), `arc` (radius, angle), `helix` (radius, heigh
 | Cameras | ✅ |
 | Animations (position/rotation/scale) | ✅ |
 | Animations (visible, emissive, deform) | ❌ (no glTF equivalent) |
-| Torus, Capsule, Disk, Grid, IcoSphere | ❌ (warning emitted) |
-| CSG (union/difference/intersection) | ❌ (warning, children exported separately) |
+| Torus, Capsule, Disk, Grid, IcoSphere | ✅ |
+| CSG (union/difference/intersection) | ❌ (strict fail by default; use `--allow-approximate-csg` to export children separately) |
 | Instance (via definitions) | ✅ |
 
 ---

@@ -1,6 +1,7 @@
 #include "GltfExporter.hpp"
 
 #include <MeshCraft/Mc3/Mc3Document.hpp>
+#include <cctype>
 #include <filesystem>
 #include <iostream>
 #include <stdexcept>
@@ -26,15 +27,6 @@ static void printUsage(const char* prog) {
               << "    incorrect). Without this flag CSG nodes cause an error.\n";
 }
 
-static OutputFormat formatFromPath(const fs::path& p) {
-    std::string ext = p.extension().string();
-    for (char& c : ext) c = static_cast<char>(std::tolower(c));
-    if (ext == ".glb")  return OutputFormat::GLB;
-    if (ext == ".gltf") return OutputFormat::GLTF;
-    throw std::runtime_error(
-        std::string("Unknown output extension '") + p.extension().string() +
-        "'. Only .gltf and .glb are supported.");
-}
 
 int main(int argc, char* argv[]) {
     bool allowApproxCSG = false;
@@ -73,7 +65,7 @@ int main(int argc, char* argv[]) {
     try {
         auto doc = Mc3Document::loadFromFile(inputPath);
 
-        OutputFormat fmt = formatFromPath(outputPath);
+        OutputFormat fmt = outputFormatFromPath(outputPath);
 
         GltfExporter exporter;
         exporter.allowApproximateCSG = allowApproxCSG;

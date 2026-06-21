@@ -462,6 +462,8 @@ For `<union>` and `<intersection>`, all children participate equally.
 
 Children can be any primitive or nested CSG operation (recursive).
 
+**glTF export:** `mc3togltf` does not evaluate CSG booleans. By default any CSG node causes an export error. Pass `--allow-approximate-csg` (CLI) or enable the editor checkbox to export children as separate meshes instead (geometrically incorrect but useful for preview).
+
 ---
 
 ### `<area>`
