@@ -228,7 +228,11 @@ Path types: `line` (length, axis), `arc` (radius, angle), `helix` (radius, heigh
 <intersection name="Cut">...</intersection>
 ```
 
-**Export note:** `mc3togltf` does **not** evaluate CSG booleans. By default any CSG node causes an error. Pass `--allow-approximate-csg` (CLI) or enable the "Allow approximate CSG export" checkbox (editor) to export children as separate meshes instead.
+**Export note:** `mc3togltf` evaluates CSG booleans using the [Manifold](https://github.com/elalish/manifold) library and exports the result as a single merged mesh.
+
+Supported child primitives for CSG: Box, Cube, Sphere, Cylinder, Cone (analytic), Torus, Capsule, IcoSphere (triangulated). Plane, Disk, Grid, Mesh (OBJ), and Extrude are not watertight or too complex — they are skipped with a warning when encountered inside a CSG node.
+
+Pass `--allow-approximate-csg` (CLI) or enable the "Allow approximate CSG export" checkbox (editor) to bypass Manifold evaluation and export children as separate meshes instead (geometrically incorrect — for debugging only).
 
 ---
 
@@ -267,7 +271,7 @@ Path types: `line` (length, axis), `arc` (radius, angle), `helix` (radius, heigh
 | Animations (position/rotation/scale) | ✅ |
 | Animations (visible, emissive, deform) | ❌ (no glTF equivalent) |
 | Torus, Capsule, Disk, Grid, IcoSphere | ✅ |
-| CSG (union/difference/intersection) | ❌ (strict fail by default; use `--allow-approximate-csg` to export children separately) |
+| CSG (union/difference/intersection) | ✅ (evaluated by Manifold; `--allow-approximate-csg` exports children separately as debug fallback) |
 | Instance (via definitions) | ✅ |
 
 ---

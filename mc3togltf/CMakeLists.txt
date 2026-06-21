@@ -8,6 +8,25 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 include(FetchContent)
 
 # --------------------------------------------------------------------------
+# Manifold — CSG boolean mesh evaluation.
+# When included from the root CMakeLists the target already exists; this
+# guard avoids a double-fetch in standalone builds.
+# --------------------------------------------------------------------------
+if(NOT TARGET manifold)
+    set(MANIFOLD_PAR           OFF CACHE BOOL "" FORCE)
+    set(MANIFOLD_EXPORT        OFF CACHE BOOL "" FORCE)
+    set(MANIFOLD_TEST          OFF CACHE BOOL "" FORCE)
+    set(MANIFOLD_FUZZ          OFF CACHE BOOL "" FORCE)
+    set(MANIFOLD_CROSS_SECTION OFF CACHE BOOL "" FORCE)
+    FetchContent_Declare(manifold
+        GIT_REPOSITORY https://github.com/elalish/manifold.git
+        GIT_TAG        v3.0.0
+        GIT_SHALLOW    TRUE
+    )
+    FetchContent_MakeAvailable(manifold)
+endif()
+
+# --------------------------------------------------------------------------
 # Mc3 library (from parent repo)
 # --------------------------------------------------------------------------
 if(NOT TARGET Mc3)
@@ -45,6 +64,7 @@ FetchContent_MakeAvailable(tinyobjloader)
 add_library(mc3togltf_lib STATIC
     src/MeshBuilder.cpp
     src/GltfExporter.cpp
+    src/CsgEvaluator.cpp
 )
 
 target_include_directories(mc3togltf_lib
@@ -54,7 +74,7 @@ target_include_directories(mc3togltf_lib
         ${tinyobjloader_SOURCE_DIR}
 )
 
-target_link_libraries(mc3togltf_lib PUBLIC Mc3 tinyobjloader)
+target_link_libraries(mc3togltf_lib PUBLIC Mc3 tinyobjloader manifold)
 
 # --------------------------------------------------------------------------
 # Executable — thin wrapper around the library
@@ -82,6 +102,9 @@ if(BUILD_TESTING)
         set(_primitives_xml  "${CMAKE_CURRENT_SOURCE_DIR}/../test/all_primitives.mc3.xml")
         set(_objects_xml     "${CMAKE_CURRENT_SOURCE_DIR}/../test/all_objects.mc3.xml")
         set(_csg_xml         "${CMAKE_CURRENT_SOURCE_DIR}/../test/csg_test.mc3.xml")
+        set(_csg_union_xml   "${CMAKE_CURRENT_SOURCE_DIR}/../test/csg_union_export.mc3.xml")
+        set(_csg_diff_xml    "${CMAKE_CURRENT_SOURCE_DIR}/../test/csg_difference_export.mc3.xml")
+        set(_csg_isect_xml   "${CMAKE_CURRENT_SOURCE_DIR}/../test/csg_intersection_export.mc3.xml")
         if(EXISTS "${_anim_xml}" AND EXISTS "${_house_xml}")
             add_test(
                 NAME mc3togltf_gltf
@@ -123,6 +146,18 @@ if(BUILD_TESTING)
                         "${_csg_xml}"
             )
             set_tests_properties(mc3togltf_csg_strict PROPERTIES TIMEOUT 30)
+        endif()
+        if(EXISTS "${_csg_union_xml}" AND EXISTS "${_csg_diff_xml}" AND EXISTS "${_csg_isect_xml}")
+            add_test(
+                NAME mc3togltf_csg_export
+                COMMAND "${PYTHON3_EXEC}"
+                        "${CMAKE_CURRENT_SOURCE_DIR}/test/csg_export_test.py"
+                        "$<TARGET_FILE:mc3togltf>"
+                        "${_csg_union_xml}"
+                        "${_csg_diff_xml}"
+                        "${_csg_isect_xml}"
+            )
+            set_tests_properties(mc3togltf_csg_export PROPERTIES TIMEOUT 60)
         endif()
     endif()
 endif()

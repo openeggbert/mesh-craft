@@ -13,9 +13,12 @@ OutputFormat outputFormatFromPath(const std::filesystem::path& outputPath);
 
 class GltfExporter {
 public:
-    // When false (default), any CSG node (union/difference/intersection) throws instead of
-    // exporting wrong geometry. Set true with --allow-approximate-csg (CLI) or the
-    // "Allow approximate CSG export" checkbox (editor) to export children separately.
+    // When false (default), CSG nodes (union/difference/intersection) are evaluated
+    // using the Manifold library and exported as a single merged mesh.  Throws on
+    // evaluation failure.
+    // When true (--allow-approximate-csg / editor checkbox), Manifold evaluation is
+    // skipped and children are exported as separate meshes — geometrically incorrect,
+    // useful only for debugging or previewing unsupported scene graphs.
     bool allowApproximateCSG{false};
 
     void exportDocument(const MeshCraft::Mc3::Mc3Document& doc,

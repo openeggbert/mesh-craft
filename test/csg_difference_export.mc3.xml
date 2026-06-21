@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Box with a sphere-shaped cavity subtracted via CSG difference. -->
+<mc3 version="0.3" model="CsgDifferenceExport">
+  <objects>
+    <difference name="HollowBlock">
+      <box    name="Block"  size="1.5 1.5 1.5"/>
+      <sphere name="Cavity" radius="0.6" role="cutter"/>
+    </difference>
+  </objects>
+</mc3>

@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Box intersected with sphere → rounded corners solid. -->
+<mc3 version="0.3" model="CsgIntersectionExport">
+  <objects>
+    <intersection name="RoundedSolid">
+      <box    name="Block" size="1.2 1.2 1.2"/>
+      <sphere name="Ball"  radius="0.75"/>
+    </intersection>
+  </objects>
+</mc3>

@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Two overlapping boxes merged into one solid via CSG union. -->
+<mc3 version="0.3" model="CsgUnionExport">
+  <objects>
+    <union name="MergedBoxes">
+      <box name="BoxA" size="1 1 1" position="-0.3 0 0"/>
+      <box name="BoxB" size="1 1 1" position=" 0.3 0 0"/>
+    </union>
+  </objects>
+</mc3>

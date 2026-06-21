@@ -114,7 +114,7 @@ ctest -V --test-dir cmake-build-debug
 - Preferences dialog: only auto-save interval is persisted; snap/grid/theme not saved
 - Headless screenshot: always writes PPM regardless of file extension
 - MCB: compression flag reserved in header but not implemented
-- CSG export to glTF: CSG boolean evaluation not implemented; exporting CSG scenes requires "Allow approximate CSG export" checkbox in the export dialog (children exported as separate meshes, geometrically incorrect)
+- CSG export to glTF: evaluated by Manifold (union/difference/intersection). Plane, Disk, Grid, Mesh, and Extrude nodes inside CSG are skipped with a warning (non-watertight). The "Allow approximate CSG export" checkbox bypasses Manifold and exports children separately (debug only)
 - No automated UI tests; only XML roundtrip and smoke test
 
 ## License

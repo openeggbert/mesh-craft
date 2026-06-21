@@ -462,7 +462,9 @@ For `<union>` and `<intersection>`, all children participate equally.
 
 Children can be any primitive or nested CSG operation (recursive).
 
-**glTF export:** `mc3togltf` does not evaluate CSG booleans. By default any CSG node causes an export error. Pass `--allow-approximate-csg` (CLI) or enable the editor checkbox to export children as separate meshes instead (geometrically incorrect but useful for preview).
+**glTF export:** `mc3togltf` evaluates CSG booleans using the Manifold library and exports the result as a single merged mesh. Supported child primitive types: Box, Cube, Sphere, Cylinder, Cone (analytic), Torus, Capsule, IcoSphere (triangulated). Plane, Disk, Grid, Mesh, and Extrude nodes inside CSG are skipped with a warning (non-watertight or unsupported topology). Pass `--allow-approximate-csg` (CLI) or enable the editor checkbox to bypass Manifold evaluation and export children as separate meshes (geometrically incorrect — for debugging only).
+
+**Difference semantics:** non-cutter children are unioned to form the base solid; children with `role="cutter"` are subtracted from it.
 
 ---
 

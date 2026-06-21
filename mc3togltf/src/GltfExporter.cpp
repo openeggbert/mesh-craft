@@ -4,6 +4,7 @@
 #include <tiny_gltf.h>
 
 #include "GltfExporter.hpp"
+#include "CsgEvaluator.hpp"
 #include "MathUtils.hpp"
 #include "MeshBuilder.hpp"
 
@@ -327,6 +328,41 @@ static int buildMesh(ExportCtx& ctx,
 }
 
 // ---------------------------------------------------------------------------
+// Add a pre-built MeshData to the glTF model.  Applies ctx.unitScale.
+// Returns the glTF mesh index, or -1 if md is empty.
+// ---------------------------------------------------------------------------
+
+static int addMeshDataToGltf(ExportCtx& ctx, MeshData md,
+                              const std::string& name, int materialIdx)
+{
+    if (md.empty()) return -1;
+    if (ctx.unitScale != 1.0f)
+        md.applyScale(ctx.unitScale, ctx.unitScale, ctx.unitScale);
+
+    tinygltf::Model& model = ctx.model;
+    int posAcc  = addAccessorVec3(model, md.positions, /*calcBounds=*/true);
+    int normAcc = addAccessorVec3(model, md.normals);
+    int idxAcc  = addAccessorIndices(model, md.indices);
+
+    tinygltf::Primitive prim;
+    prim.attributes["POSITION"] = posAcc;
+    prim.attributes["NORMAL"]   = normAcc;
+    if (!md.texcoords.empty()) {
+        int uvAcc = addAccessorVec2(model, md.texcoords);
+        prim.attributes["TEXCOORD_0"] = uvAcc;
+    }
+    prim.indices = idxAcc;
+    prim.mode    = TINYGLTF_MODE_TRIANGLES;
+    if (materialIdx >= 0) prim.material = materialIdx;
+
+    tinygltf::Mesh mesh;
+    mesh.name = name;
+    mesh.primitives.push_back(std::move(prim));
+    model.meshes.push_back(std::move(mesh));
+    return static_cast<int>(model.meshes.size()) - 1;
+}
+
+// ---------------------------------------------------------------------------
 // Node building (recursive)
 // ---------------------------------------------------------------------------
 
@@ -416,29 +452,34 @@ static int buildNode(ExportCtx& ctx, const Mc3Object& obj)
         directMesh = buildMesh(ctx, obj, matIdx);
     }
 
-    // CSG nodes: boolean evaluation not implemented.
-    // All CSG operations fail by default; use --allow-approximate-csg to export
-    // children as separate meshes (geometrically incorrect, for preview only).
+    // --- CSG nodes: real boolean evaluation via Manifold ---
+    bool csgEvaluated = false;
     if (obj.type == ObjectType::Union ||
         obj.type == ObjectType::Difference ||
         obj.type == ObjectType::Intersection) {
+
         const char* op = (obj.type == ObjectType::Union)      ? "union"
                        : (obj.type == ObjectType::Difference) ? "difference"
                        :                                        "intersection";
+
         if (!ctx.allowApproximateCSG) {
-            throw std::runtime_error(
-                std::string("CSG <") + op + "> node '" +
-                (obj.name.empty() ? "(unnamed)" : obj.name) +
-                "' — CSG boolean evaluation is not implemented. "
-                "Use --allow-approximate-csg to export children as separate meshes instead.");
+            // Real CSG: evaluate with Manifold, produce a single merged mesh.
+            // Throws on error so the export fails loudly rather than silently wrong.
+            MeshData csgData = evaluateCsgNode(obj, ctx.definitions);
+            if (!csgData.empty())
+                directMesh = addMeshDataToGltf(ctx, std::move(csgData), obj.name, matIdx);
+            csgEvaluated = true;   // skip children — they are baked into the mesh
+        } else {
+            // Approximate mode (--allow-approximate-csg / editor checkbox):
+            // export children as separate meshes.  Geometrically incorrect.
+            std::cerr << "Warning: mc3togltf: <" << op << "> node '"
+                      << (obj.name.empty() ? "(unnamed)" : obj.name)
+                      << "' — approximate CSG mode; children exported as separate meshes.\n";
         }
-        std::cerr << "Warning: mc3togltf: <" << op << "> node '"
-                  << (obj.name.empty() ? "(unnamed)" : obj.name)
-                  << "' — CSG boolean not evaluated; children exported as separate meshes.\n";
     }
 
-    // --- Logical children (for non-instance types) ---
-    if (obj.type != ObjectType::Instance) {
+    // --- Logical children (skip when real CSG was evaluated) ---
+    if (!csgEvaluated && obj.type != ObjectType::Instance) {
         for (const auto& child : obj.children) {
             if (!child) continue;
             int ci = buildNode(ctx, *child);
