@@ -121,7 +121,7 @@ void MeshCraftApplication::drawRegistryPanel() {
     // Save-definition dialog (floating child window)
     // -----------------------------------------------------------------------
     if (regSaveDlgOpen_) {
-        ImGui::SetNextWindowSize(ImVec2(360, 240), ImGuiCond_Always);
+        ImGui::SetNextWindowSize(ImVec2(380, 310), ImGuiCond_Always);
         ImGui::SetNextWindowPos(ImGui::GetMainViewport()->GetCenter(),
                                 ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
         if (ImGui::Begin("Save Definition to Registry##regdlg",
@@ -143,7 +143,7 @@ void MeshCraftApplication::drawRegistryPanel() {
                 ImGui::EndCombo();
             }
 
-            const float labelW = 70.0f;
+            const float labelW = 80.0f;
             ImGui::Text("Group:");
             ImGui::SameLine(labelW);
             ImGui::SetNextItemWidth(-1);
@@ -164,18 +164,33 @@ void MeshCraftApplication::drawRegistryPanel() {
             ImGui::SetNextItemWidth(-1);
             ImGui::InputText("##rt", regSaveTagsBuf_, sizeof(regSaveTagsBuf_));
 
+            ImGui::Text("Desc.:");
+            ImGui::SameLine(labelW);
+            ImGui::SetNextItemWidth(-1);
+            ImGui::InputText("##rdesc", regSaveDescBuf_, sizeof(regSaveDescBuf_));
+
+            ImGui::Text("Source:");
+            ImGui::SameLine(labelW);
+            ImGui::SetNextItemWidth(-1);
+            ImGui::InputText("##rsource", regSaveSourceBuf_, sizeof(regSaveSourceBuf_));
+
             ImGui::Spacing();
             bool canSave = !regSaveDefId_.empty() && regSaveNameBuf_[0] != '\0';
             if (!canSave) ImGui::BeginDisabled();
             if (ImGui::Button("Save", ImVec2(80, 0))) {
                 try {
+                    const Mc3::Mc3Document& srcDoc =
+                        (regSaveFromAi_ && aiPendingDoc_.has_value())
+                        ? *aiPendingDoc_ : document_;
                     auto entry = registry_.entryFromDefinition(
-                        document_, regSaveDefId_,
+                        srcDoc, regSaveDefId_,
                         regSaveGroupBuf_, regSaveNameBuf_,
-                        regSaveVariantBuf_, regSaveTagsBuf_);
+                        regSaveVariantBuf_, regSaveTagsBuf_,
+                        regSaveDescBuf_, regSaveSourceBuf_);
                     registry_.save(entry);
                     regResultsDirty_ = true;
                     regSaveDlgOpen_  = false;
+                    regSaveFromAi_   = false;
                     setStatusMsg("Saved '" + std::string(regSaveNameBuf_) + "' to registry");
                 } catch (const std::exception& ex) {
                     setStatusMsg(std::string("Save failed: ") + ex.what(), true);
@@ -185,6 +200,7 @@ void MeshCraftApplication::drawRegistryPanel() {
             ImGui::SameLine();
             if (ImGui::Button("Cancel", ImVec2(80, 0))) {
                 regSaveDlgOpen_ = false;
+                regSaveFromAi_  = false;
             }
         }
         ImGui::End();

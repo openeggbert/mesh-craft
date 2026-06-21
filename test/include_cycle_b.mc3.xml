@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<mc3 version="0.3" model="CycleB">
+  <include file="include_cycle_a.mc3.xml"/>
+  <materials>
+    <material id="mat_b" roughness="0.5">
+      <base_color>0.0 1.0 0.0 1.0</base_color>
+    </material>
+  </materials>
+</mc3>

@@ -450,6 +450,85 @@ static void testAnimationEvaluate() {
 }
 
 // ---------------------------------------------------------------------------
+// Include override / nested include / cycle tests
+// ---------------------------------------------------------------------------
+
+static void testIncludeOverride(const std::string& featuresXmlPath) {
+    auto xmlDir   = std::filesystem::path(featuresXmlPath).parent_path();
+    auto sceneFile = xmlDir / "include_override_scene.mc3.xml";
+    if (!std::filesystem::exists(sceneFile)) {
+        std::cout << "SKIP: include_override_scene.mc3.xml not found\n";
+        return;
+    }
+    try {
+        auto doc = Mc3Document::loadFromFile(sceneFile);
+        // The local override (stone = red) must win over the library (stone = grey)
+        CHECK(doc.materials.count("stone") == 1, "override: stone material present");
+        if (doc.materials.count("stone")) {
+            const auto& stone = doc.materials.at("stone");
+            CHECKF(stone.baseColor[0], 0.9f, "override: stone.r==0.9 (local red, not library grey)");
+            CHECKF(stone.baseColor[1], 0.1f, "override: stone.g==0.1");
+        }
+        // After roundtrip the saved file must NOT skip the local override
+        auto savedPath = xmlDir / "override_rt_tmp.mc3.xml";
+        doc.saveToFile(savedPath);
+        {
+            std::ifstream f(savedPath);
+            std::string saved((std::istreambuf_iterator<char>(f)), {});
+            // The local stone definition must appear in the saved file
+            CHECK(saved.find("id=\"stone\"") != std::string::npos,
+                  "override rt: local stone definition written to saved file");
+        }
+        auto rt = Mc3Document::loadFromFile(savedPath);
+        std::filesystem::remove(savedPath);
+        CHECK(rt.materials.count("stone") == 1, "override rt: stone present after reload");
+        if (rt.materials.count("stone"))
+            CHECKF(rt.materials.at("stone").baseColor[0], 0.9f,
+                   "override rt: red override preserved after reload");
+    } catch (const std::exception& e) {
+        fail(std::string("include override test threw: ") + e.what());
+    }
+}
+
+static void testIncludeNested(const std::string& featuresXmlPath) {
+    auto xmlDir    = std::filesystem::path(featuresXmlPath).parent_path();
+    auto sceneFile = xmlDir / "include_nested_scene.mc3.xml";
+    if (!std::filesystem::exists(sceneFile)) {
+        std::cout << "SKIP: include_nested_scene.mc3.xml not found\n";
+        return;
+    }
+    try {
+        auto doc = Mc3Document::loadFromFile(sceneFile);
+        // lib_a includes lib_b, so widget (from lib_b) must be accessible
+        CHECK(doc.definitions.count("widget") == 1, "nested include: 'widget' from lib_b accessible");
+        CHECK(doc.materials.count("wood") == 1,     "nested include: 'wood' from lib_a accessible");
+        // doc.includes must only list lib_a (not lib_b — that's nested)
+        CHECK(doc.includes.size() == 1, "nested include: only lib_a in doc.includes (not lib_b)");
+        if (!doc.includes.empty())
+            CHECK(doc.includes[0] == "include_lib_a.mc3.xml",
+                  "nested include: doc.includes[0]==\"include_lib_a.mc3.xml\"");
+    } catch (const std::exception& e) {
+        fail(std::string("include nested test threw: ") + e.what());
+    }
+}
+
+static void testIncludeCycle(const std::string& featuresXmlPath) {
+    auto xmlDir    = std::filesystem::path(featuresXmlPath).parent_path();
+    auto cycleFile = xmlDir / "include_cycle_a.mc3.xml";
+    if (!std::filesystem::exists(cycleFile)) {
+        std::cout << "SKIP: include_cycle_a.mc3.xml not found\n";
+        return;
+    }
+    bool threw = false;
+    try {
+        Mc3Document::loadFromFile(cycleFile);
+    } catch (const std::exception&) {
+        threw = true;
+    }
+    CHECK(threw, "include cycle: loading cyclic includes must throw");
+}
+
+// ---------------------------------------------------------------------------
 // Include tests
 // ---------------------------------------------------------------------------
 
@@ -696,6 +775,9 @@ int main(int argc, char* argv[]) {
     if (argc >= 2) {
         testFeaturesXmlLoads(argv[1]);
         testInclude(argv[1]);
+        testIncludeOverride(argv[1]);
+        testIncludeNested(argv[1]);
+        testIncludeCycle(argv[1]);
     }
 
     std::cout << "\n" << (failures == 0 ? "All tests passed." : "FAILURES: " + std::to_string(failures)) << "\n";

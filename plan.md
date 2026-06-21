@@ -192,9 +192,9 @@ Legend: ✅ done · 🔧 partial · 📋 planned
 
 | # | Task | Files |
 |---|------|-------|
-| M1 ✅ | mc3.xml `<include file="…"/>` support — parser merges definitions + objects from referenced file; XSD extended; roundtrip test | mc3/src/Mc3XmlParser.cpp, mc3/mc3.xsd, mc3/src/Mc3XmlWriter.cpp, test/ |
-| M2 ✅ | Model registry — `ModelRegistry` class wrapping SQLite (`modelregistry.sqlite3`); schema: group/name/variant/tags/mc3_xml/thumbnail; UI panel in editor (search, insert into scene, save selection to registry) | new: mc3/src/ModelRegistry.cpp+hpp, src/MeshCraft/MeshCraftApplication_UiRegistry.cpp |
-| M3 ✅ | AI API integration — `AiAssistant` class (cpp-httplib + Claude API); ImGui panel: prompt input, API key field, async call, response parsed as mc3.xml and merged into document; optional: save result to registry | new: src/MeshCraft/AiAssistant.cpp+hpp, src/MeshCraft/MeshCraftApplication_UiAi.cpp |
+| M1 ✅ | mc3.xml `<include file="…"/>` support — parser merges definitions + objects from referenced file; XSD extended; roundtrip test; local override fix (parser erases included IDs after local parse); nested include roundtrip fix (recordIncludes=false for recursive calls); cycle detection test; writer fix (material id from map key) | mc3/src/Mc3XmlParser.cpp, mc3/src/Mc3XmlWriter.cpp, mc3/mc3.xsd, mc3/test/roundtrip_test.cpp, test/ |
+| M2 ✅ | Model registry — `ModelRegistry` class wrapping SQLite (`modelregistry.sqlite3`); schema: group/name/variant/tags/xml/description/source (with migration); UI panel in editor (search, insert, save with desc/source fields); registry test suite (mc3_registry_test); atomic temp filenames | include/MeshCraft/ModelRegistry.hpp, src/MeshCraft/ModelRegistry.cpp, mc3/test/mc3_registry_test.cpp, src/MeshCraft/MeshCraftApplication_UiRegistry.cpp, CMakeLists.txt |
+| M3 ✅ | AI API integration — `AiAssistant` class (cpp-httplib + Claude API); ImGui panel: scope combo (full scene/selection), prompt, API key, async call; validateAiXml() before apply; aiPendingDoc_ for registry integration; "Save AI to Registry" wires AI result to registry save dialog with source="ai_generated"; atomic temp filenames | src/MeshCraft/AiAssistant.cpp+hpp, src/MeshCraft/MeshCraftApplication_UiAi.cpp, include/MeshCraft/MeshCraftApplication.hpp |
 
 ---
 

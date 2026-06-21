@@ -339,4 +339,21 @@ if(MESH_CRAFT_BUILD_TESTING AND UNIX AND NOT ANDROID AND NOT EMSCRIPTEN)
     endif()
 
     # mc3togltf_gltf test is registered by mc3togltf/CMakeLists.txt via $<TARGET_FILE:mc3togltf>
+
+    # ModelRegistry unit tests (requires SQLite3)
+    if(SQLite3_FOUND)
+        add_executable(mc3_registry_test
+            ${CMAKE_CURRENT_SOURCE_DIR}/mc3/test/mc3_registry_test.cpp
+            ${CMAKE_CURRENT_SOURCE_DIR}/src/MeshCraft/ModelRegistry.cpp
+        )
+        target_include_directories(mc3_registry_test PRIVATE
+            ${CMAKE_CURRENT_SOURCE_DIR}/include
+            ${SQLite3_INCLUDE_DIRS}
+        )
+        target_link_libraries(mc3_registry_test PRIVATE Mc3 ${SQLite3_LIBRARIES})
+        target_compile_definitions(mc3_registry_test PRIVATE MESHCRAFT_HAS_SQLITE3)
+        target_compile_features(mc3_registry_test PRIVATE cxx_std_23)
+        add_test(NAME mc3_registry COMMAND mc3_registry_test)
+        set_tests_properties(mc3_registry PROPERTIES TIMEOUT 15)
+    endif()
 endif()

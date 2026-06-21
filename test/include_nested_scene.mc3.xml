@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<mc3 version="0.3" model="NestedScene">
+  <!-- Only includes lib_a; widget (from lib_b via lib_a) must also be available -->
+  <include file="include_lib_a.mc3.xml"/>
+
+  <objects>
+    <instance name="W1" definition="widget" position="0 0 0"/>
+    <box name="WoodBox" size="1 1 1" material="wood"/>
+  </objects>
+</mc3>

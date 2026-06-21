@@ -568,7 +568,8 @@ static void parseDefinitions(const XMLElement*, Mc3Document&);
 static void processIncludes(const XMLElement* root, Mc3Document& doc,
                              const std::filesystem::path& selfPath,
                              std::set<std::filesystem::path>& inProgress,
-                             std::set<std::filesystem::path>& processed);
+                             std::set<std::filesystem::path>& processed,
+                             bool recordIncludes);
 
 // Merge definitions/materials/textures from one included file into doc.
 // Respects cycle detection: throws on cyclic includes, silently skips
@@ -603,8 +604,8 @@ static void mergeInclude(const std::filesystem::path& includePath,
 
     inProgress.insert(canonical);
 
-    // Recurse into nested includes first
-    processIncludes(root, doc, includePath, inProgress, processed);
+    // Recurse into nested includes first (do NOT record them in doc.includes)
+    processIncludes(root, doc, includePath, inProgress, processed, /*recordIncludes=*/false);
 
     // Merge shared assets (NOT objects/lights/cameras/environment/actions —
     // those belong to the main scene only).
@@ -637,7 +638,8 @@ static void mergeInclude(const std::filesystem::path& includePath,
 static void processIncludes(const XMLElement* root, Mc3Document& doc,
                              const std::filesystem::path& selfPath,
                              std::set<std::filesystem::path>& inProgress,
-                             std::set<std::filesystem::path>& processed)
+                             std::set<std::filesystem::path>& processed,
+                             bool recordIncludes)
 {
     for (const XMLElement* inc = root->FirstChildElement("include"); inc;
          inc = inc->NextSiblingElement("include")) {
@@ -647,8 +649,9 @@ static void processIncludes(const XMLElement* root, Mc3Document& doc,
         // Resolve relative to the file that contains the <include>
         std::filesystem::path includePath = selfPath.parent_path() / fileAttr;
 
-        // Record the relative path as written (for roundtrip write-back)
-        doc.includes.push_back(fileAttr);
+        // Only record at the top level (not when called recursively from mergeInclude)
+        if (recordIncludes)
+            doc.includes.push_back(fileAttr);
 
         mergeInclude(includePath, doc, inProgress, processed);
     }
@@ -683,15 +686,32 @@ Mc3Document Mc3XmlParser::parse(const std::filesystem::path& path) {
         } catch (...) {
             inProgress.insert(std::filesystem::absolute(path));
         }
-        processIncludes(root, doc, path, inProgress, processed);
+        processIncludes(root, doc, path, inProgress, processed, /*recordIncludes=*/true);
     }
 
     if (const XMLElement* env  = root->FirstChildElement("environment"))  parseEnvironment(env,  doc);
     if (const XMLElement* lts  = root->FirstChildElement("lights"))       parseLights(lts,       doc);
     if (const XMLElement* cams = root->FirstChildElement("cameras"))      parseCameras(cams,     doc);
-    if (const XMLElement* txs  = root->FirstChildElement("textures"))     parseTextures(txs,     doc);
-    if (const XMLElement* mats = root->FirstChildElement("materials"))    parseMaterials(mats,   doc);
-    if (const XMLElement* defs = root->FirstChildElement("definitions"))  parseDefinitions(defs, doc);
+
+    if (const XMLElement* txs  = root->FirstChildElement("textures")) {
+        parseTextures(txs, doc);
+        // Task 1: erase local IDs so writer does not skip them as "included"
+        for (const XMLElement* c = txs->FirstChildElement("texture"); c;
+             c = c->NextSiblingElement("texture"))
+            if (const char* id = c->Attribute("id")) doc.includedTextures.erase(id);
+    }
+    if (const XMLElement* mats = root->FirstChildElement("materials")) {
+        parseMaterials(mats, doc);
+        for (const XMLElement* c = mats->FirstChildElement("material"); c;
+             c = c->NextSiblingElement("material"))
+            if (const char* id = c->Attribute("id")) doc.includedMaterials.erase(id);
+    }
+    if (const XMLElement* defs = root->FirstChildElement("definitions")) {
+        parseDefinitions(defs, doc);
+        for (const XMLElement* c = defs->FirstChildElement("definition"); c;
+             c = c->NextSiblingElement("definition"))
+            if (const char* id = c->Attribute("id")) doc.includedDefs.erase(id);
+    }
     if (const XMLElement* objs = root->FirstChildElement("objects"))      parseObjects(objs,     doc);
     if (const XMLElement* acts = root->FirstChildElement("actions"))      parseActions(acts,     doc);
 

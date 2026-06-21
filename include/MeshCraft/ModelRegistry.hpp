@@ -19,8 +19,10 @@ public:
         std::string group;
         std::string name;
         std::string variant;
-        std::string xml;   // serialized <mc3> fragment: definitions + referenced materials
+        std::string xml;         // serialized <mc3> fragment: definitions + referenced materials
         std::string tags;
+        std::string description;
+        std::string source;      // e.g. "handmade", "ai_generated", "imported"
     };
 
     ModelRegistry() = default;
@@ -40,7 +42,9 @@ public:
                               const std::string& group,
                               const std::string& name,
                               const std::string& variant,
-                              const std::string& tags) const;
+                              const std::string& tags,
+                              const std::string& description = {},
+                              const std::string& source = {}) const;
 
     // Parse entry XML, merge definition (+materials) into doc, return inserted def id
     std::string insertIntoScene(Mc3::Mc3Document& doc, const Entry& e) const;

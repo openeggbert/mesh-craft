@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<mc3 version="0.3" model="OverrideScene">
+  <include file="include_override_library.mc3.xml"/>
+
+  <!-- Local override: stone becomes red -->
+  <materials>
+    <material id="stone" roughness="0.2">
+      <base_color>0.9 0.1 0.1 1.0</base_color>
+    </material>
+  </materials>
+
+  <objects>
+    <box name="RedBox" size="1 1 1" material="stone"/>
+  </objects>
+</mc3>

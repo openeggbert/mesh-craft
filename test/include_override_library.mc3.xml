@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<mc3 version="0.3" model="OverrideLibrary">
+  <materials>
+    <material id="stone" roughness="0.8">
+      <base_color>0.5 0.45 0.4 1.0</base_color>
+    </material>
+  </materials>
+</mc3>

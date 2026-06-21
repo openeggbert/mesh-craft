@@ -6,6 +6,7 @@
 
 #include <MeshCraft/Mc3/Mc3Document.hpp>
 #include <MeshCraft/Mc3/Mc3Object.hpp>
+#include <atomic>
 #include <filesystem>
 #include <fstream>
 #include <functional>
@@ -13,6 +14,8 @@
 #include <set>
 #include <stdexcept>
 #include <string>
+
+static std::atomic<int> gRegTmpCounter{0};
 
 namespace MeshCraft {
 
@@ -46,6 +49,7 @@ void ModelRegistry::remove(int64_t) {}
 
 ModelRegistry::Entry ModelRegistry::entryFromDefinition(
     const Mc3::Mc3Document&, const std::string&,
+    const std::string&, const std::string&,
     const std::string&, const std::string&,
     const std::string&, const std::string&) const { return {}; }
 
@@ -100,13 +104,15 @@ bool ModelRegistry::isOpen() const { return db_ != nullptr; }
 void ModelRegistry::createSchema() {
     const char* sql =
         "CREATE TABLE IF NOT EXISTS models ("
-        "  id      INTEGER PRIMARY KEY AUTOINCREMENT,"
-        "  grp     TEXT NOT NULL DEFAULT '',"
-        "  name    TEXT NOT NULL,"
-        "  variant TEXT NOT NULL DEFAULT '',"
-        "  xml     TEXT NOT NULL,"
-        "  tags    TEXT NOT NULL DEFAULT '',"
-        "  created INTEGER NOT NULL DEFAULT (strftime('%s','now'))"
+        "  id          INTEGER PRIMARY KEY AUTOINCREMENT,"
+        "  grp         TEXT NOT NULL DEFAULT '',"
+        "  name        TEXT NOT NULL,"
+        "  variant     TEXT NOT NULL DEFAULT '',"
+        "  xml         TEXT NOT NULL,"
+        "  tags        TEXT NOT NULL DEFAULT '',"
+        "  description TEXT NOT NULL DEFAULT '',"
+        "  source      TEXT NOT NULL DEFAULT '',"
+        "  created     INTEGER NOT NULL DEFAULT (strftime('%s','now'))"
         ");"
         "CREATE INDEX IF NOT EXISTS idx_models_name ON models(name);";
     char* errmsg = nullptr;
@@ -116,6 +122,14 @@ void ModelRegistry::createSchema() {
         sqlite3_free(errmsg);
         throw std::runtime_error("ModelRegistry schema error: " + err);
     }
+    // Migrate older DBs that lack description / source columns
+    sqlite3_exec(db_,
+        "ALTER TABLE models ADD COLUMN description TEXT NOT NULL DEFAULT '';",
+        nullptr, nullptr, nullptr);
+    sqlite3_exec(db_,
+        "ALTER TABLE models ADD COLUMN source TEXT NOT NULL DEFAULT '';",
+        nullptr, nullptr, nullptr);
+    // Errors above are silently ignored — ALTER TABLE fails harmlessly if column exists.
 }
 
 // ---------------------------------------------------------------------------
@@ -127,11 +141,12 @@ std::vector<ModelRegistry::Entry> ModelRegistry::search(const std::string& query
     std::vector<Entry> results;
 
     const char* sql = query.empty()
-        ? "SELECT id,grp,name,variant,xml,tags FROM models ORDER BY grp,name,variant;"
-        : "SELECT id,grp,name,variant,xml,tags FROM models "
-          "WHERE lower(name) LIKE lower(?1) "
-          "   OR lower(grp)  LIKE lower(?1) "
-          "   OR lower(tags) LIKE lower(?1) "
+        ? "SELECT id,grp,name,variant,xml,tags,description,source FROM models ORDER BY grp,name,variant;"
+        : "SELECT id,grp,name,variant,xml,tags,description,source FROM models "
+          "WHERE lower(name)        LIKE lower(?1) "
+          "   OR lower(grp)         LIKE lower(?1) "
+          "   OR lower(tags)        LIKE lower(?1) "
+          "   OR lower(description) LIKE lower(?1) "
           "ORDER BY grp,name,variant;";
 
     sqlite3_stmt* stmt = nullptr;
@@ -150,11 +165,13 @@ std::vector<ModelRegistry::Entry> ModelRegistry::search(const std::string& query
             const auto* t = reinterpret_cast<const char*>(sqlite3_column_text(stmt, i));
             return t ? t : "";
         };
-        e.group   = col(1);
-        e.name    = col(2);
-        e.variant = col(3);
-        e.xml     = col(4);
-        e.tags    = col(5);
+        e.group       = col(1);
+        e.name        = col(2);
+        e.variant     = col(3);
+        e.xml         = col(4);
+        e.tags        = col(5);
+        e.description = col(6);
+        e.source      = col(7);
         results.push_back(std::move(e));
     }
     sqlite3_finalize(stmt);
@@ -170,23 +187,29 @@ int64_t ModelRegistry::save(const Entry& e) {
     sqlite3_stmt* stmt = nullptr;
     if (e.id > 0) {
         sqlite3_prepare_v2(db_,
-            "UPDATE models SET grp=?1,name=?2,variant=?3,xml=?4,tags=?5 WHERE id=?6;",
+            "UPDATE models SET grp=?1,name=?2,variant=?3,xml=?4,tags=?5,"
+            "description=?6,source=?7 WHERE id=?8;",
             -1, &stmt, nullptr);
-        sqlite3_bind_text (stmt, 1, e.group.c_str(),   -1, SQLITE_TRANSIENT);
-        sqlite3_bind_text (stmt, 2, e.name.c_str(),    -1, SQLITE_TRANSIENT);
-        sqlite3_bind_text (stmt, 3, e.variant.c_str(), -1, SQLITE_TRANSIENT);
-        sqlite3_bind_text (stmt, 4, e.xml.c_str(),     -1, SQLITE_TRANSIENT);
-        sqlite3_bind_text (stmt, 5, e.tags.c_str(),    -1, SQLITE_TRANSIENT);
-        sqlite3_bind_int64(stmt, 6, e.id);
+        sqlite3_bind_text (stmt, 1, e.group.c_str(),       -1, SQLITE_TRANSIENT);
+        sqlite3_bind_text (stmt, 2, e.name.c_str(),        -1, SQLITE_TRANSIENT);
+        sqlite3_bind_text (stmt, 3, e.variant.c_str(),     -1, SQLITE_TRANSIENT);
+        sqlite3_bind_text (stmt, 4, e.xml.c_str(),         -1, SQLITE_TRANSIENT);
+        sqlite3_bind_text (stmt, 5, e.tags.c_str(),        -1, SQLITE_TRANSIENT);
+        sqlite3_bind_text (stmt, 6, e.description.c_str(), -1, SQLITE_TRANSIENT);
+        sqlite3_bind_text (stmt, 7, e.source.c_str(),      -1, SQLITE_TRANSIENT);
+        sqlite3_bind_int64(stmt, 8, e.id);
     } else {
         sqlite3_prepare_v2(db_,
-            "INSERT INTO models(grp,name,variant,xml,tags) VALUES(?1,?2,?3,?4,?5);",
+            "INSERT INTO models(grp,name,variant,xml,tags,description,source)"
+            " VALUES(?1,?2,?3,?4,?5,?6,?7);",
             -1, &stmt, nullptr);
-        sqlite3_bind_text(stmt, 1, e.group.c_str(),   -1, SQLITE_TRANSIENT);
-        sqlite3_bind_text(stmt, 2, e.name.c_str(),    -1, SQLITE_TRANSIENT);
-        sqlite3_bind_text(stmt, 3, e.variant.c_str(), -1, SQLITE_TRANSIENT);
-        sqlite3_bind_text(stmt, 4, e.xml.c_str(),     -1, SQLITE_TRANSIENT);
-        sqlite3_bind_text(stmt, 5, e.tags.c_str(),    -1, SQLITE_TRANSIENT);
+        sqlite3_bind_text(stmt, 1, e.group.c_str(),       -1, SQLITE_TRANSIENT);
+        sqlite3_bind_text(stmt, 2, e.name.c_str(),        -1, SQLITE_TRANSIENT);
+        sqlite3_bind_text(stmt, 3, e.variant.c_str(),     -1, SQLITE_TRANSIENT);
+        sqlite3_bind_text(stmt, 4, e.xml.c_str(),         -1, SQLITE_TRANSIENT);
+        sqlite3_bind_text(stmt, 5, e.tags.c_str(),        -1, SQLITE_TRANSIENT);
+        sqlite3_bind_text(stmt, 6, e.description.c_str(), -1, SQLITE_TRANSIENT);
+        sqlite3_bind_text(stmt, 7, e.source.c_str(),      -1, SQLITE_TRANSIENT);
     }
     sqlite3_step(stmt);
     sqlite3_finalize(stmt);
@@ -216,7 +239,9 @@ ModelRegistry::Entry ModelRegistry::entryFromDefinition(
     const std::string& group,
     const std::string& name,
     const std::string& variant,
-    const std::string& tags) const
+    const std::string& tags,
+    const std::string& description,
+    const std::string& source) const
 {
     auto it = doc.definitions.find(defId);
     if (it == doc.definitions.end())
@@ -249,18 +274,21 @@ ModelRegistry::Entry ModelRegistry::entryFromDefinition(
         }
     }
 
-    auto tmpPath = std::filesystem::temp_directory_path() / "mc_reg_save.mc3.xml";
+    auto tmpPath = std::filesystem::temp_directory_path() /
+                   ("mc_reg_save_" + std::to_string(gRegTmpCounter++) + ".mc3.xml");
     tmp.saveToFile(tmpPath);
     std::string xml = readFile(tmpPath);
     std::error_code ec;
     std::filesystem::remove(tmpPath, ec);
 
     Entry e;
-    e.group   = group;
-    e.name    = name;
-    e.variant = variant;
-    e.xml     = std::move(xml);
-    e.tags    = tags;
+    e.group       = group;
+    e.name        = name;
+    e.variant     = variant;
+    e.xml         = std::move(xml);
+    e.tags        = tags;
+    e.description = description;
+    e.source      = source;
     return e;
 }
 
@@ -269,7 +297,8 @@ ModelRegistry::Entry ModelRegistry::entryFromDefinition(
 // ---------------------------------------------------------------------------
 
 std::string ModelRegistry::insertIntoScene(Mc3::Mc3Document& doc, const Entry& e) const {
-    auto tmpPath = std::filesystem::temp_directory_path() / "mc_reg_insert.mc3.xml";
+    auto tmpPath = std::filesystem::temp_directory_path() /
+                   ("mc_reg_insert_" + std::to_string(gRegTmpCounter++) + ".mc3.xml");
     {
         std::ofstream f(tmpPath);
         if (!f) throw std::runtime_error("Cannot write temp file");

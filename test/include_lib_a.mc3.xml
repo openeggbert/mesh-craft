@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<mc3 version="0.3" model="LibA">
+  <include file="include_lib_b.mc3.xml"/>
+
+  <materials>
+    <material id="wood" roughness="0.6">
+      <base_color>0.6 0.4 0.2 1.0</base_color>
+    </material>
+  </materials>
+</mc3>

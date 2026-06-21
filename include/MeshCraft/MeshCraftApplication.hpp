@@ -24,6 +24,7 @@
 #include <filesystem>
 #include <map>
 #include <memory>
+#include <optional>
 #include <set>
 #include <string>
 #include <vector>
@@ -485,6 +486,8 @@ private:
     char aiApiKeyBuf_[128]{};
     char aiModelBuf_[64]{"claude-sonnet-4-6"};
     char aiPromptBuf_[2048]{};
+    int  aiScopeSel_{0};  // 0=Full scene, 1=Selection only
+    std::optional<Mc3::Mc3Document> aiPendingDoc_;  // last AI result, cleared on reset
     void drawAiPanel();
 
     // Model Registry (M2)
@@ -496,7 +499,10 @@ private:
     char regSaveNameBuf_[64]{};
     char regSaveVariantBuf_[64]{};
     char regSaveTagsBuf_[128]{};
+    char regSaveDescBuf_[256]{};
+    char regSaveSourceBuf_[64]{"handmade"};
     std::string regSaveDefId_;
+    bool        regSaveFromAi_{false};  // when true, save dialog reads from aiPendingDoc_
     std::vector<ModelRegistry::Entry> regCachedResults_;
     bool regResultsDirty_{true};
     void drawRegistryPanel();

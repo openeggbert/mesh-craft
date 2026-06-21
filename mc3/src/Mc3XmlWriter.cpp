@@ -424,7 +424,7 @@ void Mc3XmlWriter::write(const Mc3Document& doc, const std::filesystem::path& pa
         for (const auto& [id, mat] : doc.materials) {
             if (doc.includedMaterials.count(id)) continue;
             XMLElement* me = xml.NewElement("material");
-            me->SetAttribute("id",        mat.name.c_str());
+            me->SetAttribute("id",        id.c_str());
             me->SetAttribute("roughness", fStr(mat.roughness).c_str());
             me->SetAttribute("metallic",  fStr(mat.metallic).c_str());
             if (mat.doubleSided)            me->SetAttribute("double_sided", "true");
