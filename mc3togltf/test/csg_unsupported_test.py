@@ -47,7 +47,7 @@ if __name__ == "__main__":
         )
         print(f"Unsupported CSG child (default mode): PASS — got expected error")
 
-        # Approximate mode: must succeed, warning expected.
+        # Approximate mode: must succeed, children exported separately.
         out_approx = os.path.join(tmpdir, "out_approx.gltf")
         r = run([mc3togltf, "--allow-approximate-csg", xml_path, out_approx])
         assert r.returncode == 0, (
@@ -60,15 +60,57 @@ if __name__ == "__main__":
         with open(out_approx) as f:
             gltf = json.load(f)
 
-        nmap = {n.get("name", ""): n for n in gltf.get("nodes", [])}
-        assert "BadCsg" in nmap, (
-            f"Expected 'BadCsg' root node in approx output, got: {sorted(nmap.keys())}"
+        nmap    = {n.get("name", ""): n for n in gltf.get("nodes", [])}
+        meshes  = gltf.get("meshes", [])
+        accs    = gltf.get("accessors", [])
+
+        # All three nodes must be present — children exported separately.
+        for expected in ("BadCsg", "BaseBox", "DiskInsideCsg"):
+            assert expected in nmap, (
+                f"Expected node '{expected}' in approx output, "
+                f"got: {sorted(nmap.keys())}"
+            )
+
+        # BadCsg must be the parent; children must be glTF child indices of it.
+        badcsg_children = {
+            gltf["nodes"][ci].get("name", "")
+            for ci in nmap["BadCsg"].get("children", [])
+        }
+        assert "BaseBox" in badcsg_children, (
+            f"Expected 'BaseBox' as a child of 'BadCsg', got: {badcsg_children}"
+        )
+        assert "DiskInsideCsg" in badcsg_children, (
+            f"Expected 'DiskInsideCsg' as a child of 'BadCsg', got: {badcsg_children}"
+        )
+
+        # Both children must have mesh geometry (vertex count > 0).
+        def vertex_count(node_name):
+            mesh_idx = nmap[node_name].get("mesh")
+            if mesh_idx is None:
+                return 0
+            prims = meshes[mesh_idx].get("primitives", []) if 0 <= mesh_idx < len(meshes) else []
+            if not prims:
+                return 0
+            pos_idx = prims[0].get("attributes", {}).get("POSITION")
+            if pos_idx is None or not (0 <= pos_idx < len(accs)):
+                return 0
+            return accs[pos_idx].get("count", 0)
+
+        basebox_vc = vertex_count("BaseBox")
+        assert basebox_vc > 0, (
+            f"Expected 'BaseBox' to have mesh geometry in approx mode, got {basebox_vc} vertices"
+        )
+
+        disk_vc = vertex_count("DiskInsideCsg")
+        assert disk_vc > 0, (
+            f"Expected 'DiskInsideCsg' to have mesh geometry in approx mode, got {disk_vc} vertices"
         )
 
         combined = r.stdout + r.stderr
         assert "approximate" in combined.lower() or "separate" in combined.lower(), (
             f"Expected approximate-mode warning in output, got:\n{combined}"
         )
-        print("Unsupported CSG child (--allow-approximate-csg): PASS")
+        print(f"Unsupported CSG child (--allow-approximate-csg): PASS "
+              f"(BaseBox={basebox_vc}v, DiskInsideCsg={disk_vc}v)")
 
     print("All unsupported CSG child tests: PASS")
