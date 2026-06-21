@@ -37,7 +37,7 @@ MeshData buildCone     (float radius, float height, int segments);
 MeshData buildPlane    (float w, float d, const std::string& axis);
 MeshData buildTorus    (float majorRadius, float minorRadius, int segments);
 MeshData buildCapsule  (float radius, float height, int segments, const std::string& axis);
-MeshData buildDisk     (float radius, int segments, const std::string& axis);
+MeshData buildDisk     (float radius, float innerRadius, int segments, const std::string& axis);
 MeshData buildGrid     (float w, float d, int subdX, int subdZ);
 MeshData buildIcoSphere(float radius, int subdivisions);
 

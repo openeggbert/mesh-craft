@@ -150,7 +150,8 @@ private:
 
     // GLB export settings dialog state (F8)
     bool glbExportOpen_{false};
-    int  glbExportFmt_{0};          // 0 = GLB, 1 = GLTF
+    int  glbExportFmt_{0};                // 0 = GLB, 1 = GLTF
+    bool glbAllowApproxCSG_{false};       // checkbox: allow approximate CSG export
     char glbExportOutBuf_[512]{};
     char glbExportErr_[256]{};
     void runGltfExport(const std::string& outPath);

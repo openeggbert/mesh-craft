@@ -159,9 +159,10 @@ static XMLElement* writeObject(XMLDocument& xmlDoc, const std::shared_ptr<Mc3Obj
             if (p.axis != "y")      el->SetAttribute("axis",     p.axis.c_str());
             break;
         case ObjectType::Disk:
-            if (p.radius   != 0.5f) el->SetAttribute("radius",   fStr(p.radius).c_str());
-            if (p.segments != 32)   el->SetAttribute("segments", p.segments);
-            if (p.axis != "y")      el->SetAttribute("axis",     p.axis.c_str());
+            if (p.radius      != 0.5f) el->SetAttribute("radius",       fStr(p.radius).c_str());
+            if (p.minorRadius >  0.0f) el->SetAttribute("inner_radius", fStr(p.minorRadius).c_str());
+            if (p.segments    != 32)   el->SetAttribute("segments",     p.segments);
+            if (p.axis != "y")         el->SetAttribute("axis",         p.axis.c_str());
             break;
         default: break;
         }

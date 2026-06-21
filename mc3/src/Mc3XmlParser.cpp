@@ -198,7 +198,14 @@ static Mc3Primitive parsePrimitive(const XMLElement* el, ObjectType type) {
     p.segments      = attrI(el, "segments",       32);
     p.axis          = attr (el, "axis",           "y");
     p.majorRadius   = attrF(el, "major_radius",   0.35f);
-    p.minorRadius   = attrF(el, "minor_radius",   0.15f);
+    if (type == ObjectType::Disk) {
+        // Disk uses inner_radius (0=solid); accept legacy minor_radius for compat.
+        float ir = attrF(el, "inner_radius", -1.0f);
+        if (ir < 0.0f) ir = attrF(el, "minor_radius", 0.0f);
+        p.minorRadius = ir;
+    } else {
+        p.minorRadius = attrF(el, "minor_radius", 0.15f);
+    }
     p.subdivisionsX = attrI(el, "subdivisions_x", 4);
     p.subdivisionsZ = attrI(el, "subdivisions_z", 4);
     return p;

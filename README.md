@@ -2,6 +2,8 @@
 
 A C++23 3D scene editor for the `.mc3.xml` format — a lightweight XML-based scene description used by the OpenEggbert project.
 
+![MeshCraft screenshot](mesh_craft_screenshot.png)
+
 ## Description
 
 MeshCraft lets you build and edit 3D scenes from primitive shapes, groups, materials, CSG boolean operations, and external OBJ meshes. Scenes are saved as `.mc3.xml` files and can be exported to glTF/GLB for use in games and real-time applications.
@@ -112,8 +114,7 @@ ctest -V --test-dir cmake-build-debug
 - Preferences dialog: only auto-save interval is persisted; snap/grid/theme not saved
 - Headless screenshot: always writes PPM regardless of file extension
 - MCB: compression flag reserved in header but not implemented
-- CSG export to glTF: not yet evaluated (Manifold CSG result not passed to mc3togltf)
-- `mc3togltf`: not all MC3 primitives are implemented (unsupported ones fall back silently)
+- CSG export to glTF: CSG boolean evaluation not implemented; exporting CSG scenes requires "Allow approximate CSG export" checkbox in the export dialog (children exported as separate meshes, geometrically incorrect)
 - No automated UI tests; only XML roundtrip and smoke test
 
 ## License

@@ -13,6 +13,7 @@
     <torus    name="Torus"     major_radius="0.4" minor_radius="0.15" segments="32"  position="-6 0  3"/>
     <capsule  name="Capsule"   radius="0.3" height="0.8"              position="-4 0  3"/>
     <disk     name="Disk"      radius="0.5" segments="32"             position="-2 0  3"/>
+    <disk     name="RingDisk" radius="0.5" inner_radius="0.25" segments="32"  position=" 0 0  6"/>
     <grid     name="Grid"      size="1 1 1" subdivisions_x="4" subdivisions_z="4"  position=" 0 0  3"/>
     <icosphere name="IcoSphere" radius="0.5" segments="32"            position=" 2 0  3"/>
 

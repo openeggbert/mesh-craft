@@ -5,7 +5,7 @@
 
   <!-- ============================================================
        MC3 Scene Format — XML Schema
-       Version: 0.2
+       Version: 0.3
        ============================================================ -->
 
   <!-- ── Primitive types ──────────────────────────────────────── -->
@@ -357,9 +357,10 @@
       <xs:element name="metadata"   type="metadataType"  minOccurs="0"/>
     </xs:sequence>
     <xs:attributeGroup ref="objectAttrs"/>
-    <xs:attribute name="radius"   type="xs:float"/>
-    <xs:attribute name="segments" type="xs:positiveInteger"/>
-    <xs:attribute name="axis"     type="axisType"/>
+    <xs:attribute name="radius"       type="xs:float"/>
+    <xs:attribute name="inner_radius" type="xs:float"/>
+    <xs:attribute name="segments"     type="xs:positiveInteger"/>
+    <xs:attribute name="axis"         type="axisType"/>
   </xs:complexType>
 
   <!-- grid -->

@@ -230,7 +230,7 @@ if(EMSCRIPTEN)
     # SDL3 imported targets are directory-scoped; re-declare them in this scope.
     find_package(SDL3 REQUIRED CONFIG)
     target_link_libraries(${_target} PRIVATE
-        CNA ${_cna_backend_target} SHARP_RUNTIME Mc3 Mcb imgui SDL3::SDL3-static)
+        CNA ${_cna_backend_target} SHARP_RUNTIME Mc3 Mcb mc3togltf_lib imgui SDL3::SDL3-static)
     target_link_options(${_target} PRIVATE
         -sALLOW_MEMORY_GROWTH=1
         -sSTACK_SIZE=1048576

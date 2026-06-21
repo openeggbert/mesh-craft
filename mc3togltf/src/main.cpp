@@ -12,21 +12,28 @@ using namespace mc3togltf;
 using MeshCraft::Mc3::Mc3Document;
 
 static void printUsage(const char* prog) {
-    std::cerr << "Usage: " << prog << " <input.mc3.xml> [output.gltf|output.glb]\n"
+    std::cerr << "Usage: " << prog << " [--allow-approximate-csg] <input.mc3.xml> [output.gltf|output.glb]\n"
               << "\n"
               << "  If the output path is omitted, the input filename is used\n"
               << "  with its extension replaced by .gltf\n"
               << "\n"
-              << "  Output format is determined by the output file extension:\n"
+              << "  Output extension must be .gltf or .glb (case-insensitive):\n"
               << "    .gltf  → JSON glTF 2.0 (external buffer .bin)\n"
-              << "    .glb   → Binary GLB 2.0 (self-contained)\n";
+              << "    .glb   → Binary GLB 2.0 (self-contained)\n"
+              << "\n"
+              << "  --allow-approximate-csg\n"
+              << "    Export CSG nodes by exporting children separately (geometrically\n"
+              << "    incorrect). Without this flag CSG nodes cause an error.\n";
 }
 
 static OutputFormat formatFromPath(const fs::path& p) {
     std::string ext = p.extension().string();
     for (char& c : ext) c = static_cast<char>(std::tolower(c));
-    if (ext == ".glb") return OutputFormat::GLB;
-    return OutputFormat::GLTF;
+    if (ext == ".glb")  return OutputFormat::GLB;
+    if (ext == ".gltf") return OutputFormat::GLTF;
+    throw std::runtime_error(
+        std::string("Unknown output extension '") + p.extension().string() +
+        "'. Only .gltf and .glb are supported.");
 }
 
 int main(int argc, char* argv[]) {

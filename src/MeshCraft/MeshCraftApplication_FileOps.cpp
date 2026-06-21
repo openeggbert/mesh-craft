@@ -183,7 +183,7 @@ void MeshCraftApplication::runGltfExport(const std::string& outPath) {
     std::cout << "[MeshCraft] Exporting to " << outPath << "\n";
 
     mc3togltf::GltfExporter exporter;
-    exporter.allowApproximateCSG = true;  // editor previews: warn, don't abort
+    exporter.allowApproximateCSG = glbAllowApproxCSG_;
     exporter.exportDocument(document_, out, fmt);
 
     setStatusMsg("Exported to " + out.filename().string());

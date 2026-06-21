@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<mc3 version="0.3" model="AllObjects">
+
+  <lights>
+    <ambient color="0.3 0.3 0.3" brightness="0.5"/>
+    <directional name="Sun" color="1 0.95 0.8" brightness="2" direction="-0.5 -1 -0.5"/>
+  </lights>
+
+  <cameras>
+    <camera name="Main" position="0 5 10" target="0 0 0" fov="60"/>
+  </cameras>
+
+  <materials>
+    <material id="red"><base_color>0.9 0.1 0.1 1.0</base_color></material>
+    <material id="blue"><base_color>0.1 0.3 0.9 1.0</base_color></material>
+  </materials>
+
+  <definitions>
+    <definition id="TemplateCube">
+      <cube name="Cube"/>
+    </definition>
+  </definitions>
+
+  <objects>
+
+    <!-- Mesh from OBJ file -->
+    <mesh name="Tetra" src="tetra.obj" material="red" position="-4 0 0"/>
+
+    <!-- Extrude: circle cross-section along a line -->
+    <extrude name="Pipe" position="-2 0 0">
+      <cross_section type="circle" radius="0.25" segments="16"/>
+      <path type="line" length="1.5" axis="y"/>
+    </extrude>
+
+    <!-- Group containing two primitives -->
+    <group name="MyGroup" position="0 0 0">
+      <sphere name="GroupSphere" radius="0.3" position="0 0.5 0" material="blue"/>
+      <box name="GroupBox" size="0.4 0.4 0.4"/>
+    </group>
+
+    <!-- Instance referencing the definition twice -->
+    <instance name="CubeA" definition="TemplateCube" position="2 0 0" material="red"/>
+    <instance name="CubeB" definition="TemplateCube" position="3 0 0" material="blue"/>
+
+    <!-- Area trigger zone -->
+    <area name="TriggerZone" size="2 1 2" position="0 0 4"/>
+
+  </objects>
+
+</mc3>

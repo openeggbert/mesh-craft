@@ -80,6 +80,8 @@ if(BUILD_TESTING)
         set(_anim_xml        "${CMAKE_CURRENT_SOURCE_DIR}/../test/animation_test.mc3.xml")
         set(_house_xml       "${CMAKE_CURRENT_SOURCE_DIR}/../test/house.mc3.xml")
         set(_primitives_xml  "${CMAKE_CURRENT_SOURCE_DIR}/../test/all_primitives.mc3.xml")
+        set(_objects_xml     "${CMAKE_CURRENT_SOURCE_DIR}/../test/all_objects.mc3.xml")
+        set(_csg_xml         "${CMAKE_CURRENT_SOURCE_DIR}/../test/csg_test.mc3.xml")
         if(EXISTS "${_anim_xml}" AND EXISTS "${_house_xml}")
             add_test(
                 NAME mc3togltf_gltf
@@ -99,6 +101,28 @@ if(BUILD_TESTING)
                         "${CMAKE_CURRENT_BINARY_DIR}/all_primitives_test.glb"
             )
             set_tests_properties(mc3togltf_all_primitives PROPERTIES TIMEOUT 30)
+        endif()
+        if(EXISTS "${_primitives_xml}" AND EXISTS "${_objects_xml}")
+            add_test(
+                NAME mc3togltf_export_verification
+                COMMAND "${PYTHON3_EXEC}"
+                        "${CMAKE_CURRENT_SOURCE_DIR}/test/all_primitives_export_test.py"
+                        "$<TARGET_FILE:mc3togltf>"
+                        "${_primitives_xml}"
+                        "${_objects_xml}"
+                WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/../test"
+            )
+            set_tests_properties(mc3togltf_export_verification PROPERTIES TIMEOUT 60)
+        endif()
+        if(EXISTS "${_csg_xml}")
+            add_test(
+                NAME mc3togltf_csg_strict
+                COMMAND "${PYTHON3_EXEC}"
+                        "${CMAKE_CURRENT_SOURCE_DIR}/test/csg_strict_test.py"
+                        "$<TARGET_FILE:mc3togltf>"
+                        "${_csg_xml}"
+            )
+            set_tests_properties(mc3togltf_csg_strict PROPERTIES TIMEOUT 30)
         endif()
     endif()
 endif()

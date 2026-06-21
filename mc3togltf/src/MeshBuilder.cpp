@@ -391,27 +391,59 @@ MeshData buildCapsule(float radius, float height, int segments, const std::strin
 }
 
 // ---------------------------------------------------------------------------
-// Disk
+// Disk (solid or annular ring when innerRadius > 0)
 // ---------------------------------------------------------------------------
 
-MeshData buildDisk(float radius, int segments, const std::string& axis) {
+MeshData buildDisk(float radius, float innerRadius, int segments, const std::string& axis) {
     MeshData m;
     const float pi = std::numbers::pi_v<float>;
 
-    m.positions.insert(m.positions.end(), {0.0f, 0.0f, 0.0f});
-    m.normals.insert(m.normals.end(), {0.0f, 1.0f, 0.0f});
-    m.texcoords.insert(m.texcoords.end(), {0.5f, 0.5f});
-
-    for (int i = 0; i <= segments; ++i) {
-        float a = 2.0f * pi * i / segments;
-        float c = std::cos(a), s = std::sin(a);
-        m.positions.insert(m.positions.end(), {c*radius, 0.0f, s*radius});
+    if (innerRadius <= 0.0f) {
+        // Solid disk: center + rim fan
+        m.positions.insert(m.positions.end(), {0.0f, 0.0f, 0.0f});
         m.normals.insert(m.normals.end(), {0.0f, 1.0f, 0.0f});
-        m.texcoords.insert(m.texcoords.end(), {0.5f+c*0.5f, 0.5f+s*0.5f});
-    }
+        m.texcoords.insert(m.texcoords.end(), {0.5f, 0.5f});
 
-    for (int i = 0; i < segments; ++i)
-        m.indices.insert(m.indices.end(), {0u, uint32_t(i+2), uint32_t(i+1)});
+        for (int i = 0; i <= segments; ++i) {
+            float a = 2.0f * pi * i / segments;
+            float c = std::cos(a), s = std::sin(a);
+            m.positions.insert(m.positions.end(), {c*radius, 0.0f, s*radius});
+            m.normals.insert(m.normals.end(), {0.0f, 1.0f, 0.0f});
+            m.texcoords.insert(m.texcoords.end(), {0.5f+c*0.5f, 0.5f+s*0.5f});
+        }
+        for (int i = 0; i < segments; ++i)
+            m.indices.insert(m.indices.end(), {0u, uint32_t(i+2), uint32_t(i+1)});
+    } else {
+        // Ring disk: outer rim at [0..segments], inner rim at [segments+1..2*segments+1]
+        if (innerRadius >= radius)
+            throw std::runtime_error("Disk inner_radius must be less than radius");
+        float irScale = innerRadius / radius;
+
+        for (int i = 0; i <= segments; ++i) {
+            float a = 2.0f * pi * i / segments;
+            float c = std::cos(a), s = std::sin(a);
+            m.positions.insert(m.positions.end(), {c*radius, 0.0f, s*radius});
+            m.normals.insert(m.normals.end(), {0.0f, 1.0f, 0.0f});
+            m.texcoords.insert(m.texcoords.end(), {0.5f+c*0.5f, 0.5f+s*0.5f});
+        }
+        for (int i = 0; i <= segments; ++i) {
+            float a = 2.0f * pi * i / segments;
+            float c = std::cos(a), s = std::sin(a);
+            m.positions.insert(m.positions.end(), {c*innerRadius, 0.0f, s*innerRadius});
+            m.normals.insert(m.normals.end(), {0.0f, 1.0f, 0.0f});
+            m.texcoords.insert(m.texcoords.end(), {0.5f+c*0.5f*irScale, 0.5f+s*0.5f*irScale});
+        }
+        // outer[i] = i, outer[i+1] = i+1
+        // inner[i] = segments+1+i, inner[i+1] = segments+1+i+1
+        // CCW from +Y: {outer[i], inner[i], inner[i+1]}  {outer[i], inner[i+1], outer[i+1]}
+        for (int i = 0; i < segments; ++i) {
+            uint32_t o0 = uint32_t(i);
+            uint32_t o1 = uint32_t(i + 1);
+            uint32_t i0 = uint32_t(segments + 1 + i);
+            uint32_t i1 = uint32_t(segments + 1 + i + 1);
+            m.indices.insert(m.indices.end(), {o0, i0, i1,  o0, i1, o1});
+        }
+    }
 
     remapAxis(m, axis);
     return m;
@@ -983,7 +1015,7 @@ MeshData buildPrimitive(const MeshCraft::Mc3::Mc3Primitive& p) {
     case PT::Plane:     return buildPlane(p.size[0], p.size[2], p.axis);
     case PT::Torus:    return buildTorus(p.majorRadius, p.minorRadius, p.segments);
     case PT::Capsule:  return buildCapsule(p.radius, p.height, p.segments, p.axis);
-    case PT::Disk:     return buildDisk(p.radius, p.segments, p.axis);
+    case PT::Disk:     return buildDisk(p.radius, p.minorRadius, p.segments, p.axis);
     case PT::Grid:     return buildGrid(p.size[0], p.size[2], p.subdivisionsX, p.subdivisionsZ);
     case PT::IcoSphere: return buildIcoSphere(p.radius, std::max(1, std::min(4, p.segments/8)));
     }

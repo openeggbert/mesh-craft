@@ -404,22 +404,21 @@ static int buildNode(ExportCtx& ctx, const Mc3Object& obj)
         directMesh = buildMesh(ctx, obj, matIdx);
     }
 
-    // CSG nodes: boolean evaluation not supported in mc3togltf.
-    // union: export children separately with a warning (visually approximate).
-    // difference/intersection: produce semantically wrong geometry — fail unless
-    // --allow-approximate-csg is passed.
+    // CSG nodes: boolean evaluation not implemented.
+    // All CSG operations fail by default; use --allow-approximate-csg to export
+    // children as separate meshes (geometrically incorrect, for preview only).
     if (obj.type == ObjectType::Union ||
         obj.type == ObjectType::Difference ||
         obj.type == ObjectType::Intersection) {
         const char* op = (obj.type == ObjectType::Union)      ? "union"
                        : (obj.type == ObjectType::Difference) ? "difference"
                        :                                        "intersection";
-        if (obj.type != ObjectType::Union && !ctx.allowApproximateCSG) {
+        if (!ctx.allowApproximateCSG) {
             throw std::runtime_error(
                 std::string("CSG <") + op + "> node '" +
                 (obj.name.empty() ? "(unnamed)" : obj.name) +
-                "' cannot be exported correctly (boolean not evaluated). "
-                "Pass --allow-approximate-csg to export children as separate meshes instead.");
+                "' — CSG boolean evaluation is not implemented. "
+                "Use --allow-approximate-csg to export children as separate meshes instead.");
         }
         std::cerr << "Warning: mc3togltf: <" << op << "> node '"
                   << (obj.name.empty() ? "(unnamed)" : obj.name)
