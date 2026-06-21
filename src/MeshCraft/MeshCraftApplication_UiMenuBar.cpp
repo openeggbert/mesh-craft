@@ -598,8 +598,9 @@ float MeshCraftApplication::drawMenuBar()
             ImGui::MenuItem("Stats Overlay",   nullptr,  &showStatsOverlay_);
             ImGui::MenuItem("Bloom (emissive glow)", nullptr, &bloomEnabled_);
             ImGui::MenuItem("Snap to Grid", nullptr, &snapEnabled_);
-            ImGui::MenuItem("Timeline",     "Ctrl+T", &showTimeline_);
-            ImGui::MenuItem("Model Registry", nullptr, &showRegistryPanel_);
+            ImGui::MenuItem("Timeline",       "Ctrl+T", &showTimeline_);
+            ImGui::MenuItem("Model Registry", nullptr,  &showRegistryPanel_);
+            ImGui::MenuItem("AI Assistant",   nullptr,  &showAiPanel_);
             ImGui::EndMenu();
         }
         if (ImGui::BeginMenu("Help")) {

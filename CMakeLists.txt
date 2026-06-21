@@ -173,6 +173,23 @@ if(NOT EMSCRIPTEN AND NOT ANDROID)
     message(STATUS "SQLite3 found: ${SQLite3_VERSION}")
 endif()
 
+# cpp-httplib + OpenSSL — AI Assistant (desktop builds only)
+if(NOT EMSCRIPTEN AND NOT ANDROID)
+    set(HTTPLIB_USE_BROTLI_IF_AVAILABLE OFF CACHE BOOL "" FORCE)
+    FetchContent_Declare(httplib
+        GIT_REPOSITORY https://github.com/yhirose/cpp-httplib.git
+        GIT_TAG        v0.18.3
+        GIT_SHALLOW    TRUE
+    )
+    FetchContent_MakeAvailable(httplib)
+    find_package(OpenSSL)
+    if(OpenSSL_FOUND)
+        message(STATUS "OpenSSL found: ${OPENSSL_VERSION} — AI HTTPS enabled")
+    else()
+        message(STATUS "OpenSSL not found — AI Assistant will be disabled at runtime")
+    endif()
+endif()
+
 # -----------------------------------------------------------------------------
 # Sources
 # -----------------------------------------------------------------------------
@@ -214,6 +231,12 @@ target_include_directories(${_target}
 if(SQLite3_FOUND)
     target_compile_definitions(${_target} PRIVATE MESHCRAFT_HAS_SQLITE3)
     target_include_directories(${_target} PRIVATE ${SQLite3_INCLUDE_DIRS})
+endif()
+
+# Enable AI Assistant when cpp-httplib + OpenSSL are available
+if(httplib_POPULATED AND OpenSSL_FOUND)
+    target_compile_definitions(${_target} PRIVATE MESHCRAFT_HAS_AI)
+    target_link_libraries(${_target} PRIVATE httplib::httplib)
 endif()
 
 # -----------------------------------------------------------------------------

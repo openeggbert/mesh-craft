@@ -194,7 +194,7 @@ Legend: ✅ done · 🔧 partial · 📋 planned
 |---|------|-------|
 | M1 ✅ | mc3.xml `<include file="…"/>` support — parser merges definitions + objects from referenced file; XSD extended; roundtrip test | mc3/src/Mc3XmlParser.cpp, mc3/mc3.xsd, mc3/src/Mc3XmlWriter.cpp, test/ |
 | M2 ✅ | Model registry — `ModelRegistry` class wrapping SQLite (`modelregistry.sqlite3`); schema: group/name/variant/tags/mc3_xml/thumbnail; UI panel in editor (search, insert into scene, save selection to registry) | new: mc3/src/ModelRegistry.cpp+hpp, src/MeshCraft/MeshCraftApplication_UiRegistry.cpp |
-| M3 | AI API integration — `AiAssistant` class (cpp-httplib + Claude API); ImGui panel: prompt input, API key field, async call, response parsed as mc3.xml and merged into document; optional: save result to registry | new: src/MeshCraft/AiAssistant.cpp+hpp, src/MeshCraft/MeshCraftApplication_UiAi.cpp |
+| M3 ✅ | AI API integration — `AiAssistant` class (cpp-httplib + Claude API); ImGui panel: prompt input, API key field, async call, response parsed as mc3.xml and merged into document; optional: save result to registry | new: src/MeshCraft/AiAssistant.cpp+hpp, src/MeshCraft/MeshCraftApplication_UiAi.cpp |
 
 ---
 

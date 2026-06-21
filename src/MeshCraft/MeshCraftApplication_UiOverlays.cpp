@@ -1734,6 +1734,7 @@ void MeshCraftApplication::drawDialogs()
     }
 
     drawRegistryPanel();
+    drawAiPanel();
 }
 
 void MeshCraftApplication::drawPanelSplitters(int screenW, int screenH)

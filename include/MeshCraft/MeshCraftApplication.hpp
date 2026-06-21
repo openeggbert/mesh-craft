@@ -1,5 +1,6 @@
 #pragma once
 
+#include "MeshCraft/AiAssistant.hpp"
 #include "MeshCraft/ModelRegistry.hpp"
 #include "MeshCraft/Editor/EditorCamera.hpp"
 #include "MeshCraft/Editor/EditorTool.hpp"
@@ -477,6 +478,14 @@ private:
 
     // SDL event watcher for ImGui event forwarding
     static bool sdlEventWatch(void* userdata, void* event);
+
+    // AI Assistant (M3)
+    AiAssistant aiAssistant_;
+    bool showAiPanel_{false};
+    char aiApiKeyBuf_[128]{};
+    char aiModelBuf_[64]{"claude-sonnet-4-6"};
+    char aiPromptBuf_[2048]{};
+    void drawAiPanel();
 
     // Model Registry (M2)
     ModelRegistry registry_;
