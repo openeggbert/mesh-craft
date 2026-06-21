@@ -643,7 +643,7 @@ All properties are float-valued. `visible` uses `0.0` = false, `≥ 0.5` = true.
   non-animated components fall back to the object's base transform value.
 - Cubic bezier channels are sampled at 30 fps and exported as `LINEAR` glTF interpolation.
 - `visible`, `deform.*`, and `material.*` channels have no glTF node-transform equivalent
-  and are silently skipped during export.
+  and are skipped during export with a warning printed to stderr.
 
 ---
 

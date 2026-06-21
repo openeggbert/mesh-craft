@@ -130,6 +130,10 @@ def test_all_objects(mc3togltf, xml_path, tmpdir):
     check_node_has_geometry(gltf, "GroupSphere")
     check_node_has_geometry(gltf, "GroupBox")
 
+    # CubeA and CubeB are <instance> nodes from <definitions>: must have geometry
+    check_node_has_geometry(gltf, "CubeA")
+    check_node_has_geometry(gltf, "CubeB")
+
     # TriggerZone is an <area>: must exist but no mesh; must have extras.mc3_type=="area"
     tz_node = nmap["TriggerZone"]
     assert tz_node.get("mesh") is None, "TriggerZone is an area and should have no mesh"

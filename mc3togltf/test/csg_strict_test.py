@@ -41,12 +41,18 @@ if __name__ == "__main__":
         )
         print("CSG approximate export with flag: PASS")
 
-        # Invalid output extension: must fail
+        # Invalid output extension: must fail with a useful message
         bad_out = os.path.join(tmpdir, "out.foo")
         r = run([mc3togltf, csg_xml, bad_out])
         assert r.returncode != 0, (
             "Expected non-zero exit for unknown extension '.foo', "
             f"but got returncode={r.returncode}"
+        )
+        combined = r.stdout + r.stderr
+        assert ("Unknown output extension" in combined or
+                "Only .gltf and .glb" in combined or
+                ".foo" in combined), (
+            f"Expected useful error message for unknown extension, got:\n{combined}"
         )
         print("Invalid extension rejection: PASS")
 

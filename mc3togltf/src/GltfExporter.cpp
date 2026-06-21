@@ -727,7 +727,12 @@ static void exportAnimations(
                 case AnimatedProperty::ScaleX:    path = "scale";       comp = 0; break;
                 case AnimatedProperty::ScaleY:    path = "scale";       comp = 1; break;
                 case AnimatedProperty::ScaleZ:    path = "scale";       comp = 2; break;
-                default: continue; // visible/material/deform not representable in glTF transforms
+                default:
+                    std::cerr << "Warning: mc3togltf: action '" << actionName
+                              << "': channel property '" << animatedPropertyName(ch.property)
+                              << "' on target '" << ch.targetObject
+                              << "' has no glTF node-transform equivalent — channel skipped.\n";
+                    continue;
             }
             auto& pg = groups[ch.targetObject][path];
             pg.path = path;
