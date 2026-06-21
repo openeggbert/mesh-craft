@@ -694,6 +694,12 @@
   <xs:element name="mc3">
     <xs:complexType>
       <xs:sequence>
+        <!-- Zero or more file includes (must appear before other sections) -->
+        <xs:element name="include" minOccurs="0" maxOccurs="unbounded">
+          <xs:complexType>
+            <xs:attribute name="file" type="xs:string" use="required"/>
+          </xs:complexType>
+        </xs:element>
         <xs:element name="metadata"    type="metadataType"         minOccurs="0"/>
         <xs:element name="environment" type="environmentType"      minOccurs="0"/>
         <xs:element name="lights"      type="lightsType"           minOccurs="0"/>

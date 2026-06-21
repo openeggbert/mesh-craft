@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Shared asset library used by include tests and scene_with_include.mc3.xml.
+     Contains reusable definitions and materials.  Not a scene — no objects. -->
+<mc3 version="0.3" model="Library">
+
+  <materials>
+    <material id="stone" roughness="0.8" metallic="0.0">
+      <base_color>0.5 0.45 0.4 1</base_color>
+    </material>
+    <material id="wood" roughness="0.6" metallic="0.0">
+      <base_color>0.55 0.35 0.2 1</base_color>
+    </material>
+  </materials>
+
+  <definitions>
+    <definition id="pillar">
+      <cylinder name="Pillar" radius="0.2" height="3" segments="8" material="stone"/>
+    </definition>
+    <definition id="crate">
+      <box name="Crate" size="1 1 1" material="wood"/>
+    </definition>
+  </definitions>
+
+</mc3>

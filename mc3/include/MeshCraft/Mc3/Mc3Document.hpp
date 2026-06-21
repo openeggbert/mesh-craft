@@ -12,6 +12,7 @@
 #include <map>
 #include <memory>
 #include <optional>
+#include <set>
 #include <string>
 #include <vector>
 
@@ -26,6 +27,17 @@ public:
 
     // Directory of the source .mc3.xml file — used for resolving relative asset paths
     std::filesystem::path sourcePath;
+
+    // Files referenced via <include file="..."/> — preserved so the writer
+    // can re-emit them instead of inlining the included content.
+    std::vector<std::string> includes;
+
+    // IDs of definitions/materials/textures that were loaded from included
+    // files.  The writer skips these so they are not duplicated into the
+    // main file.
+    std::set<std::string> includedDefs;
+    std::set<std::string> includedMaterials;
+    std::set<std::string> includedTextures;
 
     std::optional<Mc3Environment> environment;
     std::vector<Mc3Light>   lights;

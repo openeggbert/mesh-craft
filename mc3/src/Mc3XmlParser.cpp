@@ -10,7 +10,9 @@
 #include <tinyxml2.h>
 
 #include <cstdlib>
+#include <filesystem>
 #include <iostream>
+#include <set>
 #include <sstream>
 #include <stdexcept>
 #include <string>
@@ -555,6 +557,104 @@ static void parseActions(const XMLElement* el, Mc3Document& doc) {
 }
 
 // ---------------------------------------------------------------------------
+// Include processing
+// ---------------------------------------------------------------------------
+
+// Forward declarations (the actual functions are defined above).
+static void parseTextures   (const XMLElement*, Mc3Document&);
+static void parseMaterials  (const XMLElement*, Mc3Document&);
+static void parseDefinitions(const XMLElement*, Mc3Document&);
+
+static void processIncludes(const XMLElement* root, Mc3Document& doc,
+                             const std::filesystem::path& selfPath,
+                             std::set<std::filesystem::path>& inProgress,
+                             std::set<std::filesystem::path>& processed);
+
+// Merge definitions/materials/textures from one included file into doc.
+// Respects cycle detection: throws on cyclic includes, silently skips
+// already-processed files (diamond-include deduplication).
+static void mergeInclude(const std::filesystem::path& includePath,
+                          Mc3Document& doc,
+                          std::set<std::filesystem::path>& inProgress,
+                          std::set<std::filesystem::path>& processed)
+{
+    std::filesystem::path canonical;
+    try {
+        canonical = std::filesystem::weakly_canonical(includePath);
+    } catch (...) {
+        canonical = std::filesystem::absolute(includePath);
+    }
+
+    if (inProgress.count(canonical))
+        throw std::runtime_error("Cyclic <include> detected: " + includePath.string());
+
+    if (processed.count(canonical))
+        return;  // already merged via a different include path — skip silently
+
+    XMLDocument xml;
+    if (xml.LoadFile(includePath.string().c_str()) != XML_SUCCESS)
+        throw std::runtime_error("Failed to load <include> file '" +
+                                  includePath.string() + "': " + xml.ErrorStr());
+
+    const XMLElement* root = xml.FirstChildElement("mc3");
+    if (!root)
+        throw std::runtime_error("No <mc3> root element in included file: " +
+                                  includePath.string());
+
+    inProgress.insert(canonical);
+
+    // Recurse into nested includes first
+    processIncludes(root, doc, includePath, inProgress, processed);
+
+    // Merge shared assets (NOT objects/lights/cameras/environment/actions —
+    // those belong to the main scene only).
+    if (const XMLElement* txs  = root->FirstChildElement("textures")) {
+        parseTextures(txs, doc);
+        for (const XMLElement* c = txs->FirstChildElement("texture"); c;
+             c = c->NextSiblingElement("texture"))
+            if (const char* id = c->Attribute("id"))
+                doc.includedTextures.insert(id);
+    }
+    if (const XMLElement* mats = root->FirstChildElement("materials")) {
+        parseMaterials(mats, doc);
+        for (const XMLElement* c = mats->FirstChildElement("material"); c;
+             c = c->NextSiblingElement("material"))
+            if (const char* id = c->Attribute("id"))
+                doc.includedMaterials.insert(id);
+    }
+    if (const XMLElement* defs = root->FirstChildElement("definitions")) {
+        parseDefinitions(defs, doc);
+        for (const XMLElement* c = defs->FirstChildElement("definition"); c;
+             c = c->NextSiblingElement("definition"))
+            if (const char* id = c->Attribute("id"))
+                doc.includedDefs.insert(id);
+    }
+
+    inProgress.erase(canonical);
+    processed.insert(canonical);
+}
+
+static void processIncludes(const XMLElement* root, Mc3Document& doc,
+                             const std::filesystem::path& selfPath,
+                             std::set<std::filesystem::path>& inProgress,
+                             std::set<std::filesystem::path>& processed)
+{
+    for (const XMLElement* inc = root->FirstChildElement("include"); inc;
+         inc = inc->NextSiblingElement("include")) {
+        const char* fileAttr = inc->Attribute("file");
+        if (!fileAttr || !fileAttr[0]) continue;
+
+        // Resolve relative to the file that contains the <include>
+        std::filesystem::path includePath = selfPath.parent_path() / fileAttr;
+
+        // Record the relative path as written (for roundtrip write-back)
+        doc.includes.push_back(fileAttr);
+
+        mergeInclude(includePath, doc, inProgress, processed);
+    }
+}
+
+// ---------------------------------------------------------------------------
 // Entry point
 // ---------------------------------------------------------------------------
 
@@ -573,6 +673,18 @@ Mc3Document Mc3XmlParser::parse(const std::filesystem::path& path) {
     doc.model            = attr(root, "model",   "unnamed");
     doc.unit             = attr(root, "unit",    "meter");
     doc.coordinateSystem = attr(root, "coordinate_system", "right_handed_y_up");
+
+    // Process <include> elements before any local sections so that included
+    // definitions/materials/textures are available when the main file is parsed.
+    {
+        std::set<std::filesystem::path> inProgress, processed;
+        try {
+            inProgress.insert(std::filesystem::weakly_canonical(path));
+        } catch (...) {
+            inProgress.insert(std::filesystem::absolute(path));
+        }
+        processIncludes(root, doc, path, inProgress, processed);
+    }
 
     if (const XMLElement* env  = root->FirstChildElement("environment"))  parseEnvironment(env,  doc);
     if (const XMLElement* lts  = root->FirstChildElement("lights"))       parseLights(lts,       doc);

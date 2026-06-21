@@ -314,6 +314,14 @@ void Mc3XmlWriter::write(const Mc3Document& doc, const std::filesystem::path& pa
         root->SetAttribute("unit", doc.unit.c_str());
     xml.InsertEndChild(root);
 
+    // Include references (written before all other sections so they appear at
+    // the top and can be processed first on the next load).
+    for (const auto& inc : doc.includes) {
+        XMLElement* incEl = xml.NewElement("include");
+        incEl->SetAttribute("file", inc.c_str());
+        root->InsertEndChild(incEl);
+    }
+
     // Environment
     if (doc.environment) {
         const auto& env = *doc.environment;
@@ -386,10 +394,11 @@ void Mc3XmlWriter::write(const Mc3Document& doc, const std::filesystem::path& pa
         root->InsertEndChild(cEl);
     }
 
-    // Textures
+    // Textures — skip entries that came from <include> files
     if (!doc.textures.empty()) {
         XMLElement* tEl = xml.NewElement("textures");
         for (const auto& [id, tex] : doc.textures) {
+            if (doc.includedTextures.count(id)) continue;
             XMLElement* te = xml.NewElement("texture");
             te->SetAttribute("id",  id.c_str());
             if (!tex.name.empty() && tex.name != id)
@@ -409,10 +418,11 @@ void Mc3XmlWriter::write(const Mc3Document& doc, const std::filesystem::path& pa
         root->InsertEndChild(tEl);
     }
 
-    // Materials
+    // Materials — skip entries that came from <include> files
     if (!doc.materials.empty()) {
         XMLElement* mEl = xml.NewElement("materials");
         for (const auto& [id, mat] : doc.materials) {
+            if (doc.includedMaterials.count(id)) continue;
             XMLElement* me = xml.NewElement("material");
             me->SetAttribute("id",        mat.name.c_str());
             me->SetAttribute("roughness", fStr(mat.roughness).c_str());
@@ -443,10 +453,11 @@ void Mc3XmlWriter::write(const Mc3Document& doc, const std::filesystem::path& pa
         root->InsertEndChild(mEl);
     }
 
-    // Definitions
+    // Definitions — skip entries that came from <include> files
     if (!doc.definitions.empty()) {
         XMLElement* dEl = xml.NewElement("definitions");
         for (const auto& [id, obj] : doc.definitions) {
+            if (doc.includedDefs.count(id)) continue;
             XMLElement* de = xml.NewElement("definition");
             de->SetAttribute("id", id.c_str());
             XMLElement* oe = writeObject(xml, obj);

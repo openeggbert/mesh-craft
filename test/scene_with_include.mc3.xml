@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Scene that imports shared definitions and materials from mc3_library.mc3.xml.
+     The <include> element must appear before other sections. -->
+<mc3 version="0.3" model="SceneWithInclude">
+
+  <include file="mc3_library.mc3.xml"/>
+
+  <objects>
+    <instance name="Pillar1" definition="pillar" position="0 0 0"/>
+    <instance name="Pillar2" definition="pillar" position="5 0 0"/>
+    <box name="Floor" size="10 0.1 10" position="0 -0.05 0"/>
+    <instance name="Crate1" definition="crate" position="2 0.5 2"/>
+  </objects>
+
+</mc3>

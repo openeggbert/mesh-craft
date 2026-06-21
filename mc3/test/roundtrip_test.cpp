@@ -6,6 +6,7 @@
 #include <fstream>
 #include <functional>
 #include <iostream>
+#include <iterator>
 #include <memory>
 #include <string>
 
@@ -448,6 +449,72 @@ static void testAnimationEvaluate() {
     CHECKF(evaluateChannel(step, 1.0f),  0.0f, "eval step: after end clamps");
 }
 
+// ---------------------------------------------------------------------------
+// Include tests
+// ---------------------------------------------------------------------------
+
+static void testInclude(const std::string& featuresXmlPath) {
+    auto xmlDir    = std::filesystem::path(featuresXmlPath).parent_path();
+    auto sceneFile = xmlDir / "scene_with_include.mc3.xml";
+    auto libFile   = xmlDir / "mc3_library.mc3.xml";
+
+    if (!std::filesystem::exists(sceneFile) || !std::filesystem::exists(libFile)) {
+        std::cout << "SKIP: scene_with_include.mc3.xml or mc3_library.mc3.xml not found\n";
+        return;
+    }
+
+    try {
+        // --- Load ---
+        auto doc = Mc3Document::loadFromFile(sceneFile);
+
+        CHECK(doc.definitions.count("pillar") == 1, "include: 'pillar' definition loaded from library");
+        CHECK(doc.definitions.count("crate")  == 1, "include: 'crate' definition loaded from library");
+        CHECK(doc.materials.count("stone")    == 1, "include: 'stone' material loaded from library");
+        CHECK(doc.materials.count("wood")     == 1, "include: 'wood' material loaded from library");
+
+        CHECK(!doc.includes.empty(),                        "include: includes list non-empty");
+        CHECK(doc.includes[0] == "mc3_library.mc3.xml",    "include: relative path recorded");
+
+        CHECK(doc.includedDefs.count("pillar") == 1,       "include: 'pillar' tracked as included def");
+        CHECK(doc.includedDefs.count("crate")  == 1,       "include: 'crate' tracked as included def");
+        CHECK(doc.includedMaterials.count("stone") == 1,   "include: 'stone' tracked as included mat");
+        CHECK(doc.includedMaterials.count("wood")  == 1,   "include: 'wood' tracked as included mat");
+
+        // Scene objects from the main file
+        CHECK(doc.objects.size() >= 4, "include: scene objects present (4 expected)");
+
+        // --- Roundtrip: save to same directory so relative include path resolves ---
+        auto savedPath = xmlDir / "scene_include_rt_tmp.mc3.xml";
+        doc.saveToFile(savedPath);
+
+        // Saved file must contain <include> and must NOT inline the library content
+        {
+            std::ifstream f(savedPath);
+            std::string saved((std::istreambuf_iterator<char>(f)), {});
+            CHECK(saved.find("<include") != std::string::npos,
+                  "include rt: <include> element present in saved file");
+            CHECK(saved.find("id=\"pillar\"") == std::string::npos,
+                  "include rt: included definitions not inlined in saved file");
+            CHECK(saved.find("id=\"stone\"") == std::string::npos,
+                  "include rt: included materials not inlined in saved file");
+        }
+
+        // Reload: definitions should still be accessible via the re-emitted <include>
+        auto rt = Mc3Document::loadFromFile(savedPath);
+        std::filesystem::remove(savedPath);
+
+        CHECK(rt.definitions.count("pillar") == 1, "include rt: 'pillar' accessible after reload");
+        CHECK(rt.materials.count("stone")    == 1, "include rt: 'stone' accessible after reload");
+        CHECK(rt.objects.size() >= 4,              "include rt: scene objects preserved");
+        CHECK(!rt.includes.empty(),                "include rt: includes list preserved");
+
+    } catch (const std::exception& e) {
+        fail(std::string("include test threw: ") + e.what());
+    }
+}
+
+// ---------------------------------------------------------------------------
+
 static void testFeaturesXmlLoads(const std::string& path) {
     try {
         auto doc = Mc3Document::loadFromFile(path);
@@ -626,8 +693,10 @@ int main(int argc, char* argv[]) {
     testAnimationMultiAction();
     testAnimationEvaluate();
 
-    if (argc >= 2)
+    if (argc >= 2) {
         testFeaturesXmlLoads(argv[1]);
+        testInclude(argv[1]);
+    }
 
     std::cout << "\n" << (failures == 0 ? "All tests passed." : "FAILURES: " + std::to_string(failures)) << "\n";
     return failures > 0 ? 1 : 0;
