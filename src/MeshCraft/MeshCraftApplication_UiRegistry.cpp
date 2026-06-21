@@ -128,9 +128,13 @@ void MeshCraftApplication::drawRegistryPanel() {
                          &regSaveDlgOpen_, ImGuiWindowFlags_NoResize)) {
 
             ImGui::Text("Definition:");
+            // When saving from an AI result, list aiPendingDoc_ definitions, not document_.
+            const auto& defSource = (regSaveFromAi_ && aiPendingDoc_.has_value())
+                                    ? aiPendingDoc_->definitions
+                                    : document_.definitions;
             const char* preview = regSaveDefId_.empty() ? "(select)" : regSaveDefId_.c_str();
             if (ImGui::BeginCombo("##regdef", preview)) {
-                for (const auto& [id, _] : document_.definitions) {
+                for (const auto& [id, _] : defSource) {
                     bool sel = (id == regSaveDefId_);
                     if (ImGui::Selectable(id.c_str(), sel)) {
                         regSaveDefId_ = id;

@@ -219,23 +219,35 @@ void MeshCraftApplication::drawAiPanel() {
         }
     }
 
-    // ---- Save AI result to Registry — visible as long as aiPendingDoc_ has definitions ----
-    // This is independent of whether the response has been applied to the scene.
-    if (registry_.isOpen() && aiPendingDoc_.has_value()
-            && !aiPendingDoc_->definitions.empty()) {
+    // ---- Save AI result to Registry ----
+    // Visible whenever aiPendingDoc_ has definitions; does NOT require registry_.isOpen().
+    if (aiPendingDoc_.has_value() && !aiPendingDoc_->definitions.empty()) {
         ImGui::SameLine();
         if (ImGui::Button("Save to Registry…")) {
-            showRegistryPanel_ = true;
-            regSaveDlgOpen_    = true;
-            const std::string& defId = aiPendingDoc_->definitions.begin()->first;
-            std::strncpy(regSaveNameBuf_,   defId.c_str(),        sizeof(regSaveNameBuf_) - 1);
-            std::strncpy(regSaveGroupBuf_,  "AI",                 sizeof(regSaveGroupBuf_) - 1);
-            std::strncpy(regSaveSourceBuf_, "ai_generated",       sizeof(regSaveSourceBuf_) - 1);
-            regSaveDescBuf_[0]    = '\0';
-            regSaveVariantBuf_[0] = '\0';
-            regSaveTagsBuf_[0]    = '\0';
-            regSaveDefId_  = defId;
-            regSaveFromAi_ = true;
+            // Ensure the registry is open; open the default DB if needed.
+            bool regReady = registry_.isOpen();
+            if (!regReady) {
+                try {
+                    registry_.open(ModelRegistry::defaultPath());
+                    regResultsDirty_ = true;
+                    regReady = true;
+                } catch (const std::exception& ex) {
+                    setStatusMsg(std::string("Registry open failed: ") + ex.what(), true);
+                }
+            }
+            if (regReady) {
+                showRegistryPanel_ = true;
+                regSaveDlgOpen_    = true;
+                const std::string& defId = aiPendingDoc_->definitions.begin()->first;
+                std::strncpy(regSaveNameBuf_,   defId.c_str(),  sizeof(regSaveNameBuf_) - 1);
+                std::strncpy(regSaveGroupBuf_,  "AI",           sizeof(regSaveGroupBuf_) - 1);
+                std::strncpy(regSaveSourceBuf_, "ai_generated", sizeof(regSaveSourceBuf_) - 1);
+                regSaveDescBuf_[0]    = '\0';
+                regSaveVariantBuf_[0] = '\0';
+                regSaveTagsBuf_[0]    = '\0';
+                regSaveDefId_  = defId;
+                regSaveFromAi_ = true;
+            }
         }
     }
 
