@@ -507,6 +507,37 @@ static void testIncludeNested(const std::string& featuresXmlPath) {
         if (!doc.includes.empty())
             CHECK(doc.includes[0] == "include_lib_a.mc3.xml",
                   "nested include: doc.includes[0]==\"include_lib_a.mc3.xml\"");
+
+        // --- Roundtrip: save to the same directory so relative paths resolve ---
+        auto savedPath = xmlDir / "nested_rt_tmp.mc3.xml";
+        doc.saveToFile(savedPath);
+        {
+            std::ifstream f(savedPath);
+            std::string saved((std::istreambuf_iterator<char>(f)), {});
+            // The saved file must re-emit the lib_a include
+            CHECK(saved.find("include_lib_a.mc3.xml") != std::string::npos,
+                  "nested rt: lib_a include present in saved file");
+            // The saved file must NOT directly reference lib_b (that's nested inside lib_a)
+            CHECK(saved.find("include_lib_b.mc3.xml") == std::string::npos,
+                  "nested rt: lib_b NOT directly referenced in saved file");
+            // The definitions from lib_b must also not be inlined
+            CHECK(saved.find("id=\"widget\"") == std::string::npos,
+                  "nested rt: widget definition NOT inlined in saved file");
+        }
+
+        // Reload: assets from both lib_a and lib_b must still be accessible
+        auto rt = Mc3Document::loadFromFile(savedPath);
+        std::filesystem::remove(savedPath);
+
+        CHECK(rt.definitions.count("widget") == 1,
+              "nested rt: 'widget' accessible after reload");
+        CHECK(rt.materials.count("wood") == 1,
+              "nested rt: 'wood' accessible after reload");
+        CHECK(rt.includes.size() == 1,
+              "nested rt: includes list has exactly one entry after reload");
+        if (!rt.includes.empty())
+            CHECK(rt.includes[0] == "include_lib_a.mc3.xml",
+                  "nested rt: doc.includes[0] still lib_a after reload");
     } catch (const std::exception& e) {
         fail(std::string("include nested test threw: ") + e.what());
     }

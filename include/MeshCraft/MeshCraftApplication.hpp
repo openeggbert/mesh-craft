@@ -487,7 +487,8 @@ private:
     char aiModelBuf_[64]{"claude-sonnet-4-6"};
     char aiPromptBuf_[2048]{};
     int  aiScopeSel_{0};  // 0=Full scene, 1=Selection only
-    std::optional<Mc3::Mc3Document> aiPendingDoc_;  // last AI result, cleared on reset
+    std::optional<Mc3::Mc3Document> aiPendingDoc_;  // validated+parsed AI result
+    std::string aiValidationError_;  // non-empty when auto-validation failed
     void drawAiPanel();
 
     // Model Registry (M2)

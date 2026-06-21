@@ -88,6 +88,17 @@ static void testSaveSearchRemove() {
     auto found = reg.search("Chair");
     CHECK(found.size() == 1, "registry: search by name works");
 
+    // Search by group
+    auto byGroup = reg.search("Furniture");
+    CHECK(byGroup.size() == 1, "registry: search by group works");
+
+    // Search by tags
+    auto byTag = reg.search("seating");
+    CHECK(byTag.size() == 1, "registry: search by tag 'seating' works");
+
+    auto byTag2 = reg.search("indoor");
+    CHECK(byTag2.size() == 1, "registry: search by tag 'indoor' works");
+
     auto notFound = reg.search("xxxx_notexist");
     CHECK(notFound.empty(), "registry: search non-existent returns empty");
 
@@ -144,6 +155,59 @@ static void testEntryFromDefinitionAndInsert() {
     fs::remove(dbPath);
 }
 
+static void testInsertDuplicateDefId() {
+    // Two registry entries with the same definition id "crate" inserted into one scene
+    // must get unique ids: "crate" and "crate_1".
+    namespace fs = std::filesystem;
+    auto dbPath = fs::temp_directory_path() / "mc3_reg_dup_test.sqlite3";
+    fs::remove(dbPath);
+
+    ModelRegistry reg;
+    reg.open(dbPath);
+
+    // First entry — crate with wood material
+    auto doc1 = makeDocWithDef();
+    auto e1 = reg.entryFromDefinition(doc1, "crate", "G", "Crate1", "", "", "", "");
+
+    // Second entry — a different crate (different material) but same def id
+    Mc3Document doc2;
+    Mc3Material mat2;
+    mat2.baseColor = {0.8f, 0.1f, 0.1f, 1.0f};
+    doc2.materials["steel"] = mat2;
+    auto box2 = std::make_shared<Mc3Object>(); box2->id="b2"; box2->type=ObjectType::Box;
+    box2->primitive=Mc3Primitive{}; box2->material="steel";
+    auto def2 = std::make_shared<Mc3Object>(); def2->id="crate"; def2->type=ObjectType::Group;
+    def2->children.push_back(box2);
+    doc2.definitions["crate"] = def2;
+    auto e2 = reg.entryFromDefinition(doc2, "crate", "G", "Crate2", "", "", "", "");
+
+    Mc3Document scene;
+    std::string id1, id2;
+    try {
+        id1 = reg.insertIntoScene(scene, e1);
+        id2 = reg.insertIntoScene(scene, e2);
+        CHECK(true, "duplicate def: both inserts did not throw");
+    } catch (const std::exception& ex) {
+        fail(std::string("duplicate def: threw: ") + ex.what());
+        reg.close(); fs::remove(dbPath);
+        return;
+    }
+
+    CHECK(id1 != id2,                               "duplicate def: ids are distinct");
+    CHECK(scene.definitions.count(id1) == 1,        "duplicate def: first def present");
+    CHECK(scene.definitions.count(id2) == 1,        "duplicate def: second def present");
+    // The first id must be "crate", the second must have a suffix
+    CHECK(id1 == "crate",                           "duplicate def: first id is 'crate'");
+    CHECK(id2 == "crate_1",                         "duplicate def: second id is 'crate_1'");
+
+    // Materials from both entries must be merged into the scene
+    CHECK(scene.materials.count("wood") == 1,       "duplicate def: wood material merged");
+    CHECK(scene.materials.count("steel") == 1,      "duplicate def: steel material merged");
+
+    reg.close();
+    fs::remove(dbPath);
+}
+
 static void testMigration() {
     // Opening the same DB twice should not fail (migration runs safely on existing columns)
     namespace fs = std::filesystem;
@@ -175,6 +239,7 @@ int main() {
     testOpenClose();
     testSaveSearchRemove();
     testEntryFromDefinitionAndInsert();
+    testInsertDuplicateDefId();
     testMigration();
 #else
     std::cout << "SKIP: ModelRegistry tests require MESHCRAFT_HAS_SQLITE3\n";
