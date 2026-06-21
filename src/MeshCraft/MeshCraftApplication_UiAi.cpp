@@ -96,7 +96,7 @@ void MeshCraftApplication::drawAiPanel() {
     if (aiApiKeyBuf_[0] == '\0') {
         const char* envKey = std::getenv("ANTHROPIC_API_KEY");
         if (envKey && *envKey)
-            std::strncpy(aiApiKeyBuf_, envKey, sizeof(aiApiKeyBuf_) - 1);
+            copyToBuf(aiApiKeyBuf_, envKey);
     }
 
     ImGui::SetNextWindowSize(ImVec2(520, 540), ImGuiCond_FirstUseEver);
@@ -227,21 +227,28 @@ void MeshCraftApplication::drawAiPanel() {
             // Ensure the registry is open; open the default DB if needed.
             bool regReady = registry_.isOpen();
             if (!regReady) {
+                bool openThrew = false;
                 try {
                     registry_.open(ModelRegistry::defaultPath());
-                    regResultsDirty_ = true;
-                    regReady = true;
                 } catch (const std::exception& ex) {
                     setStatusMsg(std::string("Registry open failed: ") + ex.what(), true);
+                    openThrew = true;
+                }
+                if (!openThrew) {
+                    regReady = registry_.isOpen();
+                    if (regReady)
+                        regResultsDirty_ = true;
+                    else
+                        setStatusMsg("Model Registry is not available in this build", true);
                 }
             }
             if (regReady) {
                 showRegistryPanel_ = true;
                 regSaveDlgOpen_    = true;
                 const std::string& defId = aiPendingDoc_->definitions.begin()->first;
-                std::strncpy(regSaveNameBuf_,   defId.c_str(),  sizeof(regSaveNameBuf_) - 1);
-                std::strncpy(regSaveGroupBuf_,  "AI",           sizeof(regSaveGroupBuf_) - 1);
-                std::strncpy(regSaveSourceBuf_, "ai_generated", sizeof(regSaveSourceBuf_) - 1);
+                copyToBuf(regSaveNameBuf_,   defId.c_str());
+                copyToBuf(regSaveGroupBuf_,  "AI");
+                copyToBuf(regSaveSourceBuf_, "ai_generated");
                 regSaveDescBuf_[0]    = '\0';
                 regSaveVariantBuf_[0] = '\0';
                 regSaveTagsBuf_[0]    = '\0';
@@ -258,6 +265,12 @@ void MeshCraftApplication::drawAiPanel() {
             aiAssistant_.reset();
             aiPendingDoc_.reset();
             aiValidationError_.clear();
+            // If the registry save dialog was pre-filled from this AI result, close it
+            // so it cannot fall back to listing scene definitions.
+            if (regSaveFromAi_) {
+                regSaveDlgOpen_ = false;
+                regSaveFromAi_  = false;
+            }
         }
     }
 

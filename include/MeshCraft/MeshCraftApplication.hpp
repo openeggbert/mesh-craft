@@ -21,12 +21,14 @@
 #include <Microsoft/Xna/Framework/Input/MouseState.hpp>
 #include <System/Object.hpp>
 #include <array>
+#include <cstdio>
 #include <filesystem>
 #include <map>
 #include <memory>
 #include <optional>
 #include <set>
 #include <string>
+#include <string_view>
 #include <vector>
 
 namespace MeshCraft {
@@ -531,6 +533,13 @@ private:
     void  enterWalkMode();
     void  exitWalkMode();
     void  drawWalkModeHud(int screenW, int screenH);
+
+    // Copy src into a fixed ImGui char buffer; always null-terminates.
+    template<std::size_t N>
+    static void copyToBuf(char (&dst)[N], std::string_view src) {
+        static_assert(N > 0);
+        std::snprintf(dst, N, "%s", std::string(src).c_str());
+    }
 };
 
 } // namespace MeshCraft

@@ -139,8 +139,7 @@ void MeshCraftApplication::drawRegistryPanel() {
                     if (ImGui::Selectable(id.c_str(), sel)) {
                         regSaveDefId_ = id;
                         if (regSaveNameBuf_[0] == '\0')
-                            std::strncpy(regSaveNameBuf_, id.c_str(),
-                                         sizeof(regSaveNameBuf_) - 1);
+                            copyToBuf(regSaveNameBuf_, id.c_str());
                     }
                     if (sel) ImGui::SetItemDefaultFocus();
                 }
