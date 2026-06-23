@@ -208,6 +208,15 @@ void MeshCraftApplication::LoadContent() {
             document_ = Mc3::Mc3Document::loadFromFile(currentFile_);
             addRecentFile(currentFile_);
             std::cout << "[MeshCraft] Loaded: " << currentFile_ << "\n";
+            // Auto-start the first action marked autoplay="true"
+            for (const auto& [aname, act] : document_.actions) {
+                if (act.autoplay) {
+                    currentActionName_ = aname;
+                    animTime_    = 0.0f;
+                    animPlaying_ = true;
+                    break;
+                }
+            }
             // In screenshot mode, auto-activate the default_camera so the render
             // uses the scene's own camera instead of the editor viewport camera.
             if (!autoScreenshotPath_.empty() && !document_.defaultCamera.empty()) {

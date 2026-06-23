@@ -426,8 +426,15 @@ void SceneRenderer::drawObjectEdges(const Mc3Object& obj, const Mc3Document& doc
     Matrix world = objectWorldMatrix(obj.transform) * parentWorld;
     Color edgeColor(0, 0, 0, 220);
 
-    // Slight outward push (scale in local space) to avoid z-fighting with the solid mesh
-    constexpr float kPush = 1.003f;
+    // World-space scale of each local axis from the world matrix row magnitudes.
+    float rowMagX = std::sqrt(world.M11*world.M11 + world.M12*world.M12 + world.M13*world.M13);
+    float rowMagY = std::sqrt(world.M21*world.M21 + world.M22*world.M22 + world.M23*world.M23);
+    float rowMagZ = std::sqrt(world.M31*world.M31 + world.M32*world.M32 + world.M33*world.M33);
+    float maxScale = std::max({rowMagX, rowMagY, rowMagZ});
+    // Push ~0.25 world units outward, irrespective of object world-space scale.
+    // Clamped to [1.003, 1.02]: lower bound keeps the old minimum for tiny objects;
+    // upper bound keeps the cage visually close to the solid on large objects.
+    float kPush = std::clamp(1.0f + 0.25f / std::max(maxScale, 0.001f), 1.003f, 1.02f);
 
     Matrix deform = obj.deform
         ? Matrix::CreateScale({obj.deform->scale[0], obj.deform->scale[1], obj.deform->scale[2]})

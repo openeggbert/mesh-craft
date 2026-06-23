@@ -681,6 +681,7 @@
     <xs:attribute name="name"     type="xs:string"  use="required"/>
     <xs:attribute name="duration" type="xs:float"   default="1.0"/>
     <xs:attribute name="loop"     type="xs:boolean" default="false"/>
+    <xs:attribute name="autoplay" type="xs:boolean" default="false"/>
   </xs:complexType>
 
   <xs:complexType name="mc3ActionsType">

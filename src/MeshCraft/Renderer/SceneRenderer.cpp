@@ -288,7 +288,9 @@ SceneRenderer::SceneRenderer(GraphicsDevice& device)
     effect_ = std::make_unique<BasicEffect>(device_);
     effect_->VertexColorEnabled = true;
     effect_->EnableDefaultLighting();           // set up 3-point light colors/directions once
-    effect_->setLightingEnabledProperty(false); // off by default; toggled on in draw()
+    effect_->setAmbientLightColorProperty(Vector3{0.35f, 0.35f, 0.35f}); // brighter fill so shadow sides are not pitch-black
+    effect_->setPreferPerPixelLightingProperty(true); // smoother on curved surfaces if CNA supports
+    effect_->setLightingEnabledProperty(false); // off by default; enabled per draw in drawMeshTextured
 
     buildUnitBox();
     buildUnitSphere(32, unitSphere_);    buildUnitSphere(16, unitSphereL1_);   buildUnitSphere(6,  unitSphereL2_);
@@ -391,6 +393,7 @@ void SceneRenderer::drawMeshTextured(const RenderMesh& mesh,
     effect_->View       = view;
     effect_->Projection = proj;
     effect_->VertexColorEnabled = false;
+    effect_->setLightingEnabledProperty(true);
     if (tex) {
         effect_->setTextureEnabledProperty(true);
         effect_->setTextureProperty(tex);
@@ -416,6 +419,7 @@ void SceneRenderer::drawMeshTextured(const RenderMesh& mesh,
 
     effect_->setTextureProperty(nullptr);
     effect_->setTextureEnabledProperty(false);
+    effect_->setLightingEnabledProperty(false);
     effect_->VertexColorEnabled = true;
     effect_->setDiffuseColorProperty(Vector3{1,1,1});
     effect_->setAlphaProperty(1.0f);
@@ -762,10 +766,8 @@ void SceneRenderer::draw(const Mc3Document& doc,
 
     Matrix identity = Matrix::getIdentityProperty();
 
-    effect_->setLightingEnabledProperty(true);
     for (const auto& obj : doc.objects)
         drawObject(*obj, doc, identity, view, proj, selected);
-    effect_->setLightingEnabledProperty(false);
 
     effect_->setFogEnabledProperty(false);
 }

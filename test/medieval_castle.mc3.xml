@@ -86,6 +86,15 @@
     <material id="chapel_roof"  roughness="0.82" metallic="0.0"><base_color>0.38 0.18 0.12 1.0</base_color></material>
     <material id="glass_window" roughness="0.05" metallic="0.05" alpha_mode="blend"><base_color>0.68 0.84 1.0 0.32</base_color></material>
     <material id="thatch"       roughness="0.92" metallic="0.0"><base_color>0.68 0.56 0.24 1.0</base_color></material>
+    <material id="bloom_red"    roughness="0.80" metallic="0.0"><base_color>0.88 0.08 0.08 1.0</base_color></material>
+    <material id="bloom_white"  roughness="0.80" metallic="0.0"><base_color>0.96 0.94 0.92 1.0</base_color></material>
+    <material id="bloom_yellow" roughness="0.80" metallic="0.0"><base_color>0.95 0.82 0.06 1.0</base_color></material>
+    <material id="bloom_purple" roughness="0.80" metallic="0.0"><base_color>0.58 0.18 0.72 1.0</base_color></material>
+    <material id="stem_green"   roughness="0.90" metallic="0.0"><base_color>0.20 0.48 0.12 1.0</base_color></material>
+    <material id="lamp_iron"    roughness="0.40" metallic="0.90"><base_color>0.14 0.14 0.16 1.0</base_color></material>
+    <material id="lamp_glow"    roughness="0.20" metallic="0.05" alpha_mode="blend"><base_color>1.0 0.90 0.60 0.85</base_color><emissive_color>1.8 1.2 0.3</emissive_color></material>
+    <material id="moss"         roughness="0.95" metallic="0.0"><base_color>0.14 0.36 0.10 1.0</base_color></material>
+    <material id="ivy"          roughness="0.92" metallic="0.0"><base_color>0.16 0.44 0.12 1.0</base_color></material>
   </materials>
 
   <!-- ================================================================
@@ -196,6 +205,51 @@
         <cylinder name="Handle" radius="0.04" height="0.6"  segments="6" position="0 0.30 0" material="wood_light"/>
         <cylinder name="Cup"    radius="0.08" height="0.10" segments="8" position="0 0.65 0" material="iron_metal"/>
         <sphere   name="Flame"  radius="0.09" segments="6"               position="0 0.80 0" material="fire_glow"/>
+      </group>
+    </definition>
+
+    <!-- RED WILDFLOWER: thin stem + sphere bloom -->
+    <definition id="flower_red">
+      <group name="FlowerRed">
+        <cylinder name="Stem"  radius="0.02" height="0.50" segments="4" position="0 0.25 0" material="stem_green"/>
+        <sphere   name="Bloom" radius="0.11" segments="8"               position="0 0.56 0" material="bloom_red"/>
+      </group>
+    </definition>
+
+    <!-- WHITE DAISY: thin stem + white flat sphere -->
+    <definition id="flower_white">
+      <group name="FlowerWhite">
+        <cylinder name="Stem"  radius="0.02" height="0.45" segments="4" position="0 0.225 0" material="stem_green"/>
+        <sphere   name="Bloom" radius="0.10" segments="8"                position="0 0.52  0" material="bloom_white"/>
+        <sphere   name="Eye"   radius="0.04" segments="6"                position="0 0.58  0" material="bloom_yellow"/>
+      </group>
+    </definition>
+
+    <!-- YELLOW BUTTERCUP -->
+    <definition id="flower_yellow">
+      <group name="FlowerYellow">
+        <cylinder name="Stem"  radius="0.02" height="0.38" segments="4" position="0 0.19 0" material="stem_green"/>
+        <sphere   name="Bloom" radius="0.09" segments="8"               position="0 0.44 0" material="bloom_yellow"/>
+      </group>
+    </definition>
+
+    <!-- PURPLE WILDFLOWER (lavender / foxglove style) -->
+    <definition id="flower_purple">
+      <group name="FlowerPurple">
+        <cylinder name="Stem"  radius="0.02" height="0.60" segments="4" position="0 0.30 0" material="stem_green"/>
+        <sphere   name="B1"    radius="0.07" segments="6"               position="0 0.62 0" material="bloom_purple"/>
+        <sphere   name="B2"    radius="0.06" segments="6"               position="0 0.72 0" material="bloom_purple"/>
+        <sphere   name="B3"    radius="0.05" segments="6"               position="0 0.80 0" material="bloom_purple"/>
+      </group>
+    </definition>
+
+    <!-- IRON LAMP POST: tall post + cage + glowing sphere -->
+    <definition id="lamp_post">
+      <group name="LampPost">
+        <cylinder name="Post"  radius="0.05" height="3.5"  segments="6"  position="0 1.75 0"   material="lamp_iron"/>
+        <box      name="Arm"   size="0.60 0.05 0.05"                     position="0.30 3.40 0" material="lamp_iron"/>
+        <cylinder name="Cage"  radius="0.18" height="0.40" segments="8"  position="0.60 3.22 0" material="lamp_iron"/>
+        <sphere   name="Light" radius="0.14" segments="8"                position="0.60 3.22 0" material="lamp_glow"/>
       </group>
     </definition>
 
@@ -1039,6 +1093,192 @@
     <instance name="Bu13" definition="bush" position=" 36  0  56"/>
     <instance name="Bu14" definition="bush" position=" 55  0  52"/>
 
+    <!-- ==============================================================
+         WILDFLOWERS  (courtyard near inner walls + outside by road)
+         Each variety used multiple times via definitions
+    ============================================================== -->
+    <!-- East inner wall -->
+    <instance name="FR01" definition="flower_red"    position=" 18.0 0 -6.0"/>
+    <instance name="FW01" definition="flower_white"  position=" 18.5 0 -3.0"/>
+    <instance name="FY01" definition="flower_yellow" position=" 18.0 0  1.0"/>
+    <instance name="FP01" definition="flower_purple" position=" 18.5 0  5.0"/>
+    <instance name="FR02" definition="flower_red"    position=" 18.0 0  9.5"/>
+    <instance name="FW02" definition="flower_white"  position=" 18.5 0 13.0"/>
+    <!-- West inner wall -->
+    <instance name="FW03" definition="flower_white"  position="-18.0 0 -6.0"/>
+    <instance name="FY02" definition="flower_yellow" position="-18.5 0 -2.0"/>
+    <instance name="FP02" definition="flower_purple" position="-18.0 0  4.0"/>
+    <instance name="FR03" definition="flower_red"    position="-18.5 0  9.5"/>
+    <instance name="FY03" definition="flower_yellow" position="-18.0 0 14.0"/>
+    <!-- North inner wall -->
+    <instance name="FP03" definition="flower_purple" position=" -6.0 0 18.5"/>
+    <instance name="FW04" definition="flower_white"  position="  0.0 0 19.0"/>
+    <instance name="FR04" definition="flower_red"    position="  6.0 0 18.5"/>
+    <instance name="FY04" definition="flower_yellow" position=" 11.0 0 18.5"/>
+    <!-- Near well -->
+    <instance name="FR05" definition="flower_red"    position="  3.5 0 -2.5"/>
+    <instance name="FW05" definition="flower_white"  position=" -3.5 0 -2.5"/>
+    <!-- Outside castle, meadow flanking approach road -->
+    <instance name="FY05" definition="flower_yellow" position=" -7.0 0 -32.0"/>
+    <instance name="FR06" definition="flower_red"    position="  7.5 0 -30.0"/>
+    <instance name="FP04" definition="flower_purple" position=" -9.0 0 -34.0"/>
+    <instance name="FW06" definition="flower_white"  position="  9.0 0 -29.0"/>
+    <instance name="FY06" definition="flower_yellow" position="-12.0 0 -28.0"/>
+    <instance name="FR07" definition="flower_red"    position=" 11.0 0 -27.0"/>
+    <instance name="FP05" definition="flower_purple" position="  6.0 0 -38.0"/>
+    <instance name="FW07" definition="flower_white"  position=" -6.0 0 -40.0"/>
+
+    <!-- ==============================================================
+         IRON LAMP POSTS  (gate, barracks, chapel, courtyard)
+    ============================================================== -->
+    <instance name="LP01" definition="lamp_post" position=" -3.5 0 -19.5"/>
+    <instance name="LP02" definition="lamp_post" position="  3.5 0 -19.5"/>
+    <instance name="LP03" definition="lamp_post" position="-17.0 0   2.5"/>
+    <instance name="LP04" definition="lamp_post" position=" 10.5 0  -0.2"/>
+    <instance name="LP05" definition="lamp_post" position="  0.0 0  -8.0"/>
+    <instance name="LP06" definition="lamp_post" position=" -7.0 0  16.5"/>
+    <instance name="LP07" definition="lamp_post" position="  7.0 0  16.5"/>
+
   </objects>
+
+  <!-- ================================================================
+       ACTIONS  (animations)
+  ================================================================ -->
+  <actions>
+
+    <!-- AMBIENT ANIMATIONS: flag waves + campfire flicker — autoplay + loop
+         Duration 4 s contains: a slow flag oscillation (±12°) and rapid
+         fire-sphere scale flicker.  Both loop seamlessly. -->
+    <action name="ambient_animations" duration="4.0" loop="true" autoplay="true">
+
+      <!-- KeepFlag: wave RotationY 0→12→0→-12→0 -->
+      <channel target="KeepFlag" property="RotationY">
+        <keyframe time="0.0"  value="  0.0" interp="linear"/>
+        <keyframe time="1.0"  value=" 12.0" interp="linear"/>
+        <keyframe time="2.0"  value="  0.0" interp="linear"/>
+        <keyframe time="3.0"  value="-12.0" interp="linear"/>
+        <keyframe time="4.0"  value="  0.0" interp="linear"/>
+      </channel>
+
+      <!-- GSpanFlag: opposite phase for variety -->
+      <channel target="GSpanFlag" property="RotationY">
+        <keyframe time="0.0"  value="  3.0" interp="linear"/>
+        <keyframe time="1.0"  value="-10.0" interp="linear"/>
+        <keyframe time="2.0"  value="  3.0" interp="linear"/>
+        <keyframe time="3.0"  value=" 16.0" interp="linear"/>
+        <keyframe time="4.0"  value="  3.0" interp="linear"/>
+      </channel>
+
+      <!-- Flame1 ScaleX — rapid flicker -->
+      <channel target="Flame1" property="ScaleX">
+        <keyframe time="0.0"  value="1.00" interp="linear"/>
+        <keyframe time="0.25" value="1.30" interp="linear"/>
+        <keyframe time="0.55" value="0.80" interp="linear"/>
+        <keyframe time="0.85" value="1.20" interp="linear"/>
+        <keyframe time="1.15" value="0.78" interp="linear"/>
+        <keyframe time="1.45" value="1.25" interp="linear"/>
+        <keyframe time="1.75" value="0.85" interp="linear"/>
+        <keyframe time="2.10" value="1.18" interp="linear"/>
+        <keyframe time="2.40" value="0.82" interp="linear"/>
+        <keyframe time="2.70" value="1.28" interp="linear"/>
+        <keyframe time="3.00" value="0.88" interp="linear"/>
+        <keyframe time="3.30" value="1.15" interp="linear"/>
+        <keyframe time="3.60" value="0.80" interp="linear"/>
+        <keyframe time="3.85" value="1.22" interp="linear"/>
+        <keyframe time="4.00" value="1.00" interp="linear"/>
+      </channel>
+
+      <!-- Flame1 ScaleY — slightly offset from ScaleX -->
+      <channel target="Flame1" property="ScaleY">
+        <keyframe time="0.0"  value="1.00" interp="linear"/>
+        <keyframe time="0.30" value="0.75" interp="linear"/>
+        <keyframe time="0.60" value="1.35" interp="linear"/>
+        <keyframe time="0.90" value="0.80" interp="linear"/>
+        <keyframe time="1.20" value="1.30" interp="linear"/>
+        <keyframe time="1.55" value="0.78" interp="linear"/>
+        <keyframe time="1.85" value="1.25" interp="linear"/>
+        <keyframe time="2.20" value="0.84" interp="linear"/>
+        <keyframe time="2.55" value="1.20" interp="linear"/>
+        <keyframe time="2.85" value="0.79" interp="linear"/>
+        <keyframe time="3.20" value="1.32" interp="linear"/>
+        <keyframe time="3.50" value="0.82" interp="linear"/>
+        <keyframe time="3.80" value="1.18" interp="linear"/>
+        <keyframe time="4.00" value="1.00" interp="linear"/>
+      </channel>
+
+      <!-- Flame2 ScaleX — offset phase -->
+      <channel target="Flame2" property="ScaleX">
+        <keyframe time="0.0"  value="1.10" interp="linear"/>
+        <keyframe time="0.35" value="0.75" interp="linear"/>
+        <keyframe time="0.70" value="1.25" interp="linear"/>
+        <keyframe time="1.05" value="0.82" interp="linear"/>
+        <keyframe time="1.40" value="1.20" interp="linear"/>
+        <keyframe time="1.80" value="0.78" interp="linear"/>
+        <keyframe time="2.15" value="1.28" interp="linear"/>
+        <keyframe time="2.50" value="0.80" interp="linear"/>
+        <keyframe time="2.85" value="1.22" interp="linear"/>
+        <keyframe time="3.20" value="0.76" interp="linear"/>
+        <keyframe time="3.55" value="1.18" interp="linear"/>
+        <keyframe time="3.85" value="0.85" interp="linear"/>
+        <keyframe time="4.00" value="1.10" interp="linear"/>
+      </channel>
+
+      <!-- Flame3 ScaleX — tip of fire, faster small flicker -->
+      <channel target="Flame3" property="ScaleX">
+        <keyframe time="0.0"  value="1.00" interp="linear"/>
+        <keyframe time="0.20" value="1.40" interp="linear"/>
+        <keyframe time="0.45" value="0.65" interp="linear"/>
+        <keyframe time="0.65" value="1.35" interp="linear"/>
+        <keyframe time="0.90" value="0.70" interp="linear"/>
+        <keyframe time="1.10" value="1.45" interp="linear"/>
+        <keyframe time="1.35" value="0.65" interp="linear"/>
+        <keyframe time="1.60" value="1.30" interp="linear"/>
+        <keyframe time="1.85" value="0.72" interp="linear"/>
+        <keyframe time="2.10" value="1.38" interp="linear"/>
+        <keyframe time="2.35" value="0.68" interp="linear"/>
+        <keyframe time="2.60" value="1.42" interp="linear"/>
+        <keyframe time="2.85" value="0.70" interp="linear"/>
+        <keyframe time="3.10" value="1.35" interp="linear"/>
+        <keyframe time="3.35" value="0.65" interp="linear"/>
+        <keyframe time="3.60" value="1.40" interp="linear"/>
+        <keyframe time="3.85" value="0.72" interp="linear"/>
+        <keyframe time="4.00" value="1.00" interp="linear"/>
+      </channel>
+
+      <!-- Forge fire FForge ScaleX — slow pulse -->
+      <channel target="FForge" property="ScaleX">
+        <keyframe time="0.0"  value="1.00" interp="linear"/>
+        <keyframe time="0.5"  value="1.30" interp="linear"/>
+        <keyframe time="1.0"  value="0.75" interp="linear"/>
+        <keyframe time="1.5"  value="1.25" interp="linear"/>
+        <keyframe time="2.0"  value="0.80" interp="linear"/>
+        <keyframe time="2.5"  value="1.20" interp="linear"/>
+        <keyframe time="3.0"  value="0.78" interp="linear"/>
+        <keyframe time="3.5"  value="1.28" interp="linear"/>
+        <keyframe time="4.0"  value="1.00" interp="linear"/>
+      </channel>
+      <channel target="FForge" property="ScaleY">
+        <keyframe time="0.0"  value="1.00" interp="linear"/>
+        <keyframe time="0.6"  value="0.70" interp="linear"/>
+        <keyframe time="1.1"  value="1.35" interp="linear"/>
+        <keyframe time="1.7"  value="0.75" interp="linear"/>
+        <keyframe time="2.2"  value="1.28" interp="linear"/>
+        <keyframe time="2.8"  value="0.72" interp="linear"/>
+        <keyframe time="3.3"  value="1.30" interp="linear"/>
+        <keyframe time="3.8"  value="0.80" interp="linear"/>
+        <keyframe time="4.0"  value="1.00" interp="linear"/>
+      </channel>
+
+    </action>
+
+    <!-- DRAWBRIDGE RAISE: manual trigger (not autoplay), 3 s -->
+    <action name="drawbridge_raise" duration="3.0" loop="false" autoplay="false">
+      <channel target="Drawbridge" property="RotationX">
+        <keyframe time="0.0" value=" 0.0" interp="linear"/>
+        <keyframe time="3.0" value="85.0" interp="linear"/>
+      </channel>
+    </action>
+
+  </actions>
 
 </mc3>

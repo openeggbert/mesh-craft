@@ -50,6 +50,7 @@ struct Mc3Action {
     std::string name;
     float       duration{ 1.0f };
     bool        loop{ false };
+    bool        autoplay{ false }; // start automatically when the scene is opened
     std::vector<Mc3Channel> channels;
 };
 

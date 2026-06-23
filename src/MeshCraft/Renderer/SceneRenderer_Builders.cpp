@@ -144,7 +144,7 @@ void SceneRenderer::buildUnitSphere(int segments, RenderMesh& target) {
         target.texVB->SetData(tv.data(), static_cast<int>(tv.size()));
         target.texIB = std::make_unique<IndexBuffer>(device_, static_cast<int>(indices.size()));
         target.texIB->SetData(indices.data(), static_cast<int>(indices.size()));
-        target.texPrimitiveCount = target.texPrimitiveCount;
+        target.texPrimitiveCount = static_cast<int>(indices.size()) / 3;
     }
 }
 
@@ -239,7 +239,7 @@ void SceneRenderer::buildUnitCylinder(int segments, RenderMesh& target) {
         target.texVB->SetData(tv.data(), static_cast<int>(tv.size()));
         target.texIB = std::make_unique<IndexBuffer>(device_, static_cast<int>(ti.size()));
         target.texIB->SetData(ti.data(), static_cast<int>(ti.size()));
-        target.primitiveCount = static_cast<int>(ti.size()) / 3;
+        target.texPrimitiveCount = static_cast<int>(ti.size()) / 3;
     }
 }
 

@@ -521,6 +521,7 @@ static void parseActions(const XMLElement* el, Mc3Document& doc) {
         action.name     = attr(ae, "name");
         action.duration = attrF(ae, "duration", 1.0f);
         action.loop     = attrB(ae, "loop", false);
+        action.autoplay = attrB(ae, "autoplay", false);
         if (action.name.empty()) continue;
 
         for (const XMLElement* ce = ae->FirstChildElement("channel"); ce;

@@ -492,7 +492,8 @@ void Mc3XmlWriter::write(const Mc3Document& doc, const std::filesystem::path& pa
             XMLElement* ae = xml.NewElement("action");
             ae->SetAttribute("name",     act.name.c_str());
             ae->SetAttribute("duration", fStr(act.duration).c_str());
-            if (act.loop) ae->SetAttribute("loop", "true");
+            if (act.loop)     ae->SetAttribute("loop",     "true");
+            if (act.autoplay) ae->SetAttribute("autoplay", "true");
 
             for (const auto& ch : act.channels) {
                 XMLElement* ce = xml.NewElement("channel");
