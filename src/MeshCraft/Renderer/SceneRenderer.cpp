@@ -287,6 +287,8 @@ SceneRenderer::SceneRenderer(GraphicsDevice& device)
 {
     effect_ = std::make_unique<BasicEffect>(device_);
     effect_->VertexColorEnabled = true;
+    effect_->EnableDefaultLighting();           // set up 3-point light colors/directions once
+    effect_->setLightingEnabledProperty(false); // off by default; toggled on in draw()
 
     buildUnitBox();
     buildUnitSphere(32, unitSphere_);    buildUnitSphere(16, unitSphereL1_);   buildUnitSphere(6,  unitSphereL2_);
@@ -576,8 +578,7 @@ void SceneRenderer::drawObject(const Mc3Object& obj, const Mc3Document& doc,
     }
 
     auto drawAuto = [&](const RenderMesh& mesh, const Matrix& m) {
-        if (tex) drawMeshTextured(mesh, m, view, proj, color, tex);
-        else     drawMesh(mesh, m, view, proj, color);
+        drawMeshTextured(mesh, m, view, proj, color, tex);
     };
 
     // G8: pick LOD level based on camera distance to object pivot
@@ -761,8 +762,10 @@ void SceneRenderer::draw(const Mc3Document& doc,
 
     Matrix identity = Matrix::getIdentityProperty();
 
+    effect_->setLightingEnabledProperty(true);
     for (const auto& obj : doc.objects)
         drawObject(*obj, doc, identity, view, proj, selected);
+    effect_->setLightingEnabledProperty(false);
 
     effect_->setFogEnabledProperty(false);
 }
