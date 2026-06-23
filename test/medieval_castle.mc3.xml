@@ -47,45 +47,70 @@
   </cameras>
 
   <!-- ================================================================
+       TEXTURES  (procedurally generated, stored in test/textures/)
+  ================================================================ -->
+  <textures>
+    <texture id="tex_stone_grey"   uri="textures/stone_grey.png"   filter="linear"/>
+    <texture id="tex_stone_dark"   uri="textures/stone_dark.png"   filter="linear"/>
+    <texture id="tex_keep_stone"   uri="textures/keep_stone.png"   filter="linear"/>
+    <texture id="tex_gate_stone"   uri="textures/gate_stone.png"   filter="linear"/>
+    <texture id="tex_cobblestone"  uri="textures/cobblestone.png"  filter="linear"/>
+    <texture id="tex_wood_dark"    uri="textures/wood_dark.png"    filter="linear"/>
+    <texture id="tex_wood_light"   uri="textures/wood_light.png"   filter="linear"/>
+    <texture id="tex_grass"        uri="textures/grass.png"        filter="linear"/>
+    <texture id="tex_dirt"         uri="textures/dirt.png"         filter="linear"/>
+    <texture id="tex_roof_slate"   uri="textures/roof_slate.png"   filter="linear"/>
+    <texture id="tex_bark"         uri="textures/bark.png"         filter="linear"/>
+    <texture id="tex_oak_leaves"   uri="textures/oak_leaves.png"   filter="linear"/>
+    <texture id="tex_oak_dark"     uri="textures/oak_dark.png"     filter="linear"/>
+    <texture id="tex_pine_leaves"  uri="textures/pine_leaves.png"  filter="linear"/>
+    <texture id="tex_water"        uri="textures/water.png"        filter="linear"/>
+    <texture id="tex_iron"         uri="textures/iron.png"         filter="linear"/>
+    <texture id="tex_thatch"       uri="textures/thatch.png"       filter="linear"/>
+    <texture id="tex_chapel_stone" uri="textures/chapel_stone.png" filter="linear"/>
+    <texture id="tex_chapel_roof"  uri="textures/chapel_roof.png"  filter="linear"/>
+  </textures>
+
+  <!-- ================================================================
        MATERIALS
   ================================================================ -->
   <materials>
-    <material id="castle_wall"  roughness="0.88" metallic="0.0"><base_color>0.70 0.67 0.60 1.0</base_color></material>
-    <material id="tower_stone"  roughness="0.85" metallic="0.0"><base_color>0.60 0.57 0.52 1.0</base_color></material>
-    <material id="keep_stone"   roughness="0.90" metallic="0.0"><base_color>0.50 0.48 0.44 1.0</base_color></material>
-    <material id="keep_base"    roughness="0.92" metallic="0.0"><base_color>0.45 0.43 0.40 1.0</base_color></material>
-    <material id="gate_stone"   roughness="0.86" metallic="0.0"><base_color>0.56 0.54 0.49 1.0</base_color></material>
-    <material id="cobblestone"  roughness="0.90" metallic="0.0"><base_color>0.54 0.51 0.47 1.0</base_color></material>
-    <material id="roof_slate"   roughness="0.80" metallic="0.0"><base_color>0.24 0.23 0.27 1.0</base_color></material>
-    <material id="wood_gate"    roughness="0.75" metallic="0.0"><base_color>0.28 0.16 0.08 1.0</base_color></material>
-    <material id="wood_bridge"  roughness="0.82" metallic="0.0"><base_color>0.46 0.30 0.16 1.0</base_color></material>
-    <material id="wood_light"   roughness="0.72" metallic="0.0"><base_color>0.56 0.40 0.22 1.0</base_color></material>
-    <material id="chimney_stone" roughness="0.92" metallic="0.0"><base_color>0.38 0.35 0.32 1.0</base_color></material>
-    <material id="iron_metal"   roughness="0.45" metallic="0.88"><base_color>0.22 0.22 0.24 1.0</base_color></material>
-    <material id="moat_water"   roughness="0.04" metallic="0.04" alpha_mode="blend"><base_color>0.07 0.20 0.38 0.80</base_color></material>
-    <material id="pond_water"   roughness="0.04" metallic="0.04" alpha_mode="blend"><base_color>0.10 0.28 0.46 0.75</base_color></material>
-    <material id="grass"        roughness="0.95" metallic="0.0"><base_color>0.20 0.50 0.14 1.0</base_color></material>
-    <material id="dirt_road"    roughness="0.92" metallic="0.0"><base_color>0.52 0.40 0.26 1.0</base_color></material>
-    <material id="road_verge"   roughness="0.94" metallic="0.0"><base_color>0.40 0.30 0.18 1.0</base_color></material>
-    <material id="earth_bank"   roughness="0.94" metallic="0.0"><base_color>0.44 0.32 0.18 1.0</base_color></material>
-    <material id="tree_trunk"   roughness="0.90" metallic="0.0"><base_color>0.32 0.20 0.10 1.0</base_color></material>
-    <material id="oak_leaves"   roughness="0.88" metallic="0.0"><base_color>0.18 0.46 0.12 1.0</base_color></material>
-    <material id="oak_dark"     roughness="0.88" metallic="0.0"><base_color>0.11 0.32 0.08 1.0</base_color></material>
-    <material id="pine_leaves"  roughness="0.88" metallic="0.0"><base_color>0.10 0.34 0.12 1.0</base_color></material>
+    <material id="castle_wall"  roughness="0.88" metallic="0.0"><base_color>0.70 0.67 0.60 1.0</base_color><base_color_texture>tex_stone_grey</base_color_texture></material>
+    <material id="tower_stone"  roughness="0.85" metallic="0.0"><base_color>0.60 0.57 0.52 1.0</base_color><base_color_texture>tex_stone_dark</base_color_texture></material>
+    <material id="keep_stone"   roughness="0.90" metallic="0.0"><base_color>0.50 0.48 0.44 1.0</base_color><base_color_texture>tex_keep_stone</base_color_texture></material>
+    <material id="keep_base"    roughness="0.92" metallic="0.0"><base_color>0.45 0.43 0.40 1.0</base_color><base_color_texture>tex_keep_stone</base_color_texture></material>
+    <material id="gate_stone"   roughness="0.86" metallic="0.0"><base_color>0.56 0.54 0.49 1.0</base_color><base_color_texture>tex_gate_stone</base_color_texture></material>
+    <material id="cobblestone"  roughness="0.90" metallic="0.0"><base_color>0.54 0.51 0.47 1.0</base_color><base_color_texture>tex_cobblestone</base_color_texture></material>
+    <material id="roof_slate"   roughness="0.80" metallic="0.0"><base_color>0.24 0.23 0.27 1.0</base_color><base_color_texture>tex_roof_slate</base_color_texture></material>
+    <material id="wood_gate"    roughness="0.75" metallic="0.0"><base_color>0.28 0.16 0.08 1.0</base_color><base_color_texture>tex_wood_dark</base_color_texture></material>
+    <material id="wood_bridge"  roughness="0.82" metallic="0.0"><base_color>0.46 0.30 0.16 1.0</base_color><base_color_texture>tex_wood_dark</base_color_texture></material>
+    <material id="wood_light"   roughness="0.72" metallic="0.0"><base_color>0.56 0.40 0.22 1.0</base_color><base_color_texture>tex_wood_light</base_color_texture></material>
+    <material id="chimney_stone" roughness="0.92" metallic="0.0"><base_color>0.38 0.35 0.32 1.0</base_color><base_color_texture>tex_stone_dark</base_color_texture></material>
+    <material id="iron_metal"   roughness="0.45" metallic="0.88"><base_color>0.22 0.22 0.24 1.0</base_color><base_color_texture>tex_iron</base_color_texture></material>
+    <material id="moat_water"   roughness="0.04" metallic="0.04" alpha_mode="blend"><base_color>0.07 0.20 0.38 0.80</base_color><base_color_texture>tex_water</base_color_texture></material>
+    <material id="pond_water"   roughness="0.04" metallic="0.04" alpha_mode="blend"><base_color>0.10 0.28 0.46 0.75</base_color><base_color_texture>tex_water</base_color_texture></material>
+    <material id="grass"        roughness="0.95" metallic="0.0"><base_color>0.20 0.50 0.14 1.0</base_color><base_color_texture>tex_grass</base_color_texture></material>
+    <material id="dirt_road"    roughness="0.92" metallic="0.0"><base_color>0.52 0.40 0.26 1.0</base_color><base_color_texture>tex_dirt</base_color_texture></material>
+    <material id="road_verge"   roughness="0.94" metallic="0.0"><base_color>0.40 0.30 0.18 1.0</base_color><base_color_texture>tex_dirt</base_color_texture></material>
+    <material id="earth_bank"   roughness="0.94" metallic="0.0"><base_color>0.44 0.32 0.18 1.0</base_color><base_color_texture>tex_dirt</base_color_texture></material>
+    <material id="tree_trunk"   roughness="0.90" metallic="0.0"><base_color>0.32 0.20 0.10 1.0</base_color><base_color_texture>tex_bark</base_color_texture></material>
+    <material id="oak_leaves"   roughness="0.88" metallic="0.0"><base_color>0.18 0.46 0.12 1.0</base_color><base_color_texture>tex_oak_leaves</base_color_texture></material>
+    <material id="oak_dark"     roughness="0.88" metallic="0.0"><base_color>0.11 0.32 0.08 1.0</base_color><base_color_texture>tex_oak_dark</base_color_texture></material>
+    <material id="pine_leaves"  roughness="0.88" metallic="0.0"><base_color>0.10 0.34 0.12 1.0</base_color><base_color_texture>tex_pine_leaves</base_color_texture></material>
     <material id="reed"         roughness="0.90" metallic="0.0"><base_color>0.55 0.48 0.22 1.0</base_color></material>
-    <material id="rock"         roughness="0.86" metallic="0.0"><base_color>0.42 0.40 0.38 1.0</base_color></material>
+    <material id="rock"         roughness="0.86" metallic="0.0"><base_color>0.42 0.40 0.38 1.0</base_color><base_color_texture>tex_stone_dark</base_color_texture></material>
     <material id="flag_red"     roughness="0.68" metallic="0.0"><base_color>0.82 0.10 0.10 1.0</base_color></material>
     <material id="flag_blue"    roughness="0.68" metallic="0.0"><base_color>0.12 0.20 0.80 1.0</base_color></material>
     <material id="flag_gold"    roughness="0.60" metallic="0.20"><base_color>0.90 0.72 0.10 1.0</base_color></material>
-    <material id="barrel_wood"  roughness="0.76" metallic="0.0"><base_color>0.38 0.22 0.10 1.0</base_color></material>
+    <material id="barrel_wood"  roughness="0.76" metallic="0.0"><base_color>0.38 0.22 0.10 1.0</base_color><base_color_texture>tex_wood_dark</base_color_texture></material>
     <material id="rope"         roughness="0.86" metallic="0.0"><base_color>0.72 0.60 0.36 1.0</base_color></material>
     <material id="fire_glow"    roughness="0.55" metallic="0.0"><base_color>1.0 0.48 0.04 1.0</base_color><emissive_color>2.4 0.9 0.05</emissive_color></material>
     <material id="charcoal"     roughness="0.92" metallic="0.0"><base_color>0.14 0.10 0.08 1.0</base_color><emissive_color>0.6 0.10 0.02</emissive_color></material>
-    <material id="pole_wood"    roughness="0.80" metallic="0.0"><base_color>0.46 0.30 0.14 1.0</base_color></material>
-    <material id="chapel_stone" roughness="0.86" metallic="0.0"><base_color>0.62 0.60 0.55 1.0</base_color></material>
-    <material id="chapel_roof"  roughness="0.82" metallic="0.0"><base_color>0.38 0.18 0.12 1.0</base_color></material>
+    <material id="pole_wood"    roughness="0.80" metallic="0.0"><base_color>0.46 0.30 0.14 1.0</base_color><base_color_texture>tex_wood_light</base_color_texture></material>
+    <material id="chapel_stone" roughness="0.86" metallic="0.0"><base_color>0.62 0.60 0.55 1.0</base_color><base_color_texture>tex_chapel_stone</base_color_texture></material>
+    <material id="chapel_roof"  roughness="0.82" metallic="0.0"><base_color>0.38 0.18 0.12 1.0</base_color><base_color_texture>tex_chapel_roof</base_color_texture></material>
     <material id="glass_window" roughness="0.05" metallic="0.05" alpha_mode="blend"><base_color>0.68 0.84 1.0 0.32</base_color></material>
-    <material id="thatch"       roughness="0.92" metallic="0.0"><base_color>0.68 0.56 0.24 1.0</base_color></material>
+    <material id="thatch"       roughness="0.92" metallic="0.0"><base_color>0.68 0.56 0.24 1.0</base_color><base_color_texture>tex_thatch</base_color_texture></material>
     <material id="bloom_red"    roughness="0.80" metallic="0.0"><base_color>0.88 0.08 0.08 1.0</base_color></material>
     <material id="bloom_white"  roughness="0.80" metallic="0.0"><base_color>0.96 0.94 0.92 1.0</base_color></material>
     <material id="bloom_yellow" roughness="0.80" metallic="0.0"><base_color>0.95 0.82 0.06 1.0</base_color></material>
@@ -1151,8 +1176,8 @@
          fire-sphere scale flicker.  Both loop seamlessly. -->
     <action name="ambient_animations" duration="4.0" loop="true" autoplay="true">
 
-      <!-- KeepFlag: wave RotationY 0→12→0→-12→0 -->
-      <channel target="KeepFlag" property="RotationY">
+      <!-- KeepFlag: wave rotation.y 0→12→0→-12→0 -->
+      <channel target="KeepFlag" property="rotation.y">
         <keyframe time="0.0"  value="  0.0" interp="linear"/>
         <keyframe time="1.0"  value=" 12.0" interp="linear"/>
         <keyframe time="2.0"  value="  0.0" interp="linear"/>
@@ -1161,7 +1186,7 @@
       </channel>
 
       <!-- GSpanFlag: opposite phase for variety -->
-      <channel target="GSpanFlag" property="RotationY">
+      <channel target="GSpanFlag" property="rotation.y">
         <keyframe time="0.0"  value="  3.0" interp="linear"/>
         <keyframe time="1.0"  value="-10.0" interp="linear"/>
         <keyframe time="2.0"  value="  3.0" interp="linear"/>
@@ -1169,8 +1194,8 @@
         <keyframe time="4.0"  value="  3.0" interp="linear"/>
       </channel>
 
-      <!-- Flame1 ScaleX — rapid flicker -->
-      <channel target="Flame1" property="ScaleX">
+      <!-- Flame1 scale.x — rapid flicker -->
+      <channel target="Flame1" property="scale.x">
         <keyframe time="0.0"  value="1.00" interp="linear"/>
         <keyframe time="0.25" value="1.30" interp="linear"/>
         <keyframe time="0.55" value="0.80" interp="linear"/>
@@ -1188,8 +1213,8 @@
         <keyframe time="4.00" value="1.00" interp="linear"/>
       </channel>
 
-      <!-- Flame1 ScaleY — slightly offset from ScaleX -->
-      <channel target="Flame1" property="ScaleY">
+      <!-- Flame1 scale.y — slightly offset from scale.x -->
+      <channel target="Flame1" property="scale.y">
         <keyframe time="0.0"  value="1.00" interp="linear"/>
         <keyframe time="0.30" value="0.75" interp="linear"/>
         <keyframe time="0.60" value="1.35" interp="linear"/>
@@ -1206,8 +1231,8 @@
         <keyframe time="4.00" value="1.00" interp="linear"/>
       </channel>
 
-      <!-- Flame2 ScaleX — offset phase -->
-      <channel target="Flame2" property="ScaleX">
+      <!-- Flame2 scale.x — offset phase -->
+      <channel target="Flame2" property="scale.x">
         <keyframe time="0.0"  value="1.10" interp="linear"/>
         <keyframe time="0.35" value="0.75" interp="linear"/>
         <keyframe time="0.70" value="1.25" interp="linear"/>
@@ -1223,8 +1248,8 @@
         <keyframe time="4.00" value="1.10" interp="linear"/>
       </channel>
 
-      <!-- Flame3 ScaleX — tip of fire, faster small flicker -->
-      <channel target="Flame3" property="ScaleX">
+      <!-- Flame3 scale.x — tip of fire, faster small flicker -->
+      <channel target="Flame3" property="scale.x">
         <keyframe time="0.0"  value="1.00" interp="linear"/>
         <keyframe time="0.20" value="1.40" interp="linear"/>
         <keyframe time="0.45" value="0.65" interp="linear"/>
@@ -1245,8 +1270,8 @@
         <keyframe time="4.00" value="1.00" interp="linear"/>
       </channel>
 
-      <!-- Forge fire FForge ScaleX — slow pulse -->
-      <channel target="FForge" property="ScaleX">
+      <!-- Forge fire FForge scale.x — slow pulse -->
+      <channel target="FForge" property="scale.x">
         <keyframe time="0.0"  value="1.00" interp="linear"/>
         <keyframe time="0.5"  value="1.30" interp="linear"/>
         <keyframe time="1.0"  value="0.75" interp="linear"/>
@@ -1257,7 +1282,7 @@
         <keyframe time="3.5"  value="1.28" interp="linear"/>
         <keyframe time="4.0"  value="1.00" interp="linear"/>
       </channel>
-      <channel target="FForge" property="ScaleY">
+      <channel target="FForge" property="scale.y">
         <keyframe time="0.0"  value="1.00" interp="linear"/>
         <keyframe time="0.6"  value="0.70" interp="linear"/>
         <keyframe time="1.1"  value="1.35" interp="linear"/>
@@ -1273,7 +1298,7 @@
 
     <!-- DRAWBRIDGE RAISE: manual trigger (not autoplay), 3 s -->
     <action name="drawbridge_raise" duration="3.0" loop="false" autoplay="false">
-      <channel target="Drawbridge" property="RotationX">
+      <channel target="Drawbridge" property="rotation.x">
         <keyframe time="0.0" value=" 0.0" interp="linear"/>
         <keyframe time="3.0" value="85.0" interp="linear"/>
       </channel>
