@@ -146,7 +146,7 @@ Legend: ✅ done · 🔧 partial · 📋 planned
 | I1 ✅ | Environment: render background texture in viewport — SpriteBatch full-viewport quad before 3D scene; texture cached and reloaded on URI change; clear to backgroundColor when no texture | MeshCraftApplication.cpp |
 | I2 ✅ | Environment: equirectangular skybox — GLSL panorama shader (gl_VertexID quad, no depth write), texture cached, drawn before scene | MeshCraftApplication.cpp |
 | I3 ✅ | Environment: fog visualization in viewport — per-object color blend (linear: start/end, exponential: density) + BasicEffect FogEnabled for solid pass | SceneRenderer.cpp |
-| I4 | Lighting: colored point-light sphere gizmos (sphere in light color) | SceneRenderer.cpp |
+| I4 ✅ | Lighting: colored point/spot light sphere gizmos — point: solid sphere + diamond ray lines; spot: small sphere + cone wireframe | SceneRenderer.cpp |
 | I5 | Rendering: SSAO (ambient occlusion post-process) | SceneRenderer.cpp |
 | I6 ✅ | Rendering: bloom — gl_VertexID vertex shader + disable CNA residual GL state (cull-face/stencil/scissor) before composite; strength slider in UI | MeshCraftApplication.cpp, SceneRenderer.cpp |
 | I7 | Rendering: shadow map debug overlay | SceneRenderer.cpp |
