@@ -1,0 +1,1005 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<mc3 version="0.3" model="Human">
+
+  <environment>
+    <background color="0.12 0.14 0.18"/>
+    <fog color="0.12 0.14 0.18" density="0.015"/>
+  </environment>
+
+  <lights>
+    <ambient color="0.35 0.35 0.40" brightness="0.6"/>
+    <!-- Key light: warm, upper-left-front -->
+    <directional name="KeyLight"  color="1.0 0.95 0.85" brightness="2.2" direction="-0.5 -1.0 -0.7"/>
+    <!-- Fill light: cool, right side -->
+    <point       name="FillLight" color="0.70 0.80 1.0"  brightness="0.8" position="2.5 1.2 1.0"/>
+    <!-- Rim light: back -->
+    <directional name="RimLight"  color="0.90 0.95 1.0"  brightness="1.1" direction="0.3 -0.5 1.0"/>
+  </lights>
+
+  <cameras>
+    <camera name="FullBody" position="0 0.9 3.2"  target="0 0.9 0"   fov="45"/>
+    <camera name="Face"     position="0 1.58 1.1"  target="0 1.58 0"  fov="35"/>
+    <camera name="Action"   position="1.5 1.2 2.5" target="0 0.85 0"  fov="55"/>
+  </cameras>
+
+  <textures>
+    <texture id="skin_diffuse"  uri="textures/skin_diffuse.png"  color_space="srgb"   filter="linear" wrap_u="repeat" wrap_v="repeat"/>
+    <texture id="skin_rough"    uri="textures/skin_roughness.png" color_space="linear" filter="linear" wrap_u="repeat" wrap_v="repeat"/>
+    <texture id="hair_diffuse"  uri="textures/hair_diffuse.png"  color_space="srgb"   filter="linear" wrap_u="repeat" wrap_v="repeat"/>
+  </textures>
+
+  <materials>
+    <material id="skin" roughness="1.0" metallic="0.0">
+      <!-- base_color tints the texture; keep near-white so texture drives the hue -->
+      <base_color>1.0 1.0 1.0 1.0</base_color>
+      <base_color_texture>skin_diffuse</base_color_texture>
+      <!-- ORM texture: R=occlusion, G=roughness, B=metallic -->
+      <metallic_roughness_texture>skin_rough</metallic_roughness_texture>
+    </material>
+    <material id="hair" roughness="0.85" metallic="0.0">
+      <base_color>1.0 1.0 1.0 1.0</base_color>
+      <base_color_texture>hair_diffuse</base_color_texture>
+    </material>
+    <material id="shirt" roughness="0.80" metallic="0.0">
+      <base_color>0.22 0.40 0.72 1.0</base_color>
+    </material>
+    <material id="pants" roughness="0.78" metallic="0.0">
+      <base_color>0.15 0.18 0.30 1.0</base_color>
+    </material>
+    <material id="shoes" roughness="0.55" metallic="0.0">
+      <base_color>0.14 0.09 0.06 1.0</base_color>
+    </material>
+    <material id="sole" roughness="0.92" metallic="0.0">
+      <base_color>0.07 0.07 0.07 1.0</base_color>
+    </material>
+    <material id="belt" roughness="0.50" metallic="0.0">
+      <base_color>0.20 0.13 0.08 1.0</base_color>
+    </material>
+    <material id="buckle" roughness="0.25" metallic="0.90">
+      <base_color>0.72 0.65 0.35 1.0</base_color>
+    </material>
+    <material id="eye_white" roughness="0.25" metallic="0.0">
+      <base_color>0.95 0.94 0.92 1.0</base_color>
+    </material>
+    <material id="eye_iris" roughness="0.12" metallic="0.0">
+      <base_color>0.22 0.38 0.60 1.0</base_color>
+    </material>
+    <material id="pupil" roughness="0.08" metallic="0.0">
+      <base_color>0.05 0.04 0.04 1.0</base_color>
+    </material>
+    <material id="catchlight" roughness="0.0">
+      <base_color>1.0 1.0 1.0 1.0</base_color>
+      <emissive_color>0.9 0.9 0.9</emissive_color>
+    </material>
+    <material id="lips" roughness="0.35" metallic="0.0">
+      <base_color>0.75 0.42 0.38 1.0</base_color>
+    </material>
+    <material id="eyebrow" roughness="0.90" metallic="0.0">
+      <base_color>0.15 0.10 0.06 1.0</base_color>
+    </material>
+    <material id="button" roughness="0.30" metallic="0.10">
+      <base_color>0.85 0.83 0.80 1.0</base_color>
+    </material>
+    <material id="watch_band" roughness="0.60" metallic="0.0">
+      <base_color>0.12 0.09 0.07 1.0</base_color>
+    </material>
+    <material id="watch_face" roughness="0.15" metallic="0.05">
+      <base_color>0.08 0.08 0.10 1.0</base_color>
+    </material>
+    <material id="watch_case" roughness="0.20" metallic="0.95">
+      <base_color>0.80 0.80 0.82 1.0</base_color>
+    </material>
+    <material id="floor_mat" roughness="0.85" metallic="0.0">
+      <base_color>0.45 0.43 0.40 1.0</base_color>
+    </material>
+  </materials>
+
+  <objects>
+
+    <plane name="Floor" size="8 8" position="0 0 0" material="floor_mat"/>
+
+    <!-- ROOT: whole-body translate controller (body bob during walk) -->
+    <group name="Root" position="0 0 0">
+
+      <!-- ================================================================
+           PELVIS GROUP — pivot at hip centre (world Y=0.84)
+           Controls: leg chains + hip sway animation
+           ================================================================ -->
+      <group name="Pelvis" position="0 0.84 0">
+
+        <!-- Hip mesh: organic shape via CSG union -->
+        <union name="HipMesh" position="0 0 0" material="pants">
+          <cylinder name="HipCyl"  radius="0.128" height="0.180" segments="16" material="pants"/>
+          <sphere   name="HipSphL" radius="0.106" segments="14" position="-0.092 0.0 0" material="pants"/>
+          <sphere   name="HipSphR" radius="0.106" segments="14" position=" 0.092 0.0 0" material="pants"/>
+        </union>
+
+        <!-- Belt sits at hip centre -->
+        <cylinder name="Belt"   radius="0.132" height="0.034" segments="16" position="0 0.010 0"     material="belt"/>
+        <box      name="Buckle" size="0.044 0.030 0.010"                     position="0 0.010 -0.132" material="buckle"/>
+
+        <!-- ============================================================
+             LEFT LEG  (local X = -0.100 from pelvis pivot)
+             Thigh 0.370 m  knee world Y = 0.470
+             Calf  0.378 m  ankle world Y = 0.092
+             Sole bottom world Y = 0.000
+             ============================================================ -->
+        <group name="LHipJoint" position="-0.100 0 0">
+          <sphere   name="LHipSph" radius="0.070" segments="12" position="0 0 0"          material="pants"/>
+          <cylinder name="LThigh"  radius="0.066" height="0.370" segments="16" position="0 -0.185 0" material="pants"/>
+
+          <group name="LKneeJoint" position="0 -0.370 0">
+            <sphere   name="LKneeSph" radius="0.050" segments="12" position="0 0 0"           material="pants"/>
+            <cylinder name="LCalf"    radius="0.050" height="0.378" segments="16" position="0 -0.189 0" material="pants"/>
+
+            <group name="LAnkleJoint" position="0 -0.378 0">
+              <sphere name="LAnkleSph" radius="0.034" segments="8" position="0 0 0" material="shoes"/>
+              <!-- Shoe: union of body box + rounded toe cap -->
+              <union name="LFootMesh" position="0 -0.045 -0.055" material="shoes">
+                <box    name="LShoeBody" size="0.095 0.080 0.195"                          material="shoes"/>
+                <sphere name="LToeCap"   radius="0.048" segments="12" position="0 0.005 -0.090" material="shoes"/>
+              </union>
+              <box name="LSole" size="0.098 0.018 0.215" position="0 -0.083 -0.060" material="sole"/>
+            </group>
+          </group>
+        </group>
+
+        <!-- ============================================================
+             RIGHT LEG (mirror of left)
+             ============================================================ -->
+        <group name="RHipJoint" position="0.100 0 0">
+          <sphere   name="RHipSph" radius="0.070" segments="12" position="0 0 0"          material="pants"/>
+          <cylinder name="RThigh"  radius="0.066" height="0.370" segments="16" position="0 -0.185 0" material="pants"/>
+
+          <group name="RKneeJoint" position="0 -0.370 0">
+            <sphere   name="RKneeSph" radius="0.050" segments="12" position="0 0 0"           material="pants"/>
+            <cylinder name="RCalf"    radius="0.050" height="0.378" segments="16" position="0 -0.189 0" material="pants"/>
+
+            <group name="RAnkleJoint" position="0 -0.378 0">
+              <sphere name="RAnkleSph" radius="0.034" segments="8" position="0 0 0" material="shoes"/>
+              <union name="RFootMesh" position="0 -0.045 -0.055" material="shoes">
+                <box    name="RShoeBody" size="0.095 0.080 0.195"                          material="shoes"/>
+                <sphere name="RToeCap"   radius="0.048" segments="12" position="0 0.005 -0.090" material="shoes"/>
+              </union>
+              <box name="RSole" size="0.098 0.018 0.215" position="0 -0.083 -0.060" material="sole"/>
+            </group>
+          </group>
+        </group>
+
+      </group><!-- end Pelvis -->
+
+      <!-- ================================================================
+           SPINE GROUP — pivot also at hip centre (world Y=0.84)
+           Controls: torso, arms, head + trunk lean/counter-rotation
+           ================================================================ -->
+      <group name="Spine" position="0 0.84 0">
+
+        <!-- Torso: waist + chest cylinders merged via CSG union
+             TorsoMesh local Y=0.18:
+               waist  centre world Y=1.02, spans 0.90-1.14
+               chest  centre world Y=1.24, spans 1.05-1.43 -->
+        <union name="TorsoMesh" position="0 0.18 0" material="shirt">
+          <cylinder name="TorsoWaist" radius="0.115" height="0.240" segments="20" material="shirt"/>
+          <cylinder name="TorsoChest" radius="0.155" height="0.380" segments="20" position="0 0.220 0" material="shirt"/>
+        </union>
+
+        <!-- Shirt details (Spine local space) -->
+        <box    name="ChestPocket" size="0.065 0.055 0.010" position="-0.075 0.460 -0.158" material="shirt"/>
+        <sphere name="Btn1" radius="0.010" segments="6" position="0 0.440 -0.158" material="button"/>
+        <sphere name="Btn2" radius="0.010" segments="6" position="0 0.350 -0.158" material="button"/>
+        <sphere name="Btn3" radius="0.010" segments="6" position="0 0.260 -0.158" material="button"/>
+        <sphere name="Btn4" radius="0.010" segments="6" position="0 0.170 -0.158" material="button"/>
+        <box name="CollarL" size="0.065 0.022 0.078" position="-0.038 0.582 -0.148" rotation="0 28 -7"  material="shirt"/>
+        <box name="CollarR" size="0.065 0.022 0.078" position=" 0.038 0.582 -0.148" rotation="0 -28  7" material="shirt"/>
+
+        <!-- ============================================================
+             LEFT ARM
+             shoulder world Y=1.415, X=-0.185
+             upper arm 0.275 m  elbow world Y=1.140
+             forearm   0.255 m  wrist world Y=0.885
+             ============================================================ -->
+        <group name="LShoulderJoint" position="-0.185 0.575 0">
+          <sphere   name="LShoulderSph" radius="0.068" segments="12" position="0 0 0"          material="shirt"/>
+          <cylinder name="LUpperArm"    radius="0.046" height="0.275" segments="16" position="0 -0.138 0" material="shirt"/>
+
+          <group name="LElbowJoint" position="0 -0.275 0">
+            <sphere   name="LElbowSph" radius="0.036" segments="10" position="0 0 0"          material="shirt"/>
+            <cylinder name="LCuff"     radius="0.040" height="0.030" segments="16" position="0 -0.008 0" material="shirt"/>
+            <cylinder name="LForearm"  radius="0.036" height="0.255" segments="16" position="0 -0.128 0" material="skin"/>
+
+            <group name="LWristJoint" position="0 -0.255 0">
+              <sphere name="LWristSph" radius="0.028" segments="8" position="0 0 0" material="skin"/>
+              <!-- Watch on left wrist -->
+              <cylinder name="LWatchBand1" radius="0.033" height="0.022" segments="12" position="0  0.010  0"     material="watch_band"/>
+              <box      name="LWatchCase"  size="0.040 0.010 0.040"                    position="0  0.014 -0.034"  material="watch_case"/>
+              <box      name="LWatchFace"  size="0.034 0.003 0.034"                    position="0  0.018 -0.034"  material="watch_face"/>
+              <!-- Palm -->
+              <box name="LPalm" size="0.082 0.105 0.028" position="0 -0.058 0" material="skin"/>
+              <!-- Fingers -->
+              <cylinder name="LIdx1"     radius="0.012" height="0.050" segments="8" position="-0.026 -0.130  0" material="skin"/>
+              <sphere   name="LIdxTip"   radius="0.013" segments="6"               position="-0.026 -0.158  0" material="skin"/>
+              <cylinder name="LMid1"     radius="0.013" height="0.055" segments="8" position="-0.008 -0.133  0" material="skin"/>
+              <sphere   name="LMidTip"   radius="0.014" segments="6"               position="-0.008 -0.163  0" material="skin"/>
+              <cylinder name="LRng1"     radius="0.012" height="0.050" segments="8" position=" 0.010 -0.130  0" material="skin"/>
+              <sphere   name="LRngTip"   radius="0.013" segments="6"               position=" 0.010 -0.158  0" material="skin"/>
+              <cylinder name="LPnk1"     radius="0.010" height="0.038" segments="8" position=" 0.026 -0.123  0" material="skin"/>
+              <sphere   name="LPnkTip"   radius="0.011" segments="6"               position=" 0.026 -0.146  0" material="skin"/>
+              <cylinder name="LThumb1"   radius="0.014" height="0.040" segments="8" position="-0.040 -0.080 -0.010" rotation="0 0 40" material="skin"/>
+              <sphere   name="LThumbTip" radius="0.015" segments="6"               position="-0.062 -0.062 -0.010"                   material="skin"/>
+            </group>
+          </group>
+        </group>
+
+        <!-- ============================================================
+             RIGHT ARM (mirror of left, no watch)
+             ============================================================ -->
+        <group name="RShoulderJoint" position="0.185 0.575 0">
+          <sphere   name="RShoulderSph" radius="0.068" segments="12" position="0 0 0"          material="shirt"/>
+          <cylinder name="RUpperArm"    radius="0.046" height="0.275" segments="16" position="0 -0.138 0" material="shirt"/>
+
+          <group name="RElbowJoint" position="0 -0.275 0">
+            <sphere   name="RElbowSph" radius="0.036" segments="10" position="0 0 0"          material="shirt"/>
+            <cylinder name="RCuff"     radius="0.040" height="0.030" segments="16" position="0 -0.008 0" material="shirt"/>
+            <cylinder name="RForearm"  radius="0.036" height="0.255" segments="16" position="0 -0.128 0" material="skin"/>
+
+            <group name="RWristJoint" position="0 -0.255 0">
+              <sphere name="RWristSph" radius="0.028" segments="8" position="0 0 0" material="skin"/>
+              <box name="RPalm" size="0.082 0.105 0.028" position="0 -0.058 0" material="skin"/>
+              <cylinder name="RIdx1"     radius="0.012" height="0.050" segments="8" position=" 0.026 -0.130  0" material="skin"/>
+              <sphere   name="RIdxTip"   radius="0.013" segments="6"               position=" 0.026 -0.158  0" material="skin"/>
+              <cylinder name="RMid1"     radius="0.013" height="0.055" segments="8" position=" 0.008 -0.133  0" material="skin"/>
+              <sphere   name="RMidTip"   radius="0.014" segments="6"               position=" 0.008 -0.163  0" material="skin"/>
+              <cylinder name="RRng1"     radius="0.012" height="0.050" segments="8" position="-0.010 -0.130  0" material="skin"/>
+              <sphere   name="RRngTip"   radius="0.013" segments="6"               position="-0.010 -0.158  0" material="skin"/>
+              <cylinder name="RPnk1"     radius="0.010" height="0.038" segments="8" position="-0.026 -0.123  0" material="skin"/>
+              <sphere   name="RPnkTip"   radius="0.011" segments="6"               position="-0.026 -0.146  0" material="skin"/>
+              <cylinder name="RThumb1"   radius="0.014" height="0.040" segments="8" position=" 0.040 -0.080 -0.010" rotation="0 0 -40" material="skin"/>
+              <sphere   name="RThumbTip" radius="0.015" segments="6"               position=" 0.062 -0.062 -0.010"                    material="skin"/>
+            </group>
+          </group>
+        </group>
+
+        <!-- ============================================================
+             NECK + HEAD
+             NeckJoint local in Spine: (0 0.600 0)  world Y=1.440
+             HeadJoint local in NeckJoint: (0 0.115 0)  world Y=1.555
+             Skull centre world Y=1.575, top Y=1.685
+             ============================================================ -->
+        <group name="NeckJoint" position="0 0.600 0">
+          <cylinder name="Neck"       radius="0.042" height="0.115" segments="12" position="0 0.058  0"     material="skin"/>
+          <sphere   name="AdamsApple" radius="0.016" segments="8"                 position="0 0.068 -0.040" material="skin"/>
+
+          <group name="HeadJoint" position="0 0.115 0">
+
+            <!-- Head shape: skull + jaw + chin via CSG union -->
+            <union name="HeadUnion" position="0 0.020 0" material="skin">
+              <sphere name="Skull" radius="0.110" segments="20"                          material="skin"/>
+              <sphere name="Jaw"   radius="0.088" segments="16" position="0 -0.040  0.018" material="skin"/>
+              <sphere name="Chin"  radius="0.052" segments="12" position="0 -0.090  0.018" material="skin"/>
+            </union>
+
+            <!-- Hair -->
+            <sphere name="HairMain"   radius="0.105" segments="16" position="0       0.085  0"     material="hair"/>
+            <sphere name="HairFrontL" radius="0.062" segments="12" position="-0.055  0.095 -0.060" material="hair"/>
+            <sphere name="HairFrontR" radius="0.062" segments="12" position=" 0.055  0.095 -0.060" material="hair"/>
+            <sphere name="HairBack"   radius="0.072" segments="12" position="0       0.060  0.065" material="hair"/>
+            <sphere name="HairSideL"  radius="0.050" segments="10" position="-0.095  0.045  0.010" material="hair"/>
+            <sphere name="HairSideR"  radius="0.050" segments="10" position=" 0.095  0.045  0.010" material="hair"/>
+
+            <!-- Ears -->
+            <sphere name="EarL"     radius="0.030" segments="10" position="-0.108  0.012  0"     material="skin"/>
+            <sphere name="EarLLobe" radius="0.018" segments="8"  position="-0.108 -0.018  0.005" material="skin"/>
+            <sphere name="EarR"     radius="0.030" segments="10" position=" 0.108  0.012  0"     material="skin"/>
+            <sphere name="EarRLobe" radius="0.018" segments="8"  position=" 0.108 -0.018  0.005" material="skin"/>
+
+            <!-- Cheeks -->
+            <sphere name="CheekL" radius="0.048" segments="10" position="-0.068 -0.012 -0.068" material="skin"/>
+            <sphere name="CheekR" radius="0.048" segments="10" position=" 0.068 -0.012 -0.068" material="skin"/>
+
+            <!-- LEFT EYE group -->
+            <group name="LEyeGroup" position="-0.038 0.022 -0.095">
+              <sphere name="LEyeWhite" radius="0.025" segments="12" position="0 0  0"       material="eye_white"/>
+              <sphere name="LEyeIris"  radius="0.016" segments="10" position="0 0 -0.014"   material="eye_iris"/>
+              <sphere name="LEyePupil" radius="0.009" segments="8"  position="0 0 -0.020"   material="pupil"/>
+              <sphere name="LEyeCatch" radius="0.004" segments="6"  position="-0.006 0.006 -0.024" material="catchlight"/>
+              <box name="LEyelidTop" size="0.055 0.010 0.026" position="0  0.010 -0.010" rotation="-15 0 0" material="skin"/>
+              <box name="LEyelidBot" size="0.050 0.008 0.020" position="0 -0.010 -0.008" rotation="  8 0 0" material="skin"/>
+            </group>
+
+            <!-- RIGHT EYE group -->
+            <group name="REyeGroup" position="0.038 0.022 -0.095">
+              <sphere name="REyeWhite" radius="0.025" segments="12" position="0 0  0"       material="eye_white"/>
+              <sphere name="REyeIris"  radius="0.016" segments="10" position="0 0 -0.014"   material="eye_iris"/>
+              <sphere name="REyePupil" radius="0.009" segments="8"  position="0 0 -0.020"   material="pupil"/>
+              <sphere name="REyeCatch" radius="0.004" segments="6"  position="0.006 0.006 -0.024" material="catchlight"/>
+              <box name="REyelidTop" size="0.055 0.010 0.026" position="0  0.010 -0.010" rotation="-15 0 0" material="skin"/>
+              <box name="REyelidBot" size="0.050 0.008 0.020" position="0 -0.010 -0.008" rotation="  8 0 0" material="skin"/>
+            </group>
+
+            <!-- Eyebrows -->
+            <box name="LEyebrow" size="0.052 0.010 0.014" position="-0.038 0.048 -0.096" rotation="0 0 -8" material="eyebrow"/>
+            <box name="REyebrow" size="0.052 0.010 0.014" position=" 0.038 0.048 -0.096" rotation="0 0  8" material="eyebrow"/>
+
+            <!-- Nose -->
+            <box    name="NoseBridge" size="0.022 0.048 0.020" position="0  0.005 -0.108"          material="skin"/>
+            <sphere name="NoseTip"    radius="0.022" segments="10"   position="0 -0.022 -0.118"    material="skin"/>
+            <sphere name="NoseWingL"  radius="0.014" segments="8"    position="-0.020 -0.026 -0.112" material="skin"/>
+            <sphere name="NoseWingR"  radius="0.014" segments="8"    position=" 0.020 -0.026 -0.112" material="skin"/>
+
+            <!-- Lips -->
+            <box    name="UpperLip"   size="0.060 0.016 0.020" position="0 -0.052 -0.105" rotation="10 0 0"  material="lips"/>
+            <box    name="LowerLip"   size="0.056 0.014 0.022" position="0 -0.070 -0.104" rotation="-8 0 0"  material="lips"/>
+            <sphere name="LipCornerL" radius="0.010" segments="6"    position="-0.030 -0.062 -0.103"         material="lips"/>
+            <sphere name="LipCornerR" radius="0.010" segments="6"    position=" 0.030 -0.062 -0.103"         material="lips"/>
+
+          </group><!-- end HeadJoint -->
+        </group><!-- end NeckJoint -->
+
+      </group><!-- end Spine -->
+    </group><!-- end Root -->
+
+  </objects>
+
+  <actions>
+
+    <!-- ================================================================
+         IDLE BREATH — 4 s loop, chest expands
+         ================================================================ -->
+    <action name="IdleBreath" duration="4.0" loop="true">
+      <channel target="TorsoMesh" property="scale.x">
+        <keyframe time="0.0" value="1.000" interp="cubic">
+          <handle_right dt="0.6" dv="0.018"/>
+        </keyframe>
+        <keyframe time="2.0" value="1.030" interp="cubic">
+          <handle_left  dt="-0.6" dv="0.018"/>
+          <handle_right dt="0.6"  dv="-0.018"/>
+        </keyframe>
+        <keyframe time="4.0" value="1.000" interp="cubic">
+          <handle_left  dt="-0.6" dv="-0.018"/>
+        </keyframe>
+      </channel>
+      <channel target="TorsoMesh" property="scale.z">
+        <keyframe time="0.0" value="1.000" interp="cubic">
+          <handle_right dt="0.6" dv="0.012"/>
+        </keyframe>
+        <keyframe time="2.0" value="1.020" interp="cubic">
+          <handle_left  dt="-0.6" dv="0.012"/>
+          <handle_right dt="0.6"  dv="-0.012"/>
+        </keyframe>
+        <keyframe time="4.0" value="1.000" interp="cubic">
+          <handle_left  dt="-0.6" dv="-0.012"/>
+        </keyframe>
+      </channel>
+    </action>
+
+    <!-- ================================================================
+         HEAD SWAY — 7 s loop, subtle idle movement
+         ================================================================ -->
+    <action name="HeadSway" duration="7.0" loop="true">
+      <channel target="HeadJoint" property="rotation.y">
+        <keyframe time="0.0" value=" 0.0" interp="cubic">
+          <handle_right dt="1.0" dv="-4.0"/>
+        </keyframe>
+        <keyframe time="2.0" value="-5.0" interp="cubic">
+          <handle_left  dt="-1.0" dv="-4.0"/>
+          <handle_right dt="1.0"  dv="4.0"/>
+        </keyframe>
+        <keyframe time="5.0" value=" 4.0" interp="cubic">
+          <handle_left  dt="-1.0" dv="4.0"/>
+          <handle_right dt="1.0"  dv="-3.0"/>
+        </keyframe>
+        <keyframe time="7.0" value=" 0.0" interp="cubic">
+          <handle_left  dt="-1.0" dv="-3.0"/>
+        </keyframe>
+      </channel>
+      <channel target="HeadJoint" property="rotation.z">
+        <keyframe time="0.0" value=" 0.0" interp="cubic">
+          <handle_right dt="1.2" dv="-1.5"/>
+        </keyframe>
+        <keyframe time="3.0" value="-2.5" interp="cubic">
+          <handle_left  dt="-1.2" dv="-1.5"/>
+          <handle_right dt="1.2"  dv="1.5"/>
+        </keyframe>
+        <keyframe time="7.0" value=" 0.0" interp="cubic">
+          <handle_left  dt="-1.2" dv="1.5"/>
+        </keyframe>
+      </channel>
+    </action>
+
+    <!-- ================================================================
+         BLINK — 5 s loop, double blink pattern
+         ================================================================ -->
+    <action name="Blink" duration="5.0" loop="true">
+      <channel target="LEyelidTop" property="position.y">
+        <keyframe time="0.00" value=" 0.010" interp="linear"/>
+        <keyframe time="1.80" value=" 0.010" interp="linear"/>
+        <keyframe time="1.87" value="-0.010" interp="linear"/>
+        <keyframe time="1.94" value=" 0.010" interp="linear"/>
+        <keyframe time="3.50" value=" 0.010" interp="linear"/>
+        <keyframe time="3.57" value="-0.010" interp="linear"/>
+        <keyframe time="3.64" value=" 0.010" interp="linear"/>
+        <keyframe time="5.00" value=" 0.010" interp="linear"/>
+      </channel>
+      <channel target="REyelidTop" property="position.y">
+        <keyframe time="0.00" value=" 0.010" interp="linear"/>
+        <keyframe time="1.80" value=" 0.010" interp="linear"/>
+        <keyframe time="1.87" value="-0.010" interp="linear"/>
+        <keyframe time="1.94" value=" 0.010" interp="linear"/>
+        <keyframe time="3.50" value=" 0.010" interp="linear"/>
+        <keyframe time="3.57" value="-0.010" interp="linear"/>
+        <keyframe time="3.64" value=" 0.010" interp="linear"/>
+        <keyframe time="5.00" value=" 0.010" interp="linear"/>
+      </channel>
+    </action>
+
+    <!-- ================================================================
+         WALK — 1.4 s loop, full gait cycle
+         t=0.00  right heel strike
+         t=0.35  right mid-stance, left toe-off
+         t=0.70  left heel strike
+         t=1.05  left mid-stance, right toe-off
+         ================================================================ -->
+    <action name="Walk" duration="1.4" loop="true">
+
+      <!-- Body bob: peaks at mid-stance of each foot (twice per cycle) -->
+      <channel target="Root" property="position.y">
+        <keyframe time="0.00" value="0.000" interp="cubic">
+          <handle_right dt="0.18" dv="0.014"/>
+        </keyframe>
+        <keyframe time="0.25" value="0.020" interp="cubic">
+          <handle_left  dt="-0.14" dv="0.014"/>
+          <handle_right dt="0.14"  dv="-0.014"/>
+        </keyframe>
+        <keyframe time="0.50" value="0.000" interp="cubic">
+          <handle_left  dt="-0.14" dv="-0.014"/>
+          <handle_right dt="0.14"  dv="0.014"/>
+        </keyframe>
+        <keyframe time="0.75" value="0.020" interp="cubic">
+          <handle_left  dt="-0.14" dv="0.014"/>
+          <handle_right dt="0.14"  dv="-0.014"/>
+        </keyframe>
+        <keyframe time="1.00" value="0.000" interp="cubic">
+          <handle_left  dt="-0.14" dv="-0.014"/>
+          <handle_right dt="0.18"  dv="0.010"/>
+        </keyframe>
+        <keyframe time="1.40" value="0.000" interp="cubic">
+          <handle_left  dt="-0.18" dv="-0.010"/>
+        </keyframe>
+      </channel>
+
+      <!-- Pelvis lateral sway: leans over the stance leg -->
+      <channel target="Pelvis" property="rotation.z">
+        <keyframe time="0.00" value=" 4.0" interp="cubic">
+          <handle_right dt="0.25" dv="-1.5"/>
+        </keyframe>
+        <keyframe time="0.35" value=" 5.5" interp="cubic">
+          <handle_left  dt="-0.20" dv="-1.5"/>
+          <handle_right dt="0.20"  dv="-8.0"/>
+        </keyframe>
+        <keyframe time="0.70" value="-4.0" interp="cubic">
+          <handle_left  dt="-0.20" dv="-8.0"/>
+          <handle_right dt="0.25"  dv=" 1.5"/>
+        </keyframe>
+        <keyframe time="1.05" value="-5.5" interp="cubic">
+          <handle_left  dt="-0.20" dv=" 1.5"/>
+          <handle_right dt="0.20"  dv=" 8.0"/>
+        </keyframe>
+        <keyframe time="1.40" value=" 4.0" interp="cubic">
+          <handle_left  dt="-0.20" dv=" 8.0"/>
+        </keyframe>
+      </channel>
+
+      <!-- Trunk forward lean + small oscillation -->
+      <channel target="Spine" property="rotation.x">
+        <keyframe time="0.00" value="5.0" interp="cubic">
+          <handle_right dt="0.30" dv="0.5"/>
+        </keyframe>
+        <keyframe time="0.35" value="6.0" interp="cubic">
+          <handle_left  dt="-0.30" dv="0.5"/>
+          <handle_right dt="0.30"  dv="-0.5"/>
+        </keyframe>
+        <keyframe time="0.70" value="5.0" interp="cubic">
+          <handle_left  dt="-0.30" dv="-0.5"/>
+          <handle_right dt="0.30"  dv="0.5"/>
+        </keyframe>
+        <keyframe time="1.05" value="6.0" interp="cubic">
+          <handle_left  dt="-0.30" dv="0.5"/>
+          <handle_right dt="0.30"  dv="-0.5"/>
+        </keyframe>
+        <keyframe time="1.40" value="5.0" interp="cubic">
+          <handle_left  dt="-0.30" dv="-0.5"/>
+        </keyframe>
+      </channel>
+      <!-- Trunk counter-rotation: opposite to lead leg -->
+      <channel target="Spine" property="rotation.y">
+        <keyframe time="0.00" value="-4.0" interp="cubic">
+          <handle_right dt="0.30" dv="5.5"/>
+        </keyframe>
+        <keyframe time="0.70" value=" 4.0" interp="cubic">
+          <handle_left  dt="-0.30" dv="5.5"/>
+          <handle_right dt="0.30"  dv="-5.5"/>
+        </keyframe>
+        <keyframe time="1.40" value="-4.0" interp="cubic">
+          <handle_left  dt="-0.30" dv="-5.5"/>
+        </keyframe>
+      </channel>
+
+      <!-- LEFT HIP: behind at t=0, swings to front peak at t=0.50 -->
+      <channel target="LHipJoint" property="rotation.x">
+        <keyframe time="0.00" value="-18.0" interp="cubic">
+          <handle_right dt="0.28" dv="18.0"/>
+        </keyframe>
+        <keyframe time="0.50" value=" 20.0" interp="cubic">
+          <handle_left  dt="-0.28" dv="18.0"/>
+          <handle_right dt="0.18"  dv="-8.0"/>
+        </keyframe>
+        <keyframe time="0.70" value=" 14.0" interp="cubic">
+          <handle_left  dt="-0.15" dv="-8.0"/>
+          <handle_right dt="0.25"  dv="-18.0"/>
+        </keyframe>
+        <keyframe time="1.05" value=" -5.0" interp="cubic">
+          <handle_left  dt="-0.22" dv="-12.0"/>
+          <handle_right dt="0.22"  dv="5.0"/>
+        </keyframe>
+        <keyframe time="1.40" value="-18.0" interp="cubic">
+          <handle_left  dt="-0.28" dv="-8.0"/>
+        </keyframe>
+      </channel>
+
+      <!-- LEFT KNEE: bends to clear ground during swing (t=0 to 0.7) -->
+      <channel target="LKneeJoint" property="rotation.x">
+        <keyframe time="0.00" value="-14.0" interp="cubic">
+          <handle_right dt="0.18" dv="-28.0"/>
+        </keyframe>
+        <keyframe time="0.25" value="-55.0" interp="cubic">
+          <handle_left  dt="-0.14" dv="-28.0"/>
+          <handle_right dt="0.14"  dv="28.0"/>
+        </keyframe>
+        <keyframe time="0.55" value=" -4.0" interp="cubic">
+          <handle_left  dt="-0.14" dv="28.0"/>
+          <handle_right dt="0.12"  dv="-3.0"/>
+        </keyframe>
+        <keyframe time="0.70" value=" -8.0" interp="cubic">
+          <handle_left  dt="-0.12" dv="-3.0"/>
+          <handle_right dt="0.22"  dv="0.0"/>
+        </keyframe>
+        <keyframe time="1.05" value="-12.0" interp="cubic">
+          <handle_left  dt="-0.20" dv="-5.0"/>
+          <handle_right dt="0.20"  dv="3.0"/>
+        </keyframe>
+        <keyframe time="1.40" value="-14.0" interp="cubic">
+          <handle_left  dt="-0.20" dv="-2.0"/>
+        </keyframe>
+      </channel>
+
+      <!-- LEFT ANKLE: push-off plantar flex → swing dorsiflexion → heel strike -->
+      <channel target="LAnkleJoint" property="rotation.x">
+        <keyframe time="0.00" value="-22.0" interp="cubic">
+          <handle_right dt="0.22" dv="20.0"/>
+        </keyframe>
+        <keyframe time="0.30" value="  8.0" interp="cubic">
+          <handle_left  dt="-0.18" dv="15.0"/>
+          <handle_right dt="0.18"  dv="-5.0"/>
+        </keyframe>
+        <keyframe time="0.70" value=" 16.0" interp="cubic">
+          <handle_left  dt="-0.18" dv="3.0"/>
+          <handle_right dt="0.18"  dv="-12.0"/>
+        </keyframe>
+        <keyframe time="0.90" value="  0.0" interp="cubic">
+          <handle_left  dt="-0.12" dv="-8.0"/>
+          <handle_right dt="0.20"  dv="-12.0"/>
+        </keyframe>
+        <keyframe time="1.20" value=" -5.0" interp="cubic">
+          <handle_left  dt="-0.18" dv="-8.0"/>
+          <handle_right dt="0.14"  dv="8.0"/>
+        </keyframe>
+        <keyframe time="1.40" value="-22.0" interp="cubic">
+          <handle_left  dt="-0.14" dv="-18.0"/>
+        </keyframe>
+      </channel>
+
+      <!-- RIGHT HIP: opposite phase (forward at t=0, goes behind) -->
+      <channel target="RHipJoint" property="rotation.x">
+        <keyframe time="0.00" value=" 14.0" interp="cubic">
+          <handle_right dt="0.25" dv="-18.0"/>
+        </keyframe>
+        <keyframe time="0.35" value=" -5.0" interp="cubic">
+          <handle_left  dt="-0.22" dv="-12.0"/>
+          <handle_right dt="0.22"  dv="-8.0"/>
+        </keyframe>
+        <keyframe time="0.70" value="-18.0" interp="cubic">
+          <handle_left  dt="-0.28" dv="-8.0"/>
+          <handle_right dt="0.28"  dv="18.0"/>
+        </keyframe>
+        <keyframe time="1.20" value=" 20.0" interp="cubic">
+          <handle_left  dt="-0.28" dv="18.0"/>
+          <handle_right dt="0.18"  dv="-8.0"/>
+        </keyframe>
+        <keyframe time="1.40" value=" 14.0" interp="cubic">
+          <handle_left  dt="-0.15" dv="-8.0"/>
+        </keyframe>
+      </channel>
+
+      <!-- RIGHT KNEE -->
+      <channel target="RKneeJoint" property="rotation.x">
+        <keyframe time="0.00" value=" -8.0" interp="cubic">
+          <handle_right dt="0.20" dv="-4.0"/>
+        </keyframe>
+        <keyframe time="0.35" value="-12.0" interp="cubic">
+          <handle_left  dt="-0.20" dv="-4.0"/>
+          <handle_right dt="0.18"  dv="3.0"/>
+        </keyframe>
+        <keyframe time="0.70" value="-14.0" interp="cubic">
+          <handle_left  dt="-0.18" dv="-3.0"/>
+          <handle_right dt="0.18"  dv="-28.0"/>
+        </keyframe>
+        <keyframe time="0.95" value="-55.0" interp="cubic">
+          <handle_left  dt="-0.14" dv="-28.0"/>
+          <handle_right dt="0.14"  dv="28.0"/>
+        </keyframe>
+        <keyframe time="1.25" value=" -4.0" interp="cubic">
+          <handle_left  dt="-0.14" dv="28.0"/>
+          <handle_right dt="0.12"  dv="-3.0"/>
+        </keyframe>
+        <keyframe time="1.40" value=" -8.0" interp="cubic">
+          <handle_left  dt="-0.12" dv="-3.0"/>
+        </keyframe>
+      </channel>
+
+      <!-- RIGHT ANKLE -->
+      <channel target="RAnkleJoint" property="rotation.x">
+        <keyframe time="0.00" value=" 16.0" interp="cubic">
+          <handle_right dt="0.18" dv="-12.0"/>
+        </keyframe>
+        <keyframe time="0.20" value="  0.0" interp="cubic">
+          <handle_left  dt="-0.12" dv="-8.0"/>
+          <handle_right dt="0.20"  dv="-10.0"/>
+        </keyframe>
+        <keyframe time="0.50" value=" -5.0" interp="cubic">
+          <handle_left  dt="-0.18" dv="-8.0"/>
+          <handle_right dt="0.14"  dv="8.0"/>
+        </keyframe>
+        <keyframe time="0.70" value="-22.0" interp="cubic">
+          <handle_left  dt="-0.14" dv="-18.0"/>
+          <handle_right dt="0.22"  dv="20.0"/>
+        </keyframe>
+        <keyframe time="1.00" value="  8.0" interp="cubic">
+          <handle_left  dt="-0.18" dv="15.0"/>
+          <handle_right dt="0.18"  dv="-5.0"/>
+        </keyframe>
+        <keyframe time="1.40" value=" 16.0" interp="cubic">
+          <handle_left  dt="-0.18" dv="3.0"/>
+        </keyframe>
+      </channel>
+
+      <!-- LEFT SHOULDER: swings counter to left leg -->
+      <channel target="LShoulderJoint" property="rotation.x">
+        <keyframe time="0.00" value=" 22.0" interp="cubic">
+          <handle_right dt="0.30" dv="-20.0"/>
+        </keyframe>
+        <keyframe time="0.35" value="  0.0" interp="cubic">
+          <handle_left  dt="-0.30" dv="-20.0"/>
+          <handle_right dt="0.30"  dv="-20.0"/>
+        </keyframe>
+        <keyframe time="0.70" value="-22.0" interp="cubic">
+          <handle_left  dt="-0.30" dv="-20.0"/>
+          <handle_right dt="0.30"  dv="20.0"/>
+        </keyframe>
+        <keyframe time="1.05" value="  0.0" interp="cubic">
+          <handle_left  dt="-0.30" dv="20.0"/>
+          <handle_right dt="0.30"  dv="20.0"/>
+        </keyframe>
+        <keyframe time="1.40" value=" 22.0" interp="cubic">
+          <handle_left  dt="-0.30" dv="20.0"/>
+        </keyframe>
+      </channel>
+
+      <!-- RIGHT SHOULDER: opposite to left -->
+      <channel target="RShoulderJoint" property="rotation.x">
+        <keyframe time="0.00" value="-22.0" interp="cubic">
+          <handle_right dt="0.30" dv="20.0"/>
+        </keyframe>
+        <keyframe time="0.35" value="  0.0" interp="cubic">
+          <handle_left  dt="-0.30" dv="20.0"/>
+          <handle_right dt="0.30"  dv="20.0"/>
+        </keyframe>
+        <keyframe time="0.70" value=" 22.0" interp="cubic">
+          <handle_left  dt="-0.30" dv="20.0"/>
+          <handle_right dt="0.30"  dv="-20.0"/>
+        </keyframe>
+        <keyframe time="1.05" value="  0.0" interp="cubic">
+          <handle_left  dt="-0.30" dv="-20.0"/>
+          <handle_right dt="0.30"  dv="-20.0"/>
+        </keyframe>
+        <keyframe time="1.40" value="-22.0" interp="cubic">
+          <handle_left  dt="-0.30" dv="-20.0"/>
+        </keyframe>
+      </channel>
+
+      <!-- Elbow natural bend oscillates with arm swing -->
+      <channel target="LElbowJoint" property="rotation.x">
+        <keyframe time="0.00" value="-15.0" interp="cubic">
+          <handle_right dt="0.30" dv="-8.0"/>
+        </keyframe>
+        <keyframe time="0.35" value="-25.0" interp="cubic">
+          <handle_left  dt="-0.30" dv="-8.0"/>
+          <handle_right dt="0.30"  dv="8.0"/>
+        </keyframe>
+        <keyframe time="0.70" value="-15.0" interp="cubic">
+          <handle_left  dt="-0.30" dv="8.0"/>
+          <handle_right dt="0.30"  dv="-8.0"/>
+        </keyframe>
+        <keyframe time="1.05" value="-25.0" interp="cubic">
+          <handle_left  dt="-0.30" dv="-8.0"/>
+          <handle_right dt="0.30"  dv="8.0"/>
+        </keyframe>
+        <keyframe time="1.40" value="-15.0" interp="cubic">
+          <handle_left  dt="-0.30" dv="8.0"/>
+        </keyframe>
+      </channel>
+      <channel target="RElbowJoint" property="rotation.x">
+        <keyframe time="0.00" value="-25.0" interp="cubic">
+          <handle_right dt="0.30" dv="8.0"/>
+        </keyframe>
+        <keyframe time="0.35" value="-15.0" interp="cubic">
+          <handle_left  dt="-0.30" dv="8.0"/>
+          <handle_right dt="0.30"  dv="-8.0"/>
+        </keyframe>
+        <keyframe time="0.70" value="-25.0" interp="cubic">
+          <handle_left  dt="-0.30" dv="-8.0"/>
+          <handle_right dt="0.30"  dv="8.0"/>
+        </keyframe>
+        <keyframe time="1.05" value="-15.0" interp="cubic">
+          <handle_left  dt="-0.30" dv="8.0"/>
+          <handle_right dt="0.30"  dv="-8.0"/>
+        </keyframe>
+        <keyframe time="1.40" value="-25.0" interp="cubic">
+          <handle_left  dt="-0.30" dv="-8.0"/>
+        </keyframe>
+      </channel>
+
+    </action>
+
+    <!-- ================================================================
+         JUMP — 2.0 s, no loop
+         0.00-0.30  crouch
+         0.30-0.50  explosive extend, leave ground
+         0.50-0.90  rising
+         0.90-1.10  peak
+         1.10-1.40  descending
+         1.40-1.55  landing impact
+         1.55-2.00  recovery
+         ================================================================ -->
+    <action name="Jump" duration="2.0" loop="false">
+
+      <!-- Root height arc -->
+      <channel target="Root" property="position.y">
+        <keyframe time="0.00" value=" 0.000" interp="cubic">
+          <handle_right dt="0.20" dv="-0.30"/>
+        </keyframe>
+        <keyframe time="0.30" value="-0.150" interp="cubic">
+          <handle_left  dt="-0.15" dv="-0.30"/>
+          <handle_right dt="0.10"  dv="0.70"/>
+        </keyframe>
+        <keyframe time="0.50" value=" 0.000" interp="cubic">
+          <handle_left  dt="-0.10" dv="0.70"/>
+          <handle_right dt="0.22"  dv="1.30"/>
+        </keyframe>
+        <keyframe time="0.90" value=" 0.450" interp="cubic">
+          <handle_left  dt="-0.22" dv="1.30"/>
+          <handle_right dt="0.22"  dv="-1.30"/>
+        </keyframe>
+        <keyframe time="1.35" value=" 0.000" interp="cubic">
+          <handle_left  dt="-0.22" dv="-1.30"/>
+          <handle_right dt="0.10"  dv="-0.30"/>
+        </keyframe>
+        <keyframe time="1.50" value="-0.060" interp="cubic">
+          <handle_left  dt="-0.10" dv="-0.20"/>
+          <handle_right dt="0.25"  dv="0.18"/>
+        </keyframe>
+        <keyframe time="2.00" value=" 0.000" interp="cubic">
+          <handle_left  dt="-0.25" dv="0.15"/>
+        </keyframe>
+      </channel>
+
+      <!-- Trunk lean -->
+      <channel target="Spine" property="rotation.x">
+        <keyframe time="0.00" value=" 3.0" interp="cubic">
+          <handle_right dt="0.20" dv="5.0"/>
+        </keyframe>
+        <keyframe time="0.30" value="12.0" interp="cubic">
+          <handle_left  dt="-0.15" dv="5.0"/>
+          <handle_right dt="0.10"  dv="-14.0"/>
+        </keyframe>
+        <keyframe time="0.50" value=" 1.0" interp="cubic">
+          <handle_left  dt="-0.10" dv="-12.0"/>
+          <handle_right dt="0.22"  dv="-3.0"/>
+        </keyframe>
+        <keyframe time="0.90" value="-2.0" interp="cubic">
+          <handle_left  dt="-0.22" dv="-3.0"/>
+          <handle_right dt="0.22"  dv="6.0"/>
+        </keyframe>
+        <keyframe time="1.50" value="10.0" interp="cubic">
+          <handle_left  dt="-0.22" dv="6.0"/>
+          <handle_right dt="0.30"  dv="-8.0"/>
+        </keyframe>
+        <keyframe time="2.00" value=" 3.0" interp="cubic">
+          <handle_left  dt="-0.25" dv="-5.0"/>
+        </keyframe>
+      </channel>
+
+      <!-- Left knee: deep crouch → full extend → landing flex → recover -->
+      <channel target="LKneeJoint" property="rotation.x">
+        <keyframe time="0.00" value="  0.0" interp="cubic">
+          <handle_right dt="0.20" dv="-65.0"/>
+        </keyframe>
+        <keyframe time="0.30" value="-70.0" interp="cubic">
+          <handle_left  dt="-0.15" dv="-65.0"/>
+          <handle_right dt="0.10"  dv="85.0"/>
+        </keyframe>
+        <keyframe time="0.50" value="  0.0" interp="cubic">
+          <handle_left  dt="-0.10" dv="85.0"/>
+          <handle_right dt="0.22"  dv="-8.0"/>
+        </keyframe>
+        <keyframe time="0.90" value="-10.0" interp="cubic">
+          <handle_left  dt="-0.22" dv="-8.0"/>
+          <handle_right dt="0.22"  dv="5.0"/>
+        </keyframe>
+        <keyframe time="1.35" value="  0.0" interp="cubic">
+          <handle_left  dt="-0.22" dv="5.0"/>
+          <handle_right dt="0.10"  dv="-65.0"/>
+        </keyframe>
+        <keyframe time="1.50" value="-60.0" interp="cubic">
+          <handle_left  dt="-0.10" dv="-65.0"/>
+          <handle_right dt="0.30"  dv="65.0"/>
+        </keyframe>
+        <keyframe time="2.00" value="  0.0" interp="cubic">
+          <handle_left  dt="-0.25" dv="50.0"/>
+        </keyframe>
+      </channel>
+
+      <!-- Right knee: symmetric -->
+      <channel target="RKneeJoint" property="rotation.x">
+        <keyframe time="0.00" value="  0.0" interp="cubic">
+          <handle_right dt="0.20" dv="-65.0"/>
+        </keyframe>
+        <keyframe time="0.30" value="-70.0" interp="cubic">
+          <handle_left  dt="-0.15" dv="-65.0"/>
+          <handle_right dt="0.10"  dv="85.0"/>
+        </keyframe>
+        <keyframe time="0.50" value="  0.0" interp="cubic">
+          <handle_left  dt="-0.10" dv="85.0"/>
+          <handle_right dt="0.22"  dv="-8.0"/>
+        </keyframe>
+        <keyframe time="0.90" value="-10.0" interp="cubic">
+          <handle_left  dt="-0.22" dv="-8.0"/>
+          <handle_right dt="0.22"  dv="5.0"/>
+        </keyframe>
+        <keyframe time="1.35" value="  0.0" interp="cubic">
+          <handle_left  dt="-0.22" dv="5.0"/>
+          <handle_right dt="0.10"  dv="-65.0"/>
+        </keyframe>
+        <keyframe time="1.50" value="-60.0" interp="cubic">
+          <handle_left  dt="-0.10" dv="-65.0"/>
+          <handle_right dt="0.30"  dv="65.0"/>
+        </keyframe>
+        <keyframe time="2.00" value="  0.0" interp="cubic">
+          <handle_left  dt="-0.25" dv="50.0"/>
+        </keyframe>
+      </channel>
+
+      <!-- Left ankle: dorsiflexion in crouch → plantar flex at push-off → heel-ready landing -->
+      <channel target="LAnkleJoint" property="rotation.x">
+        <keyframe time="0.00" value="  0.0" interp="cubic">
+          <handle_right dt="0.20" dv="12.0"/>
+        </keyframe>
+        <keyframe time="0.30" value=" 16.0" interp="cubic">
+          <handle_left  dt="-0.15" dv="12.0"/>
+          <handle_right dt="0.10"  dv="-45.0"/>
+        </keyframe>
+        <keyframe time="0.50" value="-28.0" interp="cubic">
+          <handle_left  dt="-0.10" dv="-45.0"/>
+          <handle_right dt="0.22"  dv="12.0"/>
+        </keyframe>
+        <keyframe time="0.90" value=" -8.0" interp="cubic">
+          <handle_left  dt="-0.22" dv="12.0"/>
+          <handle_right dt="0.22"  dv="18.0"/>
+        </keyframe>
+        <keyframe time="1.35" value=" 18.0" interp="cubic">
+          <handle_left  dt="-0.22" dv="18.0"/>
+          <handle_right dt="0.10"  dv="-12.0"/>
+        </keyframe>
+        <keyframe time="1.50" value="  5.0" interp="cubic">
+          <handle_left  dt="-0.10" dv="-10.0"/>
+          <handle_right dt="0.30"  dv="-5.0"/>
+        </keyframe>
+        <keyframe time="2.00" value="  0.0" interp="cubic">
+          <handle_left  dt="-0.25" dv="-3.0"/>
+        </keyframe>
+      </channel>
+
+      <!-- Right ankle: symmetric -->
+      <channel target="RAnkleJoint" property="rotation.x">
+        <keyframe time="0.00" value="  0.0" interp="cubic">
+          <handle_right dt="0.20" dv="12.0"/>
+        </keyframe>
+        <keyframe time="0.30" value=" 16.0" interp="cubic">
+          <handle_left  dt="-0.15" dv="12.0"/>
+          <handle_right dt="0.10"  dv="-45.0"/>
+        </keyframe>
+        <keyframe time="0.50" value="-28.0" interp="cubic">
+          <handle_left  dt="-0.10" dv="-45.0"/>
+          <handle_right dt="0.22"  dv="12.0"/>
+        </keyframe>
+        <keyframe time="0.90" value=" -8.0" interp="cubic">
+          <handle_left  dt="-0.22" dv="12.0"/>
+          <handle_right dt="0.22"  dv="18.0"/>
+        </keyframe>
+        <keyframe time="1.35" value=" 18.0" interp="cubic">
+          <handle_left  dt="-0.22" dv="18.0"/>
+          <handle_right dt="0.10"  dv="-12.0"/>
+        </keyframe>
+        <keyframe time="1.50" value="  5.0" interp="cubic">
+          <handle_left  dt="-0.10" dv="-10.0"/>
+          <handle_right dt="0.30"  dv="-5.0"/>
+        </keyframe>
+        <keyframe time="2.00" value="  0.0" interp="cubic">
+          <handle_left  dt="-0.25" dv="-3.0"/>
+        </keyframe>
+      </channel>
+
+      <!-- Arms: both back in crouch, rise during push-off, absorb on landing -->
+      <channel target="LShoulderJoint" property="rotation.x">
+        <keyframe time="0.00" value="  0.0" interp="cubic">
+          <handle_right dt="0.20" dv="-28.0"/>
+        </keyframe>
+        <keyframe time="0.30" value="-32.0" interp="cubic">
+          <handle_left  dt="-0.15" dv="-28.0"/>
+          <handle_right dt="0.12"  dv="65.0"/>
+        </keyframe>
+        <keyframe time="0.60" value=" 38.0" interp="cubic">
+          <handle_left  dt="-0.15" dv="65.0"/>
+          <handle_right dt="0.20"  dv="-8.0"/>
+        </keyframe>
+        <keyframe time="0.90" value=" 18.0" interp="cubic">
+          <handle_left  dt="-0.20" dv="-8.0"/>
+          <handle_right dt="0.25"  dv="-15.0"/>
+        </keyframe>
+        <keyframe time="1.50" value="-15.0" interp="cubic">
+          <handle_left  dt="-0.30" dv="-15.0"/>
+          <handle_right dt="0.30"  dv="12.0"/>
+        </keyframe>
+        <keyframe time="2.00" value="  0.0" interp="cubic">
+          <handle_left  dt="-0.30" dv="10.0"/>
+        </keyframe>
+      </channel>
+      <channel target="RShoulderJoint" property="rotation.x">
+        <keyframe time="0.00" value="  0.0" interp="cubic">
+          <handle_right dt="0.20" dv="-28.0"/>
+        </keyframe>
+        <keyframe time="0.30" value="-32.0" interp="cubic">
+          <handle_left  dt="-0.15" dv="-28.0"/>
+          <handle_right dt="0.12"  dv="65.0"/>
+        </keyframe>
+        <keyframe time="0.60" value=" 38.0" interp="cubic">
+          <handle_left  dt="-0.15" dv="65.0"/>
+          <handle_right dt="0.20"  dv="-8.0"/>
+        </keyframe>
+        <keyframe time="0.90" value=" 18.0" interp="cubic">
+          <handle_left  dt="-0.20" dv="-8.0"/>
+          <handle_right dt="0.25"  dv="-15.0"/>
+        </keyframe>
+        <keyframe time="1.50" value="-15.0" interp="cubic">
+          <handle_left  dt="-0.30" dv="-15.0"/>
+          <handle_right dt="0.30"  dv="12.0"/>
+        </keyframe>
+        <keyframe time="2.00" value="  0.0" interp="cubic">
+          <handle_left  dt="-0.30" dv="10.0"/>
+        </keyframe>
+      </channel>
+
+    </action>
+
+  </actions>
+
+</mc3>

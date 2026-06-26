@@ -455,8 +455,20 @@ static void parseCameras(const XMLElement* el, Mc3Document& doc) {
 static void parseTextures(const XMLElement* el, Mc3Document& doc) {
     for (const XMLElement* c = el->FirstChildElement("texture"); c;
          c = c->NextSiblingElement("texture")) {
+        std::string id   = attr(c, "id");
+        std::string type = attr(c, "type");
+        if (type == "svg") {
+            Mc3SvgTexture svg;
+            svg.id  = id;
+            svg.src = attr(c, "src");
+            if (svg.src.empty()) {
+                const char* text = c->GetText();
+                if (text) svg.inlineContent = text;
+            }
+            if (!id.empty()) doc.svgTextures[id] = std::move(svg);
+            continue;
+        }
         Mc3Texture tex;
-        std::string id = attr(c, "id");
         tex.name       = id;
         tex.uri        = attr(c, "uri");
         tex.wrapU      = attr(c, "wrap_u",      "repeat");
@@ -496,6 +508,23 @@ static void parseMaterials(const XMLElement* el, Mc3Document& doc) {
             mat.emissiveColor = {v[0], v[1], v[2]};
         }
         doc.materials[id] = mat;
+    }
+}
+
+static void parseEmbeds(const XMLElement* el, Mc3Document& doc) {
+    for (const XMLElement* c = el->FirstChildElement("embed"); c;
+         c = c->NextSiblingElement("embed")) {
+        std::string id   = attr(c, "id");
+        std::string type = attr(c, "type");
+        if (type != "gltf" || id.empty()) continue;
+        Mc3EmbedGltf em;
+        em.id  = id;
+        em.src = attr(c, "src");
+        if (em.src.empty()) {
+            const char* text = c->GetText();
+            if (text) em.base64Content = text;
+        }
+        doc.embeds[id] = std::move(em);
     }
 }
 
@@ -734,6 +763,7 @@ Mc3Document Mc3XmlParser::parse(const std::filesystem::path& path) {
              c = c->NextSiblingElement("definition"))
             if (const char* id = c->Attribute("id")) doc.includedDefs.erase(id);
     }
+    if (const XMLElement* embs = root->FirstChildElement("embeds"))       parseEmbeds(embs,      doc);
     if (const XMLElement* objs = root->FirstChildElement("objects"))      parseObjects(objs,     doc);
     if (const XMLElement* acts = root->FirstChildElement("actions"))      parseActions(acts,     doc);
 

@@ -2,10 +2,12 @@
 
 #include "MeshCraft/Mc3/Mc3Animation.hpp"
 #include "MeshCraft/Mc3/Mc3Camera.hpp"
+#include "MeshCraft/Mc3/Mc3EmbedGltf.hpp"
 #include "MeshCraft/Mc3/Mc3Environment.hpp"
 #include "MeshCraft/Mc3/Mc3Light.hpp"
 #include "MeshCraft/Mc3/Mc3Material.hpp"
 #include "MeshCraft/Mc3/Mc3Object.hpp"
+#include "MeshCraft/Mc3/Mc3SvgTexture.hpp"
 #include "MeshCraft/Mc3/Mc3Texture.hpp"
 
 #include <filesystem>
@@ -49,8 +51,10 @@ public:
     std::vector<Mc3Camera>  cameras;
     std::string defaultCamera;
 
-    std::map<std::string, Mc3Texture>  textures;
-    std::map<std::string, Mc3Material> materials;
+    std::map<std::string, Mc3Texture>    textures;
+    std::map<std::string, Mc3SvgTexture> svgTextures;
+    std::map<std::string, Mc3EmbedGltf>  embeds;
+    std::map<std::string, Mc3Material>   materials;
     std::map<std::string, std::shared_ptr<Mc3Object>> definitions;
     std::vector<std::shared_ptr<Mc3Object>> objects;
     std::map<std::string, Mc3Action> actions;
@@ -70,6 +74,12 @@ public:
 
     // Add a texture (key = texture.name).  Returns reference to the stored texture.
     Mc3Texture& addTexture(Mc3Texture tex);
+
+    // Add an SVG texture (key = tex.id).  Returns reference to the stored entry.
+    Mc3SvgTexture& addSvgTexture(Mc3SvgTexture tex);
+
+    // Add an embedded GLTF (key = embed.id).  Returns reference to the stored entry.
+    Mc3EmbedGltf& addEmbed(Mc3EmbedGltf embed);
 
     // Append an object to the root objects list.  Returns the shared_ptr (copy).
     std::shared_ptr<Mc3Object> addObject(std::shared_ptr<Mc3Object> obj);

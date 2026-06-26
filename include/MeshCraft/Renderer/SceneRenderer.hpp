@@ -66,8 +66,21 @@ public:
               const Microsoft::Xna::Framework::Matrix& projection,
               const std::vector<const Mc3::Mc3Object*>& selected);
 
-    // Call after any document mutation so CSG meshes are re-evaluated
-    void clearCsgCache() { csgMeshCache_.clear(); }
+    // Clear the CSG content-hash cache (call on document load/close to free memory).
+    // Normal edits do NOT need an explicit clear — the cache auto-invalidates via hash.
+    void clearCsgCache() { csgMeshCache_.clear(); csgTriCountMap_.clear(); }
+
+    // Triangle count of the last computed CSG result for the given object ID.
+    // Returns -1 if the object has not been rendered yet this session.
+    int csgCachedTriCount(const std::string& objId) const {
+        auto it = csgTriCountMap_.find(objId);
+        return it != csgTriCountMap_.end() ? it->second : -1;
+    }
+
+    // Export the computed CSG result for obj to an OBJ file at path.
+    // Returns true on success; on failure, err is set to a human-readable message.
+    bool exportCsgMesh(const Mc3::Mc3Object& obj, const Mc3::Mc3Document& doc,
+                       const std::string& path, std::string& err);
 
     // Replace the per-object animation overrides used during the next draw() call.
     void setAnimOverrides(std::unordered_map<std::string, AnimOverride> overrides) {
@@ -266,7 +279,8 @@ private:
 
     std::map<std::string, Microsoft::Xna::Framework::Graphics::Texture2D> textureCache_;
     std::map<std::string, RenderMesh> meshCache_;
-    std::map<const Mc3::Mc3Object*, RenderMesh> csgMeshCache_;
+    std::unordered_map<std::size_t, RenderMesh> csgMeshCache_;
+    std::unordered_map<std::string, int> csgTriCountMap_;   // obj.id → last rendered tri count (K4)
     std::unordered_map<std::string, AnimOverride> animOverrides_;
 };
 

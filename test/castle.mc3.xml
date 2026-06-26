@@ -1,0 +1,403 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<mc3 version="0.3" model="MedievalCastle" unit="meter" rotation_units="degrees" euler_order="XYZ">
+
+  <environment>
+    <background color="0.47 0.65 0.88"/>
+    <fog mode="linear" color="0.72 0.80 0.92" start="130" end="320"/>
+  </environment>
+
+  <lights>
+    <ambient color="0.35 0.37 0.45" brightness="0.45"/>
+    <directional name="Sun" color="1.0 0.95 0.80" brightness="2.8"
+                 direction="-0.55 -1.0 -0.45" cast_shadows="true"/>
+    <point name="LampCourt1" color="1.0 0.85 0.60" brightness="8" position=" 10 3.5  5" range="20"/>
+    <point name="LampCourt2" color="1.0 0.85 0.60" brightness="8" position="-10 3.5 -5" range="20"/>
+    <spot  name="GateLight"  color="0.95 0.90 0.70" brightness="12"
+           position="0 8 30" direction="0 -0.8 -1" angle="35" falloff="50" range="28"/>
+  </lights>
+
+  <cameras>
+    <camera name="Main"    type="perspective" position=" 60 30  65" target=" 0 10 -5" fov="55" near="0.1" far="500"/>
+    <camera name="Aerial"  type="perspective" position="  0 90   5" target=" 0  0  0" fov="50"/>
+    <camera name="Gate"    type="perspective" position="  0  6  48" target=" 0  6 25" fov="65"/>
+    <camera name="KeepCam" type="perspective" position=" 22 20  22" target=" 0 14 -5" fov="60"/>
+  </cameras>
+
+  <materials>
+    <material id="stone" roughness="0.85" metallic="0.0">
+      <base_color>0.70 0.65 0.58 1.0</base_color>
+    </material>
+    <material id="dark_stone" roughness="0.88" metallic="0.0">
+      <base_color>0.46 0.42 0.38 1.0</base_color>
+    </material>
+    <material id="roof_tile" roughness="0.78" metallic="0.0">
+      <base_color>0.62 0.20 0.14 1.0</base_color>
+    </material>
+    <material id="wood" roughness="0.75" metallic="0.0">
+      <base_color>0.48 0.32 0.18 1.0</base_color>
+    </material>
+    <material id="grass" roughness="0.95" metallic="0.0">
+      <base_color>0.22 0.52 0.18 1.0</base_color>
+    </material>
+    <material id="dirt" roughness="0.95" metallic="0.0">
+      <base_color>0.54 0.42 0.28 1.0</base_color>
+    </material>
+    <material id="moat_water" roughness="0.04" metallic="0.08" alpha_mode="blend">
+      <base_color>0.10 0.28 0.58 0.80</base_color>
+    </material>
+    <material id="bark" roughness="0.88" metallic="0.0">
+      <base_color>0.36 0.24 0.14 1.0</base_color>
+    </material>
+    <material id="leaves" roughness="0.85" metallic="0.0" double_sided="true">
+      <base_color>0.18 0.48 0.15 1.0</base_color>
+    </material>
+    <material id="iron" roughness="0.35" metallic="0.88">
+      <base_color>0.24 0.24 0.27 1.0</base_color>
+    </material>
+    <material id="flag_red" roughness="0.60" metallic="0.0">
+      <base_color>0.82 0.12 0.10 1.0</base_color>
+      <emissive_color>0.12 0.01 0.01</emissive_color>
+    </material>
+    <material id="flag_gold" roughness="0.55" metallic="0.3">
+      <base_color>0.92 0.74 0.08 1.0</base_color>
+      <emissive_color>0.10 0.08 0.01</emissive_color>
+    </material>
+  </materials>
+
+  <definitions>
+
+    <!-- Rohová věž: tělo + parapet + 8 cimbuří + kónická střecha -->
+    <definition id="corner_tower">
+      <group name="CTower">
+        <cylinder name="TBody"    radius="4.5" height="14"  segments="24" position="0  7.0  0" material="stone"/>
+        <cylinder name="TParapet" radius="4.8" height="0.8" segments="24" position="0 14.4  0" material="dark_stone"/>
+        <box name="TM0" size="1.3 1.6 1.3" position=" 4.00 15.2  0.00" material="stone"/>
+        <box name="TM1" size="1.3 1.6 1.3" position=" 2.83 15.2  2.83" material="stone"/>
+        <box name="TM2" size="1.3 1.6 1.3" position=" 0.00 15.2  4.00" material="stone"/>
+        <box name="TM3" size="1.3 1.6 1.3" position="-2.83 15.2  2.83" material="stone"/>
+        <box name="TM4" size="1.3 1.6 1.3" position="-4.00 15.2  0.00" material="stone"/>
+        <box name="TM5" size="1.3 1.6 1.3" position="-2.83 15.2 -2.83" material="stone"/>
+        <box name="TM6" size="1.3 1.6 1.3" position=" 0.00 15.2 -4.00" material="stone"/>
+        <box name="TM7" size="1.3 1.6 1.3" position=" 2.83 15.2 -2.83" material="stone"/>
+        <cone name="TRoof" radius="5.2" height="6.5" segments="24" position="0 19.25 0" material="roof_tile"/>
+      </group>
+    </definition>
+
+    <!-- Dub: vícekulový korun -->
+    <definition id="oak_tree">
+      <group name="OakTree">
+        <cylinder name="OTrunk"   radius="0.35" height="5.0" segments="8"  position=" 0.0 2.5  0.0" material="bark"/>
+        <sphere   name="OCanopy"  radius="3.2"               segments="16" position=" 0.0 7.0  0.0" material="leaves"/>
+        <sphere   name="OCanopyL" radius="2.0"               segments="12" position="-2.0 5.8  0.5" material="leaves"/>
+        <sphere   name="OCanopyR" radius="2.0"               segments="12" position=" 2.0 5.8 -0.5" material="leaves"/>
+      </group>
+    </definition>
+
+    <!-- Jedle: vrstvené kužele -->
+    <definition id="pine_tree">
+      <group name="PineTree">
+        <cylinder name="PTrunk"  radius="0.28" height="6.0" segments="8"  position="0  3.0 0" material="bark"/>
+        <cone     name="PCrown1" radius="2.8"  height="5.0" segments="16" position="0  7.5 0" material="leaves"/>
+        <cone     name="PCrown2" radius="1.9"  height="4.2" segments="16" position="0 10.5 0" material="leaves"/>
+        <cone     name="PCrown3" radius="1.1"  height="3.5" segments="16" position="0 13.0 0" material="leaves"/>
+      </group>
+    </definition>
+
+    <!-- Kamenná studna -->
+    <definition id="stone_well">
+      <group name="StoneWell">
+        <cylinder name="WBase"  radius="1.1"  height="0.5" segments="16" position=" 0.00 0.25 0" material="dark_stone"/>
+        <cylinder name="WRing"  radius="0.95" height="0.9" segments="16" position=" 0.00 0.95 0" material="stone"/>
+        <cylinder name="WPostL" radius="0.12" height="2.0" segments="8"  position="-0.85 2.40 0" material="wood"/>
+        <cylinder name="WPostR" radius="0.12" height="2.0" segments="8"  position=" 0.85 2.40 0" material="wood"/>
+        <cylinder name="WBeam"  radius="0.10" height="1.9" segments="8" axis="x" position="0 3.35 0" material="wood"/>
+        <cylinder name="WWinch" radius="0.16" height="1.6" segments="10" axis="x" position="0 3.35 0" material="iron"/>
+      </group>
+    </definition>
+
+  </definitions>
+
+  <objects>
+
+    <!-- Terén, příkop, nádvoří -->
+    <plane name="Ground"    size="300 300" axis="y" position="0 0.00 0" material="grass"/>
+    <plane name="MoatWater" size=" 68  68" axis="y" position="0 0.05 0" material="moat_water"/>
+    <plane name="Courtyard" size=" 44  44" axis="y" position="0 0.10 0" material="dirt"/>
+
+    <!-- Severní hradební zeď (Z = -25) -->
+    <box name="WallNorth" size="50 9 2.5" position="0 4.5 -25" material="stone"/>
+    <box name="NBatt0"  size="1.5 1.8 1.3" position="-19.5 9.9 -25" material="stone"/>
+    <box name="NBatt1"  size="1.5 1.8 1.3" position="-16.5 9.9 -25" material="stone"/>
+    <box name="NBatt2"  size="1.5 1.8 1.3" position="-13.5 9.9 -25" material="stone"/>
+    <box name="NBatt3"  size="1.5 1.8 1.3" position="-10.5 9.9 -25" material="stone"/>
+    <box name="NBatt4"  size="1.5 1.8 1.3" position=" -7.5 9.9 -25" material="stone"/>
+    <box name="NBatt5"  size="1.5 1.8 1.3" position=" -4.5 9.9 -25" material="stone"/>
+    <box name="NBatt6"  size="1.5 1.8 1.3" position=" -1.5 9.9 -25" material="stone"/>
+    <box name="NBatt7"  size="1.5 1.8 1.3" position="  1.5 9.9 -25" material="stone"/>
+    <box name="NBatt8"  size="1.5 1.8 1.3" position="  4.5 9.9 -25" material="stone"/>
+    <box name="NBatt9"  size="1.5 1.8 1.3" position="  7.5 9.9 -25" material="stone"/>
+    <box name="NBatt10" size="1.5 1.8 1.3" position=" 10.5 9.9 -25" material="stone"/>
+    <box name="NBatt11" size="1.5 1.8 1.3" position=" 13.5 9.9 -25" material="stone"/>
+    <box name="NBatt12" size="1.5 1.8 1.3" position=" 16.5 9.9 -25" material="stone"/>
+    <box name="NBatt13" size="1.5 1.8 1.3" position=" 19.5 9.9 -25" material="stone"/>
+
+    <!-- Východní zeď (X = +25) -->
+    <box name="WallEast" size="2.5 9 50" position="25 4.5 0" material="stone"/>
+    <box name="EBatt0"  size="1.3 1.8 1.5" position="25 9.9 -19.5" material="stone"/>
+    <box name="EBatt1"  size="1.3 1.8 1.5" position="25 9.9 -16.5" material="stone"/>
+    <box name="EBatt2"  size="1.3 1.8 1.5" position="25 9.9 -13.5" material="stone"/>
+    <box name="EBatt3"  size="1.3 1.8 1.5" position="25 9.9 -10.5" material="stone"/>
+    <box name="EBatt4"  size="1.3 1.8 1.5" position="25 9.9  -7.5" material="stone"/>
+    <box name="EBatt5"  size="1.3 1.8 1.5" position="25 9.9  -4.5" material="stone"/>
+    <box name="EBatt6"  size="1.3 1.8 1.5" position="25 9.9  -1.5" material="stone"/>
+    <box name="EBatt7"  size="1.3 1.8 1.5" position="25 9.9   1.5" material="stone"/>
+    <box name="EBatt8"  size="1.3 1.8 1.5" position="25 9.9   4.5" material="stone"/>
+    <box name="EBatt9"  size="1.3 1.8 1.5" position="25 9.9   7.5" material="stone"/>
+    <box name="EBatt10" size="1.3 1.8 1.5" position="25 9.9  10.5" material="stone"/>
+    <box name="EBatt11" size="1.3 1.8 1.5" position="25 9.9  13.5" material="stone"/>
+    <box name="EBatt12" size="1.3 1.8 1.5" position="25 9.9  16.5" material="stone"/>
+    <box name="EBatt13" size="1.3 1.8 1.5" position="25 9.9  19.5" material="stone"/>
+
+    <!-- Západní zeď (X = -25) -->
+    <box name="WallWest" size="2.5 9 50" position="-25 4.5 0" material="stone"/>
+    <box name="WBatt0"  size="1.3 1.8 1.5" position="-25 9.9 -19.5" material="stone"/>
+    <box name="WBatt1"  size="1.3 1.8 1.5" position="-25 9.9 -16.5" material="stone"/>
+    <box name="WBatt2"  size="1.3 1.8 1.5" position="-25 9.9 -13.5" material="stone"/>
+    <box name="WBatt3"  size="1.3 1.8 1.5" position="-25 9.9 -10.5" material="stone"/>
+    <box name="WBatt4"  size="1.3 1.8 1.5" position="-25 9.9  -7.5" material="stone"/>
+    <box name="WBatt5"  size="1.3 1.8 1.5" position="-25 9.9  -4.5" material="stone"/>
+    <box name="WBatt6"  size="1.3 1.8 1.5" position="-25 9.9  -1.5" material="stone"/>
+    <box name="WBatt7"  size="1.3 1.8 1.5" position="-25 9.9   1.5" material="stone"/>
+    <box name="WBatt8"  size="1.3 1.8 1.5" position="-25 9.9   4.5" material="stone"/>
+    <box name="WBatt9"  size="1.3 1.8 1.5" position="-25 9.9   7.5" material="stone"/>
+    <box name="WBatt10" size="1.3 1.8 1.5" position="-25 9.9  10.5" material="stone"/>
+    <box name="WBatt11" size="1.3 1.8 1.5" position="-25 9.9  13.5" material="stone"/>
+    <box name="WBatt12" size="1.3 1.8 1.5" position="-25 9.9  16.5" material="stone"/>
+    <box name="WBatt13" size="1.3 1.8 1.5" position="-25 9.9  19.5" material="stone"/>
+
+    <!-- Jižní zeď (Z = +25) — mezera X = ±6 pro bránu -->
+    <box name="WallSouthL" size="19 9 2.5" position="-15.5 4.5 25" material="stone"/>
+    <box name="WallSouthR" size="19 9 2.5" position=" 15.5 4.5 25" material="stone"/>
+    <box name="SLBatt0" size="1.5 1.8 1.3" position="-22.5 9.9 25" material="stone"/>
+    <box name="SLBatt1" size="1.5 1.8 1.3" position="-19.5 9.9 25" material="stone"/>
+    <box name="SLBatt2" size="1.5 1.8 1.3" position="-16.5 9.9 25" material="stone"/>
+    <box name="SLBatt3" size="1.5 1.8 1.3" position="-13.5 9.9 25" material="stone"/>
+    <box name="SLBatt4" size="1.5 1.8 1.3" position="-10.5 9.9 25" material="stone"/>
+    <box name="SLBatt5" size="1.5 1.8 1.3" position=" -7.5 9.9 25" material="stone"/>
+    <box name="SRBatt0" size="1.5 1.8 1.3" position="  7.5 9.9 25" material="stone"/>
+    <box name="SRBatt1" size="1.5 1.8 1.3" position=" 10.5 9.9 25" material="stone"/>
+    <box name="SRBatt2" size="1.5 1.8 1.3" position=" 13.5 9.9 25" material="stone"/>
+    <box name="SRBatt3" size="1.5 1.8 1.3" position=" 16.5 9.9 25" material="stone"/>
+    <box name="SRBatt4" size="1.5 1.8 1.3" position=" 19.5 9.9 25" material="stone"/>
+    <box name="SRBatt5" size="1.5 1.8 1.3" position=" 22.5 9.9 25" material="stone"/>
+
+    <!-- 4 rohové věže -->
+    <instance name="TowerNE" definition="corner_tower" position=" 25 0 -25"/>
+    <instance name="TowerNW" definition="corner_tower" position="-25 0 -25"/>
+    <instance name="TowerSE" definition="corner_tower" position=" 25 0  25"/>
+    <instance name="TowerSW" definition="corner_tower" position="-25 0  25"/>
+
+    <!-- Brána (jižní střed, Z = 25) -->
+    <group name="Gatehouse" position="0 0 25">
+      <cylinder name="GTowerL"     radius="4.0" height="12.0" segments="20" position="-6.5  6.0 0" material="dark_stone"/>
+      <cone     name="GTowerLRoof" radius="4.5" height=" 5.0" segments="20" position="-6.5 14.5 0" material="roof_tile"/>
+      <cylinder name="GTowerR"     radius="4.0" height="12.0" segments="20" position=" 6.5  6.0 0" material="dark_stone"/>
+      <cone     name="GTowerRRoof" radius="4.5" height=" 5.0" segments="20" position=" 6.5 14.5 0" material="roof_tile"/>
+      <!-- Kamenný oblouk s vybráním pro průjezd (CSG) -->
+      <difference name="GateArch" material="dark_stone">
+        <box name="GateBlock" size="9.0 9.0 2.6" position="0 4.5 0"/>
+        <box name="GateCut"   size="5.0 7.5 3.0" position="0 3.75 0" role="cutter"/>
+      </difference>
+      <!-- Ochoz a cimbuří nad bránou -->
+      <box name="GateWalkway" size="9.0 2.0 2.6" position="0 10.0 0" material="dark_stone"/>
+      <box name="GMerl0" size="1.5 1.8 1.3" position="-3.0 11.9 0" material="dark_stone"/>
+      <box name="GMerl1" size="1.5 1.8 1.3" position="-1.0 11.9 0" material="dark_stone"/>
+      <box name="GMerl2" size="1.5 1.8 1.3" position=" 1.0 11.9 0" material="dark_stone"/>
+      <box name="GMerl3" size="1.5 1.8 1.3" position=" 3.0 11.9 0" material="dark_stone"/>
+      <!-- Železná mříž (portcullis) — napůl zdvižená -->
+      <box name="PBar0"  size="0.25 4.5 0.20" position="-1.8 2.25 0" material="iron"/>
+      <box name="PBar1"  size="0.25 4.5 0.20" position="-0.6 2.25 0" material="iron"/>
+      <box name="PBar2"  size="0.25 4.5 0.20" position=" 0.6 2.25 0" material="iron"/>
+      <box name="PBar3"  size="0.25 4.5 0.20" position=" 1.8 2.25 0" material="iron"/>
+      <box name="PHBar0" size="4.5 0.20 0.20" position="0  4.4 0" material="iron"/>
+      <box name="PHBar1" size="4.5 0.20 0.20" position="0  2.8 0" material="iron"/>
+      <box name="PHBar2" size="4.5 0.20 0.20" position="0  1.2 0" material="iron"/>
+      <!-- Praporec nad branou -->
+      <cylinder name="GFlagPole" radius="0.10" height="5.0" segments="6" position="0 14.5 -1.0" material="iron"/>
+      <box      name="GFlag"     size="2.2 1.2 0.06"                    position="1.1 16.5 -1.0" material="flag_gold"/>
+    </group>
+
+    <!-- Padací most -->
+    <box name="Drawbridge" size="5.0 0.40 14" position="0 0.20 32.5" material="wood"/>
+    <box name="BRailL"    size="0.25 0.80 14" position="-2.75 0.60 32.5" material="wood"/>
+    <box name="BRailR"    size="0.25 0.80 14" position=" 2.75 0.60 32.5" material="wood"/>
+    <cylinder name="ChainL" radius="0.10" height="12" segments="6" position="-2.0 5.0 30" rotation="-28 0 0" material="iron"/>
+    <cylinder name="ChainR" radius="0.10" height="12" segments="6" position=" 2.0 5.0 30" rotation="-28 0 0" material="iron"/>
+
+    <!-- Centrální donjon (keep) -->
+    <group name="Keep" position="0 0 -5">
+      <!-- Tělo s průstřelnami vybranými CSG subtrakcí -->
+      <difference name="KeepBody" material="dark_stone">
+        <box name="KeepBox" size="14 26 14" position="0 13 0"/>
+        <!-- Severní průstřelny -->
+        <box name="SlitN1" size="0.65 2.2 2.5" position="-4.5  9.0 -5.8" role="cutter"/>
+        <box name="SlitN2" size="0.65 2.2 2.5" position=" 4.5  9.0 -5.8" role="cutter"/>
+        <box name="SlitN3" size="0.65 2.2 2.5" position="-4.5 17.0 -5.8" role="cutter"/>
+        <box name="SlitN4" size="0.65 2.2 2.5" position=" 4.5 17.0 -5.8" role="cutter"/>
+        <!-- Jižní průstřelny -->
+        <box name="SlitS1" size="0.65 2.2 2.5" position="-4.5  9.0  5.8" role="cutter"/>
+        <box name="SlitS2" size="0.65 2.2 2.5" position=" 4.5  9.0  5.8" role="cutter"/>
+        <box name="SlitS3" size="0.65 2.2 2.5" position="-4.5 17.0  5.8" role="cutter"/>
+        <box name="SlitS4" size="0.65 2.2 2.5" position=" 4.5 17.0  5.8" role="cutter"/>
+        <!-- Východní průstřelny -->
+        <box name="SlitE1" size="2.5 2.2 0.65" position=" 5.8  9.0 -4.5" role="cutter"/>
+        <box name="SlitE2" size="2.5 2.2 0.65" position=" 5.8  9.0  4.5" role="cutter"/>
+        <box name="SlitE3" size="2.5 2.2 0.65" position=" 5.8 17.0 -4.5" role="cutter"/>
+        <box name="SlitE4" size="2.5 2.2 0.65" position=" 5.8 17.0  4.5" role="cutter"/>
+        <!-- Západní průstřelny -->
+        <box name="SlitW1" size="2.5 2.2 0.65" position="-5.8  9.0 -4.5" role="cutter"/>
+        <box name="SlitW2" size="2.5 2.2 0.65" position="-5.8  9.0  4.5" role="cutter"/>
+        <box name="SlitW3" size="2.5 2.2 0.65" position="-5.8 17.0 -4.5" role="cutter"/>
+        <box name="SlitW4" size="2.5 2.2 0.65" position="-5.8 17.0  4.5" role="cutter"/>
+        <!-- Vstupní portál (jižní fasáda) -->
+        <box name="DoorCut" size="3.2 4.8 2.6" position="0 2.4 5.8" role="cutter"/>
+      </difference>
+      <!-- Sokl -->
+      <box name="KeepPlinth" size="16 2 16" position="0 1 0" material="stone"/>
+      <!-- Cimbuří na vrcholu donjonu (Y=26) -->
+      <box name="KBN0" size="1.6 2.2 1.4" position="-6.0 27.1 -7.0" material="dark_stone"/>
+      <box name="KBN1" size="1.6 2.2 1.4" position="-3.0 27.1 -7.0" material="dark_stone"/>
+      <box name="KBN2" size="1.6 2.2 1.4" position=" 0.0 27.1 -7.0" material="dark_stone"/>
+      <box name="KBN3" size="1.6 2.2 1.4" position=" 3.0 27.1 -7.0" material="dark_stone"/>
+      <box name="KBN4" size="1.6 2.2 1.4" position=" 6.0 27.1 -7.0" material="dark_stone"/>
+      <box name="KBS0" size="1.6 2.2 1.4" position="-6.0 27.1  7.0" material="dark_stone"/>
+      <box name="KBS1" size="1.6 2.2 1.4" position="-3.0 27.1  7.0" material="dark_stone"/>
+      <box name="KBS2" size="1.6 2.2 1.4" position=" 0.0 27.1  7.0" material="dark_stone"/>
+      <box name="KBS3" size="1.6 2.2 1.4" position=" 3.0 27.1  7.0" material="dark_stone"/>
+      <box name="KBS4" size="1.6 2.2 1.4" position=" 6.0 27.1  7.0" material="dark_stone"/>
+      <box name="KBE0" size="1.4 2.2 1.6" position=" 7.0 27.1 -3.0" material="dark_stone"/>
+      <box name="KBE1" size="1.4 2.2 1.6" position=" 7.0 27.1  0.0" material="dark_stone"/>
+      <box name="KBE2" size="1.4 2.2 1.6" position=" 7.0 27.1  3.0" material="dark_stone"/>
+      <box name="KBW0" size="1.4 2.2 1.6" position="-7.0 27.1 -3.0" material="dark_stone"/>
+      <box name="KBW1" size="1.4 2.2 1.6" position="-7.0 27.1  0.0" material="dark_stone"/>
+      <box name="KBW2" size="1.4 2.2 1.6" position="-7.0 27.1  3.0" material="dark_stone"/>
+      <box name="KBC0" size="1.4 2.2 1.4" position="-7.0 27.1 -7.0" material="dark_stone"/>
+      <box name="KBC1" size="1.4 2.2 1.4" position=" 7.0 27.1 -7.0" material="dark_stone"/>
+      <box name="KBC2" size="1.4 2.2 1.4" position="-7.0 27.1  7.0" material="dark_stone"/>
+      <box name="KBC3" size="1.4 2.2 1.4" position=" 7.0 27.1  7.0" material="dark_stone"/>
+      <!-- Stožáry s prapory (SZ a SV roh) -->
+      <cylinder name="FlagPoleNW" radius="0.12" height="6.0" segments="6" position="-6.5 29.0 -6.5" material="iron"/>
+      <cylinder name="FlagPoleNE" radius="0.12" height="6.0" segments="6" position=" 6.5 29.0 -6.5" material="iron"/>
+      <box name="FlagNW" size="2.8 1.6 0.06" position="-5.1 31.2 -6.5" material="flag_red"/>
+      <box name="FlagNE" size="2.8 1.6 0.06" position=" 7.9 31.2 -6.5" material="flag_gold"/>
+    </group>
+
+    <!-- Studna na nádvoří -->
+    <instance name="CourtWell" definition="stone_well" position="0 0 6"/>
+
+    <!-- Kasárna / stáje (východní část nádvoří) -->
+    <group name="Barracks" position="16 0 3">
+      <box name="BBody"  size="8 4.5 13" position="0  2.25 0" material="stone"/>
+      <box name="BRoofL" size="6 0.40 13.5" position="-1.7 5.1 0" rotation="0 0  27" material="roof_tile"/>
+      <box name="BRoofR" size="6 0.40 13.5" position=" 1.7 5.1 0" rotation="0 0 -27" material="roof_tile"/>
+      <box name="BWin1"  size="0.20 1.1 0.8" position="4.1 2.5 -3.5" material="iron"/>
+      <box name="BWin2"  size="0.20 1.1 0.8" position="4.1 2.5  3.5" material="iron"/>
+    </group>
+
+    <!-- Kaple s věží a jehlancovou věžičkou (západ nádvoří) -->
+    <group name="Chapel" position="-15 0 -3">
+      <box      name="ChBody"  size="6  6  9"   position="0 3.0  0.0" material="stone"/>
+      <box      name="ChTower" size="4 12  4"   position="0 6.0 -4.0" material="dark_stone"/>
+      <cone     name="ChSpire" radius="2.2" height="5.5" segments="8" position="0 14.75 -4.0" material="roof_tile"/>
+      <cylinder name="ChRose"  radius="0.9" height="0.22" segments="24" position="0 4.5  4.6" material="iron"/>
+      <cylinder name="ChFlagPole" radius="0.09" height="4.5" segments="6" position="0 19.5 -4.0" material="iron"/>
+      <box      name="ChFlag"     size="1.8 1.0 0.06"                    position="0.9 21.25 -4.0" material="flag_red"/>
+    </group>
+
+    <!-- Severní hájek stromů -->
+    <instance name="TN1" definition="oak_tree"  position="-18 0 -55" rotation="0  15 0"/>
+    <instance name="TN2" definition="oak_tree"  position="  2 0 -61" rotation="0 200 0"/>
+    <instance name="TN3" definition="oak_tree"  position=" 20 0 -54" rotation="0 340 0"/>
+    <instance name="TN4" definition="pine_tree" position=" -8 0 -58" rotation="0  80 0"/>
+    <instance name="TN5" definition="pine_tree" position=" 12 0 -57" rotation="0 155 0"/>
+    <instance name="TN6" definition="oak_tree"  position="-30 0 -57" rotation="0  90 0"/>
+    <instance name="TN7" definition="pine_tree" position=" 28 0 -56" rotation="0 240 0"/>
+
+    <!-- Východní hájek -->
+    <instance name="TE1" definition="oak_tree"  position="55 0 -14" rotation="0  40 0"/>
+    <instance name="TE2" definition="oak_tree"  position="63 0   5" rotation="0 270 0"/>
+    <instance name="TE3" definition="pine_tree" position="58 0  -4" rotation="0 120 0"/>
+    <instance name="TE4" definition="pine_tree" position="52 0  16" rotation="0  60 0"/>
+    <instance name="TE5" definition="oak_tree"  position="66 0 -22" rotation="0 320 0"/>
+    <instance name="TE6" definition="oak_tree"  position="60 0  22" rotation="0 195 0"/>
+
+    <!-- Západní hájek -->
+    <instance name="TW1" definition="oak_tree"  position="-55 0 -12" rotation="0 200 0"/>
+    <instance name="TW2" definition="oak_tree"  position="-63 0   6" rotation="0  90 0"/>
+    <instance name="TW3" definition="pine_tree" position="-58 0   0" rotation="0 140 0"/>
+    <instance name="TW4" definition="pine_tree" position="-52 0  18" rotation="0 250 0"/>
+    <instance name="TW5" definition="oak_tree"  position="-66 0 -20" rotation="0  30 0"/>
+    <instance name="TW6" definition="pine_tree" position="-60 0  22" rotation="0 170 0"/>
+
+    <!-- Jižní přístupový hájek (u cesty) -->
+    <instance name="TS1" definition="oak_tree"  position="-22 0 65" rotation="0 110 0"/>
+    <instance name="TS2" definition="oak_tree"  position=" 24 0 68" rotation="0 220 0"/>
+    <instance name="TS3" definition="pine_tree" position="-38 0 57" rotation="0  55 0"/>
+    <instance name="TS4" definition="pine_tree" position=" 38 0 59" rotation="0 310 0"/>
+    <instance name="TS5" definition="oak_tree"  position="  5 0 73" rotation="0 180 0"/>
+    <instance name="TS6" definition="oak_tree"  position="-45 0 62" rotation="0  70 0"/>
+
+    <!-- Hlínová příjezdová cesta -->
+    <box name="Road" size="5.2 0.06 60" position="0 0.12 62" material="dirt"/>
+
+  </objects>
+
+  <actions>
+    <!-- Vlání praporu SZ věže donjonu -->
+    <action name="WaveFlagNW" duration="3.2" loop="true">
+      <channel target="FlagNW" property="rotation.y">
+        <keyframe time="0.0" value=" 0.0" interp="cubic"/>
+        <keyframe time="1.6" value="12.0" interp="cubic"/>
+        <keyframe time="3.2" value=" 0.0" interp="cubic"/>
+      </channel>
+      <channel target="FlagNW" property="scale.x">
+        <keyframe time="0.0" value="1.00" interp="cubic"/>
+        <keyframe time="1.6" value="0.86" interp="cubic"/>
+        <keyframe time="3.2" value="1.00" interp="cubic"/>
+      </channel>
+    </action>
+
+    <!-- Vlání praporu SV věže donjonu (jiná fáze) -->
+    <action name="WaveFlagNE" duration="3.8" loop="true">
+      <channel target="FlagNE" property="rotation.y">
+        <keyframe time="0.0" value="  0.0" interp="cubic"/>
+        <keyframe time="1.9" value="-10.0" interp="cubic"/>
+        <keyframe time="3.8" value="  0.0" interp="cubic"/>
+      </channel>
+      <channel target="FlagNE" property="scale.x">
+        <keyframe time="0.0" value="1.00" interp="cubic"/>
+        <keyframe time="1.9" value="0.88" interp="cubic"/>
+        <keyframe time="3.8" value="1.00" interp="cubic"/>
+      </channel>
+    </action>
+
+    <!-- Vlání praporu brány -->
+    <action name="WaveGFlag" duration="2.9" loop="true">
+      <channel target="GFlag" property="rotation.y">
+        <keyframe time="0.0"  value=" 0.0" interp="cubic"/>
+        <keyframe time="1.45" value=" 9.0" interp="cubic"/>
+        <keyframe time="2.9"  value=" 0.0" interp="cubic"/>
+      </channel>
+    </action>
+
+    <!-- Vlání praporu kaple -->
+    <action name="WaveChFlag" duration="3.5" loop="true">
+      <channel target="ChFlag" property="rotation.y">
+        <keyframe time="0.0"  value="  0.0" interp="cubic"/>
+        <keyframe time="1.75" value="-11.0" interp="cubic"/>
+        <keyframe time="3.5"  value="  0.0" interp="cubic"/>
+      </channel>
+    </action>
+  </actions>
+
+</mc3>

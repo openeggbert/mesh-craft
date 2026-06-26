@@ -12,6 +12,7 @@
 #include <algorithm>
 #include <cmath>
 #include <filesystem>
+#include <fstream>
 #include <numeric>
 #include <numbers>
 #include <optional>
@@ -59,6 +60,48 @@ static Matrix computeObjWorldMatrix(const Mc3Object& obj) {
            Matrix::CreateScale({t.scale[0], t.scale[1], t.scale[2]}) *
            Matrix::CreateFromYawPitchRoll(t.rotation[1]*d, t.rotation[0]*d, t.rotation[2]*d) *
            Matrix::CreateTranslation({t.position[0]+px, t.position[1]+py, t.position[2]+pz});
+}
+
+// Hash utilities for content-based CSG cache invalidation (K1)
+static std::size_t hashMix(std::size_t h, std::size_t v) noexcept {
+    return h ^ (v + 0x9e3779b9u + (h << 6) + (h >> 2));
+}
+
+// Recursively hash a CSG subtree's content: transforms, primitive params, children.
+// Changing ANY input (move, resize, add/remove child) produces a different hash.
+static std::size_t csgSubtreeHash(const Mc3Object& obj, const Mc3Document& doc, int depth) {
+    if (depth > 12) return 0;
+    std::size_t h = std::hash<std::string>{}(obj.id);
+    auto hf = [&](float v)       { h = hashMix(h, std::hash<float>{}(v)); };
+    auto hi = [&](int   v)       { h = hashMix(h, std::hash<int>{}(v));   };
+    hi((int)obj.type);
+    hi(obj.visible  ? 1 : 0);
+    hi(obj.isCutter ? 1 : 0);
+    const auto& t = obj.transform;
+    hf(t.position[0]); hf(t.position[1]); hf(t.position[2]);
+    hf(t.rotation[0]); hf(t.rotation[1]); hf(t.rotation[2]);
+    hf(t.scale[0]);    hf(t.scale[1]);    hf(t.scale[2]);
+    hf(t.pivot[0]);    hf(t.pivot[1]);    hf(t.pivot[2]);
+    if (obj.primitive) {
+        const auto& p = *obj.primitive;
+        hi((int)p.primitiveType);
+        hf(p.size[0]);       hf(p.size[1]);       hf(p.size[2]);
+        hf(p.radius);        hf(p.height);
+        hi(p.segments);
+        hf(p.majorRadius);   hf(p.minorRadius);
+    }
+    if (obj.deform) {
+        hf(obj.deform->scale[0]); hf(obj.deform->scale[1]); hf(obj.deform->scale[2]);
+    }
+    for (const auto& child : obj.children)
+        h = hashMix(h, csgSubtreeHash(*child, doc, depth + 1));
+    if (obj.type == ObjectType::Instance) {
+        const std::string& defKey = pickInstanceDef(obj);
+        auto it = doc.definitions.find(defKey);
+        if (it != doc.definitions.end() && it->second)
+            h = hashMix(h, csgSubtreeHash(*it->second, doc, depth + 1));
+    }
+    return h;
 }
 
 // Build a manifold::Manifold for `obj` and its subtree.
@@ -708,13 +751,22 @@ void SceneRenderer::drawObject(const Mc3Object& obj, const Mc3Document& doc,
     case ObjectType::Union:
     case ObjectType::Intersection:
     case ObjectType::Difference: {
-        // Look up or evaluate the CSG boolean mesh (world-space, drawn with identity)
-        auto cit = csgMeshCache_.find(&obj);
+        // Content-hash cache: recomputes only when inputs actually change (K1).
+        // Folding in parentWorld ensures a moved parent triggers re-evaluation.
+        std::size_t fp = csgSubtreeHash(obj, doc, 0);
+        auto hfmat = [&](float v) { fp = hashMix(fp, std::hash<float>{}(v)); };
+        hfmat(parentWorld.M11); hfmat(parentWorld.M12); hfmat(parentWorld.M13); hfmat(parentWorld.M14);
+        hfmat(parentWorld.M21); hfmat(parentWorld.M22); hfmat(parentWorld.M23); hfmat(parentWorld.M24);
+        hfmat(parentWorld.M31); hfmat(parentWorld.M32); hfmat(parentWorld.M33); hfmat(parentWorld.M34);
+        hfmat(parentWorld.M41); hfmat(parentWorld.M42); hfmat(parentWorld.M43); hfmat(parentWorld.M44);
+        if (csgMeshCache_.size() > 128) csgMeshCache_.clear();
+        auto cit = csgMeshCache_.find(fp);
         if (cit == csgMeshCache_.end()) {
             manifold::Manifold m = buildManifoldTree(obj, doc, parentWorld, 0);
-            csgMeshCache_[&obj] = manifoldToRenderMesh(device_, m);
-            cit = csgMeshCache_.find(&obj);
+            csgMeshCache_[fp] = manifoldToRenderMesh(device_, m);
+            cit = csgMeshCache_.find(fp);
         }
+        csgTriCountMap_[obj.id] = cit->second.primitiveCount;  // K4
         if (cit->second.vb) {
             drawMesh(cit->second, Matrix::getIdentityProperty(), view, proj, color);
         } else {
@@ -1247,6 +1299,64 @@ void SceneRenderer::scenePolyStats(const Mc3::Mc3Document& doc,
         }
     };
     walk(doc.objects);
+}
+
+// ---------------------------------------------------------------------------
+// K3: Export CSG result as OBJ
+// ---------------------------------------------------------------------------
+bool SceneRenderer::exportCsgMesh(const Mc3Object& obj, const Mc3Document& doc,
+                                   const std::string& path, std::string& err) {
+    try {
+        manifold::Manifold m = buildManifoldTree(obj, doc, Matrix::getIdentityProperty(), 0);
+        if (m.IsEmpty()) { err = "CSG result is empty"; return false; }
+        manifold::MeshGL gl = m.GetMeshGL();
+        int nVerts = (int)gl.vertProperties.size() / (int)gl.numProp;
+        int nTris  = (int)gl.triVerts.size() / 3;
+        if (nVerts <= 0 || nTris <= 0) { err = "Mesh has no geometry"; return false; }
+
+        std::ofstream f(path);
+        if (!f) { err = "Cannot open file for writing: " + path; return false; }
+
+        f << "# CSG export from MeshCraft\n";
+        f << "# Vertices: " << nVerts << "  Triangles: " << nTris << "\n";
+        f << std::fixed;
+
+        for (int i = 0; i < nVerts; ++i) {
+            float x = gl.vertProperties[i * gl.numProp + 0];
+            float y = gl.vertProperties[i * gl.numProp + 1];
+            float z = gl.vertProperties[i * gl.numProp + 2];
+            f << "v " << x << " " << y << " " << z << "\n";
+        }
+
+        // Per-face normals via cross product
+        for (int ti = 0; ti < nTris; ++ti) {
+            uint32_t i0 = gl.triVerts[ti * 3 + 0];
+            uint32_t i1 = gl.triVerts[ti * 3 + 1];
+            uint32_t i2 = gl.triVerts[ti * 3 + 2];
+            float ax = gl.vertProperties[i0*gl.numProp], ay = gl.vertProperties[i0*gl.numProp+1], az = gl.vertProperties[i0*gl.numProp+2];
+            float bx = gl.vertProperties[i1*gl.numProp], by = gl.vertProperties[i1*gl.numProp+1], bz = gl.vertProperties[i1*gl.numProp+2];
+            float cx = gl.vertProperties[i2*gl.numProp], cy = gl.vertProperties[i2*gl.numProp+1], cz = gl.vertProperties[i2*gl.numProp+2];
+            float ux = bx-ax, uy = by-ay, uz = bz-az;
+            float vx = cx-ax, vy = cy-ay, vz = cz-az;
+            float nx = uy*vz - uz*vy, ny = uz*vx - ux*vz, nz = ux*vy - uy*vx;
+            float len = std::sqrt(nx*nx + ny*ny + nz*nz);
+            if (len > 1e-9f) { nx /= len; ny /= len; nz /= len; }
+            f << "vn " << nx << " " << ny << " " << nz << "\n";
+        }
+
+        for (int ti = 0; ti < nTris; ++ti) {
+            uint32_t i0 = gl.triVerts[ti*3+0] + 1;  // OBJ is 1-indexed
+            uint32_t i1 = gl.triVerts[ti*3+1] + 1;
+            uint32_t i2 = gl.triVerts[ti*3+2] + 1;
+            int ni = ti + 1;
+            f << "f " << i0 << "//" << ni << " " << i1 << "//" << ni << " " << i2 << "//" << ni << "\n";
+        }
+
+        return true;
+    } catch (const std::exception& e) {
+        err = e.what();
+        return false;
+    }
 }
 
 } // namespace MeshCraft::Renderer

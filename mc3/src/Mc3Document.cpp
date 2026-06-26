@@ -28,6 +28,18 @@ Mc3Texture& Mc3Document::addTexture(Mc3Texture tex) {
     return textures[key];
 }
 
+Mc3SvgTexture& Mc3Document::addSvgTexture(Mc3SvgTexture tex) {
+    const std::string key = tex.id;
+    svgTextures[key] = std::move(tex);
+    return svgTextures[key];
+}
+
+Mc3EmbedGltf& Mc3Document::addEmbed(Mc3EmbedGltf embed) {
+    const std::string key = embed.id;
+    embeds[key] = std::move(embed);
+    return embeds[key];
+}
+
 std::shared_ptr<Mc3Object> Mc3Document::addObject(std::shared_ptr<Mc3Object> obj) {
     objects.push_back(obj);
     return obj;

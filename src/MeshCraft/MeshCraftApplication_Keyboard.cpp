@@ -41,7 +41,7 @@ void MeshCraftApplication::handleKeyboardShortcuts(const KeyboardState& ks, cons
     }
 
     // Undo / Redo
-    if (ctrl && justPressed(ks, prevKs, Keys::Z)) {
+    if (shortcutFired("edit.undo", ks, prevKs)) {
         if (!undoStack_.empty()) {
             redoStack_.push_back(deepCopyDoc(document_));
             if (static_cast<int>(redoStack_.size()) > kUndoMax)
@@ -55,7 +55,7 @@ void MeshCraftApplication::handleKeyboardShortcuts(const KeyboardState& ks, cons
         }
         return;
     }
-    if (ctrl && justPressed(ks, prevKs, Keys::Y)) {
+    if (shortcutFired("edit.redo", ks, prevKs)) {
         if (!redoStack_.empty()) {
             undoStack_.push_back(deepCopyDoc(document_));
             if (static_cast<int>(undoStack_.size()) > kUndoMax)
@@ -84,29 +84,26 @@ void MeshCraftApplication::handleKeyboardShortcuts(const KeyboardState& ks, cons
     }
 
     // File ops
-    if (ctrl && !shift && justPressed(ks, prevKs, Keys::N)) { confirmIfModified(PendingAction::NewScene);  return; }
-    if (ctrl && !shift && justPressed(ks, prevKs, Keys::O)) { confirmIfModified(PendingAction::OpenFile);  return; }
-    if (ctrl &&  shift && justPressed(ks, prevKs, Keys::S)) { saveFileAs(); return; }
-    if (ctrl && !shift && justPressed(ks, prevKs, Keys::S)) { saveFile();   return; }
-    if (ctrl && !shift && justPressed(ks, prevKs, Keys::E)) { exportGltf(); return; }
+    if (shortcutFired("file.new",    ks, prevKs)) { confirmIfModified(PendingAction::NewScene); return; }
+    if (shortcutFired("file.open",   ks, prevKs)) { confirmIfModified(PendingAction::OpenFile); return; }
+    if (shortcutFired("file.saveAs", ks, prevKs)) { saveFileAs(); return; }
+    if (shortcutFired("file.save",   ks, prevKs)) { saveFile();   return; }
+    if (shortcutFired("file.export", ks, prevKs)) { exportGltf(); return; }
 
     // Tool selection
-    if (!ctrl && !alt && justPressed(ks, prevKs, Keys::G)) { activeTool_ = ActiveTool::Move;   updateWindowTitle(); }
-    if (!ctrl && !alt && justPressed(ks, prevKs, Keys::R)) { activeTool_ = ActiveTool::Rotate; updateWindowTitle(); }
-    if (!ctrl && !alt && justPressed(ks, prevKs, Keys::S)) { activeTool_ = ActiveTool::Scale;  updateWindowTitle(); }
-    if (!ctrl && !alt && justPressed(ks, prevKs, Keys::Q)) { activeTool_ = ActiveTool::Select; updateWindowTitle(); }
+    if (shortcutFired("tool.move",   ks, prevKs)) { activeTool_ = ActiveTool::Move;   updateWindowTitle(); }
+    if (shortcutFired("tool.rotate", ks, prevKs)) { activeTool_ = ActiveTool::Rotate; updateWindowTitle(); }
+    if (shortcutFired("tool.scale",  ks, prevKs)) { activeTool_ = ActiveTool::Scale;  updateWindowTitle(); }
+    if (shortcutFired("tool.select", ks, prevKs)) { activeTool_ = ActiveTool::Select; updateWindowTitle(); }
 
     // Edge overlay toggle
-    if (alt && justPressed(ks, prevKs, Keys::W)) { showEdgeOverlay_ = !showEdgeOverlay_; return; }
+    if (shortcutFired("view.edgeOverlay", ks, prevKs)) { showEdgeOverlay_ = !showEdgeOverlay_; return; }
 
-    // Find & Replace names (Ctrl+H)
-    if (ctrl && !alt && justPressed(ks, prevKs, Keys::H)) {
-        findReplaceOpen_ = true;
-        return;
-    }
+    // Find & Replace names
+    if (shortcutFired("edit.findReplace", ks, prevKs)) { findReplaceOpen_ = true; return; }
 
-    // Hide selected (H) / show all hidden (Alt+H)
-    if (!ctrl && !alt && justPressed(ks, prevKs, Keys::H)) {
+    // Hide selected / show all hidden
+    if (shortcutFired("view.hideSelected", ks, prevKs)) {
         auto sel = selection_.selection();
         if (!sel.empty()) {
             pushUndo();
@@ -116,7 +113,7 @@ void MeshCraftApplication::handleKeyboardShortcuts(const KeyboardState& ks, cons
         }
         return;
     }
-    if (!ctrl && alt && justPressed(ks, prevKs, Keys::H)) {
+    if (shortcutFired("view.showAll", ks, prevKs)) {
         std::function<void(std::vector<std::shared_ptr<Mc3::Mc3Object>>&)> showAll;
         showAll = [&](auto& list) {
             for (auto& o : list) { o->visible = true; showAll(o->children); }
@@ -191,32 +188,26 @@ void MeshCraftApplication::handleKeyboardShortcuts(const KeyboardState& ks, cons
         return;
     }
 
-    // Command palette (Ctrl+P)
-    if (ctrl && !shift && justPressed(ks, prevKs, Keys::P)) {
-        cmdPaletteOpen_ = true;
-        return;
-    }
+    // Command palette
+    if (shortcutFired("ui.cmdPalette", ks, prevKs)) { cmdPaletteOpen_ = true; return; }
 
-    // Copy Properties to Selected (Ctrl+Shift+P)
+    // Copy Properties to Selected (Ctrl+Shift+P — not in keybind table, keep direct)
     if (ctrl && shift && justPressed(ks, prevKs, Keys::P)) {
         if (selection_.selection().size() >= 2) copyPropsOpen_ = true;
         return;
     }
 
-    // Batch rename (Ctrl+Shift+R)
-    if (ctrl && shift && justPressed(ks, prevKs, Keys::R)) {
+    // Batch rename
+    if (shortcutFired("edit.batchRename", ks, prevKs)) {
         if (selection_.hasSelection()) batchRenameOpen_ = true;
         return;
     }
 
-    // Isolate selection (Alt+I) — hide all non-selected; toggle again to restore
-    if (!ctrl && alt && justPressed(ks, prevKs, Keys::I)) {
-        toggleIsolate();
-        return;
-    }
+    // Isolate selection
+    if (shortcutFired("view.isolate", ks, prevKs)) { toggleIsolate(); return; }
 
-    // Lock / unlock selected (Ctrl+L)
-    if (ctrl && justPressed(ks, prevKs, Keys::L)) {
+    // Lock / unlock selected
+    if (shortcutFired("edit.lock", ks, prevKs)) {
         for (const auto& s : selection_.selection()) {
             if (lockedIds_.count(s->id)) lockedIds_.erase(s->id);
             else                          lockedIds_.insert(s->id);
@@ -225,10 +216,10 @@ void MeshCraftApplication::handleKeyboardShortcuts(const KeyboardState& ks, cons
     }
 
     // Timeline toggle
-    if (ctrl && justPressed(ks, prevKs, Keys::T)) { showTimeline_ = !showTimeline_; return; }
+    if (shortcutFired("view.timeline", ks, prevKs)) { showTimeline_ = !showTimeline_; return; }
 
-    // Animation play/pause (Space)
-    if (!ctrl && !alt && justPressed(ks, prevKs, Keys::Space)) {
+    // Animation play/pause
+    if (shortcutFired("anim.playPause", ks, prevKs)) {
         if (!currentActionName_.empty() && document_.actions.count(currentActionName_)) {
             animPlaying_ = !animPlaying_;
         }
@@ -262,13 +253,13 @@ void MeshCraftApplication::handleKeyboardShortcuts(const KeyboardState& ks, cons
     if (!ctrl && justPressed(ks, prevKs, Keys::F5)) { addPrimitive(Mc3::ObjectType::Plane);    return; }
 
     // Delete selected
-    if (justPressed(ks, prevKs, Keys::Delete)) { deleteSelected(); return; }
+    if (shortcutFired("edit.delete", ks, prevKs)) { deleteSelected(); return; }
 
     // Select parent (P)
     if (!ctrl && !alt && justPressed(ks, prevKs, Keys::P)) { selectParent(); return; }
 
-    // Camera: F = focus on selection or reset
-    if (!ctrl && justPressed(ks, prevKs, Keys::F)) {
+    // Camera: focus on selection or reset
+    if (shortcutFired("view.focus", ks, prevKs)) {
         if (selection_.hasSelection()) {
             float bMinX = 1e30f, bMinY = 1e30f, bMinZ = 1e30f;
             float bMaxX = -1e30f, bMaxY = -1e30f, bMaxZ = -1e30f;
@@ -316,7 +307,7 @@ void MeshCraftApplication::handleKeyboardShortcuts(const KeyboardState& ks, cons
     }
 
     // Select all
-    if (ctrl && justPressed(ks, prevKs, Keys::A)) {
+    if (shortcutFired("edit.selectAll", ks, prevKs)) {
         if (selection_.hasSelection()) {
             auto& sel0 = selection_.selection().front();
             bool isGroup = sel0->type == Mc3::ObjectType::Group   ||
@@ -337,7 +328,7 @@ void MeshCraftApplication::handleKeyboardShortcuts(const KeyboardState& ks, cons
         return;
     }
 
-    if (ctrl && justPressed(ks, prevKs, Keys::I)) {
+    if (shortcutFired("edit.invertSel", ks, prevKs)) {
         std::function<void(std::vector<std::shared_ptr<Mc3::Mc3Object>>&)> invertWalk;
         invertWalk = [&](auto& list) {
             for (auto& o : list) {
@@ -350,7 +341,7 @@ void MeshCraftApplication::handleKeyboardShortcuts(const KeyboardState& ks, cons
         updateWindowTitle();
         return;
     }
-    if (ctrl && !shift && justPressed(ks, prevKs, Keys::D)) { duplicateSelected(); return; }
+    if (shortcutFired("edit.duplicate", ks, prevKs) && !shift) { duplicateSelected(); return; }
     if (ctrl &&  shift && justPressed(ks, prevKs, Keys::D)) {
         duplicateSelected();
         for (const auto& s : selection_.selection())
@@ -361,11 +352,11 @@ void MeshCraftApplication::handleKeyboardShortcuts(const KeyboardState& ks, cons
         setStatusMsg(dbuf);
         return;
     }
-    if (ctrl && justPressed(ks, prevKs, Keys::C)) { copySelected();   return; }
-    if (ctrl && justPressed(ks, prevKs, Keys::X)) { cutSelected();    return; }
-    if (ctrl && justPressed(ks, prevKs, Keys::V)) { pasteClipboard(); return; }
-    if (ctrl && !shift && justPressed(ks, prevKs, Keys::G)) { groupSelected();   return; }
-    if (ctrl &&  shift && justPressed(ks, prevKs, Keys::G)) { ungroupSelected(); return; }
+    if (shortcutFired("edit.copy",    ks, prevKs)) { copySelected();   return; }
+    if (shortcutFired("edit.cut",     ks, prevKs)) { cutSelected();    return; }
+    if (shortcutFired("edit.paste",   ks, prevKs)) { pasteClipboard(); return; }
+    if (shortcutFired("edit.group",   ks, prevKs)) { groupSelected();   return; }
+    if (shortcutFired("edit.ungroup", ks, prevKs)) { ungroupSelected(); return; }
 
     // Reorder in hierarchy (Ctrl+Up / Ctrl+Down — move object among siblings)
     if (ctrl && !shift && selection_.hasSelection() &&

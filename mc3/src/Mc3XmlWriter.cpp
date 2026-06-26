@@ -436,8 +436,8 @@ void Mc3XmlWriter::write(const Mc3Document& doc, const std::filesystem::path& pa
         root->InsertEndChild(cEl);
     }
 
-    // Textures — skip entries that came from <include> files
-    if (!doc.textures.empty()) {
+    // Textures (bitmap + SVG) — skip entries that came from <include> files
+    if (!doc.textures.empty() || !doc.svgTextures.empty()) {
         XMLElement* tEl = xml.NewElement("textures");
         for (const auto& [id, tex] : doc.textures) {
             if (doc.includedTextures.count(id)) continue;
@@ -455,6 +455,19 @@ void Mc3XmlWriter::write(const Mc3Document& doc, const std::filesystem::path& pa
                 te->SetAttribute("filter", tex.filter.c_str());
             if (tex.colorSpace != "srgb")
                 te->SetAttribute("color_space", tex.colorSpace.c_str());
+            tEl->InsertEndChild(te);
+        }
+        for (const auto& [id, svg] : doc.svgTextures) {
+            XMLElement* te = xml.NewElement("texture");
+            te->SetAttribute("id",   id.c_str());
+            te->SetAttribute("type", "svg");
+            if (!svg.src.empty()) {
+                te->SetAttribute("src", svg.src.c_str());
+            } else if (!svg.inlineContent.empty()) {
+                XMLText* t = xml.NewText(svg.inlineContent.c_str());
+                t->SetCData(true);
+                te->InsertEndChild(t);
+            }
             tEl->InsertEndChild(te);
         }
         root->InsertEndChild(tEl);
@@ -493,6 +506,25 @@ void Mc3XmlWriter::write(const Mc3Document& doc, const std::filesystem::path& pa
             mEl->InsertEndChild(me);
         }
         root->InsertEndChild(mEl);
+    }
+
+    // Embedded GLTF assets
+    if (!doc.embeds.empty()) {
+        XMLElement* eEl = xml.NewElement("embeds");
+        for (const auto& [id, em] : doc.embeds) {
+            XMLElement* ee = xml.NewElement("embed");
+            ee->SetAttribute("type", "gltf");
+            ee->SetAttribute("id",   id.c_str());
+            if (!em.src.empty()) {
+                ee->SetAttribute("src", em.src.c_str());
+            } else if (!em.base64Content.empty()) {
+                XMLText* t = xml.NewText(em.base64Content.c_str());
+                t->SetCData(true);
+                ee->InsertEndChild(t);
+            }
+            eEl->InsertEndChild(ee);
+        }
+        root->InsertEndChild(eEl);
     }
 
     // Definitions — skip entries that came from <include> files

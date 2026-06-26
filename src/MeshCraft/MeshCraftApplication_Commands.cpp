@@ -1,5 +1,6 @@
 #include "MeshCraft/MeshCraftApplication.hpp"
 #include "MeshCraftPrivate.hpp"
+#include "EditorAlgorithms.hpp"
 
 #include <SDL3/SDL.h>
 
@@ -91,13 +92,16 @@ void MeshCraftApplication::addPrimitive(Mc3::ObjectType type) {
             sel0->children.push_back(obj);
             selection_.clear(); selection_.select(obj);
             modified_ = true;
-            updateWindowTitle(); return;
+            updateWindowTitle();
+            recordStep("add", {objectTypeName(type)});
+            return;
         }
     }
     document_.objects.push_back(obj);
     selection_.clear(); selection_.select(obj);
     modified_ = true;
     updateWindowTitle();
+    recordStep("add", {objectTypeName(type)});
 }
 
 // (removeFromList is defined in MeshCraftPrivate.hpp)
@@ -111,6 +115,7 @@ void MeshCraftApplication::deleteSelected() {
     selection_.clear();
     modified_ = true;
     updateWindowTitle();
+    recordStep("delete");
 }
 void MeshCraftApplication::toggleIsolate() {
     std::function<void(std::vector<std::shared_ptr<Mc3::Mc3Object>>&)> walk;
@@ -194,6 +199,7 @@ void MeshCraftApplication::duplicateSelected() {
         for (auto& o : newObjs) selection_.select(o);
         modified_ = true;
         updateWindowTitle();
+        recordStep("duplicate");
     }
 }
 
@@ -266,6 +272,7 @@ void MeshCraftApplication::groupSelected() {
     selection_.clear(); selection_.select(group);
     modified_ = true;
     updateWindowTitle();
+    recordStep("group");
 }
 
 void MeshCraftApplication::ungroupSelected() {
@@ -285,6 +292,7 @@ void MeshCraftApplication::ungroupSelected() {
     for (auto& child : children) selection_.select(child);
     modified_ = true;
     updateWindowTitle();
+    recordStep("ungroup");
 }
 
 // ---------------------------------------------------------------------------
@@ -317,7 +325,7 @@ void MeshCraftApplication::pushUndo() {
     if (static_cast<int>(undoStack_.size()) > kUndoMax)
         undoStack_.erase(undoStack_.begin());
     redoStack_.clear();
-    sceneRenderer_->clearCsgCache();
+    // CSG cache no longer cleared here: hash-based invalidation handles it (K1)
 }
 
 // ---------------------------------------------------------------------------
@@ -397,20 +405,13 @@ void MeshCraftApplication::batchRenameSelected() {
     auto& sel = selection_.selection();
     if (sel.empty()) return;
     pushUndo();
-    int idx = 1;
-    for (const auto& s : sel) {
-        if (lockedIds_.count(s->id)) { ++idx; continue; }
-        std::string newName = applyRenamePattern(batchRenameBuf_, s->name, idx,
-                                                  objectTypeName(s->type));
-        if (!newName.empty()) s->name = newName;
-        ++idx;
-    }
+    int renamed = batchRenameObjects(sel, lockedIds_, batchRenameBuf_);
     modified_ = true;
     updateWindowTitle();
     char msg[64];
-    std::snprintf(msg, sizeof(msg), "Renamed %d object(s)",
-                  static_cast<int>(sel.size()));
+    std::snprintf(msg, sizeof(msg), "Renamed %d object(s)", renamed);
     setStatusMsg(msg);
+    recordStep("batch_rename", {batchRenameBuf_});
 }
 
 // ---------------------------------------------------------------------------
@@ -611,6 +612,40 @@ void MeshCraftApplication::alignToObject() {
                  " object(s) to " + src->name, false, 2.0f);
 }
 
+// H14: Scale selected objects around their group center
+void MeshCraftApplication::groupScaleSelected() {
+    const auto& sel = selection_.selection();
+    if (sel.empty()) return;
+    const float f = groupScaleFactor_;
+
+    // Compute group center (average of positions)
+    float cx = 0.f, cy = 0.f, cz = 0.f;
+    for (const auto& o : sel) {
+        cx += o->transform.position[0];
+        cy += o->transform.position[1];
+        cz += o->transform.position[2];
+    }
+    const float n = static_cast<float>(sel.size());
+    cx /= n; cy /= n; cz /= n;
+
+    pushUndo();
+    for (const auto& o : sel) {
+        if (lockedIds_.count(o->id)) continue;
+        // Translate position away from center by factor
+        o->transform.position[0] = cx + (o->transform.position[0] - cx) * f;
+        o->transform.position[1] = cy + (o->transform.position[1] - cy) * f;
+        o->transform.position[2] = cz + (o->transform.position[2] - cz) * f;
+        // Also scale the object itself
+        o->transform.scale[0] *= f;
+        o->transform.scale[1] *= f;
+        o->transform.scale[2] *= f;
+    }
+    modified_ = true; updateWindowTitle();
+    setStatusMsg("Group scale ×" + std::to_string(f).substr(0, 5) +
+                 " on " + std::to_string(sel.size()) + " object(s)", false, 2.0f);
+    recordStep("group_scale", {std::to_string(f)});
+}
+
 void MeshCraftApplication::selectChildren() {
     if (!selection_.hasSelection()) return;
     const auto& sel0 = selection_.selection().front();
@@ -675,67 +710,23 @@ void MeshCraftApplication::findReplaceNames() {
     const std::string replStr(replaceBuf_);
     if (findStr.empty()) return;
 
-    // Build lowercase needle for case-insensitive mode
-    std::string findLow = findStr;
-    if (!findCaseSensitive_)
-        for (auto& c : findLow) c = (char)std::tolower((unsigned char)c);
+    // Build selected-ID set for selectedOnly mode
+    std::set<std::string> selectedIds;
+    if (findSelectedOnly_)
+        for (const auto& s : selection_.selection()) selectedIds.insert(s->id);
 
-    // Returns modified string, or src unchanged if no match
-    auto replaceAll = [&](const std::string& src) -> std::string {
-        std::string haystack = src;
-        std::string needle   = findStr;
-        if (!findCaseSensitive_) {
-            haystack.resize(src.size());
-            for (size_t i = 0; i < src.size(); ++i)
-                haystack[i] = (char)std::tolower((unsigned char)src[i]);
-            needle = findLow;
-        }
-        std::string result;
-        size_t lastPos = 0, pos;
-        bool found = false;
-        while ((pos = haystack.find(needle, lastPos)) != std::string::npos) {
-            result += src.substr(lastPos, pos - lastPos);
-            result += replStr;
-            lastPos = pos + needle.size();
-            found = true;
-        }
-        if (!found) return src;
-        result += src.substr(lastPos);
-        return result;
-    };
-
-    // Count eligible matches (skip locked objects)
-    int matchCount = 0;
-    std::function<void(const std::vector<std::shared_ptr<Mc3::Mc3Object>>&)> countWalk;
-    countWalk = [&](const auto& list) {
-        for (const auto& o : list) {
-            if (!lockedIds_.count(o->id)) {
-                bool inScope = !findSelectedOnly_ || selection_.isSelected(o.get());
-                if (inScope && replaceAll(o->name) != o->name) ++matchCount;
-            }
-            countWalk(o->children);
-        }
-    };
-    countWalk(document_.objects);
-
+    int matchCount = countFindReplaceMatches(document_.objects, lockedIds_,
+                                             findStr, replStr, findCaseSensitive_,
+                                             findSelectedOnly_, selectedIds);
     if (matchCount == 0) {
         setStatusMsg("No matches found for \"" + findStr + "\"", true, 2.5f);
         return;
     }
 
     pushUndo();
-    std::function<void(std::vector<std::shared_ptr<Mc3::Mc3Object>>&)> applyWalk;
-    applyWalk = [&](auto& list) {
-        for (auto& o : list) {
-            if (!lockedIds_.count(o->id)) {
-                bool inScope = !findSelectedOnly_ || selection_.isSelected(o.get());
-                if (inScope) o->name = replaceAll(o->name);
-            }
-            applyWalk(o->children);
-        }
-    };
-    applyWalk(document_.objects);
-
+    applyFindReplaceNames(document_.objects, lockedIds_,
+                          findStr, replStr, findCaseSensitive_,
+                          findSelectedOnly_, selectedIds);
     modified_ = true;
     updateWindowTitle();
     char msg[64];
@@ -749,40 +740,13 @@ void MeshCraftApplication::findReplaceNames() {
 
 void MeshCraftApplication::arrayDuplicate() {
     if (!selection_.hasSelection()) return;
-    const int   count   = std::max(2, arrayDupCount_);
-    const int   axis    = std::clamp(arrayDupAxis_, 0, 2);
-    const float spacing = arrayDupSpacing_;
-
     auto prev = selection_.selection();
     pushUndo();
-    std::vector<std::shared_ptr<Mc3::Mc3Object>> newObjs;
 
-    for (const auto& src : prev) {
-        auto* parentList = findParentList(document_.objects, src.get());
-        if (!parentList) continue;
-        auto it = std::find_if(parentList->begin(), parentList->end(),
-            [&](const auto& o){ return o.get() == src.get(); });
-        if (it == parentList->end()) continue;
-        auto insertIt = it + 1;
-
-        const float basePos = src->transform.position[axis];
-        for (int i = 1; i < count; ++i) {
-            auto copy = deepCopyObject(*src);
-            // Unique id/name per copy
-            copy->name = src->name + "_" + std::to_string(i);
-            copy->id   = src->id + "_arr" + std::to_string(i);
-            if (arrayDupRelative_)
-                copy->transform.position[axis] = basePos + static_cast<float>(i) * spacing;
-            else
-                copy->transform.position[axis] = static_cast<float>(i) * spacing;
-            insertIt = parentList->insert(insertIt, copy);
-            ++insertIt;
-            newObjs.push_back(copy);
-        }
-    }
-
+    auto newObjs = arrayDuplicateObjects(document_.objects, prev,
+                                          arrayDupCount_, arrayDupAxis_,
+                                          arrayDupSpacing_, arrayDupRelative_);
     if (!newObjs.empty()) {
-        // Select originals + all new copies
         selection_.clear();
         for (const auto& src : prev) selection_.select(src);
         for (auto& o : newObjs) selection_.select(o);
@@ -792,6 +756,9 @@ void MeshCraftApplication::arrayDuplicate() {
         std::snprintf(msg, sizeof(msg), "Array: %d object(s) created",
                       static_cast<int>(newObjs.size()));
         setStatusMsg(msg);
+        recordStep("linear_array", {std::to_string(std::max(2, arrayDupCount_)),
+                                    std::to_string(std::clamp(arrayDupAxis_, 0, 2)),
+                                    std::to_string(arrayDupSpacing_)});
     }
 }
 

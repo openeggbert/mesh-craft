@@ -561,15 +561,40 @@
 
   <!-- ── Textures ─────────────────────────────────────────────── -->
 
-  <xs:complexType name="textureElementType">
+  <!-- mixed="true" allows inline SVG CDATA content -->
+  <xs:complexType name="textureElementType" mixed="true">
     <xs:attribute name="id"          type="xs:ID"           use="required"/>
-    <xs:attribute name="uri"         type="xs:anyURI"        use="required"/>
+    <!-- type: "bitmap" (default) or "svg" -->
+    <xs:attribute name="type"        type="xs:string"        default="bitmap"/>
+    <!-- bitmap textures: uri points to image file -->
+    <xs:attribute name="uri"         type="xs:anyURI"/>
+    <!-- SVG textures: src points to .svg file; omit for inline CDATA content -->
+    <xs:attribute name="src"         type="xs:anyURI"/>
     <xs:attribute name="wrap_u"      type="wrapModeType"     default="repeat"/>
     <xs:attribute name="wrap_v"      type="wrapModeType"     default="repeat"/>
     <xs:attribute name="filter"      type="filterType"       default="linear"/>
     <xs:attribute name="color_space" type="colorSpaceType"   default="srgb"/>
     <xs:attribute name="mip_maps"    type="xs:boolean"       default="true"/>
   </xs:complexType>
+
+  <!-- ── Embeds ───────────────────────────────────────────────── -->
+
+  <!-- mixed="true" allows inline base64 GLB content -->
+  <xs:complexType name="embedElementType" mixed="true">
+    <xs:attribute name="id"   type="xs:ID"     use="required"/>
+    <!-- type: currently only "gltf" is defined -->
+    <xs:attribute name="type" type="xs:string" use="required"/>
+    <!-- src: path to external .glb file; omit for inline base64 content -->
+    <xs:attribute name="src"  type="xs:anyURI"/>
+  </xs:complexType>
+
+  <xs:complexType name="embedsType">
+    <xs:sequence>
+      <xs:element name="embed" type="embedElementType" minOccurs="0" maxOccurs="unbounded"/>
+    </xs:sequence>
+  </xs:complexType>
+
+  <!-- ── Textures ─────────────────────────────────────────────── -->
 
   <xs:complexType name="texturesType">
     <xs:sequence>
@@ -707,6 +732,7 @@
         <xs:element name="cameras"     type="camerasType"          minOccurs="0"/>
         <xs:element name="textures"    type="texturesType"         minOccurs="0"/>
         <xs:element name="materials"   type="materialsType"        minOccurs="0"/>
+        <xs:element name="embeds"      type="embedsType"           minOccurs="0"/>
         <xs:element name="definitions" type="definitionsType"      minOccurs="0"/>
         <xs:element name="objects"     type="objectsContainerType" minOccurs="0"/>
         <xs:element name="actions"     type="mc3ActionsType"       minOccurs="0"/>

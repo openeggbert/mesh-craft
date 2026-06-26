@@ -1,5 +1,6 @@
 #include "MeshCraft/MeshCraftApplication.hpp"
 #include "MeshCraftPrivate.hpp"
+#include "MeshCraft/Scene/SceneHierarchyPanel.hpp"
 
 #include "MeshCraft/Mcb/McbReader.hpp"
 #include "MeshCraft/Mcb/McbWriter.hpp"
@@ -552,7 +553,7 @@ void MeshCraftApplication::drawDialogs()
                             if (clicked) {
                                 selection_.clear();
                                 selection_.select(obj);
-                                hierarchyScrollToId_ = obj->id;
+                                hierarchyPanel_->scrollToObject(obj->id);
                                 updateWindowTitle();
                                 closePalette = true;
                             }
@@ -753,6 +754,48 @@ void MeshCraftApplication::drawDialogs()
         if (!canApply) ImGui::BeginDisabled();
         if (ImGui::Button("Create Array", ImVec2(130, 0))) {
             arrayDuplicate();
+            ImGui::CloseCurrentPopup();
+        }
+        if (!canApply) ImGui::EndDisabled();
+        ImGui::SameLine();
+        if (ImGui::Button("Cancel", ImVec2(90, 0)) || ImGui::IsKeyPressed(ImGuiKey_Escape, false))
+            ImGui::CloseCurrentPopup();
+        ImGui::EndPopup();
+    }
+
+    // -----------------------------------------------------------------------
+    // Group Scale dialog (H14)
+    // -----------------------------------------------------------------------
+    if (groupScaleOpen_) {
+        ImGui::OpenPopup("Group Scale##grpscldlg");
+        groupScaleOpen_ = false;
+    }
+    if (ImGui::BeginPopupModal("Group Scale##grpscldlg", nullptr,
+                               ImGuiWindowFlags_AlwaysAutoResize)) {
+        int selCount = static_cast<int>(selection_.selection().size());
+        ImGui::Text("%d object(s) selected", selCount);
+        ImGui::TextDisabled("Scales positions and sizes around the group center.");
+        ImGui::Separator();
+
+        ImGui::TextColored(ImVec4(0.55f, 1.0f, 0.55f, 1.0f), "Scale factor");
+        ImGui::SetNextItemWidth(200);
+        ImGui::DragFloat("##grpsclfac", &groupScaleFactor_, 0.01f, 0.01f, 100.0f, "× %.3f");
+        ImGui::SameLine();
+        if (ImGui::SmallButton("×2"))   groupScaleFactor_ = 2.0f;
+        ImGui::SameLine();
+        if (ImGui::SmallButton("×0.5")) groupScaleFactor_ = 0.5f;
+        ImGui::SameLine();
+        if (ImGui::SmallButton("×1"))   groupScaleFactor_ = 1.0f;
+
+        ImGui::TextDisabled("Moves objects and scales them proportionally.");
+        ImGui::TextDisabled("Locked objects are skipped.");
+
+        ImGui::Spacing();
+        ImGui::Separator();
+        bool canApply = selCount >= 2 && groupScaleFactor_ > 0.f;
+        if (!canApply) ImGui::BeginDisabled();
+        if (ImGui::Button("Apply", ImVec2(100, 0))) {
+            groupScaleSelected();
             ImGui::CloseCurrentPopup();
         }
         if (!canApply) ImGui::EndDisabled();
@@ -1321,8 +1364,235 @@ void MeshCraftApplication::drawDialogs()
 
         ImGui::EndChild();
         ImGui::Separator();
-        if (ImGui::Button("Close", ImVec2(120, 0)) || ImGui::IsKeyPressed(ImGuiKey_Escape, false))
+        if (ImGui::Button("Edit Bindings…", ImVec2(130, 0))) keybindOpen_ = true;
+        ImGui::SameLine();
+        if (ImGui::Button("Close", ImVec2(100, 0)) || ImGui::IsKeyPressed(ImGuiKey_Escape, false))
             ImGui::CloseCurrentPopup();
+        ImGui::EndPopup();
+    }
+
+    // -----------------------------------------------------------------------
+    // H9: Keybind editor dialog
+    // -----------------------------------------------------------------------
+    if (keybindOpen_) {
+        ImGui::OpenPopup("Edit Keybindings##kbeditdlg");
+        keybindOpen_ = false;
+    }
+    if (ImGui::BeginPopupModal("Edit Keybindings##kbeditdlg", nullptr, ImGuiWindowFlags_NoResize)) {
+        ImGui::SetNextWindowSize(ImVec2(500, 560));
+        ImGui::Text("Click a binding and press a new key combination to rebind.");
+        ImGui::TextDisabled("Modifiers: hold Ctrl/Shift/Alt before pressing the key.");
+        ImGui::Separator();
+
+        // Ordered action list for display
+        static const struct { const char* id; const char* label; } kActions[] = {
+            {"file.new",          "New Scene"},
+            {"file.open",         "Open..."},
+            {"file.save",         "Save"},
+            {"file.saveAs",       "Save As..."},
+            {"file.export",       "Export GLB"},
+            {"edit.undo",         "Undo"},
+            {"edit.redo",         "Redo"},
+            {"edit.cut",          "Cut"},
+            {"edit.copy",         "Copy"},
+            {"edit.paste",        "Paste"},
+            {"edit.duplicate",    "Duplicate"},
+            {"edit.delete",       "Delete"},
+            {"edit.selectAll",    "Select All"},
+            {"edit.invertSel",    "Invert Selection"},
+            {"edit.group",        "Group"},
+            {"edit.ungroup",      "Ungroup"},
+            {"edit.batchRename",  "Batch Rename"},
+            {"edit.findReplace",  "Find & Replace Names"},
+            {"edit.lock",         "Lock/Unlock Selected"},
+            {"view.timeline",     "Toggle Timeline"},
+            {"view.hideSelected", "Hide Selected"},
+            {"view.showAll",      "Show All Hidden"},
+            {"view.isolate",      "Isolate Selection"},
+            {"view.edgeOverlay",  "Edge Overlay"},
+            {"view.focus",        "Focus Camera (F)"},
+            {"tool.select",       "Tool: Select"},
+            {"tool.move",         "Tool: Move"},
+            {"tool.scale",        "Tool: Scale"},
+            {"tool.rotate",       "Tool: Rotate"},
+            {"anim.playPause",    "Play/Pause Animation"},
+            {"ui.cmdPalette",     "Command Palette"},
+            {"ui.screenshot",     "Save Screenshot"},
+        };
+
+        ImGui::BeginChild("##kbeditscroll", ImVec2(480, 430), false);
+        for (const auto& a : kActions) {
+            ImGui::PushID(a.id);
+            const KeyBind& bind = keybindings_[a.id];
+            bool capturing = (keyCaptureAction_ == a.id);
+
+            // Action label
+            ImGui::TextUnformatted(a.label);
+            ImGui::SameLine(220);
+
+            // Current binding display / capture button
+            std::string btnLabel = capturing ? "[Press key…]" : bind.toLabel();
+            if (capturing)
+                ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.6f, 0.2f, 0.2f, 1.f));
+            if (ImGui::SmallButton(btnLabel.c_str()))
+                keyCaptureAction_ = capturing ? "" : a.id;
+            if (capturing)
+                ImGui::PopStyleColor();
+            if (ImGui::IsItemHovered()) ImGui::SetTooltip("Click to start capturing, press any key combo");
+
+            // Clear button
+            ImGui::SameLine();
+            if (ImGui::SmallButton("×##clr")) {
+                keybindings_[a.id] = KeyBind{};
+                if (keyCaptureAction_ == a.id) keyCaptureAction_.clear();
+            }
+            if (ImGui::IsItemHovered()) ImGui::SetTooltip("Clear this binding");
+
+            ImGui::PopID();
+        }
+        ImGui::EndChild();
+
+        // Key capture: check if capturing and a key was pressed
+        if (!keyCaptureAction_.empty()) {
+            // ImGuiKey → XNA Keys:: mapping for common keys
+            static const struct { ImGuiKey imgui; int xna; } kImGuiToXna[] = {
+                {ImGuiKey_A,65},{ImGuiKey_B,66},{ImGuiKey_C,67},{ImGuiKey_D,68},
+                {ImGuiKey_E,69},{ImGuiKey_F,70},{ImGuiKey_G,71},{ImGuiKey_H,72},
+                {ImGuiKey_I,73},{ImGuiKey_J,74},{ImGuiKey_K,75},{ImGuiKey_L,76},
+                {ImGuiKey_M,77},{ImGuiKey_N,78},{ImGuiKey_O,79},{ImGuiKey_P,80},
+                {ImGuiKey_Q,81},{ImGuiKey_R,82},{ImGuiKey_S,83},{ImGuiKey_T,84},
+                {ImGuiKey_U,85},{ImGuiKey_V,86},{ImGuiKey_W,87},{ImGuiKey_X,88},
+                {ImGuiKey_Y,89},{ImGuiKey_Z,90},
+                {ImGuiKey_F1,112},{ImGuiKey_F2,113},{ImGuiKey_F3,114},{ImGuiKey_F4,115},
+                {ImGuiKey_F5,116},{ImGuiKey_F6,117},{ImGuiKey_F7,118},{ImGuiKey_F8,119},
+                {ImGuiKey_F9,120},{ImGuiKey_F10,121},{ImGuiKey_F11,122},{ImGuiKey_F12,123},
+                {ImGuiKey_Delete,46},{ImGuiKey_Space,32},{ImGuiKey_Tab,9},
+                {ImGuiKey_UpArrow,38},{ImGuiKey_DownArrow,40},
+                {ImGuiKey_LeftArrow,37},{ImGuiKey_RightArrow,39},
+                {ImGuiKey_PageUp,33},{ImGuiKey_PageDown,34},
+                {ImGuiKey_Home,36},{ImGuiKey_End,35},{ImGuiKey_Insert,45},
+                {ImGuiKey_Keypad1,97},{ImGuiKey_Keypad2,98},{ImGuiKey_Keypad3,99},
+                {ImGuiKey_Keypad4,100},{ImGuiKey_Keypad5,101},{ImGuiKey_Keypad6,102},
+                {ImGuiKey_Keypad7,103},{ImGuiKey_Keypad8,104},{ImGuiKey_Keypad9,105},
+                {ImGuiKey_Keypad0,96},
+            };
+            auto& io = ImGui::GetIO();
+            for (const auto& m : kImGuiToXna) {
+                if (ImGui::IsKeyPressed(m.imgui, false)) {
+                    KeyBind nb;
+                    nb.ctrl  = io.KeyCtrl;
+                    nb.shift = io.KeyShift;
+                    nb.alt   = io.KeyAlt;
+                    nb.key   = m.xna;
+                    keybindings_[keyCaptureAction_] = nb;
+                    keyCaptureAction_.clear();
+                    saveKeybindings();
+                    break;
+                }
+            }
+            // Escape cancels capture
+            if (ImGui::IsKeyPressed(ImGuiKey_Escape, false))
+                keyCaptureAction_.clear();
+        }
+
+        ImGui::Separator();
+        if (ImGui::Button("Reset to Defaults", ImVec2(140, 0))) {
+            keybindings_.clear();
+            initDefaultBindings();
+            saveKeybindings();
+        }
+        ImGui::SameLine();
+        if (ImGui::Button("Close", ImVec2(100, 0)) || ImGui::IsKeyPressed(ImGuiKey_Escape, false)) {
+            keyCaptureAction_.clear();
+            saveKeybindings();
+            ImGui::CloseCurrentPopup();
+        }
+        ImGui::EndPopup();
+    }
+
+    // -----------------------------------------------------------------------
+    // H12: Macro Recorder dialog
+    // -----------------------------------------------------------------------
+    if (macroOpen_) {
+        ImGui::OpenPopup("Macro Recorder##macrodlg");
+        macroOpen_ = false;
+    }
+    if (ImGui::BeginPopupModal("Macro Recorder##macrodlg", nullptr,
+                               ImGuiWindowFlags_AlwaysAutoResize)) {
+        // Status indicator
+        if (isRecording_) {
+            ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.f, 0.35f, 0.35f, 1.f));
+            ImGui::Text("REC  %d step(s) captured", static_cast<int>(macroSteps_.size()));
+            ImGui::PopStyleColor();
+        } else {
+            ImGui::Text("%d step(s) recorded", static_cast<int>(macroSteps_.size()));
+        }
+        ImGui::Separator();
+
+        // Record / Stop toggle
+        if (isRecording_) {
+            if (ImGui::Button("Stop", ImVec2(100, 0))) {
+                isRecording_ = false;
+                setStatusMsg("Recording stopped", false, 2.f);
+            }
+        } else {
+            if (ImGui::Button("Record", ImVec2(100, 0))) {
+                macroSteps_.clear();
+                isRecording_ = true;
+                setStatusMsg("Recording started — edit the scene, then Stop", false, 3.f);
+            }
+        }
+        ImGui::SameLine();
+
+        // Play
+        bool canPlay = !macroSteps_.empty() && !isRecording_;
+        if (!canPlay) ImGui::BeginDisabled();
+        if (ImGui::Button("Play", ImVec2(100, 0))) {
+            ImGui::CloseCurrentPopup();
+            playMacro();
+        }
+        if (!canPlay) ImGui::EndDisabled();
+        ImGui::SameLine();
+
+        // Clear
+        if (ImGui::Button("Clear", ImVec2(80, 0))) {
+            macroSteps_.clear();
+            isRecording_ = false;
+        }
+
+        // Step list
+        ImGui::Separator();
+        ImGui::BeginChild("##macrosteps", ImVec2(440, 180), true);
+        if (macroSteps_.empty()) {
+            ImGui::TextDisabled("(no steps)");
+            ImGui::TextDisabled("Press Record, then edit the scene,");
+            ImGui::TextDisabled("then Stop. Play repeats the sequence.");
+        } else {
+            for (int i = 0; i < static_cast<int>(macroSteps_.size()); ++i) {
+                const auto& step = macroSteps_[static_cast<size_t>(i)];
+                std::string line = std::to_string(i + 1) + ". " + step.verb;
+                for (const auto& a : step.args) { line += ' '; line += a; }
+                ImGui::TextUnformatted(line.c_str());
+            }
+        }
+        ImGui::EndChild();
+
+        // Save / Load
+        ImGui::Separator();
+        ImGui::TextDisabled("File path (.mc3macro):");
+        ImGui::SetNextItemWidth(310);
+        ImGui::InputText("##macrofile", macroFileBuf_, sizeof(macroFileBuf_));
+        ImGui::SameLine();
+        if (ImGui::Button("Save##macrosave", ImVec2(55, 0))) saveMacro(macroFileBuf_);
+        ImGui::SameLine();
+        if (ImGui::Button("Load##macroload", ImVec2(55, 0))) loadMacro(macroFileBuf_);
+
+        ImGui::Separator();
+        if (ImGui::Button("Close", ImVec2(100, 0)) ||
+            ImGui::IsKeyPressed(ImGuiKey_Escape, false)) {
+            isRecording_ = false;
+            ImGui::CloseCurrentPopup();
+        }
         ImGui::EndPopup();
     }
 
@@ -1567,8 +1837,23 @@ void MeshCraftApplication::drawDialogs()
         ImGui::SliderFloat("Scale##sns", &snapScale_, 0.01f, 1.0f, "%.2f");
 
         ImGui::Spacing();
-        if (ImGui::Button("Close", ImVec2(100, 0)) || ImGui::IsKeyPressed(ImGuiKey_Escape, false))
+        ImGui::SeparatorText("Theme");
+        {
+            static const char* kThemes[] = { "Dark", "Light", "Classic" };
+            for (int i = 0; i < 3; ++i) {
+                if (i > 0) ImGui::SameLine();
+                bool active = (prefTheme_ == i);
+                if (active) ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.20f, 0.45f, 0.20f, 1.f));
+                if (ImGui::SmallButton(kThemes[i])) { prefTheme_ = i; applyTheme(); }
+                if (active) ImGui::PopStyleColor();
+            }
+        }
+
+        ImGui::Spacing();
+        if (ImGui::Button("Close", ImVec2(100, 0)) || ImGui::IsKeyPressed(ImGuiKey_Escape, false)) {
+            savePrefs();
             ImGui::CloseCurrentPopup();
+        }
         ImGui::EndPopup();
     }
 
@@ -1733,6 +2018,46 @@ void MeshCraftApplication::drawDialogs()
         ImGui::EndPopup();
     }
 
+    // -----------------------------------------------------------------------
+    // K3: CSG mesh export dialog
+    // -----------------------------------------------------------------------
+    if (csgExportOpen_) {
+        ImGui::OpenPopup("Export CSG Mesh##csgexpdlg");
+        csgExportOpen_ = false;
+    }
+    if (ImGui::BeginPopupModal("Export CSG Mesh##csgexpdlg", nullptr,
+                               ImGuiWindowFlags_AlwaysAutoResize)) {
+        ImGui::SeparatorText("Output path (.obj)");
+        ImGui::SetNextItemWidth(420);
+        if (ImGui::IsWindowAppearing()) ImGui::SetKeyboardFocusHere();
+        bool enter = ImGui::InputText("##csgoutpath", csgExportBuf_, sizeof(csgExportBuf_),
+                                      ImGuiInputTextFlags_EnterReturnsTrue);
+
+        if (csgExportErr_[0])
+            ImGui::TextColored(ImVec4(1.f, 0.3f, 0.3f, 1.f), "%s", csgExportErr_);
+
+        ImGui::Spacing();
+        bool canExp = csgExportBuf_[0] != '\0' && csgExportObj_ != nullptr;
+        if (!canExp) ImGui::BeginDisabled();
+        if ((enter || ImGui::Button("Export", ImVec2(100, 0))) && canExp) {
+            csgExportErr_[0] = '\0';
+            std::string err;
+            if (sceneRenderer_->exportCsgMesh(*csgExportObj_, document_, csgExportBuf_, err)) {
+                setStatusMsg("Exported " +
+                    std::filesystem::path(csgExportBuf_).filename().string(), false, 2.0f);
+                ImGui::CloseCurrentPopup();
+            } else {
+                std::strncpy(csgExportErr_, err.c_str(), sizeof(csgExportErr_) - 1);
+                csgExportErr_[sizeof(csgExportErr_) - 1] = '\0';
+            }
+        }
+        if (!canExp) ImGui::EndDisabled();
+        ImGui::SameLine();
+        if (ImGui::Button("Cancel", ImVec2(90, 0)) || ImGui::IsKeyPressed(ImGuiKey_Escape, false))
+            ImGui::CloseCurrentPopup();
+        ImGui::EndPopup();
+    }
+
     drawRegistryPanel();
     drawAiPanel();
 }
@@ -1779,6 +2104,43 @@ void MeshCraftApplication::drawPanelSplitters(int screenW, int screenH)
 
     ImGui::End();
     ImGui::PopStyleVar();
+}
+
+void MeshCraftApplication::drawShadowDebugOverlay(int /*screenW*/, int screenH)
+{
+    if (!shadowDebugEnabled_ || !shadowDebugColorTex_) return;
+
+    const Mc3::Mc3Light* shadowLight = nullptr;
+    for (const auto& l : document_.lights)
+        if (l.type == Mc3::LightType::Directional && l.castShadows) { shadowLight = &l; break; }
+
+    const float res = static_cast<float>(kShadowDebugRes);
+    ImGui::SetNextWindowPos(ImVec2(8.f, static_cast<float>(screenH) - res - 80.f),
+                            ImGuiCond_FirstUseEver);
+    ImGui::SetNextWindowSize(ImVec2(res * 2.f + 20.f, res + 60.f), ImGuiCond_FirstUseEver);
+    if (ImGui::Begin("Shadow Frustum##shadowdebug", &shadowDebugEnabled_,
+                     ImGuiWindowFlags_NoScrollbar)) {
+        if (shadowLight) {
+            ImGui::Text("Light: %s  dir(%.2f, %.2f, %.2f)  ortho ±50 m",
+                        shadowLight->name.c_str(),
+                        shadowLight->direction[0],
+                        shadowLight->direction[1],
+                        shadowLight->direction[2]);
+            ImGui::Image((ImTextureID)(intptr_t)shadowDebugColorTex_, ImVec2(res, res));
+            ImGui::SameLine();
+            ImGui::BeginGroup();
+            ImGui::TextDisabled("Light view");
+            ImGui::TextDisabled("(what the light sees)");
+            ImGui::TextDisabled("Objects in this area");
+            ImGui::TextDisabled("cast / receive shadows.");
+            ImGui::EndGroup();
+        } else {
+            ImGui::TextDisabled("No directional light with Cast Shadows enabled.");
+            ImGui::TextDisabled("Enable Cast Shadows on a directional light");
+            ImGui::TextDisabled("in the Light properties panel.");
+        }
+    }
+    ImGui::End();
 }
 
 } // namespace MeshCraft

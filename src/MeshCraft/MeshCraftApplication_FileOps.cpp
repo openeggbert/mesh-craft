@@ -3,6 +3,8 @@
 
 #include "GltfExporter.hpp"
 
+#include <imgui.h>
+
 #include <algorithm>
 #include <cstdio>
 #include <cstring>
@@ -11,6 +13,7 @@
 #include <functional>
 #include <iostream>
 #include <set>
+#include <sstream>
 #include <stdexcept>
 #include <string>
 
@@ -102,6 +105,7 @@ void MeshCraftApplication::executePendingAction() {
                 addRecentFile(currentFile_);
                 selection_.clear();
                 undoStack_.clear(); redoStack_.clear();
+                sceneRenderer_->clearCsgCache();
                 modified_ = false;
                 setStatusMsg("Opened " + currentFile_.filename().string(), false, 2.0f);
                 updateWindowTitle();
@@ -275,6 +279,52 @@ void MeshCraftApplication::mergeSceneFromFile(const std::string& path) {
 
     modified_ = true; updateWindowTitle();
     setStatusMsg("Merged " + std::to_string(added) + " object(s) from " + path, false, 3.0f);
+}
+
+// ---------------------------------------------------------------------------
+// H7: Preferences — load / save / apply theme
+// ---------------------------------------------------------------------------
+void MeshCraftApplication::applyTheme() {
+    switch (prefTheme_) {
+    case 1:  ImGui::StyleColorsLight();   break;
+    case 2:  ImGui::StyleColorsClassic(); break;
+    default: ImGui::StyleColorsDark();    break;
+    }
+}
+
+void MeshCraftApplication::loadPrefs() {
+    std::ifstream f(prefsPath());
+    if (!f) return;
+    std::string line;
+    while (std::getline(f, line)) {
+        auto eq = line.find('=');
+        if (eq == std::string::npos) continue;
+        std::string key = line.substr(0, eq);
+        std::string val = line.substr(eq + 1);
+        try {
+            if      (key == "autoSaveInterval") autoSaveInterval_ = std::stof(val);
+            else if (key == "snapTranslate")    snapTranslate_    = std::stof(val);
+            else if (key == "snapRotate")       snapRotate_       = std::stof(val);
+            else if (key == "snapScale")        snapScale_        = std::stof(val);
+            else if (key == "gridSpacing")      gridSpacing_      = std::stof(val);
+            else if (key == "theme")            prefTheme_        = std::stoi(val);
+        } catch (...) {}
+    }
+    applyTheme();
+}
+
+void MeshCraftApplication::savePrefs() {
+    auto p = prefsPath();
+    std::error_code ec;
+    std::filesystem::create_directories(p.parent_path(), ec);
+    std::ofstream f(p);
+    if (!f) return;
+    f << "autoSaveInterval=" << autoSaveInterval_ << "\n";
+    f << "snapTranslate="    << snapTranslate_    << "\n";
+    f << "snapRotate="       << snapRotate_       << "\n";
+    f << "snapScale="        << snapScale_        << "\n";
+    f << "gridSpacing="      << gridSpacing_      << "\n";
+    f << "theme="            << prefTheme_        << "\n";
 }
 
 } // namespace MeshCraft

@@ -64,9 +64,9 @@ Legend: ✅ done · 🔧 partial · 📋 planned
 | D2 ✅ | Texture tab: make fields editable (wrapU/V, filter, colorSpace as editable combos, not read-only) | UiLeftPanel.cpp |
 | D3 ~~skipped~~ | Material: duplicate material (copy in material list) | UiLeftPanel.cpp |
 | D4 ✅ | Material: apply material from list to selection (button "Apply to selection") | UiLeftPanel.cpp |
-| D5 | Material: export/import as standalone JSON or XML snippet | MeshCraftApplication_Commands.cpp |
+| D5 ✅ | Material: export/import as standalone XML snippet — Export saves Mc3Document(material only) to .mc3mat.xml; Import loads + merges with suffix-on-collision; both via popup modal dialogs | MeshCraftApplication_UiOverlays.cpp, MeshCraftApplication.hpp |
 | D6 ✅ | Texture: drag-and-drop URI file from OS into texture field | UiLeftPanel.cpp |
-| D7 | Material: material preview (small UV sphere with applied material) | UiLeftPanel.cpp, SceneRenderer |
+| D7 ✅ | Material: preview sphere — 128×128 FBO (BloomGL); SDF Blinn-Phong GLSL shader with u_color/u_roughness/u_metallic uniforms; rendered each frame material is selected; centered ImGui::Image in material panel | MeshCraftApplication.cpp, MeshCraftApplication.hpp, UiLeftPanel.cpp |
 | D8 ✅ | Material: search filter in material list | UiLeftPanel.cpp |
 
 ---
@@ -79,7 +79,7 @@ Legend: ✅ done · 🔧 partial · 📋 planned
 | E2 ✅ | Hierarchy: type icons next to each row (small Box/Sphere/Group/Light symbols) | UiLeftPanel.cpp |
 | E3 ✅ | Hierarchy: color row by first tag | UiLeftPanel.cpp |
 | E4 ✅ | Hierarchy: show lock icon on locked objects | UiLeftPanel.cpp |
-| E5 | Hierarchy: filter by multiple criteria (tag AND/OR, type, material) | UiLeftPanel.cpp |
+| E5 ✅ | Hierarchy: filter by multiple criteria — AND/OR toggle button; tag combo (collects all tags); material combo; layer combo (was E7); updated matchesFilter lambda handles both AND (all criteria) and OR (any active criterion) modes | UiLeftPanel.cpp, MeshCraftApplication.hpp |
 | E6 ✅ | Hierarchy: Select Children command (complement to Select Parent P) | MeshCraftApplication_Commands.cpp |
 | E7 ✅ | Scene: named layers (visibility groups, without changing hierarchy) | Mc3Document, UiLeftPanel |
 | E8 ✅ | Scene: export/import subtree as template (save subtree as new definition) | MeshCraftApplication_Commands.cpp |
@@ -128,14 +128,14 @@ Legend: ✅ done · 🔧 partial · 📋 planned
 | H4 ✅ | Scatter/Place: distribute copies along a curve | MeshCraftApplication_Commands.cpp |
 | H5 ✅ | Pivot: UI to move pivot independently from geometry | UiProperties.cpp |
 | H6 ✅ | Panel resize: drag left/right panel width | MeshCraftApplication.cpp |
-| H7 | Preferences dialog (autosave interval, snap defaults, grid defaults, theme) | new file |
+| H7 ✅ | Preferences dialog — autosave/snap/grid already existed; added: theme selector (Dark/Light/Classic via ImGui::StyleColors*); persistence loadPrefs()/savePrefs() to ~/.config/meshcraft/prefs.ini (key=value INI); loadPrefs() called at startup; savePrefs() on dialog Close | MeshCraftApplication_FileOps.cpp, MeshCraftApplication_UiOverlays.cpp, MeshCraftPrivate.hpp |
 | H8 ✅ | Undo: show undo stack as list (UI in Edit menu) | MeshCraftApplication.hpp |
-| H9 | Keyboard shortcuts: customizable bindings | new file |
+| H9 ✅ | Keyboard shortcuts: customizable bindings — KeyBind struct (ctrl/shift/alt/key); 32 default actions; keybind editor dialog with click-to-capture + kImGuiToXna[] table; Reset to Defaults; INI persistence to ~/.config/meshcraft/keybindings.ini; shortcutFired() replaces direct justPressed() checks in Keyboard.cpp | MeshCraftApplication_Keybindings.cpp (new), MeshCraftApplication_Keyboard.cpp, UiOverlays.cpp, MeshCraftApplication.hpp |
 | H10 ✅ | Drag-and-drop MC3 file from OS into app window (SDL drop event) | MeshCraftApplication.cpp |
 | H11 ✅ | Command palette: search object names in addition to commands | UiOverlays.cpp |
-| H12 | Macro recorder (record a sequence of actions, replay) | new file |
+| H12 ✅ | Macro recorder — record/stop/play/clear; recordStep() hooks in addPrimitive/delete/duplicate/group/ungroup/groupScale/batchRename/linearArray; executeMacroStep() dispatch; save/load .mc3macro (tab-separated lines); Macro Editor dialog (step list, file path, Save/Load); Edit menu Record/Stop/Play/Editor items | MeshCraftApplication_Macro.cpp (new), MeshCraftApplication_Commands.cpp, UiOverlays.cpp, UiMenuBar.cpp, MeshCraftApplication.hpp, MeshCraftPrivate.hpp |
 | H13 ✅ | Gizmo: snap to fixed angles (15°/45°/90° during rotate with Ctrl) | MeshCraftApplication_Mouse.cpp |
-| H14 | Proportional scale from group center (scale around group center, not each object's own pivot) | MeshCraftApplication_Commands.cpp |
+| H14 ✅ | Group Scale — computes selection center (position average); scales each obj's position from center × factor AND scales obj.scale × factor; dialog with DragFloat + ×2/×0.5/×1 shortcuts; Edit menu "Group Scale…" (enabled ≥2 selected); locked objects skipped | MeshCraftApplication_Commands.cpp, UiMenuBar.cpp, UiOverlays.cpp, MeshCraftApplication.hpp |
 
 ---
 
@@ -147,9 +147,9 @@ Legend: ✅ done · 🔧 partial · 📋 planned
 | I2 ✅ | Environment: equirectangular skybox — GLSL panorama shader (gl_VertexID quad, no depth write), texture cached, drawn before scene | MeshCraftApplication.cpp |
 | I3 ✅ | Environment: fog visualization in viewport — per-object color blend (linear: start/end, exponential: density) + BasicEffect FogEnabled for solid pass | SceneRenderer.cpp |
 | I4 ✅ | Lighting: colored point/spot light sphere gizmos — point: solid sphere + diamond ray lines; spot: small sphere + cone wireframe | SceneRenderer.cpp |
-| I5 | Rendering: SSAO (ambient occlusion post-process) | SceneRenderer.cpp |
+| I5 ✅ | Rendering: SSAO (ambient occlusion post-process) — depth blit via glBlitFramebuffer + view-space reconstruction + 16-sample hemisphere + 5×5 blur + multiplicative composite; strength & radius sliders in UI | MeshCraftApplication.cpp |
 | I6 ✅ | Rendering: bloom — gl_VertexID vertex shader + disable CNA residual GL state (cull-face/stencil/scissor) before composite; strength slider in UI | MeshCraftApplication.cpp, SceneRenderer.cpp |
-| I7 | Rendering: shadow map debug overlay | SceneRenderer.cpp |
+| I7 ✅ | Rendering: shadow map debug overlay — RGBA+depth FBO 256×256; renders scene from first castShadows directional light (orthographic ±50 m); ImGui "Shadow Frustum" window shows light-view color render; menu toggle in View | MeshCraftApplication.cpp, MeshCraftApplication_UiOverlays.cpp |
 | I8 ✅ | Rendering: full wireframe mode toggle for entire scene | SceneRenderer.cpp |
 
 ---
@@ -169,10 +169,10 @@ Legend: ✅ done · 🔧 partial · 📋 planned
 
 | # | Task | Files |
 |---|------|-------|
-| K1 | CSG: real-time preview cache (invalidation works; evaluation can be slow for large trees) | SceneRenderer.cpp |
-| K2 | CSG: reorder children in Properties (drag-reorder children of a CSG node) | UiProperties.cpp |
-| K3 | CSG: export resulting mesh to OBJ/GLB | MeshCraftApplication_Commands.cpp |
-| K4 | CSG: show triangle count of resulting mesh | UiProperties.cpp |
+| K1 ✅ | CSG: real-time preview cache — content-hash (FNV-mix over subtree transforms, primitives, parent matrix) replaces raw-pointer key; `pushUndo()` no longer clears cache; auto-evicts at 128 entries; `clearCsgCache()` called on document load to free memory; also fixes bug where moved parent didn't invalidate child CSG | SceneRenderer.cpp, MeshCraftApplication_Commands.cpp, MeshCraftApplication_FileOps.cpp |
+| K2 ✅ | CSG: reorder children in Properties (drag-reorder children of a CSG node) — drag handle ":: name" on each child row; all CSG types (Union/Difference/Intersection); undo-able; Difference keeps isCutter checkbox left of name | UiProperties.cpp |
+| K3 ✅ | CSG: export resulting mesh to OBJ — "Export OBJ…" button in CSG Properties; popup dialog with path field; SceneRenderer::exportCsgMesh() builds manifold tree + writes v/vn/f OBJ with per-face normals | SceneRenderer.cpp, UiProperties.cpp, UiOverlays.cpp |
+| K4 ✅ | CSG: show triangle count — csgTriCountMap_ (obj.id→int) updated each frame when CSG mesh drawn; csgCachedTriCount() public getter; UiProperties shows "Tris: N" or "— (not yet rendered)" | SceneRenderer.hpp, SceneRenderer.cpp, UiProperties.cpp |
 
 ---
 
@@ -180,11 +180,11 @@ Legend: ✅ done · 🔧 partial · 📋 planned
 
 | # | Task | Files |
 |---|------|-------|
-| L1 | Extract SceneHierarchyPanel into its own class (TODO in Scene/SceneHierarchyPanel.cpp) | SceneHierarchyPanel.cpp |
-| L2 | Extract PropertiesPanel into its own class (TODO in Scene/PropertiesPanel.cpp) | PropertiesPanel.cpp |
-| L3 | Unit tests for MeshCraftApplication commands (batch rename, array dup, find-replace) | tests/ |
-| L4 | Reduce code duplication in UiMenuBar.cpp (walk/collect lambdas repeated many times) | UiMenuBar.cpp |
-| L5 | EditorViewport.cpp: implement TODO stub | EditorViewport.cpp |
+| L1 ✅ | Extract SceneHierarchyPanel into its own class — HierarchyCallbacks struct (7 std::function slots); draw(selection, lockedIds, cb) method; moved all hierarchy state (searchBuf, typeFilter, layerFilter, tagFilter, matFilter, filterOr, anchorId, renamingId, renameBuf, renameNeedsFocus, scrollToId, flatOrder); scrollToObject() for command palette; UiLeftPanel Scene tab reduced to 10 lines; UiOverlays uses hierarchyPanel_->scrollToObject() | SceneHierarchyPanel.hpp, SceneHierarchyPanel.cpp, UiLeftPanel.cpp, UiOverlays.cpp, MeshCraftApplication.hpp |
+| L2 ✅ | Extract PropertiesPanel into its own class — PropertiesContext struct (12 fields + 8 callbacks); full draw() from UiProperties.cpp (~2000 lines); insertAnimKeyframes signature changed initializer_list→vector; thin wrapper in UiProperties.cpp | PropertiesPanel.hpp, PropertiesPanel.cpp, UiProperties.cpp, MeshCraftApplication.hpp, Anim.cpp |
+| L3 ✅ | Unit tests for MeshCraftApplication commands — extracted pure algorithms into `EditorAlgorithms.hpp` (CNA-free); 57 tests across applyRenamePattern / batchRenameObjects / countFindReplaceMatches / applyFindReplaceNames / arrayDuplicateObjects / deepCopyObjectAlg; `Commands.cpp` delegates to free functions; `mc3_commands_test` binary registered as CTest `mc3_commands` | src/MeshCraft/EditorAlgorithms.hpp, mc3/test/editor_commands_test.cpp, mc3/CMakeLists.txt, MeshCraftApplication_Commands.cpp |
+| L4 ✅ | Reduce code duplication in UiMenuBar.cpp — 8 repeated std::function tree-walk patterns replaced with two C++23 deducing-this local lambdas: `walkAll(list, fn)` and `selectBy(pred)` | UiMenuBar.cpp |
+| L5 ✅ | EditorViewport.cpp: implement TODO stub — added EditorCamera member + camera() accessors; PickRay struct; pickRay(mx,my,vX,vY,vW,vH) method converting pixel coords to world-space ray | EditorViewport.hpp, EditorViewport.cpp |
 
 ---
 
@@ -195,6 +195,22 @@ Legend: ✅ done · 🔧 partial · 📋 planned
 | M1 ✅ | mc3.xml `<include file="…"/>` support — parser merges definitions + objects from referenced file; XSD extended; roundtrip test; local override fix (parser erases included IDs after local parse); nested include roundtrip fix (recordIncludes=false for recursive calls); cycle detection test; writer fix (material id from map key) | mc3/src/Mc3XmlParser.cpp, mc3/src/Mc3XmlWriter.cpp, mc3/mc3.xsd, mc3/test/roundtrip_test.cpp, test/ |
 | M2 ✅ | Model registry — `ModelRegistry` class wrapping SQLite (`modelregistry.sqlite3`); schema: group/name/variant/tags/xml/description/source (with migration); UI panel in editor (search, insert, save with desc/source fields); registry test suite (mc3_registry_test); atomic temp filenames | include/MeshCraft/ModelRegistry.hpp, src/MeshCraft/ModelRegistry.cpp, mc3/test/mc3_registry_test.cpp, src/MeshCraft/MeshCraftApplication_UiRegistry.cpp, CMakeLists.txt |
 | M3 ✅ | AI API integration — `AiAssistant` class (cpp-httplib + Claude API); ImGui panel: scope combo (full scene/selection), prompt, API key, async call; validateAiXml() before apply; aiPendingDoc_ for registry integration; "Save AI to Registry" wires AI result to registry save dialog with source="ai_generated"; atomic temp filenames | src/MeshCraft/AiAssistant.cpp+hpp, src/MeshCraft/MeshCraftApplication_UiAi.cpp, include/MeshCraft/MeshCraftApplication.hpp |
+
+---
+
+## N — mc3.xml Schema Extensions
+
+> Each N task covers: data model extension (`Mc3Document` / new structs), parser (`Mc3XmlParser.cpp`), writer (`Mc3XmlWriter.cpp`), XSD schema (`mc3.xsd`), and basic editor UI.
+
+| # | Task | Files |
+|---|------|-------|
+| N1 ✅ | SVG texture — `Mc3SvgTexture` struct (id, src, inlineContent); `<texture type="svg" src="…"/>` and inline CDATA form; `doc.svgTextures` map + `addSvgTexture()`; parser routes type="svg", writer emits with SetCData; XSD updated (mixed="true", optional uri, new type/src attrs); 10 roundtrip tests all pass | Mc3SvgTexture.hpp, Mc3Document.hpp, Mc3Document.cpp, Mc3XmlParser.cpp, Mc3XmlWriter.cpp, mc3.xsd, roundtrip_test.cpp |
+| N2 ✅ | Embedded GLTF — `Mc3EmbedGltf` struct (id, src, base64Content); `<embeds>` top-level section; external `<embed type="gltf" src="…"/>` and inline base64 CDATA form; meshSource convention "embed:\<id\>"; `doc.embeds` map + `addEmbed()`; XSD `embedsType`; MCB writer/reader; 13 roundtrip tests all pass | Mc3EmbedGltf.hpp, Mc3Document.hpp, Mc3Document.cpp, Mc3XmlParser.cpp, Mc3XmlWriter.cpp, mc3.xsd, McbWriter.cpp, McbReader.cpp, roundtrip_test.cpp |
+| N3 | Lua scripts — `<script type="lua" id="…">lua source</script>`; new `Mc3Script` struct (`id`, `type`, `source`); parser/writer; editor: new "Scripts" tab in left panel with list and inline editor; script execution is optional at runtime (Lua 5.4 or LuaJIT) | mc3/include/Mc3Document.hpp, Mc3XmlParser.cpp, Mc3XmlWriter.cpp, mc3.xsd |
+| N4 | Sound and music — `<sound id="…" src="…" loop="false"/>` and `<music id="…" src="…" loop="true"/>`; new `Mc3Sound` / `Mc3Music` structs; editor: "Audio" tab in left panel with list and attributes; optional playback in editor (SDL_mixer or miniaudio) | mc3/include/Mc3Document.hpp, Mc3XmlParser.cpp, Mc3XmlWriter.cpp, mc3.xsd |
+| N5 | `<trigger>` element — named sequence of things to start: `<trigger id="intro"><play-action ref="walk_anim"/><play-sound ref="door_click"/><run-script ref="init_lua"/><play-music ref="bg_music"/></trigger>`; new `Mc3Trigger` struct; editor: "Triggers" tab in left panel | mc3/include/Mc3Document.hpp, Mc3XmlParser.cpp, Mc3XmlWriter.cpp, mc3.xsd |
+| N6 | Document-level `<state>` — named scene-wide configuration snapshots (distinct from per-object `Mc3ObjectState`); each `<state name="night">` contains `<object-override id="…" position="…" rotation="…" visible="…" material="…"/>` for any number of objects; switching a state applies all overrides to live objects; editor: "Scene States" tab | mc3/include/Mc3Document.hpp, Mc3XmlParser.cpp, Mc3XmlWriter.cpp, mc3.xsd |
+| N7 | `<meta>` element — top-level key-value metadata container for mc3.xml generators; contains `<metaentry key="…" value="…"/>` elements (key and value as attributes, no sub-tags); shown read-only in editor Scene Properties; XSD + roundtrip test | mc3/include/Mc3Document.hpp, Mc3XmlParser.cpp, Mc3XmlWriter.cpp, mc3.xsd, mc3/test/roundtrip_test.cpp |
 
 ---
 

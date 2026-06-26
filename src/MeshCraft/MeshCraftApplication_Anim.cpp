@@ -93,7 +93,7 @@ void MeshCraftApplication::evaluateAndPushAnimOverrides() {
 
 void MeshCraftApplication::insertAnimKeyframes(
     Mc3::Mc3Object& obj,
-    std::initializer_list<Mc3::AnimatedProperty> props)
+    const std::vector<Mc3::AnimatedProperty>& props)
 {
     if (currentActionName_.empty()) return;
     auto actionIt = document_.actions.find(currentActionName_);

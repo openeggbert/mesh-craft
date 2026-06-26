@@ -6,6 +6,8 @@
 #include "MeshCraft/Mc3/Mc3Light.hpp"
 #include "MeshCraft/Mc3/Mc3Material.hpp"
 #include "MeshCraft/Mc3/Mc3Object.hpp"
+#include "MeshCraft/Mc3/Mc3EmbedGltf.hpp"
+#include "MeshCraft/Mc3/Mc3SvgTexture.hpp"
 #include "MeshCraft/Mc3/Mc3Texture.hpp"
 
 #include <array>
@@ -383,6 +385,32 @@ static Mc3::Mc3Texture readTexture(std::istream& in) {
     return tex;
 }
 
+static Mc3::Mc3SvgTexture readSvgTexture(std::istream& in, const std::string& id) {
+    Mc3::Mc3SvgTexture svg;
+    svg.id = id;
+    while (true) {
+        std::string k = rKey(in); if (k.empty()) break;
+        uint8_t tag = rU8(in);
+        if      (k == "src")           svg.src           = rRawStr(in);
+        else if (k == "inlineContent") svg.inlineContent = rRawStr(in);
+        else                           skipValue(in, tag);
+    }
+    return svg;
+}
+
+static Mc3::Mc3EmbedGltf readEmbed(std::istream& in, const std::string& id) {
+    Mc3::Mc3EmbedGltf em;
+    em.id = id;
+    while (true) {
+        std::string k = rKey(in); if (k.empty()) break;
+        uint8_t tag = rU8(in);
+        if      (k == "src")           em.src           = rRawStr(in);
+        else if (k == "base64Content") em.base64Content = rRawStr(in);
+        else                           skipValue(in, tag);
+    }
+    return em;
+}
+
 static Mc3::Mc3Material readMaterial(std::istream& in) {
     Mc3::Mc3Material m;
     while (true) {
@@ -570,6 +598,24 @@ static Mc3::Mc3Document readDocument(std::istream& in) {
                 std::string mk = rRawStr(in);
                 uint8_t t = rU8(in);
                 if (t == TAG_OBJ) doc.textures[mk] = readTexture(in);
+                else               skipValue(in, t);
+            }
+        }
+        else if (k == "svgTextures") {
+            uint32_t n = rU32(in);
+            for (uint32_t i = 0; i < n; ++i) {
+                std::string mk = rRawStr(in);
+                uint8_t t = rU8(in);
+                if (t == TAG_OBJ) doc.svgTextures[mk] = readSvgTexture(in, mk);
+                else               skipValue(in, t);
+            }
+        }
+        else if (k == "embeds") {
+            uint32_t n = rU32(in);
+            for (uint32_t i = 0; i < n; ++i) {
+                std::string mk = rRawStr(in);
+                uint8_t t = rU8(in);
+                if (t == TAG_OBJ) doc.embeds[mk] = readEmbed(in, mk);
                 else               skipValue(in, t);
             }
         }

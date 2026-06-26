@@ -25,13 +25,36 @@ inline bool justPressed(const Microsoft::Xna::Framework::Input::KeyboardState& c
     return cur.IsKeyDown(k) && prev.IsKeyUp(k);
 }
 
-inline std::filesystem::path recentFilesPath()
+inline std::filesystem::path meshcraftConfigDir()
 {
     const char* cfg = std::getenv("XDG_CONFIG_HOME");
     std::filesystem::path base = cfg && cfg[0]
         ? std::filesystem::path(cfg)
         : std::filesystem::path(std::getenv("HOME") ? std::getenv("HOME") : ".") / ".config";
-    return base / "meshcraft" / "recent.txt";
+    return base / "meshcraft";
+}
+
+inline std::filesystem::path recentFilesPath()   { return meshcraftConfigDir() / "recent.txt"; }
+inline std::filesystem::path prefsPath()         { return meshcraftConfigDir() / "prefs.ini"; }
+inline std::filesystem::path keybindingsPath()   { return meshcraftConfigDir() / "keybindings.ini"; }
+inline std::filesystem::path macroPath()         { return meshcraftConfigDir() / "macro.mc3macro"; }
+
+inline Mc3::ObjectType objectTypeFromName(const std::string& n) {
+    if (n == "Sphere")       return Mc3::ObjectType::Sphere;
+    if (n == "Cylinder")     return Mc3::ObjectType::Cylinder;
+    if (n == "Cone")         return Mc3::ObjectType::Cone;
+    if (n == "Plane")        return Mc3::ObjectType::Plane;
+    if (n == "Torus")        return Mc3::ObjectType::Torus;
+    if (n == "Capsule")      return Mc3::ObjectType::Capsule;
+    if (n == "Disk")         return Mc3::ObjectType::Disk;
+    if (n == "Grid")         return Mc3::ObjectType::Grid;
+    if (n == "IcoSphere")    return Mc3::ObjectType::IcoSphere;
+    if (n == "Extrude")      return Mc3::ObjectType::Extrude;
+    if (n == "Union")        return Mc3::ObjectType::Union;
+    if (n == "Difference")   return Mc3::ObjectType::Difference;
+    if (n == "Intersection") return Mc3::ObjectType::Intersection;
+    if (n == "Group")        return Mc3::ObjectType::Group;
+    return Mc3::ObjectType::Box;
 }
 
 inline void removeFromList(std::vector<std::shared_ptr<Mc3::Mc3Object>>& list,

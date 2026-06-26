@@ -31,11 +31,27 @@
 #include <set>
 #include <string>
 #include <string_view>
+#include <unordered_map>
 #include <vector>
 
 namespace MeshCraft {
 
 enum class ActiveTool { Select, Move, Rotate, Scale, AddBox, AddSphere, AddCylinder, AddCone, AddPlane, Measure };
+
+// H12: Macro recorder — one recorded editing step
+struct MacroStep {
+    std::string              verb;
+    std::vector<std::string> args;
+};
+
+// H9: customizable key binding
+struct KeyBind {
+    bool ctrl{false}, shift{false}, alt{false};
+    int  key{0};                 // Keys:: enum value; 0 = unbound
+    std::string toLabel() const; // e.g. "Ctrl+S"
+    static KeyBind fromString(const std::string& s);
+    std::string toString() const;
+};
 
 class MeshCraftApplication : public Microsoft::Xna::Framework::Game {
 public:
@@ -158,6 +174,12 @@ private:
     char mergeSceneErr_[256]{};
     void mergeSceneFromFile(const std::string& path);
 
+    // CSG mesh export dialog state (K3)
+    bool                    csgExportOpen_{false};
+    char                    csgExportBuf_[512]{};
+    char                    csgExportErr_[256]{};
+    const Mc3::Mc3Object*   csgExportObj_{nullptr};
+
     // GLB export settings dialog state (F8)
     bool glbExportOpen_{false};
     int  glbExportFmt_{0};                // 0 = GLB, 1 = GLTF
@@ -187,6 +209,34 @@ private:
     void applyBloom(int vx, int glViewY, int vw, int vh,
                     const Microsoft::Xna::Framework::Matrix& view,
                     const Microsoft::Xna::Framework::Matrix& proj);
+
+    // Shadow Map Debug (I7)
+    bool     shadowDebugEnabled_{false};
+    unsigned shadowDebugFbo_{0};
+    unsigned shadowDebugColorTex_{0};
+    unsigned shadowDebugDepthTex_{0};
+    static constexpr int kShadowDebugRes = 256;
+    void initShadowDebug();
+    void renderShadowDebugFbo(const Microsoft::Xna::Framework::Matrix& lightView,
+                              const Microsoft::Xna::Framework::Matrix& lightProj);
+    void drawShadowDebugOverlay(int screenW, int screenH);
+
+    // Material preview sphere (D7)
+    static constexpr int kMatPreviewRes = 128;
+    unsigned             matPreviewTexId_{0};   // GL texture name, exposed for ImGui::Image
+    void initMatPreview();
+    void renderMatPreview(float r, float g, float b, float roughness, float metallic);
+
+    // SSAO post-processing (I5)
+    bool  ssaoEnabled_{false};
+    bool  ssaoGlReady_{false};
+    float ssaoStrength_{0.8f};
+    float ssaoRadius_{0.5f};
+    int   ssaoFboW_{0}, ssaoFboH_{0};
+    void initSsao(int w, int h);
+    void applySsao(int vx, int glViewY, int vw, int vh,
+                   float tanHalfFovX, float tanHalfFovY,
+                   float nearPlane, float farPlane);
     void initSkybox();
     void drawSkybox(const Microsoft::Xna::Framework::Matrix& view,
                     float fovDegrees, float aspect);
@@ -324,7 +374,7 @@ private:
 
     void evaluateAndPushAnimOverrides();
     void insertAnimKeyframes(Mc3::Mc3Object& obj,
-                             std::initializer_list<Mc3::AnimatedProperty> props);
+                             const std::vector<Mc3::AnimatedProperty>& props);
     void drawTimelinePanel(int screenW, int screenH);
 
     // Keyboard state from last frame
@@ -348,29 +398,8 @@ private:
     std::map<std::string, bool> preisolateVisibility_;
     void toggleIsolate();
 
-    // Hierarchy search filter
-    char hierarchyFilter_[128]{};
-
-    // Hierarchy type filter (E5): 0=All 1=Prim 2=Mesh 3=Group 4=Instance 5=CSG 6=Extrude
-    int  hierTypeFilter_{0};
-
-    // Hierarchy layer filter (E7): empty = show all layers
-    std::string hierLayerFilter_;
-
-    // ID to scroll into view in hierarchy next frame (set by command palette object selection)
-    std::string hierarchyScrollToId_;
-
     // Material list search filter
     char matFilter_[128]{};
-
-    // Hierarchy shift-click range selection
-    std::string hierarchyAnchorId_;
-    std::vector<std::shared_ptr<Mc3::Mc3Object>> hierarchyFlatOrder_;
-
-    // Inline rename state (hierarchy panel)
-    std::string renamingId_;
-    char renameBuf_[256]{};
-    bool renameNeedsFocus_{false};
 
     // Unsaved-changes guard
     enum class PendingAction { None, NewScene, OpenFile, OpenRecentFile, ExitApp };
@@ -391,6 +420,10 @@ private:
     char cmdPaletteBuf_[256]{};
 
     // Batch rename dialog
+    bool  groupScaleOpen_{false};
+    float groupScaleFactor_{2.0f};
+    void  groupScaleSelected();
+
     bool batchRenameOpen_{false};
     char batchRenameBuf_[256]{};
     void batchRenameSelected();
@@ -473,8 +506,34 @@ private:
     void  performAutoSave();
     static std::filesystem::path autoSavePath(const std::filesystem::path& file);
 
-    // Preferences dialog (F5)
+    // Customizable keybindings (H9)
+    std::unordered_map<std::string, KeyBind> keybindings_;
+    std::string keyCaptureAction_;   // non-empty = waiting for next keypress
+    bool        keybindOpen_{false}; // open keybind editor dialog
+    void initDefaultBindings();
+    void loadKeybindings();
+    void saveKeybindings();
+    bool shortcutFired(const std::string& id,
+                       const Microsoft::Xna::Framework::Input::KeyboardState& ks,
+                       const Microsoft::Xna::Framework::Input::KeyboardState& prev) const;
+
+    // Macro recorder (H12)
+    bool                   isRecording_{false};
+    std::vector<MacroStep> macroSteps_;
+    bool                   macroOpen_{false};
+    char                   macroFileBuf_[512]{};
+    void recordStep(const std::string& verb, std::vector<std::string> args = {});
+    void playMacro();
+    void executeMacroStep(const MacroStep& step);
+    void saveMacro(const std::string& path);
+    void loadMacro(const std::string& path);
+
+    // Preferences dialog (H7)
     bool prefsOpen_{false};
+    int  prefTheme_{0};   // 0=Dark, 1=Light, 2=Classic
+    void applyTheme();
+    void loadPrefs();
+    void savePrefs();
 
     // Timed status bar notification
     std::string statusMsg_;

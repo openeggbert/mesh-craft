@@ -204,6 +204,8 @@ void MeshCraftApplication::LoadContent() {
         SDL_HideWindow(sdlWindow);
 
     loadRecentFiles();
+    loadPrefs();
+    loadKeybindings();
 
     if (!currentFile_.empty() && std::filesystem::exists(currentFile_)) {
         try {
@@ -500,6 +502,27 @@ void MeshCraftApplication::Draw(const GameTime& /*gameTime*/) {
     cachedVP_ = view * proj;
     cachedVX_ = viewX; cachedVY_ = viewY; cachedVW_ = viewW; cachedVH_ = viewH;
 
+    // Shadow map debug (I7) — render scene from first castShadows directional light
+    if (shadowDebugEnabled_) {
+        for (const auto& l : document_.lights) {
+            if (l.type == Mc3::LightType::Directional && l.castShadows) {
+                Vector3 ldir(l.direction[0], l.direction[1], l.direction[2]);
+                ldir = Vector3::Normalize(ldir);
+                constexpr float kShadowDist = 50.f;
+                Vector3 center(0.f, 0.f, 0.f);
+                Vector3 lpos = center - ldir * kShadowDist;
+                Vector3 up(0.f, 1.f, 0.f);
+                if (std::abs(ldir.Y) > 0.99f) up = Vector3(1.f, 0.f, 0.f);
+                Matrix lv = Matrix::CreateLookAt(lpos, center, up);
+                Matrix lp = Matrix::CreateOrthographic(kShadowDist * 2.f, kShadowDist * 2.f,
+                                                        0.1f, kShadowDist * 3.f);
+                if (!shadowDebugFbo_) initShadowDebug();
+                if (shadowDebugFbo_)  renderShadowDebugFbo(lv, lp);
+                break;
+            }
+        }
+    }
+
     // I2: equirectangular skybox (drawn before scene, no depth write)
     drawSkybox(view, camera_.fovDegrees, aspect);
 
@@ -580,6 +603,15 @@ void MeshCraftApplication::Draw(const GameTime& /*gameTime*/) {
     vpReset.setHeightProperty(screenH);
     gd.setViewportProperty(vpReset);
 
+    // SSAO post-process (I5) — multiplicative ambient occlusion darkening
+    if (ssaoEnabled_) {
+        if (ssaoFboW_ != viewW || ssaoFboH_ != viewH || !ssaoGlReady_)
+            initSsao(viewW, viewH);
+        const float tanHalfFovY = std::tan(camera_.fovDegrees * 0.5f * std::numbers::pi_v<float> / 180.f);
+        applySsao(viewX, glViewY, viewW, viewH, tanHalfFovY * aspect, tanHalfFovY,
+                  camera_.nearPlane, camera_.farPlane);
+    }
+
     // Bloom post-process (I6) — additive emissive glow
     if (bloomEnabled_) {
         if (bloomFboW_ != viewW || bloomFboH_ != viewH)
@@ -630,6 +662,7 @@ void MeshCraftApplication::drawImGuiUi(int screenW, int screenH)
     drawStatusBar(screenW, screenH);
     if (!walkModeEnabled_)
         drawPanelSplitters(screenW, screenH);
+    drawShadowDebugOverlay(screenW, screenH);
     drawDialogs();
 }
 
@@ -674,6 +707,20 @@ constexpr unsigned kGL_COLOR_BUFFER_BIT     = 0x4000u;
 constexpr unsigned kGL_LINK_STATUS          = 0x8B82u;
 constexpr unsigned kGL_COMPILE_STATUS       = 0x8B81u;
 constexpr unsigned kGL_INFO_LOG_LENGTH      = 0x8B84u;
+
+// SSAO / depth blit constants
+constexpr unsigned kGL_READ_FRAMEBUFFER  = 0x8CA8u;
+constexpr unsigned kGL_DRAW_FRAMEBUFFER  = 0x8CA9u;
+constexpr unsigned kGL_DEPTH_BUFFER_BIT  = 0x0100u;
+constexpr unsigned kGL_DEPTH_ATTACHMENT  = 0x8D00u;
+constexpr unsigned kGL_DEPTH_COMPONENT24 = 0x81A6u;
+constexpr unsigned kGL_DEPTH_COMPONENT   = 0x1902u;
+constexpr unsigned kGL_UNSIGNED_INT      = 0x1405u;
+constexpr unsigned kGL_NEAREST           = 0x2600u;
+constexpr unsigned kGL_DST_COLOR         = 0x0306u;
+constexpr unsigned kGL_ZERO              = 0u;
+constexpr unsigned kGL_R8                = 0x8229u;
+constexpr unsigned kGL_RED               = 0x1903u;
 
 struct BloomGL {
     void     (*GenFramebuffers)(int, unsigned*) = nullptr;
@@ -738,6 +785,18 @@ struct BloomGL {
     unsigned skyboxTex{0};
     std::string skyboxTexPath;
 
+    // SSAO
+    void     (*BlitFramebuffer)(int,int,int,int,int,int,int,int,unsigned,unsigned) = nullptr;
+    void     (*DrawBuffers)(int, const unsigned*) = nullptr;
+    unsigned ssaoDepthFbo{0}, ssaoDepthTex{0};
+    unsigned ssaoFbo{0},      ssaoTex{0};
+    unsigned ssaoBlurFbo{0},  ssaoBlurTex{0};
+    unsigned progSsao{0}, progSsaoBlur{0}, progSsaoComposite{0};
+
+    // Material preview (D7)
+    unsigned matPreviewFbo{0}, matPreviewTex{0};
+    unsigned progMatPreview{0};
+
     bool loadFunctions() {
         if (fnLoaded) return true;
 #define LD(m,n) m = reinterpret_cast<decltype(m)>(SDL_GL_GetProcAddress(n))
@@ -789,6 +848,8 @@ struct BloomGL {
         LD(Disable,                "glDisable");
         LD(GetError,               "glGetError");
         LD(ColorMask,              "glColorMask");
+        LD(BlitFramebuffer,        "glBlitFramebuffer");
+        LD(DrawBuffers,            "glDrawBuffers");
 #undef LD
         fnLoaded = GenFramebuffers && DrawArrays && UseProgram && CreateShader;
         if (!fnLoaded) std::cerr << "[Bloom] Failed to load GL functions\n";
@@ -858,6 +919,18 @@ struct BloomGL {
         if (skyboxTex)     { DeleteTextures(1, &skyboxTex); skyboxTex = 0; skyboxTexPath.clear(); }
         if (quadVAO) { DeleteVertexArrays(1, &quadVAO); quadVAO = 0; }
         if (quadVBO) { DeleteBuffers(1, &quadVBO);       quadVBO = 0; }
+        if (ssaoDepthFbo)      { DeleteFramebuffers(1, &ssaoDepthFbo);   ssaoDepthFbo = 0; }
+        if (ssaoDepthTex)      { DeleteTextures(1, &ssaoDepthTex);       ssaoDepthTex = 0; }
+        if (ssaoFbo)           { DeleteFramebuffers(1, &ssaoFbo);        ssaoFbo = 0; }
+        if (ssaoTex)           { DeleteTextures(1, &ssaoTex);            ssaoTex = 0; }
+        if (ssaoBlurFbo)       { DeleteFramebuffers(1, &ssaoBlurFbo);    ssaoBlurFbo = 0; }
+        if (ssaoBlurTex)       { DeleteTextures(1, &ssaoBlurTex);        ssaoBlurTex = 0; }
+        if (progSsao)          { DeleteProgram(progSsao);                progSsao = 0; }
+        if (progSsaoBlur)      { DeleteProgram(progSsaoBlur);            progSsaoBlur = 0; }
+        if (progSsaoComposite) { DeleteProgram(progSsaoComposite);       progSsaoComposite = 0; }
+        if (matPreviewFbo)  { DeleteFramebuffers(1, &matPreviewFbo); matPreviewFbo = 0; }
+        if (matPreviewTex)  { DeleteTextures(1, &matPreviewTex);     matPreviewTex = 0; }
+        if (progMatPreview) { DeleteProgram(progMatPreview);          progMatPreview = 0; }
         ready       = false;
     }
 };
@@ -929,6 +1002,122 @@ void main() {
 }
 )";
 
+const char* kSsaoFS = R"(#version 300 es
+precision highp float;
+uniform sampler2D u_depth;
+uniform vec2      u_tanHalfFov;
+uniform float     u_near;
+uniform float     u_far;
+uniform float     u_radius;
+in vec2 v_uv;
+out vec4 fragColor;
+
+float linDepth(float rawD) {
+    float z = rawD * 2.0 - 1.0;
+    return (2.0 * u_near * u_far) / (u_far + u_near - z * (u_far - u_near));
+}
+
+vec3 viewPos(vec2 uv, float ld) {
+    vec2 ndc = uv * 2.0 - 1.0;
+    return vec3(ndc * u_tanHalfFov * ld, -ld);
+}
+
+float rand(vec2 co) {
+    return fract(sin(dot(co, vec2(12.9898, 78.233))) * 43758.5453);
+}
+
+void main() {
+    float rawD = texture(u_depth, v_uv).r;
+    if (rawD >= 0.9999) { fragColor = vec4(1.0); return; }
+
+    float ld  = linDepth(rawD);
+    vec3  pos = viewPos(v_uv, ld);
+    vec3  N   = normalize(cross(dFdx(pos), dFdy(pos)));
+
+    const int SAMPLES = 16;
+    float occ = 0.0;
+    for (int i = 0; i < SAMPLES; i++) {
+        float fi  = float(i);
+        float r   = rand(v_uv + vec2(fi * 0.137, fi * 0.371)) * u_radius;
+        float phi = rand(v_uv + vec2(fi * 0.721, fi * 0.173)) * 6.28318;
+        float cth = rand(v_uv + vec2(fi * 0.531, fi * 0.979));
+        float sth = sqrt(max(0.0, 1.0 - cth * cth));
+        vec3 sDir = vec3(sth * cos(phi), sth * sin(phi), cth);
+        if (dot(sDir, N) < 0.0) sDir = -sDir;
+        vec3 sPos = pos + sDir * r;
+        vec2 sNdc = sPos.xy / (-sPos.z * u_tanHalfFov);
+        vec2 sUv  = sNdc * 0.5 + 0.5;
+        if (any(lessThan(sUv, vec2(0.0))) || any(greaterThan(sUv, vec2(1.0)))) continue;
+        float sLin = linDepth(texture(u_depth, sUv).r);
+        float rangeCheck = smoothstep(0.0, 1.0, u_radius / abs(ld - sLin + 0.001));
+        if (sLin < ld - 0.025) occ += rangeCheck;
+    }
+    occ /= float(SAMPLES);
+    float ao = 1.0 - occ;
+    fragColor = vec4(ao, ao, ao, 1.0);
+}
+)";
+
+const char* kSsaoBlurFS = R"(#version 300 es
+precision mediump float;
+uniform sampler2D u_ao;
+uniform vec2      u_texelSize;
+in vec2 v_uv;
+out vec4 fragColor;
+void main() {
+    float ao = 0.0;
+    for (int x = -2; x <= 2; x++) {
+        for (int y = -2; y <= 2; y++) {
+            ao += texture(u_ao, v_uv + vec2(float(x), float(y)) * u_texelSize).r;
+        }
+    }
+    ao /= 25.0;
+    fragColor = vec4(ao, ao, ao, 1.0);
+}
+)";
+
+const char* kSsaoCompositeFS = R"(#version 300 es
+precision mediump float;
+uniform sampler2D u_ao;
+uniform float     u_strength;
+in vec2 v_uv;
+out vec4 fragColor;
+void main() {
+    float ao     = texture(u_ao, v_uv).r;
+    float factor = mix(1.0, ao, u_strength);
+    fragColor = vec4(factor, factor, factor, 1.0);
+}
+)";
+
+// Material preview sphere shader (D7): fullscreen triangle, SDF sphere with Blinn-Phong
+const char* kMatPreviewFS = R"(#version 300 es
+precision mediump float;
+uniform vec3  u_color;
+uniform float u_roughness;
+uniform float u_metallic;
+in vec2 v_uv;
+out vec4 fragColor;
+void main() {
+    vec2 p = v_uv * 2.0 - 1.0;
+    float r2 = dot(p, p);
+    if (r2 > 1.0) discard;
+    float z = sqrt(1.0 - r2);
+    vec3 N = normalize(vec3(p, z));
+    vec3 L = normalize(vec3(0.6, 1.0, 0.8));
+    vec3 V = vec3(0.0, 0.0, 1.0);
+    vec3 H = normalize(L + V);
+    float NdotL = max(dot(N, L), 0.0);
+    float NdotH = max(dot(N, H), 0.0);
+    float shininess = mix(128.0, 2.0, u_roughness);
+    float spec = pow(NdotH, shininess) * (1.0 - u_roughness * 0.7);
+    vec3 f0 = mix(vec3(0.04), u_color, u_metallic);
+    vec3 diffuse = u_color * (1.0 - u_metallic);
+    vec3 ambient = u_color * 0.12;
+    vec3 col = ambient + diffuse * NdotL * 0.88 + f0 * spec * 0.9;
+    fragColor = vec4(col, 1.0);
+}
+)";
+
 } // anonymous namespace
 
 namespace MeshCraft {
@@ -938,6 +1127,7 @@ void MeshCraftApplication::initBloom(int w, int h)
     if (w <= 0 || h <= 0) return;
     auto& gl = s_bloom;
     if (!gl.loadFunctions()) return;
+    ssaoGlReady_ = false;  // cleanup() will wipe SSAO GL objects
     gl.cleanup();
 
     gl.GenTextures(1, &gl.texA);
@@ -1141,6 +1331,275 @@ void MeshCraftApplication::applyBloom(
     gl.UseProgram(0);
     gl.BindTexture(kGL_TEXTURE_2D, 0);
     gl.Viewport(0, 0, cachedScreenW_, cachedScreenH_);
+}
+
+void MeshCraftApplication::initSsao(int w, int h)
+{
+    if (w <= 0 || h <= 0) return;
+    auto& gl = s_bloom;
+    if (!gl.loadFunctions()) return;
+
+    // Clean up any existing SSAO resources without touching bloom/skybox
+    if (gl.ssaoDepthFbo)      { gl.DeleteFramebuffers(1, &gl.ssaoDepthFbo);   gl.ssaoDepthFbo = 0; }
+    if (gl.ssaoDepthTex)      { gl.DeleteTextures(1, &gl.ssaoDepthTex);       gl.ssaoDepthTex = 0; }
+    if (gl.ssaoFbo)           { gl.DeleteFramebuffers(1, &gl.ssaoFbo);        gl.ssaoFbo = 0; }
+    if (gl.ssaoTex)           { gl.DeleteTextures(1, &gl.ssaoTex);            gl.ssaoTex = 0; }
+    if (gl.ssaoBlurFbo)       { gl.DeleteFramebuffers(1, &gl.ssaoBlurFbo);    gl.ssaoBlurFbo = 0; }
+    if (gl.ssaoBlurTex)       { gl.DeleteTextures(1, &gl.ssaoBlurTex);        gl.ssaoBlurTex = 0; }
+    if (gl.progSsao)          { gl.DeleteProgram(gl.progSsao);                gl.progSsao = 0; }
+    if (gl.progSsaoBlur)      { gl.DeleteProgram(gl.progSsaoBlur);            gl.progSsaoBlur = 0; }
+    if (gl.progSsaoComposite) { gl.DeleteProgram(gl.progSsaoComposite);       gl.progSsaoComposite = 0; }
+
+    // Depth texture (DEPTH_COMPONENT24)
+    gl.GenTextures(1, &gl.ssaoDepthTex);
+    gl.BindTexture(kGL_TEXTURE_2D, gl.ssaoDepthTex);
+    gl.TexImage2D(kGL_TEXTURE_2D, 0, (int)kGL_DEPTH_COMPONENT24, w, h, 0,
+                  kGL_DEPTH_COMPONENT, kGL_UNSIGNED_INT, nullptr);
+    gl.TexParameteri(kGL_TEXTURE_2D, kGL_TEXTURE_MIN_FILTER, (int)kGL_NEAREST);
+    gl.TexParameteri(kGL_TEXTURE_2D, kGL_TEXTURE_MAG_FILTER, (int)kGL_NEAREST);
+    gl.TexParameteri(kGL_TEXTURE_2D, kGL_TEXTURE_WRAP_S,     (int)kGL_CLAMP_TO_EDGE);
+    gl.TexParameteri(kGL_TEXTURE_2D, kGL_TEXTURE_WRAP_T,     (int)kGL_CLAMP_TO_EDGE);
+
+    gl.GenFramebuffers(1, &gl.ssaoDepthFbo);
+    gl.BindFramebuffer(kGL_FRAMEBUFFER, gl.ssaoDepthFbo);
+    gl.FramebufferTexture2D(kGL_FRAMEBUFFER, kGL_DEPTH_ATTACHMENT,
+                            kGL_TEXTURE_2D, gl.ssaoDepthTex, 0);
+    if (gl.DrawBuffers) { unsigned none = kGL_ZERO; gl.DrawBuffers(1, &none); }
+    if (gl.CheckFramebufferStatus(kGL_FRAMEBUFFER) != kGL_FRAMEBUFFER_COMPLETE)
+        std::cerr << "[SSAO] Depth FBO incomplete\n";
+
+    // AO texture (R8)
+    gl.GenTextures(1, &gl.ssaoTex);
+    gl.BindTexture(kGL_TEXTURE_2D, gl.ssaoTex);
+    gl.TexImage2D(kGL_TEXTURE_2D, 0, (int)kGL_R8, w, h, 0,
+                  kGL_RED, kGL_UNSIGNED_BYTE, nullptr);
+    gl.TexParameteri(kGL_TEXTURE_2D, kGL_TEXTURE_MIN_FILTER, (int)kGL_LINEAR);
+    gl.TexParameteri(kGL_TEXTURE_2D, kGL_TEXTURE_MAG_FILTER, (int)kGL_LINEAR);
+    gl.TexParameteri(kGL_TEXTURE_2D, kGL_TEXTURE_WRAP_S,     (int)kGL_CLAMP_TO_EDGE);
+    gl.TexParameteri(kGL_TEXTURE_2D, kGL_TEXTURE_WRAP_T,     (int)kGL_CLAMP_TO_EDGE);
+
+    gl.GenFramebuffers(1, &gl.ssaoFbo);
+    gl.BindFramebuffer(kGL_FRAMEBUFFER, gl.ssaoFbo);
+    gl.FramebufferTexture2D(kGL_FRAMEBUFFER, kGL_COLOR_ATTACHMENT0,
+                            kGL_TEXTURE_2D, gl.ssaoTex, 0);
+    if (gl.CheckFramebufferStatus(kGL_FRAMEBUFFER) != kGL_FRAMEBUFFER_COMPLETE)
+        std::cerr << "[SSAO] AO FBO incomplete\n";
+
+    // Blur texture (R8)
+    gl.GenTextures(1, &gl.ssaoBlurTex);
+    gl.BindTexture(kGL_TEXTURE_2D, gl.ssaoBlurTex);
+    gl.TexImage2D(kGL_TEXTURE_2D, 0, (int)kGL_R8, w, h, 0,
+                  kGL_RED, kGL_UNSIGNED_BYTE, nullptr);
+    gl.TexParameteri(kGL_TEXTURE_2D, kGL_TEXTURE_MIN_FILTER, (int)kGL_LINEAR);
+    gl.TexParameteri(kGL_TEXTURE_2D, kGL_TEXTURE_MAG_FILTER, (int)kGL_LINEAR);
+    gl.TexParameteri(kGL_TEXTURE_2D, kGL_TEXTURE_WRAP_S,     (int)kGL_CLAMP_TO_EDGE);
+    gl.TexParameteri(kGL_TEXTURE_2D, kGL_TEXTURE_WRAP_T,     (int)kGL_CLAMP_TO_EDGE);
+
+    gl.GenFramebuffers(1, &gl.ssaoBlurFbo);
+    gl.BindFramebuffer(kGL_FRAMEBUFFER, gl.ssaoBlurFbo);
+    gl.FramebufferTexture2D(kGL_FRAMEBUFFER, kGL_COLOR_ATTACHMENT0,
+                            kGL_TEXTURE_2D, gl.ssaoBlurTex, 0);
+    if (gl.CheckFramebufferStatus(kGL_FRAMEBUFFER) != kGL_FRAMEBUFFER_COMPLETE)
+        std::cerr << "[SSAO] Blur FBO incomplete\n";
+
+    gl.BindFramebuffer(kGL_FRAMEBUFFER, 0);
+    gl.BindTexture(kGL_TEXTURE_2D, 0);
+
+    gl.progSsao          = gl.makeProgram(kBloomVS, kSsaoFS);
+    gl.progSsaoBlur      = gl.makeProgram(kBloomVS, kSsaoBlurFS);
+    gl.progSsaoComposite = gl.makeProgram(kBloomVS, kSsaoCompositeFS);
+    if (!gl.progSsao || !gl.progSsaoBlur || !gl.progSsaoComposite)
+        std::cerr << "[SSAO] Shader compile/link failed\n";
+
+    ssaoFboW_    = w;
+    ssaoFboH_    = h;
+    ssaoGlReady_ = (gl.progSsao && gl.progSsaoBlur && gl.progSsaoComposite
+                    && gl.ssaoDepthFbo && gl.ssaoFbo && gl.ssaoBlurFbo);
+}
+
+void MeshCraftApplication::applySsao(
+    int vx, int glViewY, int vw, int vh,
+    float tanHalfFovX, float tanHalfFovY,
+    float nearPlane, float farPlane)
+{
+    auto& gl = s_bloom;
+    if (!gl.BlitFramebuffer || !gl.ssaoDepthFbo || !gl.progSsao) return;
+    if (vw <= 0 || vh <= 0) return;
+
+    constexpr unsigned kSSAO_SCISSOR_TEST = 0x0C11u;
+    constexpr unsigned kSSAO_CULL_FACE    = 0x0B44u;
+    constexpr unsigned kSSAO_STENCIL_TEST = 0x0B90u;
+
+    // Step 1: blit depth from default framebuffer into ssaoDepthFbo
+    gl.Disable(kSSAO_SCISSOR_TEST);
+    gl.BindFramebuffer(kGL_READ_FRAMEBUFFER, 0);
+    gl.BindFramebuffer(kGL_DRAW_FRAMEBUFFER, gl.ssaoDepthFbo);
+    gl.BlitFramebuffer(vx, glViewY, vx + vw, glViewY + vh,
+                       0, 0, vw, vh,
+                       kGL_DEPTH_BUFFER_BIT, kGL_NEAREST);
+
+    // Step 2: SSAO pass — depth → AO
+    gl.BindFramebuffer(kGL_FRAMEBUFFER, gl.ssaoFbo);
+    gl.Viewport(0, 0, vw, vh);
+    gl.Disable(kGL_BLEND);
+    gl.Disable(kGL_DEPTH_TEST);
+    gl.UseProgram(gl.progSsao);
+    gl.ActiveTexture(kGL_TEXTURE0);
+    gl.BindTexture(kGL_TEXTURE_2D, gl.ssaoDepthTex);
+    gl.Uniform1i(gl.GetUniformLocation(gl.progSsao, "u_depth"),      0);
+    gl.Uniform2f(gl.GetUniformLocation(gl.progSsao, "u_tanHalfFov"), tanHalfFovX, tanHalfFovY);
+    gl.Uniform1f(gl.GetUniformLocation(gl.progSsao, "u_near"),       nearPlane);
+    gl.Uniform1f(gl.GetUniformLocation(gl.progSsao, "u_far"),        farPlane);
+    gl.Uniform1f(gl.GetUniformLocation(gl.progSsao, "u_radius"),     ssaoRadius_);
+    gl.BindVertexArray(0);
+    gl.DrawArrays(kGL_TRIANGLE_STRIP, 0, 4);
+
+    // Step 3: blur AO
+    gl.BindFramebuffer(kGL_FRAMEBUFFER, gl.ssaoBlurFbo);
+    gl.Viewport(0, 0, vw, vh);
+    gl.UseProgram(gl.progSsaoBlur);
+    gl.ActiveTexture(kGL_TEXTURE0);
+    gl.BindTexture(kGL_TEXTURE_2D, gl.ssaoTex);
+    gl.Uniform1i(gl.GetUniformLocation(gl.progSsaoBlur, "u_ao"),        0);
+    gl.Uniform2f(gl.GetUniformLocation(gl.progSsaoBlur, "u_texelSize"),
+                 1.0f / static_cast<float>(vw), 1.0f / static_cast<float>(vh));
+    gl.BindVertexArray(0);
+    gl.DrawArrays(kGL_TRIANGLE_STRIP, 0, 4);
+
+    // Step 4: multiplicative composite onto scene
+    gl.BindFramebuffer(kGL_FRAMEBUFFER, 0);
+    gl.Viewport(vx, glViewY, vw, vh);
+    gl.Disable(kGL_DEPTH_TEST);
+    gl.Disable(kSSAO_CULL_FACE);
+    gl.Disable(kSSAO_STENCIL_TEST);
+    gl.Disable(kSSAO_SCISSOR_TEST);
+    gl.Enable(kGL_BLEND);
+    gl.BlendEquation(kGL_FUNC_ADD);
+    gl.BlendFunc(kGL_DST_COLOR, kGL_ZERO);
+    if (gl.ColorMask) gl.ColorMask(1, 1, 1, 1);
+    gl.UseProgram(gl.progSsaoComposite);
+    gl.ActiveTexture(kGL_TEXTURE0);
+    gl.BindTexture(kGL_TEXTURE_2D, gl.ssaoBlurTex);
+    gl.Uniform1i(gl.GetUniformLocation(gl.progSsaoComposite, "u_ao"),       0);
+    gl.Uniform1f(gl.GetUniformLocation(gl.progSsaoComposite, "u_strength"), ssaoStrength_);
+    gl.BindVertexArray(0);
+    gl.DrawArrays(kGL_TRIANGLE_STRIP, 0, 4);
+
+    // Restore GL state
+    gl.Disable(kGL_BLEND);
+    gl.Enable(kGL_DEPTH_TEST);
+    gl.BlendFunc(kGL_SRC_ALPHA, kGL_ONE_MINUS_SRC_ALPHA);
+    gl.BlendEquation(kGL_FUNC_ADD);
+    gl.UseProgram(0);
+    gl.BindTexture(kGL_TEXTURE_2D, 0);
+    gl.Viewport(0, 0, cachedScreenW_, cachedScreenH_);
+}
+
+void MeshCraftApplication::initShadowDebug()
+{
+    auto& gl = s_bloom;
+    if (!gl.loadFunctions()) return;
+
+    const int res = kShadowDebugRes;
+
+    gl.GenTextures(1, &shadowDebugColorTex_);
+    gl.BindTexture(kGL_TEXTURE_2D, shadowDebugColorTex_);
+    gl.TexImage2D(kGL_TEXTURE_2D, 0, (int)kGL_RGBA8, res, res, 0,
+                  kGL_RGBA, kGL_UNSIGNED_BYTE, nullptr);
+    gl.TexParameteri(kGL_TEXTURE_2D, kGL_TEXTURE_MIN_FILTER, (int)kGL_LINEAR);
+    gl.TexParameteri(kGL_TEXTURE_2D, kGL_TEXTURE_MAG_FILTER, (int)kGL_LINEAR);
+    gl.TexParameteri(kGL_TEXTURE_2D, kGL_TEXTURE_WRAP_S,     (int)kGL_CLAMP_TO_EDGE);
+    gl.TexParameteri(kGL_TEXTURE_2D, kGL_TEXTURE_WRAP_T,     (int)kGL_CLAMP_TO_EDGE);
+
+    gl.GenTextures(1, &shadowDebugDepthTex_);
+    gl.BindTexture(kGL_TEXTURE_2D, shadowDebugDepthTex_);
+    gl.TexImage2D(kGL_TEXTURE_2D, 0, (int)kGL_DEPTH_COMPONENT24, res, res, 0,
+                  kGL_DEPTH_COMPONENT, kGL_UNSIGNED_INT, nullptr);
+    gl.TexParameteri(kGL_TEXTURE_2D, kGL_TEXTURE_MIN_FILTER, (int)kGL_NEAREST);
+    gl.TexParameteri(kGL_TEXTURE_2D, kGL_TEXTURE_MAG_FILTER, (int)kGL_NEAREST);
+    gl.TexParameteri(kGL_TEXTURE_2D, kGL_TEXTURE_WRAP_S,     (int)kGL_CLAMP_TO_EDGE);
+    gl.TexParameteri(kGL_TEXTURE_2D, kGL_TEXTURE_WRAP_T,     (int)kGL_CLAMP_TO_EDGE);
+
+    gl.GenFramebuffers(1, &shadowDebugFbo_);
+    gl.BindFramebuffer(kGL_FRAMEBUFFER, shadowDebugFbo_);
+    gl.FramebufferTexture2D(kGL_FRAMEBUFFER, kGL_COLOR_ATTACHMENT0,
+                            kGL_TEXTURE_2D, shadowDebugColorTex_, 0);
+    gl.FramebufferTexture2D(kGL_FRAMEBUFFER, kGL_DEPTH_ATTACHMENT,
+                            kGL_TEXTURE_2D, shadowDebugDepthTex_, 0);
+    if (gl.CheckFramebufferStatus(kGL_FRAMEBUFFER) != kGL_FRAMEBUFFER_COMPLETE)
+        std::cerr << "[ShadowDebug] FBO incomplete\n";
+    gl.BindFramebuffer(kGL_FRAMEBUFFER, 0);
+    gl.BindTexture(kGL_TEXTURE_2D, 0);
+}
+
+void MeshCraftApplication::renderShadowDebugFbo(const Matrix& lightView, const Matrix& lightProj)
+{
+    if (!shadowDebugFbo_) return;
+    auto& gl = s_bloom;
+
+    gl.BindFramebuffer(kGL_FRAMEBUFFER, shadowDebugFbo_);
+    gl.Viewport(0, 0, kShadowDebugRes, kShadowDebugRes);
+    gl.Disable(kGL_BLEND);
+    gl.ClearColor(0.4f, 0.4f, 0.5f, 1.f);
+    gl.Clear(kGL_COLOR_BUFFER_BIT | kGL_DEPTH_BUFFER_BIT);
+    getGraphicsDeviceProperty().SetDepthTestEnabled(true);
+
+    sceneRenderer_->draw(document_, lightView, lightProj, {});
+
+    gl.BindFramebuffer(kGL_FRAMEBUFFER, 0);
+    gl.Viewport(0, 0, cachedScreenW_, cachedScreenH_);
+}
+
+// ---------------------------------------------------------------------------
+// D7: Material preview sphere (128×128 FBO, SDF Blinn-Phong shader)
+// ---------------------------------------------------------------------------
+void MeshCraftApplication::initMatPreview() {
+    auto& gl = s_bloom;
+    if (!gl.loadFunctions()) return;
+    if (gl.matPreviewTex) return;  // already initialised
+
+    constexpr int res = kMatPreviewRes;
+    gl.GenFramebuffers(1, &gl.matPreviewFbo);
+    gl.BindFramebuffer(kGL_FRAMEBUFFER, gl.matPreviewFbo);
+    gl.GenTextures(1, &gl.matPreviewTex);
+    gl.BindTexture(kGL_TEXTURE_2D, gl.matPreviewTex);
+    gl.TexImage2D(kGL_TEXTURE_2D, 0, kGL_RGBA8, res, res, 0, kGL_RGBA, kGL_UNSIGNED_BYTE, nullptr);
+    gl.TexParameteri(kGL_TEXTURE_2D, kGL_TEXTURE_MIN_FILTER, kGL_LINEAR);
+    gl.TexParameteri(kGL_TEXTURE_2D, kGL_TEXTURE_MAG_FILTER, kGL_LINEAR);
+    gl.FramebufferTexture2D(kGL_FRAMEBUFFER, kGL_COLOR_ATTACHMENT0,
+                            kGL_TEXTURE_2D, gl.matPreviewTex, 0);
+    gl.BindFramebuffer(kGL_FRAMEBUFFER, 0);
+    gl.BindTexture(kGL_TEXTURE_2D, 0);
+
+    gl.progMatPreview = gl.makeProgram(kBloomVS, kMatPreviewFS);
+    if (!gl.progMatPreview) {
+        gl.DeleteFramebuffers(1, &gl.matPreviewFbo); gl.matPreviewFbo = 0;
+        gl.DeleteTextures(1, &gl.matPreviewTex);     gl.matPreviewTex = 0;
+    }
+}
+
+void MeshCraftApplication::renderMatPreview(float r, float g, float b,
+                                             float roughness, float metallic) {
+    auto& gl = s_bloom;
+    if (!gl.matPreviewTex || !gl.progMatPreview) return;
+
+    constexpr int res = kMatPreviewRes;
+    gl.BindFramebuffer(kGL_FRAMEBUFFER, gl.matPreviewFbo);
+    gl.Viewport(0, 0, res, res);
+    gl.Disable(kGL_BLEND);
+    gl.Disable(kGL_DEPTH_TEST);
+    gl.ClearColor(0.18f, 0.18f, 0.18f, 1.f);
+    gl.Clear(kGL_COLOR_BUFFER_BIT);
+    gl.UseProgram(gl.progMatPreview);
+    gl.Uniform3f(gl.GetUniformLocation(gl.progMatPreview, "u_color"), r, g, b);
+    gl.Uniform1f(gl.GetUniformLocation(gl.progMatPreview, "u_roughness"), roughness);
+    gl.Uniform1f(gl.GetUniformLocation(gl.progMatPreview, "u_metallic"),  metallic);
+    gl.DrawArrays(kGL_TRIANGLE_STRIP, 0, 4);
+    gl.UseProgram(0);
+    gl.BindFramebuffer(kGL_FRAMEBUFFER, 0);
+    gl.Viewport(0, 0, cachedScreenW_, cachedScreenH_);
+    gl.Enable(kGL_BLEND);
+    matPreviewTexId_ = gl.matPreviewTex;
 }
 
 } // namespace MeshCraft

@@ -32,6 +32,18 @@ float MeshCraftApplication::drawMenuBar()
     // Main menu bar
     // -----------------------------------------------------------------------
     float menuBarH = 0.0f;
+
+    // Generic recursive walk: fn receives each shared_ptr by ref
+    auto walkAll = [&](this auto& self, auto& list, auto&& fn) -> void {
+        for (auto& o : list) { fn(o); self(o->children, fn); }
+    };
+    // Select all objects passing pred, clear selection first, update title after
+    auto selectBy = [&](auto&& pred) {
+        selection_.clear();
+        walkAll(document_.objects, [&](const auto& o) { if (pred(o)) selection_.select(o); });
+        updateWindowTitle();
+    };
+
     if (ImGui::BeginMainMenuBar()) {
         menuBarH = ImGui::GetWindowHeight();
         if (ImGui::BeginMenu("File")) {
@@ -117,25 +129,15 @@ float MeshCraftApplication::drawMenuBar()
                 updateWindowTitle();
             }
             if (ImGui::MenuItem("Invert Selection", "Ctrl+I")) {
-                std::function<void(std::vector<std::shared_ptr<Mc3::Mc3Object>>&)> invertWalk;
-                invertWalk = [&](auto& list) {
-                    for (auto& o : list) {
-                        if (selection_.isSelected(o.get())) selection_.deselect(o);
-                        else                                 selection_.select(o);
-                        invertWalk(o->children);
-                    }
-                };
-                invertWalk(document_.objects);
+                walkAll(document_.objects, [&](const auto& o) {
+                    if (selection_.isSelected(o.get())) selection_.deselect(o);
+                    else                                selection_.select(o);
+                });
                 updateWindowTitle();
             }
             if (ImGui::BeginMenu("Select by Type")) {
-                // collect which types exist in scene (recursive)
                 std::set<Mc3::ObjectType> presentTypes;
-                std::function<void(const std::vector<std::shared_ptr<Mc3::Mc3Object>>&)> collectTypes;
-                collectTypes = [&](const auto& list) {
-                    for (const auto& o : list) { presentTypes.insert(o->type); collectTypes(o->children); }
-                };
-                collectTypes(document_.objects);
+                walkAll(document_.objects, [&](const auto& o) { presentTypes.insert(o->type); });
 
                 auto typeName = [](Mc3::ObjectType t) -> const char* {
                     switch (t) {
@@ -170,16 +172,7 @@ float MeshCraftApplication::drawMenuBar()
                     if (!presentTypes.count(t)) continue;
                     anyPresent = true;
                     if (ImGui::MenuItem(typeName(t))) {
-                        selection_.clear();
-                        std::function<void(const std::vector<std::shared_ptr<Mc3::Mc3Object>>&)> walk;
-                        walk = [&](const auto& list) {
-                            for (const auto& o : list) {
-                                if (o->type == t) selection_.select(o);
-                                walk(o->children);
-                            }
-                        };
-                        walk(document_.objects);
-                        updateWindowTitle();
+                        selectBy([t](const auto& o) { return o->type == t; });
                     }
                 }
                 if (!anyPresent) ImGui::TextDisabled("(scene is empty)");
@@ -187,31 +180,18 @@ float MeshCraftApplication::drawMenuBar()
             }
             if (ImGui::BeginMenu("Select by Tag")) {
                 std::set<std::string> allTags;
-                std::function<void(const std::vector<std::shared_ptr<Mc3::Mc3Object>>&)> collectTags;
-                collectTags = [&](const auto& list) {
-                    for (const auto& o : list) {
-                        for (const auto& t : o->tags) allTags.insert(t);
-                        collectTags(o->children);
-                    }
-                };
-                collectTags(document_.objects);
+                walkAll(document_.objects, [&](const auto& o) {
+                    for (const auto& t : o->tags) allTags.insert(t);
+                });
 
                 if (allTags.empty()) {
                     ImGui::TextDisabled("(no tags in scene)");
                 } else {
                     for (const auto& tag : allTags) {
                         if (ImGui::MenuItem(tag.c_str())) {
-                            selection_.clear();
-                            std::function<void(const std::vector<std::shared_ptr<Mc3::Mc3Object>>&)> sel;
-                            sel = [&](const auto& list) {
-                                for (const auto& o : list) {
-                                    if (std::find(o->tags.begin(), o->tags.end(), tag) != o->tags.end())
-                                        selection_.select(o);
-                                    sel(o->children);
-                                }
-                            };
-                            sel(document_.objects);
-                            updateWindowTitle();
+                            selectBy([&](const auto& o) {
+                                return std::find(o->tags.begin(), o->tags.end(), tag) != o->tags.end();
+                            });
                             char sbuf[96];
                             std::snprintf(sbuf, sizeof(sbuf), "Selected %d object(s) with tag \"%s\"",
                                           static_cast<int>(selection_.selection().size()), tag.c_str());
@@ -223,29 +203,15 @@ float MeshCraftApplication::drawMenuBar()
             }
             if (ImGui::BeginMenu("Select by Material")) {
                 std::set<std::string> allMats;
-                std::function<void(const std::vector<std::shared_ptr<Mc3::Mc3Object>>&)> collectMats;
-                collectMats = [&](const auto& list) {
-                    for (const auto& o : list) {
-                        if (!o->material.empty()) allMats.insert(o->material);
-                        collectMats(o->children);
-                    }
-                };
-                collectMats(document_.objects);
+                walkAll(document_.objects, [&](const auto& o) {
+                    if (!o->material.empty()) allMats.insert(o->material);
+                });
                 if (allMats.empty()) {
                     ImGui::TextDisabled("(no materials in scene)");
                 } else {
                     for (const auto& mat : allMats) {
                         if (ImGui::MenuItem(mat.c_str())) {
-                            selection_.clear();
-                            std::function<void(const std::vector<std::shared_ptr<Mc3::Mc3Object>>&)> sel;
-                            sel = [&](const auto& list) {
-                                for (const auto& o : list) {
-                                    if (o->material == mat) selection_.select(o);
-                                    sel(o->children);
-                                }
-                            };
-                            sel(document_.objects);
-                            updateWindowTitle();
+                            selectBy([&](const auto& o) { return o->material == mat; });
                             char sbuf[96];
                             std::snprintf(sbuf, sizeof(sbuf), "Selected %d object(s) with material \"%s\"",
                                           static_cast<int>(selection_.selection().size()), mat.c_str());
@@ -427,6 +393,9 @@ float MeshCraftApplication::drawMenuBar()
                     ImGui::EndMenu();
                 }
             }
+            if (ImGui::MenuItem("Group Scale…", nullptr, false,
+                                selection_.selection().size() >= 2))
+                groupScaleOpen_ = true;
             if (ImGui::MenuItem("Linear Array...", nullptr, false,
                                 !selection_.selection().empty()))
                 arrayDupOpen_ = true;
@@ -441,6 +410,26 @@ float MeshCraftApplication::drawMenuBar()
             if (ImGui::MenuItem("Randomize Transform...", nullptr, false,
                                 !selection_.selection().empty()))
                 randomizeOpen_ = true;
+            ImGui::Separator();
+            // H12: Macro recorder
+            if (isRecording_) {
+                ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.f, 0.4f, 0.4f, 1.f));
+                if (ImGui::MenuItem("Stop Recording")) {
+                    isRecording_ = false;
+                    setStatusMsg("Recording stopped", false, 2.f);
+                }
+                ImGui::PopStyleColor();
+            } else {
+                if (ImGui::MenuItem("Record Macro")) {
+                    macroSteps_.clear();
+                    isRecording_ = true;
+                    setStatusMsg("Recording started — edit the scene, then Stop", false, 3.f);
+                }
+            }
+            if (ImGui::MenuItem("Play Macro", nullptr, false, !macroSteps_.empty() && !isRecording_))
+                playMacro();
+            if (ImGui::MenuItem("Macro Editor…"))
+                macroOpen_ = true;
             ImGui::Separator();
             if (ImGui::MenuItem("Lock/Unlock Selected", "Ctrl+L", false, !selection_.selection().empty())) {
                 for (const auto& s : selection_.selection()) {
@@ -523,12 +512,8 @@ float MeshCraftApplication::drawMenuBar()
                 modified_ = true; updateWindowTitle();
             }
             if (ImGui::MenuItem("Show All Hidden", "Alt+H")) {
-                std::function<void(std::vector<std::shared_ptr<Mc3::Mc3Object>>&)> showAll;
-                showAll = [&](auto& list) {
-                    for (auto& o : list) { o->visible = true; showAll(o->children); }
-                };
                 pushUndo();
-                showAll(document_.objects);
+                walkAll(document_.objects, [&](const auto& o) { o->visible = true; });
                 modified_ = true; updateWindowTitle();
             }
             ImGui::EndMenu();
@@ -601,6 +586,14 @@ float MeshCraftApplication::drawMenuBar()
                 ImGui::SetNextItemWidth(140);
                 ImGui::SliderFloat("  Strength##bloom", &bloomStrength_, 0.5f, 8.0f, "%.1f");
             }
+            ImGui::MenuItem("SSAO (ambient occlusion)", nullptr, &ssaoEnabled_);
+            if (ssaoEnabled_) {
+                ImGui::SetNextItemWidth(140);
+                ImGui::SliderFloat("  Strength##ssao", &ssaoStrength_, 0.0f, 1.0f, "%.2f");
+                ImGui::SetNextItemWidth(140);
+                ImGui::SliderFloat("  Radius##ssao",   &ssaoRadius_,   0.05f, 2.0f, "%.2f");
+            }
+            ImGui::MenuItem("Shadow Map Debug",         nullptr, &shadowDebugEnabled_);
             ImGui::MenuItem("Snap to Grid", nullptr, &snapEnabled_);
             ImGui::MenuItem("Timeline",       "Ctrl+T", &showTimeline_);
             ImGui::MenuItem("Model Registry", nullptr,  &showRegistryPanel_);

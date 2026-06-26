@@ -783,6 +783,122 @@ static void testDiskLegacyMinorRadius() {
 }
 
 // ---------------------------------------------------------------------------
+// SVG texture roundtrip
+// ---------------------------------------------------------------------------
+
+static void testEmbedGltf() {
+    // External GLB
+    {
+        Mc3Document doc;
+        Mc3EmbedGltf em;
+        em.id  = "car";
+        em.src = "models/car.glb";
+        doc.addEmbed(em);
+
+        auto rt = roundtrip(doc);
+        CHECK(rt.embeds.count("car") == 1,       "embed external: present after roundtrip");
+        if (rt.embeds.count("car")) {
+            CHECK(rt.embeds["car"].src == "models/car.glb", "embed external: src preserved");
+            CHECK(rt.embeds["car"].base64Content.empty(),    "embed external: no base64");
+            CHECK(rt.embeds["car"].isExternal(),             "embed external: isExternal()");
+        }
+    }
+    // Inline base64
+    {
+        Mc3Document doc;
+        Mc3EmbedGltf em;
+        em.id            = "icon_mesh";
+        em.base64Content = "Z2xURgIAAAA="; // fake base64 GLB header
+        doc.addEmbed(em);
+
+        auto rt = roundtrip(doc);
+        CHECK(rt.embeds.count("icon_mesh") == 1,     "embed inline: present after roundtrip");
+        if (rt.embeds.count("icon_mesh")) {
+            CHECK(rt.embeds["icon_mesh"].src.empty(),        "embed inline: src empty");
+            CHECK(!rt.embeds["icon_mesh"].base64Content.empty(), "embed inline: base64 preserved");
+            CHECK(rt.embeds["icon_mesh"].isInline(),         "embed inline: isInline()");
+        }
+    }
+    // Mesh object references embed via "embed:<id>"
+    {
+        Mc3Document doc;
+        Mc3EmbedGltf em;
+        em.id  = "tree";
+        em.src = "tree.glb";
+        doc.addEmbed(em);
+        auto obj = std::make_shared<Mc3Object>();
+        obj->id         = "tree_obj";
+        obj->type       = ObjectType::Mesh;
+        obj->meshSource = "embed:tree";
+        doc.objects.push_back(obj);
+
+        auto rt = roundtrip(doc);
+        CHECK(rt.embeds.count("tree") == 1,               "embed+mesh: embed present");
+        CHECK(!rt.objects.empty(),                         "embed+mesh: object present");
+        if (!rt.objects.empty())
+            CHECK(rt.objects[0]->meshSource == "embed:tree", "embed+mesh: meshSource roundtrips");
+    }
+    // Coexistence with textures
+    {
+        Mc3Document doc;
+        doc.addTexture(Mc3Texture{"diffuse", "tex/d.png"});
+        doc.addEmbed(Mc3EmbedGltf{"prop", "prop.glb", {}});
+
+        auto rt = roundtrip(doc);
+        CHECK(rt.textures.count("diffuse") == 1, "embed+tex: texture preserved");
+        CHECK(rt.embeds.count("prop")      == 1, "embed+tex: embed preserved");
+    }
+}
+
+static void testSvgTexture() {
+    // External SVG
+    {
+        Mc3Document doc;
+        Mc3SvgTexture svg;
+        svg.id  = "logo";
+        svg.src = "images/logo.svg";
+        doc.addSvgTexture(svg);
+
+        auto rt = roundtrip(doc);
+        CHECK(rt.svgTextures.count("logo") == 1,  "svg tex external: present after roundtrip");
+        if (rt.svgTextures.count("logo")) {
+            CHECK(rt.svgTextures["logo"].src == "images/logo.svg", "svg tex external: src preserved");
+            CHECK(rt.svgTextures["logo"].inlineContent.empty(),    "svg tex external: no inline content");
+            CHECK(rt.svgTextures["logo"].isExternal(),             "svg tex external: isExternal()");
+        }
+    }
+    // Inline SVG
+    {
+        Mc3Document doc;
+        Mc3SvgTexture svg;
+        svg.id            = "icon";
+        svg.inlineContent = "<svg xmlns=\"http://www.w3.org/2000/svg\"><circle r=\"10\"/></svg>";
+        doc.addSvgTexture(svg);
+
+        auto rt = roundtrip(doc);
+        CHECK(rt.svgTextures.count("icon") == 1, "svg tex inline: present after roundtrip");
+        if (rt.svgTextures.count("icon")) {
+            CHECK(rt.svgTextures["icon"].src.empty(),       "svg tex inline: src empty");
+            CHECK(!rt.svgTextures["icon"].inlineContent.empty(), "svg tex inline: content preserved");
+            CHECK(rt.svgTextures["icon"].isInline(),        "svg tex inline: isInline()");
+        }
+    }
+    // Coexistence with regular bitmap textures
+    {
+        Mc3Document doc;
+        doc.addTexture(Mc3Texture{"diffuse", "tex/color.png"});
+        Mc3SvgTexture svg;
+        svg.id  = "badge";
+        svg.src = "badge.svg";
+        doc.addSvgTexture(svg);
+
+        auto rt = roundtrip(doc);
+        CHECK(rt.textures.count("diffuse") == 1,    "svg+bitmap: bitmap texture preserved");
+        CHECK(rt.svgTextures.count("badge") == 1,   "svg+bitmap: svg texture preserved");
+    }
+}
+
+// ---------------------------------------------------------------------------
 
 int main(int argc, char* argv[]) {
     testVisible();
@@ -802,6 +918,8 @@ int main(int argc, char* argv[]) {
     testAnimationStep();
     testAnimationMultiAction();
     testAnimationEvaluate();
+    testEmbedGltf();
+    testSvgTexture();
 
     if (argc >= 2) {
         testFeaturesXmlLoads(argv[1]);

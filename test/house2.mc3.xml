@@ -1,0 +1,532 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<mc3 version="0.3" model="Dum_se_zahradou">
+    <environment>
+        <background color="0.53 0.75 0.95"/>
+        <fog mode="linear" color="0.75 0.85 0.95" start="80" end="220" density="0.01"/>
+    </environment>
+    <lights>
+        <ambient color="0.35 0.38 0.45" brightness="0.5"/>
+        <directional name="Sun" color="1 0.95 0.8" brightness="2.8" direction="-0.6 -1 -0.4" cast_shadows="true"/>
+        <point name="Lamp_obyvak" color="1 0.85 0.6" brightness="6" position="0 2.3 0"/>
+        <point name="Lamp_kuchyn" color="1 0.9 0.7" brightness="5" position="5 2.3 2"/>
+        <point name="Lamp_loznice" color="0.9 0.85 0.75" brightness="4" position="0 5.8 0"/>
+        <point name="Lamp_sklep" color="0.8 0.8 0.65" brightness="4" position="0 -1.2 0"/>
+    </lights>
+    <cameras default="Main">
+        <camera name="Main" type="perspective" position="28 18 32" target="0 2 0" fov="55" near="0.1" far="500"/>
+        <camera name="Zahrada" type="perspective" position="-20 10 20" target="-8 1 -5" fov="60" near="0.1" far="300"/>
+    </cameras>
+    <textures>
+        <texture id="tex_cihla" uri="textures/brick.png"/>
+        <texture id="tex_dlazdice" uri="textures/tile.png"/>
+        <texture id="tex_dřevo" uri="textures/wood.png"/>
+        <texture id="tex_koberec" uri="textures/carpet.png"/>
+        <texture id="tex_obraz1" uri="textures/painting1.png" wrap_u="clamp" wrap_v="clamp"/>
+        <texture id="tex_obraz2" uri="textures/painting2.png" wrap_u="clamp" wrap_v="clamp"/>
+        <texture id="tex_strecha" uri="textures/roof_tile.png"/>
+        <texture id="tex_trava" uri="textures/grass.png"/>
+    </textures>
+    <materials>
+        <material id="mat_beton" roughness="0.82" metallic="0">
+            <base_color>0.72 0.7 0.68 1</base_color>
+        </material>
+        <material id="mat_cihla" roughness="0.9" metallic="0">
+            <base_color>0.72 0.38 0.26 1</base_color>
+            <base_color_texture>tex_cihla</base_color_texture>
+        </material>
+        <material id="mat_dlazdice" roughness="0.75" metallic="0">
+            <base_color>0.8 0.76 0.7 1</base_color>
+            <base_color_texture>tex_dlazdice</base_color_texture>
+        </material>
+        <material id="mat_drevo_nabyt" roughness="0.6" metallic="0">
+            <base_color>0.5 0.32 0.16 1</base_color>
+            <base_color_texture>tex_dřevo</base_color_texture>
+        </material>
+        <material id="mat_dvere" roughness="0.65" metallic="0">
+            <base_color>0.28 0.18 0.1 1</base_color>
+        </material>
+        <material id="mat_hlina" roughness="0.95" metallic="0">
+            <base_color>0.42 0.3 0.2 1</base_color>
+        </material>
+        <material id="mat_kmen" roughness="0.9" metallic="0">
+            <base_color>0.38 0.25 0.14 1</base_color>
+            <base_color_texture>tex_dřevo</base_color_texture>
+        </material>
+        <material id="mat_koberec_cerveny" roughness="0.98" metallic="0">
+            <base_color>0.65 0.12 0.1 1</base_color>
+            <base_color_texture>tex_koberec</base_color_texture>
+        </material>
+        <material id="mat_koberec_modry" roughness="0.98" metallic="0">
+            <base_color>0.18 0.25 0.6 1</base_color>
+            <base_color_texture>tex_koberec</base_color_texture>
+        </material>
+        <material id="mat_kov" roughness="0.3" metallic="0.9">
+            <base_color>0.75 0.73 0.7 1</base_color>
+        </material>
+        <material id="mat_kvet_cerv" roughness="0.95" metallic="0">
+            <base_color>0.85 0.15 0.12 1</base_color>
+        </material>
+        <material id="mat_kvet_zlut" roughness="0.95" metallic="0">
+            <base_color>0.92 0.82 0.1 1</base_color>
+        </material>
+        <material id="mat_latka_postel" roughness="0.88" metallic="0">
+            <base_color>0.85 0.8 0.72 1</base_color>
+        </material>
+        <material id="mat_latka_sedaci" roughness="0.88" metallic="0">
+            <base_color>0.3 0.28 0.55 1</base_color>
+        </material>
+        <material id="mat_lavicka" roughness="0.7" metallic="0">
+            <base_color>0.42 0.28 0.15 1</base_color>
+        </material>
+        <material id="mat_listy" roughness="0.95" metallic="0" double_sided="true">
+            <base_color>0.15 0.45 0.12 1</base_color>
+        </material>
+        <material id="mat_listy2" roughness="0.95" metallic="0" double_sided="true">
+            <base_color>0.1 0.38 0.1 1</base_color>
+        </material>
+        <material id="mat_obraz1" roughness="0.8" metallic="0">
+            <base_color>1 1 1 1</base_color>
+            <base_color_texture>tex_obraz1</base_color_texture>
+        </material>
+        <material id="mat_obraz2" roughness="0.8" metallic="0">
+            <base_color>1 1 1 1</base_color>
+            <base_color_texture>tex_obraz2</base_color_texture>
+        </material>
+        <material id="mat_okno_ram" roughness="0.7" metallic="0">
+            <base_color>0.95 0.93 0.88 1</base_color>
+        </material>
+        <material id="mat_omitka" roughness="0.88" metallic="0">
+            <base_color>0.92 0.89 0.82 1</base_color>
+        </material>
+        <material id="mat_plot_drevo" roughness="0.88" metallic="0">
+            <base_color>0.45 0.3 0.18 1</base_color>
+            <base_color_texture>tex_dřevo</base_color_texture>
+        </material>
+        <material id="mat_plot_sloup" roughness="0.85" metallic="0">
+            <base_color>0.35 0.22 0.12 1</base_color>
+        </material>
+        <material id="mat_podlaha_dlaz" roughness="0.65" metallic="0">
+            <base_color>0.78 0.74 0.68 1</base_color>
+            <base_color_texture>tex_dlazdice</base_color_texture>
+        </material>
+        <material id="mat_podlaha_drevo" roughness="0.55" metallic="0">
+            <base_color>0.6 0.42 0.25 1</base_color>
+            <base_color_texture>tex_dřevo</base_color_texture>
+        </material>
+        <material id="mat_police" roughness="0.65" metallic="0">
+            <base_color>0.48 0.33 0.18 1</base_color>
+        </material>
+        <material id="mat_polstar" roughness="0.9" metallic="0">
+            <base_color>0.9 0.88 0.85 1</base_color>
+        </material>
+        <material id="mat_ram_obrazu" roughness="0.55" metallic="0.1">
+            <base_color>0.55 0.4 0.18 1</base_color>
+        </material>
+        <material id="mat_sklep_podlaha" roughness="0.9" metallic="0">
+            <base_color>0.45 0.43 0.4 1</base_color>
+        </material>
+        <material id="mat_sklep_zed" roughness="0.92" metallic="0">
+            <base_color>0.55 0.52 0.48 1</base_color>
+        </material>
+        <material id="mat_sklo" roughness="0.05" metallic="0.1" alpha_mode="blend">
+            <base_color>0.8 0.9 0.95 0.25</base_color>
+        </material>
+        <material id="mat_stena_bila" roughness="0.9" metallic="0">
+            <base_color>0.96 0.95 0.93 1</base_color>
+        </material>
+        <material id="mat_stena_modra" roughness="0.9" metallic="0">
+            <base_color>0.7 0.8 0.92 1</base_color>
+        </material>
+        <material id="mat_strecha" roughness="0.85" metallic="0">
+            <base_color>0.4 0.18 0.12 1</base_color>
+            <base_color_texture>tex_strecha</base_color_texture>
+        </material>
+        <material id="mat_strop" roughness="0.92" metallic="0">
+            <base_color>0.97 0.97 0.95 1</base_color>
+        </material>
+        <material id="mat_trava" roughness="0.95" metallic="0">
+            <base_color>0.22 0.52 0.18 1</base_color>
+            <base_color_texture>tex_trava</base_color_texture>
+        </material>
+        <material id="mat_zivplot" roughness="0.95" metallic="0">
+            <base_color>0.12 0.4 0.1 1</base_color>
+        </material>
+    </materials>
+    <definitions>
+        <definition id="def_dvere_vnejsi">
+            <group name="Dvere_vnejsi">
+                <difference name="Zaruben_vnejsi" material="mat_cihla">
+                    <box name="Zaruben_outer" size="1.2 2.2 0.32"/>
+                    <box name="Dvere_otvor" role="cutter" position="0 -0.05 0" size="1 2.05 0.35"/>
+                </difference>
+                <box name="Kridlo_dveri" material="mat_dvere" position="0 -0.04 0.04" size="0.98 2.02 0.06"/>
+                <sphere name="Klika" material="mat_kov" position="0.38 -0.15 0.1" radius="0.04"/>
+            </group>
+        </definition>
+        <definition id="def_dvere_vnitrni">
+            <group name="Dvere_vnitrni">
+                <box name="Ram_dveri_v" material="mat_okno_ram" size="0.92 2.1 0.1"/>
+                <box name="Kridlo_v" material="mat_dvere" position="0 0 0.04" size="0.88 2.06 0.05"/>
+                <sphere name="Klika_v" material="mat_kov" position="0.34 -0.2 0.08" radius="0.035"/>
+            </group>
+        </definition>
+        <definition id="def_kniha">
+            <box name="Kniha" material="mat_dvere" size="0.05 0.24 0.18"/>
+        </definition>
+        <definition id="def_kvetinac">
+            <group name="Kvetinac">
+                <cylinder name="Nadoba" material="mat_cihla" position="0 0.15 0" radius="0.22" height="0.3" segments="12"/>
+                <sphere name="Zemina" material="mat_hlina" position="0 0.3 0" radius="0.2" segments="10"/>
+                <sphere name="Kvet_c" material="mat_kvet_cerv" position="0 0.42 0" radius="0.15" segments="8"/>
+            </group>
+        </definition>
+        <definition id="def_okno">
+            <group name="Okno">
+                <difference name="Ram_okna" material="mat_okno_ram">
+                    <box name="Ram_outer" size="1.1 1.3 0.12"/>
+                    <box name="Ram_inner" role="cutter" size="0.9 1.1 0.15"/>
+                </difference>
+                <box name="Sklo_panel" material="mat_sklo" size="0.88 1.08 0.04"/>
+                <box name="Krizovy_H" material="mat_okno_ram" position="0 0 0.01" size="0.9 0.05 0.05"/>
+                <box name="Krizovy_V" material="mat_okno_ram" position="0 0 0.01" size="0.05 1.1 0.05"/>
+            </group>
+        </definition>
+        <definition id="def_plot_panel">
+            <group name="Plot_panel">
+                <box name="Lata1" material="mat_plot_drevo" position="-0.4 0.6 0" size="0.08 1.2 0.04"/>
+                <box name="Lata2" material="mat_plot_drevo" position="-0.2 0.6 0" size="0.08 1.2 0.04"/>
+                <box name="Lata3" material="mat_plot_drevo" position="0 0.6 0" size="0.08 1.2 0.04"/>
+                <box name="Lata4" material="mat_plot_drevo" position="0.2 0.6 0" size="0.08 1.2 0.04"/>
+                <box name="Lata5" material="mat_plot_drevo" position="0.4 0.6 0" size="0.08 1.2 0.04"/>
+                <box name="Pritel1" material="mat_plot_drevo" position="0 0.3 0" size="1 0.08 0.06"/>
+                <box name="Pritel2" material="mat_plot_drevo" position="0 0.85 0" size="1 0.08 0.06"/>
+            </group>
+        </definition>
+        <definition id="def_plot_sloup">
+            <group name="Plot_sloup">
+                <box name="Sloup_telo" material="mat_plot_sloup" position="0 0.7 0" size="0.12 1.4 0.12"/>
+                <box name="Sloup_kap" material="mat_plot_sloup" position="0 1.4 0" size="0.16 0.1 0.16"/>
+            </group>
+        </definition>
+        <definition id="def_polstar">
+            <box name="Polstar" material="mat_polstar" size="0.5 0.16 0.5"/>
+        </definition>
+        <definition id="def_smrk">
+            <group name="Smrk">
+                <cylinder name="Kmen_s" material="mat_kmen" position="0 1 0" radius="0.14" height="2" segments="8"/>
+                <cone name="Koruna_s1" material="mat_listy2" position="0 3.5 0" radius="1.5" height="2.5" segments="10"/>
+                <cone name="Koruna_s2" material="mat_listy2" position="0 4.8 0" radius="1.1" height="2.2" segments="10"/>
+                <cone name="Koruna_s3" material="mat_listy2" position="0 5.9 0" radius="0.7" height="1.8" segments="10"/>
+            </group>
+        </definition>
+        <definition id="def_strom">
+            <group name="Strom">
+                <cylinder name="Kmen" material="mat_kmen" position="0 1.4 0" radius="0.18" height="2.8" segments="10"/>
+                <sphere name="Koruna_dolni" material="mat_listy" position="0 3.8 0" radius="1.6" segments="14"/>
+                <sphere name="Koruna_horni" material="mat_listy2" position="0 5 0" radius="1.1" segments="12"/>
+            </group>
+        </definition>
+        <definition id="def_stupen">
+            <box name="Stupen" material="mat_beton" size="1.2 0.18 0.28"/>
+        </definition>
+    </definitions>
+    <objects>
+        <plane name="Zeme_trava" material="mat_trava" size="80 80"/>
+        <box name="Zahon1" material="mat_hlina" position="-10 0.075 -6" size="3.5 0.15 1.5"/>
+        <box name="Zahon2" material="mat_hlina" position="-10 0.075 -9" size="3.5 0.15 1.5"/>
+        <sphere name="Kvet_z1" material="mat_kvet_cerv" position="-11 0.38 -6" radius="0.18"/>
+        <sphere name="Kvet_z2" material="mat_kvet_zlut" position="-10.2 0.38 -6" radius="0.18"/>
+        <sphere name="Kvet_z3" material="mat_kvet_cerv" position="-9.4 0.38 -6" radius="0.18"/>
+        <sphere name="Kvet_z4" material="mat_kvet_zlut" position="-11 0.38 -9" radius="0.18"/>
+        <sphere name="Kvet_z5" material="mat_kvet_cerv" position="-10.2 0.38 -9" radius="0.18"/>
+        <sphere name="Kvet_z6" material="mat_kvet_zlut" position="-9.4 0.38 -9" radius="0.18"/>
+        <box name="Zivplot_sever" material="mat_zivplot" position="0 0.8 -15" size="32 1.6 0.6"/>
+        <box name="Zivplot_jih" material="mat_zivplot" position="0 0.8 15" size="32 1.6 0.6"/>
+        <box name="Zivplot_zapad" material="mat_zivplot" position="-16 0.8 0" size="0.6 1.6 30"/>
+        <box name="Zivplot_vychod" material="mat_zivplot" position="16 0.8 6.5" size="0.6 1.6 16"/>
+        <group name="Lavicka_zahrada" position="-11 0 3">
+            <box name="Sedak_lavicka" material="mat_lavicka" position="0 0.46 0" size="1.8 0.08 0.45"/>
+            <box name="Opera_lavicka" material="mat_lavicka" position="0 0.75 -0.2" size="1.8 0.55 0.06"/>
+            <box name="Noha_lav1" material="mat_lavicka" position="-0.8 0.22 0" size="0.06 0.44 0.4"/>
+            <box name="Noha_lav2" material="mat_lavicka" position="0.8 0.22 0" size="0.06 0.44 0.4"/>
+        </group>
+        <instance name="Kvetinac1" position="-2.2 0 4.8" definition="def_kvetinac"/>
+        <instance name="Kvetinac2" position="2.2 0 4.8" definition="def_kvetinac"/>
+        <instance name="Kvetinac3" position="-2.2 0 -4.8" definition="def_kvetinac"/>
+        <instance name="Kvetinac4" position="2.2 0 -4.8" definition="def_kvetinac"/>
+        <instance name="Strom_SZ" position="-12 0 -11" rotation="0 20 0" definition="def_strom"/>
+        <instance name="Strom_SV" position="12 0 -11" rotation="0 75 0" definition="def_strom"/>
+        <instance name="Strom_JZ" position="-12 0 10" rotation="0 40 0" definition="def_strom"/>
+        <instance name="Smrk_JV1" position="13 0 8" rotation="0 10 0" definition="def_smrk"/>
+        <instance name="Smrk_JV2" position="11 0 12" rotation="0 55 0" definition="def_smrk"/>
+        <instance name="Strom_ZAD" position="-5 0 -13" rotation="0 90 0" definition="def_strom"/>
+        <instance name="Sloup_S1" position="-15.5 0 -14.7" definition="def_plot_sloup"/>
+        <instance name="Panel_S1" position="-15 0 -14.7" definition="def_plot_panel"/>
+        <instance name="Sloup_S2" position="-14 0 -14.7" definition="def_plot_sloup"/>
+        <instance name="Panel_S2" position="-13.5 0 -14.7" definition="def_plot_panel"/>
+        <instance name="Sloup_S3" position="-12.5 0 -14.7" definition="def_plot_sloup"/>
+        <instance name="Panel_S3" position="-12 0 -14.7" definition="def_plot_panel"/>
+        <instance name="Sloup_S4" position="-11 0 -14.7" definition="def_plot_sloup"/>
+        <instance name="Panel_S4" position="-10.5 0 -14.7" definition="def_plot_panel"/>
+        <instance name="Sloup_S5" position="-9.5 0 -14.7" definition="def_plot_sloup"/>
+        <instance name="Panel_S5" position="-9 0 -14.7" definition="def_plot_panel"/>
+        <instance name="Sloup_S6" position="-8 0 -14.7" definition="def_plot_sloup"/>
+        <instance name="Panel_S6" position="-7.5 0 -14.7" definition="def_plot_panel"/>
+        <instance name="Sloup_S7" position="-6.5 0 -14.7" definition="def_plot_sloup"/>
+        <instance name="Panel_S7" position="-6 0 -14.7" definition="def_plot_panel"/>
+        <instance name="Sloup_S8" position="-5 0 -14.7" definition="def_plot_sloup"/>
+        <instance name="Panel_S8" position="-4.5 0 -14.7" definition="def_plot_panel"/>
+        <instance name="Sloup_S9" position="-3.5 0 -14.7" definition="def_plot_sloup"/>
+        <box name="Branka_leva" material="mat_plot_sloup" position="-2.8 0.65 -14.7" size="0.06 1.3 0.05"/>
+        <box name="Branka_prava" material="mat_plot_sloup" position="-1.5 0.65 -14.7" size="0.06 1.3 0.05"/>
+        <box name="Branka_vrat1" material="mat_plot_drevo" position="-2.15 0.65 -14.7" size="1.1 1.15 0.05"/>
+        <box name="Branka_zavor" material="mat_kov" position="-2.15 0.8 -14.7" rotation="0 90 0" size="0.05 0.05 0.3"/>
+        <box name="Chodnik_hlavni" material="mat_dlazdice" position="-2.15 0.04 -7.35" size="1.6 0.08 14"/>
+        <box name="Terasa" material="mat_dlazdice" position="0 0.05 3" size="10 0.1 4"/>
+        <instance name="Stupen_ext1" position="0 0.09 5.18" definition="def_stupen"/>
+        <instance name="Stupen_ext2" position="0 0.27 5.46" definition="def_stupen"/>
+        <instance name="Stupen_ext3" position="0 0.45 5.74" definition="def_stupen"/>
+        <box name="Madlo_ext_L" material="mat_kov" position="-0.65 0.55 5.46" rotation="0 0 20" size="0.05 0.6 1.2"/>
+        <box name="Madlo_ext_P" material="mat_kov" position="0.65 0.55 5.46" rotation="0 0 -20" size="0.05 0.6 1.2"/>
+        <group name="Sklep">
+            <box name="Sklep_sever" material="mat_sklep_zed" position="0 -1.2 -4.825" size="10 2.4 0.35"/>
+            <box name="Sklep_jih" material="mat_sklep_zed" position="0 -1.2 4.825" size="10 2.4 0.35"/>
+            <box name="Sklep_zapad" material="mat_sklep_zed" position="-4.825 -1.2 0" size="0.35 2.4 9.65"/>
+            <box name="Sklep_vychod" material="mat_sklep_zed" position="4.825 -1.2 0" size="0.35 2.4 9.65"/>
+            <box name="Sklep_podlaha" material="mat_sklep_podlaha" position="0 -2.325 0" size="9.3 0.15 9.3"/>
+            <box name="Sklep_strop" material="mat_beton" position="0 -0.1 0" size="9.3 0.2 9.3"/>
+            <box name="Police_sklep1" material="mat_police" position="-3.5 -0.6 -4.4" size="3 0.06 0.35"/>
+            <box name="Police_sklep2" material="mat_police" position="-3.5 -1.1 -4.4" size="3 0.06 0.35"/>
+            <box name="Police_sklep3" material="mat_police" position="-3.5 -1.6 -4.4" size="3 0.06 0.35"/>
+            <box name="Police_nosnik_L" material="mat_police" position="-5 -1.2 -4.4" size="0.06 2 0.3"/>
+            <box name="Police_nosnik_P" material="mat_police" position="-2 -1.2 -4.4" size="0.06 2 0.3"/>
+            <instance name="Okno_sklep1" position="-2.5 -0.6 -5" scale="0.6 0.5 1" definition="def_okno"/>
+            <instance name="Okno_sklep2" position="2.5 -0.6 -5" scale="0.6 0.5 1" definition="def_okno"/>
+            <box name="Stupen_sk1" material="mat_beton" position="3.8 -0.28 3.5" size="0.9 0.18 0.28"/>
+            <box name="Stupen_sk2" material="mat_beton" position="3.8 -0.46 3.78" size="0.9 0.18 0.28"/>
+            <box name="Stupen_sk3" material="mat_beton" position="3.8 -0.64 4.06" size="0.9 0.18 0.28"/>
+            <box name="Stupen_sk4" material="mat_beton" position="3.8 -0.82 4.34" size="0.9 0.18 0.28"/>
+            <box name="Stupen_sk5" material="mat_beton" position="3.8 -1 4.62" size="0.9 0.18 0.28"/>
+            <box name="Stupen_sk6" material="mat_beton" position="3.8 -1.18 4.9" size="0.9 0.18 0.28"/>
+            <box name="Stupen_sk7" material="mat_beton" position="3.8 -1.36 5.18" size="0.9 0.18 0.28"/>
+        </group>
+        <group name="Prizemí">
+            <difference name="Stena_sever_prizemí" material="mat_omitka">
+                <box name="Stena_S_block" position="0 1.5 -4.825" size="10 3 0.35"/>
+                <box name="Okno_otvor_S1" role="cutter" position="-2.8 1.7 -4.825" size="1.2 1.4 0.4"/>
+                <box name="Okno_otvor_S2" role="cutter" position="2.8 1.7 -4.825" size="1.2 1.4 0.4"/>
+            </difference>
+            <difference name="Stena_jih_prizemí" material="mat_omitka">
+                <box name="Stena_J_block" position="0 1.5 4.825" size="10 3 0.35"/>
+                <box name="Dvere_otvor_J" role="cutter" position="0 1.1 4.825" size="1.1 2.2 0.4"/>
+                <box name="Okno_otvor_J1" role="cutter" position="-3.5 1.7 4.825" size="1.2 1.4 0.4"/>
+                <box name="Okno_otvor_J2" role="cutter" position="3.5 1.7 4.825" size="1.2 1.4 0.4"/>
+            </difference>
+            <difference name="Stena_zapad_prizemí" material="mat_omitka">
+                <box name="Stena_Z_block" position="-4.825 1.5 0" size="0.35 3 9.65"/>
+                <box name="Okno_otvor_Z1" role="cutter" position="-4.825 1.7 -2" size="0.4 1.4 1.2"/>
+                <box name="Okno_otvor_Z2" role="cutter" position="-4.825 1.7 2" size="0.4 1.4 1.2"/>
+            </difference>
+            <difference name="Stena_vychod_prizemí" material="mat_omitka">
+                <box name="Stena_V_block" position="4.825 1.5 0" size="0.35 3 9.65"/>
+                <box name="Okno_otvor_V1" role="cutter" position="4.825 1.7 -2" size="0.4 1.4 1.2"/>
+            </difference>
+            <difference name="Pricka_EW" material="mat_stena_bila">
+                <box name="Pricka_EW_block" position="0 1.5 0.5" size="9.3 3 0.15"/>
+                <box name="Pricka_EW_dvere" role="cutter" position="-2.5 1.075 0.5" size="0.92 2.15 0.2"/>
+                <box name="Pricka_EW_dvere2" role="cutter" position="2.5 1.075 0.5" size="0.92 2.15 0.2"/>
+            </difference>
+            <box name="Podlaha_obyvak" material="mat_podlaha_drevo" position="0 0.04 -2.15" size="9.3 0.08 4.7"/>
+            <box name="Podlaha_kuchyn" material="mat_podlaha_dlaz" position="0 0.04 2.75" size="9.3 0.08 4.5"/>
+            <box name="Strop_prizemí" material="mat_strop" position="0 3.09 0" size="9.3 0.18 9.3"/>
+            <instance name="Okno_S1_P" position="-2.8 1.7 -4.83" rotation="0 180 0" definition="def_okno"/>
+            <instance name="Okno_S2_P" position="2.8 1.7 -4.83" rotation="0 180 0" definition="def_okno"/>
+            <instance name="Okno_J1_P" position="-3.5 1.7 4.83" definition="def_okno"/>
+            <instance name="Okno_J2_P" position="3.5 1.7 4.83" definition="def_okno"/>
+            <instance name="Okno_Z1_P" position="-4.83 1.7 -2" rotation="0 90 0" definition="def_okno"/>
+            <instance name="Okno_Z2_P" position="-4.83 1.7 2" rotation="0 90 0" definition="def_okno"/>
+            <instance name="Okno_V1_P" position="4.83 1.7 -2" rotation="0 -90 0" definition="def_okno"/>
+            <instance name="Dvere_vchod" position="0 1.1 4.83" definition="def_dvere_vnejsi"/>
+            <instance name="Dvere_vn_P1" position="-2.5 1.075 0.5" definition="def_dvere_vnitrni"/>
+            <instance name="Dvere_vn_P2" position="2.5 1.075 0.5" definition="def_dvere_vnitrni"/>
+        </group>
+        <group name="Obyvak" position="0 0.08 -2.15">
+            <box name="Koberec_obyvak" material="mat_koberec_cerveny" position="0 0.01 -0.5" size="4 0.02 2.8"/>
+            <box name="Pohovka_sedak" material="mat_latka_sedaci" position="-1 0.225 -1.8" size="2.2 0.45 0.8"/>
+            <box name="Pohovka_opera" material="mat_latka_sedaci" position="-1 0.475 -2.17" size="2.2 0.55 0.15"/>
+            <box name="Pohovka_noha1" material="mat_drevo_nabyt" position="-2.02 0.075 -1.45" size="0.08 0.15 0.08"/>
+            <box name="Pohovka_noha2" material="mat_drevo_nabyt" position="0.02 0.075 -1.45" size="0.08 0.15 0.08"/>
+            <box name="Pohovka_noha3" material="mat_drevo_nabyt" position="-2.02 0.075 -2.15" size="0.08 0.15 0.08"/>
+            <box name="Pohovka_noha4" material="mat_drevo_nabyt" position="0.02 0.075 -2.15" size="0.08 0.15 0.08"/>
+            <instance name="Polstar_ob1" position="-1.8 0.695 -1.9" scale="0.7 0.8 0.6" definition="def_polstar"/>
+            <instance name="Polstar_ob2" position="-0.5 0.695 -1.9" scale="0.7 0.8 0.6" definition="def_polstar"/>
+            <box name="Stolek_deska" material="mat_drevo_nabyt" position="-1 0.42 -0.8" size="1.2 0.05 0.65"/>
+            <box name="Stolek_noha1" material="mat_drevo_nabyt" position="-1.53 0.2 -0.52" size="0.06 0.4 0.06"/>
+            <box name="Stolek_noha2" material="mat_drevo_nabyt" position="-0.47 0.2 -0.52" size="0.06 0.4 0.06"/>
+            <box name="Stolek_noha3" material="mat_drevo_nabyt" position="-1.53 0.2 -1.08" size="0.06 0.4 0.06"/>
+            <box name="Stolek_noha4" material="mat_drevo_nabyt" position="-0.47 0.2 -1.08" size="0.06 0.4 0.06"/>
+            <box name="Komoda_telo" material="mat_drevo_nabyt" position="2 0.25 -1.9" size="1.6 0.5 0.4"/>
+            <box name="Komoda_zas1" material="mat_drevo_nabyt" position="1.62 0.2 -1.9" size="0.7 0.36 0.36"/>
+            <box name="Komoda_zas2" material="mat_drevo_nabyt" position="2.38 0.2 -1.9" size="0.7 0.36 0.36"/>
+            <box name="Obraz1_platno" material="mat_obraz1" position="-2.8 2.2 -4.78" size="0.8 0.6 0.03"/>
+            <box name="Obraz1_ram_L" material="mat_ram_obrazu" position="-3.22 2.2 -4.76" size="0.05 0.68 0.04"/>
+            <box name="Obraz1_ram_P" material="mat_ram_obrazu" position="-2.38 2.2 -4.76" size="0.05 0.68 0.04"/>
+            <box name="Obraz1_ram_T" material="mat_ram_obrazu" position="-2.8 2.54 -4.76" size="0.9 0.05 0.04"/>
+            <box name="Obraz1_ram_B" material="mat_ram_obrazu" position="-2.8 1.86 -4.76" size="0.9 0.05 0.04"/>
+            <box name="Obraz2_platno" material="mat_obraz2" position="2.8 2.2 -4.78" size="0.8 0.6 0.03"/>
+            <box name="Obraz2_ram_L" material="mat_ram_obrazu" position="2.38 2.2 -4.76" size="0.05 0.68 0.04"/>
+            <box name="Obraz2_ram_P" material="mat_ram_obrazu" position="3.22 2.2 -4.76" size="0.05 0.68 0.04"/>
+            <box name="Obraz2_ram_T" material="mat_ram_obrazu" position="2.8 2.54 -4.76" size="0.9 0.05 0.04"/>
+            <box name="Obraz2_ram_B" material="mat_ram_obrazu" position="2.8 1.86 -4.76" size="0.9 0.05 0.04"/>
+        </group>
+        <group name="Kuchyn" position="0 0.08 2.75">
+            <box name="Linka_dolni" material="mat_drevo_nabyt" position="-2.25 0.44 -1.8" size="4.5 0.88 0.6"/>
+            <box name="Linka_deska" material="mat_kov" position="-2.25 0.9 -1.8" size="4.5 0.05 0.64"/>
+            <box name="Drez_vanicka" material="mat_kov" position="-0.8 0.92 -1.8" size="0.8 0.1 0.45"/>
+            <cylinder name="Drez_odtok" material="mat_kov" position="-0.8 0.84 -1.8" radius="0.04" height="0.12"/>
+            <box name="Linka_horni" material="mat_drevo_nabyt" position="-2.25 1.85 -1.98" size="4.5 0.7 0.35"/>
+            <box name="Stul_deska" material="mat_drevo_nabyt" position="2.5 0.76 0.2" size="1.6 0.06 0.9"/>
+            <box name="Stul_noha1" material="mat_drevo_nabyt" position="1.74 0.37 -0.25" size="0.07 0.74 0.07"/>
+            <box name="Stul_noha2" material="mat_drevo_nabyt" position="3.26 0.37 -0.25" size="0.07 0.74 0.07"/>
+            <box name="Stul_noha3" material="mat_drevo_nabyt" position="1.74 0.37 0.65" size="0.07 0.74 0.07"/>
+            <box name="Stul_noha4" material="mat_drevo_nabyt" position="3.26 0.37 0.65" size="0.07 0.74 0.07"/>
+            <box name="Zidle1_sedak" material="mat_drevo_nabyt" position="1.8 0.48 0.2" size="0.44 0.06 0.44"/>
+            <box name="Zidle1_opera" material="mat_drevo_nabyt" position="1.8 0.72 -0.18" size="0.44 0.44 0.05"/>
+            <box name="Zidle2_sedak" material="mat_drevo_nabyt" position="3.2 0.48 0.2" size="0.44 0.06 0.44"/>
+            <box name="Zidle2_opera" material="mat_drevo_nabyt" position="3.2 0.72 -0.18" size="0.44 0.44 0.05"/>
+        </group>
+        <group name="Schodiste_vnitrni" position="3.5 0 -3.8">
+            <box name="Schod_v1" material="mat_dlazdice" position="0 0.09 0" size="1 0.18 0.28"/>
+            <box name="Schod_v2" material="mat_dlazdice" position="0 0.27 0.28" size="1 0.18 0.28"/>
+            <box name="Schod_v3" material="mat_dlazdice" position="0 0.45 0.56" size="1 0.18 0.28"/>
+            <box name="Schod_v4" material="mat_dlazdice" position="0 0.63 0.84" size="1 0.18 0.28"/>
+            <box name="Schod_v5" material="mat_dlazdice" position="0 0.81 1.12" size="1 0.18 0.28"/>
+            <box name="Schod_v6" material="mat_dlazdice" position="0 0.99 1.4" size="1 0.18 0.28"/>
+            <box name="Schod_v7" material="mat_dlazdice" position="0 1.17 1.68" size="1 0.18 0.28"/>
+            <box name="Schod_v8" material="mat_dlazdice" position="0 1.35 1.96" size="1 0.18 0.28"/>
+            <box name="Schod_v9" material="mat_dlazdice" position="0 1.53 2.24" size="1 0.18 0.28"/>
+            <box name="Schod_v10" material="mat_dlazdice" position="0 1.71 2.52" size="1 0.18 0.28"/>
+            <box name="Schod_v11" material="mat_dlazdice" position="0 1.89 2.8" size="1 0.18 0.28"/>
+            <box name="Schod_v12" material="mat_dlazdice" position="0 2.07 3.08" size="1 0.18 0.28"/>
+            <box name="Madlo_schod" material="mat_kov" position="0.55 1.28 1.54" rotation="0 0 -27" size="0.05 0.05 3.6"/>
+            <box name="Sloupek_s1" material="mat_kov" position="0.55 0.5 0.14" size="0.05 0.8 0.05"/>
+            <box name="Sloupek_s2" material="mat_kov" position="0.55 0.8 0.84" size="0.05 0.9 0.05"/>
+            <box name="Sloupek_s3" material="mat_kov" position="0.55 1 1.54" size="0.05 1.08 0.05"/>
+            <box name="Sloupek_s4" material="mat_kov" position="0.55 1.2 2.24" size="0.05 1.26 0.05"/>
+            <box name="Sloupek_s5" material="mat_kov" position="0.55 1.4 2.94" size="0.05 1.44 0.05"/>
+        </group>
+        <group name="Patro" position="0 3.18 0">
+            <difference name="Stena_sever_patro" material="mat_omitka">
+                <box name="Stena_SP_block" position="0 1.5 -4.825" size="10 3 0.35"/>
+                <box name="Okno_otvor_SP1" role="cutter" position="-2.8 1.7 -4.825" size="1.2 1.4 0.4"/>
+                <box name="Okno_otvor_SP2" role="cutter" position="2.8 1.7 -4.825" size="1.2 1.4 0.4"/>
+            </difference>
+            <difference name="Stena_jih_patro" material="mat_omitka">
+                <box name="Stena_JP_block" position="0 1.5 4.825" size="10 3 0.35"/>
+                <box name="Okno_otvor_JP1" role="cutter" position="-3 1.7 4.825" size="1.2 1.4 0.4"/>
+                <box name="Okno_otvor_JP2" role="cutter" position="3 1.7 4.825" size="1.2 1.4 0.4"/>
+            </difference>
+            <difference name="Stena_zapad_patro" material="mat_omitka">
+                <box name="Stena_ZP_block" position="-4.825 1.5 0" size="0.35 3 9.65"/>
+                <box name="Okno_otvor_ZP1" role="cutter" position="-4.825 1.7 -2" size="0.4 1.4 1.2"/>
+            </difference>
+            <difference name="Stena_vychod_patro" material="mat_omitka">
+                <box name="Stena_VP_block" position="4.825 1.5 0" size="0.35 3 9.65"/>
+                <box name="Okno_otvor_VP1" role="cutter" position="4.825 1.7 2" size="0.4 1.4 1.2"/>
+            </difference>
+            <difference name="Pricka_patro" material="mat_stena_modra">
+                <box name="Pricka_P_block" position="0 1.5 0" size="9.3 3 0.15"/>
+                <box name="Pricka_P_dvere1" role="cutter" position="-2 1.075 0" size="0.92 2.15 0.2"/>
+                <box name="Pricka_P_dvere2" role="cutter" position="2.5 1.075 0" size="0.92 2.15 0.2"/>
+            </difference>
+            <box name="Podlaha_patro_A" material="mat_podlaha_drevo" position="0 0.04 -2.32" size="9.3 0.08 4.65"/>
+            <box name="Podlaha_patro_B" material="mat_podlaha_drevo" position="0 0.04 2.32" size="9.3 0.08 4.65"/>
+            <box name="Strop_patro" material="mat_strop" position="0 3.09 0" size="9.3 0.18 9.3"/>
+            <instance name="Okno_SP1" position="-2.8 1.7 -4.83" rotation="0 180 0" definition="def_okno"/>
+            <instance name="Okno_SP2" position="2.8 1.7 -4.83" rotation="0 180 0" definition="def_okno"/>
+            <instance name="Okno_JP1" position="-3 1.7 4.83" definition="def_okno"/>
+            <instance name="Okno_JP2" position="3 1.7 4.83" definition="def_okno"/>
+            <instance name="Okno_ZP1" position="-4.83 1.7 -2" rotation="0 90 0" definition="def_okno"/>
+            <instance name="Okno_VP1" position="4.83 1.7 2" rotation="0 -90 0" definition="def_okno"/>
+            <instance name="Dvere_pat1" position="-2 1.075 0" definition="def_dvere_vnitrni"/>
+            <instance name="Dvere_pat2" position="2.5 1.075 0" definition="def_dvere_vnitrni"/>
+        </group>
+        <group name="Loznice" position="0 3.26 -2.32">
+            <box name="Koberec_loznice" material="mat_koberec_modry" position="0 0.01 0" size="4.5 0.02 3.2"/>
+            <box name="Postel_ram" material="mat_drevo_nabyt" position="-1.5 0.125 -0.8" size="1.8 0.25 2.1"/>
+            <box name="Postel_matrace" material="mat_latka_postel" position="-1.5 0.36 -0.8" size="1.7 0.22 2"/>
+            <box name="Postel_hlavac" material="mat_drevo_nabyt" position="-1.5 0.5 -1.84" size="1.8 0.55 0.12"/>
+            <instance name="Polstar_L1" position="-1.9 0.6 -1.3" definition="def_polstar"/>
+            <instance name="Polstar_L2" position="-1.1 0.6 -1.3" definition="def_polstar"/>
+            <box name="Nocni_stolek1" material="mat_drevo_nabyt" position="-2.7 0.25 -1.1" size="0.45 0.5 0.4"/>
+            <box name="Nocni_stolek2" material="mat_drevo_nabyt" position="-0.3 0.25 -1.1" size="0.45 0.5 0.4"/>
+            <box name="Skrin_telo" material="mat_drevo_nabyt" position="3 1.05 -1.6" size="1.6 2.1 0.6"/>
+            <box name="Skrin_dvere1" material="mat_dvere" position="2.66 1.02 -1.31" size="0.76 2 0.04"/>
+            <box name="Skrin_dvere2" material="mat_dvere" position="3.42 1.02 -1.31" size="0.76 2 0.04"/>
+            <sphere name="Klika_sk1" material="mat_kov" position="2.9 1.02 -1.28" radius="0.03"/>
+            <sphere name="Klika_sk2" material="mat_kov" position="3.18 1.02 -1.28" radius="0.03"/>
+            <box name="Toalet_deska" material="mat_drevo_nabyt" position="1.2 0.76 1.4" size="0.9 0.05 0.45"/>
+            <box name="Toalet_noha1" material="mat_drevo_nabyt" position="0.78 0.37 1.2" size="0.06 0.74 0.06"/>
+            <box name="Toalet_noha2" material="mat_drevo_nabyt" position="1.62 0.37 1.2" size="0.06 0.74 0.06"/>
+            <box name="Toalet_zrcadlo" material="mat_sklo" position="1.2 1.3 1.4" size="0.8 0.7 0.03"/>
+            <box name="Obraz3_platno" material="mat_obraz2" position="0 2.3 -4.75" size="0.7 0.55 0.03"/>
+            <box name="Obraz3_ram" material="mat_ram_obrazu" position="0 2.3 -4.73" size="0.8 0.65 0.04"/>
+        </group>
+        <group name="Detsky_pokoj" position="0 3.26 2.32">
+            <box name="Koberec_dets" material="mat_koberec_cerveny" position="0 0.01 0" size="3.5 0.02 3"/>
+            <box name="Postel_d_ram" material="mat_drevo_nabyt" position="-3 0.11 -0.6" size="1 0.22 2"/>
+            <box name="Postel_d_matrace" material="mat_latka_postel" position="-3 0.3 -0.6" size="0.92 0.16 1.92"/>
+            <box name="Postel_d_hlavac" material="mat_drevo_nabyt" position="-3 0.4 -1.54" size="1 0.45 0.1"/>
+            <instance name="Polstar_D" position="-3 0.5 -1.2" scale="0.7 0.7 0.7" definition="def_polstar"/>
+            <box name="Stul_d_deska" material="mat_drevo_nabyt" position="1.5 0.76 -1.6" size="1.2 0.05 0.65"/>
+            <box name="Stul_d_noha1" material="mat_drevo_nabyt" position="0.95 0.37 -1.32" size="0.06 0.74 0.06"/>
+            <box name="Stul_d_noha2" material="mat_drevo_nabyt" position="2.05 0.37 -1.32" size="0.06 0.74 0.06"/>
+            <box name="Stul_d_noha3" material="mat_drevo_nabyt" position="0.95 0.37 -1.88" size="0.06 0.74 0.06"/>
+            <box name="Stul_d_noha4" material="mat_drevo_nabyt" position="2.05 0.37 -1.88" size="0.06 0.74 0.06"/>
+            <box name="Knihovna_telo" material="mat_police" position="3.8 1.1 0" size="1.1 2.2 0.28"/>
+            <box name="Polka1" material="mat_police" position="3.8 0.5 0" size="1 0.04 0.24"/>
+            <box name="Polka2" material="mat_police" position="3.8 1 0" size="1 0.04 0.24"/>
+            <box name="Polka3" material="mat_police" position="3.8 1.5 0" size="1 0.04 0.24"/>
+            <box name="Polka4" material="mat_police" position="3.8 2 0" size="1 0.04 0.24"/>
+            <instance name="Kniha1" position="3.55 0.64 0" definition="def_kniha"/>
+            <instance name="Kniha2" position="3.62 0.64 0" rotation="0 5 0" definition="def_kniha"/>
+            <instance name="Kniha3" position="3.69 0.64 0" definition="def_kniha"/>
+            <instance name="Kniha4" position="3.55 1.14 0" definition="def_kniha"/>
+            <instance name="Kniha5" position="3.62 1.14 0" definition="def_kniha"/>
+        </group>
+        <group name="Strecha" position="0 6.36 0">
+            <box name="Strecha_stit_S" material="mat_omitka" position="0 0 -4.825" size="10.2 0.25 0.25"/>
+            <box name="Strecha_stit_J" material="mat_omitka" position="0 0 4.825" size="10.2 0.25 0.25"/>
+            <box name="Strecha_leva" material="mat_strecha" position="0 1.35 -2.45" rotation="-28 0 0" size="10.2 0.18 5.4"/>
+            <box name="Strecha_prava" material="mat_strecha" position="0 1.35 2.45" rotation="28 0 0" size="10.2 0.18 5.4"/>
+            <box name="Stit_S" material="mat_omitka" position="0 1.5 -4.75" size="10 0.25 3"/>
+            <box name="Stit_J" material="mat_omitka" position="0 1.5 4.75" size="10 0.25 3"/>
+            <box name="Komin_telo" material="mat_cihla" position="2 1.25 0" size="0.6 2.5 0.6"/>
+            <box name="Komin_korunek" material="mat_cihla" position="2 2.56 0" size="0.72 0.12 0.72"/>
+        </group>
+        <box name="Okap_chodnik_S" material="mat_beton" position="0 0.03 -5.3" size="10.7 0.06 0.6"/>
+        <box name="Okap_chodnik_J" material="mat_beton" position="0 0.03 5.3" size="10.7 0.06 0.6"/>
+        <box name="Okap_chodnik_Z" material="mat_beton" position="-5.3 0.03 0" size="0.6 0.06 9.65"/>
+        <box name="Okap_chodnik_V" material="mat_beton" position="5.3 0.03 0" size="0.6 0.06 9.65"/>
+    </objects>
+    <actions>
+        <action name="Branka_otevirani" duration="2">
+            <channel target="Branka_vrat1" property="rotation.y">
+                <keyframe time="0" value="0" interp="cubic">
+                    <handle_left dt="-0.1" dv="0"/>
+                    <handle_right dt="0.1" dv="0"/>
+                </keyframe>
+                <keyframe time="2" value="90" interp="cubic">
+                    <handle_left dt="-0.1" dv="0"/>
+                    <handle_right dt="0.1" dv="0"/>
+                </keyframe>
+            </channel>
+        </action>
+        <action name="Slunce_rotace" duration="60" loop="true">
+            <channel target="Sun" property="rotation.y">
+                <keyframe time="0" value="0"/>
+                <keyframe time="60" value="360"/>
+            </channel>
+        </action>
+    </actions>
+</mc3>
