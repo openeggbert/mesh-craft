@@ -592,6 +592,32 @@ void SceneRenderer::drawObject(const Mc3Object& obj, const Mc3Document& doc,
     // 0 = full quality (<10 units), 1 = mid (10..40), 2 = lo (>40)
     int lodLevel = (distSq > 40.0f*40.0f) ? 2 : (distSq > 10.0f*10.0f) ? 1 : 0;
 
+    // I3: per-object fog — mix color toward fog color based on camera distance
+    if (doc.environment && doc.environment->fog) {
+        const auto& f = *doc.environment->fog;
+        float dist = std::sqrt(distSq);
+        float fogFactor = 0.0f;
+        if (f.mode == Mc3::FogMode::Linear) {
+            if (f.end > f.start)
+                fogFactor = std::clamp((dist - f.start) / (f.end - f.start), 0.0f, 1.0f);
+        } else {
+            fogFactor = std::clamp(1.0f - std::exp(-f.density * dist), 0.0f, 1.0f);
+        }
+        if (fogFactor > 0.0f) {
+            float r = color.getRProperty() / 255.0f;
+            float g = color.getGProperty() / 255.0f;
+            float b = color.getBProperty() / 255.0f;
+            r += (f.color[0] - r) * fogFactor;
+            g += (f.color[1] - g) * fogFactor;
+            b += (f.color[2] - b) * fogFactor;
+            color = Color(
+                static_cast<int>(std::clamp(r, 0.0f, 1.0f) * 255),
+                static_cast<int>(std::clamp(g, 0.0f, 1.0f) * 255),
+                static_cast<int>(std::clamp(b, 0.0f, 1.0f) * 255),
+                static_cast<int>(color.getAProperty()));
+        }
+    }
+
     auto lodMesh = [&](const RenderMesh& hi, const RenderMesh& mid, const RenderMesh& lo)
         -> const RenderMesh& {
         return lodLevel == 2 ? lo : lodLevel == 1 ? mid : hi;

@@ -124,6 +124,9 @@ public:
                           const Microsoft::Xna::Framework::Matrix& view,
                           const Microsoft::Xna::Framework::Matrix& projection);
 
+    // Number of emissive objects drawn in the last drawEmissivePass call
+    int emissiveDrawCount() const { return emissiveDrawCount_; }
+
     // Compute vertex and triangle counts for all visible objects in the scene
     void scenePolyStats(const Mc3::Mc3Document& doc, int& totalVerts, int& totalTris) const;
 

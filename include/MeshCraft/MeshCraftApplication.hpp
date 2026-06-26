@@ -16,6 +16,8 @@
 
 #include <Microsoft/Xna/Framework/Game.hpp>
 #include <Microsoft/Xna/Framework/GameTime.hpp>
+#include <Microsoft/Xna/Framework/Graphics/SpriteBatch.hpp>
+#include <Microsoft/Xna/Framework/Graphics/Texture2D.hpp>
 #include <Microsoft/Xna/Framework/Input/Keyboard.hpp>
 #include <Microsoft/Xna/Framework/Input/KeyboardState.hpp>
 #include <Microsoft/Xna/Framework/Input/MouseState.hpp>
@@ -68,6 +70,9 @@ private:
     std::unique_ptr<Renderer::SceneRenderer> sceneRenderer_;
     std::unique_ptr<Scene::SceneHierarchyPanel> hierarchyPanel_;
     std::unique_ptr<Scene::PropertiesPanel>     propertiesPanel_;
+    std::unique_ptr<Microsoft::Xna::Framework::Graphics::SpriteBatch> spriteBatch_;
+    std::optional<Microsoft::Xna::Framework::Graphics::Texture2D> bgTexture_;
+    std::string bgTexturePath_;
 
     // Input state
     Microsoft::Xna::Framework::Input::MouseState prevMouse_;
@@ -175,12 +180,16 @@ private:
     void (*fnGlDisable_)(unsigned int)         = nullptr;
 
     // Bloom post-processing (I6)
-    bool bloomEnabled_{false};
-    int  bloomFboW_{0}, bloomFboH_{0};
+    bool  bloomEnabled_{false};
+    float bloomStrength_{2.5f};
+    int   bloomFboW_{0}, bloomFboH_{0};
     void initBloom(int w, int h);
     void applyBloom(int vx, int glViewY, int vw, int vh,
                     const Microsoft::Xna::Framework::Matrix& view,
                     const Microsoft::Xna::Framework::Matrix& proj);
+    void initSkybox();
+    void drawSkybox(const Microsoft::Xna::Framework::Matrix& view,
+                    float fovDegrees, float aspect);
 
     // Panel layout (widths are user-resizable via splitter drag)
     int kLeftPanelW  = 220;

@@ -686,6 +686,19 @@ void MeshCraftApplication::drawLeftPanel(float panelY, float panelH)
                     }
                 }
 
+                // Skybox texture (equirectangular panorama)
+                ImGui::TextDisabled("Skybox Texture (equirect)");
+                {
+                    char buf[256];
+                    std::strncpy(buf, env.skyboxTexture.c_str(), sizeof(buf)-1); buf[255]='\0';
+                    ImGui::SetNextItemWidth(-1);
+                    if (ImGui::InputText("##envskybox", buf, sizeof(buf),
+                            ImGuiInputTextFlags_EnterReturnsTrue)) {
+                        pushUndo(); env.skyboxTexture = buf;
+                        modified_ = true; updateWindowTitle();
+                    }
+                }
+
                 ImGui::Spacing();
                 ImGui::Separator();
                 ImGui::Spacing();

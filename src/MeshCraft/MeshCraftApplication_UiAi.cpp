@@ -10,6 +10,7 @@
 #include <cstring>
 #include <filesystem>
 #include <fstream>
+#include <sstream>
 #include <string>
 
 namespace MeshCraft {
@@ -18,18 +19,53 @@ namespace MeshCraft {
 // Helpers
 // ---------------------------------------------------------------------------
 
-static const char* kSystemPrompt =
-    "You are a 3D scene editor assistant for the MC3 format.\n"
-    "MC3 is an XML-based 3D scene format. Key elements:\n"
-    "  <box>, <sphere>, <cylinder>, <cone>, <plane> — primitives with size/radius/height attributes\n"
-    "  <group> — named group with child objects (position/rotation/scale)\n"
-    "  <instance name=\"...\" definition=\"defId\"/> — instance of a reusable definition\n"
-    "  <material id=\"...\" roughness=\"0.5\" metallic=\"0.0\"><base_color>R G B A</base_color></material>\n"
-    "  <definitions><definition id=\"...\">[children]</definition></definitions> — reusable shapes\n"
-    "  <light type=\"point|directional|spot\" position=\"X Y Z\"/>\n"
-    "Apply the user's instruction to the provided scene.\n"
-    "Return ONLY a complete, valid mc3.xml document starting with <?xml version=\"1.0\"?>.\n"
-    "No prose, no markdown fences, no explanations — pure XML only.";
+static const char* kStrictXmlRules =
+    "\n\n---\n\n"
+    "STRICT XML RULES (violations cause parse errors — follow exactly):\n"
+    "  1. name/id attributes: ONLY ASCII letters, digits, underscores, hyphens.\n"
+    "     NO Czech/accented chars, NO spaces. Use name=\"dum_prvni_patro\" NOT name=\"dum prvni patro\".\n"
+    "  2. Inside any attribute value: escape & as &amp;  < as &lt;  > as &gt;\n"
+    "  3. Use ONLY straight double-quotes (\") — never curly/smart quotes.\n"
+    "  4. Numeric attributes (position, rotation, scale, size, radius): space-separated numbers only.\n"
+    "  5. EVERY opening tag MUST end with > before any child or sibling element.\n"
+    "     WRONG: <group name=\"x\" position=\"0 0 0\"\n     <child/>  (missing > on group)\n"
+    "     RIGHT:  <group name=\"x\" position=\"0 0 0\"><child/></group>\n"
+    "  6. Modify the provided scene XML — do NOT return an empty document.\n"
+    "  7. Return ONLY valid XML starting with <?xml — no prose, no markdown fences.";
+
+// Load the MC3 format specification from gen.md (used as AI system prompt).
+// Searches a few candidate paths relative to the binary / working directory.
+static std::string buildSystemPrompt() {
+    namespace fs = std::filesystem;
+    // Candidate locations: cwd, parent of cwd, source tree absolute path
+    std::vector<fs::path> candidates = {
+        "gen.md",
+        "../gen.md",
+        "../../gen.md",
+    };
+    // Also try next to the executable if we can find it via /proc/self/exe
+    {
+        std::error_code ec;
+        auto exe = fs::read_symlink("/proc/self/exe", ec);
+        if (!ec) {
+            candidates.push_back(exe.parent_path() / "gen.md");
+            candidates.push_back(exe.parent_path().parent_path() / "gen.md");
+        }
+    }
+    for (const auto& p : candidates) {
+        std::ifstream f(p);
+        if (!f) continue;
+        std::string spec(std::istreambuf_iterator<char>(f), {});
+        if (spec.size() > 500)   // sanity check: real file is ~10KB
+            return spec + kStrictXmlRules;
+    }
+    // Fallback if gen.md not found
+    return
+        "You are a 3D scene editor assistant for the MC3 XML format (version 0.3).\n"
+        "Apply the user's instruction to the provided scene XML and return a complete valid mc3.xml.\n"
+        "Use <box>, <sphere>, <cylinder>, <cone>, <plane>, <group>, <instance>, <definitions>.\n"
+        + std::string(kStrictXmlRules);
+}
 
 static std::atomic<int> gAiTmpCounter{0};
 
@@ -49,6 +85,41 @@ static std::string serializeScene(const Mc3::Mc3Document& doc) {
     std::error_code ec;
     fs::remove(tmp, ec);
     return xml;
+}
+
+// Fix common AI XML mistake: opening tag not closed with '>' before next element.
+// Scans char-by-char; when inside a tag and a bare '<' appears, injects '>'.
+static std::string repairXml(const std::string& xml) {
+    std::string out;
+    out.reserve(xml.size() + 32);
+    bool inTag  = false;
+    bool inVal  = false;
+    char quote  = 0;
+    for (size_t i = 0; i < xml.size(); ++i) {
+        char c = xml[i];
+        if (inTag) {
+            if (inVal) {
+                out += c;
+                if (c == quote) inVal = false;
+            } else if (c == '"' || c == '\'') {
+                inVal = true; quote = c; out += c;
+            } else if (c == '>') {
+                inTag = false; out += c;
+            } else if (c == '<') {
+                // Missing '>' — inject it, then start the new tag
+                out += '>';
+                inTag = false;
+                out += c;
+                inTag = true; inVal = false;
+            } else {
+                out += c;
+            }
+        } else {
+            if (c == '<') inTag = true;
+            out += c;
+        }
+    }
+    return out;
 }
 
 // Parse xml string into document; throws on malformed XML or missing <mc3>.
@@ -76,8 +147,14 @@ void MeshCraftApplication::drawAiPanel() {
     // This runs once per response (guarded by: pending not yet set and no error yet recorded).
     if (aiAssistant_.isDone() && !aiAssistant_.hasError()
             && !aiPendingDoc_.has_value() && aiValidationError_.empty()) {
-        try {
-            std::string xml = extractXml(aiAssistant_.result());
+        if (aiAssistant_.wasTruncated()) {
+            aiValidationError_ =
+                "AI response was cut off by the token limit (max_tokens="
+                + std::to_string(aiAssistant_.maxTokens) + ").\n"
+                "The generated scene was too large. "
+                "Increase Max Tokens in the AI panel (up to 64000) or simplify the prompt.";
+        } else try {
+            std::string xml = repairXml(extractXml(aiAssistant_.result()));
             if (xml.find("<mc3") == std::string::npos)
                 throw std::runtime_error("Response does not contain a <mc3> root element");
             Mc3::Mc3Document parsed = parseXml(xml);
@@ -88,8 +165,27 @@ void MeshCraftApplication::drawAiPanel() {
                     "Not applying to avoid destroying the current scene.");
             aiPendingDoc_ = std::move(parsed);
         } catch (const std::exception& ex) {
-            aiValidationError_ = ex.what();
-        }
+            std::string errMsg = ex.what();
+            // Extract line number from tinyxml2 message ("Line number=NNN") and show that line
+            auto lineTag = errMsg.find("Line number=");
+            if (lineTag != std::string::npos) {
+                int lineNo = std::atoi(errMsg.c_str() + lineTag + 12);
+                if (lineNo > 0) {
+                    const std::string& raw = aiAssistant_.result();
+                    int cur = 1;
+                    std::string badLine;
+                    std::istringstream ss(raw);
+                    for (std::string ln; std::getline(ss, ln); ) {
+                        if (cur++ == lineNo) { badLine = ln; break; }
+                    }
+                    if (!badLine.empty()) {
+                        if (badLine.size() > 200) badLine = badLine.substr(0, 197) + "...";
+                        errMsg += "\nLine content: " + badLine;
+                    }
+                }
+            }
+            aiValidationError_ = errMsg;
+        } // end else try
     }
 
     // Pre-fill API key from environment if buffer is empty
@@ -117,6 +213,15 @@ void MeshCraftApplication::drawAiPanel() {
     ImGui::SetNextItemWidth(-1);
     ImGui::InputText("##aimodel", aiModelBuf_, sizeof(aiModelBuf_));
 
+    // ---- Max tokens ----
+    ImGui::Text("Max tokens:");
+    ImGui::SameLine(90);
+    ImGui::SetNextItemWidth(-1);
+    ImGui::SliderInt("##aimtok", &aiAssistant_.maxTokens, 4096, 64000, "%d");
+    if (ImGui::IsItemHovered())
+        ImGui::SetTooltip("claude-sonnet-4-6 supports up to 64 000 output tokens.\n"
+                          "Large scenes need 20 000+. Default: 32 000.");
+
     ImGui::Spacing();
 
     // ---- Scope ----
@@ -142,7 +247,7 @@ void MeshCraftApplication::drawAiPanel() {
 
     if (inFlight)
         ImGui::TextColored(ImVec4(0.9f, 0.7f, 0.1f, 1.0f),
-                           "Sending to Claude... (may take up to 60 s)");
+                           "Sending to Claude... (large scenes can take 2–5 min)");
 
     if (hasDone && aiAssistant_.hasError()) {
         ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.35f, 0.35f, 1.0f));
@@ -196,7 +301,7 @@ void MeshCraftApplication::drawAiPanel() {
             } else {
                 sceneXml = serializeScene(document_);
             }
-            aiAssistant_.sendAsync(kSystemPrompt, sceneXml + "\n\nTask: " + aiPromptBuf_);
+            aiAssistant_.sendAsync(buildSystemPrompt(), sceneXml, aiPromptBuf_);
             setStatusMsg("AI request sent…");
         } catch (...) {
             setStatusMsg("Failed to serialize scene", true);

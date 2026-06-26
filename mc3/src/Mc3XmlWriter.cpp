@@ -334,6 +334,11 @@ void Mc3XmlWriter::write(const Mc3Document& doc, const std::filesystem::path& pa
             bt->SetText(env.backgroundTexture.c_str());
             eEl->InsertEndChild(bt);
         }
+        if (!env.skyboxTexture.empty()) {
+            XMLElement* st = xml.NewElement("skybox_texture");
+            st->SetText(env.skyboxTexture.c_str());
+            eEl->InsertEndChild(st);
+        }
         if (env.fog) {
             XMLElement* fg = xml.NewElement("fog");
             fg->SetAttribute("mode",    env.fog->mode == FogMode::Exponential ? "exponential" : "linear");
@@ -369,6 +374,8 @@ void Mc3XmlWriter::write(const Mc3Document& doc, const std::filesystem::path& pa
                 le->SetAttribute("angle",   fStr(l.angle).c_str());
                 le->SetAttribute("falloff", fStr(l.falloff).c_str());
             }
+            if ((l.type == LightType::Spot || l.type == LightType::Point) && l.range != 0.f)
+                le->SetAttribute("range", fStr(l.range).c_str());
             if (l.castShadows) le->SetAttribute("cast_shadows", "true");
             lEl->InsertEndChild(le);
         }
@@ -387,8 +394,12 @@ void Mc3XmlWriter::write(const Mc3Document& doc, const std::filesystem::path& pa
             ce->SetAttribute("position", vec3Str(cam.position).c_str());
             ce->SetAttribute("target",   vec3Str(cam.target).c_str());
             ce->SetAttribute("fov",      fStr(cam.fov).c_str());
+            if (cam.type == CameraType::Orthographic)
+                ce->SetAttribute("size", fStr(cam.orthoSize).c_str());
             ce->SetAttribute("near",     fStr(cam.nearPlane).c_str());
             ce->SetAttribute("far",      fStr(cam.farPlane).c_str());
+            if (cam.rotation)
+                ce->SetAttribute("rotation", vec3Str(*cam.rotation).c_str());
             cEl->InsertEndChild(ce);
         }
         root->InsertEndChild(cEl);

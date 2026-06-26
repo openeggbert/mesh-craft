@@ -9,6 +9,7 @@
 
 #include <tinyxml2.h>
 
+#include <algorithm>
 #include <cstdlib>
 #include <filesystem>
 #include <iostream>
@@ -363,6 +364,9 @@ static void parseEnvironment(const XMLElement* el, Mc3Document& doc) {
     if (const XMLElement* bt = el->FirstChildElement("background_texture")) {
         if (const char* t = bt->GetText()) env.backgroundTexture = t;
     }
+    if (const XMLElement* st = el->FirstChildElement("skybox_texture")) {
+        if (const char* t = st->GetText()) env.skyboxTexture = t;
+    }
     if (const XMLElement* fg = el->FirstChildElement("fog")) {
         Mc3Fog fog;
         fog.color   = attrVec3(fg, "color", {0.5f,0.5f,0.5f});
@@ -382,6 +386,7 @@ static void parseLights(const XMLElement* el, Mc3Document& doc) {
         std::string t = c->Name();
         if (t == "ambient") {
             light.type       = LightType::Ambient;
+            light.name       = attr(c, "name");
             light.color      = attrVec3(c, "color", {1,1,1});
             light.brightness = attrF(c, "brightness", 1.0f);
         } else if (t == "directional") {

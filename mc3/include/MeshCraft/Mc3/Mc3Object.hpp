@@ -17,6 +17,7 @@ namespace MeshCraft::Mc3 {
 
 enum class UvProjection { Planar, Box, Sphere };
 
+
 struct Mc3UvMapping {
     UvProjection projection{UvProjection::Planar};
     float scaleU{1.0f};
@@ -90,6 +91,95 @@ public:
     std::optional<Mc3UvMapping> uvMapping;
 
     // TODO: actions
+
+    // --- Static factory methods -------------------------------------------
+    // Each factory returns a shared_ptr so objects can be added directly to
+    // children vectors or Mc3Document::objects.
+
+    static std::shared_ptr<Mc3Object> makeBox(
+        std::string name,
+        std::array<float,3> size = {1.f,1.f,1.f},
+        std::string material = "");
+
+    static std::shared_ptr<Mc3Object> makeCube(
+        std::string name, float side = 1.f, std::string material = "");
+
+    static std::shared_ptr<Mc3Object> makeSphere(
+        std::string name, float radius = 0.5f, int segments = 32,
+        std::string material = "");
+
+    static std::shared_ptr<Mc3Object> makeIcoSphere(
+        std::string name, float radius = 0.5f, int subdivisions = 2,
+        std::string material = "");
+
+    static std::shared_ptr<Mc3Object> makeCylinder(
+        std::string name, float radius = 0.5f, float height = 1.f,
+        int segments = 32, std::string material = "");
+
+    static std::shared_ptr<Mc3Object> makeCone(
+        std::string name, float radius = 0.5f, float height = 1.f,
+        int segments = 32, std::string material = "");
+
+    static std::shared_ptr<Mc3Object> makePlane(
+        std::string name, float width = 1.f, float depth = 1.f,
+        std::string material = "");
+
+    static std::shared_ptr<Mc3Object> makeTorus(
+        std::string name, float majorRadius = 0.35f, float minorRadius = 0.15f,
+        int segments = 32, std::string material = "");
+
+    static std::shared_ptr<Mc3Object> makeCapsule(
+        std::string name, float radius = 0.5f, float height = 1.f,
+        int segments = 32, std::string material = "");
+
+    static std::shared_ptr<Mc3Object> makeDisk(
+        std::string name, float radius = 0.5f, int segments = 32,
+        std::string material = "");
+
+    static std::shared_ptr<Mc3Object> makeGrid(
+        std::string name, int subdivisionsX = 4, int subdivisionsZ = 4,
+        float width = 1.f, float depth = 1.f, std::string material = "");
+
+    static std::shared_ptr<Mc3Object> makeGroup(
+        std::string name,
+        std::vector<std::shared_ptr<Mc3Object>> children = {});
+
+    static std::shared_ptr<Mc3Object> makeInstance(
+        std::string name, std::string definition, std::string material = "");
+
+    // makeInstance with a pool of variant definitions (random selection)
+    static std::shared_ptr<Mc3Object> makeInstanceVariant(
+        std::string name, std::vector<std::string> definitions);
+
+    static std::shared_ptr<Mc3Object> makeMesh(
+        std::string name, std::string src, std::string material = "");
+
+    // CSG operations — add children with isCutter=true for subtracted volumes
+    static std::shared_ptr<Mc3Object> makeUnion(
+        std::string name, std::vector<std::shared_ptr<Mc3Object>> children = {});
+    static std::shared_ptr<Mc3Object> makeDifference(
+        std::string name, std::vector<std::shared_ptr<Mc3Object>> children = {});
+    static std::shared_ptr<Mc3Object> makeIntersection(
+        std::string name, std::vector<std::shared_ptr<Mc3Object>> children = {});
+
+    // --- Fluent setters ---------------------------------------------------
+    // Return *this so callers can chain: obj->at(0,1,0)->withMaterial("stone")
+
+    Mc3Object& at(float x, float y, float z);
+    Mc3Object& rotatedBy(float rx, float ry, float rz);
+    Mc3Object& scaledBy(float sx, float sy, float sz);
+    Mc3Object& scaledBy(float s);
+    Mc3Object& withId(std::string id);
+    Mc3Object& withMaterial(std::string mat);
+    Mc3Object& withVisible(bool v);
+    Mc3Object& withCollision(std::string c);
+    Mc3Object& withLayer(std::string l);
+    Mc3Object& withTag(std::string tag);
+    Mc3Object& withDeform(float sx, float sy, float sz);
+    Mc3Object& addChild(std::shared_ptr<Mc3Object> child);
+    Mc3Object& asCutter(bool v = true);
+    Mc3Object& withUvMapping(Mc3UvMapping uv);
+    Mc3Object& withUvMapping(UvProjection proj, float scaleU = 1.f, float scaleV = 1.f);
 };
 
 } // namespace MeshCraft::Mc3

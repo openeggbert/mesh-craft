@@ -35,6 +35,23 @@ struct Mc3Keyframe {
     Interpolation  interpolation{ Interpolation::Linear };
     Mc3BezierHandle handleLeft { -0.1f, 0.0f };
     Mc3BezierHandle handleRight{  0.1f, 0.0f };
+
+    // --- Factory helpers --------------------------------------------------
+    static Mc3Keyframe linear(float t, float v) {
+        Mc3Keyframe k; k.time = t; k.value = v;
+        k.interpolation = Interpolation::Linear; return k;
+    }
+    static Mc3Keyframe step(float t, float v) {
+        Mc3Keyframe k; k.time = t; k.value = v;
+        k.interpolation = Interpolation::Step; return k;
+    }
+    static Mc3Keyframe bezier(float t, float v,
+                              Mc3BezierHandle left  = {-0.1f, 0.f},
+                              Mc3BezierHandle right = { 0.1f, 0.f}) {
+        Mc3Keyframe k; k.time = t; k.value = v;
+        k.interpolation = Interpolation::CubicBezier;
+        k.handleLeft = left; k.handleRight = right; return k;
+    }
 };
 
 // A channel animates one property of one named scene object.
@@ -52,6 +69,21 @@ struct Mc3Action {
     bool        loop{ false };
     bool        autoplay{ false }; // start automatically when the scene is opened
     std::vector<Mc3Channel> channels;
+
+    // --- Builder helpers --------------------------------------------------
+    static Mc3Action make(std::string name, float duration = 1.0f,
+                          bool loop = false, bool autoplay = false) {
+        Mc3Action a; a.name = std::move(name);
+        a.duration = duration; a.loop = loop; a.autoplay = autoplay; return a;
+    }
+    Mc3Action& addChannel(std::string target, AnimatedProperty prop,
+                          std::vector<Mc3Keyframe> kfs) {
+        Mc3Channel ch; ch.targetObject = std::move(target);
+        ch.property = prop; ch.keyframes = std::move(kfs);
+        channels.push_back(std::move(ch)); return *this;
+    }
+    Mc3Action& withLoop(bool v = true)     { loop     = v; return *this; }
+    Mc3Action& withAutoplay(bool v = true) { autoplay = v; return *this; }
 };
 
 // Property name ↔ enum conversions (XML attribute values).

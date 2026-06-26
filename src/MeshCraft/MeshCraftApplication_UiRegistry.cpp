@@ -17,12 +17,17 @@ void MeshCraftApplication::drawRegistryPanel() {
     if (!registry_.isOpen()) {
         try {
             registry_.open(ModelRegistry::defaultPath());
-            regResultsDirty_ = true;
         } catch (const std::exception& ex) {
             setStatusMsg(std::string("Registry: ") + ex.what(), true);
             showRegistryPanel_ = false;
             return;
         }
+        if (!registry_.isOpen()) {
+            setStatusMsg("Model Registry is not available in this build", true);
+            showRegistryPanel_ = false;
+            return;
+        }
+        regResultsDirty_ = true;
     }
 
     // Refresh search results when query changed or marked dirty
@@ -127,7 +132,6 @@ void MeshCraftApplication::drawRegistryPanel() {
         if (ImGui::Begin("Save Definition to Registry##regdlg",
                          &regSaveDlgOpen_, ImGuiWindowFlags_NoResize)) {
 
-            ImGui::Text("Definition:");
             // When saving from an AI result, list aiPendingDoc_ definitions, not document_.
             const auto& defSource = (regSaveFromAi_ && aiPendingDoc_.has_value())
                                     ? aiPendingDoc_->definitions

@@ -27,6 +27,7 @@
 #include <sstream>
 #include <stdexcept>
 #include <string>
+#include <fstream>
 #include <unordered_map>
 #include <vector>
 
@@ -244,7 +245,9 @@ static int addAccessorIndices(tinygltf::Model& model,
 
 static std::unordered_map<std::string, int>
 buildTextures(tinygltf::Model& model,
-              const std::map<std::string, Mc3Texture>& textures)
+              const std::map<std::string, Mc3Texture>& textures,
+              const std::filesystem::path& basePath,
+              bool embedImages)
 {
     std::unordered_map<std::string, int> texIdx;
     for (const auto& [name, tex] : textures) {
@@ -261,7 +264,28 @@ buildTextures(tinygltf::Model& model,
 
         tinygltf::Image img;
         img.name = tex.name;
-        img.uri  = tex.uri;
+
+        if (embedImages) {
+            // GLB: load raw bytes so tinygltf can embed them as a data URI.
+            // Without pixel data, tinygltf's embed path silently strips the
+            // directory prefix and emits a bare filename URI that Blender can't find.
+            std::filesystem::path imgPath = basePath / tex.uri;
+            std::ifstream ifs(imgPath, std::ios::binary);
+            if (ifs) {
+                img.image = std::vector<unsigned char>(
+                    std::istreambuf_iterator<char>(ifs),
+                    std::istreambuf_iterator<char>());
+                img.as_is    = true;          // already-encoded PNG bytes
+                img.mimeType = "image/png";   // drives tinygltf's ext detection
+            } else {
+                img.uri = tex.uri;
+                std::cerr << "[mc3togltf] Warning: texture not found for embedding: "
+                          << imgPath << "\n";
+            }
+        } else {
+            // GLTF: keep relative URI so tools can load textures from next to the file
+            img.uri = tex.uri;
+        }
 
         int imgIdx = static_cast<int>(model.images.size());
         model.images.push_back(std::move(img));
@@ -1032,8 +1056,9 @@ void GltfExporter::exportDocument(const Mc3Document& doc,
         if (!ae.empty()) model.asset.extras = tinygltf::Value(ae);
     }
 
-    // Textures
-    auto texIdx = buildTextures(model, doc.textures);
+    // Textures (embedImages=true for GLB so images are embedded as data URIs)
+    bool embedImagesNow = (format == OutputFormat::GLB);
+    auto texIdx = buildTextures(model, doc.textures, doc.sourcePath, embedImagesNow);
 
     // Materials
     std::unordered_map<std::string, int> matNameToIdx;

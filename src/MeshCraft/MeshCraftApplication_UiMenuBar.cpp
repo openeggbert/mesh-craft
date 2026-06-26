@@ -597,6 +597,10 @@ float MeshCraftApplication::drawMenuBar()
             ImGui::MenuItem("Wireframe Mode",  nullptr,  &showWireframeMode_);
             ImGui::MenuItem("Stats Overlay",   nullptr,  &showStatsOverlay_);
             ImGui::MenuItem("Bloom (emissive glow)", nullptr, &bloomEnabled_);
+            if (bloomEnabled_) {
+                ImGui::SetNextItemWidth(140);
+                ImGui::SliderFloat("  Strength##bloom", &bloomStrength_, 0.5f, 8.0f, "%.1f");
+            }
             ImGui::MenuItem("Snap to Grid", nullptr, &snapEnabled_);
             ImGui::MenuItem("Timeline",       "Ctrl+T", &showTimeline_);
             ImGui::MenuItem("Model Registry", nullptr,  &showRegistryPanel_);

@@ -29,6 +29,7 @@
 #include <numbers>
 #include <stdexcept>
 #include "MeshCraftPrivate.hpp"
+#include <stb_image.h>
 
 namespace MeshCraft {
 
@@ -98,6 +99,7 @@ void MeshCraftApplication::LoadContent() {
 
     gridRenderer_  = std::make_unique<Renderer::GridRenderer>(gd);
     sceneRenderer_ = std::make_unique<Renderer::SceneRenderer>(gd);
+    spriteBatch_   = std::make_unique<Graphics::SpriteBatch>(gd);
 
     hierarchyPanel_  = std::make_unique<Scene::SceneHierarchyPanel>(document_);
     propertiesPanel_ = std::make_unique<Scene::PropertiesPanel>();
@@ -428,6 +430,29 @@ void MeshCraftApplication::Draw(const GameTime& /*gameTime*/) {
     }
     gd.Clear(bgColor);
 
+    // I1: draw background texture stretched to fill viewport (before 3D scene)
+    if (spriteBatch_ && document_.environment &&
+        !document_.environment->backgroundTexture.empty()) {
+        const std::string& btUri = document_.environment->backgroundTexture;
+        std::string absPath = (document_.sourcePath / btUri).string();
+        if (absPath != bgTexturePath_) {
+            bgTexturePath_ = absPath;
+            bgTexture_.reset();
+            try { bgTexture_.emplace(absPath, gd); } catch (...) {}
+        }
+        if (bgTexture_) {
+            Rectangle destRect{viewX, viewY, viewW, viewH};
+            spriteBatch_->Begin();
+            spriteBatch_->Draw(*bgTexture_, destRect, Color::White);
+            spriteBatch_->End();
+        }
+    } else if (document_.environment &&
+               document_.environment->backgroundTexture.empty() &&
+               !bgTexturePath_.empty()) {
+        bgTexturePath_.clear();
+        bgTexture_.reset();
+    }
+
     if (fnGlViewport_) fnGlViewport_(viewX, glViewY, viewW, viewH);
 
     float aspect = (viewH > 0) ? static_cast<float>(viewW) / viewH : 16.0f / 9.0f;
@@ -474,6 +499,9 @@ void MeshCraftApplication::Draw(const GameTime& /*gameTime*/) {
     // Cache for measurement overlay projection
     cachedVP_ = view * proj;
     cachedVX_ = viewX; cachedVY_ = viewY; cachedVW_ = viewW; cachedVH_ = viewH;
+
+    // I2: equirectangular skybox (drawn before scene, no depth write)
+    drawSkybox(view, camera_.fovDegrees, aspect);
 
     gd.SetDepthTestEnabled(false);
     gridRenderer_->draw(view, proj);
@@ -624,6 +652,7 @@ constexpr unsigned kGL_RGBA8                = 0x8058u;
 constexpr unsigned kGL_UNSIGNED_BYTE        = 0x1401u;
 constexpr unsigned kGL_LINEAR               = 0x2601u;
 constexpr unsigned kGL_CLAMP_TO_EDGE        = 0x812Fu;
+constexpr unsigned kGL_REPEAT               = 0x2901u;
 constexpr unsigned kGL_TEXTURE_MIN_FILTER   = 0x2801u;
 constexpr unsigned kGL_TEXTURE_MAG_FILTER   = 0x2800u;
 constexpr unsigned kGL_TEXTURE_WRAP_S       = 0x2802u;
@@ -644,6 +673,7 @@ constexpr unsigned kGL_DEPTH_TEST           = 0x0B71u;
 constexpr unsigned kGL_COLOR_BUFFER_BIT     = 0x4000u;
 constexpr unsigned kGL_LINK_STATUS          = 0x8B82u;
 constexpr unsigned kGL_COMPILE_STATUS       = 0x8B81u;
+constexpr unsigned kGL_INFO_LOG_LENGTH      = 0x8B84u;
 
 struct BloomGL {
     void     (*GenFramebuffers)(int, unsigned*) = nullptr;
@@ -670,17 +700,20 @@ struct BloomGL {
     void     (*ShaderSource)(unsigned, int, const char* const*, const int*) = nullptr;
     void     (*CompileShader)(unsigned) = nullptr;
     void     (*GetShaderiv)(unsigned, unsigned, int*) = nullptr;
+    void     (*GetShaderInfoLog)(unsigned, int, int*, char*) = nullptr;
     void     (*DeleteShader)(unsigned) = nullptr;
     unsigned (*CreateProgram)() = nullptr;
     void     (*AttachShader)(unsigned, unsigned) = nullptr;
     void     (*LinkProgram)(unsigned) = nullptr;
     void     (*GetProgramiv)(unsigned, unsigned, int*) = nullptr;
+    void     (*GetProgramInfoLog)(unsigned, int, int*, char*) = nullptr;
     void     (*DeleteProgram)(unsigned) = nullptr;
     void     (*UseProgram)(unsigned) = nullptr;
     int      (*GetUniformLocation)(unsigned, const char*) = nullptr;
     void     (*Uniform1i)(int, int) = nullptr;
     void     (*Uniform1f)(int, float) = nullptr;
     void     (*Uniform2f)(int, float, float) = nullptr;
+    void     (*Uniform3f)(int, float, float, float) = nullptr;
     void     (*BlendFunc)(unsigned, unsigned) = nullptr;
     void     (*BlendEquation)(unsigned) = nullptr;
     void     (*DrawArrays)(unsigned, int, int) = nullptr;
@@ -689,6 +722,9 @@ struct BloomGL {
     void     (*Viewport)(int, int, int, int) = nullptr;
     void     (*Enable)(unsigned) = nullptr;
     void     (*Disable)(unsigned) = nullptr;
+    unsigned (*GetError)() = nullptr;
+    void     (*ReadPixels)(int, int, int, int, unsigned, unsigned, void*) = nullptr;
+    void     (*ColorMask)(unsigned char, unsigned char, unsigned char, unsigned char) = nullptr;
 
     unsigned fboA{0}, fboB{0};
     unsigned texA{0}, texB{0};
@@ -696,6 +732,11 @@ struct BloomGL {
     unsigned quadVAO{0}, quadVBO{0};
     bool     fnLoaded{false};
     bool     ready{false};
+
+    // Skybox
+    unsigned progSkybox{0};
+    unsigned skyboxTex{0};
+    std::string skyboxTexPath;
 
     bool loadFunctions() {
         if (fnLoaded) return true;
@@ -724,17 +765,20 @@ struct BloomGL {
         LD(ShaderSource,           "glShaderSource");
         LD(CompileShader,          "glCompileShader");
         LD(GetShaderiv,            "glGetShaderiv");
+        LD(GetShaderInfoLog,       "glGetShaderInfoLog");
         LD(DeleteShader,           "glDeleteShader");
         LD(CreateProgram,          "glCreateProgram");
         LD(AttachShader,           "glAttachShader");
         LD(LinkProgram,            "glLinkProgram");
         LD(GetProgramiv,           "glGetProgramiv");
+        LD(GetProgramInfoLog,      "glGetProgramInfoLog");
         LD(DeleteProgram,          "glDeleteProgram");
         LD(UseProgram,             "glUseProgram");
         LD(GetUniformLocation,     "glGetUniformLocation");
         LD(Uniform1i,              "glUniform1i");
         LD(Uniform1f,              "glUniform1f");
         LD(Uniform2f,              "glUniform2f");
+        LD(Uniform3f,              "glUniform3f");
         LD(BlendFunc,              "glBlendFunc");
         LD(BlendEquation,          "glBlendEquation");
         LD(DrawArrays,             "glDrawArrays");
@@ -743,10 +787,19 @@ struct BloomGL {
         LD(Viewport,               "glViewport");
         LD(Enable,                 "glEnable");
         LD(Disable,                "glDisable");
+        LD(GetError,               "glGetError");
+        LD(ColorMask,              "glColorMask");
 #undef LD
         fnLoaded = GenFramebuffers && DrawArrays && UseProgram && CreateShader;
         if (!fnLoaded) std::cerr << "[Bloom] Failed to load GL functions\n";
         return fnLoaded;
+    }
+
+    void logError(const char* where) {
+        if (!GetError) return;
+        unsigned err = GetError();
+        if (err) std::cerr << "[Bloom] GL error 0x" << std::hex << err << std::dec
+                           << " after " << where << "\n";
     }
 
     unsigned compileShader(unsigned type, const char* src) {
@@ -755,7 +808,18 @@ struct BloomGL {
         ShaderSource(s, 1, srcs, nullptr);
         CompileShader(s);
         int ok = 0; GetShaderiv(s, kGL_COMPILE_STATUS, &ok);
-        if (!ok) { std::cerr << "[Bloom] Shader compile error\n"; DeleteShader(s); return 0; }
+        if (!ok) {
+            int len = 0;
+            if (GetShaderInfoLog) {
+                GetShaderiv(s, kGL_INFO_LOG_LENGTH, &len);
+                std::string log(std::max(len, 1), '\0');
+                GetShaderInfoLog(s, len, nullptr, log.data());
+                std::cerr << "[Bloom] Shader compile error:\n" << log << "\n";
+            } else {
+                std::cerr << "[Bloom] Shader compile error\n";
+            }
+            DeleteShader(s); return 0;
+        }
         return s;
     }
 
@@ -768,7 +832,18 @@ struct BloomGL {
         LinkProgram(p);
         DeleteShader(vs); DeleteShader(fs);
         int ok = 0; GetProgramiv(p, kGL_LINK_STATUS, &ok);
-        if (!ok) { std::cerr << "[Bloom] Program link error\n"; DeleteProgram(p); return 0; }
+        if (!ok) {
+            if (GetProgramInfoLog) {
+                int len = 0;
+                GetProgramiv(p, kGL_INFO_LOG_LENGTH, &len);
+                std::string log(std::max(len, 1), '\0');
+                GetProgramInfoLog(p, len, nullptr, log.data());
+                std::cerr << "[Bloom] Program link error:\n" << log << "\n";
+            } else {
+                std::cerr << "[Bloom] Program link error\n";
+            }
+            DeleteProgram(p); return 0;
+        }
         return p;
     }
 
@@ -779,19 +854,24 @@ struct BloomGL {
         if (texB)        { DeleteTextures(1, &texB);         texB = 0; }
         if (progBlur)      { DeleteProgram(progBlur);       progBlur = 0; }
         if (progComposite) { DeleteProgram(progComposite);  progComposite = 0; }
+        if (progSkybox)    { DeleteProgram(progSkybox);     progSkybox = 0; }
+        if (skyboxTex)     { DeleteTextures(1, &skyboxTex); skyboxTex = 0; skyboxTexPath.clear(); }
         if (quadVAO) { DeleteVertexArrays(1, &quadVAO); quadVAO = 0; }
         if (quadVBO) { DeleteBuffers(1, &quadVBO);       quadVBO = 0; }
-        ready = false;
+        ready       = false;
     }
 };
 BloomGL s_bloom;
 
+// Full-screen quad via gl_VertexID: no VBO or vertex attributes required.
+// IDs 0-3 in TRIANGLE_STRIP order give positions (-1,1),(-1,-1),(1,1),(1,-1).
 const char* kBloomVS = R"(#version 300 es
-layout(location = 0) in vec2 a_pos;
 out vec2 v_uv;
 void main() {
-    v_uv = a_pos * 0.5 + 0.5;
-    gl_Position = vec4(a_pos, 0.0, 1.0);
+    float x = float(gl_VertexID >> 1) * 2.0 - 1.0;
+    float y = 1.0 - float(gl_VertexID & 1) * 2.0;
+    v_uv = vec2(x * 0.5 + 0.5, y * 0.5 + 0.5);
+    gl_Position = vec4(x, y, 0.0, 1.0);
 }
 )";
 const char* kBloomBlurFS = R"(#version 300 es
@@ -817,6 +897,35 @@ in vec2 v_uv;
 out vec4 fragColor;
 void main() {
     fragColor = vec4(texture(u_tex, v_uv).rgb * u_strength, 1.0);
+}
+)";
+
+const char* kSkyboxVS = R"(#version 300 es
+layout(location = 0) in vec2 a_pos;
+uniform vec3 u_right;
+uniform vec3 u_up;
+uniform vec3 u_forward;
+uniform vec2 u_tanFov;
+out vec3 v_dir;
+void main() {
+    v_dir = u_forward
+          + a_pos.x * u_tanFov.x * u_right
+          + a_pos.y * u_tanFov.y * u_up;
+    gl_Position = vec4(a_pos, 0.9999, 1.0);
+}
+)";
+
+const char* kSkyboxFS = R"(#version 300 es
+precision mediump float;
+uniform sampler2D u_tex;
+in vec3 v_dir;
+out vec4 fragColor;
+const float PI = 3.14159265;
+void main() {
+    vec3 d = normalize(v_dir);
+    float u = atan(d.z, d.x) / (2.0 * PI) + 0.5;
+    float v = asin(clamp(d.y, -1.0, 1.0)) / PI + 0.5;
+    fragColor = texture(u_tex, vec2(u, 1.0 - v));
 }
 )";
 
@@ -875,6 +984,92 @@ void MeshCraftApplication::initBloom(int w, int h)
     gl.ready   = true;
 }
 
+void MeshCraftApplication::initSkybox()
+{
+    auto& gl = s_bloom;
+    if (!gl.loadFunctions()) return;
+    // Ensure the shared quad VAO/VBO is built (reuse bloom's quad)
+    if (!gl.quadVAO) {
+        gl.GenVertexArrays(1, &gl.quadVAO);
+        gl.BindVertexArray(gl.quadVAO);
+        gl.GenBuffers(1, &gl.quadVBO);
+        gl.BindBuffer(kGL_ARRAY_BUFFER, gl.quadVBO);
+        const float quad[] = { -1.f, 1.f,  -1.f, -1.f,  1.f, 1.f,  1.f, -1.f };
+        gl.BufferData(kGL_ARRAY_BUFFER, (long)sizeof(quad), quad, kGL_STATIC_DRAW);
+        gl.EnableVertexAttribArray(0);
+        gl.VertexAttribPointer(0, 2, kGL_FLOAT, 0, 8, nullptr);
+        gl.BindVertexArray(0);
+        gl.BindBuffer(kGL_ARRAY_BUFFER, 0);
+    }
+    if (gl.progSkybox) gl.DeleteProgram(gl.progSkybox);
+    gl.progSkybox = gl.makeProgram(kSkyboxVS, kSkyboxFS);
+    if (!gl.progSkybox) std::cerr << "[Skybox] Failed to compile shader\n";
+}
+
+void MeshCraftApplication::drawSkybox(const Matrix& view, float fovDegrees, float aspect)
+{
+    if (!document_.environment || document_.environment->skyboxTexture.empty()) return;
+    const std::string& uriRaw = document_.environment->skyboxTexture;
+    std::string absPath = document_.sourcePath.empty()
+        ? uriRaw
+        : (document_.sourcePath / uriRaw).string();
+
+    auto& gl = s_bloom;
+    if (!gl.progSkybox) initSkybox();
+    if (!gl.progSkybox) return;
+
+    // (Re)load texture when path changes
+    if (absPath != gl.skyboxTexPath) {
+        if (gl.skyboxTex) { gl.DeleteTextures(1, &gl.skyboxTex); gl.skyboxTex = 0; }
+        gl.skyboxTexPath.clear();
+        int w = 0, h = 0, ch = 0;
+        stbi_set_flip_vertically_on_load(0);
+        unsigned char* data = stbi_load(absPath.c_str(), &w, &h, &ch, 4);
+        if (data) {
+            gl.GenTextures(1, &gl.skyboxTex);
+            gl.BindTexture(kGL_TEXTURE_2D, gl.skyboxTex);
+            gl.TexImage2D(kGL_TEXTURE_2D, 0, (int)kGL_RGBA8, w, h, 0,
+                          kGL_RGBA, kGL_UNSIGNED_BYTE, data);
+            gl.TexParameteri(kGL_TEXTURE_2D, kGL_TEXTURE_MIN_FILTER, (int)kGL_LINEAR);
+            gl.TexParameteri(kGL_TEXTURE_2D, kGL_TEXTURE_MAG_FILTER, (int)kGL_LINEAR);
+            gl.TexParameteri(kGL_TEXTURE_2D, kGL_TEXTURE_WRAP_S,     (int)kGL_REPEAT);
+            gl.TexParameteri(kGL_TEXTURE_2D, kGL_TEXTURE_WRAP_T,     (int)kGL_CLAMP_TO_EDGE);
+            gl.BindTexture(kGL_TEXTURE_2D, 0);
+            stbi_image_free(data);
+            gl.skyboxTexPath = absPath;
+        } else {
+            std::cerr << "[Skybox] Failed to load: " << absPath << "\n";
+            return;
+        }
+    }
+    if (!gl.skyboxTex) return;
+
+    // Extract camera basis vectors from view matrix (XNA row-major):
+    //   row 0 = right, row 1 = up, row 2 = back (-forward)
+    float rx = view.M11, ry = view.M12, rz = view.M13;
+    float ux = view.M21, uy = view.M22, uz = view.M23;
+    float fx = -view.M31, fy = -view.M32, fz = -view.M33;  // forward = -back
+
+    const float pi = std::numbers::pi_v<float>;
+    float tanHalfFovY = std::tan(fovDegrees * pi / 180.0f * 0.5f);
+    float tanHalfFovX = tanHalfFovY * aspect;
+
+    gl.Disable(kGL_DEPTH_TEST);
+    gl.Disable(kGL_BLEND);
+    gl.UseProgram(gl.progSkybox);
+    gl.ActiveTexture(kGL_TEXTURE0);
+    gl.BindTexture(kGL_TEXTURE_2D, gl.skyboxTex);
+    gl.Uniform1i(gl.GetUniformLocation(gl.progSkybox, "u_tex"), 0);
+    gl.Uniform3f(gl.GetUniformLocation(gl.progSkybox, "u_right"),   rx, ry, rz);
+    gl.Uniform3f(gl.GetUniformLocation(gl.progSkybox, "u_up"),      ux, uy, uz);
+    gl.Uniform3f(gl.GetUniformLocation(gl.progSkybox, "u_forward"), fx, fy, fz);
+    gl.Uniform2f(gl.GetUniformLocation(gl.progSkybox, "u_tanFov"),  tanHalfFovX, tanHalfFovY);
+    gl.BindVertexArray(gl.quadVAO);
+    gl.DrawArrays(kGL_TRIANGLE_STRIP, 0, 4);
+    gl.BindVertexArray(0);
+    gl.BindTexture(kGL_TEXTURE_2D, 0);
+}
+
 void MeshCraftApplication::applyBloom(
     int vx, int glViewY, int vw, int vh,
     const Matrix& view, const Matrix& proj)
@@ -882,53 +1077,63 @@ void MeshCraftApplication::applyBloom(
     auto& gl = s_bloom;
     if (!gl.ready || vw <= 0 || vh <= 0) return;
 
-    // Step = 2 screen pixels so blur spreads wider (wider glow on small emitters)
-    const float iw = 2.0f / static_cast<float>(vw);
-    const float ih = 2.0f / static_cast<float>(vh);
+    const float iw = 1.0f / static_cast<float>(vw);
+    const float ih = 1.0f / static_cast<float>(vh);
 
     // Pass 0: render emissive objects into FBO A
     gl.BindFramebuffer(kGL_FRAMEBUFFER, gl.fboA);
     gl.Viewport(0, 0, vw, vh);
     gl.Disable(kGL_BLEND);
+    gl.Disable(kGL_DEPTH_TEST);
     gl.ClearColor(0.f, 0.f, 0.f, 0.f);
     gl.Clear(kGL_COLOR_BUFFER_BIT);
     sceneRenderer_->drawEmissivePass(document_, view, proj);
+    // Re-bind fboA: CNA may reset viewport/framebuffer state during emissive draw
+    gl.BindFramebuffer(kGL_FRAMEBUFFER, gl.fboA);
+    gl.Viewport(0, 0, vw, vh);
 
-    // Passes 1–4: ping-pong Gaussian blur (2 iterations each axis)
+    // Passes 1–4: ping-pong Gaussian blur (4 iterations H+V)
     auto blur = [&](unsigned srcTex, unsigned dstFbo, float dx, float dy) {
         gl.BindFramebuffer(kGL_FRAMEBUFFER, dstFbo);
         gl.Viewport(0, 0, vw, vh);
+        gl.Disable(kGL_BLEND);
+        gl.Disable(kGL_DEPTH_TEST);
         gl.UseProgram(gl.progBlur);
         gl.Uniform1i(gl.GetUniformLocation(gl.progBlur, "u_tex"), 0);
         gl.Uniform2f(gl.GetUniformLocation(gl.progBlur, "u_dir"), dx, dy);
         gl.ActiveTexture(kGL_TEXTURE0);
         gl.BindTexture(kGL_TEXTURE_2D, srcTex);
-        gl.BindVertexArray(gl.quadVAO);
-        gl.DrawArrays(kGL_TRIANGLE_STRIP, 0, 4);
         gl.BindVertexArray(0);
+        gl.DrawArrays(kGL_TRIANGLE_STRIP, 0, 4);
     };
     for (int i = 0; i < 4; ++i) {
         blur(gl.texA, gl.fboB, iw, 0.f);   // horizontal: A → B
         blur(gl.texB, gl.fboA, 0.f, ih);   // vertical:   B → A
     }
 
-    // Pass 5: additive composite onto viewport area
+    // Pass 5: additive composite onto viewport area in default FB
     gl.BindFramebuffer(kGL_FRAMEBUFFER, 0);
     gl.Viewport(vx, glViewY, vw, vh);
     gl.Disable(kGL_DEPTH_TEST);
+    constexpr unsigned kGL_CULL_FACE    = 0x0B44u;
+    constexpr unsigned kGL_STENCIL_TEST = 0x0B90u;
+    constexpr unsigned kGL_SCISSOR_TEST = 0x0C11u;
+    gl.Disable(kGL_CULL_FACE);
+    gl.Disable(kGL_STENCIL_TEST);
+    gl.Disable(kGL_SCISSOR_TEST);
     gl.Enable(kGL_BLEND);
     gl.BlendEquation(kGL_FUNC_ADD);
     gl.BlendFunc(kGL_ONE, kGL_ONE);
+    if (gl.ColorMask) gl.ColorMask(1, 1, 1, 1);
     gl.UseProgram(gl.progComposite);
     gl.Uniform1i(gl.GetUniformLocation(gl.progComposite, "u_tex"), 0);
-    gl.Uniform1f(gl.GetUniformLocation(gl.progComposite, "u_strength"), 2.5f);
+    gl.Uniform1f(gl.GetUniformLocation(gl.progComposite, "u_strength"), bloomStrength_);
     gl.ActiveTexture(kGL_TEXTURE0);
     gl.BindTexture(kGL_TEXTURE_2D, gl.texA);
-    gl.BindVertexArray(gl.quadVAO);
-    gl.DrawArrays(kGL_TRIANGLE_STRIP, 0, 4);
     gl.BindVertexArray(0);
+    gl.DrawArrays(kGL_TRIANGLE_STRIP, 0, 4);
 
-    // Restore GL state
+    // Restore GL state for the rest of the frame
     gl.Disable(kGL_BLEND);
     gl.Enable(kGL_DEPTH_TEST);
     gl.BlendFunc(kGL_SRC_ALPHA, kGL_ONE_MINUS_SRC_ALPHA);

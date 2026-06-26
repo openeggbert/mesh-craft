@@ -53,8 +53,44 @@ public:
     // Load from MC3 XML (.mc3.xml) — implemented in mc3togltf
     static Mc3Document loadFromFile(const std::filesystem::path& path);
 
-    // TODO: save to XML
+    // Save to XML
     void saveToFile(const std::filesystem::path& path) const;
+
+    // --- Builder / helper methods -----------------------------------------
+    // These add objects to the document and return a reference to the stored
+    // element so callers can chain additional modifications.
+
+    // Add a material (key = material.name).  Returns reference to the stored material.
+    Mc3Material& addMaterial(Mc3Material mat);
+
+    // Add a texture (key = texture.name).  Returns reference to the stored texture.
+    Mc3Texture& addTexture(Mc3Texture tex);
+
+    // Append an object to the root objects list.  Returns the shared_ptr (copy).
+    std::shared_ptr<Mc3Object> addObject(std::shared_ptr<Mc3Object> obj);
+
+    // Register a named definition (reusable template for <instance> elements).
+    // Returns the shared_ptr stored in definitions[id].
+    std::shared_ptr<Mc3Object> defineObject(std::string id,
+                                             std::shared_ptr<Mc3Object> obj);
+
+    // Append a light.  Returns reference to the stored light.
+    Mc3Light& addLight(Mc3Light light);
+
+    // Append a camera.  Returns reference to the stored camera.
+    Mc3Camera& addCamera(Mc3Camera cam);
+
+    // Add or replace a named action.  Returns reference to the stored action.
+    Mc3Action& addAction(Mc3Action action);
+
+    // Set the environment block (replaces any existing one).
+    Mc3Document& setEnvironment(Mc3Environment env);
+
+    // Convenience: set background color without touching other env fields.
+    Mc3Document& setBackgroundColor(float r, float g, float b);
+
+    // Convenience: set fog without touching other env fields.
+    Mc3Document& setFog(Mc3Fog fog);
 };
 
 } // namespace MeshCraft::Mc3

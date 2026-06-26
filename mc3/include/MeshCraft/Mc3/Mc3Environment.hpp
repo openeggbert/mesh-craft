@@ -17,7 +17,8 @@ struct Mc3Fog {
 
 struct Mc3Environment {
     std::array<float, 3> backgroundColor{0.0f, 0.0f, 0.0f};
-    std::string backgroundTexture;
+    std::string backgroundTexture;   // flat 2D background (I1)
+    std::string skyboxTexture;       // equirectangular panorama (I2)
     std::optional<Mc3Fog> fog;
 };
 

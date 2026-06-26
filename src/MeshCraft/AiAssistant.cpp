@@ -46,6 +46,19 @@ static std::string jsonEscape(const std::string& s) {
     return out;
 }
 
+// Extract the value of "stop_reason" from a Claude /v1/messages response JSON.
+// Returns "end_turn", "max_tokens", or empty string if not found.
+static std::string extractStopReason(const std::string& json) {
+    const std::string key = "\"stop_reason\":\"";
+    auto pos = json.find(key);
+    if (pos == std::string::npos) return {};
+    pos += key.size();
+    std::string out;
+    while (pos < json.size() && json[pos] != '"')
+        out += json[pos++];
+    return out;
+}
+
 // Extract the text value of the first "text" key in the JSON response.
 // Claude /v1/messages response: {"content":[{"type":"text","text":"..."}]}
 static std::string extractFirstTextValue(const std::string& json) {
@@ -116,14 +129,17 @@ void AiAssistant::poll() {
     if (!future_.valid() || done_) return;
     if (future_.wait_for(std::chrono::seconds(0)) == std::future_status::ready) {
         try {
-            result_   = future_.get();
-            done_     = true;
-            hasError_ = false;
+            auto [text, stop] = future_.get();
+            result_     = std::move(text);
+            stopReason_ = std::move(stop);
+            done_       = true;
+            hasError_   = false;
         } catch (const std::exception& e) {
-            result_   = {};
-            errorMsg_ = e.what();
-            done_     = true;
-            hasError_ = true;
+            result_     = {};
+            stopReason_ = {};
+            errorMsg_   = e.what();
+            done_       = true;
+            hasError_   = true;
         }
     }
 }
@@ -134,34 +150,59 @@ void AiAssistant::reset() {
     future_ = {};
     result_.clear();
     errorMsg_.clear();
+    stopReason_.clear();
     done_     = false;
     hasError_ = false;
 }
 
-void AiAssistant::sendAsync(const std::string& systemPrompt, const std::string& userMessage) {
+void AiAssistant::sendAsync(const std::string& systemPrompt,
+                            const std::string& sceneXml,
+                            const std::string& taskPrompt) {
     reset();
-    std::string apiKeyCopy = apiKey;
-    std::string modelCopy  = model;
+    std::string apiKeyCopy    = apiKey;
+    std::string modelCopy     = model;
+    int         maxTokensCopy = maxTokens;
 
     future_ = std::async(std::launch::async,
-        [apiKeyCopy, modelCopy, systemPrompt, userMessage]() -> std::string
+        [apiKeyCopy, modelCopy, maxTokensCopy,
+         systemPrompt, sceneXml, taskPrompt]()
+            -> std::pair<std::string, std::string>   // {text, stop_reason}
     {
 #ifdef MESHCRAFT_HAS_AI
         httplib::SSLClient cli("api.anthropic.com");
         cli.set_connection_timeout(30, 0);
-        cli.set_read_timeout(120, 0);
-        cli.set_write_timeout(30, 0);
+        cli.set_read_timeout(600, 0);   // 10 min: large scenes + high max_tokens can be slow
+        cli.set_write_timeout(120, 0);  // 2 min: large scene XML body
 
+        // Structured request with prompt caching:
+        //   system prompt  → cached (stable across requests)
+        //   scene XML      → cached (stable while editing same scene)
+        //   task prompt    → NOT cached (changes every request)
         std::string body =
-            "{\"model\":\"" + jsonEscape(modelCopy) + "\","
-            "\"max_tokens\":8192,"
-            "\"system\":\"" + jsonEscape(systemPrompt) + "\","
-            "\"messages\":[{\"role\":\"user\","
-            "\"content\":\"" + jsonEscape(userMessage) + "\"}]}";
+            "{"
+            "\"model\":\"" + jsonEscape(modelCopy) + "\","
+            "\"max_tokens\":" + std::to_string(maxTokensCopy) + ","
+            "\"system\":[{"
+              "\"type\":\"text\","
+              "\"text\":\"" + jsonEscape(systemPrompt) + "\","
+              "\"cache_control\":{\"type\":\"ephemeral\"}"
+            "}],"
+            "\"messages\":[{\"role\":\"user\",\"content\":["
+              "{"
+                "\"type\":\"text\","
+                "\"text\":\"" + jsonEscape(sceneXml) + "\","
+                "\"cache_control\":{\"type\":\"ephemeral\"}"
+              "},"
+              "{"
+                "\"type\":\"text\","
+                "\"text\":\"Task: " + jsonEscape(taskPrompt) + "\""
+              "}"
+            "]}]}";
 
         httplib::Headers headers = {
             {"x-api-key",          apiKeyCopy},
             {"anthropic-version",  "2023-06-01"},
+            {"anthropic-beta",     "prompt-caching-2024-07-31"},
             {"content-type",       "application/json"}
         };
 
@@ -173,13 +214,14 @@ void AiAssistant::sendAsync(const std::string& systemPrompt, const std::string& 
             throw std::runtime_error("API error " + std::to_string(res->status) +
                 ": " + res->body);
 
-        std::string text = extractFirstTextValue(res->body);
+        std::string stopReason = extractStopReason(res->body);
+        std::string text       = extractFirstTextValue(res->body);
         if (text.empty())
             throw std::runtime_error("Empty response from API: " + res->body);
-        return text;
+        return {text, stopReason};
 #else
-        (void)apiKeyCopy; (void)modelCopy;
-        (void)systemPrompt; (void)userMessage;
+        (void)apiKeyCopy; (void)modelCopy; (void)maxTokensCopy;
+        (void)systemPrompt; (void)sceneXml; (void)taskPrompt;
         throw std::runtime_error(
             "AI not available: built without cpp-httplib + OpenSSL.\n"
             "Install libssl-dev and reconfigure.");
