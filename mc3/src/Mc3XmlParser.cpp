@@ -198,7 +198,8 @@ static Mc3Primitive parsePrimitive(const XMLElement* el, ObjectType type) {
     }
     p.radius        = attrF(el, "radius",         0.5f);
     p.height        = attrF(el, "height",         1.0f);
-    p.segments      = attrI(el, "segments",       32);
+    // IcoSphere default subdivisions is 2; all other primitives default to 32.
+    p.segments      = attrI(el, "segments", type == ObjectType::IcoSphere ? 2 : 32);
     p.axis          = attr (el, "axis",           "y");
     p.majorRadius   = attrF(el, "major_radius",   0.35f);
     if (type == ObjectType::Disk) {
@@ -247,6 +248,12 @@ static void parseCommonObjectAttribs(const XMLElement* el, Mc3Object& obj) {
         m.rotation = attrF(uv, "rotation", 0.0f);
         obj.uvMapping = m;
     }
+    if (const XMLElement* meta = el->FirstChildElement("metadata"))
+        for (const XMLElement* p = meta->FirstChildElement("property"); p;
+             p = p->NextSiblingElement("property"))
+            if (const char* n = p->Attribute("name"))
+                if (const char* v = p->Attribute("value"))
+                    obj.metadata[n] = v;
 }
 
 static void parseChildren(const XMLElement* el, Mc3Object& obj) {
@@ -682,6 +689,15 @@ Mc3Document Mc3XmlParser::parse(const std::filesystem::path& path) {
     doc.model            = attr(root, "model",   "unnamed");
     doc.unit             = attr(root, "unit",    "meter");
     doc.coordinateSystem = attr(root, "coordinate_system", "right_handed_y_up");
+    doc.rotationUnits    = attr(root, "rotation_units",    "degrees");
+    doc.eulerOrder       = attr(root, "euler_order",       "XYZ");
+
+    if (const XMLElement* meta = root->FirstChildElement("metadata"))
+        for (const XMLElement* p = meta->FirstChildElement("property"); p;
+             p = p->NextSiblingElement("property"))
+            if (const char* n = p->Attribute("name"))
+                if (const char* v = p->Attribute("value"))
+                    doc.metadata[n] = v;
 
     // Process <include> elements before any local sections so that included
     // definitions/materials/textures are available when the main file is parsed.

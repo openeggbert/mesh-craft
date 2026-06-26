@@ -90,7 +90,8 @@ public:
 
     std::optional<Mc3UvMapping> uvMapping;
 
-    // TODO: actions
+    // Opaque key/value pass-through store (mirrors <metadata> in the XSD).
+    std::map<std::string, std::string> metadata;
 
     // --- Static factory methods -------------------------------------------
     // Each factory returns a shared_ptr so objects can be added directly to
@@ -180,6 +181,7 @@ public:
     Mc3Object& asCutter(bool v = true);
     Mc3Object& withUvMapping(Mc3UvMapping uv);
     Mc3Object& withUvMapping(UvProjection proj, float scaleU = 1.f, float scaleV = 1.f);
+    Mc3Object& withMetadata(std::string key, std::string value);
 };
 
 } // namespace MeshCraft::Mc3

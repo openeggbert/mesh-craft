@@ -150,7 +150,8 @@ static XMLElement* writeObject(XMLDocument& xmlDoc, const std::shared_ptr<Mc3Obj
             if (p.subdivisionsZ != 4) el->SetAttribute("subdivisions_z", p.subdivisionsZ);
             break;
         case ObjectType::IcoSphere:
-            if (p.radius != 0.5f) el->SetAttribute("radius", fStr(p.radius).c_str());
+            if (p.radius   != 0.5f) el->SetAttribute("radius",   fStr(p.radius).c_str());
+            if (p.segments != 2)    el->SetAttribute("segments", p.segments);
             break;
         case ObjectType::Capsule:
             if (p.radius   != 0.5f) el->SetAttribute("radius",   fStr(p.radius).c_str());
@@ -280,6 +281,18 @@ static XMLElement* writeObject(XMLDocument& xmlDoc, const std::shared_ptr<Mc3Obj
         }
     }
 
+    // Object metadata
+    if (!obj->metadata.empty()) {
+        XMLElement* metaEl = xmlDoc.NewElement("metadata");
+        for (const auto& [k, v] : obj->metadata) {
+            XMLElement* pe = xmlDoc.NewElement("property");
+            pe->SetAttribute("name",  k.c_str());
+            pe->SetAttribute("value", v.c_str());
+            metaEl->InsertEndChild(pe);
+        }
+        el->InsertEndChild(metaEl);
+    }
+
     // Named states
     for (const auto& [stateId, st] : obj->states) {
         XMLElement* se = xmlDoc.NewElement("state");
@@ -312,6 +325,12 @@ void Mc3XmlWriter::write(const Mc3Document& doc, const std::filesystem::path& pa
     root->SetAttribute("model",   doc.model.c_str());
     if (doc.unit != "meter")
         root->SetAttribute("unit", doc.unit.c_str());
+    if (doc.coordinateSystem != "right_handed_y_up")
+        root->SetAttribute("coordinate_system", doc.coordinateSystem.c_str());
+    if (doc.rotationUnits != "degrees")
+        root->SetAttribute("rotation_units", doc.rotationUnits.c_str());
+    if (doc.eulerOrder != "XYZ")
+        root->SetAttribute("euler_order", doc.eulerOrder.c_str());
     xml.InsertEndChild(root);
 
     // Include references (written before all other sections so they appear at
@@ -320,6 +339,18 @@ void Mc3XmlWriter::write(const Mc3Document& doc, const std::filesystem::path& pa
         XMLElement* incEl = xml.NewElement("include");
         incEl->SetAttribute("file", inc.c_str());
         root->InsertEndChild(incEl);
+    }
+
+    // Root metadata
+    if (!doc.metadata.empty()) {
+        XMLElement* metaEl = xml.NewElement("metadata");
+        for (const auto& [k, v] : doc.metadata) {
+            XMLElement* pe = xml.NewElement("property");
+            pe->SetAttribute("name",  k.c_str());
+            pe->SetAttribute("value", v.c_str());
+            metaEl->InsertEndChild(pe);
+        }
+        root->InsertEndChild(metaEl);
     }
 
     // Environment

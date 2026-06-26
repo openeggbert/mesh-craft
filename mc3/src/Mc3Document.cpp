@@ -74,4 +74,16 @@ Mc3Document& Mc3Document::setFog(Mc3Fog fog) {
     return *this;
 }
 
+Mc3Document& Mc3Document::withMetadata(std::string key, std::string value) {
+    metadata[std::move(key)] = std::move(value); return *this;
+}
+
+Mc3Document& Mc3Document::withRotationUnits(std::string units) {
+    rotationUnits = std::move(units); return *this;
+}
+
+Mc3Document& Mc3Document::withEulerOrder(std::string order) {
+    eulerOrder = std::move(order); return *this;
+}
+
 } // namespace MeshCraft::Mc3

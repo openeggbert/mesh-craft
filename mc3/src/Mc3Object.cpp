@@ -223,5 +223,8 @@ Mc3Object& Mc3Object::withUvMapping(Mc3UvMapping uv) {
 Mc3Object& Mc3Object::withUvMapping(UvProjection proj, float scaleU, float scaleV) {
     uvMapping = Mc3UvMapping{proj, scaleU, scaleV}; return *this;
 }
+Mc3Object& Mc3Object::withMetadata(std::string key, std::string value) {
+    metadata[std::move(key)] = std::move(value); return *this;
+}
 
 } // namespace MeshCraft::Mc3

@@ -24,6 +24,11 @@ public:
     std::string model;
     std::string unit{"meter"};
     std::string coordinateSystem{"right_handed_y_up"};
+    std::string rotationUnits{"degrees"};  // degrees | radians
+    std::string eulerOrder{"XYZ"};         // XYZ | XZY | YXZ | YZX | ZXY | ZYX
+
+    // Opaque key/value pass-through store (mirrors <metadata> in the XSD).
+    std::map<std::string, std::string> metadata;
 
     // Directory of the source .mc3.xml file — used for resolving relative asset paths
     std::filesystem::path sourcePath;
@@ -91,6 +96,13 @@ public:
 
     // Convenience: set fog without touching other env fields.
     Mc3Document& setFog(Mc3Fog fog);
+
+    // Set a metadata key/value pair (pass-through store, round-trips via XML).
+    Mc3Document& withMetadata(std::string key, std::string value);
+
+    // Convenience setters for root-level rotation convention.
+    Mc3Document& withRotationUnits(std::string units);  // "degrees" | "radians"
+    Mc3Document& withEulerOrder(std::string order);     // "XYZ" | "YXZ" | etc.
 };
 
 } // namespace MeshCraft::Mc3
