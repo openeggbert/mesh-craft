@@ -64,11 +64,26 @@ def test_all_primitives(mc3togltf, xml_path, tmpdir):
         f"asset.version != '2.0', got: {gltf.get('asset', {}).get('version')}"
 
     # Every expected primitive must have a node with a POSITION accessor
+    # and a non-zero index count (no zero-triangle meshes).
     for name in EXPECTED_PRIMITIVE_NODES:
         mesh, prim = check_node_has_geometry(gltf, name)
         pos_idx = prim["attributes"]["POSITION"]
         vc = accessor_count(gltf, pos_idx)
         assert vc > 0, f"Node '{name}' POSITION accessor has 0 vertices"
+        # STAB-0163: verify triangle count > 0
+        idx_acc = prim.get("indices")
+        assert idx_acc is not None, f"Node '{name}' primitive has no indices accessor"
+        ic = accessor_count(gltf, idx_acc)
+        assert ic > 0, f"Node '{name}' indices accessor has 0 entries (zero triangles)"
+        assert ic % 3 == 0, f"Node '{name}' index count {ic} is not a multiple of 3"
+
+    # STAB-0199: node count must equal object count in the input XML (no silent drops)
+    EXPECTED_OBJECT_COUNT = len(EXPECTED_PRIMITIVE_NODES)  # 12 objects in all_primitives.mc3.xml
+    actual_nodes = len(gltf.get("nodes", []))
+    assert actual_nodes >= EXPECTED_OBJECT_COUNT, (
+        f"STAB-0199: expected at least {EXPECTED_OBJECT_COUNT} nodes (one per object), "
+        f"got {actual_nodes} — some objects may have been silently dropped"
+    )
 
     # Total mesh count must cover all primitives
     assert len(gltf.get("meshes", [])) >= len(EXPECTED_PRIMITIVE_NODES), (

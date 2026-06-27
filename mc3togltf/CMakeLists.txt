@@ -35,28 +35,36 @@ if(NOT TARGET Mc3)
 endif()
 
 # --------------------------------------------------------------------------
-# tinygltf — header-only glTF 2.0 reader/writer
+# tinygltf — header-only glTF 2.0 reader/writer.
+# Guard avoids stamp-file conflicts when included from root CMakeLists.
 # --------------------------------------------------------------------------
-FetchContent_Declare(
-    tinygltf
-    GIT_REPOSITORY https://github.com/syoyo/tinygltf.git
-    GIT_TAG        v2.9.3
-)
-set(TINYGLTF_BUILD_LOADER_EXAMPLE OFF CACHE BOOL "" FORCE)
-set(TINYGLTF_HEADER_ONLY          ON  CACHE BOOL "" FORCE)
-set(TINYGLTF_INSTALL              OFF CACHE BOOL "" FORCE)
-FetchContent_MakeAvailable(tinygltf)
+FetchContent_GetProperties(tinygltf)
+if(NOT tinygltf_POPULATED)
+    FetchContent_Declare(
+        tinygltf
+        GIT_REPOSITORY https://github.com/syoyo/tinygltf.git
+        GIT_TAG        v2.9.3
+    )
+    set(TINYGLTF_BUILD_LOADER_EXAMPLE OFF CACHE BOOL "" FORCE)
+    set(TINYGLTF_HEADER_ONLY          ON  CACHE BOOL "" FORCE)
+    set(TINYGLTF_INSTALL              OFF CACHE BOOL "" FORCE)
+    FetchContent_MakeAvailable(tinygltf)
+endif()
 
 # --------------------------------------------------------------------------
-# tinyobjloader — header-only OBJ mesh loader
+# tinyobjloader — header-only OBJ mesh loader.
+# Guard avoids double-declare when already fetched by the root CMakeLists.
 # --------------------------------------------------------------------------
-FetchContent_Declare(
-    tinyobjloader
-    GIT_REPOSITORY https://github.com/tinyobjloader/tinyobjloader.git
-    GIT_TAG        v2.0.0rc13
-)
-set(TINYOBJLOADER_BUILD_TEST_LOADER OFF CACHE BOOL "" FORCE)
-FetchContent_MakeAvailable(tinyobjloader)
+FetchContent_GetProperties(tinyobjloader)
+if(NOT tinyobjloader_POPULATED)
+    FetchContent_Declare(
+        tinyobjloader
+        GIT_REPOSITORY https://github.com/tinyobjloader/tinyobjloader.git
+        GIT_TAG        v2.0.0rc13
+    )
+    set(TINYOBJLOADER_BUILD_TEST_LOADER OFF CACHE BOOL "" FORCE)
+    FetchContent_MakeAvailable(tinyobjloader)
+endif()
 
 # --------------------------------------------------------------------------
 # Static library — GltfExporter + MeshBuilder (used by mc3togltf AND MeshCraft)
@@ -107,6 +115,7 @@ if(BUILD_TESTING)
         set(_csg_diff_xml             "${CMAKE_CURRENT_SOURCE_DIR}/../test/csg_difference_export.mc3.xml")
         set(_csg_isect_xml            "${CMAKE_CURRENT_SOURCE_DIR}/../test/csg_intersection_export.mc3.xml")
         set(_csg_unsupported_xml      "${CMAKE_CURRENT_SOURCE_DIR}/../test/csg_unsupported_child.mc3.xml")
+        set(_csg_nested_xml           "${CMAKE_CURRENT_SOURCE_DIR}/../test/csg_nested.mc3.xml")
         set(_instance_deform_xml      "${CMAKE_CURRENT_SOURCE_DIR}/../test/instance_deform_cache.mc3.xml")
         set(_close_dimensions_xml     "${CMAKE_CURRENT_SOURCE_DIR}/../test/close_dimensions.mc3.xml")
         if(EXISTS "${_anim_xml}" AND EXISTS "${_house_xml}")
@@ -182,6 +191,16 @@ if(BUILD_TESTING)
                         "${_csg_unsupported_xml}"
             )
             set_tests_properties(mc3togltf_csg_unsupported PROPERTIES TIMEOUT 30)
+        endif()
+        if(EXISTS "${_csg_nested_xml}")
+            add_test(
+                NAME mc3togltf_csg_nested
+                COMMAND "${PYTHON3_EXEC}"
+                        "${CMAKE_CURRENT_SOURCE_DIR}/test/csg_nested_test.py"
+                        "$<TARGET_FILE:mc3togltf>"
+                        "${_csg_nested_xml}"
+            )
+            set_tests_properties(mc3togltf_csg_nested PROPERTIES TIMEOUT 30)
         endif()
         if(EXISTS "${_instance_deform_xml}")
             add_test(

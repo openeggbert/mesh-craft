@@ -17,3 +17,14 @@ target_include_directories(Mcb
 )
 
 target_link_libraries(Mcb PUBLIC Mc3)
+
+include(CTest)
+
+if(BUILD_TESTING)
+    add_executable(mcb_roundtrip_test
+        test/mcb_roundtrip_test.cpp
+    )
+    target_link_libraries(mcb_roundtrip_test PRIVATE Mcb)
+    add_test(NAME mcb_roundtrip COMMAND mcb_roundtrip_test)
+    set_tests_properties(mcb_roundtrip PROPERTIES TIMEOUT 30)
+endif()

@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- STAB-0205: Nested CSG — union inside difference.
+     Result: BoxBase minus (union of two spheres). -->
+<mc3 version="0.3" model="CsgNestedExport">
+  <objects>
+    <difference name="NestedCsg">
+      <box  name="BoxBase" size="2 2 2"/>
+      <union name="HolePair">
+        <sphere name="HoleA" radius="0.5" position="-0.5 0 0"/>
+        <sphere name="HoleB" radius="0.5" position=" 0.5 0 0"/>
+      </union>
+    </difference>
+  </objects>
+</mc3>

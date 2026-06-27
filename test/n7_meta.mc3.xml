@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- STAB-0045: XSD validation fixture for N7 (meta key-value map) -->
+<mc3 version="0.3" model="N7MetaFixture">
+
+  <meta>
+    <metaentry key="author"      value="Test Author"/>
+    <metaentry key="license"     value="MIT"/>
+    <metaentry key="description" value="Fixture for XSD N7 meta map validation"/>
+    <metaentry key="version"     value="1.0.0"/>
+  </meta>
+
+  <objects>
+    <box name="Cube" size="1 1 1" position="0 0.5 0"/>
+  </objects>
+
+</mc3>

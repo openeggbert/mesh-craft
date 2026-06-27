@@ -1290,6 +1290,326 @@ static void testSvgTexture() {
 }
 
 // ---------------------------------------------------------------------------
+// STAB-0070 — Disk with inner_radius="0.3" loaded from XML
+// ---------------------------------------------------------------------------
+
+static void testDiskInnerRadius() {
+    auto xmlPath = tmpPath();
+    {
+        std::ofstream f(xmlPath);
+        f << R"(<?xml version="1.0" encoding="UTF-8"?>)" "\n"
+          << R"(<mc3 version="0.3">)" "\n"
+          << R"(  <objects>)" "\n"
+          << R"(    <disk name="Ring" radius="1.0" inner_radius="0.3" segments="32"/>)" "\n"
+          << R"(  </objects>)" "\n"
+          << R"(</mc3>)" "\n";
+    }
+    auto doc = Mc3Document::loadFromFile(xmlPath);
+    std::filesystem::remove(xmlPath);
+
+    CHECK(!doc.objects.empty(), "disk inner_radius: object present");
+    if (!doc.objects.empty() && doc.objects[0]->primitive) {
+        const auto& pr = *doc.objects[0]->primitive;
+        CHECK(pr.primitiveType == PrimitiveType::Disk, "disk inner_radius: type==Disk");
+        CHECKF(pr.radius,      1.0f, "disk inner_radius: radius==1.0");
+        CHECKF(pr.minorRadius, 0.3f, "disk inner_radius: inner_radius==0.3 survives");
+        CHECK(pr.segments == 32,     "disk inner_radius: segments==32");
+    }
+
+    // Roundtrip through writer+parser must preserve inner_radius
+    auto rt = roundtrip(doc);
+    CHECK(!rt.objects.empty(), "disk inner_radius rt: object present");
+    if (!rt.objects.empty() && rt.objects[0]->primitive)
+        CHECKF(rt.objects[0]->primitive->minorRadius, 0.3f,
+               "disk inner_radius rt: inner_radius==0.3 after roundtrip");
+}
+
+// ---------------------------------------------------------------------------
+// STAB-0030 — All primitive types survive roundtrip (primitiveType preserved)
+// ---------------------------------------------------------------------------
+
+static void testAllPrimitiveTypes() {
+    // Each row: XML tag, expected PrimitiveType
+    struct Case { const char* tag; PrimitiveType expected; };
+    static const Case cases[] = {
+        { "box",       PrimitiveType::Box       },
+        { "sphere",    PrimitiveType::Sphere     },
+        { "cylinder",  PrimitiveType::Cylinder   },
+        { "cone",      PrimitiveType::Cone       },
+        { "torus",     PrimitiveType::Torus      },
+        { "capsule",   PrimitiveType::Capsule    },
+        { "disk",      PrimitiveType::Disk       },
+        { "grid",      PrimitiveType::Grid       },
+        { "icosphere", PrimitiveType::IcoSphere  },
+        { "plane",     PrimitiveType::Plane      },
+    };
+
+    for (const auto& c : cases) {
+        Mc3Document doc;
+        auto xmlPath = tmpPath();
+        {
+            std::ofstream f(xmlPath);
+            f << R"(<?xml version="1.0" encoding="UTF-8"?>)" "\n"
+              << R"(<mc3 version="0.3">)" "\n"
+              << "  <objects>\n"
+              << "    <" << c.tag << " name=\"obj\"/>\n"
+              << "  </objects>\n"
+              << R"(</mc3>)" "\n";
+        }
+        try {
+            doc = Mc3Document::loadFromFile(xmlPath);
+        } catch (const std::exception& e) {
+            std::filesystem::remove(xmlPath);
+            fail(std::string("all_primitives: load threw for ") + c.tag + ": " + e.what());
+            continue;
+        }
+        std::filesystem::remove(xmlPath);
+
+        std::string label = std::string("all_primitives[") + c.tag + "]";
+        CHECK(!doc.objects.empty(), label + ": object present");
+        if (doc.objects.empty() || !doc.objects[0]->primitive) continue;
+        CHECK(doc.objects[0]->primitive->primitiveType == c.expected,
+              label + ": primitiveType correct after parse");
+
+        auto rt = roundtrip(doc);
+        CHECK(!rt.objects.empty(), label + " rt: object present");
+        if (!rt.objects.empty() && rt.objects[0]->primitive)
+            CHECK(rt.objects[0]->primitive->primitiveType == c.expected,
+                  label + ": primitiveType correct after roundtrip");
+    }
+}
+
+// ---------------------------------------------------------------------------
+// STAB-0075 — Unknown top-level element is silently skipped (no throw)
+// ---------------------------------------------------------------------------
+
+static void testUnknownTopLevelElement() {
+    auto xmlPath = tmpPath();
+    {
+        std::ofstream f(xmlPath);
+        f << R"(<?xml version="1.0" encoding="UTF-8"?>)" "\n"
+          << R"(<mc3 version="0.3">)" "\n"
+          << R"(  <unknowntag foo="bar"/>)" "\n"
+          << R"(  <objects>)" "\n"
+          << R"(    <box name="Known" size="1 1 1"/>)" "\n"
+          << R"(  </objects>)" "\n"
+          << R"(</mc3>)" "\n";
+    }
+    bool threw = false;
+    Mc3Document doc;
+    try {
+        doc = Mc3Document::loadFromFile(xmlPath);
+    } catch (...) {
+        threw = true;
+    }
+    std::filesystem::remove(xmlPath);
+
+    CHECK(!threw,                   "unknown tag: no exception thrown");
+    CHECK(doc.objects.size() == 1,  "unknown tag: known objects still parsed");
+}
+
+// ---------------------------------------------------------------------------
+// STAB-0074 — Grid with explicit subdivisions_x and subdivisions_z
+// ---------------------------------------------------------------------------
+
+static void testGridSubdivisions() {
+    auto xmlPath = tmpPath();
+    {
+        std::ofstream f(xmlPath);
+        f << R"(<?xml version="1.0" encoding="UTF-8"?>)" "\n"
+          << R"(<mc3 version="0.3">)" "\n"
+          << R"(  <objects>)" "\n"
+          << R"(    <grid name="Floor" size="10 10" subdivisions_x="5" subdivisions_z="8"/>)" "\n"
+          << R"(  </objects>)" "\n"
+          << R"(</mc3>)" "\n";
+    }
+    auto doc = Mc3Document::loadFromFile(xmlPath);
+    std::filesystem::remove(xmlPath);
+
+    CHECK(!doc.objects.empty(), "grid: object present");
+    if (!doc.objects.empty() && doc.objects[0]->primitive) {
+        const auto& pr = *doc.objects[0]->primitive;
+        CHECK(pr.primitiveType == PrimitiveType::Grid, "grid: type==Grid");
+        CHECK(pr.subdivisionsX == 5, "grid: subdivisions_x==5 survives parse");
+        CHECK(pr.subdivisionsZ == 8, "grid: subdivisions_z==8 survives parse");
+    }
+
+    auto rt = roundtrip(doc);
+    CHECK(!rt.objects.empty(), "grid rt: object present");
+    if (!rt.objects.empty() && rt.objects[0]->primitive) {
+        CHECK(rt.objects[0]->primitive->subdivisionsX == 5, "grid rt: subdivisions_x survives roundtrip");
+        CHECK(rt.objects[0]->primitive->subdivisionsZ == 8, "grid rt: subdivisions_z survives roundtrip");
+    }
+}
+
+// ---------------------------------------------------------------------------
+// STAB-0073 — IcoSphere with explicit segments (default is 2, not 32)
+// ---------------------------------------------------------------------------
+
+static void testIcoSphereSegments() {
+    auto xmlPath = tmpPath();
+    {
+        std::ofstream f(xmlPath);
+        f << R"(<?xml version="1.0" encoding="UTF-8"?>)" "\n"
+          << R"(<mc3 version="0.3">)" "\n"
+          << R"(  <objects>)" "\n"
+          << R"(    <icosphere name="HiRes" radius="0.6" segments="3"/>)" "\n"
+          << R"(  </objects>)" "\n"
+          << R"(</mc3>)" "\n";
+    }
+    auto doc = Mc3Document::loadFromFile(xmlPath);
+    std::filesystem::remove(xmlPath);
+
+    CHECK(!doc.objects.empty(), "icosphere: object present");
+    if (!doc.objects.empty() && doc.objects[0]->primitive) {
+        const auto& pr = *doc.objects[0]->primitive;
+        CHECK(pr.primitiveType == PrimitiveType::IcoSphere, "icosphere: type==IcoSphere");
+        CHECKF(pr.radius, 0.6f,  "icosphere: radius==0.6 survives parse");
+        CHECK(pr.segments == 3,  "icosphere: segments==3 survives parse");
+    }
+
+    auto rt = roundtrip(doc);
+    CHECK(!rt.objects.empty(), "icosphere rt: object present");
+    if (!rt.objects.empty() && rt.objects[0]->primitive) {
+        CHECKF(rt.objects[0]->primitive->radius,  0.6f, "icosphere rt: radius survives roundtrip");
+        CHECK(rt.objects[0]->primitive->segments == 3,  "icosphere rt: segments==3 survives roundtrip");
+    }
+}
+
+// ---------------------------------------------------------------------------
+// STAB-0072 — Capsule with explicit radius and height
+// ---------------------------------------------------------------------------
+
+static void testCapsuleRadiusHeight() {
+    auto xmlPath = tmpPath();
+    {
+        std::ofstream f(xmlPath);
+        f << R"(<?xml version="1.0" encoding="UTF-8"?>)" "\n"
+          << R"(<mc3 version="0.3">)" "\n"
+          << R"(  <objects>)" "\n"
+          << R"(    <capsule name="Pill" radius="0.4" height="1.5" segments="24"/>)" "\n"
+          << R"(  </objects>)" "\n"
+          << R"(</mc3>)" "\n";
+    }
+    auto doc = Mc3Document::loadFromFile(xmlPath);
+    std::filesystem::remove(xmlPath);
+
+    CHECK(!doc.objects.empty(), "capsule: object present");
+    if (!doc.objects.empty() && doc.objects[0]->primitive) {
+        const auto& pr = *doc.objects[0]->primitive;
+        CHECK(pr.primitiveType == PrimitiveType::Capsule, "capsule: type==Capsule");
+        CHECKF(pr.radius,  0.4f, "capsule: radius==0.4 survives parse");
+        CHECKF(pr.height,  1.5f, "capsule: height==1.5 survives parse");
+        CHECK(pr.segments == 24, "capsule: segments==24");
+    }
+
+    auto rt = roundtrip(doc);
+    CHECK(!rt.objects.empty(), "capsule rt: object present");
+    if (!rt.objects.empty() && rt.objects[0]->primitive) {
+        CHECKF(rt.objects[0]->primitive->radius, 0.4f, "capsule rt: radius survives roundtrip");
+        CHECKF(rt.objects[0]->primitive->height, 1.5f, "capsule rt: height survives roundtrip");
+    }
+}
+
+// ---------------------------------------------------------------------------
+// STAB-0071 — Torus with non-default minor_radius
+// ---------------------------------------------------------------------------
+
+static void testTorusMinorRadius() {
+    auto xmlPath = tmpPath();
+    {
+        std::ofstream f(xmlPath);
+        f << R"(<?xml version="1.0" encoding="UTF-8"?>)" "\n"
+          << R"(<mc3 version="0.3">)" "\n"
+          << R"(  <objects>)" "\n"
+          << R"(    <torus name="Ring" major_radius="0.5" minor_radius="0.2" segments="24"/>)" "\n"
+          << R"(  </objects>)" "\n"
+          << R"(</mc3>)" "\n";
+    }
+    auto doc = Mc3Document::loadFromFile(xmlPath);
+    std::filesystem::remove(xmlPath);
+
+    CHECK(!doc.objects.empty(), "torus: object present");
+    if (!doc.objects.empty() && doc.objects[0]->primitive) {
+        const auto& pr = *doc.objects[0]->primitive;
+        CHECK(pr.primitiveType == PrimitiveType::Torus, "torus: type==Torus");
+        CHECKF(pr.majorRadius, 0.5f, "torus: major_radius==0.5");
+        CHECKF(pr.minorRadius, 0.2f, "torus: minor_radius==0.2 survives parse");
+        CHECK(pr.segments == 24,     "torus: segments==24");
+    }
+
+    auto rt = roundtrip(doc);
+    CHECK(!rt.objects.empty(), "torus rt: object present");
+    if (!rt.objects.empty() && rt.objects[0]->primitive) {
+        CHECKF(rt.objects[0]->primitive->majorRadius, 0.5f, "torus rt: major_radius survives roundtrip");
+        CHECKF(rt.objects[0]->primitive->minorRadius, 0.2f, "torus rt: minor_radius survives roundtrip");
+    }
+}
+
+// ---------------------------------------------------------------------------
+// STAB-0068 — plane size "8 8" (vec2) roundtrip
+// ---------------------------------------------------------------------------
+
+static void testPlaneSizeVec2() {
+    Mc3Document doc;
+    auto obj          = std::make_shared<Mc3Object>();
+    obj->id           = "floor";
+    obj->type         = ObjectType::Plane;
+    obj->primitive    = Mc3Primitive{};
+    obj->primitive->primitiveType = PrimitiveType::Plane;
+    // vec2: width=8, depth=8 → stored as {8, 1, 8}
+    obj->primitive->size = {8.0f, 1.0f, 8.0f};
+    doc.objects.push_back(obj);
+
+    auto rt = roundtrip(doc);
+    CHECK(!rt.objects.empty(), "plane vec2: object present");
+    if (!rt.objects.empty() && rt.objects[0]->primitive) {
+        const auto& sz = rt.objects[0]->primitive->size;
+        CHECKF(sz[0], 8.0f, "plane vec2: size[0] == 8");
+        CHECKF(sz[1], 1.0f, "plane vec2: size[1] == 1 (height layer)");
+        CHECKF(sz[2], 8.0f, "plane vec2: size[2] == 8");
+    }
+}
+
+// ---------------------------------------------------------------------------
+// STAB-0069 — plane size "8 0 8" (legacy vec3) parsed and re-emitted as vec2
+// ---------------------------------------------------------------------------
+
+static void testPlaneSizeLegacyVec3() {
+    // Simulate a legacy XML that uses "W 0 D" format.
+    // After roundtrip the writer emits "W D" and the parser reads it as {W, 1, D}.
+    auto p = tmpPath();
+    {
+        // Write the legacy format by hand — bypass writer
+        std::ofstream f(p);
+        f << R"(<?xml version="1.0" encoding="UTF-8"?>)"  "\n"
+          << R"(<mc3 version="0.3">)"                    "\n"
+          << R"(  <objects>)"                             "\n"
+          << R"(    <plane name="OldFloor" size="8 0 8"/>)" "\n"
+          << R"(  </objects>)"                            "\n"
+          << R"(</mc3>)"                                  "\n";
+    }
+    auto doc  = Mc3Document::loadFromFile(p);
+    std::filesystem::remove(p);
+
+    CHECK(!doc.objects.empty(), "plane legacy: object present");
+    if (!doc.objects.empty() && doc.objects[0]->primitive) {
+        const auto& sz = doc.objects[0]->primitive->size;
+        CHECKF(sz[0], 8.0f, "plane legacy: size[0] == 8");
+        // Legacy "8 0 8" keeps size[1]=0 (no 1.0 injection for 3-value form)
+        CHECKF(sz[2], 8.0f, "plane legacy: size[2] == 8");
+
+        // After a second roundtrip through the writer the value normalises
+        auto rt2 = roundtrip(doc);
+        if (!rt2.objects.empty() && rt2.objects[0]->primitive) {
+            const auto& sz2 = rt2.objects[0]->primitive->size;
+            CHECKF(sz2[0], 8.0f, "plane legacy rt2: size[0] == 8");
+            CHECKF(sz2[2], 8.0f, "plane legacy rt2: size[2] == 8");
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
 
 int main(int argc, char* argv[]) {
     testVisible();
@@ -1316,6 +1636,15 @@ int main(int argc, char* argv[]) {
     testTrigger();
     testSceneState();
     testMeta();
+    testAllPrimitiveTypes();
+    testUnknownTopLevelElement();
+    testGridSubdivisions();
+    testIcoSphereSegments();
+    testCapsuleRadiusHeight();
+    testDiskInnerRadius();
+    testTorusMinorRadius();
+    testPlaneSizeVec2();
+    testPlaneSizeLegacyVec3();
 
     if (argc >= 2) {
         testFeaturesXmlLoads(argv[1]);

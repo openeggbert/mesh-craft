@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- STAB-0043: XSD validation fixture for N5 (triggers) -->
+<mc3 version="0.3" model="N5TriggersFixture">
+
+  <scripts>
+    <script id="onOpen" type="lua">door:open()</script>
+  </scripts>
+
+  <sounds>
+    <sound id="creak" src="sounds/creak.ogg"/>
+  </sounds>
+
+  <triggers>
+    <trigger id="door_open">
+      <play-action ref="anim_open"/>
+      <play-sound   ref="creak"/>
+      <run-script   ref="onOpen"/>
+    </trigger>
+    <trigger id="pickup">
+      <play-action ref="pickup_anim"/>
+      <play-music  ref="fanfare"/>
+    </trigger>
+  </triggers>
+
+  <objects>
+    <box name="Door" size="1 2 0.1" position="0 1 0"/>
+  </objects>
+
+</mc3>

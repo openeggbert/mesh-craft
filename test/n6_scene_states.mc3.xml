@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- STAB-0044: XSD validation fixture for N6 (scene states) -->
+<mc3 version="0.3" model="N6SceneStatesFixture">
+
+  <materials>
+    <material id="day_mat"   roughness="0.5"><base_color>1.0 0.9 0.7 1.0</base_color></material>
+    <material id="night_mat" roughness="0.8"><base_color>0.1 0.1 0.3 1.0</base_color></material>
+  </materials>
+
+  <states>
+    <state name="day">
+      <object-override id="lamp" visible="false"/>
+      <object-override id="sun"  visible="true" material="day_mat"/>
+    </state>
+    <state name="night">
+      <object-override id="lamp" visible="true"  position="0 3 0" rotation="0 0 0" material="night_mat"/>
+      <object-override id="sun"  visible="false"/>
+    </state>
+  </states>
+
+  <objects>
+    <sphere name="sun"  radius="0.5" position="10 10 0"/>
+    <sphere name="lamp" radius="0.2" position="0 3 0" visible="false"/>
+  </objects>
+
+</mc3>

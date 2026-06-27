@@ -1,6 +1,12 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <mc3 version="0.3" model="FeatureTest">
 
+  <!-- N7: meta key-value map -->
+  <meta>
+    <metaentry key="author"  value="FeatureTest"/>
+    <metaentry key="license" value="MIT"/>
+  </meta>
+
   <environment>
     <background color="0.1 0.2 0.4"/>
     <fog mode="linear" color="0.1 0.2 0.4" start="20" end="80"/>
@@ -23,6 +29,38 @@
     <material id="white" roughness="0.9"><base_color>0.9 0.9 0.9 1.0</base_color></material>
     <material id="gold"  roughness="0.2" metallic="1.0"><base_color>1.0 0.8 0.1 1.0</base_color></material>
   </materials>
+
+  <!-- N3: Lua scripts -->
+  <scripts>
+    <script id="onSceneStart" type="lua">print("FeatureTest loaded")</script>
+  </scripts>
+
+  <!-- N4: sounds and music -->
+  <sounds>
+    <sound id="click" src="sounds/click.ogg"/>
+  </sounds>
+
+  <music>
+    <track id="bg_music" src="music/background.ogg" loop="true"/>
+  </music>
+
+  <!-- N5: triggers -->
+  <triggers>
+    <trigger id="on_start">
+      <play-music  ref="bg_music"/>
+      <run-script  ref="onSceneStart"/>
+    </trigger>
+  </triggers>
+
+  <!-- N6: scene states -->
+  <states>
+    <state name="default">
+      <object-override id="HiddenBox" visible="true"/>
+    </state>
+    <state name="hidden_all">
+      <object-override id="HiddenBox" visible="false"/>
+    </state>
+  </states>
 
   <definitions>
     <definition id="tree_trunk">

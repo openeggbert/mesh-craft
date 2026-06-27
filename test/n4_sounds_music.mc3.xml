@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- STAB-0042: XSD validation fixture for N4 (sounds and music) -->
+<mc3 version="0.3" model="N4SoundsMusicFixture">
+
+  <sounds>
+    <sound id="explosion" src="sounds/explosion.ogg" loop="false"/>
+    <sound id="footstep"  src="sounds/footstep.ogg"  loop="true"/>
+  </sounds>
+
+  <music>
+    <track id="theme"  src="music/theme.ogg"  loop="true"/>
+    <track id="battle" src="music/battle.ogg" loop="true"/>
+  </music>
+
+  <objects>
+    <box name="Cube" size="1 1 1" position="0 0.5 0"/>
+  </objects>
+
+</mc3>

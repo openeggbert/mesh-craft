@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- STAB-0041: XSD validation fixture for N3 (Lua scripts) -->
+<mc3 version="0.3" model="N3ScriptsFixture">
+
+  <scripts>
+    <script id="onStart" type="lua">print("scene started")</script>
+    <script id="onCollide" type="lua">player:takeDamage(10)</script>
+  </scripts>
+
+  <objects>
+    <box name="Cube" size="1 1 1" position="0 0.5 0"/>
+  </objects>
+
+</mc3>
