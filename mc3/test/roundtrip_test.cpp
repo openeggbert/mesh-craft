@@ -1,7 +1,11 @@
 #include <MeshCraft/Mc3/Mc3Animation.hpp>
 #include <MeshCraft/Mc3/Mc3Document.hpp>
 #include <MeshCraft/Mc3/Mc3EmbedGltf.hpp>
+#include <MeshCraft/Mc3/Mc3Music.hpp>
+#include <MeshCraft/Mc3/Mc3SceneState.hpp>
 #include <MeshCraft/Mc3/Mc3Script.hpp>
+#include <MeshCraft/Mc3/Mc3Sound.hpp>
+#include <MeshCraft/Mc3/Mc3Trigger.hpp>
 
 #include <cmath>
 #include <filesystem>
@@ -852,6 +856,325 @@ static void testEmbedGltf() {
     }
 }
 
+static void testMeta() {
+    // Single entry
+    {
+        Mc3Document doc;
+        doc.withMeta("author", "Robert");
+
+        auto rt = roundtrip(doc);
+        CHECK(rt.meta.count("author") == 1,        "meta single: present");
+        if (rt.meta.count("author"))
+            CHECK(rt.meta["author"] == "Robert",   "meta single: value");
+    }
+    // Multiple entries
+    {
+        Mc3Document doc;
+        doc.withMeta("author",  "Robert")
+           .withMeta("version", "1.0")
+           .withMeta("license", "MIT");
+
+        auto rt = roundtrip(doc);
+        CHECK(rt.meta.size() == 3,                 "meta multi: count");
+        CHECK(rt.meta["author"]  == "Robert",      "meta multi: author");
+        CHECK(rt.meta["version"] == "1.0",         "meta multi: version");
+        CHECK(rt.meta["license"] == "MIT",         "meta multi: license");
+    }
+    // Distinct from legacy metadata
+    {
+        Mc3Document doc;
+        doc.withMetadata("old_key", "old_value");
+        doc.withMeta("new_key", "new_value");
+
+        auto rt = roundtrip(doc);
+        CHECK(rt.metadata.count("old_key") == 1,   "meta vs legacy: metadata preserved");
+        CHECK(rt.meta.count("new_key")     == 1,   "meta vs legacy: meta preserved");
+        CHECK(rt.meta.count("old_key")     == 0,   "meta vs legacy: no cross-contamination");
+    }
+    // Coexistence with scene states and sounds
+    {
+        Mc3Document doc;
+        doc.withMeta("scene", "dungeon");
+        doc.addSound(Mc3Sound{"click", "click.wav", false});
+        Mc3SceneState st; st.name = "dark";
+        Mc3ObjectOverride ovr; ovr.id = "torch"; ovr.visible = false; st.overrides.push_back(ovr);
+        doc.addSceneState(st);
+
+        auto rt = roundtrip(doc);
+        CHECK(rt.meta.count("scene")        == 1, "meta+state+snd: meta");
+        CHECK(rt.sounds.count("click")       == 1, "meta+state+snd: sound");
+        CHECK(rt.sceneStates.count("dark")   == 1, "meta+state+snd: state");
+    }
+}
+
+static void testSceneState() {
+    // Single override — visible
+    {
+        Mc3Document doc;
+        Mc3SceneState st;
+        st.name = "night";
+        Mc3ObjectOverride ovr;
+        ovr.id      = "lamp";
+        ovr.visible = false;
+        st.overrides.push_back(ovr);
+        doc.addSceneState(st);
+
+        auto rt = roundtrip(doc);
+        CHECK(rt.sceneStates.count("night") == 1,      "state visible: present");
+        if (rt.sceneStates.count("night")) {
+            const auto& s = rt.sceneStates["night"];
+            CHECK(s.overrides.size() == 1,             "state visible: override count");
+            if (!s.overrides.empty()) {
+                CHECK(s.overrides[0].id == "lamp",     "state visible: id");
+                CHECK(s.overrides[0].visible.has_value(), "state visible: has_value");
+                CHECK(s.overrides[0].visible == false, "state visible: value false");
+            }
+        }
+    }
+    // Position + rotation override
+    {
+        Mc3Document doc;
+        Mc3SceneState st;
+        st.name = "displaced";
+        Mc3ObjectOverride ovr;
+        ovr.id       = "chair";
+        ovr.position = std::array<float,3>{1.0f, 2.0f, 3.0f};
+        ovr.rotation = std::array<float,3>{0.0f, 45.0f, 0.0f};
+        st.overrides.push_back(ovr);
+        doc.addSceneState(st);
+
+        auto rt = roundtrip(doc);
+        CHECK(rt.sceneStates.count("displaced") == 1, "state pos/rot: present");
+        if (rt.sceneStates.count("displaced")) {
+            const auto& s = rt.sceneStates["displaced"];
+            if (!s.overrides.empty()) {
+                CHECK(s.overrides[0].position.has_value(), "state pos: has_value");
+                CHECK(s.overrides[0].rotation.has_value(), "state rot: has_value");
+                if (s.overrides[0].position)
+                    CHECKF((*s.overrides[0].position)[1], 2.0f, "state pos: y=2");
+                if (s.overrides[0].rotation)
+                    CHECKF((*s.overrides[0].rotation)[1], 45.0f, "state rot: y=45");
+            }
+        }
+    }
+    // Material override
+    {
+        Mc3Document doc;
+        Mc3SceneState st;
+        st.name = "dark";
+        Mc3ObjectOverride ovr;
+        ovr.id       = "wall";
+        ovr.material = "dark_stone";
+        st.overrides.push_back(ovr);
+        doc.addSceneState(st);
+
+        auto rt = roundtrip(doc);
+        CHECK(rt.sceneStates.count("dark") == 1,       "state material: present");
+        if (rt.sceneStates.count("dark")) {
+            const auto& s = rt.sceneStates["dark"];
+            if (!s.overrides.empty()) {
+                CHECK(s.overrides[0].material.has_value(),        "state material: has_value");
+                CHECK(s.overrides[0].material == "dark_stone",    "state material: value");
+                CHECK(!s.overrides[0].visible.has_value(),        "state material: visible unset");
+            }
+        }
+    }
+    // Multiple states
+    {
+        Mc3Document doc;
+        Mc3SceneState day; day.name = "day";
+        Mc3ObjectOverride o1; o1.id = "lamp"; o1.visible = false; day.overrides.push_back(o1);
+        Mc3SceneState night; night.name = "night";
+        Mc3ObjectOverride o2; o2.id = "lamp"; o2.visible = true; night.overrides.push_back(o2);
+        doc.addSceneState(day);
+        doc.addSceneState(night);
+
+        auto rt = roundtrip(doc);
+        CHECK(rt.sceneStates.count("day")   == 1,      "states multi: day present");
+        CHECK(rt.sceneStates.count("night") == 1,      "states multi: night present");
+    }
+    // Coexistence with triggers and sounds
+    {
+        Mc3Document doc;
+        doc.addSound(Mc3Sound{"click", "click.wav", false});
+        Mc3Trigger trig; trig.id = "toggle";
+        trig.steps.push_back({TriggerStepType::PlaySound, "click"});
+        doc.addTrigger(trig);
+        Mc3SceneState st; st.name = "active";
+        Mc3ObjectOverride ovr; ovr.id = "btn"; ovr.visible = true; st.overrides.push_back(ovr);
+        doc.addSceneState(st);
+
+        auto rt = roundtrip(doc);
+        CHECK(rt.sounds.count("click")       == 1, "state+trig+snd: sound");
+        CHECK(rt.triggers.count("toggle")    == 1, "state+trig+snd: trigger");
+        CHECK(rt.sceneStates.count("active") == 1, "state+trig+snd: state");
+    }
+}
+
+static void testTrigger() {
+    // Single step
+    {
+        Mc3Document doc;
+        Mc3Trigger trig;
+        trig.id = "on_click";
+        trig.steps.push_back({TriggerStepType::PlaySound, "click"});
+        doc.addTrigger(trig);
+
+        auto rt = roundtrip(doc);
+        CHECK(rt.triggers.count("on_click") == 1,      "trigger single: present");
+        if (rt.triggers.count("on_click")) {
+            const auto& t = rt.triggers["on_click"];
+            CHECK(t.steps.size() == 1,                 "trigger single: step count");
+            if (!t.steps.empty()) {
+                CHECK(t.steps[0].type == TriggerStepType::PlaySound, "trigger single: type");
+                CHECK(t.steps[0].ref  == "click",                    "trigger single: ref");
+            }
+        }
+    }
+    // Multi-step — order preserved
+    {
+        Mc3Document doc;
+        Mc3Trigger trig;
+        trig.id = "intro";
+        trig.steps.push_back({TriggerStepType::PlayAction, "walk_anim"});
+        trig.steps.push_back({TriggerStepType::PlaySound,  "click"});
+        trig.steps.push_back({TriggerStepType::RunScript,  "on_start"});
+        trig.steps.push_back({TriggerStepType::PlayMusic,  "ambient"});
+        doc.addTrigger(trig);
+
+        auto rt = roundtrip(doc);
+        CHECK(rt.triggers.count("intro") == 1,         "trigger multi: present");
+        if (rt.triggers.count("intro")) {
+            const auto& t = rt.triggers["intro"];
+            CHECK(t.steps.size() == 4,                 "trigger multi: step count");
+            if (t.steps.size() == 4) {
+                CHECK(t.steps[0].type == TriggerStepType::PlayAction, "trigger multi: step0 type");
+                CHECK(t.steps[0].ref  == "walk_anim",                 "trigger multi: step0 ref");
+                CHECK(t.steps[1].type == TriggerStepType::PlaySound,  "trigger multi: step1 type");
+                CHECK(t.steps[2].type == TriggerStepType::RunScript,  "trigger multi: step2 type");
+                CHECK(t.steps[3].type == TriggerStepType::PlayMusic,  "trigger multi: step3 type");
+                CHECK(t.steps[3].ref  == "ambient",                   "trigger multi: step3 ref");
+            }
+        }
+    }
+    // Empty trigger (no steps)
+    {
+        Mc3Document doc;
+        Mc3Trigger trig;
+        trig.id = "empty";
+        doc.addTrigger(trig);
+
+        auto rt = roundtrip(doc);
+        CHECK(rt.triggers.count("empty") == 1,         "trigger empty: present");
+        if (rt.triggers.count("empty"))
+            CHECK(rt.triggers["empty"].steps.empty(),  "trigger empty: no steps");
+    }
+    // Multiple triggers
+    {
+        Mc3Document doc;
+        Mc3Trigger t1; t1.id = "t1"; t1.steps.push_back({TriggerStepType::PlaySound, "s1"});
+        Mc3Trigger t2; t2.id = "t2"; t2.steps.push_back({TriggerStepType::PlayMusic, "m1"});
+        doc.addTrigger(t1);
+        doc.addTrigger(t2);
+
+        auto rt = roundtrip(doc);
+        CHECK(rt.triggers.count("t1") == 1,            "triggers multi: t1 present");
+        CHECK(rt.triggers.count("t2") == 1,            "triggers multi: t2 present");
+    }
+    // Coexistence with sounds and music
+    {
+        Mc3Document doc;
+        doc.addSound(Mc3Sound{"click", "click.wav", false});
+        doc.addMusic(Mc3Music{"ambient", "ambient.ogg", true});
+        Mc3Trigger trig;
+        trig.id = "start";
+        trig.steps.push_back({TriggerStepType::PlaySound, "click"});
+        trig.steps.push_back({TriggerStepType::PlayMusic, "ambient"});
+        doc.addTrigger(trig);
+
+        auto rt = roundtrip(doc);
+        CHECK(rt.sounds.count("click")    == 1, "trigger+sound+music: sound preserved");
+        CHECK(rt.musicTracks.count("ambient") == 1, "trigger+sound+music: music preserved");
+        CHECK(rt.triggers.count("start")  == 1, "trigger+sound+music: trigger preserved");
+        if (rt.triggers.count("start"))
+            CHECK(rt.triggers["start"].steps.size() == 2, "trigger+sound+music: step count");
+    }
+}
+
+static void testSoundMusic() {
+    // Sound with default loop (false)
+    {
+        Mc3Document doc;
+        doc.addSound(Mc3Sound{"click", "sounds/click.wav", false});
+
+        auto rt = roundtrip(doc);
+        CHECK(rt.sounds.count("click") == 1,          "sound default: present");
+        if (rt.sounds.count("click")) {
+            CHECK(rt.sounds["click"].src  == "sounds/click.wav", "sound default: src preserved");
+            CHECK(rt.sounds["click"].loop == false,               "sound default: loop=false");
+        }
+    }
+    // Sound with loop=true
+    {
+        Mc3Document doc;
+        doc.addSound(Mc3Sound{"wind", "sounds/wind.ogg", true});
+
+        auto rt = roundtrip(doc);
+        CHECK(rt.sounds.count("wind") == 1,           "sound loop: present");
+        if (rt.sounds.count("wind"))
+            CHECK(rt.sounds["wind"].loop == true,      "sound loop: loop=true preserved");
+    }
+    // Music track with default loop (true)
+    {
+        Mc3Document doc;
+        doc.addMusic(Mc3Music{"ambient", "music/ambient.ogg", true});
+
+        auto rt = roundtrip(doc);
+        CHECK(rt.musicTracks.count("ambient") == 1,   "music default: present");
+        if (rt.musicTracks.count("ambient")) {
+            CHECK(rt.musicTracks["ambient"].src  == "music/ambient.ogg", "music default: src preserved");
+            CHECK(rt.musicTracks["ambient"].loop == true,                 "music default: loop=true");
+        }
+    }
+    // Music track with loop=false
+    {
+        Mc3Document doc;
+        doc.addMusic(Mc3Music{"intro", "music/intro.ogg", false});
+
+        auto rt = roundtrip(doc);
+        CHECK(rt.musicTracks.count("intro") == 1,     "music no-loop: present");
+        if (rt.musicTracks.count("intro"))
+            CHECK(rt.musicTracks["intro"].loop == false, "music no-loop: loop=false preserved");
+    }
+    // Multiple sounds and tracks
+    {
+        Mc3Document doc;
+        doc.addSound(Mc3Sound{"click",    "click.wav",    false});
+        doc.addSound(Mc3Sound{"explosion","boom.wav",     false});
+        doc.addMusic(Mc3Music{"ambient",  "ambient.ogg",  true});
+        doc.addMusic(Mc3Music{"battle",   "battle.ogg",   true});
+
+        auto rt = roundtrip(doc);
+        CHECK(rt.sounds.count("click")     == 1, "multi: click present");
+        CHECK(rt.sounds.count("explosion") == 1, "multi: explosion present");
+        CHECK(rt.musicTracks.count("ambient") == 1, "multi: ambient present");
+        CHECK(rt.musicTracks.count("battle")  == 1, "multi: battle present");
+    }
+    // Coexistence with scripts and objects
+    {
+        Mc3Document doc;
+        Mc3Script sc; sc.id = "on_start"; sc.type = "lua"; sc.source = "play('click')";
+        doc.addScript(sc);
+        doc.addSound(Mc3Sound{"click", "click.wav", false});
+        doc.addMusic(Mc3Music{"bg", "bg.ogg", true});
+
+        auto rt = roundtrip(doc);
+        CHECK(rt.scripts.count("on_start") == 1, "sound+music+script: script preserved");
+        CHECK(rt.sounds.count("click")     == 1, "sound+music+script: sound preserved");
+        CHECK(rt.musicTracks.count("bg")   == 1, "sound+music+script: music preserved");
+    }
+}
+
 static void testScript() {
     // Inline Lua source
     {
@@ -989,6 +1312,10 @@ int main(int argc, char* argv[]) {
     testEmbedGltf();
     testSvgTexture();
     testScript();
+    testSoundMusic();
+    testTrigger();
+    testSceneState();
+    testMeta();
 
     if (argc >= 2) {
         testFeaturesXmlLoads(argv[1]);

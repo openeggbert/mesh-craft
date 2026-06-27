@@ -1,6 +1,6 @@
 # NEXT.md — MeshCraft Handoff Document
 
-_Last updated: 2026-06-27 (N3 Lua scripts complete; N4–N7 mc3.xml schema extensions pending)_
+_Last updated: 2026-06-27 (N1–N7 mc3.xml schema extensions complete; skupina N hotova)_
 
 ---
 
@@ -65,6 +65,10 @@ N1 (SVG textures) and N2 (embedded GLTF) are complete. N3–N7 remain.
 - **N1** — SVG texture: `Mc3SvgTexture` struct, `<texture type="svg">`, MCB, XSD, 10 roundtrip tests
 - **N2** — Embedded GLTF: `Mc3EmbedGltf` struct, `<embeds>` section, MCB, XSD, 13 roundtrip tests
 - **N3** — Lua scripts: `Mc3Script` struct, `<scripts>` section, MCB, XSD, 9 roundtrip tests
+- **N4** — Sound/music: `Mc3Sound` + `Mc3Music` structs, `<sounds>`/`<music>` sections, MCB, XSD, 13 roundtrip tests
+- **N5** — Triggers: `Mc3Trigger` + `Mc3TriggerStep` structs, `<triggers>` section, MCB, XSD, 16 roundtrip tests
+- **N6** — Scene states: `Mc3SceneState` + `Mc3ObjectOverride` structs, `<states>` section, MCB, XSD, 15 roundtrip tests
+- **N7** — Meta: `doc.meta` map, `<meta><metaentry>` element, MCB, XSD, 10 roundtrip tests
 
 ### What does not work yet
 - N4–N7: Sound/music, triggers, document-level scene states, `<meta>` — schema types
@@ -103,15 +107,14 @@ N1 (SVG textures) and N2 (embedded GLTF) are complete. N3–N7 remain.
 
 **No current blocker.** Build is clean, all 15 tests pass.
 
-The next natural work is **N4** (Sound and music): adding `Mc3Sound` + `Mc3Music` structs and
-`<sounds>`/`<music>` sections. This follows the exact same 9-step pattern as N1–N3 and has no
-dependencies on incomplete or broken code.
+Skupina N je kompletní. Další práce závisí na prioritách v plan.md — doporučeno pokračovat
+skupinou, která má nejvyšší prioritu na konci plan.md.
 
 ---
 
 ## 5. Known Bugs and Limitations
 
-- **incomplete** — N4–N7 (sound/music, triggers, scene states, meta) not yet implemented.
+- **complete** — Skupina N (N1–N7) je hotova.
 - **incomplete** — `EditorViewport` not integrated into `MeshCraftApplication`; `camera_` and `gizmo_`
   are still direct members of the app class. `EditorViewport::pickRay()` is unused in production code.
 - **incomplete** — SVG-to-bitmap rasterization for GLTF export (noted in N1). The GLTF exporter
@@ -210,24 +213,9 @@ ctest --output-on-failure
 
 ## 8. Next Smallest Tasks
 
-In priority order (from plan.md group N):
+**Skupina N je kompletní (N1–N7).** Přečti plan.md a zjisti, která skupina má nejvyšší prioritu.
 
-### Task 1 — N4: Sound and music elements in mc3.xml
-**Goal:** `Mc3Sound` + `Mc3Music` structs; `<sounds>` and `<music>` sections (no audio playback).
-- Two maps: `doc.sounds` (`Mc3Sound`: id, src, loop=false) and `doc.musicTracks` (`Mc3Music`: id, src, loop=true)
-- XML: `<sound id="…" src="…" loop="false"/>` and `<music id="…" src="…" loop="true"/>`
-- MCB, XSD, roundtrip tests
-- **Verify:** `ctest --output-on-failure`
-
-### Task 3 — N5: `<trigger>` element
-**Goal:** `Mc3Trigger` struct with ordered list of steps (play-action, play-sound, run-script, play-music).
-- `<trigger id="intro"><play-action ref="walk_anim"/><play-sound ref="click"/></trigger>`
-- `Mc3TriggerStep`: `type` enum (PlayAction/PlaySound/RunScript/PlayMusic) + `ref` string
-- `Mc3Trigger`: `id` + `vector<Mc3TriggerStep>`
-- MCB, XSD, roundtrip tests
-- **Verify:** `ctest --output-on-failure`
-
-### Task 4 — N6: Document-level `<state>` element
+### Task 1 — N6: Document-level `<state>` element
 **Goal:** Named scene-wide configuration snapshots (distinct from per-object `Mc3ObjectState`).
 - `Mc3ObjectOverride`: `id`, optional position/rotation/visible/material
 - `Mc3SceneState`: `name` + `vector<Mc3ObjectOverride>`
@@ -235,7 +223,7 @@ In priority order (from plan.md group N):
 - MCB, XSD, roundtrip tests
 - **Verify:** `ctest --output-on-failure`
 
-### Task 5 — N7: `<meta>` element
+### Task 2 — N7: `<meta>` element
 **Goal:** Top-level key-value metadata, key/value as XML attributes (not sub-tags).
 - Note: `doc.metadata` already exists for the old `<metadata><property name="…"/>` form.
   N7 adds `doc.meta` (separate map) for `<meta><metaentry key="…" value="…"/></meta>`.
@@ -251,7 +239,7 @@ In priority order (from plan.md group N):
   the refactor to replace `camera_`/`gizmo_` touches too many files for the current focus (N3–N7).
 - **No SVG rasterization** — add `stb_image_write`/`lodepng` only after N3–N7 are done.
 - **No GLTF exporter changes for SVG/embed** — keep `GltfExporter.cpp` stable for now.
-- **No new plan.md groups** — complete N4–N7 before adding more scope.
+- Skupina N je hotova — lze otevřít novou skupinu z plan.md podle priority.
 - **No mass refactor** of `MeshCraftApplication_*.cpp` files.
 - **No `Mc3Document` field removals or renames** — breaks `mc3togltf` and test XMLs.
 - **No MCB format version bump** — MCB uses forward-compatible unknown-key skipping; new fields
@@ -265,9 +253,9 @@ In priority order (from plan.md group N):
 
 ```
 Read NEXT.md first. Then implement the next task listed in section 8
-(currently N4 — Sound and music elements in mc3.xml). Follow the exact 9-step
+(currently N6 — document-level <state> element). Follow the exact 9-step
 checklist in that section. Do not refactor unrelated code. After each
 file change, verify: ninja mc3_roundtrip_test && ctest --output-on-failure
-Confirm all 15 tests still pass, then update NEXT.md to reflect N4 done
-and promote N5 to the top of section 8.
+Confirm all 15 tests still pass, then update NEXT.md to reflect N6 done
+and promote N7 to the top of section 8.
 ```

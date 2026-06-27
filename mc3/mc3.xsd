@@ -143,7 +143,20 @@
     <xs:attribute name="rotation" type="xs:float"/>
   </xs:complexType>
 
-  <!-- ── Metadata ─────────────────────────────────────────────── -->
+  <!-- ── Meta (new-style key-value) ──────────────────────────── -->
+
+  <xs:complexType name="metaentryType">
+    <xs:attribute name="key"   type="xs:string" use="required"/>
+    <xs:attribute name="value" type="xs:string" use="required"/>
+  </xs:complexType>
+
+  <xs:complexType name="metaType">
+    <xs:sequence>
+      <xs:element name="metaentry" type="metaentryType" minOccurs="0" maxOccurs="unbounded"/>
+    </xs:sequence>
+  </xs:complexType>
+
+  <!-- ── Metadata (legacy) ─────────────────────────────────────── -->
   <!--
     Key/value store for opaque pass-through data (e.g. source-format metadata
     captured during import that has no first-class MC3 representation).
@@ -609,6 +622,79 @@
     </xs:sequence>
   </xs:complexType>
 
+  <!-- ── Scene States ─────────────────────────────────────────── -->
+
+  <xs:complexType name="objectOverrideType">
+    <xs:attribute name="id"       type="xs:string"  use="required"/>
+    <xs:attribute name="visible"  type="xs:boolean"/>
+    <xs:attribute name="position" type="xs:string"/>
+    <xs:attribute name="rotation" type="xs:string"/>
+    <xs:attribute name="material" type="xs:string"/>
+  </xs:complexType>
+
+  <xs:complexType name="sceneStateType">
+    <xs:sequence>
+      <xs:element name="object-override" type="objectOverrideType" minOccurs="0" maxOccurs="unbounded"/>
+    </xs:sequence>
+    <xs:attribute name="name" type="xs:string" use="required"/>
+  </xs:complexType>
+
+  <xs:complexType name="statesType">
+    <xs:sequence>
+      <xs:element name="state" type="sceneStateType" minOccurs="0" maxOccurs="unbounded"/>
+    </xs:sequence>
+  </xs:complexType>
+
+  <!-- ── Triggers ─────────────────────────────────────────────── -->
+
+  <xs:complexType name="triggerStepRefType">
+    <xs:attribute name="ref" type="xs:string" use="required"/>
+  </xs:complexType>
+
+  <xs:complexType name="triggerElementType">
+    <xs:choice minOccurs="0" maxOccurs="unbounded">
+      <xs:element name="play-action" type="triggerStepRefType"/>
+      <xs:element name="play-sound"  type="triggerStepRefType"/>
+      <xs:element name="run-script"  type="triggerStepRefType"/>
+      <xs:element name="play-music"  type="triggerStepRefType"/>
+    </xs:choice>
+    <xs:attribute name="id" type="xs:ID" use="required"/>
+  </xs:complexType>
+
+  <xs:complexType name="triggersType">
+    <xs:sequence>
+      <xs:element name="trigger" type="triggerElementType" minOccurs="0" maxOccurs="unbounded"/>
+    </xs:sequence>
+  </xs:complexType>
+
+  <!-- ── Sounds ───────────────────────────────────────────────── -->
+
+  <xs:complexType name="soundElementType">
+    <xs:attribute name="id"   type="xs:ID"      use="required"/>
+    <xs:attribute name="src"  type="xs:anyURI"  use="required"/>
+    <xs:attribute name="loop" type="xs:boolean" default="false"/>
+  </xs:complexType>
+
+  <xs:complexType name="soundsType">
+    <xs:sequence>
+      <xs:element name="sound" type="soundElementType" minOccurs="0" maxOccurs="unbounded"/>
+    </xs:sequence>
+  </xs:complexType>
+
+  <!-- ── Music ────────────────────────────────────────────────── -->
+
+  <xs:complexType name="musicTrackType">
+    <xs:attribute name="id"   type="xs:ID"      use="required"/>
+    <xs:attribute name="src"  type="xs:anyURI"  use="required"/>
+    <xs:attribute name="loop" type="xs:boolean" default="true"/>
+  </xs:complexType>
+
+  <xs:complexType name="musicType">
+    <xs:sequence>
+      <xs:element name="track" type="musicTrackType" minOccurs="0" maxOccurs="unbounded"/>
+    </xs:sequence>
+  </xs:complexType>
+
   <!-- ── Textures ─────────────────────────────────────────────── -->
 
   <xs:complexType name="texturesType">
@@ -742,6 +828,7 @@
           </xs:complexType>
         </xs:element>
         <xs:element name="metadata"    type="metadataType"         minOccurs="0"/>
+        <xs:element name="meta"        type="metaType"             minOccurs="0"/>
         <xs:element name="environment" type="environmentType"      minOccurs="0"/>
         <xs:element name="lights"      type="lightsType"           minOccurs="0"/>
         <xs:element name="cameras"     type="camerasType"          minOccurs="0"/>
@@ -749,6 +836,10 @@
         <xs:element name="materials"   type="materialsType"        minOccurs="0"/>
         <xs:element name="embeds"      type="embedsType"           minOccurs="0"/>
         <xs:element name="scripts"     type="scriptsType"          minOccurs="0"/>
+        <xs:element name="sounds"      type="soundsType"           minOccurs="0"/>
+        <xs:element name="music"       type="musicType"            minOccurs="0"/>
+        <xs:element name="triggers"    type="triggersType"         minOccurs="0"/>
+        <xs:element name="states"      type="statesType"           minOccurs="0"/>
         <xs:element name="definitions" type="definitionsType"      minOccurs="0"/>
         <xs:element name="objects"     type="objectsContainerType" minOccurs="0"/>
         <xs:element name="actions"     type="mc3ActionsType"       minOccurs="0"/>

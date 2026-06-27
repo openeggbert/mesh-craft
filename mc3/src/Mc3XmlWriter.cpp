@@ -1,6 +1,8 @@
 #include "Mc3XmlWriter.hpp"
 #include <MeshCraft/Mc3/Mc3Animation.hpp>
 #include <MeshCraft/Mc3/Mc3Extrude.hpp>
+#include <MeshCraft/Mc3/Mc3SceneState.hpp>
+#include <MeshCraft/Mc3/Mc3Trigger.hpp>
 #include <tinyxml2.h>
 #include <stdexcept>
 #include <cstdio>
@@ -341,7 +343,7 @@ void Mc3XmlWriter::write(const Mc3Document& doc, const std::filesystem::path& pa
         root->InsertEndChild(incEl);
     }
 
-    // Root metadata
+    // Root metadata (legacy <metadata><property name="…" value="…"/>)
     if (!doc.metadata.empty()) {
         XMLElement* metaEl = xml.NewElement("metadata");
         for (const auto& [k, v] : doc.metadata) {
@@ -351,6 +353,18 @@ void Mc3XmlWriter::write(const Mc3Document& doc, const std::filesystem::path& pa
             metaEl->InsertEndChild(pe);
         }
         root->InsertEndChild(metaEl);
+    }
+
+    // New-style meta (<meta><metaentry key="…" value="…"/>)
+    if (!doc.meta.empty()) {
+        XMLElement* mEl = xml.NewElement("meta");
+        for (const auto& [k, v] : doc.meta) {
+            XMLElement* ee = xml.NewElement("metaentry");
+            ee->SetAttribute("key",   k.c_str());
+            ee->SetAttribute("value", v.c_str());
+            mEl->InsertEndChild(ee);
+        }
+        root->InsertEndChild(mEl);
     }
 
     // Environment
@@ -542,6 +556,76 @@ void Mc3XmlWriter::write(const Mc3Document& doc, const std::filesystem::path& pa
             sEl->InsertEndChild(se);
         }
         root->InsertEndChild(sEl);
+    }
+
+    // Sounds
+    if (!doc.sounds.empty()) {
+        XMLElement* snEl = xml.NewElement("sounds");
+        for (const auto& [id, snd] : doc.sounds) {
+            XMLElement* se = xml.NewElement("sound");
+            se->SetAttribute("id",  id.c_str());
+            se->SetAttribute("src", snd.src.c_str());
+            if (snd.loop) se->SetAttribute("loop", "true");
+            snEl->InsertEndChild(se);
+        }
+        root->InsertEndChild(snEl);
+    }
+
+    // Music tracks
+    if (!doc.musicTracks.empty()) {
+        XMLElement* mEl = xml.NewElement("music");
+        for (const auto& [id, mus] : doc.musicTracks) {
+            XMLElement* te = xml.NewElement("track");
+            te->SetAttribute("id",  id.c_str());
+            te->SetAttribute("src", mus.src.c_str());
+            if (!mus.loop) te->SetAttribute("loop", "false");
+            mEl->InsertEndChild(te);
+        }
+        root->InsertEndChild(mEl);
+    }
+
+    // Triggers
+    if (!doc.triggers.empty()) {
+        XMLElement* trEl = xml.NewElement("triggers");
+        for (const auto& [id, trig] : doc.triggers) {
+            XMLElement* te = xml.NewElement("trigger");
+            te->SetAttribute("id", id.c_str());
+            for (const auto& step : trig.steps) {
+                const char* tag = nullptr;
+                switch (step.type) {
+                case TriggerStepType::PlayAction: tag = "play-action"; break;
+                case TriggerStepType::PlaySound:  tag = "play-sound";  break;
+                case TriggerStepType::RunScript:  tag = "run-script";  break;
+                case TriggerStepType::PlayMusic:  tag = "play-music";  break;
+                }
+                if (!tag) continue;
+                XMLElement* se = xml.NewElement(tag);
+                se->SetAttribute("ref", step.ref.c_str());
+                te->InsertEndChild(se);
+            }
+            trEl->InsertEndChild(te);
+        }
+        root->InsertEndChild(trEl);
+    }
+
+    // Scene states
+    if (!doc.sceneStates.empty()) {
+        XMLElement* stEl = xml.NewElement("states");
+        for (const auto& [name, state] : doc.sceneStates) {
+            XMLElement* se = xml.NewElement("state");
+            se->SetAttribute("name", name.c_str());
+            for (const auto& ovr : state.overrides) {
+                XMLElement* oe = xml.NewElement("object-override");
+                oe->SetAttribute("id", ovr.id.c_str());
+                if (ovr.visible.has_value())  oe->SetAttribute("visible",  *ovr.visible ? "true" : "false");
+                if (ovr.position.has_value()) oe->SetAttribute("position", vec3Str(*ovr.position).c_str());
+                if (ovr.rotation.has_value()) oe->SetAttribute("rotation", vec3Str(*ovr.rotation).c_str());
+                if (ovr.material.has_value()) oe->SetAttribute("material", ovr.material->c_str());
+                se->InsertEndChild(oe);
+            }
+            stEl->InsertEndChild(se);
+        }
+        root->InsertEndChild(stEl);
     }
 
     // Definitions — skip entries that came from <include> files

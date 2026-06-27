@@ -511,6 +511,78 @@ static void parseMaterials(const XMLElement* el, Mc3Document& doc) {
     }
 }
 
+static void parseStates(const XMLElement* el, Mc3Document& doc) {
+    for (const XMLElement* s = el->FirstChildElement("state"); s;
+         s = s->NextSiblingElement("state")) {
+        std::string name = attr(s, "name");
+        if (name.empty()) continue;
+        Mc3SceneState state;
+        state.name = name;
+        for (const XMLElement* ov = s->FirstChildElement("object-override"); ov;
+             ov = ov->NextSiblingElement("object-override")) {
+            std::string id = attr(ov, "id");
+            if (id.empty()) continue;
+            Mc3ObjectOverride ovr;
+            ovr.id = id;
+            if (ov->Attribute("visible"))  ovr.visible  = attrB(ov, "visible", true);
+            if (ov->Attribute("position")) ovr.position = attrVec3(ov, "position");
+            if (ov->Attribute("rotation")) ovr.rotation = attrVec3(ov, "rotation");
+            if (ov->Attribute("material")) ovr.material = std::string(attr(ov, "material"));
+            state.overrides.push_back(std::move(ovr));
+        }
+        doc.sceneStates[name] = std::move(state);
+    }
+}
+
+static void parseTriggers(const XMLElement* el, Mc3Document& doc) {
+    for (const XMLElement* t = el->FirstChildElement("trigger"); t;
+         t = t->NextSiblingElement("trigger")) {
+        std::string id = attr(t, "id");
+        if (id.empty()) continue;
+        Mc3Trigger trig;
+        trig.id = id;
+        for (const XMLElement* s = t->FirstChildElement(); s;
+             s = s->NextSiblingElement()) {
+            std::string name = s->Name();
+            Mc3TriggerStep step;
+            if      (name == "play-action") step.type = TriggerStepType::PlayAction;
+            else if (name == "play-sound")  step.type = TriggerStepType::PlaySound;
+            else if (name == "run-script")  step.type = TriggerStepType::RunScript;
+            else if (name == "play-music")  step.type = TriggerStepType::PlayMusic;
+            else continue;
+            step.ref = attr(s, "ref");
+            trig.steps.push_back(std::move(step));
+        }
+        doc.triggers[id] = std::move(trig);
+    }
+}
+
+static void parseSounds(const XMLElement* el, Mc3Document& doc) {
+    for (const XMLElement* c = el->FirstChildElement("sound"); c;
+         c = c->NextSiblingElement("sound")) {
+        std::string id = attr(c, "id");
+        if (id.empty()) continue;
+        Mc3Sound snd;
+        snd.id   = id;
+        snd.src  = attr(c, "src");
+        snd.loop = attrB(c, "loop", false);
+        doc.sounds[id] = std::move(snd);
+    }
+}
+
+static void parseMusic(const XMLElement* el, Mc3Document& doc) {
+    for (const XMLElement* c = el->FirstChildElement("track"); c;
+         c = c->NextSiblingElement("track")) {
+        std::string id = attr(c, "id");
+        if (id.empty()) continue;
+        Mc3Music mus;
+        mus.id   = id;
+        mus.src  = attr(c, "src");
+        mus.loop = attrB(c, "loop", true);
+        doc.musicTracks[id] = std::move(mus);
+    }
+}
+
 static void parseScripts(const XMLElement* el, Mc3Document& doc) {
     for (const XMLElement* c = el->FirstChildElement("script"); c;
          c = c->NextSiblingElement("script")) {
@@ -743,6 +815,13 @@ Mc3Document Mc3XmlParser::parse(const std::filesystem::path& path) {
                 if (const char* v = p->Attribute("value"))
                     doc.metadata[n] = v;
 
+    if (const XMLElement* metaEl = root->FirstChildElement("meta"))
+        for (const XMLElement* e = metaEl->FirstChildElement("metaentry"); e;
+             e = e->NextSiblingElement("metaentry"))
+            if (const char* k = e->Attribute("key"))
+                if (const char* v = e->Attribute("value"))
+                    doc.meta[k] = v;
+
     // Process <include> elements before any local sections so that included
     // definitions/materials/textures are available when the main file is parsed.
     {
@@ -780,6 +859,10 @@ Mc3Document Mc3XmlParser::parse(const std::filesystem::path& path) {
     }
     if (const XMLElement* embs = root->FirstChildElement("embeds"))       parseEmbeds(embs,      doc);
     if (const XMLElement* scrs = root->FirstChildElement("scripts"))      parseScripts(scrs,     doc);
+    if (const XMLElement* snds = root->FirstChildElement("sounds"))       parseSounds(snds,      doc);
+    if (const XMLElement* mus  = root->FirstChildElement("music"))        parseMusic(mus,        doc);
+    if (const XMLElement* trgs = root->FirstChildElement("triggers"))     parseTriggers(trgs,    doc);
+    if (const XMLElement* sts  = root->FirstChildElement("states"))       parseStates(sts,       doc);
     if (const XMLElement* objs = root->FirstChildElement("objects"))      parseObjects(objs,     doc);
     if (const XMLElement* acts = root->FirstChildElement("actions"))      parseActions(acts,     doc);
 

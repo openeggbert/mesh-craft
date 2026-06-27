@@ -7,7 +7,11 @@
 #include "MeshCraft/Mc3/Mc3Light.hpp"
 #include "MeshCraft/Mc3/Mc3Material.hpp"
 #include "MeshCraft/Mc3/Mc3Object.hpp"
+#include "MeshCraft/Mc3/Mc3Music.hpp"
+#include "MeshCraft/Mc3/Mc3SceneState.hpp"
 #include "MeshCraft/Mc3/Mc3Script.hpp"
+#include "MeshCraft/Mc3/Mc3Sound.hpp"
+#include "MeshCraft/Mc3/Mc3Trigger.hpp"
 #include "MeshCraft/Mc3/Mc3SvgTexture.hpp"
 #include "MeshCraft/Mc3/Mc3Texture.hpp"
 
@@ -33,6 +37,9 @@ public:
     // Opaque key/value pass-through store (mirrors <metadata> in the XSD).
     std::map<std::string, std::string> metadata;
 
+    // New-style key-value metadata (mirrors <meta><metaentry key="…" value="…"/> in the XSD).
+    std::map<std::string, std::string> meta;
+
     // Directory of the source .mc3.xml file — used for resolving relative asset paths
     std::filesystem::path sourcePath;
 
@@ -56,6 +63,10 @@ public:
     std::map<std::string, Mc3SvgTexture> svgTextures;
     std::map<std::string, Mc3EmbedGltf>  embeds;
     std::map<std::string, Mc3Script>     scripts;
+    std::map<std::string, Mc3Sound>      sounds;
+    std::map<std::string, Mc3Music>      musicTracks;
+    std::map<std::string, Mc3Trigger>    triggers;
+    std::map<std::string, Mc3SceneState> sceneStates;
     std::map<std::string, Mc3Material>   materials;
     std::map<std::string, std::shared_ptr<Mc3Object>> definitions;
     std::vector<std::shared_ptr<Mc3Object>> objects;
@@ -86,6 +97,18 @@ public:
     // Add a script (key = script.id).  Returns reference to the stored entry.
     Mc3Script& addScript(Mc3Script script);
 
+    // Add a sound effect (key = sound.id).  Returns reference to the stored entry.
+    Mc3Sound& addSound(Mc3Sound sound);
+
+    // Add a music track (key = music.id).  Returns reference to the stored entry.
+    Mc3Music& addMusic(Mc3Music music);
+
+    // Add a trigger (key = trigger.id).  Returns reference to the stored entry.
+    Mc3Trigger& addTrigger(Mc3Trigger trigger);
+
+    // Add a scene state (key = state.name).  Returns reference to the stored entry.
+    Mc3SceneState& addSceneState(Mc3SceneState state);
+
     // Append an object to the root objects list.  Returns the shared_ptr (copy).
     std::shared_ptr<Mc3Object> addObject(std::shared_ptr<Mc3Object> obj);
 
@@ -114,6 +137,9 @@ public:
 
     // Set a metadata key/value pair (pass-through store, round-trips via XML).
     Mc3Document& withMetadata(std::string key, std::string value);
+
+    // Set a meta key/value pair (new-style <meta> element).
+    Mc3Document& withMeta(std::string key, std::string value);
 
     // Convenience setters for root-level rotation convention.
     Mc3Document& withRotationUnits(std::string units);  // "degrees" | "radians"

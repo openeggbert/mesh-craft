@@ -46,6 +46,30 @@ Mc3Script& Mc3Document::addScript(Mc3Script script) {
     return scripts[key];
 }
 
+Mc3Sound& Mc3Document::addSound(Mc3Sound sound) {
+    const std::string key = sound.id;
+    sounds[key] = std::move(sound);
+    return sounds[key];
+}
+
+Mc3Music& Mc3Document::addMusic(Mc3Music music) {
+    const std::string key = music.id;
+    musicTracks[key] = std::move(music);
+    return musicTracks[key];
+}
+
+Mc3Trigger& Mc3Document::addTrigger(Mc3Trigger trigger) {
+    const std::string key = trigger.id;
+    triggers[key] = std::move(trigger);
+    return triggers[key];
+}
+
+Mc3SceneState& Mc3Document::addSceneState(Mc3SceneState state) {
+    const std::string key = state.name;
+    sceneStates[key] = std::move(state);
+    return sceneStates[key];
+}
+
 std::shared_ptr<Mc3Object> Mc3Document::addObject(std::shared_ptr<Mc3Object> obj) {
     objects.push_back(obj);
     return obj;
@@ -94,6 +118,10 @@ Mc3Document& Mc3Document::setFog(Mc3Fog fog) {
 
 Mc3Document& Mc3Document::withMetadata(std::string key, std::string value) {
     metadata[std::move(key)] = std::move(value); return *this;
+}
+
+Mc3Document& Mc3Document::withMeta(std::string key, std::string value) {
+    meta[std::move(key)] = std::move(value); return *this;
 }
 
 Mc3Document& Mc3Document::withRotationUnits(std::string units) {

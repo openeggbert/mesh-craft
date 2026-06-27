@@ -7,7 +7,11 @@
 #include "MeshCraft/Mc3/Mc3Material.hpp"
 #include "MeshCraft/Mc3/Mc3Object.hpp"
 #include "MeshCraft/Mc3/Mc3EmbedGltf.hpp"
+#include "MeshCraft/Mc3/Mc3Music.hpp"
+#include "MeshCraft/Mc3/Mc3SceneState.hpp"
 #include "MeshCraft/Mc3/Mc3Script.hpp"
+#include "MeshCraft/Mc3/Mc3Sound.hpp"
+#include "MeshCraft/Mc3/Mc3Trigger.hpp"
 #include "MeshCraft/Mc3/Mc3SvgTexture.hpp"
 #include "MeshCraft/Mc3/Mc3Texture.hpp"
 
@@ -286,6 +290,58 @@ static void writeScript(std::ostream& o, const Mc3::Mc3Script& sc) {
     wEnd(o);
 }
 
+static void writeSound(std::ostream& o, const Mc3::Mc3Sound& snd) {
+    wIfStr (o, "src",  snd.src,  "");
+    wIfBool(o, "loop", snd.loop, false);
+    wEnd(o);
+}
+
+static void writeMusic(std::ostream& o, const Mc3::Mc3Music& mus) {
+    wIfStr (o, "src",  mus.src,  "");
+    wIfBool(o, "loop", mus.loop, true);
+    wEnd(o);
+}
+
+static void writeObjectOverride(std::ostream& o, const Mc3::Mc3ObjectOverride& ovr) {
+    wIfStr(o, "id", ovr.id, "");
+    if (ovr.visible.has_value())  wFieldBool(o, "visible",  *ovr.visible);
+    if (ovr.position.has_value()) wFieldVec3(o, "position", *ovr.position);
+    if (ovr.rotation.has_value()) wFieldVec3(o, "rotation", *ovr.rotation);
+    if (ovr.material.has_value()) wFieldStr(o,  "material", *ovr.material);
+    wEnd(o);
+}
+
+static void writeSceneState(std::ostream& o, const Mc3::Mc3SceneState& state) {
+    if (!state.overrides.empty()) {
+        wKeyArr(o, "overrides", static_cast<uint32_t>(state.overrides.size()));
+        for (const auto& ovr : state.overrides) { wU8(o, TAG_OBJ); writeObjectOverride(o, ovr); }
+    }
+    wEnd(o);
+}
+
+static const char* triggerStepTypeStr(Mc3::TriggerStepType t) {
+    switch (t) {
+    case Mc3::TriggerStepType::PlayAction: return "play-action";
+    case Mc3::TriggerStepType::PlaySound:  return "play-sound";
+    case Mc3::TriggerStepType::RunScript:  return "run-script";
+    case Mc3::TriggerStepType::PlayMusic:  return "play-music";
+    }
+    return "";
+}
+
+static void writeTrigger(std::ostream& o, const Mc3::Mc3Trigger& trig) {
+    if (!trig.steps.empty()) {
+        wKeyArr(o, "steps", static_cast<uint32_t>(trig.steps.size()));
+        for (const auto& step : trig.steps) {
+            wU8(o, TAG_OBJ);
+            wIfStr(o, "type", triggerStepTypeStr(step.type), "");
+            wIfStr(o, "ref",  step.ref,                      "");
+            wEnd(o);
+        }
+    }
+    wEnd(o);
+}
+
 static void writeMaterial(std::ostream& o, const Mc3::Mc3Material& m) {
     const Mc3::Mc3Material def;
     wIfStr (o, "name",                     m.name,                     "");
@@ -395,6 +451,11 @@ static void writeDocument(std::ostream& o, const Mc3::Mc3Document& doc) {
     wIfStr(o, "coordinateSystem", doc.coordinateSystem, def.coordinateSystem.c_str());
     wIfStr(o, "defaultCamera",    doc.defaultCamera,    "");
 
+    if (!doc.meta.empty()) {
+        wKeyMap(o, "meta", static_cast<uint32_t>(doc.meta.size()));
+        for (const auto& [k, v] : doc.meta) { wRawStr(o, k); wU8(o, TAG_STR); wRawStr(o, v); }
+    }
+
     if (doc.environment) { wKeyObj(o, "environment"); writeEnvironment(o, *doc.environment); }
 
     if (!doc.lights.empty()) {
@@ -421,6 +482,22 @@ static void writeDocument(std::ostream& o, const Mc3::Mc3Document& doc) {
     if (!doc.scripts.empty()) {
         wKeyMap(o, "scripts", static_cast<uint32_t>(doc.scripts.size()));
         for (const auto& [k, v] : doc.scripts) { wRawStr(o, k); wU8(o, TAG_OBJ); writeScript(o, v); }
+    }
+    if (!doc.sounds.empty()) {
+        wKeyMap(o, "sounds", static_cast<uint32_t>(doc.sounds.size()));
+        for (const auto& [k, v] : doc.sounds) { wRawStr(o, k); wU8(o, TAG_OBJ); writeSound(o, v); }
+    }
+    if (!doc.musicTracks.empty()) {
+        wKeyMap(o, "musicTracks", static_cast<uint32_t>(doc.musicTracks.size()));
+        for (const auto& [k, v] : doc.musicTracks) { wRawStr(o, k); wU8(o, TAG_OBJ); writeMusic(o, v); }
+    }
+    if (!doc.triggers.empty()) {
+        wKeyMap(o, "triggers", static_cast<uint32_t>(doc.triggers.size()));
+        for (const auto& [k, v] : doc.triggers) { wRawStr(o, k); wU8(o, TAG_OBJ); writeTrigger(o, v); }
+    }
+    if (!doc.sceneStates.empty()) {
+        wKeyMap(o, "sceneStates", static_cast<uint32_t>(doc.sceneStates.size()));
+        for (const auto& [k, v] : doc.sceneStates) { wRawStr(o, k); wU8(o, TAG_OBJ); writeSceneState(o, v); }
     }
     if (!doc.materials.empty()) {
         wKeyMap(o, "materials", static_cast<uint32_t>(doc.materials.size()));

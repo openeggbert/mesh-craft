@@ -7,7 +7,11 @@
 #include "MeshCraft/Mc3/Mc3Material.hpp"
 #include "MeshCraft/Mc3/Mc3Object.hpp"
 #include "MeshCraft/Mc3/Mc3EmbedGltf.hpp"
+#include "MeshCraft/Mc3/Mc3Music.hpp"
+#include "MeshCraft/Mc3/Mc3SceneState.hpp"
 #include "MeshCraft/Mc3/Mc3Script.hpp"
+#include "MeshCraft/Mc3/Mc3Sound.hpp"
+#include "MeshCraft/Mc3/Mc3Trigger.hpp"
 #include "MeshCraft/Mc3/Mc3SvgTexture.hpp"
 #include "MeshCraft/Mc3/Mc3Texture.hpp"
 
@@ -399,6 +403,102 @@ static Mc3::Mc3SvgTexture readSvgTexture(std::istream& in, const std::string& id
     return svg;
 }
 
+static Mc3::Mc3ObjectOverride readObjectOverride(std::istream& in) {
+    Mc3::Mc3ObjectOverride ovr;
+    while (true) {
+        std::string k = rKey(in); if (k.empty()) break;
+        uint8_t tag = rU8(in);
+        if      (k == "id")       ovr.id       = rRawStr(in);
+        else if (k == "visible")  ovr.visible  = rU8(in) != 0;
+        else if (k == "position") ovr.position = rVec3(in);
+        else if (k == "rotation") ovr.rotation = rVec3(in);
+        else if (k == "material") ovr.material = rRawStr(in);
+        else                      skipValue(in, tag);
+    }
+    return ovr;
+}
+
+static Mc3::Mc3SceneState readSceneState(std::istream& in, const std::string& name) {
+    Mc3::Mc3SceneState state;
+    state.name = name;
+    while (true) {
+        std::string k = rKey(in); if (k.empty()) break;
+        uint8_t tag = rU8(in);
+        if (k == "overrides" && tag == TAG_ARR) {
+            uint32_t n = rU32(in);
+            for (uint32_t i = 0; i < n; ++i) {
+                uint8_t t = rU8(in);
+                if (t == TAG_OBJ) state.overrides.push_back(readObjectOverride(in));
+                else               skipValue(in, t);
+            }
+        } else {
+            skipValue(in, tag);
+        }
+    }
+    return state;
+}
+
+static Mc3::TriggerStepType parseTriggerStepType(const std::string& s) {
+    if (s == "play-sound")  return Mc3::TriggerStepType::PlaySound;
+    if (s == "run-script")  return Mc3::TriggerStepType::RunScript;
+    if (s == "play-music")  return Mc3::TriggerStepType::PlayMusic;
+    return Mc3::TriggerStepType::PlayAction;
+}
+
+static Mc3::Mc3Trigger readTrigger(std::istream& in, const std::string& id) {
+    Mc3::Mc3Trigger trig;
+    trig.id = id;
+    while (true) {
+        std::string k = rKey(in); if (k.empty()) break;
+        uint8_t tag = rU8(in);
+        if (k == "steps" && tag == TAG_ARR) {
+            uint32_t n = rU32(in);
+            for (uint32_t i = 0; i < n; ++i) {
+                uint8_t t = rU8(in);
+                if (t != TAG_OBJ) { skipValue(in, t); continue; }
+                Mc3::Mc3TriggerStep step;
+                while (true) {
+                    std::string sk = rKey(in); if (sk.empty()) break;
+                    uint8_t st = rU8(in);
+                    if      (sk == "type") step.type = parseTriggerStepType(rRawStr(in));
+                    else if (sk == "ref")  step.ref  = rRawStr(in);
+                    else                   skipValue(in, st);
+                }
+                trig.steps.push_back(std::move(step));
+            }
+        } else {
+            skipValue(in, tag);
+        }
+    }
+    return trig;
+}
+
+static Mc3::Mc3Sound readSound(std::istream& in, const std::string& id) {
+    Mc3::Mc3Sound snd;
+    snd.id = id;
+    while (true) {
+        std::string k = rKey(in); if (k.empty()) break;
+        uint8_t tag = rU8(in);
+        if      (k == "src")  snd.src  = rRawStr(in);
+        else if (k == "loop") snd.loop = rU8(in) != 0;
+        else                  skipValue(in, tag);
+    }
+    return snd;
+}
+
+static Mc3::Mc3Music readMusic(std::istream& in, const std::string& id) {
+    Mc3::Mc3Music mus;
+    mus.id = id;
+    while (true) {
+        std::string k = rKey(in); if (k.empty()) break;
+        uint8_t tag = rU8(in);
+        if      (k == "src")  mus.src  = rRawStr(in);
+        else if (k == "loop") mus.loop = rU8(in) != 0;
+        else                  skipValue(in, tag);
+    }
+    return mus;
+}
+
 static Mc3::Mc3Script readScript(std::istream& in, const std::string& id) {
     Mc3::Mc3Script sc;
     sc.id = id;
@@ -587,6 +687,15 @@ static Mc3::Mc3Document readDocument(std::istream& in) {
         else if (k == "unit")             doc.unit             = rRawStr(in);
         else if (k == "coordinateSystem") doc.coordinateSystem = rRawStr(in);
         else if (k == "defaultCamera")    doc.defaultCamera    = rRawStr(in);
+        else if (k == "meta") {
+            uint32_t n = rU32(in);
+            for (uint32_t i = 0; i < n; ++i) {
+                std::string mk = rRawStr(in);
+                uint8_t t = rU8(in);
+                if (t == TAG_STR) doc.meta[mk] = rRawStr(in);
+                else               skipValue(in, t);
+            }
+        }
         else if (k == "environment")      doc.environment      = readEnvironment(in);
         else if (k == "lights") {
             uint32_t n = rU32(in);
@@ -639,6 +748,42 @@ static Mc3::Mc3Document readDocument(std::istream& in) {
                 std::string mk = rRawStr(in);
                 uint8_t t = rU8(in);
                 if (t == TAG_OBJ) doc.scripts[mk] = readScript(in, mk);
+                else               skipValue(in, t);
+            }
+        }
+        else if (k == "sounds") {
+            uint32_t n = rU32(in);
+            for (uint32_t i = 0; i < n; ++i) {
+                std::string mk = rRawStr(in);
+                uint8_t t = rU8(in);
+                if (t == TAG_OBJ) doc.sounds[mk] = readSound(in, mk);
+                else               skipValue(in, t);
+            }
+        }
+        else if (k == "musicTracks") {
+            uint32_t n = rU32(in);
+            for (uint32_t i = 0; i < n; ++i) {
+                std::string mk = rRawStr(in);
+                uint8_t t = rU8(in);
+                if (t == TAG_OBJ) doc.musicTracks[mk] = readMusic(in, mk);
+                else               skipValue(in, t);
+            }
+        }
+        else if (k == "triggers") {
+            uint32_t n = rU32(in);
+            for (uint32_t i = 0; i < n; ++i) {
+                std::string mk = rRawStr(in);
+                uint8_t t = rU8(in);
+                if (t == TAG_OBJ) doc.triggers[mk] = readTrigger(in, mk);
+                else               skipValue(in, t);
+            }
+        }
+        else if (k == "sceneStates") {
+            uint32_t n = rU32(in);
+            for (uint32_t i = 0; i < n; ++i) {
+                std::string mk = rRawStr(in);
+                uint8_t t = rU8(in);
+                if (t == TAG_OBJ) doc.sceneStates[mk] = readSceneState(in, mk);
                 else               skipValue(in, t);
             }
         }
