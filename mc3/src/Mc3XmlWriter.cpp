@@ -527,6 +527,23 @@ void Mc3XmlWriter::write(const Mc3Document& doc, const std::filesystem::path& pa
         root->InsertEndChild(eEl);
     }
 
+    // Scripts
+    if (!doc.scripts.empty()) {
+        XMLElement* sEl = xml.NewElement("scripts");
+        for (const auto& [id, sc] : doc.scripts) {
+            XMLElement* se = xml.NewElement("script");
+            se->SetAttribute("id",   id.c_str());
+            se->SetAttribute("type", sc.type.c_str());
+            if (!sc.source.empty()) {
+                XMLText* t = xml.NewText(sc.source.c_str());
+                t->SetCData(true);
+                se->InsertEndChild(t);
+            }
+            sEl->InsertEndChild(se);
+        }
+        root->InsertEndChild(sEl);
+    }
+
     // Definitions — skip entries that came from <include> files
     if (!doc.definitions.empty()) {
         XMLElement* dEl = xml.NewElement("definitions");

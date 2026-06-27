@@ -1,5 +1,7 @@
 #include <MeshCraft/Mc3/Mc3Animation.hpp>
 #include <MeshCraft/Mc3/Mc3Document.hpp>
+#include <MeshCraft/Mc3/Mc3EmbedGltf.hpp>
+#include <MeshCraft/Mc3/Mc3Script.hpp>
 
 #include <cmath>
 #include <filesystem>
@@ -850,6 +852,72 @@ static void testEmbedGltf() {
     }
 }
 
+static void testScript() {
+    // Inline Lua source
+    {
+        Mc3Document doc;
+        Mc3Script sc;
+        sc.id     = "on_start";
+        sc.type   = "lua";
+        sc.source = "print(\"hello world\")";
+        doc.addScript(sc);
+
+        auto rt = roundtrip(doc);
+        CHECK(rt.scripts.count("on_start") == 1,      "script inline: present after roundtrip");
+        if (rt.scripts.count("on_start")) {
+            CHECK(rt.scripts["on_start"].type   == "lua",              "script inline: type preserved");
+            CHECK(rt.scripts["on_start"].source == "print(\"hello world\")", "script inline: source preserved");
+            CHECK(rt.scripts["on_start"].hasSource(),                  "script inline: hasSource()");
+        }
+    }
+    // Multi-line source preserved
+    {
+        Mc3Document doc;
+        Mc3Script sc;
+        sc.id     = "tick";
+        sc.type   = "lua";
+        sc.source = "local t = 0\nfunction update(dt)\n  t = t + dt\nend";
+        doc.addScript(sc);
+
+        auto rt = roundtrip(doc);
+        CHECK(rt.scripts.count("tick") == 1,           "script multiline: present");
+        if (rt.scripts.count("tick"))
+            CHECK(rt.scripts["tick"].source == sc.source, "script multiline: source preserved");
+    }
+    // Empty source
+    {
+        Mc3Document doc;
+        Mc3Script sc;
+        sc.id   = "empty";
+        sc.type = "lua";
+        doc.addScript(sc);
+
+        auto rt = roundtrip(doc);
+        CHECK(rt.scripts.count("empty") == 1,          "script empty: present");
+        if (rt.scripts.count("empty"))
+            CHECK(!rt.scripts["empty"].hasSource(),    "script empty: hasSource() false");
+    }
+    // Coexistence with objects and embeds
+    {
+        Mc3Document doc;
+        doc.addEmbed(Mc3EmbedGltf{"prop", "prop.glb", {}});
+        Mc3Script sc;
+        sc.id     = "main";
+        sc.type   = "lua";
+        sc.source = "return 42";
+        doc.addScript(sc);
+        auto obj = std::make_shared<Mc3Object>();
+        obj->id   = "cube1";
+        obj->type = ObjectType::Cube;
+        doc.objects.push_back(obj);
+
+        auto rt = roundtrip(doc);
+        CHECK(rt.embeds.count("prop")   == 1, "script+embed+obj: embed preserved");
+        CHECK(rt.scripts.count("main")  == 1, "script+embed+obj: script preserved");
+        CHECK(!rt.objects.empty(),             "script+embed+obj: object preserved");
+    }
+}
+
 static void testSvgTexture() {
     // External SVG
     {
@@ -920,6 +988,7 @@ int main(int argc, char* argv[]) {
     testAnimationEvaluate();
     testEmbedGltf();
     testSvgTexture();
+    testScript();
 
     if (argc >= 2) {
         testFeaturesXmlLoads(argv[1]);

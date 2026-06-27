@@ -7,6 +7,7 @@
 #include "MeshCraft/Mc3/Mc3Light.hpp"
 #include "MeshCraft/Mc3/Mc3Material.hpp"
 #include "MeshCraft/Mc3/Mc3Object.hpp"
+#include "MeshCraft/Mc3/Mc3Script.hpp"
 #include "MeshCraft/Mc3/Mc3SvgTexture.hpp"
 #include "MeshCraft/Mc3/Mc3Texture.hpp"
 
@@ -54,6 +55,7 @@ public:
     std::map<std::string, Mc3Texture>    textures;
     std::map<std::string, Mc3SvgTexture> svgTextures;
     std::map<std::string, Mc3EmbedGltf>  embeds;
+    std::map<std::string, Mc3Script>     scripts;
     std::map<std::string, Mc3Material>   materials;
     std::map<std::string, std::shared_ptr<Mc3Object>> definitions;
     std::vector<std::shared_ptr<Mc3Object>> objects;
@@ -80,6 +82,9 @@ public:
 
     // Add an embedded GLTF (key = embed.id).  Returns reference to the stored entry.
     Mc3EmbedGltf& addEmbed(Mc3EmbedGltf embed);
+
+    // Add a script (key = script.id).  Returns reference to the stored entry.
+    Mc3Script& addScript(Mc3Script script);
 
     // Append an object to the root objects list.  Returns the shared_ptr (copy).
     std::shared_ptr<Mc3Object> addObject(std::shared_ptr<Mc3Object> obj);

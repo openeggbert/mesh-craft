@@ -7,6 +7,7 @@
 #include "MeshCraft/Mc3/Mc3Material.hpp"
 #include "MeshCraft/Mc3/Mc3Object.hpp"
 #include "MeshCraft/Mc3/Mc3EmbedGltf.hpp"
+#include "MeshCraft/Mc3/Mc3Script.hpp"
 #include "MeshCraft/Mc3/Mc3SvgTexture.hpp"
 #include "MeshCraft/Mc3/Mc3Texture.hpp"
 
@@ -398,6 +399,19 @@ static Mc3::Mc3SvgTexture readSvgTexture(std::istream& in, const std::string& id
     return svg;
 }
 
+static Mc3::Mc3Script readScript(std::istream& in, const std::string& id) {
+    Mc3::Mc3Script sc;
+    sc.id = id;
+    while (true) {
+        std::string k = rKey(in); if (k.empty()) break;
+        uint8_t tag = rU8(in);
+        if      (k == "type")   sc.type   = rRawStr(in);
+        else if (k == "source") sc.source = rRawStr(in);
+        else                    skipValue(in, tag);
+    }
+    return sc;
+}
+
 static Mc3::Mc3EmbedGltf readEmbed(std::istream& in, const std::string& id) {
     Mc3::Mc3EmbedGltf em;
     em.id = id;
@@ -616,6 +630,15 @@ static Mc3::Mc3Document readDocument(std::istream& in) {
                 std::string mk = rRawStr(in);
                 uint8_t t = rU8(in);
                 if (t == TAG_OBJ) doc.embeds[mk] = readEmbed(in, mk);
+                else               skipValue(in, t);
+            }
+        }
+        else if (k == "scripts") {
+            uint32_t n = rU32(in);
+            for (uint32_t i = 0; i < n; ++i) {
+                std::string mk = rRawStr(in);
+                uint8_t t = rU8(in);
+                if (t == TAG_OBJ) doc.scripts[mk] = readScript(in, mk);
                 else               skipValue(in, t);
             }
         }

@@ -40,6 +40,12 @@ Mc3EmbedGltf& Mc3Document::addEmbed(Mc3EmbedGltf embed) {
     return embeds[key];
 }
 
+Mc3Script& Mc3Document::addScript(Mc3Script script) {
+    const std::string key = script.id;
+    scripts[key] = std::move(script);
+    return scripts[key];
+}
+
 std::shared_ptr<Mc3Object> Mc3Document::addObject(std::shared_ptr<Mc3Object> obj) {
     objects.push_back(obj);
     return obj;

@@ -7,6 +7,7 @@
 #include "MeshCraft/Mc3/Mc3Material.hpp"
 #include "MeshCraft/Mc3/Mc3Object.hpp"
 #include "MeshCraft/Mc3/Mc3EmbedGltf.hpp"
+#include "MeshCraft/Mc3/Mc3Script.hpp"
 #include "MeshCraft/Mc3/Mc3SvgTexture.hpp"
 #include "MeshCraft/Mc3/Mc3Texture.hpp"
 
@@ -279,6 +280,12 @@ static void writeEmbed(std::ostream& o, const Mc3::Mc3EmbedGltf& em) {
     wEnd(o);
 }
 
+static void writeScript(std::ostream& o, const Mc3::Mc3Script& sc) {
+    wIfStr(o, "type",   sc.type,   "");
+    wIfStr(o, "source", sc.source, "");
+    wEnd(o);
+}
+
 static void writeMaterial(std::ostream& o, const Mc3::Mc3Material& m) {
     const Mc3::Mc3Material def;
     wIfStr (o, "name",                     m.name,                     "");
@@ -410,6 +417,10 @@ static void writeDocument(std::ostream& o, const Mc3::Mc3Document& doc) {
     if (!doc.embeds.empty()) {
         wKeyMap(o, "embeds", static_cast<uint32_t>(doc.embeds.size()));
         for (const auto& [k, v] : doc.embeds) { wRawStr(o, k); wU8(o, TAG_OBJ); writeEmbed(o, v); }
+    }
+    if (!doc.scripts.empty()) {
+        wKeyMap(o, "scripts", static_cast<uint32_t>(doc.scripts.size()));
+        for (const auto& [k, v] : doc.scripts) { wRawStr(o, k); wU8(o, TAG_OBJ); writeScript(o, v); }
     }
     if (!doc.materials.empty()) {
         wKeyMap(o, "materials", static_cast<uint32_t>(doc.materials.size()));

@@ -594,6 +594,21 @@
     </xs:sequence>
   </xs:complexType>
 
+  <!-- ── Scripts ──────────────────────────────────────────────── -->
+
+  <!-- mixed="true" allows inline Lua source as text content (CDATA) -->
+  <xs:complexType name="scriptElementType" mixed="true">
+    <xs:attribute name="id"   type="xs:ID"     use="required"/>
+    <!-- type: currently only "lua" is defined -->
+    <xs:attribute name="type" type="xs:string" use="required"/>
+  </xs:complexType>
+
+  <xs:complexType name="scriptsType">
+    <xs:sequence>
+      <xs:element name="script" type="scriptElementType" minOccurs="0" maxOccurs="unbounded"/>
+    </xs:sequence>
+  </xs:complexType>
+
   <!-- ── Textures ─────────────────────────────────────────────── -->
 
   <xs:complexType name="texturesType">
@@ -733,6 +748,7 @@
         <xs:element name="textures"    type="texturesType"         minOccurs="0"/>
         <xs:element name="materials"   type="materialsType"        minOccurs="0"/>
         <xs:element name="embeds"      type="embedsType"           minOccurs="0"/>
+        <xs:element name="scripts"     type="scriptsType"          minOccurs="0"/>
         <xs:element name="definitions" type="definitionsType"      minOccurs="0"/>
         <xs:element name="objects"     type="objectsContainerType" minOccurs="0"/>
         <xs:element name="actions"     type="mc3ActionsType"       minOccurs="0"/>

@@ -1,6 +1,6 @@
 # NEXT.md — MeshCraft Handoff Document
 
-_Last updated: 2026-06-26 (N2 embedded GLTF complete; N3–N7 mc3.xml schema extensions pending)_
+_Last updated: 2026-06-27 (N3 Lua scripts complete; N4–N7 mc3.xml schema extensions pending)_
 
 ---
 
@@ -64,9 +64,10 @@ N1 (SVG textures) and N2 (embedded GLTF) are complete. N3–N7 remain.
 - **L5** — EditorViewport.cpp stub implemented: added `EditorCamera` member + `PickRay pickRay()` method
 - **N1** — SVG texture: `Mc3SvgTexture` struct, `<texture type="svg">`, MCB, XSD, 10 roundtrip tests
 - **N2** — Embedded GLTF: `Mc3EmbedGltf` struct, `<embeds>` section, MCB, XSD, 13 roundtrip tests
+- **N3** — Lua scripts: `Mc3Script` struct, `<scripts>` section, MCB, XSD, 9 roundtrip tests
 
 ### What does not work yet
-- N3–N7: Lua scripts, sound/music, triggers, document-level scene states, `<meta>` — schema types
+- N4–N7: Sound/music, triggers, document-level scene states, `<meta>` — schema types
   not yet defined; no parser/writer/MCB/XSD/tests.
 - SVG → bitmap rasterization for GLTF export (N1 data model done; rasterization deferred).
 - `EditorViewport` not yet integrated into `MeshCraftApplication` — app still holds its own
@@ -102,15 +103,15 @@ N1 (SVG textures) and N2 (embedded GLTF) are complete. N3–N7 remain.
 
 **No current blocker.** Build is clean, all 15 tests pass.
 
-The next natural work is **N3** (Lua scripts): adding `Mc3Script` struct + `<scripts>` top-level
-section to mc3.xml. This follows the exact same 9-step pattern as N1/N2 and has no dependencies
-on incomplete or broken code.
+The next natural work is **N4** (Sound and music): adding `Mc3Sound` + `Mc3Music` structs and
+`<sounds>`/`<music>` sections. This follows the exact same 9-step pattern as N1–N3 and has no
+dependencies on incomplete or broken code.
 
 ---
 
 ## 5. Known Bugs and Limitations
 
-- **incomplete** — N3–N7 (Lua scripts, sound/music, triggers, scene states, meta) not yet implemented.
+- **incomplete** — N4–N7 (sound/music, triggers, scene states, meta) not yet implemented.
 - **incomplete** — `EditorViewport` not integrated into `MeshCraftApplication`; `camera_` and `gizmo_`
   are still direct members of the app class. `EditorViewport::pickRay()` is unused in production code.
 - **incomplete** — SVG-to-bitmap rasterization for GLTF export (noted in N1). The GLTF exporter
@@ -211,19 +212,7 @@ ctest --output-on-failure
 
 In priority order (from plan.md group N):
 
-### Task 1 — N3: Lua script support in mc3.xml
-**Goal:** `Mc3Script` struct + `<scripts>` section. Data model only; no Lua runtime.
-- `mc3/include/MeshCraft/Mc3/Mc3Script.hpp` — struct: `id`, `type` ("lua"), `source`
-- `Mc3Document.hpp` — `scripts` map + `addScript()`
-- `Mc3Document.cpp` — implement `addScript()`
-- `Mc3XmlParser.cpp` — `parseScripts()`: `<script type="lua" id="…">source</script>` (text content)
-- `Mc3XmlWriter.cpp` — emit `<scripts>` with SetCData for source
-- `McbWriter.cpp` + `McbReader.cpp` — serialize `scripts` map
-- `mc3.xsd` — `scriptElementType` (mixed, id, type) + `scriptsType` + root sequence entry
-- `roundtrip_test.cpp` — `testScript()`: inline source preserved, coexistence with objects
-- **Verify:** `ctest --output-on-failure` (expect 15/15)
-
-### Task 2 — N4: Sound and music elements in mc3.xml
+### Task 1 — N4: Sound and music elements in mc3.xml
 **Goal:** `Mc3Sound` + `Mc3Music` structs; `<sounds>` and `<music>` sections (no audio playback).
 - Two maps: `doc.sounds` (`Mc3Sound`: id, src, loop=false) and `doc.musicTracks` (`Mc3Music`: id, src, loop=true)
 - XML: `<sound id="…" src="…" loop="false"/>` and `<music id="…" src="…" loop="true"/>`
@@ -262,7 +251,7 @@ In priority order (from plan.md group N):
   the refactor to replace `camera_`/`gizmo_` touches too many files for the current focus (N3–N7).
 - **No SVG rasterization** — add `stb_image_write`/`lodepng` only after N3–N7 are done.
 - **No GLTF exporter changes for SVG/embed** — keep `GltfExporter.cpp` stable for now.
-- **No new plan.md groups** — complete N3–N7 before adding more scope.
+- **No new plan.md groups** — complete N4–N7 before adding more scope.
 - **No mass refactor** of `MeshCraftApplication_*.cpp` files.
 - **No `Mc3Document` field removals or renames** — breaks `mc3togltf` and test XMLs.
 - **No MCB format version bump** — MCB uses forward-compatible unknown-key skipping; new fields
@@ -276,9 +265,9 @@ In priority order (from plan.md group N):
 
 ```
 Read NEXT.md first. Then implement the next task listed in section 8
-(currently N3 — Lua script support in mc3.xml). Follow the exact 9-step
+(currently N4 — Sound and music elements in mc3.xml). Follow the exact 9-step
 checklist in that section. Do not refactor unrelated code. After each
 file change, verify: ninja mc3_roundtrip_test && ctest --output-on-failure
-Confirm all 15 tests still pass, then update NEXT.md to reflect N3 done
-and promote N4 to the top of section 8.
+Confirm all 15 tests still pass, then update NEXT.md to reflect N4 done
+and promote N5 to the top of section 8.
 ```

@@ -511,6 +511,21 @@ static void parseMaterials(const XMLElement* el, Mc3Document& doc) {
     }
 }
 
+static void parseScripts(const XMLElement* el, Mc3Document& doc) {
+    for (const XMLElement* c = el->FirstChildElement("script"); c;
+         c = c->NextSiblingElement("script")) {
+        std::string id   = attr(c, "id");
+        std::string type = attr(c, "type");
+        if (id.empty()) continue;
+        Mc3Script sc;
+        sc.id   = id;
+        sc.type = type;
+        const char* text = c->GetText();
+        if (text) sc.source = text;
+        doc.scripts[id] = std::move(sc);
+    }
+}
+
 static void parseEmbeds(const XMLElement* el, Mc3Document& doc) {
     for (const XMLElement* c = el->FirstChildElement("embed"); c;
          c = c->NextSiblingElement("embed")) {
@@ -764,6 +779,7 @@ Mc3Document Mc3XmlParser::parse(const std::filesystem::path& path) {
             if (const char* id = c->Attribute("id")) doc.includedDefs.erase(id);
     }
     if (const XMLElement* embs = root->FirstChildElement("embeds"))       parseEmbeds(embs,      doc);
+    if (const XMLElement* scrs = root->FirstChildElement("scripts"))      parseScripts(scrs,     doc);
     if (const XMLElement* objs = root->FirstChildElement("objects"))      parseObjects(objs,     doc);
     if (const XMLElement* acts = root->FirstChildElement("actions"))      parseActions(acts,     doc);
 
