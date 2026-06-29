@@ -1,0 +1,6 @@
+# cmake build dirs
+cmake-build-debug/*
+cmake-build-release/*
+
+# tool build dirs
+mc3togltf/build/*

@@ -5,3 +5,8 @@ b-release/
 *-build/
 .idea/
 *.user
+
+# editor / test runtime artifacts
+imgui.ini
+Testing/
+*.autosave
