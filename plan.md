@@ -72,10 +72,10 @@ _Generated: 2026-06-27 from full codebase + test audit. Replaces previous 100-ta
 | ID | St | Pri | Title | Key File(s) | Verification |
 |----|----|-----|-------|-------------|--------------|
 | STAB-0001 | ✅ | P0 | Verify clean debug build from root CMakeLists | `CMakeLists.txt` | `cmake .. -DBUILD_TESTING=ON && ninja` exits 0; 15/15 tests pass (verified 2026-06-27) |
-| STAB-0002 | 🧪 | P0 | Verify release build from root CMakeLists | `CMakeLists.txt` | `cmake -S . -B b -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=ON && cmake --build b -j4` exits 0 |
+| STAB-0002 | ✅ | P0 | Verify release build from root CMakeLists | `CMakeLists.txt` | `cmake -S . -B b-release -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=ON && cmake --build b-release -j4` exits 0; 381/381 targets, 17/17 CTest pass (verified 2026-06-29) |
 | STAB-0003 | 🧪 | P1 | Verify build with `BUILD_TESTING=OFF` | `CMakeLists.txt` | `cmake -S . -B b -DBUILD_TESTING=OFF && cmake --build b` — no test targets compiled |
 | STAB-0004 | ✅ | P0 | Confirm all 15 CTest tests are registered | `CMakeLists.txt`, `mc3/CMakeLists.txt`, `mc3togltf/CMakeLists.txt` | `ctest -N` lists exactly 15 tests (verified 2026-06-27) |
-| STAB-0005 | 🧪 | P1 | Verify `mc3` standalone build (without root project) | `mc3/CMakeLists.txt` | `cmake -S mc3 -B mc3-build -DBUILD_TESTING=ON && cmake --build mc3-build` |
+| STAB-0005 | ✅ | P1 | Verify `mc3` standalone build (without root project) | `mc3/CMakeLists.txt` | Fixed: guarded `mc3_commands_test` (needs editor `EditorAlgorithms.hpp` outside mc3/) + added `enable_testing()` for `PROJECT_IS_TOP_LEVEL`. `cmake -S mc3 -B mc3-build -DBUILD_TESTING=ON && cmake --build mc3-build` exits 0; `ctest` 1/1; root 17/17 unaffected (verified 2026-06-29) |
 | STAB-0006 | 🧪 | P1 | Verify `mc3togltf` standalone build | `mc3togltf/CMakeLists.txt` | `cmake -S mc3togltf -B togltf-build && cmake --build togltf-build` |
 | STAB-0007 | 🧪 | P1 | Verify `mcb` standalone build | `mcb/CMakeLists.txt` | `cmake -S mcb -B mcb-build && cmake --build mcb-build` |
 | STAB-0008 | 🧪 | P2 | Verify build without SQLite3 on supported platform | `CMakeLists.txt` | Use container without `libsqlite3-dev`; confirm `MESHCRAFT_HAS_SQLITE3` undefined; registry stubs compile |

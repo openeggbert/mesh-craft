@@ -56,6 +56,14 @@ target_link_libraries(Mc3 PRIVATE tinyxml2::tinyxml2)
 # -----------------------------------------------------------------------------
 
 if(BUILD_TESTING)
+    # When mc3 is built standalone (top-level project) nobody has called
+    # enable_testing() yet, so add_test() would silently register nothing.
+    # As a subdirectory of the root MeshCraft project, the root's include(CTest)
+    # already enabled testing.
+    if(PROJECT_IS_TOP_LEVEL)
+        enable_testing()
+    endif()
+
     add_executable(mc3_roundtrip_test test/roundtrip_test.cpp)
     target_link_libraries(mc3_roundtrip_test PRIVATE Mc3)
 
@@ -70,12 +78,23 @@ if(BUILD_TESTING)
              COMMAND mc3_roundtrip_test ${MC3_FEATURES_XML})
     set_tests_properties(mc3_roundtrip PROPERTIES TIMEOUT 15)
 
-    add_executable(mc3_commands_test test/editor_commands_test.cpp)
-    target_include_directories(mc3_commands_test PRIVATE
-        ${CMAKE_SOURCE_DIR}/src/MeshCraft
-    )
-    target_link_libraries(mc3_commands_test PRIVATE Mc3)
-    target_compile_features(mc3_commands_test PRIVATE cxx_std_23)
-    add_test(NAME mc3_commands COMMAND mc3_commands_test)
-    set_tests_properties(mc3_commands PROPERTIES TIMEOUT 15)
+    # editor_commands_test pulls in EditorAlgorithms.hpp from the MeshCraft
+    # editor sources, which live at the repo root (src/MeshCraft/) — outside
+    # the mc3/ subtree. Only build it when those sources are available (i.e.
+    # as part of the root MeshCraft project) so mc3 stays buildable standalone.
+    set(MC3_EDITOR_SRC_DIR "${CMAKE_SOURCE_DIR}/src/MeshCraft")
+    if(EXISTS "${MC3_EDITOR_SRC_DIR}/EditorAlgorithms.hpp")
+        add_executable(mc3_commands_test test/editor_commands_test.cpp)
+        target_include_directories(mc3_commands_test PRIVATE
+            ${MC3_EDITOR_SRC_DIR}
+        )
+        target_link_libraries(mc3_commands_test PRIVATE Mc3)
+        target_compile_features(mc3_commands_test PRIVATE cxx_std_23)
+        add_test(NAME mc3_commands COMMAND mc3_commands_test)
+        set_tests_properties(mc3_commands PROPERTIES TIMEOUT 15)
+    else()
+        message(STATUS "mc3: skipping mc3_commands_test — MeshCraft editor "
+                       "sources not found at ${MC3_EDITOR_SRC_DIR} "
+                       "(standalone mc3 build)")
+    endif()
 endif()

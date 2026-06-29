@@ -1,5 +1,7 @@
 build/
 build-*/
 cmake-build-*/
+b-release/
+*-build/
 .idea/
 *.user
