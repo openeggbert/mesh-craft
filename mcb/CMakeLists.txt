@@ -5,6 +5,17 @@ set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
+# --------------------------------------------------------------------------
+# Mc3 library (from parent repo)
+# When included from the root CMakeLists the target already exists; this
+# guard adds it as a subdirectory only for standalone `mcb` builds so the
+# Mc3 headers/include dirs are available.
+# --------------------------------------------------------------------------
+if(NOT TARGET Mc3)
+    get_filename_component(_mc3_dir "${CMAKE_CURRENT_SOURCE_DIR}/../mc3" ABSOLUTE)
+    add_subdirectory("${_mc3_dir}" mc3_dep)
+endif()
+
 add_library(Mcb STATIC
     src/McbWriter.cpp
     src/McbReader.cpp

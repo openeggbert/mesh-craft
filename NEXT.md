@@ -39,6 +39,12 @@ Gate 2 (Export) priority items complete. Gate 3 (Editor safety) is next.
   the root project; standalone `ctest` 11/11. No CMakeLists change needed —
   already correctly guarded. Built offline by pointing `FETCHCONTENT_SOURCE_DIR_*`
   at `cmake-build-debug/_deps/{manifold,tinygltf,tinyobjloader}-src`.
+- **`mcb` standalone build:** ✅ verified 2026-06-30 (STAB-0007) — `mcb-build/`
+  builds `Mcb` lib + `mcb_roundtrip_test` (19/19 targets) without the root
+  project; standalone `ctest` 1/1. **Needed a fix** — added an
+  `if(NOT TARGET Mc3)` guard to `mcb/CMakeLists.txt` so the standalone build
+  adds `../mc3` as a subdirectory (previously failed: Mc3 headers not on the
+  include path → `Mc3Document.hpp: No such file or directory`).
 
 ### Tests — 17/17 CTest pass (Debug ~3.4 s, Release ~3.6 s)
 1. `smoke_test`  2. `xsd_validation`  3. `mc3_registry`  4. `mc3_roundtrip`
@@ -79,6 +85,17 @@ intentionally skips `mc3_commands` (editor-dependent — see §3/§5).
 ---
 
 ## 3. Recent changes (2026-06-30)
+
+**STAB-0007 — verify `mcb` standalone build (code change):**
+- `mcb/CMakeLists.txt` — added an `if(NOT TARGET Mc3)` guard that runs
+  `add_subdirectory(../mc3 mc3_dep)` only when `Mc3` doesn't already exist
+  (i.e. standalone builds). Mirrors the existing guard in `mc3togltf/CMakeLists.txt`.
+- **Behaviour changed:** none in the root build — the guard is a no-op there
+  (`Mc3` already exists), confirmed by a full root rebuild (381 targets) + 17/17.
+- Standalone: `cmake -S mcb -B mcb-build -G Ninja && cmake --build mcb-build`
+  now exits 0 (19/19 targets), `ctest` 1/1. The mc3 sub-build correctly skips
+  `mc3_commands_test` via the STAB-0005 guard.
+- `plan.md` — STAB-0007 marked ✅. `NEXT.md` — refreshed.
 
 **STAB-0006 — verify `mc3togltf` standalone build (no code change):**
 - Configured + built `mc3togltf/` as a top-level CMake project into
@@ -226,6 +243,12 @@ cmake -S mc3togltf -B togltf-build -G Ninja -DBUILD_TESTING=ON \
 cmake --build togltf-build -j4
 (cd togltf-build && ctest --output-on-failure)   # 11/11
 
+# --- mcb standalone build — STAB-0007
+cmake -S mcb -B mcb-build -G Ninja -DBUILD_TESTING=ON \
+      -DFETCHCONTENT_UPDATES_DISCONNECTED=ON
+cmake --build mcb-build -j4
+(cd mcb-build && ctest --output-on-failure)   # 1/1 (mc3_commands skipped)
+
 # --- Export a scene
 ./cmake-build-debug/mc3togltf/mc3togltf test/features.mc3.xml /tmp/out.glb
 
@@ -242,30 +265,22 @@ No project linter/formatter is configured.
 
 ## 8. Next smallest tasks
 
-1. **STAB-0007** — Verify `mcb` standalone build.
-   Goal: confirm `mcb/` builds + tests standalone.
-   Files: `mcb/CMakeLists.txt` (may need the same `enable_testing()` /
-   `PROJECT_IS_TOP_LEVEL` guard as mc3).
-   Verify: `cmake -S mcb -B mcb-build -G Ninja \
-           -DFETCHCONTENT_UPDATES_DISCONNECTED=ON && cmake --build mcb-build \
-           && (cd mcb-build && ctest)`.
-
-2. **STAB-0058** — Add CTest for `mc3tomcb` CLI (binary round-trip).
+1. **STAB-0058** — Add CTest for `mc3tomcb` CLI (binary round-trip).
    Goal: round-trip `mc3 → mcb → mc3` via the CLIs and diff.
    Files: new Python test under `mcb/test/` or `test/`, `mcb/CMakeLists.txt`.
    Verify: `ctest -R mc3tomcb --output-on-failure`.
 
-3. **STAB-0025** — Create `.github/workflows/ci.yml` skeleton.
+2. **STAB-0025** — Create `.github/workflows/ci.yml` skeleton.
    Goal: configure + build + ctest on push.
    Files: `.github/workflows/ci.yml`.
    Verify: `act` locally or push to a branch and check Actions.
 
-4. **STAB-0279** — Extend editor-command undo/redo coverage.
+3. **STAB-0279** — Extend editor-command undo/redo coverage.
    Goal: assert each command is undoable and round-trips `Mc3Document` state.
    Files: `mc3/test/editor_commands_test.cpp`.
    Verify: `ctest -R mc3_commands --output-on-failure`.
 
-5. **STAB-0265** — Verify autosave writes `.autosave` on change.
+4. **STAB-0265** — Verify autosave writes `.autosave` on change.
    Goal: confirm autosave path/trigger; note stray `test/*.mc3.xml.autosave`
    files already present in the tree.
    Files: `src/MeshCraft/MeshCraftApplication*.cpp`, new/targeted test.
@@ -292,7 +307,7 @@ No project linter/formatter is configured.
 
 ```
 Read NEXT.md first. Then inspect only the files needed for the first task in
-section 8 (STAB-0007 — verify mcb standalone build). Do not refactor
+section 8 (STAB-0058 — add CTest for the mc3tomcb CLI). Do not refactor
 unrelated code. Make one small, verified improvement. Build/test with the
 commands in section 7 and confirm cmake-build-debug still passes 17/17
 (ctest --output-on-failure). Update NEXT.md after finishing.
