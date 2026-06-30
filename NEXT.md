@@ -1,6 +1,6 @@
 # NEXT.md — MeshCraft handoff document
 
-_Last updated: 2026-06-29_
+_Last updated: 2026-06-30_
 
 ---
 
@@ -34,6 +34,11 @@ Gate 2 (Export) priority items complete. Gate 3 (Editor safety) is next.
 - **Offline mode:** working (`-DFETCHCONTENT_UPDATES_DISCONNECTED=ON`).
 - **`mc3` standalone build:** ✅ verified 2026-06-29 (STAB-0005) — `mc3-build/`
   builds the `Mc3` lib + `mc3_roundtrip_test` without the root project.
+- **`mc3togltf` standalone build:** ✅ verified 2026-06-30 (STAB-0006) —
+  `togltf-build/` builds `mc3togltf_lib` + `mc3togltf` (41/41 targets) without
+  the root project; standalone `ctest` 11/11. No CMakeLists change needed —
+  already correctly guarded. Built offline by pointing `FETCHCONTENT_SOURCE_DIR_*`
+  at `cmake-build-debug/_deps/{manifold,tinygltf,tinyobjloader}-src`.
 
 ### Tests — 17/17 CTest pass (Debug ~3.4 s, Release ~3.6 s)
 1. `smoke_test`  2. `xsd_validation`  3. `mc3_registry`  4. `mc3_roundtrip`
@@ -73,9 +78,22 @@ intentionally skips `mc3_commands` (editor-dependent — see §3/§5).
 
 ---
 
-## 3. Recent changes (2026-06-29)
+## 3. Recent changes (2026-06-30)
 
-**Modified files:**
+**STAB-0006 — verify `mc3togltf` standalone build (no code change):**
+- Configured + built `mc3togltf/` as a top-level CMake project into
+  `togltf-build/` with system cmake 3.31.6, fully offline. Result: 41/41
+  targets link, standalone `ctest` 11/11, root Debug still 17/17.
+- `mc3togltf/CMakeLists.txt` needed **no change** — its FetchContent/`add_subdirectory`
+  guards (`if(NOT TARGET manifold)`, `if(NOT TARGET Mc3)`, `FetchContent_GetProperties`)
+  already make it standalone-safe. The mc3 sub-build correctly skipped
+  `mc3_commands_test` (editor sources outside the subtree) via the STAB-0005 guard.
+- `plan.md` — STAB-0006 marked ✅. `NEXT.md` — this handoff refreshed.
+- Offline trick: pass `-DFETCHCONTENT_SOURCE_DIR_{MANIFOLD,TINYGLTF,TINYOBJLOADER}`
+  pointing at `cmake-build-debug/_deps/*-src` to reuse already-fetched sources
+  (the `togltf-build/` dir is gitignored via `*-build/`).
+
+**Previous changes (2026-06-29):**
 - `mc3/CMakeLists.txt` — STAB-0005 fix for standalone build:
   - `mc3_commands_test` is now guarded by
     `if(EXISTS "${CMAKE_SOURCE_DIR}/src/MeshCraft/EditorAlgorithms.hpp")`.
@@ -198,6 +216,16 @@ cmake -S mc3 -B mc3-build -G Ninja -DBUILD_TESTING=ON \
 cmake --build mc3-build -j4
 (cd mc3-build && ctest --output-on-failure)   # 1/1 (mc3_commands skipped)
 
+# --- mc3togltf standalone build — STAB-0006 (offline: reuse cached _deps)
+DEPS="$PWD/cmake-build-debug/_deps"
+cmake -S mc3togltf -B togltf-build -G Ninja -DBUILD_TESTING=ON \
+      -DFETCHCONTENT_UPDATES_DISCONNECTED=ON \
+      -DFETCHCONTENT_SOURCE_DIR_MANIFOLD="$DEPS/manifold-src" \
+      -DFETCHCONTENT_SOURCE_DIR_TINYGLTF="$DEPS/tinygltf-src" \
+      -DFETCHCONTENT_SOURCE_DIR_TINYOBJLOADER="$DEPS/tinyobjloader-src"
+cmake --build togltf-build -j4
+(cd togltf-build && ctest --output-on-failure)   # 11/11
+
 # --- Export a scene
 ./cmake-build-debug/mc3togltf/mc3togltf test/features.mc3.xml /tmp/out.glb
 
@@ -214,14 +242,7 @@ No project linter/formatter is configured.
 
 ## 8. Next smallest tasks
 
-1. **STAB-0006** — Verify `mc3togltf` standalone build.
-   Goal: confirm `mc3togltf/` builds without the root project (watch for the
-   same editor-/root-path coupling as STAB-0005).
-   Files: `mc3togltf/CMakeLists.txt`.
-   Verify: `cmake -S mc3togltf -B togltf-build -G Ninja \
-           -DFETCHCONTENT_UPDATES_DISCONNECTED=ON && cmake --build togltf-build`.
-
-2. **STAB-0007** — Verify `mcb` standalone build.
+1. **STAB-0007** — Verify `mcb` standalone build.
    Goal: confirm `mcb/` builds + tests standalone.
    Files: `mcb/CMakeLists.txt` (may need the same `enable_testing()` /
    `PROJECT_IS_TOP_LEVEL` guard as mc3).
@@ -229,22 +250,22 @@ No project linter/formatter is configured.
            -DFETCHCONTENT_UPDATES_DISCONNECTED=ON && cmake --build mcb-build \
            && (cd mcb-build && ctest)`.
 
-3. **STAB-0058** — Add CTest for `mc3tomcb` CLI (binary round-trip).
+2. **STAB-0058** — Add CTest for `mc3tomcb` CLI (binary round-trip).
    Goal: round-trip `mc3 → mcb → mc3` via the CLIs and diff.
    Files: new Python test under `mcb/test/` or `test/`, `mcb/CMakeLists.txt`.
    Verify: `ctest -R mc3tomcb --output-on-failure`.
 
-4. **STAB-0025** — Create `.github/workflows/ci.yml` skeleton.
+3. **STAB-0025** — Create `.github/workflows/ci.yml` skeleton.
    Goal: configure + build + ctest on push.
    Files: `.github/workflows/ci.yml`.
    Verify: `act` locally or push to a branch and check Actions.
 
-5. **STAB-0279** — Extend editor-command undo/redo coverage.
+4. **STAB-0279** — Extend editor-command undo/redo coverage.
    Goal: assert each command is undoable and round-trips `Mc3Document` state.
    Files: `mc3/test/editor_commands_test.cpp`.
    Verify: `ctest -R mc3_commands --output-on-failure`.
 
-6. **STAB-0265** — Verify autosave writes `.autosave` on change.
+5. **STAB-0265** — Verify autosave writes `.autosave` on change.
    Goal: confirm autosave path/trigger; note stray `test/*.mc3.xml.autosave`
    files already present in the tree.
    Files: `src/MeshCraft/MeshCraftApplication*.cpp`, new/targeted test.
@@ -271,7 +292,7 @@ No project linter/formatter is configured.
 
 ```
 Read NEXT.md first. Then inspect only the files needed for the first task in
-section 8 (STAB-0006 — verify mc3togltf standalone build). Do not refactor
+section 8 (STAB-0007 — verify mcb standalone build). Do not refactor
 unrelated code. Make one small, verified improvement. Build/test with the
 commands in section 7 and confirm cmake-build-debug still passes 17/17
 (ctest --output-on-failure). Update NEXT.md after finishing.
