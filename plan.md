@@ -135,7 +135,7 @@ _Generated: 2026-06-27 from full codebase + test audit. Replaces previous 100-ta
 | STAB-0055 | 📋 | P1 | Add `mc3togltf_gltf` assertion: verify exported GLB `scenes` has exactly 1 scene | `mc3togltf/test/gltf_test.py` | GLB JSON `scenes` length == 1 |
 | STAB-0056 | 📋 | P2 | Add determinism test: same input → bit-identical GLB output | `mc3togltf/test/gltf_test.py` | Run mc3togltf twice on same input; compare output bytes |
 | STAB-0057 | 📋 | P2 | Add `ctest --rerun-failed` workflow documentation | `README.md` | README explains how to rerun failed tests |
-| STAB-0058 | 📋 | P2 | Add CTest test for mcb CLI (mc3tomcb tool) | `mc3tomcb/CMakeLists.txt` | `mc3tomcb features.mc3.xml /tmp/out.mcb` exits 0; file has correct header bytes |
+| STAB-0058 | ✅ | P2 | Add CTest test for mcb CLI (mc3tomcb tool) | `mc3tomcb/CMakeLists.txt`, `mc3tomcb/test/mc3tomcb_roundtrip_test.py` | Added `mc3tomcb_roundtrip` CTest: drives the CLI through `mc3.xml→mcb→mc3.xml→mcb→mc3.xml` over 9 fixtures (incl. N3–N7), asserting MCB magic header, fixpoint determinism (a.mcb==c.mcb, b.xml==d.xml) and no dropped scene content. `ctest -R mc3tomcb_roundtrip` 1/1; root now 18/18 (verified 2026-06-30) |
 | STAB-0059 | 📋 | P2 | Add test for mc3tomcb round-trip: mc3.xml → MCB → decode → compare | new test | `mc3tomcb in.mc3.xml out.mcb && mc3frommcb out.mcb restored.mc3.xml && diff in.mc3.xml restored.mc3.xml` |
 | STAB-0060 | 🧪 | P1 | Verify GLB magic number test asserts on bytes 0-3 | `mc3togltf/test/gltf_test.py` | `assert data[:4] == b'glTF'` present in gltf_test.py |
 | STAB-0061 | 🧪 | P1 | Verify `mc3_registry` test covers migration (ALTER TABLE ADD COLUMN) | `mc3/test/mc3_registry_test.cpp` | Test explicitly creates table without `description`/`source` then calls `open()` |

@@ -46,14 +46,14 @@ Gate 2 (Export) priority items complete. Gate 3 (Editor safety) is next.
   adds `../mc3` as a subdirectory (previously failed: Mc3 headers not on the
   include path → `Mc3Document.hpp: No such file or directory`).
 
-### Tests — 17/17 CTest pass (Debug ~3.4 s, Release ~3.6 s)
+### Tests — 18/18 CTest pass (Debug ~4.8 s, Release ~3.6 s)
 1. `smoke_test`  2. `xsd_validation`  3. `mc3_registry`  4. `mc3_roundtrip`
-5. `mc3_commands`  6. `mcb_roundtrip`  7. `mc3togltf_gltf`
-8. `mc3togltf_all_primitives`  9. `mc3togltf_export_verification`
-10. `mc3togltf_large_scene`  11. `mc3togltf_csg_strict`  12. `mc3togltf_csg_export`
-13. `mc3togltf_csg_unsupported`  14. `mc3togltf_csg_nested`
-15. `mc3togltf_instance_deform_cache`  16. `mc3togltf_float_cache_key`
-17. `mc3togltf_large_scene_generated`
+5. `mc3_commands`  6. `mcb_roundtrip`  7. `mc3tomcb_roundtrip`  8. `mc3togltf_gltf`
+9. `mc3togltf_all_primitives`  10. `mc3togltf_export_verification`
+11. `mc3togltf_large_scene`  12. `mc3togltf_csg_strict`  13. `mc3togltf_csg_export`
+14. `mc3togltf_csg_unsupported`  15. `mc3togltf_csg_nested`
+16. `mc3togltf_instance_deform_cache`  17. `mc3togltf_float_cache_key`
+18. `mc3togltf_large_scene_generated`
 
 Standalone `mc3-build/` registers and passes `mc3_roundtrip` (1/1); it
 intentionally skips `mc3_commands` (editor-dependent — see §3/§5).
@@ -61,7 +61,8 @@ intentionally skips `mc3_commands` (editor-dependent — see §3/§5).
 ### Tools / libraries available
 - `MeshCraft` — editor executable (builds; viewport not fully integrated).
 - `mc3togltf` — CLI: `mc3togltf in.mc3.xml out.glb`.
-- `mc3tomcb` / `mc3frommcb` — MCB binary serialization CLIs (no CTest yet).
+- `mc3tomcb` — bidirectional MCB serialization CLI (`mc3.xml`↔`.mcb`, direction
+  by extension); covered by the `mc3tomcb_roundtrip` CTest (STAB-0058).
 - `Mc3` static lib — scene data, XML load/save.
 - `Mcb` static lib — binary serialization (McbWriter + McbReader).
 - `mc3togltf_lib` static lib — GltfExporter, MeshBuilder, CsgEvaluator.
@@ -79,12 +80,26 @@ intentionally skips `mc3_commands` (editor-dependent — see §3/§5).
 - EditorViewport not integrated into the `MeshCraftApplication` render loop.
 - SVG texture rasterization not implemented (stub only).
 - Embedded GLTF not resolved/inlined in GltfExporter.
-- `mc3tomcb`/`mc3frommcb` have no CTest coverage.
 - No CI/CD workflow.
 
 ---
 
 ## 3. Recent changes (2026-06-30)
+
+**STAB-0058 — add CTest for the `mc3tomcb` CLI (new test, no behaviour change):**
+- New `mc3tomcb/test/mc3tomcb_roundtrip_test.py` + registration in
+  `mc3tomcb/CMakeLists.txt` (`include(CTest)` + `mc3tomcb_roundtrip` test).
+- The test drives the CLI through `mc3.xml → mcb → mc3.xml → mcb → mc3.xml`
+  for 9 fixtures (incl. N3–N7) and asserts: (1) MCB magic header `MCB\0`,
+  (2) fixpoint determinism — the 2nd MCB blob is byte-identical to the 1st and
+  the 2nd canonical XML equals the 1st, (3) no scene content dropped — element
+  tag multiset + root `model` preserved (Bezier handle tags excluded; the XML
+  writer canonicalises them on save regardless of MCB).
+- Registered in `mc3tomcb/CMakeLists.txt` (not `mcb/`) so the `mcb` standalone
+  build stays free of the `mc3tomcb` target (keeps STAB-0007 green).
+- **Test count:** 17 → 18. Root `ctest` 18/18 (Debug). Negative-checked: the
+  test exits non-zero when the CLI produces no output.
+- `plan.md` — STAB-0058 marked ✅. `NEXT.md` — refreshed.
 
 **STAB-0007 — verify `mcb` standalone build (code change):**
 - `mcb/CMakeLists.txt` — added an `if(NOT TARGET Mc3)` guard that runs
@@ -162,8 +177,8 @@ headless may need an offscreen/stub GL context. Lower-risk pure-logic pieces
   GltfExporter. _status: incomplete._
 - **EditorViewport not integrated** — renderer exists but not wired into
   `MeshCraftApplication`. _status: incomplete._
-- **mc3tomcb / mc3frommcb CLIs** — exist, no CTest coverage. _status: needs
-  verification._
+- **mc3tomcb CLI** — covered by the `mc3tomcb_roundtrip` CTest since STAB-0058.
+  _status: done._
 - **No CI** — `.github/workflows/ci.yml` not created. _status: incomplete._
 - **AI tests need network** — mock layer needed for STAB-0371–0376. _status:
   incomplete._
@@ -257,6 +272,7 @@ python3 test/validate_xsd.py mc3/mc3.xsd test/features.mc3.xml
 
 # --- Run a single test
 ctest -R mcb_roundtrip --output-on-failure
+ctest -R mc3tomcb_roundtrip --output-on-failure   # STAB-0058 CLI round-trip
 ```
 
 No project linter/formatter is configured.
@@ -265,22 +281,17 @@ No project linter/formatter is configured.
 
 ## 8. Next smallest tasks
 
-1. **STAB-0058** — Add CTest for `mc3tomcb` CLI (binary round-trip).
-   Goal: round-trip `mc3 → mcb → mc3` via the CLIs and diff.
-   Files: new Python test under `mcb/test/` or `test/`, `mcb/CMakeLists.txt`.
-   Verify: `ctest -R mc3tomcb --output-on-failure`.
-
-2. **STAB-0025** — Create `.github/workflows/ci.yml` skeleton.
+1. **STAB-0025** — Create `.github/workflows/ci.yml` skeleton.
    Goal: configure + build + ctest on push.
    Files: `.github/workflows/ci.yml`.
    Verify: `act` locally or push to a branch and check Actions.
 
-3. **STAB-0279** — Extend editor-command undo/redo coverage.
+2. **STAB-0279** — Extend editor-command undo/redo coverage.
    Goal: assert each command is undoable and round-trips `Mc3Document` state.
    Files: `mc3/test/editor_commands_test.cpp`.
    Verify: `ctest -R mc3_commands --output-on-failure`.
 
-4. **STAB-0265** — Verify autosave writes `.autosave` on change.
+3. **STAB-0265** — Verify autosave writes `.autosave` on change.
    Goal: confirm autosave path/trigger; note stray `test/*.mc3.xml.autosave`
    files already present in the tree.
    Files: `src/MeshCraft/MeshCraftApplication*.cpp`, new/targeted test.
@@ -307,9 +318,9 @@ No project linter/formatter is configured.
 
 ```
 Read NEXT.md first. Then inspect only the files needed for the first task in
-section 8 (STAB-0058 — add CTest for the mc3tomcb CLI). Do not refactor
-unrelated code. Make one small, verified improvement. Build/test with the
-commands in section 7 and confirm cmake-build-debug still passes 17/17
+section 8 (STAB-0025 — create the .github/workflows/ci.yml skeleton). Do not
+refactor unrelated code. Make one small, verified improvement. Build/test with
+the commands in section 7 and confirm cmake-build-debug still passes 18/18
 (ctest --output-on-failure). Update NEXT.md after finishing.
 
 Current branch: develop

@@ -31,3 +31,42 @@ add_executable(mc3tomcb
 target_link_libraries(mc3tomcb PRIVATE Mcb Mc3)
 
 install(TARGETS mc3tomcb RUNTIME DESTINATION bin)
+
+# --------------------------------------------------------------------------
+# Tests — STAB-0058: drive the CLI through mc3.xml -> mcb -> mc3.xml and back,
+# asserting a deterministic, lossless round-trip.
+# --------------------------------------------------------------------------
+include(CTest)
+
+if(BUILD_TESTING)
+    find_program(PYTHON3_EXEC python3)
+    if(PYTHON3_EXEC)
+        set(_rt_fixtures
+            "${CMAKE_CURRENT_SOURCE_DIR}/../test/features.mc3.xml"
+            "${CMAKE_CURRENT_SOURCE_DIR}/../test/all_objects.mc3.xml"
+            "${CMAKE_CURRENT_SOURCE_DIR}/../test/all_primitives.mc3.xml"
+            "${CMAKE_CURRENT_SOURCE_DIR}/../test/house.mc3.xml"
+            "${CMAKE_CURRENT_SOURCE_DIR}/../test/n3_scripts.mc3.xml"
+            "${CMAKE_CURRENT_SOURCE_DIR}/../test/n4_sounds_music.mc3.xml"
+            "${CMAKE_CURRENT_SOURCE_DIR}/../test/n5_triggers.mc3.xml"
+            "${CMAKE_CURRENT_SOURCE_DIR}/../test/n6_scene_states.mc3.xml"
+            "${CMAKE_CURRENT_SOURCE_DIR}/../test/n7_meta.mc3.xml"
+        )
+        set(_rt_existing)
+        foreach(_fx IN LISTS _rt_fixtures)
+            if(EXISTS "${_fx}")
+                list(APPEND _rt_existing "${_fx}")
+            endif()
+        endforeach()
+        if(_rt_existing)
+            add_test(
+                NAME mc3tomcb_roundtrip
+                COMMAND "${PYTHON3_EXEC}"
+                        "${CMAKE_CURRENT_SOURCE_DIR}/test/mc3tomcb_roundtrip_test.py"
+                        "$<TARGET_FILE:mc3tomcb>"
+                        ${_rt_existing}
+            )
+            set_tests_properties(mc3tomcb_roundtrip PROPERTIES TIMEOUT 60)
+        endif()
+    endif()
+endif()
