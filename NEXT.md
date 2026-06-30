@@ -80,11 +80,27 @@ intentionally skips `mc3_commands` (editor-dependent — see §3/§5).
 - EditorViewport not integrated into the `MeshCraftApplication` render loop.
 - SVG texture rasterization not implemented (stub only).
 - Embedded GLTF not resolved/inlined in GltfExporter.
-- No CI/CD workflow.
+- CI covers only the CNA-free libs; no full-editor (CNA + SDL3) CI job yet.
 
 ---
 
 ## 3. Recent changes (2026-06-30)
+
+**STAB-0025 — CI skeleton (new file, no source change):**
+- New `.github_/workflows/ci.yml` — a GitHub Actions matrix job that builds each
+  CNA-free component (`mc3`, `mcb`, `mc3togltf`, `mc3tomcb`) as a standalone
+  CMake project (Release, Ninja, g++-14) and runs its `ctest` on push/PR to
+  `master`/`develop`. Covers 14 of 18 tests without needing CNA/SDL3/OpenGL.
+- **Parked deactivated** under `.github_/` (trailing underscore), not `.github/`:
+  the push token lacks the `workflow` scope GitHub requires for files under
+  `.github/workflows/`. To activate: rename `.github_` → `.github` and push with
+  a `workflow`-scoped token.
+- The full editor build (root project → needs the CNA sibling repo at `../cna`
+  + SDL3/OpenGL/SQLite3) is left as a documented TODO in the workflow header;
+  it would add the 4 root-level tests (smoke, xsd_validation, mc3_registry,
+  mc3_commands).
+- Validated by running the exact CI commands locally for all four components:
+  mc3 1/1, mcb 1/1, mc3togltf 11/11, mc3tomcb 2/2.
 
 **STAB-0058 — add CTest for the `mc3tomcb` CLI (new test, no behaviour change):**
 - New `mc3tomcb/test/mc3tomcb_roundtrip_test.py` + registration in
@@ -179,7 +195,10 @@ headless may need an offscreen/stub GL context. Lower-risk pure-logic pieces
   `MeshCraftApplication`. _status: incomplete._
 - **mc3tomcb CLI** — covered by the `mc3tomcb_roundtrip` CTest since STAB-0058.
   _status: done._
-- **No CI** — `.github/workflows/ci.yml` not created. _status: incomplete._
+- **CI** — `.github_/workflows/ci.yml` builds/tests the CNA-free libs (STAB-0025),
+  parked deactivated under `.github_/` (token lacks `workflow` scope; rename to
+  `.github/` to activate). A full-editor CI job (CNA + SDL3) is still missing.
+  _status: partial._
 - **AI tests need network** — mock layer needed for STAB-0371–0376. _status:
   incomplete._
 - **AI truncation** — see `AI_TRUNCATION_BUG.md`: `max_tokens` hard-capped at
@@ -281,17 +300,12 @@ No project linter/formatter is configured.
 
 ## 8. Next smallest tasks
 
-1. **STAB-0025** — Create `.github/workflows/ci.yml` skeleton.
-   Goal: configure + build + ctest on push.
-   Files: `.github/workflows/ci.yml`.
-   Verify: `act` locally or push to a branch and check Actions.
-
-2. **STAB-0279** — Extend editor-command undo/redo coverage.
+1. **STAB-0279** — Extend editor-command undo/redo coverage.
    Goal: assert each command is undoable and round-trips `Mc3Document` state.
    Files: `mc3/test/editor_commands_test.cpp`.
    Verify: `ctest -R mc3_commands --output-on-failure`.
 
-3. **STAB-0265** — Verify autosave writes `.autosave` on change.
+2. **STAB-0265** — Verify autosave writes `.autosave` on change.
    Goal: confirm autosave path/trigger; note stray `test/*.mc3.xml.autosave`
    files already present in the tree.
    Files: `src/MeshCraft/MeshCraftApplication*.cpp`, new/targeted test.
@@ -318,7 +332,7 @@ No project linter/formatter is configured.
 
 ```
 Read NEXT.md first. Then inspect only the files needed for the first task in
-section 8 (STAB-0025 — create the .github/workflows/ci.yml skeleton). Do not
+section 8 (STAB-0279 — extend editor-command undo/redo coverage). Do not
 refactor unrelated code. Make one small, verified improvement. Build/test with
 the commands in section 7 and confirm cmake-build-debug still passes 18/18
 (ctest --output-on-failure). Update NEXT.md after finishing.

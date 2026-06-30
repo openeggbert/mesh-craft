@@ -95,7 +95,7 @@ _Generated: 2026-06-27 from full codebase + test audit. Replaces previous 100-ta
 | STAB-0022 | 🧪 | P1 | Confirm CMake min-version 3.21 is actually required | `CMakeLists.txt` | Test with CMake 3.21; build passes |
 | STAB-0023 | 🧪 | P2 | Confirm C++23 features used compile with GCC ≥ 13 | `CMakeLists.txt` | Build with GCC 13; `deducing-this` lambdas in UiMenuBar.cpp compile cleanly |
 | STAB-0024 | 🧪 | P2 | Confirm C++23 features compile with Clang ≥ 17 | `CMakeLists.txt` | Build with Clang 17; no errors |
-| STAB-0025 | 📋 | P2 | Create `.github/workflows/ci.yml` skeleton | `.github/workflows/ci.yml` | CI workflow runs cmake + ctest on push to develop/master |
+| STAB-0025 | ✅ | P2 | Create `.github/workflows/ci.yml` skeleton | `.github_/workflows/ci.yml` | Added GH Actions matrix workflow building the CNA-free libs (mc3/mcb/mc3togltf/mc3tomcb) standalone + ctest on push/PR to develop/master. Dry-run of exact CI commands locally: 1/1, 1/1, 11/11, 2/2 (15 runs, 14 unique tests). Full editor build (needs CNA sibling + SDL3) left as documented TODO. **Parked deactivated under `.github_/`** (push token lacks `workflow` scope; rename to `.github/` to activate). (verified 2026-06-30) |
 
 ---
 
