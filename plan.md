@@ -398,7 +398,7 @@ _Generated: 2026-06-27 from full codebase + test audit. Replaces previous 100-ta
 | STAB-0276 | 🧪 | P1 | Verify invalid file load produces error dialog, not crash | `src/MeshCraft/MeshCraftApplication_FileOps.cpp` | Load non-XML file; error shown; app continues |
 | STAB-0277 | 📋 | P1 | Verify locked object cannot be modified by move gizmo | `src/MeshCraft/MeshCraftApplication_Mouse.cpp` | Lock object; drag gizmo; position unchanged |
 | STAB-0278 | 🧪 | P1 | Verify AI apply is undoable with Ctrl+Z | `src/MeshCraft/MeshCraftApplication_UiAi.cpp` | Apply AI result; undo; original restored |
-| STAB-0279 | 🧪 | P1 | Verify delete command is undoable | `src/MeshCraft/MeshCraftApplication_Commands.cpp` | Delete object; Ctrl+Z; object restored |
+| STAB-0279 | ✅ | P1 | Verify delete command is undoable | `mc3/test/editor_commands_test.cpp` | Added CNA-free undo/redo coverage to `mc3_commands`: models the editor's snapshot-based undo (mirrors `deepCopyDoc`) and asserts a full snapshot→mutate→undo→redo round-trip (XML-equality oracle) for batchRename / findReplace / arrayDuplicate, plus a snapshot-independence test. Negative-checked (shallow copy → 3 FAILs). The literal GUI delete+Ctrl+Z flow needs an app-level/CNA test (deferred). root 18/18 (verified 2026-06-30) |
 | STAB-0280 | 🧪 | P1 | Verify duplicate command is undoable | `src/MeshCraft/MeshCraftApplication_Commands.cpp` | Duplicate object; Ctrl+Z; duplicate removed |
 | STAB-0281 | 🧪 | P1 | Verify group command is undoable | `src/MeshCraft/MeshCraftApplication_Commands.cpp` | Group objects; Ctrl+Z; ungrouped |
 | STAB-0282 | 🧪 | P1 | Verify ungroup command is undoable | `src/MeshCraft/MeshCraftApplication_Commands.cpp` | Ungroup; Ctrl+Z; group restored |

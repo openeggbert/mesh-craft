@@ -4,9 +4,12 @@
 #include <MeshCraft/Mc3/Mc3Object.hpp>
 
 #include <cmath>
+#include <filesystem>
+#include <fstream>
 #include <iostream>
 #include <memory>
 #include <set>
+#include <sstream>
 #include <string>
 #include <vector>
 
@@ -30,6 +33,89 @@ static std::shared_ptr<Mc3Object> makeObj(const std::string& id,
     o->name = name;
     o->type = type;
     return o;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Undo/redo helpers (STAB-0279)
+//
+// The editor's undo/redo is snapshot-based: pushUndo() stores a full
+// deepCopyDoc(document_) onto undoStack_ before each command, and undo/redo
+// swap those whole-document snapshots (see MeshCraftApplication_Commands.cpp +
+// deepCopyDoc in MeshCraftPrivate.hpp). That private header is CNA-coupled and
+// can't be included here, so snapshotDoc() reproduces deepCopyDoc() exactly
+// using the CNA-free deepCopyObjectAlg primitive the real code is built on.
+// ─────────────────────────────────────────────────────────────────────────────
+
+static Mc3Document snapshotDoc(const Mc3Document& src)
+{
+    Mc3Document copy = src;          // value copy — object shared_ptrs are shallow
+    copy.objects.clear();
+    for (const auto& obj : src.objects)
+        copy.objects.push_back(deepCopyObjectAlg(*obj));
+    copy.definitions.clear();
+    for (const auto& [key, obj] : src.definitions)
+        copy.definitions[key] = deepCopyObjectAlg(*obj);
+    return copy;
+}
+
+// Serialise a document to canonical XML and return it as a string. Used as a
+// thorough deep-equality oracle: it captures every serialised field, so an
+// incomplete snapshot/restore is caught — not only the fields a command edits.
+static std::string docToXml(const Mc3Document& doc)
+{
+    static int tmpIdx = 0;
+    auto path = std::filesystem::temp_directory_path() /
+                ("mc3_cmd_undo_" + std::to_string(tmpIdx++) + ".mc3.xml");
+    doc.saveToFile(path);
+    std::ifstream in(path, std::ios::binary);
+    std::ostringstream ss;
+    ss << in.rdbuf();
+    std::error_code ec;
+    std::filesystem::remove(path, ec);
+    return ss.str();
+}
+
+// Runs the full snapshot -> mutate -> undo -> redo cycle the editor performs and
+// asserts the document state round-trips exactly.
+template <class Mutate>
+static void checkUndoRedo(const std::string& label, Mc3Document& doc, Mutate mutate)
+{
+    const std::string before = docToXml(doc);
+
+    Mc3Document snap = snapshotDoc(doc);   // pushUndo()
+    mutate(doc);                           // command executes
+    const std::string after = docToXml(doc);
+    CHECK(after != before, label + ": command actually mutates the document");
+
+    // Undo — restore the pre-command snapshot.
+    doc = snapshotDoc(snap);
+    CHECK(docToXml(doc) == before, label + ": undo restores the original state");
+
+    // Redo — re-run the command on the restored document.
+    mutate(doc);
+    CHECK(docToXml(doc) == after, label + ": redo reproduces the mutated state");
+}
+
+// A small scene with non-default fields (position, material, visibility,
+// nested child) so the round-trip exercises more than just names.
+static Mc3Document makeUndoScene()
+{
+    Mc3Document doc;
+    doc.model = "UndoScene";
+
+    auto a = makeObj("a", "BoxA");
+    a->transform.position[0] = 1.0f;
+    a->transform.position[1] = 2.0f;
+    a->transform.position[2] = 3.0f;
+    a->material = "stone";
+    auto child = makeObj("a_child", "BoxChild", Mc3::ObjectType::Sphere);
+    a->children.push_back(child);
+
+    auto b = makeObj("b", "BoxB");
+    b->visible = false;
+
+    doc.objects = {a, b};
+    return doc;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -330,6 +416,59 @@ static void testDeepCopy()
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Undo/redo round-trip per command (STAB-0279)
+// ─────────────────────────────────────────────────────────────────────────────
+
+static void testUndoRedoBatchRename()
+{
+    Mc3Document doc = makeUndoScene();
+    std::set<std::string> locked;
+    checkUndoRedo("batchRename", doc, [&](Mc3Document& d) {
+        batchRenameObjects(d.objects, locked, "{type}_{index:02d}");
+    });
+}
+
+static void testUndoRedoFindReplace()
+{
+    Mc3Document doc = makeUndoScene();
+    std::set<std::string> locked, selIds;
+    checkUndoRedo("findReplace", doc, [&](Mc3Document& d) {
+        // Recurses into children too, so the nested BoxChild is renamed.
+        applyFindReplaceNames(d.objects, locked, "Box", "Cube",
+                              /*caseSensitive=*/true, /*selectedOnly=*/false, selIds);
+    });
+}
+
+static void testUndoRedoArrayDuplicate()
+{
+    Mc3Document doc = makeUndoScene();
+    checkUndoRedo("arrayDuplicate", doc, [&](Mc3Document& d) {
+        std::vector<std::shared_ptr<Mc3Object>> sources = { d.objects.front() };
+        arrayDuplicateObjects(d.objects, sources,
+                              /*count=*/3, /*axis=*/0, /*spacing=*/2.0f, /*relative=*/true);
+    });
+}
+
+// The snapshot must be a deep, independent copy: mutating the live document
+// after snapshotting must not change the snapshot. A shallow copy (sharing
+// object shared_ptrs) would silently corrupt the undo history.
+static void testSnapshotIndependence()
+{
+    Mc3Document doc = makeUndoScene();
+    Mc3Document snap = snapshotDoc(doc);            // pushUndo()
+    const std::string snapBefore = docToXml(snap);
+
+    // Mutate the live document in several ways.
+    batchRenameObjects(doc.objects, {}, "MUT_{index}");
+    doc.objects.front()->transform.position[0] = 999.0f;
+    doc.objects.front()->children.clear();
+    doc.objects.pop_back();
+
+    CHECK(docToXml(snap) == snapBefore,
+          "snapshot independence: mutating the live document leaves the snapshot intact");
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 
 int main()
 {
@@ -338,6 +477,10 @@ int main()
     testFindReplace();
     testArrayDuplicate();
     testDeepCopy();
+    testUndoRedoBatchRename();
+    testUndoRedoFindReplace();
+    testUndoRedoArrayDuplicate();
+    testSnapshotIndependence();
 
     std::cout << "\n";
     if (failures == 0)

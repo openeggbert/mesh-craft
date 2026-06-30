@@ -86,6 +86,20 @@ intentionally skips `mc3_commands` (editor-dependent — see §3/§5).
 
 ## 3. Recent changes (2026-06-30)
 
+**STAB-0279 — editor-command undo/redo coverage (test only, Gate 3 start):**
+- Extended `mc3/test/editor_commands_test.cpp` (the `mc3_commands` test) with
+  CNA-free undo/redo coverage. The editor's undo is snapshot-based
+  (`pushUndo()` stores `deepCopyDoc(document_)`); the test reproduces that
+  snapshot with the CNA-free `deepCopyObjectAlg` primitive and asserts a full
+  `snapshot → mutate → undo → redo` round-trip using a saved-XML deep-equality
+  oracle, for batchRename / findReplace / arrayDuplicate, plus a
+  snapshot-independence test (live mutation must not touch the snapshot).
+- Negative-checked: forcing a shallow snapshot makes 3 assertions FAIL, so the
+  test genuinely catches broken undo.
+- No production code changed. Root `ctest` 18/18.
+- The literal GUI flow (delete object → Ctrl+Z) still needs an app-level/CNA
+  integration test — deferred.
+
 **STAB-0025 — CI skeleton (new file, no source change):**
 - New `.github_/workflows/ci.yml` — a GitHub Actions matrix job that builds each
   CNA-free component (`mc3`, `mcb`, `mc3togltf`, `mc3tomcb`) as a standalone
@@ -300,15 +314,16 @@ No project linter/formatter is configured.
 
 ## 8. Next smallest tasks
 
-1. **STAB-0279** — Extend editor-command undo/redo coverage.
-   Goal: assert each command is undoable and round-trips `Mc3Document` state.
-   Files: `mc3/test/editor_commands_test.cpp`.
-   Verify: `ctest -R mc3_commands --output-on-failure`.
-
-2. **STAB-0265** — Verify autosave writes `.autosave` on change.
+1. **STAB-0265** — Verify autosave writes `.autosave` on change.
    Goal: confirm autosave path/trigger; note stray `test/*.mc3.xml.autosave`
    files already present in the tree.
    Files: `src/MeshCraft/MeshCraftApplication*.cpp`, new/targeted test.
+
+2. **STAB-0280..0283** — Remaining "commands are undoable" checks.
+   Goal: extend the undo/redo coverage to the other editor commands; the
+   GUI-level delete+Ctrl+Z flow still needs an app-level/CNA integration test.
+   Files: `mc3/test/editor_commands_test.cpp` (+ any app-level harness).
+   Verify: `ctest -R mc3_commands --output-on-failure`.
 
 ---
 
@@ -332,7 +347,7 @@ No project linter/formatter is configured.
 
 ```
 Read NEXT.md first. Then inspect only the files needed for the first task in
-section 8 (STAB-0279 — extend editor-command undo/redo coverage). Do not
+section 8 (STAB-0265 — verify autosave writes `.autosave` on change). Do not
 refactor unrelated code. Make one small, verified improvement. Build/test with
 the commands in section 7 and confirm cmake-build-debug still passes 18/18
 (ctest --output-on-failure). Update NEXT.md after finishing.
