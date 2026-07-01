@@ -422,9 +422,9 @@ _Generated: 2026-06-27 from full codebase + test audit. Replaces previous 100-ta
 
 | ID | St | Pri | Title | Key File(s) | Verification |
 |----|----|-----|-------|-------------|--------------|
-| STAB-0296 | 🧪 | P1 | Verify no fixed char buffer overflow in file path fields | `src/MeshCraft/MeshCraftApplication_FileOps.cpp` | All `char buf[N]` — verify N large enough for paths; use `std::string` where possible |
-| STAB-0297 | 🧪 | P1 | Verify no fixed char buffer overflow in rename field | `src/MeshCraft/Scene/SceneHierarchyPanel.cpp` | Rename buffer size ≥ 256; truncated by `strncpy` or `snprintf` |
-| STAB-0298 | 🧪 | P1 | Verify no unsafe `strcpy` in UI code | all `.cpp` | `grep -r strcpy src/` returns no hits; only `strncpy`/`snprintf`/`std::string` |
+| STAB-0296 | ✅ | P1 | Verify no fixed char buffer overflow in file path fields | `src/MeshCraft/MeshCraftApplication_FileOps.cpp`, `MeshCraftApplication_Anim.cpp`, `MeshCraftApplication_UiMenuBar.cpp`, `MeshCraftApplication_UiOverlays.cpp`, `Scene/PropertiesPanel.cpp` | Audited all 40 `std::strncpy` call sites across the editor UI (`grep -rn std::strncpy src/MeshCraft/`). **Found a real gap**: the established safe idiom is `strncpy(buf, src, sizeof(buf)-1)` followed by an explicit `buf[sizeof(buf)-1] = '\0'` (used correctly at ~33 sites) — but 7 sites (6 distinct buffers: `glbExportOutBuf_` ×2, `openDialogErr_`, `saveDialogErr_`, `subtreeExportNameBuf_`, `addChannelObjBuf_`, `layerBuf`) were missing the terminator, meaning a source string ≥ the buffer size would leave the buffer non-null-terminated (buffer over-read when later read via `%s`/`std::string(buf)` — `addChannelObjBuf_` is a confirmed case, read via `std::string(addChannelObjBuf_)` a few lines later). Fixed all 7 sites with the same one-line pattern used everywhere else. root 18/18, Release 18/18 (verified 2026-07-01) |
+| STAB-0297 | ✅ | P1 | Verify no fixed char buffer overflow in rename field | `src/MeshCraft/Scene/SceneHierarchyPanel.cpp` | Verified by inspection: `renameBuf_` is `char[256]` (meets the ≥256 requirement) and both write sites (`strncpy` + explicit `[sizeof-1]='\0'`) are correctly terminated. No fix needed. |
+| STAB-0298 | ✅ | P1 | Verify no unsafe `strcpy` in UI code | all `.cpp` | `grep -rn '\bstrcpy(' src/ mc3/ mcb/ mc3togltf/ mc3tomcb/ include/` returns zero hits in project-authored code (3 hits exist only in `mc3togltf/build/_deps/tinygltf-src/...` — vendored third-party sources pulled by FetchContent, out of scope). No fix needed. |
 | STAB-0299 | ✅ | P1 | Verify AI pending dialog: cleared on Reset | `mc3/test/editor_commands_test.cpp` | Reset/Apply live inside `if (ImGui::Button(...))` blocks (`MeshCraftApplication_UiAi.cpp:264-380`) with no separable function, so added a small state-transition mirror `AiPanelStateAlg`/`aiResetAlg` to `EditorAlgorithms.hpp` (bools stand in for the real `optional<Mc3Document>`/`string` fields — presence/absence is what's under test). Confirms Reset clears the pending-doc and validation-error flags. root 18/18 (verified 2026-07-01) |
 | STAB-0300 | ✅ | P1 | Verify AI pending dialog: not cleared on Apply (Save still available) | `mc3/test/editor_commands_test.cpp` | Added mirror `aiApplyToSceneAlg` of the "Apply to Scene" button body (`MeshCraftApplication_UiAi.cpp:317-324`). Confirms Apply intentionally leaves the pending-doc flag set. root 18/18 (verified 2026-07-01) |
 | STAB-0301 | ✅ | P1 | Verify registry dialog: closed when Reset clicked in AI panel | `mc3/test/editor_commands_test.cpp` | Same `aiResetAlg` mirror: confirms Reset closes the registry save dialog only when it was opened from this AI result (`regSaveFromAi_`), and leaves an independently-opened dialog alone. Negative-checked (dropped the `regSaveFromAi_` guard → 1 FAIL). root 18/18 (verified 2026-07-01) |
@@ -876,7 +876,7 @@ _Generated: 2026-06-27 from full codebase + test audit. Replaces previous 100-ta
 | S5 CSG | 35 | 4 | 0 | 9 | 22 | 0 |
 | S6 Geometry | 25 | 5 | 0 | 7 | 13 | 0 |
 | S7 Save/load | 35 | 12 | 0 | 4 | 19 | 0 |
-| S8 UI robustness | 40 | 5 | 0 | 11 | 24 | 0 |
+| S8 UI robustness | 40 | 8 | 0 | 8 | 24 | 0 |
 | S9 Registry | 35 | 9 | 0 | 12 | 14 | 0 |
 | S10 AI | 40 | 0 | 0 | 8 | 32 | 0 |
 | S11 Materials | 30 | 0 | 0 | 9 | 21 | 0 |
@@ -889,7 +889,7 @@ _Generated: 2026-06-27 from full codebase + test audit. Replaces previous 100-ta
 | S18 Code quality | 25 | 0 | 3 | 5 | 17 | 0 |
 | S19 Security | 15 | 0 | 0 | 4 | 11 | 0 |
 | S20 Release | 15 | 0 | 0 | 0 | 15 | 0 |
-| **TOTAL** | **650** | **52** | **14** | **195** | **389** | **0** |
+| **TOTAL** | **650** | **55** | **14** | **192** | **389** | **0** |
 
 ---
 

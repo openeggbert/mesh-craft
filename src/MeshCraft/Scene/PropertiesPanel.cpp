@@ -381,10 +381,12 @@ void PropertiesPanel::draw(float panelX, float panelY, float panelW, float panel
             ImGui::TextDisabled("Layer");
             if (layerMixed) { ImGui::SameLine(); ImGui::TextColored(ImVec4(1.0f,0.75f,0.2f,1.0f),"~"); if (ImGui::IsItemHovered()) ImGui::SetTooltip("Values differ across selection"); }
             static char layerBuf[64]{};
-            if (!layerMixed)
+            if (!layerMixed) {
                 std::strncpy(layerBuf, sel0->layer.c_str(), sizeof(layerBuf) - 1);
-            else
+                layerBuf[sizeof(layerBuf) - 1] = '\0';
+            } else {
                 layerBuf[0] = '\0';
+            }
             ImGui::SetNextItemWidth(-1);
             if (ImGui::InputText("##layer", layerBuf, sizeof(layerBuf), ImGuiInputTextFlags_EnterReturnsTrue)) {
                 ctx.pushUndo();

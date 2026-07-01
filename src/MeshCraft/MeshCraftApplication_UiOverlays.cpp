@@ -1175,6 +1175,7 @@ void MeshCraftApplication::drawDialogs()
                 ImGui::CloseCurrentPopup();
             } catch (const std::exception& e) {
                 std::strncpy(openDialogErr_, e.what(), sizeof(openDialogErr_) - 1);
+                openDialogErr_[sizeof(openDialogErr_) - 1] = '\0';
             }
         }
         ImGui::SameLine();
@@ -1210,6 +1211,7 @@ void MeshCraftApplication::drawDialogs()
                 ImGui::CloseCurrentPopup();
             } catch (const std::exception& e) {
                 std::strncpy(saveDialogErr_, e.what(), sizeof(saveDialogErr_) - 1);
+                saveDialogErr_[sizeof(saveDialogErr_) - 1] = '\0';
             }
         }
         ImGui::SameLine();
@@ -1753,6 +1755,7 @@ void MeshCraftApplication::drawDialogs()
             if (pos != std::string::npos && pos == cur.size() - std::strlen(otherExt)) {
                 cur.replace(pos, std::strlen(otherExt), wantExt);
                 std::strncpy(glbExportOutBuf_, cur.c_str(), sizeof(glbExportOutBuf_)-1);
+                glbExportOutBuf_[sizeof(glbExportOutBuf_)-1] = '\0';
             }
         }
 

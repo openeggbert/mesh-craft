@@ -301,10 +301,12 @@ void MeshCraftApplication::drawTimelinePanel(int screenW, int screenH) {
             addChannelOpen_ = true;
             addChannelObjBuf_[0] = '\0';
             // Pre-fill from first selected object
-            if (selection_.hasSelection())
+            if (selection_.hasSelection()) {
                 std::strncpy(addChannelObjBuf_,
                              selection_.selection().front()->name.c_str(),
                              sizeof(addChannelObjBuf_) - 1);
+                addChannelObjBuf_[sizeof(addChannelObjBuf_) - 1] = '\0';
+            }
         }
     }
     ImGui::EndChild();

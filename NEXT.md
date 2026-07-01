@@ -19,11 +19,13 @@ Gate 2 (Export) priority items complete; Release build re-verified
 (STAB-0002, 18/18). **Gate 3 (Editor safety)**: priority clusters all
 landed (undo/redo STAB-0279, auto-save/backup STAB-0265..0268, duplicate/
 group/ungroup/material-edit undo STAB-0280..0283, dialog lifecycle
-STAB-0299..0303) **plus** the dirty-flag/unsaved-changes cluster
-(STAB-0261..0264) from mining the rest of Gate 3's range. Gate 3 itself is
-still **not** fully green — STAB-0261–0335 has plenty of 🧪/📋 left (see
-§8). **Gate 4 (Registry/AI)**: registry search cluster done
-(STAB-0340..0344, including a real fix for missing `source` search).
+STAB-0299..0303) **plus** two more clusters from mining the rest of Gate
+3's range: dirty-flag/unsaved-changes (STAB-0261..0264) and buffer-safety
+audits (STAB-0296..0298 — **found and fixed 7 missing null-terminators**
+after `strncpy`, a real latent bug class). Gate 3 itself is still **not**
+fully green — STAB-0261–0335 has plenty of 🧪/📋 left (see §8). **Gate 4
+(Registry/AI)**: registry search cluster done (STAB-0340..0344, including
+a real fix for missing `source` search).
 
 **Key architectural decisions:**
 - `mc3/` and `mcb/` are pure C++ static libs with **no** CNA/ImGui dependency
@@ -248,9 +250,30 @@ below) and got fixed, not just documented.
   `confirmIfModifiedAlg`/`unsavedDialogResolvesToExecuteAlg` to
   `EditorAlgorithms.hpp` plus `mc3_commands` coverage for all cases.
   Negative-checked (Save ignoring `hasCurrentFile` → 1 FAIL). root 18/18,
-  Release 18/18. **Not yet committed** (awaiting user go-ahead).
+  Release 18/18. Committed as `af8ac78`.
+- **STAB-0296/0297/0298** — Buffer-safety audits. Audited all 40
+  `std::strncpy` call sites across the editor UI
+  (`grep -rn std::strncpy src/MeshCraft/`). **Found a real gap**: the
+  established safe idiom is `strncpy(buf, src, sizeof(buf)-1)` followed by
+  an explicit `buf[sizeof(buf)-1] = '\0'` (used correctly at ~33 sites) —
+  but 7 sites across 4 files were missing the terminator: `glbExportOutBuf_`
+  (×2, `MeshCraftApplication_FileOps.cpp:176` and
+  `MeshCraftApplication_UiOverlays.cpp:1755`), `openDialogErr_`/
+  `saveDialogErr_` (`MeshCraftApplication_UiOverlays.cpp:1177,1212`, from
+  `e.what()` — exception messages can be long),
+  `subtreeExportNameBuf_` (`MeshCraftApplication_UiMenuBar.cpp:237`, from
+  object name/id), `addChannelObjBuf_`
+  (`MeshCraftApplication_Anim.cpp:305-307` — confirmed later read via
+  `std::string(addChannelObjBuf_)`, so a real over-read risk, not just
+  theoretical), and `layerBuf` (`Scene/PropertiesPanel.cpp:385`). Fixed all
+  7 with the same one-line pattern already used everywhere else in the same
+  files. STAB-0297 (`SceneHierarchyPanel.cpp`'s `renameBuf_`, `char[256]`)
+  and STAB-0298 (`grep -rn '\bstrcpy(' src/ mc3/ ... include/` — zero hits
+  in project code, only in vendored `mc3togltf/build/_deps/tinygltf-src/`)
+  were both already clean, no fix needed. root 18/18, Release 18/18.
+  **Not yet committed** (awaiting user go-ahead).
 
-Test count stays 18 for all twenty-one tasks touching `mc3_commands`/
+Test count stays 18 for all twenty-four tasks touching `mc3_commands`/
 `mc3_registry`/root tests (checks added to existing binaries, no new ctest
 registered). root 18/18, Release 18/18 (both verified 2026-07-01). The
 push-token situation in §4 is unchanged from the prior session.
@@ -428,47 +451,36 @@ No project linter/formatter is configured.
 
 Gate 3's priority-order list is ✅, the Release build is re-verified
 (STAB-0002), Gate 4's registry-search cluster (STAB-0340..0344) is ✅, and
-the dirty-flag/unsaved-changes cluster (STAB-0261..0264) from mining Gate 3
-further is ✅.
+two more Gate-3-mining clusters are ✅: dirty-flag/unsaved-changes
+(STAB-0261..0264) and buffer-safety audits (STAB-0296..0298, with a real
+7-site null-terminator fix).
 
 1. **Continue mining Gate 3 — next P1 cluster in ID order: STAB-0270..0278**
    (undo for AI-apply/merge-scene, Save-As doesn't overwrite original,
    Export Selection scoping, drag-drop load, invalid-file-load error
    handling, locked-object gizmo, AI-apply undo). Same approach as this
    session: investigate each file for a CNA-free seam (mirror function or
-   real shared code) before assuming a CNA harness is required; some may
-   turn out to be inspection-only like STAB-0261-0263.
+   real shared code, or a real audit like STAB-0296) before assuming a CNA
+   harness is required; some may turn out to be inspection-only like
+   STAB-0261-0263.
    Files: `MeshCraftApplication_FileOps.cpp`, `MeshCraftApplication_UiAi.cpp`,
    `MeshCraftApplication.cpp`, `MeshCraftApplication_Mouse.cpp`.
 
-2. **STAB-0296..0298 — buffer-overflow/strcpy audits (quick, no CNA seam
-   needed).** These are pure `grep`-based static audits, not runtime tests:
-   STAB-0296 (fixed `char buf[N]` sizes in file-path fields), STAB-0297
-   (rename-field buffer ≥256, uses `strncpy`/`snprintf`), STAB-0298
-   (`grep -r strcpy src/` returns nothing). Fast, low-risk, no build needed
-   to get the answer — could be done before or instead of STAB-0270-0278.
-
-3. **STAB-0371..0376 — AI mock tests (Gate 4, bigger).** Needs a mock HTTP
+2. **STAB-0371..0376 — AI mock tests (Gate 4, bigger).** Needs a mock HTTP
    layer for `AiAssistant` first (see §5/§9 — "No AI/network tests until a
    mock layer exists"). Bigger scope than the wins so far.
 
-4. **Remaining smaller Gate 4/registry tasks.** e.g. STAB-0346 (verify
+3. **Remaining smaller Gate 4/registry tasks.** e.g. STAB-0346 (verify
    `insertIntoScene` parses/adds objects correctly — likely already
    incidentally covered by `testEntryFromDefinitionAndInsert`, worth a
    quick check), STAB-0351 (thumbnail explicitly unsupported), STAB-0359/
    0364/0368/0370 (large XML, special chars, update-existing-entry, empty
    variant — all P2/P3, straightforward `mc3_registry_test.cpp` additions).
 
-5. **(optional) Rotate the PAT and activate CI.**
+4. **(optional) Rotate the PAT and activate CI.**
    Goal: revoke the exposed token, create one with `repo` + `workflow` scope,
    switch remotes off the token-in-URL, then rename `.github_` → `.github`.
    Verify: `git push origin develop` accepted and the workflow runs in Actions.
-
-3. **(optional) Move beyond Gate 3.** With undo/redo, auto-save, backup
-   rotation, and the main document-mutating commands all covered, it may be
-   worth checking whether Gate 4 (Registry/AI, STAB-0371..0376 AI mock
-   tests) or re-verifying Release-mode 18/18 (§2, stale since STAB-0002) is
-   a better use of the next session than the weaker STAB-0299..0303 cluster.
 
 ---
 
@@ -505,13 +517,13 @@ Current branch: develop (origin/develop at d2853ad; STAB-0265 committed
 locally as 95d8db7; STAB-0266 as c771513; STAB-0267/0268 as fa819c8;
 STAB-0280..0283 as 65338aa; STAB-0299..0303 as c5d0aba; STAB-0002 Release
 re-verify + STAB-0340..0342 as 23ddd81; STAB-0343/0344 as fc9a4d8;
-STAB-0261..0264 (dirty-flag/unsaved-changes cluster) are in the working
-tree, not yet committed/pushed).
+STAB-0261..0264 as af8ac78; STAB-0296..0298 (buffer null-terminator fixes)
+are in the working tree, not yet committed/pushed).
 Build dirs: cmake-build-debug/ (Debug, CLion cmake 4.2.2), b-release/
 (Release, re-verified 18/18 2026-07-01)
 Active plan: plan.md (STAB-XXXX tasks — Gate 3 priority-order list +
-STAB-0261..0264 done, Gate 4 registry edge cases done; pick next area per §8,
-e.g. STAB-0270..0278 or the quick STAB-0296..0298 audits)
+STAB-0261..0264 + STAB-0296..0298 done, Gate 4 registry edge cases done;
+pick next area per §8, e.g. STAB-0270..0278)
 Reconfigure cmake-build-debug ONLY with CLion's cmake 4.2.2, not /usr/bin/cmake.
 CI is parked deactivated under .github_/ (token lacks `workflow` scope).
 ```

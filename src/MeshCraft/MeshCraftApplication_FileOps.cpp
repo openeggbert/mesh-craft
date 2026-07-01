@@ -174,6 +174,7 @@ void MeshCraftApplication::exportGltf() {
     else outPath += ext;
 
     std::strncpy(glbExportOutBuf_, outPath.c_str(), sizeof(glbExportOutBuf_) - 1);
+    glbExportOutBuf_[sizeof(glbExportOutBuf_) - 1] = '\0';
     glbExportErr_[0]  = '\0';
     glbExportOpen_    = true;
 }

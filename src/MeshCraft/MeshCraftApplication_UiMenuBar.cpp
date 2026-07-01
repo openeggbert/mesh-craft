@@ -235,6 +235,7 @@ float MeshCraftApplication::drawMenuBar()
                 auto* src = selection_.selection().front().get();
                 std::string suggested = src->name.empty() ? src->id : src->name;
                 std::strncpy(subtreeExportNameBuf_, suggested.c_str(), sizeof(subtreeExportNameBuf_)-1);
+                subtreeExportNameBuf_[sizeof(subtreeExportNameBuf_)-1] = '\0';
                 subtreeExportFileBuf_[0] = '\0';
                 subtreeExportErr_[0]     = '\0';
                 subtreeExportOpen_       = true;
