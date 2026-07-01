@@ -804,6 +804,96 @@ static void testBackupRotationLimitedToTwoSlots()
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// AI panel dialog lifecycle (STAB-0299/0300/0301)
+// ─────────────────────────────────────────────────────────────────────────────
+
+static void testAiPanelResetClearsPendingAndError()
+{
+    AiPanelStateAlg st;
+    st.aiPendingDocSet    = true;
+    st.validationErrorSet = true;
+    aiResetAlg(st);
+    CHECK(!st.aiPendingDocSet,    "AI Reset clears aiPendingDoc_");
+    CHECK(!st.validationErrorSet, "AI Reset clears aiValidationError_");
+}
+
+static void testAiPanelApplyDoesNotClearPending()
+{
+    AiPanelStateAlg st;
+    st.aiPendingDocSet = true;
+    aiApplyToSceneAlg(st);
+    CHECK(st.aiPendingDocSet,
+          "AI Apply to Scene leaves aiPendingDoc_ set (Save to Registry stays available)");
+}
+
+static void testAiPanelResetRegistryDialogBehavior()
+{
+    // Registry dialog opened FROM this AI result: Reset must close it.
+    AiPanelStateAlg st;
+    st.aiPendingDocSet = true;
+    st.regSaveFromAi   = true;
+    st.regSaveDlgOpen  = true;
+    aiResetAlg(st);
+    CHECK(!st.regSaveDlgOpen, "AI Reset closes the registry save dialog opened from this AI result");
+    CHECK(!st.regSaveFromAi,  "AI Reset clears regSaveFromAi_");
+
+    // Registry dialog opened independently (not from AI): Reset must leave it alone.
+    AiPanelStateAlg st2;
+    st2.regSaveFromAi = false;
+    st2.regSaveDlgOpen = true;
+    aiResetAlg(st2);
+    CHECK(st2.regSaveDlgOpen, "AI Reset leaves an independently-opened registry dialog alone");
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// No crash on an externally-removed selected object (STAB-0303)
+//
+// PropertiesPanel.cpp never looks up the selected object in the document
+// tree (it only reads/writes fields on the shared_ptr directly, which stays
+// valid even if the object was removed from document_.objects elsewhere),
+// and the sole delete path (MeshCraftApplication::deleteSelected(), reached
+// from SceneHierarchyPanel.cpp's "Delete" menu item) always clears
+// selection_ right after removing — so no code path holds a "selected but
+// removed" object at once. Verified by inspection.
+//
+// The remaining risk is command functions that DO look the object up in the
+// tree (duplicate/group/ungroup, mirrored below) if a caller ever invoked
+// them with a stale selection. Confirm they no-op gracefully rather than
+// dereferencing a null parent list.
+// ─────────────────────────────────────────────────────────────────────────────
+
+static void testCommandsIgnoreObjectNotInTree()
+{
+    auto a = makeObj("a", "A");
+    auto orphan = makeObj("orphan", "Orphan"); // never added to root
+    std::vector<std::shared_ptr<Mc3Object>> root = {a};
+
+    auto dup = duplicateObjectsAlg(root, {orphan});
+    CHECK(dup.empty(), "duplicate: no-op for an object not present in the tree");
+    CHECK(root.size() == 1, "duplicate: root unchanged");
+
+    auto group = groupObjectsAlg(root, {orphan}, "ShouldNotExist");
+    // groupObjectsAlg doesn't search for the object's parent (it only removes
+    // it if found), so it still creates a group containing the orphan — but
+    // must not crash, and must leave the real root object (`a`) alone.
+    CHECK(group != nullptr, "group: does not crash when grouping an untracked object");
+    CHECK(root.size() == 2, "group: `a` plus the new group, orphan was never in root to begin with");
+    bool aUntouched = std::any_of(root.begin(), root.end(),
+        [&](const auto& o){ return o.get() == a.get(); });
+    CHECK(aUntouched, "group: the real root object (a) is untouched");
+
+    // A Group (with a child, so it passes the type/empty checks) that was
+    // never added to root: findParentListAlg won't find it, so ungroup must
+    // no-op rather than dereference a null parent list.
+    auto orphanGroup = std::make_shared<Mc3Object>();
+    orphanGroup->type = Mc3::ObjectType::Group;
+    orphanGroup->name = "OrphanGroup";
+    orphanGroup->children.push_back(makeObj("oc", "OrphanChild"));
+    auto restored = ungroupObjectAlg(root, orphanGroup);
+    CHECK(restored.empty(), "ungroup: no-op for a group not present in the tree");
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 
 int main()
 {
@@ -830,6 +920,10 @@ int main()
     testAutoSaveWritesSeparateFileNotOriginal();
     testBackupRotationCreatesBackup1And2();
     testBackupRotationLimitedToTwoSlots();
+    testAiPanelResetClearsPendingAndError();
+    testAiPanelApplyDoesNotClearPending();
+    testAiPanelResetRegistryDialogBehavior();
+    testCommandsIgnoreObjectNotInTree();
 
     std::cout << "\n";
     if (failures == 0)

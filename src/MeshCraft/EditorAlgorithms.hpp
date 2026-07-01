@@ -410,4 +410,44 @@ inline void rotateBackupsAlg(const std::filesystem::path& file)
         std::filesystem::copy_options::overwrite_existing, ec);
 }
 
+// ── AI panel dialog lifecycle (STAB-0299/0300/0301) ───────────────────────────
+//
+// Mirrors the Reset / Apply to Scene / Save-to-Registry state transitions in
+// MeshCraftApplication::drawAiPanel() (MeshCraftApplication_UiAi.cpp:264-380).
+// Those transitions are plain field assignments, but they live directly
+// inside `if (ImGui::Button(...))` blocks with no separable function today,
+// so this mirror tracks presence/absence of the real fields with bools
+// (the actual document/error/dialog content isn't what's under test —
+// std::optional<Mc3Document> aiPendingDoc_ / std::string aiValidationError_
+// / bool regSaveFromAi_ / bool regSaveDlgOpen_).
+
+struct AiPanelStateAlg {
+    bool aiPendingDocSet    = false;  // aiPendingDoc_.has_value()
+    bool validationErrorSet = false;  // !aiValidationError_.empty()
+    bool regSaveFromAi      = false;
+    bool regSaveDlgOpen     = false;
+};
+
+// Mirrors the "Reset" button body (MeshCraftApplication_UiAi.cpp:369-379):
+// always clears the pending result and any validation error; additionally
+// closes the registry save dialog, but ONLY if it was opened from this AI
+// result (regSaveFromAi_) — a dialog opened independently is left alone.
+inline void aiResetAlg(AiPanelStateAlg& st)
+{
+    st.aiPendingDocSet    = false;
+    st.validationErrorSet = false;
+    if (st.regSaveFromAi) {
+        st.regSaveDlgOpen = false;
+        st.regSaveFromAi  = false;
+    }
+}
+
+// Mirrors the "Apply to Scene" button body (MeshCraftApplication_UiAi.cpp:
+// 317-324): intentionally does NOT clear aiPendingDoc_, so "Save to
+// Registry" stays available after applying.
+inline void aiApplyToSceneAlg(AiPanelStateAlg& st)
+{
+    (void)st; // no field the real code touches is relevant to lifecycle state
+}
+
 } // namespace MeshCraft

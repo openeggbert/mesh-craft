@@ -15,12 +15,14 @@ new features. All work is tracked in `plan.md` as STAB-XXXX tasks across
 sections S0–S20, guarded by Gates 0–6.
 
 **Current phase:** Stabilization. Gate 0 (Build) and Gate 1 (Format) complete;
-Gate 2 (Export) priority items complete. **Gate 3 (Editor safety) nearly
-done**: undo/redo (STAB-0279), auto-save interval + auto-save-file
-(STAB-0265/0266), backup-rotation (STAB-0267/0268), and duplicate/group/
-ungroup/material-edit undo (STAB-0280..0283) all landed. Only
-STAB-0299..0303 (dialog lifecycle) remains, and it's a weaker candidate —
-see §8.
+Gate 2 (Export) priority items complete. **Gate 3 (Editor safety) priority
+clusters all landed**: undo/redo (STAB-0279), auto-save interval +
+auto-save-file (STAB-0265/0266), backup-rotation (STAB-0267/0268),
+duplicate/group/ungroup/material-edit undo (STAB-0280..0283), and dialog
+lifecycle (STAB-0299..0303). Note: **Gate 3 itself is NOT fully green** —
+the gates table requires all of STAB-0261–0335, and only the curated
+"Priority Execution Order" subset (the tasks above) has been done; many more
+🧪/📋 tasks remain in that range (see §8).
 
 **Key architectural decisions:**
 - `mc3/` and `mcb/` are pure C++ static libs with **no** CNA/ImGui dependency
@@ -59,12 +61,17 @@ CNA-free mirrors `autoSavePathAlg`/`autoSaveTickAlg` of the real
 file without touching the original (STAB-0266, using the real
 `Mc3Document::saveToFile`), backup rotation (STAB-0267/0268, via the CNA-free
 mirror `rotateBackupsAlg` of the real `saveFile()` backup block — confirmed a
-fixed 2-slot ring buffer, no configurable depth), **and** duplicate/group/
-ungroup/material-edit undo (STAB-0280..0283, via CNA-free mirrors
+fixed 2-slot ring buffer, no configurable depth), duplicate/group/ungroup/
+material-edit undo (STAB-0280..0283, via CNA-free mirrors
 `duplicateObjectsAlg`/`groupObjectsAlg`/`ungroupObjectAlg`/`removeFromListAlg`
 of the real `MeshCraftApplication_Commands.cpp` command bodies, plus a direct
-material-field mutation for the material-edit case). Standalone component
-builds register a subset:
+material-field mutation for the material-edit case), **and** AI-panel dialog
+lifecycle + no-crash-on-stale-selection coverage (STAB-0299..0303, via the
+CNA-free mirror `AiPanelStateAlg`/`aiResetAlg`/`aiApplyToSceneAlg`, plus a
+regression test that the duplicate/group/ungroup mirrors no-op — not
+crash — for an object no longer in the tree; STAB-0302 was verified by code
+inspection only, no test possible without an ImGui context). Standalone
+component builds register a subset:
 `mc3`→1, `mcb`→1, `mc3togltf`→11, `mc3tomcb`→2; the editor-only `mc3_commands`
 runs only in the root build.
 
@@ -144,15 +151,36 @@ runs only in the root build.
   (`Mc3Material::baseColor` field assignment) is plain data, so
   `checkUndoRedo` with a direct mutation lambda was enough. Negative-checked
   (dropped the `removeFromListAlg` call in `groupObjectsAlg` → 2 FAILs,
-  caught by the direct behavior test). **Not yet committed** (awaiting user
-  go-ahead).
+  caught by the direct behavior test). Committed as `65338aa`. This closes
+  the Gate 3 "commands are undoable" cluster (STAB-0279..0283) entirely.
+- **STAB-0299..0303** — Dialog lifecycle safety. `MeshCraftApplication_UiAi.cpp`'s
+  Reset/Apply/Save-to-Registry transitions (lines 264-380) are plain field
+  assignments but live directly inside `if (ImGui::Button(...))` blocks with
+  no separable function — added a small mirror struct `AiPanelStateAlg` +
+  `aiResetAlg`/`aiApplyToSceneAlg` to `EditorAlgorithms.hpp` (bools stand in
+  for the real `optional<Mc3Document>`/`string` fields; only
+  presence/absence is under test). Tests confirm: Reset clears the pending
+  result and error, and closes the registry dialog only if it was opened
+  from this AI result (STAB-0299/0301); Apply leaves the pending result set
+  so Save to Registry stays available (STAB-0300). Negative-checked
+  (dropped the `regSaveFromAi_` guard → 1 FAIL). STAB-0302 (empty-selection
+  crash safety) was verified by **code inspection only** — no test needed
+  or possible without an ImGui context: `PropertiesPanel::draw()` is one
+  top-level `if (hasSelection()) {...} else {...}` (lines 36/1794), so an
+  empty selection structurally cannot reach a `sel0` dereference. STAB-0303
+  (stale-selection crash safety) was verified by inspection (the only
+  delete path already clears `selection_` right after removing; the panel
+  never looks up `sel0` in the tree) plus a new regression test confirming
+  `duplicateObjectsAlg`/`groupObjectsAlg`/`ungroupObjectAlg` (which DO look
+  the object up) no-op rather than crash for an object outside the tree.
+  **Not yet committed** (awaiting user go-ahead).
 
-  This closes out the Gate 3 "commands are undoable" cluster
-  (STAB-0279..0283) entirely. Only STAB-0299..0303 (dialog lifecycle) is
-  left in Gate 3, and it's a weaker candidate for this CNA-free-mirror
-  approach — see §8.
+  This closes the entire Gate 3 "Priority Execution Order" list
+  (STAB-0279..0283, STAB-0299..0303, STAB-0265..0268). Gate 3 itself is
+  **not** fully green yet — the gates table requires all of STAB-0261–0335,
+  and plenty of 🧪/📋 tasks remain outside this curated priority subset.
 
-Test count stays 18 for all eight tasks (checks added to the existing
+Test count stays 18 for all thirteen tasks (checks added to the existing
 `mc3_commands` binary, no new ctest registered). root 18/18 (verified
 2026-07-01). The push-token situation in §4 is unchanged from the prior
 session.
@@ -285,7 +313,8 @@ definitions via `deepCopyObj` — identical logic to the CNA-free
 cmake 4.2.2, not system cmake 3.31.6 (see §5).
 
 **Stabilization gates:** Gate 0 (Build) ✅ · Gate 1 (Format) ✅ · Gate 2
-(Export) ✅ priority · Gate 3 (Editor safety) in progress · Gates 4–6 pending.
+(Export) ✅ priority · Gate 3 (Editor safety) priority-order list ✅, gate
+itself still open (STAB-0261–0335 not all green) · Gates 4–6 pending.
 
 ---
 
@@ -329,25 +358,32 @@ No project linter/formatter is configured.
 
 ## 8. Next smallest tasks
 
-The Gate 3 "commands are undoable" cluster (STAB-0279..0283) is now fully
-✅. Only STAB-0299..0303 is left in Gate 3's priority-order list.
+The entire Gate 3 "Priority Execution Order" list is now ✅: STAB-0279..0283,
+STAB-0299..0303, STAB-0265..0268. Gate 3 itself (per the gates table)
+requires all of STAB-0261–0335 green, so there's plenty left in-range if
+more Gate 3 depth is wanted — but the curated priority subset is done, so
+picking the next area is a real choice now:
 
-1. **STAB-0299..0303** — Dialog lifecycle safety (AI pending dialog Reset/
-   Apply, registry dialog auto-close, Properties panel crash-safety).
-   Investigated 2026-07-01: the Reset/Apply/Save-to-Registry transitions in
-   `MeshCraftApplication_UiAi.cpp:264-380` ARE just plain field assignments
-   (`aiPendingDoc_.reset()`, `regSaveFromAi_ = false`, etc.) — but they're
-   directly inside `if (ImGui::Button(...))` blocks with no separable
-   function today. A mirror is *possible* (introduce a small state struct +
-   `aiResetAlg`/`aiApplyAlg` functions replicating the assignments) but,
-   unlike `rotateBackupsAlg`/`duplicateObjectsAlg`, there's no real
-   algorithmic complexity to verify — it would mostly test that the mirror
-   matches itself. Lower priority than the wins above; get explicit user
-   buy-in on the value before spending time here.
-   Files: `MeshCraftApplication_UiAi.cpp`, `PropertiesPanel.cpp`.
-   Verify: targeted test once/if a mirror is added.
+1. **Continue mining Gate 3 (STAB-0261–0335) beyond the priority subset.**
+   Goal: e.g. STAB-0261-0264 (dirty flag), STAB-0269-0278 (export/drag-drop
+   edge cases), STAB-0284-0298 (remaining undo/keybinding/macro checks),
+   STAB-0304-0335 (renderer robustness). Same approach as this session:
+   check each file for a CNA-free seam before assuming a CNA harness is
+   needed.
+   Files: various under `src/MeshCraft/`.
+   Verify: `ctest -R mc3_commands --output-on-failure` (or new targeted tests).
 
-2. **(optional) Rotate the PAT and activate CI.**
+2. **Move to Gate 4 (Registry/AI).** Per `plan.md`'s priority order:
+   STAB-0371..0376 (AI mock tests — needs a mock layer, see §5/§9),
+   STAB-0391 (AI result XSD validation), STAB-0340..0342 (registry edge
+   cases). `mc3_registry` already exists as a CNA-free test target, so the
+   registry edge cases are likely the easiest entry point.
+
+3. **Re-verify the Release build.** Stale since STAB-0002 (last run at 17
+   tests; now 18). Quick, low-risk, arguably overdue:
+   `cmake -S . -B b-release -G Ninja -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=ON` (§7).
+
+4. **(optional) Rotate the PAT and activate CI.**
    Goal: revoke the exposed token, create one with `repo` + `workflow` scope,
    switch remotes off the token-in-URL, then rename `.github_` → `.github`.
    Verify: `git push origin develop` accepted and the workflow runs in Actions.
@@ -391,9 +427,11 @@ NEXT.md after finishing.
 
 Current branch: develop (origin/develop at d2853ad; STAB-0265 committed
 locally as 95d8db7; STAB-0266 as c771513; STAB-0267/0268 as fa819c8;
-STAB-0280..0283 changes are in the working tree, not yet committed/pushed).
+STAB-0280..0283 as 65338aa; STAB-0299..0303 changes are in the working tree,
+not yet committed/pushed).
 Build dirs: cmake-build-debug/ (Debug, CLion cmake 4.2.2), b-release/ (Release)
-Active plan: plan.md (STAB-XXXX tasks, Gate 3 in progress)
+Active plan: plan.md (STAB-XXXX tasks — Gate 3 priority-order list complete;
+Gate 3 itself still open per the gates table; pick next area per §8)
 Reconfigure cmake-build-debug ONLY with CLion's cmake 4.2.2, not /usr/bin/cmake.
 CI is parked deactivated under .github_/ (token lacks `workflow` scope).
 ```

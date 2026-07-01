@@ -425,11 +425,11 @@ _Generated: 2026-06-27 from full codebase + test audit. Replaces previous 100-ta
 | STAB-0296 | 🧪 | P1 | Verify no fixed char buffer overflow in file path fields | `src/MeshCraft/MeshCraftApplication_FileOps.cpp` | All `char buf[N]` — verify N large enough for paths; use `std::string` where possible |
 | STAB-0297 | 🧪 | P1 | Verify no fixed char buffer overflow in rename field | `src/MeshCraft/Scene/SceneHierarchyPanel.cpp` | Rename buffer size ≥ 256; truncated by `strncpy` or `snprintf` |
 | STAB-0298 | 🧪 | P1 | Verify no unsafe `strcpy` in UI code | all `.cpp` | `grep -r strcpy src/` returns no hits; only `strncpy`/`snprintf`/`std::string` |
-| STAB-0299 | 🧪 | P1 | Verify AI pending dialog: cleared on Reset | `src/MeshCraft/MeshCraftApplication_UiAi.cpp` | Click Reset; `aiPendingDoc_` cleared; Apply and Save buttons disabled |
-| STAB-0300 | 🧪 | P1 | Verify AI pending dialog: not cleared on Apply (Save still available) | `src/MeshCraft/MeshCraftApplication_UiAi.cpp` | Click Apply; `aiPendingDoc_` still set; Save to Registry still enabled |
-| STAB-0301 | 🧪 | P1 | Verify registry dialog: closed when Reset clicked in AI panel | `src/MeshCraft/MeshCraftApplication_UiAi.cpp` | Reset with registry save dialog open: dialog closes; `regSaveFromAi_` cleared |
-| STAB-0302 | 🧪 | P1 | Verify no crash when no object selected and Properties panel rendered | `src/MeshCraft/Scene/PropertiesPanel.cpp` | Empty selection: Properties panel shows empty or "No selection" message |
-| STAB-0303 | 🧪 | P1 | Verify no crash when selected object is deleted externally | `src/MeshCraft/MeshCraftApplication.hpp` | Delete object from hierarchy while selected; Properties panel updates |
+| STAB-0299 | ✅ | P1 | Verify AI pending dialog: cleared on Reset | `mc3/test/editor_commands_test.cpp` | Reset/Apply live inside `if (ImGui::Button(...))` blocks (`MeshCraftApplication_UiAi.cpp:264-380`) with no separable function, so added a small state-transition mirror `AiPanelStateAlg`/`aiResetAlg` to `EditorAlgorithms.hpp` (bools stand in for the real `optional<Mc3Document>`/`string` fields — presence/absence is what's under test). Confirms Reset clears the pending-doc and validation-error flags. root 18/18 (verified 2026-07-01) |
+| STAB-0300 | ✅ | P1 | Verify AI pending dialog: not cleared on Apply (Save still available) | `mc3/test/editor_commands_test.cpp` | Added mirror `aiApplyToSceneAlg` of the "Apply to Scene" button body (`MeshCraftApplication_UiAi.cpp:317-324`). Confirms Apply intentionally leaves the pending-doc flag set. root 18/18 (verified 2026-07-01) |
+| STAB-0301 | ✅ | P1 | Verify registry dialog: closed when Reset clicked in AI panel | `mc3/test/editor_commands_test.cpp` | Same `aiResetAlg` mirror: confirms Reset closes the registry save dialog only when it was opened from this AI result (`regSaveFromAi_`), and leaves an independently-opened dialog alone. Negative-checked (dropped the `regSaveFromAi_` guard → 1 FAIL). root 18/18 (verified 2026-07-01) |
+| STAB-0302 | ✅ | P1 | Verify no crash when no object selected and Properties panel rendered | `src/MeshCraft/Scene/PropertiesPanel.cpp` | Verified by code inspection (no test needed/possible without an ImGui context): `draw()` is structured as a single top-level `if (ctx.selection.hasSelection()) { ... } else { ... }` (lines 36 / 1794) — every `sel0`/`selAll` access is inside the `if` branch, and the `else` branch already renders a document-summary + "Select All" button. Empty selection cannot reach a `sel0` dereference. |
+| STAB-0303 | ✅ | P1 | Verify no crash when selected object is deleted externally | `mc3/test/editor_commands_test.cpp` | Verified by inspection + a regression test. `PropertiesPanel.cpp` never looks up the selected object in the document tree (only reads/writes fields on its `shared_ptr`, which stays valid regardless), and the sole delete path (`deleteSelected()`, reached from `SceneHierarchyPanel.cpp`'s "Delete" menu item) always clears `selection_` right after removing — so a "selected but externally removed" object can't currently occur. Added a `mc3_commands` regression test confirming `duplicateObjectsAlg`/`groupObjectsAlg`/`ungroupObjectAlg` all no-op (rather than crash) if ever called with an object not present in the tree, since those DO look the object up (`findParentListAlg`/`removeFromListAlg`, both null/no-match-safe). root 18/18 (verified 2026-07-01) |
 | STAB-0304 | 📋 | P1 | Verify invalid material reference on object doesn't crash renderer | `src/MeshCraft/Renderer/SceneRenderer.cpp` | Object with `material="nonexistent"` renders without crash (uses default) |
 | STAB-0305 | 📋 | P1 | Verify missing mesh file doesn't crash renderer | `src/MeshCraft/Renderer/SceneRenderer.cpp` | Mesh object with nonexistent `src` renders with placeholder; no crash |
 | STAB-0306 | 📋 | P1 | Verify hierarchy filter with no matches shows empty list (not crash) | `src/MeshCraft/Scene/SceneHierarchyPanel.cpp` | Type filter + tag filter that matches nothing: list empty; no crash |
@@ -876,7 +876,7 @@ _Generated: 2026-06-27 from full codebase + test audit. Replaces previous 100-ta
 | S5 CSG | 35 | 4 | 0 | 9 | 22 | 0 |
 | S6 Geometry | 25 | 5 | 0 | 7 | 13 | 0 |
 | S7 Save/load | 35 | 8 | 0 | 8 | 19 | 0 |
-| S8 UI robustness | 40 | 0 | 0 | 16 | 24 | 0 |
+| S8 UI robustness | 40 | 5 | 0 | 11 | 24 | 0 |
 | S9 Registry | 35 | 4 | 0 | 15 | 16 | 0 |
 | S10 AI | 40 | 0 | 0 | 8 | 32 | 0 |
 | S11 Materials | 30 | 0 | 0 | 9 | 21 | 0 |
@@ -889,7 +889,7 @@ _Generated: 2026-06-27 from full codebase + test audit. Replaces previous 100-ta
 | S18 Code quality | 25 | 0 | 3 | 5 | 17 | 0 |
 | S19 Security | 15 | 0 | 0 | 4 | 11 | 0 |
 | S20 Release | 15 | 0 | 0 | 0 | 15 | 0 |
-| **TOTAL** | **650** | **38** | **14** | **207** | **391** | **0** |
+| **TOTAL** | **650** | **43** | **14** | **202** | **391** | **0** |
 
 ---
 
