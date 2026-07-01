@@ -894,6 +894,34 @@ static void testCommandsIgnoreObjectNotInTree()
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Unsaved-changes confirmation (STAB-0264)
+// ─────────────────────────────────────────────────────────────────────────────
+
+static void testConfirmIfModifiedGate()
+{
+    CHECK(confirmIfModifiedAlg(/*modified=*/false),
+          "not modified: pending action runs immediately, no dialog");
+    CHECK(!confirmIfModifiedAlg(/*modified=*/true),
+          "modified: pending action must be deferred to the unsaved-changes dialog");
+}
+
+static void testUnsavedDialogChoices()
+{
+    CHECK(unsavedDialogResolvesToExecuteAlg(UnsavedDialogChoiceAlg::Save, /*hasCurrentFile=*/true),
+          "Save with a current file: proceeds with the pending action");
+    CHECK(!unsavedDialogResolvesToExecuteAlg(UnsavedDialogChoiceAlg::Save, /*hasCurrentFile=*/false),
+          "Save with no current file: refuses (can't save), does not proceed");
+    CHECK(unsavedDialogResolvesToExecuteAlg(UnsavedDialogChoiceAlg::DontSave, true),
+          "Don't Save: discards and proceeds regardless of currentFile_ (true case)");
+    CHECK(unsavedDialogResolvesToExecuteAlg(UnsavedDialogChoiceAlg::DontSave, false),
+          "Don't Save: discards and proceeds regardless of currentFile_ (false case)");
+    CHECK(!unsavedDialogResolvesToExecuteAlg(UnsavedDialogChoiceAlg::Cancel, true),
+          "Cancel: never proceeds, regardless of currentFile_ (true case)");
+    CHECK(!unsavedDialogResolvesToExecuteAlg(UnsavedDialogChoiceAlg::Cancel, false),
+          "Cancel: never proceeds, regardless of currentFile_ (false case)");
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 
 int main()
 {
@@ -924,6 +952,8 @@ int main()
     testAiPanelApplyDoesNotClearPending();
     testAiPanelResetRegistryDialogBehavior();
     testCommandsIgnoreObjectNotInTree();
+    testConfirmIfModifiedGate();
+    testUnsavedDialogChoices();
 
     std::cout << "\n";
     if (failures == 0)

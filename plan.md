@@ -380,10 +380,10 @@ _Generated: 2026-06-27 from full codebase + test audit. Replaces previous 100-ta
 
 | ID | St | Pri | Title | Key File(s) | Verification |
 |----|----|-----|-------|-------------|--------------|
-| STAB-0261 | 🧪 | P1 | Verify new scene starts with dirty flag false | `src/MeshCraft/MeshCraftApplication.hpp` | New scene: title bar shows no `*`; save prompt not triggered on quit |
-| STAB-0262 | 🧪 | P1 | Verify modifying scene sets dirty flag | `src/MeshCraft/MeshCraftApplication_Commands.cpp` | Add object; title bar shows `*` or equivalent |
-| STAB-0263 | 🧪 | P1 | Verify saving clears dirty flag | `src/MeshCraft/MeshCraftApplication_FileOps.cpp` | Save; dirty flag cleared; title bar no longer shows `*` |
-| STAB-0264 | 🧪 | P1 | Verify open-when-dirty prompts user (do not silently discard) | `src/MeshCraft/MeshCraftApplication_FileOps.cpp` | Open new file when unsaved changes: dialog appears |
+| STAB-0261 | ✅ | P1 | Verify new scene starts with dirty flag false | `src/MeshCraft/MeshCraftApplication.hpp` | Verified by code inspection: `modified_{false}` default member initializer (`MeshCraftApplication.hpp:76`), and `newScene()` also explicitly sets `modified_ = false;` (`MeshCraftApplication_FileOps.cpp:26`). No test needed — a private bool default can't regress silently without touching this exact line. |
+| STAB-0262 | ✅ | P1 | Verify modifying scene sets dirty flag | `src/MeshCraft/MeshCraftApplication_Commands.cpp` | Verified by code inspection for the plan.md scenario ("add object"): `addPrimitive()` sets `modified_ = true;` in both branches (line 94, inserting into a group; line 102, appending to `document_.objects`), immediately after the mutation (`MeshCraftApplication_Commands.cpp:32-105`). A full audit of all ~130 `modified_ = true;` call sites across the editor was out of scope for one task; spot-checked that the previously-tested commands (delete/duplicate/group/ungroup) all follow the same pattern. |
+| STAB-0263 | ✅ | P1 | Verify saving clears dirty flag | `src/MeshCraft/MeshCraftApplication_FileOps.cpp` | Verified by code inspection: `saveFile()` sets `modified_ = false;` immediately after `document_.saveToFile(currentFile_);` (`MeshCraftApplication_FileOps.cpp:142,144`). |
+| STAB-0264 | ✅ | P1 | Verify open-when-dirty prompts user (do not silently discard) | `mc3/test/editor_commands_test.cpp` | Found real branching logic worth mirroring beyond STAB-0261-0263's trivial cases: `confirmIfModified()` (`MeshCraftApplication_FileOps.cpp:85-90`) gates on `modified_` (execute now vs. defer to the "Unsaved Changes" dialog), and the dialog itself (`MeshCraftApplication_UiOverlays.cpp:1223-1253`) has three real branches — Save (only proceeds if `currentFile_` is set — otherwise refuses), Don't Save (always discards+proceeds), Cancel (never proceeds). Added CNA-free mirrors `confirmIfModifiedAlg`/`unsavedDialogResolvesToExecuteAlg` (`EditorAlgorithms.hpp`) plus `mc3_commands` coverage for all cases. Negative-checked (Save ignoring `hasCurrentFile` → 1 FAIL). root 18/18, Release 18/18 (verified 2026-07-01) |
 | STAB-0265 | ✅ | P1 | Verify autosave interval is configurable | `mc3/test/editor_commands_test.cpp` | Confirmed the real logic first: `autoSaveInterval_` has a Prefs-dialog field (`MeshCraftApplication_UiOverlays.cpp:1811`) and round-trips through `prefs.ini` (`MeshCraftApplication_FileOps.cpp:305,322`). Added CNA-free mirrors `autoSavePathAlg`/`autoSaveTickAlg` (`EditorAlgorithms.hpp`) reproducing `autoSavePath()` and the update-loop countdown/trigger branch, plus `mc3_commands` coverage: custom intervals (5s, 2s) actually change trigger timing, `interval=0` disables auto-save entirely, unmodified/no-file never triggers. Negative-checked (hard-coded interval instead of reading `intervalSeconds` → 7 FAILs). root 18/18 (verified 2026-07-01) |
 | STAB-0266 | ✅ | P1 | Verify autosave writes `.autosave` file, not the original | `mc3/test/editor_commands_test.cpp` | Added `mc3_commands` coverage using the real (CNA-free) `Mc3Document::saveToFile`, mirroring `performAutoSave()` (`MeshCraftApplication_FileOps.cpp:40-46`): saves an original file, mutates in-memory, "auto-saves" to `autoSavePathAlg(original)`, asserts the `.autosave` file is created with the mutated content and the original on-disk file is byte-for-byte unchanged. Negative-checked (auto-save written to the original path instead of `.autosave` → 3 FAILs). root 18/18 (verified 2026-07-01) |
 | STAB-0267 | ✅ | P1 | Verify backup rotation creates backup.1, backup.2 | `mc3/test/editor_commands_test.cpp` | Added CNA-free mirror `rotateBackupsAlg` (`EditorAlgorithms.hpp`) of the "F6: rotate backups" block in `saveFile()` (`MeshCraftApplication_FileOps.cpp:130-154`). `mc3_commands` coverage: 1st save creates no backup; 2nd save creates `backup.1` with the prior version; 3rd save rotates `backup.1`→`backup.2` and both hold the correct version. Negative-checked (dropped the b1→b2 cascade → 4 FAILs). root 18/18 (verified 2026-07-01) |
@@ -875,7 +875,7 @@ _Generated: 2026-06-27 from full codebase + test audit. Replaces previous 100-ta
 | S4 glTF export | 50 | 4 | 0 | 21 | 25 | 0 |
 | S5 CSG | 35 | 4 | 0 | 9 | 22 | 0 |
 | S6 Geometry | 25 | 5 | 0 | 7 | 13 | 0 |
-| S7 Save/load | 35 | 8 | 0 | 8 | 19 | 0 |
+| S7 Save/load | 35 | 12 | 0 | 4 | 19 | 0 |
 | S8 UI robustness | 40 | 5 | 0 | 11 | 24 | 0 |
 | S9 Registry | 35 | 9 | 0 | 12 | 14 | 0 |
 | S10 AI | 40 | 0 | 0 | 8 | 32 | 0 |
@@ -889,7 +889,7 @@ _Generated: 2026-06-27 from full codebase + test audit. Replaces previous 100-ta
 | S18 Code quality | 25 | 0 | 3 | 5 | 17 | 0 |
 | S19 Security | 15 | 0 | 0 | 4 | 11 | 0 |
 | S20 Release | 15 | 0 | 0 | 0 | 15 | 0 |
-| **TOTAL** | **650** | **48** | **14** | **199** | **389** | **0** |
+| **TOTAL** | **650** | **52** | **14** | **195** | **389** | **0** |
 
 ---
 

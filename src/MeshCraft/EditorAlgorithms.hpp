@@ -450,4 +450,33 @@ inline void aiApplyToSceneAlg(AiPanelStateAlg& st)
     (void)st; // no field the real code touches is relevant to lifecycle state
 }
 
+// ── Unsaved-changes confirmation (STAB-0264) ──────────────────────────────────
+//
+// Mirrors confirmIfModified() (MeshCraftApplication_FileOps.cpp:85-90): a
+// pending action (new scene / open file / open recent) runs immediately only
+// if the document is NOT modified; otherwise it must be deferred to the
+// "Unsaved Changes" dialog rather than silently discarding changes.
+inline bool confirmIfModifiedAlg(bool modified)
+{
+    return !modified; // true => run the pending action now; false => defer to the dialog
+}
+
+// The three choices in the "Unsaved Changes" dialog
+// (MeshCraftApplication_UiOverlays.cpp:1223-1253).
+enum class UnsavedDialogChoiceAlg { Save, DontSave, Cancel };
+
+// Mirrors the dialog's three button bodies: Save only lets the pending
+// action proceed if there's a file to save to (Save is a no-op + refusal
+// when currentFile_ is empty); Don't Save always discards and proceeds;
+// Cancel always aborts.
+inline bool unsavedDialogResolvesToExecuteAlg(UnsavedDialogChoiceAlg choice, bool hasCurrentFile)
+{
+    switch (choice) {
+    case UnsavedDialogChoiceAlg::Save:     return hasCurrentFile;
+    case UnsavedDialogChoiceAlg::DontSave: return true;
+    case UnsavedDialogChoiceAlg::Cancel:   return false;
+    }
+    return false;
+}
+
 } // namespace MeshCraft

@@ -16,15 +16,14 @@ sections S0–S20, guarded by Gates 0–6.
 
 **Current phase:** Stabilization. Gate 0 (Build) and Gate 1 (Format) complete;
 Gate 2 (Export) priority items complete; Release build re-verified
-(STAB-0002, 18/18). **Gate 3 (Editor safety) priority clusters all
-landed**: undo/redo (STAB-0279), auto-save interval + auto-save-file
-(STAB-0265/0266), backup-rotation (STAB-0267/0268), duplicate/group/
-ungroup/material-edit undo (STAB-0280..0283), and dialog lifecycle
-(STAB-0299..0303). Note: **Gate 3 itself is NOT fully green** — the gates
-table requires all of STAB-0261–0335, and only the curated "Priority
-Execution Order" subset has been done; many more 🧪/📋 tasks remain in that
-range. **Gate 4 (Registry/AI) started**: registry edge cases done
-(STAB-0340..0342) — see §8 for what's next.
+(STAB-0002, 18/18). **Gate 3 (Editor safety)**: priority clusters all
+landed (undo/redo STAB-0279, auto-save/backup STAB-0265..0268, duplicate/
+group/ungroup/material-edit undo STAB-0280..0283, dialog lifecycle
+STAB-0299..0303) **plus** the dirty-flag/unsaved-changes cluster
+(STAB-0261..0264) from mining the rest of Gate 3's range. Gate 3 itself is
+still **not** fully green — STAB-0261–0335 has plenty of 🧪/📋 left (see
+§8). **Gate 4 (Registry/AI)**: registry search cluster done
+(STAB-0340..0344, including a real fix for missing `source` search).
 
 **Key architectural decisions:**
 - `mc3/` and `mcb/` are pure C++ static libs with **no** CNA/ImGui dependency
@@ -73,8 +72,12 @@ lifecycle + no-crash-on-stale-selection coverage (STAB-0299..0303, via the
 CNA-free mirror `AiPanelStateAlg`/`aiResetAlg`/`aiApplyToSceneAlg`, plus a
 regression test that the duplicate/group/ungroup mirrors no-op — not
 crash — for an object no longer in the tree; STAB-0302 was verified by code
-inspection only, no test possible without an ImGui context). Standalone
-component builds register a subset:
+inspection only, no test possible without an ImGui context), **and**
+unsaved-changes confirmation (STAB-0264, via CNA-free mirrors
+`confirmIfModifiedAlg`/`unsavedDialogResolvesToExecuteAlg` of
+`confirmIfModified()` and the "Unsaved Changes" dialog's three button
+bodies — Save/Don't Save/Cancel). Standalone component builds register a
+subset:
 `mc3`→1, `mcb`→1, `mc3togltf`→11, `mc3tomcb`→2; the editor-only `mc3_commands`
 runs only in the root build.
 
@@ -227,9 +230,27 @@ below) and got fixed, not just documented.
   test (two entries with distinct sources, confirms each search returns
   only the matching one) and a source marker in the STAB-0342 per-field
   test. Negative-checked (reverted the SQL clause → 3 FAILs). root 18/18,
+  Release 18/18. Committed as `fc9a4d8`.
+- **STAB-0261..0264** — Continued mining Gate 3 (STAB-0261–0335) beyond the
+  priority subset, picking the first open P1 cluster in ID order
+  (dirty-flag / unsaved-changes workflow). STAB-0261/0262/0263 turned out to
+  be trivial, inspection-only verifications: `modified_{false}` default +
+  explicit reset in `newScene()` (0261); `addPrimitive()` sets
+  `modified_ = true` right after mutating (0262, spot-checked against the
+  plan.md scenario rather than auditing all ~130 call sites — out of scope
+  for one task); `saveFile()` clears it right after `saveToFile()` (0263).
+  STAB-0264 had real logic worth mirroring: `confirmIfModified()`
+  (`MeshCraftApplication_FileOps.cpp:85-90`) gates immediate-execute vs.
+  defer-to-dialog on `modified_`, and the "Unsaved Changes" dialog
+  (`MeshCraftApplication_UiOverlays.cpp:1223-1253`) has three real branches
+  (Save — only proceeds if `currentFile_` is set; Don't Save — always
+  discards+proceeds; Cancel — never proceeds). Added CNA-free mirrors
+  `confirmIfModifiedAlg`/`unsavedDialogResolvesToExecuteAlg` to
+  `EditorAlgorithms.hpp` plus `mc3_commands` coverage for all cases.
+  Negative-checked (Save ignoring `hasCurrentFile` → 1 FAIL). root 18/18,
   Release 18/18. **Not yet committed** (awaiting user go-ahead).
 
-Test count stays 18 for all seventeen tasks touching `mc3_commands`/
+Test count stays 18 for all twenty-one tasks touching `mc3_commands`/
 `mc3_registry`/root tests (checks added to existing binaries, no new ctest
 registered). root 18/18, Release 18/18 (both verified 2026-07-01). The
 push-token situation in §4 is unchanged from the prior session.
@@ -406,31 +427,39 @@ No project linter/formatter is configured.
 ## 8. Next smallest tasks
 
 Gate 3's priority-order list is ✅, the Release build is re-verified
-(STAB-0002), and Gate 4's registry-search cluster (STAB-0340..0344) is ✅
-— including a real fix (added `source` to the search `WHERE` clause,
-which was previously missing entirely).
+(STAB-0002), Gate 4's registry-search cluster (STAB-0340..0344) is ✅, and
+the dirty-flag/unsaved-changes cluster (STAB-0261..0264) from mining Gate 3
+further is ✅.
 
-1. **STAB-0371..0376 — AI mock tests (Gate 4, bigger).** Needs a mock HTTP
+1. **Continue mining Gate 3 — next P1 cluster in ID order: STAB-0270..0278**
+   (undo for AI-apply/merge-scene, Save-As doesn't overwrite original,
+   Export Selection scoping, drag-drop load, invalid-file-load error
+   handling, locked-object gizmo, AI-apply undo). Same approach as this
+   session: investigate each file for a CNA-free seam (mirror function or
+   real shared code) before assuming a CNA harness is required; some may
+   turn out to be inspection-only like STAB-0261-0263.
+   Files: `MeshCraftApplication_FileOps.cpp`, `MeshCraftApplication_UiAi.cpp`,
+   `MeshCraftApplication.cpp`, `MeshCraftApplication_Mouse.cpp`.
+
+2. **STAB-0296..0298 — buffer-overflow/strcpy audits (quick, no CNA seam
+   needed).** These are pure `grep`-based static audits, not runtime tests:
+   STAB-0296 (fixed `char buf[N]` sizes in file-path fields), STAB-0297
+   (rename-field buffer ≥256, uses `strncpy`/`snprintf`), STAB-0298
+   (`grep -r strcpy src/` returns nothing). Fast, low-risk, no build needed
+   to get the answer — could be done before or instead of STAB-0270-0278.
+
+3. **STAB-0371..0376 — AI mock tests (Gate 4, bigger).** Needs a mock HTTP
    layer for `AiAssistant` first (see §5/§9 — "No AI/network tests until a
-   mock layer exists"). Bigger scope than the registry wins so far.
+   mock layer exists"). Bigger scope than the wins so far.
 
-2. **Remaining smaller Gate 4/registry tasks.** e.g. STAB-0346 (verify
+4. **Remaining smaller Gate 4/registry tasks.** e.g. STAB-0346 (verify
    `insertIntoScene` parses/adds objects correctly — likely already
    incidentally covered by `testEntryFromDefinitionAndInsert`, worth a
    quick check), STAB-0351 (thumbnail explicitly unsupported), STAB-0359/
    0364/0368/0370 (large XML, special chars, update-existing-entry, empty
    variant — all P2/P3, straightforward `mc3_registry_test.cpp` additions).
 
-3. **Continue mining Gate 3 (STAB-0261–0335) beyond the priority subset.**
-   Goal: e.g. STAB-0261-0264 (dirty flag), STAB-0269-0278 (export/drag-drop
-   edge cases), STAB-0284-0298 (remaining undo/keybinding/macro checks),
-   STAB-0304-0335 (renderer robustness). Same approach as this session:
-   check each file for a CNA-free seam before assuming a CNA harness is
-   needed.
-   Files: various under `src/MeshCraft/`.
-   Verify: `ctest -R mc3_commands --output-on-failure` (or new targeted tests).
-
-4. **(optional) Rotate the PAT and activate CI.**
+5. **(optional) Rotate the PAT and activate CI.**
    Goal: revoke the exposed token, create one with `repo` + `workflow` scope,
    switch remotes off the token-in-URL, then rename `.github_` → `.github`.
    Verify: `git push origin develop` accepted and the workflow runs in Actions.
@@ -475,12 +504,14 @@ NEXT.md after finishing.
 Current branch: develop (origin/develop at d2853ad; STAB-0265 committed
 locally as 95d8db7; STAB-0266 as c771513; STAB-0267/0268 as fa819c8;
 STAB-0280..0283 as 65338aa; STAB-0299..0303 as c5d0aba; STAB-0002 Release
-re-verify + STAB-0340..0342 as 23ddd81; STAB-0343/0344 (registry
-source-search fix) are in the working tree, not yet committed/pushed).
+re-verify + STAB-0340..0342 as 23ddd81; STAB-0343/0344 as fc9a4d8;
+STAB-0261..0264 (dirty-flag/unsaved-changes cluster) are in the working
+tree, not yet committed/pushed).
 Build dirs: cmake-build-debug/ (Debug, CLion cmake 4.2.2), b-release/
 (Release, re-verified 18/18 2026-07-01)
-Active plan: plan.md (STAB-XXXX tasks — Gate 3 priority-order list complete,
-Gate 4 registry edge cases done; pick next area per §8)
+Active plan: plan.md (STAB-XXXX tasks — Gate 3 priority-order list +
+STAB-0261..0264 done, Gate 4 registry edge cases done; pick next area per §8,
+e.g. STAB-0270..0278 or the quick STAB-0296..0298 audits)
 Reconfigure cmake-build-debug ONLY with CLion's cmake 4.2.2, not /usr/bin/cmake.
 CI is parked deactivated under .github_/ (token lacks `workflow` scope).
 ```
