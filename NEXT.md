@@ -78,13 +78,15 @@ component builds register a subset:
 `mc3`→1, `mcb`→1, `mc3togltf`→11, `mc3tomcb`→2; the editor-only `mc3_commands`
 runs only in the root build.
 
-`mc3_registry` now also covers the Gate 4 edge cases (STAB-0340..0342): an
+`mc3_registry` now also covers the Gate 4 edge cases (STAB-0340..0344): an
 unopened/closed registry never crashes and behaves like the no-SQLite3 stub
 build would (`ModelRegistry.cpp` guards every method on `db_ == nullptr`);
 `open()` on a path that can't be a SQLite file (a directory) throws
 `std::runtime_error` with a named, non-empty message; and `search()` matches
-group/name/tags/description independently (case-insensitively), using the
-real `ModelRegistry` — no mirror needed, it's already CNA-free.
+group/name/tags/description/**source** independently and case-insensitively,
+using the real `ModelRegistry` — no mirror needed, it's already CNA-free.
+`source` search was a real gap found while writing these tests (see STAB-0344
+below) and got fixed, not just documented.
 
 ### Tools / libraries available
 - `MeshCraft` — editor executable (builds; viewport not fully integrated).
@@ -209,13 +211,28 @@ real `ModelRegistry` — no mirror needed, it's already CNA-free.
   to each of group/name/tags/description, confirming `search()` matches
   each independently and case-insensitively (existing tests already
   covered name/group/tags but not description). Negative-checked (dropped
-  `description` from the SQL `OR` clause → 2 FAILs). root 18/18, Release
-  18/18. **Not yet committed** (awaiting user go-ahead).
+  `description` from the SQL `OR` clause → 2 FAILs). Committed as `23ddd81`.
+- **STAB-0343/0344** — More registry search coverage, found while writing
+  STAB-0342. STAB-0343: added the exact plan.md scenario (save "Chair",
+  search "chair"/"CHAIR", both find it). STAB-0344: investigated first —
+  **found a real gap, not just a missing test**: `search()`'s SQL `WHERE`
+  clause omitted `source` entirely, and the search box's hint text
+  (`MeshCraftApplication_UiRegistry.cpp:47`, "Search by name, group or
+  tags…") didn't mention it either — `source` was write-only metadata (set
+  once via the AI/Save-to-Registry dialog, e.g. `"ai_generated"`) with no
+  way to search or filter by it afterward. Asked the user whether to fix,
+  document-only, or write-a-failing-test; **user chose to fix**. Added
+  `OR lower(source) LIKE lower(?1)` to the SQL and updated the hint text to
+  "Search by name, group, tags, description or source…", plus a dedicated
+  test (two entries with distinct sources, confirms each search returns
+  only the matching one) and a source marker in the STAB-0342 per-field
+  test. Negative-checked (reverted the SQL clause → 3 FAILs). root 18/18,
+  Release 18/18. **Not yet committed** (awaiting user go-ahead).
 
-Test count stays 18 for all fifteen tasks touching `mc3_commands`/root
-tests (checks added to existing binaries, no new ctest registered). root
-18/18, Release 18/18 (both verified 2026-07-01). The push-token situation
-in §4 is unchanged from the prior session.
+Test count stays 18 for all seventeen tasks touching `mc3_commands`/
+`mc3_registry`/root tests (checks added to existing binaries, no new ctest
+registered). root 18/18, Release 18/18 (both verified 2026-07-01). The
+push-token situation in §4 is unchanged from the prior session.
 
 ### Previous session (2026-06-30)
 
@@ -389,26 +406,20 @@ No project linter/formatter is configured.
 ## 8. Next smallest tasks
 
 Gate 3's priority-order list is ✅, the Release build is re-verified
-(STAB-0002), and Gate 4's first cluster (STAB-0340..0342, registry edge
-cases) is ✅.
+(STAB-0002), and Gate 4's registry-search cluster (STAB-0340..0344) is ✅
+— including a real fix (added `source` to the search `WHERE` clause,
+which was previously missing entirely).
 
-1. **STAB-0343/0344 — more registry search coverage (quick wins).**
-   STAB-0343 (search case-insensitive on the *name* field specifically,
-   e.g. "Chair"/"chair") is basically already proven by the STAB-0342
-   description-field case-insensitivity test, but plan.md's own wording is
-   name-specific — a 2-line addition. STAB-0344 ("search by source field")
-   is more interesting: **the search SQL's `WHERE` clause
-   (`ModelRegistry.cpp` `search()`) does NOT include `source` in the `OR`
-   list** (only name/grp/tags/description) — so searching `"ai_generated"`
-   today will NOT find entries by source. Confirm this is intentional
-   (maybe `source` is meant to be filtered via a different UI control, not
-   free-text search) before deciding whether this is a test-only task or a
-   real gap to fix.
-   Files: `mc3/test/mc3_registry_test.cpp`, `src/MeshCraft/ModelRegistry.cpp`.
-
-2. **STAB-0371..0376 — AI mock tests (Gate 4, bigger).** Needs a mock HTTP
+1. **STAB-0371..0376 — AI mock tests (Gate 4, bigger).** Needs a mock HTTP
    layer for `AiAssistant` first (see §5/§9 — "No AI/network tests until a
-   mock layer exists"). Bigger scope than the wins so far this session.
+   mock layer exists"). Bigger scope than the registry wins so far.
+
+2. **Remaining smaller Gate 4/registry tasks.** e.g. STAB-0346 (verify
+   `insertIntoScene` parses/adds objects correctly — likely already
+   incidentally covered by `testEntryFromDefinitionAndInsert`, worth a
+   quick check), STAB-0351 (thumbnail explicitly unsupported), STAB-0359/
+   0364/0368/0370 (large XML, special chars, update-existing-entry, empty
+   variant — all P2/P3, straightforward `mc3_registry_test.cpp` additions).
 
 3. **Continue mining Gate 3 (STAB-0261–0335) beyond the priority subset.**
    Goal: e.g. STAB-0261-0264 (dirty flag), STAB-0269-0278 (export/drag-drop
@@ -464,8 +475,8 @@ NEXT.md after finishing.
 Current branch: develop (origin/develop at d2853ad; STAB-0265 committed
 locally as 95d8db7; STAB-0266 as c771513; STAB-0267/0268 as fa819c8;
 STAB-0280..0283 as 65338aa; STAB-0299..0303 as c5d0aba; STAB-0002 Release
-re-verify + STAB-0340..0342 registry edge cases are in the working tree,
-not yet committed/pushed).
+re-verify + STAB-0340..0342 as 23ddd81; STAB-0343/0344 (registry
+source-search fix) are in the working tree, not yet committed/pushed).
 Build dirs: cmake-build-debug/ (Debug, CLion cmake 4.2.2), b-release/
 (Release, re-verified 18/18 2026-07-01)
 Active plan: plan.md (STAB-XXXX tasks — Gate 3 priority-order list complete,

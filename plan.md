@@ -476,8 +476,8 @@ _Generated: 2026-06-27 from full codebase + test audit. Replaces previous 100-ta
 | STAB-0340 | ✅ | P1 | Verify SQLite unavailable: registry shows error in UI (not crash) | `mc3/test/mc3_registry_test.cpp` | An unopened/closed registry (`db_ == nullptr`) exercises the identical guarded code path a no-SQLite3 stub build would (same defaults, same guards); added a test confirming `search()`/`save()`/`remove()` are all no-crash/safe-default in that state. The UI side (`MeshCraftApplication_UiRegistry.cpp:17-27`) already checks `isOpen()` and shows "Model Registry is not available in this build" — verified by code inspection (driving the real panel needs a CNA context). root 18/18, Release 18/18 (verified 2026-07-01) |
 | STAB-0341 | ✅ | P1 | Verify registry DB open failure shows named error | `mc3/test/mc3_registry_test.cpp` | Added a test that opens a path pointing at a directory (sqlite3 reliably fails with "unable to open database file" for a non-file path) and confirms `open()` throws `std::runtime_error` with a non-empty, identifiable message, and `isOpen()` stays false afterward — matching the UI's `catch` block (`setStatusMsg(std::string("Registry: ") + ex.what())`). root 18/18, Release 18/18 (verified 2026-07-01) |
 | STAB-0342 | ✅ | P1 | Verify registry search: query matches group, name, tags, description | `mc3/test/mc3_registry_test.cpp` | Existing tests already covered name/group/tags; added a test with a marker unique to each field (group/name/tags/description) confirming `search()` matches every one independently, matches case-insensitively, and doesn't false-positive on an absent marker. Negative-checked (dropped `description` from the SQL `OR` clause → 2 FAILs). root 18/18, Release 18/18 (verified 2026-07-01) |
-| STAB-0343 | 📋 | P1 | Add test: registry search case-insensitive | `mc3/test/mc3_registry_test.cpp` | Save entry with name "Chair"; search "chair" → found |
-| STAB-0344 | 📋 | P1 | Add test: registry search by source field | `mc3/test/mc3_registry_test.cpp` | Search "ai_generated" returns only AI-sourced entries |
+| STAB-0343 | ✅ | P1 | Add test: registry search case-insensitive | `mc3/test/mc3_registry_test.cpp` | Added exact plan.md scenario: save "Chair", search "chair"/"CHAIR" both find it. root 18/18, Release 18/18 (verified 2026-07-01) |
+| STAB-0344 | ✅ | P1 | Add test: registry search by source field | `mc3/test/mc3_registry_test.cpp`, `src/MeshCraft/ModelRegistry.cpp`, `src/MeshCraft/MeshCraftApplication_UiRegistry.cpp` | **Found a real gap during STAB-0342**: the search SQL's `WHERE` clause omitted `source` entirely (only name/grp/tags/description), and the search box's hint text didn't mention it either — `source` was write-only metadata, never searchable. User chose to fix rather than just document. Added `OR lower(source) LIKE lower(?1)` to the SQL, updated the hint text to "Search by name, group, tags, description or source…", and added `testSearchBySourceField` (two entries, distinct sources, confirms each search returns only the matching one) plus a source marker in the existing per-field test. Negative-checked (reverted the SQL clause → 3 FAILs). root 18/18, Release 18/18 (verified 2026-07-01) |
 | STAB-0345 | 🧪 | P1 | Verify entryFromDefinition: XML only includes referenced materials/textures | `src/MeshCraft/ModelRegistry.cpp` | Entry XML contains only materials used by the definition, not all scene materials |
 | STAB-0346 | 📋 | P1 | Verify insertIntoScene: inserted model parses and adds objects correctly | `mc3/test/mc3_registry_test.cpp` | Call insertIntoScene; check scene objects contain inserted definition |
 | STAB-0347 | 🧪 | P1 | Verify "Save to Registry" from AI panel uses aiPendingDoc, not scene doc | `src/MeshCraft/MeshCraftApplication_UiAi.cpp` | AI result with 2 definitions; save one; only AI definitions in combo |
@@ -877,7 +877,7 @@ _Generated: 2026-06-27 from full codebase + test audit. Replaces previous 100-ta
 | S6 Geometry | 25 | 5 | 0 | 7 | 13 | 0 |
 | S7 Save/load | 35 | 8 | 0 | 8 | 19 | 0 |
 | S8 UI robustness | 40 | 5 | 0 | 11 | 24 | 0 |
-| S9 Registry | 35 | 7 | 0 | 12 | 16 | 0 |
+| S9 Registry | 35 | 9 | 0 | 12 | 14 | 0 |
 | S10 AI | 40 | 0 | 0 | 8 | 32 | 0 |
 | S11 Materials | 30 | 0 | 0 | 9 | 21 | 0 |
 | S12 Animation | 30 | 0 | 0 | 11 | 19 | 0 |
@@ -889,7 +889,7 @@ _Generated: 2026-06-27 from full codebase + test audit. Replaces previous 100-ta
 | S18 Code quality | 25 | 0 | 3 | 5 | 17 | 0 |
 | S19 Security | 15 | 0 | 0 | 4 | 11 | 0 |
 | S20 Release | 15 | 0 | 0 | 0 | 15 | 0 |
-| **TOTAL** | **650** | **46** | **14** | **199** | **391** | **0** |
+| **TOTAL** | **650** | **48** | **14** | **199** | **389** | **0** |
 
 ---
 

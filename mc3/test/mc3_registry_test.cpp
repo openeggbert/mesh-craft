@@ -292,7 +292,7 @@ static void testSearchMatchesEachFieldIndependently() {
     e.xml         = "<mc3/>";
     e.tags        = "TagMarkerZZZ";
     e.description = "DescMarkerZZZ";
-    e.source      = "test";
+    e.source      = "SourceMarkerZZZ";
     int64_t id = reg.save(e);
     CHECK(id > 0, "search-fields: entry saved");
 
@@ -300,6 +300,7 @@ static void testSearchMatchesEachFieldIndependently() {
     CHECK(reg.search("NameMarkerZZZ").size()  == 1, "search: matches by name");
     CHECK(reg.search("TagMarkerZZZ").size()   == 1, "search: matches by tags");
     CHECK(reg.search("DescMarkerZZZ").size()  == 1, "search: matches by description");
+    CHECK(reg.search("SourceMarkerZZZ").size() == 1, "search: matches by source");
 
     // Case-insensitivity (search SQL uses lower() on both sides).
     CHECK(reg.search("descmarkerzzz").size() == 1,
@@ -308,6 +309,66 @@ static void testSearchMatchesEachFieldIndependently() {
     // A marker that doesn't appear in any field must not match.
     CHECK(reg.search("NoSuchMarkerAtAll").empty(),
           "search: no match for a marker absent from every field");
+
+    reg.close();
+    fs::remove(dbPath);
+}
+
+// STAB-0343: exact scenario from plan.md — saving "Chair" and searching the
+// lowercase "chair" still finds it.
+static void testSearchCaseInsensitiveByName() {
+    namespace fs = std::filesystem;
+    auto dbPath = fs::temp_directory_path() / "mc3_reg_search_ci_name.sqlite3";
+    fs::remove(dbPath);
+
+    ModelRegistry reg;
+    reg.open(dbPath);
+
+    ModelRegistry::Entry e;
+    e.name = "Chair"; e.xml = "<mc3/>";
+    CHECK(reg.save(e) > 0, "search-ci-name: entry saved");
+
+    CHECK(reg.search("chair").size() == 1, "search-ci-name: lowercase 'chair' finds 'Chair'");
+    CHECK(reg.search("CHAIR").size() == 1, "search-ci-name: uppercase 'CHAIR' finds 'Chair'");
+
+    reg.close();
+    fs::remove(dbPath);
+}
+
+// STAB-0344: searching by source returns only entries with a matching
+// source, not entries that merely share a name/group/tag/description.
+// Found during STAB-0342 investigation that `source` was entirely absent
+// from the search SQL (and from the search box's hint text) — fixed as
+// part of this task rather than left undone, per user direction.
+static void testSearchBySourceField() {
+    namespace fs = std::filesystem;
+    auto dbPath = fs::temp_directory_path() / "mc3_reg_search_source.sqlite3";
+    fs::remove(dbPath);
+
+    ModelRegistry reg;
+    reg.open(dbPath);
+
+    ModelRegistry::Entry aiEntry;
+    aiEntry.group = "Furniture"; aiEntry.name = "AiChair"; aiEntry.xml = "<mc3/>";
+    aiEntry.source = "ai_generated";
+    CHECK(reg.save(aiEntry) > 0, "search-by-source: ai entry saved");
+
+    ModelRegistry::Entry handEntry;
+    handEntry.group = "Furniture"; handEntry.name = "HandChair"; handEntry.xml = "<mc3/>";
+    handEntry.source = "handmade";
+    CHECK(reg.save(handEntry) > 0, "search-by-source: handmade entry saved");
+
+    auto aiResults = reg.search("ai_generated");
+    CHECK(aiResults.size() == 1, "search-by-source: 'ai_generated' returns exactly 1 entry");
+    if (!aiResults.empty())
+        CHECK(aiResults[0].name == "AiChair",
+              "search-by-source: 'ai_generated' returns only the AI-sourced entry");
+
+    auto handResults = reg.search("handmade");
+    CHECK(handResults.size() == 1, "search-by-source: 'handmade' returns exactly 1 entry");
+    if (!handResults.empty())
+        CHECK(handResults[0].name == "HandChair",
+              "search-by-source: 'handmade' returns only the handmade entry");
 
     reg.close();
     fs::remove(dbPath);
@@ -349,6 +410,8 @@ int main() {
     testUnavailableRegistryNoCrash();
     testOpenFailureThrowsNamedError();
     testSearchMatchesEachFieldIndependently();
+    testSearchCaseInsensitiveByName();
+    testSearchBySourceField();
 #else
     std::cout << "SKIP: ModelRegistry tests require MESHCRAFT_HAS_SQLITE3\n";
 #endif

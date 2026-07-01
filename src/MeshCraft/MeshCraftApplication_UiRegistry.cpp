@@ -44,7 +44,8 @@ void MeshCraftApplication::drawRegistryPanel() {
 
     // Search bar
     ImGui::SetNextItemWidth(-60.0f);
-    if (ImGui::InputTextWithHint("##regsearch", "Search by name, group or tags…",
+    if (ImGui::InputTextWithHint("##regsearch",
+                                 "Search by name, group, tags, description or source…",
                                  regSearchBuf_, sizeof(regSearchBuf_)))
         regResultsDirty_ = true;
     ImGui::SameLine();

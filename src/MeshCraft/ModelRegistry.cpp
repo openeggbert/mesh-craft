@@ -147,6 +147,7 @@ std::vector<ModelRegistry::Entry> ModelRegistry::search(const std::string& query
           "   OR lower(grp)         LIKE lower(?1) "
           "   OR lower(tags)        LIKE lower(?1) "
           "   OR lower(description) LIKE lower(?1) "
+          "   OR lower(source)      LIKE lower(?1) "
           "ORDER BY grp,name,variant;";
 
     sqlite3_stmt* stmt = nullptr;
