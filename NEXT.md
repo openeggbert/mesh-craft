@@ -16,9 +16,9 @@ sections S0–S20, guarded by Gates 0–6.
 
 **Current phase:** Stabilization. Gate 0 (Build) and Gate 1 (Format) complete;
 Gate 2 (Export) priority items complete. **Gate 3 (Editor safety) in progress**
-— undo/redo coverage (STAB-0279) and auto-save interval coverage (STAB-0265)
-landed; STAB-0280..0283 and STAB-0299..0303 remain deferred pending an
-app-level/CNA test harness (see §5).
+— undo/redo coverage (STAB-0279) and auto-save interval + auto-save-file
+coverage (STAB-0265, STAB-0266) landed; STAB-0280..0283 and STAB-0299..0303
+remain deferred pending an app-level/CNA test harness (see §5).
 
 **Key architectural decisions:**
 - `mc3/` and `mcb/` are pure C++ static libs with **no** CNA/ImGui dependency
@@ -51,10 +51,11 @@ app-level/CNA test harness (see §5).
 18. `mc3togltf_large_scene_generated`
 
 `mc3_commands` now covers editor algorithms, snapshot-based undo/redo
-round-trips (STAB-0279), **and** auto-save interval configurability
-(STAB-0265, via CNA-free mirrors `autoSavePathAlg`/`autoSaveTickAlg` of the
-real `autoSavePath()`/update-loop logic). Standalone component builds
-register a subset:
+round-trips (STAB-0279), auto-save interval configurability (STAB-0265, via
+CNA-free mirrors `autoSavePathAlg`/`autoSaveTickAlg` of the real
+`autoSavePath()`/update-loop logic), **and** auto-save writing a separate
+`.autosave` file without touching the original (STAB-0266, using the real
+`Mc3Document::saveToFile`). Standalone component builds register a subset:
 `mc3`→1, `mcb`→1, `mc3togltf`→11, `mc3tomcb`→2; the editor-only `mc3_commands`
 runs only in the root build.
 
@@ -97,10 +98,22 @@ runs only in the root build.
   (reproducing `autoSavePath()` and the update-loop countdown/trigger branch)
   plus new `mc3_commands` coverage: custom intervals change trigger timing,
   `interval=0` disables auto-save, unmodified/no-file never triggers.
-  Negative-checked (hard-coded interval → 7 FAILs). Test count stays 18
-  (added checks to the existing `mc3_commands` binary, no new ctest). root
-  18/18 (verified 2026-07-01). **Not yet committed** (awaiting user go-ahead);
-  the push-token situation in §4 is unchanged from the prior session.
+  Negative-checked (hard-coded interval → 7 FAILs). Committed as `95d8db7`.
+- **STAB-0266** — Verified autosave writes a separate `.autosave` file and
+  leaves the original untouched. Since `Mc3Document::saveToFile` is itself
+  CNA-free (already shared with `docToXml()` in the test file), this test
+  uses it directly rather than a mirror — closer to real behavior than
+  STAB-0265's approach. Mirrors `performAutoSave()`
+  (`MeshCraftApplication_FileOps.cpp:40-46`): saves an original file, mutates
+  in-memory, "auto-saves" to `autoSavePathAlg(original)`, asserts the
+  `.autosave` file has the mutated content and the on-disk original is
+  byte-for-byte unchanged. Negative-checked (auto-save written to the
+  original path → 3 FAILs). **Not yet committed** (awaiting user go-ahead).
+
+Test count stays 18 for both tasks (checks added to the existing
+`mc3_commands` binary, no new ctest registered). root 18/18 (verified
+2026-07-01). The push-token situation in §4 is unchanged from the prior
+session.
 
 ### Previous session (2026-06-30)
 
@@ -274,17 +287,18 @@ No project linter/formatter is configured.
 
 ## 8. Next smallest tasks
 
-1. **STAB-0266** — Verify autosave writes `.autosave` file, not the original.
-   Goal: `performAutoSave()` calls `document_.saveToFile(autoSavePath(...))` —
-   `Mc3Document::saveToFile` is itself CNA-free, so this is likely testable
-   directly (save to the `.autosave` path, confirm the original path is
-   untouched) rather than needing a mirror function.
-   Files: `mc3/test/editor_commands_test.cpp` (or a new `mc3` test).
+1. **STAB-0267** — Verify backup rotation creates `backup.1`, `backup.2`.
+   Goal: find the backup-rotation logic in `MeshCraftApplication_FileOps.cpp`
+   (separate from the `.autosave` mechanism covered by STAB-0265/0266) and
+   check whether it's CNA-free enough to mirror/test directly, the same way
+   STAB-0266 used the real `saveToFile` — search first, this may not exist
+   yet (plan.md doesn't say it's implemented, only that it should be verified).
+   Files: `mc3/test/editor_commands_test.cpp`, `MeshCraftApplication_FileOps.cpp`.
    Verify: `ctest -R mc3_commands --output-on-failure`.
 
-2. **STAB-0267..0268** — Remaining autosave/backup checks in the same cluster.
-   Goal: check `plan.md` rows for exact wording before starting.
-   Files: `src/MeshCraft/MeshCraftApplication_FileOps.cpp`.
+2. **STAB-0268** — Add test: backup rotation limit (max N backups).
+   Goal: depends on STAB-0267 landing a real rotation mechanism first.
+   Files: same as STAB-0267.
 
 3. **STAB-0280..0283** — Remaining "commands are undoable" checks.
    Goal: extend undo/redo coverage to the other editor commands; the GUI-level
@@ -335,8 +349,9 @@ improvement. Build/test with the commands in section 7 and confirm
 cmake-build-debug still passes 18/18 (ctest --output-on-failure). Update
 NEXT.md after finishing.
 
-Current branch: develop (origin/develop at d2853ad; STAB-0265 changes are in
-the working tree, not yet committed/pushed).
+Current branch: develop (origin/develop at d2853ad; STAB-0265 committed
+locally as 95d8db7; STAB-0266 changes are in the working tree, not yet
+committed/pushed).
 Build dirs: cmake-build-debug/ (Debug, CLion cmake 4.2.2), b-release/ (Release)
 Active plan: plan.md (STAB-XXXX tasks, Gate 3 in progress)
 Reconfigure cmake-build-debug ONLY with CLion's cmake 4.2.2, not /usr/bin/cmake.

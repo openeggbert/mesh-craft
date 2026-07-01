@@ -58,6 +58,14 @@ static Mc3Document snapshotDoc(const Mc3Document& src)
     return copy;
 }
 
+static std::string readFile(const std::filesystem::path& path)
+{
+    std::ifstream in(path, std::ios::binary);
+    std::ostringstream ss;
+    ss << in.rdbuf();
+    return ss.str();
+}
+
 // Serialise a document to canonical XML and return it as a string. Used as a
 // thorough deep-equality oracle: it captures every serialised field, so an
 // incomplete snapshot/restore is caught — not only the fields a command edits.
@@ -67,12 +75,10 @@ static std::string docToXml(const Mc3Document& doc)
     auto path = std::filesystem::temp_directory_path() /
                 ("mc3_cmd_undo_" + std::to_string(tmpIdx++) + ".mc3.xml");
     doc.saveToFile(path);
-    std::ifstream in(path, std::ios::binary);
-    std::ostringstream ss;
-    ss << in.rdbuf();
+    std::string xml = readFile(path);
     std::error_code ec;
     std::filesystem::remove(path, ec);
-    return ss.str();
+    return xml;
 }
 
 // Runs the full snapshot -> mutate -> undo -> redo cycle the editor performs and
@@ -532,6 +538,52 @@ static void testAutoSaveSkippedWhenNotModifiedOrNoFile()
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Auto-save writes a separate file (STAB-0266)
+//
+// Mirrors performAutoSave() (MeshCraftApplication_FileOps.cpp:40-46):
+//   document_.saveToFile(autoSavePath(currentFile_))
+// Mc3Document::saveToFile is itself CNA-free and shared with production code
+// (same primitive docToXml() above uses), so this exercises real file I/O —
+// only autoSavePathAlg is a mirror (already covered path-wise by STAB-0265).
+// ─────────────────────────────────────────────────────────────────────────────
+
+static void testAutoSaveWritesSeparateFileNotOriginal()
+{
+    Mc3Document doc = makeUndoScene();
+
+    static int tmpIdx = 0;
+    auto original = std::filesystem::temp_directory_path() /
+                    ("mc3_autosave_orig_" + std::to_string(tmpIdx++) + ".mc3.xml");
+    doc.saveToFile(original);
+    const std::string originalContentBefore = readFile(original);
+
+    const std::string autosavePath = autoSavePathAlg(original.string());
+    CHECK(autosavePath == original.string() + ".autosave",
+          "auto-save target derived from the original path via autoSavePathAlg");
+    CHECK(!std::filesystem::exists(autosavePath),
+          "auto-save file does not exist before the first auto-save");
+
+    // Mutate in-memory (as an edit would) then "auto-save" — must land on the
+    // .autosave path, leaving the on-disk original file untouched.
+    doc.objects.front()->name = "MutatedByEdit";
+    doc.saveToFile(autosavePath);
+
+    CHECK(std::filesystem::exists(autosavePath), "auto-save creates the .autosave file");
+    CHECK(readFile(original) == originalContentBefore,
+          "auto-save leaves the original on-disk file unmodified");
+
+    const std::string autosaveContent = readFile(autosavePath);
+    CHECK(autosaveContent != originalContentBefore,
+          "auto-save file content differs from the (unmodified) original");
+    CHECK(autosaveContent.find("MutatedByEdit") != std::string::npos,
+          "auto-save file contains the in-memory edit");
+
+    std::error_code ec;
+    std::filesystem::remove(original, ec);
+    std::filesystem::remove(autosavePath, ec);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 
 int main()
 {
@@ -548,6 +600,7 @@ int main()
     testAutoSaveIntervalConfigurable();
     testAutoSaveDisabledWhenIntervalIsZero();
     testAutoSaveSkippedWhenNotModifiedOrNoFile();
+    testAutoSaveWritesSeparateFileNotOriginal();
 
     std::cout << "\n";
     if (failures == 0)
