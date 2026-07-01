@@ -584,6 +584,106 @@ static void testAutoSaveWritesSeparateFileNotOriginal()
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Backup rotation (STAB-0267/0268)
+//
+// Mirrors the "F6: rotate backups before overwriting" block of
+// MeshCraftApplication::saveFile() (MeshCraftApplication_FileOps.cpp:130-154):
+// each save calls rotateBackupsAlg(path) BEFORE overwriting path with the new
+// content, exactly as the real code rotates backups before
+// document_.saveToFile(currentFile_).
+// ─────────────────────────────────────────────────────────────────────────────
+
+// 2-digit zero-padded tag so no version's marker is a substring of another
+// (e.g. "v01" vs "v10"), unlike bare "v1"/"v10".
+static std::string verTag(int n)
+{
+    char buf[8];
+    std::snprintf(buf, sizeof(buf), "model=\"v%02d\"", n);
+    return buf;
+}
+
+static void testBackupRotationCreatesBackup1And2()
+{
+    Mc3Document doc = makeUndoScene();
+    static int tmpIdx = 0;
+    auto path = std::filesystem::temp_directory_path() /
+                ("mc3_backup_rot_" + std::to_string(tmpIdx++) + ".mc3.xml");
+    auto b1 = std::filesystem::path(path.string() + ".backup.1");
+    auto b2 = std::filesystem::path(path.string() + ".backup.2");
+    std::error_code ec;
+    std::filesystem::remove(path, ec);
+    std::filesystem::remove(b1, ec);
+    std::filesystem::remove(b2, ec);
+
+    // Save 1: path doesn't exist yet — nothing to back up.
+    doc.model = "v01"; rotateBackupsAlg(path); doc.saveToFile(path);
+    CHECK(!std::filesystem::exists(b1),
+          "first save creates no backup (nothing to back up yet)");
+
+    // Save 2: path existed (v01) — becomes backup.1; no backup.2 yet.
+    doc.model = "v02"; rotateBackupsAlg(path); doc.saveToFile(path);
+    CHECK(std::filesystem::exists(b1), "second save creates backup.1");
+    CHECK(!std::filesystem::exists(b2),
+          "second save does not create backup.2 yet (only one prior version)");
+    CHECK(readFile(b1).find(verTag(1)) != std::string::npos,
+          "backup.1 holds the immediately-previous version (v01)");
+
+    // Save 3: backup.1(v01) rotates to backup.2; new backup.1 = v02.
+    doc.model = "v03"; rotateBackupsAlg(path); doc.saveToFile(path);
+    CHECK(std::filesystem::exists(b2), "third save creates backup.2");
+    CHECK(readFile(b1).find(verTag(2)) != std::string::npos,
+          "backup.1 now holds v02 (the previous version)");
+    CHECK(readFile(b2).find(verTag(1)) != std::string::npos,
+          "backup.2 now holds v01 (two versions back)");
+    CHECK(readFile(path).find(verTag(3)) != std::string::npos,
+          "current file holds the latest version (v03)");
+
+    std::filesystem::remove(path, ec);
+    std::filesystem::remove(b1, ec);
+    std::filesystem::remove(b2, ec);
+}
+
+static void testBackupRotationLimitedToTwoSlots()
+{
+    Mc3Document doc = makeUndoScene();
+    static int tmpIdx = 0;
+    auto path = std::filesystem::temp_directory_path() /
+                ("mc3_backup_limit_" + std::to_string(tmpIdx++) + ".mc3.xml");
+    auto b1 = std::filesystem::path(path.string() + ".backup.1");
+    auto b2 = std::filesystem::path(path.string() + ".backup.2");
+    auto b3 = std::filesystem::path(path.string() + ".backup.3");
+    std::error_code ec;
+    std::filesystem::remove(path, ec);
+    std::filesystem::remove(b1, ec);
+    std::filesystem::remove(b2, ec);
+    std::filesystem::remove(b3, ec);
+
+    const int kSaves = 10;
+    for (int i = 1; i <= kSaves; ++i) {
+        char buf[8];
+        std::snprintf(buf, sizeof(buf), "v%02d", i);
+        doc.model = buf;
+        rotateBackupsAlg(path);
+        doc.saveToFile(path);
+    }
+
+    CHECK(std::filesystem::exists(b1), "after 10 saves, backup.1 still exists");
+    CHECK(std::filesystem::exists(b2), "after 10 saves, backup.2 still exists");
+    CHECK(!std::filesystem::exists(b3),
+          "after 10 saves, no backup.3 is ever created (fixed 2-slot limit)");
+    CHECK(readFile(b1).find(verTag(9)) != std::string::npos,
+          "backup.1 holds only the most recent prior version (v09)");
+    CHECK(readFile(b2).find(verTag(8)) != std::string::npos,
+          "backup.2 holds only the second-most-recent prior version (v08)");
+    CHECK(readFile(path).find(verTag(10)) != std::string::npos,
+          "current file holds the latest version (v10)");
+
+    std::filesystem::remove(path, ec);
+    std::filesystem::remove(b1, ec);
+    std::filesystem::remove(b2, ec);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 
 int main()
 {
@@ -601,6 +701,8 @@ int main()
     testAutoSaveDisabledWhenIntervalIsZero();
     testAutoSaveSkippedWhenNotModifiedOrNoFile();
     testAutoSaveWritesSeparateFileNotOriginal();
+    testBackupRotationCreatesBackup1And2();
+    testBackupRotationLimitedToTwoSlots();
 
     std::cout << "\n";
     if (failures == 0)

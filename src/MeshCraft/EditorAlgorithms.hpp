@@ -7,6 +7,7 @@
 #include <algorithm>
 #include <cctype>
 #include <cstdio>
+#include <filesystem>
 #include <memory>
 #include <set>
 #include <string>
@@ -291,6 +292,29 @@ inline bool autoSaveTickAlg(bool hasCurrentFile, bool modified,
     }
     countdown = intervalSeconds > 0.0f ? intervalSeconds : 60.0f;
     return false;
+}
+
+// ── Backup rotation (STAB-0267/0268) ──────────────────────────────────────────
+//
+// Mirrors the "F6: rotate backups before overwriting" block in
+// MeshCraftApplication::saveFile() (MeshCraftApplication_FileOps.cpp:130-154):
+//   if exists(file):
+//     if exists(file.backup.1) rename(file.backup.1 -> file.backup.2)
+//     copy_file(file -> file.backup.1, overwrite)
+//   <caller then overwrites `file` with the new content>
+// This is a fixed 2-slot ring buffer (no configurable depth): backup.1 is
+// always the immediately-previous version, backup.2 the one before that;
+// anything older is discarded. Call this BEFORE overwriting `file`.
+
+inline void rotateBackupsAlg(const std::filesystem::path& file)
+{
+    if (!std::filesystem::exists(file)) return;
+    auto b1 = std::filesystem::path(file.string() + ".backup.1");
+    auto b2 = std::filesystem::path(file.string() + ".backup.2");
+    std::error_code ec;
+    if (std::filesystem::exists(b1)) std::filesystem::rename(b1, b2, ec);
+    std::filesystem::copy_file(file, b1,
+        std::filesystem::copy_options::overwrite_existing, ec);
 }
 
 } // namespace MeshCraft
