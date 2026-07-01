@@ -253,4 +253,44 @@ inline std::vector<std::shared_ptr<Mc3::Mc3Object>> arrayDuplicateObjects(
     return created;
 }
 
+// ── Auto-save (STAB-0265) ─────────────────────────────────────────────────────
+//
+// Mirrors two pieces of CNA-coupled logic so "the auto-save interval is
+// configurable" can be exercised headlessly:
+//   - autoSavePath()  in MeshCraftApplication_FileOps.cpp
+//   - the countdown/trigger branch in MeshCraftApplication::update()
+//     (MeshCraftApplication.cpp), which reads as:
+//       if (hasFile && modified && interval > 0) {
+//           countdown -= dt;
+//           if (countdown <= 0) { save(); countdown = interval; }
+//       } else {
+//           countdown = interval > 0 ? interval : 60.0f;
+//       }
+// Kept in sync manually with the real code (same convention as
+// deepCopyObjectAlg mirroring deepCopyDoc in MeshCraftPrivate.hpp).
+
+inline std::string autoSavePathAlg(const std::string& file)
+{
+    return file + ".autosave";
+}
+
+// Advances the auto-save countdown by dt seconds. Returns true if this tick
+// should perform an auto-save, in which case countdown is reset to
+// intervalSeconds; otherwise countdown is updated exactly as the real
+// update-loop branch does (including the disabled/no-file/unmodified cases).
+inline bool autoSaveTickAlg(bool hasCurrentFile, bool modified,
+                            float intervalSeconds, float dt, float& countdown)
+{
+    if (hasCurrentFile && modified && intervalSeconds > 0.0f) {
+        countdown -= dt;
+        if (countdown <= 0.0f) {
+            countdown = intervalSeconds;
+            return true;
+        }
+        return false;
+    }
+    countdown = intervalSeconds > 0.0f ? intervalSeconds : 60.0f;
+    return false;
+}
+
 } // namespace MeshCraft

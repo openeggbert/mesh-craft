@@ -1,6 +1,6 @@
 # NEXT.md — MeshCraft handoff document
 
-_Last updated: 2026-06-30_
+_Last updated: 2026-07-01_
 
 ---
 
@@ -16,7 +16,9 @@ sections S0–S20, guarded by Gates 0–6.
 
 **Current phase:** Stabilization. Gate 0 (Build) and Gate 1 (Format) complete;
 Gate 2 (Export) priority items complete. **Gate 3 (Editor safety) in progress**
-— first undo/redo coverage landed (STAB-0279).
+— undo/redo coverage (STAB-0279) and auto-save interval coverage (STAB-0265)
+landed; STAB-0280..0283 and STAB-0299..0303 remain deferred pending an
+app-level/CNA test harness (see §5).
 
 **Key architectural decisions:**
 - `mc3/` and `mcb/` are pure C++ static libs with **no** CNA/ImGui dependency
@@ -48,8 +50,11 @@ Gate 2 (Export) priority items complete. **Gate 3 (Editor safety) in progress**
 16. `mc3togltf_instance_deform_cache`  17. `mc3togltf_float_cache_key`
 18. `mc3togltf_large_scene_generated`
 
-`mc3_commands` now covers editor algorithms **and** snapshot-based undo/redo
-round-trips (STAB-0279). Standalone component builds register a subset:
+`mc3_commands` now covers editor algorithms, snapshot-based undo/redo
+round-trips (STAB-0279), **and** auto-save interval configurability
+(STAB-0265, via CNA-free mirrors `autoSavePathAlg`/`autoSaveTickAlg` of the
+real `autoSavePath()`/update-loop logic). Standalone component builds
+register a subset:
 `mc3`→1, `mcb`→1, `mc3togltf`→11, `mc3tomcb`→2; the editor-only `mc3_commands`
 runs only in the root build.
 
@@ -82,10 +87,24 @@ runs only in the root build.
 
 ---
 
-## 3. Recent changes (2026-06-30)
+## 3. Recent changes (2026-07-01)
 
-Five STAB tasks this session (commits below). **All five are now on
-`origin/develop`** (`develop` in sync at `d2853ad`).
+- **STAB-0265** — Verified autosave interval is configurable: the real
+  `autoSaveInterval_` already has a Prefs-dialog field
+  (`MeshCraftApplication_UiOverlays.cpp:1811`) and round-trips through
+  `prefs.ini` (`MeshCraftApplication_FileOps.cpp:305,322`). Added CNA-free
+  mirrors `autoSavePathAlg` / `autoSaveTickAlg` to `EditorAlgorithms.hpp`
+  (reproducing `autoSavePath()` and the update-loop countdown/trigger branch)
+  plus new `mc3_commands` coverage: custom intervals change trigger timing,
+  `interval=0` disables auto-save, unmodified/no-file never triggers.
+  Negative-checked (hard-coded interval → 7 FAILs). Test count stays 18
+  (added checks to the existing `mc3_commands` binary, no new ctest). root
+  18/18 (verified 2026-07-01). **Not yet committed** (awaiting user go-ahead);
+  the push-token situation in §4 is unchanged from the prior session.
+
+### Previous session (2026-06-30)
+
+Five STAB tasks (commits below), on `origin/develop` at `d2853ad`.
 
 - **STAB-0006** — verified `mc3togltf` standalone build (no code change; already
   guarded). 41/41 targets, ctest 11/11.
@@ -255,24 +274,32 @@ No project linter/formatter is configured.
 
 ## 8. Next smallest tasks
 
-1. **STAB-0265** — Verify autosave writes `.autosave` on change.
-   Goal: confirm autosave path/trigger; note the stray `test/*.mc3.xml.autosave`
-   files already present in the tree.
-   Files: `src/MeshCraft/MeshCraftApplication*.cpp`, new/targeted test.
-   Verify: build the editor + targeted test, or inspect autosave path logic.
+1. **STAB-0266** — Verify autosave writes `.autosave` file, not the original.
+   Goal: `performAutoSave()` calls `document_.saveToFile(autoSavePath(...))` —
+   `Mc3Document::saveToFile` is itself CNA-free, so this is likely testable
+   directly (save to the `.autosave` path, confirm the original path is
+   untouched) rather than needing a mirror function.
+   Files: `mc3/test/editor_commands_test.cpp` (or a new `mc3` test).
+   Verify: `ctest -R mc3_commands --output-on-failure`.
 
-2. **STAB-0280..0283** — Remaining "commands are undoable" checks.
+2. **STAB-0267..0268** — Remaining autosave/backup checks in the same cluster.
+   Goal: check `plan.md` rows for exact wording before starting.
+   Files: `src/MeshCraft/MeshCraftApplication_FileOps.cpp`.
+
+3. **STAB-0280..0283** — Remaining "commands are undoable" checks.
    Goal: extend undo/redo coverage to the other editor commands; the GUI-level
    delete→Ctrl+Z flow needs an app-level/CNA integration harness.
    Files: `mc3/test/editor_commands_test.cpp` (+ any app-level harness).
    Verify: `ctest -R mc3_commands --output-on-failure`.
+   Status: deferred — no CNA-free seam found yet (same blocker as STAB-0299..0303).
 
-3. **STAB-0299..0303** — Dialog lifecycle safety (next Gate 3 cluster).
+4. **STAB-0299..0303** — Dialog lifecycle safety (next Gate 3 cluster).
    Goal: assert dialogs open/close cleanly and don't leak/duplicate state.
    Files: editor dialog code under `src/MeshCraft/`.
    Verify: targeted test once a CNA-free seam is found.
+   Status: deferred — same app-level/CNA harness blocker as above.
 
-4. **(optional) Rotate the PAT and activate CI.**
+5. **(optional) Rotate the PAT and activate CI.**
    Goal: revoke the exposed token, create one with `repo` + `workflow` scope,
    switch remotes off the token-in-URL, then rename `.github_` → `.github`.
    Verify: `git push origin develop` accepted and the workflow runs in Actions.
@@ -308,7 +335,8 @@ improvement. Build/test with the commands in section 7 and confirm
 cmake-build-debug still passes 18/18 (ctest --output-on-failure). Update
 NEXT.md after finishing.
 
-Current branch: develop (in sync with origin/develop at d2853ad).
+Current branch: develop (origin/develop at d2853ad; STAB-0265 changes are in
+the working tree, not yet committed/pushed).
 Build dirs: cmake-build-debug/ (Debug, CLion cmake 4.2.2), b-release/ (Release)
 Active plan: plan.md (STAB-XXXX tasks, Gate 3 in progress)
 Reconfigure cmake-build-debug ONLY with CLion's cmake 4.2.2, not /usr/bin/cmake.

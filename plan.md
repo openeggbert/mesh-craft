@@ -384,7 +384,7 @@ _Generated: 2026-06-27 from full codebase + test audit. Replaces previous 100-ta
 | STAB-0262 | 🧪 | P1 | Verify modifying scene sets dirty flag | `src/MeshCraft/MeshCraftApplication_Commands.cpp` | Add object; title bar shows `*` or equivalent |
 | STAB-0263 | 🧪 | P1 | Verify saving clears dirty flag | `src/MeshCraft/MeshCraftApplication_FileOps.cpp` | Save; dirty flag cleared; title bar no longer shows `*` |
 | STAB-0264 | 🧪 | P1 | Verify open-when-dirty prompts user (do not silently discard) | `src/MeshCraft/MeshCraftApplication_FileOps.cpp` | Open new file when unsaved changes: dialog appears |
-| STAB-0265 | 🧪 | P1 | Verify autosave interval is configurable | `src/MeshCraft/MeshCraftApplication_FileOps.cpp` | Prefs dialog shows autosave interval field; value persists to prefs.ini |
+| STAB-0265 | ✅ | P1 | Verify autosave interval is configurable | `mc3/test/editor_commands_test.cpp` | Confirmed the real logic first: `autoSaveInterval_` has a Prefs-dialog field (`MeshCraftApplication_UiOverlays.cpp:1811`) and round-trips through `prefs.ini` (`MeshCraftApplication_FileOps.cpp:305,322`). Added CNA-free mirrors `autoSavePathAlg`/`autoSaveTickAlg` (`EditorAlgorithms.hpp`) reproducing `autoSavePath()` and the update-loop countdown/trigger branch, plus `mc3_commands` coverage: custom intervals (5s, 2s) actually change trigger timing, `interval=0` disables auto-save entirely, unmodified/no-file never triggers. Negative-checked (hard-coded interval instead of reading `intervalSeconds` → 7 FAILs). root 18/18 (verified 2026-07-01) |
 | STAB-0266 | 🧪 | P1 | Verify autosave writes `.autosave` file, not the original | `src/MeshCraft/MeshCraftApplication_FileOps.cpp` | Autosave creates `scene.mc3.xml.autosave`; original unmodified |
 | STAB-0267 | 🧪 | P1 | Verify backup rotation creates backup.1, backup.2 | `src/MeshCraft/MeshCraftApplication_FileOps.cpp` | Save twice; two backup files present |
 | STAB-0268 | 📋 | P2 | Add test: backup rotation limit (max N backups) | `src/MeshCraft/MeshCraftApplication_FileOps.cpp` | Save 10 times; only N backup files exist |
@@ -875,7 +875,7 @@ _Generated: 2026-06-27 from full codebase + test audit. Replaces previous 100-ta
 | S4 glTF export | 50 | 4 | 0 | 21 | 25 | 0 |
 | S5 CSG | 35 | 4 | 0 | 9 | 22 | 0 |
 | S6 Geometry | 25 | 5 | 0 | 7 | 13 | 0 |
-| S7 Save/load | 35 | 0 | 0 | 15 | 20 | 0 |
+| S7 Save/load | 35 | 1 | 0 | 14 | 20 | 0 |
 | S8 UI robustness | 40 | 0 | 0 | 16 | 24 | 0 |
 | S9 Registry | 35 | 4 | 0 | 15 | 16 | 0 |
 | S10 AI | 40 | 0 | 0 | 8 | 32 | 0 |
@@ -889,7 +889,7 @@ _Generated: 2026-06-27 from full codebase + test audit. Replaces previous 100-ta
 | S18 Code quality | 25 | 0 | 3 | 5 | 17 | 0 |
 | S19 Security | 15 | 0 | 0 | 4 | 11 | 0 |
 | S20 Release | 15 | 0 | 0 | 0 | 15 | 0 |
-| **TOTAL** | **650** | **30** | **14** | **214** | **392** | **0** |
+| **TOTAL** | **650** | **31** | **14** | **213** | **392** | **0** |
 
 ---
 

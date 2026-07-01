@@ -469,6 +469,69 @@ static void testSnapshotIndependence()
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// autoSaveTickAlg / autoSavePathAlg (STAB-0265)
+// ─────────────────────────────────────────────────────────────────────────────
+
+static void testAutoSavePath()
+{
+    CHECK(autoSavePathAlg("scene.mc3.xml") == "scene.mc3.xml.autosave",
+          "auto-save path appends .autosave suffix");
+    CHECK(autoSavePathAlg("/tmp/proj/scene.mc3.xml") ==
+              "/tmp/proj/scene.mc3.xml.autosave",
+          "auto-save path preserves directory");
+}
+
+static void testAutoSaveIntervalConfigurable()
+{
+    // A custom (non-default) interval of 5s: countdown reaches 0 after 5s of
+    // elapsed dt and triggers exactly once, then resets to the same interval.
+    {
+        float countdown = 5.0f;
+        bool triggered = false;
+        for (int i = 0; i < 5; ++i)
+            triggered = autoSaveTickAlg(/*hasFile=*/true, /*modified=*/true,
+                                        /*interval=*/5.0f, /*dt=*/1.0f, countdown) || triggered;
+        CHECK(triggered, "custom 5s interval: triggers once 5s elapse");
+        CHECKF(countdown, 5.0f, "custom 5s interval: countdown resets to the configured interval");
+    }
+    // A different interval (2s) changes when the trigger fires — proves the
+    // interval is actually read, not hard-coded.
+    {
+        float countdown = 2.0f;
+        bool triggeredEarly = autoSaveTickAlg(true, true, 2.0f, 1.0f, countdown);
+        CHECK(!triggeredEarly, "custom 2s interval: no trigger after 1 of 2s");
+        bool triggeredNow = autoSaveTickAlg(true, true, 2.0f, 1.0f, countdown);
+        CHECK(triggeredNow, "custom 2s interval: triggers after the full 2s");
+    }
+}
+
+static void testAutoSaveDisabledWhenIntervalIsZero()
+{
+    float countdown = 60.0f;
+    bool everTriggered = false;
+    for (int i = 0; i < 1000; ++i)
+        everTriggered = autoSaveTickAlg(/*hasFile=*/true, /*modified=*/true,
+                                        /*interval=*/0.0f, /*dt=*/1.0f, countdown) || everTriggered;
+    CHECK(!everTriggered, "interval=0 disables auto-save entirely");
+    CHECKF(countdown, 60.0f, "interval=0 pins countdown at the 60s fallback");
+}
+
+static void testAutoSaveSkippedWhenNotModifiedOrNoFile()
+{
+    float countdown = 1.0f;
+    CHECK(!autoSaveTickAlg(/*hasFile=*/true, /*modified=*/false,
+                           /*interval=*/5.0f, /*dt=*/10.0f, countdown),
+          "unmodified document never auto-saves even past the interval");
+    CHECKF(countdown, 5.0f, "unmodified document: countdown reset to the interval");
+
+    countdown = 1.0f;
+    CHECK(!autoSaveTickAlg(/*hasFile=*/false, /*modified=*/true,
+                           /*interval=*/5.0f, /*dt=*/10.0f, countdown),
+          "no current file never auto-saves even past the interval");
+    CHECKF(countdown, 5.0f, "no current file: countdown reset to the interval");
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 
 int main()
 {
@@ -481,6 +544,10 @@ int main()
     testUndoRedoFindReplace();
     testUndoRedoArrayDuplicate();
     testSnapshotIndependence();
+    testAutoSavePath();
+    testAutoSaveIntervalConfigurable();
+    testAutoSaveDisabledWhenIntervalIsZero();
+    testAutoSaveSkippedWhenNotModifiedOrNoFile();
 
     std::cout << "\n";
     if (failures == 0)
