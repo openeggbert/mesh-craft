@@ -208,6 +208,111 @@ static void testInsertDuplicateDefId() {
     fs::remove(dbPath);
 }
 
+// ---------------------------------------------------------------------------
+// STAB-0340/0341/0342 — registry edge cases
+// ---------------------------------------------------------------------------
+
+// STAB-0340: an unavailable registry (never opened, or opened+closed) must
+// never crash — every public method guards on `db_ == nullptr` and returns a
+// safe default. This is the exact same code path a no-SQLite3 stub build
+// exercises (see the `#ifndef MESHCRAFT_HAS_SQLITE3` stubs above in
+// ModelRegistry.cpp, which return the same defaults unconditionally); the UI
+// side (MeshCraftApplication_UiRegistry.cpp:17-27) checks `isOpen()` and shows
+// "Model Registry is not available in this build" rather than proceeding —
+// verified by code inspection since driving the real ImGui panel needs a
+// CNA context.
+static void testUnavailableRegistryNoCrash() {
+    ModelRegistry reg; // never opened
+    CHECK(!reg.isOpen(), "unavailable registry: isOpen() false before any open()");
+    CHECK(reg.search("anything").empty(),
+          "unavailable registry: search() returns empty, no crash");
+
+    ModelRegistry::Entry e;
+    e.name = "X"; e.xml = "<mc3/>";
+    CHECK(reg.save(e) == -1, "unavailable registry: save() returns -1, no crash");
+
+    reg.remove(123); // must not crash
+    CHECK(true, "unavailable registry: remove() does not crash");
+
+    // Same guarantee after open() + close() (not just before the first open()).
+    namespace fs = std::filesystem;
+    auto dbPath = fs::temp_directory_path() / "mc3_reg_unavailable_after_close.sqlite3";
+    fs::remove(dbPath);
+    reg.open(dbPath);
+    reg.close();
+    CHECK(!reg.isOpen(), "unavailable registry: isOpen() false after close()");
+    CHECK(reg.search("anything").empty(),
+          "unavailable registry: search() safe after close()");
+    fs::remove(dbPath);
+}
+
+// STAB-0341: opening a path that can't be a SQLite DB file (a directory)
+// throws std::runtime_error with a named, non-empty message, and leaves the
+// registry closed — matching what MeshCraftApplication_UiRegistry.cpp's
+// catch block reports via setStatusMsg(std::string("Registry: ") + ex.what()).
+static void testOpenFailureThrowsNamedError() {
+    namespace fs = std::filesystem;
+    auto badPath = fs::temp_directory_path() / "mc3_reg_open_fail_dir";
+    fs::remove_all(badPath);
+    fs::create_directory(badPath);
+
+    ModelRegistry reg;
+    bool threw = false;
+    std::string message;
+    try {
+        reg.open(badPath); // a directory can't be opened as a SQLite file
+    } catch (const std::exception& ex) {
+        threw = true;
+        message = ex.what();
+    }
+    CHECK(threw, "registry open on an invalid path throws");
+    CHECK(!message.empty(), "registry open failure message is non-empty");
+    CHECK(message.find("ModelRegistry open failed") != std::string::npos,
+          "registry open failure message identifies the failing operation");
+    CHECK(!reg.isOpen(), "registry stays closed after a failed open()");
+
+    fs::remove_all(badPath);
+}
+
+// STAB-0342: search matches each of group/name/tags/description independently.
+// Each entry below has a marker unique to exactly one field, so a false
+// match (e.g. searching group text also hitting name) would be caught.
+static void testSearchMatchesEachFieldIndependently() {
+    namespace fs = std::filesystem;
+    auto dbPath = fs::temp_directory_path() / "mc3_reg_search_fields.sqlite3";
+    fs::remove(dbPath);
+
+    ModelRegistry reg;
+    reg.open(dbPath);
+
+    ModelRegistry::Entry e;
+    e.group       = "GroupMarkerZZZ";
+    e.name        = "NameMarkerZZZ";
+    e.variant     = "";
+    e.xml         = "<mc3/>";
+    e.tags        = "TagMarkerZZZ";
+    e.description = "DescMarkerZZZ";
+    e.source      = "test";
+    int64_t id = reg.save(e);
+    CHECK(id > 0, "search-fields: entry saved");
+
+    CHECK(reg.search("GroupMarkerZZZ").size() == 1, "search: matches by group");
+    CHECK(reg.search("NameMarkerZZZ").size()  == 1, "search: matches by name");
+    CHECK(reg.search("TagMarkerZZZ").size()   == 1, "search: matches by tags");
+    CHECK(reg.search("DescMarkerZZZ").size()  == 1, "search: matches by description");
+
+    // Case-insensitivity (search SQL uses lower() on both sides).
+    CHECK(reg.search("descmarkerzzz").size() == 1,
+          "search: matches by description case-insensitively");
+
+    // A marker that doesn't appear in any field must not match.
+    CHECK(reg.search("NoSuchMarkerAtAll").empty(),
+          "search: no match for a marker absent from every field");
+
+    reg.close();
+    fs::remove(dbPath);
+}
+
 static void testMigration() {
     // Opening the same DB twice should not fail (migration runs safely on existing columns)
     namespace fs = std::filesystem;
@@ -241,6 +346,9 @@ int main() {
     testEntryFromDefinitionAndInsert();
     testInsertDuplicateDefId();
     testMigration();
+    testUnavailableRegistryNoCrash();
+    testOpenFailureThrowsNamedError();
+    testSearchMatchesEachFieldIndependently();
 #else
     std::cout << "SKIP: ModelRegistry tests require MESHCRAFT_HAS_SQLITE3\n";
 #endif

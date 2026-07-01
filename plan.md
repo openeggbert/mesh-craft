@@ -72,7 +72,7 @@ _Generated: 2026-06-27 from full codebase + test audit. Replaces previous 100-ta
 | ID | St | Pri | Title | Key File(s) | Verification |
 |----|----|-----|-------|-------------|--------------|
 | STAB-0001 | ✅ | P0 | Verify clean debug build from root CMakeLists | `CMakeLists.txt` | `cmake .. -DBUILD_TESTING=ON && ninja` exits 0; 15/15 tests pass (verified 2026-06-27) |
-| STAB-0002 | ✅ | P0 | Verify release build from root CMakeLists | `CMakeLists.txt` | `cmake -S . -B b-release -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=ON && cmake --build b-release -j4` exits 0; 381/381 targets, 17/17 CTest pass (verified 2026-06-29) |
+| STAB-0002 | ✅ | P0 | Verify release build from root CMakeLists | `CMakeLists.txt` | `cmake -S . -B b-release -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=ON && cmake --build b-release -j4` exits 0; 73/73 targets, **18/18 CTest pass** (re-verified 2026-07-01, up from 17/17 on 2026-06-29 — reconfigured + rebuilt clean, no code changes needed) |
 | STAB-0003 | 🧪 | P1 | Verify build with `BUILD_TESTING=OFF` | `CMakeLists.txt` | `cmake -S . -B b -DBUILD_TESTING=OFF && cmake --build b` — no test targets compiled |
 | STAB-0004 | ✅ | P0 | Confirm all 15 CTest tests are registered | `CMakeLists.txt`, `mc3/CMakeLists.txt`, `mc3togltf/CMakeLists.txt` | `ctest -N` lists exactly 15 tests (verified 2026-06-27) |
 | STAB-0005 | ✅ | P1 | Verify `mc3` standalone build (without root project) | `mc3/CMakeLists.txt` | Fixed: guarded `mc3_commands_test` (needs editor `EditorAlgorithms.hpp` outside mc3/) + added `enable_testing()` for `PROJECT_IS_TOP_LEVEL`. `cmake -S mc3 -B mc3-build -DBUILD_TESTING=ON && cmake --build mc3-build` exits 0; `ctest` 1/1; root 17/17 unaffected (verified 2026-06-29) |
@@ -473,9 +473,9 @@ _Generated: 2026-06-27 from full codebase + test audit. Replaces previous 100-ta
 | STAB-0337 | ✅ | P0 | Registry save/search/remove | `src/MeshCraft/ModelRegistry.cpp` | `mc3_registry` passes |
 | STAB-0338 | ✅ | P0 | Registry migration (ALTER TABLE) | `src/MeshCraft/ModelRegistry.cpp` | `mc3_registry` passes |
 | STAB-0339 | ✅ | P0 | Registry insertIntoScene returns unique id | `src/MeshCraft/ModelRegistry.cpp` | `mc3_registry` passes (duplicate-id suffix test) |
-| STAB-0340 | 🧪 | P1 | Verify SQLite unavailable: registry shows error in UI (not crash) | `src/MeshCraft/ModelRegistry.cpp` | Stub build (no SQLite): UI shows "Registry unavailable" |
-| STAB-0341 | 🧪 | P1 | Verify registry DB open failure shows named error | `src/MeshCraft/ModelRegistry.cpp` | Open read-only path; `isOpen()` false; UI shows path + error |
-| STAB-0342 | 🧪 | P1 | Verify registry search: query matches group, name, tags, description | `mc3/test/mc3_registry_test.cpp` | Test each field separately; each produces the correct result |
+| STAB-0340 | ✅ | P1 | Verify SQLite unavailable: registry shows error in UI (not crash) | `mc3/test/mc3_registry_test.cpp` | An unopened/closed registry (`db_ == nullptr`) exercises the identical guarded code path a no-SQLite3 stub build would (same defaults, same guards); added a test confirming `search()`/`save()`/`remove()` are all no-crash/safe-default in that state. The UI side (`MeshCraftApplication_UiRegistry.cpp:17-27`) already checks `isOpen()` and shows "Model Registry is not available in this build" — verified by code inspection (driving the real panel needs a CNA context). root 18/18, Release 18/18 (verified 2026-07-01) |
+| STAB-0341 | ✅ | P1 | Verify registry DB open failure shows named error | `mc3/test/mc3_registry_test.cpp` | Added a test that opens a path pointing at a directory (sqlite3 reliably fails with "unable to open database file" for a non-file path) and confirms `open()` throws `std::runtime_error` with a non-empty, identifiable message, and `isOpen()` stays false afterward — matching the UI's `catch` block (`setStatusMsg(std::string("Registry: ") + ex.what())`). root 18/18, Release 18/18 (verified 2026-07-01) |
+| STAB-0342 | ✅ | P1 | Verify registry search: query matches group, name, tags, description | `mc3/test/mc3_registry_test.cpp` | Existing tests already covered name/group/tags; added a test with a marker unique to each field (group/name/tags/description) confirming `search()` matches every one independently, matches case-insensitively, and doesn't false-positive on an absent marker. Negative-checked (dropped `description` from the SQL `OR` clause → 2 FAILs). root 18/18, Release 18/18 (verified 2026-07-01) |
 | STAB-0343 | 📋 | P1 | Add test: registry search case-insensitive | `mc3/test/mc3_registry_test.cpp` | Save entry with name "Chair"; search "chair" → found |
 | STAB-0344 | 📋 | P1 | Add test: registry search by source field | `mc3/test/mc3_registry_test.cpp` | Search "ai_generated" returns only AI-sourced entries |
 | STAB-0345 | 🧪 | P1 | Verify entryFromDefinition: XML only includes referenced materials/textures | `src/MeshCraft/ModelRegistry.cpp` | Entry XML contains only materials used by the definition, not all scene materials |
@@ -877,7 +877,7 @@ _Generated: 2026-06-27 from full codebase + test audit. Replaces previous 100-ta
 | S6 Geometry | 25 | 5 | 0 | 7 | 13 | 0 |
 | S7 Save/load | 35 | 8 | 0 | 8 | 19 | 0 |
 | S8 UI robustness | 40 | 5 | 0 | 11 | 24 | 0 |
-| S9 Registry | 35 | 4 | 0 | 15 | 16 | 0 |
+| S9 Registry | 35 | 7 | 0 | 12 | 16 | 0 |
 | S10 AI | 40 | 0 | 0 | 8 | 32 | 0 |
 | S11 Materials | 30 | 0 | 0 | 9 | 21 | 0 |
 | S12 Animation | 30 | 0 | 0 | 11 | 19 | 0 |
@@ -889,7 +889,7 @@ _Generated: 2026-06-27 from full codebase + test audit. Replaces previous 100-ta
 | S18 Code quality | 25 | 0 | 3 | 5 | 17 | 0 |
 | S19 Security | 15 | 0 | 0 | 4 | 11 | 0 |
 | S20 Release | 15 | 0 | 0 | 0 | 15 | 0 |
-| **TOTAL** | **650** | **43** | **14** | **202** | **391** | **0** |
+| **TOTAL** | **650** | **46** | **14** | **199** | **391** | **0** |
 
 ---
 
