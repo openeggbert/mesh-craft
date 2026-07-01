@@ -399,10 +399,10 @@ _Generated: 2026-06-27 from full codebase + test audit. Replaces previous 100-ta
 | STAB-0277 | 📋 | P1 | Verify locked object cannot be modified by move gizmo | `src/MeshCraft/MeshCraftApplication_Mouse.cpp` | Lock object; drag gizmo; position unchanged |
 | STAB-0278 | 🧪 | P1 | Verify AI apply is undoable with Ctrl+Z | `src/MeshCraft/MeshCraftApplication_UiAi.cpp` | Apply AI result; undo; original restored |
 | STAB-0279 | ✅ | P1 | Verify delete command is undoable | `mc3/test/editor_commands_test.cpp` | Added CNA-free undo/redo coverage to `mc3_commands`: models the editor's snapshot-based undo (mirrors `deepCopyDoc`) and asserts a full snapshot→mutate→undo→redo round-trip (XML-equality oracle) for batchRename / findReplace / arrayDuplicate, plus a snapshot-independence test. Negative-checked (shallow copy → 3 FAILs). The literal GUI delete+Ctrl+Z flow needs an app-level/CNA test (deferred). root 18/18 (verified 2026-06-30) |
-| STAB-0280 | 🧪 | P1 | Verify duplicate command is undoable | `src/MeshCraft/MeshCraftApplication_Commands.cpp` | Duplicate object; Ctrl+Z; duplicate removed |
-| STAB-0281 | 🧪 | P1 | Verify group command is undoable | `src/MeshCraft/MeshCraftApplication_Commands.cpp` | Group objects; Ctrl+Z; ungrouped |
-| STAB-0282 | 🧪 | P1 | Verify ungroup command is undoable | `src/MeshCraft/MeshCraftApplication_Commands.cpp` | Ungroup; Ctrl+Z; group restored |
-| STAB-0283 | 🧪 | P1 | Verify material edit is undoable | `src/MeshCraft/Scene/PropertiesPanel.cpp` | Change baseColor; Ctrl+Z; original color restored |
+| STAB-0280 | ✅ | P1 | Verify duplicate command is undoable | `mc3/test/editor_commands_test.cpp` | Found the document mutation in `duplicateSelected()` (`MeshCraftApplication_Commands.cpp:178-204`) is pure vector/shared_ptr logic (app-state bookkeeping aside). Added CNA-free mirror `duplicateObjectsAlg` (`EditorAlgorithms.hpp`) plus direct behavior tests (copy inserted after original, `_copy` name/id, transform preserved, deep-independent) and a `checkUndoRedo` round-trip test. root 18/18 (verified 2026-07-01) |
+| STAB-0281 | ✅ | P1 | Verify group command is undoable | `mc3/test/editor_commands_test.cpp` | Added CNA-free mirror `groupObjectsAlg` + `removeFromListAlg` mirroring `groupSelected()`/`removeFromList()` (`MeshCraftApplication_Commands.cpp:250-276`, `MeshCraftPrivate.hpp:60-68`). Direct tests confirm children/order/non-selected-object handling; `checkUndoRedo` confirms the round-trip. Negative-checked (dropped the `removeFromListAlg` call → 2 FAILs, caught by the direct behavior test). root 18/18 (verified 2026-07-01) |
+| STAB-0282 | ✅ | P1 | Verify ungroup command is undoable | `mc3/test/editor_commands_test.cpp` | Added CNA-free mirror `ungroupObjectAlg` mirroring `ungroupSelected()` (`MeshCraftApplication_Commands.cpp:278-296`). Direct tests confirm children restored to their former position, group removed, and rejection of non-Group/empty-Group input; `checkUndoRedo` confirms the round-trip (re-locates the group by name each call since post-undo `d` is a fresh snapshot copy). root 18/18 (verified 2026-07-01) |
+| STAB-0283 | ✅ | P1 | Verify material edit is undoable | `mc3/test/editor_commands_test.cpp` | The `PropertiesPanel.cpp` `ColorEdit4` widget is ImGui-coupled, but the document mutation it performs (`Mc3Material::baseColor` field assignment on `Mc3Document::materials`) is plain data — no new Alg function needed. `checkUndoRedo` confirms the already-proven generic snapshot/undo mechanism (STAB-0279) also round-trips material edits. root 18/18 (verified 2026-07-01) |
 | STAB-0284 | 📋 | P1 | Verify animation keyframe edit is undoable | `src/MeshCraft/MeshCraftApplication_Anim.cpp` | Add keyframe; Ctrl+Z; keyframe removed |
 | STAB-0285 | 📋 | P1 | Verify registry insert is undoable | `src/MeshCraft/MeshCraftApplication_UiRegistry.cpp` | Insert model from registry; Ctrl+Z; removed |
 | STAB-0286 | 🧪 | P1 | Verify keybinding changes persist across restart | `src/MeshCraft/MeshCraftApplication_Keybindings.cpp` | Change keybinding; restart app; binding preserved |
@@ -875,7 +875,7 @@ _Generated: 2026-06-27 from full codebase + test audit. Replaces previous 100-ta
 | S4 glTF export | 50 | 4 | 0 | 21 | 25 | 0 |
 | S5 CSG | 35 | 4 | 0 | 9 | 22 | 0 |
 | S6 Geometry | 25 | 5 | 0 | 7 | 13 | 0 |
-| S7 Save/load | 35 | 4 | 0 | 12 | 19 | 0 |
+| S7 Save/load | 35 | 8 | 0 | 8 | 19 | 0 |
 | S8 UI robustness | 40 | 0 | 0 | 16 | 24 | 0 |
 | S9 Registry | 35 | 4 | 0 | 15 | 16 | 0 |
 | S10 AI | 40 | 0 | 0 | 8 | 32 | 0 |
@@ -889,7 +889,7 @@ _Generated: 2026-06-27 from full codebase + test audit. Replaces previous 100-ta
 | S18 Code quality | 25 | 0 | 3 | 5 | 17 | 0 |
 | S19 Security | 15 | 0 | 0 | 4 | 11 | 0 |
 | S20 Release | 15 | 0 | 0 | 0 | 15 | 0 |
-| **TOTAL** | **650** | **34** | **14** | **211** | **391** | **0** |
+| **TOTAL** | **650** | **38** | **14** | **207** | **391** | **0** |
 
 ---
 

@@ -393,6 +393,79 @@ static void testArrayDuplicate()
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// duplicateObjectsAlg / groupObjectsAlg / ungroupObjectAlg (STAB-0280/0281/0282)
+// ─────────────────────────────────────────────────────────────────────────────
+
+static void testDuplicateObjects()
+{
+    auto a = makeObj("a", "A");
+    auto b = makeObj("b", "B");
+    a->transform.position[0] = 1.0f;
+    std::vector<std::shared_ptr<Mc3Object>> root = {a, b};
+
+    auto created = duplicateObjectsAlg(root, {a});
+    CHECK(created.size() == 1,        "duplicate: 1 copy created");
+    CHECK(root.size() == 3,           "duplicate: root grows by 1");
+    CHECK(root[0]->name == "A",       "duplicate: original stays at index 0");
+    CHECK(root[1]->name == "A_copy",  "duplicate: copy inserted right after original");
+    CHECK(root[1]->id   == "a_copy",  "duplicate: copy id suffixed with _copy");
+    CHECK(root[2]->name == "B",       "duplicate: B not displaced");
+    CHECKF(root[1]->transform.position[0], 1.0f, "duplicate: copy preserves transform");
+
+    // Copy is independent of the original.
+    root[1]->transform.position[0] = 99.0f;
+    CHECKF(a->transform.position[0], 1.0f, "duplicate: copy is a deep, independent copy");
+}
+
+static void testGroupAndUngroupObjects()
+{
+    auto a = makeObj("a", "A");
+    auto b = makeObj("b", "B");
+    auto c = makeObj("c", "C");
+    std::vector<std::shared_ptr<Mc3Object>> root = {a, b, c};
+
+    auto group = groupObjectsAlg(root, {a, c}, "Group1");
+    CHECK(group != nullptr,        "group: returns the new group object");
+    CHECK(root.size() == 2,        "group: a and c removed from root, group inserted");
+    CHECK(root[0]->name == "Group1" || root[1]->name == "Group1",
+          "group: the new group is somewhere in root");
+    CHECK(group->children.size() == 2, "group: group has 2 children");
+    CHECK(group->children[0]->name == "A", "group: child order preserved (A)");
+    CHECK(group->children[1]->name == "C", "group: child order preserved (C)");
+    bool bStillTopLevel = std::any_of(root.begin(), root.end(),
+        [&](const auto& o){ return o.get() == b.get(); });
+    CHECK(bStillTopLevel, "group: B (not selected) stays top-level, ungrouped");
+
+    auto restored = ungroupObjectAlg(root, group);
+    CHECK(restored.size() == 2, "ungroup: returns the 2 former children");
+    CHECK(root.size() == 3,     "ungroup: root back to 3 top-level objects");
+    bool groupGone = std::none_of(root.begin(), root.end(),
+        [&](const auto& o){ return o.get() == group.get(); });
+    CHECK(groupGone, "ungroup: the group object itself is removed");
+    bool aRestored = std::any_of(root.begin(), root.end(),
+        [&](const auto& o){ return o.get() == a.get(); });
+    bool cRestored = std::any_of(root.begin(), root.end(),
+        [&](const auto& o){ return o.get() == c.get(); });
+    CHECK(aRestored && cRestored, "ungroup: A and C are back at top level");
+}
+
+static void testUngroupRejectsNonGroupOrEmptyGroup()
+{
+    auto a = makeObj("a", "A");
+    std::vector<std::shared_ptr<Mc3Object>> root = {a};
+    CHECK(ungroupObjectAlg(root, a).empty(),
+          "ungroup: rejects a non-Group object (no-op)");
+    CHECK(root.size() == 1, "ungroup: root unchanged after rejected ungroup");
+
+    auto emptyGroup = std::make_shared<Mc3Object>();
+    emptyGroup->type = Mc3::ObjectType::Group;
+    emptyGroup->name = "Empty";
+    root.push_back(emptyGroup);
+    CHECK(ungroupObjectAlg(root, emptyGroup).empty(),
+          "ungroup: rejects a Group with no children (no-op)");
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // deepCopyObjectAlg
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -452,6 +525,53 @@ static void testUndoRedoArrayDuplicate()
         std::vector<std::shared_ptr<Mc3Object>> sources = { d.objects.front() };
         arrayDuplicateObjects(d.objects, sources,
                               /*count=*/3, /*axis=*/0, /*spacing=*/2.0f, /*relative=*/true);
+    });
+}
+
+static void testUndoRedoDuplicate()
+{
+    Mc3Document doc = makeUndoScene();
+    checkUndoRedo("duplicate", doc, [&](Mc3Document& d) {
+        duplicateObjectsAlg(d.objects, { d.objects.front() });
+    });
+}
+
+static void testUndoRedoGroup()
+{
+    Mc3Document doc = makeUndoScene();
+    checkUndoRedo("group", doc, [&](Mc3Document& d) {
+        groupObjectsAlg(d.objects, { d.objects[0], d.objects[1] }, "TestGroup");
+    });
+}
+
+static void testUndoRedoUngroup()
+{
+    // Ungroup acts on a pre-existing group, so build one before the command
+    // under test runs (group creation itself is covered by testUndoRedoGroup).
+    Mc3Document doc = makeUndoScene();
+    groupObjectsAlg(doc.objects, { doc.objects[0], doc.objects[1] }, "PreGroup");
+    checkUndoRedo("ungroup", doc, [&](Mc3Document& d) {
+        // Re-locate the group by name on every call (including the post-undo
+        // redo call) rather than capturing a shared_ptr from setup: after
+        // undo, `d` has been replaced by a fresh deep copy (snapshotDoc), so
+        // a captured pointer from before snapshotting would be stale.
+        auto it = std::find_if(d.objects.begin(), d.objects.end(),
+            [](const auto& o){ return o->name == "PreGroup"; });
+        if (it != d.objects.end()) ungroupObjectAlg(d.objects, *it);
+    });
+}
+
+// Material edits (STAB-0283) go through PropertiesPanel.cpp's ImGui
+// ColorEdit4 widget in the real app, which can't run headlessly — but the
+// *document*-level mutation it performs is a plain field assignment on
+// Mc3Document::materials, which is exactly what the generic snapshot/undo
+// mechanism (STAB-0279) needs to round-trip. No new Alg function needed.
+static void testUndoRedoMaterialEdit()
+{
+    Mc3Document doc = makeUndoScene();
+    doc.materials["stone"] = Mc3::Mc3Material("stone", {0.5f, 0.5f, 0.5f, 1.0f});
+    checkUndoRedo("materialEdit", doc, [&](Mc3Document& d) {
+        d.materials["stone"].baseColor = {0.1f, 0.2f, 0.3f, 0.9f};
     });
 }
 
@@ -691,10 +811,17 @@ int main()
     testBatchRename();
     testFindReplace();
     testArrayDuplicate();
+    testDuplicateObjects();
+    testGroupAndUngroupObjects();
+    testUngroupRejectsNonGroupOrEmptyGroup();
     testDeepCopy();
     testUndoRedoBatchRename();
     testUndoRedoFindReplace();
     testUndoRedoArrayDuplicate();
+    testUndoRedoDuplicate();
+    testUndoRedoGroup();
+    testUndoRedoUngroup();
+    testUndoRedoMaterialEdit();
     testSnapshotIndependence();
     testAutoSavePath();
     testAutoSaveIntervalConfigurable();

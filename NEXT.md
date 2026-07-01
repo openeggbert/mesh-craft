@@ -15,11 +15,12 @@ new features. All work is tracked in `plan.md` as STAB-XXXX tasks across
 sections S0–S20, guarded by Gates 0–6.
 
 **Current phase:** Stabilization. Gate 0 (Build) and Gate 1 (Format) complete;
-Gate 2 (Export) priority items complete. **Gate 3 (Editor safety) in progress**
-— undo/redo coverage (STAB-0279), auto-save interval + auto-save-file coverage
-(STAB-0265, STAB-0266), and backup-rotation coverage (STAB-0267, STAB-0268)
-landed; STAB-0280..0283 and STAB-0299..0303 remain deferred pending an
-app-level/CNA test harness (see §5).
+Gate 2 (Export) priority items complete. **Gate 3 (Editor safety) nearly
+done**: undo/redo (STAB-0279), auto-save interval + auto-save-file
+(STAB-0265/0266), backup-rotation (STAB-0267/0268), and duplicate/group/
+ungroup/material-edit undo (STAB-0280..0283) all landed. Only
+STAB-0299..0303 (dialog lifecycle) remains, and it's a weaker candidate —
+see §8.
 
 **Key architectural decisions:**
 - `mc3/` and `mcb/` are pure C++ static libs with **no** CNA/ImGui dependency
@@ -56,10 +57,14 @@ round-trips (STAB-0279), auto-save interval configurability (STAB-0265, via
 CNA-free mirrors `autoSavePathAlg`/`autoSaveTickAlg` of the real
 `autoSavePath()`/update-loop logic), auto-save writing a separate `.autosave`
 file without touching the original (STAB-0266, using the real
-`Mc3Document::saveToFile`), **and** backup rotation (STAB-0267/0268, via the
-CNA-free mirror `rotateBackupsAlg` of the real `saveFile()` backup block —
-confirmed a fixed 2-slot ring buffer, no configurable depth). Standalone
-component builds register a subset:
+`Mc3Document::saveToFile`), backup rotation (STAB-0267/0268, via the CNA-free
+mirror `rotateBackupsAlg` of the real `saveFile()` backup block — confirmed a
+fixed 2-slot ring buffer, no configurable depth), **and** duplicate/group/
+ungroup/material-edit undo (STAB-0280..0283, via CNA-free mirrors
+`duplicateObjectsAlg`/`groupObjectsAlg`/`ungroupObjectAlg`/`removeFromListAlg`
+of the real `MeshCraftApplication_Commands.cpp` command bodies, plus a direct
+material-field mutation for the material-edit case). Standalone component
+builds register a subset:
 `mc3`→1, `mcb`→1, `mc3togltf`→11, `mc3tomcb`→2; the editor-only `mc3_commands`
 runs only in the root build.
 
@@ -122,10 +127,32 @@ runs only in the root build.
   3rd save → `backup.1`/`backup.2` both correct (STAB-0267); 10 sequential
   saves → still only 2 backup files, each holding just the two most recent
   prior versions, no `backup.3` ever appears (STAB-0268). Negative-checked
-  (dropped the `backup.1`→`backup.2` cascade → 4 FAILs). **Not yet committed**
-  (awaiting user go-ahead).
+  (dropped the `backup.1`→`backup.2` cascade → 4 FAILs). Committed as
+  `fa819c8`.
+- **STAB-0280..0283** — Verified duplicate/group/ungroup/material-edit are
+  undoable. Investigated first: `duplicateSelected()`/`groupSelected()`/
+  `ungroupSelected()` (`MeshCraftApplication_Commands.cpp:178-296`) turned
+  out to have pure vector/shared_ptr document mutation once app-state
+  bookkeeping (selection_, modified_, updateWindowTitle(), recordStep()) is
+  set aside — same shape as the already-shared `arrayDuplicateObjects`.
+  Added CNA-free mirrors `duplicateObjectsAlg`, `groupObjectsAlg`,
+  `ungroupObjectAlg`, `removeFromListAlg` to `EditorAlgorithms.hpp`, plus
+  direct behavior tests (insertion position, `_copy` suffixing, child
+  order, non-Group/empty-Group rejection) and `checkUndoRedo` round-trips
+  for all three. STAB-0283 needed no new Alg function — `PropertiesPanel.cpp`'s
+  `ColorEdit4` widget is ImGui-coupled but the mutation it performs
+  (`Mc3Material::baseColor` field assignment) is plain data, so
+  `checkUndoRedo` with a direct mutation lambda was enough. Negative-checked
+  (dropped the `removeFromListAlg` call in `groupObjectsAlg` → 2 FAILs,
+  caught by the direct behavior test). **Not yet committed** (awaiting user
+  go-ahead).
 
-Test count stays 18 for all four tasks (checks added to the existing
+  This closes out the Gate 3 "commands are undoable" cluster
+  (STAB-0279..0283) entirely. Only STAB-0299..0303 (dialog lifecycle) is
+  left in Gate 3, and it's a weaker candidate for this CNA-free-mirror
+  approach — see §8.
+
+Test count stays 18 for all eight tasks (checks added to the existing
 `mc3_commands` binary, no new ctest registered). root 18/18 (verified
 2026-07-01). The push-token situation in §4 is unchanged from the prior
 session.
@@ -302,34 +329,34 @@ No project linter/formatter is configured.
 
 ## 8. Next smallest tasks
 
-The Gate 3 priority-order clusters (`plan.md` §Priority Execution Order) are
-now: STAB-0279 ✅, STAB-0280..0283 (below), STAB-0299..0303 (below),
-STAB-0265..0268 ✅. Both remaining clusters were previously assumed blocked
-on a missing app-level/CNA harness — but that assumption predates the
-STAB-0265..0268 sessions, which found CNA-free seams (`saveToFile`,
-a mirrorable backup/autosave block) in files that looked CNA-coupled at a
-glance. Re-check each file with fresh eyes before deferring again.
+The Gate 3 "commands are undoable" cluster (STAB-0279..0283) is now fully
+✅. Only STAB-0299..0303 is left in Gate 3's priority-order list.
 
-1. **STAB-0280..0283** — "Commands are undoable": duplicate / group / ungroup
-   / material edit.
-   Goal: check `MeshCraftApplication_Commands.cpp` and `PropertiesPanel.cpp`
-   for a pure-logic seam (like `rotateBackupsAlg`) before concluding a CNA
-   harness is required.
-   Files: `mc3/test/editor_commands_test.cpp` (+ any app-level harness).
-   Verify: `ctest -R mc3_commands --output-on-failure`.
+1. **STAB-0299..0303** — Dialog lifecycle safety (AI pending dialog Reset/
+   Apply, registry dialog auto-close, Properties panel crash-safety).
+   Investigated 2026-07-01: the Reset/Apply/Save-to-Registry transitions in
+   `MeshCraftApplication_UiAi.cpp:264-380` ARE just plain field assignments
+   (`aiPendingDoc_.reset()`, `regSaveFromAi_ = false`, etc.) — but they're
+   directly inside `if (ImGui::Button(...))` blocks with no separable
+   function today. A mirror is *possible* (introduce a small state struct +
+   `aiResetAlg`/`aiApplyAlg` functions replicating the assignments) but,
+   unlike `rotateBackupsAlg`/`duplicateObjectsAlg`, there's no real
+   algorithmic complexity to verify — it would mostly test that the mirror
+   matches itself. Lower priority than the wins above; get explicit user
+   buy-in on the value before spending time here.
+   Files: `MeshCraftApplication_UiAi.cpp`, `PropertiesPanel.cpp`.
+   Verify: targeted test once/if a mirror is added.
 
-2. **STAB-0299..0303** — Dialog lifecycle safety (AI pending dialog, registry
-   dialog, Properties panel crash-safety).
-   Goal: same re-check — `MeshCraftApplication_UiAi.cpp` / `PropertiesPanel.cpp`
-   may have extractable state-machine logic even if the render calls are
-   CNA-coupled.
-   Files: editor dialog code under `src/MeshCraft/`.
-   Verify: targeted test once a CNA-free seam is found.
-
-3. **(optional) Rotate the PAT and activate CI.**
+2. **(optional) Rotate the PAT and activate CI.**
    Goal: revoke the exposed token, create one with `repo` + `workflow` scope,
    switch remotes off the token-in-URL, then rename `.github_` → `.github`.
    Verify: `git push origin develop` accepted and the workflow runs in Actions.
+
+3. **(optional) Move beyond Gate 3.** With undo/redo, auto-save, backup
+   rotation, and the main document-mutating commands all covered, it may be
+   worth checking whether Gate 4 (Registry/AI, STAB-0371..0376 AI mock
+   tests) or re-verifying Release-mode 18/18 (§2, stale since STAB-0002) is
+   a better use of the next session than the weaker STAB-0299..0303 cluster.
 
 ---
 
@@ -363,8 +390,8 @@ cmake-build-debug still passes 18/18 (ctest --output-on-failure). Update
 NEXT.md after finishing.
 
 Current branch: develop (origin/develop at d2853ad; STAB-0265 committed
-locally as 95d8db7; STAB-0266 committed locally as c771513; STAB-0267/0268
-changes are in the working tree, not yet committed/pushed).
+locally as 95d8db7; STAB-0266 as c771513; STAB-0267/0268 as fa819c8;
+STAB-0280..0283 changes are in the working tree, not yet committed/pushed).
 Build dirs: cmake-build-debug/ (Debug, CLion cmake 4.2.2), b-release/ (Release)
 Active plan: plan.md (STAB-XXXX tasks, Gate 3 in progress)
 Reconfigure cmake-build-debug ONLY with CLion's cmake 4.2.2, not /usr/bin/cmake.

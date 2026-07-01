@@ -65,6 +65,18 @@ findParentListAlg(std::vector<std::shared_ptr<Mc3::Mc3Object>>& list,
     return nullptr;
 }
 
+// Mirrors removeFromList() in MeshCraftPrivate.hpp: removes target from list
+// (searching recursively into children) wherever it appears.
+inline void removeFromListAlg(std::vector<std::shared_ptr<Mc3::Mc3Object>>& list,
+                              const Mc3::Mc3Object* target)
+{
+    list.erase(std::remove_if(list.begin(), list.end(),
+        [&](const auto& o){ return o.get() == target; }), list.end());
+    for (auto& obj : list)
+        if (!obj->children.empty())
+            removeFromListAlg(obj->children, target);
+}
+
 // ── Rename pattern ────────────────────────────────────────────────────────────
 // Tokens: {name}, {type}, {index}, {index:02d}, {index:03d},
 //         {index0}, {index0:02d}, {index0:03d}
@@ -252,6 +264,87 @@ inline std::vector<std::shared_ptr<Mc3::Mc3Object>> arrayDuplicateObjects(
         }
     }
     return created;
+}
+
+// ── Duplicate / Group / Ungroup (STAB-0280/0281/0282) ─────────────────────────
+//
+// Mirror the object-tree mutation performed by MeshCraftApplication::
+// duplicateSelected() / groupSelected() / ungroupSelected()
+// (MeshCraftApplication_Commands.cpp:178-296). Only the document mutation is
+// mirrored — the app-state bookkeeping those methods also do (selection_,
+// modified_, updateWindowTitle(), recordStep()) doesn't affect whether the
+// *document* round-trips through undo/redo, which is what's under test.
+
+// Duplicates each selected object in place (inserted right after the
+// original in its parent list) with "_copy" name/id suffixes. Returns the
+// new objects.
+inline std::vector<std::shared_ptr<Mc3::Mc3Object>> duplicateObjectsAlg(
+    std::vector<std::shared_ptr<Mc3::Mc3Object>>&       rootObjects,
+    const std::vector<std::shared_ptr<Mc3::Mc3Object>>& selected)
+{
+    std::vector<std::shared_ptr<Mc3::Mc3Object>> newObjs;
+    for (const auto& s : selected) {
+        auto* parent = findParentListAlg(rootObjects, s.get());
+        if (!parent) continue;
+        auto copy = deepCopyObjectAlg(*s);
+        copy->name = s->name + "_copy";
+        copy->id   = s->id.empty() ? copy->name : s->id + "_copy";
+        auto it = std::find_if(parent->begin(), parent->end(),
+            [&](const auto& o){ return o.get() == s.get(); });
+        if (it != parent->end()) ++it;
+        parent->insert(it, copy);
+        newObjs.push_back(copy);
+    }
+    return newObjs;
+}
+
+// Groups the selected objects as children of a new Group object, inserted at
+// the position of the earliest-selected object. Returns the new group (or
+// nullptr if selected is empty).
+inline std::shared_ptr<Mc3::Mc3Object> groupObjectsAlg(
+    std::vector<std::shared_ptr<Mc3::Mc3Object>>&       rootObjects,
+    const std::vector<std::shared_ptr<Mc3::Mc3Object>>& selected,
+    const std::string&                                   groupName)
+{
+    if (selected.empty()) return nullptr;
+
+    size_t insertIdx = rootObjects.size();
+    for (const auto& s : selected)
+        for (size_t i = 0; i < rootObjects.size(); ++i)
+            if (rootObjects[i].get() == s.get()) { insertIdx = std::min(insertIdx, i); break; }
+
+    auto group = std::make_shared<Mc3::Mc3Object>();
+    group->type = Mc3::ObjectType::Group;
+    group->name = groupName;
+
+    for (const auto& s : selected) {
+        group->children.push_back(s);
+        removeFromListAlg(rootObjects, s.get());
+    }
+    insertIdx = std::min(insertIdx, rootObjects.size());
+    rootObjects.insert(rootObjects.begin() + static_cast<std::ptrdiff_t>(insertIdx), group);
+    return group;
+}
+
+// Ungroups groupObj: its children are spliced into groupObj's former
+// position in its parent list, and groupObj itself is removed. Returns the
+// (now top-level-in-that-list) children, or empty if groupObj isn't a
+// non-empty Group or isn't found in rootObjects.
+inline std::vector<std::shared_ptr<Mc3::Mc3Object>> ungroupObjectAlg(
+    std::vector<std::shared_ptr<Mc3::Mc3Object>>& rootObjects,
+    const std::shared_ptr<Mc3::Mc3Object>&        groupObj)
+{
+    if (groupObj->type != Mc3::ObjectType::Group || groupObj->children.empty())
+        return {};
+    auto children = groupObj->children;
+    auto* parentList = findParentListAlg(rootObjects, groupObj.get());
+    if (!parentList) return {};
+    auto it = std::find_if(parentList->begin(), parentList->end(),
+        [&](const auto& o) { return o.get() == groupObj.get(); });
+    if (it == parentList->end()) return {};
+    auto insertIt = parentList->erase(it);
+    for (const auto& child : children) { insertIt = parentList->insert(insertIt, child); ++insertIt; }
+    return children;
 }
 
 // ── Auto-save (STAB-0265) ─────────────────────────────────────────────────────
