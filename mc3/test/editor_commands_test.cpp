@@ -922,6 +922,267 @@ static void testUnsavedDialogChoices()
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// AI apply is undoable (STAB-0270/0278)
+//
+// MeshCraftApplication::drawAiPanel()'s "Apply to Scene" button
+// (MeshCraftApplication_UiAi.cpp:317-324) does `pushUndo(); document_ =
+// *aiPendingDoc_;` — a plain full-document replacement, no new Alg needed.
+// checkUndoRedo confirms the generic snapshot/undo mechanism (STAB-0279)
+// round-trips a full-document replacement exactly like it does the smaller
+// per-field mutations (batchRename, materialEdit, ...).
+// ─────────────────────────────────────────────────────────────────────────────
+
+static void testUndoRedoAiApply()
+{
+    Mc3Document doc = makeUndoScene();
+    Mc3Document aiResult;
+    aiResult.model = "AiGenerated";
+    aiResult.objects = { makeObj("ai1", "AiBox") };
+
+    checkUndoRedo("aiApply", doc, [&](Mc3Document& d) {
+        d = aiResult;
+    });
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Merge scene (STAB-0271)
+// ─────────────────────────────────────────────────────────────────────────────
+
+static void testUndoRedoMergeScene()
+{
+    Mc3Document doc = makeUndoScene();
+    Mc3Document src;
+    src.objects = { makeObj("merged", "MergedBox") };
+
+    checkUndoRedo("mergeScene", doc, [&](Mc3Document& d) {
+        mergeDocumentsAlg(d, src);
+    });
+}
+
+static void testMergeSceneCollisionHandling()
+{
+    Mc3Document dst = makeUndoScene();
+    dst.textures["wood"]  = Mc3::Mc3Texture("wood", "wood_old.png");
+    dst.materials["stone"] = Mc3::Mc3Material("stone", {0.5f, 0.5f, 0.5f, 1.0f});
+
+    Mc3Document src;
+    src.textures["wood"]  = Mc3::Mc3Texture("wood", "wood_new.png"); // collides
+    src.textures["metal"] = Mc3::Mc3Texture("metal", "metal.png");   // new
+    src.materials["stone"] = Mc3::Mc3Material("stone", {0.1f, 0.1f, 0.1f, 1.0f}); // collides
+    src.objects = { makeObj("s1", "SrcBoxA"), makeObj("s2", "SrcBoxB") };
+
+    int added = mergeDocumentsAlg(dst, src);
+
+    CHECK(added == 2, "mergeScene: returns the number of objects appended");
+    CHECK(dst.objects.size() == 4, "mergeScene: source objects appended to destination");
+
+    CHECK(dst.textures.at("wood").uri == "wood_old.png",
+          "mergeScene: texture key collision — existing destination texture wins");
+    CHECK(dst.textures.count("metal") == 1,
+          "mergeScene: non-colliding source texture is merged in");
+
+    CHECK(dst.materials.count("stone") == 1, "mergeScene: original 'stone' material untouched");
+    CHECK(dst.materials.at("stone").baseColor[0] == 0.5f,
+          "mergeScene: material key collision — existing destination material is not overwritten");
+    CHECK(dst.materials.count("stone_2") == 1,
+          "mergeScene: colliding source material is inserted under a suffixed key");
+    CHECK(dst.materials.at("stone_2").name == "stone_2",
+          "mergeScene: suffixed material's name field is updated to match its new key");
+    CHECK(dst.materials.at("stone_2").baseColor[0] == 0.1f,
+          "mergeScene: suffixed material keeps the source's field values");
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Save As does not overwrite the original file (STAB-0272)
+// ─────────────────────────────────────────────────────────────────────────────
+
+static void testResolveSaveAsPath()
+{
+    auto [p1, mcb1] = resolveSaveAsPathAlg("scene");
+    CHECK(p1 == "scene.mc3.xml" && !mcb1,
+          "Save As: bare name gets .mc3.xml appended");
+
+    auto [p2, mcb2] = resolveSaveAsPathAlg("scene.mc3.xml");
+    CHECK(p2 == "scene.mc3.xml" && !mcb2,
+          "Save As: already-suffixed path is left unchanged");
+
+    auto [p3, mcb3] = resolveSaveAsPathAlg("scene.mcb");
+    CHECK(p3 == "scene.mcb" && mcb3,
+          "Save As: .mcb path is routed to the MCB writer, not suffixed with .mc3.xml");
+
+    auto [p4, mcb4] = resolveSaveAsPathAlg("/tmp/proj/house");
+    CHECK(p4 == "/tmp/proj/house.mc3.xml" && !mcb4,
+          "Save As: directory prefix is preserved");
+}
+
+static void testSaveAsDoesNotOverwriteOriginal()
+{
+    Mc3Document doc = makeUndoScene();
+    static int tmpIdx = 0;
+    auto dir = std::filesystem::temp_directory_path();
+    auto original = dir / ("mc3_saveas_orig_" + std::to_string(tmpIdx) + ".mc3.xml");
+    auto newPath  = dir / ("mc3_saveas_new_"  + std::to_string(tmpIdx++) + ".mc3.xml");
+    std::error_code ec;
+    std::filesystem::remove(original, ec);
+    std::filesystem::remove(newPath, ec);
+
+    doc.model = "Original";
+    doc.saveToFile(original);
+    const std::string originalContent = readFile(original);
+
+    // Simulate "Save As" to a different path: same document, resolved path.
+    doc.model = "SavedAs";
+    auto [resolved, isMcb] = resolveSaveAsPathAlg(newPath.string());
+    CHECK(!isMcb, "Save As target resolves to the XML writer");
+    doc.saveToFile(resolved);
+
+    CHECK(std::filesystem::exists(original), "Save As: original file still exists");
+    CHECK(readFile(original) == originalContent,
+          "Save As: original file's content is untouched");
+    CHECK(std::filesystem::exists(newPath), "Save As: new file was created");
+    CHECK(readFile(newPath).find("model=\"SavedAs\"") != std::string::npos,
+          "Save As: new file holds the current (post-edit) document");
+
+    std::filesystem::remove(original, ec);
+    std::filesystem::remove(newPath, ec);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Export Selection scoping (STAB-0273/0274)
+// ─────────────────────────────────────────────────────────────────────────────
+
+static void testExportSelectionOnlySelectedObjects()
+{
+    Mc3Document doc;
+    auto a = makeObj("a", "A"); a->material = "stone";
+    auto b = makeObj("b", "B"); b->material = "wood";
+    auto c = makeObj("c", "C");
+    doc.objects = { a, b, c };
+    doc.materials["stone"] = Mc3::Mc3Material("stone", {1,0,0,1});
+    doc.materials["wood"]  = Mc3::Mc3Material("wood",  {0,1,0,1});
+
+    Mc3Document exported = exportSelectionAlg(doc, { a, c });
+
+    CHECK(exported.objects.size() == 2,
+          "Export Selection: only the selected objects are included");
+    bool hasA = std::any_of(exported.objects.begin(), exported.objects.end(),
+        [](const auto& o){ return o->id == "a"; });
+    bool hasC = std::any_of(exported.objects.begin(), exported.objects.end(),
+        [](const auto& o){ return o->id == "c"; });
+    bool hasB = std::any_of(exported.objects.begin(), exported.objects.end(),
+        [](const auto& o){ return o->id == "b"; });
+    CHECK(hasA && hasC, "Export Selection: selected objects a and c are present");
+    CHECK(!hasB, "Export Selection: unselected object b is excluded");
+    CHECK(exported.materials.count("wood") == 0,
+          "Export Selection: materials belonging only to unselected objects are excluded");
+}
+
+static void testExportSelectionIncludesDependentMaterialsAndTextures()
+{
+    Mc3Document doc;
+    auto a = makeObj("a", "A");
+    a->material = "stone";
+    a->materialOverride = "trim";
+    auto child = makeObj("a_child", "AChild");
+    child->material = "wood"; // referenced only via a nested child
+    a->children.push_back(child);
+    doc.objects = { a };
+
+    doc.materials["stone"] = Mc3::Mc3Material("stone", {1,0,0,1});
+    doc.materials["stone"].baseColorTexture = "stoneTex";
+    doc.materials["trim"]  = Mc3::Mc3Material("trim",  {0,0,1,1});
+    doc.materials["wood"]  = Mc3::Mc3Material("wood",  {0,1,0,1});
+    doc.materials["unrelated"] = Mc3::Mc3Material("unrelated", {1,1,1,1});
+
+    doc.textures["stoneTex"]     = Mc3::Mc3Texture("stoneTex", "stone.png");
+    doc.textures["unrelatedTex"] = Mc3::Mc3Texture("unrelatedTex", "unrelated.png");
+
+    Mc3Document exported = exportSelectionAlg(doc, { a });
+
+    CHECK(exported.materials.count("stone") == 1,
+          "Export Selection: material referenced by 'material' is included");
+    CHECK(exported.materials.count("trim") == 1,
+          "Export Selection: material referenced by 'materialOverride' is included");
+    CHECK(exported.materials.count("wood") == 1,
+          "Export Selection: material referenced only by a nested child is included");
+    CHECK(exported.materials.count("unrelated") == 0,
+          "Export Selection: material not referenced by the selection is excluded");
+    CHECK(exported.textures.count("stoneTex") == 1,
+          "Export Selection: texture referenced by an included material is included");
+    CHECK(exported.textures.count("unrelatedTex") == 0,
+          "Export Selection: texture not referenced by any included material is excluded");
+    CHECK(exported.objects.front()->children.size() == 1,
+          "Export Selection: nested children are deep-copied along with their parent");
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Drag-drop MC3 file routing (STAB-0275)
+// ─────────────────────────────────────────────────────────────────────────────
+
+static void testDroppableScenePathDetection()
+{
+    CHECK(isDroppableScenePathAlg("house.mc3.xml"),
+          "drag-drop: a .mc3.xml path is treated as a droppable scene file");
+    CHECK(isDroppableScenePathAlg("/tmp/scenes/house.mc3.xml"),
+          "drag-drop: droppable detection works with a full path");
+    CHECK(isDroppableScenePathAlg("plain.xml"),
+          "drag-drop: a bare .xml path is treated as a droppable scene file");
+    CHECK(!isDroppableScenePathAlg("texture.png"),
+          "drag-drop: a .png path is NOT treated as a droppable scene file");
+    CHECK(!isDroppableScenePathAlg("readme.txt"),
+          "drag-drop: an unrelated .txt path is NOT treated as a droppable scene file");
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Invalid file load produces a named error, not a crash (STAB-0276)
+//
+// Mirrors the catch block in the "Open File" dialog (MeshCraftApplication_
+// UiOverlays.cpp:1160-1179): Mc3Document::loadFromFile() is called directly
+// (no Alg mirror needed — it's already CNA-free), and the dialog relies on it
+// throwing std::exception with a non-empty, descriptive message for any
+// unparseable input rather than crashing.
+// ─────────────────────────────────────────────────────────────────────────────
+
+static void testInvalidFileLoadThrowsNamedError()
+{
+    static int tmpIdx = 0;
+    auto path = std::filesystem::temp_directory_path() /
+                ("mc3_invalid_" + std::to_string(tmpIdx++) + ".mc3.xml");
+    std::error_code ec;
+
+    {
+        std::ofstream f(path);
+        f << "This is not XML at all { } <<<";
+    }
+    bool threwForGarbage = false;
+    std::string garbageMsg;
+    try { Mc3Document::loadFromFile(path); }
+    catch (const std::exception& e) { threwForGarbage = true; garbageMsg = e.what(); }
+    CHECK(threwForGarbage, "loading a non-XML file throws instead of crashing");
+    CHECK(!garbageMsg.empty(), "the thrown exception has a non-empty, named message");
+    std::filesystem::remove(path, ec);
+
+    {
+        std::ofstream f(path);
+        f << "<?xml version=\"1.0\"?><notmc3></notmc3>";
+    }
+    bool threwForWrongRoot = false;
+    std::string wrongRootMsg;
+    try { Mc3Document::loadFromFile(path); }
+    catch (const std::exception& e) { threwForWrongRoot = true; wrongRootMsg = e.what(); }
+    CHECK(threwForWrongRoot, "loading well-formed XML with the wrong root element throws");
+    CHECK(!wrongRootMsg.empty(), "the wrong-root exception has a non-empty, named message");
+    std::filesystem::remove(path, ec);
+
+    auto missingPath = std::filesystem::temp_directory_path() /
+                       ("mc3_invalid_missing_" + std::to_string(tmpIdx++) + ".mc3.xml");
+    bool threwForMissing = false;
+    try { Mc3Document::loadFromFile(missingPath); }
+    catch (const std::exception&) { threwForMissing = true; }
+    CHECK(threwForMissing, "loading a nonexistent path throws instead of crashing");
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 
 int main()
 {
@@ -954,6 +1215,15 @@ int main()
     testCommandsIgnoreObjectNotInTree();
     testConfirmIfModifiedGate();
     testUnsavedDialogChoices();
+    testUndoRedoAiApply();
+    testUndoRedoMergeScene();
+    testMergeSceneCollisionHandling();
+    testResolveSaveAsPath();
+    testSaveAsDoesNotOverwriteOriginal();
+    testExportSelectionOnlySelectedObjects();
+    testExportSelectionIncludesDependentMaterialsAndTextures();
+    testDroppableScenePathDetection();
+    testInvalidFileLoadThrowsNamedError();
 
     std::cout << "\n";
     if (failures == 0)

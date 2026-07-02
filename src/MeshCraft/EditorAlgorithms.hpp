@@ -2,15 +2,18 @@
 // Pure editor command algorithms — no CNA / ImGui / SDL / OpenGL dependencies.
 // Included by MeshCraftApplication_Commands.cpp and editor_commands_test.cpp.
 
+#include <MeshCraft/Mc3/Mc3Document.hpp>
 #include <MeshCraft/Mc3/Mc3Object.hpp>
 
 #include <algorithm>
 #include <cctype>
 #include <cstdio>
 #include <filesystem>
+#include <functional>
 #include <memory>
 #include <set>
 #include <string>
+#include <utility>
 #include <vector>
 
 namespace MeshCraft {
@@ -477,6 +480,118 @@ inline bool unsavedDialogResolvesToExecuteAlg(UnsavedDialogChoiceAlg choice, boo
     case UnsavedDialogChoiceAlg::Cancel:   return false;
     }
     return false;
+}
+
+// ── Merge scene (STAB-0271) ───────────────────────────────────────────────────
+//
+// Mirrors MeshCraftApplication::mergeSceneFromFile() (MeshCraftApplication_
+// FileOps.cpp:255-283), minus pushUndo()/modified_/updateWindowTitle()/
+// setStatusMsg(). Textures: skip on key collision (existing document wins).
+// Materials: on key collision, suffix with _2, _3, ... until unique, and
+// rename the copy's `name` field to match its new key. Objects: appended by
+// sharing the same shared_ptr (matches the real code — safe because src is
+// always freshly loaded from file and shares no ownership with dst).
+// Returns the number of objects appended.
+
+inline int mergeDocumentsAlg(Mc3::Mc3Document& dst, const Mc3::Mc3Document& src)
+{
+    for (const auto& [key, tex] : src.textures) {
+        if (!dst.textures.count(key))
+            dst.textures[key] = tex;
+    }
+
+    for (const auto& [key, mat] : src.materials) {
+        std::string k = key;
+        int n = 2;
+        while (dst.materials.count(k)) k = key + "_" + std::to_string(n++);
+        dst.materials[k] = mat;
+        dst.materials[k].name = k;
+    }
+
+    int added = 0;
+    for (const auto& obj : src.objects) {
+        dst.objects.push_back(obj);
+        ++added;
+    }
+    return added;
+}
+
+// ── Save As path resolution (STAB-0272) ───────────────────────────────────────
+//
+// Mirrors the path-normalization logic in the "Save As" dialog's Save button
+// body (MeshCraftApplication_UiOverlays.cpp:1196-1198): a path already ending
+// in ".mcb" is saved via the MCB writer as-is; any other path gets ".mc3.xml"
+// appended unless it already contains that suffix. Returns {resolvedPath,
+// isMcb}.
+
+inline std::pair<std::string, bool> resolveSaveAsPathAlg(const std::string& rawPath)
+{
+    std::string path = rawPath;
+    bool isMcb = path.size() >= 4 && path.substr(path.size() - 4) == ".mcb";
+    if (!isMcb && path.find(".mc3.xml") == std::string::npos) path += ".mc3.xml";
+    return {path, isMcb};
+}
+
+// ── Export selection (STAB-0273/0274) ─────────────────────────────────────────
+//
+// Mirrors MeshCraftApplication::exportSelectionToFile() (MeshCraftApplication_
+// FileOps.cpp:209-250), minus the file write and setStatusMsg(). Builds a new
+// document containing deep copies of the selected objects (and their
+// children) plus every material and texture those objects (recursively)
+// reference — so exporting a selection never silently drops a material or
+// texture it depends on, but also never carries the whole scene's asset set.
+
+inline Mc3::Mc3Document exportSelectionAlg(
+    const Mc3::Mc3Document&                             doc,
+    const std::vector<std::shared_ptr<Mc3::Mc3Object>>& selected)
+{
+    Mc3::Mc3Document tmp;
+
+    std::set<std::string> matKeys;
+    std::function<void(const Mc3::Mc3Object&)> collectMats =
+        [&](const Mc3::Mc3Object& obj) {
+            if (!obj.material.empty())         matKeys.insert(obj.material);
+            if (!obj.materialOverride.empty()) matKeys.insert(obj.materialOverride);
+            for (const auto& c : obj.children) collectMats(*c);
+        };
+
+    for (const auto& sel : selected) {
+        tmp.objects.push_back(deepCopyObjectAlg(*sel));
+        collectMats(*sel);
+    }
+
+    std::set<std::string> texKeys;
+    for (const auto& key : matKeys) {
+        auto it = doc.materials.find(key);
+        if (it == doc.materials.end()) continue;
+        tmp.materials[key] = it->second;
+        const auto& m = it->second;
+        for (const auto& tk : { m.baseColorTexture, m.normalTexture,
+                                 m.emissiveTexture, m.metallicRoughnessTexture,
+                                 m.occlusionTexture })
+            if (!tk.empty()) texKeys.insert(tk);
+    }
+
+    for (const auto& key : texKeys) {
+        auto it = doc.textures.find(key);
+        if (it != doc.textures.end()) tmp.textures[key] = it->second;
+    }
+
+    return tmp;
+}
+
+// ── Drag-drop file routing (STAB-0275) ────────────────────────────────────────
+//
+// Mirrors the extension check in MeshCraftApplication's SDL_EVENT_DROP_FILE
+// watcher (MeshCraftApplication.cpp:332): a dropped path is routed to the
+// scene loader if its extension is ".xml" or its path contains ".mc3"
+// (covers both "scene.mc3.xml" and the bare-extension "scene.mc3" case);
+// anything else (images, unrelated files) is rejected with a status message
+// instead of being handed to the XML parser.
+
+inline bool isDroppableScenePathAlg(const std::filesystem::path& path)
+{
+    return path.extension() == ".xml" || path.string().find(".mc3") != std::string::npos;
 }
 
 } // namespace MeshCraft

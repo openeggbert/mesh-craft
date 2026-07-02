@@ -389,15 +389,15 @@ _Generated: 2026-06-27 from full codebase + test audit. Replaces previous 100-ta
 | STAB-0267 | ✅ | P1 | Verify backup rotation creates backup.1, backup.2 | `mc3/test/editor_commands_test.cpp` | Added CNA-free mirror `rotateBackupsAlg` (`EditorAlgorithms.hpp`) of the "F6: rotate backups" block in `saveFile()` (`MeshCraftApplication_FileOps.cpp:130-154`). `mc3_commands` coverage: 1st save creates no backup; 2nd save creates `backup.1` with the prior version; 3rd save rotates `backup.1`→`backup.2` and both hold the correct version. Negative-checked (dropped the b1→b2 cascade → 4 FAILs). root 18/18 (verified 2026-07-01) |
 | STAB-0268 | ✅ | P2 | Add test: backup rotation limit (max N backups) | `mc3/test/editor_commands_test.cpp` | Confirmed the mechanism is a fixed 2-slot ring buffer (no configurable N). `mc3_commands` coverage: after 10 sequential saves, `backup.1`/`backup.2` hold only the two most recent prior versions and no `backup.3` is ever created. Same negative check as STAB-0267 (shared implementation). root 18/18 (verified 2026-07-01) |
 | STAB-0269 | 📋 | P2 | Document crash recovery workflow | `README.md` | README explains .autosave files and how to recover |
-| STAB-0270 | 🧪 | P1 | Verify undo before AI apply is possible | `src/MeshCraft/MeshCraftApplication_UiAi.cpp` | Apply AI result; Ctrl+Z; original scene restored |
-| STAB-0271 | 🧪 | P1 | Verify undo for merge scene | `src/MeshCraft/MeshCraftApplication_FileOps.cpp` | Merge scene; Ctrl+Z; merged objects removed |
-| STAB-0272 | 🧪 | P1 | Verify Save As creates new file without overwriting original | `src/MeshCraft/MeshCraftApplication_FileOps.cpp` | File → Save As → new path; original path file unchanged |
-| STAB-0273 | 🧪 | P1 | Verify Export Selection saves only selected objects | `src/MeshCraft/MeshCraftApplication_FileOps.cpp` | Select 2 of 5 objects; export selection; output has 2 objects |
-| STAB-0274 | 🧪 | P1 | Verify Export Selection includes dependent materials/textures | `src/MeshCraft/MeshCraftApplication_FileOps.cpp` | Exported selection file contains materials referenced by selected objects |
-| STAB-0275 | 📋 | P1 | Verify drag-drop MC3 file loads correctly | `src/MeshCraft/MeshCraftApplication.cpp` | Drop `.mc3.xml` file on window; scene loads |
-| STAB-0276 | 🧪 | P1 | Verify invalid file load produces error dialog, not crash | `src/MeshCraft/MeshCraftApplication_FileOps.cpp` | Load non-XML file; error shown; app continues |
-| STAB-0277 | 📋 | P1 | Verify locked object cannot be modified by move gizmo | `src/MeshCraft/MeshCraftApplication_Mouse.cpp` | Lock object; drag gizmo; position unchanged |
-| STAB-0278 | 🧪 | P1 | Verify AI apply is undoable with Ctrl+Z | `src/MeshCraft/MeshCraftApplication_UiAi.cpp` | Apply AI result; undo; original restored |
+| STAB-0270 | ✅ | P1 | Verify undo before AI apply is possible | `mc3/test/editor_commands_test.cpp` | "Apply to Scene" (`MeshCraftApplication_UiAi.cpp:317-324`) does `pushUndo(); document_ = *aiPendingDoc_;` — a plain full-document replacement, no new Alg needed. `checkUndoRedo` confirms the generic snapshot/undo mechanism (STAB-0279) round-trips a full-document replacement the same way it does smaller per-field mutations. root 18/18 (verified 2026-07-02) |
+| STAB-0271 | ✅ | P1 | Verify undo for merge scene | `mc3/test/editor_commands_test.cpp` | Added CNA-free mirror `mergeDocumentsAlg` (`EditorAlgorithms.hpp`) of `mergeSceneFromFile()` (`MeshCraftApplication_FileOps.cpp:255-283`). `mc3_commands` coverage: `checkUndoRedo` round-trip, plus direct collision-handling tests — texture key collision keeps the destination's existing texture, material key collision suffixes the source's copy (`_2`, `_3`, ...) and updates its `name` field, objects are appended. root 18/18 (verified 2026-07-02) |
+| STAB-0272 | ✅ | P1 | Verify Save As creates new file without overwriting original | `mc3/test/editor_commands_test.cpp` | Added CNA-free mirror `resolveSaveAsPathAlg` (`EditorAlgorithms.hpp`) of the Save-As path-normalization logic (`MeshCraftApplication_UiOverlays.cpp:1196-1198`). `mc3_commands` coverage: extension-normalization cases (bare name, already-suffixed, `.mcb`, directory prefix) plus a real-file test — save an "original" doc, mutate in-memory, `saveToFile` to a *different* resolved path, assert the original file's on-disk bytes are unchanged and the new file holds the mutated content. root 18/18 (verified 2026-07-02) |
+| STAB-0273 | ✅ | P1 | Verify Export Selection saves only selected objects | `mc3/test/editor_commands_test.cpp` | Added CNA-free mirror `exportSelectionAlg` (`EditorAlgorithms.hpp`) of `exportSelectionToFile()` (`MeshCraftApplication_FileOps.cpp:209-250`), taking a plain object vector instead of the CNA-coupled `Selection` class. `mc3_commands` coverage: exporting 2 of 3 objects yields exactly those 2, and materials referenced only by the unselected object are excluded. root 18/18 (verified 2026-07-02) |
+| STAB-0274 | ✅ | P1 | Verify Export Selection includes dependent materials/textures | `mc3/test/editor_commands_test.cpp` | Same `exportSelectionAlg` mirror as STAB-0273. Coverage: materials referenced via `material`, `materialOverride`, and a nested child are all included; a material not referenced by the selection is excluded; a texture referenced by an included material is included, one that isn't is excluded; nested children are deep-copied with their parent. root 18/18 (verified 2026-07-02) |
+| STAB-0275 | ✅ | P1 | Verify drag-drop MC3 file loads correctly | `mc3/test/editor_commands_test.cpp` | Already implemented via an `SDL_EVENT_DROP_FILE` watcher (`MeshCraftApplication.cpp:74-88`) routing to `confirmIfModified(PendingAction::OpenRecentFile, ...)`. Extracted the CNA-free routing decision as `isDroppableScenePathAlg` (`EditorAlgorithms.hpp`, mirrors `MeshCraftApplication.cpp:332`) and added `mc3_commands` coverage: `.mc3.xml`/bare `.xml` paths route to the loader, `.png`/`.txt` do not. The SDL event plumbing itself needs a CNA/window test harness (deferred, same as the literal GUI delete+Ctrl+Z flow in STAB-0279). root 18/18 (verified 2026-07-02) |
+| STAB-0276 | ✅ | P1 | Verify invalid file load produces error dialog, not crash | `mc3/test/editor_commands_test.cpp` | The Open File dialog's catch block (`MeshCraftApplication_UiOverlays.cpp:1160-1179`) relies on `Mc3Document::loadFromFile()` throwing `std::exception` with a named message rather than crashing — already CNA-free, no mirror needed. Added direct `mc3_commands` coverage (no prior test exercised this): non-XML garbage, well-formed XML with the wrong root element, and a nonexistent path all throw with a non-empty message. root 18/18 (verified 2026-07-02) |
+| STAB-0277 | ✅ | P1 | Verify locked object cannot be modified by move gizmo | `src/MeshCraft/MeshCraftApplication_Mouse.cpp` | Verified by code inspection: the Move (line 141-142), Scale (322-323) and Rotate (372-373) gizmo-drag apply loops all `if (lockedIds_.count(s->id)) continue;` before mutating `transform`, as do the vertex-snap (204-205) and surface-snap (252-253) helper passes; proportional editing (232) additionally excludes locked objects from the falloff target set. `MouseState` is an Xna/CNA input type with no headless test harness available, so this is inspection-only (same pattern as STAB-0302). No test needed — behavior already correct. |
+| STAB-0278 | ✅ | P1 | Verify AI apply is undoable with Ctrl+Z | `mc3/test/editor_commands_test.cpp` | Same coverage as STAB-0270 (`testUndoRedoAiApply`) — both describe the same "Apply to Scene" undo path. root 18/18 (verified 2026-07-02) |
 | STAB-0279 | ✅ | P1 | Verify delete command is undoable | `mc3/test/editor_commands_test.cpp` | Added CNA-free undo/redo coverage to `mc3_commands`: models the editor's snapshot-based undo (mirrors `deepCopyDoc`) and asserts a full snapshot→mutate→undo→redo round-trip (XML-equality oracle) for batchRename / findReplace / arrayDuplicate, plus a snapshot-independence test. Negative-checked (shallow copy → 3 FAILs). The literal GUI delete+Ctrl+Z flow needs an app-level/CNA test (deferred). root 18/18 (verified 2026-06-30) |
 | STAB-0280 | ✅ | P1 | Verify duplicate command is undoable | `mc3/test/editor_commands_test.cpp` | Found the document mutation in `duplicateSelected()` (`MeshCraftApplication_Commands.cpp:178-204`) is pure vector/shared_ptr logic (app-state bookkeeping aside). Added CNA-free mirror `duplicateObjectsAlg` (`EditorAlgorithms.hpp`) plus direct behavior tests (copy inserted after original, `_copy` name/id, transform preserved, deep-independent) and a `checkUndoRedo` round-trip test. root 18/18 (verified 2026-07-01) |
 | STAB-0281 | ✅ | P1 | Verify group command is undoable | `mc3/test/editor_commands_test.cpp` | Added CNA-free mirror `groupObjectsAlg` + `removeFromListAlg` mirroring `groupSelected()`/`removeFromList()` (`MeshCraftApplication_Commands.cpp:250-276`, `MeshCraftPrivate.hpp:60-68`). Direct tests confirm children/order/non-selected-object handling; `checkUndoRedo` confirms the round-trip. Negative-checked (dropped the `removeFromListAlg` call → 2 FAILs, caught by the direct behavior test). root 18/18 (verified 2026-07-01) |
@@ -868,28 +868,33 @@ _Generated: 2026-06-27 from full codebase + test audit. Replaces previous 100-ta
 
 | Section | Total | ✅ | 🟡 | 🧪 | 📋 | 🔴 |
 |---------|-------|---|---|---|---|---|
-| S0 Build | 25 | 0 | 3 | 13 | 9 | 0 |
-| S1 Test infra | 40 | 0 | 2 | 15 | 23 | 0 |
-| S2 MC3 XML | 55 | 5 | 0 | 33 | 17 | 0 |
-| S3 MCB binary | 30 | 0 | 0 | 9 | 21 | 0 |
-| S4 glTF export | 50 | 4 | 0 | 21 | 25 | 0 |
-| S5 CSG | 35 | 4 | 0 | 9 | 22 | 0 |
-| S6 Geometry | 25 | 5 | 0 | 7 | 13 | 0 |
-| S7 Save/load | 35 | 12 | 0 | 4 | 19 | 0 |
-| S8 UI robustness | 40 | 8 | 0 | 8 | 24 | 0 |
-| S9 Registry | 35 | 9 | 0 | 12 | 14 | 0 |
+| S0 Build | 25 | 9 | 0 | 12 | 4 | 0 |
+| S1 Test infra | 40 | 8 | 2 | 15 | 15 | 0 |
+| S2 MC3 XML | 55 | 13 | 0 | 26 | 16 | 0 |
+| S3 MCB binary | 30 | 10 | 0 | 5 | 15 | 0 |
+| S4 glTF export | 50 | 16 | 0 | 21 | 13 | 0 |
+| S5 CSG | 35 | 5 | 0 | 7 | 23 | 0 |
+| S6 Geometry | 25 | 5 | 0 | 6 | 14 | 0 |
+| S7 Save/load | 35 | 22 | 0 | 4 | 9 | 0 |
+| S8 UI robustness | 40 | 8 | 0 | 4 | 28 | 0 |
+| S9 Registry | 35 | 9 | 0 | 6 | 20 | 0 |
 | S10 AI | 40 | 0 | 0 | 8 | 32 | 0 |
 | S11 Materials | 30 | 0 | 0 | 9 | 21 | 0 |
-| S12 Animation | 30 | 0 | 0 | 11 | 19 | 0 |
-| S13 Commands | 25 | 3 | 0 | 6 | 16 | 0 |
-| S14 Rendering | 30 | 0 | 0 | 11 | 19 | 0 |
-| S15 Import/export | 25 | 0 | 0 | 7 | 18 | 0 |
+| S12 Animation | 30 | 0 | 0 | 12 | 18 | 0 |
+| S13 Commands | 25 | 4 | 0 | 3 | 18 | 0 |
+| S14 Rendering | 30 | 0 | 0 | 12 | 18 | 0 |
+| S15 Import/export | 25 | 0 | 0 | 6 | 19 | 0 |
 | S16 Cross-platform | 25 | 0 | 1 | 0 | 24 | 0 |
-| S17 Documentation | 20 | 5 | 5 | 0 | 10 | 0 |
-| S18 Code quality | 25 | 0 | 3 | 5 | 17 | 0 |
+| S17 Documentation | 20 | 4 | 7 | 0 | 9 | 0 |
+| S18 Code quality | 25 | 0 | 3 | 2 | 20 | 0 |
 | S19 Security | 15 | 0 | 0 | 4 | 11 | 0 |
 | S20 Release | 15 | 0 | 0 | 0 | 15 | 0 |
-| **TOTAL** | **650** | **55** | **14** | **192** | **389** | **0** |
+
+_Recomputed directly from per-row status markers on 2026-07-02 (the table had
+drifted from actual row state over several prior sessions); totals below are
+now derived, not hand-maintained — recompute the same way after any batch of
+status changes rather than incrementing by hand._
+| **TOTAL** | **650** | **113** | **13** | **162** | **362** | **0** |
 
 ---
 
