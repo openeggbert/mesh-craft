@@ -1,6 +1,6 @@
 # NEXT.md
 
-_Last updated: 2026-07-01_
+_Last updated: 2026-07-02_
 
 ---
 
@@ -17,11 +17,14 @@ across sections S0–S20, gated by a Gate 0–6 checklist.
 
 **Current phase:** Stabilization. Gate 0 (Build) and Gate 1 (Format) are
 complete. Gate 2 (Export)'s priority items are complete. Gate 3 (Editor
-safety)'s curated "Priority Execution Order" subset is complete, but Gate 3
-as a whole is **not** — its full range (STAB-0261–0335) still has many
-untested items outside that subset. Gate 4 (Registry/AI) has only its
-registry-search cluster done; the larger AI-mock-test item is untouched.
-Gates 5–6 are untouched.
+safety)'s curated "Priority Execution Order" subset is complete, **plus**
+two more mined clusters (STAB-0261..0269 dirty-flag/autosave/backup, and
+STAB-0270..0278 AI-apply/merge-scene/Save-As/Export-Selection/drag-drop/
+invalid-file/locked-gizmo) — S7 (Editor Save/Load) is now 22/35 ✅. Gate 3
+as a whole is still **not** fully green — S8 (UI Robustness) and the rest
+of S13 (Commands) still have untested items. Gate 4 (Registry/AI) has only
+its registry-search cluster done; the larger AI-mock-test item is
+untouched. Gates 5–6 are untouched.
 
 **Important architectural decisions:**
 - `mc3/` and `mcb/` are pure C++ static libs with **no** CNA/ImGui
@@ -59,10 +62,15 @@ Gates 5–6 are untouched.
 `mc3togltf_large_scene_generated`.
 
 `mc3_commands` covers editor algorithms (rename/find-replace/array-dup),
-undo/redo round-trips, auto-save (interval + file), backup rotation,
-duplicate/group/ungroup/material-edit undo, AI-panel dialog lifecycle, and
-the unsaved-changes-confirmation flow — all via CNA-free mirror functions
-in `EditorAlgorithms.hpp` (see §6). `mc3_registry` covers open/save/search/
+undo/redo round-trips (including full-document replacement, as AI-apply
+does), auto-save (interval + file), backup rotation, duplicate/group/
+ungroup/material-edit/merge-scene undo, merge-scene collision handling
+(texture skip, material suffix), Save-As path resolution + original-file
+preservation, Export-Selection scoping (only selected objects + their
+dependent materials/textures), drag-drop file-type routing, invalid-file-
+load error handling, AI-panel dialog lifecycle, and the unsaved-changes-
+confirmation flow — all via CNA-free mirror functions in
+`EditorAlgorithms.hpp` (see §6). `mc3_registry` covers open/save/search/
 remove/migration plus registry-unavailable and search-field edge cases,
 tested directly against the real `ModelRegistry` class (no mirror needed —
 it has no CNA/ImGui dependency).
@@ -110,9 +118,46 @@ it has no CNA/ImGui dependency).
 
 ## 3. Recent changes
 
-All changes below are committed on `develop` and pushed to
-`origin/develop` (currently at `d98e34b`, fully in sync).
+All changes below are committed on `develop` as `fba7738`; not yet pushed
+to `origin/develop` (last push was at `d98e34b`).
 
+- Verified and added CNA-free test coverage for the next Gate 3 cluster,
+  STAB-0270..0278 (`mc3/test/editor_commands_test.cpp`,
+  `src/MeshCraft/EditorAlgorithms.hpp`):
+  - AI-apply and merge-scene undo — both are plain document
+    mutations (`document_ = *aiPendingDoc_` / append+merge), so the
+    generic snapshot/undo mechanism (STAB-0279) already round-trips
+    them; verified with `checkUndoRedo`, no new Alg needed for AI-apply.
+  - Added a CNA-free mirror `mergeDocumentsAlg` of
+    `mergeSceneFromFile()`'s collision handling: texture key collision
+    keeps the destination's existing texture; material key collision
+    suffixes the source's copy (`_2`, `_3`, ...); objects are appended.
+  - Added `resolveSaveAsPathAlg`, mirroring the Save-As dialog's
+    extension-normalization logic, plus a real-file test proving Save
+    As never touches the original file's on-disk bytes.
+  - Added `exportSelectionAlg`, mirroring `exportSelectionToFile()`
+    (taking a plain object vector instead of the CNA-coupled
+    `Selection` class): only selected objects are exported, along with
+    every material/texture they (recursively) depend on — nothing more,
+    nothing less.
+  - Added `isDroppableScenePathAlg`, mirroring the SDL drag-drop
+    handler's file-type routing decision (`.xml`/`.mc3.xml` → load as
+    scene, anything else → rejected).
+  - **Filled a real test gap** (STAB-0276): no test previously exercised
+    `Mc3Document::loadFromFile()`'s error path. Confirmed it throws
+    `std::exception` with a named, non-empty message for non-XML
+    garbage, wrong-root-element XML, and a nonexistent path — exactly
+    what the Open File dialog's catch block relies on to show an error
+    instead of crashing.
+  - STAB-0277 (locked object gizmo protection) verified by code
+    inspection only: `MeshCraftApplication_Mouse.cpp`'s Move/Scale/
+    Rotate gizmo-drag loops, plus vertex-snap/surface-snap/proportional-
+    editing, already `continue` past any `lockedIds_`-member object.
+    No test possible without a CNA/window harness (same as STAB-0302);
+    behavior was already correct.
+  - Recomputed `plan.md`'s per-section task-count summary table
+    directly from row status markers — it had drifted out of sync with
+    actual `STAB-XXXX` row state across several prior sessions.
 - Verified and (where needed) added CNA-free test coverage for the Gate 3
   "commands are undoable" cluster: delete, batch-rename, find-replace,
   array-duplicate, duplicate, group, ungroup, material-edit
@@ -321,19 +366,24 @@ No project linter/formatter is configured.
 
 ## 8. Next smallest tasks
 
-1. **STAB-0270..0278** — Continue mining Gate 3 (next P1 cluster in ID
-   order): undo for AI-apply, undo for merge-scene, Save-As not
-   overwriting the original file, Export Selection scoping (only selected
-   objects + their dependent materials/textures), drag-drop `.mc3.xml`
-   load, invalid-file-load error handling, locked-object gizmo
-   protection, AI-apply undo.
+1. **STAB-0284..0292** — Continue mining Gate 3 (next P1 items in ID order,
+   within S7/S13): animation keyframe-edit undo (STAB-0284), registry-
+   insert undo (STAB-0285), keybinding persistence across restart
+   (STAB-0286), preferences persistence across restart (STAB-0287), GLB
+   export settings persisted in the UI (STAB-0290), macro save/load
+   round-trip (STAB-0292). (STAB-0288/0289/0291/0293..0295 in the same
+   range are P2 — lower priority, pick up only if time remains.)
    Goal: for each, check whether the relevant logic is CNA-free (a mirror
-   function candidate, like `confirmIfModifiedAlg`) or inspection-only
-   (like the dirty-flag cluster) before assuming a CNA test harness is
-   needed.
-   Files likely involved: `src/MeshCraft/MeshCraftApplication_FileOps.cpp`,
-   `MeshCraftApplication_UiAi.cpp`, `MeshCraftApplication.cpp`,
-   `MeshCraftApplication_Mouse.cpp`.
+   function candidate, like `mergeDocumentsAlg`) or inspection-only (like
+   STAB-0277) before assuming a CNA test harness is needed. Note:
+   STAB-0286/0287 (persistence) may already be partly covered by
+   `loadPrefs()`/`savePrefs()` in `MeshCraftApplication_FileOps.cpp` —
+   check whether a CNA-free round-trip test of those two functions
+   directly covers it before building anything new.
+   Files likely involved: `src/MeshCraft/MeshCraftApplication_Anim.cpp`,
+   `MeshCraftApplication_UiRegistry.cpp`,
+   `MeshCraftApplication_Keybindings.cpp`,
+   `MeshCraftApplication_FileOps.cpp`, `MeshCraftApplication_Macro.cpp`.
    Verify: `ctest -R mc3_commands --output-on-failure` (plus any new
    targeted test), full suite `ctest --output-on-failure` (expect 18/18
    or 19/19 if a new ctest is registered).
@@ -394,11 +444,14 @@ improvement. Build and test with the commands in section 7 and confirm
 cmake-build-debug still passes (18/18, or the new total if you registered
 a new ctest). Update NEXT.md after finishing.
 
-Current branch: develop, fully in sync with origin/develop at d98e34b.
-Build dirs: cmake-build-debug/ (Debug, CLion cmake 4.2.2), b-release/
-(Release) — both re-verified 18/18 on 2026-07-01.
-Active plan: plan.md (STAB-XXXX tasks; Gate 3's priority subset and Gate
-4's registry-search cluster are done; pick the next task from section 8).
+Current branch: develop, at fba7738 locally (origin/develop still at
+d98e34b — fba7738 not yet pushed).
+Build dirs: cmake-build-debug/ (Debug, CLion cmake 4.2.2, re-verified
+18/18 on 2026-07-02) — b-release/ (Release) not re-verified since
+2026-07-01, may need a rebuild if b-release/ was deleted.
+Active plan: plan.md (STAB-XXXX tasks; Gate 3's priority subset,
+STAB-0261..0278, and Gate 4's registry-search cluster are done; pick the
+next task from section 8, e.g. STAB-0284..0292).
 Reconfigure cmake-build-debug ONLY with CLion's cmake 4.2.2, not
 /usr/bin/cmake.
 CI is parked deactivated under .github_/ (token lacks `workflow` scope,
