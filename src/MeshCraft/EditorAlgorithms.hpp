@@ -430,10 +430,11 @@ inline void rotateBackupsAlg(const std::filesystem::path& file)
 // / bool regSaveFromAi_ / bool regSaveDlgOpen_).
 
 struct AiPanelStateAlg {
-    bool aiPendingDocSet    = false;  // aiPendingDoc_.has_value()
-    bool validationErrorSet = false;  // !aiValidationError_.empty()
-    bool regSaveFromAi      = false;
-    bool regSaveDlgOpen     = false;
+    bool        aiPendingDocSet    = false;  // aiPendingDoc_.has_value()
+    bool        validationErrorSet = false;  // !aiValidationError_.empty()
+    bool        regSaveFromAi      = false;
+    bool        regSaveDlgOpen     = false;
+    std::string regSaveDefId;                // regSaveDefId_
 };
 
 // Mirrors the "Reset" button body (MeshCraftApplication_UiAi.cpp:369-379):
@@ -456,6 +457,29 @@ inline void aiResetAlg(AiPanelStateAlg& st)
 inline void aiApplyToSceneAlg(AiPanelStateAlg& st)
 {
     (void)st; // no field the real code touches is relevant to lifecycle state
+}
+
+// Mirrors the "Save to Registry…" button's Ai-tracking assignments
+// (MeshCraftApplication_UiAi.cpp:350-361, the `if (regReady)` body): records
+// which definition id to pre-fill and marks the save as AI-sourced. Note
+// what this does NOT depend on: it doesn't check or set any "applied to
+// scene" flag — the button's visibility gate (line 329) and this handler
+// both reference `aiPendingDoc_` alone (STAB-0348: works without a prior
+// Apply). `defId` mirrors `aiPendingDoc_->definitions.begin()->first`.
+inline void aiSaveToRegistryClickAlg(AiPanelStateAlg& st, const std::string& defId)
+{
+    st.regSaveDefId  = defId;
+    st.regSaveFromAi = true;
+}
+
+// Mirrors the definition-source ternary in the "Save Definition to
+// Registry" dialog (MeshCraftApplication_UiRegistry.cpp:137-139): when the
+// save was initiated from an AI result (regSaveFromAi_) AND that result is
+// still present, list aiPendingDoc_'s definitions; otherwise list the scene
+// document's (document_.definitions) — STAB-0347.
+inline bool registrySaveUsesAiDefinitionsAlg(const AiPanelStateAlg& st)
+{
+    return st.regSaveFromAi && st.aiPendingDocSet;
 }
 
 // ── Unsaved-changes confirmation (STAB-0264) ──────────────────────────────────

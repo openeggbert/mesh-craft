@@ -846,6 +846,45 @@ static void testAiPanelResetRegistryDialogBehavior()
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// "Save to Registry" from the AI panel (STAB-0347/0348)
+// ─────────────────────────────────────────────────────────────────────────────
+
+static void testAiSaveToRegistryUsesAiPendingDoc()
+{
+    AiPanelStateAlg st;
+    st.aiPendingDocSet = true;
+    aiSaveToRegistryClickAlg(st, "goblinHut");
+
+    CHECK(st.regSaveDefId == "goblinHut",
+          "AI Save to Registry: records the AI result's definition id to pre-fill");
+    CHECK(st.regSaveFromAi,
+          "AI Save to Registry: marks the pending save as AI-sourced");
+    CHECK(registrySaveUsesAiDefinitionsAlg(st),
+          "STAB-0347: after Save to Registry from AI, the save dialog sources definitions "
+          "from aiPendingDoc_, not document_");
+
+    // An independently-opened save (never went through the AI button) must
+    // list the scene document's definitions instead.
+    AiPanelStateAlg independent;
+    CHECK(!registrySaveUsesAiDefinitionsAlg(independent),
+          "an independently-opened registry save dialog uses document_'s definitions, not AI's");
+}
+
+static void testAiSaveToRegistryWorksWithoutApply()
+{
+    // The real "Save to Registry" button's visibility gate and click handler
+    // both reference only aiPendingDoc_ (MeshCraftApplication_UiAi.cpp:329) —
+    // never a "was Apply clicked" flag, because no such flag exists. Model
+    // that directly: reach a successful Save-to-Registry state transition
+    // WITHOUT ever calling aiApplyToSceneAlg() first.
+    AiPanelStateAlg st;
+    st.aiPendingDocSet = true; // AI response validated — this alone is the gate
+    aiSaveToRegistryClickAlg(st, "def1"); // no aiApplyToSceneAlg(st) call before this
+    CHECK(st.regSaveFromAi,
+          "STAB-0348: Save to Registry succeeds without a prior Apply to Scene");
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // No crash on an externally-removed selected object (STAB-0303)
 //
 // PropertiesPanel.cpp never looks up the selected object in the document
@@ -1750,6 +1789,8 @@ int main()
     testAiPanelResetClearsPendingAndError();
     testAiPanelApplyDoesNotClearPending();
     testAiPanelResetRegistryDialogBehavior();
+    testAiSaveToRegistryUsesAiPendingDoc();
+    testAiSaveToRegistryWorksWithoutApply();
     testCommandsIgnoreObjectNotInTree();
     testConfirmIfModifiedGate();
     testUnsavedDialogChoices();

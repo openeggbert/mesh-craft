@@ -2,7 +2,9 @@
 #include <MeshCraft/Mc3/Mc3Document.hpp>
 #include <MeshCraft/Mc3/Mc3Object.hpp>
 
+#include <cstdlib>
 #include <filesystem>
+#include <fstream>
 #include <iostream>
 #include <string>
 
@@ -603,6 +605,65 @@ static void testEmptyVariantField() {
     fs::remove(dbPath);
 }
 
+// ---------------------------------------------------------------------------
+// STAB-0345 — entryFromDefinition's XML includes only the materials (and
+// their textures) actually referenced by the definition being saved, not
+// every material in the source scene document.
+// ---------------------------------------------------------------------------
+
+static void testEntryFromDefinitionOnlyIncludesReferencedMaterials() {
+    namespace fs = std::filesystem;
+    auto dbPath = fs::temp_directory_path() / "mc3_reg_scoped_materials.sqlite3";
+    fs::remove(dbPath);
+
+    ModelRegistry reg;
+    reg.open(dbPath);
+
+    auto doc = makeDocWithDef(); // "crate" definition references only "wood"
+    Mc3Material unrelated;
+    unrelated.baseColor = {0.1f, 0.1f, 0.9f, 1.0f};
+    doc.materials["unrelated_material"] = unrelated; // present in the scene, NOT referenced by "crate"
+
+    ModelRegistry::Entry e = reg.entryFromDefinition(doc, "crate", "G", "Crate", "", "", "", "");
+    CHECK(e.xml.find("wood") != std::string::npos,
+          "entryFromDef scoping: xml includes the referenced material 'wood'");
+    CHECK(e.xml.find("unrelated_material") == std::string::npos,
+          "entryFromDef scoping: xml does NOT include the unreferenced 'unrelated_material'");
+
+    // Confirm at the parsed-document level too, not just a substring check.
+    auto tmpPath = fs::temp_directory_path() / "mc3_reg_scoped_materials_check.mc3.xml";
+    { std::ofstream f(tmpPath); f << e.xml; }
+    Mc3Document parsed = Mc3Document::loadFromFile(tmpPath);
+    CHECK(parsed.materials.size() == 1,
+          "entryFromDef scoping: exactly 1 material round-trips through the saved entry");
+    CHECK(parsed.materials.count("wood") == 1,
+          "entryFromDef scoping: that material is 'wood'");
+    fs::remove(tmpPath);
+
+    reg.close();
+    fs::remove(dbPath);
+}
+
+// ---------------------------------------------------------------------------
+// STAB-0349 — the default registry DB path is ~/.meshcraft/modelregistry.sqlite3
+// (or %USERPROFILE%\.meshcraft\modelregistry.sqlite3 on Windows).
+// ---------------------------------------------------------------------------
+
+static void testDefaultPathFormat() {
+    auto path = ModelRegistry::defaultPath();
+    CHECK(path.filename() == "modelregistry.sqlite3",
+          "defaultPath: filename is 'modelregistry.sqlite3'");
+    CHECK(path.parent_path().filename() == ".meshcraft",
+          "defaultPath: parent directory is '.meshcraft'");
+#ifndef _WIN32
+    const char* home = std::getenv("HOME");
+    if (home && *home) {
+        CHECK(path == std::filesystem::path(home) / ".meshcraft" / "modelregistry.sqlite3",
+              "defaultPath: full path is $HOME/.meshcraft/modelregistry.sqlite3");
+    }
+#endif
+}
+
 #endif // MESHCRAFT_HAS_SQLITE3
 
 int main() {
@@ -622,6 +683,8 @@ int main() {
     testSpecialCharsInNameAndTags();
     testUpdateExistingEntry();
     testEmptyVariantField();
+    testEntryFromDefinitionOnlyIncludesReferencedMaterials();
+    testDefaultPathFormat();
 #else
     std::cout << "SKIP: ModelRegistry tests require MESHCRAFT_HAS_SQLITE3\n";
 #endif
