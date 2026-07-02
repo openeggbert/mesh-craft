@@ -1,6 +1,6 @@
 # NEXT.md
 
-_Last updated: 2026-07-02 (later still, same day)_
+_Last updated: 2026-07-02 (evening, same day)_
 
 ---
 
@@ -17,16 +17,17 @@ across sections S0–S20, gated by a Gate 0–6 checklist.
 
 **Current phase:** Stabilization. Gate 0 (Build) and Gate 1 (Format) are
 complete. Gate 2 (Export)'s priority items are complete. **Gate 3 (Editor
-safety): all P1 items across S7/S8/S13 are done** (mined well beyond the
-original curated subset over several sessions — see §3; several real
-bugs found and fixed along the way). **Gate 4 (Registry/AI): all of the
-registry cluster's smaller items are now done too** (search fields +
-edge cases, plus STAB-0346/0351/0359/0364/0368/0370 — S9 now 15/35 ✅,
-rest P1/P2/P3 mixed); the larger AI-mock-test item (STAB-0371..0376) is
-still untouched and needs a mock HTTP layer designed first. Current
-per-section totals: **S7 28/35, S8 17/40, S9 15/35, S13 11/25** (all
-✅-counted rows; remainder of each is lower-priority). Gates 5–6 are
-untouched.
+safety): all P1 items across S7/S8/S13 are done.** **Gate 4 (Registry):
+every registry item (P1 through P3) that had a natural test or
+inspection path is now done — S9 is 22/35 ✅, and every remaining row
+there needs either a live UI/concurrency setup (P2/P3, e.g. concurrent
+DB access, corrupted-file handling) not a quick test.** The one Gate 4
+item left untouched is the big one: AI mock tests (STAB-0371..0376),
+which needs a mock HTTP layer designed for `AiAssistant` before anything
+in that cluster is testable. Current per-section totals: **S7 28/35, S8
+17/40, S9 22/35, S13 11/25**. Gates 5–6 are untouched. Running total:
+**6 real bugs found and fixed** so far across this stabilization effort
+(see §3).
 
 **Important architectural decisions:**
 - `mc3/` and `mcb/` are pure C++ static libs with **no** CNA/ImGui
@@ -129,7 +130,7 @@ search-field edge cases.
 
 ## 3. Recent changes
 
-All changes below are committed on `develop` as `f2ba147`; not yet pushed
+All changes below are committed on `develop` as `cbb50d6`; not yet pushed
 to `origin/develop` (last push was at `d98e34b`, several sessions back —
 confirm with the user before pushing).
 
@@ -153,13 +154,20 @@ confirm with the user before pushing).
    transform but never called `pushUndo()` — pivot resets couldn't be
    undone. Also confirmed the undo/redo stack depth cap (`kUndoMax = 20`)
    is real and correctly implemented (added a 200-push regression test).
-3. STAB-0346/0351/0359/0364/0368/0370 (S9 — ModelRegistry, closing out
-   Gate 4's smaller items): strengthened the `insertIntoScene` test to
-   check the parsed definition's actual structure (not just presence),
-   added a schema-level "no thumbnail column" check via `PRAGMA
-   table_info`, a >1MB XML round-trip test, special-characters-in-name/
-   tags, `save()`'s UPDATE-existing-id branch (never exercised before),
-   and empty-variant-field round-trip.
+3. STAB-0346/0351/0359/0364/0368/0370 (S9 — ModelRegistry): strengthened
+   the `insertIntoScene` test to check the parsed definition's actual
+   structure (not just presence), added a schema-level "no thumbnail
+   column" check via `PRAGMA table_info`, a >1MB XML round-trip test,
+   special-characters-in-name/tags, `save()`'s UPDATE-existing-id branch
+   (never exercised before), and empty-variant-field round-trip.
+4. STAB-0345/0347/0348/0349/0350/0352/0366 (S9's remaining P1 rows,
+   closing out Gate 4's registry work entirely): entryFromDefinition's
+   material scoping; extended the existing `AiPanelStateAlg` mirror with
+   `aiSaveToRegistryClickAlg`/`registrySaveUsesAiDefinitionsAlg` to
+   confirm the AI panel's "Save to Registry" sources `aiPendingDoc_` (not
+   `document_`) and needs no prior "Apply to Scene" click; `defaultPath()`
+   format; STAB-0350/0352/0366 verified by code inspection only (no
+   CNA/ImGui harness exists for them).
 
 Also confirmed the cross-repo `../cna`/`../sharp-runtime` build break
 from earlier today was fixed (by whichever session owns those repos,
@@ -175,8 +183,8 @@ their null-terminator (one was a confirmed buffer-over-read); and
 clause entirely. All work follows the "Alg mirror" pattern described in
 §6 — see `plan.md`'s `STAB-XXXX` rows for exhaustive per-behavior detail
 on any of the above (running total: **6 real bugs found and fixed**
-across this stabilization effort so far, all via the same
-verify-then-fix workflow).
+across this stabilization effort so far — 4 this session, 2 further
+back — all via the same verify-then-fix workflow).
 
 ---
 
@@ -358,41 +366,29 @@ No project linter/formatter is configured.
 
 ## 8. Next smallest tasks
 
-**Gate 3's P1 items across S7/S8/S13, and Gate 4's smaller registry
-tasks, are now done** (see §1/§3).
+**Gate 3's P1 items across S7/S8/S13, and ALL of Gate 4's registry work
+(every P1 row in S9), are now done** (see §1/§3). The only P1-tier work
+left in the whole stabilization plan that hasn't been touched is:
 
-1. **S9's remaining P1 items (quick win, not yet touched)** — STAB-0345
-   (`entryFromDefinition`'s XML includes only referenced materials/
-   textures, not the whole scene's), STAB-0347/0348 (AI panel's "Save to
-   Registry" uses `aiPendingDoc_` not `document_`, and works without a
-   prior Apply — `MeshCraftApplication_UiAi.cpp`, likely ImGui-coupled/
-   inspection-only), STAB-0349 (`ModelRegistry::defaultPath()` returns
-   `~/.meshcraft/modelregistry.sqlite3`, directly testable), STAB-0350
-   (registry auto-opens on first "Save to Registry" — `UiAi.cpp`,
-   inspection-only), STAB-0352 (registry UI "no data" state —
-   `UiRegistry.cpp`, inspection-only), STAB-0366 (verify the
-   `MESHCRAFT_HAS_SQLITE3`-absent stub build: all methods no-op,
-   `isOpen()` false — directly testable, mirrors the existing
-   `#ifndef MESHCRAFT_HAS_SQLITE3` stub block already read this session).
-   Files: `mc3/test/mc3_registry_test.cpp`, `src/MeshCraft/ModelRegistry.cpp`.
-   Verify: `ctest -R mc3_registry --output-on-failure`.
-
-2. **STAB-0371..0376** — AI mock tests (Gate 4, bigger effort). Needs a
-   mock HTTP layer for `AiAssistant` before any test can run without live
-   network access.
+1. **STAB-0371..0376** — AI mock tests (Gate 4's last untouched piece).
+   Needs a mock HTTP layer for `AiAssistant` before any test can run
+   without live network access.
    Goal: design and add a minimal mock/stub for `AiAssistant`'s HTTP call
    so request/response handling (including the truncation bug in §5) can
    be tested deterministically.
    Files: `src/MeshCraft/AiAssistant.cpp`/`.hpp`, new test file.
    Verify: new ctest target passes without network access.
 
-3. **(alternative) Keep mining Gate 3's P2 items** — `plan.md`'s
-   remaining rows there are now all P2/P3 (S7: 7 left, S8: 23 left, S13:
-   14 left) — pick by ID order within whichever section, same "check for
-   an Alg-mirror candidate or inspection-only" approach as every cluster
-   so far.
+2. **(alternative) Move to P2 items** — with P1 essentially exhausted
+   across S7/S8/S9/S13, the next tier by `plan.md`'s own priority scheme
+   is P2 (then P3). Remaining P2/P3 counts: S7: 7, S8: 23, S9: 13, S13:
+   14, plus untouched sections S10 (AI, 40), S11 (Materials, 30), S12
+   (Animation, 30), S14 (Rendering, 30), S15 (Import/export, 25) — pick
+   by ID order within whichever section the user wants to prioritize,
+   same "check for an Alg-mirror candidate or inspection-only" approach
+   as every cluster so far.
 
-4. **(optional) Rotate the PAT and activate CI** — see §4 for the exact
+3. **(optional) Rotate the PAT and activate CI** — see §4 for the exact
    steps.
    Verify: `git push origin develop` accepted for a `.github/workflows/`
    file, and the workflow runs in GitHub Actions.
@@ -432,20 +428,19 @@ improvement. Build and test with the commands in section 7 and confirm
 cmake-build-debug still passes (18/18, or the new total if you registered
 a new ctest). Update NEXT.md after finishing.
 
-Current branch: develop, at f2ba147 locally (origin/develop still at
+Current branch: develop, at cbb50d6 locally (origin/develop still at
 d98e34b — several commits not yet pushed; confirm with the user before
 pushing).
 Build dirs: cmake-build-debug/ (Debug, CLion cmake 4.2.2) — full rebuild +
 18/18 ctest verified clean 2026-07-02. b-release/ (Release) not
 re-verified since 2026-07-01; re-verify if touching anything
 Release-sensitive.
-Active plan: plan.md (STAB-XXXX tasks; Gate 3's P1 items across S7/S8/S13
-are DONE — S7 28/35, S8 17/40, S13 11/25; Gate 4's registry cluster
-(search + STAB-0346/0351/0359/0364/0368/0370) is DONE — S9 15/35, but
-S9 still has a handful of untouched P1 rows (STAB-0345/0347/0348/0349/
-0350/0352/0366) not yet picked up. Pick the next task from section 8 —
-likely those remaining S9 P1s, or the bigger AI-mock-test item, or Gate
-3's P2 backlog).
+Active plan: plan.md (STAB-XXXX tasks; ALL P1 items across S7/S8/S9/S13
+are now DONE — S7 28/35, S8 17/40, S9 22/35, S13 11/25. The only
+untouched P1-tier work left anywhere in the plan is Gate 4's AI mock
+tests, STAB-0371..0376 — needs a mock HTTP layer for AiAssistant first.
+Pick the next task from section 8: that AI mock-test work, or move to P2
+items in whichever section the user prefers).
 Reconfigure cmake-build-debug ONLY with CLion's cmake 4.2.2, not
 /usr/bin/cmake.
 CI is parked deactivated under .github_/ (token lacks `workflow` scope,
