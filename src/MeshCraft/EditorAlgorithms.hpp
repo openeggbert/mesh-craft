@@ -7,11 +7,15 @@
 
 #include <algorithm>
 #include <cctype>
+#include <cmath>
 #include <cstdio>
 #include <filesystem>
+#include <fstream>
 #include <functional>
+#include <map>
 #include <memory>
 #include <set>
+#include <sstream>
 #include <string>
 #include <utility>
 #include <vector>
@@ -592,6 +596,268 @@ inline Mc3::Mc3Document exportSelectionAlg(
 inline bool isDroppableScenePathAlg(const std::filesystem::path& path)
 {
     return path.extension() == ".xml" || path.string().find(".mc3") != std::string::npos;
+}
+
+// ── Animation keyframe insertion (STAB-0284) ──────────────────────────────────
+//
+// Mirrors MeshCraftApplication::insertAnimKeyframes() (MeshCraftApplication_
+// Anim.cpp:94-153), minus pushUndo()/modified_/evaluateAndPushAnimOverrides().
+// For each requested property: finds the channel for (obj.name, prop) or
+// creates one; evaluates the object's *current* transform/visibility field as
+// the keyframe value (for TRS/Visible properties) or the channel's currently
+// animated value at animTime (for every other property — there's no live
+// "current value" on Mc3Object for those, e.g. material/deform channels);
+// then either overwrites an existing keyframe within 0.001 of animTime, or
+// inserts a new one and re-sorts the channel by time.
+
+inline void insertAnimKeyframesAlg(
+    Mc3::Mc3Action&                            action,
+    const Mc3::Mc3Object&                      obj,
+    const std::vector<Mc3::AnimatedProperty>&  props,
+    float                                       animTime)
+{
+    for (auto prop : props) {
+        int ci = -1;
+        for (int i = 0; i < (int)action.channels.size(); ++i) {
+            if (action.channels[i].targetObject == obj.name &&
+                action.channels[i].property == prop) { ci = i; break; }
+        }
+        if (ci < 0) {
+            Mc3::Mc3Channel ch;
+            ch.targetObject = obj.name;
+            ch.property     = prop;
+            action.channels.push_back(std::move(ch));
+            ci = static_cast<int>(action.channels.size()) - 1;
+        }
+
+        float value = 0.0f;
+        switch (prop) {
+        case Mc3::AnimatedProperty::PositionX: value = obj.transform.position[0]; break;
+        case Mc3::AnimatedProperty::PositionY: value = obj.transform.position[1]; break;
+        case Mc3::AnimatedProperty::PositionZ: value = obj.transform.position[2]; break;
+        case Mc3::AnimatedProperty::RotationX: value = obj.transform.rotation[0]; break;
+        case Mc3::AnimatedProperty::RotationY: value = obj.transform.rotation[1]; break;
+        case Mc3::AnimatedProperty::RotationZ: value = obj.transform.rotation[2]; break;
+        case Mc3::AnimatedProperty::ScaleX:    value = obj.transform.scale[0];    break;
+        case Mc3::AnimatedProperty::ScaleY:    value = obj.transform.scale[1];    break;
+        case Mc3::AnimatedProperty::ScaleZ:    value = obj.transform.scale[2];    break;
+        case Mc3::AnimatedProperty::Visible:   value = obj.visible ? 1.0f : 0.0f; break;
+        default:
+            value = Mc3::evaluateChannel(action.channels[ci], animTime); break;
+        }
+
+        auto& ch = action.channels[ci];
+        bool replaced = false;
+        for (auto& kf : ch.keyframes) {
+            if (std::abs(kf.time - animTime) < 0.001f) { kf.value = value; replaced = true; break; }
+        }
+        if (!replaced) {
+            Mc3::Mc3Keyframe kf;
+            kf.time = animTime; kf.value = value;
+            ch.keyframes.push_back(kf);
+            std::sort(ch.keyframes.begin(), ch.keyframes.end(),
+                [](const Mc3::Mc3Keyframe& a, const Mc3::Mc3Keyframe& b){ return a.time < b.time; });
+        }
+    }
+}
+
+// ── Keybinding persistence format (STAB-0286) ─────────────────────────────────
+//
+// Mirrors the persistence format used by KeyBind::toString()/fromString() and
+// loadKeybindings()/saveKeybindings() (MeshCraftApplication_Keybindings.cpp):
+// each binding serializes as "id=[ctrl+][shift+][alt+]KEYNAME" (or an empty
+// value when unbound), one "id=value" line per binding; loading re-parses the
+// same tokens case-insensitively and only overwrites ids present in the file
+// (an id absent from the file keeps its pre-load — i.e. default — value, the
+// same merge behavior `initDefaultBindings()` + `loadKeybindings()` produce
+// together in the real code). Uses its own small key-name table — distinct
+// from the real `Keys::` enum, which lives in CNA and can't be included here
+// — because what's under test is the tokenize/join *format*, not any
+// particular `Keys::` integer value.
+
+struct KeyBindAlg {
+    bool ctrl{false}, shift{false}, alt{false};
+    int  key{0};
+};
+
+namespace detail {
+inline const std::vector<std::pair<int, const char*>>& keyNameTableAlg()
+{
+    static const std::vector<std::pair<int, const char*>> table = {
+        {1, "A"}, {2, "S"}, {3, "Z"}, {4, "F1"}, {5, "Space"}, {6, "Delete"},
+    };
+    return table;
+}
+} // namespace detail
+
+inline const char* keyNameAlg(int key)
+{
+    for (auto& [k, n] : detail::keyNameTableAlg()) if (k == key) return n;
+    return "?";
+}
+
+inline int keyFromNameAlg(const std::string& n)
+{
+    std::string upper = n;
+    for (auto& c : upper) c = static_cast<char>(std::toupper(static_cast<unsigned char>(c)));
+    for (auto& [k, name] : detail::keyNameTableAlg()) {
+        std::string en = name;
+        for (auto& c : en) c = static_cast<char>(std::toupper(static_cast<unsigned char>(c)));
+        if (en == upper) return k;
+    }
+    return 0;
+}
+
+inline std::string keyBindToStringAlg(const KeyBindAlg& b)
+{
+    if (!b.key) return "";
+    std::string s;
+    if (b.ctrl)  s += "ctrl+";
+    if (b.shift) s += "shift+";
+    if (b.alt)   s += "alt+";
+    s += keyNameAlg(b.key);
+    return s;
+}
+
+inline KeyBindAlg keyBindFromStringAlg(const std::string& raw)
+{
+    KeyBindAlg b;
+    if (raw.empty()) return b;
+    std::vector<std::string> parts;
+    std::string cur;
+    for (char c : raw) {
+        if (c == '+') { if (!cur.empty()) { parts.push_back(cur); cur.clear(); } }
+        else cur += c;
+    }
+    if (!cur.empty()) parts.push_back(cur);
+    for (auto& p : parts) {
+        std::string pl = p;
+        for (auto& c : pl) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+        if      (pl == "ctrl")  b.ctrl  = true;
+        else if (pl == "shift") b.shift = true;
+        else if (pl == "alt")   b.alt   = true;
+        else                    b.key   = keyFromNameAlg(p);
+    }
+    return b;
+}
+
+inline void saveKeybindingsAlg(const std::filesystem::path& path,
+                               const std::map<std::string, KeyBindAlg>& bindings)
+{
+    std::ofstream f(path);
+    for (const auto& [id, bind] : bindings)
+        f << id << "=" << keyBindToStringAlg(bind) << "\n";
+}
+
+inline void loadKeybindingsAlg(const std::filesystem::path& path,
+                               std::map<std::string, KeyBindAlg>& bindings)
+{
+    std::ifstream f(path);
+    if (!f) return;
+    std::string line;
+    while (std::getline(f, line)) {
+        auto eq = line.find('=');
+        if (eq == std::string::npos) continue;
+        std::string id  = line.substr(0, eq);
+        std::string val = line.substr(eq + 1);
+        bindings[id] = keyBindFromStringAlg(val);
+    }
+}
+
+// ── Preferences persistence (STAB-0287) ───────────────────────────────────────
+//
+// Mirrors loadPrefs()/savePrefs() (MeshCraftApplication_FileOps.cpp:296-329):
+// a flat "key=value" ini file for the six scalar preference fields. An
+// unknown key or an unparseable value is silently skipped — one bad line
+// must not prevent the rest of the file from loading — and a missing file
+// leaves every field at its pre-load (caller-supplied default) value.
+// applyTheme()'s ImGui side effect is intentionally not mirrored (rendering
+// only, not data).
+
+struct PrefsAlg {
+    float autoSaveInterval{60.0f};
+    float snapTranslate{1.0f};
+    float snapRotate{15.0f};
+    float snapScale{0.1f};
+    float gridSpacing{1.0f};
+    int   theme{0};
+};
+
+inline void savePrefsAlg(const std::filesystem::path& path, const PrefsAlg& p)
+{
+    std::ofstream f(path);
+    if (!f) return;
+    f << "autoSaveInterval=" << p.autoSaveInterval << "\n";
+    f << "snapTranslate="    << p.snapTranslate    << "\n";
+    f << "snapRotate="       << p.snapRotate       << "\n";
+    f << "snapScale="        << p.snapScale        << "\n";
+    f << "gridSpacing="      << p.gridSpacing      << "\n";
+    f << "theme="            << p.theme            << "\n";
+}
+
+inline void loadPrefsAlg(const std::filesystem::path& path, PrefsAlg& p)
+{
+    std::ifstream f(path);
+    if (!f) return;
+    std::string line;
+    while (std::getline(f, line)) {
+        auto eq = line.find('=');
+        if (eq == std::string::npos) continue;
+        std::string key = line.substr(0, eq);
+        std::string val = line.substr(eq + 1);
+        try {
+            if      (key == "autoSaveInterval") p.autoSaveInterval = std::stof(val);
+            else if (key == "snapTranslate")    p.snapTranslate    = std::stof(val);
+            else if (key == "snapRotate")       p.snapRotate       = std::stof(val);
+            else if (key == "snapScale")        p.snapScale        = std::stof(val);
+            else if (key == "gridSpacing")      p.gridSpacing      = std::stof(val);
+            else if (key == "theme")            p.theme            = std::stoi(val);
+        } catch (...) {}
+    }
+}
+
+// ── Macro save/load (STAB-0292) ───────────────────────────────────────────────
+//
+// Mirrors saveMacro()/loadMacro() (MeshCraftApplication_Macro.cpp:94-131):
+// each step is one tab-separated line ("verb\targ1\targ2..."); loading skips
+// blank lines. MacroStepAlg mirrors the real (CNA-coupled, declared inside
+// MeshCraftApplication.hpp) MacroStep struct's fields exactly.
+
+struct MacroStepAlg {
+    std::string              verb;
+    std::vector<std::string> args;
+};
+
+inline void saveMacroAlg(const std::filesystem::path& path,
+                         const std::vector<MacroStepAlg>& steps)
+{
+    std::ofstream f(path);
+    for (const auto& step : steps) {
+        f << step.verb;
+        for (const auto& arg : step.args) f << '\t' << arg;
+        f << '\n';
+    }
+}
+
+inline std::vector<MacroStepAlg> loadMacroAlg(const std::filesystem::path& path)
+{
+    std::vector<MacroStepAlg> steps;
+    std::ifstream f(path);
+    if (!f) return steps;
+    std::string line;
+    while (std::getline(f, line)) {
+        if (line.empty()) continue;
+        MacroStepAlg step;
+        std::istringstream ss(line);
+        std::string tok;
+        bool first = true;
+        while (std::getline(ss, tok, '\t')) {
+            if (first) { step.verb = tok; first = false; }
+            else step.args.push_back(tok);
+        }
+        if (!step.verb.empty()) steps.push_back(std::move(step));
+    }
+    return steps;
 }
 
 } // namespace MeshCraft

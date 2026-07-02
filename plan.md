@@ -403,15 +403,15 @@ _Generated: 2026-06-27 from full codebase + test audit. Replaces previous 100-ta
 | STAB-0281 | ✅ | P1 | Verify group command is undoable | `mc3/test/editor_commands_test.cpp` | Added CNA-free mirror `groupObjectsAlg` + `removeFromListAlg` mirroring `groupSelected()`/`removeFromList()` (`MeshCraftApplication_Commands.cpp:250-276`, `MeshCraftPrivate.hpp:60-68`). Direct tests confirm children/order/non-selected-object handling; `checkUndoRedo` confirms the round-trip. Negative-checked (dropped the `removeFromListAlg` call → 2 FAILs, caught by the direct behavior test). root 18/18 (verified 2026-07-01) |
 | STAB-0282 | ✅ | P1 | Verify ungroup command is undoable | `mc3/test/editor_commands_test.cpp` | Added CNA-free mirror `ungroupObjectAlg` mirroring `ungroupSelected()` (`MeshCraftApplication_Commands.cpp:278-296`). Direct tests confirm children restored to their former position, group removed, and rejection of non-Group/empty-Group input; `checkUndoRedo` confirms the round-trip (re-locates the group by name each call since post-undo `d` is a fresh snapshot copy). root 18/18 (verified 2026-07-01) |
 | STAB-0283 | ✅ | P1 | Verify material edit is undoable | `mc3/test/editor_commands_test.cpp` | The `PropertiesPanel.cpp` `ColorEdit4` widget is ImGui-coupled, but the document mutation it performs (`Mc3Material::baseColor` field assignment on `Mc3Document::materials`) is plain data — no new Alg function needed. `checkUndoRedo` confirms the already-proven generic snapshot/undo mechanism (STAB-0279) also round-trips material edits. root 18/18 (verified 2026-07-01) |
-| STAB-0284 | 📋 | P1 | Verify animation keyframe edit is undoable | `src/MeshCraft/MeshCraftApplication_Anim.cpp` | Add keyframe; Ctrl+Z; keyframe removed |
-| STAB-0285 | 📋 | P1 | Verify registry insert is undoable | `src/MeshCraft/MeshCraftApplication_UiRegistry.cpp` | Insert model from registry; Ctrl+Z; removed |
-| STAB-0286 | 🧪 | P1 | Verify keybinding changes persist across restart | `src/MeshCraft/MeshCraftApplication_Keybindings.cpp` | Change keybinding; restart app; binding preserved |
-| STAB-0287 | 🧪 | P1 | Verify preferences persist across restart | `src/MeshCraft/MeshCraftApplication_FileOps.cpp` | Change autosave interval; restart; value preserved |
+| STAB-0284 | ✅ | P1 | Verify animation keyframe edit is undoable | `mc3/test/editor_commands_test.cpp` | `insertAnimKeyframes()`'s document mutation (`MeshCraftApplication_Anim.cpp:94-153`) is plain `Mc3Document::actions` editing once `modified_`/`evaluateAndPushAnimOverrides()` are set aside. Added CNA-free mirror `insertAnimKeyframesAlg` (`EditorAlgorithms.hpp`); direct tests confirm create-new-channel, reuse-existing-channel, and replace-not-duplicate-at-same-time behavior, plus a `checkUndoRedo` round-trip. root 18/18 (verified 2026-07-02) |
+| STAB-0285 | ✅ | P1 | Verify registry insert is undoable | `mc3/test/editor_commands_test.cpp` | The "Insert" button (`MeshCraftApplication_UiRegistry.cpp:80-101`) does `pushUndo(); document_.objects.push_back(obj); modified_ = true;` — a plain append, no new Alg needed (same pattern as STAB-0270/0278/0283). `checkUndoRedo` confirms the generic snapshot/undo mechanism round-trips it. root 18/18 (verified 2026-07-02) |
+| STAB-0286 | ✅ | P1 | Verify keybinding changes persist across restart | `mc3/test/editor_commands_test.cpp` | Added CNA-free mirrors `KeyBindAlg`/`keyBindToStringAlg`/`keyBindFromStringAlg`/`saveKeybindingsAlg`/`loadKeybindingsAlg` (`EditorAlgorithms.hpp`) of `KeyBind::toString()`/`fromString()` and `loadKeybindings()`/`saveKeybindings()` (`MeshCraftApplication_Keybindings.cpp`) — using a standalone key-name table since the real `Keys::` enum lives in CNA and can't be included here; what's under test is the persistence *format*, not `Keys::` integer values. `mc3_commands` coverage: modifier-combination round-trip, case-insensitive parsing, and — simulating a restart — a saved binding overwrites a differing pre-load default while an id absent from the file is left untouched. root 18/18 (verified 2026-07-02) |
+| STAB-0287 | ✅ | P1 | Verify preferences persist across restart | `mc3/test/editor_commands_test.cpp` | Added CNA-free mirror `PrefsAlg`/`savePrefsAlg`/`loadPrefsAlg` (`EditorAlgorithms.hpp`) of `loadPrefs()`/`savePrefs()` (`MeshCraftApplication_FileOps.cpp:296-329`), already CNA-free logic apart from the `applyTheme()` ImGui side effect (intentionally not mirrored). Coverage: all 6 fields round-trip; a missing file leaves defaults untouched; an unparseable value on one line doesn't block later well-formed lines from loading. root 18/18 (verified 2026-07-02) |
 | STAB-0288 | 📋 | P2 | Add test: recent file list if implemented | `src/MeshCraft/MeshCraftApplication_FileOps.cpp` | File → Recent shows last opened file |
 | STAB-0289 | 📋 | P2 | Verify Merge Scene handles ID collision (suffix appended) | `src/MeshCraft/MeshCraftApplication_FileOps.cpp` | Merge file with same object IDs as current scene; collision handled |
-| STAB-0290 | 🧪 | P1 | Verify GLB export settings (embedded/external) persisted in UI | `src/MeshCraft/MeshCraftApplication_FileOps.cpp` | Change export setting; open dialog again; setting preserved |
+| STAB-0290 | ✅ | P1 | Verify GLB export settings (embedded/external) persisted in UI | `src/MeshCraft/MeshCraftApplication_FileOps.cpp` | Verified by inspection: `glbExportFmt_`/`glbAllowApproxCSG_` are plain `MeshCraftApplication` members (`include/MeshCraft/MeshCraftApplication.hpp`), not local dialog state; `exportGltf()` (`MeshCraftApplication_FileOps.cpp:164-180`), which runs each time the export dialog (re)opens, only resets `glbExportOutBuf_`/`glbExportErr_`/`glbExportOpen_` — it never touches the format/CSG-approximation fields, so both trivially persist across repeated dialog opens within a session. No test possible without a CNA/ImGui harness (same as STAB-0277/0302/0300). Note: this item asks about persistence across a dialog re-open, not across an app *restart* — unlike STAB-0286/0287, these two fields are NOT written to `prefs.ini`, so they do reset to their compiled-in defaults on restart; that's outside what this item's verification text asks for. |
 | STAB-0291 | 📋 | P2 | Verify export overwrites existing file after confirmation | `src/MeshCraft/MeshCraftApplication_FileOps.cpp` | Export to existing path; behavior: overwrite or prompt |
-| STAB-0292 | 🧪 | P1 | Verify macro save/load preserves all steps | `src/MeshCraft/MeshCraftApplication_Macro.cpp` | Save macro; reload; all steps present |
+| STAB-0292 | ✅ | P1 | Verify macro save/load preserves all steps | `mc3/test/editor_commands_test.cpp` | Added CNA-free mirror `MacroStepAlg`/`saveMacroAlg`/`loadMacroAlg` (`EditorAlgorithms.hpp`) of `saveMacro()`/`loadMacro()` (`MeshCraftApplication_Macro.cpp:94-131`; `MacroStep` itself is plain data but only declared inside the CNA-coupled `MeshCraftApplication.hpp`, hence the mirror struct). Coverage: verb+args round-trip exactly and in order for a 4-step macro; blank lines between steps are skipped on load. root 18/18 (verified 2026-07-02) |
 | STAB-0293 | 📋 | P2 | Verify macro playback skips missing object gracefully | `src/MeshCraft/MeshCraftApplication_Macro.cpp` | Macro references deleted object; step skipped; rest plays |
 | STAB-0294 | 📋 | P2 | Verify headless screenshot export (`--screenshot`) works | `src/MeshCraft/main.cpp` | `./MeshCraft --screenshot scene.mc3.xml out.png` produces valid PNG |
 | STAB-0295 | 📋 | P2 | Verify export subtree as template creates valid mc3.xml | `src/MeshCraft/MeshCraftApplication_Commands.cpp` | Select subtree; export as template; output validates against XSD |
@@ -875,7 +875,7 @@ _Generated: 2026-06-27 from full codebase + test audit. Replaces previous 100-ta
 | S4 glTF export | 50 | 16 | 0 | 21 | 13 | 0 |
 | S5 CSG | 35 | 5 | 0 | 7 | 23 | 0 |
 | S6 Geometry | 25 | 5 | 0 | 6 | 14 | 0 |
-| S7 Save/load | 35 | 22 | 0 | 4 | 9 | 0 |
+| S7 Save/load | 35 | 28 | 0 | 0 | 7 | 0 |
 | S8 UI robustness | 40 | 8 | 0 | 4 | 28 | 0 |
 | S9 Registry | 35 | 9 | 0 | 6 | 20 | 0 |
 | S10 AI | 40 | 0 | 0 | 8 | 32 | 0 |
@@ -889,12 +889,12 @@ _Generated: 2026-06-27 from full codebase + test audit. Replaces previous 100-ta
 | S18 Code quality | 25 | 0 | 3 | 2 | 20 | 0 |
 | S19 Security | 15 | 0 | 0 | 4 | 11 | 0 |
 | S20 Release | 15 | 0 | 0 | 0 | 15 | 0 |
+| **TOTAL** | **650** | **119** | **13** | **158** | **360** | **0** |
 
-_Recomputed directly from per-row status markers on 2026-07-02 (the table had
-drifted from actual row state over several prior sessions); totals below are
-now derived, not hand-maintained — recompute the same way after any batch of
-status changes rather than incrementing by hand._
-| **TOTAL** | **650** | **113** | **13** | **162** | **362** | **0** |
+_Recomputed directly from per-row status markers (the table had drifted from
+actual row state over several prior sessions); derived, not hand-maintained
+— recompute the same way after any batch of status changes rather than
+incrementing by hand. Last recomputed 2026-07-02._
 
 ---
 

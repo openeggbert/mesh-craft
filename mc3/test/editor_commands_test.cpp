@@ -1183,6 +1183,253 @@ static void testInvalidFileLoadThrowsNamedError()
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Animation keyframe insertion is undoable (STAB-0284)
+// ─────────────────────────────────────────────────────────────────────────────
+
+static void testUndoRedoAnimKeyframe()
+{
+    Mc3Document doc = makeUndoScene();
+    doc.actions["Walk"] = Mc3::Mc3Action::make("Walk", 2.0f);
+    checkUndoRedo("animKeyframe", doc, [&](Mc3Document& d) {
+        insertAnimKeyframesAlg(d.actions["Walk"], *d.objects.front(),
+            { Mc3::AnimatedProperty::PositionX, Mc3::AnimatedProperty::Visible }, 0.5f);
+    });
+}
+
+static void testInsertAnimKeyframesCreatesAndReplaces()
+{
+    Mc3Document doc = makeUndoScene();
+    auto& obj = *doc.objects.front();
+    obj.transform.position[0] = 3.0f;
+    Mc3::Mc3Action action = Mc3::Mc3Action::make("Walk");
+
+    insertAnimKeyframesAlg(action, obj, { Mc3::AnimatedProperty::PositionX }, 0.0f);
+    CHECK(action.channels.size() == 1,
+          "anim keyframe: creates a new channel for a never-animated property");
+    CHECK(action.channels[0].keyframes.size() == 1,
+          "anim keyframe: creates one keyframe at time 0");
+    CHECKF(action.channels[0].keyframes[0].value, 3.0f,
+          "anim keyframe: captures the object's current value");
+
+    obj.transform.position[0] = 9.0f;
+    insertAnimKeyframesAlg(action, obj, { Mc3::AnimatedProperty::PositionX }, 1.0f);
+    CHECK(action.channels.size() == 1,
+          "anim keyframe: reuses the existing channel for the same property");
+    CHECK(action.channels[0].keyframes.size() == 2,
+          "anim keyframe: adds a second keyframe at a new time");
+
+    insertAnimKeyframesAlg(action, obj, { Mc3::AnimatedProperty::PositionX }, 1.0f);
+    CHECK(action.channels[0].keyframes.size() == 2,
+          "anim keyframe: re-inserting at the same time replaces, not duplicates");
+    CHECKF(action.channels[0].keyframes[1].value, 9.0f,
+          "anim keyframe: the replaced keyframe holds the latest value");
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Registry insert is undoable (STAB-0285)
+//
+// The "Insert" button (MeshCraftApplication_UiRegistry.cpp:80-101) does
+// `pushUndo(); document_.objects.push_back(obj); modified_ = true;` — a plain
+// append, no new Alg needed. checkUndoRedo confirms the generic snapshot/undo
+// mechanism (STAB-0279) round-trips it, same as STAB-0270/0278/0283.
+// ─────────────────────────────────────────────────────────────────────────────
+
+static void testUndoRedoRegistryInsert()
+{
+    Mc3Document doc = makeUndoScene();
+    checkUndoRedo("registryInsert", doc, [&](Mc3Document& d) {
+        auto obj = makeObj("reg_chair01", "Chair", Mc3::ObjectType::Instance);
+        obj->definition = "chair01";
+        d.objects.push_back(obj);
+    });
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Keybinding persistence (STAB-0286)
+// ─────────────────────────────────────────────────────────────────────────────
+
+static void testKeyBindStringFormat()
+{
+    KeyBindAlg unbound;
+    CHECK(keyBindToStringAlg(unbound).empty(), "unbound key serializes to an empty string");
+    CHECK(keyBindFromStringAlg("").key == 0, "an empty string parses back to unbound");
+
+    KeyBindAlg b{true, false, true, 1}; // ctrl+alt+A
+    std::string s = keyBindToStringAlg(b);
+    CHECK(s == "ctrl+alt+A", "modifiers serialize in ctrl/shift/alt order, only when set");
+    KeyBindAlg parsed = keyBindFromStringAlg(s);
+    CHECK(parsed.ctrl && !parsed.shift && parsed.alt && parsed.key == 1,
+          "a serialized binding parses back to the same value");
+
+    KeyBindAlg parsedUpper = keyBindFromStringAlg("CTRL+SHIFT+f1");
+    CHECK(parsedUpper.ctrl && parsedUpper.shift && !parsedUpper.alt && parsedUpper.key == 4,
+          "parsing is case-insensitive for both modifier and key-name tokens");
+}
+
+static void testKeybindingPersistenceRoundTrip()
+{
+    std::map<std::string, KeyBindAlg> bindings;
+    bindings["edit.undo"]     = {true,  false, false, 3}; // ctrl+Z
+    bindings["tool.move"]     = {false, false, false, 2}; // bare S, no modifiers
+    bindings["ui.cmdPalette"] = {true,  true,  true,  4}; // ctrl+shift+alt+F1
+    bindings["edit.delete"]   = {false, false, false, 6};
+
+    static int tmpIdx = 0;
+    auto path = std::filesystem::temp_directory_path() /
+                ("mc3_keybind_" + std::to_string(tmpIdx++) + ".ini");
+    std::error_code ec;
+    std::filesystem::remove(path, ec);
+
+    saveKeybindingsAlg(path, bindings);
+
+    // Simulate a restart: start from a fresh defaults map (as
+    // initDefaultBindings() would populate), then load the saved file.
+    std::map<std::string, KeyBindAlg> reloaded;
+    reloaded["edit.undo"]  = {true, false, false, 1}; // different default; must be overwritten
+    reloaded["view.focus"] = {false, false, false, 5}; // not in the file; must survive untouched
+    loadKeybindingsAlg(path, reloaded);
+
+    CHECK(reloaded["edit.undo"].ctrl && reloaded["edit.undo"].key == 3,
+          "keybinding persistence: a saved binding overwrites the pre-load default on reload");
+    CHECK(reloaded["tool.move"].key == 2 && !reloaded["tool.move"].ctrl,
+          "keybinding persistence: a no-modifier binding round-trips");
+    CHECK(reloaded["ui.cmdPalette"].ctrl && reloaded["ui.cmdPalette"].shift && reloaded["ui.cmdPalette"].alt,
+          "keybinding persistence: all three modifiers round-trip together");
+    CHECK(reloaded["view.focus"].key == 5,
+          "keybinding persistence: a binding absent from the file keeps its pre-load (default) value");
+
+    std::filesystem::remove(path, ec);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Preferences persistence (STAB-0287)
+// ─────────────────────────────────────────────────────────────────────────────
+
+static void testPrefsPersistenceRoundTrip()
+{
+    PrefsAlg p;
+    p.autoSaveInterval = 30.0f;
+    p.snapTranslate    = 0.5f;
+    p.snapRotate       = 5.0f;
+    p.snapScale        = 0.05f;
+    p.gridSpacing      = 2.0f;
+    p.theme            = 2;
+
+    static int tmpIdx = 0;
+    auto path = std::filesystem::temp_directory_path() /
+                ("mc3_prefs_" + std::to_string(tmpIdx++) + ".ini");
+    std::error_code ec;
+    std::filesystem::remove(path, ec);
+
+    savePrefsAlg(path, p);
+
+    PrefsAlg reloaded; // fresh defaults, as on a restarted process
+    loadPrefsAlg(path, reloaded);
+
+    CHECKF(reloaded.autoSaveInterval, 30.0f, "prefs: autoSaveInterval persists across restart");
+    CHECKF(reloaded.snapTranslate,    0.5f,  "prefs: snapTranslate persists across restart");
+    CHECKF(reloaded.snapRotate,       5.0f,  "prefs: snapRotate persists across restart");
+    CHECKF(reloaded.snapScale,        0.05f, "prefs: snapScale persists across restart");
+    CHECKF(reloaded.gridSpacing,      2.0f,  "prefs: gridSpacing persists across restart");
+    CHECK(reloaded.theme == 2, "prefs: theme persists across restart");
+
+    std::filesystem::remove(path, ec);
+}
+
+static void testPrefsLoadIgnoresMissingFile()
+{
+    PrefsAlg p; // defaults
+    auto path = std::filesystem::temp_directory_path() / "mc3_prefs_never_written.ini";
+    std::error_code ec;
+    std::filesystem::remove(path, ec);
+    loadPrefsAlg(path, p);
+    CHECK(p.theme == 0, "prefs: loading a missing file leaves defaults untouched");
+}
+
+static void testPrefsLoadSkipsMalformedLines()
+{
+    static int tmpIdx = 0;
+    auto path = std::filesystem::temp_directory_path() /
+                ("mc3_prefs_malformed_" + std::to_string(tmpIdx++) + ".ini");
+    std::error_code ec;
+    {
+        std::ofstream f(path);
+        f << "autoSaveInterval=not_a_number\n";
+        f << "snapRotate=7.5\n";
+        f << "unknownKey=123\n";
+    }
+    PrefsAlg p;
+    loadPrefsAlg(path, p);
+    CHECKF(p.autoSaveInterval, 60.0f,
+          "prefs: an unparseable value leaves that field at its prior (default) value");
+    CHECKF(p.snapRotate, 7.5f, "prefs: a later, well-formed line still loads correctly");
+    std::filesystem::remove(path, ec);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// GLB export settings persist across dialog re-open (STAB-0290)
+//
+// glbExportFmt_ / glbAllowApproxCSG_ are plain MeshCraftApplication members
+// (declared in MeshCraftApplication.hpp), not local dialog state — and
+// exportGltf() (MeshCraftApplication_FileOps.cpp:164-180), which runs every
+// time the "Export to glTF/GLB" dialog is (re)opened, only resets
+// glbExportOutBuf_ / glbExportErr_ / glbExportOpen_. It never touches
+// glbExportFmt_ or glbAllowApproxCSG_, so both trivially persist across
+// repeated dialog opens within a running session. No test possible without a
+// CNA/ImGui harness (same as STAB-0277/0302) — verified by inspection only.
+// ─────────────────────────────────────────────────────────────────────────────
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Macro save/load round-trip (STAB-0292)
+// ─────────────────────────────────────────────────────────────────────────────
+
+static void testMacroSaveLoadRoundTrip()
+{
+    std::vector<MacroStepAlg> steps = {
+        {"add",           {"Sphere"}},
+        {"linear_array",  {"5", "0", "2.0"}},
+        {"lock",          {}},
+        {"batch_rename",  {"{type}_{index:02d}"}},
+    };
+
+    static int tmpIdx = 0;
+    auto path = std::filesystem::temp_directory_path() /
+                ("mc3_macro_" + std::to_string(tmpIdx++) + ".mc3macro");
+    std::error_code ec;
+    std::filesystem::remove(path, ec);
+
+    saveMacroAlg(path, steps);
+    std::vector<MacroStepAlg> loaded = loadMacroAlg(path);
+
+    CHECK(loaded.size() == steps.size(), "macro round-trip: same step count");
+    bool allMatch = loaded.size() == steps.size();
+    for (size_t i = 0; allMatch && i < steps.size(); ++i)
+        allMatch = loaded[i].verb == steps[i].verb && loaded[i].args == steps[i].args;
+    CHECK(allMatch, "macro round-trip: every step's verb and args match exactly, in order");
+
+    std::filesystem::remove(path, ec);
+}
+
+static void testMacroLoadSkipsBlankLines()
+{
+    static int tmpIdx = 0;
+    auto path = std::filesystem::temp_directory_path() /
+                ("mc3_macro_blank_" + std::to_string(tmpIdx++) + ".mc3macro");
+    {
+        std::ofstream f(path);
+        f << "add\tBox\n\n\ndelete\n";
+    }
+    std::vector<MacroStepAlg> loaded = loadMacroAlg(path);
+    CHECK(loaded.size() == 2, "macro load: blank lines between steps are skipped");
+    CHECK(loaded[0].verb == "add" && loaded[0].args.size() == 1 && loaded[0].args[0] == "Box",
+          "macro load: a step with one arg parses correctly");
+    CHECK(loaded[1].verb == "delete" && loaded[1].args.empty(),
+          "macro load: a step with no args parses correctly");
+    std::error_code ec;
+    std::filesystem::remove(path, ec);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 
 int main()
 {
@@ -1224,6 +1471,16 @@ int main()
     testExportSelectionIncludesDependentMaterialsAndTextures();
     testDroppableScenePathDetection();
     testInvalidFileLoadThrowsNamedError();
+    testUndoRedoAnimKeyframe();
+    testInsertAnimKeyframesCreatesAndReplaces();
+    testUndoRedoRegistryInsert();
+    testKeyBindStringFormat();
+    testKeybindingPersistenceRoundTrip();
+    testPrefsPersistenceRoundTrip();
+    testPrefsLoadIgnoresMissingFile();
+    testPrefsLoadSkipsMalformedLines();
+    testMacroSaveLoadRoundTrip();
+    testMacroLoadSkipsBlankLines();
 
     std::cout << "\n";
     if (failures == 0)
