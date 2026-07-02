@@ -960,4 +960,21 @@ inline std::array<float,4> materialColorAlg(const std::string& matId, const Mc3:
     return { 180.0f/255.0f, 180.0f/255.0f, 180.0f/255.0f, 1.0f };
 }
 
+// ── Undo/redo stack depth cap (STAB-0481) ─────────────────────────────────────
+//
+// Mirrors the push-then-trim pattern duplicated at all three undo/redo stack
+// mutation sites — pushUndo() (MeshCraftApplication_Commands.cpp:323-329),
+// and the undo/redo key handlers' opposite-stack pushes
+// (MeshCraftApplication_Keyboard.cpp:44-69): push the new snapshot, then if
+// the stack now exceeds the cap, drop the OLDEST entry (index 0) — so the
+// stack always holds at most `cap` entries, always the most recent ones.
+
+template <class T>
+inline void pushWithCapAlg(std::vector<T>& stack, T value, int cap)
+{
+    stack.push_back(std::move(value));
+    if (static_cast<int>(stack.size()) > cap)
+        stack.erase(stack.begin());
+}
+
 } // namespace MeshCraft

@@ -1569,6 +1569,158 @@ static void testDuplicateMaterialIdLastWins()
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// applyRenamePattern: {index} zero-padding over a sequence (STAB-0475)
+//
+// The single-value cases (idx=3 → "03", idx=7 → "007") are already covered
+// by testApplyRenamePattern(); this locks in the *sequence* behavior a real
+// batch rename produces: consecutive indices 1..3 each padded independently,
+// not just one isolated value.
+// ─────────────────────────────────────────────────────────────────────────────
+
+static void testApplyRenamePatternZeroPaddingSequence()
+{
+    CHECK(applyRenamePatternAlg("{index:02d}", "X", 1, "Box") == "01",
+          "zero-padding sequence: idx=1 -> \"01\"");
+    CHECK(applyRenamePatternAlg("{index:02d}", "X", 2, "Box") == "02",
+          "zero-padding sequence: idx=2 -> \"02\"");
+    CHECK(applyRenamePatternAlg("{index:02d}", "X", 10, "Box") == "10",
+          "zero-padding sequence: idx=10 -> \"10\" (no truncation once 2 digits are needed)");
+    CHECK(applyRenamePatternAlg("{index:03d}", "X", 1, "Box") == "001",
+          "zero-padding sequence: {index:03d} idx=1 -> \"001\"");
+    CHECK(applyRenamePatternAlg("{index:03d}", "X", 42, "Box") == "042",
+          "zero-padding sequence: {index:03d} idx=42 -> \"042\"");
+}
+
+// STAB-0476 (batchRename skips locked objects, algorithm-level) is already
+// covered by testBatchRename()'s "with one locked object" case above
+// (locked object keeps its name, index still advances past it) — that IS
+// the algorithm-level test this item asks for, not a separate app-level one.
+// No new test needed.
+
+// ─────────────────────────────────────────────────────────────────────────────
+// findReplace treats the search string literally, not as a regex (STAB-0477)
+//
+// replaceAllInString() (EditorAlgorithms.hpp) uses plain std::string::find(),
+// never std::regex — so characters with special regex meaning (., *, +, (, ),
+// [, ]) are matched literally by construction. This test locks that contract
+// in explicitly, since a future refactor to a regex-based implementation
+// would silently change behavior for names containing those characters.
+// ─────────────────────────────────────────────────────────────────────────────
+
+static void testFindReplaceTreatsSpecialCharsLiterally()
+{
+    auto o1 = makeObj("1", "Box.001");
+    auto o2 = makeObj("2", "Box_001");   // would ALSO match "Box.001" if '.' were a regex wildcard
+    auto o3 = makeObj("3", "BoxX001");   // same
+    std::vector<std::shared_ptr<Mc3Object>> objects = {o1, o2, o3};
+    std::set<std::string> locked, selIds;
+
+    int cnt = countFindReplaceMatches(objects, locked, "Box.001", "Wall.001",
+                                      /*caseSensitive=*/true, false, selIds);
+    CHECK(cnt == 1, "find-replace: \".\" in the search string matches only a literal '.', not any char");
+
+    applyFindReplaceNames(objects, locked, "Box.001", "Wall.001", true, false, selIds);
+    CHECK(o1->name == "Wall.001", "find-replace: the literal '.' match is replaced");
+    CHECK(o2->name == "Box_001",  "find-replace: an '_' in that position is NOT treated as a '.' wildcard match");
+    CHECK(o3->name == "BoxX001",  "find-replace: an 'X' in that position is NOT treated as a '.' wildcard match");
+
+    // A search string that would be an invalid/greedy regex (unbalanced
+    // parens, '*' with nothing to repeat) must not throw or behave oddly —
+    // it's just a literal substring that happens not to match anything.
+    auto o4 = makeObj("4", "Normal");
+    std::vector<std::shared_ptr<Mc3Object>> objects2 = {o4};
+    int cnt2 = countFindReplaceMatches(objects2, locked, "(unbalanced*", "x",
+                                       true, false, selIds);
+    CHECK(cnt2 == 0, "find-replace: a regex-invalid search string is just a literal no-match, not an error");
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// deepCopyObjectAlg's identity contract (STAB-0478/0479)
+//
+// testDeepCopy() above already confirms children are preserved (STAB-0478).
+// STAB-0479 asks that "the copied object's ID differs from the original" —
+// but that's the wrong expectation for THIS function specifically:
+// deepCopyObjectAlg is the snapshot primitive checkUndoRedo() is built on
+// (see snapshotDoc() at the top of this file), and undo/redo MUST restore
+// the exact same ids, or every existing checkUndoRedo test in this file
+// (which compares XML-serialized equality after undo) would fail. Making a
+// COPY with a genuinely different id is a *different* operation — that's
+// what duplicateObjectsAlg does, layered on top of deepCopyObjectAlg (see
+// testDuplicateObjects() above: `root[1]->id == "a_copy"`, already tested).
+// This test documents and locks in that distinction explicitly.
+// ─────────────────────────────────────────────────────────────────────────────
+
+static void testDeepCopyPreservesIdentityForSnapshots()
+{
+    auto src = makeObj("orig_id", "OrigName");
+    auto copy = deepCopyObjectAlg(*src);
+    CHECK(copy->id == src->id,
+          "deepCopyObjectAlg: preserves the original id exactly (required for undo/redo snapshot equality)");
+
+    // The layer that DOES need a new id (duplicateObjectsAlg) gets one —
+    // confirmed already by testDuplicateObjects(); cross-referenced here so
+    // the distinction isn't lost.
+    std::vector<std::shared_ptr<Mc3Object>> root = {src};
+    auto dup = duplicateObjectsAlg(root, {src});
+    CHECK(dup.front()->id != src->id,
+          "duplicateObjectsAlg (built on deepCopyObjectAlg): the DUPLICATE command does assign a new id");
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Undo/redo stack depth cap (STAB-0481)
+// ─────────────────────────────────────────────────────────────────────────────
+
+static void testUndoStackDepthCapped()
+{
+    const int kCap = 20;
+    std::vector<Mc3Document> stack;
+    for (int i = 1; i <= 200; ++i) {
+        Mc3Document d;
+        d.model = "v" + std::to_string(i);
+        pushWithCapAlg(stack, std::move(d), kCap);
+    }
+    CHECK(static_cast<int>(stack.size()) == kCap,
+          "undo stack: after 200 pushes, size is capped at 20, not unbounded");
+    CHECK(stack.front().model == "v181",
+          "undo stack: the oldest surviving entry is the 181st push (oldest 180 were dropped)");
+    CHECK(stack.back().model == "v200",
+          "undo stack: the newest entry is the most recent push");
+}
+
+static void testUndoStackBelowCapUnaffected()
+{
+    const int kCap = 20;
+    std::vector<Mc3Document> stack;
+    for (int i = 1; i <= 5; ++i) {
+        Mc3Document d;
+        d.model = "v" + std::to_string(i);
+        pushWithCapAlg(stack, std::move(d), kCap);
+    }
+    CHECK(stack.size() == 5, "undo stack: below the cap, nothing is dropped");
+    CHECK(stack.front().model == "v1", "undo stack: below the cap, the first push is still there");
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Every command pushes an undo entry (STAB-0480)
+//
+// Audited every MeshCraftApplication_Commands.cpp function for a document
+// mutation without a preceding pushUndo(). **Found and fixed a real bug**:
+// resetPivot() mutated selected objects' transform.position/pivot and set
+// modified_ = true, but never called pushUndo() — resetting a pivot could
+// not be undone with Ctrl+Z, unlike every other mutating command in that
+// file. Fixed by adding a hasSelection() guard + pushUndo() at the top,
+// matching the pattern every other command in the file already uses.
+// (Not independently listed as toggleIsolate()'s missing pushUndo(): that
+// toggle is intentionally self-reversing — re-toggling restores the exact
+// pre-isolate visibility from preisolateVisibility_ — so treating it as a
+// discrete undo step would be redundant, not a bug.)
+// No headless test possible: resetPivot()'s pivot-compensation math uses
+// Microsoft::Xna::Framework::Matrix (a CNA type), so it isn't separable
+// into a CNA-free mirror the way the other command fixes in this suite
+// were. Verified by code inspection + confirming the fix compiles clean.
+// ─────────────────────────────────────────────────────────────────────────────
+
+// ─────────────────────────────────────────────────────────────────────────────
 
 int main()
 {
@@ -1627,6 +1779,11 @@ int main()
     testMaterialColorFallsBackForMissingReference();
     testMaterialColorResolvesExistingMaterial();
     testDuplicateMaterialIdLastWins();
+    testApplyRenamePatternZeroPaddingSequence();
+    testFindReplaceTreatsSpecialCharsLiterally();
+    testDeepCopyPreservesIdentityForSnapshots();
+    testUndoStackDepthCapped();
+    testUndoStackBelowCapUnaffected();
 
     std::cout << "\n";
     if (failures == 0)

@@ -883,6 +883,8 @@ void MeshCraftApplication::copyPropsToSelected() {
 
 void MeshCraftApplication::resetPivot() {
     using namespace Microsoft::Xna::Framework;
+    if (!selection_.hasSelection()) return;
+    pushUndo();
     const float deg = std::numbers::pi_v<float> / 180.0f;
     for (const auto& s : selection_.selection()) {
         if (lockedIds_.count(s->id)) continue;

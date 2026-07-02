@@ -636,13 +636,13 @@ _Generated: 2026-06-27 from full codebase + test audit. Replaces previous 100-ta
 | STAB-0472 | ✅ | P0 | batchRenameObjects: covered by commands tests | `mc3/test/editor_commands_test.cpp` | `mc3_commands` passes |
 | STAB-0473 | ✅ | P0 | findReplace: covered by commands tests | `mc3/test/editor_commands_test.cpp` | `mc3_commands` passes |
 | STAB-0474 | ✅ | P0 | arrayDuplicateObjects: covered by commands tests | `mc3/test/editor_commands_test.cpp` | `mc3_commands` passes |
-| STAB-0475 | 🧪 | P1 | Add command test: applyRenamePattern with `{index}` zero-padding | `mc3/test/editor_commands_test.cpp` | `{index:03d}` produces "001", "002"… |
-| STAB-0476 | 🧪 | P1 | Add command test: batchRename skips locked objects (algorithm) | `mc3/test/editor_commands_test.cpp` | Locked objects unchanged; unlocked renamed |
-| STAB-0477 | 🧪 | P1 | Add command test: findReplace with regex special chars in search | `mc3/test/editor_commands_test.cpp` | Search for "Box.001" (dot is literal in find-replace); only exact match replaced |
-| STAB-0478 | 📋 | P1 | Add command test: deepCopyObjectAlg preserves children | `mc3/test/editor_commands_test.cpp` | Copy parent with 3 children; all 3 appear in copy |
-| STAB-0479 | 📋 | P1 | Add command test: deepCopyObjectAlg generates unique IDs | `mc3/test/editor_commands_test.cpp` | Copied object ID differs from original |
-| STAB-0480 | 📋 | P1 | Verify every command pushes undo entry | `src/MeshCraft/MeshCraftApplication_Commands.cpp` | After each command, undo stack depth increased by 1 |
-| STAB-0481 | 📋 | P1 | Verify undo/redo does not exceed stack depth limit | `src/MeshCraft/MeshCraftApplication.hpp` | Perform 200 commands; undo stack size ≤ configured max |
+| STAB-0475 | ✅ | P1 | Add command test: applyRenamePattern with `{index}` zero-padding | `mc3/test/editor_commands_test.cpp` | `testApplyRenamePatternZeroPaddingSequence()` locks in the sequence behavior (1→"01", 2→"02", 10→"10", and `{index:03d}` 1→"001", 42→"042") beyond the single-value cases `testApplyRenamePattern()` already covered. root 18/18 (verified 2026-07-02) |
+| STAB-0476 | ✅ | P1 | Add command test: batchRename skips locked objects (algorithm) | `mc3/test/editor_commands_test.cpp` | Already covered — `testBatchRename()`'s "with one locked object" case (added earlier) IS the algorithm-level test this item asks for: locked object keeps its name, index still advances past it. No new test needed. |
+| STAB-0477 | ✅ | P1 | Add command test: findReplace with regex special chars in search | `mc3/test/editor_commands_test.cpp` | `replaceAllInString()` uses plain `std::string::find()`, never `std::regex`, so special characters are literal by construction. Added `testFindReplaceTreatsSpecialCharsLiterally()` locking this in explicitly: `.` in "Box.001" matches only a literal `.` (not `_`/`X` in that position), and a regex-invalid string (`"(unbalanced*"`) is just a literal no-match, not an error. root 18/18 (verified 2026-07-02) |
+| STAB-0478 | ✅ | P1 | Add command test: deepCopyObjectAlg preserves children | `mc3/test/editor_commands_test.cpp` | Already covered — `testDeepCopy()` (added earlier) directly asserts child count, child fields, and child independence after mutation. No new test needed. |
+| STAB-0479 | ✅ | P1 | Add command test: deepCopyObjectAlg generates unique IDs | `mc3/test/editor_commands_test.cpp` | **The item's premise doesn't apply to this function** — `deepCopyObjectAlg` is the snapshot primitive `checkUndoRedo()` is built on (see `snapshotDoc()`), and undo/redo *requires* identical ids across a snapshot restore (every existing `checkUndoRedo` test compares XML-serialized equality after undo, which would break if ids changed). Unique-id generation is correctly a *different* operation, layered on top by `duplicateObjectsAlg` (already tested: `root[1]->id == "a_copy"` in `testDuplicateObjects()`). Added `testDeepCopyPreservesIdentityForSnapshots()` to document and lock in this distinction explicitly, cross-referencing both behaviors side by side. root 18/18 (verified 2026-07-02) |
+| STAB-0480 | ✅ | P1 | Verify every command pushes undo entry | `mc3/test/editor_commands_test.cpp` | Audited every `MeshCraftApplication_Commands.cpp` function for a document mutation without a preceding `pushUndo()`. **Found and fixed a real bug**: `resetPivot()` mutated selected objects' `transform.position`/`pivot` and set `modified_ = true`, but never called `pushUndo()` — resetting a pivot could not be undone with Ctrl+Z, unlike every other mutating command in that file. Fixed by adding a `hasSelection()` guard + `pushUndo()` at the top, matching every other command's pattern. (`toggleIsolate()`'s missing `pushUndo()` was reviewed and left alone — it's intentionally self-reversing via `preisolateVisibility_`, so a discrete undo step would be redundant, not a bug.) No headless test possible: `resetPivot()`'s pivot-compensation math uses `Microsoft::Xna::Framework::Matrix` (a CNA type), not separable into a CNA-free mirror. Verified by code inspection + confirming the fix compiles clean and root 18/18 still passes. |
+| STAB-0481 | ✅ | P1 | Verify undo/redo does not exceed stack depth limit | `mc3/test/editor_commands_test.cpp` | Confirmed a real, correctly-implemented cap already exists: `kUndoMax = 20` (`MeshCraftApplication.hpp:545`), enforced by the identical push-then-trim-oldest pattern at all three stack-mutation sites (`pushUndo()` in `MeshCraftApplication_Commands.cpp:323-329`, and the undo/redo key handlers' opposite-stack pushes in `MeshCraftApplication_Keyboard.cpp:44-69`). Added CNA-free mirror `pushWithCapAlg` (`EditorAlgorithms.hpp`) of that shared pattern; `testUndoStackDepthCapped()` pushes 200 entries and confirms the final size is exactly 20 and holds the 20 *most recent* pushes (oldest 180 correctly dropped), plus a below-cap sanity check. root 18/18 (verified 2026-07-02) |
 | STAB-0482 | 📋 | P2 | Verify "Convert to Definition" creates correct Definition entry | `src/MeshCraft/MeshCraftApplication_Commands.cpp` | Selected object → definition; Instance added in place |
 | STAB-0483 | 📋 | P2 | Verify "Break Instance" expands to copy of definition content | `src/MeshCraft/MeshCraftApplication_Commands.cpp` | Instance expanded; definition still exists; no shared pointers |
 | STAB-0484 | 📋 | P2 | Verify "Align to Object": aligns selection to target transform | `src/MeshCraft/MeshCraftApplication_Commands.cpp` | Select 2 objects + target; align; position matches target |
@@ -881,7 +881,7 @@ _Generated: 2026-06-27 from full codebase + test audit. Replaces previous 100-ta
 | S10 AI | 40 | 0 | 0 | 8 | 32 | 0 |
 | S11 Materials | 30 | 0 | 0 | 9 | 21 | 0 |
 | S12 Animation | 30 | 0 | 0 | 12 | 18 | 0 |
-| S13 Commands | 25 | 4 | 0 | 3 | 18 | 0 |
+| S13 Commands | 25 | 11 | 0 | 0 | 14 | 0 |
 | S14 Rendering | 30 | 0 | 0 | 12 | 18 | 0 |
 | S15 Import/export | 25 | 0 | 0 | 6 | 19 | 0 |
 | S16 Cross-platform | 25 | 0 | 1 | 0 | 24 | 0 |
@@ -889,7 +889,7 @@ _Generated: 2026-06-27 from full codebase + test audit. Replaces previous 100-ta
 | S18 Code quality | 25 | 0 | 3 | 2 | 20 | 0 |
 | S19 Security | 15 | 0 | 0 | 4 | 11 | 0 |
 | S20 Release | 15 | 0 | 0 | 0 | 15 | 0 |
-| **TOTAL** | **650** | **128** | **13** | **154** | **355** | **0** |
+| **TOTAL** | **650** | **135** | **13** | **151** | **351** | **0** |
 
 _Recomputed directly from per-row status markers (the table had drifted from
 actual row state over several prior sessions); derived, not hand-maintained
