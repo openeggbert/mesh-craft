@@ -1,6 +1,6 @@
 # NEXT.md
 
-_Last updated: 2026-07-02 (evening, same day)_
+_Last updated: 2026-07-02 (late evening, same day)_
 
 ---
 
@@ -15,19 +15,18 @@ exports scenes to glTF/GLB via **mc3togltf**.
 adding new features. All work is tracked in `plan.md` as `STAB-XXXX` tasks
 across sections S0–S20, gated by a Gate 0–6 checklist.
 
-**Current phase:** Stabilization. Gate 0 (Build) and Gate 1 (Format) are
-complete. Gate 2 (Export)'s priority items are complete. **Gate 3 (Editor
-safety): all P1 items across S7/S8/S13 are done.** **Gate 4 (Registry):
-every registry item (P1 through P3) that had a natural test or
-inspection path is now done — S9 is 22/35 ✅, and every remaining row
-there needs either a live UI/concurrency setup (P2/P3, e.g. concurrent
-DB access, corrupted-file handling) not a quick test.** The one Gate 4
-item left untouched is the big one: AI mock tests (STAB-0371..0376),
-which needs a mock HTTP layer designed for `AiAssistant` before anything
-in that cluster is testable. Current per-section totals: **S7 28/35, S8
-17/40, S9 22/35, S13 11/25**. Gates 5–6 are untouched. Running total:
-**6 real bugs found and fixed** so far across this stabilization effort
-(see §3).
+**Current phase:** Stabilization. Gate 0 (Build), Gate 1 (Format), and
+Gate 2 (Export)'s priority items are complete. **Gate 3 (Editor safety):
+all P1 items across S7/S8/S13 are done.** **Gate 4 (Registry/AI) is now
+DONE, including the AI mock-test cluster (STAB-0371..0376)** — that
+needed a real test seam added to `AiAssistant` (an overridable
+`apiBaseUrl`) plus a new `AiResponseAlgorithms.hpp` extracting its
+response-validation pipeline out of the ImGui-coupled AI panel; see §3
+for what that uncovered (a real bug: AI responses wrapped in markdown
+fences or trailing prose failed to parse). Current per-section totals:
+**S7 28/35, S8 17/40, S9 22/35, S10 6/40, S13 11/25**. Gates 5–6 are
+untouched. Running total: **7 real bugs found and fixed** so far across
+this stabilization effort (see §3).
 
 **Important architectural decisions:**
 - `mc3/` and `mcb/` are pure C++ static libs with **no** CNA/ImGui
@@ -62,14 +61,14 @@ in that cluster is testable. Current per-section totals: **S7 28/35, S8
   testing without the root project: `mc3`, `mcb`, `mc3togltf`, `mc3tomcb`.
 
 ### Tests
-**18/18 CTest pass** (verified 2026-07-02, full from-scratch Debug
-rebuild): `smoke_test`, `xsd_validation`, `mc3_registry`, `mc3_roundtrip`,
-`mc3_commands`, `mcb_roundtrip`, `mc3tomcb_roundtrip`, `mc3togltf_gltf`,
-`mc3togltf_all_primitives`, `mc3togltf_export_verification`,
-`mc3togltf_large_scene`, `mc3togltf_csg_strict`, `mc3togltf_csg_export`,
-`mc3togltf_csg_unsupported`, `mc3togltf_csg_nested`,
-`mc3togltf_instance_deform_cache`, `mc3togltf_float_cache_key`,
-`mc3togltf_large_scene_generated`.
+**19/19 CTest pass** (verified 2026-07-02, full from-scratch Debug
+rebuild): `smoke_test`, `xsd_validation`, `mc3_registry`, `mc3_ai`,
+`mc3_roundtrip`, `mc3_commands`, `mcb_roundtrip`, `mc3tomcb_roundtrip`,
+`mc3togltf_gltf`, `mc3togltf_all_primitives`,
+`mc3togltf_export_verification`, `mc3togltf_large_scene`,
+`mc3togltf_csg_strict`, `mc3togltf_csg_export`, `mc3togltf_csg_unsupported`,
+`mc3togltf_csg_nested`, `mc3togltf_instance_deform_cache`,
+`mc3togltf_float_cache_key`, `mc3togltf_large_scene_generated`.
 
 `mc3_commands` (~250 assertions) covers editor command algorithms
 (rename/find-replace/array-dup/duplicate/group/ungroup), undo/redo
@@ -81,11 +80,16 @@ material-color resolution, undo-stack depth capping, and the AI-panel +
 unsaved-changes-confirmation dialog lifecycles — all via CNA-free mirror
 functions in `EditorAlgorithms.hpp` (the "Alg mirror" pattern, see §6),
 plus a few tests against real CNA-free classes directly (`Mc3Document`,
-`ModelRegistry`) where no mirror is needed. See `plan.md`'s `STAB-XXXX`
-rows for the exhaustive per-behavior list — this summary intentionally
-stays high-level as the row count has grown large. `mc3_registry` covers
+`ModelRegistry`) where no mirror is needed. `mc3_registry` covers
 open/save/search/remove/migration plus registry-unavailable and
-search-field edge cases.
+search-field edge cases. `mc3_ai` (new, 39 assertions) covers
+`AiAssistant`'s JSON helpers, the AI-response validation pipeline
+(`AiResponseAlgorithms.hpp`: extract/repair/parse/empty-check), and —
+when `MESHCRAFT_HAS_AI` is available — three end-to-end
+`sendAsync()`/`poll()` round-trips against a real local mock HTTP server
+(success, truncation, HTTP error), no real network call. See `plan.md`'s
+`STAB-XXXX` rows for the exhaustive per-behavior list — this summary
+intentionally stays high-level as the row count has grown large.
 
 ### Tools / libraries available
 - `MeshCraft` — editor executable. Builds and runs; the 3D viewport is not
@@ -130,11 +134,32 @@ search-field edge cases.
 
 ## 3. Recent changes
 
-All changes below are committed on `develop` as `cbb50d6`; not yet pushed
+All changes below are committed on `develop` as `f37c541`; not yet pushed
 to `origin/develop` (last push was at `d98e34b`, several sessions back —
 confirm with the user before pushing).
 
 **This session (2026-07-02), in order:**
+0. STAB-0371..0376 (Gate 4 complete — AI mock tests). Added a test seam
+   to `AiAssistant` (`apiBaseUrl`, overridable; replaces a hardcoded
+   `httplib::SSLClient` with the unified `httplib::Client` — same
+   production behavior, now testable against a local mock). Extracted
+   its response-validation pipeline out of the ImGui-coupled AI panel
+   into new `AiResponseAlgorithms.hpp` (`extractXmlAlg`/`repairXmlAlg`/
+   `parseXmlAlg`/`isEmptyMc3DocumentAlg`/`validateAndParseAiResponseAlg`)
+   — the AI panel now calls these directly, not a duplicate. **Found and
+   fixed a 5th real bug**: the original `extractXml()` only located the
+   *start* of the XML and returned everything to the end of the string,
+   so an AI response wrapped in a markdown code fence or followed by
+   chatty prose kept that trailing content — and tinyxml2 does NOT
+   tolerate bytes after the root element closes, so such (perfectly
+   valid) responses failed to parse. Fixed by also trimming at the
+   matching `</mc3>`. New `mc3_ai` ctest target (39 assertions),
+   including 3 end-to-end round-trips against a real local mock HTTP
+   server (success/truncation/error) via `httplib::Server`. Also found
+   that `AI_TRUNCATION_BUG.md` is stale — the bug it describes (hardcoded
+   `max_tokens=8192`, no `stop_reason` check) isn't present in the
+   current code (fixed in an earlier session, doc never updated);
+   corrected the corresponding (also stale) entry in this doc's §5.
 1. STAB-0270..0326's P1 subset (S7/S8 — Editor Save/Load & UI
    Robustness): AI-apply/merge-scene/Save-As/Export-Selection/drag-drop/
    invalid-file-load/locked-gizmo, then anim-keyframe/registry-insert
@@ -182,8 +207,8 @@ their null-terminator (one was a confirmed buffer-over-read); and
 `ModelRegistry::search()`'s SQL was missing `source` from its `WHERE`
 clause entirely. All work follows the "Alg mirror" pattern described in
 §6 — see `plan.md`'s `STAB-XXXX` rows for exhaustive per-behavior detail
-on any of the above (running total: **6 real bugs found and fixed**
-across this stabilization effort so far — 4 this session, 2 further
+on any of the above (running total: **7 real bugs found and fixed**
+across this stabilization effort so far — 5 this session, 2 further
 back — all via the same verify-then-fix workflow).
 
 ---
@@ -191,8 +216,9 @@ back — all via the same verify-then-fix workflow).
 ## 4. Current blocker / main problem
 
 **There is no blocker to local development or testing** — a full
-from-scratch Debug rebuild (52/52 targets) succeeds and passes 18/18
-tests as of 2026-07-02. (Earlier today, a cross-repo build break between
+from-scratch Debug rebuild (53/53 targets, now including `ai_test`)
+succeeds and passes 19/19 tests as of 2026-07-02. (Earlier today, a
+cross-repo build break between
 `../cna` and `../sharp-runtime` blocked a full root rebuild — see §3 and
 §5 for the resolved-issue record; it did not require any change in this
 repo and has since been fixed by whichever session owns those repos.)
@@ -233,9 +259,18 @@ the repo owner to rotate/rescope the token.
 
 - **PAT exposed in `.git/config` and lacks `workflow` scope** — see §4.
   _status: confirmed (security + operational); needs owner action._
-- **AI response truncation** — `AiAssistant.cpp` hard-caps `max_tokens` at
-  8192 and doesn't check `stop_reason`, so large scenes get truncated XML.
-  See `AI_TRUNCATION_BUG.md`. _status: confirmed bug, not fixed._
+- **`AI_TRUNCATION_BUG.md` is STALE** — it documents `max_tokens` hard-capped
+  at 8192 with no `stop_reason` check. Verified directly while building the
+  STAB-0371..0376 AI mock tests: neither is true of the current code —
+  `maxTokens` defaults to 32000 and is UI-configurable up to 64000
+  (`AiAssistant.hpp:15`), and `wasTruncated()` (`stopReason_ == "max_tokens"`)
+  is checked and surfaced as a validation error in `drawAiPanel()`. Git
+  history shows the fix (commit `17e8787`) landed either just before or in
+  the same batch as the bug doc (`9ad58a4`) — the doc was never updated
+  after. _status: bug doc is stale, not the code; consider deleting or
+  rewriting `AI_TRUNCATION_BUG.md` next time it's touched. Not fixed by
+  this session (out of scope for the AI-mock-test task), just verified and
+  flagged here so it isn't trusted as current._
 - **CI is partial** — only the CNA-free libs (`mc3`, `mcb`, `mc3togltf`,
   `mc3tomcb`) are covered by the parked workflow; there's no full-editor
   (CNA + SDL3) CI job. _status: incomplete, and currently inactive (see §4)._
@@ -254,12 +289,12 @@ the repo owner to rotate/rescope the token.
   system cmake (3.31.6) fails during Generate (bogus manifold/
   `boolean3.cpp` sources). _status: confirmed, environmental — always use
   CLion's cmake for this directory._
-- **AI/network tests don't exist** — `AiAssistant` calls a real HTTP
-  endpoint; no mock layer exists yet, so `STAB-0371..0376` (AI mock tests)
-  are blocked on building one. _status: incomplete._
-- **Gate 3 is not fully green** — S7 (Editor Save/Load, 28/35) and S8 (UI
-  Robustness, 17/40) have solid coverage now, but most of S8's remaining
-  items and S13 (Commands, 4/25) are still untested. _status: needs
+- ~~AI/network tests don't exist~~ — **RESOLVED**: `AiAssistant` now has a
+  test seam (`apiBaseUrl`), and `mc3_ai` (STAB-0371..0376) tests it
+  end-to-end against a real local mock HTTP server. See §3.
+- **Gate 3 is not fully green** (all P1 items are, but the gate itself
+  requires the full `STAB-0261–0335` range) — S7 28/35, S8 17/40, S13
+  11/25; the remainder of each is P2/P3, untested. _status: needs
   verification, tracked task-by-task in `plan.md`._
 
 ---
@@ -302,6 +337,32 @@ rendering, verification is by code inspection only (documented as such in
 `plan.md`), since no headless test is possible without a CNA/ImGui test
 harness (which does not currently exist).
 
+Two variants of the pattern, both now in use:
+- **"Kept in sync manually"** (the original/default): the real code and
+  the mirror are two separate implementations of the same logic, because
+  the real one is genuinely CNA-coupled (e.g. `deepCopyDoc` vs.
+  `deepCopyObjectAlg` above) — a comment on the mirror names the real
+  function and file/line it mirrors.
+- **"Single source of truth"** (preferred whenever the real logic has
+  *zero* CNA/ImGui dependency, just lives in a CNA-coupled translation
+  unit): move the logic itself into the `Alg`-suffixed header, and have
+  the real `.cpp` `#include` and call it directly — no duplication, no
+  drift risk. Used for `EditorAlgorithms.hpp` functions that
+  `MeshCraftApplication_Commands.cpp` calls, and for the newer
+  `src/MeshCraft/AiResponseAlgorithms.hpp` (`extractXmlAlg`/
+  `repairXmlAlg`/`parseXmlAlg`/`isEmptyMc3DocumentAlg`/
+  `validateAndParseAiResponseAlg`), which `MeshCraftApplication_UiAi.cpp`
+  calls directly instead of keeping its own copy.
+
+**Testing genuinely network-dependent code**: `AiAssistant` (`AiAssistant.
+hpp`/`.cpp`) has a public `apiBaseUrl` member (default `https://
+api.anthropic.com`) that tests override to point `sendAsync()` at a local
+`httplib::Server` mock instead — `httplib::Client` auto-dispatches to SSL
+for `https://` or a plain socket for `http://`, so this changes nothing
+about production behavior. See `mc3_ai`'s mock-server tests in
+`mc3/test/ai_test.cpp` for the pattern if another network-calling class
+ever needs the same treatment.
+
 **Hard constraints / invariants:**
 - `Mc3Document` public API: do not change without checking `mc3togltf`,
   `mc3tomcb`, and all test XMLs.
@@ -331,8 +392,8 @@ harness (which does not currently exist).
 # --- Debug (CLion dir; reconfigure with CLion's cmake to avoid the 3.31.6 bug)
 CLION_CMAKE=/home/robertvokac/.local/share/JetBrains/Toolbox/apps/clion/bin/cmake/linux/x64/bin/cmake
 "$CLION_CMAKE" -S . -B cmake-build-debug -DBUILD_TESTING=ON   # (re)configure
-cd cmake-build-debug && ninja && ctest --output-on-failure    # build + test (18)
-ctest -N                                                      # lists all 18 tests
+cd cmake-build-debug && ninja && ctest --output-on-failure    # build + test (19)
+ctest -N                                                      # lists all 19 tests
 
 # --- Release (system cmake 3.31.6 is fine for a fresh dir)
 cmake -S . -B b-release -G Ninja -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=ON \
@@ -353,6 +414,7 @@ done   # mc3 1/1 · mcb 1/1 · mc3togltf 11/11 · mc3tomcb 2/2
 python3 test/validate_xsd.py mc3/mc3.xsd test/features.mc3.xml
 ctest -R mc3_commands --output-on-failure   # editor algorithms + undo/redo
 ctest -R mc3_registry --output-on-failure   # ModelRegistry
+ctest -R mc3_ai       --output-on-failure   # AiAssistant + mock HTTP server
 ctest -R mc3tomcb_roundtrip --output-on-failure
 
 # --- Push (normal pushes work fine; only CI activation is blocked, see §4)
@@ -366,27 +428,34 @@ No project linter/formatter is configured.
 
 ## 8. Next smallest tasks
 
-**Gate 3's P1 items across S7/S8/S13, and ALL of Gate 4's registry work
-(every P1 row in S9), are now done** (see §1/§3). The only P1-tier work
-left in the whole stabilization plan that hasn't been touched is:
+**Gate 3's P1 items across S7/S8/S13, and ALL of Gate 4 (S9 + S10's AI
+mock tests, STAB-0371..0376) are now done** (see §1/§3).
 
-1. **STAB-0371..0376** — AI mock tests (Gate 4's last untouched piece).
-   Needs a mock HTTP layer for `AiAssistant` before any test can run
-   without live network access.
-   Goal: design and add a minimal mock/stub for `AiAssistant`'s HTTP call
-   so request/response handling (including the truncation bug in §5) can
-   be tested deterministically.
-   Files: `src/MeshCraft/AiAssistant.cpp`/`.hpp`, new test file.
-   Verify: new ctest target passes without network access.
+1. **S10 has 3 more untouched P0 items, right next to what this session
+   just did, not yet picked up**: STAB-0377 ("Apply to Scene pushes
+   undo" — likely ALREADY covered by `testUndoRedoAiApply()` from
+   STAB-0270/0278 earlier this session; check before writing a new test,
+   don't duplicate), STAB-0378 (verify the API key is never
+   logged/printed — a `grep` check, per the plan's own verification
+   text), STAB-0379 (verify the API key pre-fills from
+   `ANTHROPIC_API_KEY` — the real logic in `drawAiPanel()`
+   (`if (aiApiKeyBuf_[0] == '\0') { ... getenv(...) ... }`) looks like a
+   good `Alg`-mirror candidate, same pattern as everything else this
+   session). These are P0, same priority tier as what was just finished,
+   and directly adjacent — flagged to the user, not yet started (out of
+   the explicitly-requested STAB-0371..0376 scope).
+   Files: `mc3/test/ai_test.cpp`, `AiResponseAlgorithms.hpp` or a new
+   small mirror, `src/MeshCraft/MeshCraftApplication_UiAi.cpp`.
+   Verify: `ctest -R mc3_ai --output-on-failure`.
 
-2. **(alternative) Move to P2 items** — with P1 essentially exhausted
-   across S7/S8/S9/S13, the next tier by `plan.md`'s own priority scheme
-   is P2 (then P3). Remaining P2/P3 counts: S7: 7, S8: 23, S9: 13, S13:
-   14, plus untouched sections S10 (AI, 40), S11 (Materials, 30), S12
-   (Animation, 30), S14 (Rendering, 30), S15 (Import/export, 25) — pick
-   by ID order within whichever section the user wants to prioritize,
-   same "check for an Alg-mirror candidate or inspection-only" approach
-   as every cluster so far.
+2. **(alternative) Move to P2 items** — with P0/P1 essentially exhausted
+   across S7/S8/S9/S10/S13, the next tier by `plan.md`'s own priority
+   scheme is P2 (then P3). Remaining P2/P3 counts: S7: 7, S8: 23, S9: 13,
+   S10: 26 (minus the 3 P0s above), S13: 14, plus untouched sections S11
+   (Materials, 30), S12 (Animation, 30), S14 (Rendering, 30), S15
+   (Import/export, 25) — pick by ID order within whichever section the
+   user wants to prioritize, same "check for an Alg-mirror candidate or
+   inspection-only" approach as every cluster so far.
 
 3. **(optional) Rotate the PAT and activate CI** — see §4 for the exact
    steps.
@@ -412,7 +481,6 @@ left in the whole stabilization plan that hasn't been touched is:
   `.git/config`, not copied into any tracked file.
 - **No SVG rasterization work** until a library choice is made (librsvg
   vs. NanoSVG).
-- **No AI/network-dependent tests** until a mock layer exists.
 - **No mass refactoring** of passing code, and no speculative
   architecture changes — this is a stabilization phase; scope each task
   to exactly what its `STAB-XXXX` entry in `plan.md` asks for.
@@ -425,22 +493,23 @@ left in the whole stabilization plan that hasn't been touched is:
 Read NEXT.md first. Then inspect only the files needed for the first task
 in section 8. Do not refactor unrelated code. Make one small, verified
 improvement. Build and test with the commands in section 7 and confirm
-cmake-build-debug still passes (18/18, or the new total if you registered
+cmake-build-debug still passes (19/19, or the new total if you registered
 a new ctest). Update NEXT.md after finishing.
 
-Current branch: develop, at cbb50d6 locally (origin/develop still at
+Current branch: develop, at f37c541 locally (origin/develop still at
 d98e34b — several commits not yet pushed; confirm with the user before
 pushing).
 Build dirs: cmake-build-debug/ (Debug, CLion cmake 4.2.2) — full rebuild +
-18/18 ctest verified clean 2026-07-02. b-release/ (Release) not
+19/19 ctest verified clean 2026-07-02. b-release/ (Release) not
 re-verified since 2026-07-01; re-verify if touching anything
 Release-sensitive.
-Active plan: plan.md (STAB-XXXX tasks; ALL P1 items across S7/S8/S9/S13
-are now DONE — S7 28/35, S8 17/40, S9 22/35, S13 11/25. The only
-untouched P1-tier work left anywhere in the plan is Gate 4's AI mock
-tests, STAB-0371..0376 — needs a mock HTTP layer for AiAssistant first.
-Pick the next task from section 8: that AI mock-test work, or move to P2
-items in whichever section the user prefers).
+Active plan: plan.md (STAB-XXXX tasks; Gate 3's P1 items and ALL of
+Gate 4 — S7 28/35, S8 17/40, S9 22/35, S10 6/40, S13 11/25 — are now
+DONE. S10 still has 3 untouched P0 items right next to what was just
+finished: STAB-0377/0378/0379 (Apply-to-Scene-pushes-undo — check if
+already covered by testUndoRedoAiApply first —, API-key-never-logged,
+API-key-env-var-prefill). Pick the next task from section 8: those three,
+or move to P2 items in whichever section the user prefers).
 Reconfigure cmake-build-debug ONLY with CLion's cmake 4.2.2, not
 /usr/bin/cmake.
 CI is parked deactivated under .github_/ (token lacks `workflow` scope,
