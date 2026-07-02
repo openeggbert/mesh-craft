@@ -511,12 +511,12 @@ _Generated: 2026-06-27 from full codebase + test audit. Replaces previous 100-ta
 
 | ID | St | Pri | Title | Key File(s) | Verification |
 |----|----|-----|-------|-------------|--------------|
-| STAB-0371 | 📋 | P0 | Add mock AI response test (no real network call) | `mc3/test/` or new `ai_test.cpp` | Test calls AiAssistant with mock HTTP server; validates XML extraction |
-| STAB-0372 | 📋 | P0 | Add test: JSON extraction from AI response (plain XML) | new `ai_test.cpp` | `extractXml("<mc3>…</mc3>")` returns full XML string |
-| STAB-0373 | 📋 | P0 | Add test: JSON extraction strips markdown code fences | new `ai_test.cpp` | Input with `\`\`\`xml\n<mc3>…</mc3>\n\`\`\`` → returns `<mc3>…</mc3>` |
-| STAB-0374 | 📋 | P1 | Add test: XML extraction with extra text before/after XML | new `ai_test.cpp` | "Here is the scene: `<mc3>…</mc3>` Hope that helps" → extracts `<mc3>…</mc3>` |
-| STAB-0375 | 📋 | P1 | Add test: invalid XML response → `aiValidationError_` set | new `ai_test.cpp` | AI returns "not xml here" → `aiPendingDoc_` null; error shown |
-| STAB-0376 | 📋 | P1 | Add test: empty document rejection (no objects, no definitions) | `src/MeshCraft/MeshCraftApplication_UiAi.cpp` | AI returns `<mc3><objects/></mc3>` → rejected; error "empty document" shown |
+| STAB-0371 | ✅ | P0 | Add mock AI response test (no real network call) | `mc3/test/ai_test.cpp` | Added a test seam: `AiAssistant::apiBaseUrl` (default `https://api.anthropic.com`, override for tests) replaces the hardcoded `httplib::SSLClient("api.anthropic.com")` with `httplib::Client(baseUrlCopy)` — httplib's unified `Client` auto-dispatches to SSL for `https://` and plain sockets for `http://`, so production behavior (real HTTPS) is byte-identical while tests can point at `http://127.0.0.1:PORT` with no OpenSSL/cert complexity. New `ai_test` ctest target (`mc3_ai`) spins up a real `httplib::Server` on an ephemeral localhost port and drives `AiAssistant::sendAsync()`/`poll()` through it end-to-end for three cases: success (200, extracts text + stop_reason), truncation (`stop_reason:"max_tokens"` → `wasTruncated()`), and an HTTP error status (401 → `hasError()` with the status code in the message). No real network call. root 19/19 (verified 2026-07-02) |
+| STAB-0372 | ✅ | P0 | Add test: JSON extraction from AI response (plain XML) | `mc3/test/ai_test.cpp` | Moved `extractXml()` out of `MeshCraftApplication_UiAi.cpp` (CNA-coupled TU) into new CNA-free `src/MeshCraft/AiResponseAlgorithms.hpp` as `extractXmlAlg` — `UiAi.cpp` now calls the same function, not a duplicate. `testExtractXmlPlain()` confirms plain `<mc3>…</mc3>` and `<?xml…>`-prefixed input both pass through unchanged. root 19/19 (verified 2026-07-02) |
+| STAB-0373 | ✅ | P0 | Add test: JSON extraction strips markdown code fences | `mc3/test/ai_test.cpp`, `src/MeshCraft/AiResponseAlgorithms.hpp` | **Found and fixed a real bug**: the original `extractXml()` only located the *start* marker (`<?xml`/`<mc3`) and returned everything to the end of the string — a closing ` ``` ` markdown fence (or any trailing content) survived into the string handed to `Mc3Document::loadFromFile()`, and tinyxml2 does **not** tolerate content after the root element closes (confirmed empirically: this test failed against the original code before the fix, not just in theory). Fixed `extractXmlAlg` to also trim at the matching `</mc3>` close tag. `testExtractXmlStripsMarkdownFence()` confirms exact output; `testFullPipelineHandlesMarkdownFenceAndProse()` confirms the full extract→repair→parse pipeline now succeeds end-to-end for a fenced response. root 19/19 (verified 2026-07-02) |
+| STAB-0374 | ✅ | P1 | Add test: XML extraction with extra text before/after XML | `mc3/test/ai_test.cpp` | Same fix and mechanism as STAB-0373 (the fix isn't fence-specific — it trims at `</mc3>` regardless of what follows). `testExtractXmlWithSurroundingProse()` confirms "Here is the scene: `<mc3>…</mc3>` Hope that helps" extracts to exactly the XML; the pipeline test confirms it parses successfully end-to-end too. root 19/19 (verified 2026-07-02) |
+| STAB-0375 | ✅ | P1 | Add test: invalid XML response → `aiValidationError_` set | `mc3/test/ai_test.cpp`, `src/MeshCraft/AiResponseAlgorithms.hpp` | Extracted the *entire* validation pipeline (extract → repair → require `<mc3` → parse → reject-if-empty) from `drawAiPanel()`'s inline `try`/`catch` into `validateAndParseAiResponseAlg()` — `UiAi.cpp` now calls this one function and only keeps the ImGui-specific line-number-diagnostic enrichment locally. Tests confirm: no `<mc3>` root → error naming that specifically; malformed (unclosed) XML → non-empty error, no document. root 19/19 (verified 2026-07-02) |
+| STAB-0376 | ✅ | P1 | Add test: empty document rejection (no objects, no definitions) | `mc3/test/ai_test.cpp`, `src/MeshCraft/AiResponseAlgorithms.hpp` | Extracted the empty-document guard as `isEmptyMc3DocumentAlg`, used by `validateAndParseAiResponseAlg`. `testValidateAndParseEmptyDocumentRejected()`: `<mc3 version="0.3"></mc3>` (no objects, no definitions) is rejected with an "empty document" error; `testValidateAndParseAcceptsNonEmptyDocument()` confirms a document with ≥1 object is accepted, as a negative check. root 19/19 (verified 2026-07-02) |
 | STAB-0377 | 📋 | P0 | Add test: Apply to Scene pushes undo | `src/MeshCraft/MeshCraftApplication_UiAi.cpp` | After apply: undo stack has 1 item; Ctrl+Z restores previous doc |
 | STAB-0378 | 🧪 | P0 | Verify API key not logged or printed | `src/MeshCraft/AiAssistant.cpp` | `grep -r apiKey src/MeshCraft/AiAssistant.cpp` — no `std::cout`/`printf` of key |
 | STAB-0379 | 🧪 | P0 | Verify API key loaded from `ANTHROPIC_API_KEY` env var | `src/MeshCraft/MeshCraftApplication_UiAi.cpp` | Set env var; open AI panel; key field pre-populated |
@@ -878,7 +878,7 @@ _Generated: 2026-06-27 from full codebase + test audit. Replaces previous 100-ta
 | S7 Save/load | 35 | 28 | 0 | 0 | 7 | 0 |
 | S8 UI robustness | 40 | 17 | 0 | 0 | 23 | 0 |
 | S9 Registry | 35 | 22 | 0 | 0 | 13 | 0 |
-| S10 AI | 40 | 0 | 0 | 8 | 32 | 0 |
+| S10 AI | 40 | 6 | 0 | 8 | 26 | 0 |
 | S11 Materials | 30 | 0 | 0 | 9 | 21 | 0 |
 | S12 Animation | 30 | 0 | 0 | 12 | 18 | 0 |
 | S13 Commands | 25 | 11 | 0 | 0 | 14 | 0 |
@@ -889,7 +889,7 @@ _Generated: 2026-06-27 from full codebase + test audit. Replaces previous 100-ta
 | S18 Code quality | 25 | 0 | 3 | 2 | 20 | 0 |
 | S19 Security | 15 | 0 | 0 | 4 | 11 | 0 |
 | S20 Release | 15 | 0 | 0 | 0 | 15 | 0 |
-| **TOTAL** | **650** | **148** | **13** | **145** | **344** | **0** |
+| **TOTAL** | **650** | **154** | **13** | **145** | **338** | **0** |
 
 _Recomputed directly from per-row status markers (the table had drifted from
 actual row state over several prior sessions); derived, not hand-maintained

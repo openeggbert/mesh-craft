@@ -19,9 +19,11 @@ namespace MeshCraft {
 
 // ---------------------------------------------------------------------------
 // JSON helpers — just enough for the Claude API request/response
+// (declared as public static members in AiAssistant.hpp so ai_test.cpp can
+// exercise them directly, no CNA/ImGui/network dependency)
 // ---------------------------------------------------------------------------
 
-static std::string jsonEscape(const std::string& s) {
+std::string AiAssistant::jsonEscape(const std::string& s) {
     std::string out;
     out.reserve(s.size() + s.size() / 8);
     for (unsigned char c : s) {
@@ -48,7 +50,7 @@ static std::string jsonEscape(const std::string& s) {
 
 // Extract the value of "stop_reason" from a Claude /v1/messages response JSON.
 // Returns "end_turn", "max_tokens", or empty string if not found.
-static std::string extractStopReason(const std::string& json) {
+std::string AiAssistant::extractStopReason(const std::string& json) {
     const std::string key = "\"stop_reason\":\"";
     auto pos = json.find(key);
     if (pos == std::string::npos) return {};
@@ -61,7 +63,7 @@ static std::string extractStopReason(const std::string& json) {
 
 // Extract the text value of the first "text" key in the JSON response.
 // Claude /v1/messages response: {"content":[{"type":"text","text":"..."}]}
-static std::string extractFirstTextValue(const std::string& json) {
+std::string AiAssistant::extractFirstTextValue(const std::string& json) {
     const std::string key = "\"text\":\"";
     auto pos = json.find(key);
     if (pos == std::string::npos) return {};
@@ -162,14 +164,19 @@ void AiAssistant::sendAsync(const std::string& systemPrompt,
     std::string apiKeyCopy    = apiKey;
     std::string modelCopy     = model;
     int         maxTokensCopy = maxTokens;
+    std::string baseUrlCopy   = apiBaseUrl;
 
     future_ = std::async(std::launch::async,
-        [apiKeyCopy, modelCopy, maxTokensCopy,
+        [apiKeyCopy, modelCopy, maxTokensCopy, baseUrlCopy,
          systemPrompt, sceneXml, taskPrompt]()
             -> std::pair<std::string, std::string>   // {text, stop_reason}
     {
 #ifdef MESHCRAFT_HAS_AI
-        httplib::SSLClient cli("api.anthropic.com");
+        // httplib::Client parses the scheme from baseUrlCopy and internally
+        // dispatches to an SSL-backed client for "https://" (production,
+        // default apiBaseUrl) or a plain socket for "http://" (test mock
+        // servers point apiBaseUrl at http://127.0.0.1:PORT).
+        httplib::Client cli(baseUrlCopy);
         cli.set_connection_timeout(30, 0);
         cli.set_read_timeout(600, 0);   // 10 min: large scenes + high max_tokens can be slow
         cli.set_write_timeout(120, 0);  // 2 min: large scene XML body
@@ -180,22 +187,22 @@ void AiAssistant::sendAsync(const std::string& systemPrompt,
         //   task prompt    → NOT cached (changes every request)
         std::string body =
             "{"
-            "\"model\":\"" + jsonEscape(modelCopy) + "\","
+            "\"model\":\"" + AiAssistant::jsonEscape(modelCopy) + "\","
             "\"max_tokens\":" + std::to_string(maxTokensCopy) + ","
             "\"system\":[{"
               "\"type\":\"text\","
-              "\"text\":\"" + jsonEscape(systemPrompt) + "\","
+              "\"text\":\"" + AiAssistant::jsonEscape(systemPrompt) + "\","
               "\"cache_control\":{\"type\":\"ephemeral\"}"
             "}],"
             "\"messages\":[{\"role\":\"user\",\"content\":["
               "{"
                 "\"type\":\"text\","
-                "\"text\":\"" + jsonEscape(sceneXml) + "\","
+                "\"text\":\"" + AiAssistant::jsonEscape(sceneXml) + "\","
                 "\"cache_control\":{\"type\":\"ephemeral\"}"
               "},"
               "{"
                 "\"type\":\"text\","
-                "\"text\":\"Task: " + jsonEscape(taskPrompt) + "\""
+                "\"text\":\"Task: " + AiAssistant::jsonEscape(taskPrompt) + "\""
               "}"
             "]}]}";
 
@@ -214,13 +221,13 @@ void AiAssistant::sendAsync(const std::string& systemPrompt,
             throw std::runtime_error("API error " + std::to_string(res->status) +
                 ": " + res->body);
 
-        std::string stopReason = extractStopReason(res->body);
-        std::string text       = extractFirstTextValue(res->body);
+        std::string stopReason = AiAssistant::extractStopReason(res->body);
+        std::string text       = AiAssistant::extractFirstTextValue(res->body);
         if (text.empty())
             throw std::runtime_error("Empty response from API: " + res->body);
         return {text, stopReason};
 #else
-        (void)apiKeyCopy; (void)modelCopy; (void)maxTokensCopy;
+        (void)apiKeyCopy; (void)modelCopy; (void)maxTokensCopy; (void)baseUrlCopy;
         (void)systemPrompt; (void)sceneXml; (void)taskPrompt;
         throw std::runtime_error(
             "AI not available: built without cpp-httplib + OpenSSL.\n"

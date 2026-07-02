@@ -14,6 +14,11 @@ public:
     std::string model{"claude-sonnet-4-6"};
     int         maxTokens{32000};  // claude-sonnet-4-6 supports up to 64 000
 
+    // Base URL for the Messages API endpoint. Override for testing against a
+    // local mock server (e.g. "http://127.0.0.1:PORT") — production code
+    // never needs to touch this, it defaults to the real Claude API.
+    std::string apiBaseUrl{"https://api.anthropic.com"};
+
     // Starts a background HTTPS call to the Claude API with prompt caching.
     // systemPrompt — role/format instructions (cached)
     // sceneXml     — serialized mc3.xml scene sent as context (cached)
@@ -35,6 +40,13 @@ public:
 
     // Clear state so a new request can be sent.
     void reset();
+
+    // --- Pure JSON helpers, exposed for direct unit testing (no CNA/ImGui/
+    // network dependency) — just enough JSON handling for the Claude API's
+    // request/response shape. ---
+    static std::string jsonEscape(const std::string& s);
+    static std::string extractStopReason(const std::string& json);
+    static std::string extractFirstTextValue(const std::string& json);
 
 private:
     std::future<std::pair<std::string, std::string>> future_; // {text, stop_reason}

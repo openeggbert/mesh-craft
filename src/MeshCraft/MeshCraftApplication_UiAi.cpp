@@ -1,6 +1,7 @@
 #include "MeshCraft/MeshCraftApplication.hpp"
 #include "MeshCraft/AiAssistant.hpp"
 #include "MeshCraft/ModelRegistry.hpp"
+#include "AiResponseAlgorithms.hpp"
 
 #include <MeshCraft/Mc3/Mc3Document.hpp>
 #include <imgui.h>
@@ -69,12 +70,6 @@ static std::string buildSystemPrompt() {
 
 static std::atomic<int> gAiTmpCounter{0};
 
-static std::string extractXml(const std::string& s) {
-    auto pos = s.find("<?xml");
-    if (pos == std::string::npos) pos = s.find("<mc3");
-    return (pos == std::string::npos) ? s : s.substr(pos);
-}
-
 static std::string serializeScene(const Mc3::Mc3Document& doc) {
     namespace fs = std::filesystem;
     auto tmp = fs::temp_directory_path() /
@@ -87,52 +82,9 @@ static std::string serializeScene(const Mc3::Mc3Document& doc) {
     return xml;
 }
 
-// Fix common AI XML mistake: opening tag not closed with '>' before next element.
-// Scans char-by-char; when inside a tag and a bare '<' appears, injects '>'.
-static std::string repairXml(const std::string& xml) {
-    std::string out;
-    out.reserve(xml.size() + 32);
-    bool inTag  = false;
-    bool inVal  = false;
-    char quote  = 0;
-    for (size_t i = 0; i < xml.size(); ++i) {
-        char c = xml[i];
-        if (inTag) {
-            if (inVal) {
-                out += c;
-                if (c == quote) inVal = false;
-            } else if (c == '"' || c == '\'') {
-                inVal = true; quote = c; out += c;
-            } else if (c == '>') {
-                inTag = false; out += c;
-            } else if (c == '<') {
-                // Missing '>' — inject it, then start the new tag
-                out += '>';
-                inTag = false;
-                out += c;
-                inTag = true; inVal = false;
-            } else {
-                out += c;
-            }
-        } else {
-            if (c == '<') inTag = true;
-            out += c;
-        }
-    }
-    return out;
-}
-
-// Parse xml string into document; throws on malformed XML or missing <mc3>.
-static Mc3::Mc3Document parseXml(const std::string& xml) {
-    namespace fs = std::filesystem;
-    auto tmp = fs::temp_directory_path() /
-               ("mc_ai_resp_" + std::to_string(gAiTmpCounter++) + ".mc3.xml");
-    { std::ofstream f(tmp); f << xml; }
-    auto doc = Mc3::Mc3Document::loadFromFile(tmp);
-    std::error_code ec;
-    fs::remove(tmp, ec);
-    return doc;
-}
+// extractXml() / repairXml() / parseXml() moved to AiResponseAlgorithms.hpp
+// (as extractXmlAlg/repairXmlAlg/parseXmlAlg) so they can be unit-tested
+// headlessly — this file calls the same functions, not a duplicate.
 
 // ---------------------------------------------------------------------------
 // drawAiPanel
@@ -153,39 +105,34 @@ void MeshCraftApplication::drawAiPanel() {
                 + std::to_string(aiAssistant_.maxTokens) + ").\n"
                 "The generated scene was too large. "
                 "Increase Max Tokens in the AI panel (up to 64000) or simplify the prompt.";
-        } else try {
-            std::string xml = repairXml(extractXml(aiAssistant_.result()));
-            if (xml.find("<mc3") == std::string::npos)
-                throw std::runtime_error("Response does not contain a <mc3> root element");
-            Mc3::Mc3Document parsed = parseXml(xml);
-            // Reject documents that would silently wipe the scene
-            if (parsed.objects.empty() && parsed.definitions.empty())
-                throw std::runtime_error(
-                    "AI returned an empty document (no objects, no definitions). "
-                    "Not applying to avoid destroying the current scene.");
-            aiPendingDoc_ = std::move(parsed);
-        } catch (const std::exception& ex) {
-            std::string errMsg = ex.what();
-            // Extract line number from tinyxml2 message ("Line number=NNN") and show that line
-            auto lineTag = errMsg.find("Line number=");
-            if (lineTag != std::string::npos) {
-                int lineNo = std::atoi(errMsg.c_str() + lineTag + 12);
-                if (lineNo > 0) {
-                    const std::string& raw = aiAssistant_.result();
-                    int cur = 1;
-                    std::string badLine;
-                    std::istringstream ss(raw);
-                    for (std::string ln; std::getline(ss, ln); ) {
-                        if (cur++ == lineNo) { badLine = ln; break; }
-                    }
-                    if (!badLine.empty()) {
-                        if (badLine.size() > 200) badLine = badLine.substr(0, 197) + "...";
-                        errMsg += "\nLine content: " + badLine;
+        } else {
+            AiResponseParseResultAlg parseResult =
+                validateAndParseAiResponseAlg(aiAssistant_.result());
+            if (parseResult.doc.has_value()) {
+                aiPendingDoc_ = std::move(parseResult.doc);
+            } else {
+                std::string errMsg = parseResult.errorMessage;
+                // Extract line number from tinyxml2 message ("Line number=NNN") and show that line
+                auto lineTag = errMsg.find("Line number=");
+                if (lineTag != std::string::npos) {
+                    int lineNo = std::atoi(errMsg.c_str() + lineTag + 12);
+                    if (lineNo > 0) {
+                        const std::string& raw = aiAssistant_.result();
+                        int cur = 1;
+                        std::string badLine;
+                        std::istringstream ss(raw);
+                        for (std::string ln; std::getline(ss, ln); ) {
+                            if (cur++ == lineNo) { badLine = ln; break; }
+                        }
+                        if (!badLine.empty()) {
+                            if (badLine.size() > 200) badLine = badLine.substr(0, 197) + "...";
+                            errMsg += "\nLine content: " + badLine;
+                        }
                     }
                 }
+                aiValidationError_ = errMsg;
             }
-            aiValidationError_ = errMsg;
-        } // end else try
+        }
     }
 
     // Pre-fill API key from environment if buffer is empty

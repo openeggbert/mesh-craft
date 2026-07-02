@@ -356,4 +356,30 @@ if(MESH_CRAFT_BUILD_TESTING AND UNIX AND NOT ANDROID AND NOT EMSCRIPTEN)
         add_test(NAME mc3_registry COMMAND mc3_registry_test)
         set_tests_properties(mc3_registry PROPERTIES TIMEOUT 15)
     endif()
+
+    # AI Assistant unit + mock-HTTP-server tests (Gate 4, STAB-0371..0376).
+    # AiResponseAlgorithms.hpp (extractXml/repairXml/parseXml/validate) has
+    # no CNA/ImGui/network dependency, so this always builds; the mock HTTP
+    # server round-trip additionally needs cpp-httplib + OpenSSL (same gate
+    # as the main app's AI feature) to exercise AiAssistant::sendAsync() for
+    # real, just against a local server instead of api.anthropic.com.
+    if(httplib_POPULATED)
+        add_executable(ai_test
+            ${CMAKE_CURRENT_SOURCE_DIR}/mc3/test/ai_test.cpp
+            ${CMAKE_CURRENT_SOURCE_DIR}/src/MeshCraft/AiAssistant.cpp
+        )
+        target_include_directories(ai_test PRIVATE
+            ${CMAKE_CURRENT_SOURCE_DIR}/include
+            ${CMAKE_CURRENT_SOURCE_DIR}/src/MeshCraft
+        )
+        target_link_libraries(ai_test PRIVATE Mc3 httplib::httplib)
+        if(OpenSSL_FOUND)
+            target_compile_definitions(ai_test PRIVATE MESHCRAFT_HAS_AI)
+        endif()
+        target_compile_features(ai_test PRIVATE cxx_std_23)
+        find_package(Threads REQUIRED)
+        target_link_libraries(ai_test PRIVATE Threads::Threads)
+        add_test(NAME mc3_ai COMMAND ai_test)
+        set_tests_properties(mc3_ai PROPERTIES TIMEOUT 30)
+    endif()
 endif()
