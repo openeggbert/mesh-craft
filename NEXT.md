@@ -1,6 +1,6 @@
 # NEXT.md
 
-_Last updated: 2026-07-02 (later same day)_
+_Last updated: 2026-07-02 (later still, same day)_
 
 ---
 
@@ -17,16 +17,16 @@ across sections S0–S20, gated by a Gate 0–6 checklist.
 
 **Current phase:** Stabilization. Gate 0 (Build) and Gate 1 (Format) are
 complete. Gate 2 (Export)'s priority items are complete. **Gate 3 (Editor
-safety): all P1 items across S7/S8/S13 are now done** (mined well beyond
-the original curated subset over several sessions — see §3 for the full
-list of clusters; several real bugs found and fixed along the way, most
-recently the STAB-0306 hierarchy-filter bug, the STAB-0325/0326
-unclamped bloom/SSAO sliders, and the STAB-0480 missing `pushUndo()` in
-`resetPivot()`). Current per-section totals: **S7 28/35 ✅ (rest P2), S8
-17/40 ✅ (rest P2/P3), S13 11/25 ✅ (rest P2/P3)**. Gate 4 (Registry/AI)
-has only its registry-search cluster done; the larger AI-mock-test item
-(STAB-0371..0376) is untouched and needs a mock HTTP layer first. Gates
-5–6 are untouched.
+safety): all P1 items across S7/S8/S13 are done** (mined well beyond the
+original curated subset over several sessions — see §3; several real
+bugs found and fixed along the way). **Gate 4 (Registry/AI): all of the
+registry cluster's smaller items are now done too** (search fields +
+edge cases, plus STAB-0346/0351/0359/0364/0368/0370 — S9 now 15/35 ✅,
+rest P1/P2/P3 mixed); the larger AI-mock-test item (STAB-0371..0376) is
+still untouched and needs a mock HTTP layer designed first. Current
+per-section totals: **S7 28/35, S8 17/40, S9 15/35, S13 11/25** (all
+✅-counted rows; remainder of each is lower-priority). Gates 5–6 are
+untouched.
 
 **Important architectural decisions:**
 - `mc3/` and `mcb/` are pure C++ static libs with **no** CNA/ImGui
@@ -129,56 +129,54 @@ search-field edge cases.
 
 ## 3. Recent changes
 
-All changes below are committed on `develop` as `edb954d`; not yet pushed
+All changes below are committed on `develop` as `f2ba147`; not yet pushed
 to `origin/develop` (last push was at `d98e34b`, several sessions back —
 confirm with the user before pushing).
 
-**This session (2026-07-02, continuing the same day's earlier work):**
-STAB-0475..0481 (S13 — Commands, Undo/Redo, Algorithms). **Found and
-fixed a real bug**: `resetPivot()` (`MeshCraftApplication_Commands.cpp`)
-mutated selected objects' transform and set `modified_ = true` but never
-called `pushUndo()` — pivot resets couldn't be undone. Fixed with a
-`hasSelection()` guard + `pushUndo()`, matching every other command.
-Confirmed the undo/redo stack depth cap (`kUndoMax = 20`) is real and
-correctly implemented; added mirror `pushWithCapAlg` + a 200-push
-regression test. STAB-0476/0478 were already covered by earlier tests
-(documented, not duplicated); STAB-0479's premise didn't apply to
-`deepCopyObjectAlg` (must preserve ids for undo/redo snapshot equality —
-documented that distinction explicitly against `duplicateObjectsAlg`,
-which does assign new ids and is already tested). Recomputed `plan.md`'s
-summary table (S13 now 11/25).
+**This session (2026-07-02), in order:**
+1. STAB-0270..0326's P1 subset (S7/S8 — Editor Save/Load & UI
+   Robustness): AI-apply/merge-scene/Save-As/Export-Selection/drag-drop/
+   invalid-file-load/locked-gizmo, then anim-keyframe/registry-insert
+   undo + keybinding/prefs/macro persistence formats, then invalid
+   material ref/missing mesh/hierarchy filter/duplicate names+ids/
+   command palette/material preview/bloom+SSAO clamping. **Found and
+   fixed 3 real bugs**: (a) `SceneHierarchyPanel.cpp`'s `drawHierarchy()`
+   gated its filter skip-decision on text-search-only instead of "any
+   filter active", so a type/layer/tag/material filter with no search
+   text silently did nothing; (b) the bloom/SSAO strength+radius sliders
+   in `MeshCraftApplication_UiMenuBar.cpp` had no
+   `ImGuiSliderFlags_AlwaysClamp`, so Ctrl+Click-to-type could set them
+   negative; (c) filled a real test gap in `Mc3Document::loadFromFile()`'s
+   error path (no prior test existed).
+2. STAB-0475..0481 (S13 — Commands, Undo/Redo, Algorithms). **Found and
+   fixed a 4th real bug**: `resetPivot()` mutated selected objects'
+   transform but never called `pushUndo()` — pivot resets couldn't be
+   undone. Also confirmed the undo/redo stack depth cap (`kUndoMax = 20`)
+   is real and correctly implemented (added a 200-push regression test).
+3. STAB-0346/0351/0359/0364/0368/0370 (S9 — ModelRegistry, closing out
+   Gate 4's smaller items): strengthened the `insertIntoScene` test to
+   check the parsed definition's actual structure (not just presence),
+   added a schema-level "no thumbnail column" check via `PRAGMA
+   table_info`, a >1MB XML round-trip test, special-characters-in-name/
+   tags, `save()`'s UPDATE-existing-id branch (never exercised before),
+   and empty-variant-field round-trip.
 
-**Earlier the same day:** STAB-0304..0326 P1 subset (S8 — UI Robustness,
-now 17/40). Found and fixed two more real bugs: (1) `SceneHierarchyPanel.
-cpp`'s `drawHierarchy()` gated its filter skip-decision on text-search-only
-instead of "any filter active", so a type/layer/tag/material filter with
-no search text silently did nothing; (2) the bloom/SSAO strength (and
-SSAO radius) sliders in `MeshCraftApplication_UiMenuBar.cpp` had no
-`ImGuiSliderFlags_AlwaysClamp`, so Ctrl+Click-to-type could set them
-negative. STAB-0304/0308 verified via new CNA-free mirrors/tests;
-STAB-0305/0307/0312/0319 verified by code inspection only (OpenGL/ImGui-
-coupled, no headless harness exists). Also: STAB-0284..0292 P1 items
-(S7 → 28/35) — anim-keyframe/registry-insert undo, keybinding/prefs/macro
-persistence formats, all via new CNA-free "Alg" mirrors in
-`EditorAlgorithms.hpp`. Also: STAB-0270..0278 (AI-apply/merge-scene/
-Save-As/Export-Selection/drag-drop/invalid-file-load/locked-gizmo) —
-filled a real test gap in `Mc3Document::loadFromFile()`'s error path
-(STAB-0276, no prior test existed). Also confirmed the cross-repo
-`../cna`/`../sharp-runtime` build break from earlier was fixed (by
-whichever session owns those repos, not this one).
+Also confirmed the cross-repo `../cna`/`../sharp-runtime` build break
+from earlier today was fixed (by whichever session owns those repos,
+not this one) — a full 52/52-target Debug rebuild now succeeds.
 
 **Prior sessions (summarized):** the original Gate 3 "commands are
-undoable" cluster (delete/rename/find-replace/array-dup/duplicate/group/
-ungroup/material-edit undo), auto-save + 2-slot backup rotation, AI-panel
-dialog lifecycle, dirty-flag/unsaved-changes-confirmation. **Two more
-real bugs found and fixed further back**: 7 of 40 `std::strncpy` call
-sites across the editor UI were missing their null-terminator (one,
-`addChannelObjBuf_`, was a confirmed buffer-over-read since it's read
-back via `std::string(...)`); and `ModelRegistry::search()`'s SQL was
-missing `source` from its `WHERE` clause entirely, so searching by
-source silently found nothing. All work follows the "Alg mirror" pattern
-described in §6 — see `plan.md`'s `STAB-XXXX` rows for exhaustive
-per-behavior detail on any of the above.
+undoable" cluster, auto-save + 2-slot backup rotation, AI-panel dialog
+lifecycle, dirty-flag/unsaved-changes-confirmation, registry search
+fields + edge cases. **2 more real bugs found and fixed further back**:
+7 of 40 `std::strncpy` call sites across the editor UI were missing
+their null-terminator (one was a confirmed buffer-over-read); and
+`ModelRegistry::search()`'s SQL was missing `source` from its `WHERE`
+clause entirely. All work follows the "Alg mirror" pattern described in
+§6 — see `plan.md`'s `STAB-XXXX` rows for exhaustive per-behavior detail
+on any of the above (running total: **6 real bugs found and fixed**
+across this stabilization effort so far, all via the same
+verify-then-fix workflow).
 
 ---
 
@@ -360,17 +358,23 @@ No project linter/formatter is configured.
 
 ## 8. Next smallest tasks
 
-**Gate 3's P1 items across S7/S8/S13 are now exhausted** (see §1/§3). The
-natural next area per `plan.md`'s own Priority Execution Order is Gate 4
-(Registry/AI):
+**Gate 3's P1 items across S7/S8/S13, and Gate 4's smaller registry
+tasks, are now done** (see §1/§3).
 
-1. **Remaining smaller Gate 4/registry tasks (quick win)** — STAB-0346
-   (verify `insertIntoScene` parses/adds objects correctly; may already
-   be covered by `testEntryFromDefinitionAndInsert`, worth a quick check
-   rather than a new test), STAB-0351 (thumbnail explicitly unsupported),
-   STAB-0359/0364/0368/0370 (large XML, special characters,
-   update-existing-entry, empty variant field).
-   Files: `mc3/test/mc3_registry_test.cpp`.
+1. **S9's remaining P1 items (quick win, not yet touched)** — STAB-0345
+   (`entryFromDefinition`'s XML includes only referenced materials/
+   textures, not the whole scene's), STAB-0347/0348 (AI panel's "Save to
+   Registry" uses `aiPendingDoc_` not `document_`, and works without a
+   prior Apply — `MeshCraftApplication_UiAi.cpp`, likely ImGui-coupled/
+   inspection-only), STAB-0349 (`ModelRegistry::defaultPath()` returns
+   `~/.meshcraft/modelregistry.sqlite3`, directly testable), STAB-0350
+   (registry auto-opens on first "Save to Registry" — `UiAi.cpp`,
+   inspection-only), STAB-0352 (registry UI "no data" state —
+   `UiRegistry.cpp`, inspection-only), STAB-0366 (verify the
+   `MESHCRAFT_HAS_SQLITE3`-absent stub build: all methods no-op,
+   `isOpen()` false — directly testable, mirrors the existing
+   `#ifndef MESHCRAFT_HAS_SQLITE3` stub block already read this session).
+   Files: `mc3/test/mc3_registry_test.cpp`, `src/MeshCraft/ModelRegistry.cpp`.
    Verify: `ctest -R mc3_registry --output-on-failure`.
 
 2. **STAB-0371..0376** — AI mock tests (Gate 4, bigger effort). Needs a
@@ -382,8 +386,7 @@ natural next area per `plan.md`'s own Priority Execution Order is Gate 4
    Files: `src/MeshCraft/AiAssistant.cpp`/`.hpp`, new test file.
    Verify: new ctest target passes without network access.
 
-3. **(alternative) Keep mining Gate 3's P2 items** — if the user wants to
-   continue in S7/S8/S13 rather than move to Gate 4, `plan.md`'s
+3. **(alternative) Keep mining Gate 3's P2 items** — `plan.md`'s
    remaining rows there are now all P2/P3 (S7: 7 left, S8: 23 left, S13:
    14 left) — pick by ID order within whichever section, same "check for
    an Alg-mirror candidate or inspection-only" approach as every cluster
@@ -429,7 +432,7 @@ improvement. Build and test with the commands in section 7 and confirm
 cmake-build-debug still passes (18/18, or the new total if you registered
 a new ctest). Update NEXT.md after finishing.
 
-Current branch: develop, at edb954d locally (origin/develop still at
+Current branch: develop, at f2ba147 locally (origin/develop still at
 d98e34b — several commits not yet pushed; confirm with the user before
 pushing).
 Build dirs: cmake-build-debug/ (Debug, CLion cmake 4.2.2) — full rebuild +
@@ -437,10 +440,12 @@ Build dirs: cmake-build-debug/ (Debug, CLion cmake 4.2.2) — full rebuild +
 re-verified since 2026-07-01; re-verify if touching anything
 Release-sensitive.
 Active plan: plan.md (STAB-XXXX tasks; Gate 3's P1 items across S7/S8/S13
-are now DONE — S7 28/35, S8 17/40, S13 11/25, rest of each is P2/P3; Gate
-4's registry-search cluster is done. Pick the next task from section 8 —
-likely moving into Gate 4's remaining registry/AI-mock items, or continue
-mining Gate 3's P2 backlog if preferred).
+are DONE — S7 28/35, S8 17/40, S13 11/25; Gate 4's registry cluster
+(search + STAB-0346/0351/0359/0364/0368/0370) is DONE — S9 15/35, but
+S9 still has a handful of untouched P1 rows (STAB-0345/0347/0348/0349/
+0350/0352/0366) not yet picked up. Pick the next task from section 8 —
+likely those remaining S9 P1s, or the bigger AI-mock-test item, or Gate
+3's P2 backlog).
 Reconfigure cmake-build-debug ONLY with CLion's cmake 4.2.2, not
 /usr/bin/cmake.
 CI is parked deactivated under .github_/ (token lacks `workflow` scope,
