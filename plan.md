@@ -479,12 +479,12 @@ _Generated: 2026-06-27 from full codebase + test audit. Replaces previous 100-ta
 | STAB-0343 | ✅ | P1 | Add test: registry search case-insensitive | `mc3/test/mc3_registry_test.cpp` | Added exact plan.md scenario: save "Chair", search "chair"/"CHAIR" both find it. root 18/18, Release 18/18 (verified 2026-07-01) |
 | STAB-0344 | ✅ | P1 | Add test: registry search by source field | `mc3/test/mc3_registry_test.cpp`, `src/MeshCraft/ModelRegistry.cpp`, `src/MeshCraft/MeshCraftApplication_UiRegistry.cpp` | **Found a real gap during STAB-0342**: the search SQL's `WHERE` clause omitted `source` entirely (only name/grp/tags/description), and the search box's hint text didn't mention it either — `source` was write-only metadata, never searchable. User chose to fix rather than just document. Added `OR lower(source) LIKE lower(?1)` to the SQL, updated the hint text to "Search by name, group, tags, description or source…", and added `testSearchBySourceField` (two entries, distinct sources, confirms each search returns only the matching one) plus a source marker in the existing per-field test. Negative-checked (reverted the SQL clause → 3 FAILs). root 18/18, Release 18/18 (verified 2026-07-01) |
 | STAB-0345 | 🧪 | P1 | Verify entryFromDefinition: XML only includes referenced materials/textures | `src/MeshCraft/ModelRegistry.cpp` | Entry XML contains only materials used by the definition, not all scene materials |
-| STAB-0346 | 📋 | P1 | Verify insertIntoScene: inserted model parses and adds objects correctly | `mc3/test/mc3_registry_test.cpp` | Call insertIntoScene; check scene objects contain inserted definition |
+| STAB-0346 | ✅ | P1 | Verify insertIntoScene: inserted model parses and adds objects correctly | `mc3/test/mc3_registry_test.cpp` | Note: `insertIntoScene` inserts into `doc.definitions` (+ merges `materials`/`textures`) — it never touches `doc.objects` directly; placing an `Instance` object in the scene is the caller's job (`MeshCraftApplication_UiRegistry.cpp`'s "Insert" button). `testEntryFromDefinitionAndInsert()` already checked `scene.definitions.count(insertedId) == 1`, but only presence, not correctness — strengthened it to verify the inserted definition's actual parsed structure: type (Group), child count (1), child type (Box), and the child's material reference ("wood") all match what `entryFromDefinition` originally serialized. root 18/18 (verified 2026-07-02) |
 | STAB-0347 | 🧪 | P1 | Verify "Save to Registry" from AI panel uses aiPendingDoc, not scene doc | `src/MeshCraft/MeshCraftApplication_UiAi.cpp` | AI result with 2 definitions; save one; only AI definitions in combo |
 | STAB-0348 | 🧪 | P1 | Verify AI "Save to Registry" works without prior Apply | `src/MeshCraft/MeshCraftApplication_UiAi.cpp` | Get AI response; click Save to Registry without Apply; save succeeds |
 | STAB-0349 | 🧪 | P1 | Verify default DB path is `~/.meshcraft/modelregistry.sqlite3` | `src/MeshCraft/ModelRegistry.cpp` | `ModelRegistry::defaultPath()` returns expected path |
 | STAB-0350 | 📋 | P1 | Verify registry auto-opens default path on first "Save to Registry" | `src/MeshCraft/MeshCraftApplication_UiAi.cpp` | Registry not manually opened; click Save to Registry; DB auto-created |
-| STAB-0351 | 📋 | P2 | Add test: registry thumbnail explicitly unsupported (no column) | `mc3/test/mc3_registry_test.cpp` | `Entry` struct has no thumbnail field; doc says explicitly not implemented |
+| STAB-0351 | ✅ | P2 | Add test: registry thumbnail explicitly unsupported (no column) | `mc3/test/mc3_registry_test.cpp` | `Entry` (`ModelRegistry.hpp`) having no `thumbnail` member is a compile-time fact, not runtime-assertable without reflection — but the SQL schema is, and matters more (it's what would need a migration if this ever changed). Added `testNoThumbnailColumn()`: opens the real DB file directly via `sqlite3_open_v2` + `PRAGMA table_info(models)` and confirms no column is named `thumbnail`. Already documented in `m1m2m3.md`: "Not yet implemented: thumbnail column (design placeholder only)." root 18/18 (verified 2026-07-02) |
 | STAB-0352 | 🧪 | P1 | Verify registry UI "no data" state shows message | `src/MeshCraft/MeshCraftApplication_UiRegistry.cpp` | Empty registry: shows "No models found" or similar |
 | STAB-0353 | 📋 | P2 | Verify registry handles concurrent open from two processes | `src/MeshCraft/ModelRegistry.cpp` | Two MeshCraft instances open same DB; SQLite WAL mode; no corruption |
 | STAB-0354 | 📋 | P2 | Verify corrupted registry DB file produces error (not crash) | `src/MeshCraft/ModelRegistry.cpp` | Write garbage to DB file; `open()` returns error string; app continues |
@@ -492,18 +492,18 @@ _Generated: 2026-06-27 from full codebase + test audit. Replaces previous 100-ta
 | STAB-0356 | 📋 | P2 | Verify registry material merge on insert: no duplicate material IDs | `src/MeshCraft/ModelRegistry.cpp` | Insert model with material already in scene; material reused, not duplicated |
 | STAB-0357 | 📋 | P2 | Verify registry texture merge on insert | `src/MeshCraft/ModelRegistry.cpp` | Insert model with texture already in scene; texture reused |
 | STAB-0358 | 📋 | P2 | Verify "Save current definition" button in UI | `src/MeshCraft/MeshCraftApplication_UiRegistry.cpp` | Select definition in combo; fill fields; save; entry appears in search |
-| STAB-0359 | 📋 | P3 | Add registry test: large XML content (>1MB definition XML) | `mc3/test/mc3_registry_test.cpp` | Save and retrieve entry with 1MB XML; no corruption |
+| STAB-0359 | ✅ | P3 | Add registry test: large XML content (>1MB definition XML) | `mc3/test/mc3_registry_test.cpp` | Added `testLargeXmlContent()`: builds a >1MB payload from a repeating, distinctive (not uniform-filler) pattern so a truncation bug couldn't hide, saves it, searches it back, and confirms both length and byte-for-byte content match exactly (`sqlite3_bind_text`/`TEXT` column have no practical size issue here, but this locks it in as a regression guard). root 18/18 (verified 2026-07-02) |
 | STAB-0360 | 📋 | P3 | Verify registry DB path config (alternative path via env var or prefs) | `src/MeshCraft/ModelRegistry.cpp` | Document how to override default DB path |
 | STAB-0361 | 📋 | P2 | Verify registry search is live (instant, not on Enter) | `src/MeshCraft/MeshCraftApplication_UiRegistry.cpp` | Type in search; results update each keystroke |
 | STAB-0362 | 📋 | P2 | Verify registry panel shows group, name, variant columns | `src/MeshCraft/MeshCraftApplication_UiRegistry.cpp` | UI table shows all three fields for each entry |
 | STAB-0363 | 📋 | P2 | Verify registry panel X (delete) button removes entry permanently | `src/MeshCraft/MeshCraftApplication_UiRegistry.cpp` | Click X; entry removed from search; DB record deleted |
-| STAB-0364 | 📋 | P3 | Add registry test: save entry with special chars in name/tags | `mc3/test/mc3_registry_test.cpp` | Entry with name `"door (gothic)"` and tags `"arch medieval"` saves and searches correctly |
+| STAB-0364 | ✅ | P3 | Add registry test: save entry with special chars in name/tags | `mc3/test/mc3_registry_test.cpp` | Added `testSpecialCharsInNameAndTags()` using exactly the plan's example (name `"door (gothic)"`, tags `"arch medieval"`): saves without error, name round-trips byte-exact, and tag search still works alongside the parenthesized name. Expected to already work — `save()`/`search()` use parameterized `sqlite3_bind_text`, never string concatenation — this locks it in explicitly rather than just asserting by design. root 18/18 (verified 2026-07-02) |
 | STAB-0365 | 📋 | P3 | Verify registry works on read-only filesystem (Emscripten IDBFS) | `src/MeshCraft/ModelRegistry.cpp` | Stub behavior on Emscripten documented |
 | STAB-0366 | 🧪 | P1 | Verify MESHCRAFT_HAS_SQLITE3 guard in ModelRegistry.cpp | `src/MeshCraft/ModelRegistry.cpp` | Without `MESHCRAFT_HAS_SQLITE3`: all methods are no-ops; `isOpen()` returns false |
 | STAB-0367 | 📋 | P2 | Verify registry `created` timestamp stored as Unix epoch | `src/MeshCraft/ModelRegistry.cpp` | Saved entry has non-zero `created` field; matches current time ± 5s |
-| STAB-0368 | 📋 | P3 | Add registry test: update existing entry (save with existing id) | `mc3/test/mc3_registry_test.cpp` | Save entry; update description; search returns updated description |
+| STAB-0368 | ✅ | P3 | Add registry test: update existing entry (save with existing id) | `mc3/test/mc3_registry_test.cpp` | Added `testUpdateExistingEntry()`: no prior test ever re-saved the same id (all existing tests only insert fresh rows). Saves an entry, re-saves with `Entry.id` set to the returned id and a changed description, confirms `save()` returns the same id (not a new one), the table still has exactly 1 row (no duplicate insert), and `search()` returns the updated description — exercising `save()`'s `UPDATE` branch (`ModelRegistry.cpp:189-201`) for the first time. root 18/18 (verified 2026-07-02) |
 | STAB-0369 | 📋 | P3 | Verify registry `source` field values are constrained | `src/MeshCraft/ModelRegistry.cpp` | Only "handmade" or "ai_generated" used; documented in API |
-| STAB-0370 | 📋 | P2 | Verify registry variant field allows empty string | `mc3/test/mc3_registry_test.cpp` | Entry with empty variant: save and retrieve correctly |
+| STAB-0370 | ✅ | P2 | Verify registry variant field allows empty string | `mc3/test/mc3_registry_test.cpp` | Existing tests exercised empty variant incidentally (default-constructed `Entry`) but never explicitly saved+searched+asserted it stays empty. Added `testEmptyVariantField()`: saves with `variant = ""`, searches back, confirms `results[0].variant.empty()` — the `col()` lambda's `t ? t : ""` NULL-guard plus the schema's `variant TEXT NOT NULL DEFAULT ''` mean this was already safe, now verified directly. root 18/18 (verified 2026-07-02) |
 
 ---
 
@@ -877,7 +877,7 @@ _Generated: 2026-06-27 from full codebase + test audit. Replaces previous 100-ta
 | S6 Geometry | 25 | 5 | 0 | 6 | 14 | 0 |
 | S7 Save/load | 35 | 28 | 0 | 0 | 7 | 0 |
 | S8 UI robustness | 40 | 17 | 0 | 0 | 23 | 0 |
-| S9 Registry | 35 | 9 | 0 | 6 | 20 | 0 |
+| S9 Registry | 35 | 15 | 0 | 6 | 14 | 0 |
 | S10 AI | 40 | 0 | 0 | 8 | 32 | 0 |
 | S11 Materials | 30 | 0 | 0 | 9 | 21 | 0 |
 | S12 Animation | 30 | 0 | 0 | 12 | 18 | 0 |
@@ -889,7 +889,7 @@ _Generated: 2026-06-27 from full codebase + test audit. Replaces previous 100-ta
 | S18 Code quality | 25 | 0 | 3 | 2 | 20 | 0 |
 | S19 Security | 15 | 0 | 0 | 4 | 11 | 0 |
 | S20 Release | 15 | 0 | 0 | 0 | 15 | 0 |
-| **TOTAL** | **650** | **135** | **13** | **151** | **351** | **0** |
+| **TOTAL** | **650** | **141** | **13** | **151** | **345** | **0** |
 
 _Recomputed directly from per-row status markers (the table had drifted from
 actual row state over several prior sessions); derived, not hand-maintained

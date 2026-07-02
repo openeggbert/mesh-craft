@@ -6,6 +6,10 @@
 #include <iostream>
 #include <string>
 
+#ifdef MESHCRAFT_HAS_SQLITE3
+#include <sqlite3.h>
+#endif
+
 using namespace MeshCraft;
 using namespace MeshCraft::Mc3;
 
@@ -147,6 +151,23 @@ static void testEntryFromDefinitionAndInsert() {
         CHECK(!insertedId.empty(),                        "insertIntoScene: returned id");
         CHECK(scene.definitions.count(insertedId) == 1,  "insertIntoScene: definition present");
         CHECK(scene.materials.count("wood") == 1,        "insertIntoScene: material merged");
+
+        // STAB-0346: verify the inserted definition actually parsed correctly —
+        // not just that *some* entry landed under `insertedId`, but that its
+        // object tree matches what was originally serialized: a Group
+        // containing one Box child with material "wood" (see makeDocWithDef()).
+        const auto& insertedDef = scene.definitions.at(insertedId);
+        CHECK(insertedDef->type == ObjectType::Group,
+              "insertIntoScene: inserted definition parsed with the correct type (Group)");
+        CHECK(insertedDef->children.size() == 1,
+              "insertIntoScene: inserted definition parsed with the correct child count");
+        if (!insertedDef->children.empty()) {
+            const auto& insertedChild = insertedDef->children.front();
+            CHECK(insertedChild->type == ObjectType::Box,
+                  "insertIntoScene: inserted definition's child parsed with the correct type (Box)");
+            CHECK(insertedChild->material == "wood",
+                  "insertIntoScene: inserted definition's child kept its material reference");
+        }
     } catch (const std::exception& ex) {
         fail(std::string("insertIntoScene threw: ") + ex.what());
     }
@@ -398,6 +419,190 @@ static void testMigration() {
     fs::remove(dbPath);
 }
 
+// ---------------------------------------------------------------------------
+// STAB-0351 — thumbnails are explicitly unsupported (design placeholder only,
+// see m1m2m3.md: "Not yet implemented: thumbnail column"). `Entry` having no
+// `thumbnail` member is a compile-time fact (verified by reading
+// ModelRegistry.hpp), not something a runtime test can assert without C++
+// reflection — but the *schema* is a runtime fact this test CAN check
+// directly: query the real `models` table via `PRAGMA table_info` and
+// confirm no column named "thumbnail" exists, so a future accidental
+// addition wouldn't silently drift from the documented design.
+// ---------------------------------------------------------------------------
+
+static void testNoThumbnailColumn() {
+    namespace fs = std::filesystem;
+    auto dbPath = fs::temp_directory_path() / "mc3_reg_no_thumbnail.sqlite3";
+    fs::remove(dbPath);
+
+    ModelRegistry reg;
+    reg.open(dbPath); // creates the schema
+
+    sqlite3* raw = nullptr;
+    CHECK(sqlite3_open_v2(dbPath.string().c_str(), &raw, SQLITE_OPEN_READONLY, nullptr) == SQLITE_OK,
+          "no-thumbnail: can reopen the DB file directly for schema inspection");
+
+    sqlite3_stmt* stmt = nullptr;
+    sqlite3_prepare_v2(raw, "PRAGMA table_info(models);", -1, &stmt, nullptr);
+    bool hasThumbnailColumn = false;
+    int  columnCount = 0;
+    while (sqlite3_step(stmt) == SQLITE_ROW) {
+        ++columnCount;
+        const auto* name = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 1)); // column 1 = name
+        if (name && std::string(name) == "thumbnail") hasThumbnailColumn = true;
+    }
+    sqlite3_finalize(stmt);
+    sqlite3_close(raw);
+
+    CHECK(columnCount > 0, "no-thumbnail: table_info returned the models table's columns");
+    CHECK(!hasThumbnailColumn,
+          "no-thumbnail: the 'models' table schema has no thumbnail column (design placeholder only)");
+
+    reg.close();
+    fs::remove(dbPath);
+}
+
+// ---------------------------------------------------------------------------
+// STAB-0359 — large XML content (>1MB) round-trips through SQLite without
+// truncation or corruption.
+// ---------------------------------------------------------------------------
+
+static void testLargeXmlContent() {
+    namespace fs = std::filesystem;
+    auto dbPath = fs::temp_directory_path() / "mc3_reg_large_xml.sqlite3";
+    fs::remove(dbPath);
+
+    ModelRegistry reg;
+    reg.open(dbPath);
+
+    // Build a >1MB XML-ish payload out of a repeating, distinctive pattern
+    // so a truncation or byte-corruption bug would be easy to catch (as
+    // opposed to a uniform filler that could truncate "successfully").
+    std::string bigXml = "<mc3 version=\"0.3\"><definitions><definition id=\"big\">";
+    std::string chunk;
+    for (int i = 0; i < 100; ++i)
+        chunk += "<box id=\"b" + std::to_string(i) + "\" size=\"1 1 1\"/>";
+    while (bigXml.size() < 1024 * 1024) bigXml += chunk;
+    bigXml += "</definition></definitions></mc3>";
+    CHECK(bigXml.size() > 1024 * 1024, "large-xml: test payload is actually over 1MB");
+
+    ModelRegistry::Entry e;
+    e.name = "BigModel";
+    e.xml  = bigXml;
+    int64_t id = reg.save(e);
+    CHECK(id > 0, "large-xml: entry with >1MB xml saved without error");
+
+    auto results = reg.search("BigModel");
+    CHECK(results.size() == 1, "large-xml: entry is found again by search");
+    if (!results.empty()) {
+        CHECK(results[0].xml.size() == bigXml.size(),
+              "large-xml: retrieved xml is exactly the same length as what was saved");
+        CHECK(results[0].xml == bigXml,
+              "large-xml: retrieved xml is byte-for-byte identical (no corruption)");
+    }
+
+    reg.close();
+    fs::remove(dbPath);
+}
+
+// ---------------------------------------------------------------------------
+// STAB-0364 — special characters in name/tags save and search correctly
+// (parameterized SQLite queries, not string concatenation, so this is
+// expected to already work — this test locks it in explicitly).
+// ---------------------------------------------------------------------------
+
+static void testSpecialCharsInNameAndTags() {
+    namespace fs = std::filesystem;
+    auto dbPath = fs::temp_directory_path() / "mc3_reg_special_chars.sqlite3";
+    fs::remove(dbPath);
+
+    ModelRegistry reg;
+    reg.open(dbPath);
+
+    ModelRegistry::Entry e;
+    e.name = "door (gothic)";
+    e.tags = "arch medieval";
+    e.xml  = "<mc3/>";
+    int64_t id = reg.save(e);
+    CHECK(id > 0, "special-chars: entry with parens/spaces in name saved without error");
+
+    auto byName = reg.search("door (gothic)");
+    CHECK(byName.size() == 1, "special-chars: exact name with parens found by search");
+    if (!byName.empty())
+        CHECK(byName[0].name == "door (gothic)",
+              "special-chars: name with parens preserved exactly on retrieval");
+
+    auto byTag = reg.search("medieval");
+    CHECK(byTag.size() == 1, "special-chars: tag search still works alongside a parenthesized name");
+
+    reg.close();
+    fs::remove(dbPath);
+}
+
+// ---------------------------------------------------------------------------
+// STAB-0368 — saving with an existing id updates that row in place rather
+// than inserting a duplicate.
+// ---------------------------------------------------------------------------
+
+static void testUpdateExistingEntry() {
+    namespace fs = std::filesystem;
+    auto dbPath = fs::temp_directory_path() / "mc3_reg_update.sqlite3";
+    fs::remove(dbPath);
+
+    ModelRegistry reg;
+    reg.open(dbPath);
+
+    ModelRegistry::Entry e;
+    e.name = "Lamp"; e.xml = "<mc3/>"; e.description = "Original description";
+    int64_t id = reg.save(e);
+    CHECK(id > 0, "update-entry: initial save succeeds");
+
+    ModelRegistry::Entry updated;
+    updated.id          = id;
+    updated.name        = "Lamp";
+    updated.xml         = "<mc3/>";
+    updated.description = "Updated description";
+    int64_t updatedId = reg.save(updated);
+    CHECK(updatedId == id, "update-entry: saving with an existing id returns that same id");
+
+    auto results = reg.search("");
+    CHECK(results.size() == 1, "update-entry: still exactly 1 row — no duplicate inserted");
+    if (!results.empty())
+        CHECK(results[0].description == "Updated description",
+              "update-entry: search returns the updated description, not the original");
+
+    reg.close();
+    fs::remove(dbPath);
+}
+
+// ---------------------------------------------------------------------------
+// STAB-0370 — an empty variant field saves and retrieves correctly (not
+// corrupted into NULL or some other sentinel).
+// ---------------------------------------------------------------------------
+
+static void testEmptyVariantField() {
+    namespace fs = std::filesystem;
+    auto dbPath = fs::temp_directory_path() / "mc3_reg_empty_variant.sqlite3";
+    fs::remove(dbPath);
+
+    ModelRegistry reg;
+    reg.open(dbPath);
+
+    ModelRegistry::Entry e;
+    e.name = "GenericBox"; e.xml = "<mc3/>"; e.variant = "";
+    int64_t id = reg.save(e);
+    CHECK(id > 0, "empty-variant: entry with empty variant saved without error");
+
+    auto results = reg.search("GenericBox");
+    CHECK(results.size() == 1, "empty-variant: entry found by search");
+    if (!results.empty())
+        CHECK(results[0].variant.empty(),
+              "empty-variant: retrieved variant is an empty string, not corrupted");
+
+    reg.close();
+    fs::remove(dbPath);
+}
+
 #endif // MESHCRAFT_HAS_SQLITE3
 
 int main() {
@@ -412,6 +617,11 @@ int main() {
     testSearchMatchesEachFieldIndependently();
     testSearchCaseInsensitiveByName();
     testSearchBySourceField();
+    testNoThumbnailColumn();
+    testLargeXmlContent();
+    testSpecialCharsInNameAndTags();
+    testUpdateExistingEntry();
+    testEmptyVariantField();
 #else
     std::cout << "SKIP: ModelRegistry tests require MESHCRAFT_HAS_SQLITE3\n";
 #endif
