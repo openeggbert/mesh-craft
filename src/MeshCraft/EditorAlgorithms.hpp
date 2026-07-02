@@ -6,6 +6,7 @@
 #include <MeshCraft/Mc3/Mc3Object.hpp>
 
 #include <algorithm>
+#include <array>
 #include <cctype>
 #include <cmath>
 #include <cstdio>
@@ -858,6 +859,105 @@ inline std::vector<MacroStepAlg> loadMacroAlg(const std::filesystem::path& path)
         if (!step.verb.empty()) steps.push_back(std::move(step));
     }
     return steps;
+}
+
+// ── Hierarchy panel filter (STAB-0306) ────────────────────────────────────────
+//
+// Mirrors matchesType()/matchesFilter() and the filter-active flags
+// (Scene/SceneHierarchyPanel.cpp:206-252): an object matches if it (or any
+// descendant, recursively — so a matching child keeps its ancestors visible)
+// passes every ACTIVE filter (AND mode, the default) or any active filter
+// (OR mode, `filterOr_`); an inactive filter is never checked, and with no
+// filter active at all everything matches. `hierarchyAnyFilterActiveAlg` is
+// what the real drawHierarchy() loop must gate the skip-decision on — it
+// used to gate on the text-search flag alone, which silently made a
+// type/layer/tag/material-only filter (no search text typed) do nothing;
+// fixed alongside this mirror (SceneHierarchyPanel.cpp:269/276 now check
+// `anyFiltering`, matching this mirror's `hierarchyAnyFilterActiveAlg`).
+
+struct HierarchyFilterAlg {
+    std::string textLower;      // already-lowercased search text; empty = inactive
+    int         typeFilter{0};  // 0 = any; see hierarchyMatchesTypeAlg
+    std::string layerFilter;    // empty = inactive
+    std::string tagFilter;      // empty = inactive
+    std::string matFilter;      // empty = inactive
+    bool        orMode{false};
+};
+
+inline bool hierarchyMatchesTypeAlg(int typeFilter, Mc3::ObjectType t)
+{
+    using OT = Mc3::ObjectType;
+    switch (typeFilter) {
+    case 1:
+        return t == OT::Box || t == OT::Cube || t == OT::Sphere ||
+               t == OT::Cylinder || t == OT::Cone || t == OT::Plane ||
+               t == OT::Torus || t == OT::Capsule || t == OT::Disk ||
+               t == OT::Grid || t == OT::IcoSphere;
+    case 2: return t == OT::Mesh;
+    case 3: return t == OT::Group || t == OT::Area;
+    case 4: return t == OT::Instance;
+    case 5: return t == OT::Union || t == OT::Difference || t == OT::Intersection;
+    case 6: return t == OT::Extrude;
+    default: return true;
+    }
+}
+
+inline bool hierarchyAnyFilterActiveAlg(const HierarchyFilterAlg& f)
+{
+    return !f.textLower.empty() || f.typeFilter != 0 || !f.layerFilter.empty() ||
+           !f.tagFilter.empty() || !f.matFilter.empty();
+}
+
+inline bool hierarchyFilterMatchesAlg(const HierarchyFilterAlg& f, const Mc3::Mc3Object& o)
+{
+    if (!hierarchyAnyFilterActiveAlg(f)) return true;
+
+    bool filtering     = !f.textLower.empty();
+    bool typeFiltering = (f.typeFilter != 0);
+    bool layFiltering  = !f.layerFilter.empty();
+    bool tagFiltering  = !f.tagFilter.empty();
+    bool matFiltering  = !f.matFilter.empty();
+
+    std::string nl = o.name.empty() ? o.id : o.name;
+    for (auto& ch : nl) ch = static_cast<char>(std::tolower(static_cast<unsigned char>(ch)));
+    bool textOk = !filtering     || nl.find(f.textLower) != std::string::npos;
+    bool typeOk = !typeFiltering || hierarchyMatchesTypeAlg(f.typeFilter, o.type);
+    bool layOk  = !layFiltering  || (o.layer == f.layerFilter);
+    bool tagOk  = !tagFiltering  || std::any_of(o.tags.begin(), o.tags.end(),
+                                        [&](const std::string& t){ return t == f.tagFilter; });
+    bool matOk  = !matFiltering  || (o.material == f.matFilter);
+    bool selfMatch = f.orMode
+        ? (   (filtering     && textOk)
+           || (typeFiltering && typeOk)
+           || (layFiltering  && layOk)
+           || (tagFiltering  && tagOk)
+           || (matFiltering  && matOk))
+        : (textOk && typeOk && layOk && tagOk && matOk);
+    if (selfMatch) return true;
+    for (const auto& c : o.children) if (hierarchyFilterMatchesAlg(f, *c)) return true;
+    return false;
+}
+
+// ── Material color resolution fallback (STAB-0304) ────────────────────────────
+//
+// Mirrors SceneRenderer::materialColor() (Renderer/SceneRenderer.cpp:
+// 368-381), minus the CNA `Color` type (returns a plain clamped RGBA float
+// array instead): an empty or unresolvable material id — e.g. the object's
+// `material` attribute references a definition that was deleted, renamed, or
+// never existed in a hand-edited/AI-generated file — falls back to a fixed
+// default gray rather than crashing or leaving the object unrendered.
+
+inline std::array<float,4> materialColorAlg(const std::string& matId, const Mc3::Mc3Document& doc)
+{
+    if (!matId.empty()) {
+        auto it = doc.materials.find(matId);
+        if (it != doc.materials.end()) {
+            const auto& bc = it->second.baseColor;
+            return { std::clamp(bc[0], 0.0f, 1.0f), std::clamp(bc[1], 0.0f, 1.0f),
+                     std::clamp(bc[2], 0.0f, 1.0f), std::clamp(bc[3], 0.0f, 1.0f) };
+        }
+    }
+    return { 180.0f/255.0f, 180.0f/255.0f, 180.0f/255.0f, 1.0f };
 }
 
 } // namespace MeshCraft

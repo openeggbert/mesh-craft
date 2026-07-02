@@ -1430,6 +1430,145 @@ static void testMacroLoadSkipsBlankLines()
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Hierarchy filter: type/layer/tag/material-only filters actually narrow the
+// list, not just text search (STAB-0306) — regression test for a real bug
+// where SceneHierarchyPanel.cpp gated the skip-decision on `filtering`
+// (text-only) instead of `anyFiltering`, so a type/layer/tag/material filter
+// with no search text typed silently had no effect. Fixed alongside this
+// mirror (see EditorAlgorithms.hpp's HierarchyFilterAlg comment).
+// ─────────────────────────────────────────────────────────────────────────────
+
+static void testHierarchyFilterTypeOnlyNarrowsWithoutText()
+{
+    auto box    = makeObj("box",    "MyBox",    Mc3::ObjectType::Box);
+    auto sphere = makeObj("sphere", "MySphere", Mc3::ObjectType::Sphere);
+    auto mesh   = makeObj("mesh",   "MyMesh",   Mc3::ObjectType::Mesh);
+
+    HierarchyFilterAlg f;
+    f.typeFilter = 2; // "Mesh" only, per hierarchyMatchesTypeAlg
+    // No text typed — this is exactly the case the bug affected.
+
+    auto shouldSkip = [&](const std::shared_ptr<Mc3Object>& o) {
+        return hierarchyAnyFilterActiveAlg(f) && !hierarchyFilterMatchesAlg(f, *o);
+    };
+
+    CHECK(shouldSkip(box),    "hierarchy filter: type-only filter (no text) skips a non-matching Box");
+    CHECK(shouldSkip(sphere), "hierarchy filter: type-only filter (no text) skips a non-matching Sphere");
+    CHECK(!shouldSkip(mesh),  "hierarchy filter: type-only filter (no text) keeps a matching Mesh");
+}
+
+static void testHierarchyFilterRecursesIntoChildren()
+{
+    auto child  = makeObj("c", "TargetMesh", Mc3::ObjectType::Mesh);
+    auto parent = makeObj("p", "Group",      Mc3::ObjectType::Group);
+    parent->children.push_back(child);
+
+    HierarchyFilterAlg f;
+    f.typeFilter = 2; // Mesh only — parent itself is a Group, doesn't match directly
+
+    CHECK(hierarchyFilterMatchesAlg(f, *parent),
+          "hierarchy filter: a non-matching parent still matches via a matching descendant");
+}
+
+static void testHierarchyFilterOrMode()
+{
+    auto box = makeObj("box", "SpecialName", Mc3::ObjectType::Box);
+
+    HierarchyFilterAlg f;
+    f.textLower  = "special";       // matches by name
+    f.typeFilter = 2;               // does NOT match by type (Box != Mesh)
+    f.orMode     = true;
+
+    CHECK(hierarchyFilterMatchesAlg(f, *box),
+          "hierarchy filter: OR mode matches on any active filter, not all of them");
+
+    f.orMode = false;
+    CHECK(!hierarchyFilterMatchesAlg(f, *box),
+          "hierarchy filter: AND mode (default) requires every active filter to match");
+}
+
+static void testHierarchyFilterNoActiveFiltersMatchesEverything()
+{
+    auto box = makeObj("box", "Anything", Mc3::ObjectType::Box);
+    HierarchyFilterAlg f; // all fields at their inactive default
+    CHECK(hierarchyFilterMatchesAlg(f, *box),
+          "hierarchy filter: with no filter active, every object matches");
+    CHECK(!hierarchyAnyFilterActiveAlg(f),
+          "hierarchy filter: hierarchyAnyFilterActiveAlg is false when nothing is active");
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Invalid material reference doesn't crash the renderer (STAB-0304)
+// ─────────────────────────────────────────────────────────────────────────────
+
+static void testMaterialColorFallsBackForMissingReference()
+{
+    Mc3Document doc;
+    doc.materials["stone"] = Mc3::Mc3Material("stone", {0.2f, 0.4f, 0.6f, 1.0f});
+
+    auto emptyRef = materialColorAlg("", doc);
+    auto missingRef = materialColorAlg("nonexistent", doc);
+    const float expectedGray = 180.0f / 255.0f;
+
+    CHECKF(emptyRef[0], expectedGray, "material color: empty material id falls back to default gray (R)");
+    CHECKF(emptyRef[3], 1.0f,         "material color: default gray fallback is fully opaque");
+    CHECKF(missingRef[0], expectedGray,
+          "material color: a material id not present in the document falls back to default gray, not a crash");
+}
+
+static void testMaterialColorResolvesExistingMaterial()
+{
+    Mc3Document doc;
+    doc.materials["stone"] = Mc3::Mc3Material("stone", {0.2f, 0.4f, 0.6f, 1.0f});
+    auto c = materialColorAlg("stone", doc);
+    CHECKF(c[0], 0.2f, "material color: resolves an existing material's base color (R)");
+    CHECKF(c[1], 0.4f, "material color: resolves an existing material's base color (G)");
+    CHECKF(c[2], 0.6f, "material color: resolves an existing material's base color (B)");
+    CHECKF(c[3], 1.0f, "material color: resolves an existing material's base color (A)");
+
+    doc.materials["hot"] = Mc3::Mc3Material("hot", {1.5f, -0.5f, 0.5f, 1.0f});
+    auto hot = materialColorAlg("hot", doc);
+    CHECKF(hot[0], 1.0f, "material color: an out-of-range base color component is clamped high");
+    CHECKF(hot[1], 0.0f, "material color: an out-of-range base color component is clamped low");
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Duplicate material IDs (STAB-0308) — a document-model-level guarantee, not
+// a mirror: `Mc3Document::materials` is a std::map, so a duplicate key can
+// only arise while *parsing* XML (two <material id="dup"> elements), never
+// in-memory. Confirms the parser's policy is "last wins", tested directly
+// against the real (already CNA-free) Mc3Document::loadFromFile.
+// ─────────────────────────────────────────────────────────────────────────────
+
+static void testDuplicateMaterialIdLastWins()
+{
+    static int tmpIdx = 0;
+    auto path = std::filesystem::temp_directory_path() /
+                ("mc3_dupmat_" + std::to_string(tmpIdx++) + ".mc3.xml");
+    {
+        std::ofstream f(path);
+        f << "<?xml version=\"1.0\"?>\n"
+             "<mc3 version=\"0.3\" model=\"DupMat\">\n"
+             "  <materials>\n"
+             "    <material id=\"dup\" roughness=\"0.1\"><base_color>1.0 0.0 0.0 1.0</base_color></material>\n"
+             "    <material id=\"dup\" roughness=\"0.9\"><base_color>0.0 1.0 0.0 1.0</base_color></material>\n"
+             "  </materials>\n"
+             "</mc3>\n";
+    }
+
+    Mc3Document doc = Mc3Document::loadFromFile(path);
+
+    CHECK(doc.materials.size() == 1, "duplicate material id: only one entry survives (map semantics)");
+    CHECKF(doc.materials.at("dup").baseColor[1], 1.0f,
+          "duplicate material id: the LAST <material> element in document order wins");
+    CHECKF(doc.materials.at("dup").roughness, 0.9f,
+          "duplicate material id: the last element's other fields win too, not a per-field merge");
+
+    std::error_code ec;
+    std::filesystem::remove(path, ec);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 
 int main()
 {
@@ -1481,6 +1620,13 @@ int main()
     testPrefsLoadSkipsMalformedLines();
     testMacroSaveLoadRoundTrip();
     testMacroLoadSkipsBlankLines();
+    testHierarchyFilterTypeOnlyNarrowsWithoutText();
+    testHierarchyFilterRecursesIntoChildren();
+    testHierarchyFilterOrMode();
+    testHierarchyFilterNoActiveFiltersMatchesEverything();
+    testMaterialColorFallsBackForMissingReference();
+    testMaterialColorResolvesExistingMaterial();
+    testDuplicateMaterialIdLastWins();
 
     std::cout << "\n";
     if (failures == 0)

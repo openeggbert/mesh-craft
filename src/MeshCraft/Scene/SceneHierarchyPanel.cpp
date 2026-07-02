@@ -266,14 +266,19 @@ void SceneHierarchyPanel::draw(Editor::SelectionManager& selection,
     std::function<void(const std::vector<std::shared_ptr<Mc3::Mc3Object>>&)> drawHierarchy;
     drawHierarchy = [&](const std::vector<std::shared_ptr<Mc3::Mc3Object>>& list) {
         for (const auto& obj : list) {
-            if (filtering && !matchesFilter(*obj)) continue;
+            // anyFiltering, not filtering (text-only): a type/layer/tag/
+            // material filter with no search text typed must still narrow
+            // the list — matchesFilter() already accounts for all of them
+            // via anyFiltering, but gating the call on `filtering` alone
+            // made the other filters silently do nothing (STAB-0306).
+            if (anyFiltering && !matchesFilter(*obj)) continue;
             ImGui::PushID(obj.get());
             bool sel = selection.isSelected(obj.get());
             bool hasChildren = !obj->children.empty();
             ImGuiTreeNodeFlags flags = ImGuiTreeNodeFlags_OpenOnArrow |
                                        ImGuiTreeNodeFlags_SpanAvailWidth;
             if (!hasChildren) flags |= ImGuiTreeNodeFlags_Leaf | ImGuiTreeNodeFlags_NoTreePushOnOpen;
-            if (filtering && hasChildren) flags |= ImGuiTreeNodeFlags_DefaultOpen;
+            if (anyFiltering && hasChildren) flags |= ImGuiTreeNodeFlags_DefaultOpen;
             if (sel)          flags |= ImGuiTreeNodeFlags_Selected;
             if (expandAll   && hasChildren) ImGui::SetNextItemOpen(true,  ImGuiCond_Always);
             if (collapseAll && hasChildren) ImGui::SetNextItemOpen(false, ImGuiCond_Always);
