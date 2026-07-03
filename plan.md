@@ -531,7 +531,7 @@ _Generated: 2026-06-27 from full codebase + test audit. Replaces previous 100-ta
 | STAB-0388 | 📋 | P2 | Verify async lifetime safety: doc destroyed while AI running | `src/MeshCraft/AiAssistant.cpp` | Close file while request in flight; callback doesn't access freed memory |
 | STAB-0389 | 📋 | P1 | Verify `MESHCRAFT_HAS_AI` guard: AI panel not shown when undefined | `src/MeshCraft/MeshCraftApplication_UiAi.cpp` | Non-AI build: "AI Assistant" not in View menu |
 | STAB-0390 | 📋 | P1 | Verify non-AI build compiles and links without httplib/OpenSSL | `CMakeLists.txt` | Build with `MESHCRAFT_HAS_AI` not defined; no linker errors |
-| STAB-0391 | 📋 | P1 | Add XSD validation of AI response | `src/MeshCraft/MeshCraftApplication_UiAi.cpp` | After parsing, validate against mc3.xsd; reject if invalid |
+| STAB-0391 | ✅ | P1 | Add XSD validation of AI response | `src/MeshCraft/AiResponseAlgorithms.hpp`, `mc3/mc3.xsd`, `CMakeLists.txt`, `cmake/Mc3XsdEmbed.hpp.in`, `mc3/test/ai_test.cpp` | Added `validateXmlAgainstXsdAlg` (libxml2 `xmlSchema*` API) and wired it into `validateAndParseAiResponseAlg` after structural parse + empty-doc check. `mc3.xsd` is embedded into a generated header at CMake configure time (`Mc3XsdEmbed.hpp.in` → `generated/MeshCraft/Mc3XsdEmbed.hpp`) so validation never depends on a runtime file path/CWD. New optional `find_package(LibXml2)` (desktop builds only, same pattern as SQLite3/OpenSSL): when found, `MESHCRAFT_HAS_LIBXML2` is defined and both `MeshCraft` and `ai_test` link `libxml2`; when absent, `validateXmlAgainstXsdAlg` is a no-op returning "valid" (graceful degradation — structural parsing via tinyxml2 already happened, XSD is a stricter additional check, not the only line of defense). **Found and fixed a real pre-existing schema gap while building this**: `Mc3XmlWriter.cpp`/`Mc3XmlParser.cpp` write/read an `id` attribute on every scene object, but `mc3.xsd`'s `objectAttrs` group never declared it — any object with `id` (which is all of them, in practice) would have failed strict XSD validation. Fixed by adding `<xs:attribute name="id" type="xs:string"/>` to `objectAttrs` (deliberately `xs:string` not `xs:ID`, since object ids aren't referenced via IDREF and constraining them to the same document-wide ID-uniqueness namespace as materials/textures/definitions isn't an invariant the app actually enforces). 6 new assertions in `ai_test.cpp` (accept a schema-valid response; reject one with `role="bogus"` — `roleType` only allows `"cutter"` — both directly on `validateXmlAgainstXsdAlg` and through the full `validateAndParseAiResponseAlg` pipeline). root 19/19, standalone `mc3` 1/1 (verified 2026-07-03) |
 | STAB-0392 | 📋 | P2 | Verify temp files from AI validation are cleaned up | `src/MeshCraft/AiAssistant.cpp` | After AI flow; `/tmp/` has no leftover mc3 temp files |
 | STAB-0393 | 📋 | P2 | Verify temp file names are unique (no race on concurrent calls) | `src/MeshCraft/AiAssistant.cpp` | Atomic temp file name uses PID or UUID |
 | STAB-0394 | 📋 | P2 | Verify AI prompt length limit (very large scene) | `src/MeshCraft/AiAssistant.cpp` | Scene with 1000 objects: confirm API request body size is reasonable |
@@ -878,7 +878,7 @@ _Generated: 2026-06-27 from full codebase + test audit. Replaces previous 100-ta
 | S7 Save/load | 35 | 28 | 0 | 0 | 7 | 0 |
 | S8 UI robustness | 40 | 17 | 0 | 0 | 23 | 0 |
 | S9 Registry | 35 | 22 | 0 | 0 | 13 | 0 |
-| S10 AI | 40 | 9 | 0 | 6 | 25 | 0 |
+| S10 AI | 40 | 10 | 0 | 6 | 24 | 0 |
 | S11 Materials | 30 | 0 | 0 | 9 | 21 | 0 |
 | S12 Animation | 30 | 0 | 0 | 12 | 18 | 0 |
 | S13 Commands | 25 | 11 | 0 | 0 | 14 | 0 |
@@ -889,7 +889,7 @@ _Generated: 2026-06-27 from full codebase + test audit. Replaces previous 100-ta
 | S18 Code quality | 25 | 0 | 3 | 2 | 20 | 0 |
 | S19 Security | 15 | 0 | 0 | 4 | 11 | 0 |
 | S20 Release | 15 | 0 | 0 | 0 | 15 | 0 |
-| **TOTAL** | **650** | **157** | **13** | **143** | **337** | **0** |
+| **TOTAL** | **650** | **158** | **13** | **143** | **336** | **0** |
 
 _Recomputed directly from per-row status markers (the table had drifted from
 actual row state over several prior sessions); derived, not hand-maintained

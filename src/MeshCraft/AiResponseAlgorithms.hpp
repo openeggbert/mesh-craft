@@ -7,10 +7,19 @@
 #include <MeshCraft/Mc3/Mc3Document.hpp>
 
 #include <atomic>
+#include <cstdarg>
+#include <cstdio>
+#include <cstring>
 #include <filesystem>
 #include <fstream>
 #include <optional>
 #include <string>
+
+#ifdef MESHCRAFT_HAS_LIBXML2
+#include <MeshCraft/Mc3XsdEmbed.hpp>
+#include <libxml/parser.h>
+#include <libxml/xmlschemastypes.h>
+#endif
 
 namespace MeshCraft {
 
@@ -102,6 +111,67 @@ inline bool isEmptyMc3DocumentAlg(const Mc3::Mc3Document& doc)
     return doc.objects.empty() && doc.definitions.empty();
 }
 
+#ifdef MESHCRAFT_HAS_LIBXML2
+namespace detail {
+inline void xsdErrorCollectorAlg(void* ctx, const char* msg, ...)
+{
+    auto* out = static_cast<std::string*>(ctx);
+    char buf[512];
+    va_list args;
+    va_start(args, msg);
+    std::vsnprintf(buf, sizeof(buf), msg, args);
+    va_end(args);
+    *out += buf;
+}
+} // namespace detail
+#endif
+
+// Validate `xml` (already extracted/repaired, structurally well-formed XML)
+// against the embedded mc3.xsd schema (STAB-0391) — generated at CMake
+// configure time from mc3/mc3.xsd (see Mc3XsdEmbed.hpp.in), so this never
+// depends on a runtime file path or the working directory. Returns the
+// first schema-validation error message if `xml` doesn't conform, or
+// std::nullopt if it does. When libxml2 isn't available at compile time
+// (MESHCRAFT_HAS_LIBXML2 undefined), this is a no-op that always returns
+// std::nullopt — structural (tinyxml2) parsing already happened upstream in
+// parseXmlAlg, so schema validation degrades gracefully rather than
+// blocking "Apply to Scene" on builds without libxml2.
+inline std::optional<std::string> validateXmlAgainstXsdAlg(const std::string& xml)
+{
+#ifdef MESHCRAFT_HAS_LIBXML2
+    xmlSchemaParserCtxtPtr xsdCtx =
+        xmlSchemaNewMemParserCtxt(kMc3XsdContent, static_cast<int>(std::strlen(kMc3XsdContent)));
+    if (!xsdCtx) return std::string("Internal error: could not create XSD parser context");
+    xmlSchemaPtr schema = xmlSchemaParse(xsdCtx);
+    xmlSchemaFreeParserCtxt(xsdCtx);
+    if (!schema) return std::string("Internal error: embedded mc3.xsd failed to parse");
+
+    xmlDocPtr doc = xmlReadMemory(xml.c_str(), static_cast<int>(xml.size()), "ai_response.xml", nullptr, 0);
+    if (!doc) {
+        xmlSchemaFree(schema);
+        return std::string("XML is not well-formed");
+    }
+
+    xmlSchemaValidCtxtPtr validCtx = xmlSchemaNewValidCtxt(schema);
+    std::string errors;
+    xmlSchemaSetValidErrors(validCtx, &detail::xsdErrorCollectorAlg, &detail::xsdErrorCollectorAlg, &errors);
+    int result = xmlSchemaValidateDoc(validCtx, doc);
+
+    xmlSchemaFreeValidCtxt(validCtx);
+    xmlFreeDoc(doc);
+    xmlSchemaFree(schema);
+
+    if (result != 0) {
+        if (errors.empty()) errors = "AI response XML does not conform to mc3.xsd";
+        return errors;
+    }
+    return std::nullopt;
+#else
+    (void)xml;
+    return std::nullopt;
+#endif
+}
+
 // Result of validateAndParseAiResponseAlg(): either a usable document, or
 // an error message explaining why the response was rejected.
 struct AiResponseParseResultAlg {
@@ -128,6 +198,10 @@ inline AiResponseParseResultAlg validateAndParseAiResponseAlg(const std::string&
             r.errorMessage =
                 "AI returned an empty document (no objects, no definitions). "
                 "Not applying to avoid destroying the current scene.";
+            return r;
+        }
+        if (auto xsdError = validateXmlAgainstXsdAlg(xml)) {
+            r.errorMessage = "AI response does not conform to mc3.xsd: " + *xsdError;
             return r;
         }
         r.doc = std::move(parsed);

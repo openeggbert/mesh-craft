@@ -190,6 +190,26 @@ if(NOT EMSCRIPTEN AND NOT ANDROID)
     endif()
 endif()
 
+# LibXml2 — XSD validation of AI-generated XML (STAB-0391, desktop builds only)
+if(NOT EMSCRIPTEN AND NOT ANDROID)
+    find_package(LibXml2)
+    if(LIBXML2_FOUND)
+        message(STATUS "LibXml2 found: ${LIBXML2_VERSION_STRING} — AI response XSD validation enabled")
+    else()
+        message(STATUS "LibXml2 not found — AI response XSD validation disabled (falls back to structural parse only)")
+    endif()
+endif()
+
+# Embed mc3.xsd content into a generated header so runtime XSD validation
+# never depends on the working directory or install layout.
+file(READ "${CMAKE_CURRENT_SOURCE_DIR}/mc3/mc3.xsd" MC3_XSD_CONTENT)
+set(MESHCRAFT_GENERATED_INCLUDE_DIR "${CMAKE_BINARY_DIR}/generated")
+configure_file(
+    "${CMAKE_CURRENT_SOURCE_DIR}/cmake/Mc3XsdEmbed.hpp.in"
+    "${MESHCRAFT_GENERATED_INCLUDE_DIR}/MeshCraft/Mc3XsdEmbed.hpp"
+    @ONLY
+)
+
 # -----------------------------------------------------------------------------
 # Sources
 # -----------------------------------------------------------------------------
@@ -237,6 +257,14 @@ endif()
 if(httplib_POPULATED AND OpenSSL_FOUND)
     target_compile_definitions(${_target} PRIVATE MESHCRAFT_HAS_AI)
     target_link_libraries(${_target} PRIVATE httplib::httplib)
+endif()
+
+# Enable AI-response XSD validation when LibXml2 is available (STAB-0391)
+target_include_directories(${_target} PRIVATE ${MESHCRAFT_GENERATED_INCLUDE_DIR})
+if(LIBXML2_FOUND)
+    target_compile_definitions(${_target} PRIVATE MESHCRAFT_HAS_LIBXML2)
+    target_include_directories(${_target} PRIVATE ${LIBXML2_INCLUDE_DIR})
+    target_link_libraries(${_target} PRIVATE ${LIBXML2_LIBRARIES})
 endif()
 
 # -----------------------------------------------------------------------------
@@ -371,10 +399,16 @@ if(MESH_CRAFT_BUILD_TESTING AND UNIX AND NOT ANDROID AND NOT EMSCRIPTEN)
         target_include_directories(ai_test PRIVATE
             ${CMAKE_CURRENT_SOURCE_DIR}/include
             ${CMAKE_CURRENT_SOURCE_DIR}/src/MeshCraft
+            ${MESHCRAFT_GENERATED_INCLUDE_DIR}
         )
         target_link_libraries(ai_test PRIVATE Mc3 httplib::httplib)
         if(OpenSSL_FOUND)
             target_compile_definitions(ai_test PRIVATE MESHCRAFT_HAS_AI)
+        endif()
+        if(LIBXML2_FOUND)
+            target_compile_definitions(ai_test PRIVATE MESHCRAFT_HAS_LIBXML2)
+            target_include_directories(ai_test PRIVATE ${LIBXML2_INCLUDE_DIR})
+            target_link_libraries(ai_test PRIVATE ${LIBXML2_LIBRARIES})
         endif()
         target_compile_features(ai_test PRIVATE cxx_std_23)
         find_package(Threads REQUIRED)

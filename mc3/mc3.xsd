@@ -179,6 +179,7 @@
     euler_order attributes.
   -->
   <xs:attributeGroup name="objectAttrs">
+    <xs:attribute name="id"        type="xs:string"/>
     <xs:attribute name="name"      type="xs:string"/>
     <xs:attribute name="position"  type="vec3Type"/>
     <xs:attribute name="rotation"  type="vec3Type"/>

@@ -1,0 +1,10 @@
+#pragma once
+// Auto-generated at CMake configure time from mc3/mc3.xsd — do not edit.
+// Embedding the schema text avoids any runtime dependency on the working
+// directory or install layout when validating AI-generated XML (STAB-0391).
+
+namespace MeshCraft {
+
+inline constexpr const char* kMc3XsdContent = R"MC3_XSD_EMBED(@MC3_XSD_CONTENT@)MC3_XSD_EMBED";
+
+} // namespace MeshCraft

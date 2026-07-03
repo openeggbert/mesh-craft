@@ -205,6 +205,57 @@ static void testValidateAndParseAcceptsNonEmptyDocument() {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// STAB-0391 — AI response XSD validation (validateXmlAgainstXsdAlg, embedded
+// mc3.xsd). Also exercised end-to-end through validateAndParseAiResponseAlg,
+// which is what MeshCraftApplication_UiAi.cpp actually calls.
+// ─────────────────────────────────────────────────────────────────────────────
+
+static void testValidateXmlAgainstXsdAcceptsValidDocument() {
+    // Schema-conformant: box's only required-by-convention attribute is
+    // `id` (added to objectAttrs this session — Mc3XmlWriter/Parser already
+    // read/write it, but mc3.xsd never declared it, a real pre-existing gap
+    // found while wiring up this test), plus a valid vec3Type `size`.
+    auto err = validateXmlAgainstXsdAlg(
+        "<mc3 version=\"0.3\"><objects><box id=\"b1\" size=\"1 1 1\"/></objects></mc3>");
+    CHECK(!err.has_value(), "STAB-0391: a schema-conformant document passes XSD validation");
+}
+
+static void testValidateAndParseAiResponsePipelineAcceptsValidXsd() {
+    auto result = validateAndParseAiResponseAlg(
+        "<mc3 version=\"0.3\"><objects><box id=\"b1\" size=\"1 1 1\"/></objects></mc3>");
+    CHECK(result.doc.has_value(),
+          "STAB-0391: the full pipeline accepts a schema-conformant AI response");
+}
+
+#ifdef MESHCRAFT_HAS_LIBXML2
+// These two only hold when libxml2 is actually compiled in — without it,
+// validateXmlAgainstXsdAlg is a no-op that never rejects (see its doc
+// comment), by design: schema validation degrades gracefully rather than
+// blocking "Apply to Scene" on builds without libxml2.
+
+static void testValidateXmlAgainstXsdRejectsInvalidDocument() {
+    // `role` is an enumeration of just "cutter" (mc3.xsd) — "bogus" is not
+    // a member. Well-formed XML, structurally parseable by Mc3Document
+    // (Mc3XmlParser just compares role=="cutter" as a plain string), but a
+    // genuine schema violation.
+    auto err = validateXmlAgainstXsdAlg(
+        "<mc3 version=\"0.3\"><objects><box id=\"b1\" role=\"bogus\"/></objects></mc3>");
+    CHECK(err.has_value(), "STAB-0391: a schema-violating document is rejected");
+    if (err)
+        CHECK(!err->empty(), "STAB-0391: the rejection includes a non-empty error message");
+}
+
+static void testValidateAndParseAiResponsePipelineRejectsInvalidXsd() {
+    auto result = validateAndParseAiResponseAlg(
+        "<mc3 version=\"0.3\"><objects><box id=\"b1\" role=\"bogus\"/></objects></mc3>");
+    CHECK(!result.doc.has_value(),
+          "STAB-0391: the full pipeline rejects an AI response that violates mc3.xsd");
+    CHECK(result.errorMessage.find("mc3.xsd") != std::string::npos,
+          "STAB-0391: the rejection error names the schema");
+}
+#endif // MESHCRAFT_HAS_LIBXML2
+
+// ─────────────────────────────────────────────────────────────────────────────
 // STAB-0371 — mock HTTP server round-trip through the real AiAssistant
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -328,6 +379,14 @@ int main() {
     testValidateAndParseMalformedXmlSetsError();
     testValidateAndParseEmptyDocumentRejected();
     testValidateAndParseAcceptsNonEmptyDocument();
+    testValidateXmlAgainstXsdAcceptsValidDocument();
+    testValidateAndParseAiResponsePipelineAcceptsValidXsd();
+#ifdef MESHCRAFT_HAS_LIBXML2
+    testValidateXmlAgainstXsdRejectsInvalidDocument();
+    testValidateAndParseAiResponsePipelineRejectsInvalidXsd();
+#else
+    std::cout << "SKIP: XSD-rejection tests require MESHCRAFT_HAS_LIBXML2\n";
+#endif
 #ifdef MESHCRAFT_HAS_AI
     testMockServerSuccessRoundTrip();
     testMockServerTruncatedResponse();
