@@ -72,7 +72,8 @@ partial, 142 🧪 has a plan but not executed, 329 📋 not started.**
   Last verified 2026-06-30.
 
 ### Tests
-**20/20 CTest pass** (last full run 2026-07-03, commit `d63bb15`):
+**20/20 CTest pass** (last full run 2026-07-03, commit `ee4dd2c`, after a
+full reconfigure — see §3's mc3.xsd note):
 `smoke_test`, `xsd_validation`, `mc3_registry`, `mc3_ai`, `mc3_roundtrip`,
 `mc3_commands`, `mcb_roundtrip`, `mc3tomcb_roundtrip`, `mc3togltf_gltf`,
 `mc3togltf_all_primitives`, `mc3togltf_export_verification`,
@@ -149,6 +150,68 @@ this summary intentionally stays high-level.
 
 All changes are committed on `develop`; see §10 for the exact commit
 and push-sync state.
+
+**`mc3.xsd` audit** (not tied to a `STAB-XXXX` ID — this closes out the
+"suspected, needs verification" item from an earlier version of this
+section): systematically diffed every `SetAttribute`/`NewElement` call
+in `Mc3XmlWriter.cpp` against `mc3.xsd`'s declared attributes/elements,
+following up on the object `id` gap found while building STAB-0391.
+Found **7 more real gaps** — all genuinely round-tripping data (writer
+writes it, parser reads it back correctly) that the schema simply never
+declared, meaning any scene using them would fail strict XSD validation
+(including through the AI response pipeline, since STAB-0391 wired real
+validation into it):
+- `objectAttrs`: `layer` was completely undeclared.
+- Per-object `<state id="...">` children (`Mc3Object::states` — distinct
+  from the document-level N6 `<states><state name="...">`) had **zero**
+  XSD representation for any object type. Added a new `objectStateType`
+  and wired it into all 12 leaf object types + `instanceType` +
+  `areaType` + `extrudeType` + `objectsContainerType`.
+- `instanceType`: `material_override` and `variants` were undeclared.
+- `uvMappingType`: declared a stale, **never-actually-used** combined
+  `scale`/`offset` (vec2) pair; the real attributes
+  (`projection`/`scale_u`/`scale_v`/`offset_u`/`offset_v`) were entirely
+  undeclared.
+- `environmentType`: `background_texture`/`skybox_texture` are written
+  as separate child elements, but the schema only declared an unused
+  `texture` attribute on `<background>` instead.
+- `textureElementType`: `name` (display name, independent of `id`) was
+  undeclared.
+
+**Also found a genuine, separate round-trip bug** while auditing the
+texture `name` gap: the editor's rename-texture UI
+(`MeshCraftApplication_UiLeftPanel.cpp:532`) sets `Mc3Texture::name`
+independently of the map key/XML `id`; the writer conditionally emits
+it as a `name` attribute — but `Mc3XmlParser::parseTextures` always
+reset `tex.name = id` on load, **silently discarding the rename on
+every save/reload**. This wasn't an XSD problem, it was a real data-loss
+bug. Fixed to read `name` back when present (falls back to `id` when
+absent, unchanged behavior for files that never used it).
+
+New test coverage: `test/xsd_gaps_fixed.mc3.xml` (new XSD validation
+fixture exercising every construct above at once — picked up
+automatically by the `xsd_validation` ctest's glob),
+`testTextureNameDiffersFromId()` in `roundtrip_test.cpp` (regression for
+the parser bug — a positive case confirming a renamed texture survives,
+and a negative control confirming unrenamed textures still default
+`name` to `id`), and
+`testValidateAndParseAiResponseAcceptsPreviouslyUndeclaredConstructs()`
+in `ai_test.cpp` (regression for the false-XSD-reject class of bug,
+through the exact `validateAndParseAiResponseAlg` pipeline the AI panel
+calls).
+
+**Process note, worth remembering**: after editing `mc3.xsd`, a plain
+`ninja` rebuild is **not enough** — `mc3.xsd` is embedded into a
+generated header (`Mc3XsdEmbed.hpp`) via `configure_file()`, which only
+runs at CMake **configure** time, not build time. Editing the schema and
+only rebuilding silently compiles in the *old* schema content. Caught
+this the hard way: my first attempt at the new regression test failed
+even though the schema fix and the test XML were both correct in
+isolation — a full `cmake -S . -B cmake-build-debug` reconfigure fixed
+it. Always reconfigure after touching `mc3.xsd`.
+
+Verified: root 20/20, standalone `mc3` 1/1 (reconfigured + rebuilt from
+scratch to confirm, given the note above).
 
 **Gate 6's remaining P1 items** (S17, P1 — pure docs, no code changes):
 STAB-0585, 0588, 0589, 0590, 0591 — closes out Gate 6's entire P1
@@ -430,14 +493,20 @@ requires the repo owner to rotate/rescope the token.
   items remain untouched. _status: priority-list items done, rest not
   started; note Gate 4 itself still needs the full `STAB-0336–0410`
   range green to be considered closed._
-- **`mc3.xsd` may have other undeclared-but-actually-used attributes**
-  besides the object `id` gap just fixed (STAB-0391) — that gap was only
-  found because XSD validation was newly wired up and exercised against
-  real writer/parser behavior. No systematic audit of `mc3.xsd` vs.
-  `Mc3XmlWriter.cpp`/`Mc3XmlParser.cpp` has been done. _status: suspected,
-  needs verification — a good candidate for a future STAB task (diff the
-  writer's `SetAttribute` calls against the schema's declared attributes
-  per element)._
+- **`mc3.xsd` vs. `Mc3XmlWriter.cpp` audit — done, 7 more gaps found and
+  fixed** (see §3): `layer`, per-object `<state>` (all object types),
+  `instance`'s `material_override`/`variants`, `uv_mapping`'s real
+  attributes, `environment`'s `background_texture`/`skybox_texture`,
+  `texture`'s `name`. All confirmed genuinely round-tripping (not just
+  schema gaps) before fixing. _status: resolved. Residual risk: the
+  audit covered `Mc3XmlWriter.cpp` exhaustively but not every
+  `Mc3XmlParser.cpp` code path in the other direction (parser accepting
+  something the writer never emits) — lower priority since that
+  direction can't cause a false-XSD-reject of real writer output._
+- **Texture `name` silently reset to `id` on every save/reload** — found
+  and fixed during the audit above (`Mc3XmlParser::parseTextures` never
+  read the `name` attribute back). _status: fixed, regression-tested
+  (`testTextureNameDiffersFromId`)._
 - **`mc3.xsd` has no numeric range constraints at all** — zero
   `minInclusive`/`minExclusive` anywhere in the schema (`grep`-confirmed,
   STAB-0590). A structurally/schema-valid AI response can contain a
@@ -599,19 +668,7 @@ No project linter/formatter is configured.
 
 ## 8. Next smallest tasks
 
-1. **Audit `mc3.xsd` for other undeclared-but-actually-used attributes**
-   (see §5) — the object `id` gap (STAB-0391) was found by accident; a
-   deliberate pass may find more, and each one is a latent false-reject
-   in AI-response XSD validation.
-   Goal: diff every `SetAttribute("name", ...)` call in
-   `mc3/src/Mc3XmlWriter.cpp` against the corresponding element's
-   declared attributes in `mc3/mc3.xsd`; fix any gap the same way `id`
-   was fixed (add the attribute to the schema, don't touch the writer).
-   Files: `mc3/src/Mc3XmlWriter.cpp`, `mc3/mc3.xsd`.
-   Verify: `ctest -R xsd_validation --output-on-failure` (must stay
-   passing) plus re-run `ai_test`'s XSD tests after any schema change.
-
-2. **Gate 6's P1 priority-list is now fully closed** (STAB-0579-0592, all
+1. **Gate 6's P1 priority-list is now fully closed** (STAB-0579-0592, all
    done this session). Remaining S17 work is P2/P3 only: STAB-0593 (new
    `CONTRIBUTING.md` — build setup, CNA boundary, API change policy),
    STAB-0594 (document `<include>` semantics fully in `MC3_FORMAT.md` —
@@ -621,7 +678,7 @@ No project linter/formatter is configured.
    Verify: no build/test command applies — same as other Gate 6 items,
    verification is doc-matches-reality.
 
-3. **Move to P2 items** in whichever section is most valuable next —
+2. **Move to P2 items** in whichever section is most valuable next —
    with P0/P1 essentially exhausted across S6/S7/S8/S9/S10/S13, the next
    tier by `plan.md`'s own priority scheme is P2 (then P3). Remaining
    P2/P3 counts: S6: 13 (includes STAB-0245, the P3 1000-object stress
@@ -636,7 +693,7 @@ No project linter/formatter is configured.
    Verify: the relevant `ctest -R <target>`, plus a full
    `ctest --output-on-failure` (expect 20/20 or higher).
 
-4. **(optional) Rotate the PAT and activate CI** — see §4 for the exact
+3. **(optional) Rotate the PAT and activate CI** — see §4 for the exact
    steps.
    Goal: replace the plaintext, under-scoped PAT in `.git/config` with a
    `repo`+`workflow`-scoped token (or SSH), then rename `.github_` →
@@ -692,14 +749,16 @@ you registered a new ctest). Update NEXT.md after finishing.
 Current branch: develop; confirm sync with origin/develop before
 resuming — check `git status` / `git log origin/develop..HEAD` (recent
 local commits may not be pushed yet; push only if asked).
-Build dirs: cmake-build-debug/ (Debug, CLion cmake 4.2.2) — full rebuild
-(53 targets, including the new libxml2 link in MeshCraft/ai_test) +
-20/20 ctest verified clean 2026-07-03. b-release/ (Release) not
-re-verified since 2026-07-01 and has NOT been reconfigured with the new
-LibXml2 find_package yet; re-verify (reconfigure + rebuild) before
-relying on it. Standalone mc3/ build re-verified 2026-07-03 (1/1,
-includes the mc3.xsd fix); standalone mc3togltf/ build re-verified
-2026-07-03 (12/12, includes mc3togltf_large_scene_500).
+Build dirs: cmake-build-debug/ (Debug, CLion cmake 4.2.2) — full
+reconfigure + rebuild (53 targets) + 20/20 ctest verified clean
+2026-07-03 at commit ee4dd2c (reconfigure was required, not just
+rebuild — see §3's mc3.xsd process note; always reconfigure after
+touching mc3.xsd). b-release/ (Release) not re-verified since
+2026-07-01 and has NOT been reconfigured since the LibXml2
+find_package/mc3.xsd audit changes; re-verify (reconfigure + rebuild)
+before relying on it. Standalone mc3/ build re-verified 2026-07-03
+(1/1, includes the mc3.xsd audit fixes); standalone mc3togltf/ build
+re-verified 2026-07-03 (12/12).
 Active plan: plan.md (STAB-XXXX tasks; every gate's P1 priority-list
 subset is now done, including Gate 6 in full — STAB-0579-0592 closed
 this session, on top of S6 STAB-0243/0244 and S10 STAB-0371-0379/0391
@@ -707,10 +766,13 @@ from earlier the same day) — S6 7/25, S7 28/35, S8 17/40, S9 22/35,
 S10 10/40, S13 11/25, S17 17/20. Note: no gate is fully green yet —
 each needs its full STAB-XXXX range, not just the priority-list subset
 (see plan.md's "Stabilization Gates" table, or the equivalent table in
-STABILIZATION.md). Pick the next task from section 8: audit mc3.xsd for
-other undeclared-but-actually-used attributes, Gate 6's remaining P2/P3
-items (STAB-0593-0595), move to P2 items in whichever section is
-preferred, or optionally rotate the PAT to activate CI).
+STABILIZATION.md). Also this session (not tied to a STAB-XXXX ID): a
+full mc3.xsd audit found and fixed 7 more undeclared writer
+attributes/elements plus one real texture-rename round-trip bug (see
+§3) — that line of work is now closed out. Pick the next task from
+section 8: Gate 6's remaining P2/P3 items (STAB-0593-0595), move to P2
+items in whichever section is preferred, or optionally rotate the PAT
+to activate CI).
 Reconfigure cmake-build-debug ONLY with CLion's cmake 4.2.2, not
 /usr/bin/cmake.
 CI is parked deactivated under .github_/ (token lacks `workflow` scope,
