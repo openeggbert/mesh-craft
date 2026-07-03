@@ -31,14 +31,16 @@ for the exact ranges). None of the 7 gates are fully green yet.
 - **Gate 5** (Large scene): priority-list items done — S6's mesh-reuse
   check (STAB-0243) and 500-object test (STAB-0244). P2/P3 remain
   (including the P3 1000-object stress test, STAB-0245).
-- **Gate 6** (Documentation): **all P1 priority-list items done** —
-  README/MC3_FORMAT.md/STABILIZATION.md/m1m2m3.md updates and a new
-  TESTING.md (STAB-0579-0592, this session). Only P2/P3 remain: S17 is
-  17/20 ✅ (STAB-0593 CONTRIBUTING.md, STAB-0594 `<include>` deep-dive,
-  STAB-0595 RELEASE.md — all P2/P3).
+- **Gate 6** (Documentation): **S17 is fully done, 20/20** — every item
+  in "Documentation and User-Facing Honesty" is now ✅ (STAB-0579-0595,
+  this session, closing README/MC3_FORMAT.md/STABILIZATION.md/
+  m1m2m3.md/TESTING.md/CONTRIBUTING.md/RELEASE.md). Gate 6 itself is
+  **not** fully green, though — its `STAB-0576–0650` range extends into
+  S18 (Code Quality), S19 (Security), and S20 (Release Readiness), all
+  still mostly untouched.
 
-Plan-wide totals (out of 650 `STAB-XXXX` rows): **173 ✅ done, 6 🟡
-partial, 142 🧪 has a plan but not executed, 329 📋 not started.**
+Plan-wide totals (out of 650 `STAB-XXXX` rows): **176 ✅ done, 6 🟡
+partial, 142 🧪 has a plan but not executed, 326 📋 not started.**
 
 **Important architectural decisions:**
 - `mc3/` and `mcb/` are pure C++ static libs with **no** CNA/ImGui
@@ -212,6 +214,28 @@ it. Always reconfigure after touching `mc3.xsd`.
 
 Verified: root 20/20, standalone `mc3` 1/1 (reconfigured + rebuilt from
 scratch to confirm, given the note above).
+
+**S17 completed — STAB-0593/0594/0595** (pure docs, no code changes):
+closes out the last 3 items in "Documentation and User-Facing Honesty",
+all P2/P3.
+- STAB-0594: `MC3_FORMAT.md`'s new "Include" section was written by
+  reading `mergeInclude()`/`processIncludes()` in `Mc3XmlParser.cpp`
+  directly (not from memory or `m1m2m3.md`) — covers what actually gets
+  merged (only `<definitions>`/`<materials>`/`<textures>`; an included
+  file's `<objects>` etc. are silently ignored), merge order + local-
+  override policy, path resolution (relative to the *including* file),
+  nested-include depth-first order, diamond dedup, cycle detection, and
+  the save-time skip-set mechanism.
+- STAB-0593: new `CONTRIBUTING.md` — build setup gotchas (both
+  `GLOB_RECURSE` and `mc3.xsd` need a reconfigure, not just a rebuild;
+  `cmake-build-debug/` needs CLion's cmake specifically), the CNA
+  boundary, and an API change policy that cites this session's
+  mc3.xsd/writer symmetry audit as a concrete "why this matters"
+  example.
+- STAB-0595: new `RELEASE.md` with the 4 requested sections (build
+  clean, all tests pass, docs current, sample files valid) plus a
+  pre-tag checklist — framed explicitly against the current
+  stabilization-phase reality, not implying a release is imminent.
 
 **Gate 6's remaining P1 items** (S17, P1 — pure docs, no code changes):
 STAB-0585, 0588, 0589, 0590, 0591 — closes out Gate 6's entire P1
@@ -668,15 +692,18 @@ No project linter/formatter is configured.
 
 ## 8. Next smallest tasks
 
-1. **Gate 6's P1 priority-list is now fully closed** (STAB-0579-0592, all
-   done this session). Remaining S17 work is P2/P3 only: STAB-0593 (new
-   `CONTRIBUTING.md` — build setup, CNA boundary, API change policy),
-   STAB-0594 (document `<include>` semantics fully in `MC3_FORMAT.md` —
-   merge rules, local-override policy, cycle detection, skip-sets),
-   STAB-0595 (P3, new `RELEASE.md` checklist).
-   Files: `CONTRIBUTING.md` (new), `MC3_FORMAT.md`, `RELEASE.md` (new).
-   Verify: no build/test command applies — same as other Gate 6 items,
-   verification is doc-matches-reality.
+1. **S17 (Documentation) is fully done, 20/20** — no items remain in
+   that section. The next untouched Gate 6 sections are S18 (Code
+   Quality and Architecture, 25 items, mostly 📋), S19 (Security and
+   Robustness, 15 items), and S20 (Release Readiness, 15 items) — all
+   needed for Gate 6 itself to go green.
+   Goal: pick by ID order within S18/S19/S20; read each row's exact ask
+   before starting (this section spans real code-quality/security work,
+   not just docs — treat it like any other `plan.md` cluster, not an
+   extension of the docs-only Gate 6 work just finished).
+   Files: varies — see `plan.md`'s Key File column per row.
+   Verify: varies per item; likely a mix of `ctest` runs and code
+   inspection, same as other sections.
 
 2. **Move to P2 items** in whichever section is most valuable next —
    with P0/P1 essentially exhausted across S6/S7/S8/S9/S10/S13, the next
@@ -760,19 +787,20 @@ before relying on it. Standalone mc3/ build re-verified 2026-07-03
 (1/1, includes the mc3.xsd audit fixes); standalone mc3togltf/ build
 re-verified 2026-07-03 (12/12).
 Active plan: plan.md (STAB-XXXX tasks; every gate's P1 priority-list
-subset is now done, including Gate 6 in full — STAB-0579-0592 closed
-this session, on top of S6 STAB-0243/0244 and S10 STAB-0371-0379/0391
-from earlier the same day) — S6 7/25, S7 28/35, S8 17/40, S9 22/35,
-S10 10/40, S13 11/25, S17 17/20. Note: no gate is fully green yet —
-each needs its full STAB-XXXX range, not just the priority-list subset
-(see plan.md's "Stabilization Gates" table, or the equivalent table in
-STABILIZATION.md). Also this session (not tied to a STAB-XXXX ID): a
-full mc3.xsd audit found and fixed 7 more undeclared writer
-attributes/elements plus one real texture-rename round-trip bug (see
-§3) — that line of work is now closed out. Pick the next task from
-section 8: Gate 6's remaining P2/P3 items (STAB-0593-0595), move to P2
-items in whichever section is preferred, or optionally rotate the PAT
-to activate CI).
+subset is now done, and S17 (Documentation) is fully complete at
+20/20 — STAB-0579-0595 closed this session, on top of S6
+STAB-0243/0244 and S10 STAB-0371-0379/0391 from earlier the same day)
+— S6 7/25, S7 28/35, S8 17/40, S9 22/35, S10 10/40, S13 11/25,
+S17 20/20. Note: no gate is fully green yet — each needs its full
+STAB-XXXX range, not just the priority-list subset; Gate 6 specifically
+still needs S18/S19/S20 (see plan.md's "Stabilization Gates" table, or
+the equivalent table in STABILIZATION.md). Also this session (not tied
+to a STAB-XXXX ID): a full mc3.xsd audit found and fixed 7 more
+undeclared writer attributes/elements plus one real texture-rename
+round-trip bug (see §3) — that line of work is now closed out. Pick the
+next task from section 8: S18/S19/S20 (Gate 6's remaining sections),
+move to P2 items in whichever section is preferred, or optionally
+rotate the PAT to activate CI).
 Reconfigure cmake-build-debug ONLY with CLion's cmake 4.2.2, not
 /usr/bin/cmake.
 CI is parked deactivated under .github_/ (token lacks `workflow` scope,
