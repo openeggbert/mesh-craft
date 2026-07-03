@@ -31,12 +31,14 @@ for the exact ranges). None of the 7 gates are fully green yet.
 - **Gate 5** (Large scene): priority-list items done — S6's mesh-reuse
   check (STAB-0243) and 500-object test (STAB-0244). P2/P3 remain
   (including the P3 1000-object stress test, STAB-0245).
-- **Gate 6** (Documentation): priority-list items done — README/
-  MC3_FORMAT.md/STABILIZATION.md updates and a new TESTING.md (this
-  session). Several P1 items remain (STAB-0585, 0588-0591).
+- **Gate 6** (Documentation): **all P1 priority-list items done** —
+  README/MC3_FORMAT.md/STABILIZATION.md/m1m2m3.md updates and a new
+  TESTING.md (STAB-0579-0592, this session). Only P2/P3 remain: S17 is
+  17/20 ✅ (STAB-0593 CONTRIBUTING.md, STAB-0594 `<include>` deep-dive,
+  STAB-0595 RELEASE.md — all P2/P3).
 
-Plan-wide totals (out of 650 `STAB-XXXX` rows): **168 ✅ done, 6 🟡
-partial, 142 🧪 has a plan but not executed, 334 📋 not started.**
+Plan-wide totals (out of 650 `STAB-XXXX` rows): **173 ✅ done, 6 🟡
+partial, 142 🧪 has a plan but not executed, 329 📋 not started.**
 
 **Important architectural decisions:**
 - `mc3/` and `mcb/` are pure C++ static libs with **no** CNA/ImGui
@@ -147,6 +149,50 @@ this summary intentionally stays high-level.
 
 All changes are committed on `develop`; see §10 for the exact commit
 and push-sync state.
+
+**Gate 6's remaining P1 items** (S17, P1 — pure docs, no code changes):
+STAB-0585, 0588, 0589, 0590, 0591 — closes out Gate 6's entire P1
+priority-list. Each claim below was verified against actual code before
+writing it, not assumed:
+- STAB-0585: `MC3_FORMAT.md`'s export support matrix — added 3 rows
+  found by tracing the exporter: SVG textures (❌, `svgTextures` is a
+  separate map `GltfExporter` never reads — silently dropped, not even
+  a warning), Embedded glTF (❌, `embed:id` is treated as a literal OBJ
+  path; traced `loadObjMesh`→`buildMesh`'s catch block — it fails,
+  prints a warning, and the node exports with `mesh=-1`, i.e. no
+  geometry but otherwise valid), N3-N7 (❌, no glTF equivalent).
+- STAB-0589: rewrote the CSG limitations paragraph after reading
+  `CsgEvaluator.cpp`'s `manifoldToMeshData()` directly — corrected "no
+  UVs" to the more precise fact that a texcoord channel *is* written
+  but every value is a hardcoded `(0,0)` placeholder (not simply
+  absent); confirmed flat-normal recomputation via the actual
+  cross-product code; named "strict mode" as the actual default
+  explicitly (`allowApproximateCSG = false`).
+- STAB-0590/0591: added an AI + Registry limitations block to README's
+  "Current Limitations". Notable verified findings: (a) the AI API key
+  is never persisted to disk — `PrefsAlg`'s fields have no `apiKey`
+  member; (b) `mc3.xsd` has **zero** `minInclusive`/`minExclusive`
+  constraints anywhere (`grep`-confirmed), so a schema-valid AI response
+  can still contain e.g. a negative `size` and will apply to the scene
+  unchanged; (c) also found and fixed an unrelated **stale claim** in
+  the same README section — it said "only auto-save interval is
+  persisted; snap/grid/theme not saved", but `savePrefsAlg`/
+  `loadPrefsAlg` (read directly) persist all 6 `PrefsAlg` fields
+  (autoSaveInterval, snapTranslate, snapRotate, snapScale, gridSpacing,
+  theme). Fixed in the same edit since it was directly adjacent and
+  already verified false.
+- STAB-0588: reviewed `m1m2m3.md` (the M1/M2/M3 design doc) against
+  current code. M1 (`<include>` semantics) and M2 (registry schema/C++
+  interface) still match closely. Found and fixed real drift in M2
+  (search hint missing `source`, added post-doc per STAB-0344) and
+  significant drift in M3's `AiAssistant` class snippet/lifecycle
+  diagrams — `sendAsync` grew from 2 to 3 params (prompt caching),
+  `maxTokens`/`apiBaseUrl`/`wasTruncated()` were all added later, and
+  the validation pipeline now includes an mc3.xsd step (STAB-0391)
+  the doc never mentioned. Added a "reviewed 2026-07-03" note at the
+  top of the file pointing at what changed.
+- Verified: touched no `.cpp`/`CMakeLists.txt` files — pure docs, no
+  rebuild/retest needed (root ctest last verified 20/20 at `d63bb15`).
 
 **Gate 6 priority-list documentation cluster** (S17, P1/P2 — pure docs,
 no code changes): STAB-0579, 0580, 0581, 0583, 0584, 0586, 0587, 0592.
@@ -392,6 +438,14 @@ requires the repo owner to rotate/rescope the token.
   needs verification — a good candidate for a future STAB task (diff the
   writer's `SetAttribute` calls against the schema's declared attributes
   per element)._
+- **`mc3.xsd` has no numeric range constraints at all** — zero
+  `minInclusive`/`minExclusive` anywhere in the schema (`grep`-confirmed,
+  STAB-0590). A structurally/schema-valid AI response can contain a
+  negative `size`, `radius`, `duration`, etc. and it will pass validation
+  and apply to the scene unchanged. _status: confirmed, documented in
+  README's "Current Limitations" — not fixed; fixing would mean deciding
+  per-attribute what ranges are actually valid, a bigger design task than
+  a documentation pass._
 - **N3-N7 extensions (scripts, sounds, music, triggers, scene states) are
   data-only** — fully round-tripped (XML parser/writer, MCB, XSD), but
   nothing executes them at runtime: no Lua interpreter, no audio
@@ -557,19 +611,15 @@ No project linter/formatter is configured.
    Verify: `ctest -R xsd_validation --output-on-failure` (must stay
    passing) plus re-run `ai_test`'s XSD tests after any schema change.
 
-2. **Gate 6's remaining P1 items** (the priority-list subset — STAB-0579,
-   0580, 0581, 0583, 0584, 0586, 0587, 0592 — is done, this session):
-   STAB-0585 (MC3_FORMAT.md export support matrix — the section already
-   exists; verify it's still accurate against current `GltfExporter.cpp`
-   behavior), STAB-0588 (verify `m1m2m3.md` still accurate), STAB-0589
-   (document CSG limitations explicitly — `MC3_FORMAT.md` already has a
-   CSG limitations paragraph; verify completeness against the exact ask),
-   STAB-0590 (document AI integration limitations), STAB-0591 (document
-   registry limitations).
-   Files: `MC3_FORMAT.md`, `m1m2m3.md`, `README.md` or a new `AI.md`.
-   Verify: no build/test command applies directly — verification is
-   "does the doc match observed repo behavior", checked by cross-reading
-   against `plan.md` and actually running the commands each doc claims.
+2. **Gate 6's P1 priority-list is now fully closed** (STAB-0579-0592, all
+   done this session). Remaining S17 work is P2/P3 only: STAB-0593 (new
+   `CONTRIBUTING.md` — build setup, CNA boundary, API change policy),
+   STAB-0594 (document `<include>` semantics fully in `MC3_FORMAT.md` —
+   merge rules, local-override policy, cycle detection, skip-sets),
+   STAB-0595 (P3, new `RELEASE.md` checklist).
+   Files: `CONTRIBUTING.md` (new), `MC3_FORMAT.md`, `RELEASE.md` (new).
+   Verify: no build/test command applies — same as other Gate 6 items,
+   verification is doc-matches-reality.
 
 3. **Move to P2 items** in whichever section is most valuable next —
    with P0/P1 essentially exhausted across S6/S7/S8/S9/S10/S13, the next
@@ -650,17 +700,17 @@ LibXml2 find_package yet; re-verify (reconfigure + rebuild) before
 relying on it. Standalone mc3/ build re-verified 2026-07-03 (1/1,
 includes the mc3.xsd fix); standalone mc3togltf/ build re-verified
 2026-07-03 (12/12, includes mc3togltf_large_scene_500).
-Active plan: plan.md (STAB-XXXX tasks; Gates 0-6's Priority Execution
-Order items are all done (S6 STAB-0243/0244, S10 STAB-0371-0379/0391,
-S17 STAB-0579/0580/0581/0583/0584/0586/0587/0592 closed this session) —
-S6 7/25, S7 28/35, S8 17/40, S9 22/35, S10 10/40, S13 11/25, S17 12/20.
-Note: no gate is fully green yet — each needs its full STAB-XXXX range,
-not just the priority-list subset (see plan.md's "Stabilization Gates"
-table, or the equivalent table in STABILIZATION.md). Pick the next task
-from section 8: audit mc3.xsd for other undeclared-but-actually-used
-attributes, Gate 6's remaining P1 items (STAB-0585/0588-0591), move to
-P2 items in whichever section is preferred, or optionally rotate the
-PAT to activate CI).
+Active plan: plan.md (STAB-XXXX tasks; every gate's P1 priority-list
+subset is now done, including Gate 6 in full — STAB-0579-0592 closed
+this session, on top of S6 STAB-0243/0244 and S10 STAB-0371-0379/0391
+from earlier the same day) — S6 7/25, S7 28/35, S8 17/40, S9 22/35,
+S10 10/40, S13 11/25, S17 17/20. Note: no gate is fully green yet —
+each needs its full STAB-XXXX range, not just the priority-list subset
+(see plan.md's "Stabilization Gates" table, or the equivalent table in
+STABILIZATION.md). Pick the next task from section 8: audit mc3.xsd for
+other undeclared-but-actually-used attributes, Gate 6's remaining P2/P3
+items (STAB-0593-0595), move to P2 items in whichever section is
+preferred, or optionally rotate the PAT to activate CI).
 Reconfigure cmake-build-debug ONLY with CLion's cmake 4.2.2, not
 /usr/bin/cmake.
 CI is parked deactivated under .github_/ (token lacks `workflow` scope,
