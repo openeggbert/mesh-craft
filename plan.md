@@ -782,9 +782,9 @@ _Generated: 2026-06-27 from full codebase + test audit. Replaces previous 100-ta
 | STAB-0590 | ✅ | P1 | Document AI integration limitations | `README.md` | Added to "Current Limitations", each claim verified against code: no Emscripten/Android support (`NOT EMSCRIPTEN AND NOT ANDROID` guard on the httplib/OpenSSL `find_package` block); API key never persisted to disk (`PrefsAlg`'s persisted fields — `grep`-checked — have no `apiKey` field; it lives only in the in-memory UI buffer, pre-filled from `ANTHROPIC_API_KEY`); validation is structural not semantic (`mc3.xsd` has zero `minInclusive`/`minExclusive` constraints anywhere — `grep`-confirmed — so a geometrically nonsensical response, e.g. negative `size`, passes validation). |
 | STAB-0591 | ✅ | P1 | Document registry limitations | `README.md` | Added to "Current Limitations": no thumbnail column (confirmed via `ModelRegistry.cpp`'s `createSchema()` — no `thumbnail` field, matches `m1m2m3.md`'s note); SQLite3 required on desktop, stubbed out on Emscripten/Android (`MESHCRAFT_HAS_SQLITE3` guard); no sync — single local SQLite file at `~/.meshcraft/modelregistry.sqlite3`, no backup/multi-device mechanism. |
 | STAB-0592 | ✅ | P2 | Add TESTING.md: documents test suite, how to run, what each test covers | `TESTING.md` | New file: how to run (full suite, single test, direct binary, standalone builds), a reference table for all 20 tests (5 C++ assertion binaries with real measured `PASS:` counts, 15 CLI-driving Python tests) each with purpose + pass criteria, and a "writing a new test" section covering both registration patterns used in this repo. |
-| STAB-0593 | 📋 | P2 | Add contributor instructions (build setup, CLAUDE.md constraints) | `CONTRIBUTING.md` | How to add new .cpp file (reconfigure), CNA boundary, API change policy |
-| STAB-0594 | 📋 | P2 | Document `<include>` semantics fully | `MC3_FORMAT.md` | Include merge rules, local-override policy, cycle detection, skip-sets documented |
-| STAB-0595 | 📋 | P3 | Add release checklist | `RELEASE.md` | Checklist: build clean, all tests pass, docs current, sample files valid |
+| STAB-0593 | ✅ | P2 | Add contributor instructions (build setup, CLAUDE.md constraints) | `CONTRIBUTING.md` | New file: build setup (GLOB_RECURSE/mc3.xsd reconfigure gotcha, CLion-cmake-only for cmake-build-debug), CNA boundary (no CNA edits, no meta-gl include, CNA-free component list, the Alg-mirror pattern), API change policy (Mc3Document consumers to check, schema/writer symmetry — cites the 8-gap audit as a concrete example, MCB version bump guidance). |
+| STAB-0594 | ✅ | P2 | Document `<include>` semantics fully | `MC3_FORMAT.md` | New "Include (`<include>`)" section, written from reading `mergeInclude`/`processIncludes` directly (not from memory/m1m2m3.md): what gets merged (defs/materials/textures only — objects/environment/etc. from an included file are silently ignored), merge order + local-override policy (local always wins, no error), path resolution (relative to the including file, not the top-level scene), nested-include merge order (depth-first pre-order), diamond-include dedup, cycle detection, and the save-time skip-set mechanism (`includedDefs`/`includedMaterials`/`includedTextures`) including how a local override gets correctly un-skipped. |
+| STAB-0595 | ✅ | P3 | Add release checklist | `RELEASE.md` | New file with the exact 4 sections asked for (build clean, all tests pass, docs current, sample files valid) plus a "before tagging" section; framed explicitly against the current stabilization-phase reality (no gate fully green yet) rather than implying a release is imminent. |
 
 ---
 
@@ -885,11 +885,11 @@ _Generated: 2026-06-27 from full codebase + test audit. Replaces previous 100-ta
 | S14 Rendering | 30 | 0 | 0 | 12 | 18 | 0 |
 | S15 Import/export | 25 | 0 | 0 | 6 | 19 | 0 |
 | S16 Cross-platform | 25 | 0 | 1 | 0 | 24 | 0 |
-| S17 Documentation | 20 | 17 | 0 | 0 | 3 | 0 |
+| S17 Documentation | 20 | 20 | 0 | 0 | 0 | 0 |
 | S18 Code quality | 25 | 0 | 3 | 2 | 20 | 0 |
 | S19 Security | 15 | 0 | 0 | 4 | 11 | 0 |
 | S20 Release | 15 | 0 | 0 | 0 | 15 | 0 |
-| **TOTAL** | **650** | **173** | **6** | **142** | **329** | **0** |
+| **TOTAL** | **650** | **176** | **6** | **142** | **326** | **0** |
 
 _Recomputed directly from per-row status markers (the table had drifted from
 actual row state over several prior sessions); derived, not hand-maintained

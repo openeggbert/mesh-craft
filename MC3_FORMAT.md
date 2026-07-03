@@ -26,6 +26,7 @@ MC3 (MeshCraft 3D) is an XML-based scene format (`.mc3.xml`). It describes a 3D 
 
 ```xml
 <mc3 ...>
+  <include file="..."/>
   <meta>...</meta>
   <environment>...</environment>
   <lights>...</lights>
@@ -50,6 +51,81 @@ even though `Mc3XmlParser` itself is lenient about order. This matters
 in practice: the AI Assistant's "Apply to Scene" pipeline validates
 AI-generated XML against this schema (see MESHCRAFT_HAS_LIBXML2 in
 `AiResponseAlgorithms.hpp`) and rejects out-of-order responses.
+
+---
+
+## Include (`<include>`)
+
+Lets one `.mc3.xml` file pull shared **definitions, materials, and
+textures** from another file, so an asset library can be maintained once
+and reused across multiple scenes.
+
+```xml
+<!-- scene.mc3.xml -->
+<mc3 version="0.3" model="MyScene">
+  <include file="furniture_library.mc3.xml"/>
+  <include file="materials_pbr.mc3.xml"/>
+  <objects>
+    <instance name="Chair1" definition="chair" position="0 0 0"/>
+  </objects>
+</mc3>
+```
+
+| Attribute | Type | Required |
+|-----------|------|----------|
+| `file` | string (path) | yes |
+
+**What gets merged** — only `<definitions>`, `<materials>`, and
+`<textures>` from the included file. Everything else in an included file
+(`<objects>`, `<environment>`, `<lights>`, `<cameras>`, `<actions>`,
+`<scripts>`, `<sounds>`, `<music>`, `<triggers>`, `<states>`, `<meta>`) is
+**silently ignored** — an included file is treated purely as an asset
+library, never as a sub-scene.
+
+**Merge order and local-override policy:** includes are merged **before**
+the including file's own `<definitions>`/`<materials>`/`<textures>` are
+parsed, and later parsing simply overwrites same-`id` map entries — so
+**a local entry with the same `id` as an included one always wins**,
+with no error or warning. This lets a scene "override" one asset from a
+shared library without forking the whole library file.
+
+**Path resolution:** `file` is resolved **relative to the file that
+contains the `<include>` element**, not relative to the top-level scene
+file. So if `a.mc3.xml` includes `libs/b.mc3.xml`, and `b.mc3.xml`
+itself includes `c.mc3.xml`, `c.mc3.xml`'s path is resolved relative to
+`libs/`, not to `a.mc3.xml`'s directory.
+
+**Nested includes and merge order:** an included file's own `<include>`s
+are processed **before** that file's own definitions/materials/textures
+are merged (depth-first, pre-order) — so in the `a → b → c` chain above,
+`c`'s assets are merged first, then `b`'s own assets, then (after `a`
+processes any of its other top-level includes) `a`'s own local content
+last. Only the top-level file's `<include>` elements are recorded in the
+saved output (`doc.includes`) — nested includes are followed and merged
+but not themselves re-emitted as separate `<include>` elements.
+
+**Diamond includes** (e.g. `A→B`, `A→C`, `B→D`, `C→D`): each included
+file is merged **exactly once**, tracked by a "processed" set keyed on
+the file's canonical (resolved, absolute) path — the second and later
+times `D` is reached, it's silently skipped rather than merged twice or
+erroring.
+
+**Cycle detection:** a "currently being processed" set tracks the
+include chain's call stack (depth-first). If a file's canonical path is
+already in that set when it's reached again (e.g. `A` includes `B`, `B`
+includes `A`), parsing throws
+`std::runtime_error("Cyclic <include> detected: ...")` rather than
+recursing forever.
+
+**Roundtrip / skip-set on save:** `Mc3Document` tracks which definition/
+material/texture `id`s came from an include
+(`includedDefs`/`includedMaterials`/`includedTextures`), and the writer
+**does not** re-emit those entries into the saved file — they continue
+to live only in the referenced library file, keeping the include
+structure intact across save/load. If the main file locally overrides
+one of those `id`s, the override is detected during parsing (the local
+entry is removed from the "included" set the moment it's parsed) and
+correctly gets written out as local content on save, not skipped.
 
 ---
 
