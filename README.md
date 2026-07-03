@@ -125,6 +125,68 @@ ctest -V --test-dir cmake-build-debug
 - No automated UI tests; only XML roundtrip and smoke test
 - AI Assistant: not available on Emscripten or Android builds (`cpp-httplib`/OpenSSL are only fetched/linked when `NOT EMSCRIPTEN AND NOT ANDROID`). The API key is **never persisted to disk** — it lives only in the in-memory UI text buffer for the session, pre-filled from the `ANTHROPIC_API_KEY` environment variable if set, and is not part of the saved preferences file. Response validation is structural, not semantic: it checks the XML is well-formed, has a `<mc3>` root, isn't empty, and conforms to `mc3.xsd` (element order, attribute types/patterns, ID/IDREF cross-references) — but `mc3.xsd` has no numeric range constraints (no `minInclusive`/`minExclusive` anywhere), so a geometrically nonsensical response (e.g. negative `size`/`radius`) passes validation and applies to the scene as-is
 - Model Registry: no thumbnail column (design placeholder only, never implemented — see `m1m2m3.md`); requires the system SQLite3 library on desktop builds (stubbed out, feature disabled, on Emscripten/Android); no sync between multiple registry database files — it's a single local SQLite file at `~/.meshcraft/modelregistry.sqlite3`, not backed up or shared automatically
+- SVG textures (`<texture type="svg">`): parsed, serialized, and round-tripped, but never rasterized — `mc3togltf`'s `GltfExporter` doesn't read the SVG texture map at all, so an SVG-sourced texture is silently dropped from glTF export, not just deferred. Blocked on picking a rasterization library (librsvg vs. NanoSVG)
+- Embedded glTF (`<mesh src="embed:id"/>`): parsed and serialized, but `GltfExporter` treats `embed:id` as a literal OBJ file path, which fails to parse — the export doesn't crash, but the node exports with no mesh (see `MC3_FORMAT.md`'s export support matrix)
+- N3–N7 scene data (scripts, sounds, music, triggers, scene states, meta): fully round-tripped (XML/MCB/XSD) but not executed at runtime — no Lua interpreter, no audio playback, no trigger-firing event system, no state-switching logic (data model first, by design at this stage — see `MC3_FORMAT.md`'s per-section status notes)
+
+## Reporting a Crash
+
+MeshCraft has no built-in crash reporter — if it crashes, capture a
+backtrace with the OS-standard tools below and attach it to a
+[GitHub Issue](https://github.com/openeggbert/mesh-craft/issues) along
+with the scene file (if any) and the exact command line that triggered
+it.
+
+**Linux:**
+
+```sh
+# Debug build already has debug info (see "Build (Linux)" above)
+ulimit -c unlimited                       # enable core dumps for this shell
+./cmake-build-debug/MeshCraft scene.mc3.xml
+# after it crashes, find the core file (verified: named core.<pid> by
+# default on this system — check `cat /proc/sys/kernel/core_pattern`
+# if yours differs) and load it:
+gdb ./cmake-build-debug/MeshCraft core.<pid>
+(gdb) bt full                              # full backtrace — this is what to attach
+```
+
+If it hangs instead of crashing, attach a backtrace from a running
+process instead: `gdb -p $(pgrep MeshCraft) -batch -ex "bt full"`.
+
+**Windows:** no build/test verification of this exists in this
+environment (Linux-only dev setup) — the standard approach is to let
+Windows Error Reporting generate a `.dmp` file (Control Panel → System
+→ Advanced → check "Windows Error Reporting" settings, or trigger one
+directly via Task Manager → right-click the hung/crashed process →
+"Create dump file") and open it in WinDbg or Visual Studio for a
+backtrace. Treat this as unverified guidance, not a tested procedure.
+
+## Backup and Recovery
+
+Auto-save and backups live **next to the scene file itself** — there is
+no separate cache/config directory for them.
+
+- **Auto-save**: while a file `scene.mc3.xml` is open, the editor
+  periodically writes the current in-memory state to
+  `scene.mc3.xml.autosave` (interval configurable in Preferences,
+  default 60s). This file is deleted automatically on the next explicit
+  Save — it's a crash-recovery net, not a permanent artifact.
+- **Recovering after a crash**: reopen `scene.mc3.xml` normally. If a
+  `.autosave` file exists and is newer than the saved file, the status
+  bar shows "Autosave found — may be newer than saved file: ..." for a
+  few seconds — this is a **notification only**, not an automatic
+  prompt with a restore button. To actually recover: open
+  `scene.mc3.xml.autosave` directly (File → Open, or rename it to end
+  in `.mc3.xml` first since the app expects that extension), check it
+  looks right, then Save As over the original filename.
+- **Backup rotation on every explicit Save**: before writing, the
+  previous on-disk content is preserved as `scene.mc3.xml.backup.1`
+  (most recent prior version); if a `.backup.1` already existed, it's
+  first renamed to `scene.mc3.xml.backup.2` (previous-to-that version)
+  — a fixed 2-slot ring buffer, nothing older than 2 saves back is
+  kept. To recover from a bad save (e.g. accidentally saved over good
+  work with something wrong), copy `.backup.1` (or `.backup.2` for one
+  save further back) over `scene.mc3.xml`.
 
 ## License
 

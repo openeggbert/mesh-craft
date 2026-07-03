@@ -846,21 +846,21 @@ _Generated: 2026-06-27 from full codebase + test audit. Replaces previous 100-ta
 
 | ID | St | Pri | Title | Key File(s) | Verification |
 |----|----|-----|-------|-------------|--------------|
-| STAB-0636 | 📋 | P2 | Add version number to CMakeLists.txt | `CMakeLists.txt` | `project(MeshCraft VERSION 0.1.0)` or similar; version accessible at runtime |
-| STAB-0637 | 📋 | P2 | Display version in About dialog or `--version` flag | `src/MeshCraft/main.cpp` | `./MeshCraft --version` prints version string |
-| STAB-0638 | 📋 | P2 | Create CHANGELOG.md with current state | `CHANGELOG.md` | Lists completed feature groups (A–N), stabilization groups (S1–S12) |
-| STAB-0639 | 📋 | P2 | Verify release build has no debug symbols in binary | `CMakeLists.txt` | Release build: file size significantly smaller than debug; no DWARF sections |
-| STAB-0640 | 📋 | P2 | Verify all test fixtures validated against current XSD | `test/*.mc3.xml` | `xsd_validation` passes for every `.mc3.xml` in test/ |
-| STAB-0641 | 📋 | P2 | Verify sample files usable (load cleanly, no errors) | `test/house.mc3.xml`, `test/garden_house.mc3.xml`, `test/features.mc3.xml` | Each loads in MeshCraft without error dialog |
-| STAB-0642 | 📋 | P3 | Verify Blender import smoke test for release sample | manual | Export `house.mc3.xml` to GLB; import in Blender 4.x; no errors |
-| STAB-0643 | 📋 | P3 | Verify web build smoke test (release candidate) | manual | Web build loads `features.mc3.xml`; renders without browser error |
-| STAB-0644 | 📋 | P3 | Add license notices for all third-party dependencies | `LICENSES/` or `THIRD_PARTY.md` | tinyxml2, tinygltf, tinyobjloader, imgui, manifold, cpp-httplib, SQLite — all acknowledged |
-| STAB-0645 | 📋 | P3 | List third-party dependencies with versions and licenses | `THIRD_PARTY.md` | All FetchContent deps listed with GIT_TAG and license |
-| STAB-0646 | 📋 | P3 | Document known limitations in README | `README.md` | Section: "Known Limitations" — SVG rasterization not done, Emscripten SQLite, etc. |
-| STAB-0647 | 📋 | P3 | Document crash log instructions | `README.md` | How to capture crash log on Linux/Windows; where to report |
-| STAB-0648 | 📋 | P3 | Create user guide (basic workflow) | `docs/USER_GUIDE.md` | Create/save scene, add primitive, export GLB — step by step |
-| STAB-0649 | 📋 | P3 | Document backup/recovery procedure | `README.md` | Where autosaves are stored; how to recover; backup.1 behavior |
-| STAB-0650 | 📋 | P3 | Verify CI produces consistent test report | `.github/workflows/ci.yml` | CI output includes pass/fail count and test names |
+| STAB-0636 | ✅ | P2 | Add version number to CMakeLists.txt | `CMakeLists.txt` | `project(MeshCraft VERSION 0.1.0 LANGUAGES C CXX)`; `${PROJECT_VERSION}` baked into the `MeshCraft` executable via `target_compile_definitions(... MESHCRAFT_VERSION="${PROJECT_VERSION}")`. |
+| STAB-0637 | ✅ | P2 | Display version in About dialog or `--version` flag | `src/MeshCraft/main.cpp` | Added `--version` flag (checked directly, real binary): `./MeshCraft --version` → `MeshCraft 0.1.0`, exit 0. Also added to `--help` output. |
+| STAB-0638 | ✅ | P2 | Create CHANGELOG.md with current state | `CHANGELOG.md` | New file. Note: the verification text's "feature groups (A–N), stabilization groups (S1–S12)" is stale pre-replan terminology (already flagged in `STABILIZATION.md`'s Historical Note) — `git log` only shows lettered groups E/F/G/H/M/N/R/S/T (not A–D), and stabilization is now S0–S20. Wrote the changelog around what's actually verifiable in `git log` instead of reviving labels that don't map onto anything findable, with an explicit note explaining the discrepancy. Covers M1–M3, N1–N7, the pre-stabilization E/F/G/H/R/S/T feature commits, and a current-state summary of the STAB-XXXX stabilization effort. |
+| STAB-0639 | ✅ | P2 | Verify release build has no debug symbols in binary | `CMakeLists.txt` | Actually built and compared (not assumed): fresh Release build 6.25MB vs. Debug 59.9MB (~10× smaller); `file` shows Debug has `with debug_info`, Release does not; `objdump -h` on the Release binary finds zero `.debug_*` sections. Release is "not stripped" (still has a symbol table) but that's distinct from DWARF debug info, which is genuinely absent. Release 20/20 ctest also verified in the same pass. |
+| STAB-0640 | ✅ | P2 | Verify all test fixtures validated against current XSD | `test/*.mc3.xml` | Already continuously covered by the `xsd_validation` ctest (20/20 passing throughout this session, including after all `mc3.xsd` audit changes). |
+| STAB-0641 | ✅ | P2 | Verify sample files usable (load cleanly, no errors) | `test/house.mc3.xml`, `test/garden_house.mc3.xml`, `test/features.mc3.xml` | `smoke_test` ctest already covers `house.mc3.xml` through the real editor binary. Additionally ran the real `MeshCraft` binary headlessly (`--screenshot`) against all three files directly (not just the standalone XML parser) — all three load without error and produce a valid non-empty screenshot. |
+| STAB-0642 | 📋 | P3 | Verify Blender import smoke test for release sample | manual | Genuinely manual — no Blender available in this environment; needs a human with Blender 4.x. |
+| STAB-0643 | 📋 | P3 | Verify web build smoke test (release candidate) | manual | Genuinely manual — needs a browser and interactive verification; not something a headless session can do. |
+| STAB-0644 | ✅ | P3 | Add license notices for all third-party dependencies | `LICENSES/` or `THIRD_PARTY.md` | New `THIRD_PARTY.md`, combined with STAB-0645 (same file, natural pairing). Also covers system deps (SQLite3, OpenSSL, LibXml2, SDL3) and the sibling `cna`/`sharp-runtime` repos' licenses (Ms-PL, MIT respectively, read directly from their `LICENSE` files), beyond just the FetchContent-vendored set the row names. |
+| STAB-0645 | ✅ | P3 | List third-party dependencies with versions and licenses | `THIRD_PARTY.md` | Same file as STAB-0644. Every version verified against the actual `GIT_TAG` in each `FetchContent_Declare` call, not copied from memory: tinyxml2 `10.0.0`, imgui `v1.91.6`, manifold `v3.0.0`, tinyobjloader `v2.0.0rc13`, tinygltf `v2.9.3`, cpp-httplib `v0.18.3`. |
+| STAB-0646 | ✅ | P3 | Document known limitations in README | `README.md` | The existing "Current Limitations" section already covered most of this (kept that title rather than renaming to "Known Limitations" — trivial wording difference, not worth the churn). **Found and fixed a real gap while checking**: SVG rasterization wasn't mentioned in README at all (verified via `grep -in "svg"` → 0 hits) despite being a real, known limitation documented elsewhere — added, along with Embedded glTF and N3-N7 runtime-execution limitations that were similarly present in `MC3_FORMAT.md`/`NEXT.md` but absent from README. |
+| STAB-0647 | ✅ | P3 | Document crash log instructions | `README.md` | New "Reporting a Crash" section. No custom crash handler exists in the codebase (`grep`-confirmed: no `signal()`/`SIGSEGV`/`std::set_terminate`), so instructions cover OS-level tools. Linux instructions actually tested in this environment (a throwaway SIGSEGV program + `ulimit -c unlimited` confirmed a `core.<pid>` file is produced, matching what's documented). Windows guidance is standard/well-known but explicitly marked as unverified (Linux-only dev environment). |
+| STAB-0648 | ✅ | P3 | Create user guide (basic workflow) | `docs/USER_GUIDE.md` | New file (new `docs/` dir). Every menu path and keyboard shortcut verified against the actual menu code (`MeshCraftApplication_UiMenuBar.cpp`) before writing it — File→New/Save/Save As/Export GLB with their real shortcuts, Add→Box (`F1`), the Move/Rotate/Scale tool shortcuts (`G`/`R`/`S`), and the real constraint that Export GLB requires the scene to already be saved (confirmed in `exportGltf()`). |
+| STAB-0649 | ✅ | P3 | Document backup/recovery procedure | `README.md` | New "Backup and Recovery" section, written from reading `MeshCraftApplication_FileOps.cpp` directly: exact autosave path (`<file>.autosave`, deleted on next explicit save), the 2-slot backup rotation (`.backup.1`/`.backup.2`, oldest dropped), and the real "autosave found" status-bar notification behavior on load (a notification only, not an automatic restore prompt — confirmed by reading the actual code path in `MeshCraftApplication.cpp`). |
+| STAB-0650 | 📋 | P3 | Verify CI produces consistent test report | `.github/workflows/ci.yml` | Blocked — CI is parked deactivated (`.github_/` not `.github/`, see `NEXT.md` §4's PAT issue) and cannot actually be *run* to verify its output without the repo owner rotating the token first. Could review the YAML for whether the *configuration* would produce a consistent report if activated, but that's a materially weaker check than what this row asks for. |
 
 ---
 
@@ -888,8 +888,8 @@ _Generated: 2026-06-27 from full codebase + test audit. Replaces previous 100-ta
 | S17 Documentation | 20 | 20 | 0 | 0 | 0 | 0 |
 | S18 Code quality | 25 | 7 | 0 | 0 | 18 | 0 |
 | S19 Security | 15 | 11 | 0 | 0 | 4 | 0 |
-| S20 Release | 15 | 0 | 0 | 0 | 15 | 0 |
-| **TOTAL** | **650** | **194** | **3** | **136** | **317** | **0** |
+| S20 Release | 15 | 12 | 0 | 0 | 3 | 0 |
+| **TOTAL** | **650** | **206** | **3** | **136** | **305** | **0** |
 
 _Recomputed directly from per-row status markers (the table had drifted from
 actual row state over several prior sessions); derived, not hand-maintained

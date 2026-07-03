@@ -11,6 +11,7 @@ static void printUsage(const char* prog) {
         "\n"
         "Options:\n"
         "  --screenshot <path>   Render scene to PNG and exit (headless)\n"
+        "  --version             Print version and exit\n"
         "  --help                Show this help\n";
 }
 
@@ -22,6 +23,9 @@ int main(int argc, char* argv[]) {
         std::string arg = argv[i];
         if (arg == "--help" || arg == "-h") {
             printUsage(argv[0]);
+            return 0;
+        } else if (arg == "--version") {
+            std::cout << "MeshCraft " << MESHCRAFT_VERSION << "\n";
             return 0;
         } else if (arg == "--screenshot" && i + 1 < argc) {
             screenshotPath = argv[++i];

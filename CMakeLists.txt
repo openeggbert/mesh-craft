@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.21)
-project(MeshCraft LANGUAGES C CXX)
+project(MeshCraft VERSION 0.1.0 LANGUAGES C CXX)
 
 include(CTest)
 
@@ -246,6 +246,8 @@ target_include_directories(${_target}
         ${CMAKE_CURRENT_SOURCE_DIR}/src
         ${tinyobjloader_SOURCE_DIR}
 )
+
+target_compile_definitions(${_target} PRIVATE MESHCRAFT_VERSION="${PROJECT_VERSION}")
 
 # Enable SQLite3-backed ModelRegistry on desktop builds
 if(SQLite3_FOUND)
