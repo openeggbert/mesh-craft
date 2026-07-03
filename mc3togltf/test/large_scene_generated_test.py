@@ -4,11 +4,13 @@ Generated large-scene regression test for geometry reuse.
 
 Builds a temporary MC3 scene entirely in Python (no static XML file needed):
   - 1 definition "unit_box" (1x1x1 box)
-  - 100 instance nodes of unit_box      → all share exactly 1 glTF mesh
-  -  50 identical sphere nodes (r=0.5)  → all share exactly 1 glTF mesh
-  -  50 identical box nodes (2x2x2)     → all share exactly 1 glTF mesh
+  - N_INSTANCES instance nodes of unit_box  → all share exactly 1 glTF mesh
+  - N_SPHERES identical sphere nodes (r=0.5) → all share exactly 1 glTF mesh
+  - N_BOXES identical box nodes (2x2x2)      → all share exactly 1 glTF mesh
 
-Total: 200 MC3 objects, ≤ 3 unique glTF meshes expected.
+Default (SCALE=1): 200 MC3 objects, ≤ 3 unique glTF meshes expected.
+An optional second CLI arg scales the object counts (STAB-0244 passes 2.5
+for a 500-object export, asserting it completes in under 30s).
 
 This verifies that geometry reuse scales correctly beyond the static
 large_scene.mc3.xml fixture.
@@ -18,11 +20,14 @@ import os
 import subprocess
 import sys
 import tempfile
+import time
 
 
-N_INSTANCES = 100
-N_SPHERES   = 50
-N_BOXES     = 50
+SCALE       = float(sys.argv[2]) if len(sys.argv) > 2 else 1.0
+N_INSTANCES = round(100 * SCALE)
+N_SPHERES   = round(50 * SCALE)
+N_BOXES     = round(50 * SCALE)
+MAX_SECONDS = 30.0
 
 
 def generate_xml():
@@ -72,13 +77,21 @@ if __name__ == "__main__":
         with open(xml_path, "w") as f:
             f.write(generate_xml())
 
-        out = os.path.join(tmpdir, "generated.gltf")
-        r   = run([mc3togltf, xml_path, out])
+        out        = os.path.join(tmpdir, "generated.gltf")
+        started    = time.monotonic()
+        r          = run([mc3togltf, xml_path, out])
+        elapsed    = time.monotonic() - started
         assert r.returncode == 0, (
             f"Export failed (returncode={r.returncode}):\n{r.stderr}"
         )
         assert os.path.exists(out) and os.path.getsize(out) > 0, \
             "Output glTF is missing or empty"
+        assert elapsed < MAX_SECONDS, (
+            f"Export of {total} objects took {elapsed:.2f}s, "
+            f"expected < {MAX_SECONDS:.0f}s (STAB-0244)"
+        )
+        print(f"Export of {total} objects completed in {elapsed:.2f}s "
+              f"(expected < {MAX_SECONDS:.0f}s) — PASS")
 
         with open(out) as f:
             gltf = json.load(f)

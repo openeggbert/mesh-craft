@@ -355,8 +355,8 @@ _Generated: 2026-06-27 from full codebase + test audit. Replaces previous 100-ta
 | STAB-0240 | 🧪 | P1 | Verify material-specific cache key (same prim, different material → different mesh) | `mc3togltf/src/GltfExporter.cpp` | Two boxes with different materials: exported glTF has 2 unique meshes |
 | STAB-0241 | 🧪 | P1 | Verify repeated OBJ mesh src reuses same glTF mesh | `mc3togltf/src/GltfExporter.cpp` | Two objects with `<mesh src="same.obj"/>` → 1 mesh, 2 nodes |
 | STAB-0242 | ✅ | P0 | Large scene (200 objects) exports correctly | `mc3togltf/test/large_scene_generated_test.py` | `mc3togltf_large_scene_generated` passes |
-| STAB-0243 | 🧪 | P1 | Verify large_scene_generated unique mesh count (not 200 unique meshes) | `mc3togltf/test/large_scene_generated_test.py` | Test checks that `len(gltf.meshes) < len(gltf.nodes)` (reuse confirmed) |
-| STAB-0244 | 📋 | P2 | Add 500-object generated test | `mc3togltf/test/large_scene_generated_test.py` | New test generates 500-object scene; export completes in < 30s |
+| STAB-0243 | ✅ | P1 | Verify large_scene_generated unique mesh count (not 200 unique meshes) | `mc3togltf/test/large_scene_generated_test.py` | Already covered by the existing test (lines 98-109): asserts `len(meshes) <= 6` (not "200 unique meshes") and `len(nodes) >= len(meshes) * 10`, explicitly confirming reuse rather than a 1:1 node:mesh ratio. No new test needed. root 20/20 (verified 2026-07-03) |
+| STAB-0244 | ✅ | P2 | Add 500-object generated test | `mc3togltf/test/large_scene_generated_test.py`, `mc3togltf/CMakeLists.txt` | Parameterized the existing generator with an optional scale-factor CLI arg (`N_INSTANCES/N_SPHERES/N_BOXES = round(100/50/50 * SCALE)`) instead of duplicating the script — new `mc3togltf_large_scene_500` ctest passes `2.5` (250+125+125 = 500 objects). Added `time.monotonic()` timing around the export subprocess call with an explicit `assert elapsed < 30.0` (STAB-0244's own requirement), applied to both the 200- and 500-object runs. Measured: 500-object export completes in ~0.02s. root 20/20 (verified 2026-07-03) |
 | STAB-0245 | 📋 | P3 | Add 1000-object generated test (stress) | `mc3togltf/test/large_scene_generated_test.py` | 1000-object test with timeout 120s; memory usage < 500MB |
 | STAB-0246 | 🧪 | P1 | Verify `mc3togltf_large_scene` test asserts node count | `mc3togltf/test/large_scene_test.py` | Test asserts `len(nodes) >= expected_count` |
 | STAB-0247 | 🧪 | P1 | Verify group-only definition (no children) doesn't crash exporter | `mc3togltf/src/GltfExporter.cpp` | Instance of empty definition: exports as empty group node; no crash |
@@ -874,7 +874,7 @@ _Generated: 2026-06-27 from full codebase + test audit. Replaces previous 100-ta
 | S3 MCB binary | 30 | 10 | 0 | 5 | 15 | 0 |
 | S4 glTF export | 50 | 16 | 0 | 21 | 13 | 0 |
 | S5 CSG | 35 | 5 | 0 | 7 | 23 | 0 |
-| S6 Geometry | 25 | 5 | 0 | 6 | 14 | 0 |
+| S6 Geometry | 25 | 7 | 0 | 5 | 13 | 0 |
 | S7 Save/load | 35 | 28 | 0 | 0 | 7 | 0 |
 | S8 UI robustness | 40 | 17 | 0 | 0 | 23 | 0 |
 | S9 Registry | 35 | 22 | 0 | 0 | 13 | 0 |
@@ -889,7 +889,7 @@ _Generated: 2026-06-27 from full codebase + test audit. Replaces previous 100-ta
 | S18 Code quality | 25 | 0 | 3 | 2 | 20 | 0 |
 | S19 Security | 15 | 0 | 0 | 4 | 11 | 0 |
 | S20 Release | 15 | 0 | 0 | 0 | 15 | 0 |
-| **TOTAL** | **650** | **158** | **13** | **143** | **336** | **0** |
+| **TOTAL** | **650** | **160** | **13** | **142** | **335** | **0** |
 
 _Recomputed directly from per-row status markers (the table had drifted from
 actual row state over several prior sessions); derived, not hand-maintained

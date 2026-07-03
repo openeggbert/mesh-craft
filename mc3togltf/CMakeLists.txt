@@ -229,5 +229,16 @@ if(BUILD_TESTING)
                     "$<TARGET_FILE:mc3togltf>"
         )
         set_tests_properties(mc3togltf_large_scene_generated PROPERTIES TIMEOUT 60)
+
+        # STAB-0244: 500-object export, asserting completion in < 30s
+        # (same script, scale=2.5 -> 250+125+125 = 500 objects).
+        add_test(
+            NAME mc3togltf_large_scene_500
+            COMMAND "${PYTHON3_EXEC}"
+                    "${CMAKE_CURRENT_SOURCE_DIR}/test/large_scene_generated_test.py"
+                    "$<TARGET_FILE:mc3togltf>"
+                    "2.5"
+        )
+        set_tests_properties(mc3togltf_large_scene_500 PROPERTIES TIMEOUT 60)
     endif()
 endif()
