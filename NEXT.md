@@ -16,19 +16,27 @@ adding new features. All work is tracked in `plan.md` as `STAB-XXXX`
 tasks across sections S0–S20, gated by a Gate 0–6 checklist (each gate
 requires a specific `STAB-XXXX` ID range to be fully green).
 
-**Current phase:** Stabilization. Gates 0–2 (Build, Format, Export
-priority items) are complete. **Gate 3 (Editor safety)'s P1 items are
-done** across S7 (Editor Save/Load), S8 (UI Robustness), and S13
-(Commands/Undo/Redo) — the gate itself isn't fully green yet because it
-requires the *entire* `STAB-0261–0335` range, and P2/P3 rows in that
-range remain. **Gate 4 (Registry/AI) is done**, including S9
-(ModelRegistry) and all of Gate 4's `Priority Execution Order` items in
-S10 (AI mock tests, the 3 P0 verification items, and XSD validation of
-AI responses). Gates 5–6 are untouched. Note: Gate 4 itself isn't fully
-green yet — its checklist requires the *entire* `STAB-0336–0410` range,
-and P2/P3 rows in S9/S10 remain (see §5). Plan-wide totals (out of 650
-`STAB-XXXX` rows): **158 ✅ done, 13 🟡 partial, 143 🧪 has a plan but not
-executed, 336 📋 not started.**
+**Current phase:** Stabilization. For every gate below, "priority-list
+items done" means `plan.md`'s `Priority Execution Order` shortlist for
+that gate is closed — **not** the same as the gate being fully green,
+which requires its *entire* `STAB-XXXX` range (see `STABILIZATION.md`
+for the exact ranges). None of the 7 gates are fully green yet.
+
+- **Gates 0–2** (Build, Format, Export): priority items complete.
+- **Gate 3** (Editor safety): P1 items done across S7 (Editor Save/Load),
+  S8 (UI Robustness), S13 (Commands/Undo/Redo). P2/P3 remain.
+- **Gate 4** (Registry/AI): priority-list items done — S9 (ModelRegistry
+  edge cases) and S10 (AI mock tests, the 3 P0 verification items, XSD
+  validation of AI responses). P2/P3 remain in both sections.
+- **Gate 5** (Large scene): priority-list items done — S6's mesh-reuse
+  check (STAB-0243) and 500-object test (STAB-0244). P2/P3 remain
+  (including the P3 1000-object stress test, STAB-0245).
+- **Gate 6** (Documentation): priority-list items done — README/
+  MC3_FORMAT.md/STABILIZATION.md updates and a new TESTING.md (this
+  session). Several P1 items remain (STAB-0585, 0588-0591).
+
+Plan-wide totals (out of 650 `STAB-XXXX` rows): **168 ✅ done, 6 🟡
+partial, 142 🧪 has a plan but not executed, 334 📋 not started.**
 
 **Important architectural decisions:**
 - `mc3/` and `mcb/` are pure C++ static libs with **no** CNA/ImGui
@@ -137,9 +145,48 @@ this summary intentionally stays high-level.
 
 ## 3. Recent changes
 
-All changes are committed on `develop` at `8e590ce`; see §10 for the
-last confirmed push-sync state (commits may be ahead of
-`origin/develop` — check before assuming they're pushed).
+All changes are committed on `develop`; see §10 for the exact commit
+and push-sync state.
+
+**Gate 6 priority-list documentation cluster** (S17, P1/P2 — pure docs,
+no code changes): STAB-0579, 0580, 0581, 0583, 0584, 0586, 0587, 0592.
+- STAB-0580/0581/0587 were already satisfied by earlier work — just
+  verified and marked ✅ in `plan.md` (no file changes for these three).
+- STAB-0579: `README.md` — added a note that `file(GLOB_RECURSE)`
+  requires a cmake reconfigure (not just `ninja`) after adding a new
+  `.cpp` file.
+- STAB-0583: `MC3_FORMAT.md` — added `Meta (N7)`, `Scripts (N3)`,
+  `Sounds and Music (N4)`, `Triggers (N5)`, `Scene States (N6)`
+  sections, each with a real example drawn from `test/n*_*.mc3.xml`
+  fixtures, an attribute table, and an honest status note (all five are
+  fully round-tripped — parser/writer/MCB/XSD — but **not executed at
+  runtime**: no Lua interpreter, no audio playback, no trigger-firing
+  event system, no state-switching logic). Also updated the "Top-level
+  sections" overview and added a note that the XSD enforces a strict
+  root-element order — newly relevant since STAB-0391 wired real XSD
+  validation into the AI response pipeline.
+- STAB-0584: `MC3_FORMAT.md` — added an `MCB Binary Format` section
+  (what it is, file extension, how to produce it via CLI/C++ API,
+  header byte layout, payload tag encoding, relationship to
+  `.mc3.xml`), verified against `McbFormat.hpp`/`McbWriter.hpp`/
+  `McbReader.hpp` rather than guessed.
+- STAB-0586: `STABILIZATION.md` — full rewrite. The old version
+  described "15 CTest tests" and listed gaps that are now fixed (MCB
+  roundtrip test, N3-N7 XSD fixtures, AI mock tests — all exist now).
+  Replaced with an accurate gate table (exact `STAB-XXXX` ranges +
+  priority-list status per gate), the current 20-test list, and a
+  "Known Gaps" section that points to this file's §5 as the actively-
+  maintained source of truth instead of duplicating a list that will
+  go stale again.
+- STAB-0592: new `TESTING.md` — how to run tests (full suite, single
+  test, direct binary, standalone builds), a reference table for all
+  20 tests with purpose + pass criteria (assertion counts for the 5
+  C++ binaries were measured by actually running them, not guessed),
+  and a "writing a new test" section.
+- Verified: this cluster touched no `CMakeLists.txt`/`.cpp` files —
+  `git status` after the change showed only `.md` files — so no
+  rebuild/retest was performed for it specifically (root ctest was
+  last verified 20/20 by the STAB-0243/0244 work just before this).
 
 **STAB-0377/0378/0379** (S10, P0 — verification-only, no new code):
 confirmed all three were already satisfied by existing code, so each was
@@ -345,6 +392,20 @@ requires the repo owner to rotate/rescope the token.
   needs verification — a good candidate for a future STAB task (diff the
   writer's `SetAttribute` calls against the schema's declared attributes
   per element)._
+- **N3-N7 extensions (scripts, sounds, music, triggers, scene states) are
+  data-only** — fully round-tripped (XML parser/writer, MCB, XSD), but
+  nothing executes them at runtime: no Lua interpreter, no audio
+  playback, no trigger-firing event system, no "switch active scene
+  state" logic. Documented explicitly in `MC3_FORMAT.md` per-section
+  now (STAB-0583, this session). _status: intended at this stage (data
+  model before execution), not a bug — but a real capability gap a user
+  reading only the format spec's examples could easily miss without the
+  new status notes._
+- **Gates 5 and 6's priority-list items are done, but neither gate is
+  fully green** — Gate 5 needs the full `STAB-0411–0470` range (S6 is
+  7/25 ✅), Gate 6 needs `STAB-0576–0650` (S17 is 12/20 ✅, with
+  STAB-0585/0588-0591 the next concrete P1 items — see §8).
+  _status: priority-list items done, rest not started._
 
 ---
 
@@ -496,18 +557,16 @@ No project linter/formatter is configured.
    Verify: `ctest -R xsd_validation --output-on-failure` (must stay
    passing) plus re-run `ai_test`'s XSD tests after any schema change.
 
-2. **Gate 6 — Documentation gate** is the only stabilization gate whose
-   `Priority Execution Order` list is still fully untouched (Gates 0-5's
-   priority-list items are now all done, though the gates themselves
-   need their full `STAB-XXXX` ranges green, not just the priority
-   subset — see `plan.md`'s "Stabilization Gates" table).
-   Goal: STAB-0579..0581 (README gaps), STAB-0583..0584
-   (MC3_FORMAT.md updates), STAB-0586..0587 (STABILIZATION.md and
-   NEXT.md), STAB-0592 (TESTING.md created) — read each row's exact
-   ask in `plan.md` before starting, these are documentation-audit
-   tasks (check docs match reality), not blind rewrites.
-   Files: `README.md`, `MC3_FORMAT.md`, `STABILIZATION.md`, `NEXT.md`,
-   `TESTING.md` (new).
+2. **Gate 6's remaining P1 items** (the priority-list subset — STAB-0579,
+   0580, 0581, 0583, 0584, 0586, 0587, 0592 — is done, this session):
+   STAB-0585 (MC3_FORMAT.md export support matrix — the section already
+   exists; verify it's still accurate against current `GltfExporter.cpp`
+   behavior), STAB-0588 (verify `m1m2m3.md` still accurate), STAB-0589
+   (document CSG limitations explicitly — `MC3_FORMAT.md` already has a
+   CSG limitations paragraph; verify completeness against the exact ask),
+   STAB-0590 (document AI integration limitations), STAB-0591 (document
+   registry limitations).
+   Files: `MC3_FORMAT.md`, `m1m2m3.md`, `README.md` or a new `AI.md`.
    Verify: no build/test command applies directly — verification is
    "does the doc match observed repo behavior", checked by cross-reading
    against `plan.md` and actually running the commands each doc claims.
@@ -591,15 +650,17 @@ LibXml2 find_package yet; re-verify (reconfigure + rebuild) before
 relying on it. Standalone mc3/ build re-verified 2026-07-03 (1/1,
 includes the mc3.xsd fix); standalone mc3togltf/ build re-verified
 2026-07-03 (12/12, includes mc3togltf_large_scene_500).
-Active plan: plan.md (STAB-XXXX tasks; Gates 0-5's Priority Execution
-Order items are all done (S6 STAB-0243/0244, S10 STAB-0371-0379/0391
-closed this session) — S6 7/25, S7 28/35, S8 17/40, S9 22/35, S10 10/40,
-S13 11/25. Note: the gates themselves still need their full STAB-XXXX
-ranges green, not just the priority-list subset (see plan.md's
-"Stabilization Gates" table). Pick the next task from section 8: audit
-mc3.xsd for other undeclared-but-actually-used attributes, start Gate
-6's documentation-audit items, move to P2 items in whichever section is
-preferred, or optionally rotate the PAT to activate CI).
+Active plan: plan.md (STAB-XXXX tasks; Gates 0-6's Priority Execution
+Order items are all done (S6 STAB-0243/0244, S10 STAB-0371-0379/0391,
+S17 STAB-0579/0580/0581/0583/0584/0586/0587/0592 closed this session) —
+S6 7/25, S7 28/35, S8 17/40, S9 22/35, S10 10/40, S13 11/25, S17 12/20.
+Note: no gate is fully green yet — each needs its full STAB-XXXX range,
+not just the priority-list subset (see plan.md's "Stabilization Gates"
+table, or the equivalent table in STABILIZATION.md). Pick the next task
+from section 8: audit mc3.xsd for other undeclared-but-actually-used
+attributes, Gate 6's remaining P1 items (STAB-0585/0588-0591), move to
+P2 items in whichever section is preferred, or optionally rotate the
+PAT to activate CI).
 Reconfigure cmake-build-debug ONLY with CLion's cmake 4.2.2, not
 /usr/bin/cmake.
 CI is parked deactivated under .github_/ (token lacks `workflow` scope,
