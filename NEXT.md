@@ -31,17 +31,20 @@ for the exact ranges). None of the 7 gates are fully green yet.
 - **Gate 5** (Large scene): priority-list items done — S6's mesh-reuse
   check (STAB-0243) and 500-object test (STAB-0244). P2/P3 remain
   (including the P3 1000-object stress test, STAB-0245).
-- **Gate 6** (Documentation): **S17 is fully done, 20/20** — every item
-  in "Documentation and User-Facing Honesty" is now ✅ (STAB-0579-0595,
-  this session, closing README/MC3_FORMAT.md/STABILIZATION.md/
-  m1m2m3.md/TESTING.md/CONTRIBUTING.md/RELEASE.md). Gate 6 itself is
-  **not** fully green, though — its `STAB-0576–0650` range extends into
-  S18 (Code Quality), S19 (Security), and S20 (Release Readiness). All
-  P0/P1 items in S18 (7/7) and S19 (9/9, plus 2 bonus P2s) are now done
-  too — S20 is P2/P3-only and fully untouched.
+- **Gate 6** (Documentation): very close to fully green. S17 is 20/20
+  (done). S18's P0/P1 is 7/7 done (18 P2/P3 remain). S19's P0/P1+bonus
+  is 11/15 done (4 P2/P3 remain — one, STAB-0631, may already be
+  covered by STAB-0383, needs checking). S20 is 12/15 done — the only
+  3 remaining items are things this session genuinely could not do:
+  STAB-0642 (needs Blender), STAB-0643 (needs a browser), STAB-0650
+  (CI is deactivated, can't verify its output without the repo owner
+  rotating the PAT first — see §4). Gate 6 needs the full
+  `STAB-0576–0650` range green, so it's not there yet, but the
+  remaining gap is now small and specific: 18+4+3 = 25 items, 3 of
+  which need something outside this session's reach.
 
-Plan-wide totals (out of 650 `STAB-XXXX` rows): **194 ✅ done, 3 🟡
-partial, 136 🧪 has a plan but not executed, 317 📋 not started.**
+Plan-wide totals (out of 650 `STAB-XXXX` rows): **206 ✅ done, 3 🟡
+partial, 136 🧪 has a plan but not executed, 305 📋 not started.**
 
 **Important architectural decisions:**
 - `mc3/` and `mcb/` are pure C++ static libs with **no** CNA/ImGui
@@ -104,9 +107,9 @@ See `plan.md`'s `STAB-XXXX` rows for the exhaustive per-behavior list;
 this summary intentionally stays high-level.
 
 ### Tools / libraries available
-- `MeshCraft` — editor executable. Builds and runs; the 3D viewport is
-  not fully integrated into the render loop (see "What does NOT work
-  yet").
+- `MeshCraft` — editor executable, version `0.1.0` (`--version` to
+  print it). Builds and runs; the 3D viewport is not fully integrated
+  into the render loop (see "What does NOT work yet").
 - `mc3togltf` — CLI: `mc3togltf in.mc3.xml out.glb`.
 - `mc3tomcb` — bidirectional CLI: `mc3.xml` ↔ `.mcb`, direction chosen by
   file extension.
@@ -215,6 +218,48 @@ it. Always reconfigure after touching `mc3.xsd`.
 
 Verified: root 20/20, standalone `mc3` 1/1 (reconfigured + rebuilt from
 scratch to confirm, given the note above).
+
+**S20 (Release Readiness) — STAB-0636/0637/0639/0640/0641/0644-0649**
+(12 of 15 items; the other 3 need something this session doesn't have
+— Blender, a browser, or an active CI run):
+- STAB-0636/0637: `project(MeshCraft VERSION 0.1.0 ...)` +
+  `MESHCRAFT_VERSION` compile definition + a new `--version` CLI flag.
+  Verified against the real binary: `./MeshCraft --version` →
+  `MeshCraft 0.1.0`.
+- STAB-0639: **actually built** a fresh Release binary and compared it
+  to Debug rather than assuming — 6.25MB vs. 59.9MB (~10× smaller),
+  `file`/`objdump` confirm Debug has DWARF debug info and Release has
+  none. Release 20/20 ctest also re-verified in the same pass.
+- STAB-0640/0641: `xsd_validation` already covers this continuously;
+  additionally ran the real `MeshCraft` binary headlessly against
+  `house`/`garden_house`/`features.mc3.xml` directly (not just the
+  standalone parser) to confirm all three load cleanly through the
+  actual editor.
+- STAB-0638: new `CHANGELOG.md`. The row's own verification text asks
+  for stale pre-replan terminology ("feature groups A–N, stabilization
+  groups S1–S12") that doesn't map onto anything in `git log` (which
+  shows lettered groups E/F/G/H/M/N/R/S/T, not A–D) — wrote it around
+  what's actually there instead, with an explicit note on why.
+- STAB-0644/0645: new `THIRD_PARTY.md` — every dependency version
+  verified against the real `FetchContent_Declare` `GIT_TAG`, not
+  copied from memory.
+- STAB-0646: README's "Current Limitations" mostly covered this, but
+  **found a real gap** — SVG rasterization wasn't mentioned in README
+  at all despite being a known limitation elsewhere; added it plus two
+  similarly-missing items (Embedded glTF, N3-N7 runtime execution).
+- STAB-0647: new "Reporting a Crash" section — no custom crash handler
+  exists (grep-confirmed); Linux instructions actually tested (a
+  throwaway SIGSEGV program confirmed the documented `core.<pid>`
+  naming); Windows guidance marked explicitly unverified.
+- STAB-0648: new `docs/USER_GUIDE.md` — every menu path/shortcut
+  verified against the real menu code before writing it.
+- STAB-0649: new "Backup and Recovery" section, written from reading
+  `MeshCraftApplication_FileOps.cpp` directly (exact autosave path,
+  2-slot backup rotation, the real "autosave found" notification
+  behavior — a notification only, not an automatic restore prompt).
+
+Verified: root 20/20 and Release 20/20 (both freshly rebuilt after the
+`CMakeLists.txt`/`main.cpp` changes for STAB-0636/0637).
 
 **S18 + S19 P0/P1 verification — STAB-0596..0602, 0621..0634** (no
 production code changed — pure verification, including live testing
@@ -597,11 +642,21 @@ requires the repo owner to rotate/rescope the token.
   model before execution), not a bug — but a real capability gap a user
   reading only the format spec's examples could easily miss without the
   new status notes._
-- **Gates 5 and 6's priority-list items are done, but neither gate is
-  fully green** — Gate 5 needs the full `STAB-0411–0470` range (S6 is
-  7/25 ✅), Gate 6 needs `STAB-0576–0650` (S17 is 12/20 ✅, with
-  STAB-0585/0588-0591 the next concrete P1 items — see §8).
-  _status: priority-list items done, rest not started._
+- **Gate 5 and Gate 6 are close but not fully green** — Gate 5 needs
+  the full `STAB-0411–0470` range (S6 is 7/25 ✅). Gate 6 needs
+  `STAB-0576–0650` — S17 20/20 ✅, S18 7/25 (P0/P1 done, 18 P2/P3
+  left), S19 11/15 (P0/P1+bonus done, 4 P2/P3 left), S20 12/15 (only 3
+  items left, and all 3 are genuinely blocked — see below).
+  _status: very close for Gate 6; the remaining 18+4 S18/S19 items are
+  normal follow-on work, see §8._
+- **3 `plan.md` items cannot be completed by an AI session in this
+  environment**: STAB-0642 (needs Blender 4.x installed, not available
+  here), STAB-0643 (needs a browser to interactively verify a web
+  build), STAB-0650 (needs CI actually running, but CI is parked
+  deactivated — see §4's PAT issue; reviewing the YAML's *configuration*
+  is a materially weaker check than what the row asks for). _status:
+  flagged, not attempted further — these need either a human with the
+  right tools, or the PAT rotated first._
 
 ---
 
@@ -720,11 +775,12 @@ for c in mc3 mcb mc3togltf mc3tomcb; do
         -DFETCHCONTENT_UPDATES_DISCONNECTED=ON
   cmake --build "$c-build" -j4
   (cd "$c-build" && ctest --output-on-failure)
-done   # mc3 1/1 · mcb 1/1 · mc3togltf 11/11 · mc3tomcb 2/2
+done   # mc3 1/1 · mcb 1/1 · mc3togltf 12/12 · mc3tomcb 2/2
 
-# --- Export a scene / validate XML / run a single test
+# --- Export a scene / validate XML / run a single test / check version
 ./cmake-build-debug/mc3togltf/mc3togltf test/features.mc3.xml /tmp/out.glb
 python3 test/validate_xsd.py mc3/mc3.xsd test/features.mc3.xml
+./cmake-build-debug/MeshCraft --version                      # MeshCraft 0.1.0
 ctest -R mc3_commands --output-on-failure   # editor algorithms + undo/redo
 ctest -R mc3_registry --output-on-failure   # ModelRegistry
 ctest -R mc3_ai       --output-on-failure   # AiAssistant + mock HTTP server
@@ -741,26 +797,25 @@ No project linter/formatter is configured.
 
 ## 8. Next smallest tasks
 
-1. **S17/S18/S19's P0/P1 items are all done.** Only S20 (Release
-   Readiness, 15 items, all P2/P3) remains untouched in Gate 6.
-   Goal: pick by ID order — e.g. STAB-0636 (version number in
-   CMakeLists.txt) and STAB-0637 (`--version` CLI flag) are the
-   smallest starting points; STAB-0644/0645 (third-party license
-   acknowledgment) are worth doing before any real release regardless
-   of stabilization-phase status. Read each row's exact ask first.
+1. **Gate 6 is nearly closed.** S17 20/20, S18's P0/P1 7/7, S19's
+   P0/P1+bonus 11/15, S20 12/15 — the only 3 remaining items in the
+   whole gate that this session could plausibly still do are S18's 18
+   P2/P3 items and S19's 4 P2/P3 items (STAB-0642/0643/0650 are
+   genuinely blocked — see §5). Doing all of S18+S19's remaining P2/P3
+   would fully close Gate 6's `STAB-0576–0650` range except those 3.
+   Goal: STAB-0610 (`-Wall -Wextra` — will surface real warnings across
+   the whole codebase, potentially a bigger task than it looks once you
+   see the count), STAB-0630 (untrusted OBJ robustness — mirrors the
+   DoS-input testing pattern already used for STAB-0625/0628/0629, just
+   against `tinyobjloader` instead of the XML parser), STAB-0631 (check
+   if `AiAssistant`'s network timeout is already covered by something
+   equivalent to STAB-0383 before writing new work), then the rest of
+   S18's P2/P3 by ID order.
    Files: varies — see `plan.md`'s Key File column per row.
-   Verify: varies per item; several are code changes (version flag)
-   needing a rebuild + `ctest`, others are pure docs.
+   Verify: varies; STAB-0610 needs a rebuild to see warning output,
+   STAB-0630 needs an actual malformed-OBJ test like the XML DoS tests.
 
-2. **S18/S19's remaining P2/P3 items** (18 and 4 respectively) — real
-   code-quality/security work, not docs: e.g. STAB-0610 (`-Wall -Wextra`
-   compiler warnings), STAB-0630 (untrusted OBJ file robustness),
-   STAB-0631 (AI network timeout — "see STAB-0383", check if already
-   covered before writing new work).
-   Files: varies — see `plan.md`'s Key File column per row.
-   Verify: varies; STAB-0610 needs a rebuild to see warning output.
-
-3. **Move to P2 items** in whichever section is most valuable next —
+2. **Move to P2 items** in whichever section is most valuable next —
    with P0/P1 essentially exhausted across S6/S7/S8/S9/S10/S13/S18/S19,
    the next tier by `plan.md`'s own priority scheme is P2 (then P3).
    Remaining P2/P3 counts: S6: 13 (includes STAB-0245, the P3
@@ -775,7 +830,7 @@ No project linter/formatter is configured.
    Verify: the relevant `ctest -R <target>`, plus a full
    `ctest --output-on-failure` (expect 20/20 or higher).
 
-4. **(optional) Rotate the PAT and activate CI** — see §4 for the exact
+3. **(optional) Rotate the PAT and activate CI** — see §4 for the exact
    steps.
    Goal: replace the plaintext, under-scoped PAT in `.git/config` with a
    `repo`+`workflow`-scoped token (or SSH), then rename `.github_` →
@@ -833,32 +888,30 @@ resuming — check `git status` / `git log origin/develop..HEAD` (recent
 local commits may not be pushed yet; push only if asked).
 Build dirs: cmake-build-debug/ (Debug, CLion cmake 4.2.2) — full
 reconfigure + rebuild (53 targets) + 20/20 ctest verified clean
-2026-07-03 at commit ee4dd2c (reconfigure was required, not just
-rebuild — see §3's mc3.xsd process note; always reconfigure after
-touching mc3.xsd). No production code has changed since (S17/S18/S19
-work was docs + verification only), so this should still hold; re-run
-ctest if in doubt. b-release/ (Release) not re-verified since
-2026-07-01 and has NOT been reconfigured since the LibXml2
-find_package/mc3.xsd audit changes; re-verify (reconfigure + rebuild)
-before relying on it. Standalone mc3/ build re-verified 2026-07-03
-(1/1); standalone mc3togltf/ build re-verified 2026-07-03 (12/12).
+2026-07-03 at commit fca6fc1 (includes the version-number/--version-flag
+change, which needed a reconfigure for the new PROJECT_VERSION). Release
+(b-release/) also freshly built + 20/20 ctest verified in the same pass
+— 6.25MB, no debug symbols, confirmed via `file`/`objdump`. Standalone
+mc3/ build re-verified 2026-07-03 (1/1); standalone mc3togltf/ build
+re-verified 2026-07-03 (12/12).
 Active plan: plan.md (STAB-XXXX tasks; every gate's P1 priority-list
-subset is now done; S17 (Documentation) is fully complete at 20/20,
-and S18/S19's P0/P1 items are all done too (S18 7/7, S19 9/9 +2 bonus
-P2s) — STAB-0579-0595 and STAB-0596-0602/0621-0634 closed this
-session, on top of S6 STAB-0243/0244 and S10 STAB-0371-0379/0391 from
-earlier the same day) — S6 7/25, S7 28/35, S8 17/40, S9 22/35,
-S10 10/40, S13 11/25, S17 20/20, S18 7/25, S19 11/15. Note: no gate is
-fully green yet — each needs its full STAB-XXXX range, not just the
-priority-list subset; Gate 6 specifically still needs S20 in full plus
-S18/S19's remaining P2/P3 (see plan.md's "Stabilization Gates" table,
-or the equivalent table in STABILIZATION.md). Also this session (not
-tied to a STAB-XXXX ID): a full mc3.xsd audit found and fixed 7 more
-undeclared writer attributes/elements plus one real texture-rename
-round-trip bug (see §3) — that line of work is now closed out. Pick the
-next task from section 8: S20 (Gate 6's only remaining section, all
-P2/P3), S18/S19's remaining P2/P3 items, move to P2 items in whichever
-section is preferred, or optionally rotate the PAT to activate CI).
+subset is done; S17 is fully complete at 20/20; S18's P0/P1 is 7/7;
+S19's P0/P1+bonus is 11/15; S20 is 12/15 with only 3 items left, all
+genuinely blocked — STAB-0642 needs Blender, STAB-0643 needs a browser,
+STAB-0650 needs CI actually running, which it can't since it's parked
+deactivated) — S6 7/25, S7 28/35, S8 17/40, S9 22/35, S10 10/40,
+S13 11/25, S17 20/20, S18 7/25, S19 11/15, S20 12/15. Note: no gate is
+fully green yet — each needs its full STAB-XXXX range; Gate 6 is close
+— only S18's 18 P2/P3 items and S19's 4 P2/P3 items stand between it
+and green, besides the 3 blocked S20 items (see plan.md's
+"Stabilization Gates" table, or the equivalent table in
+STABILIZATION.md). Also this session (not tied to a STAB-XXXX ID): a
+full mc3.xsd audit found and fixed 7 more undeclared writer
+attributes/elements plus one real texture-rename round-trip bug (see
+§3) — closed out. Pick the next task from section 8: S18/S19's
+remaining P2/P3 items (would fully close Gate 6 except the 3 blocked
+S20 items), move to P2 items in whichever section is preferred, or
+optionally rotate the PAT to activate CI).
 Reconfigure cmake-build-debug ONLY with CLion's cmake 4.2.2, not
 /usr/bin/cmake.
 CI is parked deactivated under .github_/ (token lacks `workflow` scope,
