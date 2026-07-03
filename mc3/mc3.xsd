@@ -138,9 +138,18 @@
   <!-- ── UV Mapping ───────────────────────────────────────────── -->
 
   <xs:complexType name="uvMappingType">
-    <xs:attribute name="scale"    type="vec2Type"/>
-    <xs:attribute name="offset"   type="vec2Type"/>
-    <xs:attribute name="rotation" type="xs:float"/>
+    <!-- Actually written/read by Mc3XmlWriter/Mc3XmlParser as separate
+         per-axis attributes, not the combined vec2 "scale"/"offset" below
+         (which are declared for forward-compatibility but currently
+         unused by either the writer or the parser). -->
+    <xs:attribute name="projection" type="xs:string"/>  <!-- "planar" | "box" | "sphere" -->
+    <xs:attribute name="scale_u"    type="xs:float"/>
+    <xs:attribute name="scale_v"    type="xs:float"/>
+    <xs:attribute name="offset_u"   type="xs:float"/>
+    <xs:attribute name="offset_v"   type="xs:float"/>
+    <xs:attribute name="rotation"   type="xs:float"/>
+    <xs:attribute name="scale"      type="vec2Type"/>
+    <xs:attribute name="offset"     type="vec2Type"/>
   </xs:complexType>
 
   <!-- ── Meta (new-style key-value) ──────────────────────────── -->
@@ -172,6 +181,21 @@
     </xs:sequence>
   </xs:complexType>
 
+  <!-- ── Per-object named states (Mc3Object::states) ─────────────
+       Distinct from the document-level <states><state name="..."> (N6,
+       sceneStateType) — this is a per-object <state id="..."> child that
+       Mc3XmlWriter emits for every object type unconditionally, mirroring
+       Mc3ObjectState's fields exactly. -->
+
+  <xs:complexType name="objectStateType">
+    <xs:attribute name="id"       type="xs:string"  use="required"/>
+    <xs:attribute name="position" type="vec3Type"/>
+    <xs:attribute name="rotation" type="vec3Type"/>
+    <xs:attribute name="scale"    type="vec3Type"/>
+    <xs:attribute name="visible"  type="xs:boolean"/>
+    <xs:attribute name="material" type="xs:string"/>
+  </xs:complexType>
+
   <!-- ── Shared object attributes ─────────────────────────────── -->
   <!--
     Transform order: T(position+pivot) * R(rotation) * S(scale) * T(-pivot)
@@ -189,6 +213,7 @@
     <xs:attribute name="visible"   type="xs:boolean"  default="true"/>
     <xs:attribute name="collision" type="xs:string"   default="none"/>
     <xs:attribute name="tags"      type="xs:string"/>
+    <xs:attribute name="layer"     type="xs:string"/>
     <xs:attribute name="role"      type="roleType"/>
   </xs:attributeGroup>
 
@@ -266,6 +291,7 @@
       <xs:element name="deform"     type="deformType"    minOccurs="0"/>
       <xs:element name="uv_mapping" type="uvMappingType" minOccurs="0"/>
       <xs:element name="metadata"   type="metadataType"  minOccurs="0"/>
+      <xs:element name="state"      type="objectStateType" minOccurs="0" maxOccurs="unbounded"/>
     </xs:sequence>
     <xs:attributeGroup ref="objectAttrs"/>
     <xs:attribute name="size"     type="vec3Type"/>
@@ -278,6 +304,7 @@
       <xs:element name="deform"     type="deformType"    minOccurs="0"/>
       <xs:element name="uv_mapping" type="uvMappingType" minOccurs="0"/>
       <xs:element name="metadata"   type="metadataType"  minOccurs="0"/>
+      <xs:element name="state"      type="objectStateType" minOccurs="0" maxOccurs="unbounded"/>
     </xs:sequence>
     <xs:attributeGroup ref="objectAttrs"/>
     <xs:attribute name="radius"   type="xs:float"/>
@@ -290,6 +317,7 @@
       <xs:element name="deform"     type="deformType"    minOccurs="0"/>
       <xs:element name="uv_mapping" type="uvMappingType" minOccurs="0"/>
       <xs:element name="metadata"   type="metadataType"  minOccurs="0"/>
+      <xs:element name="state"      type="objectStateType" minOccurs="0" maxOccurs="unbounded"/>
     </xs:sequence>
     <xs:attributeGroup ref="objectAttrs"/>
     <xs:attribute name="radius"   type="xs:float"/>
@@ -304,6 +332,7 @@
       <xs:element name="deform"     type="deformType"    minOccurs="0"/>
       <xs:element name="uv_mapping" type="uvMappingType" minOccurs="0"/>
       <xs:element name="metadata"   type="metadataType"  minOccurs="0"/>
+      <xs:element name="state"      type="objectStateType" minOccurs="0" maxOccurs="unbounded"/>
     </xs:sequence>
     <xs:attributeGroup ref="objectAttrs"/>
     <xs:attribute name="radius"   type="xs:float"/>
@@ -317,6 +346,7 @@
       <xs:element name="deform"     type="deformType"    minOccurs="0"/>
       <xs:element name="uv_mapping" type="uvMappingType" minOccurs="0"/>
       <xs:element name="metadata"   type="metadataType"  minOccurs="0"/>
+      <xs:element name="state"      type="objectStateType" minOccurs="0" maxOccurs="unbounded"/>
     </xs:sequence>
     <xs:attributeGroup ref="objectAttrs"/>
     <xs:attribute name="size"     type="vec2Type"/>
@@ -330,6 +360,7 @@
       <xs:element name="deform"     type="deformType"    minOccurs="0"/>
       <xs:element name="uv_mapping" type="uvMappingType" minOccurs="0"/>
       <xs:element name="metadata"   type="metadataType"  minOccurs="0"/>
+      <xs:element name="state"      type="objectStateType" minOccurs="0" maxOccurs="unbounded"/>
     </xs:sequence>
     <xs:attributeGroup ref="objectAttrs"/>
     <xs:attribute name="size"     type="vec3Type"/>
@@ -342,6 +373,7 @@
       <xs:element name="deform"     type="deformType"    minOccurs="0"/>
       <xs:element name="uv_mapping" type="uvMappingType" minOccurs="0"/>
       <xs:element name="metadata"   type="metadataType"  minOccurs="0"/>
+      <xs:element name="state"      type="objectStateType" minOccurs="0" maxOccurs="unbounded"/>
     </xs:sequence>
     <xs:attributeGroup ref="objectAttrs"/>
     <xs:attribute name="major_radius" type="xs:float"/>
@@ -355,6 +387,7 @@
       <xs:element name="deform"     type="deformType"    minOccurs="0"/>
       <xs:element name="uv_mapping" type="uvMappingType" minOccurs="0"/>
       <xs:element name="metadata"   type="metadataType"  minOccurs="0"/>
+      <xs:element name="state"      type="objectStateType" minOccurs="0" maxOccurs="unbounded"/>
     </xs:sequence>
     <xs:attributeGroup ref="objectAttrs"/>
     <xs:attribute name="radius"   type="xs:float"/>
@@ -369,6 +402,7 @@
       <xs:element name="deform"     type="deformType"    minOccurs="0"/>
       <xs:element name="uv_mapping" type="uvMappingType" minOccurs="0"/>
       <xs:element name="metadata"   type="metadataType"  minOccurs="0"/>
+      <xs:element name="state"      type="objectStateType" minOccurs="0" maxOccurs="unbounded"/>
     </xs:sequence>
     <xs:attributeGroup ref="objectAttrs"/>
     <xs:attribute name="radius"       type="xs:float"/>
@@ -383,6 +417,7 @@
       <xs:element name="deform"     type="deformType"    minOccurs="0"/>
       <xs:element name="uv_mapping" type="uvMappingType" minOccurs="0"/>
       <xs:element name="metadata"   type="metadataType"  minOccurs="0"/>
+      <xs:element name="state"      type="objectStateType" minOccurs="0" maxOccurs="unbounded"/>
     </xs:sequence>
     <xs:attributeGroup ref="objectAttrs"/>
     <xs:attribute name="size"           type="vec3Type"/>
@@ -396,6 +431,7 @@
       <xs:element name="deform"     type="deformType"    minOccurs="0"/>
       <xs:element name="uv_mapping" type="uvMappingType" minOccurs="0"/>
       <xs:element name="metadata"   type="metadataType"  minOccurs="0"/>
+      <xs:element name="state"      type="objectStateType" minOccurs="0" maxOccurs="unbounded"/>
     </xs:sequence>
     <xs:attributeGroup ref="objectAttrs"/>
     <xs:attribute name="radius"   type="xs:float"/>
@@ -408,6 +444,7 @@
       <xs:element name="deform"     type="deformType"    minOccurs="0"/>
       <xs:element name="uv_mapping" type="uvMappingType" minOccurs="0"/>
       <xs:element name="metadata"   type="metadataType"  minOccurs="0"/>
+      <xs:element name="state"      type="objectStateType" minOccurs="0" maxOccurs="unbounded"/>
     </xs:sequence>
     <xs:attributeGroup ref="objectAttrs"/>
     <xs:attribute name="src" type="xs:string" use="required"/>
@@ -421,6 +458,7 @@
       <xs:element name="cross_section" type="crossSectionType" minOccurs="1" maxOccurs="1"/>
       <xs:element name="path"          type="pathType"         minOccurs="1" maxOccurs="1"/>
       <xs:element name="metadata"      type="metadataType"     minOccurs="0"/>
+      <xs:element name="state"         type="objectStateType"  minOccurs="0" maxOccurs="unbounded"/>
     </xs:sequence>
     <xs:attributeGroup ref="objectAttrs"/>
     <xs:attribute name="segments" type="xs:positiveInteger"/>
@@ -432,18 +470,22 @@
   <!-- instance -->
   <xs:complexType name="instanceType">
     <xs:sequence>
-      <xs:element name="deform"   type="deformType"   minOccurs="0"/>
-      <xs:element name="metadata" type="metadataType" minOccurs="0"/>
+      <xs:element name="deform"   type="deformType"      minOccurs="0"/>
+      <xs:element name="metadata" type="metadataType"    minOccurs="0"/>
+      <xs:element name="state"    type="objectStateType" minOccurs="0" maxOccurs="unbounded"/>
     </xs:sequence>
     <xs:attributeGroup ref="objectAttrs"/>
-    <xs:attribute name="definition" type="xs:IDREF" use="required"/>  <!-- references definition/@id -->
+    <xs:attribute name="definition"        type="xs:IDREF"  use="required"/>  <!-- references definition/@id -->
+    <xs:attribute name="material_override" type="xs:IDREF"/>                 <!-- references material/@id -->
+    <xs:attribute name="variants"          type="xs:string"/>                <!-- space-separated definition ids -->
   </xs:complexType>
 
   <!-- area -->
   <xs:complexType name="areaType">
     <xs:sequence>
-      <xs:element name="deform"   type="deformType"   minOccurs="0"/>
-      <xs:element name="metadata" type="metadataType" minOccurs="0"/>
+      <xs:element name="deform"   type="deformType"      minOccurs="0"/>
+      <xs:element name="metadata" type="metadataType"    minOccurs="0"/>
+      <xs:element name="state"    type="objectStateType" minOccurs="0" maxOccurs="unbounded"/>
     </xs:sequence>
     <xs:attributeGroup ref="objectAttrs"/>
     <xs:attribute name="size" type="vec3Type"/>
@@ -453,8 +495,9 @@
 
   <xs:complexType name="objectsContainerType">
     <xs:sequence>
-      <xs:element name="deform"   type="deformType"   minOccurs="0"/>
-      <xs:element name="metadata" type="metadataType" minOccurs="0"/>
+      <xs:element name="deform"   type="deformType"      minOccurs="0"/>
+      <xs:element name="metadata" type="metadataType"    minOccurs="0"/>
+      <xs:element name="state"    type="objectStateType" minOccurs="0" maxOccurs="unbounded"/>
       <xs:choice  minOccurs="0" maxOccurs="unbounded">
         <xs:element name="box"          type="boxType"/>
         <xs:element name="cube"         type="cubeType"/>
@@ -497,8 +540,12 @@
 
   <xs:complexType name="environmentType">
     <xs:sequence>
-      <xs:element name="background" type="backgroundType" minOccurs="0"/>
-      <xs:element name="fog"        type="fogType"        minOccurs="0"/>
+      <xs:element name="background"         type="backgroundType" minOccurs="0"/>
+      <!-- Written as separate text-content sibling elements by Mc3XmlWriter,
+           not via backgroundType's unused "texture" attribute below. -->
+      <xs:element name="background_texture" type="xs:string"      minOccurs="0"/>
+      <xs:element name="skybox_texture"     type="xs:string"      minOccurs="0"/>
+      <xs:element name="fog"                type="fogType"        minOccurs="0"/>
     </xs:sequence>
   </xs:complexType>
 
@@ -578,6 +625,9 @@
   <!-- mixed="true" allows inline SVG CDATA content -->
   <xs:complexType name="textureElementType" mixed="true">
     <xs:attribute name="id"          type="xs:ID"           use="required"/>
+    <!-- Display name, independent of id (editor: "rename texture"); if
+         omitted, readers should fall back to id. -->
+    <xs:attribute name="name"        type="xs:string"/>
     <!-- type: "bitmap" (default) or "svg" -->
     <xs:attribute name="type"        type="xs:string"        default="bitmap"/>
     <!-- bitmap textures: uri points to image file -->

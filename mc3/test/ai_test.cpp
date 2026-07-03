@@ -227,6 +227,29 @@ static void testValidateAndParseAiResponsePipelineAcceptsValidXsd() {
           "STAB-0391: the full pipeline accepts a schema-conformant AI response");
 }
 
+// Regression test for a follow-up audit (post-STAB-0391): mc3.xsd was
+// missing declarations for several attributes/elements that
+// Mc3XmlWriter/Mc3XmlParser actually read/write — object `layer`, instance
+// `material_override`/`variants`, and per-object `<state>` children chief
+// among them (see plan.md). Each would have made a perfectly valid,
+// round-tripping AI response get wrongly rejected by this exact pipeline.
+// Fixed in mc3.xsd; this test exercises all three constructs at once so a
+// future regression here fails loudly.
+static void testValidateAndParseAiResponseAcceptsPreviouslyUndeclaredConstructs() {
+    auto result = validateAndParseAiResponseAlg(
+        "<mc3 version=\"0.3\">"
+        "<materials><material id=\"stone\"/></materials>"
+        "<definitions><definition id=\"crate\"><box size=\"1 1 1\"/></definition></definitions>"
+        "<objects>"
+        "<box id=\"b1\" size=\"1 1 1\" layer=\"Foreground\">"
+        "<state id=\"on\" visible=\"true\"/>"
+        "</box>"
+        "<instance id=\"i1\" definition=\"crate\" material_override=\"stone\" variants=\"a b\"/>"
+        "</objects></mc3>");
+    CHECK(result.doc.has_value(),
+          "XSD audit regression: layer/state/material_override/variants no longer false-reject");
+}
+
 #ifdef MESHCRAFT_HAS_LIBXML2
 // These two only hold when libxml2 is actually compiled in — without it,
 // validateXmlAgainstXsdAlg is a no-op that never rejects (see its doc
@@ -381,6 +404,7 @@ int main() {
     testValidateAndParseAcceptsNonEmptyDocument();
     testValidateXmlAgainstXsdAcceptsValidDocument();
     testValidateAndParseAiResponsePipelineAcceptsValidXsd();
+    testValidateAndParseAiResponseAcceptsPreviouslyUndeclaredConstructs();
 #ifdef MESHCRAFT_HAS_LIBXML2
     testValidateXmlAgainstXsdRejectsInvalidDocument();
     testValidateAndParseAiResponsePipelineRejectsInvalidXsd();

@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- XSD validation fixture for schema/writer drift found and fixed during
+     an mc3.xsd audit (see plan.md): every construct below is written by
+     Mc3XmlWriter and read back by Mc3XmlParser today, but previously had
+     no XSD declaration at all, so it would have failed strict XSD
+     validation (e.g. via the AI response pipeline's validateXmlAgainstXsdAlg,
+     STAB-0391) despite being perfectly valid, real, round-tripping data. -->
+<mc3 version="0.3" model="XsdGapsFixedFixture">
+
+  <environment>
+    <background color="0.1 0.1 0.15"/>
+    <background_texture>textures/bg.png</background_texture>
+    <skybox_texture>textures/sky.png</skybox_texture>
+  </environment>
+
+  <materials>
+    <material id="wood" roughness="0.6"><base_color>0.4 0.25 0.1 1.0</base_color></material>
+    <material id="stone" roughness="0.9"><base_color>0.5 0.5 0.5 1.0</base_color></material>
+  </materials>
+
+  <definitions>
+    <definition id="crate">
+      <box name="Crate" size="1 1 1"/>
+    </definition>
+  </definitions>
+
+  <objects>
+    <!-- object `layer` attribute -->
+    <box name="LayeredBox" size="1 1 1" layer="Foreground" material="wood"/>
+
+    <!-- per-object <state> children (Mc3Object::states — distinct from the
+         document-level <states><state name="..."> N6 scene states) -->
+    <sphere name="Toggle" radius="0.5">
+      <state id="on"  visible="true"  material="wood"/>
+      <state id="off" visible="false" position="0 -5 0"/>
+    </sphere>
+
+    <!-- instance-specific material_override / variants -->
+    <instance name="Crate1" definition="crate" material_override="stone"
+              variants="crate_gothic crate_modern" position="2 0 0"/>
+
+    <!-- uv_mapping's actual per-axis attributes -->
+    <box name="TiledBox" size="2 2 2" position="4 0 0">
+      <uv_mapping projection="box" scale_u="2" scale_v="2" offset_u="0.1" offset_v="0.1" rotation="15"/>
+    </box>
+  </objects>
+
+</mc3>

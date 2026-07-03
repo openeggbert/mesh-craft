@@ -1290,6 +1290,41 @@ static void testSvgTexture() {
 }
 
 // ---------------------------------------------------------------------------
+// Texture display name (Mc3Texture::name) surviving a roundtrip when it
+// differs from the map key / XML id — found while auditing mc3.xsd for
+// writer/parser drift: the editor's "rename texture" UI
+// (MeshCraftApplication_UiLeftPanel.cpp) sets tex.name independently of the
+// map key, Mc3XmlWriter writes it as a `name` attribute when it differs
+// from `id`, but Mc3XmlParser previously always reset tex.name = id on
+// load, silently discarding the rename on every save/reload. Fixed to read
+// the `name` attribute back (falling back to id when absent, same as
+// before for files that never set it).
+// ---------------------------------------------------------------------------
+
+static void testTextureNameDiffersFromId() {
+    Mc3Document doc;
+    doc.addTexture(Mc3Texture{"tex1", "foo.png"});
+    // Simulate the editor's rename-texture UI: map key ("tex1", becomes the
+    // XML id) stays fixed, only the display name changes.
+    doc.textures["tex1"].name = "Diffuse Texture";
+
+    auto rt = roundtrip(doc);
+    CHECK(rt.textures.count("tex1") == 1, "texture rename rt: entry present under original id");
+    if (rt.textures.count("tex1")) {
+        CHECK(rt.textures.at("tex1").name == "Diffuse Texture",
+              "texture rename rt: display name survives (was silently reset to id before the fix)");
+    }
+
+    // Negative control: when name was never changed (matches id), no `name`
+    // attribute is written at all, and the parser's fallback still yields name==id.
+    Mc3Document doc2;
+    doc2.addTexture(Mc3Texture{"tex2", "bar.png"});
+    auto rt2 = roundtrip(doc2);
+    CHECK(rt2.textures.count("tex2") == 1 && rt2.textures.at("tex2").name == "tex2",
+          "texture rename rt: unrenamed texture still defaults name to id");
+}
+
+// ---------------------------------------------------------------------------
 // STAB-0070 — Disk with inner_radius="0.3" loaded from XML
 // ---------------------------------------------------------------------------
 
@@ -1631,6 +1666,7 @@ int main(int argc, char* argv[]) {
     testAnimationEvaluate();
     testEmbedGltf();
     testSvgTexture();
+    testTextureNameDiffersFromId();
     testScript();
     testSoundMusic();
     testTrigger();

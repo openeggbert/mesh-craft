@@ -469,7 +469,7 @@ static void parseTextures(const XMLElement* el, Mc3Document& doc) {
             continue;
         }
         Mc3Texture tex;
-        tex.name       = id;
+        tex.name       = attr(c, "name", id.c_str());
         tex.uri        = attr(c, "uri");
         tex.wrapU      = attr(c, "wrap_u",      "repeat");
         tex.wrapV      = attr(c, "wrap_v",      "repeat");
