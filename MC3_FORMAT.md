@@ -382,7 +382,12 @@ Unsupported child types cause the export to **fail with an error** in default mo
 
 Pass `--allow-approximate-csg` (CLI) or enable the "Allow approximate CSG export" checkbox (editor) to bypass Manifold evaluation and export children as separate meshes instead. This mode is **geometrically incorrect** and intended only as a debug fallback.
 
-**Limitations of CSG output:** result mesh has flat normals (no smooth shading); UVs are not generated; child material assignments are not preserved — the CSG root's material is used for the merged mesh.
+**Strict mode is the default** (`allowApproximateCSG = false` in `GltfExporter`; the `mc3togltf_csg_strict` test asserts this): a CSG node containing an unsupported child type fails the whole export with an error rather than silently producing wrong geometry. There is no separate "strict" flag to set — it's simply what happens unless `--allow-approximate-csg` is explicitly passed.
+
+**Limitations of CSG output** (the Manifold-evaluated result mesh, not the approximate-fallback path), per `CsgEvaluator.cpp`'s `manifoldToMeshData()`:
+- **UV coordinates are not real** — a texcoord channel is present (same vertex count as positions/normals), but every value is a hardcoded `(0, 0)` placeholder, not an actual UV unwrap. Any material with texture slots (base color, normal, etc.) samples the same texel everywhere on a CSG result.
+- **Normals are not preserved from the child geometry** — flat per-face normals are recomputed from each triangle's winding via cross product; there is no smooth-shading / vertex-normal-interpolation option for CSG output.
+- Child material assignments are not preserved — the CSG root's material is used for the entire merged mesh, regardless of what materials the children had.
 
 ---
 
@@ -423,6 +428,9 @@ Pass `--allow-approximate-csg` (CLI) or enable the "Allow approximate CSG export
 | Torus, Capsule, Disk, Grid, IcoSphere | ✅ |
 | CSG (union/difference/intersection) | ✅ (evaluated by Manifold; unsupported child types fail the export; `--allow-approximate-csg` exports children separately as debug fallback) |
 | Instance (via definitions) | ✅ |
+| SVG textures (N1, `<textures><texture>` with an SVG source) | ❌ — `svgTextures` is a separate map in `Mc3Document` that `GltfExporter` never reads at all; an SVG-sourced texture is silently dropped, not warned about. Rasterization isn't implemented anywhere yet (editor viewport included) |
+| Embedded glTF (N2, `<mesh src="embed:id"/>`) | ❌ — treated as a literal OBJ file path, which fails to parse; the export doesn't crash but continues with **no mesh on that node** (`Warning: OBJ load failed (...)` on stderr, `stats.warnings` incremented). See STAB-0194 for the tracked automated test of this exact behavior |
+| Scripts, Sounds, Music, Triggers, Scene States, Meta (N3-N7) | ❌ (no glTF equivalent — these are MCB/XML-only data, round-tripped but not translated to any glTF concept; see [Scripts (N3)](#scripts-n3) etc. above) |
 
 ---
 
