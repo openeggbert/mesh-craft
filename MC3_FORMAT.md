@@ -26,16 +26,51 @@ MC3 (MeshCraft 3D) is an XML-based scene format (`.mc3.xml`). It describes a 3D 
 
 ```xml
 <mc3 ...>
+  <meta>...</meta>
   <environment>...</environment>
   <lights>...</lights>
   <cameras>...</cameras>
   <textures>...</textures>
   <materials>...</materials>
+  <scripts>...</scripts>
+  <sounds>...</sounds>
+  <music>...</music>
+  <triggers>...</triggers>
+  <states>...</states>
   <definitions>...</definitions>
   <objects>...</objects>
   <actions>...</actions>
 </mc3>
 ```
+
+All sections are optional, but **the XSD schema (`mc3/mc3.xsd`) requires
+whichever sections are present to appear in this exact order** —
+`<objects>` before `<materials>`, for example, fails schema validation
+even though `Mc3XmlParser` itself is lenient about order. This matters
+in practice: the AI Assistant's "Apply to Scene" pipeline validates
+AI-generated XML against this schema (see MESHCRAFT_HAS_LIBXML2 in
+`AiResponseAlgorithms.hpp`) and rejects out-of-order responses.
+
+---
+
+## Meta (N7)
+
+Free-form document-level key/value metadata — author, license, description, version tags, etc. Purely descriptive; not interpreted by the parser, exporter, or editor beyond round-tripping it.
+
+```xml
+<meta>
+  <metaentry key="author"      value="Jane Doe"/>
+  <metaentry key="license"     value="MIT"/>
+  <metaentry key="description" value="A small demo scene"/>
+</meta>
+```
+
+| Attribute | Type | Required |
+|-----------|------|----------|
+| `key` | string | yes |
+| `value` | string | yes |
+
+**Note:** this is distinct from the older `<metadata>` section (`<property name="..." value="..."/>` children), which exists for opaque pass-through data captured during import from other formats. `<meta>`/`<metaentry>` is the newer, general-purpose key/value store — prefer it for new content.
 
 ---
 
@@ -105,6 +140,117 @@ MC3 (MeshCraft 3D) is an XML-based scene format (`.mc3.xml`). It describes a 3D 
   </material>
 </materials>
 ```
+
+---
+
+## Scripts (N3)
+
+Inline Lua source, referenced by id from `<triggers>` (`<run-script ref="..."/>`) or by future runtime hooks. The script body is the element's text content (CDATA-safe via `mixed="true"` in the schema).
+
+```xml
+<scripts>
+  <script id="onStart"   type="lua">print("scene started")</script>
+  <script id="onCollide" type="lua">player:takeDamage(10)</script>
+</scripts>
+```
+
+| Attribute | Type | Required | Notes |
+|-----------|------|----------|-------|
+| `id` | ID | yes | Referenced by `<run-script ref="...">` |
+| `type` | string | yes | Only `"lua"` is currently defined |
+
+**Status:** data model, parser, writer, MCB round-trip, and XSD validation are complete (STAB-0032). There is no Lua interpreter embedded in the editor or exporters yet — scripts are stored and round-tripped, not executed.
+
+---
+
+## Sounds and Music (N4)
+
+One-shot/loopable sound effects and background music tracks, referenced by id from `<triggers>` (`<play-sound ref="...">`, `<play-music ref="...">`).
+
+```xml
+<sounds>
+  <sound id="explosion" src="sounds/explosion.ogg" loop="false"/>
+  <sound id="footstep"  src="sounds/footstep.ogg"  loop="true"/>
+</sounds>
+
+<music>
+  <track id="theme"  src="music/theme.ogg"  loop="true"/>
+  <track id="battle" src="music/battle.ogg" loop="true"/>
+</music>
+```
+
+| Element | Attribute | Type | Required | Default |
+|---------|-----------|------|----------|---------|
+| `<sound>` | `id` | ID | yes | — |
+| `<sound>` | `src` | URI | yes | — |
+| `<sound>` | `loop` | bool | no | `false` |
+| `<track>` (inside `<music>`) | `id` | ID | yes | — |
+| `<track>` (inside `<music>`) | `src` | URI | yes | — |
+| `<track>` (inside `<music>`) | `loop` | bool | no | `true` |
+
+**Status:** data model, parser, writer, MCB round-trip, and XSD validation are complete (STAB-0032). No audio playback is implemented in the editor or exporters — these are data-only for now.
+
+---
+
+## Triggers (N5)
+
+Named sequences of steps — references into `<actions>`, `<sounds>`, `<scripts>`, and `<music>` — intended to be fired by future gameplay/event logic.
+
+```xml
+<triggers>
+  <trigger id="door_open">
+    <play-action ref="anim_open"/>
+    <play-sound  ref="creak"/>
+    <run-script  ref="onOpen"/>
+  </trigger>
+  <trigger id="pickup">
+    <play-action ref="pickup_anim"/>
+    <play-music  ref="fanfare"/>
+  </trigger>
+</triggers>
+```
+
+| Step element | References |
+|--------------|------------|
+| `<play-action ref="..."/>` | an `<action name="...">` in `<actions>` |
+| `<play-sound ref="..."/>` | a `<sound id="...">` in `<sounds>` |
+| `<play-music ref="..."/>` | a `<track id="...">` in `<music>` |
+| `<run-script ref="..."/>` | a `<script id="...">` in `<scripts>` |
+
+A `<trigger>` can contain any number of steps in any order/combination. `ref` values are plain strings in the schema (not `IDREF`) — cross-references are not validated at parse time.
+
+**Status:** data model, parser, writer, MCB round-trip, and XSD validation are complete (STAB-0043). Nothing in the editor or exporters currently fires triggers — there's no event system wired up to them yet.
+
+---
+
+## Scene States (N6)
+
+Named snapshots of per-object property overrides (visibility, transform, material) — e.g. "day" vs. "night" variants of the same scene.
+
+```xml
+<states>
+  <state name="day">
+    <object-override id="lamp" visible="false"/>
+    <object-override id="sun"  visible="true" material="day_mat"/>
+  </state>
+  <state name="night">
+    <object-override id="lamp" visible="true" position="0 3 0" material="night_mat"/>
+    <object-override id="sun"  visible="false"/>
+  </state>
+</states>
+```
+
+| Attribute (on `<object-override>`) | Type | Required |
+|-------------------------------------|------|----------|
+| `id` | string | yes — the target object's `id` attribute (see [Objects](#objects)) |
+| `visible` | bool | no |
+| `position` | vec3 | no |
+| `rotation` | vec3 | no |
+| `material` | string | no |
+
+Only the attributes present on `<object-override>` are overridden; everything else keeps the target object's base value.
+
+**Status:** data model, parser, writer, MCB round-trip, and XSD validation are complete (STAB-0044). There is no runtime "apply state" logic in the editor yet — states are stored and round-tripped, not switched between at runtime.
 
 ---
 
@@ -277,6 +423,46 @@ Pass `--allow-approximate-csg` (CLI) or enable the "Allow approximate CSG export
 | Torus, Capsule, Disk, Grid, IcoSphere | ✅ |
 | CSG (union/difference/intersection) | ✅ (evaluated by Manifold; unsupported child types fail the export; `--allow-approximate-csg` exports children separately as debug fallback) |
 | Instance (via definitions) | ✅ |
+
+---
+
+## MCB Binary Format
+
+MCB (`.mcb`) is a compact binary encoding of the exact same `Mc3Document` model that `.mc3.xml` describes — same fields, same tree structure, just serialized as tagged binary values instead of XML text. It exists for faster load times at runtime; it is not a separate format with different capabilities, and every `.mc3.xml` scene round-trips through MCB losslessly (see `mc3_roundtrip`/`mcb_roundtrip`/`mc3tomcb_roundtrip` tests).
+
+**File extension:** `.mcb`
+
+**Producing an MCB file** — via the `mc3tomcb` CLI (direction is chosen by file extension):
+
+```sh
+./cmake-build-debug/mc3tomcb/mc3tomcb scene.mc3.xml scene.mcb   # XML -> MCB
+./cmake-build-debug/mc3tomcb/mc3tomcb scene.mcb scene.mc3.xml   # MCB -> XML
+```
+
+Or from C++, via the `Mcb` library (`mcb/include/MeshCraft/Mcb/`):
+
+```cpp
+#include <MeshCraft/Mcb/McbWriter.hpp>
+#include <MeshCraft/Mcb/McbReader.hpp>
+
+MeshCraft::Mcb::saveToFile(doc, "scene.mcb");
+Mc3::Mc3Document doc2 = MeshCraft::Mcb::loadFromFile("scene.mcb");
+```
+
+**Header layout** (`mcb/include/MeshCraft/Mcb/McbFormat.hpp`):
+
+| Offset | Size | Field | Notes |
+|--------|------|-------|-------|
+| 0 | 4 bytes | Magic | `"MCB\0"` |
+| 4 | 1 byte | Version | Currently `1` (`MCB_VERSION`); readers reject any other value |
+| 5 | 1 byte | Flags | Bit 0 = compressed payload — **defined but not implemented**; a reader throws if this bit is set |
+| 6-7 | 2 bytes | Reserved | Always `0` |
+| 8 | 1 byte | Root tag | Always `TAG_OBJ` (`0x07`) |
+| 9+ | — | Payload | The document as a tagged key/value tree (see below) |
+
+**Payload encoding:** every value is a 1-byte type tag followed by its data — `TAG_BOOL`/`TAG_I32`/`TAG_F32` (fixed-size), `TAG_STR` (uint32 length + UTF-8 bytes, no null terminator), `TAG_VEC3`/`TAG_VEC4` (3 or 4 float32), `TAG_OBJ` (key/value pairs terminated by a zero-length key), `TAG_ARR` (uint32 count + that many tagged values), `TAG_MAP` (uint32 count + that many `STR key` + tagged value pairs). Every `Mc3Document` field (objects, materials, textures, definitions, scripts, sounds, music, triggers, states, meta, etc. — including all N1-N7 extensions) is written under a string key matching its XML element/attribute name, so the two formats stay structurally parallel.
+
+**Relationship to `.mc3.xml`:** MCB is a runtime-loading optimization, not an authoring format — there is no MCB-specific editor UI; you edit `.mc3.xml` and convert to `.mcb` as a build/export step (or open a `.mcb` directly, which the app transparently round-trips through the same `Mc3Document` model). Compression (flags bit 0) is reserved in the header for a future zlib payload but not implemented — an MCB file with that bit set cannot currently be read.
 
 ---
 

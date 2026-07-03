@@ -768,20 +768,20 @@ _Generated: 2026-06-27 from full codebase + test audit. Replaces previous 100-ta
 | STAB-0576 | ✅ | P0 | README: "XML-based (.mc3.xml)" not "YAML-based" | `README.md` | S11 done |
 | STAB-0577 | ✅ | P0 | README: feature list accurate | `README.md` | S11 done |
 | STAB-0578 | ✅ | P0 | README: build instructions correct (ninja, cmake-build-debug) | `README.md` | S11 done |
-| STAB-0579 | 🟡 | P1 | README: add note that `file(GLOB_RECURSE)` requires reconfigure | `README.md` | README warns about cmake reconfigure after adding .cpp files |
-| STAB-0580 | 🟡 | P1 | README: add C++23 compiler requirement | `README.md` | README states GCC ≥ 13 or Clang ≥ 17 required |
-| STAB-0581 | 🟡 | P1 | README: document lxml dependency for `xsd_validation` | `README.md` | README says `pip3 install lxml` required for XSD test |
+| STAB-0579 | ✅ | P1 | README: add note that `file(GLOB_RECURSE)` requires reconfigure | `README.md` | Added a note under "Build with SDL_RENDERER backend": sources are globbed, so a new `.cpp` file (or CMakeLists.txt-registered test executable) needs a `cmake -S . -B cmake-build-debug` reconfigure — `ninja` alone won't pick it up. |
+| STAB-0580 | ✅ | P1 | README: add C++23 compiler requirement | `README.md` | Already present (line 46): "C++23-capable compiler (GCC 13+, Clang 16+, MSVC 2022+)" — satisfies the ask (a stated compiler requirement); no enforced version check exists in CMakeLists.txt to cross-verify the exact minimums against, so the stated numbers are left as-is. |
+| STAB-0581 | ✅ | P1 | README: document lxml dependency for `xsd_validation` | `README.md` | Already present (line 47): "Python 3 + `lxml` (for XSD validation tests)". |
 | STAB-0582 | ✅ | P0 | MC3_FORMAT.md: created and documents all sections | `MC3_FORMAT.md` | S12 done |
-| STAB-0583 | 🟡 | P1 | MC3_FORMAT.md: update for N3-N7 new elements | `MC3_FORMAT.md` | `<scripts>`, `<sounds>`, `<music>`, `<triggers>`, `<states>`, `<meta>` sections added |
-| STAB-0584 | 🟡 | P1 | MC3_FORMAT.md: document MCB format alongside XML | `MC3_FORMAT.md` | MCB section: what it is, how to produce, file extension, relationship to mc3.xml |
+| STAB-0583 | ✅ | P1 | MC3_FORMAT.md: update for N3-N7 new elements | `MC3_FORMAT.md` | Added `## Meta (N7)`, `## Scripts (N3)`, `## Sounds and Music (N4)`, `## Triggers (N5)`, `## Scene States (N6)` sections, each with an example drawn from the real `test/n*_*.mc3.xml` fixtures, an attribute table, and an honest "Status" line (data model/parser/writer/MCB/XSD complete; not yet executed/applied at runtime — no Lua interpreter, no audio playback, no trigger-firing, no state-switching). Also updated the "Top-level sections" overview to list all sections and added a note that the XSD enforces a strict root-element order (relevant now that STAB-0391 wired real XSD validation into the AI response pipeline). |
+| STAB-0584 | ✅ | P1 | MC3_FORMAT.md: document MCB format alongside XML | `MC3_FORMAT.md` | Added `## MCB Binary Format`: what it is (same `Mc3Document` model, binary encoding), file extension, how to produce it (CLI + C++ API, verified function names against `McbWriter.hpp`/`McbReader.hpp`), header byte layout (magic/version/flags/reserved/root-tag, verified against `McbFormat.hpp` and the actual `saveToBinary`/`loadFromBinary` read/write code), payload tag encoding, and relationship to `.mc3.xml` (runtime-loading optimization, not a separate authoring format; compression flag reserved but not implemented). |
 | STAB-0585 | 📋 | P1 | MC3_FORMAT.md: document export support matrix (mc3togltf limitations) | `MC3_FORMAT.md` | Table: which features export to glTF, which produce warnings, which are unsupported |
-| STAB-0586 | 🟡 | P1 | STABILIZATION.md: update to reflect new stabilization plan | `STABILIZATION.md` | STABILIZATION.md shows STAB-XXXX task IDs; policy section updated |
-| STAB-0587 | 🟡 | P1 | NEXT.md: rewritten to be short and operational | `NEXT.md` | NEXT.md shows current gate, exact next task, commands to run |
+| STAB-0586 | ✅ | P1 | STABILIZATION.md: update to reflect new stabilization plan | `STABILIZATION.md` | Full rewrite: replaced the stale "15 CTest tests"/old S1-S12 "Completed Phases" narrative and outdated "Known Gaps" (several already fixed — MCB roundtrip test, N3-N7 XSD fixtures, AI mock tests all exist now) with a gate table showing each gate's exact `STAB-XXXX` range and its priority-list status, the current 20-test list, a "Known Gaps" section that points to `NEXT.md` §5 as the actively-maintained source of truth (with a short current headline list) instead of duplicating it, and a brief historical note on the S1-S12→S0-S20 replan. |
+| STAB-0587 | ✅ | P1 | NEXT.md: rewritten to be short and operational | `NEXT.md` | Already satisfied by this session's earlier full rewrite (commit `a837492`) per the user's explicit 10-section spec — shows current status, current blocker, and exact next task with commands. Kept current incrementally every commit since. |
 | STAB-0588 | 📋 | P1 | m1m2m3.md: verify still accurate (M1/M2/M3 complete) | `m1m2m3.md` | Review m1m2m3.md against current code; mark any discrepancies |
 | STAB-0589 | 📋 | P1 | Document CSG limitations explicitly | `MC3_FORMAT.md` | Document: no UV, no normals preservation, strict mode default |
 | STAB-0590 | 📋 | P1 | Document AI integration limitations | `README.md` or `AI.md` | Document: no Emscripten support, key not stored, approximate validation |
 | STAB-0591 | 📋 | P1 | Document registry limitations | `README.md` or `AI.md` | Document: no thumbnail, SQLite required on desktop, no sync |
-| STAB-0592 | 📋 | P2 | Add TESTING.md: documents test suite, how to run, what each test covers | `TESTING.md` | New file; each test listed with purpose and expected output |
+| STAB-0592 | ✅ | P2 | Add TESTING.md: documents test suite, how to run, what each test covers | `TESTING.md` | New file: how to run (full suite, single test, direct binary, standalone builds), a reference table for all 20 tests (5 C++ assertion binaries with real measured `PASS:` counts, 15 CLI-driving Python tests) each with purpose + pass criteria, and a "writing a new test" section covering both registration patterns used in this repo. |
 | STAB-0593 | 📋 | P2 | Add contributor instructions (build setup, CLAUDE.md constraints) | `CONTRIBUTING.md` | How to add new .cpp file (reconfigure), CNA boundary, API change policy |
 | STAB-0594 | 📋 | P2 | Document `<include>` semantics fully | `MC3_FORMAT.md` | Include merge rules, local-override policy, cycle detection, skip-sets documented |
 | STAB-0595 | 📋 | P3 | Add release checklist | `RELEASE.md` | Checklist: build clean, all tests pass, docs current, sample files valid |
@@ -885,11 +885,11 @@ _Generated: 2026-06-27 from full codebase + test audit. Replaces previous 100-ta
 | S14 Rendering | 30 | 0 | 0 | 12 | 18 | 0 |
 | S15 Import/export | 25 | 0 | 0 | 6 | 19 | 0 |
 | S16 Cross-platform | 25 | 0 | 1 | 0 | 24 | 0 |
-| S17 Documentation | 20 | 4 | 7 | 0 | 9 | 0 |
+| S17 Documentation | 20 | 12 | 0 | 0 | 8 | 0 |
 | S18 Code quality | 25 | 0 | 3 | 2 | 20 | 0 |
 | S19 Security | 15 | 0 | 0 | 4 | 11 | 0 |
 | S20 Release | 15 | 0 | 0 | 0 | 15 | 0 |
-| **TOTAL** | **650** | **160** | **13** | **142** | **335** | **0** |
+| **TOTAL** | **650** | **168** | **6** | **142** | **334** | **0** |
 
 _Recomputed directly from per-row status markers (the table had drifted from
 actual row state over several prior sessions); derived, not hand-maintained

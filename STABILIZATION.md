@@ -1,114 +1,96 @@
 # MeshCraft Stabilization Policy and Summary
 
-_Last updated: 2026-06-27_
+_Last updated: 2026-07-03_
 
 ---
 
 ## Current Stabilization Policy
 
-1. **No new features until stabilization gates S0–S6 are green.**
+1. **No new features until stabilization gates are green.**
 2. Every task in `plan.md` requires:
    - Acceptance criteria
    - Verification command or test
-   - Status changed to ✅ only after test exists, is registered, runs, and passes
-3. Status symbols: ✅ verified · 🟡 partial · 🧪 needs test · 📋 planned · 🔴 bug
-4. Claude Code must ask before implementing any `plan.md` task (per CLAUDE.md workflow).
+   - Status changed to ✅ only after a test exists, is registered, runs, and passes
+3. Status symbols: ✅ verified · 🟡 partial · 🧪 has a plan/test but not executed or not fully verified · 📋 planned · 🔴 blocked
+4. Claude Code must ask before implementing any `plan.md` task (per `CLAUDE.md`'s workflow).
 5. No CNA changes without owner permission.
-6. No `${meta-gl_SOURCE_DIR}/include` in CMakeLists.txt.
-7. No `Mc3Document` public API changes without checking `mc3togltf` and all test XMLs.
+6. No `${meta-gl_SOURCE_DIR}/include` in `CMakeLists.txt`.
+7. No `Mc3Document` public API changes without checking `mc3togltf`, `mc3tomcb`, and all test XMLs.
 
 ---
 
 ## Stabilization Gates
 
-| Gate | Name | Condition |
-|------|------|-----------|
-| **Gate 0** | Build | All 15 CTest tests registered and passing; debug + release build verified |
-| **Gate 1** | Format | MC3 XML + MCB roundtrip for all features (N1-N7); XSD fixtures for all elements |
-| **Gate 2** | Export | All primitives/objects export; CSG real export; geometry reuse verified |
-| **Gate 3** | Editor safety | Undo for all destructive ops; save/load/autosave/backup verified; no dialog lifecycle bugs |
-| **Gate 4** | Registry/AI | AI mock tests; registry edge cases; non-SQLite/non-AI builds clean |
-| **Gate 5** | Large scene | 500-object test; export stats correct; memory acceptable |
-| **Gate 6** | Documentation | README, MC3_FORMAT, NEXT, STABILIZATION, m1m2m3 current and honest |
+The full backlog is 650 `STAB-XXXX` tasks in `plan.md`, sectioned S0-S20. Each gate below requires its **entire** `STAB-XXXX` range green — not just the handful of tasks in that gate's "Priority Execution Order" shortlist (`plan.md`'s own fast-path subset for getting a gate's headline risk closed quickly).
+
+| Gate | Name | Required range | Priority-list status |
+|------|------|-----------------|----------------------|
+| **Gate 0** | Build | STAB-0001–0025 green | ✅ done |
+| **Gate 1** | Format | STAB-0066–0150 green | ✅ done |
+| **Gate 2** | Export | STAB-0151–0260 green | ✅ done |
+| **Gate 3** | Editor safety | STAB-0261–0335 green | ✅ P1 items done; P2/P3 remain |
+| **Gate 4** | Registry/AI | STAB-0336–0410 green | ✅ priority-list items done (S9 registry edge cases, S10 AI mock tests + XSD validation); P2/P3 remain |
+| **Gate 5** | Large scene | STAB-0411–0470 green (subset) | ✅ priority-list items done (S6 mesh-reuse check + 500-object test); P2/P3 remain |
+| **Gate 6** | Documentation | STAB-0576–0650 green | in progress (this document is part of it) |
+
+None of the gates are fully green yet — see `plan.md`'s per-section summary table for the exact `STAB-XXXX` counts remaining in each. `NEXT.md` tracks the specific next task to pick up.
 
 ---
 
-## Completed Stabilization Phases (prior to 2026-06-27)
+## Current Test Suite (2026-07-03)
 
-### Phase 1 — Format (S1) ✅
-- Canonicalized `src` vs `source` in mc3togltf parser
-- Fixed plane `size` vec2 vs vec3 discrepancy
-
-### Phase 2 — mc3togltf refactoring (S3, S4) ✅
-- Removed duplicate `Mc3XmlParser` from mc3togltf
-- Added mc3togltf to root CMakeLists.txt (`add_subdirectory(mc3togltf)`)
-
-### Phase 3 — Build and tests (S5, S6, S7, S8) ✅
-- Verified full top-level build: all targets
-- Added `xsd_validation` CTest (Python/lxml)
-- Confirmed `mc3_roundtrip` test (110 tests)
-- Confirmed `mc3togltf_gltf` test (39 assertions)
-
-### Phase 4 — Primitives and CSG (S9, S10) ✅
-- Implemented Disk, Grid, IcoSphere, Torus, Capsule in MeshBuilder
-- CSG real export (Manifold); strict mode default; approximate fallback with flag
-
-### Phase 5 — Documentation (S11, S12) ✅
-- Fixed README (XML-based, accurate features, correct build steps)
-- Created MC3_FORMAT.md (canonical format specification)
-
-### N1-N7 Schema Extensions ✅
-- N1: SVG texture (Mc3SvgTexture, parser, writer, MCB, XSD, 10 tests)
-- N2: Embedded GLTF (Mc3EmbedGltf, parser, writer, MCB, XSD, 13 tests)
-- N3: Lua scripts (Mc3Script, parser, writer, MCB, XSD, 9 tests)
-- N4: Sound/music (Mc3Sound, Mc3Music, parser, writer, MCB, XSD, 13 tests)
-- N5: Triggers (Mc3Trigger, Mc3TriggerStep, parser, writer, MCB, XSD, 16 tests)
-- N6: Scene states (Mc3SceneState, Mc3ObjectOverride, parser, writer, MCB, XSD, 15 tests)
-- N7: Meta map (doc.meta, parser, writer, MCB, XSD, 10 tests)
-
----
-
-## Current Test Suite (2026-06-27)
-
-15 CTest tests, all passing (~2.7s total):
+20 CTest tests, all passing:
 
 | Test | What it covers |
 |------|---------------|
 | `smoke_test` | Editor binary starts, opens scene, exits cleanly |
 | `xsd_validation` | All `test/*.mc3.xml` validate against `mc3/mc3.xsd` |
-| `mc3_registry` | ModelRegistry SQLite CRUD + migration |
-| `mc3_roundtrip` | Full XML parser/writer roundtrip (all features) |
-| `mc3_commands` | 57 unit tests for EditorAlgorithms |
+| `mc3_registry` | ModelRegistry SQLite CRUD + migration + edge cases |
+| `mc3_ai` | AiAssistant JSON helpers, AI-response validation pipeline (extract/repair/parse/empty-check/XSD-validate), mock-HTTP-server round-trips (success/truncation/HTTP error) |
+| `mc3_roundtrip` | Full XML parser/writer roundtrip (all features, including N1-N7) |
+| `mc3_commands` | Editor command algorithms, undo/redo, save/load workflows, keybinding/prefs/macro persistence, hierarchy filtering |
+| `mcb_roundtrip` | MCB binary encode/decode roundtrip (N1-N7 included) |
+| `mc3tomcb_roundtrip` | `mc3tomcb` CLI roundtrip (`mc3.xml` ↔ `.mcb`) |
 | `mc3togltf_gltf` | Animation + house GLB export + magic bytes |
-| `mc3togltf_all_primitives` | All 10 primitive types export without error |
+| `mc3togltf_all_primitives` | All primitive types export without error |
 | `mc3togltf_export_verification` | Node count, mesh presence, material names |
 | `mc3togltf_large_scene` | Static 200-object scene export |
-| `mc3togltf_large_scene_generated` | Python-generated 200-object test |
-| `mc3togltf_csg_strict` | CSG fails hard without flag |
+| `mc3togltf_csg_strict` | CSG fails hard without the approximate-export flag |
 | `mc3togltf_csg_export` | Union/difference/intersection real export |
-| `mc3togltf_csg_unsupported` | Unsupported CSG child detected |
+| `mc3togltf_csg_unsupported` | Unsupported CSG child type detected |
+| `mc3togltf_csg_nested` | Nested CSG operations export correctly |
 | `mc3togltf_instance_deform_cache` | Deform cache key produces separate meshes |
 | `mc3togltf_float_cache_key` | Close float dimensions don't collide |
+| `mc3togltf_large_scene_generated` | Python-generated 200-object test; asserts mesh reuse (not 1 mesh per node) |
+| `mc3togltf_large_scene_500` | Same generator scaled to 500 objects; asserts export completes in < 30s |
+
+Also verified independently of the root build: standalone (CNA-free) configure/build/test for `mc3/`, `mcb/`, `mc3togltf/`, `mc3tomcb/` — each must stay buildable without CNA/ImGui, per `CLAUDE.md`.
+
+Run: `cd cmake-build-debug && ctest --output-on-failure` (see `NEXT.md` section 7 for the full command list, including a fresh configure).
 
 ---
 
-## Known Gaps (as of 2026-06-27)
+## Known Gaps (as of 2026-07-03)
 
-1. **No MCB binary roundtrip test** — N1-N7 MCB code compiles but no test verifies encode/decode (STAB-0121–0130)
-2. **No XSD fixtures for N3-N7** — `xsd_validation` doesn't exercise new elements (STAB-0041–0046)
-3. **AI tests require real network** — no mock test exists for AI pipeline (STAB-0371–0410)
-4. **EditorViewport not integrated** — `EditorViewport` class complete but unused in `MeshCraftApplication`
-5. **SVG rasterization not implemented** — N1 data model done; rasterization for GLTF export deferred
-6. **Embedded GLTF not resolved in exporter** — `embed:` meshSource not handled by GltfExporter
-7. **Include tracking missing** for `svgTextures` and `embeds` maps (N1-N2)
-8. **Many UI behaviors untested** — undo, save/load, dialog lifecycle, picking (S7-S8)
+See `NEXT.md` section 5 ("Known bugs and limitations") for the authoritative, actively-maintained list — it is kept current every session, unlike this document's historical narrative below. Headlines:
+
+- CI workflow exists but is parked deactivated under `.github_/` — the git PAT lacks the `workflow` OAuth scope needed to activate it (owner action required).
+- SVG texture rasterization (N1) is parsed/serialized but not rasterized (stub only).
+- Embedded glTF (N2) is parsed/serialized but not resolved/inlined by `GltfExporter`.
+- `EditorViewport` is not integrated into `MeshCraftApplication`'s render loop.
+- N3-N7 extensions (scripts, sounds, music, triggers, scene states) are fully round-tripped (XML, MCB, XSD) but **not executed/applied at runtime** — no Lua interpreter, no audio playback, no trigger-firing event system, no "switch active scene state" logic. This is by design at the current stage (data model first), not a bug — see `MC3_FORMAT.md` for the per-feature status notes.
+- MCB compression flag is reserved in the header but not implemented.
 
 ---
 
-## New Stabilization Backlog
+## Historical Note
 
-See `plan.md` for the full 650-task stabilization backlog (STAB-0001 through STAB-0650).
+Sections S1-S12 (referenced in commit history and early planning docs) predate the current S0-S20 / `STAB-XXXX` structure and were folded into it during the 2026-06-27 replan. All N1-N7 schema extensions (SVG texture, embedded glTF, Lua scripts, sounds/music, triggers, scene states, meta map) were completed — data model, parser, writer, MCB support, and XSD fixtures — before that replan and are tracked as done in `plan.md`.
 
-Next tasks: STAB-0001, STAB-0004, STAB-0019, STAB-0121–0130, STAB-0041–0046.
+---
 
-See `NEXT.md` for operational next steps.
+## Where to Look Next
+
+- **`plan.md`** — the full 650-task backlog (STAB-0001 through STAB-0650), the authoritative per-task status.
+- **`NEXT.md`** — short, operational: current status, current blocker (if any), and the exact next task to pick up.
+- **`MC3_FORMAT.md`** — the format specification, including per-feature implementation status notes.

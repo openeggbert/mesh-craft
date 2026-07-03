@@ -63,6 +63,12 @@ cmake -S . -B cmake-build-debug -DMESH_CRAFT_GRAPHICS_BACKEND=SDL_RENDERER
 ninja -C cmake-build-debug
 ```
 
+> **Note:** sources are collected with `file(GLOB_RECURSE)`, so CMake does
+> not automatically notice a newly added `.cpp` file. After adding one
+> (or a new CMakeLists.txt-registered test executable), re-run the
+> `cmake -S . -B cmake-build-debug` configure step before building —
+> `ninja` alone will not pick it up.
+
 ### Run
 
 ```sh
