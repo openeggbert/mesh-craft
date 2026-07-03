@@ -1,6 +1,6 @@
 # NEXT.md
 
-_Last updated: 2026-07-03_
+_Last updated: 2026-07-03 (later session)_
 
 ---
 
@@ -22,10 +22,13 @@ done** across S7 (Editor Save/Load), S8 (UI Robustness), and S13
 (Commands/Undo/Redo) — the gate itself isn't fully green yet because it
 requires the *entire* `STAB-0261–0335` range, and P2/P3 rows in that
 range remain. **Gate 4 (Registry/AI) is done**, including S9
-(ModelRegistry) and the AI mock-test cluster plus its 3 remaining P0
-verification items in S10. Gates 5–6 are untouched. Plan-wide totals
-(out of 650 `STAB-XXXX` rows): **157 ✅ done, 13 🟡 partial, 143 🧪 has a
-plan but not executed, 337 📋 not started.**
+(ModelRegistry) and all of Gate 4's `Priority Execution Order` items in
+S10 (AI mock tests, the 3 P0 verification items, and XSD validation of
+AI responses). Gates 5–6 are untouched. Note: Gate 4 itself isn't fully
+green yet — its checklist requires the *entire* `STAB-0336–0410` range,
+and P2/P3 rows in S9/S10 remain (see §5). Plan-wide totals (out of 650
+`STAB-XXXX` rows): **158 ✅ done, 13 🟡 partial, 143 🧪 has a plan but not
+executed, 336 📋 not started.**
 
 **Important architectural decisions:**
 - `mc3/` and `mcb/` are pure C++ static libs with **no** CNA/ImGui
@@ -59,7 +62,7 @@ plan but not executed, 337 📋 not started.**
   Last verified 2026-06-30.
 
 ### Tests
-**19/19 CTest pass** (last full run 2026-07-02, commit `f37c541`):
+**19/19 CTest pass** (last full run 2026-07-03, commit `8e590ce`):
 `smoke_test`, `xsd_validation`, `mc3_registry`, `mc3_ai`, `mc3_roundtrip`,
 `mc3_commands`, `mcb_roundtrip`, `mc3tomcb_roundtrip`, `mc3togltf_gltf`,
 `mc3togltf_all_primitives`, `mc3togltf_export_verification`,
@@ -77,10 +80,11 @@ plan but not executed, 337 📋 not started.**
   confirmation dialog lifecycles.
 - `mc3_registry`: open/save/search/remove/migration, registry-unavailable
   and search-field edge cases, schema introspection.
-- `mc3_ai` (new this session, 39 assertions): `AiAssistant`'s JSON
-  helpers, the AI-response validation pipeline (extract/repair/parse/
-  empty-check), and three end-to-end mock-HTTP-server round-trips
-  (success, truncation, HTTP error) — no real network call.
+- `mc3_ai` (45 assertions): `AiAssistant`'s JSON helpers, the AI-response
+  validation pipeline (extract/repair/parse/empty-check/XSD-validate),
+  three end-to-end mock-HTTP-server round-trips (success, truncation,
+  HTTP error) — no real network call — and XSD accept/reject cases
+  (STAB-0391, this session).
 
 See `plan.md`'s `STAB-XXXX` rows for the exhaustive per-behavior list;
 this summary intentionally stays high-level.
@@ -113,8 +117,10 @@ this summary intentionally stays high-level.
   rotation (fixed 2-slot ring buffer) on save.
 - AI Assistant: sends scene + prompt to the Claude API, extracts/repairs/
   validates the returned XML (including responses wrapped in markdown
-  fences or trailing prose — this was a real bug, fixed this session),
-  applies it to the scene or saves definitions to the registry.
+  fences or trailing prose — a real bug, fixed in an earlier session
+  this same day), validates it against `mc3.xsd` via libxml2 (new this
+  session, STAB-0391 — schema-embedded at compile time, no runtime file
+  path), applies it to the scene or saves definitions to the registry.
 
 ### What does NOT work yet
 - `EditorViewport` is not integrated into the `MeshCraftApplication`
@@ -131,8 +137,9 @@ this summary intentionally stays high-level.
 
 ## 3. Recent changes
 
-All changes are committed on `develop`; see §10 for the exact commit the
-push was last confirmed in sync at.
+All changes are committed on `develop` at `8e590ce`; see §10 for the
+last confirmed push-sync state (commits may be ahead of
+`origin/develop` — check before assuming they're pushed).
 
 **STAB-0377/0378/0379** (S10, P0 — verification-only, no new code):
 confirmed all three were already satisfied by existing code, so each was
@@ -147,6 +154,45 @@ simply marked ✅ in `plan.md` with a citation, no new test/code added:
 - STAB-0379: `MeshCraftApplication_UiAi.cpp:138-143` already pre-fills
   the key input buffer from `std::getenv("ANTHROPIC_API_KEY")` whenever
   the buffer is empty.
+
+**STAB-0391** (S10, P1 — real feature work, new dependency): added real
+XSD validation of AI-generated XML, closing the last item in Gate 4's
+`Priority Execution Order` list.
+- New `validateXmlAgainstXsdAlg(xml)` in `AiResponseAlgorithms.hpp`
+  (libxml2 `xmlSchema*` API), wired into `validateAndParseAiResponseAlg`
+  right after the structural-parse + empty-document checks.
+- `mc3.xsd` is embedded into a generated header at CMake configure time
+  (new `cmake/Mc3XsdEmbed.hpp.in` → `generated/MeshCraft/Mc3XsdEmbed.hpp`,
+  via `file(READ)` + `configure_file(... @ONLY)` in root `CMakeLists.txt`)
+  — validation never depends on a runtime file path or install layout.
+- New optional `find_package(LibXml2)` (desktop builds only), same
+  found/not-found pattern as SQLite3/OpenSSL: sets `MESHCRAFT_HAS_LIBXML2`
+  and links `libxml2` into both `MeshCraft` and `ai_test` when present;
+  when absent, `validateXmlAgainstXsdAlg` is a no-op that always reports
+  "valid" — schema validation degrades gracefully rather than blocking
+  "Apply to Scene" on a build without libxml2 (tinyxml2 structural
+  parsing already happened upstream either way). `libxml2-dev` 2.9.14
+  was present on this dev machine and is now a linked dependency of the
+  `MeshCraft` binary — confirmed via `ldd MeshCraft | grep xml`.
+- **Found and fixed a real, pre-existing schema/format gap** while
+  building this: `Mc3XmlWriter.cpp` writes an `id` attribute on every
+  scene object and `Mc3XmlParser.cpp` reads it back, but `mc3.xsd`'s
+  `objectAttrs` group never declared `id` as a valid attribute — so any
+  object carrying `id` (which is all of them, in practice) would have
+  failed strict XSD validation, even though it's a real, actively-used
+  part of the format. Fixed by adding
+  `<xs:attribute name="id" type="xs:string"/>` to `objectAttrs`.
+  Deliberately typed `xs:string`, not `xs:ID`: object ids aren't
+  referenced via IDREF anywhere, and `xs:ID` would pull them into the
+  same document-wide uniqueness namespace as material/texture/definition
+  ids — a constraint the app doesn't actually enforce.
+- 6 new assertions in `ai_test.cpp`: accept a schema-valid document;
+  reject `role="bogus"` (`roleType` only allows `"cutter"`) both
+  directly via `validateXmlAgainstXsdAlg` and through the full
+  `validateAndParseAiResponseAlg` pipeline.
+- Verified: root 19/19 (including `xsd_validation`, confirming the
+  schema fix didn't break any existing fixture), standalone `mc3` 1/1,
+  `MeshCraft` full rebuild links clean against libxml2.
 
 Across this session, Gate 3's P1 items (S7/S8/S13) and all of Gate 4
 (S9 + S10) were closed out, cluster by cluster, each verified with a
@@ -270,8 +316,19 @@ requires the repo owner to rotate/rescope the token.
   remainder of each is P2/P3, untested. _status: needs verification,
   tracked task-by-task in `plan.md`._
 - **S10 (AI) P0 items are now all closed** (STAB-0377/0378/0379
-  verified this session, no code changes needed); 25 P1/P2/P3 items
-  remain untouched. _status: P0 done, rest not started._
+  verified, no code changes needed) and Gate 4's `Priority Execution
+  Order` list is fully done (STAB-0391 XSD validation added); 24 P1/P2/P3
+  items remain untouched. _status: priority-list items done, rest not
+  started; note Gate 4 itself still needs the full `STAB-0336–0410`
+  range green to be considered closed._
+- **`mc3.xsd` may have other undeclared-but-actually-used attributes**
+  besides the object `id` gap just fixed (STAB-0391) — that gap was only
+  found because XSD validation was newly wired up and exercised against
+  real writer/parser behavior. No systematic audit of `mc3.xsd` vs.
+  `Mc3XmlWriter.cpp`/`Mc3XmlParser.cpp` has been done. _status: suspected,
+  needs verification — a good candidate for a future STAB task (diff the
+  writer's `SetAttribute` calls against the schema's declared attributes
+  per element)._
 
 ---
 
@@ -324,6 +381,17 @@ override to point `sendAsync()` at a local `httplib::Server` mock —
 socket for `http://`, so this changes nothing about production
 behavior. See `mc3/test/ai_test.cpp` for the pattern.
 
+**Embedding a resource file at compile time**: `mc3.xsd` is compiled
+into `MeshCraft`/`ai_test` as a raw string constant
+(`MeshCraft::kMc3XsdContent`) rather than read from disk at runtime.
+Root `CMakeLists.txt` does `file(READ mc3/mc3.xsd MC3_XSD_CONTENT)` then
+`configure_file(cmake/Mc3XsdEmbed.hpp.in .../generated/MeshCraft/
+Mc3XsdEmbed.hpp @ONLY)`, substituting `@MC3_XSD_CONTENT@` into a
+`R"MC3_XSD_EMBED(...)MC3_XSD_EMBED"` raw string literal. This is the
+project's first use of this pattern — reach for it again for any other
+resource that must be available regardless of CWD/install layout,
+instead of a runtime path lookup.
+
 **Hard constraints / invariants:**
 - `Mc3Document` public API: do not change without checking `mc3togltf`,
   `mc3tomcb`, and all test XMLs.
@@ -341,6 +409,14 @@ behavior. See `mc3/test/ai_test.cpp` for the pattern.
   requires a cmake reconfigure (a new `.py` test file does not; new test
   executables registered explicitly in `CMakeLists.txt`, like
   `ai_test`, need a reconfigure too).
+- `mc3.xsd` changes require a cmake reconfigure too (it's embedded into
+  a generated header at configure time, not read at build/run time —
+  see §6 "Embedding a resource file at compile time").
+- Editing `mc3.xsd`: any object attribute that `Mc3XmlWriter.cpp`
+  actually writes must also be declared in the schema (`objectAttrs` or
+  the specific element type) or real/AI-generated scenes using it will
+  fail XSD validation — see the `id` gap fixed in STAB-0391 (§3) and the
+  suspected-wider-gap note in §5.
 - MCB format version is `MCB_VERSION = 1` in `McbFormat.hpp` — bump on
   any breaking wire-format change.
 - XSD root element order: `include → metadata → meta → environment →
@@ -392,10 +468,22 @@ No project linter/formatter is configured.
 
 ## 8. Next smallest tasks
 
-1. **Move to P2 items** in whichever section is most valuable next —
+1. **Audit `mc3.xsd` for other undeclared-but-actually-used attributes**
+   (see §5) — the object `id` gap (STAB-0391) was found by accident; a
+   deliberate pass may find more, and each one is a latent false-reject
+   in AI-response XSD validation.
+   Goal: diff every `SetAttribute("name", ...)` call in
+   `mc3/src/Mc3XmlWriter.cpp` against the corresponding element's
+   declared attributes in `mc3/mc3.xsd`; fix any gap the same way `id`
+   was fixed (add the attribute to the schema, don't touch the writer).
+   Files: `mc3/src/Mc3XmlWriter.cpp`, `mc3/mc3.xsd`.
+   Verify: `ctest -R xsd_validation --output-on-failure` (must stay
+   passing) plus re-run `ai_test`'s XSD tests after any schema change.
+
+2. **Move to P2 items** in whichever section is most valuable next —
    with P0/P1 essentially exhausted across S7/S8/S9/S10/S13, the next
    tier by `plan.md`'s own priority scheme is P2 (then P3). Remaining
-   P2/P3 counts: S7: 7, S8: 23, S9: 13, S10: 25, S13: 14, plus
+   P2/P3 counts: S7: 7, S8: 23, S9: 13, S10: 24, S13: 14, plus
    untouched sections S11 (Materials, 30), S12 (Animation, 30), S14
    (Rendering, 30), S15 (Import/export, 25).
    Goal: pick by ID order within the chosen section; for each item,
@@ -406,7 +494,7 @@ No project linter/formatter is configured.
    Verify: the relevant `ctest -R <target>`, plus a full
    `ctest --output-on-failure` (expect 19/19 or higher).
 
-2. **(optional) Rotate the PAT and activate CI** — see §4 for the exact
+3. **(optional) Rotate the PAT and activate CI** — see §4 for the exact
    steps.
    Goal: replace the plaintext, under-scoped PAT in `.git/config` with a
    `repo`+`workflow`-scoped token (or SSH), then rename `.github_` →
@@ -441,6 +529,12 @@ No project linter/formatter is configured.
 - **No rewriting `AI_TRUNCATION_BUG.md` as a side effect of an unrelated
   task** — it's flagged as stale (§5), but cleaning it up should be its
   own small, deliberate step, not folded into other work.
+- **No typing object `id` (or any newly-added `mc3.xsd` attribute) as
+  `xs:ID`** without first checking whether the app actually enforces
+  document-wide uniqueness for it — `xs:ID` pulls the attribute into a
+  shared uniqueness namespace with materials/textures/definitions, which
+  is not an invariant the current writer/parser upholds for object ids
+  (see STAB-0391 in §3).
 
 ---
 
@@ -454,18 +548,24 @@ and confirm cmake-build-debug still passes (19/19, or the new total if
 you registered a new ctest). Update NEXT.md after finishing.
 
 Current branch: develop; confirm sync with origin/develop before
-resuming (last confirmed sync was commit a837492; commits since then
-may not be pushed yet — check `git status` / `git log origin/develop..HEAD`).
+resuming (last confirmed sync was commit a837492; commit 8e590ce and
+one before it may not be pushed yet — check `git status` / `git log
+origin/develop..HEAD`).
 Build dirs: cmake-build-debug/ (Debug, CLion cmake 4.2.2) — full rebuild
-+ 19/19 ctest verified clean 2026-07-02 at commit f37c541 (no code has
-changed since — only plan.md/NEXT.md docs — so this should still hold,
-but re-run ctest if in doubt). b-release/ (Release) not re-verified
-since 2026-07-01; re-verify if touching anything Release-sensitive.
-Active plan: plan.md (STAB-XXXX tasks; Gate 3's P1 items, all of Gate 4,
-and S10's remaining P0 items are done — S7 28/35, S8 17/40, S9 22/35,
-S10 9/40, S13 11/25. Pick the next task from section 8: move to P2
-items in whichever section is preferred, or optionally rotate the PAT
-to activate CI).
+(53 targets, including the new libxml2 link in MeshCraft/ai_test) +
+19/19 ctest verified clean 2026-07-03 at commit 8e590ce. b-release/
+(Release) not re-verified since 2026-07-01 and has NOT been reconfigured
+with the new LibXml2 find_package yet; re-verify (reconfigure + rebuild)
+before relying on it. Standalone mc3/ build re-verified 2026-07-03
+(1/1, includes the mc3.xsd fix).
+Active plan: plan.md (STAB-XXXX tasks; Gate 3's P1 items, all of Gate 4's
+Priority Execution Order items (including STAB-0391, this session), and
+S10's P0 items are done — S7 28/35, S8 17/40, S9 22/35, S10 10/40, S13
+11/25. Note: Gate 4 itself still needs the full STAB-0336-0410 range
+green, not just the priority-list subset. Pick the next task from
+section 8: audit mc3.xsd for other undeclared-but-actually-used
+attributes, move to P2 items in whichever section is preferred, or
+optionally rotate the PAT to activate CI).
 Reconfigure cmake-build-debug ONLY with CLion's cmake 4.2.2, not
 /usr/bin/cmake.
 CI is parked deactivated under .github_/ (token lacks `workflow` scope,
