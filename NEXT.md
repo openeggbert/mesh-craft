@@ -1,6 +1,6 @@
 # NEXT.md
 
-_Last updated: 2026-07-02_
+_Last updated: 2026-07-03_
 
 ---
 
@@ -22,9 +22,10 @@ done** across S7 (Editor Save/Load), S8 (UI Robustness), and S13
 (Commands/Undo/Redo) — the gate itself isn't fully green yet because it
 requires the *entire* `STAB-0261–0335` range, and P2/P3 rows in that
 range remain. **Gate 4 (Registry/AI) is done**, including S9
-(ModelRegistry) and the AI mock-test cluster in S10. Gates 5–6 are
-untouched. Plan-wide totals (out of 650 `STAB-XXXX` rows): **154 ✅ done,
-13 🟡 partial, 145 🧪 has a plan but not executed, 338 📋 not started.**
+(ModelRegistry) and the AI mock-test cluster plus its 3 remaining P0
+verification items in S10. Gates 5–6 are untouched. Plan-wide totals
+(out of 650 `STAB-XXXX` rows): **157 ✅ done, 13 🟡 partial, 143 🧪 has a
+plan but not executed, 337 📋 not started.**
 
 **Important architectural decisions:**
 - `mc3/` and `mcb/` are pure C++ static libs with **no** CNA/ImGui
@@ -130,8 +131,22 @@ this summary intentionally stays high-level.
 
 ## 3. Recent changes
 
-All changes are committed on `develop` and pushed to `origin/develop`,
-currently in sync at `ba98afc`.
+All changes are committed on `develop`; see §10 for the exact commit the
+push was last confirmed in sync at.
+
+**STAB-0377/0378/0379** (S10, P0 — verification-only, no new code):
+confirmed all three were already satisfied by existing code, so each was
+simply marked ✅ in `plan.md` with a citation, no new test/code added:
+- STAB-0377: `testUndoRedoAiApply()` (`mc3/test/editor_commands_test.cpp:974`)
+  already covers "Apply to Scene" pushing an undo entry; verified it
+  matches the real button code exactly (`MeshCraftApplication_UiAi.cpp:264-266`,
+  `pushUndo(); document_ = *aiPendingDoc_;`).
+- STAB-0378: `grep` over `AiAssistant.cpp` confirms the API key is only
+  ever used to build the `x-api-key` HTTP header — never written to
+  `std::cout`/`std::cerr`/`printf`/etc.
+- STAB-0379: `MeshCraftApplication_UiAi.cpp:138-143` already pre-fills
+  the key input buffer from `std::getenv("ANTHROPIC_API_KEY")` whenever
+  the buffer is empty.
 
 Across this session, Gate 3's P1 items (S7/S8/S13) and all of Gate 4
 (S9 + S10) were closed out, cluster by cluster, each verified with a
@@ -254,12 +269,9 @@ requires the repo owner to rotate/rescope the token.
   full `STAB-0261–0335` range) — S7 28/35, S8 17/40, S13 11/25; the
   remainder of each is P2/P3, untested. _status: needs verification,
   tracked task-by-task in `plan.md`._
-- **S10 (AI) has 3 untouched P0 items** right next to the just-finished
-  AI mock-test work: STAB-0377 (Apply-to-Scene-pushes-undo — may already
-  be covered by an existing test, needs checking before writing a new
-  one), STAB-0378 (verify the API key is never logged/printed),
-  STAB-0379 (verify the API key pre-fills from `ANTHROPIC_API_KEY`).
-  _status: not started, flagged for the next session._
+- **S10 (AI) P0 items are now all closed** (STAB-0377/0378/0379
+  verified this session, no code changes needed); 25 P1/P2/P3 items
+  remain untouched. _status: P0 done, rest not started._
 
 ---
 
@@ -380,28 +392,10 @@ No project linter/formatter is configured.
 
 ## 8. Next smallest tasks
 
-1. **STAB-0377/0378/0379** (S10, P0 — untouched, right next to the
-   just-finished AI mock-test work).
-   Goal: STAB-0377 — verify "Apply to Scene" pushes an undo entry; check
-   whether `testUndoRedoAiApply()` (added earlier this session for
-   STAB-0270/0278) already covers this before writing a new test.
-   STAB-0378 — verify the API key is never logged/printed (a `grep`
-   check against `AiAssistant.cpp` per the plan's own verification
-   text). STAB-0379 — verify the API key pre-fills from
-   `ANTHROPIC_API_KEY`; the real logic in `drawAiPanel()`
-   (`if (aiApiKeyBuf_[0] == '\0') { ... getenv(...) ... }`) looks like a
-   good candidate for a small `Alg` mirror, same pattern as everything
-   else done this session.
-   Files: `mc3/test/ai_test.cpp`, `mc3/test/editor_commands_test.cpp`,
-   `src/MeshCraft/AiResponseAlgorithms.hpp` (or a new small mirror),
-   `src/MeshCraft/MeshCraftApplication_UiAi.cpp`, `AiAssistant.cpp`.
-   Verify: `ctest -R mc3_ai --output-on-failure` and/or
-   `ctest -R mc3_commands --output-on-failure`.
-
-2. **Move to P2 items** in whichever section is most valuable next —
+1. **Move to P2 items** in whichever section is most valuable next —
    with P0/P1 essentially exhausted across S7/S8/S9/S10/S13, the next
    tier by `plan.md`'s own priority scheme is P2 (then P3). Remaining
-   P2/P3 counts: S7: 7, S8: 23, S9: 13, S10: ~26, S13: 14, plus
+   P2/P3 counts: S7: 7, S8: 23, S9: 13, S10: 25, S13: 14, plus
    untouched sections S11 (Materials, 30), S12 (Animation, 30), S14
    (Rendering, 30), S15 (Import/export, 25).
    Goal: pick by ID order within the chosen section; for each item,
@@ -412,7 +406,7 @@ No project linter/formatter is configured.
    Verify: the relevant `ctest -R <target>`, plus a full
    `ctest --output-on-failure` (expect 19/19 or higher).
 
-3. **(optional) Rotate the PAT and activate CI** — see §4 for the exact
+2. **(optional) Rotate the PAT and activate CI** — see §4 for the exact
    steps.
    Goal: replace the plaintext, under-scoped PAT in `.git/config` with a
    `repo`+`workflow`-scoped token (or SSH), then rename `.github_` →
@@ -459,15 +453,19 @@ verified improvement. Run the relevant build/test command from section 7
 and confirm cmake-build-debug still passes (19/19, or the new total if
 you registered a new ctest). Update NEXT.md after finishing.
 
-Current branch: develop, in sync with origin/develop at ba98afc.
+Current branch: develop; confirm sync with origin/develop before
+resuming (last confirmed sync was commit a837492; commits since then
+may not be pushed yet — check `git status` / `git log origin/develop..HEAD`).
 Build dirs: cmake-build-debug/ (Debug, CLion cmake 4.2.2) — full rebuild
-+ 19/19 ctest verified clean 2026-07-02. b-release/ (Release) not
-re-verified since 2026-07-01; re-verify if touching anything
-Release-sensitive.
-Active plan: plan.md (STAB-XXXX tasks; Gate 3's P1 items and all of
-Gate 4 are done — S7 28/35, S8 17/40, S9 22/35, S10 6/40, S13 11/25.
-Pick the next task from section 8: STAB-0377/0378/0379, or move to P2
-items in whichever section is preferred).
++ 19/19 ctest verified clean 2026-07-02 at commit f37c541 (no code has
+changed since — only plan.md/NEXT.md docs — so this should still hold,
+but re-run ctest if in doubt). b-release/ (Release) not re-verified
+since 2026-07-01; re-verify if touching anything Release-sensitive.
+Active plan: plan.md (STAB-XXXX tasks; Gate 3's P1 items, all of Gate 4,
+and S10's remaining P0 items are done — S7 28/35, S8 17/40, S9 22/35,
+S10 9/40, S13 11/25. Pick the next task from section 8: move to P2
+items in whichever section is preferred, or optionally rotate the PAT
+to activate CI).
 Reconfigure cmake-build-debug ONLY with CLion's cmake 4.2.2, not
 /usr/bin/cmake.
 CI is parked deactivated under .github_/ (token lacks `workflow` scope,

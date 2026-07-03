@@ -517,9 +517,9 @@ _Generated: 2026-06-27 from full codebase + test audit. Replaces previous 100-ta
 | STAB-0374 | ✅ | P1 | Add test: XML extraction with extra text before/after XML | `mc3/test/ai_test.cpp` | Same fix and mechanism as STAB-0373 (the fix isn't fence-specific — it trims at `</mc3>` regardless of what follows). `testExtractXmlWithSurroundingProse()` confirms "Here is the scene: `<mc3>…</mc3>` Hope that helps" extracts to exactly the XML; the pipeline test confirms it parses successfully end-to-end too. root 19/19 (verified 2026-07-02) |
 | STAB-0375 | ✅ | P1 | Add test: invalid XML response → `aiValidationError_` set | `mc3/test/ai_test.cpp`, `src/MeshCraft/AiResponseAlgorithms.hpp` | Extracted the *entire* validation pipeline (extract → repair → require `<mc3` → parse → reject-if-empty) from `drawAiPanel()`'s inline `try`/`catch` into `validateAndParseAiResponseAlg()` — `UiAi.cpp` now calls this one function and only keeps the ImGui-specific line-number-diagnostic enrichment locally. Tests confirm: no `<mc3>` root → error naming that specifically; malformed (unclosed) XML → non-empty error, no document. root 19/19 (verified 2026-07-02) |
 | STAB-0376 | ✅ | P1 | Add test: empty document rejection (no objects, no definitions) | `mc3/test/ai_test.cpp`, `src/MeshCraft/AiResponseAlgorithms.hpp` | Extracted the empty-document guard as `isEmptyMc3DocumentAlg`, used by `validateAndParseAiResponseAlg`. `testValidateAndParseEmptyDocumentRejected()`: `<mc3 version="0.3"></mc3>` (no objects, no definitions) is rejected with an "empty document" error; `testValidateAndParseAcceptsNonEmptyDocument()` confirms a document with ≥1 object is accepted, as a negative check. root 19/19 (verified 2026-07-02) |
-| STAB-0377 | 📋 | P0 | Add test: Apply to Scene pushes undo | `src/MeshCraft/MeshCraftApplication_UiAi.cpp` | After apply: undo stack has 1 item; Ctrl+Z restores previous doc |
-| STAB-0378 | 🧪 | P0 | Verify API key not logged or printed | `src/MeshCraft/AiAssistant.cpp` | `grep -r apiKey src/MeshCraft/AiAssistant.cpp` — no `std::cout`/`printf` of key |
-| STAB-0379 | 🧪 | P0 | Verify API key loaded from `ANTHROPIC_API_KEY` env var | `src/MeshCraft/MeshCraftApplication_UiAi.cpp` | Set env var; open AI panel; key field pre-populated |
+| STAB-0377 | ✅ | P0 | Add test: Apply to Scene pushes undo | `src/MeshCraft/MeshCraftApplication_UiAi.cpp`, `mc3/test/editor_commands_test.cpp` | Already covered by `testUndoRedoAiApply()` (editor_commands_test.cpp:974-984), which exercises `checkUndoRedo` against a plain document replacement — verified this matches the real "Apply to Scene" button code exactly: `MeshCraftApplication_UiAi.cpp:264-266` does `pushUndo(); document_ = *aiPendingDoc_;`. No new test needed. root 19/19 (verified 2026-07-03) |
+| STAB-0378 | ✅ | P0 | Verify API key not logged or printed | `src/MeshCraft/AiAssistant.cpp` | `grep -n "std::cout\|std::cerr\|printf\|fprintf\|std::clog" src/MeshCraft/AiAssistant.cpp` — no match involving the key. The only use of `apiKeyCopy` is building the `x-api-key` HTTP header (`AiAssistant.cpp:210`); it is never written to any stream. (verified 2026-07-03) |
+| STAB-0379 | ✅ | P0 | Verify API key loaded from `ANTHROPIC_API_KEY` env var | `src/MeshCraft/MeshCraftApplication_UiAi.cpp` | Already implemented at `MeshCraftApplication_UiAi.cpp:138-143`: if the key input buffer is empty, `std::getenv("ANTHROPIC_API_KEY")` pre-fills it every frame the panel is open. (verified 2026-07-03) |
 | STAB-0380 | 🧪 | P1 | Verify API key field is password-masked in UI | `src/MeshCraft/MeshCraftApplication_UiAi.cpp` | API key input uses `ImGuiInputTextFlags_Password` |
 | STAB-0381 | 📋 | P1 | Add test: model name is user-configurable | `src/MeshCraft/MeshCraftApplication_UiAi.cpp` | Model field editable; value sent in API request |
 | STAB-0382 | 📋 | P1 | Verify network error produces user-visible error message | `src/MeshCraft/AiAssistant.cpp` | Simulate connection refused; `hasError()` true; `errorMsg()` non-empty |
@@ -878,7 +878,7 @@ _Generated: 2026-06-27 from full codebase + test audit. Replaces previous 100-ta
 | S7 Save/load | 35 | 28 | 0 | 0 | 7 | 0 |
 | S8 UI robustness | 40 | 17 | 0 | 0 | 23 | 0 |
 | S9 Registry | 35 | 22 | 0 | 0 | 13 | 0 |
-| S10 AI | 40 | 6 | 0 | 8 | 26 | 0 |
+| S10 AI | 40 | 9 | 0 | 6 | 25 | 0 |
 | S11 Materials | 30 | 0 | 0 | 9 | 21 | 0 |
 | S12 Animation | 30 | 0 | 0 | 12 | 18 | 0 |
 | S13 Commands | 25 | 11 | 0 | 0 | 14 | 0 |
@@ -889,7 +889,7 @@ _Generated: 2026-06-27 from full codebase + test audit. Replaces previous 100-ta
 | S18 Code quality | 25 | 0 | 3 | 2 | 20 | 0 |
 | S19 Security | 15 | 0 | 0 | 4 | 11 | 0 |
 | S20 Release | 15 | 0 | 0 | 0 | 15 | 0 |
-| **TOTAL** | **650** | **154** | **13** | **145** | **338** | **0** |
+| **TOTAL** | **650** | **157** | **13** | **143** | **337** | **0** |
 
 _Recomputed directly from per-row status markers (the table had drifted from
 actual row state over several prior sessions); derived, not hand-maintained
