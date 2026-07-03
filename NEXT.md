@@ -62,14 +62,14 @@ executed, 336 📋 not started.**
   Last verified 2026-06-30.
 
 ### Tests
-**19/19 CTest pass** (last full run 2026-07-03, commit `8e590ce`):
+**20/20 CTest pass** (last full run 2026-07-03, commit `d63bb15`):
 `smoke_test`, `xsd_validation`, `mc3_registry`, `mc3_ai`, `mc3_roundtrip`,
 `mc3_commands`, `mcb_roundtrip`, `mc3tomcb_roundtrip`, `mc3togltf_gltf`,
 `mc3togltf_all_primitives`, `mc3togltf_export_verification`,
 `mc3togltf_large_scene`, `mc3togltf_csg_strict`, `mc3togltf_csg_export`,
 `mc3togltf_csg_unsupported`, `mc3togltf_csg_nested`,
 `mc3togltf_instance_deform_cache`, `mc3togltf_float_cache_key`,
-`mc3togltf_large_scene_generated`.
+`mc3togltf_large_scene_generated`, `mc3togltf_large_scene_500`.
 
 - `mc3_commands` (~250 assertions): editor command algorithms (rename/
   find-replace/array-dup/duplicate/group/ungroup), undo/redo round-trips
@@ -190,9 +190,24 @@ XSD validation of AI-generated XML, closing the last item in Gate 4's
   reject `role="bogus"` (`roleType` only allows `"cutter"`) both
   directly via `validateXmlAgainstXsdAlg` and through the full
   `validateAndParseAiResponseAlg` pipeline.
-- Verified: root 19/19 (including `xsd_validation`, confirming the
-  schema fix didn't break any existing fixture), standalone `mc3` 1/1,
-  `MeshCraft` full rebuild links clean against libxml2.
+- Verified: root 19/19 (at the time, before STAB-0243/0244 below added a
+  20th test; including `xsd_validation`, confirming the schema fix
+  didn't break any existing fixture), standalone `mc3` 1/1, `MeshCraft`
+  full rebuild links clean against libxml2.
+
+**STAB-0243/0244** (S6, P1/P2 — Gate 5's `Priority Execution Order`
+items): STAB-0243 was already fully covered by the existing
+`large_scene_generated_test.py` (its assertions check `len(meshes) <= 6`
+and `nodes >= meshes * 10`, i.e. reuse, not "200 unique meshes") — no new
+test needed, just a `plan.md` status update. STAB-0244 parameterized
+that same script with an optional CLI scale-factor arg instead of
+duplicating it (`N_INSTANCES/N_SPHERES/N_BOXES = round(100/50/50 *
+SCALE)`), added `time.monotonic()` timing with an explicit `assert
+elapsed < 30.0`, and registered a new `mc3togltf_large_scene_500` ctest
+(`mc3togltf/CMakeLists.txt`, scale `2.5` → 500 objects). Measured:
+500-object export completes in ~0.02s. Root ctest is now **20/20**;
+standalone `mc3togltf` build re-verified separately (12/12, includes the
+new test).
 
 Across this session, Gate 3's P1 items (S7/S8/S13) and all of Gate 4
 (S9 + S10) were closed out, cluster by cluster, each verified with a
@@ -249,9 +264,10 @@ listed above).
 ## 4. Current blocker / main problem
 
 **There is no blocker to local development or testing.** Debug builds
-clean (full rebuild, 53/53 targets) and 19/19 tests pass as of the last
-verified state (`f37c541`, 2026-07-02). `develop` is pushed and in sync
-with `origin/develop`.
+clean (full rebuild, 53/53 targets) and 20/20 tests pass as of the last
+verified state (2026-07-03; see §10 for the exact commit and push-sync
+status). `develop` may be ahead of `origin/develop` — check before
+assuming a push is current.
 
 The one open **operational** issue is **CI cannot be activated with the
 current git credentials**:
@@ -432,8 +448,8 @@ instead of a runtime path lookup.
 # --- Debug (CLion dir; reconfigure with CLion's cmake to avoid the 3.31.6 bug)
 CLION_CMAKE=/home/robertvokac/.local/share/JetBrains/Toolbox/apps/clion/bin/cmake/linux/x64/bin/cmake
 "$CLION_CMAKE" -S . -B cmake-build-debug -DBUILD_TESTING=ON   # (re)configure
-cd cmake-build-debug && ninja && ctest --output-on-failure    # build + test (19)
-ctest -N                                                      # lists all 19 tests
+cd cmake-build-debug && ninja && ctest --output-on-failure    # build + test (20)
+ctest -N                                                      # lists all 20 tests
 
 # --- Release (system cmake 3.31.6 is fine for a fresh dir)
 cmake -S . -B b-release -G Ninja -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=ON \
@@ -480,21 +496,38 @@ No project linter/formatter is configured.
    Verify: `ctest -R xsd_validation --output-on-failure` (must stay
    passing) plus re-run `ai_test`'s XSD tests after any schema change.
 
-2. **Move to P2 items** in whichever section is most valuable next —
-   with P0/P1 essentially exhausted across S7/S8/S9/S10/S13, the next
+2. **Gate 6 — Documentation gate** is the only stabilization gate whose
+   `Priority Execution Order` list is still fully untouched (Gates 0-5's
+   priority-list items are now all done, though the gates themselves
+   need their full `STAB-XXXX` ranges green, not just the priority
+   subset — see `plan.md`'s "Stabilization Gates" table).
+   Goal: STAB-0579..0581 (README gaps), STAB-0583..0584
+   (MC3_FORMAT.md updates), STAB-0586..0587 (STABILIZATION.md and
+   NEXT.md), STAB-0592 (TESTING.md created) — read each row's exact
+   ask in `plan.md` before starting, these are documentation-audit
+   tasks (check docs match reality), not blind rewrites.
+   Files: `README.md`, `MC3_FORMAT.md`, `STABILIZATION.md`, `NEXT.md`,
+   `TESTING.md` (new).
+   Verify: no build/test command applies directly — verification is
+   "does the doc match observed repo behavior", checked by cross-reading
+   against `plan.md` and actually running the commands each doc claims.
+
+3. **Move to P2 items** in whichever section is most valuable next —
+   with P0/P1 essentially exhausted across S6/S7/S8/S9/S10/S13, the next
    tier by `plan.md`'s own priority scheme is P2 (then P3). Remaining
-   P2/P3 counts: S7: 7, S8: 23, S9: 13, S10: 24, S13: 14, plus
-   untouched sections S11 (Materials, 30), S12 (Animation, 30), S14
-   (Rendering, 30), S15 (Import/export, 25).
+   P2/P3 counts: S6: 13 (includes STAB-0245, the P3 1000-object stress
+   test), S7: 7, S8: 23, S9: 13, S10: 24, S13: 14, plus untouched
+   sections S11 (Materials, 30), S12 (Animation, 30), S14 (Rendering,
+   30), S15 (Import/export, 25).
    Goal: pick by ID order within the chosen section; for each item,
    check whether the relevant logic is CNA-free (an `Alg`-mirror
    candidate) or inspection-only before assuming a CNA/ImGui test
    harness is needed.
    Files: varies by section — see `plan.md`'s Key File column per row.
    Verify: the relevant `ctest -R <target>`, plus a full
-   `ctest --output-on-failure` (expect 19/19 or higher).
+   `ctest --output-on-failure` (expect 20/20 or higher).
 
-3. **(optional) Rotate the PAT and activate CI** — see §4 for the exact
+4. **(optional) Rotate the PAT and activate CI** — see §4 for the exact
    steps.
    Goal: replace the plaintext, under-scoped PAT in `.git/config` with a
    `repo`+`workflow`-scoped token (or SSH), then rename `.github_` →
@@ -544,28 +577,29 @@ No project linter/formatter is configured.
 Read NEXT.md first. Then inspect only the files needed for the first
 task in section 8. Do not refactor unrelated code. Make one small,
 verified improvement. Run the relevant build/test command from section 7
-and confirm cmake-build-debug still passes (19/19, or the new total if
+and confirm cmake-build-debug still passes (20/20, or the new total if
 you registered a new ctest). Update NEXT.md after finishing.
 
 Current branch: develop; confirm sync with origin/develop before
-resuming (last confirmed sync was commit a837492; commit 8e590ce and
-one before it may not be pushed yet — check `git status` / `git log
-origin/develop..HEAD`).
+resuming — check `git status` / `git log origin/develop..HEAD` (recent
+local commits may not be pushed yet; push only if asked).
 Build dirs: cmake-build-debug/ (Debug, CLion cmake 4.2.2) — full rebuild
 (53 targets, including the new libxml2 link in MeshCraft/ai_test) +
-19/19 ctest verified clean 2026-07-03 at commit 8e590ce. b-release/
-(Release) not re-verified since 2026-07-01 and has NOT been reconfigured
-with the new LibXml2 find_package yet; re-verify (reconfigure + rebuild)
-before relying on it. Standalone mc3/ build re-verified 2026-07-03
-(1/1, includes the mc3.xsd fix).
-Active plan: plan.md (STAB-XXXX tasks; Gate 3's P1 items, all of Gate 4's
-Priority Execution Order items (including STAB-0391, this session), and
-S10's P0 items are done — S7 28/35, S8 17/40, S9 22/35, S10 10/40, S13
-11/25. Note: Gate 4 itself still needs the full STAB-0336-0410 range
-green, not just the priority-list subset. Pick the next task from
-section 8: audit mc3.xsd for other undeclared-but-actually-used
-attributes, move to P2 items in whichever section is preferred, or
-optionally rotate the PAT to activate CI).
+20/20 ctest verified clean 2026-07-03. b-release/ (Release) not
+re-verified since 2026-07-01 and has NOT been reconfigured with the new
+LibXml2 find_package yet; re-verify (reconfigure + rebuild) before
+relying on it. Standalone mc3/ build re-verified 2026-07-03 (1/1,
+includes the mc3.xsd fix); standalone mc3togltf/ build re-verified
+2026-07-03 (12/12, includes mc3togltf_large_scene_500).
+Active plan: plan.md (STAB-XXXX tasks; Gates 0-5's Priority Execution
+Order items are all done (S6 STAB-0243/0244, S10 STAB-0371-0379/0391
+closed this session) — S6 7/25, S7 28/35, S8 17/40, S9 22/35, S10 10/40,
+S13 11/25. Note: the gates themselves still need their full STAB-XXXX
+ranges green, not just the priority-list subset (see plan.md's
+"Stabilization Gates" table). Pick the next task from section 8: audit
+mc3.xsd for other undeclared-but-actually-used attributes, start Gate
+6's documentation-audit items, move to P2 items in whichever section is
+preferred, or optionally rotate the PAT to activate CI).
 Reconfigure cmake-build-debug ONLY with CLion's cmake 4.2.2, not
 /usr/bin/cmake.
 CI is parked deactivated under .github_/ (token lacks `workflow` scope,
