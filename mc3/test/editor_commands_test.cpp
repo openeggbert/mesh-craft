@@ -513,6 +513,62 @@ static void testUngroupRejectsNonGroupOrEmptyGroup()
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// convertToDefinitionAlg (STAB-0482)
+// ─────────────────────────────────────────────────────────────────────────────
+
+static void testConvertToDefinition()
+{
+    Mc3Document doc;
+    auto src = makeObj("box1", "MyBox", Mc3::ObjectType::Sphere);
+    src->transform.position = {5.0f, 1.0f, -2.0f};
+    src->transform.rotation = {0.0f, 45.0f, 0.0f};
+    src->transform.scale    = {2.0f, 2.0f, 2.0f};
+    src->visible = false;
+    src->tags    = {"prop", "reusable"};
+    auto child = makeObj("box1_child", "Child");
+    src->children.push_back(child);
+    doc.objects.push_back(src);
+
+    auto inst = convertToDefinitionAlg(doc, src);
+
+    // A new definition was created, keyed "def_1" (first free key).
+    CHECK(doc.definitions.count("def_1") == 1, "convert: definition 'def_1' created");
+    if (doc.definitions.count("def_1")) {
+        const auto& def = doc.definitions.at("def_1");
+        CHECK(def->id == "def_1" && def->name == "def_1", "convert: definition id/name set to the key");
+        CHECK(def->type == Mc3::ObjectType::Sphere, "convert: definition keeps the original object type");
+        CHECKF(def->transform.position[0], 0.0f, "convert: definition transform reset (position.x)");
+        CHECKF(def->transform.rotation[1], 0.0f, "convert: definition transform reset (rotation.y)");
+        CHECKF(def->transform.scale[0],    1.0f, "convert: definition transform reset (scale.x)");
+        CHECK(def->children.size() == 1 && def->children[0]->name == "Child",
+              "convert: definition is a deep copy including children");
+        CHECK(def.get() != src.get(), "convert: definition is a distinct object, not the same pointer as src");
+    }
+
+    // src was replaced in-place by an Instance preserving its transform/visibility/tags.
+    CHECK(doc.objects.size() == 1, "convert: object count unchanged (replaced in place, not appended)");
+    CHECK(inst != nullptr && doc.objects[0].get() == inst.get(),
+          "convert: root list's entry is now the returned Instance");
+    CHECK(inst->type == Mc3::ObjectType::Instance, "convert: replacement is an Instance");
+    CHECK(inst->definition == "def_1", "convert: Instance references the new definition key");
+    CHECK(inst->id == "box1", "convert: Instance keeps src's original id");
+    CHECK(inst->name == "MyBox", "convert: Instance keeps src's original name");
+    CHECKF(inst->transform.position[0], 5.0f, "convert: Instance keeps src's original position.x");
+    CHECKF(inst->transform.rotation[1], 45.0f, "convert: Instance keeps src's original rotation.y");
+    CHECKF(inst->transform.scale[0],    2.0f, "convert: Instance keeps src's original scale.x");
+    CHECK(inst->visible == false, "convert: Instance keeps src's original visibility");
+    CHECK(inst->tags.size() == 2 && inst->tags[0] == "prop" && inst->tags[1] == "reusable",
+          "convert: Instance keeps src's original tags");
+
+    // A second conversion (of the new Instance's sibling, here just re-run on
+    // inst itself) must not collide with "def_1" — proves unique-key search works.
+    auto inst2 = convertToDefinitionAlg(doc, inst);
+    CHECK(doc.definitions.count("def_2") == 1,
+          "convert: second conversion gets a distinct key 'def_2', no collision with 'def_1'");
+    CHECK(inst2->definition == "def_2", "convert: second Instance references 'def_2'");
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // deepCopyObjectAlg
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -1818,6 +1874,7 @@ int main()
     testDuplicateObjects();
     testGroupAndUngroupObjects();
     testUngroupRejectsNonGroupOrEmptyGroup();
+    testConvertToDefinition();
     testDeepCopy();
     testUndoRedoBatchRename();
     testUndoRedoFindReplace();

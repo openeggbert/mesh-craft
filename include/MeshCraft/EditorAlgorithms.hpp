@@ -382,6 +382,50 @@ inline std::vector<std::shared_ptr<Mc3::Mc3Object>> ungroupObjectAlg(
     return children;
 }
 
+// ── Convert to Definition (STAB-0482) ──────────────────────────────────────────
+//
+// Mirrors MeshCraftApplication::convertToDefinition()
+// (MeshCraftApplication_Commands.cpp) — moves src into doc.definitions
+// (transform reset to identity, since a definition is a reusable template)
+// and replaces it in-place with an Instance node that preserves src's
+// original transform/visibility/tags. Returns the new Instance (its
+// `.definition` field is the generated key, e.g. "def_1").
+inline std::shared_ptr<Mc3::Mc3Object> convertToDefinitionAlg(
+    Mc3::Mc3Document&                       doc,
+    const std::shared_ptr<Mc3::Mc3Object>&  src)
+{
+    int n = 1;
+    std::string defKey;
+    do { defKey = "def_" + std::to_string(n++); }
+    while (doc.definitions.count(defKey));
+
+    auto defObj = deepCopyObjectAlg(*src);
+    defObj->id   = defKey;
+    defObj->name = defKey;
+    defObj->transform.position = {0.0f, 0.0f, 0.0f};
+    defObj->transform.rotation = {0.0f, 0.0f, 0.0f};
+    defObj->transform.scale    = {1.0f, 1.0f, 1.0f};
+    doc.definitions[defKey] = defObj;
+
+    auto inst = std::make_shared<Mc3::Mc3Object>();
+    inst->id         = src->id;
+    inst->name       = src->name.empty() ? defKey : src->name;
+    inst->type       = Mc3::ObjectType::Instance;
+    inst->definition = defKey;
+    inst->transform  = src->transform;
+    inst->visible    = src->visible;
+    inst->tags       = src->tags;
+
+    auto* parentList = findParentListAlg(doc.objects, src.get());
+    if (parentList) {
+        for (auto& obj : *parentList)
+            if (obj.get() == src.get()) { obj = inst; break; }
+    } else {
+        doc.objects.push_back(inst);
+    }
+    return inst;
+}
+
 // ── Auto-save (STAB-0265) ─────────────────────────────────────────────────────
 //
 // Mirrors two pieces of CNA-coupled logic so "the auto-save interval is

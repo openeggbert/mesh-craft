@@ -33,9 +33,12 @@ Blender). **S12 (Animation Stability)** is done: 28/30, remaining 2
 flagged (STAB-0464 needs a live display; STAB-0460 describes a feature
 that was never built, out of scope per the stabilization moratorium).
 Both S11 and S12 sweeps found several real bugs, fixed with permanent
-regression tests — see §3 for the full list. Plan-wide totals: **283
+regression tests — see §3 for the full list. **S13 (Commands,
+Undo/Redo, and Algorithms)** work has started: STAB-0482 done
+(extracted a new `convertToDefinitionAlg()` Alg mirror, the command
+had none before). Plan-wide totals: **284
 ✅ done, 6 🟡 partial, 112 🧪 has a plan but not executed,
-249 📋 not started** out of 650.
+248 📋 not started** out of 650.
 
 **Important architectural decisions:**
 - `mc3/` and `mcb/` are pure C++ static libs with **no** CNA/ImGui
@@ -166,17 +169,30 @@ See `TESTING.md` for the full per-test reference and `plan.md`'s
 
 ## 3. Recent changes
 
-**23 STAB tasks committed and pushed as of `7b3126c`** (`53aa75e`
-through `7b3126c` — see `git log --oneline` for the full list). Gate 6
+**24 STAB tasks committed and pushed as of `950547c`** (`53aa75e`
+through `950547c` — see `git log --oneline` for the full list). Gate 6
 is exhausted (§8); **S11 and S12 are both fully done** except
-genuinely blocked/flagged items. **STAB-0457-0470** below are
-implemented but **not yet committed** as of this update.
+genuinely blocked/flagged items. Work has moved to **S13 (Commands,
+Undo/Redo, and Algorithms)**. **STAB-0482** below is implemented but
+**not yet committed** as of this update.
 
 This was a long, dense session that closed out essentially all of
 **Gate 6 (Documentation)**'s reachable work (plus a from-scratch schema
 audit that found real bugs), then finished S11 and S12 entirely (bar
-the blocked/flagged items). Highlights, most recent first:
+the blocked/flagged items) and started S13. Highlights, most recent
+first:
 
+- **STAB-0482 — extracted `convertToDefinitionAlg()`**: "Convert to
+  Definition" had no Alg mirror yet, unlike duplicate/group/ungroup
+  (already covered). Extracted the command's document mutation into
+  `EditorAlgorithms.hpp`, wired the real `convertToDefinition()` to
+  call it (single source of truth, ~30 fewer duplicated lines). Added
+  `testConvertToDefinition()` (20 assertions): the new definition is a
+  deep copy with transform reset to identity but type/children
+  preserved; the replacement Instance preserves the original
+  transform/visibility/tags/id/name and correctly references the new
+  key; object count stays the same (in-place replacement); a second
+  conversion gets a distinct key with no collision.
 - **STAB-0457-0470 — S12 closeout**: STAB-0457-0459/0461-0463/0465-0467/
   0470 all confirmed correct by code inspection or already covered by
   existing tests (deleted/included/registry-inserted objects are
@@ -869,31 +885,25 @@ stabilization moratorium; STAB-0464 needs a live display).
 
 **S13 (Commands, Undo/Redo, and Algorithms)** already has its P0/P1
 tier done from earlier sessions (STAB-0471-0481 — including a real fix,
-`resetPivot()` was missing `pushUndo()`, found and fixed then). Its
-remaining rows start at P2:
+`resetPivot()` was missing `pushUndo()`, found and fixed then).
+STAB-0482 is now done too (this session — extracted a new
+`convertToDefinitionAlg()` Alg mirror, added 20 assertions). Next:
 
-1. **STAB-0482 — verify "Convert to Definition" creates correct
-   Definition entry** (S13, P2, next-lowest ID). Goal: selecting an
-   object and converting it to a reusable Definition should move it
-   into `doc.definitions` and replace it in-place with an Instance
-   node referencing that definition.
-   Files: `src/MeshCraft/MeshCraftApplication_Commands.cpp`.
-   Verify: read the actual command function first; if it's a plain
-   document mutation (not CNA-coupled), it may be directly headlessly
-   testable — check before assuming it needs a live display.
+1. **STAB-0483 — verify "Break Instance" expands to a copy of
+   definition content** (S13, P2, next-lowest ID). Goal: the inverse of
+   Convert to Definition — an Instance node should expand into an
+   independent deep copy of its definition's content (no shared
+   `shared_ptr`s with the original definition, so editing one doesn't
+   affect the other).
+   Files: `src/MeshCraft/MeshCraftApplication_Commands.cpp` (check
+   whether an Alg mirror already exists for this one, same as
+   `convertToDefinitionAlg` didn't for STAB-0482 until this session).
+   Verify: read the actual command function first; extract to
+   `EditorAlgorithms.hpp` and add a headless test if none exists yet.
 
-2. **STAB-0483 — verify "Break Instance" expands to a copy of
-   definition content** (S13, P2). Goal: the inverse of Convert to
-   Definition — an Instance node should expand into an independent
-   deep copy of its definition's content (no shared `shared_ptr`s with
-   the original definition, so editing one doesn't affect the other).
-   Files: `src/MeshCraft/MeshCraftApplication_Commands.cpp`.
-   Verify: same approach as STAB-0482 — read first, test headlessly if
-   possible.
-
-Beyond these two: S13 has ~13 more P2/P3 items (STAB-0484-0496ish —
-Align to Object, Scatter/Place, command palette, etc. — see `plan.md`'s
-S13 rows). S14 (Rendering/Viewport) and S15 (Import/Export/Editor
+Beyond this: S13 has ~13 more P2/P3 items (STAB-0484-0496ish — Align to
+Object, Scatter/Place, command palette, etc. — see `plan.md`'s S13
+rows). S14 (Rendering/Viewport) and S15 (Import/Export/Editor
 Integration) remain fully untouched after S13.
 
 ---

@@ -497,48 +497,13 @@ void MeshCraftApplication::convertToDefinition() {
     if (!selection_.hasSelection()) return;
     auto src = selection_.selection().front();
 
-    // Generate unique definition key
-    int n = 1;
-    std::string defKey;
-    do { defKey = "def_" + std::to_string(n++); }
-    while (document_.definitions.count(defKey));
-
     pushUndo();
-
-    // Deep-copy selected object into definitions map (reset transform to identity)
-    auto defObj = deepCopyObject(*src);
-    defObj->id   = defKey;
-    defObj->name = defKey;
-    defObj->transform.position = {0.0f, 0.0f, 0.0f};
-    defObj->transform.rotation = {0.0f, 0.0f, 0.0f};
-    defObj->transform.scale    = {1.0f, 1.0f, 1.0f};
-    document_.definitions[defKey] = defObj;
-
-    // Build Instance object preserving original transform
-    auto inst = std::make_shared<Mc3::Mc3Object>();
-    inst->id         = src->id;
-    inst->name       = src->name.empty() ? defKey : src->name;
-    inst->type       = Mc3::ObjectType::Instance;
-    inst->definition = defKey;
-    inst->transform  = src->transform;
-    inst->visible    = src->visible;
-    inst->tags       = src->tags;
-
-    // Replace src with inst in place (find parent list)
-    auto* parentList = findParentList(document_.objects, src.get());
-    if (parentList) {
-        for (auto& obj : *parentList) {
-            if (obj.get() == src.get()) { obj = inst; break; }
-        }
-    } else {
-        // Not found in main list — shouldn't happen, but add to root as fallback
-        document_.objects.push_back(inst);
-    }
+    auto inst = convertToDefinitionAlg(document_, src);
 
     selection_.clear();
     selection_.select(inst);
     modified_ = true; updateWindowTitle();
-    setStatusMsg("Converted to definition: " + defKey, false, 2.5f);
+    setStatusMsg("Converted to definition: " + inst->definition, false, 2.5f);
 }
 
 void MeshCraftApplication::exportSubtreeAsTemplate(const std::string& defName,
