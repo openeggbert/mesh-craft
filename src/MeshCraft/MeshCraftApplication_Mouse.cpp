@@ -310,13 +310,8 @@ void MeshCraftApplication::handleMouseInput(const MouseState& ms, const MouseSta
             float delta = (dx * tx + dy * ty) * degsPerPixel;
             bool ctrlHeld = (Keyboard::GetState().IsKeyDown(Keys::LeftControl) ||
                              Keyboard::GetState().IsKeyDown(Keys::RightControl));
-            for (const auto& s : selection_.selection()) {
-                if (lockedIds_.count(s->id)) continue;
-                float& r = s->transform.rotation[axIdx];
-                r += delta;
-                if (snapEnabled_ || ctrlHeld)
-                    r = std::round(r / snapRotate_) * snapRotate_;
-            }
+            applyRotationDragAlg(selection_.selection(), lockedIds_, axIdx, delta,
+                                 snapEnabled_ || ctrlHeld, snapRotate_);
             modified_ = true;
             updateWindowTitle();
         }

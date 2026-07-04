@@ -731,6 +731,34 @@ inline bool vertexSnapToNearestAlg(
     return true;
 }
 
+// ── Rotation drag + angle snap (STAB-0491) ────────────────────────────────────
+//
+// Mirrors the rotate-gizmo drag loop in handleMouseInput() (rotation
+// branch): adds `delta` degrees to axis `axIdx` of every selected, unlocked
+// object's rotation, then rounds to the nearest `snapIncrement` if
+// `shouldSnap` is true — the real code resolves `shouldSnap` as
+// `snapEnabled_ || ctrlHeld` (a momentary Ctrl override on top of the
+// persistent Snap-to-grid toggle, rotation-only — Move/Scale drags only
+// check `snapEnabled_`, confirmed intentional by the matching "Ctrl or snap
+// grid" status-indicator condition in MeshCraftApplication_UiOverlays.cpp).
+// Returns the number of objects actually rotated (locked ones skipped).
+inline int applyRotationDragAlg(
+    const std::vector<std::shared_ptr<Mc3::Mc3Object>>& selected,
+    const std::set<std::string>&                        lockedIds,
+    int axIdx, float delta, bool shouldSnap, float snapIncrement)
+{
+    int rotated = 0;
+    for (const auto& s : selected) {
+        if (lockedIds.count(s->id)) continue;
+        float& r = s->transform.rotation[axIdx];
+        r += delta;
+        if (shouldSnap)
+            r = std::round(r / snapIncrement) * snapIncrement;
+        ++rotated;
+    }
+    return rotated;
+}
+
 // ── Auto-save (STAB-0265) ─────────────────────────────────────────────────────
 //
 // Mirrors two pieces of CNA-coupled logic so "the auto-save interval is

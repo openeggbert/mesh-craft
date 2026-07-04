@@ -950,6 +950,65 @@ static void testVertexSnap()
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// applyRotationDragAlg (STAB-0491)
+// ─────────────────────────────────────────────────────────────────────────────
+
+static void testRotationDragSnap()
+{
+    // Basic accumulate on the given axis, no snap: delta is added as-is.
+    {
+        auto a = makeObj("a", "A"); a->transform.rotation = {0, 10, 0};
+        auto b = makeObj("b", "B"); b->transform.rotation = {0, 20, 0};
+        int rotated = applyRotationDragAlg({a, b}, {}, /*axIdx=*/1, /*delta=*/5.0f,
+                                            /*shouldSnap=*/false, 45.0f);
+        CHECK(rotated == 2, "rotate drag: both unlocked objects rotated");
+        CHECKF(a->transform.rotation[1], 15.0f, "rotate drag: A's Y rotation accumulates delta");
+        CHECKF(b->transform.rotation[1], 25.0f, "rotate drag: B's Y rotation accumulates delta");
+    }
+
+    // Only the targeted axis is touched.
+    {
+        auto a = makeObj("a", "A"); a->transform.rotation = {1, 2, 3};
+        applyRotationDragAlg({a}, {}, /*axIdx=*/0, /*delta=*/10.0f, false, 45.0f);
+        CHECKF(a->transform.rotation[0], 11.0f, "rotate drag: targeted axis (X) modified");
+        CHECKF(a->transform.rotation[1], 2.0f,  "rotate drag: untargeted axis (Y) untouched");
+        CHECKF(a->transform.rotation[2], 3.0f,  "rotate drag: untargeted axis (Z) untouched");
+    }
+
+    // Locked object is skipped and not counted.
+    {
+        auto a = makeObj("a", "A"); a->transform.rotation = {0, 10, 0};
+        auto locked = makeObj("l", "L"); locked->transform.rotation = {0, 10, 0};
+        int rotated = applyRotationDragAlg({a, locked}, {"l"}, 1, 5.0f, false, 45.0f);
+        CHECK(rotated == 1, "rotate drag: locked object not counted as rotated");
+        CHECKF(locked->transform.rotation[1], 10.0f, "rotate drag: locked object's rotation untouched");
+        CHECKF(a->transform.rotation[1], 15.0f, "rotate drag: unlocked object still rotated");
+    }
+
+    // Snap rounds the post-delta value to the nearest increment (45 deg here,
+    // matching the STAB-0491 row's example — snapRotate_ itself defaults to
+    // 15 deg and is user-configurable; 45 is one of its quick-select presets).
+    {
+        auto a = makeObj("a", "A"); a->transform.rotation = {0, 10, 0};
+        applyRotationDragAlg({a}, {}, 1, /*delta=*/28.0f, /*shouldSnap=*/true, /*snapIncrement=*/45.0f);
+        // 10 + 28 = 38 -> round(38/45)*45 = round(0.844)*45 = 45
+        CHECKF(a->transform.rotation[1], 45.0f, "rotate drag: snap rounds to nearest 45 deg increment");
+    }
+    {
+        auto a = makeObj("a", "A"); a->transform.rotation = {0, 0, 0};
+        applyRotationDragAlg({a}, {}, 1, /*delta=*/20.0f, /*shouldSnap=*/true, /*snapIncrement=*/45.0f);
+        // 0 + 20 = 20 -> round(20/45)*45 = round(0.444)*45 = 0
+        CHECKF(a->transform.rotation[1], 0.0f, "rotate drag: snap rounds down when closer to the lower increment");
+    }
+
+    // No selection is a no-op.
+    {
+        CHECK(applyRotationDragAlg({}, {}, 1, 10.0f, true, 45.0f) == 0,
+              "rotate drag: empty selection is a no-op");
+    }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // deepCopyObjectAlg
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -2261,6 +2320,7 @@ int main()
     testScatterAlongCurve();
     testProportionalFalloff();
     testVertexSnap();
+    testRotationDragSnap();
     testDeepCopy();
     testUndoRedoBatchRename();
     testUndoRedoFindReplace();
