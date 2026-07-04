@@ -251,13 +251,19 @@ buildTextures(tinygltf::Model& model,
 {
     std::unordered_map<std::string, int> texIdx;
     for (const auto& [name, tex] : textures) {
+        auto wrapMode = [](const std::string& w) {
+            if (w == "clamp")  return TINYGLTF_TEXTURE_WRAP_CLAMP_TO_EDGE;
+            if (w == "mirror") return TINYGLTF_TEXTURE_WRAP_MIRRORED_REPEAT;
+            return TINYGLTF_TEXTURE_WRAP_REPEAT;
+        };
         tinygltf::Sampler samp;
-        samp.wrapS = (tex.wrapU == "clamp") ? TINYGLTF_TEXTURE_WRAP_CLAMP_TO_EDGE
-                                             : TINYGLTF_TEXTURE_WRAP_REPEAT;
-        samp.wrapT = (tex.wrapV == "clamp") ? TINYGLTF_TEXTURE_WRAP_CLAMP_TO_EDGE
-                                             : TINYGLTF_TEXTURE_WRAP_REPEAT;
-        samp.minFilter = TINYGLTF_TEXTURE_FILTER_LINEAR_MIPMAP_LINEAR;
-        samp.magFilter = TINYGLTF_TEXTURE_FILTER_LINEAR;
+        samp.wrapS = wrapMode(tex.wrapU);
+        samp.wrapT = wrapMode(tex.wrapV);
+        bool nearest = (tex.filter == "nearest");
+        samp.minFilter = nearest ? TINYGLTF_TEXTURE_FILTER_NEAREST_MIPMAP_NEAREST
+                                  : TINYGLTF_TEXTURE_FILTER_LINEAR_MIPMAP_LINEAR;
+        samp.magFilter = nearest ? TINYGLTF_TEXTURE_FILTER_NEAREST
+                                  : TINYGLTF_TEXTURE_FILTER_LINEAR;
 
         int sampIdx = static_cast<int>(model.samplers.size());
         model.samplers.push_back(std::move(samp));

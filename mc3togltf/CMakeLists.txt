@@ -126,6 +126,7 @@ if(BUILD_TESTING)
         set(_instance_deform_xml      "${CMAKE_CURRENT_SOURCE_DIR}/../test/instance_deform_cache.mc3.xml")
         set(_close_dimensions_xml     "${CMAKE_CURRENT_SOURCE_DIR}/../test/close_dimensions.mc3.xml")
         set(_obj_robustness_xml       "${CMAKE_CURRENT_SOURCE_DIR}/../test/obj_robustness.mc3.xml")
+        set(_texture_sampler_xml      "${CMAKE_CURRENT_SOURCE_DIR}/../test/texture_sampler.mc3.xml")
         if(EXISTS "${_anim_xml}" AND EXISTS "${_house_xml}")
             add_test(
                 NAME mc3togltf_gltf
@@ -239,6 +240,16 @@ if(BUILD_TESTING)
                         "${_obj_robustness_xml}"
             )
             set_tests_properties(mc3togltf_obj_robustness PROPERTIES TIMEOUT 30)
+        endif()
+        if(EXISTS "${_texture_sampler_xml}")
+            add_test(
+                NAME mc3togltf_texture_sampler
+                COMMAND "${PYTHON3_EXEC}"
+                        "${CMAKE_CURRENT_SOURCE_DIR}/test/texture_sampler_test.py"
+                        "$<TARGET_FILE:mc3togltf>"
+                        "${_texture_sampler_xml}"
+            )
+            set_tests_properties(mc3togltf_texture_sampler PROPERTIES TIMEOUT 30)
         endif()
         add_test(
             NAME mc3togltf_large_scene_generated

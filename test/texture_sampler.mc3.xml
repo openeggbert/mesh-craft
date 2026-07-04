@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<mc3 version="0.3" model="TextureSamplerTest">
+
+  <textures>
+    <texture id="tex_repeat"  uri="textures/a.png" wrap_u="repeat" wrap_v="repeat" filter="linear"/>
+    <texture id="tex_clamp"   uri="textures/b.png" wrap_u="clamp"  wrap_v="clamp"  filter="linear"/>
+    <texture id="tex_mirror"  uri="textures/c.png" wrap_u="mirror" wrap_v="mirror" filter="linear"/>
+    <texture id="tex_nearest" uri="textures/d.png" wrap_u="repeat" wrap_v="repeat" filter="nearest"/>
+  </textures>
+
+  <objects>
+    <plane name="Floor" size="4 4" axis="y" position="0 0 0"/>
+  </objects>
+
+</mc3>
