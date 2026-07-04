@@ -34,10 +34,13 @@ tool-blocked (STAB-0609/0614/0615/0620 need
 S20 (Release Readiness) is 12/15, with the last 3 items genuinely
 blocked (need Blender, a browser, or a running CI — none available in
 this environment). No gate is fully green yet. **S11 (Materials,
-Textures, and Visual Fidelity) work has started** (STAB-0417/0418
-done, 2 real export bugs found and fixed). Plan-wide totals: **227
-✅ done, 4 🟡 partial, 136 🧪 has a plan but not executed,
-283 📋 not started** out of 650.
+Textures, and Visual Fidelity) work is well underway**: STAB-0411-0420
+done (11 items — includes 5 duplicated with S2/S3's STAB-0166-0170),
+**3 real export bugs found and fixed** (texture wrap `mirror` mode,
+texture `filter`, and texture URI subdirectory-stripping), colorSpace/
+missing-texture-warns confirmed already correct. Plan-wide totals: **240
+✅ done, 4 🟡 partial, 125 🧪 has a plan but not executed,
+281 📋 not started** out of 650.
 
 **Important architectural decisions:**
 - `mc3/` and `mcb/` are pure C++ static libs with **no** CNA/ImGui
@@ -76,9 +79,10 @@ done, 2 real export bugs found and fixed). Plan-wide totals: **227
   re-checked against the newer 13-test count from STAB-0630 — see §3).
 
 ### Tests
-**22/22 CTest pass** in Debug as of this session (STAB-0630 added
-`mc3togltf_obj_robustness`, STAB-0417/0418 added
-`mc3togltf_texture_sampler`; started the session at 20/20, last full
+**23/23 CTest pass** in Debug as of this session (STAB-0630 added
+`mc3togltf_obj_robustness`, STAB-0417/0418/0420/0416 added
+`mc3togltf_texture_sampler`, STAB-0166-0170/0411-0415 added
+`mc3togltf_material_pbr`; started the session at 20/20, last full
 Debug+Release verification at commit `fca6fc1`): `smoke_test`,
 `xsd_validation`, `mc3_registry`, `mc3_ai`, `mc3_roundtrip`,
 `mc3_commands`, `mcb_roundtrip`, `mc3tomcb_roundtrip`,
@@ -88,7 +92,8 @@ Debug+Release verification at commit `fca6fc1`): `smoke_test`,
 `mc3togltf_csg_unsupported`, `mc3togltf_csg_nested`,
 `mc3togltf_instance_deform_cache`, `mc3togltf_float_cache_key`,
 `mc3togltf_obj_robustness`, `mc3togltf_texture_sampler`,
-`mc3togltf_large_scene_generated`, `mc3togltf_large_scene_500`.
+`mc3togltf_material_pbr`, `mc3togltf_large_scene_generated`,
+`mc3togltf_large_scene_500`.
 
 - `mc3_commands` (~282 assertions): editor command algorithms, undo/redo
   for every mutating command, auto-save/backup, Save-As/Export-Selection/
@@ -163,18 +168,55 @@ See `TESTING.md` for the full per-test reference and `plan.md`'s
 
 ## 3. Recent changes
 
-**14 STAB tasks committed and pushed this session** (`53aa75e` through
-`cb15f7c`; `origin/develop` == local `develop` as of this update — see
-`git log --oneline` for the full list). Gate 6 is exhausted for this
-environment (§8); work has moved on to **S11 (Materials, Textures, and
-Visual Fidelity)**. **STAB-0417/STAB-0418** below are implemented but
-**not yet committed** as of this update.
+**16 STAB tasks committed and pushed as of `3799a27`** (`53aa75e`
+through `3799a27` — see `git log --oneline` for the full list). Gate 6
+is exhausted for this environment (§8); work has moved on to **S11
+(Materials, Textures, and Visual Fidelity)**. **STAB-0419/0420/0166-
+0170/0411-0416** below are implemented but **not yet committed** as of
+this update.
 
 This was a long, dense session that closed out essentially all of
 **Gate 6 (Documentation)**'s reachable work (plus a from-scratch schema
 audit that found real bugs), then moved into S11. Highlights, most
 recent first:
 
+- **STAB-0416 — texture URI subdirectory silently stripped on export**:
+  the 3rd real S11 export bug this session. tinygltf's *default* image
+  writer (`tinygltf::WriteImageData`, vendored) truncates
+  external-reference URIs to `GetBaseFilename()` — `uri="textures/a.png"`
+  was silently exported as `uri="a.png"`, which would break texture
+  loading in any tool expecting the original relative layout (that
+  default behavior is designed for tinygltf's own "auto-write image
+  bytes next to the gltf" workflow, which mc3togltf doesn't use for
+  external references). Fixed by registering a custom
+  `writer.SetImageWriter(...)` that preserves the original URI verbatim
+  for external references and delegates to the real default for
+  embedded images (`--embed`/`.glb`, confirmed unaffected). Extended
+  `mc3togltf_texture_sampler` to assert exact `uri` values.
+- **STAB-0166-0170 (S2/S3) + STAB-0411-0415 (S11) — verified material
+  PBR export** (10 duplicate-pair rows, same underlying check,
+  closed together): `base_color` → `baseColorFactor` (all 4 components
+  incl. alpha), `metallic` → `metallicFactor`, `roughness` →
+  `roughnessFactor`, `emissive_color` → `emissiveFactor`, `alpha_mode`
+  → `alphaMode`/`alphaCutoff` (`blend`→BLEND, `mask`+cutoff→MASK) all
+  confirmed correct via a new `test/material_pbr.mc3.xml` fixture (4
+  materials covering each case) and `mc3togltf_material_pbr` ctest —
+  no code changes needed, this was genuinely already correct, just
+  untested.
+- **STAB-0419 + STAB-0420 — verified texture colorSpace/missing-file
+  handling**: `tex.colorSpace` is never read by `GltfExporter.cpp`, but
+  this is *correct*, not a gap — glTF core has no per-texture
+  colorSpace property; the spec mandates it implicitly by material
+  slot (baseColor/emissive = sRGB, normal/metallicRoughness/occlusion
+  = linear, non-negotiable), and the exporter never decodes/re-encodes
+  pixels anyway (raw PNG bytes copied verbatim). Checked real content
+  (`test/human.mc3.xml`): mc3 authors already assign `color_space`
+  consistent with glTF's per-slot convention. For STAB-0420: default
+  `.gltf` mode correctly doesn't warn on a missing texture file (it's
+  just an external URI reference, resolved later by the consuming
+  tool); `--embed`/`.glb` mode (which actually reads pixel bytes)
+  already warns per-texture and still exits 0 — extended
+  `mc3togltf_texture_sampler` to cover the `.glb` path explicitly.
 - **STAB-0417 + STAB-0418 — texture sampler wrap/filter export bugs**:
   found 2 more real gaps while starting S11. `mc3.xsd`'s `wrapModeType`
   allows `repeat`/`clamp`/`mirror`, but `GltfExporter.cpp`'s
@@ -634,41 +676,35 @@ without an external tool or a human with a display.**
 
 The next priority tier is P2 items across S6–S13 and the untouched
 S11/S12/S14/S15 sections. **S11 (Materials, Textures, and Visual
-Fidelity)** has several concrete, non-blocked P1 candidates worth
-picking up next:
+Fidelity)**: STAB-0411-0420 are all done (§3). STAB-0421/0422/0423 are
+next by ID but all concern the **material preview sphere** — a live
+ImGui/OpenGL-rendered 128×128 widget — genuinely blocked in this
+headless environment for the same reason as STAB-0617 (no display, no
+way to visually verify). Skip to the next non-visual items:
 
-1. **STAB-0419 — verify texture colorSpace exported** (S11, P1,
-   next in queue after STAB-0417/0418). Goal: `tex.colorSpace`
-   (`srgb`/`linear`) is currently never read by `GltfExporter.cpp` at
-   all (same shape of gap as STAB-0418's filter bug). glTF core has no
-   first-party per-texture colorSpace property — the spec conveys this
-   implicitly by texture *slot* (baseColor/emissive are sRGB by
-   convention, normal/metallicRoughness/occlusion are linear) — so
-   decide whether mc3's explicit `color_space` attribute needs an
-   `extras` field, a `KHR_texture_...` extension, or is actually
-   already correctly implied by slot and just needs documenting as
-   such (read the row's own hedge: "glTF extras or KHR extension").
-   Files: `mc3togltf/src/GltfExporter.cpp`.
-   Verify: check whether `tex.colorSpace` disagreeing with its slot's
-   implicit convention (e.g. a normal map explicitly marked `srgb`) is
-   even a real scenario worth representing; if a fix is warranted,
-   extend `mc3togltf_texture_sampler` (or a new ctest) to cover it.
+1. **STAB-0424 — material with same ID but different fields in
+   merge/include** (S11, P2). Goal: when a scene `<include>`s another
+   file and both define a material with the same `id` but different
+   field values, confirm/document the local-wins policy (does the
+   *including* file's definition win, or the included one, or is it
+   last-one-wins by parse order?) and add a regression test.
+   Files: `mc3/src/Mc3XmlParser.cpp` (include-merge logic, see the
+   `mergeInclude`/`processIncludes` functions read during this
+   session's STAB-0612/0613 work), `mc3/test/roundtrip_test.cpp`.
+   Verify: read the actual merge order in code first; write a small
+   two-file fixture (base + include) with a colliding material id and
+   confirm which value survives; add a ctest assertion.
 
-2. **STAB-0420 — add test: missing texture warns but does not fail
-   export** (S11, P1). Goal: confirm a `<texture>` whose `uri` doesn't
-   exist on disk produces a warning (not a crash/hard-fail) and export
-   continues. STAB-0417/0418's new `test/texture_sampler.mc3.xml`
-   fixture already references nonexistent files
-   (`textures/a.png` etc.) in non-embed mode — check whether this
-   already exercises the missing-texture path, or whether `--embed`
-   mode's `GltfExporter.cpp:282` warning path (found while fixing
-   STAB-0417/0418, currently only reachable in embed/GLB output) needs
-   its own explicit test.
-   Files: `mc3togltf/src/GltfExporter.cpp`, possibly extend
-   `test/texture_sampler.mc3.xml` or add a new fixture.
-   Verify: run `mc3togltf` (both `.gltf` and `--embed`/`.glb` modes)
-   against a texture with a missing file; confirm exit 0 + warning
-   text; add/extend a ctest.
+2. **STAB-0425 — verify material after registry insert: no ID
+   collision with scene** (S11, P2). Goal: confirm that inserting a
+   `ModelRegistry` entry whose materials collide by `id` with the live
+   scene's existing materials gets a suffix (not a silent overwrite or
+   a duplicate-key clobber).
+   Files: `src/MeshCraft/ModelRegistry.cpp` (`insertIntoScene`, read
+   during this session's STAB-0611/0635 `TempFile.hpp` work).
+   Verify: read the actual insert logic; if untested, add a
+   `mc3_registry` test case inserting a definition whose material id
+   already exists in the target document.
 
 Beyond these two: S11 has ~20 more P2/P3 items after STAB-0417-0420
 (see `plan.md`'s S11 rows). S12 (Animation Stability), S13

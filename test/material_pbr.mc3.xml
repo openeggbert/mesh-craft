@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<mc3 version="0.3" model="MaterialPbrTest">
+
+  <materials>
+    <material id="mat_metal_rough" roughness="0.3" metallic="0.8">
+      <base_color>0.6 0.6 0.6 1.0</base_color>
+    </material>
+    <material id="mat_emissive" roughness="0.5" metallic="0.0">
+      <base_color>0 0 0 1</base_color>
+      <emissive_color>1 0.5 0</emissive_color>
+    </material>
+    <material id="mat_blend" roughness="0.5" metallic="0.0" alpha_mode="blend">
+      <base_color>0.2 0.4 0.8 0.5</base_color>
+    </material>
+    <material id="mat_mask" roughness="0.5" metallic="0.0" alpha_mode="mask" alpha_cutoff="0.7">
+      <base_color>1 1 1 0.9</base_color>
+    </material>
+  </materials>
+
+  <objects>
+    <box name="BoxMetalRough" size="1 1 1" position="0 0 0" material="mat_metal_rough"/>
+    <box name="BoxEmissive"   size="1 1 1" position="2 0 0" material="mat_emissive"/>
+    <box name="BoxBlend"      size="1 1 1" position="4 0 0" material="mat_blend"/>
+    <box name="BoxMask"       size="1 1 1" position="6 0 0" material="mat_mask"/>
+  </objects>
+
+</mc3>

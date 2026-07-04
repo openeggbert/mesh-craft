@@ -1048,6 +1048,28 @@ void GltfExporter::exportDocument(const Mc3Document& doc,
     tinygltf::Model model;
     tinygltf::TinyGLTF writer;
 
+    // STAB-0416: tinygltf's default image writer (tinygltf::WriteImageData)
+    // truncates image.uri down to just its basename (GetBaseFilename) before
+    // writing it out — designed for the "auto-write image bytes next to the
+    // gltf" workflow, but it silently drops any subdirectory prefix (e.g.
+    // "textures/wall.png" -> "wall.png") for external-reference textures,
+    // which never had pixel data for it to write in the first place. Only
+    // override the external-reference case (image->image.empty()); delegate
+    // to the real default for embedded images so --embed/.glb is unaffected.
+    writer.SetImageWriter(
+        [](const std::string* basepath, const std::string* filename,
+           const tinygltf::Image* image, bool embedImages,
+           const tinygltf::FsCallbacks* fs_cb, const tinygltf::URICallbacks* uri_cb,
+           std::string* out_uri, void* user_data) -> bool {
+            if (image->image.empty()) {
+                *out_uri = image->uri;
+                return true;
+            }
+            return tinygltf::WriteImageData(basepath, filename, image, embedImages,
+                                             fs_cb, uri_cb, out_uri, user_data);
+        },
+        nullptr);
+
     model.buffers.emplace_back();
     model.buffers[0].name = "buffer0";
     model.asset.version   = "2.0";
