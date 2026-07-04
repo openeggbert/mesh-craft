@@ -4,9 +4,9 @@
 #include "AiResponseAlgorithms.hpp"
 
 #include <MeshCraft/Mc3/Mc3Document.hpp>
+#include <MeshCraft/TempFile.hpp>
 #include <imgui.h>
 
-#include <atomic>
 #include <cstdlib>
 #include <cstring>
 #include <filesystem>
@@ -68,12 +68,9 @@ static std::string buildSystemPrompt() {
         + std::string(kStrictXmlRules);
 }
 
-static std::atomic<int> gAiTmpCounter{0};
-
 static std::string serializeScene(const Mc3::Mc3Document& doc) {
     namespace fs = std::filesystem;
-    auto tmp = fs::temp_directory_path() /
-               ("mc_ai_scene_" + std::to_string(gAiTmpCounter++) + ".mc3.xml");
+    auto tmp = uniqueTempPath("mc_ai_scene", ".mc3.xml");
     doc.saveToFile(tmp);
     std::ifstream f(tmp);
     std::string xml(std::istreambuf_iterator<char>(f), {});

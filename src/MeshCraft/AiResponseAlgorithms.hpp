@@ -5,8 +5,8 @@
 // ai_test.cpp (headless).
 
 #include <MeshCraft/Mc3/Mc3Document.hpp>
+#include <MeshCraft/TempFile.hpp>
 
-#include <atomic>
 #include <cstdarg>
 #include <cstdio>
 #include <cstring>
@@ -93,10 +93,8 @@ inline std::string repairXmlAlg(const std::string& xml)
 // file since the parser is file-based).
 inline Mc3::Mc3Document parseXmlAlg(const std::string& xml)
 {
-    static std::atomic<int> tmpCounter{0};
     namespace fs = std::filesystem;
-    auto tmp = fs::temp_directory_path() /
-               ("mc_ai_parse_" + std::to_string(tmpCounter++) + ".mc3.xml");
+    auto tmp = uniqueTempPath("mc_ai_parse", ".mc3.xml");
     { std::ofstream f(tmp); f << xml; }
     auto doc = Mc3::Mc3Document::loadFromFile(tmp);
     std::error_code ec;

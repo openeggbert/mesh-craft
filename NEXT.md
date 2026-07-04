@@ -24,14 +24,14 @@ risks closed quickly).
 **Current phase:** Stabilization. Every gate's priority-list subset is
 now done. **Gate 6 (Documentation) is close to fully green**: S17
 (Documentation and User-Facing Honesty) is 20/20 complete; S18 (Code
-Quality) has all P0/P1 items done plus 2 P2s (STAB-0610, STAB-0603)
-done, 16 P2/P3 remain; S19 (Security) has all P0/P1/P2 items done
-(14/15), with just 1 P3 left (STAB-0635, tmp-file race condition); S20
-(Release Readiness) is 12/15, with the last 3 items genuinely blocked
+Quality) has all P0/P1 items done plus 3 P2s (STAB-0610, STAB-0603,
+STAB-0611) done, 15 P2/P3 remain; **S19 (Security and Robustness) is
+now fully green — 15/15**; S20 (Release Readiness) is 12/15, with the
+last 3 items genuinely blocked
 (need Blender, a browser, or a running CI — none available in this
-environment). No gate is fully green yet. Plan-wide totals: **212 ✅
+environment). No gate is fully green yet. Plan-wide totals: **214 ✅
 done, 3 🟡 partial, 136 🧪 has a plan but not executed,
-299 📋 not started** out of 650.
+297 📋 not started** out of 650.
 
 **Important architectural decisions:**
 - `mc3/` and `mcb/` are pure C++ static libs with **no** CNA/ImGui
@@ -156,19 +156,39 @@ See `TESTING.md` for the full per-test reference and `plan.md`'s
 ## 3. Recent changes
 
 **STAB-0610** (`53aa75e`), **STAB-0630** (`09fdf95`),
-**STAB-0383/STAB-0631** (`7670a00`), and **STAB-0633** (`9aabad4`) are
-committed; `origin/develop` is not yet pushed to (last pushed commit is
-`03723b8`). **STAB-0603** below is implemented but **not yet
-committed** as of this update — working tree has a file move
-(`src/MeshCraft/EditorAlgorithms.hpp` → `include/MeshCraft/
-EditorAlgorithms.hpp`) plus edits to `MeshCraftApplication_Commands.cpp`,
-`mc3/test/editor_commands_test.cpp`, `mc3/CMakeLists.txt`, `plan.md`,
+**STAB-0383/STAB-0631** (`7670a00`), **STAB-0633** (`9aabad4`), and
+**STAB-0603** (`54f6a76`+`99cc7ad`) are committed; `origin/develop` is
+not yet pushed to (last pushed commit is `03723b8`). **STAB-0611 +
+STAB-0635** below are implemented but **not yet committed** as of this
+update — working tree has a new file (`include/MeshCraft/TempFile.hpp`)
+plus edits to `ModelRegistry.cpp`, `AiResponseAlgorithms.hpp`,
+`MeshCraftApplication_UiAi.cpp`, `mc3/test/ai_test.cpp`, `plan.md`,
 `NEXT.md`.
 
 This was a long, dense session that closed out essentially all of
 **Gate 6 (Documentation)**'s reachable work, plus a from-scratch schema
 audit that found real bugs. Highlights, most recent first:
 
+- **STAB-0611 + STAB-0635 — shared `uniqueTempPath()` helper, fixing a
+  real tmp-file collision risk**: while investigating STAB-0635 (whose
+  `plan.md` row named `AiAssistant.cpp` as the key file — slightly off;
+  it has no temp files at all), found the *same* bug pattern
+  independently duplicated in 3 places: `ModelRegistry.cpp`'s
+  `entryFromDef`/`insertIntoScene`, `AiResponseAlgorithms.hpp`'s
+  `parseXmlAlg`, and `MeshCraftApplication_UiAi.cpp`'s `serializeScene`
+  each built their tmp filename from a local `std::atomic<int>` counter
+  starting at 0 — safe within one process, but two MeshCraft processes
+  (or an app instance + a test run) sharing the same OS temp directory
+  could collide on the exact same filename. Added
+  `include/MeshCraft/TempFile.hpp`'s `uniqueTempPath(prefix, extension)`
+  (random 64-bit suffix, `thread_local` RNG seeded from
+  `std::random_device`) — this is exactly what the still-open
+  STAB-0611 asked for ("shared between AI assistant and any future
+  user"), so fixing STAB-0635 properly meant doing STAB-0611 first and
+  using it at all 3 sites rather than patching each one differently.
+  Added a 1000-iteration no-collision regression test to `ai_test`.
+  Verified: 21/21 ctest, plus a direct run of `mc3_registry_test`
+  (exercises the changed `ModelRegistry.cpp` paths) — all pass.
 - **STAB-0603 — `EditorAlgorithms.hpp` moved to a public include
   directory**: was at `src/MeshCraft/EditorAlgorithms.hpp`, included
   via a fragile `src/`-relative path (`#include "EditorAlgorithms.hpp"`)
@@ -493,29 +513,37 @@ No project linter/formatter is configured.
 
 ## 8. Next smallest tasks
 
-1. **STAB-0635 — verify tmp-file race condition** (S19, P3, the one
-   remaining S19 item). Goal: confirm `AiAssistant.cpp`'s temp-file
-   naming includes a PID or random suffix (not a fixed name two
-   concurrent instances could collide on).
-   Files: `src/MeshCraft/AiAssistant.cpp`.
-   Verify: code inspection; grep for the tmp-path construction and
-   confirm uniqueness per process/thread.
+**S19 (Security and Robustness) is fully green — 15/15 — no remaining
+S19 items.** All remaining Gate 6 work is in S18 (Code Quality):
 
-2. **STAB-0604 — audit duplicate code: `SceneRenderer_Builders.cpp` vs
-   `MeshBuilder.cpp`** (S18, P2, next-lowest ID after STAB-0603). Goal:
-   check whether the two files (one in the CNA-coupled renderer, one in
-   the CNA-free `mc3togltf_lib`) duplicate the same primitive-geometry
-   generation logic; if so, decide whether it's worth extracting to a
-   shared utility (may not be — the two have different vertex/index
-   formats for different consumers, so duplication could be
-   intentional; this needs a real read before deciding).
+1. **STAB-0604 — audit duplicate code: `SceneRenderer_Builders.cpp` vs
+   `MeshBuilder.cpp`** (S18, P2, next-lowest ID after
+   STAB-0603/0610/0611). Goal: check whether the two files (one in the
+   CNA-coupled renderer, one in the CNA-free `mc3togltf_lib`) duplicate
+   the same primitive-geometry generation logic; if so, decide whether
+   it's worth extracting to a shared utility (may not be — the two
+   have different vertex/index formats for different consumers, so
+   duplication could be intentional; this needs a real read before
+   deciding).
    Files: `src/MeshCraft/Renderer/SceneRenderer_Builders.cpp`,
    `mc3togltf/src/MeshBuilder.cpp`.
    Verify: code inspection; if extraction happens, `ctest
    --output-on-failure` must stay 21/21.
 
-Beyond these two: S18 has 15 more P2/P3 items after STAB-0603/0604
-(mostly code-quality audits — see `plan.md`'s S18 rows). Closing S18+S19 fully
+2. **STAB-0605 — verify logging is consistent** (S18, P2). Goal: check
+   whether error/warning reporting across the codebase uses a
+   consistent channel (the mc3togltf/AI-panel code already uses
+   `std::cerr << "Warning: ..."` consistently per this session's
+   STAB-0630/STAB-0383 work) rather than a mix of raw `printf`/`cerr`/
+   something else, especially in library code (`mc3/src`,
+   `mc3togltf/src`, `mcb/src`).
+   Files: all `.cpp` (grep-driven audit).
+   Verify: code inspection; `grep -rn "printf\|fprintf\|std::cerr\|std::cout"`
+   across library dirs, categorize what's found.
+
+Beyond these two: S18 has 14 more P2/P3 items after
+STAB-0603/0604/0605/0610/0611 (mostly code-quality audits — see
+`plan.md`'s S18 rows). Closing S18 fully
 would leave Gate 6 blocked only on the 3 genuinely-inaccessible S20
 items (§5). After that, the next priority tier is P2 items across
 S6–S13 and the

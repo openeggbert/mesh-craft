@@ -14,11 +14,13 @@
 #include "AiResponseAlgorithms.hpp"
 
 #include <MeshCraft/Mc3/Mc3Document.hpp>
+#include <MeshCraft/TempFile.hpp>
 
 #include <chrono>
 #include <condition_variable>
 #include <iostream>
 #include <mutex>
+#include <set>
 #include <string>
 #include <thread>
 
@@ -51,6 +53,22 @@ static void testJsonEscape() {
     std::string ctrl(1, '\x01');
     CHECK(AiAssistant::jsonEscape(ctrl) == "\\u0001",
           "jsonEscape: other control characters escaped as \\u00XX");
+}
+
+// STAB-0611/STAB-0635 — uniqueTempPath() must not repeat, even for the same
+// prefix/extension in the same process (the bug this replaces was a
+// per-process counter that reset to 0 on every launch, so two MeshCraft
+// processes could collide on the same tmp filename).
+static void testUniqueTempPathNoCollision() {
+    std::set<std::string> seen;
+    bool anyCollision = false;
+    for (int i = 0; i < 1000; ++i) {
+        auto p = MeshCraft::uniqueTempPath("stab0635_test", ".tmp");
+        if (!seen.insert(p.string()).second) anyCollision = true;
+    }
+    CHECK(!anyCollision,
+          "STAB-0611/STAB-0635: 1000 consecutive uniqueTempPath() calls with "
+          "the same prefix/extension never repeat");
 }
 
 static void testExtractStopReason() {
@@ -442,6 +460,7 @@ static void testNetworkTimeoutPreventsIndefiniteHang() {
 // ─────────────────────────────────────────────────────────────────────────────
 
 int main() {
+    testUniqueTempPathNoCollision();
     testJsonEscape();
     testExtractStopReason();
     testExtractFirstTextValue();

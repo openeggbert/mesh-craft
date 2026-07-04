@@ -6,7 +6,7 @@
 
 #include <MeshCraft/Mc3/Mc3Document.hpp>
 #include <MeshCraft/Mc3/Mc3Object.hpp>
-#include <atomic>
+#include <MeshCraft/TempFile.hpp>
 #include <filesystem>
 #include <fstream>
 #include <functional>
@@ -14,8 +14,6 @@
 #include <set>
 #include <stdexcept>
 #include <string>
-
-static std::atomic<int> gRegTmpCounter{0};
 
 namespace MeshCraft {
 
@@ -275,8 +273,7 @@ ModelRegistry::Entry ModelRegistry::entryFromDefinition(
         }
     }
 
-    auto tmpPath = std::filesystem::temp_directory_path() /
-                   ("mc_reg_save_" + std::to_string(gRegTmpCounter++) + ".mc3.xml");
+    auto tmpPath = uniqueTempPath("mc_reg_save", ".mc3.xml");
     tmp.saveToFile(tmpPath);
     std::string xml = readFile(tmpPath);
     std::error_code ec;
@@ -298,8 +295,7 @@ ModelRegistry::Entry ModelRegistry::entryFromDefinition(
 // ---------------------------------------------------------------------------
 
 std::string ModelRegistry::insertIntoScene(Mc3::Mc3Document& doc, const Entry& e) const {
-    auto tmpPath = std::filesystem::temp_directory_path() /
-                   ("mc_reg_insert_" + std::to_string(gRegTmpCounter++) + ".mc3.xml");
+    auto tmpPath = uniqueTempPath("mc_reg_insert", ".mc3.xml");
     {
         std::ofstream f(tmpPath);
         if (!f) throw std::runtime_error("Cannot write temp file");
