@@ -415,16 +415,8 @@ void MeshCraftApplication::drawDialogs()
         if (entry(  "File", cFile, "Screenshot",       "F11"))      saveScreenshot("screenshot.ppm");
 
         // ---- Edit commands ----
-        if (hasUndo && entry("Edit", cEdit, "Undo",   "Ctrl+Z")) {
-            redoStack_.push_back(deepCopyDoc(document_));
-            document_ = std::move(undoStack_.back()); undoStack_.pop_back();
-            selection_.clear(); modified_ = true; updateWindowTitle();
-        }
-        if (hasRedo && entry("Edit", cEdit, "Redo",   "Ctrl+Y")) {
-            undoStack_.push_back(deepCopyDoc(document_));
-            document_ = std::move(redoStack_.back()); redoStack_.pop_back();
-            selection_.clear(); modified_ = true; updateWindowTitle();
-        }
+        if (hasUndo && entry("Edit", cEdit, "Undo",   "Ctrl+Z")) performUndo();
+        if (hasRedo && entry("Edit", cEdit, "Redo",   "Ctrl+Y")) performRedo();
         if (entry("Edit", cEdit, "Select All",         "Ctrl+A")) {
             selection_.clear();
             for (auto& o : document_.objects) selection_.select(o);
@@ -443,28 +435,7 @@ void MeshCraftApplication::drawDialogs()
             if (selection_.selection().size() >= 2)
                 if (entry("Edit", cEdit, "Copy Properties to Selected…", "Ctrl+⇧P")) copyPropsOpen_ = true;
             if (hasSel) {
-                if (entry("Edit", cEdit, "Drop to Ground Plane", "")) {
-                    pushUndo();
-                    for (const auto& s : selection_.selection()) {
-                        if (lockedIds_.count(s->id)) continue;
-                        float bot = 0.0f;
-                        if (s->primitive) {
-                            const auto& p = *s->primitive;
-                            float sy = std::abs(s->transform.scale[1]);
-                            switch (p.primitiveType) {
-                                case Mc3::PrimitiveType::Box:
-                                case Mc3::PrimitiveType::Cube:      bot = (p.size[1]*sy)/2.0f; break;
-                                case Mc3::PrimitiveType::Sphere:    bot = p.radius*sy;          break;
-                                case Mc3::PrimitiveType::Cylinder:
-                                case Mc3::PrimitiveType::Cone:      bot = (p.height/2.0f)*sy;  break;
-                                default: break;
-                            }
-                        }
-                        s->transform.position[1] = bot;
-                    }
-                    modified_ = true; updateWindowTitle();
-                    setStatusMsg("Dropped to ground plane");
-                }
+                if (entry("Edit", cEdit, "Drop to Ground Plane", "")) dropSelectedToGroundPlane();
             }
             if (entry("Edit", cEdit, "Select Parent",  "P"))        selectParent();
             if (hasSel && entry("Edit", cEdit, "Convert to Definition", "")) convertToDefinition();

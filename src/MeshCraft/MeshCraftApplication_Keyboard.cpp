@@ -41,34 +41,8 @@ void MeshCraftApplication::handleKeyboardShortcuts(const KeyboardState& ks, cons
     }
 
     // Undo / Redo
-    if (shortcutFired("edit.undo", ks, prevKs)) {
-        if (!undoStack_.empty()) {
-            redoStack_.push_back(deepCopyDoc(document_));
-            if (static_cast<int>(redoStack_.size()) > kUndoMax)
-                redoStack_.erase(redoStack_.begin());
-            document_ = std::move(undoStack_.back());
-            undoStack_.pop_back();
-            selection_.clear();
-            modified_ = true;
-            updateWindowTitle();
-            evaluateAndPushAnimOverrides();
-        }
-        return;
-    }
-    if (shortcutFired("edit.redo", ks, prevKs)) {
-        if (!redoStack_.empty()) {
-            undoStack_.push_back(deepCopyDoc(document_));
-            if (static_cast<int>(undoStack_.size()) > kUndoMax)
-                undoStack_.erase(undoStack_.begin());
-            document_ = std::move(redoStack_.back());
-            redoStack_.pop_back();
-            selection_.clear();
-            modified_ = true;
-            updateWindowTitle();
-            evaluateAndPushAnimOverrides();
-        }
-        return;
-    }
+    if (shortcutFired("edit.undo", ks, prevKs)) { performUndo(); return; }
+    if (shortcutFired("edit.redo", ks, prevKs)) { performRedo(); return; }
 
     // Walk mode toggle (F5)
     if (justPressed(ks, prevKs, Keys::F5)) {

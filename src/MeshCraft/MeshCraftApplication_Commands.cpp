@@ -328,6 +328,35 @@ void MeshCraftApplication::pushUndo() {
     // CSG cache no longer cleared here: hash-based invalidation handles it (K1)
 }
 
+// Shared by the keyboard shortcut, the Edit menu, and the command palette
+// (STAB-0486) so all 3 entry points stay behaviorally identical instead of
+// hand-copied and free to drift.
+void MeshCraftApplication::performUndo() {
+    if (undoStack_.empty()) return;
+    redoStack_.push_back(deepCopyDoc(document_));
+    if (static_cast<int>(redoStack_.size()) > kUndoMax)
+        redoStack_.erase(redoStack_.begin());
+    document_ = std::move(undoStack_.back());
+    undoStack_.pop_back();
+    selection_.clear();
+    modified_ = true;
+    updateWindowTitle();
+    evaluateAndPushAnimOverrides();
+}
+
+void MeshCraftApplication::performRedo() {
+    if (redoStack_.empty()) return;
+    undoStack_.push_back(deepCopyDoc(document_));
+    if (static_cast<int>(undoStack_.size()) > kUndoMax)
+        undoStack_.erase(undoStack_.begin());
+    document_ = std::move(redoStack_.back());
+    redoStack_.pop_back();
+    selection_.clear();
+    modified_ = true;
+    updateWindowTitle();
+    evaluateAndPushAnimOverrides();
+}
+
 // ---------------------------------------------------------------------------
 // Screenshot
 // ---------------------------------------------------------------------------
@@ -542,6 +571,34 @@ void MeshCraftApplication::alignToObject() {
     modified_ = true; updateWindowTitle();
     setStatusMsg("Aligned " + std::to_string(aligned) +
                  " object(s) to " + srcName, false, 2.0f);
+}
+
+// Shared by the Edit menu and the command palette (STAB-0486) so both stay
+// behaviorally identical instead of hand-copied and free to drift.
+void MeshCraftApplication::dropSelectedToGroundPlane() {
+    if (!selection_.hasSelection()) return;
+    pushUndo();
+    int dropped = 0;
+    for (const auto& s : selection_.selection()) {
+        if (lockedIds_.count(s->id)) continue;
+        float bottomOffset = 0.0f; // distance from pivot to lowest point
+        if (s->primitive) {
+            const auto& p = *s->primitive;
+            float sy = std::abs(s->transform.scale[1]);
+            switch (p.primitiveType) {
+                case Mc3::PrimitiveType::Box:
+                case Mc3::PrimitiveType::Cube:   bottomOffset = (p.size[1]*sy)/2.0f; break;
+                case Mc3::PrimitiveType::Sphere: bottomOffset = p.radius*sy;         break;
+                case Mc3::PrimitiveType::Cylinder:
+                case Mc3::PrimitiveType::Cone:   bottomOffset = (p.height/2.0f)*sy; break;
+                default: bottomOffset = 0.0f; break;
+            }
+        }
+        s->transform.position[1] = bottomOffset;
+        ++dropped;
+    }
+    modified_ = true; updateWindowTitle();
+    setStatusMsg("Dropped " + std::to_string(dropped) + " object(s) to ground plane");
 }
 
 // H14: Scale selected objects around their group center

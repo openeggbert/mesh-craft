@@ -433,6 +433,7 @@ private:
     void convertToDefinition();
     void breakInstance();
     void randomizeTransformSelected();
+    void dropSelectedToGroundPlane();
 
     // Find & Replace names dialog
     bool findReplaceOpen_{false};
@@ -546,6 +547,8 @@ private:
     std::vector<Mc3::Mc3Document> undoStack_;
     std::vector<Mc3::Mc3Document> redoStack_;
     void pushUndo();
+    void performUndo();
+    void performRedo();
 
     // SDL event watcher for ImGui event forwarding
     static bool sdlEventWatch(void* userdata, void* event);

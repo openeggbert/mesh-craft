@@ -34,12 +34,14 @@ flagged (STAB-0464 needs a live display; STAB-0460 describes a feature
 that was never built, out of scope per the stabilization moratorium).
 Both S11 and S12 sweeps found several real bugs, fixed with permanent
 regression tests — see §3 for the full list. **S13 (Commands,
-Undo/Redo, and Algorithms)** work is underway: STAB-0482-0485 done
+Undo/Redo, and Algorithms)** work is underway: STAB-0482-0486 done
 (extracted `convertToDefinitionAlg()`/`breakInstanceAlg()`/
 `alignToObjectAlg()`/`scatterAlongCurveAlg()` Alg mirrors, none existed
-before; STAB-0483 found and fixed a real duplicate-id bug — see §3).
-Plan-wide totals: **287 ✅ done, 6 🟡 partial, 112 🧪 has a plan but
-not executed, 245 📋 not started** out of 650.
+before; STAB-0483 found and fixed a real duplicate-id bug; STAB-0486
+found and fixed a real Undo/Redo drift bug between the keyboard/menu/
+palette entry points — see §3). Plan-wide totals: **288 ✅ done, 6 🟡
+partial, 112 🧪 has a plan but not executed, 244 📋 not started** out
+of 650.
 
 **Important architectural decisions:**
 - `mc3/` and `mcb/` are pure C++ static libs with **no** CNA/ImGui
@@ -170,9 +172,9 @@ See `TESTING.md` for the full per-test reference and `plan.md`'s
 
 ## 3. Recent changes
 
-**27 STAB tasks committed as of `5b1d306`** (`53aa75e` through
-`5b1d306`, pushed to `origin/develop` — see `git log --oneline` for the
-full list). **STAB-0485** below is implemented and about to be
+**28 STAB tasks committed as of `bfc185b`** (`53aa75e` through
+`bfc185b`, pushed to `origin/develop` — see `git log --oneline` for the
+full list). **STAB-0486** below is implemented and about to be
 committed as of this update. Gate 6 is exhausted (§8); **S11 and S12
 are both fully done** except genuinely blocked/flagged items. Work is
 underway on **S13 (Commands, Undo/Redo, and Algorithms)**.
@@ -183,6 +185,27 @@ audit that found real bugs), then finished S11 and S12 entirely (bar
 the blocked/flagged items) and started S13. Highlights, most recent
 first:
 
+- **STAB-0486 — found and fixed a real Undo/Redo drift bug**: 3
+  independent hand-copied implementations of Undo/Redo had silently
+  diverged — the keyboard shortcut path (`MeshCraftApplication_Keyboard.cpp`)
+  enforced the `kUndoMax` cap on the *opposite* stack (e.g. redo-stack
+  growth while undoing) and called `evaluateAndPushAnimOverrides()` to
+  refresh animation state after the swap, but the Edit-menu and command-
+  palette copies did neither — undoing/redoing via mouse could grow the
+  opposite stack past the 20-entry cap and leave stale animation
+  overrides applied until something else (e.g. playback) refreshed
+  them. Also found "Drop to Ground Plane" duplicated between menu and
+  palette with a cosmetic status-message drift (menu reported the
+  actual dropped count, palette always said "Dropped to ground plane").
+  Fixed both by extracting shared `performUndo()`/`performRedo()`/
+  `dropSelectedToGroundPlane()` private methods
+  (`MeshCraftApplication_Commands.cpp`) and wiring all 3 (or 2) call
+  sites to them — future changes can no longer re-diverge. No new
+  headless test possible (CNA-coupled `MeshCraftApplication` methods
+  can't be instantiated in `mc3_commands_test`); the shared cap logic
+  itself is already covered by `testUndoStackDepthCapped`. Verified via
+  full rebuild (0 warnings), 25/25 ctest, and a real `--screenshot`
+  smoke test against `house.mc3.xml`.
 - **STAB-0485 — extracted `scatterAlongCurveAlg()`**: this row's
   phrasing ("N=10 -> exactly 10 new objects") doesn't match intended
   behavior — the UI itself documents `count-1` new objects
@@ -930,21 +953,24 @@ stabilization moratorium; STAB-0464 needs a live display).
 **S13 (Commands, Undo/Redo, and Algorithms)** already has its P0/P1
 tier done from earlier sessions (STAB-0471-0481 — including a real fix,
 `resetPivot()` was missing `pushUndo()`, found and fixed then).
-STAB-0482-0485 are now done too (this session — extracted
+STAB-0482-0486 are now done too (this session — extracted
 `convertToDefinitionAlg()`/`breakInstanceAlg()`/`alignToObjectAlg()`/
 `scatterAlongCurveAlg()` Alg mirrors, none existed before; STAB-0483
-found and fixed a real duplicate-id bug — see §3). Next:
+found and fixed a real duplicate-id bug; STAB-0486 found and fixed a
+real Undo/Redo drift bug across keyboard/menu/palette — see §3). Next:
 
-1. **STAB-0486 — verify command palette executes same code path as
-   menu** (S13, P2, next-lowest ID). Goal: confirm the command palette's
-   "Delete" entry (and others) call the exact same function as the
-   equivalent Edit-menu item, not a parallel/duplicated implementation.
-   Files: `src/MeshCraft/MeshCraftApplication_UiOverlays.cpp`.
-   Verify: read the command palette dispatch table and the menu
-   handlers; confirm they resolve to the same function pointers/calls.
+1. **STAB-0487 — verify macro recorder captures batchRename step**
+   (S13, P2, next-lowest ID). Goal: record a batch-rename action, save
+   the macro, confirm the step appears correctly in the `.mc3macro`
+   file.
+   Files: `src/MeshCraft/MeshCraftApplication_Macro.cpp`.
+   Verify: read the macro recorder's step-capture code path and an
+   actual recorded `.mc3macro` file/fixture if one exists; add a
+   headless test if the recording logic has no CNA dependency (likely,
+   given the established Alg-mirror pattern).
 
-Beyond this: S13 has ~10 more P2/P3 items (STAB-0487-0496ish — macro
-recorder, proportional editing/snapping, Select Children, Random
+Beyond this: S13 has ~9 more P2/P3 items (STAB-0488-0496ish — macro
+playback, proportional editing/snapping, Select Children, Random
 variant — see `plan.md`'s S13 rows; several of these, e.g. mouse-drag
 snapping, may be genuinely interactive/blocked like S11/S12's visual
 items — check each before assuming). S14 (Rendering/Viewport) and S15

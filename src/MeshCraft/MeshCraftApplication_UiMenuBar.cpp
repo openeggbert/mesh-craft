@@ -90,20 +90,8 @@ float MeshCraftApplication::drawMenuBar()
             ImGui::EndMenu();
         }
         if (ImGui::BeginMenu("Edit")) {
-            if (ImGui::MenuItem("Undo", "Ctrl+Z", false, !undoStack_.empty())) {
-                if (!undoStack_.empty()) {
-                    redoStack_.push_back(deepCopyDoc(document_));
-                    document_ = std::move(undoStack_.back()); undoStack_.pop_back();
-                    selection_.clear(); modified_ = true; updateWindowTitle();
-                }
-            }
-            if (ImGui::MenuItem("Redo", "Ctrl+Y", false, !redoStack_.empty())) {
-                if (!redoStack_.empty()) {
-                    undoStack_.push_back(deepCopyDoc(document_));
-                    document_ = std::move(redoStack_.back()); redoStack_.pop_back();
-                    selection_.clear(); modified_ = true; updateWindowTitle();
-                }
-            }
+            if (ImGui::MenuItem("Undo", "Ctrl+Z", false, !undoStack_.empty())) performUndo();
+            if (ImGui::MenuItem("Redo", "Ctrl+Y", false, !redoStack_.empty())) performRedo();
             if (ImGui::MenuItem("Undo History...", nullptr, false, !undoStack_.empty()))
                 undoHistoryOpen_ = true;
             ImGui::Separator();
@@ -323,38 +311,7 @@ float MeshCraftApplication::drawMenuBar()
             {
                 bool hasSel2c = !selection_.selection().empty();
                 if (ImGui::MenuItem("Drop to Ground Plane", nullptr, false, hasSel2c)) {
-                    pushUndo();
-                    int dropped = 0;
-                    for (const auto& s : selection_.selection()) {
-                        if (lockedIds_.count(s->id)) continue;
-                        float bottomOffset = 0.0f; // distance from pivot to lowest point
-                        if (s->primitive) {
-                            const auto& p = *s->primitive;
-                            float sy = std::abs(s->transform.scale[1]);
-                            switch (p.primitiveType) {
-                                case Mc3::PrimitiveType::Box:
-                                case Mc3::PrimitiveType::Cube:
-                                    bottomOffset = (p.size[1] * sy) / 2.0f;
-                                    break;
-                                case Mc3::PrimitiveType::Sphere:
-                                    bottomOffset = p.radius * sy;
-                                    break;
-                                case Mc3::PrimitiveType::Cylinder:
-                                case Mc3::PrimitiveType::Cone:
-                                    bottomOffset = (p.height / 2.0f) * sy;
-                                    break;
-                                default:
-                                    bottomOffset = 0.0f;
-                                    break;
-                            }
-                        }
-                        s->transform.position[1] = bottomOffset;
-                        ++dropped;
-                    }
-                    modified_ = true; updateWindowTitle();
-                    char dbuf[64];
-                    std::snprintf(dbuf, sizeof(dbuf), "Dropped %d object(s) to ground plane", dropped);
-                    setStatusMsg(dbuf);
+                    dropSelectedToGroundPlane();
                 }
                 if (ImGui::MenuItem("Snap Selection to Grid", nullptr, false, hasSel2c)) {
                     int snapped = 0;
