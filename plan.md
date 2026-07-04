@@ -664,7 +664,7 @@ _Generated: 2026-06-27 from full codebase + test audit. Replaces previous 100-ta
 
 | ID | St | Pri | Title | Key File(s) | Verification |
 |----|----|-----|-------|-------------|--------------|
-| STAB-0496 | 🧪 | P0 | Smoke test: editor starts and renders without crash | `test/smoke_test.sh` | `smoke_test` passes |
+| STAB-0496 | ✅ | P0 | Smoke test: editor starts and renders without crash | `test/smoke_test.sh` | Already had a real, passing ctest (`smoke_test`: `MeshCraft house.mc3.xml --screenshot out.ppm` under `xvfb-run` if available, asserts the PPM is non-empty) — confirmed this session it exercises a genuine render, not a trivial stub: sampled the actual PPM pixel data for `house.mc3.xml`, `garden_house.mc3.xml`, and `features.mc3.xml` and found 366/911/839 distinct RGB colors respectively (a flat/uninitialized framebuffer would show ~1-3), proving real lit 3D geometry is drawn. No code change needed, just verification + the marker flip from 🧪 to ✅. |
 | STAB-0497 | 🧪 | P1 | Verify renderer handles all object types without crash | `src/MeshCraft/Renderer/SceneRenderer.cpp` | `all_objects.mc3.xml` loads; renders 1 frame; exits cleanly (smoke test) |
 | STAB-0498 | 🧪 | P1 | Verify renderer handles empty scene (no objects) | `src/MeshCraft/Renderer/SceneRenderer.cpp` | `<mc3><objects/></mc3>` loaded; renders without crash |
 | STAB-0499 | 📋 | P1 | Verify renderer handles missing mesh file gracefully | `src/MeshCraft/Renderer/SceneRenderer.cpp` | Mesh with nonexistent `src`: placeholder sphere or empty; no crash |

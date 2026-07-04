@@ -49,9 +49,10 @@ Ctrl+rotate 45° snap is real but the increment is user-configurable
 glTF-export path where Instance `variantDefinitions` were silently
 ignored outside CSG, fixed via a new shared
 `Mc3Object::resolvedInstanceDefinitionKey()`; STAB-0494/0495 closed out
-the last 2 P3 items — see §3 for the full list. **Work now moves to
-S14 (Rendering and Viewport Stability)**, fully untouched. Plan-wide
-totals: **297 ✅ done, 6 🟡 partial, 112 🧪 has a plan but not
+the last 2 P3 items — see §3 for the full list. **Work has moved to
+S14 (Rendering and Viewport Stability)**: STAB-0496 done (confirmed
+`smoke_test` exercises a genuine render, not a stub). Plan-wide
+totals: **298 ✅ done, 6 🟡 partial, 111 🧪 has a plan but not
 executed, 235 📋 not started** out of 650.
 
 **Important architectural decisions:**
@@ -183,13 +184,13 @@ See `TESTING.md` for the full per-test reference and `plan.md`'s
 
 ## 3. Recent changes
 
-**37 STAB tasks committed as of `965a456`** (`53aa75e` through
-`965a456`, pushed to `origin/develop` — see `git log --oneline` for the
-full list). **STAB-0495** below is implemented and about to be
-committed as of this update — **this closes S13 entirely.** Gate 6 is
-exhausted (§8); **S11, S12, and S13 are all fully done** except
-genuinely blocked/flagged items (S11/S12 only). Work moves next to
-**S14 (Rendering and Viewport Stability)**, fully untouched.
+**38 STAB tasks committed as of `60851b2`** (`53aa75e` through
+`60851b2`, pushed to `origin/develop` — see `git log --oneline` for the
+full list). **STAB-0496** below is verified and about to be committed
+as of this update — **the first item of S14.** Gate 6 is exhausted
+(§8); **S11, S12, and S13 are all fully done** except genuinely
+blocked/flagged items (S11/S12 only). Work is underway on **S14
+(Rendering and Viewport Stability)**.
 
 This was a long, dense session that closed out essentially all of
 **Gate 6 (Documentation)**'s reachable work (plus a from-scratch schema
@@ -197,6 +198,15 @@ audit that found real bugs), then finished S11 and S12 entirely (bar
 the blocked/flagged items) and started S13. Highlights, most recent
 first:
 
+- **STAB-0496 — verified `smoke_test` exercises a genuine render**:
+  the ctest already passed, but to confirm it isn't a trivial stub
+  (e.g. a cleared framebuffer that just happens to produce a non-empty
+  file), sampled the actual PPM pixel data for all 3 sample scenes
+  (`house.mc3.xml`, `garden_house.mc3.xml`, `features.mc3.xml`) and
+  found 366/911/839 distinct RGB colors respectively — proving real
+  lit 3D geometry is drawn, not a flat/uninitialized buffer (which
+  would show ~1-3 colors). No code change needed. **First item of S14
+  (Rendering and Viewport Stability) done.**
 - **STAB-0495 — extracted `groupScaleAlg()`, closes S13**: confirmed
   exactly correct against the row's own example (2 objects at (0,0,0)
   and (2,0,0), group-scaled 2x, end up at (-1,0,0) and (3,0,0) — each
@@ -1103,29 +1113,29 @@ stabilization moratorium; STAB-0464 needs a live display).
 **S13 (Commands, Undo/Redo, and Algorithms) is fully done — all 25
 items ✅** (see the "Recent changes" summary above and §3 for the full
 list of extractions/bugs found this session). **S14 (Rendering and
-Viewport Stability), 30 items, is fully untouched.** Next:
+Viewport Stability), 30 items, is underway** — STAB-0496 done (verified
+`smoke_test` exercises a genuine render across all 3 sample scenes, not
+a stub). Next:
 
-1. **STAB-0496 — smoke test: editor starts and renders without
-   crash** (S14, P0, first item). Already has a real, passing ctest
-   (`smoke_test`, via `test/smoke_test.sh` — loads a scene,
-   `--screenshot`s it headlessly via `xvfb-run` if available, checks
-   the PPM is non-empty) — currently marked 🧪 (has a plan, not yet
-   marked verified) despite already passing in every ctest run this
-   session. Goal: confirm it actually exercises a real render (not a
-   trivial stub) and mark it ✅ with that verification, following the
-   same "re-run and confirm, don't just trust the row" discipline used
-   throughout S11-S13.
-   Files: `test/smoke_test.sh`.
+1. **STAB-0497 — verify renderer handles all object types without
+   crash** (S14, P1, next-lowest ID). Goal: an `all_objects.mc3.xml`
+   (or equivalent fixture covering every `ObjectType`) loads, renders
+   1 frame via `--screenshot`, and exits cleanly.
+   Files: `src/MeshCraft/Renderer/SceneRenderer.cpp`.
+   Verify: check whether an `all_objects.mc3.xml`-style fixture already
+   exists (or use `test/features.mc3.xml` if it already covers every
+   type); same `--screenshot`-based headless approach as STAB-0496,
+   no display needed since this is a "doesn't crash" check, not a
+   visual-correctness one.
 
-S14 is heavily visual/interactive (gizmos, camera presets, bloom/SSAO
-toggles, shadow maps) — expect many items to land like S11/S12's
-blocked set (flagged 🟡, needs a live display) rather than S13's
-extract-and-test pattern. A few early items (STAB-0497/0498/0499/0500 —
-renderer handles all object types / empty scene / missing mesh /
-missing material without crashing) are good candidates for the same
-`--screenshot`-based headless smoke-test approach already proven for
-STAB-0496, since "doesn't crash" is verifiable without a display. S15
-(Import/Export/Editor Integration) remains untouched after S14.
+S14 is heavily visual/interactive beyond the "doesn't crash" checks
+(gizmos, camera presets, bloom/SSAO toggles, shadow maps) — expect many
+items to land like S11/S12's blocked set (flagged 🟡, needs a live
+display) rather than S13's extract-and-test pattern. STAB-0498/0499/
+0500 (empty scene / missing mesh / missing material, all "no crash"
+checks) are likely headlessly verifiable the same way as STAB-0496/
+0497. S15 (Import/Export/Editor Integration) remains untouched after
+S14.
 
 ---
 
