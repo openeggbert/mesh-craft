@@ -479,7 +479,7 @@ inline std::shared_ptr<Mc3::Mc3Object> breakInstanceAlg(
     const std::shared_ptr<Mc3::Mc3Object>& inst)
 {
     if (inst->type != Mc3::ObjectType::Instance) return nullptr;
-    auto defIt = doc.definitions.find(inst->definition);
+    auto defIt = doc.definitions.find(inst->resolvedInstanceDefinitionKey());
     if (defIt == doc.definitions.end()) return nullptr;
 
     auto copy = deepCopyObjectAlg(*defIt->second);

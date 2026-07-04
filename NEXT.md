@@ -34,7 +34,7 @@ flagged (STAB-0464 needs a live display; STAB-0460 describes a feature
 that was never built, out of scope per the stabilization moratorium).
 Both S11 and S12 sweeps found several real bugs, fixed with permanent
 regression tests — see §3 for the full list. **S13 (Commands,
-Undo/Redo, and Algorithms)** work is underway: STAB-0482-0492 done
+Undo/Redo, and Algorithms)** work is underway: STAB-0482-0493 done
 (extracted `convertToDefinitionAlg()`/`breakInstanceAlg()`/
 `alignToObjectAlg()`/`scatterAlongCurveAlg()`/
 `applyProportionalFalloffAlg()`/`vertexSnapToNearestAlg()`/
@@ -44,9 +44,12 @@ STAB-0486 found and fixed a real Undo/Redo drift bug between the
 keyboard/menu/palette entry points; STAB-0487/0488 confirmed the macro
 recorder/playback system already correct; STAB-0491 confirmed the
 Ctrl+rotate 45° snap is real but the increment is user-configurable
-(default 15°), and the Ctrl-override is deliberately rotation-only —
-see §3). Plan-wide totals: **294 ✅ done, 6 🟡 partial, 112 🧪 has
-a plan but not executed, 238 📋 not started** out of 650.
+(default 15°), and the Ctrl-override is deliberately rotation-only;
+STAB-0493 found and fixed a real glTF-export bug where Instance
+`variantDefinitions` were silently ignored outside CSG, adding a
+shared `Mc3Object::resolvedInstanceDefinitionKey()` — see §3).
+Plan-wide totals: **295 ✅ done, 6 🟡 partial, 112 🧪 has a plan but
+not executed, 237 📋 not started** out of 650.
 
 **Important architectural decisions:**
 - `mc3/` and `mcb/` are pure C++ static libs with **no** CNA/ImGui
@@ -79,21 +82,21 @@ a plan but not executed, 238 📋 not started** out of 650.
   every standalone/Release build this session without issue.
 - **Standalone (CNA-free) component builds**, each configuring/
   building/testing without the root project: `mc3` (1/1), `mcb` (1/1),
-  `mc3togltf` (12/12), `mc3tomcb` (2/2) — last re-verified at commit
-  `fca6fc1`; `mc3togltf` re-verified again this session after STAB-0610
-  (still 0 warnings under `-Wall -Wextra`, standalone build not yet
-  re-checked against the newer 13-test count from STAB-0630 — see §3).
+  `mc3togltf` (18/18), `mc3tomcb` (2/2) — `mc3togltf` re-verified fresh
+  this session after STAB-0493 added `mc3togltf_instance_variant`
+  (Mc3, mc3togltf_lib, and mc3togltf all rebuild+test cleanly outside
+  the root project).
 
 ### Tests
-**25/25 CTest pass** in Debug as of this session (STAB-0630 added
+**26/26 CTest pass** in Debug as of this session (STAB-0493 added
+`mc3togltf_instance_variant`, STAB-0630 added
 `mc3togltf_obj_robustness`, STAB-0417/0418/0420/0416 added
 `mc3togltf_texture_sampler`, STAB-0166-0170/0411-0415/0435 added
 `mc3togltf_material_pbr`, STAB-0440 added
 `mc3togltf_svg_texture_export`, STAB-0447/0448 added
-`mc3togltf_animation_unsupported`; started the session at 20/20, last
-full Debug+Release verification at commit `fca6fc1`): `smoke_test`,
-`xsd_validation`, `mc3_registry`, `mc3_ai`, `mc3_roundtrip`,
-`mc3_commands`, `mcb_roundtrip`, `mc3tomcb_roundtrip`,
+`mc3togltf_animation_unsupported`; started the session at 20/20):
+`smoke_test`, `xsd_validation`, `mc3_registry`, `mc3_ai`,
+`mc3_roundtrip`, `mc3_commands`, `mcb_roundtrip`, `mc3tomcb_roundtrip`,
 `mc3togltf_gltf`, `mc3togltf_all_primitives`,
 `mc3togltf_export_verification`, `mc3togltf_large_scene`,
 `mc3togltf_csg_strict`, `mc3togltf_csg_export`,
@@ -101,8 +104,8 @@ full Debug+Release verification at commit `fca6fc1`): `smoke_test`,
 `mc3togltf_instance_deform_cache`, `mc3togltf_float_cache_key`,
 `mc3togltf_obj_robustness`, `mc3togltf_texture_sampler`,
 `mc3togltf_material_pbr`, `mc3togltf_svg_texture_export`,
-`mc3togltf_animation_unsupported`, `mc3togltf_large_scene_generated`,
-`mc3togltf_large_scene_500`.
+`mc3togltf_animation_unsupported`, `mc3togltf_instance_variant`,
+`mc3togltf_large_scene_generated`, `mc3togltf_large_scene_500`.
 
 - `mc3_commands` (~404 assertions): editor command algorithms, undo/redo
   for every mutating command, auto-save/backup, Save-As/Export-Selection/
@@ -177,9 +180,9 @@ See `TESTING.md` for the full per-test reference and `plan.md`'s
 
 ## 3. Recent changes
 
-**34 STAB tasks committed as of `de3c9a8`** (`53aa75e` through
-`de3c9a8`, pushed to `origin/develop` — see `git log --oneline` for the
-full list). **STAB-0492** below is implemented and about to be
+**35 STAB tasks committed as of `884535d`** (`53aa75e` through
+`884535d`, pushed to `origin/develop` — see `git log --oneline` for the
+full list). **STAB-0493** below is implemented and about to be
 committed as of this update. Gate 6 is exhausted (§8); **S11 and S12
 are both fully done** except genuinely blocked/flagged items. Work is
 underway on **S13 (Commands, Undo/Redo, and Algorithms)**.
@@ -190,6 +193,42 @@ audit that found real bugs), then finished S11 and S12 entirely (bar
 the blocked/flagged items) and started S13. Highlights, most recent
 first:
 
+- **STAB-0493 — found and fixed a real glTF-export bug in Instance
+  "variants" resolution**: the row's file (`MeshCraftApplication_Commands.cpp`)
+  was wrong — "Random variant" isn't an editor command at all, it's a
+  data-model feature (`Mc3Object::variantDefinitions` +
+  `makeInstanceVariant()`) resolved deterministically per-object by
+  hashing the object's own id (stable across runs — the correct design
+  for reproducible exports, not a literal per-call coin flip).
+  `SceneRenderer.cpp` (live viewport) and `CsgEvaluator.cpp` (CSG
+  export) both already resolved this correctly via an identical
+  duplicated hash formula, but **`GltfExporter.cpp`'s regular
+  (non-CSG) Instance path ignored `variantDefinitions` entirely and
+  always used `definition`** (always the first variant) — what you see
+  in the editor viewport was not what you got in a regular (non-CSG)
+  glTF export. Its mesh-cache key had the same bug compounded (keyed
+  off the always-identical `obj.definition` rather than the resolved
+  key), which would have caused wrong mesh reuse across differently-
+  resolved variant instances once the primary bug was fixed, had the
+  cache key not been fixed at the same time. Also found and fixed the
+  identical gap in `breakInstanceAlg()` (STAB-0483, this session),
+  `SceneRenderer_Extrude.cpp`'s edge-overlay wireframe path (would draw
+  the wrong variant's outline vs. its own solid mesh), and the left
+  panel's "rename definition key" flow (patched `Instance::definition`
+  on rename but not matching entries inside `variantDefinitions`,
+  leaving dangling references). Consolidated everything into one new
+  shared `Mc3Object::resolvedInstanceDefinitionKey()` method
+  (`mc3/include/MeshCraft/Mc3/Mc3Object.hpp`+`.cpp` — additive, not a
+  breaking API change) and wired every consumer through it. Added
+  `test/instance_variant.mc3.xml` (8 instances, distinct ids, same
+  2-entry variant list) + `mc3togltf_instance_variant` ctest: asserts
+  real variation occurs (exactly 2 distinct meshes used across the 8
+  instances, not a collapse onto one — the regression check that would
+  have failed pre-fix) and that resolution is deterministic across
+  repeated export runs. Verified via full CMake reconfigure + rebuild
+  (0 warnings), 26/26 ctest (up from 25/25), a real `--screenshot`
+  smoke test, and a standalone (CNA-free) `mc3togltf` re-verification
+  (18/18).
 - **STAB-0492 — extracted `flattenDescendantsAlg()`**: `selectChildren()`
   was already correct — its recursive `addAll` lambda walked every
   descendant at any depth, not just direct children — but had no Alg
@@ -991,7 +1030,7 @@ for c in mc3 mcb mc3togltf mc3tomcb; do
         -DFETCHCONTENT_UPDATES_DISCONNECTED=ON
   cmake --build "$c-build" -j4
   (cd "$c-build" && ctest --output-on-failure)
-done   # mc3 1/1 · mcb 1/1 · mc3togltf 12/12 · mc3tomcb 2/2
+done   # mc3 1/1 · mcb 1/1 · mc3togltf 18/18 · mc3tomcb 2/2
 
 # --- Run / export / validate / version
 ./cmake-build-debug/MeshCraft test/house.mc3.xml   # open a sample scene
@@ -1034,7 +1073,7 @@ stabilization moratorium; STAB-0464 needs a live display).
 **S13 (Commands, Undo/Redo, and Algorithms)** already has its P0/P1
 tier done from earlier sessions (STAB-0471-0481 — including a real fix,
 `resetPivot()` was missing `pushUndo()`, found and fixed then).
-STAB-0482-0492 are now done too (this session — extracted
+STAB-0482-0493 are now done too (this session — extracted
 `convertToDefinitionAlg()`/`breakInstanceAlg()`/`alignToObjectAlg()`/
 `scatterAlongCurveAlg()`/`applyProportionalFalloffAlg()`/
 `vertexSnapToNearestAlg()`/`applyRotationDragAlg()`/
@@ -1043,23 +1082,23 @@ found and fixed a real duplicate-id bug; STAB-0486 found and fixed a
 real Undo/Redo drift bug across keyboard/menu/palette; STAB-0487/0488
 confirmed the macro recorder/playback system already correct;
 STAB-0491 confirmed the 45° rotate-snap is a preset, not a default, and
-that Ctrl-override is intentionally rotation-only — see §3). Next:
+that Ctrl-override is intentionally rotation-only; STAB-0493 found and
+fixed a real glTF-export bug where Instance `variantDefinitions` were
+silently ignored outside CSG evaluation, consolidating variant
+resolution into a new shared `Mc3Object::resolvedInstanceDefinitionKey()`
+— see §3). Next:
 
-1. **STAB-0493 — verify "Random variant" creates instance pointing to
-   random definition** (S13, P2, next-lowest ID). Goal: confirm
-   multiple calls produce different definition assignments (not always
-   the same one, not a crash on a single-definition scene).
-   Files: `src/MeshCraft/MeshCraftApplication_Commands.cpp`.
-   Verify: find the "Random variant" command's implementation (grep for
-   likely names — `randomVariant`, `randomizeInstance`, etc.); extract
-   the pure selection logic to `EditorAlgorithms.hpp` with an
-   injectable RNG for determinism (same pattern as STAB-0485's
-   `scatterAlongCurveAlg`'s `jitterRng`), and add a headless test.
+1. **STAB-0494 — add command test: arrayDuplicate with negative count
+   fails gracefully** (S13, P3, next-lowest ID). Goal: `count=-1` adds
+   no objects and doesn't crash.
+   Files: `mc3/test/editor_commands_test.cpp`.
+   Verify: `arrayDuplicateObjects()` (`EditorAlgorithms.hpp`) already
+   has headless test coverage — check whether a negative-count case is
+   already covered or needs a new assertion added.
 
-Beyond this: S13 has 2 more P3 items (STAB-0494 arrayDuplicate
-negative-count test, STAB-0495 Group Scale centroid verification — see
-`plan.md`'s S13 rows), both likely headlessly verifiable. S14
-(Rendering/Viewport) and S15 (Import/Export/Editor Integration) are
+Beyond this: S13 has 1 more P3 item (STAB-0495 Group Scale centroid
+verification — see `plan.md`'s S13 row), likely headlessly verifiable.
+S14 (Rendering/Viewport) and S15 (Import/Export/Editor Integration) are
 untouched after that.
 
 ---

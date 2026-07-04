@@ -525,7 +525,7 @@ void SceneRenderer::drawObjectEdges(const Mc3Object& obj, const Mc3Document& doc
             drawObjectEdges(*child, doc, world, view, proj, depth + 1);
         break;
     case ObjectType::Instance: {
-        auto it = doc.definitions.find(obj.definition);
+        auto it = doc.definitions.find(obj.resolvedInstanceDefinitionKey());
         if (it != doc.definitions.end() && it->second)
             drawObjectEdges(*it->second, doc, world, view, proj, depth + 1);
         else

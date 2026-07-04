@@ -1,5 +1,7 @@
 #include "MeshCraft/Mc3/Mc3Object.hpp"
 
+#include <functional>
+
 namespace MeshCraft::Mc3 {
 
 namespace {
@@ -225,6 +227,14 @@ Mc3Object& Mc3Object::withUvMapping(UvProjection proj, float scaleU, float scale
 }
 Mc3Object& Mc3Object::withMetadata(std::string key, std::string value) {
     metadata[std::move(key)] = std::move(value); return *this;
+}
+
+const std::string& Mc3Object::resolvedInstanceDefinitionKey() const {
+    if (!variantDefinitions.empty()) {
+        std::size_t idx = std::hash<std::string>{}(id) % variantDefinitions.size();
+        return variantDefinitions[idx];
+    }
+    return definition;
 }
 
 } // namespace MeshCraft::Mc3

@@ -30,16 +30,6 @@ using namespace MeshCraft::Renderer;
 // CSG helpers (file scope)
 // ---------------------------------------------------------------------------
 
-// Pick the resolved definition key for an Instance object.
-// When variantDefinitions is non-empty, selects deterministically by hashing the object id.
-static const std::string& pickInstanceDef(const Mc3Object& obj) {
-    if (!obj.variantDefinitions.empty()) {
-        std::size_t idx = std::hash<std::string>{}(obj.id) % obj.variantDefinitions.size();
-        return obj.variantDefinitions[idx];
-    }
-    return obj.definition;
-}
-
 // XNA row-major → manifold mat3x4 (3 rows × 4 cols, linalg column-major storage)
 // XNA: v' = v * M  →  manifold Transform: v' = M * (v,1)
 // manifold mat3x4[col][row]: col0=X axis, col1=Y axis, col2=Z axis, col3=translation
@@ -96,7 +86,7 @@ static std::size_t csgSubtreeHash(const Mc3Object& obj, const Mc3Document& doc, 
     for (const auto& child : obj.children)
         h = hashMix(h, csgSubtreeHash(*child, doc, depth + 1));
     if (obj.type == ObjectType::Instance) {
-        const std::string& defKey = pickInstanceDef(obj);
+        const std::string& defKey = obj.resolvedInstanceDefinitionKey();
         auto it = doc.definitions.find(defKey);
         if (it != doc.definitions.end() && it->second)
             h = hashMix(h, csgSubtreeHash(*it->second, doc, depth + 1));
@@ -178,7 +168,7 @@ static manifold::Manifold buildManifoldTree(
         return result;
     }
     case ObjectType::Instance: {
-        auto it = doc.definitions.find(pickInstanceDef(obj));
+        auto it = doc.definitions.find(obj.resolvedInstanceDefinitionKey());
         if (it != doc.definitions.end() && it->second)
             return buildManifoldTree(*it->second, doc, objWorld, depth + 1);
         return Manifold{};
@@ -777,7 +767,7 @@ void SceneRenderer::drawObject(const Mc3Object& obj, const Mc3Document& doc,
         break;
     }
     case ObjectType::Instance: {
-        auto it = doc.definitions.find(pickInstanceDef(obj));
+        auto it = doc.definitions.find(obj.resolvedInstanceDefinitionKey());
         if (it != doc.definitions.end() && it->second)
             drawObject(*it->second, doc, world, view, proj, selected, depth + 1);
         else
@@ -949,7 +939,7 @@ void SceneRenderer::drawEmissiveObject(
         recurseChildren = false;
         break;
     case ObjectType::Instance: {
-        auto it = doc.definitions.find(pickInstanceDef(obj));
+        auto it = doc.definitions.find(obj.resolvedInstanceDefinitionKey());
         if (it != doc.definitions.end() && it->second)
             drawEmissiveObject(*it->second, doc, world, view, proj, depth + 1);
         recurseChildren = false;

@@ -130,6 +130,7 @@ if(BUILD_TESTING)
         set(_material_pbr_xml         "${CMAKE_CURRENT_SOURCE_DIR}/../test/material_pbr.mc3.xml")
         set(_svg_material_xml         "${CMAKE_CURRENT_SOURCE_DIR}/../test/svg_material.mc3.xml")
         set(_anim_unsupported_xml     "${CMAKE_CURRENT_SOURCE_DIR}/../test/animation_unsupported.mc3.xml")
+        set(_instance_variant_xml     "${CMAKE_CURRENT_SOURCE_DIR}/../test/instance_variant.mc3.xml")
         if(EXISTS "${_anim_xml}" AND EXISTS "${_house_xml}")
             add_test(
                 NAME mc3togltf_gltf
@@ -283,6 +284,16 @@ if(BUILD_TESTING)
                         "${_anim_unsupported_xml}"
             )
             set_tests_properties(mc3togltf_animation_unsupported PROPERTIES TIMEOUT 30)
+        endif()
+        if(EXISTS "${_instance_variant_xml}")
+            add_test(
+                NAME mc3togltf_instance_variant
+                COMMAND "${PYTHON3_EXEC}"
+                        "${CMAKE_CURRENT_SOURCE_DIR}/test/instance_variant_test.py"
+                        "$<TARGET_FILE:mc3togltf>"
+                        "${_instance_variant_xml}"
+            )
+            set_tests_properties(mc3togltf_instance_variant PROPERTIES TIMEOUT 30)
         endif()
         add_test(
             NAME mc3togltf_large_scene_generated

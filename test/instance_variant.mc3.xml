@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Regression fixture for STAB-0493 (Instance "variants" resolution).
+     Mc3Object::resolvedInstanceDefinitionKey() picks a definition from
+     `variants` by hashing the object's own `id`; every Instance consumer
+     (live viewport, CSG evaluation, glTF export) must resolve through it so
+     an Instance renders the same way everywhere. Before this fix,
+     GltfExporter.cpp's regular (non-CSG) Instance path ignored
+     `variantDefinitions` entirely and always used `definition` (i.e. always
+     the first variant), so every V0..V7 instance below would have resolved
+     to "defBox" regardless of id. -->
+<mc3 version="0.3" model="InstanceVariantFixture">
+
+  <definitions>
+    <definition id="defBox">
+      <box name="DefBox" size="1 1 1"/>
+    </definition>
+    <definition id="defSphere">
+      <sphere name="DefSphere" radius="0.5"/>
+    </definition>
+  </definitions>
+
+  <objects>
+    <instance id="v0" name="V0" definition="defBox" variants="defBox defSphere" position="0 0 0"/>
+    <instance id="v1" name="V1" definition="defBox" variants="defBox defSphere" position="1 0 0"/>
+    <instance id="v2" name="V2" definition="defBox" variants="defBox defSphere" position="2 0 0"/>
+    <instance id="v3" name="V3" definition="defBox" variants="defBox defSphere" position="3 0 0"/>
+    <instance id="v4" name="V4" definition="defBox" variants="defBox defSphere" position="4 0 0"/>
+    <instance id="v5" name="V5" definition="defBox" variants="defBox defSphere" position="5 0 0"/>
+    <instance id="v6" name="V6" definition="defBox" variants="defBox defSphere" position="6 0 0"/>
+    <instance id="v7" name="V7" definition="defBox" variants="defBox defSphere" position="7 0 0"/>
+  </objects>
+
+</mc3>

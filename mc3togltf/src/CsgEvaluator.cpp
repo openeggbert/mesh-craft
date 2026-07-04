@@ -317,10 +317,7 @@ static manifold::Manifold buildManifoldNode(
 
     // --- Instance: resolve definition ---
     case ObjectType::Instance: {
-        const std::string& defKey = obj.variantDefinitions.empty()
-            ? obj.definition
-            : obj.variantDefinitions[
-                std::hash<std::string>{}(obj.id) % obj.variantDefinitions.size()];
+        const std::string& defKey = obj.resolvedInstanceDefinitionKey();
         auto it = definitions.find(defKey);
         if (it != definitions.end() && it->second)
             return buildManifoldNode(*it->second, definitions, nodeMat, depth + 1, csgRootName);

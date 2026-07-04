@@ -182,6 +182,15 @@ public:
     Mc3Object& withUvMapping(Mc3UvMapping uv);
     Mc3Object& withUvMapping(UvProjection proj, float scaleU = 1.f, float scaleV = 1.f);
     Mc3Object& withMetadata(std::string key, std::string value);
+
+    // type == Instance: the definition key to actually resolve against.
+    // When variantDefinitions is non-empty, deterministically picks one by
+    // hashing this object's own id (stable across runs/consumers, not a
+    // per-call coin flip) instead of always using `definition` (the first
+    // variant, set at creation time). Every Instance consumer (live
+    // viewport, glTF export, CSG evaluation) must resolve through this so
+    // they agree on which variant an Instance renders as.
+    const std::string& resolvedInstanceDefinitionKey() const;
 };
 
 } // namespace MeshCraft::Mc3

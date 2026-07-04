@@ -549,8 +549,9 @@ static int buildNode(ExportCtx& ctx, const Mc3Object& obj)
     // plus Instance (resolved via definitions).
     int directMesh = -1;
 
-    if (obj.type == ObjectType::Instance && !obj.definition.empty()) {
-        auto it = ctx.definitions.find(obj.definition);
+    if (obj.type == ObjectType::Instance && !obj.resolvedInstanceDefinitionKey().empty()) {
+        const std::string& defKey = obj.resolvedInstanceDefinitionKey();
+        auto it = ctx.definitions.find(defKey);
         if (it != ctx.definitions.end() && it->second) {
             const Mc3Object& defObj = *it->second;
 
@@ -560,7 +561,7 @@ static int buildNode(ExportCtx& ctx, const Mc3Object& obj)
             }();
 
             // Reuse cached mesh if same definition+material+deform was already built
-            auto cacheKey = buildDefCacheKey(obj.definition, effectiveMat, obj.deform);
+            auto cacheKey = buildDefCacheKey(defKey, effectiveMat, obj.deform);
             auto cacheIt  = ctx.defMeshCache.find(cacheKey);
             if (cacheIt != ctx.defMeshCache.end()) {
                 directMesh = cacheIt->second;
@@ -581,7 +582,7 @@ static int buildNode(ExportCtx& ctx, const Mc3Object& obj)
             }
         } else {
             std::cerr << "Warning: instance references unknown definition '"
-                      << obj.definition << "'\n";
+                      << defKey << "'\n";
             ctx.stats.warnings++;
         }
     } else if (obj.primitive.has_value() || obj.extrude.has_value() ||

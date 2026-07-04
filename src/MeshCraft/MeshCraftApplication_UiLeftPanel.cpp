@@ -672,9 +672,12 @@ void MeshCraftApplication::drawLeftPanel(float panelY, float panelH)
                                 std::function<void(std::vector<std::shared_ptr<Mc3::Mc3Object>>&)> fixRefs;
                                 fixRefs = [&](auto& list) {
                                     for (auto& o : list) {
-                                        if (o->type == Mc3::ObjectType::Instance &&
-                                            o->definition == selectedDefId_)
-                                            o->definition = newKey;
+                                        if (o->type == Mc3::ObjectType::Instance) {
+                                            if (o->definition == selectedDefId_)
+                                                o->definition = newKey;
+                                            for (auto& v : o->variantDefinitions)
+                                                if (v == selectedDefId_) v = newKey;
+                                        }
                                         fixRefs(o->children);
                                     }
                                 };
