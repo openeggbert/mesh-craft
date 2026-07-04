@@ -2,6 +2,7 @@
 // Pure editor command algorithms — no CNA / ImGui / SDL / OpenGL dependencies.
 // Included by MeshCraftApplication_Commands.cpp and editor_commands_test.cpp.
 
+#include <MeshCraft/Editor/SelectionManager.hpp>
 #include <MeshCraft/Mc3/Mc3Document.hpp>
 #include <MeshCraft/Mc3/Mc3Object.hpp>
 
@@ -904,6 +905,22 @@ inline std::shared_ptr<Mc3::Mc3Object> pickObjectByRayAlg(
     };
     testList(rootObjects);
     return bestObj;
+}
+
+// Resolves what a viewport click should do to the current selection, given
+// the ray-cast pick result and whether Ctrl was held. Single source of
+// truth for the exact sequence in handleMouseInput() right after its
+// pickObjectByRayAlg() call (STAB-0504): without Ctrl, a fresh click always
+// replaces the selection (clearing it even on a miss); Ctrl held makes a
+// hit additive and a miss a no-op, so Ctrl-clicking empty space never loses
+// the existing selection.
+inline void resolveClickSelectionAlg(
+    Editor::SelectionManager& selection,
+    const std::shared_ptr<Mc3::Mc3Object>& picked,
+    bool ctrlHeld)
+{
+    if (!ctrlHeld) selection.clear();
+    if (picked) selection.select(picked);
 }
 
 // ── Auto-save (STAB-0265) ─────────────────────────────────────────────────────

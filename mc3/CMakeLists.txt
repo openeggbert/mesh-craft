@@ -87,7 +87,10 @@ if(BUILD_TESTING)
     # so mc3 stays buildable standalone.
     set(MC3_EDITOR_INCLUDE_DIR "${CMAKE_SOURCE_DIR}/include")
     if(EXISTS "${MC3_EDITOR_INCLUDE_DIR}/MeshCraft/EditorAlgorithms.hpp")
-        add_executable(mc3_commands_test test/editor_commands_test.cpp)
+        add_executable(mc3_commands_test
+            test/editor_commands_test.cpp
+            "${CMAKE_SOURCE_DIR}/src/MeshCraft/Editor/SelectionManager.cpp"
+        )
         target_include_directories(mc3_commands_test PRIVATE
             ${MC3_EDITOR_INCLUDE_DIR}
         )

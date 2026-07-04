@@ -436,8 +436,7 @@ void MeshCraftApplication::handleMouseInput(const MouseState& ms, const MouseSta
                 {rayOrig.X, rayOrig.Y, rayOrig.Z},
                 {rayDir.X, rayDir.Y, rayDir.Z});
 
-            if (!ctrl) selection_.clear();
-            if (bestObj) selection_.select(bestObj);
+            resolveClickSelectionAlg(selection_, bestObj, ctrl);
             updateWindowTitle();
         }
     }

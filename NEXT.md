@@ -72,9 +72,13 @@ headless `--screenshot` path — both flagged 🟡, and **STAB-0503 found
 and fixed a real bug**: viewport click-to-select only ray-cast-tested
 primitive-typed objects, silently making every Instance/Mesh/Group/
 Extrude/CSG object unclickable; fixed via a new
-`pickObjectByRayAlg()`, tested headlessly (8 new assertions). Plan-wide
-totals: **303 ✅ done, 8 🟡 partial, 106 🧪 has a plan but not
-executed, 233 📋 not started** out of 650.
+`pickObjectByRayAlg()`, tested headlessly (8 new assertions), and
+STAB-0504 done (already-correct click-to-deselect behavior confirmed
+by reading, extracted into `resolveClickSelectionAlg()` and given 4
+new headless assertions — the first test in this suite to exercise
+`Editor::SelectionManager` directly). Plan-wide totals: **304 ✅ done,
+8 🟡 partial, 106 🧪 has a plan but not executed, 232 📋 not started**
+out of 650.
 
 **Important architectural decisions:**
 - `mc3/` and `mcb/` are pure C++ static libs with **no** CNA/ImGui
@@ -135,7 +139,7 @@ added `mc3togltf_texture_sampler`, STAB-0166-0170/0411-0415/0435 added
 `mc3togltf_animation_unsupported`, `mc3togltf_instance_variant`,
 `mc3togltf_large_scene_generated`, `mc3togltf_large_scene_500`.
 
-- `mc3_commands` (~427 assertions): editor command algorithms, undo/redo
+- `mc3_commands` (431 assertions): editor command algorithms, undo/redo
   for every mutating command, auto-save/backup, Save-As/Export-Selection/
   drag-drop workflows, keybinding/preferences/macro persistence,
   hierarchy-panel filtering, AI-panel + unsaved-changes dialog
@@ -208,9 +212,9 @@ See `TESTING.md` for the full per-test reference and `plan.md`'s
 
 ## 3. Recent changes
 
-**45 STAB tasks committed as of this update** (`53aa75e` through
-`b803096`, pushed to `origin/develop` — see `git log --oneline` for the
-full list). **STAB-0503** below is verified and about to be committed
+**46 STAB tasks committed as of this update** (`53aa75e` through
+`035f2a9`, pushed to `origin/develop` — see `git log --oneline` for the
+full list). **STAB-0504** below is verified and about to be committed
 as of this update. Gate 6 is exhausted (§8); **S11, S12, and S13 are
 all fully done** except genuinely blocked/flagged items. **S14 is now
 also accumulating flagged items**, same as S11/S12. Work is underway on
@@ -222,6 +226,23 @@ audit that found real bugs), then finished S11 and S12 entirely (bar
 the blocked/flagged items) and started S13. Highlights, most recent
 first:
 
+- **STAB-0504 — confirmed click-to-deselect is already correct,
+  extracted + tested it properly**: read `handleMouseInput()`'s click
+  handler (right next to STAB-0503's fix) and confirmed
+  `if (!ctrl) selection_.clear(); if (bestObj) selection_.select(bestObj);`
+  already clears the selection correctly when clicking empty space
+  without Ctrl — no bug. Since `Editor::SelectionManager` turned out to
+  be fully CNA-free (only depends on `Mc3Object.hpp`), extracted the
+  2-line decision into `resolveClickSelectionAlg()`
+  (`EditorAlgorithms.hpp`) and added `SelectionManager.cpp` to the
+  `mc3_commands_test` target so it — and by extension this logic — can
+  be tested directly rather than only read. Added
+  `testResolveClickSelection()` (4 assertions): click-without-Ctrl on
+  empty space clears the selection, click-without-Ctrl on an object
+  replaces it, Ctrl+click on empty space never loses the existing
+  selection, Ctrl+click on an object is additive. Verified via full
+  CMake reconfigure + rebuild (0 warnings), 30/30 ctest, `mc3_commands`
+  now at exactly 431 assertions, and a real `--screenshot` smoke test.
 - **STAB-0503 — found and fixed a real click-to-select bug**: the
   viewport's ray-cast picking (`handleMouseInput()`,
   `MeshCraftApplication_Mouse.cpp`) only tested objects with
@@ -1257,21 +1278,24 @@ code confirmed correct, needs a live selection + R keypress), and
 STAB-0503 done (found and fixed a real bug: click-to-select only
 ray-tested primitive-typed objects, silently making every Instance/
 Mesh/Group/Extrude/CSG object unclickable; fixed via
-`pickObjectByRayAlg()`, 8 new headless assertions). Next:
+`pickObjectByRayAlg()`, 8 new headless assertions), and STAB-0504 done
+(already-correct click-to-deselect behavior confirmed, extracted into
+`resolveClickSelectionAlg()` and given 4 new headless assertions —
+`Editor::SelectionManager` is now directly testable). Next:
 
-1. **STAB-0504 — verify picking: click on empty space deselects all**
-   (S14, P1, next-lowest ID). Goal: clicking empty viewport space
-   clears the selection. Files:
-   `src/MeshCraft/MeshCraftApplication_Mouse.cpp`. Verify: the
-   click-handler code read for STAB-0503 already showed
-   `if (!ctrl) selection_.clear(); if (bestObj) selection_.select(bestObj);`
-   right after the `pickObjectByRayAlg()` call — when nothing is hit
-   (`bestObj` null) and ctrl isn't held, this already unconditionally
-   clears the selection. Confirm this is exhaustively correct (e.g. the
-   ctrl-held case is deliberately additive, not a bug) and whether it's
-   already covered by `testPickObjectByRay()`'s "empty list / no hit"
-   assertions or needs its own headless check of the clear-then-select
-   sequence.
+1. **STAB-0505 — verify bounding box toggle: AABB visible for
+   selected** (S14, P1, next-lowest ID). Goal: toggling "show bounding
+   boxes" draws a visible AABB outline around each selected object.
+   Files: `src/MeshCraft/Renderer/SceneRenderer.cpp`. Verify:
+   `MeshCraftApplication.cpp`'s draw loop already showed (during
+   STAB-0501's investigation) a `if (showBoundingBox_) { ... cyan wire
+   box for each selected object ... }` block right after the
+   translate/scale/rotate gizmo dispatch, itself nested inside
+   `if (selection_.hasSelection())` — so this likely needs a live
+   selection too, same wall as STAB-0501/0502, unless the toggle itself
+   can be flipped and verified independent of an actual selected object
+   (e.g. does the AABB math have a pure, testable piece worth
+   extracting regardless of the live-display limitation?).
 
 Beyond that, S14 gets heavily visual/interactive (gizmos, camera
 presets, bloom/SSAO toggles, shadow maps) — expect many items to land

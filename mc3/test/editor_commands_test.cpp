@@ -2482,6 +2482,54 @@ static void testPickObjectByRay()
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Click-to-select resolution (STAB-0504)
+//
+// Confirmed by reading handleMouseInput() (MeshCraftApplication_Mouse.cpp)
+// that clicking empty space (no Ctrl) already clears the selection, via
+// `if (!ctrl) selection_.clear(); if (bestObj) selection_.select(bestObj);`
+// right after the ray-cast pick. Extracted this into resolveClickSelectionAlg()
+// (single source of truth, wired the real handler to call it) so the
+// clear-on-miss / additive-on-Ctrl behavior is directly tested rather than
+// just read.
+// ─────────────────────────────────────────────────────────────────────────────
+
+static void testResolveClickSelection()
+{
+    using MeshCraft::Editor::SelectionManager;
+
+    auto a = makeObj("a", "A");
+    auto b = makeObj("b", "B");
+
+    // Click on empty space (no Ctrl) clears the entire selection.
+    SelectionManager sel1;
+    sel1.select(a);
+    resolveClickSelectionAlg(sel1, nullptr, false);
+    CHECK(!sel1.hasSelection(),
+          "clicking empty space without Ctrl clears the selection entirely (STAB-0504)");
+
+    // Click on a new object (no Ctrl) replaces the selection.
+    SelectionManager sel2;
+    sel2.select(a);
+    resolveClickSelectionAlg(sel2, b, false);
+    CHECK(sel2.selection().size() == 1 && sel2.selection()[0] == b,
+          "clicking a new object without Ctrl replaces the previous selection");
+
+    // Ctrl+click on empty space leaves the existing selection untouched.
+    SelectionManager sel3;
+    sel3.select(a);
+    resolveClickSelectionAlg(sel3, nullptr, true);
+    CHECK(sel3.selection().size() == 1 && sel3.selection()[0] == a,
+          "Ctrl+click on empty space never loses the existing selection");
+
+    // Ctrl+click on a new object is additive, not a replacement.
+    SelectionManager sel4;
+    sel4.select(a);
+    resolveClickSelectionAlg(sel4, b, true);
+    CHECK(sel4.selection().size() == 2,
+          "Ctrl+click on a new object adds to the selection instead of replacing it");
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Every command pushes an undo entry (STAB-0480)
 //
 // Audited every MeshCraftApplication_Commands.cpp function for a document
@@ -2578,6 +2626,7 @@ int main()
     testUndoStackDepthCapped();
     testUndoStackBelowCapUnaffected();
     testPickObjectByRay();
+    testResolveClickSelection();
 
     std::cout << "\n";
     if (failures == 0)
