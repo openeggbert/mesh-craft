@@ -1,5 +1,6 @@
 #include "MeshCraft/MeshCraftApplication.hpp"
 #include "MeshCraftPrivate.hpp"
+#include "MeshCraft/EditorAlgorithms.hpp"
 
 #include <Microsoft/Xna/Framework/Input/Keys.hpp>
 #include <Microsoft/Xna/Framework/Input/KeyboardState.hpp>
@@ -212,39 +213,9 @@ void MeshCraftApplication::handleMouseInput(const MouseState& ms, const MouseSta
 
             // Proportional editing (H1): apply Gaussian falloff to nearby unselected objects
             if (propEditEnabled_ && propEditRadius_ > 0.0f) {
-                // Compute selection center as influence origin
-                float cx3 = 0, cy3 = 0, cz3 = 0;
-                int ns = 0;
-                for (const auto& s : selection_.selection()) {
-                    cx3 += s->transform.position[0];
-                    cy3 += s->transform.position[1];
-                    cz3 += s->transform.position[2];
-                    ++ns;
-                }
-                if (ns > 0) { cx3 /= ns; cy3 /= ns; cz3 /= ns; }
-
-                float r2 = propEditRadius_ * propEditRadius_;
-                float sigSq = r2 / 9.0f; // Gaussian sigma: falloff reaches ~5% at radius edge
-
-                std::function<void(std::vector<std::shared_ptr<Mc3::Mc3Object>>&)> applyFalloff;
-                applyFalloff = [&](std::vector<std::shared_ptr<Mc3::Mc3Object>>& list) {
-                    for (auto& obj : list) {
-                        if (!selection_.isSelected(obj.get()) && !lockedIds_.count(obj->id)) {
-                            float ddx = obj->transform.position[0] - cx3;
-                            float ddy = obj->transform.position[1] - cy3;
-                            float ddz = obj->transform.position[2] - cz3;
-                            float d2 = ddx*ddx + ddy*ddy + ddz*ddz;
-                            if (d2 < r2) {
-                                float weight = std::exp(-d2 / (2.0f * sigSq));
-                                obj->transform.position[0] += delta * ax.X * weight;
-                                obj->transform.position[1] += delta * ax.Y * weight;
-                                obj->transform.position[2] += delta * ax.Z * weight;
-                            }
-                        }
-                        applyFalloff(obj->children);
-                    }
-                };
-                applyFalloff(document_.objects);
+                applyProportionalFalloffAlg(document_.objects, selection_.selection(), lockedIds_,
+                                            delta * ax.X, delta * ax.Y, delta * ax.Z,
+                                            propEditRadius_);
             }
 
             // Surface snap (B8): snap Y to the top surface directly below each selected object

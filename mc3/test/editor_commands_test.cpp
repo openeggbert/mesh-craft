@@ -790,6 +790,93 @@ static void testScatterAlongCurve()
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// applyProportionalFalloffAlg / proportionalFalloffWeightAlg (STAB-0489)
+// ─────────────────────────────────────────────────────────────────────────────
+
+static void testProportionalFalloff()
+{
+    // Weight function itself: 1.0 at zero distance, 0 at/beyond the radius,
+    // strictly decreasing in between.
+    {
+        CHECKF(proportionalFalloffWeightAlg(0.0f, 10.0f), 1.0f,
+               "falloff weight: distance 0 -> weight 1.0");
+        CHECK(proportionalFalloffWeightAlg(100.0f, 10.0f) == 0.0f,
+              "falloff weight: distance == radius^2 -> weight 0 (edge excluded)");
+        CHECK(proportionalFalloffWeightAlg(400.0f, 10.0f) == 0.0f,
+              "falloff weight: distance beyond radius -> weight 0");
+        float wNear = proportionalFalloffWeightAlg(4.0f, 10.0f);
+        float wFar  = proportionalFalloffWeightAlg(64.0f, 10.0f);
+        CHECK(wNear > 0.0f && wFar > 0.0f && wNear > wFar,
+              "falloff weight: strictly decreasing with distance within radius");
+        CHECK(proportionalFalloffWeightAlg(1.0f, 0.0f) == 0.0f,
+              "falloff weight: zero radius -> always 0");
+    }
+
+    // A selected object at the origin, one unselected neighbor well within
+    // radius, one unselected neighbor outside it, one locked neighbor inside
+    // radius (must be skipped despite being unselected).
+    {
+        std::vector<std::shared_ptr<Mc3Object>> roots;
+        auto sel = makeObj("sel", "Selected");
+        sel->transform.position = {0, 0, 0};
+        auto near = makeObj("near", "Near");
+        near->transform.position = {1, 0, 0};
+        auto far = makeObj("far", "Far");
+        far->transform.position = {100, 0, 0};
+        auto locked = makeObj("locked", "Locked");
+        locked->transform.position = {0, 1, 0};
+        roots.push_back(sel);
+        roots.push_back(near);
+        roots.push_back(far);
+        roots.push_back(locked);
+
+        std::set<std::string> lockedIds = {"locked"};
+        int affected = applyProportionalFalloffAlg(roots, {sel}, lockedIds,
+                                                     /*deltaX=*/10.0f, 0.0f, 0.0f,
+                                                     /*radius=*/5.0f);
+        CHECK(affected == 1, "falloff apply: only the near, unlocked neighbor is affected");
+        CHECK(near->transform.position[0] > 0.0f,
+              "falloff apply: near neighbor nudged toward the delta direction");
+        CHECKF(far->transform.position[0], 100.0f,
+               "falloff apply: out-of-radius neighbor is untouched");
+        CHECKF(locked->transform.position[1], 1.0f,
+               "falloff apply: locked neighbor is untouched even though in-radius");
+        CHECKF(sel->transform.position[0], 0.0f,
+               "falloff apply: the selected object itself is untouched (moved separately)");
+    }
+
+    // Multi-object selection: center is the average position.
+    {
+        std::vector<std::shared_ptr<Mc3Object>> roots;
+        auto a = makeObj("a", "A"); a->transform.position = {-2, 0, 0};
+        auto b = makeObj("b", "B"); b->transform.position = {2, 0, 0};
+        auto mid = makeObj("mid", "Mid"); mid->transform.position = {0, 0, 0};
+        roots.push_back(a);
+        roots.push_back(b);
+        roots.push_back(mid);
+
+        int affected = applyProportionalFalloffAlg(roots, {a, b}, {},
+                                                     5.0f, 0.0f, 0.0f, 3.0f);
+        CHECK(affected == 1, "falloff apply: selection center is the average of selected positions");
+        CHECK(mid->transform.position[0] > 0.0f,
+              "falloff apply: object at the averaged selection center is affected");
+    }
+
+    // No-ops: empty selection, radius <= 0.
+    {
+        std::vector<std::shared_ptr<Mc3Object>> roots;
+        auto sel = makeObj("sel", "Sel");
+        auto other = makeObj("other", "Other");
+        roots.push_back(sel);
+        roots.push_back(other);
+        CHECK(applyProportionalFalloffAlg(roots, {}, {}, 1, 0, 0, 5.0f) == 0,
+              "falloff apply: empty selection is a no-op");
+        CHECK(applyProportionalFalloffAlg(roots, {sel}, {}, 1, 0, 0, 0.0f) == 0,
+              "falloff apply: zero radius is a no-op");
+    }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // deepCopyObjectAlg
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -2099,6 +2186,7 @@ int main()
     testBreakInstance();
     testAlignToObject();
     testScatterAlongCurve();
+    testProportionalFalloff();
     testDeepCopy();
     testUndoRedoBatchRename();
     testUndoRedoFindReplace();

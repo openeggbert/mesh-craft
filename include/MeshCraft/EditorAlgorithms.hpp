@@ -608,6 +608,72 @@ inline std::vector<std::shared_ptr<Mc3::Mc3Object>> scatterAlongCurveAlg(
     return newObjs;
 }
 
+// ── Proportional editing falloff (H1 / STAB-0489) ─────────────────────────────
+//
+// Mirrors the Gaussian-falloff nearby-object influence applied during a
+// Move-tool drag when propEditEnabled_ is on (the applyFalloff lambda in
+// MeshCraftApplication_Mouse.cpp's handleMouseInput()): every unselected,
+// unlocked object within propEditRadius_ of the selection's center gets
+// nudged by (deltaX,deltaY,deltaZ) scaled by a Gaussian weight, sigma chosen
+// so the weight is ~5% at the radius edge. deltaX/Y/Z are the already-
+// resolved world-space move delta (delta*axis), since axis resolution is
+// mouse/gizmo-driven and out of scope for a CNA-free mirror.
+
+inline float proportionalFalloffWeightAlg(float distSq, float radius)
+{
+    if (radius <= 0.0f) return 0.0f;
+    float r2 = radius * radius;
+    if (distSq >= r2) return 0.0f;
+    float sigSq = r2 / 9.0f; // reaches ~5% at radius edge
+    return std::exp(-distSq / (2.0f * sigSq));
+}
+
+// Returns the number of non-selected, non-locked objects actually nudged.
+// No-op (returns 0) if `selected` is empty or radius <= 0.
+inline int applyProportionalFalloffAlg(
+    std::vector<std::shared_ptr<Mc3::Mc3Object>>&       rootObjects,
+    const std::vector<std::shared_ptr<Mc3::Mc3Object>>& selected,
+    const std::set<std::string>&                        lockedIds,
+    float deltaX, float deltaY, float deltaZ,
+    float radius)
+{
+    if (selected.empty() || radius <= 0.0f) return 0;
+
+    float cx = 0.0f, cy = 0.0f, cz = 0.0f;
+    for (const auto& s : selected) {
+        cx += s->transform.position[0];
+        cy += s->transform.position[1];
+        cz += s->transform.position[2];
+    }
+    float n = static_cast<float>(selected.size());
+    cx /= n; cy /= n; cz /= n;
+
+    std::set<const Mc3::Mc3Object*> selPtrs;
+    for (const auto& s : selected) selPtrs.insert(s.get());
+
+    int affected = 0;
+    std::function<void(std::vector<std::shared_ptr<Mc3::Mc3Object>>&)> walk;
+    walk = [&](std::vector<std::shared_ptr<Mc3::Mc3Object>>& list) {
+        for (auto& obj : list) {
+            if (!selPtrs.count(obj.get()) && !lockedIds.count(obj->id)) {
+                float ddx = obj->transform.position[0] - cx;
+                float ddy = obj->transform.position[1] - cy;
+                float ddz = obj->transform.position[2] - cz;
+                float weight = proportionalFalloffWeightAlg(ddx*ddx + ddy*ddy + ddz*ddz, radius);
+                if (weight > 0.0f) {
+                    obj->transform.position[0] += deltaX * weight;
+                    obj->transform.position[1] += deltaY * weight;
+                    obj->transform.position[2] += deltaZ * weight;
+                    ++affected;
+                }
+            }
+            walk(obj->children);
+        }
+    };
+    walk(rootObjects);
+    return affected;
+}
+
 // ── Auto-save (STAB-0265) ─────────────────────────────────────────────────────
 //
 // Mirrors two pieces of CNA-coupled logic so "the auto-save interval is

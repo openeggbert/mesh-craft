@@ -34,15 +34,16 @@ flagged (STAB-0464 needs a live display; STAB-0460 describes a feature
 that was never built, out of scope per the stabilization moratorium).
 Both S11 and S12 sweeps found several real bugs, fixed with permanent
 regression tests — see §3 for the full list. **S13 (Commands,
-Undo/Redo, and Algorithms)** work is underway: STAB-0482-0488 done
+Undo/Redo, and Algorithms)** work is underway: STAB-0482-0489 done
 (extracted `convertToDefinitionAlg()`/`breakInstanceAlg()`/
-`alignToObjectAlg()`/`scatterAlongCurveAlg()` Alg mirrors, none existed
-before; STAB-0483 found and fixed a real duplicate-id bug; STAB-0486
-found and fixed a real Undo/Redo drift bug between the keyboard/menu/
-palette entry points; STAB-0487/0488 confirmed the macro recorder/
-playback system already correct — see §3). Plan-wide totals: **290
-✅ done, 6 🟡 partial, 112 🧪 has a plan but not executed,
-242 📋 not started** out of 650.
+`alignToObjectAlg()`/`scatterAlongCurveAlg()`/
+`applyProportionalFalloffAlg()` Alg mirrors, none existed before;
+STAB-0483 found and fixed a real duplicate-id bug; STAB-0486 found and
+fixed a real Undo/Redo drift bug between the keyboard/menu/palette
+entry points; STAB-0487/0488 confirmed the macro recorder/playback
+system already correct — see §3). Plan-wide totals: **291 ✅ done,
+6 🟡 partial, 112 🧪 has a plan but not executed, 241 📋 not
+started** out of 650.
 
 **Important architectural decisions:**
 - `mc3/` and `mcb/` are pure C++ static libs with **no** CNA/ImGui
@@ -100,7 +101,7 @@ full Debug+Release verification at commit `fca6fc1`): `smoke_test`,
 `mc3togltf_animation_unsupported`, `mc3togltf_large_scene_generated`,
 `mc3togltf_large_scene_500`.
 
-- `mc3_commands` (~362 assertions): editor command algorithms, undo/redo
+- `mc3_commands` (~376 assertions): editor command algorithms, undo/redo
   for every mutating command, auto-save/backup, Save-As/Export-Selection/
   drag-drop workflows, keybinding/preferences/macro persistence,
   hierarchy-panel filtering, AI-panel + unsaved-changes dialog
@@ -173,12 +174,12 @@ See `TESTING.md` for the full per-test reference and `plan.md`'s
 
 ## 3. Recent changes
 
-**30 STAB tasks committed as of `d6e9488`** (`53aa75e` through
-`d6e9488`, pushed to `origin/develop` — see `git log --oneline` for the
-full list). **STAB-0487/0488** below are confirmed correct and about
-to be committed as of this update. Gate 6 is exhausted (§8); **S11 and
-S12 are both fully done** except genuinely blocked/flagged items. Work
-is underway on **S13 (Commands, Undo/Redo, and Algorithms)**.
+**31 STAB tasks committed as of `2bddd33`** (`53aa75e` through
+`2bddd33`, pushed to `origin/develop` — see `git log --oneline` for the
+full list). **STAB-0489** below is implemented and about to be
+committed as of this update. Gate 6 is exhausted (§8); **S11 and S12
+are both fully done** except genuinely blocked/flagged items. Work is
+underway on **S13 (Commands, Undo/Redo, and Algorithms)**.
 
 This was a long, dense session that closed out essentially all of
 **Gate 6 (Documentation)**'s reachable work (plus a from-scratch schema
@@ -186,6 +187,22 @@ audit that found real bugs), then finished S11 and S12 entirely (bar
 the blocked/flagged items) and started S13. Highlights, most recent
 first:
 
+- **STAB-0489 — extracted `applyProportionalFalloffAlg()`**: the
+  Gaussian falloff math inside `handleMouseInput()`'s `applyFalloff`
+  lambda (weight 1.0 at zero distance, decreasing to 0 at the radius
+  edge exclusive, skipping selected/locked objects, centered on the
+  selection's average position) was already correct but completely
+  untested — the whole function is one giant mouse-drag handler with
+  no Alg mirror for this piece. Extracted `proportionalFalloffWeightAlg()`
+  (pure weight formula) + `applyProportionalFalloffAlg()` (selection-
+  center + recursive walk + apply, taking an already-resolved
+  world-space delta since axis resolution is mouse/gizmo-driven) into
+  `EditorAlgorithms.hpp`; wired the real code to call it. Added
+  `testProportionalFalloff()` (14 assertions): weight function edge
+  cases (zero distance, at/beyond radius, strictly decreasing,
+  non-positive radius), the apply function's near/far/locked-neighbor
+  selectivity, multi-object selection using the *average* position as
+  influence center, and empty-selection/zero-radius no-ops.
 - **STAB-0487 + STAB-0488 — confirmed the macro recorder/playback
   system is already correct**: STAB-0487 confirmed `batchRenameSelected()`
   unconditionally records a `"batch_rename"` step with the rename
@@ -970,32 +987,30 @@ stabilization moratorium; STAB-0464 needs a live display).
 **S13 (Commands, Undo/Redo, and Algorithms)** already has its P0/P1
 tier done from earlier sessions (STAB-0471-0481 — including a real fix,
 `resetPivot()` was missing `pushUndo()`, found and fixed then).
-STAB-0482-0488 are now done too (this session — extracted
+STAB-0482-0489 are now done too (this session — extracted
 `convertToDefinitionAlg()`/`breakInstanceAlg()`/`alignToObjectAlg()`/
-`scatterAlongCurveAlg()` Alg mirrors, none existed before; STAB-0483
-found and fixed a real duplicate-id bug; STAB-0486 found and fixed a
-real Undo/Redo drift bug across keyboard/menu/palette; STAB-0487/0488
-confirmed the macro recorder/playback system already correct — see
-§3). Next:
+`scatterAlongCurveAlg()`/`applyProportionalFalloffAlg()` Alg mirrors,
+none existed before; STAB-0483 found and fixed a real duplicate-id bug;
+STAB-0486 found and fixed a real Undo/Redo drift bug across keyboard/
+menu/palette; STAB-0487/0488 confirmed the macro recorder/playback
+system already correct — see §3). Next:
 
-1. **STAB-0489 — verify proportional editing: nearby objects
-   influenced** (S13, P2, next-lowest ID). Goal: confirm that moving an
-   object with proportional editing enabled shifts nearby objects by a
-   falloff-scaled amount.
+1. **STAB-0490 — verify snapping: vertex snap to nearest object
+   position** (S13, P2, next-lowest ID). Goal: confirm Shift+drag snaps
+   the moved object's position to the nearest other object's position.
    Files: `src/MeshCraft/MeshCraftApplication_Mouse.cpp`.
-   Verify: read the actual drag-handling code first — this may be a
-   genuinely interactive/mouse-drag feature (like S11/S12's blocked
-   visual items) or it may have a pure falloff-math core extractable to
-   `EditorAlgorithms.hpp` and testable headlessly; check which before
-   assuming either way. If the feature doesn't exist at all, confirm
-   that via exhaustive grep (same as STAB-0460) rather than assuming.
+   Verify: this logic already exists right next to STAB-0489's
+   falloff code in the same `handleMouseInput()` function (the
+   "Vertex snap (Shift)" block, nearest-neighbor search over
+   `document_.objects`) — likely has the same pure-math-core-extractable
+   shape; read it and extract/test if so.
 
-Beyond this: S13 has ~8 more P2/P3 items (STAB-0490-0496ish — snapping,
-angle snapping, Select Children, Random variant — see `plan.md`'s S13
-rows; several of these, e.g. mouse-drag snapping, may be genuinely
-interactive/blocked like S11/S12's visual items — check each before
-assuming). S14 (Rendering/Viewport) and S15 (Import/Export/Editor
-Integration) remain fully untouched after S13.
+Beyond this: S13 has ~7 more P2/P3 items (STAB-0491-0496ish — angle
+snapping, Select Children, Random variant — see `plan.md`'s S13 rows;
+some of these may be genuinely interactive/blocked like S11/S12's
+visual items — check each before assuming). S14 (Rendering/Viewport)
+and S15 (Import/Export/Editor Integration) remain fully untouched
+after S13.
 
 ---
 
