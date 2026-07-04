@@ -383,6 +383,19 @@ if(MESH_CRAFT_BUILD_TESTING AND UNIX AND NOT ANDROID AND NOT EMSCRIPTEN)
         set_tests_properties(smoke_test_empty_scene PROPERTIES TIMEOUT 30)
     endif()
 
+    # STAB-0499: a <mesh> with a nonexistent src must render a placeholder
+    # (not crash) and print a warning (not silently swallow the failure).
+    if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/test/missing_mesh.mc3.xml")
+        add_test(
+            NAME missing_mesh_test
+            COMMAND bash ${CMAKE_CURRENT_SOURCE_DIR}/test/missing_mesh_test.sh
+                    $<TARGET_FILE:MeshCraft>
+                    ${CMAKE_CURRENT_SOURCE_DIR}/test/missing_mesh.mc3.xml
+            WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
+        )
+        set_tests_properties(missing_mesh_test PROPERTIES TIMEOUT 30)
+    endif()
+
     find_program(PYTHON3_EXEC python3)
     if(PYTHON3_EXEC)
         file(GLOB _mc3_xml_files "${CMAKE_CURRENT_SOURCE_DIR}/test/*.mc3.xml")

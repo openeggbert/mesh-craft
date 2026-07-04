@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- STAB-0499 fixture: a <mesh> object referencing a nonexistent src file,
+     to confirm the editor renders a graceful placeholder instead of
+     crashing. -->
+<mc3 version="0.3" model="MissingMeshFixture">
+  <objects>
+    <mesh name="Ghost" src="meshes/does_not_exist.obj" position="0 0 0"/>
+  </objects>
+</mc3>

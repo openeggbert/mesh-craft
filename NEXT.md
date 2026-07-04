@@ -49,16 +49,19 @@ Ctrl+rotate 45° snap is real but the increment is user-configurable
 glTF-export path where Instance `variantDefinitions` were silently
 ignored outside CSG, fixed via a new shared
 `Mc3Object::resolvedInstanceDefinitionKey()`; STAB-0494/0495 closed out
-the last 2 P3 items — see §3 for the full list. **Work has moved to
+the last 2 P3 items — see §3 for the full list. **Work continues on
 S14 (Rendering and Viewport Stability)**: STAB-0496 done (confirmed
 `smoke_test` exercises a genuine render, not a stub), STAB-0497 done
 (confirmed the renderer's main switch exhaustively handles all 19
 `ObjectType` values plus a safe default fallback; added a permanent
-`smoke_test_all_objects` ctest), and STAB-0498 done (added
+`smoke_test_all_objects` ctest), STAB-0498 done (added
 `test/empty_scene.mc3.xml` + `smoke_test_empty_scene` ctest — no
-existing fixture covered a genuinely empty scene). Plan-wide totals:
-**300 ✅ done, 6 🟡 partial, 109 🧪 has a plan but not executed,
-235 📋 not started** out of 650.
+existing fixture covered a genuinely empty scene), and STAB-0499 done
+(found a real silent-failure gap: a missing mesh file loaded with no
+warning at all; fixed `loadOrGetMesh()` to print a warning, added
+`test/missing_mesh.mc3.xml` + `missing_mesh_test` ctest). Plan-wide
+totals: **301 ✅ done, 6 🟡 partial, 109 🧪 has a plan but not
+executed, 234 📋 not started** out of 650.
 
 **Important architectural decisions:**
 - `mc3/` and `mcb/` are pure C++ static libs with **no** CNA/ImGui
@@ -97,19 +100,21 @@ existing fixture covered a genuinely empty scene). Plan-wide totals:
   the root project).
 
 ### Tests
-**28/28 CTest pass** in Debug as of this session (STAB-0498 added
-`smoke_test_empty_scene`, STAB-0497 added `smoke_test_all_objects`,
-STAB-0493 added `mc3togltf_instance_variant`, STAB-0630 added
+**29/29 CTest pass** in Debug as of this session (STAB-0499 added
+`missing_mesh_test`, STAB-0498 added `smoke_test_empty_scene`,
+STAB-0497 added `smoke_test_all_objects`, STAB-0493 added
+`mc3togltf_instance_variant`, STAB-0630 added
 `mc3togltf_obj_robustness`, STAB-0417/0418/0420/0416 added
 `mc3togltf_texture_sampler`, STAB-0166-0170/0411-0415/0435 added
 `mc3togltf_material_pbr`, STAB-0440 added
 `mc3togltf_svg_texture_export`, STAB-0447/0448 added
 `mc3togltf_animation_unsupported`; started the session at 20/20):
 `smoke_test`, `smoke_test_all_objects`, `smoke_test_empty_scene`,
-`xsd_validation`, `mc3_registry`, `mc3_ai`, `mc3_roundtrip`,
-`mc3_commands`, `mcb_roundtrip`, `mc3tomcb_roundtrip`, `mc3togltf_gltf`,
-`mc3togltf_all_primitives`, `mc3togltf_export_verification`,
-`mc3togltf_large_scene`, `mc3togltf_csg_strict`, `mc3togltf_csg_export`,
+`missing_mesh_test`, `xsd_validation`, `mc3_registry`, `mc3_ai`,
+`mc3_roundtrip`, `mc3_commands`, `mcb_roundtrip`, `mc3tomcb_roundtrip`,
+`mc3togltf_gltf`, `mc3togltf_all_primitives`,
+`mc3togltf_export_verification`, `mc3togltf_large_scene`,
+`mc3togltf_csg_strict`, `mc3togltf_csg_export`,
 `mc3togltf_csg_unsupported`, `mc3togltf_csg_nested`,
 `mc3togltf_instance_deform_cache`, `mc3togltf_float_cache_key`,
 `mc3togltf_obj_robustness`, `mc3togltf_texture_sampler`,
@@ -204,6 +209,21 @@ audit that found real bugs), then finished S11 and S12 entirely (bar
 the blocked/flagged items) and started S13. Highlights, most recent
 first:
 
+- **STAB-0499 — found and fixed a silent mesh-load-failure gap**: a
+  `<mesh src="...">` pointing to a nonexistent file loaded with no
+  crash, but also **no warning at all** — the failure was completely
+  invisible, unlike every other error path in the renderer/exporter
+  (which all print a `Warning:`/`Error:`-prefixed message, per
+  STAB-0605's logging-consistency audit). Fixed
+  `SceneRenderer::loadOrGetMesh()` to print
+  `"Warning: failed to load mesh \"<path>\" — rendering placeholder box"`
+  when `loadObjMesh()` returns an empty mesh (the existing placeholder-box
+  fallback behavior is unchanged, only the diagnostics are new). Added
+  `test/missing_mesh.mc3.xml` + `test/missing_mesh_test.sh` (a real
+  `--screenshot` run asserting both a non-empty PPM and the warning text
+  in captured output) and a permanent `missing_mesh_test` ctest (same
+  mechanism as STAB-0496/0497/0498). Verified via full CMake reconfigure
+  + rebuild (0 warnings) and 29/29 ctest (up from 28/28).
 - **STAB-0498 — added an empty-scene fixture + ctest**: no existing
   fixture had a genuinely empty `<objects/>` scene. Added
   `test/empty_scene.mc3.xml` (the minimal possible valid document — no
@@ -1143,29 +1163,27 @@ list of extractions/bugs found this session). **S14 (Rendering and
 Viewport Stability), 30 items, is underway** — STAB-0496 done (verified
 `smoke_test` exercises a genuine render across all 3 sample scenes),
 STAB-0497 done (confirmed the renderer handles all 19 `ObjectType`
-values by construction; added `smoke_test_all_objects` ctest), and
+values by construction; added `smoke_test_all_objects` ctest),
 STAB-0498 done (added `test/empty_scene.mc3.xml` +
-`smoke_test_empty_scene` ctest). Next:
+`smoke_test_empty_scene` ctest), and STAB-0499 done (found and fixed a
+real silent mesh-load-failure gap; added `test/missing_mesh.mc3.xml` +
+`missing_mesh_test` ctest). Next:
 
-1. **STAB-0499 — verify renderer handles missing mesh file
-   gracefully** (S14, P1, next-lowest ID). Goal: a `<mesh>` object with
-   a nonexistent `src` renders a placeholder (or nothing), not a crash.
-   Files: `src/MeshCraft/Renderer/SceneRenderer.cpp`.
-   Verify: `SceneRenderer.cpp`'s `ObjectType::Mesh` case already showed
-   (during STAB-0497's code reading) a fallback to `unitBox_` if
-   `loadOrGetMesh()` returns null — confirm this via a real
-   `--screenshot` run against a fixture with a bad mesh path, following
-   the same pattern as STAB-0498 (create a small fixture + permanent
-   ctest if none exists).
+1. **STAB-0500 — verify renderer handles missing material reference**
+   (S14, P1, next-lowest ID). Goal: an object with `material="nonexistent"`
+   renders with a sensible default (e.g. default white material), not a
+   crash. Files: `src/MeshCraft/Renderer/SceneRenderer.cpp`.
+   Verify: read how the material lookup resolves an unknown key, then
+   confirm via a real `--screenshot` run against a fixture referencing a
+   nonexistent material, following the same pattern as
+   STAB-0498/STAB-0499 (create a small fixture + permanent ctest if none
+   exists).
 
-STAB-0500 (missing material reference, same "no crash, sensible
-fallback" shape) is likely headlessly verifiable the same way. Beyond
-that, S14 gets heavily visual/interactive (gizmos, camera presets,
-bloom/SSAO toggles, shadow maps) — expect many items to land like
-S11/S12's blocked set (flagged 🟡, needs a live display) rather than
-S13's extract-and-test pattern. S15 (Import/Export/Editor Integration)
-remains untouched after
-S14.
+Beyond that, S14 gets heavily visual/interactive (gizmos, camera
+presets, bloom/SSAO toggles, shadow maps) — expect many items to land
+like S11/S12's blocked set (flagged 🟡, needs a live display) rather
+than S13's extract-and-test pattern. S15 (Import/Export/Editor
+Integration) remains untouched after S14.
 
 ---
 

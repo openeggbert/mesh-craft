@@ -480,6 +480,10 @@ const RenderMesh* SceneRenderer::loadOrGetMesh(const std::string& absPath)
     if (it != meshCache_.end()) return it->second.vb ? &it->second : nullptr;
 
     RenderMesh loaded = loadObjMesh(device_, absPath);
+    if (!loaded.vb) {
+        std::cerr << "Warning: failed to load mesh \"" << absPath
+                   << "\" — rendering placeholder box\n";
+    }
     auto [ins, ok] = meshCache_.emplace(absPath, std::move(loaded));
     (void)ok;
     return ins->second.vb ? &ins->second : nullptr;
