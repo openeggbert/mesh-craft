@@ -24,14 +24,14 @@ risks closed quickly).
 **Current phase:** Stabilization. Every gate's priority-list subset is
 now done. **Gate 6 (Documentation) is close to fully green**: S17
 (Documentation and User-Facing Honesty) is 20/20 complete; S18 (Code
-Quality) has all P0/P1 items done plus 4 P2s (STAB-0610, STAB-0603,
-STAB-0611, STAB-0604) done, 14 P2/P3 remain; **S19 (Security and Robustness) is
+Quality) has all P0/P1 items done plus 5 P2s (STAB-0610, STAB-0603,
+STAB-0611, STAB-0604, STAB-0605) done, 13 P2/P3 remain; **S19 (Security and Robustness) is
 now fully green — 15/15**; S20 (Release Readiness) is 12/15, with the
 last 3 items genuinely blocked
 (need Blender, a browser, or a running CI — none available in this
-environment). No gate is fully green yet. Plan-wide totals: **215 ✅
+environment). No gate is fully green yet. Plan-wide totals: **216 ✅
 done, 3 🟡 partial, 136 🧪 has a plan but not executed,
-296 📋 not started** out of 650.
+295 📋 not started** out of 650.
 
 **Important architectural decisions:**
 - `mc3/` and `mcb/` are pure C++ static libs with **no** CNA/ImGui
@@ -157,16 +157,28 @@ See `TESTING.md` for the full per-test reference and `plan.md`'s
 
 **STAB-0610** (`53aa75e`), **STAB-0630** (`09fdf95`),
 **STAB-0383/STAB-0631** (`7670a00`), **STAB-0633** (`9aabad4`),
-**STAB-0603** (`54f6a76`+`99cc7ad`), and **STAB-0611/STAB-0635**
-(`32c9211`) are committed; `origin/develop` is not yet pushed to (last
-pushed commit is `03723b8`). **STAB-0604** below is verification-only
-(code inspection, no code changed) and is reflected in
-`plan.md`/`NEXT.md` but not yet committed as of this update.
+**STAB-0603** (`54f6a76`+`99cc7ad`), **STAB-0611/STAB-0635**
+(`32c9211`), and **STAB-0604** (`9447dd2`) are committed;
+`origin/develop` is not yet pushed to (last pushed commit is
+`03723b8`). **STAB-0605** below is verification-only (code inspection,
+no code changed) and is reflected in `plan.md`/`NEXT.md` but not yet
+committed as of this update.
 
 This was a long, dense session that closed out essentially all of
 **Gate 6 (Documentation)**'s reachable work, plus a from-scratch schema
 audit that found real bugs. Highlights, most recent first:
 
+- **STAB-0605 — verified logging is consistent**: grep-driven audit
+  across `mc3/src`, `mc3togltf/src`, `mcb/src`, `mc3tomcb/src`,
+  `src/MeshCraft`. 0 raw `printf`/`fprintf` calls anywhere (only
+  `std::snprintf` into local string buffers for UI labels/XML number
+  formatting — a different concern, not diagnostics). Libraries use
+  `std::cerr` with a `"Warning: "`/`"Error: "` prefix and never touch
+  stdout; CLI tools (`mc3togltf`, `mc3tomcb`) use `std::cout` for their
+  actual output plus `std::cerr` for failures; the editor tags every
+  message with a `[Subsystem]` prefix (`[Bloom]`, `[Skybox]`, `[SSAO]`,
+  etc.). Consistent throughout — no fix needed, no custom logger
+  warranted.
 - **STAB-0604 — audited `SceneRenderer_Builders.cpp` vs
   `MeshBuilder.cpp` for duplicate geometry code**: read both files in
   full, compared box + UV-sphere construction line-by-line as
@@ -529,34 +541,28 @@ No project linter/formatter is configured.
 **S19 (Security and Robustness) is fully green — 15/15 — no remaining
 S19 items.** All remaining Gate 6 work is in S18 (Code Quality):
 
-1. **STAB-0605 — verify logging is consistent** (S18, P2,
-   next-lowest ID after STAB-0603/0604/0610/0611). Goal: check whether
-   error/warning reporting across the codebase uses a consistent
-   channel (the mc3togltf/AI-panel code already uses
-   `std::cerr << "Warning: ..."` consistently per this session's
-   STAB-0630/STAB-0383 work) rather than a mix of raw `printf`/`cerr`/
-   something else, especially in library code (`mc3/src`,
-   `mc3togltf/src`, `mcb/src`).
-   Files: all `.cpp` (grep-driven audit).
-   Verify: code inspection; `grep -rn "printf\|fprintf\|std::cerr\|std::cout"`
-   across library dirs, categorize what's found.
-
-2. **STAB-0606 — add error result type to `Mc3XmlParser`** (S18, P2).
-   Goal: the row suggests an *optional* non-throwing
-   `loadFromFile(path, &error)` variant alongside the existing
-   throwing one — read the current exception-based API first to decide
-   whether this is worth adding (every current call site already
-   expects/handles the throw, per this session's STAB-0625/0628/0629
-   hostile-input testing) or whether it's a "not needed, document why"
-   outcome like STAB-0604.
+1. **STAB-0606 — add error result type to `Mc3XmlParser`** (S18, P2,
+   next-lowest ID after STAB-0603/0604/0605/0610/0611). Goal: the row
+   suggests an *optional* non-throwing `loadFromFile(path, &error)`
+   variant alongside the existing throwing one — read the current
+   exception-based API first to decide whether this is worth adding
+   (every current call site already expects/handles the throw, per
+   this session's STAB-0625/0628/0629 hostile-input testing) or
+   whether it's a "not needed, document why" outcome like STAB-0604.
    Files: `mc3/src/Mc3XmlParser.cpp`, `mc3/include/MeshCraft/Mc3/`
    (wherever `Mc3Document::loadFromFile` is declared).
    Verify: code inspection first; if added, `ctest --output-on-failure`
    must stay 21/21 plus new coverage for the non-throwing path.
 
-Beyond these two: S18 has 13 more P2/P3 items after
-STAB-0603/0604/0605/0606/0610/0611 (mostly code-quality audits — see
-`plan.md`'s S18 rows). Closing S18 fully
+2. **STAB-0607 — verify `McbWriter`/`McbReader` don't use raw
+   `new`/`delete`** (S18, P2). Goal: confirm RAII throughout (no manual
+   memory management) in the MCB binary serialization code.
+   Files: `mcb/src/McbWriter.cpp`, `mcb/src/McbReader.cpp`.
+   Verify: code inspection; `grep -n "new \|delete "` in both files.
+
+Beyond these two: S18 has 12 more P2/P3 items after
+STAB-0603/0604/0605/0606/0607/0610/0611 (mostly code-quality audits —
+see `plan.md`'s S18 rows). Closing S18 fully
 would leave Gate 6 blocked only on the 3 genuinely-inaccessible S20
 items (§5). After that, the next priority tier is P2 items across
 S6–S13 and the
