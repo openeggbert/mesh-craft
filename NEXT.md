@@ -25,12 +25,12 @@ risks closed quickly).
 now done. **Gate 6 (Documentation) is close to fully green**: S17
 (Documentation and User-Facing Honesty) is 20/20 complete; S18 (Code
 Quality) has all P0/P1 items done plus 1 P2 (STAB-0610) done, 17 P2/P3
-remain; S19 (Security) has all P0/P1 plus 3 bonus P2 items done (12/15),
-3 P2/P3 remain; S20 (Release Readiness) is 12/15, with the last 3 items
+remain; S19 (Security) has all P0/P1 plus 4 bonus P2 items done (13/15),
+2 P2/P3 remain; S20 (Release Readiness) is 12/15, with the last 3 items
 genuinely blocked (need Blender, a browser, or a running CI — none
 available in this environment). No gate is fully green yet. Plan-wide
-totals: **208 ✅ done, 3 🟡 partial, 136 🧪 has a plan but not executed,
-303 📋 not started** out of 650.
+totals: **210 ✅ done, 3 🟡 partial, 136 🧪 has a plan but not executed,
+301 📋 not started** out of 650.
 
 **Important architectural decisions:**
 - `mc3/` and `mcb/` are pure C++ static libs with **no** CNA/ImGui
@@ -88,10 +88,11 @@ verification at commit `fca6fc1`): `smoke_test`, `xsd_validation`,
   lifecycles.
 - `mc3_registry` (~94 assertions): ModelRegistry SQLite CRUD, search
   (name/group/tags/description/source), migration, edge cases.
-- `mc3_ai` (~52 assertions): AiAssistant JSON helpers, the full
+- `mc3_ai` (~55 assertions): AiAssistant JSON helpers, the full
   AI-response validation pipeline (extract → repair → parse →
-  empty-check → XSD-validate), 3 mock-HTTP-server round-trips (no real
-  network), and XSD accept/reject regression tests.
+  empty-check → XSD-validate), 4 mock-HTTP-server round-trips (success,
+  truncation, HTTP error, indefinite-hang timeout — no real network),
+  and XSD accept/reject regression tests.
 - `mc3_roundtrip` (~299 assertions): full XML parser/writer roundtrip,
   all N1–N7 extensions, edge cases.
 - `mcb_roundtrip` (~50 assertions): MCB binary roundtrip, base scene +
@@ -153,19 +154,29 @@ See `TESTING.md` for the full per-test reference and `plan.md`'s
 
 ## 3. Recent changes
 
-**STAB-0610** is committed (`53aa75e`); `origin/develop` is not yet
-pushed to (last pushed commit is `03723b8`). **STAB-0630** below is
-implemented but **not yet committed** as of this update — working tree
-has new/modified files: `NEXT.md`, `plan.md`, `TESTING.md`,
-`mc3togltf/CMakeLists.txt`, `mc3togltf/src/MeshBuilder.cpp`,
-`mc3togltf/test/obj_robustness_test.py`,
-`test/obj_malformed_negative.obj`, `test/obj_malformed_infinite.obj`,
-`test/obj_robustness.mc3.xml`.
+**STAB-0610** (`53aa75e`) and **STAB-0630** (`09fdf95`) are committed;
+`origin/develop` is not yet pushed to (last pushed commit is `03723b8`).
+**STAB-0383/STAB-0631** below are implemented but **not yet committed**
+as of this update — working tree has new/modified files: `NEXT.md`,
+`plan.md`, `TESTING.md`, `include/MeshCraft/AiAssistant.hpp`,
+`src/MeshCraft/AiAssistant.cpp`, `mc3/test/ai_test.cpp`.
 
 This was a long, dense session that closed out essentially all of
 **Gate 6 (Documentation)**'s reachable work, plus a from-scratch schema
 audit that found real bugs. Highlights, most recent first:
 
+- **STAB-0383 + STAB-0631 — AI network timeout**: confirmed
+  `AiAssistant`'s `httplib::Client` already had finite connect/read/write
+  timeouts (30s/600s/120s) — not infinite. Exposed them as public
+  overridable members (`connectTimeoutSec`/`readTimeoutSec`/
+  `writeTimeoutSec`, mirroring the existing `apiBaseUrl` test-override
+  pattern) instead of hardcoded literals, purely so a fast test could
+  verify the *behavior* rather than just read the numbers off the page.
+  Added a mock-server test where the handler blocks on a condition
+  variable forever (simulating a truly hung server, not just a slow
+  one) with a 1s override — confirmed `sendAsync()` still returns with
+  `hasError()` within ~1s, not indefinitely. Test runs in ~1.2s wall
+  time, no change to production timeout values.
 - **STAB-0630 — untrusted OBJ file robustness**: fed `loadObjMesh()`
   three hostile inputs — an out-of-range negative (relative) vertex
   index, a literal `nan` coordinate, and a `1e400`-overflow-to-infinity
@@ -456,23 +467,29 @@ No project linter/formatter is configured.
 
 ## 8. Next smallest tasks
 
-1. **STAB-0631 — verify AI network timeout** (S19, P2). Goal: the row
-   says "see STAB-0383" — check whether that item (or equivalent
-   coverage) already verifies `AiAssistant` has a configured HTTP
-   timeout before writing new work; if it does, this is a quick mark
-   rather than new code.
-   Files: `src/MeshCraft/AiAssistant.cpp`.
-   Verify: code inspection first; if a live test is needed, a mock
-   server that never responds (already have the pattern from
-   `ai_test.cpp`'s other mock-server tests) with a timeout assertion.
+1. **STAB-0633 — verify AI apply requires undo-capable state** (S19,
+   P2). Goal: confirm applying an AI response to the live scene always
+   goes through the same command path that pushes an undo snapshot
+   first — i.e. "apply without undo push" should be impossible by
+   construction, not just by convention. Read
+   `MeshCraftApplication_UiAi.cpp`'s apply path and trace it back to
+   whichever `pushUndo()`-calling command it reuses (compare against
+   how other mutating commands guarantee this, per `EditorAlgorithms.hpp`'s
+   "Alg mirror" pattern in NEXT.md §6). This is the last remaining S19
+   P2 item — closing it finishes S19 down to its 2 remaining P3s.
+   Files: `src/MeshCraft/MeshCraftApplication_UiAi.cpp`.
+   Verify: code inspection first (does it call the same
+   apply-with-undo path as everything else, or something bespoke?); if
+   a regression test is warranted, `mc3_commands` already has the
+   pattern for "command X pushes exactly one undo entry" checks.
 
-Beyond this one: S18 has 17 more P2/P3 items (mostly code-quality
-audits — see `plan.md`'s S18 rows), S19 has 1 more P2 item after
-STAB-0631 (STAB-0632/0630 already done, STAB-0633 remains). Closing all
-of S18+S19's remaining items would leave Gate 6 blocked only on the 3
-genuinely-inaccessible S20 items (§5). After that, the next priority
-tier is P2 items across S6–S13 and the untouched S11/S12/S14/S15
-sections — see `plan.md`'s per-section Key File columns.
+Beyond this one: S18 has 17 P2/P3 items remaining (mostly code-quality
+audits — see `plan.md`'s S18 rows, e.g. STAB-0603 is the next lowest
+ID). Closing S19 fully (this item) and working through S18 would leave
+Gate 6 blocked only on the 3 genuinely-inaccessible S20 items (§5).
+After that, the next priority tier is P2 items across S6–S13 and the
+untouched S11/S12/S14/S15 sections — see `plan.md`'s per-section Key
+File columns.
 
 ---
 

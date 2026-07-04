@@ -165,9 +165,13 @@ void AiAssistant::sendAsync(const std::string& systemPrompt,
     std::string modelCopy     = model;
     int         maxTokensCopy = maxTokens;
     std::string baseUrlCopy   = apiBaseUrl;
+    int         connectTimeoutCopy = connectTimeoutSec;
+    int         readTimeoutCopy    = readTimeoutSec;
+    int         writeTimeoutCopy   = writeTimeoutSec;
 
     future_ = std::async(std::launch::async,
         [apiKeyCopy, modelCopy, maxTokensCopy, baseUrlCopy,
+         connectTimeoutCopy, readTimeoutCopy, writeTimeoutCopy,
          systemPrompt, sceneXml, taskPrompt]()
             -> std::pair<std::string, std::string>   // {text, stop_reason}
     {
@@ -177,9 +181,9 @@ void AiAssistant::sendAsync(const std::string& systemPrompt,
         // default apiBaseUrl) or a plain socket for "http://" (test mock
         // servers point apiBaseUrl at http://127.0.0.1:PORT).
         httplib::Client cli(baseUrlCopy);
-        cli.set_connection_timeout(30, 0);
-        cli.set_read_timeout(600, 0);   // 10 min: large scenes + high max_tokens can be slow
-        cli.set_write_timeout(120, 0);  // 2 min: large scene XML body
+        cli.set_connection_timeout(connectTimeoutCopy, 0);
+        cli.set_read_timeout(readTimeoutCopy, 0);
+        cli.set_write_timeout(writeTimeoutCopy, 0);
 
         // Structured request with prompt caching:
         //   system prompt  → cached (stable across requests)

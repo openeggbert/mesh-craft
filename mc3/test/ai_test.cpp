@@ -16,7 +16,9 @@
 #include <MeshCraft/Mc3/Mc3Document.hpp>
 
 #include <chrono>
+#include <condition_variable>
 #include <iostream>
+#include <mutex>
 #include <string>
 #include <thread>
 
@@ -385,6 +387,56 @@ static void testMockServerHttpErrorStatus() {
     serverThread.join();
 }
 
+// STAB-0383 / STAB-0631 — a server that accepts the connection but never
+// responds must not hang sendAsync() forever: the configured read timeout
+// has to fire and report an error.
+static void testNetworkTimeoutPreventsIndefiniteHang() {
+    std::mutex              releaseMutex;
+    std::condition_variable releaseCv;
+    bool                    release = false;
+
+    httplib::Server svr;
+    svr.Post("/v1/messages", [&](const httplib::Request&, httplib::Response&) {
+        // Block until the test releases us — simulates a server that hangs
+        // indefinitely rather than one that merely responds slowly.
+        std::unique_lock<std::mutex> lk(releaseMutex);
+        releaseCv.wait(lk, [&] { return release; });
+    });
+    int port = svr.bind_to_any_port("127.0.0.1");
+    std::thread serverThread([&]{ svr.listen_after_bind(); });
+    waitUntilServerRunning(svr);
+
+    AiAssistant ai;
+    ai.apiKey            = "test-key";
+    ai.apiBaseUrl        = "http://127.0.0.1:" + std::to_string(port);
+    ai.connectTimeoutSec = 1;
+    ai.readTimeoutSec    = 1; // far shorter than the server's indefinite hang
+    ai.writeTimeoutSec   = 1;
+
+    auto start = std::chrono::steady_clock::now();
+    ai.sendAsync("system prompt", "<mc3/>", "add a box");
+    bool finished = pollUntilDone(ai, 4000);
+    auto elapsedMs = std::chrono::duration_cast<std::chrono::milliseconds>(
+        std::chrono::steady_clock::now() - start).count();
+
+    CHECK(finished,
+          "STAB-0383/STAB-0631: sendAsync() returns instead of hanging "
+          "forever when the server never responds");
+    CHECK(ai.hasError(),
+          "STAB-0383/STAB-0631: a timed-out request is reported as an error");
+    CHECK(elapsedMs < 4000,
+          "STAB-0383/STAB-0631: the timeout fires close to the configured "
+          "readTimeoutSec (1s), not after an indefinite wait");
+
+    {
+        std::lock_guard<std::mutex> lk(releaseMutex);
+        release = true;
+    }
+    releaseCv.notify_all();
+    svr.stop();
+    serverThread.join();
+}
+
 #endif // MESHCRAFT_HAS_AI
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -415,6 +467,7 @@ int main() {
     testMockServerSuccessRoundTrip();
     testMockServerTruncatedResponse();
     testMockServerHttpErrorStatus();
+    testNetworkTimeoutPreventsIndefiniteHang();
 #else
     std::cout << "SKIP: mock HTTP server tests require MESHCRAFT_HAS_AI\n";
 #endif

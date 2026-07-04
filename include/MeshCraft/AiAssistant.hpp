@@ -19,6 +19,14 @@ public:
     // never needs to touch this, it defaults to the real Claude API.
     std::string apiBaseUrl{"https://api.anthropic.com"};
 
+    // HTTP timeouts, in seconds. Defaults match production needs (large
+    // scenes + high max_tokens can be slow). Overridable so tests can verify
+    // sendAsync() actually returns on a hung connection without waiting out
+    // the full production timeout (STAB-0383/STAB-0631).
+    int connectTimeoutSec{30};
+    int readTimeoutSec{600};
+    int writeTimeoutSec{120};
+
     // Starts a background HTTPS call to the Claude API with prompt caching.
     // systemPrompt — role/format instructions (cached)
     // sceneXml     — serialized mc3.xml scene sent as context (cached)
