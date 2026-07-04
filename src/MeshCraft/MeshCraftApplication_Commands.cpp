@@ -607,31 +607,11 @@ void MeshCraftApplication::groupScaleSelected() {
     if (sel.empty()) return;
     const float f = groupScaleFactor_;
 
-    // Compute group center (average of positions)
-    float cx = 0.f, cy = 0.f, cz = 0.f;
-    for (const auto& o : sel) {
-        cx += o->transform.position[0];
-        cy += o->transform.position[1];
-        cz += o->transform.position[2];
-    }
-    const float n = static_cast<float>(sel.size());
-    cx /= n; cy /= n; cz /= n;
-
     pushUndo();
-    for (const auto& o : sel) {
-        if (lockedIds_.count(o->id)) continue;
-        // Translate position away from center by factor
-        o->transform.position[0] = cx + (o->transform.position[0] - cx) * f;
-        o->transform.position[1] = cy + (o->transform.position[1] - cy) * f;
-        o->transform.position[2] = cz + (o->transform.position[2] - cz) * f;
-        // Also scale the object itself
-        o->transform.scale[0] *= f;
-        o->transform.scale[1] *= f;
-        o->transform.scale[2] *= f;
-    }
+    int scaled = groupScaleAlg(sel, lockedIds_, f);
     modified_ = true; updateWindowTitle();
     setStatusMsg("Group scale ×" + std::to_string(f).substr(0, 5) +
-                 " on " + std::to_string(sel.size()) + " object(s)", false, 2.0f);
+                 " on " + std::to_string(scaled) + " object(s)", false, 2.0f);
     recordStep("group_scale", {std::to_string(f)});
 }
 

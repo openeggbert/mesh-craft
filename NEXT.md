@@ -34,24 +34,25 @@ flagged (STAB-0464 needs a live display; STAB-0460 describes a feature
 that was never built, out of scope per the stabilization moratorium).
 Both S11 and S12 sweeps found several real bugs, fixed with permanent
 regression tests — see §3 for the full list. **S13 (Commands,
-Undo/Redo, and Algorithms)** work is underway: STAB-0482-0494 done
-(extracted `convertToDefinitionAlg()`/`breakInstanceAlg()`/
-`alignToObjectAlg()`/`scatterAlongCurveAlg()`/
-`applyProportionalFalloffAlg()`/`vertexSnapToNearestAlg()`/
-`applyRotationDragAlg()`/`flattenDescendantsAlg()` Alg mirrors, none
-existed before; STAB-0483 found and fixed a real duplicate-id bug;
+Undo/Redo, and Algorithms) is now fully done — all 25 items (STAB-0471
+through STAB-0495) ✅.** Highlights: extracted 8 new Alg mirrors
+(`convertToDefinitionAlg()`/`breakInstanceAlg()`/`alignToObjectAlg()`/
+`scatterAlongCurveAlg()`/`applyProportionalFalloffAlg()`/
+`vertexSnapToNearestAlg()`/`applyRotationDragAlg()`/
+`flattenDescendantsAlg()`/`groupScaleAlg()`, none existed before;
+STAB-0483 found and fixed a real duplicate-id bug in Break Instance;
 STAB-0486 found and fixed a real Undo/Redo drift bug between the
 keyboard/menu/palette entry points; STAB-0487/0488 confirmed the macro
 recorder/playback system already correct; STAB-0491 confirmed the
 Ctrl+rotate 45° snap is real but the increment is user-configurable
-(default 15°), and the Ctrl-override is deliberately rotation-only;
-STAB-0493 found and fixed a real glTF-export bug where Instance
-`variantDefinitions` were silently ignored outside CSG, adding a
-shared `Mc3Object::resolvedInstanceDefinitionKey()`; STAB-0494 confirmed
-a negative `arrayDuplicate` count safely clamps to 1 copy (not a
-silent zero-op as the row assumed) — see §3). Plan-wide totals:
-**296 ✅ done, 6 🟡 partial, 112 🧪 has a plan but not executed,
-236 📋 not started** out of 650.
+(default 15°); STAB-0493 found and fixed the session's biggest bug — a
+glTF-export path where Instance `variantDefinitions` were silently
+ignored outside CSG, fixed via a new shared
+`Mc3Object::resolvedInstanceDefinitionKey()`; STAB-0494/0495 closed out
+the last 2 P3 items — see §3 for the full list. **Work now moves to
+S14 (Rendering and Viewport Stability)**, fully untouched. Plan-wide
+totals: **297 ✅ done, 6 🟡 partial, 112 🧪 has a plan but not
+executed, 235 📋 not started** out of 650.
 
 **Important architectural decisions:**
 - `mc3/` and `mcb/` are pure C++ static libs with **no** CNA/ImGui
@@ -109,7 +110,7 @@ silent zero-op as the row assumed) — see §3). Plan-wide totals:
 `mc3togltf_animation_unsupported`, `mc3togltf_instance_variant`,
 `mc3togltf_large_scene_generated`, `mc3togltf_large_scene_500`.
 
-- `mc3_commands` (~407 assertions): editor command algorithms, undo/redo
+- `mc3_commands` (~419 assertions): editor command algorithms, undo/redo
   for every mutating command, auto-save/backup, Save-As/Export-Selection/
   drag-drop workflows, keybinding/preferences/macro persistence,
   hierarchy-panel filtering, AI-panel + unsaved-changes dialog
@@ -182,13 +183,13 @@ See `TESTING.md` for the full per-test reference and `plan.md`'s
 
 ## 3. Recent changes
 
-**36 STAB tasks committed as of `f2bb603`** (`53aa75e` through
-`f2bb603`, pushed to `origin/develop` — see `git log --oneline` for the
-full list). **STAB-0494** below is implemented and about to be
-committed as of this update. Gate 6 is exhausted (§8); **S11 and S12
-are both fully done** except genuinely blocked/flagged items. Work is
-underway on **S13 (Commands, Undo/Redo, and Algorithms)**, nearly
-complete — 1 item left (STAB-0495).
+**37 STAB tasks committed as of `965a456`** (`53aa75e` through
+`965a456`, pushed to `origin/develop` — see `git log --oneline` for the
+full list). **STAB-0495** below is implemented and about to be
+committed as of this update — **this closes S13 entirely.** Gate 6 is
+exhausted (§8); **S11, S12, and S13 are all fully done** except
+genuinely blocked/flagged items (S11/S12 only). Work moves next to
+**S14 (Rendering and Viewport Stability)**, fully untouched.
 
 This was a long, dense session that closed out essentially all of
 **Gate 6 (Documentation)**'s reachable work (plus a from-scratch schema
@@ -196,6 +197,20 @@ audit that found real bugs), then finished S11 and S12 entirely (bar
 the blocked/flagged items) and started S13. Highlights, most recent
 first:
 
+- **STAB-0495 — extracted `groupScaleAlg()`, closes S13**: confirmed
+  exactly correct against the row's own example (2 objects at (0,0,0)
+  and (2,0,0), group-scaled 2x, end up at (-1,0,0) and (3,0,0) — each
+  pushed twice as far from their shared centroid). No Alg mirror
+  existed. Extracted `groupScaleAlg()` into `EditorAlgorithms.hpp`;
+  wired the real `groupScaleSelected()` to call it, and as a side
+  effect fixed its status-message count to reflect objects *actually*
+  scaled rather than the full selection size (same fix shape as
+  STAB-0484's `alignToObject`). Added `testGroupScale()` (12
+  assertions): the row's own example verified exactly; factor<1
+  shrinks toward the centroid; a locked object is excluded from the
+  move/scale and the count but still correctly contributes to the
+  centroid average; empty selection is a no-op. **This closes S13
+  (Commands, Undo/Redo, and Algorithms) — all 25 items done.**
 - **STAB-0494 — confirmed negative arrayDuplicate count clamps
   gracefully, doesn't silently no-op**: the row expected "count=-1 ->
   no objects added"; actual (also safe) behavior is
@@ -1085,38 +1100,32 @@ items). **S12 (Animation Stability) is done** — 28/30, remaining 2
 flagged (STAB-0460 a never-built feature, out of scope per the
 stabilization moratorium; STAB-0464 needs a live display).
 
-**S13 (Commands, Undo/Redo, and Algorithms)** already has its P0/P1
-tier done from earlier sessions (STAB-0471-0481 — including a real fix,
-`resetPivot()` was missing `pushUndo()`, found and fixed then).
-STAB-0482-0493 are now done too (this session — extracted
-`convertToDefinitionAlg()`/`breakInstanceAlg()`/`alignToObjectAlg()`/
-`scatterAlongCurveAlg()`/`applyProportionalFalloffAlg()`/
-`vertexSnapToNearestAlg()`/`applyRotationDragAlg()`/
-`flattenDescendantsAlg()` Alg mirrors, none existed before; STAB-0483
-found and fixed a real duplicate-id bug; STAB-0486 found and fixed a
-real Undo/Redo drift bug across keyboard/menu/palette; STAB-0487/0488
-confirmed the macro recorder/playback system already correct;
-STAB-0491 confirmed the 45° rotate-snap is a preset, not a default, and
-that Ctrl-override is intentionally rotation-only; STAB-0493 found and
-fixed a real glTF-export bug where Instance `variantDefinitions` were
-silently ignored outside CSG evaluation, consolidating variant
-resolution into a new shared `Mc3Object::resolvedInstanceDefinitionKey()`
-— see §3). Next:
+**S13 (Commands, Undo/Redo, and Algorithms) is fully done — all 25
+items ✅** (see the "Recent changes" summary above and §3 for the full
+list of extractions/bugs found this session). **S14 (Rendering and
+Viewport Stability), 30 items, is fully untouched.** Next:
 
-1. **STAB-0495 — verify Group Scale: positions scaled from selection
-   centroid** (S13, P3, next-lowest ID, last S13 item). Goal: confirm
-   2 objects at (0,0,0) and (2,0,0), scaled 2x as a group, end up at
-   (-1,0,0) and (3,0,0) — i.e. scaled outward from their shared
-   centroid, not from the origin or independently.
-   Files: `src/MeshCraft/MeshCraftApplication_Commands.cpp`.
-   Verify: read `groupScaleSelected()` (already referenced in this
-   session's STAB-0489 work as a precedent for centroid-based
-   commands); extract to `EditorAlgorithms.hpp` and add a headless
-   test if no Alg mirror exists yet.
+1. **STAB-0496 — smoke test: editor starts and renders without
+   crash** (S14, P0, first item). Already has a real, passing ctest
+   (`smoke_test`, via `test/smoke_test.sh` — loads a scene,
+   `--screenshot`s it headlessly via `xvfb-run` if available, checks
+   the PPM is non-empty) — currently marked 🧪 (has a plan, not yet
+   marked verified) despite already passing in every ctest run this
+   session. Goal: confirm it actually exercises a real render (not a
+   trivial stub) and mark it ✅ with that verification, following the
+   same "re-run and confirm, don't just trust the row" discipline used
+   throughout S11-S13.
+   Files: `test/smoke_test.sh`.
 
-Completing this finishes **all of S13**. S14 (Rendering/Viewport) and
-S15 (Import/Export/Editor Integration) are fully untouched — next
-sections to start after S13 closes.
+S14 is heavily visual/interactive (gizmos, camera presets, bloom/SSAO
+toggles, shadow maps) — expect many items to land like S11/S12's
+blocked set (flagged 🟡, needs a live display) rather than S13's
+extract-and-test pattern. A few early items (STAB-0497/0498/0499/0500 —
+renderer handles all object types / empty scene / missing mesh /
+missing material without crashing) are good candidates for the same
+`--screenshot`-based headless smoke-test approach already proven for
+STAB-0496, since "doesn't crash" is verifiable without a display. S15
+(Import/Export/Editor Integration) remains untouched after S14.
 
 ---
 

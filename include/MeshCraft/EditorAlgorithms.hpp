@@ -779,6 +779,46 @@ inline std::vector<std::shared_ptr<Mc3::Mc3Object>> flattenDescendantsAlg(
     return out;
 }
 
+// ── Group Scale (H14 / STAB-0495) ─────────────────────────────────────────────
+//
+// Mirrors groupScaleSelected() (MeshCraftApplication_Commands.cpp): scales
+// every selected, unlocked object's own transform.scale by `factor`, and
+// moves its position away from (or toward, for factor<1) the group's
+// centroid (the average position of every selected object, including locked
+// ones — only the actual move/scale application skips locked objects) by
+// that same factor. E.g. objects at (0,0,0) and (2,0,0) with factor=2 move
+// to (-1,0,0) and (3,0,0) (centroid 1,0,0, each pushed twice as far from it).
+// Returns the number of objects actually scaled (locked ones skipped).
+inline int groupScaleAlg(
+    const std::vector<std::shared_ptr<Mc3::Mc3Object>>& selected,
+    const std::set<std::string>&                        lockedIds,
+    float factor)
+{
+    if (selected.empty()) return 0;
+
+    float cx = 0.0f, cy = 0.0f, cz = 0.0f;
+    for (const auto& o : selected) {
+        cx += o->transform.position[0];
+        cy += o->transform.position[1];
+        cz += o->transform.position[2];
+    }
+    float n = static_cast<float>(selected.size());
+    cx /= n; cy /= n; cz /= n;
+
+    int scaled = 0;
+    for (const auto& o : selected) {
+        if (lockedIds.count(o->id)) continue;
+        o->transform.position[0] = cx + (o->transform.position[0] - cx) * factor;
+        o->transform.position[1] = cy + (o->transform.position[1] - cy) * factor;
+        o->transform.position[2] = cz + (o->transform.position[2] - cz) * factor;
+        o->transform.scale[0] *= factor;
+        o->transform.scale[1] *= factor;
+        o->transform.scale[2] *= factor;
+        ++scaled;
+    }
+    return scaled;
+}
+
 // ── Auto-save (STAB-0265) ─────────────────────────────────────────────────────
 //
 // Mirrors two pieces of CNA-coupled logic so "the auto-save interval is

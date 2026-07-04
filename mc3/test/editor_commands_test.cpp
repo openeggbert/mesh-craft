@@ -1070,6 +1070,54 @@ static void testFlattenDescendants()
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// groupScaleAlg (STAB-0495)
+// ─────────────────────────────────────────────────────────────────────────────
+
+static void testGroupScale()
+{
+    // The row's own example: 2 objects at (0,0,0) and (2,0,0), scale 2x ->
+    // (-1,0,0) and (3,0,0) (centroid 1,0,0, each pushed twice as far away).
+    {
+        auto a = makeObj("a", "A"); a->transform.position = {0, 0, 0};
+        auto b = makeObj("b", "B"); b->transform.position = {2, 0, 0};
+        int scaled = groupScaleAlg({a, b}, {}, 2.0f);
+        CHECK(scaled == 2, "group scale: both unlocked objects scaled");
+        CHECKF(a->transform.position[0], -1.0f, "group scale: A moves to -1 (row's example)");
+        CHECKF(b->transform.position[0], 3.0f,  "group scale: B moves to 3 (row's example)");
+        CHECKF(a->transform.scale[0], 2.0f, "group scale: A's own scale.x doubled");
+        CHECKF(b->transform.scale[0], 2.0f, "group scale: B's own scale.x doubled");
+    }
+
+    // factor < 1 shrinks toward the centroid.
+    {
+        auto a = makeObj("a", "A"); a->transform.position = {0, 0, 0};
+        auto b = makeObj("b", "B"); b->transform.position = {4, 0, 0};
+        groupScaleAlg({a, b}, {}, 0.5f);
+        // centroid = 2; a: 2 + (0-2)*0.5 = 1; b: 2 + (4-2)*0.5 = 3
+        CHECKF(a->transform.position[0], 1.0f, "group scale: factor<1 shrinks toward centroid (A)");
+        CHECKF(b->transform.position[0], 3.0f, "group scale: factor<1 shrinks toward centroid (B)");
+    }
+
+    // Locked object is skipped (position and scale both untouched) and not
+    // counted, but still contributes to the centroid computation.
+    {
+        auto a = makeObj("a", "A"); a->transform.position = {0, 0, 0};
+        auto locked = makeObj("l", "L"); locked->transform.position = {2, 0, 0};
+        locked->transform.scale = {1, 1, 1};
+        int scaled = groupScaleAlg({a, locked}, {"l"}, 2.0f);
+        CHECK(scaled == 1, "group scale: locked object not counted as scaled");
+        CHECKF(locked->transform.position[0], 2.0f, "group scale: locked object's position untouched");
+        CHECKF(locked->transform.scale[0], 1.0f, "group scale: locked object's scale untouched");
+        // centroid is still (0+2)/2=1, so A moves to 1+(0-1)*2 = -1 (same as
+        // if L weren't locked — confirms L still contributes to the centroid).
+        CHECKF(a->transform.position[0], -1.0f, "group scale: locked object still contributes to centroid");
+    }
+
+    // Empty selection is a no-op.
+    CHECK(groupScaleAlg({}, {}, 2.0f) == 0, "group scale: empty selection is a no-op");
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // deepCopyObjectAlg
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -2383,6 +2431,7 @@ int main()
     testVertexSnap();
     testRotationDragSnap();
     testFlattenDescendants();
+    testGroupScale();
     testDeepCopy();
     testUndoRedoBatchRename();
     testUndoRedoFindReplace();
