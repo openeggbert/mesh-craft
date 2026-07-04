@@ -197,6 +197,19 @@ Free-form document-level key/value metadata — author, license, description, ve
 </textures>
 ```
 
+**Path resolution:** `uri` is resolved **relative to the top-level
+scene file's directory** — every consumer (`GltfExporter.cpp`,
+`SceneRenderer.cpp`) resolves it as `doc.sourcePath / uri`, where
+`sourcePath` is set once, from the file originally passed to
+`Mc3Document::loadFromFile()`. This is **not** the same rule as
+`<include>`'s own path resolution above: a `<texture>` declared inside
+an `<include>`d file still resolves its `uri` relative to the
+*top-level* scene file's directory, not relative to the included
+file's own directory. In practice this means texture files referenced
+by a shared/included material library should be placed relative to
+wherever scenes that include that library actually live, not relative
+to the library file itself.
+
 ---
 
 ## Materials

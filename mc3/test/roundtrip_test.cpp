@@ -93,6 +93,69 @@ static void testDeform() {
     }
 }
 
+// STAB-0436: material colors are written as plain decimal floats
+// (Mc3XmlWriter.cpp's vec4Str/vec3Str, "%.6g" == 6 significant digits), never
+// quantized to uint8 anywhere in the mc3<->glTF pipeline. Confirms a value
+// that isn't a round decimal (205/255, plausible from an 8-bit color picker)
+// survives within the row's own 1e-5 tolerance despite the 6-sig-fig
+// serialization, and that a simple value round-trips exactly.
+static void testMaterialColorPrecisionRoundtrip() {
+    Mc3Document doc;
+    Mc3Material mat;
+    mat.name = "precise";
+    mat.baseColor = {0.8f, 0.3f, 0.1f, 1.0f};
+    mat.emissiveColor = {205.0f/255.0f, 128.0f/255.0f, 64.0f/255.0f};
+    doc.materials["precise"] = mat;
+
+    auto obj = std::make_shared<Mc3Object>();
+    obj->id = "o1"; obj->type = ObjectType::Box;
+    obj->primitive = Mc3Primitive{}; obj->material = "precise";
+    doc.objects.push_back(obj);
+
+    auto rt = roundtrip(doc);
+    CHECK(rt.materials.count("precise") == 1, "color precision: material present");
+    if (!rt.materials.count("precise")) return;
+    const auto& m = rt.materials.at("precise");
+    CHECKF(m.baseColor[0], 0.8f, "color precision: base_color.r round decimal");
+    CHECKF(m.baseColor[1], 0.3f, "color precision: base_color.g round decimal");
+    CHECKF(m.baseColor[2], 0.1f, "color precision: base_color.b round decimal");
+    CHECKF(m.emissiveColor[0], 205.0f/255.0f, "color precision: emissive.r (8-bit-derived value, within 1e-5)");
+    CHECKF(m.emissiveColor[1], 128.0f/255.0f, "color precision: emissive.g (8-bit-derived value, within 1e-5)");
+    CHECKF(m.emissiveColor[2], 64.0f/255.0f,  "color precision: emissive.b (8-bit-derived value, within 1e-5)");
+}
+
+// STAB-0432: Mc3UvMapping (projection/scale/offset/rotation) had no roundtrip
+// test at all before this.
+static void testUvMappingRoundtrip() {
+    Mc3Document doc;
+    auto obj       = std::make_shared<Mc3Object>();
+    obj->id        = "box1";
+    obj->type      = ObjectType::Box;
+    obj->primitive = Mc3Primitive{.primitiveType=PrimitiveType::Cube, .size={1,1,1}};
+    Mc3UvMapping uv;
+    uv.projection = UvProjection::Box;
+    uv.scaleU     = 2.0f;
+    uv.scaleV     = 0.5f;
+    uv.offsetU    = 0.25f;
+    uv.offsetV    = 0.75f;
+    uv.rotation   = 45.0f;
+    obj->uvMapping = uv;
+    doc.objects.push_back(obj);
+
+    auto rt = roundtrip(doc);
+    CHECK(!rt.objects.empty(), "uv mapping: object present");
+    if (rt.objects.empty()) return;
+    CHECK(rt.objects[0]->uvMapping.has_value(), "uv mapping: optional present");
+    if (!rt.objects[0]->uvMapping) return;
+    const auto& m = *rt.objects[0]->uvMapping;
+    CHECK(m.projection == UvProjection::Box, "uv mapping: projection==Box");
+    CHECKF(m.scaleU,   2.0f,  "uv mapping: scale_u");
+    CHECKF(m.scaleV,   0.5f,  "uv mapping: scale_v");
+    CHECKF(m.offsetU,  0.25f, "uv mapping: offset_u");
+    CHECKF(m.offsetV,  0.75f, "uv mapping: offset_v");
+    CHECKF(m.rotation, 45.0f, "uv mapping: rotation");
+}
+
 static void testExtrudeArcCircle() {
     Mc3Document doc;
     auto obj    = std::make_shared<Mc3Object>();
@@ -1795,6 +1858,8 @@ int main(int argc, char* argv[]) {
     testVisible();
     testVisibleDefault();
     testDeform();
+    testMaterialColorPrecisionRoundtrip();
+    testUvMappingRoundtrip();
     testExtrudeArcCircle();
     testExtrudeHelixPolygon();
     testExtrudePolyline();

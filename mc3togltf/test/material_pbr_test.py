@@ -10,6 +10,11 @@ material PBR fields must export to the correct glTF material properties.
   - emissive_color     -> emissiveFactor
   - alpha_mode="blend" -> alphaMode="BLEND"
   - alpha_mode="mask" + alpha_cutoff -> alphaMode="MASK" + alphaCutoff
+
+STAB-0435: each fixture object's node -> mesh -> primitive -> material index
+chain must reference the exact material it declared via material="..." in
+the mc3 XML (not just that the material properties exist somewhere in the
+materials array).
 """
 import json
 import os
@@ -109,5 +114,38 @@ if __name__ == "__main__":
                 )
 
             print(f"{mat_id}: {expected} — PASS")
+
+        # STAB-0435: each object's node->mesh->primitive->material chain must
+        # reference the exact material it declared in the mc3 XML.
+        NODE_TO_MATERIAL = {
+            "BoxMetalRough": "mat_metal_rough",
+            "BoxEmissive":   "mat_emissive",
+            "BoxBlend":      "mat_blend",
+            "BoxMask":       "mat_mask",
+        }
+        nodes  = gltf.get("nodes", [])
+        meshes = gltf.get("meshes", [])
+        node_by_name = {n.get("name", ""): n for n in nodes}
+        for node_name, expected_mat_id in NODE_TO_MATERIAL.items():
+            assert node_name in node_by_name, (
+                f"Expected node '{node_name}' in output, got: {sorted(node_by_name.keys())}"
+            )
+            node = node_by_name[node_name]
+            mesh_idx = node.get("mesh")
+            assert mesh_idx is not None and 0 <= mesh_idx < len(meshes), (
+                f"Node '{node_name}' has no valid mesh index"
+            )
+            prims = meshes[mesh_idx].get("primitives", [])
+            assert prims, f"Node '{node_name}''s mesh has no primitives"
+            mat_idx = prims[0].get("material")
+            assert mat_idx is not None and 0 <= mat_idx < len(materials), (
+                f"Node '{node_name}''s primitive has no valid material index"
+            )
+            actual_mat_id = materials[mat_idx].get("name")
+            assert actual_mat_id == expected_mat_id, (
+                f"Node '{node_name}': expected material '{expected_mat_id}', "
+                f"got '{actual_mat_id}' (node->mesh->primitive->material chain wrong)"
+            )
+            print(f"{node_name}: node->mesh->primitive->material == '{actual_mat_id}' — PASS")
 
     print("\nMaterial PBR export test: PASS")
