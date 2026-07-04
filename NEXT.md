@@ -76,9 +76,11 @@ Extrude/CSG object unclickable; fixed via a new
 STAB-0504 done (already-correct click-to-deselect behavior confirmed
 by reading, extracted into `resolveClickSelectionAlg()` and given 4
 new headless assertions — the first test in this suite to exercise
-`Editor::SelectionManager` directly). Plan-wide totals: **304 ✅ done,
-8 🟡 partial, 106 🧪 has a plan but not executed, 232 📋 not started**
-out of 650.
+`Editor::SelectionManager` directly), and STAB-0505 flagged 🟡 (the
+selected-object bounding-box overlay is confirmed correct by reading,
+but needs a live selection to actually see, same wall as
+STAB-0501/0502). Plan-wide totals: **304 ✅ done, 9 🟡 partial, 105 🧪
+has a plan but not executed, 232 📋 not started** out of 650.
 
 **Important architectural decisions:**
 - `mc3/` and `mcb/` are pure C++ static libs with **no** CNA/ImGui
@@ -212,9 +214,9 @@ See `TESTING.md` for the full per-test reference and `plan.md`'s
 
 ## 3. Recent changes
 
-**46 STAB tasks committed as of this update** (`53aa75e` through
-`035f2a9`, pushed to `origin/develop` — see `git log --oneline` for the
-full list). **STAB-0504** below is verified and about to be committed
+**47 STAB tasks committed as of this update** (`53aa75e` through
+`2b5be0c`, pushed to `origin/develop` — see `git log --oneline` for the
+full list). **STAB-0505** below is verified and about to be committed
 as of this update. Gate 6 is exhausted (§8); **S11, S12, and S13 are
 all fully done** except genuinely blocked/flagged items. **S14 is now
 also accumulating flagged items**, same as S11/S12. Work is underway on
@@ -226,6 +228,18 @@ audit that found real bugs), then finished S11 and S12 entirely (bar
 the blocked/flagged items) and started S13. Highlights, most recent
 first:
 
+- **STAB-0505 — flagged: selected-object bounding box needs a live
+  display, same wall as STAB-0501/0502**: `drawObjectWireframe()`
+  (`SceneRenderer.cpp`) is confirmed correct and safe by reading — a
+  default unit-size box for non-primitive types (matching the
+  STAB-0503 fallback convention), and correctly-scaled wire shapes for
+  every primitive type (box/sphere/cylinder/cone/plane/torus/capsule/
+  disk/grid/icosphere). The cyan bbox overlay
+  (`MeshCraftApplication.cpp`) is correctly gated on
+  `showBoundingBox_ && selection_.hasSelection()`. Also noted a
+  *separate*, always-on yellow selection wireframe built into
+  `drawObject()`'s core path, independent of this toggle. Both need a
+  live selection to actually see on screen — flagged 🟡.
 - **STAB-0504 — confirmed click-to-deselect is already correct,
   extracted + tested it properly**: read `handleMouseInput()`'s click
   handler (right next to STAB-0503's fix) and confirmed
@@ -1278,24 +1292,27 @@ code confirmed correct, needs a live selection + R keypress), and
 STAB-0503 done (found and fixed a real bug: click-to-select only
 ray-tested primitive-typed objects, silently making every Instance/
 Mesh/Group/Extrude/CSG object unclickable; fixed via
-`pickObjectByRayAlg()`, 8 new headless assertions), and STAB-0504 done
+`pickObjectByRayAlg()`, 8 new headless assertions), STAB-0504 done
 (already-correct click-to-deselect behavior confirmed, extracted into
 `resolveClickSelectionAlg()` and given 4 new headless assertions —
-`Editor::SelectionManager` is now directly testable). Next:
+`Editor::SelectionManager` is now directly testable), and STAB-0505
+flagged 🟡 (the selected-object bounding-box overlay is confirmed
+correct by reading, but needs a live selection to actually see, same
+wall as STAB-0501/0502). Next:
 
-1. **STAB-0505 — verify bounding box toggle: AABB visible for
-   selected** (S14, P1, next-lowest ID). Goal: toggling "show bounding
-   boxes" draws a visible AABB outline around each selected object.
-   Files: `src/MeshCraft/Renderer/SceneRenderer.cpp`. Verify:
-   `MeshCraftApplication.cpp`'s draw loop already showed (during
-   STAB-0501's investigation) a `if (showBoundingBox_) { ... cyan wire
-   box for each selected object ... }` block right after the
-   translate/scale/rotate gizmo dispatch, itself nested inside
-   `if (selection_.hasSelection())` — so this likely needs a live
-   selection too, same wall as STAB-0501/0502, unless the toggle itself
-   can be flipped and verified independent of an actual selected object
-   (e.g. does the AABB math have a pure, testable piece worth
-   extracting regardless of the live-display limitation?).
+1. **STAB-0506 — verify camera presets: Front view sets camera
+   correctly** (S14, P1, next-lowest ID). Goal: clicking the "Front"
+   camera preset aligns the camera to the -Z axis. Files:
+   `src/MeshCraft/MeshCraftApplication_UiOverlays.cpp`. Verify: unlike
+   STAB-0501/0502/0505, this does NOT depend on object selection — a
+   quick grep already found a static preset table (`{"Front", 0.0f,
+   0.0f, false}, ...`) applied via plain `camera_.yaw = p.yaw;
+   camera_.pitch = p.pitch;` (`camera_` fields are plain floats, not
+   selection-gated). This looks like a good candidate for an actual
+   Alg extraction + headless test (verify the preset table's angle
+   values produce the expected axis-aligned view directions) rather
+   than another flag — read the full preset table and the button/
+   keyboard (`Num 1`-`Num 7`?) wiring before concluding either way.
 
 Beyond that, S14 gets heavily visual/interactive (gizmos, camera
 presets, bloom/SSAO toggles, shadow maps) — expect many items to land
