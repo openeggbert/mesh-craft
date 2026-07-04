@@ -84,13 +84,16 @@ on selection like the others — extracted the shared `cameraPresetsAlg()`
 + `cameraOrbitPositionAlg()`, wired `EditorCamera::position()` to the
 latter as its single source of truth, and confirmed Front/Top/Right
 resolve to the correct axis-aligned positions with 15 new assertions),
-and STAB-0507 done (the editor's own ortho/persp toggle can't be
+STAB-0507 done (the editor's own ortho/persp toggle can't be
 flipped headlessly, but the "look through camera" path shares the
 identical `CreateOrthographic`/`CreatePerspectiveFieldOfView` branch
 keyed off a per-scene `Mc3Camera`'s type — verified that shared
 mechanism empirically via a new `test/orthographic_camera.mc3.xml` +
-`smoke_test_orthographic_camera` ctest). Plan-wide totals: **306 ✅
-done, 9 🟡 partial, 103 🧪 has a plan but not executed, 232 📋 not
+`smoke_test_orthographic_camera` ctest), and STAB-0508 flagged 🟡 (the
+SSAO GL pipeline is confirmed correct and safe by reading, but
+`ssaoEnabled_` isn't part of the persisted prefs file either — no
+headless hook, same wall as STAB-0505). Plan-wide totals: **306 ✅
+done, 10 🟡 partial, 102 🧪 has a plan but not executed, 232 📋 not
 started** out of 650.
 
 **Important architectural decisions:**
@@ -227,9 +230,9 @@ See `TESTING.md` for the full per-test reference and `plan.md`'s
 
 ## 3. Recent changes
 
-**49 STAB tasks committed as of this update** (`53aa75e` through
-`b4970dd`, pushed to `origin/develop` — see `git log --oneline` for the
-full list). **STAB-0507** below is verified and about to be committed
+**50 STAB tasks committed as of this update** (`53aa75e` through
+`497543b`, pushed to `origin/develop` — see `git log --oneline` for the
+full list). **STAB-0508** below is verified and about to be committed
 as of this update. Gate 6 is exhausted (§8); **S11, S12, and S13 are
 all fully done** except genuinely blocked/flagged items. **S14 is now
 also accumulating flagged items**, same as S11/S12. Work is underway on
@@ -241,6 +244,18 @@ audit that found real bugs), then finished S11 and S12 entirely (bar
 the blocked/flagged items) and started S13. Highlights, most recent
 first:
 
+- **STAB-0508 — flagged: SSAO toggle needs a live display, same wall
+  as STAB-0505**: `applySsao()` (`MeshCraftApplication.cpp`) is
+  confirmed correct and safe by reading — a 4-pass GL pipeline (depth
+  blit → SSAO pass → blur → multiplicative composite) with null-
+  function and zero-viewport guards, and proper GL state save/restore
+  afterward. `ssaoEnabled_` defaults to `false` and is only ever
+  flipped via an ImGui menu item — checked whether it's part of the
+  persisted prefs file the way STAB-0507's orthographic-camera
+  workaround was possible, but it isn't (`loadPrefs()`/`savePrefs()`
+  only persist `autoSaveInterval`/`snapTranslate`/`snapRotate`/
+  `snapScale`/`gridSpacing`/`theme`). No CLI/document/prefs hook exists
+  to force it on for a headless `--screenshot` run — flagged 🟡.
 - **STAB-0507 — verified the ortho/perspective toggle via its shared
   projection mechanism**: `EditorCamera::projectionMatrix()` correctly
   branches between `Matrix::CreateOrthographic` and
@@ -1361,20 +1376,21 @@ the "look through camera" path shares the identical
 `CreateOrthographic`/`CreatePerspectiveFieldOfView` branch keyed off a
 per-scene `Mc3Camera`'s type — verified via a new
 `test/orthographic_camera.mc3.xml` + `smoke_test_orthographic_camera`
-ctest). Next:
+ctest), and STAB-0508 flagged 🟡 (the SSAO GL pipeline is confirmed
+correct and safe by reading, but `ssaoEnabled_` isn't part of the
+persisted prefs file either — no headless hook, same wall as
+STAB-0505). Next:
 
-1. **STAB-0508 — verify SSAO toggle: off/on changes visual output**
-   (S14, P1, next-lowest ID). Goal: toggling SSAO changes ambient
-   occlusion in the rendered scene. Files:
-   `src/MeshCraft/MeshCraftApplication.cpp`. Verify: `ssaoEnabled_`
-   defaults to `false` and is only ever flipped via an ImGui menu item
-   (`MeshCraftApplication_UiMenuBar.cpp`) — a pure runtime UI toggle,
-   same shape as `showBoundingBox_` (STAB-0505), with no CLI/document
-   hook to force it on for a headless `--screenshot` run. Read
-   `applySsao()`'s implementation for correctness first, then check
-   whether an orthographic-camera-style workaround exists (e.g. a
-   scene-level "ssao enabled" flag) before concluding this needs a live
-   display like STAB-0501/0502/0505.
+1. **STAB-0509 — verify bloom toggle: off/on changes visual output**
+   (S14, P1, next-lowest ID). Goal: toggling bloom changes the bright-
+   area glow in the rendered scene. Files:
+   `src/MeshCraft/MeshCraftApplication.cpp`. Verify: STAB-0508 already
+   confirmed `bloomEnabled_` is not part of the persisted prefs file
+   either (only `autoSaveInterval`/`snapTranslate`/`snapRotate`/
+   `snapScale`/`gridSpacing`/`theme` persist), so this is very likely
+   the same wall as STAB-0505/0508 — read `applyBloom()`'s
+   implementation for correctness, confirm there's no CLI/document hook
+   before concluding this needs a live display too.
 
 Beyond that, S14 gets heavily visual/interactive (gizmos, camera
 presets, bloom/SSAO toggles, shadow maps) — expect many items to land
