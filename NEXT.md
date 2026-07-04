@@ -51,12 +51,14 @@ ignored outside CSG, fixed via a new shared
 `Mc3Object::resolvedInstanceDefinitionKey()`; STAB-0494/0495 closed out
 the last 2 P3 items — see §3 for the full list. **Work has moved to
 S14 (Rendering and Viewport Stability)**: STAB-0496 done (confirmed
-`smoke_test` exercises a genuine render, not a stub) and STAB-0497
-done (confirmed the renderer's main switch exhaustively handles all
-19 `ObjectType` values plus a safe default fallback; added a permanent
-`smoke_test_all_objects` ctest). Plan-wide totals: **299 ✅ done,
-6 🟡 partial, 110 🧪 has a plan but not executed, 235 📋 not
-started** out of 650.
+`smoke_test` exercises a genuine render, not a stub), STAB-0497 done
+(confirmed the renderer's main switch exhaustively handles all 19
+`ObjectType` values plus a safe default fallback; added a permanent
+`smoke_test_all_objects` ctest), and STAB-0498 done (added
+`test/empty_scene.mc3.xml` + `smoke_test_empty_scene` ctest — no
+existing fixture covered a genuinely empty scene). Plan-wide totals:
+**300 ✅ done, 6 🟡 partial, 109 🧪 has a plan but not executed,
+235 📋 not started** out of 650.
 
 **Important architectural decisions:**
 - `mc3/` and `mcb/` are pure C++ static libs with **no** CNA/ImGui
@@ -95,16 +97,17 @@ started** out of 650.
   the root project).
 
 ### Tests
-**27/27 CTest pass** in Debug as of this session (STAB-0497 added
-`smoke_test_all_objects`, STAB-0493 added `mc3togltf_instance_variant`,
-STAB-0630 added `mc3togltf_obj_robustness`, STAB-0417/0418/0420/0416
-added `mc3togltf_texture_sampler`, STAB-0166-0170/0411-0415/0435 added
+**28/28 CTest pass** in Debug as of this session (STAB-0498 added
+`smoke_test_empty_scene`, STAB-0497 added `smoke_test_all_objects`,
+STAB-0493 added `mc3togltf_instance_variant`, STAB-0630 added
+`mc3togltf_obj_robustness`, STAB-0417/0418/0420/0416 added
+`mc3togltf_texture_sampler`, STAB-0166-0170/0411-0415/0435 added
 `mc3togltf_material_pbr`, STAB-0440 added
 `mc3togltf_svg_texture_export`, STAB-0447/0448 added
 `mc3togltf_animation_unsupported`; started the session at 20/20):
-`smoke_test`, `smoke_test_all_objects`, `xsd_validation`,
-`mc3_registry`, `mc3_ai`, `mc3_roundtrip`, `mc3_commands`,
-`mcb_roundtrip`, `mc3tomcb_roundtrip`, `mc3togltf_gltf`,
+`smoke_test`, `smoke_test_all_objects`, `smoke_test_empty_scene`,
+`xsd_validation`, `mc3_registry`, `mc3_ai`, `mc3_roundtrip`,
+`mc3_commands`, `mcb_roundtrip`, `mc3tomcb_roundtrip`, `mc3togltf_gltf`,
 `mc3togltf_all_primitives`, `mc3togltf_export_verification`,
 `mc3togltf_large_scene`, `mc3togltf_csg_strict`, `mc3togltf_csg_export`,
 `mc3togltf_csg_unsupported`, `mc3togltf_csg_nested`,
@@ -187,9 +190,9 @@ See `TESTING.md` for the full per-test reference and `plan.md`'s
 
 ## 3. Recent changes
 
-**39 STAB tasks committed as of `d3c51fc`** (`53aa75e` through
-`d3c51fc`, pushed to `origin/develop` — see `git log --oneline` for the
-full list). **STAB-0497** below is verified and about to be committed
+**40 STAB tasks committed as of `cb04f50`** (`53aa75e` through
+`cb04f50`, pushed to `origin/develop` — see `git log --oneline` for the
+full list). **STAB-0498** below is verified and about to be committed
 as of this update. Gate 6 is exhausted (§8); **S11, S12, and S13 are
 all fully done** except genuinely blocked/flagged items (S11/S12
 only). Work is underway on **S14 (Rendering and Viewport
@@ -201,6 +204,13 @@ audit that found real bugs), then finished S11 and S12 entirely (bar
 the blocked/flagged items) and started S13. Highlights, most recent
 first:
 
+- **STAB-0498 — added an empty-scene fixture + ctest**: no existing
+  fixture had a genuinely empty `<objects/>` scene. Added
+  `test/empty_scene.mc3.xml` (the minimal possible valid document — no
+  environment/materials/definitions either) and confirmed via a real
+  `--screenshot` run that it loads and renders cleanly (an empty scene
+  still draws its background/grid/skybox), exit 0. Added a permanent
+  `smoke_test_empty_scene` ctest (same mechanism as STAB-0496/0497).
 - **STAB-0497 — confirmed the renderer handles every object type,
   added `smoke_test_all_objects`**: `drawObject()`'s main switch
   (`SceneRenderer.cpp`) exhaustively handles all 19 `ObjectType` values
@@ -1131,27 +1141,30 @@ stabilization moratorium; STAB-0464 needs a live display).
 items ✅** (see the "Recent changes" summary above and §3 for the full
 list of extractions/bugs found this session). **S14 (Rendering and
 Viewport Stability), 30 items, is underway** — STAB-0496 done (verified
-`smoke_test` exercises a genuine render across all 3 sample scenes) and
+`smoke_test` exercises a genuine render across all 3 sample scenes),
 STAB-0497 done (confirmed the renderer handles all 19 `ObjectType`
-values by construction; added `smoke_test_all_objects` ctest). Next:
+values by construction; added `smoke_test_all_objects` ctest), and
+STAB-0498 done (added `test/empty_scene.mc3.xml` +
+`smoke_test_empty_scene` ctest). Next:
 
-1. **STAB-0498 — verify renderer handles empty scene (no objects)**
-   (S14, P1, next-lowest ID). Goal: a scene with `<objects/>` (no
-   children at all) renders without crashing.
+1. **STAB-0499 — verify renderer handles missing mesh file
+   gracefully** (S14, P1, next-lowest ID). Goal: a `<mesh>` object with
+   a nonexistent `src` renders a placeholder (or nothing), not a crash.
    Files: `src/MeshCraft/Renderer/SceneRenderer.cpp`.
-   Verify: same `--screenshot`-based headless approach as STAB-0496/
-   0497 — either find/create a minimal empty-objects fixture, or
-   confirm one of the existing fixtures already covers this; consider
-   adding a permanent ctest the same way `smoke_test_all_objects` was
-   added, if it doesn't already exist.
+   Verify: `SceneRenderer.cpp`'s `ObjectType::Mesh` case already showed
+   (during STAB-0497's code reading) a fallback to `unitBox_` if
+   `loadOrGetMesh()` returns null — confirm this via a real
+   `--screenshot` run against a fixture with a bad mesh path, following
+   the same pattern as STAB-0498 (create a small fixture + permanent
+   ctest if none exists).
 
-STAB-0499/0500 (missing mesh file / missing material reference, both
-"no crash, sensible fallback" checks) are likely headlessly verifiable
-the same way. Beyond that, S14 gets heavily visual/interactive (gizmos,
-camera presets, bloom/SSAO toggles, shadow maps) — expect many items to
-land like S11/S12's blocked set (flagged 🟡, needs a live display)
-rather than S13's extract-and-test pattern. S15 (Import/Export/Editor
-Integration) remains untouched after
+STAB-0500 (missing material reference, same "no crash, sensible
+fallback" shape) is likely headlessly verifiable the same way. Beyond
+that, S14 gets heavily visual/interactive (gizmos, camera presets,
+bloom/SSAO toggles, shadow maps) — expect many items to land like
+S11/S12's blocked set (flagged 🟡, needs a live display) rather than
+S13's extract-and-test pattern. S15 (Import/Export/Editor Integration)
+remains untouched after
 S14.
 
 ---

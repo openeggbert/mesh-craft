@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- STAB-0498 fixture: a scene with zero objects, to confirm the editor
+     (parser + SceneRenderer + smoke-test screenshot path) handles a
+     genuinely empty scene without crashing. -->
+<mc3 version="0.3" model="EmptyScene">
+  <objects/>
+</mc3>
