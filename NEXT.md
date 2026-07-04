@@ -59,13 +59,17 @@ S14 (Rendering and Viewport Stability)**: STAB-0496 done (confirmed
 existing fixture covered a genuinely empty scene), STAB-0499 done
 (found a real silent-failure gap: a missing mesh file loaded with no
 warning at all; fixed `loadOrGetMesh()` to print a warning, added
-`test/missing_mesh.mc3.xml` + `missing_mesh_test` ctest), and STAB-0500
+`test/missing_mesh.mc3.xml` + `missing_mesh_test` ctest), STAB-0500
 done (confirmed a nonexistent `material=` reference safely falls back
 to a default gray color in all 3 resolution sites, no crash by
 construction; added `test/missing_material.mc3.xml` +
-`smoke_test_missing_material` ctest). Plan-wide totals: **302 ✅ done,
-6 🟡 partial, 109 🧪 has a plan but not executed, 233 📋 not started**
-out of 650.
+`smoke_test_missing_material` ctest), and **STAB-0501 is the first S14
+item to hit the same wall as S11/S12's blocked set**: the translate
+gizmo's draw code is confirmed correct by reading, but seeing it
+requires a live mouse-click selection plus the Move tool active,
+neither reachable through the headless `--screenshot` path — flagged
+🟡. Plan-wide totals: **302 ✅ done, 7 🟡 partial, 108 🧪 has a plan
+but not executed, 233 📋 not started** out of 650.
 
 **Important architectural decisions:**
 - `mc3/` and `mcb/` are pure C++ static libs with **no** CNA/ImGui
@@ -199,13 +203,13 @@ See `TESTING.md` for the full per-test reference and `plan.md`'s
 
 ## 3. Recent changes
 
-**42 STAB tasks committed as of `27bef12`** (`53aa75e` through
-`27bef12`, pushed to `origin/develop` — see `git log --oneline` for the
-full list). **STAB-0500** below is verified and about to be committed
+**43 STAB tasks committed as of this update** (`53aa75e` through
+`2788043`, pushed to `origin/develop` — see `git log --oneline` for the
+full list). **STAB-0501** below is verified and about to be committed
 as of this update. Gate 6 is exhausted (§8); **S11, S12, and S13 are
-all fully done** except genuinely blocked/flagged items (S11/S12
-only). Work is underway on **S14 (Rendering and Viewport
-Stability)**.
+all fully done** except genuinely blocked/flagged items. **S14 is now
+also accumulating flagged items**, same as S11/S12. Work is underway on
+**S14 (Rendering and Viewport Stability)**.
 
 This was a long, dense session that closed out essentially all of
 **Gate 6 (Documentation)**'s reachable work (plus a from-scratch schema
@@ -213,6 +217,21 @@ audit that found real bugs), then finished S11 and S12 entirely (bar
 the blocked/flagged items) and started S13. Highlights, most recent
 first:
 
+- **STAB-0501 — flagged: translate gizmo needs a live display to
+  verify visually**: `drawGizmo()` (`SceneRenderer_Gizmos.cpp`) is
+  confirmed correct and safe by reading — a null-`obj` guard, correct
+  per-axis line + drag-handle-cube math anchored at the object's
+  position, consistently colored red/green/blue for X/Y/Z. Its call
+  site (`MeshCraftApplication.cpp`) correctly gates the draw on
+  `selection_.hasSelection() && activeTool_ == ActiveTool::Move`. But
+  **actually confirming it renders requires both a live mouse-click
+  selection and the Move tool active** (the default `activeTool_` is
+  `Select`, not `Move`) — neither reachable through the headless
+  `--screenshot` CLI path the rest of S14 has used so far, and adding a
+  debug-only CLI selection hook would be scope creep beyond what this
+  verification task asks for. Flagged 🟡, same category as S11/S12's
+  blocked visual items (STAB-0421-0423/0428/0464/0617) — first S14 item
+  to land there.
 - **STAB-0500 — confirmed a missing material reference safely falls
   back to a default color**: read all 3 places `obj.material` is
   resolved in `SceneRenderer.cpp` (`materialColor()`, the base-color-
@@ -1187,21 +1206,24 @@ values by construction; added `smoke_test_all_objects` ctest),
 STAB-0498 done (added `test/empty_scene.mc3.xml` +
 `smoke_test_empty_scene` ctest), STAB-0499 done (found and fixed a
 real silent mesh-load-failure gap; added `test/missing_mesh.mc3.xml` +
-`missing_mesh_test` ctest), and STAB-0500 done (confirmed a
+`missing_mesh_test` ctest), STAB-0500 done (confirmed a
 nonexistent `material=` reference safely falls back to a default gray
 color, no crash by construction; added `test/missing_material.mc3.xml`
-+ `smoke_test_missing_material` ctest). Next:
++ `smoke_test_missing_material` ctest), and STAB-0501 flagged 🟡 (the
+translate gizmo's draw code is confirmed correct by reading, but
+seeing it needs a live selection + Move tool active, unreachable
+headlessly). Next:
 
-1. **STAB-0501 — verify gizmo: translate gizmo appears on selected
-   object** (S14, P1, next-lowest ID). Goal: selecting an object shows
-   XYZ translate arrows at its position. Files:
-   `src/MeshCraft/Renderer/SceneRenderer_Gizmos.cpp`.
-   Verify: this is the first S14 item that depends on live selection
-   state rather than just scene content — check whether selection can
-   be driven headlessly (e.g. a CLI flag, or a scene/test hook that
-   pre-selects an object) before assuming it needs a live display; if
-   no headless path exists, this likely lands in the flagged/blocked
-   set like S11/S12's visual items.
+1. **STAB-0502 — verify gizmo: rotate gizmo appears on right mode**
+   (S14, P1, next-lowest ID). Goal: switching to Rotate mode (R) on a
+   selected object shows rotation circles. Files:
+   `src/MeshCraft/Renderer/SceneRenderer_Gizmos.cpp`. Verify: same
+   shape as STAB-0501 — `drawRotateGizmo()`'s call site is almost
+   certainly gated the same way (`selection_.hasSelection() &&
+   activeTool_ == ActiveTool::Rotate`), so this will likely also need a
+   live selection + tool-mode switch; confirm by reading, and expect
+   another 🟡 flag rather than a headless fixture unless something in
+   the actual code differs from STAB-0501's finding.
 
 Beyond that, S14 gets heavily visual/interactive (gizmos, camera
 presets, bloom/SSAO toggles, shadow maps) — expect many items to land
