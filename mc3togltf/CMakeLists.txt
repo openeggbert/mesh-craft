@@ -78,11 +78,18 @@ add_library(mc3togltf_lib STATIC
 target_include_directories(mc3togltf_lib
     PUBLIC
         ${CMAKE_CURRENT_SOURCE_DIR}/src   # exposes GltfExporter.hpp, MeshBuilder.hpp
-        ${tinygltf_SOURCE_DIR}
-        ${tinyobjloader_SOURCE_DIR}
+)
+
+# Marked SYSTEM so -Wall -Wextra on mc3togltf_lib doesn't surface warnings
+# from vendored headers (e.g. tinygltf's bundled stb_image_write.h).
+target_include_directories(mc3togltf_lib SYSTEM PUBLIC
+    ${tinygltf_SOURCE_DIR}
+    ${tinyobjloader_SOURCE_DIR}
 )
 
 target_link_libraries(mc3togltf_lib PUBLIC Mc3 tinyobjloader manifold)
+
+target_compile_options(mc3togltf_lib PRIVATE -Wall -Wextra)
 
 # --------------------------------------------------------------------------
 # Executable — thin wrapper around the library

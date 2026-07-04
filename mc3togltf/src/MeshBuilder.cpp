@@ -602,6 +602,20 @@ static std::vector<std::array<float,2>> sampleCrossSection(
         }
         break;
     }
+    case CT::Star: {
+        int n = std::max(3, cs.sides);
+        float outerR = cs.radius;
+        float innerR = (cs.innerRadius > 0.0f && cs.innerRadius < cs.radius)
+            ? cs.innerRadius : cs.radius * 0.5f;
+        const float offset = -pi / 2.0f; // start from top
+        for (int i = 0; i < n; ++i) {
+            float aOuter = 2.0f * pi * i / n + offset;
+            float aInner = aOuter + pi / n;
+            pts.push_back({outerR*std::cos(aOuter), outerR*std::sin(aOuter)});
+            pts.push_back({innerR*std::cos(aInner), innerR*std::sin(aInner)});
+        }
+        break;
+    }
     case CT::Custom:
         for (auto& p : cs.customPoints) pts.push_back({p.x, p.y});
         break;
@@ -624,7 +638,6 @@ static std::vector<PathFrame> samplePath(const MeshCraft::Mc3::Mc3ExtrudePath& p
     switch (path.type) {
     case PT::Line: {
         float len = path.length;
-        float dy = 1.0f; // default axis = y
         if (path.axis == "x") { for (int i=0;i<=segments;++i) frames.push_back({{len*i/segments,0,0},{1,0,0}}); break; }
         if (path.axis == "z") { for (int i=0;i<=segments;++i) frames.push_back({{0,0,len*i/segments},{0,0,1}}); break; }
         for (int i = 0; i <= segments; ++i)

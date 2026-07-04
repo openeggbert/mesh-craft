@@ -806,7 +806,7 @@ _Generated: 2026-06-27 from full codebase + test audit. Replaces previous 100-ta
 | STAB-0607 | 📋 | P2 | Verify McbWriter/McbReader don't use raw `new`/`delete` | `mcb/src/McbWriter.cpp`, `mcb/src/McbReader.cpp` | RAII everywhere; no manual memory management |
 | STAB-0608 | 📋 | P2 | Verify all file I/O in Mc3 library uses `std::filesystem` | `mc3/src/Mc3XmlParser.cpp`, `mc3/src/Mc3XmlWriter.cpp` | No raw `fopen`; uses `std::filesystem::path` |
 | STAB-0609 | 📋 | P2 | Investigate header-include hygiene (IWYU) | all headers | Run `include-what-you-use` on Mc3 library; fix unused includes |
-| STAB-0610 | 📋 | P2 | Verify compiler warnings at `-Wall -Wextra` | `CMakeLists.txt` | Add `-Wall -Wextra` to Mc3 and mc3togltf targets; fix all warnings |
+| STAB-0610 | ✅ | P2 | Verify compiler warnings at `-Wall -Wextra` | `CMakeLists.txt` | Added `-Wall -Wextra` to Mc3 and mc3togltf_lib; fixed 3 real warnings (unhandled `Star` case, unused `dy`, missing-field-initializers); marked vendored tinygltf/tinyobjloader include dirs SYSTEM |
 | STAB-0611 | 📋 | P2 | Extract temp-file helper (unique temp path generation) | new `TempFile.hpp` | Shared between AI assistant and any future user; atomic naming |
 | STAB-0612 | 📋 | P2 | Extract XML-parse helper (safe attribute reading) | `mc3/src/Mc3XmlParser.cpp` | `attr()`, `attrF()`, `attrB()`, `attrVec3()` already exist; verify consistent use |
 | STAB-0613 | 📋 | P2 | Verify no anonymous namespace symbol conflicts across TUs | `mc3/src/Mc3XmlParser.cpp` | Functions in anonymous namespace are TU-local; no ODR violation |

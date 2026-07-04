@@ -1074,7 +1074,7 @@ void GltfExporter::exportDocument(const Mc3Document& doc,
     // Object nodes (recursive)
     ExportCtx ctx{model, matNameToIdx, doc.definitions,
                   unitScaleFactor(doc.unit), doc.sourcePath,
-                  allowApproximateCSG};
+                  allowApproximateCSG, {}, {}, {}};
     for (const auto& objPtr : doc.objects) {
         if (!objPtr) continue;
         int nodeIdx = buildNode(ctx, *objPtr);

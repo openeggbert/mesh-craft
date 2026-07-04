@@ -51,6 +51,8 @@ target_include_directories(Mc3
 
 target_link_libraries(Mc3 PRIVATE tinyxml2::tinyxml2)
 
+target_compile_options(Mc3 PRIVATE -Wall -Wextra)
+
 # -----------------------------------------------------------------------------
 # Round-trip unit tests
 # -----------------------------------------------------------------------------

@@ -1,6 +1,6 @@
 # NEXT.md
 
-_Last updated: 2026-07-03_
+_Last updated: 2026-07-04_
 
 ---
 
@@ -24,13 +24,13 @@ risks closed quickly).
 **Current phase:** Stabilization. Every gate's priority-list subset is
 now done. **Gate 6 (Documentation) is close to fully green**: S17
 (Documentation and User-Facing Honesty) is 20/20 complete; S18 (Code
-Quality) has all P0/P1 items done (7/7), 18 P2/P3 remain; S19 (Security)
-has all P0/P1 plus 2 bonus P2 items done (11/15), 4 P2/P3 remain; S20
-(Release Readiness) is 12/15, with the last 3 items genuinely blocked
-(need Blender, a browser, or a running CI — none available in this
-environment). No gate is fully green yet. Plan-wide totals: **206 ✅
-done, 3 🟡 partial, 136 🧪 has a plan but not executed, 305 📋 not
-started** out of 650.
+Quality) has all P0/P1 items done plus 1 P2 (STAB-0610) done, 17 P2/P3
+remain; S19 (Security) has all P0/P1 plus 2 bonus P2 items done (11/15),
+4 P2/P3 remain; S20 (Release Readiness) is 12/15, with the last 3 items
+genuinely blocked (need Blender, a browser, or a running CI — none
+available in this environment). No gate is fully green yet. Plan-wide
+totals: **207 ✅ done, 3 🟡 partial, 136 🧪 has a plan but not executed,
+304 📋 not started** out of 650.
 
 **Important architectural decisions:**
 - `mc3/` and `mcb/` are pure C++ static libs with **no** CNA/ImGui
@@ -148,13 +148,33 @@ See `TESTING.md` for the full per-test reference and `plan.md`'s
 
 ## 3. Recent changes
 
-All changes are committed and pushed — `develop` is in sync with
-`origin/develop` at commit `03723b8`.
+`develop` is at commit `03723b8` (`origin/develop` in sync). The
+**STAB-0610** change below is made but **not yet committed** — working
+tree has uncommitted edits to `NEXT.md`, `plan.md`, `mc3/CMakeLists.txt`,
+`mc3togltf/CMakeLists.txt`, `mc3togltf/src/GltfExporter.cpp`,
+`mc3togltf/src/MeshBuilder.cpp`.
 
 This was a long, dense session that closed out essentially all of
 **Gate 6 (Documentation)**'s reachable work, plus a from-scratch schema
 audit that found real bugs. Highlights, most recent first:
 
+- **STAB-0610 — `-Wall -Wextra` on `Mc3` and `mc3togltf_lib`**: added
+  the flags to both targets' `CMakeLists.txt`. Found and fixed 3 real
+  warnings in our own code: `MeshBuilder.cpp`'s `sampleCrossSection()`
+  didn't handle `CrossSectionType::Star` at all (silently produced an
+  empty polygon for star cross-sections in glTF export — mirrored the
+  existing, correct `SceneRenderer_Extrude.cpp` star-sampling logic to
+  fix it); an unused `dy` variable in `samplePath()`; and a
+  missing-field-initializers warning on `ExportCtx` aggregate init in
+  `GltfExporter.cpp` (silenced with explicit `{}`, no behavior change —
+  the omitted members already default-initialize correctly). Also
+  marked the vendored `tinygltf`/`tinyobjloader` include dirs `SYSTEM`
+  in `mc3togltf/CMakeLists.txt` so their (unfixable, third-party)
+  warnings don't pollute the build under the new flags. Verified: a
+  full from-scratch Debug reconfigure/rebuild is 100% warning-free for
+  `Mc3` and `mc3togltf_lib`, 20/20 ctest still pass, and a fresh
+  standalone `mc3togltf` build (outside the root project) is also
+  warning-free and 12/12 tests pass.
 - **S20 (Release Readiness), 12/15 items**: added a project version
   (`0.1.0`) and `--version` CLI flag; actually built and compared
   Debug vs. Release binaries to confirm Release has no debug symbols;
@@ -412,19 +432,7 @@ No project linter/formatter is configured.
 
 ## 8. Next smallest tasks
 
-1. **STAB-0610 — enable `-Wall -Wextra` and fix what it finds** (S18,
-   P2). Goal: add the flags to the `Mc3`/`mc3togltf_lib` targets in
-   their respective `CMakeLists.txt`, rebuild, and fix (or explicitly
-   suppress with a comment explaining why) whatever warnings surface —
-   this task's actual size depends entirely on how many warnings appear
-   and isn't knowable until it's run.
-   Files: `mc3/CMakeLists.txt`, `mc3togltf/CMakeLists.txt`, whatever
-   `.cpp` files the warnings point at.
-   Verify: a clean rebuild with the new flags produces 0 warnings (or
-   each remaining one is deliberately suppressed with a reason), plus
-   `ctest --output-on-failure` still 20/20.
-
-2. **STAB-0630 — untrusted OBJ file robustness** (S19, P2). Goal: feed
+1. **STAB-0630 — untrusted OBJ file robustness** (S19, P2). Goal: feed
    `tinyobjloader` a malformed OBJ (negative vertex indices, NaN
    coordinates) through `loadObjMesh()` and confirm it's handled
    without a crash — mirrors the DoS-input testing pattern already used
@@ -436,7 +444,7 @@ No project linter/formatter is configured.
    Verify: manual test first (like this session's DoS tests), then
    decide whether to promote it into a permanent `mc3togltf` ctest.
 
-3. **STAB-0631 — verify AI network timeout** (S19, P2). Goal: the row
+2. **STAB-0631 — verify AI network timeout** (S19, P2). Goal: the row
    says "see STAB-0383" — check whether that item (or equivalent
    coverage) already verifies `AiAssistant` has a configured HTTP
    timeout before writing new work; if it does, this is a quick mark
@@ -446,7 +454,7 @@ No project linter/formatter is configured.
    server that never responds (already have the pattern from
    `ai_test.cpp`'s other mock-server tests) with a timeout assertion.
 
-Beyond these three: S18 has 18 more P2/P3 items (mostly code-quality
+Beyond these two: S18 has 17 more P2/P3 items (mostly code-quality
 audits — see `plan.md`'s S18 rows), S19 has 1 more P2 item after the
 two above (STAB-0632 already done, STAB-0633 remains). Closing all of
 S18+S19's remaining items would leave Gate 6 blocked only on the 3
