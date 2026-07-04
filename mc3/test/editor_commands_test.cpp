@@ -2530,6 +2530,69 @@ static void testResolveClickSelection()
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Camera view presets (STAB-0506)
+//
+// Verifies the actual preset table used by the "Front/Top/Right/Persp"
+// button row (MeshCraftApplication_UiOverlays.cpp, now shared via
+// cameraPresetsAlg()) against cameraOrbitPositionAlg() — the same
+// spherical-to-Cartesian formula EditorCamera::position() uses — so the
+// resulting camera position for each preset is checked directly, not just
+// read.
+// ─────────────────────────────────────────────────────────────────────────────
+
+static void testCameraPresets()
+{
+    const auto& presets = cameraPresetsAlg();
+    CHECK(presets.size() == 4, "there are exactly 4 camera presets: Front, Top, Right, Persp");
+
+    const CameraPresetAlg* front = nullptr;
+    const CameraPresetAlg* top   = nullptr;
+    const CameraPresetAlg* right = nullptr;
+    const CameraPresetAlg* persp = nullptr;
+    for (const auto& p : presets) {
+        if (std::string(p.label) == "Front") front = &p;
+        if (std::string(p.label) == "Top")   top   = &p;
+        if (std::string(p.label) == "Right") right = &p;
+        if (std::string(p.label) == "Persp") persp = &p;
+    }
+    CHECK(front && top && right && persp, "all 4 expected preset labels are present");
+    if (!front || !top || !right || !persp) return;
+
+    CHECK(!front->reset && !top->reset && !right->reset,
+          "Front/Top/Right only set yaw+pitch, they don't trigger a full camera reset");
+    CHECK(persp->reset, "Persp triggers a full camera reset (distance/target back to default)");
+
+    const float dist = 10.0f;
+    const std::array<float,3> origin{0.0f, 0.0f, 0.0f};
+
+    // Front: camera sits on the target's +Z axis, looking back toward -Z.
+    auto frontPos = cameraOrbitPositionAlg(front->yaw, front->pitch, dist, origin);
+    CHECKF(frontPos[0], 0.0f,  "Front preset: camera X stays at the target's X");
+    CHECKF(frontPos[1], 0.0f,  "Front preset: camera Y stays at the target's Y");
+    CHECKF(frontPos[2], dist,  "Front preset: camera sits on the +Z axis (looks toward -Z)");
+
+    // Right: camera sits on the target's +X axis.
+    auto rightPos = cameraOrbitPositionAlg(right->yaw, right->pitch, dist, origin);
+    CHECKF(rightPos[0], dist, "Right preset: camera sits on the +X axis");
+    CHECK(std::abs(rightPos[2]) < 1e-3f, "Right preset: camera Z stays near the target's Z");
+
+    // Top: a deliberately near-90deg (not exact) pitch, so the camera ends up
+    // almost directly above the target with a small residual Z offset,
+    // dodging the gimbal singularity viewMatrix() guards for |pitch| > 1.47.
+    auto topPos = cameraOrbitPositionAlg(top->yaw, top->pitch, dist, origin);
+    CHECK(topPos[1] > dist * 0.99f, "Top preset: camera Y is almost the full distance above the target");
+    CHECK(std::abs(topPos[0]) < 1e-3f, "Top preset: camera X stays at the target's X (yaw=0)");
+    CHECK(topPos[2] > 0.0f && topPos[2] < dist * 0.2f,
+          "Top preset: a small residual +Z offset avoids the exact-90deg gimbal singularity");
+
+    // The orbit position formula tracks an arbitrary (non-origin) target too.
+    auto offsetPos = cameraOrbitPositionAlg(0.0f, 0.0f, 5.0f, {2.0f, 3.0f, 4.0f});
+    CHECKF(offsetPos[0], 2.0f, "camera position tracks a non-origin target's X");
+    CHECKF(offsetPos[1], 3.0f, "camera position tracks a non-origin target's Y");
+    CHECKF(offsetPos[2], 9.0f, "camera position tracks a non-origin target's Z plus the orbit distance");
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Every command pushes an undo entry (STAB-0480)
 //
 // Audited every MeshCraftApplication_Commands.cpp function for a document
@@ -2627,6 +2690,7 @@ int main()
     testUndoStackBelowCapUnaffected();
     testPickObjectByRay();
     testResolveClickSelection();
+    testCameraPresets();
 
     std::cout << "\n";
     if (failures == 0)

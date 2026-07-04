@@ -1,4 +1,5 @@
 #include "MeshCraft/Editor/EditorCamera.hpp"
+#include "MeshCraft/EditorAlgorithms.hpp"
 
 #include <Microsoft/Xna/Framework/MathHelper.hpp>
 #include <algorithm>
@@ -50,12 +51,8 @@ void EditorCamera::reset() {
 }
 
 Vector3 EditorCamera::position() const {
-    float cosP = std::cos(pitch);
-    return {
-        target.X + distance * cosP * std::sin(yaw),
-        target.Y + distance * std::sin(pitch),
-        target.Z + distance * cosP * std::cos(yaw)
-    };
+    auto p = MeshCraft::cameraOrbitPositionAlg(yaw, pitch, distance, {target.X, target.Y, target.Z});
+    return { p[0], p[1], p[2] };
 }
 
 Matrix EditorCamera::viewMatrix() const {

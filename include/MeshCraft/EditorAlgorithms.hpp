@@ -923,6 +923,44 @@ inline void resolveClickSelectionAlg(
     if (picked) selection.select(picked);
 }
 
+// ── Camera view presets (STAB-0506) ──────────────────────────────────────────
+//
+// Single source of truth for the view-preset button row
+// (MeshCraftApplication_UiOverlays.cpp): each preset sets EditorCamera's yaw/
+// pitch (or triggers a full reset for "Persp"). cameraOrbitPositionAlg()
+// mirrors EditorCamera::position()'s exact spherical-to-Cartesian formula
+// (include/MeshCraft/Editor/EditorCamera.hpp — that method just converts
+// this function's std::array<float,3> to/from its CNA Vector3 type), so the
+// presets' resulting camera position can be verified headlessly: Front
+// (yaw=0, pitch=0) puts the camera on the target's +Z axis looking toward
+// -Z; Right (yaw=90°) puts it on +X; Top uses a near-90° pitch (1.47 rad,
+// not exactly 90°) to dodge the gimbal singularity viewMatrix() already
+// guards against for |pitch| > 1.47.
+
+struct CameraPresetAlg { const char* label; float yaw; float pitch; bool reset; };
+
+inline const std::array<CameraPresetAlg, 4>& cameraPresetsAlg()
+{
+    static const std::array<CameraPresetAlg, 4> kPresets = {{
+        { "Front", 0.0f,     0.0f,  false },
+        { "Top",   0.0f,     1.47f, false },
+        { "Right", 1.5708f,  0.0f,  false },
+        { "Persp", 0.0f,     0.0f,  true  },
+    }};
+    return kPresets;
+}
+
+inline std::array<float,3> cameraOrbitPositionAlg(
+    float yaw, float pitch, float distance, const std::array<float,3>& target)
+{
+    float cosP = std::cos(pitch);
+    return {
+        target[0] + distance * cosP * std::sin(yaw),
+        target[1] + distance * std::sin(pitch),
+        target[2] + distance * cosP * std::cos(yaw)
+    };
+}
+
 // ── Auto-save (STAB-0265) ─────────────────────────────────────────────────────
 //
 // Mirrors two pieces of CNA-coupled logic so "the auto-save interval is

@@ -1,5 +1,6 @@
 #include "MeshCraft/MeshCraftApplication.hpp"
 #include "MeshCraftPrivate.hpp"
+#include "MeshCraft/EditorAlgorithms.hpp"
 #include "MeshCraft/Scene/SceneHierarchyPanel.hpp"
 
 #include "MeshCraft/Mcb/McbReader.hpp"
@@ -232,14 +233,7 @@ void MeshCraftApplication::drawStatsOverlay(int screenW, int screenH)
             ImGuiWindowFlags_NoMove | ImGuiWindowFlags_AlwaysAutoResize |
             ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoBringToFrontOnFocus);
 
-        struct Preset { const char* label; float yaw; float pitch; bool reset; };
-        static const Preset presets[] = {
-            { "Front", 0.0f,     0.0f,  false },
-            { "Top",   0.0f,     1.47f, false },
-            { "Right", 1.5708f,  0.0f,  false },
-            { "Persp", 0.0f,     0.0f,  true  },
-        };
-        for (const auto& p : presets) {
+        for (const auto& p : cameraPresetsAlg()) {
             if (ImGui::Button(p.label, ImVec2(38, 18))) {
                 if (p.reset) { camera_.reset(); camera_.orthographic = false; }
                 else         { camera_.yaw = p.yaw; camera_.pitch = p.pitch; }
