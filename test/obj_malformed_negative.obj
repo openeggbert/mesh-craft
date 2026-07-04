@@ -1,0 +1,7 @@
+# STAB-0630 fixture: OBJ with an out-of-range negative (relative) vertex index
+v 0.0 1.0 0.0
+v -0.8 -0.5 0.5
+v 0.8 -0.5 0.5
+
+f 1 2 3
+f -100 -99 -98

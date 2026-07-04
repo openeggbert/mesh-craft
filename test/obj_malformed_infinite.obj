@@ -1,0 +1,8 @@
+# STAB-0630 fixture: OBJ with a coordinate that overflows to infinity
+v 1e400 1e400 1e400
+v -0.8 -0.5 0.5
+v 0.8 -0.5 0.5
+v 0.0 -0.5 -1.0
+
+f 1 2 3
+f 1 3 4

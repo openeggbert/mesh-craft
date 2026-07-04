@@ -25,12 +25,12 @@ risks closed quickly).
 now done. **Gate 6 (Documentation) is close to fully green**: S17
 (Documentation and User-Facing Honesty) is 20/20 complete; S18 (Code
 Quality) has all P0/P1 items done plus 1 P2 (STAB-0610) done, 17 P2/P3
-remain; S19 (Security) has all P0/P1 plus 2 bonus P2 items done (11/15),
-4 P2/P3 remain; S20 (Release Readiness) is 12/15, with the last 3 items
+remain; S19 (Security) has all P0/P1 plus 3 bonus P2 items done (12/15),
+3 P2/P3 remain; S20 (Release Readiness) is 12/15, with the last 3 items
 genuinely blocked (need Blender, a browser, or a running CI — none
 available in this environment). No gate is fully green yet. Plan-wide
-totals: **207 ✅ done, 3 🟡 partial, 136 🧪 has a plan but not executed,
-304 📋 not started** out of 650.
+totals: **208 ✅ done, 3 🟡 partial, 136 🧪 has a plan but not executed,
+303 📋 not started** out of 650.
 
 **Important architectural decisions:**
 - `mc3/` and `mcb/` are pure C++ static libs with **no** CNA/ImGui
@@ -63,18 +63,23 @@ totals: **207 ✅ done, 3 🟡 partial, 136 🧪 has a plan but not executed,
   every standalone/Release build this session without issue.
 - **Standalone (CNA-free) component builds**, each configuring/
   building/testing without the root project: `mc3` (1/1), `mcb` (1/1),
-  `mc3togltf` (12/12), `mc3tomcb` (2/2) — all re-verified this session.
+  `mc3togltf` (12/12), `mc3tomcb` (2/2) — last re-verified at commit
+  `fca6fc1`; `mc3togltf` re-verified again this session after STAB-0610
+  (still 0 warnings under `-Wall -Wextra`, standalone build not yet
+  re-checked against the newer 13-test count from STAB-0630 — see §3).
 
 ### Tests
-**20/20 CTest pass** in both Debug and Release, last verified at commit
-`fca6fc1`: `smoke_test`, `xsd_validation`, `mc3_registry`, `mc3_ai`,
-`mc3_roundtrip`, `mc3_commands`, `mcb_roundtrip`, `mc3tomcb_roundtrip`,
-`mc3togltf_gltf`, `mc3togltf_all_primitives`,
-`mc3togltf_export_verification`, `mc3togltf_large_scene`,
-`mc3togltf_csg_strict`, `mc3togltf_csg_export`,
+**21/21 CTest pass** in Debug as of this session (STAB-0630 added
+`mc3togltf_obj_robustness`; previously 20/20, last full Debug+Release
+verification at commit `fca6fc1`): `smoke_test`, `xsd_validation`,
+`mc3_registry`, `mc3_ai`, `mc3_roundtrip`, `mc3_commands`,
+`mcb_roundtrip`, `mc3tomcb_roundtrip`, `mc3togltf_gltf`,
+`mc3togltf_all_primitives`, `mc3togltf_export_verification`,
+`mc3togltf_large_scene`, `mc3togltf_csg_strict`, `mc3togltf_csg_export`,
 `mc3togltf_csg_unsupported`, `mc3togltf_csg_nested`,
 `mc3togltf_instance_deform_cache`, `mc3togltf_float_cache_key`,
-`mc3togltf_large_scene_generated`, `mc3togltf_large_scene_500`.
+`mc3togltf_obj_robustness`, `mc3togltf_large_scene_generated`,
+`mc3togltf_large_scene_500`.
 
 - `mc3_commands` (~282 assertions): editor command algorithms, undo/redo
   for every mutating command, auto-save/backup, Save-As/Export-Selection/
@@ -148,16 +153,35 @@ See `TESTING.md` for the full per-test reference and `plan.md`'s
 
 ## 3. Recent changes
 
-`develop` is at commit `03723b8` (`origin/develop` in sync). The
-**STAB-0610** change below is made but **not yet committed** — working
-tree has uncommitted edits to `NEXT.md`, `plan.md`, `mc3/CMakeLists.txt`,
-`mc3togltf/CMakeLists.txt`, `mc3togltf/src/GltfExporter.cpp`,
-`mc3togltf/src/MeshBuilder.cpp`.
+**STAB-0610** is committed (`53aa75e`); `origin/develop` is not yet
+pushed to (last pushed commit is `03723b8`). **STAB-0630** below is
+implemented but **not yet committed** as of this update — working tree
+has new/modified files: `NEXT.md`, `plan.md`, `TESTING.md`,
+`mc3togltf/CMakeLists.txt`, `mc3togltf/src/MeshBuilder.cpp`,
+`mc3togltf/test/obj_robustness_test.py`,
+`test/obj_malformed_negative.obj`, `test/obj_malformed_infinite.obj`,
+`test/obj_robustness.mc3.xml`.
 
 This was a long, dense session that closed out essentially all of
 **Gate 6 (Documentation)**'s reachable work, plus a from-scratch schema
 audit that found real bugs. Highlights, most recent first:
 
+- **STAB-0630 — untrusted OBJ file robustness**: fed `loadObjMesh()`
+  three hostile inputs — an out-of-range negative (relative) vertex
+  index, a literal `nan` coordinate, and a `1e400`-overflow-to-infinity
+  coordinate. The first two were already handled cleanly (tinyobjloader
+  itself rejects the bad index; `nan` parses to `0.0` and never
+  propagates). **Found a real gap**: infinite coordinates parsed
+  successfully and silently produced a spec-invalid GLB (`inf` floats in
+  the binary buffer, `null` — not a number — in the JSON accessor
+  `min`/`max`, since JSON has no `Infinity` literal). Fixed by rejecting
+  non-finite vertex coordinates in `loadObjMesh()` with a clean
+  `std::runtime_error`, routed through the exact same catch-and-skip
+  path `buildMesh()` already uses for other malformed-mesh cases (prints
+  `Warning:`, node exported meshless, export continues — no crash).
+  Added a permanent `mc3togltf_obj_robustness` ctest (2 new `.obj`
+  fixtures + 1 new `.mc3.xml` scene under `test/`) covering all 3 inputs
+  plus a check that no accessor ever serializes a non-finite value.
 - **STAB-0610 — `-Wall -Wextra` on `Mc3` and `mc3togltf_lib`**: added
   the flags to both targets' `CMakeLists.txt`. Found and fixed 3 real
   warnings in our own code: `MeshBuilder.cpp`'s `sampleCrossSection()`
@@ -432,19 +456,7 @@ No project linter/formatter is configured.
 
 ## 8. Next smallest tasks
 
-1. **STAB-0630 — untrusted OBJ file robustness** (S19, P2). Goal: feed
-   `tinyobjloader` a malformed OBJ (negative vertex indices, NaN
-   coordinates) through `loadObjMesh()` and confirm it's handled
-   without a crash — mirrors the DoS-input testing pattern already used
-   for the XML parser this session (STAB-0625/0628/0629): write a small
-   malformed `.obj` fixture, run it through the real export path, check
-   for a clean error rather than a crash/hang.
-   Files: `mc3togltf/src/MeshBuilder.cpp` (`loadObjMesh`), a new test
-   fixture under `test/`.
-   Verify: manual test first (like this session's DoS tests), then
-   decide whether to promote it into a permanent `mc3togltf` ctest.
-
-2. **STAB-0631 — verify AI network timeout** (S19, P2). Goal: the row
+1. **STAB-0631 — verify AI network timeout** (S19, P2). Goal: the row
    says "see STAB-0383" — check whether that item (or equivalent
    coverage) already verifies `AiAssistant` has a configured HTTP
    timeout before writing new work; if it does, this is a quick mark
@@ -454,10 +466,10 @@ No project linter/formatter is configured.
    server that never responds (already have the pattern from
    `ai_test.cpp`'s other mock-server tests) with a timeout assertion.
 
-Beyond these two: S18 has 17 more P2/P3 items (mostly code-quality
-audits — see `plan.md`'s S18 rows), S19 has 1 more P2 item after the
-two above (STAB-0632 already done, STAB-0633 remains). Closing all of
-S18+S19's remaining items would leave Gate 6 blocked only on the 3
+Beyond this one: S18 has 17 more P2/P3 items (mostly code-quality
+audits — see `plan.md`'s S18 rows), S19 has 1 more P2 item after
+STAB-0631 (STAB-0632/0630 already done, STAB-0633 remains). Closing all
+of S18+S19's remaining items would leave Gate 6 blocked only on the 3
 genuinely-inaccessible S20 items (§5). After that, the next priority
 tier is P2 items across S6–S13 and the untouched S11/S12/S14/S15
 sections — see `plan.md`'s per-section Key File columns.

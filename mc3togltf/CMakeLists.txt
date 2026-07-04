@@ -125,6 +125,7 @@ if(BUILD_TESTING)
         set(_csg_nested_xml           "${CMAKE_CURRENT_SOURCE_DIR}/../test/csg_nested.mc3.xml")
         set(_instance_deform_xml      "${CMAKE_CURRENT_SOURCE_DIR}/../test/instance_deform_cache.mc3.xml")
         set(_close_dimensions_xml     "${CMAKE_CURRENT_SOURCE_DIR}/../test/close_dimensions.mc3.xml")
+        set(_obj_robustness_xml       "${CMAKE_CURRENT_SOURCE_DIR}/../test/obj_robustness.mc3.xml")
         if(EXISTS "${_anim_xml}" AND EXISTS "${_house_xml}")
             add_test(
                 NAME mc3togltf_gltf
@@ -228,6 +229,16 @@ if(BUILD_TESTING)
                         "${_close_dimensions_xml}"
             )
             set_tests_properties(mc3togltf_float_cache_key PROPERTIES TIMEOUT 30)
+        endif()
+        if(EXISTS "${_obj_robustness_xml}")
+            add_test(
+                NAME mc3togltf_obj_robustness
+                COMMAND "${PYTHON3_EXEC}"
+                        "${CMAKE_CURRENT_SOURCE_DIR}/test/obj_robustness_test.py"
+                        "$<TARGET_FILE:mc3togltf>"
+                        "${_obj_robustness_xml}"
+            )
+            set_tests_properties(mc3togltf_obj_robustness PROPERTIES TIMEOUT 30)
         endif()
         add_test(
             NAME mc3togltf_large_scene_generated

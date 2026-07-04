@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<mc3 version="0.1" model="ObjRobustnessTest" unit="meter">
+
+  <objects>
+    <mesh name="Valid" src="tetra.obj" position="0 0 0"/>
+    <mesh name="NegativeIndex" src="obj_malformed_negative.obj" position="2 0 0"/>
+    <mesh name="InfiniteCoord" src="obj_malformed_infinite.obj" position="4 0 0"/>
+  </objects>
+
+</mc3>

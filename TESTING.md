@@ -1,8 +1,8 @@
 # Testing
 
-_Last updated: 2026-07-03. This document is derived from the actual `CMakeLists.txt` test registrations and test source files — if it drifts from `ctest -N`'s output, trust `ctest -N`._
+_Last updated: 2026-07-04. This document is derived from the actual `CMakeLists.txt` test registrations and test source files — if it drifts from `ctest -N`'s output, trust `ctest -N`._
 
-MeshCraft's tests run through **CTest** — 20 tests today, mixing C++ assertion-based binaries and Python subprocess-driven checks against the `mc3togltf`/`mc3tomcb` CLIs.
+MeshCraft's tests run through **CTest** — 21 tests today, mixing C++ assertion-based binaries and Python subprocess-driven checks against the `mc3togltf`/`mc3tomcb` CLIs.
 
 ---
 
@@ -24,7 +24,7 @@ ctest -R mc3_commands --output-on-failure
 ctest -R mc3togltf_csg --output-on-failure   # matches all 4 CSG tests
 ```
 
-Expected result: **20/20 Passed**. A failing test prints its assertion/subprocess output inline with `--output-on-failure`; without that flag, CTest only shows pass/fail per test name.
+Expected result: **21/21 Passed**. A failing test prints its assertion/subprocess output inline with `--output-on-failure`; without that flag, CTest only shows pass/fail per test name.
 
 Each C++ test binary can also be run directly (bypassing CTest) for faster iteration:
 
@@ -87,6 +87,7 @@ These spawn the built `mc3togltf`/`mc3tomcb` binaries as subprocesses and assert
 | `mc3togltf_csg_nested` | `mc3togltf/test/*.py` | Nested CSG operations (CSG-of-CSG) export correctly | Exported mesh matches expected nested-boolean result |
 | `mc3togltf_instance_deform_cache` | `mc3togltf/test/*.py` | Instances of the same definition with different `<deform>` produce separate cached meshes (not incorrectly shared) | Distinct mesh indices per distinct deform |
 | `mc3togltf_float_cache_key` | `mc3togltf/test/*.py` | Two primitives with close-but-not-equal float dimensions produce 2 distinct meshes (cache key doesn't collide on float rounding) | `len(meshes) == 2` |
+| `mc3togltf_obj_robustness` | `mc3togltf/test/obj_robustness_test.py` | Untrusted OBJ input: out-of-range negative vertex index and an infinite (`1e400`-overflow) coordinate must not crash the exporter | Exit 0, a `Warning:`/`non-finite` message per malformed file, valid mesh still exports geometry, no `null` (non-finite) values in any accessor `min`/`max` |
 
 ---
 

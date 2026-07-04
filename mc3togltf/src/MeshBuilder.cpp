@@ -1058,6 +1058,16 @@ MeshData loadObjMesh(const std::filesystem::path& basePath, const std::string& s
     const auto& attrib = reader.GetAttrib();
     const auto& shapes = reader.GetShapes();
 
+    // Reject non-finite vertex coordinates (e.g. "1e400" overflowing to inf)
+    // rather than silently exporting a spec-invalid glTF (inf in the binary
+    // buffer, null in the JSON accessor min/max).
+    for (float v : attrib.vertices) {
+        if (!std::isfinite(v)) {
+            throw std::runtime_error("OBJ load failed (" + objPath.string() +
+                                      "): non-finite vertex coordinate");
+        }
+    }
+
     MeshData m;
     for (const auto& shape : shapes) {
         const auto& idxList = shape.mesh.indices;
