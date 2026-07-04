@@ -97,13 +97,16 @@ bloom GL pipeline is likewise confirmed correct and safe, and its prior
 real fix — a VAO/VBO silent-failure bug + CNA GL-state leakage, fixed
 and pixel-diff-verified in an earlier session per project memory — is
 confirmed still intact in the current code, but `bloomEnabled_` has
-the same no-headless-hook wall as SSAO), and STAB-0510 flagged 🟡
+the same no-headless-hook wall as SSAO), STAB-0510 flagged 🟡
 (audited `drawObjectEdges()` the same way STAB-0497 audited the solid
 path — exhaustively and safely handles all 19 `ObjectType` values, no
 bug found — but `showWireframeMode_` has the same no-headless-hook
-wall as the other toggles). Plan-wide totals: **306 ✅ done, 12 🟡
-partial, 100 🧪 has a plan but not executed, 232 📋 not started** out
-of 650.
+wall as the other toggles), and STAB-0511 done (unlike the last 4
+toggles, fog is a document-level setting applied unconditionally —
+verified with a real pixel-sampling test proving a fully-fogged object
+renders fog-colored, not its authored base color). Plan-wide totals:
+**307 ✅ done, 12 🟡 partial, 100 🧪 has a plan but not executed, 231
+📋 not started** out of 650.
 
 **Important architectural decisions:**
 - `mc3/` and `mcb/` are pure C++ static libs with **no** CNA/ImGui
@@ -142,19 +145,20 @@ of 650.
   the root project).
 
 ### Tests
-**31/31 CTest pass** in Debug as of this session (STAB-0507 added
-`smoke_test_orthographic_camera`, STAB-0500 added
-`smoke_test_missing_material`, STAB-0499 added `missing_mesh_test`,
-STAB-0498 added `smoke_test_empty_scene`, STAB-0497 added
-`smoke_test_all_objects`, STAB-0493 added `mc3togltf_instance_variant`,
-STAB-0630 added `mc3togltf_obj_robustness`, STAB-0417/0418/0420/0416
+**32/32 CTest pass** in Debug as of this session (STAB-0511 added
+`fog_linear_test`, STAB-0507 added `smoke_test_orthographic_camera`,
+STAB-0500 added `smoke_test_missing_material`, STAB-0499 added
+`missing_mesh_test`, STAB-0498 added `smoke_test_empty_scene`,
+STAB-0497 added `smoke_test_all_objects`, STAB-0493 added
+`mc3togltf_instance_variant`, STAB-0630 added
+`mc3togltf_obj_robustness`, STAB-0417/0418/0420/0416
 added `mc3togltf_texture_sampler`, STAB-0166-0170/0411-0415/0435 added
 `mc3togltf_material_pbr`, STAB-0440 added
 `mc3togltf_svg_texture_export`, STAB-0447/0448 added
 `mc3togltf_animation_unsupported`; started the session at 20/20):
 `smoke_test`, `smoke_test_all_objects`, `smoke_test_empty_scene`,
 `missing_mesh_test`, `smoke_test_missing_material`,
-`smoke_test_orthographic_camera`, `xsd_validation`,
+`smoke_test_orthographic_camera`, `fog_linear_test`, `xsd_validation`,
 `mc3_registry`, `mc3_ai`, `mc3_roundtrip`, `mc3_commands`,
 `mcb_roundtrip`, `mc3tomcb_roundtrip`, `mc3togltf_gltf`, `mc3togltf_all_primitives`,
 `mc3togltf_export_verification`, `mc3togltf_large_scene`,
@@ -239,9 +243,9 @@ See `TESTING.md` for the full per-test reference and `plan.md`'s
 
 ## 3. Recent changes
 
-**52 STAB tasks committed as of this update** (`53aa75e` through
-`81e5b45`, pushed to `origin/develop` — see `git log --oneline` for the
-full list). **STAB-0510** below is verified and about to be committed
+**53 STAB tasks committed as of this update** (`53aa75e` through
+`b506b90`, pushed to `origin/develop` — see `git log --oneline` for the
+full list). **STAB-0511** below is verified and about to be committed
 as of this update. Gate 6 is exhausted (§8); **S11, S12, and S13 are
 all fully done** except genuinely blocked/flagged items. **S14 is now
 also accumulating flagged items**, same as S11/S12. Work is underway on
@@ -253,6 +257,24 @@ audit that found real bugs), then finished S11 and S12 entirely (bar
 the blocked/flagged items) and started S13. Highlights, most recent
 first:
 
+- **STAB-0511 — verified fog visualization with a real pixel-sampling
+  test, unlike the last 4 toggles**: fog is a document-level
+  `<environment><fog>` setting (`Mc3Environment::fog`), applied
+  unconditionally — no UI toggle gates it — in both
+  `SceneRenderer::draw()` (GPU `BasicEffect` fog uniforms) and
+  `drawObject()` (a CPU per-object color tint toward the fog color,
+  scaled by camera-to-object distance, supporting both Linear and
+  Exponential modes). This makes it headlessly verifiable, unlike
+  STAB-0505/0508/0509/0510. Added `test/fog_linear.mc3.xml` (a bright
+  red box 20 units from the camera, linear fog `start=1`/`end=8`/
+  `color="0 1 0"` fully covering that distance so `fogFactor` clamps to
+  exactly 1.0) + `test/fog_linear_test.py` (real pixel sampling:
+  asserts a substantial fog-colored/green pixel cluster exists and that
+  **no** un-fogged red pixel appears anywhere) + a permanent
+  `fog_linear_test` ctest. Manually confirmed the box renders as
+  `(0,243,0)` — fully fog-colored, zero red pixels anywhere in the full
+  image. Verified via full CMake reconfigure + rebuild (0 warnings) and
+  32/32 ctest (up from 31/31).
 - **STAB-0510 — flagged: wireframe mode needs a live display, but the
   type-coverage audit is real work**: the main draw loop
   (`MeshCraftApplication.cpp`) correctly skips the solid pass and
@@ -1429,21 +1451,24 @@ has the same no-headless-hook wall), and STAB-0510 flagged 🟡
 (audited `drawObjectEdges()` the same way STAB-0497 audited the solid
 path — exhaustively and safely handles all 19 `ObjectType` values, no
 bug found — but `showWireframeMode_` has the same no-headless-hook
-wall as the other toggles). Next — **first P2 item, S14's priority
-subset is done**:
+wall as the other toggles), and STAB-0511 done (fog is a
+document-level setting applied unconditionally, unlike the last 4
+toggles — verified with a real pixel-sampling test proving a
+fully-fogged object renders fog-colored, not its authored base color).
+Next — **first P2 item, S14's priority subset is done**:
 
-1. **STAB-0511 — verify fog visualization: linear fog gradient
-   correct** (S14, P2, next-lowest ID). Goal: distant objects appear
-   fogged when linear fog start/end are set. Files:
-   `src/MeshCraft/Renderer/SceneRenderer.cpp`. Verify: unlike the last 4
-   toggles (STAB-0505/0508/0509/0510, all pure runtime UI state), fog
-   is a **document-level** `<environment><fog>` setting
-   (`Mc3Environment::fog`, an `std::optional<Mc3Fog>`) — likely
-   headlessly verifiable the same way STAB-0507's orthographic camera
-   was: add a small fixture with fog configured and objects at varying
-   depths, screenshot it, and confirm via pixel sampling that distant
-   objects are visibly tinted toward the fog color (comparing near vs.
-   far object pixel colors) rather than needing a live toggle.
+1. **STAB-0512 — verify light sphere gizmos: point light shows sphere
+   + rays** (S14, P2, next-lowest ID). Goal: a point light in the scene
+   shows a gizmo (sphere + rays) in the viewport. Files:
+   `src/MeshCraft/Renderer/SceneRenderer_Gizmos.cpp`. Verify: STAB-0511's
+   investigation already showed `drawLightGizmos()` is called
+   **unconditionally** in the main draw loop (`MeshCraftApplication.cpp`,
+   right alongside `drawCameraGizmos()`/`drawCsgGizmos()`) — not gated
+   by selection state or a UI toggle like STAB-0501/0502/0505's gizmos.
+   This looks headlessly verifiable the same way STAB-0511 was: add a
+   fixture with a point light, screenshot it, and confirm via pixel
+   sampling that the gizmo's distinctive rendering (e.g. a colored
+   sphere marker) actually appears.
 
 Beyond that, S14 gets heavily visual/interactive (gizmos, camera
 presets, bloom/SSAO toggles, shadow maps) — expect many items to land

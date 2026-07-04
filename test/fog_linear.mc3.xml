@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- STAB-0511 fixture: linear fog (start=1, end=8, bright green) fully
+     covers a bright red box placed 20 units from the camera, so the
+     rendered box should trend toward the fog color rather than its
+     authored red base color — verifiable via the screenshot CLI mode's
+     pixel sampling, without a live UI toggle. -->
+<mc3 version="0.3" model="FogLinearFixture" default_camera="Main">
+
+  <environment>
+    <fog mode="linear" color="0 1 0" start="1" end="8" density="0.01"/>
+  </environment>
+
+  <lights>
+    <ambient color="0.6 0.6 0.6" brightness="0.6"/>
+    <directional name="Sun" color="1 1 1" brightness="1.5" direction="-0.3 -1 -0.3"/>
+  </lights>
+
+  <cameras>
+    <camera name="Main" position="0 0 20" target="0 0 0" fov="50" near="0.1" far="200"/>
+  </cameras>
+
+  <materials>
+    <material id="red"><base_color>1.0 0.0 0.0 1.0</base_color></material>
+  </materials>
+
+  <objects>
+    <box name="FarBox" size="4 4 4" position="0 0 0" material="red"/>
+  </objects>
+
+</mc3>

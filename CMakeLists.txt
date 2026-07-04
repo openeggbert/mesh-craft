@@ -436,6 +436,22 @@ if(MESH_CRAFT_BUILD_TESTING AND UNIX AND NOT ANDROID AND NOT EMSCRIPTEN)
                     ${_mc3_xml_files}
         )
         set_tests_properties(xsd_validation PROPERTIES TIMEOUT 30)
+
+        # STAB-0511: fog is a document-level <environment><fog> setting, applied
+        # unconditionally (unlike the bloom/SSAO/wireframe UI toggles) — verify
+        # a fully-fogged distant object actually renders fog-colored, not its
+        # authored base color, via real pixel sampling.
+        if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/test/fog_linear.mc3.xml")
+            add_test(
+                NAME fog_linear_test
+                COMMAND "${PYTHON3_EXEC}"
+                        "${CMAKE_CURRENT_SOURCE_DIR}/test/fog_linear_test.py"
+                        $<TARGET_FILE:MeshCraft>
+                        "${CMAKE_CURRENT_SOURCE_DIR}/test/fog_linear.mc3.xml"
+                WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
+            )
+            set_tests_properties(fog_linear_test PROPERTIES TIMEOUT 30)
+        endif()
     endif()
 
     # mc3togltf_gltf test is registered by mc3togltf/CMakeLists.txt via $<TARGET_FILE:mc3togltf>
