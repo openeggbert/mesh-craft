@@ -24,13 +24,14 @@ risks closed quickly).
 **Current phase:** Stabilization. Every gate's priority-list subset is
 now done. **Gate 6 (Documentation) is close to fully green**: S17
 (Documentation and User-Facing Honesty) is 20/20 complete; S18 (Code
-Quality) has all P0/P1 items done plus 1 P2 (STAB-0610) done, 17 P2/P3
-remain; S19 (Security) has all P0/P1/P2 items done (14/15), with just 1
-P3 left (STAB-0635, tmp-file race condition); S20 (Release Readiness)
-is 12/15, with the last 3 items genuinely blocked (need Blender, a
-browser, or a running CI — none available in this environment). No
-gate is fully green yet. Plan-wide totals: **211 ✅ done, 3 🟡 partial,
-136 🧪 has a plan but not executed, 300 📋 not started** out of 650.
+Quality) has all P0/P1 items done plus 2 P2s (STAB-0610, STAB-0603)
+done, 16 P2/P3 remain; S19 (Security) has all P0/P1/P2 items done
+(14/15), with just 1 P3 left (STAB-0635, tmp-file race condition); S20
+(Release Readiness) is 12/15, with the last 3 items genuinely blocked
+(need Blender, a browser, or a running CI — none available in this
+environment). No gate is fully green yet. Plan-wide totals: **212 ✅
+done, 3 🟡 partial, 136 🧪 has a plan but not executed,
+299 📋 not started** out of 650.
 
 **Important architectural decisions:**
 - `mc3/` and `mcb/` are pure C++ static libs with **no** CNA/ImGui
@@ -154,17 +155,33 @@ See `TESTING.md` for the full per-test reference and `plan.md`'s
 
 ## 3. Recent changes
 
-**STAB-0610** (`53aa75e`), **STAB-0630** (`09fdf95`), and
-**STAB-0383/STAB-0631** (`7670a00`) are committed; `origin/develop` is
-not yet pushed to (last pushed commit is `03723b8`). **STAB-0633**
-below is verification-only (code inspection, no code changed) and is
-reflected in `plan.md`/`NEXT.md` but not yet committed as of this
-update.
+**STAB-0610** (`53aa75e`), **STAB-0630** (`09fdf95`),
+**STAB-0383/STAB-0631** (`7670a00`), and **STAB-0633** (`9aabad4`) are
+committed; `origin/develop` is not yet pushed to (last pushed commit is
+`03723b8`). **STAB-0603** below is implemented but **not yet
+committed** as of this update — working tree has a file move
+(`src/MeshCraft/EditorAlgorithms.hpp` → `include/MeshCraft/
+EditorAlgorithms.hpp`) plus edits to `MeshCraftApplication_Commands.cpp`,
+`mc3/test/editor_commands_test.cpp`, `mc3/CMakeLists.txt`, `plan.md`,
+`NEXT.md`.
 
 This was a long, dense session that closed out essentially all of
 **Gate 6 (Documentation)**'s reachable work, plus a from-scratch schema
 audit that found real bugs. Highlights, most recent first:
 
+- **STAB-0603 — `EditorAlgorithms.hpp` moved to a public include
+  directory**: was at `src/MeshCraft/EditorAlgorithms.hpp`, included
+  via a fragile `src/`-relative path (`#include "EditorAlgorithms.hpp"`)
+  that only worked because `mc3_commands_test` explicitly added
+  `src/MeshCraft` to its include dirs. Moved to
+  `include/MeshCraft/EditorAlgorithms.hpp`, matching the existing
+  public-include convention every other header uses (e.g.
+  `AiAssistant.hpp`); updated both real `#include`s and
+  `mc3/CMakeLists.txt`'s `mc3_commands_test` guard (now checks
+  `include/MeshCraft/EditorAlgorithms.hpp`, still gracefully skipped in
+  a standalone `mc3/` checkout where that path doesn't exist — verified
+  by rebuilding standalone `mc3` fresh: 1/1, correctly skips
+  `mc3_commands`). Root project rebuild: 21/21 ctest still pass.
 - **STAB-0633 — AI apply requires undo-capable state**: confirmed by
   code inspection — `document_` is assigned from `aiPendingDoc_` at
   exactly one call site (`MeshCraftApplication_UiAi.cpp:266`, the
@@ -476,23 +493,7 @@ No project linter/formatter is configured.
 
 ## 8. Next smallest tasks
 
-1. **STAB-0603 — refactor `EditorAlgorithms.hpp` to a public include
-   directory** (S18, P2, lowest-ID remaining P2). Goal: move
-   `src/MeshCraft/EditorAlgorithms.hpp` to
-   `include/MeshCraft/EditorAlgorithms.hpp` so it's not a fragile
-   `src/`-relative include; update every `#include` of it (real editor
-   code + `mc3/test/editor_commands_test.cpp`'s
-   `MC3_EDITOR_SRC_DIR`-based path in `mc3/CMakeLists.txt`) to the new
-   location.
-   Files: `src/MeshCraft/EditorAlgorithms.hpp` (move),
-   `mc3/CMakeLists.txt` (the `MC3_EDITOR_SRC_DIR`/`EXISTS` check at
-   lines 85-90), every real `.cpp` that `#include`s it.
-   Verify: cmake reconfigure (new header location), full rebuild, then
-   `ctest --output-on-failure` — must stay 21/21 including
-   `mc3_commands` (proves the test still finds the header from its new
-   public location).
-
-2. **STAB-0635 — verify tmp-file race condition** (S19, P3, the one
+1. **STAB-0635 — verify tmp-file race condition** (S19, P3, the one
    remaining S19 item). Goal: confirm `AiAssistant.cpp`'s temp-file
    naming includes a PID or random suffix (not a fixed name two
    concurrent instances could collide on).
@@ -500,8 +501,21 @@ No project linter/formatter is configured.
    Verify: code inspection; grep for the tmp-path construction and
    confirm uniqueness per process/thread.
 
-Beyond these two: S18 has 16 more P2/P3 items after STAB-0603 (mostly
-code-quality audits — see `plan.md`'s S18 rows). Closing S18+S19 fully
+2. **STAB-0604 — audit duplicate code: `SceneRenderer_Builders.cpp` vs
+   `MeshBuilder.cpp`** (S18, P2, next-lowest ID after STAB-0603). Goal:
+   check whether the two files (one in the CNA-coupled renderer, one in
+   the CNA-free `mc3togltf_lib`) duplicate the same primitive-geometry
+   generation logic; if so, decide whether it's worth extracting to a
+   shared utility (may not be — the two have different vertex/index
+   formats for different consumers, so duplication could be
+   intentional; this needs a real read before deciding).
+   Files: `src/MeshCraft/Renderer/SceneRenderer_Builders.cpp`,
+   `mc3togltf/src/MeshBuilder.cpp`.
+   Verify: code inspection; if extraction happens, `ctest
+   --output-on-failure` must stay 21/21.
+
+Beyond these two: S18 has 15 more P2/P3 items after STAB-0603/0604
+(mostly code-quality audits — see `plan.md`'s S18 rows). Closing S18+S19 fully
 would leave Gate 6 blocked only on the 3 genuinely-inaccessible S20
 items (§5). After that, the next priority tier is P2 items across
 S6–S13 and the

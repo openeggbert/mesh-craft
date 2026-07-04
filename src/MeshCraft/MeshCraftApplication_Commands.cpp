@@ -1,6 +1,6 @@
 #include "MeshCraft/MeshCraftApplication.hpp"
 #include "MeshCraftPrivate.hpp"
-#include "EditorAlgorithms.hpp"
+#include "MeshCraft/EditorAlgorithms.hpp"
 
 #include <SDL3/SDL.h>
 

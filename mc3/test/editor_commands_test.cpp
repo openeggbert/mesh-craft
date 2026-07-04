@@ -1,4 +1,4 @@
-#include "EditorAlgorithms.hpp"
+#include <MeshCraft/EditorAlgorithms.hpp>
 
 #include <MeshCraft/Mc3/Mc3Document.hpp>
 #include <MeshCraft/Mc3/Mc3Object.hpp>

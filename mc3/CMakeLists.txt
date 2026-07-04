@@ -80,15 +80,16 @@ if(BUILD_TESTING)
              COMMAND mc3_roundtrip_test ${MC3_FEATURES_XML})
     set_tests_properties(mc3_roundtrip PROPERTIES TIMEOUT 15)
 
-    # editor_commands_test pulls in EditorAlgorithms.hpp from the MeshCraft
-    # editor sources, which live at the repo root (src/MeshCraft/) — outside
-    # the mc3/ subtree. Only build it when those sources are available (i.e.
-    # as part of the root MeshCraft project) so mc3 stays buildable standalone.
-    set(MC3_EDITOR_SRC_DIR "${CMAKE_SOURCE_DIR}/src/MeshCraft")
-    if(EXISTS "${MC3_EDITOR_SRC_DIR}/EditorAlgorithms.hpp")
+    # editor_commands_test pulls in MeshCraft/EditorAlgorithms.hpp from the
+    # MeshCraft editor's public include dir, which lives at the repo root
+    # (include/) — outside the mc3/ subtree. Only build it when those
+    # headers are available (i.e. as part of the root MeshCraft project)
+    # so mc3 stays buildable standalone.
+    set(MC3_EDITOR_INCLUDE_DIR "${CMAKE_SOURCE_DIR}/include")
+    if(EXISTS "${MC3_EDITOR_INCLUDE_DIR}/MeshCraft/EditorAlgorithms.hpp")
         add_executable(mc3_commands_test test/editor_commands_test.cpp)
         target_include_directories(mc3_commands_test PRIVATE
-            ${MC3_EDITOR_SRC_DIR}
+            ${MC3_EDITOR_INCLUDE_DIR}
         )
         target_link_libraries(mc3_commands_test PRIVATE Mc3)
         target_compile_features(mc3_commands_test PRIVATE cxx_std_23)
@@ -96,7 +97,7 @@ if(BUILD_TESTING)
         set_tests_properties(mc3_commands PROPERTIES TIMEOUT 15)
     else()
         message(STATUS "mc3: skipping mc3_commands_test — MeshCraft editor "
-                       "sources not found at ${MC3_EDITOR_SRC_DIR} "
+                       "headers not found at ${MC3_EDITOR_INCLUDE_DIR} "
                        "(standalone mc3 build)")
     endif()
 endif()
