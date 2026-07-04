@@ -500,6 +500,29 @@ inline std::shared_ptr<Mc3::Mc3Object> breakInstanceAlg(
     return copy;
 }
 
+// ── Align to Object (STAB-0484) ────────────────────────────────────────────────
+//
+// Mirrors MeshCraftApplication::alignToObject() — sets every OTHER selected
+// object's *position* (rotation/scale untouched) to match the first selected
+// object's position. Locked objects (by id) are skipped. Returns the count
+// of objects actually aligned (0 if fewer than 2 objects are selected — no
+// mutation happens in that case, matching the real command's early return).
+inline int alignToObjectAlg(
+    const std::vector<std::shared_ptr<Mc3::Mc3Object>>& selected,
+    const std::set<std::string>&                        lockedIds)
+{
+    if (selected.size() < 2) return 0;
+    const auto& src = selected.front();
+    int aligned = 0;
+    for (size_t i = 1; i < selected.size(); ++i) {
+        const auto& s = selected[i];
+        if (lockedIds.count(s->id)) continue;
+        s->transform.position = src->transform.position;
+        ++aligned;
+    }
+    return aligned;
+}
+
 // ── Auto-save (STAB-0265) ─────────────────────────────────────────────────────
 //
 // Mirrors two pieces of CNA-coupled logic so "the auto-save interval is

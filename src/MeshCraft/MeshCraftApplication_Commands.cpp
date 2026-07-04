@@ -536,21 +536,12 @@ void MeshCraftApplication::exportSubtreeAsTemplate(const std::string& defName,
 
 void MeshCraftApplication::alignToObject() {
     if (selection_.selection().size() < 2) return;
-    const auto& src = selection_.selection().front();
-    float tx = src->transform.position[0];
-    float ty = src->transform.position[1];
-    float tz = src->transform.position[2];
+    const std::string& srcName = selection_.selection().front()->name;
     pushUndo();
-    for (size_t i = 1; i < selection_.selection().size(); ++i) {
-        const auto& s = selection_.selection()[i];
-        if (lockedIds_.count(s->id)) continue;
-        s->transform.position[0] = tx;
-        s->transform.position[1] = ty;
-        s->transform.position[2] = tz;
-    }
+    int aligned = alignToObjectAlg(selection_.selection(), lockedIds_);
     modified_ = true; updateWindowTitle();
-    setStatusMsg("Aligned " + std::to_string(selection_.selection().size() - 1) +
-                 " object(s) to " + src->name, false, 2.0f);
+    setStatusMsg("Aligned " + std::to_string(aligned) +
+                 " object(s) to " + srcName, false, 2.0f);
 }
 
 // H14: Scale selected objects around their group center

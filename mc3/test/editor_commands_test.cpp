@@ -637,6 +637,45 @@ static void testBreakInstance()
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// alignToObjectAlg (STAB-0484)
+// ─────────────────────────────────────────────────────────────────────────────
+
+static void testAlignToObject()
+{
+    auto target = makeObj("t", "Target");
+    target->transform.position = {5.0f, 2.0f, -3.0f};
+    auto a = makeObj("a", "A");
+    a->transform.position = {0.0f, 0.0f, 0.0f};
+    a->transform.rotation = {10.0f, 20.0f, 30.0f}; // must survive untouched
+    auto b = makeObj("b", "B");
+    b->transform.position = {1.0f, 1.0f, 1.0f};
+
+    std::vector<std::shared_ptr<Mc3Object>> sel = {target, a, b};
+    int aligned = alignToObjectAlg(sel, {});
+    CHECK(aligned == 2, "align: both non-target objects aligned");
+    CHECKF(a->transform.position[0], 5.0f, "align: A.position.x matches target");
+    CHECKF(a->transform.position[1], 2.0f, "align: A.position.y matches target");
+    CHECKF(a->transform.position[2], -3.0f, "align: A.position.z matches target");
+    CHECKF(a->transform.rotation[0], 10.0f, "align: A.rotation untouched");
+    CHECKF(b->transform.position[0], 5.0f, "align: B.position.x matches target");
+    CHECKF(target->transform.position[0], 5.0f, "align: target itself unchanged");
+
+    // Locked objects are skipped.
+    auto c = makeObj("c", "C");
+    c->transform.position = {9.0f, 9.0f, 9.0f};
+    std::vector<std::shared_ptr<Mc3Object>> sel2 = {target, c};
+    int aligned2 = alignToObjectAlg(sel2, {"c"});
+    CHECK(aligned2 == 0, "align: locked object not counted as aligned");
+    CHECKF(c->transform.position[0], 9.0f, "align: locked object's position unchanged");
+
+    // Fewer than 2 selected objects: no-op.
+    std::vector<std::shared_ptr<Mc3Object>> selOne = {target};
+    CHECK(alignToObjectAlg(selOne, {}) == 0, "align: fewer than 2 selected is a no-op");
+    std::vector<std::shared_ptr<Mc3Object>> selEmpty = {};
+    CHECK(alignToObjectAlg(selEmpty, {}) == 0, "align: empty selection is a no-op");
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // deepCopyObjectAlg
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -1944,6 +1983,7 @@ int main()
     testUngroupRejectsNonGroupOrEmptyGroup();
     testConvertToDefinition();
     testBreakInstance();
+    testAlignToObject();
     testDeepCopy();
     testUndoRedoBatchRename();
     testUndoRedoFindReplace();

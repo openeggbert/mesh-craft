@@ -34,12 +34,12 @@ flagged (STAB-0464 needs a live display; STAB-0460 describes a feature
 that was never built, out of scope per the stabilization moratorium).
 Both S11 and S12 sweeps found several real bugs, fixed with permanent
 regression tests — see §3 for the full list. **S13 (Commands,
-Undo/Redo, and Algorithms)** work has started: STAB-0482/0483 done
-(extracted `convertToDefinitionAlg()`/`breakInstanceAlg()` Alg mirrors,
-neither existed before; STAB-0483 found and fixed a real duplicate-id
-bug — see §3). Plan-wide totals: **285
+Undo/Redo, and Algorithms)** work has started: STAB-0482-0484 done
+(extracted `convertToDefinitionAlg()`/`breakInstanceAlg()`/
+`alignToObjectAlg()` Alg mirrors, none existed before; STAB-0483 found
+and fixed a real duplicate-id bug — see §3). Plan-wide totals: **286
 ✅ done, 6 🟡 partial, 112 🧪 has a plan but not executed,
-247 📋 not started** out of 650.
+246 📋 not started** out of 650.
 
 **Important architectural decisions:**
 - `mc3/` and `mcb/` are pure C++ static libs with **no** CNA/ImGui
@@ -170,11 +170,11 @@ See `TESTING.md` for the full per-test reference and `plan.md`'s
 
 ## 3. Recent changes
 
-**25 STAB tasks committed and pushed as of `ed54ff2`** (`53aa75e`
-through `ed54ff2` — see `git log --oneline` for the full list). Gate 6
+**26 STAB tasks committed and pushed as of `5e6dc98`** (`53aa75e`
+through `5e6dc98` — see `git log --oneline` for the full list). Gate 6
 is exhausted (§8); **S11 and S12 are both fully done** except
 genuinely blocked/flagged items. Work is underway on **S13 (Commands,
-Undo/Redo, and Algorithms)**. **STAB-0483** below is implemented but
+Undo/Redo, and Algorithms)**. **STAB-0484** below is implemented but
 **not yet committed** as of this update.
 
 This was a long, dense session that closed out essentially all of
@@ -183,6 +183,16 @@ audit that found real bugs), then finished S11 and S12 entirely (bar
 the blocked/flagged items) and started S13. Highlights, most recent
 first:
 
+- **STAB-0484 — extracted `alignToObjectAlg()`**: "Align to Object"
+  had no Alg mirror either (same gap as STAB-0482/0483). Confirmed the
+  command only aligns *position* (not rotation/scale) of every
+  non-target selected object to the first-selected "target" object,
+  skipping locked objects. As a side effect of the extraction, fixed
+  the status-message object count (previously always reported
+  `selectionSize-1`, over-counting when a selected object was locked
+  and skipped — now reports the actual aligned count). Added
+  `testAlignToObject()` (11 assertions): the align itself, rotation
+  left untouched, locked-object skip, and <2-selected/empty no-ops.
 - **STAB-0483 — found and fixed a duplicate-id bug in "Break
   Instance"**: the original code only uniquified the *top-level*
   copy's id (a dead `copy->id = inst->id;` assignment was immediately
@@ -903,27 +913,26 @@ stabilization moratorium; STAB-0464 needs a live display).
 **S13 (Commands, Undo/Redo, and Algorithms)** already has its P0/P1
 tier done from earlier sessions (STAB-0471-0481 — including a real fix,
 `resetPivot()` was missing `pushUndo()`, found and fixed then).
-STAB-0482/0483 are now done too (this session — extracted
-`convertToDefinitionAlg()`/`breakInstanceAlg()` Alg mirrors, neither
-existed before; STAB-0483 found and fixed a real duplicate-id bug —
-see §3). Next:
+STAB-0482-0484 are now done too (this session — extracted
+`convertToDefinitionAlg()`/`breakInstanceAlg()`/`alignToObjectAlg()`
+Alg mirrors, none existed before; STAB-0483 found and fixed a real
+duplicate-id bug — see §3). Next:
 
-1. **STAB-0484 — verify "Align to Object" aligns selection to target
-   transform** (S13, P2, next-lowest ID). Goal: selecting 2+ objects
-   plus a target and aligning should set the selection's
-   position/rotation/scale (whichever axes the command supports) to
-   match the target's transform.
+1. **STAB-0485 — verify Scatter/Place: count objects added matches
+   requested** (S13, P2, next-lowest ID). Goal: a "scatter N copies"
+   command should add exactly N new objects (not off-by-one, not
+   silently capped).
    Files: `src/MeshCraft/MeshCraftApplication_Commands.cpp`.
    Verify: read the actual command function first — check whether an
-   Alg mirror already exists (same pattern as STAB-0482/0483, neither
-   had one); extract to `EditorAlgorithms.hpp` and add a headless test
-   if none exists yet.
+   Alg mirror already exists (same pattern as STAB-0482-0484, none had
+   one); extract to `EditorAlgorithms.hpp` and add a headless test if
+   none exists yet.
 
-Beyond this: S13 has ~12 more P2/P3 items (STAB-0485-0496ish — Scatter/
-Place, command palette, macro recorder, proportional editing/snapping,
-Select Children, Random variant — see `plan.md`'s S13 rows; several of
-these, e.g. mouse-drag snapping, may be genuinely interactive/blocked
-like S11/S12's visual items — check each before assuming). S14
+Beyond this: S13 has ~11 more P2/P3 items (STAB-0486-0496ish — command
+palette, macro recorder, proportional editing/snapping, Select
+Children, Random variant — see `plan.md`'s S13 rows; several of these,
+e.g. mouse-drag snapping, may be genuinely interactive/blocked like
+S11/S12's visual items — check each before assuming). S14
 (Rendering/Viewport) and S15 (Import/Export/Editor Integration) remain
 fully untouched after S13.
 
