@@ -24,15 +24,17 @@ risks closed quickly).
 **Current phase:** Stabilization. Every gate's priority-list subset is
 now done. **Gate 6 (Documentation) is close to fully green**: S17
 (Documentation and User-Facing Honesty) is 20/20 complete; S18 (Code
-Quality) has all P0/P1 items done plus 8 P2s (STAB-0610, STAB-0603,
-STAB-0611, STAB-0604, STAB-0605, STAB-0606, STAB-0607, STAB-0608)
-done, 10 P2/P3 remain; **S19 (Security and Robustness) is
+Quality) is 18/25 done (all P0/P1 plus every runnable P2), with 7
+remaining: 4 are tool-blocked (STAB-0609/0614/0615/0620 need
+`include-what-you-use`/`clang-tidy`/`cppcheck`, none installed here)
+and 3 are large-file audit/refactor-judgment calls (STAB-0616-0619);
+**S19 (Security and Robustness) is
 now fully green — 15/15**; S20 (Release Readiness) is 12/15, with the
 last 3 items genuinely blocked
 (need Blender, a browser, or a running CI — none available in this
-environment). No gate is fully green yet. Plan-wide totals: **219 ✅
+environment). No gate is fully green yet. Plan-wide totals: **221 ✅
 done, 3 🟡 partial, 136 🧪 has a plan but not executed,
-292 📋 not started** out of 650.
+290 📋 not started** out of 650.
 
 **Important architectural decisions:**
 - `mc3/` and `mcb/` are pure C++ static libs with **no** CNA/ImGui
@@ -156,10 +158,10 @@ See `TESTING.md` for the full per-test reference and `plan.md`'s
 
 ## 3. Recent changes
 
-Nine STAB tasks committed this session (`53aa75e` STAB-0610 through
-`26ddc5b` STAB-0606 — see `git log --oneline` for the full list);
+Ten STAB tasks committed this session (`53aa75e` STAB-0610 through
+`6762522` STAB-0607/0608 — see `git log --oneline` for the full list);
 `origin/develop` is not yet pushed to (last pushed commit is
-`03723b8`). **STAB-0607 + STAB-0608** below are verification-only
+`03723b8`). **STAB-0612 + STAB-0613** below are verification-only
 (code inspection, no code changed) and are reflected in
 `plan.md`/`NEXT.md` but not yet committed as of this update.
 
@@ -167,6 +169,15 @@ This was a long, dense session that closed out essentially all of
 **Gate 6 (Documentation)**'s reachable work, plus a from-scratch schema
 audit that found real bugs. Highlights, most recent first:
 
+- **STAB-0612 + STAB-0613 — verified `Mc3XmlParser.cpp`'s
+  safe-attribute-helper usage and TU-local linkage**: every one of the
+  ~30 direct `->Attribute(...)` calls outside the `attr()`/`attrF()`/
+  `attrB()`/`attrVec3()` helpers themselves is a deliberate
+  presence-check guard, not a bypass. The file uses `static` (not a
+  literal `namespace{}` block) for all 37 free functions, giving the
+  same TU-local/no-ODR-conflict guarantee — only `Mc3XmlParser::parse`
+  itself has external linkage, and it's a properly header-declared
+  class method. Both clean — no fix needed.
 - **STAB-0607 + STAB-0608 — verified `mcb`/`mc3` library hygiene**: no
   raw `new`/`delete`/`malloc`/`free` in `McbWriter.cpp`/`McbReader.cpp`
   (1405 lines combined, 0 hits; ownership via `std::make_shared` +
