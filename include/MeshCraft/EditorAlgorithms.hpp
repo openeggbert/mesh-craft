@@ -674,6 +674,63 @@ inline int applyProportionalFalloffAlg(
     return affected;
 }
 
+// ── Vertex snap on Shift+drag (STAB-0490) ─────────────────────────────────────
+//
+// Mirrors the "Vertex snap (Shift)" block in handleMouseInput()
+// (MeshCraftApplication_Mouse.cpp): finds the nearest unselected object's
+// position to (refX,refY,refZ) within `threshold`; if found, offsets every
+// selected, unlocked object by the delta from the reference point to that
+// nearest position. Returns true iff a snap target was found and applied
+// (false leaves every object untouched).
+
+inline bool vertexSnapToNearestAlg(
+    const std::vector<std::shared_ptr<Mc3::Mc3Object>>& rootObjects,
+    const std::vector<std::shared_ptr<Mc3::Mc3Object>>& selected,
+    const std::set<std::string>&                        lockedIds,
+    float refX, float refY, float refZ,
+    float threshold)
+{
+    if (selected.empty()) return false;
+
+    std::set<const Mc3::Mc3Object*> selPtrs;
+    for (const auto& s : selected) selPtrs.insert(s.get());
+
+    float bestDist = threshold;
+    float bestX = refX, bestY = refY, bestZ = refZ;
+    bool  found = false;
+
+    std::function<void(const std::vector<std::shared_ptr<Mc3::Mc3Object>>&)> findNearest;
+    findNearest = [&](const std::vector<std::shared_ptr<Mc3::Mc3Object>>& list) {
+        for (const auto& obj : list) {
+            if (!selPtrs.count(obj.get())) {
+                float ddx = obj->transform.position[0] - refX;
+                float ddy = obj->transform.position[1] - refY;
+                float ddz = obj->transform.position[2] - refZ;
+                float d = std::sqrt(ddx*ddx + ddy*ddy + ddz*ddz);
+                if (d < bestDist) {
+                    bestDist = d;
+                    bestX = obj->transform.position[0];
+                    bestY = obj->transform.position[1];
+                    bestZ = obj->transform.position[2];
+                    found = true;
+                }
+            }
+            findNearest(obj->children);
+        }
+    };
+    findNearest(rootObjects);
+    if (!found) return false;
+
+    float offX = bestX - refX, offY = bestY - refY, offZ = bestZ - refZ;
+    for (const auto& s : selected) {
+        if (lockedIds.count(s->id)) continue;
+        s->transform.position[0] += offX;
+        s->transform.position[1] += offY;
+        s->transform.position[2] += offZ;
+    }
+    return true;
+}
+
 // ── Auto-save (STAB-0265) ─────────────────────────────────────────────────────
 //
 // Mirrors two pieces of CNA-coupled logic so "the auto-save interval is

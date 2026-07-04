@@ -173,42 +173,12 @@ void MeshCraftApplication::handleMouseInput(const MouseState& ms, const MouseSta
             bool shiftHeld = (Keyboard::GetState().IsKeyDown(Keys::LeftShift) ||
                               Keyboard::GetState().IsKeyDown(Keys::RightShift));
             if (shiftHeld) {
-                float nx = sel0->transform.position[0];
-                float ny = sel0->transform.position[1];
-                float nz = sel0->transform.position[2];
                 float threshold = camera_.distance * 0.08f;
-                float bestDist = threshold;
-                float bestX = nx, bestY = ny, bestZ = nz;
-
-                std::function<void(const std::vector<std::shared_ptr<Mc3::Mc3Object>>&)> findNearest;
-                findNearest = [&](const std::vector<std::shared_ptr<Mc3::Mc3Object>>& list) {
-                    for (const auto& obj : list) {
-                        if (!selection_.isSelected(obj.get())) {
-                            float ddx = obj->transform.position[0] - nx;
-                            float ddy = obj->transform.position[1] - ny;
-                            float ddz = obj->transform.position[2] - nz;
-                            float d = std::sqrt(ddx*ddx + ddy*ddy + ddz*ddz);
-                            if (d < bestDist) {
-                                bestDist = d;
-                                bestX = obj->transform.position[0];
-                                bestY = obj->transform.position[1];
-                                bestZ = obj->transform.position[2];
-                            }
-                        }
-                        findNearest(obj->children);
-                    }
-                };
-                findNearest(document_.objects);
-
-                if (bestDist < threshold) {
-                    float offX = bestX - nx, offY = bestY - ny, offZ = bestZ - nz;
-                    for (const auto& s : selection_.selection()) {
-                        if (lockedIds_.count(s->id)) continue;
-                        s->transform.position[0] += offX;
-                        s->transform.position[1] += offY;
-                        s->transform.position[2] += offZ;
-                    }
-                }
+                vertexSnapToNearestAlg(document_.objects, selection_.selection(), lockedIds_,
+                                       sel0->transform.position[0],
+                                       sel0->transform.position[1],
+                                       sel0->transform.position[2],
+                                       threshold);
             }
 
             // Proportional editing (H1): apply Gaussian falloff to nearby unselected objects

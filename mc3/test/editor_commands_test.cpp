@@ -877,6 +877,79 @@ static void testProportionalFalloff()
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// vertexSnapToNearestAlg (STAB-0490)
+// ─────────────────────────────────────────────────────────────────────────────
+
+static void testVertexSnap()
+{
+    // A snap target within threshold: selection snaps by the exact delta to
+    // that target's position; a second selected object moves by the same
+    // delta (rigid offset, not each independently re-centered).
+    {
+        std::vector<std::shared_ptr<Mc3Object>> roots;
+        auto sel0 = makeObj("s0", "Sel0"); sel0->transform.position = {0, 0, 0};
+        auto sel1 = makeObj("s1", "Sel1"); sel1->transform.position = {5, 0, 0};
+        auto target = makeObj("t", "Target"); target->transform.position = {1, 2, 0};
+        roots.push_back(sel0);
+        roots.push_back(sel1);
+        roots.push_back(target);
+
+        bool snapped = vertexSnapToNearestAlg(roots, {sel0, sel1}, {},
+                                               /*ref=*/0.0f, 0.0f, 0.0f,
+                                               /*threshold=*/10.0f);
+        CHECK(snapped, "vertex snap: target within threshold is found and applied");
+        CHECKF(sel0->transform.position[0], 1.0f, "vertex snap: anchor snaps exactly onto target.x");
+        CHECKF(sel0->transform.position[1], 2.0f, "vertex snap: anchor snaps exactly onto target.y");
+        CHECKF(sel1->transform.position[0], 6.0f, "vertex snap: other selected object moves by the same offset (x)");
+        CHECKF(sel1->transform.position[1], 2.0f, "vertex snap: other selected object moves by the same offset (y)");
+    }
+
+    // No target within threshold: nothing moves, returns false.
+    {
+        std::vector<std::shared_ptr<Mc3Object>> roots;
+        auto sel0 = makeObj("s0", "Sel0"); sel0->transform.position = {0, 0, 0};
+        auto far = makeObj("far", "Far"); far->transform.position = {100, 0, 0};
+        roots.push_back(sel0);
+        roots.push_back(far);
+
+        bool snapped = vertexSnapToNearestAlg(roots, {sel0}, {}, 0, 0, 0, /*threshold=*/1.0f);
+        CHECK(!snapped, "vertex snap: no target within threshold returns false");
+        CHECKF(sel0->transform.position[0], 0.0f, "vertex snap: no-op leaves position untouched");
+    }
+
+    // The nearest of several candidates wins, and the selected object itself
+    // is never its own snap target.
+    {
+        std::vector<std::shared_ptr<Mc3Object>> roots;
+        auto sel0 = makeObj("s0", "Sel0"); sel0->transform.position = {0, 0, 0};
+        auto near = makeObj("near", "Near"); near->transform.position = {2, 0, 0};
+        auto nearer = makeObj("nearer", "Nearer"); nearer->transform.position = {1, 0, 0};
+        roots.push_back(sel0);
+        roots.push_back(near);
+        roots.push_back(nearer);
+
+        vertexSnapToNearestAlg(roots, {sel0}, {}, 0, 0, 0, 10.0f);
+        CHECKF(sel0->transform.position[0], 1.0f, "vertex snap: snaps to the nearest candidate, not just the first");
+    }
+
+    // Locked objects don't move even if selected; empty selection is a no-op.
+    {
+        std::vector<std::shared_ptr<Mc3Object>> roots;
+        auto sel0 = makeObj("s0", "Sel0"); sel0->transform.position = {0, 0, 0};
+        auto target = makeObj("t", "Target"); target->transform.position = {3, 0, 0};
+        roots.push_back(sel0);
+        roots.push_back(target);
+
+        bool snapped = vertexSnapToNearestAlg(roots, {sel0}, {"s0"}, 0, 0, 0, 10.0f);
+        CHECK(snapped, "vertex snap: target still found even if the only selected object is locked");
+        CHECKF(sel0->transform.position[0], 0.0f, "vertex snap: locked selected object is not moved");
+
+        CHECK(!vertexSnapToNearestAlg(roots, {}, {}, 0, 0, 0, 10.0f),
+              "vertex snap: empty selection is a no-op");
+    }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // deepCopyObjectAlg
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -2187,6 +2260,7 @@ int main()
     testAlignToObject();
     testScatterAlongCurve();
     testProportionalFalloff();
+    testVertexSnap();
     testDeepCopy();
     testUndoRedoBatchRename();
     testUndoRedoFindReplace();
