@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- STAB-0500 fixture: an object referencing a material id that isn't
+     declared anywhere in the document, to confirm the renderer falls
+     back to a default color instead of crashing. -->
+<mc3 version="0.3" model="MissingMaterialFixture">
+  <objects>
+    <box name="GhostBox" size="1 1 1" position="0 0 0" material="nonexistent"/>
+  </objects>
+</mc3>

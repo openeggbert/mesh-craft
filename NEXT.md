@@ -56,12 +56,16 @@ S14 (Rendering and Viewport Stability)**: STAB-0496 done (confirmed
 `ObjectType` values plus a safe default fallback; added a permanent
 `smoke_test_all_objects` ctest), STAB-0498 done (added
 `test/empty_scene.mc3.xml` + `smoke_test_empty_scene` ctest — no
-existing fixture covered a genuinely empty scene), and STAB-0499 done
+existing fixture covered a genuinely empty scene), STAB-0499 done
 (found a real silent-failure gap: a missing mesh file loaded with no
 warning at all; fixed `loadOrGetMesh()` to print a warning, added
-`test/missing_mesh.mc3.xml` + `missing_mesh_test` ctest). Plan-wide
-totals: **301 ✅ done, 6 🟡 partial, 109 🧪 has a plan but not
-executed, 234 📋 not started** out of 650.
+`test/missing_mesh.mc3.xml` + `missing_mesh_test` ctest), and STAB-0500
+done (confirmed a nonexistent `material=` reference safely falls back
+to a default gray color in all 3 resolution sites, no crash by
+construction; added `test/missing_material.mc3.xml` +
+`smoke_test_missing_material` ctest). Plan-wide totals: **302 ✅ done,
+6 🟡 partial, 109 🧪 has a plan but not executed, 233 📋 not started**
+out of 650.
 
 **Important architectural decisions:**
 - `mc3/` and `mcb/` are pure C++ static libs with **no** CNA/ImGui
@@ -100,19 +104,19 @@ executed, 234 📋 not started** out of 650.
   the root project).
 
 ### Tests
-**29/29 CTest pass** in Debug as of this session (STAB-0499 added
-`missing_mesh_test`, STAB-0498 added `smoke_test_empty_scene`,
-STAB-0497 added `smoke_test_all_objects`, STAB-0493 added
-`mc3togltf_instance_variant`, STAB-0630 added
-`mc3togltf_obj_robustness`, STAB-0417/0418/0420/0416 added
-`mc3togltf_texture_sampler`, STAB-0166-0170/0411-0415/0435 added
+**30/30 CTest pass** in Debug as of this session (STAB-0500 added
+`smoke_test_missing_material`, STAB-0499 added `missing_mesh_test`,
+STAB-0498 added `smoke_test_empty_scene`, STAB-0497 added
+`smoke_test_all_objects`, STAB-0493 added `mc3togltf_instance_variant`,
+STAB-0630 added `mc3togltf_obj_robustness`, STAB-0417/0418/0420/0416
+added `mc3togltf_texture_sampler`, STAB-0166-0170/0411-0415/0435 added
 `mc3togltf_material_pbr`, STAB-0440 added
 `mc3togltf_svg_texture_export`, STAB-0447/0448 added
 `mc3togltf_animation_unsupported`; started the session at 20/20):
 `smoke_test`, `smoke_test_all_objects`, `smoke_test_empty_scene`,
-`missing_mesh_test`, `xsd_validation`, `mc3_registry`, `mc3_ai`,
-`mc3_roundtrip`, `mc3_commands`, `mcb_roundtrip`, `mc3tomcb_roundtrip`,
-`mc3togltf_gltf`, `mc3togltf_all_primitives`,
+`missing_mesh_test`, `smoke_test_missing_material`, `xsd_validation`,
+`mc3_registry`, `mc3_ai`, `mc3_roundtrip`, `mc3_commands`,
+`mcb_roundtrip`, `mc3tomcb_roundtrip`, `mc3togltf_gltf`, `mc3togltf_all_primitives`,
 `mc3togltf_export_verification`, `mc3togltf_large_scene`,
 `mc3togltf_csg_strict`, `mc3togltf_csg_export`,
 `mc3togltf_csg_unsupported`, `mc3togltf_csg_nested`,
@@ -195,9 +199,9 @@ See `TESTING.md` for the full per-test reference and `plan.md`'s
 
 ## 3. Recent changes
 
-**40 STAB tasks committed as of `cb04f50`** (`53aa75e` through
-`cb04f50`, pushed to `origin/develop` — see `git log --oneline` for the
-full list). **STAB-0498** below is verified and about to be committed
+**42 STAB tasks committed as of `27bef12`** (`53aa75e` through
+`27bef12`, pushed to `origin/develop` — see `git log --oneline` for the
+full list). **STAB-0500** below is verified and about to be committed
 as of this update. Gate 6 is exhausted (§8); **S11, S12, and S13 are
 all fully done** except genuinely blocked/flagged items (S11/S12
 only). Work is underway on **S14 (Rendering and Viewport
@@ -209,6 +213,22 @@ audit that found real bugs), then finished S11 and S12 entirely (bar
 the blocked/flagged items) and started S13. Highlights, most recent
 first:
 
+- **STAB-0500 — confirmed a missing material reference safely falls
+  back to a default color**: read all 3 places `obj.material` is
+  resolved in `SceneRenderer.cpp` (`materialColor()`, the base-color-
+  texture lookup, the emissive-glow lookup) — each looks it up via
+  `doc.materials.find()` and safely no-ops/falls back when it returns
+  `end()`, no crash possible by construction whether the id is empty
+  or simply doesn't exist. The actual fallback color is
+  `Color(180,180,180,255)` (light gray), not literal white as the
+  row's wording suggested — same kind of imprecise-row-phrasing as
+  STAB-0491/0494, not a bug. Added `test/missing_material.mc3.xml`
+  (`<box material="nonexistent">`) and a permanent
+  `smoke_test_missing_material` ctest (same `smoke_test.sh` mechanism
+  as STAB-0496-0499). Verified via a real `--screenshot` run (exit 0,
+  88 distinct sampled colors, confirming a genuine shaded render) and
+  full CMake reconfigure + rebuild (0 warnings), 30/30 ctest (up from
+  29/29).
 - **STAB-0499 — found and fixed a silent mesh-load-failure gap**: a
   `<mesh src="...">` pointing to a nonexistent file loaded with no
   crash, but also **no warning at all** — the failure was completely
@@ -1165,19 +1185,23 @@ Viewport Stability), 30 items, is underway** — STAB-0496 done (verified
 STAB-0497 done (confirmed the renderer handles all 19 `ObjectType`
 values by construction; added `smoke_test_all_objects` ctest),
 STAB-0498 done (added `test/empty_scene.mc3.xml` +
-`smoke_test_empty_scene` ctest), and STAB-0499 done (found and fixed a
+`smoke_test_empty_scene` ctest), STAB-0499 done (found and fixed a
 real silent mesh-load-failure gap; added `test/missing_mesh.mc3.xml` +
-`missing_mesh_test` ctest). Next:
+`missing_mesh_test` ctest), and STAB-0500 done (confirmed a
+nonexistent `material=` reference safely falls back to a default gray
+color, no crash by construction; added `test/missing_material.mc3.xml`
++ `smoke_test_missing_material` ctest). Next:
 
-1. **STAB-0500 — verify renderer handles missing material reference**
-   (S14, P1, next-lowest ID). Goal: an object with `material="nonexistent"`
-   renders with a sensible default (e.g. default white material), not a
-   crash. Files: `src/MeshCraft/Renderer/SceneRenderer.cpp`.
-   Verify: read how the material lookup resolves an unknown key, then
-   confirm via a real `--screenshot` run against a fixture referencing a
-   nonexistent material, following the same pattern as
-   STAB-0498/STAB-0499 (create a small fixture + permanent ctest if none
-   exists).
+1. **STAB-0501 — verify gizmo: translate gizmo appears on selected
+   object** (S14, P1, next-lowest ID). Goal: selecting an object shows
+   XYZ translate arrows at its position. Files:
+   `src/MeshCraft/Renderer/SceneRenderer_Gizmos.cpp`.
+   Verify: this is the first S14 item that depends on live selection
+   state rather than just scene content — check whether selection can
+   be driven headlessly (e.g. a CLI flag, or a scene/test hook that
+   pre-selects an object) before assuming it needs a live display; if
+   no headless path exists, this likely lands in the flagged/blocked
+   set like S11/S12's visual items.
 
 Beyond that, S14 gets heavily visual/interactive (gizmos, camera
 presets, bloom/SSAO toggles, shadow maps) — expect many items to land
