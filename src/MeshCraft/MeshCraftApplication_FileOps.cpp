@@ -278,6 +278,19 @@ void MeshCraftApplication::mergeSceneFromFile(const std::string& path) {
         ++added;
     }
 
+    // Merge actions (suffix on collision — STAB-0469: previously not merged
+    // at all, so merging a scene silently discarded all of its animations).
+    // Channel targetObject references don't need remapping here: the merged
+    // objects above keep their original names unchanged, so a suffixed
+    // action's channels still correctly resolve to them.
+    for (auto& [key, action] : src.actions) {
+        std::string k = key;
+        int n = 2;
+        while (document_.actions.count(k)) k = key + "_" + std::to_string(n++);
+        document_.actions[k] = action;
+        document_.actions[k].name = k;
+    }
+
     modified_ = true; updateWindowTitle();
     setStatusMsg("Merged " + std::to_string(added) + " object(s) from " + path, false, 3.0f);
 }

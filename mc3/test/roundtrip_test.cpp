@@ -169,6 +169,59 @@ static void testUnnamedMaterialHandledGracefully() {
     }
 }
 
+// STAB-0468: two keyframes at the identical time must not crash (division by
+// zero in linear interpolation, guarded; cubic bezier uses bisection, so it's
+// inherently safe) and must have a well-defined, documented tie-break policy
+// (first-declared wins) rather than whatever an unstable sort happens to do.
+static void testDuplicateKeyframeTimePolicy() {
+    auto xmlPath = tmpPath();
+    {
+        std::ofstream f(xmlPath);
+        f << R"(<?xml version="1.0" encoding="UTF-8"?>
+<mc3 version="0.3" model="DuplicateKeyframeTimeTest">
+  <objects>
+    <box name="Box1" size="1 1 1"/>
+  </objects>
+  <actions>
+    <action name="Snap" duration="1.0">
+      <channel target="Box1" property="position.x">
+        <keyframe time="0.5" value="1.0" interp="linear"/>
+        <keyframe time="0.5" value="9.0" interp="linear"/>
+        <keyframe time="1.0" value="2.0" interp="linear"/>
+      </channel>
+    </action>
+  </actions>
+</mc3>)";
+    }
+    try {
+        auto doc = Mc3Document::loadFromFile(xmlPath);
+        std::filesystem::remove(xmlPath);
+
+        CHECK(doc.actions.count("Snap") == 1, "duplicate kf time: action present");
+        if (!doc.actions.count("Snap")) return;
+        const auto& ch = doc.actions.at("Snap").channels.at(0);
+        CHECK(ch.keyframes.size() == 3, "duplicate kf time: all 3 keyframes kept (no dedup)");
+        if (ch.keyframes.size() == 3) {
+            // First-declared-wins: the kf with value=1.0 (declared first in the
+            // XML) must sort before the kf with value=9.0 (declared second),
+            // since std::stable_sort preserves original order for equal keys.
+            CHECKF(ch.keyframes[0].time,  0.5f, "duplicate kf time: kf[0].time");
+            CHECKF(ch.keyframes[0].value, 1.0f, "duplicate kf time: kf[0] is the first-declared duplicate");
+            CHECKF(ch.keyframes[1].time,  0.5f, "duplicate kf time: kf[1].time");
+            CHECKF(ch.keyframes[1].value, 9.0f, "duplicate kf time: kf[1] is the second-declared duplicate");
+        }
+
+        // evaluateChannel must not crash/NaN at or around the duplicate time.
+        float v = evaluateChannel(ch, 0.5f);
+        CHECK(std::isfinite(v), "duplicate kf time: evaluateChannel(0.5) is finite, not NaN/Inf");
+        float v2 = evaluateChannel(ch, 0.75f);
+        CHECK(std::isfinite(v2), "duplicate kf time: evaluateChannel(0.75) is finite, not NaN/Inf");
+    } catch (const std::exception& e) {
+        std::filesystem::remove(xmlPath);
+        fail(std::string("duplicate kf time: threw unexpectedly: ") + e.what());
+    }
+}
+
 // STAB-0432: Mc3UvMapping (projection/scale/offset/rotation) had no roundtrip
 // test at all before this.
 static void testUvMappingRoundtrip() {
@@ -1971,6 +2024,7 @@ int main(int argc, char* argv[]) {
     testDeform();
     testMaterialColorPrecisionRoundtrip();
     testUnnamedMaterialHandledGracefully();
+    testDuplicateKeyframeTimePolicy();
     testUvMappingRoundtrip();
     testExtrudeArcCircle();
     testExtrudeHelixPolygon();

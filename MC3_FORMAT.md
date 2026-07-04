@@ -497,6 +497,12 @@ Pass `--allow-approximate-csg` (CLI) or enable the "Allow approximate CSG export
 
 **Interpolation:** `linear`, `step`, `cubic` (cubic bezier with `<handle_left dt dv/>` and `<handle_right dt dv/>`)
 
+**Units:** `duration` and keyframe `time` are already in **seconds** — there
+is no frame-rate concept anywhere in the format, so `mc3togltf` passes
+keyframe times straight through into glTF's animation sampler `input`
+accessor (which the glTF spec also requires to be in seconds) with no
+conversion needed or applied.
+
 ---
 
 ## mc3togltf export support matrix
@@ -517,7 +523,7 @@ Pass `--allow-approximate-csg` (CLI) or enable the "Allow approximate CSG export
 | Torus, Capsule, Disk, Grid, IcoSphere | ✅ |
 | CSG (union/difference/intersection) | ✅ (evaluated by Manifold; unsupported child types fail the export; `--allow-approximate-csg` exports children separately as debug fallback) |
 | Instance (via definitions) | ✅ |
-| SVG textures (N1, `<textures><texture>` with an SVG source) | ❌ — `svgTextures` is a separate map in `Mc3Document` that `GltfExporter` never reads at all; an SVG-sourced texture is silently dropped, not warned about. Rasterization isn't implemented anywhere yet (editor viewport included) |
+| SVG textures (N1, `<textures><texture>` with an SVG source) | ❌ — `svgTextures` is a separate map in `Mc3Document` that `GltfExporter` never rasterizes (rasterization isn't implemented anywhere yet, editor viewport included); since STAB-0440, a material referencing an SVG texture prints a warning naming the material/slot/texture id instead of dropping it silently, but the texture itself is still omitted from the export |
 | Embedded glTF (N2, `<mesh src="embed:id"/>`) | ❌ — treated as a literal OBJ file path, which fails to parse; the export doesn't crash but continues with **no mesh on that node** (`Warning: OBJ load failed (...)` on stderr, `stats.warnings` incremented). See STAB-0194 for the tracked automated test of this exact behavior |
 | Scripts, Sounds, Music, Triggers, Scene States, Meta (N3-N7) | ❌ (no glTF equivalent — these are MCB/XML-only data, round-tripped but not translated to any glTF concept; see [Scripts (N3)](#scripts-n3) etc. above) |
 

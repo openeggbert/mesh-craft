@@ -22,54 +22,20 @@ requires its full `STAB-XXXX` ID range green — not just a smaller
 risks closed quickly).
 
 **Current phase:** Stabilization. Every gate's priority-list subset is
-now done. **Gate 6 (Documentation) is close to fully green**: S17
-(Documentation and User-Facing Honesty) is 20/20 complete; **S19
-(Security and Robustness) is fully green — 15/15**; S18 (Code Quality)
-is 20/25 done (all P0/P1 plus every reachable P2/P3), 1 genuinely
-flagged (STAB-0617 — `PropertiesPanel.cpp`'s 1770-line `draw()` is a
-real smell, but splitting ImGui code with no way to visually verify
-the result in this environment is deferred, not attempted), and 4
-tool-blocked (STAB-0609/0614/0615/0620 need
-`include-what-you-use`/`clang-tidy`/`cppcheck`, none installed here);
-S20 (Release Readiness) is 12/15, with the last 3 items genuinely
-blocked (need Blender, a browser, or a running CI — none available in
-this environment). No gate is fully green yet. **S11 (Materials,
-Textures, and Visual Fidelity) is now fully done except 5 genuinely
-blocked items**: 25/30 ✅, with STAB-0421/0422/0423 (material preview
-sphere) and STAB-0428 (texture drag-and-drop) needing a live display
-(same constraint as STAB-0617), and STAB-0431 needing Blender (same
-constraint as the S20 items). Everything else in S11 is closed. This
-sweep found **5 real bugs fixed** (texture wrap `mirror` mode, texture
-`filter`, texture URI subdirectory-stripping, a registry-insert
-material-name-collision silently keeping the wrong material, and SVG
-textures being silently dropped with no warning), **5 genuine
-test-coverage gaps closed** (material-with-every-field roundtrip,
-material animation roundtrip, UV mapping roundtrip, node→material
-export chain, unnamed-material handling — all previously entirely
-untested), and 8 items confirmed already correct or already
-sufficiently documented (colorSpace, missing-texture-warns,
-include-override policy, search case-insensitivity, D3's skip reason,
-the inert embed-texture checkbox, color precision, alpha-mode/
-emissive-only material defaults) plus one new `MC3_FORMAT.md`
-documentation addition (texture path resolution). **S12 (Animation
-Stability) work is well underway**: STAB-0441-0456 done (16 items).
-STAB-0441-0448 (8 items — 4 already covered by existing/this-session
-tests, 2 new roundtrip test gaps closed — scale, deform — and 2 new
-glTF-export-warning tests added). STAB-0449-0455 (7 timeline-UI/undo
-items) verified correct by code inspection — the pixel-level mouse
-interaction itself needs a live display, but the underlying data
-operations (multi-select set toggling, reverse-sorted safe keyframe
-erasure, action duplicate/rename, relative-time-preserving keyframe
-copy/paste, unconditional `pushUndo()` before every mutation) are all
-directly readable and confirmed correct, same standard applied to
-STAB-0426 earlier. **STAB-0456 found a real bug and fixed it**:
-renaming an object via any of its 3 real editor paths never propagated
-to that object's animation channels (`Mc3Channel::targetObject` is a
-plain name string) — silently orphaning its animations with no crash
-and no indication why. Added a shared `renameObjectInActionsAlg()`
-helper wired into all 3 call sites. Plan-wide totals: **271
-✅ done, 4 🟡 partial, 113 🧪 has a plan but not executed,
-262 📋 not started** out of 650.
+done. **Gate 6 (Documentation)**: S17 20/20 ✅ (fully green), S19 15/15
+✅ (fully green), S18 20/25 (all reachable done; 1 flagged —
+STAB-0617 — 4 tool-blocked, need `include-what-you-use`/`clang-tidy`/
+`cppcheck`), S20 12/15 (3 blocked on Blender/browser/CI). No gate is
+fully green yet, but nothing more is runnable in Gate 6 without an
+external tool or a human with a display. **S11 (Materials/Textures)**
+is done: 25/30, remaining 5 all genuinely blocked (live display or
+Blender). **S12 (Animation Stability)** is done: 28/30, remaining 2
+flagged (STAB-0464 needs a live display; STAB-0460 describes a feature
+that was never built, out of scope per the stabilization moratorium).
+Both S11 and S12 sweeps found several real bugs, fixed with permanent
+regression tests — see §3 for the full list. Plan-wide totals: **283
+✅ done, 6 🟡 partial, 112 🧪 has a plan but not executed,
+249 📋 not started** out of 650.
 
 **Important architectural decisions:**
 - `mc3/` and `mcb/` are pure C++ static libs with **no** CNA/ImGui
@@ -200,17 +166,48 @@ See `TESTING.md` for the full per-test reference and `plan.md`'s
 
 ## 3. Recent changes
 
-**22 STAB tasks committed and pushed as of `b0df3a9`** (`53aa75e`
-through `b0df3a9` — see `git log --oneline` for the full list). Gate 6
-is exhausted (§8); S11 is fully done except 5 blocked items. S12
-(Animation Stability) is well underway. **STAB-0449-0456** below are
+**23 STAB tasks committed and pushed as of `7b3126c`** (`53aa75e`
+through `7b3126c` — see `git log --oneline` for the full list). Gate 6
+is exhausted (§8); **S11 and S12 are both fully done** except
+genuinely blocked/flagged items. **STAB-0457-0470** below are
 implemented but **not yet committed** as of this update.
 
 This was a long, dense session that closed out essentially all of
 **Gate 6 (Documentation)**'s reachable work (plus a from-scratch schema
-audit that found real bugs), then finished S11 entirely (bar the
-blocked items) and worked deep into S12. Highlights, most recent first:
+audit that found real bugs), then finished S11 and S12 entirely (bar
+the blocked/flagged items). Highlights, most recent first:
 
+- **STAB-0457-0470 — S12 closeout**: STAB-0457-0459/0461-0463/0465-0467/
+  0470 all confirmed correct by code inspection or already covered by
+  existing tests (deleted/included/registry-inserted objects are
+  equally animatable since animation channels resolve by name against
+  the whole merged object tree with no origin distinction; the shared
+  `evaluateChannel()` interpolation math and its glTF-export/sampler
+  consistency were already thoroughly tested; mc3 time units are
+  already seconds, no frame-rate conversion exists or is needed — added
+  a clarifying note to `MC3_FORMAT.md` and fixed a stale line there
+  about SVG textures predating this session's STAB-0440 fix).
+  **STAB-0460 and STAB-0464 flagged** (🟡, not resolved): STAB-0460
+  is a "scale all keyframe times" feature that was never built at all
+  (confirmed by exhaustive grep) — out of scope per the stabilization
+  feature moratorium; STAB-0464's curve-editor drawing code exists but
+  needs a live display to confirm it's visually correct.
+  **STAB-0468 found a real gap and fixed it**: keyframes were sorted
+  with plain `std::sort` (not stability-guaranteed for equal keys), so
+  two keyframes at an identical time had a formally unspecified
+  tie-break order. Switched to `std::stable_sort` for a well-defined
+  first-declared-wins policy; also confirmed `evaluateChannel()` was
+  already safe against a zero-length time span (explicit guard for
+  Linear, inherently safe for CubicBezier via bisection search — no
+  NaN/crash risk either way). **STAB-0469 found a real gap and fixed
+  it**: `mergeSceneFromFile()` merged textures/materials/objects but
+  never touched `src.actions` at all — merging a scene silently
+  discarded 100% of its animations. Fixed with the same
+  suffix-on-collision pattern already used for materials. Separately
+  noted (not fixed, flagged in §5): the same function's *texture*
+  merge still uses skip-on-collision rather than the suffix+
+  reference-remap pattern STAB-0425 established, so a merged material
+  could end up referencing the wrong texture on a name collision.
 - **STAB-0449-0456 — S12 timeline UI sweep**: STAB-0449-0453 (timeline
   multi-select, delete, duplicate action ["Dup" button, initially
   missed searching for the literal word "Duplicate"], rename action
@@ -667,9 +664,32 @@ requires the repo owner to rotate/rescope the token.
 - **CI is partial** — only the CNA-free libs are covered by the parked
   workflow; no full-editor CI job. _status: incomplete, inactive._
 - **SVG texture rasterization** — parsed/serialized/round-tripped, but
-  `GltfExporter` never reads the SVG texture map, so it's silently
-  dropped from export. Blocked on a library choice (librsvg vs.
-  NanoSVG). _status: incomplete, now documented in `README.md`._
+  `GltfExporter` never rasterizes the SVG texture map. Since STAB-0440
+  this session, a material referencing one now prints a warning naming
+  the material/slot/texture id, rather than dropping it silently — but
+  the texture itself is still omitted from export. Blocked on a
+  library choice (librsvg vs. NanoSVG). _status: incomplete, now
+  documented in `README.md`/`MC3_FORMAT.md`, warns instead of silent._
+- **`mergeSceneFromFile()`'s texture merge can silently pick the wrong
+  texture on a name collision** — unlike its material merge (suffix on
+  collision, fixed pattern) and unlike `ModelRegistry::insertIntoScene`
+  (suffix + reference-remap, fixed this session per STAB-0425), the
+  texture merge in `MeshCraftApplication_FileOps.cpp` still uses
+  skip-on-collision (existing wins): if the merged scene's texture
+  name collides with an unrelated one already in the target scene, a
+  material that should reference the merged scene's own texture ends
+  up pointing at the wrong one instead. Found while fixing STAB-0469
+  (same file, adjacent code) this session. _status: confirmed, not
+  fixed — same fix shape as STAB-0425 (suffix + remap referencing
+  materials), scoped out of STAB-0469 to keep that task bounded; no
+  assigned STAB-XXXX ID of its own yet._
+- **No "scale animation time" feature exists** — `plan.md`'s STAB-0460
+  describes a feature (scale all of an action's keyframe times by a
+  factor) that was never implemented anywhere in the codebase (confirmed
+  by exhaustive grep this session). _status: confirmed missing, not a
+  bug — flagged 🟡 in `plan.md`, needs a future feature-planning
+  decision, out of scope during the current stabilization-only feature
+  moratorium._
 - **Embedded glTF** — `embed:id` is treated as a literal OBJ path by
   `GltfExporter`, which fails to parse; export continues with an empty
   node rather than crashing. _status: incomplete, documented._
@@ -839,36 +859,42 @@ Blender/browser/CI). **There is nothing left to pick up in Gate 6
 without an external tool or a human with a display.**
 
 The next priority tier is P2 items across S6–S13 and the untouched
-S11/S12/S14/S15 sections. **S11 (Materials, Textures, and Visual
-Fidelity) is done** — 25/30, remaining 5 all genuinely blocked
-(STAB-0421/0422/0423 material preview sphere + STAB-0428 texture
-drag-and-drop need a live display, same as STAB-0617; STAB-0431 needs
-Blender, same as the S20 items).
+S14/S15 sections. **S11 (Materials, Textures, and Visual Fidelity) is
+done** — 25/30, remaining 5 all genuinely blocked (STAB-0421/0422/0423
+material preview sphere + STAB-0428 texture drag-and-drop need a live
+display, same as STAB-0617; STAB-0431 needs Blender, same as the S20
+items). **S12 (Animation Stability) is done** — 28/30, remaining 2
+flagged (STAB-0460 a never-built feature, out of scope per the
+stabilization moratorium; STAB-0464 needs a live display).
 
-**S12 (Animation Stability)** is the next untouched section (30 rows).
-A first pass (not yet done this session) is the right next step before
-diving into individual items — many of its P1 roundtrip rows
-(STAB-0441-0445: transform/material/deform animation roundtrip) may
-already be covered by this session's `testAnimationLinear`/
-`testAnimationCubicBezier`/`testAnimationStep`/`testAnimationMultiAction`/
-`testMaterialColorAnimationRoundtrip` tests, or by pre-existing
-coverage neither STAB-0430 nor this note has cross-checked yet. Its
-remaining rows split into two shapes:
-- **STAB-0441-0448** (roundtrip + glTF-export coverage): pure
-  file-based tests, no live editor needed — check existing coverage
-  first, add tests only for genuine gaps (same pattern as this
-  session's S11 sweep).
-- **STAB-0449-0453+** (timeline UI: multi-select, delete, duplicate,
-  rename, copy/paste keyframes): interactive `MeshCraftApplication_Anim.cpp`
-  UI gestures — check whether the "Alg mirror" pattern (a CNA-free
-  header with the actual logic, per `NEXT.md` §6) already exists for
-  any of these before assuming they're all visually-blocked like
-  STAB-0421-0423/0428/0617 — some editor logic this session found
-  (undo/redo, hierarchy filtering) was already extracted that way and
-  fully testable without a display.
+**S13 (Commands, Undo/Redo, and Algorithms)** already has its P0/P1
+tier done from earlier sessions (STAB-0471-0481 — including a real fix,
+`resetPivot()` was missing `pushUndo()`, found and fixed then). Its
+remaining rows start at P2:
 
-S13 (Commands/Undo/Redo/Algorithms), S14 (Rendering/Viewport), and S15
-(Import/Export/Editor Integration) remain untouched after S12.
+1. **STAB-0482 — verify "Convert to Definition" creates correct
+   Definition entry** (S13, P2, next-lowest ID). Goal: selecting an
+   object and converting it to a reusable Definition should move it
+   into `doc.definitions` and replace it in-place with an Instance
+   node referencing that definition.
+   Files: `src/MeshCraft/MeshCraftApplication_Commands.cpp`.
+   Verify: read the actual command function first; if it's a plain
+   document mutation (not CNA-coupled), it may be directly headlessly
+   testable — check before assuming it needs a live display.
+
+2. **STAB-0483 — verify "Break Instance" expands to a copy of
+   definition content** (S13, P2). Goal: the inverse of Convert to
+   Definition — an Instance node should expand into an independent
+   deep copy of its definition's content (no shared `shared_ptr`s with
+   the original definition, so editing one doesn't affect the other).
+   Files: `src/MeshCraft/MeshCraftApplication_Commands.cpp`.
+   Verify: same approach as STAB-0482 — read first, test headlessly if
+   possible.
+
+Beyond these two: S13 has ~13 more P2/P3 items (STAB-0484-0496ish —
+Align to Object, Scatter/Place, command palette, etc. — see `plan.md`'s
+S13 rows). S14 (Rendering/Viewport) and S15 (Import/Export/Editor
+Integration) remain fully untouched after S13.
 
 ---
 

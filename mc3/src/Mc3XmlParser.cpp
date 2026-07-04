@@ -676,8 +676,11 @@ static void parseActions(const XMLElement* el, Mc3Document& doc) {
                 }
                 ch.keyframes.push_back(kf);
             }
-            // Ensure keyframes are sorted by time
-            std::sort(ch.keyframes.begin(), ch.keyframes.end(),
+            // Ensure keyframes are sorted by time. Stable so two keyframes at
+            // the identical time keep their original (first-declared-wins)
+            // relative order — plain std::sort doesn't guarantee this for
+            // equal keys (STAB-0468).
+            std::stable_sort(ch.keyframes.begin(), ch.keyframes.end(),
                 [](const Mc3Keyframe& a, const Mc3Keyframe& b){ return a.time < b.time; });
             action.channels.push_back(std::move(ch));
         }
