@@ -97,9 +97,13 @@ bloom GL pipeline is likewise confirmed correct and safe, and its prior
 real fix — a VAO/VBO silent-failure bug + CNA GL-state leakage, fixed
 and pixel-diff-verified in an earlier session per project memory — is
 confirmed still intact in the current code, but `bloomEnabled_` has
-the same no-headless-hook wall as SSAO). Plan-wide totals: **306 ✅
-done, 11 🟡 partial, 101 🧪 has a plan but not executed, 232 📋 not
-started** out of 650.
+the same no-headless-hook wall as SSAO), and STAB-0510 flagged 🟡
+(audited `drawObjectEdges()` the same way STAB-0497 audited the solid
+path — exhaustively and safely handles all 19 `ObjectType` values, no
+bug found — but `showWireframeMode_` has the same no-headless-hook
+wall as the other toggles). Plan-wide totals: **306 ✅ done, 12 🟡
+partial, 100 🧪 has a plan but not executed, 232 📋 not started** out
+of 650.
 
 **Important architectural decisions:**
 - `mc3/` and `mcb/` are pure C++ static libs with **no** CNA/ImGui
@@ -235,9 +239,9 @@ See `TESTING.md` for the full per-test reference and `plan.md`'s
 
 ## 3. Recent changes
 
-**51 STAB tasks committed as of this update** (`53aa75e` through
-`cba9b6a`, pushed to `origin/develop` — see `git log --oneline` for the
-full list). **STAB-0509** below is verified and about to be committed
+**52 STAB tasks committed as of this update** (`53aa75e` through
+`81e5b45`, pushed to `origin/develop` — see `git log --oneline` for the
+full list). **STAB-0510** below is verified and about to be committed
 as of this update. Gate 6 is exhausted (§8); **S11, S12, and S13 are
 all fully done** except genuinely blocked/flagged items. **S14 is now
 also accumulating flagged items**, same as S11/S12. Work is underway on
@@ -249,6 +253,21 @@ audit that found real bugs), then finished S11 and S12 entirely (bar
 the blocked/flagged items) and started S13. Highlights, most recent
 first:
 
+- **STAB-0510 — flagged: wireframe mode needs a live display, but the
+  type-coverage audit is real work**: the main draw loop
+  (`MeshCraftApplication.cpp`) correctly skips the solid pass and
+  always draws the edge overlay when `showWireframeMode_` is on,
+  matching "solid objects become wireframe" exactly. Audited
+  `drawObjectEdges()` (`SceneRenderer_Extrude.cpp`) the same way
+  STAB-0497 audited the solid draw path: exhaustively and safely
+  handles all 19 `ObjectType` values — 11 primitives explicitly sized,
+  5 container types recurse into children, Instance resolves via
+  `resolvedInstanceDefinitionKey()` (STAB-0503's fix consistently
+  applied here too), Extrude computes real profile-ring + spine
+  wireframe geometry, Mesh/unknown falls back to a safe placeholder box
+  — no crash possible by construction, no bug found. `showWireframeMode_`
+  has the same no-headless-hook wall as STAB-0505/0508/0509 — flagged
+  🟡.
 - **STAB-0509 — flagged: bloom toggle needs a live display, same wall
   as SSAO — but with a documented history**: `applyBloom()`
   (`MeshCraftApplication.cpp`) is confirmed correct and safe by reading.
@@ -1406,22 +1425,25 @@ STAB-0505), and STAB-0509 flagged 🟡 (the bloom pipeline is likewise
 confirmed correct, and its prior real fix — a VAO/VBO silent-failure
 bug + CNA GL-state leakage, pixel-diff-verified in an earlier session
 per project memory — is confirmed still intact, but `bloomEnabled_`
-has the same no-headless-hook wall). Next:
+has the same no-headless-hook wall), and STAB-0510 flagged 🟡
+(audited `drawObjectEdges()` the same way STAB-0497 audited the solid
+path — exhaustively and safely handles all 19 `ObjectType` values, no
+bug found — but `showWireframeMode_` has the same no-headless-hook
+wall as the other toggles). Next — **first P2 item, S14's priority
+subset is done**:
 
-1. **STAB-0510 — verify wireframe mode: all objects rendered as
-   wireframe** (S14, P1, next-lowest ID). Goal: toggling wireframe mode
-   renders every object as wireframe instead of solid. Files:
-   `src/MeshCraft/Renderer/SceneRenderer.cpp`. Verify: a quick grep
-   already found `showWireframeMode_` follows the exact same shape as
-   `showBoundingBox_`/`ssaoEnabled_`/`bloomEnabled_` — defaults to
-   `false`, only flipped via ImGui menu/toolbar, not in the persisted
-   prefs file. Confirm that pattern holds (check `loadPrefs()`/
-   `savePrefs()` again to be sure) and read
-   `SceneRenderer::drawEdgeOverlay()`/the wireframe draw path for
-   correctness before flagging — this is very likely another 🟡, but
-   worth double-checking since `showEdgeOverlay_` is drawn through the
-   same `if (showEdgeOverlay_ || showWireframeMode_)` condition and
-   might already have its own test angle.
+1. **STAB-0511 — verify fog visualization: linear fog gradient
+   correct** (S14, P2, next-lowest ID). Goal: distant objects appear
+   fogged when linear fog start/end are set. Files:
+   `src/MeshCraft/Renderer/SceneRenderer.cpp`. Verify: unlike the last 4
+   toggles (STAB-0505/0508/0509/0510, all pure runtime UI state), fog
+   is a **document-level** `<environment><fog>` setting
+   (`Mc3Environment::fog`, an `std::optional<Mc3Fog>`) — likely
+   headlessly verifiable the same way STAB-0507's orthographic camera
+   was: add a small fixture with fog configured and objects at varying
+   depths, screenshot it, and confirm via pixel sampling that distant
+   objects are visibly tinted toward the fog color (comparing near vs.
+   far object pixel colors) rather than needing a live toggle.
 
 Beyond that, S14 gets heavily visual/interactive (gizmos, camera
 presets, bloom/SSAO toggles, shadow maps) — expect many items to land
