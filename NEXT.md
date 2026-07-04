@@ -24,14 +24,14 @@ risks closed quickly).
 **Current phase:** Stabilization. Every gate's priority-list subset is
 now done. **Gate 6 (Documentation) is close to fully green**: S17
 (Documentation and User-Facing Honesty) is 20/20 complete; S18 (Code
-Quality) has all P0/P1 items done plus 3 P2s (STAB-0610, STAB-0603,
-STAB-0611) done, 15 P2/P3 remain; **S19 (Security and Robustness) is
+Quality) has all P0/P1 items done plus 4 P2s (STAB-0610, STAB-0603,
+STAB-0611, STAB-0604) done, 14 P2/P3 remain; **S19 (Security and Robustness) is
 now fully green — 15/15**; S20 (Release Readiness) is 12/15, with the
 last 3 items genuinely blocked
 (need Blender, a browser, or a running CI — none available in this
-environment). No gate is fully green yet. Plan-wide totals: **214 ✅
+environment). No gate is fully green yet. Plan-wide totals: **215 ✅
 done, 3 🟡 partial, 136 🧪 has a plan but not executed,
-297 📋 not started** out of 650.
+296 📋 not started** out of 650.
 
 **Important architectural decisions:**
 - `mc3/` and `mcb/` are pure C++ static libs with **no** CNA/ImGui
@@ -156,19 +156,32 @@ See `TESTING.md` for the full per-test reference and `plan.md`'s
 ## 3. Recent changes
 
 **STAB-0610** (`53aa75e`), **STAB-0630** (`09fdf95`),
-**STAB-0383/STAB-0631** (`7670a00`), **STAB-0633** (`9aabad4`), and
-**STAB-0603** (`54f6a76`+`99cc7ad`) are committed; `origin/develop` is
-not yet pushed to (last pushed commit is `03723b8`). **STAB-0611 +
-STAB-0635** below are implemented but **not yet committed** as of this
-update — working tree has a new file (`include/MeshCraft/TempFile.hpp`)
-plus edits to `ModelRegistry.cpp`, `AiResponseAlgorithms.hpp`,
-`MeshCraftApplication_UiAi.cpp`, `mc3/test/ai_test.cpp`, `plan.md`,
-`NEXT.md`.
+**STAB-0383/STAB-0631** (`7670a00`), **STAB-0633** (`9aabad4`),
+**STAB-0603** (`54f6a76`+`99cc7ad`), and **STAB-0611/STAB-0635**
+(`32c9211`) are committed; `origin/develop` is not yet pushed to (last
+pushed commit is `03723b8`). **STAB-0604** below is verification-only
+(code inspection, no code changed) and is reflected in
+`plan.md`/`NEXT.md` but not yet committed as of this update.
 
 This was a long, dense session that closed out essentially all of
 **Gate 6 (Documentation)**'s reachable work, plus a from-scratch schema
 audit that found real bugs. Highlights, most recent first:
 
+- **STAB-0604 — audited `SceneRenderer_Builders.cpp` vs
+  `MeshBuilder.cpp` for duplicate geometry code**: read both files in
+  full, compared box + UV-sphere construction line-by-line as
+  representative samples. Same underlying parametric math (identical
+  ring/sector UV-sphere formula, same 6-face box topology) but
+  genuinely different code shapes: the renderer side builds unit-sized
+  shapes directly into 2 different interleaved GPU vertex formats via
+  `uint16_t`-indexed buffer uploads (CNA-coupled); the export side
+  builds arbitrarily-dimensioned shapes into flat position/normal/
+  texcoord/`uint32_t`-index vectors for `tinygltf` (CNA-free), with a
+  shared `addQuad()` helper and axis-remapping the renderer side
+  doesn't need. Extracting a shared utility would only add an
+  abstraction layer to bridge the two representations, with no runtime
+  benefit and real risk to two independently-tested core paths — **not
+  done**, documented as an intentional non-action.
 - **STAB-0611 + STAB-0635 — shared `uniqueTempPath()` helper, fixing a
   real tmp-file collision risk**: while investigating STAB-0635 (whose
   `plan.md` row named `AiAssistant.cpp` as the key file — slightly off;
@@ -516,23 +529,10 @@ No project linter/formatter is configured.
 **S19 (Security and Robustness) is fully green — 15/15 — no remaining
 S19 items.** All remaining Gate 6 work is in S18 (Code Quality):
 
-1. **STAB-0604 — audit duplicate code: `SceneRenderer_Builders.cpp` vs
-   `MeshBuilder.cpp`** (S18, P2, next-lowest ID after
-   STAB-0603/0610/0611). Goal: check whether the two files (one in the
-   CNA-coupled renderer, one in the CNA-free `mc3togltf_lib`) duplicate
-   the same primitive-geometry generation logic; if so, decide whether
-   it's worth extracting to a shared utility (may not be — the two
-   have different vertex/index formats for different consumers, so
-   duplication could be intentional; this needs a real read before
-   deciding).
-   Files: `src/MeshCraft/Renderer/SceneRenderer_Builders.cpp`,
-   `mc3togltf/src/MeshBuilder.cpp`.
-   Verify: code inspection; if extraction happens, `ctest
-   --output-on-failure` must stay 21/21.
-
-2. **STAB-0605 — verify logging is consistent** (S18, P2). Goal: check
-   whether error/warning reporting across the codebase uses a
-   consistent channel (the mc3togltf/AI-panel code already uses
+1. **STAB-0605 — verify logging is consistent** (S18, P2,
+   next-lowest ID after STAB-0603/0604/0610/0611). Goal: check whether
+   error/warning reporting across the codebase uses a consistent
+   channel (the mc3togltf/AI-panel code already uses
    `std::cerr << "Warning: ..."` consistently per this session's
    STAB-0630/STAB-0383 work) rather than a mix of raw `printf`/`cerr`/
    something else, especially in library code (`mc3/src`,
@@ -541,8 +541,21 @@ S19 items.** All remaining Gate 6 work is in S18 (Code Quality):
    Verify: code inspection; `grep -rn "printf\|fprintf\|std::cerr\|std::cout"`
    across library dirs, categorize what's found.
 
-Beyond these two: S18 has 14 more P2/P3 items after
-STAB-0603/0604/0605/0610/0611 (mostly code-quality audits — see
+2. **STAB-0606 — add error result type to `Mc3XmlParser`** (S18, P2).
+   Goal: the row suggests an *optional* non-throwing
+   `loadFromFile(path, &error)` variant alongside the existing
+   throwing one — read the current exception-based API first to decide
+   whether this is worth adding (every current call site already
+   expects/handles the throw, per this session's STAB-0625/0628/0629
+   hostile-input testing) or whether it's a "not needed, document why"
+   outcome like STAB-0604.
+   Files: `mc3/src/Mc3XmlParser.cpp`, `mc3/include/MeshCraft/Mc3/`
+   (wherever `Mc3Document::loadFromFile` is declared).
+   Verify: code inspection first; if added, `ctest --output-on-failure`
+   must stay 21/21 plus new coverage for the non-throwing path.
+
+Beyond these two: S18 has 13 more P2/P3 items after
+STAB-0603/0604/0605/0606/0610/0611 (mostly code-quality audits — see
 `plan.md`'s S18 rows). Closing S18 fully
 would leave Gate 6 blocked only on the 3 genuinely-inaccessible S20
 items (§5). After that, the next priority tier is P2 items across
