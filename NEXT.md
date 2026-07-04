@@ -34,19 +34,19 @@ flagged (STAB-0464 needs a live display; STAB-0460 describes a feature
 that was never built, out of scope per the stabilization moratorium).
 Both S11 and S12 sweeps found several real bugs, fixed with permanent
 regression tests — see §3 for the full list. **S13 (Commands,
-Undo/Redo, and Algorithms)** work is underway: STAB-0482-0491 done
+Undo/Redo, and Algorithms)** work is underway: STAB-0482-0492 done
 (extracted `convertToDefinitionAlg()`/`breakInstanceAlg()`/
 `alignToObjectAlg()`/`scatterAlongCurveAlg()`/
 `applyProportionalFalloffAlg()`/`vertexSnapToNearestAlg()`/
-`applyRotationDragAlg()` Alg mirrors, none existed before; STAB-0483
-found and fixed a real duplicate-id bug; STAB-0486 found and fixed a
-real Undo/Redo drift bug between the keyboard/menu/palette entry
-points; STAB-0487/0488 confirmed the macro recorder/playback system
-already correct; STAB-0491 confirmed the Ctrl+rotate 45° snap is real
-but the increment is user-configurable (default 15°), and the
-Ctrl-override is deliberately rotation-only — see §3). Plan-wide
-totals: **293 ✅ done, 6 🟡 partial, 112 🧪 has a plan but not
-executed, 239 📋 not started** out of 650.
+`applyRotationDragAlg()`/`flattenDescendantsAlg()` Alg mirrors, none
+existed before; STAB-0483 found and fixed a real duplicate-id bug;
+STAB-0486 found and fixed a real Undo/Redo drift bug between the
+keyboard/menu/palette entry points; STAB-0487/0488 confirmed the macro
+recorder/playback system already correct; STAB-0491 confirmed the
+Ctrl+rotate 45° snap is real but the increment is user-configurable
+(default 15°), and the Ctrl-override is deliberately rotation-only —
+see §3). Plan-wide totals: **294 ✅ done, 6 🟡 partial, 112 🧪 has
+a plan but not executed, 238 📋 not started** out of 650.
 
 **Important architectural decisions:**
 - `mc3/` and `mcb/` are pure C++ static libs with **no** CNA/ImGui
@@ -104,7 +104,7 @@ full Debug+Release verification at commit `fca6fc1`): `smoke_test`,
 `mc3togltf_animation_unsupported`, `mc3togltf_large_scene_generated`,
 `mc3togltf_large_scene_500`.
 
-- `mc3_commands` (~399 assertions): editor command algorithms, undo/redo
+- `mc3_commands` (~404 assertions): editor command algorithms, undo/redo
   for every mutating command, auto-save/backup, Save-As/Export-Selection/
   drag-drop workflows, keybinding/preferences/macro persistence,
   hierarchy-panel filtering, AI-panel + unsaved-changes dialog
@@ -177,9 +177,9 @@ See `TESTING.md` for the full per-test reference and `plan.md`'s
 
 ## 3. Recent changes
 
-**33 STAB tasks committed as of `25384b5`** (`53aa75e` through
-`25384b5`, pushed to `origin/develop` — see `git log --oneline` for the
-full list). **STAB-0491** below is implemented and about to be
+**34 STAB tasks committed as of `de3c9a8`** (`53aa75e` through
+`de3c9a8`, pushed to `origin/develop` — see `git log --oneline` for the
+full list). **STAB-0492** below is implemented and about to be
 committed as of this update. Gate 6 is exhausted (§8); **S11 and S12
 are both fully done** except genuinely blocked/flagged items. Work is
 underway on **S13 (Commands, Undo/Redo, and Algorithms)**.
@@ -190,6 +190,15 @@ audit that found real bugs), then finished S11 and S12 entirely (bar
 the blocked/flagged items) and started S13. Highlights, most recent
 first:
 
+- **STAB-0492 — extracted `flattenDescendantsAlg()`**: `selectChildren()`
+  was already correct — its recursive `addAll` lambda walked every
+  descendant at any depth, not just direct children — but had no Alg
+  mirror. Extracted `flattenDescendantsAlg()` into
+  `EditorAlgorithms.hpp`; wired the real function to call it. Added
+  `testFlattenDescendants()` (5 assertions) with a 3-level tree
+  (children → grandchildren → one great-grandchild): all 5 descendants
+  present regardless of depth, pre-order confirmed, childless object
+  flattens to an empty list.
 - **STAB-0491 — extracted `applyRotationDragAlg()`, confirmed 45° is a
   preset not a default**: the row's phrasing implied a hardcoded 45°
   snap; actual behavior rounds to the configurable `snapRotate_`
@@ -1025,32 +1034,33 @@ stabilization moratorium; STAB-0464 needs a live display).
 **S13 (Commands, Undo/Redo, and Algorithms)** already has its P0/P1
 tier done from earlier sessions (STAB-0471-0481 — including a real fix,
 `resetPivot()` was missing `pushUndo()`, found and fixed then).
-STAB-0482-0491 are now done too (this session — extracted
+STAB-0482-0492 are now done too (this session — extracted
 `convertToDefinitionAlg()`/`breakInstanceAlg()`/`alignToObjectAlg()`/
 `scatterAlongCurveAlg()`/`applyProportionalFalloffAlg()`/
-`vertexSnapToNearestAlg()`/`applyRotationDragAlg()` Alg mirrors, none
-existed before; STAB-0483 found and fixed a real duplicate-id bug;
-STAB-0486 found and fixed a real Undo/Redo drift bug across keyboard/
-menu/palette; STAB-0487/0488 confirmed the macro recorder/playback
-system already correct; STAB-0491 confirmed the 45° rotate-snap is a
-preset, not a default, and that Ctrl-override is intentionally
-rotation-only — see §3). Next:
+`vertexSnapToNearestAlg()`/`applyRotationDragAlg()`/
+`flattenDescendantsAlg()` Alg mirrors, none existed before; STAB-0483
+found and fixed a real duplicate-id bug; STAB-0486 found and fixed a
+real Undo/Redo drift bug across keyboard/menu/palette; STAB-0487/0488
+confirmed the macro recorder/playback system already correct;
+STAB-0491 confirmed the 45° rotate-snap is a preset, not a default, and
+that Ctrl-override is intentionally rotation-only — see §3). Next:
 
-1. **STAB-0492 — verify "Select Children" command selects all
-   descendants** (S13, P2, next-lowest ID). Goal: confirm selecting a
-   parent with nested children and running Select Children selects
-   every descendant at every depth, not just direct children.
+1. **STAB-0493 — verify "Random variant" creates instance pointing to
+   random definition** (S13, P2, next-lowest ID). Goal: confirm
+   multiple calls produce different definition assignments (not always
+   the same one, not a crash on a single-definition scene).
    Files: `src/MeshCraft/MeshCraftApplication_Commands.cpp`.
-   Verify: read `selectChildren()`; extract to `EditorAlgorithms.hpp`
-   and add a headless test if it has no CNA dependency (very likely,
-   given the established pattern for this file).
+   Verify: find the "Random variant" command's implementation (grep for
+   likely names — `randomVariant`, `randomizeInstance`, etc.); extract
+   the pure selection logic to `EditorAlgorithms.hpp` with an
+   injectable RNG for determinism (same pattern as STAB-0485's
+   `scatterAlongCurveAlg`'s `jitterRng`), and add a headless test.
 
-Beyond this: S13 has 3 more items (STAB-0493 Random variant, STAB-0494
-P3 arrayDuplicate negative-count test, STAB-0495 P3 Group Scale
-centroid verification — see `plan.md`'s S13 rows), all in
-`MeshCraftApplication_Commands.cpp`/`editor_commands_test.cpp`, likely
-all headlessly verifiable. S14 (Rendering/Viewport) and S15
-(Import/Export/Editor Integration) are untouched after that.
+Beyond this: S13 has 2 more P3 items (STAB-0494 arrayDuplicate
+negative-count test, STAB-0495 Group Scale centroid verification — see
+`plan.md`'s S13 rows), both likely headlessly verifiable. S14
+(Rendering/Viewport) and S15 (Import/Export/Editor Integration) are
+untouched after that.
 
 ---
 

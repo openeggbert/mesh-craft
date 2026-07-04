@@ -759,6 +759,26 @@ inline int applyRotationDragAlg(
     return rotated;
 }
 
+// ── Select Children (STAB-0492) ───────────────────────────────────────────────
+//
+// Mirrors selectChildren() (MeshCraftApplication_Commands.cpp): flattens
+// every descendant of the given children list at any depth (not just direct
+// children), in pre-order (parent before its own children).
+inline std::vector<std::shared_ptr<Mc3::Mc3Object>> flattenDescendantsAlg(
+    const std::vector<std::shared_ptr<Mc3::Mc3Object>>& children)
+{
+    std::vector<std::shared_ptr<Mc3::Mc3Object>> out;
+    std::function<void(const std::vector<std::shared_ptr<Mc3::Mc3Object>>&)> addAll;
+    addAll = [&](const std::vector<std::shared_ptr<Mc3::Mc3Object>>& list) {
+        for (const auto& c : list) {
+            out.push_back(c);
+            addAll(c->children);
+        }
+    };
+    addAll(children);
+    return out;
+}
+
 // ── Auto-save (STAB-0265) ─────────────────────────────────────────────────────
 //
 // Mirrors two pieces of CNA-coupled logic so "the auto-save interval is

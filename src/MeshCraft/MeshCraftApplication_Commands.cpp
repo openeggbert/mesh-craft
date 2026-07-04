@@ -643,14 +643,7 @@ void MeshCraftApplication::selectChildren() {
         return;
     }
     selection_.clear();
-    std::function<void(const std::vector<std::shared_ptr<Mc3::Mc3Object>>&)> addAll;
-    addAll = [&](const std::vector<std::shared_ptr<Mc3::Mc3Object>>& list) {
-        for (const auto& c : list) {
-            selection_.select(c);
-            addAll(c->children);
-        }
-    };
-    addAll(sel0->children);
+    for (auto& c : flattenDescendantsAlg(sel0->children)) selection_.select(c);
     updateWindowTitle();
     setStatusMsg("Selected " + std::to_string(selection_.selection().size()) + " child object(s)", false, 1.5f);
 }

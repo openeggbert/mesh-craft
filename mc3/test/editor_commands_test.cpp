@@ -1009,6 +1009,45 @@ static void testRotationDragSnap()
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// flattenDescendantsAlg (STAB-0492)
+// ─────────────────────────────────────────────────────────────────────────────
+
+static void testFlattenDescendants()
+{
+    // 2 levels of children below a parent: grandchildren must be included,
+    // not just direct children.
+    auto grandchild1 = makeObj("gc1", "GC1");
+    auto grandchild2 = makeObj("gc2", "GC2");
+    auto child1 = makeObj("c1", "C1");
+    child1->children = {grandchild1, grandchild2};
+    auto child2 = makeObj("c2", "C2");
+    auto greatGrandchild = makeObj("ggc", "GGC");
+    grandchild1->children = {greatGrandchild};
+
+    auto flat = flattenDescendantsAlg({child1, child2});
+
+    CHECK(flat.size() == 5, "flatten descendants: all 5 descendants across 3 levels are included");
+    std::set<std::string> ids;
+    for (const auto& o : flat) ids.insert(o->id);
+    CHECK(ids.count("c1") && ids.count("c2") && ids.count("gc1") &&
+          ids.count("gc2") && ids.count("ggc"),
+          "flatten descendants: every descendant id is present, at every depth");
+
+    // Pre-order: a parent appears before its own children.
+    auto indexOf = [&](const std::string& id) -> int {
+        for (size_t i = 0; i < flat.size(); ++i) if (flat[i]->id == id) return static_cast<int>(i);
+        return -1;
+    };
+    CHECK(indexOf("c1") < indexOf("gc1"), "flatten descendants: pre-order — parent before child");
+    CHECK(indexOf("gc1") < indexOf("ggc"), "flatten descendants: pre-order — grandparent before great-grandchild");
+
+    // A leaf with no children flattens to an empty list.
+    auto leaf = makeObj("leaf", "Leaf");
+    CHECK(flattenDescendantsAlg(leaf->children).empty(),
+          "flatten descendants: object with no children -> empty list");
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // deepCopyObjectAlg
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -2321,6 +2360,7 @@ int main()
     testProportionalFalloff();
     testVertexSnap();
     testRotationDragSnap();
+    testFlattenDescendants();
     testDeepCopy();
     testUndoRedoBatchRename();
     testUndoRedoFindReplace();
