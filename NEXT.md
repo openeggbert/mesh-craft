@@ -35,16 +35,19 @@ S20 (Release Readiness) is 12/15, with the last 3 items genuinely
 blocked (need Blender, a browser, or a running CI — none available in
 this environment). No gate is fully green yet. **S11 (Materials,
 Textures, and Visual Fidelity) work is well underway**: STAB-0411-0420,
-0424-0427 done, **4 real bugs found and fixed** (texture wrap
+0424-0430 done, **4 real bugs found and fixed** (texture wrap
 `mirror` mode, texture `filter`, texture URI subdirectory-stripping,
 and a registry-insert material-name-collision silently keeping the
-wrong material), colorSpace/missing-texture-warns/include-override/
-search-case-insensitivity/D3-skip-reason all confirmed already
-correct or already sufficiently documented. STAB-0421-0423 (material
-preview sphere) remain genuinely blocked — same visual-verification
-constraint as STAB-0617. Plan-wide totals: **244
+wrong material), **2 genuine test-coverage gaps closed** (material
+with every field populated; material color/roughness/metallic/emissive
+animation — both previously entirely untested), colorSpace/
+missing-texture-warns/include-override/search-case-insensitivity/
+D3-skip-reason all confirmed already correct or already sufficiently
+documented. STAB-0421-0423/0428 (material preview sphere, texture
+drag-drop) remain genuinely blocked — same visual-verification
+constraint as STAB-0617. Plan-wide totals: **246
 ✅ done, 4 🟡 partial, 124 🧪 has a plan but not executed,
-278 📋 not started** out of 650.
+276 📋 not started** out of 650.
 
 **Important architectural decisions:**
 - `mc3/` and `mcb/` are pure C++ static libs with **no** CNA/ImGui
@@ -172,10 +175,10 @@ See `TESTING.md` for the full per-test reference and `plan.md`'s
 
 ## 3. Recent changes
 
-**17 STAB tasks committed and pushed as of `c7efbb1`** (`53aa75e`
-through `c7efbb1` — see `git log --oneline` for the full list). Gate 6
+**18 STAB tasks committed and pushed as of `5f13345`** (`53aa75e`
+through `5f13345` — see `git log --oneline` for the full list). Gate 6
 is exhausted for this environment (§8); work has moved on to **S11
-(Materials, Textures, and Visual Fidelity)**. **STAB-0424/0425/0426/0427**
+(Materials, Textures, and Visual Fidelity)**. **STAB-0429/0430**
 below are implemented but **not yet committed** as of this update.
 
 This was a long, dense session that closed out essentially all of
@@ -183,6 +186,21 @@ This was a long, dense session that closed out essentially all of
 audit that found real bugs), then moved into S11. Highlights, most
 recent first:
 
+- **STAB-0429 + STAB-0430 — closed 2 genuine material test-coverage
+  gaps**: STAB-0429 added `testMaterialAllFieldsRoundtrip()` — a
+  "kitchen sink" material with all 5 texture slots, non-default
+  base/emissive color, roughness/metallic, `alpha_mode="mask"`+cutoff,
+  and `double_sided`, all 25 assertions confirming exact save→reload
+  survival (no prior test populated every field on one material at
+  once). STAB-0430 added `testMaterialColorAnimationRoundtrip()` — 6
+  channels (baseColor R/G/B, roughness, metallic, emissiveR), 2
+  keyframes each, 30 assertions: confirmed
+  `AnimatedProperty::MaterialBaseColorR`-etc. already have a complete
+  string mapping the writer/parser correctly call (`Mc3Animation.cpp`),
+  but literally no test had ever exercised a material animation channel
+  before (only position/rotation/scale/deform/visible were covered) —
+  all pass, no code changes needed for either, purely closing untested
+  gaps.
 - **STAB-0426 + STAB-0427 — verified material search + documented D3's
   skip reason**: STAB-0426 confirmed by code reading (inline ImGui
   code, not extracted to a testable header, but a plain string
@@ -713,40 +731,42 @@ without an external tool or a human with a display.**
 
 The next priority tier is P2 items across S6–S13 and the untouched
 S11/S12/S14/S15 sections. **S11 (Materials, Textures, and Visual
-Fidelity)**: STAB-0411-0420/0424-0427 are all done (§3). STAB-0421/
-0422/0423 (material preview sphere, a live ImGui/OpenGL-rendered
-128×128 widget) and STAB-0428 (texture drag-and-drop, an interactive
-UI gesture) both need a human at a live display — same blocker as
-STAB-0617, skipped. The next non-blocked items are pure round-trip
-tests:
+Fidelity)**: STAB-0411-0420/0424-0430 are all done (§3) — S11's P1/P2
+tier is now fully closed except the 4 visually-blocked items
+(STAB-0421/0422/0423 material preview sphere, STAB-0428 texture
+drag-and-drop). Remaining S11 work is all P3:
 
-1. **STAB-0429 — add roundtrip test: material with all fields +
-   texture reference** (S11, P2). Goal: a material exercising every
-   field at once (`base_color`, `roughness`, `metallic`,
-   `base_color_texture`, `normal_texture` + `normal_scale`,
-   `metallic_roughness_texture`, `occlusion_texture` +
-   `occlusion_strength`, `emissive_texture`, `emissive_color`,
-   `alpha_mode`, `alpha_cutoff`, `double_sided`) must survive a
-   save→reload round-trip exactly. `test/material_pbr.mc3.xml` (new
-   this session) covers most fields individually across 4 materials,
-   but not one material with *all* fields simultaneously, and not
-   round-tripped (it's only ever exported, never re-saved as mc3.xml).
+1. **STAB-0432 — verify UV mapping roundtrip (scale + offset)** (S11,
+   P3, next-lowest non-blocked ID — STAB-0431 needs Blender, same
+   blocker class as the S20 items in §5). Goal: `<uv_mapping
+   scale_u="2" offset_u="0.5" .../>` must survive save→reload exactly.
    Files: `mc3/test/roundtrip_test.cpp`.
-   Verify: add one "kitchen sink" material to a fixture (or inline in
-   the test), save→reload, assert every field survives exactly.
+   Verify: check whether `Mc3UvMapping` already has *any* roundtrip
+   coverage first (this session hasn't checked) before writing a new
+   test.
 
-2. **STAB-0430 — add test: material animation roundtrip (color
-   keyframes)** (S11, P2). Goal: a material with an animated
-   `baseColor` (keyframed over time, via the `<action>`/keyframe
-   system already covered by `mc3_roundtrip`'s animation tests) must
-   survive save→reload with all keyframe values/timings intact.
-   Files: `mc3/test/roundtrip_test.cpp`.
-   Verify: check whether an existing animation-roundtrip test already
-   covers a material-color-keyframe track (this session hasn't read
-   the animation code yet) before writing new fixture/test code.
+2. **STAB-0435 — add test: material applied to object survives
+   export** (S11, P3). Goal: confirm an object's `material="..."`
+   attribute correctly becomes a glTF node → mesh → primitive →
+   material index reference in the exported glTF. `test/material_pbr.mc3.xml`
+   (new this session) already has 4 objects each referencing a distinct
+   material — check whether `mc3togltf_material_pbr` already covers
+   this via the `materials[]` array lookup, or only checks material
+   *properties* without confirming the *node* correctly references it.
+   Files: `mc3togltf/test/material_pbr_test.py` (extend) or
+   `mc3togltf/src/GltfExporter.cpp` (read only).
+   Verify: read the exported glTF's `nodes`→`meshes`→`primitives`→
+   `material` index chain for one of the 4 test objects.
 
-Beyond these two: S11 has ~18 more P2/P3 items after STAB-0417-0427
-(see `plan.md`'s S11 rows). S12 (Animation Stability), S13
+Beyond these two: S11 has ~16 more P3 items after STAB-0417-0430 (see
+`plan.md`'s S11 rows) — several are quick documentation/behavior
+checks (STAB-0433 texture path convention docs, STAB-0436 color
+precision, STAB-0437 unnamed material, STAB-0438 alpha=0 mode,
+STAB-0439 emissive-only material, STAB-0440 SVG-unsupported docs),
+one needs a design decision on GUI checkbox behavior (STAB-0434,
+embedded vs external texture setting — check whether this is actually
+visual/interactive-UI-blocked or just a code-path check first), and
+one needs Blender (STAB-0431). S12 (Animation Stability), S13
 (Commands/Undo/Redo/Algorithms), S14 (Rendering/Viewport), and S15
 (Import/Export/Editor Integration) are untouched sections — worth a
 first pass to see how much is already ✅/🧪 vs genuinely open before

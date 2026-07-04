@@ -456,6 +456,76 @@ static void testAnimationEvaluate() {
 }
 
 // ---------------------------------------------------------------------------
+// STAB-0430 — material color/roughness/metallic/emissive animation roundtrip
+// ---------------------------------------------------------------------------
+
+// AnimatedProperty::MaterialBaseColorR/G/B/A, MaterialRoughness/Metallic, and
+// MaterialEmissiveR/G/B are all defined and have a complete animatedPropertyName()/
+// animatedPropertyFromName() string mapping (Mc3Animation.cpp), and the
+// writer/parser both call through it (Mc3XmlWriter.cpp:676,
+// Mc3XmlParser.cpp:659) — but no test had ever exercised a material property
+// channel specifically, only position/rotation/scale/deform/visible.
+static void testMaterialColorAnimationRoundtrip() {
+    Mc3Document doc;
+    Mc3Action action;
+    action.name     = "Pulse";
+    action.duration  = 2.0f;
+    action.loop      = true;
+
+    auto makeChannel = [](AnimatedProperty prop, float v0, float v1) {
+        Mc3Channel ch;
+        ch.targetObject = "GlowCube";
+        ch.property     = prop;
+        ch.keyframes    = {
+            Mc3Keyframe::linear(0.0f, v0),
+            Mc3Keyframe::linear(2.0f, v1),
+        };
+        return ch;
+    };
+    action.channels.push_back(makeChannel(AnimatedProperty::MaterialBaseColorR, 0.2f, 0.9f));
+    action.channels.push_back(makeChannel(AnimatedProperty::MaterialBaseColorG, 0.3f, 0.1f));
+    action.channels.push_back(makeChannel(AnimatedProperty::MaterialBaseColorB, 0.4f, 0.0f));
+    action.channels.push_back(makeChannel(AnimatedProperty::MaterialRoughness,  0.8f, 0.1f));
+    action.channels.push_back(makeChannel(AnimatedProperty::MaterialMetallic,  0.0f, 1.0f));
+    action.channels.push_back(makeChannel(AnimatedProperty::MaterialEmissiveR, 0.0f, 1.0f));
+    doc.actions["Pulse"] = std::move(action);
+
+    auto rt = roundtrip(doc);
+    CHECK(rt.actions.count("Pulse") == 1, "material anim: action 'Pulse' present");
+    if (!rt.actions.count("Pulse")) return;
+    const auto& a = rt.actions.at("Pulse");
+    CHECK(a.channels.size() == 6, "material anim: 6 channels present");
+    if (a.channels.size() != 6) return;
+
+    static const AnimatedProperty expectedProps[6] = {
+        AnimatedProperty::MaterialBaseColorR, AnimatedProperty::MaterialBaseColorG,
+        AnimatedProperty::MaterialBaseColorB, AnimatedProperty::MaterialRoughness,
+        AnimatedProperty::MaterialMetallic,   AnimatedProperty::MaterialEmissiveR,
+    };
+    static const char* propNames[6] = {
+        "baseColorR", "baseColorG", "baseColorB", "roughness", "metallic", "emissiveR",
+    };
+    static const float v0s[6] = {0.2f, 0.3f, 0.4f, 0.8f, 0.0f, 0.0f};
+    static const float v1s[6] = {0.9f, 0.1f, 0.0f, 0.1f, 1.0f, 1.0f};
+
+    for (int i = 0; i < 6; ++i) {
+        const auto& c = a.channels[i];
+        CHECK(c.targetObject == "GlowCube",
+              std::string("material anim: ") + propNames[i] + " channel.target");
+        CHECK(c.property == expectedProps[i],
+              std::string("material anim: ") + propNames[i] + " channel.property survived roundtrip");
+        CHECK(c.keyframes.size() == 2,
+              std::string("material anim: ") + propNames[i] + " keyframe count");
+        if (c.keyframes.size() == 2) {
+            CHECKF(c.keyframes[0].value, v0s[i],
+                   std::string("material anim: ") + propNames[i] + " kf[0].value");
+            CHECKF(c.keyframes[1].value, v1s[i],
+                   std::string("material anim: ") + propNames[i] + " kf[1].value");
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
 // Include override / nested include / cycle tests
 // ---------------------------------------------------------------------------
 
@@ -786,6 +856,81 @@ static void testDiskLegacyMinorRadius() {
         std::filesystem::remove(xmlPath);
         fail(std::string("disk legacy: exception: ") + e.what());
     }
+}
+
+// ---------------------------------------------------------------------------
+// STAB-0429 — material with every field populated must survive roundtrip
+// ---------------------------------------------------------------------------
+
+static void testMaterialAllFieldsRoundtrip() {
+    Mc3Document doc;
+
+    Mc3Texture bcTex;  bcTex.name = "bc_tex";  bcTex.uri = "textures/bc.png";
+    Mc3Texture nTex;   nTex.name = "n_tex";    nTex.uri = "textures/n.png";
+    Mc3Texture mrTex;  mrTex.name = "mr_tex";  mrTex.uri = "textures/mr.png";
+    Mc3Texture aoTex;  aoTex.name = "ao_tex";  aoTex.uri = "textures/ao.png";
+    Mc3Texture emTex;  emTex.name = "em_tex";  emTex.uri = "textures/em.png";
+    doc.textures["bc_tex"] = bcTex;
+    doc.textures["n_tex"]  = nTex;
+    doc.textures["mr_tex"] = mrTex;
+    doc.textures["ao_tex"] = aoTex;
+    doc.textures["em_tex"] = emTex;
+
+    Mc3Material mat;
+    mat.name                     = "kitchen_sink";
+    mat.baseColor                = {0.25f, 0.5f, 0.75f, 0.6f};
+    mat.baseColorTexture         = "bc_tex";
+    mat.normalTexture            = "n_tex";
+    mat.normalScale              = 1.5f;
+    mat.metallicRoughnessTexture = "mr_tex";
+    mat.occlusionTexture         = "ao_tex";
+    mat.occlusionStrength        = 0.8f;
+    mat.emissiveTexture          = "em_tex";
+    mat.emissiveColor            = {0.9f, 0.4f, 0.1f};
+    mat.roughness                = 0.35f;
+    mat.metallic                 = 0.65f;
+    mat.alphaMode                = "mask";
+    mat.alphaCutoff              = 0.42f;
+    mat.doubleSided              = true;
+    doc.materials["kitchen_sink"] = mat;
+
+    auto obj = std::make_shared<Mc3Object>();
+    obj->id = "obj1"; obj->name = "AllFieldsBox"; obj->type = ObjectType::Box;
+    obj->primitive = Mc3Primitive{};
+    obj->material  = "kitchen_sink";
+    doc.objects.push_back(obj);
+
+    auto rt = roundtrip(doc);
+    CHECK(rt.materials.count("kitchen_sink") == 1, "material all-fields: material present after roundtrip");
+    if (!rt.materials.count("kitchen_sink")) return;
+    const auto& m = rt.materials.at("kitchen_sink");
+
+    CHECKF(m.baseColor[0], 0.25f, "material all-fields: baseColor.r");
+    CHECKF(m.baseColor[1], 0.5f,  "material all-fields: baseColor.g");
+    CHECKF(m.baseColor[2], 0.75f, "material all-fields: baseColor.b");
+    CHECKF(m.baseColor[3], 0.6f,  "material all-fields: baseColor.a");
+    CHECK(m.baseColorTexture == "bc_tex",         "material all-fields: baseColorTexture");
+    CHECK(m.normalTexture == "n_tex",             "material all-fields: normalTexture");
+    CHECKF(m.normalScale, 1.5f,                   "material all-fields: normalScale");
+    CHECK(m.metallicRoughnessTexture == "mr_tex", "material all-fields: metallicRoughnessTexture");
+    CHECK(m.occlusionTexture == "ao_tex",         "material all-fields: occlusionTexture");
+    CHECKF(m.occlusionStrength, 0.8f,             "material all-fields: occlusionStrength");
+    CHECK(m.emissiveTexture == "em_tex",          "material all-fields: emissiveTexture");
+    CHECKF(m.emissiveColor[0], 0.9f, "material all-fields: emissiveColor.r");
+    CHECKF(m.emissiveColor[1], 0.4f, "material all-fields: emissiveColor.g");
+    CHECKF(m.emissiveColor[2], 0.1f, "material all-fields: emissiveColor.b");
+    CHECKF(m.roughness, 0.35f, "material all-fields: roughness");
+    CHECKF(m.metallic,  0.65f, "material all-fields: metallic");
+    CHECK(m.alphaMode == "mask", "material all-fields: alphaMode");
+    CHECKF(m.alphaCutoff, 0.42f, "material all-fields: alphaCutoff");
+    CHECK(m.doubleSided == true, "material all-fields: doubleSided");
+
+    CHECK(!rt.objects.empty() && rt.objects[0]->material == "kitchen_sink",
+          "material all-fields: object's material reference preserved");
+
+    for (const char* texId : {"bc_tex", "n_tex", "mr_tex", "ao_tex", "em_tex"})
+        CHECK(rt.textures.count(texId) == 1,
+              std::string("material all-fields: texture '") + texId + "' present after roundtrip");
 }
 
 // ---------------------------------------------------------------------------
@@ -1659,11 +1804,13 @@ int main(int argc, char* argv[]) {
     testDiskRingRoundtrip();
     testDiskSolidRoundtrip();
     testDiskLegacyMinorRadius();
+    testMaterialAllFieldsRoundtrip();
     testAnimationLinear();
     testAnimationCubicBezier();
     testAnimationStep();
     testAnimationMultiAction();
     testAnimationEvaluate();
+    testMaterialColorAnimationRoundtrip();
     testEmbedGltf();
     testSvgTexture();
     testTextureNameDiffersFromId();
