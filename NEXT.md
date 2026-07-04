@@ -34,14 +34,15 @@ flagged (STAB-0464 needs a live display; STAB-0460 describes a feature
 that was never built, out of scope per the stabilization moratorium).
 Both S11 and S12 sweeps found several real bugs, fixed with permanent
 regression tests — see §3 for the full list. **S13 (Commands,
-Undo/Redo, and Algorithms)** work is underway: STAB-0482-0486 done
+Undo/Redo, and Algorithms)** work is underway: STAB-0482-0488 done
 (extracted `convertToDefinitionAlg()`/`breakInstanceAlg()`/
 `alignToObjectAlg()`/`scatterAlongCurveAlg()` Alg mirrors, none existed
 before; STAB-0483 found and fixed a real duplicate-id bug; STAB-0486
 found and fixed a real Undo/Redo drift bug between the keyboard/menu/
-palette entry points — see §3). Plan-wide totals: **288 ✅ done, 6 🟡
-partial, 112 🧪 has a plan but not executed, 244 📋 not started** out
-of 650.
+palette entry points; STAB-0487/0488 confirmed the macro recorder/
+playback system already correct — see §3). Plan-wide totals: **290
+✅ done, 6 🟡 partial, 112 🧪 has a plan but not executed,
+242 📋 not started** out of 650.
 
 **Important architectural decisions:**
 - `mc3/` and `mcb/` are pure C++ static libs with **no** CNA/ImGui
@@ -172,12 +173,12 @@ See `TESTING.md` for the full per-test reference and `plan.md`'s
 
 ## 3. Recent changes
 
-**28 STAB tasks committed as of `bfc185b`** (`53aa75e` through
-`bfc185b`, pushed to `origin/develop` — see `git log --oneline` for the
-full list). **STAB-0486** below is implemented and about to be
-committed as of this update. Gate 6 is exhausted (§8); **S11 and S12
-are both fully done** except genuinely blocked/flagged items. Work is
-underway on **S13 (Commands, Undo/Redo, and Algorithms)**.
+**30 STAB tasks committed as of `d6e9488`** (`53aa75e` through
+`d6e9488`, pushed to `origin/develop` — see `git log --oneline` for the
+full list). **STAB-0487/0488** below are confirmed correct and about
+to be committed as of this update. Gate 6 is exhausted (§8); **S11 and
+S12 are both fully done** except genuinely blocked/flagged items. Work
+is underway on **S13 (Commands, Undo/Redo, and Algorithms)**.
 
 This was a long, dense session that closed out essentially all of
 **Gate 6 (Documentation)**'s reachable work (plus a from-scratch schema
@@ -185,6 +186,22 @@ audit that found real bugs), then finished S11 and S12 entirely (bar
 the blocked/flagged items) and started S13. Highlights, most recent
 first:
 
+- **STAB-0487 + STAB-0488 — confirmed the macro recorder/playback
+  system is already correct**: STAB-0487 confirmed `batchRenameSelected()`
+  unconditionally records a `"batch_rename"` step with the rename
+  pattern as its arg, and playback replays it through the exact same
+  real function — already exhaustively covered by the existing
+  `testMacroSaveLoadRoundTrip()` (STAB-0292), whose fixture already
+  includes a `batch_rename` step. STAB-0488's row assumes a
+  name-lookup-and-skip mechanism that doesn't exist by design: macro
+  steps never store an object name/id, only the verb and its args —
+  every step operates on whatever is selected *at playback time*.
+  Verified every selection-consuming command
+  (`duplicateSelected`/`groupSelected`/`ungroupSelected`/
+  `groupScaleSelected`/`arrayDuplicate`/`batchRenameSelected`) already
+  guards on empty selection, so replaying a macro recorded on an object
+  that's absent at playback time is already a safe no-op for every
+  step. No bug, no code change needed for either.
 - **STAB-0486 — found and fixed a real Undo/Redo drift bug**: 3
   independent hand-copied implementations of Undo/Redo had silently
   diverged — the keyboard shortcut path (`MeshCraftApplication_Keyboard.cpp`)
@@ -953,28 +970,32 @@ stabilization moratorium; STAB-0464 needs a live display).
 **S13 (Commands, Undo/Redo, and Algorithms)** already has its P0/P1
 tier done from earlier sessions (STAB-0471-0481 — including a real fix,
 `resetPivot()` was missing `pushUndo()`, found and fixed then).
-STAB-0482-0486 are now done too (this session — extracted
+STAB-0482-0488 are now done too (this session — extracted
 `convertToDefinitionAlg()`/`breakInstanceAlg()`/`alignToObjectAlg()`/
 `scatterAlongCurveAlg()` Alg mirrors, none existed before; STAB-0483
 found and fixed a real duplicate-id bug; STAB-0486 found and fixed a
-real Undo/Redo drift bug across keyboard/menu/palette — see §3). Next:
+real Undo/Redo drift bug across keyboard/menu/palette; STAB-0487/0488
+confirmed the macro recorder/playback system already correct — see
+§3). Next:
 
-1. **STAB-0487 — verify macro recorder captures batchRename step**
-   (S13, P2, next-lowest ID). Goal: record a batch-rename action, save
-   the macro, confirm the step appears correctly in the `.mc3macro`
-   file.
-   Files: `src/MeshCraft/MeshCraftApplication_Macro.cpp`.
-   Verify: read the macro recorder's step-capture code path and an
-   actual recorded `.mc3macro` file/fixture if one exists; add a
-   headless test if the recording logic has no CNA dependency (likely,
-   given the established Alg-mirror pattern).
+1. **STAB-0489 — verify proportional editing: nearby objects
+   influenced** (S13, P2, next-lowest ID). Goal: confirm that moving an
+   object with proportional editing enabled shifts nearby objects by a
+   falloff-scaled amount.
+   Files: `src/MeshCraft/MeshCraftApplication_Mouse.cpp`.
+   Verify: read the actual drag-handling code first — this may be a
+   genuinely interactive/mouse-drag feature (like S11/S12's blocked
+   visual items) or it may have a pure falloff-math core extractable to
+   `EditorAlgorithms.hpp` and testable headlessly; check which before
+   assuming either way. If the feature doesn't exist at all, confirm
+   that via exhaustive grep (same as STAB-0460) rather than assuming.
 
-Beyond this: S13 has ~9 more P2/P3 items (STAB-0488-0496ish — macro
-playback, proportional editing/snapping, Select Children, Random
-variant — see `plan.md`'s S13 rows; several of these, e.g. mouse-drag
-snapping, may be genuinely interactive/blocked like S11/S12's visual
-items — check each before assuming). S14 (Rendering/Viewport) and S15
-(Import/Export/Editor Integration) remain fully untouched after S13.
+Beyond this: S13 has ~8 more P2/P3 items (STAB-0490-0496ish — snapping,
+angle snapping, Select Children, Random variant — see `plan.md`'s S13
+rows; several of these, e.g. mouse-drag snapping, may be genuinely
+interactive/blocked like S11/S12's visual items — check each before
+assuming). S14 (Rendering/Viewport) and S15 (Import/Export/Editor
+Integration) remain fully untouched after S13.
 
 ---
 
