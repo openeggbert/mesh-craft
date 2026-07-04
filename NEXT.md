@@ -51,9 +51,13 @@ sufficiently documented (colorSpace, missing-texture-warns,
 include-override policy, search case-insensitivity, D3's skip reason,
 the inert embed-texture checkbox, color precision, alpha-mode/
 emissive-only material defaults) plus one new `MC3_FORMAT.md`
-documentation addition (texture path resolution). Plan-wide totals: **255
-✅ done, 4 🟡 partial, 124 🧪 has a plan but not executed,
-267 📋 not started** out of 650.
+documentation addition (texture path resolution). **S12 (Animation
+Stability) work has started**: STAB-0441-0448 done (8 items — 4 already
+covered by existing/this-session tests, 2 new roundtrip test gaps
+closed — scale, deform — and 2 new glTF-export-warning tests added).
+Plan-wide totals: **263
+✅ done, 4 🟡 partial, 118 🧪 has a plan but not executed,
+265 📋 not started** out of 650.
 
 **Important architectural decisions:**
 - `mc3/` and `mcb/` are pure C++ static libs with **no** CNA/ImGui
@@ -92,11 +96,12 @@ documentation addition (texture path resolution). Plan-wide totals: **255
   re-checked against the newer 13-test count from STAB-0630 — see §3).
 
 ### Tests
-**24/24 CTest pass** in Debug as of this session (STAB-0630 added
+**25/25 CTest pass** in Debug as of this session (STAB-0630 added
 `mc3togltf_obj_robustness`, STAB-0417/0418/0420/0416 added
 `mc3togltf_texture_sampler`, STAB-0166-0170/0411-0415/0435 added
 `mc3togltf_material_pbr`, STAB-0440 added
-`mc3togltf_svg_texture_export`; started the session at 20/20, last
+`mc3togltf_svg_texture_export`, STAB-0447/0448 added
+`mc3togltf_animation_unsupported`; started the session at 20/20, last
 full Debug+Release verification at commit `fca6fc1`): `smoke_test`,
 `xsd_validation`, `mc3_registry`, `mc3_ai`, `mc3_roundtrip`,
 `mc3_commands`, `mcb_roundtrip`, `mc3tomcb_roundtrip`,
@@ -107,7 +112,8 @@ full Debug+Release verification at commit `fca6fc1`): `smoke_test`,
 `mc3togltf_instance_deform_cache`, `mc3togltf_float_cache_key`,
 `mc3togltf_obj_robustness`, `mc3togltf_texture_sampler`,
 `mc3togltf_material_pbr`, `mc3togltf_svg_texture_export`,
-`mc3togltf_large_scene_generated`, `mc3togltf_large_scene_500`.
+`mc3togltf_animation_unsupported`, `mc3togltf_large_scene_generated`,
+`mc3togltf_large_scene_500`.
 
 - `mc3_commands` (~282 assertions): editor command algorithms, undo/redo
   for every mutating command, auto-save/backup, Save-As/Export-Selection/
@@ -182,17 +188,35 @@ See `TESTING.md` for the full per-test reference and `plan.md`'s
 
 ## 3. Recent changes
 
-**20 STAB tasks committed and pushed as of `8f6afc1`** (`53aa75e`
-through `8f6afc1` — see `git log --oneline` for the full list). Gate 6
-is exhausted for this environment (§8); **S11 is now fully done** except
-5 genuinely blocked items (§8 details). **STAB-0437/0438/0439/0440**
-below are implemented but **not yet committed** as of this update.
+**21 STAB tasks committed and pushed as of `e99ba20`** (`53aa75e`
+through `e99ba20` — see `git log --oneline` for the full list). Gate 6
+is exhausted (§8); S11 is fully done except 5 blocked items. Work has
+moved to **S12 (Animation Stability)**. **STAB-0441-0448** below are
+implemented but **not yet committed** as of this update.
 
 This was a long, dense session that closed out essentially all of
 **Gate 6 (Documentation)**'s reachable work (plus a from-scratch schema
 audit that found real bugs), then finished S11 entirely (bar the
-blocked items). Highlights, most recent first:
+blocked items) and started S12. Highlights, most recent first:
 
+- **STAB-0441-0448 — S12 roundtrip + glTF-export animation sweep**:
+  STAB-0441 (position)/0442 (rotation)/0444 (material) were already
+  covered by existing tests (`testAnimationCubicBezier`/
+  `testAnimationLinear`/`testAnimationMultiAction`, and this session's
+  own `testMaterialColorAnimationRoundtrip`). STAB-0443 (scale) and
+  STAB-0445 (deform) were genuine gaps — no test had ever used a
+  `Scale*`/`Deform*` channel — added `testAnimationScaleRoundtrip()`/
+  `testAnimationDeformRoundtrip()`. STAB-0446 was already thoroughly
+  covered by `gltf_test.py`'s `test_animation()` (position/rotation/
+  scale all verified exporting to the correct glTF path with correct
+  accessor types). STAB-0447/0448: confirmed `GltfExporter.cpp`
+  already warns and excludes any unsupported animated property
+  (material/deform channels use the same code path proven for
+  visible-only actions) but no fixture had ever exercised a material
+  or deform channel specifically — added
+  `test/animation_unsupported.mc3.xml` + `mc3togltf_animation_unsupported`
+  ctest confirming both warn correctly and are excluded from the
+  exported `animations` array.
 - **STAB-0437/0438/0439/0440 — S11 closeout**: STAB-0437 confirmed a
   `<material>` with no `id` collides gracefully on `id=""` (last-write-
   wins, no crash) and — critically — the exporter's `!matName.empty()`

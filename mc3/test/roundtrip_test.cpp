@@ -534,6 +534,72 @@ static void testAnimationMultiAction() {
     }
 }
 
+// STAB-0443: no prior test used any AnimatedProperty::Scale* channel.
+static void testAnimationScaleRoundtrip() {
+    Mc3Document doc;
+    Mc3Action action;
+    action.name     = "GrowShrink";
+    action.duration = 1.5f;
+
+    Mc3Channel ch;
+    ch.targetObject = "Balloon";
+    ch.property     = AnimatedProperty::ScaleX;
+    ch.keyframes    = {
+        Mc3Keyframe::linear(0.0f, 1.0f),
+        Mc3Keyframe::linear(1.5f, 3.0f),
+    };
+    action.channels.push_back(ch);
+    doc.actions["GrowShrink"] = std::move(action);
+
+    auto rt = roundtrip(doc);
+    CHECK(rt.actions.count("GrowShrink") == 1, "anim scale: action present");
+    if (!rt.actions.count("GrowShrink")) return;
+    const auto& a = rt.actions.at("GrowShrink");
+    CHECK(a.channels.size() == 1, "anim scale: channel count");
+    if (a.channels.empty()) return;
+    const auto& c = a.channels[0];
+    CHECK(c.targetObject == "Balloon", "anim scale: channel.target");
+    CHECK(c.property == AnimatedProperty::ScaleX, "anim scale: channel.property==ScaleX");
+    CHECK(c.keyframes.size() == 2, "anim scale: keyframe count");
+    if (c.keyframes.size() == 2) {
+        CHECKF(c.keyframes[0].value, 1.0f, "anim scale: kf[0].value");
+        CHECKF(c.keyframes[1].value, 3.0f, "anim scale: kf[1].value");
+    }
+}
+
+// STAB-0445: no prior test used any AnimatedProperty::Deform* channel.
+static void testAnimationDeformRoundtrip() {
+    Mc3Document doc;
+    Mc3Action action;
+    action.name     = "Squash";
+    action.duration = 1.0f;
+
+    Mc3Channel ch;
+    ch.targetObject = "Ball";
+    ch.property     = AnimatedProperty::DeformX;
+    ch.keyframes    = {
+        Mc3Keyframe::linear(0.0f, 1.0f),
+        Mc3Keyframe::linear(1.0f, 1.8f),
+    };
+    action.channels.push_back(ch);
+    doc.actions["Squash"] = std::move(action);
+
+    auto rt = roundtrip(doc);
+    CHECK(rt.actions.count("Squash") == 1, "anim deform: action present");
+    if (!rt.actions.count("Squash")) return;
+    const auto& a = rt.actions.at("Squash");
+    CHECK(a.channels.size() == 1, "anim deform: channel count");
+    if (a.channels.empty()) return;
+    const auto& c = a.channels[0];
+    CHECK(c.targetObject == "Ball", "anim deform: channel.target");
+    CHECK(c.property == AnimatedProperty::DeformX, "anim deform: channel.property==DeformX");
+    CHECK(c.keyframes.size() == 2, "anim deform: keyframe count");
+    if (c.keyframes.size() == 2) {
+        CHECKF(c.keyframes[0].value, 1.0f, "anim deform: kf[0].value");
+        CHECKF(c.keyframes[1].value, 1.8f, "anim deform: kf[1].value");
+    }
+}
+
 static void testAnimationEvaluate() {
     // Linear 0→1 over 1 second
     Mc3Channel lin;
@@ -1920,6 +1986,8 @@ int main(int argc, char* argv[]) {
     testAnimationCubicBezier();
     testAnimationStep();
     testAnimationMultiAction();
+    testAnimationScaleRoundtrip();
+    testAnimationDeformRoundtrip();
     testAnimationEvaluate();
     testMaterialColorAnimationRoundtrip();
     testEmbedGltf();

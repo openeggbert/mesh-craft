@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<mc3 version="0.3" model="AnimationUnsupportedTest">
+
+  <materials>
+    <material id="glow" roughness="0.5"><base_color>0.5 0.5 0.5 1.0</base_color></material>
+  </materials>
+
+  <objects>
+    <box name="GlowBox" size="1 1 1" material="glow"/>
+    <box name="SquashBox" size="1 1 1"/>
+  </objects>
+
+  <actions>
+    <!-- Pulse: GlowBox's material color animated — no glTF node-transform equivalent -->
+    <action name="Pulse" duration="1.0" loop="true">
+      <channel target="GlowBox" property="material.baseColor.r">
+        <keyframe time="0.0" value="0.2" interp="linear"/>
+        <keyframe time="1.0" value="0.9" interp="linear"/>
+      </channel>
+    </action>
+
+    <!-- Squash: SquashBox's deform animated — no glTF node-transform equivalent -->
+    <action name="Squash" duration="1.0" loop="true">
+      <channel target="SquashBox" property="deform.x">
+        <keyframe time="0.0" value="1.0" interp="linear"/>
+        <keyframe time="1.0" value="1.8" interp="linear"/>
+      </channel>
+    </action>
+  </actions>
+
+</mc3>
