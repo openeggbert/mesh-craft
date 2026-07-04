@@ -426,6 +426,80 @@ inline std::shared_ptr<Mc3::Mc3Object> convertToDefinitionAlg(
     return inst;
 }
 
+// ── Break Instance (STAB-0483) ─────────────────────────────────────────────────
+//
+// Mirrors MeshCraftApplication::flatFindById() — recursive id lookup across
+// the whole object tree.
+inline Mc3::Mc3Object* flatFindByIdAlg(
+    const std::vector<std::shared_ptr<Mc3::Mc3Object>>& rootObjects,
+    const std::string& id)
+{
+    for (const auto& obj : rootObjects) {
+        if (obj->id == id) return obj.get();
+        if (!obj->children.empty()) {
+            auto* r = flatFindByIdAlg(obj->children, id);
+            if (r) return r;
+        }
+    }
+    return nullptr;
+}
+
+// Recursively assigns a fresh, document-unique id (derived from each
+// object's own name) to obj and every descendant. The original
+// breakInstance() only uniquified the *top-level* copy's id — every
+// descendant kept the definition template's original id verbatim, so
+// breaking a second Instance of the same definition produced exact
+// duplicate child ids (a real bug: id is used elsewhere as a set key,
+// e.g. `lockedIds_`). `assignedThisWalk` additionally guards against two
+// descendants in the *same* subtree colliding with each other.
+inline void regenerateSubtreeIdsAlg(
+    Mc3::Mc3Object&                                      obj,
+    const std::vector<std::shared_ptr<Mc3::Mc3Object>>&  rootObjects,
+    std::set<std::string>&                               assignedThisWalk)
+{
+    int n = 1;
+    std::string newId;
+    do { newId = obj.name + "_" + std::to_string(n++); }
+    while (assignedThisWalk.count(newId) || flatFindByIdAlg(rootObjects, newId));
+    obj.id = newId;
+    assignedThisWalk.insert(newId);
+    for (auto& child : obj.children)
+        if (child) regenerateSubtreeIdsAlg(*child, rootObjects, assignedThisWalk);
+}
+
+// Mirrors MeshCraftApplication::breakInstance() — expands inst into an
+// independent deep copy of its definition's content (preserving inst's own
+// name/transform/visibility/tags), replacing inst in place. Every object in
+// the copied subtree gets a fresh, document-unique id (see
+// regenerateSubtreeIdsAlg). Returns the new object, or nullptr if inst isn't
+// a valid Instance or its definition doesn't exist.
+inline std::shared_ptr<Mc3::Mc3Object> breakInstanceAlg(
+    Mc3::Mc3Document&                      doc,
+    const std::shared_ptr<Mc3::Mc3Object>& inst)
+{
+    if (inst->type != Mc3::ObjectType::Instance) return nullptr;
+    auto defIt = doc.definitions.find(inst->definition);
+    if (defIt == doc.definitions.end()) return nullptr;
+
+    auto copy = deepCopyObjectAlg(*defIt->second);
+    copy->name      = inst->name;
+    copy->transform = inst->transform;
+    copy->visible   = inst->visible;
+    copy->tags      = inst->tags;
+
+    std::set<std::string> assigned;
+    regenerateSubtreeIdsAlg(*copy, doc.objects, assigned);
+
+    auto* parentList = findParentListAlg(doc.objects, inst.get());
+    if (parentList) {
+        for (auto& obj : *parentList)
+            if (obj.get() == inst.get()) { obj = copy; break; }
+    } else {
+        doc.objects.push_back(copy);
+    }
+    return copy;
+}
+
 // ── Auto-save (STAB-0265) ─────────────────────────────────────────────────────
 //
 // Mirrors two pieces of CNA-coupled logic so "the auto-save interval is

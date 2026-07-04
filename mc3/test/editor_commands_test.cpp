@@ -569,6 +569,74 @@ static void testConvertToDefinition()
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// breakInstanceAlg (STAB-0483)
+// ─────────────────────────────────────────────────────────────────────────────
+
+static void testBreakInstance()
+{
+    Mc3Document doc;
+
+    // A definition with children (mirrors a typical "Car" prop: a body + 2 wheels).
+    auto defObj = makeObj("car_def", "car_def", Mc3::ObjectType::Group);
+    auto body   = makeObj("body", "Body");
+    auto wheel  = makeObj("wheel", "Wheel");
+    defObj->children = {body, wheel};
+    doc.definitions["car_def"] = defObj;
+
+    auto inst1 = makeObj("inst1", "Car1", Mc3::ObjectType::Instance);
+    inst1->definition = "car_def";
+    inst1->transform.position = {1.0f, 0.0f, 0.0f};
+    inst1->visible = false;
+    inst1->tags    = {"vehicle"};
+    doc.objects.push_back(inst1);
+
+    auto copy1 = breakInstanceAlg(doc, inst1);
+    CHECK(copy1 != nullptr, "break: returns the new object");
+    if (copy1) {
+        CHECK(copy1->type == Mc3::ObjectType::Group, "break: copy keeps the definition's own type");
+        CHECK(copy1->name == "Car1", "break: copy keeps the instance's name");
+        CHECKF(copy1->transform.position[0], 1.0f, "break: copy keeps the instance's transform");
+        CHECK(copy1->visible == false, "break: copy keeps the instance's visibility");
+        CHECK(copy1->tags.size() == 1 && copy1->tags[0] == "vehicle", "break: copy keeps the instance's tags");
+        CHECK(copy1->children.size() == 2, "break: copy has both children from the definition");
+    }
+    CHECK(doc.objects.size() == 1 && doc.objects[0].get() == copy1.get(),
+          "break: root list's entry is now the returned copy (replaced in place)");
+
+    // STAB-0483's actual bug: break a SECOND Instance of the SAME definition.
+    // Before the fix, both copies' children kept the definition template's
+    // original ids verbatim ("body"/"wheel") — an exact duplicate.
+    auto inst2 = makeObj("inst2", "Car2", Mc3::ObjectType::Instance);
+    inst2->definition = "car_def";
+    doc.objects.push_back(inst2);
+    auto copy2 = breakInstanceAlg(doc, inst2);
+    CHECK(copy2 != nullptr, "break (2nd): returns the new object");
+    if (copy1 && copy2) {
+        CHECK(copy1->id != copy2->id, "break (2nd): top-level copies have distinct ids");
+        CHECK(copy1->children[0]->id != copy2->children[0]->id,
+              "break (2nd): first children ('Body') have distinct ids, not both 'body'");
+        CHECK(copy1->children[1]->id != copy2->children[1]->id,
+              "break (2nd): second children ('Wheel') have distinct ids, not both 'wheel'");
+        // Every id in both subtrees must be unique across the whole document.
+        std::set<std::string> allIds;
+        std::function<void(const std::shared_ptr<Mc3Object>&)> collect =
+            [&](const std::shared_ptr<Mc3Object>& o) {
+                CHECK(allIds.insert(o->id).second,
+                      "break (2nd): id '" + o->id + "' is unique across the whole document");
+                for (auto& c : o->children) collect(c);
+            };
+        for (auto& o : doc.objects) collect(o);
+    }
+
+    // Rejections: non-Instance, and Instance with an unknown definition.
+    auto notInst = makeObj("plain", "Plain", Mc3::ObjectType::Box);
+    CHECK(breakInstanceAlg(doc, notInst) == nullptr, "break: rejects a non-Instance object");
+    auto badInst = makeObj("bad", "Bad", Mc3::ObjectType::Instance);
+    badInst->definition = "does_not_exist";
+    CHECK(breakInstanceAlg(doc, badInst) == nullptr, "break: rejects an Instance with an unknown definition");
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // deepCopyObjectAlg
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -1875,6 +1943,7 @@ int main()
     testGroupAndUngroupObjects();
     testUngroupRejectsNonGroupOrEmptyGroup();
     testConvertToDefinition();
+    testBreakInstance();
     testDeepCopy();
     testUndoRedoBatchRename();
     testUndoRedoFindReplace();

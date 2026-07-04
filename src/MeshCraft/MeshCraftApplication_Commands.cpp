@@ -454,43 +454,19 @@ void MeshCraftApplication::breakInstance() {
         setStatusMsg("Selected object is not an Instance", true, 2.0f);
         return;
     }
-    auto defIt = document_.definitions.find(inst->definition);
-    if (defIt == document_.definitions.end()) {
+    if (!document_.definitions.count(inst->definition)) {
         setStatusMsg("Definition not found: " + inst->definition, true, 2.0f);
         return;
     }
 
     pushUndo();
-
-    // Deep-copy definition content, preserve instance transform + metadata
-    auto copy = deepCopyObject(*defIt->second);
-    copy->id        = inst->id;
-    copy->name      = inst->name;
-    copy->transform = inst->transform;
-    copy->visible   = inst->visible;
-    copy->tags      = inst->tags;
-
-    // Generate a fresh unique id to avoid collision if definition is used elsewhere
-    int n = 1;
-    std::string newId;
-    do { newId = copy->name + "_" + std::to_string(n++); }
-    while (flatFindById(newId) != nullptr);
-    copy->id = newId;
-
-    // Replace instance in hierarchy
-    auto* parentList = findParentList(document_.objects, inst.get());
-    if (parentList) {
-        for (auto& obj : *parentList) {
-            if (obj.get() == inst.get()) { obj = copy; break; }
-        }
-    } else {
-        document_.objects.push_back(copy);
-    }
+    std::string definitionName = inst->definition;
+    auto copy = breakInstanceAlg(document_, inst);
 
     selection_.clear();
     selection_.select(copy);
     modified_ = true; updateWindowTitle();
-    setStatusMsg("Instance broken: " + inst->definition, false, 2.0f);
+    setStatusMsg("Instance broken: " + definitionName, false, 2.0f);
 }
 
 void MeshCraftApplication::convertToDefinition() {
