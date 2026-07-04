@@ -23,18 +23,19 @@ risks closed quickly).
 
 **Current phase:** Stabilization. Every gate's priority-list subset is
 now done. **Gate 6 (Documentation) is close to fully green**: S17
-(Documentation and User-Facing Honesty) is 20/20 complete; S18 (Code
-Quality) is 18/25 done (all P0/P1 plus every runnable P2), with 7
-remaining: 4 are tool-blocked (STAB-0609/0614/0615/0620 need
-`include-what-you-use`/`clang-tidy`/`cppcheck`, none installed here)
-and 3 are large-file audit/refactor-judgment calls (STAB-0616-0619);
-**S19 (Security and Robustness) is
-now fully green — 15/15**; S20 (Release Readiness) is 12/15, with the
-last 3 items genuinely blocked
-(need Blender, a browser, or a running CI — none available in this
-environment). No gate is fully green yet. Plan-wide totals: **221 ✅
-done, 3 🟡 partial, 136 🧪 has a plan but not executed,
-290 📋 not started** out of 650.
+(Documentation and User-Facing Honesty) is 20/20 complete; **S19
+(Security and Robustness) is fully green — 15/15**; S18 (Code Quality)
+is 20/25 done (all P0/P1 plus every reachable P2/P3), 1 genuinely
+flagged (STAB-0617 — `PropertiesPanel.cpp`'s 1770-line `draw()` is a
+real smell, but splitting ImGui code with no way to visually verify
+the result in this environment is deferred, not attempted), and 4
+tool-blocked (STAB-0609/0614/0615/0620 need
+`include-what-you-use`/`clang-tidy`/`cppcheck`, none installed here);
+S20 (Release Readiness) is 12/15, with the last 3 items genuinely
+blocked (need Blender, a browser, or a running CI — none available in
+this environment). No gate is fully green yet. Plan-wide totals: **225
+✅ done, 4 🟡 partial, 136 🧪 has a plan but not executed,
+285 📋 not started** out of 650.
 
 **Important architectural decisions:**
 - `mc3/` and `mcb/` are pure C++ static libs with **no** CNA/ImGui
@@ -158,10 +159,10 @@ See `TESTING.md` for the full per-test reference and `plan.md`'s
 
 ## 3. Recent changes
 
-Ten STAB tasks committed this session (`53aa75e` STAB-0610 through
-`6762522` STAB-0607/0608 — see `git log --oneline` for the full list);
-`origin/develop` is not yet pushed to (last pushed commit is
-`03723b8`). **STAB-0612 + STAB-0613** below are verification-only
+Eleven STAB tasks committed this session (`53aa75e` STAB-0610 through
+`32f11b8` STAB-0612/0613/0147/0619 — see `git log --oneline` for the
+full list); `origin/develop` is not yet pushed to (last pushed commit
+is `03723b8`). **STAB-0616/0617/0618** below are verification-only
 (code inspection, no code changed) and are reflected in
 `plan.md`/`NEXT.md` but not yet committed as of this update.
 
@@ -169,6 +170,24 @@ This was a long, dense session that closed out essentially all of
 **Gate 6 (Documentation)**'s reachable work, plus a from-scratch schema
 audit that found real bugs. Highlights, most recent first:
 
+- **STAB-0616/0617/0618 — audited the 3 large-source-file items**:
+  `MeshCraftApplication.hpp` (613 lines) is internally organized into
+  clearly-labeled member groups, with its *implementation* already
+  split across ~15 `MeshCraftApplication_*.cpp` files by feature — no
+  further split needed. `SceneRenderer.cpp` (1362-line core, alongside
+  the already-split `_Builders`/`_Extrude`/`_Gizmos` files) is
+  internally organized (mesh primitives → draw dispatch → debug-icon
+  gizmos → stats) — confirmed the existing 4-file split is good
+  practice, as the row expected, no further split. `PropertiesPanel.cpp`
+  is genuinely different: `draw()` is a single ~1770-line function with
+  almost no internal section markers — a real smell, and splitting it
+  by object-type (as the row suggests) would be a legitimate, low-risk
+  mechanical extraction *in principle*, but ImGui code is easy to
+  subtly break on extraction (ID-stack/layout ordering) and this
+  environment has **no way to visually verify a UI panel still renders
+  correctly** (no display, viewport not integrated). Flagged 🟡 (confirmed
+  real, deferred pending a human clicking through the live editor) —
+  not attempted, unlike the other two which are genuinely fine as-is.
 - **STAB-0612 + STAB-0613 — verified `Mc3XmlParser.cpp`'s
   safe-attribute-helper usage and TU-local linkage**: every one of the
   ~30 direct `->Attribute(...)` calls outside the `attr()`/`attrF()`/
@@ -177,7 +196,10 @@ audit that found real bugs. Highlights, most recent first:
   literal `namespace{}` block) for all 37 free functions, giving the
   same TU-local/no-ODR-conflict guarantee — only `Mc3XmlParser::parse`
   itself has external linkage, and it's a properly header-declared
-  class method. Both clean — no fix needed.
+  class method. Both clean — no fix needed. Same commit also closed
+  **STAB-0147/STAB-0619** (S3/S18): MCB tag constants were already
+  extracted to a shared header, just under the name `McbFormat.hpp`
+  rather than the `McbTags.hpp` both rows assumed.
 - **STAB-0607 + STAB-0608 — verified `mcb`/`mc3` library hygiene**: no
   raw `new`/`delete`/`malloc`/`free` in `McbWriter.cpp`/`McbReader.cpp`
   (1405 lines combined, 0 hits; ownership via `std::make_shared` +
@@ -566,45 +588,44 @@ No project linter/formatter is configured.
 
 ## 8. Next smallest tasks
 
-**S19 (Security and Robustness) is fully green — 15/15 — no remaining
-S19 items.** All remaining Gate 6 work is in S18 (Code Quality):
+**Gate 6 is now essentially exhausted for this environment.** S17
+20/20, S19 15/15 (both fully green), S18 20/25 (all reachable items
+done; the other 5 are either tool-blocked — STAB-0609/0614/0615/0620,
+need `include-what-you-use`/`clang-tidy`/`cppcheck`, none installed
+here — or STAB-0617, genuinely flagged 🟡 and deferred since it needs a
+human visually verifying a live ImGui panel after a split, which this
+headless environment can't do), S20 12/15 (3 blocked on
+Blender/browser/CI). **There is nothing left to pick up in Gate 6
+without an external tool or a human with a display.**
 
-**Note:** STAB-0609 (IWYU), STAB-0614/0615 (clang-tidy), and STAB-0620
-(cppcheck) are all blocked in this environment — none of
-`include-what-you-use`/`clang-tidy`/`cppcheck` are installed
-(`which` returns nothing for any of them). Skip these until a human
-runs them elsewhere, same as the 3 blocked S20 items (§5).
+The next priority tier is P2 items across S6–S13 and the untouched
+S11/S12/S14/S15 sections. **S11 (Materials, Textures, and Visual
+Fidelity)** has several concrete, non-blocked P1 candidates worth
+picking up next:
 
-1. **STAB-0612 — verify consistent use of `Mc3XmlParser`'s existing
-   safe-attribute helpers** (S18, P2, next-lowest *runnable* ID — skips
-   the tool-blocked STAB-0609 above). Goal: the row says `attr()`/
-   `attrF()`/`attrB()`/`attrVec3()` already exist — confirm every
-   attribute read in `Mc3XmlParser.cpp` goes through one of them rather
-   than calling `tinyxml2`'s raw `Attribute()`/`FloatAttribute()` etc.
-   directly in some places.
-   Files: `mc3/src/Mc3XmlParser.cpp`.
-   Verify: code inspection; grep for direct tinyxml2 attribute-getter
-   calls outside the helper functions themselves.
+1. **STAB-0417 — verify texture wrapU/wrapV exported to glTF
+   sampler** (S11, P1). Goal: confirm `wrapU="repeat"`/`wrapV="clamp"`
+   etc. on an mc3 `<texture>` produces the correct glTF sampler
+   `wrapS`/`wrapT` enum values (`10497`=REPEAT, `33071`=CLAMP_TO_EDGE,
+   `33648`=MIRRORED_REPEAT).
+   Files: `mc3togltf/src/GltfExporter.cpp` (sampler-building code).
+   Verify: read the current sampler-building code; if untested, export
+   a small fixture and check the glTF JSON's sampler values; add a
+   ctest if this becomes a permanent regression check.
 
-2. **STAB-0613 — verify no anonymous-namespace symbol conflicts across
-   translation units** (S18, P2). Goal: confirm functions in
-   `Mc3XmlParser.cpp`'s anonymous namespace are genuinely TU-local (no
-   ODR violation) — should be automatic given anonymous-namespace
-   semantics, but worth a real read given this is exactly the kind of
-   thing that's "obviously fine" until it isn't.
-   Files: `mc3/src/Mc3XmlParser.cpp`.
-   Verify: code inspection.
+2. **STAB-0418 — verify texture filter exported to glTF sampler**
+   (S11, P1). Goal: same shape as STAB-0417 but for `filter="linear"`/
+   `"nearest"` → glTF sampler `minFilter`/`magFilter`.
+   Files: `mc3togltf/src/GltfExporter.cpp`.
+   Verify: same pattern as STAB-0417.
 
-Beyond these two: S18 has 8 more items after
-STAB-0603/0604/0605/0606/0607/0608/0610/0611/0612/0613, of which 4
-(STAB-0609/0614/0615/0620) are tool-blocked per the note above — the
-other 4 (STAB-0616-0619) are large-file audits/refactor-judgment calls
-(see `plan.md`'s S18 rows). Closing S18 fully
-would leave Gate 6 blocked only on the 3 genuinely-inaccessible S20
-items (§5). After that, the next priority tier is P2 items across
-S6–S13 and the
-untouched S11/S12/S14/S15 sections — see `plan.md`'s per-section Key
-File columns.
+Beyond these two: STAB-0419/0420 (S11, P1) are the same shape
+(colorSpace export, missing-texture-warns-but-doesn't-fail); S11 has
+~20 more P2/P3 items after that (see `plan.md`'s S11 rows). S12
+(Animation Stability), S13 (Commands/Undo/Redo/Algorithms), S14
+(Rendering/Viewport), and S15 (Import/Export/Editor Integration) are
+untouched sections — worth a first pass to see how much is already
+✅/🧪 vs genuinely open before diving in.
 
 ---
 
