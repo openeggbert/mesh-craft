@@ -25,12 +25,12 @@ risks closed quickly).
 now done. **Gate 6 (Documentation) is close to fully green**: S17
 (Documentation and User-Facing Honesty) is 20/20 complete; S18 (Code
 Quality) has all P0/P1 items done plus 1 P2 (STAB-0610) done, 17 P2/P3
-remain; S19 (Security) has all P0/P1 plus 4 bonus P2 items done (13/15),
-2 P2/P3 remain; S20 (Release Readiness) is 12/15, with the last 3 items
-genuinely blocked (need Blender, a browser, or a running CI — none
-available in this environment). No gate is fully green yet. Plan-wide
-totals: **210 ✅ done, 3 🟡 partial, 136 🧪 has a plan but not executed,
-301 📋 not started** out of 650.
+remain; S19 (Security) has all P0/P1/P2 items done (14/15), with just 1
+P3 left (STAB-0635, tmp-file race condition); S20 (Release Readiness)
+is 12/15, with the last 3 items genuinely blocked (need Blender, a
+browser, or a running CI — none available in this environment). No
+gate is fully green yet. Plan-wide totals: **211 ✅ done, 3 🟡 partial,
+136 🧪 has a plan but not executed, 300 📋 not started** out of 650.
 
 **Important architectural decisions:**
 - `mc3/` and `mcb/` are pure C++ static libs with **no** CNA/ImGui
@@ -154,17 +154,26 @@ See `TESTING.md` for the full per-test reference and `plan.md`'s
 
 ## 3. Recent changes
 
-**STAB-0610** (`53aa75e`) and **STAB-0630** (`09fdf95`) are committed;
-`origin/develop` is not yet pushed to (last pushed commit is `03723b8`).
-**STAB-0383/STAB-0631** below are implemented but **not yet committed**
-as of this update — working tree has new/modified files: `NEXT.md`,
-`plan.md`, `TESTING.md`, `include/MeshCraft/AiAssistant.hpp`,
-`src/MeshCraft/AiAssistant.cpp`, `mc3/test/ai_test.cpp`.
+**STAB-0610** (`53aa75e`), **STAB-0630** (`09fdf95`), and
+**STAB-0383/STAB-0631** (`7670a00`) are committed; `origin/develop` is
+not yet pushed to (last pushed commit is `03723b8`). **STAB-0633**
+below is verification-only (code inspection, no code changed) and is
+reflected in `plan.md`/`NEXT.md` but not yet committed as of this
+update.
 
 This was a long, dense session that closed out essentially all of
 **Gate 6 (Documentation)**'s reachable work, plus a from-scratch schema
 audit that found real bugs. Highlights, most recent first:
 
+- **STAB-0633 — AI apply requires undo-capable state**: confirmed by
+  code inspection — `document_` is assigned from `aiPendingDoc_` at
+  exactly one call site (`MeshCraftApplication_UiAi.cpp:266`, the
+  "Apply to Scene" button), unconditionally preceded on the immediately
+  prior line by `pushUndo()`. No other code path reaches that
+  assignment, so apply-without-undo-push is impossible by construction.
+  No code change, no new test (would just re-assert that two adjacent
+  lines execute in order, which C++ already guarantees). **This closes
+  S19 down to a single remaining P3** (STAB-0635).
 - **STAB-0383 + STAB-0631 — AI network timeout**: confirmed
   `AiAssistant`'s `httplib::Client` already had finite connect/read/write
   timeouts (30s/600s/120s) — not infinite. Exposed them as public
@@ -467,27 +476,35 @@ No project linter/formatter is configured.
 
 ## 8. Next smallest tasks
 
-1. **STAB-0633 — verify AI apply requires undo-capable state** (S19,
-   P2). Goal: confirm applying an AI response to the live scene always
-   goes through the same command path that pushes an undo snapshot
-   first — i.e. "apply without undo push" should be impossible by
-   construction, not just by convention. Read
-   `MeshCraftApplication_UiAi.cpp`'s apply path and trace it back to
-   whichever `pushUndo()`-calling command it reuses (compare against
-   how other mutating commands guarantee this, per `EditorAlgorithms.hpp`'s
-   "Alg mirror" pattern in NEXT.md §6). This is the last remaining S19
-   P2 item — closing it finishes S19 down to its 2 remaining P3s.
-   Files: `src/MeshCraft/MeshCraftApplication_UiAi.cpp`.
-   Verify: code inspection first (does it call the same
-   apply-with-undo path as everything else, or something bespoke?); if
-   a regression test is warranted, `mc3_commands` already has the
-   pattern for "command X pushes exactly one undo entry" checks.
+1. **STAB-0603 — refactor `EditorAlgorithms.hpp` to a public include
+   directory** (S18, P2, lowest-ID remaining P2). Goal: move
+   `src/MeshCraft/EditorAlgorithms.hpp` to
+   `include/MeshCraft/EditorAlgorithms.hpp` so it's not a fragile
+   `src/`-relative include; update every `#include` of it (real editor
+   code + `mc3/test/editor_commands_test.cpp`'s
+   `MC3_EDITOR_SRC_DIR`-based path in `mc3/CMakeLists.txt`) to the new
+   location.
+   Files: `src/MeshCraft/EditorAlgorithms.hpp` (move),
+   `mc3/CMakeLists.txt` (the `MC3_EDITOR_SRC_DIR`/`EXISTS` check at
+   lines 85-90), every real `.cpp` that `#include`s it.
+   Verify: cmake reconfigure (new header location), full rebuild, then
+   `ctest --output-on-failure` — must stay 21/21 including
+   `mc3_commands` (proves the test still finds the header from its new
+   public location).
 
-Beyond this one: S18 has 17 P2/P3 items remaining (mostly code-quality
-audits — see `plan.md`'s S18 rows, e.g. STAB-0603 is the next lowest
-ID). Closing S19 fully (this item) and working through S18 would leave
-Gate 6 blocked only on the 3 genuinely-inaccessible S20 items (§5).
-After that, the next priority tier is P2 items across S6–S13 and the
+2. **STAB-0635 — verify tmp-file race condition** (S19, P3, the one
+   remaining S19 item). Goal: confirm `AiAssistant.cpp`'s temp-file
+   naming includes a PID or random suffix (not a fixed name two
+   concurrent instances could collide on).
+   Files: `src/MeshCraft/AiAssistant.cpp`.
+   Verify: code inspection; grep for the tmp-path construction and
+   confirm uniqueness per process/thread.
+
+Beyond these two: S18 has 16 more P2/P3 items after STAB-0603 (mostly
+code-quality audits — see `plan.md`'s S18 rows). Closing S18+S19 fully
+would leave Gate 6 blocked only on the 3 genuinely-inaccessible S20
+items (§5). After that, the next priority tier is P2 items across
+S6–S13 and the
 untouched S11/S12/S14/S15 sections — see `plan.md`'s per-section Key
 File columns.
 
