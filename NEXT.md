@@ -92,8 +92,13 @@ mechanism empirically via a new `test/orthographic_camera.mc3.xml` +
 `smoke_test_orthographic_camera` ctest), and STAB-0508 flagged 🟡 (the
 SSAO GL pipeline is confirmed correct and safe by reading, but
 `ssaoEnabled_` isn't part of the persisted prefs file either — no
-headless hook, same wall as STAB-0505). Plan-wide totals: **306 ✅
-done, 10 🟡 partial, 102 🧪 has a plan but not executed, 232 📋 not
+headless hook, same wall as STAB-0505), and STAB-0509 flagged 🟡 (the
+bloom GL pipeline is likewise confirmed correct and safe, and its prior
+real fix — a VAO/VBO silent-failure bug + CNA GL-state leakage, fixed
+and pixel-diff-verified in an earlier session per project memory — is
+confirmed still intact in the current code, but `bloomEnabled_` has
+the same no-headless-hook wall as SSAO). Plan-wide totals: **306 ✅
+done, 11 🟡 partial, 101 🧪 has a plan but not executed, 232 📋 not
 started** out of 650.
 
 **Important architectural decisions:**
@@ -230,9 +235,9 @@ See `TESTING.md` for the full per-test reference and `plan.md`'s
 
 ## 3. Recent changes
 
-**50 STAB tasks committed as of this update** (`53aa75e` through
-`497543b`, pushed to `origin/develop` — see `git log --oneline` for the
-full list). **STAB-0508** below is verified and about to be committed
+**51 STAB tasks committed as of this update** (`53aa75e` through
+`cba9b6a`, pushed to `origin/develop` — see `git log --oneline` for the
+full list). **STAB-0509** below is verified and about to be committed
 as of this update. Gate 6 is exhausted (§8); **S11, S12, and S13 are
 all fully done** except genuinely blocked/flagged items. **S14 is now
 also accumulating flagged items**, same as S11/S12. Work is underway on
@@ -244,6 +249,24 @@ audit that found real bugs), then finished S11 and S12 entirely (bar
 the blocked/flagged items) and started S13. Highlights, most recent
 first:
 
+- **STAB-0509 — flagged: bloom toggle needs a live display, same wall
+  as SSAO — but with a documented history**: `applyBloom()`
+  (`MeshCraftApplication.cpp`) is confirmed correct and safe by reading.
+  This exact pipeline was previously broken and fixed in an earlier
+  session (project memory, 2026-06-26): a VAO/VBO silent-failure bug
+  (`glDrawArrays` drawing nothing despite a correctly bound VAO/VBO,
+  fixed by switching to a `gl_VertexID`-based vertex shader) plus CNA
+  leaving `GL_CULL_FACE`/`GL_STENCIL_TEST`/`GL_SCISSOR_TEST` enabled
+  after scene rendering (silently discarding the composite quad, fixed
+  with explicit `Disable()` calls) — both empirically verified at the
+  time via a manual on/off pixel-diff (1802 pixels changed, +57 average
+  brightness, centroid inside the 3D viewport). Confirmed both fixes
+  are still present in the current code (`BindVertexArray(0)` for every
+  bloom draw, explicit `Disable()` of all 3 states before composite) —
+  the historical verification still holds today. Like STAB-0508,
+  `bloomEnabled_` isn't part of the persisted prefs file either, so
+  there's no way to re-verify it fresh via `--screenshot` in this
+  environment — flagged 🟡.
 - **STAB-0508 — flagged: SSAO toggle needs a live display, same wall
   as STAB-0505**: `applySsao()` (`MeshCraftApplication.cpp`) is
   confirmed correct and safe by reading — a 4-pass GL pipeline (depth
@@ -1376,21 +1399,29 @@ the "look through camera" path shares the identical
 `CreateOrthographic`/`CreatePerspectiveFieldOfView` branch keyed off a
 per-scene `Mc3Camera`'s type — verified via a new
 `test/orthographic_camera.mc3.xml` + `smoke_test_orthographic_camera`
-ctest), and STAB-0508 flagged 🟡 (the SSAO GL pipeline is confirmed
+ctest), STAB-0508 flagged 🟡 (the SSAO GL pipeline is confirmed
 correct and safe by reading, but `ssaoEnabled_` isn't part of the
 persisted prefs file either — no headless hook, same wall as
-STAB-0505). Next:
+STAB-0505), and STAB-0509 flagged 🟡 (the bloom pipeline is likewise
+confirmed correct, and its prior real fix — a VAO/VBO silent-failure
+bug + CNA GL-state leakage, pixel-diff-verified in an earlier session
+per project memory — is confirmed still intact, but `bloomEnabled_`
+has the same no-headless-hook wall). Next:
 
-1. **STAB-0509 — verify bloom toggle: off/on changes visual output**
-   (S14, P1, next-lowest ID). Goal: toggling bloom changes the bright-
-   area glow in the rendered scene. Files:
-   `src/MeshCraft/MeshCraftApplication.cpp`. Verify: STAB-0508 already
-   confirmed `bloomEnabled_` is not part of the persisted prefs file
-   either (only `autoSaveInterval`/`snapTranslate`/`snapRotate`/
-   `snapScale`/`gridSpacing`/`theme` persist), so this is very likely
-   the same wall as STAB-0505/0508 — read `applyBloom()`'s
-   implementation for correctness, confirm there's no CLI/document hook
-   before concluding this needs a live display too.
+1. **STAB-0510 — verify wireframe mode: all objects rendered as
+   wireframe** (S14, P1, next-lowest ID). Goal: toggling wireframe mode
+   renders every object as wireframe instead of solid. Files:
+   `src/MeshCraft/Renderer/SceneRenderer.cpp`. Verify: a quick grep
+   already found `showWireframeMode_` follows the exact same shape as
+   `showBoundingBox_`/`ssaoEnabled_`/`bloomEnabled_` — defaults to
+   `false`, only flipped via ImGui menu/toolbar, not in the persisted
+   prefs file. Confirm that pattern holds (check `loadPrefs()`/
+   `savePrefs()` again to be sure) and read
+   `SceneRenderer::drawEdgeOverlay()`/the wireframe draw path for
+   correctness before flagging — this is very likely another 🟡, but
+   worth double-checking since `showEdgeOverlay_` is drawn through the
+   same `if (showEdgeOverlay_ || showWireframeMode_)` condition and
+   might already have its own test angle.
 
 Beyond that, S14 gets heavily visual/interactive (gizmos, camera
 presets, bloom/SSAO toggles, shadow maps) — expect many items to land
