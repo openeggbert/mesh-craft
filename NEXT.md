@@ -51,9 +51,12 @@ ignored outside CSG, fixed via a new shared
 `Mc3Object::resolvedInstanceDefinitionKey()`; STAB-0494/0495 closed out
 the last 2 P3 items — see §3 for the full list. **Work has moved to
 S14 (Rendering and Viewport Stability)**: STAB-0496 done (confirmed
-`smoke_test` exercises a genuine render, not a stub). Plan-wide
-totals: **298 ✅ done, 6 🟡 partial, 111 🧪 has a plan but not
-executed, 235 📋 not started** out of 650.
+`smoke_test` exercises a genuine render, not a stub) and STAB-0497
+done (confirmed the renderer's main switch exhaustively handles all
+19 `ObjectType` values plus a safe default fallback; added a permanent
+`smoke_test_all_objects` ctest). Plan-wide totals: **299 ✅ done,
+6 🟡 partial, 110 🧪 has a plan but not executed, 235 📋 not
+started** out of 650.
 
 **Important architectural decisions:**
 - `mc3/` and `mcb/` are pure C++ static libs with **no** CNA/ImGui
@@ -92,18 +95,18 @@ executed, 235 📋 not started** out of 650.
   the root project).
 
 ### Tests
-**26/26 CTest pass** in Debug as of this session (STAB-0493 added
-`mc3togltf_instance_variant`, STAB-0630 added
-`mc3togltf_obj_robustness`, STAB-0417/0418/0420/0416 added
-`mc3togltf_texture_sampler`, STAB-0166-0170/0411-0415/0435 added
+**27/27 CTest pass** in Debug as of this session (STAB-0497 added
+`smoke_test_all_objects`, STAB-0493 added `mc3togltf_instance_variant`,
+STAB-0630 added `mc3togltf_obj_robustness`, STAB-0417/0418/0420/0416
+added `mc3togltf_texture_sampler`, STAB-0166-0170/0411-0415/0435 added
 `mc3togltf_material_pbr`, STAB-0440 added
 `mc3togltf_svg_texture_export`, STAB-0447/0448 added
 `mc3togltf_animation_unsupported`; started the session at 20/20):
-`smoke_test`, `xsd_validation`, `mc3_registry`, `mc3_ai`,
-`mc3_roundtrip`, `mc3_commands`, `mcb_roundtrip`, `mc3tomcb_roundtrip`,
-`mc3togltf_gltf`, `mc3togltf_all_primitives`,
-`mc3togltf_export_verification`, `mc3togltf_large_scene`,
-`mc3togltf_csg_strict`, `mc3togltf_csg_export`,
+`smoke_test`, `smoke_test_all_objects`, `xsd_validation`,
+`mc3_registry`, `mc3_ai`, `mc3_roundtrip`, `mc3_commands`,
+`mcb_roundtrip`, `mc3tomcb_roundtrip`, `mc3togltf_gltf`,
+`mc3togltf_all_primitives`, `mc3togltf_export_verification`,
+`mc3togltf_large_scene`, `mc3togltf_csg_strict`, `mc3togltf_csg_export`,
 `mc3togltf_csg_unsupported`, `mc3togltf_csg_nested`,
 `mc3togltf_instance_deform_cache`, `mc3togltf_float_cache_key`,
 `mc3togltf_obj_robustness`, `mc3togltf_texture_sampler`,
@@ -184,13 +187,13 @@ See `TESTING.md` for the full per-test reference and `plan.md`'s
 
 ## 3. Recent changes
 
-**38 STAB tasks committed as of `60851b2`** (`53aa75e` through
-`60851b2`, pushed to `origin/develop` — see `git log --oneline` for the
-full list). **STAB-0496** below is verified and about to be committed
-as of this update — **the first item of S14.** Gate 6 is exhausted
-(§8); **S11, S12, and S13 are all fully done** except genuinely
-blocked/flagged items (S11/S12 only). Work is underway on **S14
-(Rendering and Viewport Stability)**.
+**39 STAB tasks committed as of `d3c51fc`** (`53aa75e` through
+`d3c51fc`, pushed to `origin/develop` — see `git log --oneline` for the
+full list). **STAB-0497** below is verified and about to be committed
+as of this update. Gate 6 is exhausted (§8); **S11, S12, and S13 are
+all fully done** except genuinely blocked/flagged items (S11/S12
+only). Work is underway on **S14 (Rendering and Viewport
+Stability)**.
 
 This was a long, dense session that closed out essentially all of
 **Gate 6 (Documentation)**'s reachable work (plus a from-scratch schema
@@ -198,6 +201,20 @@ audit that found real bugs), then finished S11 and S12 entirely (bar
 the blocked/flagged items) and started S13. Highlights, most recent
 first:
 
+- **STAB-0497 — confirmed the renderer handles every object type,
+  added `smoke_test_all_objects`**: `drawObject()`'s main switch
+  (`SceneRenderer.cpp`) exhaustively handles all 19 `ObjectType` values
+  (every primitive, `Group`/`Area`, the 3 CSG ops, `Instance`,
+  `Extrude`, `Mesh`) plus a safe `default:` placeholder-box fallback —
+  no crash possible by construction, even for a future/unknown type.
+  Empirically confirmed via real `--screenshot` runs against
+  `all_objects.mc3.xml`, `all_primitives.mc3.xml` (11 primitive
+  shapes), and `csg_nested.mc3.xml` (nested CSG) — all exit 0 with
+  genuinely varied pixel output (383-757 distinct sampled colors,
+  ruling out a stub render). Added a permanent `smoke_test_all_objects`
+  ctest (same `smoke_test.sh` mechanism as STAB-0496, pointed at
+  `all_objects.mc3.xml`) so this stays verified going forward, not just
+  this session.
 - **STAB-0496 — verified `smoke_test` exercises a genuine render**:
   the ctest already passed, but to confirm it isn't a trivial stub
   (e.g. a cleared framebuffer that just happens to produce a non-empty
@@ -1114,27 +1131,27 @@ stabilization moratorium; STAB-0464 needs a live display).
 items ✅** (see the "Recent changes" summary above and §3 for the full
 list of extractions/bugs found this session). **S14 (Rendering and
 Viewport Stability), 30 items, is underway** — STAB-0496 done (verified
-`smoke_test` exercises a genuine render across all 3 sample scenes, not
-a stub). Next:
+`smoke_test` exercises a genuine render across all 3 sample scenes) and
+STAB-0497 done (confirmed the renderer handles all 19 `ObjectType`
+values by construction; added `smoke_test_all_objects` ctest). Next:
 
-1. **STAB-0497 — verify renderer handles all object types without
-   crash** (S14, P1, next-lowest ID). Goal: an `all_objects.mc3.xml`
-   (or equivalent fixture covering every `ObjectType`) loads, renders
-   1 frame via `--screenshot`, and exits cleanly.
+1. **STAB-0498 — verify renderer handles empty scene (no objects)**
+   (S14, P1, next-lowest ID). Goal: a scene with `<objects/>` (no
+   children at all) renders without crashing.
    Files: `src/MeshCraft/Renderer/SceneRenderer.cpp`.
-   Verify: check whether an `all_objects.mc3.xml`-style fixture already
-   exists (or use `test/features.mc3.xml` if it already covers every
-   type); same `--screenshot`-based headless approach as STAB-0496,
-   no display needed since this is a "doesn't crash" check, not a
-   visual-correctness one.
+   Verify: same `--screenshot`-based headless approach as STAB-0496/
+   0497 — either find/create a minimal empty-objects fixture, or
+   confirm one of the existing fixtures already covers this; consider
+   adding a permanent ctest the same way `smoke_test_all_objects` was
+   added, if it doesn't already exist.
 
-S14 is heavily visual/interactive beyond the "doesn't crash" checks
-(gizmos, camera presets, bloom/SSAO toggles, shadow maps) — expect many
-items to land like S11/S12's blocked set (flagged 🟡, needs a live
-display) rather than S13's extract-and-test pattern. STAB-0498/0499/
-0500 (empty scene / missing mesh / missing material, all "no crash"
-checks) are likely headlessly verifiable the same way as STAB-0496/
-0497. S15 (Import/Export/Editor Integration) remains untouched after
+STAB-0499/0500 (missing mesh file / missing material reference, both
+"no crash, sensible fallback" checks) are likely headlessly verifiable
+the same way. Beyond that, S14 gets heavily visual/interactive (gizmos,
+camera presets, bloom/SSAO toggles, shadow maps) — expect many items to
+land like S11/S12's blocked set (flagged 🟡, needs a live display)
+rather than S13's extract-and-test pattern. S15 (Import/Export/Editor
+Integration) remains untouched after
 S14.
 
 ---

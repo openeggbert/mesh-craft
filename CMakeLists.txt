@@ -355,6 +355,20 @@ if(MESH_CRAFT_BUILD_TESTING AND UNIX AND NOT ANDROID AND NOT EMSCRIPTEN)
     )
     set_tests_properties(smoke_test PROPERTIES TIMEOUT 30)
 
+    # STAB-0497: same smoke-test mechanism, but against a scene exercising
+    # every Mc3::ObjectType (all_objects.mc3.xml) to confirm the live
+    # SceneRenderer handles every type without crashing.
+    if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/test/all_objects.mc3.xml")
+        add_test(
+            NAME smoke_test_all_objects
+            COMMAND bash ${CMAKE_CURRENT_SOURCE_DIR}/test/smoke_test.sh
+                    $<TARGET_FILE:MeshCraft>
+                    ${CMAKE_CURRENT_SOURCE_DIR}/test/all_objects.mc3.xml
+            WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
+        )
+        set_tests_properties(smoke_test_all_objects PROPERTIES TIMEOUT 30)
+    endif()
+
     find_program(PYTHON3_EXEC python3)
     if(PYTHON3_EXEC)
         file(GLOB _mc3_xml_files "${CMAKE_CURRENT_SOURCE_DIR}/test/*.mc3.xml")
