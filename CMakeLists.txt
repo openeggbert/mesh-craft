@@ -452,6 +452,22 @@ if(MESH_CRAFT_BUILD_TESTING AND UNIX AND NOT ANDROID AND NOT EMSCRIPTEN)
             )
             set_tests_properties(fog_linear_test PROPERTIES TIMEOUT 30)
         endif()
+
+        # STAB-0512: drawLightGizmos() is called unconditionally in the main
+        # draw loop (not gated by selection/UI toggle like the translate/
+        # rotate/bbox gizmos) — verify the point-light sphere+rays gizmo
+        # actually renders via real pixel sampling.
+        if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/test/point_light_gizmo.mc3.xml")
+            add_test(
+                NAME point_light_gizmo_test
+                COMMAND "${PYTHON3_EXEC}"
+                        "${CMAKE_CURRENT_SOURCE_DIR}/test/point_light_gizmo_test.py"
+                        $<TARGET_FILE:MeshCraft>
+                        "${CMAKE_CURRENT_SOURCE_DIR}/test/point_light_gizmo.mc3.xml"
+                WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
+            )
+            set_tests_properties(point_light_gizmo_test PROPERTIES TIMEOUT 30)
+        endif()
     endif()
 
     # mc3togltf_gltf test is registered by mc3togltf/CMakeLists.txt via $<TARGET_FILE:mc3togltf>

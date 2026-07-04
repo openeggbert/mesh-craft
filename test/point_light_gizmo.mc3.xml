@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- STAB-0512 fixture: a single point light with a distinctive bright
+     magenta color, camera looking straight at it, and no other scene
+     content that could plausibly render that color — so the gizmo's
+     sphere+rays marker (drawLightGizmos(), unconditional, no UI toggle)
+     can be confirmed via pixel sampling. -->
+<mc3 version="0.3" model="PointLightGizmoFixture" default_camera="Main">
+
+  <lights>
+    <point name="Marker" color="1.0 0.0 1.0" brightness="1.0" position="0 0 0"/>
+  </lights>
+
+  <cameras>
+    <camera name="Main" position="0 0 3" target="0 0 0" fov="50" near="0.05" far="100"/>
+  </cameras>
+
+  <objects/>
+
+</mc3>

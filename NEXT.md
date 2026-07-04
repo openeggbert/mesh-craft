@@ -101,12 +101,15 @@ the same no-headless-hook wall as SSAO), STAB-0510 flagged 🟡
 (audited `drawObjectEdges()` the same way STAB-0497 audited the solid
 path — exhaustively and safely handles all 19 `ObjectType` values, no
 bug found — but `showWireframeMode_` has the same no-headless-hook
-wall as the other toggles), and STAB-0511 done (unlike the last 4
+wall as the other toggles), STAB-0511 done (unlike the last 4
 toggles, fog is a document-level setting applied unconditionally —
 verified with a real pixel-sampling test proving a fully-fogged object
-renders fog-colored, not its authored base color). Plan-wide totals:
-**307 ✅ done, 12 🟡 partial, 100 🧪 has a plan but not executed, 231
-📋 not started** out of 650.
+renders fog-colored, not its authored base color), and STAB-0512 done
+(`drawLightGizmos()` is also called unconditionally, not selection-
+gated like the translate/rotate/bbox gizmos — verified the point-light
+sphere+rays marker with a magenta-pixel-sampling test). Plan-wide
+totals: **308 ✅ done, 12 🟡 partial, 100 🧪 has a plan but not
+executed, 230 📋 not started** out of 650.
 
 **Important architectural decisions:**
 - `mc3/` and `mcb/` are pure C++ static libs with **no** CNA/ImGui
@@ -145,9 +148,10 @@ renders fog-colored, not its authored base color). Plan-wide totals:
   the root project).
 
 ### Tests
-**32/32 CTest pass** in Debug as of this session (STAB-0511 added
-`fog_linear_test`, STAB-0507 added `smoke_test_orthographic_camera`,
-STAB-0500 added `smoke_test_missing_material`, STAB-0499 added
+**33/33 CTest pass** in Debug as of this session (STAB-0512 added
+`point_light_gizmo_test`, STAB-0511 added `fog_linear_test`, STAB-0507
+added `smoke_test_orthographic_camera`, STAB-0500 added
+`smoke_test_missing_material`, STAB-0499 added
 `missing_mesh_test`, STAB-0498 added `smoke_test_empty_scene`,
 STAB-0497 added `smoke_test_all_objects`, STAB-0493 added
 `mc3togltf_instance_variant`, STAB-0630 added
@@ -158,7 +162,8 @@ added `mc3togltf_texture_sampler`, STAB-0166-0170/0411-0415/0435 added
 `mc3togltf_animation_unsupported`; started the session at 20/20):
 `smoke_test`, `smoke_test_all_objects`, `smoke_test_empty_scene`,
 `missing_mesh_test`, `smoke_test_missing_material`,
-`smoke_test_orthographic_camera`, `fog_linear_test`, `xsd_validation`,
+`smoke_test_orthographic_camera`, `fog_linear_test`,
+`point_light_gizmo_test`, `xsd_validation`,
 `mc3_registry`, `mc3_ai`, `mc3_roundtrip`, `mc3_commands`,
 `mcb_roundtrip`, `mc3tomcb_roundtrip`, `mc3togltf_gltf`, `mc3togltf_all_primitives`,
 `mc3togltf_export_verification`, `mc3togltf_large_scene`,
@@ -243,9 +248,9 @@ See `TESTING.md` for the full per-test reference and `plan.md`'s
 
 ## 3. Recent changes
 
-**53 STAB tasks committed as of this update** (`53aa75e` through
-`b506b90`, pushed to `origin/develop` — see `git log --oneline` for the
-full list). **STAB-0511** below is verified and about to be committed
+**54 STAB tasks committed as of this update** (`53aa75e` through
+`21f934b`, pushed to `origin/develop` — see `git log --oneline` for the
+full list). **STAB-0512** below is verified and about to be committed
 as of this update. Gate 6 is exhausted (§8); **S11, S12, and S13 are
 all fully done** except genuinely blocked/flagged items. **S14 is now
 also accumulating flagged items**, same as S11/S12. Work is underway on
@@ -257,6 +262,24 @@ audit that found real bugs), then finished S11 and S12 entirely (bar
 the blocked/flagged items) and started S13. Highlights, most recent
 first:
 
+- **STAB-0512 — verified the point-light gizmo with a real
+  pixel-sampling test**: `drawLightGizmos()` (actually in
+  `SceneRenderer.cpp`, not `SceneRenderer_Gizmos.cpp` as the row cited)
+  is called unconditionally in the main draw loop
+  (`MeshCraftApplication.cpp`), alongside `drawCameraGizmos()`/
+  `drawCsgGizmos()` — not gated by selection state or a UI toggle like
+  the translate/rotate/bbox gizmos (STAB-0501/0502/0505). Confirmed the
+  `Point` case draws a solid sphere (0.13 unit scale) tinted with the
+  light's own color plus 7 diagonal ray lines radiating outward at
+  radius 0.28 — exactly matching "sphere + rays". Added
+  `test/point_light_gizmo.mc3.xml` (a single point light with a
+  distinctive bright magenta color, camera looking straight at it, no
+  other scene content that could plausibly produce that color) +
+  `test/point_light_gizmo_test.py` (real pixel sampling: asserts a
+  substantial magenta-ish pixel cluster exists) + a permanent
+  `point_light_gizmo_test` ctest. Manually confirmed 418 magenta-gizmo
+  pixel samples in a full run. Verified via full CMake reconfigure +
+  rebuild (0 warnings) and 33/33 ctest (up from 32/32).
 - **STAB-0511 — verified fog visualization with a real pixel-sampling
   test, unlike the last 4 toggles**: fog is a document-level
   `<environment><fog>` setting (`Mc3Environment::fog`), applied
@@ -1451,24 +1474,27 @@ has the same no-headless-hook wall), and STAB-0510 flagged 🟡
 (audited `drawObjectEdges()` the same way STAB-0497 audited the solid
 path — exhaustively and safely handles all 19 `ObjectType` values, no
 bug found — but `showWireframeMode_` has the same no-headless-hook
-wall as the other toggles), and STAB-0511 done (fog is a
+wall as the other toggles), STAB-0511 done (fog is a
 document-level setting applied unconditionally, unlike the last 4
 toggles — verified with a real pixel-sampling test proving a
-fully-fogged object renders fog-colored, not its authored base color).
-Next — **first P2 item, S14's priority subset is done**:
+fully-fogged object renders fog-colored, not its authored base color),
+and STAB-0512 done (`drawLightGizmos()` is also called unconditionally,
+not selection-gated like the translate/rotate/bbox gizmos — verified
+the point-light sphere+rays marker with a magenta-pixel-sampling
+test). Next:
 
-1. **STAB-0512 — verify light sphere gizmos: point light shows sphere
-   + rays** (S14, P2, next-lowest ID). Goal: a point light in the scene
-   shows a gizmo (sphere + rays) in the viewport. Files:
-   `src/MeshCraft/Renderer/SceneRenderer_Gizmos.cpp`. Verify: STAB-0511's
-   investigation already showed `drawLightGizmos()` is called
-   **unconditionally** in the main draw loop (`MeshCraftApplication.cpp`,
-   right alongside `drawCameraGizmos()`/`drawCsgGizmos()`) — not gated
-   by selection state or a UI toggle like STAB-0501/0502/0505's gizmos.
-   This looks headlessly verifiable the same way STAB-0511 was: add a
-   fixture with a point light, screenshot it, and confirm via pixel
-   sampling that the gizmo's distinctive rendering (e.g. a colored
-   sphere marker) actually appears.
+1. **STAB-0513 — verify spot light gizmo: sphere + cone visible** (S14,
+   P2, next-lowest ID). Goal: a spot light in the scene shows a gizmo
+   (small sphere + cone) in the viewport. Files:
+   `src/MeshCraft/Renderer/SceneRenderer_Gizmos.cpp` (same imprecise
+   citation as STAB-0512 — the real code is in `SceneRenderer.cpp`'s
+   `drawLightGizmos()`). Verify: STAB-0512's investigation already read
+   the `Spot` case — a small sphere (0.10 unit scale) at the light's
+   position plus a cone built from the light's `direction`/`angle`
+   fields — same unconditional draw path as Point, so this should be
+   verifiable the same way: a fixture with a distinctively-colored spot
+   light, screenshot, confirm via pixel sampling that both the sphere
+   and cone outline actually render.
 
 Beyond that, S14 gets heavily visual/interactive (gizmos, camera
 presets, bloom/SSAO toggles, shadow maps) — expect many items to land
