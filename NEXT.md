@@ -34,23 +34,26 @@ tool-blocked (STAB-0609/0614/0615/0620 need
 S20 (Release Readiness) is 12/15, with the last 3 items genuinely
 blocked (need Blender, a browser, or a running CI — none available in
 this environment). No gate is fully green yet. **S11 (Materials,
-Textures, and Visual Fidelity) work is well underway**: STAB-0411-0427,
-0429-0436 all done (only STAB-0428 and STAB-0421-0423 remain, all
-visually-blocked), **4 real bugs found and fixed** (texture wrap
-`mirror` mode, texture `filter`, texture URI subdirectory-stripping,
-and a registry-insert material-name-collision silently keeping the
-wrong material), **4 genuine test-coverage gaps closed** (material
-with every field populated; material color/roughness/metallic/emissive
-animation; UV mapping roundtrip; node→material export chain — all
-previously entirely untested), colorSpace/missing-texture-warns/
-include-override/search-case-insensitivity/D3-skip-reason/embed-texture-
-checkbox/color-precision all confirmed already correct or already
-sufficiently documented (including a new `MC3_FORMAT.md` note on
-texture-path resolution). STAB-0421-0423/0428 (material preview
-sphere, texture drag-drop) remain genuinely blocked — same
-visual-verification constraint as STAB-0617. Plan-wide totals: **251
+Textures, and Visual Fidelity) is now fully done except 5 genuinely
+blocked items**: 25/30 ✅, with STAB-0421/0422/0423 (material preview
+sphere) and STAB-0428 (texture drag-and-drop) needing a live display
+(same constraint as STAB-0617), and STAB-0431 needing Blender (same
+constraint as the S20 items). Everything else in S11 is closed. This
+sweep found **5 real bugs fixed** (texture wrap `mirror` mode, texture
+`filter`, texture URI subdirectory-stripping, a registry-insert
+material-name-collision silently keeping the wrong material, and SVG
+textures being silently dropped with no warning), **5 genuine
+test-coverage gaps closed** (material-with-every-field roundtrip,
+material animation roundtrip, UV mapping roundtrip, node→material
+export chain, unnamed-material handling — all previously entirely
+untested), and 8 items confirmed already correct or already
+sufficiently documented (colorSpace, missing-texture-warns,
+include-override policy, search case-insensitivity, D3's skip reason,
+the inert embed-texture checkbox, color precision, alpha-mode/
+emissive-only material defaults) plus one new `MC3_FORMAT.md`
+documentation addition (texture path resolution). Plan-wide totals: **255
 ✅ done, 4 🟡 partial, 124 🧪 has a plan but not executed,
-271 📋 not started** out of 650.
+267 📋 not started** out of 650.
 
 **Important architectural decisions:**
 - `mc3/` and `mcb/` are pure C++ static libs with **no** CNA/ImGui
@@ -89,11 +92,12 @@ visual-verification constraint as STAB-0617. Plan-wide totals: **251
   re-checked against the newer 13-test count from STAB-0630 — see §3).
 
 ### Tests
-**23/23 CTest pass** in Debug as of this session (STAB-0630 added
+**24/24 CTest pass** in Debug as of this session (STAB-0630 added
 `mc3togltf_obj_robustness`, STAB-0417/0418/0420/0416 added
-`mc3togltf_texture_sampler`, STAB-0166-0170/0411-0415 added
-`mc3togltf_material_pbr`; started the session at 20/20, last full
-Debug+Release verification at commit `fca6fc1`): `smoke_test`,
+`mc3togltf_texture_sampler`, STAB-0166-0170/0411-0415/0435 added
+`mc3togltf_material_pbr`, STAB-0440 added
+`mc3togltf_svg_texture_export`; started the session at 20/20, last
+full Debug+Release verification at commit `fca6fc1`): `smoke_test`,
 `xsd_validation`, `mc3_registry`, `mc3_ai`, `mc3_roundtrip`,
 `mc3_commands`, `mcb_roundtrip`, `mc3tomcb_roundtrip`,
 `mc3togltf_gltf`, `mc3togltf_all_primitives`,
@@ -102,8 +106,8 @@ Debug+Release verification at commit `fca6fc1`): `smoke_test`,
 `mc3togltf_csg_unsupported`, `mc3togltf_csg_nested`,
 `mc3togltf_instance_deform_cache`, `mc3togltf_float_cache_key`,
 `mc3togltf_obj_robustness`, `mc3togltf_texture_sampler`,
-`mc3togltf_material_pbr`, `mc3togltf_large_scene_generated`,
-`mc3togltf_large_scene_500`.
+`mc3togltf_material_pbr`, `mc3togltf_svg_texture_export`,
+`mc3togltf_large_scene_generated`, `mc3togltf_large_scene_500`.
 
 - `mc3_commands` (~282 assertions): editor command algorithms, undo/redo
   for every mutating command, auto-save/backup, Save-As/Export-Selection/
@@ -178,17 +182,39 @@ See `TESTING.md` for the full per-test reference and `plan.md`'s
 
 ## 3. Recent changes
 
-**19 STAB tasks committed and pushed as of `b2c6887`** (`53aa75e`
-through `b2c6887` — see `git log --oneline` for the full list). Gate 6
-is exhausted for this environment (§8); S11 is now essentially
-finished. **STAB-0432/0433/0434/0435/0436** below are implemented but
-**not yet committed** as of this update.
+**20 STAB tasks committed and pushed as of `8f6afc1`** (`53aa75e`
+through `8f6afc1` — see `git log --oneline` for the full list). Gate 6
+is exhausted for this environment (§8); **S11 is now fully done** except
+5 genuinely blocked items (§8 details). **STAB-0437/0438/0439/0440**
+below are implemented but **not yet committed** as of this update.
 
 This was a long, dense session that closed out essentially all of
 **Gate 6 (Documentation)**'s reachable work (plus a from-scratch schema
-audit that found real bugs), then worked through nearly all of S11.
-Highlights, most recent first:
+audit that found real bugs), then finished S11 entirely (bar the
+blocked items). Highlights, most recent first:
 
+- **STAB-0437/0438/0439/0440 — S11 closeout**: STAB-0437 confirmed a
+  `<material>` with no `id` collides gracefully on `id=""` (last-write-
+  wins, no crash) and — critically — the exporter's `!matName.empty()`
+  guard means a materialless object never accidentally resolves to an
+  unnamed material; added `testUnnamedMaterialHandledGracefully()`.
+  STAB-0438 confirmed alpha=0 with no explicit `alpha_mode` exports as
+  OPAQUE (no auto-BLEND) — matches STAB-0170's earlier finding that
+  `alpha_mode` is explicit, not auto-derived; also checked the live
+  editor and found it doesn't alpha-blend either (no `GL_BLEND`
+  anywhere in `SceneRenderer.cpp`), so there's no editor-vs-export
+  discrepancy — this is correct-by-design, a content-authoring
+  responsibility, not a bug. STAB-0439 found the real `baseColorFactor`
+  default for an emissive-only material is `[0.8,0.8,0.8,1.0]`, not
+  `[1,1,1,1]` as the row assumed — matches `Mc3Material`'s actual
+  default, correct behavior, wrong row expectation. **STAB-0440 found
+  a real gap and fixed it**: SVG textures were already documented as
+  unsupported, but silently — no warning was ever printed. Added a
+  `doc.svgTextures` check to `GltfExporter.cpp`'s `buildMaterial()`
+  so an unresolvable SVG-sourced texture reference now prints a
+  specific warning (naming the material, slot, and texture id) instead
+  of vanishing silently; added `test/svg_material.mc3.xml` +
+  `mc3togltf_svg_texture_export` ctest.
 - **STAB-0432/0433/0434/0435/0436 — final S11 P3 sweep**: STAB-0432
   added `testUvMappingRoundtrip()` (`Mc3UvMapping` had zero prior
   coverage — projection/scale/offset/rotation all confirmed exact).
@@ -755,69 +781,35 @@ without an external tool or a human with a display.**
 
 The next priority tier is P2 items across S6–S13 and the untouched
 S11/S12/S14/S15 sections. **S11 (Materials, Textures, and Visual
-Fidelity)** is nearly fully closed: only 4 items remain, all
-genuinely blocked in this environment — STAB-0421/0422/0423 (material
-preview sphere) and STAB-0428 (texture drag-and-drop) all need a human
-at a live display, same as STAB-0617.
+Fidelity) is done** — 25/30, remaining 5 all genuinely blocked
+(STAB-0421/0422/0423 material preview sphere + STAB-0428 texture
+drag-and-drop need a live display, same as STAB-0617; STAB-0431 needs
+Blender, same as the S20 items).
 
-The last 4 *runnable* S11 items are quick, well-scoped checks:
+**S12 (Animation Stability)** is the next untouched section (30 rows).
+A first pass (not yet done this session) is the right next step before
+diving into individual items — many of its P1 roundtrip rows
+(STAB-0441-0445: transform/material/deform animation roundtrip) may
+already be covered by this session's `testAnimationLinear`/
+`testAnimationCubicBezier`/`testAnimationStep`/`testAnimationMultiAction`/
+`testMaterialColorAnimationRoundtrip` tests, or by pre-existing
+coverage neither STAB-0430 nor this note has cross-checked yet. Its
+remaining rows split into two shapes:
+- **STAB-0441-0448** (roundtrip + glTF-export coverage): pure
+  file-based tests, no live editor needed — check existing coverage
+  first, add tests only for genuine gaps (same pattern as this
+  session's S11 sweep).
+- **STAB-0449-0453+** (timeline UI: multi-select, delete, duplicate,
+  rename, copy/paste keyframes): interactive `MeshCraftApplication_Anim.cpp`
+  UI gestures — check whether the "Alg mirror" pattern (a CNA-free
+  header with the actual logic, per `NEXT.md` §6) already exists for
+  any of these before assuming they're all visually-blocked like
+  STAB-0421-0423/0428/0617 — some editor logic this session found
+  (undo/redo, hierarchy filtering) was already extracted that way and
+  fully testable without a display.
 
-1. **STAB-0437 — add test: unnamed material (id collision with
-   default)** (S11, P3). Goal: confirm a `<material>` element with no
-   `id` attribute is handled gracefully (doesn't crash, doesn't
-   silently overwrite an unrelated material under some default id).
-   Files: `mc3/src/Mc3XmlParser.cpp` (`parseMaterials`, read during
-   this session's STAB-0424 work), `mc3/test/roundtrip_test.cpp`.
-   Verify: read `parseMaterials()`'s handling of a missing `id`
-   attribute (`attr(c, "id")` returns `""` when absent — check what
-   `doc.materials[""]` collision means for multiple unnamed materials)
-   before writing a test.
-
-2. **STAB-0438 — verify alpha=0 material exported with MASK or BLEND
-   mode** (S11, P3). Goal: a material with `base_color`'s alpha
-   component at 0 (fully transparent) but no explicit `alpha_mode` set
-   — does the exporter (already confirmed this session to just pass
-   `mat.alphaMode` through literally, no alpha-value-based
-   auto-detection) leave it as `OPAQUE` (likely, given STAB-0170's
-   findings) or is there special-casing for alpha=0 specifically?
-   Files: `mc3togltf/src/GltfExporter.cpp` (`buildMaterial`, already
-   read this session for STAB-0166-0170).
-   Verify: test-export a material with alpha=0 and no `alpha_mode`;
-   check what `alphaMode` actually comes out — likely reveals this row
-   describes desired behavior not yet implemented (auto-BLEND on
-   alpha<1), in which case document the gap rather than force a
-   speculative auto-detection feature.
-
-3. **STAB-0439 — verify emissive-only material (no baseColor)
-   exported** (S11, P3). Goal: confirm a material that only sets
-   `emissive_color` (leaving `base_color` at its default) exports with
-   `baseColorFactor` at the default `[0.8,0.8,0.8,1.0]` per
-   `Mc3Material`'s own default (the row's own expectation of
-   `[1,1,1,1]` may not match the actual default — verify against real
-   code, not the row's assumption).
-   Files: `mc3togltf/src/GltfExporter.cpp`, `mc3/test/roundtrip_test.cpp`
-   or a `mc3togltf` ctest.
-   Verify: export a material with only `emissive_color` set; check the
-   actual `baseColorFactor` default matches `Mc3Material::baseColor`'s
-   declared default.
-
-4. **STAB-0440 — verify SVG texture documented as unsupported** (S11,
-   P3). Goal: confirm this is already covered — `README.md`'s
-   limitations list already mentions SVG rasterization isn't
-   implemented (added in an earlier session, per this repo's git
-   history), and `mc3/test/roundtrip_test.cpp` already has
-   `testSvgTexture()` for round-trip (not export) coverage. Check
-   whether `GltfExporter.cpp` itself prints a warning when it
-   encounters an SVG texture during export, or silently drops it.
-   Files: `mc3togltf/src/GltfExporter.cpp`, `README.md`.
-   Verify: export a scene referencing an SVG texture; confirm a
-   warning is printed (or add one if the SVG case is silently ignored).
-
-Beyond these four: S11 is done except the 4 blocked items above. S12
-(Animation Stability), S13 (Commands/Undo/Redo/Algorithms), S14
-(Rendering/Viewport), and S15 (Import/Export/Editor Integration) are
-untouched sections — worth a first pass to see how much is already
-✅/🧪 vs genuinely open before diving in.
+S13 (Commands/Undo/Redo/Algorithms), S14 (Rendering/Viewport), and S15
+(Import/Export/Editor Integration) remain untouched after S12.
 
 ---
 

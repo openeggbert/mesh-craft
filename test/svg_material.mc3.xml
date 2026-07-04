@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<mc3 version="0.3" model="SvgMaterialTest">
+  <textures>
+    <texture id="logo" type="svg" src="logo.svg"/>
+  </textures>
+  <materials>
+    <material id="logo_mat" roughness="0.5">
+      <base_color_texture>logo</base_color_texture>
+    </material>
+  </materials>
+  <objects>
+    <box name="LogoBox" size="1 1 1" material="logo_mat"/>
+  </objects>
+</mc3>

@@ -315,10 +315,21 @@ buildTextures(tinygltf::Model& model,
 
 static int buildMaterial(tinygltf::Model& model,
                          const Mc3Material& mat,
-                         const std::unordered_map<std::string, int>& texIdx)
+                         const std::unordered_map<std::string, int>& texIdx,
+                         const std::map<std::string, Mc3SvgTexture>& svgTextures)
 {
     tinygltf::Material m;
     m.name = mat.name;
+
+    // STAB-0440: SVG textures aren't rasterized (no code path reads
+    // doc.svgTextures at all), so a material referencing one resolves to
+    // nothing in texIdx. Name the reason instead of silently dropping it.
+    auto warnIfUnresolvedSvg = [&](const std::string& texRef, const char* slot) {
+        if (svgTextures.count(texRef))
+            std::cerr << "Warning: material '" << mat.name << "' references SVG texture '"
+                      << texRef << "' as " << slot
+                      << " — SVG rasterization is not implemented, texture skipped\n";
+    };
 
     auto& pbr = m.pbrMetallicRoughness;
     pbr.baseColorFactor = {
@@ -332,6 +343,8 @@ static int buildMaterial(tinygltf::Model& model,
         if (it != texIdx.end()) {
             pbr.baseColorTexture.index    = it->second;
             pbr.baseColorTexture.texCoord = 0;
+        } else {
+            warnIfUnresolvedSvg(mat.baseColorTexture, "base_color_texture");
         }
     }
     if (!mat.metallicRoughnessTexture.empty()) {
@@ -339,6 +352,8 @@ static int buildMaterial(tinygltf::Model& model,
         if (it != texIdx.end()) {
             pbr.metallicRoughnessTexture.index    = it->second;
             pbr.metallicRoughnessTexture.texCoord = 0;
+        } else {
+            warnIfUnresolvedSvg(mat.metallicRoughnessTexture, "metallic_roughness_texture");
         }
     }
     if (!mat.normalTexture.empty()) {
@@ -347,6 +362,8 @@ static int buildMaterial(tinygltf::Model& model,
             m.normalTexture.index    = it->second;
             m.normalTexture.texCoord = 0;
             m.normalTexture.scale    = mat.normalScale;
+        } else {
+            warnIfUnresolvedSvg(mat.normalTexture, "normal_texture");
         }
     }
     if (!mat.occlusionTexture.empty()) {
@@ -355,6 +372,8 @@ static int buildMaterial(tinygltf::Model& model,
             m.occlusionTexture.index    = it->second;
             m.occlusionTexture.texCoord = 0;
             m.occlusionTexture.strength = mat.occlusionStrength;
+        } else {
+            warnIfUnresolvedSvg(mat.occlusionTexture, "occlusion_texture");
         }
     }
     if (!mat.emissiveTexture.empty()) {
@@ -362,6 +381,8 @@ static int buildMaterial(tinygltf::Model& model,
         if (it != texIdx.end()) {
             m.emissiveTexture.index    = it->second;
             m.emissiveTexture.texCoord = 0;
+        } else {
+            warnIfUnresolvedSvg(mat.emissiveTexture, "emissive_texture");
         }
     }
 
@@ -1091,7 +1112,7 @@ void GltfExporter::exportDocument(const Mc3Document& doc,
     // Materials
     std::unordered_map<std::string, int> matNameToIdx;
     for (const auto& [name, mat] : doc.materials) {
-        int idx = buildMaterial(model, mat, texIdx);
+        int idx = buildMaterial(model, mat, texIdx, doc.svgTextures);
         matNameToIdx[name] = idx;
     }
 

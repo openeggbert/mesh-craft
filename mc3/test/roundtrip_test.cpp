@@ -124,6 +124,51 @@ static void testMaterialColorPrecisionRoundtrip() {
     CHECKF(m.emissiveColor[2], 64.0f/255.0f,  "color precision: emissive.b (8-bit-derived value, within 1e-5)");
 }
 
+// STAB-0437: a <material> with no id attribute parses with id="" (attr()'s
+// default). Confirmed by reading GltfExporter.cpp's buildNode(): it guards
+// `if (!matName.empty())` before ever looking up doc.materials by name, so an
+// object with no material assigned (obj->material == "") never accidentally
+// resolves to an unnamed material — the empty string means "no material",
+// never "the material named empty string". Two materials that both omit id
+// collide on the same "" key: no crash, silent last-write-wins (the same
+// policy STAB-0424 already confirmed for genuine id collisions).
+static void testUnnamedMaterialHandledGracefully() {
+    auto xmlPath = tmpPath();
+    {
+        std::ofstream f(xmlPath);
+        f << R"(<?xml version="1.0" encoding="UTF-8"?>
+<mc3 version="0.3" model="UnnamedMaterialTest">
+  <materials>
+    <material roughness="0.2"><base_color>0.1 0.1 0.1 1.0</base_color></material>
+    <material roughness="0.9"><base_color>0.9 0.9 0.9 1.0</base_color></material>
+  </materials>
+  <objects>
+    <box name="NoMaterialBox" size="1 1 1"/>
+  </objects>
+</mc3>)";
+    }
+    try {
+        auto doc = Mc3Document::loadFromFile(xmlPath);
+        std::filesystem::remove(xmlPath);
+
+        CHECK(doc.materials.count("") == 1,
+              "unnamed material: no crash, exactly one '' entry (last-write-wins on collision)");
+        if (doc.materials.count("")) {
+            CHECKF(doc.materials.at("").roughness, 0.9f,
+                   "unnamed material: second (last) unnamed material's value survived, first silently dropped");
+        }
+
+        CHECK(!doc.objects.empty(), "unnamed material: materialless object still loaded");
+        if (!doc.objects.empty())
+            CHECK(doc.objects[0]->material.empty(),
+                  "unnamed material: materialless object's material field stays empty, "
+                  "not accidentally resolved to the unnamed material");
+    } catch (const std::exception& e) {
+        std::filesystem::remove(xmlPath);
+        fail(std::string("unnamed material: threw unexpectedly: ") + e.what());
+    }
+}
+
 // STAB-0432: Mc3UvMapping (projection/scale/offset/rotation) had no roundtrip
 // test at all before this.
 static void testUvMappingRoundtrip() {
@@ -1859,6 +1904,7 @@ int main(int argc, char* argv[]) {
     testVisibleDefault();
     testDeform();
     testMaterialColorPrecisionRoundtrip();
+    testUnnamedMaterialHandledGracefully();
     testUvMappingRoundtrip();
     testExtrudeArcCircle();
     testExtrudeHelixPolygon();

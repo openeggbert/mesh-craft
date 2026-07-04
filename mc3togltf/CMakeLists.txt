@@ -128,6 +128,7 @@ if(BUILD_TESTING)
         set(_obj_robustness_xml       "${CMAKE_CURRENT_SOURCE_DIR}/../test/obj_robustness.mc3.xml")
         set(_texture_sampler_xml      "${CMAKE_CURRENT_SOURCE_DIR}/../test/texture_sampler.mc3.xml")
         set(_material_pbr_xml         "${CMAKE_CURRENT_SOURCE_DIR}/../test/material_pbr.mc3.xml")
+        set(_svg_material_xml         "${CMAKE_CURRENT_SOURCE_DIR}/../test/svg_material.mc3.xml")
         if(EXISTS "${_anim_xml}" AND EXISTS "${_house_xml}")
             add_test(
                 NAME mc3togltf_gltf
@@ -261,6 +262,16 @@ if(BUILD_TESTING)
                         "${_material_pbr_xml}"
             )
             set_tests_properties(mc3togltf_material_pbr PROPERTIES TIMEOUT 30)
+        endif()
+        if(EXISTS "${_svg_material_xml}")
+            add_test(
+                NAME mc3togltf_svg_texture_export
+                COMMAND "${PYTHON3_EXEC}"
+                        "${CMAKE_CURRENT_SOURCE_DIR}/test/svg_texture_export_test.py"
+                        "$<TARGET_FILE:mc3togltf>"
+                        "${_svg_material_xml}"
+            )
+            set_tests_properties(mc3togltf_svg_texture_export PROPERTIES TIMEOUT 30)
         endif()
         add_test(
             NAME mc3togltf_large_scene_generated
