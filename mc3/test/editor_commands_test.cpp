@@ -676,6 +676,120 @@ static void testAlignToObject()
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// scatterAlongCurveAlg / scatterCurvePositionAlg (STAB-0485)
+// ─────────────────────────────────────────────────────────────────────────────
+
+static void testScatterAlongCurve()
+{
+    auto zeroRng = []() -> float { return 0.0f; };
+
+    // Line mode: count=10 -> exactly 9 NEW objects (the UI's own "(N-1 new)"
+    // label documents this as intended; the original stays untouched).
+    {
+        std::vector<std::shared_ptr<Mc3Object>> roots;
+        auto src = makeObj("s", "Src");
+        src->transform.position = {1.0f, 2.0f, 3.0f};
+        roots.push_back(src);
+
+        ScatterCurveParamsAlg params;
+        params.count   = 10;
+        params.mode    = 0; // line
+        params.axis    = 1; // Y
+        params.spacing = 2.0f;
+
+        auto added = scatterAlongCurveAlg(roots, {src}, params, zeroRng);
+        CHECK(added.size() == 9, "scatter line: count=10 selected=1 -> 9 new objects");
+        CHECK(roots.size() == 10, "scatter line: original root list grows by 9 (10 total)");
+        CHECKF(src->transform.position[1], 2.0f, "scatter line: original object itself untouched");
+
+        CHECKF(added[0]->transform.position[0], 1.0f, "scatter line: copy1.x unchanged (axis=Y)");
+        CHECKF(added[0]->transform.position[1], 4.0f, "scatter line: copy1.y = base + 1*spacing");
+        CHECKF(added[0]->transform.position[2], 3.0f, "scatter line: copy1.z unchanged (axis=Y)");
+        CHECKF(added[8]->transform.position[1], 20.0f, "scatter line: copy9.y = base + 9*spacing");
+        CHECK(added[0]->name == "Src_sc1", "scatter line: copy naming convention");
+        CHECK(added[0]->id   == "s_sc1",   "scatter line: copy id convention (must stay unique)");
+    }
+
+    // Multiple selected sources: each independently gets count-1 new copies,
+    // inserted into its own parent list right after itself.
+    {
+        std::vector<std::shared_ptr<Mc3Object>> roots;
+        auto a = makeObj("a", "A"); a->transform.position = {0,0,0};
+        auto b = makeObj("b", "B"); b->transform.position = {10,0,0};
+        roots.push_back(a);
+        roots.push_back(b);
+
+        ScatterCurveParamsAlg params;
+        params.count   = 3;
+        params.mode    = 0;
+        params.axis    = 0;
+        params.spacing = 1.0f;
+
+        auto added = scatterAlongCurveAlg(roots, {a, b}, params, zeroRng);
+        CHECK(added.size() == 4, "scatter multi-source: 2 sources * (count-1)=2 each -> 4 new");
+        CHECK(roots.size() == 6, "scatter multi-source: root list grows by 4 (6 total)");
+        // a, a_sc1, a_sc2, b, b_sc1, b_sc2 in order.
+        CHECK(roots[0]->id == "a" && roots[1]->id == "a_sc1" && roots[2]->id == "a_sc2",
+              "scatter multi-source: A's copies inserted right after A");
+        CHECK(roots[3]->id == "b" && roots[4]->id == "b_sc1" && roots[5]->id == "b_sc2",
+              "scatter multi-source: B's copies inserted right after B");
+    }
+
+    // Arc mode: copy at i=0 conceptually sits at the source (angle=0 -> dx=dz=0).
+    {
+        auto src = makeObj("s", "Src");
+        src->transform.position = {0.0f, 0.0f, 0.0f};
+
+        ScatterCurveParamsAlg params;
+        params.count       = 4;
+        params.mode        = 1; // arc
+        params.axis        = 1; // Y-up: arc in XZ plane
+        params.arcAngleDeg = 180.0f;
+        params.radius      = 5.0f;
+
+        auto p1 = scatterCurvePositionAlg(*src, 1, params);
+        auto p3 = scatterCurvePositionAlg(*src, 3, params); // i=count-1 -> t=1 -> angle=180deg
+        CHECKF(p3[0], -10.0f, "scatter arc: last point x = radius*cos(180)-radius = -2*radius");
+        CHECK(std::abs(p3[2]) < 1e-3f, "scatter arc: last point z ~= 0 at angle=180deg");
+        CHECK(std::abs(p1[0]) > 0.01f || std::abs(p1[2]) > 0.01f,
+              "scatter arc: intermediate point is actually displaced off the source");
+    }
+
+    // Jitter is applied per-axis via the injected RNG.
+    {
+        std::vector<std::shared_ptr<Mc3Object>> roots;
+        auto src = makeObj("s", "Src");
+        roots.push_back(src);
+
+        ScatterCurveParamsAlg params;
+        params.count  = 2;
+        params.mode   = 0;
+        params.axis   = 0;
+        params.jitter = 10.0f;
+
+        auto onesRng = []() -> float { return 1.0f; };
+        auto added = scatterAlongCurveAlg(roots, {src}, params, onesRng);
+        CHECK(added.size() == 1, "scatter jitter: count=2 -> 1 new copy");
+        CHECKF(added[0]->transform.position[1], 10.0f, "scatter jitter: jitterRng()*jitter added to Y");
+        CHECKF(added[0]->transform.position[2], 10.0f, "scatter jitter: jitterRng()*jitter added to Z");
+    }
+
+    // No-ops.
+    {
+        std::vector<std::shared_ptr<Mc3Object>> roots;
+        auto src = makeObj("s", "Src");
+        roots.push_back(src);
+        ScatterCurveParamsAlg params;
+        params.count = 1; // < 2
+        CHECK(scatterAlongCurveAlg(roots, {src}, params, zeroRng).empty(),
+              "scatter: count < 2 is a no-op");
+        params.count = 5;
+        CHECK(scatterAlongCurveAlg(roots, {}, params, zeroRng).empty(),
+              "scatter: empty selection is a no-op");
+    }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // deepCopyObjectAlg
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -1984,6 +2098,7 @@ int main()
     testConvertToDefinition();
     testBreakInstance();
     testAlignToObject();
+    testScatterAlongCurve();
     testDeepCopy();
     testUndoRedoBatchRename();
     testUndoRedoFindReplace();

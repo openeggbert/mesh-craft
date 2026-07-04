@@ -34,12 +34,12 @@ flagged (STAB-0464 needs a live display; STAB-0460 describes a feature
 that was never built, out of scope per the stabilization moratorium).
 Both S11 and S12 sweeps found several real bugs, fixed with permanent
 regression tests — see §3 for the full list. **S13 (Commands,
-Undo/Redo, and Algorithms)** work has started: STAB-0482-0484 done
+Undo/Redo, and Algorithms)** work is underway: STAB-0482-0485 done
 (extracted `convertToDefinitionAlg()`/`breakInstanceAlg()`/
-`alignToObjectAlg()` Alg mirrors, none existed before; STAB-0483 found
-and fixed a real duplicate-id bug — see §3). Plan-wide totals: **286
-✅ done, 6 🟡 partial, 112 🧪 has a plan but not executed,
-246 📋 not started** out of 650.
+`alignToObjectAlg()`/`scatterAlongCurveAlg()` Alg mirrors, none existed
+before; STAB-0483 found and fixed a real duplicate-id bug — see §3).
+Plan-wide totals: **287 ✅ done, 6 🟡 partial, 112 🧪 has a plan but
+not executed, 245 📋 not started** out of 650.
 
 **Important architectural decisions:**
 - `mc3/` and `mcb/` are pure C++ static libs with **no** CNA/ImGui
@@ -97,7 +97,7 @@ full Debug+Release verification at commit `fca6fc1`): `smoke_test`,
 `mc3togltf_animation_unsupported`, `mc3togltf_large_scene_generated`,
 `mc3togltf_large_scene_500`.
 
-- `mc3_commands` (~282 assertions): editor command algorithms, undo/redo
+- `mc3_commands` (~362 assertions): editor command algorithms, undo/redo
   for every mutating command, auto-save/backup, Save-As/Export-Selection/
   drag-drop workflows, keybinding/preferences/macro persistence,
   hierarchy-panel filtering, AI-panel + unsaved-changes dialog
@@ -170,12 +170,12 @@ See `TESTING.md` for the full per-test reference and `plan.md`'s
 
 ## 3. Recent changes
 
-**26 STAB tasks committed and pushed as of `5e6dc98`** (`53aa75e`
-through `5e6dc98` — see `git log --oneline` for the full list). Gate 6
-is exhausted (§8); **S11 and S12 are both fully done** except
-genuinely blocked/flagged items. Work is underway on **S13 (Commands,
-Undo/Redo, and Algorithms)**. **STAB-0484** below is implemented but
-**not yet committed** as of this update.
+**27 STAB tasks committed as of `5b1d306`** (`53aa75e` through
+`5b1d306`, pushed to `origin/develop` — see `git log --oneline` for the
+full list). **STAB-0485** below is implemented and about to be
+committed as of this update. Gate 6 is exhausted (§8); **S11 and S12
+are both fully done** except genuinely blocked/flagged items. Work is
+underway on **S13 (Commands, Undo/Redo, and Algorithms)**.
 
 This was a long, dense session that closed out essentially all of
 **Gate 6 (Documentation)**'s reachable work (plus a from-scratch schema
@@ -183,6 +183,23 @@ audit that found real bugs), then finished S11 and S12 entirely (bar
 the blocked/flagged items) and started S13. Highlights, most recent
 first:
 
+- **STAB-0485 — extracted `scatterAlongCurveAlg()`**: this row's
+  phrasing ("N=10 -> exactly 10 new objects") doesn't match intended
+  behavior — the UI itself documents `count-1` new objects
+  (`MeshCraftApplication_UiOverlays.cpp:826`, `"(%d new)"` label),
+  since `count` is the total number of points along the curve
+  *including* the untouched original, not a bug. No Alg mirror existed
+  for this command (same gap as STAB-0482/0483/0484). Extracted
+  `ScatterCurveParamsAlg` + `scatterCurvePositionAlg()` (pure line/arc
+  position math) + `scatterAlongCurveAlg()` (the splice-and-copy loop,
+  taking an injectable `jitterRng` for determinism) into
+  `EditorAlgorithms.hpp`; wired the real `scatterAlongCurve()` to call
+  it. Added `testScatterAlongCurve()` (21 assertions): count=10/1
+  source -> exactly 9 new objects and the original untouched; multiple
+  sources each independently get `count-1` copies inserted right after
+  themselves; line- and arc-mode position math verified against
+  `scatterCurvePositionAlg`; a fixed jitter function gives exact,
+  deterministic per-axis offsets; `count<2`/empty-selection no-ops.
 - **STAB-0484 — extracted `alignToObjectAlg()`**: "Align to Object"
   had no Alg mirror either (same gap as STAB-0482/0483). Confirmed the
   command only aligns *position* (not rotation/scale) of every
@@ -913,28 +930,25 @@ stabilization moratorium; STAB-0464 needs a live display).
 **S13 (Commands, Undo/Redo, and Algorithms)** already has its P0/P1
 tier done from earlier sessions (STAB-0471-0481 — including a real fix,
 `resetPivot()` was missing `pushUndo()`, found and fixed then).
-STAB-0482-0484 are now done too (this session — extracted
-`convertToDefinitionAlg()`/`breakInstanceAlg()`/`alignToObjectAlg()`
-Alg mirrors, none existed before; STAB-0483 found and fixed a real
-duplicate-id bug — see §3). Next:
+STAB-0482-0485 are now done too (this session — extracted
+`convertToDefinitionAlg()`/`breakInstanceAlg()`/`alignToObjectAlg()`/
+`scatterAlongCurveAlg()` Alg mirrors, none existed before; STAB-0483
+found and fixed a real duplicate-id bug — see §3). Next:
 
-1. **STAB-0485 — verify Scatter/Place: count objects added matches
-   requested** (S13, P2, next-lowest ID). Goal: a "scatter N copies"
-   command should add exactly N new objects (not off-by-one, not
-   silently capped).
-   Files: `src/MeshCraft/MeshCraftApplication_Commands.cpp`.
-   Verify: read the actual command function first — check whether an
-   Alg mirror already exists (same pattern as STAB-0482-0484, none had
-   one); extract to `EditorAlgorithms.hpp` and add a headless test if
-   none exists yet.
+1. **STAB-0486 — verify command palette executes same code path as
+   menu** (S13, P2, next-lowest ID). Goal: confirm the command palette's
+   "Delete" entry (and others) call the exact same function as the
+   equivalent Edit-menu item, not a parallel/duplicated implementation.
+   Files: `src/MeshCraft/MeshCraftApplication_UiOverlays.cpp`.
+   Verify: read the command palette dispatch table and the menu
+   handlers; confirm they resolve to the same function pointers/calls.
 
-Beyond this: S13 has ~11 more P2/P3 items (STAB-0486-0496ish — command
-palette, macro recorder, proportional editing/snapping, Select
-Children, Random variant — see `plan.md`'s S13 rows; several of these,
-e.g. mouse-drag snapping, may be genuinely interactive/blocked like
-S11/S12's visual items — check each before assuming). S14
-(Rendering/Viewport) and S15 (Import/Export/Editor Integration) remain
-fully untouched after S13.
+Beyond this: S13 has ~10 more P2/P3 items (STAB-0487-0496ish — macro
+recorder, proportional editing/snapping, Select Children, Random
+variant — see `plan.md`'s S13 rows; several of these, e.g. mouse-drag
+snapping, may be genuinely interactive/blocked like S11/S12's visual
+items — check each before assuming). S14 (Rendering/Viewport) and S15
+(Import/Export/Editor Integration) remain fully untouched after S13.
 
 ---
 

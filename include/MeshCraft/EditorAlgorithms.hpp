@@ -15,6 +15,7 @@
 #include <functional>
 #include <map>
 #include <memory>
+#include <numbers>
 #include <set>
 #include <sstream>
 #include <string>
@@ -521,6 +522,90 @@ inline int alignToObjectAlg(
         ++aligned;
     }
     return aligned;
+}
+
+// ── Scatter Along Curve (STAB-0485) ────────────────────────────────────────────
+//
+// Mirrors MeshCraftApplication::scatterAlongCurve() (H4). `count` is the
+// *total* number of points along the curve, including the original at index
+// 0 — the UI's own live label already says "(count-1) new" next to the
+// count slider, so producing `count-1` new copies per source object is the
+// documented, intended behavior, not an off-by-one bug.
+struct ScatterCurveParamsAlg {
+    int   count       = 2;      // total points including the original; must be >= 2
+    int   mode        = 0;      // 0 = straight line along `axis`; anything else = arc
+    int   axis        = 1;      // 0=X, 1=Y, 2=Z — line direction, or the arc plane's "up" axis
+    float spacing     = 1.0f;   // line mode: distance between consecutive points
+    float arcAngleDeg = 180.0f; // arc mode: total sweep angle
+    float radius      = 1.0f;   // arc mode: arc radius
+    float jitter      = 0.0f;   // max per-axis random offset added to each new copy's position
+};
+
+// Computes copy index i's position (i=0 is the untouched original's own
+// position) relative to src, for either curve mode. Exposed separately so
+// it can be tested in isolation from the RNG/document-mutation side.
+inline std::array<float,3> scatterCurvePositionAlg(
+    const Mc3::Mc3Object& src, int i, const ScatterCurveParamsAlg& p)
+{
+    float bx = src.transform.position[0];
+    float by = src.transform.position[1];
+    float bz = src.transform.position[2];
+
+    if (p.mode == 0) {
+        float offset = static_cast<float>(i) * p.spacing;
+        std::array<float,3> pos = {bx, by, bz};
+        pos[p.axis] += offset;
+        return pos;
+    }
+    float t     = static_cast<float>(i) / static_cast<float>(p.count - 1);
+    float angle = t * p.arcAngleDeg * (std::numbers::pi_v<float> / 180.0f);
+    float dx = p.radius * std::cos(angle) - p.radius; // 0 at angle=0 (i.e. at the source)
+    float dz = p.radius * std::sin(angle);
+    switch (p.axis) {
+    case 0:  return {bx,      by + dx, bz + dz}; // arc in YZ plane (X is up)
+    case 1:  return {bx + dx, by,      bz + dz}; // arc in XZ plane (Y is up)
+    default: return {bx + dx, by + dz, bz};      // arc in XY plane (Z is up)
+    }
+}
+
+// For each selected source object, inserts (params.count - 1) new deep
+// copies immediately after it in its parent list, positioned along the
+// curve (see scatterCurvePositionAlg) with `jitterRng() * params.jitter`
+// added per axis. `jitterRng` should return a value in [-1, 1] — pass a
+// fixed-seed or always-zero generator for deterministic/testable output.
+// Returns only the newly created objects (not the untouched originals).
+// No-op (returns empty) if `selected` is empty or params.count < 2.
+inline std::vector<std::shared_ptr<Mc3::Mc3Object>> scatterAlongCurveAlg(
+    std::vector<std::shared_ptr<Mc3::Mc3Object>>&       rootObjects,
+    const std::vector<std::shared_ptr<Mc3::Mc3Object>>& selected,
+    const ScatterCurveParamsAlg&                        params,
+    const std::function<float()>&                       jitterRng)
+{
+    std::vector<std::shared_ptr<Mc3::Mc3Object>> newObjs;
+    if (selected.empty() || params.count < 2) return newObjs;
+
+    for (const auto& src : selected) {
+        auto* parentList = findParentListAlg(rootObjects, src.get());
+        if (!parentList) continue;
+        auto it = std::find_if(parentList->begin(), parentList->end(),
+            [&](const auto& o){ return o.get() == src.get(); });
+        if (it == parentList->end()) continue;
+        auto insertIt = it + 1;
+
+        for (int i = 1; i < params.count; ++i) {
+            auto copy = deepCopyObjectAlg(*src);
+            copy->name = src->name + "_sc" + std::to_string(i);
+            copy->id   = src->id   + "_sc" + std::to_string(i);
+            auto p = scatterCurvePositionAlg(*src, i, params);
+            copy->transform.position[0] = p[0] + jitterRng() * params.jitter;
+            copy->transform.position[1] = p[1] + jitterRng() * params.jitter;
+            copy->transform.position[2] = p[2] + jitterRng() * params.jitter;
+            insertIt = parentList->insert(insertIt, copy);
+            ++insertIt;
+            newObjs.push_back(copy);
+        }
+    }
+    return newObjs;
 }
 
 // ── Auto-save (STAB-0265) ─────────────────────────────────────────────────────
