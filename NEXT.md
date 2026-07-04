@@ -63,13 +63,14 @@ warning at all; fixed `loadOrGetMesh()` to print a warning, added
 done (confirmed a nonexistent `material=` reference safely falls back
 to a default gray color in all 3 resolution sites, no crash by
 construction; added `test/missing_material.mc3.xml` +
-`smoke_test_missing_material` ctest), and **STAB-0501 is the first S14
-item to hit the same wall as S11/S12's blocked set**: the translate
-gizmo's draw code is confirmed correct by reading, but seeing it
-requires a live mouse-click selection plus the Move tool active,
-neither reachable through the headless `--screenshot` path — flagged
-🟡. Plan-wide totals: **302 ✅ done, 7 🟡 partial, 108 🧪 has a plan
-but not executed, 233 📋 not started** out of 650.
+`smoke_test_missing_material` ctest), and **STAB-0501/STAB-0502 are the
+first S14 items to hit the same wall as S11/S12's blocked set**: both
+gizmo draw functions (translate, rotate) are confirmed correct by
+reading, but seeing either requires a live mouse-click selection plus
+the matching tool active (Move/Rotate), neither reachable through the
+headless `--screenshot` path — both flagged 🟡. Plan-wide totals: **302
+✅ done, 8 🟡 partial, 107 🧪 has a plan but not executed, 233 📋 not
+started** out of 650.
 
 **Important architectural decisions:**
 - `mc3/` and `mcb/` are pure C++ static libs with **no** CNA/ImGui
@@ -203,9 +204,9 @@ See `TESTING.md` for the full per-test reference and `plan.md`'s
 
 ## 3. Recent changes
 
-**43 STAB tasks committed as of this update** (`53aa75e` through
-`2788043`, pushed to `origin/develop` — see `git log --oneline` for the
-full list). **STAB-0501** below is verified and about to be committed
+**44 STAB tasks committed as of this update** (`53aa75e` through
+`d40fb72`, pushed to `origin/develop` — see `git log --oneline` for the
+full list). **STAB-0502** below is verified and about to be committed
 as of this update. Gate 6 is exhausted (§8); **S11, S12, and S13 are
 all fully done** except genuinely blocked/flagged items. **S14 is now
 also accumulating flagged items**, same as S11/S12. Work is underway on
@@ -217,6 +218,18 @@ audit that found real bugs), then finished S11 and S12 entirely (bar
 the blocked/flagged items) and started S13. Highlights, most recent
 first:
 
+- **STAB-0502 — flagged: rotate gizmo needs a live display to verify
+  visually, same wall as STAB-0501**: `drawRotateGizmo()`
+  (`SceneRenderer_Gizmos.cpp`) is confirmed correct and safe by
+  reading — a null-`obj` guard, 3 correctly-computed 32-segment circles
+  around the object's position (one per axis plane), consistently
+  colored red/green/blue matching the translate gizmo's convention.
+  Its call site correctly gates the draw on
+  `selection_.hasSelection() && activeTool_ == ActiveTool::Rotate`, and
+  the `R` keybinding (`tool.rotate`) correctly sets
+  `activeTool_ = ActiveTool::Rotate`. Same wall as STAB-0501: actually
+  seeing it needs a live selection + the R keypress, neither reachable
+  through the headless `--screenshot` path. Flagged 🟡.
 - **STAB-0501 — flagged: translate gizmo needs a live display to
   verify visually**: `drawGizmo()` (`SceneRenderer_Gizmos.cpp`) is
   confirmed correct and safe by reading — a null-`obj` guard, correct
@@ -1209,21 +1222,22 @@ real silent mesh-load-failure gap; added `test/missing_mesh.mc3.xml` +
 `missing_mesh_test` ctest), STAB-0500 done (confirmed a
 nonexistent `material=` reference safely falls back to a default gray
 color, no crash by construction; added `test/missing_material.mc3.xml`
-+ `smoke_test_missing_material` ctest), and STAB-0501 flagged 🟡 (the
++ `smoke_test_missing_material` ctest), STAB-0501 flagged 🟡 (the
 translate gizmo's draw code is confirmed correct by reading, but
 seeing it needs a live selection + Move tool active, unreachable
-headlessly). Next:
+headlessly), and STAB-0502 flagged 🟡 (same wall — rotate gizmo draw
+code confirmed correct, needs a live selection + R keypress). Next:
 
-1. **STAB-0502 — verify gizmo: rotate gizmo appears on right mode**
-   (S14, P1, next-lowest ID). Goal: switching to Rotate mode (R) on a
-   selected object shows rotation circles. Files:
-   `src/MeshCraft/Renderer/SceneRenderer_Gizmos.cpp`. Verify: same
-   shape as STAB-0501 — `drawRotateGizmo()`'s call site is almost
-   certainly gated the same way (`selection_.hasSelection() &&
-   activeTool_ == ActiveTool::Rotate`), so this will likely also need a
-   live selection + tool-mode switch; confirm by reading, and expect
-   another 🟡 flag rather than a headless fixture unless something in
-   the actual code differs from STAB-0501's finding.
+1. **STAB-0503 — verify picking: click on object selects it** (S14,
+   P1, next-lowest ID). Goal: clicking a visible object selects it
+   (visible in the hierarchy panel). Files:
+   `src/MeshCraft/MeshCraftApplication_Mouse.cpp`. Verify: this is a
+   real mouse-click event handler, not just a draw call gated on
+   existing selection state like STAB-0501/0502 — read the picking
+   logic (ray-cast or screen-space hit test) for correctness, but
+   expect this also needs a live display/mouse to confirm end-to-end
+   (a synthetic click event isn't available through the headless
+   `--screenshot` path either).
 
 Beyond that, S14 gets heavily visual/interactive (gizmos, camera
 presets, bloom/SSAO toggles, shadow maps) — expect many items to land
