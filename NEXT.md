@@ -24,15 +24,15 @@ risks closed quickly).
 **Current phase:** Stabilization. Every gate's priority-list subset is
 now done. **Gate 6 (Documentation) is close to fully green**: S17
 (Documentation and User-Facing Honesty) is 20/20 complete; S18 (Code
-Quality) has all P0/P1 items done plus 6 P2s (STAB-0610, STAB-0603,
-STAB-0611, STAB-0604, STAB-0605, STAB-0606) done, 12 P2/P3 remain;
-**S19 (Security and Robustness) is
+Quality) has all P0/P1 items done plus 8 P2s (STAB-0610, STAB-0603,
+STAB-0611, STAB-0604, STAB-0605, STAB-0606, STAB-0607, STAB-0608)
+done, 10 P2/P3 remain; **S19 (Security and Robustness) is
 now fully green — 15/15**; S20 (Release Readiness) is 12/15, with the
 last 3 items genuinely blocked
 (need Blender, a browser, or a running CI — none available in this
-environment). No gate is fully green yet. Plan-wide totals: **217 ✅
+environment). No gate is fully green yet. Plan-wide totals: **219 ✅
 done, 3 🟡 partial, 136 🧪 has a plan but not executed,
-294 📋 not started** out of 650.
+292 📋 not started** out of 650.
 
 **Important architectural decisions:**
 - `mc3/` and `mcb/` are pure C++ static libs with **no** CNA/ImGui
@@ -156,19 +156,24 @@ See `TESTING.md` for the full per-test reference and `plan.md`'s
 
 ## 3. Recent changes
 
-**STAB-0610** (`53aa75e`), **STAB-0630** (`09fdf95`),
-**STAB-0383/STAB-0631** (`7670a00`), **STAB-0633** (`9aabad4`),
-**STAB-0603** (`54f6a76`+`99cc7ad`), **STAB-0611/STAB-0635**
-(`32c9211`), **STAB-0604** (`9447dd2`), and **STAB-0605** (`6e4054b`)
-are committed; `origin/develop` is not yet pushed to (last pushed
-commit is `03723b8`). **STAB-0606** below is verification-only (code
-inspection, no code changed) and is reflected in `plan.md`/`NEXT.md`
-but not yet committed as of this update.
+Nine STAB tasks committed this session (`53aa75e` STAB-0610 through
+`26ddc5b` STAB-0606 — see `git log --oneline` for the full list);
+`origin/develop` is not yet pushed to (last pushed commit is
+`03723b8`). **STAB-0607 + STAB-0608** below are verification-only
+(code inspection, no code changed) and are reflected in
+`plan.md`/`NEXT.md` but not yet committed as of this update.
 
 This was a long, dense session that closed out essentially all of
 **Gate 6 (Documentation)**'s reachable work, plus a from-scratch schema
 audit that found real bugs. Highlights, most recent first:
 
+- **STAB-0607 + STAB-0608 — verified `mcb`/`mc3` library hygiene**: no
+  raw `new`/`delete`/`malloc`/`free` in `McbWriter.cpp`/`McbReader.cpp`
+  (1405 lines combined, 0 hits; ownership via `std::make_shared` +
+  RAII containers); no raw `fopen`/`FILE*` in
+  `Mc3XmlParser.cpp`/`Mc3XmlWriter.cpp` (all paths are
+  `std::filesystem::path`, disk I/O goes through tinyxml2's
+  `LoadFile`/`SaveFile`). Both clean — no fix needed.
 - **STAB-0606 — checked whether `Mc3XmlParser` needs a non-throwing
   API**: read every real call site of `Mc3Document::loadFromFile` (7
   production sites across the editor, `mc3togltf`, `mc3tomcb`, plus
@@ -553,25 +558,37 @@ No project linter/formatter is configured.
 **S19 (Security and Robustness) is fully green — 15/15 — no remaining
 S19 items.** All remaining Gate 6 work is in S18 (Code Quality):
 
-1. **STAB-0607 — verify `McbWriter`/`McbReader` don't use raw
-   `new`/`delete`** (S18, P2, next-lowest ID after
-   STAB-0603/0604/0605/0606/0610/0611). Goal: confirm RAII throughout
-   (no manual memory management) in the MCB binary serialization code.
-   Files: `mcb/src/McbWriter.cpp`, `mcb/src/McbReader.cpp`.
-   Verify: code inspection; `grep -n "new \|delete "` in both files.
+**Note:** STAB-0609 (IWYU), STAB-0614/0615 (clang-tidy), and STAB-0620
+(cppcheck) are all blocked in this environment — none of
+`include-what-you-use`/`clang-tidy`/`cppcheck` are installed
+(`which` returns nothing for any of them). Skip these until a human
+runs them elsewhere, same as the 3 blocked S20 items (§5).
 
-2. **STAB-0608 — verify all file I/O in Mc3 library uses
-   `std::filesystem`** (S18, P2). Goal: confirm no raw `fopen`/`FILE*`
-   anywhere in `mc3/src` — everything should use `std::filesystem::path`
-   and `std::ifstream`/`std::ofstream` (this session's STAB-0630 fix
-   and the STAB-0611 `TempFile.hpp` work both leaned on this already
-   being true elsewhere in the codebase).
-   Files: `mc3/src/Mc3XmlParser.cpp`, `mc3/src/Mc3XmlWriter.cpp`.
-   Verify: code inspection; `grep -n "fopen\|FILE\*"` in both files.
+1. **STAB-0612 — verify consistent use of `Mc3XmlParser`'s existing
+   safe-attribute helpers** (S18, P2, next-lowest *runnable* ID — skips
+   the tool-blocked STAB-0609 above). Goal: the row says `attr()`/
+   `attrF()`/`attrB()`/`attrVec3()` already exist — confirm every
+   attribute read in `Mc3XmlParser.cpp` goes through one of them rather
+   than calling `tinyxml2`'s raw `Attribute()`/`FloatAttribute()` etc.
+   directly in some places.
+   Files: `mc3/src/Mc3XmlParser.cpp`.
+   Verify: code inspection; grep for direct tinyxml2 attribute-getter
+   calls outside the helper functions themselves.
 
-Beyond these two: S18 has 11 more P2/P3 items after
-STAB-0603/0604/0605/0606/0607/0608/0610/0611 (mostly code-quality
-audits — see `plan.md`'s S18 rows). Closing S18 fully
+2. **STAB-0613 — verify no anonymous-namespace symbol conflicts across
+   translation units** (S18, P2). Goal: confirm functions in
+   `Mc3XmlParser.cpp`'s anonymous namespace are genuinely TU-local (no
+   ODR violation) — should be automatic given anonymous-namespace
+   semantics, but worth a real read given this is exactly the kind of
+   thing that's "obviously fine" until it isn't.
+   Files: `mc3/src/Mc3XmlParser.cpp`.
+   Verify: code inspection.
+
+Beyond these two: S18 has 8 more items after
+STAB-0603/0604/0605/0606/0607/0608/0610/0611/0612/0613, of which 4
+(STAB-0609/0614/0615/0620) are tool-blocked per the note above — the
+other 4 (STAB-0616-0619) are large-file audits/refactor-judgment calls
+(see `plan.md`'s S18 rows). Closing S18 fully
 would leave Gate 6 blocked only on the 3 genuinely-inaccessible S20
 items (§5). After that, the next priority tier is P2 items across
 S6–S13 and the
