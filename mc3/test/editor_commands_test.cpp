@@ -422,6 +422,28 @@ static void testArrayDuplicate()
         CHECK(created.size() == 1, "array dup count=1 clamped to 2 → 1 copy");
     }
 
+    // STAB-0494: a negative count (only reachable via a hand-edited/hostile
+    // .mc3macro linear_array step — the real ImGui slider is clamped to
+    // [2,20]) does not crash. It is clamped to the same minimum-of-2 floor
+    // as count=0/1 above (1 copy created), not silently dropped to zero —
+    // that clamp-to-minimum, not a hard reject, is this function's actual,
+    // intentional "graceful" behavior for any too-small count.
+    {
+        auto src = makeObj("z", "Z");
+        std::vector<std::shared_ptr<Mc3Object>> root = {src};
+        auto created = arrayDuplicateObjects(root, {src}, -1, 0, 1.0f, true);
+        CHECK(created.size() == 1, "array dup count=-1: no crash, clamped to 2 → 1 copy");
+        CHECK(root.size() == 2, "array dup count=-1: root grows by exactly 1, no runaway/negative-loop");
+    }
+    {
+        // A very negative count must not somehow be (mis)interpreted as a
+        // huge unsigned loop count (would hang/OOM) — still just 1 copy.
+        auto src = makeObj("w", "W");
+        std::vector<std::shared_ptr<Mc3Object>> root = {src};
+        auto created = arrayDuplicateObjects(root, {src}, -1000000, 0, 1.0f, true);
+        CHECK(created.size() == 1, "array dup count=-1000000: no crash/hang, clamped to 2 → 1 copy");
+    }
+
     // Order in root: copies inserted after source, in correct order
     {
         auto a   = makeObj("a", "A");

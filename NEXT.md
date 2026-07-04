@@ -34,7 +34,7 @@ flagged (STAB-0464 needs a live display; STAB-0460 describes a feature
 that was never built, out of scope per the stabilization moratorium).
 Both S11 and S12 sweeps found several real bugs, fixed with permanent
 regression tests — see §3 for the full list. **S13 (Commands,
-Undo/Redo, and Algorithms)** work is underway: STAB-0482-0493 done
+Undo/Redo, and Algorithms)** work is underway: STAB-0482-0494 done
 (extracted `convertToDefinitionAlg()`/`breakInstanceAlg()`/
 `alignToObjectAlg()`/`scatterAlongCurveAlg()`/
 `applyProportionalFalloffAlg()`/`vertexSnapToNearestAlg()`/
@@ -47,9 +47,11 @@ Ctrl+rotate 45° snap is real but the increment is user-configurable
 (default 15°), and the Ctrl-override is deliberately rotation-only;
 STAB-0493 found and fixed a real glTF-export bug where Instance
 `variantDefinitions` were silently ignored outside CSG, adding a
-shared `Mc3Object::resolvedInstanceDefinitionKey()` — see §3).
-Plan-wide totals: **295 ✅ done, 6 🟡 partial, 112 🧪 has a plan but
-not executed, 237 📋 not started** out of 650.
+shared `Mc3Object::resolvedInstanceDefinitionKey()`; STAB-0494 confirmed
+a negative `arrayDuplicate` count safely clamps to 1 copy (not a
+silent zero-op as the row assumed) — see §3). Plan-wide totals:
+**296 ✅ done, 6 🟡 partial, 112 🧪 has a plan but not executed,
+236 📋 not started** out of 650.
 
 **Important architectural decisions:**
 - `mc3/` and `mcb/` are pure C++ static libs with **no** CNA/ImGui
@@ -107,7 +109,7 @@ not executed, 237 📋 not started** out of 650.
 `mc3togltf_animation_unsupported`, `mc3togltf_instance_variant`,
 `mc3togltf_large_scene_generated`, `mc3togltf_large_scene_500`.
 
-- `mc3_commands` (~404 assertions): editor command algorithms, undo/redo
+- `mc3_commands` (~407 assertions): editor command algorithms, undo/redo
   for every mutating command, auto-save/backup, Save-As/Export-Selection/
   drag-drop workflows, keybinding/preferences/macro persistence,
   hierarchy-panel filtering, AI-panel + unsaved-changes dialog
@@ -180,12 +182,13 @@ See `TESTING.md` for the full per-test reference and `plan.md`'s
 
 ## 3. Recent changes
 
-**35 STAB tasks committed as of `884535d`** (`53aa75e` through
-`884535d`, pushed to `origin/develop` — see `git log --oneline` for the
-full list). **STAB-0493** below is implemented and about to be
+**36 STAB tasks committed as of `f2bb603`** (`53aa75e` through
+`f2bb603`, pushed to `origin/develop` — see `git log --oneline` for the
+full list). **STAB-0494** below is implemented and about to be
 committed as of this update. Gate 6 is exhausted (§8); **S11 and S12
 are both fully done** except genuinely blocked/flagged items. Work is
-underway on **S13 (Commands, Undo/Redo, and Algorithms)**.
+underway on **S13 (Commands, Undo/Redo, and Algorithms)**, nearly
+complete — 1 item left (STAB-0495).
 
 This was a long, dense session that closed out essentially all of
 **Gate 6 (Documentation)**'s reachable work (plus a from-scratch schema
@@ -193,6 +196,18 @@ audit that found real bugs), then finished S11 and S12 entirely (bar
 the blocked/flagged items) and started S13. Highlights, most recent
 first:
 
+- **STAB-0494 — confirmed negative arrayDuplicate count clamps
+  gracefully, doesn't silently no-op**: the row expected "count=-1 ->
+  no objects added"; actual (also safe) behavior is
+  `arrayDuplicateObjects()`'s existing `count = std::max(2, count)`
+  clamp, which produces exactly 1 copy for any too-small count
+  (0, 1, or negative) — never a crash, never a silent zero-op. The
+  real ImGui slider is clamped to `[2,20]`, so a negative count is
+  only reachable via a hand-edited/hostile `.mc3macro` `linear_array`
+  step. Added 2 assertions to `testArrayDuplicate()`: `count=-1`
+  produces exactly 1 copy, and `count=-1000000` (guarding against an
+  extreme negative being misinterpreted as a huge loop count) also
+  safely produces exactly 1 copy.
 - **STAB-0493 — found and fixed a real glTF-export bug in Instance
   "variants" resolution**: the row's file (`MeshCraftApplication_Commands.cpp`)
   was wrong — "Random variant" isn't an editor command at all, it's a
@@ -1088,18 +1103,20 @@ silently ignored outside CSG evaluation, consolidating variant
 resolution into a new shared `Mc3Object::resolvedInstanceDefinitionKey()`
 — see §3). Next:
 
-1. **STAB-0494 — add command test: arrayDuplicate with negative count
-   fails gracefully** (S13, P3, next-lowest ID). Goal: `count=-1` adds
-   no objects and doesn't crash.
-   Files: `mc3/test/editor_commands_test.cpp`.
-   Verify: `arrayDuplicateObjects()` (`EditorAlgorithms.hpp`) already
-   has headless test coverage — check whether a negative-count case is
-   already covered or needs a new assertion added.
+1. **STAB-0495 — verify Group Scale: positions scaled from selection
+   centroid** (S13, P3, next-lowest ID, last S13 item). Goal: confirm
+   2 objects at (0,0,0) and (2,0,0), scaled 2x as a group, end up at
+   (-1,0,0) and (3,0,0) — i.e. scaled outward from their shared
+   centroid, not from the origin or independently.
+   Files: `src/MeshCraft/MeshCraftApplication_Commands.cpp`.
+   Verify: read `groupScaleSelected()` (already referenced in this
+   session's STAB-0489 work as a precedent for centroid-based
+   commands); extract to `EditorAlgorithms.hpp` and add a headless
+   test if no Alg mirror exists yet.
 
-Beyond this: S13 has 1 more P3 item (STAB-0495 Group Scale centroid
-verification — see `plan.md`'s S13 row), likely headlessly verifiable.
-S14 (Rendering/Viewport) and S15 (Import/Export/Editor Integration) are
-untouched after that.
+Completing this finishes **all of S13**. S14 (Rendering/Viewport) and
+S15 (Import/Export/Editor Integration) are fully untouched — next
+sections to start after S13 closes.
 
 ---
 
