@@ -231,6 +231,79 @@ static void testInsertDuplicateDefId() {
     fs::remove(dbPath);
 }
 
+// STAB-0425: two independently-authored registry entries can plausibly reuse
+// the same generic material name (e.g. "wood") for two *different* materials.
+// insertIntoScene() must not let the second insert silently keep whichever
+// "wood" the scene already has — the second entry's own material (and the
+// inserted object's reference to it) must survive under a suffixed id.
+static void testInsertMaterialNameCollision() {
+    namespace fs = std::filesystem;
+    auto dbPath = fs::temp_directory_path() / "mc3_reg_matcollision_test.sqlite3";
+    fs::remove(dbPath);
+
+    ModelRegistry reg;
+    reg.open(dbPath);
+
+    // Entry 1: "crate" definition using "wood" = brown.
+    auto doc1 = makeDocWithDef();
+    auto e1 = reg.entryFromDefinition(doc1, "crate", "G", "Crate", "", "", "", "");
+
+    // Entry 2: a different "chair" definition that ALSO names its (different)
+    // material "wood" = red.
+    Mc3Document doc2;
+    Mc3Material redWood;
+    redWood.roughness = 0.2f;
+    redWood.baseColor = {0.9f, 0.1f, 0.1f, 1.0f};
+    doc2.materials["wood"] = redWood;
+    auto chairBox = std::make_shared<Mc3Object>();
+    chairBox->id = "cb1"; chairBox->type = ObjectType::Box;
+    chairBox->primitive = Mc3Primitive{}; chairBox->material = "wood";
+    auto chairDef = std::make_shared<Mc3Object>();
+    chairDef->id = "chair"; chairDef->type = ObjectType::Group;
+    chairDef->children.push_back(chairBox);
+    doc2.definitions["chair"] = chairDef;
+    auto e2 = reg.entryFromDefinition(doc2, "chair", "G", "Chair", "", "", "", "");
+
+    Mc3Document scene;
+    std::string id1, id2;
+    try {
+        id1 = reg.insertIntoScene(scene, e1);
+        id2 = reg.insertIntoScene(scene, e2);
+        CHECK(true, "material collision: both inserts did not throw");
+    } catch (const std::exception& ex) {
+        fail(std::string("material collision: threw: ") + ex.what());
+        reg.close(); fs::remove(dbPath);
+        return;
+    }
+
+    CHECK(scene.materials.count("wood") == 1,
+          "material collision: original 'wood' (brown) still present");
+    if (scene.materials.count("wood"))
+        CHECK(scene.materials.at("wood").baseColor[0] < 0.7f,
+              "material collision: original 'wood' unchanged (still brown, not red)");
+
+    CHECK(scene.materials.count("wood_1") == 1,
+          "material collision: entry 2's material renamed to 'wood_1'");
+    if (scene.materials.count("wood_1"))
+        CHECK(scene.materials.at("wood_1").baseColor[0] > 0.7f,
+              "material collision: 'wood_1' has entry 2's actual (red) values");
+
+    // The inserted 'chair' definition's box must reference the renamed
+    // material, not silently keep pointing at the scene's pre-existing 'wood'.
+    CHECK(scene.definitions.count(id2) == 1, "material collision: chair definition present");
+    if (scene.definitions.count(id2)) {
+        auto& def = scene.definitions.at(id2);
+        CHECK(def && !def->children.empty(),
+              "material collision: chair definition has its child");
+        if (def && !def->children.empty())
+            CHECK(def->children[0]->material == "wood_1",
+                  "material collision: chair box's material reference remapped to 'wood_1'");
+    }
+
+    reg.close();
+    fs::remove(dbPath);
+}
+
 // ---------------------------------------------------------------------------
 // STAB-0340/0341/0342 — registry edge cases
 // ---------------------------------------------------------------------------
@@ -672,6 +745,7 @@ int main() {
     testSaveSearchRemove();
     testEntryFromDefinitionAndInsert();
     testInsertDuplicateDefId();
+    testInsertMaterialNameCollision();
     testMigration();
     testUnavailableRegistryNoCrash();
     testOpenFailureThrowsNamedError();

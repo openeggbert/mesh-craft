@@ -11,6 +11,7 @@
 #include <fstream>
 #include <functional>
 #include <iostream>
+#include <map>
 #include <set>
 #include <stdexcept>
 #include <string>
@@ -294,6 +295,27 @@ ModelRegistry::Entry ModelRegistry::entryFromDefinition(
 // insertIntoScene
 // ---------------------------------------------------------------------------
 
+// STAB-0425: rewrite every material/texture reference in obj and its
+// descendants (material, materialOverride, and each named state's material
+// override) according to remap. Called after a name collision forces an
+// imported material/texture onto a new suffixed id, so the imported object
+// tree still points at its own (renamed) material/texture, not silently at
+// whatever happened to already occupy that name in the target scene.
+static void remapMaterialRefs(Mc3::Mc3Object& obj,
+                               const std::map<std::string, std::string>& remap)
+{
+    auto apply = [&](std::string& id) {
+        auto it = remap.find(id);
+        if (it != remap.end()) id = it->second;
+    };
+    apply(obj.material);
+    apply(obj.materialOverride);
+    for (auto& [stateName, state] : obj.states)
+        if (state.material) apply(*state.material);
+    for (auto& child : obj.children)
+        if (child) remapMaterialRefs(*child, remap);
+}
+
 std::string ModelRegistry::insertIntoScene(Mc3::Mc3Document& doc, const Entry& e) const {
     auto tmpPath = uniqueTempPath("mc_reg_insert", ".mc3.xml");
     {
@@ -317,17 +339,45 @@ std::string ModelRegistry::insertIntoScene(Mc3::Mc3Document& doc, const Entry& e
     while (doc.definitions.count(finalId))
         finalId = defId + "_" + std::to_string(suffix++);
 
+    // STAB-0425: a texture/material name colliding with the scene's existing
+    // one must NOT silently keep whichever value the scene already had —
+    // give the imported entry's texture/material a suffixed id instead
+    // (mirroring finalId above) and rewrite every reference to it, so the
+    // inserted object always ends up with its own actual material/texture,
+    // never an unrelated same-named one already in the scene.
+    std::map<std::string, std::string> texRemap;
+    for (auto& [texId, tex] : tmp.textures) {
+        std::string finalTexId = texId;
+        int texSuffix = 1;
+        while (doc.textures.count(finalTexId))
+            finalTexId = texId + "_" + std::to_string(texSuffix++);
+        if (finalTexId != texId) texRemap[texId] = finalTexId;
+        doc.textures[finalTexId] = tex;
+    }
+
+    auto remapTex = [&](std::string& texId) {
+        auto it = texRemap.find(texId);
+        if (it != texRemap.end()) texId = it->second;
+    };
+
+    std::map<std::string, std::string> matRemap;
+    for (auto& [matId, mat] : tmp.materials) {
+        remapTex(mat.baseColorTexture);
+        remapTex(mat.normalTexture);
+        remapTex(mat.metallicRoughnessTexture);
+        remapTex(mat.occlusionTexture);
+        remapTex(mat.emissiveTexture);
+
+        std::string finalMatId = matId;
+        int matSuffix = 1;
+        while (doc.materials.count(finalMatId))
+            finalMatId = matId + "_" + std::to_string(matSuffix++);
+        if (finalMatId != matId) matRemap[matId] = finalMatId;
+        doc.materials[finalMatId] = mat;
+    }
+
+    if (defObj) remapMaterialRefs(*defObj, matRemap);
     doc.definitions[finalId] = std::move(defObj);
-
-    // Merge materials (don't overwrite existing)
-    for (auto& [matId, mat] : tmp.materials)
-        if (!doc.materials.count(matId))
-            doc.materials[matId] = mat;
-
-    // Merge textures (don't overwrite existing)
-    for (auto& [texId, tex] : tmp.textures)
-        if (!doc.textures.count(texId))
-            doc.textures[texId] = tex;
 
     return finalId;
 }

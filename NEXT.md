@@ -34,13 +34,17 @@ tool-blocked (STAB-0609/0614/0615/0620 need
 S20 (Release Readiness) is 12/15, with the last 3 items genuinely
 blocked (need Blender, a browser, or a running CI — none available in
 this environment). No gate is fully green yet. **S11 (Materials,
-Textures, and Visual Fidelity) work is well underway**: STAB-0411-0420
-done (11 items — includes 5 duplicated with S2/S3's STAB-0166-0170),
-**3 real export bugs found and fixed** (texture wrap `mirror` mode,
-texture `filter`, and texture URI subdirectory-stripping), colorSpace/
-missing-texture-warns confirmed already correct. Plan-wide totals: **240
-✅ done, 4 🟡 partial, 125 🧪 has a plan but not executed,
-281 📋 not started** out of 650.
+Textures, and Visual Fidelity) work is well underway**: STAB-0411-0420,
+0424-0427 done, **4 real bugs found and fixed** (texture wrap
+`mirror` mode, texture `filter`, texture URI subdirectory-stripping,
+and a registry-insert material-name-collision silently keeping the
+wrong material), colorSpace/missing-texture-warns/include-override/
+search-case-insensitivity/D3-skip-reason all confirmed already
+correct or already sufficiently documented. STAB-0421-0423 (material
+preview sphere) remain genuinely blocked — same visual-verification
+constraint as STAB-0617. Plan-wide totals: **244
+✅ done, 4 🟡 partial, 124 🧪 has a plan but not executed,
+278 📋 not started** out of 650.
 
 **Important architectural decisions:**
 - `mc3/` and `mcb/` are pure C++ static libs with **no** CNA/ImGui
@@ -168,18 +172,51 @@ See `TESTING.md` for the full per-test reference and `plan.md`'s
 
 ## 3. Recent changes
 
-**16 STAB tasks committed and pushed as of `3799a27`** (`53aa75e`
-through `3799a27` — see `git log --oneline` for the full list). Gate 6
+**17 STAB tasks committed and pushed as of `c7efbb1`** (`53aa75e`
+through `c7efbb1` — see `git log --oneline` for the full list). Gate 6
 is exhausted for this environment (§8); work has moved on to **S11
-(Materials, Textures, and Visual Fidelity)**. **STAB-0419/0420/0166-
-0170/0411-0416** below are implemented but **not yet committed** as of
-this update.
+(Materials, Textures, and Visual Fidelity)**. **STAB-0424/0425/0426/0427**
+below are implemented but **not yet committed** as of this update.
 
 This was a long, dense session that closed out essentially all of
 **Gate 6 (Documentation)**'s reachable work (plus a from-scratch schema
 audit that found real bugs), then moved into S11. Highlights, most
 recent first:
 
+- **STAB-0426 + STAB-0427 — verified material search + documented D3's
+  skip reason**: STAB-0426 confirmed by code reading (inline ImGui
+  code, not extracted to a testable header, but a plain string
+  algorithm — verifiable without a display, unlike the preview
+  *sphere*): filter and material key are both lowercased before a
+  substring match, correctly matching the row's own `"metal"` →
+  `"Metal_01"`/`"METAL_rusty"` example. STAB-0427: traced "D3" to the
+  pre-650 task list (`"Material: duplicate material in the material
+  list"`, a proposed feature, superseded and not in this repo's
+  tracked docs) — confirmed via grep there's no "duplicate material"
+  code anywhere (genuinely unimplemented, not a half-finished ghost),
+  and documented why: it's a new feature, and this project is
+  explicitly in a feature moratorium during stabilization (same policy
+  that already defers SVG rasterization and embedded-glTF-by-reference).
+- **STAB-0425 — registry insert silently kept the wrong material on a
+  name collision**: the 4th real S11 bug this session. `insertIntoScene()`
+  already gave the imported *definition* id a numeric suffix on
+  collision, but materials/textures used silent "skip if already
+  present" — two independently-authored registry entries reusing a
+  generic name like `"wood"` would leave the second insert's object
+  pointing at the *first* entry's unrelated `"wood"` material, wrong
+  color and all, no error. Fixed: materials/textures now get the same
+  suffix treatment as the definition id, plus a `remapMaterialRefs()`
+  walk over the inserted object tree so it always ends up pointing at
+  its own (possibly renamed) material. Added `testInsertMaterialNameCollision`
+  (8 new assertions in `mc3_registry_test.cpp`).
+- **STAB-0424 — material id collision in `<include>`/merge**: already
+  fully covered by existing (currently passing) test coverage — no new
+  code or test needed. Confirmed the policy in code: `<include>`
+  elements process before the local file's own `<materials>` section
+  (explicit comment in `Mc3XmlParser.cpp`), and the local parse does a
+  plain map overwrite, so **local (including file) always wins** on an
+  id collision. `roundtrip_test.cpp`'s existing `testIncludeOverride()`
+  already asserts exactly this, including round-trip survival.
 - **STAB-0416 — texture URI subdirectory silently stripped on export**:
   the 3rd real S11 export bug this session. tinygltf's *default* image
   writer (`tinygltf::WriteImageData`, vendored) truncates
@@ -676,37 +713,39 @@ without an external tool or a human with a display.**
 
 The next priority tier is P2 items across S6–S13 and the untouched
 S11/S12/S14/S15 sections. **S11 (Materials, Textures, and Visual
-Fidelity)**: STAB-0411-0420 are all done (§3). STAB-0421/0422/0423 are
-next by ID but all concern the **material preview sphere** — a live
-ImGui/OpenGL-rendered 128×128 widget — genuinely blocked in this
-headless environment for the same reason as STAB-0617 (no display, no
-way to visually verify). Skip to the next non-visual items:
+Fidelity)**: STAB-0411-0420/0424-0427 are all done (§3). STAB-0421/
+0422/0423 (material preview sphere, a live ImGui/OpenGL-rendered
+128×128 widget) and STAB-0428 (texture drag-and-drop, an interactive
+UI gesture) both need a human at a live display — same blocker as
+STAB-0617, skipped. The next non-blocked items are pure round-trip
+tests:
 
-1. **STAB-0424 — material with same ID but different fields in
-   merge/include** (S11, P2). Goal: when a scene `<include>`s another
-   file and both define a material with the same `id` but different
-   field values, confirm/document the local-wins policy (does the
-   *including* file's definition win, or the included one, or is it
-   last-one-wins by parse order?) and add a regression test.
-   Files: `mc3/src/Mc3XmlParser.cpp` (include-merge logic, see the
-   `mergeInclude`/`processIncludes` functions read during this
-   session's STAB-0612/0613 work), `mc3/test/roundtrip_test.cpp`.
-   Verify: read the actual merge order in code first; write a small
-   two-file fixture (base + include) with a colliding material id and
-   confirm which value survives; add a ctest assertion.
+1. **STAB-0429 — add roundtrip test: material with all fields +
+   texture reference** (S11, P2). Goal: a material exercising every
+   field at once (`base_color`, `roughness`, `metallic`,
+   `base_color_texture`, `normal_texture` + `normal_scale`,
+   `metallic_roughness_texture`, `occlusion_texture` +
+   `occlusion_strength`, `emissive_texture`, `emissive_color`,
+   `alpha_mode`, `alpha_cutoff`, `double_sided`) must survive a
+   save→reload round-trip exactly. `test/material_pbr.mc3.xml` (new
+   this session) covers most fields individually across 4 materials,
+   but not one material with *all* fields simultaneously, and not
+   round-tripped (it's only ever exported, never re-saved as mc3.xml).
+   Files: `mc3/test/roundtrip_test.cpp`.
+   Verify: add one "kitchen sink" material to a fixture (or inline in
+   the test), save→reload, assert every field survives exactly.
 
-2. **STAB-0425 — verify material after registry insert: no ID
-   collision with scene** (S11, P2). Goal: confirm that inserting a
-   `ModelRegistry` entry whose materials collide by `id` with the live
-   scene's existing materials gets a suffix (not a silent overwrite or
-   a duplicate-key clobber).
-   Files: `src/MeshCraft/ModelRegistry.cpp` (`insertIntoScene`, read
-   during this session's STAB-0611/0635 `TempFile.hpp` work).
-   Verify: read the actual insert logic; if untested, add a
-   `mc3_registry` test case inserting a definition whose material id
-   already exists in the target document.
+2. **STAB-0430 — add test: material animation roundtrip (color
+   keyframes)** (S11, P2). Goal: a material with an animated
+   `baseColor` (keyframed over time, via the `<action>`/keyframe
+   system already covered by `mc3_roundtrip`'s animation tests) must
+   survive save→reload with all keyframe values/timings intact.
+   Files: `mc3/test/roundtrip_test.cpp`.
+   Verify: check whether an existing animation-roundtrip test already
+   covers a material-color-keyframe track (this session hasn't read
+   the animation code yet) before writing new fixture/test code.
 
-Beyond these two: S11 has ~20 more P2/P3 items after STAB-0417-0420
+Beyond these two: S11 has ~18 more P2/P3 items after STAB-0417-0427
 (see `plan.md`'s S11 rows). S12 (Animation Stability), S13
 (Commands/Undo/Redo/Algorithms), S14 (Rendering/Viewport), and S15
 (Import/Export/Editor Integration) are untouched sections — worth a
