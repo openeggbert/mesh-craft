@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- STAB-0507 fixture: default_camera points to an orthographic camera,
+     exercising the "look through camera" CreateOrthographic branch
+     (MeshCraftApplication.cpp) so a genuine orthographic render can be
+     verified via the screenshot CLI mode, without a live UI toggle click. -->
+<mc3 version="0.3" model="OrthographicCameraFixture" default_camera="TopOrtho">
+
+  <lights>
+    <ambient color="0.3 0.3 0.3" brightness="0.5"/>
+    <directional name="Sun" color="1 0.95 0.8" brightness="2" direction="-0.5 -1 -0.5"/>
+  </lights>
+
+  <cameras>
+    <camera name="TopOrtho" type="orthographic" position="0 20 0" target="0 0 0" size="6"/>
+  </cameras>
+
+  <materials>
+    <material id="red"><base_color>0.9 0.1 0.1 1.0</base_color></material>
+    <material id="green"><base_color>0.1 0.8 0.2 1.0</base_color></material>
+    <material id="blue"><base_color>0.1 0.3 0.9 1.0</base_color></material>
+  </materials>
+
+  <objects>
+    <box name="Near"  size="1 1 1" position="-3 0 -3" material="red"/>
+    <box name="Mid"   size="1 1 1" position="0 0 0"   material="green"/>
+    <box name="Far"   size="1 1 1" position="3 0 3"   material="blue"/>
+  </objects>
+
+</mc3>

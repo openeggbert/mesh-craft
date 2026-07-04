@@ -79,13 +79,19 @@ new headless assertions — the first test in this suite to exercise
 `Editor::SelectionManager` directly), and STAB-0505 flagged 🟡 (the
 selected-object bounding-box overlay is confirmed correct by reading,
 but needs a live selection to actually see, same wall as
-STAB-0501/0502), and STAB-0506 done (camera view presets don't depend
+STAB-0501/0502), STAB-0506 done (camera view presets don't depend
 on selection like the others — extracted the shared `cameraPresetsAlg()`
 + `cameraOrbitPositionAlg()`, wired `EditorCamera::position()` to the
 latter as its single source of truth, and confirmed Front/Top/Right
-resolve to the correct axis-aligned positions with 15 new assertions).
-Plan-wide totals: **305 ✅ done, 9 🟡 partial, 104 🧪 has a plan but
-not executed, 232 📋 not started** out of 650.
+resolve to the correct axis-aligned positions with 15 new assertions),
+and STAB-0507 done (the editor's own ortho/persp toggle can't be
+flipped headlessly, but the "look through camera" path shares the
+identical `CreateOrthographic`/`CreatePerspectiveFieldOfView` branch
+keyed off a per-scene `Mc3Camera`'s type — verified that shared
+mechanism empirically via a new `test/orthographic_camera.mc3.xml` +
+`smoke_test_orthographic_camera` ctest). Plan-wide totals: **306 ✅
+done, 9 🟡 partial, 103 🧪 has a plan but not executed, 232 📋 not
+started** out of 650.
 
 **Important architectural decisions:**
 - `mc3/` and `mcb/` are pure C++ static libs with **no** CNA/ImGui
@@ -124,7 +130,8 @@ not executed, 232 📋 not started** out of 650.
   the root project).
 
 ### Tests
-**30/30 CTest pass** in Debug as of this session (STAB-0500 added
+**31/31 CTest pass** in Debug as of this session (STAB-0507 added
+`smoke_test_orthographic_camera`, STAB-0500 added
 `smoke_test_missing_material`, STAB-0499 added `missing_mesh_test`,
 STAB-0498 added `smoke_test_empty_scene`, STAB-0497 added
 `smoke_test_all_objects`, STAB-0493 added `mc3togltf_instance_variant`,
@@ -134,7 +141,8 @@ added `mc3togltf_texture_sampler`, STAB-0166-0170/0411-0415/0435 added
 `mc3togltf_svg_texture_export`, STAB-0447/0448 added
 `mc3togltf_animation_unsupported`; started the session at 20/20):
 `smoke_test`, `smoke_test_all_objects`, `smoke_test_empty_scene`,
-`missing_mesh_test`, `smoke_test_missing_material`, `xsd_validation`,
+`missing_mesh_test`, `smoke_test_missing_material`,
+`smoke_test_orthographic_camera`, `xsd_validation`,
 `mc3_registry`, `mc3_ai`, `mc3_roundtrip`, `mc3_commands`,
 `mcb_roundtrip`, `mc3tomcb_roundtrip`, `mc3togltf_gltf`, `mc3togltf_all_primitives`,
 `mc3togltf_export_verification`, `mc3togltf_large_scene`,
@@ -219,9 +227,9 @@ See `TESTING.md` for the full per-test reference and `plan.md`'s
 
 ## 3. Recent changes
 
-**48 STAB tasks committed as of this update** (`53aa75e` through
-`21a81be`, pushed to `origin/develop` — see `git log --oneline` for the
-full list). **STAB-0506** below is verified and about to be committed
+**49 STAB tasks committed as of this update** (`53aa75e` through
+`b4970dd`, pushed to `origin/develop` — see `git log --oneline` for the
+full list). **STAB-0507** below is verified and about to be committed
 as of this update. Gate 6 is exhausted (§8); **S11, S12, and S13 are
 all fully done** except genuinely blocked/flagged items. **S14 is now
 also accumulating flagged items**, same as S11/S12. Work is underway on
@@ -233,6 +241,29 @@ audit that found real bugs), then finished S11 and S12 entirely (bar
 the blocked/flagged items) and started S13. Highlights, most recent
 first:
 
+- **STAB-0507 — verified the ortho/perspective toggle via its shared
+  projection mechanism**: `EditorCamera::projectionMatrix()` correctly
+  branches between `Matrix::CreateOrthographic` and
+  `Matrix::CreatePerspectiveFieldOfView` based on the `orthographic`
+  bool the UI toggle flips (the row's file citation was imprecise — the
+  button lives in `MeshCraftApplication_UiOverlays.cpp`, the branch in
+  `EditorCamera.cpp`). The editor's own toggle can't be flipped
+  headlessly (no CLI/keyboard-simulation hook, and a scene with a
+  `default_camera` overrides it anyway via the separate "look through
+  camera" path) — but that path shares the *identical*
+  `CreateOrthographic`/`CreatePerspectiveFieldOfView` branch, keyed off
+  a per-scene `Mc3Camera`'s `type` instead. Verified the shared
+  mechanism empirically: added `test/orthographic_camera.mc3.xml`
+  (`default_camera` pointing at an orthographic `Mc3Camera`) + a
+  permanent `smoke_test_orthographic_camera` ctest, confirming a real,
+  non-stub render (83 distinct sampled colors) through the same
+  underlying projection code. Also noted the two orthographic sizing
+  formulas differ intentionally: `EditorCamera`'s toggle derives
+  half-height from `distance`+`fov` (stays visually consistent when
+  switching modes mid-session), while `Mc3Camera`'s orthographic type
+  uses an explicit authored `size` attribute — not a bug, two different
+  design contexts. Verified via full CMake reconfigure + rebuild (0
+  warnings) and 31/31 ctest (up from 30/30).
 - **STAB-0506 — camera view presets verified headlessly, unlike the
   gizmo/bbox items**: unlike STAB-0501/0502/0505, camera presets don't
   depend on object selection — the "Front/Top/Right/Persp" button row
@@ -1320,24 +1351,30 @@ Mesh/Group/Extrude/CSG object unclickable; fixed via
 `Editor::SelectionManager` is now directly testable), STAB-0505
 flagged 🟡 (the selected-object bounding-box overlay is confirmed
 correct by reading, but needs a live selection to actually see, same
-wall as STAB-0501/0502), and STAB-0506 done (camera presets don't
+wall as STAB-0501/0502), STAB-0506 done (camera presets don't
 depend on selection — extracted shared `cameraPresetsAlg()` +
 `cameraOrbitPositionAlg()`, `EditorCamera::position()` now delegates
 to the latter, 15 new headless assertions confirm Front/Top/Right
-resolve to the correct axis-aligned positions). Next:
+resolve to the correct axis-aligned positions), and STAB-0507 done
+(the editor's own ortho/persp toggle can't be flipped headlessly, but
+the "look through camera" path shares the identical
+`CreateOrthographic`/`CreatePerspectiveFieldOfView` branch keyed off a
+per-scene `Mc3Camera`'s type — verified via a new
+`test/orthographic_camera.mc3.xml` + `smoke_test_orthographic_camera`
+ctest). Next:
 
-1. **STAB-0507 — verify orthographic/perspective toggle** (S14, P1,
-   next-lowest ID). Goal: toggling the Ortho/Persp button changes the
-   projection matrix accordingly. Files:
-   `src/MeshCraft/MeshCraftApplication.cpp`. Verify: STAB-0506 already
-   found the toggle itself (`camera_.orthographic = !camera_.orthographic;`)
-   and `EditorCamera::projectionMatrix()`'s branch between
-   `CreateOrthographic`/`CreatePerspectiveFieldOfView` — likely
-   verifiable the same way as STAB-0506 (read the projection math,
-   confirm it's not selection-gated) plus a real `--screenshot`
-   comparison between ortho and perspective renders of the same scene
-   (distinctly different pixel output, similar to STAB-0496's
-   distinct-color-count technique) as empirical confirmation.
+1. **STAB-0508 — verify SSAO toggle: off/on changes visual output**
+   (S14, P1, next-lowest ID). Goal: toggling SSAO changes ambient
+   occlusion in the rendered scene. Files:
+   `src/MeshCraft/MeshCraftApplication.cpp`. Verify: `ssaoEnabled_`
+   defaults to `false` and is only ever flipped via an ImGui menu item
+   (`MeshCraftApplication_UiMenuBar.cpp`) — a pure runtime UI toggle,
+   same shape as `showBoundingBox_` (STAB-0505), with no CLI/document
+   hook to force it on for a headless `--screenshot` run. Read
+   `applySsao()`'s implementation for correctness first, then check
+   whether an orthographic-camera-style workaround exists (e.g. a
+   scene-level "ssao enabled" flag) before concluding this needs a live
+   display like STAB-0501/0502/0505.
 
 Beyond that, S14 gets heavily visual/interactive (gizmos, camera
 presets, bloom/SSAO toggles, shadow maps) — expect many items to land
