@@ -424,54 +424,17 @@ void MeshCraftApplication::handleMouseInput(const MouseState& ms, const MouseSta
                 }
             }
 
-            // Ray-cast picking
+            // Ray-cast picking (any visible object, not just primitives — STAB-0503)
             float ndcX = ((mx - vX) / static_cast<float>(vW)) * 2.0f - 1.0f;
             float ndcY = 1.0f - ((my - vY) / static_cast<float>(vH)) * 2.0f;
 
             Vector3 rayOrig = camera_.position();
             Vector3 rayDir  = camera_.screenRayDirection(ndcX, ndcY, asp);
 
-            auto rayAABB = [](const Vector3& ro, const Vector3& rd,
-                               const Vector3& bMin, const Vector3& bMax,
-                               float& tHit) -> bool {
-                float tNear = 0.0f, tFar = 1e30f;
-                const float* rov = &ro.X; const float* rdv = &rd.X;
-                const float* bnv = &bMin.X; const float* bxv = &bMax.X;
-                for (int i = 0; i < 3; ++i) {
-                    if (std::abs(rdv[i]) < 1e-9f) {
-                        if (rov[i] < bnv[i] || rov[i] > bxv[i]) return false;
-                    } else {
-                        float t1 = (bnv[i] - rov[i]) / rdv[i];
-                        float t2 = (bxv[i] - rov[i]) / rdv[i];
-                        if (t1 > t2) { float tmp = t1; t1 = t2; t2 = tmp; }
-                        tNear = std::max(tNear, t1);
-                        tFar  = std::min(tFar,  t2);
-                        if (tNear > tFar) return false;
-                    }
-                }
-                tHit = tNear;
-                return tNear >= 0.0f;
-            };
-
-            float bestT = 1e30f;
-            std::shared_ptr<Mc3::Mc3Object> bestObj;
-
-            std::function<void(const std::vector<std::shared_ptr<Mc3::Mc3Object>>&)> testList;
-            testList = [&](const std::vector<std::shared_ptr<Mc3::Mc3Object>>& list) {
-                for (const auto& obj : list) {
-                    if (!obj || !obj->visible) continue;
-                    if (obj->primitive) {
-                        Vector3 bMin, bMax;
-                        objectAABB(*obj, bMin, bMax);
-                        float tHit = 0.0f;
-                        if (rayAABB(rayOrig, rayDir, bMin, bMax, tHit) && tHit < bestT) {
-                            bestT = tHit; bestObj = obj;
-                        }
-                    }
-                    if (!obj->children.empty()) testList(obj->children);
-                }
-            };
-            testList(document_.objects);
+            auto bestObj = pickObjectByRayAlg(
+                document_.objects,
+                {rayOrig.X, rayOrig.Y, rayOrig.Z},
+                {rayDir.X, rayDir.Y, rayDir.Z});
 
             if (!ctrl) selection_.clear();
             if (bestObj) selection_.select(bestObj);

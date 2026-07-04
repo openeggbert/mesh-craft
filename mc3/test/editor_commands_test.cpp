@@ -2392,6 +2392,96 @@ static void testUndoStackBelowCapUnaffected()
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Viewport ray-cast picking (STAB-0503)
+//
+// Found and fixed a real bug: the real click-to-select handler
+// (handleMouseInput(), MeshCraftApplication_Mouse.cpp) only ray-cast-tested
+// objects with `obj->primitive` set — i.e. only the 11 primitive shape
+// types. Instance/Mesh/Group/Extrude/CSG objects (8 other ObjectType
+// values) could never be selected by clicking directly on them in the 3D
+// viewport, unlike box-select (drag-rectangle selection), which already
+// selects by screen-projected position regardless of type. Fixed by
+// extracting pickObjectByRayAlg(), which tests every visible object
+// (defaulting to a 0.5-unit half-extent AABB, scaled by transform.scale,
+// for any non-primitive type) and wiring the real handler to call it.
+// ─────────────────────────────────────────────────────────────────────────────
+
+static void testPickObjectByRay()
+{
+    // A ray straight down +Z, tested against objects placed at z=0 with
+    // varying x offsets.
+    std::array<float,3> rayOrig{0.0f, 0.0f, -10.0f};
+    std::array<float,3> rayDir{0.0f, 0.0f, 1.0f};
+
+    // Non-primitive object (Instance) at the origin: no `primitive` set at
+    // all. Pre-fix, this was silently unpickable; now it gets a default
+    // 0.5-unit half-extent box and the ray (which passes through x=0,y=0)
+    // hits it.
+    auto inst = makeObj("inst1", "Instance1", Mc3::ObjectType::Instance);
+    inst->transform.position = {0.0f, 0.0f, 0.0f};
+    std::vector<std::shared_ptr<Mc3Object>> rootsA{inst};
+    auto pickedA = pickObjectByRayAlg(rootsA, rayOrig, rayDir);
+    CHECK(pickedA == inst,
+          "a non-primitive Instance object is now pickable by ray-cast (the STAB-0503 bug fix)");
+
+    // Same Instance, but far enough off-axis that the ray misses its
+    // default 0.5-unit half-extent box.
+    auto instFar = makeObj("inst2", "Instance2", Mc3::ObjectType::Instance);
+    instFar->transform.position = {5.0f, 0.0f, 0.0f};
+    std::vector<std::shared_ptr<Mc3Object>> rootsB{instFar};
+    CHECK(pickObjectByRayAlg(rootsB, rayOrig, rayDir) == nullptr,
+          "a ray that misses even the default half-extent box picks nothing");
+
+    // Primitive sized larger than the 0.5 default (sphere radius 2): a ray
+    // offset at x=1.8 (inside the real radius, well outside the generic
+    // default) must still hit — confirms primitives keep using their real
+    // size, not the non-primitive fallback.
+    auto sphereObj = makeObj("sphere1", "BigSphere", Mc3::ObjectType::Sphere);
+    sphereObj->transform.position = {0.0f, 0.0f, 0.0f};
+    sphereObj->primitive = Mc3::Mc3Primitive::sphere(2.0f);
+    std::array<float,3> rayOffsetOrig{1.8f, 0.0f, -10.0f};
+    std::vector<std::shared_ptr<Mc3Object>> rootsC{sphereObj};
+    CHECK(pickObjectByRayAlg(rootsC, rayOffsetOrig, rayDir) == sphereObj,
+          "a primitive keeps using its real size (radius 2 sphere hit at x=1.8, well outside the 0.5 default)");
+    std::array<float,3> rayOffsetOrig2{3.0f, 0.0f, -10.0f};
+    CHECK(pickObjectByRayAlg(rootsC, rayOffsetOrig2, rayDir) == nullptr,
+          "a ray outside a primitive's real radius (x=3 vs. radius 2) still correctly misses");
+
+    // Invisible objects are never pickable even if the ray would hit them.
+    auto hidden = makeObj("hidden1", "Hidden", Mc3::ObjectType::Box);
+    hidden->transform.position = {0.0f, 0.0f, 0.0f};
+    hidden->visible = false;
+    std::vector<std::shared_ptr<Mc3Object>> rootsD{hidden};
+    CHECK(pickObjectByRayAlg(rootsD, rayOrig, rayDir) == nullptr,
+          "an invisible object is never picked, even directly on the ray");
+
+    // Closest-wins: two objects on the same ray at different depths.
+    auto near = makeObj("near1", "Near", Mc3::ObjectType::Box);
+    near->transform.position = {0.0f, 0.0f, -2.0f};
+    auto far = makeObj("far1", "Far", Mc3::ObjectType::Box);
+    far->transform.position = {0.0f, 0.0f, 5.0f};
+    std::vector<std::shared_ptr<Mc3Object>> rootsE{far, near}; // far listed first
+    CHECK(pickObjectByRayAlg(rootsE, rayOrig, rayDir) == near,
+          "of two objects along the same ray, the nearer one wins regardless of list order");
+
+    // Recursion: a child object in the ray's path is found even when its
+    // parent (elsewhere in space) is not itself hit.
+    auto parent = makeObj("group1", "Group1", Mc3::ObjectType::Group);
+    parent->transform.position = {50.0f, 50.0f, 50.0f};
+    auto child = makeObj("child1", "Child1", Mc3::ObjectType::Instance);
+    child->transform.position = {0.0f, 0.0f, 0.0f};
+    parent->children.push_back(child);
+    std::vector<std::shared_ptr<Mc3Object>> rootsF{parent};
+    CHECK(pickObjectByRayAlg(rootsF, rayOrig, rayDir) == child,
+          "a child object in the ray's path is found by recursion, even though its parent isn't hit");
+
+    // Empty scene / no hit at all.
+    std::vector<std::shared_ptr<Mc3Object>> rootsG{};
+    CHECK(pickObjectByRayAlg(rootsG, rayOrig, rayDir) == nullptr,
+          "an empty object list picks nothing");
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Every command pushes an undo entry (STAB-0480)
 //
 // Audited every MeshCraftApplication_Commands.cpp function for a document
@@ -2487,6 +2577,7 @@ int main()
     testDeepCopyPreservesIdentityForSnapshots();
     testUndoStackDepthCapped();
     testUndoStackBelowCapUnaffected();
+    testPickObjectByRay();
 
     std::cout << "\n";
     if (failures == 0)

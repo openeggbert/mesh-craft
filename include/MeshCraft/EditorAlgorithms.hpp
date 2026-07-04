@@ -819,6 +819,93 @@ inline int groupScaleAlg(
     return scaled;
 }
 
+// ── Viewport ray-cast picking (STAB-0503) ────────────────────────────────────
+//
+// Mirrors the ray-cast object picking in handleMouseInput()
+// (MeshCraftApplication_Mouse.cpp). Any visible object gets a default
+// 0.5-unit half-extent AABB (scaled by its transform scale); primitive
+// shapes (Box/Sphere/Cylinder/Cone/Plane) use their actual dimensions
+// instead. This must NOT be gated on `obj.primitive` being set — an
+// earlier version of the real code only tested primitive-typed objects,
+// silently making every Instance/Mesh/Group/Extrude/CSG object unclickable
+// in the viewport (found and fixed by STAB-0503), inconsistent with
+// box-select, which already selects by screen position regardless of type.
+
+inline void objectAABBAlg(const Mc3::Mc3Object& obj,
+                           std::array<float,3>& bMin, std::array<float,3>& bMax)
+{
+    const auto& t = obj.transform;
+    float opx = t.position[0], opy = t.position[1], opz = t.position[2];
+    float osx = t.scale[0],    osy = t.scale[1],    osz = t.scale[2];
+    float hx = 0.5f, hy = 0.5f, hz = 0.5f;
+    if (obj.primitive) {
+        const auto& p = *obj.primitive;
+        switch (p.primitiveType) {
+        case Mc3::PrimitiveType::Box: case Mc3::PrimitiveType::Cube:
+            hx = p.size[0]*0.5f; hy = p.size[1]*0.5f; hz = p.size[2]*0.5f; break;
+        case Mc3::PrimitiveType::Sphere:
+            hx = hy = hz = p.radius; break;
+        case Mc3::PrimitiveType::Cylinder: case Mc3::PrimitiveType::Cone:
+            hx = hz = p.radius; hy = p.height*0.5f; break;
+        case Mc3::PrimitiveType::Plane:
+            hx = p.size[0]*0.5f; hy = 0.05f; hz = p.size[1]*0.5f; break;
+        default: break;
+        }
+    }
+    hx *= std::abs(osx); hy *= std::abs(osy); hz *= std::abs(osz);
+    bMin = {opx-hx, opy-hy, opz-hz};
+    bMax = {opx+hx, opy+hy, opz+hz};
+}
+
+inline bool rayAABBIntersectAlg(
+    const std::array<float,3>& rayOrig, const std::array<float,3>& rayDir,
+    const std::array<float,3>& bMin, const std::array<float,3>& bMax,
+    float& tHit)
+{
+    float tNear = 0.0f, tFar = 1e30f;
+    for (int i = 0; i < 3; ++i) {
+        if (std::abs(rayDir[i]) < 1e-9f) {
+            if (rayOrig[i] < bMin[i] || rayOrig[i] > bMax[i]) return false;
+        } else {
+            float t1 = (bMin[i] - rayOrig[i]) / rayDir[i];
+            float t2 = (bMax[i] - rayOrig[i]) / rayDir[i];
+            if (t1 > t2) std::swap(t1, t2);
+            tNear = std::max(tNear, t1);
+            tFar  = std::min(tFar,  t2);
+            if (tNear > tFar) return false;
+        }
+    }
+    tHit = tNear;
+    return tNear >= 0.0f;
+}
+
+// Recursively finds the closest visible object (any type) whose AABB the
+// ray hits, or nullptr if none. Matches the "closest wins" semantics of the
+// real click-to-select handler.
+inline std::shared_ptr<Mc3::Mc3Object> pickObjectByRayAlg(
+    const std::vector<std::shared_ptr<Mc3::Mc3Object>>& rootObjects,
+    const std::array<float,3>& rayOrig, const std::array<float,3>& rayDir)
+{
+    float bestT = 1e30f;
+    std::shared_ptr<Mc3::Mc3Object> bestObj;
+
+    std::function<void(const std::vector<std::shared_ptr<Mc3::Mc3Object>>&)> testList;
+    testList = [&](const std::vector<std::shared_ptr<Mc3::Mc3Object>>& list) {
+        for (const auto& obj : list) {
+            if (!obj || !obj->visible) continue;
+            std::array<float,3> bMin, bMax;
+            objectAABBAlg(*obj, bMin, bMax);
+            float tHit = 0.0f;
+            if (rayAABBIntersectAlg(rayOrig, rayDir, bMin, bMax, tHit) && tHit < bestT) {
+                bestT = tHit; bestObj = obj;
+            }
+            if (!obj->children.empty()) testList(obj->children);
+        }
+    };
+    testList(rootObjects);
+    return bestObj;
+}
+
 // ── Auto-save (STAB-0265) ─────────────────────────────────────────────────────
 //
 // Mirrors two pieces of CNA-coupled logic so "the auto-save interval is

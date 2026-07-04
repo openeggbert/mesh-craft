@@ -63,14 +63,18 @@ warning at all; fixed `loadOrGetMesh()` to print a warning, added
 done (confirmed a nonexistent `material=` reference safely falls back
 to a default gray color in all 3 resolution sites, no crash by
 construction; added `test/missing_material.mc3.xml` +
-`smoke_test_missing_material` ctest), and **STAB-0501/STAB-0502 are the
+`smoke_test_missing_material` ctest), **STAB-0501/STAB-0502 are the
 first S14 items to hit the same wall as S11/S12's blocked set**: both
 gizmo draw functions (translate, rotate) are confirmed correct by
 reading, but seeing either requires a live mouse-click selection plus
 the matching tool active (Move/Rotate), neither reachable through the
-headless `--screenshot` path — both flagged 🟡. Plan-wide totals: **302
-✅ done, 8 🟡 partial, 107 🧪 has a plan but not executed, 233 📋 not
-started** out of 650.
+headless `--screenshot` path — both flagged 🟡, and **STAB-0503 found
+and fixed a real bug**: viewport click-to-select only ray-cast-tested
+primitive-typed objects, silently making every Instance/Mesh/Group/
+Extrude/CSG object unclickable; fixed via a new
+`pickObjectByRayAlg()`, tested headlessly (8 new assertions). Plan-wide
+totals: **303 ✅ done, 8 🟡 partial, 106 🧪 has a plan but not
+executed, 233 📋 not started** out of 650.
 
 **Important architectural decisions:**
 - `mc3/` and `mcb/` are pure C++ static libs with **no** CNA/ImGui
@@ -131,7 +135,7 @@ added `mc3togltf_texture_sampler`, STAB-0166-0170/0411-0415/0435 added
 `mc3togltf_animation_unsupported`, `mc3togltf_instance_variant`,
 `mc3togltf_large_scene_generated`, `mc3togltf_large_scene_500`.
 
-- `mc3_commands` (~419 assertions): editor command algorithms, undo/redo
+- `mc3_commands` (~427 assertions): editor command algorithms, undo/redo
   for every mutating command, auto-save/backup, Save-As/Export-Selection/
   drag-drop workflows, keybinding/preferences/macro persistence,
   hierarchy-panel filtering, AI-panel + unsaved-changes dialog
@@ -204,9 +208,9 @@ See `TESTING.md` for the full per-test reference and `plan.md`'s
 
 ## 3. Recent changes
 
-**44 STAB tasks committed as of this update** (`53aa75e` through
-`d40fb72`, pushed to `origin/develop` — see `git log --oneline` for the
-full list). **STAB-0502** below is verified and about to be committed
+**45 STAB tasks committed as of this update** (`53aa75e` through
+`b803096`, pushed to `origin/develop` — see `git log --oneline` for the
+full list). **STAB-0503** below is verified and about to be committed
 as of this update. Gate 6 is exhausted (§8); **S11, S12, and S13 are
 all fully done** except genuinely blocked/flagged items. **S14 is now
 also accumulating flagged items**, same as S11/S12. Work is underway on
@@ -218,6 +222,29 @@ audit that found real bugs), then finished S11 and S12 entirely (bar
 the blocked/flagged items) and started S13. Highlights, most recent
 first:
 
+- **STAB-0503 — found and fixed a real click-to-select bug**: the
+  viewport's ray-cast picking (`handleMouseInput()`,
+  `MeshCraftApplication_Mouse.cpp`) only tested objects with
+  `obj->primitive` set — the 11 primitive shape types. Every
+  Instance/Mesh/Group/Extrude/CSG object (8 other `ObjectType` values)
+  was silently unpickable by clicking directly on it in the 3D
+  viewport, inconsistent with box-select (drag-rectangle selection),
+  which already selects any object type by screen-projected position —
+  a real usability gap affecting extremely common content (Instances
+  are used throughout every sample scene for props). Extracted
+  `objectAABBAlg()`/`rayAABBIntersectAlg()`/`pickObjectByRayAlg()` into
+  `EditorAlgorithms.hpp` (any visible object now gets a default
+  0.5-unit half-extent AABB, scaled by transform, unless it's a
+  primitive with real dimensions) and wired the real handler to call
+  it, removing the buggy gate. Added `testPickObjectByRay()` (8
+  assertions): the regression case (a non-primitive Instance is now
+  pickable), a primitive keeps its real size rather than the generic
+  default, invisible objects are never picked, closest-of-multiple wins
+  regardless of list order, recursion finds a child even when its
+  parent isn't hit, and no-hit/empty-list cases return null. Verified
+  via a full rebuild (0 warnings), `mc3_commands` growing to ~427
+  assertions (all passing), 30/30 ctest, and a real `--screenshot`
+  smoke test against `house.mc3.xml`.
 - **STAB-0502 — flagged: rotate gizmo needs a live display to verify
   visually, same wall as STAB-0501**: `drawRotateGizmo()`
   (`SceneRenderer_Gizmos.cpp`) is confirmed correct and safe by
@@ -1225,19 +1252,26 @@ color, no crash by construction; added `test/missing_material.mc3.xml`
 + `smoke_test_missing_material` ctest), STAB-0501 flagged 🟡 (the
 translate gizmo's draw code is confirmed correct by reading, but
 seeing it needs a live selection + Move tool active, unreachable
-headlessly), and STAB-0502 flagged 🟡 (same wall — rotate gizmo draw
-code confirmed correct, needs a live selection + R keypress). Next:
+headlessly), STAB-0502 flagged 🟡 (same wall — rotate gizmo draw
+code confirmed correct, needs a live selection + R keypress), and
+STAB-0503 done (found and fixed a real bug: click-to-select only
+ray-tested primitive-typed objects, silently making every Instance/
+Mesh/Group/Extrude/CSG object unclickable; fixed via
+`pickObjectByRayAlg()`, 8 new headless assertions). Next:
 
-1. **STAB-0503 — verify picking: click on object selects it** (S14,
-   P1, next-lowest ID). Goal: clicking a visible object selects it
-   (visible in the hierarchy panel). Files:
-   `src/MeshCraft/MeshCraftApplication_Mouse.cpp`. Verify: this is a
-   real mouse-click event handler, not just a draw call gated on
-   existing selection state like STAB-0501/0502 — read the picking
-   logic (ray-cast or screen-space hit test) for correctness, but
-   expect this also needs a live display/mouse to confirm end-to-end
-   (a synthetic click event isn't available through the headless
-   `--screenshot` path either).
+1. **STAB-0504 — verify picking: click on empty space deselects all**
+   (S14, P1, next-lowest ID). Goal: clicking empty viewport space
+   clears the selection. Files:
+   `src/MeshCraft/MeshCraftApplication_Mouse.cpp`. Verify: the
+   click-handler code read for STAB-0503 already showed
+   `if (!ctrl) selection_.clear(); if (bestObj) selection_.select(bestObj);`
+   right after the `pickObjectByRayAlg()` call — when nothing is hit
+   (`bestObj` null) and ctrl isn't held, this already unconditionally
+   clears the selection. Confirm this is exhaustively correct (e.g. the
+   ctrl-held case is deliberately additive, not a bug) and whether it's
+   already covered by `testPickObjectByRay()`'s "empty list / no hit"
+   assertions or needs its own headless check of the clear-then-select
+   sequence.
 
 Beyond that, S14 gets heavily visual/interactive (gizmos, camera
 presets, bloom/SSAO toggles, shadow maps) — expect many items to land
