@@ -405,7 +405,7 @@ void MeshCraftApplication::batchRenameSelected() {
     auto& sel = selection_.selection();
     if (sel.empty()) return;
     pushUndo();
-    int renamed = batchRenameObjects(sel, lockedIds_, batchRenameBuf_);
+    int renamed = batchRenameObjects(sel, lockedIds_, batchRenameBuf_, &document_.actions);
     modified_ = true;
     updateWindowTitle();
     char msg[64];

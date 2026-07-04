@@ -113,23 +113,50 @@ inline std::string applyRenamePatternAlg(const std::string& pat,
     return r;
 }
 
+// ── Rename fixup (STAB-0456) ───────────────────────────────────────────────────
+
+// Mc3Channel::targetObject is a plain object-name string, not a stable id
+// reference — renaming an object anywhere (Properties panel, hierarchy
+// panel, batch rename) must call this immediately after, or every action
+// channel that targeted the object's old name becomes silently orphaned
+// (safe — no crash, both export and live playback already guard a missing
+// target — but the animation stops working with no indication why).
+inline void renameObjectInActionsAlg(std::map<std::string, Mc3::Mc3Action>& actions,
+                                      const std::string& oldName,
+                                      const std::string& newName)
+{
+    if (oldName.empty() || oldName == newName) return;
+    for (auto& [actionName, action] : actions)
+        for (auto& ch : action.channels)
+            if (ch.targetObject == oldName) ch.targetObject = newName;
+}
+
 // ── Batch rename ──────────────────────────────────────────────────────────────
 
 // Applies rename pattern to selected objects (skipping locked ones).
 // Index is 1-based, assigned by position in the selection vector.
 // Returns count of objects whose name was changed.
+// `actions`, when non-null, gets each renamed object's channels fixed up via
+// renameObjectInActionsAlg (optional/nullable so existing headless tests that
+// construct objects without a full document keep compiling unchanged).
 inline int batchRenameObjects(
     const std::vector<std::shared_ptr<Mc3::Mc3Object>>& selected,
     const std::set<std::string>&                         lockedIds,
-    const std::string&                                   pattern)
+    const std::string&                                   pattern,
+    std::map<std::string, Mc3::Mc3Action>*                actions = nullptr)
 {
     int renamed = 0;
     int idx = 1;
     for (const auto& s : selected) {
         if (lockedIds.count(s->id)) { ++idx; continue; }
+        std::string oldName = s->name;
         std::string newName = applyRenamePatternAlg(pattern, s->name, idx,
                                                     objectTypeNameAlg(s->type));
-        if (!newName.empty()) { s->name = newName; ++renamed; }
+        if (!newName.empty()) {
+            s->name = newName;
+            if (actions) renameObjectInActionsAlg(*actions, oldName, newName);
+            ++renamed;
+        }
         ++idx;
     }
     return renamed;

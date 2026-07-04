@@ -1,5 +1,6 @@
 #include "MeshCraft/Scene/PropertiesPanel.hpp"
 #include "MeshCraft/Renderer/SceneRenderer.hpp"
+#include "MeshCraft/EditorAlgorithms.hpp"
 
 #include <imgui.h>
 
@@ -46,7 +47,9 @@ void PropertiesPanel::draw(float panelX, float panelY, float panelW, float panel
                                  ImGuiInputTextFlags_EnterReturnsTrue))
             {
                 ctx.pushUndo();
+                std::string oldName = sel0->name;
                 sel0->name = nameBuf;
+                renameObjectInActionsAlg(ctx.document.actions, oldName, sel0->name);
                 ctx.markModified();
             }
         }

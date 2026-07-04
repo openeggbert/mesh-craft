@@ -206,6 +206,53 @@ static void testBatchRename()
     CHECK(x->name == "copy_Chair", "batch rename {name} token");
 }
 
+// STAB-0456: renaming an object must not silently orphan animation channels
+// that targeted its old name (Mc3Channel::targetObject is a plain name
+// string, not a stable id reference).
+static void testRenameObjectInActionsAlg()
+{
+    Mc3::Mc3Action action;
+    action.name = "Spin";
+    Mc3::Mc3Channel ch;
+    ch.targetObject = "OldName";
+    ch.property     = Mc3::AnimatedProperty::RotationY;
+    ch.keyframes    = {Mc3::Mc3Keyframe::linear(0.0f, 0.0f), Mc3::Mc3Keyframe::linear(1.0f, 360.0f)};
+    action.channels.push_back(ch);
+    std::map<std::string, Mc3::Mc3Action> actions = {{"Spin", action}};
+
+    renameObjectInActionsAlg(actions, "OldName", "NewName");
+    CHECK(actions.at("Spin").channels[0].targetObject == "NewName",
+          "rename in actions: channel.targetObject updated to new name");
+
+    // No-op cases: empty old name, or old==new.
+    renameObjectInActionsAlg(actions, "", "Whatever");
+    CHECK(actions.at("Spin").channels[0].targetObject == "NewName",
+          "rename in actions: empty oldName is a no-op");
+    renameObjectInActionsAlg(actions, "NewName", "NewName");
+    CHECK(actions.at("Spin").channels[0].targetObject == "NewName",
+          "rename in actions: oldName==newName is a no-op");
+
+    // A channel targeting an unrelated object must be untouched.
+    Mc3::Mc3Channel other;
+    other.targetObject = "Unrelated";
+    other.property     = Mc3::AnimatedProperty::PositionX;
+    actions["Spin"].channels.push_back(other);
+    renameObjectInActionsAlg(actions, "NewName", "NewerName");
+    CHECK(actions.at("Spin").channels[0].targetObject == "NewerName",
+          "rename in actions: matching channel renamed again");
+    CHECK(actions.at("Spin").channels[1].targetObject == "Unrelated",
+          "rename in actions: unrelated channel untouched");
+
+    // batchRenameObjects with the optional actions pointer applies the fixup.
+    auto obj = makeObj("r1", "OldName");
+    std::vector<std::shared_ptr<Mc3Object>> sel = {obj};
+    std::map<std::string, Mc3::Mc3Action> actions2 = {{"Spin", action}};
+    batchRenameObjects(sel, {}, "Renamed_{name}", &actions2);
+    CHECK(obj->name == "Renamed_OldName", "batch rename with actions: object renamed");
+    CHECK(actions2.at("Spin").channels[0].targetObject == "Renamed_OldName",
+          "batch rename with actions: channel.targetObject followed the rename");
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // find-replace helpers
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1765,6 +1812,7 @@ int main()
 {
     testApplyRenamePattern();
     testBatchRename();
+    testRenameObjectInActionsAlg();
     testFindReplace();
     testArrayDuplicate();
     testDuplicateObjects();

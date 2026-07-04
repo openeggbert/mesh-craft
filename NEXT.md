@@ -52,12 +52,24 @@ include-override policy, search case-insensitivity, D3's skip reason,
 the inert embed-texture checkbox, color precision, alpha-mode/
 emissive-only material defaults) plus one new `MC3_FORMAT.md`
 documentation addition (texture path resolution). **S12 (Animation
-Stability) work has started**: STAB-0441-0448 done (8 items — 4 already
-covered by existing/this-session tests, 2 new roundtrip test gaps
-closed — scale, deform — and 2 new glTF-export-warning tests added).
-Plan-wide totals: **263
-✅ done, 4 🟡 partial, 118 🧪 has a plan but not executed,
-265 📋 not started** out of 650.
+Stability) work is well underway**: STAB-0441-0456 done (16 items).
+STAB-0441-0448 (8 items — 4 already covered by existing/this-session
+tests, 2 new roundtrip test gaps closed — scale, deform — and 2 new
+glTF-export-warning tests added). STAB-0449-0455 (7 timeline-UI/undo
+items) verified correct by code inspection — the pixel-level mouse
+interaction itself needs a live display, but the underlying data
+operations (multi-select set toggling, reverse-sorted safe keyframe
+erasure, action duplicate/rename, relative-time-preserving keyframe
+copy/paste, unconditional `pushUndo()` before every mutation) are all
+directly readable and confirmed correct, same standard applied to
+STAB-0426 earlier. **STAB-0456 found a real bug and fixed it**:
+renaming an object via any of its 3 real editor paths never propagated
+to that object's animation channels (`Mc3Channel::targetObject` is a
+plain name string) — silently orphaning its animations with no crash
+and no indication why. Added a shared `renameObjectInActionsAlg()`
+helper wired into all 3 call sites. Plan-wide totals: **271
+✅ done, 4 🟡 partial, 113 🧪 has a plan but not executed,
+262 📋 not started** out of 650.
 
 **Important architectural decisions:**
 - `mc3/` and `mcb/` are pure C++ static libs with **no** CNA/ImGui
@@ -188,17 +200,40 @@ See `TESTING.md` for the full per-test reference and `plan.md`'s
 
 ## 3. Recent changes
 
-**21 STAB tasks committed and pushed as of `e99ba20`** (`53aa75e`
-through `e99ba20` — see `git log --oneline` for the full list). Gate 6
-is exhausted (§8); S11 is fully done except 5 blocked items. Work has
-moved to **S12 (Animation Stability)**. **STAB-0441-0448** below are
+**22 STAB tasks committed and pushed as of `b0df3a9`** (`53aa75e`
+through `b0df3a9` — see `git log --oneline` for the full list). Gate 6
+is exhausted (§8); S11 is fully done except 5 blocked items. S12
+(Animation Stability) is well underway. **STAB-0449-0456** below are
 implemented but **not yet committed** as of this update.
 
 This was a long, dense session that closed out essentially all of
 **Gate 6 (Documentation)**'s reachable work (plus a from-scratch schema
 audit that found real bugs), then finished S11 entirely (bar the
-blocked items) and started S12. Highlights, most recent first:
+blocked items) and worked deep into S12. Highlights, most recent first:
 
+- **STAB-0449-0456 — S12 timeline UI sweep**: STAB-0449-0453 (timeline
+  multi-select, delete, duplicate action ["Dup" button, initially
+  missed searching for the literal word "Duplicate"], rename action
+  ["Ren" button, not literally double-click as the row assumed, but
+  functionally correct with proper name-collision validation],
+  copy/paste keyframes) and STAB-0454/0455 (undo-safety for add/delete
+  keyframe) all verified correct by code inspection — the mouse/pixel
+  hit-testing itself needs a live display, but the underlying data
+  operations are directly readable: multi-select is a `std::set`
+  toggle, delete uses reverse-sorted erasure to avoid index
+  invalidation, copy/paste preserves relative keyframe timing, and
+  every mutation is preceded by an unconditional `pushUndo()`.
+  **STAB-0456 found a real bug and fixed it**: renaming an object via
+  any of its 3 real editor paths (Properties panel, hierarchy panel,
+  batch rename) never propagated to that object's animation channels
+  (`Mc3Channel::targetObject` is a plain name string, not a stable id)
+  — silently orphaning its animations, safe (no crash, both export and
+  playback already guard a missing target) but permanently broken with
+  no indication why. Added a shared `renameObjectInActionsAlg()` helper
+  to `EditorAlgorithms.hpp`, wired into all 3 call sites (`batchRenameObjects()`
+  gained a new optional `actions` pointer parameter, nullable so its 5
+  existing headless-test call sites kept compiling unchanged). Added
+  `testRenameObjectInActionsAlg()` (7 assertions).
 - **STAB-0441-0448 — S12 roundtrip + glTF-export animation sweep**:
   STAB-0441 (position)/0442 (rotation)/0444 (material) were already
   covered by existing tests (`testAnimationCubicBezier`/

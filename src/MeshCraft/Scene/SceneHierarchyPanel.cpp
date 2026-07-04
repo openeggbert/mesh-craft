@@ -1,4 +1,5 @@
 #include "MeshCraft/Scene/SceneHierarchyPanel.hpp"
+#include "MeshCraft/EditorAlgorithms.hpp"
 
 #include <imgui.h>
 
@@ -341,7 +342,9 @@ void SceneHierarchyPanel::draw(Editor::SelectionManager& selection,
                 } else if (enter || deact) {
                     if (renameBuf_[0]) {
                         cb.pushUndo();
+                        std::string oldName = obj->name;
                         obj->name = renameBuf_;
+                        MeshCraft::renameObjectInActionsAlg(document_.actions, oldName, obj->name);
                         cb.markModified();
                     }
                     renamingId_.clear();
