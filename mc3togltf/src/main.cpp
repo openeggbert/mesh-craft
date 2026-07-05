@@ -43,7 +43,10 @@ int main(int argc, char* argv[]) {
     std::vector<std::string> args;
     for (int i = 1; i < argc; ++i) {
         std::string a = argv[i];
-        if (a == "--allow-approximate-csg") allowApproxCSG = true;
+        if (a == "--help" || a == "-h") {
+            printUsage(argv[0]);
+            return 0;
+        } else if (a == "--allow-approximate-csg") allowApproxCSG = true;
         else if (a == "--stats")            showStats = true;
         else args.push_back(a);
     }

@@ -276,6 +276,23 @@ if(BUILD_TESTING)
             )
             set_tests_properties(mc3togltf_glb_texture_embed PROPERTIES TIMEOUT 30)
         endif()
+        if(EXISTS "${_house_xml}")
+            add_test(
+                NAME mc3togltf_no_partial_output
+                COMMAND "${PYTHON3_EXEC}"
+                        "${CMAKE_CURRENT_SOURCE_DIR}/test/no_partial_output_test.py"
+                        "$<TARGET_FILE:mc3togltf>"
+                        "${_house_xml}"
+            )
+            set_tests_properties(mc3togltf_no_partial_output PROPERTIES TIMEOUT 30)
+        endif()
+        add_test(
+            NAME mc3togltf_help_text
+            COMMAND "${PYTHON3_EXEC}"
+                    "${CMAKE_CURRENT_SOURCE_DIR}/test/help_text_test.py"
+                    "$<TARGET_FILE:mc3togltf>"
+        )
+        set_tests_properties(mc3togltf_help_text PROPERTIES TIMEOUT 30)
         if(EXISTS "${_svg_material_xml}")
             add_test(
                 NAME mc3togltf_svg_texture_export
