@@ -1,6 +1,6 @@
 # NEXT.md
 
-_Last updated: 2026-07-05 (STAB-0533, prior commit `658fde3`, pushed)_
+_Last updated: 2026-07-05 (STAB-0534/0535, prior commit `23113a6`, pushed)_
 
 ---
 
@@ -23,8 +23,8 @@ tasks across sections S0–S20, gated by a Gate 0–6 checklist.
 without an external tool or a live display is done. Sections S0–S14 are
 fully closed (bar a handful of genuinely blocked/flagged items — S14: 17
 done, 13 flagged 🟡, 0 remaining). **S15 (Import/Export/Editor
-Integration), 30 items, is in progress**: 7 done (STAB-0526–0531,
-0533), 23 not yet started.
+Integration), 30 items, is in progress**: 9 done (STAB-0526–0531,
+0533–0535), 1 flagged 🟡 (STAB-0532), 20 not yet started.
 
 **Important architectural decisions:**
 - `mc3/` and `mcb/` are pure C++ static libs with **no** CNA/ImGui
@@ -149,6 +149,27 @@ See `TESTING.md` for the full per-test reference.
 
 ## 3. Recent changes
 
+- **STAB-0534/0535** — **found a real stale-mirror gap**: the
+  pre-existing `mergeDocumentsAlg()` (`EditorAlgorithms.hpp:1120-1163`,
+  a CNA-free mirror of `mergeSceneFromFile()` used by
+  `testMergeSceneCollisionHandling`) predates STAB-0469, which added
+  action-merging with suffix-on-collision to the *real* method — the
+  mirror was never updated and silently merged textures/materials/
+  objects only, dropping `actions` from the test's view entirely (the
+  real method was still correct; only the test mirror had drifted).
+  Fixed `mergeDocumentsAlg()` to also merge `actions` with the same
+  suffix logic as materials, and added 6 new assertions mirroring the
+  existing material-collision test shape. Object-append (STAB-0534) was
+  already fully covered. Pure `mc3`-lib test, CNA-free. 40/40 ctest
+  passing (same count, more assertions inside the existing test).
+- **STAB-0532** — traced the OBJ-import Browse button's full path:
+  `PropertiesPanel.cpp:1258-1268` → `MeshCraftApplication_UiProperties.cpp:47-52`
+  → the "Mesh Source" popup (`MeshCraftApplication_UiOverlays.cpp:1906-1937`,
+  F2). Confirmed it's a plain ImGui `InputText` popup (no native OS file
+  dialog) that assigns straight to `meshSource` — the same field
+  STAB-0533's round-trip test already confirmed persists correctly. No
+  unique logic beyond that; genuinely needs a live UI session to click
+  through the popup itself. Flagged 🟡.
 - **STAB-0533** — **found a real coverage gap**: the existing
   `meshSource` round-trip test (`mc3/test/roundtrip_test.cpp:1200-1218`)
   only exercised the `"embed:<id>"` special case, never a plain
@@ -579,41 +600,28 @@ row asks for ("file created; non-zero size"). Marked both ✅ in
 ## 8. Next smallest tasks
 
 **S14 is fully closed.** **S15 (Import/Export/Editor Integration)** is
-in progress: STAB-0526–0531 + 0533 done (7), 23 remaining. Pick in
-`plan.md` order unless noted otherwise:
+in progress: STAB-0526–0531 + 0533–0535 done (9), STAB-0532 flagged 🟡,
+20 remaining. Pick in `plan.md` order unless noted otherwise:
 
-1. **STAB-0532 — verify OBJ import: Browse button opens file path
-   entry.** Files: `src/MeshCraft/Scene/PropertiesPanel.cpp:1258-1268`
-   (already located this session). The text field itself directly sets
-   `sel0->meshSource` on edit (`:1262`) — the exact same field
-   STAB-0533's round-trip test just confirmed persists correctly to
-   XML. The Browse button (`:1266`) calls `ctx.openMeshBrowse(...)`,
-   which looks like a live file-picker popup — check what
-   `openMeshBrowse()` actually does before flagging; if it's just a
-   popup that ultimately writes to the same `meshSource` field with no
-   extra logic worth testing, a 🟡 flag (confirmed correct by reading,
-   needs a live display for the popup itself) is likely more honest
-   than forcing a UI test.
+1. **STAB-0536 — Export Subtree: exported file validates against
+   XSD.** Files: `src/MeshCraft/MeshCraftApplication_Commands.cpp`
+   (`exportSelectionToFile()`, `:209-250`). Promising: there's already a
+   CNA-free `exportSelectionAlg()` mirror (`EditorAlgorithms.hpp:1179-
+   1216`, STAB-0273/0274) with its own tests — but check it's actually
+   wired up / matches the real method (this session found TWO other
+   "mirror" functions — `exportSelectionAlg` itself looked fine, but
+   `mergeDocumentsAlg` had silently drifted out of sync with the real
+   method after STAB-0469, per STAB-0534/0535's finding). The real gap
+   to close is likely just: does the *exported file*, written via
+   `tmp.saveToFile(path)`, actually validate against `mc3.xsd`? Build a
+   quick test: export a subtree, run `test/validate_xsd.py` on the
+   result.
 
-2. **STAB-0534/0535 — Merge Scene: objects appear in hierarchy /
-   definitions merged not duplicated.** Files:
-   `src/MeshCraft/MeshCraftApplication_FileOps.cpp`. Check whether merge
-   is a plain document-level operation callable without ImGui (like
-   `runGltfExport()` turned out to be) — if so, exercise it directly
-   with `test/house.mc3.xml` as the merge source, matching the row's own
-   suggested verification.
-
-3. **STAB-0536 — Export Subtree: exported file validates against
-   XSD.** Files: `src/MeshCraft/MeshCraftApplication_Commands.cpp`. Look
-   for `exportSelectionToFile()` (seen in passing this session) — likely
-   testable the same way as STAB-0526-0529's new `--export` mechanism,
-   or via a direct CNA-free call if it doesn't touch ImGui either.
-
-4. **STAB-0537/0538 — mc3tomcb error handling** (missing input file,
+2. **STAB-0537/0538 — mc3tomcb error handling** (missing input file,
    write-protected output path). Pure CLI checks, no editor/UI
    involvement — straightforward to add to `mc3tomcb`'s own test suite.
 
-5. **STAB-0539+** — remaining S15 items (`plan.md`, several marked 🧪).
+3. **STAB-0539+** — remaining S15 items (`plan.md`, several marked 🧪).
    Don't assume 🧪 means "needs a live UI" without checking the actual
    code path first — this session found `runGltfExport()` (STAB-0526)
    and the pre-existing `mc3tomcb_roundtrip` test (STAB-0530/0531) both
@@ -659,14 +667,14 @@ verified improvement. Run the relevant build/test command from section 7
 and confirm cmake-build-debug still passes (40/40, or the new total if
 you registered a new ctest). Update NEXT.md after finishing.
 
-Current branch: develop, prior commit `658fde3` (STAB-0526-0529) — the
-STAB-0533 commit lands right after this NEXT.md update (git push was
-denied earlier in a prior session, then started working again
+Current branch: develop, prior commit `23113a6` (STAB-0533) — the
+STAB-0532/0534/0535 commit lands right after this NEXT.md update (git
+push was denied earlier in a prior session, then started working again
 unprompted — see section 4; if it happens again, keep committing
 locally and retry later). Build dir: cmake-build-debug/ (Debug, CLion
-cmake 4.2.2) — full rebuilt and 40/40 ctest verified clean as of
-STAB-0533 (includes a new `--export <path>` CLI flag on the `MeshCraft`
-binary itself, see §2/§3). Reconfigure now REQUIRES the extra flag
+cmake 4.2.2) — full rebuilt and 40/40 ctest verified clean (includes a
+new `--export <path>` CLI flag on the `MeshCraft` binary itself, see
+§2/§3). Reconfigure now REQUIRES the extra flag
 `-DCMAKE_POLICY_VERSION_MINIMUM=3.5` — see section 4/7 for why (CNA
 sibling repo added a vendored ENet dep incompatible with CMake 4.2.2
 without it). Release (b-release/) and the standalone
@@ -677,8 +685,8 @@ project's history but not re-checked as part of this update — re-verify
 Active plan: plan.md (STAB-XXXX tasks). Gates 0–5 closed, Gate 6
 exhausted for this environment. S0–S14 fully closed (S14: 17 done, 13
 flagged, 0 remaining). S15 (Import/Export/Editor Integration) is in
-progress: STAB-0526–0531 + 0533 done (7), 23 remaining — pick the first
-task from section 8.
+progress: STAB-0526–0531 + 0533–0535 done (9), STAB-0532 flagged 🟡, 20
+remaining — pick the first task from section 8.
 
 Reconfigure cmake-build-debug ONLY with CLion's cmake, not the system
 cmake. Editing mc3.xsd or adding a new .cpp file / new add_test()

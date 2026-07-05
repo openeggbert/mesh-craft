@@ -1117,16 +1117,18 @@ inline bool unsavedDialogResolvesToExecuteAlg(UnsavedDialogChoiceAlg choice, boo
     return false;
 }
 
-// ── Merge scene (STAB-0271) ───────────────────────────────────────────────────
+// ── Merge scene (STAB-0271, STAB-0469) ────────────────────────────────────────
 //
 // Mirrors MeshCraftApplication::mergeSceneFromFile() (MeshCraftApplication_
-// FileOps.cpp:255-283), minus pushUndo()/modified_/updateWindowTitle()/
+// FileOps.cpp:258-299), minus pushUndo()/modified_/updateWindowTitle()/
 // setStatusMsg(). Textures: skip on key collision (existing document wins).
-// Materials: on key collision, suffix with _2, _3, ... until unique, and
-// rename the copy's `name` field to match its new key. Objects: appended by
-// sharing the same shared_ptr (matches the real code — safe because src is
-// always freshly loaded from file and shares no ownership with dst).
-// Returns the number of objects appended.
+// Materials and actions: on key collision, suffix with _2, _3, ... until
+// unique, and rename the copy's `name` field to match its new key (STAB-0469
+// added action-merging to the real method — this mirror had fallen out of
+// sync and never merged actions at all until STAB-0534/0535 caught it).
+// Objects: appended by sharing the same shared_ptr (matches the real code —
+// safe because src is always freshly loaded from file and shares no
+// ownership with dst). Returns the number of objects appended.
 
 inline int mergeDocumentsAlg(Mc3::Mc3Document& dst, const Mc3::Mc3Document& src)
 {
@@ -1147,6 +1149,14 @@ inline int mergeDocumentsAlg(Mc3::Mc3Document& dst, const Mc3::Mc3Document& src)
     for (const auto& obj : src.objects) {
         dst.objects.push_back(obj);
         ++added;
+    }
+
+    for (const auto& [key, action] : src.actions) {
+        std::string k = key;
+        int n = 2;
+        while (dst.actions.count(k)) k = key + "_" + std::to_string(n++);
+        dst.actions[k] = action;
+        dst.actions[k].name = k;
     }
     return added;
 }

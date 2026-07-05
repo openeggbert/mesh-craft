@@ -1655,11 +1655,14 @@ static void testMergeSceneCollisionHandling()
     Mc3Document dst = makeUndoScene();
     dst.textures["wood"]  = Mc3::Mc3Texture("wood", "wood_old.png");
     dst.materials["stone"] = Mc3::Mc3Material("stone", {0.5f, 0.5f, 0.5f, 1.0f});
+    dst.actions["Walk"] = Mc3::Mc3Action::make("Walk", 1.0f);
 
     Mc3Document src;
     src.textures["wood"]  = Mc3::Mc3Texture("wood", "wood_new.png"); // collides
     src.textures["metal"] = Mc3::Mc3Texture("metal", "metal.png");   // new
     src.materials["stone"] = Mc3::Mc3Material("stone", {0.1f, 0.1f, 0.1f, 1.0f}); // collides
+    src.actions["Walk"] = Mc3::Mc3Action::make("Walk", 2.0f); // collides
+    src.actions["Jump"] = Mc3::Mc3Action::make("Jump", 0.5f); // new
     src.objects = { makeObj("s1", "SrcBoxA"), makeObj("s2", "SrcBoxB") };
 
     int added = mergeDocumentsAlg(dst, src);
@@ -1681,6 +1684,18 @@ static void testMergeSceneCollisionHandling()
           "mergeScene: suffixed material's name field is updated to match its new key");
     CHECK(dst.materials.at("stone_2").baseColor[0] == 0.1f,
           "mergeScene: suffixed material keeps the source's field values");
+
+    CHECK(dst.actions.count("Walk") == 1, "mergeScene: original 'Walk' action untouched");
+    CHECK(dst.actions.at("Walk").duration == 1.0f,
+          "mergeScene: action key collision — existing destination action is not overwritten");
+    CHECK(dst.actions.count("Walk_2") == 1,
+          "mergeScene: colliding source action is inserted under a suffixed key");
+    CHECK(dst.actions.at("Walk_2").name == "Walk_2",
+          "mergeScene: suffixed action's name field is updated to match its new key");
+    CHECK(dst.actions.at("Walk_2").duration == 2.0f,
+          "mergeScene: suffixed action keeps the source's field values");
+    CHECK(dst.actions.count("Jump") == 1,
+          "mergeScene: non-colliding source action is merged in");
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
