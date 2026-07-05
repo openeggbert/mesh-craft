@@ -461,6 +461,7 @@ void MeshCraftApplication::Draw(const GameTime& /*gameTime*/) {
     float aspect = (viewH > 0) ? static_cast<float>(viewW) / viewH : 16.0f / 9.0f;
     Matrix view = camera_.viewMatrix();
     Matrix proj = camera_.projectionMatrix(aspect);
+    float effectiveFovDegrees = camera_.fovDegrees;
 
     // Walk mode: override view with first-person camera
     if (walkModeEnabled_) {
@@ -494,6 +495,7 @@ void MeshCraftApplication::Draw(const GameTime& /*gameTime*/) {
             float fovRad = cam.fov * pi / 180.0f;
             proj = Matrix::CreatePerspectiveFieldOfView(fovRad, aspect,
                                                          cam.nearPlane, cam.farPlane);
+            effectiveFovDegrees = cam.fov;
         }
     } else {
         lookThroughCamera_ = false; // auto-clear if camera removed
@@ -525,7 +527,7 @@ void MeshCraftApplication::Draw(const GameTime& /*gameTime*/) {
     }
 
     // I2: equirectangular skybox (drawn before scene, no depth write)
-    drawSkybox(view, camera_.fovDegrees, aspect);
+    drawSkybox(view, effectiveFovDegrees, aspect);
 
     gd.SetDepthTestEnabled(false);
     gridRenderer_->draw(view, proj);
@@ -992,17 +994,18 @@ void main() {
 )";
 
 const char* kSkyboxVS = R"(#version 300 es
-layout(location = 0) in vec2 a_pos;
 uniform vec3 u_right;
 uniform vec3 u_up;
 uniform vec3 u_forward;
 uniform vec2 u_tanFov;
 out vec3 v_dir;
 void main() {
+    float x = float(gl_VertexID >> 1) * 2.0 - 1.0;
+    float y = 1.0 - float(gl_VertexID & 1) * 2.0;
     v_dir = u_forward
-          + a_pos.x * u_tanFov.x * u_right
-          + a_pos.y * u_tanFov.y * u_up;
-    gl_Position = vec4(a_pos, 0.9999, 1.0);
+          + x * u_tanFov.x * u_right
+          + y * u_tanFov.y * u_up;
+    gl_Position = vec4(x, y, 0.9999, 1.0);
 }
 )";
 
@@ -1196,19 +1199,6 @@ void MeshCraftApplication::initSkybox()
 {
     auto& gl = s_bloom;
     if (!gl.loadFunctions()) return;
-    // Ensure the shared quad VAO/VBO is built (reuse bloom's quad)
-    if (!gl.quadVAO) {
-        gl.GenVertexArrays(1, &gl.quadVAO);
-        gl.BindVertexArray(gl.quadVAO);
-        gl.GenBuffers(1, &gl.quadVBO);
-        gl.BindBuffer(kGL_ARRAY_BUFFER, gl.quadVBO);
-        const float quad[] = { -1.f, 1.f,  -1.f, -1.f,  1.f, 1.f,  1.f, -1.f };
-        gl.BufferData(kGL_ARRAY_BUFFER, (long)sizeof(quad), quad, kGL_STATIC_DRAW);
-        gl.EnableVertexAttribArray(0);
-        gl.VertexAttribPointer(0, 2, kGL_FLOAT, 0, 8, nullptr);
-        gl.BindVertexArray(0);
-        gl.BindBuffer(kGL_ARRAY_BUFFER, 0);
-    }
     if (gl.progSkybox) gl.DeleteProgram(gl.progSkybox);
     gl.progSkybox = gl.makeProgram(kSkyboxVS, kSkyboxFS);
     if (!gl.progSkybox) std::cerr << "[Skybox] Failed to compile shader\n";
@@ -1262,8 +1252,10 @@ void MeshCraftApplication::drawSkybox(const Matrix& view, float fovDegrees, floa
     float tanHalfFovY = std::tan(fovDegrees * pi / 180.0f * 0.5f);
     float tanHalfFovX = tanHalfFovY * aspect;
 
+    constexpr unsigned int kGL_CULL_FACE = 0x0B44u;
     gl.Disable(kGL_DEPTH_TEST);
     gl.Disable(kGL_BLEND);
+    gl.Disable(kGL_CULL_FACE);
     gl.UseProgram(gl.progSkybox);
     gl.ActiveTexture(kGL_TEXTURE0);
     gl.BindTexture(kGL_TEXTURE_2D, gl.skyboxTex);
@@ -1272,9 +1264,13 @@ void MeshCraftApplication::drawSkybox(const Matrix& view, float fovDegrees, floa
     gl.Uniform3f(gl.GetUniformLocation(gl.progSkybox, "u_up"),      ux, uy, uz);
     gl.Uniform3f(gl.GetUniformLocation(gl.progSkybox, "u_forward"), fx, fy, fz);
     gl.Uniform2f(gl.GetUniformLocation(gl.progSkybox, "u_tanFov"),  tanHalfFovX, tanHalfFovY);
-    gl.BindVertexArray(gl.quadVAO);
-    gl.DrawArrays(kGL_TRIANGLE_STRIP, 0, 4);
+    // Generate the full-screen quad procedurally from gl_VertexID (see
+    // kSkyboxVS) instead of a bound VAO/VBO + vertex attribute — the
+    // VAO-based approach silently produced a degenerate, invisible draw
+    // in this environment (STAB-0524); gl_VertexID matches the working
+    // pattern already used by the bloom passes below.
     gl.BindVertexArray(0);
+    gl.DrawArrays(kGL_TRIANGLE_STRIP, 0, 4);
     gl.BindTexture(kGL_TEXTURE_2D, 0);
 }
 

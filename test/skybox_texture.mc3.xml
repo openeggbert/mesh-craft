@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- STAB-0524 fixture: a solid-blue equirectangular skybox_texture, no
+     background_texture and no foreground objects, so the whole viewport
+     should be filled with the skybox color if drawSkybox()
+     (MeshCraftApplication.cpp:1217+) actually renders — the shader
+     samples the texture along each pixel's camera-space ray direction,
+     so a solid-color image renders as that flat color everywhere
+     regardless of where the camera looks. -->
+<mc3 version="0.3" model="SkyboxTextureFixture" default_camera="Main">
+
+  <environment>
+    <skybox_texture>textures/solid_blue_equirect.png</skybox_texture>
+  </environment>
+
+  <lights>
+    <ambient color="0.3 0.3 0.3" brightness="0.5"/>
+  </lights>
+
+  <cameras>
+    <camera name="Main" position="0 0 3" target="0 0 0" fov="50" near="0.05" far="100"/>
+  </cameras>
+
+  <objects/>
+
+</mc3>

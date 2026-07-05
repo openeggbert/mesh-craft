@@ -1,6 +1,6 @@
 # NEXT.md
 
-_Last updated: 2026-07-05 (STAB-0523, prior commit `fb32692`, pushed)_
+_Last updated: 2026-07-05 (STAB-0524, prior commit `d64b1f8`, pushed)_
 
 ---
 
@@ -22,9 +22,9 @@ tasks across sections S0–S20, gated by a Gate 0–6 checklist.
 (Documentation)** is exhausted for this environment — everything reachable
 without an external tool or a live display is done. Sections S0–S13 are
 fully closed (bar a handful of genuinely blocked/flagged items). **S14
-(Rendering and Viewport Stability), 30 items, is in progress**: 15 done,
+(Rendering and Viewport Stability), 30 items, is in progress**: 16 done,
 13 flagged 🟡 (confirmed correct by code reading, but need a human with a
-live display/tool to verify), 2 not yet started.
+live display/tool to verify), 1 not yet started.
 
 **Important architectural decisions:**
 - `mc3/` and `mcb/` are pure C++ static libs with **no** CNA/ImGui
@@ -65,7 +65,7 @@ live display/tool to verify), 2 not yet started.
   with §7's commands if you depend on this.
 
 ### Tests
-**37/37 CTest pass** in Debug (`ctest -N` lists all 37 by name). Notably:
+**38/38 CTest pass** in Debug (`ctest -N` lists all 38 by name). Notably:
 - `mc3_commands` (~450 assertions): editor command algorithms, undo/redo,
   auto-save/backup, keybinding/macro persistence, hierarchy filtering,
   AI-panel lifecycle, viewport ray-cast picking, click-selection
@@ -78,9 +78,10 @@ live display/tool to verify), 2 not yet started.
 - Several real-render smoke tests (`smoke_test*`, `fog_linear_test`,
   `point_light_gizmo_test`, `spot_light_gizmo_test`,
   `look_through_camera_test`, `csg_cache_test`,
-  `background_texture_test`) that run the actual `MeshCraft` binary in
-  `--screenshot` headless mode and verify genuine pixel output (or, for
-  `csg_cache_test`, a printed internal counter), not a stub render.
+  `background_texture_test`, `skybox_texture_test`) that run the actual
+  `MeshCraft` binary in `--screenshot` headless mode and verify genuine
+  pixel output (or, for `csg_cache_test`, a printed internal counter),
+  not a stub render.
 - A dozen `mc3togltf_*` tests covering CSG, materials, textures,
   animation, instance variants, large scenes.
 
@@ -111,8 +112,10 @@ See `TESTING.md` for the full per-test reference.
   (fixed this session — see §3), not just primitives.
 - Real headless rendering verified via `--screenshot`: sample scenes,
   missing-mesh/missing-material fallbacks, orthographic camera, linear
-  fog, point-light gizmo, spot-light gizmo, look-through-camera override
-  — all confirmed to produce genuine, non-stub pixel output.
+  fog, point-light gizmo, spot-light gizmo, look-through-camera override,
+  background texture, **equirectangular skybox (fixed this session — was
+  completely invisible before, see §3)** — all confirmed to produce
+  genuine, non-stub pixel output.
 
 ### What does NOT work yet
 - `EditorViewport` is not integrated into the `MeshCraftApplication`
@@ -137,6 +140,28 @@ See `TESTING.md` for the full per-test reference.
 
 ## 3. Recent changes
 
+- **STAB-0524** — **found and fixed a real, previously-invisible bug**:
+  the equirectangular skybox never rendered anything, despite every
+  surface-level check (shader compiles/links, texture loads, correct
+  GL state, zero `glGetError()`, correct viewport/scissor) passing —
+  confirmed via a temporarily hardcoded solid-color fragment shader that
+  *still* produced zero visible pixels. Root cause: `drawSkybox()` built
+  and bound a dedicated `quadVAO`/`quadVBO` with an `a_pos` vertex
+  attribute, but that VAO-based path silently produces a degenerate,
+  invisible draw in this environment (OpenGL ES 3.2 via Mesa) — while
+  the bloom passes' `gl_VertexID`-based procedural quad generation (no
+  VAO needed at all) is confirmed working. Fixed by switching
+  `kSkyboxVS` to the same `gl_VertexID` pattern, binding VAO 0, and
+  removing the now-dead VAO/VBO construction from `initSkybox()`. Also
+  fixed a related bug in the same function: `drawSkybox()` always used
+  the *default editor camera's* FOV (60°) instead of the actual active
+  camera's FOV in look-through-camera/walk mode — added an
+  `effectiveFovDegrees` local tracking the real active FOV. Added
+  `test/skybox_texture.mc3.xml` + a new committed test asset
+  `test/textures/solid_blue_equirect.png` + `test/skybox_texture_test.py`
+  (pixel sampling in a safe viewport-interior rectangle) + a permanent
+  `skybox_texture_test` ctest. Manually confirmed 96% blue coverage after
+  the fix vs. 0% before. 38/38 ctest passing.
 - **STAB-0523** — verified `background_texture` renders unconditionally
   (document-driven, no UI toggle), stretched to fill the viewport,
   before the 3D scene (`MeshCraftApplication.cpp:436-457`). Added
@@ -293,7 +318,7 @@ new `Alg` extractions. Full history is in `git log --oneline`.
 ## 4. Current blocker / main problem
 
 **No blocker to local development or testing** — Debug builds and passes
-37/37 tests as of STAB-0523. **New reconfigure requirement:** the CLion
+38/38 tests as of STAB-0524. **New reconfigure requirement:** the CLion
 cmake command in §7 now needs `-DCMAKE_POLICY_VERSION_MINIMUM=3.5` added,
 because the sibling CNA repo (commit `00e0cea`, "add ENet 1.3.17 as
 vendored third-party dependency", 2026-07-04) added
@@ -455,7 +480,7 @@ CLION_CMAKE=/home/robertvokac/.local/share/JetBrains/Toolbox/apps/clion/bin/cmak
 "$CLION_CMAKE" -S . -B cmake-build-debug -DBUILD_TESTING=ON \
       -DCMAKE_POLICY_VERSION_MINIMUM=3.5                      # (re)configure — flag needed since CNA added vendored ENet, see §4
 cd cmake-build-debug && ninja && ctest --output-on-failure    # build + test (36)
-ctest -N                                                      # lists all 37 tests
+ctest -N                                                      # lists all 38 tests
 
 # --- Release (system cmake is fine for a fresh dir)
 cmake -S . -B b-release -G Ninja -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=ON \
@@ -494,26 +519,24 @@ No project linter/formatter is configured.
 S14's priority (P0/P1) subset is done; remaining items are P2/P3. Pick in
 `plan.md` order unless noted otherwise:
 
-1. **STAB-0524 — verify skybox panorama shader: equirectangular image
-   displayed.** Files: `src/MeshCraft/MeshCraftApplication.cpp:1217-`
-   (`drawSkybox()`, already located this session): document-driven
-   (`document_.environment->skyboxTexture`, no UI toggle), loads via
-   `stbi_load` and renders unconditionally whenever set — same testable
-   class as STAB-0523. Good candidate for a fixture + pixel-sampling
-   test (STAB-0507/0511/0512/0513/0517/0522/0523's pattern); will need a
-   solid-color equirectangular test texture (same approach as
-   STAB-0523's generated `test/textures/solid_green.png`).
+1. **STAB-0525 — verify LOD: primitive segment count decreases at
+   distance (the last S14 item).** Files:
+   `src/MeshCraft/Renderer/SceneRenderer.cpp` — look for
+   `lodMesh(unitSphere_, unitSphereL1_, unitSphereL2_)` and similar calls
+   (seen in passing this session, e.g. around the Torus/Capsule/Cone
+   draw cases) — the LOD level appears to be selected from
+   `camPosX_/Y/Z_` (extracted from the view matrix in
+   `SceneRenderer::draw()`) vs. object distance. This is document/camera-
+   driven, not a UI toggle, so likely headlessly testable: check whether
+   there's an existing accessor exposing which LOD tier got used for a
+   given object (matching `csgCachedTriCount()`'s pattern — add one,
+   following STAB-0522's precedent, if none exists), then build two
+   fixtures (near camera vs. far camera to the same sphere) and assert
+   the reported tri/vertex count actually drops.
 
-2. **STAB-0525 — remaining S14 item** (`plan.md`, currently 📋; LOD
-   segment count vs. camera distance). Continue the established
-   pattern: read the code first; if document-driven/unconditional,
-   build a fixture + pixel-sampling test; if a pure runtime toggle or
-   needs live interaction with no headless hook, flag 🟡
-   (STAB-0505/0508/0509/0510/0514/0515/0516/0518/0519/0520/0521's
-   pattern).
-
-3. Once S14 is closed out, **S15 (Import/Export/Editor Integration)**
-   is next and fully untouched — read its `plan.md` rows before starting.
+2. Once S14 is closed out (this is the last item), **S15
+   (Import/Export/Editor Integration)** is next and fully untouched —
+   read its `plan.md` rows before starting.
 
 ---
 
@@ -552,15 +575,15 @@ S14's priority (P0/P1) subset is done; remaining items are P2/P3. Pick in
 Read NEXT.md first. Then inspect only the files needed for the first
 task in section 8. Do not refactor unrelated code. Make one small,
 verified improvement. Run the relevant build/test command from section 7
-and confirm cmake-build-debug still passes (37/37, or the new total if
+and confirm cmake-build-debug still passes (38/38, or the new total if
 you registered a new ctest). Update NEXT.md after finishing.
 
 Current branch: develop, in sync with origin/develop as of commit
-`fb32692` (git push was denied earlier in a prior session, then started
+`d64b1f8` (git push was denied earlier in a prior session, then started
 working again unprompted — see section 4; if it happens again, keep
 committing locally and retry later). Build dir: cmake-build-debug/
-(Debug, CLion cmake 4.2.2) — full rebuilt and 37/37 ctest verified
-clean as of STAB-0523. Reconfigure now REQUIRES the extra flag
+(Debug, CLion cmake 4.2.2) — full rebuilt and 38/38 ctest verified
+clean as of STAB-0524. Reconfigure now REQUIRES the extra flag
 `-DCMAKE_POLICY_VERSION_MINIMUM=3.5` — see section 4/7 for why (CNA
 sibling repo added a vendored ENet dep incompatible with CMake 4.2.2
 without it). Release (b-release/) and the standalone
@@ -570,8 +593,8 @@ project's history but not re-checked as part of this update — re-verify
 
 Active plan: plan.md (STAB-XXXX tasks). Gates 0–5 closed, Gate 6
 exhausted for this environment. S0–S13 fully closed. S14 (Rendering and
-Viewport Stability) is in progress: 15 done, 13 flagged (need a live
-display/tool), 2 remaining — pick the next task from section 8.
+Viewport Stability) is in progress: 16 done, 13 flagged (need a live
+display/tool), 1 remaining (STAB-0525) — pick it up from section 8.
 
 Reconfigure cmake-build-debug ONLY with CLion's cmake, not the system
 cmake. Editing mc3.xsd or adding a new .cpp file / new add_test()

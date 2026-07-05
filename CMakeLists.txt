@@ -527,6 +527,20 @@ if(MESH_CRAFT_BUILD_TESTING AND UNIX AND NOT ANDROID AND NOT EMSCRIPTEN)
             )
             set_tests_properties(background_texture_test PROPERTIES TIMEOUT 30)
         endif()
+
+        # STAB-0524: confirms the equirectangular skybox shader actually
+        # renders a document-driven skybox_texture.
+        if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/test/skybox_texture.mc3.xml")
+            add_test(
+                NAME skybox_texture_test
+                COMMAND "${PYTHON3_EXEC}"
+                        "${CMAKE_CURRENT_SOURCE_DIR}/test/skybox_texture_test.py"
+                        $<TARGET_FILE:MeshCraft>
+                        "${CMAKE_CURRENT_SOURCE_DIR}/test/skybox_texture.mc3.xml"
+                WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
+            )
+            set_tests_properties(skybox_texture_test PROPERTIES TIMEOUT 30)
+        endif()
     endif()
 
     # mc3togltf_gltf test is registered by mc3togltf/CMakeLists.txt via $<TARGET_FILE:mc3togltf>
