@@ -1,6 +1,6 @@
 # NEXT.md
 
-_Last updated: 2026-07-05 (STAB-0517, prior commit `5c33f6b`)_
+_Last updated: 2026-07-05 (STAB-0518, prior commit `f45ad40`, pushed)_
 
 ---
 
@@ -23,8 +23,8 @@ tasks across sections S0–S20, gated by a Gate 0–6 checklist.
 without an external tool or a live display is done. Sections S0–S13 are
 fully closed (bar a handful of genuinely blocked/flagged items). **S14
 (Rendering and Viewport Stability), 30 items, is in progress**: 13 done,
-9 flagged 🟡 (confirmed correct by code reading, but need a human with a
-live display to visually verify), 8 not yet started.
+10 flagged 🟡 (confirmed correct by code reading, but need a human with a
+live display to visually verify), 7 not yet started.
 
 **Important architectural decisions:**
 - `mc3/` and `mcb/` are pure C++ static libs with **no** CNA/ImGui
@@ -136,6 +136,14 @@ See `TESTING.md` for the full per-test reference.
 
 ## 3. Recent changes
 
+- **STAB-0518** — audited the locked-object outline (red wireframe,
+  `MeshCraftApplication.cpp:582-595`): correctly recurses through all
+  objects/children, draws the outline for every locked id — no bug
+  found. `lockedIds_` is a pure in-memory editor set with no persisted
+  `mc3.xml` attribute (confirmed: no `locked` attribute anywhere in
+  `mc3.xsd`/`Mc3Document`), only settable via a live keyboard shortcut or
+  menu action. Same no-headless-hook wall as STAB-0505/0514/0515/0516.
+  Flagged 🟡.
 - **STAB-0517** — verified the "look through camera" override with a
   real pixel-sampling test (`test/look_through_camera.mc3.xml` +
   `look_through_camera_test.py`, 34,645 yellow samples confirmed): a box
@@ -252,15 +260,16 @@ an environment limitation — see §5 for the full list.
 
 Genuine **operational** issues, unrelated to current work:
 
-- **`git push origin develop` is currently denied.** The remote is now
-  SSH (`git@github.com:openeggbert/mesh-craft.git`, not the HTTPS+PAT URL
-  previously documented here) and returns
-  `Permission to openeggbert/mesh-craft.git denied to robertvokac` — the
-  active SSH key lacks push access. **5 commits are queued locally on
-  `develop`, not yet pushed**: STAB-0513 (`da3a8d6`) through STAB-0517
-  (see `git log --oneline -5` for the current head). Needs the repo
-  owner to fix SSH key access; do not attempt to reconfigure the remote
-  or credentials without explicit permission.
+- **`git push origin develop` was denied earlier this session, then
+  started working again without any local config change.** The remote is
+  now SSH (`git@github.com:openeggbert/mesh-craft.git`, not the
+  HTTPS+PAT URL previously documented here). It failed with
+  `Permission to openeggbert/mesh-craft.git denied to robertvokac` for
+  commits `da3a8d6` through `f45ad40` (STAB-0513–0517), then a later
+  retry of the same `git push origin develop` succeeded and pushed all 5
+  — so access is likely SSH-agent/key-forwarding related and may recur.
+  If push is denied again: don't touch remote/credential config, just
+  keep committing locally and retry later (or ask the user).
 - **CI cannot be activated with the current git credentials** (separate,
   older issue). The workflow file is committed but parked at
   `.github_/workflows/ci.yml` (GitHub only treats `.github/workflows/` as
@@ -301,11 +310,12 @@ Genuine **operational** issues, unrelated to current work:
   `bloomEnabled_` (STAB-0509), `showWireframeMode_` (STAB-0510), the
   translate/rotate gizmo visibility (STAB-0501/0502), the gizmo-drag
   delta overlay (STAB-0514), the per-selected-object poly-stats display
-  (STAB-0515), and the shadow-map debug overlay (STAB-0516) — all
-  confirmed correct and safe by code reading, none reachable via the
-  headless `--screenshot` path (no CLI/document/prefs hook exists to
-  force them on/pre-select an object). _needs verification by a human
-  with a live display._
+  (STAB-0515), the shadow-map debug overlay (STAB-0516), and the
+  locked-object outline (STAB-0518) — all confirmed correct and safe by
+  code reading, none reachable via the headless `--screenshot` path (no
+  CLI/document/prefs hook exists to force them on/pre-select or
+  pre-lock an object). _needs verification by a human with a live
+  display._
 - **N3–N7 (scripts/sounds/music/triggers/states/meta) are data-only** —
   round-tripped but nothing executes them at runtime. _intended at this
   stage, not a bug._
@@ -422,22 +432,23 @@ No project linter/formatter is configured.
 S14's priority (P0/P1) subset is done; remaining items are P2/P3. Pick in
 `plan.md` order unless noted otherwise:
 
-1. **STAB-0518 — verify locked object outline: locked objects have
-   distinct visual.** Files: `src/MeshCraft/Renderer/SceneRenderer.cpp`.
-   `lockedIds_` (referenced at `MeshCraftApplication_UiOverlays.cpp:48`)
-   is an in-memory editor set, not (as far as read so far) a persisted
-   `mc3.xml` attribute — check whether locking is document-driven (would
-   make this headlessly testable, fixture + pixel-sampling pattern) or
-   purely a runtime editor action with no CLI/document hook (would need
-   the STAB-0505-style 🟡 flag) before deciding which.
+1. **STAB-0519 — verify proportional editing falloff: visible sphere
+   indicator.** Files: `src/MeshCraft/MeshCraftApplication_Mouse.cpp`
+   (`applyProportionalFalloffAlg()` call site, line ~186) and
+   `include/MeshCraft/EditorAlgorithms.hpp:634`
+   (`applyProportionalFalloffAlg()` itself). Likely the same
+   live-drag-required class as STAB-0514 (proportional editing only
+   applies during an active Move-gizmo drag) — confirm by checking
+   whether the falloff-radius sphere indicator is drawn unconditionally
+   from a document/toggle state or only mid-drag before flagging.
 
-2. **STAB-0519 through STAB-0525** — remaining S14 items (`plan.md`,
+2. **STAB-0520 through STAB-0525** — remaining S14 items (`plan.md`,
    currently 📋). Continue the established pattern: read the code first;
    if the feature is document-driven or unconditional, build a fixture +
    pixel-sampling test (STAB-0507/0511/0512/0513/0517's pattern); if it's
    a pure runtime UI toggle or requires live selection/interaction with
    no headless hook, confirm correctness by reading and flag 🟡
-   (STAB-0505/0508/0509/0510/0514/0515/0516's pattern).
+   (STAB-0505/0508/0509/0510/0514/0515/0516/0518's pattern).
 
 3. Once S14 is closed out, **S15 (Import/Export/Editor Integration)**
    is next and fully untouched — read its `plan.md` rows before starting.
@@ -482,21 +493,22 @@ verified improvement. Run the relevant build/test command from section 7
 and confirm cmake-build-debug still passes (35/35, or the new total if
 you registered a new ctest). Update NEXT.md after finishing.
 
-Current branch: develop, 5 commits ahead of origin/develop and NOT
-pushed (git push is currently denied — see section 4, fix needs the repo
-owner). Build dir: cmake-build-debug/ (Debug, CLion cmake 4.2.2) — full
-rebuilt and 35/35 ctest verified clean as of STAB-0517. Reconfigure now
-REQUIRES the extra flag `-DCMAKE_POLICY_VERSION_MINIMUM=3.5` — see
-section 4/7 for why (CNA sibling repo added a vendored ENet dep
-incompatible with CMake 4.2.2 without it). Release (b-release/) and the
-standalone mc3/mcb/mc3togltf/mc3tomcb builds were verified earlier in
-this project's history but not re-checked as part of this update —
-re-verify (with the same new flag) before relying on them.
+Current branch: develop, in sync with origin/develop as of commit
+`f45ad40` (push was denied earlier this session, then started working
+again unprompted — see section 4). Build dir: cmake-build-debug/
+(Debug, CLion cmake 4.2.2) — full rebuilt and 35/35 ctest verified
+clean as of STAB-0517. Reconfigure now REQUIRES the extra flag
+`-DCMAKE_POLICY_VERSION_MINIMUM=3.5` — see section 4/7 for why (CNA
+sibling repo added a vendored ENet dep incompatible with CMake 4.2.2
+without it). Release (b-release/) and the standalone
+mc3/mcb/mc3togltf/mc3tomcb builds were verified earlier in this
+project's history but not re-checked as part of this update — re-verify
+(with the same new flag) before relying on them.
 
 Active plan: plan.md (STAB-XXXX tasks). Gates 0–5 closed, Gate 6
 exhausted for this environment. S0–S13 fully closed. S14 (Rendering and
-Viewport Stability) is in progress: 13 done, 9 flagged (need a live
-display), 8 remaining — pick the next task from section 8.
+Viewport Stability) is in progress: 13 done, 10 flagged (need a live
+display), 7 remaining — pick the next task from section 8.
 
 Reconfigure cmake-build-debug ONLY with CLion's cmake, not the system
 cmake. Editing mc3.xsd or adding a new .cpp file / new add_test()
