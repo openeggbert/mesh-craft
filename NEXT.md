@@ -1,6 +1,6 @@
 # NEXT.md
 
-_Last updated: 2026-07-05 (STAB-0550, prior commit `1d382b0`, pushed)_
+_Last updated: 2026-07-05 (STAB-0008/0551/0552, prior commit `732529d`, pushed)_
 
 ---
 
@@ -21,11 +21,12 @@ tasks across sections S0–S20, gated by a Gate 0–6 checklist.
 **Current phase:** Stabilization. Gates 0–5 are fully closed. **Gate 6
 (Documentation)** is exhausted for this environment — everything reachable
 without an external tool or a live display is done. Sections S0–S15 are
-now **fully closed** (bar a handful of genuinely blocked/flagged items —
-S14: 17 done, 13 flagged 🟡, 0 remaining; S15: 23 done, 2 flagged 🟡, 0
-remaining). **S16 (Cross-Platform Stability)**, 30 items, is next and
-fully untouched — its first item (STAB-0551, P0, "Linux desktop build
-and run") is already flagged 🟡 in `plan.md`.
+fully closed (S14: 17 done, 13 flagged 🟡, 0 remaining; S15: 23 done, 2
+flagged 🟡, 0 remaining). **S16 (Cross-Platform Stability), 30 items, is
+in progress**: 1 done (STAB-0551), 1 flagged 🟡 (STAB-0552, genuine
+cross-compile progress + a specific CNA-side blocker), 28 not yet
+started. Also **retroactively fixed STAB-0008** (Gate 0/S0, a real bug
+found while working on STAB-0552).
 
 **Important architectural decisions:**
 - `mc3/` and `mcb/` are pure C++ static libs with **no** CNA/ImGui
@@ -151,6 +152,28 @@ See `TESTING.md` for the full per-test reference.
 
 ## 3. Recent changes
 
+- **STAB-0551/0552/0008** — first S16 work. STAB-0551 confirmed ✅ by
+  the cumulative weight of this whole session's build/test history plus
+  a fresh direct check: `MeshCraft` launched without `--screenshot` runs
+  for several seconds (real SDL window, EasyGL/GLES 3.2 backend,
+  sustained main loop) without crashing. Attempting STAB-0552 (MinGW
+  cross-compile — toolchain fully installed, wrote a standard toolchain
+  file) hit `find_package(SQLite3 REQUIRED)` in `CMakeLists.txt:172` —
+  **found and fixed a real bug (STAB-0008)**: this directly contradicted
+  the codebase's own established "SQLite3 is optional, `ModelRegistry`
+  stubs handle its absence" architecture and blocked the exact scenario
+  STAB-0008 itself describes. Fixed by removing `REQUIRED` + adding a
+  proper found/not-found branch (mirroring the adjacent OpenSSL check);
+  confirmed the normal Linux build (where SQLite3 *is* found) is
+  unaffected, 46/46 ctest still passing. With that fixed, the MinGW
+  configure succeeded fully and the build proceeded through 328/449
+  objects (~73%) before hitting a genuine, CNA-side blocker:
+  `imgui_impl_opengl3.cpp: fatal error: GLES3/gl3.h: No such file or
+  directory` — CNA's `EASYGL` backend configures GLES3 mode
+  unconditionally regardless of target platform, and no GLES-for-Windows
+  headers are available/vendored. Out of scope to fix here (CNA
+  boundary) — flagged 🟡 with this specific, actionable blocker for
+  whoever handles CNA next, rather than a vague "untested."
 - **STAB-0550** — **found and fixed a real, deeper bug: the 4th
   instance of this session's "reference silently breaks across a
   merge/import boundary" pattern, but this time in the core
@@ -747,28 +770,27 @@ row asks for ("file created; non-zero size"). Marked both ✅ in
 ## 8. Next smallest tasks
 
 **S14 and S15 are both fully closed.** **S16 (Cross-Platform
-Stability)**, 30 items, is next and completely untouched. Pick in
-`plan.md` order unless noted otherwise:
+Stability)** is in progress: STAB-0551 done, STAB-0552 flagged 🟡
+(genuine cross-compile progress, blocked on a specific CNA-side GLES3
+header issue — see §3). Pick in `plan.md` order unless noted otherwise:
 
-1. **STAB-0551 — Linux desktop build and run (P0, already flagged 🟡
-   in `plan.md` from before this session touched it).** Files:
-   `CMakeLists.txt`. This environment *is* Linux x86_64, and every STAB
-   task this whole session has repeatedly done a full reconfigure +
-   rebuild + `ctest` here (46/46 currently green) — check whether the
-   pre-existing 🟡 just reflects "written before verification happened"
-   and can now be confirmed ✅ from this session's own extensive
-   evidence, or whether it's flagging something specific (e.g. the
-   interactive/windowed run path, not just headless `--screenshot`)
-   that's still genuinely unverified.
+1. **STAB-0553 — Emscripten web build + basic smoke.** Files:
+   `CMakeLists.txt`. The Emscripten SDK *is* installed in this
+   environment at `/home/robertvokac/Downloads/emsdk` (v5.0.7, confirmed
+   working — `source emsdk_env.sh` then `emcc --version` succeeds), just
+   not on `$PATH` by default. Try `emcmake cmake -S . -B b-web
+   -DBUILD_TESTING=OFF -DCMAKE_POLICY_VERSION_MINIMUM=3.5` after sourcing
+   that env — CMakeLists.txt already has `if(NOT EMSCRIPTEN AND NOT
+   ANDROID)` guards around SQLite3/OpenSSL/httplib (STAB-0008 just fixed
+   the SQLite3 one to be a graceful fallback rather than a hard
+   `REQUIRED`), so configure may get further than MinGW did before
+   hitting a CNA-side Emscripten-specific blocker (if any) — don't
+   assume it'll hit the *same* GLES3 issue MinGW did; Emscripten's own
+   GL emulation is a different code path. Remember to clean up any large
+   scratch build directory (e.g. `b-web/`) when done, same as `b-mingw/`
+   was removed this round.
 
-2. **STAB-0552/0553 — MinGW cross-compile / Emscripten web build.**
-   Files: `CMakeLists.txt`. Check whether the cross-compile toolchains
-   (`x86_64-w64-mingw32-cmake`, `emcmake`) are actually installed in
-   this environment before attempting either — if not, these are
-   genuinely blocked-on-missing-tool items, same class as the already-
-   flagged STAB-0642/0643/0650.
-
-3. **STAB-0554-0559+** — path separators, UTF-8 filenames, paths with
+2. **STAB-0554-0559+** — path separators, UTF-8 filenames, paths with
    spaces, non-ASCII object names, OS config dirs, clipboard paste.
    Several of these (UTF-8/spaces/non-ASCII filenames, path separator
    handling) look like straightforward, headlessly-testable
@@ -819,9 +841,9 @@ verified improvement. Run the relevant build/test command from section 7
 and confirm cmake-build-debug still passes (46/46, or the new total if
 you registered a new ctest). Update NEXT.md after finishing.
 
-Current branch: develop, prior commit `1d382b0` (STAB-0548/0549) — the
-STAB-0550 commit lands right after this NEXT.md update (git push was
-denied earlier in a prior session, then started working again
+Current branch: develop, prior commit `732529d` (STAB-0550) — the
+STAB-0008/0551/0552 commit lands right after this NEXT.md update (git
+push was denied earlier in a prior session, then started working again
 unprompted — see section 4; if it happens again, keep committing
 locally and retry later). Build dir: cmake-build-debug/ (Debug, CLion
 cmake 4.2.2) — full rebuilt and 46/46 ctest verified clean (includes a
@@ -832,13 +854,18 @@ sibling repo added a vendored ENet dep incompatible with CMake 4.2.2
 without it). Release (b-release/) and the standalone
 mc3/mcb/mc3togltf/mc3tomcb builds were verified earlier in this
 project's history but not re-checked as part of this update — re-verify
-(with the same new flag) before relying on them.
+(with the same new flag) before relying on them. **New this round:**
+`find_package(SQLite3)` in the root `CMakeLists.txt` is no longer
+`REQUIRED` (STAB-0008) — confirmed this doesn't change the normal
+Linux build (SQLite3 still found, 46/46 ctest unaffected).
 
 Active plan: plan.md (STAB-XXXX tasks). Gates 0–5 closed, Gate 6
 exhausted for this environment. S0–S15 fully closed (S14: 17 done, 13
 flagged, 0 remaining; S15: 23 done, 2 flagged, 0 remaining). S16
-(Cross-Platform Stability) is next and fully untouched — pick the
-first task from section 8.
+(Cross-Platform Stability) is in progress: STAB-0551 done, STAB-0552
+flagged 🟡 (blocked on a CNA-side GLES3-for-Windows header issue, see
+section 3) — pick the next task (STAB-0553, Emscripten) from
+section 8.
 
 Reconfigure cmake-build-debug ONLY with CLion's cmake, not the system
 cmake. Editing mc3.xsd or adding a new .cpp file / new add_test()

@@ -167,10 +167,20 @@ FetchContent_MakeAvailable(tinyobjloader)
 # mc3togltf — MC3 to glTF/GLB export tool (uses Mc3 + tinyobjloader already fetched above)
 add_subdirectory(mc3togltf)
 
-# SQLite3 — model registry persistence (desktop builds only)
+# SQLite3 — model registry persistence (desktop builds only). Optional,
+# not REQUIRED: ModelRegistry.cpp's MESHCRAFT_HAS_SQLITE3 guard already
+# provides safe no-op stubs for its absence (STAB-0008/0366/0552/0563),
+# so a REQUIRED find_package() here would contradict that and needlessly
+# block any environment/toolchain without a SQLite3 dev package for its
+# target (e.g. a fresh MinGW cross-compile sysroot) — same pattern as the
+# OpenSSL check right below.
 if(NOT EMSCRIPTEN AND NOT ANDROID)
-    find_package(SQLite3 REQUIRED)
-    message(STATUS "SQLite3 found: ${SQLite3_VERSION}")
+    find_package(SQLite3)
+    if(SQLite3_FOUND)
+        message(STATUS "SQLite3 found: ${SQLite3_VERSION}")
+    else()
+        message(STATUS "SQLite3 not found — ModelRegistry will be disabled at runtime")
+    endif()
 endif()
 
 # cpp-httplib + OpenSSL — AI Assistant (desktop builds only)
