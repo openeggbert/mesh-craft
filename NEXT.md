@@ -1,6 +1,6 @@
 # NEXT.md
 
-_Last updated: 2026-07-05 (STAB-0515, prior commit `5542497`)_
+_Last updated: 2026-07-05 (STAB-0516, prior commit `1abfc5c`)_
 
 ---
 
@@ -23,8 +23,8 @@ tasks across sections S0–S20, gated by a Gate 0–6 checklist.
 without an external tool or a live display is done. Sections S0–S13 are
 fully closed (bar a handful of genuinely blocked/flagged items). **S14
 (Rendering and Viewport Stability), 30 items, is in progress**: 12 done,
-8 flagged 🟡 (confirmed correct by code reading, but need a human with a
-live display to visually verify), 10 not yet started.
+9 flagged 🟡 (confirmed correct by code reading, but need a human with a
+live display to visually verify), 9 not yet started.
 
 **Important architectural decisions:**
 - `mc3/` and `mcb/` are pure C++ static libs with **no** CNA/ImGui
@@ -135,6 +135,14 @@ See `TESTING.md` for the full per-test reference.
 
 ## 3. Recent changes
 
+- **STAB-0516** — audited the shadow-map debug overlay
+  (`MeshCraftApplication.cpp:505-524,1535-1551`,
+  `MeshCraftApplication_UiOverlays.cpp:2077-2104`): correctly finds the
+  first shadow-casting directional light, renders the scene into a
+  dedicated FBO from light-space, restores framebuffer/viewport state
+  afterward (no leak), and displays it in a "Shadow Frustum" window — no
+  bug found. Gated on `shadowDebugEnabled_` (default `false`, menu-item
+  only), same no-headless-hook wall as STAB-0508/0509/0510. Flagged 🟡.
 - **STAB-0515** — audited the per-selected-object poly-stats display:
   `plan.md`'s file citation was imprecise (the real feature is
   `PropertiesPanel.cpp:1413-1422`'s "Poly stats (C6)", not the
@@ -274,11 +282,12 @@ The only genuine **operational** issue is unrelated to current work:
   `showBoundingBox_` (STAB-0505), `ssaoEnabled_` (STAB-0508),
   `bloomEnabled_` (STAB-0509), `showWireframeMode_` (STAB-0510), the
   translate/rotate gizmo visibility (STAB-0501/0502), the gizmo-drag
-  delta overlay (STAB-0514), and the per-selected-object poly-stats
-  display (STAB-0515) — all confirmed correct and safe by code reading,
-  none reachable via the headless `--screenshot` path (no
-  CLI/document/prefs hook exists to force them on/pre-select an object).
-  _needs verification by a human with a live display._
+  delta overlay (STAB-0514), the per-selected-object poly-stats display
+  (STAB-0515), and the shadow-map debug overlay (STAB-0516) — all
+  confirmed correct and safe by code reading, none reachable via the
+  headless `--screenshot` path (no CLI/document/prefs hook exists to
+  force them on/pre-select an object). _needs verification by a human
+  with a live display._
 - **N3–N7 (scripts/sounds/music/triggers/states/meta) are data-only** —
   round-tripped but nothing executes them at runtime. _intended at this
   stage, not a bug._
@@ -395,21 +404,24 @@ No project linter/formatter is configured.
 S14's priority (P0/P1) subset is done; remaining items are P2/P3. Pick in
 `plan.md` order unless noted otherwise:
 
-1. **STAB-0516 — verify shadow map debug overlay: renders from first
-   directional light.** Files: `src/MeshCraft/MeshCraftApplication.cpp`
-   (search for "Shadow Frustum" / shadow-map debug window). Check
-   whether the debug view is gated by a UI-only toggle (needs live
-   display, STAB-0505's pattern) or is document/state-driven and
-   reachable via `--screenshot` (STAB-0507/0511/0512/0513's pattern) —
-   read the code first before deciding which.
+1. **STAB-0517 — verify "Look through camera": renders from Mc3Camera
+   position/rotation.** Files: `src/MeshCraft/MeshCraftApplication.cpp`.
+   Promising lead: `lookThroughCamera_`/`selectedCameraIdx_` are already
+   auto-activated headlessly in `--screenshot` mode when the document
+   has a `default_camera` (`MeshCraftApplication.cpp:224-236`, the same
+   mechanism STAB-0507's orthographic-camera test already exercises) —
+   likely reachable via a fixture + pixel-sampling test
+   (STAB-0507/0511/0512/0513's pattern) rather than needing a live
+   display. Confirm by reading how the viewport picks the camera matrix
+   when `lookThroughCamera_` is true vs. false.
 
-2. **STAB-0517 through STAB-0525** — remaining S14 items (`plan.md`,
+2. **STAB-0518 through STAB-0525** — remaining S14 items (`plan.md`,
    currently 📋). Continue the established pattern: read the code first;
    if the feature is document-driven or unconditional, build a fixture +
    pixel-sampling test (STAB-0507/0511/0512/0513's pattern); if it's a
    pure runtime UI toggle or requires live selection/interaction with no
    headless hook, confirm correctness by reading and flag 🟡
-   (STAB-0505/0508/0509/0510/0514/0515's pattern).
+   (STAB-0505/0508/0509/0510/0514/0515/0516's pattern).
 
 3. Once S14 is closed out, **S15 (Import/Export/Editor Integration)**
    is next and fully untouched — read its `plan.md` rows before starting.
@@ -466,8 +478,8 @@ project's history but not re-checked as part of this update — re-verify
 
 Active plan: plan.md (STAB-XXXX tasks). Gates 0–5 closed, Gate 6
 exhausted for this environment. S0–S13 fully closed. S14 (Rendering and
-Viewport Stability) is in progress: 12 done, 8 flagged (need a live
-display), 10 remaining — pick the next task from section 8.
+Viewport Stability) is in progress: 12 done, 9 flagged (need a live
+display), 9 remaining — pick the next task from section 8.
 
 Reconfigure cmake-build-debug ONLY with CLion's cmake, not the system
 cmake. Editing mc3.xsd or adding a new .cpp file / new add_test()
