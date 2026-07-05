@@ -1,6 +1,6 @@
 # NEXT.md
 
-_Last updated: 2026-07-05 (STAB-0519, prior commit `87785cd`, pushed)_
+_Last updated: 2026-07-05 (STAB-0521, prior commit `c678a63`, pushed)_
 
 ---
 
@@ -23,8 +23,8 @@ tasks across sections S0–S20, gated by a Gate 0–6 checklist.
 without an external tool or a live display is done. Sections S0–S13 are
 fully closed (bar a handful of genuinely blocked/flagged items). **S14
 (Rendering and Viewport Stability), 30 items, is in progress**: 13 done,
-11 flagged 🟡 (confirmed correct by code reading, but need a human with a
-live display to visually verify), 6 not yet started.
+13 flagged 🟡 (confirmed correct by code reading, but need a human with a
+live display/tool to verify), 4 not yet started.
 
 **Important architectural decisions:**
 - `mc3/` and `mcb/` are pure C++ static libs with **no** CNA/ImGui
@@ -136,6 +136,22 @@ See `TESTING.md` for the full per-test reference.
 
 ## 3. Recent changes
 
+- **STAB-0521** — audited every FBO-based render pass and GL state
+  toggle in `MeshCraftApplication.cpp` (bloom, SSAO, shadow-map debug,
+  material preview, main scene draw): all framebuffer binds properly
+  restore to `0`, all `Enable`/`Disable` state toggles are consistently
+  paired — matches the previously-fixed bloom leak (STAB-0509), no new
+  leak found. No hook exists to reliably query `glGetError()` after a
+  full frame (GL function pointers are only loaded lazily per-subsystem)
+  and a GL error is a weak proxy for state leakage anyway (invalid state
+  produces no error, just wrong pixels — the pixel-sampling tests added
+  this session already exercise the real render path). Flagged 🟡
+  pending a live GL-debugger session.
+- **STAB-0520** — confirmed `test/large_scene.mc3.xml` exists; the stats
+  overlay's `displayFps_` is an exponentially-smoothed rolling average
+  across many frames of a sustained interactive loop, conceptually
+  incompatible with the single-frame `--screenshot` model. Needs a human
+  running the editor interactively. Flagged 🟡.
 - **STAB-0519** — **found and fixed a real gap**: proportional editing's
   falloff radius had no viewport visual indicator anywhere (only a
   toolbar slider/tooltip showed the number), even though the row's own
@@ -326,12 +342,19 @@ Genuine **operational** issues, unrelated to current work:
   translate/rotate gizmo visibility (STAB-0501/0502), the gizmo-drag
   delta overlay (STAB-0514), the per-selected-object poly-stats display
   (STAB-0515), the shadow-map debug overlay (STAB-0516), the
-  locked-object outline (STAB-0518), and the proportional-editing
-  falloff sphere (STAB-0519, newly implemented this session) — all
-  confirmed correct and safe by code reading, none reachable via the
-  headless `--screenshot` path (no CLI/document/prefs hook exists to
-  force them on/pre-select or pre-lock an object). _needs verification
-  by a human with a live display._
+  locked-object outline (STAB-0518), the proportional-editing falloff
+  sphere (STAB-0519, newly implemented this session), and large-scene
+  live FPS (STAB-0520) — all confirmed correct and safe by code reading,
+  none reachable via the headless `--screenshot` path (no
+  CLI/document/prefs hook exists to force them on/pre-select or
+  pre-lock an object, and FPS itself requires a sustained interactive
+  loop). _needs verification by a human with a live display._
+- **GL state-leak instrumentation (STAB-0521)** doesn't have an
+  automated `glGetError()` check wired up — every FBO/state-toggle
+  site was audited by code reading and matches the previously-fixed
+  bloom leak pattern, but a definitive check needs a live GL-debugger
+  session (RenderDoc/apitrace). _confirmed correct by reading, no
+  automated instrumentation exists._
 - **N3–N7 (scripts/sounds/music/triggers/states/meta) are data-only** —
   round-tripped but nothing executes them at runtime. _intended at this
   stage, not a bug._
@@ -448,28 +471,38 @@ No project linter/formatter is configured.
 S14's priority (P0/P1) subset is done; remaining items are P2/P3. Pick in
 `plan.md` order unless noted otherwise:
 
-1. **STAB-0520 — verify large scene FPS acceptable (200 objects, ≥ 30
-   FPS).** `plan.md` marks this "manual" — needs a live display to watch
-   the FPS counter, same as the other flagged items. Likely a straight
-   🟡 flag after confirming `large_scene.mc3.xml` exists and loads.
+1. **STAB-0522 — verify CSG preview cache: re-render without touching
+   CSG returns cache hit.** Files:
+   `src/MeshCraft/Renderer/SceneRenderer.cpp`. Row's stated verification
+   ("60 fps... no evaluation each frame") sounds like another live-FPS
+   item (STAB-0520's class) — but check whether there's a cache-hit
+   counter/log that could be asserted headlessly across two screenshots
+   of the same unchanged CSG object before assuming it needs a live
+   display.
 
-2. **STAB-0521 — verify no GL state leak between render passes.** Files:
-   `src/MeshCraft/Renderer/SceneRenderer.cpp`. Promising lead: unlike
-   most S14 items so far, this doesn't need a live display or selection
-   — check whether `glGetError()` can be queried right after a
-   `--screenshot` render (possibly a new, very small hook: print/assert
-   `GL_NO_ERROR` after the main draw call, guarded by an existing debug
-   path) to make this genuinely headlessly testable.
+2. **STAB-0523 — verify background texture renders before 3D scene.**
+   Files: `src/MeshCraft/MeshCraftApplication.cpp`. Promising —
+   likely document-driven (a background-texture setting), same
+   testable class as the skybox code already read this session
+   (`MeshCraftApplication.cpp:526-527`, "I2: equirectangular skybox,
+   drawn before scene, no depth write"). Good candidate for a fixture +
+   pixel-sampling test (STAB-0507/0511/0512/0513/0517's pattern).
 
-3. **STAB-0522 through STAB-0525** — remaining S14 items (`plan.md`,
-   currently 📋). Continue the established pattern: read the code first;
-   if the feature is document-driven or unconditional, build a fixture +
-   pixel-sampling test (STAB-0507/0511/0512/0513/0517's pattern); if it's
-   a pure runtime UI toggle or requires live selection/interaction with
-   no headless hook, confirm correctness by reading and flag 🟡
-   (STAB-0505/0508/0509/0510/0514/0515/0516/0518/0519's pattern).
+3. **STAB-0524 — verify skybox panorama shader: equirectangular image
+   displayed.** Files: `src/MeshCraft/MeshCraftApplication.cpp:526-527`
+   (`drawSkybox()`, already located this session) — also looks
+   document-driven and reachable via `--screenshot`, likely another
+   fixture + pixel-sampling candidate.
 
-4. Once S14 is closed out, **S15 (Import/Export/Editor Integration)**
+4. **STAB-0525 — remaining S14 item** (`plan.md`, currently 📋; LOD
+   segment count vs. camera distance). Continue the established
+   pattern: read the code first; if document-driven/unconditional,
+   build a fixture + pixel-sampling test; if a pure runtime toggle or
+   needs live interaction with no headless hook, flag 🟡
+   (STAB-0505/0508/0509/0510/0514/0515/0516/0518/0519/0520/0521's
+   pattern).
+
+5. Once S14 is closed out, **S15 (Import/Export/Editor Integration)**
    is next and fully untouched — read its `plan.md` rows before starting.
 
 ---
@@ -526,8 +559,8 @@ project's history but not re-checked as part of this update — re-verify
 
 Active plan: plan.md (STAB-XXXX tasks). Gates 0–5 closed, Gate 6
 exhausted for this environment. S0–S13 fully closed. S14 (Rendering and
-Viewport Stability) is in progress: 13 done, 11 flagged (need a live
-display), 6 remaining — pick the next task from section 8.
+Viewport Stability) is in progress: 13 done, 13 flagged (need a live
+display/tool), 4 remaining — pick the next task from section 8.
 
 Reconfigure cmake-build-debug ONLY with CLion's cmake, not the system
 cmake. Editing mc3.xsd or adding a new .cpp file / new add_test()
