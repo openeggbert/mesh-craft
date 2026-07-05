@@ -468,6 +468,21 @@ if(MESH_CRAFT_BUILD_TESTING AND UNIX AND NOT ANDROID AND NOT EMSCRIPTEN)
             )
             set_tests_properties(point_light_gizmo_test PROPERTIES TIMEOUT 30)
         endif()
+
+        # STAB-0513: same unconditional draw path as STAB-0512 — verify the
+        # spot-light sphere+cone gizmo actually renders via real pixel
+        # sampling.
+        if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/test/spot_light_gizmo.mc3.xml")
+            add_test(
+                NAME spot_light_gizmo_test
+                COMMAND "${PYTHON3_EXEC}"
+                        "${CMAKE_CURRENT_SOURCE_DIR}/test/spot_light_gizmo_test.py"
+                        $<TARGET_FILE:MeshCraft>
+                        "${CMAKE_CURRENT_SOURCE_DIR}/test/spot_light_gizmo.mc3.xml"
+                WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
+            )
+            set_tests_properties(spot_light_gizmo_test PROPERTIES TIMEOUT 30)
+        endif()
     endif()
 
     # mc3togltf_gltf test is registered by mc3togltf/CMakeLists.txt via $<TARGET_FILE:mc3togltf>

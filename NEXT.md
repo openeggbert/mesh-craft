@@ -1,6 +1,6 @@
 # NEXT.md
 
-_Last updated: 2026-07-04 (commit `b0c56f6`)_
+_Last updated: 2026-07-05 (STAB-0513, prior commit `9fda7ac`)_
 
 ---
 
@@ -22,9 +22,9 @@ tasks across sections S0–S20, gated by a Gate 0–6 checklist.
 (Documentation)** is exhausted for this environment — everything reachable
 without an external tool or a live display is done. Sections S0–S13 are
 fully closed (bar a handful of genuinely blocked/flagged items). **S14
-(Rendering and Viewport Stability), 30 items, is in progress**: 11 done,
+(Rendering and Viewport Stability), 30 items, is in progress**: 12 done,
 6 flagged 🟡 (confirmed correct by code reading, but need a human with a
-live display to visually verify), 13 not yet started.
+live display to visually verify), 12 not yet started.
 
 **Important architectural decisions:**
 - `mc3/` and `mcb/` are pure C++ static libs with **no** CNA/ImGui
@@ -47,8 +47,15 @@ live display to visually verify), 13 not yet started.
 
 ### Build
 - **Debug** (`cmake-build-debug/`, generated with CLion's bundled cmake
-  4.2.2): full reconfigure + rebuild succeeds cleanly, 0 warnings, as of
-  commit `b0c56f6`.
+  4.2.2): full reconfigure + rebuild succeeds cleanly, 0 warnings from
+  MeshCraft's own sources, as of STAB-0513. **New as of this update:**
+  the reconfigure now requires `-DCMAKE_POLICY_VERSION_MINIMUM=3.5` — the
+  sibling CNA repo added a vendored ENet dependency
+  (`../cna/third_party/enet/CMakeLists.txt`) whose `cmake_minimum_required`
+  is too old for CMake 4.2.2 (CMake ≥4 removed compat with policy versions
+  <3.5). This is a CNA-side issue (out of scope for this repo, see
+  CLAUDE.md); the flag is a harmless top-level workaround, not a CNA file
+  change. See §7 for the updated reconfigure command and §4 for details.
 - **Release** (`b-release/`): directory exists from an earlier point in
   this session's history; **not re-verified as part of this update** —
   re-run the commands in §7 before relying on it.
@@ -58,7 +65,7 @@ live display to visually verify), 13 not yet started.
   with §7's commands if you depend on this.
 
 ### Tests
-**33/33 CTest pass** in Debug (`ctest -N` lists all 33 by name). Notably:
+**34/34 CTest pass** in Debug (`ctest -N` lists all 34 by name). Notably:
 - `mc3_commands` (~450 assertions): editor command algorithms, undo/redo,
   auto-save/backup, keybinding/macro persistence, hierarchy filtering,
   AI-panel lifecycle, viewport ray-cast picking, click-selection
@@ -69,9 +76,9 @@ live display to visually verify), 13 not yet started.
 - `mc3_roundtrip` (~299 assertions): full XML parser/writer roundtrip.
 - `mcb_roundtrip` (~50 assertions): MCB binary roundtrip.
 - Several real-render smoke tests (`smoke_test*`, `fog_linear_test`,
-  `point_light_gizmo_test`) that run the actual `MeshCraft` binary in
-  `--screenshot` headless mode and verify genuine pixel output, not a
-  stub render.
+  `point_light_gizmo_test`, `spot_light_gizmo_test`) that run the actual
+  `MeshCraft` binary in `--screenshot` headless mode and verify genuine
+  pixel output, not a stub render.
 - A dozen `mc3togltf_*` tests covering CSG, materials, textures,
   animation, instance variants, large scenes.
 
@@ -102,8 +109,8 @@ See `TESTING.md` for the full per-test reference.
   (fixed this session — see §3), not just primitives.
 - Real headless rendering verified via `--screenshot`: sample scenes,
   missing-mesh/missing-material fallbacks, orthographic camera, linear
-  fog, point-light gizmo — all confirmed to produce genuine, non-stub
-  pixel output.
+  fog, point-light gizmo, spot-light gizmo — all confirmed to produce
+  genuine, non-stub pixel output.
 
 ### What does NOT work yet
 - `EditorViewport` is not integrated into the `MeshCraftApplication`
@@ -128,7 +135,15 @@ See `TESTING.md` for the full per-test reference.
 
 ## 3. Recent changes
 
-Most recent 14 commits (`27bef12` through `b0c56f6`), all part of the S14
+- **STAB-0513** — verified the spot-light gizmo (small sphere at the apex
+  + an 8-segment cone along its direction) with a real pixel-sampling
+  test (`test/spot_light_gizmo.mc3.xml` + `spot_light_gizmo_test.py`,
+  522 cyan-gizmo samples confirmed); same unconditional draw path as
+  STAB-0512. Also discovered (not fixed, out of scope): the sibling CNA
+  repo now needs `-DCMAKE_POLICY_VERSION_MINIMUM=3.5` to reconfigure —
+  see §4.
+
+Prior 14 commits (`27bef12` through `b0c56f6`), all part of the S14
 (Rendering and Viewport Stability) sweep:
 
 - **STAB-0512** — verified the point-light gizmo (sphere + rays) with a
@@ -182,9 +197,16 @@ new `Alg` extractions. Full history is in `git log --oneline`.
 
 ## 4. Current blocker / main problem
 
-**No blocker to local development or testing.** Debug builds and passes
-33/33 tests as of commit `b0c56f6`, pushed and in sync with
-`origin/develop`.
+**No blocker to local development or testing** — Debug builds and passes
+34/34 tests as of STAB-0513. **New reconfigure requirement:** the CLion
+cmake command in §7 now needs `-DCMAKE_POLICY_VERSION_MINIMUM=3.5` added,
+because the sibling CNA repo (commit `00e0cea`, "add ENet 1.3.17 as
+vendored third-party dependency", 2026-07-04) added
+`../cna/third_party/enet/CMakeLists.txt` with a `cmake_minimum_required`
+too old for CMake 4.2.2 (CMake ≥4 dropped compatibility with policy
+versions <3.5 — hard error, not a warning). The flag is a harmless
+top-level workaround (doesn't touch any CNA file) and CNA is out of scope
+for this repo per CLAUDE.md, so it was not fixed at the source.
 
 The recurring theme in S14 is that several visual features (bounding-box
 overlay, SSAO, bloom, wireframe mode, translate/rotate gizmos) are gated
@@ -229,6 +251,9 @@ The only genuine **operational** issue is unrelated to current work:
 - **`mc3.xsd`'s `mip_maps` texture attribute has zero implementation** —
   parses fine, does nothing anywhere. _confirmed, not fixed, no assigned
   STAB-XXXX ID._
+- **CNA's vendored ENet needs `-DCMAKE_POLICY_VERSION_MINIMUM=3.5`** to
+  reconfigure with CMake 4.2.2 — see §4. _confirmed, workaround in place,
+  not a CNA file change._
 - **S14 visual toggles need a live display to re-verify**:
   `showBoundingBox_` (STAB-0505), `ssaoEnabled_` (STAB-0508),
   `bloomEnabled_` (STAB-0509), `showWireframeMode_` (STAB-0510), and the
@@ -310,20 +335,21 @@ requires a full reconfigure, not just a rebuild.**
 ```bash
 # --- Debug (CLion dir; reconfigure with CLion's cmake to avoid a system-cmake bug)
 CLION_CMAKE=/home/robertvokac/.local/share/JetBrains/Toolbox/apps/clion/bin/cmake/linux/x64/bin/cmake
-"$CLION_CMAKE" -S . -B cmake-build-debug -DBUILD_TESTING=ON   # (re)configure
-cd cmake-build-debug && ninja && ctest --output-on-failure    # build + test (33)
-ctest -N                                                      # lists all 33 tests
+"$CLION_CMAKE" -S . -B cmake-build-debug -DBUILD_TESTING=ON \
+      -DCMAKE_POLICY_VERSION_MINIMUM=3.5                      # (re)configure — flag needed since CNA added vendored ENet, see §4
+cd cmake-build-debug && ninja && ctest --output-on-failure    # build + test (34)
+ctest -N                                                      # lists all 34 tests
 
 # --- Release (system cmake is fine for a fresh dir)
 cmake -S . -B b-release -G Ninja -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=ON \
-      -DFETCHCONTENT_UPDATES_DISCONNECTED=ON
+      -DFETCHCONTENT_UPDATES_DISCONNECTED=ON -DCMAKE_POLICY_VERSION_MINIMUM=3.5
 cmake --build b-release -j4
 (cd b-release && ctest --output-on-failure)
 
 # --- Standalone (CNA-free) component builds + tests
 for c in mc3 mcb mc3togltf mc3tomcb; do
   cmake -S "$c" -B "$c-build" -G Ninja -DBUILD_TESTING=ON \
-        -DFETCHCONTENT_UPDATES_DISCONNECTED=ON
+        -DFETCHCONTENT_UPDATES_DISCONNECTED=ON -DCMAKE_POLICY_VERSION_MINIMUM=3.5
   cmake --build "$c-build" -j4
   (cd "$c-build" && ctest --output-on-failure)
 done
@@ -351,32 +377,21 @@ No project linter/formatter is configured.
 S14's priority (P0/P1) subset is done; remaining items are P2/P3. Pick in
 `plan.md` order unless noted otherwise:
 
-1. **STAB-0513 — verify spot light gizmo: sphere + cone visible.**
-   Goal: confirm the spot-light gizmo (small sphere at the light position
-   + a cone along its direction) renders. Files:
-   `src/MeshCraft/Renderer/SceneRenderer.cpp` (`drawLightGizmos()`'s
-   `Spot` case — already read during STAB-0512, same unconditional draw
-   path as `Point`). Likely the same pattern as STAB-0511/0512: add a
-   fixture with a distinctively-colored spot light, screenshot it, verify
-   via pixel sampling that both the sphere and cone actually render.
-   Verify: `ctest -R spot_light_gizmo_test` (new test to add) plus
-   `ctest --output-on-failure` for the full suite.
-
-2. **STAB-0514 — verify delta overlay: shown while dragging a gizmo.**
+1. **STAB-0514 — verify delta overlay: shown while dragging a gizmo.**
    Goal: confirm a "Δ +2.50"-style overlay appears near the cursor while
    dragging a position gizmo. Files:
    `src/MeshCraft/MeshCraftApplication_UiOverlays.cpp`. This depends on
    an active mouse-drag gesture — check whether it's reachable headlessly
    before assuming it needs a live display like STAB-0501/0502/0505.
 
-3. **STAB-0515 through STAB-0525** — remaining S14 items (`plan.md`,
+2. **STAB-0515 through STAB-0525** — remaining S14 items (`plan.md`,
    currently 📋). Continue the established pattern: read the code first;
    if the feature is document-driven or unconditional, build a fixture +
-   pixel-sampling test (STAB-0507/0511/0512's pattern); if it's a pure
-   runtime UI toggle with no headless hook, confirm correctness by
+   pixel-sampling test (STAB-0507/0511/0512/0513's pattern); if it's a
+   pure runtime UI toggle with no headless hook, confirm correctness by
    reading and flag 🟡 (STAB-0505/0508/0509/0510's pattern).
 
-4. Once S14 is closed out, **S15 (Import/Export/Editor Integration)**
+3. Once S14 is closed out, **S15 (Import/Export/Editor Integration)**
    is next and fully untouched — read its `plan.md` rows before starting.
 
 ---
@@ -416,20 +431,23 @@ S14's priority (P0/P1) subset is done; remaining items are P2/P3. Pick in
 Read NEXT.md first. Then inspect only the files needed for the first
 task in section 8. Do not refactor unrelated code. Make one small,
 verified improvement. Run the relevant build/test command from section 7
-and confirm cmake-build-debug still passes (33/33, or the new total if
+and confirm cmake-build-debug still passes (34/34, or the new total if
 you registered a new ctest). Update NEXT.md after finishing.
 
-Current branch: develop, in sync with origin/develop at commit b0c56f6.
-Build dir: cmake-build-debug/ (Debug, CLion cmake 4.2.2) — full rebuilt
-and 33/33 ctest verified clean at this commit. Release (b-release/) and
-the standalone mc3/mcb/mc3togltf/mc3tomcb builds were verified earlier
-in this project's history but not re-checked as part of this update —
-re-verify before relying on them.
+Current branch: develop. Build dir: cmake-build-debug/ (Debug, CLion
+cmake 4.2.2) — full rebuilt and 34/34 ctest verified clean as of
+STAB-0513. Reconfigure now REQUIRES the extra flag
+`-DCMAKE_POLICY_VERSION_MINIMUM=3.5` — see section 4/7 for why (CNA
+sibling repo added a vendored ENet dep incompatible with CMake 4.2.2
+without it). Release (b-release/) and the standalone
+mc3/mcb/mc3togltf/mc3tomcb builds were verified earlier in this
+project's history but not re-checked as part of this update — re-verify
+(with the same new flag) before relying on them.
 
 Active plan: plan.md (STAB-XXXX tasks). Gates 0–5 closed, Gate 6
 exhausted for this environment. S0–S13 fully closed. S14 (Rendering and
-Viewport Stability) is in progress: 11 done, 6 flagged (need a live
-display), 13 remaining — pick the next task from section 8.
+Viewport Stability) is in progress: 12 done, 6 flagged (need a live
+display), 12 remaining — pick the next task from section 8.
 
 Reconfigure cmake-build-debug ONLY with CLion's cmake, not the system
 cmake. Editing mc3.xsd or adding a new .cpp file / new add_test()
