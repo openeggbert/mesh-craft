@@ -1216,6 +1216,22 @@ static void testEmbedGltf() {
         if (!rt.objects.empty())
             CHECK(rt.objects[0]->meshSource == "embed:tree", "embed+mesh: meshSource roundtrips");
     }
+    // Mesh object references a plain imported OBJ file path (STAB-0533) —
+    // distinct from the "embed:<id>" special case above; both share the
+    // same <mesh src="..."/> attribute (Mc3XmlWriter.cpp:269-270).
+    {
+        Mc3Document doc;
+        auto obj = std::make_shared<Mc3Object>();
+        obj->id         = "chair_obj";
+        obj->type       = ObjectType::Mesh;
+        obj->meshSource = "models/chair.obj";
+        doc.objects.push_back(obj);
+
+        auto rt = roundtrip(doc);
+        CHECK(!rt.objects.empty(), "obj import: object present");
+        if (!rt.objects.empty())
+            CHECK(rt.objects[0]->meshSource == "models/chair.obj", "obj import: meshSource path roundtrips");
+    }
     // Coexistence with textures
     {
         Mc3Document doc;
