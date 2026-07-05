@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- STAB-0549 fixture: a Mesh object referencing an embedded glTF via
+     meshSource="embed:tree" (parsed/serialized/round-tripped correctly
+     by mc3/Mc3XmlParser+Writer, per mc3/test/roundtrip_test.cpp's
+     testEmbedGltf), used to confirm GltfExporter's current, documented
+     behavior for this case: it treats "embed:tree" as a literal OBJ
+     file path (GltfExporter.cpp:417-424), which fails to open, so
+     export continues with a warning and an empty (meshless) node
+     rather than crashing — a known, unfixed limitation (NEXT.md
+     "What does NOT work yet"), not something this fixture expects to
+     pass cleanly. -->
+<mc3 version="0.3" model="EmbedMeshSourceFixture">
+
+  <embeds>
+    <embed type="gltf" id="tree" src="tree.glb"/>
+  </embeds>
+
+  <objects>
+    <mesh name="EmbeddedTree" src="embed:tree" position="0 0 0"/>
+  </objects>
+
+</mc3>

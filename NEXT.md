@@ -1,6 +1,6 @@
 # NEXT.md
 
-_Last updated: 2026-07-05 (STAB-0546/0547, prior commit `657fced`, pushed)_
+_Last updated: 2026-07-05 (STAB-0548/0549, prior commit `0f36ab1`, pushed)_
 
 ---
 
@@ -23,8 +23,8 @@ tasks across sections S0–S20, gated by a Gate 0–6 checklist.
 without an external tool or a live display is done. Sections S0–S14 are
 fully closed (bar a handful of genuinely blocked/flagged items — S14: 17
 done, 13 flagged 🟡, 0 remaining). **S15 (Import/Export/Editor
-Integration), 30 items, is in progress**: 20 done (STAB-0526–0531,
-0533–0538, 0540–0547), 2 flagged 🟡 (STAB-0532, 0539), 8 not yet
+Integration), 30 items, is in progress**: 22 done (STAB-0526–0531,
+0533–0538, 0540–0549), 2 flagged 🟡 (STAB-0532, 0539), 6 not yet
 started.
 
 **Important architectural decisions:**
@@ -66,7 +66,7 @@ started.
   with §7's commands if you depend on this.
 
 ### Tests
-**44/44 CTest pass** in Debug (`ctest -N` lists all 44 by name). Notably:
+**46/46 CTest pass** in Debug (`ctest -N` lists all 46 by name). Notably:
 - `mc3_commands` (~450 assertions): editor command algorithms, undo/redo,
   auto-save/backup, keybinding/macro persistence, hierarchy filtering,
   AI-panel lifecycle, viewport ray-cast picking, click-selection
@@ -150,6 +150,23 @@ See `TESTING.md` for the full per-test reference.
 
 ## 3. Recent changes
 
+- **STAB-0548/0549** — STAB-0548 confirmed correct by tracing `Instance`
+  resolution (`GltfExporter.cpp:552-587`): definitions from `<include>`
+  and the scene's own `<definitions>` are unified into `doc.definitions`
+  at parse time, so no special-casing is needed at export time.
+  Manually confirmed via `--stats`: 0 warnings, real geometry, and the
+  two `pillar` instances correctly sharing one glTF mesh. Previously
+  untested by `mc3togltf`'s own suite (only XML round-tripping was
+  covered). **STAB-0549 confirmed as a documented, deliberate
+  limitation, matching the row's own anticipated resolution** ("marked
+  as limitation") — `buildMesh()` treats `embed:<id>` as a literal OBJ
+  path with no special-case, so it fails to open, warns, and produces
+  an empty node; actually resolving it would mean parsing external
+  GLB/base64 data, a real new feature not attempted here. Locked in the
+  safe degradation (exit 0, warning, empty node — not a crash) with a
+  regression test. Added `mc3togltf/test/include_export_test.py` +
+  `test/embed_mesh_source.mc3.xml` + `mc3togltf/test/embed_mesh_source_test.py`
+  + 2 permanent ctests. 46/46 ctest passing (up from 44/44).
 - **STAB-0546/0547** — STAB-0546 confirmed correct by tracing
   `GltfExporter::exportDocument()`: the whole `tinygltf::Model` is
   built fully in memory and `WriteGltfSceneToFile()` runs exactly
@@ -705,38 +722,38 @@ row asks for ("file created; non-zero size"). Marked both ✅ in
 ## 8. Next smallest tasks
 
 **S14 is fully closed.** **S15 (Import/Export/Editor Integration)** is
-in progress: STAB-0526–0531 + 0533–0538 + 0540–0547 done (20),
-STAB-0532/0539 flagged 🟡, 8 remaining. Pick in `plan.md` order unless
-noted otherwise:
+almost done: STAB-0526–0531 + 0533–0538 + 0540–0549 done (22),
+STAB-0532/0539 flagged 🟡, **only STAB-0550 left**. **S16
+(Cross-Platform Stability)**, 30 items, starts right after — its first
+item (STAB-0551, P0, "Linux desktop build and run") is already flagged
+🟡 in `plan.md`.
 
-1. **STAB-0548 — verify includes during GLB export: included
-   definitions exported.** Files: `mc3togltf/src/GltfExporter.cpp`.
-   Check how `doc.definitions`/`doc.includedDefs` (the include-tracking
-   fields already read this session for STAB-0540) get resolved during
-   `buildNode()`/`exportDocument()` — does an `Instance` object
-   referencing an *included* (not locally-defined) definition actually
-   get its geometry exported, or silently produce an empty node?
+1. **STAB-0550 — verify subtree template import resolves relative
+   paths (the last S15 item).** Files:
+   `src/MeshCraft/MeshCraftApplication_Commands.cpp`. The row asks:
+   when a `.mc3.xml` template exported by `exportSubtreeAsTemplate()`
+   (STAB-0536, just fixed to carry its own materials/textures) is
+   *imported elsewhere*, do its texture `uri`s resolve relative to the
+   *template file's own directory*, not the importing scene's
+   directory? Find the template-import code path (look near
+   `exportSubtreeAsTemplate`/`convertToDefinitionAlg` in
+   `MeshCraftApplication_Commands.cpp`, or check whether "import" here
+   just means `Mc3Document::loadFromFile()` + merge, in which case this
+   may already be correct by construction since `doc.sourcePath` is
+   always set from whichever file was actually loaded).
 
-2. **STAB-0549 — verify embedded assets during GLB export: `embed:`
-   meshSource resolved.** Files: `mc3togltf/src/GltfExporter.cpp`. The
-   row itself hints `(STAB-0194 extended) or marked as limitation` —
-   NEXT.md's own "What does NOT work yet" already documents this as a
-   known, unfixed gap: `GltfExporter` treats `embed:id` as a literal
-   OBJ path (fails to load, continues with an empty/meshless node,
-   doesn't crash). Likely just needs confirming that still holds and
-   marking the row as a documented limitation, not a fix — same
-   judgment call as STAB-0542's PNG/PPM and STAB-0543's texture-embed
-   rows, where the honest answer was "this is how it deliberately
-   works" rather than "here's a bug to close."
-
-3. **STAB-0550+** — remaining S15 items (`plan.md`). Don't assume 🧪
+2. **S16 (Cross-Platform Stability)** starts at STAB-0551. Read its
+   `plan.md` rows before starting — several (MinGW/Emscripten builds,
+   OS-specific config dirs, clipboard) look like they may need tools or
+   platforms not available in this environment, similar to the
+   STAB-0642/0643/0650 items already flagged as blocked. Don't assume 🧪
    means "needs a live UI" without checking the actual code path first
    — this session found `runGltfExport()` (STAB-0526), the pre-existing
    `mc3tomcb_roundtrip` test (STAB-0530/0531), `mc3tomcb`'s error
-   handling (STAB-0537/0538), STAB-0540/0541, and STAB-0546 all turned
-   out to already be correct/headlessly testable, needing only new
-   test coverage — while STAB-0534/0535/0536/0543/0544/0545/0547 had
-   real bugs or wrong assumptions hiding behind plausible-looking
+   handling (STAB-0537/0538), STAB-0540/0541, STAB-0546, and STAB-0548
+   all turned out to already be correct/headlessly testable, needing
+   only new test coverage — while STAB-0534/0535/0536/0543/0544/0545/0547
+   had real bugs or wrong assumptions hiding behind plausible-looking
    code/row wording (three of them the *exact same* "export drops
    referenced textures" pattern — check any remaining export-adjacent
    row for it), and STAB-0539 had an unwired duplicate. Read before
@@ -779,15 +796,15 @@ noted otherwise:
 Read NEXT.md first. Then inspect only the files needed for the first
 task in section 8. Do not refactor unrelated code. Make one small,
 verified improvement. Run the relevant build/test command from section 7
-and confirm cmake-build-debug still passes (44/44, or the new total if
+and confirm cmake-build-debug still passes (46/46, or the new total if
 you registered a new ctest). Update NEXT.md after finishing.
 
-Current branch: develop, prior commit `657fced` (STAB-0544/0545) — the
-STAB-0546/0547 commit lands right after this NEXT.md update (git push
+Current branch: develop, prior commit `0f36ab1` (STAB-0546/0547) — the
+STAB-0548/0549 commit lands right after this NEXT.md update (git push
 was denied earlier in a prior session, then started working again
 unprompted — see section 4; if it happens again, keep committing
 locally and retry later). Build dir: cmake-build-debug/ (Debug, CLion
-cmake 4.2.2) — full rebuilt and 44/44 ctest verified clean (includes a
+cmake 4.2.2) — full rebuilt and 46/46 ctest verified clean (includes a
 new `--export <path>` CLI flag on the `MeshCraft` binary itself, see
 §2/§3). Reconfigure now REQUIRES the extra flag
 `-DCMAKE_POLICY_VERSION_MINIMUM=3.5` — see section 4/7 for why (CNA
@@ -799,10 +816,10 @@ project's history but not re-checked as part of this update — re-verify
 
 Active plan: plan.md (STAB-XXXX tasks). Gates 0–5 closed, Gate 6
 exhausted for this environment. S0–S14 fully closed (S14: 17 done, 13
-flagged, 0 remaining). S15 (Import/Export/Editor Integration) is in
-progress: STAB-0526–0531 + 0533–0538 + 0540–0547 done (20),
-STAB-0532/0539 flagged 🟡, 8 remaining — pick the first task from
-section 8.
+flagged, 0 remaining). S15 (Import/Export/Editor Integration) is
+almost done: STAB-0526–0531 + 0533–0538 + 0540–0549 done (22),
+STAB-0532/0539 flagged 🟡, only STAB-0550 left — pick it up from
+section 8. S16 (Cross-Platform Stability) starts right after.
 
 Reconfigure cmake-build-debug ONLY with CLion's cmake, not the system
 cmake. Editing mc3.xsd or adding a new .cpp file / new add_test()

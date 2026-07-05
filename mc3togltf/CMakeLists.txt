@@ -132,6 +132,8 @@ if(BUILD_TESTING)
         set(_anim_unsupported_xml     "${CMAKE_CURRENT_SOURCE_DIR}/../test/animation_unsupported.mc3.xml")
         set(_instance_variant_xml     "${CMAKE_CURRENT_SOURCE_DIR}/../test/instance_variant.mc3.xml")
         set(_glb_texture_embed_xml    "${CMAKE_CURRENT_SOURCE_DIR}/../test/glb_texture_embed.mc3.xml")
+        set(_scene_with_include_xml   "${CMAKE_CURRENT_SOURCE_DIR}/../test/scene_with_include.mc3.xml")
+        set(_embed_mesh_source_xml    "${CMAKE_CURRENT_SOURCE_DIR}/../test/embed_mesh_source.mc3.xml")
         if(EXISTS "${_anim_xml}" AND EXISTS "${_house_xml}")
             add_test(
                 NAME mc3togltf_gltf
@@ -293,6 +295,26 @@ if(BUILD_TESTING)
                     "$<TARGET_FILE:mc3togltf>"
         )
         set_tests_properties(mc3togltf_help_text PROPERTIES TIMEOUT 30)
+        if(EXISTS "${_scene_with_include_xml}")
+            add_test(
+                NAME mc3togltf_include_export
+                COMMAND "${PYTHON3_EXEC}"
+                        "${CMAKE_CURRENT_SOURCE_DIR}/test/include_export_test.py"
+                        "$<TARGET_FILE:mc3togltf>"
+                        "${_scene_with_include_xml}"
+            )
+            set_tests_properties(mc3togltf_include_export PROPERTIES TIMEOUT 30)
+        endif()
+        if(EXISTS "${_embed_mesh_source_xml}")
+            add_test(
+                NAME mc3togltf_embed_mesh_source
+                COMMAND "${PYTHON3_EXEC}"
+                        "${CMAKE_CURRENT_SOURCE_DIR}/test/embed_mesh_source_test.py"
+                        "$<TARGET_FILE:mc3togltf>"
+                        "${_embed_mesh_source_xml}"
+            )
+            set_tests_properties(mc3togltf_embed_mesh_source PROPERTIES TIMEOUT 30)
+        endif()
         if(EXISTS "${_svg_material_xml}")
             add_test(
                 NAME mc3togltf_svg_texture_export
