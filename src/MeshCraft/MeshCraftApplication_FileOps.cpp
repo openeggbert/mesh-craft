@@ -197,6 +197,9 @@ void MeshCraftApplication::runGltfExport(const std::string& outPath) {
         + (s.reusedMeshRefs > 0 ? ", " + std::to_string(s.reusedMeshRefs) + " reused" : "")
         + ")";
     setStatusMsg(statusMsg);
+    std::cout << "[MeshCraft] " << statusMsg
+               << " — " << s.objectsProcessed << " objects, "
+               << s.totalTriangles << " triangles, " << s.warnings << " warnings\n";
 }
 
 // ---------------------------------------------------------------------------

@@ -64,6 +64,18 @@ MeshCraftApplication::MeshCraftApplication(std::filesystem::path filePath, std::
     setIsMouseVisibleProperty(true);
 }
 
+MeshCraftApplication::MeshCraftApplication(std::filesystem::path filePath, std::string screenshotPath,
+                                           std::string exportPath)
+    : currentFile_(std::move(filePath))
+    , autoScreenshotPath_(std::move(screenshotPath))
+    , autoScreenshotCountdown_(autoScreenshotPath_.empty() ? 0 : 120)
+    , autoExportPath_(std::move(exportPath))
+    , autoExportCountdown_(autoExportPath_.empty() ? 0 : 2)
+{
+    getWindowProperty().setTitleProperty("Mesh Craft");
+    setIsMouseVisibleProperty(true);
+}
+
 // ---------------------------------------------------------------------------
 // SDL event watcher — forwards each event to ImGui before CNA processes it
 // ---------------------------------------------------------------------------
@@ -268,6 +280,19 @@ bool MeshCraftApplication::BeginDraw() {
 void MeshCraftApplication::EndDraw() {
     ImGui::Render();
     ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
+    if (pendingExport_) {
+        pendingExport_ = false;
+        try {
+            runGltfExport(autoExportPath_);
+            std::cout << "[MeshCraft] Auto-export complete: " << autoExportPath_ << "\n";
+        } catch (const std::exception& e) {
+            std::cerr << "[MeshCraft] Export error: " << e.what() << "\n";
+            exportFailed_ = true;
+        }
+        if (autoScreenshotPath_.empty())
+            Exit();
+    }
+
     if (pendingScreenshot_) {
         pendingScreenshot_ = false;
         saveScreenshot(autoScreenshotPath_);
@@ -649,6 +674,12 @@ void MeshCraftApplication::Draw(const GameTime& /*gameTime*/) {
         --autoScreenshotCountdown_;
         if (autoScreenshotCountdown_ == 0 && !autoScreenshotPath_.empty())
             pendingScreenshot_ = true;
+    }
+
+    if (autoExportCountdown_ > 0) {
+        --autoExportCountdown_;
+        if (autoExportCountdown_ == 0 && !autoExportPath_.empty())
+            pendingExport_ = true;
     }
 }
 

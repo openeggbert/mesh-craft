@@ -1,6 +1,6 @@
 # NEXT.md
 
-_Last updated: 2026-07-05 (STAB-0525, prior commit `d75a0b1`, pushed)_
+_Last updated: 2026-07-05 (STAB-0526/0527/0528/0529, prior commit `85baf79`, pushed)_
 
 ---
 
@@ -21,9 +21,10 @@ tasks across sections S0–S20, gated by a Gate 0–6 checklist.
 **Current phase:** Stabilization. Gates 0–5 are fully closed. **Gate 6
 (Documentation)** is exhausted for this environment — everything reachable
 without an external tool or a live display is done. Sections S0–S14 are
-now **fully closed** (bar a handful of genuinely blocked/flagged items —
-17 done, 13 flagged 🟡 needing a live display/tool, 0 remaining in S14).
-**S15 (Import/Export/Editor Integration)** is next and fully untouched.
+fully closed (bar a handful of genuinely blocked/flagged items — S14: 17
+done, 13 flagged 🟡, 0 remaining). **S15 (Import/Export/Editor
+Integration), 30 items, is in progress**: 4 done (STAB-0526–0529), 26
+not yet started.
 
 **Important architectural decisions:**
 - `mc3/` and `mcb/` are pure C++ static libs with **no** CNA/ImGui
@@ -64,7 +65,7 @@ now **fully closed** (bar a handful of genuinely blocked/flagged items —
   with §7's commands if you depend on this.
 
 ### Tests
-**39/39 CTest pass** in Debug (`ctest -N` lists all 39 by name). Notably:
+**40/40 CTest pass** in Debug (`ctest -N` lists all 40 by name). Notably:
 - `mc3_commands` (~450 assertions): editor command algorithms, undo/redo,
   auto-save/backup, keybinding/macro persistence, hierarchy filtering,
   AI-panel lifecycle, viewport ray-cast picking, click-selection
@@ -81,6 +82,11 @@ now **fully closed** (bar a handful of genuinely blocked/flagged items —
   the actual `MeshCraft` binary in `--screenshot` headless mode and
   verify genuine pixel output (or, for `csg_cache_test`/`lod_test`, a
   printed internal counter), not a stub render.
+- `editor_export_test`: exercises the editor's own export codepath (not
+  just the standalone `mc3togltf` CLI) via a new `--export <path>` flag
+  on the `MeshCraft` binary — GLB magic bytes, glTF JSON validity,
+  invalid-extension error + non-zero exit, and the exporter stats
+  message.
 - A dozen `mc3togltf_*` tests covering CSG, materials, textures,
   animation, instance variants, large scenes.
 
@@ -89,7 +95,11 @@ See `TESTING.md` for the full per-test reference.
 ### Tools / libraries available
 - `MeshCraft` — editor executable, version `0.1.0` (`--version` to print
   it). Builds and runs; the 3D viewport is not fully integrated into the
-  render loop in interactive mode (see "What does NOT work yet").
+  render loop in interactive mode (see "What does NOT work yet"). New
+  this session: `--export <path>` (new, STAB-0526) exports the loaded
+  scene to `.glb`/`.gltf` and exits non-interactively (same codepath as
+  the editor's File → Export menu), alongside the existing
+  `--screenshot <path>`.
 - `mc3togltf` — CLI: `mc3togltf in.mc3.xml out.glb`.
 - `mc3tomcb` — bidirectional CLI: `mc3.xml` ↔ `.mcb`.
 - `Mc3` / `Mcb` / `mc3togltf_lib` — static libs (scene data, binary
@@ -139,6 +149,26 @@ See `TESTING.md` for the full per-test reference.
 
 ## 3. Recent changes
 
+- **STAB-0526/0527/0528/0529** — first S15 items. The editor's File →
+  Export dialog (`exportGltf()`/`runGltfExport()`,
+  `MeshCraftApplication_FileOps.cpp`) is menu/dialog-driven; confirmed
+  `runGltfExport()` is structurally identical to the standalone
+  `mc3togltf` CLI's own `main.cpp` (same `outputFormatFromPath()` →
+  `GltfExporter::exportDocument()` sequence, already covered by a dozen
+  `mc3togltf_*` ctest entries) — only the editor-specific glue was
+  untested. With user go-ahead, added a genuine, permanent `--export
+  <path>` CLI flag to the `MeshCraft` editor binary (new 3-arg
+  `MeshCraftApplication` constructor, 2-frame countdown since export
+  needs no rendering warm-up unlike `--screenshot`'s 120) that runs the
+  same `runGltfExport()` codepath a menu click would, then exits — also
+  usable for real scripted/batch export, not just testing. Added
+  `exportFailed()` so `main()` can return a non-zero exit code on
+  export failure (STAB-0528), and a `std::cout` print of the exporter
+  stats message alongside the existing `setStatusMsg()` call
+  (STAB-0529). Added `test/editor_export_test.py` (all 4 rows in one
+  script, reusing `test/house.mc3.xml`) + a permanent
+  `editor_export_test` ctest. 40/40 ctest passing (also confirmed
+  `--screenshot` mode unaffected).
 - **STAB-0525** — verified the LOD tier (`SceneRenderer.cpp:633-639`,
   G8) actually changes with camera distance, closing out S14. No
   accessor existed to observe which tier was used, so added
@@ -330,7 +360,7 @@ new `Alg` extractions. Full history is in `git log --oneline`.
 ## 4. Current blocker / main problem
 
 **No blocker to local development or testing** — Debug builds and passes
-39/39 tests as of STAB-0525. **New reconfigure requirement:** the CLion
+40/40 tests as of STAB-0529. **New reconfigure requirement:** the CLion
 cmake command in §7 now needs `-DCMAKE_POLICY_VERSION_MINIMUM=3.5` added,
 because the sibling CNA repo (commit `00e0cea`, "add ENet 1.3.17 as
 vendored third-party dependency", 2026-07-04) added
@@ -492,7 +522,7 @@ CLION_CMAKE=/home/robertvokac/.local/share/JetBrains/Toolbox/apps/clion/bin/cmak
 "$CLION_CMAKE" -S . -B cmake-build-debug -DBUILD_TESTING=ON \
       -DCMAKE_POLICY_VERSION_MINIMUM=3.5                      # (re)configure — flag needed since CNA added vendored ENet, see §4
 cd cmake-build-debug && ninja && ctest --output-on-failure    # build + test (39)
-ctest -N                                                      # lists all 39 tests
+ctest -N                                                      # lists all 40 tests
 
 # --- Release (system cmake is fine for a fresh dir)
 cmake -S . -B b-release -G Ninja -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=ON \
@@ -526,38 +556,63 @@ No project linter/formatter is configured.
 
 ---
 
+## 8a. STAB-0530/0531 — already done, no new work
+
+While setting up section 8, found that `mc3tomcb_roundtrip`
+(`mc3tomcb/test/mc3tomcb_roundtrip_test.py`, from earlier STAB-0058)
+already fully covers both rows — it does a stronger check (MCB magic
+bytes + byte-identical determinism + no dropped content) than either
+row asks for ("file created; non-zero size"). Marked both ✅ in
+`plan.md` with no code changes.
+
 ## 8. Next smallest tasks
 
-**S14 (Rendering and Viewport Stability) is fully closed** (17 done, 13
-flagged 🟡, 0 remaining). **S15 (Import/Export/Editor Integration)** is
-next and completely untouched (`plan.md` rows STAB-0526 onward). Pick in
+**S14 is fully closed.** **S15 (Import/Export/Editor Integration)** is
+in progress: STAB-0526–0531 done (4 verified/fixed this session + 2
+already covered by pre-existing tests, see §8a), 24 remaining. Pick in
 `plan.md` order unless noted otherwise:
 
-1. **STAB-0526–0529, 0532, 0539+ (marked 🧪 in `plan.md`)** — File→Export
-   GLB/glTF menu actions, invalid-extension error dialog, exporter stats
-   in the status bar, OBJ import Browse button, drag-drop loading. These
-   all look like live-menu/dialog/drag-drop-driven UI actions — read
-   each one's actual code path first (some menu actions might just call
-   an existing, already-tested export function directly and could be
-   exercised via a headless command path; don't assume 🧪 means
-   unreachable without checking, same lesson as STAB-0517/0522's
-   "looks blocked but isn't" surprises this session).
+1. **STAB-0533 — verify OBJ import: file path persists in XML on
+   save.** Files: `mc3/src/Mc3XmlWriter.cpp`,
+   `mc3/test/roundtrip_test.cpp`. **Confirmed gap**: the existing
+   `meshSource` round-trip coverage (`roundtrip_test.cpp:1210-1217`)
+   only tests the `embed:tree` form, never a plain OBJ file path (e.g.
+   `models/chair.obj`) — add that case. This is a pure `mc3`-lib test,
+   completely CNA-free, no rendering needed — extend the existing
+   CNA-free `mc3_roundtrip` ctest rather than adding a new headless
+   `--screenshot` fixture.
 
-2. **STAB-0530 — verify mc3tomcb tool: `mc3tomcb in.mc3.xml out.mcb`
-   produces file** and **STAB-0531 — add CTest for mc3tomcb**. Check
-   first whether the existing `mc3tomcb_roundtrip` ctest (already in the
-   33+ test suite before this session, unrelated to this session's new
-   tests) already covers this — if so, these two rows may already be
-   satisfiable by referencing that existing test rather than adding a
-   new one.
+2. **STAB-0532 — verify OBJ import: Browse button opens file path
+   entry.** Files: `src/MeshCraft/Scene/PropertiesPanel.cpp`. Likely a
+   live-ImGui-dialog action (SDL native file picker or an ImGui popup) —
+   read the code first before assuming it needs a live display; if it's
+   just a text-field bound to `meshSource` with no picker logic worth
+   testing beyond STAB-0533's round-trip, a 🟡 flag may be more honest
+   than forcing a UI test.
 
-3. **STAB-0533–0538** — OBJ import path persistence in XML, Merge Scene
-   behavior (hierarchy + definition-collision suffixing), Export Subtree
-   XSD validation, mc3tomcb error handling (missing input, write-
-   protected output). These look like straightforward CLI/file-level
-   checks reachable without a live UI — good candidates to verify next
-   via existing sample scenes (e.g. `test/house.mc3.xml` for the merge
-   test) plus `mc3tomcb`/`validate_xsd.py` from the command line.
+3. **STAB-0534/0535 — Merge Scene: objects appear in hierarchy /
+   definitions merged not duplicated.** Files:
+   `src/MeshCraft/MeshCraftApplication_FileOps.cpp`. Check whether merge
+   is a plain document-level operation callable without ImGui (like
+   `runGltfExport()` turned out to be) — if so, exercise it directly
+   with `test/house.mc3.xml` as the merge source, matching the row's own
+   suggested verification.
+
+4. **STAB-0536 — Export Subtree: exported file validates against
+   XSD.** Files: `src/MeshCraft/MeshCraftApplication_Commands.cpp`. Look
+   for `exportSelectionToFile()` (seen in passing this session) — likely
+   testable the same way as STAB-0526-0529's new `--export` mechanism,
+   or via a direct CNA-free call if it doesn't touch ImGui either.
+
+5. **STAB-0537/0538 — mc3tomcb error handling** (missing input file,
+   write-protected output path). Pure CLI checks, no editor/UI
+   involvement — straightforward to add to `mc3tomcb`'s own test suite.
+
+6. **STAB-0539+** — remaining S15 items (`plan.md`, several marked 🧪).
+   Don't assume 🧪 means "needs a live UI" without checking the actual
+   code path first — this session found `runGltfExport()` (STAB-0526)
+   and the pre-existing `mc3tomcb_roundtrip` test (STAB-0530/0531) both
+   turned out to already be headlessly testable or already covered.
 
 ---
 
@@ -596,15 +651,17 @@ next and completely untouched (`plan.md` rows STAB-0526 onward). Pick in
 Read NEXT.md first. Then inspect only the files needed for the first
 task in section 8. Do not refactor unrelated code. Make one small,
 verified improvement. Run the relevant build/test command from section 7
-and confirm cmake-build-debug still passes (39/39, or the new total if
+and confirm cmake-build-debug still passes (40/40, or the new total if
 you registered a new ctest). Update NEXT.md after finishing.
 
-Current branch: develop, in sync with origin/develop as of commit
-`d75a0b1` (git push was denied earlier in a prior session, then started
-working again unprompted — see section 4; if it happens again, keep
-committing locally and retry later). Build dir: cmake-build-debug/
-(Debug, CLion cmake 4.2.2) — full rebuilt and 39/39 ctest verified
-clean as of STAB-0525. Reconfigure now REQUIRES the extra flag
+Current branch: develop, prior commit `85baf79` (STAB-0525) — the
+STAB-0526/0527/0528/0529 commit lands right after this NEXT.md update
+(git push was denied earlier in a prior session, then started working
+again unprompted — see section 4; if it happens again, keep committing
+locally and retry later). Build dir: cmake-build-debug/ (Debug, CLion
+cmake 4.2.2) — full rebuilt and 40/40 ctest verified clean as of
+STAB-0529 (includes a new `--export <path>` CLI flag on the `MeshCraft`
+binary itself, see §2/§3). Reconfigure now REQUIRES the extra flag
 `-DCMAKE_POLICY_VERSION_MINIMUM=3.5` — see section 4/7 for why (CNA
 sibling repo added a vendored ENet dep incompatible with CMake 4.2.2
 without it). Release (b-release/) and the standalone
@@ -614,8 +671,10 @@ project's history but not re-checked as part of this update — re-verify
 
 Active plan: plan.md (STAB-XXXX tasks). Gates 0–5 closed, Gate 6
 exhausted for this environment. S0–S14 fully closed (S14: 17 done, 13
-flagged, 0 remaining). S15 (Import/Export/Editor Integration) is next
-and fully untouched — pick the first task from section 8.
+flagged, 0 remaining). S15 (Import/Export/Editor Integration) is in
+progress: STAB-0526–0531 done, 24 remaining — pick the first task from
+section 8 (STAB-0533's confirmed OBJ-path round-trip gap is a good,
+quick, CNA-free start).
 
 Reconfigure cmake-build-debug ONLY with CLion's cmake, not the system
 cmake. Editing mc3.xsd or adding a new .cpp file / new add_test()

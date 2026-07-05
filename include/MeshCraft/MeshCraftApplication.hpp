@@ -60,6 +60,12 @@ public:
     MeshCraftApplication();
     explicit MeshCraftApplication(std::filesystem::path filePath);
     MeshCraftApplication(std::filesystem::path filePath, std::string screenshotPath);
+    MeshCraftApplication(std::filesystem::path filePath, std::string screenshotPath,
+                         std::string exportPath);
+
+    // True if a non-interactive --export run (see main.cpp) failed — main()
+    // uses this to pick the process exit code (STAB-0528).
+    [[nodiscard]] bool exportFailed() const { return exportFailed_; }
 
     void LoadContent() override;
     void Update(Microsoft::Xna::Framework::GameTime& gameTime) override;
@@ -122,6 +128,14 @@ private:
     std::string autoScreenshotPath_;
     int autoScreenshotCountdown_{0};
     bool pendingScreenshot_{false};
+
+    // Auto-export mode (STAB-0526..0529): non-interactive
+    // `--export <path>` runs the same runGltfExport() codepath a menu
+    // click would, then exits — no rendering warm-up needed.
+    std::string autoExportPath_;
+    int  autoExportCountdown_{0};
+    bool pendingExport_{false};
+    bool exportFailed_{false};
 
     // Lights panel selection
     int selectedLightIdx_{-1};

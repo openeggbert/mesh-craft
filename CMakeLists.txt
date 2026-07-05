@@ -557,6 +557,21 @@ if(MESH_CRAFT_BUILD_TESTING AND UNIX AND NOT ANDROID AND NOT EMSCRIPTEN)
             )
             set_tests_properties(lod_test PROPERTIES TIMEOUT 30)
         endif()
+
+        # STAB-0526/0527/0528/0529: exercises the editor's --export CLI flag
+        # (runGltfExport()'s non-interactive codepath) for GLB/glTF export,
+        # the invalid-extension error path, and the exporter stats message.
+        if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/test/house.mc3.xml")
+            add_test(
+                NAME editor_export_test
+                COMMAND "${PYTHON3_EXEC}"
+                        "${CMAKE_CURRENT_SOURCE_DIR}/test/editor_export_test.py"
+                        $<TARGET_FILE:MeshCraft>
+                        "${CMAKE_CURRENT_SOURCE_DIR}/test/house.mc3.xml"
+                WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
+            )
+            set_tests_properties(editor_export_test PROPERTIES TIMEOUT 60)
+        endif()
     endif()
 
     # mc3togltf_gltf test is registered by mc3togltf/CMakeLists.txt via $<TARGET_FILE:mc3togltf>
