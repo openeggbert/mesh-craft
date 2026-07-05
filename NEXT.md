@@ -1,6 +1,6 @@
 # NEXT.md
 
-_Last updated: 2026-07-05 (STAB-0516, prior commit `1abfc5c`)_
+_Last updated: 2026-07-05 (STAB-0517, prior commit `5c33f6b`)_
 
 ---
 
@@ -22,9 +22,9 @@ tasks across sections S0–S20, gated by a Gate 0–6 checklist.
 (Documentation)** is exhausted for this environment — everything reachable
 without an external tool or a live display is done. Sections S0–S13 are
 fully closed (bar a handful of genuinely blocked/flagged items). **S14
-(Rendering and Viewport Stability), 30 items, is in progress**: 12 done,
+(Rendering and Viewport Stability), 30 items, is in progress**: 13 done,
 9 flagged 🟡 (confirmed correct by code reading, but need a human with a
-live display to visually verify), 9 not yet started.
+live display to visually verify), 8 not yet started.
 
 **Important architectural decisions:**
 - `mc3/` and `mcb/` are pure C++ static libs with **no** CNA/ImGui
@@ -65,7 +65,7 @@ live display to visually verify), 9 not yet started.
   with §7's commands if you depend on this.
 
 ### Tests
-**34/34 CTest pass** in Debug (`ctest -N` lists all 34 by name). Notably:
+**35/35 CTest pass** in Debug (`ctest -N` lists all 35 by name). Notably:
 - `mc3_commands` (~450 assertions): editor command algorithms, undo/redo,
   auto-save/backup, keybinding/macro persistence, hierarchy filtering,
   AI-panel lifecycle, viewport ray-cast picking, click-selection
@@ -76,9 +76,10 @@ live display to visually verify), 9 not yet started.
 - `mc3_roundtrip` (~299 assertions): full XML parser/writer roundtrip.
 - `mcb_roundtrip` (~50 assertions): MCB binary roundtrip.
 - Several real-render smoke tests (`smoke_test*`, `fog_linear_test`,
-  `point_light_gizmo_test`, `spot_light_gizmo_test`) that run the actual
-  `MeshCraft` binary in `--screenshot` headless mode and verify genuine
-  pixel output, not a stub render.
+  `point_light_gizmo_test`, `spot_light_gizmo_test`,
+  `look_through_camera_test`) that run the actual `MeshCraft` binary in
+  `--screenshot` headless mode and verify genuine pixel output, not a
+  stub render.
 - A dozen `mc3togltf_*` tests covering CSG, materials, textures,
   animation, instance variants, large scenes.
 
@@ -109,8 +110,8 @@ See `TESTING.md` for the full per-test reference.
   (fixed this session — see §3), not just primitives.
 - Real headless rendering verified via `--screenshot`: sample scenes,
   missing-mesh/missing-material fallbacks, orthographic camera, linear
-  fog, point-light gizmo, spot-light gizmo — all confirmed to produce
-  genuine, non-stub pixel output.
+  fog, point-light gizmo, spot-light gizmo, look-through-camera override
+  — all confirmed to produce genuine, non-stub pixel output.
 
 ### What does NOT work yet
 - `EditorViewport` is not integrated into the `MeshCraftApplication`
@@ -135,6 +136,14 @@ See `TESTING.md` for the full per-test reference.
 
 ## 3. Recent changes
 
+- **STAB-0517** — verified the "look through camera" override with a
+  real pixel-sampling test (`test/look_through_camera.mc3.xml` +
+  `look_through_camera_test.py`, 34,645 yellow samples confirmed): a box
+  placed entirely outside the default editor camera's fixed default view
+  is only visible if the render truly switches to the scene's own
+  `default_camera` (the same `--screenshot`-mode auto-activation
+  mechanism STAB-0507 already exercises, but with a genuine pixel
+  assertion this time instead of just a non-empty-PPM smoke check).
 - **STAB-0516** — audited the shadow-map debug overlay
   (`MeshCraftApplication.cpp:505-524,1535-1551`,
   `MeshCraftApplication_UiOverlays.cpp:2077-2104`): correctly finds the
@@ -222,7 +231,7 @@ new `Alg` extractions. Full history is in `git log --oneline`.
 ## 4. Current blocker / main problem
 
 **No blocker to local development or testing** — Debug builds and passes
-34/34 tests as of STAB-0513. **New reconfigure requirement:** the CLion
+35/35 tests as of STAB-0517. **New reconfigure requirement:** the CLion
 cmake command in §7 now needs `-DCMAKE_POLICY_VERSION_MINIMUM=3.5` added,
 because the sibling CNA repo (commit `00e0cea`, "add ENet 1.3.17 as
 vendored third-party dependency", 2026-07-04) added
@@ -241,14 +250,23 @@ confirmed correct and safe by code reading, but a fresh visual
 confirmation needs a human with a live display. This is not a bug, just
 an environment limitation — see §5 for the full list.
 
-The only genuine **operational** issue is unrelated to current work:
+Genuine **operational** issues, unrelated to current work:
 
-- **CI cannot be activated with the current git credentials.** The
-  workflow file is committed but parked at `.github_/workflows/ci.yml`
-  (GitHub only treats `.github/workflows/` as live) because the PAT
-  embedded in the remote URL lacks the `workflow` OAuth scope. That same
-  PAT is also stored in plaintext in `.git/config` (not in any tracked
-  file). Fix requires the repo owner to rotate/rescope the token.
+- **`git push origin develop` is currently denied.** The remote is now
+  SSH (`git@github.com:openeggbert/mesh-craft.git`, not the HTTPS+PAT URL
+  previously documented here) and returns
+  `Permission to openeggbert/mesh-craft.git denied to robertvokac` — the
+  active SSH key lacks push access. **5 commits are queued locally on
+  `develop`, not yet pushed**: STAB-0513 (`da3a8d6`) through STAB-0517
+  (see `git log --oneline -5` for the current head). Needs the repo
+  owner to fix SSH key access; do not attempt to reconfigure the remote
+  or credentials without explicit permission.
+- **CI cannot be activated with the current git credentials** (separate,
+  older issue). The workflow file is committed but parked at
+  `.github_/workflows/ci.yml` (GitHub only treats `.github/workflows/` as
+  live) because the previous HTTPS remote's embedded PAT lacked the
+  `workflow` OAuth scope. Fix requires the repo owner to rotate/rescope
+  credentials — may now be moot if the remote has fully switched to SSH.
 
 ---
 
@@ -364,8 +382,8 @@ requires a full reconfigure, not just a rebuild.**
 CLION_CMAKE=/home/robertvokac/.local/share/JetBrains/Toolbox/apps/clion/bin/cmake/linux/x64/bin/cmake
 "$CLION_CMAKE" -S . -B cmake-build-debug -DBUILD_TESTING=ON \
       -DCMAKE_POLICY_VERSION_MINIMUM=3.5                      # (re)configure — flag needed since CNA added vendored ENet, see §4
-cd cmake-build-debug && ninja && ctest --output-on-failure    # build + test (34)
-ctest -N                                                      # lists all 34 tests
+cd cmake-build-debug && ninja && ctest --output-on-failure    # build + test (35)
+ctest -N                                                      # lists all 35 tests
 
 # --- Release (system cmake is fine for a fresh dir)
 cmake -S . -B b-release -G Ninja -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=ON \
@@ -404,23 +422,21 @@ No project linter/formatter is configured.
 S14's priority (P0/P1) subset is done; remaining items are P2/P3. Pick in
 `plan.md` order unless noted otherwise:
 
-1. **STAB-0517 — verify "Look through camera": renders from Mc3Camera
-   position/rotation.** Files: `src/MeshCraft/MeshCraftApplication.cpp`.
-   Promising lead: `lookThroughCamera_`/`selectedCameraIdx_` are already
-   auto-activated headlessly in `--screenshot` mode when the document
-   has a `default_camera` (`MeshCraftApplication.cpp:224-236`, the same
-   mechanism STAB-0507's orthographic-camera test already exercises) —
-   likely reachable via a fixture + pixel-sampling test
-   (STAB-0507/0511/0512/0513's pattern) rather than needing a live
-   display. Confirm by reading how the viewport picks the camera matrix
-   when `lookThroughCamera_` is true vs. false.
+1. **STAB-0518 — verify locked object outline: locked objects have
+   distinct visual.** Files: `src/MeshCraft/Renderer/SceneRenderer.cpp`.
+   `lockedIds_` (referenced at `MeshCraftApplication_UiOverlays.cpp:48`)
+   is an in-memory editor set, not (as far as read so far) a persisted
+   `mc3.xml` attribute — check whether locking is document-driven (would
+   make this headlessly testable, fixture + pixel-sampling pattern) or
+   purely a runtime editor action with no CLI/document hook (would need
+   the STAB-0505-style 🟡 flag) before deciding which.
 
-2. **STAB-0518 through STAB-0525** — remaining S14 items (`plan.md`,
+2. **STAB-0519 through STAB-0525** — remaining S14 items (`plan.md`,
    currently 📋). Continue the established pattern: read the code first;
    if the feature is document-driven or unconditional, build a fixture +
-   pixel-sampling test (STAB-0507/0511/0512/0513's pattern); if it's a
-   pure runtime UI toggle or requires live selection/interaction with no
-   headless hook, confirm correctness by reading and flag 🟡
+   pixel-sampling test (STAB-0507/0511/0512/0513/0517's pattern); if it's
+   a pure runtime UI toggle or requires live selection/interaction with
+   no headless hook, confirm correctness by reading and flag 🟡
    (STAB-0505/0508/0509/0510/0514/0515/0516's pattern).
 
 3. Once S14 is closed out, **S15 (Import/Export/Editor Integration)**
@@ -463,23 +479,24 @@ S14's priority (P0/P1) subset is done; remaining items are P2/P3. Pick in
 Read NEXT.md first. Then inspect only the files needed for the first
 task in section 8. Do not refactor unrelated code. Make one small,
 verified improvement. Run the relevant build/test command from section 7
-and confirm cmake-build-debug still passes (34/34, or the new total if
+and confirm cmake-build-debug still passes (35/35, or the new total if
 you registered a new ctest). Update NEXT.md after finishing.
 
-Current branch: develop. Build dir: cmake-build-debug/ (Debug, CLion
-cmake 4.2.2) — full rebuilt and 34/34 ctest verified clean as of
-STAB-0513. Reconfigure now REQUIRES the extra flag
-`-DCMAKE_POLICY_VERSION_MINIMUM=3.5` — see section 4/7 for why (CNA
-sibling repo added a vendored ENet dep incompatible with CMake 4.2.2
-without it). Release (b-release/) and the standalone
-mc3/mcb/mc3togltf/mc3tomcb builds were verified earlier in this
-project's history but not re-checked as part of this update — re-verify
-(with the same new flag) before relying on them.
+Current branch: develop, 5 commits ahead of origin/develop and NOT
+pushed (git push is currently denied — see section 4, fix needs the repo
+owner). Build dir: cmake-build-debug/ (Debug, CLion cmake 4.2.2) — full
+rebuilt and 35/35 ctest verified clean as of STAB-0517. Reconfigure now
+REQUIRES the extra flag `-DCMAKE_POLICY_VERSION_MINIMUM=3.5` — see
+section 4/7 for why (CNA sibling repo added a vendored ENet dep
+incompatible with CMake 4.2.2 without it). Release (b-release/) and the
+standalone mc3/mcb/mc3togltf/mc3tomcb builds were verified earlier in
+this project's history but not re-checked as part of this update —
+re-verify (with the same new flag) before relying on them.
 
 Active plan: plan.md (STAB-XXXX tasks). Gates 0–5 closed, Gate 6
 exhausted for this environment. S0–S13 fully closed. S14 (Rendering and
-Viewport Stability) is in progress: 12 done, 9 flagged (need a live
-display), 9 remaining — pick the next task from section 8.
+Viewport Stability) is in progress: 13 done, 9 flagged (need a live
+display), 8 remaining — pick the next task from section 8.
 
 Reconfigure cmake-build-debug ONLY with CLion's cmake, not the system
 cmake. Editing mc3.xsd or adding a new .cpp file / new add_test()

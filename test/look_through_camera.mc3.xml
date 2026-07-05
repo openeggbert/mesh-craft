@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- STAB-0517 fixture: default_camera is aimed at a box placed *behind*
+     where the default editor orbit camera would be looking (default
+     EditorCamera: yaw=0, pitch=0.4, distance=15, target=(0,0,0), i.e.
+     positioned around (0, 5.8, 13.8) looking toward -z). The "Target"
+     box sits at z=+50 — behind that default camera's view direction, so
+     it is invisible under the default orbit view. The "Behind" camera
+     is placed right next to it, looking straight at it, so a
+     substantial yellow pixel cluster can only appear if the render
+     truly uses the Mc3Camera's own position/target/fov (the
+     lookThroughCamera_ override in MeshCraftApplication.cpp), not the
+     default editor camera. -->
+<mc3 version="0.3" model="LookThroughCameraFixture" default_camera="Behind">
+
+  <lights>
+    <ambient color="0.3 0.3 0.3" brightness="0.5"/>
+    <directional name="Sun" color="1 0.95 0.8" brightness="2" direction="-0.3 -1 -0.3"/>
+  </lights>
+
+  <cameras>
+    <camera name="Behind" position="0 0 52" target="0 0 50" fov="50" near="0.05" far="100"/>
+  </cameras>
+
+  <materials>
+    <material id="yellow"><base_color>1.0 1.0 0.0 1.0</base_color></material>
+  </materials>
+
+  <objects>
+    <box name="Target" size="2 2 2" position="0 0 50" material="yellow"/>
+  </objects>
+
+</mc3>

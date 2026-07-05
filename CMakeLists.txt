@@ -483,6 +483,21 @@ if(MESH_CRAFT_BUILD_TESTING AND UNIX AND NOT ANDROID AND NOT EMSCRIPTEN)
             )
             set_tests_properties(spot_light_gizmo_test PROPERTIES TIMEOUT 30)
         endif()
+
+        # STAB-0517: confirms lookThroughCamera_ actually overrides view/proj
+        # from the Mc3Camera's own position/target/fov in --screenshot mode,
+        # not silently falling back to the default editor camera.
+        if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/test/look_through_camera.mc3.xml")
+            add_test(
+                NAME look_through_camera_test
+                COMMAND "${PYTHON3_EXEC}"
+                        "${CMAKE_CURRENT_SOURCE_DIR}/test/look_through_camera_test.py"
+                        $<TARGET_FILE:MeshCraft>
+                        "${CMAKE_CURRENT_SOURCE_DIR}/test/look_through_camera.mc3.xml"
+                WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
+            )
+            set_tests_properties(look_through_camera_test PROPERTIES TIMEOUT 30)
+        endif()
     endif()
 
     # mc3togltf_gltf test is registered by mc3togltf/CMakeLists.txt via $<TARGET_FILE:mc3togltf>
