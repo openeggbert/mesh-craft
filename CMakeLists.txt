@@ -498,6 +498,21 @@ if(MESH_CRAFT_BUILD_TESTING AND UNIX AND NOT ANDROID AND NOT EMSCRIPTEN)
             )
             set_tests_properties(look_through_camera_test PROPERTIES TIMEOUT 30)
         endif()
+
+        # STAB-0522: confirms the content-hash CSG cache (K1) actually
+        # prevents re-evaluating a static CSG object across the --screenshot
+        # warm-up loop's ~120 frames.
+        if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/test/csg_cache.mc3.xml")
+            add_test(
+                NAME csg_cache_test
+                COMMAND "${PYTHON3_EXEC}"
+                        "${CMAKE_CURRENT_SOURCE_DIR}/test/csg_cache_test.py"
+                        $<TARGET_FILE:MeshCraft>
+                        "${CMAKE_CURRENT_SOURCE_DIR}/test/csg_cache.mc3.xml"
+                WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
+            )
+            set_tests_properties(csg_cache_test PROPERTIES TIMEOUT 30)
+        endif()
     endif()
 
     # mc3togltf_gltf test is registered by mc3togltf/CMakeLists.txt via $<TARGET_FILE:mc3togltf>

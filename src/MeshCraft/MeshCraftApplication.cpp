@@ -272,6 +272,7 @@ void MeshCraftApplication::EndDraw() {
         pendingScreenshot_ = false;
         saveScreenshot(autoScreenshotPath_);
         std::cout << "[MeshCraft] Auto-screenshot saved to: " << autoScreenshotPath_ << "\n";
+        std::cout << "[CsgCache] evaluations: " << sceneRenderer_->csgCacheEvaluationCount() << "\n";
         Exit();
     }
     Game::EndDraw();

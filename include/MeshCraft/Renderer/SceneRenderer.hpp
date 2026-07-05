@@ -77,6 +77,12 @@ public:
         return it != csgTriCountMap_.end() ? it->second : -1;
     }
 
+    // Number of times a CSG subtree was actually re-evaluated (cache miss —
+    // buildManifoldTree() called) since this SceneRenderer was constructed.
+    // A static CSG scene re-drawn across many frames should see this stay
+    // at 1 after the first draw, not grow with the frame count (K1).
+    int csgCacheEvaluationCount() const { return csgCacheEvaluations_; }
+
     // Export the computed CSG result for obj to an OBJ file at path.
     // Returns true on success; on failure, err is set to a human-readable message.
     bool exportCsgMesh(const Mc3::Mc3Object& obj, const Mc3::Mc3Document& doc,
@@ -289,6 +295,7 @@ private:
     std::map<std::string, RenderMesh> meshCache_;
     std::unordered_map<std::size_t, RenderMesh> csgMeshCache_;
     std::unordered_map<std::string, int> csgTriCountMap_;   // obj.id → last rendered tri count (K4)
+    int csgCacheEvaluations_{0};   // cache-miss count (STAB-0522)
     std::unordered_map<std::string, AnimOverride> animOverrides_;
 };
 

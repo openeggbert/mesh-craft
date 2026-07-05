@@ -1,6 +1,6 @@
 # NEXT.md
 
-_Last updated: 2026-07-05 (STAB-0521, prior commit `c678a63`, pushed)_
+_Last updated: 2026-07-05 (STAB-0522, prior commit `fc6bdf3`, pushed)_
 
 ---
 
@@ -22,9 +22,9 @@ tasks across sections S0–S20, gated by a Gate 0–6 checklist.
 (Documentation)** is exhausted for this environment — everything reachable
 without an external tool or a live display is done. Sections S0–S13 are
 fully closed (bar a handful of genuinely blocked/flagged items). **S14
-(Rendering and Viewport Stability), 30 items, is in progress**: 13 done,
+(Rendering and Viewport Stability), 30 items, is in progress**: 14 done,
 13 flagged 🟡 (confirmed correct by code reading, but need a human with a
-live display/tool to verify), 4 not yet started.
+live display/tool to verify), 3 not yet started.
 
 **Important architectural decisions:**
 - `mc3/` and `mcb/` are pure C++ static libs with **no** CNA/ImGui
@@ -65,7 +65,7 @@ live display/tool to verify), 4 not yet started.
   with §7's commands if you depend on this.
 
 ### Tests
-**35/35 CTest pass** in Debug (`ctest -N` lists all 35 by name). Notably:
+**36/36 CTest pass** in Debug (`ctest -N` lists all 36 by name). Notably:
 - `mc3_commands` (~450 assertions): editor command algorithms, undo/redo,
   auto-save/backup, keybinding/macro persistence, hierarchy filtering,
   AI-panel lifecycle, viewport ray-cast picking, click-selection
@@ -77,9 +77,10 @@ live display/tool to verify), 4 not yet started.
 - `mcb_roundtrip` (~50 assertions): MCB binary roundtrip.
 - Several real-render smoke tests (`smoke_test*`, `fog_linear_test`,
   `point_light_gizmo_test`, `spot_light_gizmo_test`,
-  `look_through_camera_test`) that run the actual `MeshCraft` binary in
-  `--screenshot` headless mode and verify genuine pixel output, not a
-  stub render.
+  `look_through_camera_test`, `csg_cache_test`) that run the actual
+  `MeshCraft` binary in `--screenshot` headless mode and verify genuine
+  pixel output (or, for `csg_cache_test`, a printed internal counter),
+  not a stub render.
 - A dozen `mc3togltf_*` tests covering CSG, materials, textures,
   animation, instance variants, large scenes.
 
@@ -136,6 +137,18 @@ See `TESTING.md` for the full per-test reference.
 
 ## 3. Recent changes
 
+- **STAB-0522** — verified the content-hash CSG cache (K1,
+  `SceneRenderer.cpp:756-778`) actually prevents re-evaluating a static
+  CSG object across repeated draws. No headless way existed to observe
+  hit/miss behavior, so added a small counter
+  (`csgCacheEvaluations_`/`csgCacheEvaluationCount()`, same pattern as
+  the existing `csgCachedTriCount()`/K4) incremented only on a cache
+  miss, printed as `[CsgCache] evaluations: N` at the end of
+  `--screenshot` mode. Added `test/csg_cache.mc3.xml` (one static CSG
+  union) + `test/csg_cache_test.py` (parses stdout, asserts the count
+  stays at 1–3 across the ~120-frame screenshot warm-up loop rather than
+  climbing toward ~120) + a permanent `csg_cache_test` ctest. Manually
+  confirmed exactly 1 evaluation. 36/36 ctest passing.
 - **STAB-0521** — audited every FBO-based render pass and GL state
   toggle in `MeshCraftApplication.cpp` (bloom, SSAO, shadow-map debug,
   material preview, main scene draw): all framebuffer binds properly
@@ -270,7 +283,7 @@ new `Alg` extractions. Full history is in `git log --oneline`.
 ## 4. Current blocker / main problem
 
 **No blocker to local development or testing** — Debug builds and passes
-35/35 tests as of STAB-0517. **New reconfigure requirement:** the CLion
+36/36 tests as of STAB-0522. **New reconfigure requirement:** the CLion
 cmake command in §7 now needs `-DCMAKE_POLICY_VERSION_MINIMUM=3.5` added,
 because the sibling CNA repo (commit `00e0cea`, "add ENet 1.3.17 as
 vendored third-party dependency", 2026-07-04) added
@@ -431,8 +444,8 @@ requires a full reconfigure, not just a rebuild.**
 CLION_CMAKE=/home/robertvokac/.local/share/JetBrains/Toolbox/apps/clion/bin/cmake/linux/x64/bin/cmake
 "$CLION_CMAKE" -S . -B cmake-build-debug -DBUILD_TESTING=ON \
       -DCMAKE_POLICY_VERSION_MINIMUM=3.5                      # (re)configure — flag needed since CNA added vendored ENet, see §4
-cd cmake-build-debug && ninja && ctest --output-on-failure    # build + test (35)
-ctest -N                                                      # lists all 35 tests
+cd cmake-build-debug && ninja && ctest --output-on-failure    # build + test (36)
+ctest -N                                                      # lists all 36 tests
 
 # --- Release (system cmake is fine for a fresh dir)
 cmake -S . -B b-release -G Ninja -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=ON \
@@ -471,30 +484,21 @@ No project linter/formatter is configured.
 S14's priority (P0/P1) subset is done; remaining items are P2/P3. Pick in
 `plan.md` order unless noted otherwise:
 
-1. **STAB-0522 — verify CSG preview cache: re-render without touching
-   CSG returns cache hit.** Files:
-   `src/MeshCraft/Renderer/SceneRenderer.cpp`. Row's stated verification
-   ("60 fps... no evaluation each frame") sounds like another live-FPS
-   item (STAB-0520's class) — but check whether there's a cache-hit
-   counter/log that could be asserted headlessly across two screenshots
-   of the same unchanged CSG object before assuming it needs a live
-   display.
-
-2. **STAB-0523 — verify background texture renders before 3D scene.**
+1. **STAB-0523 — verify background texture renders before 3D scene.**
    Files: `src/MeshCraft/MeshCraftApplication.cpp`. Promising —
    likely document-driven (a background-texture setting), same
    testable class as the skybox code already read this session
    (`MeshCraftApplication.cpp:526-527`, "I2: equirectangular skybox,
    drawn before scene, no depth write"). Good candidate for a fixture +
-   pixel-sampling test (STAB-0507/0511/0512/0513/0517's pattern).
+   pixel-sampling test (STAB-0507/0511/0512/0513/0517/0522's pattern).
 
-3. **STAB-0524 — verify skybox panorama shader: equirectangular image
+2. **STAB-0524 — verify skybox panorama shader: equirectangular image
    displayed.** Files: `src/MeshCraft/MeshCraftApplication.cpp:526-527`
    (`drawSkybox()`, already located this session) — also looks
    document-driven and reachable via `--screenshot`, likely another
    fixture + pixel-sampling candidate.
 
-4. **STAB-0525 — remaining S14 item** (`plan.md`, currently 📋; LOD
+3. **STAB-0525 — remaining S14 item** (`plan.md`, currently 📋; LOD
    segment count vs. camera distance). Continue the established
    pattern: read the code first; if document-driven/unconditional,
    build a fixture + pixel-sampling test; if a pure runtime toggle or
@@ -502,7 +506,7 @@ S14's priority (P0/P1) subset is done; remaining items are P2/P3. Pick in
    (STAB-0505/0508/0509/0510/0514/0515/0516/0518/0519/0520/0521's
    pattern).
 
-5. Once S14 is closed out, **S15 (Import/Export/Editor Integration)**
+4. Once S14 is closed out, **S15 (Import/Export/Editor Integration)**
    is next and fully untouched — read its `plan.md` rows before starting.
 
 ---
@@ -542,14 +546,15 @@ S14's priority (P0/P1) subset is done; remaining items are P2/P3. Pick in
 Read NEXT.md first. Then inspect only the files needed for the first
 task in section 8. Do not refactor unrelated code. Make one small,
 verified improvement. Run the relevant build/test command from section 7
-and confirm cmake-build-debug still passes (35/35, or the new total if
+and confirm cmake-build-debug still passes (36/36, or the new total if
 you registered a new ctest). Update NEXT.md after finishing.
 
 Current branch: develop, in sync with origin/develop as of commit
-`f45ad40` (push was denied earlier this session, then started working
-again unprompted — see section 4). Build dir: cmake-build-debug/
-(Debug, CLion cmake 4.2.2) — full rebuilt and 35/35 ctest verified
-clean as of STAB-0517. Reconfigure now REQUIRES the extra flag
+`fc6bdf3` (git push was denied earlier in a prior session, then started
+working again unprompted — see section 4; if it happens again, keep
+committing locally and retry later). Build dir: cmake-build-debug/
+(Debug, CLion cmake 4.2.2) — full rebuilt and 36/36 ctest verified
+clean as of STAB-0522. Reconfigure now REQUIRES the extra flag
 `-DCMAKE_POLICY_VERSION_MINIMUM=3.5` — see section 4/7 for why (CNA
 sibling repo added a vendored ENet dep incompatible with CMake 4.2.2
 without it). Release (b-release/) and the standalone
@@ -559,8 +564,8 @@ project's history but not re-checked as part of this update — re-verify
 
 Active plan: plan.md (STAB-XXXX tasks). Gates 0–5 closed, Gate 6
 exhausted for this environment. S0–S13 fully closed. S14 (Rendering and
-Viewport Stability) is in progress: 13 done, 13 flagged (need a live
-display/tool), 4 remaining — pick the next task from section 8.
+Viewport Stability) is in progress: 14 done, 13 flagged (need a live
+display/tool), 3 remaining — pick the next task from section 8.
 
 Reconfigure cmake-build-debug ONLY with CLion's cmake, not the system
 cmake. Editing mc3.xsd or adding a new .cpp file / new add_test()

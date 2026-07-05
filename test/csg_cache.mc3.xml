@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- STAB-0522 fixture: a single static CSG union, never modified across
+     the screenshot-mode warm-up loop (120 frames, see
+     autoScreenshotCountdown_ in MeshCraftApplication.cpp) plus the final
+     screenshot frame. If SceneRenderer's content-hash CSG cache (K1)
+     works, buildManifoldTree() should run exactly once (first draw);
+     if it's broken and re-evaluates every frame, the printed
+     [CsgCache] evaluations count would climb toward ~120. -->
+<mc3 version="0.3" model="CsgCacheFixture" default_camera="Main">
+
+  <lights>
+    <ambient color="0.3 0.3 0.3" brightness="0.5"/>
+    <directional name="Sun" color="1 0.95 0.8" brightness="2" direction="-0.5 -1 -0.5"/>
+  </lights>
+
+  <cameras>
+    <camera name="Main" position="0 0 3" target="0 0 0" fov="50" near="0.05" far="100"/>
+  </cameras>
+
+  <materials>
+    <material id="grey"><base_color>0.7 0.7 0.7 1.0</base_color></material>
+  </materials>
+
+  <objects>
+    <union name="MergedBoxes" material="grey">
+      <box name="BoxA" size="1 1 1" position="-0.3 0 0"/>
+      <box name="BoxB" size="1 1 1" position=" 0.3 0 0"/>
+    </union>
+  </objects>
+
+</mc3>

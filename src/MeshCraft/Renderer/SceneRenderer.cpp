@@ -764,6 +764,7 @@ void SceneRenderer::drawObject(const Mc3Object& obj, const Mc3Document& doc,
         if (csgMeshCache_.size() > 128) csgMeshCache_.clear();
         auto cit = csgMeshCache_.find(fp);
         if (cit == csgMeshCache_.end()) {
+            ++csgCacheEvaluations_;
             manifold::Manifold m = buildManifoldTree(obj, doc, parentWorld, 0);
             csgMeshCache_[fp] = manifoldToRenderMesh(device_, m);
             cit = csgMeshCache_.find(fp);
