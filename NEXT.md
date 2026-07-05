@@ -1,6 +1,6 @@
 # NEXT.md
 
-_Last updated: 2026-07-05 (STAB-0539/0542, prior commit `af94e22`, pushed)_
+_Last updated: 2026-07-05 (STAB-0543, prior commit `d894ddf`, not yet pushed)_
 
 ---
 
@@ -23,8 +23,9 @@ tasks across sections S0–S20, gated by a Gate 0–6 checklist.
 without an external tool or a live display is done. Sections S0–S14 are
 fully closed (bar a handful of genuinely blocked/flagged items — S14: 17
 done, 13 flagged 🟡, 0 remaining). **S15 (Import/Export/Editor
-Integration), 30 items, is in progress**: 13 done (STAB-0526–0531,
-0533–0538, 0542), 2 flagged 🟡 (STAB-0532, 0539), 15 not yet started.
+Integration), 30 items, is in progress**: 16 done (STAB-0526–0531,
+0533–0538, 0540–0543), 2 flagged 🟡 (STAB-0532, 0539), 12 not yet
+started.
 
 **Important architectural decisions:**
 - `mc3/` and `mcb/` are pure C++ static libs with **no** CNA/ImGui
@@ -65,7 +66,7 @@ Integration), 30 items, is in progress**: 13 done (STAB-0526–0531,
   with §7's commands if you depend on this.
 
 ### Tests
-**41/41 CTest pass** in Debug (`ctest -N` lists all 41 by name). Notably:
+**42/42 CTest pass** in Debug (`ctest -N` lists all 42 by name). Notably:
 - `mc3_commands` (~450 assertions): editor command algorithms, undo/redo,
   auto-save/backup, keybinding/macro persistence, hierarchy filtering,
   AI-panel lifecycle, viewport ray-cast picking, click-selection
@@ -149,6 +150,32 @@ See `TESTING.md` for the full per-test reference.
 
 ## 3. Recent changes
 
+- **STAB-0543** — no "Embed textures" setting exists anywhere (image
+  embedding is fully automatic, tied to output format:
+  `GltfExporter.cpp:1109-1111`, `embedImagesNow = format == GLB`), but
+  the underlying concern — does GLB actually embed real texture pixel
+  data? — was genuinely untested (the existing `texture_sampler_test.py`
+  deliberately uses nonexistent texture files to test the
+  missing-texture-warning path). **Also found the row's own
+  verification method was wrong**: GLB embedding here isn't via
+  `bufferView`s — tinygltf's `embedImages=true` path encodes images as
+  base64 `data:image/png;base64,...` URIs instead (my own first test
+  attempt assumed `bufferView` and failed against real output before I
+  checked). Added `test/glb_texture_embed.mc3.xml` (references the
+  real, committed `textures/solid_green.png`) +
+  `mc3togltf/test/glb_texture_embed_test.py` (decodes the embedded
+  base64 data URI, confirms byte-identical to the source PNG) + a
+  permanent `mc3togltf_glb_texture_embed` ctest. 42/42 ctest passing
+  (up from 41/41).
+- **STAB-0540/0541** — both already fully covered, no new work needed.
+  The editor's `saveFile()`/`saveFileAs()` call `document_.saveToFile()`
+  directly — the exact function `mc3/test/roundtrip_test.cpp`'s
+  `testInclude()` (`<include>` paths + definitions/materials survive a
+  real save-to-file + reload cycle, not inlined) and `testEmbedGltf()`
+  (external-GLB and inline-base64 embeds, plus `meshSource="embed:<id>"`
+  linkage, via the shared `roundtrip()` helper — a genuine
+  `saveToFile()`/`loadFromFile()` round-trip through a real file, same
+  calls the editor's Save/Open commands use) already exercise.
 - **STAB-0542** — confirmed the row's expectation doesn't match
   long-standing, deliberate behavior: `--screenshot out.png` always
   writes raw PPM (manually verified: `b'P6\n800 480\n255\n...'` header),
@@ -645,37 +672,30 @@ row asks for ("file created; non-zero size"). Marked both ✅ in
 ## 8. Next smallest tasks
 
 **S14 is fully closed.** **S15 (Import/Export/Editor Integration)** is
-in progress: STAB-0526–0531 + 0533–0538 + 0542 done (13), STAB-0532/0539
-flagged 🟡, 15 remaining. Pick in `plan.md` order unless noted otherwise:
+in progress: STAB-0526–0531 + 0533–0538 + 0540–0543 done (16),
+STAB-0532/0539 flagged 🟡, 12 remaining. Pick in `plan.md` order unless
+noted otherwise:
 
-1. **STAB-0540/0541 — includes / embedded assets preserved through
-   editor load/save cycle.** Files:
-   `src/MeshCraft/MeshCraftApplication_FileOps.cpp`. Since
-   `saveFile()`/`saveFileAs()` just call `document_.saveToFile()` (the
-   same writer used everywhere), this is likely already substantially
-   covered by `mc3/test/roundtrip_test.cpp`'s existing include tests
-   (`testInclude`, around line 869, uses `test/mc3_library.mc3.xml` —
-   the same fixture STAB-0536 just fixed the export path for) and the
-   embed tests around line 1190-1218. Check exact coverage before
-   assuming a gap — this session has found both "already covered" and
-   "looks fine but has a real bug" outcomes about equally often, so
-   read carefully either way.
+1. **STAB-0544/0545 — material export/import (`.mc3mat.xml`)
+   round-trip + collision suffix.** Files:
+   `src/MeshCraft/MeshCraftApplication_UiOverlays.cpp` (`:1654`+,
+   "Import from .mc3mat.xml file" already located this session). Check
+   whether the export/import functions are plain document-level calls
+   (like `runGltfExport()`/`mergeSceneFromFile()` turned out to be) —
+   likely testable directly, and the collision-suffix logic
+   (STAB-0545) may follow the exact same pattern already fixed/tested
+   for materials in `mergeDocumentsAlg()` (STAB-0534/0535).
 
-2. **STAB-0543 — verify GLB export settings: texture embedding choice
-   applied.** Files: `MeshCraftApplication_FileOps.cpp`. Look for
-   `glbAllowApproxCSG_`'s sibling settings (an "embed textures" flag)
-   and whether `GltfExporter` has a corresponding option already tested
-   by the `mc3togltf_*` ctest suite.
-
-3. **STAB-0544-0549+** — remaining S15 items (`plan.md`, several marked
+2. **STAB-0546-0549+** — remaining S15 items (`plan.md`, several marked
    🧪 or 📋). Don't assume 🧪 means "needs a live UI" without checking
    the actual code path first — this session found `runGltfExport()`
    (STAB-0526), the pre-existing `mc3tomcb_roundtrip` test
-   (STAB-0530/0531), and `mc3tomcb`'s error handling (STAB-0537/0538)
-   all turned out to already be correct/headlessly testable, needing
-   only new test coverage — while STAB-0534/0535/0536 had real bugs
-   hiding behind plausible-looking code, and STAB-0539 had an unwired
-   duplicate. Read before assuming either way.
+   (STAB-0530/0531), `mc3tomcb`'s error handling (STAB-0537/0538), and
+   STAB-0540/0541 all turned out to already be correct/headlessly
+   testable, needing only new test coverage — while
+   STAB-0534/0535/0536/0543 had real bugs or wrong assumptions hiding
+   behind plausible-looking code/row wording, and STAB-0539 had an
+   unwired duplicate. Read before assuming either way.
 
 ---
 
@@ -714,15 +734,15 @@ flagged 🟡, 15 remaining. Pick in `plan.md` order unless noted otherwise:
 Read NEXT.md first. Then inspect only the files needed for the first
 task in section 8. Do not refactor unrelated code. Make one small,
 verified improvement. Run the relevant build/test command from section 7
-and confirm cmake-build-debug still passes (41/41, or the new total if
+and confirm cmake-build-debug still passes (42/42, or the new total if
 you registered a new ctest). Update NEXT.md after finishing.
 
-Current branch: develop, prior commit `af94e22` (STAB-0537/0538) — the
-STAB-0539/0542 commit lands right after this NEXT.md update (git push
-was denied earlier in a prior session, then started working again
+Current branch: develop, prior commit `d894ddf` (STAB-0539/0542) — the
+STAB-0540/0541/0543 commit lands right after this NEXT.md update (git
+push was denied earlier in a prior session, then started working again
 unprompted — see section 4; if it happens again, keep committing
 locally and retry later). Build dir: cmake-build-debug/ (Debug, CLion
-cmake 4.2.2) — full rebuilt and 41/41 ctest verified clean (includes a
+cmake 4.2.2) — full rebuilt and 42/42 ctest verified clean (includes a
 new `--export <path>` CLI flag on the `MeshCraft` binary itself, see
 §2/§3). Reconfigure now REQUIRES the extra flag
 `-DCMAKE_POLICY_VERSION_MINIMUM=3.5` — see section 4/7 for why (CNA
@@ -735,8 +755,9 @@ project's history but not re-checked as part of this update — re-verify
 Active plan: plan.md (STAB-XXXX tasks). Gates 0–5 closed, Gate 6
 exhausted for this environment. S0–S14 fully closed (S14: 17 done, 13
 flagged, 0 remaining). S15 (Import/Export/Editor Integration) is in
-progress: STAB-0526–0531 + 0533–0538 + 0542 done (13), STAB-0532/0539
-flagged 🟡, 15 remaining — pick the first task from section 8.
+progress: STAB-0526–0531 + 0533–0538 + 0540–0543 done (16),
+STAB-0532/0539 flagged 🟡, 12 remaining — pick the first task from
+section 8.
 
 Reconfigure cmake-build-debug ONLY with CLion's cmake, not the system
 cmake. Editing mc3.xsd or adding a new .cpp file / new add_test()

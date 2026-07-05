@@ -131,6 +131,7 @@ if(BUILD_TESTING)
         set(_svg_material_xml         "${CMAKE_CURRENT_SOURCE_DIR}/../test/svg_material.mc3.xml")
         set(_anim_unsupported_xml     "${CMAKE_CURRENT_SOURCE_DIR}/../test/animation_unsupported.mc3.xml")
         set(_instance_variant_xml     "${CMAKE_CURRENT_SOURCE_DIR}/../test/instance_variant.mc3.xml")
+        set(_glb_texture_embed_xml    "${CMAKE_CURRENT_SOURCE_DIR}/../test/glb_texture_embed.mc3.xml")
         if(EXISTS "${_anim_xml}" AND EXISTS "${_house_xml}")
             add_test(
                 NAME mc3togltf_gltf
@@ -264,6 +265,16 @@ if(BUILD_TESTING)
                         "${_material_pbr_xml}"
             )
             set_tests_properties(mc3togltf_material_pbr PROPERTIES TIMEOUT 30)
+        endif()
+        if(EXISTS "${_glb_texture_embed_xml}")
+            add_test(
+                NAME mc3togltf_glb_texture_embed
+                COMMAND "${PYTHON3_EXEC}"
+                        "${CMAKE_CURRENT_SOURCE_DIR}/test/glb_texture_embed_test.py"
+                        "$<TARGET_FILE:mc3togltf>"
+                        "${_glb_texture_embed_xml}"
+            )
+            set_tests_properties(mc3togltf_glb_texture_embed PROPERTIES TIMEOUT 30)
         endif()
         if(EXISTS "${_svg_material_xml}")
             add_test(

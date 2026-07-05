@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- STAB-0543 fixture: a single box referencing a real, existing texture
+     file (textures/solid_green.png, a 152-byte solid-color PNG created
+     for STAB-0523) so GLB export's automatic image-embedding path
+     (GltfExporter.cpp:1109-1111) can be verified against real pixel
+     data, not just a nonexistent-file warning path. -->
+<mc3 version="0.3" model="GlbTextureEmbedFixture">
+
+  <textures>
+    <texture id="tex_green" uri="textures/solid_green.png"/>
+  </textures>
+
+  <materials>
+    <material id="mat_green" roughness="0.8" metallic="0.0">
+      <base_color>1.0 1.0 1.0 1.0</base_color>
+      <base_color_texture>tex_green</base_color_texture>
+    </material>
+  </materials>
+
+  <objects>
+    <box name="TexturedBox" size="1 1 1" material="mat_green"/>
+  </objects>
+
+</mc3>
