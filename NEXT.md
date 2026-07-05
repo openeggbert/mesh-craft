@@ -1,6 +1,6 @@
 # NEXT.md
 
-_Last updated: 2026-07-05 (STAB-0513, prior commit `9fda7ac`)_
+_Last updated: 2026-07-05 (STAB-0514, prior commit `da3a8d6`)_
 
 ---
 
@@ -23,8 +23,8 @@ tasks across sections S0–S20, gated by a Gate 0–6 checklist.
 without an external tool or a live display is done. Sections S0–S13 are
 fully closed (bar a handful of genuinely blocked/flagged items). **S14
 (Rendering and Viewport Stability), 30 items, is in progress**: 12 done,
-6 flagged 🟡 (confirmed correct by code reading, but need a human with a
-live display to visually verify), 12 not yet started.
+7 flagged 🟡 (confirmed correct by code reading, but need a human with a
+live display to visually verify), 11 not yet started.
 
 **Important architectural decisions:**
 - `mc3/` and `mcb/` are pure C++ static libs with **no** CNA/ImGui
@@ -135,6 +135,13 @@ See `TESTING.md` for the full per-test reference.
 
 ## 3. Recent changes
 
+- **STAB-0514** — audited the gizmo-drag delta overlay
+  (`MeshCraftApplication_UiOverlays.cpp:95-155`): confirmed correct —
+  `gizmoDragAxisIdx_`/`gizmoDragStartVal_` are always set together with
+  `gizmo_.startDrag()` at all 3 drag-start sites in
+  `MeshCraftApplication_Mouse.cpp`, no stale-read bug possible. Needs a
+  live mouse-down-drag gesture over a gizmo handle to visually re-verify
+  (same class as STAB-0501/0502) — no headless hook, flagged 🟡.
 - **STAB-0513** — verified the spot-light gizmo (small sphere at the apex
   + an 8-segment cone along its direction) with a real pixel-sampling
   test (`test/spot_light_gizmo.mc3.xml` + `spot_light_gizmo_test.py`,
@@ -256,11 +263,12 @@ The only genuine **operational** issue is unrelated to current work:
   not a CNA file change._
 - **S14 visual toggles need a live display to re-verify**:
   `showBoundingBox_` (STAB-0505), `ssaoEnabled_` (STAB-0508),
-  `bloomEnabled_` (STAB-0509), `showWireframeMode_` (STAB-0510), and the
-  translate/rotate gizmo visibility (STAB-0501/0502) — all confirmed
-  correct and safe by code reading, none reachable via the headless
-  `--screenshot` path (no CLI/document/prefs hook exists to force them
-  on). _needs verification by a human with a live display._
+  `bloomEnabled_` (STAB-0509), `showWireframeMode_` (STAB-0510), the
+  translate/rotate gizmo visibility (STAB-0501/0502), and the gizmo-drag
+  delta overlay (STAB-0514) — all confirmed correct and safe by code
+  reading, none reachable via the headless `--screenshot` path (no
+  CLI/document/prefs hook exists to force them on). _needs verification
+  by a human with a live display._
 - **N3–N7 (scripts/sounds/music/triggers/states/meta) are data-only** —
   round-tripped but nothing executes them at runtime. _intended at this
   stage, not a bug._
@@ -377,19 +385,24 @@ No project linter/formatter is configured.
 S14's priority (P0/P1) subset is done; remaining items are P2/P3. Pick in
 `plan.md` order unless noted otherwise:
 
-1. **STAB-0514 — verify delta overlay: shown while dragging a gizmo.**
-   Goal: confirm a "Δ +2.50"-style overlay appears near the cursor while
-   dragging a position gizmo. Files:
-   `src/MeshCraft/MeshCraftApplication_UiOverlays.cpp`. This depends on
-   an active mouse-drag gesture — check whether it's reachable headlessly
-   before assuming it needs a live display like STAB-0501/0502/0505.
+1. **STAB-0515 — verify render stats: vertex/face count updates on
+   selection change.** `plan.md`'s file citation
+   (`MeshCraftApplication_UiOverlays.cpp`) is imprecise — that file's
+   stats overlay (`drawStatsOverlay()`) only shows whole-document
+   `scenePolyStats()` totals, not per-selection. The actual per-selected-
+   object stat lives in `src/MeshCraft/Scene/PropertiesPanel.cpp:1413-
+   1422` (Geometry tab, "Poly stats (C6)"), calling
+   `ctx.renderer->objectPolyStats(*sel0, v, t)` where `sel0` is
+   `ctx.selection.selection().front()` (set at `PropertiesPanel.cpp:37-
+   38`). Check whether this can be verified headlessly or needs the same
+   live-selection treatment as STAB-0505/0514 before flagging.
 
-2. **STAB-0515 through STAB-0525** — remaining S14 items (`plan.md`,
+2. **STAB-0516 through STAB-0525** — remaining S14 items (`plan.md`,
    currently 📋). Continue the established pattern: read the code first;
    if the feature is document-driven or unconditional, build a fixture +
    pixel-sampling test (STAB-0507/0511/0512/0513's pattern); if it's a
    pure runtime UI toggle with no headless hook, confirm correctness by
-   reading and flag 🟡 (STAB-0505/0508/0509/0510's pattern).
+   reading and flag 🟡 (STAB-0505/0508/0509/0510/0514's pattern).
 
 3. Once S14 is closed out, **S15 (Import/Export/Editor Integration)**
    is next and fully untouched — read its `plan.md` rows before starting.
@@ -446,8 +459,8 @@ project's history but not re-checked as part of this update — re-verify
 
 Active plan: plan.md (STAB-XXXX tasks). Gates 0–5 closed, Gate 6
 exhausted for this environment. S0–S13 fully closed. S14 (Rendering and
-Viewport Stability) is in progress: 12 done, 6 flagged (need a live
-display), 12 remaining — pick the next task from section 8.
+Viewport Stability) is in progress: 12 done, 7 flagged (need a live
+display), 11 remaining — pick the next task from section 8.
 
 Reconfigure cmake-build-debug ONLY with CLion's cmake, not the system
 cmake. Editing mc3.xsd or adding a new .cpp file / new add_test()
