@@ -1,4 +1,5 @@
 #include "MeshCraft/MeshCraftApplication.hpp"
+#include "MeshCraft/EditorAlgorithms.hpp"
 
 #include <imgui.h>
 #include <imgui_impl_sdl3.h>
@@ -357,7 +358,7 @@ void MeshCraftApplication::Update(GameTime& gameTime) {
     if (!pendingDropFile_.empty()) {
         std::filesystem::path dropPath = std::move(pendingDropFile_);
         pendingDropFile_.clear();
-        if (dropPath.extension() == ".xml" || dropPath.string().find(".mc3") != std::string::npos)
+        if (isDroppableScenePathAlg(dropPath))
             confirmIfModified(PendingAction::OpenRecentFile, dropPath);
         else
             setStatusMsg("Unsupported file type: " + dropPath.filename().string(), true, 3.0f);

@@ -1,6 +1,6 @@
 # NEXT.md
 
-_Last updated: 2026-07-05 (STAB-0537/0538, prior commit `0f8b45a`, pushed)_
+_Last updated: 2026-07-05 (STAB-0539/0542, prior commit `af94e22`, pushed)_
 
 ---
 
@@ -23,8 +23,8 @@ tasks across sections S0–S20, gated by a Gate 0–6 checklist.
 without an external tool or a live display is done. Sections S0–S14 are
 fully closed (bar a handful of genuinely blocked/flagged items — S14: 17
 done, 13 flagged 🟡, 0 remaining). **S15 (Import/Export/Editor
-Integration), 30 items, is in progress**: 12 done (STAB-0526–0531,
-0533–0538), 1 flagged 🟡 (STAB-0532), 17 not yet started.
+Integration), 30 items, is in progress**: 13 done (STAB-0526–0531,
+0533–0538, 0542), 2 flagged 🟡 (STAB-0532, 0539), 15 not yet started.
 
 **Important architectural decisions:**
 - `mc3/` and `mcb/` are pure C++ static libs with **no** CNA/ImGui
@@ -149,6 +149,28 @@ See `TESTING.md` for the full per-test reference.
 
 ## 3. Recent changes
 
+- **STAB-0542** — confirmed the row's expectation doesn't match
+  long-standing, deliberate behavior: `--screenshot out.png` always
+  writes raw PPM (manually verified: `b'P6\n800 480\n255\n...'` header),
+  never real PNG — `stb_image_write.h` exists only inside tinygltf's
+  fetched deps, never linked into the `MeshCraft` editor target. This
+  is the exact mechanism **8 existing `test/*.py` scripts** (all of
+  S14/S15's new pixel-sampling tests plus pre-existing ones) already
+  rely on; implementing real PNG would mean rewriting all of them and
+  is a genuine new-feature decision, not attempted without an explicit
+  go-ahead. Marked ✅ (the screenshot mechanism itself produces a
+  genuine valid image, extensively proven this session) — documented
+  the PNG/PPM naming mismatch in `plan.md` for whoever revisits it.
+- **STAB-0539** — traced editor drag-drop's full path (SDL
+  `SDL_EVENT_DROP_FILE` watcher → `pendingDropFile_` → `Update()`).
+  **Found and fixed an unwired duplicate**: the real drop-consumption
+  code (`MeshCraftApplication.cpp:360`) duplicated
+  `isDroppableScenePathAlg()`'s exact logic inline instead of calling
+  it — rewired it to call the Alg function directly (needed a new
+  `#include`). Routing logic confirmed correct, already covered
+  headlessly by `testDroppableScenePathDetection`. The actual SDL drop
+  *event* delivery itself needs a live drag-and-drop gesture. 41/41
+  ctest passing (no regressions). Flagged 🟡.
 - **STAB-0537/0538** — confirmed `mc3tomcb`'s existing catch-all
   (`main.cpp:28-47`) already handles both a missing input file and a
   write-protected output path correctly (exit 1, clear stderr message,
@@ -623,37 +645,37 @@ row asks for ("file created; non-zero size"). Marked both ✅ in
 ## 8. Next smallest tasks
 
 **S14 is fully closed.** **S15 (Import/Export/Editor Integration)** is
-in progress: STAB-0526–0531 + 0533–0538 done (12), STAB-0532 flagged 🟡,
-17 remaining. Pick in `plan.md` order unless noted otherwise:
+in progress: STAB-0526–0531 + 0533–0538 + 0542 done (13), STAB-0532/0539
+flagged 🟡, 15 remaining. Pick in `plan.md` order unless noted otherwise:
 
-1. **STAB-0539 — verify editor drag-drop: drop `.mc3.xml` → loads
-   scene.** Files: `src/MeshCraft/MeshCraftApplication.cpp` (SDL
-   `SDL_EVENT_DROP_FILE` watcher, referenced in passing this session at
-   `:332`, routes through `isDroppableScenePathAlg()` in
-   `EditorAlgorithms.hpp`). The extension-routing logic is already
-   CNA-free and may already be tested — check
-   `mc3/test/editor_commands_test.cpp` for
-   `testDroppableScenePathDetection` before assuming a gap; the actual
-   SDL drop *event* delivery itself is genuinely live-only.
+1. **STAB-0540/0541 — includes / embedded assets preserved through
+   editor load/save cycle.** Files:
+   `src/MeshCraft/MeshCraftApplication_FileOps.cpp`. Since
+   `saveFile()`/`saveFileAs()` just call `document_.saveToFile()` (the
+   same writer used everywhere), this is likely already substantially
+   covered by `mc3/test/roundtrip_test.cpp`'s existing include tests
+   (`testInclude`, around line 869, uses `test/mc3_library.mc3.xml` —
+   the same fixture STAB-0536 just fixed the export path for) and the
+   embed tests around line 1190-1218. Check exact coverage before
+   assuming a gap — this session has found both "already covered" and
+   "looks fine but has a real bug" outcomes about equally often, so
+   read carefully either way.
 
-2. **STAB-0542 — verify screenshot export (headless): PNG valid.**
-   Files: `src/MeshCraft/main.cpp`. **Possible discrepancy spotted in
-   passing**: `saveScreenshot()` (`MeshCraftApplication_Commands.cpp`)
-   writes a **PPM** file (`"P6\n"` header), not PNG, despite this row's
-   title/verification method saying "PNG valid" / "PNG magic bytes" —
-   check whether this is just an imprecise row (rename to PPM in the
-   verification note) or a genuine gap (no PNG output path exists at
-   all) before writing a test.
+2. **STAB-0543 — verify GLB export settings: texture embedding choice
+   applied.** Files: `MeshCraftApplication_FileOps.cpp`. Look for
+   `glbAllowApproxCSG_`'s sibling settings (an "embed textures" flag)
+   and whether `GltfExporter` has a corresponding option already tested
+   by the `mc3togltf_*` ctest suite.
 
-3. **STAB-0540/0541/0543-0549+** — remaining S15 items (`plan.md`,
-   several marked 🧪 or 📋). Don't assume 🧪 means "needs a live UI"
-   without checking the actual code path first — this session found
-   `runGltfExport()` (STAB-0526), the pre-existing `mc3tomcb_roundtrip`
-   test (STAB-0530/0531), and `mc3tomcb`'s error handling
-   (STAB-0537/0538) all turned out to already be correct/headlessly
-   testable, needing only new test coverage, not new code — while
-   STAB-0534/0535/0536 turned out to have real bugs hiding behind
-   plausible-looking code. Read before assuming either way.
+3. **STAB-0544-0549+** — remaining S15 items (`plan.md`, several marked
+   🧪 or 📋). Don't assume 🧪 means "needs a live UI" without checking
+   the actual code path first — this session found `runGltfExport()`
+   (STAB-0526), the pre-existing `mc3tomcb_roundtrip` test
+   (STAB-0530/0531), and `mc3tomcb`'s error handling (STAB-0537/0538)
+   all turned out to already be correct/headlessly testable, needing
+   only new test coverage — while STAB-0534/0535/0536 had real bugs
+   hiding behind plausible-looking code, and STAB-0539 had an unwired
+   duplicate. Read before assuming either way.
 
 ---
 
@@ -695,8 +717,8 @@ verified improvement. Run the relevant build/test command from section 7
 and confirm cmake-build-debug still passes (41/41, or the new total if
 you registered a new ctest). Update NEXT.md after finishing.
 
-Current branch: develop, prior commit `0f8b45a` (STAB-0536) — the
-STAB-0537/0538 commit lands right after this NEXT.md update (git push
+Current branch: develop, prior commit `af94e22` (STAB-0537/0538) — the
+STAB-0539/0542 commit lands right after this NEXT.md update (git push
 was denied earlier in a prior session, then started working again
 unprompted — see section 4; if it happens again, keep committing
 locally and retry later). Build dir: cmake-build-debug/ (Debug, CLion
@@ -713,8 +735,8 @@ project's history but not re-checked as part of this update — re-verify
 Active plan: plan.md (STAB-XXXX tasks). Gates 0–5 closed, Gate 6
 exhausted for this environment. S0–S14 fully closed (S14: 17 done, 13
 flagged, 0 remaining). S15 (Import/Export/Editor Integration) is in
-progress: STAB-0526–0531 + 0533–0538 done (12), STAB-0532 flagged 🟡,
-17 remaining — pick the first task from section 8.
+progress: STAB-0526–0531 + 0533–0538 + 0542 done (13), STAB-0532/0539
+flagged 🟡, 15 remaining — pick the first task from section 8.
 
 Reconfigure cmake-build-debug ONLY with CLion's cmake, not the system
 cmake. Editing mc3.xsd or adding a new .cpp file / new add_test()
