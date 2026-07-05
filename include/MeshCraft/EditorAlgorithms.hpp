@@ -1274,6 +1274,90 @@ inline Mc3::Mc3Document exportSubtreeTemplateAlg(
     return tmp;
 }
 
+// ── Export/import a single material (STAB-0544/0545) ─────────────────────────
+//
+// Mirrors the Material Export/Import dialogs' button bodies
+// (MeshCraftApplication_UiOverlays.cpp:1626-1637 and :1664-1688), minus the
+// file I/O and setStatusMsg(). Before this fix, exportMaterialAlg's real-code
+// counterpart wrote only the material itself — no referenced textures — so
+// an exported .mc3mat.xml file would contain a dangling base_color_texture
+// (etc.) reference wherever it was re-imported standalone, silently losing
+// its appearance (STAB-0500's gray fallback). The import side didn't even
+// look at loaded.textures at all, so re-importing that same (now-fixed)
+// file would still drop them. Both are fixed together here: export collects
+// the material's referenced textures (same pattern as exportSelectionAlg /
+// exportSubtreeTemplateAlg); import re-adds them, reusing an existing
+// texture under the same key only if its `uri` actually matches (otherwise
+// suffixing a new key and re-pointing the material's own reference field —
+// a *different* texture must never silently masquerade as the one this
+// material was exported with).
+
+inline Mc3::Mc3Document exportMaterialAlg(const Mc3::Mc3Document& doc, const std::string& matId)
+{
+    Mc3::Mc3Document tmp;
+    auto it = doc.materials.find(matId);
+    if (it == doc.materials.end()) return tmp;
+    tmp.materials[matId] = it->second;
+
+    const auto& m = it->second;
+    for (const auto& tk : { m.baseColorTexture, m.normalTexture, m.emissiveTexture,
+                             m.metallicRoughnessTexture, m.occlusionTexture }) {
+        if (tk.empty()) continue;
+        auto texIt = doc.textures.find(tk);
+        if (texIt != doc.textures.end()) tmp.textures[tk] = texIt->second;
+    }
+    return tmp;
+}
+
+// Imports every material in `loaded` into `dest`, suffixing the material's
+// own key on collision (_2, _3, ...) and renaming the copy's `name` field to
+// match, exactly like mergeDocumentsAlg's material handling. Any texture the
+// material references (found in loaded.textures) is imported alongside it:
+// reused as-is if dest already has a texture under that key with the same
+// `uri`, otherwise inserted under a suffixed key with the material's own
+// reference field re-pointed to match. Returns the number of materials
+// imported.
+
+inline int importMaterialsAlg(Mc3::Mc3Document& dest, const Mc3::Mc3Document& loaded,
+                               std::string* lastKeyOut = nullptr)
+{
+    auto importTexRef = [&](std::string& texRef) {
+        if (texRef.empty()) return;
+        auto texIt = loaded.textures.find(texRef);
+        if (texIt == loaded.textures.end()) return;
+
+        auto existing = dest.textures.find(texRef);
+        if (existing != dest.textures.end() && existing->second.uri == texIt->second.uri)
+            return; // same texture already present under this key — reuse it
+
+        std::string key = texRef;
+        int n = 2;
+        while (dest.textures.count(key)) key = texRef + "_" + std::to_string(n++);
+        dest.textures[key] = texIt->second;
+        texRef = key;
+    };
+
+    int added = 0;
+    for (const auto& [id, srcMat] : loaded.materials) {
+        std::string key = id;
+        int n = 2;
+        while (dest.materials.count(key)) key = id + "_" + std::to_string(n++);
+
+        Mc3::Mc3Material mat = srcMat;
+        importTexRef(mat.baseColorTexture);
+        importTexRef(mat.normalTexture);
+        importTexRef(mat.emissiveTexture);
+        importTexRef(mat.metallicRoughnessTexture);
+        importTexRef(mat.occlusionTexture);
+
+        dest.materials[key] = mat;
+        dest.materials[key].name = key;
+        if (lastKeyOut) *lastKeyOut = key;
+        ++added;
+    }
+    return added;
+}
+
 // ── Drag-drop file routing (STAB-0275) ────────────────────────────────────────
 //
 // Mirrors the extension check in MeshCraftApplication's SDL_EVENT_DROP_FILE

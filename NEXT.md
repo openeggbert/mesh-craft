@@ -1,6 +1,6 @@
 # NEXT.md
 
-_Last updated: 2026-07-05 (STAB-0543, prior commit `d894ddf`, not yet pushed)_
+_Last updated: 2026-07-05 (STAB-0544/0545, prior commit `b9b5646`, pushed)_
 
 ---
 
@@ -23,8 +23,8 @@ tasks across sections S0–S20, gated by a Gate 0–6 checklist.
 without an external tool or a live display is done. Sections S0–S14 are
 fully closed (bar a handful of genuinely blocked/flagged items — S14: 17
 done, 13 flagged 🟡, 0 remaining). **S15 (Import/Export/Editor
-Integration), 30 items, is in progress**: 16 done (STAB-0526–0531,
-0533–0538, 0540–0543), 2 flagged 🟡 (STAB-0532, 0539), 12 not yet
+Integration), 30 items, is in progress**: 18 done (STAB-0526–0531,
+0533–0538, 0540–0545), 2 flagged 🟡 (STAB-0532, 0539), 10 not yet
 started.
 
 **Important architectural decisions:**
@@ -150,6 +150,24 @@ See `TESTING.md` for the full per-test reference.
 
 ## 3. Recent changes
 
+- **STAB-0544/0545** — **found and fixed a real bug, the 3rd instance
+  of this session's "export drops textures" pattern** (after
+  STAB-0536): the Material Export dialog copied only the material
+  itself into the exported `.mc3mat.xml` — no referenced textures —
+  and the Import dialog never looked at a file's `<textures>` section
+  at all, so even a fixed export would still lose its texture on
+  reimport. Fixed both together: added `exportMaterialAlg()` (same
+  texture-collection pattern as `exportSelectionAlg`/
+  `exportSubtreeTemplateAlg`) and `importMaterialsAlg()` (imports
+  referenced textures, suffixing + re-pointing the material's
+  reference field on a genuine collision, reusing an existing texture
+  only if its `uri` actually matches). Found the pre-existing
+  material-suffix logic was already correct, but **texture-reference
+  remapping on collision was the real STAB-0545 gap** — without it, an
+  imported material could silently end up pointing at a pre-existing,
+  unrelated texture. Added 22 new assertions across 4 test functions.
+  42/42 ctest passing (same count, more assertions inside the existing
+  `mc3_commands` ctest).
 - **STAB-0543** — no "Embed textures" setting exists anywhere (image
   embedding is fully automatic, tied to output format:
   `GltfExporter.cpp:1109-1111`, `embedImagesNow = format == GLB`), but
@@ -672,30 +690,35 @@ row asks for ("file created; non-zero size"). Marked both ✅ in
 ## 8. Next smallest tasks
 
 **S14 is fully closed.** **S15 (Import/Export/Editor Integration)** is
-in progress: STAB-0526–0531 + 0533–0538 + 0540–0543 done (16),
-STAB-0532/0539 flagged 🟡, 12 remaining. Pick in `plan.md` order unless
+in progress: STAB-0526–0531 + 0533–0538 + 0540–0545 done (18),
+STAB-0532/0539 flagged 🟡, 10 remaining. Pick in `plan.md` order unless
 noted otherwise:
 
-1. **STAB-0544/0545 — material export/import (`.mc3mat.xml`)
-   round-trip + collision suffix.** Files:
-   `src/MeshCraft/MeshCraftApplication_UiOverlays.cpp` (`:1654`+,
-   "Import from .mc3mat.xml file" already located this session). Check
-   whether the export/import functions are plain document-level calls
-   (like `runGltfExport()`/`mergeSceneFromFile()` turned out to be) —
-   likely testable directly, and the collision-suffix logic
-   (STAB-0545) may follow the exact same pattern already fixed/tested
-   for materials in `mergeDocumentsAlg()` (STAB-0534/0535).
+1. **STAB-0546 — verify `mc3togltf` CLI: no output file created on
+   error.** Files: `mc3togltf/src/main.cpp`. Check whether the exporter
+   ever partially writes the output file before hitting an error (e.g.
+   `WriteGltfSceneToFile` failing after some setup) — if tinygltf
+   writes atomically or the error path always occurs before any file
+   write, this may just need a quick confirming test rather than a fix.
 
-2. **STAB-0546-0549+** — remaining S15 items (`plan.md`, several marked
-   🧪 or 📋). Don't assume 🧪 means "needs a live UI" without checking
-   the actual code path first — this session found `runGltfExport()`
-   (STAB-0526), the pre-existing `mc3tomcb_roundtrip` test
-   (STAB-0530/0531), `mc3tomcb`'s error handling (STAB-0537/0538), and
-   STAB-0540/0541 all turned out to already be correct/headlessly
-   testable, needing only new test coverage — while
-   STAB-0534/0535/0536/0543 had real bugs or wrong assumptions hiding
-   behind plausible-looking code/row wording, and STAB-0539 had an
-   unwired duplicate. Read before assuming either way.
+2. **STAB-0547 — verify `mc3togltf` help text accurate.** Files:
+   `mc3togltf/src/main.cpp`. `printUsage()` is already visible (lines
+   ~15-33) — straightforward to diff its listed flags against what
+   `main()`'s arg-parsing loop actually recognizes (`--allow-approximate-csg`,
+   `--stats`).
+
+3. **STAB-0548-0549+** — remaining S15 items (`plan.md`). Don't assume
+   🧪 means "needs a live UI" without checking the actual code path
+   first — this session found `runGltfExport()` (STAB-0526), the
+   pre-existing `mc3tomcb_roundtrip` test (STAB-0530/0531),
+   `mc3tomcb`'s error handling (STAB-0537/0538), and STAB-0540/0541 all
+   turned out to already be correct/headlessly testable, needing only
+   new test coverage — while STAB-0534/0535/0536/0543/0544/0545 had
+   real bugs or wrong assumptions hiding behind plausible-looking
+   code/row wording (three of them the *exact same* "export drops
+   referenced textures" pattern — check any remaining export-adjacent
+   row for it), and STAB-0539 had an unwired duplicate. Read before
+   assuming either way.
 
 ---
 
@@ -737,8 +760,8 @@ verified improvement. Run the relevant build/test command from section 7
 and confirm cmake-build-debug still passes (42/42, or the new total if
 you registered a new ctest). Update NEXT.md after finishing.
 
-Current branch: develop, prior commit `d894ddf` (STAB-0539/0542) — the
-STAB-0540/0541/0543 commit lands right after this NEXT.md update (git
+Current branch: develop, prior commit `b9b5646` (STAB-0540/0541/0543) —
+the STAB-0544/0545 commit lands right after this NEXT.md update (git
 push was denied earlier in a prior session, then started working again
 unprompted — see section 4; if it happens again, keep committing
 locally and retry later). Build dir: cmake-build-debug/ (Debug, CLion
@@ -755,8 +778,8 @@ project's history but not re-checked as part of this update — re-verify
 Active plan: plan.md (STAB-XXXX tasks). Gates 0–5 closed, Gate 6
 exhausted for this environment. S0–S14 fully closed (S14: 17 done, 13
 flagged, 0 remaining). S15 (Import/Export/Editor Integration) is in
-progress: STAB-0526–0531 + 0533–0538 + 0540–0543 done (16),
-STAB-0532/0539 flagged 🟡, 12 remaining — pick the first task from
+progress: STAB-0526–0531 + 0533–0538 + 0540–0545 done (18),
+STAB-0532/0539 flagged 🟡, 10 remaining — pick the first task from
 section 8.
 
 Reconfigure cmake-build-debug ONLY with CLion's cmake, not the system

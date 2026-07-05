@@ -1873,6 +1873,115 @@ static void testExportSubtreeTemplateIncludesDependentMaterialsAndTextures()
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Material export/import round-trip + collision handling (STAB-0544/0545):
+// before this fix, exporting a single material dropped any texture it
+// referenced, and importing never looked at a file's <textures> section at
+// all -- so even a correctly-fixed export would still lose its texture on
+// reimport. Both sides are fixed together.
+// ─────────────────────────────────────────────────────────────────────────────
+
+static void testExportMaterialIncludesReferencedTexture()
+{
+    Mc3Document doc;
+    doc.materials["stone"] = Mc3::Mc3Material("stone", {0.5f, 0.45f, 0.4f, 1.0f});
+    doc.materials["stone"].baseColorTexture = "stoneTex";
+    doc.materials["unrelated"] = Mc3::Mc3Material("unrelated", {1, 1, 1, 1});
+    doc.textures["stoneTex"]     = Mc3::Mc3Texture("stoneTex", "stone.png");
+    doc.textures["unrelatedTex"] = Mc3::Mc3Texture("unrelatedTex", "unrelated.png");
+
+    Mc3Document tmp = exportMaterialAlg(doc, "stone");
+
+    CHECK(tmp.materials.count("stone") == 1, "Export Material: the material itself is included");
+    CHECK(tmp.textures.count("stoneTex") == 1,
+          "Export Material: texture referenced by the material is included");
+    CHECK(tmp.materials.count("unrelated") == 0,
+          "Export Material: unrelated material is excluded");
+    CHECK(tmp.textures.count("unrelatedTex") == 0,
+          "Export Material: unrelated texture is excluded");
+
+    // Round-trip through the real XML writer/parser.
+    auto path = std::filesystem::temp_directory_path() / "mc3_material_export_test.mc3.xml";
+    tmp.saveToFile(path);
+    Mc3Document reloaded = Mc3Document::loadFromFile(path);
+    std::filesystem::remove(path);
+
+    CHECK(reloaded.materials.count("stone") == 1, "Export Material: material survives save/reload");
+    CHECK(reloaded.textures.count("stoneTex") == 1, "Export Material: texture survives save/reload");
+    CHECK(reloaded.materials.at("stone").baseColorTexture == "stoneTex",
+          "Export Material: material's texture reference still points at the reloaded texture's key");
+}
+
+static void testImportMaterialsNoCollision()
+{
+    Mc3Document dest;
+    Mc3Document loaded;
+    loaded.materials["stone"] = Mc3::Mc3Material("stone", {0.5f, 0.45f, 0.4f, 1.0f});
+    loaded.materials["stone"].baseColorTexture = "stoneTex";
+    loaded.textures["stoneTex"] = Mc3::Mc3Texture("stoneTex", "stone.png");
+
+    std::string lastKey;
+    int added = importMaterialsAlg(dest, loaded, &lastKey);
+
+    CHECK(added == 1, "Import Material: returns the number of materials imported");
+    CHECK(lastKey == "stone", "Import Material: no collision — key is unchanged");
+    CHECK(dest.materials.count("stone") == 1, "Import Material: material is present under its key");
+    CHECK(dest.textures.count("stoneTex") == 1, "Import Material: referenced texture is imported alongside it");
+    CHECK(dest.materials.at("stone").baseColorTexture == "stoneTex",
+          "Import Material: material's texture reference is unchanged when there's no collision");
+}
+
+static void testImportMaterialsCollisionHandling()
+{
+    Mc3Document dest;
+    dest.materials["stone"] = Mc3::Mc3Material("stone", {0.1f, 0.1f, 0.1f, 1.0f}); // pre-existing, different
+    dest.textures["stoneTex"] = Mc3::Mc3Texture("stoneTex", "existing_stone.png"); // pre-existing, different uri
+
+    Mc3Document loaded;
+    loaded.materials["stone"] = Mc3::Mc3Material("stone", {0.9f, 0.8f, 0.7f, 1.0f});
+    loaded.materials["stone"].baseColorTexture = "stoneTex";
+    loaded.textures["stoneTex"] = Mc3::Mc3Texture("stoneTex", "imported_stone.png");
+
+    std::string lastKey;
+    int added = importMaterialsAlg(dest, loaded, &lastKey);
+
+    CHECK(added == 1, "Import Material collision: returns the number of materials imported");
+    CHECK(lastKey == "stone_2", "Import Material collision: colliding material key is suffixed");
+    CHECK(dest.materials.count("stone") == 1 && dest.materials.at("stone").baseColor[0] == 0.1f,
+          "Import Material collision: pre-existing 'stone' material is untouched");
+    CHECK(dest.materials.count("stone_2") == 1 && dest.materials.at("stone_2").baseColor[0] == 0.9f,
+          "Import Material collision: imported material is inserted under the suffixed key");
+    CHECK(dest.materials.at("stone_2").name == "stone_2",
+          "Import Material collision: suffixed material's name field matches its new key");
+
+    CHECK(dest.textures.count("stoneTex") == 1 && dest.textures.at("stoneTex").uri == "existing_stone.png",
+          "Import Material collision: pre-existing 'stoneTex' texture is untouched");
+    CHECK(dest.textures.count("stoneTex_2") == 1 && dest.textures.at("stoneTex_2").uri == "imported_stone.png",
+          "Import Material collision: imported (different) texture is inserted under a suffixed key");
+    CHECK(dest.materials.at("stone_2").baseColorTexture == "stoneTex_2",
+          "Import Material collision: suffixed material's texture reference is re-pointed to the suffixed "
+          "texture key, not left dangling at the pre-existing unrelated texture");
+}
+
+static void testImportMaterialsReusesIdenticalExistingTexture()
+{
+    Mc3Document dest;
+    dest.textures["stoneTex"] = Mc3::Mc3Texture("stoneTex", "stone.png"); // same uri as import
+
+    Mc3Document loaded;
+    loaded.materials["stone2"] = Mc3::Mc3Material("stone2", {0.9f, 0.8f, 0.7f, 1.0f});
+    loaded.materials["stone2"].baseColorTexture = "stoneTex";
+    loaded.textures["stoneTex"] = Mc3::Mc3Texture("stoneTex", "stone.png"); // identical uri
+
+    int added = importMaterialsAlg(dest, loaded);
+
+    CHECK(added == 1, "Import Material reuse: returns the number of materials imported");
+    CHECK(dest.textures.size() == 1,
+          "Import Material reuse: an identical existing texture is reused, not duplicated under a suffix");
+    CHECK(dest.materials.at("stone2").baseColorTexture == "stoneTex",
+          "Import Material reuse: material's texture reference still points at the reused key");
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Drag-drop MC3 file routing (STAB-0275)
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -2731,6 +2840,10 @@ int main()
     testExportSelectionOnlySelectedObjects();
     testExportSelectionIncludesDependentMaterialsAndTextures();
     testExportSubtreeTemplateIncludesDependentMaterialsAndTextures();
+    testExportMaterialIncludesReferencedTexture();
+    testImportMaterialsNoCollision();
+    testImportMaterialsCollisionHandling();
+    testImportMaterialsReusesIdenticalExistingTexture();
     testDroppableScenePathDetection();
     testInvalidFileLoadThrowsNamedError();
     testUndoRedoAnimKeyframe();

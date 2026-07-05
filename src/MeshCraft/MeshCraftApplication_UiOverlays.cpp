@@ -1625,8 +1625,7 @@ void MeshCraftApplication::drawDialogs()
         if (!canExp) ImGui::BeginDisabled();
         if ((enter || ImGui::Button("Export", ImVec2(90, 0))) && canExp) {
             try {
-                Mc3::Mc3Document tmp;
-                tmp.materials[matExportId_] = document_.materials.at(matExportId_);
+                Mc3::Mc3Document tmp = exportMaterialAlg(document_, matExportId_);
                 tmp.saveToFile(matExportBuf_);
                 setStatusMsg("Exported material '" + matExportId_ + "' → " + matExportBuf_);
                 ImGui::CloseCurrentPopup();
@@ -1669,18 +1668,7 @@ void MeshCraftApplication::drawDialogs()
                                  sizeof(matImportErr_)-1);
                 } else {
                     pushUndo();
-                    int added = 0;
-                    for (auto& [id, mat] : loaded.materials) {
-                        // avoid overwriting without confirmation: suffix if exists
-                        std::string key = id;
-                        int n = 2;
-                        while (document_.materials.count(key))
-                            key = id + "_" + std::to_string(n++);
-                        document_.materials[key] = mat;
-                        document_.materials[key].name = key;
-                        selectedMaterialKey_ = key;
-                        ++added;
-                    }
+                    int added = importMaterialsAlg(document_, loaded, &selectedMaterialKey_);
                     modified_ = true; updateWindowTitle();
                     setStatusMsg("Imported " + std::to_string(added) + " material(s) from " +
                                  std::string(matImportBuf_));
