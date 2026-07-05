@@ -927,6 +927,91 @@ static void testInclude(const std::string& featuresXmlPath) {
 }
 
 // ---------------------------------------------------------------------------
+// Include across directories (STAB-0550): a texture path or OBJ meshSource
+// that's relative to the *included* file's own directory must still resolve
+// correctly once merged into a main document that lives in a *different*
+// directory. testInclude() above can't catch this because its fixtures
+// (scene_with_include.mc3.xml + mc3_library.mc3.xml) happen to share the
+// same directory, where doc.sourcePath and the include's own directory are
+// identical by coincidence.
+// ---------------------------------------------------------------------------
+
+static void testIncludeAcrossDirectoriesRebasesRelativePaths() {
+    auto root = std::filesystem::temp_directory_path() /
+                ("mc3_include_dirs_" + std::to_string(tmpIdx++));
+    auto assetsDir = root / "assets";
+    auto scenesDir = root / "scenes";
+    std::error_code ec;
+    std::filesystem::create_directories(assetsDir / "textures", ec);
+    std::filesystem::create_directories(scenesDir, ec);
+
+    // The actual texture file the library's relative path should resolve to.
+    auto realTexturePath = assetsDir / "textures" / "tree.png";
+    { std::ofstream f(realTexturePath); f << "fake png bytes"; }
+
+    auto libPath = assetsDir / "lib.mc3.xml";
+    {
+        std::ofstream f(libPath);
+        f << R"(<?xml version="1.0" encoding="UTF-8"?>
+<mc3 version="0.3" model="Lib">
+  <textures>
+    <texture id="treeTex" uri="textures/tree.png"/>
+  </textures>
+  <definitions>
+    <definition id="tree">
+      <mesh name="Tree" src="models/tree.obj"/>
+    </definition>
+  </definitions>
+</mc3>
+)";
+    }
+
+    auto scenePath = scenesDir / "scene.mc3.xml";
+    {
+        std::ofstream f(scenePath);
+        f << R"(<?xml version="1.0" encoding="UTF-8"?>
+<mc3 version="0.3" model="Scene">
+  <include file="../assets/lib.mc3.xml"/>
+  <objects>
+    <instance name="Tree1" definition="tree" position="0 0 0"/>
+  </objects>
+</mc3>
+)";
+    }
+
+    try {
+        auto doc = Mc3Document::loadFromFile(scenePath);
+
+        CHECK(doc.textures.count("treeTex") == 1, "include across dirs: included texture is present");
+        if (doc.textures.count("treeTex")) {
+            auto resolved = std::filesystem::weakly_canonical(
+                doc.sourcePath / doc.textures.at("treeTex").uri, ec);
+            auto expected = std::filesystem::weakly_canonical(realTexturePath, ec);
+            CHECK(resolved == expected,
+                  "include across dirs: rebased texture uri resolves to the library's real "
+                  "file (" + resolved.string() + " == " + expected.string() + ")");
+        }
+
+        CHECK(doc.definitions.count("tree") == 1, "include across dirs: included definition is present");
+        if (doc.definitions.count("tree") && doc.definitions.at("tree")) {
+            const auto& defObj = doc.definitions.at("tree");
+            auto resolvedMesh = std::filesystem::weakly_canonical(
+                doc.sourcePath / defObj->meshSource, ec);
+            auto expectedMesh = std::filesystem::weakly_canonical(
+                assetsDir / "models" / "tree.obj", ec);
+            CHECK(resolvedMesh == expectedMesh,
+                  "include across dirs: rebased definition meshSource resolves relative to "
+                  "the library's own directory (" + resolvedMesh.string() + " == " +
+                  expectedMesh.string() + ")");
+        }
+    } catch (const std::exception& e) {
+        fail(std::string("include across directories test threw: ") + e.what());
+    }
+
+    std::filesystem::remove_all(root, ec);
+}
+
+// ---------------------------------------------------------------------------
 
 static void testFeaturesXmlLoads(const std::string& path) {
     try {
@@ -2077,6 +2162,7 @@ int main(int argc, char* argv[]) {
     testTorusMinorRadius();
     testPlaneSizeVec2();
     testPlaneSizeLegacyVec3();
+    testIncludeAcrossDirectoriesRebasesRelativePaths();
 
     if (argc >= 2) {
         testFeaturesXmlLoads(argv[1]);

@@ -1,6 +1,6 @@
 # NEXT.md
 
-_Last updated: 2026-07-05 (STAB-0548/0549, prior commit `0f36ab1`, pushed)_
+_Last updated: 2026-07-05 (STAB-0550, prior commit `1d382b0`, pushed)_
 
 ---
 
@@ -20,12 +20,12 @@ tasks across sections S0–S20, gated by a Gate 0–6 checklist.
 
 **Current phase:** Stabilization. Gates 0–5 are fully closed. **Gate 6
 (Documentation)** is exhausted for this environment — everything reachable
-without an external tool or a live display is done. Sections S0–S14 are
-fully closed (bar a handful of genuinely blocked/flagged items — S14: 17
-done, 13 flagged 🟡, 0 remaining). **S15 (Import/Export/Editor
-Integration), 30 items, is in progress**: 22 done (STAB-0526–0531,
-0533–0538, 0540–0549), 2 flagged 🟡 (STAB-0532, 0539), 6 not yet
-started.
+without an external tool or a live display is done. Sections S0–S15 are
+now **fully closed** (bar a handful of genuinely blocked/flagged items —
+S14: 17 done, 13 flagged 🟡, 0 remaining; S15: 23 done, 2 flagged 🟡, 0
+remaining). **S16 (Cross-Platform Stability)**, 30 items, is next and
+fully untouched — its first item (STAB-0551, P0, "Linux desktop build
+and run") is already flagged 🟡 in `plan.md`.
 
 **Important architectural decisions:**
 - `mc3/` and `mcb/` are pure C++ static libs with **no** CNA/ImGui
@@ -66,7 +66,8 @@ started.
   with §7's commands if you depend on this.
 
 ### Tests
-**46/46 CTest pass** in Debug (`ctest -N` lists all 46 by name). Notably:
+**46/46 CTest pass** in Debug (`ctest -N` lists all 46 by name; STAB-0550
+added assertions to an existing ctest, not a new one). Notably:
 - `mc3_commands` (~450 assertions): editor command algorithms, undo/redo,
   auto-save/backup, keybinding/macro persistence, hierarchy filtering,
   AI-panel lifecycle, viewport ray-cast picking, click-selection
@@ -150,6 +151,30 @@ See `TESTING.md` for the full per-test reference.
 
 ## 3. Recent changes
 
+- **STAB-0550** — **found and fixed a real, deeper bug: the 4th
+  instance of this session's "reference silently breaks across a
+  merge/import boundary" pattern, but this time in the core
+  `<include>` mechanism itself** (closing out S15). There's no
+  dedicated "import subtree template" function — a template exported
+  by `exportSubtreeAsTemplate()` (STAB-0536) comes back in via the same
+  `<include>` mechanism `mc3_library.mc3.xml` uses. `Mc3XmlParser.cpp`'s
+  `mergeInclude()` stored an included file's texture `uri`/mesh `src`
+  paths completely unadjusted, but everything resolves against a
+  single `doc.sourcePath` (the *main* file's directory) — so any
+  relative path inside an included file living in a *different*
+  directory than the main scene silently resolved against the wrong
+  location. Went unnoticed because both existing include fixtures
+  happen to share the same directory by coincidence. Fixed by adding
+  `rebaseRelativePath()` + `rebaseDefinitionMeshSources()`, wired into
+  `mergeInclude()` for textures (incl. external SVG), and
+  included-definition mesh sources — in-memory only, never leaks into
+  a saved file since the writer already skips re-emitting included
+  content. Added a real two-directory fixture test with an actual
+  texture file on disk, confirming the rebased path resolves to the
+  real file, not just a plausible-looking string. 46/46 ctest passing
+  (same count, more assertions inside the existing `mc3_roundtrip`
+  ctest). **This closes out S15 entirely** (23 done, 2 flagged 🟡, 0
+  remaining) — **S16 (Cross-Platform Stability) is next.**
 - **STAB-0548/0549** — STAB-0548 confirmed correct by tracing `Instance`
   resolution (`GltfExporter.cpp:552-587`): definitions from `<include>`
   and the scene's own `<definitions>` are unified into `doc.definitions`
@@ -721,43 +746,38 @@ row asks for ("file created; non-zero size"). Marked both ✅ in
 
 ## 8. Next smallest tasks
 
-**S14 is fully closed.** **S15 (Import/Export/Editor Integration)** is
-almost done: STAB-0526–0531 + 0533–0538 + 0540–0549 done (22),
-STAB-0532/0539 flagged 🟡, **only STAB-0550 left**. **S16
-(Cross-Platform Stability)**, 30 items, starts right after — its first
-item (STAB-0551, P0, "Linux desktop build and run") is already flagged
-🟡 in `plan.md`.
+**S14 and S15 are both fully closed.** **S16 (Cross-Platform
+Stability)**, 30 items, is next and completely untouched. Pick in
+`plan.md` order unless noted otherwise:
 
-1. **STAB-0550 — verify subtree template import resolves relative
-   paths (the last S15 item).** Files:
-   `src/MeshCraft/MeshCraftApplication_Commands.cpp`. The row asks:
-   when a `.mc3.xml` template exported by `exportSubtreeAsTemplate()`
-   (STAB-0536, just fixed to carry its own materials/textures) is
-   *imported elsewhere*, do its texture `uri`s resolve relative to the
-   *template file's own directory*, not the importing scene's
-   directory? Find the template-import code path (look near
-   `exportSubtreeAsTemplate`/`convertToDefinitionAlg` in
-   `MeshCraftApplication_Commands.cpp`, or check whether "import" here
-   just means `Mc3Document::loadFromFile()` + merge, in which case this
-   may already be correct by construction since `doc.sourcePath` is
-   always set from whichever file was actually loaded).
+1. **STAB-0551 — Linux desktop build and run (P0, already flagged 🟡
+   in `plan.md` from before this session touched it).** Files:
+   `CMakeLists.txt`. This environment *is* Linux x86_64, and every STAB
+   task this whole session has repeatedly done a full reconfigure +
+   rebuild + `ctest` here (46/46 currently green) — check whether the
+   pre-existing 🟡 just reflects "written before verification happened"
+   and can now be confirmed ✅ from this session's own extensive
+   evidence, or whether it's flagging something specific (e.g. the
+   interactive/windowed run path, not just headless `--screenshot`)
+   that's still genuinely unverified.
 
-2. **S16 (Cross-Platform Stability)** starts at STAB-0551. Read its
-   `plan.md` rows before starting — several (MinGW/Emscripten builds,
-   OS-specific config dirs, clipboard) look like they may need tools or
-   platforms not available in this environment, similar to the
-   STAB-0642/0643/0650 items already flagged as blocked. Don't assume 🧪
-   means "needs a live UI" without checking the actual code path first
-   — this session found `runGltfExport()` (STAB-0526), the pre-existing
-   `mc3tomcb_roundtrip` test (STAB-0530/0531), `mc3tomcb`'s error
-   handling (STAB-0537/0538), STAB-0540/0541, STAB-0546, and STAB-0548
-   all turned out to already be correct/headlessly testable, needing
-   only new test coverage — while STAB-0534/0535/0536/0543/0544/0545/0547
-   had real bugs or wrong assumptions hiding behind plausible-looking
-   code/row wording (three of them the *exact same* "export drops
-   referenced textures" pattern — check any remaining export-adjacent
-   row for it), and STAB-0539 had an unwired duplicate. Read before
-   assuming either way.
+2. **STAB-0552/0553 — MinGW cross-compile / Emscripten web build.**
+   Files: `CMakeLists.txt`. Check whether the cross-compile toolchains
+   (`x86_64-w64-mingw32-cmake`, `emcmake`) are actually installed in
+   this environment before attempting either — if not, these are
+   genuinely blocked-on-missing-tool items, same class as the already-
+   flagged STAB-0642/0643/0650.
+
+3. **STAB-0554-0559+** — path separators, UTF-8 filenames, paths with
+   spaces, non-ASCII object names, OS config dirs, clipboard paste.
+   Several of these (UTF-8/spaces/non-ASCII filenames, path separator
+   handling) look like straightforward, headlessly-testable
+   `mc3`-lib-level checks (load/save round-trip with an unusual path or
+   object name) — good candidates before the platform-specific build
+   items. Don't assume a row needs a live UI or another OS without
+   checking the actual code path first — this session found real bugs
+   and wrong assumptions roughly as often as "already correct, just
+   needed a test" outcomes, so read carefully either way.
 
 ---
 
@@ -799,9 +819,9 @@ verified improvement. Run the relevant build/test command from section 7
 and confirm cmake-build-debug still passes (46/46, or the new total if
 you registered a new ctest). Update NEXT.md after finishing.
 
-Current branch: develop, prior commit `0f36ab1` (STAB-0546/0547) — the
-STAB-0548/0549 commit lands right after this NEXT.md update (git push
-was denied earlier in a prior session, then started working again
+Current branch: develop, prior commit `1d382b0` (STAB-0548/0549) — the
+STAB-0550 commit lands right after this NEXT.md update (git push was
+denied earlier in a prior session, then started working again
 unprompted — see section 4; if it happens again, keep committing
 locally and retry later). Build dir: cmake-build-debug/ (Debug, CLion
 cmake 4.2.2) — full rebuilt and 46/46 ctest verified clean (includes a
@@ -815,11 +835,10 @@ project's history but not re-checked as part of this update — re-verify
 (with the same new flag) before relying on them.
 
 Active plan: plan.md (STAB-XXXX tasks). Gates 0–5 closed, Gate 6
-exhausted for this environment. S0–S14 fully closed (S14: 17 done, 13
-flagged, 0 remaining). S15 (Import/Export/Editor Integration) is
-almost done: STAB-0526–0531 + 0533–0538 + 0540–0549 done (22),
-STAB-0532/0539 flagged 🟡, only STAB-0550 left — pick it up from
-section 8. S16 (Cross-Platform Stability) starts right after.
+exhausted for this environment. S0–S15 fully closed (S14: 17 done, 13
+flagged, 0 remaining; S15: 23 done, 2 flagged, 0 remaining). S16
+(Cross-Platform Stability) is next and fully untouched — pick the
+first task from section 8.
 
 Reconfigure cmake-build-debug ONLY with CLion's cmake, not the system
 cmake. Editing mc3.xsd or adding a new .cpp file / new add_test()

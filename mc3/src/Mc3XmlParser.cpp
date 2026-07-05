@@ -703,6 +703,37 @@ static void processIncludes(const XMLElement* root, Mc3Document& doc,
                              std::set<std::filesystem::path>& processed,
                              bool recordIncludes);
 
+// Re-express a path that's relative to `fromDir` (the file that actually
+// contains it) so it resolves correctly relative to `toDir` (doc.sourcePath,
+// the *main* document's directory) instead — needed because everything in
+// doc ends up resolved against a single doc.sourcePath, regardless of which
+// included file a texture/mesh reference actually came from (STAB-0550).
+// Leaves the path unchanged if either directory can't be resolved.
+static std::string rebaseRelativePath(const std::string& relPath,
+                                       const std::filesystem::path& fromDir,
+                                       const std::filesystem::path& toDir) {
+    std::error_code ec;
+    auto abs = std::filesystem::weakly_canonical(fromDir / relPath, ec);
+    if (ec) return relPath;
+    auto rel = std::filesystem::relative(abs, toDir, ec);
+    if (ec) return relPath;
+    return rel.generic_string();
+}
+
+// Recursively rebases meshSource on every Mesh-type object in an included
+// definition's subtree (skips "embed:<id>" references — those resolve
+// through doc.embeds, not the filesystem).
+static void rebaseDefinitionMeshSources(Mc3Object& obj,
+                                         const std::filesystem::path& fromDir,
+                                         const std::filesystem::path& toDir) {
+    if (obj.type == ObjectType::Mesh && !obj.meshSource.empty() &&
+        obj.meshSource.rfind("embed:", 0) != 0) {
+        obj.meshSource = rebaseRelativePath(obj.meshSource, fromDir, toDir);
+    }
+    for (auto& child : obj.children)
+        if (child) rebaseDefinitionMeshSources(*child, fromDir, toDir);
+}
+
 // Merge definitions/materials/textures from one included file into doc.
 // Respects cycle detection: throws on cyclic includes, silently skips
 // already-processed files (diamond-include deduplication).
@@ -745,8 +776,21 @@ static void mergeInclude(const std::filesystem::path& includePath,
         parseTextures(txs, doc);
         for (const XMLElement* c = txs->FirstChildElement("texture"); c;
              c = c->NextSiblingElement("texture"))
-            if (const char* id = c->Attribute("id"))
+            if (const char* id = c->Attribute("id")) {
                 doc.includedTextures.insert(id);
+                // STAB-0550: rebase the texture's uri (or an external SVG
+                // texture's src) so it still resolves correctly against
+                // doc.sourcePath, not includePath's own directory (only
+                // matters when they differ).
+                auto texIt = doc.textures.find(id);
+                if (texIt != doc.textures.end() && !texIt->second.uri.empty())
+                    texIt->second.uri = rebaseRelativePath(
+                        texIt->second.uri, includePath.parent_path(), doc.sourcePath);
+                auto svgIt = doc.svgTextures.find(id);
+                if (svgIt != doc.svgTextures.end() && !svgIt->second.src.empty())
+                    svgIt->second.src = rebaseRelativePath(
+                        svgIt->second.src, includePath.parent_path(), doc.sourcePath);
+            }
     }
     if (const XMLElement* mats = root->FirstChildElement("materials")) {
         parseMaterials(mats, doc);
@@ -759,8 +803,15 @@ static void mergeInclude(const std::filesystem::path& includePath,
         parseDefinitions(defs, doc);
         for (const XMLElement* c = defs->FirstChildElement("definition"); c;
              c = c->NextSiblingElement("definition"))
-            if (const char* id = c->Attribute("id"))
+            if (const char* id = c->Attribute("id")) {
                 doc.includedDefs.insert(id);
+                // STAB-0550: rebase any OBJ meshSource inside this included
+                // definition the same way, for the same reason.
+                auto defIt = doc.definitions.find(id);
+                if (defIt != doc.definitions.end() && defIt->second)
+                    rebaseDefinitionMeshSources(*defIt->second, includePath.parent_path(),
+                                                 doc.sourcePath);
+            }
     }
 
     inProgress.erase(canonical);
