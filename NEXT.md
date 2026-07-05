@@ -1,6 +1,6 @@
 # NEXT.md
 
-_Last updated: 2026-07-05 (STAB-0553, prior commit `7dab653`, pushed)_
+_Last updated: 2026-07-05 (STAB-0553 live-browser follow-up, prior commit `4fd6dea`, pushed)_
 
 ---
 
@@ -147,11 +147,45 @@ See `TESTING.md` for the full per-test reference.
   wireframe mode, translate/rotate gizmos) are confirmed correct by code
   reading but can't be re-verified fresh in this headless environment —
   see §5.
+- **The Emscripten web build (STAB-0553) compiles and loads correctly
+  but doesn't visually render the 3D editor.** User-tested in a real
+  browser: page loads, `SDL_CreateWindow` succeeds, `EasyGLGraphicsBackend`
+  initializes over WebGL 2.0, `[MeshCraft] New scene` prints, no crash,
+  no console error — but the canvas stays a blank/black rectangle.
+  Confirmed (read-only investigation into CNA) that CNA's
+  `Game::RunLoop()` correctly uses `emscripten_set_main_loop()` for
+  every backend including EasyGL (`cna/src/Microsoft/Xna/Framework/
+  Game.cpp:811-825`), so the render loop genuinely keeps running — the
+  cause is something else per-frame (ImGui font-atlas upload under
+  WebGL2? an unsupported GL call silently no-op'ing?) that wasn't
+  root-caused. Diagnosing further needs temporary frame-counter/GL-error
+  logging added to MeshCraft's own `Draw()`/`EndDraw()`, a rebuild, and
+  another user round-trip in a real browser — deferred at the user's
+  choice. Not a regression from this session's own changes (this is the
+  *first* time the web build has ever actually been run/tested at all).
 
 ---
 
 ## 3. Recent changes
 
+- **STAB-0553 live-browser follow-up** — the user actually served the
+  built `MeshCraft.html` locally and opened it in a real browser: it
+  loads, initializes (window + WebGL 2.0 GL backend + scene, no crash,
+  no console error), but the 3D editor renders as a blank/black canvas
+  — not visually usable. Investigated (read-only, CNA is out of scope
+  to modify) whether the app falls out of `main()` after one frame
+  under Emscripten (a common cause of this exact symptom): confirmed
+  CNA's `Game::RunLoop()` correctly calls `emscripten_set_main_loop()`
+  for every backend including EasyGL, so the render loop genuinely
+  keeps running — ruling out that hypothesis. The actual cause (ImGui
+  font-atlas upload under WebGL2? an unsupported GL call silently
+  no-op'ing? something else per-frame) needs temporary diagnostic
+  logging in MeshCraft's own `Draw()`/`EndDraw()` plus another
+  rebuild-and-browser-retest round-trip to pin down — deferred at the
+  user's request. Documented as a new known limitation; STAB-0553
+  itself stays ✅ (build/load/init genuinely succeed, matching its
+  literal ask) since visual 3D rendering in a browser was never part
+  of that row's own verification bar.
 - **STAB-0553** — **genuine success, unlike STAB-0552's MinGW attempt.**
   The Emscripten SDK is installed at
   `/home/robertvokac/Downloads/emsdk` (v5.0.7). `emcmake cmake`
@@ -632,6 +666,12 @@ Genuine **operational** issues, unrelated to current work:
   on collision). _confirmed, not fixed, no assigned STAB-XXXX ID._
 - **Embedded glTF** (`embed:id`) fails to parse as an OBJ path; export
   continues with an empty node. _incomplete, documented._
+- **Emscripten web build renders a blank canvas** — builds and loads
+  correctly (STAB-0553), CNA's Emscripten main loop is confirmed wired
+  up correctly, but the 3D editor doesn't visually render in a browser
+  for a not-yet-root-caused reason. _confirmed via live user testing,
+  not fixed, needs frame-level diagnostic logging + another
+  browser-retest round-trip to pin down further._
 - **`EditorViewport` not integrated** into `MeshCraftApplication`'s
   render loop. _incomplete._
 - **`mc3.xsd` has no numeric range constraints** — a schema-valid AI
