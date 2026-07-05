@@ -636,6 +636,7 @@ void SceneRenderer::drawObject(const Mc3Object& obj, const Mc3Document& doc,
     float distSq = dx*dx + dy*dy + dz*dz;
     // 0 = full quality (<10 units), 1 = mid (10..40), 2 = lo (>40)
     int lodLevel = (distSq > 40.0f*40.0f) ? 2 : (distSq > 10.0f*10.0f) ? 1 : 0;
+    lodLevelMap_[obj.id] = lodLevel;
 
     // I3: per-object fog — mix color toward fog color based on camera distance
     if (doc.environment && doc.environment->fog) {

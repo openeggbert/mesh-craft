@@ -541,6 +541,22 @@ if(MESH_CRAFT_BUILD_TESTING AND UNIX AND NOT ANDROID AND NOT EMSCRIPTEN)
             )
             set_tests_properties(skybox_texture_test PROPERTIES TIMEOUT 30)
         endif()
+
+        # STAB-0525: confirms the LOD tier (SceneRenderer.cpp:633-639, G8)
+        # actually changes with camera distance, not just reports a constant.
+        if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/test/lod_near.mc3.xml" AND
+           EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/test/lod_far.mc3.xml")
+            add_test(
+                NAME lod_test
+                COMMAND "${PYTHON3_EXEC}"
+                        "${CMAKE_CURRENT_SOURCE_DIR}/test/lod_test.py"
+                        $<TARGET_FILE:MeshCraft>
+                        "${CMAKE_CURRENT_SOURCE_DIR}/test/lod_near.mc3.xml"
+                        "${CMAKE_CURRENT_SOURCE_DIR}/test/lod_far.mc3.xml"
+                WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
+            )
+            set_tests_properties(lod_test PROPERTIES TIMEOUT 30)
+        endif()
     endif()
 
     # mc3togltf_gltf test is registered by mc3togltf/CMakeLists.txt via $<TARGET_FILE:mc3togltf>

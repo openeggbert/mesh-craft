@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- STAB-0525 fixture: a single sphere viewed from 3 units away (well
+     under SceneRenderer's 10-unit LOD threshold), so it should render at
+     full quality (lodLevel 0, 32-segment unitSphere_). Paired with
+     lod_far.mc3.xml (same sphere, viewed from 60 units away) to confirm
+     the reported LOD tier actually changes with camera distance
+     (SceneRenderer.cpp:633-639, G8), not just report a constant. -->
+<mc3 version="0.3" model="LodNearFixture" default_camera="Main">
+
+  <lights>
+    <ambient color="0.3 0.3 0.3" brightness="0.5"/>
+    <directional name="Sun" color="1 0.95 0.8" brightness="2" direction="-0.5 -1 -0.5"/>
+  </lights>
+
+  <cameras>
+    <camera name="Main" position="0 0 3" target="0 0 0" fov="50" near="0.05" far="200"/>
+  </cameras>
+
+  <materials>
+    <material id="grey"><base_color>0.7 0.7 0.7 1.0</base_color></material>
+  </materials>
+
+  <objects>
+    <sphere name="TestSphere" radius="0.5" position="0 0 0" material="grey"/>
+  </objects>
+
+</mc3>

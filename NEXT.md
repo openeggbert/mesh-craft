@@ -1,6 +1,6 @@
 # NEXT.md
 
-_Last updated: 2026-07-05 (STAB-0524, prior commit `d64b1f8`, pushed)_
+_Last updated: 2026-07-05 (STAB-0525, prior commit `d75a0b1`, pushed)_
 
 ---
 
@@ -20,11 +20,10 @@ tasks across sections S0–S20, gated by a Gate 0–6 checklist.
 
 **Current phase:** Stabilization. Gates 0–5 are fully closed. **Gate 6
 (Documentation)** is exhausted for this environment — everything reachable
-without an external tool or a live display is done. Sections S0–S13 are
-fully closed (bar a handful of genuinely blocked/flagged items). **S14
-(Rendering and Viewport Stability), 30 items, is in progress**: 16 done,
-13 flagged 🟡 (confirmed correct by code reading, but need a human with a
-live display/tool to verify), 1 not yet started.
+without an external tool or a live display is done. Sections S0–S14 are
+now **fully closed** (bar a handful of genuinely blocked/flagged items —
+17 done, 13 flagged 🟡 needing a live display/tool, 0 remaining in S14).
+**S15 (Import/Export/Editor Integration)** is next and fully untouched.
 
 **Important architectural decisions:**
 - `mc3/` and `mcb/` are pure C++ static libs with **no** CNA/ImGui
@@ -65,7 +64,7 @@ live display/tool to verify), 1 not yet started.
   with §7's commands if you depend on this.
 
 ### Tests
-**38/38 CTest pass** in Debug (`ctest -N` lists all 38 by name). Notably:
+**39/39 CTest pass** in Debug (`ctest -N` lists all 39 by name). Notably:
 - `mc3_commands` (~450 assertions): editor command algorithms, undo/redo,
   auto-save/backup, keybinding/macro persistence, hierarchy filtering,
   AI-panel lifecycle, viewport ray-cast picking, click-selection
@@ -78,10 +77,10 @@ live display/tool to verify), 1 not yet started.
 - Several real-render smoke tests (`smoke_test*`, `fog_linear_test`,
   `point_light_gizmo_test`, `spot_light_gizmo_test`,
   `look_through_camera_test`, `csg_cache_test`,
-  `background_texture_test`, `skybox_texture_test`) that run the actual
-  `MeshCraft` binary in `--screenshot` headless mode and verify genuine
-  pixel output (or, for `csg_cache_test`, a printed internal counter),
-  not a stub render.
+  `background_texture_test`, `skybox_texture_test`, `lod_test`) that run
+  the actual `MeshCraft` binary in `--screenshot` headless mode and
+  verify genuine pixel output (or, for `csg_cache_test`/`lod_test`, a
+  printed internal counter), not a stub render.
 - A dozen `mc3togltf_*` tests covering CSG, materials, textures,
   animation, instance variants, large scenes.
 
@@ -140,6 +139,19 @@ See `TESTING.md` for the full per-test reference.
 
 ## 3. Recent changes
 
+- **STAB-0525** — verified the LOD tier (`SceneRenderer.cpp:633-639`,
+  G8) actually changes with camera distance, closing out S14. No
+  accessor existed to observe which tier was used, so added
+  `lodLevelMap_`/`lastLodLevel(objId)` (same pattern as
+  `csgCachedTriCount()`/K4 and STAB-0522's `csgCacheEvaluationCount()`),
+  printed as `[LOD] level=N` at the end of `--screenshot` mode. Added
+  `test/lod_near.mc3.xml` (sphere 3 units away, expect tier 0) +
+  `test/lod_far.mc3.xml` (same sphere 60 units away, expect tier 2) +
+  `test/lod_test.py` (runs both scenes, asserts the exact expected tier
+  for each, not just that levels differ) + a permanent `lod_test` ctest.
+  Manually confirmed level 0 near / level 2 far. 39/39 ctest passing.
+  **S14 (Rendering and Viewport Stability) is now fully closed**: 17
+  done, 13 flagged 🟡 (need a live display/tool), 0 remaining.
 - **STAB-0524** — **found and fixed a real, previously-invisible bug**:
   the equirectangular skybox never rendered anything, despite every
   surface-level check (shader compiles/links, texture loads, correct
@@ -318,7 +330,7 @@ new `Alg` extractions. Full history is in `git log --oneline`.
 ## 4. Current blocker / main problem
 
 **No blocker to local development or testing** — Debug builds and passes
-38/38 tests as of STAB-0524. **New reconfigure requirement:** the CLion
+39/39 tests as of STAB-0525. **New reconfigure requirement:** the CLion
 cmake command in §7 now needs `-DCMAKE_POLICY_VERSION_MINIMUM=3.5` added,
 because the sibling CNA repo (commit `00e0cea`, "add ENet 1.3.17 as
 vendored third-party dependency", 2026-07-04) added
@@ -479,8 +491,8 @@ requires a full reconfigure, not just a rebuild.**
 CLION_CMAKE=/home/robertvokac/.local/share/JetBrains/Toolbox/apps/clion/bin/cmake/linux/x64/bin/cmake
 "$CLION_CMAKE" -S . -B cmake-build-debug -DBUILD_TESTING=ON \
       -DCMAKE_POLICY_VERSION_MINIMUM=3.5                      # (re)configure — flag needed since CNA added vendored ENet, see §4
-cd cmake-build-debug && ninja && ctest --output-on-failure    # build + test (36)
-ctest -N                                                      # lists all 38 tests
+cd cmake-build-debug && ninja && ctest --output-on-failure    # build + test (39)
+ctest -N                                                      # lists all 39 tests
 
 # --- Release (system cmake is fine for a fresh dir)
 cmake -S . -B b-release -G Ninja -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=ON \
@@ -516,27 +528,36 @@ No project linter/formatter is configured.
 
 ## 8. Next smallest tasks
 
-S14's priority (P0/P1) subset is done; remaining items are P2/P3. Pick in
+**S14 (Rendering and Viewport Stability) is fully closed** (17 done, 13
+flagged 🟡, 0 remaining). **S15 (Import/Export/Editor Integration)** is
+next and completely untouched (`plan.md` rows STAB-0526 onward). Pick in
 `plan.md` order unless noted otherwise:
 
-1. **STAB-0525 — verify LOD: primitive segment count decreases at
-   distance (the last S14 item).** Files:
-   `src/MeshCraft/Renderer/SceneRenderer.cpp` — look for
-   `lodMesh(unitSphere_, unitSphereL1_, unitSphereL2_)` and similar calls
-   (seen in passing this session, e.g. around the Torus/Capsule/Cone
-   draw cases) — the LOD level appears to be selected from
-   `camPosX_/Y/Z_` (extracted from the view matrix in
-   `SceneRenderer::draw()`) vs. object distance. This is document/camera-
-   driven, not a UI toggle, so likely headlessly testable: check whether
-   there's an existing accessor exposing which LOD tier got used for a
-   given object (matching `csgCachedTriCount()`'s pattern — add one,
-   following STAB-0522's precedent, if none exists), then build two
-   fixtures (near camera vs. far camera to the same sphere) and assert
-   the reported tri/vertex count actually drops.
+1. **STAB-0526–0529, 0532, 0539+ (marked 🧪 in `plan.md`)** — File→Export
+   GLB/glTF menu actions, invalid-extension error dialog, exporter stats
+   in the status bar, OBJ import Browse button, drag-drop loading. These
+   all look like live-menu/dialog/drag-drop-driven UI actions — read
+   each one's actual code path first (some menu actions might just call
+   an existing, already-tested export function directly and could be
+   exercised via a headless command path; don't assume 🧪 means
+   unreachable without checking, same lesson as STAB-0517/0522's
+   "looks blocked but isn't" surprises this session).
 
-2. Once S14 is closed out (this is the last item), **S15
-   (Import/Export/Editor Integration)** is next and fully untouched —
-   read its `plan.md` rows before starting.
+2. **STAB-0530 — verify mc3tomcb tool: `mc3tomcb in.mc3.xml out.mcb`
+   produces file** and **STAB-0531 — add CTest for mc3tomcb**. Check
+   first whether the existing `mc3tomcb_roundtrip` ctest (already in the
+   33+ test suite before this session, unrelated to this session's new
+   tests) already covers this — if so, these two rows may already be
+   satisfiable by referencing that existing test rather than adding a
+   new one.
+
+3. **STAB-0533–0538** — OBJ import path persistence in XML, Merge Scene
+   behavior (hierarchy + definition-collision suffixing), Export Subtree
+   XSD validation, mc3tomcb error handling (missing input, write-
+   protected output). These look like straightforward CLI/file-level
+   checks reachable without a live UI — good candidates to verify next
+   via existing sample scenes (e.g. `test/house.mc3.xml` for the merge
+   test) plus `mc3tomcb`/`validate_xsd.py` from the command line.
 
 ---
 
@@ -575,15 +596,15 @@ S14's priority (P0/P1) subset is done; remaining items are P2/P3. Pick in
 Read NEXT.md first. Then inspect only the files needed for the first
 task in section 8. Do not refactor unrelated code. Make one small,
 verified improvement. Run the relevant build/test command from section 7
-and confirm cmake-build-debug still passes (38/38, or the new total if
+and confirm cmake-build-debug still passes (39/39, or the new total if
 you registered a new ctest). Update NEXT.md after finishing.
 
 Current branch: develop, in sync with origin/develop as of commit
-`d64b1f8` (git push was denied earlier in a prior session, then started
+`d75a0b1` (git push was denied earlier in a prior session, then started
 working again unprompted — see section 4; if it happens again, keep
 committing locally and retry later). Build dir: cmake-build-debug/
-(Debug, CLion cmake 4.2.2) — full rebuilt and 38/38 ctest verified
-clean as of STAB-0524. Reconfigure now REQUIRES the extra flag
+(Debug, CLion cmake 4.2.2) — full rebuilt and 39/39 ctest verified
+clean as of STAB-0525. Reconfigure now REQUIRES the extra flag
 `-DCMAKE_POLICY_VERSION_MINIMUM=3.5` — see section 4/7 for why (CNA
 sibling repo added a vendored ENet dep incompatible with CMake 4.2.2
 without it). Release (b-release/) and the standalone
@@ -592,9 +613,9 @@ project's history but not re-checked as part of this update — re-verify
 (with the same new flag) before relying on them.
 
 Active plan: plan.md (STAB-XXXX tasks). Gates 0–5 closed, Gate 6
-exhausted for this environment. S0–S13 fully closed. S14 (Rendering and
-Viewport Stability) is in progress: 16 done, 13 flagged (need a live
-display/tool), 1 remaining (STAB-0525) — pick it up from section 8.
+exhausted for this environment. S0–S14 fully closed (S14: 17 done, 13
+flagged, 0 remaining). S15 (Import/Export/Editor Integration) is next
+and fully untouched — pick the first task from section 8.
 
 Reconfigure cmake-build-debug ONLY with CLion's cmake, not the system
 cmake. Editing mc3.xsd or adding a new .cpp file / new add_test()

@@ -83,6 +83,14 @@ public:
     // at 1 after the first draw, not grow with the frame count (K1).
     int csgCacheEvaluationCount() const { return csgCacheEvaluations_; }
 
+    // LOD tier (0=full, 1=mid, 2=low) picked for the given object ID on
+    // its last draw, based on camera distance (G8). Returns -1 if the
+    // object has not been rendered yet this session (STAB-0525).
+    int lastLodLevel(const std::string& objId) const {
+        auto it = lodLevelMap_.find(objId);
+        return it != lodLevelMap_.end() ? it->second : -1;
+    }
+
     // Export the computed CSG result for obj to an OBJ file at path.
     // Returns true on success; on failure, err is set to a human-readable message.
     bool exportCsgMesh(const Mc3::Mc3Object& obj, const Mc3::Mc3Document& doc,
@@ -296,6 +304,7 @@ private:
     std::unordered_map<std::size_t, RenderMesh> csgMeshCache_;
     std::unordered_map<std::string, int> csgTriCountMap_;   // obj.id → last rendered tri count (K4)
     int csgCacheEvaluations_{0};   // cache-miss count (STAB-0522)
+    std::unordered_map<std::string, int> lodLevelMap_;   // obj.id → last used LOD tier (STAB-0525)
     std::unordered_map<std::string, AnimOverride> animOverrides_;
 };
 
