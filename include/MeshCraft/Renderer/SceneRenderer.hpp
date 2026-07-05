@@ -114,6 +114,14 @@ public:
                              const Microsoft::Xna::Framework::Matrix& projection,
                              Microsoft::Xna::Framework::Color color);
 
+    // Render a free-floating wireframe sphere at an arbitrary world position
+    // and radius (e.g. proportional-editing falloff radius indicator)
+    void drawWireSphereAt(const Microsoft::Xna::Framework::Vector3& center,
+                          float radius,
+                          const Microsoft::Xna::Framework::Matrix& view,
+                          const Microsoft::Xna::Framework::Matrix& projection,
+                          Microsoft::Xna::Framework::Color color);
+
     // Render scene-level gizmos (lights / cameras)
     void drawLightGizmos(const std::vector<Mc3::Mc3Light>& lights,
                          const Microsoft::Xna::Framework::Matrix& view,

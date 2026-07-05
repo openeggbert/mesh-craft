@@ -548,6 +548,14 @@ void SceneRenderer::drawObjectWireframe(const Mc3Object& obj,
     drawWireShape(*ws, wireWorld, view, proj, color);
 }
 
+void SceneRenderer::drawWireSphereAt(const Vector3& center, float radius,
+                                      const Matrix& view, const Matrix& proj, Color color)
+{
+    Matrix wireWorld = Matrix::CreateScale({ radius * 2.0f, radius * 2.0f, radius * 2.0f }) *
+                        Matrix::CreateTranslation(center);
+    drawWireShape(wireShapeSphere_, wireWorld, view, proj, color);
+}
+
 void SceneRenderer::drawObject(const Mc3Object& obj, const Mc3Document& doc,
                                 const Matrix& parentWorld,
                                 const Matrix& view, const Matrix& proj,

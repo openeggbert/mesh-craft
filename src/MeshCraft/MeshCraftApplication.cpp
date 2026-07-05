@@ -579,6 +579,23 @@ void MeshCraftApplication::Draw(const GameTime& /*gameTime*/) {
         }
     }
 
+    // Proportional editing (H1) falloff radius indicator — a wireframe
+    // sphere centered on the selection's average position, matching the
+    // center used by applyProportionalFalloffAlg() during a Move drag.
+    if (propEditEnabled_ && propEditRadius_ > 0.0f && selection_.hasSelection()) {
+        gd.SetDepthTestEnabled(false);
+        float cx = 0.0f, cy = 0.0f, cz = 0.0f;
+        for (const auto& s : selection_.selection()) {
+            cx += s->transform.position[0];
+            cy += s->transform.position[1];
+            cz += s->transform.position[2];
+        }
+        float n = static_cast<float>(selection_.selection().size());
+        Color propColor(255, 170, 60, 140);
+        sceneRenderer_->drawWireSphereAt({cx / n, cy / n, cz / n}, propEditRadius_,
+                                          view, proj, propColor);
+    }
+
     // Locked-object outline (red wireframe around every locked object)
     if (!lockedIds_.empty()) {
         gd.SetDepthTestEnabled(false);

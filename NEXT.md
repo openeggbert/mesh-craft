@@ -1,6 +1,6 @@
 # NEXT.md
 
-_Last updated: 2026-07-05 (STAB-0518, prior commit `f45ad40`, pushed)_
+_Last updated: 2026-07-05 (STAB-0519, prior commit `87785cd`, pushed)_
 
 ---
 
@@ -23,8 +23,8 @@ tasks across sections S0–S20, gated by a Gate 0–6 checklist.
 without an external tool or a live display is done. Sections S0–S13 are
 fully closed (bar a handful of genuinely blocked/flagged items). **S14
 (Rendering and Viewport Stability), 30 items, is in progress**: 13 done,
-10 flagged 🟡 (confirmed correct by code reading, but need a human with a
-live display to visually verify), 7 not yet started.
+11 flagged 🟡 (confirmed correct by code reading, but need a human with a
+live display to visually verify), 6 not yet started.
 
 **Important architectural decisions:**
 - `mc3/` and `mcb/` are pure C++ static libs with **no** CNA/ImGui
@@ -136,6 +136,21 @@ See `TESTING.md` for the full per-test reference.
 
 ## 3. Recent changes
 
+- **STAB-0519** — **found and fixed a real gap**: proportional editing's
+  falloff radius had no viewport visual indicator anywhere (only a
+  toolbar slider/tooltip showed the number), even though the row's own
+  success criterion calls for a "radius sphere drawn in viewport" and
+  the falloff math itself (`applyProportionalFalloffAlg`) was already
+  correct and tested (STAB-0489). Added `SceneRenderer::drawWireSphereAt()`
+  (reuses the existing `wireShapeSphere_` geometry) and wired it into
+  `MeshCraftApplication.cpp`'s draw loop: an orange wireframe sphere
+  centered on the selection's average position (same center the falloff
+  algorithm uses) with radius `propEditRadius_`, shown continuously
+  whenever proportional editing is enabled with a selection — not just
+  mid-drag. 35/35 ctest still passing (no regressions). Like
+  STAB-0508/0509/0510, `propEditEnabled_` has no CLI/document/prefs
+  hook, so the new indicator can't be pixel-tested headlessly — flagged
+  🟡 for a live-display confirmation.
 - **STAB-0518** — audited the locked-object outline (red wireframe,
   `MeshCraftApplication.cpp:582-595`): correctly recurses through all
   objects/children, draws the outline for every locked id — no bug
@@ -310,12 +325,13 @@ Genuine **operational** issues, unrelated to current work:
   `bloomEnabled_` (STAB-0509), `showWireframeMode_` (STAB-0510), the
   translate/rotate gizmo visibility (STAB-0501/0502), the gizmo-drag
   delta overlay (STAB-0514), the per-selected-object poly-stats display
-  (STAB-0515), the shadow-map debug overlay (STAB-0516), and the
-  locked-object outline (STAB-0518) — all confirmed correct and safe by
-  code reading, none reachable via the headless `--screenshot` path (no
-  CLI/document/prefs hook exists to force them on/pre-select or
-  pre-lock an object). _needs verification by a human with a live
-  display._
+  (STAB-0515), the shadow-map debug overlay (STAB-0516), the
+  locked-object outline (STAB-0518), and the proportional-editing
+  falloff sphere (STAB-0519, newly implemented this session) — all
+  confirmed correct and safe by code reading, none reachable via the
+  headless `--screenshot` path (no CLI/document/prefs hook exists to
+  force them on/pre-select or pre-lock an object). _needs verification
+  by a human with a live display._
 - **N3–N7 (scripts/sounds/music/triggers/states/meta) are data-only** —
   round-tripped but nothing executes them at runtime. _intended at this
   stage, not a bug._
@@ -432,25 +448,28 @@ No project linter/formatter is configured.
 S14's priority (P0/P1) subset is done; remaining items are P2/P3. Pick in
 `plan.md` order unless noted otherwise:
 
-1. **STAB-0519 — verify proportional editing falloff: visible sphere
-   indicator.** Files: `src/MeshCraft/MeshCraftApplication_Mouse.cpp`
-   (`applyProportionalFalloffAlg()` call site, line ~186) and
-   `include/MeshCraft/EditorAlgorithms.hpp:634`
-   (`applyProportionalFalloffAlg()` itself). Likely the same
-   live-drag-required class as STAB-0514 (proportional editing only
-   applies during an active Move-gizmo drag) — confirm by checking
-   whether the falloff-radius sphere indicator is drawn unconditionally
-   from a document/toggle state or only mid-drag before flagging.
+1. **STAB-0520 — verify large scene FPS acceptable (200 objects, ≥ 30
+   FPS).** `plan.md` marks this "manual" — needs a live display to watch
+   the FPS counter, same as the other flagged items. Likely a straight
+   🟡 flag after confirming `large_scene.mc3.xml` exists and loads.
 
-2. **STAB-0520 through STAB-0525** — remaining S14 items (`plan.md`,
+2. **STAB-0521 — verify no GL state leak between render passes.** Files:
+   `src/MeshCraft/Renderer/SceneRenderer.cpp`. Promising lead: unlike
+   most S14 items so far, this doesn't need a live display or selection
+   — check whether `glGetError()` can be queried right after a
+   `--screenshot` render (possibly a new, very small hook: print/assert
+   `GL_NO_ERROR` after the main draw call, guarded by an existing debug
+   path) to make this genuinely headlessly testable.
+
+3. **STAB-0522 through STAB-0525** — remaining S14 items (`plan.md`,
    currently 📋). Continue the established pattern: read the code first;
    if the feature is document-driven or unconditional, build a fixture +
    pixel-sampling test (STAB-0507/0511/0512/0513/0517's pattern); if it's
    a pure runtime UI toggle or requires live selection/interaction with
    no headless hook, confirm correctness by reading and flag 🟡
-   (STAB-0505/0508/0509/0510/0514/0515/0516/0518's pattern).
+   (STAB-0505/0508/0509/0510/0514/0515/0516/0518/0519's pattern).
 
-3. Once S14 is closed out, **S15 (Import/Export/Editor Integration)**
+4. Once S14 is closed out, **S15 (Import/Export/Editor Integration)**
    is next and fully untouched — read its `plan.md` rows before starting.
 
 ---
@@ -507,8 +526,8 @@ project's history but not re-checked as part of this update — re-verify
 
 Active plan: plan.md (STAB-XXXX tasks). Gates 0–5 closed, Gate 6
 exhausted for this environment. S0–S13 fully closed. S14 (Rendering and
-Viewport Stability) is in progress: 13 done, 10 flagged (need a live
-display), 7 remaining — pick the next task from section 8.
+Viewport Stability) is in progress: 13 done, 11 flagged (need a live
+display), 6 remaining — pick the next task from section 8.
 
 Reconfigure cmake-build-debug ONLY with CLion's cmake, not the system
 cmake. Editing mc3.xsd or adding a new .cpp file / new add_test()
