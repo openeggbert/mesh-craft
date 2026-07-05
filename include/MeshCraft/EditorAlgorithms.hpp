@@ -1225,6 +1225,55 @@ inline Mc3::Mc3Document exportSelectionAlg(
     return tmp;
 }
 
+// ── Export subtree as template (STAB-0536) ────────────────────────────────────
+//
+// Mirrors the file-save half of MeshCraftApplication::exportSubtreeAsTemplate()
+// (MeshCraftApplication_Commands.cpp:514-536). Before this fix, that method
+// wrote only `tmp.definitions[defName] = defObj` — no materials or textures —
+// so a template exported to its own file (e.g. for reuse as an <include>
+// library, matching test/mc3_library.mc3.xml's shape) silently lost the
+// appearance of any object in it that referenced a material, which would
+// then resolve to the default-gray fallback (STAB-0500) wherever the
+// template file was loaded standalone. This mirrors exportSelectionAlg's
+// material/texture collection so the template's dependencies travel with it.
+
+inline Mc3::Mc3Document exportSubtreeTemplateAlg(
+    const Mc3::Mc3Document&           doc,
+    const std::string&                defName,
+    std::shared_ptr<Mc3::Mc3Object>   defObj)
+{
+    Mc3::Mc3Document tmp;
+
+    std::set<std::string> matKeys;
+    std::function<void(const Mc3::Mc3Object&)> collectMats =
+        [&](const Mc3::Mc3Object& obj) {
+            if (!obj.material.empty())         matKeys.insert(obj.material);
+            if (!obj.materialOverride.empty()) matKeys.insert(obj.materialOverride);
+            for (const auto& c : obj.children) collectMats(*c);
+        };
+    collectMats(*defObj);
+
+    std::set<std::string> texKeys;
+    for (const auto& key : matKeys) {
+        auto it = doc.materials.find(key);
+        if (it == doc.materials.end()) continue;
+        tmp.materials[key] = it->second;
+        const auto& m = it->second;
+        for (const auto& tk : { m.baseColorTexture, m.normalTexture,
+                                 m.emissiveTexture, m.metallicRoughnessTexture,
+                                 m.occlusionTexture })
+            if (!tk.empty()) texKeys.insert(tk);
+    }
+
+    for (const auto& key : texKeys) {
+        auto it = doc.textures.find(key);
+        if (it != doc.textures.end()) tmp.textures[key] = it->second;
+    }
+
+    tmp.definitions[defName] = std::move(defObj);
+    return tmp;
+}
+
 // ── Drag-drop file routing (STAB-0275) ────────────────────────────────────────
 //
 // Mirrors the extension check in MeshCraftApplication's SDL_EVENT_DROP_FILE

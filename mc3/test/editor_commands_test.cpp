@@ -1822,6 +1822,57 @@ static void testExportSelectionIncludesDependentMaterialsAndTextures()
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Export subtree as template (STAB-0536): before this fix, the exported file
+// carried only the definition object — no materials/textures it referenced —
+// so a standalone template file silently lost its appearance (fell back to
+// default gray, STAB-0500) when loaded elsewhere.
+// ─────────────────────────────────────────────────────────────────────────────
+
+static void testExportSubtreeTemplateIncludesDependentMaterialsAndTextures()
+{
+    Mc3Document doc;
+    doc.materials["stone"] = Mc3::Mc3Material("stone", {0.5f, 0.45f, 0.4f, 1.0f});
+    doc.materials["stone"].baseColorTexture = "stoneTex";
+    doc.materials["unrelated"] = Mc3::Mc3Material("unrelated", {1, 1, 1, 1});
+    doc.textures["stoneTex"]     = Mc3::Mc3Texture("stoneTex", "stone.png");
+    doc.textures["unrelatedTex"] = Mc3::Mc3Texture("unrelatedTex", "unrelated.png");
+
+    auto pillar = makeObj("pillar_def", "Pillar");
+    pillar->material = "stone";
+
+    Mc3Document tmp = exportSubtreeTemplateAlg(doc, "pillar", pillar);
+
+    CHECK(tmp.definitions.count("pillar") == 1,
+          "Export Subtree Template: definition is present under its key");
+    CHECK(tmp.materials.count("stone") == 1,
+          "Export Subtree Template: material referenced by the definition is included");
+    CHECK(tmp.textures.count("stoneTex") == 1,
+          "Export Subtree Template: texture referenced by the included material is included");
+    CHECK(tmp.materials.count("unrelated") == 0,
+          "Export Subtree Template: material not referenced by the definition is excluded");
+    CHECK(tmp.textures.count("unrelatedTex") == 0,
+          "Export Subtree Template: texture not referenced by any included material is excluded");
+    CHECK(tmp.objects.empty(),
+          "Export Subtree Template: exported file has no top-level objects, only a definition");
+
+    // Round-trip through the real XML writer/parser (same code path
+    // saveToFile()/loadFromFile() use everywhere) to confirm the fix
+    // actually produces a schema-shaped, reloadable file — not just a
+    // correct in-memory document.
+    auto path = std::filesystem::temp_directory_path() / "mc3_subtree_template_test.mc3.xml";
+    tmp.saveToFile(path);
+    Mc3Document reloaded = Mc3Document::loadFromFile(path);
+    std::filesystem::remove(path);
+
+    CHECK(reloaded.definitions.count("pillar") == 1,
+          "Export Subtree Template: definition survives a save/reload round-trip");
+    CHECK(reloaded.materials.count("stone") == 1,
+          "Export Subtree Template: material survives a save/reload round-trip");
+    CHECK(reloaded.textures.count("stoneTex") == 1,
+          "Export Subtree Template: texture survives a save/reload round-trip");
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Drag-drop MC3 file routing (STAB-0275)
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -2679,6 +2730,7 @@ int main()
     testSaveAsDoesNotOverwriteOriginal();
     testExportSelectionOnlySelectedObjects();
     testExportSelectionIncludesDependentMaterialsAndTextures();
+    testExportSubtreeTemplateIncludesDependentMaterialsAndTextures();
     testDroppableScenePathDetection();
     testInvalidFileLoadThrowsNamedError();
     testUndoRedoAnimKeyframe();

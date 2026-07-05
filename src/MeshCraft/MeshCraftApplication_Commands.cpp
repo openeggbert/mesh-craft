@@ -528,10 +528,11 @@ void MeshCraftApplication::exportSubtreeAsTemplate(const std::string& defName,
     defObj->transform.scale    = {1.0f, 1.0f, 1.0f};
     document_.definitions[defName] = defObj;
 
-    // Optionally save the subtree to a file
+    // Optionally save the subtree to a file — carries along any materials/
+    // textures the subtree references, so the standalone file doesn't
+    // silently lose its appearance when loaded elsewhere (STAB-0536).
     if (!filePath.empty()) {
-        Mc3::Mc3Document tmp;
-        tmp.definitions[defName] = defObj;
+        Mc3::Mc3Document tmp = exportSubtreeTemplateAlg(document_, defName, defObj);
         tmp.saveToFile(filePath);
     }
 

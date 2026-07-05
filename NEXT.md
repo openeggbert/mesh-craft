@@ -1,6 +1,6 @@
 # NEXT.md
 
-_Last updated: 2026-07-05 (STAB-0534/0535, prior commit `23113a6`, pushed)_
+_Last updated: 2026-07-05 (STAB-0536, prior commit `8d4f65d`, pushed)_
 
 ---
 
@@ -23,8 +23,8 @@ tasks across sections S0–S20, gated by a Gate 0–6 checklist.
 without an external tool or a live display is done. Sections S0–S14 are
 fully closed (bar a handful of genuinely blocked/flagged items — S14: 17
 done, 13 flagged 🟡, 0 remaining). **S15 (Import/Export/Editor
-Integration), 30 items, is in progress**: 9 done (STAB-0526–0531,
-0533–0535), 1 flagged 🟡 (STAB-0532), 20 not yet started.
+Integration), 30 items, is in progress**: 10 done (STAB-0526–0531,
+0533–0536), 1 flagged 🟡 (STAB-0532), 19 not yet started.
 
 **Important architectural decisions:**
 - `mc3/` and `mcb/` are pure C++ static libs with **no** CNA/ImGui
@@ -149,6 +149,20 @@ See `TESTING.md` for the full per-test reference.
 
 ## 3. Recent changes
 
+- **STAB-0536** — **found and fixed a real bug**: `exportSubtreeAsTemplate()`'s
+  file-save path (`MeshCraftApplication_Commands.cpp:531-536`) wrote
+  only the definition object — no materials/textures it referenced —
+  so a template exported to its own standalone file (the exact shape
+  used for `<include>` libraries, e.g. `test/mc3_library.mc3.xml`)
+  silently lost its appearance (fell back to default gray, STAB-0500)
+  when loaded elsewhere. XSD structural validity was never actually at
+  risk (a dangling material reference is still schema-valid) — this
+  was a real correctness bug the row's literal ask wouldn't have
+  caught. Added `exportSubtreeTemplateAlg()` (mirrors
+  `exportSelectionAlg`'s material/texture collection, targets
+  `.definitions` instead of `.objects`) and wired it into the real
+  method. Added a 9-assertion test including a full save+reload
+  round-trip through the real XML writer/parser. 40/40 ctest passing.
 - **STAB-0534/0535** — **found a real stale-mirror gap**: the
   pre-existing `mergeDocumentsAlg()` (`EditorAlgorithms.hpp:1120-1163`,
   a CNA-free mirror of `mergeSceneFromFile()` used by
@@ -600,28 +614,19 @@ row asks for ("file created; non-zero size"). Marked both ✅ in
 ## 8. Next smallest tasks
 
 **S14 is fully closed.** **S15 (Import/Export/Editor Integration)** is
-in progress: STAB-0526–0531 + 0533–0535 done (9), STAB-0532 flagged 🟡,
-20 remaining. Pick in `plan.md` order unless noted otherwise:
+in progress: STAB-0526–0531 + 0533–0536 done (10), STAB-0532 flagged 🟡,
+19 remaining. Pick in `plan.md` order unless noted otherwise:
 
-1. **STAB-0536 — Export Subtree: exported file validates against
-   XSD.** Files: `src/MeshCraft/MeshCraftApplication_Commands.cpp`
-   (`exportSelectionToFile()`, `:209-250`). Promising: there's already a
-   CNA-free `exportSelectionAlg()` mirror (`EditorAlgorithms.hpp:1179-
-   1216`, STAB-0273/0274) with its own tests — but check it's actually
-   wired up / matches the real method (this session found TWO other
-   "mirror" functions — `exportSelectionAlg` itself looked fine, but
-   `mergeDocumentsAlg` had silently drifted out of sync with the real
-   method after STAB-0469, per STAB-0534/0535's finding). The real gap
-   to close is likely just: does the *exported file*, written via
-   `tmp.saveToFile(path)`, actually validate against `mc3.xsd`? Build a
-   quick test: export a subtree, run `test/validate_xsd.py` on the
-   result.
+1. **STAB-0537/0538 — mc3tomcb error handling.** Files:
+   `mc3tomcb/src/main.cpp`. STAB-0537: missing input file (`return 1`
+   paths already exist at `:19,42,46` — check they print a clear
+   message and exit non-zero, add a ctest if not already covered).
+   STAB-0538: write-protected output path. Pure CLI checks, no
+   editor/UI involvement — straightforward to add to `mc3tomcb`'s own
+   test suite (`mc3tomcb/CMakeLists.txt`, alongside the existing
+   `mc3tomcb_roundtrip` test).
 
-2. **STAB-0537/0538 — mc3tomcb error handling** (missing input file,
-   write-protected output path). Pure CLI checks, no editor/UI
-   involvement — straightforward to add to `mc3tomcb`'s own test suite.
-
-3. **STAB-0539+** — remaining S15 items (`plan.md`, several marked 🧪).
+2. **STAB-0539+** — remaining S15 items (`plan.md`, several marked 🧪).
    Don't assume 🧪 means "needs a live UI" without checking the actual
    code path first — this session found `runGltfExport()` (STAB-0526)
    and the pre-existing `mc3tomcb_roundtrip` test (STAB-0530/0531) both
@@ -667,9 +672,9 @@ verified improvement. Run the relevant build/test command from section 7
 and confirm cmake-build-debug still passes (40/40, or the new total if
 you registered a new ctest). Update NEXT.md after finishing.
 
-Current branch: develop, prior commit `23113a6` (STAB-0533) — the
-STAB-0532/0534/0535 commit lands right after this NEXT.md update (git
-push was denied earlier in a prior session, then started working again
+Current branch: develop, prior commit `8d4f65d` (STAB-0532/0534/0535) —
+the STAB-0536 commit lands right after this NEXT.md update (git push
+was denied earlier in a prior session, then started working again
 unprompted — see section 4; if it happens again, keep committing
 locally and retry later). Build dir: cmake-build-debug/ (Debug, CLion
 cmake 4.2.2) — full rebuilt and 40/40 ctest verified clean (includes a
@@ -685,8 +690,8 @@ project's history but not re-checked as part of this update — re-verify
 Active plan: plan.md (STAB-XXXX tasks). Gates 0–5 closed, Gate 6
 exhausted for this environment. S0–S14 fully closed (S14: 17 done, 13
 flagged, 0 remaining). S15 (Import/Export/Editor Integration) is in
-progress: STAB-0526–0531 + 0533–0535 done (9), STAB-0532 flagged 🟡, 20
-remaining — pick the first task from section 8.
+progress: STAB-0526–0531 + 0533–0536 done (10), STAB-0532 flagged 🟡,
+19 remaining — pick the first task from section 8.
 
 Reconfigure cmake-build-debug ONLY with CLion's cmake, not the system
 cmake. Editing mc3.xsd or adding a new .cpp file / new add_test()
