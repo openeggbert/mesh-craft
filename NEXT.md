@@ -1,6 +1,6 @@
 # NEXT.md
 
-_Last updated: 2026-07-05 (STAB-0536, prior commit `8d4f65d`, pushed)_
+_Last updated: 2026-07-05 (STAB-0537/0538, prior commit `0f8b45a`, pushed)_
 
 ---
 
@@ -23,8 +23,8 @@ tasks across sections S0–S20, gated by a Gate 0–6 checklist.
 without an external tool or a live display is done. Sections S0–S14 are
 fully closed (bar a handful of genuinely blocked/flagged items — S14: 17
 done, 13 flagged 🟡, 0 remaining). **S15 (Import/Export/Editor
-Integration), 30 items, is in progress**: 10 done (STAB-0526–0531,
-0533–0536), 1 flagged 🟡 (STAB-0532), 19 not yet started.
+Integration), 30 items, is in progress**: 12 done (STAB-0526–0531,
+0533–0538), 1 flagged 🟡 (STAB-0532), 17 not yet started.
 
 **Important architectural decisions:**
 - `mc3/` and `mcb/` are pure C++ static libs with **no** CNA/ImGui
@@ -65,7 +65,7 @@ Integration), 30 items, is in progress**: 10 done (STAB-0526–0531,
   with §7's commands if you depend on this.
 
 ### Tests
-**40/40 CTest pass** in Debug (`ctest -N` lists all 40 by name). Notably:
+**41/41 CTest pass** in Debug (`ctest -N` lists all 41 by name). Notably:
 - `mc3_commands` (~450 assertions): editor command algorithms, undo/redo,
   auto-save/backup, keybinding/macro persistence, hierarchy filtering,
   AI-panel lifecycle, viewport ray-cast picking, click-selection
@@ -149,6 +149,15 @@ See `TESTING.md` for the full per-test reference.
 
 ## 3. Recent changes
 
+- **STAB-0537/0538** — confirmed `mc3tomcb`'s existing catch-all
+  (`main.cpp:28-47`) already handles both a missing input file and a
+  write-protected output path correctly (exit 1, clear stderr message,
+  no output file) — no code change needed, just previously-missing
+  test coverage (only the success round-trip was tested before). Added
+  `mc3tomcb/test/mc3tomcb_error_test.py` (uses a temp dir with its
+  write bit stripped rather than a hardcoded `/root/...` path, so it
+  doesn't depend on the runner's privilege level) + a permanent
+  `mc3tomcb_error_handling` ctest. 41/41 ctest passing (up from 40/40).
 - **STAB-0536** — **found and fixed a real bug**: `exportSubtreeAsTemplate()`'s
   file-save path (`MeshCraftApplication_Commands.cpp:531-536`) wrote
   only the definition object — no materials/textures it referenced —
@@ -614,23 +623,37 @@ row asks for ("file created; non-zero size"). Marked both ✅ in
 ## 8. Next smallest tasks
 
 **S14 is fully closed.** **S15 (Import/Export/Editor Integration)** is
-in progress: STAB-0526–0531 + 0533–0536 done (10), STAB-0532 flagged 🟡,
-19 remaining. Pick in `plan.md` order unless noted otherwise:
+in progress: STAB-0526–0531 + 0533–0538 done (12), STAB-0532 flagged 🟡,
+17 remaining. Pick in `plan.md` order unless noted otherwise:
 
-1. **STAB-0537/0538 — mc3tomcb error handling.** Files:
-   `mc3tomcb/src/main.cpp`. STAB-0537: missing input file (`return 1`
-   paths already exist at `:19,42,46` — check they print a clear
-   message and exit non-zero, add a ctest if not already covered).
-   STAB-0538: write-protected output path. Pure CLI checks, no
-   editor/UI involvement — straightforward to add to `mc3tomcb`'s own
-   test suite (`mc3tomcb/CMakeLists.txt`, alongside the existing
-   `mc3tomcb_roundtrip` test).
+1. **STAB-0539 — verify editor drag-drop: drop `.mc3.xml` → loads
+   scene.** Files: `src/MeshCraft/MeshCraftApplication.cpp` (SDL
+   `SDL_EVENT_DROP_FILE` watcher, referenced in passing this session at
+   `:332`, routes through `isDroppableScenePathAlg()` in
+   `EditorAlgorithms.hpp`). The extension-routing logic is already
+   CNA-free and may already be tested — check
+   `mc3/test/editor_commands_test.cpp` for
+   `testDroppableScenePathDetection` before assuming a gap; the actual
+   SDL drop *event* delivery itself is genuinely live-only.
 
-2. **STAB-0539+** — remaining S15 items (`plan.md`, several marked 🧪).
-   Don't assume 🧪 means "needs a live UI" without checking the actual
-   code path first — this session found `runGltfExport()` (STAB-0526)
-   and the pre-existing `mc3tomcb_roundtrip` test (STAB-0530/0531) both
-   turned out to already be headlessly testable or already covered.
+2. **STAB-0542 — verify screenshot export (headless): PNG valid.**
+   Files: `src/MeshCraft/main.cpp`. **Possible discrepancy spotted in
+   passing**: `saveScreenshot()` (`MeshCraftApplication_Commands.cpp`)
+   writes a **PPM** file (`"P6\n"` header), not PNG, despite this row's
+   title/verification method saying "PNG valid" / "PNG magic bytes" —
+   check whether this is just an imprecise row (rename to PPM in the
+   verification note) or a genuine gap (no PNG output path exists at
+   all) before writing a test.
+
+3. **STAB-0540/0541/0543-0549+** — remaining S15 items (`plan.md`,
+   several marked 🧪 or 📋). Don't assume 🧪 means "needs a live UI"
+   without checking the actual code path first — this session found
+   `runGltfExport()` (STAB-0526), the pre-existing `mc3tomcb_roundtrip`
+   test (STAB-0530/0531), and `mc3tomcb`'s error handling
+   (STAB-0537/0538) all turned out to already be correct/headlessly
+   testable, needing only new test coverage, not new code — while
+   STAB-0534/0535/0536 turned out to have real bugs hiding behind
+   plausible-looking code. Read before assuming either way.
 
 ---
 
@@ -669,15 +692,15 @@ in progress: STAB-0526–0531 + 0533–0536 done (10), STAB-0532 flagged 🟡,
 Read NEXT.md first. Then inspect only the files needed for the first
 task in section 8. Do not refactor unrelated code. Make one small,
 verified improvement. Run the relevant build/test command from section 7
-and confirm cmake-build-debug still passes (40/40, or the new total if
+and confirm cmake-build-debug still passes (41/41, or the new total if
 you registered a new ctest). Update NEXT.md after finishing.
 
-Current branch: develop, prior commit `8d4f65d` (STAB-0532/0534/0535) —
-the STAB-0536 commit lands right after this NEXT.md update (git push
+Current branch: develop, prior commit `0f8b45a` (STAB-0536) — the
+STAB-0537/0538 commit lands right after this NEXT.md update (git push
 was denied earlier in a prior session, then started working again
 unprompted — see section 4; if it happens again, keep committing
 locally and retry later). Build dir: cmake-build-debug/ (Debug, CLion
-cmake 4.2.2) — full rebuilt and 40/40 ctest verified clean (includes a
+cmake 4.2.2) — full rebuilt and 41/41 ctest verified clean (includes a
 new `--export <path>` CLI flag on the `MeshCraft` binary itself, see
 §2/§3). Reconfigure now REQUIRES the extra flag
 `-DCMAKE_POLICY_VERSION_MINIMUM=3.5` — see section 4/7 for why (CNA
@@ -690,8 +713,8 @@ project's history but not re-checked as part of this update — re-verify
 Active plan: plan.md (STAB-XXXX tasks). Gates 0–5 closed, Gate 6
 exhausted for this environment. S0–S14 fully closed (S14: 17 done, 13
 flagged, 0 remaining). S15 (Import/Export/Editor Integration) is in
-progress: STAB-0526–0531 + 0533–0536 done (10), STAB-0532 flagged 🟡,
-19 remaining — pick the first task from section 8.
+progress: STAB-0526–0531 + 0533–0538 done (12), STAB-0532 flagged 🟡,
+17 remaining — pick the first task from section 8.
 
 Reconfigure cmake-build-debug ONLY with CLion's cmake, not the system
 cmake. Editing mc3.xsd or adding a new .cpp file / new add_test()

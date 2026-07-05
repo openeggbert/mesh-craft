@@ -68,5 +68,19 @@ if(BUILD_TESTING)
             )
             set_tests_properties(mc3tomcb_roundtrip PROPERTIES TIMEOUT 60)
         endif()
+
+        # STAB-0537/0538: missing input file / write-protected output path
+        # each exit non-zero with an error message, not a crash or silent
+        # success.
+        if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/../test/house.mc3.xml")
+            add_test(
+                NAME mc3tomcb_error_handling
+                COMMAND "${PYTHON3_EXEC}"
+                        "${CMAKE_CURRENT_SOURCE_DIR}/test/mc3tomcb_error_test.py"
+                        "$<TARGET_FILE:mc3tomcb>"
+                        "${CMAKE_CURRENT_SOURCE_DIR}/../test/house.mc3.xml"
+            )
+            set_tests_properties(mc3tomcb_error_handling PROPERTIES TIMEOUT 30)
+        endif()
     endif()
 endif()
