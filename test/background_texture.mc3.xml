@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- STAB-0523 fixture: a solid bright-green background_texture behind a
+     bright red box. background_texture is drawn unconditionally (no UI
+     toggle) before the 3D scene, stretched to fill the whole viewport
+     (MeshCraftApplication.cpp:436-457) — so a screenshot should show
+     green everywhere the box doesn't cover, and red where it does,
+     confirming both that the texture renders and that it stays behind
+     (not on top of) 3D content. -->
+<mc3 version="0.3" model="BackgroundTextureFixture" default_camera="Main">
+
+  <environment>
+    <background_texture>textures/solid_green.png</background_texture>
+  </environment>
+
+  <lights>
+    <ambient color="0.3 0.3 0.3" brightness="0.5"/>
+    <directional name="Sun" color="1 0.95 0.8" brightness="2" direction="-0.5 -1 -0.5"/>
+  </lights>
+
+  <cameras>
+    <camera name="Main" position="0 0 3" target="0 0 0" fov="50" near="0.05" far="100"/>
+  </cameras>
+
+  <materials>
+    <material id="red"><base_color>0.9 0.05 0.05 1.0</base_color></material>
+  </materials>
+
+  <objects>
+    <box name="Foreground" size="1 1 1" position="0 0 0" material="red"/>
+  </objects>
+
+</mc3>

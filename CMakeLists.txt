@@ -513,6 +513,20 @@ if(MESH_CRAFT_BUILD_TESTING AND UNIX AND NOT ANDROID AND NOT EMSCRIPTEN)
             )
             set_tests_properties(csg_cache_test PROPERTIES TIMEOUT 30)
         endif()
+
+        # STAB-0523: confirms background_texture renders unconditionally,
+        # stretched to fill the viewport, behind (not covering) 3D content.
+        if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/test/background_texture.mc3.xml")
+            add_test(
+                NAME background_texture_test
+                COMMAND "${PYTHON3_EXEC}"
+                        "${CMAKE_CURRENT_SOURCE_DIR}/test/background_texture_test.py"
+                        $<TARGET_FILE:MeshCraft>
+                        "${CMAKE_CURRENT_SOURCE_DIR}/test/background_texture.mc3.xml"
+                WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
+            )
+            set_tests_properties(background_texture_test PROPERTIES TIMEOUT 30)
+        endif()
     endif()
 
     # mc3togltf_gltf test is registered by mc3togltf/CMakeLists.txt via $<TARGET_FILE:mc3togltf>
