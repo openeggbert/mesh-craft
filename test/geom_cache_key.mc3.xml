@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- S6 geometry cache key fixtures (STAB-0240/0241).
+
+     BoxRed/BoxBlue: identical geometry, different material. buildGeomCacheKey()
+     (GltfExporter.cpp) folds matIdx into the key, so these must NOT share a
+     glTF mesh.
+
+     TetraA/TetraB: two <mesh> objects referencing the same OBJ src (and no
+     material), so they SHOULD share a single glTF mesh. -->
+<mc3 version="0.3" model="GeomCacheKeyTest">
+
+  <materials>
+    <material id="red"><base_color>0.9 0.1 0.1 1.0</base_color></material>
+    <material id="blue"><base_color>0.1 0.1 0.9 1.0</base_color></material>
+  </materials>
+
+  <objects>
+    <box name="BoxRed"  size="1 1 1" material="red"  position="-2 0 0"/>
+    <box name="BoxBlue" size="1 1 1" material="blue" position=" 2 0 0"/>
+
+    <mesh name="TetraA" src="tetra.obj" position="0 0 0"/>
+    <mesh name="TetraB" src="tetra.obj" position="0 2 0"/>
+  </objects>
+
+</mc3>

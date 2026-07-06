@@ -128,6 +128,7 @@ if(BUILD_TESTING)
         set(_csg_stress_xml           "${CMAKE_CURRENT_SOURCE_DIR}/../test/csg_stress.mc3.xml")
         set(_instance_deform_xml      "${CMAKE_CURRENT_SOURCE_DIR}/../test/instance_deform_cache.mc3.xml")
         set(_close_dimensions_xml     "${CMAKE_CURRENT_SOURCE_DIR}/../test/close_dimensions.mc3.xml")
+        set(_geom_cache_key_xml       "${CMAKE_CURRENT_SOURCE_DIR}/../test/geom_cache_key.mc3.xml")
         set(_obj_robustness_xml       "${CMAKE_CURRENT_SOURCE_DIR}/../test/obj_robustness.mc3.xml")
         set(_texture_sampler_xml      "${CMAKE_CURRENT_SOURCE_DIR}/../test/texture_sampler.mc3.xml")
         set(_material_pbr_xml         "${CMAKE_CURRENT_SOURCE_DIR}/../test/material_pbr.mc3.xml")
@@ -272,6 +273,16 @@ if(BUILD_TESTING)
                         "${_close_dimensions_xml}"
             )
             set_tests_properties(mc3togltf_float_cache_key PROPERTIES TIMEOUT 30 LABELS "export")
+        endif()
+        if(EXISTS "${_geom_cache_key_xml}")
+            add_test(
+                NAME mc3togltf_geom_cache_key
+                COMMAND "${PYTHON3_EXEC}"
+                        "${CMAKE_CURRENT_SOURCE_DIR}/test/geom_cache_key_test.py"
+                        "$<TARGET_FILE:mc3togltf>"
+                        "${_geom_cache_key_xml}"
+            )
+            set_tests_properties(mc3togltf_geom_cache_key PROPERTIES TIMEOUT 30 LABELS "export")
         endif()
         if(EXISTS "${_obj_robustness_xml}")
             add_test(
