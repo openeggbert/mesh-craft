@@ -504,11 +504,11 @@ No project linter/formatter is configured.
    desktop session (dragging a file from a real file manager) — same
    caveat as clipboard above, check for a testable seam first.
 
-4. **STAB-0566 — verify Windows: SDL runtime DLLs copied.** Files:
-   `CMakeLists.txt`. Check whether `cna_copy_sdl_runtime` (or an
-   equivalent post-build step) actually exists and runs for a Windows
-   target — likely reachable by inspecting the MinGW configure/build
-   log from STAB-0552 rather than needing a fresh cross-compile.
+4. **STAB-0567 — verify MinGW: static libgcc/libstdc++ linked.** Files:
+   `CMakeLists.txt`. Should be a one-line confirmation — the
+   `-static-libgcc -static-libstdc++` flags are already visible at
+   `CMakeLists.txt:350` inside the same `if(MINGW)` block checked for
+   STAB-0566.
 
 Recently closed this session: **STAB-0554** (path separators — confirmed
 `std::filesystem::path` used consistently everywhere, no gap),
@@ -526,11 +526,14 @@ compatibility — confirmed all 7 of CNA's EasyGL 3D shader programs are
 console showed no shader-compile-failure diagnostics), **STAB-0563/0564**
 (SQLite/AI stubs on Emscripten — both feature-gate macros are correctly
 undefined for that target and both stub branches compiled clean as
-part of the same 449/449 build), and **STAB-0565** (IDBFS persistence —
+part of the same 449/449 build), **STAB-0565** (IDBFS persistence —
 found and fixed a real gap: `cmake/web/pre.js` mounted IDBFS at
 `/home/user`, but Emscripten's actual default `$HOME` is
 `/home/web_user`, so everything `meshcraftConfigDir()` writes was
-silently landing outside the persistent mount; fixed and rebuilt clean).
+silently landing outside the persistent mount; fixed and rebuilt clean),
+and **STAB-0566** (Windows SDL DLL copy — confirmed correct by code
+review; can't be run end-to-end since MinGW blocks earlier at ~73%,
+before the link/post-build stage this row concerns).
 
 Continue through the rest of S16 (`plan.md`, STAB-0559 onward) in
 `plan.md` order after these — several remaining rows are platform-build
