@@ -477,8 +477,11 @@ if(MESH_CRAFT_BUILD_TESTING AND UNIX AND NOT ANDROID AND NOT EMSCRIPTEN)
     endif()
 
     # STAB-0521: verify no GL error leaks out of a full frame's render passes.
-    # medieval_castle.mc3.xml enables bloom, so this exercises SSAO/bloom/
-    # skybox/gizmos/ImGui together, not just the base 3D pass.
+    # medieval_castle.mc3.xml is the richest fixture available (skybox,
+    # emissive materials, many objects/gizmos) -- note that bloom/SSAO
+    # themselves are pure runtime UI toggles (off by default, no CLI/
+    # document hook), so this exercises the base 3D pass + skybox + gizmos
+    # + ImGui, not the bloom/SSAO post-process passes specifically.
     if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/test/medieval_castle.mc3.xml")
         add_test(
             NAME gl_state_leak_test
