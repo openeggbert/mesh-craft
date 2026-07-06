@@ -30,14 +30,21 @@ static const char* attr(const XMLElement* el, const char* name, const char* def 
     return v ? v : def;
 }
 
+// STAB-0080: a malformed value (e.g. "abc") previously threw std::invalid_argument
+// straight out of std::stof/std::stoi, which failed the *entire* file load with an
+// unhelpful "Failed to load file: stof" message instead of gracefully defaulting
+// just this one attribute — unlike parseVec3/parseVec4, which are sscanf-based and
+// already tolerate malformed input safely.
 static float attrF(const XMLElement* el, const char* name, float def = 0.0f) {
     const char* v = el->Attribute(name);
-    return v ? std::stof(v) : def;
+    if (!v) return def;
+    try { return std::stof(v); } catch (...) { return def; }
 }
 
 static int attrI(const XMLElement* el, const char* name, int def = 0) {
     const char* v = el->Attribute(name);
-    return v ? std::stoi(v) : def;
+    if (!v) return def;
+    try { return std::stoi(v); } catch (...) { return def; }
 }
 
 static bool attrB(const XMLElement* el, const char* name, bool def = false) {
@@ -70,8 +77,10 @@ static Mc3Transform parseTransform(const XMLElement* el) {
     if (sv) {
         std::string s = sv;
         if (s.find(' ') == std::string::npos && s.find(',') == std::string::npos) {
-            float f = std::stof(s);
-            t.scale = {f, f, f};
+            // STAB-0080: a malformed single-value scale (e.g. "abc") must not
+            // throw uncaught and fail the whole file load.
+            try { float f = std::stof(s); t.scale = {f, f, f}; }
+            catch (...) { t.scale = {1, 1, 1}; }
         } else {
             t.scale = parseVec3(s, {1,1,1});
         }
@@ -179,8 +188,10 @@ static Mc3Primitive parsePrimitive(const XMLElement* el, ObjectType type) {
     if (const char* sv = el->Attribute("size")) {
         std::string s = sv;
         if (s.find(' ') == std::string::npos && s.find(',') == std::string::npos) {
-            float f = std::stof(s);
-            p.size = {f, f, f};
+            // STAB-0080: a malformed single-value size (e.g. "abc") must not
+            // throw uncaught and fail the whole file load.
+            try { float f = std::stof(s); p.size = {f, f, f}; }
+            catch (...) { /* p.size keeps its default-constructed value */ }
         } else if (type == ObjectType::Plane) {
             // Plane size is vec2 (width × depth = X × Z). Legacy XMLs may have "W 0 D" (3 values).
             std::istringstream iss(s);

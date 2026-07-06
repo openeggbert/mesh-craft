@@ -1997,6 +1997,123 @@ static void testUnknownTopLevelElement() {
     CHECK(doc.objects.size() == 1,  "unknown tag: known objects still parsed");
 }
 
+// STAB-0076: an unknown *attribute* on a known element must be ignored, not
+// throw or corrupt the known attributes on the same element.
+static void testUnknownAttributeOnKnownElement() {
+    auto xmlPath = tmpPath();
+    {
+        std::ofstream f(xmlPath);
+        f << R"(<?xml version="1.0" encoding="UTF-8"?>)" "\n"
+          << R"(<mc3 version="0.3">)" "\n"
+          << R"(  <objects>)" "\n"
+          << R"(    <box name="Known" id="b1" unknownAttr="whatever" size="2 2 2"/>)" "\n"
+          << R"(  </objects>)" "\n"
+          << R"(</mc3>)" "\n";
+    }
+    bool threw = false;
+    Mc3Document doc;
+    try {
+        doc = Mc3Document::loadFromFile(xmlPath);
+    } catch (...) {
+        threw = true;
+    }
+    std::filesystem::remove(xmlPath);
+
+    CHECK(!threw, "unknown attribute: no exception thrown");
+    CHECK(doc.objects.size() == 1, "unknown attribute: object still parsed");
+    if (!doc.objects.empty()) {
+        CHECK(doc.objects[0]->name == "Known", "unknown attribute: known attribute (name) unaffected");
+        if (doc.objects[0]->primitive)
+            CHECKF(doc.objects[0]->primitive->size[0], 2.0f, "unknown attribute: known attribute (size) unaffected");
+    }
+}
+
+// STAB-0079/0080: malformed numeric attributes must not crash or throw
+// uncaught — parseVec3/parseVec4 are sscanf-based (already tolerant by
+// construction); attrF()/attrI() and the two inline single-value size/scale
+// parsers in Mc3XmlParser.cpp previously used raw std::stof/std::stoi with
+// no try/catch, which threw std::invalid_argument straight out and failed
+// the *entire* file load with an unhelpful "Failed to load file: stof"
+// message (found and fixed this session).
+static void testMalformedNumericAttributesDoNotCrash() {
+    auto xmlPath = tmpPath();
+    {
+        std::ofstream f(xmlPath);
+        f << R"(<?xml version="1.0" encoding="UTF-8"?>)" "\n"
+          << R"(<mc3 version="0.3">)" "\n"
+          << R"(  <objects>)" "\n"
+          << R"(    <sphere name="BadRadius" radius="abc"/>)" "\n"
+          << R"(    <box name="BadScale" scale="notanumber"/>)" "\n"
+          << R"(    <box name="BadSize" size="notanumber"/>)" "\n"
+          << R"(    <box name="PartialVec3" position="1 2"/>)" "\n"
+          << R"(  </objects>)" "\n"
+          << R"(</mc3>)" "\n";
+    }
+    bool threw = false;
+    Mc3Document doc;
+    try {
+        doc = Mc3Document::loadFromFile(xmlPath);
+    } catch (...) {
+        threw = true;
+    }
+    std::filesystem::remove(xmlPath);
+
+    CHECK(!threw, "malformed numeric attrs: no exception thrown, whole file still loads");
+    CHECK(doc.objects.size() == 4, "malformed numeric attrs: all 4 objects still parsed");
+    if (doc.objects.size() == 4) {
+        CHECK(doc.objects[0]->primitive.has_value(), "malformed radius: primitive still present");
+        if (doc.objects[0]->primitive)
+            CHECKF(doc.objects[0]->primitive->radius, 0.5f, "malformed radius: falls back to default 0.5");
+
+        CHECKF(doc.objects[1]->transform.scale[0], 1.0f, "malformed scale: falls back to default 1.0");
+
+        if (doc.objects[2]->primitive)
+            CHECKF(doc.objects[2]->primitive->size[0], 1.0f, "malformed size: falls back to default 1.0");
+
+        // "1 2" (only 2 of 3 vec3 components) must not crash; third
+        // component stays at its default (0) rather than reading garbage.
+        CHECKF(doc.objects[3]->transform.position[0], 1.0f, "partial vec3: position.x parsed");
+        CHECKF(doc.objects[3]->transform.position[1], 2.0f, "partial vec3: position.y parsed");
+        CHECKF(doc.objects[3]->transform.position[2], 0.0f, "partial vec3: position.z defaults to 0");
+    }
+}
+
+// STAB-0081: an object with no `id` attribute must not crash. The row's
+// original acceptance criterion assumed it should be *skipped*, but
+// mc3.xsd's own objectAttrs group declares `id` as plain `xs:string` with
+// no `use="required"` (unlike e.g. instanceType's `definition`, which is
+// `use="required"`) — id is genuinely optional by design for ordinary
+// scene objects. The actual, schema-consistent policy confirmed here:
+// the object is still parsed and added with an empty id, not dropped.
+static void testMissingIdDoesNotCrash() {
+    auto xmlPath = tmpPath();
+    {
+        std::ofstream f(xmlPath);
+        f << R"(<?xml version="1.0" encoding="UTF-8"?>)" "\n"
+          << R"(<mc3 version="0.3">)" "\n"
+          << R"(  <objects>)" "\n"
+          << R"(    <box name="NoId"/>)" "\n"
+          << R"(    <box name="HasId" id="b1"/>)" "\n"
+          << R"(  </objects>)" "\n"
+          << R"(</mc3>)" "\n";
+    }
+    bool threw = false;
+    Mc3Document doc;
+    try {
+        doc = Mc3Document::loadFromFile(xmlPath);
+    } catch (...) {
+        threw = true;
+    }
+    std::filesystem::remove(xmlPath);
+
+    CHECK(!threw, "missing id: no exception thrown");
+    CHECK(doc.objects.size() == 2, "missing id: both objects still parsed (id is genuinely optional per mc3.xsd)");
+    if (doc.objects.size() == 2) {
+        CHECK(doc.objects[0]->id.empty(), "missing id: NoId object kept with an empty id, not dropped");
+        CHECK(doc.objects[1]->id == "b1", "missing id: sibling object's id unaffected");
+    }
+}
+
 // ---------------------------------------------------------------------------
 // STAB-0074 — Grid with explicit subdivisions_x and subdivisions_z
 // ---------------------------------------------------------------------------
@@ -2360,6 +2477,9 @@ int main(int argc, char* argv[]) {
     testMeta();
     testAllPrimitiveTypes();
     testUnknownTopLevelElement();
+    testUnknownAttributeOnKnownElement();
+    testMalformedNumericAttributesDoNotCrash();
+    testMissingIdDoesNotCrash();
     testGridSubdivisions();
     testIcoSphereSegments();
     testCapsuleRadiusHeight();
