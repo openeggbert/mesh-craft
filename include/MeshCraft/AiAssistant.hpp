@@ -1,18 +1,33 @@
 #pragma once
 #include <atomic>
-#include <future>
+#include <memory>
+#include <mutex>
 #include <string>
 #include <utility>
 
 namespace MeshCraft {
+
+// Shared result box for a background AI request. Heap-allocated and held by
+// both AiAssistant (via a shared_ptr) and the detached worker thread's own
+// shared_ptr copy — so the thread can keep running and safely write its
+// result here even if the owning AiAssistant is destroyed first (STAB-0387/
+// STAB-0388). Never destroyed while a thread still holds a reference to it.
+struct AiRequestResult {
+    std::atomic<bool> done{false};
+    std::mutex        mutex; // guards the fields below
+    std::string       text;
+    std::string       stopReason;
+    std::string       error;
+    bool              hasError{false};
+};
 
 // Asynchronous Claude API client.
 // All public methods are safe to call from the main (UI) thread.
 class AiAssistant {
 public:
     std::string apiKey;
-    std::string model{"claude-sonnet-4-6"};
-    int         maxTokens{32000};  // claude-sonnet-4-6 supports up to 64 000
+    std::string model{"claude-sonnet-5"}; // STAB-0407: kept current with Anthropic's model lineup
+    int         maxTokens{32000};  // claude-sonnet-5 supports up to 64 000
 
     // Base URL for the Messages API endpoint. Override for testing against a
     // local mock server (e.g. "http://127.0.0.1:PORT") — production code
@@ -57,7 +72,7 @@ public:
     static std::string extractFirstTextValue(const std::string& json);
 
 private:
-    std::future<std::pair<std::string, std::string>> future_; // {text, stop_reason}
+    std::shared_ptr<AiRequestResult> pending_; // null when no request has ever been sent
     std::string result_;
     std::string errorMsg_;
     std::string stopReason_;

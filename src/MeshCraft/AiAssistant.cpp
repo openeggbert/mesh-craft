@@ -11,9 +11,9 @@
 
 #include <chrono>
 #include <cstdio>
-#include <future>
 #include <stdexcept>
 #include <string>
+#include <thread>
 
 namespace MeshCraft {
 
@@ -124,32 +124,37 @@ std::string AiAssistant::extractFirstTextValue(const std::string& json) {
 // ---------------------------------------------------------------------------
 
 bool AiAssistant::isInFlight() const {
-    return future_.valid() && !done_;
+    return pending_ != nullptr && !done_;
 }
 
 void AiAssistant::poll() {
-    if (!future_.valid() || done_) return;
-    if (future_.wait_for(std::chrono::seconds(0)) == std::future_status::ready) {
-        try {
-            auto [text, stop] = future_.get();
-            result_     = std::move(text);
-            stopReason_ = std::move(stop);
-            done_       = true;
-            hasError_   = false;
-        } catch (const std::exception& e) {
-            result_     = {};
-            stopReason_ = {};
-            errorMsg_   = e.what();
-            done_       = true;
-            hasError_   = true;
-        }
+    if (!pending_ || done_) return;
+    if (!pending_->done.load(std::memory_order_acquire)) return;
+
+    std::lock_guard<std::mutex> lock(pending_->mutex);
+    if (pending_->hasError) {
+        result_     = {};
+        stopReason_ = {};
+        errorMsg_   = pending_->error;
+        hasError_   = true;
+    } else {
+        result_     = pending_->text;
+        stopReason_ = pending_->stopReason;
+        hasError_   = false;
     }
+    done_ = true;
 }
 
 void AiAssistant::reset() {
-    if (future_.valid() && !done_)
-        future_.wait(); // wait for in-flight call to finish before resetting
-    future_ = {};
+    // STAB-0387/STAB-0388: previously this blocked (via future_.wait()) until
+    // an in-flight request finished — since future_ was a std::async future,
+    // its *destructor* (e.g. app shutdown while a request is in flight) had
+    // the exact same blocking behavior, up to readTimeoutSec (600s default).
+    // Now pending_ just drops our reference to the shared result box; the
+    // background thread (detached, holding its own shared_ptr copy) keeps
+    // running independently and safely writes into it whether or not this
+    // AiAssistant (or the whole app) still exists — no blocking anywhere.
+    pending_.reset();
     result_.clear();
     errorMsg_.clear();
     stopReason_.clear();
@@ -169,75 +174,94 @@ void AiAssistant::sendAsync(const std::string& systemPrompt,
     int         readTimeoutCopy    = readTimeoutSec;
     int         writeTimeoutCopy   = writeTimeoutSec;
 
-    future_ = std::async(std::launch::async,
-        [apiKeyCopy, modelCopy, maxTokensCopy, baseUrlCopy,
-         connectTimeoutCopy, readTimeoutCopy, writeTimeoutCopy,
-         systemPrompt, sceneXml, taskPrompt]()
-            -> std::pair<std::string, std::string>   // {text, stop_reason}
+    auto pending = std::make_shared<AiRequestResult>();
+    pending_ = pending;
+
+    std::thread([pending, apiKeyCopy, modelCopy, maxTokensCopy, baseUrlCopy,
+                 connectTimeoutCopy, readTimeoutCopy, writeTimeoutCopy,
+                 systemPrompt, sceneXml, taskPrompt]()
     {
+        std::string text, stopReason, error;
+        bool hasError = false;
+        try {
 #ifdef MESHCRAFT_HAS_AI
-        // httplib::Client parses the scheme from baseUrlCopy and internally
-        // dispatches to an SSL-backed client for "https://" (production,
-        // default apiBaseUrl) or a plain socket for "http://" (test mock
-        // servers point apiBaseUrl at http://127.0.0.1:PORT).
-        httplib::Client cli(baseUrlCopy);
-        cli.set_connection_timeout(connectTimeoutCopy, 0);
-        cli.set_read_timeout(readTimeoutCopy, 0);
-        cli.set_write_timeout(writeTimeoutCopy, 0);
+            // httplib::Client parses the scheme from baseUrlCopy and internally
+            // dispatches to an SSL-backed client for "https://" (production,
+            // default apiBaseUrl) or a plain socket for "http://" (test mock
+            // servers point apiBaseUrl at http://127.0.0.1:PORT).
+            httplib::Client cli(baseUrlCopy);
+            cli.set_connection_timeout(connectTimeoutCopy, 0);
+            cli.set_read_timeout(readTimeoutCopy, 0);
+            cli.set_write_timeout(writeTimeoutCopy, 0);
 
-        // Structured request with prompt caching:
-        //   system prompt  → cached (stable across requests)
-        //   scene XML      → cached (stable while editing same scene)
-        //   task prompt    → NOT cached (changes every request)
-        std::string body =
-            "{"
-            "\"model\":\"" + AiAssistant::jsonEscape(modelCopy) + "\","
-            "\"max_tokens\":" + std::to_string(maxTokensCopy) + ","
-            "\"system\":[{"
-              "\"type\":\"text\","
-              "\"text\":\"" + AiAssistant::jsonEscape(systemPrompt) + "\","
-              "\"cache_control\":{\"type\":\"ephemeral\"}"
-            "}],"
-            "\"messages\":[{\"role\":\"user\",\"content\":["
-              "{"
-                "\"type\":\"text\","
-                "\"text\":\"" + AiAssistant::jsonEscape(sceneXml) + "\","
-                "\"cache_control\":{\"type\":\"ephemeral\"}"
-              "},"
-              "{"
-                "\"type\":\"text\","
-                "\"text\":\"Task: " + AiAssistant::jsonEscape(taskPrompt) + "\""
-              "}"
-            "]}]}";
+            // Structured request with prompt caching:
+            //   system prompt  → cached (stable across requests)
+            //   scene XML      → cached (stable while editing same scene)
+            //   task prompt    → NOT cached (changes every request)
+            std::string body =
+                "{"
+                "\"model\":\"" + AiAssistant::jsonEscape(modelCopy) + "\","
+                "\"max_tokens\":" + std::to_string(maxTokensCopy) + ","
+                "\"system\":[{"
+                  "\"type\":\"text\","
+                  "\"text\":\"" + AiAssistant::jsonEscape(systemPrompt) + "\","
+                  "\"cache_control\":{\"type\":\"ephemeral\"}"
+                "}],"
+                "\"messages\":[{\"role\":\"user\",\"content\":["
+                  "{"
+                    "\"type\":\"text\","
+                    "\"text\":\"" + AiAssistant::jsonEscape(sceneXml) + "\","
+                    "\"cache_control\":{\"type\":\"ephemeral\"}"
+                  "},"
+                  "{"
+                    "\"type\":\"text\","
+                    "\"text\":\"Task: " + AiAssistant::jsonEscape(taskPrompt) + "\""
+                  "}"
+                "]}]}";
 
-        httplib::Headers headers = {
-            {"x-api-key",          apiKeyCopy},
-            {"anthropic-version",  "2023-06-01"},
-            {"anthropic-beta",     "prompt-caching-2024-07-31"},
-            {"content-type",       "application/json"}
-        };
+            httplib::Headers headers = {
+                {"x-api-key",          apiKeyCopy},
+                {"anthropic-version",  "2023-06-01"},
+                {"anthropic-beta",     "prompt-caching-2024-07-31"},
+                {"content-type",       "application/json"}
+            };
 
-        auto res = cli.Post("/v1/messages", headers, body, "application/json");
-        if (!res)
-            throw std::runtime_error("HTTP request failed: " +
-                httplib::to_string(res.error()));
-        if (res->status != 200)
-            throw std::runtime_error("API error " + std::to_string(res->status) +
-                ": " + res->body);
+            auto res = cli.Post("/v1/messages", headers, body, "application/json");
+            if (!res) {
+                throw std::runtime_error("HTTP request failed: " +
+                    httplib::to_string(res.error()));
+            }
+            if (res->status != 200) {
+                throw std::runtime_error("API error " + std::to_string(res->status) +
+                    ": " + res->body);
+            }
 
-        std::string stopReason = AiAssistant::extractStopReason(res->body);
-        std::string text       = AiAssistant::extractFirstTextValue(res->body);
-        if (text.empty())
-            throw std::runtime_error("Empty response from API: " + res->body);
-        return {text, stopReason};
+            stopReason = AiAssistant::extractStopReason(res->body);
+            text       = AiAssistant::extractFirstTextValue(res->body);
+            if (text.empty()) {
+                throw std::runtime_error("Empty response from API: " + res->body);
+            }
 #else
-        (void)apiKeyCopy; (void)modelCopy; (void)maxTokensCopy; (void)baseUrlCopy;
-        (void)systemPrompt; (void)sceneXml; (void)taskPrompt;
-        throw std::runtime_error(
-            "AI not available: built without cpp-httplib + OpenSSL.\n"
-            "Install libssl-dev and reconfigure.");
+            (void)apiKeyCopy; (void)modelCopy; (void)maxTokensCopy; (void)baseUrlCopy;
+            (void)systemPrompt; (void)sceneXml; (void)taskPrompt;
+            throw std::runtime_error(
+                "AI not available: built without cpp-httplib + OpenSSL.\n"
+                "Install libssl-dev and reconfigure.");
 #endif
-    });
+        } catch (const std::exception& e) {
+            hasError = true;
+            error    = e.what();
+        }
+
+        {
+            std::lock_guard<std::mutex> lock(pending->mutex);
+            pending->text       = std::move(text);
+            pending->stopReason = std::move(stopReason);
+            pending->error      = std::move(error);
+            pending->hasError   = hasError;
+        }
+        pending->done.store(true, std::memory_order_release);
+    }).detach();
 }
 
 } // namespace MeshCraft
