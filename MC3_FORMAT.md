@@ -494,6 +494,8 @@ Pass `--allow-approximate-csg` (CLI) or enable the "Allow approximate CSG export
 - **Normals are not preserved from the child geometry** — flat per-face normals are recomputed from each triangle's winding via cross product; there is no smooth-shading / vertex-normal-interpolation option for CSG output.
 - Child material assignments are not preserved — the CSG root's material is used for the entire merged mesh, regardless of what materials the children had.
 
+**Investigated: could UV be preserved (STAB-0225)?** Not without a real feature addition. Every `Manifold` fed into a boolean op in `CsgEvaluator.cpp` is built either from Manifold's own built-in primitive generators (`Manifold::Cube`/`Sphere`/`Cylinder`, which carry no UV data at all) or from a `MeshGL` with `numProp = 3` (position-only) for the Torus/Capsule/IcoSphere path — no UV channel is ever fed in for Manifold to carry through the boolean op in the first place. Manifold v3's `MeshGL` *does* support extra per-vertex properties beyond position (and interpolates them across new cut edges during boolean ops), so preserving UVs is technically possible — but it would require rebuilding every CSG-eligible primitive with a UV-carrying `MeshGL` (including writing new UV-aware constructors for the cases currently using Manifold's built-in generators) and handling the interpolated-but-unwrapped seams that boolean cuts create. That's a real, non-trivial feature, out of scope for this stabilization effort — documented as an explicit limitation above rather than attempted.
+
 ---
 
 ## Animations

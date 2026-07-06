@@ -143,7 +143,28 @@ if(NOT EMSCRIPTEN)
     target_link_libraries(imgui PUBLIC GLESv2)
 endif()
 
-# Manifold — CSG boolean mesh evaluation
+# Manifold — CSG boolean mesh evaluation. Pinned at v3.0.0 (STAB-0222); no
+# minimum-version requirement beyond this exact pin has been established —
+# MeshCraft's CsgEvaluator.cpp only uses the stable, long-standing
+# Manifold/MeshGL boolean-op API (+, -, ^, Transform), so any 3.x release
+# is expected to work, but only v3.0.0 is actually built/tested here.
+#
+# All the FORCE-disabled options below are non-essential features this
+# project doesn't use, kept off to minimize build complexity/time rather
+# than because of a discovered technical blocker (no historical
+# investigation found a specific reason to enable any of them):
+#   MANIFOLD_EXPORT/TEST/FUZZ: Manifold's own export CLI, test suite, and
+#     fuzzers -- not needed since MeshCraft only links the library.
+#   MANIFOLD_PAR (STAB-0232): Manifold's internal (TBB/PSTL) parallelism
+#     for its own mesh-processing algorithms. Left off; not yet profiled
+#     against this project's typical scene sizes to see whether it would
+#     help — a real perf investigation, not done, would need before/after
+#     timing on a large CSG-heavy scene (see STAB-0233's perf test).
+#   MANIFOLD_CROSS_SECTION (STAB-0235): Manifold's 2D cross-section/
+#     polygon-boolean module (its `CrossSection` class) — unrelated to
+#     MC3's own `Mc3CrossSection` (extrude cross-sections, a completely
+#     separate, pre-existing MeshCraft feature). Left off since nothing in
+#     mc3togltf calls into Manifold's CrossSection API.
 set(MANIFOLD_PAR           OFF CACHE BOOL "" FORCE)
 set(MANIFOLD_EXPORT        OFF CACHE BOOL "" FORCE)
 set(MANIFOLD_TEST          OFF CACHE BOOL "" FORCE)

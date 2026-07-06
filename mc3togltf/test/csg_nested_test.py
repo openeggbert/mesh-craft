@@ -87,6 +87,37 @@ def test_nested_csg(mc3togltf, xml_path, tmpdir):
     print(f"csg_nested_test: PASS (verts={vc}, indices={ic})")
 
 
+def test_nested_csg_approximate(mc3togltf, xml_path, tmpdir):
+    """STAB-0231: --allow-approximate-csg with a 3-level nested CSG child
+    must recurse through every level and export all 4 leaf primitives
+    (BoxBase, HoleA, HoleB1, HoleB2) as separate meshes, with the 3 CSG
+    wrapper nodes (NestedCsg, HolePair, HoleBGroup) correctly meshless
+    but still holding valid `children` hierarchy links."""
+    out = os.path.join(tmpdir, "nested_approx.gltf")
+    r = run([mc3togltf, "--allow-approximate-csg", xml_path, out])
+    assert r.returncode == 0, (
+        f"Approximate-mode nested CSG export failed (returncode={r.returncode}):\n{r.stderr}"
+    )
+
+    with open(out) as f:
+        gltf = json.load(f)
+    nmap = {n.get("name", ""): n for n in gltf.get("nodes", [])}
+
+    leaf_names = ["BoxBase", "HoleA", "HoleB1", "HoleB2"]
+    for leaf in leaf_names:
+        assert leaf in nmap, f"Expected leaf '{leaf}' as a node in approximate mode, got: {sorted(nmap.keys())}"
+        assert nmap[leaf].get("mesh") is not None, f"Leaf '{leaf}' should have real mesh geometry"
+
+    wrapper_names = ["NestedCsg", "HolePair", "HoleBGroup"]
+    for wrapper in wrapper_names:
+        assert wrapper in nmap, f"Expected CSG wrapper '{wrapper}' as a node, got: {sorted(nmap.keys())}"
+        assert nmap[wrapper].get("mesh") is None, f"CSG wrapper '{wrapper}' should have no mesh of its own in approximate mode"
+        assert nmap[wrapper].get("children"), f"CSG wrapper '{wrapper}' should have a children array"
+
+    print(f"csg_nested_test (approximate mode): PASS "
+          f"(4 leaves meshed, 3 CSG wrappers correctly meshless with children)")
+
+
 if __name__ == "__main__":
     if len(sys.argv) < 3:
         print(f"Usage: {sys.argv[0]} <mc3togltf> <csg_nested.mc3.xml>")
@@ -95,6 +126,7 @@ if __name__ == "__main__":
     with tempfile.TemporaryDirectory() as tmpdir:
         try:
             test_nested_csg(sys.argv[1], sys.argv[2], tmpdir)
+            test_nested_csg_approximate(sys.argv[1], sys.argv[2], tmpdir)
         except AssertionError as e:
             print(f"FAIL: {e}", file=sys.stderr)
             sys.exit(1)
