@@ -504,11 +504,14 @@ No project linter/formatter is configured.
    desktop session (dragging a file from a real file manager) — same
    caveat as clipboard above, check for a testable seam first.
 
-4. **STAB-0568 — verify Android stub: main() → shared lib adapter.**
-   Files: `CMakeLists.txt`. Check whether `add_library(main SHARED)`
-   (or equivalent) is actually selected for an Android configure —
-   likely code-reading only, since there's no Android NDK/toolchain
-   available in this environment to actually configure against.
+4. **STAB-0569 — verify preloaded web assets: `test/` files accessible.**
+   Files: `CMakeLists.txt`. The `--preload-file test@/test` flag is
+   already visible at `CMakeLists.txt:319` (confirmed while reading
+   the Emscripten link-options block for STAB-0562/0565) — this row is
+   likely a quick confirmation that a sample file under `/test` in the
+   Emscripten FS is actually readable, e.g. via a small Node smoke
+   check against the already-built `MeshCraft.js`/`.wasm` (same
+   approach as STAB-0553's `mc3togltf.js --help` check).
 
 Recently closed this session: **STAB-0554** (path separators — confirmed
 `std::filesystem::path` used consistently everywhere, no gap),
@@ -537,8 +540,11 @@ real MinGW toolchain and found a genuine bug via `--trace-expand`:
 MeshCraft's parent directory scope, so zero DLL-copy commands were ever
 generated; fixed on the MeshCraft side only, via a `CNA_SDL_PREBUILT_ROOT`-based
 fallback in `CMakeLists.txt`, verified against the regenerated
-`build.ninja`), and **STAB-0567** (MinGW static libgcc/libstdc++ —
-confirmed directly in the same generated `build.ninja`'s `LINK_FLAGS`).
+`build.ninja`), **STAB-0567** (MinGW static libgcc/libstdc++ —
+confirmed directly in the same generated `build.ninja`'s `LINK_FLAGS`),
+and **STAB-0568** (Android `main()`/shared-lib adapter — confirmed by
+code reading; no Android NDK is installed here so it can't be
+reconfigured against a real toolchain like STAB-0566/0567 were).
 
 **Lesson from STAB-0566**: don't close a build-system verification row on
 code-reading alone when a cheap real reconfigure is possible (the cached
