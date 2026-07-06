@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<mc3 version="0.1" model="">
+    <lights>
+        <directional name="Sun" color="1 0.95 0.85" brightness="1.2" direction="0.3 -1 -0.2"/>
+    </lights>
+    <materials>
+        <material id="Wood" roughness="0.7" metallic="0">
+            <base_color>0.6 0.4 0.2 1</base_color>
+        </material>
+    </materials>
+    <objects>
+        <box name="Crate" id="box1" material="Wood" position="2 0.5 -1"/>
+        <sphere name="Ball" id="sphere1" radius="0.75"/>
+    </objects>
+</mc3>

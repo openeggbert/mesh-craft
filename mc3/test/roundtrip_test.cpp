@@ -2177,6 +2177,56 @@ static void testPathWithSpacesRoundtrip() {
 }
 
 // ---------------------------------------------------------------------------
+// STAB-0049 — golden-file test: Mc3XmlWriter's exact byte output for a fixed
+// document is compared against a committed reference file. Mc3XmlWriter has
+// no time/random/machine-dependent state (verified: no time()/rand()/chrono
+// calls anywhere in Mc3XmlWriter.cpp), so this output is fully deterministic
+// — an unintentional formatting change (attribute order, float precision,
+// whitespace) in the writer will show up here as a byte diff, even if every
+// field-level roundtrip assertion elsewhere still passes.
+// ---------------------------------------------------------------------------
+
+static void testGoldenFileBasicScene() {
+    Mc3Document doc;
+    doc.materials["Wood"] = Mc3Material("Wood", {0.6f, 0.4f, 0.2f, 1.0f}, 0.7f, 0.0f);
+
+    auto box = std::make_shared<Mc3Object>();
+    box->id = "box1"; box->name = "Crate"; box->type = ObjectType::Box;
+    box->primitive = Mc3Primitive{.primitiveType = PrimitiveType::Box, .size = {1.0f, 1.0f, 1.0f}};
+    box->material = "Wood";
+    box->transform.position = {2.0f, 0.5f, -1.0f};
+    doc.objects.push_back(box);
+
+    auto sphere = std::make_shared<Mc3Object>();
+    sphere->id = "sphere1"; sphere->name = "Ball"; sphere->type = ObjectType::Sphere;
+    sphere->primitive = Mc3Primitive{.primitiveType = PrimitiveType::Sphere, .radius = 0.75f};
+    doc.objects.push_back(sphere);
+
+    doc.lights.push_back(Mc3Light::directional("Sun", {0.3f, -1.0f, -0.2f}, {1.0f, 0.95f, 0.85f}, 1.2f));
+
+    auto p = tmpPath();
+    doc.saveToFile(p);
+    std::ifstream produced(p);
+    std::string producedContent((std::istreambuf_iterator<char>(produced)),
+                                 std::istreambuf_iterator<char>());
+    std::filesystem::remove(p);
+
+    auto goldenPath = std::filesystem::path(__FILE__).parent_path() / "golden" / "basic_scene.mc3.xml";
+    std::ifstream golden(goldenPath);
+    CHECK(golden.good(), "golden file: basic_scene.mc3.xml exists and opens");
+    if (!golden.good()) return;
+    std::string goldenContent((std::istreambuf_iterator<char>(golden)),
+                               std::istreambuf_iterator<char>());
+
+    CHECK(producedContent == goldenContent,
+          "golden file: Mc3XmlWriter output byte-for-byte matches committed golden/basic_scene.mc3.xml");
+    if (producedContent != goldenContent) {
+        std::cerr << "--- produced ---\n" << producedContent
+                  << "--- golden ---\n" << goldenContent << "\n";
+    }
+}
+
+// ---------------------------------------------------------------------------
 // STAB-0557 — non-ASCII object name: name/id containing non-ASCII characters
 // survives an ordinary (ASCII-path) round-trip unchanged.
 // ---------------------------------------------------------------------------
@@ -2247,6 +2297,7 @@ int main(int argc, char* argv[]) {
     testUtf8FilenameRoundtrip();
     testPathWithSpacesRoundtrip();
     testNonAsciiObjectNameRoundtrip();
+    testGoldenFileBasicScene();
 
     if (argc >= 2) {
         testFeaturesXmlLoads(argv[1]);

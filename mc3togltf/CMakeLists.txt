@@ -299,6 +299,13 @@ if(BUILD_TESTING)
             set_tests_properties(mc3togltf_determinism PROPERTIES TIMEOUT 30 LABELS "export")
         endif()
         add_test(
+            NAME mc3togltf_golden
+            COMMAND "${PYTHON3_EXEC}"
+                    "${CMAKE_CURRENT_SOURCE_DIR}/test/golden_test.py"
+                    "$<TARGET_FILE:mc3togltf>"
+        )
+        set_tests_properties(mc3togltf_golden PROPERTIES TIMEOUT 30 LABELS "export")
+        add_test(
             NAME mc3togltf_help_text
             COMMAND "${PYTHON3_EXEC}"
                     "${CMAKE_CURRENT_SOURCE_DIR}/test/help_text_test.py"

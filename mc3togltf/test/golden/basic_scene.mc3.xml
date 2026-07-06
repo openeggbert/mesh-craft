@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- STAB-0050: fixed, dedicated fixture for the golden-file glTF export
+     test (mc3togltf/test/golden_test.py). Do not reuse this file for any
+     other test — its only job is to stay byte-for-byte stable so the
+     committed golden JSON in this same directory keeps matching. -->
+<mc3 version="0.1" model="GoldenBasicScene">
+  <materials>
+    <material id="Wood" roughness="0.7" metallic="0">
+      <base_color>0.6 0.4 0.2 1</base_color>
+    </material>
+  </materials>
+  <objects>
+    <box name="Crate" id="box1" material="Wood" position="2 0.5 -1"/>
+    <sphere name="Ball" id="sphere1" radius="0.75"/>
+  </objects>
+</mc3>
