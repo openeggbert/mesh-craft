@@ -1,6 +1,6 @@
 # NEXT.md
 
-_Last updated: 2026-07-05, commit `18b1809` (develop, in sync with `origin/develop`)_
+_Last updated: 2026-07-06, commit `0c504ea` + this session's S16 work (develop)_
 
 ---
 
@@ -492,30 +492,33 @@ No project linter/formatter is configured.
    back by a human with a browser — this repo alone can't close the
    loop.
 
-2. **STAB-0554 — verify path separators: Windows paths handled.**
-   Files: `src/MeshCraft/MeshCraftApplication_FileOps.cpp`. Check
-   whether file paths are handled via `std::filesystem::path`
-   consistently (which normalizes separators) or via raw string
-   concatenation anywhere. Verification: code read + a small
-   CNA-free unit test in `mc3/test/roundtrip_test.cpp` if a gap is
-   found (e.g. constructing a path with backslashes on a
-   `std::filesystem::path` and confirming it round-trips).
+2. **STAB-0559 — verify clipboard paste: Ctrl+V from OS clipboard.**
+   Files: `src/MeshCraft/MeshCraftApplication_Keyboard.cpp`. Needs a
+   live UI session to actually exercise clipboard interaction — check
+   whether this is reachable at all headlessly (e.g. does ImGui's own
+   clipboard callback plumbing have a headless-testable seam) before
+   assuming it's fully blocked.
 
-3. **STAB-0555/0556/0557 — UTF-8 filenames, paths with spaces,
-   non-ASCII object names.** Files: `mc3/src/Mc3XmlParser.cpp`,
-   `mc3/test/roundtrip_test.cpp`. These look like straightforward,
-   headlessly-testable additions to the existing round-trip test suite
-   (save/reload with an unusual path or object name, assert the content
-   survives unchanged) — no live UI or another OS needed. Verification:
-   `ctest -R mc3_roundtrip --output-on-failure`.
+3. **STAB-0560 — verify SDL drag-drop on Linux.** Files:
+   `src/MeshCraft/MeshCraftApplication.cpp`. Likely needs a live
+   desktop session (dragging a file from a real file manager) — same
+   caveat as clipboard above, check for a testable seam first.
 
-4. **STAB-0558 — verify config dir per OS.** Files:
-   `src/MeshCraft/MeshCraftApplication_FileOps.cpp`. Check what
-   determines the prefs/config path today (likely already
-   `std::filesystem`-based) and whether it's actually OS-conditional or
-   just always uses a Linux-style path. Verification: code read; a
-   Linux-only confirmation is all that's reachable in this environment
-   (Windows/`%APPDATA%` needs a human on Windows).
+4. **STAB-0561 — verify file dialogs (text path fields) work on all
+   platforms.** Files: `src/MeshCraft/MeshCraftApplication_FileOps.cpp`.
+   Code-reading task: confirm the text-path-field fallback (used since
+   there's no native file dialog) works identically regardless of
+   platform — likely already true since it's plain ImGui + std::string,
+   no OS-specific dialog code path exists to diverge.
+
+Recently closed this session: **STAB-0554** (path separators — confirmed
+`std::filesystem::path` used consistently everywhere, no gap),
+**STAB-0555/0556/0557** (UTF-8 filenames, paths with spaces, non-ASCII
+object names — added 3 new round-trip tests, all pass, see §3), and
+**STAB-0558** (config dir per OS — found and fixed a real gap:
+`meshcraftConfigDir()` in `MeshCraftPrivate.hpp` was unconditionally
+Linux-style with no Windows branch at all; added `%APPDATA%` support
+under `#if defined(_WIN32)`).
 
 Continue through the rest of S16 (`plan.md`, STAB-0559 onward) in
 `plan.md` order after these — several remaining rows are platform-build

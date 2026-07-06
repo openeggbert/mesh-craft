@@ -27,11 +27,19 @@ inline bool justPressed(const Microsoft::Xna::Framework::Input::KeyboardState& c
 
 inline std::filesystem::path meshcraftConfigDir()
 {
+#if defined(_WIN32)
+    const char* appdata = std::getenv("APPDATA");
+    std::filesystem::path base = appdata && appdata[0]
+        ? std::filesystem::path(appdata)
+        : std::filesystem::path(std::getenv("USERPROFILE") ? std::getenv("USERPROFILE") : ".");
+    return base / "meshcraft";
+#else
     const char* cfg = std::getenv("XDG_CONFIG_HOME");
     std::filesystem::path base = cfg && cfg[0]
         ? std::filesystem::path(cfg)
         : std::filesystem::path(std::getenv("HOME") ? std::getenv("HOME") : ".") / ".config";
     return base / "meshcraft";
+#endif
 }
 
 inline std::filesystem::path recentFilesPath()   { return meshcraftConfigDir() / "recent.txt"; }

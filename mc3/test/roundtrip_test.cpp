@@ -40,6 +40,16 @@ static Mc3Document roundtrip(Mc3Document doc) {
     return loaded;
 }
 
+// Round-trips through an explicit path instead of the auto-generated
+// ASCII-only tmpPath() — lets STAB-0555/0556 exercise UTF-8 filenames and
+// paths containing spaces.
+static Mc3Document roundtripAt(Mc3Document doc, const std::filesystem::path& p) {
+    doc.saveToFile(p);
+    auto loaded = Mc3Document::loadFromFile(p);
+    std::filesystem::remove(p);
+    return loaded;
+}
+
 // ---------------------------------------------------------------------------
 
 static void testVisible() {
@@ -2118,6 +2128,77 @@ static void testPlaneSizeLegacyVec3() {
 }
 
 // ---------------------------------------------------------------------------
+// STAB-0555 — UTF-8 filename: the scene file's own path (not just its
+// contents) contains non-ASCII characters.
+// ---------------------------------------------------------------------------
+
+static void testUtf8FilenameRoundtrip() {
+    auto p = std::filesystem::temp_directory_path() /
+             std::filesystem::path(u8"mc3_rt_čeština_日本.mc3.xml");
+
+    Mc3Document doc;
+    auto obj       = std::make_shared<Mc3Object>();
+    obj->id        = "box1";
+    obj->name      = "Box";
+    obj->type      = ObjectType::Box;
+    obj->primitive = Mc3Primitive{};
+    doc.objects.push_back(obj);
+
+    auto rt = roundtripAt(doc, p);
+    CHECK(!rt.objects.empty(), "utf8 filename: object present after round-trip");
+    if (!rt.objects.empty())
+        CHECK(rt.objects[0]->id == "box1", "utf8 filename: object id preserved");
+}
+
+// ---------------------------------------------------------------------------
+// STAB-0556 — path with spaces: both the parent directory and filename
+// contain spaces.
+// ---------------------------------------------------------------------------
+
+static void testPathWithSpacesRoundtrip() {
+    auto dir = std::filesystem::temp_directory_path() / "my scene files";
+    std::error_code ec;
+    std::filesystem::create_directories(dir, ec);
+    auto p = dir / "house with spaces.mc3.xml";
+
+    Mc3Document doc;
+    auto obj       = std::make_shared<Mc3Object>();
+    obj->id        = "box2";
+    obj->name      = "Box";
+    obj->type      = ObjectType::Box;
+    obj->primitive = Mc3Primitive{};
+    doc.objects.push_back(obj);
+
+    auto rt = roundtripAt(doc, p);
+    std::filesystem::remove_all(dir, ec);
+    CHECK(!rt.objects.empty(), "path with spaces: object present after round-trip");
+    if (!rt.objects.empty())
+        CHECK(rt.objects[0]->id == "box2", "path with spaces: object id preserved");
+}
+
+// ---------------------------------------------------------------------------
+// STAB-0557 — non-ASCII object name: name/id containing non-ASCII characters
+// survives an ordinary (ASCII-path) round-trip unchanged.
+// ---------------------------------------------------------------------------
+
+static void testNonAsciiObjectNameRoundtrip() {
+    Mc3Document doc;
+    auto obj       = std::make_shared<Mc3Object>();
+    const std::string nonAsciiName = "Slon_člověk";
+    obj->id        = "obj1";
+    obj->name      = nonAsciiName;
+    obj->type      = ObjectType::Box;
+    obj->primitive = Mc3Primitive{};
+    doc.objects.push_back(obj);
+
+    auto rt = roundtrip(doc);
+    CHECK(!rt.objects.empty(), "non-ascii name: object present after round-trip");
+    if (!rt.objects.empty())
+        CHECK(rt.objects[0]->name == nonAsciiName,
+              "non-ascii name: UTF-8 name preserved exactly");
+}
+
+// ---------------------------------------------------------------------------
 
 int main(int argc, char* argv[]) {
     testVisible();
@@ -2163,6 +2244,9 @@ int main(int argc, char* argv[]) {
     testPlaneSizeVec2();
     testPlaneSizeLegacyVec3();
     testIncludeAcrossDirectoriesRebasesRelativePaths();
+    testUtf8FilenameRoundtrip();
+    testPathWithSpacesRoundtrip();
+    testNonAsciiObjectNameRoundtrip();
 
     if (argc >= 2) {
         testFeaturesXmlLoads(argv[1]);
