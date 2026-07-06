@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- STAB-0210: a <mesh> (external OBJ) child inside real CSG.
+     CsgEvaluator.cpp unconditionally rejects Mesh-type CSG children
+     ("is not supported in real CSG export") regardless of whether the
+     underlying OBJ is itself watertight. tetra.obj here is a perfectly
+     valid, watertight tetrahedron, proving the rejection is a hard
+     type-based pre-check, not a Manifold-detected non-manifold-geometry
+     failure. That separate code path (Manifold::Status() != NoError for
+     the Torus/Capsule/IcoSphere triangulated-primitive case) is
+     unreachable via any current object type, since buildPrimitive()
+     always produces valid watertight meshes for those. -->
+<mc3 version="0.3" model="CsgMeshChild">
+  <objects>
+    <union name="MeshInCsg">
+      <box  name="BaseBox" size="1 1 1"/>
+      <mesh name="TetraInsideCsg" src="tetra.obj"/>
+    </union>
+  </objects>
+</mc3>
