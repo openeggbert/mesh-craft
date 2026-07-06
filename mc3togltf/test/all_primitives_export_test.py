@@ -13,7 +13,7 @@ def run(cmd):
 
 EXPECTED_PRIMITIVE_NODES = [
     "Box", "Cube", "Sphere", "Cylinder", "Cone", "Plane",
-    "Torus", "Capsule", "Disk", "RingDisk", "Grid", "IcoSphere",
+    "Torus", "TorusThin", "Capsule", "Disk", "RingDisk", "Grid", "IcoSphere",
 ]
 
 EXPECTED_OBJECTS_NODES = [
@@ -104,6 +104,27 @@ def test_all_primitives(mc3togltf, xml_path, tmpdir):
         f"(ring={ring_vc}, disk={disk_vc})"
     )
 
+    # STAB-0162: Torus must actually use Mc3Primitive::minorRadius (tube
+    # radius) from the XML, not ignore it. Torus (minor_radius=0.15) and
+    # TorusThin (minor_radius=0.05) share the same major_radius/segments, so
+    # if minorRadius were ignored their meshes would be identical. Compare
+    # each accessor's own min/max bounds (mesh-local space, unaffected by the
+    # node's position translation) rather than vertex *count*, since a
+    # different minorRadius changes the ring's radial extent, not its
+    # topology/vertex count.
+    _, torus_prim      = check_node_has_geometry(gltf, "Torus")
+    _, torus_thin_prim = check_node_has_geometry(gltf, "TorusThin")
+    accs = gltf.get("accessors", [])
+    torus_acc      = accs[torus_prim["attributes"]["POSITION"]]
+    torus_thin_acc = accs[torus_thin_prim["attributes"]["POSITION"]]
+    torus_extent      = max(abs(v) for v in torus_acc["max"] + torus_acc["min"])
+    torus_thin_extent = max(abs(v) for v in torus_thin_acc["max"] + torus_thin_acc["min"])
+    assert torus_extent > torus_thin_extent, (
+        f"Torus (minor_radius=0.15) should have a larger radial extent than "
+        f"TorusThin (minor_radius=0.05): got {torus_extent} vs {torus_thin_extent} "
+        f"— minorRadius may not be applied"
+    )
+
     # GLB magic-byte check
     out_glb = os.path.join(tmpdir, "out_primitives.glb")
     r = run([mc3togltf, xml_path, out_glb])
@@ -145,9 +166,29 @@ def test_all_objects(mc3togltf, xml_path, tmpdir):
     check_node_has_geometry(gltf, "GroupSphere")
     check_node_has_geometry(gltf, "GroupBox")
 
-    # CubeA and CubeB are <instance> nodes from <definitions>: must have geometry
+    # CubeA and CubeB are <instance> nodes from <definitions>: must have geometry.
+    # They intentionally use *different* materials (red/blue) to exercise
+    # per-instance material override — so, correctly, they do NOT share a
+    # glTF mesh index (mesh sharing is keyed on definition+material+deform;
+    # see buildDefCacheKey() in GltfExporter.cpp). The same-definition+
+    # same-material shared-mesh case (STAB-0198) is already covered by
+    # instance_deform_cache_test.py's BlockA/BlockB assertions.
     check_node_has_geometry(gltf, "CubeA")
     check_node_has_geometry(gltf, "CubeB")
+
+    # STAB-0197: <group name="MyGroup"> contains GroupSphere/GroupBox as XML
+    # children — the exported node tree must reflect that parent-child
+    # relationship via glTF's node.children index array, not just export all
+    # three as unrelated top-level nodes.
+    nodes = gltf.get("nodes", [])
+    my_group = nmap["MyGroup"]
+    group_children_idx = my_group.get("children", [])
+    assert group_children_idx, "MyGroup node has no children array (hierarchy lost on export)"
+    child_names = {nodes[i].get("name") for i in group_children_idx if 0 <= i < len(nodes)}
+    assert {"GroupSphere", "GroupBox"} <= child_names, (
+        f"MyGroup.children should reference GroupSphere and GroupBox, "
+        f"got child node names: {sorted(n for n in child_names if n)}"
+    )
 
     # TriggerZone is an <area>: must exist but no mesh; must have extras.mc3_type=="area"
     tz_node = nmap["TriggerZone"]
