@@ -304,6 +304,7 @@ void MeshCraftApplication::EndDraw() {
             std::cout << "[LOD] level=" << sceneRenderer_->lastLodLevel(document_.objects.front()->id) << "\n";
             std::cout << "[CsgTriCount] count=" << sceneRenderer_->csgCachedTriCount(document_.objects.front()->id) << "\n";
         }
+        std::cout << "[GLCheck] " << (lastGlErrorSeen_ ? "error" : "clean") << "\n";
         Exit();
     }
     Game::EndDraw();
@@ -673,6 +674,8 @@ void MeshCraftApplication::Draw(const GameTime& /*gameTime*/) {
     // Box-select rectangle overlay drawn via ImGui in drawImGuiUi()
     gd.SetDepthTestEnabled(false);
     drawImGuiUi(screenW, screenH);
+
+    checkGlStateLeak("full frame (SSAO/bloom/skybox/gizmos/ImGui)");
 
     if (autoScreenshotCountdown_ > 0) {
         --autoScreenshotCountdown_;
@@ -1651,6 +1654,23 @@ void MeshCraftApplication::renderMatPreview(float r, float g, float b,
     gl.Viewport(0, 0, cachedScreenW_, cachedScreenH_);
     gl.Enable(kGL_BLEND);
     matPreviewTexId_ = gl.matPreviewTex;
+}
+
+// STAB-0521: glGetError() is a queue, not a single flag — a pass that
+// triggers more than one error before anything drains it would otherwise
+// leave later errors to surface (misleadingly) as if caused by whatever
+// unrelated call happens to invoke GetError() next. Drain it fully here so
+// each frame's checkpoint reports its own errors exactly once.
+void MeshCraftApplication::checkGlStateLeak(const char* where) {
+    auto& gl = s_bloom;
+    if (!gl.GetError) return;
+    lastGlErrorSeen_ = false;
+    unsigned err;
+    while ((err = gl.GetError()) != 0 /* GL_NO_ERROR */) {
+        lastGlErrorSeen_ = true;
+        std::cerr << "[GLCheck] leaked GL error 0x" << std::hex << err << std::dec
+                   << " detected after " << where << "\n";
+    }
 }
 
 } // namespace MeshCraft

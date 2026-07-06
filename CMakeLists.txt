@@ -476,6 +476,20 @@ if(MESH_CRAFT_BUILD_TESTING AND UNIX AND NOT ANDROID AND NOT EMSCRIPTEN)
         set_tests_properties(smoke_test_orthographic_camera PROPERTIES TIMEOUT 30 LABELS "render")
     endif()
 
+    # STAB-0521: verify no GL error leaks out of a full frame's render passes.
+    # medieval_castle.mc3.xml enables bloom, so this exercises SSAO/bloom/
+    # skybox/gizmos/ImGui together, not just the base 3D pass.
+    if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/test/medieval_castle.mc3.xml")
+        add_test(
+            NAME gl_state_leak_test
+            COMMAND bash ${CMAKE_CURRENT_SOURCE_DIR}/test/gl_state_leak_test.sh
+                    $<TARGET_FILE:MeshCraft>
+                    ${CMAKE_CURRENT_SOURCE_DIR}/test/medieval_castle.mc3.xml
+            WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
+        )
+        set_tests_properties(gl_state_leak_test PROPERTIES TIMEOUT 30 LABELS "render")
+    endif()
+
     find_program(PYTHON3_EXEC python3)
     if(PYTHON3_EXEC)
         execute_process(

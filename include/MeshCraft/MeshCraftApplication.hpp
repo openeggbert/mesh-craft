@@ -241,6 +241,12 @@ private:
     void initMatPreview();
     void renderMatPreview(float r, float g, float b, float roughness, float metallic);
 
+    // STAB-0521: drains glGetError() after a full frame's render passes
+    // (SSAO/bloom/skybox/gizmos/ImGui) and reports any leaked GL error state,
+    // so a bad state left by one pass doesn't silently propagate into the next.
+    void checkGlStateLeak(const char* where);
+    bool lastGlErrorSeen_{false};
+
     // SSAO post-processing (I5)
     bool  ssaoEnabled_{false};
     bool  ssaoGlReady_{false};
