@@ -165,6 +165,18 @@ static void testApplyRenamePattern()
     // No tokens → string unchanged
     CHECK(applyRenamePatternAlg("static_name", "Box", 1, "Box") == "static_name",
           "pattern with no tokens");
+
+    // STAB-0047: empty pattern → empty result (no fallback to origName)
+    CHECK(applyRenamePatternAlg("", "Box", 1, "Box").empty(),
+          "empty pattern yields empty result");
+
+    // STAB-0047: a pattern containing a literal backslash passes through
+    // unchanged — applyRenamePatternAlg does plain substring replacement,
+    // no regex/escape handling, so backslashes aren't special.
+    CHECK(applyRenamePatternAlg("back\\{name}", "Box", 1, "Box") == "back\\Box",
+          "pattern with literal backslash before a token");
+    CHECK(applyRenamePatternAlg("C:\\models\\{name}", "Chair", 1, "Mesh") == "C:\\models\\Chair",
+          "pattern with backslashes as literal path separators");
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -204,6 +216,15 @@ static void testBatchRename()
     std::vector<std::shared_ptr<Mc3Object>> sel3 = {x};
     batchRenameObjects(sel3, {}, "copy_{name}");
     CHECK(x->name == "copy_Chair", "batch rename {name} token");
+
+    // STAB-0047: empty pattern resolves to an empty name, which
+    // batchRenameObjects must skip rather than actually applying (an
+    // object's name should never be silently wiped to "").
+    auto e = makeObj("e", "Elephant");
+    std::vector<std::shared_ptr<Mc3Object>> sel4 = {e};
+    int renamedEmpty = batchRenameObjects(sel4, {}, "");
+    CHECK(renamedEmpty == 0, "batch rename with empty pattern: 0 objects counted as renamed");
+    CHECK(e->name == "Elephant", "batch rename with empty pattern: name unchanged, not wiped to empty");
 }
 
 // STAB-0456: renaming an object must not silently orphan animation channels

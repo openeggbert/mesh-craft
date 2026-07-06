@@ -494,6 +494,60 @@ static void testMigration() {
     fs::remove(dbPath);
 }
 
+// STAB-0061: exercises the actual ALTER TABLE ADD COLUMN path in
+// createSchema() — writes a legacy-schema DB (pre-description/source
+// columns, matching what a DB created before those columns existed would
+// look like) directly via sqlite3, then confirms ModelRegistry::open()
+// migrates it in place without throwing and without losing the pre-existing
+// row.
+static void testMigrationFromLegacySchema() {
+    namespace fs = std::filesystem;
+    auto dbPath = fs::temp_directory_path() / "mc3_reg_legacy_migrate.sqlite3";
+    fs::remove(dbPath);
+
+    {
+        sqlite3* raw = nullptr;
+        CHECK(sqlite3_open(dbPath.string().c_str(), &raw) == SQLITE_OK,
+              "legacy migration: raw sqlite3_open succeeds");
+        const char* legacySchema =
+            "CREATE TABLE models ("
+            "  id      INTEGER PRIMARY KEY AUTOINCREMENT,"
+            "  grp     TEXT NOT NULL DEFAULT '',"
+            "  name    TEXT NOT NULL,"
+            "  variant TEXT NOT NULL DEFAULT '',"
+            "  xml     TEXT NOT NULL,"
+            "  tags    TEXT NOT NULL DEFAULT '',"
+            "  created INTEGER NOT NULL DEFAULT (strftime('%s','now'))"
+            ");";
+        char* errmsg = nullptr;
+        sqlite3_exec(raw, legacySchema, nullptr, nullptr, &errmsg);
+        CHECK(errmsg == nullptr, "legacy migration: legacy CREATE TABLE (no description/source) succeeds");
+        if (errmsg) sqlite3_free(errmsg);
+
+        sqlite3_exec(raw,
+            "INSERT INTO models(grp,name,variant,xml,tags) "
+            "VALUES ('', 'LegacyWidget', '', '<mc3/>', '');",
+            nullptr, nullptr, &errmsg);
+        CHECK(errmsg == nullptr, "legacy migration: insert into legacy schema succeeds");
+        if (errmsg) sqlite3_free(errmsg);
+        sqlite3_close(raw);
+    }
+
+    {
+        ModelRegistry reg;
+        reg.open(dbPath);  // createSchema() must ALTER TABLE ADD COLUMN here, not throw
+        auto results = reg.search("");
+        CHECK(results.size() == 1, "legacy migration: pre-existing row survives ALTER TABLE migration");
+        if (!results.empty()) {
+            CHECK(results[0].name == "LegacyWidget", "legacy migration: name preserved");
+            CHECK(results[0].description.empty(), "legacy migration: description defaults to empty after ADD COLUMN");
+            CHECK(results[0].source.empty(), "legacy migration: source defaults to empty after ADD COLUMN");
+        }
+        reg.close();
+    }
+    fs::remove(dbPath);
+}
+
 // ---------------------------------------------------------------------------
 // STAB-0351 — thumbnails are explicitly unsupported (design placeholder only,
 // see m1m2m3.md: "Not yet implemented: thumbnail column"). `Entry` having no
@@ -747,6 +801,7 @@ int main() {
     testInsertDuplicateDefId();
     testInsertMaterialNameCollision();
     testMigration();
+    testMigrationFromLegacySchema();
     testUnavailableRegistryNoCrash();
     testOpenFailureThrowsNamedError();
     testSearchMatchesEachFieldIndependently();
