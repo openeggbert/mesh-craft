@@ -78,7 +78,7 @@ if(BUILD_TESTING)
 
     add_test(NAME mc3_roundtrip
              COMMAND mc3_roundtrip_test ${MC3_FEATURES_XML})
-    set_tests_properties(mc3_roundtrip PROPERTIES TIMEOUT 15)
+    set_tests_properties(mc3_roundtrip PROPERTIES TIMEOUT 15 LABELS "format")
 
     # editor_commands_test pulls in MeshCraft/EditorAlgorithms.hpp from the
     # MeshCraft editor's public include dir, which lives at the repo root
@@ -97,7 +97,7 @@ if(BUILD_TESTING)
         target_link_libraries(mc3_commands_test PRIVATE Mc3)
         target_compile_features(mc3_commands_test PRIVATE cxx_std_23)
         add_test(NAME mc3_commands COMMAND mc3_commands_test)
-        set_tests_properties(mc3_commands PROPERTIES TIMEOUT 15)
+        set_tests_properties(mc3_commands PROPERTIES TIMEOUT 15 LABELS "commands")
     else()
         message(STATUS "mc3: skipping mc3_commands_test — MeshCraft editor "
                        "headers not found at ${MC3_EDITOR_INCLUDE_DIR} "

@@ -66,7 +66,7 @@ if(BUILD_TESTING)
                         "$<TARGET_FILE:mc3tomcb>"
                         ${_rt_existing}
             )
-            set_tests_properties(mc3tomcb_roundtrip PROPERTIES TIMEOUT 60)
+            set_tests_properties(mc3tomcb_roundtrip PROPERTIES TIMEOUT 60 LABELS "export")
         endif()
 
         # STAB-0537/0538: missing input file / write-protected output path
@@ -80,7 +80,7 @@ if(BUILD_TESTING)
                         "$<TARGET_FILE:mc3tomcb>"
                         "${CMAKE_CURRENT_SOURCE_DIR}/../test/house.mc3.xml"
             )
-            set_tests_properties(mc3tomcb_error_handling PROPERTIES TIMEOUT 30)
+            set_tests_properties(mc3tomcb_error_handling PROPERTIES TIMEOUT 30 LABELS "export")
         endif()
     endif()
 endif()

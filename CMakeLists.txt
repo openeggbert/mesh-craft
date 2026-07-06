@@ -383,7 +383,7 @@ if(MESH_CRAFT_BUILD_TESTING AND UNIX AND NOT ANDROID AND NOT EMSCRIPTEN)
                 ${CMAKE_CURRENT_SOURCE_DIR}/test/house.mc3.xml
         WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
     )
-    set_tests_properties(smoke_test PROPERTIES TIMEOUT 30)
+    set_tests_properties(smoke_test PROPERTIES TIMEOUT 30 LABELS "render")
 
     # STAB-0497: same smoke-test mechanism, but against a scene exercising
     # every Mc3::ObjectType (all_objects.mc3.xml) to confirm the live
@@ -396,7 +396,7 @@ if(MESH_CRAFT_BUILD_TESTING AND UNIX AND NOT ANDROID AND NOT EMSCRIPTEN)
                     ${CMAKE_CURRENT_SOURCE_DIR}/test/all_objects.mc3.xml
             WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
         )
-        set_tests_properties(smoke_test_all_objects PROPERTIES TIMEOUT 30)
+        set_tests_properties(smoke_test_all_objects PROPERTIES TIMEOUT 30 LABELS "render")
     endif()
 
     # STAB-0498: same smoke-test mechanism, but against a scene with zero
@@ -410,7 +410,7 @@ if(MESH_CRAFT_BUILD_TESTING AND UNIX AND NOT ANDROID AND NOT EMSCRIPTEN)
                     ${CMAKE_CURRENT_SOURCE_DIR}/test/empty_scene.mc3.xml
             WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
         )
-        set_tests_properties(smoke_test_empty_scene PROPERTIES TIMEOUT 30)
+        set_tests_properties(smoke_test_empty_scene PROPERTIES TIMEOUT 30 LABELS "render")
     endif()
 
     # STAB-0499: a <mesh> with a nonexistent src must render a placeholder
@@ -423,7 +423,7 @@ if(MESH_CRAFT_BUILD_TESTING AND UNIX AND NOT ANDROID AND NOT EMSCRIPTEN)
                     ${CMAKE_CURRENT_SOURCE_DIR}/test/missing_mesh.mc3.xml
             WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
         )
-        set_tests_properties(missing_mesh_test PROPERTIES TIMEOUT 30)
+        set_tests_properties(missing_mesh_test PROPERTIES TIMEOUT 30 LABELS "render")
     endif()
 
     # STAB-0500: same smoke-test mechanism, but against an object whose
@@ -437,7 +437,7 @@ if(MESH_CRAFT_BUILD_TESTING AND UNIX AND NOT ANDROID AND NOT EMSCRIPTEN)
                     ${CMAKE_CURRENT_SOURCE_DIR}/test/missing_material.mc3.xml
             WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
         )
-        set_tests_properties(smoke_test_missing_material PROPERTIES TIMEOUT 30)
+        set_tests_properties(smoke_test_missing_material PROPERTIES TIMEOUT 30 LABELS "render")
     endif()
 
     # STAB-0507: default_camera points to an orthographic Mc3Camera, exercising
@@ -452,7 +452,7 @@ if(MESH_CRAFT_BUILD_TESTING AND UNIX AND NOT ANDROID AND NOT EMSCRIPTEN)
                     ${CMAKE_CURRENT_SOURCE_DIR}/test/orthographic_camera.mc3.xml
             WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
         )
-        set_tests_properties(smoke_test_orthographic_camera PROPERTIES TIMEOUT 30)
+        set_tests_properties(smoke_test_orthographic_camera PROPERTIES TIMEOUT 30 LABELS "render")
     endif()
 
     find_program(PYTHON3_EXEC python3)
@@ -476,7 +476,7 @@ if(MESH_CRAFT_BUILD_TESTING AND UNIX AND NOT ANDROID AND NOT EMSCRIPTEN)
                         "${CMAKE_CURRENT_SOURCE_DIR}/mc3/mc3.xsd"
                         ${_mc3_xml_files}
             )
-            set_tests_properties(xsd_validation PROPERTIES TIMEOUT 30)
+            set_tests_properties(xsd_validation PROPERTIES TIMEOUT 30 LABELS "format")
         endif()
 
         # STAB-0511: fog is a document-level <environment><fog> setting, applied
@@ -492,7 +492,7 @@ if(MESH_CRAFT_BUILD_TESTING AND UNIX AND NOT ANDROID AND NOT EMSCRIPTEN)
                         "${CMAKE_CURRENT_SOURCE_DIR}/test/fog_linear.mc3.xml"
                 WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
             )
-            set_tests_properties(fog_linear_test PROPERTIES TIMEOUT 30)
+            set_tests_properties(fog_linear_test PROPERTIES TIMEOUT 30 LABELS "render")
         endif()
 
         # STAB-0512: drawLightGizmos() is called unconditionally in the main
@@ -508,7 +508,7 @@ if(MESH_CRAFT_BUILD_TESTING AND UNIX AND NOT ANDROID AND NOT EMSCRIPTEN)
                         "${CMAKE_CURRENT_SOURCE_DIR}/test/point_light_gizmo.mc3.xml"
                 WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
             )
-            set_tests_properties(point_light_gizmo_test PROPERTIES TIMEOUT 30)
+            set_tests_properties(point_light_gizmo_test PROPERTIES TIMEOUT 30 LABELS "render")
         endif()
 
         # STAB-0513: same unconditional draw path as STAB-0512 — verify the
@@ -523,7 +523,7 @@ if(MESH_CRAFT_BUILD_TESTING AND UNIX AND NOT ANDROID AND NOT EMSCRIPTEN)
                         "${CMAKE_CURRENT_SOURCE_DIR}/test/spot_light_gizmo.mc3.xml"
                 WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
             )
-            set_tests_properties(spot_light_gizmo_test PROPERTIES TIMEOUT 30)
+            set_tests_properties(spot_light_gizmo_test PROPERTIES TIMEOUT 30 LABELS "render")
         endif()
 
         # STAB-0517: confirms lookThroughCamera_ actually overrides view/proj
@@ -538,7 +538,7 @@ if(MESH_CRAFT_BUILD_TESTING AND UNIX AND NOT ANDROID AND NOT EMSCRIPTEN)
                         "${CMAKE_CURRENT_SOURCE_DIR}/test/look_through_camera.mc3.xml"
                 WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
             )
-            set_tests_properties(look_through_camera_test PROPERTIES TIMEOUT 30)
+            set_tests_properties(look_through_camera_test PROPERTIES TIMEOUT 30 LABELS "render")
         endif()
 
         # STAB-0522: confirms the content-hash CSG cache (K1) actually
@@ -553,7 +553,7 @@ if(MESH_CRAFT_BUILD_TESTING AND UNIX AND NOT ANDROID AND NOT EMSCRIPTEN)
                         "${CMAKE_CURRENT_SOURCE_DIR}/test/csg_cache.mc3.xml"
                 WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
             )
-            set_tests_properties(csg_cache_test PROPERTIES TIMEOUT 30)
+            set_tests_properties(csg_cache_test PROPERTIES TIMEOUT 30 LABELS "render")
         endif()
 
         # STAB-0523: confirms background_texture renders unconditionally,
@@ -567,7 +567,7 @@ if(MESH_CRAFT_BUILD_TESTING AND UNIX AND NOT ANDROID AND NOT EMSCRIPTEN)
                         "${CMAKE_CURRENT_SOURCE_DIR}/test/background_texture.mc3.xml"
                 WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
             )
-            set_tests_properties(background_texture_test PROPERTIES TIMEOUT 30)
+            set_tests_properties(background_texture_test PROPERTIES TIMEOUT 30 LABELS "render")
         endif()
 
         # STAB-0524: confirms the equirectangular skybox shader actually
@@ -581,7 +581,7 @@ if(MESH_CRAFT_BUILD_TESTING AND UNIX AND NOT ANDROID AND NOT EMSCRIPTEN)
                         "${CMAKE_CURRENT_SOURCE_DIR}/test/skybox_texture.mc3.xml"
                 WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
             )
-            set_tests_properties(skybox_texture_test PROPERTIES TIMEOUT 30)
+            set_tests_properties(skybox_texture_test PROPERTIES TIMEOUT 30 LABELS "render")
         endif()
 
         # STAB-0525: confirms the LOD tier (SceneRenderer.cpp:633-639, G8)
@@ -597,7 +597,7 @@ if(MESH_CRAFT_BUILD_TESTING AND UNIX AND NOT ANDROID AND NOT EMSCRIPTEN)
                         "${CMAKE_CURRENT_SOURCE_DIR}/test/lod_far.mc3.xml"
                 WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
             )
-            set_tests_properties(lod_test PROPERTIES TIMEOUT 30)
+            set_tests_properties(lod_test PROPERTIES TIMEOUT 30 LABELS "render")
         endif()
 
         # STAB-0526/0527/0528/0529: exercises the editor's --export CLI flag
@@ -612,7 +612,7 @@ if(MESH_CRAFT_BUILD_TESTING AND UNIX AND NOT ANDROID AND NOT EMSCRIPTEN)
                         "${CMAKE_CURRENT_SOURCE_DIR}/test/house.mc3.xml"
                 WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
             )
-            set_tests_properties(editor_export_test PROPERTIES TIMEOUT 60)
+            set_tests_properties(editor_export_test PROPERTIES TIMEOUT 60 LABELS "export")
         endif()
     endif()
 
@@ -632,7 +632,7 @@ if(MESH_CRAFT_BUILD_TESTING AND UNIX AND NOT ANDROID AND NOT EMSCRIPTEN)
         target_compile_definitions(mc3_registry_test PRIVATE MESHCRAFT_HAS_SQLITE3)
         target_compile_features(mc3_registry_test PRIVATE cxx_std_23)
         add_test(NAME mc3_registry COMMAND mc3_registry_test)
-        set_tests_properties(mc3_registry PROPERTIES TIMEOUT 15)
+        set_tests_properties(mc3_registry PROPERTIES TIMEOUT 15 LABELS "registry")
     endif()
 
     # AI Assistant unit + mock-HTTP-server tests (Gate 4, STAB-0371..0376).
@@ -664,6 +664,6 @@ if(MESH_CRAFT_BUILD_TESTING AND UNIX AND NOT ANDROID AND NOT EMSCRIPTEN)
         find_package(Threads REQUIRED)
         target_link_libraries(ai_test PRIVATE Threads::Threads)
         add_test(NAME mc3_ai COMMAND ai_test)
-        set_tests_properties(mc3_ai PROPERTIES TIMEOUT 30)
+        set_tests_properties(mc3_ai PROPERTIES TIMEOUT 30 LABELS "ai")
     endif()
 endif()

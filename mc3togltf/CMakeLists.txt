@@ -143,7 +143,7 @@ if(BUILD_TESTING)
                         "${_anim_xml}"
                         "${_house_xml}"
             )
-            set_tests_properties(mc3togltf_gltf PROPERTIES TIMEOUT 30)
+            set_tests_properties(mc3togltf_gltf PROPERTIES TIMEOUT 30 LABELS "export")
         endif()
         if(EXISTS "${_primitives_xml}")
             add_test(
@@ -152,7 +152,7 @@ if(BUILD_TESTING)
                         "${_primitives_xml}"
                         "${CMAKE_CURRENT_BINARY_DIR}/all_primitives_test.glb"
             )
-            set_tests_properties(mc3togltf_all_primitives PROPERTIES TIMEOUT 30)
+            set_tests_properties(mc3togltf_all_primitives PROPERTIES TIMEOUT 30 LABELS "export")
         endif()
         if(EXISTS "${_primitives_xml}" AND EXISTS "${_objects_xml}")
             add_test(
@@ -164,7 +164,7 @@ if(BUILD_TESTING)
                         "${_objects_xml}"
                 WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/../test"
             )
-            set_tests_properties(mc3togltf_export_verification PROPERTIES TIMEOUT 60)
+            set_tests_properties(mc3togltf_export_verification PROPERTIES TIMEOUT 60 LABELS "export")
         endif()
         if(EXISTS "${_large_scene_xml}")
             add_test(
@@ -174,7 +174,7 @@ if(BUILD_TESTING)
                         "$<TARGET_FILE:mc3togltf>"
                         "${_large_scene_xml}"
             )
-            set_tests_properties(mc3togltf_large_scene PROPERTIES TIMEOUT 30)
+            set_tests_properties(mc3togltf_large_scene PROPERTIES TIMEOUT 30 LABELS "export")
         endif()
         if(EXISTS "${_csg_xml}")
             add_test(
@@ -184,7 +184,7 @@ if(BUILD_TESTING)
                         "$<TARGET_FILE:mc3togltf>"
                         "${_csg_xml}"
             )
-            set_tests_properties(mc3togltf_csg_strict PROPERTIES TIMEOUT 30)
+            set_tests_properties(mc3togltf_csg_strict PROPERTIES TIMEOUT 30 LABELS "export")
         endif()
         if(EXISTS "${_csg_union_xml}" AND EXISTS "${_csg_diff_xml}" AND EXISTS "${_csg_isect_xml}")
             add_test(
@@ -196,7 +196,7 @@ if(BUILD_TESTING)
                         "${_csg_diff_xml}"
                         "${_csg_isect_xml}"
             )
-            set_tests_properties(mc3togltf_csg_export PROPERTIES TIMEOUT 60)
+            set_tests_properties(mc3togltf_csg_export PROPERTIES TIMEOUT 60 LABELS "export")
         endif()
         if(EXISTS "${_csg_unsupported_xml}")
             add_test(
@@ -206,7 +206,7 @@ if(BUILD_TESTING)
                         "$<TARGET_FILE:mc3togltf>"
                         "${_csg_unsupported_xml}"
             )
-            set_tests_properties(mc3togltf_csg_unsupported PROPERTIES TIMEOUT 30)
+            set_tests_properties(mc3togltf_csg_unsupported PROPERTIES TIMEOUT 30 LABELS "export")
         endif()
         if(EXISTS "${_csg_nested_xml}")
             add_test(
@@ -216,7 +216,7 @@ if(BUILD_TESTING)
                         "$<TARGET_FILE:mc3togltf>"
                         "${_csg_nested_xml}"
             )
-            set_tests_properties(mc3togltf_csg_nested PROPERTIES TIMEOUT 30)
+            set_tests_properties(mc3togltf_csg_nested PROPERTIES TIMEOUT 30 LABELS "export")
         endif()
         if(EXISTS "${_instance_deform_xml}")
             add_test(
@@ -226,7 +226,7 @@ if(BUILD_TESTING)
                         "$<TARGET_FILE:mc3togltf>"
                         "${_instance_deform_xml}"
             )
-            set_tests_properties(mc3togltf_instance_deform_cache PROPERTIES TIMEOUT 30)
+            set_tests_properties(mc3togltf_instance_deform_cache PROPERTIES TIMEOUT 30 LABELS "export")
         endif()
         if(EXISTS "${_close_dimensions_xml}")
             add_test(
@@ -236,7 +236,7 @@ if(BUILD_TESTING)
                         "$<TARGET_FILE:mc3togltf>"
                         "${_close_dimensions_xml}"
             )
-            set_tests_properties(mc3togltf_float_cache_key PROPERTIES TIMEOUT 30)
+            set_tests_properties(mc3togltf_float_cache_key PROPERTIES TIMEOUT 30 LABELS "export")
         endif()
         if(EXISTS "${_obj_robustness_xml}")
             add_test(
@@ -246,7 +246,7 @@ if(BUILD_TESTING)
                         "$<TARGET_FILE:mc3togltf>"
                         "${_obj_robustness_xml}"
             )
-            set_tests_properties(mc3togltf_obj_robustness PROPERTIES TIMEOUT 30)
+            set_tests_properties(mc3togltf_obj_robustness PROPERTIES TIMEOUT 30 LABELS "export")
         endif()
         if(EXISTS "${_texture_sampler_xml}")
             add_test(
@@ -256,7 +256,7 @@ if(BUILD_TESTING)
                         "$<TARGET_FILE:mc3togltf>"
                         "${_texture_sampler_xml}"
             )
-            set_tests_properties(mc3togltf_texture_sampler PROPERTIES TIMEOUT 30)
+            set_tests_properties(mc3togltf_texture_sampler PROPERTIES TIMEOUT 30 LABELS "export")
         endif()
         if(EXISTS "${_material_pbr_xml}")
             add_test(
@@ -266,7 +266,7 @@ if(BUILD_TESTING)
                         "$<TARGET_FILE:mc3togltf>"
                         "${_material_pbr_xml}"
             )
-            set_tests_properties(mc3togltf_material_pbr PROPERTIES TIMEOUT 30)
+            set_tests_properties(mc3togltf_material_pbr PROPERTIES TIMEOUT 30 LABELS "export")
         endif()
         if(EXISTS "${_glb_texture_embed_xml}")
             add_test(
@@ -276,7 +276,7 @@ if(BUILD_TESTING)
                         "$<TARGET_FILE:mc3togltf>"
                         "${_glb_texture_embed_xml}"
             )
-            set_tests_properties(mc3togltf_glb_texture_embed PROPERTIES TIMEOUT 30)
+            set_tests_properties(mc3togltf_glb_texture_embed PROPERTIES TIMEOUT 30 LABELS "export")
         endif()
         if(EXISTS "${_house_xml}")
             add_test(
@@ -286,7 +286,7 @@ if(BUILD_TESTING)
                         "$<TARGET_FILE:mc3togltf>"
                         "${_house_xml}"
             )
-            set_tests_properties(mc3togltf_no_partial_output PROPERTIES TIMEOUT 30)
+            set_tests_properties(mc3togltf_no_partial_output PROPERTIES TIMEOUT 30 LABELS "export")
         endif()
         add_test(
             NAME mc3togltf_help_text
@@ -294,7 +294,7 @@ if(BUILD_TESTING)
                     "${CMAKE_CURRENT_SOURCE_DIR}/test/help_text_test.py"
                     "$<TARGET_FILE:mc3togltf>"
         )
-        set_tests_properties(mc3togltf_help_text PROPERTIES TIMEOUT 30)
+        set_tests_properties(mc3togltf_help_text PROPERTIES TIMEOUT 30 LABELS "export")
         if(EXISTS "${_scene_with_include_xml}")
             add_test(
                 NAME mc3togltf_include_export
@@ -303,7 +303,7 @@ if(BUILD_TESTING)
                         "$<TARGET_FILE:mc3togltf>"
                         "${_scene_with_include_xml}"
             )
-            set_tests_properties(mc3togltf_include_export PROPERTIES TIMEOUT 30)
+            set_tests_properties(mc3togltf_include_export PROPERTIES TIMEOUT 30 LABELS "export")
         endif()
         if(EXISTS "${_embed_mesh_source_xml}")
             add_test(
@@ -313,7 +313,7 @@ if(BUILD_TESTING)
                         "$<TARGET_FILE:mc3togltf>"
                         "${_embed_mesh_source_xml}"
             )
-            set_tests_properties(mc3togltf_embed_mesh_source PROPERTIES TIMEOUT 30)
+            set_tests_properties(mc3togltf_embed_mesh_source PROPERTIES TIMEOUT 30 LABELS "export")
         endif()
         if(EXISTS "${_svg_material_xml}")
             add_test(
@@ -323,7 +323,7 @@ if(BUILD_TESTING)
                         "$<TARGET_FILE:mc3togltf>"
                         "${_svg_material_xml}"
             )
-            set_tests_properties(mc3togltf_svg_texture_export PROPERTIES TIMEOUT 30)
+            set_tests_properties(mc3togltf_svg_texture_export PROPERTIES TIMEOUT 30 LABELS "export")
         endif()
         if(EXISTS "${_anim_unsupported_xml}")
             add_test(
@@ -333,7 +333,7 @@ if(BUILD_TESTING)
                         "$<TARGET_FILE:mc3togltf>"
                         "${_anim_unsupported_xml}"
             )
-            set_tests_properties(mc3togltf_animation_unsupported PROPERTIES TIMEOUT 30)
+            set_tests_properties(mc3togltf_animation_unsupported PROPERTIES TIMEOUT 30 LABELS "export")
         endif()
         if(EXISTS "${_instance_variant_xml}")
             add_test(
@@ -343,7 +343,7 @@ if(BUILD_TESTING)
                         "$<TARGET_FILE:mc3togltf>"
                         "${_instance_variant_xml}"
             )
-            set_tests_properties(mc3togltf_instance_variant PROPERTIES TIMEOUT 30)
+            set_tests_properties(mc3togltf_instance_variant PROPERTIES TIMEOUT 30 LABELS "export")
         endif()
         add_test(
             NAME mc3togltf_large_scene_generated
@@ -351,7 +351,7 @@ if(BUILD_TESTING)
                     "${CMAKE_CURRENT_SOURCE_DIR}/test/large_scene_generated_test.py"
                     "$<TARGET_FILE:mc3togltf>"
         )
-        set_tests_properties(mc3togltf_large_scene_generated PROPERTIES TIMEOUT 60)
+        set_tests_properties(mc3togltf_large_scene_generated PROPERTIES TIMEOUT 60 LABELS "export")
 
         # STAB-0244: 500-object export, asserting completion in < 30s
         # (same script, scale=2.5 -> 250+125+125 = 500 objects).
@@ -362,6 +362,6 @@ if(BUILD_TESTING)
                     "$<TARGET_FILE:mc3togltf>"
                     "2.5"
         )
-        set_tests_properties(mc3togltf_large_scene_500 PROPERTIES TIMEOUT 60)
+        set_tests_properties(mc3togltf_large_scene_500 PROPERTIES TIMEOUT 60 LABELS "export")
     endif()
 endif()
