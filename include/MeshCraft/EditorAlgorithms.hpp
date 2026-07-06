@@ -1750,4 +1750,50 @@ inline void pushWithCapAlg(std::vector<T>& stack, T value, int cap)
         stack.erase(stack.begin());
 }
 
+// ── Recent files list (STAB-0288) ─────────────────────────────────────────────
+//
+// Mirrors loadRecentFiles()/saveRecentFiles()/addRecentFile()
+// (MeshCraftApplication_FileOps.cpp:61-89): a newline-separated absolute-path
+// list, most-recently-used first, capped at kMaxRecentFiles (10). A path that
+// no longer exists on disk is silently skipped on load (not removed from the
+// file — only pruned in-memory for the current session). addRecentFile()
+// de-duplicates (moving an existing entry to the front rather than adding a
+// second copy), inserts at the front, then truncates to the cap.
+
+inline void loadRecentFilesAlg(const std::filesystem::path& path,
+                                std::vector<std::filesystem::path>& recentFiles,
+                                int maxRecentFiles)
+{
+    std::ifstream f(path);
+    std::string line;
+    while (std::getline(f, line) && static_cast<int>(recentFiles.size()) < maxRecentFiles) {
+        if (!line.empty() && std::filesystem::exists(line))
+            recentFiles.emplace_back(line);
+    }
+}
+
+inline void saveRecentFilesAlg(const std::filesystem::path& path,
+                                const std::vector<std::filesystem::path>& recentFiles)
+{
+    std::error_code ec;
+    std::filesystem::create_directories(path.parent_path(), ec);
+    std::ofstream f(path);
+    for (const auto& r : recentFiles)
+        f << r.string() << "\n";
+}
+
+inline void addRecentFileAlg(std::vector<std::filesystem::path>& recentFiles,
+                              const std::filesystem::path& newPath,
+                              int maxRecentFiles)
+{
+    auto abs = std::filesystem::absolute(newPath);
+    recentFiles.erase(
+        std::remove_if(recentFiles.begin(), recentFiles.end(),
+            [&](const auto& r) { return r == abs; }),
+        recentFiles.end());
+    recentFiles.insert(recentFiles.begin(), abs);
+    if (static_cast<int>(recentFiles.size()) > maxRecentFiles)
+        recentFiles.resize(static_cast<size_t>(maxRecentFiles));
+}
+
 } // namespace MeshCraft

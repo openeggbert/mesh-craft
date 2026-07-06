@@ -1722,6 +1722,44 @@ static void testMergeSceneCollisionHandling()
           "mergeScene: non-colliding source action is merged in");
 }
 
+// STAB-0289: unlike textures/materials/actions (all map-keyed, all suffix a
+// colliding key), mergeDocumentsAlg() has NO id-collision handling at all for
+// objects — src.objects are unconditionally appended (see the "for (const
+// auto& obj : src.objects) dst.objects.push_back(obj);" loop). This is a real,
+// confirmed gap: merging two documents that both use the same object id
+// (plausible when both were created from the same template, or when both
+// simply leave id empty, which many fixtures in this codebase do) produces a
+// destination document with two objects sharing one id, silently, with no
+// suffixing and no warning. Documented as a real gap rather than a
+// speculative fix: doc.objects is a `std::vector`, not a map, so a colliding
+// id doesn't cause data loss the way a colliding *key* does for materials/
+// actions/textures — nothing is silently overwritten — but anything that
+// looks an object up *by id* after a merge (e.g. Mc3SceneState/
+// Mc3ObjectOverride's `id` field) could resolve ambiguously. A correct fix
+// needs to walk the entire source object subtree (ids exist on every nested
+// child too, not just top-level objects) and rename any id colliding with one
+// already present anywhere in the destination's existing tree — materially
+// more work than the flat-map suffix idiom used for materials/actions, and
+// out of scope to implement speculatively without a driving STAB-0289 test
+// failure. This test proves the *current* behavior so future work can target
+// exactly this gap.
+static void testMergeSceneObjectIdCollisionNotHandled()
+{
+    Mc3Document dst = makeUndoScene(); // has an object with id "a"
+    Mc3Document src;
+    src.objects = { makeObj("a", "SrcBoxWithCollidingId") }; // same id as dst's "a"
+
+    int added = mergeDocumentsAlg(dst, src);
+
+    CHECK(added == 1, "mergeScene: object with a colliding id is still appended (not dropped)");
+    int countWithIdA = 0;
+    for (const auto& o : dst.objects) if (o->id == "a") ++countWithIdA;
+    CHECK(countWithIdA == 2,
+          "mergeScene: confirmed gap (STAB-0289) — object id collisions are NOT "
+          "suffixed/resolved like materials/actions/textures; two objects now "
+          "share id \"a\" in the merged document");
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Save As does not overwrite the original file (STAB-0272)
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1886,7 +1924,6 @@ static void testExportSubtreeTemplateIncludesDependentMaterialsAndTextures()
     auto path = std::filesystem::temp_directory_path() / "mc3_subtree_template_test.mc3.xml";
     tmp.saveToFile(path);
     Mc3Document reloaded = Mc3Document::loadFromFile(path);
-    std::filesystem::remove(path);
 
     CHECK(reloaded.definitions.count("pillar") == 1,
           "Export Subtree Template: definition survives a save/reload round-trip");
@@ -1894,6 +1931,32 @@ static void testExportSubtreeTemplateIncludesDependentMaterialsAndTextures()
           "Export Subtree Template: material survives a save/reload round-trip");
     CHECK(reloaded.textures.count("stoneTex") == 1,
           "Export Subtree Template: texture survives a save/reload round-trip");
+
+    // STAB-0295: the parser round-trip above proves the file is well-formed
+    // and semantically reloadable, but tinyxml2 (Mc3XmlParser) is lenient
+    // about element order, while mc3.xsd's root-element order is strict —
+    // so also validate against the real schema via the project's own
+    // test/validate_xsd.py (lxml), the same tool the xsd_validation ctest
+    // uses for every committed fixture. Degrades to a SKIP (not a failure)
+    // if python3/lxml aren't available in this environment, mirroring
+    // validate_xsd.py's own "lxml missing" diagnostic (STAB-0015).
+    auto xsdPath = std::filesystem::path(__FILE__).parent_path().parent_path() / "mc3.xsd";
+    auto validatorPath = std::filesystem::path(__FILE__).parent_path().parent_path().parent_path()
+                          / "test" / "validate_xsd.py";
+    bool lxmlAvailable = std::system("python3 -c \"import lxml\" > /dev/null 2>&1") == 0;
+    if (!lxmlAvailable || !std::filesystem::exists(xsdPath) || !std::filesystem::exists(validatorPath)) {
+        std::cout << "SKIP: Export Subtree Template XSD validation -- "
+                      "python3/lxml or validate_xsd.py/mc3.xsd not available in this environment\n";
+    } else {
+        std::string cmd = "python3 \"" + validatorPath.string() + "\" \"" + xsdPath.string() +
+                           "\" \"" + path.string() + "\" > /dev/null 2>&1";
+        int rc = std::system(cmd.c_str());
+        CHECK(rc == 0,
+              "Export Subtree Template: exported file validates against mc3.xsd "
+              "(run manually to see the error: " + cmd + ")");
+    }
+
+    std::filesystem::remove(path);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -2317,6 +2380,135 @@ static void testMacroLoadSkipsBlankLines()
           "macro load: a step with no args parses correctly");
     std::error_code ec;
     std::filesystem::remove(path, ec);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Recent files list (STAB-0288) — loadRecentFilesAlg/saveRecentFilesAlg/
+// addRecentFileAlg (EditorAlgorithms.hpp), mirroring loadRecentFiles()/
+// saveRecentFiles()/addRecentFile() (MeshCraftApplication_FileOps.cpp).
+// ─────────────────────────────────────────────────────────────────────────────
+
+static void testRecentFilesLoadSkipsNonexistentPaths()
+{
+    static int tmpIdx = 0;
+    auto listPath = std::filesystem::temp_directory_path() /
+                    ("mc3_recent_" + std::to_string(tmpIdx++) + ".txt");
+    auto realFile = std::filesystem::temp_directory_path() /
+                    ("mc3_recent_real_" + std::to_string(tmpIdx++) + ".mc3.xml");
+    { std::ofstream f(realFile); f << "<mc3/>"; }
+
+    {
+        std::ofstream f(listPath);
+        f << (std::filesystem::temp_directory_path() / "does_not_exist_at_all.mc3.xml").string() << "\n";
+        f << realFile.string() << "\n";
+    }
+
+    std::vector<std::filesystem::path> recent;
+    loadRecentFilesAlg(listPath, recent, 10);
+    CHECK(recent.size() == 1, "recent files: a path that no longer exists on disk is skipped on load");
+    CHECK(recent.size() == 1 && recent[0] == realFile,
+          "recent files: the still-existing path is kept");
+
+    std::error_code ec;
+    std::filesystem::remove(listPath, ec);
+    std::filesystem::remove(realFile, ec);
+}
+
+static void testRecentFilesLoadRespectsMaxCap()
+{
+    static int tmpIdx = 0;
+    auto listPath = std::filesystem::temp_directory_path() /
+                    ("mc3_recent_cap_" + std::to_string(tmpIdx++) + ".txt");
+    std::vector<std::filesystem::path> realFiles;
+    {
+        std::ofstream f(listPath);
+        for (int i = 0; i < 15; ++i) {
+            auto p = std::filesystem::temp_directory_path() /
+                     ("mc3_recent_cap_file_" + std::to_string(tmpIdx) + "_" + std::to_string(i) + ".mc3.xml");
+            { std::ofstream rf(p); rf << "<mc3/>"; }
+            realFiles.push_back(p);
+            f << p.string() << "\n";
+        }
+    }
+
+    std::vector<std::filesystem::path> recent;
+    loadRecentFilesAlg(listPath, recent, /*maxRecentFiles=*/10);
+    CHECK(recent.size() == 10, "recent files: load stops at maxRecentFiles even if the file has more entries");
+
+    std::error_code ec;
+    std::filesystem::remove(listPath, ec);
+    for (const auto& p : realFiles) std::filesystem::remove(p, ec);
+}
+
+static void testAddRecentFileDedupsMovesToFrontAndCaps()
+{
+    static int tmpIdx = 0;
+    std::vector<std::filesystem::path> realFiles;
+    auto makeFile = [&](int i) {
+        auto p = std::filesystem::temp_directory_path() /
+                 ("mc3_recent_add_" + std::to_string(tmpIdx) + "_" + std::to_string(i) + ".mc3.xml");
+        { std::ofstream f(p); f << "<mc3/>"; }
+        realFiles.push_back(p);
+        return p;
+    };
+    tmpIdx++;
+
+    std::vector<std::filesystem::path> recent;
+    auto fileA = makeFile(0);
+    auto fileB = makeFile(1);
+    auto fileC = makeFile(2);
+
+    addRecentFileAlg(recent, fileA, 10);
+    addRecentFileAlg(recent, fileB, 10);
+    addRecentFileAlg(recent, fileC, 10);
+    CHECK(recent.size() == 3 && recent[0] == fileC && recent[1] == fileB && recent[2] == fileA,
+          "recent files: most-recently-added file is at the front");
+
+    // Re-adding fileA (already in the list) must move it to the front, not duplicate it.
+    addRecentFileAlg(recent, fileA, 10);
+    CHECK(recent.size() == 3, "recent files: re-adding an existing entry doesn't duplicate it");
+    CHECK(!recent.empty() && recent[0] == std::filesystem::absolute(fileA),
+          "recent files: re-adding an existing entry moves it to the front");
+
+    // Cap enforcement: adding beyond maxRecentFiles drops the oldest.
+    std::vector<std::filesystem::path> capped;
+    std::vector<std::filesystem::path> capFiles;
+    for (int i = 0; i < 5; ++i) capFiles.push_back(makeFile(100 + i));
+    for (const auto& p : capFiles) addRecentFileAlg(capped, p, /*maxRecentFiles=*/3);
+    CHECK(capped.size() == 3, "recent files: list never exceeds maxRecentFiles");
+    CHECK(!capped.empty() && capped[0] == std::filesystem::absolute(capFiles.back()),
+          "recent files: most-recently-added file is still at the front after capping");
+    CHECK(std::find(capped.begin(), capped.end(), std::filesystem::absolute(capFiles.front())) == capped.end(),
+          "recent files: the oldest entry is dropped once the cap is exceeded");
+
+    std::error_code ec;
+    for (const auto& p : realFiles) std::filesystem::remove(p, ec);
+}
+
+static void testRecentFilesPersistenceRoundTrip()
+{
+    static int tmpIdx = 0;
+    auto listPath = std::filesystem::temp_directory_path() /
+                    ("mc3_recent_roundtrip_" + std::to_string(tmpIdx++) + ".txt");
+    auto file1 = std::filesystem::temp_directory_path() /
+                 ("mc3_recent_rt1_" + std::to_string(tmpIdx) + ".mc3.xml");
+    auto file2 = std::filesystem::temp_directory_path() /
+                 ("mc3_recent_rt2_" + std::to_string(tmpIdx) + ".mc3.xml");
+    { std::ofstream f(file1); f << "<mc3/>"; }
+    { std::ofstream f(file2); f << "<mc3/>"; }
+
+    std::vector<std::filesystem::path> recent = {file2, file1};
+    saveRecentFilesAlg(listPath, recent);
+
+    std::vector<std::filesystem::path> reloaded; // fresh, as on a restarted process
+    loadRecentFilesAlg(listPath, reloaded, 10);
+    CHECK(reloaded.size() == 2 && reloaded[0] == file2 && reloaded[1] == file1,
+          "recent files: save/load round-trip preserves order across a simulated restart");
+
+    std::error_code ec;
+    std::filesystem::remove(listPath, ec);
+    std::filesystem::remove(file1, ec);
+    std::filesystem::remove(file2, ec);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -2989,6 +3181,7 @@ int main()
     testUndoRedoAiApply();
     testUndoRedoMergeScene();
     testMergeSceneCollisionHandling();
+    testMergeSceneObjectIdCollisionNotHandled();
     testResolveSaveAsPath();
     testSaveAsDoesNotOverwriteOriginal();
     testExportSelectionOnlySelectedObjects();
@@ -3010,6 +3203,10 @@ int main()
     testPrefsLoadSkipsMalformedLines();
     testMacroSaveLoadRoundTrip();
     testMacroLoadSkipsBlankLines();
+    testRecentFilesLoadSkipsNonexistentPaths();
+    testRecentFilesLoadRespectsMaxCap();
+    testAddRecentFileDedupsMovesToFrontAndCaps();
+    testRecentFilesPersistenceRoundTrip();
     testHierarchyFilterTypeOnlyNarrowsWithoutText();
     testHierarchyFilterRecursesIntoChildren();
     testHierarchyFilterOrMode();
