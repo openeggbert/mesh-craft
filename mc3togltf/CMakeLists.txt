@@ -111,6 +111,7 @@ include(CTest)
 
 if(BUILD_TESTING)
     find_program(PYTHON3_EXEC python3)
+    find_program(BLENDER_EXEC blender)
     if(PYTHON3_EXEC)
         set(_anim_xml        "${CMAKE_CURRENT_SOURCE_DIR}/../test/animation_test.mc3.xml")
         set(_house_xml       "${CMAKE_CURRENT_SOURCE_DIR}/../test/house.mc3.xml")
@@ -149,6 +150,27 @@ if(BUILD_TESTING)
             )
             set_tests_properties(mc3togltf_anim_geom_cache PROPERTIES TIMEOUT 30 LABELS "export")
         endif()
+        # STAB-0252: real headless Blender import of a generated large scene.
+        # Optional external tooling -- only registered if `blender` is found.
+        if(BLENDER_EXEC)
+            add_test(
+                NAME mc3togltf_blender_import
+                COMMAND "${PYTHON3_EXEC}"
+                        "${CMAKE_CURRENT_SOURCE_DIR}/test/blender_import_test.py"
+                        "$<TARGET_FILE:mc3togltf>"
+                        "${BLENDER_EXEC}"
+            )
+            set_tests_properties(mc3togltf_blender_import PROPERTIES TIMEOUT 90 LABELS "export")
+        endif()
+        # STAB-0257: >1M-triangle OBJ export stress test. Generates the OBJ
+        # on the fly (not a committed static fixture -- it's ~28MB as text).
+        add_test(
+            NAME mc3togltf_large_obj_stress
+            COMMAND "${PYTHON3_EXEC}"
+                    "${CMAKE_CURRENT_SOURCE_DIR}/test/large_obj_stress_test.py"
+                    "$<TARGET_FILE:mc3togltf>"
+        )
+        set_tests_properties(mc3togltf_large_obj_stress PROPERTIES TIMEOUT 90 LABELS "export")
         set(_obj_robustness_xml       "${CMAKE_CURRENT_SOURCE_DIR}/../test/obj_robustness.mc3.xml")
         set(_texture_sampler_xml      "${CMAKE_CURRENT_SOURCE_DIR}/../test/texture_sampler.mc3.xml")
         set(_material_pbr_xml         "${CMAKE_CURRENT_SOURCE_DIR}/../test/material_pbr.mc3.xml")
@@ -499,5 +521,18 @@ if(BUILD_TESTING)
                     "2.5"
         )
         set_tests_properties(mc3togltf_large_scene_500 PROPERTIES TIMEOUT 60 LABELS "export")
+
+        # STAB-0245: 1000-object stress export (same script, scale=5.0 ->
+        # 500+250+250 = 1000 objects), timeout 120s per the row's own ask.
+        # Measured manually (not asserted in-test): ~0.1s wall time, ~8.5MB
+        # peak RSS for the mc3togltf process — far under the row's 500MB bound.
+        add_test(
+            NAME mc3togltf_large_scene_1000
+            COMMAND "${PYTHON3_EXEC}"
+                    "${CMAKE_CURRENT_SOURCE_DIR}/test/large_scene_generated_test.py"
+                    "$<TARGET_FILE:mc3togltf>"
+                    "5.0"
+        )
+        set_tests_properties(mc3togltf_large_scene_1000 PROPERTIES TIMEOUT 120 LABELS "export")
     endif()
 endif()
