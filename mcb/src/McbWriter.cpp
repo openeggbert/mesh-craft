@@ -455,6 +455,31 @@ static void writeDocument(std::ostream& o, const Mc3::Mc3Document& doc) {
         wKeyMap(o, "meta", static_cast<uint32_t>(doc.meta.size()));
         for (const auto& [k, v] : doc.meta) { wRawStr(o, k); wU8(o, TAG_STR); wRawStr(o, v); }
     }
+    // STAB-0131/0144: doc.includes, its skip-sets, and the legacy doc.metadata
+    // map were never written at all — an MCB roundtrip of a scene that used
+    // <include> silently lost the include structure (everything the included
+    // file contributed would get inlined on the next XML save instead of
+    // staying in the referenced library file).
+    if (!doc.metadata.empty()) {
+        wKeyMap(o, "metadata", static_cast<uint32_t>(doc.metadata.size()));
+        for (const auto& [k, v] : doc.metadata) { wRawStr(o, k); wU8(o, TAG_STR); wRawStr(o, v); }
+    }
+    if (!doc.includes.empty()) {
+        wKeyArr(o, "includes", static_cast<uint32_t>(doc.includes.size()));
+        for (const auto& inc : doc.includes) { wU8(o, TAG_STR); wRawStr(o, inc); }
+    }
+    if (!doc.includedDefs.empty()) {
+        wKeyArr(o, "includedDefs", static_cast<uint32_t>(doc.includedDefs.size()));
+        for (const auto& id : doc.includedDefs) { wU8(o, TAG_STR); wRawStr(o, id); }
+    }
+    if (!doc.includedMaterials.empty()) {
+        wKeyArr(o, "includedMaterials", static_cast<uint32_t>(doc.includedMaterials.size()));
+        for (const auto& id : doc.includedMaterials) { wU8(o, TAG_STR); wRawStr(o, id); }
+    }
+    if (!doc.includedTextures.empty()) {
+        wKeyArr(o, "includedTextures", static_cast<uint32_t>(doc.includedTextures.size()));
+        for (const auto& id : doc.includedTextures) { wU8(o, TAG_STR); wRawStr(o, id); }
+    }
 
     if (doc.environment) { wKeyObj(o, "environment"); writeEnvironment(o, *doc.environment); }
 

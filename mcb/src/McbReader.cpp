@@ -696,6 +696,48 @@ static Mc3::Mc3Document readDocument(std::istream& in) {
                 else               skipValue(in, t);
             }
         }
+        else if (k == "metadata") {
+            uint32_t n = rU32(in);
+            for (uint32_t i = 0; i < n; ++i) {
+                std::string mk = rRawStr(in);
+                uint8_t t = rU8(in);
+                if (t == TAG_STR) doc.metadata[mk] = rRawStr(in);
+                else               skipValue(in, t);
+            }
+        }
+        else if (k == "includes") {
+            uint32_t n = rU32(in);
+            doc.includes.reserve(n);
+            for (uint32_t i = 0; i < n; ++i) {
+                uint8_t t = rU8(in);
+                if (t == TAG_STR) doc.includes.push_back(rRawStr(in));
+                else               skipValue(in, t);
+            }
+        }
+        else if (k == "includedDefs") {
+            uint32_t n = rU32(in);
+            for (uint32_t i = 0; i < n; ++i) {
+                uint8_t t = rU8(in);
+                if (t == TAG_STR) doc.includedDefs.insert(rRawStr(in));
+                else               skipValue(in, t);
+            }
+        }
+        else if (k == "includedMaterials") {
+            uint32_t n = rU32(in);
+            for (uint32_t i = 0; i < n; ++i) {
+                uint8_t t = rU8(in);
+                if (t == TAG_STR) doc.includedMaterials.insert(rRawStr(in));
+                else               skipValue(in, t);
+            }
+        }
+        else if (k == "includedTextures") {
+            uint32_t n = rU32(in);
+            for (uint32_t i = 0; i < n; ++i) {
+                uint8_t t = rU8(in);
+                if (t == TAG_STR) doc.includedTextures.insert(rRawStr(in));
+                else               skipValue(in, t);
+            }
+        }
         else if (k == "environment")      doc.environment      = readEnvironment(in);
         else if (k == "lights") {
             uint32_t n = rU32(in);

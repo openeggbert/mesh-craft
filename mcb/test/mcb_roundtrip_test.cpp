@@ -277,6 +277,48 @@ static void testMeta() {
 }
 
 // ---------------------------------------------------------------------------
+// STAB-0131 — doc.includes (and its include skip-sets) survive an MCB
+// roundtrip. Without this, converting an XML scene that uses <include> to
+// MCB and back would silently inline everything that used to live in the
+// included library file into the main scene.
+// ---------------------------------------------------------------------------
+
+static void testIncludesList() {
+    Mc3Document doc;
+    doc.includes = {"shared_lib.mc3.xml", "materials.mc3.xml"};
+    doc.includedDefs.insert("crate");
+    doc.includedMaterials.insert("stone");
+    doc.includedTextures.insert("tex1");
+
+    auto rt = roundtrip(doc);
+
+    CHECK(rt.includes.size() == 2, "includes: list size survives");
+    if (rt.includes.size() == 2) {
+        CHECK(rt.includes[0] == "shared_lib.mc3.xml", "includes: [0] survives, order preserved");
+        CHECK(rt.includes[1] == "materials.mc3.xml",  "includes: [1] survives, order preserved");
+    }
+    CHECK(rt.includedDefs.count("crate") == 1,        "includes: includedDefs skip-set survives");
+    CHECK(rt.includedMaterials.count("stone") == 1,   "includes: includedMaterials skip-set survives");
+    CHECK(rt.includedTextures.count("tex1") == 1,      "includes: includedTextures skip-set survives");
+}
+
+// STAB-0144 — doc.metadata (the legacy <metadata><property> map, distinct
+// from the newer doc.meta N7 map) survives an MCB roundtrip.
+static void testLegacyMetadataMap() {
+    Mc3Document doc;
+    doc.metadata["old_key"] = "old_value";
+    doc.metadata["another"] = "value2";
+
+    auto rt = roundtrip(doc);
+
+    CHECK(rt.metadata.count("old_key") == 1, "legacy metadata: old_key survives");
+    CHECK(rt.metadata.count("another") == 1, "legacy metadata: another survives");
+    if (rt.metadata.count("old_key")) CHECK(rt.metadata["old_key"] == "old_value", "legacy metadata: value survives");
+    // Confirm doc.meta and doc.metadata don't cross-contaminate through MCB either.
+    CHECK(rt.meta.empty(), "legacy metadata: doc.meta stays empty (no cross-contamination)");
+}
+
+// ---------------------------------------------------------------------------
 
 int main() {
     testSmoke();
@@ -289,6 +331,8 @@ int main() {
     testTrigger();
     testSceneState();
     testMeta();
+    testIncludesList();
+    testLegacyMetadataMap();
 
     if (failures == 0)
         std::cout << "All MCB roundtrip tests passed.\n";
