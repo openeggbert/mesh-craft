@@ -504,10 +504,14 @@ No project linter/formatter is configured.
    desktop session (dragging a file from a real file manager) — same
    caveat as clipboard above, check for a testable seam first.
 
-4. **STAB-0562 — verify OpenGL ES 3 features on web (WebGL2).** Files:
-   `CMakeLists.txt`. Likely overlaps heavily with the Emscripten
-   blank-canvas investigation (item 1) — probably best tackled together
-   rather than as a separate pass.
+4. **STAB-0563 — verify SQLite stubs compile on Emscripten.** Files:
+   `src/MeshCraft/ModelRegistry.cpp`. Should be a quick check: confirm
+   `MESHCRAFT_HAS_SQLITE3` is undefined for the Emscripten target
+   (already implied by STAB-0553/0562's clean 449/449 builds, which
+   never link SQLite3) and that `ModelRegistry`'s stub code path
+   actually compiles (not just link-skips). Verification: re-run the
+   Emscripten build, grep the configure log for the SQLite3
+   feature-detection message.
 
 Recently closed this session: **STAB-0554** (path separators — confirmed
 `std::filesystem::path` used consistently everywhere, no gap),
@@ -516,10 +520,13 @@ object names — added 3 new round-trip tests, all pass, see §3),
 **STAB-0558** (config dir per OS — found and fixed a real gap:
 `meshcraftConfigDir()` in `MeshCraftPrivate.hpp` was unconditionally
 Linux-style with no Windows branch at all; added `%APPDATA%` support
-under `#if defined(_WIN32)`), and **STAB-0561** (file dialogs — confirmed
+under `#if defined(_WIN32)`), **STAB-0561** (file dialogs — confirmed
 no native OS file-picker library exists anywhere in the editor; all 8
 path entry points use plain `ImGui::InputText`, which has no
-OS-conditional code path to diverge).
+OS-conditional code path to diverge), and **STAB-0562** (WebGL2 shader
+compatibility — confirmed all 7 of CNA's EasyGL 3D shader programs are
+`#version 300 es`/GLSL ES 3.00, and the prior STAB-0553 live-browser
+console showed no shader-compile-failure diagnostics).
 
 Continue through the rest of S16 (`plan.md`, STAB-0559 onward) in
 `plan.md` order after these — several remaining rows are platform-build
