@@ -504,14 +504,13 @@ No project linter/formatter is configured.
    desktop session (dragging a file from a real file manager) — same
    caveat as clipboard above, check for a testable seam first.
 
-4. **STAB-0563 — verify SQLite stubs compile on Emscripten.** Files:
-   `src/MeshCraft/ModelRegistry.cpp`. Should be a quick check: confirm
-   `MESHCRAFT_HAS_SQLITE3` is undefined for the Emscripten target
-   (already implied by STAB-0553/0562's clean 449/449 builds, which
-   never link SQLite3) and that `ModelRegistry`'s stub code path
-   actually compiles (not just link-skips). Verification: re-run the
-   Emscripten build, grep the configure log for the SQLite3
-   feature-detection message.
+4. **STAB-0565 — verify IDBFS persistence on web build.** Files:
+   `CMakeLists.txt`. Check whether `-lidbfs.js` is actually passed for
+   the Emscripten link, and whether `MeshCraftApplication`/`FileOps`
+   ever mounts/syncs an IDBFS filesystem — if no IDBFS wiring exists at
+   all yet, this row is an honest gap (a real missing feature, not a
+   verification), same class as STAB-0558 turned out to be. Actual
+   "survives a page reload" behavior needs a live browser either way.
 
 Recently closed this session: **STAB-0554** (path separators — confirmed
 `std::filesystem::path` used consistently everywhere, no gap),
@@ -523,10 +522,13 @@ Linux-style with no Windows branch at all; added `%APPDATA%` support
 under `#if defined(_WIN32)`), **STAB-0561** (file dialogs — confirmed
 no native OS file-picker library exists anywhere in the editor; all 8
 path entry points use plain `ImGui::InputText`, which has no
-OS-conditional code path to diverge), and **STAB-0562** (WebGL2 shader
+OS-conditional code path to diverge), **STAB-0562** (WebGL2 shader
 compatibility — confirmed all 7 of CNA's EasyGL 3D shader programs are
 `#version 300 es`/GLSL ES 3.00, and the prior STAB-0553 live-browser
-console showed no shader-compile-failure diagnostics).
+console showed no shader-compile-failure diagnostics), and
+**STAB-0563/0564** (SQLite/AI stubs on Emscripten — both feature-gate
+macros are correctly undefined for that target and both stub branches
+compiled clean as part of the same 449/449 build).
 
 Continue through the rest of S16 (`plan.md`, STAB-0559 onward) in
 `plan.md` order after these — several remaining rows are platform-build
