@@ -1,6 +1,6 @@
 # NEXT.md
 
-_Last updated: 2026-07-06, commit `0c504ea` + this session's S16 work (develop)_
+_Last updated: 2026-07-06, commit `ff4455a` (develop, in sync with `origin/develop`)_
 
 ---
 
@@ -15,20 +15,15 @@ CNA's backend depends on). Scenes export to glTF/GLB via **mc3togltf** and
 to a compact binary format via **mc3tomcb**.
 
 **Main goal:** reach a fully stabilized, test-covered codebase before
-adding new features. All work is tracked in `plan.md` as ~650 `STAB-XXXX`
-tasks across sections S0–S20, gated by a Gate 0–6 checklist.
+adding new features. All work is tracked in `plan.md` as ~651 `STAB-XXXX`
+tasks across sections S0–S20, gated by a Gate 0–6 checklist
+(`STABILIZATION.md`).
 
-**Current phase:** Stabilization. Gates 0–6 are all substantially closed
-(see `STABILIZATION.md` for exact per-gate status) — everything reachable
-without an external tool or a live display is done. Sections S0–S20 are
-all closed or exhausted for this environment: the only rows still open
-anywhere in `plan.md` are genuinely blocked on a missing tool or a live
-human session (STAB-0559/0560 clipboard/drag-drop, STAB-0571/0572/0573
-web export/SSAO/bloom, STAB-0617 ImGui refactor, STAB-0642 Blender,
-STAB-0643 web browser, STAB-0650 CI credentials — see §5) plus a handful
-of lower-priority P2/P3 items in the earlier sections (S0-S15) that were
-never the focus of this session's pass. **Nothing headless-reachable is
-left undone in S16-S20.**
+**Current phase:** Stabilization, deep in the S0–S15 backlog. **453/651**
+`plan.md` rows are ✅. Sections **S0, S1, S2, S13, S17, S19** are fully
+closed. S16/S18/S20 are closed except for rows genuinely blocked on a
+missing tool or a live human session. **S3 (MCB Binary Format Stability)
+is in progress** — currently the active section (see §4/§8).
 
 **Important architectural decisions:**
 - `mc3/` and `mcb/` are pure C++ static libs with **no** CNA/ImGui
@@ -44,6 +39,10 @@ left undone in S16-S20.**
   aside — that pure logic lives in CNA-free headers (functions suffixed
   `Alg`, e.g. `EditorAlgorithms.hpp`) that both the real app code and the
   headless test suite `#include` and call directly. See §6.
+- MCB (`mcb/`) is a custom tagged binary format (magic `MCB\0`, version
+  byte, then key/tag/value pairs — see `mcb/include/MeshCraft/Mcb/McbFormat.hpp`)
+  mirroring `Mc3Document`'s full field set, used as a faster-load
+  alternative to XML. It is **not** an authoring format.
 
 ---
 
@@ -51,298 +50,271 @@ left undone in S16-S20.**
 
 ### Build
 - **Debug** (`cmake-build-debug/`, generated with CLion's bundled cmake
-  4.2.2): last full reconfigure + rebuild was clean, 0 warnings from
-  MeshCraft's own sources, at commit `18b1809`.
-- **Release** (`b-release/`): exists from earlier in this project's
-  history; not re-verified in the current session — re-run the commands
-  in §7 before relying on it.
+  4.2.2): last full rebuild + full `ctest` run was clean at commit
+  `ff4455a` — **48/48 tests passed**, 0 warnings from MeshCraft's own
+  sources. No source changes since that commit (working tree clean).
+- **Release** (`b-release/`): last verified earlier in this stabilization
+  effort; not re-verified against the current commit — re-run the
+  commands in §7 before relying on it.
 - **Standalone (CNA-free) component builds** (`mc3`, `mcb`, `mc3togltf`,
-  `mc3tomcb`, each configures/builds/tests independently of the root
-  project): last confirmed passing earlier in this project's history —
-  re-verify with §7's commands if you depend on this.
+  `mc3tomcb`): each configures/builds/tests independently of the root
+  project. `mcb`'s standalone build was re-verified at commit `22b1c5d`
+  (1/1 passing, includes the MCB include/metadata fix). The other three
+  were last confirmed passing earlier in this effort — re-verify with
+  §7's commands if you depend on them.
 - **MinGW (Windows) cross-compile**: configure succeeds; build reaches
-  ~73% (328/449 objects) before failing on a CNA-side issue. See §4.
+  ~73% (328/449 objects) before failing on a CNA-side issue (missing
+  GLES3 headers for a Windows target). See §4. Windows-specific fixes
+  already landed on the MeshCraft side this effort: SDL runtime DLL
+  copying and static libgcc/libstdc++ linking are both confirmed correct
+  via the generated `build.ninja` (STAB-0566/0567), and config-dir
+  resolution now has a real `%APPDATA%` branch (STAB-0558) — none of
+  this can be exercised past the 73% mark until CNA's GLES3 gap is
+  resolved.
 - **Emscripten (web) build**: configure and build both succeed 100%
   (449/449, exit 0) and the compiled JS/WASM genuinely executes (verified
   via Node). Loaded in a real browser: initializes correctly, but renders
   a blank canvas — the 3D editor is not yet usable on web. See §4.
 
 ### Tests
-**46/46 CTest pass** in Debug as of the last run in this session (before
-commit `18b1809`, which only changed documentation). `ctest -N` lists
-all 46 by name. Notably:
-- `mc3_commands` (~450+ assertions): editor command algorithms, undo/redo,
-  auto-save/backup, keybinding/macro persistence, hierarchy filtering,
-  AI-panel lifecycle, viewport ray-cast picking, click-selection
-  resolution, camera view presets, export/import material+texture
-  collection, merge-scene collision handling.
-- `mc3_registry` (~94 assertions): ModelRegistry SQLite CRUD/search.
-- `mc3_ai` (~55 assertions): AiAssistant JSON + AI-response validation
+**48/48 CTest pass** in Debug as of commit `ff4455a`. `ctest -N` lists
+all 48 by name; `ctest --print-labels` groups them into `format`/
+`export`/`render`/`registry`/`ai`/`commands` (STAB-0027). Notable
+binaries and their real measured assertion counts (see `TESTING.md`):
+- `mc3_commands` (489 `PASS:` assertions): editor command algorithms
+  (rename incl. edge cases), undo/redo, auto-save/backup,
+  keybinding/macro persistence, hierarchy filtering, AI-panel lifecycle,
+  viewport picking, material-color resolution.
+- `mc3_registry` (109 assertions): ModelRegistry SQLite CRUD/search,
+  including a real legacy-schema `ALTER TABLE ADD COLUMN` migration test
+  and a corrupted-database-file test.
+- `mc3_ai` (57 assertions): AiAssistant JSON + AI-response validation
   pipeline, mock-HTTP-server round-trips.
-- `mc3_roundtrip` (~300+ assertions): full XML parser/writer roundtrip,
-  including `<include>` across directories with real files on disk.
-- `mcb_roundtrip` (~50 assertions): MCB binary roundtrip.
+- `mc3_roundtrip` (413+ assertions): full XML parser/writer roundtrip —
+  every primitive/structural object type (including Union/Intersection/
+  Instance/Area, previously untested), all N1–N7 extensions, `<include>`
+  edge cases (spaces in path, nonexistent file, nested, cross-directory),
+  malformed-input robustness, a golden-file byte-for-byte writer-output
+  test, and a genuine two-cycle save/reload fixpoint test.
+- `mcb_roundtrip` (2 CTest entries: `mcb_roundtrip` C++ binary + `mc3tomcb_roundtrip`
+  CLI test): MCB binary roundtrip, now including `doc.includes`/skip-sets/
+  legacy `metadata`/CSG/extrude/deform (all added this effort — see §3).
+- `mc3togltf_*` (~24 tests): CSG, materials, textures (real GLB image
+  embedding), animation, instance variants, large scenes, a full-GLB
+  determinism test, a golden-JSON structural test, help text,
+  no-partial-output-on-error.
 - Several real-render smoke tests (`smoke_test*`, `fog_linear_test`,
-  `point_light_gizmo_test`, `spot_light_gizmo_test`,
-  `look_through_camera_test`, `csg_cache_test`, `background_texture_test`,
-  `skybox_texture_test`, `lod_test`, `editor_export_test`) that run the
-  actual `MeshCraft` binary in `--screenshot` headless mode and verify
-  genuine pixel output or printed internal counters, not a stub render.
-- `mc3togltf_*` (~18 tests): CSG, materials, textures (including real
-  GLB image embedding and `<include>`d definitions), animation, instance
-  variants, large scenes, help text, no-partial-output-on-error.
-- `mc3tomcb_roundtrip` + `mc3tomcb_error_handling`: CLI round-trip and
-  error paths (missing input, write-protected output).
+  gizmo tests, `csg_cache_test`, background/skybox texture, `lod_test`,
+  `editor_export_test`) that run the actual `MeshCraft` binary in
+  `--screenshot` headless mode and verify genuine pixel output.
 
 ### Tools / libraries available
 - `MeshCraft` — editor executable, version `0.1.0` (`--version` to print
   it). Builds and runs on Linux; the 3D viewport is not fully integrated
   into the render loop in interactive mode, and the Emscripten build
   doesn't visually render yet (see "What does NOT work yet").
-  - `--screenshot <path>` — render scene headlessly to a PPM file (always
-    PPM regardless of the extension given) and exit.
+  - `--screenshot <path>` — render scene headlessly to a PPM file.
   - `--export <path>` — export the loaded scene to `.glb`/`.gltf`
-    non-interactively and exit (same codepath as the editor's File →
-    Export menu; also usable for real scripted/batch export).
-- `mc3togltf` — CLI: `mc3togltf in.mc3.xml out.glb` (`--help`/`-h` now
-  works; `--allow-approximate-csg`, `--stats`).
+    non-interactively and exit.
+- `mc3togltf` — CLI: `mc3togltf in.mc3.xml out.glb` (`--help`/`-h`,
+  `--allow-approximate-csg`, `--stats`).
 - `mc3tomcb` — bidirectional CLI: `mc3.xml` ↔ `.mcb`.
 - `Mc3` / `Mcb` / `mc3togltf_lib` — static libs (scene data, binary
   serialization, glTF export).
 
 ### What works
-- Full XML round-trip for all primitive types and all N1–N7 extensions,
-  including `<include>` libraries that live in a *different* directory
-  than the main scene (fixed this session — previously silently broke).
-- MCB binary round-trip, matching the XML feature set.
-- XSD validation for every test fixture and for AI-generated scene XML
-  before it's applied to the live scene.
-- glTF/GLB export: primitives, animations, CSG, materials (with real
-  embedded texture data, verified byte-for-byte), lights, cameras,
-  instances, groups, OBJ mesh import, `<include>`d definitions.
+- Full XML round-trip for all object types (primitives, Group, Union/
+  Difference/Intersection, Instance, Area, Mesh, Extrude) and all N1–N7
+  extensions, including `<include>` across directories, with spaces in
+  the path, and with a clear error on a missing include file.
+- MCB binary round-trip, now matching the XML feature set including
+  the include structure (fixed this effort — see §3) and legacy
+  `metadata` map.
+- XSD validation for every test fixture and for AI-generated scene XML.
+- glTF/GLB export: primitives, animations, CSG, materials, lights,
+  cameras, instances, groups, OBJ mesh import, `<include>`d definitions;
+  a genuine byte-for-byte determinism test and a golden-JSON structural
+  test both pass.
 - SQLite-backed asset registry: open/save/search/remove/migration
-  (gracefully disabled if SQLite3 isn't available at configure time —
-  fixed this session, was previously a hard `REQUIRED` dependency).
-- Editor undo/redo (snapshot-based, capped at 20).
-- Auto-save + 2-slot rotating backup on save.
-- AI Assistant: sends scene + prompt to the Claude API, validates the
-  response, applies it or saves definitions to the registry.
-- Viewport ray-cast click-to-select works for every object type.
-- Material export/import (`.mc3mat.xml`) now correctly carries its
-  referenced textures both ways, with correct collision handling on
-  import (fixed this session — previously silently dropped textures).
-- Export Subtree as Template now correctly carries its referenced
-  materials/textures (fixed this session — previously silently dropped
-  them, same bug class as material export).
-- Real headless rendering verified via `--screenshot` for: sample
-  scenes, missing-mesh/missing-material fallbacks, orthographic camera,
-  linear fog, point/spot light gizmos, look-through-camera override,
-  background texture, skybox (fixed this session — was completely
-  invisible before, a VAO-based draw call silently produced nothing
-  under this environment's GL setup).
-- Emscripten and MinGW builds are both partially proven: Emscripten
-  builds and runs (WASM genuinely executes); MinGW builds to ~73% before
-  a CNA-side blocker (see §4).
+  (including from a genuinely pre-migration legacy schema), gracefully
+  disabled if SQLite3 isn't available at configure time.
+- Editor undo/redo, auto-save + rotating backup, AI Assistant, viewport
+  ray-cast click-to-select, material/subtree export-import — all as
+  documented in prior sessions, unchanged this effort.
 
 ### What does NOT work yet
-- `EditorViewport` is not integrated into the `MeshCraftApplication`
-  render loop.
 - **The Emscripten web build doesn't visually render the 3D editor** —
-  see §4, this is the main open problem.
+  see §4, the main open problem, unchanged since it was first found.
+- `EditorViewport` is not integrated into the `MeshCraftApplication`
+  render loop (interactive mode).
 - SVG texture rasterization: parsed/serialized/round-tripped, but
   `GltfExporter` never reads the SVG texture map — silently dropped from
-  export (a warning is printed, at least).
+  export (a warning is printed).
 - Embedded glTF (`<mesh src="embed:id"/>`): parsed/serialized, but
   `GltfExporter` treats `embed:id` as a literal OBJ path, which fails —
-  export continues with an empty (meshless) node, doesn't crash. This is
-  a deliberate, documented limitation (real fix = parsing external
-  GLB/base64 data, a new feature), not a quick bug.
+  export continues with an empty (meshless) node. Deliberate, documented
+  limitation (real fix = parsing external GLB/base64 data), not a bug.
+- `<embeds>` inside an `<include>`d file is never merged (only the main
+  document's own top-level `<embeds>` is parsed) — a narrow, accepted
+  limitation, documented in `MC3_FORMAT.md` (STAB-0092).
 - N3–N7 scene data (scripts, sounds, music, triggers, scene states,
   meta): fully round-tripped but not executed at runtime anywhere.
-- CI workflow exists but is parked deactivated under `.github_/` (see
-  §4); no automated full-editor (CNA + SDL3) build/test job runs
-  anywhere currently.
+- CI workflow exists but is parked deactivated under `.github_/`.
 - MinGW (Windows) cross-compile builds to ~73% then fails on a CNA-side
-  GLES3 header issue (see §4) — out of scope for this repo to fix.
+  GLES3 header issue — out of scope for this repo to fix.
 - A cluster of visual toggles (bounding-box overlay, SSAO, bloom,
-  wireframe mode, translate/rotate gizmos, gizmo-drag delta overlay,
-  per-selection poly stats, shadow-map debug, locked-object outline,
-  proportional-editing falloff sphere, large-scene live FPS) are
-  confirmed correct by code reading but can't be re-verified fresh in
-  this headless environment — see §5.
+  wireframe mode, gizmos, shadow-map debug, etc.) are confirmed correct
+  by code reading but can't be re-verified fresh in this headless
+  environment — see §5.
 
 ---
 
 ## 3. Recent changes
 
-Most recent work (this session) closed out **S14** and **S15** entirely
-and started **S16**. Highlights, newest first:
+Most recent work closed out **S0, S1, S2 entirely** and made significant
+progress into **S3 (MCB Binary Format Stability)**. Highlights, newest
+first (all on `develop`, all pushed):
 
-- **Emscripten web build**: verified `emcmake`/build succeed fully
-  (449/449) and the compiled code genuinely executes (Node smoke test);
-  live-browser testing found the 3D editor renders a blank canvas —
-  documented as a new, undiagnosed limitation (§4).
-- **`CMakeLists.txt`**: `find_package(SQLite3)` is no longer `REQUIRED` —
-  it was blocking any environment/toolchain without a SQLite3 dev
-  package (found while attempting the MinGW cross-compile), contradicting
-  the codebase's own established "SQLite3 is optional, `ModelRegistry`
-  stubs handle its absence" design.
-- **`Mc3XmlParser.cpp`**: fixed `<include>` silently breaking relative
-  texture/mesh paths when the included file lives in a different
-  directory than the main scene — added `rebaseRelativePath()` /
-  `rebaseDefinitionMeshSources()`.
-- **`MeshCraftApplication_UiOverlays.cpp` / `EditorAlgorithms.hpp`**:
-  fixed Material Export/Import silently dropping referenced textures
-  both on export and (separately) on import; added
-  `exportMaterialAlg()` / `importMaterialsAlg()`.
-- **`mc3togltf`**: added `--help`/`-h` (previously absent — `--help` was
-  parsed as a literal, nonexistent input filename); verified no partial
-  output file is left on disk on error; verified `<include>`d
-  definitions and real GLB texture embedding both work correctly.
-- **`MeshCraftApplication_Commands.cpp` / `EditorAlgorithms.hpp`**: fixed
-  Export Subtree as Template silently dropping referenced
-  materials/textures; added `exportSubtreeTemplateAlg()`.
-- **`MeshCraftApplication.cpp`**: fixed the equirectangular skybox
-  rendering nothing at all (VAO-based draw silently failed under this
-  environment's GL setup; switched to the same `gl_VertexID` procedural
-  quad pattern the working bloom passes already use); fixed a related
-  wrong-FOV bug in the same function; added a `--export <path>` CLI flag
-  for non-interactive GLB/glTF export; fixed drag-drop's path-routing
-  logic duplicating (instead of calling) an already-tested function.
-- **`SceneRenderer.cpp`/`.hpp`**: added a proportional-editing falloff
-  radius indicator (previously missing entirely, despite the underlying
-  math being correct and tested); added a CSG cache-hit counter to prove
-  the content-hash cache actually prevents re-evaluating static CSG
-  objects every frame.
-- Extensive new headless pixel-sampling tests were added throughout for
-  rendering features (fog, gizmos, camera override, background/skybox
-  textures, LOD, CSG cache) and CLI behaviors (export flag, help text,
-  error handling on both `mc3togltf` and `mc3tomcb`).
+- **`mcb/test/mcb_roundtrip_test.cpp`**: added CSG/extrude/deform
+  roundtrip tests (STAB-0141/0142/0143) — no MCB test exercised any of
+  these before, despite the writer/reader already supporting them; all
+  pass cleanly, confirming genuine end-to-end support.
+- **`mcb/src/McbWriter.cpp` / `McbReader.cpp`**: **real bug fixed** —
+  `doc.includes` and its skip-sets (`includedDefs`/`includedMaterials`/
+  `includedTextures`) plus the legacy `doc.metadata` map were **never
+  written or read by MCB at all**. Converting an XML scene using
+  `<include>` to MCB and back to XML would silently inline everything
+  the included library contributed into the main scene, losing the
+  include structure completely. Fixed by adding write/read support for
+  all 5 fields (STAB-0131/0144).
+- **`mc3/src/Mc3XmlParser.cpp`**: **real bug fixed** — `attrF()`/`attrI()`
+  used raw `std::stof`/`std::stoi` with no `try/catch`; a single
+  malformed float attribute anywhere in a scene file (e.g. `radius="abc"`)
+  failed the **entire file load** with an unhelpful `"Failed to load
+  file: stof"` message. Fixed 3 call sites (STAB-0080).
+- **`mc3/src/Mc3XmlParser.cpp` / `Mc3XmlWriter.cpp`**: **real bug fixed**
+  — `areaType`'s `size` attribute (declared in `mc3.xsd`) was never
+  implemented on either side (STAB-0031). Fixing it surfaced a **second**
+  bug in `mc3togltf/src/GltfExporter.cpp`: `buildMesh()` built a real
+  default-Box-shaped mesh for any object with `primitive.has_value()`,
+  with no `ObjectType::Area` exclusion — harmless before since Area's
+  primitive was always null, but triggered immediately by the parser fix.
+  Both fixed.
+- **`mc3/src/Mc3XmlWriter.cpp`**: **real bug fixed** — the SVG-texture
+  writer loop was missing the `includedTextures` skip check the adjacent
+  regular-texture loop already had; an SVG texture merged from an
+  `<include>` file was silently re-inlined into the main file on every
+  save (STAB-0091).
+- **`src/MeshCraft/ModelRegistry.cpp`**: **real bug fixed** —
+  `ModelRegistry::open()` left `db_` non-null when `createSchema()`
+  threw (e.g. opening a corrupted database file), so `isOpen()`
+  incorrectly reported `true` after a failed open (STAB-0065).
+- **`CMakeLists.txt`**: added an actionable diagnostic when `lxml` is
+  missing instead of letting `xsd_validation` fail with a raw Python
+  traceback (STAB-0015); added CTest `LABELS` to all registered tests
+  for `-L format`/`-L export`/etc. grouping (STAB-0027).
+- Extensive new test coverage added across `mc3/test/roundtrip_test.cpp`
+  and `mcb/test/mcb_roundtrip_test.cpp` for previously-untested object
+  types/fields (Union/Intersection/Instance/Area, `Mc3Light`/`Mc3Camera`/
+  `Mc3Environment` — none referenced anywhere before this effort — a
+  50-object scene, multi-channel-kind actions, and a genuine two-cycle
+  save/reload fixpoint test).
+- `plan.md`'s summary table was recomputed (it had drifted badly from
+  actual row state across several prior sessions) and `TESTING.md`'s
+  stale test counts ("21 tests") were corrected to the real numbers.
 
-Full history is in `git log --oneline`.
+Full history is in `git log --oneline`; `plan.md` has a per-row writeup
+for every `STAB-XXXX` ID mentioned above.
 
 ---
 
 ## 4. Current blocker / main problem
 
 **No blocker to local development or testing on Linux** — Debug builds
-and passes 46/46 tests as of `18b1809`.
+and passes 48/48 tests as of `ff4455a`.
 
-The most important **open problem** is the Emscripten web build's blank
-canvas:
+The most important **open problem**, unchanged across several sessions,
+is the Emscripten web build's blank canvas:
 
-- **Symptom**: `MeshCraft.html`, served locally
-  (`python3 -m http.server` from the build dir) and opened in a real
+- **Symptom**: `MeshCraft.html`, served locally and opened in a real
   browser, loads and initializes correctly — `SDL_CreateWindow`
-  succeeds, `EasyGLGraphicsBackend` initializes over WebGL 2.0
-  (`OpenGL ES 3.0 (WebGL 2.0)`), `[MeshCraft] New scene` prints, no
+  succeeds, `EasyGLGraphicsBackend` initializes over WebGL 2.0, no
   crash, no console error — but the `<canvas>` stays a blank/black
-  rectangle. The 3D editor is not visually usable.
+  rectangle.
 - **Failing command**: none technically fails; the failure is purely
-  visual/behavioral in the browser. To reproduce: build with Emscripten
-  (see §7), serve the output directory over HTTP, open
-  `MeshCraft.html` in a browser, open its devtools console.
+  visual. To reproduce: build with Emscripten (§7), serve the output
+  directory over HTTP, open `MeshCraft.html`, check devtools console.
 - **Affected files/modules**: likely `MeshCraftApplication::Draw()`/
   `EndDraw()` (`src/MeshCraft/MeshCraftApplication.cpp`), ImGui's
-  font-atlas/texture upload path, or a GL call that's silently a no-op
-  under WebGL2/GLES3 but fine under desktop GL. Not yet narrowed down
-  further than that.
-- **Suspected cause**: unconfirmed. Ruled out one major hypothesis (see
-  below). Remaining candidates: ImGui font-atlas texture upload failing
-  under WebGL2, an unsupported GL call silently no-op'ing every frame,
-  or a canvas-sizing/viewport issue specific to the Emscripten shell.
-- **What has already been tried**: investigated (read-only; CNA is out
-  of scope to modify from this repo) whether CNA's game loop even keeps
-  running under Emscripten — a black canvas after one successful frame
-  often means the app fell out of `main()`, since Emscripten requires a
-  registered callback (`emscripten_set_main_loop`) to keep looping,
-  unlike a native build's `while` loop. Confirmed this is **not** the
-  cause: CNA's `Game::RunLoop()` (`../cna/src/Microsoft/Xna/Framework/
-  Game.cpp:811-825`) correctly branches on `#if defined(__EMSCRIPTEN__)`
-  and calls `emscripten_set_main_loop(EmscriptenMainLoopCallback, 0, 1)`
-  generically for every backend including EasyGL — so the render loop
-  genuinely keeps running frame after frame. The actual per-frame cause
-  of the blank canvas was not root-caused; doing so would need temporary
-  frame-counter/GL-error diagnostic logging added to MeshCraft's own
-  `Draw()`/`EndDraw()`, a rebuild, and another user retest in a real
-  browser — deferred at the user's request as the next thing to pick up.
+  font-atlas upload path, or a GL call that's silently a no-op under
+  WebGL2/GLES3.
+- **What has already been tried**: confirmed CNA's `Game::RunLoop()`
+  correctly branches on `__EMSCRIPTEN__` and keeps the render loop
+  running frame after frame (ruled out "fell out of main()"). Also
+  confirmed all 7 of CNA's EasyGL 3D shader programs are valid
+  `#version 300 es` and compile/link without error (no shader-compile
+  failure in the console). The actual per-frame cause was not
+  root-caused — needs temporary frame-counter/`glGetError()` diagnostic
+  logging added to `Draw()`/`EndDraw()`, a rebuild, and a human
+  browser-retest. Deferred at the user's request as a lower priority
+  than the plain backlog work.
 
 A second, lower-priority open item: **MinGW (Windows) cross-compile
-builds to ~73%** (328/449 objects) then fails with
-`imgui_impl_opengl3.cpp: fatal error: GLES3/gl3.h: No such file or
-directory` — CNA's build configures `-DIMGUI_IMPL_OPENGL_ES3`
-unconditionally for the `EASYGL` backend regardless of target platform,
-and no GLES-for-Windows headers are vendored. This is a CNA-side
-decision, out of scope to fix from this repo — needs the CNA maintainer
-to vendor GLES headers for Windows or select a desktop-GL path for
-non-Linux targets.
+builds to ~73%** then fails with `imgui_impl_opengl3.cpp: fatal error:
+GLES3/gl3.h: No such file or directory` — a CNA-side backend
+configuration decision, out of scope to fix from this repo.
 
-A third, purely **operational** issue, unrelated to the above: CI is
-parked deactivated under `.github_/workflows/ci.yml` (GitHub only treats
-`.github/workflows/` as live) because the git remote's credentials lack
-the scope needed to activate it. `git push` itself has also intermittently
-been denied then started working again unprompted during this session,
-for reasons outside this repo's control — if push fails, don't touch
-git/remote config; just keep committing locally and retry later.
+A third, purely **operational** issue: CI is parked deactivated under
+`.github_/workflows/ci.yml` because the git remote's credentials lack
+the `workflow` scope. `git push` has occasionally been denied then
+started working again unprompted — if push fails, don't touch git/
+remote config, just retry.
 
 ---
 
 ## 5. Known bugs and limitations
 
-- **Emscripten web build renders a blank canvas** — see §4. _confirmed
-  via live user testing, not fixed, needs frame-level diagnostic
-  logging + another browser-retest round-trip to narrow down further._
+- **Emscripten web build renders a blank canvas** — see §4. _confirmed,
+  not fixed, needs frame-level diagnostic logging + a browser retest._
 - **MinGW cross-compile fails at ~73% on a CNA-side GLES3 header
-  issue** — see §4. _confirmed, blocked on CNA, not fixable from this
-  repo._
-- **CI cannot be activated with the current git credentials** — the
-  workflow file is committed but parked at `.github_/workflows/ci.yml`.
+  issue** — see §4. _confirmed, blocked on CNA, not fixable from here._
+- **CI cannot be activated with the current git credentials** —
   _confirmed; needs owner action on the git remote/credentials._
-- **SVG texture rasterization** not implemented in `GltfExporter` — a
-  material referencing an SVG texture prints a warning and omits it.
+- **SVG texture rasterization** not implemented in `GltfExporter`.
   _incomplete, documented, blocked on a library choice (librsvg vs.
   NanoSVG)._
 - **Embedded glTF** (`embed:id`) fails to parse as an OBJ path during
-  glTF export; export continues with an empty node, doesn't crash.
-  _incomplete, deliberately documented as a limitation (real fix is a
-  new feature: parsing external GLB/base64 data), not attempted._
+  glTF export; doesn't crash, exports a meshless node. _incomplete,
+  deliberately documented, real fix is a new feature._
+- **`<embeds>` inside an `<include>`d file is never merged** — a narrow,
+  accepted limitation (STAB-0092), documented in `MC3_FORMAT.md`.
+  _incomplete, not implemented, no reported real-world use case yet._
 - **`mc3.xsd` has no numeric range constraints** — a schema-valid AI
   response can contain a negative `size`/`radius` and it applies
   unchanged. _confirmed, documented in `README.md`, not fixed._
-- **`mc3.xsd`'s `mip_maps` texture attribute has zero implementation** —
-  parses fine, does nothing anywhere. _confirmed, not fixed, no assigned
-  STAB-XXXX ID._
-- **A cluster of visual toggles need a live display to re-verify**:
-  bounding-box overlay, SSAO, bloom, wireframe mode, translate/rotate
-  gizmo visibility, the gizmo-drag delta overlay, per-selected-object
-  poly-stats display, shadow-map debug overlay, locked-object outline,
-  the proportional-editing falloff sphere (newly implemented this
-  session, needs visual confirmation), and large-scene live FPS — all
-  confirmed correct and safe by code reading, none reachable via the
-  headless `--screenshot` path (no CLI/document/prefs hook exists to
-  force them on/pre-select or pre-lock an object, and FPS itself
-  requires a sustained interactive loop). _needs verification by a
-  human with a live display._
-- **The OBJ-import Browse button** (a plain ImGui text-entry popup, no
-  native OS file dialog) and **editor drag-drop's actual SDL drop
-  event delivery** both need a live UI session to click/drag through —
-  their underlying logic is confirmed correct and headlessly tested.
-  _needs a live display._
-- **`--screenshot` always writes raw PPM**, regardless of the output
-  path's extension (e.g. `--screenshot out.png` still writes PPM bytes)
-  — this is deliberate and long-standing, relied on by dozens of
-  existing test scripts; not a bug, but the naming is misleading if you
-  don't know this. _confirmed, deliberate, documented._
-- **N3–N7 (scripts/sounds/music/triggers/scene states/meta) are
-  data-only** — round-tripped but nothing executes them at runtime.
-  _intended at this stage, not a bug._
+- **`mc3.xsd`'s `mip_maps` texture attribute has zero implementation.**
+  _confirmed, not fixed, no assigned STAB-XXXX ID._
+- **A cluster of visual toggles need a live display to re-verify**
+  (bounding-box overlay, SSAO, bloom, wireframe, gizmos, shadow-map
+  debug, etc.) — confirmed correct by code reading, none reachable via
+  headless `--screenshot`. _needs verification by a human with a live
+  display._
+- **`--screenshot` always writes raw PPM** regardless of the output
+  path's extension. _confirmed, deliberate, documented, relied on by
+  dozens of existing test scripts._
+- **N3–N7 are data-only** — round-tripped but nothing executes them at
+  runtime. _intended at this stage, not a bug._
 - **`mc3` standalone build skips `mc3_commands`** — needs
-  `EditorAlgorithms.hpp` from the editor tree, absent in a standalone
-  checkout. _intended, not a bug._
+  `EditorAlgorithms.hpp` from the editor tree, absent standalone.
+  _intended, not a bug._
 - **3 `plan.md` items cannot be completed in this environment**:
   STAB-0642 (needs Blender), STAB-0643 (needs a browser — partially
-  now possible, see §4's Emscripten findings), STAB-0650 (needs CI
-  actually running). _flagged, needs external tooling/action._
+  reachable), STAB-0650 (needs CI actually running). _flagged, needs
+  external tooling/action._
+- **S3 (MCB) is only partially audited** — several rows (truncated/
+  corrupted-input error handling, UTF-8 strings, large strings, file
+  size vs. XML, determinism, magic-byte identifiability, endianness)
+  haven't been checked yet this effort. _needs verification — see §8._
 
 ---
 
@@ -362,39 +334,42 @@ MeshCraft (editor exe)
 model) → either `Mc3XmlWriter` (save), `McbWriter` (binary), or
 `GltfExporter` (glTF/GLB).
 
+**MCB format** (`mcb/include/MeshCraft/Mcb/McbFormat.hpp`): magic `MCB\0`
++ version byte + flags byte, then a flat sequence of
+`key(len-prefixed) + tag-byte + value` pairs terminated by a zero-length
+key, recursing for `TAG_OBJ`/`TAG_ARR`/`TAG_MAP`. `skipValue()` in
+`McbReader.cpp` recursively skips any tag type it doesn't recognize by
+key name, which is what makes forward-compatible unknown-key handling
+work — **this was verified only by code reading so far this effort, not
+yet by an empirical test with a hand-constructed unknown-key stream**
+(STAB-0132/0145, next up — see §8).
+
 **`doc.sourcePath` is a single directory per document.** Everything
 (texture URIs, OBJ mesh sources, etc.) resolves relative to it. When a
 document pulls in an `<include>`d file from a *different* directory,
-paths from that file must be rebased to resolve correctly against
-`doc.sourcePath` — see `Mc3XmlParser.cpp`'s `rebaseRelativePath()` /
-`rebaseDefinitionMeshSources()` (added this session; this had been
-silently broken before).
+paths from that file are rebased via `Mc3XmlParser.cpp`'s
+`rebaseRelativePath()`/`rebaseDefinitionMeshSources()`.
 
 **Undo/redo:** snapshot-based. `undoStack_`/`redoStack_` (capped at 20)
-hold `std::vector<Mc3::Mc3Document>`; `pushUndo()` stores a deep copy of
-`document_` before each mutating command.
+hold `std::vector<Mc3::Mc3Document>`.
 
 **The "Alg mirror" pattern**: editor/AI logic in CNA-coupled `.cpp` files
 often has zero actual CNA/ImGui dependency once app-state bookkeeping and
 rendering are set aside. Pure logic lives in a CNA-free header
 (`include/MeshCraft/EditorAlgorithms.hpp`, `AiResponseAlgorithms.hpp`),
 functions suffixed `Alg`, and the real `.cpp` `#include`s and calls them
-directly — single source of truth, no duplication. The headless test
-suite (`mc3/test/editor_commands_test.cpp`) calls the same functions
-directly with no CNA/SDL3/ImGui dependency.
-**Caution**: this session found multiple cases where a real `.cpp` had
-its own inline duplicate of an `Alg` function instead of calling it,
-which had silently drifted out of sync (`mergeDocumentsAlg` vs. the real
-merge code after a later feature was added to only one of them) — when
-touching one side of an Alg-mirrored pair, always check the other side
-is actually wired up and matches.
+directly. The headless test suite (`mc3/test/editor_commands_test.cpp`)
+calls the same functions directly with no CNA/SDL3/ImGui dependency.
+**Caution**: prior sessions found real `.cpp` files with their own inline
+duplicate of an `Alg` function instead of calling it, silently drifted
+out of sync — when touching one side of an Alg-mirrored pair, always
+check the other side is actually wired up and matches.
 
 **GL rendering caution**: a VAO-based vertex-attribute draw path was
-found completely non-functional in this environment's GL setup this
-session (the skybox — fixed by switching to a `gl_VertexID`-based
-procedural approach, matching what the working bloom passes already
-use). If a new raw-GL draw call renders nothing with no error, consider
-this failure mode.
+found completely non-functional in this environment's GL setup in a
+prior session (the skybox — fixed by switching to a `gl_VertexID`-based
+procedural approach). If a new raw-GL draw call renders nothing with no
+error, consider this failure mode.
 
 **Embedding a resource file at compile time**: `mc3.xsd` is compiled into
 `MeshCraft`/`ai_test` as a raw string constant, generated at CMake
@@ -407,7 +382,8 @@ requires a full reconfigure, not just a rebuild.**
 - `mc3/`, `mcb/`, `mc3togltf/`, `mc3tomcb/` must stay buildable standalone
   (no CNA/ImGui deps).
 - `mc3.xsd` must stay symmetric with `Mc3XmlWriter.cpp` — any new writer
-  attribute/element needs a schema declaration in the same change.
+  attribute/element needs a schema declaration in the same change (the
+  STAB-0031 Area/`size` bug was exactly this symmetry breaking down).
 - Do not add `${meta-gl_SOURCE_DIR}/include` to any `CMakeLists.txt`
   (triggers a full CNA recompile).
 - Do not modify CNA/SHARP_RUNTIME source files from this repo.
@@ -415,15 +391,16 @@ requires a full reconfigure, not just a rebuild.**
   `add_test()`, or an edit to `mc3.xsd`) needs a cmake **reconfigure**,
   not just a rebuild.
 - MCB format version is `MCB_VERSION` in `McbFormat.hpp` — bump on any
-  breaking wire-format change.
+  breaking wire-format change. Adding a new optional key (as done this
+  effort for `includes`/`metadata`) is additive and doesn't need a bump,
+  since `skipValue()` makes unknown keys forward-compatible either way.
 - XSD root element order is strict (`include → metadata → meta →
   environment → textures → materials → embeds → ... → definitions →
   objects → actions`).
 - Reconfigure `cmake-build-debug/` only with CLion's bundled cmake, not
   the system cmake (a documented system-cmake bug for this project).
 - `find_package(SQLite3)`/`OpenSSL`/`LibXml2` are all intentionally
-  optional on desktop builds — don't make any of them `REQUIRED` again
-  (a past `REQUIRED` on SQLite3 was a real bug, fixed this session).
+  optional on desktop builds — don't make any of them `REQUIRED` again.
 
 ---
 
@@ -434,8 +411,11 @@ requires a full reconfigure, not just a rebuild.**
 CLION_CMAKE=/home/robertvokac/.local/share/JetBrains/Toolbox/apps/clion/bin/cmake/linux/x64/bin/cmake
 "$CLION_CMAKE" -S . -B cmake-build-debug -DBUILD_TESTING=ON \
       -DCMAKE_POLICY_VERSION_MINIMUM=3.5   # (re)configure — flag needed since CNA vendors ENet with an old cmake_minimum_required
-cd cmake-build-debug && ninja && ctest --output-on-failure    # build + test (46)
-ctest -N                                                      # lists all 46 tests
+cd cmake-build-debug && ninja && ctest --output-on-failure    # build + test (48)
+ctest -N                                                      # lists all 48 tests
+ctest --print-labels                                          # format/export/render/registry/ai/commands
+ctest -L export --output-on-failure                           # run just one label group
+ctest --rerun-failed --output-on-failure                      # re-run only what failed last time
 
 # --- Release (system cmake is fine for a fresh dir)
 cmake -S . -B b-release -G Ninja -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=ON \
@@ -449,12 +429,21 @@ for c in mc3 mcb mc3togltf mc3tomcb; do
         -DFETCHCONTENT_UPDATES_DISCONNECTED=ON -DCMAKE_POLICY_VERSION_MINIMUM=3.5
   cmake --build "$c-build" -j4
   (cd "$c-build" && ctest --output-on-failure)
+  rm -rf "$c-build"   # these are scratch dirs, not committed
 done
 
 # --- MinGW (Windows) cross-compile — builds to ~73%, see §4 for the blocker
-# Needs a toolchain file (CMAKE_SYSTEM_NAME Windows, x86_64-w64-mingw32-gcc/g++);
-# mingw-w64 packages are installed on this machine.
-cmake -S . -B b-mingw -G Ninja -DCMAKE_TOOLCHAIN_FILE=<path-to-toolchain>.cmake \
+cat > /tmp/mingw-toolchain.cmake <<'EOF'
+set(CMAKE_SYSTEM_NAME Windows)
+set(CMAKE_SYSTEM_PROCESSOR x86_64)
+set(CMAKE_C_COMPILER x86_64-w64-mingw32-gcc)
+set(CMAKE_CXX_COMPILER x86_64-w64-mingw32-g++)
+set(CMAKE_FIND_ROOT_PATH /usr/x86_64-w64-mingw32)
+set(CMAKE_FIND_ROOT_PATH_MODE_PROGRAM NEVER)
+set(CMAKE_FIND_ROOT_PATH_MODE_LIBRARY ONLY)
+set(CMAKE_FIND_ROOT_PATH_MODE_INCLUDE ONLY)
+EOF
+cmake -S . -B b-mingw -G Ninja -DCMAKE_TOOLCHAIN_FILE=/tmp/mingw-toolchain.cmake \
       -DBUILD_TESTING=OFF -DCMAKE_POLICY_VERSION_MINIMUM=3.5
 cmake --build b-mingw -j$(nproc)   # fails at ~328/449 objects, see §4
 
@@ -463,21 +452,19 @@ source /home/robertvokac/Downloads/emsdk/emsdk_env.sh
 emcmake cmake -S . -B b-web -G Ninja -DBUILD_TESTING=OFF -DCMAKE_POLICY_VERSION_MINIMUM=3.5
 cmake --build b-web -j$(nproc)
 cd b-web && python3 -m http.server 8765 --bind 127.0.0.1   # then open http://127.0.0.1:8765/MeshCraft.html
-node mc3togltf/mc3togltf.js --help   # confirms the compiled JS/WASM actually executes
 
 # --- Run / export / validate / version
-./cmake-build-debug/MeshCraft test/house.mc3.xml   # open a sample scene
-./cmake-build-debug/MeshCraft --version             # MeshCraft 0.1.0
+./cmake-build-debug/MeshCraft test/house.mc3.xml
+./cmake-build-debug/MeshCraft --version
 ./cmake-build-debug/MeshCraft test/fog_linear.mc3.xml --screenshot /tmp/out.ppm
-./cmake-build-debug/MeshCraft test/house.mc3.xml --export /tmp/out.glb --stats
+./cmake-build-debug/MeshCraft test/house.mc3.xml --export /tmp/out.glb
 ./cmake-build-debug/mc3togltf/mc3togltf test/features.mc3.xml /tmp/out.glb
-./cmake-build-debug/mc3togltf/mc3togltf --help
 python3 test/validate_xsd.py mc3/mc3.xsd test/features.mc3.xml
-ctest -R mc3_commands --output-on-failure   # editor algorithms + undo/redo
-ctest -R mc3_registry --output-on-failure   # ModelRegistry
-ctest -R mc3_ai       --output-on-failure   # AiAssistant + mock HTTP server
+ctest -R mc3_roundtrip --output-on-failure   # mc3 XML parser/writer
+ctest -R mcb_roundtrip --output-on-failure   # MCB binary format
+ctest -R mc3_commands  --output-on-failure   # editor algorithms + undo/redo
 
-# --- Push (normal pushes have worked throughout this session; only CI activation is blocked, see §4)
+# --- Push (normal pushes have worked throughout; only CI activation is blocked, see §4)
 git push origin develop
 ```
 
@@ -487,58 +474,60 @@ No project linter/formatter is configured.
 
 ## 8. Next smallest tasks
 
-**S16–S20 are exhausted for this environment** — every row in those
-sections is now either ✅ or genuinely blocked on a missing tool/live
-session (clipboard/drag-drop/web-export/web-SSAO-bloom need a live
-UI or browser; STAB-0617's ImGui refactor needs a live display to
-verify after splitting; STAB-0642/0643/0650 need Blender/a
-browser/working CI respectively). The next work is in the **S0–S15
-backlog**, which is much larger (see `plan.md`'s per-section summary
-table) and includes real implementation work (new MCB roundtrip tests,
-CTest labels/grouping), not just verification. Two things worth doing
-first, both cheap:
+Continue **S3 (MCB Binary Format Stability)**, `plan.md` priority order.
+Remaining open rows (all in `mcb/`):
 
-1. **Spot-check S0–S15's remaining 📋/🧪 rows for staleness before
-   assuming they're fresh work.** This session found STAB-0013
-   (Emscripten build) and STAB-0039 (`mcb_roundtrip_test` CTest target)
-   were already fully satisfied by later, more specific STAB rows or
-   pre-existing test infrastructure — just never marked done. A quick
-   `ctest -N` / `grep` pass over the next 10-20 rows before writing new
-   code could close several for free.
+1. **STAB-0132/0145 — verify MCB unknown-key skipping empirically.**
+   Goal: prove (not just read code) that `McbReader`'s `skipValue()`
+   correctly and safely skips a key it doesn't recognize, including a
+   forward-compat "future version added a new section" scenario.
+   Files: `mcb/test/mcb_roundtrip_test.cpp` (new test), possibly
+   `mcb/src/McbWriter.cpp`/`McbReader.cpp` if a gap is found. Approach:
+   hand-construct a valid MCB byte stream (magic `MCB_MAGIC` + `MCB_VERSION`
+   from `McbFormat.hpp`, root `TAG_OBJ`, a couple of known fields, one
+   deliberately unknown key with an arbitrary tag/value, then the rest of
+   a normal document) and confirm `loadFromBinary()` doesn't throw and
+   correctly reads everything after the unknown key. Verification:
+   `ctest -R mcb_roundtrip --output-on-failure`.
 
-2. **STAB-0027 — add CTest labels for grouping** (`ctest -L format` /
-   `-L export` etc.). Files: `CMakeLists.txt`, `mc3togltf/CMakeLists.txt`.
-   Straightforward: add `set_tests_properties(<test> PROPERTIES LABELS
-   "<label>")` per existing `add_test()` call, grouped by which gate/
-   section they belong to. Verification: `ctest -L <label>` runs only
-   the intended subset.
+2. **STAB-0133/0134/0135 — MCB malformed-input error handling.** Goal:
+   confirm (or fix) that a truncated file, an all-zeros header, and a
+   single-byte input all fail cleanly (throw or return an error) rather
+   than crash/UB. Files: `mcb/src/McbReader.cpp`, new tests in
+   `mcb/test/mcb_roundtrip_test.cpp`. This is a good candidate to check
+   empirically first (feed the bad bytes, see what actually happens)
+   before assuming either outcome. Verification: same as above.
 
-STAB-0554 through STAB-0575 (all of S16), STAB-0609/0614/0615/0620 (S18
-static analysis), STAB-0011/0013/0015/0020/0039 (S0/S1 spot-checks) are
-closed this session — see `plan.md` for full detail on each. Real bugs
-found and fixed (not just verified): **STAB-0558** (`meshcraftConfigDir()`
-had no Windows branch), **STAB-0565** (`cmake/web/pre.js` mounted IDBFS
-at the wrong path, silently breaking persistence), **STAB-0566**
-(`cna_copy_sdl_runtime()`'s SDL3 targets are invisible from MeshCraft's
-parent directory scope — only found via a real MinGW reconfigure +
-`--trace-expand`, after first closing it incorrectly on code-reading
-alone), and **STAB-0015** (missing `lxml` crashed `xsd_validation` with
-a raw traceback instead of an actionable message).
+3. **STAB-0148 — verify UTF-8 strings survive MCB roundtrip.** Files:
+   `mcb/test/mcb_roundtrip_test.cpp`. Quick, should mirror the existing
+   `mc3_roundtrip` UTF-8-filename test's spirit but for an object id/name
+   field through MCB specifically (`wRawStr`/`rRawStr` are just
+   length-prefixed byte copies, so this is very likely already correct
+   — confirm with a real test rather than assuming).
 
-**Lessons learned this session**:
-- Don't close a build-system verification row on code-reading alone
-  when a cheap real reconfigure is possible — the cached
-  `.sdl-prebuilt-Windows-x86_64`/`-emscripten` dirs make MinGW/
-  Emscripten reconfigures fast even though a full build is slow/blocked,
-  and `--trace-expand` + inspecting the generated `build.ninja` can
-  surface bugs invisible from source alone (STAB-0566).
-- Roughly as many rows turned out to be "confirmed already correct,
-  just needed a test" as turned out to be real bugs — don't assume a
-  row is trivial or blocked without checking.
-- Several early-section (S0/S1) rows are stale duplicates of later,
-  more specific work from the original 650-task plan generation —
-  worth a quick sanity check before assuming a low-numbered row is
-  untouched.
+4. **STAB-0140/0149/0150 — determinism, magic bytes, endianness.**
+   Files: `mcb/src/McbWriter.cpp`. STAB-0149 (magic bytes) and STAB-0150
+   (endianness, already commented as "little-endian"/"IEEE 754" in
+   `McbFormat.hpp`) are likely quick documentation-only confirmations.
+   STAB-0140 (writer determinism) needs an actual byte-compare test —
+   check whether `Mc3Document`'s map iteration order (`std::map` is
+   naturally sorted, so this is likely fine) could ever make two writes
+   of the same document differ.
+
+5. **STAB-0136/0146 — document the MCB format.** `MC3_FORMAT.md` or a
+   new `MCB_FORMAT.md`: header layout, `TAG_*` constants (already
+   defined with inline comments in `McbFormat.hpp` — STAB-0146 may
+   already be satisfied, check before writing more), key ordering.
+
+Remaining lower-priority S3 rows (STAB-0137/0138/0139) are P1/P2 checks
+for animation-keyframe completeness, large-string handling, and file-size
+comparison — worth a quick look after the above, likely mostly
+confirmations given how thoroughly writer/reader already cover other
+field types.
+
+**After S3 closes**, continue to **S4 (glTF/GLB Exporter Correctness)**
+in `plan.md` order — it's the next-largest section with real open rows
+(13 `📋` + 16 `🧪` remaining).
 
 ---
 
@@ -547,10 +536,7 @@ a raw traceback instead of an actionable message).
 - **No new scene-format features** — N1–N7 are complete; further schema
   additions need design discussion first.
 - **No CNA/SHARP_RUNTIME source changes** — separate repos, out of
-  scope for this one. The MinGW GLES3-header blocker and the Emscripten
-  rendering issue may ultimately need CNA-side changes, but that's a
-  different Claude Code instance's / the CNA maintainer's call, not
-  something to patch around from here.
+  scope for this one.
 - **No `Mc3Document` public API changes** without checking `mc3togltf`,
   `mc3tomcb`, and all test XMLs.
 - **No `${meta-gl_SOURCE_DIR}/include`** in any `CMakeLists.txt`.
@@ -558,26 +544,26 @@ a raw traceback instead of an actionable message).
   CLion's bundled cmake.
 - **No moving `.github_` back to `.github`** until CI credentials are
   sorted out.
-- **No SVG rasterization work** until a library choice is made (librsvg
-  vs. NanoSVG) — a real feature decision, not a quick fix.
+- **No SVG rasterization work** until a library choice is made — a real
+  feature decision, not a quick fix.
 - **No implementing `embed:` mesh-source resolution in `GltfExporter`**
-  without a explicit decision to take it on — it's a real new feature
-  (parsing external GLB/base64 data), not a bug fix, and has been
-  deliberately left as a documented limitation twice now.
+  or **`<embeds>`-inside-`<include>` merging** without an explicit
+  decision to take either on — both are deliberately documented
+  limitations, not bugs, and both have been deferred multiple times now.
 - **No mass refactoring** of passing code, no speculative architecture
   changes — stabilization phase; scope each change to exactly what its
-  `STAB-XXXX` entry (or the current diagnostic task) asks for.
-- **No adding a debug-only CLI flag purely to force a UI toggle on for
-  testing** (e.g. bloom/SSAO/wireframe) — considered and rejected
-  multiple times as scope creep; flag known-correct-but-unverifiable
-  behavior instead.
+  `STAB-XXXX` entry asks for.
 - **No attempting to "fix" the MinGW build by vendoring GLES headers
-  ourselves** — that's CNA's build configuration decision to make, not
-  something to patch around from the MeshCraft side.
-- **No attempting STAB-0642/0650** without the missing tool/access first
-  (Blender, an active CI run respectively). STAB-0643 (browser) is now
-  partially reachable — a human can load the Emscripten build locally,
-  as already done for the diagnostic session in §4.
+  ourselves** — that's CNA's call, not something to patch around from
+  the MeshCraft side.
+- **No attempting STAB-0642/0643/0650** without the missing tool/access
+  first (Blender, a browser, an active CI run respectively).
+- **Don't assume a `plan.md` row needs new work without checking first**
+  — this effort found roughly a third of the "open" rows in S0–S2 were
+  already fully satisfied by existing tests/infrastructure, just never
+  marked done (stale rows from the original 650-task plan generation).
+  A quick `grep`/`ctest -R` check before writing new code has
+  consistently paid off.
 
 ---
 
@@ -585,27 +571,31 @@ a raw traceback instead of an actionable message).
 
 ```
 Read NEXT.md first. Then inspect only the files needed for the first
-task in section 8. Do not refactor unrelated code. Make one small,
-verified improvement. Run the relevant build/test command from section 7
-and confirm cmake-build-debug still passes (46/46, or the new total if
-you registered a new ctest). Update NEXT.md after finishing.
+task in section 8 (STAB-0132/0145 — MCB unknown-key skipping). Do not
+refactor unrelated code. Before writing a new test, grep for whether it
+already exists (this codebase has had many stale plan.md rows). Make one
+small, verified improvement. Run the relevant build/test command from
+section 7 and confirm cmake-build-debug still passes (48/48, or the new
+total if you registered a new ctest). Update plan.md's row for the task
+you completed, and update NEXT.md's section 3/8 after finishing.
 
-Current branch: develop, in sync with origin/develop at commit 18b1809.
+Current branch: develop, in sync with origin/develop at commit ff4455a.
 Build dir: cmake-build-debug/ (Debug, CLion cmake 4.2.2) — last full
-rebuild + 46/46 ctest was clean at this commit. Release (b-release/) and
-the standalone mc3/mcb/mc3togltf/mc3tomcb builds were verified earlier
-in this project's history but not re-checked recently — re-verify
-before relying on them.
+rebuild + 48/48 ctest was clean at this commit, working tree clean.
+Release (b-release/) and the standalone mc3/mcb/mc3togltf/mc3tomcb
+builds were verified earlier in this project's history (mcb/ re-verified
+at 22b1c5d) but should be re-checked if you depend on them.
 
 Reconfigure cmake-build-debug ONLY with CLion's cmake, not the system
 cmake. Editing mc3.xsd or adding a new .cpp file / new add_test()
 requires a reconfigure, not just a rebuild — see section 6.
 
-The most useful thing to pick up first is diagnosing the Emscripten
-blank-canvas rendering issue (section 4/8, item 1) — it needs a human
-with a browser to close the loop, so if none is available, move on to
-the plain S16 verification tasks (section 8, items 2+) instead.
+The Emscripten blank-canvas issue (section 4) needs a human with a
+browser to close the loop — if none is available, stay on the plain S3
+backlog work in section 8 instead.
 
 CI is parked deactivated under .github_/ (credentials issue, see
-section 4).
+section 4). Commit after each STAB-XXXX task and push to origin/develop
+— this has been the standing workflow across this whole stabilization
+effort.
 ```
