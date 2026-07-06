@@ -333,6 +333,10 @@ static std::shared_ptr<Mc3Object> parseObject(const XMLElement* el) {
         obj->csgOperation = Mc3CsgOperation{CsgType::Intersection};
     } else if (tag == "area") {
         obj->type = ObjectType::Area;
+        // STAB-0031: areaType's `size` attribute (mc3.xsd) was declared but
+        // never actually parsed anywhere — parsePrimitive()'s generic size
+        // handling captures it even though Area has no PrimitiveType case.
+        if (el->Attribute("size")) obj->primitive = parsePrimitive(el, ObjectType::Area);
     } else {
         std::cerr << "Warning: unknown object type <" << tag << ">, skipped.\n";
         return nullptr;

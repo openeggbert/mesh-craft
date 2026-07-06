@@ -168,6 +168,11 @@ static XMLElement* writeObject(XMLDocument& xmlDoc, const std::shared_ptr<Mc3Obj
             if (p.segments    != 32)   el->SetAttribute("segments",     p.segments);
             if (p.axis != "y")         el->SetAttribute("axis",         p.axis.c_str());
             break;
+        case ObjectType::Area:
+            // STAB-0031: areaType's `size` attribute (mc3.xsd) was declared
+            // but never actually written anywhere.
+            el->SetAttribute("size", vec3Str(p.size).c_str());
+            break;
         default: break;
         }
     }

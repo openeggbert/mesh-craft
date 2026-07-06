@@ -424,7 +424,10 @@ static int buildMesh(ExportCtx& ctx,
         }
     } else if (obj.extrude.has_value()) {
         md = buildExtrude(*obj.extrude);
-    } else if (obj.primitive.has_value()) {
+    } else if (obj.primitive.has_value() && obj.type != ObjectType::Area) {
+        // Area's `primitive` (STAB-0031) only stores its `size` attribute for
+        // round-tripping/editor use — an area is a non-rendering marker
+        // volume, not a mesh, regardless of primitiveType's default value.
         md = buildPrimitive(*obj.primitive);
     }
 

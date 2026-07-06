@@ -453,6 +453,77 @@ static void testGroupChildren() {
         CHECK(rt.objects[0]->children[2]->name == "Child2", "group: child[2].name");
 }
 
+// STAB-0031: Union/Intersection (Difference already covered by
+// testCsgDifferenceAndCutter above), Instance, and Area — object types not
+// exercised by testAllPrimitiveTypes() (primitives only) or elsewhere.
+static void testUnionAndIntersectionRoundtrip() {
+    for (auto [type, csgType, label] : {
+             std::tuple{ObjectType::Union, CsgType::Union, "union"},
+             std::tuple{ObjectType::Intersection, CsgType::Intersection, "intersection"}}) {
+        Mc3Document doc;
+        auto node = std::make_shared<Mc3Object>();
+        node->id = "csg1"; node->type = type;
+        node->csgOperation = Mc3CsgOperation{.csgType = csgType};
+        for (const char* childId : {"a", "b"}) {
+            auto child = std::make_shared<Mc3Object>();
+            child->id = childId; child->type = ObjectType::Box;
+            child->primitive = Mc3Primitive{};
+            node->children.push_back(child);
+        }
+        doc.objects.push_back(node);
+
+        auto rt = roundtrip(doc);
+        CHECK(!rt.objects.empty(), std::string(label) + ": node present");
+        if (rt.objects.empty()) continue;
+        CHECK(rt.objects[0]->type == type, std::string(label) + ": type preserved");
+        CHECK(rt.objects[0]->csgOperation.has_value() &&
+              rt.objects[0]->csgOperation->csgType == csgType,
+              std::string(label) + ": csgType preserved");
+        CHECK(rt.objects[0]->children.size() == 2, std::string(label) + ": child count==2");
+    }
+}
+
+static void testInstanceRoundtrip() {
+    Mc3Document doc;
+    auto def = std::make_shared<Mc3Object>();
+    def->id = "chairDef"; def->type = ObjectType::Box;
+    def->primitive = Mc3Primitive{};
+    doc.definitions["chairDef"] = def;
+
+    auto mat = Mc3Material("Fabric", {0.5f, 0.1f, 0.1f, 1.0f});
+    doc.materials["Fabric"] = mat;
+
+    auto inst = std::make_shared<Mc3Object>();
+    inst->id = "inst1"; inst->name = "Chair1"; inst->type = ObjectType::Instance;
+    inst->definition = "chairDef";
+    inst->materialOverride = "Fabric";
+    doc.objects.push_back(inst);
+
+    auto rt = roundtrip(doc);
+    CHECK(!rt.objects.empty(), "instance: node present");
+    if (rt.objects.empty()) return;
+    CHECK(rt.objects[0]->type == ObjectType::Instance, "instance: type preserved");
+    CHECK(rt.objects[0]->definition == "chairDef", "instance: definition IDREF preserved");
+    CHECK(rt.objects[0]->materialOverride == "Fabric", "instance: material_override preserved");
+    CHECK(rt.definitions.count("chairDef") == 1, "instance: referenced definition survives");
+}
+
+static void testAreaRoundtrip() {
+    Mc3Document doc;
+    auto area = std::make_shared<Mc3Object>();
+    area->id = "area1"; area->name = "TriggerZone"; area->type = ObjectType::Area;
+    area->primitive = Mc3Primitive{.size = {4.0f, 2.0f, 4.0f}};
+    doc.objects.push_back(area);
+
+    auto rt = roundtrip(doc);
+    CHECK(!rt.objects.empty(), "area: node present");
+    if (rt.objects.empty()) return;
+    CHECK(rt.objects[0]->type == ObjectType::Area, "area: type preserved");
+    CHECK(rt.objects[0]->primitive.has_value(), "area: primitive/size present");
+    if (rt.objects[0]->primitive)
+        CHECKF(rt.objects[0]->primitive->size[0], 4.0f, "area: size.x preserved");
+}
+
 // ---------------------------------------------------------------------------
 // Animation tests
 // ---------------------------------------------------------------------------
@@ -2264,6 +2335,9 @@ int main(int argc, char* argv[]) {
     testExtrudeBezier();
     testCsgDifferenceAndCutter();
     testGroupChildren();
+    testUnionAndIntersectionRoundtrip();
+    testInstanceRoundtrip();
+    testAreaRoundtrip();
     testDiskRingRoundtrip();
     testDiskSolidRoundtrip();
     testDiskLegacyMinorRadius();
