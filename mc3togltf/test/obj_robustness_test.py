@@ -1,16 +1,19 @@
 #!/usr/bin/env python3
 """
-STAB-0630: untrusted OBJ file robustness.
+STAB-0630 + STAB-0165: untrusted / missing OBJ file robustness.
 
-Feeds mc3togltf a scene with three <mesh> nodes referencing OBJ files:
+Feeds mc3togltf a scene with four <mesh> nodes referencing OBJ files:
   - a valid tetrahedron
   - an OBJ with an out-of-range negative (relative) vertex index
   - an OBJ with a coordinate that overflows to infinity
+  - a meshSource that does not exist on disk at all (STAB-0165)
 
-Malformed OBJs must not crash the exporter: mc3togltf must exit 0, print a
-"Warning:" for each malformed file, still export the valid mesh's geometry,
-and never emit non-finite floats into the glTF (which tinygltf represents in
-the JSON accessor min/max as invalid `null` entries — a spec violation).
+Malformed/missing OBJs must not crash the exporter: mc3togltf must exit 0,
+print a "Warning:" for each bad file (STAB-0165: the missing-file warning
+must name the actual file it tried to open), still export the valid mesh's
+geometry, and never emit non-finite floats into the glTF (which tinygltf
+represents in the JSON accessor min/max as invalid `null` entries — a spec
+violation).
 """
 import json
 import os
@@ -43,12 +46,19 @@ if __name__ == "__main__":
         )
 
         combined = r.stdout + r.stderr
-        assert combined.count("Warning:") >= 2, (
-            f"Expected a Warning: for each of the 2 malformed OBJ files, got:\n{combined}"
+        assert combined.count("Warning:") >= 3, (
+            f"Expected a Warning: for each of the 3 bad OBJ references (negative "
+            f"index, infinite coord, missing file), got:\n{combined}"
         )
         assert "non-finite" in combined, (
             f"Expected the infinite-coordinate OBJ to be rejected with a "
             f"'non-finite' error, got:\n{combined}"
+        )
+        # STAB-0165: a missing meshSource must name the actual file it tried to
+        # open, not just print a generic "file not found" with no context.
+        assert "obj_does_not_exist.obj" in combined, (
+            f"Expected the missing-file warning to name 'obj_does_not_exist.obj', "
+            f"got:\n{combined}"
         )
 
         assert os.path.exists(out_glb) and os.path.getsize(out_glb) > 0, \
