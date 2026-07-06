@@ -16,6 +16,7 @@
 #include "MeshCraft/Mc3/Mc3Trigger.hpp"
 
 #include <cmath>
+#include <cstring>
 #include <iostream>
 #include <memory>
 #include <sstream>
@@ -416,6 +417,79 @@ static void testDeformRoundtrip() {
 }
 
 // ---------------------------------------------------------------------------
+// STAB-0132 / STAB-0145 — unknown-key skipping (forward compatibility)
+// ---------------------------------------------------------------------------
+
+// Minimal hand-rolled writers for constructing a byte-exact MCB stream that
+// includes keys McbWriter itself would never emit — the only way to actually
+// exercise McbReader's skipValue()/skipObject() unknown-key path.
+static void rawU8(std::ostream& o, uint8_t v) { o.put(static_cast<char>(v)); }
+static void rawU32(std::ostream& o, uint32_t v) {
+    char b[4] = {
+        static_cast<char>(v & 0xFF),
+        static_cast<char>((v >> 8) & 0xFF),
+        static_cast<char>((v >> 16) & 0xFF),
+        static_cast<char>((v >> 24) & 0xFF),
+    };
+    o.write(b, 4);
+}
+static void rawStr(std::ostream& o, const std::string& s) {
+    rawU32(o, static_cast<uint32_t>(s.size()));
+    if (!s.empty()) o.write(s.data(), static_cast<std::streamsize>(s.size()));
+}
+static void rawKey(std::ostream& o, const std::string& k) {
+    rawU8(o, static_cast<uint8_t>(k.size()));
+    o.write(k.data(), static_cast<std::streamsize>(k.size()));
+}
+static void rawEnd(std::ostream& o) { rawU8(o, 0); }
+
+static void testUnknownKeySkipping() {
+    std::ostringstream out(std::ios::binary);
+    out.write(MCB_MAGIC, 4);
+    rawU8(out, MCB_VERSION);
+    rawU8(out, 0);                  // flags
+    rawU8(out, 0); rawU8(out, 0);   // reserved
+    rawU8(out, TAG_OBJ);            // root object
+
+    // Known scalar field before any unknown key.
+    rawKey(out, "model"); rawU8(out, TAG_STR); rawStr(out, "BeforeUnknown");
+
+    // STAB-0132: a single unrecognized scalar key, as a future writer might add.
+    rawKey(out, "xyz_future"); rawU8(out, TAG_I32); rawU32(out, 12345);
+
+    // STAB-0145: an unrecognized key whose value is an entire new nested
+    // TAG_OBJ *section* (simulates a future format version adding a whole
+    // new document-level feature, not just one field).
+    rawKey(out, "futureSection"); rawU8(out, TAG_OBJ);
+    rawKey(out, "nestedUnknown"); rawU8(out, TAG_STR); rawStr(out, "ignored");
+    rawEnd(out); // end futureSection
+
+    // An unrecognized key holding a TAG_ARR of mixed known-tag elements.
+    rawKey(out, "futureArray"); rawU8(out, TAG_ARR); rawU32(out, 2);
+    rawU8(out, TAG_STR); rawStr(out, "a");
+    rawU8(out, TAG_F32);
+    { float f = 1.5f; uint32_t u; std::memcpy(&u, &f, 4); rawU32(out, u); }
+
+    // Known scalar field after all the unknown keys — proves the reader's
+    // cursor position is correct once skipValue() returns.
+    rawKey(out, "unit"); rawU8(out, TAG_STR); rawStr(out, "AfterUnknown");
+
+    rawEnd(out); // end root object
+
+    std::istringstream in(out.str(), std::ios::binary);
+    Mc3Document doc;
+    bool threw = false;
+    try {
+        doc = loadFromBinary(in);
+    } catch (const std::exception&) {
+        threw = true;
+    }
+    CHECK(!threw, "unknown-key: loadFromBinary does not throw on unrecognized keys/sections");
+    CHECK(doc.model == "BeforeUnknown", "unknown-key: field before unknown key parses correctly");
+    CHECK(doc.unit == "AfterUnknown",   "unknown-key: field after unknown scalar/object/array keys still parses (forward-compat)");
+}
+
+// ---------------------------------------------------------------------------
 
 int main() {
     testSmoke();
@@ -433,6 +507,7 @@ int main() {
     testCsgOperationRoundtrip();
     testExtrudeRoundtrip();
     testDeformRoundtrip();
+    testUnknownKeySkipping();
 
     if (failures == 0)
         std::cout << "All MCB roundtrip tests passed.\n";
