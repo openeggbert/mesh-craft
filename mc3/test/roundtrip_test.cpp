@@ -1302,6 +1302,289 @@ static void testWriterPreservesObjectInsertionOrder() {
     }
 }
 
+// STAB-0112: all four Mc3Transform fields (position/rotation/scale/pivot)
+// set together on one object — no prior test used `pivot` at all.
+static void testTransformAllFieldsRoundtrip() {
+    Mc3Document doc;
+    auto obj = std::make_shared<Mc3Object>();
+    obj->id = "b1"; obj->type = ObjectType::Box; obj->primitive = Mc3Primitive{};
+    obj->transform.position = {1.0f, 2.0f, 3.0f};
+    obj->transform.rotation = {10.0f, 20.0f, 30.0f};
+    obj->transform.scale    = {2.0f, 3.0f, 4.0f};
+    obj->transform.pivot    = {0.5f, 0.5f, 0.5f};
+    doc.objects.push_back(obj);
+
+    auto rt = roundtrip(doc);
+    CHECK(!rt.objects.empty(), "transform all-fields: object present");
+    if (rt.objects.empty()) return;
+    const auto& t = rt.objects[0]->transform;
+    CHECKF(t.position[0], 1.0f, "transform all-fields: position.x");
+    CHECKF(t.position[2], 3.0f, "transform all-fields: position.z");
+    CHECKF(t.rotation[1], 20.0f, "transform all-fields: rotation.y");
+    CHECKF(t.scale[2],    4.0f,  "transform all-fields: scale.z");
+    CHECKF(t.pivot[0],    0.5f,  "transform all-fields: pivot.x");
+    CHECKF(t.pivot[1],    0.5f,  "transform all-fields: pivot.y");
+}
+
+// STAB-0115: a scene with 50 objects roundtrips completely (no truncation,
+// no id/name collision across a larger set than the handful used elsewhere).
+static void testFiftyObjectSceneRoundtrip() {
+    Mc3Document doc;
+    for (int i = 0; i < 50; ++i) {
+        auto obj = std::make_shared<Mc3Object>();
+        obj->id   = "obj" + std::to_string(i);
+        obj->name = "Object" + std::to_string(i);
+        obj->type = ObjectType::Box;
+        obj->primitive = Mc3Primitive{};
+        obj->transform.position = {static_cast<float>(i), 0.0f, 0.0f};
+        doc.objects.push_back(obj);
+    }
+
+    auto rt = roundtrip(doc);
+    CHECK(rt.objects.size() == 50, "50 objects: all present after roundtrip");
+    if (rt.objects.size() != 50) return;
+    bool allMatch = true;
+    for (int i = 0; i < 50; ++i) {
+        if (rt.objects[i]->id != "obj" + std::to_string(i) ||
+            rt.objects[i]->name != "Object" + std::to_string(i) ||
+            std::abs(rt.objects[i]->transform.position[0] - static_cast<float>(i)) > 1e-4f) {
+            allMatch = false;
+            break;
+        }
+    }
+    CHECK(allMatch, "50 objects: every object's id/name/position matches its original index");
+}
+
+// STAB-0116: all Mc3Light fields — including Spot-only (angle/falloff/range)
+// and castShadows, never exercised by the single directional-light golden
+// fixture test (testGoldenFileBasicScene).
+static void testLightAllFieldsRoundtrip() {
+    Mc3Document doc;
+    Mc3Light light;
+    light.type        = LightType::Spot;
+    light.name        = "SpotLight1";
+    light.color       = {1.0f, 0.8f, 0.6f};
+    light.brightness  = 2.5f;
+    light.direction   = {0.0f, -1.0f, 0.0f};
+    light.position    = {1.0f, 5.0f, 2.0f};
+    light.range       = 15.0f;
+    light.angle       = 30.0f;
+    light.falloff     = 0.5f;
+    light.castShadows = true;
+    doc.lights.push_back(light);
+
+    auto rt = roundtrip(doc);
+    CHECK(rt.lights.size() == 1, "light all-fields: present after roundtrip");
+    if (rt.lights.size() != 1) return;
+    const auto& l = rt.lights[0];
+    CHECK(l.type == LightType::Spot,      "light all-fields: type==Spot");
+    CHECK(l.name == "SpotLight1",         "light all-fields: name");
+    CHECKF(l.color[0], 1.0f,              "light all-fields: color.r");
+    CHECKF(l.brightness, 2.5f,            "light all-fields: brightness");
+    CHECKF(l.position[1], 5.0f,           "light all-fields: position.y");
+    CHECKF(l.range, 15.0f,                "light all-fields: range");
+    CHECKF(l.angle, 30.0f,                "light all-fields: angle");
+    CHECKF(l.falloff, 0.5f,               "light all-fields: falloff");
+    CHECK(l.castShadows == true,          "light all-fields: castShadows");
+}
+
+// STAB-0117: Mc3Camera roundtrip was never exercised at the mc3-library
+// level at all (only indirectly via the editor's orthographic_camera smoke
+// test, which tests rendering, not the XML data model).
+static void testCameraAllFieldsRoundtrip() {
+    Mc3Document doc;
+    Mc3Camera cam;
+    cam.name      = "MainCam";
+    cam.type      = CameraType::Orthographic;
+    cam.position  = {1.0f, 2.0f, 3.0f};
+    cam.target    = {0.0f, 1.0f, 0.0f};
+    cam.nearPlane = 0.5f;
+    cam.farPlane  = 500.0f;
+    cam.fov       = 45.0f;
+    cam.orthoSize = 8.0f;
+    doc.cameras.push_back(cam);
+    doc.defaultCamera = "MainCam";
+
+    auto rt = roundtrip(doc);
+    CHECK(rt.cameras.size() == 1, "camera all-fields: present after roundtrip");
+    CHECK(rt.defaultCamera == "MainCam", "camera all-fields: defaultCamera preserved");
+    if (rt.cameras.size() != 1) return;
+    const auto& c = rt.cameras[0];
+    CHECK(c.name == "MainCam",              "camera all-fields: name");
+    CHECK(c.type == CameraType::Orthographic, "camera all-fields: type==Orthographic");
+    CHECKF(c.position[2], 3.0f,              "camera all-fields: position.z");
+    CHECKF(c.target[1],   1.0f,              "camera all-fields: target.y");
+    CHECKF(c.nearPlane,   0.5f,              "camera all-fields: nearPlane");
+    CHECKF(c.farPlane,    500.0f,            "camera all-fields: farPlane");
+    CHECKF(c.orthoSize,   8.0f,              "camera all-fields: orthoSize (written since type==Orthographic)");
+}
+
+// STAB-0118: Mc3Environment's actual serialized fields — background color/
+// texture, skybox texture, and fog (color/mode/start/end/density). Note:
+// "bloom" (mentioned in the row's original wording) is not part of
+// Mc3Environment/mc3.xsd at all — it's a runtime/editor UI toggle, not
+// scene-file data, so there's nothing to roundtrip for it.
+static void testEnvironmentAllFieldsRoundtrip() {
+    Mc3Document doc;
+    Mc3Environment env;
+    env.backgroundColor   = {0.1f, 0.2f, 0.3f};
+    env.backgroundTexture = "textures/bg.png";
+    env.skyboxTexture     = "textures/sky.png";
+    Mc3Fog fog;
+    fog.color   = {0.6f, 0.6f, 0.7f};
+    fog.mode    = FogMode::Linear;
+    fog.start   = 5.0f;
+    fog.end     = 50.0f;
+    fog.density = 0.02f;
+    env.fog = fog;
+    doc.environment = env;
+
+    auto rt = roundtrip(doc);
+    CHECK(rt.environment.has_value(), "environment all-fields: present after roundtrip");
+    if (!rt.environment) return;
+    const auto& e = *rt.environment;
+    CHECKF(e.backgroundColor[1], 0.2f,        "environment all-fields: backgroundColor.g");
+    CHECK(e.backgroundTexture == "textures/bg.png", "environment all-fields: backgroundTexture");
+    CHECK(e.skyboxTexture == "textures/sky.png",    "environment all-fields: skyboxTexture");
+    CHECK(e.fog.has_value(), "environment all-fields: fog present");
+    if (e.fog) {
+        CHECKF(e.fog->start, 5.0f,    "environment all-fields: fog.start");
+        CHECKF(e.fog->end, 50.0f,     "environment all-fields: fog.end");
+        CHECKF(e.fog->density, 0.02f, "environment all-fields: fog.density");
+        CHECK(e.fog->mode == FogMode::Linear, "environment all-fields: fog.mode==Linear");
+    }
+}
+
+// STAB-0119: one action with keyframes across all three channel *kinds*
+// (transform, material, deform) together — testAnimationMultiAction only
+// ever combined multiple *single-channel* actions, never multiple channel
+// kinds within the same action.
+static void testActionWithTransformMaterialDeformChannels() {
+    Mc3Document doc;
+    Mc3Action action;
+    action.name = "Combo";
+    action.duration = 2.0f;
+
+    Mc3Channel transformCh;
+    transformCh.targetObject = "Box1";
+    transformCh.property = AnimatedProperty::PositionY;
+    transformCh.keyframes = {Mc3Keyframe::linear(0.0f, 0.0f), Mc3Keyframe::linear(2.0f, 5.0f)};
+    action.channels.push_back(transformCh);
+
+    Mc3Channel materialCh;
+    materialCh.targetObject = "Box1";
+    materialCh.property = AnimatedProperty::MaterialBaseColorR;
+    materialCh.keyframes = {Mc3Keyframe::linear(0.0f, 0.2f), Mc3Keyframe::linear(2.0f, 0.9f)};
+    action.channels.push_back(materialCh);
+
+    Mc3Channel deformCh;
+    deformCh.targetObject = "Box1";
+    deformCh.property = AnimatedProperty::DeformX;
+    deformCh.keyframes = {Mc3Keyframe::linear(0.0f, 1.0f), Mc3Keyframe::linear(2.0f, 2.0f)};
+    action.channels.push_back(deformCh);
+
+    doc.actions["Combo"] = std::move(action);
+
+    auto rt = roundtrip(doc);
+    CHECK(rt.actions.count("Combo") == 1, "combo action: present after roundtrip");
+    if (!rt.actions.count("Combo")) return;
+    const auto& a = rt.actions.at("Combo");
+    CHECK(a.channels.size() == 3, "combo action: all 3 channels survive");
+    if (a.channels.size() == 3) {
+        CHECK(a.channels[0].property == AnimatedProperty::PositionY,
+              "combo action: channel[0] is the transform (PositionY) channel");
+        CHECK(a.channels[1].property == AnimatedProperty::MaterialBaseColorR,
+              "combo action: channel[1] is the material (MaterialBaseColorR) channel");
+        CHECK(a.channels[2].property == AnimatedProperty::DeformX,
+              "combo action: channel[2] is the deform (DeformX) channel");
+    }
+}
+
+// STAB-0110: save-reload *semantic* equivalence — a scene combining
+// transform/material/light/camera/environment/action fields is put through
+// TWO independent load->save->reload cycles, and the two reloaded documents
+// are compared field-by-field (not by comparing raw XML text, and not just
+// against the original once). This is a fixpoint check: if any field
+// silently drifted (e.g. a float losing precision on the second write, or a
+// field only surviving the *first* roundtrip due to some default-vs-explicit
+// quirk), the two independently-reloaded copies would disagree with each
+// other, which a single-roundtrip test can't detect.
+static void testSaveReloadSemanticEquivalenceFixpoint() {
+    Mc3Document doc;
+    auto obj = std::make_shared<Mc3Object>();
+    obj->id = "b1"; obj->name = "Box"; obj->type = ObjectType::Box;
+    obj->primitive = Mc3Primitive{};
+    obj->material = "mat1";
+    obj->transform.position = {1.0f, 2.0f, 3.0f};
+    obj->transform.rotation = {10.0f, 20.0f, 30.0f};
+    obj->transform.scale    = {2.0f, 3.0f, 4.0f};
+    obj->transform.pivot    = {0.5f, 0.5f, 0.5f};
+    doc.objects.push_back(obj);
+
+    doc.materials["mat1"] = Mc3Material("mat1", {0.25f, 0.5f, 0.75f, 0.6f}, 0.35f, 0.65f);
+
+    Mc3Light light; light.type = LightType::Point; light.name = "Lamp";
+    light.color = {1.0f, 0.9f, 0.8f}; light.brightness = 1.3f;
+    light.position = {0.0f, 3.0f, 0.0f}; light.range = 10.0f;
+    doc.lights.push_back(light);
+
+    Mc3Camera cam; cam.name = "Cam1"; cam.type = CameraType::Perspective;
+    cam.position = {0.0f, 5.0f, 10.0f}; cam.fov = 50.0f;
+    doc.cameras.push_back(cam);
+    doc.defaultCamera = "Cam1";
+
+    Mc3Environment env;
+    env.backgroundColor = {0.1f, 0.1f, 0.1f};
+    Mc3Fog fog; fog.start = 5.0f; fog.end = 40.0f;
+    env.fog = fog;
+    doc.environment = env;
+
+    Mc3Action action; action.name = "Spin"; action.duration = 1.0f;
+    Mc3Channel ch; ch.targetObject = "b1"; ch.property = AnimatedProperty::RotationY;
+    ch.keyframes = {Mc3Keyframe::linear(0.0f, 0.0f), Mc3Keyframe::linear(1.0f, 360.0f)};
+    action.channels.push_back(ch);
+    doc.actions["Spin"] = std::move(action);
+
+    // Two independent load->save->reload cycles from the same original doc.
+    auto reload1 = roundtrip(doc);
+    auto reload2 = roundtrip(doc);
+
+    CHECK(reload1.objects.size() == reload2.objects.size(),
+          "fixpoint: object count matches across two independent reloads");
+    if (!reload1.objects.empty() && !reload2.objects.empty()) {
+        const auto& o1 = reload1.objects[0];
+        const auto& o2 = reload2.objects[0];
+        CHECKF(o1->transform.position[0], o2->transform.position[0], "fixpoint: position.x matches");
+        CHECKF(o1->transform.pivot[2],     o2->transform.pivot[2],    "fixpoint: pivot.z matches");
+        CHECK(o1->material == o2->material,                          "fixpoint: material id matches");
+    }
+    CHECK(reload1.materials.count("mat1") == reload2.materials.count("mat1"),
+          "fixpoint: material presence matches");
+    if (reload1.materials.count("mat1") && reload2.materials.count("mat1"))
+        CHECKF(reload1.materials.at("mat1").roughness, reload2.materials.at("mat1").roughness,
+               "fixpoint: material roughness matches");
+    CHECK(reload1.lights.size() == reload2.lights.size(), "fixpoint: light count matches");
+    if (!reload1.lights.empty() && !reload2.lights.empty())
+        CHECKF(reload1.lights[0].range, reload2.lights[0].range, "fixpoint: light range matches");
+    CHECK(reload1.cameras.size() == reload2.cameras.size(), "fixpoint: camera count matches");
+    if (!reload1.cameras.empty() && !reload2.cameras.empty())
+        CHECKF(reload1.cameras[0].fov, reload2.cameras[0].fov, "fixpoint: camera fov matches");
+    CHECK(reload1.environment.has_value() == reload2.environment.has_value(),
+          "fixpoint: environment presence matches");
+    if (reload1.environment && reload2.environment && reload1.environment->fog && reload2.environment->fog)
+        CHECKF(reload1.environment->fog->end, reload2.environment->fog->end, "fixpoint: fog.end matches");
+    CHECK(reload1.actions.count("Spin") == reload2.actions.count("Spin"), "fixpoint: action presence matches");
+    if (reload1.actions.count("Spin") && reload2.actions.count("Spin")) {
+        const auto& a1 = reload1.actions.at("Spin");
+        const auto& a2 = reload2.actions.at("Spin");
+        CHECK(a1.channels.size() == a2.channels.size(), "fixpoint: action channel count matches");
+        if (!a1.channels.empty() && !a2.channels.empty() &&
+            a1.channels[0].keyframes.size() == 2 && a2.channels[0].keyframes.size() == 2)
+            CHECKF(a1.channels[0].keyframes[1].value, a2.channels[0].keyframes[1].value,
+                   "fixpoint: action keyframe value matches");
+    }
+}
+
 // ---------------------------------------------------------------------------
 
 static void testFeaturesXmlLoads(const std::string& path) {
@@ -2831,6 +3114,13 @@ int main(int argc, char* argv[]) {
     testMalformedXmlParseErrorIsClean();
     testWriterEmitsVersionCorrectly();
     testWriterPreservesObjectInsertionOrder();
+    testTransformAllFieldsRoundtrip();
+    testFiftyObjectSceneRoundtrip();
+    testLightAllFieldsRoundtrip();
+    testCameraAllFieldsRoundtrip();
+    testEnvironmentAllFieldsRoundtrip();
+    testActionWithTransformMaterialDeformChannels();
+    testSaveReloadSemanticEquivalenceFixpoint();
     testUtf8FilenameRoundtrip();
     testPathWithSpacesRoundtrip();
     testNonAsciiObjectNameRoundtrip();
