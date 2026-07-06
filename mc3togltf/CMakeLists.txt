@@ -173,6 +173,20 @@ if(BUILD_TESTING)
                         "${BLENDER_EXEC}"
             )
             set_tests_properties(mc3togltf_material_pbr_blender_import PROPERTIES TIMEOUT 90 LABELS "export")
+
+            # STAB-0642: a real, richly-authored release-representative scene
+            # (not a synthetic generated one) survives export -> Blender import.
+            if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/../test/medieval_castle.mc3.xml")
+                add_test(
+                    NAME mc3togltf_release_sample_blender_import
+                    COMMAND "${PYTHON3_EXEC}"
+                            "${CMAKE_CURRENT_SOURCE_DIR}/test/release_sample_blender_import_test.py"
+                            "$<TARGET_FILE:mc3togltf>"
+                            "${BLENDER_EXEC}"
+                            "${CMAKE_CURRENT_SOURCE_DIR}/../test/medieval_castle.mc3.xml"
+                )
+                set_tests_properties(mc3togltf_release_sample_blender_import PROPERTIES TIMEOUT 90 LABELS "export")
+            endif()
         endif()
         # STAB-0257: >1M-triangle OBJ export stress test. Generates the OBJ
         # on the fly (not a committed static fixture -- it's ~28MB as text).

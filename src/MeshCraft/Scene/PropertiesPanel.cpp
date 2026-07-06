@@ -1084,7 +1084,7 @@ void PropertiesPanel::draw(float panelX, float panelY, float panelW, float panel
                         cs.radius = std::max(0.001f, cs.radius);
                         ctx.markModified();
                     }
-                    ImGui::TextDisabled("Inner Radius (0 = 50%)");
+                    ImGui::TextDisabled("Inner Radius (0 = 50%%)");
                     ImGui::SetNextItemWidth(-1);
                     if (ImGui::DragFloat("##csstir", &cs.innerRadius, 0.01f, 0.0f, cs.radius)) {
                         if (ImGui::IsItemActivated()) ctx.pushUndo();
