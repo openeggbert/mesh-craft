@@ -490,6 +490,61 @@ static void testUnknownKeySkipping() {
 }
 
 // ---------------------------------------------------------------------------
+// STAB-0133 / STAB-0134 / STAB-0135 — malformed-input error handling
+// ---------------------------------------------------------------------------
+
+static void testTruncatedFile() {
+    Mc3Document doc;
+    doc.model = "TruncationTarget";
+    auto obj = std::make_shared<Mc3Object>();
+    obj->id = "cube1"; obj->name = "MyCube"; obj->type = ObjectType::Box;
+    obj->primitive = Mc3Primitive{}; obj->primitive->size = {2.0f, 2.0f, 2.0f};
+    doc.objects.push_back(obj);
+
+    std::ostringstream out(std::ios::binary);
+    saveToBinary(doc, out);
+    const std::string full = out.str();
+    CHECK(full.size() > 50, "truncated: fixture is long enough to truncate meaningfully");
+
+    const std::string truncated = full.substr(0, 50);
+    std::istringstream in(truncated, std::ios::binary);
+    bool threw = false;
+    try {
+        Mc3Document rt = loadFromBinary(in);
+        (void)rt;
+    } catch (const std::exception&) {
+        threw = true;
+    }
+    CHECK(threw, "truncated: loadFromBinary() throws a clean error rather than crashing on a file truncated mid-document");
+}
+
+static void testAllZerosInput() {
+    const std::string zeros(100, '\0');
+    std::istringstream in(zeros, std::ios::binary);
+    bool threw = false;
+    try {
+        Mc3Document rt = loadFromBinary(in);
+        (void)rt;
+    } catch (const std::exception&) {
+        threw = true;
+    }
+    CHECK(threw, "all-zeros: loadFromBinary() throws a clean error on a corrupted (all-zero) header rather than crashing");
+}
+
+static void testSingleByteInput() {
+    const std::string oneByte(1, '\0');
+    std::istringstream in(oneByte, std::ios::binary);
+    bool threw = false;
+    try {
+        Mc3Document rt = loadFromBinary(in);
+        (void)rt;
+    } catch (const std::exception&) {
+        threw = true;
+    }
+    CHECK(threw, "single-byte: loadFromBinary() throws a clean error on a single-byte input rather than crashing");
+}
+
+// ---------------------------------------------------------------------------
 
 int main() {
     testSmoke();
@@ -508,6 +563,9 @@ int main() {
     testExtrudeRoundtrip();
     testDeformRoundtrip();
     testUnknownKeySkipping();
+    testTruncatedFile();
+    testAllZerosInput();
+    testSingleByteInput();
 
     if (failures == 0)
         std::cout << "All MCB roundtrip tests passed.\n";
