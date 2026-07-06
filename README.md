@@ -148,6 +148,18 @@ currently renders a blank canvas**, an open, undiagnosed limitation (see
 ctest -V --test-dir cmake-build-debug
 ```
 
+Re-run only the tests that failed last time (useful after fixing a
+handful of failures without re-running the whole ~40s suite):
+
+```sh
+ctest --test-dir cmake-build-debug --rerun-failed --output-on-failure
+```
+
+Tests are also grouped by label (`format`/`export`/`render`/`registry`/
+`ai`/`commands`) — run just one group with `ctest --test-dir
+cmake-build-debug -L export`. See `TESTING.md` for the full test
+reference.
+
 ## Current Features
 
 - Full `.mc3.xml` scene load/save with XML roundtrip

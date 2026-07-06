@@ -1,8 +1,8 @@
 # Testing
 
-_Last updated: 2026-07-04. This document is derived from the actual `CMakeLists.txt` test registrations and test source files — if it drifts from `ctest -N`'s output, trust `ctest -N`._
+_Last updated: 2026-07-06. This document is derived from the actual `CMakeLists.txt` test registrations and test source files — if it drifts from `ctest -N`'s output, trust `ctest -N`._
 
-MeshCraft's tests run through **CTest** — 21 tests today, mixing C++ assertion-based binaries and Python subprocess-driven checks against the `mc3togltf`/`mc3tomcb` CLIs.
+MeshCraft's tests run through **CTest** — 47 tests today, mixing C++ assertion-based binaries and Python subprocess-driven checks against the `mc3togltf`/`mc3tomcb` CLIs and the `MeshCraft` editor binary itself (headless `--screenshot` real-pixel-sampling tests). **Known gap:** the "CLI-driving Python tests" table below only documents ~17 of the ~44 registered Python tests — the `render`-labeled smoke/pixel-sampling tests (`smoke_test*`, `fog_linear_test`, `point_light_gizmo_test`, etc.) and several newer `mc3togltf_*` tests aren't listed yet; `ctest -N` and `ctest --print-labels` are authoritative until this table is refreshed.
 
 ---
 
@@ -22,9 +22,16 @@ ctest -N
 # Run one test by name (regex match)
 ctest -R mc3_commands --output-on-failure
 ctest -R mc3togltf_csg --output-on-failure   # matches all 4 CSG tests
+
+# Run one group by label (format/export/render/registry/ai/commands)
+ctest -L export --output-on-failure
+ctest --print-labels   # list all labels
+
+# Re-run only what failed last time
+ctest --rerun-failed --output-on-failure
 ```
 
-Expected result: **21/21 Passed**. A failing test prints its assertion/subprocess output inline with `--output-on-failure`; without that flag, CTest only shows pass/fail per test name.
+Expected result: **47/47 Passed**. A failing test prints its assertion/subprocess output inline with `--output-on-failure`; without that flag, CTest only shows pass/fail per test name.
 
 Each C++ test binary can also be run directly (bypassing CTest) for faster iteration:
 
@@ -48,7 +55,7 @@ for c in mc3 mcb mc3togltf mc3tomcb; do
 done
 ```
 
-Expected: `mc3` 1/1, `mcb` 1/1, `mc3togltf` 12/12, `mc3tomcb` 2/2. (`mc3`'s standalone build registers only `mc3_roundtrip_test` — `mc3_commands_test` needs `EditorAlgorithms.hpp` from the editor tree and is skipped outside the root build; this is intended, not a bug.)
+Expected: `mc3` 1/1, `mcb` 1/1, `mc3togltf` 24/24, `mc3tomcb` 3/3. (`mc3`'s standalone build registers only `mc3_roundtrip_test` — `mc3_commands_test` needs `EditorAlgorithms.hpp` from the editor tree and is skipped outside the root build; this is intended, not a bug.)
 
 ---
 
@@ -58,11 +65,11 @@ Expected: `mc3` 1/1, `mcb` 1/1, `mc3togltf` 12/12, `mc3tomcb` 2/2. (`mc3`'s stan
 
 | Test | Binary | Covers | Pass criteria |
 |------|--------|--------|----------------|
-| `mc3_registry` | `mc3_registry_test` | `ModelRegistry` (SQLite): open/save/search/remove/migration, unavailable-registry and DB-open-failure edge cases, schema introspection | ~94 `PASS:` assertions, 0 `FAIL:` |
-| `mc3_ai` | `ai_test` | `AiAssistant`'s JSON helpers; the AI-response validation pipeline (extract markdown/prose → repair → parse → reject-if-empty → validate against `mc3.xsd`); four end-to-end mock-HTTP-server round-trips (success, truncation, HTTP error, indefinite-hang timeout) — no real network call | ~55 `PASS:` assertions, 0 `FAIL:`. The mock-server and libxml2-dependent cases are skipped (with a `SKIP:` line, not a failure) on builds without `MESHCRAFT_HAS_AI`/`MESHCRAFT_HAS_LIBXML2` |
-| `mc3_roundtrip` | `mc3_roundtrip_test` | Full `.mc3.xml` parser/writer roundtrip for every element type, including all N1-N7 extensions and edge cases (legacy attribute forms, defaults) | ~299 `PASS:` assertions, ends with `All tests passed.` |
-| `mc3_commands` | `mc3_commands_test` | Editor command algorithms (rename, find/replace, array-dup, duplicate, group/ungroup), undo/redo round-trips for every mutating command, auto-save/backup, Save-As/Export-Selection/drag-drop/invalid-file-load workflows, keybinding/preferences/macro persistence formats, hierarchy-panel filtering, material-color resolution, undo-stack depth capping, AI-panel + unsaved-changes-confirmation dialog lifecycles | ~282 `PASS:` assertions |
-| `mcb_roundtrip` | `mcb_roundtrip_test` | MCB binary encode/decode roundtrip for the base scene and all N1-N7 extension types | ~50 `PASS:` assertions, ends with `All MCB roundtrip tests passed.` |
+| `mc3_registry` | `mc3_registry_test` | `ModelRegistry` (SQLite): open/save/search/remove/migration (including a real legacy-schema `ALTER TABLE ADD COLUMN` migration test, STAB-0061), unavailable-registry and DB-open-failure edge cases, schema introspection | 109 `PASS:` assertions, 0 `FAIL:` |
+| `mc3_ai` | `ai_test` | `AiAssistant`'s JSON helpers; the AI-response validation pipeline (extract markdown/prose → repair → parse → reject-if-empty → validate against `mc3.xsd`); four end-to-end mock-HTTP-server round-trips (success, truncation, HTTP error, indefinite-hang timeout) — no real network call | 57 `PASS:` assertions, 0 `FAIL:`. The mock-server and libxml2-dependent cases are skipped (with a `SKIP:` line, not a failure) on builds without `MESHCRAFT_HAS_AI`/`MESHCRAFT_HAS_LIBXML2` |
+| `mc3_roundtrip` | `mc3_roundtrip_test` | Full `.mc3.xml` parser/writer roundtrip for every element type, including all N1-N7 extensions, UTF-8/space-containing paths, and edge cases (legacy attribute forms, defaults) | 413 `PASS:` assertions, ends with `All tests passed.` |
+| `mc3_commands` | `mc3_commands_test` | Editor command algorithms (rename incl. empty-pattern/backslash edge cases, find/replace, array-dup, duplicate, group/ungroup), undo/redo round-trips for every mutating command, auto-save/backup, Save-As/Export-Selection/drag-drop/invalid-file-load workflows, keybinding/preferences/macro persistence formats, hierarchy-panel filtering, material-color resolution, undo-stack depth capping, AI-panel + unsaved-changes-confirmation dialog lifecycles | 489 `PASS:` assertions |
+| `mcb_roundtrip` | `mcb_roundtrip_test` | MCB binary encode/decode roundtrip for the base scene and all N1-N7 extension types | 50 `PASS:` assertions, ends with `All MCB roundtrip tests passed.` |
 
 All five print one `PASS: <description>` or `FAIL: <description>` line per assertion and exit non-zero if any `FAIL:` occurred — grep for `^FAIL:` to find failures quickly in CI-style output.
 
