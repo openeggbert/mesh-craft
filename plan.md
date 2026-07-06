@@ -116,7 +116,7 @@ _Generated: 2026-06-27 from full codebase + test audit. Replaces previous 100-ta
 | STAB-0036 | 🧪 | P1 | Add MCB binary roundtrip test for N5 (triggers) | new `mcb_test` | Write doc with triggers including all step types → MCB → re-read → steps match |
 | STAB-0037 | 🧪 | P1 | Add MCB binary roundtrip test for N6 (scene states) | new `mcb_test` | Write doc with state overrides (visible/position/rotation/material) → MCB → re-read |
 | STAB-0038 | 🧪 | P1 | Add MCB binary roundtrip test for N7 (meta map) | new `mcb_test` | Write doc with meta map → MCB → re-read → meta entries match |
-| STAB-0039 | 📋 | P1 | Create `mcb_roundtrip_test` CTest target | `mcb/CMakeLists.txt` or `CMakeLists.txt` | `ctest -R mcb_roundtrip` runs and passes |
+| STAB-0039 | ✅ | P1 | Create `mcb_roundtrip_test` CTest target | `mcb/CMakeLists.txt` or `CMakeLists.txt` | Already exists and registered (test #21, `mcb_roundtrip`). `ctest -R mcb_roundtrip` → 2/2 pass (`mcb_roundtrip` + `mc3tomcb_roundtrip`), 0.17s. |
 | STAB-0040 | 🧪 | P0 | Verify `xsd_validation` test covers all XMLs in `test/` | `test/validate_xsd.py`, `CMakeLists.txt` | `file(GLOB _mc3_xml_files ...)` captures every `.mc3.xml` in test/ |
 | STAB-0041 | ✅ | P1 | Add XSD validation test fixture containing N3 (scripts) element | `test/n3_scripts.mc3.xml` | `xsd_validation` validates `<scripts><script id="onStart" type="lua">…</script></scripts>` (2026-06-27) |
 | STAB-0042 | ✅ | P1 | Add XSD validation test fixture containing N4 (sounds/music) elements | `test/n4_sounds_music.mc3.xml` | `xsd_validation` validates `<sounds>` + `<music><track …/>` (2026-06-27) |
