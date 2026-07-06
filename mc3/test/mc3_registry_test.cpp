@@ -3,6 +3,7 @@
 #include <MeshCraft/Mc3/Mc3Object.hpp>
 
 #include <cstdlib>
+#include <ctime>
 #include <filesystem>
 #include <fstream>
 #include <iostream>
@@ -298,6 +299,66 @@ static void testInsertMaterialNameCollision() {
         if (def && !def->children.empty())
             CHECK(def->children[0]->material == "wood_1",
                   "material collision: chair box's material reference remapped to 'wood_1'");
+    }
+
+    reg.close();
+    fs::remove(dbPath);
+}
+
+// STAB-0356/0357: inserting the SAME registry entry twice does NOT reuse the
+// already-present material/texture, even though the content is byte-identical
+// the second time — insertIntoScene()'s collision handling (STAB-0425) keys
+// purely on name, never compares content, so a second insert always gets a
+// freshly-suffixed material/texture id ("wood_1", not a reused "wood"). This
+// is the deliberate, safety-motivated design from STAB-0425 (never assume a
+// matching id means matching content, since two unrelated registry entries
+// could coincidentally reuse a common name like "wood" with different actual
+// values) — not a bug, but it does mean re-inserting the identical entry
+// grows the scene's material/texture count rather than deduplicating. Row's
+// "reused, not duplicated" expectation is corrected here to match the actual,
+// intentional trade-off.
+static void testInsertSameEntryTwiceDuplicatesNotReuses() {
+    namespace fs = std::filesystem;
+    auto dbPath = fs::temp_directory_path() / "mc3_reg_dupinsert_test.sqlite3";
+    fs::remove(dbPath);
+
+    ModelRegistry reg;
+    reg.open(dbPath);
+
+    auto doc = makeDocWithDef();
+    doc.textures["woodTex"] = Mc3Texture("woodTex", "wood.png");
+    doc.materials["wood"].baseColorTexture = "woodTex";
+    auto e = reg.entryFromDefinition(doc, "crate", "G", "Crate", "", "", "", "");
+
+    Mc3Document scene;
+    std::string id1 = reg.insertIntoScene(scene, e);
+    std::string id2 = reg.insertIntoScene(scene, e); // same entry, inserted again
+
+    CHECK(id1 != id2, "duplicate insert: definitions get distinct ids ('crate', 'crate_1')");
+
+    // STAB-0356: material is NOT reused -- a second, identical-content copy
+    // is created under a suffixed id.
+    CHECK(scene.materials.count("wood") == 1 && scene.materials.count("wood_1") == 1,
+          "duplicate insert (STAB-0356): second insert creates 'wood_1' rather than reusing 'wood'");
+    if (scene.materials.count("wood") && scene.materials.count("wood_1"))
+        CHECK(scene.materials.at("wood").baseColor == scene.materials.at("wood_1").baseColor,
+              "duplicate insert: 'wood' and 'wood_1' have byte-identical content (true duplicate, not divergent)");
+
+    // STAB-0357: texture is NOT reused either, same reasoning.
+    CHECK(scene.textures.count("woodTex") == 1 && scene.textures.count("woodTex_1") == 1,
+          "duplicate insert (STAB-0357): second insert creates 'woodTex_1' rather than reusing 'woodTex'");
+    if (scene.textures.count("woodTex") && scene.textures.count("woodTex_1"))
+        CHECK(scene.textures.at("woodTex").uri == scene.textures.at("woodTex_1").uri,
+              "duplicate insert: 'woodTex' and 'woodTex_1' have byte-identical content");
+
+    // The second definition's material reference must point at ITS OWN
+    // (suffixed) material, not the first insert's.
+    CHECK(scene.definitions.count(id2) == 1, "duplicate insert: second definition present");
+    if (scene.definitions.count(id2)) {
+        auto& def = scene.definitions.at(id2);
+        if (def && !def->children.empty())
+            CHECK(def->children[0]->material == "wood_1",
+                  "duplicate insert: second definition's box references its own suffixed material");
     }
 
     reg.close();
@@ -624,6 +685,50 @@ static void testNoThumbnailColumn() {
 }
 
 // ---------------------------------------------------------------------------
+// STAB-0367 — `created` is stored as a Unix epoch timestamp close to "now".
+// Like STAB-0351's thumbnail check, `Entry` has no `created` member at all
+// (search()'s own SELECT statement doesn't even fetch the column) — it's
+// write-only metadata, populated only by the schema's own
+// `DEFAULT (strftime('%s','now'))`. Query it directly via raw SQL.
+// ---------------------------------------------------------------------------
+
+static void testCreatedTimestampIsUnixEpoch() {
+    namespace fs = std::filesystem;
+    auto dbPath = fs::temp_directory_path() / "mc3_reg_created_ts.sqlite3";
+    fs::remove(dbPath);
+
+    ModelRegistry reg;
+    reg.open(dbPath);
+
+    auto doc = makeDocWithDef();
+    auto e = reg.entryFromDefinition(doc, "crate", "G", "Crate", "", "", "", "");
+    auto before = static_cast<int64_t>(std::time(nullptr));
+    int64_t id = reg.save(e);
+    auto after = static_cast<int64_t>(std::time(nullptr));
+    CHECK(id > 0, "created timestamp: save() succeeds");
+
+    sqlite3* raw = nullptr;
+    CHECK(sqlite3_open_v2(dbPath.string().c_str(), &raw, SQLITE_OPEN_READONLY, nullptr) == SQLITE_OK,
+          "created timestamp: can reopen the DB file directly");
+
+    sqlite3_stmt* stmt = nullptr;
+    sqlite3_prepare_v2(raw, "SELECT created FROM models WHERE id=?1;", -1, &stmt, nullptr);
+    sqlite3_bind_int64(stmt, 1, id);
+    int64_t created = -1;
+    if (sqlite3_step(stmt) == SQLITE_ROW)
+        created = sqlite3_column_int64(stmt, 0);
+    sqlite3_finalize(stmt);
+    sqlite3_close(raw);
+
+    CHECK(created > 0, "created timestamp: non-zero, positive Unix epoch value stored");
+    CHECK(created >= before - 5 && created <= after + 5,
+          "created timestamp: matches current time within a 5s tolerance window");
+
+    reg.close();
+    fs::remove(dbPath);
+}
+
+// ---------------------------------------------------------------------------
 // STAB-0359 — large XML content (>1MB) round-trips through SQLite without
 // truncation or corruption.
 // ---------------------------------------------------------------------------
@@ -832,6 +937,7 @@ int main() {
     testEntryFromDefinitionAndInsert();
     testInsertDuplicateDefId();
     testInsertMaterialNameCollision();
+    testInsertSameEntryTwiceDuplicatesNotReuses();
     testMigration();
     testMigrationFromLegacySchema();
     testCorruptedDatabaseThrowsCleanly();
@@ -841,6 +947,7 @@ int main() {
     testSearchCaseInsensitiveByName();
     testSearchBySourceField();
     testNoThumbnailColumn();
+    testCreatedTimestampIsUnixEpoch();
     testLargeXmlContent();
     testSpecialCharsInNameAndTags();
     testUpdateExistingEntry();
