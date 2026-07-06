@@ -1,8 +1,13 @@
 #include "MeshCraft/Mcb/McbReader.hpp"
 #include "MeshCraft/Mcb/McbWriter.hpp"
 #include "MeshCraft/Mcb/McbFormat.hpp"
+#include "MeshCraft/Mc3/Mc3CsgOperation.hpp"
+#include "MeshCraft/Mc3/Mc3Deform.hpp"
 #include "MeshCraft/Mc3/Mc3Document.hpp"
 #include "MeshCraft/Mc3/Mc3EmbedGltf.hpp"
+#include "MeshCraft/Mc3/Mc3Extrude.hpp"
+#include "MeshCraft/Mc3/Mc3Object.hpp"
+#include "MeshCraft/Mc3/Mc3Primitive.hpp"
 #include "MeshCraft/Mc3/Mc3Music.hpp"
 #include "MeshCraft/Mc3/Mc3SceneState.hpp"
 #include "MeshCraft/Mc3/Mc3Script.hpp"
@@ -319,6 +324,98 @@ static void testLegacyMetadataMap() {
 }
 
 // ---------------------------------------------------------------------------
+// STAB-0141/0142/0143 — CSG, extrude, and deform were never exercised by any
+// MCB test at all, despite McbWriter/McbReader having full support
+// (writeCsgOp/writeExtrude/writeDeform).
+// ---------------------------------------------------------------------------
+
+static void testCsgOperationRoundtrip() {
+    Mc3Document doc;
+    auto csgNode = std::make_shared<Mc3Object>();
+    csgNode->id = "diff1";
+    csgNode->type = ObjectType::Difference;
+    csgNode->csgOperation = Mc3CsgOperation{.csgType = CsgType::Difference};
+
+    auto base = std::make_shared<Mc3Object>();
+    base->id = "base1"; base->type = ObjectType::Box;
+    base->primitive = Mc3Primitive{}; base->isCutter = false;
+
+    auto cutter = std::make_shared<Mc3Object>();
+    cutter->id = "cut1"; cutter->type = ObjectType::Sphere;
+    cutter->primitive = Mc3Primitive{.primitiveType = PrimitiveType::Sphere};
+    cutter->isCutter = true;
+
+    csgNode->children.push_back(base);
+    csgNode->children.push_back(cutter);
+    doc.objects.push_back(csgNode);
+
+    auto rt = roundtrip(doc);
+    CHECK(!rt.objects.empty(), "csg: node present after MCB roundtrip");
+    if (rt.objects.empty()) return;
+    const auto& node = rt.objects[0];
+    CHECK(node->type == ObjectType::Difference, "csg: type==Difference");
+    CHECK(node->csgOperation.has_value(), "csg: csgOperation present");
+    if (node->csgOperation)
+        CHECK(node->csgOperation->csgType == CsgType::Difference, "csg: csgType==Difference");
+    CHECK(node->children.size() == 2, "csg: child count");
+    if (node->children.size() == 2) {
+        CHECK(node->children[0]->isCutter == false, "csg: base.isCutter==false");
+        CHECK(node->children[1]->isCutter == true,  "csg: cutter.isCutter==true");
+    }
+}
+
+static void testExtrudeRoundtrip() {
+    Mc3Document doc;
+    auto obj = std::make_shared<Mc3Object>();
+    obj->id = "ext1"; obj->type = ObjectType::Extrude;
+    Mc3Extrude ex;
+    ex.crossSection.type   = CrossSectionType::Polygon;
+    ex.crossSection.radius = 0.08f;
+    ex.crossSection.sides  = 6;
+    ex.path.type        = ExtrudePathType::Helix;
+    ex.path.helixRadius = 0.5f;
+    ex.path.helixHeight = 3.0f;
+    ex.path.helixTurns  = 4.0f;
+    ex.segments = 64;
+    ex.caps     = true;
+    obj->extrude = ex;
+    doc.objects.push_back(obj);
+
+    auto rt = roundtrip(doc);
+    CHECK(!rt.objects.empty(), "extrude: node present after MCB roundtrip");
+    if (rt.objects.empty() || !rt.objects[0]->extrude) { fail("extrude: extrude data missing"); return; }
+    const auto& rx = rt.objects[0]->extrude.value();
+    CHECK(rx.crossSection.type == CrossSectionType::Polygon, "extrude: cs.type==Polygon");
+    CHECK(rx.crossSection.sides == 6,                        "extrude: cs.sides");
+    CHECKF(rx.crossSection.radius, 0.08f,                    "extrude: cs.radius");
+    CHECK(rx.path.type == ExtrudePathType::Helix,             "extrude: path.type==Helix");
+    CHECKF(rx.path.helixRadius, 0.5f,                         "extrude: path.helixRadius");
+    CHECKF(rx.path.helixHeight, 3.0f,                         "extrude: path.helixHeight");
+    CHECKF(rx.path.helixTurns, 4.0f,                          "extrude: path.helixTurns");
+    CHECK(rx.segments == 64,                                  "extrude: segments");
+    CHECK(rx.caps == true,                                    "extrude: caps");
+}
+
+static void testDeformRoundtrip() {
+    Mc3Document doc;
+    auto obj = std::make_shared<Mc3Object>();
+    obj->id = "sph1"; obj->type = ObjectType::Sphere;
+    obj->primitive = Mc3Primitive{.primitiveType = PrimitiveType::Sphere, .radius = 0.5f};
+    obj->deform = Mc3Deform{.scale = {2.0f, 3.0f, 4.0f}};
+    doc.objects.push_back(obj);
+
+    auto rt = roundtrip(doc);
+    CHECK(!rt.objects.empty(), "deform: object present after MCB roundtrip");
+    if (rt.objects.empty()) return;
+    CHECK(rt.objects[0]->deform.has_value(), "deform: optional present");
+    if (rt.objects[0]->deform) {
+        CHECKF(rt.objects[0]->deform->scale[0], 2.0f, "deform: scale.x");
+        CHECKF(rt.objects[0]->deform->scale[1], 3.0f, "deform: scale.y");
+        CHECKF(rt.objects[0]->deform->scale[2], 4.0f, "deform: scale.z");
+    }
+}
+
+// ---------------------------------------------------------------------------
 
 int main() {
     testSmoke();
@@ -333,6 +430,9 @@ int main() {
     testMeta();
     testIncludesList();
     testLegacyMetadataMap();
+    testCsgOperationRoundtrip();
+    testExtrudeRoundtrip();
+    testDeformRoundtrip();
 
     if (failures == 0)
         std::cout << "All MCB roundtrip tests passed.\n";
