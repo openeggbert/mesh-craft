@@ -878,7 +878,7 @@ _Generated: 2026-06-27 from full codebase + test audit. Replaces previous 100-ta
 | S6 Geometry | 25 | 25 | 0 | 0 | 0 | 0 |
 | S7 Save/load | 35 | 34 | 1 | 0 | 0 | 0 |
 | S8 UI robustness | 40 | 39 | 1 | 0 | 0 | 0 |
-| S9 Registry | 35 | 22 | 0 | 0 | 13 | 0 |
+| S9 Registry | 35 | 34 | 1 | 0 | 0 | 0 |
 | S10 AI | 40 | 11 | 0 | 6 | 23 | 0 |
 | S11 Materials | 30 | 25 | 0 | 2 | 3 | 0 |
 | S12 Animation | 30 | 28 | 2 | 0 | 0 | 0 |
@@ -890,18 +890,18 @@ _Generated: 2026-06-27 from full codebase + test audit. Replaces previous 100-ta
 | S18 Code quality | 25 | 24 | 1 | 0 | 0 | 0 |
 | S19 Security | 15 | 15 | 0 | 0 | 0 | 0 |
 | S20 Release | 15 | 12 | 0 | 0 | 3 | 0 |
-| **TOTAL** | **651** | **572** | **23** | **8** | **48** | **0** |
+| **TOTAL** | **651** | **584** | **24** | **8** | **35** | **0** |
 
 _Recomputed directly from per-row status markers after S0/S1/S2/S3/S4/S5/S6/
-S7/S8 fully closed (S1/S3/S4/S5/S6 100%, S0/S2/S7/S8 100% except one
+S7/S8/S9 fully closed (S1/S3/S4/S5/S6 100%, S0/S2/S7/S8/S9 100% except one
 genuinely-flagged 🟡 row each — STAB-0012 blocked on a CNA-side MinGW gap,
-STAB-0092 a documented accepted limitation, STAB-0289 a documented real gap
-in mergeDocumentsAlg()'s object-id handling, STAB-0327 a corrected-premise
-row pending a product decision); derived, not hand-maintained — recompute
-the same way after any batch of status changes rather than incrementing by
-hand. Total row count is 651, not 650 (S14 has 31 rows, not 30 — an
+STAB-0092 a documented accepted limitation, STAB-0289/STAB-0327/STAB-0360
+each a documented real gap or corrected-premise row pending a product
+decision); derived, not hand-maintained — recompute the same way after any
+batch of status changes rather than incrementing by hand. Total row count
+is 651, not 650 (S14 has 31 rows, not 30 — an
 off-by-one in the section header's implied count, not a data error). Last
-recomputed 2026-07-06 (after closing S8).
+recomputed 2026-07-06 (after closing S9).
 
 ---
 
