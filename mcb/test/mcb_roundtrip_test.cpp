@@ -571,6 +571,84 @@ static void testUtf8StringRoundtrip() {
 }
 
 // ---------------------------------------------------------------------------
+// STAB-0140 — McbWriter determinism (same input -> same bytes)
+// ---------------------------------------------------------------------------
+
+static void testWriterDeterminism() {
+    Mc3Document doc;
+    doc.model = "DeterminismTarget";
+    doc.meta["author"]  = "Alice";
+    doc.meta["license"] = "MIT";
+    doc.metadata["legacyKey"] = "legacyValue";
+    doc.includedDefs.insert("defA");
+    doc.includedDefs.insert("defB");
+
+    Mc3Material mat1; mat1.name = "Mat1"; mat1.baseColor = {1.0f, 0.0f, 0.0f, 1.0f};
+    Mc3Material mat2; mat2.name = "Mat2"; mat2.baseColor = {0.0f, 1.0f, 0.0f, 1.0f};
+    doc.materials["Mat1"] = mat1;
+    doc.materials["Mat2"] = mat2;
+
+    for (int i = 0; i < 5; ++i) {
+        auto obj = std::make_shared<Mc3Object>();
+        obj->id   = "obj" + std::to_string(i);
+        obj->name = "Object " + std::to_string(i);
+        obj->type = ObjectType::Box;
+        obj->primitive = Mc3Primitive{};
+        obj->tags = {"tagA", "tagB"};
+        doc.objects.push_back(obj);
+    }
+
+    std::ostringstream out1(std::ios::binary);
+    std::ostringstream out2(std::ios::binary);
+    saveToBinary(doc, out1);
+    saveToBinary(doc, out2);
+
+    CHECK(out1.str() == out2.str(),
+          "determinism: two writes of the identical document produce byte-identical output "
+          "(all Mc3Document maps/sets are std::map/std::set, so iteration order is key-sorted, not insertion- or pointer-order-dependent)");
+}
+
+// ---------------------------------------------------------------------------
+// STAB-0150 — endianness: MCB's wire format is a fixed little-endian
+// encoding regardless of host byte order
+// ---------------------------------------------------------------------------
+
+static void testEndiannessLittleEndian() {
+    // 3.5f's IEEE-754 bit pattern is the well-known constant 0x40600000
+    // (sign=0, exponent=128, mantissa=0x600000). McbWriter's wU32()/wF32()
+    // build the wire bytes via explicit bit shifts (v & 0xFF, >>8, >>16,
+    // >>24), not a raw multi-byte memcpy of an integer — so the byte order
+    // written to disk is fixed and does not depend on the host's native
+    // endianness. If that holds, the 4 bytes for 3.5f must appear in the
+    // stream as 00 00 60 40, which this test verifies empirically against
+    // a hand-computed expected sequence (not derived from the host's own
+    // float layout).
+    Mc3Document doc;
+    auto obj = std::make_shared<Mc3Object>();
+    obj->id = "endian_probe"; obj->type = ObjectType::Sphere;
+    obj->primitive = Mc3Primitive{};
+    obj->primitive->radius = 3.5f; // default is 0.5f, so this is guaranteed to be written
+
+    doc.objects.push_back(obj);
+
+    std::ostringstream out(std::ios::binary);
+    saveToBinary(doc, out);
+    const std::string bytes = out.str();
+
+    const unsigned char expected[4] = {0x00, 0x00, 0x60, 0x40};
+    bool found = false;
+    for (size_t i = 0; i + 4 <= bytes.size() && !found; ++i) {
+        if (static_cast<unsigned char>(bytes[i])   == expected[0] &&
+            static_cast<unsigned char>(bytes[i+1]) == expected[1] &&
+            static_cast<unsigned char>(bytes[i+2]) == expected[2] &&
+            static_cast<unsigned char>(bytes[i+3]) == expected[3]) {
+            found = true;
+        }
+    }
+    CHECK(found, "endianness: 3.5f's bytes appear in the wire format in little-endian order (00 00 60 40)");
+}
+
+// ---------------------------------------------------------------------------
 
 int main() {
     testSmoke();
@@ -593,6 +671,8 @@ int main() {
     testAllZerosInput();
     testSingleByteInput();
     testUtf8StringRoundtrip();
+    testWriterDeterminism();
+    testEndiannessLittleEndian();
 
     if (failures == 0)
         std::cout << "All MCB roundtrip tests passed.\n";
