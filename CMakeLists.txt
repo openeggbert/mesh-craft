@@ -577,6 +577,21 @@ if(MESH_CRAFT_BUILD_TESTING AND UNIX AND NOT ANDROID AND NOT EMSCRIPTEN)
             set_tests_properties(csg_cache_test PROPERTIES TIMEOUT 30 LABELS "render")
         endif()
 
+        # STAB-0216: confirms the CSG mesh cache never grows unbounded — with
+        # 150 unique-geometry CSG nodes (far more than the 128-entry cap), the
+        # cache must stay bounded (full-clear-on-exceed policy), not grow to 150.
+        if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/test/csg_cache_eviction.mc3.xml")
+            add_test(
+                NAME csg_cache_eviction_test
+                COMMAND "${PYTHON3_EXEC}"
+                        "${CMAKE_CURRENT_SOURCE_DIR}/test/csg_cache_eviction_test.py"
+                        $<TARGET_FILE:MeshCraft>
+                        "${CMAKE_CURRENT_SOURCE_DIR}/test/csg_cache_eviction.mc3.xml"
+                WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
+            )
+            set_tests_properties(csg_cache_eviction_test PROPERTIES TIMEOUT 60 LABELS "render")
+        endif()
+
         # STAB-0523: confirms background_texture renders unconditionally,
         # stretched to fill the viewport, behind (not covering) 3D content.
         if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/test/background_texture.mc3.xml")

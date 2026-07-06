@@ -1,7 +1,9 @@
 #!/usr/bin/env python3
 """
 Regression/verification test for STAB-0522 (CSG preview cache: re-render
-without touching CSG returns a cache hit, not a re-evaluation).
+without touching CSG returns a cache hit, not a re-evaluation) and
+STAB-0213 (csgCachedTriCount() returns a real, non-zero triangle count
+after rendering).
 
 SceneRenderer's content-hash CSG cache (K1, SceneRenderer.cpp's
 Union/Intersection/Difference case) recomputes buildManifoldTree() only
@@ -14,6 +16,11 @@ MeshCraftApplication::EndDraw() prints
 incremented only on a cache miss) right before exiting. If the cache
 works, N should be 1 (or a small constant); if it were broken and
 re-evaluated every frame, N would climb toward ~120.
+
+STAB-0213: the same EndDraw() diagnostic block also prints
+"[CsgTriCount] count=N" (SceneRenderer::csgCachedTriCount() for the
+scene's first object) -- this test confirms N is a real, positive
+triangle count after the CSG union has actually been rendered.
 
 Usage: csg_cache_test.py <MeshCraft-binary> <csg_cache.mc3.xml>
 """
@@ -63,6 +70,21 @@ def main():
         )
 
         print(f"PASS: csg_cache_test — {evaluations} CSG evaluation(s) across the warm-up loop")
+
+        # STAB-0213: csgCachedTriCount() must reflect a real, non-zero
+        # triangle count for the rendered CSG union, not -1 (never-rendered
+        # sentinel) or 0 (degenerate/empty result).
+        m2 = re.search(r"\[CsgTriCount\] count=(-?\d+)", r.stdout)
+        assert m2, (
+            f"expected a '[CsgTriCount] count=N' line in stdout, found none.\n"
+            f"stdout={r.stdout}"
+        )
+        tri_count = int(m2.group(1))
+        assert tri_count > 0, (
+            f"expected csgCachedTriCount() to return a positive triangle count "
+            f"for the rendered CSG union 'MergedBoxes', got {tri_count}"
+        )
+        print(f"PASS: csg_cache_test — csgCachedTriCount() == {tri_count} (> 0)")
     finally:
         if os.path.exists(ppm_path):
             os.remove(ppm_path)

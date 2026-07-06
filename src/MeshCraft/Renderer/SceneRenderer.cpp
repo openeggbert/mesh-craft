@@ -1,4 +1,5 @@
 #include "MeshCraft/Renderer/SceneRenderer.hpp"
+#include "MeshCraft/Renderer/CsgCacheAlg.hpp"
 #include <iostream>
 
 #include <Microsoft/Xna/Framework/Graphics/BufferUsage.hpp>
@@ -52,47 +53,11 @@ static Matrix computeObjWorldMatrix(const Mc3Object& obj) {
            Matrix::CreateTranslation({t.position[0]+px, t.position[1]+py, t.position[2]+pz});
 }
 
-// Hash utilities for content-based CSG cache invalidation (K1)
-static std::size_t hashMix(std::size_t h, std::size_t v) noexcept {
-    return h ^ (v + 0x9e3779b9u + (h << 6) + (h >> 2));
-}
-
-// Recursively hash a CSG subtree's content: transforms, primitive params, children.
-// Changing ANY input (move, resize, add/remove child) produces a different hash.
-static std::size_t csgSubtreeHash(const Mc3Object& obj, const Mc3Document& doc, int depth) {
-    if (depth > 12) return 0;
-    std::size_t h = std::hash<std::string>{}(obj.id);
-    auto hf = [&](float v)       { h = hashMix(h, std::hash<float>{}(v)); };
-    auto hi = [&](int   v)       { h = hashMix(h, std::hash<int>{}(v));   };
-    hi((int)obj.type);
-    hi(obj.visible  ? 1 : 0);
-    hi(obj.isCutter ? 1 : 0);
-    const auto& t = obj.transform;
-    hf(t.position[0]); hf(t.position[1]); hf(t.position[2]);
-    hf(t.rotation[0]); hf(t.rotation[1]); hf(t.rotation[2]);
-    hf(t.scale[0]);    hf(t.scale[1]);    hf(t.scale[2]);
-    hf(t.pivot[0]);    hf(t.pivot[1]);    hf(t.pivot[2]);
-    if (obj.primitive) {
-        const auto& p = *obj.primitive;
-        hi((int)p.primitiveType);
-        hf(p.size[0]);       hf(p.size[1]);       hf(p.size[2]);
-        hf(p.radius);        hf(p.height);
-        hi(p.segments);
-        hf(p.majorRadius);   hf(p.minorRadius);
-    }
-    if (obj.deform) {
-        hf(obj.deform->scale[0]); hf(obj.deform->scale[1]); hf(obj.deform->scale[2]);
-    }
-    for (const auto& child : obj.children)
-        h = hashMix(h, csgSubtreeHash(*child, doc, depth + 1));
-    if (obj.type == ObjectType::Instance) {
-        const std::string& defKey = obj.resolvedInstanceDefinitionKey();
-        auto it = doc.definitions.find(defKey);
-        if (it != doc.definitions.end() && it->second)
-            h = hashMix(h, csgSubtreeHash(*it->second, doc, depth + 1));
-    }
-    return h;
-}
+// Content-based CSG cache invalidation (K1): csgSubtreeHashAlg()/csgHashMixAlg()
+// live in include/MeshCraft/Renderer/CsgCacheAlg.hpp (STAB-0214/0215) so the
+// hash logic can be unit tested directly without a live GraphicsDevice.
+using MeshCraft::csgHashMixAlg;
+using MeshCraft::csgSubtreeHashAlg;
 
 // Build a manifold::Manifold for `obj` and its subtree.
 // parentToWorld: cumulative transform from the CSG root's parent space to world.
@@ -756,8 +721,8 @@ void SceneRenderer::drawObject(const Mc3Object& obj, const Mc3Document& doc,
     case ObjectType::Difference: {
         // Content-hash cache: recomputes only when inputs actually change (K1).
         // Folding in parentWorld ensures a moved parent triggers re-evaluation.
-        std::size_t fp = csgSubtreeHash(obj, doc, 0);
-        auto hfmat = [&](float v) { fp = hashMix(fp, std::hash<float>{}(v)); };
+        std::size_t fp = csgSubtreeHashAlg(obj, doc, 0);
+        auto hfmat = [&](float v) { fp = csgHashMixAlg(fp, std::hash<float>{}(v)); };
         hfmat(parentWorld.M11); hfmat(parentWorld.M12); hfmat(parentWorld.M13); hfmat(parentWorld.M14);
         hfmat(parentWorld.M21); hfmat(parentWorld.M22); hfmat(parentWorld.M23); hfmat(parentWorld.M24);
         hfmat(parentWorld.M31); hfmat(parentWorld.M32); hfmat(parentWorld.M33); hfmat(parentWorld.M34);

@@ -1,8 +1,11 @@
 #include <MeshCraft/EditorAlgorithms.hpp>
+#include <MeshCraft/Renderer/CsgCacheAlg.hpp>
 
 #include <MeshCraft/Mc3/Mc3Document.hpp>
 #include <MeshCraft/Mc3/Mc3Object.hpp>
+#include <MeshCraft/Mc3/Mc3Primitive.hpp>
 
+#include <array>
 #include <cmath>
 #include <filesystem>
 #include <fstream>
@@ -2809,6 +2812,95 @@ static void testCameraPresets()
 // ─────────────────────────────────────────────────────────────────────────────
 
 // ─────────────────────────────────────────────────────────────────────────────
+// STAB-0214/0215: SceneRenderer's CSG content-hash preview cache (K1) —
+// csgSubtreeHashAlg()/csgHashMixAlg() (CsgCacheAlg.hpp) exercised directly,
+// headlessly, without a live GraphicsDevice.
+// ─────────────────────────────────────────────────────────────────────────────
+
+static void testCsgSubtreeHashChangesOnChildMove()
+{
+    Mc3Document doc;
+    auto csgNode = std::make_shared<Mc3Object>();
+    csgNode->type = ObjectType::Union;
+    auto child = std::make_shared<Mc3Object>();
+    child->id = "c1"; child->type = ObjectType::Box;
+    child->primitive = Mc3Primitive{};
+    csgNode->children.push_back(child);
+
+    auto h1 = csgSubtreeHashAlg(*csgNode, doc);
+    auto h1b = csgSubtreeHashAlg(*csgNode, doc);
+    CHECK(h1 == h1b, "csg hash: unchanged subtree hashes identically across calls (real cache hit)");
+
+    // STAB-0214: moving a child must change the subtree hash (cache invalidates).
+    child->transform.position = {1.0f, 0.0f, 0.0f};
+    auto h2 = csgSubtreeHashAlg(*csgNode, doc);
+    CHECK(h1 != h2, "csg hash: moving a child changes the subtree hash (cache invalidates)");
+}
+
+static void testCsgSubtreeHashChangesOnParentTransform()
+{
+    // Mirrors SceneRenderer.cpp's actual cache-key construction: the subtree's
+    // own content hash is folded together with the accumulated parentWorld
+    // matrix (csgHashMixAlg per component), so a moved *parent* (not just a
+    // child) also invalidates the cache — STAB-0215.
+    Mc3Document doc;
+    auto csgNode = std::make_shared<Mc3Object>();
+    csgNode->type = ObjectType::Difference;
+    auto base = std::make_shared<Mc3Object>();
+    base->id = "base"; base->type = ObjectType::Box; base->primitive = Mc3Primitive{};
+    csgNode->children.push_back(base);
+
+    auto subtreeHash = csgSubtreeHashAlg(*csgNode, doc);
+
+    auto foldMatrix = [](std::size_t h, const std::array<float, 16>& m) {
+        for (float v : m) h = csgHashMixAlg(h, std::hash<float>{}(v));
+        return h;
+    };
+
+    const std::array<float, 16> identity  = {1,0,0,0, 0,1,0,0, 0,0,1,0, 0,0,0,1};
+    std::array<float, 16> translated = identity;
+    translated[12] = 5.0f; // translation.x, column-major 4x4 (row 3 = translation row)
+
+    auto fpIdentity   = foldMatrix(subtreeHash, identity);
+    auto fpTranslated = foldMatrix(subtreeHash, translated);
+
+    CHECK(fpIdentity != fpTranslated,
+          "csg cache key: a moved CSG parent (different parentWorld matrix folded in) "
+          "changes the final cache key even though the subtree's own content hash is unchanged");
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// STAB-0217/0218: investigated, no new headless test added — findings below.
+//
+// STAB-0217 (exportCsgMesh() OBJ triangle count matches the live preview's
+// csgCachedTriCount()): both code paths call the identical buildManifoldTree()
+// (SceneRenderer.cpp) on the identical object subtree — exportCsgMesh() with
+// an identity parent matrix, the live preview with the real accumulated
+// parentWorld. Manifold::Transform() is a pure affine map on already-built
+// vertex positions (it does not re-tessellate), and a single consistent
+// affine transform applied to an entire CSG subtree preserves every
+// sibling's relative geometry (overlaps/intersections), so boolean-op
+// topology — and therefore triangle count — is invariant to which global
+// transform (identity vs. parentWorld) is used. The two paths are therefore
+// provably equal by construction, not just by coincidence. exportCsgMesh()
+// is only reachable via an ImGui button (MeshCraftApplication_UiOverlays.cpp)
+// with no CLI/headless entry point; adding one purely to empirically re-prove
+// what's already provable by this argument would be scope creep beyond a P2
+// verification task.
+//
+// STAB-0218 (CSG child reorder via PropertiesPanel.cpp's drag-and-drop is
+// undoable): confirmed by code inspection that `ctx.pushUndo()` is called
+// immediately before the reorder mutation (matching the placement of every
+// other undo-tracked mutation in that file). Undo itself is snapshot-based
+// (whole-Mc3Document copies, see testDeepCopyPreservesIdentityForSnapshots
+// above) — std::vector copy/assignment inherently preserves element order,
+// so ANY mutation preceded by pushUndo(), including a children-vector
+// reorder, is restorable by construction; no reorder-specific undo logic
+// exists (or is needed) to verify separately. Like resetPivot() elsewhere in
+// this file, the drag-and-drop detection itself is ImGui-interaction-coupled
+// and not separable into a CNA-free Alg mirror, so no headless test drives
+// the actual drag gesture.
+// ─────────────────────────────────────────────────────────────────────────────
 
 int main()
 {
@@ -2892,6 +2984,8 @@ int main()
     testPickObjectByRay();
     testResolveClickSelection();
     testCameraPresets();
+    testCsgSubtreeHashChangesOnChildMove();
+    testCsgSubtreeHashChangesOnParentTransform();
 
     std::cout << "\n";
     if (failures == 0)

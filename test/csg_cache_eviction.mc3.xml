@@ -1,0 +1,622 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- STAB-0216 fixture: 150 unique-geometry CSG unions (each two boxes of a
+     distinct size), forcing well over 128 distinct content-hash cache
+     entries within a single render. Confirms SceneRenderer.csgMeshCache_
+     never grows unbounded: it is cleared entirely once it would exceed 128
+     entries (see csgMeshCacheSize(), STAB-0216), so the printed
+     [CsgCache] size: N must never exceed 129 (128 existing + 1 just
+     inserted, checked before the next insertion). -->
+<mc3 version="0.3" model="CsgCacheEvictionFixture" default_camera="Main">
+
+  <lights>
+    <ambient color="0.3 0.3 0.3" brightness="0.5"/>
+  </lights>
+
+  <cameras>
+    <camera name="Main" position="0 0 400" target="0 0 0" fov="50" near="0.05" far="1000"/>
+  </cameras>
+
+  <objects>
+    <union name="CsgN0" position="0.0 0.0 0">
+      <box name="CsgN0A" size="0.500 0.500 0.500" position="-0.2 0 0"/>
+      <box name="CsgN0B" size="0.500 0.500 0.500" position=" 0.2 0 0"/>
+    </union>
+    <union name="CsgN1" position="3.0 0.0 0">
+      <box name="CsgN1A" size="0.510 0.510 0.510" position="-0.2 0 0"/>
+      <box name="CsgN1B" size="0.510 0.510 0.510" position=" 0.2 0 0"/>
+    </union>
+    <union name="CsgN2" position="6.0 0.0 0">
+      <box name="CsgN2A" size="0.520 0.520 0.520" position="-0.2 0 0"/>
+      <box name="CsgN2B" size="0.520 0.520 0.520" position=" 0.2 0 0"/>
+    </union>
+    <union name="CsgN3" position="9.0 0.0 0">
+      <box name="CsgN3A" size="0.530 0.530 0.530" position="-0.2 0 0"/>
+      <box name="CsgN3B" size="0.530 0.530 0.530" position=" 0.2 0 0"/>
+    </union>
+    <union name="CsgN4" position="12.0 0.0 0">
+      <box name="CsgN4A" size="0.540 0.540 0.540" position="-0.2 0 0"/>
+      <box name="CsgN4B" size="0.540 0.540 0.540" position=" 0.2 0 0"/>
+    </union>
+    <union name="CsgN5" position="15.0 0.0 0">
+      <box name="CsgN5A" size="0.550 0.550 0.550" position="-0.2 0 0"/>
+      <box name="CsgN5B" size="0.550 0.550 0.550" position=" 0.2 0 0"/>
+    </union>
+    <union name="CsgN6" position="18.0 0.0 0">
+      <box name="CsgN6A" size="0.560 0.560 0.560" position="-0.2 0 0"/>
+      <box name="CsgN6B" size="0.560 0.560 0.560" position=" 0.2 0 0"/>
+    </union>
+    <union name="CsgN7" position="21.0 0.0 0">
+      <box name="CsgN7A" size="0.570 0.570 0.570" position="-0.2 0 0"/>
+      <box name="CsgN7B" size="0.570 0.570 0.570" position=" 0.2 0 0"/>
+    </union>
+    <union name="CsgN8" position="24.0 0.0 0">
+      <box name="CsgN8A" size="0.580 0.580 0.580" position="-0.2 0 0"/>
+      <box name="CsgN8B" size="0.580 0.580 0.580" position=" 0.2 0 0"/>
+    </union>
+    <union name="CsgN9" position="27.0 0.0 0">
+      <box name="CsgN9A" size="0.590 0.590 0.590" position="-0.2 0 0"/>
+      <box name="CsgN9B" size="0.590 0.590 0.590" position=" 0.2 0 0"/>
+    </union>
+    <union name="CsgN10" position="30.0 0.0 0">
+      <box name="CsgN10A" size="0.600 0.600 0.600" position="-0.2 0 0"/>
+      <box name="CsgN10B" size="0.600 0.600 0.600" position=" 0.2 0 0"/>
+    </union>
+    <union name="CsgN11" position="33.0 0.0 0">
+      <box name="CsgN11A" size="0.610 0.610 0.610" position="-0.2 0 0"/>
+      <box name="CsgN11B" size="0.610 0.610 0.610" position=" 0.2 0 0"/>
+    </union>
+    <union name="CsgN12" position="36.0 0.0 0">
+      <box name="CsgN12A" size="0.620 0.620 0.620" position="-0.2 0 0"/>
+      <box name="CsgN12B" size="0.620 0.620 0.620" position=" 0.2 0 0"/>
+    </union>
+    <union name="CsgN13" position="39.0 0.0 0">
+      <box name="CsgN13A" size="0.630 0.630 0.630" position="-0.2 0 0"/>
+      <box name="CsgN13B" size="0.630 0.630 0.630" position=" 0.2 0 0"/>
+    </union>
+    <union name="CsgN14" position="42.0 0.0 0">
+      <box name="CsgN14A" size="0.640 0.640 0.640" position="-0.2 0 0"/>
+      <box name="CsgN14B" size="0.640 0.640 0.640" position=" 0.2 0 0"/>
+    </union>
+    <union name="CsgN15" position="45.0 0.0 0">
+      <box name="CsgN15A" size="0.650 0.650 0.650" position="-0.2 0 0"/>
+      <box name="CsgN15B" size="0.650 0.650 0.650" position=" 0.2 0 0"/>
+    </union>
+    <union name="CsgN16" position="48.0 0.0 0">
+      <box name="CsgN16A" size="0.660 0.660 0.660" position="-0.2 0 0"/>
+      <box name="CsgN16B" size="0.660 0.660 0.660" position=" 0.2 0 0"/>
+    </union>
+    <union name="CsgN17" position="51.0 0.0 0">
+      <box name="CsgN17A" size="0.670 0.670 0.670" position="-0.2 0 0"/>
+      <box name="CsgN17B" size="0.670 0.670 0.670" position=" 0.2 0 0"/>
+    </union>
+    <union name="CsgN18" position="54.0 0.0 0">
+      <box name="CsgN18A" size="0.680 0.680 0.680" position="-0.2 0 0"/>
+      <box name="CsgN18B" size="0.680 0.680 0.680" position=" 0.2 0 0"/>
+    </union>
+    <union name="CsgN19" position="57.0 0.0 0">
+      <box name="CsgN19A" size="0.690 0.690 0.690" position="-0.2 0 0"/>
+      <box name="CsgN19B" size="0.690 0.690 0.690" position=" 0.2 0 0"/>
+    </union>
+    <union name="CsgN20" position="0.0 3.0 0">
+      <box name="CsgN20A" size="0.700 0.700 0.700" position="-0.2 0 0"/>
+      <box name="CsgN20B" size="0.700 0.700 0.700" position=" 0.2 0 0"/>
+    </union>
+    <union name="CsgN21" position="3.0 3.0 0">
+      <box name="CsgN21A" size="0.710 0.710 0.710" position="-0.2 0 0"/>
+      <box name="CsgN21B" size="0.710 0.710 0.710" position=" 0.2 0 0"/>
+    </union>
+    <union name="CsgN22" position="6.0 3.0 0">
+      <box name="CsgN22A" size="0.720 0.720 0.720" position="-0.2 0 0"/>
+      <box name="CsgN22B" size="0.720 0.720 0.720" position=" 0.2 0 0"/>
+    </union>
+    <union name="CsgN23" position="9.0 3.0 0">
+      <box name="CsgN23A" size="0.730 0.730 0.730" position="-0.2 0 0"/>
+      <box name="CsgN23B" size="0.730 0.730 0.730" position=" 0.2 0 0"/>
+    </union>
+    <union name="CsgN24" position="12.0 3.0 0">
+      <box name="CsgN24A" size="0.740 0.740 0.740" position="-0.2 0 0"/>
+      <box name="CsgN24B" size="0.740 0.740 0.740" position=" 0.2 0 0"/>
+    </union>
+    <union name="CsgN25" position="15.0 3.0 0">
+      <box name="CsgN25A" size="0.750 0.750 0.750" position="-0.2 0 0"/>
+      <box name="CsgN25B" size="0.750 0.750 0.750" position=" 0.2 0 0"/>
+    </union>
+    <union name="CsgN26" position="18.0 3.0 0">
+      <box name="CsgN26A" size="0.760 0.760 0.760" position="-0.2 0 0"/>
+      <box name="CsgN26B" size="0.760 0.760 0.760" position=" 0.2 0 0"/>
+    </union>
+    <union name="CsgN27" position="21.0 3.0 0">
+      <box name="CsgN27A" size="0.770 0.770 0.770" position="-0.2 0 0"/>
+      <box name="CsgN27B" size="0.770 0.770 0.770" position=" 0.2 0 0"/>
+    </union>
+    <union name="CsgN28" position="24.0 3.0 0">
+      <box name="CsgN28A" size="0.780 0.780 0.780" position="-0.2 0 0"/>
+      <box name="CsgN28B" size="0.780 0.780 0.780" position=" 0.2 0 0"/>
+    </union>
+    <union name="CsgN29" position="27.0 3.0 0">
+      <box name="CsgN29A" size="0.790 0.790 0.790" position="-0.2 0 0"/>
+      <box name="CsgN29B" size="0.790 0.790 0.790" position=" 0.2 0 0"/>
+    </union>
+    <union name="CsgN30" position="30.0 3.0 0">
+      <box name="CsgN30A" size="0.800 0.800 0.800" position="-0.2 0 0"/>
+      <box name="CsgN30B" size="0.800 0.800 0.800" position=" 0.2 0 0"/>
+    </union>
+    <union name="CsgN31" position="33.0 3.0 0">
+      <box name="CsgN31A" size="0.810 0.810 0.810" position="-0.2 0 0"/>
+      <box name="CsgN31B" size="0.810 0.810 0.810" position=" 0.2 0 0"/>
+    </union>
+    <union name="CsgN32" position="36.0 3.0 0">
+      <box name="CsgN32A" size="0.820 0.820 0.820" position="-0.2 0 0"/>
+      <box name="CsgN32B" size="0.820 0.820 0.820" position=" 0.2 0 0"/>
+    </union>
+    <union name="CsgN33" position="39.0 3.0 0">
+      <box name="CsgN33A" size="0.830 0.830 0.830" position="-0.2 0 0"/>
+      <box name="CsgN33B" size="0.830 0.830 0.830" position=" 0.2 0 0"/>
+    </union>
+    <union name="CsgN34" position="42.0 3.0 0">
+      <box name="CsgN34A" size="0.840 0.840 0.840" position="-0.2 0 0"/>
+      <box name="CsgN34B" size="0.840 0.840 0.840" position=" 0.2 0 0"/>
+    </union>
+    <union name="CsgN35" position="45.0 3.0 0">
+      <box name="CsgN35A" size="0.850 0.850 0.850" position="-0.2 0 0"/>
+      <box name="CsgN35B" size="0.850 0.850 0.850" position=" 0.2 0 0"/>
+    </union>
+    <union name="CsgN36" position="48.0 3.0 0">
+      <box name="CsgN36A" size="0.860 0.860 0.860" position="-0.2 0 0"/>
+      <box name="CsgN36B" size="0.860 0.860 0.860" position=" 0.2 0 0"/>
+    </union>
+    <union name="CsgN37" position="51.0 3.0 0">
+      <box name="CsgN37A" size="0.870 0.870 0.870" position="-0.2 0 0"/>
+      <box name="CsgN37B" size="0.870 0.870 0.870" position=" 0.2 0 0"/>
+    </union>
+    <union name="CsgN38" position="54.0 3.0 0">
+      <box name="CsgN38A" size="0.880 0.880 0.880" position="-0.2 0 0"/>
+      <box name="CsgN38B" size="0.880 0.880 0.880" position=" 0.2 0 0"/>
+    </union>
+    <union name="CsgN39" position="57.0 3.0 0">
+      <box name="CsgN39A" size="0.890 0.890 0.890" position="-0.2 0 0"/>
+      <box name="CsgN39B" size="0.890 0.890 0.890" position=" 0.2 0 0"/>
+    </union>
+    <union name="CsgN40" position="0.0 6.0 0">
+      <box name="CsgN40A" size="0.900 0.900 0.900" position="-0.2 0 0"/>
+      <box name="CsgN40B" size="0.900 0.900 0.900" position=" 0.2 0 0"/>
+    </union>
+    <union name="CsgN41" position="3.0 6.0 0">
+      <box name="CsgN41A" size="0.910 0.910 0.910" position="-0.2 0 0"/>
+      <box name="CsgN41B" size="0.910 0.910 0.910" position=" 0.2 0 0"/>
+    </union>
+    <union name="CsgN42" position="6.0 6.0 0">
+      <box name="CsgN42A" size="0.920 0.920 0.920" position="-0.2 0 0"/>
+      <box name="CsgN42B" size="0.920 0.920 0.920" position=" 0.2 0 0"/>
+    </union>
+    <union name="CsgN43" position="9.0 6.0 0">
+      <box name="CsgN43A" size="0.930 0.930 0.930" position="-0.2 0 0"/>
+      <box name="CsgN43B" size="0.930 0.930 0.930" position=" 0.2 0 0"/>
+    </union>
+    <union name="CsgN44" position="12.0 6.0 0">
+      <box name="CsgN44A" size="0.940 0.940 0.940" position="-0.2 0 0"/>
+      <box name="CsgN44B" size="0.940 0.940 0.940" position=" 0.2 0 0"/>
+    </union>
+    <union name="CsgN45" position="15.0 6.0 0">
+      <box name="CsgN45A" size="0.950 0.950 0.950" position="-0.2 0 0"/>
+      <box name="CsgN45B" size="0.950 0.950 0.950" position=" 0.2 0 0"/>
+    </union>
+    <union name="CsgN46" position="18.0 6.0 0">
+      <box name="CsgN46A" size="0.960 0.960 0.960" position="-0.2 0 0"/>
+      <box name="CsgN46B" size="0.960 0.960 0.960" position=" 0.2 0 0"/>
+    </union>
+    <union name="CsgN47" position="21.0 6.0 0">
+      <box name="CsgN47A" size="0.970 0.970 0.970" position="-0.2 0 0"/>
+      <box name="CsgN47B" size="0.970 0.970 0.970" position=" 0.2 0 0"/>
+    </union>
+    <union name="CsgN48" position="24.0 6.0 0">
+      <box name="CsgN48A" size="0.980 0.980 0.980" position="-0.2 0 0"/>
+      <box name="CsgN48B" size="0.980 0.980 0.980" position=" 0.2 0 0"/>
+    </union>
+    <union name="CsgN49" position="27.0 6.0 0">
+      <box name="CsgN49A" size="0.990 0.990 0.990" position="-0.2 0 0"/>
+      <box name="CsgN49B" size="0.990 0.990 0.990" position=" 0.2 0 0"/>
+    </union>
+    <union name="CsgN50" position="30.0 6.0 0">
+      <box name="CsgN50A" size="0.500 0.500 0.500" position="-0.2 0 0"/>
+      <box name="CsgN50B" size="0.500 0.500 0.500" position=" 0.2 0 0"/>
+    </union>
+    <union name="CsgN51" position="33.0 6.0 0">
+      <box name="CsgN51A" size="0.510 0.510 0.510" position="-0.2 0 0"/>
+      <box name="CsgN51B" size="0.510 0.510 0.510" position=" 0.2 0 0"/>
+    </union>
+    <union name="CsgN52" position="36.0 6.0 0">
+      <box name="CsgN52A" size="0.520 0.520 0.520" position="-0.2 0 0"/>
+      <box name="CsgN52B" size="0.520 0.520 0.520" position=" 0.2 0 0"/>
+    </union>
+    <union name="CsgN53" position="39.0 6.0 0">
+      <box name="CsgN53A" size="0.530 0.530 0.530" position="-0.2 0 0"/>
+      <box name="CsgN53B" size="0.530 0.530 0.530" position=" 0.2 0 0"/>
+    </union>
+    <union name="CsgN54" position="42.0 6.0 0">
+      <box name="CsgN54A" size="0.540 0.540 0.540" position="-0.2 0 0"/>
+      <box name="CsgN54B" size="0.540 0.540 0.540" position=" 0.2 0 0"/>
+    </union>
+    <union name="CsgN55" position="45.0 6.0 0">
+      <box name="CsgN55A" size="0.550 0.550 0.550" position="-0.2 0 0"/>
+      <box name="CsgN55B" size="0.550 0.550 0.550" position=" 0.2 0 0"/>
+    </union>
+    <union name="CsgN56" position="48.0 6.0 0">
+      <box name="CsgN56A" size="0.560 0.560 0.560" position="-0.2 0 0"/>
+      <box name="CsgN56B" size="0.560 0.560 0.560" position=" 0.2 0 0"/>
+    </union>
+    <union name="CsgN57" position="51.0 6.0 0">
+      <box name="CsgN57A" size="0.570 0.570 0.570" position="-0.2 0 0"/>
+      <box name="CsgN57B" size="0.570 0.570 0.570" position=" 0.2 0 0"/>
+    </union>
+    <union name="CsgN58" position="54.0 6.0 0">
+      <box name="CsgN58A" size="0.580 0.580 0.580" position="-0.2 0 0"/>
+      <box name="CsgN58B" size="0.580 0.580 0.580" position=" 0.2 0 0"/>
+    </union>
+    <union name="CsgN59" position="57.0 6.0 0">
+      <box name="CsgN59A" size="0.590 0.590 0.590" position="-0.2 0 0"/>
+      <box name="CsgN59B" size="0.590 0.590 0.590" position=" 0.2 0 0"/>
+    </union>
+    <union name="CsgN60" position="0.0 9.0 0">
+      <box name="CsgN60A" size="0.600 0.600 0.600" position="-0.2 0 0"/>
+      <box name="CsgN60B" size="0.600 0.600 0.600" position=" 0.2 0 0"/>
+    </union>
+    <union name="CsgN61" position="3.0 9.0 0">
+      <box name="CsgN61A" size="0.610 0.610 0.610" position="-0.2 0 0"/>
+      <box name="CsgN61B" size="0.610 0.610 0.610" position=" 0.2 0 0"/>
+    </union>
+    <union name="CsgN62" position="6.0 9.0 0">
+      <box name="CsgN62A" size="0.620 0.620 0.620" position="-0.2 0 0"/>
+      <box name="CsgN62B" size="0.620 0.620 0.620" position=" 0.2 0 0"/>
+    </union>
+    <union name="CsgN63" position="9.0 9.0 0">
+      <box name="CsgN63A" size="0.630 0.630 0.630" position="-0.2 0 0"/>
+      <box name="CsgN63B" size="0.630 0.630 0.630" position=" 0.2 0 0"/>
+    </union>
+    <union name="CsgN64" position="12.0 9.0 0">
+      <box name="CsgN64A" size="0.640 0.640 0.640" position="-0.2 0 0"/>
+      <box name="CsgN64B" size="0.640 0.640 0.640" position=" 0.2 0 0"/>
+    </union>
+    <union name="CsgN65" position="15.0 9.0 0">
+      <box name="CsgN65A" size="0.650 0.650 0.650" position="-0.2 0 0"/>
+      <box name="CsgN65B" size="0.650 0.650 0.650" position=" 0.2 0 0"/>
+    </union>
+    <union name="CsgN66" position="18.0 9.0 0">
+      <box name="CsgN66A" size="0.660 0.660 0.660" position="-0.2 0 0"/>
+      <box name="CsgN66B" size="0.660 0.660 0.660" position=" 0.2 0 0"/>
+    </union>
+    <union name="CsgN67" position="21.0 9.0 0">
+      <box name="CsgN67A" size="0.670 0.670 0.670" position="-0.2 0 0"/>
+      <box name="CsgN67B" size="0.670 0.670 0.670" position=" 0.2 0 0"/>
+    </union>
+    <union name="CsgN68" position="24.0 9.0 0">
+      <box name="CsgN68A" size="0.680 0.680 0.680" position="-0.2 0 0"/>
+      <box name="CsgN68B" size="0.680 0.680 0.680" position=" 0.2 0 0"/>
+    </union>
+    <union name="CsgN69" position="27.0 9.0 0">
+      <box name="CsgN69A" size="0.690 0.690 0.690" position="-0.2 0 0"/>
+      <box name="CsgN69B" size="0.690 0.690 0.690" position=" 0.2 0 0"/>
+    </union>
+    <union name="CsgN70" position="30.0 9.0 0">
+      <box name="CsgN70A" size="0.700 0.700 0.700" position="-0.2 0 0"/>
+      <box name="CsgN70B" size="0.700 0.700 0.700" position=" 0.2 0 0"/>
+    </union>
+    <union name="CsgN71" position="33.0 9.0 0">
+      <box name="CsgN71A" size="0.710 0.710 0.710" position="-0.2 0 0"/>
+      <box name="CsgN71B" size="0.710 0.710 0.710" position=" 0.2 0 0"/>
+    </union>
+    <union name="CsgN72" position="36.0 9.0 0">
+      <box name="CsgN72A" size="0.720 0.720 0.720" position="-0.2 0 0"/>
+      <box name="CsgN72B" size="0.720 0.720 0.720" position=" 0.2 0 0"/>
+    </union>
+    <union name="CsgN73" position="39.0 9.0 0">
+      <box name="CsgN73A" size="0.730 0.730 0.730" position="-0.2 0 0"/>
+      <box name="CsgN73B" size="0.730 0.730 0.730" position=" 0.2 0 0"/>
+    </union>
+    <union name="CsgN74" position="42.0 9.0 0">
+      <box name="CsgN74A" size="0.740 0.740 0.740" position="-0.2 0 0"/>
+      <box name="CsgN74B" size="0.740 0.740 0.740" position=" 0.2 0 0"/>
+    </union>
+    <union name="CsgN75" position="45.0 9.0 0">
+      <box name="CsgN75A" size="0.750 0.750 0.750" position="-0.2 0 0"/>
+      <box name="CsgN75B" size="0.750 0.750 0.750" position=" 0.2 0 0"/>
+    </union>
+    <union name="CsgN76" position="48.0 9.0 0">
+      <box name="CsgN76A" size="0.760 0.760 0.760" position="-0.2 0 0"/>
+      <box name="CsgN76B" size="0.760 0.760 0.760" position=" 0.2 0 0"/>
+    </union>
+    <union name="CsgN77" position="51.0 9.0 0">
+      <box name="CsgN77A" size="0.770 0.770 0.770" position="-0.2 0 0"/>
+      <box name="CsgN77B" size="0.770 0.770 0.770" position=" 0.2 0 0"/>
+    </union>
+    <union name="CsgN78" position="54.0 9.0 0">
+      <box name="CsgN78A" size="0.780 0.780 0.780" position="-0.2 0 0"/>
+      <box name="CsgN78B" size="0.780 0.780 0.780" position=" 0.2 0 0"/>
+    </union>
+    <union name="CsgN79" position="57.0 9.0 0">
+      <box name="CsgN79A" size="0.790 0.790 0.790" position="-0.2 0 0"/>
+      <box name="CsgN79B" size="0.790 0.790 0.790" position=" 0.2 0 0"/>
+    </union>
+    <union name="CsgN80" position="0.0 12.0 0">
+      <box name="CsgN80A" size="0.800 0.800 0.800" position="-0.2 0 0"/>
+      <box name="CsgN80B" size="0.800 0.800 0.800" position=" 0.2 0 0"/>
+    </union>
+    <union name="CsgN81" position="3.0 12.0 0">
+      <box name="CsgN81A" size="0.810 0.810 0.810" position="-0.2 0 0"/>
+      <box name="CsgN81B" size="0.810 0.810 0.810" position=" 0.2 0 0"/>
+    </union>
+    <union name="CsgN82" position="6.0 12.0 0">
+      <box name="CsgN82A" size="0.820 0.820 0.820" position="-0.2 0 0"/>
+      <box name="CsgN82B" size="0.820 0.820 0.820" position=" 0.2 0 0"/>
+    </union>
+    <union name="CsgN83" position="9.0 12.0 0">
+      <box name="CsgN83A" size="0.830 0.830 0.830" position="-0.2 0 0"/>
+      <box name="CsgN83B" size="0.830 0.830 0.830" position=" 0.2 0 0"/>
+    </union>
+    <union name="CsgN84" position="12.0 12.0 0">
+      <box name="CsgN84A" size="0.840 0.840 0.840" position="-0.2 0 0"/>
+      <box name="CsgN84B" size="0.840 0.840 0.840" position=" 0.2 0 0"/>
+    </union>
+    <union name="CsgN85" position="15.0 12.0 0">
+      <box name="CsgN85A" size="0.850 0.850 0.850" position="-0.2 0 0"/>
+      <box name="CsgN85B" size="0.850 0.850 0.850" position=" 0.2 0 0"/>
+    </union>
+    <union name="CsgN86" position="18.0 12.0 0">
+      <box name="CsgN86A" size="0.860 0.860 0.860" position="-0.2 0 0"/>
+      <box name="CsgN86B" size="0.860 0.860 0.860" position=" 0.2 0 0"/>
+    </union>
+    <union name="CsgN87" position="21.0 12.0 0">
+      <box name="CsgN87A" size="0.870 0.870 0.870" position="-0.2 0 0"/>
+      <box name="CsgN87B" size="0.870 0.870 0.870" position=" 0.2 0 0"/>
+    </union>
+    <union name="CsgN88" position="24.0 12.0 0">
+      <box name="CsgN88A" size="0.880 0.880 0.880" position="-0.2 0 0"/>
+      <box name="CsgN88B" size="0.880 0.880 0.880" position=" 0.2 0 0"/>
+    </union>
+    <union name="CsgN89" position="27.0 12.0 0">
+      <box name="CsgN89A" size="0.890 0.890 0.890" position="-0.2 0 0"/>
+      <box name="CsgN89B" size="0.890 0.890 0.890" position=" 0.2 0 0"/>
+    </union>
+    <union name="CsgN90" position="30.0 12.0 0">
+      <box name="CsgN90A" size="0.900 0.900 0.900" position="-0.2 0 0"/>
+      <box name="CsgN90B" size="0.900 0.900 0.900" position=" 0.2 0 0"/>
+    </union>
+    <union name="CsgN91" position="33.0 12.0 0">
+      <box name="CsgN91A" size="0.910 0.910 0.910" position="-0.2 0 0"/>
+      <box name="CsgN91B" size="0.910 0.910 0.910" position=" 0.2 0 0"/>
+    </union>
+    <union name="CsgN92" position="36.0 12.0 0">
+      <box name="CsgN92A" size="0.920 0.920 0.920" position="-0.2 0 0"/>
+      <box name="CsgN92B" size="0.920 0.920 0.920" position=" 0.2 0 0"/>
+    </union>
+    <union name="CsgN93" position="39.0 12.0 0">
+      <box name="CsgN93A" size="0.930 0.930 0.930" position="-0.2 0 0"/>
+      <box name="CsgN93B" size="0.930 0.930 0.930" position=" 0.2 0 0"/>
+    </union>
+    <union name="CsgN94" position="42.0 12.0 0">
+      <box name="CsgN94A" size="0.940 0.940 0.940" position="-0.2 0 0"/>
+      <box name="CsgN94B" size="0.940 0.940 0.940" position=" 0.2 0 0"/>
+    </union>
+    <union name="CsgN95" position="45.0 12.0 0">
+      <box name="CsgN95A" size="0.950 0.950 0.950" position="-0.2 0 0"/>
+      <box name="CsgN95B" size="0.950 0.950 0.950" position=" 0.2 0 0"/>
+    </union>
+    <union name="CsgN96" position="48.0 12.0 0">
+      <box name="CsgN96A" size="0.960 0.960 0.960" position="-0.2 0 0"/>
+      <box name="CsgN96B" size="0.960 0.960 0.960" position=" 0.2 0 0"/>
+    </union>
+    <union name="CsgN97" position="51.0 12.0 0">
+      <box name="CsgN97A" size="0.970 0.970 0.970" position="-0.2 0 0"/>
+      <box name="CsgN97B" size="0.970 0.970 0.970" position=" 0.2 0 0"/>
+    </union>
+    <union name="CsgN98" position="54.0 12.0 0">
+      <box name="CsgN98A" size="0.980 0.980 0.980" position="-0.2 0 0"/>
+      <box name="CsgN98B" size="0.980 0.980 0.980" position=" 0.2 0 0"/>
+    </union>
+    <union name="CsgN99" position="57.0 12.0 0">
+      <box name="CsgN99A" size="0.990 0.990 0.990" position="-0.2 0 0"/>
+      <box name="CsgN99B" size="0.990 0.990 0.990" position=" 0.2 0 0"/>
+    </union>
+    <union name="CsgN100" position="0.0 15.0 0">
+      <box name="CsgN100A" size="0.500 0.500 0.500" position="-0.2 0 0"/>
+      <box name="CsgN100B" size="0.500 0.500 0.500" position=" 0.2 0 0"/>
+    </union>
+    <union name="CsgN101" position="3.0 15.0 0">
+      <box name="CsgN101A" size="0.510 0.510 0.510" position="-0.2 0 0"/>
+      <box name="CsgN101B" size="0.510 0.510 0.510" position=" 0.2 0 0"/>
+    </union>
+    <union name="CsgN102" position="6.0 15.0 0">
+      <box name="CsgN102A" size="0.520 0.520 0.520" position="-0.2 0 0"/>
+      <box name="CsgN102B" size="0.520 0.520 0.520" position=" 0.2 0 0"/>
+    </union>
+    <union name="CsgN103" position="9.0 15.0 0">
+      <box name="CsgN103A" size="0.530 0.530 0.530" position="-0.2 0 0"/>
+      <box name="CsgN103B" size="0.530 0.530 0.530" position=" 0.2 0 0"/>
+    </union>
+    <union name="CsgN104" position="12.0 15.0 0">
+      <box name="CsgN104A" size="0.540 0.540 0.540" position="-0.2 0 0"/>
+      <box name="CsgN104B" size="0.540 0.540 0.540" position=" 0.2 0 0"/>
+    </union>
+    <union name="CsgN105" position="15.0 15.0 0">
+      <box name="CsgN105A" size="0.550 0.550 0.550" position="-0.2 0 0"/>
+      <box name="CsgN105B" size="0.550 0.550 0.550" position=" 0.2 0 0"/>
+    </union>
+    <union name="CsgN106" position="18.0 15.0 0">
+      <box name="CsgN106A" size="0.560 0.560 0.560" position="-0.2 0 0"/>
+      <box name="CsgN106B" size="0.560 0.560 0.560" position=" 0.2 0 0"/>
+    </union>
+    <union name="CsgN107" position="21.0 15.0 0">
+      <box name="CsgN107A" size="0.570 0.570 0.570" position="-0.2 0 0"/>
+      <box name="CsgN107B" size="0.570 0.570 0.570" position=" 0.2 0 0"/>
+    </union>
+    <union name="CsgN108" position="24.0 15.0 0">
+      <box name="CsgN108A" size="0.580 0.580 0.580" position="-0.2 0 0"/>
+      <box name="CsgN108B" size="0.580 0.580 0.580" position=" 0.2 0 0"/>
+    </union>
+    <union name="CsgN109" position="27.0 15.0 0">
+      <box name="CsgN109A" size="0.590 0.590 0.590" position="-0.2 0 0"/>
+      <box name="CsgN109B" size="0.590 0.590 0.590" position=" 0.2 0 0"/>
+    </union>
+    <union name="CsgN110" position="30.0 15.0 0">
+      <box name="CsgN110A" size="0.600 0.600 0.600" position="-0.2 0 0"/>
+      <box name="CsgN110B" size="0.600 0.600 0.600" position=" 0.2 0 0"/>
+    </union>
+    <union name="CsgN111" position="33.0 15.0 0">
+      <box name="CsgN111A" size="0.610 0.610 0.610" position="-0.2 0 0"/>
+      <box name="CsgN111B" size="0.610 0.610 0.610" position=" 0.2 0 0"/>
+    </union>
+    <union name="CsgN112" position="36.0 15.0 0">
+      <box name="CsgN112A" size="0.620 0.620 0.620" position="-0.2 0 0"/>
+      <box name="CsgN112B" size="0.620 0.620 0.620" position=" 0.2 0 0"/>
+    </union>
+    <union name="CsgN113" position="39.0 15.0 0">
+      <box name="CsgN113A" size="0.630 0.630 0.630" position="-0.2 0 0"/>
+      <box name="CsgN113B" size="0.630 0.630 0.630" position=" 0.2 0 0"/>
+    </union>
+    <union name="CsgN114" position="42.0 15.0 0">
+      <box name="CsgN114A" size="0.640 0.640 0.640" position="-0.2 0 0"/>
+      <box name="CsgN114B" size="0.640 0.640 0.640" position=" 0.2 0 0"/>
+    </union>
+    <union name="CsgN115" position="45.0 15.0 0">
+      <box name="CsgN115A" size="0.650 0.650 0.650" position="-0.2 0 0"/>
+      <box name="CsgN115B" size="0.650 0.650 0.650" position=" 0.2 0 0"/>
+    </union>
+    <union name="CsgN116" position="48.0 15.0 0">
+      <box name="CsgN116A" size="0.660 0.660 0.660" position="-0.2 0 0"/>
+      <box name="CsgN116B" size="0.660 0.660 0.660" position=" 0.2 0 0"/>
+    </union>
+    <union name="CsgN117" position="51.0 15.0 0">
+      <box name="CsgN117A" size="0.670 0.670 0.670" position="-0.2 0 0"/>
+      <box name="CsgN117B" size="0.670 0.670 0.670" position=" 0.2 0 0"/>
+    </union>
+    <union name="CsgN118" position="54.0 15.0 0">
+      <box name="CsgN118A" size="0.680 0.680 0.680" position="-0.2 0 0"/>
+      <box name="CsgN118B" size="0.680 0.680 0.680" position=" 0.2 0 0"/>
+    </union>
+    <union name="CsgN119" position="57.0 15.0 0">
+      <box name="CsgN119A" size="0.690 0.690 0.690" position="-0.2 0 0"/>
+      <box name="CsgN119B" size="0.690 0.690 0.690" position=" 0.2 0 0"/>
+    </union>
+    <union name="CsgN120" position="0.0 18.0 0">
+      <box name="CsgN120A" size="0.700 0.700 0.700" position="-0.2 0 0"/>
+      <box name="CsgN120B" size="0.700 0.700 0.700" position=" 0.2 0 0"/>
+    </union>
+    <union name="CsgN121" position="3.0 18.0 0">
+      <box name="CsgN121A" size="0.710 0.710 0.710" position="-0.2 0 0"/>
+      <box name="CsgN121B" size="0.710 0.710 0.710" position=" 0.2 0 0"/>
+    </union>
+    <union name="CsgN122" position="6.0 18.0 0">
+      <box name="CsgN122A" size="0.720 0.720 0.720" position="-0.2 0 0"/>
+      <box name="CsgN122B" size="0.720 0.720 0.720" position=" 0.2 0 0"/>
+    </union>
+    <union name="CsgN123" position="9.0 18.0 0">
+      <box name="CsgN123A" size="0.730 0.730 0.730" position="-0.2 0 0"/>
+      <box name="CsgN123B" size="0.730 0.730 0.730" position=" 0.2 0 0"/>
+    </union>
+    <union name="CsgN124" position="12.0 18.0 0">
+      <box name="CsgN124A" size="0.740 0.740 0.740" position="-0.2 0 0"/>
+      <box name="CsgN124B" size="0.740 0.740 0.740" position=" 0.2 0 0"/>
+    </union>
+    <union name="CsgN125" position="15.0 18.0 0">
+      <box name="CsgN125A" size="0.750 0.750 0.750" position="-0.2 0 0"/>
+      <box name="CsgN125B" size="0.750 0.750 0.750" position=" 0.2 0 0"/>
+    </union>
+    <union name="CsgN126" position="18.0 18.0 0">
+      <box name="CsgN126A" size="0.760 0.760 0.760" position="-0.2 0 0"/>
+      <box name="CsgN126B" size="0.760 0.760 0.760" position=" 0.2 0 0"/>
+    </union>
+    <union name="CsgN127" position="21.0 18.0 0">
+      <box name="CsgN127A" size="0.770 0.770 0.770" position="-0.2 0 0"/>
+      <box name="CsgN127B" size="0.770 0.770 0.770" position=" 0.2 0 0"/>
+    </union>
+    <union name="CsgN128" position="24.0 18.0 0">
+      <box name="CsgN128A" size="0.780 0.780 0.780" position="-0.2 0 0"/>
+      <box name="CsgN128B" size="0.780 0.780 0.780" position=" 0.2 0 0"/>
+    </union>
+    <union name="CsgN129" position="27.0 18.0 0">
+      <box name="CsgN129A" size="0.790 0.790 0.790" position="-0.2 0 0"/>
+      <box name="CsgN129B" size="0.790 0.790 0.790" position=" 0.2 0 0"/>
+    </union>
+    <union name="CsgN130" position="30.0 18.0 0">
+      <box name="CsgN130A" size="0.800 0.800 0.800" position="-0.2 0 0"/>
+      <box name="CsgN130B" size="0.800 0.800 0.800" position=" 0.2 0 0"/>
+    </union>
+    <union name="CsgN131" position="33.0 18.0 0">
+      <box name="CsgN131A" size="0.810 0.810 0.810" position="-0.2 0 0"/>
+      <box name="CsgN131B" size="0.810 0.810 0.810" position=" 0.2 0 0"/>
+    </union>
+    <union name="CsgN132" position="36.0 18.0 0">
+      <box name="CsgN132A" size="0.820 0.820 0.820" position="-0.2 0 0"/>
+      <box name="CsgN132B" size="0.820 0.820 0.820" position=" 0.2 0 0"/>
+    </union>
+    <union name="CsgN133" position="39.0 18.0 0">
+      <box name="CsgN133A" size="0.830 0.830 0.830" position="-0.2 0 0"/>
+      <box name="CsgN133B" size="0.830 0.830 0.830" position=" 0.2 0 0"/>
+    </union>
+    <union name="CsgN134" position="42.0 18.0 0">
+      <box name="CsgN134A" size="0.840 0.840 0.840" position="-0.2 0 0"/>
+      <box name="CsgN134B" size="0.840 0.840 0.840" position=" 0.2 0 0"/>
+    </union>
+    <union name="CsgN135" position="45.0 18.0 0">
+      <box name="CsgN135A" size="0.850 0.850 0.850" position="-0.2 0 0"/>
+      <box name="CsgN135B" size="0.850 0.850 0.850" position=" 0.2 0 0"/>
+    </union>
+    <union name="CsgN136" position="48.0 18.0 0">
+      <box name="CsgN136A" size="0.860 0.860 0.860" position="-0.2 0 0"/>
+      <box name="CsgN136B" size="0.860 0.860 0.860" position=" 0.2 0 0"/>
+    </union>
+    <union name="CsgN137" position="51.0 18.0 0">
+      <box name="CsgN137A" size="0.870 0.870 0.870" position="-0.2 0 0"/>
+      <box name="CsgN137B" size="0.870 0.870 0.870" position=" 0.2 0 0"/>
+    </union>
+    <union name="CsgN138" position="54.0 18.0 0">
+      <box name="CsgN138A" size="0.880 0.880 0.880" position="-0.2 0 0"/>
+      <box name="CsgN138B" size="0.880 0.880 0.880" position=" 0.2 0 0"/>
+    </union>
+    <union name="CsgN139" position="57.0 18.0 0">
+      <box name="CsgN139A" size="0.890 0.890 0.890" position="-0.2 0 0"/>
+      <box name="CsgN139B" size="0.890 0.890 0.890" position=" 0.2 0 0"/>
+    </union>
+    <union name="CsgN140" position="0.0 21.0 0">
+      <box name="CsgN140A" size="0.900 0.900 0.900" position="-0.2 0 0"/>
+      <box name="CsgN140B" size="0.900 0.900 0.900" position=" 0.2 0 0"/>
+    </union>
+    <union name="CsgN141" position="3.0 21.0 0">
+      <box name="CsgN141A" size="0.910 0.910 0.910" position="-0.2 0 0"/>
+      <box name="CsgN141B" size="0.910 0.910 0.910" position=" 0.2 0 0"/>
+    </union>
+    <union name="CsgN142" position="6.0 21.0 0">
+      <box name="CsgN142A" size="0.920 0.920 0.920" position="-0.2 0 0"/>
+      <box name="CsgN142B" size="0.920 0.920 0.920" position=" 0.2 0 0"/>
+    </union>
+    <union name="CsgN143" position="9.0 21.0 0">
+      <box name="CsgN143A" size="0.930 0.930 0.930" position="-0.2 0 0"/>
+      <box name="CsgN143B" size="0.930 0.930 0.930" position=" 0.2 0 0"/>
+    </union>
+    <union name="CsgN144" position="12.0 21.0 0">
+      <box name="CsgN144A" size="0.940 0.940 0.940" position="-0.2 0 0"/>
+      <box name="CsgN144B" size="0.940 0.940 0.940" position=" 0.2 0 0"/>
+    </union>
+    <union name="CsgN145" position="15.0 21.0 0">
+      <box name="CsgN145A" size="0.950 0.950 0.950" position="-0.2 0 0"/>
+      <box name="CsgN145B" size="0.950 0.950 0.950" position=" 0.2 0 0"/>
+    </union>
+    <union name="CsgN146" position="18.0 21.0 0">
+      <box name="CsgN146A" size="0.960 0.960 0.960" position="-0.2 0 0"/>
+      <box name="CsgN146B" size="0.960 0.960 0.960" position=" 0.2 0 0"/>
+    </union>
+    <union name="CsgN147" position="21.0 21.0 0">
+      <box name="CsgN147A" size="0.970 0.970 0.970" position="-0.2 0 0"/>
+      <box name="CsgN147B" size="0.970 0.970 0.970" position=" 0.2 0 0"/>
+    </union>
+    <union name="CsgN148" position="24.0 21.0 0">
+      <box name="CsgN148A" size="0.980 0.980 0.980" position="-0.2 0 0"/>
+      <box name="CsgN148B" size="0.980 0.980 0.980" position=" 0.2 0 0"/>
+    </union>
+    <union name="CsgN149" position="27.0 21.0 0">
+      <box name="CsgN149A" size="0.990 0.990 0.990" position="-0.2 0 0"/>
+      <box name="CsgN149B" size="0.990 0.990 0.990" position=" 0.2 0 0"/>
+    </union>
+  </objects>
+
+</mc3>

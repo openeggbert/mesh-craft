@@ -83,6 +83,13 @@ public:
     // at 1 after the first draw, not grow with the frame count (K1).
     int csgCacheEvaluationCount() const { return csgCacheEvaluations_; }
 
+    // Current entry count of the CSG mesh cache. Bounded: the cache is
+    // cleared entirely once it would exceed 128 entries (STAB-0216) — not an
+    // LRU eviction down to a fixed size, so this can transiently read as high
+    // as 129 (128 existing + 1 just-inserted, checked before the *next*
+    // insertion) before the next unique CSG subtree triggers a full clear.
+    int csgMeshCacheSize() const { return static_cast<int>(csgMeshCache_.size()); }
+
     // LOD tier (0=full, 1=mid, 2=low) picked for the given object ID on
     // its last draw, based on camera distance (G8). Returns -1 if the
     // object has not been rendered yet this session (STAB-0525).

@@ -299,8 +299,11 @@ void MeshCraftApplication::EndDraw() {
         saveScreenshot(autoScreenshotPath_);
         std::cout << "[MeshCraft] Auto-screenshot saved to: " << autoScreenshotPath_ << "\n";
         std::cout << "[CsgCache] evaluations: " << sceneRenderer_->csgCacheEvaluationCount() << "\n";
-        if (!document_.objects.empty())
+        std::cout << "[CsgCache] size: " << sceneRenderer_->csgMeshCacheSize() << "\n";
+        if (!document_.objects.empty()) {
             std::cout << "[LOD] level=" << sceneRenderer_->lastLodLevel(document_.objects.front()->id) << "\n";
+            std::cout << "[CsgTriCount] count=" << sceneRenderer_->csgCachedTriCount(document_.objects.front()->id) << "\n";
+        }
         Exit();
     }
     Game::EndDraw();
