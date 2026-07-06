@@ -69,6 +69,60 @@ ninja -C cmake-build-debug
 > `cmake -S . -B cmake-build-debug` configure step before building —
 > `ninja` alone will not pick it up.
 
+### Build (Windows, MinGW cross-compile from Linux)
+
+Requires the `x86_64-w64-mingw32-gcc`/`g++` toolchain (Debian/Ubuntu:
+`apt install g++-mingw-w64-x86-64`). Write a toolchain file:
+
+```cmake
+# mingw-toolchain.cmake
+set(CMAKE_SYSTEM_NAME Windows)
+set(CMAKE_SYSTEM_PROCESSOR x86_64)
+set(CMAKE_C_COMPILER x86_64-w64-mingw32-gcc)
+set(CMAKE_CXX_COMPILER x86_64-w64-mingw32-g++)
+set(CMAKE_FIND_ROOT_PATH /usr/x86_64-w64-mingw32)
+set(CMAKE_FIND_ROOT_PATH_MODE_PROGRAM NEVER)
+set(CMAKE_FIND_ROOT_PATH_MODE_LIBRARY ONLY)
+set(CMAKE_FIND_ROOT_PATH_MODE_INCLUDE ONLY)
+```
+
+```sh
+cmake -S . -B b-mingw -G Ninja -DCMAKE_TOOLCHAIN_FILE=mingw-toolchain.cmake -DBUILD_TESTING=OFF
+cmake --build b-mingw -j$(nproc)
+```
+
+**Known blocker (as of this writing):** configure succeeds and the
+build progresses through ~73% of the object graph (all of CNA's
+XNA-compatibility layer, `Mc3`, Manifold, most of ImGui), then fails on
+`imgui_impl_opengl3.cpp: fatal error: GLES3/gl3.h: No such file or
+directory` — CNA's build configures `-DIMGUI_IMPL_OPENGL_ES3`
+unconditionally for the `EASYGL` backend regardless of target platform,
+and no GLES-for-Windows headers are vendored. This is a CNA-side
+graphics-backend decision, not something this repo can fix on its own —
+see `cna`'s own issue tracker. SQLite3/OpenSSL/LibXml2 all gracefully
+disable (stubbed at compile time) rather than blocking configure when
+absent for the target, and the produced `build.ninja` correctly copies
+`SDL3`/`SDL3_image`/`SDL3_mixer`/`libwinpthread-1` DLLs next to
+`MeshCraft.exe` and statically links `libgcc`/`libstdc++`.
+
+### Build (Web, Emscripten)
+
+Requires the [Emscripten SDK](https://emscripten.org/docs/getting_started/downloads.html)
+(`source emsdk_env.sh` puts `emcmake`/`emcc`/`em++` on `PATH`):
+
+```sh
+emcmake cmake -S . -B b-web -G Ninja -DBUILD_TESTING=OFF
+cmake --build b-web -j$(nproc)
+cd b-web && python3 -m http.server 8765   # then open http://localhost:8765/MeshCraft.html
+```
+
+Builds and links cleanly (449/449 objects) and the produced page loads
+and initializes correctly in a real browser (WebGL 2.0 context,
+`SDL_CreateWindow` succeeds, no console errors) — **but the 3D viewport
+currently renders a blank canvas**, an open, undiagnosed limitation (see
+`NEXT.md` §4 for what's been ruled out so far). CLI tools (`mc3togltf`,
+`mc3tomcb`) build the same way and run correctly under Node.
+
 ### Run
 
 ```sh

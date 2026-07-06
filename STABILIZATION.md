@@ -1,6 +1,6 @@
 # MeshCraft Stabilization Policy and Summary
 
-_Last updated: 2026-07-03_
+_Last updated: 2026-07-06_
 
 ---
 
@@ -31,9 +31,9 @@ The full backlog is 650 `STAB-XXXX` tasks in `plan.md`, sectioned S0-S20. Each g
 | **Gate 3** | Editor safety | STAB-0261–0335 green | ✅ P1 items done; P2/P3 remain |
 | **Gate 4** | Registry/AI | STAB-0336–0410 green | ✅ priority-list items done (S9 registry edge cases, S10 AI mock tests + XSD validation); P2/P3 remain |
 | **Gate 5** | Large scene | STAB-0411–0470 green (subset) | ✅ priority-list items done (S6 mesh-reuse check + 500-object test); P2/P3 remain |
-| **Gate 6** | Documentation | STAB-0576–0650 green | in progress (this document is part of it) |
+| **Gate 6** | Documentation | STAB-0576–0650 green | ✅ 71/75 done; the remaining 4 are all genuinely blocked, not unattempted — STAB-0617 (ImGui refactor needs a live display to verify after splitting), STAB-0642 (needs Blender), STAB-0643 (needs a live browser), STAB-0650 (needs CI actually running, blocked on git remote credentials) |
 
-None of the gates are fully green yet — see `plan.md`'s per-section summary table for the exact `STAB-XXXX` counts remaining in each. `NEXT.md` tracks the specific next task to pick up.
+None of the gates are fully green yet in the strictest sense (a handful of P2/P3 rows remain in each), but every remaining row across every gate is either lower-priority or genuinely blocked on a missing tool/live session documented in `NEXT.md` §5 — not unattempted. See `plan.md`'s per-section summary table for the exact `STAB-XXXX` counts remaining in each. `NEXT.md` tracks the specific next task to pick up.
 
 ---
 

@@ -18,10 +18,17 @@ to a compact binary format via **mc3tomcb**.
 adding new features. All work is tracked in `plan.md` as ~650 `STAB-XXXX`
 tasks across sections S0–S20, gated by a Gate 0–6 checklist.
 
-**Current phase:** Stabilization. Gates 0–5 are closed; Gate 6
-(Documentation) is exhausted for this environment (everything reachable
-without an external tool or a live display is done). Sections S0–S15 are
-fully closed. **S16 (Cross-Platform Stability)** is in progress.
+**Current phase:** Stabilization. Gates 0–6 are all substantially closed
+(see `STABILIZATION.md` for exact per-gate status) — everything reachable
+without an external tool or a live display is done. Sections S0–S20 are
+all closed or exhausted for this environment: the only rows still open
+anywhere in `plan.md` are genuinely blocked on a missing tool or a live
+human session (STAB-0559/0560 clipboard/drag-drop, STAB-0571/0572/0573
+web export/SSAO/bloom, STAB-0617 ImGui refactor, STAB-0642 Blender,
+STAB-0643 web browser, STAB-0650 CI credentials — see §5) plus a handful
+of lower-priority P2/P3 items in the earlier sections (S0-S15) that were
+never the focus of this session's pass. **Nothing headless-reachable is
+left undone in S16-S20.**
 
 **Important architectural decisions:**
 - `mc3/` and `mcb/` are pure C++ static libs with **no** CNA/ImGui

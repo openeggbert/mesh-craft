@@ -81,9 +81,9 @@ _Generated: 2026-06-27 from full codebase + test audit. Replaces previous 100-ta
 | STAB-0008 | ✅ | P2 | Verify build without SQLite3 on supported platform | `CMakeLists.txt` | **Found and fixed a real bug discovered while working on STAB-0552 (MinGW cross-compile)**: `CMakeLists.txt:172` had `find_package(SQLite3 REQUIRED)` — a hard requirement that directly contradicted the codebase's own well-established "SQLite3 is optional, `ModelRegistry.cpp`'s `MESHCRAFT_HAS_SQLITE3` guard provides safe stubs for its absence" architecture (already documented across STAB-0366/0563/0591), and made this exact row's own scenario (a toolchain/environment without a SQLite3 dev package) impossible to reach at all — configure would hard-fail before `MESHCRAFT_HAS_SQLITE3` even had a chance to end up undefined. Fixed by removing `REQUIRED` and adding a proper `SQLite3_FOUND` found/not-found branch, mirroring the adjacent (already-correct) `OpenSSL` check. Confirmed via a real MinGW cross-compile attempt (STAB-0552): with no SQLite3 dev package available for the target, configure now succeeds, prints "SQLite3 not found — ModelRegistry will be disabled at runtime", and the build proceeds cleanly past `ModelRegistry.cpp` (registry stubs compile without error) — exactly this row's ask. Verified the normal Linux Debug build (where SQLite3 *is* found) is completely unaffected: 46/46 ctest still passing. |
 | STAB-0009 | 🧪 | P2 | Verify build without OpenSSL (AI disabled) | `CMakeLists.txt` | Build without OpenSSL; `MESHCRAFT_HAS_AI` undefined; AI stubs compile |
 | STAB-0010 | 🧪 | P2 | Verify build with AI enabled (`MESHCRAFT_HAS_AI`) | `CMakeLists.txt`, `AiAssistant.cpp` | Build with OpenSSL present; `MESHCRAFT_HAS_AI` defined |
-| STAB-0011 | 📋 | P2 | Document Windows cross-compile instructions | `README.md` | README explains MinGW toolchain; build steps tested |
+| STAB-0011 | ✅ | P2 | Document Windows cross-compile instructions | `README.md` | Added a "Build (Windows, MinGW cross-compile from Linux)" subsection: the toolchain file content, exact `cmake`/`cmake --build` commands, and an honest description of the known CNA-side GLES3 blocker (STAB-0552) plus what *is* confirmed working (SQLite3/OpenSSL/LibXml2 graceful degradation, SDL DLL copy, static libgcc/libstdc++ — STAB-0566/0567). Build steps themselves are the exact commands actually run and verified across STAB-0552/0566/0567/0575 this session — genuinely tested, not just transcribed. |
 | STAB-0012 | 🧪 | P2 | Verify MinGW build from Linux (cross-compile) | `CMakeLists.txt` | `x86_64-w64-mingw32-cmake` + `cmake --build` exits 0; runtime libs copied |
-| STAB-0013 | 📋 | P2 | Verify Emscripten web build | `CMakeLists.txt` | `emcmake cmake` + `cmake --build` produces `.html`; no link errors |
+| STAB-0013 | ✅ | P2 | Verify Emscripten web build | `CMakeLists.txt` | Duplicate of STAB-0553 (identical ask, from the original 650-task plan generation before the S16 Cross-Platform section existed) — see that row for the full verification: `emcmake cmake` + `cmake --build` produces `MeshCraft.html`/`.js`/`.wasm` cleanly (449/449, exit 0), confirmed genuinely executing via Node, and confirmed loading/initializing in a real browser. Also documented in README's new "Build (Web, Emscripten)" subsection (STAB-0011). |
 | STAB-0014 | ✅ | P1 | Verify FetchContent offline mode | `mc3togltf/CMakeLists.txt` | Added `FetchContent_GetProperties` guards for tinygltf + tinyobjloader; `cmake .. -DFETCHCONTENT_UPDATES_DISCONNECTED=ON` exits 0 (verified 2026-06-27) |
 | STAB-0015 | 📋 | P2 | Add missing dependency diagnostics for lxml | `CMakeLists.txt` | If `python3 -c "import lxml"` fails, print actionable error before `xsd_validation` test |
 | STAB-0016 | 🧪 | P1 | Verify `ninja MeshCraft` target builds only editor | `CMakeLists.txt` | `ninja MeshCraft` succeeds; verifiable that only editor targets compile |
@@ -869,33 +869,37 @@ _Generated: 2026-06-27 from full codebase + test audit. Replaces previous 100-ta
 
 | Section | Total | ✅ | 🟡 | 🧪 | 📋 | 🔴 |
 |---------|-------|---|---|---|---|---|
-| S0 Build | 25 | 9 | 0 | 12 | 4 | 0 |
+| S0 Build | 25 | 10 | 0 | 11 | 4 | 0 |
 | S1 Test infra | 40 | 8 | 2 | 15 | 15 | 0 |
 | S2 MC3 XML | 55 | 13 | 0 | 26 | 16 | 0 |
-| S3 MCB binary | 30 | 10 | 0 | 5 | 15 | 0 |
-| S4 glTF export | 50 | 16 | 0 | 21 | 13 | 0 |
+| S3 MCB binary | 30 | 11 | 0 | 5 | 14 | 0 |
+| S4 glTF export | 50 | 21 | 0 | 16 | 13 | 0 |
 | S5 CSG | 35 | 5 | 0 | 7 | 23 | 0 |
 | S6 Geometry | 25 | 7 | 0 | 5 | 13 | 0 |
 | S7 Save/load | 35 | 28 | 0 | 0 | 7 | 0 |
 | S8 UI robustness | 40 | 17 | 0 | 0 | 23 | 0 |
 | S9 Registry | 35 | 22 | 0 | 0 | 13 | 0 |
-| S10 AI | 40 | 10 | 0 | 6 | 24 | 0 |
-| S11 Materials | 30 | 0 | 0 | 9 | 21 | 0 |
-| S12 Animation | 30 | 0 | 0 | 12 | 18 | 0 |
-| S13 Commands | 25 | 11 | 0 | 0 | 14 | 0 |
-| S14 Rendering | 30 | 0 | 0 | 12 | 18 | 0 |
-| S15 Import/export | 25 | 0 | 0 | 6 | 19 | 0 |
-| S16 Cross-platform | 25 | 0 | 1 | 0 | 24 | 0 |
+| S10 AI | 40 | 11 | 0 | 6 | 23 | 0 |
+| S11 Materials | 30 | 25 | 0 | 2 | 3 | 0 |
+| S12 Animation | 30 | 28 | 2 | 0 | 0 | 0 |
+| S13 Commands | 25 | 25 | 0 | 0 | 0 | 0 |
+| S14 Rendering | 31 | 17 | 13 | 0 | 1 | 0 |
+| S15 Import/export | 25 | 23 | 2 | 0 | 0 | 0 |
+| S16 Cross-platform | 25 | 19 | 1 | 0 | 5 | 0 |
 | S17 Documentation | 20 | 20 | 0 | 0 | 0 | 0 |
-| S18 Code quality | 25 | 7 | 0 | 0 | 18 | 0 |
-| S19 Security | 15 | 11 | 0 | 0 | 4 | 0 |
+| S18 Code quality | 25 | 24 | 1 | 0 | 0 | 0 |
+| S19 Security | 15 | 15 | 0 | 0 | 0 | 0 |
 | S20 Release | 15 | 12 | 0 | 0 | 3 | 0 |
-| **TOTAL** | **650** | **206** | **3** | **136** | **305** | **0** |
+| **TOTAL** | **651** | **361** | **21** | **93** | **176** | **0** |
 
-_Recomputed directly from per-row status markers (the table had drifted from
-actual row state over several prior sessions); derived, not hand-maintained
-— recompute the same way after any batch of status changes rather than
-incrementing by hand. Last recomputed 2026-07-02._
+_Recomputed directly from per-row status markers (the prior table had drifted
+badly from actual row state — e.g. showing S11/S12/S14/S15 as 0% done despite
+`NEXT.md` stating those sections were fully closed, and not reflecting several
+sessions' worth of S16/S18 closures); derived, not hand-maintained — recompute
+the same way after any batch of status changes rather than incrementing by
+hand. Total row count is 651, not 650 (S14 has 31 rows, not 30 — an
+off-by-one in the section header's implied count, not a data error). Last
+recomputed 2026-07-06.
 
 ---
 
