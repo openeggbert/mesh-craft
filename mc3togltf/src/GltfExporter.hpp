@@ -16,6 +16,7 @@ struct ExportStats {
     int objectsProcessed{0};   // MC3 objects visited (buildNode calls)
     int gltfNodes{0};          // glTF nodes written
     int uniqueMeshes{0};       // unique glTF meshes in the buffer
+    int materialCount{0};      // glTF materials written
     int reusedMeshRefs{0};     // node-to-mesh assignments that reused an existing mesh
     int totalVertices{0};      // vertex count summed over unique meshes
     int totalTriangles{0};     // triangle count summed over unique meshes

@@ -98,6 +98,7 @@ int main(int argc, char* argv[]) {
                       << "  Objects processed: " << s.objectsProcessed   << "\n"
                       << "  glTF nodes:        " << s.gltfNodes           << "\n"
                       << "  Unique meshes:     " << s.uniqueMeshes        << "\n"
+                      << "  Materials:         " << s.materialCount       << "\n"
                       << "  Reused mesh refs:  " << s.reusedMeshRefs      << "\n"
                       << "  Total vertices:    " << s.totalVertices        << "\n"
                       << "  Total triangles:   " << s.totalTriangles       << "\n"

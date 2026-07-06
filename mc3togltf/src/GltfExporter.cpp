@@ -1179,8 +1179,9 @@ void GltfExporter::exportDocument(const Mc3Document& doc,
 
     // Populate export statistics from accumulated ctx.stats + model aggregate counts.
     stats = ctx.stats;
-    stats.gltfNodes    = static_cast<int>(model.nodes.size());
-    stats.uniqueMeshes = static_cast<int>(model.meshes.size());
+    stats.gltfNodes     = static_cast<int>(model.nodes.size());
+    stats.uniqueMeshes  = static_cast<int>(model.meshes.size());
+    stats.materialCount = static_cast<int>(model.materials.size());
     for (const auto& mesh : model.meshes) {
         for (const auto& prim : mesh.primitives) {
             auto posIt = prim.attributes.find("POSITION");

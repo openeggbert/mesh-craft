@@ -129,6 +129,7 @@ if(BUILD_TESTING)
         set(_texture_sampler_xml      "${CMAKE_CURRENT_SOURCE_DIR}/../test/texture_sampler.mc3.xml")
         set(_material_pbr_xml         "${CMAKE_CURRENT_SOURCE_DIR}/../test/material_pbr.mc3.xml")
         set(_node_transform_xml       "${CMAKE_CURRENT_SOURCE_DIR}/../test/node_transform.mc3.xml")
+        set(_empty_scene_xml          "${CMAKE_CURRENT_SOURCE_DIR}/../test/empty_scene.mc3.xml")
         set(_svg_material_xml         "${CMAKE_CURRENT_SOURCE_DIR}/../test/svg_material.mc3.xml")
         set(_anim_unsupported_xml     "${CMAKE_CURRENT_SOURCE_DIR}/../test/animation_unsupported.mc3.xml")
         set(_instance_variant_xml     "${CMAKE_CURRENT_SOURCE_DIR}/../test/instance_variant.mc3.xml")
@@ -278,6 +279,27 @@ if(BUILD_TESTING)
                         "${_node_transform_xml}"
             )
             set_tests_properties(mc3togltf_node_transform PROPERTIES TIMEOUT 30 LABELS "export")
+        endif()
+        if(EXISTS "${_empty_scene_xml}")
+            add_test(
+                NAME mc3togltf_empty_scene
+                COMMAND "${PYTHON3_EXEC}"
+                        "${CMAKE_CURRENT_SOURCE_DIR}/test/empty_scene_test.py"
+                        "$<TARGET_FILE:mc3togltf>"
+                        "${_empty_scene_xml}"
+            )
+            set_tests_properties(mc3togltf_empty_scene PROPERTIES TIMEOUT 30 LABELS "export")
+        endif()
+        if(EXISTS "${_house_xml}" AND EXISTS "${_obj_robustness_xml}")
+            add_test(
+                NAME mc3togltf_export_stats
+                COMMAND "${PYTHON3_EXEC}"
+                        "${CMAKE_CURRENT_SOURCE_DIR}/test/export_stats_test.py"
+                        "$<TARGET_FILE:mc3togltf>"
+                        "${_house_xml}"
+                        "${_obj_robustness_xml}"
+            )
+            set_tests_properties(mc3togltf_export_stats PROPERTIES TIMEOUT 30 LABELS "export")
         endif()
         if(EXISTS "${_house_xml}" AND EXISTS "${_primitives_xml}")
             add_test(
