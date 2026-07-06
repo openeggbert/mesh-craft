@@ -504,17 +504,17 @@ No project linter/formatter is configured.
    desktop session (dragging a file from a real file manager) — same
    caveat as clipboard above, check for a testable seam first.
 
-4. **STAB-0571 onward (web export, web SSAO/bloom)** — all three
-   (STAB-0571/0572/0573) are marked `manual` in `plan.md` and need a
-   live browser session (export-then-download, visual AO/bloom
-   inspection) — not reachable from this environment at all. Consider
-   skipping straight to **STAB-0574** (platform feature matrix
-   documentation, a `README.md` writing task) or **STAB-0575** (Windows
-   spaces-in-path build, needs a real Windows machine — likely blocked
-   too).
+4. **STAB-0575 — verify Windows: spaces in CMake binary dir work.**
+   Files: `CMakeLists.txt`. Needs a real Windows machine (or at least a
+   MinGW build that gets further than STAB-0552's ~73% blocker) to
+   actually build from a path like `C:\My Projects\MeshCraft\...` —
+   likely blocked here the same way. STAB-0571/0572/0573 (web export,
+   web SSAO/bloom) are all marked `manual` in `plan.md` and need a live
+   browser session — not reachable from this environment at all; S16 is
+   otherwise fully closed (STAB-0574 done, see below).
 
-STAB-0554 through STAB-0570 (all of S16's build/path/platform
-verification rows) are closed — see `plan.md` for full detail on each.
+STAB-0554 through STAB-0570, plus STAB-0574 (platform feature matrix in
+`README.md`), are closed — see `plan.md` for full detail on each.
 Two were genuine bugs found and fixed, not just verified: **STAB-0558**
 (`meshcraftConfigDir()` had no Windows branch at all) and **STAB-0565**
 (`cmake/web/pre.js` mounted IDBFS at the wrong path, silently breaking

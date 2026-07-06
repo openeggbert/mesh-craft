@@ -757,7 +757,7 @@ _Generated: 2026-06-27 from full codebase + test audit. Replaces previous 100-ta
 | STAB-0571 | 📋 | P3 | Verify web export: exported GLB downloadable from browser | manual | Use web build; export scene; download and verify GLB |
 | STAB-0572 | 📋 | P3 | Verify web SSAO: works on WebGL2 | manual | SSAO in web build produces visible AO; no GL error |
 | STAB-0573 | 📋 | P3 | Verify web bloom: works on WebGL2 | manual | Bloom in web build produces visible glow; no GL error |
-| STAB-0574 | 📋 | P3 | Document platform feature matrix | `README.md` | Table: feature × (Linux/Windows/Web/Android) availability |
+| STAB-0574 | ✅ | P3 | Document platform feature matrix | `README.md` | Added a "Platform Support Matrix" section to `README.md` (between "Current Limitations" and "Reporting a Crash") — an 11-row table crossing Linux/Windows(MinGW)/Web(Emscripten)/Android against build status, app launch, 3D rendering, shaders, config persistence, SQLite/AI feature gating, file dialogs, path handling, static runtime linking, and CI — synthesizing everything actually confirmed across this session's S16 verification work (STAB-0551-0570), with explicit ✅/🟡/❌/❓ status per cell and honest caveats (e.g. Windows config-dir support is code-verified but not run against a working build, since MinGW itself is blocked). |
 | STAB-0575 | 📋 | P3 | Verify Windows: spaces in CMake binary dir work | `CMakeLists.txt` | Build from `C:\My Projects\MeshCraft\cmake-build-debug\` |
 
 ---

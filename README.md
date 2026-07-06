@@ -129,6 +129,28 @@ ctest -V --test-dir cmake-build-debug
 - Embedded glTF (`<mesh src="embed:id"/>`): parsed and serialized, but `GltfExporter` treats `embed:id` as a literal OBJ file path, which fails to parse — the export doesn't crash, but the node exports with no mesh (see `MC3_FORMAT.md`'s export support matrix)
 - N3–N7 scene data (scripts, sounds, music, triggers, scene states, meta): fully round-tripped (XML/MCB/XSD) but not executed at runtime — no Lua interpreter, no audio playback, no trigger-firing event system, no state-switching logic (data model first, by design at this stage — see `MC3_FORMAT.md`'s per-section status notes)
 
+## Platform Support Matrix
+
+Status as of the S16 (Cross-Platform Stability) stabilization pass.
+Legend: ✅ verified working &nbsp; 🟡 partially verified / known gap &nbsp;
+❌ not available on this platform &nbsp; ❓ not yet attempted (no toolchain
+available to test with).
+
+| Feature | Linux | Windows (MinGW) | Web (Emscripten) | Android |
+|---|---|---|---|---|
+| Full desktop/native build | ✅ | 🟡 builds to ~73% (328/449 objects), then fails on a CNA-side `GLES3/gl3.h` header gap — CNA configures `-DIMGUI_IMPL_OPENGL_ES3` unconditionally for the `EASYGL` backend regardless of target platform | ✅ 449/449, exit 0 | ❓ never attempted (no Android NDK installed here) |
+| App launches / runs | ✅ | ❌ (build doesn't complete) | 🟡 loads, initializes (`SDL_CreateWindow`, WebGL2 context), no crash — but renders a blank canvas, not yet visually usable | ❓ |
+| 3D viewport rendering | ✅ | ❌ (build doesn't complete) | ❌ blank canvas — root cause not yet diagnosed (needs frame-level GL diagnostics + a browser retest) | ❓ |
+| Shaders (GLSL ES 3.00 / WebGL2) | ✅ (desktop GL) | ❌ (build doesn't complete) | ✅ all 7 CNA EasyGL 3D shader programs are `#version 300 es` and compile/link cleanly | ❓ |
+| Config/prefs/recent-files/keybindings persistence | ✅ `~/.config/meshcraft` | ✅ `%APPDATA%\meshcraft` (code-verified; no working build to run it against yet) | ✅ IDBFS-mounted `$HOME/.config/meshcraft`, survives reload (code/build-verified; needs a live-browser round-trip to fully confirm) | ❓ (falls through to the same non-Windows `$HOME`-based logic as Linux; not verified on-device) |
+| SQLite Model Registry | ✅ (or gracefully stubbed if SQLite3 dev package absent) | 🟡 gracefully stubbed when SQLite3 absent (code-verified; no working build to run it against yet) | ❌ always stubbed (`MESHCRAFT_HAS_SQLITE3` never defined) | ❌ always stubbed (same guard as Web) |
+| AI Assistant (Claude API) | ✅ (or gracefully stubbed if OpenSSL absent) | 🟡 same as SQLite3 above | ❌ always stubbed (`MESHCRAFT_HAS_AI` never defined) | ❌ always stubbed (same guard as Web) |
+| File dialogs (text-path-field fallback) | ✅ | ✅ (no native OS dialog anywhere — plain `ImGui::InputText`, platform-agnostic by construction) | ✅ | ✅ |
+| Path handling (UTF-8, spaces, separators) | ✅ (round-trip tested) | ✅ (`std::filesystem::path` used consistently; not executable-tested on real Windows) | ✅ (`std::filesystem::path`; not executable-tested) | ✅ (same code path) |
+| Static runtime linking / DLL bundling | N/A | ✅ `-static-libgcc -static-libstdc++`, plus `SDL3`/`SDL3_image`/`SDL3_mixer`/`libwinpthread-1` DLLs copied next to the `.exe` (build-graph verified) | N/A (single `.wasm`, no separate runtime DLLs) | ❓ |
+| wasm exceptions / preloaded test assets | N/A | N/A | ✅ `-fwasm-exceptions` on compile+link; `--preload-file test@/test` packages all `test/` assets into `MeshCraft.data` | N/A |
+| CI | ❌ workflow exists but is parked at `.github_/workflows/ci.yml` (not `.github/`) pending git remote credentials with the right scope — not platform-specific, blocks all four | | | |
+
 ## Reporting a Crash
 
 MeshCraft has no built-in crash reporter — if it crashes, capture a
