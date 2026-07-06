@@ -873,7 +873,7 @@ _Generated: 2026-06-27 from full codebase + test audit. Replaces previous 100-ta
 | S1 Test infra | 40 | 40 | 0 | 0 | 0 | 0 |
 | S2 MC3 XML | 55 | 54 | 1 | 0 | 0 | 0 |
 | S3 MCB binary | 30 | 30 | 0 | 0 | 0 | 0 |
-| S4 glTF export | 50 | 21 | 0 | 16 | 13 | 0 |
+| S4 glTF export | 50 | 50 | 0 | 0 | 0 | 0 |
 | S5 CSG | 35 | 5 | 0 | 7 | 23 | 0 |
 | S6 Geometry | 25 | 7 | 0 | 5 | 13 | 0 |
 | S7 Save/load | 35 | 28 | 0 | 0 | 7 | 0 |
@@ -890,16 +890,16 @@ _Generated: 2026-06-27 from full codebase + test audit. Replaces previous 100-ta
 | S18 Code quality | 25 | 24 | 1 | 0 | 0 | 0 |
 | S19 Security | 15 | 15 | 0 | 0 | 0 | 0 |
 | S20 Release | 15 | 12 | 0 | 0 | 3 | 0 |
-| **TOTAL** | **651** | **467** | **21** | **36** | **127** | **0** |
+| **TOTAL** | **651** | **496** | **21** | **20** | **114** | **0** |
 
-_Recomputed directly from per-row status markers after S0/S1/S2/S3 fully
-closed (S1 100%, S3 100%, S0/S2 100% except one genuinely-blocked 🟡 row
-each — STAB-0012 blocked on a CNA-side MinGW gap, STAB-0092 a documented
-accepted limitation); derived, not hand-maintained — recompute the same way
-after any batch of status changes rather than incrementing by hand. Total
-row count is 651, not 650 (S14 has 31 rows, not 30 — an off-by-one in the
-section header's implied count, not a data error). Last recomputed
-2026-07-06 (after closing S3).
+_Recomputed directly from per-row status markers after S0/S1/S2/S3/S4 fully
+closed (S1/S3/S4 100%, S0/S2 100% except one genuinely-blocked 🟡 row each —
+STAB-0012 blocked on a CNA-side MinGW gap, STAB-0092 a documented accepted
+limitation); derived, not hand-maintained — recompute the same way after any
+batch of status changes rather than incrementing by hand. Total row count is
+651, not 650 (S14 has 31 rows, not 30 — an off-by-one in the section
+header's implied count, not a data error). Last recomputed 2026-07-06
+(after closing S4).
 
 ---
 
