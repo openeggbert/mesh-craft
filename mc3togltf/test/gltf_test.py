@@ -47,6 +47,8 @@ def test_basic(binary, house_xml):
     check(len(g.get("nodes", [])) > 0,                  "basic: nodes present")
     check(len(g.get("meshes", [])) > 0,                 "basic: meshes present")
     check(g.get("scene") == 0,                          "basic: scene==0 (default scene)")
+    check(len(g.get("scenes", [])) == 1,
+          f"basic: exactly 1 scene in scenes array, got {len(g.get('scenes', []))}")
     check("mc3_model" in g.get("asset", {}).get("extras", {}),
           "basic: asset.extras.mc3_model present")
 
