@@ -545,6 +545,32 @@ static void testSingleByteInput() {
 }
 
 // ---------------------------------------------------------------------------
+// STAB-0148 — UTF-8 strings survive MCB roundtrip
+// ---------------------------------------------------------------------------
+
+static void testUtf8StringRoundtrip() {
+    Mc3Document doc;
+    doc.model = "\xC5\xBDlu\xC5\xA5ou\xC4\x8Dk\xC3\xBD k\xC5\xAF\xC5\x88"; // "Žluťoučký kůň"
+
+    auto obj       = std::make_shared<Mc3Object>();
+    const std::string nonAsciiName = "Slon_\xC4\x8Dlov\xC4\x9Bk"; // "Slon_člověk"
+    const std::string emojiId      = "box_\xF0\x9F\x9A\x80";      // "box_🚀" (4-byte UTF-8 codepoint)
+    obj->id        = emojiId;
+    obj->name      = nonAsciiName;
+    obj->type      = ObjectType::Box;
+    obj->primitive = Mc3Primitive{};
+    doc.objects.push_back(obj);
+
+    auto rt = roundtrip(doc);
+    CHECK(rt.model == doc.model, "utf-8: multi-byte doc.model string survives MCB roundtrip");
+    CHECK(!rt.objects.empty(), "utf-8: object present after MCB roundtrip");
+    if (!rt.objects.empty()) {
+        CHECK(rt.objects[0]->name == nonAsciiName, "utf-8: 2-byte-codepoint object name preserved exactly");
+        CHECK(rt.objects[0]->id   == emojiId,      "utf-8: 4-byte-codepoint (emoji) object id preserved exactly");
+    }
+}
+
+// ---------------------------------------------------------------------------
 
 int main() {
     testSmoke();
@@ -566,6 +592,7 @@ int main() {
     testTruncatedFile();
     testAllZerosInput();
     testSingleByteInput();
+    testUtf8StringRoundtrip();
 
     if (failures == 0)
         std::cout << "All MCB roundtrip tests passed.\n";
