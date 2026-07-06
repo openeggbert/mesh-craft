@@ -436,6 +436,7 @@ static void writeAction(std::ostream& o, const Mc3::Mc3Action& act) {
     wIfStr (o, "name",     act.name,     "");
     wIfF32 (o, "duration", act.duration, def.duration);
     wIfBool(o, "loop",     act.loop,     def.loop);
+    wIfBool(o, "autoplay", act.autoplay, def.autoplay);
     if (!act.channels.empty()) {
         wKeyArr(o, "channels", static_cast<uint32_t>(act.channels.size()));
         for (const auto& ch : act.channels) { wU8(o, TAG_OBJ); writeChannel(o, ch); }

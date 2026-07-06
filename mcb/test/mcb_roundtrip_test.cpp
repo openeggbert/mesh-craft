@@ -1,6 +1,7 @@
 #include "MeshCraft/Mcb/McbReader.hpp"
 #include "MeshCraft/Mcb/McbWriter.hpp"
 #include "MeshCraft/Mcb/McbFormat.hpp"
+#include "MeshCraft/Mc3/Mc3Animation.hpp"
 #include "MeshCraft/Mc3/Mc3CsgOperation.hpp"
 #include "MeshCraft/Mc3/Mc3Deform.hpp"
 #include "MeshCraft/Mc3/Mc3Document.hpp"
@@ -17,6 +18,7 @@
 
 #include <cmath>
 #include <cstring>
+#include <filesystem>
 #include <iostream>
 #include <memory>
 #include <sstream>
@@ -649,6 +651,112 @@ static void testEndiannessLittleEndian() {
 }
 
 // ---------------------------------------------------------------------------
+// STAB-0137 — MCB writes all animation keyframes
+// ---------------------------------------------------------------------------
+
+static void testActionAnimationRoundtrip() {
+    Mc3Document doc;
+    Mc3Action action;
+    action.name     = "Walk";
+    action.duration = 2.5f;
+    action.loop     = true;
+    action.autoplay = true; // real bug found & fixed this task: MCB never wrote/read this field at all
+
+    Mc3Channel channel;
+    channel.targetObject = "hero";
+    channel.property     = AnimatedProperty::PositionY;
+    for (int i = 0; i < 10; ++i) {
+        const float t = static_cast<float>(i) * 0.25f;
+        const float v = static_cast<float>(i);
+        Mc3Keyframe kf;
+        if      (i % 3 == 0) kf = Mc3Keyframe::step(t, v);
+        else if (i % 3 == 1) kf = Mc3Keyframe::linear(t, v);
+        else                 kf = Mc3Keyframe::bezier(t, v, {-0.2f, 0.1f}, {0.3f, -0.15f});
+        channel.keyframes.push_back(kf);
+    }
+    action.channels.push_back(channel);
+    doc.actions["Walk"] = action;
+
+    auto rt = roundtrip(doc);
+    CHECK(rt.actions.count("Walk") == 1, "action: 'Walk' survives MCB roundtrip");
+    if (rt.actions.count("Walk") != 1) return;
+
+    const auto& ract = rt.actions.at("Walk");
+    CHECKF(ract.duration, action.duration, "action: duration survives");
+    CHECK(ract.loop     == action.loop,     "action: loop survives");
+    CHECK(ract.autoplay == action.autoplay, "action: autoplay survives (previously silently dropped by MCB)");
+    CHECK(ract.channels.size() == 1, "action: channel count survives");
+    if (ract.channels.empty()) return;
+
+    const auto& rch = ract.channels[0];
+    CHECK(rch.targetObject == channel.targetObject, "action: channel targetObject survives");
+    CHECK(rch.property     == channel.property,     "action: channel property survives");
+    CHECK(rch.keyframes.size() == channel.keyframes.size(), "action: all 10 keyframes survive (none dropped)");
+    for (size_t i = 0; i < rch.keyframes.size() && i < channel.keyframes.size(); ++i) {
+        const auto& orig = channel.keyframes[i];
+        const auto& got  = rch.keyframes[i];
+        const std::string tag = "keyframe[" + std::to_string(i) + "]";
+        CHECKF(got.time,          orig.time,          "action: " + tag + ".time survives");
+        CHECKF(got.value,         orig.value,         "action: " + tag + ".value survives");
+        CHECK(got.interpolation == orig.interpolation, "action: " + tag + ".interpolation survives");
+        if (orig.interpolation == Interpolation::CubicBezier) {
+            CHECKF(got.handleLeft.dt,  orig.handleLeft.dt,  "action: " + tag + ".handleLeft.dt survives");
+            CHECKF(got.handleLeft.dv,  orig.handleLeft.dv,  "action: " + tag + ".handleLeft.dv survives");
+            CHECKF(got.handleRight.dt, orig.handleRight.dt, "action: " + tag + ".handleRight.dt survives");
+            CHECKF(got.handleRight.dv, orig.handleRight.dv, "action: " + tag + ".handleRight.dv survives");
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// STAB-0138 — very large string values (>64KB) do not crash the writer
+// ---------------------------------------------------------------------------
+
+static void testLargeStringRoundtrip() {
+    Mc3Document doc;
+    std::string bigSource(100 * 1024, 'x'); // 100KB
+    // Sprinkle distinguishable content at the start/end so truncation would be detectable.
+    bigSource.replace(0, 6, "START:");
+    bigSource.replace(bigSource.size() - 4, 4, ":END");
+
+    Mc3Script script;
+    script.id     = "bigScript";
+    script.type   = "lua";
+    script.source = bigSource;
+    doc.scripts["bigScript"] = script;
+
+    auto rt = roundtrip(doc);
+    CHECK(rt.scripts.count("bigScript") == 1, "large-string: 100KB script survives MCB roundtrip");
+    if (rt.scripts.count("bigScript") != 1) return;
+    const auto& rs = rt.scripts.at("bigScript");
+    CHECK(rs.source.size() == bigSource.size(), "large-string: 100KB source length is not truncated");
+    CHECK(rs.source == bigSource, "large-string: 100KB source content is byte-identical (not just length)");
+}
+
+// ---------------------------------------------------------------------------
+// STAB-0139 — MCB binary file size vs. equivalent XML
+// ---------------------------------------------------------------------------
+
+static void testFileSizeSmallerThanXml() {
+    const auto xmlPath = std::filesystem::path(__FILE__).parent_path() / ".." / ".." / "test" / "house.mc3.xml";
+    std::error_code ec;
+    const auto xmlSize = std::filesystem::file_size(xmlPath, ec);
+    CHECK(!ec, "file-size: test/house.mc3.xml exists and is readable");
+    if (ec) return;
+
+    Mc3Document doc = Mc3Document::loadFromFile(xmlPath);
+    std::ostringstream out(std::ios::binary);
+    saveToBinary(doc, out);
+    const auto mcbSize = out.str().size();
+
+    std::cout << "INFO: house.mc3.xml = " << xmlSize << " bytes, house.mcb = " << mcbSize
+              << " bytes (" << (100.0 * static_cast<double>(mcbSize) / static_cast<double>(xmlSize))
+              << "% of XML size)\n";
+    CHECK(mcbSize < xmlSize,
+          "file-size: MCB encoding of house.mc3.xml is smaller than its XML source");
+}
+
+// ---------------------------------------------------------------------------
 
 int main() {
     testSmoke();
@@ -673,6 +781,9 @@ int main() {
     testUtf8StringRoundtrip();
     testWriterDeterminism();
     testEndiannessLittleEndian();
+    testActionAnimationRoundtrip();
+    testLargeStringRoundtrip();
+    testFileSizeSmallerThanXml();
 
     if (failures == 0)
         std::cout << "All MCB roundtrip tests passed.\n";
