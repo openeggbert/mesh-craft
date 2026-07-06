@@ -1,13 +1,25 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<!-- STAB-0205: Nested CSG — union inside difference.
-     Result: BoxBase minus (union of two spheres). -->
+<!-- STAB-0205/0206: 3-level nested CSG.
+     Level 1 (root): Difference — BoxBase minus HolePair (cutter).
+     Level 2: Union (HolePair) — HoleA union HoleBGroup.
+     Level 3: Union (HoleBGroup) — HoleB1 union HoleB2.
+     Real subtraction requires role="cutter" on the top-level cutter
+     child (HolePair); without it, Difference treats an un-flagged
+     child as part of the base (unioned in, not subtracted). A prior
+     version of this fixture omitted role="cutter" and silently tested
+     a union of BoxBase+HolePair collapsing to just BoxBase (36 verts,
+     no real cavity) instead of an actual difference. Fixed alongside
+     extending to 3 levels. -->
 <mc3 version="0.3" model="CsgNestedExport">
   <objects>
     <difference name="NestedCsg">
       <box  name="BoxBase" size="2 2 2"/>
-      <union name="HolePair">
+      <union name="HolePair" role="cutter">
         <sphere name="HoleA" radius="0.5" position="-0.5 0 0"/>
-        <sphere name="HoleB" radius="0.5" position=" 0.5 0 0"/>
+        <union name="HoleBGroup">
+          <sphere name="HoleB1" radius="0.3" position="0.5  0.2 0"/>
+          <sphere name="HoleB2" radius="0.3" position="0.5 -0.2 0"/>
+        </union>
       </union>
     </difference>
   </objects>

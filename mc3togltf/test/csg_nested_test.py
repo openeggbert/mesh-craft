@@ -1,5 +1,17 @@
 #!/usr/bin/env python3
-"""STAB-0205: Verify nested CSG (union inside difference) exports correctly."""
+"""
+STAB-0205/0206: Verify nested CSG exports correctly, 3 levels deep
+(Difference -> Union -> Union).
+
+A prior version of this test's fixture omitted role="cutter" on the
+top-level cutter child, so Difference silently treated it as a second
+*base* child (unioned in) instead of subtracting it -- since the cutter
+was fully inside the base box, the "union" degenerated to just the box
+alone (36 vertices) and this test's old assertions (vertex count > 0,
+index count > 0) passed anyway without ever proving a real cut happened.
+Fixed by adding role="cutter" and asserting a vertex count high enough
+that it could only come from a genuinely hollowed-out result.
+"""
 import json
 import os
 import subprocess
@@ -46,15 +58,26 @@ def test_nested_csg(mc3togltf, xml_path, tmpdir):
     vc = accessor_count(gltf, pos_idx)
     assert vc > 0, f"NestedCsg has 0 vertices after CSG eval"
 
+    # STAB-0206: prove a *real* 3-level cut happened, not a silent no-op.
+    # BoxBase alone is 12 triangles = 36 vertices; a genuinely hollowed-out
+    # box (3 cavities carved via a 3-level Difference->Union->Union cutter
+    # tree) must have far more geometry than that.
+    assert vc > 1000, (
+        f"NestedCsg has only {vc} vertices -- expected a real hollowed-out "
+        f"result (thousands of vertices from 3 carved cavities), not a "
+        f"near-bare box (36v would mean the cutter was silently ignored, "
+        f"e.g. a missing role=\"cutter\" flag)"
+    )
+
     idx_acc = prims[0].get("indices")
     assert idx_acc is not None, "NestedCsg primitive missing indices accessor"
     ic = accessor_count(gltf, idx_acc)
     assert ic > 0,      f"NestedCsg has 0 indices (zero triangles)"
     assert ic % 3 == 0, f"NestedCsg index count {ic} not a multiple of 3"
 
-    # All child nodes (BoxBase, HolePair, HoleA, HoleB) must be fully baked —
-    # they must NOT appear as separate glTF nodes.
-    baked_children = ["BoxBase", "HolePair", "HoleA", "HoleB"]
+    # All child nodes across all 3 levels must be fully baked — they must
+    # NOT appear as separate glTF nodes.
+    baked_children = ["BoxBase", "HolePair", "HoleA", "HoleBGroup", "HoleB1", "HoleB2"]
     for child in baked_children:
         assert child not in nmap, (
             f"Child '{child}' should be baked into NestedCsg, "
