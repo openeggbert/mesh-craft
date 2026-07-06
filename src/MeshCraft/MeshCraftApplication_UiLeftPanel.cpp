@@ -956,14 +956,21 @@ void MeshCraftApplication::drawLeftPanel(float panelY, float panelH)
                 // Roughness
                 ImGui::TextDisabled("Roughness");
                 ImGui::SetNextItemWidth(-1);
-                if (ImGui::SliderFloat("##matrgh", &mat.roughness, 0.0f, 1.0f, "%.2f")) {
+                // AlwaysClamp: without it, Ctrl+Click lets a typed value go
+                // out of [0,1], which would export a spec-invalid glTF
+                // pbrMetallicRoughness.roughnessFactor with no other guard.
+                if (ImGui::SliderFloat("##matrgh", &mat.roughness, 0.0f, 1.0f, "%.2f",
+                                       ImGuiSliderFlags_AlwaysClamp)) {
                     modified_ = true;
                 }
 
                 // Metallic
                 ImGui::TextDisabled("Metallic");
                 ImGui::SetNextItemWidth(-1);
-                if (ImGui::SliderFloat("##matmet", &mat.metallic, 0.0f, 1.0f, "%.2f")) {
+                // AlwaysClamp: same out-of-[0,1]-via-Ctrl+Click risk as
+                // roughness above (spec-invalid metallicFactor on export).
+                if (ImGui::SliderFloat("##matmet", &mat.metallic, 0.0f, 1.0f, "%.2f",
+                                       ImGuiSliderFlags_AlwaysClamp)) {
                     modified_ = true;
                 }
 
@@ -989,7 +996,10 @@ void MeshCraftApplication::drawLeftPanel(float panelY, float panelH)
                 if (alphaIdx == 1) {
                     ImGui::TextDisabled("Alpha Cutoff");
                     ImGui::SetNextItemWidth(-1);
-                    if (ImGui::SliderFloat("##matac", &mat.alphaCutoff, 0.0f, 1.0f, "%.2f"))
+                    // AlwaysClamp: same out-of-[0,1]-via-Ctrl+Click risk as
+                    // roughness/metallic above (spec-invalid alphaCutoff).
+                    if (ImGui::SliderFloat("##matac", &mat.alphaCutoff, 0.0f, 1.0f, "%.2f",
+                                           ImGuiSliderFlags_AlwaysClamp))
                         modified_ = true;
                 }
 

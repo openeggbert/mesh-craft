@@ -761,6 +761,15 @@ static void testAnimationEvaluate() {
     CHECKF(evaluateChannel(step, 0.49f), 1.0f, "eval step: just before 0.5");
     CHECKF(evaluateChannel(step, 0.5f),  0.0f, "eval step: t=0.5");
     CHECKF(evaluateChannel(step, 1.0f),  0.0f, "eval step: after end clamps");
+
+    // STAB-0316: an action with an empty channel (no keyframes at all) must
+    // not crash the timeline UI's evaluation path; evaluateChannel() returns
+    // a defined default (0.0f) rather than reading past an empty vector.
+    Mc3Channel empty;
+    empty.targetObject = "Obj3";
+    empty.property     = AnimatedProperty::PositionY;
+    CHECKF(evaluateChannel(empty, 0.0f), 0.0f, "eval empty channel: t=0 returns 0.0 (no crash)");
+    CHECKF(evaluateChannel(empty, 5.0f), 0.0f, "eval empty channel: arbitrary t returns 0.0 (no crash)");
 }
 
 // ---------------------------------------------------------------------------

@@ -1487,14 +1487,21 @@ void PropertiesPanel::draw(float panelX, float panelY, float panelW, float panel
                 // Roughness
                 ImGui::TextDisabled("Roughness");
                 ImGui::SetNextItemWidth(-1);
-                if (ImGui::SliderFloat("##mrough", &mat.roughness, 0.0f, 1.0f)) {
+                // AlwaysClamp: without it, Ctrl+Click lets a typed value go
+                // out of [0,1], which would export a spec-invalid glTF
+                // pbrMetallicRoughness.roughnessFactor with no other guard.
+                if (ImGui::SliderFloat("##mrough", &mat.roughness, 0.0f, 1.0f, "%.3f",
+                                       ImGuiSliderFlags_AlwaysClamp)) {
                     ctx.markModified();
                 }
 
                 // Metallic
                 ImGui::TextDisabled("Metallic");
                 ImGui::SetNextItemWidth(-1);
-                if (ImGui::SliderFloat("##mmetal", &mat.metallic, 0.0f, 1.0f)) {
+                // AlwaysClamp: same out-of-[0,1]-via-Ctrl+Click risk as
+                // roughness above (spec-invalid metallicFactor on export).
+                if (ImGui::SliderFloat("##mmetal", &mat.metallic, 0.0f, 1.0f, "%.3f",
+                                       ImGuiSliderFlags_AlwaysClamp)) {
                     ctx.markModified();
                 }
 
@@ -1520,7 +1527,10 @@ void PropertiesPanel::draw(float panelX, float panelY, float panelW, float panel
                 if (mat.alphaMode == "mask") {
                     ImGui::TextDisabled("Alpha Cutoff");
                     ImGui::SetNextItemWidth(-1);
-                    if (ImGui::SliderFloat("##mcut", &mat.alphaCutoff, 0.0f, 1.0f)) {
+                    // AlwaysClamp: same out-of-[0,1]-via-Ctrl+Click risk as
+                    // roughness/metallic above (spec-invalid alphaCutoff).
+                    if (ImGui::SliderFloat("##mcut", &mat.alphaCutoff, 0.0f, 1.0f, "%.3f",
+                                           ImGuiSliderFlags_AlwaysClamp)) {
                         ctx.markModified();
                     }
                 }

@@ -2050,7 +2050,11 @@ void MeshCraftApplication::drawPanelSplitters(int screenW, int screenH)
         ImGui::SetMouseCursor(ImGuiMouseCursor_ResizeEW);
     if (ImGui::IsItemActive()) {
         kLeftPanelW += static_cast<int>(ImGui::GetIO().MouseDelta.x);
-        kLeftPanelW  = std::clamp(kLeftPanelW, 80, screenW / 2 - 40);
+        // STAB-0309: std::clamp(v, lo, hi) is undefined behavior if lo > hi.
+        // screenW/2-40 drops below 80 once screenW < 240 -- no SDL window
+        // minimum size is set anywhere, so a user can genuinely shrink the OS
+        // window below that. Clamp the upper bound to never go below lo.
+        kLeftPanelW  = std::clamp(kLeftPanelW, 80, std::max(80, screenW / 2 - 40));
     }
 
     // Right panel splitter
@@ -2060,7 +2064,7 @@ void MeshCraftApplication::drawPanelSplitters(int screenW, int screenH)
         ImGui::SetMouseCursor(ImGuiMouseCursor_ResizeEW);
     if (ImGui::IsItemActive()) {
         kRightPanelW -= static_cast<int>(ImGui::GetIO().MouseDelta.x);
-        kRightPanelW  = std::clamp(kRightPanelW, 80, screenW / 2 - 40);
+        kRightPanelW  = std::clamp(kRightPanelW, 80, std::max(80, screenW / 2 - 40));
     }
 
     ImGui::End();

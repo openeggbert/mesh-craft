@@ -2254,6 +2254,42 @@ static void testKeybindingPersistenceRoundTrip()
     std::filesystem::remove(path, ec);
 }
 
+// STAB-0328: a corrupted/hand-edited keybindings.ini must not crash or throw
+// on load -- a line with no '=' is skipped entirely, and a line with an
+// unrecognized key name resolves to "no key bound" (0) rather than throwing,
+// since keyBindFromStringAlg() does no numeric parsing at all (pure string
+// comparisons against a fixed name table).
+static void testKeybindingsLoadSkipsGarbageLines()
+{
+    static int tmpIdx = 0;
+    auto path = std::filesystem::temp_directory_path() /
+                ("mc3_keybind_garbage_" + std::to_string(tmpIdx++) + ".ini");
+    {
+        std::ofstream f(path);
+        f << "this line has no equals sign at all\n";
+        f << "edit.undo=ctrl+totally_not_a_real_key_name\n";
+        f << "\n"; // blank line
+        f << "tool.move=S\n"; // well-formed, must still load correctly
+    }
+
+    std::map<std::string, KeyBindAlg> bindings;
+    bindings["edit.undo"] = {true, false, false, 99}; // pre-load sentinel
+
+    loadKeybindingsAlg(path, bindings); // must not throw/crash
+
+    CHECK(bindings.count("edit.undo") == 1,
+          "keybindings: a line with an unrecognized key name is loaded (not skipped), "
+          "resolving to key=0 rather than crashing");
+    CHECK(bindings["edit.undo"].ctrl && bindings["edit.undo"].key == 0,
+          "keybindings: unrecognized key name resolves to key=0 (no binding), modifiers still parse");
+    CHECK(bindings.count("tool.move") == 1 && bindings["tool.move"].key != 0,
+          "keybindings: a well-formed line later in the file still loads correctly "
+          "after garbage lines earlier");
+
+    std::error_code ec;
+    std::filesystem::remove(path, ec);
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Preferences persistence (STAB-0287)
 // ─────────────────────────────────────────────────────────────────────────────
@@ -3198,6 +3234,7 @@ int main()
     testUndoRedoRegistryInsert();
     testKeyBindStringFormat();
     testKeybindingPersistenceRoundTrip();
+    testKeybindingsLoadSkipsGarbageLines();
     testPrefsPersistenceRoundTrip();
     testPrefsLoadIgnoresMissingFile();
     testPrefsLoadSkipsMalformedLines();
