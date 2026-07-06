@@ -1,6 +1,6 @@
 # NEXT.md
 
-_Last updated: 2026-07-06, commit `252f266` (develop, in sync with `origin/develop`)_
+_Last updated: 2026-07-07, commit `865d015` (develop, in sync with `origin/develop`)_
 
 ---
 
@@ -47,7 +47,7 @@ separate implementations.
 ## 2. Current status
 
 ### Build
-**Debug**: 66/66 tests pass as of commit `252f266`. Working tree clean.
+**Debug**: 66/66 tests pass as of commit `865d015`. Working tree clean.
 Also did a **from-scratch Emscripten web build this session** (see §6) —
 succeeded cleanly, and was verified running in real headless Chrome
 (WebGL2 context creation confirmed, no errors). Release/standalone
@@ -107,6 +107,24 @@ closed section/batch.
    "651, S14 has 31 not 30" note in the old summary was describing this
    very duplicate, not a legitimate extra task).
 
+**After the 650-row plan hit 620/650, a fresh unscoped bug sweep** (see
+`plan.md`'s "Post-650 Follow-Up Findings" section) found and fixed 3 more
+real, empirically-reproduced bugs:
+10. **MCB stack-overflow crash on a crafted file** — `McbReader.cpp`'s
+    `readObject`/`skipValue` had no recursion-depth limit; a ~20,000-level
+    nested `<children>` chain (a few hundred KB) segfaulted the process
+    outright, not catchable via `std::exception`. Fixed with a
+    `RecursionGuard<256>` template, mirroring `CsgEvaluator.cpp`'s
+    `CSG_MAX_DEPTH` pattern.
+11. **MCB resource-exhaustion DoS** — `rRawStr()` allocated/zero-filled a
+    claimed string length *before* validating it against the stream; a
+    23-byte crafted file claiming a ~4GB string forced ~4.1GB committed
+    memory + 1.66s CPU. Fixed with a 64MB sanity ceiling before allocation.
+12. **`ModelRegistry.cpp` temp-file leak** — `insertIntoScene()`/
+    `entryFromDefinition()` had the same unguarded-cleanup-on-exception
+    bug already fixed elsewhere this session (STAB-0392), just never
+    propagated here. Fixed with the same try/catch pattern.
+
 ### Real, confirmed-but-unfixed gaps (flagged 🟡 in plan.md — 29 total)
 Grouped by recurring cause (see the memory file `project_meshcraft_
 stabilization.md` for the full breakdown):
@@ -165,7 +183,7 @@ for every `STAB-XXXX` ID.
 ## 4. Current blocker / main problem
 
 **No blocker to local development or testing on Linux** — 66/66 tests
-pass as of `252f266`. The only remaining plan.md item (STAB-0650) is
+pass as of `865d015`. The only remaining plan.md item (STAB-0650) is
 blocked on the repo owner rotating a PAT for the parked-deactivated CI
 workflow — nothing to do here without that action. MinGW cross-compile
 is blocked on a CNA-side GLES3-header gap (out of scope, needs the CNA
@@ -346,7 +364,7 @@ re-reading that row's own reasoning in plan.md first (most need a live
 human with a display, or are deliberate product decisions needing scope
 discussion, not code-only fixes) — see NEXT.md §8 for detail.
 
-Current branch: develop, in sync with origin/develop at commit 252f266.
+Current branch: develop, in sync with origin/develop at commit 865d015.
 Build dir: cmake-build-debug/ (Debug, CLion cmake) — last full rebuild +
 66/66 ctest was clean at this commit, working tree clean.
 
