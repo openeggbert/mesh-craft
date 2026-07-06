@@ -1228,6 +1228,80 @@ static void testIncludeNonexistentFileClearError() {
           "nonexistent include: error message names the missing file");
 }
 
+// STAB-0109: malformed XML (e.g. an unclosed tag) must fail cleanly via
+// Mc3XmlParser::parse()'s existing tinyxml2-error check
+// (`throw std::runtime_error("Failed to load XML: <path>: <tinyxml2 error>")`),
+// not crash or hang.
+static void testMalformedXmlParseErrorIsClean() {
+    auto xmlPath = tmpPath();
+    {
+        std::ofstream f(xmlPath);
+        f << R"(<?xml version="1.0" encoding="UTF-8"?>)" "\n"
+          << R"(<mc3 version="0.3">)" "\n"
+          << R"(  <objects>)" "\n"
+          << R"(    <box name="Unclosed")" "\n"  // missing closing '>' / '/>'
+          << R"(  </objects>)" "\n"
+          << R"(</mc3>)" "\n";
+    }
+    bool threw = false;
+    std::string message;
+    try {
+        Mc3Document::loadFromFile(xmlPath);
+    } catch (const std::exception& e) {
+        threw = true;
+        message = e.what();
+    }
+    std::filesystem::remove(xmlPath);
+
+    CHECK(threw, "malformed xml: throws cleanly (not a crash/hang)");
+    CHECK(!message.empty(), "malformed xml: exception message is non-empty");
+}
+
+// STAB-0111: the writer emits the document's own `version` attribute back
+// verbatim (Mc3XmlWriter.cpp: `root->SetAttribute("version", doc.version...)`),
+// not a hardcoded constant.
+static void testWriterEmitsVersionCorrectly() {
+    Mc3Document doc;
+    doc.version = "0.3";
+    auto obj = std::make_shared<Mc3Object>();
+    obj->id = "b1"; obj->type = ObjectType::Box; obj->primitive = Mc3Primitive{};
+    doc.objects.push_back(obj);
+
+    auto p = tmpPath();
+    doc.saveToFile(p);
+    std::ifstream f(p);
+    std::string text((std::istreambuf_iterator<char>(f)), {});
+
+    CHECK(text.find(R"(version="0.3")") != std::string::npos,
+          "writer version: saved file's <mc3> root has version=\"0.3\"");
+
+    auto rt = Mc3Document::loadFromFile(p);
+    std::filesystem::remove(p);
+    CHECK(rt.version == "0.3", "writer version: roundtrips back as \"0.3\"");
+}
+
+// STAB-0114: the writer preserves the insertion order of doc.objects (a
+// plain std::vector) in the output XML — objects are not reordered by id,
+// name, or type.
+static void testWriterPreservesObjectInsertionOrder() {
+    Mc3Document doc;
+    for (const char* name : {"Zebra", "Apple", "Mango", "Banana"}) {
+        auto obj = std::make_shared<Mc3Object>();
+        obj->id = name; obj->name = name; obj->type = ObjectType::Box;
+        obj->primitive = Mc3Primitive{};
+        doc.objects.push_back(obj);
+    }
+
+    auto rt = roundtrip(doc);
+    CHECK(rt.objects.size() == 4, "insertion order: all 4 objects present");
+    if (rt.objects.size() == 4) {
+        CHECK(rt.objects[0]->name == "Zebra",  "insertion order: [0]==Zebra (not alphabetical)");
+        CHECK(rt.objects[1]->name == "Apple",  "insertion order: [1]==Apple");
+        CHECK(rt.objects[2]->name == "Mango",  "insertion order: [2]==Mango");
+        CHECK(rt.objects[3]->name == "Banana", "insertion order: [3]==Banana");
+    }
+}
+
 // ---------------------------------------------------------------------------
 
 static void testFeaturesXmlLoads(const std::string& path) {
@@ -1699,6 +1773,54 @@ static void testSceneState() {
         CHECK(rt.triggers.count("toggle")    == 1, "state+trig+snd: trigger");
         CHECK(rt.sceneStates.count("active") == 1, "state+trig+snd: state");
     }
+    // STAB-0105: all four override fields set together on one override —
+    // confirms setting one field doesn't clobber the others in the same
+    // <object-override> element.
+    {
+        Mc3Document doc;
+        Mc3SceneState st; st.name = "everything";
+        Mc3ObjectOverride ovr;
+        ovr.id       = "prop";
+        ovr.visible  = false;
+        ovr.position = std::array<float,3>{1.0f, 2.0f, 3.0f};
+        ovr.rotation = std::array<float,3>{0.0f, 90.0f, 0.0f};
+        ovr.material = "rusty";
+        st.overrides.push_back(ovr);
+        doc.addSceneState(st);
+
+        auto rt = roundtrip(doc);
+        CHECK(rt.sceneStates.count("everything") == 1, "state all-fields: present");
+        if (rt.sceneStates.count("everything") && !rt.sceneStates["everything"].overrides.empty()) {
+            const auto& o = rt.sceneStates["everything"].overrides[0];
+            CHECK(o.visible.has_value() && *o.visible == false,        "state all-fields: visible survives");
+            CHECK(o.position.has_value(),                              "state all-fields: position survives");
+            CHECK(o.rotation.has_value(),                              "state all-fields: rotation survives");
+            CHECK(o.material.has_value() && *o.material == "rusty",    "state all-fields: material survives");
+            if (o.position) CHECKF((*o.position)[0], 1.0f, "state all-fields: position.x");
+            if (o.rotation) CHECKF((*o.rotation)[1], 90.0f, "state all-fields: rotation.y");
+        }
+    }
+    // STAB-0106: an override with only `visible` set must not write
+    // position/rotation/material attributes at all (genuinely absent from
+    // the XML text, not just unset after reload).
+    {
+        Mc3Document doc;
+        Mc3SceneState st; st.name = "onlyvisible";
+        Mc3ObjectOverride ovr; ovr.id = "prop2"; ovr.visible = true;
+        st.overrides.push_back(ovr);
+        doc.addSceneState(st);
+
+        auto p = tmpPath();
+        doc.saveToFile(p);
+        std::ifstream f(p);
+        std::string text((std::istreambuf_iterator<char>(f)), {});
+        std::filesystem::remove(p);
+
+        CHECK(text.find("position") == std::string::npos, "state only-visible: no position attribute written");
+        CHECK(text.find("rotation") == std::string::npos, "state only-visible: no rotation attribute written");
+        CHECK(text.find("material") == std::string::npos, "state only-visible: no material attribute written");
+        CHECK(text.find("visible") != std::string::npos,  "state only-visible: visible attribute IS written");
+    }
 }
 
 static void testTrigger() {
@@ -1862,6 +1984,24 @@ static void testSoundMusic() {
         CHECK(rt.scripts.count("on_start") == 1, "sound+music+script: script preserved");
         CHECK(rt.sounds.count("click")     == 1, "sound+music+script: sound preserved");
         CHECK(rt.musicTracks.count("bg")   == 1, "sound+music+script: music preserved");
+    }
+    // STAB-0099/0101: the *default* loop value for each type must be
+    // genuinely omitted from the written XML text (not just round-trip to
+    // the same value, which a test only checking the loaded value back
+    // wouldn't distinguish from "always explicitly written").
+    {
+        Mc3Document doc;
+        doc.addSound(Mc3Sound{"click", "click.wav", false});  // false is sound's default
+        doc.addMusic(Mc3Music{"bg",    "bg.ogg",    true});   // true is music's default
+        auto p = tmpPath();
+        doc.saveToFile(p);
+        std::ifstream f(p);
+        std::string text((std::istreambuf_iterator<char>(f)), {});
+        std::filesystem::remove(p);
+
+        CHECK(text.find("loop") == std::string::npos,
+              "sound/music defaults: loop attribute genuinely omitted from XML text, not just "
+              "round-tripping to the same value");
     }
 }
 
@@ -2688,6 +2828,9 @@ int main(int argc, char* argv[]) {
     testIncludedSvgTextureNotDuplicatedOnSave();
     testIncludePathWithSpaces();
     testIncludeNonexistentFileClearError();
+    testMalformedXmlParseErrorIsClean();
+    testWriterEmitsVersionCorrectly();
+    testWriterPreservesObjectInsertionOrder();
     testUtf8FilenameRoundtrip();
     testPathWithSpacesRoundtrip();
     testNonAsciiObjectNameRoundtrip();
