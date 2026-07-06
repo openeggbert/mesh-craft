@@ -41,6 +41,14 @@ def check_csg_result(gltf, root_name, expected_child_names=()):
     vc = accs[pos_acc_idx].get("count", 0) if 0 <= pos_acc_idx < len(accs) else 0
     assert vc > 0, f"CSG root '{root_name}' has 0 vertices"
 
+    # STAB-0221: the boolean result must have real triangles, not just
+    # vertices with no indices accessor (or a zero-length one).
+    idx_acc_idx = prims[0].get("indices")
+    assert idx_acc_idx is not None, f"CSG root '{root_name}' primitive has no indices accessor"
+    ic = accs[idx_acc_idx].get("count", 0) if 0 <= idx_acc_idx < len(accs) else 0
+    assert ic > 0, f"CSG root '{root_name}' indices accessor has 0 entries (zero triangles)"
+    assert ic % 3 == 0, f"CSG root '{root_name}' index count {ic} is not a multiple of 3"
+
     # Child nodes must NOT appear anywhere in the glTF node list —
     # they are fully baked into the CSG boolean mesh.
     all_node_names = {n.get("name", "") for n in gltf.get("nodes", [])}

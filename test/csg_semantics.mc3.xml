@@ -1,0 +1,82 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  S5 CSG semantics fixtures (STAB-0207/0208/0209/0212/0219/0227/0228/0234).
+
+  WithCutter / WithoutCutter: same two children (Block box + Cavity
+  sphere), differing only in role="cutter" on the sphere; proves
+  isCutter genuinely changes the boolean result (subtract vs. union),
+  not just that some geometry comes out.
+
+  OffsetCutterDiff: cutter child has a non-zero position; proves the
+  child's local transform is composed into world space before the
+  boolean op (an un-translated cutter would produce a symmetric result).
+
+  EmptyIntersection: two non-overlapping boxes; boolean op must produce
+  a genuinely empty volume (no geometry), not a crash.
+
+  FullHoleDiff: a cutter that fully engulfs the base; same empty-result
+  policy should apply.
+
+  MaterialOnCsgNode: material set on the union element itself (not on
+  either child) must apply to the merged boolean-result mesh.
+
+  IdenticalSphereIntersection: intersection of two identical spheres
+  should return roughly the same sphere back (not empty, not wildly
+  larger).
+-->
+<mc3 version="0.3" model="CsgSemantics">
+
+  <materials>
+    <material id="cutmat"><base_color>0.2 0.8 0.2 1.0</base_color></material>
+  </materials>
+
+  <objects>
+
+    <difference name="WithCutter">
+      <box    name="Block1"  size="1.5 1.5 1.5"/>
+      <sphere name="Cavity1" radius="0.6" role="cutter"/>
+    </difference>
+
+    <difference name="WithoutCutter" position="4 0 0">
+      <box    name="Block2"  size="1.5 1.5 1.5"/>
+      <sphere name="Cavity2" radius="0.6"/>
+    </difference>
+
+    <difference name="OffsetCutterDiff" position="8 0 0">
+      <box    name="Block3"  size="2 2 2"/>
+      <sphere name="Cavity3" radius="0.7" position="0.8 0 0" role="cutter"/>
+    </difference>
+
+    <!-- Same box+sphere as OffsetCutterDiff but with the cutter centered
+         (no position offset). If the exporter ignored the cutter
+         child's own local transform, this and OffsetCutterDiff would be
+         indistinguishable; they must differ since one cavity pokes
+         through the box's +X face and the other is fully enclosed. -->
+    <difference name="CenteredCutterDiff" position="12 0 0">
+      <box    name="Block4"  size="2 2 2"/>
+      <sphere name="Cavity4" radius="0.7" role="cutter"/>
+    </difference>
+
+    <intersection name="EmptyIntersection" position="-4 0 0">
+      <box name="Left"  size="1 1 1" position="-5 0 0"/>
+      <box name="Right" size="1 1 1" position=" 5 0 0"/>
+    </intersection>
+
+    <difference name="FullHoleDiff" position="-8 0 0">
+      <box    name="SmallBase"  size="1 1 1"/>
+      <sphere name="BigCutter"  radius="5" role="cutter"/>
+    </difference>
+
+    <union name="MaterialOnCsgNode" position="0 4 0" material="cutmat">
+      <box    name="MatBox"    size="1 1 1"/>
+      <sphere name="MatSphere" radius="0.6" position="0.5 0 0"/>
+    </union>
+
+    <intersection name="IdenticalSphereIntersection" position="4 4 0">
+      <sphere name="SphereA" radius="0.7"/>
+      <sphere name="SphereB" radius="0.7"/>
+    </intersection>
+
+  </objects>
+
+</mc3>
