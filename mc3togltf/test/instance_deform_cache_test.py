@@ -98,4 +98,25 @@ if __name__ == "__main__":
         )
         print(f"Unique mesh count: {len(meshes)} — PASS")
 
+        # STAB-0254: BlockA/BlockB share a mesh (checked above) but sit at
+        # different positions -- each node's own translation must still be
+        # correct, proving the geometry cache never leaks a shared mesh's
+        # transform onto sibling nodes (transform lives on the node, the
+        # cache only ever holds a mesh index).
+        EXPECTED_TRANSLATION = {
+            "BlockA": None,              # (0,0,0) is the default -- correctly omitted
+            "BlockB": [3.0, 0.0, 0.0],
+            "WideBlockA": [0.0, 0.0, 3.0],
+            "WideBlockB": [3.0, 0.0, 3.0],
+            "TallBlock": [0.0, 0.0, 6.0],
+        }
+        for name, expected in EXPECTED_TRANSLATION.items():
+            actual = nmap[name].get("translation")
+            assert actual == expected, (
+                f"STAB-0254: '{name}'.translation: expected {expected}, got {actual} "
+                f"(mesh-cache transform leak?)"
+            )
+        print("STAB-0254: each node's own translation is correct despite mesh "
+              "sharing (no cache transform leak) — PASS")
+
     print("\nAll instance-deform cache tests: PASS")

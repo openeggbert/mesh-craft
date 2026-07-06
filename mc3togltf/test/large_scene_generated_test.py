@@ -34,6 +34,11 @@ def generate_xml():
     lines = [
         '<?xml version="1.0" encoding="UTF-8"?>',
         '<mc3 version="0.3" model="GeneratedLargeScene">',
+        '  <materials>',
+        '    <material id="matInstances"><base_color>0.9 0.2 0.2 1.0</base_color></material>',
+        '    <material id="matSpheres"><base_color>0.2 0.9 0.2 1.0</base_color></material>',
+        '    <material id="matBoxes"><base_color>0.2 0.2 0.9 1.0</base_color></material>',
+        '  </materials>',
         '  <definitions>',
         '    <definition id="unit_box">',
         '      <box name="UnitBox" size="1 1 1"/>',
@@ -41,19 +46,24 @@ def generate_xml():
         '  </definitions>',
         '  <objects>',
     ]
+    # STAB-0260: every object in a given group shares that group's single
+    # material (so mesh-sharing within the group is unaffected -- the
+    # geometry cache key folds in matIdx), but 3 distinct materials are used
+    # in total across the whole scene, must reuse (not duplicate) glTF
+    # materials.
     for i in range(N_INSTANCES):
         lines.append(
-            f'    <instance name="Inst_{i:04d}" definition="unit_box"'
+            f'    <instance name="Inst_{i:04d}" definition="unit_box" material="matInstances"'
             f' position="{i * 1.5:.1f} 0 0"/>'
         )
     for i in range(N_SPHERES):
         lines.append(
-            f'    <sphere name="Sph_{i:04d}" radius="0.5" segments="8"'
+            f'    <sphere name="Sph_{i:04d}" radius="0.5" segments="8" material="matSpheres"'
             f' position="{i * 1.5:.1f} 5 0"/>'
         )
     for i in range(N_BOXES):
         lines.append(
-            f'    <box name="BigBox_{i:04d}" size="2 2 2"'
+            f'    <box name="BigBox_{i:04d}" size="2 2 2" material="matBoxes"'
             f' position="{i * 2.5:.1f} 0 10"/>'
         )
     lines += ['  </objects>', '</mc3>']
@@ -156,5 +166,40 @@ if __name__ == "__main__":
             f"got {len(box_meshes)} distinct mesh indices: {box_meshes}"
         )
         print(f"All {N_BOXES} big boxes share mesh {box_meshes.pop()} — PASS")
+
+        # ----------------------------------------------------------------
+        # STAB-0260: 3 distinct materials used across the scene must
+        # produce exactly 3 glTF materials (reused, not duplicated per
+        # object), and each group's nodes must all reference the SAME
+        # material index as each other.
+        # ----------------------------------------------------------------
+        materials = gltf.get("materials", [])
+        assert len(materials) == 3, (
+            f"Expected exactly 3 glTF materials (matInstances/matSpheres/matBoxes) "
+            f"shared across {total} objects, got {len(materials)}"
+        )
+
+        def material_indices(prefix, count):
+            idxs = set()
+            for i in range(count):
+                node = nmap[f"{prefix}_{i:04d}"]
+                mesh_idx = node.get("mesh")
+                prim = gltf["meshes"][mesh_idx]["primitives"][0]
+                idxs.add(prim.get("material"))
+            return idxs
+
+        inst_mats = material_indices("Inst", N_INSTANCES)
+        sph_mats  = material_indices("Sph",  N_SPHERES)
+        box_mats  = material_indices("BigBox", N_BOXES)
+
+        assert len(inst_mats) == 1, f"All instances should share 1 material index, got {inst_mats}"
+        assert len(sph_mats)  == 1, f"All spheres should share 1 material index, got {sph_mats}"
+        assert len(box_mats)  == 1, f"All big boxes should share 1 material index, got {box_mats}"
+        assert inst_mats != sph_mats != box_mats and inst_mats != box_mats, (
+            f"Expected 3 distinct material indices across groups, got "
+            f"instances={inst_mats}, spheres={sph_mats}, boxes={box_mats}"
+        )
+        print(f"STAB-0260: {total} objects reuse exactly 3 glTF materials "
+              f"(instances={inst_mats}, spheres={sph_mats}, boxes={box_mats}) — PASS")
 
     print(f"\nGenerated large-scene reuse test ({total} objects): PASS")

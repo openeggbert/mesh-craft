@@ -92,7 +92,27 @@ static std::string buildDefCacheKey(const std::string& defId, int matIdx,
 // Uses max_digits10 float precision so close-but-distinct float values produce
 // distinct keys and do not incorrectly share the same glTF mesh.
 // Includes deform (which modifies vertex positions) and material (baked into
-// the glTF primitive).  Does NOT include node-level transform (handled as TRS).
+// the glTF primitive).  Does NOT include node-level transform (handled as TRS,
+// so e.g. two boxes at different positions correctly share one mesh — STAB-0254).
+//
+// STAB-0255: fields folded into the key, by ObjectType (see buildGeomCacheKey()
+// body below for the exact serialization):
+//   type tag (int, always first) --------------- obj.type
+//   Mesh ----------------------------------------- obj.meshSource (the OBJ path)
+//   any primitive type (Box/Sphere/Cylinder/…) --- primitiveType, size, radius,
+//                                                   height, segments, axis,
+//                                                   majorRadius, minorRadius,
+//                                                   subdivisionsX, subdivisionsZ
+//   Extrude ---------------------------------------- crossSection (type, width,
+//                                                   height, radius, innerRadius,
+//                                                   sides, segments, customPoints),
+//                                                   path (type, length, axis,
+//                                                   arcRadius, arcAngle,
+//                                                   helixRadius/Height/Turns,
+//                                                   points), twist, segments,
+//                                                   smooth, caps
+//   (any type, if present) ------------------------- deform.scale
+//   (always last) ----------------------------------- effective material index
 // ---------------------------------------------------------------------------
 
 static std::string buildGeomCacheKey(const Mc3Object& obj, int matIdx) {

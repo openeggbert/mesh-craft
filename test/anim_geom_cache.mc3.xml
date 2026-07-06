@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- STAB-0256: two identical boxes (same size, so they share one glTF mesh
+     via the geometry cache) where only one of them is animated. Confirms
+     the animation channel (keyed by node name) doesn't interfere with, or
+     get confused by, the geometry cache (keyed by shape parameters).
+     Node identity and mesh identity are independent axes. -->
+<mc3 version="0.3" model="AnimGeomCacheTest">
+  <objects>
+    <box name="BoxStatic"   size="1 1 1" position="-2 0 0"/>
+    <box name="BoxAnimated" size="1 1 1" position=" 2 0 0"/>
+  </objects>
+
+  <actions>
+    <action name="Bounce" duration="2.0" loop="true">
+      <channel target="BoxAnimated" property="position.y">
+        <keyframe time="0.0" value="0.0" interp="linear"/>
+        <keyframe time="1.0" value="3.0" interp="linear"/>
+        <keyframe time="2.0" value="0.0" interp="linear"/>
+      </channel>
+    </action>
+  </actions>
+</mc3>
