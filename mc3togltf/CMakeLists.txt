@@ -128,6 +128,7 @@ if(BUILD_TESTING)
         set(_obj_robustness_xml       "${CMAKE_CURRENT_SOURCE_DIR}/../test/obj_robustness.mc3.xml")
         set(_texture_sampler_xml      "${CMAKE_CURRENT_SOURCE_DIR}/../test/texture_sampler.mc3.xml")
         set(_material_pbr_xml         "${CMAKE_CURRENT_SOURCE_DIR}/../test/material_pbr.mc3.xml")
+        set(_node_transform_xml       "${CMAKE_CURRENT_SOURCE_DIR}/../test/node_transform.mc3.xml")
         set(_svg_material_xml         "${CMAKE_CURRENT_SOURCE_DIR}/../test/svg_material.mc3.xml")
         set(_anim_unsupported_xml     "${CMAKE_CURRENT_SOURCE_DIR}/../test/animation_unsupported.mc3.xml")
         set(_instance_variant_xml     "${CMAKE_CURRENT_SOURCE_DIR}/../test/instance_variant.mc3.xml")
@@ -267,6 +268,16 @@ if(BUILD_TESTING)
                         "${_material_pbr_xml}"
             )
             set_tests_properties(mc3togltf_material_pbr PROPERTIES TIMEOUT 30 LABELS "export")
+        endif()
+        if(EXISTS "${_node_transform_xml}")
+            add_test(
+                NAME mc3togltf_node_transform
+                COMMAND "${PYTHON3_EXEC}"
+                        "${CMAKE_CURRENT_SOURCE_DIR}/test/node_transform_test.py"
+                        "$<TARGET_FILE:mc3togltf>"
+                        "${_node_transform_xml}"
+            )
+            set_tests_properties(mc3togltf_node_transform PROPERTIES TIMEOUT 30 LABELS "export")
         endif()
         if(EXISTS "${_glb_texture_embed_xml}")
             add_test(

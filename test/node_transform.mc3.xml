@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<mc3 version="0.3" model="NodeTransformTest">
+
+  <objects>
+    <box name="Translated" size="1 1 1" position="1 2 3"/>
+    <box name="Rotated"    size="1 1 1" rotation="0 90 0"/>
+    <box name="Scaled"     size="1 1 1" scale="2 2 2"/>
+    <box name="Identity"   size="1 1 1"/>
+  </objects>
+
+</mc3>
