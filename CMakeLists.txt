@@ -457,15 +457,27 @@ if(MESH_CRAFT_BUILD_TESTING AND UNIX AND NOT ANDROID AND NOT EMSCRIPTEN)
 
     find_program(PYTHON3_EXEC python3)
     if(PYTHON3_EXEC)
-        file(GLOB _mc3_xml_files "${CMAKE_CURRENT_SOURCE_DIR}/test/*.mc3.xml")
-        add_test(
-            NAME xsd_validation
-            COMMAND "${PYTHON3_EXEC}"
-                    "${CMAKE_CURRENT_SOURCE_DIR}/test/validate_xsd.py"
-                    "${CMAKE_CURRENT_SOURCE_DIR}/mc3/mc3.xsd"
-                    ${_mc3_xml_files}
+        execute_process(
+            COMMAND "${PYTHON3_EXEC}" -c "import lxml"
+            RESULT_VARIABLE _lxml_check_result
+            ERROR_QUIET
         )
-        set_tests_properties(xsd_validation PROPERTIES TIMEOUT 30)
+        if(NOT _lxml_check_result EQUAL 0)
+            message(WARNING
+                "xsd_validation test skipped: Python module 'lxml' not found. "
+                "Install it with 'pip install lxml' or 'apt install python3-lxml' "
+                "to enable mc3.xsd validation of test/*.mc3.xml.")
+        else()
+            file(GLOB _mc3_xml_files "${CMAKE_CURRENT_SOURCE_DIR}/test/*.mc3.xml")
+            add_test(
+                NAME xsd_validation
+                COMMAND "${PYTHON3_EXEC}"
+                        "${CMAKE_CURRENT_SOURCE_DIR}/test/validate_xsd.py"
+                        "${CMAKE_CURRENT_SOURCE_DIR}/mc3/mc3.xsd"
+                        ${_mc3_xml_files}
+            )
+            set_tests_properties(xsd_validation PROPERTIES TIMEOUT 30)
+        endif()
 
         # STAB-0511: fog is a document-level <environment><fog> setting, applied
         # unconditionally (unlike the bloom/SSAO/wireframe UI toggles) — verify
