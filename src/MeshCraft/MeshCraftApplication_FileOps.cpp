@@ -28,7 +28,13 @@ void MeshCraftApplication::newScene() {
     currentActionName_.clear();
     animTime_    = 0.0f;
     animPlaying_ = false;
-    if (sceneRenderer_) sceneRenderer_->setAnimOverrides({});
+    if (sceneRenderer_) {
+        sceneRenderer_->setAnimOverrides({});
+        // STAB-0250: without this, a stale CSG preview cache entry from the
+        // previous document could collide (same content hash) with a CSG
+        // node in the new scene and show the wrong cached geometry.
+        sceneRenderer_->clearCsgCache();
+    }
     std::cout << "[MeshCraft] New scene\n";
     updateWindowTitle();
 }

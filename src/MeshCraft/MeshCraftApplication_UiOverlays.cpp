@@ -1132,6 +1132,11 @@ void MeshCraftApplication::drawDialogs()
                 addRecentFile(currentFile_);
                 selection_.clear();
                 undoStack_.clear(); redoStack_.clear();
+                // STAB-0250: same rationale as the "Open Recent File" path —
+                // without this, a stale CSG preview cache entry from the
+                // previous document could collide (same content hash) with a
+                // CSG node in the newly-loaded scene and show wrong geometry.
+                if (sceneRenderer_) sceneRenderer_->clearCsgCache();
                 modified_ = false;
                 openDialogErr_[0] = '\0';
                 std::cout << "[MeshCraft] Loaded: " << openDialogBuf_ << "\n";

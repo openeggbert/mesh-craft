@@ -2869,6 +2869,47 @@ static void testCsgSubtreeHashChangesOnParentTransform()
           "changes the final cache key even though the subtree's own content hash is unchanged");
 }
 
+static void testCsgSubtreeHashIsContentBasedNotPointerBased()
+{
+    // STAB-0249: undo/redo restores a document via whole-document snapshot
+    // copies — the restored CSG object is a genuinely different C++ object
+    // at a different memory address than the one that existed before the
+    // undo. If csgSubtreeHashAlg() hashed the object's *address* (or any
+    // pointer-derived value), every undo/redo would be a guaranteed cache
+    // miss even when the content is identical. Build two separate Mc3Object
+    // instances (deliberately different addresses, mimicking pre-undo vs.
+    // post-undo) with identical content and confirm they hash identically.
+    Mc3Document doc;
+
+    auto buildEquivalentCsgNode = []() {
+        auto node = std::make_shared<Mc3Object>();
+        node->id = "csg1"; node->type = ObjectType::Difference;
+        auto base = std::make_shared<Mc3Object>();
+        base->id = "base"; base->type = ObjectType::Box; base->primitive = Mc3Primitive{};
+        auto cutter = std::make_shared<Mc3Object>();
+        cutter->id = "cutter"; cutter->type = ObjectType::Sphere;
+        cutter->primitive = Mc3Primitive{}; cutter->primitive->radius = 0.4f;
+        cutter->isCutter = true;
+        node->children.push_back(base);
+        node->children.push_back(cutter);
+        return node;
+    };
+
+    auto preUndoNode  = buildEquivalentCsgNode();
+    auto postUndoNode = buildEquivalentCsgNode(); // distinct shared_ptr, distinct address
+
+    CHECK(preUndoNode.get() != postUndoNode.get(),
+          "csg hash pointer-independence: sanity check that the two test objects are "
+          "genuinely different instances (different addresses), not the same object reused");
+
+    auto hPre  = csgSubtreeHashAlg(*preUndoNode, doc);
+    auto hPost = csgSubtreeHashAlg(*postUndoNode, doc);
+    CHECK(hPre == hPost,
+          "csg hash: two distinct Mc3Object instances (different memory addresses) with "
+          "identical content hash identically — the cache key is content-based, not "
+          "pointer-based, so undo/redo to an unchanged CSG subtree is a real cache hit");
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // STAB-0217/0218: investigated, no new headless test added — findings below.
 //
@@ -2986,6 +3027,7 @@ int main()
     testCameraPresets();
     testCsgSubtreeHashChangesOnChildMove();
     testCsgSubtreeHashChangesOnParentTransform();
+    testCsgSubtreeHashIsContentBasedNotPointerBased();
 
     std::cout << "\n";
     if (failures == 0)
