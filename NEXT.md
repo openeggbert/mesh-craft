@@ -504,21 +504,22 @@ No project linter/formatter is configured.
    desktop session (dragging a file from a real file manager) — same
    caveat as clipboard above, check for a testable seam first.
 
-4. **STAB-0561 — verify file dialogs (text path fields) work on all
-   platforms.** Files: `src/MeshCraft/MeshCraftApplication_FileOps.cpp`.
-   Code-reading task: confirm the text-path-field fallback (used since
-   there's no native file dialog) works identically regardless of
-   platform — likely already true since it's plain ImGui + std::string,
-   no OS-specific dialog code path exists to diverge.
+4. **STAB-0562 — verify OpenGL ES 3 features on web (WebGL2).** Files:
+   `CMakeLists.txt`. Likely overlaps heavily with the Emscripten
+   blank-canvas investigation (item 1) — probably best tackled together
+   rather than as a separate pass.
 
 Recently closed this session: **STAB-0554** (path separators — confirmed
 `std::filesystem::path` used consistently everywhere, no gap),
 **STAB-0555/0556/0557** (UTF-8 filenames, paths with spaces, non-ASCII
-object names — added 3 new round-trip tests, all pass, see §3), and
+object names — added 3 new round-trip tests, all pass, see §3),
 **STAB-0558** (config dir per OS — found and fixed a real gap:
 `meshcraftConfigDir()` in `MeshCraftPrivate.hpp` was unconditionally
 Linux-style with no Windows branch at all; added `%APPDATA%` support
-under `#if defined(_WIN32)`).
+under `#if defined(_WIN32)`), and **STAB-0561** (file dialogs — confirmed
+no native OS file-picker library exists anywhere in the editor; all 8
+path entry points use plain `ImGui::InputText`, which has no
+OS-conditional code path to diverge).
 
 Continue through the rest of S16 (`plan.md`, STAB-0559 onward) in
 `plan.md` order after these — several remaining rows are platform-build
