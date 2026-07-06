@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- STAB-0248: a definition whose root is a group with 2 children
+     (a box and a sphere), instanced 10 times. All 10 instances must
+     produce real node trees, and the underlying meshes must be shared
+     across instances (not duplicated 10x). -->
+<mc3 version="0.3" model="MultiChildDefinitionTest">
+
+  <definitions>
+    <definition id="Pair">
+      <group name="PairGroup">
+        <box    name="PairBox"    size="0.4 0.4 0.4"/>
+        <sphere name="PairSphere" radius="0.3" position="0.6 0 0"/>
+      </group>
+    </definition>
+  </definitions>
+
+  <objects>
+    <instance name="Inst0" definition="Pair" position="0 0 0"/>
+    <instance name="Inst1" definition="Pair" position="2 0 0"/>
+    <instance name="Inst2" definition="Pair" position="4 0 0"/>
+    <instance name="Inst3" definition="Pair" position="6 0 0"/>
+    <instance name="Inst4" definition="Pair" position="8 0 0"/>
+    <instance name="Inst5" definition="Pair" position="0 2 0"/>
+    <instance name="Inst6" definition="Pair" position="2 2 0"/>
+    <instance name="Inst7" definition="Pair" position="4 2 0"/>
+    <instance name="Inst8" definition="Pair" position="6 2 0"/>
+    <instance name="Inst9" definition="Pair" position="8 2 0"/>
+  </objects>
+
+</mc3>

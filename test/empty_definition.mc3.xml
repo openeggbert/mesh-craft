@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- STAB-0247: an <instance> of a definition whose sole root object is a
+     <group> with zero children. mc3.xsd requires exactly one root object
+     inside <definition> (choice minOccurs=1/maxOccurs=1), so a definition
+     cannot be truly empty, but its root group can itself have no
+     children. Export must not crash. -->
+<mc3 version="0.3" model="EmptyDefinitionTest">
+
+  <definitions>
+    <definition id="EmptyGroupDef">
+      <group name="EmptyGroup"/>
+    </definition>
+  </definitions>
+
+  <objects>
+    <instance name="EmptyInstance" definition="EmptyGroupDef"/>
+  </objects>
+
+</mc3>

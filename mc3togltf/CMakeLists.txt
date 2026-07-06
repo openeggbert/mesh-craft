@@ -129,6 +129,8 @@ if(BUILD_TESTING)
         set(_instance_deform_xml      "${CMAKE_CURRENT_SOURCE_DIR}/../test/instance_deform_cache.mc3.xml")
         set(_close_dimensions_xml     "${CMAKE_CURRENT_SOURCE_DIR}/../test/close_dimensions.mc3.xml")
         set(_geom_cache_key_xml       "${CMAKE_CURRENT_SOURCE_DIR}/../test/geom_cache_key.mc3.xml")
+        set(_empty_definition_xml     "${CMAKE_CURRENT_SOURCE_DIR}/../test/empty_definition.mc3.xml")
+        set(_multi_child_def_xml      "${CMAKE_CURRENT_SOURCE_DIR}/../test/multi_child_definition.mc3.xml")
         set(_obj_robustness_xml       "${CMAKE_CURRENT_SOURCE_DIR}/../test/obj_robustness.mc3.xml")
         set(_texture_sampler_xml      "${CMAKE_CURRENT_SOURCE_DIR}/../test/texture_sampler.mc3.xml")
         set(_material_pbr_xml         "${CMAKE_CURRENT_SOURCE_DIR}/../test/material_pbr.mc3.xml")
@@ -283,6 +285,17 @@ if(BUILD_TESTING)
                         "${_geom_cache_key_xml}"
             )
             set_tests_properties(mc3togltf_geom_cache_key PROPERTIES TIMEOUT 30 LABELS "export")
+        endif()
+        if(EXISTS "${_empty_definition_xml}" AND EXISTS "${_multi_child_def_xml}")
+            add_test(
+                NAME mc3togltf_definition_instancing
+                COMMAND "${PYTHON3_EXEC}"
+                        "${CMAKE_CURRENT_SOURCE_DIR}/test/definition_instancing_test.py"
+                        "$<TARGET_FILE:mc3togltf>"
+                        "${_empty_definition_xml}"
+                        "${_multi_child_def_xml}"
+            )
+            set_tests_properties(mc3togltf_definition_instancing PROPERTIES TIMEOUT 30 LABELS "export")
         endif()
         if(EXISTS "${_obj_robustness_xml}")
             add_test(
