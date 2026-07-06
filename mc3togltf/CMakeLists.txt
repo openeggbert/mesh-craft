@@ -279,6 +279,17 @@ if(BUILD_TESTING)
             )
             set_tests_properties(mc3togltf_node_transform PROPERTIES TIMEOUT 30 LABELS "export")
         endif()
+        if(EXISTS "${_house_xml}" AND EXISTS "${_primitives_xml}")
+            add_test(
+                NAME mc3togltf_cli_extension
+                COMMAND "${PYTHON3_EXEC}"
+                        "${CMAKE_CURRENT_SOURCE_DIR}/test/cli_extension_test.py"
+                        "$<TARGET_FILE:mc3togltf>"
+                        "${_house_xml}"
+                        "${_primitives_xml}"
+            )
+            set_tests_properties(mc3togltf_cli_extension PROPERTIES TIMEOUT 30 LABELS "export")
+        endif()
         if(EXISTS "${_glb_texture_embed_xml}")
             add_test(
                 NAME mc3togltf_glb_texture_embed
