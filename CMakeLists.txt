@@ -344,6 +344,26 @@ endif()
 
 if(WIN32)
     cna_copy_sdl_runtime(${_target})
+
+    # cna_copy_sdl_runtime() (cna/cmake/ThirdPartySDL.cmake) only copies DLLs
+    # for SDL3::SDL3/SDL3_image::SDL3_image/SDL3_mixer::SDL3_mixer if those
+    # targets are visible in the calling scope — but they're IMPORTED targets
+    # created by find_package(SDL3 CONFIG) while processing CNA's own
+    # add_subdirectory(), so they're invisible here in MeshCraft's parent
+    # scope (confirmed via --trace-expand: all three if(TARGET ...) checks
+    # evaluate false, so no copy commands are ever added — STAB-0566). Copy
+    # them directly via the CACHE variable CNA sets for its prebuilt SDL
+    # install root, which *is* visible everywhere.
+    foreach(_sdl_dll IN ITEMS SDL3.dll SDL3_image.dll SDL3_mixer.dll)
+        set(_sdl_dll_path "${CNA_SDL_PREBUILT_ROOT}/install/bin/${_sdl_dll}")
+        if(EXISTS "${_sdl_dll_path}")
+            add_custom_command(TARGET ${_target} POST_BUILD
+                COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                    "${_sdl_dll_path}" "$<TARGET_FILE_DIR:${_target}>"
+                COMMENT "Copying ${_sdl_dll} next to ${_target}"
+                VERBATIM)
+        endif()
+    endforeach()
 endif()
 
 if(MINGW)

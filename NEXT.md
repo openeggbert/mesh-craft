@@ -504,11 +504,11 @@ No project linter/formatter is configured.
    desktop session (dragging a file from a real file manager) — same
    caveat as clipboard above, check for a testable seam first.
 
-4. **STAB-0567 — verify MinGW: static libgcc/libstdc++ linked.** Files:
-   `CMakeLists.txt`. Should be a one-line confirmation — the
-   `-static-libgcc -static-libstdc++` flags are already visible at
-   `CMakeLists.txt:350` inside the same `if(MINGW)` block checked for
-   STAB-0566.
+4. **STAB-0568 — verify Android stub: main() → shared lib adapter.**
+   Files: `CMakeLists.txt`. Check whether `add_library(main SHARED)`
+   (or equivalent) is actually selected for an Android configure —
+   likely code-reading only, since there's no Android NDK/toolchain
+   available in this environment to actually configure against.
 
 Recently closed this session: **STAB-0554** (path separators — confirmed
 `std::filesystem::path` used consistently everywhere, no gap),
@@ -531,9 +531,21 @@ found and fixed a real gap: `cmake/web/pre.js` mounted IDBFS at
 `/home/user`, but Emscripten's actual default `$HOME` is
 `/home/web_user`, so everything `meshcraftConfigDir()` writes was
 silently landing outside the persistent mount; fixed and rebuilt clean),
-and **STAB-0566** (Windows SDL DLL copy — confirmed correct by code
-review; can't be run end-to-end since MinGW blocks earlier at ~73%,
-before the link/post-build stage this row concerns).
+**STAB-0566** (Windows SDL DLL copy — actually reconfigured against a
+real MinGW toolchain and found a genuine bug via `--trace-expand`:
+`cna_copy_sdl_runtime()`'s `SDL3::SDL3`/etc. targets are invisible from
+MeshCraft's parent directory scope, so zero DLL-copy commands were ever
+generated; fixed on the MeshCraft side only, via a `CNA_SDL_PREBUILT_ROOT`-based
+fallback in `CMakeLists.txt`, verified against the regenerated
+`build.ninja`), and **STAB-0567** (MinGW static libgcc/libstdc++ —
+confirmed directly in the same generated `build.ninja`'s `LINK_FLAGS`).
+
+**Lesson from STAB-0566**: don't close a build-system verification row on
+code-reading alone when a cheap real reconfigure is possible (the cached
+`.sdl-prebuilt-Windows-x86_64`/`-emscripten` dirs make MinGW/Emscripten
+reconfigures fast even though a full build is slow/blocked) — the actual
+bug here was invisible from source alone and only showed up via
+`--trace-expand` + inspecting the generated `build.ninja`.
 
 Continue through the rest of S16 (`plan.md`, STAB-0559 onward) in
 `plan.md` order after these — several remaining rows are platform-build
