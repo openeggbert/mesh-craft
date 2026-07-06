@@ -125,7 +125,23 @@ to live only in the referenced library file, keeping the include
 structure intact across save/load. If the main file locally overrides
 one of those `id`s, the override is detected during parsing (the local
 entry is removed from the "included" set the moment it's parsed) and
-correctly gets written out as local content on save, not skipped.
+correctly gets written out as local content on save, not skipped. SVG
+textures (`<texture type="svg">`) share `textures`' own id-tracking and
+are covered by this same skip-set (fixed in STAB-0091 — the writer's
+SVG-texture loop was previously missing this check and silently
+re-inlined included SVG textures on every save).
+
+**Known limitation — `<embeds>` is not include-aware (STAB-0092):**
+unlike definitions/materials/textures, an included file's own `<embeds>`
+section is **never merged** — only the main document's own top-level
+`<embeds>` is parsed. If a `<definition>` merged from an included file
+references `<mesh src="embed:xyz"/>` where `xyz` is declared in *that
+same included file's* `<embeds>` section (rather than the main
+document's), the reference silently fails to resolve. This is a narrow,
+accepted limitation (embedding glTF data specifically inside a
+shared/included asset library), not implemented — would need an
+`includedEmbeds` tracking set plus an `<embeds>` merge block in
+`mergeInclude()`, mirroring the existing definitions-merge pattern.
 
 ---
 

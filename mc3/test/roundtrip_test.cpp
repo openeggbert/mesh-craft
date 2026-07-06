@@ -1092,6 +1092,142 @@ static void testIncludeAcrossDirectoriesRebasesRelativePaths() {
     std::filesystem::remove_all(root, ec);
 }
 
+// STAB-0091: an SVG texture (<texture type="svg">, sharing doc.textures'
+// includedTextures id-tracking) merged from an <include> file must NOT be
+// re-inlined into the main document's own saved file — same skip-set
+// contract as regular textures/materials/definitions. Found and fixed a
+// real bug here: the writer's svgTextures loop was missing the
+// includedTextures check that the adjacent doc.textures loop already had.
+static void testIncludedSvgTextureNotDuplicatedOnSave() {
+    auto root = std::filesystem::temp_directory_path() /
+                ("mc3_include_svg_" + std::to_string(tmpIdx++));
+    std::error_code ec;
+    std::filesystem::create_directories(root, ec);
+
+    auto libPath = root / "lib.mc3.xml";
+    {
+        std::ofstream f(libPath);
+        f << R"(<?xml version="1.0" encoding="UTF-8"?>
+<mc3 version="0.3" model="Lib">
+  <textures>
+    <texture id="logo" type="svg"><![CDATA[<svg></svg>]]></texture>
+  </textures>
+</mc3>
+)";
+    }
+
+    auto scenePath = root / "scene.mc3.xml";
+    {
+        std::ofstream f(scenePath);
+        f << R"(<?xml version="1.0" encoding="UTF-8"?>
+<mc3 version="0.3" model="Scene">
+  <include file="lib.mc3.xml"/>
+  <objects/>
+</mc3>
+)";
+    }
+
+    try {
+        auto doc = Mc3Document::loadFromFile(scenePath);
+        CHECK(doc.svgTextures.count("logo") == 1, "included svg texture: present after load");
+        CHECK(doc.includedTextures.count("logo") == 1, "included svg texture: tracked in includedTextures");
+
+        auto savedPath = root / "scene_saved.mc3.xml";
+        doc.saveToFile(savedPath);
+        std::ifstream f(savedPath);
+        std::string saved((std::istreambuf_iterator<char>(f)), {});
+        CHECK(saved.find("<include") != std::string::npos,
+              "included svg texture: <include> re-emitted in saved file");
+        CHECK(saved.find("id=\"logo\"") == std::string::npos,
+              "included svg texture: NOT re-inlined into the saved file (bug fixed this session)");
+    } catch (const std::exception& e) {
+        fail(std::string("included svg texture test threw: ") + e.what());
+    }
+
+    std::filesystem::remove_all(root, ec);
+}
+
+// STAB-0088: an <include file="..."/> whose filename contains spaces must
+// resolve and load correctly — includePath is a std::filesystem::path built
+// via selfPath.parent_path() / fileAttr (Mc3XmlParser.cpp), same
+// space-tolerant path-joining already confirmed for top-level file paths
+// (STAB-0556).
+static void testIncludePathWithSpaces() {
+    auto root = std::filesystem::temp_directory_path() /
+                ("mc3_include_spaces_" + std::to_string(tmpIdx++));
+    std::error_code ec;
+    std::filesystem::create_directories(root, ec);
+
+    auto libPath = root / "my shared library.mc3.xml";
+    {
+        std::ofstream f(libPath);
+        f << R"(<?xml version="1.0" encoding="UTF-8"?>
+<mc3 version="0.3" model="Lib">
+  <materials>
+    <material id="paint"><base_color>0.2 0.5 0.8 1</base_color></material>
+  </materials>
+</mc3>
+)";
+    }
+
+    auto scenePath = root / "scene.mc3.xml";
+    {
+        std::ofstream f(scenePath);
+        f << R"(<?xml version="1.0" encoding="UTF-8"?>
+<mc3 version="0.3" model="Scene">
+  <include file="my shared library.mc3.xml"/>
+  <objects/>
+</mc3>
+)";
+    }
+
+    try {
+        auto doc = Mc3Document::loadFromFile(scenePath);
+        CHECK(doc.materials.count("paint") == 1,
+              "include path with spaces: material from included file is present");
+    } catch (const std::exception& e) {
+        fail(std::string("include path with spaces test threw: ") + e.what());
+    }
+
+    std::filesystem::remove_all(root, ec);
+}
+
+// STAB-0089: <include file="doesnotexist.mc3.xml"/> must throw a clear error
+// naming the missing file (Mc3XmlParser.cpp's mergeInclude() explicitly
+// throws std::runtime_error("Failed to load <include> file '<path>': ...")),
+// not crash or silently produce an incomplete document.
+static void testIncludeNonexistentFileClearError() {
+    auto root = std::filesystem::temp_directory_path() /
+                ("mc3_include_missing_" + std::to_string(tmpIdx++));
+    std::error_code ec;
+    std::filesystem::create_directories(root, ec);
+
+    auto scenePath = root / "scene.mc3.xml";
+    {
+        std::ofstream f(scenePath);
+        f << R"(<?xml version="1.0" encoding="UTF-8"?>
+<mc3 version="0.3" model="Scene">
+  <include file="does_not_exist.mc3.xml"/>
+  <objects/>
+</mc3>
+)";
+    }
+
+    bool threw = false;
+    std::string message;
+    try {
+        Mc3Document::loadFromFile(scenePath);
+    } catch (const std::exception& e) {
+        threw = true;
+        message = e.what();
+    }
+    std::filesystem::remove_all(root, ec);
+
+    CHECK(threw, "nonexistent include: throws (not silently incomplete)");
+    CHECK(message.find("does_not_exist.mc3.xml") != std::string::npos,
+          "nonexistent include: error message names the missing file");
+}
+
 // ---------------------------------------------------------------------------
 
 static void testFeaturesXmlLoads(const std::string& path) {
@@ -2549,6 +2685,9 @@ int main(int argc, char* argv[]) {
     testPlaneSizeVec2();
     testPlaneSizeLegacyVec3();
     testIncludeAcrossDirectoriesRebasesRelativePaths();
+    testIncludedSvgTextureNotDuplicatedOnSave();
+    testIncludePathWithSpaces();
+    testIncludeNonexistentFileClearError();
     testUtf8FilenameRoundtrip();
     testPathWithSpacesRoundtrip();
     testNonAsciiObjectNameRoundtrip();

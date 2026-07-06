@@ -478,6 +478,14 @@ void Mc3XmlWriter::write(const Mc3Document& doc, const std::filesystem::path& pa
             tEl->InsertEndChild(te);
         }
         for (const auto& [id, svg] : doc.svgTextures) {
+            // STAB-0091: unlike the doc.textures loop above, this one was
+            // missing the includedTextures skip check — an SVG texture
+            // merged from an <include> file (mergeInclude() tracks it in
+            // the same includedTextures set, since <texture type="svg">
+            // shares the id namespace with regular textures) was silently
+            // re-inlined into the main file on every save instead of
+            // staying only in the included file.
+            if (doc.includedTextures.count(id)) continue;
             XMLElement* te = xml.NewElement("texture");
             te->SetAttribute("id",   id.c_str());
             te->SetAttribute("type", "svg");
