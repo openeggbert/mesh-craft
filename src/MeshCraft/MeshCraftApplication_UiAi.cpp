@@ -68,15 +68,42 @@ static std::string buildSystemPrompt() {
         + std::string(kStrictXmlRules);
 }
 
+// Temp file is always removed, even if saveToFile()/read throws partway
+// through (STAB-0392 — see the identical fix in AiResponseAlgorithms.hpp's
+// parseXmlAlg for the matching leak on the response-parsing side).
 static std::string serializeScene(const Mc3::Mc3Document& doc) {
     namespace fs = std::filesystem;
     auto tmp = uniqueTempPath("mc_ai_scene", ".mc3.xml");
-    doc.saveToFile(tmp);
-    std::ifstream f(tmp);
-    std::string xml(std::istreambuf_iterator<char>(f), {});
     std::error_code ec;
-    fs::remove(tmp, ec);
-    return xml;
+    try {
+        doc.saveToFile(tmp);
+        std::ifstream f(tmp);
+        std::string xml(std::istreambuf_iterator<char>(f), {});
+        fs::remove(tmp, ec);
+        return xml;
+    } catch (...) {
+        fs::remove(tmp, ec);
+        throw;
+    }
+}
+
+// Builds exactly the XML that a click of "Send" would transmit for the
+// current scope selection — shared by the pre-Send byte-count label
+// (STAB-0409) and the Send button handler itself, so they can never disagree.
+static std::string buildOutgoingSceneXml(const Mc3::Mc3Document& document,
+                                          Editor::SelectionManager& selection,
+                                          int scopeSel) {
+    if (scopeSel == 1) {
+        Mc3::Mc3Document selDoc;
+        selDoc.version = document.version;
+        selDoc.model   = "selection";
+        for (const auto& obj : selection.selection())
+            selDoc.objects.push_back(obj);
+        selDoc.materials   = document.materials;
+        selDoc.definitions = document.definitions;
+        return serializeScene(selDoc);
+    }
+    return serializeScene(document);
 }
 
 // extractXml() / repairXml() / parseXml() moved to AiResponseAlgorithms.hpp
@@ -163,7 +190,7 @@ void MeshCraftApplication::drawAiPanel() {
     ImGui::SetNextItemWidth(-1);
     ImGui::SliderInt("##aimtok", &aiAssistant_.maxTokens, 4096, 64000, "%d");
     if (ImGui::IsItemHovered())
-        ImGui::SetTooltip("claude-sonnet-4-6 supports up to 64 000 output tokens.\n"
+        ImGui::SetTooltip("claude-sonnet-5 supports up to 64 000 output tokens.\n"
                           "Large scenes need 20 000+. Default: 32 000.");
 
     ImGui::Spacing();
@@ -223,28 +250,26 @@ void MeshCraftApplication::drawAiPanel() {
     bool selectionEmpty = !selection_.hasSelection();
     bool canSend = !inFlight && aiApiKeyBuf_[0] != '\0' && aiPromptBuf_[0] != '\0'
                    && !(aiScopeSel_ == 1 && selectionEmpty);
+
+    // STAB-0409: show the size of the context about to be sent, computed via
+    // the exact same buildOutgoingSceneXml() call the Send button itself
+    // uses, so this can never drift out of sync with what's actually sent.
+    if (!inFlight && !(aiScopeSel_ == 1 && selectionEmpty)) {
+        size_t bytes = buildOutgoingSceneXml(document_, selection_, aiScopeSel_).size();
+        ImGui::TextDisabled("Sending %zu bytes of scene XML to AI", bytes);
+    }
+
     if (!canSend) ImGui::BeginDisabled();
     if (ImGui::Button("Send", ImVec2(80, 0))) {
         // Clear previous result before starting a new request
         aiAssistant_.reset();
         aiPendingDoc_.reset();
         aiValidationError_.clear();
+        aiApplyConfirmPending_ = false;
         aiAssistant_.apiKey = aiApiKeyBuf_;
-        aiAssistant_.model  = (aiModelBuf_[0] != '\0') ? aiModelBuf_ : "claude-sonnet-4-6";
+        aiAssistant_.model  = (aiModelBuf_[0] != '\0') ? aiModelBuf_ : "claude-sonnet-5";
         try {
-            std::string sceneXml;
-            if (aiScopeSel_ == 1) {
-                Mc3::Mc3Document selDoc;
-                selDoc.version = document_.version;
-                selDoc.model   = "selection";
-                for (const auto& obj : selection_.selection())
-                    selDoc.objects.push_back(obj);
-                selDoc.materials   = document_.materials;
-                selDoc.definitions = document_.definitions;
-                sceneXml = serializeScene(selDoc);
-            } else {
-                sceneXml = serializeScene(document_);
-            }
+            std::string sceneXml = buildOutgoingSceneXml(document_, selection_, aiScopeSel_);
             aiAssistant_.sendAsync(buildSystemPrompt(), sceneXml, aiPromptBuf_);
             setStatusMsg("AI request sent…");
         } catch (...) {
@@ -256,16 +281,38 @@ void MeshCraftApplication::drawAiPanel() {
         ImGui::SameLine(), ImGui::TextDisabled("(select objects first)");
 
     // ---- Apply to Scene — available whenever aiPendingDoc_ is valid ----
+    // STAB-0395: a response with drastically fewer top-level objects than the
+    // scene it would replace (e.g. 50 -> 3) is much more likely to be a
+    // mistaken/truncated AI result than an intentional bulk deletion, so it
+    // requires an explicit second click on "Confirm Replace" instead of
+    // applying immediately.
     if (aiPendingDoc_.has_value()) {
         ImGui::SameLine();
-        if (ImGui::Button("Apply to Scene", ImVec2(130, 0))) {
-            pushUndo();
-            document_ = *aiPendingDoc_;
-            modified_ = true;
-            updateWindowTitle();
-            setStatusMsg("AI response applied to scene");
-            // Intentionally do NOT clear aiPendingDoc_ so "Save to Registry" stays available
+        bool needsConfirm = aiApplyNeedsConfirmationAlg(document_.objects.size(),
+                                                         aiPendingDoc_->objects.size());
+        const char* label = (needsConfirm && aiApplyConfirmPending_) ? "Confirm Replace"
+                                                                      : "Apply to Scene";
+        if (ImGui::Button(label, ImVec2(130, 0))) {
+            if (needsConfirm && !aiApplyConfirmPending_) {
+                aiApplyConfirmPending_ = true;
+            } else {
+                pushUndo();
+                document_ = *aiPendingDoc_;
+                modified_ = true;
+                aiApplyConfirmPending_ = false;
+                updateWindowTitle();
+                setStatusMsg("AI response applied to scene");
+                // Intentionally do NOT clear aiPendingDoc_ so "Save to Registry" stays available
+            }
         }
+    }
+    if (aiApplyConfirmPending_ && aiPendingDoc_.has_value()) {
+        ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.6f, 0.1f, 1.0f));
+        ImGui::TextWrapped(
+            "Warning: this AI response has only %zu object(s), down from %zu "
+            "in the current scene. Click \"Confirm Replace\" to proceed anyway.",
+            aiPendingDoc_->objects.size(), document_.objects.size());
+        ImGui::PopStyleColor();
     }
 
     // ---- Save AI result to Registry ----
@@ -314,6 +361,7 @@ void MeshCraftApplication::drawAiPanel() {
             aiAssistant_.reset();
             aiPendingDoc_.reset();
             aiValidationError_.clear();
+            aiApplyConfirmPending_ = false;
             // If the registry save dialog was pre-filled from this AI result, close it
             // so it cannot fall back to listing scene definitions.
             if (regSaveFromAi_) {

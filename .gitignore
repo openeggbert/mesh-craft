@@ -10,3 +10,4 @@ b-release/
 imgui.ini
 Testing/
 *.autosave
+__pycache__/

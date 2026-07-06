@@ -90,16 +90,25 @@ inline std::string repairXmlAlg(const std::string& xml)
 
 // Parse an xml string into a document; throws on malformed XML or a missing
 // <mc3> root (via Mc3Document::loadFromFile, round-tripped through a temp
-// file since the parser is file-based).
+// file since the parser is file-based). The temp file is always removed,
+// including when loadFromFile() throws (STAB-0392: malformed AI responses —
+// by far the common failure case this function exists to handle — used to
+// leak a temp file every time, since the original code only removed it after
+// a successful load).
 inline Mc3::Mc3Document parseXmlAlg(const std::string& xml)
 {
     namespace fs = std::filesystem;
     auto tmp = uniqueTempPath("mc_ai_parse", ".mc3.xml");
     { std::ofstream f(tmp); f << xml; }
-    auto doc = Mc3::Mc3Document::loadFromFile(tmp);
     std::error_code ec;
-    fs::remove(tmp, ec);
-    return doc;
+    try {
+        auto doc = Mc3::Mc3Document::loadFromFile(tmp);
+        fs::remove(tmp, ec);
+        return doc;
+    } catch (...) {
+        fs::remove(tmp, ec);
+        throw;
+    }
 }
 
 // A parsed AI response that has neither objects nor definitions would
@@ -107,6 +116,19 @@ inline Mc3::Mc3Document parseXmlAlg(const std::string& xml)
 inline bool isEmptyMc3DocumentAlg(const Mc3::Mc3Document& doc)
 {
     return doc.objects.empty() && doc.definitions.empty();
+}
+
+// STAB-0395: "Apply to Scene" replaces the whole document in one step with
+// no way back except Undo — if the AI's response has drastically fewer
+// top-level objects than the scene it's replacing, that's much more likely
+// to be a truncated/mistaken response than an intentional bulk deletion, so
+// the UI should ask for confirmation instead of applying silently. Threshold:
+// only scenes with a meaningful object count (>= 10) can trigger this at
+// all, and only an actual halving-or-worse counts as "drastic" (a same-size
+// or moderately smaller result is a completely normal AI edit).
+inline bool aiApplyNeedsConfirmationAlg(size_t oldObjectCount, size_t newObjectCount)
+{
+    return oldObjectCount >= 10 && newObjectCount < oldObjectCount / 2;
 }
 
 #ifdef MESHCRAFT_HAS_LIBXML2

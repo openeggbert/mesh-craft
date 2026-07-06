@@ -16,8 +16,10 @@
 #include <MeshCraft/Mc3/Mc3Document.hpp>
 #include <MeshCraft/TempFile.hpp>
 
+#include <atomic>
 #include <chrono>
 #include <condition_variable>
+#include <filesystem>
 #include <iostream>
 #include <mutex>
 #include <set>
@@ -214,6 +216,26 @@ static void testValidateAndParseEmptyDocumentRejected() {
           "STAB-0376: the error message explains it's an empty-document rejection");
 }
 
+// STAB-0410 — a response with only <definitions> and no top-level <objects>
+// is a legitimate AI result (e.g. "add a reusable crate definition to the
+// library") and must not be rejected by the same empty-document guard that
+// exists to reject a truly empty response.
+static void testValidateAndParseAcceptsDefinitionsOnlyDocument() {
+    auto result = validateAndParseAiResponseAlg(
+        "<mc3 version=\"0.3\">"
+        "<definitions><definition id=\"crate\"><box size=\"1 1 1\"/></definition></definitions>"
+        "</mc3>");
+    CHECK(result.doc.has_value(),
+          "STAB-0410: a definitions-only response (no <objects>) is accepted, not rejected "
+          "as an empty document");
+    if (result.doc) {
+        CHECK(result.doc->objects.empty(),
+              "STAB-0410: the accepted document indeed has no objects");
+        CHECK(!result.doc->definitions.empty(),
+              "STAB-0410: ...but does have the definition that makes it non-empty");
+    }
+}
+
 static void testValidateAndParseAcceptsNonEmptyDocument() {
     auto result = validateAndParseAiResponseAlg(
         "<mc3 version=\"0.3\"><objects><box id=\"b1\"/></objects></mc3>");
@@ -222,6 +244,43 @@ static void testValidateAndParseAcceptsNonEmptyDocument() {
     if (result.doc)
         CHECK(result.doc->objects.size() == 1,
               "validateAndParseAiResponseAlg: the accepted document has the expected object");
+}
+
+// STAB-0392 — a real bug found while writing this test: parseXmlAlg wrote its
+// scratch file, then only removed it *after* a successful
+// Mc3Document::loadFromFile() call — malformed XML (a common real-world AI
+// response, exercised right above by testValidateAndParseMalformedXmlSetsError)
+// made loadFromFile() throw before the removal line ran, leaking a temp file
+// on every single malformed response. Fixed with a try/catch that always
+// removes the scratch file. This test counts "mc_ai_parse_*" files in the
+// system temp dir before/after several malformed-response validation calls.
+static void testMalformedResponseDoesNotLeakTempFiles() {
+    namespace fs = std::filesystem;
+    auto countScratchFiles = [] {
+        int n = 0;
+        std::error_code ec;
+        auto tempDir = fs::temp_directory_path(ec);
+        if (ec) return 0;
+        for (const auto& entry : fs::directory_iterator(tempDir, ec)) {
+            if (entry.path().filename().string().rfind("mc_ai_parse_", 0) == 0)
+                ++n;
+        }
+        return n;
+    };
+
+    int before = countScratchFiles();
+    for (int i = 0; i < 20; ++i) {
+        // Has "<mc3" so it passes the root-marker check, but isn't valid XML
+        // (same shape as testValidateAndParseMalformedXmlSetsError above) —
+        // this is exactly the path that used to leak parseXmlAlg's temp file.
+        auto result = validateAndParseAiResponseAlg("<mc3 version=\"0.3\"><objects>");
+        (void)result;
+    }
+    int after = countScratchFiles();
+
+    CHECK(after == before,
+          "STAB-0392: 20 malformed AI responses leave no leftover "
+          "mc_ai_parse_* temp files behind");
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -405,6 +464,155 @@ static void testMockServerHttpErrorStatus() {
     serverThread.join();
 }
 
+// STAB-0381 — the Model field is genuinely user-configurable: whatever value
+// is set on AiAssistant::model ends up verbatim in the outgoing request body,
+// not just editable in the UI with no effect on the wire.
+static void testModelNameSentInRequestBody() {
+    std::string capturedBody;
+    httplib::Server svr;
+    svr.Post("/v1/messages", [&](const httplib::Request& req, httplib::Response& res) {
+        capturedBody = req.body;
+        res.set_content(
+            R"({"content":[{"type":"text","text":"<mc3 version=\"0.3\"><objects><box id=\"b1\"/></objects></mc3>"}],"stop_reason":"end_turn"})",
+            "application/json");
+    });
+    int port = svr.bind_to_any_port("127.0.0.1");
+    std::thread serverThread([&]{ svr.listen_after_bind(); });
+    waitUntilServerRunning(svr);
+
+    AiAssistant ai;
+    ai.apiKey     = "test-key";
+    ai.apiBaseUrl = "http://127.0.0.1:" + std::to_string(port);
+    ai.model      = "claude-sonnet-5-custom-test-model";
+    ai.sendAsync("system prompt", "<mc3/>", "add a box");
+
+    bool finished = pollUntilDone(ai, 5000);
+    CHECK(finished, "model name test: request completes within the timeout");
+    CHECK(capturedBody.find("\"model\":\"claude-sonnet-5-custom-test-model\"") != std::string::npos,
+          "STAB-0381: the AiAssistant::model value is sent verbatim as the JSON \"model\" field, "
+          "confirming the UI's Model field genuinely controls what is sent to the API");
+
+    svr.stop();
+    serverThread.join();
+}
+
+// STAB-0382 — a network error (nothing listening on the target port) must
+// surface as hasError()/errorMsg(), not a crash or an indefinite hang.
+static void testConnectionRefusedProducesUserVisibleError() {
+    AiAssistant ai;
+    ai.apiKey            = "test-key";
+    // Port 1 is a reserved, essentially-never-listened-on port — connecting
+    // to it fails immediately with "connection refused" on any CI/dev box.
+    ai.apiBaseUrl        = "http://127.0.0.1:1";
+    ai.connectTimeoutSec = 3;
+    ai.readTimeoutSec    = 3;
+    ai.writeTimeoutSec   = 3;
+
+    ai.sendAsync("system prompt", "<mc3/>", "add a box");
+    bool finished = pollUntilDone(ai, 5000);
+
+    CHECK(finished, "STAB-0382: a connection-refused request completes (doesn't hang)");
+    CHECK(ai.hasError(), "STAB-0382: a network error is reported via hasError()");
+    CHECK(!ai.errorMsg().empty(),
+          "STAB-0382: a non-empty, user-visible error message is set via errorMsg()");
+}
+
+// STAB-0400 — a 200 response whose body isn't valid JSON at all (e.g. an API
+// gateway returning an HTML error page or truncated body) must not crash the
+// substring-search-based JSON extraction; it should degrade to an empty
+// result that the downstream validation pipeline then rejects cleanly.
+static void testMalformedJsonResponseHandledGracefully() {
+    httplib::Server svr;
+    svr.Post("/v1/messages", [](const httplib::Request&, httplib::Response& res) {
+        res.set_content("{not valid json at all <<< ]]", "text/plain");
+    });
+    int port = svr.bind_to_any_port("127.0.0.1");
+    std::thread serverThread([&]{ svr.listen_after_bind(); });
+    waitUntilServerRunning(svr);
+
+    AiAssistant ai;
+    ai.apiKey     = "test-key";
+    ai.apiBaseUrl = "http://127.0.0.1:" + std::to_string(port);
+    ai.sendAsync("system prompt", "<mc3/>", "add a box");
+
+    bool finished = pollUntilDone(ai, 5000);
+    CHECK(finished, "STAB-0400: malformed-JSON response completes (doesn't hang or crash)");
+    // extractFirstTextValue() finds no "text":"..." key in non-JSON content and
+    // returns empty — sendAsync() already has an explicit guard for exactly this
+    // ("Empty response from API: ..."), so it correctly surfaces as an
+    // AiAssistant-level error rather than silently continuing with an empty result.
+    CHECK(ai.hasError(),
+          "STAB-0400: a 200 response with no extractable text is reported as an error "
+          "(existing 'Empty response from API' guard), not silently swallowed");
+    CHECK(!ai.errorMsg().empty(),
+          "STAB-0400: a non-empty, user-visible error message is set");
+    CHECK(ai.result().empty(),
+          "STAB-0400: no <text> value could be extracted from non-JSON content");
+
+    svr.stop();
+    serverThread.join();
+}
+
+// STAB-0403 — sendAsync() itself has no internal re-entrancy guard (by
+// design: the UI layer is the single caller, and MeshCraftApplication_UiAi.cpp
+// disables the Send button whenever isInFlight() is true, and isInFlight()
+// flips true synchronously the instant sendAsync() returns — before the next
+// frame can render — so a real double-click can never reach sendAsync()
+// twice). This test exercises the API layer directly, confirming that if it
+// were ever called twice back-to-back anyway, the second call's request
+// simply supersedes the first (the first's detached thread keeps running
+// harmlessly to completion but its result is unreachable) rather than
+// crashing or corrupting state.
+static void testBackToBackSendAsyncCallsDoNotCrash() {
+    // The first request's connection is deliberately held open (blocked on a
+    // condition_variable) so it can never race the second — the server tells
+    // the two requests apart by their task-prompt text, embedded verbatim in
+    // the JSON body ("Task: first request" vs "Task: second request").
+    std::mutex              releaseMutex;
+    std::condition_variable releaseCv;
+    bool                    release = false;
+
+    httplib::Server svr;
+    svr.Post("/v1/messages", [&](const httplib::Request& req, httplib::Response& res) {
+        if (req.body.find("first request") != std::string::npos) {
+            std::unique_lock<std::mutex> lk(releaseMutex);
+            releaseCv.wait(lk, [&] { return release; });
+            res.set_content(
+                R"({"content":[{"type":"text","text":"<mc3 version=\"0.3\"><objects><box id=\"b1\"/></objects></mc3>"}],"stop_reason":"end_turn"})",
+                "application/json");
+        } else {
+            res.set_content(
+                R"({"content":[{"type":"text","text":"<mc3 version=\"0.3\"><objects><box id=\"b2\"/></objects></mc3>"}],"stop_reason":"end_turn"})",
+                "application/json");
+        }
+    });
+    int port = svr.bind_to_any_port("127.0.0.1");
+    std::thread serverThread([&]{ svr.listen_after_bind(); });
+    waitUntilServerRunning(svr);
+
+    AiAssistant ai;
+    ai.apiKey     = "test-key";
+    ai.apiBaseUrl = "http://127.0.0.1:" + std::to_string(port);
+    ai.sendAsync("system prompt", "<mc3/>", "first request");   // blocks server-side, discarded
+    ai.sendAsync("system prompt", "<mc3/>", "second request");  // supersedes the first
+
+    bool finished = pollUntilDone(ai, 5000);
+    CHECK(finished, "STAB-0403: the second sendAsync() call completes normally");
+    CHECK(!ai.hasError(), "STAB-0403: no error from calling sendAsync() twice back-to-back");
+    CHECK(ai.result().find("b2") != std::string::npos,
+          "STAB-0403: polling only ever observes the second (superseding) request's result");
+
+    // Release the first (blocked, now-orphaned) request so its detached
+    // thread can finish and the server can shut down cleanly.
+    {
+        std::lock_guard<std::mutex> lk(releaseMutex);
+        release = true;
+    }
+    releaseCv.notify_all();
+    svr.stop();
+    serverThread.join();
+}
+
 // STAB-0383 / STAB-0631 — a server that accepts the connection but never
 // responds must not hang sendAsync() forever: the configured read timeout
 // has to fire and report an error.
@@ -473,6 +681,8 @@ int main() {
     testValidateAndParseMalformedXmlSetsError();
     testValidateAndParseEmptyDocumentRejected();
     testValidateAndParseAcceptsNonEmptyDocument();
+    testValidateAndParseAcceptsDefinitionsOnlyDocument();
+    testMalformedResponseDoesNotLeakTempFiles();
     testValidateXmlAgainstXsdAcceptsValidDocument();
     testValidateAndParseAiResponsePipelineAcceptsValidXsd();
     testValidateAndParseAiResponseAcceptsPreviouslyUndeclaredConstructs();
@@ -486,6 +696,10 @@ int main() {
     testMockServerSuccessRoundTrip();
     testMockServerTruncatedResponse();
     testMockServerHttpErrorStatus();
+    testModelNameSentInRequestBody();
+    testConnectionRefusedProducesUserVisibleError();
+    testMalformedJsonResponseHandledGracefully();
+    testBackToBackSendAsyncCallsDoNotCrash();
     testNetworkTimeoutPreventsIndefiniteHang();
 #else
     std::cout << "SKIP: mock HTTP server tests require MESHCRAFT_HAS_AI\n";

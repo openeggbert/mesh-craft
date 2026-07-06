@@ -46,6 +46,11 @@ public:
     // systemPrompt — role/format instructions (cached)
     // sceneXml     — serialized mc3.xml scene sent as context (cached)
     // taskPrompt   — user's instruction for this request (not cached)
+    //
+    // STAB-0405: any non-200 response (429 rate limit included) is surfaced
+    // once via hasError()/errorMsg() — there is no automatic retry/backoff.
+    // The user must click Send again after a 429; this is a deliberate
+    // simplicity choice, not an oversight.
     void sendAsync(const std::string& systemPrompt,
                    const std::string& sceneXml,
                    const std::string& taskPrompt);

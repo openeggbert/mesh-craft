@@ -662,6 +662,7 @@ if(MESH_CRAFT_BUILD_TESTING AND UNIX AND NOT ANDROID AND NOT EMSCRIPTEN)
         )
         target_include_directories(mc3_registry_test PRIVATE
             ${CMAKE_CURRENT_SOURCE_DIR}/include
+            ${CMAKE_CURRENT_SOURCE_DIR}/src/MeshCraft
             ${SQLite3_INCLUDE_DIRS}
         )
         target_link_libraries(mc3_registry_test PRIVATE Mc3 ${SQLite3_LIBRARIES})

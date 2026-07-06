@@ -1,4 +1,5 @@
 #include "MeshCraft/ModelRegistry.hpp"
+#include "AiResponseAlgorithms.hpp"
 #include <MeshCraft/Mc3/Mc3Document.hpp>
 #include <MeshCraft/Mc3/Mc3Object.hpp>
 
@@ -909,6 +910,70 @@ static void testEntryFromDefinitionOnlyIncludesReferencedMaterials() {
 }
 
 // ---------------------------------------------------------------------------
+// STAB-0397 — full mock AI -> registry pipeline, no real API call: a raw
+// AI-style response string (markdown-fenced, exactly as a real Claude
+// response would arrive) goes through the same validateAndParseAiResponseAlg
+// pipeline MeshCraftApplication_UiAi.cpp calls, then the parsed document's
+// definition is saved to the registry and re-inserted into a fresh scene —
+// exercising the "Save to Registry..." button's underlying flow end-to-end.
+// ---------------------------------------------------------------------------
+
+static void testAiResponseToRegistryPipeline() {
+    namespace fs = std::filesystem;
+    auto dbPath = fs::temp_directory_path() / "mc3_reg_ai_pipeline_test.sqlite3";
+    fs::remove(dbPath);
+
+    // A realistic AI response: markdown-fenced, defines a reusable "table"
+    // definition plus the material it references.
+    std::string mockAiResponse =
+        "```xml\n"
+        "<mc3 version=\"0.3\">"
+        "<materials><material id=\"wood\"><base_color>0.5 0.3 0.1 1.0</base_color></material></materials>"
+        "<definitions><definition id=\"table\">"
+        "<box id=\"top\" size=\"2 0.1 1\" material=\"wood\"/>"
+        "</definition></definitions>"
+        "</mc3>\n"
+        "```";
+
+    auto parsed = validateAndParseAiResponseAlg(mockAiResponse);
+    CHECK(parsed.doc.has_value(),
+          "STAB-0397: the mock AI response (fenced XML with a definition) parses and "
+          "validates successfully");
+    if (!parsed.doc) return;
+    CHECK(parsed.doc->definitions.count("table") == 1,
+          "STAB-0397: the parsed document contains the 'table' definition");
+
+    ModelRegistry reg;
+    reg.open(dbPath);
+
+    auto entry = reg.entryFromDefinition(*parsed.doc, "table", "AI", "Table",
+                                         "", "ai_generated", "", "ai_generated");
+    CHECK(entry.source == "ai_generated",
+          "STAB-0397: the registry entry built from the AI response is tagged ai_generated");
+
+    int64_t id = reg.save(entry);
+    CHECK(id > 0, "STAB-0397: the AI-sourced entry saves to the registry");
+
+    auto found = reg.search("table");
+    CHECK(found.size() == 1, "STAB-0397: the saved AI-sourced entry is findable via search()");
+    if (!found.empty())
+        CHECK(found[0].source == "ai_generated",
+              "STAB-0397: the found entry retains its ai_generated source tag");
+
+    Mc3Document freshScene;
+    auto insertedId = reg.insertIntoScene(freshScene, entry);
+    CHECK(!insertedId.empty(),
+          "STAB-0397: the AI-sourced entry inserts into a fresh scene");
+    CHECK(freshScene.materials.count("wood") == 1,
+          "STAB-0397: the referenced 'wood' material is merged in along with the definition — "
+          "the full pipeline (mock AI text -> parse -> validate -> registry -> scene) "
+          "round-trips without a real network call");
+
+    reg.close();
+    fs::remove(dbPath);
+}
+
+// ---------------------------------------------------------------------------
 // STAB-0349 — the default registry DB path is ~/.meshcraft/modelregistry.sqlite3
 // (or %USERPROFILE%\.meshcraft\modelregistry.sqlite3 on Windows).
 // ---------------------------------------------------------------------------
@@ -953,6 +1018,7 @@ int main() {
     testUpdateExistingEntry();
     testEmptyVariantField();
     testEntryFromDefinitionOnlyIncludesReferencedMaterials();
+    testAiResponseToRegistryPipeline();
     testDefaultPathFormat();
 #else
     std::cout << "SKIP: ModelRegistry tests require MESHCRAFT_HAS_SQLITE3\n";
