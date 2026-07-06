@@ -504,61 +504,32 @@ No project linter/formatter is configured.
    desktop session (dragging a file from a real file manager) — same
    caveat as clipboard above, check for a testable seam first.
 
-4. **STAB-0569 — verify preloaded web assets: `test/` files accessible.**
-   Files: `CMakeLists.txt`. The `--preload-file test@/test` flag is
-   already visible at `CMakeLists.txt:319` (confirmed while reading
-   the Emscripten link-options block for STAB-0562/0565) — this row is
-   likely a quick confirmation that a sample file under `/test` in the
-   Emscripten FS is actually readable, e.g. via a small Node smoke
-   check against the already-built `MeshCraft.js`/`.wasm` (same
-   approach as STAB-0553's `mc3togltf.js --help` check).
+4. **STAB-0571 onward (web export, web SSAO/bloom)** — all three
+   (STAB-0571/0572/0573) are marked `manual` in `plan.md` and need a
+   live browser session (export-then-download, visual AO/bloom
+   inspection) — not reachable from this environment at all. Consider
+   skipping straight to **STAB-0574** (platform feature matrix
+   documentation, a `README.md` writing task) or **STAB-0575** (Windows
+   spaces-in-path build, needs a real Windows machine — likely blocked
+   too).
 
-Recently closed this session: **STAB-0554** (path separators — confirmed
-`std::filesystem::path` used consistently everywhere, no gap),
-**STAB-0555/0556/0557** (UTF-8 filenames, paths with spaces, non-ASCII
-object names — added 3 new round-trip tests, all pass, see §3),
-**STAB-0558** (config dir per OS — found and fixed a real gap:
-`meshcraftConfigDir()` in `MeshCraftPrivate.hpp` was unconditionally
-Linux-style with no Windows branch at all; added `%APPDATA%` support
-under `#if defined(_WIN32)`), **STAB-0561** (file dialogs — confirmed
-no native OS file-picker library exists anywhere in the editor; all 8
-path entry points use plain `ImGui::InputText`, which has no
-OS-conditional code path to diverge), **STAB-0562** (WebGL2 shader
-compatibility — confirmed all 7 of CNA's EasyGL 3D shader programs are
-`#version 300 es`/GLSL ES 3.00, and the prior STAB-0553 live-browser
-console showed no shader-compile-failure diagnostics), **STAB-0563/0564**
-(SQLite/AI stubs on Emscripten — both feature-gate macros are correctly
-undefined for that target and both stub branches compiled clean as
-part of the same 449/449 build), **STAB-0565** (IDBFS persistence —
-found and fixed a real gap: `cmake/web/pre.js` mounted IDBFS at
-`/home/user`, but Emscripten's actual default `$HOME` is
-`/home/web_user`, so everything `meshcraftConfigDir()` writes was
-silently landing outside the persistent mount; fixed and rebuilt clean),
-**STAB-0566** (Windows SDL DLL copy — actually reconfigured against a
-real MinGW toolchain and found a genuine bug via `--trace-expand`:
-`cna_copy_sdl_runtime()`'s `SDL3::SDL3`/etc. targets are invisible from
-MeshCraft's parent directory scope, so zero DLL-copy commands were ever
-generated; fixed on the MeshCraft side only, via a `CNA_SDL_PREBUILT_ROOT`-based
-fallback in `CMakeLists.txt`, verified against the regenerated
-`build.ninja`), **STAB-0567** (MinGW static libgcc/libstdc++ —
-confirmed directly in the same generated `build.ninja`'s `LINK_FLAGS`),
-and **STAB-0568** (Android `main()`/shared-lib adapter — confirmed by
-code reading; no Android NDK is installed here so it can't be
-reconfigured against a real toolchain like STAB-0566/0567 were).
+STAB-0554 through STAB-0570 (all of S16's build/path/platform
+verification rows) are closed — see `plan.md` for full detail on each.
+Two were genuine bugs found and fixed, not just verified: **STAB-0558**
+(`meshcraftConfigDir()` had no Windows branch at all) and **STAB-0565**
+(`cmake/web/pre.js` mounted IDBFS at the wrong path, silently breaking
+persistence). **STAB-0566** also started as a false-positive ✅ (closed
+on code-reading alone) until a real MinGW reconfigure + `--trace-expand`
+found `cna_copy_sdl_runtime()`'s SDL3 targets are invisible from
+MeshCraft's parent directory scope — fixed via a `CNA_SDL_PREBUILT_ROOT`
+fallback.
 
-**Lesson from STAB-0566**: don't close a build-system verification row on
-code-reading alone when a cheap real reconfigure is possible (the cached
-`.sdl-prebuilt-Windows-x86_64`/`-emscripten` dirs make MinGW/Emscripten
-reconfigures fast even though a full build is slow/blocked) — the actual
-bug here was invisible from source alone and only showed up via
-`--trace-expand` + inspecting the generated `build.ninja`.
-
-Continue through the rest of S16 (`plan.md`, STAB-0559 onward) in
-`plan.md` order after these — several remaining rows are platform-build
-or live-UI items (clipboard, native file dialogs, Android) that may turn
-out to be blocked on missing tools/platforms here, same as MinGW/
-Emscripten turned out to be partially blocked. Read each one's actual
-code path before assuming either way — this session found roughly as
+**Lesson learned**: don't close a build-system verification row on
+code-reading alone when a cheap real reconfigure is possible — the
+cached `.sdl-prebuilt-Windows-x86_64`/`-emscripten` dirs make MinGW/
+Emscripten reconfigures fast even though a full build is slow/blocked,
+and `--trace-expand` + inspecting the generated `build.ninja` can surface
+bugs invisible from source alone. Also: this session found roughly as
 many "confirmed already correct, just needed a test" outcomes as real
 bugs, so don't assume a row is trivial or blocked without checking.
 
