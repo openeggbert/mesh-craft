@@ -16,6 +16,7 @@
 #include "MeshCraft/Mc3/Mc3SvgTexture.hpp"
 #include "MeshCraft/Mc3/Mc3Trigger.hpp"
 
+#include <chrono>
 #include <cmath>
 #include <cstring>
 #include <filesystem>
@@ -737,6 +738,107 @@ static void testLargeStringRoundtrip() {
 // STAB-0139 — MCB binary file size vs. equivalent XML
 // ---------------------------------------------------------------------------
 
+// ---------------------------------------------------------------------------
+// Regression tests for a fresh bug sweep this session: McbReader had no
+// recursion-depth limit (readObject/skipValue), and rRawStr allocated a
+// claimed string length before validating it against the stream at all.
+// Both were confirmed to be real, not theoretical: a ~20,000-level-deep
+// <children> chain segfaulted the process outright (not a catchable
+// exception), and a 23-byte crafted file claiming a ~4GB string forced
+// ~4.1GB of committed memory and 1.66s of CPU before finally throwing.
+// ---------------------------------------------------------------------------
+
+// Writes one Mc3Object's serialized field-list body (the caller has already
+// written the TAG_OBJ tag byte that precedes this). depth==0 writes an empty
+// object; otherwise writes a single "children" entry and recurses.
+static void writeNestedChildObjectBody(std::ostream& o, int depth) {
+    if (depth <= 0) {
+        rawEnd(o);
+        return;
+    }
+    rawKey(o, "children");
+    rawU8(o, TAG_ARR);
+    rawU32(o, 1);
+    rawU8(o, TAG_OBJ);
+    writeNestedChildObjectBody(o, depth - 1);
+    rawEnd(o);
+}
+
+static void testDeeplyNestedChildrenDoesNotCrash() {
+    std::ostringstream out(std::ios::binary);
+    out.write(MCB_MAGIC, 4);
+    rawU8(out, MCB_VERSION);
+    rawU8(out, 0);                  // flags
+    rawU8(out, 0); rawU8(out, 0);   // reserved
+    rawU8(out, TAG_OBJ);            // root document object
+
+    rawKey(out, "objects");
+    rawU8(out, TAG_ARR);
+    rawU32(out, 1);
+    rawU8(out, TAG_OBJ);
+    // 8x the reader's 256-level guard -- comfortably exceeds it without
+    // needing anywhere near the ~20,000 levels that segfaulted the
+    // unguarded reader.
+    writeNestedChildObjectBody(out, 2000);
+
+    rawEnd(out); // end root document object
+
+    std::istringstream in(out.str(), std::ios::binary);
+    bool threw = false;
+    std::string errMsg;
+    try {
+        Mc3Document rt = loadFromBinary(in);
+        (void)rt;
+    } catch (const std::exception& e) {
+        threw = true;
+        errMsg = e.what();
+    }
+    CHECK(threw, "deeply-nested children: loadFromBinary() throws a clean "
+                 "error instead of a native stack-overflow crash");
+    CHECK(errMsg.find("nesting depth") != std::string::npos,
+          "deeply-nested children: the error specifically names the "
+          "recursion-depth guard, not some other failure");
+}
+
+static void testHugeStringLengthRejectedCleanly() {
+    std::ostringstream out(std::ios::binary);
+    out.write(MCB_MAGIC, 4);
+    rawU8(out, MCB_VERSION);
+    rawU8(out, 0);
+    rawU8(out, 0); rawU8(out, 0);
+    rawU8(out, TAG_OBJ);             // root document object
+
+    rawKey(out, "model");
+    rawU8(out, TAG_STR);
+    rawU32(out, 0xFFFFFFF0u);        // claims a ~4GB string length
+    // Deliberately no actual string bytes follow -- the point is that the
+    // reader must reject the claimed length before trying to honor it.
+
+    rawEnd(out);
+
+    std::istringstream in(out.str(), std::ios::binary);
+    auto start = std::chrono::steady_clock::now();
+    bool threw = false;
+    std::string errMsg;
+    try {
+        Mc3Document rt = loadFromBinary(in);
+        (void)rt;
+    } catch (const std::exception& e) {
+        threw = true;
+        errMsg = e.what();
+    }
+    auto elapsedMs = std::chrono::duration_cast<std::chrono::milliseconds>(
+        std::chrono::steady_clock::now() - start).count();
+
+    CHECK(threw, "huge string length: loadFromBinary() rejects an absurd "
+                 "claimed string length instead of allocating it");
+    CHECK(errMsg.find("sanity limit") != std::string::npos,
+          "huge string length: the error specifically names the sanity-limit guard");
+    CHECK(elapsedMs < 1000,
+          "huge string length: rejected in well under a second, not after a "
+          "multi-second multi-gigabyte memory commit");
+}
+
 static void testFileSizeSmallerThanXml() {
     const auto xmlPath = std::filesystem::path(__FILE__).parent_path() / ".." / ".." / "test" / "house.mc3.xml";
     std::error_code ec;
@@ -783,6 +885,8 @@ int main() {
     testEndiannessLittleEndian();
     testActionAnimationRoundtrip();
     testLargeStringRoundtrip();
+    testDeeplyNestedChildrenDoesNotCrash();
+    testHugeStringLengthRejectedCleanly();
     testFileSizeSmallerThanXml();
 
     if (failures == 0)

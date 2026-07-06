@@ -280,11 +280,19 @@ ModelRegistry::Entry ModelRegistry::entryFromDefinition(
         }
     }
 
+    // Temp file is always removed, even if saveToFile()/readFile() throws
+    // partway through (same leak class as STAB-0392's parseXmlAlg fix).
     auto tmpPath = uniqueTempPath("mc_reg_save", ".mc3.xml");
-    tmp.saveToFile(tmpPath);
-    std::string xml = readFile(tmpPath);
+    std::string xml;
     std::error_code ec;
-    std::filesystem::remove(tmpPath, ec);
+    try {
+        tmp.saveToFile(tmpPath);
+        xml = readFile(tmpPath);
+        std::filesystem::remove(tmpPath, ec);
+    } catch (...) {
+        std::filesystem::remove(tmpPath, ec);
+        throw;
+    }
 
     Entry e;
     e.group       = group;
@@ -323,16 +331,25 @@ static void remapMaterialRefs(Mc3::Mc3Object& obj,
 }
 
 std::string ModelRegistry::insertIntoScene(Mc3::Mc3Document& doc, const Entry& e) const {
+    // Temp file is always removed, even if loadFromFile() throws on a
+    // corrupted/malformed registry entry (same leak class as STAB-0392's
+    // parseXmlAlg fix) — reproduced empirically: a malformed e.xml made
+    // loadFromFile() throw before the removal line ran, leaking the file.
     auto tmpPath = uniqueTempPath("mc_reg_insert", ".mc3.xml");
-    {
-        std::ofstream f(tmpPath);
-        if (!f) throw std::runtime_error("Cannot write temp file");
-        f << e.xml;
-    }
-
-    Mc3::Mc3Document tmp = Mc3::Mc3Document::loadFromFile(tmpPath);
     std::error_code ec;
-    std::filesystem::remove(tmpPath, ec);
+    Mc3::Mc3Document tmp;
+    try {
+        {
+            std::ofstream f(tmpPath);
+            if (!f) throw std::runtime_error("Cannot write temp file");
+            f << e.xml;
+        }
+        tmp = Mc3::Mc3Document::loadFromFile(tmpPath);
+        std::filesystem::remove(tmpPath, ec);
+    } catch (...) {
+        std::filesystem::remove(tmpPath, ec);
+        throw;
+    }
 
     if (tmp.definitions.empty())
         throw std::runtime_error("Registry entry has no definitions");

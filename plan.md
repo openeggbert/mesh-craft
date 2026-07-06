@@ -958,6 +958,74 @@ Blender import test for release-representative content, STAB-0642).
 
 ---
 
+## Post-650 Follow-Up Findings (2026-07-07)
+
+With the original 650-row list essentially closed (620 ✅ / 29 🟡 / 1 📋),
+a fresh, independent bug-sweep investigation (not scoped to any specific
+STAB row) looked at areas that get less scrutiny in a checklist-driven
+process: resource lifetime, integer overflow, malformed/adversarial input
+handling, CSG edge cases, the new `AiAssistant` threading code, and
+silent-failure patterns. Two real, high-confidence bugs were found and
+fixed (both empirically reproduced, not just inferred by inspection):
+
+1. **MCB unbounded-recursion stack overflow** (`mcb/src/McbReader.cpp`,
+   `readObject`/`skipValue`/`skipObject`). Unlike `CsgEvaluator.cpp` (which
+   has an explicit `CSG_MAX_DEPTH = 12` guard), the MCB reader had no
+   recursion-depth limit at all. A crafted `.mcb` file with ~20,000 levels
+   of nested `<children>` (a few hundred KB) reliably **segfaulted the
+   process** (stack overflow — not a catchable `std::exception`) when
+   opened via `mc3tomcb` or the editor's Open dialog, both of which only
+   guard against `catch (const std::exception&)`. Fixed with a
+   `RecursionGuard<256>` template (mirrors the `CSG_MAX_DEPTH` pattern) in
+   both `skipValue()` (covers the skip-unknown-field path, including
+   nested `TAG_ARR`/`TAG_MAP`) and `readObject()` (covers the real
+   `Mc3Object` tree's `children` self-recursion) — now throws a clean,
+   named `"MCB: nesting depth exceeds 256"` error instead of crashing.
+   Regression tests added: `testDeeplyNestedChildrenDoesNotCrash`
+   (`mcb/test/mcb_roundtrip_test.cpp`, 2000-level nesting, confirms a
+   clean throw naming the guard).
+2. **MCB unbounded-allocation resource exhaustion** (`mcb/src/
+   McbReader.cpp`'s `rRawStr`). A claimed string length was used to
+   construct `std::string s(len, '\0')` — which actually commits/zero-
+   writes `len` bytes — **before** validating it against the actual
+   stream contents. A 23-byte crafted file (valid header + one `TAG_STR`
+   field claiming a length of `0xFFFFFFF0` ≈ 4 GB, followed by only 2
+   real bytes) forced **~4.1 GB of committed memory and 1.66s of CPU
+   time** before the pre-existing truncation check finally threw. Fixed
+   with a `kMcbMaxStringLen = 64 MB` sanity ceiling checked immediately
+   after reading the length, before any allocation — no legitimate mc3
+   scene has a single string field anywhere near this size. Regression
+   test: `testHugeStringLengthRejectedCleanly` (confirms rejection in
+   well under 1 second, not after a multi-second memory commit).
+   (`vector::reserve(n)`-based amplification for the format's various
+   count-prefixed arrays/maps was also investigated and found to already
+   fail safely via a clean `std::bad_alloc` — `reserve()` only requests
+   capacity, it doesn't commit/zero memory the way `std::string`'s
+   fill-constructor does, so this secondary vector was not fixed.)
+3. **`ModelRegistry.cpp` temp-file leak on exception** in both
+   `insertIntoScene()` and `entryFromDefinition()` — same leak class as
+   this session's STAB-0392 fix (`AiResponseAlgorithms.hpp::parseXmlAlg`,
+   `MeshCraftApplication_UiAi.cpp::serializeScene`), just never
+   propagated to these two call sites despite plan.md's own STAB-0611/
+   STAB-0635 explicitly naming them as sharing the same tmp-file helper
+   pattern. A malformed/corrupted registry entry (e.g. a hand-edited or
+   corrupted SQLite row) made the risky call (`Mc3Document::
+   loadFromFile`/`readFile`) throw before the temp-file removal line ran,
+   leaking a file on every occurrence — reproduced empirically for
+   `insertIntoScene`; `entryFromDefinition` has the structurally identical
+   shape, fixed the same way. Regression test:
+   `testInsertMalformedEntryDoesNotLeakTempFiles`
+   (`mc3/test/mc3_registry_test.cpp`).
+
+All three fixes are covered by new regression tests; full suite is 66/66
+green (`mcb_roundtrip_test` +2, `mc3_registry_test` +1). No other bugs
+were found — CSG edge cases (single-child, all-cutters, degenerate
+geometry), the new `AiAssistant` detached-thread code, and
+`Mc3XmlParser`/`Mc3XmlWriter`'s exception handling were all independently
+re-examined and confirmed safe/already correctly handled.
+
+---
+
 ## Architecture Reference (preserved from original plan.md)
 
 | Module | Location | Role |

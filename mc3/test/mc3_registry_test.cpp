@@ -910,6 +910,52 @@ static void testEntryFromDefinitionOnlyIncludesReferencedMaterials() {
 }
 
 // ---------------------------------------------------------------------------
+// Regression test for a fresh bug sweep this session: insertIntoScene() only
+// removed its scratch temp file *after* a successful Mc3Document::
+// loadFromFile() call -- a malformed/corrupted registry entry (e.g. a
+// hand-edited or corrupted SQLite row) made loadFromFile() throw before the
+// removal line ran, leaking a temp file on every single malformed entry.
+// Same leak class as STAB-0392's parseXmlAlg fix in AiResponseAlgorithms.hpp
+// -- confirmed real here too, not just by inspection.
+// ---------------------------------------------------------------------------
+
+static void testInsertMalformedEntryDoesNotLeakTempFiles() {
+    namespace fs = std::filesystem;
+    auto countScratchFiles = [] {
+        int n = 0;
+        std::error_code ec;
+        auto tempDir = fs::temp_directory_path(ec);
+        if (ec) return 0;
+        for (const auto& entry : fs::directory_iterator(tempDir, ec)) {
+            if (entry.path().filename().string().rfind("mc_reg_insert_", 0) == 0)
+                ++n;
+        }
+        return n;
+    };
+
+    ModelRegistry reg;
+    ModelRegistry::Entry e;
+    e.xml = "this is not valid xml at all <<<";
+
+    int before = countScratchFiles();
+    for (int i = 0; i < 20; ++i) {
+        Mc3Document scene;
+        bool threw = false;
+        try {
+            reg.insertIntoScene(scene, e);
+        } catch (const std::exception&) {
+            threw = true;
+        }
+        CHECK(threw, "insertIntoScene: malformed entry xml throws (not silently accepted)");
+    }
+    int after = countScratchFiles();
+
+    CHECK(after == before,
+          "STAB regression: 20 malformed insertIntoScene() calls leave no "
+          "leftover mc_reg_insert_* temp files behind");
+}
+
+// ---------------------------------------------------------------------------
 // STAB-0397 — full mock AI -> registry pipeline, no real API call: a raw
 // AI-style response string (markdown-fenced, exactly as a real Claude
 // response would arrive) goes through the same validateAndParseAiResponseAlg
@@ -1018,6 +1064,7 @@ int main() {
     testUpdateExistingEntry();
     testEmptyVariantField();
     testEntryFromDefinitionOnlyIncludesReferencedMaterials();
+    testInsertMalformedEntryDoesNotLeakTempFiles();
     testAiResponseToRegistryPipeline();
     testDefaultPathFormat();
 #else

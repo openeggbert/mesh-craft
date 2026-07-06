@@ -57,9 +57,23 @@ static float rF32(std::istream& in) {
     return v;
 }
 
+// A claimed length is validated against a generous sanity ceiling before
+// allocating — not just against "did the read succeed" after the fact.
+// std::string's fill-constructor actually commits (zero-writes) len bytes
+// immediately, unlike e.g. vector::reserve(), so an unvalidated claim from a
+// tiny corrupted/malicious file (a handful of real bytes, one length field
+// claiming ~4GB) forces multi-GB memory commit and multi-second CPU time
+// before the truncation check below ever gets a chance to fire — confirmed
+// empirically. No legitimate mc3 scene has a single string field anywhere
+// near this size.
+static constexpr uint32_t kMcbMaxStringLen = 64u * 1024u * 1024u; // 64 MB
+
 static std::string rRawStr(std::istream& in) {
     uint32_t len = rU32(in);
     if (len == 0) return {};
+    if (len > kMcbMaxStringLen)
+        throw std::runtime_error("MCB: string length " + std::to_string(len) +
+            " exceeds sanity limit (corrupted or malicious file?)");
     std::string s(len, '\0');
     if (!in.read(s.data(), static_cast<std::streamsize>(len)))
         throw std::runtime_error("MCB: string truncated");
@@ -86,6 +100,38 @@ static std::string rKey(std::istream& in) {
     return k;
 }
 
+// Defensive recursion-depth guard against a corrupted/malicious MCB file
+// with deeply-nested objects/arrays causing unbounded recursion. Unlike a
+// normal parse error, a native stack overflow is not a catchable
+// std::exception and crashes the whole process — confirmed empirically: a
+// few-hundred-KB file with ~20,000 levels of nested <children> segfaults,
+// even though every real call site (mc3tomcb, the editor's Open dialog)
+// wraps loadFromFile/loadFromBinary in a plain catch(const
+// std::exception&). Mirrors CsgEvaluator.cpp's CSG_MAX_DEPTH pattern. Two
+// independent counters (one per recursion tree: skipValue's skip-path,
+// readObject's real-object-tree path) are used rather than one shared
+// counter — simpler than threading state across both call chains, and the
+// combined worst-case stack depth (each counter capped independently) is
+// still trivially within a normal 8MB thread stack.
+template <int MaxDepth>
+class RecursionGuard {
+public:
+    RecursionGuard() {
+        if (++depth_ > MaxDepth) {
+            --depth_;
+            throw std::runtime_error(
+                "MCB: nesting depth exceeds " + std::to_string(MaxDepth) +
+                " (corrupted or malicious file?)");
+        }
+    }
+    ~RecursionGuard() { --depth_; }
+    RecursionGuard(const RecursionGuard&) = delete;
+private:
+    static thread_local int depth_;
+};
+template <int MaxDepth>
+thread_local int RecursionGuard<MaxDepth>::depth_ = 0;
+
 // Forward declaration
 static void skipValue(std::istream& in, uint8_t tag);
 
@@ -99,6 +145,7 @@ static void skipObject(std::istream& in) {
 }
 
 static void skipValue(std::istream& in, uint8_t tag) {
+    RecursionGuard<256> guard;
     switch (tag) {
     case TAG_NULL:                                     break;
     case TAG_BOOL: rU8(in);                            break;
@@ -312,6 +359,7 @@ static Mc3::Mc3ObjectState readObjectState(std::istream& in) {
 static std::shared_ptr<Mc3::Mc3Object> readObject(std::istream& in);
 
 static std::shared_ptr<Mc3::Mc3Object> readObject(std::istream& in) {
+    RecursionGuard<256> guard;
     auto obj = std::make_shared<Mc3::Mc3Object>();
     while (true) {
         std::string k = rKey(in); if (k.empty()) break;
