@@ -2114,6 +2114,65 @@ static void testMissingIdDoesNotCrash() {
     }
 }
 
+// STAB-0077: duplicate object `id` policy. doc.objects is a plain
+// std::vector<shared_ptr<Mc3Object>> (not id-keyed), so parsing never
+// deduplicates or overrides on `id` collision — both objects simply coexist
+// as independent entries. Documenting and testing the real behavior, since
+// "id" here is an optional identifier (STAB-0081), not a map key.
+static void testDuplicateObjectIdBothCoexist() {
+    auto xmlPath = tmpPath();
+    {
+        std::ofstream f(xmlPath);
+        f << R"(<?xml version="1.0" encoding="UTF-8"?>)" "\n"
+          << R"(<mc3 version="0.3">)" "\n"
+          << R"(  <objects>)" "\n"
+          << R"(    <box name="First" id="dup"/>)" "\n"
+          << R"(    <sphere name="Second" id="dup"/>)" "\n"
+          << R"(  </objects>)" "\n"
+          << R"(</mc3>)" "\n";
+    }
+    Mc3Document doc = Mc3Document::loadFromFile(xmlPath);
+    std::filesystem::remove(xmlPath);
+
+    CHECK(doc.objects.size() == 2, "duplicate object id: both objects survive (no dedup/override)");
+    if (doc.objects.size() == 2) {
+        CHECK(doc.objects[0]->id == "dup" && doc.objects[1]->id == "dup",
+              "duplicate object id: both entries keep the same id");
+        CHECK(doc.objects[0]->name == "First" && doc.objects[1]->name == "Second",
+              "duplicate object id: distinguishable by name; neither was overwritten");
+    }
+}
+
+// STAB-0078: duplicate material `id` policy. doc.materials IS a
+// std::map<std::string, Mc3Material> (id-keyed, `doc.materials[id] = mat`),
+// so — unlike objects above — a duplicate material id genuinely overwrites:
+// the later <material> element in document order wins.
+static void testDuplicateMaterialIdLastWins() {
+    auto xmlPath = tmpPath();
+    {
+        std::ofstream f(xmlPath);
+        f << R"(<?xml version="1.0" encoding="UTF-8"?>)" "\n"
+          << R"(<mc3 version="0.3">)" "\n"
+          << R"(  <materials>)" "\n"
+          << R"(    <material id="dup" roughness="0.2"><base_color>1 0 0 1</base_color></material>)" "\n"
+          << R"(    <material id="dup" roughness="0.9"><base_color>0 1 0 1</base_color></material>)" "\n"
+          << R"(  </materials>)" "\n"
+          << R"(  <objects>)" "\n"
+          << R"(    <box name="Box1" id="b1" material="dup"/>)" "\n"
+          << R"(  </objects>)" "\n"
+          << R"(</mc3>)" "\n";
+    }
+    Mc3Document doc = Mc3Document::loadFromFile(xmlPath);
+    std::filesystem::remove(xmlPath);
+
+    CHECK(doc.materials.count("dup") == 1, "duplicate material id: exactly one entry (map semantics)");
+    if (doc.materials.count("dup")) {
+        const auto& m = doc.materials.at("dup");
+        CHECKF(m.roughness, 0.9f, "duplicate material id: second <material> (roughness=0.9) wins");
+        CHECKF(m.baseColor[1], 1.0f, "duplicate material id: second <material>'s base_color (green) wins");
+    }
+}
+
 // ---------------------------------------------------------------------------
 // STAB-0074 — Grid with explicit subdivisions_x and subdivisions_z
 // ---------------------------------------------------------------------------
@@ -2480,6 +2539,8 @@ int main(int argc, char* argv[]) {
     testUnknownAttributeOnKnownElement();
     testMalformedNumericAttributesDoNotCrash();
     testMissingIdDoesNotCrash();
+    testDuplicateObjectIdBothCoexist();
+    testDuplicateMaterialIdLastWins();
     testGridSubdivisions();
     testIcoSphereSegments();
     testCapsuleRadiusHeight();
