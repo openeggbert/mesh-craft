@@ -1024,6 +1024,19 @@ geometry), the new `AiAssistant` detached-thread code, and
 `Mc3XmlParser`/`Mc3XmlWriter`'s exception handling were all independently
 re-examined and confirmed safe/already correctly handled.
 
+**Follow-up check on the same bug class**: given how severe the MCB
+recursion finding was, also empirically tested whether the *XML* load
+path has the same unbounded-recursion vulnerability (`Mc3XmlParser.cpp`'s
+`parseObject()` recurses on nested `<group>` children with no depth guard
+of its own) — generated a real `.mc3.xml` fixture with 20,000 levels of
+nested `<group>` and loaded it via `mc3togltf`. **No crash**: tinyxml2
+itself already enforces its own element-nesting depth limit and returns a
+clean `XML_ELEMENT_DEPTH_EXCEEDED` error (exit code 1, no exception needed
+from `Mc3XmlParser.cpp` at all) — confirmed safe, no fix needed. This is
+exactly why MCB (a from-scratch hand-rolled binary parser with no
+third-party hardening) was the higher-value target, not the XML path
+(which already benefits from tinyxml2's own defenses).
+
 ---
 
 ## Architecture Reference (preserved from original plan.md)
