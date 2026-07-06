@@ -161,6 +161,18 @@ if(BUILD_TESTING)
                         "${BLENDER_EXEC}"
             )
             set_tests_properties(mc3togltf_blender_import PROPERTIES TIMEOUT 90 LABELS "export")
+
+            # STAB-0431: a single-material box's PBR values survive export ->
+            # Blender import intact (Base Color / Roughness / Metallic read
+            # back from the imported Principled BSDF node).
+            add_test(
+                NAME mc3togltf_material_pbr_blender_import
+                COMMAND "${PYTHON3_EXEC}"
+                        "${CMAKE_CURRENT_SOURCE_DIR}/test/material_pbr_blender_import_test.py"
+                        "$<TARGET_FILE:mc3togltf>"
+                        "${BLENDER_EXEC}"
+            )
+            set_tests_properties(mc3togltf_material_pbr_blender_import PROPERTIES TIMEOUT 90 LABELS "export")
         endif()
         # STAB-0257: >1M-triangle OBJ export stress test. Generates the OBJ
         # on the fly (not a committed static fixture -- it's ~28MB as text).
