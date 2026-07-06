@@ -91,7 +91,13 @@ void ModelRegistry::open(const std::filesystem::path& dbPath) {
         db_ = nullptr;
         throw std::runtime_error("ModelRegistry open failed: " + err);
     }
-    createSchema();
+    try {
+        createSchema();
+    } catch (...) {
+        sqlite3_close(db_);
+        db_ = nullptr;
+        throw;
+    }
 }
 
 void ModelRegistry::close() {

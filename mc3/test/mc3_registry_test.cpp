@@ -342,6 +342,38 @@ static void testUnavailableRegistryNoCrash() {
     fs::remove(dbPath);
 }
 
+// STAB-0065: a *corrupted* SQLite file — unlike testOpenFailureThrowsNamedError's
+// directory-as-path case (which fails at sqlite3_open() itself), garbage bytes
+// in an otherwise-valid file path pass sqlite3_open() (SQLite validates the
+// file format lazily) and only fail once createSchema()'s CREATE TABLE
+// actually executes — a different code path (open()'s createSchema() call,
+// not the sqlite3_open() error branch), so it needs its own test.
+static void testCorruptedDatabaseThrowsCleanly() {
+    namespace fs = std::filesystem;
+    auto dbPath = fs::temp_directory_path() / "mc3_reg_corrupted.sqlite3";
+    fs::remove(dbPath);
+
+    {
+        std::ofstream garbage(dbPath, std::ios::binary);
+        garbage << "this is not a valid SQLite database file, just garbage bytes\0\xFF\xFE";
+    }
+
+    ModelRegistry reg;
+    bool threw = false;
+    std::string message;
+    try {
+        reg.open(dbPath);
+    } catch (const std::exception& ex) {
+        threw = true;
+        message = ex.what();
+    }
+    CHECK(threw, "corrupted db: open() throws rather than crashing");
+    CHECK(!message.empty(), "corrupted db: exception message is non-empty");
+    CHECK(!reg.isOpen(), "corrupted db: registry stays closed after the failed open()");
+
+    fs::remove(dbPath);
+}
+
 // STAB-0341: opening a path that can't be a SQLite DB file (a directory)
 // throws std::runtime_error with a named, non-empty message, and leaves the
 // registry closed — matching what MeshCraftApplication_UiRegistry.cpp's
@@ -802,6 +834,7 @@ int main() {
     testInsertMaterialNameCollision();
     testMigration();
     testMigrationFromLegacySchema();
+    testCorruptedDatabaseThrowsCleanly();
     testUnavailableRegistryNoCrash();
     testOpenFailureThrowsNamedError();
     testSearchMatchesEachFieldIndependently();
