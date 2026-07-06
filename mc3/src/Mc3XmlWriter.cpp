@@ -1,5 +1,6 @@
 #include "Mc3XmlWriter.hpp"
 #include <MeshCraft/Mc3/Mc3Animation.hpp>
+#include <MeshCraft/Mc3/Mc3Document.hpp>
 #include <MeshCraft/Mc3/Mc3Extrude.hpp>
 #include <MeshCraft/Mc3/Mc3SceneState.hpp>
 #include <MeshCraft/Mc3/Mc3Trigger.hpp>

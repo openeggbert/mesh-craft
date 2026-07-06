@@ -10,7 +10,6 @@
 #include <tinyxml2.h>
 
 #include <algorithm>
-#include <cstdlib>
 #include <filesystem>
 #include <iostream>
 #include <set>

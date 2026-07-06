@@ -1,6 +1,7 @@
 #pragma once
-#include "MeshCraft/Mc3/Mc3Document.hpp"
 #include <filesystem>
+
+namespace MeshCraft::Mc3 { class Mc3Document; }
 
 namespace MeshCraft::Mc3::Internal {
 

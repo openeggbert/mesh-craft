@@ -1,6 +1,5 @@
 #include "MeshCraft/Mc3/Mc3Animation.hpp"
 #include <algorithm>
-#include <cmath>
 
 namespace MeshCraft::Mc3 {
 
