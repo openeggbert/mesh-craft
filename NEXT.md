@@ -487,58 +487,58 @@ No project linter/formatter is configured.
 
 ## 8. Next smallest tasks
 
-1. **Diagnose the Emscripten blank-canvas rendering issue (§4).**
-   Goal: find out why nothing draws to the canvas after the first
-   successful frame, even though the main loop is confirmed to keep
-   running. Files: `src/MeshCraft/MeshCraftApplication.cpp` (`Draw()`/
-   `EndDraw()`), possibly ImGui's font-atlas upload path. Add a small,
-   temporary frame counter (e.g. `std::cerr` every 60 frames) and a
-   `glGetError()` check after the main draw calls; rebuild with
-   Emscripten (§7); ask a human to reload the page and report the new
-   console output. Verification: the diagnostic output itself, reported
-   back by a human with a browser — this repo alone can't close the
-   loop.
+**S16–S20 are exhausted for this environment** — every row in those
+sections is now either ✅ or genuinely blocked on a missing tool/live
+session (clipboard/drag-drop/web-export/web-SSAO-bloom need a live
+UI or browser; STAB-0617's ImGui refactor needs a live display to
+verify after splitting; STAB-0642/0643/0650 need Blender/a
+browser/working CI respectively). The next work is in the **S0–S15
+backlog**, which is much larger (see `plan.md`'s per-section summary
+table) and includes real implementation work (new MCB roundtrip tests,
+CTest labels/grouping), not just verification. Two things worth doing
+first, both cheap:
 
-2. **STAB-0559 — verify clipboard paste: Ctrl+V from OS clipboard.**
-   Files: `src/MeshCraft/MeshCraftApplication_Keyboard.cpp`. Needs a
-   live UI session to actually exercise clipboard interaction — check
-   whether this is reachable at all headlessly (e.g. does ImGui's own
-   clipboard callback plumbing have a headless-testable seam) before
-   assuming it's fully blocked.
+1. **Spot-check S0–S15's remaining 📋/🧪 rows for staleness before
+   assuming they're fresh work.** This session found STAB-0013
+   (Emscripten build) and STAB-0039 (`mcb_roundtrip_test` CTest target)
+   were already fully satisfied by later, more specific STAB rows or
+   pre-existing test infrastructure — just never marked done. A quick
+   `ctest -N` / `grep` pass over the next 10-20 rows before writing new
+   code could close several for free.
 
-3. **STAB-0560 — verify SDL drag-drop on Linux.** Files:
-   `src/MeshCraft/MeshCraftApplication.cpp`. Likely needs a live
-   desktop session (dragging a file from a real file manager) — same
-   caveat as clipboard above, check for a testable seam first.
+2. **STAB-0027 — add CTest labels for grouping** (`ctest -L format` /
+   `-L export` etc.). Files: `CMakeLists.txt`, `mc3togltf/CMakeLists.txt`.
+   Straightforward: add `set_tests_properties(<test> PROPERTIES LABELS
+   "<label>")` per existing `add_test()` call, grouped by which gate/
+   section they belong to. Verification: `ctest -L <label>` runs only
+   the intended subset.
 
-4. **STAB-0575 — verify Windows: spaces in CMake binary dir work.**
-   Files: `CMakeLists.txt`. Needs a real Windows machine (or at least a
-   MinGW build that gets further than STAB-0552's ~73% blocker) to
-   actually build from a path like `C:\My Projects\MeshCraft\...` —
-   likely blocked here the same way. STAB-0571/0572/0573 (web export,
-   web SSAO/bloom) are all marked `manual` in `plan.md` and need a live
-   browser session — not reachable from this environment at all; S16 is
-   otherwise fully closed (STAB-0574 done, see below).
+STAB-0554 through STAB-0575 (all of S16), STAB-0609/0614/0615/0620 (S18
+static analysis), STAB-0011/0013/0015/0020/0039 (S0/S1 spot-checks) are
+closed this session — see `plan.md` for full detail on each. Real bugs
+found and fixed (not just verified): **STAB-0558** (`meshcraftConfigDir()`
+had no Windows branch), **STAB-0565** (`cmake/web/pre.js` mounted IDBFS
+at the wrong path, silently breaking persistence), **STAB-0566**
+(`cna_copy_sdl_runtime()`'s SDL3 targets are invisible from MeshCraft's
+parent directory scope — only found via a real MinGW reconfigure +
+`--trace-expand`, after first closing it incorrectly on code-reading
+alone), and **STAB-0015** (missing `lxml` crashed `xsd_validation` with
+a raw traceback instead of an actionable message).
 
-STAB-0554 through STAB-0570, plus STAB-0574 (platform feature matrix in
-`README.md`), are closed — see `plan.md` for full detail on each.
-Two were genuine bugs found and fixed, not just verified: **STAB-0558**
-(`meshcraftConfigDir()` had no Windows branch at all) and **STAB-0565**
-(`cmake/web/pre.js` mounted IDBFS at the wrong path, silently breaking
-persistence). **STAB-0566** also started as a false-positive ✅ (closed
-on code-reading alone) until a real MinGW reconfigure + `--trace-expand`
-found `cna_copy_sdl_runtime()`'s SDL3 targets are invisible from
-MeshCraft's parent directory scope — fixed via a `CNA_SDL_PREBUILT_ROOT`
-fallback.
-
-**Lesson learned**: don't close a build-system verification row on
-code-reading alone when a cheap real reconfigure is possible — the
-cached `.sdl-prebuilt-Windows-x86_64`/`-emscripten` dirs make MinGW/
-Emscripten reconfigures fast even though a full build is slow/blocked,
-and `--trace-expand` + inspecting the generated `build.ninja` can surface
-bugs invisible from source alone. Also: this session found roughly as
-many "confirmed already correct, just needed a test" outcomes as real
-bugs, so don't assume a row is trivial or blocked without checking.
+**Lessons learned this session**:
+- Don't close a build-system verification row on code-reading alone
+  when a cheap real reconfigure is possible — the cached
+  `.sdl-prebuilt-Windows-x86_64`/`-emscripten` dirs make MinGW/
+  Emscripten reconfigures fast even though a full build is slow/blocked,
+  and `--trace-expand` + inspecting the generated `build.ninja` can
+  surface bugs invisible from source alone (STAB-0566).
+- Roughly as many rows turned out to be "confirmed already correct,
+  just needed a test" as turned out to be real bugs — don't assume a
+  row is trivial or blocked without checking.
+- Several early-section (S0/S1) rows are stale duplicates of later,
+  more specific work from the original 650-task plan generation —
+  worth a quick sanity check before assuming a low-numbered row is
+  untouched.
 
 ---
 
