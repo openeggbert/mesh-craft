@@ -124,3 +124,38 @@ error: 'CurrentRegion' is not a member of 'System::Globalization::RegionInfo'
 Compiler: `g++ (Debian 14.2.0-19) 14.2.0`. CMake: CLion-bundled `4.2.2` (required for reconfigure; system `cmake 3.31.6` has a documented bug affecting this project). Test labels: `ai` (1), `commands` (1), `export` (44), `format` (3), `registry` (1), `render` (16) — total 66.
 
 **Phase 1 conclusion**: after the `CNA_ENABLE_NET` fix, the project builds and tests genuinely clean from an absolute-zero state. This is the first time in this project's session history that this has been verified with a fully deleted build directory rather than an incremental one.
+
+---
+
+## Phase 2 — Reconcile Plan With Reality
+
+Checked every required doc (`plan.md`, `NEXT.md`, `STABILIZATION.md`, `TESTING.md`, `m1m2m3.md`, `MC3_FORMAT.md`, `mc3/MC3_FORMAT.md`, `README.md`) for test-count/status claims that had drifted from the numbers verified in Phase 1. `m1m2m3.md` and `MC3_FORMAT.md` had no numeric test-count claims to check (grep for `[0-9]+/[0-9]+` etc. returned nothing). Found and fixed real staleness in the rest:
+
+- **`STABILIZATION.md`**: "Current Test Suite (2026-07-03)" section still listed only 20 tests by name (actual: 66); the Gate table's Gate 6 row still described STAB-0642/STAB-0643 as blocked on missing Blender/browser tooling — both were actually closed with real evidence in a prior session (Blender 4.3.2 confirmed installed, a real headless-Chrome WebGL2 session confirmed). Rewrote both sections with recomputed gate-by-gate counts (exact `STAB-XXXX` ID ranges, not the section-based S0-S20 counts) and pointed the test list at `TESTING.md` instead of duplicating a now-66-entry list inline.
+- **`TESTING.md`**: header claimed "47 tests today" / "Expected result: 47/47" (actual: 66); standalone-build expectation table said `mc3togltf 24/24` (actual, re-verified by an actual standalone configure+build+ctest run: **41/41**); `smoke_test` was attributed to a nonexistent `test/smoke_test.py` (actual file: `test/smoke_test.sh`, a bash script, confirmed via `ls`). The 5 C++ assertion-binary PASS-counts (109/57/413/489/50) were all stale by 30-200%+ — recounted each directly (`./binary 2>&1 | grep -c '^PASS:'`): `mc3_registry_test` 152, `ai_test` 73, `mc3_roundtrip_test` 542, `mc3_commands_test` 510, `mcb_roundtrip_test` 155. Substantially expanded the Python/bash test-reference table (it previously covered ~17 of 66 tests; still not exhaustively 1:1, but now covers all major categories including the 3 real-headless-Blender tests and the new `gl_state_leak_test`).
+- **`README.md`'s Platform Support Matrix** and **`plan.md`'s STAB-0552/STAB-0012/STAB-0575**: the MinGW cross-compile numbers ("328/449 objects") predated this session's `CNA_ENABLE_NET` fix and were provably stale (the fix changes the total object count in the graph on every platform, not just Linux). Re-ran a full MinGW cross-compile from scratch with the fix applied (see command trace below) rather than just editing the number — found the picture is now genuinely more nuanced, not just relabeled.
+
+### MinGW cross-compile re-verification (command trace)
+
+Wrote a standard MinGW cross-compile toolchain file (`CMAKE_SYSTEM_NAME Windows`, `x86_64-w64-mingw32-{gcc,g++,windres}`, `CMAKE_FIND_ROOT_PATH /usr/x86_64-w64-mingw32`) since the one used in a prior session wasn't committed anywhere. Configure (`-DMESH_CRAFT_BUILD_TESTING=OFF`): succeeded cleanly (109.8s), correctly reported SQLite3/OpenSSL/LibXml2 all not-found-and-gracefully-disabled for the MinGW target — matching prior sessions' findings exactly, no regression there.
+
+Build (`ninja -j$(nproc)`): **failed**, but at a *different* point than the previously-documented "328/449, GLES3 blocker" — now failing much earlier (140/496) on two `../sharp-runtime`-side files. Re-ran with `ninja -k 0` (keep going past all failures) to see the complete picture in one pass: **exactly 4 distinct failures**, all pre-existing and none related to this session's `CNA_ENABLE_NET` fix:
+1. `_deps/imgui-src/backends/imgui_impl_opengl3.cpp` — the known CNA-side `GLES3/gl3.h` header gap (unchanged from prior sessions).
+2. `../sharp-runtime/src/System/Net/Sockets/Socket.cpp:361` — `-Werror=unused-function` on an internal `millisecondsToTimeval` helper.
+3. `../sharp-runtime/src/System/Net/Sockets/UnixDomainSocketEndPoint.cpp` — `afunix.h`'s `ADDRESS_FAMILY` type not visible (an internal Windows-SDK-header include-order issue, MinGW-version-specific).
+4. `../sharp-runtime/src/System/Xml/XmlConvert.cpp` (via `CharUnicodeInfo.hpp:162`) — `-Werror=sign-compare`.
+
+All 4 are inside `../cna` or `../sharp-runtime` — this project may not modify either without permission, so none were fixed. **New positive finding**: with `-k 0`, the build reached 352/358 steps, far enough to observe that `mc3togltf.exe` and `mc3tomcb.exe` (the two CNA-free CLI tools) **built and linked successfully** — confirmed as real Windows binaries via `file mc3togltf.exe` → `PE32+ executable for MS Windows 5.02 (console), x86-64, 18 sections`. Only the full GUI editor (needing CNA+SHARP_RUNTIME) remains blocked. Scratch build dir and toolchain file removed after (not committed — this repo has no dedicated MinGW toolchain file checked in; documenting the exact content here so a future session doesn't have to reconstruct it from scratch again).
+
+**Phase 2 conclusion**: every quantitative claim now in the required docs was produced by an actually-run command in this session (2026-07-07), not carried forward from an earlier revision.
+
+---
+
+## Phase 3 — Stabilization Backlog Re-Audit
+
+**Command**: structural completeness check across all 650 rows (Python, parsing `plan.md` directly):
+```
+malformed rows: 0
+rows with empty Key File(s) column: 0
+```
+Every one of the 650 `STAB-XXXX` rows has a valid status symbol (✅/🟡/🧪/📋/🔴), a valid priority (P0-P3), a non-empty title, a non-empty "Key File(s)" column, and a non-empty verification/notes column. Combined with Phase 0's findings (all 650 IDs present exactly once, contiguous 1-650, all 21 sections S0-S20 present), the backlog structure is fully sound — no follow-up needed.
