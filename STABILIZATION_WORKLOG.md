@@ -192,3 +192,60 @@ No additional Phase 4 work was needed beyond what Phase 1 already fixed. Summary
 7. **P2, cleanup/warnings**: Phase 1's clean build showed zero real compiler warnings — no P2 cleanup work was actually needed.
 
 No further Phase 4 batch was required — every P0/P1 item found during this audit was already addressed by the point Phase 5 completed.
+
+---
+
+## Phase 8 — Final Report
+
+**1. Start commit hash**: `f663585` (state of `develop` immediately before this conservative-maintainer audit began).
+
+**2. End commit hash**: `da8f1b8`.
+
+**3. Files changed** (this audit's own commits, `f663585..da8f1b8`): `CMakeLists.txt`, `NEXT.md`, `README.md`, `STABILIZATION.md`, `STABILIZATION_VERIFICATION.md` (new), `STABILIZATION_WORKLOG.md` (new), `TESTING.md`, `plan.md`. 8 files, +404/-66 lines. 4 commits.
+
+**4. Source code changed**: **Yes** — one file, `CMakeLists.txt`, +9 lines (`set(CNA_ENABLE_NET OFF CACHE BOOL "" FORCE)` plus an explanatory comment). This is a build-configuration change, not application logic — no `.cpp`/`.hpp` file was touched during this audit. (Separately, in the part of this session's overall work that happened *before* this specific "re-verify from scratch" mandate began, several `.cpp`/`.hpp` files were changed to fix the MCB recursion/DoS bugs and the `ModelRegistry` temp-file leak — those are pre-existing, already-committed, already-tested fixes this audit re-confirmed rather than re-did; see `plan.md`'s "Post-650 Follow-Up Findings" for their own detail.)
+
+**5. Tests added**: 0 new tests in this specific audit (Phases 0-5 were verification-only once the one build-config fix was made; no new `.cpp` test functions or Python/bash test scripts were written). Note the audit's own verification work (spot-checks in Phase 5) used ad-hoc, throwaway fixtures in `/tmp` that were deleted immediately after use — none were committed as permanent tests, since they were confirming already-tested behavior, not covering a genuine gap.
+
+**6. Tests removed**: 0. (No test was removed or disabled at any point.)
+
+**7. Test count before/after**: **66 before, 66 after** — unchanged. The audit's fix fully resolved a *clean-build* failure, not a test-count discrepancy; the same 66 tests that were passing in an incrementally-built directory are the same 66 now confirmed passing from a truly empty one.
+
+**8. XSD XML count before/after**: **69 before, 69 after** — unchanged, all valid both times (`test/*.mc3.xml`, `python3 test/validate_xsd.py`).
+
+**9. Build command used**:
+```sh
+rm -rf cmake-build-debug
+<clion-cmake> -S . -B cmake-build-debug -DBUILD_TESTING=ON -DCMAKE_POLICY_VERSION_MINIMUM=3.5 -G Ninja
+cd cmake-build-debug && ninja -j$(nproc)
+```
+(CLion-bundled cmake 4.2.2 required — see Phase 0.)
+
+**10. CTest result**: **66/66 passed**, exit code 0 (`ctest --test-dir cmake-build-debug --output-on-failure`).
+
+**11. Failing tests**: none.
+
+**12. Blocked tasks**:
+- **STAB-0650** (CI produces a consistent report) — blocked on the repo owner rotating a git PAT with the `workflow` scope before the parked-deactivated `.github_/workflows/ci.yml` can even be activated to check its output. No action possible from within this repo.
+- **MinGW full GUI editor build** (STAB-0552/STAB-0012, both 🟡) — blocked on 1 CNA-side (`GLES3/gl3.h` header gap) + 3 sharp-runtime-side (`-Werror` on unused-function/sign-compare/an MinGW-header include-order issue) problems, all in sibling repos this project may not modify without permission. The two CNA-free CLI tools (`mc3togltf.exe`/`mc3tomcb.exe`) are **not** blocked — confirmed building and linking as real Windows executables.
+- **~27 other 🟡-flagged rows** — genuinely need a live interactive display/mouse session (curve editor, radius indicators, drag-drop OS gestures, etc.) that this headless environment cannot provide, or are deliberate product-scope decisions (STAB-0289/0327/0360/0427/0460/0571) awaiting a call from the project owner, not technical blockers this audit can resolve.
+
+**13. STAB tasks completed** (status changed to ✅ during this specific audit): **none** — this was a re-verification pass, not new feature/task work, and Phase 5's spot checks confirmed the existing 620 ✅ rows all still hold up rather than finding new ones to close.
+
+**14. STAB tasks downgraded from ✅ due to lack of verification**: **none**. Every ✅ row spot-checked in Phase 5 (areas C/D/E/F/G/I, plus H/J via direct re-execution) held up under direct, real re-verification. No row was found to be claiming more than what its own test/command actually demonstrates.
+
+**15. Next 10 recommended tasks**: there is genuinely no open stabilization-plan backlog of meaningful size left (620 ✅ / 29 permanently-flagged 🟡 / 1 blocked 📋 out of 650). If more work is wanted, in priority order:
+1. **STAB-0650** — re-check with the repo owner whether the PAT has been rotated yet; if so, activate `.github_/` → `.github/` and confirm CI actually runs and produces a consistent report.
+2. Ask the CNA/sharp-runtime maintainer(s) to fix `GamerProfile.cpp`'s `RegionInfo::CurrentRegion()` → `getCurrentRegionProperty()` call (their own repo's build is presumably broken for anyone with `CNA_ENABLE_NET=ON`, independent of MeshCraft).
+3. Ask the sharp-runtime maintainer(s) about the 3 MinGW-target `-Werror` failures found this session (`Socket.cpp` unused-function, `UnixDomainSocketEndPoint.cpp`'s `afunix.h` issue, `CharUnicodeInfo.hpp`'s sign-compare) — orthogonal to MeshCraft, but blocks the full Windows GUI build.
+4. If Windows support matters soon: consider whether shipping `mc3togltf.exe`/`mc3tomcb.exe` alone (already working) as a Windows CLI toolset is useful in the meantime, independent of the blocked GUI editor.
+5. Revisit the 6 confirmed-real-gap product-decision rows (STAB-0289/0327/0360/0427/0460/0571) with the project owner — each needs a scope decision, not more investigation.
+6. If a live Linux desktop session ever becomes available: batch-verify the ~15+ rows needing mouse-driven interactive confirmation (curve editor, gizmo indicators, FPS counter, drag-drop gestures) in one sitting.
+7. Consider whether `PropertiesPanel.cpp`'s 2000+-line single function (STAB-0617) is worth the mechanical split — genuinely low-risk but needs a live display to verify the ImGui layout survives afterward.
+8. No urgent code work is outstanding; if this audit's cadence continues, the next "re-verify from scratch" pass is only worth repeating after a meaningful amount of new work has landed (re-running it immediately would just re-confirm the same 66/66, 0 issues).
+9. Consider committing the MinGW cross-compile toolchain file used this session (content preserved in this file's Phase 2 section) into the repo (e.g. `cmake/toolchains/mingw-w64.cmake`) so future sessions don't have to reconstruct it from scratch.
+10. If new feature work is authorized (see §17 below), get explicit user sign-off on which feature and scope before starting — this audit found no reason feature work couldn't resume from a code-quality standpoint, only that the mandate's own "no new features" rule remains in force until told otherwise.
+
+**16. Questions for user**: none genuinely blocking arose during this audit — the one build issue found (`CNA_ENABLE_NET`) was resolvable entirely within MeshCraft's own `CMakeLists.txt`, without needing a scope decision. `CLAUDE_QUESTIONS.md` was not created, since nothing met the "truly blocking" bar (no missing dependency with no fallback, no destructive migration needed, no ambiguity risking data loss/format breakage). The 6 product-decision rows listed in §15 item 5 are worth the user's attention when convenient, but none blocked this audit's own progress.
+
+**17. Whether new feature work is allowed yet**: **No, not yet**, per the mandate's own default. Only **Gate 2 (Export)** is 100% green (110/110). Every other gate has at least one remaining 🟡/📋 row (see `STABILIZATION.md`'s Gate table). Per the mandate: "Do not claim 'stabilization is done' unless all stabilization gates are actually green" — they are not, in the strictest sense, even though 620/650 (95.4%) of individual rows are ✅ and every remaining row is a documented, permanently-flagged gap rather than an unattempted or unverified one. Whether that 95.4%-with-documented-remainder state is "green enough" to resume feature work is a product decision for the project owner, not something this audit can decide unilaterally.

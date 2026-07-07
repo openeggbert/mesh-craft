@@ -1,6 +1,6 @@
 # NEXT.md
 
-_Last updated: 2026-07-07, commit `9d673a0` (develop, in sync with `origin/develop`)_
+_Last updated: 2026-07-07, commit `da8f1b8` (develop, in sync with `origin/develop`)_
 
 ---
 
@@ -47,7 +47,7 @@ separate implementations.
 ## 2. Current status
 
 ### Build
-**Debug**: 66/66 tests pass as of commit `9d673a0`. Working tree clean.
+**Debug**: 66/66 tests pass as of commit `da8f1b8`. Working tree clean.
 **Important**: a conservative-maintainer audit on 2026-07-07 deleted
 `cmake-build-debug/` entirely and rebuilt from absolute zero (rather than
 trust the incrementally-updated directory carried across many prior
@@ -199,7 +199,7 @@ for every `STAB-XXXX` ID.
 ## 4. Current blocker / main problem
 
 **No blocker to local development or testing on Linux** — 66/66 tests
-pass as of `9d673a0`. The only remaining plan.md item (STAB-0650) is
+pass as of `da8f1b8`. The only remaining plan.md item (STAB-0650) is
 blocked on the repo owner rotating a PAT for the parked-deactivated CI
 workflow — nothing to do here without that action. MinGW cross-compile
 is blocked on a CNA-side GLES3-header gap (out of scope, needs the CNA
@@ -380,9 +380,17 @@ re-reading that row's own reasoning in plan.md first (most need a live
 human with a display, or are deliberate product decisions needing scope
 discussion, not code-only fixes) — see NEXT.md §8 for detail.
 
-Current branch: develop, in sync with origin/develop at commit 9d673a0.
+Current branch: develop, in sync with origin/develop at commit da8f1b8.
 Build dir: cmake-build-debug/ (Debug, CLion cmake) — last full rebuild +
-66/66 ctest was clean at this commit, working tree clean.
+66/66 ctest was clean at this commit, working tree clean, and this was
+verified from a **genuinely empty** cmake-build-debug/ (rm -rf'd first),
+not just an incremental rebuild — see STABILIZATION_WORKLOG.md Phase 1.
+CNA_ENABLE_NET=OFF is now baked into CMakeLists.txt itself, so a normal
+reconfigure already gets this; no extra flag needed. Lesson for future
+sessions: an incrementally-updated build directory can hide a genuinely
+broken clean build for a long time (this one hid it for 2+ days) — if
+verifying "does this project actually build" is ever load-bearing again,
+delete cmake-build-debug/ first rather than trust an existing one.
 
 Reconfigure cmake-build-debug ONLY with CLion's cmake, not the system
 cmake. Editing mc3.xsd or adding a new .cpp file / new add_test()
