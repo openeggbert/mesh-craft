@@ -1,6 +1,6 @@
 # NEXT.md
 
-_Last updated: 2026-07-07, commit `865d015` (develop, in sync with `origin/develop`)_
+_Last updated: 2026-07-07, commit `9d673a0` (develop, in sync with `origin/develop`)_
 
 ---
 
@@ -47,11 +47,27 @@ separate implementations.
 ## 2. Current status
 
 ### Build
-**Debug**: 66/66 tests pass as of commit `865d015`. Working tree clean.
-Also did a **from-scratch Emscripten web build this session** (see §6) —
-succeeded cleanly, and was verified running in real headless Chrome
-(WebGL2 context creation confirmed, no errors). Release/standalone
-builds not separately re-verified.
+**Debug**: 66/66 tests pass as of commit `9d673a0`. Working tree clean.
+**Important**: a conservative-maintainer audit on 2026-07-07 deleted
+`cmake-build-debug/` entirely and rebuilt from absolute zero (rather than
+trust the incrementally-updated directory carried across many prior
+sessions) — this found and fixed a real clean-build break (`CNA_ENABLE_NET`
+defaulted ON, unconditionally pulling in a CNA component with a broken
+cross-repo API call that this project never actually links). See
+`STABILIZATION_WORKLOG.md`'s Phase 1 section and `plan.md`'s "Post-650
+Follow-Up Findings" item 4 for the full trace. **Always reconfigure with
+`CNA_ENABLE_NET` now correctly defaulted OFF via `CMakeLists.txt`** — no
+extra flag needed, this is baked into the project's own cache-variable
+overrides now. Standalone subproject builds (`mc3`/`mcb`/`mc3togltf`/
+`mc3tomcb`) were also re-verified from scratch the same session: 1/1, 1/1,
+41/41, 3/3 respectively (`mc3togltf` grew from 24 to 41 tests since the
+count was last checked). Also did a **from-scratch Emscripten web build**
+(see §6) — succeeded cleanly, and was verified running in real headless
+Chrome (WebGL2 context creation confirmed, no errors). A fresh MinGW
+cross-compile re-check (same session) found the CNA-side GLES3 blocker is
+still present, plus 3 separate sharp-runtime-side `-Werror` failures
+newly surfaced — but also newly confirmed `mc3togltf.exe`/`mc3tomcb.exe`
+build and link as real Windows executables (see `plan.md` STAB-0552).
 
 ### What's now fully verified (S3-S16, S20 — across this and prior sessions)
 MCB binary format, glTF/GLB export, CSG (both code paths), geometry
@@ -183,7 +199,7 @@ for every `STAB-XXXX` ID.
 ## 4. Current blocker / main problem
 
 **No blocker to local development or testing on Linux** — 66/66 tests
-pass as of `865d015`. The only remaining plan.md item (STAB-0650) is
+pass as of `9d673a0`. The only remaining plan.md item (STAB-0650) is
 blocked on the repo owner rotating a PAT for the parked-deactivated CI
 workflow — nothing to do here without that action. MinGW cross-compile
 is blocked on a CNA-side GLES3-header gap (out of scope, needs the CNA
@@ -364,7 +380,7 @@ re-reading that row's own reasoning in plan.md first (most need a live
 human with a display, or are deliberate product decisions needing scope
 discussion, not code-only fixes) — see NEXT.md §8 for detail.
 
-Current branch: develop, in sync with origin/develop at commit 865d015.
+Current branch: develop, in sync with origin/develop at commit 9d673a0.
 Build dir: cmake-build-debug/ (Debug, CLion cmake) — last full rebuild +
 66/66 ctest was clean at this commit, working tree clean.
 

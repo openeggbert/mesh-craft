@@ -197,14 +197,16 @@ reference.
 
 ## Platform Support Matrix
 
-Status as of the S16 (Cross-Platform Stability) stabilization pass.
+Status as of the S16 (Cross-Platform Stability) stabilization pass, re-verified
+2026-07-07 against a fresh MinGW cross-compile attempt (with the
+`CNA_ENABLE_NET=OFF` fix — see `plan.md`'s "Post-650 Follow-Up Findings" — applied).
 Legend: ✅ verified working &nbsp; 🟡 partially verified / known gap &nbsp;
 ❌ not available on this platform &nbsp; ❓ not yet attempted (no toolchain
 available to test with).
 
 | Feature | Linux | Windows (MinGW) | Web (Emscripten) | Android |
 |---|---|---|---|---|
-| Full desktop/native build | ✅ | 🟡 builds to ~73% (328/449 objects), then fails on a CNA-side `GLES3/gl3.h` header gap — CNA configures `-DIMGUI_IMPL_OPENGL_ES3` unconditionally for the `EASYGL` backend regardless of target platform | ✅ 449/449, exit 0 | ❓ never attempted (no Android NDK installed here) |
+| Full desktop/native build | ✅ | 🟡 the full GUI editor (`MeshCraft.exe`) still fails, but on the same pre-existing CNA-side `GLES3/gl3.h` header gap as before (`imgui_impl_opengl3.cpp` — CNA configures `-DIMGUI_IMPL_OPENGL_ES3` unconditionally for the `EASYGL` backend regardless of target platform), **plus** 3 separate `../sharp-runtime`-side `-Werror` build failures in its `System.Net.Sockets`/`System.Xml` namespaces (`afunix.h`'s `ADDRESS_FAMILY` on this MinGW version, an unused-function warning, a sign-compare warning) — none of these are in this project's own source, all out of scope to fix without CNA/sharp-runtime maintainer involvement. **New finding**: the two CNA-free CLI tools (`mc3togltf.exe`, `mc3tomcb.exe`) build and link successfully as real Windows PE32+ executables, since neither links SHARP_RUNTIME or CNA at all — confirmed by running `file` on the actual output binaries, not just a partial object count | ✅ builds successfully (re-verified 2026-07-06 via a real headless-Chrome session confirming a working WebGL2 context, not just a compile-only check — see `plan.md` STAB-0572/0573) | ❓ never attempted (no Android NDK installed here) |
 | App launches / runs | ✅ | ❌ (build doesn't complete) | 🟡 loads, initializes (`SDL_CreateWindow`, WebGL2 context), no crash — but renders a blank canvas, not yet visually usable | ❓ |
 | 3D viewport rendering | ✅ | ❌ (build doesn't complete) | ❌ blank canvas — root cause not yet diagnosed (needs frame-level GL diagnostics + a browser retest) | ❓ |
 | Shaders (GLSL ES 3.00 / WebGL2) | ✅ (desktop GL) | ❌ (build doesn't complete) | ✅ all 7 CNA EasyGL 3D shader programs are `#version 300 es` and compile/link cleanly | ❓ |
