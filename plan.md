@@ -1037,6 +1037,43 @@ exactly why MCB (a from-scratch hand-rolled binary parser with no
 third-party hardening) was the higher-value target, not the XML path
 (which already benefits from tinyxml2's own defenses).
 
+## Post-650 Follow-Up Findings (2026-07-07, conservative-maintainer audit)
+
+**4. Clean-build reproducibility was broken — masked by incremental build
+caching, not previously detectable by re-running `ctest` alone.** A
+mandate to re-verify the project "from scratch" (rather than trust an
+incrementally-updated `cmake-build-debug/`) led to fully deleting the
+build directory and reconfiguring+rebuilding from absolute zero. Result:
+**the literal `ninja` (default/`all`) build failed, exit code 1**, on
+`../cna`'s `GamerProfile.cpp` calling a `RegionInfo::CurrentRegion()`
+method that `../sharp-runtime` had renamed to `getCurrentRegionProperty()`
+two days earlier (sharp-runtime commit `4af2e31`, 2026-07-05) — a
+cross-repo API drift between the two sibling repos, neither of which this
+project may modify without permission. Root-caused precisely: this broken
+component (`CNA_GamerServices`, and `CNA_Net` which depends on it) is
+**never linked by anything in this project** (confirmed via
+`target_link_libraries` grep across every project `CMakeLists.txt`) — it
+was only in the default build graph because `../cna/CMakeLists.txt`'s
+`CNA_ENABLE_NET` option defaults to `ON`, and MeshCraft's own
+`CMakeLists.txt` never opted out (unlike `CNA_BUILD_TESTS`/
+`CNA_BUILD_EXAMPLES`/etc., which it already does set). **Fixed entirely on
+the MeshCraft side, zero CNA/SHARP_RUNTIME source changes**: added
+`set(CNA_ENABLE_NET OFF CACHE BOOL "" FORCE)` next to the existing
+CNA cache-variable overrides in `CMakeLists.txt`, before
+`add_subdirectory(../cna CNA_dep)`. Verified: `ninja` now exits 0 (120/120
+steps, down from 566 — a build-time win too), `ctest` is 66/66, XSD
+validation is 69/69. **Important nuance, not a retraction**: every prior
+session's "N/N tests pass" claim was still genuinely true when run — the
+now-broken `GamerProfile.cpp.o` had simply already been compiled
+successfully *before* the 2026-07-05 rename and Ninja's incremental
+dependency tracking had no reason to ever recompile it since nothing in
+*this* repo touches that file. The tests themselves were never wrong; "the
+project builds from a truly clean state" was quietly untrue for at least
+two days across several sessions until this fix, and no amount of
+re-running `ctest` in an already-populated build dir could have caught it
+— only a genuinely empty build directory could. Full detail (root-cause
+trace, all commands run) in `STABILIZATION_WORKLOG.md`'s Phase 1 section.
+
 ---
 
 ## Architecture Reference (preserved from original plan.md)

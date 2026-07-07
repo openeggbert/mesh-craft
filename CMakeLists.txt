@@ -93,6 +93,15 @@ set(EASY_GL_BUILD_TESTS     OFF CACHE BOOL "" FORCE)
 set(EASY_GL_BUILD_EXAMPLES  OFF CACHE BOOL "" FORCE)
 set(EASYGL_BUILD_TESTS      OFF CACHE BOOL "" FORCE)
 set(EASYGL_BUILD_EXAMPLES   OFF CACHE BOOL "" FORCE)
+# MeshCraft is a single-user desktop editor with no multiplayer/Xbox-Live-
+# style networking — it never links CNA_GamerServices or CNA_Net (confirmed:
+# neither appears in this file's target_link_libraries calls). CNA_ENABLE_NET
+# defaults to ON in ../cna/CMakeLists.txt, unconditionally pulling both into
+# the default `ninja`/`all` target even though nothing here needs them.
+# Disabling it removes an unused, un-built-by-MeshCraft component from the
+# default build graph — not a CNA source change, just not opting into an
+# optional CNA feature this project doesn't use.
+set(CNA_ENABLE_NET OFF CACHE BOOL "" FORCE)
 
 # CNA — XNA-like runtime (window, input, audio, graphics)
 add_subdirectory(../cna CNA_dep)
