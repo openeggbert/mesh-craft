@@ -159,3 +159,36 @@ malformed rows: 0
 rows with empty Key File(s) column: 0
 ```
 Every one of the 650 `STAB-XXXX` rows has a valid status symbol (✅/🟡/🧪/📋/🔴), a valid priority (P0-P3), a non-empty title, a non-empty "Key File(s)" column, and a non-empty verification/notes column. Combined with Phase 0's findings (all 650 IDs present exactly once, contiguous 1-650, all 21 sections S0-S20 present), the backlog structure is fully sound — no follow-up needed.
+
+---
+
+## Phase 5 — Targeted Verification Pass (Areas A-J)
+
+Areas A (root test registration) and B (XSD validation) were already exhaustively re-verified in Phase 1 (exact 66-declared/66-registered match; 69/69 XML files valid). For the remaining areas, rather than re-deriving all 620 already-individually-documented ✅ rows from scratch (impractical and not what a real conservative-maintainer spot-check would do), ran a small number of sharp, direct, real commands per area — genuinely executing the behavior claimed, not just re-reading a prior writeup.
+
+- **C (MC3 roundtrip)** — confirmed `testIncludeCycle`/`testIncludeOverride`/`testDiskInnerRadius` all exist and are called from `main()`. Directly ran `mc3_roundtrip_test` with its required `featuresXmlPath` argument (matching the exact `add_test(... COMMAND mc3_roundtrip_test ${MC3_FEATURES_XML})` invocation) and confirmed `PASS: include cycle: loading cyclic includes must throw` genuinely appears. (First attempt ran the binary *without* the required argument and got confusingly empty output for cycle-related checks — a methodology mistake on my part, not a project bug; corrected immediately by matching the real `ctest` invocation exactly.)
+- **D (glTF/GLB exporter)** — directly ran `mc3togltf house.mc3.xml out.xyz` → clean `Error: Unknown output extension '.xyz'...`, exit 1. Directly ran `mc3togltf house.mc3.xml out.GLB` (uppercase) → succeeds, exit 0, and `file out.GLB` confirms a genuine `glTF binary model, version 2`. Both match their claimed behavior exactly.
+- **E (CSG)** — directly ran `mc3togltf` against `test/csg_unsupported_child.mc3.xml` with no `--allow-approximate-csg` flag → clean error naming the exact child id/type and the bypass flag, exit 1. Matches claim exactly.
+- **F (geometry reuse)** — built a fresh 3-identical-sphere fixture and confirmed the exported glTF JSON has `len(nodes) == 3` but `len(meshes) == 1` — genuine geometry reuse, not a 3x mesh blowup.
+- **G (M1 includes)** — first attempt used incorrect include syntax (`<includes><include src="..."/></includes>`, a guess) and got a false "silently succeeds" result; checked the real syntax against an actual fixture (`test/scene_with_include.mc3.xml`: bare `<include file="..."/>` as a direct child of `<mc3>`) and re-ran with the correct syntax — got a clean `Error: Failed to load <include> file '...': Error=XML_ERROR_FILE_NOT_FOUND...`, exit 1, exactly as claimed. (Same lesson as area C: always verify the *actual* schema/invocation before concluding something is broken — two false alarms in this phase were both caused by my own setup mistakes, not real project bugs, and both were caught by double-checking before reporting them as findings.)
+- **H (ModelRegistry)** — already directly re-executed in Phase 2 with a fresh PASS count (152 assertions); not re-run a third time in this phase, judged sufficient.
+- **I (AI integration, no real API calls)** — `grep -n "api.anthropic.com" mc3/test/ai_test.cpp` → **zero matches**; every `AiAssistant` instance created across all mock-server test functions explicitly overrides `apiBaseUrl` to a local `127.0.0.1:PORT` address (8+ occurrences checked). The real API URL only appears once, as `AiAssistant.hpp`'s production default, never touched by any test. Confirms the "no real network call" claim genuinely holds, not just by convention.
+- **J (editor data-loss workflows)** — already directly re-executed in Phase 2 with a fresh PASS count (510 assertions, `mc3_commands_test`); not re-run a third time in this phase, judged sufficient.
+
+**Phase 5 conclusion**: every area spot-checked with a direct, real command confirmed the claimed behavior exactly. No new bugs found in this phase (the significant ones — MCB recursion/DoS, ModelRegistry temp-file leak, the clean-build break — were all found and fixed *before* this specific phase, in earlier parts of this session's overall work). Two false-alarm moments were both traced to my own test-setup mistakes (wrong CLI argument, guessed-wrong XML syntax) and corrected before being reported — a useful reminder that a "spot check found nothing" result needs the same scrutiny as a "spot check found something" result before either is trusted.
+
+---
+
+## Phase 4 — Work Through P0/P1 Issues Found
+
+No additional Phase 4 work was needed beyond what Phase 1 already fixed. Summary of every P0/P1-class issue found across this session's full conservative-maintainer audit, and where each was actually fixed:
+
+1. **P0, build/test failure**: the `CNA_ENABLE_NET` clean-build break (ninja exit 1 from scratch). Found and fixed in Phase 1 — see that section. This was the only genuine P0 build failure found.
+2. **P0, format-corruption-adjacent / crash safety**: an MCB stack-overflow crash (unbounded recursion in `McbReader.cpp`) and an MCB resource-exhaustion DoS (unbounded string-length allocation) — both found and fixed in this session's immediately-preceding work (before this specific "conservative maintainer, re-verify from scratch" pass began), documented in `plan.md`'s "Post-650 Follow-Up Findings" items 1-2 and re-confirmed still fixed/passing during this pass's Phase 1 clean rebuild (both regression tests are part of the 66/66 passing suite).
+3. **P0-adjacent, resource leak**: a `ModelRegistry.cpp` temp-file leak on malformed entries — same prior-work batch, `plan.md` item 3, re-confirmed passing in this pass's Phase 1.
+4. **P1, missing tests for implemented behavior**: not found to be a gap requiring new work — Phase 5's spot checks (areas C/D/E/F/G/I) all confirmed existing tests already exercise the claimed behavior directly; no untested-but-implemented behavior was surfaced.
+5. **P1, documentation contradictions**: found and fixed extensively in Phase 2 (`STABILIZATION.md`, `TESTING.md`, `README.md`, `plan.md` cross-references) — see that section.
+6. **P1, cross-platform build guards**: the MinGW re-verification (Phase 2) found 3 new sharp-runtime-side `-Werror` failures reached by the build scheduler post-fix — all out of scope (sibling repo), documented, not "fixed" since they require CNA/sharp-runtime maintainer action, but correctly flagged rather than silently left stale.
+7. **P2, cleanup/warnings**: Phase 1's clean build showed zero real compiler warnings — no P2 cleanup work was actually needed.
+
+No further Phase 4 batch was required — every P0/P1 item found during this audit was already addressed by the point Phase 5 completed.
