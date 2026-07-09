@@ -1,6 +1,6 @@
 # NEXT.md
 
-_Last updated: 2026-07-09, prior commit `dc46af4` (branch `develop`, in sync with `origin/develop` as of that commit). Based on a from-scratch clean-build verification done 2026-07-07 — see `STABILIZATION_WORKLOG.md` for the full command trace._
+_Last updated: 2026-07-09, prior commit `c4e352a` (branch `develop`, in sync with `origin/develop` as of that commit). Native Linux build/tests last verified from-scratch 2026-07-07 (unaffected by this session's findings, which are Emscripten/Windows-only) — see `STABILIZATION_WORKLOG.md` for the full command trace._
 
 ---
 
@@ -42,12 +42,12 @@ Clean from an **absolute-zero** build directory (not just incremental): `rm -rf 
 - SQLite-backed `ModelRegistry` (asset library: save/search/insert-into-scene, with graceful stub when SQLite3 isn't available).
 - AI Assistant integration (Claude API): mock-server-tested end to end, no real network call in tests; background HTTP work runs on a detached thread (not `std::async`), so closing the app or resetting mid-request never hangs.
 - Editor: undo/redo, autosave/backup, save/load, keybindings/macros/preferences persistence, drag-and-drop scene loading.
-- Web (Emscripten) build: compiles cleanly and has been confirmed running in a real headless-Chrome session with a working WebGL2 context (no console/GPU errors).
+- Web (Emscripten) build: the **2026-07-06 build artifacts** (`cmake-build-web/MeshCraft.{html,js,wasm}`, still present) run in a real headless-Chrome session with a working WebGL2 context (no console/GPU errors). **A fresh rebuild currently fails** — see §4, new blocker.
 - Real headless-Blender-based tests confirm exported GLBs (including a real authored scene, `medieval_castle.mc3.xml`) import correctly with matching PBR material values.
 
 ### What does NOT work yet
 - **Windows GUI build (MinGW)**: does not compile — see §4.
-- **Emscripten web build**: compiles and initializes (WebGL2 context confirmed working), but the 3D viewport renders a **blank canvas** — not root-caused, not yet visually usable in a browser.
+- **Emscripten web build**: initializes (WebGL2 context confirmed working), but the 3D viewport renders a **blank canvas**. **Root cause now identified** (2026-07-09): the live `<canvas>` DOM element ends up `width="0" height="0"` (confirmed via headless-Chrome `--dump-dom` against the 2026-07-06 build artifacts) even though CNA's `GraphicsDevice::createOrAttachWindow()` requests 1024×768 from `SDL_CreateWindow` — this alone fully explains the blank viewport, independent of GL correctness. The size-loss happens somewhere inside SDL3's own Emscripten video backend (third-party, vendored under CNA_dep) or a later resize path, not in this repo's code. **Cannot currently attempt a fix**: a fresh Emscripten rebuild fails before reaching MeshCraft's own sources at all — see §4, new blocker. Detail: `plan.md` STAB-0553's 2026-07-09 update.
 - **Web GLB export download**: exporting a GLB in the web build writes to Emscripten's in-browser virtual filesystem only — there is no JS bridge to actually download the file to the user's real filesystem.
 - SVG texture rasterization: parsed/serialized but never rasterized (stub only).
 - Embedded glTF references (`<mesh src="embed:id"/>`): parsed/serialized but not resolved by the exporter.
@@ -59,6 +59,7 @@ Clean from an **absolute-zero** build directory (not just incremental): `rm -rf 
 ## 3. Recent changes
 
 - **New**: committed a MinGW cross-compile toolchain file, `cmake/toolchains/mingw-w64.cmake` (standard `CMAKE_SYSTEM_NAME Windows` / `x86_64-w64-mingw32-{gcc,g++,windres}` / `CMAKE_FIND_ROOT_PATH /usr/x86_64-w64-mingw32` setup) — previously reconstructed ad hoc each session per §4/§8. Verified: `cmake -S . -B /tmp/b-mingw -DCMAKE_TOOLCHAIN_FILE=cmake/toolchains/mingw-w64.cmake -DMESH_CRAFT_BUILD_TESTING=OFF -G Ninja` configures cleanly (exit 0), reporting the same expected SQLite3/OpenSSL/LibXml2 not-found-and-gracefully-disabled result as prior sessions. Does not change build behavior — same 4 cross-repo blockers in §4 remain (not attempted, out of scope).
+- **New (investigation only, no code changed)**: root-caused the Emscripten blank-canvas bug down to `<canvas width="0" height="0">` (see §2/§4/§5, `plan.md` STAB-0553). While investigating, discovered a **separate, newly-introduced regression**: `../sharp-runtime` now fails to build under Emscripten (16 `-Werror` failures + a hard `std::chrono::clock_cast` error), which didn't exist as of the last verified web build (2026-07-06) — sharp-runtime's HEAD has since moved to `e5e38db` (2026-07-07). This blocks a fresh web rebuild entirely, so the canvas-sizing root cause could not be turned into a verified fix this session. No files in this repo were changed by this investigation.
 
 Most recent commits (`develop`, newest first):
 - `dc46af4`, `da8f1b8`, `9e5f252`, `4b7fcd2` — conservative-maintainer audit: re-verified the whole project from a genuinely empty build directory, fixed docs that had drifted from reality, re-verified MinGW/Emscripten cross-compile status.
@@ -93,16 +94,26 @@ Full history: `git log --oneline`. Per-task detail: `plan.md` (one row per `STAB
 - **What's already been tried / confirmed**: `CNA_ENABLE_NET=OFF` (this project's own fix) removes an unrelated, previously-masking failure but does not touch any of the above. The two **CNA-free** CLI tools, `mc3togltf.exe` and `mc3tomcb.exe`, **do** build and link successfully as real Windows PE32+ executables — confirmed via `file mc3togltf.exe`. Only the full ImGui/CNA-dependent GUI editor is blocked.
 - **Not something to fix here**: all 4 failures are in `../cna` or `../sharp-runtime`. Fixing them needs the maintainer(s) of those repos.
 
+**New blocker found 2026-07-09: the Emscripten (web) build no longer completes from scratch, either.**
+
+- **Failing command**: `cmake --build cmake-build-web` (or a fresh `./build-web.sh`) against current `../sharp-runtime`.
+- **Exact symptoms**: build fails deep in `../sharp-runtime` sources before ever reaching MeshCraft's own code. Two categories, both 100% inside `../sharp-runtime`:
+  1. **16 distinct `-Werror` failures** under Emscripten's clang (unused-private-field, unused-parameter, unused-const-variable, `[[nodiscard]]`-ignored, non-virtual-dtor-delete) — spread across `System/Runtime/InteropServices/RuntimeInformation.cpp`, `System/Net/NetworkInformation/NetworkInterface.hpp`, `System/Net/Dns.cpp`, `System/Xml/XPath/XPathNavigator.cpp` (×6), `System/IO/FileStream.hpp`, `System/Net/Sockets/UnixDomainSocketEndPoint.cpp`, `System/Xml/XPath/XmlDocumentNavigator.hpp`. None of these appear under the native Linux GCC build (different compiler/warning set), and none were present as of the 2026-07-06 verified web build.
+  2. **A hard compile error, not a warning**: `System/IO/FileSystemInfo.cpp:31` and `:90` — `error: no member named 'clock_cast' in namespace 'std::chrono'`. This is a genuine libc++/Emscripten-toolchain standard-library gap, not fixable by relaxing `-Werror`.
+- **Cause**: `../sharp-runtime` gained new commits between the last verified web build (2026-07-06) and now — HEAD moved to `e5e38db` (2026-07-07), including a `System.Xml.XPath` merge that introduced most of the new warnings.
+- **What still works**: the **last-known-good** `cmake-build-web/MeshCraft.{html,js,wasm}` from 2026-07-06 are untouched on disk and still load/run correctly in headless Chrome (used to investigate the canvas-sizing bug above) — only a *fresh* rebuild is broken.
+- **Not something to fix here**: both failure categories are 100% inside `../sharp-runtime`. Fixing them needs that repo's maintainer(s) — same handoff as the MinGW failures above.
+
 ---
 
 ## 5. Known bugs and limitations
 
-- **Confirmed, unfixed (out of this repo's scope)**: Windows GUI build fails (§4). Emscripten web build renders a blank canvas (root cause not found).
+- **Confirmed, unfixed (out of this repo's scope)**: Windows GUI build fails (§4). Emscripten web build no longer builds from scratch (§4, new). Emscripten canvas renders blank — root cause now identified (canvas is 0×0, §2) but fix blocked on the build regression above.
 - **Confirmed, unfixed (in scope, deliberately deferred — needs a product-scope decision, not a quick patch)**:
   - Merge Scene has no object-id collision handling (materials/textures/actions get suffixed on collision, objects don't) — `STAB-0289`.
   - No first-launch `prefs.ini` auto-creation (only written when the Preferences dialog is explicitly closed) — `STAB-0327`.
   - No registry-DB-path override mechanism (env var/prefs) — `STAB-0360`.
-  - No "duplicate material" editor command exists — `STAB-0427`.
+  - `<embeds>` map not merged from `<include>`d files (only from the main document) — `STAB-0092`.
   - No animation scale-time function exists — `STAB-0460`.
   - Web GLB export has no browser-download bridge (§2) — `STAB-0571`.
 - **Confirmed, by design (not a bug)**: SVG texture rasterization stub-only; embedded-glTF references not resolved; N3–N7 scene data not executed at runtime; two independent material-editing UIs exist (`Scene/PropertiesPanel.cpp` and `MeshCraftApplication_UiLeftPanel.cpp`) — a fix in one doesn't apply to the other.
@@ -168,15 +179,15 @@ Ordered, each scoped to one focused session:
    Files: `.github_/workflows/ci.yml` → rename to `.github/workflows/ci.yml`.
    Verify: push a trivial commit and confirm the Actions tab actually runs and reports a consistent result (`STAB-0650`).
 
-2. **Report the 4 cross-repo build failures (§4) to the CNA/sharp-runtime maintainer(s).**
+2. **Report the cross-repo build failures (§4) to the CNA/sharp-runtime maintainer(s)** — now 2 separate issues: the original 4 MinGW failures, plus the newly-found Emscripten/sharp-runtime regression (16 `-Werror` + 1 hard `clock_cast` error, `../sharp-runtime` HEAD `e5e38db`).
    Files: none in this repo — this is a communication/handoff task, not code. Include the exact errors from §4.
    Verify: N/A (external action).
 
-3. **Investigate the Emscripten blank-canvas rendering issue.**
-   Files: likely `src/MeshCraft/MeshCraftApplication.cpp` (draw loop) or CNA's EasyGL WebGL2 code path. Start by adding a temporary per-frame diagnostic (e.g. log the first few `glGetError()` calls, or confirm ImGui's font atlas texture actually uploads) under Emscripten specifically.
-   Verify: `./build-web.sh`, serve via `python3 -m http.server`, load in `google-chrome --headless=new --enable-unsafe-swiftshader --use-gl=angle --use-angle=swiftshader --screenshot=out.png <url>`, inspect `out.png` for non-black content.
+3. **Once `../sharp-runtime`'s Emscripten build regression (§4) is fixed upstream, retry the canvas-sizing fix.** The blank-canvas root cause is now known (`<canvas width="0" height="0">`, §2/§5, `plan.md` STAB-0553) — next step is a fresh `./build-web.sh`, then trace why SDL3's Emscripten backend isn't applying CNA's requested 1024×768 to the DOM canvas (likely needs an explicit `emscripten_set_canvas_element_size()` call or SDL hint from MeshCraft's own init code — CNA/SDL3 itself must not be modified without permission).
+   Files: likely `src/MeshCraft/MeshCraftApplication.cpp` or `main.cpp`, if a mesh-craft-side workaround is possible without touching CNA/SDL3.
+   Verify: `./build-web.sh`, serve via `python3 -m http.server`, load in `google-chrome --headless=new --enable-unsafe-swiftshader --use-gl=angle --use-angle=swiftshader --dump-dom <url>`, confirm `<canvas>` has nonzero `width`/`height`; then screenshot and inspect for non-black 3D content.
 
-4. **Pick one of the 6 flagged product-decision rows (`STAB-0289`/`0327`/`0360`/`0427`/`0460`/`0571`) and get an explicit scope decision from the project owner**, then implement only that one.
+4. **Pick one of the 6 flagged product-decision rows (`STAB-0092`/`0289`/`0327`/`0360`/`0460`/`0571`) and get an explicit scope decision from the project owner**, then implement only that one. (Note: `STAB-0427`, previously listed here, is actually already ✅ — resolved as "confirmed deliberately unimplemented, feature moratorium"; `STAB-0092`, "define include-tracking policy for `embeds` map," is the correct 6th row.)
    Files: varies per row — see `plan.md` for the specific row's "Key File(s)" column.
    Verify: whatever test the chosen row's own `plan.md` entry specifies.
 
