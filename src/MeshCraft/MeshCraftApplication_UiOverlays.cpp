@@ -1090,6 +1090,12 @@ void MeshCraftApplication::drawDialogs()
                 redoStack_.push_back(deepCopyDoc(document_));
                 for (int j = n - 1; j > i; --j)
                     redoStack_.push_back(std::move(undoStack_[j]));
+                // AUDIT-0056: unlike performUndo()/performRedo(), this loop can push
+                // many entries at once (jumping to the oldest of a full history) --
+                // apply the same kUndoMax cap those two already enforce, or the
+                // redo stack silently grows unbounded relative to the documented cap.
+                while (static_cast<int>(redoStack_.size()) > kUndoMax)
+                    redoStack_.erase(redoStack_.begin());
                 document_ = std::move(undoStack_[i]);
                 undoStack_.resize(i);
                 selection_.clear();
