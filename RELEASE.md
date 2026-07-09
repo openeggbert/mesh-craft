@@ -32,11 +32,11 @@ until then, treat it as the bar to clear, not a completed process.
 ## All tests pass
 
 - [ ] `ctest --output-on-failure` in `cmake-build-debug/`: **all**
-      tests pass (20/20 as of this writing — check `ctest -N` for the
+      tests pass (66/66 as of this writing — check `ctest -N` for the
       current count, since it grows over time).
 - [ ] Same in the Release build directory.
 - [ ] Each standalone component's own test(s) pass (`mc3` 1/1, `mcb`
-      1/1, `mc3togltf` 12/12, `mc3tomcb` 2/2 as of this writing).
+      1/1, `mc3togltf` 41/41, `mc3tomcb` 3/3 as of this writing).
 - [ ] No test was skipped due to a missing optional dependency
       (SQLite3, OpenSSL, LibXml2) that should actually be present on
       the release build machine — check the CMake configure log for

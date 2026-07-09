@@ -4,7 +4,13 @@
 
 namespace MeshCraft::Editor {
 
-// Base class for all editor tools (select, move, rotate, scale, primitive creation, CSG, etc.).
+// NOTE: this polymorphic tool-hierarchy design is not currently used and has
+// no subclasses anywhere in the codebase. The real editor switches tools via
+// a plain `enum class ActiveTool` (see MeshCraftApplication.hpp) handled in
+// MeshCraftApplication_Keyboard.cpp/_Mouse.cpp, not through EditorTool. Left
+// in place as unused scaffolding rather than removed, since it's unclear
+// whether it's intentional groundwork for a future refactor — see
+// plan_deep_audit.md AUDIT-0007 before deleting it outright.
 class EditorTool {
 public:
     virtual ~EditorTool() = default;
@@ -13,12 +19,6 @@ public:
 
     virtual void activate()   {}
     virtual void deactivate() {}
-
-    // TODO: mouse/keyboard event handling
-    // virtual void onMouseDown(int x, int y, int button) {}
-    // virtual void onMouseUp(int x, int y, int button)   {}
-    // virtual void onMouseMove(int x, int y)             {}
-    // virtual void onKeyDown(int key)                    {}
 };
 
 } // namespace MeshCraft::Editor

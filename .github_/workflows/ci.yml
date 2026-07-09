@@ -8,17 +8,20 @@
 #
 # Scope: this skeleton builds and tests the CNA-independent libraries
 # (mc3, mcb, mc3togltf, mc3tomcb) as standalone CMake projects. These have no
-# CNA / SDL3 / OpenGL / ImGui dependency and cover 14 of the 18 CTest tests:
-#   - mc3        -> mc3_roundtrip
-#   - mcb        -> mcb_roundtrip
-#   - mc3togltf  -> the 11 mc3togltf_* export tests
-#   - mc3tomcb   -> mc3tomcb_roundtrip (+ mcb_roundtrip)
+# CNA / SDL3 / OpenGL / ImGui dependency and cover 46 of the current 66
+# CTest tests (counts as of 2026-07-09, see NEXT.md §2 for the authoritative
+# up-to-date total):
+#   - mc3        -> 1 test  (mc3_roundtrip)
+#   - mcb        -> 1 test  (mcb_roundtrip)
+#   - mc3togltf  -> 41 tests (mc3togltf_* export/format tests)
+#   - mc3tomcb   -> 3 tests (mc3tomcb_roundtrip + mcb_roundtrip)
 #
 # TODO (not yet wired up): a full editor build job. The root project pulls in
 # the CNA sibling repo (openeggbert/cna) via `add_subdirectory(../cna ...)` and
 # needs SDL3 + OpenGL + SQLite3, so it requires checking out CNA at ../cna and
 # installing graphics/system libs. That covers the remaining root-level tests
-# (smoke_test, xsd_validation, mc3_registry, mc3_commands).
+# (smoke_test, xsd_validation, mc3_registry, mc3_ai, mc3_commands, and the
+# render-labeled tests — 20 tests as of the same count).
 
 name: CI
 

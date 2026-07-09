@@ -650,7 +650,7 @@ void MeshCraftApplication::Draw(const GameTime& /*gameTime*/) {
     if (fnGlViewport_) fnGlViewport_(0, 0, screenW, screenH);
 
     Graphics::Viewport vpReset;
-    vpReset.x = 0; vpReset.y = 0;
+    vpReset.setXProperty(0); vpReset.setYProperty(0);
     vpReset.setWidthProperty(screenW);
     vpReset.setHeightProperty(screenH);
     gd.setViewportProperty(vpReset);

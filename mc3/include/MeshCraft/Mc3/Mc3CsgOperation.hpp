@@ -13,7 +13,10 @@ enum class CsgType {
 struct Mc3CsgOperation {
     CsgType csgType{CsgType::Union};
 
-    // TODO: cached mesh result after CSG evaluation
+    // No cached mesh result field here by design — this struct stays a pure,
+    // CNA-free parameter holder. Result caching happens downstream, in
+    // SceneRenderer's own CSG cache (editor preview) and per-export in
+    // mc3togltf/src/CsgEvaluator.cpp — see NEXT.md's CSG dual-path note.
 };
 
 } // namespace MeshCraft::Mc3
