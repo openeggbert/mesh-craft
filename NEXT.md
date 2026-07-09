@@ -1,6 +1,6 @@
 # NEXT.md
 
-_Last updated: 2026-07-09, prior commit `c4e352a` (branch `develop`, in sync with `origin/develop` as of that commit). Native Linux build/tests last verified from-scratch 2026-07-07 (unaffected by this session's findings, which are Emscripten/Windows-only) — see `STABILIZATION_WORKLOG.md` for the full command trace._
+_Last updated: 2026-07-09, prior commit `6cbb2fb` (branch `develop`, in sync with `origin/develop` as of that commit). Native Linux build/tests re-verified from a genuinely empty scratch build directory the same day, after a full `plan_deep_audit.md` follow-up audit phase (see §3) — see `STABILIZATION_WORKLOG.md` for the full command trace._
 
 ---
 
@@ -58,18 +58,16 @@ Clean from an **absolute-zero** build directory (not just incremental): `rm -rf 
 
 ## 3. Recent changes
 
-- **New**: committed a MinGW cross-compile toolchain file, `cmake/toolchains/mingw-w64.cmake` (standard `CMAKE_SYSTEM_NAME Windows` / `x86_64-w64-mingw32-{gcc,g++,windres}` / `CMAKE_FIND_ROOT_PATH /usr/x86_64-w64-mingw32` setup) — previously reconstructed ad hoc each session per §4/§8. Verified: `cmake -S . -B /tmp/b-mingw -DCMAKE_TOOLCHAIN_FILE=cmake/toolchains/mingw-w64.cmake -DMESH_CRAFT_BUILD_TESTING=OFF -G Ninja` configures cleanly (exit 0), reporting the same expected SQLite3/OpenSSL/LibXml2 not-found-and-gracefully-disabled result as prior sessions. Does not change build behavior — same 4 cross-repo blockers in §4 remain (not attempted, out of scope).
-- **New (investigation only, no code changed)**: root-caused the Emscripten blank-canvas bug down to `<canvas width="0" height="0">` (see §2/§4/§5, `plan.md` STAB-0553). While investigating, discovered a **separate, newly-introduced regression**: `../sharp-runtime` now fails to build under Emscripten (16 `-Werror` failures + a hard `std::chrono::clock_cast` error), which didn't exist as of the last verified web build (2026-07-06) — sharp-runtime's HEAD has since moved to `e5e38db` (2026-07-07). This blocks a fresh web rebuild entirely, so the canvas-sizing root cause could not be turned into a verified fix this session. No files in this repo were changed by this investigation.
+**2026-07-09 — `plan_deep_audit.md` follow-up audit phase** (new plan file, superseding `plan.md` for new work since that 650-task plan's own backlog was exhausted): a fresh repository-wide audit (5 parallel review passes + direct investigation) produced 51 real, file:line-verified tasks; 48 completed, 5 `needs_human` (product/policy decisions, not attempted), 2 `blocked` (external — see below). Highlights:
+- **Real bugs fixed**: CSG preview cache key omitted `csgOperation`/`extrude`/`meshSource`, causing a stale/wrong preview after certain edits (the highest-risk finding — a *visibly plausible but wrong* rendering bug). `mc3`/`mcb`/GLB save paths were not atomic (crash mid-write could corrupt the destination file) — now write-to-temp-then-rename. Editor silent-failure paths (autosave, recent-file-open, `ModelRegistry::save()`'s `sqlite3_step` result) now surface real errors instead of failing silently. Pivot-reset button was double-pushing an undo snapshot.
+- **Hardening**: MCB reader's count-prefixed collection reads (32 sites, not just the 11 originally scoped `.reserve()` call sites) now have the same sanity-ceiling guard the 2026-07 string-length fix established.
+- **Completed the ~127-site ImGui slider-clamp gap** across all 8 files flagged since the S8 stabilization pass (`ImGuiSliderFlags_AlwaysClamp`, with deliberately-unbounded fields like position/rotation/keyframe-value correctly left alone).
+- **New build regression found and fixed**: the native Linux build was silently broken by upstream `../cna` API drift (`Viewport::X`/`Y` changed from public fields to property accessors, landed in CNA 2026-07-05) — masked by this session's incrementally-updated build dir until a full rebuild was forced; the same "stale build dir hides a real break" failure mode `NEXT.md` already warned about, recurring for a third time.
+- **Docs**: `MC3_FORMAT.md`'s Torus/Capsule/Disk/Grid/Icosphere section expanded from one line to full attribute tables; `MCB_FORMAT.md` documents the no-version-migration limitation; a new `test/xsd_docs_diff.py` tool checks XSD-vs-docs coverage on demand; a primitive-geometry cross-check test (`mc3togltf/test/all_primitives_export_test.py`) now guards against silent divergence between the export-time and editor-preview-time primitive-geometry implementations, the same risk class as the CSG dual-path invariant.
+- **Corrected several false positives** found by the initial audit fork sweep on manual re-verification (documented in `plan_deep_audit.md` itself rather than silently dropped): the fog divide-by-zero was already guarded; `<actions>` not merging from includes is a deliberate design choice (per `mergeInclude()`'s own comment), not an accidental gap; `MeshCraftApplication_UiMenuBar.cpp`'s sliders were already clamped in an earlier session.
+- **New blocked item**: `AUDIT-0050` (implement real IDBFS mount for Emscripten config persistence) — code could be written without touching CNA/sharp-runtime, but can't be compiled/verified until the sharp-runtime Emscripten regression (below) is fixed upstream.
 
-Most recent commits (`develop`, newest first):
-- `dc46af4`, `da8f1b8`, `9e5f252`, `4b7fcd2` — conservative-maintainer audit: re-verified the whole project from a genuinely empty build directory, fixed docs that had drifted from reality, re-verified MinGW/Emscripten cross-compile status.
-- `9d673a0` — **fix**: `CMakeLists.txt` now sets `CNA_ENABLE_NET OFF` (was implicitly `ON` via CNA's own default) — this was the actual clean-build fix, see §4/§6.
-- `865d015` — **fix**: MCB reader had no recursion-depth limit (a crafted file could stack-overflow-crash the process) and no sanity check on claimed string lengths (a tiny crafted file could force multi-GB memory allocation). Both fixed with a bounded recursion guard and a size ceiling; regression tests added.
-- `f0dd333`/`f663585` and earlier — closed out most of the S10–S20 stabilization sections (AI integration hang-on-close fix, GL-error-check dead code fix, materials/visual-fidelity verification, cross-platform re-verification with real Blender/Chrome evidence).
-
-Tests added this session: 2 MCB regression tests (recursion-depth, string-length), 1 ModelRegistry temp-file-leak regression test. No tests were removed. Behavior changes: `AiAssistant`'s async mechanism switched from `std::async`/`std::future` to a detached `std::thread` + `shared_ptr` result box (non-blocking shutdown); `CNA_ENABLE_NET` now defaults OFF for this project specifically.
-
-Full history: `git log --oneline`. Per-task detail: `plan.md` (one row per `STAB-XXXX` ID) and `STABILIZATION_WORKLOG.md` (narrative + exact commands run).
+Full history: `git log --oneline`. Per-task detail for the new phase: `plan_deep_audit.md`. Per-task detail for the original 650-task plan: `plan.md` (one row per `STAB-XXXX` ID) and `STABILIZATION_WORKLOG.md` (narrative + exact commands run).
 
 ---
 
@@ -116,9 +114,9 @@ Full history: `git log --oneline`. Per-task detail: `plan.md` (one row per `STAB
   - `<embeds>` map not merged from `<include>`d files (only from the main document) — `STAB-0092`.
   - No animation scale-time function exists — `STAB-0460`.
   - Web GLB export has no browser-download bridge (§2) — `STAB-0571`.
-- **Confirmed, by design (not a bug)**: SVG texture rasterization stub-only; embedded-glTF references not resolved; N3–N7 scene data not executed at runtime; two independent material-editing UIs exist (`Scene/PropertiesPanel.cpp` and `MeshCraftApplication_UiLeftPanel.cpp`) — a fix in one doesn't apply to the other.
+- **Confirmed, by design (not a bug)**: SVG texture rasterization stub-only; embedded-glTF references not resolved; N3–N7 scene data not executed at runtime; two independent material-editing UIs exist (`Scene/PropertiesPanel.cpp` and `MeshCraftApplication_UiLeftPanel.cpp`) — a fix in one doesn't apply to the other (verified 2026-07-09 via `plan_deep_audit.md` AUDIT-0013: read both side by side, no undocumented drift found beyond the already-known design). `<actions>` also deliberately not merged from `<include>`d files (confirmed via `mergeInclude()`'s own comment — distinct from the genuinely-accidental `<embeds>` gap below).
 - **Needs verification (blocked on tooling, not known-bad)**: ~15+ `plan.md` rows need a live interactive display/mouse session this headless environment can't provide (curve-editor visibility, proportional-edit radius indicator, FPS counter, live drag-and-drop gesture, etc.) — genuinely untested either way, not confirmed broken.
-- **Incomplete**: ~100+ non-material ImGui slider/drag call sites still lack `ImGuiSliderFlags_AlwaysClamp` (6 highest-impact material-PBR ones were fixed and confirmed to matter; the rest need a per-site downstream-safety review before a blanket fix).
+- **Fixed 2026-07-09** (`plan_deep_audit.md` follow-up audit — see §3): all ~127 ImGui slider/drag call sites across 8 files now have `ImGuiSliderFlags_AlwaysClamp` where meaningful (deliberately-unbounded position/rotation/keyframe-value fields correctly excluded); CSG preview cache-key bug fixed (cache omitted `csgOperation`/`extrude`/`meshSource`, causing stale previews after certain edits); MCB reader hardened against unbounded collection counts (32 sites, not just the original 11 `.reserve()` call sites); `mc3`/`mcb`/GLB save paths made atomic (temp-file + rename); several editor silent-failure paths fixed (autosave, recent-file-open, ModelRegistry `sqlite3_step`); a real, previously-unnoticed native-Linux build break from upstream CNA API drift was found and fixed (`Viewport::X`/`Y` field→property change). Full detail: `plan_deep_audit.md` (48 tasks completed, 5 `needs_human`, 2 `blocked`).
 
 ---
 
@@ -191,6 +189,14 @@ Ordered, each scoped to one focused session:
 4. **Pick one of the 6 flagged product-decision rows (`STAB-0092`/`0289`/`0327`/`0360`/`0460`/`0571`) and get an explicit scope decision from the project owner**, then implement only that one. (Note: `STAB-0427`, previously listed here, is actually already ✅ — resolved as "confirmed deliberately unimplemented, feature moratorium"; `STAB-0092`, "define include-tracking policy for `embeds` map," is the correct 6th row.)
    Files: varies per row — see `plan.md` for the specific row's "Key File(s)" column.
    Verify: whatever test the chosen row's own `plan.md` entry specifies.
+
+5. **Once `../sharp-runtime`'s Emscripten regression clears (see item 3), also implement `plan_deep_audit.md` AUDIT-0050** (real IDBFS mount/syncfs for web config persistence — currently `-lidbfs.js` is linked but never actually invoked, so prefs/recent-files/keybindings silently vanish on every web reload). Same blocker as item 3, different fix.
+   Files: `src/MeshCraft/MeshCraftPrivate.hpp`, web init path, `CMakeLists.txt:347`.
+   Verify: see `plan_deep_audit.md` AUDIT-0050 for the exact steps.
+
+6. **Get the project owner's decision on `plan_deep_audit.md`'s 5 `needs_human` rows** (`AUDIT-0037` id-collision-across-includes policy, `AUDIT-0038` MCB version-migration policy, `AUDIT-0039`/`0040` CI matrix scope, plus whatever the original 6 `plan.md` product-decision rows in item 4 resolve to) — no new investigation needed, just a scope call.
+   Files: none — communication/handoff task.
+   Verify: N/A (external decision).
 
 ---
 
