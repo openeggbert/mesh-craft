@@ -558,10 +558,30 @@ void saveToBinary(const Mc3::Mc3Document& doc, std::ostream& out) {
 }
 
 void saveToFile(const Mc3::Mc3Document& doc, const std::filesystem::path& path) {
-    std::ofstream f(path, std::ios::binary | std::ios::trunc);
-    if (!f) throw std::runtime_error("Cannot open for writing: " + path.string());
-    saveToBinary(doc, f);
-    if (!f) throw std::runtime_error("Write error: " + path.string());
+    // AUDIT-0019: write to a sibling temp file and rename over the real
+    // destination only after a fully successful write, so a crash/disk-full/
+    // permission failure mid-write can never leave a truncated or corrupt
+    // file at `path` (std::filesystem::rename is atomic within the same
+    // filesystem, which a sibling file in the same directory always is).
+    std::filesystem::path tmpPath = path;
+    tmpPath += ".tmp";
+    {
+        std::ofstream f(tmpPath, std::ios::binary | std::ios::trunc);
+        if (!f) throw std::runtime_error("Cannot open for writing: " + tmpPath.string());
+        saveToBinary(doc, f);
+        if (!f) {
+            f.close();
+            std::error_code ec;
+            std::filesystem::remove(tmpPath, ec);
+            throw std::runtime_error("Write error: " + path.string());
+        }
+    }
+    std::error_code ec;
+    std::filesystem::rename(tmpPath, path, ec);
+    if (ec) {
+        std::filesystem::remove(tmpPath, ec);
+        throw std::runtime_error("Failed to finalize MCB save (rename): " + path.string());
+    }
 }
 
 } // namespace MeshCraft::Mcb

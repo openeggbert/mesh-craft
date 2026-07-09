@@ -1188,14 +1188,51 @@ void GltfExporter::exportDocument(const Mc3Document& doc,
     bool embedImages = writeBinary;
     bool prettyPrint = !writeBinary;
 
-    std::string path = outputPath.string();
-    bool ok = writer.WriteGltfSceneToFile(&model, path,
-                                           embedImages,
-                                           /*embedBuffers=*/writeBinary,
-                                           prettyPrint,
-                                           writeBinary);
-    if (!ok)
-        throw std::runtime_error("tinygltf: failed to write " + path);
+    // AUDIT-0019: for GLB, the output is always a single self-contained
+    // file, so we can safely write to a sibling temp path and rename over
+    // the real destination only after a fully successful write -- a crash/
+    // disk-full/permission failure mid-write can then never leave a
+    // truncated .glb at the path the user asked to export to.
+    //
+    // For plain .gltf, tinygltf also writes a separate external .bin buffer
+    // (and possibly image files) alongside the JSON, with the buffer's
+    // on-disk name and the JSON's internal "uri" reference to it both
+    // derived from the given path's filename. Writing the JSON to a
+    // differently-named temp path would make tinygltf emit a buffer
+    // reference that no longer matches the real destination's expected
+    // sibling filename once renamed -- a subtler, worse corruption than the
+    // truncation this fix prevents. Left non-atomic for that multi-file
+    // case pending a proper multi-file-aware fix.
+    if (writeBinary) {
+        std::filesystem::path tmpPath = outputPath;
+        tmpPath += ".tmp";
+        std::string tmpPathStr = tmpPath.string();
+        bool ok = writer.WriteGltfSceneToFile(&model, tmpPathStr,
+                                               embedImages,
+                                               /*embedBuffers=*/writeBinary,
+                                               prettyPrint,
+                                               writeBinary);
+        if (!ok) {
+            std::error_code ec;
+            std::filesystem::remove(tmpPath, ec);
+            throw std::runtime_error("tinygltf: failed to write " + tmpPathStr);
+        }
+        std::error_code ec;
+        std::filesystem::rename(tmpPath, outputPath, ec);
+        if (ec) {
+            std::filesystem::remove(tmpPath, ec);
+            throw std::runtime_error("Failed to finalize GLB export (rename): " + outputPath.string());
+        }
+    } else {
+        std::string path = outputPath.string();
+        bool ok = writer.WriteGltfSceneToFile(&model, path,
+                                               embedImages,
+                                               /*embedBuffers=*/writeBinary,
+                                               prettyPrint,
+                                               writeBinary);
+        if (!ok)
+            throw std::runtime_error("tinygltf: failed to write " + path);
+    }
 
     // Populate export statistics from accumulated ctx.stats + model aggregate counts.
     stats = ctx.stats;
