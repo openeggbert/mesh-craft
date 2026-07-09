@@ -421,9 +421,72 @@ All objects share common transform attributes:
 | `size` | vec2 | `1 1` |
 | `axis` | `"x"`, `"y"`, `"z"` | `"y"` |
 
-#### `<torus>`, `<capsule>`, `<disk>`, `<grid>`, `<icosphere>`
+#### `<torus>`
 
-Supported by the MeshCraft editor and exported by `mc3togltf`.
+```xml
+<torus name="Ring" major_radius="0.35" minor_radius="0.15" segments="32"/>
+```
+
+| Attribute | Type | Default |
+|-----------|------|---------|
+| `major_radius` | float | `0.35` |
+| `minor_radius` | float | `0.15` |
+| `segments` | positive integer | `32` |
+
+#### `<capsule>`
+
+```xml
+<capsule name="Pill" radius="0.5" height="1.0" segments="32" axis="y"/>
+```
+
+| Attribute | Type | Default |
+|-----------|------|---------|
+| `radius` | float | `0.5` |
+| `height` | float | `1.0` |
+| `segments` | positive integer | `32` |
+| `axis` | `"x"`, `"y"`, `"z"` | `"y"` |
+
+#### `<disk>`
+
+```xml
+<disk name="Coin" radius="0.5" inner_radius="0" segments="32" axis="y"/>
+```
+
+| Attribute | Type | Default |
+|-----------|------|---------|
+| `radius` | float | `0.5` |
+| `inner_radius` | float | `0` (solid disk; > 0 makes an annulus/ring) |
+| `segments` | positive integer | `32` |
+| `axis` | `"x"`, `"y"`, `"z"` | `"y"` |
+
+**Note:** the legacy attribute name `minor_radius` is still accepted as an
+alias for `inner_radius` for backward compatibility, but `inner_radius` is
+the canonical name and the only one in the schema.
+
+#### `<grid>`
+
+```xml
+<grid name="Terrain" size="10 1 10" subdivisions_x="4" subdivisions_z="4"/>
+```
+
+| Attribute | Type | Default |
+|-----------|------|---------|
+| `size` | vec3 | `1 1 1` |
+| `subdivisions_x` | positive integer | `4` |
+| `subdivisions_z` | positive integer | `4` |
+
+#### `<icosphere>`
+
+```xml
+<icosphere name="Rock" radius="0.5" segments="2"/>
+```
+
+| Attribute | Type | Default |
+|-----------|------|---------|
+| `radius` | float | `0.5` |
+| `segments` | positive integer | `2` (subdivision level; note this primitive's default differs from the `32` shared by the other primitives above) |
+
+All five are supported by the MeshCraft editor and exported by `mc3togltf`.
 
 ### `<mesh>` — external OBJ file
 
