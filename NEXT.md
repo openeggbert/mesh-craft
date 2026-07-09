@@ -1,408 +1,221 @@
 # NEXT.md
 
-_Last updated: 2026-07-07, commit `da8f1b8` (develop, in sync with `origin/develop`)_
+_Last updated: 2026-07-09, prior commit `dc46af4` (branch `develop`, in sync with `origin/develop` as of that commit). Based on a from-scratch clean-build verification done 2026-07-07 — see `STABILIZATION_WORKLOG.md` for the full command trace._
 
 ---
 
 ## 1. Project summary
 
-**MeshCraft** is a C++23 3D scene editor for the `.mc3.xml` scene format —
-a lightweight XML-based scene description used by the OpenEggbert project.
-It uses Dear ImGui for its UI, running on **CNA** (an XNA-style SDL3 +
-OpenGL runtime, a separate sibling repo at `../cna` — never modified from
-this repo) and **SHARP_RUNTIME** (`../sharp-runtime`, the math library
-CNA's backend depends on). Scenes export to glTF/GLB via **mc3togltf** and
-to a compact binary format via **mc3tomcb**.
+**MeshCraft** is a C++23 3D scene editor for **`.mc3.xml`**, a custom XML scene-description format used by the OpenEggbert project. The editor UI is built on **Dear ImGui**, running on **CNA** (an XNA-style SDL3+OpenGL runtime — sibling repo at `../cna`, never modified from this repo) and **SHARP_RUNTIME** (`../sharp-runtime`, the .NET-BCL-style math/collections library CNA depends on). Scenes export to **glTF/GLB** via `mc3togltf` and to a compact **binary format (MCB)** via `mc3tomcb`.
 
-**Main goal:** reach a fully stabilized, test-covered codebase before
-adding new features. All work is tracked in `plan.md` as 650 `STAB-XXXX`
-tasks across sections S0–S20, gated by a Gate 0–6 checklist
-(`STABILIZATION.md`).
+**Main goal**: reach a fully stabilized, test-covered codebase before adding new product features. All stabilization work is tracked in `plan.md` as 650 `STAB-XXXX` tasks across sections S0–S20 (`STABILIZATION.md` holds the gate policy).
 
-**Current phase: stabilization is essentially DONE.** **620/650** `plan.md`
-rows are ✅, **29** are 🟡 (genuinely flagged — documented real gaps or
-corrected premises, not meant to auto-resolve), **0** are 🧪, and exactly
-**1** is still 📋 (STAB-0650, blocked on the repo owner rotating a PAT
-before CI can even be activated to check its output — nothing more to do
-here without that action). Every section S0–S20 is closed except for its
-handful of permanently-flagged 🟡 rows. **There is no more open
-"stabilization backlog" work left to autonomously pick up** — see §8 for
-what's actually left.
+**Current phase**: stabilization is functionally complete but not formally "all green." `plan.md`: **620/650 rows ✅, 29 🟡 (permanently flagged — real gaps or product decisions, not meant to auto-resolve), 1 📋 (blocked on an external action), 0 🧪, 0 🔴**. Only **Gate 2 (Export)** is 100% green; every other gate has at least one flagged row remaining. Per this project's own policy, **new feature work is not yet authorized** until the project owner decides the current state is "green enough."
 
-**Important architectural decisions:** (unchanged from prior revisions —
-see `git log -p -- NEXT.md` for full history) `mc3`/`mcb` CNA-free
-standalone libs, CNA sibling repo never modified, `mc3togltf`/`mc3tomcb`
-CNA-free CLI+lib, editor pure logic lives in CNA-free `Alg`-suffixed
-headers (`EditorAlgorithms.hpp`, `AiResponseAlgorithms.hpp`,
-`Renderer/CsgCacheAlg.hpp`) — **not every mirror is wired back into its
-real `.cpp`**, some are deliberate parallel duplicates purely for
-testability (see §6). MCB fully documented (`MCB_FORMAT.md`). CSG via
-Manifold v3.0.0, `isCutter`/`role="cutter"` semantics matter a lot (a
-missing flag silently turns a subtraction into a union). Two CSG code
-paths (export vs. editor preview) share the same semantics but are
-separate implementations.
+**Important architectural decisions**:
+- `mc3` (data model + XML parser/writer) and `mcb` (binary serializer) are **CNA-free standalone libraries** — must build and test independently of CNA/ImGui.
+- `mc3togltf` and `mc3tomcb` are **CNA-free CLI tools + libraries** built on top of `mc3`/`mcb`.
+- CNA (`../cna`) and SHARP_RUNTIME (`../sharp-runtime`) are **sibling repos this project must not modify without explicit permission**.
+- Editor logic that needs headless unit testing is extracted into CNA-free `*Alg`-suffixed header files (`EditorAlgorithms.hpp`, `AiResponseAlgorithms.hpp`, `Renderer/CsgCacheAlg.hpp`). Not every `Alg` mirror is wired back into its real `.cpp` call site — a few (`PrefsAlg`, `loadRecentFilesAlg`) are deliberate parallel duplicates kept only for testability. Check both sides before changing one.
+- CSG (boolean mesh ops) uses Manifold v3.0.0 via **two independent code paths** — export-time (`mc3togltf/src/CsgEvaluator.cpp`) and editor-preview-time (`SceneRenderer`) — that must stay semantically consistent but are separate implementations.
 
 ---
 
 ## 2. Current status
 
 ### Build
-**Debug**: 66/66 tests pass as of commit `da8f1b8`. Working tree clean.
-**Important**: a conservative-maintainer audit on 2026-07-07 deleted
-`cmake-build-debug/` entirely and rebuilt from absolute zero (rather than
-trust the incrementally-updated directory carried across many prior
-sessions) — this found and fixed a real clean-build break (`CNA_ENABLE_NET`
-defaulted ON, unconditionally pulling in a CNA component with a broken
-cross-repo API call that this project never actually links). See
-`STABILIZATION_WORKLOG.md`'s Phase 1 section and `plan.md`'s "Post-650
-Follow-Up Findings" item 4 for the full trace. **Always reconfigure with
-`CNA_ENABLE_NET` now correctly defaulted OFF via `CMakeLists.txt`** — no
-extra flag needed, this is baked into the project's own cache-variable
-overrides now. Standalone subproject builds (`mc3`/`mcb`/`mc3togltf`/
-`mc3tomcb`) were also re-verified from scratch the same session: 1/1, 1/1,
-41/41, 3/3 respectively (`mc3togltf` grew from 24 to 41 tests since the
-count was last checked). Also did a **from-scratch Emscripten web build**
-(see §6) — succeeded cleanly, and was verified running in real headless
-Chrome (WebGL2 context creation confirmed, no errors). A fresh MinGW
-cross-compile re-check (same session) found the CNA-side GLES3 blocker is
-still present, plus 3 separate sharp-runtime-side `-Werror` failures
-newly surfaced — but also newly confirmed `mc3togltf.exe`/`mc3tomcb.exe`
-build and link as real Windows executables (see `plan.md` STAB-0552).
+Clean from an **absolute-zero** build directory (not just incremental): `rm -rf cmake-build-debug` → reconfigure → `ninja` → **exit 0**. This was specifically verified this way after discovering that an incrementally-updated build directory had been silently masking a real clean-build break for at least two days (see §4).
 
-### What's now fully verified (S3-S16, S20 — across this and prior sessions)
-MCB binary format, glTF/GLB export, CSG (both code paths), geometry
-reuse/instancing/large scenes, editor save/load/undo/macro/export
-workflows, UI robustness, ModelRegistry, **AI integration (S10, including
-a real hang-on-close bug fix)**, **materials/textures/visual fidelity
-(S11)**, animation (S12, 2 flagged), commands/undo/redo (S13),
-rendering/viewport (S14, GL-state-leak check added), import/export
-integration (S15), **cross-platform (S16, fully closed — Emscripten/
-Blender both verified this session)**, documentation (S17), code quality
-(S18), security (S19), and release readiness (S20, down to 1 blocked
-row) are all now empirically verified — not just read from code. Full
-per-row detail is in `plan.md`; `git log --oneline` has one commit per
-closed section/batch.
+### Tests
+**66/66 CTest tests pass.** Labels: `ai` 1, `commands` 1, `export` 44, `format` 3, `registry` 1, `render` 16. XSD validation: **69/69** `test/*.mc3.xml` fixtures validate against `mc3/mc3.xsd`. Standalone (CNA-free) subproject builds also verified independently: `mc3` 1/1, `mcb` 1/1, `mc3togltf` 41/41, `mc3tomcb` 3/3.
 
-### Real bugs found and fixed this session (chronological, S10 onward)
-1. **`AiAssistant` hang-on-close** (STAB-0387/0388): `reset()`/destructor
-   blocked on an in-flight `std::async` future — could hang the app for
-   up to 600s on shutdown/reset while an AI request was running. Fixed
-   by replacing `std::future`/`std::async` with a detached `std::thread`
-   + `shared_ptr<AiRequestResult>` (atomic done-flag, mutex-guarded
-   fields) — non-blocking `reset()`, no lifetime issues either way.
-2. **Stale `"claude-sonnet-4-6"` model default** in the UI's `aiModelBuf_`
-   and its empty-buffer fallback/tooltip — independent of `AiAssistant::
-   model`'s already-fixed default, so every request silently used the old
-   model name unless manually retyped.
-3. **Temp file leak on every malformed AI response** — `parseXmlAlg()`/
-   `serializeScene()` only cleaned up their scratch file on the success
-   path; malformed XML (the common real-world case) leaked a file every
-   time. Fixed with `try/catch`-guaranteed cleanup.
-4. **No confirmation before a drastic AI "Apply to Scene" shrink**
-   (STAB-0395) — added a two-click "Confirm Replace" gate when the AI
-   result has less than half the current scene's object count (on
-   scenes ≥10 objects).
-5. **No pre-Send byte-count indicator** (STAB-0409) — added, sharing the
-   exact serialization helper the Send button itself uses so they can't
-   drift apart.
-6. **`logError()`/GL-error checking was dead code** (STAB-0521) — a
-   `glGetError()` helper existed but had zero call sites anywhere. Added
-   a real per-frame check (`checkGlStateLeak()`), wired into the
-   `--screenshot` diagnostic output (`[GLCheck] clean`/`error`), with a
-   new permanent ctest.
-7. **Web GLB export has no browser-download bridge** (STAB-0571,
-   flagged not fixed) — `-sFORCE_FILESYSTEM=1` exposes `Module.FS` but
-   nothing reads an exported file back out into a `Blob`/download; a
-   real gap, new-feature-sized, out of scope during stabilization.
-8. **Unescaped literal `%`** in `PropertiesPanel.cpp:1087`'s
-   `ImGui::TextDisabled("Inner Radius (0 = 50%)")` — a printf-style
-   format-string bug, surfaced as a compiler warning during the
-   from-scratch Emscripten rebuild. Fixed to `50%%`.
-9. **Accidental duplicate `STAB-0521` row in `plan.md`** — found and
-   removed; corrected the plan's total row count back to 650 (the
-   "651, S14 has 31 not 30" note in the old summary was describing this
-   very duplicate, not a legitimate extra task).
+### Tools/binaries currently available (after a build)
+- `MeshCraft` — the GUI editor (Linux native; also runs headless via `--screenshot scene.mc3.xml out.ppm` for CI-style pixel checks).
+- `mc3togltf` — CLI, `.mc3.xml` → `.gltf`/`.glb`.
+- `mc3tomcb` — CLI, `.mc3.xml` ↔ `.mcb` (binary format).
+- 5 C++ test binaries (`ai_test`, `mc3_registry_test`, `mc3_roundtrip_test`, `mc3_commands_test`, `mcb_roundtrip_test`), each runnable standalone for fast iteration.
 
-**After the 650-row plan hit 620/650, a fresh unscoped bug sweep** (see
-`plan.md`'s "Post-650 Follow-Up Findings" section) found and fixed 3 more
-real, empirically-reproduced bugs:
-10. **MCB stack-overflow crash on a crafted file** — `McbReader.cpp`'s
-    `readObject`/`skipValue` had no recursion-depth limit; a ~20,000-level
-    nested `<children>` chain (a few hundred KB) segfaulted the process
-    outright, not catchable via `std::exception`. Fixed with a
-    `RecursionGuard<256>` template, mirroring `CsgEvaluator.cpp`'s
-    `CSG_MAX_DEPTH` pattern.
-11. **MCB resource-exhaustion DoS** — `rRawStr()` allocated/zero-filled a
-    claimed string length *before* validating it against the stream; a
-    23-byte crafted file claiming a ~4GB string forced ~4.1GB committed
-    memory + 1.66s CPU. Fixed with a 64MB sanity ceiling before allocation.
-12. **`ModelRegistry.cpp` temp-file leak** — `insertIntoScene()`/
-    `entryFromDefinition()` had the same unguarded-cleanup-on-exception
-    bug already fixed elsewhere this session (STAB-0392), just never
-    propagated here. Fixed with the same try/catch pattern.
+### Recently implemented / working features
+- Full `.mc3.xml` parse/write roundtrip, including `<include>` (with cycle detection), N1–N7 schema extensions.
+- glTF/GLB export with geometry-reuse caching, CSG (union/difference/intersection, strict + approximate-fallback modes), material/texture/animation export.
+- MCB binary format, fully documented (`MCB_FORMAT.md`).
+- SQLite-backed `ModelRegistry` (asset library: save/search/insert-into-scene, with graceful stub when SQLite3 isn't available).
+- AI Assistant integration (Claude API): mock-server-tested end to end, no real network call in tests; background HTTP work runs on a detached thread (not `std::async`), so closing the app or resetting mid-request never hangs.
+- Editor: undo/redo, autosave/backup, save/load, keybindings/macros/preferences persistence, drag-and-drop scene loading.
+- Web (Emscripten) build: compiles cleanly and has been confirmed running in a real headless-Chrome session with a working WebGL2 context (no console/GPU errors).
+- Real headless-Blender-based tests confirm exported GLBs (including a real authored scene, `medieval_castle.mc3.xml`) import correctly with matching PBR material values.
 
-### Real, confirmed-but-unfixed gaps (flagged 🟡 in plan.md — 29 total)
-Grouped by recurring cause (see the memory file `project_meshcraft_
-stabilization.md` for the full breakdown):
-- **Needs a live interactive display session** (mouse-driven ImGui state
-  a headless environment can't reach) — most of S12/S14's remaining 🟡
-  rows (curve editor visibility, proportional-edit radius indicator,
-  locked-object outline, FPS counter, drag-drop OS gesture).
-- **CNA-side blocker, out of scope** — Windows/MinGW build (CNA
-  hardcodes GLES3 headers unconditionally for EASYGL).
-- **Confirmed real gap, feature-moratorium applies** — web GLB download
-  bridge (STAB-0571), animation scale-time function (STAB-0460),
-  material-duplicate command (STAB-0427/D3), merge-scene object-id
-  collision handling (STAB-0289), no first-launch prefs.ini auto-save
-  (STAB-0327), no registry-DB-path override (STAB-0360).
-- **Corrected premise** — row's literal expectation doesn't match a
-  legitimate design choice (STAB-0389: AI panel intentionally visible
-  but degrades gracefully in non-AI builds, not hidden; STAB-0423:
-  preview sphere has no environment map, so "mirror-like" isn't
-  physically achievable; STAB-0386: no `saveToString()` exists, scene
-  serialization round-trips through a temp file instead, same result).
-- **STAB-0012/STAB-0092**: pre-existing (MinGW CNA gap, an accepted
-  `<embeds>`-in-`<include>` limitation).
+### What does NOT work yet
+- **Windows GUI build (MinGW)**: does not compile — see §4.
+- **Emscripten web build**: compiles and initializes (WebGL2 context confirmed working), but the 3D viewport renders a **blank canvas** — not root-caused, not yet visually usable in a browser.
+- **Web GLB export download**: exporting a GLB in the web build writes to Emscripten's in-browser virtual filesystem only — there is no JS bridge to actually download the file to the user's real filesystem.
+- SVG texture rasterization: parsed/serialized but never rasterized (stub only).
+- Embedded glTF references (`<mesh src="embed:id"/>`): parsed/serialized but not resolved by the exporter.
+- N3–N7 scene data (scripts, sounds, music, triggers, scene states): fully round-tripped in the data model but not executed at runtime (no Lua interpreter, no audio playback, etc. — data-model-first by design, not a bug).
+- Android build: never attempted (no Android NDK in this environment).
 
 ---
 
 ## 3. Recent changes
 
-This session picked up from S10 (AI Integration Stability, 40 rows, 11
-done at the start) and closed **S10, S11, S12 (already mostly done),
-S13 (already done), S14, S15 (already mostly done), S16, and S20's
-remaining rows** — all the way to only 1 open row left in the entire
-650-task plan. Key milestones, each its own commit:
-- `stab: STAB-0387/0388 — fix AiAssistant hang-on-close via detached thread`
-- `stab: close S10 (AI Integration Stability) — STAB-0380..0410`
-- `stab: close S11 (Materials, Textures, Visual Fidelity) — STAB-0421..0431`
-  (added a real headless-Blender PBR-material import test)
-- `stab: STAB-0521 — wire up a real per-frame GL error check; close S14`
-  (also found+removed the duplicate STAB-0521 row)
-- `stab: close S16/S20 web+platform rows with real browser/Blender evidence`
-  (from-scratch Emscripten build + real headless-Chrome verification;
-  Blender-based release-sample import test)
+- **New**: committed a MinGW cross-compile toolchain file, `cmake/toolchains/mingw-w64.cmake` (standard `CMAKE_SYSTEM_NAME Windows` / `x86_64-w64-mingw32-{gcc,g++,windres}` / `CMAKE_FIND_ROOT_PATH /usr/x86_64-w64-mingw32` setup) — previously reconstructed ad hoc each session per §4/§8. Verified: `cmake -S . -B /tmp/b-mingw -DCMAKE_TOOLCHAIN_FILE=cmake/toolchains/mingw-w64.cmake -DMESH_CRAFT_BUILD_TESTING=OFF -G Ninja` configures cleanly (exit 0), reporting the same expected SQLite3/OpenSSL/LibXml2 not-found-and-gracefully-disabled result as prior sessions. Does not change build behavior — same 4 cross-repo blockers in §4 remain (not attempted, out of scope).
 
-A useful investigation pattern from prior sessions kept paying off: when
-a row's stated verification method turns out to be infeasible as written
-(no tool, no headless path), don't just leave it "manual" — check
-whether the actual capability exists in this environment before assuming
-it doesn't (Blender and a working Emscripten SDK + real Chrome both
-turned out to be available, closing several rows that earlier notes had
-marked as blocked).
+Most recent commits (`develop`, newest first):
+- `dc46af4`, `da8f1b8`, `9e5f252`, `4b7fcd2` — conservative-maintainer audit: re-verified the whole project from a genuinely empty build directory, fixed docs that had drifted from reality, re-verified MinGW/Emscripten cross-compile status.
+- `9d673a0` — **fix**: `CMakeLists.txt` now sets `CNA_ENABLE_NET OFF` (was implicitly `ON` via CNA's own default) — this was the actual clean-build fix, see §4/§6.
+- `865d015` — **fix**: MCB reader had no recursion-depth limit (a crafted file could stack-overflow-crash the process) and no sanity check on claimed string lengths (a tiny crafted file could force multi-GB memory allocation). Both fixed with a bounded recursion guard and a size ceiling; regression tests added.
+- `f0dd333`/`f663585` and earlier — closed out most of the S10–S20 stabilization sections (AI integration hang-on-close fix, GL-error-check dead code fix, materials/visual-fidelity verification, cross-platform re-verification with real Blender/Chrome evidence).
 
-Full history is in `git log --oneline`; `plan.md` has a per-row writeup
-for every `STAB-XXXX` ID.
+Tests added this session: 2 MCB regression tests (recursion-depth, string-length), 1 ModelRegistry temp-file-leak regression test. No tests were removed. Behavior changes: `AiAssistant`'s async mechanism switched from `std::async`/`std::future` to a detached `std::thread` + `shared_ptr` result box (non-blocking shutdown); `CNA_ENABLE_NET` now defaults OFF for this project specifically.
+
+Full history: `git log --oneline`. Per-task detail: `plan.md` (one row per `STAB-XXXX` ID) and `STABILIZATION_WORKLOG.md` (narrative + exact commands run).
 
 ---
 
 ## 4. Current blocker / main problem
 
-**No blocker to local development or testing on Linux** — 66/66 tests
-pass as of `da8f1b8`. The only remaining plan.md item (STAB-0650) is
-blocked on the repo owner rotating a PAT for the parked-deactivated CI
-workflow — nothing to do here without that action. MinGW cross-compile
-is blocked on a CNA-side GLES3-header gap (out of scope, needs the CNA
-maintainer). The Emscripten build itself is healthy (see §6); its
-known pre-existing "blank canvas" visual-usability limitation (from a
-prior session, STAB-0553) is unchanged and still not root-caused.
+**Nothing blocks Linux development, building, or testing** — the build is clean and 66/66 tests pass. If forced to name the single most significant *known, unresolved* problem in the project right now, it is:
+
+**The Windows (MinGW cross-compile) build of the full GUI editor does not complete.**
+
+- **Failing command**: a MinGW cross-compile build (`x86_64-w64-mingw32-g++` toolchain) of the `MeshCraft` target.
+- **Exact symptom / first failure**:
+  ```
+  /rv/data/development/github.com/openeggbert/cna/.../imgui_impl_opengl3.cpp:159:10:
+  fatal error: GLES3/gl3.h: No such file or directory
+  ```
+- **Affected files/modules**: `../cna` (configures `-DIMGUI_IMPL_OPENGL_ES3` unconditionally for its `EASYGL` backend, regardless of target platform) — **outside this repo**, must not be modified without permission.
+- **Additional failures found when building past the first one** (`ninja -k 0`), all also outside this repo, in `../sharp-runtime`:
+  - `System/Net/Sockets/Socket.cpp:361` — `-Werror=unused-function`.
+  - `System/Net/Sockets/UnixDomainSocketEndPoint.cpp` — `afunix.h`'s `ADDRESS_FAMILY` type not visible (MinGW header/include-order issue).
+  - `System/Xml/XmlConvert.cpp` (via `CharUnicodeInfo.hpp:162`) — `-Werror=sign-compare`.
+- **Suspected cause**: cross-repo API drift (CNA's Windows GL backend was never wired to a real GLES3-on-Windows solution; sharp-runtime's Windows networking code has 3 unrelated warnings-as-errors under this specific MinGW version).
+- **What's already been tried / confirmed**: `CNA_ENABLE_NET=OFF` (this project's own fix) removes an unrelated, previously-masking failure but does not touch any of the above. The two **CNA-free** CLI tools, `mc3togltf.exe` and `mc3tomcb.exe`, **do** build and link successfully as real Windows PE32+ executables — confirmed via `file mc3togltf.exe`. Only the full ImGui/CNA-dependent GUI editor is blocked.
+- **Not something to fix here**: all 4 failures are in `../cna` or `../sharp-runtime`. Fixing them needs the maintainer(s) of those repos.
 
 ---
 
 ## 5. Known bugs and limitations
 
-Unchanged from prior sessions (Emscripten blank-canvas rendering issue,
-MinGW GLES3 gap, CI credentials, SVG rasterization, embedded glTF,
-`<embeds>`-in-`<include>`, `mc3.xsd` numeric ranges, `mip_maps`, N3-N7
-data-only, CSG no real UVs, ~100+ non-material ImGui slider sites still
-lacking `ImGuiSliderFlags_AlwaysClamp` — see prior revision for the full
-list, `git log -p -- NEXT.md`) **plus this session's findings** (§2's
-numbered list — the AI hang-on-close fix, the web GLB-download gap, the
-GL-error-check dead-code fix, etc.).
-
-- **Two separate, duplicated material-editing UIs exist** (
-  `Scene/PropertiesPanel.cpp` and `MeshCraftApplication_UiLeftPanel.cpp`)
-  — a fix in one file's slider doesn't apply to the other's.
-- **Not every `Alg` mirror is wired back into its real `.cpp`** — some
-  (`PrefsAlg`, `loadRecentFilesAlg`/etc.) are deliberate parallel
-  duplicates for testability only. Precedented, not a bug, but check
-  both sides when touching one (see §6).
-- **No web GLB-download bridge** (STAB-0571) — see §2.
+- **Confirmed, unfixed (out of this repo's scope)**: Windows GUI build fails (§4). Emscripten web build renders a blank canvas (root cause not found).
+- **Confirmed, unfixed (in scope, deliberately deferred — needs a product-scope decision, not a quick patch)**:
+  - Merge Scene has no object-id collision handling (materials/textures/actions get suffixed on collision, objects don't) — `STAB-0289`.
+  - No first-launch `prefs.ini` auto-creation (only written when the Preferences dialog is explicitly closed) — `STAB-0327`.
+  - No registry-DB-path override mechanism (env var/prefs) — `STAB-0360`.
+  - No "duplicate material" editor command exists — `STAB-0427`.
+  - No animation scale-time function exists — `STAB-0460`.
+  - Web GLB export has no browser-download bridge (§2) — `STAB-0571`.
+- **Confirmed, by design (not a bug)**: SVG texture rasterization stub-only; embedded-glTF references not resolved; N3–N7 scene data not executed at runtime; two independent material-editing UIs exist (`Scene/PropertiesPanel.cpp` and `MeshCraftApplication_UiLeftPanel.cpp`) — a fix in one doesn't apply to the other.
+- **Needs verification (blocked on tooling, not known-bad)**: ~15+ `plan.md` rows need a live interactive display/mouse session this headless environment can't provide (curve-editor visibility, proportional-edit radius indicator, FPS counter, live drag-and-drop gesture, etc.) — genuinely untested either way, not confirmed broken.
+- **Incomplete**: ~100+ non-material ImGui slider/drag call sites still lack `ImGuiSliderFlags_AlwaysClamp` (6 highest-impact material-PBR ones were fixed and confirmed to matter; the rest need a per-site downstream-safety review before a blanket fix).
 
 ---
 
 ## 6. Architecture notes
 
-Unchanged from prior revision (`git log -p -- NEXT.md` for the full
-text) — CSG dual-code-path `isCutter` semantics, `Alg` mirror pattern
-nuance (some mirrors deliberately unwired), undo/redo snapshot-based
-mechanism, GL rendering caution (skybox VAO issue), `mc3.xsd` compiled
-at configure time, and the **XML comment gotcha**: `--` anywhere inside
-an XML comment is rejected by `lxml`/`validate_xsd.py` even though
-`tinyxml2` (the app's own parser) tolerates it — always validate new
-`.mc3.xml` fixtures with `test/validate_xsd.py` before trusting them.
-
-**New this session — environment capabilities worth knowing about:**
-- **Blender 4.3.2 is installed** (`/usr/bin/blender`) — usable for real
-  headless GLB-import verification via `bpy.ops.import_scene.gltf` +
-  reading back node values (`bpy.data.materials[...].node_tree.nodes`)
-  through Python. Three ctests now use it: `mc3togltf_blender_import`
-  (STAB-0252, synthetic scene), `mc3togltf_material_pbr_blender_import`
-  (STAB-0431, one box+material), `mc3togltf_release_sample_blender_import`
-  (STAB-0642, real authored content — `medieval_castle.mc3.xml`).
-- **Emscripten SDK is installed** at `~/Downloads/emsdk` (v5.0.7) but not
-  on `PATH` by default — `source ~/Downloads/emsdk/emsdk_env.sh` first,
-  then `./build-web.sh` builds into `cmake-build-web/` (gitignored,
-  ~315MB, takes a few minutes from scratch).
-- **google-chrome is installed** — can run genuinely headless with
-  software WebGL2 via `google-chrome --headless=new
-  --enable-unsafe-swiftshader --use-gl=angle --use-angle=swiftshader
-  --screenshot=out.png <url>` (serve the web build dir first, e.g.
-  `python3 -m http.server`). Confirmed real WebGL2 context creation with
-  no errors this way. **No argv/URL-param scene loading and no UI-
-  automation harness exist for the web target** — toggling runtime UI
-  state (SSAO/bloom checkboxes, opening a file) and visually confirming
-  effects still needs either a human or future automation investment
-  (synthetic canvas mouse-event dispatch).
-- AI integration (`AiAssistant.cpp`, `MeshCraftApplication_UiAi.cpp`,
-  `AiResponseAlgorithms.hpp`) test-seam infrastructure: `AiAssistant::
-  apiBaseUrl` (override for a local mock `httplib::Server`),
-  `connectTimeoutSec`/`readTimeoutSec`/`writeTimeoutSec` (override for
-  timeout tests), the whole validation pipeline (`extractXmlAlg`/
-  `validateAndParseAiResponseAlg`/`isEmptyMc3DocumentAlg`/
-  `validateXmlAgainstXsdAlg`) CNA-free in `AiResponseAlgorithms.hpp` for
-  direct `ai_test.cpp` unit testing. The background HTTP call now runs
-  on a **detached `std::thread`** writing into a `shared_ptr<
-  AiRequestResult>` (atomic `done` + mutex-guarded fields) — not
-  `std::async`, so destroying `AiAssistant` never blocks (STAB-0387/0388).
+- **CSG dual-path invariant**: `mc3togltf/src/CsgEvaluator.cpp` (export) and `SceneRenderer`'s CSG preview cache (editor) both key off `isCutter`/`role="cutter"` on child objects. A missing cutter flag silently turns a subtraction into a union — this has bitten real test fixtures before. Both paths must be kept in sync if CSG semantics change.
+- **`Alg` mirror pattern**: pure logic extracted into CNA-free headers so it's headlessly unit-testable. Most mirrors are the single source of truth their real `.cpp` calls into — but a few (documented in the headers themselves) are intentionally-unwired parallel duplicates. Always check whether a given `Alg` function is actually called by the real code before assuming a fix there takes effect in the app.
+- **Undo/redo**: snapshot-based, not command-diff-based.
+- **`mc3.xsd` is compiled into the binary at CMake configure time** (embedded header generation) — editing the XSD requires a reconfigure, not just a rebuild.
+- **XML comment gotcha**: a literal `--` anywhere inside an XML comment is rejected by `lxml`/`test/validate_xsd.py`, even though the app's own parser (`tinyxml2`) tolerates it. Always run `test/validate_xsd.py` on new `.mc3.xml` fixtures before trusting them.
+- **`AiAssistant` threading invariant**: background HTTP work runs on a **detached `std::thread`** writing into a `shared_ptr<AiRequestResult>` (atomic `done` flag + mutex-guarded fields) — never `std::async`/`std::future`, whose destructor blocking behavior previously caused an app-hang-on-close bug. Do not reintroduce `std::async` here.
+- **`CNA_ENABLE_NET` must stay `OFF`** in this project's `CMakeLists.txt` (see §4) — it disables an entirely unused CNA subsystem (`CNA_GamerServices`/`CNA_Net`, never linked by anything in this repo) that currently fails to compile on the CNA side. Re-enabling it will break the default `ninja` build again.
+- **API/compatibility boundaries that must remain stable**: `Mc3Document`'s public API is depended on by `mc3togltf` and every test fixture — check both before changing it. CNA and SHARP_RUNTIME source must not be modified without explicit owner permission.
 
 ---
 
 ## 7. Useful commands
 
 ```bash
-# --- Debug (CLion dir; reconfigure with CLion's cmake to avoid a system-cmake bug)
+# --- Configure + build (Debug). MUST use CLion's bundled cmake, not system cmake
+# (system cmake has a documented reconfigure bug for this project).
 CLION_CMAKE=/home/robertvokac/.local/share/JetBrains/Toolbox/apps/clion/bin/cmake/linux/x64/bin/cmake
-"$CLION_CMAKE" -S . -B cmake-build-debug -DBUILD_TESTING=ON \
-      -DCMAKE_POLICY_VERSION_MINIMUM=3.5
-cd cmake-build-debug && ninja && ctest --output-on-failure    # build + test (66)
-ctest -N                                                      # lists all 66 tests
-ctest --print-labels                                          # format/export/render/registry/ai/commands
+"$CLION_CMAKE" -S . -B cmake-build-debug -DBUILD_TESTING=ON -DCMAKE_POLICY_VERSION_MINIMUM=3.5 -G Ninja
+cd cmake-build-debug && ninja -j$(nproc)
 
-# --- Validate an XML fixture (also catches the "--" inside comment bug)
+# --- Test
+ctest --output-on-failure          # full suite (66)
+ctest -N                           # list all registered tests
+ctest --print-labels                # ai / commands / export / format / registry / render
+ctest -R mc3_ai --output-on-failure           # AI integration
+ctest -R mc3_registry --output-on-failure     # ModelRegistry
+ctest -R gl_state_leak --output-on-failure    # GL error-leak check
+ctest -R blender --output-on-failure          # 3 real-headless-Blender tests
+
+# --- XSD validation of a new/changed fixture
 python3 test/validate_xsd.py mc3/mc3.xsd test/some_fixture.mc3.xml
 
-# --- Run / export / validate / version
-./cmake-build-debug/MeshCraft test/house.mc3.xml
+# --- Run / demo
+./cmake-build-debug/MeshCraft test/house.mc3.xml                     # interactive
+./cmake-build-debug/MeshCraft test/house.mc3.xml --screenshot out.ppm  # headless smoke
 ./cmake-build-debug/mc3togltf/mc3togltf test/features.mc3.xml /tmp/out.glb
-ctest -R mc3_ai --output-on-failure             # AI integration tests (S10)
-ctest -R mc3_registry --output-on-failure       # ModelRegistry tests (S9)
-ctest -R gl_state_leak --output-on-failure      # STAB-0521 GL error check (S14)
-ctest -R blender --output-on-failure            # all 3 Blender-based tests
+./cmake-build-debug/mc3tomcb/mc3tomcb test/house.mc3.xml /tmp/out.mcb
 
-# --- Web build (Emscripten) — see §6 for details
-source ~/Downloads/emsdk/emsdk_env.sh
-./build-web.sh                                  # builds cmake-build-web/MeshCraft.html
-cd cmake-build-web && python3 -m http.server 8080
-google-chrome --headless=new --enable-unsafe-swiftshader \
-    --use-gl=angle --use-angle=swiftshader \
-    --screenshot=/tmp/out.png http://localhost:8080/MeshCraft.html
+# --- No linter/formatter is configured for this project.
 
-# --- Push
-git push origin develop
+# --- Reproduce the truly-clean-build check (see §4/§6 for why this matters)
+rm -rf cmake-build-debug
+# ...then reconfigure+build as above; should exit 0.
 ```
-
-No project linter/formatter is configured.
 
 ---
 
 ## 8. Next smallest tasks
 
-**There is no open stabilization-plan backlog left to autonomously pick
-up.** Before starting new work, a future session should:
+Ordered, each scoped to one focused session:
 
-1. **Check with the user** about direction — the natural next steps are
-   either (a) resuming feature work (the moratorium was "no new features
-   until stabilization is done" — it now essentially is), or (b) picking
-   a different initiative entirely. Don't assume either without asking.
-2. If asked to keep closing plan.md rows: the only one left is
-   **STAB-0650** (CI report consistency), and it's blocked on the repo
-   owner rotating a PAT — nothing to do without that.
-3. If asked to revisit the 29 flagged 🟡 rows: most need a live human
-   with a real display/mouse (curve editor, radius indicator, FPS
-   counter, drag-drop gesture) or are deliberate product decisions
-   (STAB-0289/0327/0360/0427/0460/0571) that need scope discussion
-   before implementing, not a quick patch — re-read each row's writeup
-   in `plan.md` before touching it, since the reasoning for *why* it's
-   flagged (not just that it is) matters for judging whether anything
-   changed.
-4. If asked to do a general code-quality/architecture pass: S18 (Code
-   Quality and Architecture) is closed but was scoped to the original
-   650-row list, not an open-ended audit — a fresh review might find
-   more, but that's a different kind of task than continuing this plan.
+1. **Verify whether the repo owner has rotated the CI PAT yet; if so, activate CI.**
+   Files: `.github_/workflows/ci.yml` → rename to `.github/workflows/ci.yml`.
+   Verify: push a trivial commit and confirm the Actions tab actually runs and reports a consistent result (`STAB-0650`).
+
+2. **Report the 4 cross-repo build failures (§4) to the CNA/sharp-runtime maintainer(s).**
+   Files: none in this repo — this is a communication/handoff task, not code. Include the exact errors from §4.
+   Verify: N/A (external action).
+
+3. **Investigate the Emscripten blank-canvas rendering issue.**
+   Files: likely `src/MeshCraft/MeshCraftApplication.cpp` (draw loop) or CNA's EasyGL WebGL2 code path. Start by adding a temporary per-frame diagnostic (e.g. log the first few `glGetError()` calls, or confirm ImGui's font atlas texture actually uploads) under Emscripten specifically.
+   Verify: `./build-web.sh`, serve via `python3 -m http.server`, load in `google-chrome --headless=new --enable-unsafe-swiftshader --use-gl=angle --use-angle=swiftshader --screenshot=out.png <url>`, inspect `out.png` for non-black content.
+
+4. **Pick one of the 6 flagged product-decision rows (`STAB-0289`/`0327`/`0360`/`0427`/`0460`/`0571`) and get an explicit scope decision from the project owner**, then implement only that one.
+   Files: varies per row — see `plan.md` for the specific row's "Key File(s)" column.
+   Verify: whatever test the chosen row's own `plan.md` entry specifies.
 
 ---
 
 ## 9. Do not do yet
 
-Unchanged from prior revisions (no new scene-format features, no CNA/
-SHARP_RUNTIME changes, no `Mc3Document` public API changes without
-checking dependents, no SVG rasterization or `embed:`/`<embeds>`
-implementation without an explicit decision, no mass refactoring, no
-MinGW GLES-header vendoring, no CSG UV-preservation implementation, no
-speculative fix for STAB-0289/0327/0360/0427/0460 without discussing
-scope first, no blanket slider-clamp sweep across the remaining ~100
-non-material sites without a per-site downstream-safety review first).
-
-New from this session: **no web GLB-download-bridge implementation**
-(STAB-0571) without discussing scope first — it's real new-feature work
-(JS glue, likely a custom HTML shell), not a stabilization fix.
+- **No new product features** until the project owner explicitly says the current stabilization state (620/650, Gate 2 fully green, rest flagged) is sufficient to resume feature work.
+- **No CNA or SHARP_RUNTIME source changes** without explicit owner permission — this includes the GLES3 header gap and the 3 sharp-runtime `-Werror` issues in §4, even though the fixes are individually easy to guess at.
+- **No `Mc3Document` public API changes** without checking `mc3togltf`, `mc3tomcb`, and every test fixture that touches it.
+- **No mass refactor or blanket fix** for the ~100+ un-clamped ImGui slider sites (§5) — each needs its own downstream-safety check first.
+- **No speculative implementation** of any of the 6 flagged product-decision rows (§8 item 5) without first getting the scope decision — guessing at scope risks building the wrong thing.
+- **No SVG rasterization or `embed:`/`<embeds>` resolution work** without an explicit decision on which library/approach to use.
+- **No re-running the full "delete cmake-build-debug and rebuild from scratch" verification** unless a meaningful amount of new work has landed since the last one (2026-07-07) — it would just re-confirm the same 66/66 with no new information.
 
 ---
 
 ## 10. Resume prompt
 
 ```
-Read NEXT.md first. The 650-task stabilization plan (plan.md) is now
-essentially complete: 620 ✅ / 29 🟡 (permanently flagged) / 1 📋
-(STAB-0650, blocked on repo-owner PAT rotation) / 0 🧪.
+Read NEXT.md first, in full. Then inspect only the files needed for the
+one task you're picking up — do not read or touch unrelated parts of the
+codebase, and do not refactor anything you weren't asked to change.
 
-Before doing anything else, check in with the user about direction —
-there is no more open stabilization backlog to autonomously continue.
-Do not assume a next task; ask what they'd like next (resume feature
-work, revisit a specific flagged row with new context, a different
-initiative, etc.).
+Pick the next smallest task from NEXT.md section 8 (or, if none of those
+fit what the user actually asked for, scope a new task down to something
+similarly small and testable before starting).
 
-If continuing autonomous work was explicitly re-authorized: the only
-legitimately open plan.md row is STAB-0650, which needs the repo owner's
-action, not code. Revisiting any of the 29 flagged 🟡 rows requires
-re-reading that row's own reasoning in plan.md first (most need a live
-human with a display, or are deliberate product decisions needing scope
-discussion, not code-only fixes) — see NEXT.md §8 for detail.
+Make one small, verified improvement. After making it, run the relevant
+build/test command from NEXT.md section 7 and confirm it passes before
+considering the task done. Do not mark anything as fixed/done without
+that verification.
 
-Current branch: develop, in sync with origin/develop at commit da8f1b8.
-Build dir: cmake-build-debug/ (Debug, CLion cmake) — last full rebuild +
-66/66 ctest was clean at this commit, working tree clean, and this was
-verified from a **genuinely empty** cmake-build-debug/ (rm -rf'd first),
-not just an incremental rebuild — see STABILIZATION_WORKLOG.md Phase 1.
-CNA_ENABLE_NET=OFF is now baked into CMakeLists.txt itself, so a normal
-reconfigure already gets this; no extra flag needed. Lesson for future
-sessions: an incrementally-updated build directory can hide a genuinely
-broken clean build for a long time (this one hid it for 2+ days) — if
-verifying "does this project actually build" is ever load-bearing again,
-delete cmake-build-debug/ first rather than trust an existing one.
+When finished, update NEXT.md: refresh section 2 (current status) and
+section 3 (recent changes) with what actually changed, move the
+completed task out of section 8, and update the commit hash in the
+header. Keep the update factual and concise — do not invent progress
+that wasn't actually verified.
 
-Reconfigure cmake-build-debug ONLY with CLion's cmake, not the system
-cmake. Editing mc3.xsd or adding a new .cpp file / new add_test()
-requires a reconfigure, not just a rebuild. New .mc3.xml fixture
-comments must never contain "--" anywhere inside them.
-
-Blender (/usr/bin/blender) and a working Emscripten SDK
-(~/Downloads/emsdk, source emsdk_env.sh first) are both available in
-this environment — useful for any future web/Blender-adjacent
-verification work, see NEXT.md §6.
-
-CI is parked deactivated under .github_/ (credentials issue, needs the
-repo owner). Commit after each STAB-XXXX task and push to origin/develop
-— standing workflow, but only applicable if there's still a task to do.
+Current branch: develop, in sync with origin/develop at commit dc46af4.
+No new feature work without explicit owner authorization (see section 9).
 ```
