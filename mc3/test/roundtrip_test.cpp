@@ -1101,6 +1101,172 @@ static void testIncludeAcrossDirectoriesRebasesRelativePaths() {
     std::filesystem::remove_all(root, ec);
 }
 
+// AUDIT-0036: material/texture/definition id collision across <include> is
+// unhandled by any explicit policy (unlike STAB-0289's object-id collision,
+// which suffixes on conflict) -- this test documents current behavior
+// precisely rather than changing it (see plan_deep_audit.md AUDIT-0037 for
+// the separate, still-open policy decision on whether this should change).
+//
+// Two distinct scenarios, since they go through different code paths:
+//  1. main document defines the same id as an included file -- mergeInclude()
+//     runs before the main document's own <materials> is parsed, and the main
+//     document's own definitions "reclaim" the id afterward, so the MAIN
+//     DOCUMENT wins, not simply "textually last in file order".
+//  2. two different included files both define the same id, neither in the
+//     main document -- plain map-assignment with no reclaim logic, so
+//     whichever <include> is processed LAST wins (textually last).
+static void testMaterialIdCollisionAcrossIncludes() {
+    auto root = std::filesystem::temp_directory_path() /
+                ("mc3_matcollide_" + std::to_string(tmpIdx++));
+    std::error_code ec;
+    std::filesystem::create_directories(root, ec);
+
+    auto libPath = root / "lib.mc3.xml";
+    {
+        std::ofstream f(libPath);
+        f << R"(<?xml version="1.0" encoding="UTF-8"?>
+<mc3 version="0.3" model="Lib">
+  <materials>
+    <material id="shared" roughness="0.1"><base_color>1 0 0 1</base_color></material>
+  </materials>
+</mc3>
+)";
+    }
+
+    // Scenario 1: main document's own definition of the same id.
+    auto scenePath = root / "scene.mc3.xml";
+    {
+        std::ofstream f(scenePath);
+        f << R"(<?xml version="1.0" encoding="UTF-8"?>
+<mc3 version="0.3" model="Scene">
+  <include file="lib.mc3.xml"/>
+  <materials>
+    <material id="shared" roughness="0.9"><base_color>0 1 0 1</base_color></material>
+  </materials>
+  <objects>
+    <box name="Box1" id="b1" material="shared"/>
+  </objects>
+</mc3>
+)";
+    }
+    try {
+        auto doc = Mc3Document::loadFromFile(scenePath);
+        CHECK(doc.materials.count("shared") == 1,
+              "material id collision (main vs include): exactly one entry (map semantics)");
+        if (doc.materials.count("shared")) {
+            CHECKF(doc.materials.at("shared").roughness, 0.9f,
+                   "material id collision (main vs include): the MAIN DOCUMENT's own "
+                   "definition wins over the included file's, regardless of <include> "
+                   "placement in the file (parse order: includes merge first, main "
+                   "document's own blocks parse after and reclaim same-id entries)");
+        }
+        CHECK(doc.includedMaterials.count("shared") == 0,
+              "material id collision (main vs include): reclaimed id is no longer "
+              "tracked as include-derived (so the writer won't skip it as \"from include\")");
+    } catch (const std::exception& e) {
+        fail(std::string("material id collision (main vs include) test threw: ") + e.what());
+    }
+
+    // Scenario 2: two different includes define the same id, neither in main.
+    auto lib2Path = root / "lib2.mc3.xml";
+    {
+        std::ofstream f(lib2Path);
+        f << R"(<?xml version="1.0" encoding="UTF-8"?>
+<mc3 version="0.3" model="Lib2">
+  <materials>
+    <material id="shared" roughness="0.5"><base_color>0 0 1 1</base_color></material>
+  </materials>
+</mc3>
+)";
+    }
+    auto scene2Path = root / "scene2.mc3.xml";
+    {
+        std::ofstream f(scene2Path);
+        f << R"(<?xml version="1.0" encoding="UTF-8"?>
+<mc3 version="0.3" model="Scene2">
+  <include file="lib.mc3.xml"/>
+  <include file="lib2.mc3.xml"/>
+  <objects>
+    <box name="Box1" id="b1" material="shared"/>
+  </objects>
+</mc3>
+)";
+    }
+    try {
+        auto doc = Mc3Document::loadFromFile(scene2Path);
+        CHECK(doc.materials.count("shared") == 1,
+              "material id collision (include vs include): exactly one entry (map semantics)");
+        if (doc.materials.count("shared")) {
+            CHECKF(doc.materials.at("shared").roughness, 0.5f,
+                   "material id collision (include vs include): the LAST <include> "
+                   "processed wins (plain last-write-wins, no main-document reclaim "
+                   "applies between two includes)");
+        }
+    } catch (const std::exception& e) {
+        fail(std::string("material id collision (include vs include) test threw: ") + e.what());
+    }
+
+    std::filesystem::remove_all(root, ec);
+}
+
+// AUDIT-0035: materialOverride / meshSource="embed:id" / animation channel
+// targetObject are all stored as plain, unresolved strings at parse time
+// (confirmed by reading Mc3XmlParser.cpp -- none of the three do a lookup
+// against doc.materials/doc.embeds/doc.objects during parsing). This test
+// documents that a dangling reference in any of the three is a genuine
+// no-op at parse time -- parsing must NOT throw -- since resolving (and
+// reporting an error for) a dangling reference is downstream's
+// responsibility (the exporter/renderer), not mc3's.
+static void testDanglingReferencesDoNotThrowAtParseTime() {
+    auto xmlPath = tmpPath();
+    {
+        std::ofstream f(xmlPath);
+        f << R"(<?xml version="1.0" encoding="UTF-8"?>)" "\n"
+          << R"(<mc3 version="0.3">)" "\n"
+          << R"(  <definitions>)" "\n"
+          << R"(    <definition id="def1"><box/></definition>)" "\n"
+          << R"(  </definitions>)" "\n"
+          << R"(  <objects>)" "\n"
+          << R"(    <instance name="I1" id="i1" definition="def1" material_override="does-not-exist"/>)" "\n"
+          << R"(    <mesh name="M1" id="m1" src="embed:does-not-exist"/>)" "\n"
+          << R"(  </objects>)" "\n"
+          << R"(  <actions>)" "\n"
+          << R"(    <action name="a1">)" "\n"
+          << R"(      <channel target="does-not-exist" property="position.x">)" "\n"
+          << R"(        <keyframe time="0" value="0"/>)" "\n"
+          << R"(      </channel>)" "\n"
+          << R"(    </action>)" "\n"
+          << R"(  </actions>)" "\n"
+          << R"(</mc3>)" "\n";
+    }
+
+    Mc3Document doc;
+    bool threw = false;
+    try {
+        doc = Mc3Document::loadFromFile(xmlPath);
+    } catch (const std::exception&) {
+        threw = true;
+    }
+    std::filesystem::remove(xmlPath);
+
+    CHECK(!threw, "dangling references: loadFromFile() does not throw on any of "
+                  "materialOverride / meshSource=\"embed:...\" / channel targetObject "
+                  "referencing a nonexistent id -- resolution is downstream's job");
+    if (!threw) {
+        CHECK(doc.objects.size() == 2, "dangling references: both objects still parsed");
+        if (doc.objects.size() == 2) {
+            CHECK(doc.objects[0]->materialOverride == "does-not-exist",
+                  "dangling references: materialOverride stored verbatim, unresolved");
+            CHECK(doc.objects[1]->meshSource == "embed:does-not-exist",
+                  "dangling references: meshSource stored verbatim, unresolved");
+        }
+        CHECK(doc.actions.count("a1") == 1 &&
+              !doc.actions.at("a1").channels.empty() &&
+              doc.actions.at("a1").channels[0].targetObject == "does-not-exist",
+              "dangling references: channel targetObject stored verbatim, unresolved");
+    }
+}
+
 // STAB-0091: an SVG texture (<texture type="svg">, sharing doc.textures'
 // includedTextures id-tracking) merged from an <include> file must NOT be
 // re-inlined into the main document's own saved file — same skip-set
@@ -3117,6 +3283,8 @@ int main(int argc, char* argv[]) {
     testPlaneSizeVec2();
     testPlaneSizeLegacyVec3();
     testIncludeAcrossDirectoriesRebasesRelativePaths();
+    testMaterialIdCollisionAcrossIncludes();
+    testDanglingReferencesDoNotThrowAtParseTime();
     testIncludedSvgTextureNotDuplicatedOnSave();
     testIncludePathWithSpaces();
     testIncludeNonexistentFileClearError();
