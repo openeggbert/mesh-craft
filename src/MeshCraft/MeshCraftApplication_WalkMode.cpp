@@ -153,13 +153,16 @@ void MeshCraftApplication::drawWalkModeHud(int screenW, int screenH) {
         ImGuiWindowFlags_NoNav | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoSavedSettings);
     ImGui::Text("Person height (m)");
     ImGui::SetNextItemWidth(140);
-    ImGui::SliderFloat("##wh", &walkHeight_, 0.5f, 3.0f, "%.2f");
+    // AlwaysClamp (AUDIT-0047): without it, Ctrl+Click text entry can set
+    // these outside their slider bounds (incl. zero/negative), which would
+    // break walk-mode movement/camera math with no other downstream guard.
+    ImGui::SliderFloat("##wh", &walkHeight_, 0.5f, 3.0f, "%.2f", ImGuiSliderFlags_AlwaysClamp);
     ImGui::Text("Speed (m/s)");
     ImGui::SetNextItemWidth(140);
-    ImGui::SliderFloat("##ws", &walkSpeed_, 1.0f, 20.0f, "%.1f");
+    ImGui::SliderFloat("##ws", &walkSpeed_, 1.0f, 20.0f, "%.1f", ImGuiSliderFlags_AlwaysClamp);
     ImGui::Text("Mouse sensitivity");
     ImGui::SetNextItemWidth(140);
-    ImGui::SliderFloat("##wm", &walkMouseSens_, 0.001f, 0.010f, "%.3f");
+    ImGui::SliderFloat("##wm", &walkMouseSens_, 0.001f, 0.010f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
     if (ImGui::Button("Exit Walk Mode (Esc)"))
         exitWalkMode();
     ImGui::End();

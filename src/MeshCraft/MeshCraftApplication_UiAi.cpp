@@ -188,7 +188,10 @@ void MeshCraftApplication::drawAiPanel() {
     ImGui::Text("Max tokens:");
     ImGui::SameLine(90);
     ImGui::SetNextItemWidth(-1);
-    ImGui::SliderInt("##aimtok", &aiAssistant_.maxTokens, 4096, 64000, "%d");
+    // AlwaysClamp (AUDIT-0049): without it, Ctrl+Click text entry can set
+    // this outside the API's supported range, which the request would then
+    // send verbatim with no other downstream validation.
+    ImGui::SliderInt("##aimtok", &aiAssistant_.maxTokens, 4096, 64000, "%d", ImGuiSliderFlags_AlwaysClamp);
     if (ImGui::IsItemHovered())
         ImGui::SetTooltip("claude-sonnet-5 supports up to 64 000 output tokens.\n"
                           "Large scenes need 20 000+. Default: 32 000.");

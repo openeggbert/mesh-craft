@@ -229,7 +229,11 @@ void MeshCraftApplication::drawTimelinePanel(int screenW, int screenH) {
             ImGui::Text("Dur:"); ImGui::SameLine();
             ImGui::SetNextItemWidth(55.0f);
             float dur = act.duration;
-            if (ImGui::DragFloat("##dur", &dur, 0.01f, 0.01f, 3600.0f, "%.2f")) {
+            // AlwaysClamp (AUDIT-0045): the callback below already clamps
+            // act.duration defensively, but clamping at the widget too keeps
+            // the displayed value consistent within the same frame instead
+            // of briefly showing an out-of-range typed value.
+            if (ImGui::DragFloat("##dur", &dur, 0.01f, 0.01f, 3600.0f, "%.2f", ImGuiSliderFlags_AlwaysClamp)) {
                 act.duration = std::max(0.01f, dur);
                 animTime_    = std::min(animTime_, act.duration);
                 modified_    = true;
@@ -246,7 +250,10 @@ void MeshCraftApplication::drawTimelinePanel(int screenW, int screenH) {
             ImGui::SameLine(); ImGui::Text("|"); ImGui::SameLine();
             ImGui::Text("T:"); ImGui::SameLine();
             ImGui::SetNextItemWidth(70.0f);
-            if (ImGui::DragFloat("##at", &animTime_, 0.001f, 0.0f, act.duration, "%.3f")) {
+            // AlwaysClamp (AUDIT-0045): same reasoning as ##dur above -- the
+            // callback already clamps defensively, this keeps the widget's
+            // own displayed value consistent within the same frame.
+            if (ImGui::DragFloat("##at", &animTime_, 0.001f, 0.0f, act.duration, "%.3f", ImGuiSliderFlags_AlwaysClamp)) {
                 animTime_ = std::clamp(animTime_, 0.0f, act.duration);
                 evaluateAndPushAnimOverrides();
             }
@@ -483,7 +490,9 @@ void MeshCraftApplication::drawTimelinePanel(int screenW, int screenH) {
         ImGui::Text("Scale factor:");
         ImGui::SetNextItemWidth(140.0f);
         if (ImGui::IsWindowAppearing()) ImGui::SetKeyboardFocusHere();
-        ImGui::DragFloat("##scf", &scaleChannelFactor_, 0.01f, 0.01f, 100.0f, "%.3f\xc3\x97");
+        // AlwaysClamp (AUDIT-0045): a zero/negative scale factor would
+        // collapse or reverse keyframe times with no other downstream guard.
+        ImGui::DragFloat("##scf", &scaleChannelFactor_, 0.01f, 0.01f, 100.0f, "%.3f\xc3\x97", ImGuiSliderFlags_AlwaysClamp);
         ImGui::TextDisabled("1.0 = unchanged   2.0 = twice as long");
         ImGui::Spacing();
 

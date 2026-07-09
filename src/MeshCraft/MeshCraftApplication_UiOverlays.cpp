@@ -600,27 +600,30 @@ void MeshCraftApplication::drawDialogs()
         ImGui::TextDisabled("Offsets are ADDED to existing transforms. Locked objects skipped.");
         ImGui::Separator();
 
+        // AlwaysClamp (AUDIT-0044): these are "±range" values -- a
+        // Ctrl+Click-typed negative range is semantically nonsensical and
+        // could break the underlying random-distribution math downstream.
         ImGui::TextColored(ImVec4(0.55f, 1.0f, 0.55f, 1.0f), "Position offset (±units)");
         ImGui::SetNextItemWidth(260);
-        ImGui::SliderFloat("±X pos##rx", &scatterPosRange_[0], 0.0f, 20.0f, "%.2f");
+        ImGui::SliderFloat("±X pos##rx", &scatterPosRange_[0], 0.0f, 20.0f, "%.2f", ImGuiSliderFlags_AlwaysClamp);
         ImGui::SetNextItemWidth(260);
-        ImGui::SliderFloat("±Y pos##ry", &scatterPosRange_[1], 0.0f, 20.0f, "%.2f");
+        ImGui::SliderFloat("±Y pos##ry", &scatterPosRange_[1], 0.0f, 20.0f, "%.2f", ImGuiSliderFlags_AlwaysClamp);
         ImGui::SetNextItemWidth(260);
-        ImGui::SliderFloat("±Z pos##rz", &scatterPosRange_[2], 0.0f, 20.0f, "%.2f");
+        ImGui::SliderFloat("±Z pos##rz", &scatterPosRange_[2], 0.0f, 20.0f, "%.2f", ImGuiSliderFlags_AlwaysClamp);
 
         ImGui::Spacing();
         ImGui::TextColored(ImVec4(1.0f, 0.85f, 0.4f, 1.0f), "Rotation offset (±degrees)");
         ImGui::SetNextItemWidth(260);
-        ImGui::SliderFloat("±X rot##rrx", &scatterRotRange_[0], 0.0f, 180.0f, "%.1f°");
+        ImGui::SliderFloat("±X rot##rrx", &scatterRotRange_[0], 0.0f, 180.0f, "%.1f°", ImGuiSliderFlags_AlwaysClamp);
         ImGui::SetNextItemWidth(260);
-        ImGui::SliderFloat("±Y rot##rry", &scatterRotRange_[1], 0.0f, 180.0f, "%.1f°");
+        ImGui::SliderFloat("±Y rot##rry", &scatterRotRange_[1], 0.0f, 180.0f, "%.1f°", ImGuiSliderFlags_AlwaysClamp);
         ImGui::SetNextItemWidth(260);
-        ImGui::SliderFloat("±Z rot##rrz", &scatterRotRange_[2], 0.0f, 180.0f, "%.1f°");
+        ImGui::SliderFloat("±Z rot##rrz", &scatterRotRange_[2], 0.0f, 180.0f, "%.1f°", ImGuiSliderFlags_AlwaysClamp);
 
         ImGui::Spacing();
         ImGui::TextColored(ImVec4(1.0f, 0.55f, 0.55f, 1.0f), "Scale variation (uniform ±%%)");
         ImGui::SetNextItemWidth(260);
-        ImGui::SliderFloat("±Scale%%##rsc", &scatterScaleRange_, 0.0f, 100.0f, "%.1f%%");
+        ImGui::SliderFloat("±Scale%%##rsc", &scatterScaleRange_, 0.0f, 100.0f, "%.1f%%", ImGuiSliderFlags_AlwaysClamp);
 
         ImGui::Spacing();
         ImGui::Separator();
@@ -659,7 +662,10 @@ void MeshCraftApplication::drawDialogs()
         // Count
         ImGui::TextColored(ImVec4(0.55f, 1.0f, 0.55f, 1.0f), "Count (total instances)");
         ImGui::SetNextItemWidth(200);
-        ImGui::SliderInt("##arrcount", &arrayDupCount_, 2, 20);
+        // AlwaysClamp (AUDIT-0044): count/spacing feed array-placement math
+        // and a preview loop below; out-of-bounds values from a Ctrl+Click
+        // typed entry have no other downstream guard here.
+        ImGui::SliderInt("##arrcount", &arrayDupCount_, 2, 20, "%d", ImGuiSliderFlags_AlwaysClamp);
         ImGui::SameLine();
         ImGui::TextDisabled("(%d copies)", arrayDupCount_ - 1);
 
@@ -677,7 +683,7 @@ void MeshCraftApplication::drawDialogs()
         ImGui::Spacing();
         ImGui::TextColored(ImVec4(1.0f, 0.55f, 0.55f, 1.0f), "Spacing (world units)");
         ImGui::SetNextItemWidth(200);
-        ImGui::DragFloat("##arrspacing", &arrayDupSpacing_, 0.1f, -1000.0f, 1000.0f, "%.3f u");
+        ImGui::DragFloat("##arrspacing", &arrayDupSpacing_, 0.1f, -1000.0f, 1000.0f, "%.3f u", ImGuiSliderFlags_AlwaysClamp);
         ImGui::SameLine();
         if (ImGui::SmallButton("=1")) arrayDupSpacing_ = 1.0f;
         ImGui::SameLine();
@@ -744,7 +750,9 @@ void MeshCraftApplication::drawDialogs()
 
         ImGui::TextColored(ImVec4(0.55f, 1.0f, 0.55f, 1.0f), "Scale factor");
         ImGui::SetNextItemWidth(200);
-        ImGui::DragFloat("##grpsclfac", &groupScaleFactor_, 0.01f, 0.01f, 100.0f, "× %.3f");
+        // AlwaysClamp (AUDIT-0044): canApply already guards factor > 0 before
+        // enabling Apply, but clamping here keeps the displayed value sane.
+        ImGui::DragFloat("##grpsclfac", &groupScaleFactor_, 0.01f, 0.01f, 100.0f, "× %.3f", ImGuiSliderFlags_AlwaysClamp);
         ImGui::SameLine();
         if (ImGui::SmallButton("×2"))   groupScaleFactor_ = 2.0f;
         ImGui::SameLine();
@@ -786,7 +794,10 @@ void MeshCraftApplication::drawDialogs()
         // Count
         ImGui::TextColored(ImVec4(0.55f,1.0f,0.55f,1.0f), "Copies (total incl. original)");
         ImGui::SetNextItemWidth(200);
-        ImGui::SliderInt("##sccount", &scatterCurveCount_, 2, 20);
+        // AlwaysClamp (AUDIT-0044): same reasoning as the linear-array
+        // dialog above -- count/spacing/radius/angle/jitter feed placement
+        // math with no other downstream guard against out-of-bounds values.
+        ImGui::SliderInt("##sccount", &scatterCurveCount_, 2, 20, "%d", ImGuiSliderFlags_AlwaysClamp);
         ImGui::SameLine();
         ImGui::TextDisabled("(%d new)", scatterCurveCount_ - 1);
 
@@ -812,21 +823,21 @@ void MeshCraftApplication::drawDialogs()
             // Line mode
             ImGui::TextColored(ImVec4(1.0f,0.55f,0.55f,1.0f), "Spacing (units)");
             ImGui::SetNextItemWidth(200);
-            ImGui::DragFloat("##scspacing", &scatterCurveSpacing_, 0.05f, -100.0f, 100.0f, "%.2f u");
+            ImGui::DragFloat("##scspacing", &scatterCurveSpacing_, 0.05f, -100.0f, 100.0f, "%.2f u", ImGuiSliderFlags_AlwaysClamp);
         } else {
             // Arc mode
             ImGui::TextColored(ImVec4(1.0f,0.55f,0.55f,1.0f), "Radius");
             ImGui::SetNextItemWidth(200);
-            ImGui::DragFloat("##scradius", &scatterCurveRadius_, 0.05f, 0.1f, 100.0f, "%.2f u");
+            ImGui::DragFloat("##scradius", &scatterCurveRadius_, 0.05f, 0.1f, 100.0f, "%.2f u", ImGuiSliderFlags_AlwaysClamp);
             ImGui::TextColored(ImVec4(1.0f,0.55f,0.55f,1.0f), "Arc angle");
             ImGui::SetNextItemWidth(200);
-            ImGui::SliderFloat("##scarc", &scatterCurveArcAngle_, 10.0f, 360.0f, "%.0f°");
+            ImGui::SliderFloat("##scarc", &scatterCurveArcAngle_, 10.0f, 360.0f, "%.0f°", ImGuiSliderFlags_AlwaysClamp);
         }
 
         ImGui::Spacing();
         ImGui::TextColored(ImVec4(0.8f,0.8f,1.0f,1.0f), "Jitter (random offset)");
         ImGui::SetNextItemWidth(200);
-        ImGui::DragFloat("##scjitter", &scatterCurveJitter_, 0.01f, 0.0f, 10.0f, "%.2f u");
+        ImGui::DragFloat("##scjitter", &scatterCurveJitter_, 0.01f, 0.0f, 10.0f, "%.2f u", ImGuiSliderFlags_AlwaysClamp);
 
         ImGui::Spacing();
         ImGui::Separator();
@@ -1771,7 +1782,10 @@ void MeshCraftApplication::drawDialogs()
 
         int asInterval = static_cast<int>(autoSaveInterval_);
         ImGui::SetNextItemWidth(160);
-        if (ImGui::SliderInt("Interval (s)##asint", &asInterval, 0, 300)) {
+        // AlwaysClamp (AUDIT-0044): preferences sliders -- out-of-bounds
+        // values from Ctrl+Click have no other downstream guard (autosave
+        // interval, grid spacing, and snap increments all feed real math).
+        if (ImGui::SliderInt("Interval (s)##asint", &asInterval, 0, 300, "%d", ImGuiSliderFlags_AlwaysClamp)) {
             autoSaveInterval_ = static_cast<float>(asInterval);
             if (autoSaveInterval_ > 0.0f && autoSaveCountdown_ > autoSaveInterval_)
                 autoSaveCountdown_ = autoSaveInterval_;
@@ -1786,16 +1800,16 @@ void MeshCraftApplication::drawDialogs()
         ImGui::Spacing();
         ImGui::SeparatorText("Grid");
         ImGui::SetNextItemWidth(160);
-        ImGui::SliderFloat("Cell spacing##gs", &gridSpacing_, 0.1f, 10.0f, "%.2f");
+        ImGui::SliderFloat("Cell spacing##gs", &gridSpacing_, 0.1f, 10.0f, "%.2f", ImGuiSliderFlags_AlwaysClamp);
 
         ImGui::Spacing();
         ImGui::SeparatorText("Snap");
         ImGui::SetNextItemWidth(160);
-        ImGui::SliderFloat("Translate##snt", &snapTranslate_, 0.01f, 5.0f, "%.2f");
+        ImGui::SliderFloat("Translate##snt", &snapTranslate_, 0.01f, 5.0f, "%.2f", ImGuiSliderFlags_AlwaysClamp);
         ImGui::SetNextItemWidth(160);
-        ImGui::SliderFloat("Rotate (°)##snr", &snapRotate_, 1.0f, 90.0f, "%.1f");
+        ImGui::SliderFloat("Rotate (°)##snr", &snapRotate_, 1.0f, 90.0f, "%.1f", ImGuiSliderFlags_AlwaysClamp);
         ImGui::SetNextItemWidth(160);
-        ImGui::SliderFloat("Scale##sns", &snapScale_, 0.01f, 1.0f, "%.2f");
+        ImGui::SliderFloat("Scale##sns", &snapScale_, 0.01f, 1.0f, "%.2f", ImGuiSliderFlags_AlwaysClamp);
 
         ImGui::Spacing();
         ImGui::SeparatorText("Theme");

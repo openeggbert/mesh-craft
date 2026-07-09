@@ -143,7 +143,10 @@ float MeshCraftApplication::drawToolbar(float menuBarH, int screenW)
         }
         ImGui::NewLine();
         ImGui::SetNextItemWidth(120);
-        ImGui::DragFloat("##st", &snapTranslate_, 0.01f, 0.01f, 100.0f, "%.3g u");
+        // AlwaysClamp (AUDIT-0046): without it, Ctrl+Click text entry can set
+        // these outside their slider bounds (incl. zero/negative), which
+        // would break snap-increment/grid/proportional-edit math downstream.
+        ImGui::DragFloat("##st", &snapTranslate_, 0.01f, 0.01f, 100.0f, "%.3g u", ImGuiSliderFlags_AlwaysClamp);
         ImGui::Spacing();
         // Rotate presets
         ImGui::Text("Rotate (°):");
@@ -157,7 +160,7 @@ float MeshCraftApplication::drawToolbar(float menuBarH, int screenW)
         }
         ImGui::NewLine();
         ImGui::SetNextItemWidth(120);
-        ImGui::DragFloat("##sr", &snapRotate_, 0.5f, 1.0f, 180.0f, "%.4g°");
+        ImGui::DragFloat("##sr", &snapRotate_, 0.5f, 1.0f, 180.0f, "%.4g°", ImGuiSliderFlags_AlwaysClamp);
         ImGui::Spacing();
         // Scale presets
         ImGui::Text("Scale:");
@@ -171,7 +174,7 @@ float MeshCraftApplication::drawToolbar(float menuBarH, int screenW)
         }
         ImGui::NewLine();
         ImGui::SetNextItemWidth(120);
-        ImGui::DragFloat("##ss", &snapScale_, 0.01f, 0.01f, 10.0f, "%.3g");
+        ImGui::DragFloat("##ss", &snapScale_, 0.01f, 0.01f, 10.0f, "%.3g", ImGuiSliderFlags_AlwaysClamp);
         ImGui::EndPopup();
     }
     ImGui::SameLine();
@@ -195,7 +198,10 @@ float MeshCraftApplication::drawToolbar(float menuBarH, int screenW)
     if (propEditEnabled_) {
         ImGui::SameLine();
         ImGui::SetNextItemWidth(70);
-        ImGui::SliderFloat("##propR", &propEditRadius_, 0.5f, 50.0f, "R:%.1f");
+        // AlwaysClamp (AUDIT-0046): same Ctrl+Click out-of-bounds risk; a
+        // zero/negative proportional-edit radius would break the Gaussian
+        // falloff math with no other downstream guard.
+        ImGui::SliderFloat("##propR", &propEditRadius_, 0.5f, 50.0f, "R:%.1f", ImGuiSliderFlags_AlwaysClamp);
         if (ImGui::IsItemHovered()) ImGui::SetTooltip("Proportional edit radius (world units)");
     }
     ImGui::SameLine();
@@ -220,7 +226,9 @@ float MeshCraftApplication::drawToolbar(float menuBarH, int screenW)
         ImGui::Spacing();
         ImGui::SetNextItemWidth(120);
         float tmp = gridSpacing_;
-        if (ImGui::DragFloat("##gs", &tmp, 0.05f, 0.05f, 50.0f, "%.4g u")) {
+        // AlwaysClamp (AUDIT-0046): a zero/negative grid spacing would break
+        // GridRenderer::setSpacing() with no other downstream guard.
+        if (ImGui::DragFloat("##gs", &tmp, 0.05f, 0.05f, 50.0f, "%.4g u", ImGuiSliderFlags_AlwaysClamp)) {
             gridSpacing_ = tmp;
             gridRenderer_->setSpacing(tmp);
         }
