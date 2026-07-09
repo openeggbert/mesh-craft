@@ -169,7 +169,12 @@ void PropertiesPanel::draw(float panelX, float panelY, float panelW, float panel
         {
             float scl[3] = { sel0->transform.scale[0], sel0->transform.scale[1], sel0->transform.scale[2] };
             ImGui::SetNextItemWidth(-1);
-            if (ImGui::DragFloat3("##scl", scl, 0.01f, 0.001f, 100.0f)) {
+            // AlwaysClamp (AUDIT-0042): bounded transform/primitive/material
+            // params in this file have no other downstream guard against an
+            // out-of-range Ctrl+Click-typed value; unbounded ones
+            // (position/rotation/pivot/path-point DragFloat3 calls with no
+            // explicit min/max) are deliberately left untouched.
+            if (ImGui::DragFloat3("##scl", scl, 0.01f, 0.001f, 100.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp)) {
                 if (ImGui::IsItemActivated()) ctx.pushUndo();
                 float ds[3] = { scl[0]-sel0->transform.scale[0],
                                  scl[1]-sel0->transform.scale[1],
@@ -544,7 +549,7 @@ void PropertiesPanel::draw(float panelX, float panelY, float panelW, float panel
                         if (st.scale) {
                             ImGui::SameLine();
                             ImGui::SetNextItemWidth(-1);
-                            if (ImGui::DragFloat3("##stsv", st.scale->data(), 0.01f, 0.001f, 1000.f))
+                            if (ImGui::DragFloat3("##stsv", st.scale->data(), 0.01f, 0.001f, 1000.f, "%.3f", ImGuiSliderFlags_AlwaysClamp))
                                 { ctx.pushUndo(); ctx.markModified(); }
                         }
                     }
@@ -763,7 +768,7 @@ void PropertiesPanel::draw(float panelX, float panelY, float panelW, float panel
                 float sz[3] = { p.size[0], p.size[1], p.size[2] };
                 ImGui::TextDisabled("Size (W/H/D)");
                 ImGui::SetNextItemWidth(-1);
-                if (ImGui::DragFloat3("##psize", sz, 0.01f, 0.001f, 1000.0f)) {
+                if (ImGui::DragFloat3("##psize", sz, 0.01f, 0.001f, 1000.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp)) {
                     if (ImGui::IsItemActivated()) ctx.pushUndo();
                     p.size[0] = std::max(0.001f, sz[0]);
                     p.size[1] = std::max(0.001f, sz[1]);
@@ -776,7 +781,7 @@ void PropertiesPanel::draw(float panelX, float panelY, float panelW, float panel
                 ImGui::TextDisabled("Radius");
                 float r = p.radius;
                 ImGui::SetNextItemWidth(-1);
-                if (ImGui::DragFloat("##prad", &r, 0.01f, 0.001f, 1000.0f)) {
+                if (ImGui::DragFloat("##prad", &r, 0.01f, 0.001f, 1000.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp)) {
                     if (ImGui::IsItemActivated()) ctx.pushUndo();
                     p.radius = std::max(0.001f, r);
                     ctx.markModified();
@@ -784,7 +789,7 @@ void PropertiesPanel::draw(float panelX, float panelY, float panelW, float panel
                 ImGui::TextDisabled("Segments");
                 int segs = p.segments;
                 ImGui::SetNextItemWidth(-1);
-                if (ImGui::SliderInt("##psegs", &segs, 4, 64)) {
+                if (ImGui::SliderInt("##psegs", &segs, 4, 64, "%d", ImGuiSliderFlags_AlwaysClamp)) {
                     if (ImGui::IsItemActivated()) ctx.pushUndo();
                     p.segments = segs;
                     ctx.markModified();
@@ -796,7 +801,7 @@ void PropertiesPanel::draw(float panelX, float panelY, float panelW, float panel
                 ImGui::TextDisabled("Radius");
                 float r = p.radius;
                 ImGui::SetNextItemWidth(-1);
-                if (ImGui::DragFloat("##prad", &r, 0.01f, 0.001f, 1000.0f)) {
+                if (ImGui::DragFloat("##prad", &r, 0.01f, 0.001f, 1000.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp)) {
                     if (ImGui::IsItemActivated()) ctx.pushUndo();
                     p.radius = std::max(0.001f, r);
                     ctx.markModified();
@@ -804,7 +809,7 @@ void PropertiesPanel::draw(float panelX, float panelY, float panelW, float panel
                 ImGui::TextDisabled("Height");
                 float h = p.height;
                 ImGui::SetNextItemWidth(-1);
-                if (ImGui::DragFloat("##phgt", &h, 0.01f, 0.001f, 1000.0f)) {
+                if (ImGui::DragFloat("##phgt", &h, 0.01f, 0.001f, 1000.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp)) {
                     if (ImGui::IsItemActivated()) ctx.pushUndo();
                     p.height = std::max(0.001f, h);
                     ctx.markModified();
@@ -812,7 +817,7 @@ void PropertiesPanel::draw(float panelX, float panelY, float panelW, float panel
                 ImGui::TextDisabled("Segments");
                 int segs = p.segments;
                 ImGui::SetNextItemWidth(-1);
-                if (ImGui::SliderInt("##psegs", &segs, 4, 64)) {
+                if (ImGui::SliderInt("##psegs", &segs, 4, 64, "%d", ImGuiSliderFlags_AlwaysClamp)) {
                     if (ImGui::IsItemActivated()) ctx.pushUndo();
                     p.segments = segs;
                     ctx.markModified();
@@ -823,7 +828,7 @@ void PropertiesPanel::draw(float panelX, float panelY, float panelW, float panel
                 ImGui::TextDisabled("Width");
                 float w = p.size[0];
                 ImGui::SetNextItemWidth(-1);
-                if (ImGui::DragFloat("##ppw", &w, 0.01f, 0.001f, 1000.0f)) {
+                if (ImGui::DragFloat("##ppw", &w, 0.01f, 0.001f, 1000.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp)) {
                     if (ImGui::IsItemActivated()) ctx.pushUndo();
                     p.size[0] = std::max(0.001f, w);
                     ctx.markModified();
@@ -831,7 +836,7 @@ void PropertiesPanel::draw(float panelX, float panelY, float panelW, float panel
                 ImGui::TextDisabled("Depth");
                 float d = p.size[2];
                 ImGui::SetNextItemWidth(-1);
-                if (ImGui::DragFloat("##ppd", &d, 0.01f, 0.001f, 1000.0f)) {
+                if (ImGui::DragFloat("##ppd", &d, 0.01f, 0.001f, 1000.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp)) {
                     if (ImGui::IsItemActivated()) ctx.pushUndo();
                     p.size[2] = std::max(0.001f, d);
                     ctx.markModified();
@@ -842,7 +847,7 @@ void PropertiesPanel::draw(float panelX, float panelY, float panelW, float panel
                 ImGui::TextDisabled("Outer Radius");
                 float r = p.radius;
                 ImGui::SetNextItemWidth(-1);
-                if (ImGui::DragFloat("##pdsk_r", &r, 0.01f, 0.001f, 1000.0f)) {
+                if (ImGui::DragFloat("##pdsk_r", &r, 0.01f, 0.001f, 1000.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp)) {
                     if (ImGui::IsItemActivated()) ctx.pushUndo();
                     p.radius = std::max(0.001f, r);
                     ctx.markModified();
@@ -850,7 +855,7 @@ void PropertiesPanel::draw(float panelX, float panelY, float panelW, float panel
                 ImGui::TextDisabled("Inner Radius (0 = solid)");
                 float ir = p.minorRadius;
                 ImGui::SetNextItemWidth(-1);
-                if (ImGui::DragFloat("##pdsk_ir", &ir, 0.01f, 0.0f, p.radius - 0.001f)) {
+                if (ImGui::DragFloat("##pdsk_ir", &ir, 0.01f, 0.0f, p.radius - 0.001f, "%.3f", ImGuiSliderFlags_AlwaysClamp)) {
                     if (ImGui::IsItemActivated()) ctx.pushUndo();
                     p.minorRadius = std::clamp(ir, 0.0f, p.radius - 0.001f);
                     ctx.markModified();
@@ -858,7 +863,7 @@ void PropertiesPanel::draw(float panelX, float panelY, float panelW, float panel
                 ImGui::TextDisabled("Segments");
                 int segs = p.segments;
                 ImGui::SetNextItemWidth(-1);
-                if (ImGui::SliderInt("##pdsk_segs", &segs, 3, 128)) {
+                if (ImGui::SliderInt("##pdsk_segs", &segs, 3, 128, "%d", ImGuiSliderFlags_AlwaysClamp)) {
                     if (ImGui::IsItemActivated()) ctx.pushUndo();
                     p.segments = segs;
                     ctx.markModified();
@@ -869,7 +874,7 @@ void PropertiesPanel::draw(float panelX, float panelY, float panelW, float panel
                 ImGui::TextDisabled("Radius");
                 float r = p.radius;
                 ImGui::SetNextItemWidth(-1);
-                if (ImGui::DragFloat("##pcap_r", &r, 0.01f, 0.001f, 1000.0f)) {
+                if (ImGui::DragFloat("##pcap_r", &r, 0.01f, 0.001f, 1000.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp)) {
                     if (ImGui::IsItemActivated()) ctx.pushUndo();
                     p.radius = std::max(0.001f, r);
                     ctx.markModified();
@@ -877,7 +882,7 @@ void PropertiesPanel::draw(float panelX, float panelY, float panelW, float panel
                 ImGui::TextDisabled("Height (cylinder part)");
                 float h = p.height;
                 ImGui::SetNextItemWidth(-1);
-                if (ImGui::DragFloat("##pcap_h", &h, 0.01f, 0.0f, 1000.0f)) {
+                if (ImGui::DragFloat("##pcap_h", &h, 0.01f, 0.0f, 1000.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp)) {
                     if (ImGui::IsItemActivated()) ctx.pushUndo();
                     p.height = std::max(0.0f, h);
                     ctx.markModified();
@@ -885,7 +890,7 @@ void PropertiesPanel::draw(float panelX, float panelY, float panelW, float panel
                 ImGui::TextDisabled("Segments");
                 int segs = p.segments;
                 ImGui::SetNextItemWidth(-1);
-                if (ImGui::SliderInt("##pcap_segs", &segs, 6, 64)) {
+                if (ImGui::SliderInt("##pcap_segs", &segs, 6, 64, "%d", ImGuiSliderFlags_AlwaysClamp)) {
                     if (ImGui::IsItemActivated()) ctx.pushUndo();
                     p.segments = segs;
                     ctx.markModified();
@@ -896,7 +901,7 @@ void PropertiesPanel::draw(float panelX, float panelY, float panelW, float panel
                 ImGui::TextDisabled("Width (X)");
                 float sx = p.size[0];
                 ImGui::SetNextItemWidth(-1);
-                if (ImGui::DragFloat("##pgrd_sx", &sx, 0.01f, 0.001f, 1000.0f)) {
+                if (ImGui::DragFloat("##pgrd_sx", &sx, 0.01f, 0.001f, 1000.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp)) {
                     if (ImGui::IsItemActivated()) ctx.pushUndo();
                     p.size[0] = std::max(0.001f, sx);
                     ctx.markModified();
@@ -904,7 +909,7 @@ void PropertiesPanel::draw(float panelX, float panelY, float panelW, float panel
                 ImGui::TextDisabled("Depth (Z)");
                 float sz = p.size[2];
                 ImGui::SetNextItemWidth(-1);
-                if (ImGui::DragFloat("##pgrd_sz", &sz, 0.01f, 0.001f, 1000.0f)) {
+                if (ImGui::DragFloat("##pgrd_sz", &sz, 0.01f, 0.001f, 1000.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp)) {
                     if (ImGui::IsItemActivated()) ctx.pushUndo();
                     p.size[2] = std::max(0.001f, sz);
                     ctx.markModified();
@@ -912,7 +917,7 @@ void PropertiesPanel::draw(float panelX, float panelY, float panelW, float panel
                 ImGui::TextDisabled("Subdivisions X");
                 int subX = p.subdivisionsX;
                 ImGui::SetNextItemWidth(-1);
-                if (ImGui::SliderInt("##pgrd_subx", &subX, 1, 64)) {
+                if (ImGui::SliderInt("##pgrd_subx", &subX, 1, 64, "%d", ImGuiSliderFlags_AlwaysClamp)) {
                     if (ImGui::IsItemActivated()) ctx.pushUndo();
                     p.subdivisionsX = std::max(1, subX);
                     ctx.markModified();
@@ -920,7 +925,7 @@ void PropertiesPanel::draw(float panelX, float panelY, float panelW, float panel
                 ImGui::TextDisabled("Subdivisions Z");
                 int subZ = p.subdivisionsZ;
                 ImGui::SetNextItemWidth(-1);
-                if (ImGui::SliderInt("##pgrd_subz", &subZ, 1, 64)) {
+                if (ImGui::SliderInt("##pgrd_subz", &subZ, 1, 64, "%d", ImGuiSliderFlags_AlwaysClamp)) {
                     if (ImGui::IsItemActivated()) ctx.pushUndo();
                     p.subdivisionsZ = std::max(1, subZ);
                     ctx.markModified();
@@ -931,7 +936,7 @@ void PropertiesPanel::draw(float panelX, float panelY, float panelW, float panel
                 ImGui::TextDisabled("Radius");
                 float r = p.radius;
                 ImGui::SetNextItemWidth(-1);
-                if (ImGui::DragFloat("##pico_r", &r, 0.01f, 0.001f, 1000.0f)) {
+                if (ImGui::DragFloat("##pico_r", &r, 0.01f, 0.001f, 1000.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp)) {
                     if (ImGui::IsItemActivated()) ctx.pushUndo();
                     p.radius = std::max(0.001f, r);
                     ctx.markModified();
@@ -943,7 +948,7 @@ void PropertiesPanel::draw(float panelX, float panelY, float panelW, float panel
                 ImGui::TextDisabled("Major Radius");
                 float mr = p.majorRadius;
                 ImGui::SetNextItemWidth(-1);
-                if (ImGui::DragFloat("##ptor_mr", &mr, 0.01f, 0.001f, 1000.0f)) {
+                if (ImGui::DragFloat("##ptor_mr", &mr, 0.01f, 0.001f, 1000.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp)) {
                     if (ImGui::IsItemActivated()) ctx.pushUndo();
                     p.majorRadius = std::max(0.001f, mr);
                     ctx.markModified();
@@ -951,7 +956,7 @@ void PropertiesPanel::draw(float panelX, float panelY, float panelW, float panel
                 ImGui::TextDisabled("Minor Radius");
                 float rr = p.minorRadius;
                 ImGui::SetNextItemWidth(-1);
-                if (ImGui::DragFloat("##ptor_rr", &rr, 0.01f, 0.001f, p.majorRadius)) {
+                if (ImGui::DragFloat("##ptor_rr", &rr, 0.01f, 0.001f, p.majorRadius, "%.3f", ImGuiSliderFlags_AlwaysClamp)) {
                     if (ImGui::IsItemActivated()) ctx.pushUndo();
                     p.minorRadius = std::clamp(rr, 0.001f, p.majorRadius);
                     ctx.markModified();
@@ -959,7 +964,7 @@ void PropertiesPanel::draw(float panelX, float panelY, float panelW, float panel
                 ImGui::TextDisabled("Segments");
                 int segs = p.segments;
                 ImGui::SetNextItemWidth(-1);
-                if (ImGui::SliderInt("##ptor_segs", &segs, 4, 64)) {
+                if (ImGui::SliderInt("##ptor_segs", &segs, 4, 64, "%d", ImGuiSliderFlags_AlwaysClamp)) {
                     if (ImGui::IsItemActivated()) ctx.pushUndo();
                     p.segments = segs;
                     ctx.markModified();
@@ -982,13 +987,13 @@ void PropertiesPanel::draw(float panelX, float panelY, float panelW, float panel
             // General params
             ImGui::TextDisabled("Twist (deg)");
             ImGui::SetNextItemWidth(-1);
-            if (ImGui::DragFloat("##extwist", &ex.twist, 1.0f, -3600.0f, 3600.0f)) {
+            if (ImGui::DragFloat("##extwist", &ex.twist, 1.0f, -3600.0f, 3600.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp)) {
                 if (ImGui::IsItemActivated()) ctx.pushUndo();
                 ctx.markModified();
             }
             ImGui::TextDisabled("Path Segments");
             ImGui::SetNextItemWidth(-1);
-            if (ImGui::SliderInt("##exsegs", &ex.segments, 1, 128)) {
+            if (ImGui::SliderInt("##exsegs", &ex.segments, 1, 128, "%d", ImGuiSliderFlags_AlwaysClamp)) {
                 if (ImGui::IsItemActivated()) ctx.pushUndo();
                 ctx.markModified();
             }
@@ -1011,14 +1016,14 @@ void PropertiesPanel::draw(float panelX, float panelY, float panelW, float panel
                 case Mc3::CrossSectionType::Rect:
                     ImGui::TextDisabled("Width");
                     ImGui::SetNextItemWidth(-1);
-                    if (ImGui::DragFloat("##csw", &cs.width, 0.01f, 0.001f, 1000.f)) {
+                    if (ImGui::DragFloat("##csw", &cs.width, 0.01f, 0.001f, 1000.f, "%.3f", ImGuiSliderFlags_AlwaysClamp)) {
                         if (ImGui::IsItemActivated()) ctx.pushUndo();
                         cs.width = std::max(0.001f, cs.width);
                         ctx.markModified();
                     }
                     ImGui::TextDisabled("Height");
                     ImGui::SetNextItemWidth(-1);
-                    if (ImGui::DragFloat("##csh", &cs.height, 0.01f, 0.001f, 1000.f)) {
+                    if (ImGui::DragFloat("##csh", &cs.height, 0.01f, 0.001f, 1000.f, "%.3f", ImGuiSliderFlags_AlwaysClamp)) {
                         if (ImGui::IsItemActivated()) ctx.pushUndo();
                         cs.height = std::max(0.001f, cs.height);
                         ctx.markModified();
@@ -1027,21 +1032,21 @@ void PropertiesPanel::draw(float panelX, float panelY, float panelW, float panel
                 case Mc3::CrossSectionType::Circle:
                     ImGui::TextDisabled("Radius");
                     ImGui::SetNextItemWidth(-1);
-                    if (ImGui::DragFloat("##csr", &cs.radius, 0.01f, 0.001f, 1000.f)) {
+                    if (ImGui::DragFloat("##csr", &cs.radius, 0.01f, 0.001f, 1000.f, "%.3f", ImGuiSliderFlags_AlwaysClamp)) {
                         if (ImGui::IsItemActivated()) ctx.pushUndo();
                         cs.radius = std::max(0.001f, cs.radius);
                         ctx.markModified();
                     }
                     ImGui::TextDisabled("Inner Radius");
                     ImGui::SetNextItemWidth(-1);
-                    if (ImGui::DragFloat("##csir", &cs.innerRadius, 0.01f, 0.0f, cs.radius)) {
+                    if (ImGui::DragFloat("##csir", &cs.innerRadius, 0.01f, 0.0f, cs.radius, "%.3f", ImGuiSliderFlags_AlwaysClamp)) {
                         if (ImGui::IsItemActivated()) ctx.pushUndo();
                         cs.innerRadius = std::max(0.0f, cs.innerRadius);
                         ctx.markModified();
                     }
                     ImGui::TextDisabled("Segments");
                     ImGui::SetNextItemWidth(-1);
-                    if (ImGui::SliderInt("##csseg", &cs.segments, 3, 64)) {
+                    if (ImGui::SliderInt("##csseg", &cs.segments, 3, 64, "%d", ImGuiSliderFlags_AlwaysClamp)) {
                         if (ImGui::IsItemActivated()) ctx.pushUndo();
                         ctx.markModified();
                     }
@@ -1049,21 +1054,21 @@ void PropertiesPanel::draw(float panelX, float panelY, float panelW, float panel
                 case Mc3::CrossSectionType::Polygon:
                     ImGui::TextDisabled("Radius");
                     ImGui::SetNextItemWidth(-1);
-                    if (ImGui::DragFloat("##cspr", &cs.radius, 0.01f, 0.001f, 1000.f)) {
+                    if (ImGui::DragFloat("##cspr", &cs.radius, 0.01f, 0.001f, 1000.f, "%.3f", ImGuiSliderFlags_AlwaysClamp)) {
                         if (ImGui::IsItemActivated()) ctx.pushUndo();
                         cs.radius = std::max(0.001f, cs.radius);
                         ctx.markModified();
                     }
                     ImGui::TextDisabled("Inner Radius");
                     ImGui::SetNextItemWidth(-1);
-                    if (ImGui::DragFloat("##cspir", &cs.innerRadius, 0.01f, 0.0f, cs.radius)) {
+                    if (ImGui::DragFloat("##cspir", &cs.innerRadius, 0.01f, 0.0f, cs.radius, "%.3f", ImGuiSliderFlags_AlwaysClamp)) {
                         if (ImGui::IsItemActivated()) ctx.pushUndo();
                         cs.innerRadius = std::max(0.0f, cs.innerRadius);
                         ctx.markModified();
                     }
                     ImGui::TextDisabled("Sides");
                     ImGui::SetNextItemWidth(-1);
-                    if (ImGui::SliderInt("##cspsd", &cs.sides, 3, 32)) {
+                    if (ImGui::SliderInt("##cspsd", &cs.sides, 3, 32, "%d", ImGuiSliderFlags_AlwaysClamp)) {
                         if (ImGui::IsItemActivated()) ctx.pushUndo();
                         ctx.markModified();
                     }
@@ -1071,21 +1076,21 @@ void PropertiesPanel::draw(float panelX, float panelY, float panelW, float panel
                 case Mc3::CrossSectionType::Star:
                     ImGui::TextDisabled("Points (tips)");
                     ImGui::SetNextItemWidth(-1);
-                    if (ImGui::SliderInt("##csstpts", &cs.sides, 3, 16)) {
+                    if (ImGui::SliderInt("##csstpts", &cs.sides, 3, 16, "%d", ImGuiSliderFlags_AlwaysClamp)) {
                         if (ImGui::IsItemActivated()) ctx.pushUndo();
                         cs.sides = std::max(3, cs.sides);
                         ctx.markModified();
                     }
                     ImGui::TextDisabled("Outer Radius");
                     ImGui::SetNextItemWidth(-1);
-                    if (ImGui::DragFloat("##csstr", &cs.radius, 0.01f, 0.001f, 1000.f)) {
+                    if (ImGui::DragFloat("##csstr", &cs.radius, 0.01f, 0.001f, 1000.f, "%.3f", ImGuiSliderFlags_AlwaysClamp)) {
                         if (ImGui::IsItemActivated()) ctx.pushUndo();
                         cs.radius = std::max(0.001f, cs.radius);
                         ctx.markModified();
                     }
                     ImGui::TextDisabled("Inner Radius (0 = 50%%)");
                     ImGui::SetNextItemWidth(-1);
-                    if (ImGui::DragFloat("##csstir", &cs.innerRadius, 0.01f, 0.0f, cs.radius)) {
+                    if (ImGui::DragFloat("##csstir", &cs.innerRadius, 0.01f, 0.0f, cs.radius, "%.3f", ImGuiSliderFlags_AlwaysClamp)) {
                         if (ImGui::IsItemActivated()) ctx.pushUndo();
                         cs.innerRadius = std::clamp(cs.innerRadius, 0.0f, cs.radius);
                         ctx.markModified();
@@ -1137,7 +1142,7 @@ void PropertiesPanel::draw(float panelX, float panelY, float panelW, float panel
                 case Mc3::ExtrudePathType::Line: {
                     ImGui::TextDisabled("Length");
                     ImGui::SetNextItemWidth(-1);
-                    if (ImGui::DragFloat("##plen", &path.length, 0.01f, 0.001f, 10000.f)) {
+                    if (ImGui::DragFloat("##plen", &path.length, 0.01f, 0.001f, 10000.f, "%.3f", ImGuiSliderFlags_AlwaysClamp)) {
                         if (ImGui::IsItemActivated()) ctx.pushUndo();
                         path.length = std::max(0.001f, path.length);
                         ctx.markModified();
@@ -1156,14 +1161,14 @@ void PropertiesPanel::draw(float panelX, float panelY, float panelW, float panel
                 case Mc3::ExtrudePathType::Arc:
                     ImGui::TextDisabled("Radius");
                     ImGui::SetNextItemWidth(-1);
-                    if (ImGui::DragFloat("##parr", &path.arcRadius, 0.01f, 0.001f, 10000.f)) {
+                    if (ImGui::DragFloat("##parr", &path.arcRadius, 0.01f, 0.001f, 10000.f, "%.3f", ImGuiSliderFlags_AlwaysClamp)) {
                         if (ImGui::IsItemActivated()) ctx.pushUndo();
                         path.arcRadius = std::max(0.001f, path.arcRadius);
                         ctx.markModified();
                     }
                     ImGui::TextDisabled("Angle (deg)");
                     ImGui::SetNextItemWidth(-1);
-                    if (ImGui::DragFloat("##para", &path.arcAngle, 1.0f, -360.0f, 360.0f)) {
+                    if (ImGui::DragFloat("##para", &path.arcAngle, 1.0f, -360.0f, 360.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp)) {
                         if (ImGui::IsItemActivated()) ctx.pushUndo();
                         ctx.markModified();
                     }
@@ -1171,21 +1176,21 @@ void PropertiesPanel::draw(float panelX, float panelY, float panelW, float panel
                 case Mc3::ExtrudePathType::Helix:
                     ImGui::TextDisabled("Radius");
                     ImGui::SetNextItemWidth(-1);
-                    if (ImGui::DragFloat("##phr", &path.helixRadius, 0.01f, 0.001f, 10000.f)) {
+                    if (ImGui::DragFloat("##phr", &path.helixRadius, 0.01f, 0.001f, 10000.f, "%.3f", ImGuiSliderFlags_AlwaysClamp)) {
                         if (ImGui::IsItemActivated()) ctx.pushUndo();
                         path.helixRadius = std::max(0.001f, path.helixRadius);
                         ctx.markModified();
                     }
                     ImGui::TextDisabled("Height");
                     ImGui::SetNextItemWidth(-1);
-                    if (ImGui::DragFloat("##phh", &path.helixHeight, 0.01f, 0.001f, 10000.f)) {
+                    if (ImGui::DragFloat("##phh", &path.helixHeight, 0.01f, 0.001f, 10000.f, "%.3f", ImGuiSliderFlags_AlwaysClamp)) {
                         if (ImGui::IsItemActivated()) ctx.pushUndo();
                         path.helixHeight = std::max(0.001f, path.helixHeight);
                         ctx.markModified();
                     }
                     ImGui::TextDisabled("Turns");
                     ImGui::SetNextItemWidth(-1);
-                    if (ImGui::DragFloat("##pht", &path.helixTurns, 0.1f, 0.1f, 1000.f)) {
+                    if (ImGui::DragFloat("##pht", &path.helixTurns, 0.1f, 0.1f, 1000.f, "%.3f", ImGuiSliderFlags_AlwaysClamp)) {
                         if (ImGui::IsItemActivated()) ctx.pushUndo();
                         path.helixTurns = std::max(0.1f, path.helixTurns);
                         ctx.markModified();
@@ -1195,7 +1200,7 @@ void PropertiesPanel::draw(float panelX, float panelY, float panelW, float panel
                     {
                         float pitch = (path.helixTurns > 0.0f)
                             ? path.helixHeight / path.helixTurns : 0.0f;
-                        if (ImGui::DragFloat("##php", &pitch, 0.01f, 0.001f, 10000.f)) {
+                        if (ImGui::DragFloat("##php", &pitch, 0.01f, 0.001f, 10000.f, "%.3f", ImGuiSliderFlags_AlwaysClamp)) {
                             if (ImGui::IsItemActivated()) ctx.pushUndo();
                             pitch = std::max(0.001f, pitch);
                             path.helixHeight = pitch * path.helixTurns;
@@ -1399,7 +1404,7 @@ void PropertiesPanel::draw(float panelX, float panelY, float panelW, float panel
                 auto& d = *sel0->deform;
                 ImGui::TextDisabled("Deform Scale");
                 ImGui::SetNextItemWidth(-1);
-                if (ImGui::DragFloat3("##deform", d.scale.data(), 0.01f, 0.001f, 1000.0f)) {
+                if (ImGui::DragFloat3("##deform", d.scale.data(), 0.01f, 0.001f, 1000.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp)) {
                     if (ImGui::IsItemActivated()) ctx.pushUndo();
                     d.scale[0] = std::max(0.001f, d.scale[0]);
                     d.scale[1] = std::max(0.001f, d.scale[1]);
@@ -1543,12 +1548,15 @@ void PropertiesPanel::draw(float panelX, float panelY, float panelW, float panel
                 if (ImGui::TreeNode("Advanced")) {
                     ImGui::TextDisabled("Normal Scale");
                     ImGui::SetNextItemWidth(-1);
-                    if (ImGui::DragFloat("##mnrmscl", &mat.normalScale, 0.01f, 0.0f, 10.0f)) {
+                    // AlwaysClamp: same out-of-range-via-Ctrl+Click risk as
+                    // roughness/metallic/alphaCutoff above -- occlusionStrength
+                    // in particular is glTF-spec-bounded to [0,1].
+                    if (ImGui::DragFloat("##mnrmscl", &mat.normalScale, 0.01f, 0.0f, 10.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp)) {
                         ctx.markModified();
                     }
                     ImGui::TextDisabled("Occlusion Strength");
                     ImGui::SetNextItemWidth(-1);
-                    if (ImGui::DragFloat("##moccstr", &mat.occlusionStrength, 0.01f, 0.0f, 1.0f)) {
+                    if (ImGui::DragFloat("##moccstr", &mat.occlusionStrength, 0.01f, 0.0f, 1.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp)) {
                         ctx.markModified();
                     }
                     ImGui::TreePop();
@@ -1783,19 +1791,19 @@ void PropertiesPanel::draw(float panelX, float panelY, float panelW, float panel
             ImGui::Text("Scale  U/V:");
             float sc[2] = {m.scaleU, m.scaleV};
             ImGui::SetNextItemWidth(130.0f);
-            if (ImGui::DragFloat2("##uvsc", sc, 0.01f, 0.001f, 100.0f, "%.3f")) {
+            if (ImGui::DragFloat2("##uvsc", sc, 0.01f, 0.001f, 100.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp)) {
                 ctx.pushUndo(); m.scaleU = sc[0]; m.scaleV = sc[1]; ctx.markModified();
             }
             ImGui::Text("Offset U/V:");
             float of[2] = {m.offsetU, m.offsetV};
             ImGui::SetNextItemWidth(130.0f);
-            if (ImGui::DragFloat2("##uvof", of, 0.005f, -100.0f, 100.0f, "%.3f")) {
+            if (ImGui::DragFloat2("##uvof", of, 0.005f, -100.0f, 100.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp)) {
                 ctx.pushUndo(); m.offsetU = of[0]; m.offsetV = of[1]; ctx.markModified();
             }
             ImGui::Text("Rotation:  ");
             ImGui::SameLine();
             ImGui::SetNextItemWidth(80.0f);
-            if (ImGui::DragFloat("##uvrot", &m.rotation, 0.5f, -360.0f, 360.0f, "%.1f\xc2\xb0")) {
+            if (ImGui::DragFloat("##uvrot", &m.rotation, 0.5f, -360.0f, 360.0f, "%.1f\xc2\xb0", ImGuiSliderFlags_AlwaysClamp)) {
                 ctx.pushUndo(); ctx.markModified();
             }
         }
@@ -1958,16 +1966,20 @@ void PropertiesPanel::draw(float panelX, float panelY, float panelW, float panel
                         if (fog.mode == Mc3::FogMode::Linear) {
                             ImGui::TextDisabled("Start");
                             ImGui::SetNextItemWidth(-1);
-                            if (ImGui::DragFloat("##fogstart", &fog.start, 0.5f, 0.0f, fog.end))
+                            // AlwaysClamp: keeps start/end within their
+                            // (mutually dynamic) bounds even against a
+                            // Ctrl+Click typed value, consistent with the
+                            // divide-by-zero guard already in SceneRenderer.
+                            if (ImGui::DragFloat("##fogstart", &fog.start, 0.5f, 0.0f, fog.end, "%.3f", ImGuiSliderFlags_AlwaysClamp))
                                 ctx.markModified();
                             ImGui::TextDisabled("End");
                             ImGui::SetNextItemWidth(-1);
-                            if (ImGui::DragFloat("##fogend", &fog.end, 0.5f, fog.start, 10000.0f))
+                            if (ImGui::DragFloat("##fogend", &fog.end, 0.5f, fog.start, 10000.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp))
                                 ctx.markModified();
                         } else {
                             ImGui::TextDisabled("Density");
                             ImGui::SetNextItemWidth(-1);
-                            if (ImGui::DragFloat("##fogdens", &fog.density, 0.001f, 0.0f, 1.0f, "%.4f"))
+                            if (ImGui::DragFloat("##fogdens", &fog.density, 0.001f, 0.0f, 1.0f, "%.4f", ImGuiSliderFlags_AlwaysClamp))
                                 ctx.markModified();
                         }
 
