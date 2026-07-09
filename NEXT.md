@@ -1,6 +1,6 @@
 # NEXT.md
 
-_Last updated: 2026-07-09, prior commit `6cbb2fb` (branch `develop`, in sync with `origin/develop` as of that commit). Native Linux build/tests re-verified from a genuinely empty scratch build directory the same day, after a full `plan_deep_audit.md` follow-up audit phase (see §3) — see `STABILIZATION_WORKLOG.md` for the full command trace._
+_Last updated: 2026-07-09, prior commit `2eba0af` (branch `develop`, in sync with `origin/develop` as of that commit). Native Linux build/tests re-verified from a genuinely empty scratch build directory the same day, after a full `plan_deep_audit.md` follow-up audit phase plus a second round (see §3) — see `STABILIZATION_WORKLOG.md` for the full command trace._
 
 ---
 
@@ -67,7 +67,13 @@ Clean from an **absolute-zero** build directory (not just incremental): `rm -rf 
 - **Corrected several false positives** found by the initial audit fork sweep on manual re-verification (documented in `plan_deep_audit.md` itself rather than silently dropped): the fog divide-by-zero was already guarded; `<actions>` not merging from includes is a deliberate design choice (per `mergeInclude()`'s own comment), not an accidental gap; `MeshCraftApplication_UiMenuBar.cpp`'s sliders were already clamped in an earlier session.
 - **New blocked item**: `AUDIT-0050` (implement real IDBFS mount for Emscripten config persistence) — code could be written without touching CNA/sharp-runtime, but can't be compiled/verified until the sharp-runtime Emscripten regression (below) is fixed upstream.
 
-Full history: `git log --oneline`. Per-task detail for the new phase: `plan_deep_audit.md`. Per-task detail for the original 650-task plan: `plan.md` (one row per `STAB-XXXX` ID) and `STABILIZATION_WORKLOG.md` (narrative + exact commands run).
+**2026-07-09 — round 2** (3 more targeted audit passes after round 1's 51 tasks closed out, run during an extended unattended session): 6 more tasks (`AUDIT-0056`–`0059`, plus this round's own doc entries), all completed. Highlights:
+- **Real bug fixed**: the "Undo History" jump-to-arbitrary-step dialog didn't cap `redoStack_` the way `performUndo()`/`performRedo()` already do — jumping to the oldest of a full undo history could temporarily push it past the documented 20-entry cap.
+- **Significant real gap found and fixed**: ~29 ImGui property-editing widgets (concentrated in `MeshCraftApplication_UiLeftPanel.cpp`'s light/environment-fog/material editors, and `MeshCraftApplication_Anim.cpp`'s action-duration/loop/keyframe-editing fields) set the "unsaved changes" dirty flag with **no corresponding `pushUndo()`** — the inverse of the AUDIT-0014 double-push bug: the user would see an unsaved-changes indicator but Ctrl+Z couldn't actually revert the edit. Every fix was individually verified against the file's own established correct pattern (`IsItemActivated()`-gated `pushUndo()` for continuous-drag widgets, to avoid pushing one snapshot per drag-frame) before being applied — several other flagged candidates turned out to be false positives (already correctly paired, just further apart in a long function than the audit's own mechanical lookback check covered) and were left untouched after verification.
+- **Two clean, honest "no action needed" results**, documented rather than padded: a proactive sweep for further CNA/SHARP_RUNTIME API drift risk (mirroring the `Viewport` break) found no other real forward-risk sites in this repo's own source; a test-assertion-quality audit found the existing CTest suite's assertions are already ~95%+ "strong" (exact-value/structural), not a real gap area.
+- **Re-verified no new CNA drift**: `../cna` landed another commit mid-session (`c4aa6f72`) — re-ran a full fresh clean build immediately after and confirmed still 548/548, 66/66, no new break.
+
+Full history: `git log --oneline`. Per-task detail for the audit phase (both rounds): `plan_deep_audit.md`. Per-task detail for the original 650-task plan: `plan.md` (one row per `STAB-XXXX` ID) and `STABILIZATION_WORKLOG.md` (narrative + exact commands run).
 
 ---
 
