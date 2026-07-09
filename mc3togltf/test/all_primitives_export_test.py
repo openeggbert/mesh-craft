@@ -136,6 +136,77 @@ def test_all_primitives(mc3togltf, xml_path, tmpdir):
     print("all_primitives_export_test: PASS")
 
 
+# AUDIT-0012: cross-check mc3togltf's buildPrimitive() output (exercised here
+# via the real mc3togltf CLI, reading the exported glTF accessor min/max in
+# mesh-local space) against SceneRenderer's independent "unit mesh + scale
+# matrix" implementation of the same primitive types (SceneRenderer.cpp's
+# drawObject(), lines ~637-713) -- WITHOUT needing a live GraphicsDevice/CNA
+# context, which SceneRenderer requires and this headless Python test cannot
+# provide. Instead, this encodes the analytically-derived expected bbox for
+# each primitive type from SceneRenderer's own scale-formula + unit-mesh
+# baseline dimensions (every unit shape in SceneRenderer_Builders.cpp has
+# radius/half-extent exactly 0.5, confirmed by reading each buildUnitX()),
+# and asserts mc3togltf's real output matches. If either implementation's
+# formula silently diverges (e.g. a future change to one side's scale math),
+# this test will catch the resulting bbox mismatch -- the same silent-
+# divergence risk class already documented for the CSG dual-path invariant.
+#
+# Expected values below are derived from all_primitives.mc3.xml's own
+# parameters combined with SceneRenderer's documented scale formulas:
+#   Box/Cube:  half-extent = size/2                         (SceneRenderer.cpp:643)
+#   Sphere:    half-extent = radius (all axes)               (SceneRenderer.cpp:647-649)
+#   Cylinder:  half-extent = (radius, height/2, radius)      (SceneRenderer.cpp:653-660)
+#   Cone:      half-extent = (radius, height/2, radius)      (SceneRenderer.cpp:664-667)
+#   Plane:     half-extent = (size.x/2, 0, size.z/2)         (SceneRenderer.cpp:671-673)
+#   Torus:     half-extent = (major+minor, minor, major+minor) (SceneRenderer.cpp:677-683)
+#   Capsule:   half-extent = (radius, height/2 + radius, radius) (SceneRenderer.cpp:686-691)
+#   Disk:      half-extent = (radius, 0, radius) -- outer radius only
+#   Grid:      half-extent = (size.x/2, 0, size.z/2)
+#   IcoSphere: half-extent = radius (all axes)                (SceneRenderer.cpp:710-711)
+EXPECTED_BBOX_HALF_EXTENT = {
+    "Box":        (0.5,  0.5,  0.5),
+    "Cube":       (0.5,  0.5,  0.5),   # default cube side=1.0 (Mc3Primitive::cube())
+    "Sphere":     (0.5,  0.5,  0.5),   # radius=0.5
+    "Cylinder":   (0.4,  0.5,  0.4),   # radius=0.4, height=1.0
+    "Cone":       (0.5,  0.5,  0.5),   # radius=0.5, height=1.0
+    "Plane":      (1.0,  0.0,  1.0),   # size="2 2"
+    "Torus":      (0.55, 0.15, 0.55),  # major=0.4, minor=0.15
+    "TorusThin":  (0.45, 0.05, 0.45),  # major=0.4, minor=0.05
+    "Capsule":    (0.3,  0.7,  0.3),   # radius=0.3, height=0.8 -> y = 0.8/2+0.3
+    "Disk":       (0.5,  0.0,  0.5),   # radius=0.5
+    "RingDisk":   (0.5,  0.0,  0.5),   # outer radius=0.5 (inner_radius doesn't change bbox)
+    "Grid":       (0.5,  0.0,  0.5),   # size="1 1 1" -> x/z half = 0.5
+    "IcoSphere":  (0.5,  0.5,  0.5),   # radius=0.5
+}
+BBOX_TOLERANCE = 0.02  # generous tolerance for tessellation-approximation shapes (sphere/torus/icosphere)
+
+
+def test_bbox_matches_scene_renderer_scale_formula(mc3togltf, xml_path, tmpdir):
+    out_gltf = os.path.join(tmpdir, "out_bbox_check.gltf")
+    r = run([mc3togltf, xml_path, out_gltf])
+    assert r.returncode == 0, f"mc3togltf failed:\n{r.stderr}"
+
+    with open(out_gltf) as f:
+        gltf = json.load(f)
+    accs = gltf.get("accessors", [])
+
+    for name, expected_half in EXPECTED_BBOX_HALF_EXTENT.items():
+        _, prim = check_node_has_geometry(gltf, name)
+        acc = accs[prim["attributes"]["POSITION"]]
+        actual_half = tuple(max(abs(mn), abs(mx)) for mn, mx in zip(acc["min"], acc["max"]))
+        for axis, axis_name in enumerate("XYZ"):
+            exp_v, act_v = expected_half[axis], actual_half[axis]
+            assert abs(exp_v - act_v) <= BBOX_TOLERANCE, (
+                f"AUDIT-0012: '{name}' axis {axis_name} bbox half-extent mismatch between "
+                f"mc3togltf's buildPrimitive() output ({act_v:.4f}) and the value "
+                f"analytically expected from SceneRenderer's own scale formula "
+                f"({exp_v:.4f}) -- possible silent divergence between the two "
+                f"independent primitive-geometry implementations"
+            )
+
+    print("bbox_matches_scene_renderer_scale_formula: PASS")
+
+
 def test_all_objects(mc3togltf, xml_path, tmpdir):
     if not os.path.exists(xml_path):
         print(f"Skipping all_objects test: {xml_path} not found")
@@ -226,6 +297,7 @@ if __name__ == "__main__":
         try:
             test_all_primitives(mc3togltf_bin, prims_xml, tmpdir)
             test_all_objects(mc3togltf_bin, objs_xml, tmpdir)
+            test_bbox_matches_scene_renderer_scale_formula(mc3togltf_bin, prims_xml, tmpdir)
         except AssertionError as e:
             print(f"FAIL: {e}", file=sys.stderr)
             sys.exit(1)
