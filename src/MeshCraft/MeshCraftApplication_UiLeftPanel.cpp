@@ -142,7 +142,12 @@ void MeshCraftApplication::drawLeftPanel(float panelY, float panelH)
                 // Brightness
                 ImGui::TextDisabled("Brightness");
                 ImGui::SetNextItemWidth(-1);
-                if (ImGui::DragFloat("##lbrt", &li.brightness, 0.01f, 0.0f, 100.0f)) {
+                // AlwaysClamp (AUDIT-0043): bounded light/camera/fog params
+                // below have no other downstream guard against an
+                // out-of-range Ctrl+Click-typed value; unbounded ones
+                // (position/rotation/direction DragFloat3 calls with no
+                // explicit min/max) are deliberately left untouched.
+                if (ImGui::DragFloat("##lbrt", &li.brightness, 0.01f, 0.0f, 100.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp)) {
                     modified_ = true; updateWindowTitle();
                 }
 
@@ -155,7 +160,7 @@ void MeshCraftApplication::drawLeftPanel(float panelY, float panelH)
                 if (li.type == Mc3::LightType::Directional || li.type == Mc3::LightType::Spot) {
                     ImGui::TextDisabled("Direction");
                     ImGui::SetNextItemWidth(-1);
-                    if (ImGui::DragFloat3("##ldir", li.direction.data(), 0.01f, -1.0f, 1.0f)) {
+                    if (ImGui::DragFloat3("##ldir", li.direction.data(), 0.01f, -1.0f, 1.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp)) {
                         modified_ = true; updateWindowTitle();
                     }
                 }
@@ -169,7 +174,7 @@ void MeshCraftApplication::drawLeftPanel(float panelY, float panelH)
                     }
                     ImGui::TextDisabled("Range (0=unlimited)");
                     ImGui::SetNextItemWidth(-1);
-                    if (ImGui::DragFloat("##lrng", &li.range, 0.1f, 0.0f, 10000.0f)) {
+                    if (ImGui::DragFloat("##lrng", &li.range, 0.1f, 0.0f, 10000.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp)) {
                         modified_ = true; updateWindowTitle();
                     }
                 }
@@ -178,12 +183,12 @@ void MeshCraftApplication::drawLeftPanel(float panelY, float panelH)
                 if (li.type == Mc3::LightType::Spot) {
                     ImGui::TextDisabled("Angle (deg)");
                     ImGui::SetNextItemWidth(-1);
-                    if (ImGui::SliderFloat("##lang", &li.angle, 0.0f, 90.0f)) {
+                    if (ImGui::SliderFloat("##lang", &li.angle, 0.0f, 90.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp)) {
                         modified_ = true; updateWindowTitle();
                     }
                     ImGui::TextDisabled("Falloff");
                     ImGui::SetNextItemWidth(-1);
-                    if (ImGui::SliderFloat("##lfal", &li.falloff, 0.0f, 1.0f)) {
+                    if (ImGui::SliderFloat("##lfal", &li.falloff, 0.0f, 1.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp)) {
                         modified_ = true; updateWindowTitle();
                     }
                 }
@@ -280,18 +285,18 @@ void MeshCraftApplication::drawLeftPanel(float panelY, float panelH)
                     if (fog.mode == Mc3::FogMode::Linear) {
                         ImGui::TextDisabled("Start");
                         ImGui::SetNextItemWidth(-1);
-                        if (ImGui::DragFloat("##fogstart", &fog.start, 0.5f, 0.0f, 10000.0f)) {
+                        if (ImGui::DragFloat("##fogstart", &fog.start, 0.5f, 0.0f, 10000.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp)) {
                             modified_ = true; updateWindowTitle();
                         }
                         ImGui::TextDisabled("End");
                         ImGui::SetNextItemWidth(-1);
-                        if (ImGui::DragFloat("##fogend", &fog.end, 0.5f, 0.0f, 10000.0f)) {
+                        if (ImGui::DragFloat("##fogend", &fog.end, 0.5f, 0.0f, 10000.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp)) {
                             modified_ = true; updateWindowTitle();
                         }
                     } else {
                         ImGui::TextDisabled("Density");
                         ImGui::SetNextItemWidth(-1);
-                        if (ImGui::DragFloat("##fogdens", &fog.density, 0.001f, 0.0f, 1.0f, "%.4f")) {
+                        if (ImGui::DragFloat("##fogdens", &fog.density, 0.001f, 0.0f, 1.0f, "%.4f", ImGuiSliderFlags_AlwaysClamp)) {
                             modified_ = true; updateWindowTitle();
                         }
                     }
@@ -425,13 +430,16 @@ void MeshCraftApplication::drawLeftPanel(float panelY, float panelH)
                 // Near / Far
                 ImGui::TextDisabled("Near Plane");
                 ImGui::SetNextItemWidth(-1);
-                if (ImGui::DragFloat("##cnear", &cam.nearPlane, 0.01f, 0.001f, cam.farPlane)) {
+                // AlwaysClamp: keeps the near/far invariant (near <= far)
+                // enforced even against a Ctrl+Click typed value, not just
+                // the drag gesture.
+                if (ImGui::DragFloat("##cnear", &cam.nearPlane, 0.01f, 0.001f, cam.farPlane, "%.3f", ImGuiSliderFlags_AlwaysClamp)) {
                     if (ImGui::IsItemActivated()) pushUndo();
                     modified_ = true; updateWindowTitle();
                 }
                 ImGui::TextDisabled("Far Plane");
                 ImGui::SetNextItemWidth(-1);
-                if (ImGui::DragFloat("##cfar", &cam.farPlane, 1.0f, cam.nearPlane, 100000.0f)) {
+                if (ImGui::DragFloat("##cfar", &cam.farPlane, 1.0f, cam.nearPlane, 100000.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp)) {
                     if (ImGui::IsItemActivated()) pushUndo();
                     modified_ = true; updateWindowTitle();
                 }
@@ -440,7 +448,7 @@ void MeshCraftApplication::drawLeftPanel(float panelY, float panelH)
                 if (cam.type == Mc3::CameraType::Perspective) {
                     ImGui::TextDisabled("FOV (deg)");
                     ImGui::SetNextItemWidth(-1);
-                    if (ImGui::SliderFloat("##cfov", &cam.fov, 1.0f, 170.0f)) {
+                    if (ImGui::SliderFloat("##cfov", &cam.fov, 1.0f, 170.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp)) {
                         if (ImGui::IsItemActivated()) pushUndo();
                         modified_ = true; updateWindowTitle();
                     }
@@ -450,7 +458,7 @@ void MeshCraftApplication::drawLeftPanel(float panelY, float panelH)
                 if (cam.type == Mc3::CameraType::Orthographic) {
                     ImGui::TextDisabled("Ortho Size");
                     ImGui::SetNextItemWidth(-1);
-                    if (ImGui::DragFloat("##cortho", &cam.orthoSize, 0.1f, 0.001f, 10000.0f)) {
+                    if (ImGui::DragFloat("##cortho", &cam.orthoSize, 0.1f, 0.001f, 10000.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp)) {
                         if (ImGui::IsItemActivated()) pushUndo();
                         modified_ = true; updateWindowTitle();
                     }
@@ -754,7 +762,11 @@ void MeshCraftApplication::drawLeftPanel(float panelY, float panelH)
                     {
                         float scl[3] = { defObj->transform.scale[0], defObj->transform.scale[1], defObj->transform.scale[2] };
                         ImGui::SetNextItemWidth(-1);
-                        if (ImGui::DragFloat3("##dscl", scl, 0.01f, 0.001f, 100.0f)) {
+                        // AlwaysClamp: the callback already clamps scale
+                        // defensively (std::max below), this keeps the
+                        // widget's own displayed value consistent within
+                        // the same frame.
+                        if (ImGui::DragFloat3("##dscl", scl, 0.01f, 0.001f, 100.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp)) {
                             if (ImGui::IsItemActivated()) pushUndo();
                             defObj->transform.scale[0] = std::max(0.001f, scl[0]);
                             defObj->transform.scale[1] = std::max(0.001f, scl[1]);
