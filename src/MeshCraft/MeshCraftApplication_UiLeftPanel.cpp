@@ -132,10 +132,22 @@ void MeshCraftApplication::drawLeftPanel(float panelY, float panelH)
                 }
 
                 // Color
+                // AUDIT-0059: these light-property widgets set modified_
+                // (unsaved-changes indicator) without pushUndo(), unlike the
+                // Name/Type fields above -- so the user sees "unsaved
+                // changes" but Ctrl+Z can't revert the edit. Added pushUndo(),
+                // gated on IsItemActivated() for continuous-drag widgets
+                // (Drag/Slider/ColorEdit fire every frame during a drag, so
+                // an unconditional pushUndo() would push one snapshot per
+                // frame and capture intermediate values, not the pre-edit
+                // state -- matches the established pattern already used
+                // elsewhere in this file, e.g. the camera near/far fields).
+                // Checkbox fires once per click, so it's safe unconditional.
                 ImGui::TextDisabled("Color");
                 ImGui::SetNextItemWidth(-1);
                 if (ImGui::ColorEdit3("##lcol", li.color.data(),
                         ImGuiColorEditFlags_NoLabel)) {
+                    if (ImGui::IsItemActivated()) pushUndo();
                     modified_ = true; updateWindowTitle();
                 }
 
@@ -148,12 +160,13 @@ void MeshCraftApplication::drawLeftPanel(float panelY, float panelH)
                 // (position/rotation/direction DragFloat3 calls with no
                 // explicit min/max) are deliberately left untouched.
                 if (ImGui::DragFloat("##lbrt", &li.brightness, 0.01f, 0.0f, 100.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp)) {
+                    if (ImGui::IsItemActivated()) pushUndo();
                     modified_ = true; updateWindowTitle();
                 }
 
                 // Cast shadows
                 if (ImGui::Checkbox("Cast Shadows", &li.castShadows)) {
-                    modified_ = true; updateWindowTitle();
+                    pushUndo(); modified_ = true; updateWindowTitle();
                 }
 
                 // Direction (Directional / Spot)
@@ -161,6 +174,7 @@ void MeshCraftApplication::drawLeftPanel(float panelY, float panelH)
                     ImGui::TextDisabled("Direction");
                     ImGui::SetNextItemWidth(-1);
                     if (ImGui::DragFloat3("##ldir", li.direction.data(), 0.01f, -1.0f, 1.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp)) {
+                        if (ImGui::IsItemActivated()) pushUndo();
                         modified_ = true; updateWindowTitle();
                     }
                 }
@@ -170,11 +184,13 @@ void MeshCraftApplication::drawLeftPanel(float panelY, float panelH)
                     ImGui::TextDisabled("Position");
                     ImGui::SetNextItemWidth(-1);
                     if (ImGui::DragFloat3("##lpos", li.position.data(), 0.1f)) {
+                        if (ImGui::IsItemActivated()) pushUndo();
                         modified_ = true; updateWindowTitle();
                     }
                     ImGui::TextDisabled("Range (0=unlimited)");
                     ImGui::SetNextItemWidth(-1);
                     if (ImGui::DragFloat("##lrng", &li.range, 0.1f, 0.0f, 10000.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp)) {
+                        if (ImGui::IsItemActivated()) pushUndo();
                         modified_ = true; updateWindowTitle();
                     }
                 }
@@ -184,11 +200,13 @@ void MeshCraftApplication::drawLeftPanel(float panelY, float panelH)
                     ImGui::TextDisabled("Angle (deg)");
                     ImGui::SetNextItemWidth(-1);
                     if (ImGui::SliderFloat("##lang", &li.angle, 0.0f, 90.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp)) {
+                        if (ImGui::IsItemActivated()) pushUndo();
                         modified_ = true; updateWindowTitle();
                     }
                     ImGui::TextDisabled("Falloff");
                     ImGui::SetNextItemWidth(-1);
                     if (ImGui::SliderFloat("##lfal", &li.falloff, 0.0f, 1.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp)) {
+                        if (ImGui::IsItemActivated()) pushUndo();
                         modified_ = true; updateWindowTitle();
                     }
                 }
@@ -216,10 +234,14 @@ void MeshCraftApplication::drawLeftPanel(float panelY, float panelH)
                 ImGui::Spacing();
 
                 // Background color
+                // AUDIT-0059: missing pushUndo(), same class of gap as the
+                // light editor above -- IsItemActivated()-gated to avoid a
+                // per-frame push during a continuous color-picker drag.
                 ImGui::TextDisabled("Background Color");
                 ImGui::SetNextItemWidth(-1);
                 if (ImGui::ColorEdit3("##envbg", env.backgroundColor.data(),
                         ImGuiColorEditFlags_NoLabel)) {
+                    if (ImGui::IsItemActivated()) pushUndo();
                     modified_ = true; updateWindowTitle();
                 }
 
@@ -269,6 +291,7 @@ void MeshCraftApplication::drawLeftPanel(float panelY, float panelH)
                     ImGui::SetNextItemWidth(-1);
                     if (ImGui::ColorEdit3("##fogcol", fog.color.data(),
                             ImGuiColorEditFlags_NoLabel)) {
+                        if (ImGui::IsItemActivated()) pushUndo();
                         modified_ = true; updateWindowTitle();
                     }
 
@@ -286,17 +309,20 @@ void MeshCraftApplication::drawLeftPanel(float panelY, float panelH)
                         ImGui::TextDisabled("Start");
                         ImGui::SetNextItemWidth(-1);
                         if (ImGui::DragFloat("##fogstart", &fog.start, 0.5f, 0.0f, 10000.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp)) {
+                            if (ImGui::IsItemActivated()) pushUndo();
                             modified_ = true; updateWindowTitle();
                         }
                         ImGui::TextDisabled("End");
                         ImGui::SetNextItemWidth(-1);
                         if (ImGui::DragFloat("##fogend", &fog.end, 0.5f, 0.0f, 10000.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp)) {
+                            if (ImGui::IsItemActivated()) pushUndo();
                             modified_ = true; updateWindowTitle();
                         }
                     } else {
                         ImGui::TextDisabled("Density");
                         ImGui::SetNextItemWidth(-1);
                         if (ImGui::DragFloat("##fogdens", &fog.density, 0.001f, 0.0f, 1.0f, "%.4f", ImGuiSliderFlags_AlwaysClamp)) {
+                            if (ImGui::IsItemActivated()) pushUndo();
                             modified_ = true; updateWindowTitle();
                         }
                     }
@@ -957,11 +983,17 @@ void MeshCraftApplication::drawLeftPanel(float panelY, float panelH)
                     }
                 }
 
+                // AUDIT-0059: material-editor widgets below were missing
+                // pushUndo() entirely (unlike PropertiesPanel.cpp's own copy
+                // of this material editor, which already has it) --
+                // IsItemActivated()-gated for the continuous-drag widgets.
+
                 // Base color
                 ImGui::TextDisabled("Base Color");
                 ImGui::SetNextItemWidth(-1);
                 if (ImGui::ColorEdit4("##matbc", mat.baseColor.data(),
                     ImGuiColorEditFlags_Float)) {
+                    if (ImGui::IsItemActivated()) pushUndo();
                     modified_ = true;
                 }
 
@@ -973,6 +1005,7 @@ void MeshCraftApplication::drawLeftPanel(float panelY, float panelH)
                 // pbrMetallicRoughness.roughnessFactor with no other guard.
                 if (ImGui::SliderFloat("##matrgh", &mat.roughness, 0.0f, 1.0f, "%.2f",
                                        ImGuiSliderFlags_AlwaysClamp)) {
+                    if (ImGui::IsItemActivated()) pushUndo();
                     modified_ = true;
                 }
 
@@ -983,6 +1016,7 @@ void MeshCraftApplication::drawLeftPanel(float panelY, float panelH)
                 // roughness above (spec-invalid metallicFactor on export).
                 if (ImGui::SliderFloat("##matmet", &mat.metallic, 0.0f, 1.0f, "%.2f",
                                        ImGuiSliderFlags_AlwaysClamp)) {
+                    if (ImGui::IsItemActivated()) pushUndo();
                     modified_ = true;
                 }
 
@@ -991,6 +1025,7 @@ void MeshCraftApplication::drawLeftPanel(float panelY, float panelH)
                 ImGui::SetNextItemWidth(-1);
                 if (ImGui::ColorEdit3("##matemi", mat.emissiveColor.data(),
                     ImGuiColorEditFlags_Float)) {
+                    if (ImGui::IsItemActivated()) pushUndo();
                     modified_ = true;
                 }
 
@@ -1002,6 +1037,7 @@ void MeshCraftApplication::drawLeftPanel(float panelY, float panelH)
                 if (mat.alphaMode == "blend") alphaIdx = 2;
                 ImGui::SetNextItemWidth(-1);
                 if (ImGui::Combo("##matam", &alphaIdx, alphaModes, 3)) {
+                    pushUndo();
                     mat.alphaMode = alphaModes[alphaIdx];
                     modified_ = true;
                 }
@@ -1011,13 +1047,17 @@ void MeshCraftApplication::drawLeftPanel(float panelY, float panelH)
                     // AlwaysClamp: same out-of-[0,1]-via-Ctrl+Click risk as
                     // roughness/metallic above (spec-invalid alphaCutoff).
                     if (ImGui::SliderFloat("##matac", &mat.alphaCutoff, 0.0f, 1.0f, "%.2f",
-                                           ImGuiSliderFlags_AlwaysClamp))
+                                           ImGuiSliderFlags_AlwaysClamp)) {
+                        if (ImGui::IsItemActivated()) pushUndo();
                         modified_ = true;
+                    }
                 }
 
                 // Double-sided
-                if (ImGui::Checkbox("Double-sided##matds", &mat.doubleSided))
+                if (ImGui::Checkbox("Double-sided##matds", &mat.doubleSided)) {
+                    pushUndo();
                     modified_ = true;
+                }
             }
 
             ImGui::EndTabItem();
