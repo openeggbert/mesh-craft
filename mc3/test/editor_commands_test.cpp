@@ -3037,6 +3037,17 @@ static void testCameraPresets()
 // Microsoft::Xna::Framework::Matrix (a CNA type), so it isn't separable
 // into a CNA-free mirror the way the other command fixes in this suite
 // were. Verified by code inspection + confirming the fix compiles clean.
+//
+// Follow-up (plan_deep_audit.md AUDIT-0014, 2026-07-09): the fix above gave
+// resetPivot() its own internal pushUndo(), but the UI call site
+// (Scene/PropertiesPanel.cpp's "Reset##piv" button) still had its own
+// pushUndo() immediately before calling resetPivot() -- a leftover from
+// before this fix landed, when the UI-side push was the only one. Net
+// effect: one click pushed two identical undo snapshots, so Ctrl+Z was a
+// no-op on the first press. Removed the now-redundant outer pushUndo() at
+// the UI call site. Same "no headless test possible" constraint applies
+// (same CNA-dependent function) -- verified by code inspection + full
+// ninja build + ctest 66/66 pass, same standard as the fix above.
 // ─────────────────────────────────────────────────────────────────────────────
 
 // ─────────────────────────────────────────────────────────────────────────────

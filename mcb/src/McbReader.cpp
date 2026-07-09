@@ -80,6 +80,22 @@ static std::string rRawStr(std::istream& in) {
     return s;
 }
 
+// Same rationale as kMcbMaxStringLen/rRawStr above, applied to every
+// count-prefixed collection field in the format (array/map lengths, object
+// counts, keyframe/channel counts, etc.): a claimed count is validated
+// against a generous sanity ceiling before it's used to .reserve() a vector
+// or bound a loop, not just trusted from an untrusted stream. No legitimate
+// mc3 scene has any single collection anywhere near this size.
+static constexpr uint32_t kMcbMaxCollectionCount = 10u * 1000u * 1000u; // 10M
+
+static uint32_t rU32Bounded(std::istream& in) {
+    uint32_t n = rU32(in);
+    if (n > kMcbMaxCollectionCount)
+        throw std::runtime_error("MCB: collection count " + std::to_string(n) +
+            " exceeds sanity limit (corrupted or malicious file?)");
+    return n;
+}
+
 static std::array<float,3> rVec3(std::istream& in) {
     float x = rF32(in), y = rF32(in), z = rF32(in);
     return {x, y, z};
@@ -156,7 +172,7 @@ static void skipValue(std::istream& in, uint8_t tag) {
     case TAG_VEC4: rU32(in); rU32(in); rU32(in); rU32(in); break;
     case TAG_OBJ:  skipObject(in);                     break;
     case TAG_ARR: {
-        uint32_t n = rU32(in);
+        uint32_t n = rU32Bounded(in);
         for (uint32_t i = 0; i < n; ++i) {
             uint8_t t = rU8(in);
             skipValue(in, t);
@@ -164,7 +180,7 @@ static void skipValue(std::istream& in, uint8_t tag) {
         break;
     }
     case TAG_MAP: {
-        uint32_t n = rU32(in);
+        uint32_t n = rU32Bounded(in);
         for (uint32_t i = 0; i < n; ++i) {
             rRawStr(in); // key
             uint8_t t = rU8(in);
@@ -251,7 +267,7 @@ static Mc3::Mc3CrossSection readCrossSection(std::istream& in) {
         else if (k == "segments")    cs.segments    = rI32(in);
         else if (k == "customPoints") {
             // TAG_ARR of TAG_VEC3
-            uint32_t n = rU32(in);
+            uint32_t n = rU32Bounded(in);
             cs.customPoints.reserve(n);
             for (uint32_t i = 0; i < n; ++i) {
                 uint8_t t = rU8(in);
@@ -295,7 +311,7 @@ static Mc3::Mc3ExtrudePath readPath(std::istream& in) {
         else if (k == "helixHeight") p.helixHeight = rF32(in);
         else if (k == "helixTurns")  p.helixTurns  = rF32(in);
         else if (k == "points") {
-            uint32_t n = rU32(in);
+            uint32_t n = rU32Bounded(in);
             p.points.reserve(n);
             for (uint32_t i = 0; i < n; ++i) {
                 uint8_t t = rU8(in);
@@ -382,7 +398,7 @@ static std::shared_ptr<Mc3::Mc3Object> readObject(std::istream& in) {
         else if (k == "extrude")          obj->extrude          = readExtrude(in);
         else if (k == "uvMapping")        obj->uvMapping        = readUvMapping(in);
         else if (k == "tags") {
-            uint32_t n = rU32(in);
+            uint32_t n = rU32Bounded(in);
             obj->tags.reserve(n);
             for (uint32_t i = 0; i < n; ++i) {
                 uint8_t t = rU8(in);
@@ -391,7 +407,7 @@ static std::shared_ptr<Mc3::Mc3Object> readObject(std::istream& in) {
             }
         }
         else if (k == "variantDefs") {
-            uint32_t n = rU32(in);
+            uint32_t n = rU32Bounded(in);
             obj->variantDefinitions.reserve(n);
             for (uint32_t i = 0; i < n; ++i) {
                 uint8_t t = rU8(in);
@@ -400,7 +416,7 @@ static std::shared_ptr<Mc3::Mc3Object> readObject(std::istream& in) {
             }
         }
         else if (k == "states") {
-            uint32_t n = rU32(in);
+            uint32_t n = rU32Bounded(in);
             for (uint32_t i = 0; i < n; ++i) {
                 std::string sk = rRawStr(in);
                 uint8_t t = rU8(in);
@@ -409,7 +425,7 @@ static std::shared_ptr<Mc3::Mc3Object> readObject(std::istream& in) {
             }
         }
         else if (k == "children") {
-            uint32_t n = rU32(in);
+            uint32_t n = rU32Bounded(in);
             obj->children.reserve(n);
             for (uint32_t i = 0; i < n; ++i) {
                 uint8_t t = rU8(in);
@@ -473,7 +489,7 @@ static Mc3::Mc3SceneState readSceneState(std::istream& in, const std::string& na
         std::string k = rKey(in); if (k.empty()) break;
         uint8_t tag = rU8(in);
         if (k == "overrides" && tag == TAG_ARR) {
-            uint32_t n = rU32(in);
+            uint32_t n = rU32Bounded(in);
             for (uint32_t i = 0; i < n; ++i) {
                 uint8_t t = rU8(in);
                 if (t == TAG_OBJ) state.overrides.push_back(readObjectOverride(in));
@@ -500,7 +516,7 @@ static Mc3::Mc3Trigger readTrigger(std::istream& in, const std::string& id) {
         std::string k = rKey(in); if (k.empty()) break;
         uint8_t tag = rU8(in);
         if (k == "steps" && tag == TAG_ARR) {
-            uint32_t n = rU32(in);
+            uint32_t n = rU32Bounded(in);
             for (uint32_t i = 0; i < n; ++i) {
                 uint8_t t = rU8(in);
                 if (t != TAG_OBJ) { skipValue(in, t); continue; }
@@ -690,7 +706,7 @@ static Mc3::Mc3Channel readChannel(std::istream& in) {
         if      (k == "targetObject") ch.targetObject = rRawStr(in);
         else if (k == "property")     ch.property     = static_cast<Mc3::AnimatedProperty>(rI32(in));
         else if (k == "keyframes") {
-            uint32_t n = rU32(in);
+            uint32_t n = rU32Bounded(in);
             ch.keyframes.reserve(n);
             for (uint32_t i = 0; i < n; ++i) {
                 uint8_t t = rU8(in);
@@ -713,7 +729,7 @@ static Mc3::Mc3Action readAction(std::istream& in) {
         else if (k == "loop")     act.loop     = rU8(in) != 0;
         else if (k == "autoplay") act.autoplay = rU8(in) != 0;
         else if (k == "channels") {
-            uint32_t n = rU32(in);
+            uint32_t n = rU32Bounded(in);
             act.channels.reserve(n);
             for (uint32_t i = 0; i < n; ++i) {
                 uint8_t t = rU8(in);
@@ -737,7 +753,7 @@ static Mc3::Mc3Document readDocument(std::istream& in) {
         else if (k == "coordinateSystem") doc.coordinateSystem = rRawStr(in);
         else if (k == "defaultCamera")    doc.defaultCamera    = rRawStr(in);
         else if (k == "meta") {
-            uint32_t n = rU32(in);
+            uint32_t n = rU32Bounded(in);
             for (uint32_t i = 0; i < n; ++i) {
                 std::string mk = rRawStr(in);
                 uint8_t t = rU8(in);
@@ -746,7 +762,7 @@ static Mc3::Mc3Document readDocument(std::istream& in) {
             }
         }
         else if (k == "metadata") {
-            uint32_t n = rU32(in);
+            uint32_t n = rU32Bounded(in);
             for (uint32_t i = 0; i < n; ++i) {
                 std::string mk = rRawStr(in);
                 uint8_t t = rU8(in);
@@ -755,7 +771,7 @@ static Mc3::Mc3Document readDocument(std::istream& in) {
             }
         }
         else if (k == "includes") {
-            uint32_t n = rU32(in);
+            uint32_t n = rU32Bounded(in);
             doc.includes.reserve(n);
             for (uint32_t i = 0; i < n; ++i) {
                 uint8_t t = rU8(in);
@@ -764,7 +780,7 @@ static Mc3::Mc3Document readDocument(std::istream& in) {
             }
         }
         else if (k == "includedDefs") {
-            uint32_t n = rU32(in);
+            uint32_t n = rU32Bounded(in);
             for (uint32_t i = 0; i < n; ++i) {
                 uint8_t t = rU8(in);
                 if (t == TAG_STR) doc.includedDefs.insert(rRawStr(in));
@@ -772,7 +788,7 @@ static Mc3::Mc3Document readDocument(std::istream& in) {
             }
         }
         else if (k == "includedMaterials") {
-            uint32_t n = rU32(in);
+            uint32_t n = rU32Bounded(in);
             for (uint32_t i = 0; i < n; ++i) {
                 uint8_t t = rU8(in);
                 if (t == TAG_STR) doc.includedMaterials.insert(rRawStr(in));
@@ -780,7 +796,7 @@ static Mc3::Mc3Document readDocument(std::istream& in) {
             }
         }
         else if (k == "includedTextures") {
-            uint32_t n = rU32(in);
+            uint32_t n = rU32Bounded(in);
             for (uint32_t i = 0; i < n; ++i) {
                 uint8_t t = rU8(in);
                 if (t == TAG_STR) doc.includedTextures.insert(rRawStr(in));
@@ -789,7 +805,7 @@ static Mc3::Mc3Document readDocument(std::istream& in) {
         }
         else if (k == "environment")      doc.environment      = readEnvironment(in);
         else if (k == "lights") {
-            uint32_t n = rU32(in);
+            uint32_t n = rU32Bounded(in);
             doc.lights.reserve(n);
             for (uint32_t i = 0; i < n; ++i) {
                 uint8_t t = rU8(in);
@@ -798,7 +814,7 @@ static Mc3::Mc3Document readDocument(std::istream& in) {
             }
         }
         else if (k == "cameras") {
-            uint32_t n = rU32(in);
+            uint32_t n = rU32Bounded(in);
             doc.cameras.reserve(n);
             for (uint32_t i = 0; i < n; ++i) {
                 uint8_t t = rU8(in);
@@ -807,7 +823,7 @@ static Mc3::Mc3Document readDocument(std::istream& in) {
             }
         }
         else if (k == "textures") {
-            uint32_t n = rU32(in);
+            uint32_t n = rU32Bounded(in);
             for (uint32_t i = 0; i < n; ++i) {
                 std::string mk = rRawStr(in);
                 uint8_t t = rU8(in);
@@ -816,7 +832,7 @@ static Mc3::Mc3Document readDocument(std::istream& in) {
             }
         }
         else if (k == "svgTextures") {
-            uint32_t n = rU32(in);
+            uint32_t n = rU32Bounded(in);
             for (uint32_t i = 0; i < n; ++i) {
                 std::string mk = rRawStr(in);
                 uint8_t t = rU8(in);
@@ -825,7 +841,7 @@ static Mc3::Mc3Document readDocument(std::istream& in) {
             }
         }
         else if (k == "embeds") {
-            uint32_t n = rU32(in);
+            uint32_t n = rU32Bounded(in);
             for (uint32_t i = 0; i < n; ++i) {
                 std::string mk = rRawStr(in);
                 uint8_t t = rU8(in);
@@ -834,7 +850,7 @@ static Mc3::Mc3Document readDocument(std::istream& in) {
             }
         }
         else if (k == "scripts") {
-            uint32_t n = rU32(in);
+            uint32_t n = rU32Bounded(in);
             for (uint32_t i = 0; i < n; ++i) {
                 std::string mk = rRawStr(in);
                 uint8_t t = rU8(in);
@@ -843,7 +859,7 @@ static Mc3::Mc3Document readDocument(std::istream& in) {
             }
         }
         else if (k == "sounds") {
-            uint32_t n = rU32(in);
+            uint32_t n = rU32Bounded(in);
             for (uint32_t i = 0; i < n; ++i) {
                 std::string mk = rRawStr(in);
                 uint8_t t = rU8(in);
@@ -852,7 +868,7 @@ static Mc3::Mc3Document readDocument(std::istream& in) {
             }
         }
         else if (k == "musicTracks") {
-            uint32_t n = rU32(in);
+            uint32_t n = rU32Bounded(in);
             for (uint32_t i = 0; i < n; ++i) {
                 std::string mk = rRawStr(in);
                 uint8_t t = rU8(in);
@@ -861,7 +877,7 @@ static Mc3::Mc3Document readDocument(std::istream& in) {
             }
         }
         else if (k == "triggers") {
-            uint32_t n = rU32(in);
+            uint32_t n = rU32Bounded(in);
             for (uint32_t i = 0; i < n; ++i) {
                 std::string mk = rRawStr(in);
                 uint8_t t = rU8(in);
@@ -870,7 +886,7 @@ static Mc3::Mc3Document readDocument(std::istream& in) {
             }
         }
         else if (k == "sceneStates") {
-            uint32_t n = rU32(in);
+            uint32_t n = rU32Bounded(in);
             for (uint32_t i = 0; i < n; ++i) {
                 std::string mk = rRawStr(in);
                 uint8_t t = rU8(in);
@@ -879,7 +895,7 @@ static Mc3::Mc3Document readDocument(std::istream& in) {
             }
         }
         else if (k == "materials") {
-            uint32_t n = rU32(in);
+            uint32_t n = rU32Bounded(in);
             for (uint32_t i = 0; i < n; ++i) {
                 std::string mk = rRawStr(in);
                 uint8_t t = rU8(in);
@@ -888,7 +904,7 @@ static Mc3::Mc3Document readDocument(std::istream& in) {
             }
         }
         else if (k == "definitions") {
-            uint32_t n = rU32(in);
+            uint32_t n = rU32Bounded(in);
             for (uint32_t i = 0; i < n; ++i) {
                 std::string mk = rRawStr(in);
                 uint8_t t = rU8(in);
@@ -897,7 +913,7 @@ static Mc3::Mc3Document readDocument(std::istream& in) {
             }
         }
         else if (k == "objects") {
-            uint32_t n = rU32(in);
+            uint32_t n = rU32Bounded(in);
             doc.objects.reserve(n);
             for (uint32_t i = 0; i < n; ++i) {
                 uint8_t t = rU8(in);
@@ -906,7 +922,7 @@ static Mc3::Mc3Document readDocument(std::istream& in) {
             }
         }
         else if (k == "actions") {
-            uint32_t n = rU32(in);
+            uint32_t n = rU32Bounded(in);
             for (uint32_t i = 0; i < n; ++i) {
                 std::string mk = rRawStr(in);
                 uint8_t t = rU8(in);

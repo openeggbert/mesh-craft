@@ -839,6 +839,48 @@ static void testHugeStringLengthRejectedCleanly() {
           "multi-second multi-gigabyte memory commit");
 }
 
+static void testHugeCollectionCountRejectedCleanly() {
+    // AUDIT-0024..0034: every count-prefixed collection field (not just
+    // strings) must reject an absurd claimed count before it's used to
+    // .reserve() a vector. "lights" is one of the .reserve(n) call sites.
+    std::ostringstream out(std::ios::binary);
+    out.write(MCB_MAGIC, 4);
+    rawU8(out, MCB_VERSION);
+    rawU8(out, 0);
+    rawU8(out, 0); rawU8(out, 0);
+    rawU8(out, TAG_OBJ);             // root document object
+
+    rawKey(out, "lights");
+    rawU8(out, TAG_ARR);
+    rawU32(out, 0xFFFFFFF0u);        // claims ~4 billion lights
+    // Deliberately no actual entries follow -- the point is that the reader
+    // must reject the claimed count before trying to reserve() for it.
+
+    rawEnd(out);
+
+    std::istringstream in(out.str(), std::ios::binary);
+    auto start = std::chrono::steady_clock::now();
+    bool threw = false;
+    std::string errMsg;
+    try {
+        Mc3Document rt = loadFromBinary(in);
+        (void)rt;
+    } catch (const std::exception& e) {
+        threw = true;
+        errMsg = e.what();
+    }
+    auto elapsedMs = std::chrono::duration_cast<std::chrono::milliseconds>(
+        std::chrono::steady_clock::now() - start).count();
+
+    CHECK(threw, "huge collection count: loadFromBinary() rejects an absurd "
+                 "claimed collection count instead of reserving for it");
+    CHECK(errMsg.find("sanity limit") != std::string::npos,
+          "huge collection count: the error specifically names the sanity-limit guard");
+    CHECK(elapsedMs < 1000,
+          "huge collection count: rejected in well under a second, not after a "
+          "multi-second multi-gigabyte memory commit");
+}
+
 static void testFileSizeSmallerThanXml() {
     const auto xmlPath = std::filesystem::path(__FILE__).parent_path() / ".." / ".." / "test" / "house.mc3.xml";
     std::error_code ec;
@@ -887,6 +929,7 @@ int main() {
     testLargeStringRoundtrip();
     testDeeplyNestedChildrenDoesNotCrash();
     testHugeStringLengthRejectedCleanly();
+    testHugeCollectionCountRejectedCleanly();
     testFileSizeSmallerThanXml();
 
     if (failures == 0)

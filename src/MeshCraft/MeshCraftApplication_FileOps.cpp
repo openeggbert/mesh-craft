@@ -48,7 +48,10 @@ void MeshCraftApplication::performAutoSave() {
     try {
         document_.saveToFile(autoSavePath(currentFile_));
         setStatusMsg("Auto-saved", false, 1.5f);
-    } catch (...) {}
+    } catch (const std::exception& e) {
+        std::cerr << "[MeshCraft] Auto-save error: " << e.what() << "\n";
+        setStatusMsg(std::string("Auto-save failed: ") + e.what(), true);
+    }
 }
 
 void MeshCraftApplication::setStatusMsg(std::string msg, bool isError, float duration) {
@@ -115,7 +118,11 @@ void MeshCraftApplication::executePendingAction() {
                 modified_ = false;
                 setStatusMsg("Opened " + currentFile_.filename().string(), false, 2.0f);
                 updateWindowTitle();
-            } catch (...) {}
+            } catch (const std::exception& e) {
+                std::cerr << "[MeshCraft] Open recent file error: " << e.what() << "\n";
+                setStatusMsg(std::string("Failed to open ") +
+                             pendingOpenPath_.filename().string() + ": " + e.what(), true);
+            }
         }
         break;
     case PendingAction::ExitApp:
@@ -325,12 +332,18 @@ void MeshCraftApplication::loadPrefs() {
         std::string key = line.substr(0, eq);
         std::string val = line.substr(eq + 1);
         try {
-            if      (key == "autoSaveInterval") autoSaveInterval_ = std::stof(val);
-            else if (key == "snapTranslate")    snapTranslate_    = std::stof(val);
-            else if (key == "snapRotate")       snapRotate_       = std::stof(val);
-            else if (key == "snapScale")        snapScale_        = std::stof(val);
-            else if (key == "gridSpacing")      gridSpacing_      = std::stof(val);
-            else if (key == "theme")            prefTheme_        = std::stoi(val);
+            // Clamped to the widest range any slider UI for this value allows
+            // (snapTranslate/Rotate/Scale each have two UI locations with
+            // different bounds -- MeshCraftApplication_UiOverlays.cpp and
+            // MeshCraftApplication_UiToolbar.cpp -- clamp to the wider one so
+            // a hand-edited prefs.ini can't set a value neither slider could
+            // ever reach, e.g. 0 or negative snapScale).
+            if      (key == "autoSaveInterval") autoSaveInterval_ = std::clamp(std::stof(val), 0.0f, 300.0f);
+            else if (key == "snapTranslate")    snapTranslate_    = std::clamp(std::stof(val), 0.01f, 100.0f);
+            else if (key == "snapRotate")       snapRotate_       = std::clamp(std::stof(val), 1.0f, 180.0f);
+            else if (key == "snapScale")        snapScale_        = std::clamp(std::stof(val), 0.01f, 10.0f);
+            else if (key == "gridSpacing")      gridSpacing_      = std::clamp(std::stof(val), 0.1f, 10.0f);
+            else if (key == "theme")            prefTheme_        = std::clamp(std::stoi(val), 0, 2);
         } catch (...) {}
     }
     applyTheme();

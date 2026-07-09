@@ -290,7 +290,6 @@ void PropertiesPanel::draw(float panelX, float panelY, float panelW, float panel
             }
             ImGui::SameLine();
             if (ImGui::Button("Reset##piv", ImVec2(-1,0))) {
-                ctx.pushUndo();
                 ctx.resetPivot();
             }
             if (ImGui::IsItemHovered())
