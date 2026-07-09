@@ -615,7 +615,13 @@ if(MESH_CRAFT_BUILD_TESTING AND UNIX AND NOT ANDROID AND NOT EMSCRIPTEN)
                         "${CMAKE_CURRENT_SOURCE_DIR}/test/csg_cache_eviction.mc3.xml"
                 WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
             )
-            set_tests_properties(csg_cache_eviction_test PROPERTIES TIMEOUT 60 LABELS "render")
+            # TIMEOUT raised from 60s (AUDIT-0053): this test spawns a real
+            # MeshCraft --screenshot process (xvfb-run + full GL rendering of
+            # 150 CSG boolean evaluations), which is genuinely sensitive to
+            # concurrent machine load, not just its own cost -- observed
+            # taking 24s under light load and >60s under heavy concurrent
+            # build/test activity in the same environment.
+            set_tests_properties(csg_cache_eviction_test PROPERTIES TIMEOUT 180 LABELS "render")
         endif()
 
         # STAB-0523: confirms background_texture renders unconditionally,

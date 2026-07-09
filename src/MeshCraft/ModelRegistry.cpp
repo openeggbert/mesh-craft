@@ -192,10 +192,11 @@ int64_t ModelRegistry::save(const Entry& e) {
     if (!db_) return -1;
     sqlite3_stmt* stmt = nullptr;
     if (e.id > 0) {
-        sqlite3_prepare_v2(db_,
-            "UPDATE models SET grp=?1,name=?2,variant=?3,xml=?4,tags=?5,"
-            "description=?6,source=?7 WHERE id=?8;",
-            -1, &stmt, nullptr);
+        if (sqlite3_prepare_v2(db_,
+                "UPDATE models SET grp=?1,name=?2,variant=?3,xml=?4,tags=?5,"
+                "description=?6,source=?7 WHERE id=?8;",
+                -1, &stmt, nullptr) != SQLITE_OK || !stmt)
+            return -1;
         sqlite3_bind_text (stmt, 1, e.group.c_str(),       -1, SQLITE_TRANSIENT);
         sqlite3_bind_text (stmt, 2, e.name.c_str(),        -1, SQLITE_TRANSIENT);
         sqlite3_bind_text (stmt, 3, e.variant.c_str(),     -1, SQLITE_TRANSIENT);
@@ -205,10 +206,11 @@ int64_t ModelRegistry::save(const Entry& e) {
         sqlite3_bind_text (stmt, 7, e.source.c_str(),      -1, SQLITE_TRANSIENT);
         sqlite3_bind_int64(stmt, 8, e.id);
     } else {
-        sqlite3_prepare_v2(db_,
-            "INSERT INTO models(grp,name,variant,xml,tags,description,source)"
-            " VALUES(?1,?2,?3,?4,?5,?6,?7);",
-            -1, &stmt, nullptr);
+        if (sqlite3_prepare_v2(db_,
+                "INSERT INTO models(grp,name,variant,xml,tags,description,source)"
+                " VALUES(?1,?2,?3,?4,?5,?6,?7);",
+                -1, &stmt, nullptr) != SQLITE_OK || !stmt)
+            return -1;
         sqlite3_bind_text(stmt, 1, e.group.c_str(),       -1, SQLITE_TRANSIENT);
         sqlite3_bind_text(stmt, 2, e.name.c_str(),        -1, SQLITE_TRANSIENT);
         sqlite3_bind_text(stmt, 3, e.variant.c_str(),     -1, SQLITE_TRANSIENT);
@@ -217,8 +219,9 @@ int64_t ModelRegistry::save(const Entry& e) {
         sqlite3_bind_text(stmt, 6, e.description.c_str(), -1, SQLITE_TRANSIENT);
         sqlite3_bind_text(stmt, 7, e.source.c_str(),      -1, SQLITE_TRANSIENT);
     }
-    sqlite3_step(stmt);
+    bool ok = sqlite3_step(stmt) == SQLITE_DONE;
     sqlite3_finalize(stmt);
+    if (!ok) return -1;
     return e.id > 0 ? e.id : sqlite3_last_insert_rowid(db_);
 }
 

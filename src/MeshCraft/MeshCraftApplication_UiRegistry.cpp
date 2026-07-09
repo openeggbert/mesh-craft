@@ -195,11 +195,16 @@ void MeshCraftApplication::drawRegistryPanel() {
                         regSaveGroupBuf_, regSaveNameBuf_,
                         regSaveVariantBuf_, regSaveTagsBuf_,
                         regSaveDescBuf_, regSaveSourceBuf_);
-                    registry_.save(entry);
-                    regResultsDirty_ = true;
-                    regSaveDlgOpen_  = false;
-                    regSaveFromAi_   = false;
-                    setStatusMsg("Saved '" + std::string(regSaveNameBuf_) + "' to registry");
+                    int64_t savedId = registry_.save(entry);
+                    if (savedId < 0) {
+                        setStatusMsg("Registry save failed for '" +
+                                     std::string(regSaveNameBuf_) + "'", true);
+                    } else {
+                        regResultsDirty_ = true;
+                        regSaveDlgOpen_  = false;
+                        regSaveFromAi_   = false;
+                        setStatusMsg("Saved '" + std::string(regSaveNameBuf_) + "' to registry");
+                    }
                 } catch (const std::exception& ex) {
                     setStatusMsg(std::string("Save failed: ") + ex.what(), true);
                 }

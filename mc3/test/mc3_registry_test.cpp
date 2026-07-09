@@ -956,6 +956,51 @@ static void testInsertMalformedEntryDoesNotLeakTempFiles() {
 }
 
 // ---------------------------------------------------------------------------
+// plan_deep_audit.md AUDIT-0015 — ModelRegistry::save() used to discard
+// sqlite3_prepare_v2()/sqlite3_step() failures and still return as if it had
+// succeeded (falling through to sqlite3_last_insert_rowid(), which reports a
+// stale rowid, not -1). Fixed to return -1 on any prepare/step failure.
+// Reproduce a real, deterministic step failure by chmod'ing the DB file
+// read-only after opening it (portable on POSIX, which is what this suite
+// runs on) rather than relying on a schema constraint (this table has none
+// besides the autoincrement primary key).
+// ---------------------------------------------------------------------------
+
+static void testSaveReturnsErrorOnReadOnlyDatabase() {
+    namespace fs = std::filesystem;
+    auto dbPath = fs::temp_directory_path() / "mc3_reg_readonly_test.sqlite3";
+    fs::remove(dbPath);
+
+    ModelRegistry reg;
+    reg.open(dbPath);
+
+    ModelRegistry::Entry e;
+    e.group = "Test"; e.name = "ReadOnlyCase"; e.xml = "<mc3/>";
+    int64_t id = reg.save(e);
+    CHECK(id > 0, "save: succeeds normally against a writable DB (baseline)");
+
+    // The already-open fd from open() above predates the chmod below, and a
+    // POSIX write() against an already-open writable fd ignores a later
+    // permission change -- close and reopen so the new fd actually respects
+    // the now-read-only mode.
+    reg.close();
+    fs::permissions(dbPath, fs::perms::owner_read | fs::perms::group_read | fs::perms::others_read,
+                     fs::perm_options::replace);
+    reg.open(dbPath);
+
+    ModelRegistry::Entry e2;
+    e2.group = "Test"; e2.name = "ShouldFail"; e2.xml = "<mc3/>";
+    int64_t failedId = reg.save(e2);
+    CHECK(failedId < 0,
+          "STAB regression (AUDIT-0015): save() against a read-only DB file "
+          "returns -1 (a real failure signal), not a false-success rowid");
+
+    fs::permissions(dbPath, fs::perms::owner_all, fs::perm_options::replace);
+    reg.close();
+    fs::remove(dbPath);
+}
+
+// ---------------------------------------------------------------------------
 // STAB-0397 — full mock AI -> registry pipeline, no real API call: a raw
 // AI-style response string (markdown-fenced, exactly as a real Claude
 // response would arrive) goes through the same validateAndParseAiResponseAlg
@@ -1065,6 +1110,7 @@ int main() {
     testEmptyVariantField();
     testEntryFromDefinitionOnlyIncludesReferencedMaterials();
     testInsertMalformedEntryDoesNotLeakTempFiles();
+    testSaveReturnsErrorOnReadOnlyDatabase();
     testAiResponseToRegistryPipeline();
     testDefaultPathFormat();
 #else
