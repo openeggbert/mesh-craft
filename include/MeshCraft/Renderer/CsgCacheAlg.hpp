@@ -7,6 +7,7 @@
 
 #include <MeshCraft/Mc3/Mc3Document.hpp>
 #include <MeshCraft/Mc3/Mc3Object.hpp>
+#include <MeshCraft/Mc3/Mc3Extrude.hpp>
 
 #include <cstddef>
 #include <functional>
@@ -46,6 +47,36 @@ inline std::size_t csgSubtreeHashAlg(const Mc3::Mc3Object& obj, const Mc3::Mc3Do
     if (obj.deform) {
         hf(obj.deform->scale[0]); hf(obj.deform->scale[1]); hf(obj.deform->scale[2]);
     }
+    // csgOperation: a Union/Difference/Intersection node's own operation type
+    // must be part of its hash — otherwise switching an existing CSG group's
+    // operation (with no geometry change) produces an identical hash and the
+    // preview cache never invalidates (AUDIT-0020).
+    hi(obj.csgOperation ? static_cast<int>(obj.csgOperation->csgType) : -1);
+    // extrude: an Extrude object's geometry lives entirely in this struct,
+    // not in `primitive` — must be hashed or editing an extrude profile
+    // inside a CSG tree won't invalidate the cached preview (AUDIT-0021).
+    if (obj.extrude) {
+        const auto& e = *obj.extrude;
+        const auto& cs = e.crossSection;
+        hi(static_cast<int>(cs.type));
+        hf(cs.width); hf(cs.height); hf(cs.radius); hf(cs.innerRadius);
+        hi(cs.sides); hi(cs.segments);
+        for (const auto& pt : cs.customPoints) { hf(pt.x); hf(pt.y); }
+        const auto& p = e.path;
+        hi(static_cast<int>(p.type));
+        hf(p.length); h = csgHashMixAlg(h, std::hash<std::string>{}(p.axis));
+        hf(p.arcRadius); hf(p.arcAngle);
+        hf(p.helixRadius); hf(p.helixHeight); hf(p.helixTurns);
+        for (const auto& pp : p.points) {
+            hf(pp.position[0]); hf(pp.position[1]); hf(pp.position[2]);
+            hf(pp.controlIn[0]); hf(pp.controlIn[1]); hf(pp.controlIn[2]);
+        }
+        hf(e.twist); hi(e.segments); hi(e.smooth ? 1 : 0); hi(e.caps ? 1 : 0);
+    }
+    // meshSource: which mesh a Mesh-type object references — swapping the
+    // referenced mesh on a CSG operand must invalidate the cache (AUDIT-0021).
+    if (!obj.meshSource.empty())
+        h = csgHashMixAlg(h, std::hash<std::string>{}(obj.meshSource));
     for (const auto& child : obj.children)
         h = csgHashMixAlg(h, csgSubtreeHashAlg(*child, doc, depth + 1));
     if (obj.type == Mc3::ObjectType::Instance) {

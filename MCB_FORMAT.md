@@ -190,3 +190,11 @@ path. Verified in `testWriterDeterminism()` (STAB-0140).
   `includedDefs`/`includedMaterials`/`includedTextures`/`metadata`, which
   were added additively mid-effort (STAB-0131/0144) without a version bump,
   per the forward-compatibility rule above.
+
+**No version migration.** `McbReader::loadFromBinary()` rejects any file
+whose version byte doesn't exactly equal the reader's own `MCB_VERSION`
+(`"MCB: unsupported version N"`) — there is currently no forward- or
+backward-compatibility path across a version bump; a reader built against
+one `MCB_VERSION` cannot read a file written by any other version. This is
+a deliberate current limitation, not a bug: whether to ever invest in a
+migration path is an open product/format-roadmap decision, not yet made.

@@ -3138,6 +3138,65 @@ static void testCsgSubtreeHashIsContentBasedNotPointerBased()
           "pointer-based, so undo/redo to an unchanged CSG subtree is a real cache hit");
 }
 
+static void testCsgSubtreeHashChangesOnOperationTypeChange()
+{
+    // AUDIT-0020: switching a CSG node's own operation (Union/Difference/
+    // Intersection) with no change to any child's geometry/transform must
+    // still change the subtree hash, or the preview cache never invalidates
+    // and keeps showing the stale (wrong) boolean-op result.
+    Mc3Document doc;
+    auto buildNode = [](CsgType t) {
+        auto node = std::make_shared<Mc3Object>();
+        node->type = ObjectType::Union; // container object type is irrelevant here
+        node->csgOperation = Mc3CsgOperation{};
+        node->csgOperation->csgType = t;
+        auto child = std::make_shared<Mc3Object>();
+        child->id = "c1"; child->type = ObjectType::Box; child->primitive = Mc3Primitive{};
+        node->children.push_back(child);
+        return node;
+    };
+
+    auto unionNode = buildNode(CsgType::Union);
+    auto diffNode  = buildNode(CsgType::Difference);
+
+    auto hUnion = csgSubtreeHashAlg(*unionNode, doc);
+    auto hDiff  = csgSubtreeHashAlg(*diffNode, doc);
+    CHECK(hUnion != hDiff,
+          "csg hash: changing csgOperation (Union -> Difference) with identical children "
+          "changes the subtree hash (cache invalidates instead of showing a stale preview)");
+}
+
+static void testCsgSubtreeHashChangesOnExtrudeAndMeshSource()
+{
+    // AUDIT-0021: an Extrude object's geometry lives in obj.extrude (not
+    // obj.primitive), and a Mesh object's geometry is selected by
+    // obj.meshSource — both must be hashed or editing them inside a CSG tree
+    // won't invalidate the cached preview.
+    Mc3Document doc;
+
+    auto extrudeA = std::make_shared<Mc3Object>();
+    extrudeA->id = "e1"; extrudeA->type = ObjectType::Extrude;
+    extrudeA->extrude = Mc3Extrude{};
+    extrudeA->extrude->twist = 0.0f;
+
+    auto extrudeB = std::make_shared<Mc3Object>();
+    extrudeB->id = "e1"; extrudeB->type = ObjectType::Extrude;
+    extrudeB->extrude = Mc3Extrude{};
+    extrudeB->extrude->twist = 45.0f;
+
+    CHECK(csgSubtreeHashAlg(*extrudeA, doc) != csgSubtreeHashAlg(*extrudeB, doc),
+          "csg hash: changing an Extrude object's profile (twist) changes the subtree hash");
+
+    auto meshA = std::make_shared<Mc3Object>();
+    meshA->id = "m1"; meshA->type = ObjectType::Mesh; meshA->meshSource = "meshA";
+
+    auto meshB = std::make_shared<Mc3Object>();
+    meshB->id = "m1"; meshB->type = ObjectType::Mesh; meshB->meshSource = "meshB";
+
+    CHECK(csgSubtreeHashAlg(*meshA, doc) != csgSubtreeHashAlg(*meshB, doc),
+          "csg hash: changing a Mesh object's meshSource reference changes the subtree hash");
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // STAB-0217/0218: investigated, no new headless test added — findings below.
 //
@@ -3262,6 +3321,8 @@ int main()
     testCsgSubtreeHashChangesOnChildMove();
     testCsgSubtreeHashChangesOnParentTransform();
     testCsgSubtreeHashIsContentBasedNotPointerBased();
+    testCsgSubtreeHashChangesOnOperationTypeChange();
+    testCsgSubtreeHashChangesOnExtrudeAndMeshSource();
 
     std::cout << "\n";
     if (failures == 0)
