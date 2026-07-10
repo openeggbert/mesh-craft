@@ -941,7 +941,26 @@ void PropertiesPanel::draw(float panelX, float panelY, float panelW, float panel
                     p.radius = std::max(0.001f, r);
                     ctx.markModified();
                 }
-                ImGui::TextDisabled("320 triangles (2 subdivisions)");
+                // STAB-0711: was a hardcoded, non-interactive "320 triangles
+                // (2 subdivisions)" label -- also just plain wrong for this
+                // primitive's own real default (segments=32 -> subdivisions
+                // 4 -> 5120 triangles, not 2/320; buildIcoSphere() maps
+                // segments to subdivisions via segments/8, clamped to
+                // [1,4], per mc3togltf/src/MeshBuilder.cpp). Exposes
+                // subdivisions directly (the actually meaningful knob, not
+                // its 8x-scaled segments encoding) and computes the real
+                // resulting triangle count live: 20 * 4^subdivisions.
+                int subdivisions = std::clamp(p.segments / 8, 1, 4);
+                ImGui::TextDisabled("Subdivisions");
+                ImGui::SetNextItemWidth(-1);
+                if (ImGui::SliderInt("##pico_sub", &subdivisions, 1, 4, "%d", ImGuiSliderFlags_AlwaysClamp)) {
+                    if (ImGui::IsItemActivated()) ctx.pushUndo();
+                    p.segments = subdivisions * 8;
+                    ctx.markModified();
+                }
+                int triCount = 20;
+                for (int i = 0; i < subdivisions; ++i) triCount *= 4;
+                ImGui::TextDisabled("%d triangles", triCount);
                 break;
             }
             case Mc3::PrimitiveType::Torus: {
