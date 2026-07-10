@@ -936,6 +936,12 @@ void MeshCraftApplication::drawLeftPanel(float panelY, float panelH)
                 ImGui::TextDisabled("No match for \"%s\"", matFilter_);
 
             // Editor for selected material
+            // AUDIT-0055: intentionally scalars/colors only (baseColor,
+            // roughness, metallic, emissive, alphaMode, doubleSided) — this
+            // is the quick-access left panel. Texture-slot assignment
+            // (baseColorTexture, normalTexture, metallicRoughnessTexture,
+            // emissiveTexture, occlusionTexture) is only in the full
+            // PropertiesPanel.cpp material editor, by design.
             if (!selectedMaterialKey_.empty() && document_.materials.count(selectedMaterialKey_)) {
                 auto& mat = document_.materials[selectedMaterialKey_];
                 ImGui::Separator();

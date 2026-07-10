@@ -785,8 +785,17 @@ static void mergeInclude(const std::filesystem::path& includePath,
     processIncludes(root, doc, includePath, inProgress, processed, /*recordIncludes=*/false);
 
     // Merge shared assets (NOT objects/lights/cameras/environment/actions —
-    // those belong to the main scene only).
+    // those belong to the main scene only). AUDIT-0037: id collisions across
+    // includes keep the existing last-write-wins behavior, but now log a
+    // warning so authors can spot unintended overrides.
     if (const XMLElement* txs  = root->FirstChildElement("textures")) {
+        for (const XMLElement* c = txs->FirstChildElement("texture"); c;
+             c = c->NextSiblingElement("texture"))
+            if (const char* id = c->Attribute("id"))
+                if (doc.textures.count(id) || doc.svgTextures.count(id))
+                    std::cerr << "Warning: <include file=\"" << includePath.string()
+                              << "\"> texture id '" << id
+                              << "' collides with an already-loaded texture; last-write-wins.\n";
         parseTextures(txs, doc);
         for (const XMLElement* c = txs->FirstChildElement("texture"); c;
              c = c->NextSiblingElement("texture"))
@@ -807,6 +816,13 @@ static void mergeInclude(const std::filesystem::path& includePath,
             }
     }
     if (const XMLElement* mats = root->FirstChildElement("materials")) {
+        for (const XMLElement* c = mats->FirstChildElement("material"); c;
+             c = c->NextSiblingElement("material"))
+            if (const char* id = c->Attribute("id"))
+                if (doc.materials.count(id))
+                    std::cerr << "Warning: <include file=\"" << includePath.string()
+                              << "\"> material id '" << id
+                              << "' collides with an already-loaded material; last-write-wins.\n";
         parseMaterials(mats, doc);
         for (const XMLElement* c = mats->FirstChildElement("material"); c;
              c = c->NextSiblingElement("material"))
@@ -814,6 +830,13 @@ static void mergeInclude(const std::filesystem::path& includePath,
                 doc.includedMaterials.insert(id);
     }
     if (const XMLElement* defs = root->FirstChildElement("definitions")) {
+        for (const XMLElement* c = defs->FirstChildElement("definition"); c;
+             c = c->NextSiblingElement("definition"))
+            if (const char* id = c->Attribute("id"))
+                if (doc.definitions.count(id))
+                    std::cerr << "Warning: <include file=\"" << includePath.string()
+                              << "\"> definition id '" << id
+                              << "' collides with an already-loaded definition; last-write-wins.\n";
         parseDefinitions(defs, doc);
         for (const XMLElement* c = defs->FirstChildElement("definition"); c;
              c = c->NextSiblingElement("definition"))

@@ -14,6 +14,7 @@
 #include <iostream>
 #include <iterator>
 #include <memory>
+#include <sstream>
 #include <string>
 
 using namespace MeshCraft::Mc3;
@@ -1193,7 +1194,13 @@ static void testMaterialIdCollisionAcrossIncludes() {
 )";
     }
     try {
+        // AUDIT-0037: include-vs-include collisions now log a warning to
+        // stderr (behavior unchanged, still last-write-wins) -- capture it.
+        std::ostringstream capturedErr;
+        std::streambuf* origCerr = std::cerr.rdbuf(capturedErr.rdbuf());
         auto doc = Mc3Document::loadFromFile(scene2Path);
+        std::cerr.rdbuf(origCerr);
+
         CHECK(doc.materials.count("shared") == 1,
               "material id collision (include vs include): exactly one entry (map semantics)");
         if (doc.materials.count("shared")) {
@@ -1202,6 +1209,9 @@ static void testMaterialIdCollisionAcrossIncludes() {
                    "processed wins (plain last-write-wins, no main-document reclaim "
                    "applies between two includes)");
         }
+        CHECK(capturedErr.str().find("material id 'shared'") != std::string::npos,
+              "material id collision (include vs include): a collision warning naming "
+              "the id was printed to stderr (AUDIT-0037)");
     } catch (const std::exception& e) {
         fail(std::string("material id collision (include vs include) test threw: ") + e.what());
     }

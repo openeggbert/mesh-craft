@@ -73,7 +73,14 @@ Clean from an **absolute-zero** build directory (not just incremental): `rm -rf 
 - **Two clean, honest "no action needed" results**, documented rather than padded: a proactive sweep for further CNA/SHARP_RUNTIME API drift risk (mirroring the `Viewport` break) found no other real forward-risk sites in this repo's own source; a test-assertion-quality audit found the existing CTest suite's assertions are already ~95%+ "strong" (exact-value/structural), not a real gap area.
 - **Re-verified no new CNA drift**: `../cna` landed another commit mid-session (`c4aa6f72`) — re-ran a full fresh clean build immediately after and confirmed still 548/548, 66/66, no new break.
 
-Full history: `git log --oneline`. Per-task detail for the audit phase (both rounds): `plan_deep_audit.md`. Per-task detail for the original 650-task plan: `plan.md` (one row per `STAB-XXXX` ID) and `STABILIZATION_WORKLOG.md` (narrative + exact commands run).
+**2026-07-10 — `plan.md` archival split + 4 owner decisions resolved.** `plan.md`'s 620 ✅-completed `STAB-XXXX` rows were moved out to a new `plan_20260710.md` archive (same S0-S20 section structure), leaving `plan.md` with just the 30 still-open rows (29 🟡 + 1 📋) plus all meta sections (Legend/Policy/Gates/Priority Order/Architecture Reference) — verified no id lost or duplicated (650 unique STAB-IDs, 620+30=650). The project owner then resolved 4 of `plan_deep_audit.md`'s 5 `needs_human` rows:
+- **`AUDIT-0037`** (id-collision-across-includes policy): decided **warning + last-write-wins**. Implemented in `mc3/src/Mc3XmlParser.cpp`'s `mergeInclude()` — collisions between two different `<include>`d files now print a `Warning:` to stderr naming the id; the common main-doc-overriding-an-include pattern still doesn't warn (that's deliberate authoring, not a mistake). Test coverage added (`mc3_roundtrip`'s `testMaterialIdCollisionAcrossIncludes` now captures stderr and asserts the warning fires).
+- **`AUDIT-0055`** (texture slots in the left-panel material editor): decided **intentional, comment only** — added a comment in `MeshCraftApplication_UiLeftPanel.cpp` confirming the scalars-only scope; no new UI.
+- **`AUDIT-0039`/`0040`** (CI matrix scope): decided **keep current scope, no change** — not worth deciding `../cna` checkout policy or adding permanently-red jobs until `STAB-0650`'s PAT-rotation blocker clears anyway.
+- **Still open**: `AUDIT-0038` (MCB version-migration policy) — not yet asked. The ~24 `plan.md` rows needing a live interactive display session are explicitly **deferred** — owner is not at a PC yet; revisit once they are (§8 item 4 below).
+Full 66/66 ctest verified after the `AUDIT-0037` code change.
+
+Full history: `git log --oneline`. Per-task detail for the audit phase (both rounds): `plan_deep_audit.md`. Per-task detail for the original 650-task plan: `plan.md` (30 open rows) and its archive `plan_20260710.md` (620 completed rows), plus `STABILIZATION_WORKLOG.md` (narrative + exact commands run).
 
 ---
 
@@ -122,7 +129,7 @@ Full history: `git log --oneline`. Per-task detail for the audit phase (both rou
   - Web GLB export has no browser-download bridge (§2) — `STAB-0571`.
 - **Confirmed, by design (not a bug)**: SVG texture rasterization stub-only; embedded-glTF references not resolved; N3–N7 scene data not executed at runtime; two independent material-editing UIs exist (`Scene/PropertiesPanel.cpp` and `MeshCraftApplication_UiLeftPanel.cpp`) — a fix in one doesn't apply to the other (verified 2026-07-09 via `plan_deep_audit.md` AUDIT-0013: read both side by side, no undocumented drift found beyond the already-known design). `<actions>` also deliberately not merged from `<include>`d files (confirmed via `mergeInclude()`'s own comment — distinct from the genuinely-accidental `<embeds>` gap below).
 - **Needs verification (blocked on tooling, not known-bad)**: ~15+ `plan.md` rows need a live interactive display/mouse session this headless environment can't provide (curve-editor visibility, proportional-edit radius indicator, FPS counter, live drag-and-drop gesture, etc.) — genuinely untested either way, not confirmed broken.
-- **Fixed 2026-07-09** (`plan_deep_audit.md` follow-up audit — see §3): all ~127 ImGui slider/drag call sites across 8 files now have `ImGuiSliderFlags_AlwaysClamp` where meaningful (deliberately-unbounded position/rotation/keyframe-value fields correctly excluded); CSG preview cache-key bug fixed (cache omitted `csgOperation`/`extrude`/`meshSource`, causing stale previews after certain edits); MCB reader hardened against unbounded collection counts (32 sites, not just the original 11 `.reserve()` call sites); `mc3`/`mcb`/GLB save paths made atomic (temp-file + rename); several editor silent-failure paths fixed (autosave, recent-file-open, ModelRegistry `sqlite3_step`); a real, previously-unnoticed native-Linux build break from upstream CNA API drift was found and fixed (`Viewport::X`/`Y` field→property change). Full detail: `plan_deep_audit.md` (48 tasks completed, 5 `needs_human`, 2 `blocked`).
+- **Fixed 2026-07-09** (`plan_deep_audit.md` follow-up audit — see §3): all ~127 ImGui slider/drag call sites across 8 files now have `ImGuiSliderFlags_AlwaysClamp` where meaningful (deliberately-unbounded position/rotation/keyframe-value fields correctly excluded); CSG preview cache-key bug fixed (cache omitted `csgOperation`/`extrude`/`meshSource`, causing stale previews after certain edits); MCB reader hardened against unbounded collection counts (32 sites, not just the original 11 `.reserve()` call sites); `mc3`/`mcb`/GLB save paths made atomic (temp-file + rename); several editor silent-failure paths fixed (autosave, recent-file-open, ModelRegistry `sqlite3_step`); a real, previously-unnoticed native-Linux build break from upstream CNA API drift was found and fixed (`Viewport::X`/`Y` field→property change). Full detail: `plan_deep_audit.md` (56 tasks completed, 1 `needs_human`, 2 `blocked`, as of 2026-07-10 — see §3).
 
 ---
 
@@ -192,15 +199,19 @@ Ordered, each scoped to one focused session:
    Files: likely `src/MeshCraft/MeshCraftApplication.cpp` or `main.cpp`, if a mesh-craft-side workaround is possible without touching CNA/SDL3.
    Verify: `./build-web.sh`, serve via `python3 -m http.server`, load in `google-chrome --headless=new --enable-unsafe-swiftshader --use-gl=angle --use-angle=swiftshader --dump-dom <url>`, confirm `<canvas>` has nonzero `width`/`height`; then screenshot and inspect for non-black 3D content.
 
-4. **Pick one of the 6 flagged product-decision rows (`STAB-0092`/`0289`/`0327`/`0360`/`0460`/`0571`) and get an explicit scope decision from the project owner**, then implement only that one. (Note: `STAB-0427`, previously listed here, is actually already ✅ — resolved as "confirmed deliberately unimplemented, feature moratorium"; `STAB-0092`, "define include-tracking policy for `embeds` map," is the correct 6th row.)
+4. **Deferred until the owner is at a PC (not a phone/Android): the ~24 `plan.md` rows needing a live interactive editor session** (gizmos, SSAO/bloom/wireframe toggles, drag-drop, curve editor, etc. — see `plan.md`'s open rows). Plan: owner runs the editor, Claude walks through each check step by step and records the result directly in `plan.md`.
+   Files: `plan.md` (rows STAB-0501/0502/0505/0508/0509/0510/0514/0515/0516/0518/0519/0520/0532/0539/0560/0571/0572/0573 and others flagged 🟡).
+   Verify: N/A until the session happens.
+
+5. **Pick one of the remaining flagged product-decision rows (`STAB-0092`/`0289`/`0327`/`0360`/`0460`) and get an explicit scope decision from the project owner**, then implement only that one. (`STAB-0571` needs the Emscripten build fixed first — see item 3.)
    Files: varies per row — see `plan.md` for the specific row's "Key File(s)" column.
    Verify: whatever test the chosen row's own `plan.md` entry specifies.
 
-5. **Once `../sharp-runtime`'s Emscripten regression clears (see item 3), also implement `plan_deep_audit.md` AUDIT-0050** (real IDBFS mount/syncfs for web config persistence — currently `-lidbfs.js` is linked but never actually invoked, so prefs/recent-files/keybindings silently vanish on every web reload). Same blocker as item 3, different fix.
+6. **Once `../sharp-runtime`'s Emscripten regression clears (see item 3), also implement `plan_deep_audit.md` AUDIT-0050** (real IDBFS mount/syncfs for web config persistence — currently `-lidbfs.js` is linked but never actually invoked, so prefs/recent-files/keybindings silently vanish on every web reload). Same blocker as item 3, different fix.
    Files: `src/MeshCraft/MeshCraftPrivate.hpp`, web init path, `CMakeLists.txt:347`.
    Verify: see `plan_deep_audit.md` AUDIT-0050 for the exact steps.
 
-6. **Get the project owner's decision on `plan_deep_audit.md`'s 5 `needs_human` rows** (`AUDIT-0037` id-collision-across-includes policy, `AUDIT-0038` MCB version-migration policy, `AUDIT-0039`/`0040` CI matrix scope, plus whatever the original 6 `plan.md` product-decision rows in item 4 resolve to) — no new investigation needed, just a scope call.
+7. **Get the project owner's decision on `plan_deep_audit.md`'s last remaining `needs_human` row, `AUDIT-0038`** (MCB version-migration policy — currently hard-fails on any version mismatch, by design; decide whether to ever invest in a migration path). `AUDIT-0037`/`0039`/`0040`/`0055` were already resolved 2026-07-10 (see §3).
    Files: none — communication/handoff task.
    Verify: N/A (external decision).
 
