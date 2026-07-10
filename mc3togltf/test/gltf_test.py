@@ -72,6 +72,16 @@ def test_animation(binary, anim_xml):
     check("Pulse"  in anim_names,     "anim: Pulse exported")
     check("Flash"  not in anim_names, "anim: Flash (visible-only) not exported")
 
+    # STAB-0681: autoplay/loop have no glTF core-spec equivalent -- preserved
+    # via extras. All 4 actions in this fixture use loop="true", none set
+    # autoplay explicitly (so it defaults false).
+    for anim in anims:
+        extras = anim.get("extras", {})
+        check(extras.get("loop") is True,
+              f"anim: {anim['name']} extras.loop==true (STAB-0681, was silently dropped)")
+        check(extras.get("autoplay") is False,
+              f"anim: {anim['name']} extras.autoplay==false (default, present not dropped)")
+
     for anim in anims:
         name = anim["name"]
         check(len(anim.get("samplers", [])) > 0, f"anim: {name} has samplers")

@@ -1149,8 +1149,19 @@ static void exportAnimations(
             }
         }
 
-        if (!anim.channels.empty())
+        if (!anim.channels.empty()) {
+            // STAB-0681: glTF core animation spec has no "autoplay on load"
+            // or "loop" concept (a runtime/engine decision, not exportable
+            // data) -- preserved via extras instead, matching this file's
+            // own established convention (node tags/collision, light
+            // castShadows, environment, asset mc3_version) for otherwise-
+            // inexpressible mc3 data, which this was previously missing.
+            tinygltf::Value::Object extras;
+            extras["autoplay"] = tinygltf::Value(action.autoplay);
+            extras["loop"]     = tinygltf::Value(action.loop);
+            anim.extras = tinygltf::Value(extras);
             model.animations.push_back(std::move(anim));
+        }
     }
 }
 
