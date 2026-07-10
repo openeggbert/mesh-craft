@@ -515,6 +515,13 @@ if(BUILD_TESTING)
             set_tests_properties(mc3togltf_csg_root_material PROPERTIES TIMEOUT 30 LABELS "export")
         endif()
         add_test(
+            NAME mc3togltf_dangling_material
+            COMMAND "${PYTHON3_EXEC}"
+                    "${CMAKE_CURRENT_SOURCE_DIR}/test/dangling_material_test.py"
+                    "$<TARGET_FILE:mc3togltf>"
+        )
+        set_tests_properties(mc3togltf_dangling_material PROPERTIES TIMEOUT 30 LABELS "export")
+        add_test(
             NAME mc3togltf_dangling_animation_target
             COMMAND "${PYTHON3_EXEC}"
                     "${CMAKE_CURRENT_SOURCE_DIR}/test/dangling_animation_target_test.py"

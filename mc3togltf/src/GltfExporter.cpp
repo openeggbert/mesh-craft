@@ -596,7 +596,15 @@ static int buildNode(ExportCtx& ctx, const Mc3Object& obj)
     const std::string& matName = !obj.materialOverride.empty() ? obj.materialOverride : obj.material;
     if (!matName.empty()) {
         auto it = ctx.matNameToIdx.find(matName);
-        if (it != ctx.matNameToIdx.end()) matIdx = it->second;
+        if (it != ctx.matNameToIdx.end()) {
+            matIdx = it->second;
+        } else {
+            // STAB-0679: was silently dropped, inconsistent with the
+            // analogous dangling-SVG-texture case (warnIfUnresolvedSvg
+            // above), which does warn.
+            std::cerr << "Warning: object '" << obj.name << "' references "
+                         "unknown material '" << matName << "' — exported without a material.\n";
+        }
     }
 
     // --- Geometry ---
