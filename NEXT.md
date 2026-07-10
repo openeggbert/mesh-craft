@@ -1,6 +1,6 @@
 # NEXT.md
 
-_Last updated: 2026-07-09, prior commit `2eba0af` (branch `develop`, in sync with `origin/develop` as of that commit). Native Linux build/tests re-verified from a genuinely empty scratch build directory the same day, after a full `plan_deep_audit.md` follow-up audit phase plus a second round (see §3) — see `STABILIZATION_WORKLOG.md` for the full command trace._
+_Last updated: 2026-07-10, prior commit `0e1f587` (branch `develop`). Native Linux build/tests re-verified from a genuinely empty scratch build directory the same day, after the `mc3` format spec-vs-implementation audit (`STAB-0651`–`0657`, see §3) — see `STABILIZATION_WORKLOG.md` for the full command trace._
 
 ---
 
@@ -27,7 +27,7 @@ _Last updated: 2026-07-09, prior commit `2eba0af` (branch `develop`, in sync wit
 Clean from an **absolute-zero** build directory (not just incremental): `rm -rf cmake-build-debug` → reconfigure → `ninja` → **exit 0**. This was specifically verified this way after discovering that an incrementally-updated build directory had been silently masking a real clean-build break for at least two days (see §4).
 
 ### Tests
-**66/66 CTest tests pass.** Labels: `ai` 1, `commands` 1, `export` 44, `format` 3, `registry` 1, `render` 16. XSD validation: **69/69** `test/*.mc3.xml` fixtures validate against `mc3/mc3.xsd`. Standalone (CNA-free) subproject builds also verified independently: `mc3` 1/1, `mcb` 1/1, `mc3togltf` 41/41, `mc3tomcb` 3/3.
+**66/66 CTest tests pass** (re-verified 2026-07-10 via a genuinely-fresh clean build, 548/548 objects). Labels: `ai` 1, `commands` 1, `export` 44, `format` 3, `registry` 1, `render` 16. XSD validation: **70/70** `test/*.mc3.xml` fixtures validate against `mc3/mc3.xsd`. Standalone (CNA-free) subproject builds also verified independently: `mc3` 1/1, `mcb` 1/1, `mc3togltf` 41/41, `mc3tomcb` 3/3.
 
 ### Tools/binaries currently available (after a build)
 - `MeshCraft` — the GUI editor (Linux native; also runs headless via `--screenshot scene.mc3.xml out.ppm` for CI-style pixel checks).
@@ -57,6 +57,15 @@ Clean from an **absolute-zero** build directory (not just incremental): `rm -rf 
 ---
 
 ## 3. Recent changes
+
+**2026-07-10 — `mc3` format spec-vs-implementation audit (`plan.md` §S21, `STAB-0651`–`0657`, all 7 completed).** Systematic comparison of `mc3/mc3.xsd` and `MC3_FORMAT.md` against the actual parser/writer/data model. Overall finding: coverage is strong (no data-loss bugs of the class previously fixed in this project); 7 narrower gaps, all fixed:
+- **`STAB-0651`/`0652`**: `mc3.xsd` was missing the `sides` attribute (`crossSectionType`) and `cx`/`cy`/`cz` attributes (`pointType`) that the writer already emitted for polygon/star cross-sections and bezier paths — both fully-implemented, documented features that silently failed `xsd_validation`. New fixture `test/extrude_sides_bezier.mc3.xml`.
+- **`STAB-0653`**: the initial plan was to delete the root `<mc3 default_camera="...">` attribute as dead code — **that plan was wrong**, caught before committing. A repo-wide grep found 13 real fixtures using it (`blupi_car.mc3.xml`, `speedy_blupi_world.mc3.xml`, etc.), and in the two multi-camera ones it was only working by *coincidence* (the named camera happened to be first in document order, matching the parser's empty-default fallback) — a real latent bug. Implemented it properly instead: root attribute sets the default first, `<cameras default="...">` overrides if present, first-camera fallback only if still empty.
+- **`STAB-0654`**: `mip_maps` texture attribute (schema-declared, documented) had no field anywhere in the data model — real, permanent data loss on every load. Added and round-trip tested.
+- **`STAB-0655`**: `version` attribute default was `"0.1"` in the parser/model but `"0.3"` in the XSD — a genuine 3-way inconsistency (also self-contradicting within `MC3_FORMAT.md` itself). Fixed to `"0.3"`; caught by the existing golden-byte test, which needed its own fixture updated (correctly — verified it was the only byte diff).
+- **`STAB-0656`**: `<uv_mapping>` writer wasn't gated by object type, so a Group/Instance/Area object with `uvMapping` set (not reachable via the editor UI today, but not structurally prevented) would produce schema-invalid XML. Gated it.
+- **`STAB-0657`**: deleted `mc3/MC3_FORMAT.md`, an orphaned, stale (3-week-old) duplicate of the root `MC3_FORMAT.md` that actively misled (documented `mip_maps` as working, contradicted the current doc). Added the missing `star` cross-section type to the canonical doc.
+- Full 66/66 ctest after every fix; a genuinely-fresh clean build (548/548 objects) re-verified after the whole batch.
 
 **2026-07-09 — `plan_deep_audit.md` follow-up audit phase** (new plan file, superseding `plan.md` for new work since that 650-task plan's own backlog was exhausted): a fresh repository-wide audit (5 parallel review passes + direct investigation) produced 51 real, file:line-verified tasks; 48 completed, 5 `needs_human` (product/policy decisions, not attempted), 2 `blocked` (external — see below). Highlights:
 - **Real bugs fixed**: CSG preview cache key omitted `csgOperation`/`extrude`/`meshSource`, causing a stale/wrong preview after certain edits (the highest-risk finding — a *visibly plausible but wrong* rendering bug). `mc3`/`mcb`/GLB save paths were not atomic (crash mid-write could corrupt the destination file) — now write-to-temp-then-rename. Editor silent-failure paths (autosave, recent-file-open, `ModelRegistry::save()`'s `sqlite3_step` result) now surface real errors instead of failing silently. Pivot-reset button was double-pushing an undo snapshot.
