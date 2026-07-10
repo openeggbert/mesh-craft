@@ -512,7 +512,7 @@ All five are supported by the MeshCraft editor and exported by `mc3togltf`.
 </extrude>
 ```
 
-Cross-section types: `rect` (w/h), `circle` (radius, segments), `polygon` (radius, sides), `custom` (`<point x y/>` children).
+Cross-section types: `rect` (w/h), `circle` (radius, segments), `polygon` (radius, sides), `star` (radius, inner_radius, sides), `custom` (`<point x y/>` children).
 
 Path types: `line` (length, axis), `arc` (radius, angle), `helix` (radius, height, turns), `polyline` (`<point x y z/>`), `bezier` (Catmull-Rom through `<point x y z cx cy cz/>`).
 
