@@ -1050,9 +1050,12 @@ void PropertiesPanel::draw(float panelX, float panelY, float panelW, float panel
                 if (ImGui::IsItemActivated()) ctx.pushUndo();
                 ctx.markModified();
             }
-            if (ImGui::Checkbox("Smooth", &ex.smooth))  { ctx.markModified(); }
+            // STAB-0719: these two were the only Extrude fields in this
+            // block missing pushUndo() -- every sibling field (e.g. the
+            // Path Segments slider directly above) already has it.
+            if (ImGui::Checkbox("Smooth", &ex.smooth))  { ctx.pushUndo(); ctx.markModified(); }
             ImGui::SameLine();
-            if (ImGui::Checkbox("Caps",   &ex.caps))    { ctx.markModified(); }
+            if (ImGui::Checkbox("Caps",   &ex.caps))    { ctx.pushUndo(); ctx.markModified(); }
 
             // --- Cross-section ---
             if (ImGui::TreeNodeEx("Cross-section", ImGuiTreeNodeFlags_DefaultOpen)) {
@@ -1529,6 +1532,21 @@ void PropertiesPanel::draw(float panelX, float panelY, float panelW, float panel
             }
 
             // Edit the assigned material's fields inline
+            // STAB-0719: this ENTIRE block (every field below, including
+            // the 5 texture-path fields in texField()) was found during a
+            // systematic undo-coverage audit to be completely missing
+            // pushUndo() -- unlike the standalone "Mat" tab in the left
+            // panel (MeshCraftApplication_UiLeftPanel.cpp), which already
+            // has it for the equivalent fields, this separate inline
+            // editor (shown when an object with an assigned material is
+            // selected) had zero undo coverage for any of its ~14 fields.
+            // Fixed using this file's own established convention:
+            // Checkbox/Combo/InputText get an unconditional pushUndo() (one
+            // fire per click/commit); ColorEdit/Slider/DragFloat get an
+            // IsItemActivated()-gated one (fires continuously while
+            // dragging, so gate to one undo step per drag session) --
+            // matches e.g. this same file's Extrude segments slider and
+            // the left panel's light-color ColorEdit3.
             auto matIt = ctx.document.materials.find(sel0->material);
             if (matIt != ctx.document.materials.end()) {
                 auto& mat = matIt->second;
@@ -1538,6 +1556,7 @@ void PropertiesPanel::draw(float panelX, float panelY, float panelW, float panel
                 ImGui::SetNextItemWidth(-1);
                 if (ImGui::ColorEdit4("##mbc", mat.baseColor.data(),
                         ImGuiColorEditFlags_NoLabel)) {
+                    if (ImGui::IsItemActivated()) ctx.pushUndo();
                     ctx.markModified();
                 }
 
@@ -1549,6 +1568,7 @@ void PropertiesPanel::draw(float panelX, float panelY, float panelW, float panel
                 // pbrMetallicRoughness.roughnessFactor with no other guard.
                 if (ImGui::SliderFloat("##mrough", &mat.roughness, 0.0f, 1.0f, "%.3f",
                                        ImGuiSliderFlags_AlwaysClamp)) {
+                    if (ImGui::IsItemActivated()) ctx.pushUndo();
                     ctx.markModified();
                 }
 
@@ -1559,6 +1579,7 @@ void PropertiesPanel::draw(float panelX, float panelY, float panelW, float panel
                 // roughness above (spec-invalid metallicFactor on export).
                 if (ImGui::SliderFloat("##mmetal", &mat.metallic, 0.0f, 1.0f, "%.3f",
                                        ImGuiSliderFlags_AlwaysClamp)) {
+                    if (ImGui::IsItemActivated()) ctx.pushUndo();
                     ctx.markModified();
                 }
 
@@ -1567,6 +1588,7 @@ void PropertiesPanel::draw(float panelX, float panelY, float panelW, float panel
                 ImGui::SetNextItemWidth(-1);
                 if (ImGui::ColorEdit3("##memit", mat.emissiveColor.data(),
                         ImGuiColorEditFlags_NoLabel)) {
+                    if (ImGui::IsItemActivated()) ctx.pushUndo();
                     ctx.markModified();
                 }
 
@@ -1578,6 +1600,7 @@ void PropertiesPanel::draw(float panelX, float panelY, float panelW, float panel
                 for (int i = 0; i < 3; ++i)
                     if (mat.alphaMode == alphaModes[i]) { alphaIdx = i; break; }
                 if (ImGui::Combo("##malpha", &alphaIdx, alphaModes, 3)) {
+                    ctx.pushUndo();
                     mat.alphaMode = alphaModes[alphaIdx];
                     ctx.markModified();
                 }
@@ -1588,12 +1611,14 @@ void PropertiesPanel::draw(float panelX, float panelY, float panelW, float panel
                     // roughness/metallic above (spec-invalid alphaCutoff).
                     if (ImGui::SliderFloat("##mcut", &mat.alphaCutoff, 0.0f, 1.0f, "%.3f",
                                            ImGuiSliderFlags_AlwaysClamp)) {
+                        if (ImGui::IsItemActivated()) ctx.pushUndo();
                         ctx.markModified();
                     }
                 }
 
                 // Double sided
                 if (ImGui::Checkbox("Double Sided", &mat.doubleSided)) {
+                    ctx.pushUndo();
                     ctx.markModified();
                 }
 
@@ -1605,11 +1630,13 @@ void PropertiesPanel::draw(float panelX, float panelY, float panelW, float panel
                     // roughness/metallic/alphaCutoff above -- occlusionStrength
                     // in particular is glTF-spec-bounded to [0,1].
                     if (ImGui::DragFloat("##mnrmscl", &mat.normalScale, 0.01f, 0.0f, 10.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp)) {
+                        if (ImGui::IsItemActivated()) ctx.pushUndo();
                         ctx.markModified();
                     }
                     ImGui::TextDisabled("Occlusion Strength");
                     ImGui::SetNextItemWidth(-1);
                     if (ImGui::DragFloat("##moccstr", &mat.occlusionStrength, 0.01f, 0.0f, 1.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp)) {
+                        if (ImGui::IsItemActivated()) ctx.pushUndo();
                         ctx.markModified();
                     }
                     ImGui::TreePop();
@@ -1631,6 +1658,7 @@ void PropertiesPanel::draw(float panelX, float panelY, float panelW, float panel
                         std::string id = std::string("##t") + label;
                         if (ImGui::InputText(id.c_str(), buf, sizeof(buf),
                                 ImGuiInputTextFlags_EnterReturnsTrue)) {
+                            ctx.pushUndo();
                             field = buf; ctx.markModified();
                         }
                         if (isHov && hasPendingTex) ImGui::PopStyleColor();
@@ -2038,10 +2066,14 @@ void PropertiesPanel::draw(float panelX, float panelY, float panelW, float panel
                 auto& env = *ctx.document.environment;
 
                 // Background color
+                // STAB-0719: found missing pushUndo() during a systematic
+                // undo-coverage audit -- the adjacent BG Texture/Fog fields
+                // in this same block already have it.
                 ImGui::TextDisabled("Background");
                 ImGui::SetNextItemWidth(-1);
                 if (ImGui::ColorEdit3("##envbg", env.backgroundColor.data(),
                         ImGuiColorEditFlags_Float | ImGuiColorEditFlags_HDR)) {
+                    if (ImGui::IsItemActivated()) ctx.pushUndo();
                     ctx.markModified();
                 }
 
@@ -2078,6 +2110,7 @@ void PropertiesPanel::draw(float panelX, float panelY, float panelW, float panel
                         ImGui::TextDisabled("Color");
                         ImGui::SetNextItemWidth(-1);
                         if (ImGui::ColorEdit3("##fogcol", fog.color.data(), ImGuiColorEditFlags_Float)) {
+                            if (ImGui::IsItemActivated()) ctx.pushUndo();
                             ctx.markModified();
                         }
 
@@ -2098,17 +2131,23 @@ void PropertiesPanel::draw(float panelX, float panelY, float panelW, float panel
                             // (mutually dynamic) bounds even against a
                             // Ctrl+Click typed value, consistent with the
                             // divide-by-zero guard already in SceneRenderer.
-                            if (ImGui::DragFloat("##fogstart", &fog.start, 0.5f, 0.0f, fog.end, "%.3f", ImGuiSliderFlags_AlwaysClamp))
+                            if (ImGui::DragFloat("##fogstart", &fog.start, 0.5f, 0.0f, fog.end, "%.3f", ImGuiSliderFlags_AlwaysClamp)) {
+                                if (ImGui::IsItemActivated()) ctx.pushUndo();
                                 ctx.markModified();
+                            }
                             ImGui::TextDisabled("End");
                             ImGui::SetNextItemWidth(-1);
-                            if (ImGui::DragFloat("##fogend", &fog.end, 0.5f, fog.start, 10000.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp))
+                            if (ImGui::DragFloat("##fogend", &fog.end, 0.5f, fog.start, 10000.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp)) {
+                                if (ImGui::IsItemActivated()) ctx.pushUndo();
                                 ctx.markModified();
+                            }
                         } else {
                             ImGui::TextDisabled("Density");
                             ImGui::SetNextItemWidth(-1);
-                            if (ImGui::DragFloat("##fogdens", &fog.density, 0.001f, 0.0f, 1.0f, "%.4f", ImGuiSliderFlags_AlwaysClamp))
+                            if (ImGui::DragFloat("##fogdens", &fog.density, 0.001f, 0.0f, 1.0f, "%.4f", ImGuiSliderFlags_AlwaysClamp)) {
+                                if (ImGui::IsItemActivated()) ctx.pushUndo();
                                 ctx.markModified();
+                            }
                         }
 
                         ImGui::Unindent();
