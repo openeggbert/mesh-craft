@@ -566,6 +566,16 @@ if(BUILD_TESTING)
             )
             set_tests_properties(mc3togltf_multi_file_partial_failure PROPERTIES TIMEOUT 30 LABELS "export")
         endif()
+        if(EXISTS "${_primitives_xml}")
+            add_test(
+                NAME mc3togltf_glb_padding
+                COMMAND "${PYTHON3_EXEC}"
+                        "${CMAKE_CURRENT_SOURCE_DIR}/test/glb_padding_test.py"
+                        "$<TARGET_FILE:mc3togltf>"
+                        "${_primitives_xml}"
+            )
+            set_tests_properties(mc3togltf_glb_padding PROPERTIES TIMEOUT 30 LABELS "export")
+        endif()
         if(EXISTS "${_house_xml}")
             add_test(
                 NAME mc3togltf_determinism
