@@ -725,12 +725,17 @@ static void addLights(tinygltf::Model& model,
 {
     if (lights.empty()) return;
 
-    model.extensionsUsed.push_back("KHR_lights_punctual");
-
     tinygltf::Value::Array lightsArray;
 
     for (const auto& light : lights) {
-        if (light.type == LightType::Ambient) continue; // no ambient in glTF 2.0
+        if (light.type == LightType::Ambient) {
+            // STAB-0696: glTF 2.0 / KHR_lights_punctual has no ambient light
+            // type -- warn instead of silently dropping it, matching the
+            // CSG approximate-mode "can't fully represent this" pattern.
+            std::cerr << "[mc3togltf] Warning: ambient light '" << light.name
+                      << "' has no glTF equivalent, omitted from export.\n";
+            continue;
+        }
 
         tinygltf::Value::Object lo;
         lo["name"]  = tinygltf::Value(light.name);
@@ -754,7 +759,10 @@ static void addLights(tinygltf::Model& model,
             lo["range"] = tinygltf::Value(static_cast<double>(light.range));
 
         if (light.type == LightType::Spot) {
-            double halfAngle  = light.angle * std::numbers::pi / 360.0;
+            // STAB-0692: light.angle is already a half-angle in degrees
+            // (Mc3Light.hpp), so the radian conversion is /180, not /360 --
+            // the old /360 halved every exported spotlight's cone.
+            double halfAngle  = light.angle * std::numbers::pi / 180.0;
             double innerAngle = halfAngle * (1.0 - std::clamp(light.falloff, 0.0f, 1.0f));
             tinygltf::Value::Object spot;
             spot["outerConeAngle"] = tinygltf::Value(halfAngle);
@@ -796,6 +804,9 @@ static void addLights(tinygltf::Model& model,
         outLightNodeIndices.push_back(nodeIdx);
     }
 
+    if (lightsArray.empty()) return;  // all lights were ambient-only (STAB-0696)
+
+    model.extensionsUsed.push_back("KHR_lights_punctual");
     tinygltf::Value::Object extObj;
     extObj["lights"] = tinygltf::Value(lightsArray);
     model.extensions["KHR_lights_punctual"] = tinygltf::Value(extObj);

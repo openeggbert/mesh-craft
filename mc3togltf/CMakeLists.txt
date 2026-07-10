@@ -208,6 +208,17 @@ if(BUILD_TESTING)
         set(_glb_texture_embed_xml    "${CMAKE_CURRENT_SOURCE_DIR}/../test/glb_texture_embed.mc3.xml")
         set(_scene_with_include_xml   "${CMAKE_CURRENT_SOURCE_DIR}/../test/scene_with_include.mc3.xml")
         set(_embed_mesh_source_xml    "${CMAKE_CURRENT_SOURCE_DIR}/../test/embed_mesh_source.mc3.xml")
+        set(_light_export_xml         "${CMAKE_CURRENT_SOURCE_DIR}/../test/light_export_all_types.mc3.xml")
+        if(EXISTS "${_light_export_xml}")
+            add_test(
+                NAME mc3togltf_light_export
+                COMMAND "${PYTHON3_EXEC}"
+                        "${CMAKE_CURRENT_SOURCE_DIR}/test/light_export_test.py"
+                        "$<TARGET_FILE:mc3togltf>"
+                        "${_light_export_xml}"
+            )
+            set_tests_properties(mc3togltf_light_export PROPERTIES TIMEOUT 30 LABELS "export")
+        endif()
         if(EXISTS "${_anim_xml}" AND EXISTS "${_house_xml}")
             add_test(
                 NAME mc3togltf_gltf

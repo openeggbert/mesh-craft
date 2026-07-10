@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- STAB-0692/0696/0697: regression fixture for mc3togltf light export.
+     One of each Mc3Light type, including Ambient (which has no glTF
+     equivalent and should warn+be omitted, not silently dropped). -->
+<mc3 version="0.3" model="LightExportAllTypes">
+
+  <lights>
+    <directional name="Sun" color="1 1 1" brightness="2.0" direction="0 -1 0"/>
+    <point name="Bulb" color="1 0.9 0.8" brightness="5.0" position="1 2 3" range="10"/>
+    <spot name="Torch" color="0 1 1" brightness="3.0" position="0 0 0"
+          direction="0 0 1" angle="25" falloff="0.5" range="10"/>
+    <ambient name="Fill" color="0.2 0.2 0.2" brightness="0.5"/>
+  </lights>
+
+  <objects>
+    <box name="Box" size="1 1 1"/>
+  </objects>
+
+</mc3>
