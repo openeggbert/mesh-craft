@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- STAB-0686 regression fixture: two sibling objects sharing the same
+     name, with an action targeting that name. mc3 only enforces id
+     uniqueness, not name uniqueness. Mc3Channel::targetObject targets
+     by NAME, so mc3togltf's nodeNameMap silently collides (last write
+     wins) with no warning before this fix. -->
+<mc3 version="0.3" model="DuplicateObjectNameAnimFixture">
+
+  <objects>
+    <box name="Dup" id="box_a" size="1 1 1" position="-1 0 0"/>
+    <box name="Dup" id="box_b" size="1 1 1" position="1 0 0"/>
+  </objects>
+
+  <actions>
+    <action name="Move" duration="1.0">
+      <channel target="Dup" property="position.y">
+        <keyframe time="0.0" value="0.0" interp="linear"/>
+        <keyframe time="1.0" value="2.0" interp="linear"/>
+      </channel>
+    </action>
+  </actions>
+
+</mc3>

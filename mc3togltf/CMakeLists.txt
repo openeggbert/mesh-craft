@@ -485,6 +485,17 @@ if(BUILD_TESTING)
             )
             set_tests_properties(mc3togltf_rotation_convention PROPERTIES TIMEOUT 30 LABELS "export")
         endif()
+        set(_duplicate_name_xml "${CMAKE_CURRENT_SOURCE_DIR}/../test/duplicate_object_name_anim.mc3.xml")
+        if(EXISTS "${_duplicate_name_xml}")
+            add_test(
+                NAME mc3togltf_duplicate_object_name
+                COMMAND "${PYTHON3_EXEC}"
+                        "${CMAKE_CURRENT_SOURCE_DIR}/test/duplicate_object_name_test.py"
+                        "$<TARGET_FILE:mc3togltf>"
+                        "${_duplicate_name_xml}"
+            )
+            set_tests_properties(mc3togltf_duplicate_object_name PROPERTIES TIMEOUT 30 LABELS "export")
+        endif()
         add_test(
             NAME mc3togltf_icosphere_uv_seam
             COMMAND "${PYTHON3_EXEC}"

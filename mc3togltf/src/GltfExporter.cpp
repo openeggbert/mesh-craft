@@ -1235,10 +1235,20 @@ void GltfExporter::exportDocument(const Mc3Document& doc,
         std::unordered_map<std::string, Mc3Transform> baseTransforms;
         collectBaseTransforms(doc.objects, baseTransforms);
 
+        // STAB-0686: mc3 only enforces id uniqueness, not name uniqueness --
+        // Mc3Channel::targetObject targets by NAME, so two same-named nodes
+        // silently collide here (last-write-wins) and only the later one
+        // receives its animation; the earlier one is silently unanimated.
         std::unordered_map<std::string, int> nodeNameMap;
         for (int i = 0; i < static_cast<int>(model.nodes.size()); ++i) {
-            if (!model.nodes[i].name.empty())
-                nodeNameMap[model.nodes[i].name] = i;
+            const std::string& name = model.nodes[i].name;
+            if (name.empty()) continue;
+            if (nodeNameMap.count(name)) {
+                std::cerr << "[mc3togltf] Warning: duplicate node name '" << name
+                          << "' -- animation channels targeting this name will "
+                             "only affect the last node with that name.\n";
+            }
+            nodeNameMap[name] = i;
         }
 
         exportAnimations(model, doc.actions, nodeNameMap, baseTransforms, ctx.unitScale,
