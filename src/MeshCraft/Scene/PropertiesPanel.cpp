@@ -1922,6 +1922,73 @@ void PropertiesPanel::draw(float panelX, float panelY, float panelW, float panel
         ImGui::Separator();
         ImGui::Spacing();
 
+        // STAB-0709: N7 meta (doc.meta, arbitrary key/value pairs, mirrors
+        // <meta><metaentry key="..." value="..."/> in the XSD) had zero
+        // editor UI -- lowest priority of all the N-extensions, a simple
+        // key/value list editor. Note doc.metadata (the separate "legacy"
+        // pass-through store, XSD's <metadata><property name=... value=.../>)
+        // is intentionally out of scope here -- not what this task named.
+        {
+            ImGui::TextColored(ImVec4(0.75f, 0.85f, 1.0f, 1.0f), "Meta");
+            std::vector<std::string> keys;
+            keys.reserve(ctx.document.meta.size());
+            for (const auto& [k, v] : ctx.document.meta) { (void)v; keys.push_back(k); }
+
+            std::string renameFrom, renameTo;
+            std::string removeKey;
+            for (const auto& key : keys) {
+                auto it = ctx.document.meta.find(key);
+                if (it == ctx.document.meta.end()) continue; // already renamed away this frame
+                ImGui::PushID(key.c_str());
+
+                char keyBuf[128];
+                std::strncpy(keyBuf, key.c_str(), sizeof(keyBuf)-1); keyBuf[127]='\0';
+                ImGui::SetNextItemWidth(100);
+                if (ImGui::InputText("##metakey", keyBuf, sizeof(keyBuf),
+                        ImGuiInputTextFlags_EnterReturnsTrue) && keyBuf[0] != '\0' && key != keyBuf) {
+                    renameFrom = key; renameTo = keyBuf;
+                }
+                ImGui::SameLine();
+
+                char valBuf[256];
+                std::strncpy(valBuf, it->second.c_str(), sizeof(valBuf)-1); valBuf[255]='\0';
+                ImGui::SetNextItemWidth(150);
+                if (ImGui::InputText("##metaval", valBuf, sizeof(valBuf),
+                        ImGuiInputTextFlags_EnterReturnsTrue)) {
+                    ctx.pushUndo(); it->second = valBuf; ctx.markModified();
+                }
+                ImGui::SameLine();
+                if (ImGui::SmallButton("x##metarm")) removeKey = key;
+
+                ImGui::PopID();
+            }
+            if (!renameFrom.empty()) {
+                ctx.pushUndo();
+                auto node = ctx.document.meta.extract(renameFrom);
+                node.key() = renameTo;
+                ctx.document.meta.insert(std::move(node));
+                ctx.markModified();
+            }
+            if (!removeKey.empty()) {
+                ctx.pushUndo();
+                ctx.document.meta.erase(removeKey);
+                ctx.markModified();
+            }
+            if (ImGui::SmallButton("+ Add##metaadd")) {
+                ctx.pushUndo();
+                int n = 1;
+                std::string key;
+                do { key = "key" + std::to_string(n++); }
+                while (ctx.document.meta.count(key));
+                ctx.document.meta[key] = "";
+                ctx.markModified();
+            }
+        }
+
+        ImGui::Spacing();
+        ImGui::Separator();
+        ImGui::Spacing();
+
         // Environment
         {
             bool envEnabled = ctx.document.environment.has_value();
