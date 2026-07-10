@@ -9,6 +9,9 @@
 #include <Microsoft/Xna/Framework/Color.hpp>
 #include <Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp>
 #include <Microsoft/Xna/Framework/Graphics/Viewport.hpp>
+#include <Microsoft/Xna/Framework/Audio/SoundEffect.hpp>
+#include <Microsoft/Xna/Framework/Audio/SoundEffectInstance.hpp>
+#include <Microsoft/Xna/Framework/Audio/SoundState.hpp>
 
 #include <algorithm>
 #include <cmath>
@@ -26,6 +29,41 @@ using namespace Microsoft::Xna::Framework;
 using namespace Microsoft::Xna::Framework::Input;
 using namespace Microsoft::Xna::Framework::Graphics;
 
+
+// STAB-0706: preview playback for Mc3Sound/Mc3Music entries, via CNA's
+// SoundEffect/SoundEffectInstance (Microsoft::Xna::Framework::Audio). One
+// shared preview at a time -- starting a new one stops whatever was
+// playing. Loop must be set before the first Play() call (setIsLoopedProperty
+// throws InvalidOperationException once playback has started), so it's
+// applied here, before Play(), not toggleable afterward.
+void MeshCraftApplication::playAudioPreview(const std::string& key, const std::string& srcPath, bool loop)
+{
+    using namespace Microsoft::Xna::Framework::Audio;
+
+    stopAudioPreview();
+    audioPreviewError_.clear();
+
+    try {
+        SoundEffect se(srcPath);
+        audioPreviewInstance_ = std::make_unique<SoundEffectInstance>(se.CreateInstance());
+        audioPreviewInstance_->setIsLoopedProperty(loop);
+        audioPreviewInstance_->Play();
+        audioPreviewKey_ = key;
+    } catch (const std::exception& e) {
+        audioPreviewInstance_.reset();
+        audioPreviewKey_.clear();
+        audioPreviewError_ = std::string("Playback failed: ") + e.what();
+    }
+}
+
+void MeshCraftApplication::stopAudioPreview()
+{
+    if (audioPreviewInstance_) {
+        audioPreviewInstance_->Stop();
+        audioPreviewInstance_.reset();
+    }
+    audioPreviewKey_.clear();
+}
 
 void MeshCraftApplication::drawLeftPanel(float panelY, float panelH)
 {
@@ -1240,6 +1278,179 @@ void MeshCraftApplication::drawLeftPanel(float panelY, float panelH)
                             ImVec2(-1, 240), ImGuiInputTextFlags_EnterReturnsTrue)) {
                         pushUndo(); script.source = buf; modified_ = true; updateWindowTitle();
                     }
+                }
+            }
+
+            ImGui::EndTabItem();
+        }
+
+        // -------------------------------------------------------------------
+        // Tab: Audio (STAB-0706, N4) — Sounds + Music, each list+editor
+        // following the same pattern as Scripts above, plus real preview
+        // playback via CNA's SoundEffect/SoundEffectInstance.
+        // -------------------------------------------------------------------
+        if (ImGui::BeginTabItem("Audio")) {
+            if (!audioPreviewError_.empty()) {
+                ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.4f, 0.4f, 1.0f));
+                ImGui::TextWrapped("%s", audioPreviewError_.c_str());
+                ImGui::PopStyleColor();
+                ImGui::Separator();
+            }
+
+            // Resolves a Mc3Sound/Mc3Music's `src` relative to the loaded
+            // document's own directory, matching the same base-path
+            // convention mc3togltf uses for texture URIs.
+            auto resolveSrc = [&](const std::string& src) -> std::string {
+                if (src.empty()) return src;
+                std::filesystem::path p(src);
+                return p.is_absolute() ? p.string() : (document_.sourcePath / p).string();
+            };
+
+            // --- Sounds ---
+            ImGui::TextUnformatted("Sounds");
+            ImGui::Separator();
+
+            if (!selectedSoundKey_.empty() && !document_.sounds.count(selectedSoundKey_))
+                selectedSoundKey_.clear();
+
+            if (ImGui::SmallButton("+##soundadd")) {
+                pushUndo();
+                int n = 1;
+                std::string key;
+                do { key = "sound_" + std::to_string(n++); }
+                while (document_.sounds.count(key));
+                Mc3::Mc3Sound sound;
+                sound.id = key;
+                document_.sounds[key] = sound;
+                selectedSoundKey_ = key;
+                modified_ = true; updateWindowTitle();
+            }
+            if (ImGui::IsItemHovered()) ImGui::SetTooltip("Add sound");
+            ImGui::SameLine();
+            if (ImGui::SmallButton("-##soundremove") && !selectedSoundKey_.empty()) {
+                pushUndo();
+                if (audioPreviewKey_ == selectedSoundKey_) stopAudioPreview();
+                document_.sounds.erase(selectedSoundKey_);
+                selectedSoundKey_.clear();
+                modified_ = true; updateWindowTitle();
+            }
+
+            for (const auto& [key, sound] : document_.sounds) {
+                bool sel = (key == selectedSoundKey_);
+                bool playing = (key == audioPreviewKey_) && audioPreviewInstance_ &&
+                               audioPreviewInstance_->getStateProperty() == Microsoft::Xna::Framework::Audio::SoundState::Playing;
+                ImGui::PushID(("sound_" + key).c_str());
+                if (playing) {
+                    if (ImGui::SmallButton("■")) stopAudioPreview();
+                } else {
+                    if (ImGui::SmallButton("▶") && !sound.src.empty())
+                        playAudioPreview(key, resolveSrc(sound.src), sound.loop);
+                }
+                ImGui::SameLine();
+                if (ImGui::Selectable(key.c_str(), sel))
+                    selectedSoundKey_ = key;
+                ImGui::PopID();
+            }
+
+            if (!selectedSoundKey_.empty() && document_.sounds.count(selectedSoundKey_)) {
+                auto& sound = document_.sounds[selectedSoundKey_];
+                ImGui::Spacing();
+
+                ImGui::TextDisabled("ID");
+                ImGui::SameLine();
+                if (ImGui::SmallButton("Copy##soundid"))
+                    ImGui::SetClipboardText(selectedSoundKey_.c_str());
+                ImGui::TextUnformatted(selectedSoundKey_.c_str());
+
+                ImGui::TextDisabled("Source path");
+                {
+                    char buf[512];
+                    std::strncpy(buf, sound.src.c_str(), sizeof(buf)-1); buf[511]='\0';
+                    ImGui::SetNextItemWidth(-1);
+                    if (ImGui::InputText("##soundsrc", buf, sizeof(buf),
+                            ImGuiInputTextFlags_EnterReturnsTrue)) {
+                        pushUndo(); sound.src = buf; modified_ = true; updateWindowTitle();
+                    }
+                }
+
+                if (ImGui::Checkbox("Loop##soundloop", &sound.loop)) {
+                    pushUndo(); modified_ = true; updateWindowTitle();
+                }
+            }
+
+            ImGui::Spacing();
+            ImGui::Separator();
+            ImGui::Spacing();
+
+            // --- Music ---
+            ImGui::TextUnformatted("Music");
+            ImGui::Separator();
+
+            if (!selectedMusicKey_.empty() && !document_.musicTracks.count(selectedMusicKey_))
+                selectedMusicKey_.clear();
+
+            if (ImGui::SmallButton("+##musicadd")) {
+                pushUndo();
+                int n = 1;
+                std::string key;
+                do { key = "music_" + std::to_string(n++); }
+                while (document_.musicTracks.count(key));
+                Mc3::Mc3Music music;
+                music.id = key;
+                document_.musicTracks[key] = music;
+                selectedMusicKey_ = key;
+                modified_ = true; updateWindowTitle();
+            }
+            if (ImGui::IsItemHovered()) ImGui::SetTooltip("Add music track");
+            ImGui::SameLine();
+            if (ImGui::SmallButton("-##musicremove") && !selectedMusicKey_.empty()) {
+                pushUndo();
+                if (audioPreviewKey_ == selectedMusicKey_) stopAudioPreview();
+                document_.musicTracks.erase(selectedMusicKey_);
+                selectedMusicKey_.clear();
+                modified_ = true; updateWindowTitle();
+            }
+
+            for (const auto& [key, music] : document_.musicTracks) {
+                bool sel = (key == selectedMusicKey_);
+                bool playing = (key == audioPreviewKey_) && audioPreviewInstance_ &&
+                               audioPreviewInstance_->getStateProperty() == Microsoft::Xna::Framework::Audio::SoundState::Playing;
+                ImGui::PushID(("music_" + key).c_str());
+                if (playing) {
+                    if (ImGui::SmallButton("■")) stopAudioPreview();
+                } else {
+                    if (ImGui::SmallButton("▶") && !music.src.empty())
+                        playAudioPreview(key, resolveSrc(music.src), music.loop);
+                }
+                ImGui::SameLine();
+                if (ImGui::Selectable(key.c_str(), sel))
+                    selectedMusicKey_ = key;
+                ImGui::PopID();
+            }
+
+            if (!selectedMusicKey_.empty() && document_.musicTracks.count(selectedMusicKey_)) {
+                auto& music = document_.musicTracks[selectedMusicKey_];
+                ImGui::Spacing();
+
+                ImGui::TextDisabled("ID");
+                ImGui::SameLine();
+                if (ImGui::SmallButton("Copy##musicid"))
+                    ImGui::SetClipboardText(selectedMusicKey_.c_str());
+                ImGui::TextUnformatted(selectedMusicKey_.c_str());
+
+                ImGui::TextDisabled("Source path");
+                {
+                    char buf[512];
+                    std::strncpy(buf, music.src.c_str(), sizeof(buf)-1); buf[511]='\0';
+                    ImGui::SetNextItemWidth(-1);
+                    if (ImGui::InputText("##musicsrc", buf, sizeof(buf),
+                            ImGuiInputTextFlags_EnterReturnsTrue)) {
+                        pushUndo(); music.src = buf; modified_ = true; updateWindowTitle();
+                    }
+                }
+
+                if (ImGui::Checkbox("Loop##musicloop", &music.loop)) {
+                    pushUndo(); modified_ = true; updateWindowTitle();
                 }
             }
 
