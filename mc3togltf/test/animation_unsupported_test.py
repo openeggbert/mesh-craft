@@ -38,14 +38,24 @@ if __name__ == "__main__":
             "Output glTF is missing or empty"
 
         combined = r.stdout + r.stderr
-        assert "material.baseColor.r" in combined, (
-            f"Expected a warning naming the unsupported 'material.baseColor.r' "
-            f"channel, got:\n{combined}"
-        )
-        assert "deform.x" in combined, (
-            f"Expected a warning naming the unsupported 'deform.x' channel, got:\n{combined}"
-        )
-        print("Unsupported-channel warnings: PASS")
+
+        # STAB-0684: all 13 AnimatedProperty values sharing the generic
+        # unsupported-property skip path (previously only 2 were checked)
+        # -- confirms animatedPropertyName()'s string mapping is correct
+        # for each, not just the 2 that happened to be tested already.
+        ALL_UNSUPPORTED_PROPERTIES = [
+            "visible",
+            "deform.x", "deform.y", "deform.z",
+            "material.baseColor.r", "material.baseColor.g",
+            "material.baseColor.b", "material.baseColor.a",
+            "material.roughness", "material.metallic",
+            "material.emissive.r", "material.emissive.g", "material.emissive.b",
+        ]
+        for prop in ALL_UNSUPPORTED_PROPERTIES:
+            assert prop in combined, (
+                f"Expected a warning naming the unsupported '{prop}' channel, got:\n{combined}"
+            )
+        print(f"Unsupported-channel warnings: PASS (all {len(ALL_UNSUPPORTED_PROPERTIES)} properties)")
 
         with open(out) as f:
             gltf = json.load(f)
@@ -58,8 +68,12 @@ if __name__ == "__main__":
         assert "Squash" not in anim_names, (
             f"Expected 'Squash' (deform-only action) NOT in animations, got: {anim_names}"
         )
+        assert "RemainingUnsupported" not in anim_names, (
+            f"Expected 'RemainingUnsupported' (all-unsupported-property action) "
+            f"NOT in animations, got: {anim_names}"
+        )
         assert len(anims) == 0, (
-            f"Expected 0 exported animations (both actions are entirely "
+            f"Expected 0 exported animations (all 3 actions are entirely "
             f"unsupported-property), got {len(anims)}: {anim_names}"
         )
         print(f"Unsupported-channel-only actions excluded from glTF: PASS (0 animations exported)")

@@ -26,6 +26,57 @@
         <keyframe time="1.0" value="1.8" interp="linear"/>
       </channel>
     </action>
+
+    <!-- STAB-0684: the remaining 11 of 13 AnimatedProperty values sharing
+         the generic unsupported-property skip path (Pulse/Squash above
+         only cover 2) — visible, deform.y/z, material.baseColor.g/b/a,
+         material.roughness/metallic, material.emissive.r/g/b. -->
+    <action name="RemainingUnsupported" duration="1.0" loop="true">
+      <channel target="GlowBox" property="visible">
+        <keyframe time="0.0" value="1.0" interp="step"/>
+        <keyframe time="1.0" value="0.0" interp="step"/>
+      </channel>
+      <channel target="SquashBox" property="deform.y">
+        <keyframe time="0.0" value="1.0" interp="linear"/>
+        <keyframe time="1.0" value="1.5" interp="linear"/>
+      </channel>
+      <channel target="SquashBox" property="deform.z">
+        <keyframe time="0.0" value="1.0" interp="linear"/>
+        <keyframe time="1.0" value="1.5" interp="linear"/>
+      </channel>
+      <channel target="GlowBox" property="material.baseColor.g">
+        <keyframe time="0.0" value="0.2" interp="linear"/>
+        <keyframe time="1.0" value="0.9" interp="linear"/>
+      </channel>
+      <channel target="GlowBox" property="material.baseColor.b">
+        <keyframe time="0.0" value="0.2" interp="linear"/>
+        <keyframe time="1.0" value="0.9" interp="linear"/>
+      </channel>
+      <channel target="GlowBox" property="material.baseColor.a">
+        <keyframe time="0.0" value="1.0" interp="linear"/>
+        <keyframe time="1.0" value="0.5" interp="linear"/>
+      </channel>
+      <channel target="GlowBox" property="material.roughness">
+        <keyframe time="0.0" value="0.2" interp="linear"/>
+        <keyframe time="1.0" value="0.9" interp="linear"/>
+      </channel>
+      <channel target="GlowBox" property="material.metallic">
+        <keyframe time="0.0" value="0.0" interp="linear"/>
+        <keyframe time="1.0" value="1.0" interp="linear"/>
+      </channel>
+      <channel target="GlowBox" property="material.emissive.r">
+        <keyframe time="0.0" value="0.0" interp="linear"/>
+        <keyframe time="1.0" value="1.0" interp="linear"/>
+      </channel>
+      <channel target="GlowBox" property="material.emissive.g">
+        <keyframe time="0.0" value="0.0" interp="linear"/>
+        <keyframe time="1.0" value="1.0" interp="linear"/>
+      </channel>
+      <channel target="GlowBox" property="material.emissive.b">
+        <keyframe time="0.0" value="0.0" interp="linear"/>
+        <keyframe time="1.0" value="1.0" interp="linear"/>
+      </channel>
+    </action>
   </actions>
 
 </mc3>
