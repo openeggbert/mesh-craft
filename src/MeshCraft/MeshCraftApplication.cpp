@@ -225,6 +225,7 @@ void MeshCraftApplication::LoadContent() {
             document_ = Mc3::Mc3Document::loadFromFile(currentFile_);
             addRecentFile(currentFile_);
             std::cout << "[MeshCraft] Loaded: " << currentFile_ << "\n";
+            checkRotationConventionNotice();
             // Auto-start the first action marked autoplay="true"
             for (const auto& [aname, act] : document_.actions) {
                 if (act.autoplay) {

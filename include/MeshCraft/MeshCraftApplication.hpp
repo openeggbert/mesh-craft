@@ -618,6 +618,13 @@ private:
     bool  statusMsgIsError_{false};
     void setStatusMsg(std::string msg, bool isError = false, float duration = 3.0f);
 
+    // STAB-0701: rotation_units="radians" / a non-default euler_order are
+    // export/interchange-only fields -- the editor's own rendering, gizmos,
+    // and mouse-drag rotation all assume degrees + a fixed XNA axis order
+    // and do not consult these document-level settings. Warns the author
+    // once per load rather than silently rendering such a file wrong.
+    void checkRotationConventionNotice();
+
     // Undo/redo
     static constexpr int kUndoMax = 20;
     std::vector<Mc3::Mc3Document> undoStack_;

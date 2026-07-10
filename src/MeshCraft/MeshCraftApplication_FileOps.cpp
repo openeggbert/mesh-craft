@@ -65,6 +65,25 @@ void MeshCraftApplication::setStatusMsg(std::string msg, bool isError, float dur
     statusMsgTimer_ = duration;
 }
 
+// STAB-0701: see header comment. Non-fatal -- the file still loads and
+// displays/edits fine, only the *interpretation* of its rotation values
+// during live rendering differs from what the file declares.
+void MeshCraftApplication::checkRotationConventionNotice() {
+    const bool nonDefaultUnits = document_.rotationUnits != "degrees";
+    const bool nonDefaultOrder = document_.eulerOrder != "XYZ";
+    if (!nonDefaultUnits && !nonDefaultOrder) return;
+
+    std::string what = nonDefaultUnits && nonDefaultOrder
+        ? "rotation_units=\"" + document_.rotationUnits + "\" and euler_order=\"" + document_.eulerOrder + "\""
+        : nonDefaultUnits
+            ? "rotation_units=\"" + document_.rotationUnits + "\""
+            : "euler_order=\"" + document_.eulerOrder + "\"";
+    setStatusMsg("Note: this file declares " + what +
+                 " -- the editor's live preview always renders rotations as "
+                 "degrees in XYZ order (export-only field, see STAB-0701)",
+                 /*isError=*/false, /*duration=*/6.0f);
+}
+
 
 void MeshCraftApplication::loadRecentFiles() {
     std::ifstream f(recentFilesPath());
@@ -122,6 +141,7 @@ void MeshCraftApplication::executePendingAction() {
                 sceneRenderer_->clearCsgCache();
                 modified_ = false;
                 setStatusMsg("Opened " + currentFile_.filename().string(), false, 2.0f);
+                checkRotationConventionNotice();
                 updateWindowTitle();
             } catch (const std::exception& e) {
                 std::cerr << "[MeshCraft] Open recent file error: " << e.what() << "\n";
