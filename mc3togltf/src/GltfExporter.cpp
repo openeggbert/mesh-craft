@@ -1040,7 +1040,9 @@ static void addCameraNodes(tinygltf::Model& model,
             // it unset (tinygltf only serializes aspectRatio when > 0).
         } else {
             gcam.type = "orthographic";
-            gcam.orthographic.xmag  = cam.orthoSize;
+            // STAB-0695: orthoAspect defaults to 1.0 (square), so this is a
+            // no-op for every camera authored before the field existed.
+            gcam.orthographic.xmag  = cam.orthoSize * cam.orthoAspect;
             gcam.orthographic.ymag  = cam.orthoSize;
             gcam.orthographic.znear = cam.nearPlane;
             gcam.orthographic.zfar  = cam.farPlane;

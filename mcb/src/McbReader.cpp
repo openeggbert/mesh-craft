@@ -658,6 +658,7 @@ static Mc3::Mc3Camera readCamera(std::istream& in) {
         else if (k == "farPlane")  cam.farPlane  = rF32(in);
         else if (k == "fov")       cam.fov       = rF32(in);
         else if (k == "orthoSize") cam.orthoSize = rF32(in);
+        else if (k == "orthoAspect") cam.orthoAspect = rF32(in);   // STAB-0695
         else                       skipValue(in, tag);
     }
     return cam;

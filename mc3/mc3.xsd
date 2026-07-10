@@ -618,6 +618,9 @@
     <xs:attribute name="fov"      type="xs:float"/>
     <!-- orthographic -->
     <xs:attribute name="size"     type="xs:float"/>
+    <!-- STAB-0695: orthographic view-volume width/height ratio (xmag =
+         size * aspect, ymag = size). Optional, defaults to 1.0 (square). -->
+    <xs:attribute name="aspect"   type="xs:float"/>
   </xs:complexType>
 
   <xs:complexType name="camerasType">

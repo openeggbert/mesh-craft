@@ -454,8 +454,11 @@ void Mc3XmlWriter::write(const Mc3Document& doc, const std::filesystem::path& pa
             ce->SetAttribute("position", vec3Str(cam.position).c_str());
             ce->SetAttribute("target",   vec3Str(cam.target).c_str());
             ce->SetAttribute("fov",      fStr(cam.fov).c_str());
-            if (cam.type == CameraType::Orthographic)
+            if (cam.type == CameraType::Orthographic) {
                 ce->SetAttribute("size", fStr(cam.orthoSize).c_str());
+                if (cam.orthoAspect != 1.0f)   // STAB-0695: only write non-default
+                    ce->SetAttribute("aspect", fStr(cam.orthoAspect).c_str());
+            }
             ce->SetAttribute("near",     fStr(cam.nearPlane).c_str());
             ce->SetAttribute("far",      fStr(cam.farPlane).c_str());
             if (cam.rotation)

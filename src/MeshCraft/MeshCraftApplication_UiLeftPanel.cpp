@@ -526,6 +526,18 @@ void MeshCraftApplication::drawLeftPanel(float panelY, float panelH)
                         if (ImGui::IsItemActivated()) pushUndo();
                         modified_ = true; updateWindowTitle();
                     }
+                    // STAB-0695: width/height ratio baked into the exported
+                    // glTF orthographic camera (xmag = size * aspect, ymag =
+                    // size). Doesn't affect the editor's own "look through
+                    // camera" preview, which already fits the live viewport.
+                    ImGui::TextDisabled("Aspect (export)");
+                    ImGui::SetNextItemWidth(-1);
+                    if (ImGui::DragFloat("##corthoaspect", &cam.orthoAspect, 0.01f, 0.01f, 100.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp)) {
+                        if (ImGui::IsItemActivated()) pushUndo();
+                        modified_ = true; updateWindowTitle();
+                    }
+                    if (ImGui::IsItemHovered())
+                        ImGui::SetTooltip("Width/height ratio of the exported orthographic view volume (xmag = size x aspect). 1.0 = square.");
                 }
             }
 

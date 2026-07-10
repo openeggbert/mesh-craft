@@ -393,6 +393,7 @@ static void writeCamera(std::ostream& o, const Mc3::Mc3Camera& cam) {
     wIfF32 (o, "farPlane",  cam.farPlane,  def.farPlane);
     wIfF32 (o, "fov",       cam.fov,       def.fov);
     wIfF32 (o, "orthoSize", cam.orthoSize, def.orthoSize);
+    wIfF32 (o, "orthoAspect", cam.orthoAspect, def.orthoAspect);   // STAB-0695
     wEnd(o);
 }
 

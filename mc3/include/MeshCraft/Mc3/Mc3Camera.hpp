@@ -19,6 +19,11 @@ struct Mc3Camera {
     float farPlane{1000.0f};
     float fov{60.0f};        // perspective: vertical field of view in degrees
     float orthoSize{10.0f};  // orthographic: half-height in world units
+    // STAB-0695: orthographic view volume width/height ratio. Half-width
+    // (xmag) = orthoSize * orthoAspect; half-height (ymag) = orthoSize.
+    // Defaults to 1.0 (square), matching every existing scene/export before
+    // this field existed -- purely additive, doesn't change default output.
+    float orthoAspect{1.0f};
 
     // --- Static factory helpers -------------------------------------------
     static Mc3Camera perspective(std::string name,
@@ -43,6 +48,7 @@ struct Mc3Camera {
     Mc3Camera& withClip(float nearP, float farP) { nearPlane=nearP; farPlane=farP; return *this; }
     Mc3Camera& withFov(float f)       { fov = f;       return *this; }
     Mc3Camera& withOrthoSize(float s) { orthoSize = s; return *this; }
+    Mc3Camera& withOrthoAspect(float a) { orthoAspect = a; return *this; }
 };
 
 } // namespace MeshCraft::Mc3

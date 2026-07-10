@@ -458,6 +458,7 @@ static void parseCameras(const XMLElement* el, Mc3Document& doc) {
         cam.farPlane  = attrF(c, "far",  1000.0f);
         cam.fov       = attrF(c, "fov",   60.0f);
         cam.orthoSize = attrF(c, "size",  10.0f);
+        cam.orthoAspect = attrF(c, "aspect", 1.0f);   // STAB-0695
         std::string t = attr(c, "type", "perspective");
         cam.type = (t == "orthographic") ? CameraType::Orthographic : CameraType::Perspective;
         if (const char* rot = c->Attribute("rotation"))
