@@ -861,10 +861,15 @@ static void addCameraNodes(tinygltf::Model& model,
 
         if (cam.type == CameraType::Perspective) {
             gcam.type = "perspective";
-            gcam.perspective.yfov        = cam.fov * std::numbers::pi / 180.0;
-            gcam.perspective.znear       = cam.nearPlane;
-            gcam.perspective.zfar        = cam.farPlane;
-            gcam.perspective.aspectRatio = 16.0 / 9.0;
+            gcam.perspective.yfov  = cam.fov * std::numbers::pi / 180.0;
+            gcam.perspective.znear = cam.nearPlane;
+            gcam.perspective.zfar  = cam.farPlane;
+            // STAB-0694: aspectRatio was hardcoded to 16:9 for every camera
+            // regardless of intended output. Mc3Camera has no per-camera
+            // aspect field to derive a real value from, and the glTF spec's
+            // own recommended behavior when aspectRatio is omitted is for
+            // the viewer to use its actual viewport's aspect ratio -- leave
+            // it unset (tinygltf only serializes aspectRatio when > 0).
         } else {
             gcam.type = "orthographic";
             gcam.orthographic.xmag  = cam.orthoSize;

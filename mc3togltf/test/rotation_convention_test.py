@@ -110,6 +110,14 @@ def main():
                   f"camera quaternion matches independent ZYX-radians reference "
                   f"(expected {expected}, got {actual})")
 
+            # STAB-0694: aspectRatio was hardcoded to 16:9 for every camera.
+            cam_idx = cam_node.get("camera")
+            if cam_idx is not None:
+                gcam = g["cameras"][cam_idx]["perspective"]
+                check("aspectRatio" not in gcam,
+                      "camera perspective.aspectRatio is omitted, not hardcoded to 16:9 "
+                      "(tinygltf only serializes it when explicitly set > 0)")
+
     finally:
         if os.path.exists(out):
             os.unlink(out)
