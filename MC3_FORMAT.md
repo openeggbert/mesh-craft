@@ -634,7 +634,7 @@ conversion needed or applied.
 | Lights | ✅ |
 | Cameras | ✅ |
 | Animations (position/rotation/scale) | ✅ |
-| Animations (visible, emissive, deform) | ❌ (no glTF equivalent) |
+| Animations (`visible`, `emissive_r/g/b`, `deform_x/y/z`) | ❌ (no glTF core-spec equivalent — glTF animation channels can only target `translation`/`rotation`/`scale`/`weights`). The channel is skipped with a warning naming it; no fallback is attempted (e.g. `visible` is not approximated via a scale-to-zero animation) — this is a deliberate, accepted limitation, not a bug. |
 | Torus, Capsule, Disk, Grid, IcoSphere | ✅ |
 | CSG (union/difference/intersection) | ✅ (evaluated by Manifold; unsupported child types fail the export; `--allow-approximate-csg` exports children separately as debug fallback) |
 | Instance (via definitions) | ✅ |
