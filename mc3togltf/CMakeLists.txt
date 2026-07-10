@@ -558,6 +558,16 @@ if(BUILD_TESTING)
         endif()
         if(EXISTS "${_house_xml}")
             add_test(
+                NAME mc3togltf_multi_file_partial_failure
+                COMMAND "${PYTHON3_EXEC}"
+                        "${CMAKE_CURRENT_SOURCE_DIR}/test/multi_file_partial_failure_test.py"
+                        "$<TARGET_FILE:mc3togltf>"
+                        "${_house_xml}"
+            )
+            set_tests_properties(mc3togltf_multi_file_partial_failure PROPERTIES TIMEOUT 30 LABELS "export")
+        endif()
+        if(EXISTS "${_house_xml}")
+            add_test(
                 NAME mc3togltf_determinism
                 COMMAND "${PYTHON3_EXEC}"
                         "${CMAKE_CURRENT_SOURCE_DIR}/test/determinism_test.py"
