@@ -65,6 +65,18 @@ float MeshCraftApplication::drawMenuBar()
                 }
                 ImGui::EndMenu();
             }
+            // STAB-0717: previously OBJ was only reachable indirectly, as a
+            // per-object mesh-source path typed into an existing Mesh
+            // object's Properties panel field (PropertiesPanel.cpp's
+            // openMeshBrowse) -- there was no way to bring a new OBJ into
+            // the scene as a fresh object. Adds one, in the same current-
+            // scene ("new object", not "replace scene") behavior as every
+            // other Add-menu creation action.
+            if (ImGui::MenuItem("Import OBJ...")) {
+                importObjDialogBuf_[0] = '\0';
+                importObjDialogErr_[0] = '\0';
+                importObjDialogOpen_   = true;
+            }
             ImGui::Separator();
             if (ImGui::MenuItem("Save",    "Ctrl+S")) saveFile();
             if (ImGui::MenuItem("Save As...","Ctrl+Shift+S")) saveFileAs();

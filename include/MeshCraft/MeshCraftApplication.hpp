@@ -198,6 +198,13 @@ private:
     char meshBrowseBuf_[512]{};
     char meshBrowseErr_[256]{};
 
+    // Import OBJ dialog state (STAB-0717): creates a new Mesh object in the
+    // current scene referencing the chosen OBJ file, unlike meshBrowse*_
+    // above (which only retargets an already-selected Mesh object's source).
+    bool importObjDialogOpen_{false};
+    char importObjDialogBuf_[512]{};
+    char importObjDialogErr_[256]{};
+
     // Export selection dialog state (F3)
     bool selExportOpen_{false};
     char selExportBuf_[512]{};

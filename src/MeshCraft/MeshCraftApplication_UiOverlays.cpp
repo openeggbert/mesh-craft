@@ -1950,6 +1950,51 @@ void MeshCraftApplication::drawDialogs()
     }
 
     // -----------------------------------------------------------------------
+    // Import OBJ dialog (STAB-0717) — creates a new Mesh object referencing
+    // the chosen file, added to the current scene (not a new-scene import).
+    // -----------------------------------------------------------------------
+    if (importObjDialogOpen_) {
+        ImGui::OpenPopup("Import OBJ##importobjdlg");
+        importObjDialogOpen_ = false;
+    }
+    if (ImGui::BeginPopupModal("Import OBJ##importobjdlg", nullptr,
+                               ImGuiWindowFlags_AlwaysAutoResize)) {
+        ImGui::Text("Path to .obj file:");
+        ImGui::SetNextItemWidth(420);
+        if (ImGui::IsWindowAppearing()) ImGui::SetKeyboardFocusHere();
+        bool enter = ImGui::InputText("##importobjpath", importObjDialogBuf_, sizeof(importObjDialogBuf_),
+                                      ImGuiInputTextFlags_EnterReturnsTrue);
+        if (importObjDialogErr_[0])
+            ImGui::TextColored(ImVec4(1.f, 0.3f, 0.3f, 1.f), "%s", importObjDialogErr_);
+        ImGui::Spacing();
+        bool canImport = importObjDialogBuf_[0] != '\0';
+        if (!canImport) ImGui::BeginDisabled();
+        if ((enter || ImGui::Button("Import", ImVec2(90, 0))) && canImport) {
+            std::error_code ec;
+            if (!std::filesystem::exists(importObjDialogBuf_, ec) || ec) {
+                std::strncpy(importObjDialogErr_, "File does not exist.", sizeof(importObjDialogErr_)-1);
+            } else {
+                // addPrimitive() already calls pushUndo()/adds to the scene/
+                // selects the new object/sets modified_+updateWindowTitle() --
+                // setting meshSource afterward on the just-selected object
+                // folds into the SAME undo step (pushUndo() snapshotted the
+                // document before addPrimitive() touched it at all), so no
+                // separate pushUndo() call is needed here.
+                addPrimitive(Mc3::ObjectType::Mesh);
+                if (selection_.hasSelection())
+                    selection_.selection().front()->meshSource = importObjDialogBuf_;
+                setStatusMsg("Imported " + std::filesystem::path(importObjDialogBuf_).filename().string(), false, 2.0f);
+                ImGui::CloseCurrentPopup();
+            }
+        }
+        if (!canImport) ImGui::EndDisabled();
+        ImGui::SameLine();
+        if (ImGui::Button("Cancel", ImVec2(90, 0)) || ImGui::IsKeyPressed(ImGuiKey_Escape, false))
+            ImGui::CloseCurrentPopup();
+        ImGui::EndPopup();
+    }
+
+    // -----------------------------------------------------------------------
     // Subtree Export as Template dialog (E8)
     // -----------------------------------------------------------------------
     if (subtreeExportOpen_) {
