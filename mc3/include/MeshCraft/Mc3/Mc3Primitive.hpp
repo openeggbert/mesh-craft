@@ -28,7 +28,7 @@ struct Mc3Primitive {
     float radius{0.5f};                            // sphere/cylinder/cone
     float height{1.0f};                            // cylinder/cone
     int segments{32};                              // sphere/cylinder/cone/torus
-    std::string axis{"y"};                         // cylinder/plane: mesh-generation axis hint
+    std::string axis{"y"};                         // cylinder/plane/capsule/disk: mesh-generation axis hint
     float majorRadius{0.35f};                      // torus: ring radius
     float minorRadius{0.15f};                      // torus: tube radius
     int subdivisionsX{4};                          // grid: columns

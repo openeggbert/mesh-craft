@@ -24,6 +24,26 @@ namespace MeshCraft::Scene {
 
 using namespace Microsoft::Xna::Framework;
 
+// STAB-0712: Mc3Primitive::axis (the mesh-generation axis hint consumed by
+// buildCylinder()/buildPlane()/buildCapsule()/buildDisk() in
+// mc3togltf/src/MeshBuilder.cpp) had no UI anywhere -- shared by the 4
+// primitive types that actually use it, matching this file's existing
+// per-case-block editing style.
+static void drawAxisCombo(const PropertiesContext& ctx, Mc3::Mc3Primitive& p, const char* widgetId)
+{
+    const char* axisOpts[] = { "x", "y", "z" };
+    int axisIdx = 1; // default "y"
+    for (int i = 0; i < 3; ++i)
+        if (p.axis == axisOpts[i]) { axisIdx = i; break; }
+    ImGui::TextDisabled("Axis");
+    ImGui::SetNextItemWidth(-1);
+    if (ImGui::Combo(widgetId, &axisIdx, axisOpts, 3)) {
+        ctx.pushUndo();
+        p.axis = axisOpts[axisIdx];
+        ctx.markModified();
+    }
+}
+
 void PropertiesPanel::draw(float panelX, float panelY, float panelW, float panelH,
                            const PropertiesContext& ctx)
 {
@@ -822,6 +842,12 @@ void PropertiesPanel::draw(float panelX, float panelY, float panelW, float panel
                     p.segments = segs;
                     ctx.markModified();
                 }
+                // STAB-0712: Mc3Primitive::axis had no UI anywhere -- Cone
+                // doesn't consume it (buildCone() is always Y-axis-only,
+                // confirmed by reading MeshBuilder.cpp's buildPrimitive()
+                // switch), only Cylinder does, so this is gated by type.
+                if (p.primitiveType == Mc3::PrimitiveType::Cylinder)
+                    drawAxisCombo(ctx, p, "##pcyl_axis");
                 break;
             }
             case Mc3::PrimitiveType::Plane: {
@@ -841,6 +867,7 @@ void PropertiesPanel::draw(float panelX, float panelY, float panelW, float panel
                     p.size[2] = std::max(0.001f, d);
                     ctx.markModified();
                 }
+                drawAxisCombo(ctx, p, "##ppln_axis");
                 break;
             }
             case Mc3::PrimitiveType::Disk: {
@@ -868,6 +895,12 @@ void PropertiesPanel::draw(float panelX, float panelY, float panelW, float panel
                     p.segments = segs;
                     ctx.markModified();
                 }
+                // STAB-0712: buildDisk() also takes an axis param
+                // (MeshBuilder.cpp's buildPrimitive() switch) -- the
+                // original finding only named Cylinder/Capsule/Plane, Disk
+                // is a 4th previously-unlisted instance of the same gap,
+                // confirmed directly against the switch before fixing.
+                drawAxisCombo(ctx, p, "##pdsk_axis");
                 break;
             }
             case Mc3::PrimitiveType::Capsule: {
@@ -895,6 +928,7 @@ void PropertiesPanel::draw(float panelX, float panelY, float panelW, float panel
                     p.segments = segs;
                     ctx.markModified();
                 }
+                drawAxisCombo(ctx, p, "##pcap_axis");
                 break;
             }
             case Mc3::PrimitiveType::Grid: {
