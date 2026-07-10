@@ -1098,6 +1098,16 @@ MeshData loadObjMesh(const std::filesystem::path& basePath, const std::string& s
     }
 
     MeshData m;
+    // STAB-0667: shape.mesh.material_ids (per-face OBJ material assignment)
+    // is intentionally not read here -- all shapes/faces are flattened into
+    // one MeshData with no material info, and the caller applies mc3's own
+    // single `material` attribute (if any) uniformly to the whole result.
+    // Multi-material OBJ imports therefore silently lose their per-face
+    // material assignments; this is a deliberate accepted limitation (see
+    // MC3_FORMAT.md's "Single material only" note under <mesh>), not an
+    // oversight -- properly supporting it means mapping OBJ .mtl material
+    // properties onto mc3's own material model, a real modeling decision
+    // out of scope for this loader.
     for (const auto& shape : shapes) {
         const auto& idxList = shape.mesh.indices;
         // tinyobjloader already triangulates, iterate in steps of 3

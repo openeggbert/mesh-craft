@@ -530,6 +530,20 @@ All five are supported by the MeshCraft editor and exported by `mc3togltf`.
 
 **Note:** The attribute is `src` (not `source`).
 
+**Single material only:** a `<mesh>` object always uses its own `material`
+attribute (or none) for the *entire* imported OBJ — this is intentional, not
+a bug. If the source OBJ file assigns multiple materials per face/group
+(`usemtl` groups, `.mtl`-referenced materials), those per-face assignments
+are read by the OBJ parser but discarded: `mc3togltf`'s `loadObjMesh()`
+flattens all faces into one triangle list with no material information, and
+the single mc3-declared material (if any) is applied uniformly to the whole
+mesh on export. Splitting such an OBJ into multiple glTF primitives/
+materials on import would require deciding how OBJ `.mtl` material
+properties map onto mc3's own material model — a real modeling decision, not
+a mechanical fix — so for now, multi-material OBJ meshes should be
+pre-split into separate single-material `<mesh>` objects (or `<group>`
+children) if per-face materials are needed in the exported glTF.
+
 ### `<extrude>` — path extrusion
 
 ```xml
