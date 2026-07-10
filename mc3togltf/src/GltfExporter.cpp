@@ -1022,7 +1022,16 @@ static void exportAnimations(
 
         for (const auto& [objName, pathMap] : groups) {
             auto nodeIt = nodeNameMap.find(objName);
-            if (nodeIt == nodeNameMap.end()) continue;
+            if (nodeIt == nodeNameMap.end()) {
+                // STAB-0682: was a silent no-op, unlike the unsupported-
+                // property skip a few lines above (which does warn) --
+                // a typo'd targetObject silently did nothing with no signal.
+                std::cerr << "Warning: mc3togltf: action '" << actionName
+                          << "': channel target '" << objName
+                          << "' does not match any exported node — channels "
+                             "for this target skipped.\n";
+                continue;
+            }
             int nodeIdx = nodeIt->second;
 
             // Fallback base transform for non-animated components.
