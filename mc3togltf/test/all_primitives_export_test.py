@@ -251,17 +251,36 @@ def test_bbox_matches_scene_renderer_scale_formula(mc3togltf, xml_path, tmpdir):
 # buildCone()'s bottom-cap fan and buildTorus()'s ring quads wind opposite to
 # their side/adjacent faces within the same closed mesh (confirmed directly:
 # Cone is exactly 32 positive / 32 negative triangles, i.e. perfect
-# cancellation; Torus/TorusThin are similarly mixed). That is a genuine
-# rendering-correctness bug (visible holes under backface culling), but
-# fixing MeshBuilder.cpp's triangulation is production-geometry-code scope,
-# not test-strengthening scope -- tracked separately as STAB-0702, not fixed
-# here. Once STAB-0702 lands, these three should be added to CLOSED_SOLIDS.
+# cancellation; Torus/TorusThin are similarly mixed). That was a genuine
+# rendering-correctness bug (visible holes under backface culling); fixed
+# in STAB-0702 (a production-geometry-code change, out of this test-
+# strengthening task's original scope, done as a follow-up).
+#
+# STAB-0702 postscript: Cone is star-shaped from its own local origin (a
+# cone's object-space origin sits on its axis, interior to the solid, with
+# the whole convex boundary visible from it), so once its winding was fixed
+# it DOES pass this origin-based winding-consistency check cleanly (64
+# positive / 0 negative, confirmed directly) -- added below. Torus/TorusThin
+# remain permanently excluded regardless of correctness: a torus is NOT
+# star-shaped (it has a hole), so the per-triangle signed-tetrahedron-from-
+# origin terms are mathematically guaranteed to split into a mix of positive
+# and negative even for a perfectly-wound torus (verified directly in
+# STAB-0702: flipping Torus's winding entirely still produced a mixed split,
+# just with different proportions) -- this specific check can never validate
+# Torus's winding, correct or not. STAB-0702 also found and fixed a real
+# uniform-backwards winding bug in Sphere and Capsule (not caught by this
+# origin-based check at all, since a uniformly-backwards-but-consistent
+# mesh still satisfies "pos_n==0 or neg_n==0"); Sphere/Capsule's fix is
+# verified by test_face_winding_matches_normals() below instead, which
+# checks each triangle's own winding against its own stored normal --
+# topology-agnostic, so it validates Torus/TorusThin too, unlike this one.
 CLOSED_SOLID_VOLUMES = {
     # name: (expected_volume, tolerance_fraction)
     "Box":       (1.0,                                    0.001),
     "Cube":      (1.0,                                    0.001),
     "Sphere":    (4.0/3.0 * math.pi * 0.5**3,              0.03),   # faceted UV sphere undershoots
     "Cylinder":  (math.pi * 0.4**2 * 1.0,                  0.01),
+    "Cone":      (1.0/3.0 * math.pi * 0.5**2 * 1.0,        0.01),
     "Capsule":   (math.pi * 0.3**2 * 0.8 + 4.0/3.0*math.pi*0.3**3, 0.02),
     "IcoSphere": (4.0/3.0 * math.pi * 0.5**3,              0.01),
 }
@@ -381,6 +400,64 @@ def test_sphere_no_degenerate_triangles(mc3togltf, xml_path, tmpdir):
     print("sphere_no_degenerate_triangles: PASS")
 
 
+# STAB-0702: STAB-0666's closed_solid_topology() check (divergence-theorem
+# volume from the ORIGIN) can only validate winding *consistency* for
+# star-shaped-from-the-origin solids (box/sphere/cylinder/cone/capsule/
+# icosphere) -- confirmed directly that it CANNOT diagnose a torus at all:
+# a torus is not star-shaped (it has a hole), so the per-triangle signed-
+# tetrahedron-from-origin terms are mathematically guaranteed to split into
+# a mix of positive and negative regardless of whether the mesh's actual
+# winding is correct or backwards (verified numerically: flipping Torus's
+# winding entirely changed which triangles were positive/negative, but the
+# split stayed mixed either way -- only the correctly-signed TOTAL changed).
+# That's why Cone/Torus/TorusThin were excluded from CLOSED_SOLID_VOLUMES
+# rather than added here after their STAB-0702 fix.
+#
+# This is the check that actually caught (and can verify the fix for)
+# STAB-0702: compare each triangle's own winding-derived face normal
+# against the AVERAGE of its 3 vertices' stored NORMAL attribute values.
+# This is purely local (no dependency on the origin or star-shapedness), so
+# it works for every primitive uniformly, including Torus.
+def test_face_winding_matches_normals(mc3togltf, xml_path, tmpdir):
+    out_gltf = os.path.join(tmpdir, "out_winding.gltf")
+    r = run([mc3togltf, xml_path, out_gltf])
+    assert r.returncode == 0, f"mc3togltf failed:\n{r.stderr}"
+
+    with open(out_gltf) as f:
+        gltf = json.load(f)
+    out_dir = os.path.dirname(out_gltf)
+    with open(os.path.join(out_dir, gltf["buffers"][0]["uri"]), "rb") as f:
+        bin_data = f.read()
+
+    for name in EXPECTED_PRIMITIVE_NODES:
+        _, prim = check_node_has_geometry(gltf, name)
+        if "NORMAL" not in prim["attributes"]:
+            continue
+        positions = read_vec3_accessor(gltf, bin_data, prim["attributes"]["POSITION"])
+        normals = read_vec3_accessor(gltf, bin_data, prim["attributes"]["NORMAL"])
+        indices = read_index_accessor(gltf, bin_data, prim["indices"])
+
+        mismatches = 0
+        for i in range(0, len(indices), 3):
+            i0, i1, i2 = indices[i], indices[i+1], indices[i+2]
+            a, b, c = positions[i0], positions[i1], positions[i2]
+            e1 = (b[0]-a[0], b[1]-a[1], b[2]-a[2])
+            e2 = (c[0]-a[0], c[1]-a[1], c[2]-a[2])
+            face_n = (e1[1]*e2[2]-e1[2]*e2[1], e1[2]*e2[0]-e1[0]*e2[2], e1[0]*e2[1]-e1[1]*e2[0])
+            avg_n = tuple((normals[i0][k] + normals[i1][k] + normals[i2][k]) / 3.0 for k in range(3))
+            d = face_n[0]*avg_n[0] + face_n[1]*avg_n[1] + face_n[2]*avg_n[2]
+            if d <= 0:
+                mismatches += 1
+
+        assert mismatches == 0, (
+            f"STAB-0702: '{name}' has {mismatches} triangle(s) whose winding-"
+            f"derived face normal disagrees with its own stored vertex "
+            f"normals -- a real backface-culling correctness bug"
+        )
+
+    print("face_winding_matches_normals: PASS")
+
+
 def test_all_objects(mc3togltf, xml_path, tmpdir):
     if not os.path.exists(xml_path):
         print(f"Skipping all_objects test: {xml_path} not found")
@@ -474,6 +551,7 @@ if __name__ == "__main__":
             test_bbox_matches_scene_renderer_scale_formula(mc3togltf_bin, prims_xml, tmpdir)
             test_closed_solid_topology(mc3togltf_bin, prims_xml, tmpdir)
             test_sphere_no_degenerate_triangles(mc3togltf_bin, prims_xml, tmpdir)
+            test_face_winding_matches_normals(mc3togltf_bin, prims_xml, tmpdir)
         except AssertionError as e:
             print(f"FAIL: {e}", file=sys.stderr)
             sys.exit(1)

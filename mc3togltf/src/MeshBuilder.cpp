@@ -130,6 +130,11 @@ MeshData buildSphere(float radius, int segments) {
     // rings keep both triangles as before. Guard rings==1 (topPole and
     // bottomPole would otherwise coincide and drop every triangle, leaving
     // an empty mesh): fall back to emitting both original triangles.
+    // STAB-0702: was {i0,i2,i1, i1,i2,i3} -- confirmed numerically (winding-
+    // derived face normal vs. this function's own stored per-vertex normal)
+    // that every triangle was wound backwards, uniformly. This is the same
+    // bug/fix as buildTorus() -- swapping to {i0,i1,i2, i1,i3,i2} flips
+    // every triangle to match the outward normal.
     for (int r = 0; r < rings; ++r) {
         bool topPole    = (r == 0) && rings > 1;
         bool bottomPole = (r == rings - 1) && rings > 1;
@@ -138,8 +143,8 @@ MeshData buildSphere(float radius, int segments) {
             auto i1 = i0 + 1;
             auto i2 = i0 + (sectors+1);
             auto i3 = i2 + 1;
-            if (!topPole)    m.indices.insert(m.indices.end(), {i0, i2, i1});
-            if (!bottomPole) m.indices.insert(m.indices.end(), {i1, i2, i3});
+            if (!topPole)    m.indices.insert(m.indices.end(), {i0, i1, i2});
+            if (!bottomPole) m.indices.insert(m.indices.end(), {i1, i3, i2});
         }
     }
     return m;
@@ -271,7 +276,18 @@ MeshData buildCone(float radius, float height, int segments) {
         m.normals.insert(m.normals.end(), {c1*nr, ny, s1*nr});
         m.texcoords.insert(m.texcoords.end(), {static_cast<float>(i+1)/segments, 0});
 
-        m.indices.insert(m.indices.end(), {apex, apex+1, apex+2});
+        // STAB-0702: was {apex, apex+1, apex+2} (rim0 before rim1), which
+        // winds this triangle backwards relative to its own stored outward
+        // normal -- confirmed numerically (face normal via winding has a
+        // NEGATIVE dot product with the analytically-correct outward
+        // normal) -- while the bottom cap's fan below is already correctly
+        // wound. That mismatch meant the side and cap contributed opposite
+        // signs to any consistent-outward-orientation check (e.g. the
+        // divergence-theorem volume check added in STAB-0666), a real
+        // backface-culling bug under the default single-sided glTF
+        // material. Swapping rim1/rim0 here fixes the side to match the
+        // cap's already-correct winding.
+        m.indices.insert(m.indices.end(), {apex, apex+2, apex+1});
     }
 
     // Bottom cap
@@ -341,13 +357,25 @@ MeshData buildTorus(float majorRadius, float minorRadius, int segments) {
         }
     }
 
+    // STAB-0702: was {i0,i2,i1, i1,i2,i3} -- confirmed numerically (winding-
+    // derived face normal vs. the analytically-correct stored normal above)
+    // that this pattern is wound backwards for every single quad, uniformly
+    // (unlike Cone's side-vs-cap-only mismatch). A torus is not star-shaped
+    // from the origin, so the divergence-theorem-from-origin volume check
+    // used elsewhere (STAB-0666) can't diagnose this -- it always reports a
+    // mixed pos/neg split for a torus regardless of whether the winding is
+    // actually correct or backwards, since some origin-tetrahedra
+    // necessarily subtract to account for the donut hole either way. The
+    // local per-triangle-vs-own-normal check is the one that actually
+    // caught this. Swapping to {i0,i1,i2, i1,i3,i2} flips every triangle at
+    // once to match the outward normal.
     for (int r = 0; r < rings; ++r) {
         for (int s = 0; s < sides; ++s) {
             uint32_t i0 = uint32_t(r * rowSize + s);
             uint32_t i1 = i0 + 1;
             uint32_t i2 = uint32_t((r+1) * rowSize + s);
             uint32_t i3 = i2 + 1;
-            m.indices.insert(m.indices.end(), {i0, i2, i1,  i1, i2, i3});
+            m.indices.insert(m.indices.end(), {i0, i1, i2,  i1, i3, i2});
         }
     }
     return m;
@@ -400,13 +428,26 @@ MeshData buildCapsule(float radius, float height, int segments, const std::strin
         }
     }
 
+    // STAB-0702: was {i0,i2,i1, i1,i2,i3} -- same uniform backwards-winding
+    // bug (and same fix) as buildSphere()/buildTorus(), confirmed
+    // numerically against this function's own stored normals.
+    //
+    // STAB-0669-style pole fix, extended to Capsule (STAB-0669 itself only
+    // touched buildSphere()): row 0 and row totalRows-1 are the poles,
+    // where every sector's vertex collapses to the same 3D position (like
+    // buildSphere()'s poles) -- one triangle per pole quad is therefore
+    // zero-area. Emit only the non-degenerate fan-wedge triangle at each
+    // pole quad; interior rows keep both triangles.
     for (int r = 0; r < totalRows - 1; ++r) {
+        bool topPole    = (r == 0);
+        bool bottomPole = (r == totalRows - 2);
         for (int s = 0; s < sectors; ++s) {
             uint32_t i0 = uint32_t(r * rowSize + s);
             uint32_t i1 = i0 + 1;
             uint32_t i2 = uint32_t((r+1) * rowSize + s);
             uint32_t i3 = i2 + 1;
-            m.indices.insert(m.indices.end(), {i0, i2, i1,  i1, i2, i3});
+            if (!topPole)    m.indices.insert(m.indices.end(), {i0, i1, i2});
+            if (!bottomPole) m.indices.insert(m.indices.end(), {i1, i3, i2});
         }
     }
 
