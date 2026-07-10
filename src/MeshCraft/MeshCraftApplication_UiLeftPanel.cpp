@@ -1167,6 +1167,85 @@ void MeshCraftApplication::drawLeftPanel(float panelY, float panelH)
             ImGui::EndTabItem();
         }
 
+        // -------------------------------------------------------------------
+        // Tab: Scripts (STAB-0705, N3) — minimal: list + plain-text source
+        // editor, no syntax highlighting/validation. doc.scripts already
+        // parses/round-trips/exports correctly; this was the only missing
+        // piece (zero editor UI existed for it before).
+        // -------------------------------------------------------------------
+        if (ImGui::BeginTabItem("Scripts")) {
+            if (!selectedScriptKey_.empty() && !document_.scripts.count(selectedScriptKey_))
+                selectedScriptKey_.clear();
+
+            if (ImGui::SmallButton("+##scriptadd")) {
+                pushUndo();
+                int n = 1;
+                std::string key;
+                do { key = "script_" + std::to_string(n++); }
+                while (document_.scripts.count(key));
+                Mc3::Mc3Script script;
+                script.id   = key;
+                script.type = "lua";
+                document_.scripts[key] = script;
+                selectedScriptKey_ = key;
+                modified_ = true; updateWindowTitle();
+            }
+            if (ImGui::IsItemHovered()) ImGui::SetTooltip("Add script");
+            ImGui::SameLine();
+            if (ImGui::SmallButton("-##scriptremove") && !selectedScriptKey_.empty()) {
+                pushUndo();
+                document_.scripts.erase(selectedScriptKey_);
+                selectedScriptKey_.clear();
+                modified_ = true; updateWindowTitle();
+            }
+
+            ImGui::Separator();
+            for (const auto& [key, script] : document_.scripts) {
+                bool sel = (key == selectedScriptKey_);
+                std::string label = key + "  (" + (script.type.empty() ? "lua" : script.type) + ")";
+                ImGui::PushID(("script_" + key).c_str());
+                if (ImGui::Selectable(label.c_str(), sel))
+                    selectedScriptKey_ = key;
+                ImGui::PopID();
+            }
+
+            if (!selectedScriptKey_.empty() && document_.scripts.count(selectedScriptKey_)) {
+                auto& script = document_.scripts[selectedScriptKey_];
+                ImGui::Separator();
+                ImGui::Spacing();
+
+                ImGui::TextDisabled("ID");
+                ImGui::SameLine();
+                if (ImGui::SmallButton("Copy##scriptid"))
+                    ImGui::SetClipboardText(selectedScriptKey_.c_str());
+                ImGui::TextUnformatted(selectedScriptKey_.c_str());
+
+                ImGui::TextDisabled("Type");
+                {
+                    char buf[64];
+                    std::strncpy(buf, script.type.c_str(), sizeof(buf)-1); buf[63]='\0';
+                    ImGui::SetNextItemWidth(-1);
+                    if (ImGui::InputText("##scripttype", buf, sizeof(buf),
+                            ImGuiInputTextFlags_EnterReturnsTrue)) {
+                        pushUndo(); script.type = buf; modified_ = true; updateWindowTitle();
+                    }
+                }
+
+                ImGui::TextDisabled("Source (no syntax highlighting)");
+                {
+                    char buf[16384];
+                    std::strncpy(buf, script.source.c_str(), sizeof(buf)-1); buf[16383]='\0';
+                    ImGui::SetNextItemWidth(-1);
+                    if (ImGui::InputTextMultiline("##scriptsource", buf, sizeof(buf),
+                            ImVec2(-1, 240), ImGuiInputTextFlags_EnterReturnsTrue)) {
+                        pushUndo(); script.source = buf; modified_ = true; updateWindowTitle();
+                    }
+                }
+            }
+
+            ImGui::EndTabItem();
+        }
+
         ImGui::EndTabBar();
     }
 

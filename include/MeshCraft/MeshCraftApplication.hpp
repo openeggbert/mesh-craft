@@ -149,6 +149,9 @@ private:
     // SVG textures panel selection (STAB-0703)
     std::string selectedSvgTextureKey_;
 
+    // Scripts panel selection (STAB-0705)
+    std::string selectedScriptKey_;
+
     // Materials panel selection
     std::string selectedMaterialKey_;
     char newMaterialNameBuf_[128]{};
