@@ -232,8 +232,12 @@ MeshData buildCone(float radius, float height, int segments) {
     // Side: from rim at -hh to apex at +hh
     // Slant normal: outward at angle
     float slopeLen = std::sqrt(radius*radius + height*height);
-    float ny = radius / slopeLen;
-    float nr = height / slopeLen; // radial component of normal
+    // STAB-0668: a degenerate cone (radius==0 and height==0) makes
+    // slopeLen==0, so ny/nr below would be a 0/0 NaN -- fall back to a
+    // straight-up normal (arbitrary but finite) rather than propagating
+    // NaN into the exported NORMAL accessor.
+    float ny = slopeLen > 1e-8f ? radius / slopeLen : 1.0f;
+    float nr = slopeLen > 1e-8f ? height / slopeLen : 0.0f; // radial component of normal
 
     for (int i = 0; i < segments; ++i) {
         float a0 = 2.0f * pi * i / segments;
