@@ -8,7 +8,34 @@
      DeepUnion (STAB-0233): a union tree exactly 5 levels deep containing
      32 boxes total (4 boxes at each of levels 1-4, plus 16 boxes at the
      innermost level 5). A performance test asserts this evaluates in
-     under 5 seconds. -->
+     under 5 seconds.
+
+     STAB-0675: the four fixtures below widen coverage beyond union-of-
+     boxes, which was the only scale scenario this file exercised.
+
+     ManyCuttersDifference: one base block with 8 sphere cutters removed in
+     a single <difference>, testing a wider-than-typical cutter count (as
+     opposed to TenBoxUnion's wide *union* count).
+
+     IntersectionStress: an intersection of 6 overlapping spheres arranged
+     in a ring, each pair overlapping its neighbors, which exercises
+     repeated Manifold intersection evaluation at a count beyond the
+     existing 2-3-child intersection fixtures elsewhere in the test suite.
+
+     NestedMixedOps: a single tree combining all three operators at once
+     (an outer <difference> whose base is a <union> of boxes and whose
+     cutter is an <intersection> of two spheres), unlike the existing
+     DeepUnion fixture which nests, but only ever the SAME operator
+     (union) at every level; this exercises genuinely mixed nesting.
+
+     CurvedUnionStress: a union of 12 curved (non-box) primitives,
+     spheres, cylinders, cones, icospheres, deliberately excluding Torus
+     and Capsule (STAB-0700 tracks Torus's separate, unresolved non-
+     manifold CSG bug; Capsule was only fixed by STAB-0662 this session and
+     is covered by its own dedicated fixture already). Boxes are flat-faced
+     and cheap for Manifold to evaluate; this specifically stresses the
+     tessellated-curved-geometry case at a union count beyond the single-
+     shape cutter fixtures (csg_icosphere_cutter.mc3.xml etc.) elsewhere. -->
 <mc3 version="0.3" model="CsgStress">
   <objects>
 
@@ -66,6 +93,54 @@
           </union>
         </union>
       </union>
+    </union>
+
+    <difference name="ManyCuttersDifference" position="0 12 0">
+      <box    name="Block" size="8 1.5 1.5"/>
+      <sphere name="Cut0" radius="0.5" role="cutter" position="-3.15 0 0"/>
+      <sphere name="Cut1" radius="0.5" role="cutter" position="-2.25 0 0"/>
+      <sphere name="Cut2" radius="0.5" role="cutter" position="-1.35 0 0"/>
+      <sphere name="Cut3" radius="0.5" role="cutter" position="-0.45 0 0"/>
+      <sphere name="Cut4" radius="0.5" role="cutter" position="0.45 0 0"/>
+      <sphere name="Cut5" radius="0.5" role="cutter" position="1.35 0 0"/>
+      <sphere name="Cut6" radius="0.5" role="cutter" position="2.25 0 0"/>
+      <sphere name="Cut7" radius="0.5" role="cutter" position="3.15 0 0"/>
+    </difference>
+
+    <intersection name="IntersectionStress" position="0 18 0">
+      <sphere name="IS0" radius="1.0" position="0.30 0.00 0"/>
+      <sphere name="IS1" radius="1.0" position="0.15 0.26 0"/>
+      <sphere name="IS2" radius="1.0" position="-0.15 0.26 0"/>
+      <sphere name="IS3" radius="1.0" position="-0.30 0.00 0"/>
+      <sphere name="IS4" radius="1.0" position="-0.15 -0.26 0"/>
+      <sphere name="IS5" radius="1.0" position="0.15 -0.26 0"/>
+    </intersection>
+
+    <difference name="NestedMixedOps" position="0 24 0">
+      <union name="MixedBase">
+        <box name="MB0" size="1 1 1" position="0.0 0 0"/>
+        <box name="MB1" size="1 1 1" position="0.7 0 0"/>
+        <box name="MB2" size="1 1 1" position="1.4 0 0"/>
+      </union>
+      <intersection name="MixedCutter" role="cutter">
+        <sphere name="MC0" radius="0.7" position="0.6 0 0"/>
+        <sphere name="MC1" radius="0.7" position="0.8 0 0"/>
+      </intersection>
+    </difference>
+
+    <union name="CurvedUnionStress" position="0 30 0">
+      <sphere    name="CU0"  radius="0.5" segments="16" position="0.0 0 0"/>
+      <cylinder  name="CU1"  radius="0.4" height="1.0" segments="16" position="0.8 0 0"/>
+      <cone      name="CU2"  radius="0.5" height="1.0" segments="16" position="1.6 0 0"/>
+      <icosphere name="CU3"  radius="0.5" segments="16" position="2.4 0 0"/>
+      <sphere    name="CU4"  radius="0.5" segments="16" position="3.2 0 0"/>
+      <cylinder  name="CU5"  radius="0.4" height="1.0" segments="16" position="4.0 0 0"/>
+      <cone      name="CU6"  radius="0.5" height="1.0" segments="16" position="4.8 0 0"/>
+      <icosphere name="CU7"  radius="0.5" segments="16" position="5.6 0 0"/>
+      <sphere    name="CU8"  radius="0.5" segments="16" position="6.4 0 0"/>
+      <cylinder  name="CU9"  radius="0.4" height="1.0" segments="16" position="7.2 0 0"/>
+      <cone      name="CU10" radius="0.5" height="1.0" segments="16" position="8.0 0 0"/>
+      <icosphere name="CU11" radius="0.5" segments="16" position="8.8 0 0"/>
     </union>
 
   </objects>
