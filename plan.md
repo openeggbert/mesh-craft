@@ -256,6 +256,19 @@ _New section, added 2026-07-10 after a systematic comparative audit of `mc3/mc3.
 
 ---
 
+## S22 — MCB Binary Format Coverage Audit (2026-07-10)
+
+_New section, added 2026-07-10 after a systematic audit of whether `mcb` (binary format library) and `mc3tomcb` (CLI) fully and symmetrically cover everything the `Mc3Document` data model can hold, with no silent data loss on an `mc3 -> MCB -> mc3` round-trip. Overall finding: coverage is very good — all 19 object types, CSG, extrude (including S21's new `sides`/bezier fields), all N1-N7 extension sections, materials, lights, cameras, animation, and include-bookkeeping all round-trip correctly. 4 gaps found, all verified directly by reading both `mcb/src/McbWriter.cpp` and `mcb/src/McbReader.cpp` before being added here (no false positives — see STAB-0653 earlier this session for why that verification step matters)._
+
+| ID | St | Pri | Title | Key File(s) | Verification |
+|----|----|-----|-------|-------------|--------------|
+| STAB-0658 | 📋 | P0 | MCB never writes/reads `doc.rotationUnits`/`doc.eulerOrder` — silently reverts every rotation's interpretation after a round-trip | `mc3/include/MeshCraft/Mc3/Mc3Document.hpp:34-35`, `mcb/src/McbWriter.cpp:447-454` (`writeDocument`), `mcb/src/McbReader.cpp:745-770ish` (`readDocument`) | These two document-level fields govern interpretation of *every* rotation value in the whole document (`mc3.xsd`'s own comment: "apply to ALL rotation attributes in the document"). `writeDocument()` only writes `version`/`model`/`unit`/`coordinateSystem`/`defaultCamera` from the root scalars — `rotationUnits`/`eulerOrder` are absent from both the writer and reader entirely (confirmed via grep — zero matches in either file). A document authored with `rotation_units="radians"` or a non-default `euler_order` silently reverts to degrees/XYZ after any MCB round-trip, with every object's rotation reinterpreted under the wrong convention and no error. Fix: add both to `writeDocument()`/`readDocument()`, matching the pattern of the other root scalars. Verify: round-trip test with `rotation_units="radians"`, confirm it survives MCB save+reload. |
+| STAB-0659 | 📋 | P0 | MCB never writes/reads `Mc3Environment::skyboxTexture` | `mc3/include/MeshCraft/Mc3/Mc3Environment.hpp:21`, `mcb/src/McbWriter.cpp:404-410` (`writeEnvironment`), `mcb/src/McbReader.cpp:671-682` (`readEnvironment`) | `writeEnvironment()` writes `backgroundColor`/`backgroundTexture`/`fog` but never `env.skyboxTexture` (an equirectangular-panorama skybox, documented feature "I2"); the reader has no matching key either. `backgroundTexture` (its direct sibling, "I1") IS correctly covered on both sides — this is an asymmetric, clearly-unintentional single-field omission of a real, commonly-authored environment feature, silently dropped on every MCB round-trip. Fix: add `wIfStr`/read-key pair mirroring `backgroundTexture`'s handling. Verify: round-trip test with `skyboxTexture` set, confirm it survives MCB save+reload. |
+| STAB-0660 | 📋 | P1 | MCB never writes/reads `Mc3Texture::mipMaps` (same bug class `STAB-0654` just fixed on the XML side, now found fresh on the MCB side) | `mc3/include/MeshCraft/Mc3/Mc3Texture.hpp:14`, `mcb/src/McbWriter.cpp:264-273` (`writeTexture`), `mcb/src/McbReader.cpp:441-455` (`readTexture`) | `mipMaps` was added to `Mc3Texture` this session (`STAB-0654`, 2026-07-10) specifically to fix silent data loss on XML load/save — that fix did not touch `mcb/`, so the identical bug now exists fresh on the MCB path: `mip_maps="false"` survives an XML round-trip but is silently lost the moment a scene goes through `mc3tomcb`. Fix: add `wIfBool`/read-key pair to `writeTexture()`/`readTexture()`, matching the pattern of `wrapU`/`colorSpace`. Verify: round-trip test — texture with `mipMaps=false`, confirm it survives MCB save+reload. |
+| STAB-0661 | 📋 | P1 | MCB never writes/reads per-object `Mc3Object::metadata` (the document-level equivalent IS covered — this is the per-object one) | `mc3/include/MeshCraft/Mc3/Mc3Object.hpp:93-94`, `mcb/src/McbWriter.cpp:216-262` (`writeObject`), `mcb/src/McbReader.cpp:377-439` (`readObject`) | `obj.metadata` (opaque per-object key/value pass-through, mirrors `<metadata>` in the XSD, distinct from document-level `doc.metadata`/`doc.meta` which ARE both covered and tested) is never touched anywhere in `writeObject()`/`readObject()` — confirmed by reading the full body of both functions. Any object carrying import-sourced pass-through metadata with no first-class MC3 representation silently loses it on MCB round-trip. Fix: add a `wKeyMap`/read-key pair mirroring the document-level `metadata` handling (`McbWriter.cpp:465`, `McbReader.cpp:764`), scoped to `obj.metadata` instead of `doc.metadata`. Verify: round-trip test — object with per-object `<metadata>` properties, confirm they survive MCB save+reload. |
+
+---
+
 ## Summary: Task Count by Section
 
 _As of 2026-07-10, the 620 ✅ rows counted below live in `plan_20260710.md`; only the 29 🟡 + 1 📋 = 30 open rows remain inline in this file's S0-S20 sections above. Counts below are preserved for historical continuity._
@@ -284,7 +297,8 @@ _As of 2026-07-10, the 620 ✅ rows counted below live in `plan_20260710.md`; on
 | S19 Security | 15 | 15 | 0 | 0 | 0 | 0 |
 | S20 Release | 15 | 14 | 0 | 0 | 1 | 0 |
 | S21 Format audit (new 2026-07-10) | 7 | 7 | 0 | 0 | 0 | 0 |
-| **TOTAL** | **657** | **627** | **29** | **0** | **1** | **0** |
+| S22 MCB coverage audit (new 2026-07-10) | 4 | 0 | 0 | 0 | 4 | 0 |
+| **TOTAL** | **661** | **627** | **29** | **0** | **5** | **0** |
 
 _Recomputed directly from per-row status markers after S0/S1/S2/S3/S4/S5/S6/
 S7/S8/S9/S10/S11/S12/S13/S14/S16 fully closed (S1/S3/S4/S5/S6/S13/S16 100%,
