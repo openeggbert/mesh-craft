@@ -675,6 +675,7 @@ static Mc3::Mc3Environment readEnvironment(std::istream& in) {
         uint8_t tag = rU8(in);
         if      (k == "backgroundColor")  env.backgroundColor  = rVec3(in);
         else if (k == "backgroundTexture") env.backgroundTexture = rRawStr(in);
+        else if (k == "skyboxTexture")     env.skyboxTexture     = rRawStr(in);
         else if (k == "fog")               env.fog              = readFog(in);
         else                               skipValue(in, tag);
     }

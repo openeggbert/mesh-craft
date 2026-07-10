@@ -405,6 +405,7 @@ static void writeEnvironment(std::ostream& o, const Mc3::Mc3Environment& env) {
     const Mc3::Mc3Environment def;
     wIfVec3(o, "backgroundColor",  env.backgroundColor,  def.backgroundColor);
     wIfStr (o, "backgroundTexture", env.backgroundTexture, "");
+    wIfStr (o, "skyboxTexture",    env.skyboxTexture,     "");
     if (env.fog) { wKeyObj(o, "fog"); writeFog(o, *env.fog); }
     wEnd(o);
 }

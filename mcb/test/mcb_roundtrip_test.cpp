@@ -116,6 +116,44 @@ static void testDocumentRotationConvention() {
 }
 
 // ---------------------------------------------------------------------------
+// STAB-0659 — Mc3Environment::skyboxTexture (I2, equirectangular panorama)
+// was entirely missing from MCB; its sibling backgroundTexture (I1) WAS
+// covered, which previously masked "environment roundtrips fine" as true
+// when it wasn't for this field. No prior mcb test covered Mc3Environment
+// at all, so this also covers backgroundColor/backgroundTexture/fog.
+// ---------------------------------------------------------------------------
+
+static void testEnvironmentAllFields() {
+    Mc3Document doc;
+    Mc3Environment env;
+    env.backgroundColor   = {0.1f, 0.2f, 0.3f};
+    env.backgroundTexture = "textures/bg.png";
+    env.skyboxTexture     = "textures/sky_panorama.hdr";
+    Mc3Fog fog;
+    fog.color   = {0.5f, 0.6f, 0.7f};
+    fog.mode    = FogMode::Exponential;
+    fog.start   = 5.0f;
+    fog.end     = 50.0f;
+    fog.density = 0.02f;
+    env.fog = fog;
+    doc.environment = env;
+
+    auto rt = roundtrip(doc);
+    CHECK(rt.environment.has_value(), "environment: present after roundtrip");
+    if (!rt.environment) return;
+    CHECKF(rt.environment->backgroundColor[2], 0.3f, "environment: backgroundColor.b survives");
+    CHECK(rt.environment->backgroundTexture == "textures/bg.png", "environment: backgroundTexture survives");
+    CHECK(rt.environment->skyboxTexture == "textures/sky_panorama.hdr",
+          "environment: skyboxTexture survives (was silently dropped)");
+    CHECK(rt.environment->fog.has_value(), "environment: fog present");
+    if (rt.environment->fog) {
+        CHECK(rt.environment->fog->mode == FogMode::Exponential, "environment: fog.mode survives");
+        CHECKF(rt.environment->fog->start, 5.0f, "environment: fog.start survives");
+        CHECKF(rt.environment->fog->density, 0.02f, "environment: fog.density survives");
+    }
+}
+
+// ---------------------------------------------------------------------------
 // STAB-0123 — N1 svgTextures map
 // ---------------------------------------------------------------------------
 
@@ -923,6 +961,7 @@ int main() {
     testSmoke();
     testBasicScene();
     testDocumentRotationConvention();
+    testEnvironmentAllFields();
     testSvgTexture();
     testEmbed();
     testScript();
