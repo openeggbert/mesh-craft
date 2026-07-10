@@ -450,6 +450,8 @@ static void writeDocument(std::ostream& o, const Mc3::Mc3Document& doc) {
     wIfStr(o, "model",            doc.model,            "");
     wIfStr(o, "unit",             doc.unit,             def.unit.c_str());
     wIfStr(o, "coordinateSystem", doc.coordinateSystem, def.coordinateSystem.c_str());
+    wIfStr(o, "rotationUnits",    doc.rotationUnits,    def.rotationUnits.c_str());
+    wIfStr(o, "eulerOrder",       doc.eulerOrder,       def.eulerOrder.c_str());
     wIfStr(o, "defaultCamera",    doc.defaultCamera,    "");
 
     if (!doc.meta.empty()) {

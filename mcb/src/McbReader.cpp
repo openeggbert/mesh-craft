@@ -751,6 +751,8 @@ static Mc3::Mc3Document readDocument(std::istream& in) {
         else if (k == "model")            doc.model            = rRawStr(in);
         else if (k == "unit")             doc.unit             = rRawStr(in);
         else if (k == "coordinateSystem") doc.coordinateSystem = rRawStr(in);
+        else if (k == "rotationUnits")    doc.rotationUnits    = rRawStr(in);
+        else if (k == "eulerOrder")       doc.eulerOrder       = rRawStr(in);
         else if (k == "defaultCamera")    doc.defaultCamera    = rRawStr(in);
         else if (k == "meta") {
             uint32_t n = rU32Bounded(in);

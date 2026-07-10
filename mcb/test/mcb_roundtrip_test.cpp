@@ -99,6 +99,23 @@ static void testBasicScene() {
 }
 
 // ---------------------------------------------------------------------------
+// STAB-0658 — doc.rotationUnits/eulerOrder were entirely missing from MCB;
+// a document authored with non-default rotation conventions would silently
+// revert to degrees/XYZ (reinterpreting every object's rotation) on a
+// roundtrip.
+// ---------------------------------------------------------------------------
+
+static void testDocumentRotationConvention() {
+    Mc3Document doc;
+    doc.rotationUnits = "radians";
+    doc.eulerOrder    = "ZYX";
+
+    auto rt = roundtrip(doc);
+    CHECK(rt.rotationUnits == "radians", "rotation convention: rotationUnits survives (was silently dropped)");
+    CHECK(rt.eulerOrder    == "ZYX",     "rotation convention: eulerOrder survives (was silently dropped)");
+}
+
+// ---------------------------------------------------------------------------
 // STAB-0123 — N1 svgTextures map
 // ---------------------------------------------------------------------------
 
@@ -905,6 +922,7 @@ static void testFileSizeSmallerThanXml() {
 int main() {
     testSmoke();
     testBasicScene();
+    testDocumentRotationConvention();
     testSvgTexture();
     testEmbed();
     testScript();
