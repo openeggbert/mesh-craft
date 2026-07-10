@@ -79,7 +79,11 @@ void MeshCraftApplication::drawLeftPanel(float panelY, float panelH)
         ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove |
         ImGuiWindowFlags_NoBringToFrontOnFocus | ImGuiWindowFlags_NoSavedSettings);
 
-    if (ImGui::BeginTabBar("##lefttabs")) {
+    // FittingPolicyScroll: with 12 tabs now (5 added by S24 on 2026-07-10:
+    // Scripts/Audio/Triggers/Embeds/States), the default shrink-to-fit
+    // policy squeezed every label down to an unreadable sliver -- found via
+    // live verification. Scroll arrows keep each tab's full label legible.
+    if (ImGui::BeginTabBar("##lefttabs", ImGuiTabBarFlags_FittingPolicyScroll)) {
 
         // -------------------------------------------------------------------
         // Tab: Scene hierarchy  (L1 — delegated to SceneHierarchyPanel)
@@ -749,7 +753,14 @@ void MeshCraftApplication::drawLeftPanel(float panelY, float panelH)
                 ImGui::SameLine();
                 if (ImGui::RadioButton("Inline##svgtype", isInline)) {
                     if (!isInline) {
-                        pushUndo(); svg.src.clear(); modified_ = true; updateWindowTitle();
+                        pushUndo(); svg.src.clear();
+                        // isInline() requires inlineContent to be non-empty
+                        // (src empty && !inlineContent.empty()) -- without
+                        // seeding it, the radio button could never actually
+                        // flip to Inline for a fresh/External entry.
+                        if (svg.inlineContent.empty())
+                            svg.inlineContent = "<svg xmlns=\"http://www.w3.org/2000/svg\"></svg>";
+                        modified_ = true; updateWindowTitle();
                     }
                 }
 
@@ -1638,7 +1649,14 @@ void MeshCraftApplication::drawLeftPanel(float panelY, float panelH)
                 ImGui::SameLine();
                 if (ImGui::RadioButton("Inline (base64)##embedtype", isInline)) {
                     if (!isInline) {
-                        pushUndo(); embed.src.clear(); modified_ = true; updateWindowTitle();
+                        pushUndo(); embed.src.clear();
+                        // isInline() requires base64Content to be non-empty
+                        // (src empty && !base64Content.empty()) -- without
+                        // seeding it, the radio button could never actually
+                        // flip to Inline for a fresh/External entry.
+                        if (embed.base64Content.empty())
+                            embed.base64Content = "TODO_paste_base64_glb_data_here";
+                        modified_ = true; updateWindowTitle();
                     }
                 }
 
