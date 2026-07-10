@@ -102,7 +102,16 @@ static XMLElement* writeObject(XMLDocument& xmlDoc, const std::shared_ptr<Mc3Obj
         el->InsertEndChild(de);
     }
 
-    if (obj->uvMapping) {
+    // STAB-0656: mc3.xsd only declares <uv_mapping> for primitive/mesh/
+    // extrude complexTypes, not for group/union/difference/intersection/
+    // instance/area -- writing it for those would produce schema-invalid
+    // XML even though obj->uvMapping isn't reachable there via the editor
+    // UI today.
+    const bool uvMappingAllowedForType =
+        obj->type != ObjectType::Group        && obj->type != ObjectType::Union &&
+        obj->type != ObjectType::Difference   && obj->type != ObjectType::Intersection &&
+        obj->type != ObjectType::Instance     && obj->type != ObjectType::Area;
+    if (obj->uvMapping && uvMappingAllowedForType) {
         const auto& m = *obj->uvMapping;
         XMLElement* uve = xmlDoc.NewElement("uv_mapping");
         const char* projStr = "planar";

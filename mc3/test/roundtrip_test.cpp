@@ -454,6 +454,29 @@ static void testGroupChildren() {
         CHECK(rt.objects[0]->children[2]->name == "Child2", "group: child[2].name");
 }
 
+// STAB-0656: mc3.xsd only declares <uv_mapping> on primitive/mesh/extrude
+// complexTypes -- writing it for a Group (or Union/Difference/Intersection/
+// Instance/Area) would be schema-invalid XML. Not reachable via the editor
+// UI today, but nothing structurally prevented obj->uvMapping from being
+// set on any object type, so verify the writer actually skips it.
+static void testUvMappingNotWrittenForGroup() {
+    Mc3Document doc;
+    auto grp  = std::make_shared<Mc3Object>();
+    grp->id   = "grp1";
+    grp->type = ObjectType::Group;
+    grp->uvMapping = Mc3UvMapping{};  // structurally possible, semantically invalid for Group
+    doc.objects.push_back(grp);
+
+    auto p = tmpPath();
+    doc.saveToFile(p);
+    std::ifstream saved(p);
+    std::string content((std::istreambuf_iterator<char>(saved)), std::istreambuf_iterator<char>());
+    std::filesystem::remove(p);
+
+    CHECK(content.find("uv_mapping") == std::string::npos,
+          "uv_mapping: not written for a Group object, even when set on the in-memory model");
+}
+
 // STAB-0031: Union/Intersection (Difference already covered by
 // testCsgDifferenceAndCutter above), Instance, and Area — object types not
 // exercised by testAllPrimitiveTypes() (primitives only) or elsewhere.
@@ -3346,6 +3369,7 @@ int main(int argc, char* argv[]) {
     testExtrudeBezier();
     testCsgDifferenceAndCutter();
     testGroupChildren();
+    testUvMappingNotWrittenForGroup();
     testUnionAndIntersectionRoundtrip();
     testInstanceRoundtrip();
     testAreaRoundtrip();
