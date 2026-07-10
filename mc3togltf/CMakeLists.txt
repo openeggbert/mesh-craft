@@ -521,6 +521,17 @@ if(BUILD_TESTING)
                     "$<TARGET_FILE:mc3togltf>"
         )
         set_tests_properties(mc3togltf_dangling_material PROPERTIES TIMEOUT 30 LABELS "export")
+        set(_extrude_sides_bezier_xml "${CMAKE_CURRENT_SOURCE_DIR}/../test/extrude_sides_bezier.mc3.xml")
+        if(EXISTS "${_extrude_sides_bezier_xml}")
+            add_test(
+                NAME mc3togltf_extrude_sides_bezier
+                COMMAND "${PYTHON3_EXEC}"
+                        "${CMAKE_CURRENT_SOURCE_DIR}/test/extrude_sides_bezier_test.py"
+                        "$<TARGET_FILE:mc3togltf>"
+                        "${_extrude_sides_bezier_xml}"
+            )
+            set_tests_properties(mc3togltf_extrude_sides_bezier PROPERTIES TIMEOUT 30 LABELS "export")
+        endif()
         add_test(
             NAME mc3togltf_dangling_animation_target
             COMMAND "${PYTHON3_EXEC}"
