@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- STAB-0664 regression fixture: a normal-mapped Box and Sphere, to verify
+     mc3togltf generates a TANGENT accessor. Sphere is included specifically
+     to exercise the UV-seam/degenerate-triangle-vertex case (mc3togltf's
+     TANGENT algorithm must not produce NaN/zero-length tangents there).
+     PlainBox has no normal_texture and must NOT get a TANGENT accessor. -->
+<mc3 version="0.3" model="NormalMapTangentFixture">
+
+  <textures>
+    <texture id="tex_diffuse" uri="textures/bark.png"/>
+    <texture id="tex_normal"  uri="textures/bark.png"/>
+  </textures>
+
+  <materials>
+    <material id="mat_normal_mapped" roughness="0.8" metallic="0.0">
+      <base_color>1.0 1.0 1.0 1.0</base_color>
+      <base_color_texture>tex_diffuse</base_color_texture>
+      <normal_texture>tex_normal</normal_texture>
+    </material>
+    <material id="mat_plain" roughness="0.5" metallic="0.0">
+      <base_color>0.8 0.8 0.8 1.0</base_color>
+    </material>
+  </materials>
+
+  <objects>
+    <box    name="NormalMappedBox"    size="1 1 1" material="mat_normal_mapped" position="-2 0 0"/>
+    <sphere name="NormalMappedSphere" radius="0.5" segments="16" material="mat_normal_mapped" position="0 0 0"/>
+    <box    name="PlainBox"           size="1 1 1" material="mat_plain" position="2 0 0"/>
+  </objects>
+
+</mc3>

@@ -16,7 +16,9 @@
 #include <MeshCraft/Mc3/Mc3Primitive.hpp>
 
 #include <algorithm>
+#include <array>
 #include <cctype>
+#include <cmath>
 #include <cstring>
 #include <iomanip>
 #include <iostream>
@@ -242,6 +244,114 @@ static int addAccessorVec2(tinygltf::Model& model,
     acc.type          = TINYGLTF_TYPE_VEC2;
     model.accessors.push_back(std::move(acc));
     return static_cast<int>(model.accessors.size()) - 1;
+}
+
+static int addAccessorVec4(tinygltf::Model& model,
+                           const std::vector<float>& data)
+{
+    int bvIdx = addBufferView(model, data.data(),
+                              data.size() * sizeof(float),
+                              TINYGLTF_TARGET_ARRAY_BUFFER);
+
+    tinygltf::Accessor acc;
+    acc.bufferView    = bvIdx;
+    acc.byteOffset    = 0;
+    acc.componentType = TINYGLTF_COMPONENT_TYPE_FLOAT;
+    acc.count         = static_cast<int>(data.size() / 4);
+    acc.type          = TINYGLTF_TYPE_VEC4;
+    model.accessors.push_back(std::move(acc));
+    return static_cast<int>(model.accessors.size()) - 1;
+}
+
+// STAB-0664: TANGENT attribute for normal-mapped meshes. Not full MikkTSpace
+// (angle/area-weighted contributions with feature-vertex splitting) -- uses
+// the standard per-triangle-tangent-then-per-vertex-average-then-Gram-
+// Schmidt-orthogonalize algorithm (the same approach three.js's own
+// BufferGeometry.computeTangents() uses), which produces correct, glTF-
+// TANGENT-attribute-compatible results for real-time normal mapping without
+// requiring a full MikkTSpace reference-implementation port. Returns a flat
+// VEC4 array (xyz tangent + w handedness sign), or empty if positions/
+// normals/texcoords/indices are inconsistent (caller should skip TANGENT).
+static std::vector<float> computeTangents(const std::vector<float>& positions,
+                                          const std::vector<float>& normals,
+                                          const std::vector<float>& texcoords,
+                                          const std::vector<uint32_t>& indices)
+{
+    size_t vertCount = positions.size() / 3;
+    if (vertCount == 0 || normals.size() != vertCount * 3 ||
+        texcoords.size() != vertCount * 2 || indices.size() < 3)
+        return {};
+
+    std::vector<std::array<float,3>> tan1(vertCount, {0,0,0});
+    std::vector<std::array<float,3>> tan2(vertCount, {0,0,0});
+
+    for (size_t i = 0; i + 2 < indices.size(); i += 3) {
+        uint32_t i0 = indices[i], i1 = indices[i+1], i2 = indices[i+2];
+        if (i0 >= vertCount || i1 >= vertCount || i2 >= vertCount) continue;
+
+        auto P = [&](uint32_t v) { return std::array<float,3>{positions[v*3], positions[v*3+1], positions[v*3+2]}; };
+        auto UV = [&](uint32_t v) { return std::array<float,2>{texcoords[v*2], texcoords[v*2+1]}; };
+        auto p0 = P(i0), p1 = P(i1), p2 = P(i2);
+        auto uv0 = UV(i0), uv1 = UV(i1), uv2 = UV(i2);
+
+        float e1x = p1[0]-p0[0], e1y = p1[1]-p0[1], e1z = p1[2]-p0[2];
+        float e2x = p2[0]-p0[0], e2y = p2[1]-p0[1], e2z = p2[2]-p0[2];
+        float du1 = uv1[0]-uv0[0], dv1 = uv1[1]-uv0[1];
+        float du2 = uv2[0]-uv0[0], dv2 = uv2[1]-uv0[1];
+
+        float denom = du1 * dv2 - du2 * dv1;
+        if (std::abs(denom) < 1e-12f) continue;  // degenerate UV triangle -- skip
+        float r = 1.0f / denom;
+
+        std::array<float,3> sdir{ (dv2*e1x - dv1*e2x) * r, (dv2*e1y - dv1*e2y) * r, (dv2*e1z - dv1*e2z) * r };
+        std::array<float,3> tdir{ (du1*e2x - du2*e1x) * r, (du1*e2y - du2*e1y) * r, (du1*e2z - du2*e1z) * r };
+
+        for (uint32_t v : {i0, i1, i2}) {
+            tan1[v][0] += sdir[0]; tan1[v][1] += sdir[1]; tan1[v][2] += sdir[2];
+            tan2[v][0] += tdir[0]; tan2[v][1] += tdir[1]; tan2[v][2] += tdir[2];
+        }
+    }
+
+    std::vector<float> out(vertCount * 4, 0.0f);
+    for (size_t v = 0; v < vertCount; ++v) {
+        std::array<float,3> n{normals[v*3], normals[v*3+1], normals[v*3+2]};
+        std::array<float,3> t = tan1[v];
+
+        // Gram-Schmidt orthogonalize against the vertex normal.
+        float ndott = n[0]*t[0] + n[1]*t[1] + n[2]*t[2];
+        std::array<float,3> tOrtho{ t[0]-n[0]*ndott, t[1]-n[1]*ndott, t[2]-n[2]*ndott };
+        float len = std::sqrt(tOrtho[0]*tOrtho[0] + tOrtho[1]*tOrtho[1] + tOrtho[2]*tOrtho[2]);
+
+        std::array<float,3> tFinal;
+        if (len > 1e-8f) {
+            tFinal = { tOrtho[0]/len, tOrtho[1]/len, tOrtho[2]/len };
+        } else {
+            // Degenerate (e.g. zero UV area at this vertex, or tangent
+            // exactly parallel to normal) -- fall back to an arbitrary
+            // vector perpendicular to the normal, so TANGENT is still a
+            // valid unit vector rather than NaN/zero.
+            std::array<float,3> arbitrary = (std::abs(n[0]) < 0.9f) ? std::array<float,3>{1,0,0} : std::array<float,3>{0,1,0};
+            float ax = n[1]*arbitrary[2]-n[2]*arbitrary[1];
+            float ay = n[2]*arbitrary[0]-n[0]*arbitrary[2];
+            float az = n[0]*arbitrary[1]-n[1]*arbitrary[0];
+            float alen = std::sqrt(ax*ax+ay*ay+az*az);
+            tFinal = alen > 1e-8f ? std::array<float,3>{ax/alen, ay/alen, az/alen} : std::array<float,3>{1,0,0};
+        }
+
+        // Handedness: w = +1 if (N x T) points the same way as the
+        // accumulated bitangent, -1 otherwise (standard glTF/OpenGL
+        // convention for reconstructing the bitangent as cross(N,T)*w).
+        float cx = n[1]*tFinal[2]-n[2]*tFinal[1];
+        float cy = n[2]*tFinal[0]-n[0]*tFinal[2];
+        float cz = n[0]*tFinal[1]-n[1]*tFinal[0];
+        float handedness = (cx*tan2[v][0] + cy*tan2[v][1] + cz*tan2[v][2]) < 0.0f ? -1.0f : 1.0f;
+
+        out[v*4]   = tFinal[0];
+        out[v*4+1] = tFinal[1];
+        out[v*4+2] = tFinal[2];
+        out[v*4+3] = handedness;
+    }
+    return out;
 }
 
 static int addAccessorIndices(tinygltf::Model& model,
@@ -512,6 +622,24 @@ static int buildMesh(ExportCtx& ctx,
     int uvAcc   = !md.texcoords.empty() ? addAccessorVec2(model, md.texcoords) : -1;
     int idxAcc = addAccessorIndices(model, md.indices);
 
+    // STAB-0664: normal-mapped meshes need TANGENT for correct tangent-
+    // space normal mapping (glTF viewers may fall back to derivative-based
+    // tangents without it, but that's inconsistent across implementations
+    // and can look visibly wrong, especially near UV seams). Only computed
+    // when actually needed (a normal map is assigned) and possible (both
+    // NORMAL and TEXCOORD_0 are present) -- added after idxAcc so existing
+    // meshes' POSITION/NORMAL/TEXCOORD_0/indices accessor order and indices
+    // are completely unaffected (STAB-0687's golden-byte-test constraint).
+    int tanAcc = -1;
+    if (normAcc >= 0 && uvAcc >= 0 && materialIdx >= 0 &&
+        materialIdx < static_cast<int>(model.materials.size()) &&
+        model.materials[materialIdx].normalTexture.index >= 0)
+    {
+        std::vector<float> tangents = computeTangents(md.positions, md.normals, md.texcoords, md.indices);
+        if (!tangents.empty())
+            tanAcc = addAccessorVec4(model, tangents);
+    }
+
     tinygltf::Primitive prim;
     prim.attributes["POSITION"] = posAcc;
     // Guard against a spec-invalid zero-count accessor if md ever has
@@ -520,6 +648,7 @@ static int buildMesh(ExportCtx& ctx,
     // previously lacked entirely, for both attributes).
     if (normAcc >= 0) prim.attributes["NORMAL"] = normAcc;
     if (uvAcc   >= 0) prim.attributes["TEXCOORD_0"] = uvAcc;
+    if (tanAcc  >= 0) prim.attributes["TANGENT"] = tanAcc;
     prim.indices = idxAcc;
     prim.mode    = TINYGLTF_MODE_TRIANGLES;
     if (materialIdx >= 0) prim.material = materialIdx;
@@ -551,9 +680,23 @@ static int addMeshDataToGltf(ExportCtx& ctx, MeshData md,
     tinygltf::Primitive prim;
     prim.attributes["POSITION"] = posAcc;
     prim.attributes["NORMAL"]   = normAcc;
+    int uvAcc = -1;
     if (!md.texcoords.empty()) {
-        int uvAcc = addAccessorVec2(model, md.texcoords);
+        uvAcc = addAccessorVec2(model, md.texcoords);
         prim.attributes["TEXCOORD_0"] = uvAcc;
+    }
+    // STAB-0664: same TANGENT generation as buildMesh() -- see that
+    // function's comment for the algorithm/rationale. CSG-evaluated meshes
+    // (this function's only caller) can carry a normal-mapped material too.
+    if (uvAcc >= 0 && materialIdx >= 0 &&
+        materialIdx < static_cast<int>(model.materials.size()) &&
+        model.materials[materialIdx].normalTexture.index >= 0)
+    {
+        std::vector<float> tangents = computeTangents(md.positions, md.normals, md.texcoords, md.indices);
+        if (!tangents.empty()) {
+            int tanAcc = addAccessorVec4(model, tangents);
+            prim.attributes["TANGENT"] = tanAcc;
+        }
     }
     prim.indices = idxAcc;
     prim.mode    = TINYGLTF_MODE_TRIANGLES;

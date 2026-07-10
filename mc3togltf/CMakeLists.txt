@@ -474,6 +474,17 @@ if(BUILD_TESTING)
             )
             set_tests_properties(mc3togltf_glb_texture_embed_jpeg PROPERTIES TIMEOUT 30 LABELS "export")
         endif()
+        set(_normal_map_tangent_xml "${CMAKE_CURRENT_SOURCE_DIR}/../test/normal_map_tangent.mc3.xml")
+        if(EXISTS "${_normal_map_tangent_xml}")
+            add_test(
+                NAME mc3togltf_tangent_generation
+                COMMAND "${PYTHON3_EXEC}"
+                        "${CMAKE_CURRENT_SOURCE_DIR}/test/tangent_generation_test.py"
+                        "$<TARGET_FILE:mc3togltf>"
+                        "${_normal_map_tangent_xml}"
+            )
+            set_tests_properties(mc3togltf_tangent_generation PROPERTIES TIMEOUT 30 LABELS "export")
+        endif()
         set(_rotation_convention_xml "${CMAKE_CURRENT_SOURCE_DIR}/../test/rotation_convention_export.mc3.xml")
         if(EXISTS "${_rotation_convention_xml}")
             add_test(
