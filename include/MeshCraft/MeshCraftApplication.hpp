@@ -156,6 +156,9 @@ private:
     // Triggers panel selection (STAB-0707)
     std::string selectedTriggerKey_;
 
+    // Embedded glTF panel selection (STAB-0704)
+    std::string selectedEmbedKey_;
+
     // Audio panel selection + preview playback (STAB-0706). One shared
     // preview instance at a time (starting a new preview stops any
     // currently-playing one) -- SoundEffectInstance keeps its own audio

@@ -1557,6 +1557,103 @@ void MeshCraftApplication::drawLeftPanel(float panelY, float panelH)
             ImGui::EndTabItem();
         }
 
+        // -------------------------------------------------------------------
+        // Tab: Embeds (STAB-0704, N2) — lowest-priority N-extension (a
+        // narrow interchange feature: embedding a whole external glTF/GLB
+        // asset by reference or inline base64). doc.embeds already parses/
+        // round-trips/exports correctly; this was the only missing piece.
+        // A Mesh object references an embed via meshSource = "embed:<id>".
+        // -------------------------------------------------------------------
+        if (ImGui::BeginTabItem("Embeds")) {
+            if (!selectedEmbedKey_.empty() && !document_.embeds.count(selectedEmbedKey_))
+                selectedEmbedKey_.clear();
+
+            if (ImGui::SmallButton("+##embedadd")) {
+                pushUndo();
+                int n = 1;
+                std::string key;
+                do { key = "embed_" + std::to_string(n++); }
+                while (document_.embeds.count(key));
+                Mc3::Mc3EmbedGltf embed;
+                embed.id = key;
+                document_.embeds[key] = embed;
+                selectedEmbedKey_ = key;
+                modified_ = true; updateWindowTitle();
+            }
+            if (ImGui::IsItemHovered()) ImGui::SetTooltip("Add embed");
+            ImGui::SameLine();
+            if (ImGui::SmallButton("-##embedremove") && !selectedEmbedKey_.empty()) {
+                pushUndo();
+                document_.embeds.erase(selectedEmbedKey_);
+                selectedEmbedKey_.clear();
+                modified_ = true; updateWindowTitle();
+            }
+
+            ImGui::Separator();
+            for (const auto& [key, embed] : document_.embeds) {
+                bool sel = (key == selectedEmbedKey_);
+                std::string label = key;
+                if (!embed.src.empty()) {
+                    auto slash = embed.src.find_last_of("/\\");
+                    label += "  " + (slash != std::string::npos ? embed.src.substr(slash+1) : embed.src);
+                } else if (!embed.base64Content.empty()) {
+                    label += "  (inline)";
+                }
+                ImGui::PushID(("embed_" + key).c_str());
+                if (ImGui::Selectable(label.c_str(), sel))
+                    selectedEmbedKey_ = key;
+                ImGui::PopID();
+            }
+
+            if (!selectedEmbedKey_.empty() && document_.embeds.count(selectedEmbedKey_)) {
+                auto& embed = document_.embeds[selectedEmbedKey_];
+                ImGui::Spacing();
+
+                ImGui::TextDisabled("ID");
+                ImGui::SameLine();
+                if (ImGui::SmallButton("Copy##embedid"))
+                    ImGui::SetClipboardText(selectedEmbedKey_.c_str());
+                ImGui::TextUnformatted(selectedEmbedKey_.c_str());
+                ImGui::TextDisabled("Reference from a Mesh object's Source: embed:%s", selectedEmbedKey_.c_str());
+
+                bool isInline = embed.isInline();
+                ImGui::TextDisabled("Type");
+                if (ImGui::RadioButton("External##embedtype", !isInline)) {
+                    if (isInline) {
+                        pushUndo(); embed.base64Content.clear(); modified_ = true; updateWindowTitle();
+                    }
+                }
+                ImGui::SameLine();
+                if (ImGui::RadioButton("Inline (base64)##embedtype", isInline)) {
+                    if (!isInline) {
+                        pushUndo(); embed.src.clear(); modified_ = true; updateWindowTitle();
+                    }
+                }
+
+                if (!isInline) {
+                    ImGui::TextDisabled("Source path (.glb)");
+                    char buf[512];
+                    std::strncpy(buf, embed.src.c_str(), sizeof(buf)-1); buf[511]='\0';
+                    ImGui::SetNextItemWidth(-1);
+                    if (ImGui::InputText("##embedsrc", buf, sizeof(buf),
+                            ImGuiInputTextFlags_EnterReturnsTrue)) {
+                        pushUndo(); embed.src = buf; modified_ = true; updateWindowTitle();
+                    }
+                } else {
+                    ImGui::TextDisabled("Base64 GLB data");
+                    char buf[16384];
+                    std::strncpy(buf, embed.base64Content.c_str(), sizeof(buf)-1); buf[16383]='\0';
+                    ImGui::SetNextItemWidth(-1);
+                    if (ImGui::InputTextMultiline("##embedbase64", buf, sizeof(buf),
+                            ImVec2(-1, 120), ImGuiInputTextFlags_EnterReturnsTrue)) {
+                        pushUndo(); embed.base64Content = buf; modified_ = true; updateWindowTitle();
+                    }
+                }
+            }
+
+            ImGui::EndTabItem();
+        }
+
         ImGui::EndTabBar();
     }
 
