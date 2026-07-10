@@ -21,6 +21,7 @@
 
 #include <manifold/manifold.h>
 #include <tiny_obj_loader.h>
+#include "MeshBuilder.hpp"  // mc3togltf_lib -- buildPrimitive(), shared with CsgEvaluator.cpp (STAB-0670)
 
 using namespace Microsoft::Xna::Framework;
 using namespace Microsoft::Xna::Framework::Graphics;
@@ -101,6 +102,34 @@ static manifold::Manifold buildManifoldTree(
         float r = obj.primitive ? obj.primitive->radius : 0.5f;
         float h = obj.primitive ? obj.primitive->height : 1.0f;
         return applyTransform(Manifold::Cylinder(h, r, 0.0f, SEG, /*center=*/true));
+    }
+    // STAB-0670: Torus/Capsule/IcoSphere have no native Manifold primitive
+    // constructor (unlike Box/Sphere/Cylinder/Cone above) -- previously fell
+    // through to `default: return Manifold{}`, silently previewing as empty
+    // even though CsgEvaluator.cpp (export-time) has always supported them.
+    // Reuses mc3togltf_lib's buildPrimitive() so the preview is built from
+    // the exact same triangulation as the real export, not a re-derived
+    // approximation.
+    case ObjectType::Torus:
+    case ObjectType::Capsule:
+    case ObjectType::IcoSphere: {
+        if (!obj.primitive) return Manifold{};
+        mc3togltf::MeshData md = mc3togltf::buildPrimitive(*obj.primitive);
+        if (md.empty() || md.positions.empty() || md.indices.empty()) return Manifold{};
+        MeshGL gl;
+        gl.numProp = 3;
+        gl.vertProperties.assign(md.positions.begin(), md.positions.end());
+        gl.triVerts.assign(md.indices.begin(), md.indices.end());
+        // STAB-0670 follow-up: buildPrimitive()'s output duplicates vertices
+        // at UV seams (correct for rendering, but leaves the raw triangle
+        // soup non-manifold) -- Merge() welds colocated verts within
+        // tolerance so Manifold's strict topology check succeeds. Without
+        // this, Torus/Capsule/IcoSphere fail NotManifold here exactly like
+        // they do in CsgEvaluator.cpp (same fix applied there).
+        gl.Merge();
+        Manifold m(gl);
+        if (m.Status() != Manifold::Error::NoError) return Manifold{};
+        return applyTransform(m);
     }
     case ObjectType::Union: {
         Manifold result;

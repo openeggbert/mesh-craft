@@ -240,6 +240,13 @@ static manifold::Manifold buildManifoldNode(
         gl.numProp = 3;
         gl.vertProperties.assign(md.positions.begin(), md.positions.end());
         gl.triVerts.assign(md.indices.begin(), md.indices.end());
+        // STAB-0670 follow-up: buildPrimitive() duplicates vertices at UV
+        // seams (correct for rendering, but the raw triangle soup is
+        // non-manifold) -- without welding colocated verts first, EVERY
+        // Torus/Capsule/IcoSphere CSG child hit "non-manifold geometry"
+        // here, a real, previously-undiscovered export failure (no fixture
+        // had ever exercised these types as CSG children until now).
+        gl.Merge();
         Manifold m(gl);
         if (m.Status() != Manifold::Error::NoError)
             throw std::runtime_error(failMsg("triangulation produced non-manifold geometry"));

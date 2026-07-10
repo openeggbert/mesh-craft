@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- STAB-0670 regression fixture: a Box minus an IcoSphere cutter. Before
+     the fix, SceneRenderer's CSG preview (buildManifoldTree()) had no
+     case for IcoSphere, so it silently produced an empty manifold there -
+     subtracting an empty manifold is a no-op, so the preview's triangle
+     count would equal a plain, un-cut box's count. mc3togltf's
+     CsgEvaluator.cpp always had an IcoSphere case, but (also fixed as
+     part of STAB-0670) its raw buildPrimitive() output needed
+     MeshGL::Merge() to weld UV-seam-duplicated vertices before Manifold
+     construction would accept it as watertight.
+
+     Torus and Capsule are NOT used here: both still fail CSG evaluation
+     for deeper, separate reasons (Capsule: STAB-0662's pole-closure bug;
+     Torus: a newly-discovered non-manifold triangulation issue not yet
+     root-caused, tracked as STAB-0700) discovered while implementing
+     this fix. See plan.md STAB-0670/STAB-0700 for the full picture. -->
+<mc3 version="0.3" model="CsgIcosphereCutterFixture" default_camera="Main">
+
+  <lights>
+    <ambient color="0.3 0.3 0.3" brightness="0.5"/>
+    <directional name="Sun" color="1 0.95 0.8" brightness="2" direction="-0.5 -1 -0.5"/>
+  </lights>
+
+  <cameras>
+    <camera name="Main" position="0 0 3" target="0 0 0" fov="50" near="0.05" far="100"/>
+  </cameras>
+
+  <materials>
+    <material id="grey"><base_color>0.7 0.7 0.7 1.0</base_color></material>
+  </materials>
+
+  <objects>
+    <difference name="BoxMinusIcoSphere" material="grey">
+      <box       name="Block"  size="1.5 1.5 1.5"/>
+      <icosphere name="Cavity" radius="0.6" segments="2" role="cutter"/>
+    </difference>
+  </objects>
+
+</mc3>
