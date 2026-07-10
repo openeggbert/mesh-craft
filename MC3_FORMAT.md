@@ -666,6 +666,31 @@ curve in a short time window could in principle be under-sampled.
 | Embedded glTF (N2, `<mesh src="embed:id"/>`) | ❌ — treated as a literal OBJ file path, which fails to parse; the export doesn't crash but continues with **no mesh on that node** (`Warning: OBJ load failed (...)` on stderr, `stats.warnings` incremented). See STAB-0194 for the tracked automated test of this exact behavior |
 | Scripts, Sounds, Music, Triggers, Scene States, Meta (N3-N7) | ❌ (no glTF equivalent — these are MCB/XML-only data, round-tripped but not translated to any glTF concept; see [Scripts (N3)](#scripts-n3) etc. above) |
 
+### Export scalability (STAB-0699)
+
+Measured directly (not assumed): exporting scenes of 200 through 50,000
+top-level primitive objects (box/sphere/cylinder/cone, round-robin, no
+`<instance>`/definition sharing — each object independently triggers its own
+`buildMesh()` call, the actual worst case since instanced geometry is
+deduplicated via `buildDefCacheKey()`), export time and peak resident memory
+both scale **linearly** with object count, with no sign of quadratic-or-worse
+growth:
+
+| Objects | Time | Peak RSS | time/object | RSS/object |
+|--------:|-----:|---------:|------------:|-----------:|
+| 1,000 | 0.02s | 8.2 MB | 0.020 ms | 8.4 KB |
+| 5,000 | 0.09s | 16.0 MB | 0.019 ms | 3.3 KB |
+| 10,000 | 0.18s | 26.1 MB | 0.018 ms | 2.7 KB |
+| 25,000 | 0.47s | 55.2 MB | 0.019 ms | 2.3 KB |
+| 50,000 | 0.93s | 104.1 MB | 0.019 ms | 2.1 KB |
+
+Per-object time and memory cost stay flat (even improving slightly as fixed
+process/parsing overhead amortizes over more objects) all the way to 50,000
+objects — real-world scenes, which are very unlikely to approach that count,
+export in well under a second. This was previously unaudited (flagged, not
+confirmed, by the STAB-0662-0701 export-quality audit); no code change was
+needed as a result of this measurement.
+
 ---
 
 ## MCB Binary Format
