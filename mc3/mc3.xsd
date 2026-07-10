@@ -229,6 +229,11 @@
     <xs:attribute name="x" type="xs:float" use="required"/>
     <xs:attribute name="y" type="xs:float" use="required"/>
     <xs:attribute name="z" type="xs:float"/>
+    <!-- bezier path control-point handle (Mc3XmlWriter.cpp writes these for
+         ExtrudePathType::Bezier points) -->
+    <xs:attribute name="cx" type="xs:float"/>
+    <xs:attribute name="cy" type="xs:float"/>
+    <xs:attribute name="cz" type="xs:float"/>
   </xs:complexType>
 
   <xs:complexType name="crossSectionType">
@@ -254,6 +259,8 @@
     <xs:attribute name="segments"     type="xs:positiveInteger"/>
     <!-- hollow tube -->
     <xs:attribute name="inner_radius" type="xs:float"/>
+    <!-- polygon / star -->
+    <xs:attribute name="sides"        type="xs:positiveInteger"/>
   </xs:complexType>
 
   <xs:complexType name="pathType">

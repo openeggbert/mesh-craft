@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<mc3 version="0.3" model="ExtrudeSidesBezier">
+
+  <!-- STAB-0651/0652: regression fixture for two mc3.xsd gaps found in the
+       2026-07-10 format audit: cross_section's "sides" attribute
+       (polygon/star) and point's "cx"/"cy"/"cz" bezier control-handle
+       attributes were both written by Mc3XmlWriter.cpp and read by
+       Mc3XmlParser.cpp, but missing from the XSD, so this content would
+       previously fail xsd_validation. -->
+
+  <objects>
+
+    <extrude name="Hexagon" position="-2 0 0" segments="1" smooth="false" caps="true">
+      <cross_section type="polygon" radius="0.5" sides="6"/>
+      <path type="line" axis="y" length="1.0"/>
+    </extrude>
+
+    <extrude name="FivePointStar" position="0 0 0" segments="1" smooth="false" caps="true">
+      <cross_section type="star" radius="0.5" inner_radius="0.2" sides="5"/>
+      <path type="line" axis="y" length="1.0"/>
+    </extrude>
+
+    <extrude name="BezierRibbon" position="2 0 0" segments="16" smooth="true" caps="true">
+      <cross_section type="rect" width="0.2" height="0.1"/>
+      <path type="bezier">
+        <point x="0" y="0" z="0" cx="0.5" cy="0"   cz="0"/>
+        <point x="0" y="2" z="0" cx="0"   cy="1.5" cz="0"/>
+      </path>
+    </extrude>
+
+  </objects>
+
+</mc3>
