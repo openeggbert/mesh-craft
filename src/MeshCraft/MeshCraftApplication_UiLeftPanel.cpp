@@ -626,6 +626,104 @@ void MeshCraftApplication::drawLeftPanel(float panelY, float panelH)
                 }
             }
 
+            // STAB-0703: SVG textures (N1, doc.svgTextures) previously had
+            // zero editor UI at all -- a user could only assign/create one
+            // by hand-editing XML. Mirrors the raster-texture list/editor
+            // pattern above, in the same tab since both are "textures" from
+            // a user's perspective.
+            ImGui::Spacing();
+            ImGui::Separator();
+            ImGui::TextUnformatted("SVG Textures");
+            ImGui::Separator();
+
+            if (!selectedSvgTextureKey_.empty() &&
+                !document_.svgTextures.count(selectedSvgTextureKey_))
+                selectedSvgTextureKey_.clear();
+
+            if (ImGui::SmallButton("+##svgadd")) {
+                pushUndo();
+                int n = 1;
+                std::string key;
+                do { key = "svg_" + std::to_string(n++); }
+                while (document_.svgTextures.count(key));
+                Mc3::Mc3SvgTexture svg;
+                svg.id = key;
+                document_.svgTextures[key] = svg;
+                selectedSvgTextureKey_ = key;
+                modified_ = true; updateWindowTitle();
+            }
+            ImGui::SameLine();
+            if (ImGui::SmallButton("-##svgremove") && !selectedSvgTextureKey_.empty()) {
+                pushUndo();
+                document_.svgTextures.erase(selectedSvgTextureKey_);
+                selectedSvgTextureKey_.clear();
+                modified_ = true; updateWindowTitle();
+            }
+
+            for (const auto& [key, svg] : document_.svgTextures) {
+                bool sel = (key == selectedSvgTextureKey_);
+                std::string label = key;
+                if (!svg.src.empty()) {
+                    auto slash = svg.src.find_last_of("/\\");
+                    label += "  " + (slash != std::string::npos ? svg.src.substr(slash+1) : svg.src);
+                } else if (!svg.inlineContent.empty()) {
+                    label += "  (inline)";
+                }
+                ImGui::PushID(("svg_" + key).c_str());
+                if (ImGui::Selectable(label.c_str(), sel))
+                    selectedSvgTextureKey_ = key;
+                ImGui::PopID();
+            }
+
+            if (!selectedSvgTextureKey_.empty() &&
+                document_.svgTextures.count(selectedSvgTextureKey_))
+            {
+                auto& svg = document_.svgTextures[selectedSvgTextureKey_];
+                ImGui::Spacing();
+
+                ImGui::TextDisabled("ID");
+                ImGui::SameLine();
+                if (ImGui::SmallButton("Copy##svgid"))
+                    ImGui::SetClipboardText(selectedSvgTextureKey_.c_str());
+                ImGui::TextUnformatted(selectedSvgTextureKey_.c_str());
+
+                // External vs inline are mutually exclusive per
+                // Mc3SvgTexture's own contract (src empty <=> inline set).
+                bool isInline = svg.isInline();
+                ImGui::TextDisabled("Type");
+                if (ImGui::RadioButton("External##svgtype", !isInline)) {
+                    if (isInline) {
+                        pushUndo(); svg.inlineContent.clear(); modified_ = true; updateWindowTitle();
+                    }
+                }
+                ImGui::SameLine();
+                if (ImGui::RadioButton("Inline##svgtype", isInline)) {
+                    if (!isInline) {
+                        pushUndo(); svg.src.clear(); modified_ = true; updateWindowTitle();
+                    }
+                }
+
+                if (!isInline) {
+                    ImGui::TextDisabled("Source path (.svg)");
+                    char buf[512];
+                    std::strncpy(buf, svg.src.c_str(), sizeof(buf)-1); buf[511]='\0';
+                    ImGui::SetNextItemWidth(-1);
+                    if (ImGui::InputText("##svgsrc", buf, sizeof(buf),
+                            ImGuiInputTextFlags_EnterReturnsTrue)) {
+                        pushUndo(); svg.src = buf; modified_ = true; updateWindowTitle();
+                    }
+                } else {
+                    ImGui::TextDisabled("Inline SVG markup");
+                    char buf[8192];
+                    std::strncpy(buf, svg.inlineContent.c_str(), sizeof(buf)-1); buf[8191]='\0';
+                    ImGui::SetNextItemWidth(-1);
+                    if (ImGui::InputTextMultiline("##svginline", buf, sizeof(buf),
+                            ImVec2(-1, 120), ImGuiInputTextFlags_EnterReturnsTrue)) {
+                        pushUndo(); svg.inlineContent = buf; modified_ = true; updateWindowTitle();
+                    }
+                }
+            }
+
             ImGui::EndTabItem();
         }
 
