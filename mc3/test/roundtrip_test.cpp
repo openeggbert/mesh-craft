@@ -1604,6 +1604,59 @@ static void testCameraAllFieldsRoundtrip() {
     CHECKF(c.orthoSize,   8.0f,              "camera all-fields: orthoSize (written since type==Orthographic)");
 }
 
+// STAB-0653: <mc3 default_camera="..."> (root attribute) is an alternate
+// spelling of <cameras default="...">. Before this fix it was parsed
+// nowhere -- every existing fixture using it (test/blupi_car.mc3.xml,
+// test/speedy_blupi_world.mc3.xml, etc.) only "worked" by coincidence,
+// because the named camera also happened to be the first <camera> in
+// document order (the empty-defaultCamera fallback picks the first one).
+// This test uses a NON-first camera to prove the root attribute is now
+// actually honored, not just coincidentally matching the fallback.
+static void testRootDefaultCameraAttribute() {
+    auto xmlPath = tmpPath();
+    {
+        std::ofstream f(xmlPath);
+        f << R"(<?xml version="1.0" encoding="UTF-8"?>)" "\n"
+          << R"(<mc3 version="0.3" default_camera="Second">)" "\n"
+          << R"(  <cameras>)" "\n"
+          << R"(    <camera name="First" position="0 0 1" target="0 0 0"/>)" "\n"
+          << R"(    <camera name="Second" position="0 0 2" target="0 0 0"/>)" "\n"
+          << R"(  </cameras>)" "\n"
+          << R"(</mc3>)" "\n";
+    }
+    try {
+        auto doc = Mc3Document::loadFromFile(xmlPath);
+        CHECK(doc.defaultCamera == "Second",
+              "root default_camera: honored even though 'Second' is not the "
+              "first <camera> (would be 'First' if only the fallback fired)");
+    } catch (const std::exception& e) {
+        fail(std::string("root default_camera test threw: ") + e.what());
+    }
+    std::filesystem::remove(xmlPath);
+
+    // <cameras default="..."> must win when both spellings are present.
+    auto xmlPath2 = tmpPath();
+    {
+        std::ofstream f(xmlPath2);
+        f << R"(<?xml version="1.0" encoding="UTF-8"?>)" "\n"
+          << R"(<mc3 version="0.3" default_camera="First">)" "\n"
+          << R"(  <cameras default="Second">)" "\n"
+          << R"(    <camera name="First" position="0 0 1" target="0 0 0"/>)" "\n"
+          << R"(    <camera name="Second" position="0 0 2" target="0 0 0"/>)" "\n"
+          << R"(  </cameras>)" "\n"
+          << R"(</mc3>)" "\n";
+    }
+    try {
+        auto doc = Mc3Document::loadFromFile(xmlPath2);
+        CHECK(doc.defaultCamera == "Second",
+              "root default_camera: <cameras default=\"...\"> overrides it "
+              "when both are present");
+    } catch (const std::exception& e) {
+        fail(std::string("root default_camera override test threw: ") + e.what());
+    }
+    std::filesystem::remove(xmlPath2);
+}
+
 // STAB-0118: Mc3Environment's actual serialized fields — background color/
 // texture, skybox texture, and fog (color/mode/start/end/density). Note:
 // "bloom" (mentioned in the row's original wording) is not part of
@@ -3305,6 +3358,7 @@ int main(int argc, char* argv[]) {
     testFiftyObjectSceneRoundtrip();
     testLightAllFieldsRoundtrip();
     testCameraAllFieldsRoundtrip();
+    testRootDefaultCameraAttribute();
     testEnvironmentAllFieldsRoundtrip();
     testActionWithTransformMaterialDeformChannels();
     testSaveReloadSemanticEquivalenceFixpoint();

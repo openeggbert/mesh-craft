@@ -445,7 +445,9 @@ static void parseLights(const XMLElement* el, Mc3Document& doc) {
 }
 
 static void parseCameras(const XMLElement* el, Mc3Document& doc) {
-    doc.defaultCamera = attr(el, "default");
+    // Only overrides the root-level default_camera (set before this runs)
+    // when <cameras default="..."> is explicitly present.
+    if (const char* d = el->Attribute("default")) doc.defaultCamera = d;
     for (const XMLElement* c = el->FirstChildElement("camera"); c;
          c = c->NextSiblingElement("camera")) {
         Mc3Camera cam;
@@ -898,6 +900,10 @@ Mc3Document Mc3XmlParser::parse(const std::filesystem::path& path) {
     doc.coordinateSystem = attr(root, "coordinate_system", "right_handed_y_up");
     doc.rotationUnits    = attr(root, "rotation_units",    "degrees");
     doc.eulerOrder       = attr(root, "euler_order",       "XYZ");
+    // STAB-0653: root-level default_camera is an alternate spelling of
+    // <cameras default="...">; the latter (parsed in parseCameras(), which
+    // runs after this) takes priority if both are present.
+    doc.defaultCamera    = attr(root, "default_camera");
 
     if (const XMLElement* meta = root->FirstChildElement("metadata"))
         for (const XMLElement* p = meta->FirstChildElement("property"); p;

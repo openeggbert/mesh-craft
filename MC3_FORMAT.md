@@ -202,6 +202,12 @@ Free-form document-level key/value metadata — author, license, description, ve
 </cameras>
 ```
 
+The default camera can also be set via the root `<mc3 default_camera="MainCam">`
+attribute instead of `<cameras default="...">`. If both are present,
+`<cameras default="...">` wins. If neither is present, the first `<camera>`
+in document order is used. The writer always outputs the `<cameras default>`
+form on save, regardless of which spelling was used on load.
+
 ---
 
 ## Textures
