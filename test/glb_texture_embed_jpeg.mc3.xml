@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- STAB-0676 regression fixture: a JPEG texture (textures/jpeg_test.jpg,
+     a tiny 4x4 solid-color JPEG), to verify GLB embedding tags it as
+     image/jpeg, not the previously-hardcoded image/png. -->
+<mc3 version="0.3" model="GlbTextureEmbedJpegFixture">
+
+  <textures>
+    <texture id="tex_jpeg" uri="textures/jpeg_test.jpg"/>
+  </textures>
+
+  <materials>
+    <material id="mat_jpeg" roughness="0.8" metallic="0.0">
+      <base_color>1.0 1.0 1.0 1.0</base_color>
+      <base_color_texture>tex_jpeg</base_color_texture>
+    </material>
+  </materials>
+
+  <objects>
+    <box name="TexturedBox" size="1 1 1" material="mat_jpeg"/>
+  </objects>
+
+</mc3>

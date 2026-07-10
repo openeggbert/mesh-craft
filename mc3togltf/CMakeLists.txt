@@ -456,6 +456,17 @@ if(BUILD_TESTING)
             )
             set_tests_properties(mc3togltf_glb_texture_embed PROPERTIES TIMEOUT 30 LABELS "export")
         endif()
+        set(_glb_texture_embed_jpeg_xml "${CMAKE_CURRENT_SOURCE_DIR}/../test/glb_texture_embed_jpeg.mc3.xml")
+        if(EXISTS "${_glb_texture_embed_jpeg_xml}")
+            add_test(
+                NAME mc3togltf_glb_texture_embed_jpeg
+                COMMAND "${PYTHON3_EXEC}"
+                        "${CMAKE_CURRENT_SOURCE_DIR}/test/glb_texture_embed_jpeg_test.py"
+                        "$<TARGET_FILE:mc3togltf>"
+                        "${_glb_texture_embed_jpeg_xml}"
+            )
+            set_tests_properties(mc3togltf_glb_texture_embed_jpeg PROPERTIES TIMEOUT 30 LABELS "export")
+        endif()
         if(EXISTS "${_house_xml}")
             add_test(
                 NAME mc3togltf_no_partial_output

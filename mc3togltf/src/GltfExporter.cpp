@@ -263,6 +263,26 @@ static int addAccessorIndices(tinygltf::Model& model,
 // Texture helpers
 // ---------------------------------------------------------------------------
 
+// STAB-0676: detect the real image format from magic bytes rather than
+// assuming PNG for every embedded texture -- an embedded JPEG previously
+// got mistagged as image/png, which spec-compliant loaders fail to decode
+// (JPEG bytes parsed as PNG). glTF core spec only mandates PNG/JPEG support.
+static const char* detectImageMimeType(const std::vector<unsigned char>& bytes) {
+    static constexpr unsigned char kPngMagic[]  = {0x89, 'P', 'N', 'G', '\r', '\n', 0x1A, '\n'};
+    static constexpr unsigned char kJpegMagic[] = {0xFF, 0xD8, 0xFF};
+    if (bytes.size() >= sizeof(kPngMagic) &&
+        std::equal(std::begin(kPngMagic), std::end(kPngMagic), bytes.begin()))
+        return "image/png";
+    if (bytes.size() >= sizeof(kJpegMagic) &&
+        std::equal(std::begin(kJpegMagic), std::end(kJpegMagic), bytes.begin()))
+        return "image/jpeg";
+    // Unknown format: default to PNG (prior behavior) rather than emitting
+    // no mimeType at all, but this is now a documented fallback, not silent.
+    std::cerr << "[mc3togltf] Warning: could not detect image format from "
+                 "magic bytes, defaulting to image/png (may be wrong).\n";
+    return "image/png";
+}
+
 static std::unordered_map<std::string, int>
 buildTextures(tinygltf::Model& model,
               const std::map<std::string, Mc3Texture>& textures,
@@ -301,8 +321,8 @@ buildTextures(tinygltf::Model& model,
                 img.image = std::vector<unsigned char>(
                     std::istreambuf_iterator<char>(ifs),
                     std::istreambuf_iterator<char>());
-                img.as_is    = true;          // already-encoded PNG bytes
-                img.mimeType = "image/png";   // drives tinygltf's ext detection
+                img.as_is    = true;                          // already-encoded bytes
+                img.mimeType = detectImageMimeType(img.image); // STAB-0676
             } else {
                 img.uri = tex.uri;
                 std::cerr << "[mc3togltf] Warning: texture not found for embedding: "
