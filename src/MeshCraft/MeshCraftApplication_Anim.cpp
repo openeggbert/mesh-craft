@@ -246,6 +246,11 @@ void MeshCraftApplication::drawTimelinePanel(int screenW, int screenH) {
             }
             ImGui::SameLine();
             if (ImGui::Checkbox("Loop##lp", &act.loop)) { pushUndo(); modified_ = true; }
+            ImGui::SameLine();
+            // STAB-0714: Mc3Action::autoplay had no UI at all, unlike the
+            // adjacent Loop checkbox -- settable only via hand-edited
+            // XML/MCB. Same unconditional-pushUndo() pattern as Loop above.
+            if (ImGui::Checkbox("Autoplay##ap", &act.autoplay)) { pushUndo(); modified_ = true; }
             ImGui::SameLine(); ImGui::Text("|"); ImGui::SameLine();
             if (ImGui::SmallButton("|<##rew"))  { animTime_ = 0.0f; evaluateAndPushAnimOverrides(); }
             ImGui::SameLine();
