@@ -449,6 +449,7 @@ static Mc3::Mc3Texture readTexture(std::istream& in) {
         else if (k == "wrapV")      tex.wrapV      = rRawStr(in);
         else if (k == "filter")     tex.filter     = rRawStr(in);
         else if (k == "colorSpace") tex.colorSpace = rRawStr(in);
+        else if (k == "mipMaps")    tex.mipMaps    = rU8(in) != 0;
         else                        skipValue(in, tag);
     }
     return tex;

@@ -154,6 +154,44 @@ static void testEnvironmentAllFields() {
 }
 
 // ---------------------------------------------------------------------------
+// STAB-0660 — Mc3Texture::mipMaps was entirely missing from MCB, the same
+// bug class STAB-0654 just fixed on the XML side. No prior mcb test covered
+// Mc3Texture at all, so this also covers wrapU/wrapV/filter/colorSpace.
+// ---------------------------------------------------------------------------
+
+static void testTextureAllFields() {
+    Mc3Document doc;
+    Mc3Texture tex;
+    tex.name       = "Wall";
+    tex.uri        = "textures/wall.png";
+    tex.wrapU      = "clamp";
+    tex.wrapV      = "mirror";
+    tex.filter     = "nearest";
+    tex.colorSpace = "linear";
+    tex.mipMaps    = false;
+    doc.textures["wall_tex"] = tex;
+
+    auto rt = roundtrip(doc);
+    CHECK(rt.textures.count("wall_tex") == 1, "texture: present after roundtrip");
+    if (!rt.textures.count("wall_tex")) return;
+    const auto& t = rt.textures.at("wall_tex");
+    CHECK(t.name       == "Wall",              "texture: name survives");
+    CHECK(t.uri        == "textures/wall.png", "texture: uri survives");
+    CHECK(t.wrapU      == "clamp",              "texture: wrapU survives");
+    CHECK(t.wrapV      == "mirror",             "texture: wrapV survives");
+    CHECK(t.filter     == "nearest",            "texture: filter survives");
+    CHECK(t.colorSpace == "linear",             "texture: colorSpace survives");
+    CHECK(t.mipMaps    == false,                "texture: mipMaps=false survives (was silently dropped)");
+
+    // Default (true) must round-trip too, without needing to be written.
+    Mc3Document doc2;
+    doc2.textures["tex2"] = Mc3Texture{"tex2", "bar.png"};
+    auto rt2 = roundtrip(doc2);
+    CHECK(rt2.textures.count("tex2") == 1 && rt2.textures.at("tex2").mipMaps == true,
+          "texture: mipMaps default (true) survives roundtrip");
+}
+
+// ---------------------------------------------------------------------------
 // STAB-0123 — N1 svgTextures map
 // ---------------------------------------------------------------------------
 
@@ -962,6 +1000,7 @@ int main() {
     testBasicScene();
     testDocumentRotationConvention();
     testEnvironmentAllFields();
+    testTextureAllFields();
     testSvgTexture();
     testEmbed();
     testScript();

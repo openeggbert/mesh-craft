@@ -269,6 +269,7 @@ static void writeTexture(std::ostream& o, const Mc3::Mc3Texture& tex) {
     wIfStr(o, "wrapV",      tex.wrapV,      def.wrapV.c_str());
     wIfStr(o, "filter",     tex.filter,     def.filter.c_str());
     wIfStr(o, "colorSpace", tex.colorSpace, def.colorSpace.c_str());
+    wIfBool(o, "mipMaps",   tex.mipMaps,    def.mipMaps);
     wEnd(o);
 }
 
