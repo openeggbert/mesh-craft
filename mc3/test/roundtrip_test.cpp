@@ -2675,6 +2675,44 @@ static void testTextureNameDiffersFromId() {
           "texture rename rt: unrenamed texture still defaults name to id");
 }
 
+// STAB-0654: mip_maps was declared in mc3.xsd/documented in MC3_FORMAT.md
+// but had no field in Mc3Texture, so an authored mip_maps="false" was
+// silently and permanently dropped on load.
+static void testTextureMipMapsAttribute() {
+    // mip_maps="false" must survive a full parse->save->reload cycle.
+    auto xmlPath = tmpPath();
+    {
+        std::ofstream f(xmlPath);
+        f << R"(<?xml version="1.0" encoding="UTF-8"?>)" "\n"
+          << R"(<mc3 version="0.3">)" "\n"
+          << R"(  <textures>)" "\n"
+          << R"(    <texture id="tex1" uri="foo.png" mip_maps="false"/>)" "\n"
+          << R"(  </textures>)" "\n"
+          << R"(</mc3>)" "\n";
+    }
+    try {
+        auto doc = Mc3Document::loadFromFile(xmlPath);
+        CHECK(doc.textures.count("tex1") == 1, "mip_maps: texture parsed");
+        if (doc.textures.count("tex1"))
+            CHECK(doc.textures.at("tex1").mipMaps == false,
+                  "mip_maps=\"false\" parsed (was previously silently dropped)");
+
+        auto rt = roundtrip(doc);
+        CHECK(rt.textures.count("tex1") == 1 && rt.textures.at("tex1").mipMaps == false,
+              "mip_maps: false value survives save+reload");
+    } catch (const std::exception& e) {
+        fail(std::string("mip_maps test threw: ") + e.what());
+    }
+    std::filesystem::remove(xmlPath);
+
+    // Default (true, omitted attribute) must NOT be written out explicitly.
+    Mc3Document doc2;
+    doc2.addTexture(Mc3Texture{"tex2", "bar.png"});
+    auto rt2 = roundtrip(doc2);
+    CHECK(rt2.textures.count("tex2") == 1 && rt2.textures.at("tex2").mipMaps == true,
+          "mip_maps: default (true) round-trips without needing an explicit attribute");
+}
+
 // ---------------------------------------------------------------------------
 // STAB-0070 — Disk with inner_radius="0.3" loaded from XML
 // ---------------------------------------------------------------------------
@@ -3326,6 +3364,7 @@ int main(int argc, char* argv[]) {
     testEmbedGltf();
     testSvgTexture();
     testTextureNameDiffersFromId();
+    testTextureMipMapsAttribute();
     testScript();
     testSoundMusic();
     testTrigger();

@@ -491,6 +491,7 @@ static void parseTextures(const XMLElement* el, Mc3Document& doc) {
         tex.wrapV      = attr(c, "wrap_v",      "repeat");
         tex.filter     = attr(c, "filter",      "linear");
         tex.colorSpace = attr(c, "color_space", "srgb");
+        tex.mipMaps    = attrB(c, "mip_maps",   true);
         doc.textures[id] = tex;
     }
 }

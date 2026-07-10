@@ -11,6 +11,7 @@ struct Mc3Texture {
     std::string wrapV{"repeat"};
     std::string filter{"linear"};
     std::string colorSpace{"srgb"};
+    bool mipMaps{true};
 
     // --- Builder helpers --------------------------------------------------
     Mc3Texture() = default;

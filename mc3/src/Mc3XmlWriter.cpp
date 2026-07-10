@@ -475,6 +475,8 @@ void Mc3XmlWriter::write(const Mc3Document& doc, const std::filesystem::path& pa
                 te->SetAttribute("filter", tex.filter.c_str());
             if (tex.colorSpace != "srgb")
                 te->SetAttribute("color_space", tex.colorSpace.c_str());
+            if (!tex.mipMaps)
+                te->SetAttribute("mip_maps", false);
             tEl->InsertEndChild(te);
         }
         for (const auto& [id, svg] : doc.svgTextures) {
