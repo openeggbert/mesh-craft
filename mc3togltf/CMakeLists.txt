@@ -523,6 +523,41 @@ if(BUILD_TESTING)
             )
             set_tests_properties(mc3togltf_determinism PROPERTIES TIMEOUT 30 LABELS "export")
         endif()
+        # STAB-0688: the determinism check above only ever exercised
+        # house.mc3.xml (no CSG, animation, or textures) -- floating-point-
+        # sensitive Manifold boolean ops, keyframe/interpolation evaluation,
+        # and texture/image-byte embedding were completely unverified for
+        # repeat-export reproducibility. Same script, three more fixtures.
+        if(EXISTS "${_csg_xml}")
+            add_test(
+                NAME mc3togltf_determinism_csg
+                COMMAND "${PYTHON3_EXEC}"
+                        "${CMAKE_CURRENT_SOURCE_DIR}/test/determinism_test.py"
+                        "$<TARGET_FILE:mc3togltf>"
+                        "${_csg_xml}"
+            )
+            set_tests_properties(mc3togltf_determinism_csg PROPERTIES TIMEOUT 30 LABELS "export")
+        endif()
+        if(EXISTS "${_anim_xml}")
+            add_test(
+                NAME mc3togltf_determinism_animation
+                COMMAND "${PYTHON3_EXEC}"
+                        "${CMAKE_CURRENT_SOURCE_DIR}/test/determinism_test.py"
+                        "$<TARGET_FILE:mc3togltf>"
+                        "${_anim_xml}"
+            )
+            set_tests_properties(mc3togltf_determinism_animation PROPERTIES TIMEOUT 30 LABELS "export")
+        endif()
+        if(EXISTS "${_glb_texture_embed_xml}")
+            add_test(
+                NAME mc3togltf_determinism_texture
+                COMMAND "${PYTHON3_EXEC}"
+                        "${CMAKE_CURRENT_SOURCE_DIR}/test/determinism_test.py"
+                        "$<TARGET_FILE:mc3togltf>"
+                        "${_glb_texture_embed_xml}"
+            )
+            set_tests_properties(mc3togltf_determinism_texture PROPERTIES TIMEOUT 30 LABELS "export")
+        endif()
         add_test(
             NAME mc3togltf_golden
             COMMAND "${PYTHON3_EXEC}"
