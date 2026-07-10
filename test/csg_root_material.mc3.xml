@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- STAB-0674 regression fixture: a CSG difference whose ROOT has a
+     material distinct from either child's material, so the export
+     test can assert the documented rule (MC3_FORMAT.md: "the CSG
+     root's material is used for the entire merged mesh") is actually
+     followed, not just assumed. -->
+<mc3 version="0.3" model="CsgRootMaterialFixture">
+
+  <materials>
+    <material id="root_mat"><base_color>1.0 0.0 0.0 1.0</base_color></material>
+    <material id="child_mat"><base_color>0.0 1.0 0.0 1.0</base_color></material>
+  </materials>
+
+  <objects>
+    <difference name="HollowBlock" material="root_mat">
+      <box    name="Block"  size="1.5 1.5 1.5" material="child_mat"/>
+      <sphere name="Cavity" radius="0.6" material="child_mat" role="cutter"/>
+    </difference>
+  </objects>
+
+</mc3>

@@ -496,6 +496,17 @@ if(BUILD_TESTING)
             )
             set_tests_properties(mc3togltf_duplicate_object_name PROPERTIES TIMEOUT 30 LABELS "export")
         endif()
+        set(_csg_root_material_xml "${CMAKE_CURRENT_SOURCE_DIR}/../test/csg_root_material.mc3.xml")
+        if(EXISTS "${_csg_root_material_xml}")
+            add_test(
+                NAME mc3togltf_csg_root_material
+                COMMAND "${PYTHON3_EXEC}"
+                        "${CMAKE_CURRENT_SOURCE_DIR}/test/csg_root_material_test.py"
+                        "$<TARGET_FILE:mc3togltf>"
+                        "${_csg_root_material_xml}"
+            )
+            set_tests_properties(mc3togltf_csg_root_material PROPERTIES TIMEOUT 30 LABELS "export")
+        endif()
         add_test(
             NAME mc3togltf_icosphere_uv_seam
             COMMAND "${PYTHON3_EXEC}"
