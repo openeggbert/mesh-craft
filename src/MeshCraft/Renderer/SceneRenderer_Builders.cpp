@@ -45,13 +45,25 @@ void SceneRenderer::buildUnitBox() {
     for (auto& p : P) verts.push_back({ Vector3{p[0],p[1],p[2]}, c });
 
     // 12 triangles (6 faces, 2 tri each)
+    // STAB-castle-fix: was wound CCW-from-outside (the glTF/OpenGL
+    // convention) on all 12 triangles, confirmed via direct cross-product-
+    // vs-normal computation -- but CNA's default RasterizerState
+    // (CullCounterClockwiseFace, matching true XNA/D3D9 semantics, per a
+    // sibling investigation's own test-verified analysis of the identical
+    // bug class in easy-3d/CubeMesh.cpp) requires CW-from-outside. Every
+    // face was backface-culled when viewed from outside, showing the
+    // mirrored interior of the far side instead -- reported as "3 of 6
+    // walls transparent" (from any camera angle, ~3 faces face the camera
+    // and get wrongly culled). Fixed by swapping the last two indices of
+    // every triangle (flips winding without changing which vertex gets
+    // which position/normal/UV).
     static const uint16_t IDX[] = {
-        0,2,1, 0,3,2,  // -Z
-        4,5,6, 4,6,7,  // +Z
-        0,1,5, 0,5,4,  // -Y
-        2,3,7, 2,7,6,  // +Y
-        0,4,7, 0,7,3,  // -X
-        1,2,6, 1,6,5,  // +X
+        0,1,2, 0,2,3,  // -Z
+        4,6,5, 4,7,6,  // +Z
+        0,5,1, 0,4,5,  // -Y
+        2,7,3, 2,6,7,  // +Y
+        0,7,4, 0,3,7,  // -X
+        1,6,2, 1,5,6,  // +X
     };
     unitBox_.vb = std::make_unique<VertexBuffer>(device_, 8);
     unitBox_.vb->SetData(verts.data(), 8);
@@ -78,8 +90,9 @@ void SceneRenderer::buildUnitBox() {
         int base = f * 4;
         for (int v = 0; v < 4; ++v)
             tverts.push_back({Vector3{FACES[f].p[v][0],FACES[f].p[v][1],FACES[f].p[v][2]}, FACES[f].n, UVS[v]});
-        tidx.push_back(ui16(base)); tidx.push_back(ui16(base+2)); tidx.push_back(ui16(base+1));
-        tidx.push_back(ui16(base)); tidx.push_back(ui16(base+3)); tidx.push_back(ui16(base+2));
+        // STAB-castle-fix: same winding fix as the VPC IDX[] array above.
+        tidx.push_back(ui16(base)); tidx.push_back(ui16(base+1)); tidx.push_back(ui16(base+2));
+        tidx.push_back(ui16(base)); tidx.push_back(ui16(base+2)); tidx.push_back(ui16(base+3));
     }
     unitBox_.texVB = std::make_unique<VertexBuffer>(device_, 24);
     unitBox_.texVB->SetData(tverts.data(), 24);
@@ -259,9 +272,12 @@ void SceneRenderer::buildUnitCone(int segments, RenderMesh& target) {
 
     for (int i = 0; i < segments; ++i) {
         int j = (i+1) % segments;
-        // Side
-        indices.push_back(ui16(i)); indices.push_back(ui16(apex)); indices.push_back(ui16(j));
-        // Bottom cap
+        // Side. STAB-castle-fix: was (i, apex, j), wound CCW-from-outside
+        // (confirmed via direct cross-product-vs-normal computation) --
+        // the bottom cap right below was already correct, only the side
+        // was backwards. Swapped to (i, j, apex).
+        indices.push_back(ui16(i)); indices.push_back(ui16(j)); indices.push_back(ui16(apex));
+        // Bottom cap (already correct)
         indices.push_back(ui16(botCtr)); indices.push_back(ui16(j)); indices.push_back(ui16(i));
     }
     target.vb = std::make_unique<VertexBuffer>(device_, static_cast<int>(verts.size()));
@@ -285,9 +301,11 @@ void SceneRenderer::buildUnitCone(int segments, RenderMesh& target) {
             tv.push_back({Vector3{0.5f*cx, -0.5f, 0.5f*cz}, n, Vector2{u, 1.0f}});
             tv.push_back({Vector3{0.0f, 0.5f, 0.0f}, n, Vector2{u + 0.5f / segments, 0.0f}});
         }
+        // STAB-castle-fix: same winding fix as the VPC side loop above --
+        // was (b, b+1, b+2), wound CCW-from-outside.
         for (int i = 0; i < segments; ++i) {
             int b = i * 2;
-            ti.push_back(ui16(b)); ti.push_back(ui16(b+1)); ti.push_back(ui16(b+2));
+            ti.push_back(ui16(b)); ti.push_back(ui16(b+2)); ti.push_back(ui16(b+1));
         }
         // Bottom cap
         int capBase = static_cast<int>(tv.size());
@@ -369,14 +387,18 @@ void SceneRenderer::buildUnitTorus(int ringSeg, int tubeSeg, RenderMesh& target)
             verts.push_back({ Vector3{x, y, z}, c });
         }
     }
+    // STAB-castle-fix: was {a,b,d} / {a,d,c2}, wound CCW-from-outside on
+    // all triangles (confirmed via direct cross-product-vs-normal
+    // computation). This same index array is reused below for the VPNT
+    // texIB, so this one fix covers both. Swapped to {a,d,b} / {a,c2,d}.
     for (int i = 0; i < ringSeg; ++i) {
         for (int j = 0; j < tubeSeg; ++j) {
             int a = i * (tubeSeg+1) + j;
             int b = a + 1;
             int c2 = (i+1) * (tubeSeg+1) + j;
             int d  = c2 + 1;
-            indices.push_back(ui16(a)); indices.push_back(ui16(b)); indices.push_back(ui16(d));
-            indices.push_back(ui16(a)); indices.push_back(ui16(d)); indices.push_back(ui16(c2));
+            indices.push_back(ui16(a)); indices.push_back(ui16(d)); indices.push_back(ui16(b));
+            indices.push_back(ui16(a)); indices.push_back(ui16(c2)); indices.push_back(ui16(d));
         }
     }
 
@@ -475,13 +497,18 @@ void SceneRenderer::buildUnitCapsule(int segments, RenderMesh& target) {
             indices.push_back(ui16(rb + i));
         }
     }
-    // Quads between consecutive rings
+    // Quads between consecutive rings. STAB-castle-fix: was
+    // {ra+i,rb+i,rb+j} / {ra+i,rb+j,ra+j}, wound CCW-from-outside on all
+    // triangles (confirmed via direct cross-product-vs-normal computation)
+    // -- unlike the top/bottom pole fans above/below, which were already
+    // correct. This `indices` array is copied verbatim into the VPNT `ti`
+    // array further below, so this one fix covers both.
     for (int r0 = 0; r0 + 1 < static_cast<int>(ringBases.size()); ++r0) {
         int ra = ringBases[r0], rb = ringBases[r0 + 1];
         for (int i = 0; i < segments; ++i) {
             int j = (i + 1) % segments;
-            indices.push_back(ui16(ra + i)); indices.push_back(ui16(rb + i)); indices.push_back(ui16(rb + j));
-            indices.push_back(ui16(ra + i)); indices.push_back(ui16(rb + j)); indices.push_back(ui16(ra + j));
+            indices.push_back(ui16(ra + i)); indices.push_back(ui16(rb + j)); indices.push_back(ui16(rb + i));
+            indices.push_back(ui16(ra + i)); indices.push_back(ui16(ra + j)); indices.push_back(ui16(rb + j));
         }
     }
     // Top pole cap
@@ -669,12 +696,17 @@ void SceneRenderer::buildUnitIcoSphere(int subdivisions) {
     for (int i = 0; i < nv; ++i)
         verts[i] = { Vector3{pos[i][0], pos[i][1], pos[i][2]}, c };
 
+    // STAB-castle-fix: was (f[0],f[1],f[2]), wound CCW-from-outside on
+    // every face (confirmed via direct cross-product-vs-normal computation
+    // on the base icosahedron; subdivision preserves each parent
+    // triangle's local winding, so fixing final emission here covers every
+    // subdivision level uniformly). Swapped the last two indices.
     std::vector<uint16_t> indices;
     indices.reserve(faces.size() * 3);
     for (auto& f : faces) {
         indices.push_back(ui16(f[0]));
-        indices.push_back(ui16(f[1]));
         indices.push_back(ui16(f[2]));
+        indices.push_back(ui16(f[1]));
     }
 
     int ni = static_cast<int>(indices.size());

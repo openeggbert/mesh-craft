@@ -353,6 +353,16 @@ _**Scope note**: this section audits editor UI completeness against the mc3 form
 
 ---
 
+## S25 — Live Preview Rendering: Backface Winding Bugs (2026-07-10)
+
+_New section, added 2026-07-10 in response to a live, user-reported bug (castle scene rendering with visibly transparent walls), not from a planned audit. A concurrent, independent investigation of the identical bug class in a sibling project (`easy-3d/CubeMesh.cpp`, analyzed by Fable 5 for `galaxy-eggbert`) provided the key insight and was the trigger for checking MeshCraft's own primitive builders — see that investigation's own findings for the full explanation of why this looks like "a CNA bug" but isn't: CNA's default `RasterizerState` (`CullCounterClockwiseFace`, matching true XNA/D3D9 semantics) is confirmed correct by CNA's own test suite; the bug is entirely on the geometry-authoring side (wrong winding order for that convention)._
+
+| ID | St | Pri | Title | Key File(s) | Verification |
+|----|----|-----|-------|-------------|--------------|
+| STAB-0722 | ✅ | P0 | `SceneRenderer_Builders.cpp`'s unit-shape builders (used for the editor's **live preview** rendering only, independent of `mc3togltf`'s export-side builders) have inconsistent triangle winding — Box (all faces), Cone (side), Torus (all), Capsule (mid-body rings), and IcoSphere (all) are wound CCW-from-outside (the glTF/OpenGL convention, correct for `mc3togltf` export) instead of CW-from-outside (the XNA/D3D9 convention CNA's actual, correctly-implemented default `CullCounterClockwiseFace` requires) — every affected face is backface-culled when viewed from outside, showing the mirrored interior of the far side instead. Reported by the user as "3 of 6 walls transparent" in a castle scene built mostly from `<box>` objects | `src/MeshCraft/Renderer/SceneRenderer_Builders.cpp` (`buildUnitBox()`, `buildUnitCone()`, `buildUnitTorus()`, `buildUnitCapsule()`, `buildUnitIcoSphere()`) | **Fixed 2026-07-10.** Root-caused and fixed via the same direct cross-product-vs-normal numerical technique used throughout this session's `mc3togltf` winding work (`STAB-0702`), applied here to all 7 `SceneRenderer` unit-shape builders systematically — **not** a uniform whole-file convention mismatch as initially suspected: Cylinder (side + both caps), Sphere, and Capsule's two pole caps were already correct; Box (all 12 triangles, both the flat-color VPC and textured VPNT variants), Cone (side only — its own bottom cap was already correct), Torus (all 256 triangles, shared between VPC/VPNT), Capsule (224 mid-body-ring triangles only — its own poles were already correct), and IcoSphere (all 20 base triangles, fix applied at final index emission so it covers every subdivision level uniformly) needed the fix. Each fix is a minimal index-order swap (2 of the 3 indices per triangle), not a geometry/vertex change, so normals/UVs/positions are unaffected. **Verified three independent ways**: (1) a Python re-implementation of every fixed builder's exact formula confirms 100% CW-from-outside post-fix, 0 remaining CCW; (2) real before/after screenshots of a single large box viewed from outside — before the fix, the screenshot unambiguously shows the box's *interior* (visible far-wall corner edges, looking through the wrongly-culled near face); after, a clean single lit face exactly as expected, confirmed by temporarily reverting just the Box fix, rebuilding, and re-screenshotting to get a controlled A/B comparison; (3) the actual `test/medieval_castle.mc3.xml` scene (548 objects, mostly boxes) renders as a solid, fully opaque castle after the fix. Full 86/86 ctest green (no regressions; no existing test exercised `SceneRenderer`'s own winding, only `mc3togltf`'s separate export-side builders, so this bug had zero prior coverage). No new permanent automated test added — a simple pixel-color-cluster signal (the pattern `test/background_texture_test.py` uses) was tried and found unreliable for this specific bug (the broken state's on-screen red-pixel coverage was empirically *larger*, not smaller, than the fixed state's, due to occlusion-overlap effects, not a clean presence/absence signal); relying on the numerical + visual verification above instead, consistent with how other complex `SceneRenderer`/`mc3togltf` geometry fixes were verified this session where a simple automated assertion wasn't practical. |
+
+---
+
 ## Summary: Task Count by Section
 
 _As of 2026-07-10, the 620 ✅ rows counted below live in `plan_20260710.md`; only the 29 🟡 + 1 📋 = 30 open rows remain inline in this file's S0-S20 sections above. Counts below are preserved for historical continuity._
@@ -384,7 +394,8 @@ _As of 2026-07-10, the 620 ✅ rows counted below live in `plan_20260710.md`; on
 | S22 MCB coverage audit (new 2026-07-10) | 4 | 4 | 0 | 0 | 0 | 0 |
 | S23 mc3togltf export audit (new 2026-07-10) | 41 | 38 | 0 | 0 | 3 | 0 |
 | S24 Editor UI coverage of mc3 format (new 2026-07-10) | 19 | 1 | 14 | 0 | 4 | 0 |
-| **TOTAL** | **721** | **670** | **43** | **0** | **8** | **0** |
+| S25 Live preview rendering winding bugs (new 2026-07-10) | 1 | 1 | 0 | 0 | 0 | 0 |
+| **TOTAL** | **722** | **671** | **43** | **0** | **8** | **0** |
 
 _Recomputed directly from per-row status markers after S0/S1/S2/S3/S4/S5/S6/
 S7/S8/S9/S10/S11/S12/S13/S14/S16 fully closed (S1/S3/S4/S5/S6/S13/S16 100%,
