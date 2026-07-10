@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- STAB-0700 regression fixture: a Box minus a Torus cutter. Before the
+     fix, Manifold construction failed NotManifold for ANY Torus CSG child
+     (both on export via CsgEvaluator.cpp and the editor preview), even
+     after the STAB-0670 vertex-welding fix that was sufficient for
+     IcoSphere/Capsule. Root cause: MeshGL::Merge()'s auto-computed default
+     tolerance was too tight for a torus's seam vertices (only 40 of the 49
+     actually-needed weld pairs were found), not a genuine topological
+     defect, fixed by setting an explicit tolerance before Merge(). -->
+<mc3 version="0.3" model="CsgTorusCutterFixture" default_camera="Main">
+
+  <lights>
+    <ambient color="0.3 0.3 0.3" brightness="0.5"/>
+    <directional name="Sun" color="1 0.95 0.8" brightness="2" direction="-0.5 -1 -0.5"/>
+  </lights>
+
+  <cameras>
+    <camera name="Main" position="0 0 3" target="0 0 0" fov="50" near="0.05" far="100"/>
+  </cameras>
+
+  <materials>
+    <material id="grey"><base_color>0.7 0.7 0.7 1.0</base_color></material>
+  </materials>
+
+  <objects>
+    <difference name="BoxMinusTorus" material="grey">
+      <box   name="Block"  size="1.5 1.5 1.5"/>
+      <torus name="Cavity" major_radius="0.4" minor_radius="0.15" segments="32" role="cutter"/>
+    </difference>
+  </objects>
+
+</mc3>

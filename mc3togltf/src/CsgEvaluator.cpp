@@ -246,6 +246,22 @@ static manifold::Manifold buildManifoldNode(
         // Torus/Capsule/IcoSphere CSG child hit "non-manifold geometry"
         // here, a real, previously-undiscovered export failure (no fixture
         // had ever exercised these types as CSG children until now).
+        //
+        // STAB-0700: Torus still failed NotManifold even after Merge() --
+        // root-caused via a standalone probe: MeshGL::Merge()'s DEFAULT
+        // tolerance (0, meaning "use its own auto-computed bounding-box-
+        // derived baseline") is too tight for a torus's seam vertices, so
+        // it only found 40 of the 49 actually-needed weld pairs (confirmed
+        // directly: none of the seam positions are bit-identical due to
+        // ordinary floating-point trig roundoff, so this is purely a
+        // tolerance-too-small issue, not a genuine topological defect).
+        // Explicitly setting a small absolute tolerance before Merge()
+        // finds all 49 pairs and produces a valid manifold. Verified this
+        // value is safe (doesn't over- or under-merge) across scales
+        // spanning 100x (a torus with major_radius=0.004 still merges
+        // exactly 49 pairs, not more/fewer) and doesn't regress the
+        // already-working Capsule/IcoSphere cases.
+        gl.tolerance = 1e-4f;
         gl.Merge();
         Manifold m(gl);
         if (m.Status() != Manifold::Error::NoError)

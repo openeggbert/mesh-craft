@@ -129,6 +129,13 @@ static manifold::Manifold buildManifoldTree(
         // tolerance so Manifold's strict topology check succeeds. Without
         // this, Torus/Capsule/IcoSphere fail NotManifold here exactly like
         // they do in CsgEvaluator.cpp (same fix applied there).
+        //
+        // STAB-0700: an explicit tolerance is required for Torus specifically
+        // -- Merge()'s own auto-computed baseline tolerance is too tight for
+        // its seam vertices (root-caused and verified safe across scales in
+        // CsgEvaluator.cpp's matching comment; same fix applied here to keep
+        // the preview and export paths identical).
+        gl.tolerance = 1e-4f;
         gl.Merge();
         Manifold m(gl);
         if (m.Status() != Manifold::Error::NoError) return Manifold{};
