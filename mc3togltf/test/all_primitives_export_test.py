@@ -343,6 +343,44 @@ def test_closed_solid_topology(mc3togltf, xml_path, tmpdir):
     print("closed_solid_topology: PASS")
 
 
+def test_sphere_no_degenerate_triangles(mc3togltf, xml_path, tmpdir):
+    """STAB-0669: buildSphere()'s pole rings used to emit one zero-area
+    triangle per sector at each pole (both pole-adjacent vertices of that
+    triangle collapse to the same 3D position). Confirms every triangle in
+    the exported Sphere mesh has non-zero area (a proper fan wedge at each
+    pole, matching cylinder/cone's existing correct pattern)."""
+    out_gltf = os.path.join(tmpdir, "out_sphere_area.gltf")
+    r = run([mc3togltf, xml_path, out_gltf])
+    assert r.returncode == 0, f"mc3togltf failed:\n{r.stderr}"
+
+    with open(out_gltf) as f:
+        gltf = json.load(f)
+    out_dir = os.path.dirname(out_gltf)
+    with open(os.path.join(out_dir, gltf["buffers"][0]["uri"]), "rb") as f:
+        bin_data = f.read()
+
+    _, prim = check_node_has_geometry(gltf, "Sphere")
+    positions = read_vec3_accessor(gltf, bin_data, prim["attributes"]["POSITION"])
+    indices = read_index_accessor(gltf, bin_data, prim["indices"])
+
+    zero_area = 0
+    for i in range(0, len(indices), 3):
+        a, b, c = positions[indices[i]], positions[indices[i+1]], positions[indices[i+2]]
+        e1 = (b[0]-a[0], b[1]-a[1], b[2]-a[2])
+        e2 = (c[0]-a[0], c[1]-a[1], c[2]-a[2])
+        cross = (e1[1]*e2[2]-e1[2]*e2[1], e1[2]*e2[0]-e1[0]*e2[2], e1[0]*e2[1]-e1[1]*e2[0])
+        area = 0.5 * math.sqrt(sum(x*x for x in cross))
+        if area < 1e-9:
+            zero_area += 1
+
+    assert zero_area == 0, (
+        f"STAB-0669: Sphere has {zero_area} zero-area (degenerate) "
+        f"triangle(s) out of {len(indices)//3} -- expected fan-based pole "
+        f"triangulation with no degenerate triangles"
+    )
+    print("sphere_no_degenerate_triangles: PASS")
+
+
 def test_all_objects(mc3togltf, xml_path, tmpdir):
     if not os.path.exists(xml_path):
         print(f"Skipping all_objects test: {xml_path} not found")
@@ -435,6 +473,7 @@ if __name__ == "__main__":
             test_all_objects(mc3togltf_bin, objs_xml, tmpdir)
             test_bbox_matches_scene_renderer_scale_formula(mc3togltf_bin, prims_xml, tmpdir)
             test_closed_solid_topology(mc3togltf_bin, prims_xml, tmpdir)
+            test_sphere_no_degenerate_triangles(mc3togltf_bin, prims_xml, tmpdir)
         except AssertionError as e:
             print(f"FAIL: {e}", file=sys.stderr)
             sys.exit(1)

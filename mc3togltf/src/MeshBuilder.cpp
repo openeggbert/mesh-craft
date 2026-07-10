@@ -122,13 +122,24 @@ MeshData buildSphere(float radius, int segments) {
     }
 
     // indices
+    // STAB-0669: at the poles (r==0 and r==rings-1's far ring), all
+    // sectors+1 vertices in that ring collapse to the same 3D position
+    // (sin(phi)==0), so one of each quad's two triangles has two corners at
+    // an identical position -- a zero-area triangle. Emit only the
+    // non-degenerate triangle (a proper fan wedge) at each pole; interior
+    // rings keep both triangles as before. Guard rings==1 (topPole and
+    // bottomPole would otherwise coincide and drop every triangle, leaving
+    // an empty mesh): fall back to emitting both original triangles.
     for (int r = 0; r < rings; ++r) {
+        bool topPole    = (r == 0) && rings > 1;
+        bool bottomPole = (r == rings - 1) && rings > 1;
         for (int s = 0; s < sectors; ++s) {
             auto i0 = static_cast<uint32_t>(r * (sectors+1) + s);
             auto i1 = i0 + 1;
             auto i2 = i0 + (sectors+1);
             auto i3 = i2 + 1;
-            m.indices.insert(m.indices.end(), {i0, i2, i1,  i1, i2, i3});
+            if (!topPole)    m.indices.insert(m.indices.end(), {i0, i2, i1});
+            if (!bottomPole) m.indices.insert(m.indices.end(), {i1, i2, i3});
         }
     }
     return m;

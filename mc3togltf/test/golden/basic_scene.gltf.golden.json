@@ -65,7 +65,7 @@
         {
             "bufferView": 7,
             "componentType": 5125,
-            "count": 3072,
+            "count": 2880,
             "type": "SCALAR"
         }
     ],
@@ -121,14 +121,14 @@
         },
         {
             "buffer": 0,
-            "byteLength": 12288,
+            "byteLength": 11520,
             "byteOffset": 18864,
             "target": 34963
         }
     ],
     "buffers": [
         {
-            "byteLength": 31152,
+            "byteLength": 30384,
             "name": "buffer0",
             "uri": "basic_scene.bin"
         }
