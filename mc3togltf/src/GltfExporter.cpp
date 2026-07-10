@@ -56,6 +56,8 @@ struct ExportCtx {
     float unitScale{1.0f};           // conversion factor to metres
     std::filesystem::path basePath;  // directory of source .mc3.xml (for OBJ paths)
     bool allowApproximateCSG{false};
+    bool rotationIsRadians{false};   // STAB-0691: doc.rotationUnits == "radians"
+    std::string eulerOrder{"XYZ"};   // STAB-0691: doc.eulerOrder
 
     // Cache key → glTF mesh index for MC3 <instance> nodes that share a definition.
     // Key built by buildDefCacheKey(): includes definition ID, material, and deform scale.
@@ -572,7 +574,8 @@ static int buildNode(ExportCtx& ctx, const Mc3Object& obj)
     }
 
     if (t.rotation[0] != 0.0f || t.rotation[1] != 0.0f || t.rotation[2] != 0.0f) {
-        auto q = eulerXYZToQuat(t.rotation[0], t.rotation[1], t.rotation[2]);
+        auto q = eulerToQuat(t.rotation[0], t.rotation[1], t.rotation[2],
+                              ctx.rotationIsRadians, ctx.eulerOrder);
         node.rotation = {q[0], q[1], q[2], q[3]};
     }
 
@@ -838,7 +841,10 @@ static void addLights(tinygltf::Model& model,
 
 static void addCameraNodes(tinygltf::Model& model,
                            const std::vector<Mc3Camera>& cameras,
-                           std::vector<int>& outCameraNodeIndices)
+                           std::vector<int>& outCameraNodeIndices,
+                           float unitScale,
+                           bool rotationIsRadians,
+                           const std::string& eulerOrder)
 {
     for (const auto& cam : cameras) {
         tinygltf::Camera gcam;
@@ -864,15 +870,20 @@ static void addCameraNodes(tinygltf::Model& model,
         tinygltf::Node cnode;
         cnode.name   = cam.name;
         cnode.camera = camIdx;
+        // STAB-0693: cameras previously used raw, un-scaled positions while
+        // every other node's translation is scaled by unitScale (metres
+        // conversion for unit="centimeter"/"inch" documents) -- a camera in
+        // a non-meter document ended up at the wrong distance from the
+        // correctly-scaled geometry around it.
         cnode.translation = {
-            static_cast<double>(cam.position[0]),
-            static_cast<double>(cam.position[1]),
-            static_cast<double>(cam.position[2])
+            static_cast<double>(cam.position[0]) * unitScale,
+            static_cast<double>(cam.position[1]) * unitScale,
+            static_cast<double>(cam.position[2]) * unitScale
         };
 
         if (cam.rotation.has_value()) {
             const auto& r = *cam.rotation;
-            auto q = eulerXYZToQuat(r[0], r[1], r[2]);
+            auto q = eulerToQuat(r[0], r[1], r[2], rotationIsRadians, eulerOrder);
             cnode.rotation = {q[0], q[1], q[2], q[3]};
         } else {
             float dx = cam.target[0] - cam.position[0];
@@ -946,7 +957,9 @@ static void exportAnimations(
     const std::map<std::string, Mc3Action>& actions,
     const std::unordered_map<std::string, int>& nodeNameMap,
     const std::unordered_map<std::string, Mc3Transform>& baseTransforms,
-    float unitScale)
+    float unitScale,
+    bool rotationIsRadians,
+    const std::string& eulerOrder)
 {
     if (actions.empty()) return;
 
@@ -1043,7 +1056,7 @@ static void exportAnimations(
                         float euler[3];
                         for (int i = 0; i < 3; ++i)
                             euler[i] = pg.ch[i] ? evaluateChannel(*pg.ch[i], t) : base[i];
-                        auto q = eulerXYZToQuat(euler[0], euler[1], euler[2]);
+                        auto q = eulerToQuat(euler[0], euler[1], euler[2], rotationIsRadians, eulerOrder);
                         valueData.push_back(static_cast<float>(q[0]));
                         valueData.push_back(static_cast<float>(q[1]));
                         valueData.push_back(static_cast<float>(q[2]));
@@ -1178,7 +1191,9 @@ void GltfExporter::exportDocument(const Mc3Document& doc,
     // Object nodes (recursive)
     ExportCtx ctx{model, matNameToIdx, doc.definitions,
                   unitScaleFactor(doc.unit), doc.sourcePath,
-                  allowApproximateCSG, {}, {}, {}};
+                  allowApproximateCSG,
+                  doc.rotationUnits == "radians", doc.eulerOrder,
+                  {}, {}, {}};
     for (const auto& objPtr : doc.objects) {
         if (!objPtr) continue;
         int nodeIdx = buildNode(ctx, *objPtr);
@@ -1192,7 +1207,8 @@ void GltfExporter::exportDocument(const Mc3Document& doc,
 
     // Cameras
     std::vector<int> cameraNodes;
-    addCameraNodes(model, doc.cameras, cameraNodes);
+    addCameraNodes(model, doc.cameras, cameraNodes,
+                    ctx.unitScale, ctx.rotationIsRadians, ctx.eulerOrder);
     for (int i : cameraNodes) scene.nodes.push_back(i);
 
     // Animations
@@ -1206,7 +1222,8 @@ void GltfExporter::exportDocument(const Mc3Document& doc,
                 nodeNameMap[model.nodes[i].name] = i;
         }
 
-        exportAnimations(model, doc.actions, nodeNameMap, baseTransforms, ctx.unitScale);
+        exportAnimations(model, doc.actions, nodeNameMap, baseTransforms, ctx.unitScale,
+                          ctx.rotationIsRadians, ctx.eulerOrder);
     }
 
     // Environment → scene extras

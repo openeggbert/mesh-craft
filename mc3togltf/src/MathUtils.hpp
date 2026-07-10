@@ -2,6 +2,7 @@
 #include <array>
 #include <cmath>
 #include <numbers>
+#include <string>
 
 namespace mc3togltf {
 
@@ -20,6 +21,48 @@ inline std::array<double, 4> eulerXYZToQuat(float pitchDeg, float yawDeg, float 
        -cz*sy*sx + sz*cy*cx,   // z
         cz*cy*cx + sz*sy*sx    // w
     };
+}
+
+// STAB-0691: quaternion for a single axis-angle rotation (radians).
+inline std::array<double, 4> quatFromAxisAngleRad(char axis, double angleRad) {
+    double s = std::sin(angleRad * 0.5), c = std::cos(angleRad * 0.5);
+    switch (axis) {
+        case 'X': return {s, 0.0, 0.0, c};
+        case 'Y': return {0.0, s, 0.0, c};
+        case 'Z': return {0.0, 0.0, s, c};
+        default:  return {0.0, 0.0, 0.0, 1.0};
+    }
+}
+
+// Hamilton product a*b, q=[x,y,z,w].
+inline std::array<double, 4> quatMul(const std::array<double,4>& a, const std::array<double,4>& b) {
+    return {
+        a[3]*b[0] + a[0]*b[3] + a[1]*b[2] - a[2]*b[1],
+        a[3]*b[1] - a[0]*b[2] + a[1]*b[3] + a[2]*b[0],
+        a[3]*b[2] + a[0]*b[1] - a[1]*b[0] + a[2]*b[3],
+        a[3]*b[3] - a[0]*b[0] - a[1]*b[1] - a[2]*b[2]
+    };
+}
+
+// STAB-0691: general Euler-to-quaternion honoring doc.rotationUnits (degrees
+// vs radians) and doc.eulerOrder (any of the 6 axis-order permutations, e.g.
+// "ZYX"), instead of eulerXYZToQuat()'s hardcoded degrees+XYZ assumption.
+// order[0] is applied first (innermost), order[2] last (outermost):
+// R = R[order[2]] * R[order[1]] * R[order[0]], matching eulerXYZToQuat's own
+// "Extrinsic XYZ: R = Rz*Ry*Rx" convention when order=="XYZ" (verified
+// numerically identical to eulerXYZToQuat for that case).
+inline std::array<double, 4> eulerToQuat(float x, float y, float z,
+                                          bool rotationIsRadians,
+                                          const std::string& order) {
+    const double toRad = rotationIsRadians ? 1.0 : (std::numbers::pi / 180.0);
+    std::array<double, 4> qAxis[3] = {
+        quatFromAxisAngleRad('X', x * toRad),
+        quatFromAxisAngleRad('Y', y * toRad),
+        quatFromAxisAngleRad('Z', z * toRad),
+    };
+    auto axisIdx = [](char c) { return c == 'X' ? 0 : (c == 'Y' ? 1 : 2); };
+    const std::string& ord = order.size() == 3 ? order : "XYZ";
+    return quatMul(quatMul(qAxis[axisIdx(ord[2])], qAxis[axisIdx(ord[1])]), qAxis[axisIdx(ord[0])]);
 }
 
 // Decompose a "look-at" direction into pitch/yaw Euler angles (degrees)

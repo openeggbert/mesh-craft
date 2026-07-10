@@ -467,6 +467,17 @@ if(BUILD_TESTING)
             )
             set_tests_properties(mc3togltf_glb_texture_embed_jpeg PROPERTIES TIMEOUT 30 LABELS "export")
         endif()
+        set(_rotation_convention_xml "${CMAKE_CURRENT_SOURCE_DIR}/../test/rotation_convention_export.mc3.xml")
+        if(EXISTS "${_rotation_convention_xml}")
+            add_test(
+                NAME mc3togltf_rotation_convention
+                COMMAND "${PYTHON3_EXEC}"
+                        "${CMAKE_CURRENT_SOURCE_DIR}/test/rotation_convention_test.py"
+                        "$<TARGET_FILE:mc3togltf>"
+                        "${_rotation_convention_xml}"
+            )
+            set_tests_properties(mc3togltf_rotation_convention PROPERTIES TIMEOUT 30 LABELS "export")
+        endif()
         if(EXISTS "${_house_xml}")
             add_test(
                 NAME mc3togltf_no_partial_output

@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- STAB-0691 regression fixture: rotation_units="radians" and a
+     non-default euler_order="ZYX", on both a plain object and a camera
+     with an explicit rotation. Before the fix, GltfExporter.cpp ignored
+     both fields entirely (hardcoded degrees + extrinsic XYZ composition
+     via eulerXYZToQuat()), so every rotated object/camera in a document
+     using either non-default convention exported systematically wrong. -->
+<mc3 version="0.3" model="RotationConventionExportFixture"
+     rotation_units="radians" euler_order="ZYX" default_camera="Main">
+
+  <cameras>
+    <camera name="Main" position="0 0 5" target="0 0 0" fov="50" near="0.05" far="100"
+            rotation="0.1 0.2 -0.15"/>
+  </cameras>
+
+  <objects>
+    <box name="RotatedBox" size="1 1 1" rotation="0.3 0.7 -0.5"/>
+  </objects>
+
+</mc3>
