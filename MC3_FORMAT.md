@@ -248,6 +248,18 @@ by a shared/included material library should be placed relative to
 wherever scenes that include that library actually live, not relative
 to the library file itself.
 
+**`color_space` is a pass-through hint only, not enforced.** `mc3togltf`
+parses and stores it but never reads it back — no pixel-level
+re-encoding happens at export time, the texture's raw file bytes are
+copied/referenced as-is. glTF 2.0 requires `baseColorTexture` and
+`emissiveTexture` to be sRGB-encoded and `normalTexture`/
+`metallicRoughnessTexture`/`occlusionTexture` to be linear (non-color)
+data; correctness of that encoding is entirely the responsibility of
+the actual image file on disk, not something MeshCraft validates or
+converts. Setting `color_space="srgb"` on a texture used as a normal
+map, for example, does not trigger any warning or conversion — it is
+simply unused metadata for that texture's actual role.
+
 ---
 
 ## Materials
