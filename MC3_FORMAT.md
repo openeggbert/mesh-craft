@@ -190,6 +190,21 @@ Free-form document-level key/value metadata — author, license, description, ve
 </lights>
 ```
 
+`brightness` is an arbitrary, unitless multiplier — not physical lux/candela units.
+The editor renders it as a direct scale on the light's contribution, and
+`mc3togltf` passes it straight through as `KHR_lights_punctual`'s `intensity`
+field with no per-light-type conversion. glTF's `KHR_lights_punctual` spec
+defines `intensity` as lux for directional lights and candela for point/spot
+— physically-based glTF viewers/renderers may therefore render exported
+lights at different *relative* brightness than the MeshCraft editor's own
+preview, since the same raw number is being reinterpreted under different
+physical units per light type. Not planned to change without a product
+decision on whether physically-correct cross-renderer brightness is worth
+requiring real unit conversion (and, likely, an editor-side lux/candela
+input mode) — this is a deliberate, documented limitation, not an oversight.
+`ambient` has no glTF equivalent at all and is dropped on export (with a
+warning) since `KHR_lights_punctual` doesn't support ambient lighting.
+
 ---
 
 ## Cameras
