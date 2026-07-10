@@ -1,7 +1,9 @@
 #!/usr/bin/env python3
 """Verify mc3togltf output for all_primitives.mc3.xml and all_objects.mc3.xml."""
 import json
+import math
 import os
+import struct
 import subprocess
 import sys
 import tempfile
@@ -207,6 +209,140 @@ def test_bbox_matches_scene_renderer_scale_formula(mc3togltf, xml_path, tmpdir):
     print("bbox_matches_scene_renderer_scale_formula: PASS")
 
 
+# STAB-0666: the bbox-only cross-check above proved too weak to catch a real
+# bug (STAB-0662's capsule pole-closure defect changed neither vertex COUNT
+# nor bounding box, only the *shape* of the geometry -- so a naive vertex-
+# count comparison wouldn't have caught it either). This adds a genuine
+# topology/geometry fingerprint computed directly from mc3togltf's real
+# exported vertex+index data (not a cross-check against SceneRenderer's own
+# geometry: investigating that path revealed SceneRenderer's live-preview
+# builders use fixed per-LOD-level segment counts (SceneRenderer.cpp:326-332)
+# completely decoupled from each object's mc3.xml `segments` attribute, so a
+# vertex-count/topology comparison *against SceneRenderer* would create a
+# false coupling between the test fixture's segment values and SceneRenderer's
+# internal LOD constants -- not a sound invariant to assert).
+#
+# For each primitive that is meant to be a closed, watertight solid, this
+# computes the mesh's enclosed volume via the divergence theorem (signed
+# tetrahedron volume from the origin to each triangle, summed) and checks:
+#   1. Winding consistency: every triangle must contribute the SAME SIGN to
+#      the sum. A mesh representing one consistently-outward-oriented closed
+#      solid must have every face wound the same way; a sign flip between
+#      triangles means the mesh is folded/self-intersecting or has
+#      inconsistent per-face winding (a real defect either way -- e.g. it
+#      breaks backface culling in any glTF viewer that enables it, which is
+#      the default for opaque materials per the glTF spec).
+#   2. Magnitude: the (consistently-signed) total must be close to the
+#      analytically-known volume for that primitive's declared parameters.
+#
+# Verified this actually has teeth: temporarily reverted STAB-0662's capsule
+# fix locally and re-ran this check -- the pre-fix capsule fails check #1
+# outright (32 positive vs 960 negative triangles, i.e. genuinely mixed
+# winding from the self-intersecting fold), while the post-fix capsule is
+# fully consistent (0 positive / 1024 negative). Bbox-only would not have
+# caught this at all.
+#
+# Plane/Disk/RingDisk/Grid are intentionally excluded: they are open
+# (single-sided) surfaces, not closed solids, so "enclosed volume" isn't a
+# meaningful invariant for them.
+#
+# Cone/Torus/TorusThin are also intentionally excluded here: implementing
+# this check surfaced a *real*, previously-undiscovered, separate bug --
+# buildCone()'s bottom-cap fan and buildTorus()'s ring quads wind opposite to
+# their side/adjacent faces within the same closed mesh (confirmed directly:
+# Cone is exactly 32 positive / 32 negative triangles, i.e. perfect
+# cancellation; Torus/TorusThin are similarly mixed). That is a genuine
+# rendering-correctness bug (visible holes under backface culling), but
+# fixing MeshBuilder.cpp's triangulation is production-geometry-code scope,
+# not test-strengthening scope -- tracked separately as STAB-0702, not fixed
+# here. Once STAB-0702 lands, these three should be added to CLOSED_SOLIDS.
+CLOSED_SOLID_VOLUMES = {
+    # name: (expected_volume, tolerance_fraction)
+    "Box":       (1.0,                                    0.001),
+    "Cube":      (1.0,                                    0.001),
+    "Sphere":    (4.0/3.0 * math.pi * 0.5**3,              0.03),   # faceted UV sphere undershoots
+    "Cylinder":  (math.pi * 0.4**2 * 1.0,                  0.01),
+    "Capsule":   (math.pi * 0.3**2 * 0.8 + 4.0/3.0*math.pi*0.3**3, 0.02),
+    "IcoSphere": (4.0/3.0 * math.pi * 0.5**3,              0.01),
+}
+
+
+def read_vec3_accessor(gltf, bin_data, acc_idx):
+    acc = gltf["accessors"][acc_idx]
+    bv = gltf["bufferViews"][acc["bufferView"]]
+    offset = bv.get("byteOffset", 0) + acc.get("byteOffset", 0)
+    stride = bv.get("byteStride", 12)
+    out = []
+    for i in range(acc["count"]):
+        base = offset + i * stride
+        out.append(struct.unpack_from("<fff", bin_data, base))
+    return out
+
+
+def read_index_accessor(gltf, bin_data, acc_idx):
+    acc = gltf["accessors"][acc_idx]
+    bv = gltf["bufferViews"][acc["bufferView"]]
+    offset = bv.get("byteOffset", 0) + acc.get("byteOffset", 0)
+    fmt, size = {5121: ("<B", 1), 5123: ("<H", 2), 5125: ("<I", 4)}[acc["componentType"]]
+    return [struct.unpack_from(fmt, bin_data, offset + i * size)[0] for i in range(acc["count"])]
+
+
+def mesh_signed_volume_and_winding(positions, indices):
+    """Returns (total_signed_volume, pos_triangle_count, neg_triangle_count)."""
+    total = 0.0
+    pos_n = neg_n = 0
+    for i in range(0, len(indices), 3):
+        a = positions[indices[i]]
+        b = positions[indices[i + 1]]
+        c = positions[indices[i + 2]]
+        v = (a[0] * (b[1]*c[2] - b[2]*c[1])
+           - a[1] * (b[0]*c[2] - b[2]*c[0])
+           + a[2] * (b[0]*c[1] - b[1]*c[0])) / 6.0
+        total += v
+        if v > 1e-9:
+            pos_n += 1
+        elif v < -1e-9:
+            neg_n += 1
+    return total, pos_n, neg_n
+
+
+def test_closed_solid_topology(mc3togltf, xml_path, tmpdir):
+    out_gltf = os.path.join(tmpdir, "out_topology.gltf")
+    r = run([mc3togltf, xml_path, out_gltf])
+    assert r.returncode == 0, f"mc3togltf failed:\n{r.stderr}"
+
+    with open(out_gltf) as f:
+        gltf = json.load(f)
+    out_dir = os.path.dirname(out_gltf)
+    buf_uri = gltf["buffers"][0]["uri"]
+    with open(os.path.join(out_dir, buf_uri), "rb") as f:
+        bin_data = f.read()
+
+    for name, (expected_volume, tolerance) in CLOSED_SOLID_VOLUMES.items():
+        _, prim = check_node_has_geometry(gltf, name)
+        positions = read_vec3_accessor(gltf, bin_data, prim["attributes"]["POSITION"])
+        indices = read_index_accessor(gltf, bin_data, prim["indices"])
+        total, pos_n, neg_n = mesh_signed_volume_and_winding(positions, indices)
+
+        assert pos_n == 0 or neg_n == 0, (
+            f"STAB-0666: '{name}' has inconsistent triangle winding within a "
+            f"single closed mesh ({pos_n} positive-contribution triangles, "
+            f"{neg_n} negative) -- indicates folded/self-intersecting "
+            f"geometry or a real per-face winding bug, not a single "
+            f"consistently outward-oriented solid"
+        )
+        actual_volume = abs(total)
+        rel_err = abs(actual_volume - expected_volume) / expected_volume
+        assert rel_err <= tolerance, (
+            f"STAB-0666: '{name}' enclosed volume {actual_volume:.5f} differs "
+            f"from the analytically-expected {expected_volume:.5f} by "
+            f"{rel_err*100:.2f}% (tolerance {tolerance*100:.1f}%) -- possible "
+            f"malformed/incomplete geometry"
+        )
+
+    print("closed_solid_topology: PASS")
+
+
 def test_all_objects(mc3togltf, xml_path, tmpdir):
     if not os.path.exists(xml_path):
         print(f"Skipping all_objects test: {xml_path} not found")
@@ -298,6 +434,7 @@ if __name__ == "__main__":
             test_all_primitives(mc3togltf_bin, prims_xml, tmpdir)
             test_all_objects(mc3togltf_bin, objs_xml, tmpdir)
             test_bbox_matches_scene_renderer_scale_formula(mc3togltf_bin, prims_xml, tmpdir)
+            test_closed_solid_topology(mc3togltf_bin, prims_xml, tmpdir)
         except AssertionError as e:
             print(f"FAIL: {e}", file=sys.stderr)
             sys.exit(1)
