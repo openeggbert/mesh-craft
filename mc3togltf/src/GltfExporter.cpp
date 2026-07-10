@@ -289,6 +289,7 @@ static std::unordered_map<std::string, int>
 buildTextures(tinygltf::Model& model,
               const std::map<std::string, Mc3Texture>& textures,
               const std::filesystem::path& basePath,
+              const std::filesystem::path& outDir,
               bool embedImages)
 {
     std::unordered_map<std::string, int> texIdx;
@@ -331,8 +332,24 @@ buildTextures(tinygltf::Model& model,
                           << imgPath << "\n";
             }
         } else {
-            // GLTF: keep relative URI so tools can load textures from next to the file
-            img.uri = tex.uri;
+            // GLTF: STAB-0677 -- tex.uri is relative to basePath (the
+            // source .mc3.xml's directory), not necessarily to outDir
+            // (the .gltf's own directory). If exporting to a different
+            // directory (e.g. into dist/), the raw source-relative URI
+            // would be wrong/unresolvable for anything loading the .gltf
+            // from its own location. Re-relativize against outDir; if
+            // that's not possible (e.g. different drive/root on Windows),
+            // fall back to an absolute path rather than a silently-broken
+            // relative one.
+            std::error_code ec;
+            std::filesystem::path absTexPath =
+                std::filesystem::weakly_canonical(basePath / tex.uri, ec);
+            if (ec) absTexPath = basePath / tex.uri;
+            std::filesystem::path rebased =
+                std::filesystem::relative(absTexPath, outDir, ec);
+            img.uri = (!ec && !rebased.empty())
+                          ? rebased.generic_string()
+                          : absTexPath.generic_string();
         }
 
         int imgIdx = static_cast<int>(model.images.size());
@@ -1222,7 +1239,8 @@ void GltfExporter::exportDocument(const Mc3Document& doc,
 
     // Textures (embedImages=true for GLB so images are embedded as data URIs)
     bool embedImagesNow = (format == OutputFormat::GLB);
-    auto texIdx = buildTextures(model, doc.textures, doc.sourcePath, embedImagesNow);
+    auto texIdx = buildTextures(model, doc.textures, doc.sourcePath,
+                                 outputPath.parent_path(), embedImagesNow);
 
     // Materials
     std::unordered_map<std::string, int> matNameToIdx;

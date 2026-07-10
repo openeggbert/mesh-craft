@@ -74,18 +74,39 @@ if __name__ == "__main__":
         textures  = gltf.get("textures", [])
         samplers  = gltf.get("samplers", [])
 
-        # STAB-0416: full relative path must survive export, not just basename.
+        # STAB-0416: full relative path (subdirectory prefix, e.g.
+        # "textures/a.png") must survive export, not get truncated to just
+        # a basename by tinygltf's default image writer.
+        #
+        # STAB-0677: the URI is now also re-relativized against the actual
+        # OUTPUT directory (this test exports into an unrelated tempdir, far
+        # from the source's own test/textures/ directory), so the exact
+        # string is no longer a short "textures/a.png" -- it's a longer
+        # "../../.../test/textures/a.png"-style path that correctly resolves
+        # from the output .gltf's own location. Check the suffix (subdirectory
+        # prefix preserved) rather than exact equality (which now depends on
+        # the real filesystem layout between source and output directories).
         img_by_name = {img.get("name", ""): img for img in images}
         for tex_id, expected_uri in EXPECTED_URI.items():
             assert tex_id in img_by_name, (
                 f"Expected image '{tex_id}' in output, got: {sorted(img_by_name.keys())}"
             )
             actual_uri = img_by_name[tex_id].get("uri")
-            assert actual_uri == expected_uri, (
-                f"{tex_id}.uri: expected '{expected_uri}' (full relative path), "
-                f"got '{actual_uri}' (STAB-0416: subdirectory prefix must survive export)"
+            assert actual_uri is not None and actual_uri.replace("\\", "/").endswith(expected_uri), (
+                f"{tex_id}.uri: expected it to end with '{expected_uri}' (subdirectory "
+                f"prefix preserved, STAB-0416), got '{actual_uri}'"
             )
-            print(f"{tex_id}: uri={actual_uri} — PASS")
+            # STAB-0677: resolving the URI relative to the output file's own
+            # directory must land on the real (source) texture path.
+            out_dir = os.path.dirname(out)
+            resolved = os.path.normpath(os.path.join(out_dir, actual_uri))
+            expected_real = os.path.normpath(os.path.join(os.path.dirname(xml_path), expected_uri))
+            assert resolved == expected_real, (
+                f"{tex_id}.uri: resolving '{actual_uri}' from the output directory "
+                f"({out_dir}) gives '{resolved}', expected it to resolve to the real "
+                f"source texture path '{expected_real}' (STAB-0677)"
+            )
+            print(f"{tex_id}: uri={actual_uri} — PASS (resolves correctly from output dir)")
 
         # Map texture name (mc3 id, stored as glTF image name) -> sampler dict,
         # via the glTF texture that references that image.
