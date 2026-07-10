@@ -1654,6 +1654,175 @@ void MeshCraftApplication::drawLeftPanel(float panelY, float panelH)
             ImGui::EndTabItem();
         }
 
+        // -------------------------------------------------------------------
+        // Tab: States (STAB-0708, N6) — a scene state is a named set of
+        // per-object property overrides (visible/position/rotation/
+        // material, each independently optional). doc.sceneStates already
+        // parses/round-trips/exports correctly; this was the only missing
+        // piece. `name` is treated as read-only (like every other N-
+        // extension tab's id/key field this session), since it doubles as
+        // the doc.sceneStates map key and renaming would need map-key-
+        // rehoming logic this codebase doesn't have anywhere yet.
+        // -------------------------------------------------------------------
+        if (ImGui::BeginTabItem("States")) {
+            if (!selectedSceneStateKey_.empty() && !document_.sceneStates.count(selectedSceneStateKey_))
+                selectedSceneStateKey_.clear();
+
+            if (ImGui::SmallButton("+##stateadd")) {
+                pushUndo();
+                int n = 1;
+                std::string key;
+                do { key = "state_" + std::to_string(n++); }
+                while (document_.sceneStates.count(key));
+                Mc3::Mc3SceneState state;
+                state.name = key;
+                document_.sceneStates[key] = state;
+                selectedSceneStateKey_ = key;
+                modified_ = true; updateWindowTitle();
+            }
+            if (ImGui::IsItemHovered()) ImGui::SetTooltip("Add scene state");
+            ImGui::SameLine();
+            if (ImGui::SmallButton("-##stateremove") && !selectedSceneStateKey_.empty()) {
+                pushUndo();
+                document_.sceneStates.erase(selectedSceneStateKey_);
+                selectedSceneStateKey_.clear();
+                modified_ = true; updateWindowTitle();
+            }
+
+            ImGui::Separator();
+            for (const auto& [key, state] : document_.sceneStates) {
+                bool sel = (key == selectedSceneStateKey_);
+                std::string label = key + "  (" + std::to_string(state.overrides.size()) + " override"
+                                   + (state.overrides.size() == 1 ? "" : "s") + ")";
+                ImGui::PushID(("state_" + key).c_str());
+                if (ImGui::Selectable(label.c_str(), sel))
+                    selectedSceneStateKey_ = key;
+                ImGui::PopID();
+            }
+
+            if (!selectedSceneStateKey_.empty() && document_.sceneStates.count(selectedSceneStateKey_)) {
+                auto& state = document_.sceneStates[selectedSceneStateKey_];
+                ImGui::Spacing();
+
+                ImGui::TextDisabled("Name");
+                ImGui::SameLine();
+                if (ImGui::SmallButton("Copy##stateid"))
+                    ImGui::SetClipboardText(selectedSceneStateKey_.c_str());
+                ImGui::TextUnformatted(selectedSceneStateKey_.c_str());
+
+                ImGui::Spacing();
+                ImGui::TextDisabled("Object Overrides");
+
+                int removeIdx = -1;
+                for (size_t i = 0; i < state.overrides.size(); ++i) {
+                    auto& ov = state.overrides[i];
+                    ImGui::PushID(static_cast<int>(i));
+                    ImGui::Separator();
+
+                    char idBuf[128];
+                    std::strncpy(idBuf, ov.id.c_str(), sizeof(idBuf)-1); idBuf[127]='\0';
+                    ImGui::TextDisabled("Object ID");
+                    ImGui::SameLine();
+                    ImGui::SetNextItemWidth(-40);
+                    if (ImGui::InputText("##ovid", idBuf, sizeof(idBuf),
+                            ImGuiInputTextFlags_EnterReturnsTrue)) {
+                        pushUndo(); ov.id = idBuf; modified_ = true; updateWindowTitle();
+                    }
+                    ImGui::SameLine();
+                    if (ImGui::SmallButton("x##ovrm")) removeIdx = static_cast<int>(i);
+
+                    // Visible (optional<bool>)
+                    {
+                        bool has = ov.visible.has_value();
+                        if (ImGui::Checkbox("Override Visible##ovvis", &has)) {
+                            pushUndo();
+                            ov.visible = has ? std::optional<bool>(true) : std::nullopt;
+                            modified_ = true; updateWindowTitle();
+                        }
+                        if (ov.visible.has_value()) {
+                            ImGui::SameLine();
+                            bool v = *ov.visible;
+                            if (ImGui::Checkbox("Value##ovvisval", &v)) {
+                                pushUndo(); ov.visible = v; modified_ = true; updateWindowTitle();
+                            }
+                        }
+                    }
+
+                    // Position (optional<array<float,3>>)
+                    {
+                        bool has = ov.position.has_value();
+                        if (ImGui::Checkbox("Override Position##ovpos", &has)) {
+                            pushUndo();
+                            ov.position = has ? std::optional<std::array<float,3>>({0,0,0}) : std::nullopt;
+                            modified_ = true; updateWindowTitle();
+                        }
+                        if (ov.position.has_value()) {
+                            ImGui::SameLine();
+                            ImGui::SetNextItemWidth(180);
+                            if (ImGui::DragFloat3("##ovposval", ov.position->data(), 0.01f)) {
+                                if (ImGui::IsItemActivated()) pushUndo();
+                                modified_ = true; updateWindowTitle();
+                            }
+                        }
+                    }
+
+                    // Rotation (optional<array<float,3>>)
+                    {
+                        bool has = ov.rotation.has_value();
+                        if (ImGui::Checkbox("Override Rotation##ovrot", &has)) {
+                            pushUndo();
+                            ov.rotation = has ? std::optional<std::array<float,3>>({0,0,0}) : std::nullopt;
+                            modified_ = true; updateWindowTitle();
+                        }
+                        if (ov.rotation.has_value()) {
+                            ImGui::SameLine();
+                            ImGui::SetNextItemWidth(180);
+                            if (ImGui::DragFloat3("##ovrotval", ov.rotation->data(), 0.5f)) {
+                                if (ImGui::IsItemActivated()) pushUndo();
+                                modified_ = true; updateWindowTitle();
+                            }
+                        }
+                    }
+
+                    // Material (optional<string>)
+                    {
+                        bool has = ov.material.has_value();
+                        if (ImGui::Checkbox("Override Material##ovmat", &has)) {
+                            pushUndo();
+                            ov.material = has ? std::optional<std::string>("") : std::nullopt;
+                            modified_ = true; updateWindowTitle();
+                        }
+                        if (ov.material.has_value()) {
+                            ImGui::SameLine();
+                            char matBuf[128];
+                            std::strncpy(matBuf, ov.material->c_str(), sizeof(matBuf)-1); matBuf[127]='\0';
+                            ImGui::SetNextItemWidth(150);
+                            if (ImGui::InputText("##ovmatval", matBuf, sizeof(matBuf),
+                                    ImGuiInputTextFlags_EnterReturnsTrue)) {
+                                pushUndo(); ov.material = std::string(matBuf); modified_ = true; updateWindowTitle();
+                            }
+                        }
+                    }
+
+                    ImGui::PopID();
+                }
+                if (removeIdx >= 0) {
+                    pushUndo();
+                    state.overrides.erase(state.overrides.begin() + removeIdx);
+                    modified_ = true; updateWindowTitle();
+                }
+
+                ImGui::Separator();
+                if (ImGui::SmallButton("+ Add Override")) {
+                    pushUndo();
+                    state.overrides.push_back(Mc3::Mc3ObjectOverride{});
+                    modified_ = true; updateWindowTitle();
+                }
+            }
+
+            ImGui::EndTabItem();
+        }
+
         ImGui::EndTabBar();
     }
 
