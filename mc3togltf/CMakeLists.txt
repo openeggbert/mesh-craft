@@ -478,6 +478,13 @@ if(BUILD_TESTING)
             )
             set_tests_properties(mc3togltf_rotation_convention PROPERTIES TIMEOUT 30 LABELS "export")
         endif()
+        add_test(
+            NAME mc3togltf_icosphere_uv_seam
+            COMMAND "${PYTHON3_EXEC}"
+                    "${CMAKE_CURRENT_SOURCE_DIR}/test/icosphere_uv_seam_test.py"
+                    "$<TARGET_FILE:mc3togltf>"
+        )
+        set_tests_properties(mc3togltf_icosphere_uv_seam PROPERTIES TIMEOUT 30 LABELS "export")
         if(EXISTS "${_house_xml}")
             add_test(
                 NAME mc3togltf_no_partial_output

@@ -543,13 +543,29 @@ MeshData buildIcoSphere(float radius, int subdivisions) {
 
     MeshData m;
     for (auto& f : faces) {
-        for (int vi : f) {
-            auto& v = verts[vi];
+        // STAB-0663: each face gets its own unwelded copy of its 3 vertices
+        // (no cross-triangle index sharing here), so a triangle straddling
+        // the atan2 seam (u wraps 1.0->0.0) can be fixed purely locally:
+        // compute all 3 raw u values first, then nudge any that are on the
+        // "low" side back up across the seam if the triangle spans it --
+        // this can't affect any OTHER triangle since nothing is shared.
+        float us[3], vs[3];
+        for (int i = 0; i < 3; ++i) {
+            auto& v = verts[f[i]];
+            us[i] = 0.5f + std::atan2(v[2], v[0]) / (2.0f * pi);
+            vs[i] = 0.5f - std::asin(std::clamp(v[1], -1.0f, 1.0f)) / pi;
+        }
+        float uMin = std::min({us[0], us[1], us[2]});
+        float uMax = std::max({us[0], us[1], us[2]});
+        if (uMax - uMin > 0.5f) {
+            for (float& u : us) if (u < 0.5f) u += 1.0f;
+        }
+
+        for (int i = 0; i < 3; ++i) {
+            auto& v = verts[f[i]];
             m.positions.insert(m.positions.end(), {v[0]*radius, v[1]*radius, v[2]*radius});
             m.normals.insert(m.normals.end(), {v[0], v[1], v[2]});
-            float u  = 0.5f + std::atan2(v[2], v[0]) / (2.0f * pi);
-            float vt = 0.5f - std::asin(std::clamp(v[1], -1.0f, 1.0f)) / pi;
-            m.texcoords.insert(m.texcoords.end(), {u, vt});
+            m.texcoords.insert(m.texcoords.end(), {us[i], vs[i]});
             m.indices.push_back(uint32_t(m.indices.size()));
         }
     }
