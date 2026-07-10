@@ -70,7 +70,10 @@ static manifold::Manifold buildManifoldTree(
     using namespace manifold;
     if (depth > 12 || !obj.visible) return Manifold{};
 
-    constexpr int SEG = 24;
+    // STAB-0671: matches mc3togltf/src/CsgEvaluator.cpp's CSG_SEGMENTS (was
+    // 24 here vs 32 there) -- curved-primitive CSG previews were visibly
+    // less smooth than the final export for no functional reason.
+    constexpr int SEG = 32;
     Matrix objWorld = computeObjWorldMatrix(obj) * parentToWorld;
     Matrix deformMat = obj.deform
         ? Matrix::CreateScale({obj.deform->scale[0], obj.deform->scale[1], obj.deform->scale[2]})
