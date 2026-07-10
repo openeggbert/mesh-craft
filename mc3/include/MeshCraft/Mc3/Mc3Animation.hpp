@@ -55,7 +55,13 @@ struct Mc3Keyframe {
 };
 
 // A channel animates one property of one named scene object.
-// Keyframes must be kept sorted by time (ascending).
+// Keyframes must be kept sorted by time (ascending): evaluateChannel() below
+// does a std::upper_bound binary search over this vector and will silently
+// return wrong interpolation results if it is not sorted. This is currently
+// maintained by Mc3XmlParser.cpp's parseActions() (stable_sort at parse
+// time) and by the editor's keyframe-drag UI (MeshCraftApplication_Anim.cpp,
+// stable_sort on mouse-release). Any other code that mutates `keyframes`
+// directly must preserve this invariant, e.g. by re-sorting afterward.
 struct Mc3Channel {
     std::string      targetObject;
     AnimatedProperty property{ AnimatedProperty::PositionX };
@@ -91,6 +97,8 @@ const char*                     animatedPropertyName(AnimatedProperty p);
 std::optional<AnimatedProperty> animatedPropertyFromName(const std::string& name);
 
 // Evaluate a channel at the given time.  Returns 0.0f if there are no keyframes.
+// Precondition: ch.keyframes must be sorted by ascending time (see the
+// Mc3Channel::keyframes comment) -- this function binary-searches it.
 float evaluateChannel(const Mc3Channel& ch, float time);
 
 } // namespace MeshCraft::Mc3
