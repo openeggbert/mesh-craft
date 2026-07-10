@@ -1081,10 +1081,28 @@ static void exportAnimations(
                 }
                 if (timeSet.empty()) continue;
 
-                // Dense sampling for cubic bezier to preserve curve shape in LINEAR glTF output.
+                // Dense sampling for cubic bezier to preserve curve shape in
+                // LINEAR glTF output (deliberately NOT glTF's own CUBICSPLINE
+                // sampler mode, which would need real in/out tangent data in
+                // a strict triple-per-keyframe layout -- baking to dense
+                // LINEAR samples via the same evaluateChannel() the live
+                // editor uses guarantees editor/export visual parity instead).
+                //
+                // STAB-0683: 30 samples/sec is a fixed rate, not adaptive to
+                // curve complexity or action duration -- chosen as a common
+                // "looks smooth" video/animation frame rate, not derived from
+                // any curvature/velocity analysis. No cap on total samples:
+                // a very long bezier-interpolated action produces a
+                // correspondingly large accessor purely from duration, and a
+                // very fast/sharp curve in a short window could in principle
+                // be under-sampled. Not changed here -- would need adaptive
+                // resampling (denser where curvature/velocity is high) to
+                // meaningfully improve on a fixed rate, a real but separate
+                // feature, not attempted in this pass.
                 if (hasCubic) {
                     float minT = *timeSet.begin(), maxT = *timeSet.rbegin();
-                    for (float t = minT; t <= maxT + 1e-5f; t += 1.0f / 30.0f)
+                    constexpr float kBezierBakeSampleRateHz = 30.0f;
+                    for (float t = minT; t <= maxT + 1e-5f; t += 1.0f / kBezierBakeSampleRateHz)
                         timeSet.insert(t);
                 }
 

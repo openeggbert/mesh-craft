@@ -618,6 +618,16 @@ keyframe times straight through into glTF's animation sampler `input`
 accessor (which the glTF spec also requires to be in seconds) with no
 conversion needed or applied.
 
+**`cubic` (bezier) export:** glTF's own `CUBICSPLINE` sampler mode requires
+real in/out tangent data in a strict triple-per-keyframe layout, which mc3's
+tangent-handle data isn't converted into — instead, `mc3togltf` bakes a
+bezier-interpolated channel down to dense `LINEAR` samples at a fixed 30
+samples/sec, using the exact same curve evaluation the live editor uses (so
+the export visually matches the editor preview). The rate is fixed, not
+adaptive to curve complexity — a very long bezier action produces a
+correspondingly large sampler purely from its duration, and a very fast/sharp
+curve in a short time window could in principle be under-sampled.
+
 ---
 
 ## mc3togltf export support matrix
