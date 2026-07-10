@@ -237,6 +237,18 @@ private:
     char glbExportErr_[256]{};
     void runGltfExport(const std::string& outPath);
 
+    // OBJ export dialog state (STAB-0718): the editor previously only
+    // exported to glTF/GLB (via mc3togltf::GltfExporter) or a sub-scene
+    // .mc3.xml (Export Selection). Reuses the existing, unmodified
+    // GltfExporter as a black box (exports to a temp .glb, reads it back
+    // via tinygltf's own reader, walks the resulting flattened node graph)
+    // rather than reimplementing scene traversal/CSG/transform composition
+    // a second time for OBJ specifically.
+    bool objExportOpen_{false};
+    char objExportOutBuf_[512]{};
+    char objExportErr_[256]{};
+    void runObjExport(const std::string& outPath);
+
     // Subtree export as template dialog state (E8)
     bool subtreeExportOpen_{false};
     char subtreeExportNameBuf_[128]{};  // definition name
@@ -397,6 +409,7 @@ private:
     void saveFile();
     void saveFileAs();
     void exportGltf();
+    void exportObj();
     void deleteSelected();
     void duplicateSelected();
     void copySelected();

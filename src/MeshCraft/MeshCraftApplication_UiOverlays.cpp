@@ -1776,6 +1776,45 @@ void MeshCraftApplication::drawDialogs()
     }
 
     // -----------------------------------------------------------------------
+    // OBJ Export dialog (STAB-0718)
+    // -----------------------------------------------------------------------
+    if (objExportOpen_) {
+        ImGui::OpenPopup("Export OBJ##objexpdlg");
+        objExportOpen_ = false;
+    }
+    if (ImGui::BeginPopupModal("Export OBJ##objexpdlg", nullptr,
+                               ImGuiWindowFlags_AlwaysAutoResize)) {
+        ImGui::SeparatorText("Output path");
+        ImGui::SetNextItemWidth(420);
+        if (ImGui::IsWindowAppearing()) ImGui::SetKeyboardFocusHere();
+        bool enter = ImGui::InputText("##objoutpath", objExportOutBuf_, sizeof(objExportOutBuf_),
+                                      ImGuiInputTextFlags_EnterReturnsTrue);
+        ImGui::TextDisabled("A .mtl file with the same base name is written alongside it\nif the scene has any materials.");
+
+        if (objExportErr_[0])
+            ImGui::TextColored(ImVec4(1.f, 0.3f, 0.3f, 1.f), "%s", objExportErr_);
+
+        ImGui::Spacing();
+        bool canExpObj = objExportOutBuf_[0] != '\0' && !currentFile_.empty();
+        if (!canExpObj) ImGui::BeginDisabled();
+        if ((enter || ImGui::Button("Export", ImVec2(100, 0))) && canExpObj) {
+            objExportErr_[0] = '\0';
+            try {
+                runObjExport(objExportOutBuf_);
+                ImGui::CloseCurrentPopup();
+            } catch (const std::exception& ex) {
+                std::strncpy(objExportErr_, ex.what(), sizeof(objExportErr_)-1);
+                objExportErr_[sizeof(objExportErr_)-1] = '\0';
+            }
+        }
+        if (!canExpObj) ImGui::EndDisabled();
+        ImGui::SameLine();
+        if (ImGui::Button("Cancel", ImVec2(90, 0)) || ImGui::IsKeyPressed(ImGuiKey_Escape, false))
+            ImGui::CloseCurrentPopup();
+        ImGui::EndPopup();
+    }
+
+    // -----------------------------------------------------------------------
     // Preferences dialog (F5)
     // -----------------------------------------------------------------------
     if (prefsOpen_) {

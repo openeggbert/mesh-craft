@@ -82,6 +82,11 @@ float MeshCraftApplication::drawMenuBar()
             if (ImGui::MenuItem("Save As...","Ctrl+Shift+S")) saveFileAs();
             ImGui::Separator();
             if (ImGui::MenuItem("Export GLB", "Ctrl+E")) exportGltf();
+            // STAB-0718: previously glTF/GLB was the only export format
+            // from the editor GUI. Reuses the existing GltfExporter as a
+            // black box (see runObjExport()'s own comment) rather than a
+            // second from-scratch scene-traversal implementation.
+            if (ImGui::MenuItem("Export OBJ...")) exportObj();
             {
                 bool hasSel = !selection_.selection().empty();
                 if (!hasSel) ImGui::BeginDisabled();
