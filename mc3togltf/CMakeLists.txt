@@ -219,6 +219,13 @@ if(BUILD_TESTING)
             )
             set_tests_properties(mc3togltf_light_export PROPERTIES TIMEOUT 30 LABELS "export")
         endif()
+        add_test(
+            NAME mc3togltf_environment_export
+            COMMAND "${PYTHON3_EXEC}"
+                    "${CMAKE_CURRENT_SOURCE_DIR}/test/environment_export_test.py"
+                    "$<TARGET_FILE:mc3togltf>"
+        )
+        set_tests_properties(mc3togltf_environment_export PROPERTIES TIMEOUT 30 LABELS "export")
         if(EXISTS "${_anim_xml}" AND EXISTS "${_house_xml}")
             add_test(
                 NAME mc3togltf_gltf

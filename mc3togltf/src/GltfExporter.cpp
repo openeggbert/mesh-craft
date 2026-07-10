@@ -919,6 +919,11 @@ static void applyEnvironment(tinygltf::Scene& scene,
     if (!env->backgroundTexture.empty())
         extras["backgroundTexture"] = tinygltf::Value(env->backgroundTexture);
 
+    // STAB-0698: skyboxTexture (equirectangular panorama, "I2") was missing
+    // here, unlike its sibling backgroundTexture ("I1") just above.
+    if (!env->skyboxTexture.empty())
+        extras["skyboxTexture"] = tinygltf::Value(env->skyboxTexture);
+
     if (env->fog.has_value()) {
         const auto& fog = *env->fog;
         tinygltf::Value::Object fogObj;
