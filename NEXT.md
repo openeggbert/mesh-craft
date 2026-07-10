@@ -1,6 +1,6 @@
 # NEXT.md
 
-_Last updated: 2026-07-10, prior commit `0e1f587` (branch `develop`). Native Linux build/tests re-verified from a genuinely empty scratch build directory the same day, after the `mc3` format spec-vs-implementation audit (`STAB-0651`–`0657`, see §3) — see `STABILIZATION_WORKLOG.md` for the full command trace._
+_Last updated: 2026-07-10, prior commit `ea2aaa0` (branch `develop`). Native Linux build/tests re-verified from a genuinely empty scratch build directory the same day, after the MCB binary-format coverage audit (`STAB-0658`–`0661`, see §3) — see `STABILIZATION_WORKLOG.md` for the full command trace._
 
 ---
 
@@ -57,6 +57,13 @@ Clean from an **absolute-zero** build directory (not just incremental): `rm -rf 
 ---
 
 ## 3. Recent changes
+
+**2026-07-10 — MCB binary-format coverage audit (`plan.md` §S22, `STAB-0658`–`0661`, all 4 completed).** Systematic comparison of `mcb/src/McbWriter.cpp`/`McbReader.cpp` against every field in every `mc3/include/MeshCraft/Mc3/*.hpp` header, to find silent data loss on `mc3 -> MCB -> mc3` round-trips. Overall finding: coverage is very good — all 19 object types, CSG, extrude, all N1-N7 extension sections, materials, lights, cameras, animation, and include-bookkeeping all round-trip correctly. 4 gaps found and fixed, all previously-untested combinations (this batch added the first mcb test coverage for `Mc3Environment` and `Mc3Texture` as whole structs, not just individual pre-existing fields):
+- **`STAB-0658`** (P0): `doc.rotationUnits`/`doc.eulerOrder` were entirely missing — silently reverted every rotation's interpretation to degrees/XYZ after any MCB round-trip if the document used radians or a non-default euler order.
+- **`STAB-0659`** (P0): `Mc3Environment::skyboxTexture` missing (its sibling `backgroundTexture` was covered, masking the gap).
+- **`STAB-0660`** (P1): `Mc3Texture::mipMaps` missing — the exact bug class `STAB-0654` (§S21) just fixed on the XML side, found fresh on the MCB side because that fix didn't touch `mcb/`.
+- **`STAB-0661`** (P1): per-object `Mc3Object::metadata` missing (document-level `metadata`/`meta` were covered — this is the per-object one).
+- Full 66/66 ctest after every fix; a genuinely-fresh clean build (548/548 objects) re-verified after the whole batch.
 
 **2026-07-10 — `mc3` format spec-vs-implementation audit (`plan.md` §S21, `STAB-0651`–`0657`, all 7 completed).** Systematic comparison of `mc3/mc3.xsd` and `MC3_FORMAT.md` against the actual parser/writer/data model. Overall finding: coverage is strong (no data-loss bugs of the class previously fixed in this project); 7 narrower gaps, all fixed:
 - **`STAB-0651`/`0652`**: `mc3.xsd` was missing the `sides` attribute (`crossSectionType`) and `cx`/`cy`/`cz` attributes (`pointType`) that the writer already emitted for polygon/star cross-sections and bezier paths — both fully-implemented, documented features that silently failed `xsd_validation`. New fixture `test/extrude_sides_bezier.mc3.xml`.
