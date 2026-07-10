@@ -360,7 +360,16 @@ MeshData buildCapsule(float radius, float height, int segments, const std::strin
             phi  = (pi * 0.5f) * float(r) / rings;
             yOff = +hh;
         } else {
-            phi  = (pi * 0.5f) + (pi * 0.5f) * float(r - rings) / rings;
+            // STAB-0662: was `(r - rings)`, which skips phi==pi/2 entirely
+            // for the bottom hemisphere's first row (jumping straight past
+            // the cylinder-body seam ring) and overshoots phi==pi (past the
+            // pole) on the last row -- the capsule's cylindrical mid-section
+            // was missing and the bottom pole didn't close. `r - rings - 1`
+            // makes the bottom hemisphere's own phi sweep exactly [0, pi/2]
+            // over `rings` steps (mirroring the top hemisphere), so row
+            // rings+1 is the bottom cylinder seam (phi=pi/2) and the last
+            // row is the exact pole (phi=pi).
+            phi  = (pi * 0.5f) + (pi * 0.5f) * float(r - rings - 1) / rings;
             yOff = -hh;
         }
         float sinP = std::sin(phi), cosP = std::cos(phi);

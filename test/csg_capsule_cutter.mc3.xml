@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- STAB-0662 regression fixture: a Box minus a Capsule cutter. Before the
+     fix, buildCapsule()'s bottom-hemisphere phi formula skipped the
+     cylinder-body seam ring and overshot past the pole, producing folded/
+     self-intersecting geometry, and Manifold construction failed
+     NotManifold for ANY Capsule CSG child (both on export via
+     CsgEvaluator.cpp and the STAB-0670 editor preview fix), independent
+     of the MeshGL::Merge() seam-welding fix that was sufficient for
+     IcoSphere. Confirms the capsule geometry fix alone (no CSG-side
+     change beyond STAB-0670's Merge() call) resolves this. -->
+<mc3 version="0.3" model="CsgCapsuleCutterFixture" default_camera="Main">
+
+  <lights>
+    <ambient color="0.3 0.3 0.3" brightness="0.5"/>
+    <directional name="Sun" color="1 0.95 0.8" brightness="2" direction="-0.5 -1 -0.5"/>
+  </lights>
+
+  <cameras>
+    <camera name="Main" position="0 0 3" target="0 0 0" fov="50" near="0.05" far="100"/>
+  </cameras>
+
+  <materials>
+    <material id="grey"><base_color>0.7 0.7 0.7 1.0</base_color></material>
+  </materials>
+
+  <objects>
+    <difference name="BoxMinusCapsule" material="grey">
+      <box     name="Block"  size="1.5 1.5 1.5"/>
+      <capsule name="Cavity" radius="0.3" height="0.5" segments="16" role="cutter"/>
+    </difference>
+  </objects>
+
+</mc3>
