@@ -1873,22 +1873,30 @@ void PropertiesPanel::draw(float panelX, float panelY, float panelW, float panel
         }
 
         // Coordinate system
+        // STAB-0713: was 3 options including "left_handed_y_up", which
+        // mc3.xsd's coordinateSystemType does not actually permit (only
+        // right_handed_y_up/right_handed_z_up) -- selecting it produced a
+        // document that fails XSD validation. Removed. Separately (not a
+        // UI bug, but worth flagging here since it's not otherwise
+        // discoverable): coordinateSystem is currently write-only -- no
+        // rendering or export code anywhere in this codebase reads it, so
+        // changing this value has no visible effect yet.
         {
             const char* csOpts[] = {
                 "right_handed_y_up",
                 "right_handed_z_up",
-                "left_handed_y_up"
             };
             int csIdx = 0;
-            for (int i = 0; i < 3; ++i)
+            for (int i = 0; i < 2; ++i)
                 if (ctx.document.coordinateSystem == csOpts[i]) { csIdx = i; break; }
             ImGui::TextDisabled("Coord System");
             ImGui::SetNextItemWidth(-1);
-            if (ImGui::Combo("##sccs", &csIdx, csOpts, 3)) {
+            if (ImGui::Combo("##sccs", &csIdx, csOpts, 2)) {
                 ctx.pushUndo();
                 ctx.document.coordinateSystem = csOpts[csIdx];
                 ctx.markModified();
             }
+            ImGui::SetItemTooltip("Reserved for future use -- not yet read by rendering or export.");
         }
 
         // Default camera
