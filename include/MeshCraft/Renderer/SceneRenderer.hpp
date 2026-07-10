@@ -77,6 +77,18 @@ public:
         return it != csgTriCountMap_.end() ? it->second : -1;
     }
 
+    // STAB-0672: a human-readable reason the CSG preview for the given
+    // object ID may be incomplete/empty (unsupported Mesh/Extrude content
+    // anywhere in the subtree, or the subtree exceeds the CSG depth limit),
+    // or an empty string if the last-rendered result had no such issue.
+    // "Tris: 0" alone doesn't distinguish a genuinely empty boolean (e.g. an
+    // Intersection of non-overlapping shapes) from one that silently
+    // dropped content it can't represent.
+    std::string csgWarning(const std::string& objId) const {
+        auto it = csgWarningMap_.find(objId);
+        return it != csgWarningMap_.end() ? it->second : std::string();
+    }
+
     // Number of times a CSG subtree was actually re-evaluated (cache miss —
     // buildManifoldTree() called) since this SceneRenderer was constructed.
     // A static CSG scene re-drawn across many frames should see this stay
@@ -310,6 +322,7 @@ private:
     std::map<std::string, RenderMesh> meshCache_;
     std::unordered_map<std::size_t, RenderMesh> csgMeshCache_;
     std::unordered_map<std::string, int> csgTriCountMap_;   // obj.id → last rendered tri count (K4)
+    std::unordered_map<std::string, std::string> csgWarningMap_;   // obj.id → last incomplete-preview reason, empty if none (STAB-0672)
     int csgCacheEvaluations_{0};   // cache-miss count (STAB-0522)
     std::unordered_map<std::string, int> lodLevelMap_;   // obj.id → last used LOD tier (STAB-0525)
     std::unordered_map<std::string, AnimOverride> animOverrides_;

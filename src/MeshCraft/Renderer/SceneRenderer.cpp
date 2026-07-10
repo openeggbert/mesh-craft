@@ -182,6 +182,40 @@ static manifold::Manifold buildManifoldTree(
     }
 }
 
+// STAB-0672: mirrors buildManifoldTree()'s own recursion/bail-out rules
+// (depth limit, invisible-subtree skip, Instance-definition resolution) to
+// report *why* a CSG result may have silently dropped content, rather than
+// leaving the author to guess from "Tris: 0" alone whether that's a
+// legitimate empty result or an unsupported child being ignored.
+static std::string csgSubtreeWarning(const Mc3Object& obj, const Mc3Document& doc, int depth) {
+    if (!obj.visible) return {};   // matches buildManifoldTree: hidden subtrees contribute nothing, not an error
+    if (depth > 12) return "max CSG nesting depth (12) exceeded — deeper content is dropped";
+
+    switch (obj.type) {
+    case ObjectType::Mesh:
+    case ObjectType::Extrude:
+        return "contains unsupported Mesh/Extrude geometry (not representable in CSG booleans)";
+    case ObjectType::Union:
+    case ObjectType::Intersection:
+    case ObjectType::Difference:
+    case ObjectType::Group:
+    case ObjectType::Area:
+        for (const auto& child : obj.children) {
+            std::string w = csgSubtreeWarning(*child, doc, depth + 1);
+            if (!w.empty()) return w;
+        }
+        return {};
+    case ObjectType::Instance: {
+        auto it = doc.definitions.find(obj.resolvedInstanceDefinitionKey());
+        if (it != doc.definitions.end() && it->second)
+            return csgSubtreeWarning(*it->second, doc, depth + 1);
+        return {};
+    }
+    default:
+        return {};   // primitives buildManifoldTree already knows how to build
+    }
+}
+
 // Convert a manifold::Manifold to a RenderMesh (VertexPositionColor, world-space)
 static RenderMesh manifoldToRenderMesh(GraphicsDevice& device, const manifold::Manifold& m) {
     RenderMesh mesh;
@@ -775,6 +809,7 @@ void SceneRenderer::drawObject(const Mc3Object& obj, const Mc3Document& doc,
             cit = csgMeshCache_.find(fp);
         }
         csgTriCountMap_[obj.id] = cit->second.primitiveCount;  // K4
+        csgWarningMap_[obj.id] = csgSubtreeWarning(obj, doc, 0);   // STAB-0672
         if (cit->second.vb) {
             drawMesh(cit->second, Matrix::getIdentityProperty(), view, proj, color);
         } else {

@@ -763,6 +763,19 @@ void PropertiesPanel::draw(float panelX, float panelY, float panelW, float panel
                         ImGui::TextDisabled("Tris: — (not yet rendered)");
                 }
 
+                // STAB-0672: the CSG preview silently drops content it can't
+                // represent (Mesh/Extrude children, or nodes past the depth
+                // limit) -- "Tris: 0" alone doesn't distinguish that from a
+                // legitimately empty boolean, so surface the reason explicitly.
+                {
+                    std::string warn = ctx.renderer->csgWarning(sel0->id);
+                    if (!warn.empty()) {
+                        ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.75f, 0.2f, 1.0f));
+                        ImGui::TextWrapped("⚠ Preview incomplete: %s", warn.c_str());
+                        ImGui::PopStyleColor();
+                    }
+                }
+
                 // K3: Export CSG result as OBJ
                 ImGui::Spacing();
                 if (ImGui::Button("Export OBJ…")) {
