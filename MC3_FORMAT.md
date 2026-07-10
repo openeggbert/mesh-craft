@@ -8,17 +8,18 @@ MC3 (MeshCraft 3D) is an XML-based scene format (`.mc3.xml`). It describes a 3D 
 
 ```xml
 <?xml version="1.0" encoding="UTF-8"?>
-<mc3 version="0.1" model="MyScene" unit="meter" coordinate_system="right_handed_y_up">
+<mc3 version="0.3" model="MyScene" unit="meter" coordinate_system="right_handed_y_up">
   ...
 </mc3>
 ```
 
 | Attribute | Values | Default |
 |-----------|--------|---------|
-| `version` | `"0.1"` | `"0.1"` |
+| `version` | string | `"0.3"` |
 | `model` | string | `"unnamed"` |
 | `unit` | `"meter"`, `"centimeter"`, `"inch"` | `"meter"` |
 | `coordinate_system` | `"right_handed_y_up"` | `"right_handed_y_up"` |
+| `default_camera` | string (references a `<camera>`'s `name`) | — (see [Cameras](#cameras)) |
 
 ---
 

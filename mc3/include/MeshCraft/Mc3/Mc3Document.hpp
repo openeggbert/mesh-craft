@@ -27,7 +27,7 @@ namespace MeshCraft::Mc3 {
 
 class Mc3Document {
 public:
-    std::string version{"0.1"};
+    std::string version{"0.3"};
     std::string model;
     std::string unit{"meter"};
     std::string coordinateSystem{"right_handed_y_up"};

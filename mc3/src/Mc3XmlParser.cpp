@@ -895,7 +895,7 @@ Mc3Document Mc3XmlParser::parse(const std::filesystem::path& path) {
 
     Mc3Document doc;
     doc.sourcePath       = path.parent_path();
-    doc.version          = attr(root, "version", "0.1");
+    doc.version          = attr(root, "version", "0.3");
     doc.model            = attr(root, "model",   "unnamed");
     doc.unit             = attr(root, "unit",    "meter");
     doc.coordinateSystem = attr(root, "coordinate_system", "right_handed_y_up");
