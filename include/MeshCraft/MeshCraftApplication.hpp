@@ -153,6 +153,9 @@ private:
     // Scripts panel selection (STAB-0705)
     std::string selectedScriptKey_;
 
+    // Triggers panel selection (STAB-0707)
+    std::string selectedTriggerKey_;
+
     // Audio panel selection + preview playback (STAB-0706). One shared
     // preview instance at a time (starting a new preview stops any
     // currently-playing one) -- SoundEffectInstance keeps its own audio

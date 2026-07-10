@@ -1457,6 +1457,106 @@ void MeshCraftApplication::drawLeftPanel(float panelY, float panelH)
             ImGui::EndTabItem();
         }
 
+        // -------------------------------------------------------------------
+        // Tab: Triggers (STAB-0707, N5) — a trigger is a named sequence of
+        // steps (play-action/play-sound/run-script/play-music, each with a
+        // `ref` id pointing at an entity in the corresponding collection).
+        // doc.triggers already parses/round-trips/exports correctly; this
+        // was the only missing piece.
+        // -------------------------------------------------------------------
+        if (ImGui::BeginTabItem("Triggers")) {
+            if (!selectedTriggerKey_.empty() && !document_.triggers.count(selectedTriggerKey_))
+                selectedTriggerKey_.clear();
+
+            if (ImGui::SmallButton("+##triggeradd")) {
+                pushUndo();
+                int n = 1;
+                std::string key;
+                do { key = "trigger_" + std::to_string(n++); }
+                while (document_.triggers.count(key));
+                Mc3::Mc3Trigger trigger;
+                trigger.id = key;
+                document_.triggers[key] = trigger;
+                selectedTriggerKey_ = key;
+                modified_ = true; updateWindowTitle();
+            }
+            if (ImGui::IsItemHovered()) ImGui::SetTooltip("Add trigger");
+            ImGui::SameLine();
+            if (ImGui::SmallButton("-##triggerremove") && !selectedTriggerKey_.empty()) {
+                pushUndo();
+                document_.triggers.erase(selectedTriggerKey_);
+                selectedTriggerKey_.clear();
+                modified_ = true; updateWindowTitle();
+            }
+
+            ImGui::Separator();
+            for (const auto& [key, trigger] : document_.triggers) {
+                bool sel = (key == selectedTriggerKey_);
+                std::string label = key + "  (" + std::to_string(trigger.steps.size()) + " step"
+                                   + (trigger.steps.size() == 1 ? "" : "s") + ")";
+                ImGui::PushID(("trigger_" + key).c_str());
+                if (ImGui::Selectable(label.c_str(), sel))
+                    selectedTriggerKey_ = key;
+                ImGui::PopID();
+            }
+
+            if (!selectedTriggerKey_.empty() && document_.triggers.count(selectedTriggerKey_)) {
+                auto& trigger = document_.triggers[selectedTriggerKey_];
+                ImGui::Separator();
+                ImGui::Spacing();
+
+                ImGui::TextDisabled("ID");
+                ImGui::SameLine();
+                if (ImGui::SmallButton("Copy##triggerid"))
+                    ImGui::SetClipboardText(selectedTriggerKey_.c_str());
+                ImGui::TextUnformatted(selectedTriggerKey_.c_str());
+
+                ImGui::Spacing();
+                ImGui::TextDisabled("Steps");
+
+                static const char* kStepTypeNames[] = { "Play Action", "Play Sound", "Run Script", "Play Music" };
+                int removeIdx = -1;
+                for (size_t i = 0; i < trigger.steps.size(); ++i) {
+                    auto& step = trigger.steps[i];
+                    ImGui::PushID(static_cast<int>(i));
+
+                    int typeIdx = static_cast<int>(step.type);
+                    ImGui::SetNextItemWidth(120);
+                    if (ImGui::Combo("##steptype", &typeIdx, kStepTypeNames, 4)) {
+                        pushUndo();
+                        step.type = static_cast<Mc3::TriggerStepType>(typeIdx);
+                        modified_ = true; updateWindowTitle();
+                    }
+                    ImGui::SameLine();
+
+                    char buf[256];
+                    std::strncpy(buf, step.ref.c_str(), sizeof(buf)-1); buf[255]='\0';
+                    ImGui::SetNextItemWidth(120);
+                    if (ImGui::InputText("##stepref", buf, sizeof(buf),
+                            ImGuiInputTextFlags_EnterReturnsTrue)) {
+                        pushUndo(); step.ref = buf; modified_ = true; updateWindowTitle();
+                    }
+                    ImGui::SameLine();
+                    if (ImGui::SmallButton("x")) removeIdx = static_cast<int>(i);
+
+                    ImGui::PopID();
+                }
+                if (removeIdx >= 0) {
+                    pushUndo();
+                    trigger.steps.erase(trigger.steps.begin() + removeIdx);
+                    modified_ = true; updateWindowTitle();
+                }
+
+                if (ImGui::SmallButton("+ Add Step")) {
+                    pushUndo();
+                    trigger.steps.push_back(Mc3::Mc3TriggerStep{});
+                    modified_ = true; updateWindowTitle();
+                }
+            }
+
+            ImGui::EndTabItem();
+        }
+
         ImGui::EndTabBar();
     }
 
