@@ -250,6 +250,10 @@ static void writeObject(std::ostream& o, const Mc3::Mc3Object& obj) {
         wKeyArr(o, "variantDefs", static_cast<uint32_t>(obj.variantDefinitions.size()));
         for (const auto& d : obj.variantDefinitions) { wU8(o, TAG_STR); wRawStr(o, d); }
     }
+    if (!obj.metadata.empty()) {
+        wKeyMap(o, "metadata", static_cast<uint32_t>(obj.metadata.size()));
+        for (const auto& [k, v] : obj.metadata) { wRawStr(o, k); wU8(o, TAG_STR); wRawStr(o, v); }
+    }
     if (!obj.states.empty()) {
         wKeyMap(o, "states", static_cast<uint32_t>(obj.states.size()));
         for (const auto& [k, v] : obj.states) { wRawStr(o, k); wU8(o, TAG_OBJ); writeObjectState(o, v); }

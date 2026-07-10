@@ -415,6 +415,15 @@ static std::shared_ptr<Mc3::Mc3Object> readObject(std::istream& in) {
                 else               skipValue(in, t);
             }
         }
+        else if (k == "metadata") {
+            uint32_t n = rU32Bounded(in);
+            for (uint32_t i = 0; i < n; ++i) {
+                std::string mk = rRawStr(in);
+                uint8_t t = rU8(in);
+                if (t == TAG_STR) obj->metadata[mk] = rRawStr(in);
+                else               skipValue(in, t);
+            }
+        }
         else if (k == "states") {
             uint32_t n = rU32Bounded(in);
             for (uint32_t i = 0; i < n; ++i) {

@@ -192,6 +192,34 @@ static void testTextureAllFields() {
 }
 
 // ---------------------------------------------------------------------------
+// STAB-0661 — per-object Mc3Object::metadata (opaque key/value pass-through,
+// mirrors <metadata> in the XSD) was entirely missing from MCB. Distinct
+// from document-level doc.metadata/doc.meta, which ARE covered (see
+// testMeta above) — this asymmetry made the per-object gap easy to miss.
+// ---------------------------------------------------------------------------
+
+static void testObjectMetadata() {
+    Mc3Document doc;
+    auto obj  = std::make_shared<Mc3Object>();
+    obj->id   = "obj1";
+    obj->type = ObjectType::Box;
+    obj->primitive = Mc3Primitive{};
+    obj->metadata["source_format"] = "FBX";
+    obj->metadata["original_id"]   = "12345";
+    doc.objects.push_back(obj);
+
+    auto rt = roundtrip(doc);
+    CHECK(!rt.objects.empty(), "object metadata: object present after roundtrip");
+    if (rt.objects.empty()) return;
+    const auto& m = rt.objects[0]->metadata;
+    CHECK(m.size() == 2, "object metadata: both entries survive (was silently dropped)");
+    CHECK(m.count("source_format") == 1 && m.at("source_format") == "FBX",
+          "object metadata: source_format value survives");
+    CHECK(m.count("original_id") == 1 && m.at("original_id") == "12345",
+          "object metadata: original_id value survives");
+}
+
+// ---------------------------------------------------------------------------
 // STAB-0123 — N1 svgTextures map
 // ---------------------------------------------------------------------------
 
@@ -1001,6 +1029,7 @@ int main() {
     testDocumentRotationConvention();
     testEnvironmentAllFields();
     testTextureAllFields();
+    testObjectMetadata();
     testSvgTexture();
     testEmbed();
     testScript();
