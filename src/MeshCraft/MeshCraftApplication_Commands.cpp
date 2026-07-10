@@ -51,6 +51,12 @@ void MeshCraftApplication::addPrimitive(Mc3::ObjectType type) {
     case Mc3::ObjectType::Disk:     { Mc3::Mc3Primitive p; p.primitiveType = Mc3::PrimitiveType::Disk; p.radius = 0.5f; p.minorRadius = 0.0f; p.segments = 32; obj->primitive = p; } break;
     case Mc3::ObjectType::Grid:      { Mc3::Mc3Primitive p; p.primitiveType = Mc3::PrimitiveType::Grid; p.size = {1.0f,0.0f,1.0f}; p.subdivisionsX = 4; p.subdivisionsZ = 4; obj->primitive = p; } break;
     case Mc3::ObjectType::IcoSphere: { Mc3::Mc3Primitive p; p.primitiveType = Mc3::PrimitiveType::IcoSphere; p.radius = 0.5f; obj->primitive = p; } break;
+    // STAB-0721: give freshly-created Areas an editable size, matching what
+    // areaType already gets when loaded from XML with a size= attribute
+    // (Mc3XmlParser.cpp defaults primitiveType to Box for Area since it has
+    // no ObjectType::Area case of its own) -- without this the Properties
+    // panel's "Area (trigger zone)" label had nothing to show underneath it.
+    case Mc3::ObjectType::Area:     { Mc3::Mc3Primitive p; p.primitiveType = Mc3::PrimitiveType::Box;      p.size = {1.0f,1.0f,1.0f}; obj->primitive = p; } break;
     case Mc3::ObjectType::Extrude: {
         Mc3::Mc3Extrude ex;
         ex.crossSection.type   = Mc3::CrossSectionType::Rect;
@@ -77,7 +83,7 @@ void MeshCraftApplication::addPrimitive(Mc3::ObjectType type) {
         Mc3::Mc3CsgOperation csg; csg.csgType = Mc3::CsgType::Intersection;
         obj->csgOperation = csg; break;
     }
-    default: break; // Group, Area, Mesh, Instance — no primitive
+    default: break; // Group, Mesh, Instance — no primitive
     }
     obj->transform.position = { camera_.target.X, camera_.target.Y + 0.5f, camera_.target.Z };
 

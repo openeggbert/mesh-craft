@@ -504,6 +504,7 @@ float MeshCraftApplication::drawMenuBar()
             if (ImGui::MenuItem("Mesh"))     addPrimitive(Mc3::ObjectType::Mesh);
             if (ImGui::MenuItem("Instance")) addPrimitive(Mc3::ObjectType::Instance);
             if (ImGui::MenuItem("Extrude"))  addPrimitive(Mc3::ObjectType::Extrude);
+            if (ImGui::MenuItem("Group"))    addPrimitive(Mc3::ObjectType::Group);
             ImGui::Separator();
             if (ImGui::BeginMenu("CSG")) {
                 if (ImGui::MenuItem("Union"))        addPrimitive(Mc3::ObjectType::Union);

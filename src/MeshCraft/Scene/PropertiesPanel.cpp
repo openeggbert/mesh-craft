@@ -773,10 +773,24 @@ void PropertiesPanel::draw(float panelX, float panelY, float panelW, float panel
             }
         }
 
+        // STAB-0721: Area objects have no dedicated properties block and used
+        // to fall through to the shared primitive editor with no indication
+        // they're a trigger-zone marker rather than a Box. Areas loaded from
+        // XML with a size attribute get primitiveType defaulted to Box
+        // (Mc3XmlParser.cpp has no ObjectType::Area case in parsePrimitive's
+        // switch), so a plain label here -- not a new case in the switch
+        // below -- is the correct minimal fix.
+        if (sel0->type == Mc3::ObjectType::Area) {
+            ImGui::Spacing();
+            ImGui::Separator();
+            ImGui::Spacing();
+            ImGui::TextDisabled("Area (trigger zone)");
+        }
+
         // Geometry parameters
         if (sel0->primitive) {
             ImGui::Spacing();
-            ImGui::Separator();
+            if (sel0->type != Mc3::ObjectType::Area) ImGui::Separator();
             ImGui::Spacing();
             ImGui::TextDisabled("Geometry");
 
