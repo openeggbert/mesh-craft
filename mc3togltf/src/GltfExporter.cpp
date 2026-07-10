@@ -485,15 +485,24 @@ static int buildMesh(ExportCtx& ctx,
 
     if (md.empty()) return -1;
 
-    int posAcc  = addAccessorVec3(model, md.positions, /*calcBounds=*/true);
-    int normAcc = addAccessorVec3(model, md.normals);
-    int uvAcc   = addAccessorVec2(model, md.texcoords);
-    int idxAcc  = addAccessorIndices(model, md.indices);
+    // STAB-0687: accessors are created in this exact order (position, then
+    // conditionally normal/texcoord, then indices) to match the pre-existing
+    // golden-byte-output test (mc3togltf_golden) -- reordering accessor
+    // creation, even without changing any actual content, changes their
+    // glTF indices and fails that byte-exact comparison.
+    int posAcc = addAccessorVec3(model, md.positions, /*calcBounds=*/true);
+    int normAcc = !md.normals.empty()   ? addAccessorVec3(model, md.normals)   : -1;
+    int uvAcc   = !md.texcoords.empty() ? addAccessorVec2(model, md.texcoords) : -1;
+    int idxAcc = addAccessorIndices(model, md.indices);
 
     tinygltf::Primitive prim;
-    prim.attributes["POSITION"]   = posAcc;
-    prim.attributes["NORMAL"]     = normAcc;
-    prim.attributes["TEXCOORD_0"] = uvAcc;
+    prim.attributes["POSITION"] = posAcc;
+    // Guard against a spec-invalid zero-count accessor if md ever has
+    // positions/indices but no normals/texcoords, matching the sibling
+    // addMeshDataToGltf()'s existing TEXCOORD_0 guard (which this function
+    // previously lacked entirely, for both attributes).
+    if (normAcc >= 0) prim.attributes["NORMAL"] = normAcc;
+    if (uvAcc   >= 0) prim.attributes["TEXCOORD_0"] = uvAcc;
     prim.indices = idxAcc;
     prim.mode    = TINYGLTF_MODE_TRIANGLES;
     if (materialIdx >= 0) prim.material = materialIdx;
