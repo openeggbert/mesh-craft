@@ -316,6 +316,23 @@ target_include_directories(${_target}
 
 target_compile_definitions(${_target} PRIVATE MESHCRAFT_VERSION="${PROJECT_VERSION}")
 
+# AUD-039b: the configure-time warning above (Gate C truthfulness) does not
+# stop a non-functional editor binary from being built and run -- it only
+# prints a message a headless/CI configure or a GUI CMake frontend can easily
+# miss. Wrapping this whole target in a CMake conditional to skip building it
+# entirely under non-EASYGL backends would require restructuring several
+# hundred lines of existing, stabilized target configuration (sources, link
+# libraries, tests all reference ${_target}) for high regression risk. A
+# runtime check is the surgical alternative that still satisfies Gate C
+# ("unsupported and rejected clearly"): embed the selected backend name, and
+# main() (src/MeshCraft/main.cpp) refuses to proceed under a backend the
+# editor cannot render on, before any window/GL initialization -- an
+# unsupported configuration is REJECTED at startup with a clear message and a
+# non-zero exit code, not silently launched as a broken window. The CLI tools
+# (mc3togltf/mc3tomcb) do not link this target and are unaffected.
+target_compile_definitions(${_target} PRIVATE
+    MESH_CRAFT_GRAPHICS_BACKEND_STR="${MESH_CRAFT_GRAPHICS_BACKEND_UPPER}")
+
 # Enable SQLite3-backed ModelRegistry on desktop builds
 if(SQLite3_FOUND)
     target_compile_definitions(${_target} PRIVATE MESHCRAFT_HAS_SQLITE3)
@@ -456,6 +473,16 @@ if(MESH_CRAFT_BUILD_TESTING AND UNIX AND NOT ANDROID AND NOT EMSCRIPTEN)
     target_compile_features(object_type_name_test PRIVATE cxx_std_23)
     add_test(NAME object_type_name COMMAND object_type_name_test)
     set_tests_properties(object_type_name PROPERTIES TIMEOUT 15 LABELS "unit")
+
+    # AUD-039b (Gate C): pure decision logic for the editor's runtime
+    # backend-support check. Header-only, no CNA/GL dependency.
+    add_executable(graphics_backend_check_test
+        ${CMAKE_CURRENT_SOURCE_DIR}/test/graphics_backend_check_test.cpp)
+    target_include_directories(graphics_backend_check_test PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/include)
+    target_compile_features(graphics_backend_check_test PRIVATE cxx_std_23)
+    add_test(NAME graphics_backend_check COMMAND graphics_backend_check_test)
+    set_tests_properties(graphics_backend_check PROPERTIES TIMEOUT 15 LABELS "unit")
 
     # Source-lint guard: the dead undo-snapshot pattern (undo nested inside a
     # Drag*/ColorEdit* changed-block, which never fires) must not reappear.
