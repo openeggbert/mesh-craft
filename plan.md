@@ -84,7 +84,7 @@ P1s already being fixed in git history. This session:
 
    **Net across all 63 AUD-### rows (57 original + 6 session-2 additions,
    the 6th — AUD-060 — found and fixed while testing AUD-002):
-   32 DONE, 29 TODO, 2 DEFERRED** — recompute with
+   33 DONE, 28 TODO, 2 DEFERRED** — recompute with
    `python3 test/validate_plan_consistency.py . <build-dir>` rather than
    trusting this number as time passes.
 5. Archived `plan_deep_audit.md` (all 57 of its own tasks were already
@@ -101,16 +101,15 @@ authoritative live state is always the AUD/SYS task table plus
 
 ## Priority execution queue (next up, in order)
 
-1. **AUD-039b (P1/W8)** — real Gate C enforcement (hard-fail, not a warning).
-2. **AUD-006b (P1/W1)** — extend resource confinement beyond mc3togltf export.
-3. **AUD-059 (P1/W1)** — total-document allocation budget (not just per-field).
-4. **AUD-036b (P0/W9)** — undo transaction abstraction + full triage (large;
+1. **AUD-006b (P1/W1)** — extend resource confinement beyond mc3togltf export.
+2. **AUD-059 (P1/W1)** — total-document allocation budget (not just per-field).
+3. **AUD-036b (P0/W9)** — undo transaction abstraction + full triage (large;
    incremental).
-5. **AUD-027/AUD-028 (P1/W7)** — pivot+translation and rotation-quaternion
+4. **AUD-027/AUD-028 (P1/W7)** — pivot+translation and rotation-quaternion
    animation export correctness.
-6. **AUD-015 (P2/W6)** — extend `expectTag` tag validation to the other 27
+5. **AUD-015 (P2/W6)** — extend `expectTag` tag validation to the other 27
    `read*` deserializers (`readObject` done; see its status note).
-7. Remaining `TODO` AUD-### rows by severity, then SYS-### rows.
+6. Remaining `TODO` AUD-### rows by severity, then SYS-### rows.
 
 ---
 
@@ -186,10 +185,10 @@ Mandated workstream items not tied to a single audit finding.
 - **SYS-W7-02** `[TODO]` `P2` — Differential geometry tests (viewport vs exporter).
 
 ### W8 — Backend truth
-- **SYS-W8-01** `[DONE→partial, see AUD-039b]` `P1` — Editor backend truthfulness.
-  Commit `e53af49` added a configure-time warning (Gate C not fully satisfied —
-  the editor still builds non-functionally); `AUD-039b` tracks the real
-  enforcement fix.
+- **SYS-W8-01** `[DONE]` `P1` — Editor backend truthfulness. Commit `e53af49`
+  added a configure-time warning; commit `58a7f03` (`AUD-039b`) added the real
+  runtime enforcement — the editor refuses to launch under a non-EASYGL
+  backend by default.
 
 ### W9 — Undo & data-loss
 - **SYS-W9-01** `[TODO, superseded in scope by AUD-036b]` `P0` — Full undo/redo
@@ -559,6 +558,7 @@ DONE marker without checking its cited commit/verify command.
 - **Tests:** An Android NDK configure that either selects a GL-capable backend or errors clearly; not currently testable here (no NDK installed).
 - **Verify note:** Refinement (does not change the verdict): the editor↔SDL_RENDERER incompatibility is not Android-specific — the identical breakage occurs for ANY build configured with -DMESH_CRAFT_GRAPHICS_BACKEND=SDL_RENDERER on desktop, since the editor's ImGui path (MeshCraftApplication.cpp:212-213) is hardwired to OpenGL3 with no SDL_Renderer branch. What is Android-specific is that the force at CMakeLists.txt:36-37 makes SDL_RENDERER non-optional there (the user cannot pick EASYGL). So the finding is slightly understated in scope but accurate as stated. Severity P2 stands.
 - **Blocked:** No Android NDK in this environment; also intersects CNA backend behavior (out of scope).
+- **Status note:** `AUD-039b`'s runtime check (commit `58a7f03`) now means an Android build (if one were attempted) would refuse to launch the editor UI with a clear error, rather than silently opening a non-functional window -- so the "renders nothing with no indication why" consequence this finding warns about is closed. The CMake-level force-select itself (`if(ANDROID) set(...SDL_RENDERER)`) is unchanged; this task stays `TODO` because the root cause (Android has no path to a GL-capable backend at all) is still open and untestable here (no NDK).
 - **Status note:** Android force-selects SDL_RENDERER (a backend the editor cannot render on); no NDK available to test in this environment. Depends on the AUD-039b decision (hard failure vs. real backend) for a principled fix.
 
 ### AUD-043 `[DONE]` `P1` `W13` · STABILIZATION.md is doubly stale: 650 tasks / 620 done AND 66 tests, both wrong
@@ -690,11 +690,13 @@ DONE marker without checking its cited commit/verify command.
 - **Tests:** A frame-driven ImGui harness (extending scratchpad/undo_probe2.cpp's approach into a committed test) covering DragFloat, SliderFloat, ColorEdit, Checkbox, Combo, InputText and a multi-object edit, asserting actual document field values are correct across Undo and Redo (not just that pushUndo was called).
 - **Blocked:** None — this is scoped, in-repo work; large in surface area (potentially hundreds of call sites across PropertiesPanel.cpp/UiLeftPanel.cpp/UiOverlays.cpp/UiMenuBar.cpp/UiRegistry.cpp/Anim.cpp), so it is being executed incrementally starting with the highest-risk categories (multi-object mutations, drag-and-drop, non-drag widgets not covered by AUD-036).
 
-### AUD-039b `[TODO]` `P1` `W8` · Gate C requires real enforcement, not a configure-time warning — the editor still builds (non-functionally) under BGFX/VULKAN/SDL_RENDERER
+### AUD-039b `[DONE]` `P1` `W8` · Gate C requires real enforcement, not a configure-time warning — the editor still builds (non-functionally) under BGFX/VULKAN/SDL_RENDERER
 - **Component:** CMakeLists.txt
 - **Evidence:** AUD-039/040's fix (commit e53af49) added a `message(WARNING ...)` at configure time when a non-EASYGL backend is selected, but the editor target is still added, still configured, and still builds successfully — a user who ignores or doesn't see the warning (e.g. CI configuring headlessly, or a GUI CMake frontend that collapses warnings) still gets a MeshCraft.exe/MeshCraft binary that launches, allocates a window, and then renders nothing, with no run-time indication of why. Per the adversarial re-review, "a warning while still building a known non-rendering editor does not satisfy Gate C" ("never advertise selectable but non-functional configurations" / "a backend... must be classified as exactly one of: implemented and verified, implemented but explicitly unverified, partially implemented with exact limitations, or unsupported and rejected clearly").
 - **Outcome:** Choose and implement one truthful, enforced behavior instead of a warning: (a) configure-time `message(FATAL_ERROR ...)` for the MeshCraft editor target specifically under unsupported backends (CLI tools mc3togltf/mc3tomcb/mc3/mcb remain buildable under any backend since they don't depend on it), with an explicit opt-out flag for deliberate CNA-only experimentation; or (b) a genuinely separate CLI-only build mode/target that excludes the editor executable entirely under non-EASYGL backends.
 - **Tests:** Configure with `-DMESH_CRAFT_GRAPHICS_BACKEND=BGFX` (and VULKAN, SDL_RENDERER) and assert the editor target is NOT built (configure fails, or the target is absent from the build graph), while `-DMESH_CRAFT_GRAPHICS_BACKEND=EASYGL` continues to configure and build the editor with zero warnings; assert the CLI tools (mc3togltf/mc3tomcb) still build under all four backends.
+- **Resolved:** commit `58a7f03` — verify: `ctest -R graphics_backend_check` (unit test for the decision logic); full manual verification below.
+- **Status note:** Chose the runtime-check design (compiled-in backend name + a check at the very top of `main()`, before any window/GL init) over restructuring the CMake target, since the latter would touch several hundred lines of stabilized build configuration (sources/link libraries/every test referencing `${_target}`) for high regression risk. `MESH_CRAFT_ALLOW_UNSUPPORTED_BACKEND=1` is the documented escape hatch. **Manually verified end-to-end** (not just the unit test): configured and built a full `-DMESH_CRAFT_GRAPHICS_BACKEND=SDL_RENDERER` tree (~10 min CNA rebuild in a throwaway `b-sdlrenderer/` dir, removed after). Without the override: `[MeshCraft] Error: this build was configured with MESH_CRAFT_GRAPHICS_BACKEND='SDL_RENDERER'...` printed, exit code 1, no window ever created, no screenshot file produced. With `MESH_CRAFT_ALLOW_UNSUPPORTED_BACKEND=1`: proceeded past the check (printing a warning), created a window, then crashed further downstream trying to actually render -- confirming the underlying claim (this backend genuinely cannot run the editor) rather than indicating a problem with the check itself. CLI tools are unaffected (they don't link the `MeshCraft` target). The CMake-side configure-time WARNING from `AUD-039`/`AUD-040` (commit `e53af49`) is unchanged/still present as a secondary signal.
 
 ### AUD-058 `[DONE]` `P1` `W0` · BloomGL::cleanup() exists but is never called — bloom/SSAO/skybox/material-preview/shader/VAO/VBO/FBO/texture GL resources leak on every shutdown
 - **Component:** src/MeshCraft/MeshCraftApplication.cpp (BloomGL, s_bloom)
