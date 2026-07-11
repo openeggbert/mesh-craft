@@ -110,6 +110,13 @@ install(TARGETS mc3togltf RUNTIME DESTINATION bin)
 include(CTest)
 
 if(BUILD_TESTING)
+    # C++ unit test for the ear-clipping polygon triangulator (concave caps).
+    add_executable(mc3togltf_earclip_test test/earclip_test.cpp)
+    target_link_libraries(mc3togltf_earclip_test PRIVATE mc3togltf_lib)
+    target_include_directories(mc3togltf_earclip_test PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
+    add_test(NAME mc3togltf_earclip COMMAND mc3togltf_earclip_test)
+    set_tests_properties(mc3togltf_earclip PROPERTIES TIMEOUT 15 LABELS "export")
+
     find_program(PYTHON3_EXEC python3)
     find_program(BLENDER_EXEC blender)
     if(PYTHON3_EXEC)

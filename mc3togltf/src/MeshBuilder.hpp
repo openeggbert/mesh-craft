@@ -1,12 +1,20 @@
 #pragma once
 #include <MeshCraft/Mc3/Mc3Extrude.hpp>
 #include <MeshCraft/Mc3/Mc3Primitive.hpp>
+#include <array>
 #include <cstdint>
 #include <filesystem>
 #include <string>
 #include <vector>
 
 namespace mc3togltf {
+
+// Ear-clipping triangulation of a simple 2D polygon. Returns triangles as index
+// triples into `pts`, preserving the polygon's winding order. Correct for
+// concave polygons (unlike a triangle fan). Exposed for testing; used by the
+// extrude cap builder.
+std::vector<std::array<uint32_t,3>>
+earClipPolygon(const std::vector<std::array<float,2>>& pts);
 
 struct MeshData {
     std::vector<float>    positions;  // x,y,z triplets

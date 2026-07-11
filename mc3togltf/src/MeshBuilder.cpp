@@ -962,6 +962,74 @@ static MeshData buildHollowExtrude(const MeshCraft::Mc3::Mc3Extrude& ext) {
     return m;
 }
 
+// Ear-clipping triangulation of a simple 2D polygon. Returns triangles as
+// index triples into `pts`, preserving the polygon's winding order (so the
+// caller can flip winding uniformly). Correct for CONCAVE polygons (e.g. the
+// built-in Star cross-section, or an arbitrary Custom outline) — a plain
+// triangle fan is only valid for convex polygons and produces overlapping,
+// self-covering caps on concave inputs.
+std::vector<std::array<uint32_t,3>>
+earClipPolygon(const std::vector<std::array<float,2>>& pts) {
+    std::vector<std::array<uint32_t,3>> tris;
+    const int n = static_cast<int>(pts.size());
+    if (n < 3) return tris;
+
+    auto cross = [](const std::array<float,2>& a, const std::array<float,2>& b,
+                    const std::array<float,2>& c) {
+        return (b[0]-a[0])*(c[1]-a[1]) - (b[1]-a[1])*(c[0]-a[0]);
+    };
+    // Winding from the signed area (positive == counter-clockwise).
+    float area2 = 0.0f;
+    for (int i = 0; i < n; ++i) {
+        const auto& a = pts[i];
+        const auto& b = pts[(i+1) % n];
+        area2 += a[0]*b[1] - b[0]*a[1];
+    }
+    const bool ccw = area2 > 0.0f;
+
+    auto pointInTri = [&](const std::array<float,2>& p, const std::array<float,2>& a,
+                          const std::array<float,2>& b, const std::array<float,2>& c) {
+        float d1 = cross(a, b, p), d2 = cross(b, c, p), d3 = cross(c, a, p);
+        bool neg = (d1 < 0) || (d2 < 0) || (d3 < 0);
+        bool pos = (d1 > 0) || (d2 > 0) || (d3 > 0);
+        return !(neg && pos);   // p is inside/on the triangle
+    };
+
+    std::vector<int> idx(n);
+    for (int i = 0; i < n; ++i) idx[i] = i;
+
+    int guard = 0;
+    const int maxGuard = n * n + 16;
+    while (static_cast<int>(idx.size()) > 3 && guard++ < maxGuard) {
+        const int m = static_cast<int>(idx.size());
+        bool clipped = false;
+        for (int i = 0; i < m; ++i) {
+            int i0 = idx[(i + m - 1) % m], i1 = idx[i], i2 = idx[(i + 1) % m];
+            const auto& a = pts[i0]; const auto& b = pts[i1]; const auto& c = pts[i2];
+            float cr = cross(a, b, c);
+            bool convex = ccw ? (cr > 0.0f) : (cr < 0.0f);
+            if (!convex) continue;                 // reflex vertex — not an ear
+            bool ear = true;
+            for (int j = 0; j < m; ++j) {
+                int vj = idx[j];
+                if (vj == i0 || vj == i1 || vj == i2) continue;
+                if (pointInTri(pts[vj], a, b, c)) { ear = false; break; }
+            }
+            if (!ear) continue;
+            tris.push_back({static_cast<uint32_t>(i0), static_cast<uint32_t>(i1),
+                            static_cast<uint32_t>(i2)});
+            idx.erase(idx.begin() + i);
+            clipped = true;
+            break;
+        }
+        if (!clipped) break;                        // degenerate polygon — stop
+    }
+    if (idx.size() == 3)
+        tris.push_back({static_cast<uint32_t>(idx[0]), static_cast<uint32_t>(idx[1]),
+                        static_cast<uint32_t>(idx[2])});
+    return tris;
+}
+
 // ---------------------------------------------------------------------------
 // Extrude (solid cross-section)
 // ---------------------------------------------------------------------------
@@ -1039,7 +1107,10 @@ MeshData buildExtrude(const MeshCraft::Mc3::Mc3Extrude& ext) {
 
     // Caps
     if (ext.caps && ncs >= 3) {
-        // Helper: fan triangulate a flat polygon
+        // Triangulate the cross-section polygon once (ear-clipping, so concave
+        // shapes like Star/Custom cap correctly instead of self-overlapping).
+        const auto capTris = earClipPolygon(csPoints);
+
         auto addCap = [&](const std::vector<std::array<float,3>>& ring,
                           std::array<float,3> n, bool flip) {
             auto base = static_cast<uint32_t>(m.vertexCount());
@@ -1049,9 +1120,9 @@ MeshData buildExtrude(const MeshCraft::Mc3::Mc3Extrude& ext) {
                 float a = 2.0f * pi * i / ring.size();
                 m.texcoords.insert(m.texcoords.end(), {0.5f+std::cos(a)*0.5f, 0.5f+std::sin(a)*0.5f});
             }
-            for (uint32_t i = 1; i + 1 < ring.size(); ++i) {
-                if (flip) m.indices.insert(m.indices.end(), {base, base+i+1, base+i});
-                else      m.indices.insert(m.indices.end(), {base, base+i,   base+i+1});
+            for (const auto& t : capTris) {
+                if (flip) m.indices.insert(m.indices.end(), {base+t[0], base+t[2], base+t[1]});
+                else      m.indices.insert(m.indices.end(), {base+t[0], base+t[1], base+t[2]});
             }
         };
 
