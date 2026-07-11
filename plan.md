@@ -84,7 +84,7 @@ P1s already being fixed in git history. This session:
 
    **Net across all 63 AUD-### rows (57 original + 6 session-2 additions,
    the 6th — AUD-060 — found and fixed while testing AUD-002):
-   34 DONE, 27 TODO, 2 DEFERRED** — recompute with
+   35 DONE, 26 TODO, 2 DEFERRED** — recompute with
    `python3 test/validate_plan_consistency.py . <build-dir>` rather than
    trusting this number as time passes.
 5. Archived `plan_deep_audit.md` (all 57 of its own tasks were already
@@ -101,14 +101,13 @@ authoritative live state is always the AUD/SYS task table plus
 
 ## Priority execution queue (next up, in order)
 
-1. **AUD-006b (P1/W1)** — extend resource confinement beyond mc3togltf export.
-2. **AUD-036b (P0/W9)** — undo transaction abstraction + full triage (large;
+1. **AUD-036b (P0/W9)** — undo transaction abstraction + full triage (large;
    incremental).
-3. **AUD-027/AUD-028 (P1/W7)** — pivot+translation and rotation-quaternion
+2. **AUD-027/AUD-028 (P1/W7)** — pivot+translation and rotation-quaternion
    animation export correctness.
-4. **AUD-015 (P2/W6)** — extend `expectTag` tag validation to the other 27
+3. **AUD-015 (P2/W6)** — extend `expectTag` tag validation to the other 27
    `read*` deserializers (`readObject` done; see its status note).
-5. Remaining `TODO` AUD-### rows by severity, then SYS-### rows.
+4. Remaining `TODO` AUD-### rows by severity, then SYS-### rows.
 
 ---
 
@@ -136,9 +135,10 @@ Mandated workstream items not tied to a single audit finding.
 
 ### W2 — AI / import sandbox
 - **SYS-W2-01** `[DONE]` `P1` — `Mc3LoadPolicy` threaded through parsing
-  (`allowIncludes`, `confineIncludesToRoot`, budgets); `untrusted()` factory for AI.
-  Commit `40643a4`. Verify: `ctest -R mc3_load_policy`. Scope note: covers
-  `<include>` only — see `AUD-006b` for texture/mesh/SVG/embed/sound/music.
+  (`allowIncludes`, `confineIncludesToRoot`, `confineResourcePathsToRoot`,
+  budgets); `untrusted()` factory for AI. Commits `40643a4`, `ed6e220`
+  (`AUD-006b` extended coverage to texture/mesh/SVG/embed/sound/music).
+  Verify: `ctest -R mc3_load_policy`.
 - **SYS-W2-02** `[DONE]` `P1` — In-memory AI parse path (no temp file). Commit
   `40643a4` (`Mc3Document::loadFromString`). Verify: `ctest -R mc3_load_policy`.
 - **SYS-W2-03** `[TODO]` `P2` — Real JSON parse scoped to `content[].type=="text"`;
@@ -676,11 +676,13 @@ DONE marker without checking its cited commit/verify command.
 - **Outcome:** Pin the sibling repos to explicit commits/tags (submodule or a recorded SHA + a configure-time check), and gate the editor build in CI against those pinned revisions so cross-repo regressions are caught.
 - **Tests:** Add a configure-time assertion that ../cna and ../sharp-runtime are at expected revisions; add a CI editor-build job that fails when they drift/break.
 - **Blocked:** Fixing the sibling-repo build regressions themselves is out of scope (../cna and ../sharp-runtime are owned elsewhere); only mesh-craft's pinning/CI wiring is in scope here.
-### AUD-006b `[TODO]` `P1` `W1` · Untrusted-resource confinement is exporter-only and include-only — texture/mesh/SVG/embed/sound/music paths are not confined at the AI/application layer
+### AUD-006b `[DONE]` `P1` `W1` · Untrusted-resource confinement is exporter-only and include-only — texture/mesh/SVG/embed/sound/music paths are not confined at the AI/application layer
 - **Component:** src/MeshCraft/AiResponseAlgorithms.hpp, mc3/include/MeshCraft/Mc3/Mc3LoadPolicy.hpp
 - **Evidence:** AUD-006's fix (commit 901965f) confines texture/mesh paths only inside mc3togltf's exporter (assertResourceAllowed in GltfExporter.cpp), and AUD-008's fix (40643a4) confines `<include>` only via Mc3LoadPolicy::untrusted() at parse time. Neither covers: (a) the editor application loading a texture/SVG/sound/music path from an AI-generated or pasted document directly (not via mc3togltf export) — MeshCraftApplication texture-loading code reads `tex.uri`/`svg.src`/sound and music `src` with no policy check at all; (b) `embed:` src resolution; (c) any AI-generated document that never reaches mc3togltf (e.g. the user just views/edits it in the editor without exporting). An AI response containing a `<texture uri="../../../../home/user/.ssh/id_rsa">` that the user merely opens in the editor (never exports to glTF) is unconfined today.
 - **Outcome:** Extend Mc3LoadPolicy (or a sibling Mc3ResourcePolicy) to cover texture uri, SVG src, mesh src, embed src, sound src, music src — applied at parse/application time for untrusted documents, not only at mc3togltf export time. Define the threat model per source explicitly: trusted user-opened local scenes (permissive), AI-generated scenes (confined), pasted/imported scenes (confined), CLI conversion of untrusted files (confined, existing mc3togltf flag), registry content (confined unless explicitly trusted).
 - **Tests:** Load an AI-simulated document (Mc3Document::loadFromString with untrusted policy) containing an absolute/traversal texture/sound/music path; assert the loader rejects or strips the reference without ever opening the file, verified via a filesystem-access probe (e.g. a sentinel file that must not be touched).
+- **Resolved:** commit `ed6e220` — verify: `ctest -R mc3_load_policy`
+- **Status note:** Added `Mc3LoadPolicy::confineResourcePathsToRoot` (true in `untrusted()`) and wired validation into all 6 parse sites (mesh src, texture uri, SVG src, sound src, music src, embed src) in `Mc3XmlParser.cpp` -- rejecting at PARSE TIME, before the `Mc3Document` exists for any caller (editor UI, mc3togltf) to inspect, so every consumer is protected uniformly rather than needing its own check. `embed:`/`data:` pseudo-references are correctly exempted. Verified for all 6 field types plus a trusted-policy control (confinement stays opt-in) and an embed: false-positive guard. **Known limitation** (documented in the commit, not fixed): an included file's own resource paths are validated against the top-level document's root before STAB-0550's rebasing runs, so `confineResourcePathsToRoot` combined with `allowIncludes=true` on a hypothetical custom policy could misjudge a same-directory resource in a nested include. Not exercised by any current caller -- `untrusted()` sets `allowIncludes=false`, so this combination doesn't occur in practice today.
 
 ### AUD-036b `[TODO]` `P0` `W9` · Undo system needs a real transaction abstraction, pre-mutation capture verification, and full undo_coverage_audit.py triage
 - **Component:** src/MeshCraft/*, include/MeshCraft/MeshCraftApplication.hpp (undo/redo subsystem)
