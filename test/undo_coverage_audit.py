@@ -53,7 +53,19 @@ MUTATORS = re.compile(
     r'ImGui::(Checkbox|SliderFloat\d?|SliderInt\d?|DragFloat\d?|DragInt\d?|'
     r'InputText(Multiline)?|Combo|ColorEdit[34]|RadioButton|InputFloat\d?|InputInt\d?)\s*\('
 )
-UNDO_CALL = re.compile(r'\b(ctx\.)?pushUndo\s*\(')
+# AUD-036c: also recognize ctx.undoOnActivate(...)/undoOnActivate(...) as an
+# undo-equivalent call. undoOnActivate() (MeshCraftApplication_Commands.cpp,
+# exposed on PropertiesContext as ctx.undoOnActivate) is a thin wrapper that
+# calls pushUndo() internally on the activation frame and forwards the
+# widget's changed-bool -- it collapses the
+# `bool ch = Widget(...); if (IsItemActivated()) pushUndo(); if (ch) {...}`
+# pattern into `if (ctx.undoOnActivate(Widget(...))) {...}` (see AUD-036b,
+# commit 89d874d). Before this fix, the 3 call sites in PropertiesPanel.cpp
+# that adopted ctx.undoOnActivate() (the ##pos/##rot/##scl DragFloat3 fields)
+# were misreported as candidates even though they correctly capture undo
+# state, because the literal substring "pushUndo(" never appears at their
+# call site -- it's inside undoOnActivate()'s own definition instead.
+UNDO_CALL = re.compile(r'\b(ctx\.)?(pushUndo|undoOnActivate)\s*\(')
 
 
 def enclosing_block(lines, start_idx, window=40):
