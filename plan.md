@@ -83,7 +83,7 @@ P1s already being fixed in git history. This session:
    tasks.
 
    **Net across all 62 AUD-### rows (57 original + 5 session-2 additions):
-   28 DONE, 32 TODO, 2 DEFERRED** — recompute with
+   29 DONE, 31 TODO, 2 DEFERRED** — recompute with
    `python3 test/validate_plan_consistency.py` rather than trusting this
    number as time passes.
 5. Archived `plan_deep_audit.md` (all 57 of its own tasks were already
@@ -100,16 +100,15 @@ authoritative live state is always the AUD/SYS task table plus
 
 ## Priority execution queue (next up, in order)
 
-1. **AUD-058 (P1/W0)** — call `s_bloom.cleanup()` in `~MeshCraftApplication()`.
-2. **AUD-002 (P1/W0)** — bounds-check `loadObjMesh` tinyobj indices.
-3. **AUD-039b (P1/W8)** — real Gate C enforcement (hard-fail, not a warning).
-4. **AUD-006b (P1/W1)** — extend resource confinement beyond mc3togltf export.
-5. **AUD-059 (P1/W1)** — total-document allocation budget (not just per-field).
-6. **AUD-036b (P0/W9)** — undo transaction abstraction + full triage (large;
+1. **AUD-002 (P1/W0)** — bounds-check `loadObjMesh` tinyobj indices.
+2. **AUD-039b (P1/W8)** — real Gate C enforcement (hard-fail, not a warning).
+3. **AUD-006b (P1/W1)** — extend resource confinement beyond mc3togltf export.
+4. **AUD-059 (P1/W1)** — total-document allocation budget (not just per-field).
+5. **AUD-036b (P0/W9)** — undo transaction abstraction + full triage (large;
    incremental).
-7. **AUD-003 (P3/W0)**, **AUD-015 (P2/W6)** — memory-safety cleanup
+6. **AUD-003 (P3/W0)**, **AUD-015 (P2/W6)** — memory-safety cleanup
    (`reinterpret_cast` alignment, MCB tag validation).
-8. **AUD-027/AUD-028 (P1/W7)** — pivot+translation and rotation-quaternion
+7. **AUD-027/AUD-028 (P1/W7)** — pivot+translation and rotation-quaternion
    animation export correctness.
 9. Remaining `TODO` AUD-### rows by severity, then SYS-### rows.
 
@@ -692,11 +691,13 @@ DONE marker without checking its cited commit/verify command.
 - **Outcome:** Choose and implement one truthful, enforced behavior instead of a warning: (a) configure-time `message(FATAL_ERROR ...)` for the MeshCraft editor target specifically under unsupported backends (CLI tools mc3togltf/mc3tomcb/mc3/mcb remain buildable under any backend since they don't depend on it), with an explicit opt-out flag for deliberate CNA-only experimentation; or (b) a genuinely separate CLI-only build mode/target that excludes the editor executable entirely under non-EASYGL backends.
 - **Tests:** Configure with `-DMESH_CRAFT_GRAPHICS_BACKEND=BGFX` (and VULKAN, SDL_RENDERER) and assert the editor target is NOT built (configure fails, or the target is absent from the build graph), while `-DMESH_CRAFT_GRAPHICS_BACKEND=EASYGL` continues to configure and build the editor with zero warnings; assert the CLI tools (mc3togltf/mc3tomcb) still build under all four backends.
 
-### AUD-058 `[TODO]` `P1` `W0` · BloomGL::cleanup() exists but is never called — bloom/SSAO/skybox/material-preview/shader/VAO/VBO/FBO/texture GL resources leak on every shutdown
+### AUD-058 `[DONE]` `P1` `W0` · BloomGL::cleanup() exists but is never called — bloom/SSAO/skybox/material-preview/shader/VAO/VBO/FBO/texture GL resources leak on every shutdown
 - **Component:** src/MeshCraft/MeshCraftApplication.cpp (BloomGL, s_bloom)
 - **Evidence:** ~MeshCraftApplication() (added by AUD-011's fix, commit 2d126bf) removes the SDL event watch, shuts down ImGui, and deletes shadowDebugFbo_/shadowDebugColorTex_/shadowDebugDepthTex_ — but it never calls `s_bloom.cleanup()`. `struct BloomGL` (MeshCraftApplication.cpp:795) owns a large pool of GL objects (bloom FBOs/textures, SSAO FBO/texture, skybox VAO/VBO/texture, material-preview FBO/texture, multiple shader programs) allocated across LoadContent/lazy-init call sites, and its own `cleanup()` method (line 981) already correctly deletes all of them guarded by non-zero checks — it is simply dead code, never invoked from any shutdown path. Every one of these GL objects leaks for the process lifetime on every run.
 - **Outcome:** Call `s_bloom.cleanup()` from ~MeshCraftApplication() (before or alongside the shadowDebug cleanup already there), and audit for any other GL-owning file-static/member structures in the same file that likewise define a cleanup()/dispose() method with zero call sites.
 - **Tests:** A GL-object-count assertion (e.g. query GL_NUM_* or track allocation/deletion pairs via a thin instrumentation wrapper) confirming zero leaked bloom/SSAO/skybox/material-preview objects after app shutdown; at minimum, a compile-time check that s_bloom.cleanup() has a real call site (grep-based lint, mirroring undo_snapshot_lint_test.py's approach).
+- **Resolved:** commit `0c150e5` — verify: `ctest -R gl_shutdown_leak`
+- **Status note:** Added `gl.cleanup()` call plus a self-checking `allReleased()`/`leakCheck()` regression guard (catches a FUTURE un-wired resource, not just this one). Audited for sibling GL-owning structures with an unreferenced cleanup method — found none (`SceneRenderer`/`GridRenderer` go through CNA's own `GraphicsDevice`-managed resource types, disposed via `Game::Dispose()`, a different and already-correct lifecycle path; the only other raw-GL surface in this file is a one-shot `glReadPixels` screenshot readback with no persistent allocation). Verified the regression test has real teeth: manually reverted the fix, confirmed the test fails naming the exact leaked handles, restored the fix, confirmed it passes again — 5/5 clean runs each way (isolating one unrelated flaky-driver segfault hit during testing that reproduced regardless of this fix and was not caused by it).
 
 ### AUD-059 `[TODO]` `P1` `W1` · Tessellation clamp is a per-field cap only — no total-document allocation budget, so many objects near the cap still sum to unbounded memory
 - **Component:** mc3/src/Mc3XmlParser.cpp (attrCount / kMaxTessellation)
