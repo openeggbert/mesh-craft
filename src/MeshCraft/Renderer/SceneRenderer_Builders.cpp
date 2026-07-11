@@ -1,4 +1,5 @@
 #include "MeshCraft/Renderer/SceneRenderer.hpp"
+#include "MeshCraft/Renderer/PrimitiveTessellationAlg.hpp"
 
 #include <Microsoft/Xna/Framework/Graphics/BufferUsage.hpp>
 #include <Microsoft/Xna/Framework/Graphics/IndexElementSize.hpp>
@@ -34,17 +35,9 @@ static void storePositions(const std::vector<VertexPositionColor>& verts, Render
 
 void SceneRenderer::buildUnitBox() {
     Color c(200, 200, 200, 255);
-    // 8 corners of a unit cube centered at origin
-    static const float P[][3] = {
-        {-0.5f,-0.5f,-0.5f}, { 0.5f,-0.5f,-0.5f},
-        { 0.5f, 0.5f,-0.5f}, {-0.5f, 0.5f,-0.5f},
-        {-0.5f,-0.5f, 0.5f}, { 0.5f,-0.5f, 0.5f},
-        { 0.5f, 0.5f, 0.5f}, {-0.5f, 0.5f, 0.5f},
-    };
-    std::vector<VertexPositionColor> verts;
-    for (auto& p : P) verts.push_back({ Vector3{p[0],p[1],p[2]}, c });
-
-    // 12 triangles (6 faces, 2 tri each)
+    // 8 corners of a unit cube centered at origin, 12 triangles (6 faces, 2
+    // tri each).
+    //
     // STAB-castle-fix: was wound CCW-from-outside (the glTF/OpenGL
     // convention) on all 12 triangles, confirmed via direct cross-product-
     // vs-normal computation -- but CNA's default RasterizerState
@@ -57,18 +50,24 @@ void SceneRenderer::buildUnitBox() {
     // and get wrongly culled). Fixed by swapping the last two indices of
     // every triangle (flips winding without changing which vertex gets
     // which position/normal/UV).
-    static const uint16_t IDX[] = {
-        0,1,2, 0,2,3,  // -Z
-        4,6,5, 4,7,6,  // +Z
-        0,5,1, 0,4,5,  // -Y
-        2,7,3, 2,6,7,  // +Y
-        0,7,4, 0,3,7,  // -X
-        1,6,2, 1,5,6,  // +X
-    };
+    //
+    // SYS-W7-02: this vertex/index generation now lives in
+    // tessellateUnitBoxAlg() (PrimitiveTessellationAlg.hpp) so it can be
+    // exercised headlessly for differential testing against the exporter's
+    // independent MeshBuilder.cpp::buildBox() -- moved verbatim, winding
+    // unchanged.
+    RawTessellation rtb = tessellateUnitBoxAlg();
+    std::vector<VertexPositionColor> verts;
+    verts.reserve(rtb.positions.size());
+    for (auto& p : rtb.positions) verts.push_back({ Vector3{p[0],p[1],p[2]}, c });
+    std::vector<uint16_t> IDX;
+    IDX.reserve(rtb.indices.size());
+    for (auto idx : rtb.indices) IDX.push_back(ui16(static_cast<int>(idx)));
+
     unitBox_.vb = std::make_unique<VertexBuffer>(device_, 8);
     unitBox_.vb->SetData(verts.data(), 8);
     unitBox_.ib = std::make_unique<IndexBuffer>(device_, 36);
-    unitBox_.ib->SetData(IDX, 36);
+    unitBox_.ib->SetData(IDX.data(), 36);
     unitBox_.primitiveCount = 12;
     storePositions(verts, unitBox_);
 
@@ -103,32 +102,21 @@ void SceneRenderer::buildUnitBox() {
 
 void SceneRenderer::buildUnitSphere(int segments, RenderMesh& target) {
     Color c(200, 200, 200, 255);
-    std::vector<VertexPositionColor> verts;
-    std::vector<uint16_t> indices;
-
     int rings   = segments / 2;
     int sectors = segments;
 
-    for (int r = 0; r <= rings; ++r) {
-        float phi = std::numbers::pi_v<float> * r / rings;
-        for (int s = 0; s <= sectors; ++s) {
-            float theta = 2.0f * std::numbers::pi_v<float> * s / sectors;
-            float x = std::sin(phi) * std::cos(theta) * 0.5f;
-            float y = std::cos(phi) * 0.5f;
-            float z = std::sin(phi) * std::sin(theta) * 0.5f;
-            verts.push_back({ Vector3{x,y,z}, c });
-        }
-    }
-    for (int r = 0; r < rings; ++r) {
-        for (int s = 0; s < sectors; ++s) {
-            int a = r * (sectors+1) + s;
-            int b = a + 1;
-            int c2 = (r+1) * (sectors+1) + s;
-            int d  = c2 + 1;
-            indices.push_back(ui16(a)); indices.push_back(ui16(c2)); indices.push_back(ui16(b));
-            indices.push_back(ui16(b)); indices.push_back(ui16(c2)); indices.push_back(ui16(d));
-        }
-    }
+    // SYS-W7-02: vertex/index generation now lives in
+    // tessellateUnitSphereAlg() (PrimitiveTessellationAlg.hpp), moved
+    // verbatim so it can be exercised headlessly for differential testing
+    // against the exporter's independent MeshBuilder.cpp::buildSphere().
+    RawTessellation rts = tessellateUnitSphereAlg(segments);
+    std::vector<VertexPositionColor> verts;
+    verts.reserve(rts.positions.size());
+    for (auto& p : rts.positions) verts.push_back({ Vector3{p[0],p[1],p[2]}, c });
+    std::vector<uint16_t> indices;
+    indices.reserve(rts.indices.size());
+    for (auto idx : rts.indices) indices.push_back(ui16(static_cast<int>(idx)));
+
     target.vb = std::make_unique<VertexBuffer>(device_, static_cast<int>(verts.size()));
     target.vb->SetData(verts.data(), static_cast<int>(verts.size()));
     target.ib = std::make_unique<IndexBuffer>(device_, static_cast<int>(indices.size()));
@@ -163,35 +151,19 @@ void SceneRenderer::buildUnitSphere(int segments, RenderMesh& target) {
 
 void SceneRenderer::buildUnitCylinder(int segments, RenderMesh& target) {
     Color c(200, 200, 200, 255);
+
+    // SYS-W7-02: vertex/index generation now lives in
+    // tessellateUnitCylinderAlg() (PrimitiveTessellationAlg.hpp), moved
+    // verbatim so it can be exercised headlessly for differential testing
+    // against the exporter's independent MeshBuilder.cpp::buildCylinder().
+    RawTessellation rtc = tessellateUnitCylinderAlg(segments);
     std::vector<VertexPositionColor> verts;
+    verts.reserve(rtc.positions.size());
+    for (auto& p : rtc.positions) verts.push_back({ Vector3{p[0],p[1],p[2]}, c });
     std::vector<uint16_t> indices;
+    indices.reserve(rtc.indices.size());
+    for (auto idx : rtc.indices) indices.push_back(ui16(static_cast<int>(idx)));
 
-    // Top and bottom ring + center caps
-    for (int i = 0; i < segments; ++i) {
-        float a = 2.0f * std::numbers::pi_v<float> * i / segments;
-        float x = 0.5f * std::cos(a), z = 0.5f * std::sin(a);
-        verts.push_back({ Vector3{x, -0.5f, z}, c });  // bottom ring
-    }
-    for (int i = 0; i < segments; ++i) {
-        float a = 2.0f * std::numbers::pi_v<float> * i / segments;
-        float x = 0.5f * std::cos(a), z = 0.5f * std::sin(a);
-        verts.push_back({ Vector3{x, 0.5f, z}, c });   // top ring
-    }
-    int botCenter = static_cast<int>(verts.size());
-    verts.push_back({ Vector3{0,-0.5f,0}, c });
-    int topCenter = static_cast<int>(verts.size());
-    verts.push_back({ Vector3{0, 0.5f,0}, c });
-
-    for (int i = 0; i < segments; ++i) {
-        int j = (i+1) % segments;
-        // Side quad
-        indices.push_back(ui16(i)); indices.push_back(ui16(i+segments)); indices.push_back(ui16(j+segments));
-        indices.push_back(ui16(i)); indices.push_back(ui16(j+segments)); indices.push_back(ui16(j));
-        // Bottom cap
-        indices.push_back(ui16(botCenter)); indices.push_back(ui16(j)); indices.push_back(ui16(i));
-        // Top cap
-        indices.push_back(ui16(topCenter)); indices.push_back(ui16(i+segments)); indices.push_back(ui16(j+segments));
-    }
     target.vb = std::make_unique<VertexBuffer>(device_, static_cast<int>(verts.size()));
     target.vb->SetData(verts.data(), static_cast<int>(verts.size()));
     target.ib = std::make_unique<IndexBuffer>(device_, static_cast<int>(indices.size()));
@@ -257,28 +229,20 @@ void SceneRenderer::buildUnitCylinder(int segments, RenderMesh& target) {
 
 void SceneRenderer::buildUnitCone(int segments, RenderMesh& target) {
     Color c(200, 200, 200, 255);
+
+    // SYS-W7-02: vertex/index generation now lives in
+    // tessellateUnitConeAlg() (PrimitiveTessellationAlg.hpp) -- includes the
+    // STAB-castle-fix winding swap ((i,j,apex), not (i,apex,j)) -- moved
+    // verbatim so it can be exercised headlessly for differential testing
+    // against the exporter's independent MeshBuilder.cpp::buildCone().
+    RawTessellation rtco = tessellateUnitConeAlg(segments);
     std::vector<VertexPositionColor> verts;
+    verts.reserve(rtco.positions.size());
+    for (auto& p : rtco.positions) verts.push_back({ Vector3{p[0],p[1],p[2]}, c });
     std::vector<uint16_t> indices;
+    indices.reserve(rtco.indices.size());
+    for (auto idx : rtco.indices) indices.push_back(ui16(static_cast<int>(idx)));
 
-    for (int i = 0; i < segments; ++i) {
-        float a = 2.0f * std::numbers::pi_v<float> * i / segments;
-        verts.push_back({ Vector3{0.5f*std::cos(a), -0.5f, 0.5f*std::sin(a)}, c });
-    }
-    int apex   = static_cast<int>(verts.size());
-    verts.push_back({ Vector3{0, 0.5f, 0}, c });
-    int botCtr = static_cast<int>(verts.size());
-    verts.push_back({ Vector3{0,-0.5f,0}, c });
-
-    for (int i = 0; i < segments; ++i) {
-        int j = (i+1) % segments;
-        // Side. STAB-castle-fix: was (i, apex, j), wound CCW-from-outside
-        // (confirmed via direct cross-product-vs-normal computation) --
-        // the bottom cap right below was already correct, only the side
-        // was backwards. Swapped to (i, j, apex).
-        indices.push_back(ui16(i)); indices.push_back(ui16(j)); indices.push_back(ui16(apex));
-        // Bottom cap (already correct)
-        indices.push_back(ui16(botCtr)); indices.push_back(ui16(j)); indices.push_back(ui16(i));
-    }
     target.vb = std::make_unique<VertexBuffer>(device_, static_cast<int>(verts.size()));
     target.vb->SetData(verts.data(), static_cast<int>(verts.size()));
     target.ib = std::make_unique<IndexBuffer>(device_, static_cast<int>(indices.size()));
@@ -331,17 +295,22 @@ void SceneRenderer::buildUnitCone(int segments, RenderMesh& target) {
 
 void SceneRenderer::buildUnitPlane() {
     Color c(200, 200, 200, 255);
-    std::vector<VertexPositionColor> verts = {
-        { Vector3{-0.5f, 0.0f, -0.5f}, c },
-        { Vector3{ 0.5f, 0.0f, -0.5f}, c },
-        { Vector3{ 0.5f, 0.0f,  0.5f}, c },
-        { Vector3{-0.5f, 0.0f,  0.5f}, c },
-    };
-    static const uint16_t IDX[] = { 0,1,2, 0,2,3 };
+    // SYS-W7-02: vertex/index generation now lives in
+    // tessellateUnitPlaneAlg() (PrimitiveTessellationAlg.hpp), moved
+    // verbatim so it can be exercised headlessly for differential testing
+    // against the exporter's independent MeshBuilder.cpp::buildPlane().
+    RawTessellation rtp = tessellateUnitPlaneAlg();
+    std::vector<VertexPositionColor> verts;
+    verts.reserve(rtp.positions.size());
+    for (auto& p : rtp.positions) verts.push_back({ Vector3{p[0],p[1],p[2]}, c });
+    std::vector<uint16_t> IDX;
+    IDX.reserve(rtp.indices.size());
+    for (auto idx : rtp.indices) IDX.push_back(ui16(static_cast<int>(idx)));
+
     unitPlane_.vb = std::make_unique<VertexBuffer>(device_, 4);
     unitPlane_.vb->SetData(verts.data(), 4);
     unitPlane_.ib = std::make_unique<IndexBuffer>(device_, 6);
-    unitPlane_.ib->SetData(IDX, 6);
+    unitPlane_.ib->SetData(IDX.data(), 6);
     unitPlane_.primitiveCount = 2;
     storePositions(verts, unitPlane_);
 
@@ -357,7 +326,7 @@ void SceneRenderer::buildUnitPlane() {
         unitPlane_.texVB = std::make_unique<VertexBuffer>(device_, 4);
         unitPlane_.texVB->SetData(tv, 4);
         unitPlane_.texIB = std::make_unique<IndexBuffer>(device_, 6);
-        unitPlane_.texIB->SetData(IDX, 6);
+        unitPlane_.texIB->SetData(IDX.data(), 6);
         unitPlane_.texPrimitiveCount = 2;
     }
 }
@@ -369,37 +338,20 @@ void SceneRenderer::buildUnitTorus(int ringSeg, int tubeSeg, RenderMesh& target)
     const float pi2 = 2.0f * std::numbers::pi_v<float>;
     Color c(200, 200, 200, 255);
 
+    // SYS-W7-02: vertex/index generation now lives in
+    // tessellateUnitTorusAlg() (PrimitiveTessellationAlg.hpp) -- includes
+    // the STAB-castle-fix winding swap ({a,d,b} / {a,c2,d}, not {a,b,d} /
+    // {a,d,c2}) -- moved verbatim so it can be exercised headlessly for
+    // differential testing against the exporter's independent
+    // MeshBuilder.cpp::buildTorus(). This same index array is reused below
+    // for the VPNT texIB.
+    RawTessellation rtt = tessellateUnitTorusAlg(ringSeg, tubeSeg);
     std::vector<VertexPositionColor> verts;
+    verts.reserve(rtt.positions.size());
+    for (auto& p : rtt.positions) verts.push_back({ Vector3{p[0],p[1],p[2]}, c });
     std::vector<uint16_t> indices;
-    verts.reserve((ringSeg+1)*(tubeSeg+1));
-    indices.reserve(ringSeg*tubeSeg*6);
-
-    for (int i = 0; i <= ringSeg; ++i) {
-        float theta = pi2 * i / ringSeg;
-        float ct = std::cos(theta), st = std::sin(theta);
-        for (int j = 0; j <= tubeSeg; ++j) {
-            float phi = pi2 * j / tubeSeg;
-            float cp = std::cos(phi), sp = std::sin(phi);
-            float x = (R + r * cp) * ct;
-            float y = r * sp;
-            float z = (R + r * cp) * st;
-            verts.push_back({ Vector3{x, y, z}, c });
-        }
-    }
-    // STAB-castle-fix: was {a,b,d} / {a,d,c2}, wound CCW-from-outside on
-    // all triangles (confirmed via direct cross-product-vs-normal
-    // computation). This same index array is reused below for the VPNT
-    // texIB, so this one fix covers both. Swapped to {a,d,b} / {a,c2,d}.
-    for (int i = 0; i < ringSeg; ++i) {
-        for (int j = 0; j < tubeSeg; ++j) {
-            int a = i * (tubeSeg+1) + j;
-            int b = a + 1;
-            int c2 = (i+1) * (tubeSeg+1) + j;
-            int d  = c2 + 1;
-            indices.push_back(ui16(a)); indices.push_back(ui16(d)); indices.push_back(ui16(b));
-            indices.push_back(ui16(a)); indices.push_back(ui16(c2)); indices.push_back(ui16(d));
-        }
-    }
+    indices.reserve(rtt.indices.size());
+    for (auto idx : rtt.indices) indices.push_back(ui16(static_cast<int>(idx)));
 
     int nv = static_cast<int>(verts.size());
     int ni = static_cast<int>(indices.size());
@@ -441,85 +393,24 @@ void SceneRenderer::buildUnitCapsule(int segments, RenderMesh& target) {
     // Unit capsule: radius=0.5, cylinder height=1.0, total height=2.0 (y=-1..+1)
     // Bottom hemisphere center at y=-0.5, top at y=+0.5.
     // Rendering scales: x,z by radius*2; y by (height + radius*2) / 2.
-    const int hRings = std::max(4, segments / 4);
     const float pi  = std::numbers::pi_v<float>;
     const float pi2 = 2.0f * pi;
     Color c(200, 200, 200, 255);
 
-    // Helper: add a ring of vertices at given y center offset, rXZ radius
-    // Returns start index in verts
-    auto addRing = [&](std::vector<VertexPositionColor>& verts, float y, float rXZ) {
-        int base = static_cast<int>(verts.size());
-        for (int i = 0; i < segments; ++i) {
-            float a = pi2 * i / segments;
-            verts.push_back({ Vector3{ rXZ * std::cos(a), y, rXZ * std::sin(a) }, c });
-        }
-        return base;
-    };
-
+    // SYS-W7-02: vertex/index generation (poles, hemisphere rings, cylinder
+    // seam ring, and the STAB-castle-fix {ra+i,rb+j,rb+i} / {ra+i,ra+j,rb+j}
+    // winding) now lives in tessellateUnitCapsuleAlg()
+    // (PrimitiveTessellationAlg.hpp), moved verbatim so it can be exercised
+    // headlessly for differential testing against the exporter's
+    // independent MeshBuilder.cpp::buildCapsule(). This same `indices`
+    // array is copied verbatim into the VPNT `ti` array further below.
+    RawTessellation rtcap = tessellateUnitCapsuleAlg(segments);
     std::vector<VertexPositionColor> verts;
+    verts.reserve(rtcap.positions.size());
+    for (auto& p : rtcap.positions) verts.push_back({ Vector3{p[0],p[1],p[2]}, c });
     std::vector<uint16_t> indices;
-
-    // Collect ring base indices
-    std::vector<int> ringBases;
-
-    // Bottom hemisphere: rings from pole (y=-1) to equator (y=-0.5)
-    int botPole = static_cast<int>(verts.size());
-    verts.push_back({ Vector3{0.0f, -1.0f, 0.0f}, c }); // bottom pole
-    for (int ri = 1; ri <= hRings; ++ri) {
-        float phi = -pi / 2.0f + (pi / 2.0f) * float(ri) / hRings;
-        float y   = -0.5f + 0.5f * std::sin(phi);
-        float r   =  0.5f * std::cos(phi);
-        ringBases.push_back(addRing(verts, y, r));
-    }
-
-    // Cylinder top ring at y=+0.5, r=0.5
-    ringBases.push_back(addRing(verts, 0.5f, 0.5f));
-
-    // Top hemisphere: rings from equator (y=+0.5) to pole (y=+1)
-    for (int ri = 1; ri < hRings; ++ri) {
-        float phi = (pi / 2.0f) * float(ri) / hRings;
-        float y   =  0.5f + 0.5f * std::sin(phi);
-        float r   =  0.5f * std::cos(phi);
-        ringBases.push_back(addRing(verts, y, r));
-    }
-    int topPole = static_cast<int>(verts.size());
-    verts.push_back({ Vector3{0.0f, 1.0f, 0.0f}, c }); // top pole
-
-    // Triangulate: bottom pole cap
-    {
-        int rb = ringBases[0];
-        for (int i = 0; i < segments; ++i) {
-            int j = (i + 1) % segments;
-            indices.push_back(ui16(botPole));
-            indices.push_back(ui16(rb + j));
-            indices.push_back(ui16(rb + i));
-        }
-    }
-    // Quads between consecutive rings. STAB-castle-fix: was
-    // {ra+i,rb+i,rb+j} / {ra+i,rb+j,ra+j}, wound CCW-from-outside on all
-    // triangles (confirmed via direct cross-product-vs-normal computation)
-    // -- unlike the top/bottom pole fans above/below, which were already
-    // correct. This `indices` array is copied verbatim into the VPNT `ti`
-    // array further below, so this one fix covers both.
-    for (int r0 = 0; r0 + 1 < static_cast<int>(ringBases.size()); ++r0) {
-        int ra = ringBases[r0], rb = ringBases[r0 + 1];
-        for (int i = 0; i < segments; ++i) {
-            int j = (i + 1) % segments;
-            indices.push_back(ui16(ra + i)); indices.push_back(ui16(rb + j)); indices.push_back(ui16(rb + i));
-            indices.push_back(ui16(ra + i)); indices.push_back(ui16(ra + j)); indices.push_back(ui16(rb + j));
-        }
-    }
-    // Top pole cap
-    {
-        int rt = ringBases.back();
-        for (int i = 0; i < segments; ++i) {
-            int j = (i + 1) % segments;
-            indices.push_back(ui16(topPole));
-            indices.push_back(ui16(rt + i));
-            indices.push_back(ui16(rt + j));
-        }
-    }
+    indices.reserve(rtcap.indices.size());
+    for (auto idx : rtcap.indices) indices.push_back(ui16(static_cast<int>(idx)));
 
     target.vb = std::make_unique<VertexBuffer>(device_, static_cast<int>(verts.size()));
     target.vb->SetData(verts.data(), static_cast<int>(verts.size()));
@@ -632,88 +523,31 @@ void SceneRenderer::buildUnitCapsule(int segments, RenderMesh& target) {
 }
 
 void SceneRenderer::buildUnitIcoSphere(int subdivisions) {
-    const float phi = (1.0f + std::sqrt(5.0f)) / 2.0f;
-
-    // Normalize raw vertex to radius 0.5 (unit form)
-    auto norm05 = [](float x, float y, float z) -> std::array<float,3> {
-        float len = std::sqrt(x*x + y*y + z*z);
-        return { 0.5f*x/len, 0.5f*y/len, 0.5f*z/len };
-    };
-
-    const float p = phi;
-    std::vector<std::array<float,3>> pos = {
-        norm05(-1, p, 0), norm05( 1, p, 0), norm05(-1,-p, 0), norm05( 1,-p, 0),
-        norm05( 0,-1, p), norm05( 0, 1, p), norm05( 0,-1,-p), norm05( 0, 1,-p),
-        norm05( p, 0,-1), norm05( p, 0, 1), norm05(-p, 0,-1), norm05(-p, 0, 1),
-    };
-
-    std::vector<std::array<int,3>> faces = {
-        {0,11,5}, {0,5,1}, {0,1,7}, {0,7,10}, {0,10,11},
-        {1,5,9},  {5,11,4},{11,10,2},{10,7,6}, {7,1,8},
-        {3,9,4},  {3,4,2}, {3,2,6}, {3,6,8},  {3,8,9},
-        {4,9,5},  {2,4,11},{6,2,10},{8,6,7},   {9,8,1},
-    };
-
-    std::map<std::pair<int,int>, int> midCache;
-    for (int d = 0; d < subdivisions; ++d) {
-        midCache.clear();
-        std::vector<std::array<int,3>> newFaces;
-        newFaces.reserve(faces.size() * 4);
-
-        auto getMid = [&](int a, int b) -> int {
-            auto key = std::make_pair(std::min(a,b), std::max(a,b));
-            auto it = midCache.find(key);
-            if (it != midCache.end()) return it->second;
-            const auto& pa = pos[a];
-            const auto& pb = pos[b];
-            float mx = (pa[0]+pb[0]) * 0.5f;
-            float my = (pa[1]+pb[1]) * 0.5f;
-            float mz = (pa[2]+pb[2]) * 0.5f;
-            float len = std::sqrt(mx*mx+my*my+mz*mz);
-            int idx = static_cast<int>(pos.size());
-            pos.push_back({ 0.5f*mx/len, 0.5f*my/len, 0.5f*mz/len });
-            midCache[key] = idx;
-            return idx;
-        };
-
-        for (auto& f : faces) {
-            int m01 = getMid(f[0], f[1]);
-            int m12 = getMid(f[1], f[2]);
-            int m20 = getMid(f[2], f[0]);
-            newFaces.push_back({f[0], m01, m20});
-            newFaces.push_back({f[1], m12, m01});
-            newFaces.push_back({f[2], m20, m12});
-            newFaces.push_back({m01, m12, m20});
-        }
-        faces = std::move(newFaces);
-    }
+    // SYS-W7-02: icosahedron construction, subdivision, and the
+    // STAB-castle-fix winding swap (f[0],f[2],f[1], not f[0],f[1],f[2]) now
+    // live in tessellateUnitIcoSphereAlg() (PrimitiveTessellationAlg.hpp),
+    // moved verbatim so it can be exercised headlessly for differential
+    // testing against the exporter's independent
+    // MeshBuilder.cpp::buildIcoSphere().
+    RawTessellation rti = tessellateUnitIcoSphereAlg(subdivisions);
 
     Color c(200, 200, 200, 255);
-    int nv = static_cast<int>(pos.size());
+    int nv = static_cast<int>(rti.positions.size());
 
     std::vector<VertexPositionColor> verts(nv);
     for (int i = 0; i < nv; ++i)
-        verts[i] = { Vector3{pos[i][0], pos[i][1], pos[i][2]}, c };
+        verts[i] = { Vector3{rti.positions[i][0], rti.positions[i][1], rti.positions[i][2]}, c };
 
-    // STAB-castle-fix: was (f[0],f[1],f[2]), wound CCW-from-outside on
-    // every face (confirmed via direct cross-product-vs-normal computation
-    // on the base icosahedron; subdivision preserves each parent
-    // triangle's local winding, so fixing final emission here covers every
-    // subdivision level uniformly). Swapped the last two indices.
     std::vector<uint16_t> indices;
-    indices.reserve(faces.size() * 3);
-    for (auto& f : faces) {
-        indices.push_back(ui16(f[0]));
-        indices.push_back(ui16(f[2]));
-        indices.push_back(ui16(f[1]));
-    }
+    indices.reserve(rti.indices.size());
+    for (auto idx : rti.indices) indices.push_back(ui16(static_cast<int>(idx)));
 
     int ni = static_cast<int>(indices.size());
     unitIcoSphere_.vb = std::make_unique<VertexBuffer>(device_, nv);
     unitIcoSphere_.vb->SetData(verts.data(), nv);
     unitIcoSphere_.ib = std::make_unique<IndexBuffer>(device_, ni);
     unitIcoSphere_.ib->SetData(indices.data(), ni);
-    unitIcoSphere_.primitiveCount = static_cast<int>(faces.size());
+    unitIcoSphere_.primitiveCount = ni / 3;
     storePositions(verts, unitIcoSphere_);
 }
 
