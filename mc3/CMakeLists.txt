@@ -53,6 +53,13 @@ target_link_libraries(Mc3 PRIVATE tinyxml2::tinyxml2)
 
 target_compile_options(Mc3 PRIVATE -Wall -Wextra)
 
+# AUD-055: meshcraft_apply_sanitize() is defined by the root CMakeLists.txt
+# and only visible when this file is processed via its add_subdirectory()
+# (guarded, since mc3/ can also be configured standalone).
+if(COMMAND meshcraft_apply_sanitize)
+    meshcraft_apply_sanitize(Mc3)
+endif()
+
 # -----------------------------------------------------------------------------
 # Round-trip unit tests
 # -----------------------------------------------------------------------------

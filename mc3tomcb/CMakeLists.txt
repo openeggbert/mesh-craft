@@ -30,6 +30,12 @@ add_executable(mc3tomcb
 
 target_link_libraries(mc3tomcb PRIVATE Mcb Mc3)
 
+# AUD-054/AUD-055: previously had no warning flags.
+target_compile_options(mc3tomcb PRIVATE -Wall -Wextra)
+if(COMMAND meshcraft_apply_sanitize)
+    meshcraft_apply_sanitize(mc3tomcb)
+endif()
+
 install(TARGETS mc3tomcb RUNTIME DESTINATION bin)
 
 # --------------------------------------------------------------------------

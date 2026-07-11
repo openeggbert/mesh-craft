@@ -167,7 +167,6 @@ void SceneRenderer::buildUnitCylinder(int segments, RenderMesh& target) {
     std::vector<uint16_t> indices;
 
     // Top and bottom ring + center caps
-    int base = 0;
     for (int i = 0; i < segments; ++i) {
         float a = 2.0f * std::numbers::pi_v<float> * i / segments;
         float x = 0.5f * std::cos(a), z = 0.5f * std::sin(a);

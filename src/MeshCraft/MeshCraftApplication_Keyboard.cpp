@@ -255,6 +255,7 @@ void MeshCraftApplication::handleKeyboardShortcuts(const KeyboardState& ks, cons
                         hx = p.size[0] * 0.5f * sx; hy = p.size[1] * 0.5f * sy; hz = p.size[2] * 0.5f * sz;
                         break;
                     case Mc3::PrimitiveType::Sphere:
+                    case Mc3::PrimitiveType::IcoSphere:
                         hx = hy = hz = p.radius * std::max({sx,sy,sz});
                         break;
                     case Mc3::PrimitiveType::Cylinder:
@@ -262,7 +263,27 @@ void MeshCraftApplication::handleKeyboardShortcuts(const KeyboardState& ks, cons
                         hx = hz = p.radius * std::max(sx, sz); hy = p.height * 0.5f * sy;
                         break;
                     case Mc3::PrimitiveType::Plane:
+                    case Mc3::PrimitiveType::Grid:
                         hx = p.size[0] * 0.5f * sx; hy = 0.05f; hz = p.size[2] * 0.5f * sz;
+                        break;
+                    case Mc3::PrimitiveType::Torus:
+                        // AUD-054: was falling through to the generic 0.5f
+                        // default above (a -Wswitch warning caught this) --
+                        // outer ring radius in X/Z, half tube thickness in Y.
+                        hx = hz = (p.majorRadius + p.minorRadius) * std::max(sx, sz);
+                        hy = p.minorRadius * sy;
+                        break;
+                    case Mc3::PrimitiveType::Capsule:
+                        // Cylindrical body plus a hemispherical cap of
+                        // `radius` on each end along the height axis.
+                        hx = hz = p.radius * std::max(sx, sz);
+                        hy = (p.height * 0.5f + p.radius) * sy;
+                        break;
+                    case Mc3::PrimitiveType::Disk:
+                        // Flat like Plane, but round -- radius in X/Z, same
+                        // thin-height convention as Plane.
+                        hx = hz = p.radius * std::max(sx, sz);
+                        hy = 0.05f;
                         break;
                     }
                 }

@@ -31,7 +31,7 @@ using namespace Microsoft::Xna::Framework::Input;
 using namespace Microsoft::Xna::Framework::Graphics;
 
 
-void MeshCraftApplication::drawStatsOverlay(int screenW, int screenH)
+void MeshCraftApplication::drawStatsOverlay(int screenW, [[maybe_unused]] int screenH)
 {
     if (showStatsOverlay_) {
         int tlH2 = showTimeline_ ? kTimelineH : 0;

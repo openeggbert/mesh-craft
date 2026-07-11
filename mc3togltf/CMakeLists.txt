@@ -90,6 +90,9 @@ target_include_directories(mc3togltf_lib SYSTEM PUBLIC
 target_link_libraries(mc3togltf_lib PUBLIC Mc3 tinyobjloader manifold)
 
 target_compile_options(mc3togltf_lib PRIVATE -Wall -Wextra)
+if(COMMAND meshcraft_apply_sanitize)
+    meshcraft_apply_sanitize(mc3togltf_lib)
+endif()
 
 # --------------------------------------------------------------------------
 # Executable — thin wrapper around the library
@@ -101,6 +104,13 @@ target_include_directories(mc3togltf PRIVATE
 )
 
 target_link_libraries(mc3togltf PRIVATE mc3togltf_lib)
+
+# AUD-054: the executable itself (a thin main.cpp wrapper) previously had
+# no warning flags; mc3togltf_lib above already did.
+target_compile_options(mc3togltf PRIVATE -Wall -Wextra)
+if(COMMAND meshcraft_apply_sanitize)
+    meshcraft_apply_sanitize(mc3togltf)
+endif()
 
 install(TARGETS mc3togltf RUNTIME DESTINATION bin)
 

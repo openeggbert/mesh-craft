@@ -136,7 +136,11 @@ float MeshCraftApplication::drawToolbar(float menuBarH, int screenW)
         for (float v : {0.1f, 0.25f, 0.5f, 1.0f, 2.0f}) {
             bool sel = (snapTranslate_ == v);
             if (sel) ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.20f, 0.45f, 0.20f, 1.f));
-            char lbl[16]; std::snprintf(lbl, sizeof(lbl), "%.2g##mt%.2g", v, v);
+            // AUD-054: buffer widened from 16 -- gcc's format-truncation
+            // analysis can't prove %g of an arbitrary float always stays
+            // short (it does for this loop's actual value set, but not for
+            // float's full range), so it flagged a theoretical truncation.
+            char lbl[32]; std::snprintf(lbl, sizeof(lbl), "%.2g##mt%.2g", v, v);
             if (ImGui::SmallButton(lbl)) snapTranslate_ = v;
             if (sel) ImGui::PopStyleColor();
             ImGui::SameLine();
@@ -153,7 +157,7 @@ float MeshCraftApplication::drawToolbar(float menuBarH, int screenW)
         for (float v : {5.0f, 10.0f, 15.0f, 30.0f, 45.0f, 90.0f}) {
             bool sel = (snapRotate_ == v);
             if (sel) ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.20f, 0.45f, 0.20f, 1.f));
-            char lbl[16]; std::snprintf(lbl, sizeof(lbl), "%.4g°##mr%.4g", v, v);
+            char lbl[32]; std::snprintf(lbl, sizeof(lbl), "%.4g°##mr%.4g", v, v);
             if (ImGui::SmallButton(lbl)) snapRotate_ = v;
             if (sel) ImGui::PopStyleColor();
             ImGui::SameLine();
@@ -167,7 +171,7 @@ float MeshCraftApplication::drawToolbar(float menuBarH, int screenW)
         for (float v : {0.05f, 0.1f, 0.25f, 0.5f, 1.0f}) {
             bool sel = (snapScale_ == v);
             if (sel) ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.20f, 0.45f, 0.20f, 1.f));
-            char lbl[16]; std::snprintf(lbl, sizeof(lbl), "%.2g##ms%.2g", v, v);
+            char lbl[32]; std::snprintf(lbl, sizeof(lbl), "%.2g##ms%.2g", v, v);
             if (ImGui::SmallButton(lbl)) snapScale_ = v;
             if (sel) ImGui::PopStyleColor();
             ImGui::SameLine();
@@ -216,7 +220,7 @@ float MeshCraftApplication::drawToolbar(float menuBarH, int screenW)
         for (float v : {0.25f, 0.5f, 1.0f, 2.0f, 5.0f, 10.0f}) {
             bool sel = (gridSpacing_ == v);
             if (sel) ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.20f, 0.45f, 0.20f, 1.f));
-            char lbl[20]; std::snprintf(lbl, sizeof(lbl), "%.4g u##g%.4g", v, v);
+            char lbl[32]; std::snprintf(lbl, sizeof(lbl), "%.4g u##g%.4g", v, v);
             if (ImGui::Button(lbl, ImVec2(72, 0))) {
                 gridSpacing_ = v;
                 gridRenderer_->setSpacing(v);

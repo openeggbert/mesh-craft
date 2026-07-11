@@ -29,6 +29,13 @@ target_include_directories(Mcb
 
 target_link_libraries(Mcb PUBLIC Mc3)
 
+# AUD-054/AUD-055: Mcb (the binary reader/writer -- untrusted-input parsing
+# surface) previously had no warning flags at all.
+target_compile_options(Mcb PRIVATE -Wall -Wextra)
+if(COMMAND meshcraft_apply_sanitize)
+    meshcraft_apply_sanitize(Mcb)
+endif()
+
 include(CTest)
 
 if(BUILD_TESTING)

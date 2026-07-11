@@ -16,6 +16,59 @@ set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
+# AUD-055: opt-in AddressSanitizer + UndefinedBehaviorSanitizer build for the
+# first-party targets that parse untrusted input (Mc3's XML parser, Mcb's
+# binary reader) or are otherwise part of this project's own surface --
+# deliberately NOT applied to CNA/SHARP_RUNTIME/vendored deps (imgui,
+# manifold, tinyobjloader, tinygltf, httplib): those are third-party/sibling
+# code this project doesn't own (see CLAUDE.md -- no CNA changes without
+# owner permission), so instrumenting them is out of scope here. This means
+# a bug that only manifests across the instrumented/uninstrumented boundary
+# may not be caught -- a real, accepted limitation of a first-party-only
+# opt-in build, not full whole-program coverage.
+#
+#   cmake -S . -B build-asan -DMESHCRAFT_SANITIZE=ON
+#   cmake --build build-asan && ctest --test-dir build-asan
+option(MESHCRAFT_SANITIZE
+       "Build first-party MeshCraft targets (Mc3/Mcb/mc3togltf/mc3tomcb/editor) with ASan+UBSan. Does not instrument CNA/SHARP_RUNTIME/vendored deps."
+       OFF)
+if(MESHCRAFT_SANITIZE)
+    if(MSVC)
+        message(WARNING "MESHCRAFT_SANITIZE is not wired up for MSVC; ignoring.")
+        set(MESHCRAFT_SANITIZE OFF)
+    else()
+        set(MESHCRAFT_SANITIZE_COMPILE_OPTIONS -fsanitize=address,undefined -fno-omit-frame-pointer -g)
+        # The link flag has to be applied at every EXECUTABLE's final link
+        # step, not just the instrumented static libraries themselves --
+        # otherwise a test executable that links an instrumented Mc3/Mcb/
+        # mc3togltf_lib fails with "undefined reference to __asan_*" (the
+        # object files reference the sanitizer runtime, but nothing tells
+        # the final link to pull it in). add_link_options() here, before any
+        # add_subdirectory() below, applies it to every target created
+        # anywhere in this build -- including CNA/SHARP_RUNTIME/vendored
+        # deps and the test executables in mc3/mcb/mc3togltf. Those
+        # dependencies are not compiled WITH sanitizer instrumentation
+        # (meshcraft_apply_sanitize() below is only called on first-party
+        # targets), but linking the runtime into every final binary is
+        # required for any of this to link at all, and is harmless for
+        # non-instrumented object code.
+        add_link_options(-fsanitize=address,undefined)
+    endif()
+endif()
+
+# Applies the ASan/UBSan COMPILE-time instrumentation to `tgt` when
+# MESHCRAFT_SANITIZE is ON; no-op otherwise. Called from this file and from
+# the first-party subdirectories (mc3/mcb/mc3togltf/mc3tomcb) after each of
+# their own target definitions -- MESHCRAFT_SANITIZE is a cache variable set
+# here at the root, visible in every add_subdirectory() below it. Only
+# instruments first-party code (see the option() help text above for why);
+# the link-time runtime is wired in globally, above, since it must be.
+function(meshcraft_apply_sanitize tgt)
+    if(MESHCRAFT_SANITIZE AND TARGET ${tgt})
+        target_compile_options(${tgt} PRIVATE ${MESHCRAFT_SANITIZE_COMPILE_OPTIONS})
+    endif()
+endfunction()
+
 # -----------------------------------------------------------------------------
 # Graphics backend selection
 # -----------------------------------------------------------------------------
@@ -315,6 +368,14 @@ target_include_directories(${_target}
 )
 
 target_compile_definitions(${_target} PRIVATE MESHCRAFT_VERSION="${PROJECT_VERSION}")
+
+# AUD-054: -Wall -Wextra was previously enabled on only 2 of the first-party
+# targets (Mc3, mc3togltf_lib) -- the editor itself (32 files / 18.5k LOC,
+# the largest first-party surface) compiled with no warning flags at all.
+# PRIVATE so this only applies to MeshCraft's own translation units, not
+# anything consuming this target.
+target_compile_options(${_target} PRIVATE -Wall -Wextra)
+meshcraft_apply_sanitize(${_target})
 
 # AUD-039b: the configure-time warning above (Gate C truthfulness) does not
 # stop a non-functional editor binary from being built and run -- it only
