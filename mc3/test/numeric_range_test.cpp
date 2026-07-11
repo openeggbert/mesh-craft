@@ -14,7 +14,9 @@
 // SYS-W1-02 for exactly which domains/fields are covered.
 
 #include <MeshCraft/Mc3/Mc3Document.hpp>
+#include <MeshCraft/Mc3/Mc3LoadPolicy.hpp>
 #include <MeshCraft/Mc3/Mc3Object.hpp>
+#include <MeshCraft/Mc3/Mc3Validation.hpp>
 
 #include <filesystem>
 #include <fstream>
@@ -215,10 +217,53 @@ static void testGeometryRanges() {
     } else check(false, "bad_extrude parsed with an extrude");
 }
 
+// ---------------------------------------------------------------------------
+// Environment: fog density must reject negative (clamped to 0); fog
+// start>=end is diagnosed via Mc3Validation but not repaired (SceneRenderer
+// already guards it defensively -- see the Mc3XmlParser.cpp comment).
+// ---------------------------------------------------------------------------
+static void testEnvironmentRanges() {
+    Mc3Document doc = load(
+        "<mc3 version=\"0.3\" model=\"env\">\n"
+        "  <environment>\n"
+        "    <fog mode=\"exponential\" start=\"50\" end=\"10\" density=\"-2\"/>\n"
+        "  </environment>\n"
+        "</mc3>\n");
+
+    check(doc.environment.has_value(), "environment parsed");
+    check(doc.environment && doc.environment->fog.has_value(), "fog parsed");
+    if (doc.environment && doc.environment->fog) {
+        const auto& fog = *doc.environment->fog;
+        check(fog.density == 0.0f, "fog density=-2 clamped to 0");
+        check(fog.start == 50.0f && fog.end == 10.0f,
+              "fog start/end left unmodified (start>=end is warning-only, "
+              "SceneRenderer already guards it)");
+    }
+
+    Mc3Validation v;
+    { // Re-load with a validation sink to confirm the start>=end diagnostic fires.
+        auto path = std::filesystem::temp_directory_path() / "mc3_numeric_range_env_test.mc3.xml";
+        {
+            std::ofstream f(path);
+            f << "<mc3 version=\"0.3\" model=\"env2\">\n"
+                 "  <environment><fog start=\"50\" end=\"10\"/></environment>\n"
+                 "</mc3>\n";
+        }
+        Mc3Document::loadFromFile(path, Mc3LoadPolicy::trusted(), v);
+        std::filesystem::remove(path);
+    }
+    bool foundFogWarning = false;
+    for (const auto& e : v.entries)
+        if (e.field == "start" && e.message.find("fog start") != std::string::npos)
+            foundFogWarning = true;
+    check(foundFogWarning, "fog start>=end reported via Mc3Validation");
+}
+
 int main() {
     testCameraRanges();
     testMaterialRanges();
     testGeometryRanges();
+    testEnvironmentRanges();
 
     if (failures == 0) { std::cout << "All numeric-range tests passed.\n"; return 0; }
     std::cerr << failures << " numeric-range test(s) failed.\n";

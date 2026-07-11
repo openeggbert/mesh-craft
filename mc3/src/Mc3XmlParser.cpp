@@ -703,7 +703,26 @@ static void parseEnvironment(const XMLElement* el, Mc3Document& doc) {
         fog.color   = attrVec3(fg, "color", {0.5f,0.5f,0.5f});
         fog.start   = attrF(fg, "start",   10.0f);
         fog.end     = attrF(fg, "end",     100.0f);
-        fog.density = attrF(fg, "density", 0.01f);
+        // SYS-W1-02: start should be < end for linear fog to actually
+        // produce a gradient. NOT clamped/swapped here -- SceneRenderer.cpp
+        // (I3 per-object fog) already defensively guards `if (f.end >
+        // f.start)` before computing the blend factor, so a start>=end
+        // config is already safe (renders as "no fog", never a division by
+        // zero or NaN); this is a warning-only diagnostic to help authors
+        // spot a likely mistake, not a value repair.
+        if (fog.start >= fog.end)
+            reportWarning(fg, "start",
+                          "fog start (" + std::to_string(fog.start) +
+                          ") is not less than fog end (" + std::to_string(fog.end) +
+                          "); linear fog will render as fully absent rather than a gradient");
+        // Negative density inverts the exponential falloff's intended
+        // direction (fog would visually strengthen with camera distance
+        // instead of weakening) -- already numerically safe downstream
+        // (SceneRenderer.cpp's std::clamp() catches the resulting -inf), but
+        // clamped here anyway since it's clearly an authoring mistake, not
+        // an intentional effect (unlike, say, extrude path arcAngle's
+        // legitimate use of a negative value for direction).
+        fog.density = rejectNegative(fg, "density", attrF(fg, "density", 0.01f));
         std::string mode = attr(fg, "mode", "linear");
         fog.mode = (mode == "exponential") ? FogMode::Exponential : FogMode::Linear;
         env.fog = fog;
