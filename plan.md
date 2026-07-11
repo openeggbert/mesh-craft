@@ -211,18 +211,29 @@ Mandated workstream items not tied to a single audit finding.
 - **SYS-W11-01** `[TODO, owner-gated]` `P1` — Un-park CI (`.github_` → `.github`)
   needs a `workflow`-scoped push token (`AUD-052`). Workflow file itself made
   correct/ready in commit `d16c82c`.
-- **SYS-W11-02** `[TODO]` `P2` — `-Wall -Wextra` on **all** first-party targets
+- **SYS-W11-02** `[DONE]` `P2` — `-Wall -Wextra` on **all** first-party targets
   (currently only `Mc3` and `mc3togltf_lib`) via a shared interface target; fix
-  warnings; `-Werror` in CI. (`AUD-054`)
+  warnings; `-Werror` in CI. (`AUD-054`) Commit `4fc211e`. Verify:
+  `cmake --build cmake-build-debug 2>&1 | grep -c warning` (0). `-Werror` in CI
+  not added (CI is parked, AUD-052) — would be inert until un-parked.
 - **SYS-W11-03** `[TODO]` `P2` — Editor build+test CI job. (`AUD-053`)
-- **SYS-W11-04** `[TODO]` `P2` — Opt-in ASan + UBSan configs. (`AUD-055`)
+- **SYS-W11-04** `[DONE]` `P2` — Opt-in ASan + UBSan configs. (`AUD-055`) Commit
+  `4fc211e`. Verify: `cmake -S . -B /tmp/b -DMESHCRAFT_SANITIZE=ON && cmake
+  --build /tmp/b --target mc3_roundtrip_test mcb_roundtrip_test && /tmp/b/mc3/mc3_roundtrip_test && /tmp/b/mcb/mcb_roundtrip_test`
+  (both pass clean, no ASan/UBSan findings).
 - **SYS-W11-05** `[TODO]` `P2` — Fuzz/differential harnesses over `McbReader` and
   `Mc3XmlParser`, wired into CI. (`AUD-055`)
 - **SYS-W11-06** `[TODO]` `P2` — `clang-format` + scoped `clang-tidy` config
   (checked-in, CI-integrated — ad-hoc manual passes were already run per
   `AUD-055`'s verify note).
-- **SYS-W11-07** `[TODO]` `P2` — Package-first discovery + offline mode; pin
-  sibling repos to recorded SHAs. (`AUD-057`)
+- **SYS-W11-07** `[TODO, partial]` `P2` — Package-first discovery + offline
+  mode; pin sibling repos to recorded SHAs. (`AUD-057`) The pin/check half is
+  done: commit `d2943e3` added a non-fatal configure-time `git rev-parse`
+  check against two recorded `MESHCRAFT_*_VERIFIED_SHA` values (warns, does
+  not fail, on drift — see AUD-057's status note for why fatal was rejected).
+  Package-first discovery + offline mode (finding sibling repos via an
+  installed package/CMake `find_package` before falling back to relative-path
+  `add_subdirectory`) is still open.
 
 ### W12 — Performance baselines
 - **SYS-W12-01** `[TODO]` `P2` — Benchmark scenes + baselines (XML open/save, MCB
