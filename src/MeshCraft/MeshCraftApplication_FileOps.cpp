@@ -4,6 +4,10 @@
 #include "GltfExporter.hpp"
 #include <tiny_gltf.h>
 
+#ifdef __EMSCRIPTEN__
+#include <emscripten.h>
+#endif
+
 #include <imgui.h>
 
 #include <algorithm>
@@ -233,6 +237,36 @@ void MeshCraftApplication::exportObj() {
     objExportOpen_   = true;
 }
 
+#ifdef __EMSCRIPTEN__
+namespace {
+// STAB-0571: an Emscripten build's "export" only ever writes into the
+// in-browser-tab-only virtual MEMFS -- there's no way for the user to get
+// the bytes onto their real filesystem otherwise. Reads the file back out
+// of MEMFS and triggers a real browser download via a Blob + <a download>
+// link (works in every browser, no permission prompt, unlike the
+// Chromium-only File System Access API). Scoped to GLB only (see call
+// site) since it downloads exactly one file -- a plain .gltf export
+// writes a separate external .bin buffer (and would omit textures too)
+// that a single-file download would silently leave behind.
+EM_JS(void, meshcraftWebDownloadFile, (const char* path, const char* filename), {
+    try {
+        var data = FS.readFile(UTF8ToString(path));
+        var blob = new Blob([data], {type: 'application/octet-stream'});
+        var url = URL.createObjectURL(blob);
+        var a = document.createElement('a');
+        a.href = url;
+        a.download = UTF8ToString(filename);
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        setTimeout(function() { URL.revokeObjectURL(url); }, 1000);
+    } catch (e) {
+        console.error('[MeshCraft] web download failed:', e);
+    }
+});
+} // namespace
+#endif
+
 void MeshCraftApplication::runGltfExport(const std::string& outPath) {
     std::filesystem::path out(outPath);
     // outputFormatFromPath throws std::runtime_error for unknown extensions;
@@ -250,6 +284,16 @@ void MeshCraftApplication::runGltfExport(const std::string& outPath) {
         + " (" + std::to_string(s.uniqueMeshes) + " meshes"
         + (s.reusedMeshRefs > 0 ? ", " + std::to_string(s.reusedMeshRefs) + " reused" : "")
         + ")";
+
+#ifdef __EMSCRIPTEN__
+    if (fmt == mc3togltf::OutputFormat::GLB) {
+        meshcraftWebDownloadFile(out.string().c_str(), out.filename().string().c_str());
+        statusMsg += " — downloaded";
+    } else {
+        statusMsg += " — GLTF is multi-file, browser download not supported; use GLB";
+    }
+#endif
+
     setStatusMsg(statusMsg);
     std::cout << "[MeshCraft] " << statusMsg
                << " — " << s.objectsProcessed << " objects, "
