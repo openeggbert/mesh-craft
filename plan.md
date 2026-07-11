@@ -87,7 +87,7 @@ P1s already being fixed in git history. This session:
    could be marked DONE without also claiming its still-open portion, + 3
    more found by `SYS-W7-02`'s differential geometry test: `AUD-061`/`062`/
    `063`):
-   58 DONE, 7 TODO, 2 DEFERRED** — recompute with
+   59 DONE, 6 TODO, 2 DEFERRED** — recompute with
    `python3 test/validate_plan_consistency.py . <build-dir>` rather than
    trusting this number as time passes.
 5. Archived `plan_deep_audit.md` (all 57 of its own tasks were already
@@ -104,17 +104,11 @@ authoritative live state is always the AUD/SYS task table plus
 
 ## Priority execution queue (next up, in order)
 
-1. **AUD-061 (P2/W7)** — viewport Torus/Capsule render the wrong shape for
-   any radius ratio that doesn't match the fixed unit mesh's own baked-in
-   ratio. Newly found by the differential geometry test added for the W7-02
-   workstream item; not blocked, needs an actual design decision (per-object
-   tessellation vs. multiple unit-ratio variants vs. a documented
-   limitation) rather than a one-line fix.
-2. **AUD-062 (P3/W7)** / **AUD-063 (P3/W7)** — viewport IcoSphere ignoring
+1. **AUD-062 (P3/W7)** / **AUD-063 (P3/W7)** — viewport IcoSphere ignoring
    its own subdivision field, and a Capsule hemisphere-ring-count formula
-   mismatch below `segments=16`. Also newly found by that same test; lower
-   severity, not blocked.
-3. **AUD-052 (P1/W11)** — CI is permanently parked under `.github_/`; GitHub
+   mismatch below `segments=16`. Newly found by the differential geometry
+   test added for the W7-02 workstream item; lower severity, not blocked.
+2. **AUD-052 (P1/W11)** — CI is permanently parked under `.github_/`; GitHub
    Actions never runs. This is the root blocker for AUD-053 (a CI-hardening
    task that depends on CI actually running first) and the CI-job half of
    AUD-057 — long documented elsewhere as owner-gated (enabling Actions on
@@ -123,11 +117,11 @@ authoritative live state is always the AUD/SYS task table plus
    AUD-057's configure-time-assertion half (recording/checking the sibling
    repos' current git SHA) landed independently in commit `d2943e3` — only
    the CI-job half is still open, and it's blocked here, not actionable.
-4. **AUD-042 (P2/W8)** — Android build path forces SDL_RENDERER; blocked
+3. **AUD-042 (P2/W8)** — Android build path forces SDL_RENDERER; blocked
    (no Android NDK in this environment; also intersects CNA backend
    behavior, out of scope per CLAUDE.md's "no CNA changes without owner
    permission").
-5. Remaining `TODO` AUD-### rows by severity (AUD-053, downstream of
+4. Remaining `TODO` AUD-### rows by severity (AUD-053, downstream of
    AUD-052; AUD-057's CI-job half, same blocker), then SYS-### rows.
 
 ---
@@ -1013,11 +1007,13 @@ DONE marker without checking its cited commit/verify command.
 - **Resolved:** commit `d701df7` — verify: `ctest -R "mc3_load_policy|mc3togltf_obj_robustness"`
 - **Status note:** This was a real regression in this session's own earlier AUD-006 fix (commit `901965f`) that would have broken the exporter's single most common real-world invocation pattern for any scene referencing a texture or mesh file. Caught only by incidentally testing AUD-002 with co-located relative paths instead of the test suite's habitual absolute tempdir paths — a reminder that "all tests pass" is not the same as "the common real invocation works."
 
-### AUD-061 `[TODO]` `P2` `W7` · Viewport Torus/Capsule render the wrong shape whenever the primitive's own radius ratio differs from the fixed unit mesh's baked-in ratio
+### AUD-061 `[DONE]` `P2` `W7` · Viewport Torus/Capsule render the wrong shape whenever the primitive's own radius ratio differs from the fixed unit mesh's baked-in ratio
 - **Component:** src/MeshCraft/Renderer/SceneRenderer.cpp (drawE), include/MeshCraft/Renderer/PrimitiveTessellationAlg.hpp
 - **Evidence:** Found by `SYS-W7-02`'s differential geometry test (`differential_geometry_test`, commit `1ae9087`). The viewport builds ONE fixed unit torus mesh (`majorRadius=0.35`, `minorRadius=0.15`, baked into vertex positions by `tessellateUnitTorusAlg`, `PrimitiveTessellationAlg.hpp:195`) and reproduces every document Torus by a single non-uniform affine scale: `SceneRenderer.cpp:971` `Matrix::CreateScale({R/0.35f, r/0.15f, R/0.35f})`. This can only correctly reproduce a torus whose `majorRadius/minorRadius` ratio equals `0.35/0.15` (≈2.33) — any other ratio produces an elliptical-cross-section tube, not a true torus. The same structural bug applies to Capsule: `SceneRenderer.cpp:977` `Matrix::CreateScale({r*2.0f, (h+r*2.0f)/2.0f, r*2.0f})` scales one fixed unit capsule, correct only when the document's `radius`/`height` ratio matches the unit mesh's own — otherwise the hemisphere caps become ellipsoidal instead of spherical. The independent glTF exporter (`mc3togltf/src/MeshBuilder.cpp`) tessellates each Torus/Capsule directly from its actual parameters and is confirmed correct by the same differential test — so this is a viewport-only bug; exported files are unaffected.
-- **Outcome:** Either tessellate Torus/Capsule per-object at their actual parameters (like the exporter does, dropping the fixed-unit-mesh-plus-scale optimization for these two primitive types), or bake several unit-ratio variants and pick/interpolate the nearest, or accept the current behavior as a documented approximation for non-default ratios and surface that limitation in the UI. A pure-scale fix is not possible for a non-uniform ratio — this needs an actual design decision, not a one-line change.
-- **Tests:** `differential_geometry_test` (`test/differential_geometry_test.cpp` — check the SYS-W7-02 commits for the exact path) already has a regression assertion pinning the current (wrong) behavior for a non-default ratio; once fixed, that assertion needs updating to assert correctness instead of just pinning current behavior.
+- **Outcome:** Took the "tessellate Torus/Capsule per-object at their actual parameters" option (dropping the fixed-unit-mesh-plus-scale optimization for these two primitive types only, matching what the exporter already does). `tessellateUnitTorusAlg()`/`tessellateUnitCapsuleAlg()` (`PrimitiveTessellationAlg.hpp`) gained real `majorRadius`/`minorRadius` and `radius`/`height` parameters (default-preserving the historical unit values, so every other caller is behavior-unchanged). `SceneRenderer::getOrBuildTorusMesh()`/`getOrBuildCapsuleMesh()` build a real mesh per distinct `(LOD tier, actual radius parameters)` combination on demand and cache it in a small bounded `std::map` (same 128-entry-then-clear eviction policy as the existing CSG preview cache, `csgMeshCache_`) — a static scene redrawn every frame hits the cache after the first draw of each distinct combination, so this is not a per-frame re-tessellation regression. Both `drawObject()`'s solid-render path and `drawEmissiveObject()`'s bloom path were switched over; the emissive path additionally guards the cache lookup behind `hasEmissive` so a non-emissive Torus/Capsule doesn't pay for a cache lookup every frame. Capsule's VPNT normal generation (previously a fragile position back-classification hardcoded to radius=0.5) was generalized to exact per-ring analytic normals computed the same way `buildUnitTorus()` already does. Capsule's wire-outline construction, which used to live inside `buildUnitCapsule()` (a single shared `wireShapeCapsule_` member), was moved into `buildWireShapes()` so per-object-ratio rebuilds of the mesh can't overwrite it with non-unit dimensions.
+- **Tests:** `differential_geometry_test`'s Torus/Capsule off-ratio cases, which used to only PIN the old bugged behavior with an exact formula, now assert actual correctness: renderer volume/bbox matches both analytical ground truth and the exporter's independently-correct output at the SAME off-ratio parameters (`majorRadius=0.6/minorRadius=0.2` for Torus, `radius=0.4/height=1.5` for Capsule) — the off-ratio capsule case's renderer and exporter volumes are now bit-identical (`0.986054` both). Full `ctest` run: 115/115 passing, including all 21 render pixel-sampling tests. Real headless visual verification: `xvfb-run ... MeshCraft <scene> --screenshot out.ppm` on two fixtures with deliberately extreme off-default ratios (Torus `majorRadius=0.8/minorRadius=0.5`, ratio 1.6; Capsule `radius=0.3/height=1.8`, height ≫ 2×radius) — both rendered as plausible, undistorted shapes (a proper round donut hole and circular tube cross-section for the torus; a tall pill with visibly spherical, non-ellipsoidal hemisphere caps for the capsule), not the elliptical/ellipsoidal distortion the bug used to produce.
+- **Resolved:** commit `2cb8d25` — verify: `ctest --test-dir cmake-build-debug -R differential_geometry` (or the full suite)
+- **Status note:** `objectPolyStats()`'s Torus/Capsule vertex/triangle counts still reference the fixed full-quality `unitTorus_`/`unitCapsule_` members directly rather than the per-object cache — this remains correct because ring/tube/segment COUNTS are identical across all ratio variants at a given LOD tier (only vertex positions differ, not counts), so no change was needed there. Not fixed as part of this task (out of scope, unrelated to AUD-061's shape-correctness finding): `drawObjectWireframe()`'s Torus/Capsule selection-outline wireframe still scales the fixed-ratio `wireShapeTorus_`/`wireShapeCapsule_` non-uniformly by the object's actual dimensions — the same structural issue as the fixed bug, but only affects the thin selection-highlight outline, not the solid rendered shape, and was not covered by the differential test's evidence for this finding.
 
 ### AUD-062 `[TODO]` `P3` `W7` · Viewport IcoSphere ignores the primitive's own `segments`/subdivision field — always renders at a fixed subdivision level
 - **Component:** src/MeshCraft/Renderer/SceneRenderer.cpp, src/MeshCraft/Renderer/SceneRenderer_Builders.cpp
