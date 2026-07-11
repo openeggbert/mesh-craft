@@ -64,6 +64,63 @@ static int attrCount(const XMLElement* el, const char* name, int def,
     return v;
 }
 
+// AUD-059: kMaxTessellation bounds any SINGLE field, but a document with many
+// objects each individually under that cap can still sum to an enormous
+// aggregate allocation (e.g. 100,000 <sphere segments="4096"/> objects -- each
+// legal on its own -- request ~8.6e11 vertices combined). This tracks running
+// totals across the WHOLE document being parsed and rejects before the
+// corresponding generation would be attempted downstream (mc3togltf's
+// buildPrimitive/buildExtrude), not after allocating.
+//
+// thread_local, not a parameter threaded through every parse* function,
+// because parseObject/parseChildren/parsePrimitive/parseCrossSection/
+// parseExtrude are a large, already-recursive call graph with no existing
+// context-object plumbing; adding one is a much larger refactor than this
+// fix's scope justifies. reset() is called once at the top of
+// buildDocumentFromRoot(), so nested <include> parses (which reuse the same
+// call graph) correctly charge against the SAME top-level document's budget,
+// and a later unrelated parse (e.g. the next test in the same process) starts
+// fresh.
+struct DocumentBudget {
+    long long totalObjects = 0;
+    long long totalTessellationWeight = 0; // sum of every segments/sides/subdivisions value
+
+    // Generous enough for any real scene (the largest checked-in stress
+    // fixture sums to a few thousand) while still bounding the pathological
+    // many-objects-near-the-per-field-cap case to a small multiple of that cap.
+    static constexpr long long kMaxTotalObjects = 100'000;
+    static constexpr long long kMaxTotalTessellationWeight = 500'000;
+
+    void chargeObject() {
+        if (++totalObjects > kMaxTotalObjects)
+            throw std::runtime_error(
+                "MC3: document exceeds the total object budget (" +
+                std::to_string(kMaxTotalObjects) + ") -- rejected before allocating"
+                " geometry for all of them");
+    }
+    void chargeTessellation(int weight) {
+        totalTessellationWeight += weight;
+        if (totalTessellationWeight > kMaxTotalTessellationWeight)
+            throw std::runtime_error(
+                "MC3: document's total tessellation complexity (sum of all "
+                "segments/sides/subdivisions values, " +
+                std::to_string(totalTessellationWeight) + ") exceeds the budget (" +
+                std::to_string(kMaxTotalTessellationWeight) +
+                ") -- rejected before allocating geometry for all of it");
+    }
+    void reset() { totalObjects = 0; totalTessellationWeight = 0; }
+};
+static thread_local DocumentBudget g_budget;
+
+// Wraps attrCount() and also charges the result against the document-wide
+// tessellation budget.
+static int attrCountBudgeted(const XMLElement* el, const char* name, int def,
+                             int minv, int maxv = kMaxTessellation) {
+    int v = attrCount(el, name, def, minv, maxv);
+    g_budget.chargeTessellation(v);
+    return v;
+}
+
 static bool attrB(const XMLElement* el, const char* name, bool def = false) {
     const char* v = el->Attribute(name);
     if (!v) return def;
@@ -130,8 +187,8 @@ static Mc3CrossSection parseCrossSection(const XMLElement* el) {
     cs.height      = attrF(el, "height",       0.3f);
     cs.radius      = attrF(el, "radius",       0.1f);
     cs.innerRadius = attrF(el, "inner_radius", 0.0f);
-    cs.sides       = attrCount(el, "sides",    6, 3);
-    cs.segments    = attrCount(el, "segments", 32, 1);
+    cs.sides       = attrCountBudgeted(el, "sides",    6, 3);
+    cs.segments    = attrCountBudgeted(el, "segments", 32, 1);
     for (const XMLElement* p = el->FirstChildElement("point"); p; p = p->NextSiblingElement("point")) {
         Mc3CrossSection::Point2D pt;
         pt.x = attrF(p, "x", 0);
@@ -176,7 +233,7 @@ static std::optional<Mc3Extrude> parseExtrude(const XMLElement* el) {
     ext.crossSection = parseCrossSection(cs);
     ext.path         = parsePath(pt);
     ext.twist    = attrF(el, "twist",    0.0f);
-    ext.segments = attrCount(el, "segments", 32, 1);
+    ext.segments = attrCountBudgeted(el, "segments", 32, 1);
     ext.smooth   = attrB(el, "smooth",   true);
     ext.caps     = attrB(el, "caps",     true);
     return ext;
@@ -231,7 +288,7 @@ static Mc3Primitive parsePrimitive(const XMLElement* el, ObjectType type) {
     // Sphere: buildIcoSphere() internally maps it to min(4, segments/8)
     // subdivisions, so its actual triangle count is already bounded there — the
     // clamp here just stops the raw integer from being absurd.
-    p.segments      = attrCount(el, "segments", type == ObjectType::IcoSphere ? 2 : 32, 0);
+    p.segments      = attrCountBudgeted(el, "segments", type == ObjectType::IcoSphere ? 2 : 32, 0);
     p.axis          = attr (el, "axis",           "y");
     p.majorRadius   = attrF(el, "major_radius",   0.35f);
     if (type == ObjectType::Disk) {
@@ -242,8 +299,8 @@ static Mc3Primitive parsePrimitive(const XMLElement* el, ObjectType type) {
     } else {
         p.minorRadius = attrF(el, "minor_radius", 0.15f);
     }
-    p.subdivisionsX = attrCount(el, "subdivisions_x", 4, 1);
-    p.subdivisionsZ = attrCount(el, "subdivisions_z", 4, 1);
+    p.subdivisionsX = attrCountBudgeted(el, "subdivisions_x", 4, 1);
+    p.subdivisionsZ = attrCountBudgeted(el, "subdivisions_z", 4, 1);
     return p;
 }
 
@@ -299,6 +356,7 @@ static std::shared_ptr<Mc3Object> parseObject(const XMLElement* el) {
     if (!el) return nullptr;
     std::string tag = el->Name();
     if (tag == "state" || tag == "deform") return nullptr; // handled by parent parsers
+    g_budget.chargeObject();
     auto obj = std::make_shared<Mc3Object>();
 
     if (tag == "box") {
@@ -983,6 +1041,14 @@ static void processIncludes(const XMLElement* root, Mc3Document& doc,
 static Mc3Document buildDocumentFromRoot(const XMLElement* root,
                                          const std::filesystem::path& selfPath,
                                          const Mc3LoadPolicy& policy) {
+    // AUD-059: reset the document-wide budget once per top-level parse (NOT
+    // once per <include> -- mergeInclude() parses included files' definitions/
+    // materials/textures directly via parseDefinitions() etc., without calling
+    // back into buildDocumentFromRoot(), so an included file's objects/
+    // primitives correctly accumulate against this same top-level budget
+    // rather than resetting it and escaping the cap).
+    g_budget.reset();
+
     Mc3Document doc;
     doc.sourcePath       = selfPath.parent_path();
     doc.version          = attr(root, "version", "0.3");
