@@ -26,6 +26,47 @@ if(TARGET tinyxml2 AND NOT TARGET tinyxml2::tinyxml2)
 endif()
 
 # -----------------------------------------------------------------------------
+# SYS-W11-05: opt-in genuine libFuzzer corpus-driven harness (mc3_xml_libfuzzer)
+# over Mc3XmlParser, complementing the always-on, fast, seeded-mutation
+# mc3_xml_mutation_fuzz_test CTest target below. OFF by default; requires
+# Clang (libFuzzer/-fsanitize=fuzzer is a Clang/LLVM feature -- this
+# environment has Debian clang 19.1.7, verified working). Self-contained to
+# this file so enabling it never reaches ../cna or the rest of the MeshCraft
+# tree, whether mc3/ is configured standalone (as CI's per-component matrix
+# already does) or as a root add_subdirectory(mc3): add_link_options() here
+# is directory-scoped and only applies to targets defined in THIS file.
+#
+#   cmake -S mc3 -B <dir> -DCMAKE_CXX_COMPILER=clang++ -DMESHCRAFT_FUZZ=ON
+#   cmake --build <dir> --target mc3_xml_libfuzzer
+#   <dir>/mc3_xml_libfuzzer -max_total_time=60 -seed=1
+# -----------------------------------------------------------------------------
+option(MESHCRAFT_FUZZ
+       "Build the opt-in libFuzzer corpus-driven harness (mc3_xml_libfuzzer) over Mc3XmlParser. Requires Clang."
+       OFF)
+if(MESHCRAFT_FUZZ AND NOT CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+    message(WARNING "MESHCRAFT_FUZZ requires Clang (libFuzzer); "
+                    "CMAKE_CXX_COMPILER_ID is '${CMAKE_CXX_COMPILER_ID}' -- "
+                    "skipping mc3_xml_libfuzzer. Reconfigure with "
+                    "-DCMAKE_CXX_COMPILER=clang++ to build it.")
+    set(MESHCRAFT_FUZZ OFF)
+endif()
+if(MESHCRAFT_FUZZ)
+    # fuzzer-no-link: instruments Mc3's own object code with coverage
+    # counters + ASan/UBSan (so libFuzzer's coverage-guided mutation
+    # actually sees INSIDE the parser, not just the harness translation
+    # unit) without pulling in libFuzzer's own main -- that only happens at
+    # the harness executable's link step, via the full -fsanitize=fuzzer
+    # below, mirroring how MESHCRAFT_SANITIZE separates compile-time
+    # instrumentation from the one global link-time runtime pull-in (see
+    # that option's comment above for the same "undefined reference to
+    # __asan_*" pitfall this avoids). tinyxml2 (fetched dependency) is
+    # deliberately left uninstrumented, same rationale as MESHCRAFT_SANITIZE
+    # excluding vendored/sibling code.
+    set(MESHCRAFT_FUZZ_COMPILE_OPTIONS -fsanitize=fuzzer-no-link,address,undefined -fno-omit-frame-pointer -g)
+    add_link_options(-fsanitize=address,undefined)
+endif()
+
+# -----------------------------------------------------------------------------
 # Mc3 — static library (MC3 model source format + XML I/O)
 # -----------------------------------------------------------------------------
 
@@ -58,6 +99,12 @@ target_compile_options(Mc3 PRIVATE -Wall -Wextra)
 # (guarded, since mc3/ can also be configured standalone).
 if(COMMAND meshcraft_apply_sanitize)
     meshcraft_apply_sanitize(Mc3)
+endif()
+
+# SYS-W11-05: see the MESHCRAFT_FUZZ block above -- instruments Mc3's own
+# object code for libFuzzer coverage-guided fuzzing when opted in.
+if(MESHCRAFT_FUZZ)
+    target_compile_options(Mc3 PRIVATE ${MESHCRAFT_FUZZ_COMPILE_OPTIONS})
 endif()
 
 # -----------------------------------------------------------------------------
@@ -158,6 +205,39 @@ if(BUILD_TESTING)
     target_link_libraries(mc3_autosave_recovery_test PRIVATE Mc3)
     add_test(NAME mc3_autosave_recovery COMMAND mc3_autosave_recovery_test)
     set_tests_properties(mc3_autosave_recovery PROPERTIES TIMEOUT 15 LABELS "format")
+
+    # SYS-W11-05: property-based (randomized, seeded) round-trip test --
+    # generates many random documents (RandomMc3DocumentGenerator.hpp) and
+    # asserts XML round-trip fidelity, complementing mc3_roundtrip's fixed-
+    # fixture coverage with random parameter-value/feature combinations.
+    add_executable(mc3_random_roundtrip_test test/random_roundtrip_test.cpp)
+    target_link_libraries(mc3_random_roundtrip_test PRIVATE Mc3)
+    add_test(NAME mc3_random_roundtrip COMMAND mc3_random_roundtrip_test)
+    set_tests_properties(mc3_random_roundtrip PROPERTIES TIMEOUT 30 LABELS "format")
+
+    # SYS-W11-05: seeded mutation/random-byte fuzz harness over
+    # Mc3XmlParser (via Mc3Document::loadFromString) -- the primary gap this
+    # task exists to close (MCB already had mcb_corruption_test's byte-fuzz;
+    # the XML parser had none). See the file's header comment for the two
+    # techniques used and how this relates to the opt-in libFuzzer target
+    # below.
+    add_executable(mc3_xml_mutation_fuzz_test test/xml_mutation_fuzz_test.cpp)
+    target_link_libraries(mc3_xml_mutation_fuzz_test PRIVATE Mc3)
+    add_test(NAME mc3_xml_mutation_fuzz COMMAND mc3_xml_mutation_fuzz_test)
+    set_tests_properties(mc3_xml_mutation_fuzz PROPERTIES TIMEOUT 30 LABELS "format")
+
+    # SYS-W11-05: opt-in libFuzzer harness (see the MESHCRAFT_FUZZ block near
+    # the top of this file). Deliberately NOT registered as a ctest test --
+    # it's a corpus-driven deep-fuzzing target meant for longer, occasional/
+    # manual or CI-scheduled runs (`-max_total_time=...`), not a fast
+    # per-commit gate; and it only builds under Clang, whereas ctest runs
+    # here are expected to work under any configured compiler.
+    if(MESHCRAFT_FUZZ)
+        add_executable(mc3_xml_libfuzzer test/fuzz/mc3_xml_libfuzzer.cpp)
+        target_link_libraries(mc3_xml_libfuzzer PRIVATE Mc3)
+        target_compile_options(mc3_xml_libfuzzer PRIVATE -fsanitize=fuzzer,address,undefined -fno-omit-frame-pointer -g)
+        target_link_options(mc3_xml_libfuzzer PRIVATE -fsanitize=fuzzer,address,undefined)
+    endif()
 
     # editor_commands_test pulls in MeshCraft/EditorAlgorithms.hpp from the
     # MeshCraft editor's public include dir, which lives at the repo root
