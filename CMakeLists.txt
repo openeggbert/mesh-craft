@@ -625,6 +625,20 @@ if(MESH_CRAFT_BUILD_TESTING AND UNIX AND NOT ANDROID AND NOT EMSCRIPTEN)
                          "${CMAKE_CURRENT_SOURCE_DIR}"
                          "${CMAKE_BINARY_DIR}")
         set_tests_properties(plan_consistency PROPERTIES TIMEOUT 30 LABELS "lint")
+
+        # SYS-W5-01: machine-readable cross-layer MC3 field matrix. Extracts
+        # field/attribute names from XSD, the C++ model, the XML reader/
+        # writer, and the MCB reader/writer, and CI-fails if a field is
+        # present in >=2 of those layers but missing from another (the
+        # "added a field to the model but forgot the MCB writer" bug class).
+        # See test/field_matrix.py's own docstring for exact scope,
+        # normalization rules, and the allowlist mechanism for documented
+        # intentional asymmetries.
+        add_test(NAME field_matrix
+                 COMMAND "${PYTHON3_FOR_LINT}"
+                         "${CMAKE_CURRENT_SOURCE_DIR}/test/field_matrix.py"
+                         "${CMAKE_CURRENT_SOURCE_DIR}")
+        set_tests_properties(field_matrix PROPERTIES TIMEOUT 30 LABELS "lint")
     endif()
 
     add_test(
