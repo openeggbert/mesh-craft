@@ -393,7 +393,7 @@ static int addAccessorIndices(tinygltf::Model& model,
 // assuming PNG for every embedded texture -- an embedded JPEG previously
 // got mistagged as image/png, which spec-compliant loaders fail to decode
 // (JPEG bytes parsed as PNG). glTF core spec only mandates PNG/JPEG support.
-static const char* detectImageMimeType(const std::vector<unsigned char>& bytes) {
+static const char* detectImageMimeType(const std::vector<unsigned char>& bytes, int& warningCount) {
     static constexpr unsigned char kPngMagic[]  = {0x89, 'P', 'N', 'G', '\r', '\n', 0x1A, '\n'};
     static constexpr unsigned char kJpegMagic[] = {0xFF, 0xD8, 0xFF};
     if (bytes.size() >= sizeof(kPngMagic) &&
@@ -406,16 +406,24 @@ static const char* detectImageMimeType(const std::vector<unsigned char>& bytes) 
     // no mimeType at all, but this is now a documented fallback, not silent.
     std::cerr << "[mc3togltf] Warning: could not detect image format from "
                  "magic bytes, defaulting to image/png (may be wrong).\n";
+    ++warningCount;
     return "image/png";
 }
 
+// AUD-026: `warningCount` (ExportCtx::stats.warnings at the call site) must
+// be incremented at every "Warning:" print in this file -- otherwise
+// `--stats` reports a "Warnings" total that undercounts what was actually
+// printed to stderr, misrepresenting export health. These free functions
+// don't take ExportCtx (most are reused/testable without one), so the
+// count is threaded through as a plain reference instead.
 static std::unordered_map<std::string, int>
 buildTextures(tinygltf::Model& model,
               const std::map<std::string, Mc3Texture>& textures,
               const std::filesystem::path& basePath,
               const std::filesystem::path& outDir,
               bool embedImages,
-              bool allowExternalResources)
+              bool allowExternalResources,
+              int& warningCount)
 {
     std::unordered_map<std::string, int> texIdx;
     for (const auto& [name, tex] : textures) {
@@ -453,11 +461,12 @@ buildTextures(tinygltf::Model& model,
                     std::istreambuf_iterator<char>(ifs),
                     std::istreambuf_iterator<char>());
                 img.as_is    = true;                          // already-encoded bytes
-                img.mimeType = detectImageMimeType(img.image); // STAB-0676
+                img.mimeType = detectImageMimeType(img.image, warningCount); // STAB-0676
             } else {
                 img.uri = tex.uri;
                 std::cerr << "[mc3togltf] Warning: texture not found for embedding: "
                           << imgPath << "\n";
+                ++warningCount;
             }
         } else {
             // GLTF: STAB-0677 -- tex.uri is relative to basePath (the
@@ -503,7 +512,8 @@ buildTextures(tinygltf::Model& model,
 static int buildMaterial(tinygltf::Model& model,
                          const Mc3Material& mat,
                          const std::unordered_map<std::string, int>& texIdx,
-                         const std::map<std::string, Mc3SvgTexture>& svgTextures)
+                         const std::map<std::string, Mc3SvgTexture>& svgTextures,
+                         int& warningCount)
 {
     tinygltf::Material m;
     m.name = mat.name;
@@ -512,10 +522,12 @@ static int buildMaterial(tinygltf::Model& model,
     // doc.svgTextures at all), so a material referencing one resolves to
     // nothing in texIdx. Name the reason instead of silently dropping it.
     auto warnIfUnresolvedSvg = [&](const std::string& texRef, const char* slot) {
-        if (svgTextures.count(texRef))
+        if (svgTextures.count(texRef)) {
             std::cerr << "Warning: material '" << mat.name << "' references SVG texture '"
                       << texRef << "' as " << slot
                       << " — SVG rasterization is not implemented, texture skipped\n";
+            ++warningCount;
+        }
     };
 
     auto& pbr = m.pbrMetallicRoughness;
@@ -798,6 +810,7 @@ static int buildNode(ExportCtx& ctx, const Mc3Object& obj, int depth)
             // above), which does warn.
             std::cerr << "Warning: object '" << obj.name << "' references "
                          "unknown material '" << matName << "' — exported without a material.\n";
+            ctx.stats.warnings++;
         }
     }
 
@@ -934,6 +947,17 @@ static int buildNode(ExportCtx& ctx, const Mc3Object& obj, int depth)
             extras["collision"] = tinygltf::Value(obj.collision);
             hasExtras = true;
         }
+        // AUD-029: obj.metadata is an opaque string->string pass-through
+        // (mirrors <metadata> in mc3/mcb) that survives every other
+        // round-trip but was never read here, unlike tags/collision --
+        // silently dropped on glTF export with no warning.
+        if (!obj.metadata.empty()) {
+            tinygltf::Value::Object metaObj;
+            for (const auto& [key, value] : obj.metadata)
+                metaObj[key] = tinygltf::Value(value);
+            extras["metadata"] = tinygltf::Value(metaObj);
+            hasExtras = true;
+        }
         if (hasExtras)
             node.extras = tinygltf::Value(extras);
     }
@@ -956,7 +980,8 @@ static int buildNode(ExportCtx& ctx, const Mc3Object& obj, int depth)
 static void addLights(tinygltf::Model& model,
                       const std::vector<Mc3Light>& lights,
                       std::vector<int>& outLightNodeIndices,
-                      float unitScale)
+                      float unitScale,
+                      int& warningCount)
 {
     if (lights.empty()) return;
 
@@ -969,6 +994,7 @@ static void addLights(tinygltf::Model& model,
             // CSG approximate-mode "can't fully represent this" pattern.
             std::cerr << "[mc3togltf] Warning: ambient light '" << light.name
                       << "' has no glTF equivalent, omitted from export.\n";
+            ++warningCount;
             continue;
         }
 
@@ -1192,7 +1218,8 @@ static void exportAnimations(
     const std::unordered_map<std::string, Mc3Transform>& baseTransforms,
     float unitScale,
     bool rotationIsRadians,
-    const std::string& eulerOrder)
+    const std::string& eulerOrder,
+    int& warningCount)
 {
     if (actions.empty()) return;
 
@@ -1222,6 +1249,7 @@ static void exportAnimations(
                               << "': channel property '" << animatedPropertyName(ch.property)
                               << "' on target '" << ch.targetObject
                               << "' has no glTF node-transform equivalent — channel skipped.\n";
+                    ++warningCount;
                     continue;
             }
             auto& pg = groups[ch.targetObject][path];
@@ -1244,6 +1272,7 @@ static void exportAnimations(
                           << "': channel target '" << objName
                           << "' does not match any exported node — channels "
                              "for this target skipped.\n";
+                ++warningCount;
                 continue;
             }
             int nodeIdx = nodeIt->second;
@@ -1288,7 +1317,41 @@ static void exportAnimations(
                 // resampling (denser where curvature/velocity is high) to
                 // meaningfully improve on a fixed rate, a real but separate
                 // feature, not attempted in this pass.
-                if (hasCubic) {
+                // AUD-028: a plain (non-cubic) LINEAR rotation channel is
+                // exported using only its original keyframe times. glTF's
+                // LINEAR interpolation for the "rotation" path is spherical
+                // linear interpolation (slerp) between the per-keyframe
+                // quaternions, which always takes the shortest arc -- so a
+                // euler component that sweeps more than 180 degrees between
+                // two consecutive raw keyframes (e.g. 0->270) is reproduced
+                // as the -90-degree short path instead of the authored
+                // sweep. Detect that case and reuse the same dense-sampling
+                // fix already used for cubic bezier below: baking extra
+                // LINEAR samples in between via evaluateChannel() (the same
+                // function the live editor uses) makes consecutive samples'
+                // quaternion delta small enough that slerp tracks the
+                // authored euler path instead of re-pathing it. STEP
+                // channels are exempt -- they never interpolate, so the
+                // shortest-arc issue does not apply.
+                bool needsDenseRotation = false;
+                if (path == "rotation" && !hasCubic && !allStep) {
+                    std::vector<float> rawTimes(timeSet.begin(), timeSet.end());
+                    constexpr float kPi = 3.14159265358979323846f;
+                    const float fullTurn = rotationIsRadians ? (2.0f * kPi) : 360.0f;
+                    for (size_t i = 1; i < rawTimes.size() && !needsDenseRotation; ++i) {
+                        for (int c = 0; c < 3; ++c) {
+                            if (!pg.ch[c]) continue;
+                            float v0 = evaluateChannel(*pg.ch[c], rawTimes[i - 1]);
+                            float v1 = evaluateChannel(*pg.ch[c], rawTimes[i]);
+                            if (std::fabs(v1 - v0) > fullTurn * 0.5f) {
+                                needsDenseRotation = true;
+                                break;
+                            }
+                        }
+                    }
+                }
+
+                if (hasCubic || needsDenseRotation) {
                     float minT = *timeSet.begin(), maxT = *timeSet.rbegin();
                     constexpr float kBezierBakeSampleRateHz = 30.0f;
                     for (float t = minT; t <= maxT + 1e-5f; t += 1.0f / kBezierBakeSampleRateHz)
@@ -1328,6 +1391,20 @@ static void exportAnimations(
                     for (float t : times) {
                         for (int i = 0; i < 3; ++i) {
                             float v = pg.ch[i] ? evaluateChannel(*pg.ch[i], t) : base[i];
+                            // AUD-027: the static pose's node.translation is
+                            // position + pivot (buildNode above), but
+                            // evaluateChannel()/base[] here only ever know
+                            // about position -- baseTransforms stores the
+                            // pivot-free Mc3Transform, and animated
+                            // keyframes carry raw position values, never
+                            // position+pivot. Left unadjusted, playing any
+                            // translation channel overwrote the node's
+                            // static translation with a pivot-free value,
+                            // snapping the object by -pivot the instant the
+                            // animation started. Add the same pivot offset
+                            // the static pose uses so animated and static
+                            // poses agree.
+                            if (path == "translation") v += baseT.pivot[i];
                             valueData.push_back(v * tScale);
                         }
                     }
@@ -1464,16 +1541,22 @@ void GltfExporter::exportDocument(const Mc3Document& doc,
         if (!ae.empty()) model.asset.extras = tinygltf::Value(ae);
     }
 
+    // AUD-026: buildTextures/buildMaterial run before ExportCtx exists (its
+    // matNameToIdx is built FROM buildMaterial's output), so their warnings
+    // can't be counted into ctx.stats.warnings directly -- accumulate into a
+    // local first and fold it in right after ctx is constructed below.
+    int preCtxWarnings = 0;
+
     // Textures (embedImages=true for GLB so images are embedded as data URIs)
     bool embedImagesNow = (format == OutputFormat::GLB);
     auto texIdx = buildTextures(model, doc.textures, doc.sourcePath,
                                  outputPath.parent_path(), embedImagesNow,
-                                 allowExternalResources);
+                                 allowExternalResources, preCtxWarnings);
 
     // Materials
     std::unordered_map<std::string, int> matNameToIdx;
     for (const auto& [name, mat] : doc.materials) {
-        int idx = buildMaterial(model, mat, texIdx, doc.svgTextures);
+        int idx = buildMaterial(model, mat, texIdx, doc.svgTextures, preCtxWarnings);
         matNameToIdx[name] = idx;
     }
 
@@ -1487,6 +1570,7 @@ void GltfExporter::exportDocument(const Mc3Document& doc,
                   allowApproximateCSG, allowExternalResources,
                   doc.rotationUnits == "radians", doc.eulerOrder,
                   {}, {}, {}};
+    ctx.stats.warnings += preCtxWarnings;
     for (const auto& objPtr : doc.objects) {
         if (!objPtr) continue;
         int nodeIdx = buildNode(ctx, *objPtr);
@@ -1495,7 +1579,7 @@ void GltfExporter::exportDocument(const Mc3Document& doc,
 
     // Lights
     std::vector<int> lightNodes;
-    addLights(model, doc.lights, lightNodes, ctx.unitScale);
+    addLights(model, doc.lights, lightNodes, ctx.unitScale, ctx.stats.warnings);
     for (int i : lightNodes) scene.nodes.push_back(i);
 
     // Cameras
@@ -1521,12 +1605,13 @@ void GltfExporter::exportDocument(const Mc3Document& doc,
                 std::cerr << "[mc3togltf] Warning: duplicate node name '" << name
                           << "' -- animation channels targeting this name will "
                              "only affect the last node with that name.\n";
+                ctx.stats.warnings++;
             }
             nodeNameMap[name] = i;
         }
 
         exportAnimations(model, doc.actions, nodeNameMap, baseTransforms, ctx.unitScale,
-                          ctx.rotationIsRadians, ctx.eulerOrder);
+                          ctx.rotationIsRadians, ctx.eulerOrder, ctx.stats.warnings);
     }
 
     // Environment → scene extras
