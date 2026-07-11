@@ -97,8 +97,59 @@ static void testCameraRanges() {
     }
 }
 
+// ---------------------------------------------------------------------------
+// Material: roughness/metallic/occlusion_strength/alpha_cutoff and
+// base_color's alpha (opacity) channel all in [0, 1] (glTF PBR convention).
+// ---------------------------------------------------------------------------
+static void testMaterialRanges() {
+    Mc3Document doc = load(
+        "<mc3 version=\"0.3\" model=\"mat\">\n"
+        "  <materials>\n"
+        "    <material id=\"bad\" roughness=\"-3\" metallic=\"5\"\n"
+        "              occlusion_strength=\"2\" alpha_cutoff=\"-1\">\n"
+        "      <base_color>0.5 0.5 0.5 2.0</base_color>\n"
+        "    </material>\n"
+        "    <material id=\"ok\" roughness=\"0.2\" metallic=\"0.8\"\n"
+        "              occlusion_strength=\"0.6\" alpha_cutoff=\"0.5\">\n"
+        "      <base_color>0.8 0.1 0.1 0.9</base_color>\n"
+        "    </material>\n"
+        "  </materials>\n"
+        "</mc3>\n");
+
+    check(doc.materials.size() == 2, "2 materials parsed");
+
+    auto it = doc.materials.find("bad");
+    check(it != doc.materials.end(), "material 'bad' found");
+    if (it != doc.materials.end()) {
+        const auto& m = it->second;
+        check(m.roughness >= 0.0f && m.roughness <= 1.0f,
+              "roughness=-3 clamped into [0,1]: got " + std::to_string(m.roughness));
+        check(m.metallic >= 0.0f && m.metallic <= 1.0f,
+              "metallic=5 clamped into [0,1]: got " + std::to_string(m.metallic));
+        check(m.occlusionStrength >= 0.0f && m.occlusionStrength <= 1.0f,
+              "occlusion_strength=2 clamped into [0,1]: got " + std::to_string(m.occlusionStrength));
+        check(m.alphaCutoff >= 0.0f && m.alphaCutoff <= 1.0f,
+              "alpha_cutoff=-1 clamped into [0,1]: got " + std::to_string(m.alphaCutoff));
+        check(m.baseColor[3] >= 0.0f && m.baseColor[3] <= 1.0f,
+              "base_color alpha=2.0 clamped into [0,1]: got " + std::to_string(m.baseColor[3]));
+        check(m.baseColor[0] == 0.5f, "base_color RGB left untouched (not an opacity field)");
+    }
+
+    it = doc.materials.find("ok");
+    check(it != doc.materials.end(), "material 'ok' found");
+    if (it != doc.materials.end()) {
+        const auto& m = it->second;
+        check(m.roughness == 0.2f, "legitimate roughness=0.2 preserved unchanged");
+        check(m.metallic == 0.8f, "legitimate metallic=0.8 preserved unchanged");
+        check(m.occlusionStrength == 0.6f, "legitimate occlusion_strength=0.6 preserved unchanged");
+        check(m.alphaCutoff == 0.5f, "legitimate alpha_cutoff=0.5 preserved unchanged");
+        check(m.baseColor[3] == 0.9f, "legitimate base_color alpha=0.9 preserved unchanged");
+    }
+}
+
 int main() {
     testCameraRanges();
+    testMaterialRanges();
 
     if (failures == 0) { std::cout << "All numeric-range tests passed.\n"; return 0; }
     std::cerr << failures << " numeric-range test(s) failed.\n";

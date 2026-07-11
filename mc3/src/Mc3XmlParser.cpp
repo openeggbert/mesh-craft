@@ -810,20 +810,42 @@ static void parseTextures(const XMLElement* el, Mc3Document& doc) {
     }
 }
 
+// SYS-W1-02: material field ranges (documented in MC3_FORMAT.md's Materials
+// section). roughness/metallic/occlusion_strength/alpha_cutoff, and the
+// base_color alpha (opacity) channel, all follow glTF PBR's canonical [0,1]
+// convention -- every consumer (SceneRenderer's live PBR shading,
+// mc3togltf's glTF pbrMetallicRoughness export) assumes the convention
+// holds, so an out-of-range value like roughness=-3 or metallic=5 wouldn't
+// just look "unusually shiny" downstream, it would map to fundamentally
+// undefined shader behavior. Clamped, not rejected -- same authoring-mistake
+// judgment call as the camera ranges above.
+//
+// Deliberately NOT applied to base_color/emissive_color's RGB channels or
+// normal_scale: emissive_color is explicitly documented (MC3_FORMAT.md) as
+// allowing HDR values above 1.0 for bloom/glow, base_color's RGB has no
+// established need to reject e.g. a deliberately-authored >1.0 multiplier in
+// a non-physically-based art style, and normal_scale is a signed multiplier
+// (glTF permits negative values to invert a normal map's effect).
+static constexpr float kMinMaterialUnit = 0.0f;
+static constexpr float kMaxMaterialUnit = 1.0f;
+
 static void parseMaterials(const XMLElement* el, Mc3Document& doc) {
     for (const XMLElement* c = el->FirstChildElement("material"); c;
          c = c->NextSiblingElement("material")) {
         Mc3Material mat;
         std::string id = attr(c, "id");
         mat.name        = id;
-        mat.roughness   = attrF(c, "roughness",    0.5f);
-        mat.metallic    = attrF(c, "metallic",     0.0f);
+        mat.roughness   = clampRange(c, "roughness", attrF(c, "roughness", 0.5f),
+                                      kMinMaterialUnit, kMaxMaterialUnit);
+        mat.metallic    = clampRange(c, "metallic", attrF(c, "metallic", 0.0f),
+                                      kMinMaterialUnit, kMaxMaterialUnit);
         mat.alphaMode   = attr (c, "alpha_mode",  "opaque");
         mat.doubleSided = attrB(c, "double_sided", false);
         std::string bcText = childText(c, "base_color");
         if (!bcText.empty()) {
             auto v = parseVec4(bcText, {0.8f,0.8f,0.8f,1.0f});
-            mat.baseColor = {v[0], v[1], v[2], v[3]};
+            float alpha = clampRange(c, "base_color", v[3], kMinMaterialUnit, kMaxMaterialUnit);
+            mat.baseColor = {v[0], v[1], v[2], alpha};
         }
         mat.baseColorTexture         = childText(c, "base_color_texture");
         mat.metallicRoughnessTexture = childText(c, "metallic_roughness_texture");
@@ -831,8 +853,11 @@ static void parseMaterials(const XMLElement* el, Mc3Document& doc) {
         mat.occlusionTexture         = childText(c, "occlusion_texture");
         mat.emissiveTexture          = childText(c, "emissive_texture");
         mat.normalScale       = attrF(c, "normal_scale",      1.0f);
-        mat.occlusionStrength = attrF(c, "occlusion_strength", 1.0f);
-        mat.alphaCutoff       = attrF(c, "alpha_cutoff",      0.5f);
+        mat.occlusionStrength = clampRange(c, "occlusion_strength",
+                                            attrF(c, "occlusion_strength", 1.0f),
+                                            kMinMaterialUnit, kMaxMaterialUnit);
+        mat.alphaCutoff       = clampRange(c, "alpha_cutoff", attrF(c, "alpha_cutoff", 0.5f),
+                                            kMinMaterialUnit, kMaxMaterialUnit);
         std::string ec = childText(c, "emissive_color");
         if (!ec.empty()) {
             auto v = parseVec3(ec);
