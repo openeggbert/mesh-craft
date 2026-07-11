@@ -16,6 +16,35 @@ if(NOT TARGET Mc3)
     add_subdirectory("${_mc3_dir}" mc3_dep)
 endif()
 
+# -----------------------------------------------------------------------------
+# SYS-W11-05: opt-in genuine libFuzzer corpus-driven harness (mcb_libfuzzer)
+# over McbReader, mirroring mc3/CMakeLists.txt's MESHCRAFT_FUZZ block (see
+# there for full rationale -- same option, same reasoning, applied here to
+# the Mcb static library instead of Mc3). This option() call is a no-op when
+# mcb is pulled in via the root project or when mc3's own CMakeLists.txt
+# already registered it above (option() never overrides an existing cache
+# value); it exists here too purely so a from-scratch standalone `mcb`
+# configure is self-contained and doesn't depend on reading mc3's file to
+# know this flag exists. add_link_options() here is directory-scoped to
+# this file (Mcb + mcb's own test executables below) -- it does NOT
+# reach back into mc3's targets, which mc3/CMakeLists.txt already handled
+# for itself above.
+# -----------------------------------------------------------------------------
+option(MESHCRAFT_FUZZ
+       "Build the opt-in libFuzzer corpus-driven harness (mcb_libfuzzer) over McbReader. Requires Clang."
+       OFF)
+if(MESHCRAFT_FUZZ AND NOT CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+    message(WARNING "MESHCRAFT_FUZZ requires Clang (libFuzzer); "
+                    "CMAKE_CXX_COMPILER_ID is '${CMAKE_CXX_COMPILER_ID}' -- "
+                    "skipping mcb_libfuzzer. Reconfigure with "
+                    "-DCMAKE_CXX_COMPILER=clang++ to build it.")
+    set(MESHCRAFT_FUZZ OFF)
+endif()
+if(MESHCRAFT_FUZZ)
+    set(MESHCRAFT_FUZZ_COMPILE_OPTIONS -fsanitize=fuzzer-no-link,address,undefined -fno-omit-frame-pointer -g)
+    add_link_options(-fsanitize=address,undefined)
+endif()
+
 add_library(Mcb STATIC
     src/McbWriter.cpp
     src/McbReader.cpp
@@ -34,6 +63,12 @@ target_link_libraries(Mcb PUBLIC Mc3)
 target_compile_options(Mcb PRIVATE -Wall -Wextra)
 if(COMMAND meshcraft_apply_sanitize)
     meshcraft_apply_sanitize(Mcb)
+endif()
+
+# SYS-W11-05: see the MESHCRAFT_FUZZ block above -- instruments Mcb's own
+# object code for libFuzzer coverage-guided fuzzing when opted in.
+if(MESHCRAFT_FUZZ)
+    target_compile_options(Mcb PRIVATE ${MESHCRAFT_FUZZ_COMPILE_OPTIONS})
 endif()
 
 include(CTest)
@@ -66,4 +101,30 @@ if(BUILD_TESTING)
     target_link_libraries(mcb_validation_test PRIVATE Mcb)
     add_test(NAME mcb_validation COMMAND mcb_validation_test)
     set_tests_properties(mcb_validation PROPERTIES TIMEOUT 15 LABELS "format")
+
+    # SYS-W11-05: property-based (randomized, seeded) MCB round-trip test --
+    # the McbReader/McbWriter differential half of this task, sharing the
+    # same random-document generator mc3_random_roundtrip_test (mc3/test/)
+    # uses for the XML side. See mcb_random_roundtrip_test.cpp's header
+    # comment for the rationale.
+    add_executable(mcb_random_roundtrip_test
+        test/mcb_random_roundtrip_test.cpp
+    )
+    target_include_directories(mcb_random_roundtrip_test PRIVATE
+        "${CMAKE_CURRENT_SOURCE_DIR}/../mc3/test"
+    )
+    target_link_libraries(mcb_random_roundtrip_test PRIVATE Mcb)
+    add_test(NAME mcb_random_roundtrip COMMAND mcb_random_roundtrip_test)
+    set_tests_properties(mcb_random_roundtrip PROPERTIES TIMEOUT 30 LABELS "format")
+
+    # SYS-W11-05: opt-in libFuzzer harness (see the MESHCRAFT_FUZZ block near
+    # the top of this file). Deliberately NOT registered as a ctest test --
+    # a corpus-driven deep-fuzzing target for longer, occasional/manual or
+    # CI-scheduled runs, not a fast per-commit gate; only builds under Clang.
+    if(MESHCRAFT_FUZZ)
+        add_executable(mcb_libfuzzer test/fuzz/mcb_libfuzzer.cpp)
+        target_link_libraries(mcb_libfuzzer PRIVATE Mcb)
+        target_compile_options(mcb_libfuzzer PRIVATE -fsanitize=fuzzer,address,undefined -fno-omit-frame-pointer -g)
+        target_link_options(mcb_libfuzzer PRIVATE -fsanitize=fuzzer,address,undefined)
+    endif()
 endif()
