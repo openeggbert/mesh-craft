@@ -14,11 +14,25 @@
 // as before -- this header changes WHERE the math lives, not what it
 // computes, so it does not alter rendered output.
 //
-// All shapes are generated at the SAME "unit" size SceneRenderer has always
-// used internally (box 1x1x1, sphere/cylinder/cone/capsule radius 0.5,
-// torus majorRadius=0.35/minorRadius=0.15, icosphere radius 0.5) -- the
-// object's real dimensions are applied afterwards via a per-primitive scale
-// matrix (see SceneRenderer.cpp's drawObject() switch statement).
+// Most shapes are generated at the SAME "unit" size SceneRenderer has always
+// used internally (box 1x1x1, sphere/cylinder/cone radius 0.5, icosphere
+// radius 0.5) -- the object's real dimensions are applied afterwards via a
+// per-primitive scale matrix (see SceneRenderer.cpp's drawObject() switch
+// statement).
+//
+// AUD-061: Torus and Capsule are the exception. A single non-uniform affine
+// scale of one fixed-ratio unit mesh cannot correctly reproduce an arbitrary
+// (majorRadius, minorRadius) torus or (radius, height) capsule -- the two
+// radii/the hemisphere-vs-cylinder split get conflated by the scale, so any
+// object whose ratio differs from the unit mesh's own produces a visibly
+// wrong (elliptical-cross-section tube / ellipsoidal-cap) shape. So
+// tessellateUnitTorusAlg()/tessellateUnitCapsuleAlg() take the actual
+// majorRadius/minorRadius (Torus) or radius/height (Capsule) as parameters
+// (defaulting to the historical unit-mesh values for full backward
+// compatibility) and SceneRenderer builds a real mesh per distinct
+// (ratio, LOD-tier) combination instead of scaling one fixed unit mesh --
+// see SceneRenderer::getOrBuildTorusMesh()/getOrBuildCapsuleMesh() and their
+// small bounded caches in SceneRenderer.cpp.
 //
 // Included by SceneRenderer_Builders.cpp and by
 // test/differential_geometry_test.cpp.
@@ -189,13 +203,20 @@ inline RawTessellation tessellateUnitPlaneAlg() {
 }
 
 // ---------------------------------------------------------------------------
-// Torus -- majorRadius R=0.35, minorRadius r=0.15 (outer edge at 0.5).
-// Verbatim from SceneRenderer::buildUnitTorus()'s VertexPositionColor block.
+// Torus -- majorRadius R=0.35, minorRadius r=0.15 (outer edge at 0.5) by
+// default. Verbatim from SceneRenderer::buildUnitTorus()'s
+// VertexPositionColor block; majorRadius/minorRadius were extracted to
+// parameters (AUD-061) so the SAME formula can build a torus at any
+// object's actual (majorRadius, minorRadius) ratio, not just the fixed
+// default -- calling with no radius arguments reproduces the original unit
+// mesh exactly (behavior-preserving default).
 // ---------------------------------------------------------------------------
-inline RawTessellation tessellateUnitTorusAlg(int ringSeg, int tubeSeg) {
+inline RawTessellation tessellateUnitTorusAlg(int ringSeg, int tubeSeg,
+                                               float majorRadius = 0.35f,
+                                               float minorRadius = 0.15f) {
     RawTessellation rt;
-    const float R = 0.35f;
-    const float r = 0.15f;
+    const float R = majorRadius;
+    const float r = minorRadius;
     const float pi2 = 2.0f * std::numbers::pi_v<float>;
 
     rt.positions.reserve(static_cast<size_t>(ringSeg+1)*(tubeSeg+1));
@@ -232,16 +253,24 @@ inline RawTessellation tessellateUnitTorusAlg(int ringSeg, int tubeSeg) {
 
 // ---------------------------------------------------------------------------
 // Capsule -- unit radius 0.5, cylinder section height 1 (total height 2,
-// y=-1..+1). Verbatim from SceneRenderer::buildUnitCapsule()'s
-// VertexPositionColor block.
+// y=-1..+1) by default. Verbatim from SceneRenderer::buildUnitCapsule()'s
+// VertexPositionColor block; radius/height (the cylinder-section height, as
+// Mc3Primitive::height means for Capsule -- matching
+// mc3togltf::buildCapsule()'s `hh = height * 0.5f`) were extracted to
+// parameters (AUD-061) so the SAME formula can build a capsule at any
+// object's actual (radius, height) ratio, not just the fixed default --
+// calling with no radius/height arguments reproduces the original unit mesh
+// exactly (behavior-preserving default: radius=0.5, height=1.0 -> total
+// height 2, y=-1..+1).
 // ---------------------------------------------------------------------------
-inline RawTessellation tessellateUnitCapsuleAlg(int segments) {
+inline RawTessellation tessellateUnitCapsuleAlg(int segments, float radius = 0.5f, float height = 1.0f) {
     RawTessellation rt;
     auto& verts = rt.positions;
 
     const int hRings = std::max(4, segments / 4);
     const float pi  = std::numbers::pi_v<float>;
     const float pi2 = 2.0f * pi;
+    const float halfHeight = height * 0.5f;
 
     auto addRing = [&](float y, float rXZ) {
         int base = static_cast<int>(verts.size());
@@ -255,24 +284,24 @@ inline RawTessellation tessellateUnitCapsuleAlg(int segments) {
     std::vector<int> ringBases;
 
     int botPole = static_cast<int>(verts.size());
-    verts.push_back({0.0f, -1.0f, 0.0f});
+    verts.push_back({0.0f, -(halfHeight + radius), 0.0f});
     for (int ri = 1; ri <= hRings; ++ri) {
         float phi = -pi / 2.0f + (pi / 2.0f) * float(ri) / hRings;
-        float y   = -0.5f + 0.5f * std::sin(phi);
-        float r   =  0.5f * std::cos(phi);
+        float y   = -halfHeight + radius * std::sin(phi);
+        float r   =  radius * std::cos(phi);
         ringBases.push_back(addRing(y, r));
     }
 
-    ringBases.push_back(addRing(0.5f, 0.5f));
+    ringBases.push_back(addRing(halfHeight, radius));
 
     for (int ri = 1; ri < hRings; ++ri) {
         float phi = (pi / 2.0f) * float(ri) / hRings;
-        float y   =  0.5f + 0.5f * std::sin(phi);
-        float r   =  0.5f * std::cos(phi);
+        float y   =  halfHeight + radius * std::sin(phi);
+        float r   =  radius * std::cos(phi);
         ringBases.push_back(addRing(y, r));
     }
     int topPole = static_cast<int>(verts.size());
-    verts.push_back({0.0f, 1.0f, 0.0f});
+    verts.push_back({0.0f, halfHeight + radius, 0.0f});
 
     auto push3 = [&](int a, int b, int c) {
         rt.indices.push_back(static_cast<uint32_t>(a));

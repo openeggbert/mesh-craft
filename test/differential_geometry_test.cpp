@@ -71,20 +71,28 @@
 //       NOT be (it's an open surface).
 //
 // REAL FINDINGS (see commit message for full derivation): this
-// investigation surfaced concrete, previously-undocumented geometry bugs in
-// the viewport's per-object scale formulas for Torus and Capsule -- both
-// reuse a single FIXED-aspect-ratio "unit" mesh and apply a 3-axis affine
-// scale, which cannot correctly reproduce an arbitrary (majorRadius,
-// minorRadius) torus or (radius, height) capsule from one fixed unit shape
-// (the two radii/the hemisphere-vs-cylinder split get conflated by the
-// scale). This is a real, structural limitation, not a one-line fix --
-// correctly supporting it would mean rebuilding torus/capsule geometry per
-// object (like the exporter and the CSG-preview path already do) instead of
-// scaling a cached unit mesh, a real architecture change out of scope for
-// this test-authoring task. The tests below PIN the current (bugged, but
-// real) renderer behavior with an exact formula-based assertion, rather
-// than asserting the incorrect claim that it matches the exporter --
-// clearly labeled as pinning a known bug, not a correctness claim.
+// investigation originally surfaced a concrete, previously-undocumented
+// geometry bug in the viewport's per-object scale formulas for Torus and
+// Capsule (AUD-061) -- both used to reuse a single FIXED-aspect-ratio "unit"
+// mesh and apply a 3-axis affine scale, which cannot correctly reproduce an
+// arbitrary (majorRadius, minorRadius) torus or (radius, height) capsule
+// from one fixed unit shape (the two radii/the hemisphere-vs-cylinder split
+// get conflated by the scale).
+//
+// AUD-061 STATUS: FIXED. SceneRenderer now builds a real mesh per distinct
+// (LOD tier, actual radius parameters) combination on demand (see
+// SceneRenderer::getOrBuildTorusMesh()/getOrBuildCapsuleMesh() and
+// tessellateUnitTorusAlg()/tessellateUnitCapsuleAlg() taking real
+// majorRadius/minorRadius or radius/height parameters instead of baked-in
+// constants), cached so a static scene does not re-tessellate every frame.
+// testTorus()/testCapsule() below now assert actual correctness (ground
+// truth + exporter agreement) for off-ratio cases that used to only PIN the
+// old bugged behavior.
+//
+// AUD-062 (IcoSphere ignores its own subdivision field) and AUD-063
+// (Capsule hemisphere-ring-count formula mismatch below segments=16) are
+// separate findings, deliberately left as-is/out of scope here -- see
+// plan.md.
 
 #include <MeshCraft/Renderer/PrimitiveTessellationAlg.hpp>
 #include <MeshCraft/Mc3/Mc3Primitive.hpp>
@@ -457,118 +465,110 @@ static void testPlane() {
 // reproduce the SAME (32,16)/(16,8)/(8,4) split exactly, so these are true
 // matching-discretization comparisons.
 //
-// REAL FINDING: SceneRenderer.cpp's Torus case scales the cached unit torus
-// (majorRadius=0.35, minorRadius=0.15) by sxz=majorRadius/0.35 (X/Z) and
-// sy=minorRadius/0.15 (Y) as a single affine transform. Because the unit
-// mesh's vertex X/Z already bakes together "(0.35 + 0.15*cos(phi))" into one
-// number before any scale is applied, a single sxz cannot separately
-// reproduce an arbitrary tube radius in the X/Z plane -- it only happens to
-// be correct when minorRadius/majorRadius == 0.15/0.35 (3/7 exactly, the
-// unit mesh's own ratio). For any other ratio the renderer's tube is
-// elliptical (not circular) and its overall outer radius is wrong. This is
-// a genuine, structural bug (not a one-line fix -- see file header /
-// commit message), so the "off-ratio" case below PINS the current,
-// verifiably-incorrect renderer behavior with an exact formula (not a claim
-// that it's correct) as a regression guard.
+// AUD-061 FIX VERIFIED: SceneRenderer.cpp's Torus case used to scale the
+// cached unit torus (majorRadius=0.35, minorRadius=0.15) by
+// sxz=majorRadius/0.35 (X/Z) and sy=minorRadius/0.15 (Y) as a single affine
+// transform -- correct only when minorRadius/majorRadius == 0.15/0.35 (the
+// unit mesh's own ratio); any other ratio produced an elliptical-cross-
+// section tube with the wrong outer radius. The renderer now builds a real
+// mesh directly at the object's actual (majorRadius, minorRadius) via
+// tessellateUnitTorusAlg(ringSeg, tubeSeg, majorRadius, minorRadius) --
+// majorRadius/minorRadius became real parameters instead of a baked-in
+// 0.35/0.15 constant (see SceneRenderer::getOrBuildTorusMesh() /
+// buildUnitTorus()). So the "off-ratio" case below, which used to PIN the
+// old bugged affine-scale output, now asserts actual correctness against
+// both ground truth and the exporter -- the identical invariant already
+// checked for the matching-ratio case, just at a different ratio.
 // ---------------------------------------------------------------------------
-static void testTorus() {
+static void checkTorusRatio(float R, float r, const char* label) {
     struct Tier { int ring, tube, exporterSegments; };
     const Tier tiers[] = {{32,16,32}, {16,8,16}, {8,4,8}};
 
-    // Case 1: ratio matches the unit mesh's own 0.15/0.35 -- renderer scale
-    // is exact here, so renderer/exporter/ground-truth should all agree.
-    {
-        float R = 0.35f, r = 0.15f;
-        for (auto& t : tiers) {
-            Mc3Primitive p = Mc3Primitive::torus(R, r, t.exporterSegments);
-            auto exportMesh = fromMeshData(mc3togltf::buildPrimitive(p));
-            float sxz = R / 0.35f, sy = r / 0.15f;
-            auto renderMesh = scaled(fromRaw(tessellateUnitTorusAlg(t.ring, t.tube)), sxz, sy, sxz);
-
-            double vExp = enclosedVolume(exportMesh);
-            double vRen = enclosedVolume(renderMesh);
-            double vGT  = 2.0 * std::numbers::pi * std::numbers::pi * R * r * r;
-
-            std::string tag = "torus(R=" + fmt(R) + ",r=" + fmt(r) + ",ring=" + fmt(t.ring) + ",tube=" + fmt(t.tube) + ",matching-ratio)";
-            // Empirical: coarser ring/tube tessellation undershoots the smooth
-            // torus volume more (ring=8/tube=4 is a very coarse donut).
-            double gtTol = t.ring >= 16 ? 0.15 : 0.45;
-            check(relErr(vExp, vRen) < 1e-3, tag + ": exporter and renderer volumes agree at matching segments");
-            check(relErr(vRen, vGT) < gtTol, tag + ": renderer volume within " + fmt(gtTol*100) + "% of analytical torus volume");
-            check(relErr(vExp, vGT) < gtTol, tag + ": exporter volume within " + fmt(gtTol*100) + "% of analytical torus volume");
-            check(isWatertight(welded(exportMesh)), tag + ": exporter mesh is watertight");
-            check(isWatertight(welded(renderMesh)), tag + ": renderer mesh is watertight");
-        }
-    }
-
-    // Case 2: ratio DIFFERENT from 3/7 (0.6/0.2 = ratio 1/3) -- the
-    // renderer's affine-scale bug (documented above) makes it diverge from
-    // both ground truth and the exporter's independently-correct output.
-    {
-        float R = 0.6f, r = 0.2f;
-        const Tier& t = tiers[0];
+    for (auto& t : tiers) {
         Mc3Primitive p = Mc3Primitive::torus(R, r, t.exporterSegments);
         auto exportMesh = fromMeshData(mc3togltf::buildPrimitive(p));
-        float sxz = R / 0.35f, sy = r / 0.15f;
-        auto renderMesh = scaled(fromRaw(tessellateUnitTorusAlg(t.ring, t.tube)), sxz, sy, sxz);
+        // AUD-061: renderer now tessellates directly at the object's actual
+        // (R, r) -- no post-hoc scale of a fixed-ratio unit mesh.
+        auto renderMesh = fromRaw(tessellateUnitTorusAlg(t.ring, t.tube, R, r));
 
         double vExp = enclosedVolume(exportMesh);
         double vRen = enclosedVolume(renderMesh);
         double vGT  = 2.0 * std::numbers::pi * std::numbers::pi * R * r * r;
 
-        std::string tag = "torus(R=" + fmt(R) + ",r=" + fmt(r) + ",off-ratio KNOWN BUG)";
-        info(tag + ": exporter volume=" + fmt(vExp) + " ground truth=" + fmt(vGT) + " (should agree closely)");
-        info(tag + ": renderer volume=" + fmt(vRen) + " (diverges -- see file header finding)");
-        check(relErr(vExp, vGT) < 0.15, tag + ": exporter volume is still correct (within 15% of ground truth)");
+        std::string tag = "torus(R=" + fmt(R) + ",r=" + fmt(r) + ",ring=" + fmt(t.ring) + ",tube=" + fmt(t.tube) + "," + label + ")";
+        // Empirical: coarser ring/tube tessellation undershoots the smooth
+        // torus volume more (ring=8/tube=4 is a very coarse donut).
+        double gtTol = t.ring >= 16 ? 0.15 : 0.45;
+        check(relErr(vExp, vRen) < 1e-3, tag + ": exporter and renderer volumes agree at matching segments");
+        check(relErr(vRen, vGT) < gtTol, tag + ": renderer volume within " + fmt(gtTol*100) + "% of analytical torus volume");
+        check(relErr(vExp, vGT) < gtTol, tag + ": exporter volume within " + fmt(gtTol*100) + "% of analytical torus volume");
+        check(isWatertight(welded(exportMesh)), tag + ": exporter mesh is watertight");
+        check(isWatertight(welded(renderMesh)), tag + ": renderer mesh is watertight");
 
-        // Pin the renderer's known-incorrect effective outer radius:
-        // (0.35+0.15) * sxz, NOT R + r as a correct implementation would produce.
+        // The strongest per-shape correctness signal: the renderer's outer
+        // radius (bbox X extent) must be analytically R+r, not some
+        // ratio-dependent distortion of it.
         auto bR = bboxOf(renderMesh);
-        float rendererOuterX = bR.hi[0];
-        float expectedBuggyOuterX = (0.35f + 0.15f) * sxz;
         float correctOuterX = R + r;
-        check(relErr(rendererOuterX, expectedBuggyOuterX) < 1e-3,
-              tag + ": renderer's outer radius matches the DERIVED BUGGY formula (0.35+0.15)*sxz, pinning current behavior");
-        check(relErr(rendererOuterX, correctOuterX) > 0.05,
-              tag + ": renderer's outer radius measurably differs from the analytically correct R+r (documents the bug is real)");
+        check(relErr(bR.hi[0], correctOuterX) < 1e-2,
+              tag + ": renderer's outer radius is analytically correct (R+r)");
         auto bE = bboxOf(exportMesh);
         check(relErr(bE.hi[0], correctOuterX) < 1e-2,
-              tag + ": exporter's outer radius IS analytically correct (R+r) -- confirms exporter is the correct path");
+              tag + ": exporter's outer radius is analytically correct (R+r)");
     }
+}
+
+static void testTorus() {
+    // Case 1: ratio matches the OLD fixed unit mesh's own 0.15/0.35 -- was
+    // already correct before the fix (kept as a plain regression guard).
+    checkTorusRatio(0.35f, 0.15f, "matching-ratio");
+
+    // Case 2: ratio DIFFERENT from 3/7 (0.6/0.2 = ratio 1/3) -- this is
+    // EXACTLY the ratio that used to expose the AUD-061 bug (the renderer's
+    // affine-scale approach produced an elliptical-cross-section tube with
+    // the wrong outer radius here). Now asserted correct, not just pinned.
+    checkTorusRatio(0.6f, 0.2f, "off-ratio, AUD-061 fix verified");
 }
 
 // ---------------------------------------------------------------------------
 // Capsule -- tiers 16/8/4 (unitCapsule_/L1_/L2_).
 //
-// hRings formula mismatch: renderer uses hRings=max(4,segments/4); exporter
-// uses rings=max(2,segments/4). These only agree when segments/4 >= 4 (i.e.
+// hRings formula mismatch (AUD-063, separate finding, out of scope here):
+// renderer uses hRings=max(4,segments/4); exporter uses
+// rings=max(2,segments/4). These only agree when segments/4 >= 4 (i.e.
 // segments >= 16) -- so only the segments=16 tier is a true matching-
 // discretization comparison; segments=8/4 use DIFFERENT hemisphere ring
-// counts on each side (documented via info(), not asserted equal).
+// counts on each side (documented via info(), not asserted equal). Untouched
+// by the AUD-061 fix below.
 //
-// REAL FINDING: like Torus, SceneRenderer.cpp's Capsule case scales one
-// fixed unit capsule (radius=0.5, cylinder height=1) via sxz=2*radius (X/Z,
-// correct -- capsule cross section is a plain circle, radial scale is
-// unambiguous) and sy=(height+2*radius)/2 (Y). sy correctly maps the TOTAL
-// height, but it is also the ONLY scale applied to the hemisphere caps'
-// Y-extent -- so whenever height != 2*radius (i.e. sy != sxz), the
-// hemispheres are stretched/squashed into ellipsoidal caps instead of
-// staying spherical. Exact analogue of the Torus bug; same "structural,
-// not one-line" reasoning applies. Pinned below, not asserted correct.
+// AUD-061 FIX VERIFIED: like Torus, SceneRenderer.cpp's Capsule case used to
+// scale one fixed unit capsule (radius=0.5, cylinder height=1) via
+// sxz=2*radius (X/Z) and sy=(height+2*radius)/2 (Y) -- whenever height !=
+// 2*radius (i.e. sy != sxz), the hemisphere caps were stretched/squashed
+// into ellipsoids instead of staying spherical. The renderer now builds a
+// real mesh directly at the object's actual (radius, height) via
+// tessellateUnitCapsuleAlg(segments, radius, height) -- radius/height became
+// real parameters instead of a baked-in 0.5/1.0 constant (see
+// SceneRenderer::getOrBuildCapsuleMesh() / buildUnitCapsule()). So the
+// height!=2*radius case below, which used to PIN the old bugged
+// affine-scale output, now asserts actual correctness.
 // ---------------------------------------------------------------------------
 static void testCapsule() {
     const int tiers[] = {16, 8, 4};
 
-    // radius=0.5, height=1.0 => height == 2*radius, so sy==sxz and the
-    // affine-scale bug is invisible here (control case).
+    // radius=0.5, height=1.0 => height == 2*radius -- the ratio was always
+    // correct even under the old affine-scale approach (control case), so
+    // this mainly confirms the new direct-tessellation path is
+    // behavior-preserving here.
     {
         float radius = 0.5f, height = 1.0f;
         for (int segments : tiers) {
             Mc3Primitive p = Mc3Primitive::capsule(radius, height, segments);
             auto exportMesh = fromMeshData(mc3togltf::buildPrimitive(p));
-            float sxz = radius * 2.0f;
-            float sy  = (height + radius*2.0f) / 2.0f;
-            auto renderMesh = scaled(fromRaw(tessellateUnitCapsuleAlg(segments)), sxz, sy, sxz);
+            // AUD-061: renderer now tessellates directly at the object's
+            // actual (radius, height) -- no post-hoc scale of a fixed-ratio
+            // unit mesh.
+            auto renderMesh = fromRaw(tessellateUnitCapsuleAlg(segments, radius, height));
 
             double vExp = enclosedVolume(exportMesh);
             double vRen = enclosedVolume(renderMesh);
@@ -587,48 +587,48 @@ static void testCapsule() {
                       tag + ": exporter and renderer volumes agree tightly (hRings formulas coincide at segments>=16)");
             } else {
                 info(tag + ": hRings formula differs below segments=16 (renderer max(4,segs/4) vs exporter max(2,segs/4))"
-                     " -- exporter=" + fmt(vExp) + " renderer=" + fmt(vRen) + " (not asserted equal, documented gap)");
+                     " -- exporter=" + fmt(vExp) + " renderer=" + fmt(vRen) + " (AUD-063, not asserted equal, documented gap)");
             }
         }
     }
 
-    // radius=0.4, height=1.5 => height != 2*radius (0.8), so sy != sxz and
-    // the ellipsoidal-hemisphere bug becomes visible.
+    // radius=0.4, height=1.5 => height != 2*radius (0.8) -- this is EXACTLY
+    // the ratio that used to expose the AUD-061 ellipsoidal-hemisphere bug.
+    // Now asserted correct, not just pinned.
     {
         float radius = 0.4f, height = 1.5f;
-        int segments = 16; // matching-hRings tier, isolates the scale bug specifically
+        int segments = 16; // matching-hRings tier (AUD-063 doesn't apply here)
         Mc3Primitive p = Mc3Primitive::capsule(radius, height, segments);
         auto exportMesh = fromMeshData(mc3togltf::buildPrimitive(p));
-        float sxz = radius * 2.0f;
-        float sy  = (height + radius*2.0f) / 2.0f;
-        auto renderMesh = scaled(fromRaw(tessellateUnitCapsuleAlg(segments)), sxz, sy, sxz);
+        auto renderMesh = fromRaw(tessellateUnitCapsuleAlg(segments, radius, height));
 
-        std::string tag = "capsule(r=" + fmt(radius) + ",h=" + fmt(height) + ",segs=16,height!=2r KNOWN BUG)";
-        // Correct hemisphere pole is at unit Y=+-1, X=Z=0 -- unaffected by
-        // the X/Z-vs-Y scale split either way, so the pole height is still
-        // exactly height/2 + radius on both paths (the total-height mapping
-        // itself is fine; only the EQUATOR-vs-pole cross-section shape is
-        // wrong on the renderer side).
+        std::string tag = "capsule(r=" + fmt(radius) + ",h=" + fmt(height) + ",segs=16,height!=2r, AUD-061 fix verified)";
         auto bE = bboxOf(exportMesh);
         auto bR = bboxOf(renderMesh);
         float expectedHalfHeight = height/2.0f + radius;
         check(relErr(bE.hi[1], expectedHalfHeight) < 1e-2, tag + ": exporter pole height is analytically correct");
-        check(relErr(bR.hi[1], expectedHalfHeight) < 1e-2, tag + ": renderer pole height is (coincidentally) still correct");
-        // But the equatorial X/Z radius at exactly the hemisphere-cylinder
-        // seam (y = +-height/2) should be `radius` on the correct exporter
-        // path; the renderer applies the SAME sxz there as everywhere else
-        // in X/Z (that part is fine, sxz=2*radius is uniform and correct).
-        // The bug shows up in the mid-hemisphere cross-section instead --
-        // demonstrated via volume divergence, which integrates the whole
-        // (wrong) hemisphere shape:
+        check(relErr(bR.hi[1], expectedHalfHeight) < 1e-2, tag + ": renderer pole height is analytically correct");
+        // Max horizontal (X/Z) extent of a capsule is exactly `radius`,
+        // reached anywhere from the equator through the hemisphere-cylinder
+        // seam -- true for a correct SPHERICAL cap, but NOT for the old
+        // bugged ellipsoidal cap (whose max X/Z extent was still sxz=2*radius
+        // at the seam by construction, so this specific check wouldn't have
+        // caught the old bug by itself -- the volume check below is the one
+        // that actually distinguishes spherical from ellipsoidal caps).
+        check(relErr(bR.hi[0], radius) < 1e-2, tag + ": renderer's max horizontal extent is analytically correct (radius)");
+        check(relErr(bE.hi[0], radius) < 1e-2, tag + ": exporter's max horizontal extent is analytically correct (radius)");
+
         double vExp = enclosedVolume(exportMesh);
         double vRen = enclosedVolume(renderMesh);
         double vGT  = (4.0/3.0)*std::numbers::pi*radius*radius*radius + std::numbers::pi*radius*radius*height;
-        info(tag + ": exporter volume=" + fmt(vExp) + " ground truth=" + fmt(vGT) + " (should agree closely)");
-        info(tag + ": renderer volume=" + fmt(vRen) + " (diverges -- ellipsoidal hemisphere caps, see file header finding)");
-        check(relErr(vExp, vGT) < 0.25, tag + ": exporter volume is still correct (within 25% of ground truth)");
-        check(relErr(vExp, vRen) > 0.02,
-              tag + ": exporter and renderer volumes measurably diverge here (documents the scale bug is real)");
+        info(tag + ": exporter volume=" + fmt(vExp) + " ground truth=" + fmt(vGT));
+        info(tag + ": renderer volume=" + fmt(vRen) + " ground truth=" + fmt(vGT));
+        check(relErr(vExp, vGT) < 0.25, tag + ": exporter volume is correct (within 25% of ground truth)");
+        check(relErr(vRen, vGT) < 0.25, tag + ": renderer volume is correct (within 25% of ground truth) -- AUD-061 fix verified");
+        check(relErr(vExp, vRen) < 1e-3,
+              tag + ": exporter and renderer volumes now agree tightly (both build the exact same spherical-cap shape)");
+        check(isWatertight(welded(exportMesh)), tag + ": exporter mesh is watertight");
+        check(isWatertight(welded(renderMesh)), tag + ": renderer mesh is watertight");
     }
 }
 

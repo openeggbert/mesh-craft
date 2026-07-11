@@ -16,6 +16,7 @@
 #include <memory>
 #include <optional>
 #include <string>
+#include <tuple>
 #include <unordered_map>
 #include <vector>
 
@@ -241,11 +242,32 @@ private:
     void buildUnitCylinder(int segments, RenderMesh& target);
     void buildUnitCone(int segments, RenderMesh& target);
     void buildUnitPlane();
-    void buildUnitTorus(int ringSeg, int tubeSeg, RenderMesh& target);
-    void buildUnitCapsule(int segments, RenderMesh& target);
+    // majorRadius/minorRadius default to the historical fixed unit-mesh
+    // ratio (0.35/0.15) -- callers that want a mesh at the object's ACTUAL
+    // ratio (AUD-061) pass those explicitly; see getOrBuildTorusMesh().
+    void buildUnitTorus(int ringSeg, int tubeSeg, RenderMesh& target,
+                        float majorRadius = 0.35f, float minorRadius = 0.15f);
+    // radius/height default to the historical fixed unit-mesh values
+    // (0.5/1.0) -- callers that want a mesh at the object's ACTUAL
+    // radius/height (AUD-061) pass those explicitly; see
+    // getOrBuildCapsuleMesh().
+    void buildUnitCapsule(int segments, RenderMesh& target,
+                          float radius = 0.5f, float height = 1.0f);
     void buildUnitIcoSphere(int subdivisions);
     void buildWireBox();
     void buildWireShapes(int segments);
+
+    // AUD-061: Torus/Capsule can't be correctly reproduced by scaling one
+    // fixed-ratio unit mesh (see PrimitiveTessellationAlg.hpp's file header),
+    // so the viewport builds one real mesh per distinct (LOD tier, actual
+    // radius parameters) combination on demand, cached here so a static
+    // scene with many tori/capsules does not re-tessellate every frame.
+    // Bounded like csgMeshCache_ (cleared entirely past 128 entries rather
+    // than LRU-evicted -- consistent with this codebase's existing
+    // CSG-preview-cache precedent).
+    const RenderMesh& getOrBuildTorusMesh(int ringSeg, int tubeSeg,
+                                          float majorRadius, float minorRadius);
+    const RenderMesh& getOrBuildCapsuleMesh(int segments, float radius, float height);
 
     void drawObject(const Mc3::Mc3Object& obj,
                     const Mc3::Mc3Document& doc,
@@ -320,6 +342,11 @@ private:
 
     std::map<std::string, Microsoft::Xna::Framework::Graphics::Texture2D> textureCache_;
     std::map<std::string, RenderMesh> meshCache_;
+    // AUD-061: per-object-ratio Torus/Capsule mesh caches, keyed on the
+    // exact parameters that determine the mesh's shape (LOD segment counts +
+    // actual radii). See getOrBuildTorusMesh()/getOrBuildCapsuleMesh().
+    std::map<std::tuple<int, int, float, float>, RenderMesh> torusMeshCache_;   // (ringSeg, tubeSeg, majorRadius, minorRadius)
+    std::map<std::tuple<int, float, float>, RenderMesh> capsuleMeshCache_;      // (segments, radius, height)
     std::unordered_map<std::size_t, RenderMesh> csgMeshCache_;
     std::unordered_map<std::string, int> csgTriCountMap_;   // obj.id → last rendered tri count (K4)
     std::unordered_map<std::string, std::string> csgWarningMap_;   // obj.id → last incomplete-preview reason, empty if none (STAB-0672)

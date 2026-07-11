@@ -524,6 +524,50 @@ const RenderMesh* SceneRenderer::loadOrGetMesh(const std::string& absPath)
     return ins->second.vb ? &ins->second : nullptr;
 }
 
+// ---------------------------------------------------------------------------
+// AUD-061: per-object-ratio Torus/Capsule mesh cache
+// ---------------------------------------------------------------------------
+// A single fixed-ratio unit mesh plus a non-uniform affine scale cannot
+// correctly reproduce an arbitrary (majorRadius, minorRadius) torus or
+// (radius, height) capsule -- see PrimitiveTessellationAlg.hpp's file
+// header. So instead of scaling one cached unit mesh (as every other
+// primitive type still does), Torus/Capsule build a real mesh at the
+// object's actual parameters and cache it keyed on exactly what determines
+// its shape: the LOD tier's segment counts plus the actual radii. A static
+// scene redrawn every frame hits this cache every time after the first
+// draw of each distinct (tier, ratio) combination -- it does NOT
+// re-tessellate per frame. Bounded the same way csgMeshCache_ already is
+// (clear entirely past 128 entries) so a scene with many differently-sized
+// tori/capsules can't grow this unboundedly.
+const RenderMesh& SceneRenderer::getOrBuildTorusMesh(int ringSeg, int tubeSeg,
+                                                       float majorRadius, float minorRadius)
+{
+    auto key = std::make_tuple(ringSeg, tubeSeg, majorRadius, minorRadius);
+    auto it = torusMeshCache_.find(key);
+    if (it != torusMeshCache_.end()) return it->second;
+
+    if (torusMeshCache_.size() > 128) torusMeshCache_.clear();
+    RenderMesh mesh;
+    buildUnitTorus(ringSeg, tubeSeg, mesh, majorRadius, minorRadius);
+    auto [ins, ok] = torusMeshCache_.emplace(key, std::move(mesh));
+    (void)ok;
+    return ins->second;
+}
+
+const RenderMesh& SceneRenderer::getOrBuildCapsuleMesh(int segments, float radius, float height)
+{
+    auto key = std::make_tuple(segments, radius, height);
+    auto it = capsuleMeshCache_.find(key);
+    if (it != capsuleMeshCache_.end()) return it->second;
+
+    if (capsuleMeshCache_.size() > 128) capsuleMeshCache_.clear();
+    RenderMesh mesh;
+    buildUnitCapsule(segments, mesh, radius, height);
+    auto [ins, ok] = capsuleMeshCache_.emplace(key, std::move(mesh));
+    (void)ok;
+    return ins->second;
+}
+
 void SceneRenderer::drawObjectWireframe(const Mc3Object& obj,
                                          const Matrix& view, const Matrix& proj, Color color)
 {
@@ -746,19 +790,28 @@ void SceneRenderer::drawObject(const Mc3Object& obj, const Mc3Document& doc,
     case ObjectType::Torus: {
         float R = obj.primitive ? obj.primitive->majorRadius : 0.35f;
         float r = obj.primitive ? obj.primitive->minorRadius : 0.15f;
-        float sxz = R / 0.35f;
-        float sy  = r / 0.15f;
-        drawAuto(lodMesh(unitTorus_, unitTorusL1_, unitTorusL2_),
-                 deform * Matrix::CreateScale({sxz, sy, sxz}) * world);
+        // AUD-061: a single non-uniform affine scale of one fixed-ratio unit
+        // torus (majorRadius=0.35/minorRadius=0.15) can only reproduce a
+        // torus whose OWN ratio happens to match 0.35/0.15 -- any other
+        // ratio produced an elliptical-cross-section tube. Build a real mesh
+        // at this object's actual ratio instead (cached per LOD tier +
+        // ratio, see getOrBuildTorusMesh()).
+        struct TorusTier { int ring, tube; };
+        static const TorusTier torusTiers[3] = {{32,16}, {16,8}, {8,4}};
+        const TorusTier& tt = torusTiers[lodLevel];
+        drawAuto(getOrBuildTorusMesh(tt.ring, tt.tube, R, r), deform * world);
         break;
     }
     case ObjectType::Capsule: {
         float r = obj.primitive ? obj.primitive->radius : 0.5f;
         float h = obj.primitive ? obj.primitive->height : 1.0f;
-        float sxz = r * 2.0f;
-        float sy  = (h + r * 2.0f) / 2.0f;
-        drawAuto(lodMesh(unitCapsule_, unitCapsuleL1_, unitCapsuleL2_),
-                 deform * Matrix::CreateScale({sxz, sy, sxz}) * world);
+        // AUD-061: same structural bug as Torus above -- a single affine
+        // scale of one fixed-ratio unit capsule stretched the hemisphere
+        // caps into ellipsoids whenever height != 2*radius. Build a real
+        // mesh at this object's actual radius/height instead (cached per LOD
+        // tier + radius/height, see getOrBuildCapsuleMesh()).
+        static const int capsuleTiers[3] = {16, 8, 4};
+        drawAuto(getOrBuildCapsuleMesh(capsuleTiers[lodLevel], r, h), deform * world);
         break;
     }
     case ObjectType::Disk: {
@@ -966,15 +1019,30 @@ void SceneRenderer::drawEmissiveObject(
         break;
     }
     case ObjectType::Torus: {
-        float R = obj.primitive ? obj.primitive->majorRadius : 0.35f;
-        float r = obj.primitive ? obj.primitive->minorRadius : 0.15f;
-        drawE(unitTorus_, deform * Matrix::CreateScale({R / 0.35f, r / 0.15f, R / 0.35f}) * world);
+        // AUD-061: same fix as drawObject()'s Torus case -- build the real
+        // mesh at the object's actual ratio instead of an affine scale of
+        // the fixed-ratio unit mesh. Emissive pass always uses the
+        // full-quality tier (no camera-distance LOD here, matching the
+        // pre-existing behavior of every other shape in this function).
+        // Guarded on hasEmissive (unlike the other cases' unconditional
+        // drawE() call) so a non-emissive Torus doesn't pay for a cache
+        // lookup/build every frame -- referencing unitTorus_ used to be
+        // free, but getOrBuildTorusMesh() can be a real tessellation on a
+        // cache miss.
+        if (hasEmissive) {
+            float R = obj.primitive ? obj.primitive->majorRadius : 0.35f;
+            float r = obj.primitive ? obj.primitive->minorRadius : 0.15f;
+            drawE(getOrBuildTorusMesh(32, 16, R, r), deform * world);
+        }
         break;
     }
     case ObjectType::Capsule: {
-        float r = obj.primitive ? obj.primitive->radius : 0.5f;
-        float h = obj.primitive ? obj.primitive->height : 1.0f;
-        drawE(unitCapsule_, deform * Matrix::CreateScale({r*2.0f, (h+r*2.0f)/2.0f, r*2.0f}) * world);
+        // AUD-061: same fix (and same hasEmissive guard) as the Torus case above.
+        if (hasEmissive) {
+            float r = obj.primitive ? obj.primitive->radius : 0.5f;
+            float h = obj.primitive ? obj.primitive->height : 1.0f;
+            drawE(getOrBuildCapsuleMesh(16, r, h), deform * world);
+        }
         break;
     }
     case ObjectType::IcoSphere: {

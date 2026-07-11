@@ -331,10 +331,17 @@ void SceneRenderer::buildUnitPlane() {
     }
 }
 
-void SceneRenderer::buildUnitTorus(int ringSeg, int tubeSeg, RenderMesh& target) {
+void SceneRenderer::buildUnitTorus(int ringSeg, int tubeSeg, RenderMesh& target,
+                                    float majorRadius, float minorRadius) {
     // Unit torus: majorRadius R=0.35, minorRadius r=0.15 (outer edge at 0.5)
-    const float R = 0.35f;
-    const float r = 0.15f;
+    // by default -- AUD-061: majorRadius/minorRadius are now real parameters
+    // (default-preserving the historical unit ratio) so callers building a
+    // per-object-ratio mesh (getOrBuildTorusMesh()) can pass the object's
+    // actual radii instead of relying on a post-hoc non-uniform scale, which
+    // cannot correctly reproduce an arbitrary ratio (see
+    // PrimitiveTessellationAlg.hpp's file header).
+    const float R = majorRadius;
+    const float r = minorRadius;
     const float pi2 = 2.0f * std::numbers::pi_v<float>;
     Color c(200, 200, 200, 255);
 
@@ -345,7 +352,7 @@ void SceneRenderer::buildUnitTorus(int ringSeg, int tubeSeg, RenderMesh& target)
     // differential testing against the exporter's independent
     // MeshBuilder.cpp::buildTorus(). This same index array is reused below
     // for the VPNT texIB.
-    RawTessellation rtt = tessellateUnitTorusAlg(ringSeg, tubeSeg);
+    RawTessellation rtt = tessellateUnitTorusAlg(ringSeg, tubeSeg, R, r);
     std::vector<VertexPositionColor> verts;
     verts.reserve(rtt.positions.size());
     for (auto& p : rtt.positions) verts.push_back({ Vector3{p[0],p[1],p[2]}, c });
@@ -389,12 +396,21 @@ void SceneRenderer::buildUnitTorus(int ringSeg, int tubeSeg, RenderMesh& target)
     }
 }
 
-void SceneRenderer::buildUnitCapsule(int segments, RenderMesh& target) {
+void SceneRenderer::buildUnitCapsule(int segments, RenderMesh& target,
+                                      float radius, float height) {
     // Unit capsule: radius=0.5, cylinder height=1.0, total height=2.0 (y=-1..+1)
-    // Bottom hemisphere center at y=-0.5, top at y=+0.5.
-    // Rendering scales: x,z by radius*2; y by (height + radius*2) / 2.
+    // by default. Bottom hemisphere center at y=-halfHeight, top at y=+halfHeight.
+    //
+    // AUD-061: radius/height are now real parameters (default-preserving the
+    // historical unit values) so callers building a per-object mesh
+    // (getOrBuildCapsuleMesh()) can pass the object's actual radius/height
+    // instead of relying on a post-hoc non-uniform scale of one fixed-ratio
+    // unit capsule, which stretches the hemisphere caps into ellipsoids
+    // whenever height != 2*radius (see PrimitiveTessellationAlg.hpp's file
+    // header).
     const float pi  = std::numbers::pi_v<float>;
     const float pi2 = 2.0f * pi;
+    const float halfHeight = height * 0.5f;
     Color c(200, 200, 200, 255);
 
     // SYS-W7-02: vertex/index generation (poles, hemisphere rings, cylinder
@@ -404,7 +420,7 @@ void SceneRenderer::buildUnitCapsule(int segments, RenderMesh& target) {
     // headlessly for differential testing against the exporter's
     // independent MeshBuilder.cpp::buildCapsule(). This same `indices`
     // array is copied verbatim into the VPNT `ti` array further below.
-    RawTessellation rtcap = tessellateUnitCapsuleAlg(segments);
+    RawTessellation rtcap = tessellateUnitCapsuleAlg(segments, radius, height);
     std::vector<VertexPositionColor> verts;
     verts.reserve(rtcap.positions.size());
     for (auto& p : rtcap.positions) verts.push_back({ Vector3{p[0],p[1],p[2]}, c });
@@ -419,106 +435,56 @@ void SceneRenderer::buildUnitCapsule(int segments, RenderMesh& target) {
     target.primitiveCount = static_cast<int>(indices.size()) / 3;
     storePositions(verts, target);
 
-    // VPNT with normals (for textured rendering)
+    // VPNT with normals (for textured rendering).
+    //
+    // AUD-061: was a position back-classification against hardcoded
+    // radius=0.5-relative thresholds (`p.Y < -0.49f`, `abs(p.X) < 0.01f`,
+    // etc.), which only worked for the fixed unit capsule. Replaced with
+    // exact analytic per-ring normals computed the SAME way buildUnitTorus()
+    // already does -- mirroring tessellateUnitCapsuleAlg()'s own ring-by-ring
+    // construction (bottom pole, hRings bottom-hemisphere rings, one
+    // cylinder-seam ring, hRings-1 top-hemisphere rings, top pole) so the
+    // normal at each vertex is derived directly from the SAME (phi, sector)
+    // parameters used to place it, not reverse-engineered from its final
+    // Cartesian position. This is correct for any radius/height, not just
+    // the historical 0.5/1.0 default, and removes the old formula's implicit
+    // dependency on radius==0.5 entirely.
     {
+        const int hRings = std::max(4, segments / 4);
         std::vector<VertexPositionNormalTexture> tv;
-        std::vector<uint16_t> ti;
-        std::vector<int> tRingBases;
+        tv.reserve(verts.size());
 
-        // Pole vertices handled specially; add rings with seam duplicate
-        auto addTexRing = [&](float y, float rXZ, float yCenterOffset) {
-            int base = static_cast<int>(tv.size());
-            for (int i = 0; i <= segments; ++i) {
+        auto addTexRing = [&](float y, float rXZ, float phi) {
+            float cp = std::cos(phi), sp = std::sin(phi);
+            for (int i = 0; i < segments; ++i) {
                 float a = pi2 * i / segments;
                 float cx = std::cos(a), cz = std::sin(a);
                 Vector3 pos{ rXZ * cx, y, rXZ * cz };
-                // Normal from hemisphere center (yCenterOffset = -0.5 or +0.5) or horizontal for cylinder
-                Vector3 norm;
-                if (std::abs(yCenterOffset) > 0.01f) {
-                    // hemisphere
-                    norm = Vector3::Normalize({ cx * rXZ, y - yCenterOffset, cz * rXZ });
-                } else {
-                    norm = Vector3{ cx, 0.0f, cz };
-                }
-                float u = static_cast<float>(i) / segments;
-                tv.push_back({ pos, norm, Vector2{ u, 0.0f } }); // v assigned later
+                Vector3 norm{ cx * cp, sp, cz * cp };
+                tv.push_back({ pos, norm, Vector2{ 0.5f, 0.5f } }); // simple UV, matching the historical value
             }
-            return base;
         };
-        (void)addTexRing; // suppress unused warning if we simplify
 
-        // Simplified VPNT: same topology as VPC but with normals computed per vertex
-        for (const auto& v : verts) {
-            Vector3 p = v.Position;
-            Vector3 n;
-            if (p.Y < -0.49f && std::abs(p.X) < 0.01f && std::abs(p.Z) < 0.01f)
-                n = {0, -1, 0};
-            else if (p.Y > 0.99f)
-                n = {0, 1, 0};
-            else if (p.Y <= -0.5f + 0.001f) {
-                n = Vector3::Normalize({ p.X, p.Y + 0.5f, p.Z }); // bottom hemisphere
-            } else if (p.Y >= 0.5f - 0.001f && p.Y < 0.99f) {
-                n = Vector3::Normalize({ p.X, p.Y - 0.5f, p.Z }); // top hemisphere
-            } else {
-                // cylinder body
-                float r2 = std::sqrt(p.X * p.X + p.Z * p.Z);
-                n = r2 > 0.001f ? Vector3{ p.X / r2, 0.0f, p.Z / r2 } : Vector3{0, 1, 0};
-            }
-            tv.push_back({ p, n, Vector2{0.5f, 0.5f} }); // simple UV
+        tv.push_back({ Vector3{0.0f, -(halfHeight + radius), 0.0f}, Vector3{0,-1,0}, Vector2{0.5f,0.5f} });
+        for (int ri = 1; ri <= hRings; ++ri) {
+            float phi = -pi / 2.0f + (pi / 2.0f) * float(ri) / hRings;
+            addTexRing(-halfHeight + radius * std::sin(phi), radius * std::cos(phi), phi);
         }
-        for (auto idx : indices) ti.push_back(idx);
+        addTexRing(halfHeight, radius, 0.0f);
+        for (int ri = 1; ri < hRings; ++ri) {
+            float phi = (pi / 2.0f) * float(ri) / hRings;
+            addTexRing(halfHeight + radius * std::sin(phi), radius * std::cos(phi), phi);
+        }
+        tv.push_back({ Vector3{0.0f, halfHeight + radius, 0.0f}, Vector3{0,1,0}, Vector2{0.5f,0.5f} });
 
+        // Same topology as the VPC index buffer above (tv is built in the
+        // identical botPole/ring/.../topPole order as `verts`, one vertex
+        // per sector per ring, no seam duplicate -- see tessellateUnitCapsuleAlg()).
         target.texVB = std::make_unique<VertexBuffer>(device_, static_cast<int>(tv.size()));
         target.texVB->SetData(tv.data(), static_cast<int>(tv.size()));
-        target.texIB = std::make_unique<IndexBuffer>(device_, static_cast<int>(ti.size()));
-        target.texIB->SetData(ti.data(), static_cast<int>(ti.size()));
-        target.texPrimitiveCount = static_cast<int>(ti.size()) / 3;
-    }
-
-    // Wire shape for capsule: equator ring + 4 meridian arcs + cylinder edges
-    {
-        // Equator at y=-0.5 and y=0.5 (cylinder rings)
-        for (int bot = 0; bot < 2; ++bot) {
-            float yw = bot ? -0.5f : 0.5f;
-            for (int i = 0; i < segments; ++i) {
-                float a0 = pi2 * i / segments;
-                float a1 = pi2 * (i+1) / segments;
-                wireShapeCapsule_.positions.push_back({0.5f*std::cos(a0), yw, 0.5f*std::sin(a0)});
-                wireShapeCapsule_.positions.push_back({0.5f*std::cos(a1), yw, 0.5f*std::sin(a1)});
-                wireShapeCapsule_.lineCount++;
-            }
-        }
-        // 4 vertical cylinder edges
-        for (int q = 0; q < 4; ++q) {
-            float a = pi2 * q / 4;
-            float x = 0.5f * std::cos(a), z = 0.5f * std::sin(a);
-            wireShapeCapsule_.positions.push_back({x, -0.5f, z});
-            wireShapeCapsule_.positions.push_back({x,  0.5f, z});
-            wireShapeCapsule_.lineCount++;
-        }
-        // 2 hemisphere arcs (XZ and YZ planes)
-        for (int plane = 0; plane < 2; ++plane) {
-            for (int cap = 0; cap < 2; ++cap) {
-                float yOff = cap ? -0.5f : 0.5f;
-                float ySign = cap ? -1.0f : 1.0f;
-                for (int i = 0; i < segments / 2; ++i) {
-                    float phi0 = pi * i / (segments / 2);
-                    float phi1 = pi * (i+1) / (segments / 2);
-                    float y0 = yOff + 0.5f * std::sin(phi0) * ySign;
-                    float y1 = yOff + 0.5f * std::sin(phi1) * ySign;
-                    float r0 = 0.5f * std::cos(phi0);
-                    float r1 = 0.5f * std::cos(phi1);
-                    if (plane == 0) {
-                        wireShapeCapsule_.positions.push_back({r0, y0, 0.0f});
-                        wireShapeCapsule_.positions.push_back({r1, y1, 0.0f});
-                    } else {
-                        wireShapeCapsule_.positions.push_back({0.0f, y0, r0});
-                        wireShapeCapsule_.positions.push_back({0.0f, y1, r1});
-                    }
-                    wireShapeCapsule_.lineCount++;
-                }
-            }
-        }
+        target.texIB = std::make_unique<IndexBuffer>(device_, static_cast<int>(indices.size()));
+        target.texIB->SetData(indices.data(), static_cast<int>(indices.size()));
+        target.texPrimitiveCount = static_cast<int>(indices.size()) / 3;
     }
 }
 
@@ -710,6 +676,65 @@ void SceneRenderer::buildWireShapes(int segments) {
                 wireShapeTorus_.positions.push_back({(R+r*std::cos(phi0))*ct, r*std::sin(phi0), (R+r*std::cos(phi0))*st});
                 wireShapeTorus_.positions.push_back({(R+r*std::cos(phi1))*ct, r*std::sin(phi1), (R+r*std::cos(phi1))*st});
                 wireShapeTorus_.lineCount++;
+            }
+        }
+    }
+
+    // Capsule (radius=0.5, cylinder height=1.0): equator ring + 4 meridian
+    // arcs + cylinder edges.
+    //
+    // AUD-061: moved here, out of buildUnitCapsule(), which now also gets
+    // called at the object's ACTUAL radius/height to build a per-object mesh
+    // (getOrBuildCapsuleMesh()) -- wireShapeCapsule_ is a single shared
+    // member (unlike the per-target RenderMesh outputs), so it must stay
+    // built exactly once, at the fixed unit ratio, matching every other
+    // shape's wireShape* member (all built here in buildWireShapes(), not in
+    // their buildUnit*() mesh builders) -- otherwise a later per-object-ratio
+    // buildUnitCapsule() call would silently overwrite the selection-outline
+    // wire shape with the wrong (non-unit) dimensions.
+    {
+        const float pi  = std::numbers::pi_v<float>;
+        const float pi2 = 2.0f * pi;
+        // Equator at y=-0.5 and y=0.5 (cylinder rings)
+        for (int bot = 0; bot < 2; ++bot) {
+            float yw = bot ? -0.5f : 0.5f;
+            for (int i = 0; i < segments; ++i) {
+                float a0 = pi2 * i / segments;
+                float a1 = pi2 * (i+1) / segments;
+                wireShapeCapsule_.positions.push_back({0.5f*std::cos(a0), yw, 0.5f*std::sin(a0)});
+                wireShapeCapsule_.positions.push_back({0.5f*std::cos(a1), yw, 0.5f*std::sin(a1)});
+                wireShapeCapsule_.lineCount++;
+            }
+        }
+        // 4 vertical cylinder edges
+        for (int q = 0; q < 4; ++q) {
+            float a = pi2 * q / 4;
+            float x = 0.5f * std::cos(a), z = 0.5f * std::sin(a);
+            wireShapeCapsule_.positions.push_back({x, -0.5f, z});
+            wireShapeCapsule_.positions.push_back({x,  0.5f, z});
+            wireShapeCapsule_.lineCount++;
+        }
+        // 2 hemisphere arcs (XZ and YZ planes)
+        for (int plane = 0; plane < 2; ++plane) {
+            for (int cap = 0; cap < 2; ++cap) {
+                float yOff = cap ? -0.5f : 0.5f;
+                float ySign = cap ? -1.0f : 1.0f;
+                for (int i = 0; i < segments / 2; ++i) {
+                    float phi0 = pi * i / (segments / 2);
+                    float phi1 = pi * (i+1) / (segments / 2);
+                    float y0 = yOff + 0.5f * std::sin(phi0) * ySign;
+                    float y1 = yOff + 0.5f * std::sin(phi1) * ySign;
+                    float r0 = 0.5f * std::cos(phi0);
+                    float r1 = 0.5f * std::cos(phi1);
+                    if (plane == 0) {
+                        wireShapeCapsule_.positions.push_back({r0, y0, 0.0f});
+                        wireShapeCapsule_.positions.push_back({r1, y1, 0.0f});
+                    } else {
+                        wireShapeCapsule_.positions.push_back({0.0f, y0, r0});
+                        wireShapeCapsule_.positions.push_back({0.0f, y1, r1});
+                    }
+                    wireShapeCapsule_.lineCount++;
+                }
             }
         }
     }
