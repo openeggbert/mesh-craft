@@ -290,12 +290,74 @@ static void testAnimationRanges() {
         check(doc.actions.at("ok").timeScale == 0.5f, "legitimate time_scale=0.5 preserved unchanged");
 }
 
+// ---------------------------------------------------------------------------
+// Transform: near-zero (including exactly-zero) scale on any axis is
+// clamped, magnitude-only -- sign (mirroring) is preserved since negative
+// scale is a legitimate glTF-supported mirroring feature.
+// ---------------------------------------------------------------------------
+static void testTransformScaleRanges() {
+    Mc3Document doc = load(
+        "<mc3 version=\"0.3\" model=\"xform\">\n"
+        "  <objects>\n"
+        "    <box name=\"zero_scale\" scale=\"0 0 0\"/>\n"
+        "    <box name=\"partial_zero\" scale=\"2 0 -3\"/>\n"
+        "    <box name=\"uniform_zero\" scale=\"0\"/>\n"
+        "    <box name=\"negative_ok\" scale=\"-2 -2 -2\">\n"
+        "      <deform scale=\"0 1 1\"/>\n"
+        "      <state id=\"open\" scale=\"0 0 0\"/>\n"
+        "    </box>\n"
+        "  </objects>\n"
+        "</mc3>\n");
+
+    auto find = [&](const std::string& n) -> const Mc3Object* {
+        for (const auto& o : doc.objects) if (o && o->name == n) return o.get();
+        return nullptr;
+    };
+
+    if (const Mc3Object* o = find("zero_scale")) {
+        check(o->transform.scale[0] != 0.0f && o->transform.scale[1] != 0.0f &&
+              o->transform.scale[2] != 0.0f, "scale=\"0 0 0\": all axes clamped away from 0");
+    } else check(false, "zero_scale found");
+
+    if (const Mc3Object* o = find("partial_zero")) {
+        check(o->transform.scale[0] == 2.0f, "scale=\"2 0 -3\": non-degenerate x preserved");
+        check(o->transform.scale[1] != 0.0f, "scale=\"2 0 -3\": degenerate y clamped away from 0");
+        check(o->transform.scale[2] == -3.0f,
+              "scale=\"2 0 -3\": legitimate negative (mirroring) z preserved unchanged");
+    } else check(false, "partial_zero found");
+
+    if (const Mc3Object* o = find("uniform_zero")) {
+        check(o->transform.scale[0] != 0.0f && o->transform.scale[1] != 0.0f &&
+              o->transform.scale[2] != 0.0f,
+              "single-value scale=\"0\": all axes clamped away from 0");
+    } else check(false, "uniform_zero found");
+
+    if (const Mc3Object* o = find("negative_ok")) {
+        check(o->transform.scale[0] == -2.0f && o->transform.scale[1] == -2.0f &&
+              o->transform.scale[2] == -2.0f,
+              "scale=\"-2 -2 -2\": legitimate uniform negative (mirroring) preserved unchanged");
+        check(o->deform.has_value(), "deform parsed");
+        if (o->deform)
+            check(o->deform->scale[0] != 0.0f,
+                  "deform scale=\"0 1 1\": degenerate x axis clamped away from 0");
+        check(o->states.count("open") == 1, "state 'open' parsed");
+        if (o->states.count("open")) {
+            const auto& st = o->states.at("open");
+            check(st.scale.has_value(), "state 'open' scale present");
+            if (st.scale)
+                check((*st.scale)[0] != 0.0f && (*st.scale)[1] != 0.0f && (*st.scale)[2] != 0.0f,
+                      "state 'open' scale=\"0 0 0\": all axes clamped away from 0");
+        }
+    } else check(false, "negative_ok found");
+}
+
 int main() {
     testCameraRanges();
     testMaterialRanges();
     testGeometryRanges();
     testEnvironmentRanges();
     testAnimationRanges();
+    testTransformScaleRanges();
 
     if (failures == 0) { std::cout << "All numeric-range tests passed.\n"; return 0; }
     std::cerr << failures << " numeric-range test(s) failed.\n";

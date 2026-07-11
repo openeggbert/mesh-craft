@@ -343,6 +343,27 @@ static std::string childText(const XMLElement* el, const char* childName) {
 // Transform
 // ---------------------------------------------------------------------------
 
+// SYS-W1-02: exactly-zero (or extremely-near-zero) scale on any axis
+// degenerates the transform matrix to non-invertible, which breaks any
+// downstream inverse-transpose normal calculation (NaN/Inf normals).
+// Deliberately does NOT clamp all negative scale -- negative scale is a
+// legitimate mirroring feature: mc3togltf's GltfExporter.cpp passes
+// t.scale straight through to glTF's node.scale (GltfExporter.cpp:830),
+// and glTF's own spec explicitly supports negative scale for mirroring.
+// Only magnitude near zero is degenerate, regardless of sign; the sign is
+// preserved when clamping so a tiny-but-intentionally-negative scale
+// doesn't flip to positive.
+static constexpr float kMinScaleMagnitude = 1e-4f;
+
+static float clampScaleAxis(const XMLElement* el, float raw) {
+    if (std::fabs(raw) >= kMinScaleMagnitude) return raw;
+    float clamped = (raw < 0.0f) ? -kMinScaleMagnitude : kMinScaleMagnitude;
+    reportWarning(el, "scale", "value " + std::to_string(raw) +
+                  " has near-zero magnitude (degenerates the transform matrix)",
+                  "clamped to " + std::to_string(clamped));
+    return clamped;
+}
+
 static Mc3Transform parseTransform(const XMLElement* el) {
     Mc3Transform t;
     t.position = attrVec3(el, "position");
@@ -362,6 +383,7 @@ static Mc3Transform parseTransform(const XMLElement* el) {
         } else {
             t.scale = parseVec3(s, {1,1,1});
         }
+        for (int i = 0; i < 3; ++i) t.scale[i] = clampScaleAxis(el, t.scale[i]);
     }
     t.pivot = attrVec3(el, "pivot");
     return t;
@@ -372,6 +394,10 @@ static std::optional<Mc3Deform> parseDeform(const XMLElement* el) {
     if (!d) return std::nullopt;
     Mc3Deform def;
     def.scale = attrVec3(d, "scale", {1,1,1});
+    // SYS-W1-02: deform.scale feeds the same Mat4::scaling() as the main
+    // transform's scale (CsgEvaluator.cpp, GltfExporter.cpp) -- same
+    // near-zero-degenerate-matrix hazard, same fix.
+    for (int i = 0; i < 3; ++i) def.scale[i] = clampScaleAxis(d, def.scale[i]);
     return def;
 }
 
@@ -672,7 +698,13 @@ static std::shared_ptr<Mc3Object> parseObject(const XMLElement* el) {
         Mc3ObjectState st;
         if (s->Attribute("position")) st.position = attrVec3(s, "position");
         if (s->Attribute("rotation")) st.rotation = attrVec3(s, "rotation");
-        if (s->Attribute("scale"))    st.scale    = attrVec3(s, "scale", {1,1,1});
+        if (s->Attribute("scale")) {
+            st.scale = attrVec3(s, "scale", {1,1,1});
+            // SYS-W1-02: a named state's scale overrides the base
+            // transform's scale when the state is applied -- same
+            // near-zero-degenerate-matrix hazard as parseTransform's scale.
+            for (int i = 0; i < 3; ++i) (*st.scale)[i] = clampScaleAxis(s, (*st.scale)[i]);
+        }
         if (s->Attribute("visible"))  st.visible  = attrB(s, "visible", true);
         if (s->Attribute("material")) st.material = std::string(attr(s, "material"));
         obj->states[stateId] = st;
