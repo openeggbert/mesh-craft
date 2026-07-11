@@ -147,9 +147,78 @@ static void testMaterialRanges() {
     }
 }
 
+// ---------------------------------------------------------------------------
+// Geometry: primitive radius/height/size/major_radius/minor_radius,
+// cross-section width/height/radius/inner_radius, and extrude path
+// length/radius/height must all reject negative values (clamped to 0).
+// ---------------------------------------------------------------------------
+static void testGeometryRanges() {
+    Mc3Document doc = load(
+        "<mc3 version=\"0.3\" model=\"geom\">\n"
+        "  <objects>\n"
+        "    <box name=\"bad_box\" size=\"-2 -3 4\"/>\n"
+        "    <sphere name=\"bad_sphere\" radius=\"-5\"/>\n"
+        "    <cylinder name=\"bad_cyl\" radius=\"-1\" height=\"-2\"/>\n"
+        "    <torus name=\"bad_torus\" major_radius=\"-1\" minor_radius=\"-0.5\"/>\n"
+        "    <disk name=\"bad_disk\" radius=\"2\" inner_radius=\"-3\"/>\n"
+        "    <sphere name=\"ok_sphere\" radius=\"2.5\"/>\n"
+        "    <extrude name=\"bad_extrude\">\n"
+        "      <cross_section type=\"rect\" width=\"-1\" height=\"-2\" radius=\"-3\" inner_radius=\"-4\"/>\n"
+        "      <path type=\"helix\" length=\"-1\" radius=\"-2\" height=\"-3\"/>\n"
+        "    </extrude>\n"
+        "  </objects>\n"
+        "</mc3>\n");
+
+    auto find = [&](const std::string& n) -> const Mc3Object* {
+        for (const auto& o : doc.objects) if (o && o->name == n) return o.get();
+        return nullptr;
+    };
+
+    if (const Mc3Object* o = find("bad_box"); o && o->primitive) {
+        check(o->primitive->size[0] == 0.0f && o->primitive->size[1] == 0.0f,
+              "box size=-2,-3,4: negative components clamped to 0");
+        check(o->primitive->size[2] == 4.0f, "box size=-2,-3,4: positive component preserved");
+    } else check(false, "bad_box parsed with a primitive");
+
+    if (const Mc3Object* o = find("bad_sphere"); o && o->primitive) {
+        check(o->primitive->radius == 0.0f, "sphere radius=-5 clamped to 0");
+    } else check(false, "bad_sphere parsed with a primitive");
+
+    if (const Mc3Object* o = find("bad_cyl"); o && o->primitive) {
+        check(o->primitive->radius == 0.0f, "cylinder radius=-1 clamped to 0");
+        check(o->primitive->height == 0.0f, "cylinder height=-2 clamped to 0");
+    } else check(false, "bad_cyl parsed with a primitive");
+
+    if (const Mc3Object* o = find("bad_torus"); o && o->primitive) {
+        check(o->primitive->majorRadius == 0.0f, "torus major_radius=-1 clamped to 0");
+        check(o->primitive->minorRadius == 0.0f, "torus minor_radius=-0.5 clamped to 0");
+    } else check(false, "bad_torus parsed with a primitive");
+
+    if (const Mc3Object* o = find("bad_disk"); o && o->primitive) {
+        check(o->primitive->minorRadius == 0.0f,
+              "disk inner_radius=-3 clamped/defaulted to 0 (not left negative)");
+    } else check(false, "bad_disk parsed with a primitive");
+
+    if (const Mc3Object* o = find("ok_sphere"); o && o->primitive) {
+        check(o->primitive->radius == 2.5f, "legitimate sphere radius=2.5 preserved unchanged");
+    } else check(false, "ok_sphere parsed with a primitive");
+
+    if (const Mc3Object* o = find("bad_extrude"); o && o->extrude) {
+        const auto& cs = o->extrude->crossSection;
+        check(cs.width == 0.0f && cs.height == 0.0f && cs.radius == 0.0f && cs.innerRadius == 0.0f,
+              "extrude cross_section: all negative width/height/radius/inner_radius clamped to 0");
+        const auto& path = o->extrude->path;
+        check(path.length == 0.0f, "extrude path length=-1 clamped to 0");
+        check(path.helixHeight == 0.0f, "extrude helix path height=-3 clamped to 0");
+        // helix reuses the shared "radius" attribute for helixRadius.
+        check(path.helixRadius == 0.0f, "extrude helix path radius=-2 clamped to 0");
+    } else check(false, "bad_extrude parsed with an extrude");
+}
+
 int main() {
     testCameraRanges();
     testMaterialRanges();
+    testGeometryRanges();
 
     if (failures == 0) { std::cout << "All numeric-range tests passed.\n"; return 0; }
     std::cerr << failures << " numeric-range test(s) failed.\n";

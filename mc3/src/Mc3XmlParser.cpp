@@ -188,6 +188,26 @@ static float clampMin(const XMLElement* el, const char* field, float raw, float 
     return minv;
 }
 
+// SYS-W1-02: geometry dimensions (radius/height/size/majorRadius/
+// minorRadius, cross-section width/height/radius/inner_radius, extrude path
+// length/radius/height) are only ever meaningful as non-negative -- a
+// negative box size or sphere radius has no physical meaning and produces
+// geometry with inverted/self-intersecting winding downstream (MeshBuilder.
+// cpp assumes positive dimensions when computing normals). Clamped to 0, not
+// rejected: same authoring-mistake judgment call as the other SYS-W1-02
+// ranges. Deliberately clamps only NEGATIVE values, leaving exactly-zero
+// untouched -- zero is already a meaningful, pre-existing input for several
+// of these fields (e.g. <disk inner_radius="0"/> means "solid disk"), so
+// forcing a strictly-positive floor would change legitimate existing
+// behavior that finite_input_test/roundtrip_test already rely on.
+static float rejectNegative(const XMLElement* el, const char* field, float raw) {
+    if (raw >= 0.0f) return raw;
+    reportWarning(el, field, "value " + std::to_string(raw) + " is negative "
+                  "(dimensions/radii must be >= 0)",
+                  "clamped to 0");
+    return 0.0f;
+}
+
 // Tessellation counts (segments / sides / subdivisions) come from untrusted
 // input and directly drive geometry allocation, so they are clamped to a sane
 // range. The upper bound is far above any legitimate mesh but stops a hostile
@@ -367,10 +387,10 @@ static Mc3CrossSection parseCrossSection(const XMLElement* el) {
     else if (t == "polygon") cs.type = CrossSectionType::Polygon;
     else if (t == "star")    cs.type = CrossSectionType::Star;
     else                     cs.type = CrossSectionType::Custom;
-    cs.width       = attrF(el, "width",        0.3f);
-    cs.height      = attrF(el, "height",       0.3f);
-    cs.radius      = attrF(el, "radius",       0.1f);
-    cs.innerRadius = attrF(el, "inner_radius", 0.0f);
+    cs.width       = rejectNegative(el, "width",        attrF(el, "width",        0.3f));
+    cs.height      = rejectNegative(el, "height",       attrF(el, "height",       0.3f));
+    cs.radius      = rejectNegative(el, "radius",       attrF(el, "radius",       0.1f));
+    cs.innerRadius = rejectNegative(el, "inner_radius", attrF(el, "inner_radius", 0.0f));
     cs.sides       = attrCountBudgeted(el, "sides",    6, 3);
     cs.segments    = attrCountBudgeted(el, "segments", 32, 1);
     for (const XMLElement* p = el->FirstChildElement("point"); p; p = p->NextSiblingElement("point")) {
@@ -390,12 +410,12 @@ static Mc3ExtrudePath parsePath(const XMLElement* el) {
     else if (t == "helix")    path.type = ExtrudePathType::Helix;
     else if (t == "polyline") path.type = ExtrudePathType::Polyline;
     else if (t == "bezier")   path.type = ExtrudePathType::Bezier;
-    path.length      = attrF(el, "length",  1.0f);
+    path.length      = rejectNegative(el, "length", attrF(el, "length",  1.0f));
     path.axis        = attr (el, "axis",   "y");
-    path.arcRadius   = attrF(el, "radius", 1.0f);
+    path.arcRadius   = rejectNegative(el, "radius", attrF(el, "radius", 1.0f));
     path.arcAngle    = attrF(el, "angle",  180.0f);
-    path.helixRadius = attrF(el, "radius", 0.5f);
-    path.helixHeight = attrF(el, "height", 2.0f);
+    path.helixRadius = rejectNegative(el, "radius", attrF(el, "radius", 0.5f));
+    path.helixHeight = rejectNegative(el, "height", attrF(el, "height", 2.0f));
     path.helixTurns  = attrF(el, "turns",  4.0f);
     for (const XMLElement* p = el->FirstChildElement("point"); p; p = p->NextSiblingElement("point")) {
         Mc3PathPoint pt;
@@ -469,9 +489,15 @@ static Mc3Primitive parsePrimitive(const XMLElement* el, ObjectType type) {
             auto v = parseVec3(s);
             p.size = {v[0], v[1], v[2]};
         }
+        // SYS-W1-02: a negative box/plane/grid dimension is nonsensical
+        // (see rejectNegative's comment above) regardless of which of the
+        // three size-parsing branches above produced it.
+        p.size[0] = rejectNegative(el, "size", p.size[0]);
+        p.size[1] = rejectNegative(el, "size", p.size[1]);
+        p.size[2] = rejectNegative(el, "size", p.size[2]);
     }
-    p.radius        = attrF(el, "radius",         0.5f);
-    p.height        = attrF(el, "height",         1.0f);
+    p.radius        = rejectNegative(el, "radius", attrF(el, "radius", 0.5f));
+    p.height        = rejectNegative(el, "height", attrF(el, "height", 1.0f));
     // IcoSphere default "segments" is 2; all other primitives default to 32.
     // The count is clamped to a safe upper bound so a hostile value can't drive
     // unbounded allocation. Note IcoSphere reuses the same 0..32-style scale as
@@ -480,14 +506,26 @@ static Mc3Primitive parsePrimitive(const XMLElement* el, ObjectType type) {
     // clamp here just stops the raw integer from being absurd.
     p.segments      = attrCountBudgeted(el, "segments", type == ObjectType::IcoSphere ? 2 : 32, 0);
     p.axis          = attr (el, "axis",           "y");
-    p.majorRadius   = attrF(el, "major_radius",   0.35f);
+    p.majorRadius   = rejectNegative(el, "major_radius", attrF(el, "major_radius", 0.35f));
     if (type == ObjectType::Disk) {
         // Disk uses inner_radius (0=solid); accept legacy minor_radius for compat.
+        // -1.0f is a sentinel meaning "attribute absent" (any legitimate
+        // inner_radius is >= 0), so a negative inner_radius -- whether the
+        // sentinel default or a genuinely-authored negative value -- falls
+        // back to the legacy minor_radius attribute (itself still checked
+        // below); an explicitly-negative attribute additionally gets a
+        // diagnostic so the mistake isn't silently swallowed.
         float ir = attrF(el, "inner_radius", -1.0f);
-        if (ir < 0.0f) ir = attrF(el, "minor_radius", 0.0f);
-        p.minorRadius = ir;
+        if (ir < 0.0f) {
+            if (el->Attribute("inner_radius"))
+                reportWarning(el, "inner_radius", "value " + std::to_string(ir) +
+                              " is negative (dimensions/radii must be >= 0)",
+                              "ignored, falling back to legacy minor_radius/default");
+            ir = attrF(el, "minor_radius", 0.0f);
+        }
+        p.minorRadius = rejectNegative(el, "minor_radius", ir);
     } else {
-        p.minorRadius = attrF(el, "minor_radius", 0.15f);
+        p.minorRadius = rejectNegative(el, "minor_radius", attrF(el, "minor_radius", 0.15f));
     }
     p.subdivisionsX = attrCountBudgeted(el, "subdivisions_x", 4, 1);
     p.subdivisionsZ = attrCountBudgeted(el, "subdivisions_z", 4, 1);
