@@ -23,6 +23,7 @@
 #include <cctype>
 #include <cmath>
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
 #include <filesystem>
 #include <fstream>
@@ -75,6 +76,17 @@ MeshCraftApplication::MeshCraftApplication(std::filesystem::path filePath, std::
     , autoExportPath_(std::move(exportPath))
     , autoExportCountdown_(autoExportPath_.empty() ? 0 : 2)
 {
+    // Test-only hook (AUD-058): bloom/SSAO are UI-menu-only toggles with no
+    // CLI/scene-file equivalent, so a headless --screenshot run never
+    // allocates their GL resources and a shutdown-leak test against it would
+    // pass vacuously (nothing was ever allocated to leak). Setting this env
+    // var forces both on for the one headless frame the screenshot path
+    // renders, so test/gl_shutdown_leak_test.py actually exercises
+    // BloomGL's full resource pool before checking it was released.
+    if (std::getenv("MESHCRAFT_TEST_FORCE_POSTFX")) {
+        bloomEnabled_ = true;
+        ssaoEnabled_  = true;
+    }
     getWindowProperty().setTitleProperty("Mesh Craft");
     setIsMouseVisibleProperty(true);
 }
@@ -1003,6 +1015,39 @@ struct BloomGL {
         if (progMatPreview) { DeleteProgram(progMatPreview);          progMatPreview = 0; }
         ready       = false;
     }
+
+    // AUD-058 regression guard: every GL handle this struct owns must be back
+    // to 0 after cleanup(). If a future change adds a new texture/fbo/program
+    // member without adding its matching delete call above, this catches it at
+    // shutdown (leakCheck() logs exactly which handle(s) survived) instead of
+    // silently leaking again. Kept as an explicit field list (not reflection)
+    // so a newly-added handle is a compile-time reminder to update both here
+    // and in cleanup().
+    bool allReleased() const {
+        return !fboA && !fboB && !texA && !texB && !progBlur && !progComposite &&
+               !progSkybox && !skyboxTex && !quadVAO && !quadVBO &&
+               !ssaoDepthFbo && !ssaoDepthTex && !ssaoFbo && !ssaoTex &&
+               !ssaoBlurFbo && !ssaoBlurTex && !progSsao && !progSsaoBlur &&
+               !progSsaoComposite && !matPreviewFbo && !matPreviewTex && !progMatPreview;
+    }
+
+    void leakCheck(const char* where) const {
+        if (allReleased()) return;
+        std::cerr << "[Bloom] LEAK after " << where << ": ";
+        auto rep = [&](const char* n, unsigned h) { if (h) std::cerr << n << "=" << h << " "; };
+        rep("fboA",fboA); rep("fboB",fboB); rep("texA",texA); rep("texB",texB);
+        rep("progBlur",progBlur); rep("progComposite",progComposite);
+        rep("progSkybox",progSkybox); rep("skyboxTex",skyboxTex);
+        rep("quadVAO",quadVAO); rep("quadVBO",quadVBO);
+        rep("ssaoDepthFbo",ssaoDepthFbo); rep("ssaoDepthTex",ssaoDepthTex);
+        rep("ssaoFbo",ssaoFbo); rep("ssaoTex",ssaoTex);
+        rep("ssaoBlurFbo",ssaoBlurFbo); rep("ssaoBlurTex",ssaoBlurTex);
+        rep("progSsao",progSsao); rep("progSsaoBlur",progSsaoBlur);
+        rep("progSsaoComposite",progSsaoComposite);
+        rep("matPreviewFbo",matPreviewFbo); rep("matPreviewTex",matPreviewTex);
+        rep("progMatPreview",progMatPreview);
+        std::cerr << "\n";
+    }
 };
 BloomGL s_bloom;
 
@@ -1626,6 +1671,30 @@ MeshCraftApplication::~MeshCraftApplication() {
     if (gl.DeleteTextures) {
         if (shadowDebugColorTex_) { gl.DeleteTextures(1, &shadowDebugColorTex_); shadowDebugColorTex_ = 0; }
         if (shadowDebugDepthTex_) { gl.DeleteTextures(1, &shadowDebugDepthTex_); shadowDebugDepthTex_ = 0; }
+    }
+
+    // AUD-058: s_bloom.cleanup() releases the whole bloom/SSAO/skybox/
+    // material-preview/shader/VAO/VBO/FBO/texture pool -- previously it was
+    // only ever called mid-run (initBloom()'s rebuild-on-resize path and its
+    // shader-compile-failure path), never on shutdown, so every one of those
+    // GL objects leaked for the process lifetime. Safe to call unconditionally
+    // even if LoadContent's GL init never ran: every handle cleanup() guards
+    // on is zero-initialized, and it never got a chance to become non-zero
+    // without loadFunctions() having already populated the same function
+    // pointers cleanup() would use to delete it.
+    gl.cleanup();
+
+    // Real lifecycle verification, not just "the code compiles": leakCheck()
+    // reads back every handle cleanup() is supposed to have zeroed and prints
+    // exactly which one(s) survived if any did not. A future member added to
+    // BloomGL without a matching cleanup()/allReleased() update fails loudly
+    // here on every single run (see test/gl_shutdown_leak_test.py, which runs
+    // the smoke-test binary and asserts this never prints).
+    gl.leakCheck("MeshCraftApplication shutdown");
+    if (shadowDebugFbo_ || shadowDebugColorTex_ || shadowDebugDepthTex_) {
+        std::cerr << "[ShadowDebug] LEAK after MeshCraftApplication shutdown: "
+                  << "fbo=" << shadowDebugFbo_ << " colorTex=" << shadowDebugColorTex_
+                  << " depthTex=" << shadowDebugDepthTex_ << "\n";
     }
 }
 
