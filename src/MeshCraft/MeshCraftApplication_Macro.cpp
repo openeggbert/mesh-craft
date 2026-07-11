@@ -1,5 +1,6 @@
 #include "MeshCraft/MeshCraftApplication.hpp"
 #include "MeshCraftPrivate.hpp"
+#include "MeshCraft/EditorAlgorithms.hpp"
 
 #include <filesystem>
 #include <fstream>
@@ -94,38 +95,37 @@ void MeshCraftApplication::executeMacroStep(const MacroStep& step) {
 // Save / Load
 // ---------------------------------------------------------------------------
 
+// AUD-031: previously a separate hand-copied duplicate of
+// saveMacroAlg/loadMacroAlg's own tab-separated-line format logic.
+// MacroStep and MacroStepAlg are structurally identical but distinct
+// types (MacroStep is CNA-coupled, declared in MeshCraftApplication.hpp;
+// MacroStepAlg is the CNA-free mirror), so a small copy is unavoidable
+// here -- the file open/failure-check stays in production too, since
+// saveMacroAlg/loadMacroAlg don't report open failure (an ofstream/
+// ifstream that fails to open just silently no-ops), and that user-visible
+// error message is worth preserving.
 void MeshCraftApplication::saveMacro(const std::string& path) {
     if (path.empty()) { setStatusMsg("No path specified", true, 2.f); return; }
     std::error_code ec;
     std::filesystem::create_directories(std::filesystem::path(path).parent_path(), ec);
-    std::ofstream f(path);
-    if (!f) { setStatusMsg("Failed to save: " + path, true, 3.f); return; }
-    for (const auto& step : macroSteps_) {
-        f << step.verb;
-        for (const auto& arg : step.args) f << '\t' << arg;
-        f << '\n';
-    }
+    if (!std::ofstream(path)) { setStatusMsg("Failed to save: " + path, true, 3.f); return; }
+    std::vector<MacroStepAlg> steps;
+    steps.reserve(macroSteps_.size());
+    for (const auto& s : macroSteps_) steps.push_back({s.verb, s.args});
+    saveMacroAlg(path, steps);
     setStatusMsg("Macro saved: " + std::filesystem::path(path).filename().string(), false, 2.f);
 }
 
 void MeshCraftApplication::loadMacro(const std::string& path) {
     if (path.empty()) { setStatusMsg("No path specified", true, 2.f); return; }
-    std::ifstream f(path);
-    if (!f) { setStatusMsg("Cannot open: " + path, true, 3.f); return; }
+    if (!std::ifstream(path)) { setStatusMsg("Cannot open: " + path, true, 3.f); return; }
     isRecording_ = false;
     macroSteps_.clear();
-    std::string line;
-    while (std::getline(f, line)) {
-        if (line.empty()) continue;
+    for (auto& s : loadMacroAlg(path)) {
         MacroStep step;
-        std::istringstream ss(line);
-        std::string tok;
-        bool first = true;
-        while (std::getline(ss, tok, '\t')) {
-            if (first) { step.verb = tok; first = false; }
-            else step.args.push_back(tok);
-        }
-        if (!step.verb.empty()) macroSteps_.push_back(std::move(step));
+        step.verb = std::move(s.verb);
+        step.args = std::move(s.args);
+        macroSteps_.push_back(std::move(step));
     }
     char msg[64];
     std::snprintf(msg, sizeof(msg), "Macro loaded: %d step(s)",
