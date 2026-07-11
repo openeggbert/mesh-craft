@@ -557,6 +557,16 @@ if(BUILD_TESTING)
                     "$<TARGET_FILE:mc3togltf>"
         )
         set_tests_properties(mc3togltf_icosphere_uv_seam PROPERTIES TIMEOUT 30 LABELS "export")
+        # Hostile/degenerate geometry: cyclic <instance> (unbounded recursion)
+        # and a zero-radius helix (NaN vertices) must fail loudly, not crash or
+        # emit an invalid glTF reported as success.
+        add_test(
+            NAME mc3togltf_hostile_geometry
+            COMMAND "${PYTHON3_EXEC}"
+                    "${CMAKE_CURRENT_SOURCE_DIR}/test/hostile_geometry_test.py"
+                    "$<TARGET_FILE:mc3togltf>"
+        )
+        set_tests_properties(mc3togltf_hostile_geometry PROPERTIES TIMEOUT 40 LABELS "export")
         if(EXISTS "${_house_xml}")
             add_test(
                 NAME mc3togltf_no_partial_output

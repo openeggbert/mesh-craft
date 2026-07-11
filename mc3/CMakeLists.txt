@@ -87,6 +87,13 @@ if(BUILD_TESTING)
     add_test(NAME mc3_finite_input COMMAND mc3_finite_input_test)
     set_tests_properties(mc3_finite_input PROPERTIES TIMEOUT 15 LABELS "format")
 
+    # Input-budget test: tessellation counts clamped to a safe upper bound so a
+    # hostile <sphere segments="100000000"/> can't drive unbounded allocation.
+    add_executable(mc3_input_budget_test test/input_budget_test.cpp)
+    target_link_libraries(mc3_input_budget_test PRIVATE Mc3)
+    add_test(NAME mc3_input_budget COMMAND mc3_input_budget_test)
+    set_tests_properties(mc3_input_budget PROPERTIES TIMEOUT 15 LABELS "format")
+
     # editor_commands_test pulls in MeshCraft/EditorAlgorithms.hpp from the
     # MeshCraft editor's public include dir, which lives at the repo root
     # (include/) — outside the mc3/ subtree. Only build it when those

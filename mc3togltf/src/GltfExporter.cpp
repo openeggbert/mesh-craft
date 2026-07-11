@@ -171,7 +171,7 @@ static float unitScaleFactor(const std::string& unit) {
 }
 
 // Forward declaration
-static int buildNode(ExportCtx& ctx, const Mc3Object& obj);
+static int buildNode(ExportCtx& ctx, const Mc3Object& obj, int depth = 0);
 
 // ---------------------------------------------------------------------------
 // Buffer helpers
@@ -214,6 +214,19 @@ static int addAccessorVec3(tinygltf::Model& model,
         float minX = data[0], minY = data[1], minZ = data[2];
         float maxX = minX,    maxY = minY,    maxZ = minZ;
         for (size_t i = 0; i < data.size(); i += 3) {
+            // A non-finite POSITION component makes the accessor min/max — and
+            // the whole glTF — spec-invalid. Degenerate parametric geometry
+            // (e.g. a helix with radius=0 or turns=0, which divides by zero) can
+            // produce NaN vertices from otherwise-finite inputs, so the parser's
+            // input sanitization can't catch this; fail loudly here instead of
+            // emitting an invalid file the tool reports as "Written:".
+            if (!std::isfinite(data[i]) || !std::isfinite(data[i+1]) ||
+                !std::isfinite(data[i+2])) {
+                throw std::runtime_error(
+                    "non-finite vertex position generated during export "
+                    "(NaN/Inf) — check for degenerate geometry parameters "
+                    "such as a zero-radius/zero-turn helix or zero-scale object");
+            }
             if (data[i]   < minX) minX = data[i];
             if (data[i+1] < minY) minY = data[i+1];
             if (data[i+2] < minZ) minZ = data[i+2];
@@ -713,9 +726,20 @@ static int addMeshDataToGltf(ExportCtx& ctx, MeshData md,
 // Node building (recursive)
 // ---------------------------------------------------------------------------
 
-static int buildNode(ExportCtx& ctx, const Mc3Object& obj)
+// A definition whose subtree contains an <instance> of itself expands forever.
+// buildNode has no visited-set, so a depth cap is the backstop that turns a
+// cyclic/pathologically-deep instance graph into a clear error instead of a
+// stack-overflow crash. 256 is far deeper than any legitimate hierarchy.
+static constexpr int kMaxNodeDepth = 256;
+
+static int buildNode(ExportCtx& ctx, const Mc3Object& obj, int depth)
 {
     ctx.stats.objectsProcessed++;
+
+    if (depth > kMaxNodeDepth)
+        throw std::runtime_error(
+            "object/instance nesting exceeds " + std::to_string(kMaxNodeDepth) +
+            " levels — possible cyclic <instance> definition");
 
     // Invisible objects (and their entire subtree) are skipped
     if (!obj.visible) return -1;
@@ -800,7 +824,7 @@ static int buildNode(ExportCtx& ctx, const Mc3Object& obj)
             // Recurse into definition's children
             for (const auto& child : defObj.children) {
                 if (!child) continue;
-                int ci = buildNode(ctx, *child);
+                int ci = buildNode(ctx, *child, depth + 1);
                 if (ci >= 0) node.children.push_back(ci);
             }
         } else {
@@ -854,7 +878,7 @@ static int buildNode(ExportCtx& ctx, const Mc3Object& obj)
     if (!csgEvaluated && obj.type != ObjectType::Instance) {
         for (const auto& child : obj.children) {
             if (!child) continue;
-            int ci = buildNode(ctx, *child);
+            int ci = buildNode(ctx, *child, depth + 1);
             if (ci >= 0) node.children.push_back(ci);
         }
     }

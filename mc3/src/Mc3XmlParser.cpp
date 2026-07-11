@@ -49,6 +49,21 @@ static int attrI(const XMLElement* el, const char* name, int def = 0) {
     try { return std::stoi(v); } catch (...) { return def; }
 }
 
+// Tessellation counts (segments / sides / subdivisions) come from untrusted
+// input and directly drive geometry allocation, so they are clamped to a sane
+// range. The upper bound is far above any legitimate mesh but stops a hostile
+// <sphere segments="100000000"/> (which would request ~5e15 vertices) or
+// <grid subdivisions_x="1000000"/> from exhausting memory.
+static constexpr int kMaxTessellation = 4096;
+
+static int attrCount(const XMLElement* el, const char* name, int def,
+                     int minv, int maxv = kMaxTessellation) {
+    int v = attrI(el, name, def);
+    if (v < minv) return minv;
+    if (v > maxv) return maxv;
+    return v;
+}
+
 static bool attrB(const XMLElement* el, const char* name, bool def = false) {
     const char* v = el->Attribute(name);
     if (!v) return def;
@@ -115,8 +130,8 @@ static Mc3CrossSection parseCrossSection(const XMLElement* el) {
     cs.height      = attrF(el, "height",       0.3f);
     cs.radius      = attrF(el, "radius",       0.1f);
     cs.innerRadius = attrF(el, "inner_radius", 0.0f);
-    cs.sides       = attrI(el, "sides",        6);
-    cs.segments    = attrI(el, "segments",     32);
+    cs.sides       = attrCount(el, "sides",    6, 3);
+    cs.segments    = attrCount(el, "segments", 32, 1);
     for (const XMLElement* p = el->FirstChildElement("point"); p; p = p->NextSiblingElement("point")) {
         Mc3CrossSection::Point2D pt;
         pt.x = attrF(p, "x", 0);
@@ -161,7 +176,7 @@ static std::optional<Mc3Extrude> parseExtrude(const XMLElement* el) {
     ext.crossSection = parseCrossSection(cs);
     ext.path         = parsePath(pt);
     ext.twist    = attrF(el, "twist",    0.0f);
-    ext.segments = attrI(el, "segments", 32);
+    ext.segments = attrCount(el, "segments", 32, 1);
     ext.smooth   = attrB(el, "smooth",   true);
     ext.caps     = attrB(el, "caps",     true);
     return ext;
@@ -210,8 +225,13 @@ static Mc3Primitive parsePrimitive(const XMLElement* el, ObjectType type) {
     }
     p.radius        = attrF(el, "radius",         0.5f);
     p.height        = attrF(el, "height",         1.0f);
-    // IcoSphere default subdivisions is 2; all other primitives default to 32.
-    p.segments      = attrI(el, "segments", type == ObjectType::IcoSphere ? 2 : 32);
+    // IcoSphere default "segments" is 2; all other primitives default to 32.
+    // The count is clamped to a safe upper bound so a hostile value can't drive
+    // unbounded allocation. Note IcoSphere reuses the same 0..32-style scale as
+    // Sphere: buildIcoSphere() internally maps it to min(4, segments/8)
+    // subdivisions, so its actual triangle count is already bounded there — the
+    // clamp here just stops the raw integer from being absurd.
+    p.segments      = attrCount(el, "segments", type == ObjectType::IcoSphere ? 2 : 32, 0);
     p.axis          = attr (el, "axis",           "y");
     p.majorRadius   = attrF(el, "major_radius",   0.35f);
     if (type == ObjectType::Disk) {
@@ -222,8 +242,8 @@ static Mc3Primitive parsePrimitive(const XMLElement* el, ObjectType type) {
     } else {
         p.minorRadius = attrF(el, "minor_radius", 0.15f);
     }
-    p.subdivisionsX = attrI(el, "subdivisions_x", 4);
-    p.subdivisionsZ = attrI(el, "subdivisions_z", 4);
+    p.subdivisionsX = attrCount(el, "subdivisions_x", 4, 1);
+    p.subdivisionsZ = attrCount(el, "subdivisions_z", 4, 1);
     return p;
 }
 
