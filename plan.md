@@ -204,8 +204,32 @@ Mandated workstream items not tied to a single audit finding.
   correctness: transaction abstraction, pre-mutation capture verification,
   `undo_coverage_audit.py` triage, atomicity, redo invalidation, selection
   restore. See `AUD-036b` for the authoritative task text.
-- **SYS-W9-02** `[TODO]` `P1` — Atomic save (temp + rename); autosave; crash/
-  corrupt recovery; never overwrite a user file after a failed save.
+- **SYS-W9-02** `[DONE]` `P1` — Atomic save (temp + rename); autosave; crash/
+  corrupt recovery; never overwrite a user file after a failed save. Commits
+  `386db82`, `6f93aeb`. Verify: `ctest --test-dir cmake-build-debug -R
+  mc3_autosave_recovery` (headless mechanism test) plus manual: open a file,
+  edit without saving, kill the process, relaunch and open the same file —
+  the "Recover Unsaved Changes" dialog offers Recover/Discard/Keep. Status:
+  atomic save (temp file + `std::filesystem::rename`) already existed at the
+  writer layer for both formats before this task (`Mc3XmlWriter.cpp`,
+  `McbWriter.cpp`, pre-existing — a failed write can never leave a
+  truncated/corrupt file at the real path, so "never overwrite a user file
+  after a failed save" was already true). Autosave itself
+  (`performAutoSave()`/`autoSaveTickAlg`) also already existed. What this
+  task added is actual RECOVERY: previously the only signal a newer
+  `.autosave` existed was a passive 8-second status-message toast fired once
+  at startup for command-line-opened files only — File > Open and Open
+  Recent never checked at all. Added `checkForNewerAutosave()` as the one
+  call site all three load paths now share, plus `recoverFromAutosave()`/
+  `discardAutosave()` and a real "Recover Unsaved Changes" modal dialog
+  (Recover / Discard Autosave / Keep Saved File). The App-level wiring
+  (CNA/ImGui-coupled) is verified manually per the note above, matching this
+  codebase's existing convention for UI-dialog-level behavior (see
+  `AUD-036b`'s frame-driven tests for the exception to that convention where
+  it was worth building a headless ImGui harness); the underlying mtime-
+  comparison + reload mechanism it depends on is headlessly tested
+  (`mc3_autosave_recovery_test`, `mc3/test/autosave_recovery_test.cpp`, 9
+  assertions).
 
 ### W11 — Build / CI / DX
 - **SYS-W11-01** `[TODO, owner-gated]` `P1` — Un-park CI (`.github_` → `.github`)
