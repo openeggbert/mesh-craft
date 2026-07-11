@@ -23,6 +23,12 @@ namespace MeshCraft {
 // ---------------------------------------------------------------------------
 
 std::filesystem::path ModelRegistry::defaultPath() {
+    // STAB-0360: lets a user/script redirect the registry DB (e.g. to a
+    // shared network location, or an isolated path for testing) without
+    // needing a UI for it.
+    if (const char* override = std::getenv("MESHCRAFT_REGISTRY_DB"); override && override[0])
+        return std::filesystem::path(override);
+
 #ifdef _WIN32
     const char* h = std::getenv("USERPROFILE");
     if (!h) h = ".";

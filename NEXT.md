@@ -1,6 +1,6 @@
 # NEXT.md
 
-_Last updated: 2026-07-11, prior commit `6f606df` (branch `develop`). Three product-decision rows resolved this session: `STAB-0092` (`<embeds>` not merged from `<include>`d files), `STAB-0289` (Merge Scene object-id collision handling), and `STAB-0327` (prefs.ini auto-created on first launch), all owner-approved and implemented — see §3._
+_Last updated: 2026-07-11, prior commit `485b5d5` (branch `develop`). Four product-decision rows resolved this session: `STAB-0092` (`<embeds>` not merged from `<include>`d files), `STAB-0289` (Merge Scene object-id collision handling), `STAB-0327` (prefs.ini auto-created on first launch), and `STAB-0360` (registry DB path env var override), all owner-approved and implemented — see §3._
 
 ---
 
@@ -10,7 +10,7 @@ _Last updated: 2026-07-11, prior commit `6f606df` (branch `develop`). Three prod
 
 **Main goal**: reach a fully stabilized, test-covered codebase before adding new product features. All stabilization work is tracked in `plan.md` as `STAB-XXXX` tasks across sections S0–S25 (`STABILIZATION.md` holds the gate policy). The original S0–S20 (650 tasks) was later extended with 5 audit-driven sections: S21 (mc3 format spec-vs-impl), S22 (MCB binary coverage), S23 (mc3togltf export quality), S24 (editor UI coverage of the mc3 format — driven by `missing.md`), and S25 (live-preview rendering correctness) — 723 tasks total.
 
-**Current phase**: stabilization is functionally complete but not formally "all green." `plan.md`: **686/723 rows ✅, 35 🟡 (mostly implemented-but-pending-live-visual-verification — this headless environment can't drive ImGui click/drag interaction; a smaller number are permanently-flagged real gaps or product decisions), 0 needs_human, 2 📋 (one blocked on an external action, one explicitly skipped), 0 🔴**. Per this project's own policy, **new feature work is not yet authorized** without explicit per-task owner approval — the S24 UI-coverage work (§3) was all individually approved task-by-task per `CLAUDE.md`'s `plan.md` review workflow, not a blanket go-ahead. A partial live-verification pass over §S24 happened 2026-07-10 (see §3) — 8 of the 14 newest 🟡 rows got real click-through confirmation (6 flipped to ✅, 2 real bugs found+fixed), the owner then stopped testing; the remaining rows (§8 item 4) are still open whenever there's appetite for more.
+**Current phase**: stabilization is functionally complete but not formally "all green." `plan.md`: **687/723 rows ✅, 34 🟡 (mostly implemented-but-pending-live-visual-verification — this headless environment can't drive ImGui click/drag interaction; a smaller number are permanently-flagged real gaps or product decisions), 0 needs_human, 2 📋 (one blocked on an external action, one explicitly skipped), 0 🔴**. Per this project's own policy, **new feature work is not yet authorized** without explicit per-task owner approval — the S24 UI-coverage work (§3) was all individually approved task-by-task per `CLAUDE.md`'s `plan.md` review workflow, not a blanket go-ahead. A partial live-verification pass over §S24 happened 2026-07-10 (see §3) — 8 of the 14 newest 🟡 rows got real click-through confirmation (6 flipped to ✅, 2 real bugs found+fixed), the owner then stopped testing; the remaining rows (§8 item 4) are still open whenever there's appetite for more.
 
 **Important architectural decisions**:
 - `mc3` (data model + XML parser/writer) and `mcb` (binary serializer) are **CNA-free standalone libraries** — must build and test independently of CNA/ImGui.
@@ -62,6 +62,8 @@ Clean from an **absolute-zero** build directory (not just incremental): `rm -rf 
 ---
 
 ## 3. Recent changes
+
+**2026-07-11 — `STAB-0360` resolved (owner-approved product decision, §S9).** `ModelRegistry::defaultPath()` (`src/MeshCraft/ModelRegistry.cpp`) previously always computed a fixed `$HOME/.meshcraft/modelregistry.sqlite3` path, with no way to redirect it. Fixed by checking a new `MESHCRAFT_REGISTRY_DB` env var first — if set and non-empty, it's used directly as the DB path; otherwise the existing `$HOME`/`$USERPROFILE`-based default is unchanged. A single point of change: both real call sites (`MeshCraftApplication_UiRegistry.cpp`, `MeshCraftApplication_UiAi.cpp`) already go through `defaultPath()`. No prefs.ini field added — that would need new UI to edit it; the env var matches this project's existing `XDG_CONFIG_HOME` pattern with no UI cost. New test `testDefaultPathEnvOverride()` (`mc3/test/mc3_registry_test.cpp`) confirms both the override and the revert-to-default behavior. Full 87/87 ctest green.
 
 **2026-07-11 — `STAB-0327` resolved (owner-approved product decision, §S8).** `savePrefs()` previously had exactly one call site: the Preferences dialog's own "Close" button — a fresh install never got a `prefs.ini` on disk until the user explicitly opened and closed that dialog (`loadPrefs()` on startup silently no-ops when the file doesn't exist, so nothing else ever created it). Fixed:
 - `LoadContent()` (`src/MeshCraft/MeshCraftApplication.cpp`, right after the existing `loadPrefs()` call) now calls `savePrefs()` immediately if `prefsPath()` doesn't already exist, writing the just-loaded defaults to disk on first launch.
@@ -176,7 +178,6 @@ Full history: `git log --oneline`. Per-task detail for the audit phase (both rou
 
 - **Confirmed, unfixed (out of this repo's scope)**: Windows GUI build fails (§4). Emscripten web build no longer builds from scratch (§4, new). Emscripten canvas renders blank — root cause now identified (canvas is 0×0, §2) but fix blocked on the build regression above.
 - **Confirmed, unfixed (in scope, deliberately deferred — needs a product-scope decision, not a quick patch)**:
-  - No registry-DB-path override mechanism (env var/prefs) — `STAB-0360`.
   - No animation scale-time function exists — `STAB-0460`.
   - Web GLB export has no browser-download bridge (§2) — `STAB-0571`.
 - **Confirmed, by design (not a bug)**: SVG texture rasterization stub-only; embedded-glTF references not resolved; Scripts/Triggers have full editor UI now (§3) but no runtime execution (no Lua interpreter, no event dispatch); two independent material-editing UIs exist (`Scene/PropertiesPanel.cpp` and `MeshCraftApplication_UiLeftPanel.cpp`) — a fix in one doesn't apply to the other (verified 2026-07-09 via `plan_deep_audit.md` AUDIT-0013: read both side by side, no undocumented drift found beyond the already-known design). `<actions>` also deliberately not merged from `<include>`d files (confirmed via `mergeInclude()`'s own comment — distinct from the `<embeds>` gap, which *was* accidental and is now fixed, `STAB-0092`, §3). `rotation_units`/`euler_order` are export-only, resolved as won't-fix in the editor's own rendering 2026-07-10 (§3, `STAB-0701`) — a load-time warning covers the gap instead.
@@ -254,10 +255,10 @@ Ordered, each scoped to one focused session:
    Verify: `./build-web.sh`, serve via `python3 -m http.server`, load in `google-chrome --headless=new --enable-unsafe-swiftshader --use-gl=angle --use-angle=swiftshader --dump-dom <url>`, confirm `<canvas>` has nonzero `width`/`height`; then screenshot and inspect for non-black 3D content.
 
 4. **A 2026-07-10 live-verification session already ran partway through §S24 — pick it back up when there's appetite for more.** 6 rows confirmed ✅, 2 real bugs found+fixed (see §3), owner then stopped testing. Remaining §S24-specific rows to check: `STAB-0703`/`0704` (re-test the Inline-toggle fix), `STAB-0706` (actual audio playback, using the new `test/sounds/test_tone.wav`), `STAB-0711` (needs `Add → IcoSphere` first, `features.mc3.xml` has none), `STAB-0672` (needs `test/csg_mesh_child.mc3.xml`, not `features.mc3.xml`), `STAB-0714`/`0717`/`0718`/`0719` (Autoplay checkbox, OBJ import/export menu items, undo-fix spot-checks — not attempted yet). Beyond §S24, 24 older rows are also still unverified: gizmos, SSAO/bloom/wireframe toggles, drag-drop, curve editor, etc.
-   Files: `plan.md` — search for `🟡` to find all 35 remaining rows.
+   Files: `plan.md` — search for `🟡` to find all 34 remaining rows.
    Verify: N/A until the session happens.
 
-5. **Pick one of the remaining flagged product-decision rows (`STAB-0360`/`0460`) and get an explicit scope decision from the project owner**, then implement only that one. (`STAB-0092`/`0289`/`0327` were resolved 2026-07-11, see §3. `STAB-0571` needs the Emscripten build fixed first — see item 3.)
+5. **Get an explicit scope decision from the project owner on the last remaining flagged product-decision row, `STAB-0460`** (no animation scale-time function exists — this would be new-feature-sized work, not a quick patch), then implement only if approved. (`STAB-0092`/`0289`/`0327`/`0360` were resolved 2026-07-11, see §3. `STAB-0571` needs the Emscripten build fixed first — see item 3.)
    Files: varies per row — see `plan.md` for the specific row's "Key File(s)" column.
    Verify: whatever test the chosen row's own `plan.md` entry specifies.
 

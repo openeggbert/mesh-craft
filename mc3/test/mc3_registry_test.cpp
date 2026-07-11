@@ -1084,6 +1084,20 @@ static void testDefaultPathFormat() {
 #endif
 }
 
+// STAB-0360: MESHCRAFT_REGISTRY_DB lets a user/script redirect the registry
+// DB without needing a UI for it. setenv/unsetenv are POSIX-only, matching
+// testDefaultPathFormat()'s own _WIN32 guard above.
+#ifndef _WIN32
+static void testDefaultPathEnvOverride() {
+    setenv("MESHCRAFT_REGISTRY_DB", "/tmp/custom_registry_path.sqlite3", 1);
+    CHECK(ModelRegistry::defaultPath() == std::filesystem::path("/tmp/custom_registry_path.sqlite3"),
+          "defaultPath: MESHCRAFT_REGISTRY_DB overrides the default $HOME-based path");
+    unsetenv("MESHCRAFT_REGISTRY_DB");
+    CHECK(ModelRegistry::defaultPath().filename() == "modelregistry.sqlite3",
+          "defaultPath: reverts to the default computation once the env var is unset");
+}
+#endif
+
 #endif // MESHCRAFT_HAS_SQLITE3
 
 int main() {
@@ -1113,6 +1127,9 @@ int main() {
     testSaveReturnsErrorOnReadOnlyDatabase();
     testAiResponseToRegistryPipeline();
     testDefaultPathFormat();
+#ifndef _WIN32
+    testDefaultPathEnvOverride();
+#endif
 #else
     std::cout << "SKIP: ModelRegistry tests require MESHCRAFT_HAS_SQLITE3\n";
 #endif
