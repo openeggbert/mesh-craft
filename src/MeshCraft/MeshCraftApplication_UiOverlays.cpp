@@ -1194,9 +1194,9 @@ void MeshCraftApplication::drawDialogs()
         ImGui::InputText("##savepath", saveDialogBuf_, sizeof(saveDialogBuf_));
         if (saveDialogErr_[0]) ImGui::TextColored(ImVec4(1,0.3f,0.3f,1), "%s", saveDialogErr_);
         if (ImGui::Button("Save") || ImGui::IsKeyPressed(ImGuiKey_Enter)) {
-            std::string path = saveDialogBuf_;
-            bool isMcb = path.size() >= 4 && path.substr(path.size() - 4) == ".mcb";
-            if (!isMcb && path.find(".mc3.xml") == std::string::npos) path += ".mc3.xml";
+            // AUD-031: was a hand-copied duplicate of resolveSaveAsPathAlg's
+            // own path-normalization logic; now delegates to it.
+            auto [path, isMcb] = resolveSaveAsPathAlg(saveDialogBuf_);
             try {
                 if (isMcb) Mcb::saveToFile(document_, path);
                 else        document_.saveToFile(path);
@@ -1231,8 +1231,14 @@ void MeshCraftApplication::drawDialogs()
         ImGui::Text("The scene has unsaved changes.");
         ImGui::Text("Save before continuing?");
         ImGui::Spacing();
+        // AUD-031: each button's should-execute-the-pending-action decision
+        // now delegates to unsavedDialogResolvesToExecuteAlg (the bespoke
+        // side effects around that decision -- saveFile(), the modified_/
+        // pendingAction_ resets -- stay here, since the Alg mirror
+        // deliberately only captures the boolean).
         if (ImGui::Button("Save", ImVec2(90, 0))) {
-            if (!currentFile_.empty()) {
+            bool hasFile = !currentFile_.empty();
+            if (unsavedDialogResolvesToExecuteAlg(UnsavedDialogChoiceAlg::Save, hasFile)) {
                 saveFile();
                 executePendingAction();
             } else {
@@ -1244,12 +1250,14 @@ void MeshCraftApplication::drawDialogs()
         ImGui::SameLine();
         if (ImGui::Button("Don't Save", ImVec2(90, 0))) {
             modified_ = false;
-            executePendingAction();
+            if (unsavedDialogResolvesToExecuteAlg(UnsavedDialogChoiceAlg::DontSave, !currentFile_.empty()))
+                executePendingAction();
             ImGui::CloseCurrentPopup();
         }
         ImGui::SameLine();
         if (ImGui::Button("Cancel", ImVec2(90, 0)) || ImGui::IsKeyPressed(ImGuiKey_Escape, false)) {
-            pendingAction_ = PendingAction::None;
+            if (!unsavedDialogResolvesToExecuteAlg(UnsavedDialogChoiceAlg::Cancel, !currentFile_.empty()))
+                pendingAction_ = PendingAction::None;
             ImGui::CloseCurrentPopup();
         }
         ImGui::EndPopup();

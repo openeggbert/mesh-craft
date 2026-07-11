@@ -204,53 +204,18 @@ void SceneHierarchyPanel::draw(Editor::SelectionManager& selection,
     // Build lowercase filter string
     std::string filterLower = searchBuf_;
     for (auto& ch : filterLower) ch = static_cast<char>(std::tolower(static_cast<unsigned char>(ch)));
-    bool filtering     = !filterLower.empty();
-    bool typeFiltering = (typeFilter_ != 0);
-    bool layFiltering  = !layerFilter_.empty();
-    bool tagFiltering  = !tagFilter_.empty();
-    bool matFiltering  = !matFilter_.empty();
-    bool anyFiltering  = filtering || typeFiltering || layFiltering || tagFiltering || matFiltering;
 
-    auto matchesType = [&](const Mc3::Mc3Object& o) -> bool {
-        using OT = Mc3::ObjectType;
-        switch (typeFilter_) {
-        case 1:
-            return o.type == OT::Box || o.type == OT::Cube || o.type == OT::Sphere ||
-                   o.type == OT::Cylinder || o.type == OT::Cone || o.type == OT::Plane ||
-                   o.type == OT::Torus || o.type == OT::Capsule || o.type == OT::Disk ||
-                   o.type == OT::Grid || o.type == OT::IcoSphere;
-        case 2: return o.type == OT::Mesh;
-        case 3: return o.type == OT::Group || o.type == OT::Area;
-        case 4: return o.type == OT::Instance;
-        case 5: return o.type == OT::Union || o.type == OT::Difference ||
-                       o.type == OT::Intersection;
-        case 6: return o.type == OT::Extrude;
-        default: return true;
-        }
-    };
-
-    std::function<bool(const Mc3::Mc3Object&)> matchesFilter;
-    matchesFilter = [&](const Mc3::Mc3Object& o) -> bool {
-        if (!anyFiltering) return true;
-        std::string nl = o.name.empty() ? o.id : o.name;
-        for (auto& ch : nl) ch = static_cast<char>(std::tolower(static_cast<unsigned char>(ch)));
-        bool textOk = !filtering     || nl.find(filterLower) != std::string::npos;
-        bool typeOk = !typeFiltering || matchesType(o);
-        bool layOk  = !layFiltering  || (o.layer == layerFilter_);
-        bool tagOk  = !tagFiltering  || std::any_of(o.tags.begin(), o.tags.end(),
-                                            [&](const std::string& t){ return t == tagFilter_; });
-        bool matOk  = !matFiltering  || (o.material == matFilter_);
-        bool selfMatch = filterOr_
-            ? (   (filtering     && textOk)
-               || (typeFiltering && typeOk)
-               || (layFiltering  && layOk)
-               || (tagFiltering  && tagOk)
-               || (matFiltering  && matOk))
-            : (textOk && typeOk && layOk && tagOk && matOk);
-        if (selfMatch) return true;
-        for (const auto& c : o.children) if (matchesFilter(*c)) return true;
-        return false;
-    };
+    // AUD-031: was a hand-copied duplicate of hierarchyFilterMatchesAlg (and
+    // its hierarchyMatchesTypeAlg/hierarchyAnyFilterActiveAlg helpers) own
+    // filter-matching logic; now delegates to it directly.
+    HierarchyFilterAlg filter;
+    filter.textLower   = filterLower;
+    filter.typeFilter  = typeFilter_;
+    filter.layerFilter = layerFilter_;
+    filter.tagFilter   = tagFilter_;
+    filter.matFilter   = matFilter_;
+    filter.orMode      = filterOr_;
+    bool anyFiltering = hierarchyAnyFilterActiveAlg(filter);
 
     // Rebuild flat order for shift-click range selection
     flatOrder_.clear();
@@ -267,12 +232,13 @@ void SceneHierarchyPanel::draw(Editor::SelectionManager& selection,
     std::function<void(const std::vector<std::shared_ptr<Mc3::Mc3Object>>&)> drawHierarchy;
     drawHierarchy = [&](const std::vector<std::shared_ptr<Mc3::Mc3Object>>& list) {
         for (const auto& obj : list) {
-            // anyFiltering, not filtering (text-only): a type/layer/tag/
+            // anyFiltering, not just a text search: a type/layer/tag/
             // material filter with no search text typed must still narrow
-            // the list — matchesFilter() already accounts for all of them
-            // via anyFiltering, but gating the call on `filtering` alone
-            // made the other filters silently do nothing (STAB-0306).
-            if (anyFiltering && !matchesFilter(*obj)) continue;
+            // the list — hierarchyFilterMatchesAlg() already accounts for
+            // all of them via hierarchyAnyFilterActiveAlg(), but gating the
+            // call on text-only filtering made the other filters silently
+            // do nothing (STAB-0306).
+            if (anyFiltering && !hierarchyFilterMatchesAlg(filter, *obj)) continue;
             ImGui::PushID(obj.get());
             bool sel = selection.isSelected(obj.get());
             bool hasChildren = !obj->children.empty();
