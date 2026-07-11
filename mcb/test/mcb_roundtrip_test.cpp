@@ -1212,6 +1212,96 @@ static void testOutOfRangeEnumClampedToDefault() {
           "unhandled 9999");
 }
 
+// AUD-015 (full rollout): proves the tag-validation extension beyond
+// readObject actually has teeth on a nested read* function, not just the
+// one function the original partial fix covered. "transform" -> "position"
+// is normally TAG_VEC3; tag it TAG_STR instead.
+static void testNestedReadFunctionTagMismatchRejected() {
+    std::ostringstream out(std::ios::binary);
+    out.write(MCB_MAGIC, 4);
+    rawU8(out, MCB_VERSION);
+    rawU8(out, 0);
+    rawU8(out, 0); rawU8(out, 0);
+    rawU8(out, TAG_OBJ);
+
+    rawKey(out, "objects"); rawU8(out, TAG_ARR); rawU32(out, 1);
+    rawU8(out, TAG_OBJ);
+        rawKey(out, "name"); rawU8(out, TAG_STR); rawStr(out, "Obj");
+        rawKey(out, "transform"); rawU8(out, TAG_OBJ);
+            rawKey(out, "position"); rawU8(out, TAG_STR); rawStr(out, "not a vec3");
+        rawEnd(out); // end transform
+    rawEnd(out); // end object
+    rawEnd(out); // end root object
+
+    std::istringstream in(out.str(), std::ios::binary);
+    bool threw = false;
+    std::string what;
+    try {
+        Mc3Document doc = loadFromBinary(in);
+        (void)doc;
+    } catch (const std::exception& e) {
+        threw = true;
+        what = e.what();
+    }
+    CHECK(threw, "nested tag-mismatch: readTransform rejects 'position' "
+          "tagged as TAG_STR instead of TAG_VEC3 (proves the AUD-015 "
+          "rollout covers nested read* functions, not just readObject)");
+    CHECK(what.find("position") != std::string::npos,
+          "nested tag-mismatch: error message names the offending key ('position')");
+}
+
+// AUD-017 follow-up: the original enum-clamp pass covered 9 enum sites but
+// missed 2 (ExtrudePathType in readPath, UvProjection in readUvMapping) --
+// found while extending AUD-015's tag validation to those same functions.
+// Both are nested 2+ levels deep (object -> extrude -> path -> type; object
+// -> uvMapping -> projection), unlike the top-level "type" field the
+// original AUD-017 test already covers.
+static void testNestedOutOfRangeEnumsClampedToDefault() {
+    std::ostringstream out(std::ios::binary);
+    out.write(MCB_MAGIC, 4);
+    rawU8(out, MCB_VERSION);
+    rawU8(out, 0);
+    rawU8(out, 0); rawU8(out, 0);
+    rawU8(out, TAG_OBJ);
+
+    rawKey(out, "objects"); rawU8(out, TAG_ARR); rawU32(out, 1);
+    rawU8(out, TAG_OBJ);
+        rawKey(out, "name"); rawU8(out, TAG_STR); rawStr(out, "Obj");
+        rawKey(out, "extrude"); rawU8(out, TAG_OBJ);
+            rawKey(out, "path"); rawU8(out, TAG_OBJ);
+                // ExtrudePathType has 5 real enumerators (0..4) -- 777 is nonsense.
+                rawKey(out, "type"); rawU8(out, TAG_I32); rawU32(out, 777);
+            rawEnd(out); // end path
+        rawEnd(out); // end extrude
+        rawKey(out, "uvMapping"); rawU8(out, TAG_OBJ);
+            // UvProjection has 3 real enumerators (0..2) -- 888 is nonsense.
+            rawKey(out, "projection"); rawU8(out, TAG_I32); rawU32(out, 888);
+        rawEnd(out); // end uvMapping
+    rawEnd(out); // end object
+    rawEnd(out); // end root object
+
+    std::istringstream in(out.str(), std::ios::binary);
+    bool threw = false;
+    Mc3Document doc;
+    try {
+        doc = loadFromBinary(in);
+    } catch (const std::exception&) {
+        threw = true;
+    }
+    CHECK(!threw, "nested out-of-range enums: nonsense ExtrudePathType/UvProjection "
+          "ints do not reject the whole file");
+    if (!threw) {
+        CHECK(doc.objects.size() == 1 && doc.objects[0]->extrude.has_value() &&
+              doc.objects[0]->extrude->path.type == ExtrudePathType::Line,
+              "nested out-of-range enums: extrude.path.type=777 clamped to "
+              "enumerator 0 (Line), not stored as unhandled 777");
+        CHECK(doc.objects[0]->uvMapping.has_value() &&
+              doc.objects[0]->uvMapping->projection == UvProjection::Planar,
+              "nested out-of-range enums: uvMapping.projection=888 clamped to "
+              "enumerator 0 (Planar), not stored as unhandled 888");
+    }
+}
+
 // ---------------------------------------------------------------------------
 
 int main() {
@@ -1253,6 +1343,8 @@ int main() {
     testKnownKeyTagMismatchRejected();
     testKnownKeyTagMatchStillLoads();
     testOutOfRangeEnumClampedToDefault();
+    testNestedReadFunctionTagMismatchRejected();
+    testNestedOutOfRangeEnumsClampedToDefault();
 
     if (failures == 0)
         std::cout << "All MCB roundtrip tests passed.\n";

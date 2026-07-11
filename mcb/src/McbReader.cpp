@@ -241,10 +241,10 @@ static Mc3::Mc3Transform readTransform(std::istream& in) {
     while (true) {
         std::string k = rKey(in); if (k.empty()) break;
         uint8_t tag = rU8(in);
-        if      (k == "position") tf.position = rVec3(in);
-        else if (k == "rotation") tf.rotation = rVec3(in);
-        else if (k == "scale")    tf.scale    = rVec3(in);
-        else if (k == "pivot")    tf.pivot    = rVec3(in);
+        if      (k == "position") { expectTag(tag, TAG_VEC3, "position"); tf.position = rVec3(in); }
+        else if (k == "rotation") { expectTag(tag, TAG_VEC3, "rotation"); tf.rotation = rVec3(in); }
+        else if (k == "scale")    { expectTag(tag, TAG_VEC3, "scale");    tf.scale    = rVec3(in); }
+        else if (k == "pivot")    { expectTag(tag, TAG_VEC3, "pivot");    tf.pivot    = rVec3(in); }
         else                      skipValue(in, tag);
     }
     return tf;
@@ -255,16 +255,16 @@ static Mc3::Mc3Primitive readPrimitive(std::istream& in) {
     while (true) {
         std::string k = rKey(in); if (k.empty()) break;
         uint8_t tag = rU8(in);
-        if      (k == "primitiveType") p.primitiveType = clampEnum<Mc3::PrimitiveType>(rI32(in), 11);
-        else if (k == "size")          p.size          = rVec3(in);
-        else if (k == "radius")        p.radius        = rF32(in);
-        else if (k == "height")        p.height        = rF32(in);
-        else if (k == "segments")      p.segments      = rI32(in);
-        else if (k == "axis")          p.axis          = rRawStr(in);
-        else if (k == "majorRadius")   p.majorRadius   = rF32(in);
-        else if (k == "minorRadius")   p.minorRadius   = rF32(in);
-        else if (k == "subdivisionsX") p.subdivisionsX = rI32(in);
-        else if (k == "subdivisionsZ") p.subdivisionsZ = rI32(in);
+        if      (k == "primitiveType") { expectTag(tag, TAG_I32, "primitiveType"); p.primitiveType = clampEnum<Mc3::PrimitiveType>(rI32(in), 11); }
+        else if (k == "size")          { expectTag(tag, TAG_VEC3, "size");         p.size          = rVec3(in); }
+        else if (k == "radius")        { expectTag(tag, TAG_F32, "radius");        p.radius        = rF32(in); }
+        else if (k == "height")        { expectTag(tag, TAG_F32, "height");        p.height        = rF32(in); }
+        else if (k == "segments")      { expectTag(tag, TAG_I32, "segments");      p.segments      = rI32(in); }
+        else if (k == "axis")          { expectTag(tag, TAG_STR, "axis");          p.axis          = rRawStr(in); }
+        else if (k == "majorRadius")   { expectTag(tag, TAG_F32, "majorRadius");   p.majorRadius   = rF32(in); }
+        else if (k == "minorRadius")   { expectTag(tag, TAG_F32, "minorRadius");   p.minorRadius   = rF32(in); }
+        else if (k == "subdivisionsX") { expectTag(tag, TAG_I32, "subdivisionsX"); p.subdivisionsX = rI32(in); }
+        else if (k == "subdivisionsZ") { expectTag(tag, TAG_I32, "subdivisionsZ"); p.subdivisionsZ = rI32(in); }
         else                           skipValue(in, tag);
     }
     return p;
@@ -275,7 +275,7 @@ static Mc3::Mc3Deform readDeform(std::istream& in) {
     while (true) {
         std::string k = rKey(in); if (k.empty()) break;
         uint8_t tag = rU8(in);
-        if (k == "scale") d.scale = rVec3(in);
+        if (k == "scale") { expectTag(tag, TAG_VEC3, "scale"); d.scale = rVec3(in); }
         else               skipValue(in, tag);
     }
     return d;
@@ -286,7 +286,7 @@ static Mc3::Mc3CsgOperation readCsgOp(std::istream& in) {
     while (true) {
         std::string k = rKey(in); if (k.empty()) break;
         uint8_t tag = rU8(in);
-        if (k == "csgType") csg.csgType = clampEnum<Mc3::CsgType>(rI32(in), 3);
+        if (k == "csgType") { expectTag(tag, TAG_I32, "csgType"); csg.csgType = clampEnum<Mc3::CsgType>(rI32(in), 3); }
         else                 skipValue(in, tag);
     }
     return csg;
@@ -297,14 +297,15 @@ static Mc3::Mc3CrossSection readCrossSection(std::istream& in) {
     while (true) {
         std::string k = rKey(in); if (k.empty()) break;
         uint8_t tag = rU8(in);
-        if      (k == "type")        cs.type        = clampEnum<Mc3::CrossSectionType>(rI32(in), 5);
-        else if (k == "width")       cs.width       = rF32(in);
-        else if (k == "height")      cs.height      = rF32(in);
-        else if (k == "radius")      cs.radius      = rF32(in);
-        else if (k == "innerRadius") cs.innerRadius = rF32(in);
-        else if (k == "sides")       cs.sides       = rI32(in);
-        else if (k == "segments")    cs.segments    = rI32(in);
+        if      (k == "type")        { expectTag(tag, TAG_I32, "type");        cs.type        = clampEnum<Mc3::CrossSectionType>(rI32(in), 5); }
+        else if (k == "width")       { expectTag(tag, TAG_F32, "width");       cs.width       = rF32(in); }
+        else if (k == "height")      { expectTag(tag, TAG_F32, "height");      cs.height      = rF32(in); }
+        else if (k == "radius")      { expectTag(tag, TAG_F32, "radius");      cs.radius      = rF32(in); }
+        else if (k == "innerRadius") { expectTag(tag, TAG_F32, "innerRadius"); cs.innerRadius = rF32(in); }
+        else if (k == "sides")       { expectTag(tag, TAG_I32, "sides");       cs.sides       = rI32(in); }
+        else if (k == "segments")    { expectTag(tag, TAG_I32, "segments");    cs.segments    = rI32(in); }
         else if (k == "customPoints") {
+            expectTag(tag, TAG_ARR, "customPoints");
             // TAG_ARR of TAG_VEC3
             uint32_t n = rU32Bounded(in);
             cs.customPoints.reserve(n);
@@ -329,8 +330,8 @@ static Mc3::Mc3PathPoint readPathPoint(std::istream& in) {
     while (true) {
         std::string k = rKey(in); if (k.empty()) break;
         uint8_t tag = rU8(in);
-        if      (k == "position")  pp.position  = rVec3(in);
-        else if (k == "controlIn") pp.controlIn = rVec3(in);
+        if      (k == "position")  { expectTag(tag, TAG_VEC3, "position");  pp.position  = rVec3(in); }
+        else if (k == "controlIn") { expectTag(tag, TAG_VEC3, "controlIn"); pp.controlIn = rVec3(in); }
         else                       skipValue(in, tag);
     }
     return pp;
@@ -341,15 +342,18 @@ static Mc3::Mc3ExtrudePath readPath(std::istream& in) {
     while (true) {
         std::string k = rKey(in); if (k.empty()) break;
         uint8_t tag = rU8(in);
-        if      (k == "type")        p.type        = static_cast<Mc3::ExtrudePathType>(rI32(in));
-        else if (k == "length")      p.length      = rF32(in);
-        else if (k == "axis")        p.axis        = rRawStr(in);
-        else if (k == "arcRadius")   p.arcRadius   = rF32(in);
-        else if (k == "arcAngle")    p.arcAngle    = rF32(in);
-        else if (k == "helixRadius") p.helixRadius = rF32(in);
-        else if (k == "helixHeight") p.helixHeight = rF32(in);
-        else if (k == "helixTurns")  p.helixTurns  = rF32(in);
+        // AUD-017: ExtrudePathType(5 members) was missed by the original
+        // enum-clamp pass -- clampEnum applied here too now.
+        if      (k == "type")        { expectTag(tag, TAG_I32, "type");        p.type        = clampEnum<Mc3::ExtrudePathType>(rI32(in), 5); }
+        else if (k == "length")      { expectTag(tag, TAG_F32, "length");      p.length      = rF32(in); }
+        else if (k == "axis")        { expectTag(tag, TAG_STR, "axis");        p.axis        = rRawStr(in); }
+        else if (k == "arcRadius")   { expectTag(tag, TAG_F32, "arcRadius");   p.arcRadius   = rF32(in); }
+        else if (k == "arcAngle")    { expectTag(tag, TAG_F32, "arcAngle");    p.arcAngle    = rF32(in); }
+        else if (k == "helixRadius") { expectTag(tag, TAG_F32, "helixRadius"); p.helixRadius = rF32(in); }
+        else if (k == "helixHeight") { expectTag(tag, TAG_F32, "helixHeight"); p.helixHeight = rF32(in); }
+        else if (k == "helixTurns")  { expectTag(tag, TAG_F32, "helixTurns");  p.helixTurns  = rF32(in); }
         else if (k == "points") {
+            expectTag(tag, TAG_ARR, "points");
             uint32_t n = rU32Bounded(in);
             p.points.reserve(n);
             for (uint32_t i = 0; i < n; ++i) {
@@ -368,12 +372,12 @@ static Mc3::Mc3Extrude readExtrude(std::istream& in) {
     while (true) {
         std::string k = rKey(in); if (k.empty()) break;
         uint8_t tag = rU8(in);
-        if      (k == "crossSection") ex.crossSection = readCrossSection(in);
-        else if (k == "path")         ex.path         = readPath(in);
-        else if (k == "twist")        ex.twist        = rF32(in);
-        else if (k == "segments")     ex.segments     = rI32(in);
-        else if (k == "smooth")       ex.smooth       = rU8(in) != 0;
-        else if (k == "caps")         ex.caps         = rU8(in) != 0;
+        if      (k == "crossSection") { expectTag(tag, TAG_OBJ, "crossSection"); ex.crossSection = readCrossSection(in); }
+        else if (k == "path")         { expectTag(tag, TAG_OBJ, "path");         ex.path         = readPath(in); }
+        else if (k == "twist")        { expectTag(tag, TAG_F32, "twist");        ex.twist        = rF32(in); }
+        else if (k == "segments")     { expectTag(tag, TAG_I32, "segments");     ex.segments     = rI32(in); }
+        else if (k == "smooth")       { expectTag(tag, TAG_BOOL, "smooth");      ex.smooth       = rU8(in) != 0; }
+        else if (k == "caps")         { expectTag(tag, TAG_BOOL, "caps");        ex.caps         = rU8(in) != 0; }
         else                          skipValue(in, tag);
     }
     return ex;
@@ -384,12 +388,14 @@ static Mc3::Mc3UvMapping readUvMapping(std::istream& in) {
     while (true) {
         std::string k = rKey(in); if (k.empty()) break;
         uint8_t tag = rU8(in);
-        if      (k == "projection") uv.projection = static_cast<Mc3::UvProjection>(rI32(in));
-        else if (k == "scaleU")     uv.scaleU     = rF32(in);
-        else if (k == "scaleV")     uv.scaleV     = rF32(in);
-        else if (k == "offsetU")    uv.offsetU    = rF32(in);
-        else if (k == "offsetV")    uv.offsetV    = rF32(in);
-        else if (k == "rotation")   uv.rotation   = rF32(in);
+        // AUD-017: UvProjection (3 members) was missed by the original
+        // enum-clamp pass -- clampEnum applied here too now.
+        if      (k == "projection") { expectTag(tag, TAG_I32, "projection"); uv.projection = clampEnum<Mc3::UvProjection>(rI32(in), 3); }
+        else if (k == "scaleU")     { expectTag(tag, TAG_F32, "scaleU");     uv.scaleU     = rF32(in); }
+        else if (k == "scaleV")     { expectTag(tag, TAG_F32, "scaleV");     uv.scaleV     = rF32(in); }
+        else if (k == "offsetU")    { expectTag(tag, TAG_F32, "offsetU");    uv.offsetU    = rF32(in); }
+        else if (k == "offsetV")    { expectTag(tag, TAG_F32, "offsetV");    uv.offsetV    = rF32(in); }
+        else if (k == "rotation")   { expectTag(tag, TAG_F32, "rotation");   uv.rotation   = rF32(in); }
         else                        skipValue(in, tag);
     }
     return uv;
@@ -400,11 +406,11 @@ static Mc3::Mc3ObjectState readObjectState(std::istream& in) {
     while (true) {
         std::string k = rKey(in); if (k.empty()) break;
         uint8_t tag = rU8(in);
-        if      (k == "position") st.position = rVec3(in);
-        else if (k == "rotation") st.rotation = rVec3(in);
-        else if (k == "scale")    st.scale    = rVec3(in);
-        else if (k == "visible")  st.visible  = rU8(in) != 0;
-        else if (k == "material") st.material = rRawStr(in);
+        if      (k == "position") { expectTag(tag, TAG_VEC3, "position"); st.position = rVec3(in); }
+        else if (k == "rotation") { expectTag(tag, TAG_VEC3, "rotation"); st.rotation = rVec3(in); }
+        else if (k == "scale")    { expectTag(tag, TAG_VEC3, "scale");    st.scale    = rVec3(in); }
+        else if (k == "visible")  { expectTag(tag, TAG_BOOL, "visible");  st.visible  = rU8(in) != 0; }
+        else if (k == "material") { expectTag(tag, TAG_STR, "material");  st.material = rRawStr(in); }
         else                      skipValue(in, tag);
     }
     return st;
@@ -496,13 +502,13 @@ static Mc3::Mc3Texture readTexture(std::istream& in) {
     while (true) {
         std::string k = rKey(in); if (k.empty()) break;
         uint8_t tag = rU8(in);
-        if      (k == "name")       tex.name       = rRawStr(in);
-        else if (k == "uri")        tex.uri        = rRawStr(in);
-        else if (k == "wrapU")      tex.wrapU      = rRawStr(in);
-        else if (k == "wrapV")      tex.wrapV      = rRawStr(in);
-        else if (k == "filter")     tex.filter     = rRawStr(in);
-        else if (k == "colorSpace") tex.colorSpace = rRawStr(in);
-        else if (k == "mipMaps")    tex.mipMaps    = rU8(in) != 0;
+        if      (k == "name")       { expectTag(tag, TAG_STR, "name");       tex.name       = rRawStr(in); }
+        else if (k == "uri")        { expectTag(tag, TAG_STR, "uri");        tex.uri        = rRawStr(in); }
+        else if (k == "wrapU")      { expectTag(tag, TAG_STR, "wrapU");      tex.wrapU      = rRawStr(in); }
+        else if (k == "wrapV")      { expectTag(tag, TAG_STR, "wrapV");      tex.wrapV      = rRawStr(in); }
+        else if (k == "filter")     { expectTag(tag, TAG_STR, "filter");     tex.filter     = rRawStr(in); }
+        else if (k == "colorSpace") { expectTag(tag, TAG_STR, "colorSpace"); tex.colorSpace = rRawStr(in); }
+        else if (k == "mipMaps")    { expectTag(tag, TAG_BOOL, "mipMaps");   tex.mipMaps    = rU8(in) != 0; }
         else                        skipValue(in, tag);
     }
     return tex;
@@ -514,8 +520,8 @@ static Mc3::Mc3SvgTexture readSvgTexture(std::istream& in, const std::string& id
     while (true) {
         std::string k = rKey(in); if (k.empty()) break;
         uint8_t tag = rU8(in);
-        if      (k == "src")           svg.src           = rRawStr(in);
-        else if (k == "inlineContent") svg.inlineContent = rRawStr(in);
+        if      (k == "src")           { expectTag(tag, TAG_STR, "src");           svg.src           = rRawStr(in); }
+        else if (k == "inlineContent") { expectTag(tag, TAG_STR, "inlineContent"); svg.inlineContent = rRawStr(in); }
         else                           skipValue(in, tag);
     }
     return svg;
@@ -526,11 +532,11 @@ static Mc3::Mc3ObjectOverride readObjectOverride(std::istream& in) {
     while (true) {
         std::string k = rKey(in); if (k.empty()) break;
         uint8_t tag = rU8(in);
-        if      (k == "id")       ovr.id       = rRawStr(in);
-        else if (k == "visible")  ovr.visible  = rU8(in) != 0;
-        else if (k == "position") ovr.position = rVec3(in);
-        else if (k == "rotation") ovr.rotation = rVec3(in);
-        else if (k == "material") ovr.material = rRawStr(in);
+        if      (k == "id")       { expectTag(tag, TAG_STR, "id");       ovr.id       = rRawStr(in); }
+        else if (k == "visible")  { expectTag(tag, TAG_BOOL, "visible"); ovr.visible  = rU8(in) != 0; }
+        else if (k == "position") { expectTag(tag, TAG_VEC3, "position"); ovr.position = rVec3(in); }
+        else if (k == "rotation") { expectTag(tag, TAG_VEC3, "rotation"); ovr.rotation = rVec3(in); }
+        else if (k == "material") { expectTag(tag, TAG_STR, "material"); ovr.material = rRawStr(in); }
         else                      skipValue(in, tag);
     }
     return ovr;
@@ -578,8 +584,8 @@ static Mc3::Mc3Trigger readTrigger(std::istream& in, const std::string& id) {
                 while (true) {
                     std::string sk = rKey(in); if (sk.empty()) break;
                     uint8_t st = rU8(in);
-                    if      (sk == "type") step.type = parseTriggerStepType(rRawStr(in));
-                    else if (sk == "ref")  step.ref  = rRawStr(in);
+                    if      (sk == "type") { expectTag(st, TAG_STR, "type"); step.type = parseTriggerStepType(rRawStr(in)); }
+                    else if (sk == "ref")  { expectTag(st, TAG_STR, "ref");  step.ref  = rRawStr(in); }
                     else                   skipValue(in, st);
                 }
                 trig.steps.push_back(std::move(step));
@@ -597,8 +603,8 @@ static Mc3::Mc3Sound readSound(std::istream& in, const std::string& id) {
     while (true) {
         std::string k = rKey(in); if (k.empty()) break;
         uint8_t tag = rU8(in);
-        if      (k == "src")  snd.src  = rRawStr(in);
-        else if (k == "loop") snd.loop = rU8(in) != 0;
+        if      (k == "src")  { expectTag(tag, TAG_STR, "src");  snd.src  = rRawStr(in); }
+        else if (k == "loop") { expectTag(tag, TAG_BOOL, "loop"); snd.loop = rU8(in) != 0; }
         else                  skipValue(in, tag);
     }
     return snd;
@@ -610,8 +616,8 @@ static Mc3::Mc3Music readMusic(std::istream& in, const std::string& id) {
     while (true) {
         std::string k = rKey(in); if (k.empty()) break;
         uint8_t tag = rU8(in);
-        if      (k == "src")  mus.src  = rRawStr(in);
-        else if (k == "loop") mus.loop = rU8(in) != 0;
+        if      (k == "src")  { expectTag(tag, TAG_STR, "src");  mus.src  = rRawStr(in); }
+        else if (k == "loop") { expectTag(tag, TAG_BOOL, "loop"); mus.loop = rU8(in) != 0; }
         else                  skipValue(in, tag);
     }
     return mus;
@@ -623,8 +629,8 @@ static Mc3::Mc3Script readScript(std::istream& in, const std::string& id) {
     while (true) {
         std::string k = rKey(in); if (k.empty()) break;
         uint8_t tag = rU8(in);
-        if      (k == "type")   sc.type   = rRawStr(in);
-        else if (k == "source") sc.source = rRawStr(in);
+        if      (k == "type")   { expectTag(tag, TAG_STR, "type");   sc.type   = rRawStr(in); }
+        else if (k == "source") { expectTag(tag, TAG_STR, "source"); sc.source = rRawStr(in); }
         else                    skipValue(in, tag);
     }
     return sc;
@@ -636,8 +642,8 @@ static Mc3::Mc3EmbedGltf readEmbed(std::istream& in, const std::string& id) {
     while (true) {
         std::string k = rKey(in); if (k.empty()) break;
         uint8_t tag = rU8(in);
-        if      (k == "src")           em.src           = rRawStr(in);
-        else if (k == "base64Content") em.base64Content = rRawStr(in);
+        if      (k == "src")           { expectTag(tag, TAG_STR, "src");           em.src           = rRawStr(in); }
+        else if (k == "base64Content") { expectTag(tag, TAG_STR, "base64Content"); em.base64Content = rRawStr(in); }
         else                           skipValue(in, tag);
     }
     return em;
@@ -648,21 +654,21 @@ static Mc3::Mc3Material readMaterial(std::istream& in) {
     while (true) {
         std::string k = rKey(in); if (k.empty()) break;
         uint8_t tag = rU8(in);
-        if      (k == "name")                     m.name                     = rRawStr(in);
-        else if (k == "baseColor")                m.baseColor                = rVec4(in);
-        else if (k == "baseColorTexture")         m.baseColorTexture         = rRawStr(in);
-        else if (k == "normalTexture")            m.normalTexture            = rRawStr(in);
-        else if (k == "emissiveTexture")          m.emissiveTexture          = rRawStr(in);
-        else if (k == "metallicRoughnessTexture") m.metallicRoughnessTexture = rRawStr(in);
-        else if (k == "occlusionTexture")         m.occlusionTexture         = rRawStr(in);
-        else if (k == "roughness")                m.roughness                = rF32(in);
-        else if (k == "metallic")                 m.metallic                 = rF32(in);
-        else if (k == "normalScale")              m.normalScale              = rF32(in);
-        else if (k == "occlusionStrength")        m.occlusionStrength        = rF32(in);
-        else if (k == "emissiveColor")            m.emissiveColor            = rVec3(in);
-        else if (k == "alphaMode")                m.alphaMode                = rRawStr(in);
-        else if (k == "alphaCutoff")              m.alphaCutoff              = rF32(in);
-        else if (k == "doubleSided")              m.doubleSided              = rU8(in) != 0;
+        if      (k == "name")                     { expectTag(tag, TAG_STR, "name");                     m.name                     = rRawStr(in); }
+        else if (k == "baseColor")                { expectTag(tag, TAG_VEC4, "baseColor");                m.baseColor                = rVec4(in); }
+        else if (k == "baseColorTexture")         { expectTag(tag, TAG_STR, "baseColorTexture");         m.baseColorTexture         = rRawStr(in); }
+        else if (k == "normalTexture")            { expectTag(tag, TAG_STR, "normalTexture");            m.normalTexture            = rRawStr(in); }
+        else if (k == "emissiveTexture")          { expectTag(tag, TAG_STR, "emissiveTexture");          m.emissiveTexture          = rRawStr(in); }
+        else if (k == "metallicRoughnessTexture") { expectTag(tag, TAG_STR, "metallicRoughnessTexture"); m.metallicRoughnessTexture = rRawStr(in); }
+        else if (k == "occlusionTexture")         { expectTag(tag, TAG_STR, "occlusionTexture");         m.occlusionTexture         = rRawStr(in); }
+        else if (k == "roughness")                { expectTag(tag, TAG_F32, "roughness");                m.roughness                = rF32(in); }
+        else if (k == "metallic")                 { expectTag(tag, TAG_F32, "metallic");                 m.metallic                 = rF32(in); }
+        else if (k == "normalScale")              { expectTag(tag, TAG_F32, "normalScale");              m.normalScale              = rF32(in); }
+        else if (k == "occlusionStrength")        { expectTag(tag, TAG_F32, "occlusionStrength");        m.occlusionStrength        = rF32(in); }
+        else if (k == "emissiveColor")            { expectTag(tag, TAG_VEC3, "emissiveColor");           m.emissiveColor            = rVec3(in); }
+        else if (k == "alphaMode")                { expectTag(tag, TAG_STR, "alphaMode");                m.alphaMode                = rRawStr(in); }
+        else if (k == "alphaCutoff")              { expectTag(tag, TAG_F32, "alphaCutoff");              m.alphaCutoff              = rF32(in); }
+        else if (k == "doubleSided")              { expectTag(tag, TAG_BOOL, "doubleSided");             m.doubleSided              = rU8(in) != 0; }
         else                                      skipValue(in, tag);
     }
     return m;
@@ -673,16 +679,16 @@ static Mc3::Mc3Light readLight(std::istream& in) {
     while (true) {
         std::string k = rKey(in); if (k.empty()) break;
         uint8_t tag = rU8(in);
-        if      (k == "type")        lt.type        = clampEnum<Mc3::LightType>(rI32(in), 4);
-        else if (k == "name")        lt.name        = rRawStr(in);
-        else if (k == "color")       lt.color       = rVec3(in);
-        else if (k == "brightness")  lt.brightness  = rF32(in);
-        else if (k == "direction")   lt.direction   = rVec3(in);
-        else if (k == "position")    lt.position    = rVec3(in);
-        else if (k == "range")       lt.range       = rF32(in);
-        else if (k == "angle")       lt.angle       = rF32(in);
-        else if (k == "falloff")     lt.falloff     = rF32(in);
-        else if (k == "castShadows") lt.castShadows = rU8(in) != 0;
+        if      (k == "type")        { expectTag(tag, TAG_I32, "type");        lt.type        = clampEnum<Mc3::LightType>(rI32(in), 4); }
+        else if (k == "name")        { expectTag(tag, TAG_STR, "name");        lt.name        = rRawStr(in); }
+        else if (k == "color")       { expectTag(tag, TAG_VEC3, "color");      lt.color       = rVec3(in); }
+        else if (k == "brightness")  { expectTag(tag, TAG_F32, "brightness");  lt.brightness  = rF32(in); }
+        else if (k == "direction")   { expectTag(tag, TAG_VEC3, "direction");  lt.direction   = rVec3(in); }
+        else if (k == "position")    { expectTag(tag, TAG_VEC3, "position");   lt.position    = rVec3(in); }
+        else if (k == "range")       { expectTag(tag, TAG_F32, "range");       lt.range       = rF32(in); }
+        else if (k == "angle")       { expectTag(tag, TAG_F32, "angle");       lt.angle       = rF32(in); }
+        else if (k == "falloff")     { expectTag(tag, TAG_F32, "falloff");     lt.falloff     = rF32(in); }
+        else if (k == "castShadows") { expectTag(tag, TAG_BOOL, "castShadows"); lt.castShadows = rU8(in) != 0; }
         else                         skipValue(in, tag);
     }
     return lt;
@@ -693,16 +699,16 @@ static Mc3::Mc3Camera readCamera(std::istream& in) {
     while (true) {
         std::string k = rKey(in); if (k.empty()) break;
         uint8_t tag = rU8(in);
-        if      (k == "name")      cam.name      = rRawStr(in);
-        else if (k == "type")      cam.type      = clampEnum<Mc3::CameraType>(rI32(in), 2);
-        else if (k == "position")  cam.position  = rVec3(in);
-        else if (k == "target")    cam.target    = rVec3(in);
-        else if (k == "rotation")  cam.rotation  = rVec3(in);
-        else if (k == "nearPlane") cam.nearPlane = rF32(in);
-        else if (k == "farPlane")  cam.farPlane  = rF32(in);
-        else if (k == "fov")       cam.fov       = rF32(in);
-        else if (k == "orthoSize") cam.orthoSize = rF32(in);
-        else if (k == "orthoAspect") cam.orthoAspect = rF32(in);   // STAB-0695
+        if      (k == "name")      { expectTag(tag, TAG_STR, "name");      cam.name      = rRawStr(in); }
+        else if (k == "type")      { expectTag(tag, TAG_I32, "type");      cam.type      = clampEnum<Mc3::CameraType>(rI32(in), 2); }
+        else if (k == "position")  { expectTag(tag, TAG_VEC3, "position"); cam.position  = rVec3(in); }
+        else if (k == "target")    { expectTag(tag, TAG_VEC3, "target");   cam.target    = rVec3(in); }
+        else if (k == "rotation")  { expectTag(tag, TAG_VEC3, "rotation"); cam.rotation  = rVec3(in); }
+        else if (k == "nearPlane") { expectTag(tag, TAG_F32, "nearPlane"); cam.nearPlane = rF32(in); }
+        else if (k == "farPlane")  { expectTag(tag, TAG_F32, "farPlane");  cam.farPlane  = rF32(in); }
+        else if (k == "fov")       { expectTag(tag, TAG_F32, "fov");       cam.fov       = rF32(in); }
+        else if (k == "orthoSize") { expectTag(tag, TAG_F32, "orthoSize"); cam.orthoSize = rF32(in); }
+        else if (k == "orthoAspect") { expectTag(tag, TAG_F32, "orthoAspect"); cam.orthoAspect = rF32(in); }   // STAB-0695
         else                       skipValue(in, tag);
     }
     return cam;
@@ -713,11 +719,11 @@ static Mc3::Mc3Fog readFog(std::istream& in) {
     while (true) {
         std::string k = rKey(in); if (k.empty()) break;
         uint8_t tag = rU8(in);
-        if      (k == "color")   fog.color   = rVec3(in);
-        else if (k == "mode")    fog.mode    = clampEnum<Mc3::FogMode>(rI32(in), 2);
-        else if (k == "start")   fog.start   = rF32(in);
-        else if (k == "end")     fog.end     = rF32(in);
-        else if (k == "density") fog.density = rF32(in);
+        if      (k == "color")   { expectTag(tag, TAG_VEC3, "color");   fog.color   = rVec3(in); }
+        else if (k == "mode")    { expectTag(tag, TAG_I32, "mode");     fog.mode    = clampEnum<Mc3::FogMode>(rI32(in), 2); }
+        else if (k == "start")   { expectTag(tag, TAG_F32, "start");    fog.start   = rF32(in); }
+        else if (k == "end")     { expectTag(tag, TAG_F32, "end");      fog.end     = rF32(in); }
+        else if (k == "density") { expectTag(tag, TAG_F32, "density");  fog.density = rF32(in); }
         else                     skipValue(in, tag);
     }
     return fog;
@@ -728,10 +734,10 @@ static Mc3::Mc3Environment readEnvironment(std::istream& in) {
     while (true) {
         std::string k = rKey(in); if (k.empty()) break;
         uint8_t tag = rU8(in);
-        if      (k == "backgroundColor")  env.backgroundColor  = rVec3(in);
-        else if (k == "backgroundTexture") env.backgroundTexture = rRawStr(in);
-        else if (k == "skyboxTexture")     env.skyboxTexture     = rRawStr(in);
-        else if (k == "fog")               env.fog              = readFog(in);
+        if      (k == "backgroundColor")  { expectTag(tag, TAG_VEC3, "backgroundColor");  env.backgroundColor  = rVec3(in); }
+        else if (k == "backgroundTexture") { expectTag(tag, TAG_STR, "backgroundTexture"); env.backgroundTexture = rRawStr(in); }
+        else if (k == "skyboxTexture")     { expectTag(tag, TAG_STR, "skyboxTexture");     env.skyboxTexture     = rRawStr(in); }
+        else if (k == "fog")               { expectTag(tag, TAG_OBJ, "fog");               env.fog              = readFog(in); }
         else                               skipValue(in, tag);
     }
     return env;
@@ -742,13 +748,13 @@ static Mc3::Mc3Keyframe readKeyframe(std::istream& in) {
     while (true) {
         std::string k = rKey(in); if (k.empty()) break;
         uint8_t tag = rU8(in);
-        if      (k == "time")          kf.time                = rF32(in);
-        else if (k == "value")         kf.value               = rF32(in);
-        else if (k == "interpolation") kf.interpolation       = clampEnum<Mc3::Interpolation>(rI32(in), 3);
-        else if (k == "leftDt")        kf.handleLeft.dt       = rF32(in);
-        else if (k == "leftDv")        kf.handleLeft.dv       = rF32(in);
-        else if (k == "rightDt")       kf.handleRight.dt      = rF32(in);
-        else if (k == "rightDv")       kf.handleRight.dv      = rF32(in);
+        if      (k == "time")          { expectTag(tag, TAG_F32, "time");          kf.time                = rF32(in); }
+        else if (k == "value")         { expectTag(tag, TAG_F32, "value");         kf.value               = rF32(in); }
+        else if (k == "interpolation") { expectTag(tag, TAG_I32, "interpolation"); kf.interpolation       = clampEnum<Mc3::Interpolation>(rI32(in), 3); }
+        else if (k == "leftDt")        { expectTag(tag, TAG_F32, "leftDt");        kf.handleLeft.dt       = rF32(in); }
+        else if (k == "leftDv")        { expectTag(tag, TAG_F32, "leftDv");        kf.handleLeft.dv       = rF32(in); }
+        else if (k == "rightDt")       { expectTag(tag, TAG_F32, "rightDt");       kf.handleRight.dt      = rF32(in); }
+        else if (k == "rightDv")       { expectTag(tag, TAG_F32, "rightDv");       kf.handleRight.dv      = rF32(in); }
         else                           skipValue(in, tag);
     }
     return kf;
@@ -759,9 +765,10 @@ static Mc3::Mc3Channel readChannel(std::istream& in) {
     while (true) {
         std::string k = rKey(in); if (k.empty()) break;
         uint8_t tag = rU8(in);
-        if      (k == "targetObject") ch.targetObject = rRawStr(in);
-        else if (k == "property")     ch.property     = clampEnum<Mc3::AnimatedProperty>(rI32(in), 22);
+        if      (k == "targetObject") { expectTag(tag, TAG_STR, "targetObject"); ch.targetObject = rRawStr(in); }
+        else if (k == "property")     { expectTag(tag, TAG_I32, "property");     ch.property     = clampEnum<Mc3::AnimatedProperty>(rI32(in), 22); }
         else if (k == "keyframes") {
+            expectTag(tag, TAG_ARR, "keyframes");
             uint32_t n = rU32Bounded(in);
             ch.keyframes.reserve(n);
             for (uint32_t i = 0; i < n; ++i) {
@@ -780,12 +787,13 @@ static Mc3::Mc3Action readAction(std::istream& in) {
     while (true) {
         std::string k = rKey(in); if (k.empty()) break;
         uint8_t tag = rU8(in);
-        if      (k == "name")      act.name      = rRawStr(in);
-        else if (k == "duration")  act.duration  = rF32(in);
-        else if (k == "loop")      act.loop      = rU8(in) != 0;
-        else if (k == "autoplay")  act.autoplay  = rU8(in) != 0;
-        else if (k == "timeScale") act.timeScale = rF32(in); // STAB-0460
+        if      (k == "name")      { expectTag(tag, TAG_STR, "name");      act.name      = rRawStr(in); }
+        else if (k == "duration")  { expectTag(tag, TAG_F32, "duration");  act.duration  = rF32(in); }
+        else if (k == "loop")      { expectTag(tag, TAG_BOOL, "loop");     act.loop      = rU8(in) != 0; }
+        else if (k == "autoplay")  { expectTag(tag, TAG_BOOL, "autoplay"); act.autoplay  = rU8(in) != 0; }
+        else if (k == "timeScale") { expectTag(tag, TAG_F32, "timeScale"); act.timeScale = rF32(in); } // STAB-0460
         else if (k == "channels") {
+            expectTag(tag, TAG_ARR, "channels");
             uint32_t n = rU32Bounded(in);
             act.channels.reserve(n);
             for (uint32_t i = 0; i < n; ++i) {
@@ -804,14 +812,15 @@ static Mc3::Mc3Document readDocument(std::istream& in) {
     while (true) {
         std::string k = rKey(in); if (k.empty()) break;
         uint8_t tag = rU8(in);
-        if      (k == "version")          doc.version          = rRawStr(in);
-        else if (k == "model")            doc.model            = rRawStr(in);
-        else if (k == "unit")             doc.unit             = rRawStr(in);
-        else if (k == "coordinateSystem") doc.coordinateSystem = rRawStr(in);
-        else if (k == "rotationUnits")    doc.rotationUnits    = rRawStr(in);
-        else if (k == "eulerOrder")       doc.eulerOrder       = rRawStr(in);
-        else if (k == "defaultCamera")    doc.defaultCamera    = rRawStr(in);
+        if      (k == "version")          { expectTag(tag, TAG_STR, "version");          doc.version          = rRawStr(in); }
+        else if (k == "model")            { expectTag(tag, TAG_STR, "model");            doc.model            = rRawStr(in); }
+        else if (k == "unit")             { expectTag(tag, TAG_STR, "unit");             doc.unit             = rRawStr(in); }
+        else if (k == "coordinateSystem") { expectTag(tag, TAG_STR, "coordinateSystem"); doc.coordinateSystem = rRawStr(in); }
+        else if (k == "rotationUnits")    { expectTag(tag, TAG_STR, "rotationUnits");    doc.rotationUnits    = rRawStr(in); }
+        else if (k == "eulerOrder")       { expectTag(tag, TAG_STR, "eulerOrder");       doc.eulerOrder       = rRawStr(in); }
+        else if (k == "defaultCamera")    { expectTag(tag, TAG_STR, "defaultCamera");    doc.defaultCamera    = rRawStr(in); }
         else if (k == "meta") {
+            expectTag(tag, TAG_MAP, "meta");
             uint32_t n = rU32Bounded(in);
             for (uint32_t i = 0; i < n; ++i) {
                 std::string mk = rRawStr(in);
@@ -821,6 +830,7 @@ static Mc3::Mc3Document readDocument(std::istream& in) {
             }
         }
         else if (k == "metadata") {
+            expectTag(tag, TAG_MAP, "metadata");
             uint32_t n = rU32Bounded(in);
             for (uint32_t i = 0; i < n; ++i) {
                 std::string mk = rRawStr(in);
@@ -830,6 +840,7 @@ static Mc3::Mc3Document readDocument(std::istream& in) {
             }
         }
         else if (k == "includes") {
+            expectTag(tag, TAG_ARR, "includes");
             uint32_t n = rU32Bounded(in);
             doc.includes.reserve(n);
             for (uint32_t i = 0; i < n; ++i) {
@@ -839,6 +850,7 @@ static Mc3::Mc3Document readDocument(std::istream& in) {
             }
         }
         else if (k == "includedDefs") {
+            expectTag(tag, TAG_ARR, "includedDefs");
             uint32_t n = rU32Bounded(in);
             for (uint32_t i = 0; i < n; ++i) {
                 uint8_t t = rU8(in);
@@ -847,6 +859,7 @@ static Mc3::Mc3Document readDocument(std::istream& in) {
             }
         }
         else if (k == "includedMaterials") {
+            expectTag(tag, TAG_ARR, "includedMaterials");
             uint32_t n = rU32Bounded(in);
             for (uint32_t i = 0; i < n; ++i) {
                 uint8_t t = rU8(in);
@@ -855,6 +868,7 @@ static Mc3::Mc3Document readDocument(std::istream& in) {
             }
         }
         else if (k == "includedTextures") {
+            expectTag(tag, TAG_ARR, "includedTextures");
             uint32_t n = rU32Bounded(in);
             for (uint32_t i = 0; i < n; ++i) {
                 uint8_t t = rU8(in);
@@ -863,6 +877,7 @@ static Mc3::Mc3Document readDocument(std::istream& in) {
             }
         }
         else if (k == "includedEmbeds") {
+            expectTag(tag, TAG_ARR, "includedEmbeds");
             uint32_t n = rU32Bounded(in);
             for (uint32_t i = 0; i < n; ++i) {
                 uint8_t t = rU8(in);
@@ -870,8 +885,9 @@ static Mc3::Mc3Document readDocument(std::istream& in) {
                 else               skipValue(in, t);
             }
         }
-        else if (k == "environment")      doc.environment      = readEnvironment(in);
+        else if (k == "environment")      { expectTag(tag, TAG_OBJ, "environment");      doc.environment      = readEnvironment(in); }
         else if (k == "lights") {
+            expectTag(tag, TAG_ARR, "lights");
             uint32_t n = rU32Bounded(in);
             doc.lights.reserve(n);
             for (uint32_t i = 0; i < n; ++i) {
@@ -881,6 +897,7 @@ static Mc3::Mc3Document readDocument(std::istream& in) {
             }
         }
         else if (k == "cameras") {
+            expectTag(tag, TAG_ARR, "cameras");
             uint32_t n = rU32Bounded(in);
             doc.cameras.reserve(n);
             for (uint32_t i = 0; i < n; ++i) {
@@ -890,6 +907,7 @@ static Mc3::Mc3Document readDocument(std::istream& in) {
             }
         }
         else if (k == "textures") {
+            expectTag(tag, TAG_MAP, "textures");
             uint32_t n = rU32Bounded(in);
             for (uint32_t i = 0; i < n; ++i) {
                 std::string mk = rRawStr(in);
@@ -899,6 +917,7 @@ static Mc3::Mc3Document readDocument(std::istream& in) {
             }
         }
         else if (k == "svgTextures") {
+            expectTag(tag, TAG_MAP, "svgTextures");
             uint32_t n = rU32Bounded(in);
             for (uint32_t i = 0; i < n; ++i) {
                 std::string mk = rRawStr(in);
@@ -908,6 +927,7 @@ static Mc3::Mc3Document readDocument(std::istream& in) {
             }
         }
         else if (k == "embeds") {
+            expectTag(tag, TAG_MAP, "embeds");
             uint32_t n = rU32Bounded(in);
             for (uint32_t i = 0; i < n; ++i) {
                 std::string mk = rRawStr(in);
@@ -917,6 +937,7 @@ static Mc3::Mc3Document readDocument(std::istream& in) {
             }
         }
         else if (k == "scripts") {
+            expectTag(tag, TAG_MAP, "scripts");
             uint32_t n = rU32Bounded(in);
             for (uint32_t i = 0; i < n; ++i) {
                 std::string mk = rRawStr(in);
@@ -926,6 +947,7 @@ static Mc3::Mc3Document readDocument(std::istream& in) {
             }
         }
         else if (k == "sounds") {
+            expectTag(tag, TAG_MAP, "sounds");
             uint32_t n = rU32Bounded(in);
             for (uint32_t i = 0; i < n; ++i) {
                 std::string mk = rRawStr(in);
@@ -935,6 +957,7 @@ static Mc3::Mc3Document readDocument(std::istream& in) {
             }
         }
         else if (k == "musicTracks") {
+            expectTag(tag, TAG_MAP, "musicTracks");
             uint32_t n = rU32Bounded(in);
             for (uint32_t i = 0; i < n; ++i) {
                 std::string mk = rRawStr(in);
@@ -944,6 +967,7 @@ static Mc3::Mc3Document readDocument(std::istream& in) {
             }
         }
         else if (k == "triggers") {
+            expectTag(tag, TAG_MAP, "triggers");
             uint32_t n = rU32Bounded(in);
             for (uint32_t i = 0; i < n; ++i) {
                 std::string mk = rRawStr(in);
@@ -953,6 +977,7 @@ static Mc3::Mc3Document readDocument(std::istream& in) {
             }
         }
         else if (k == "sceneStates") {
+            expectTag(tag, TAG_MAP, "sceneStates");
             uint32_t n = rU32Bounded(in);
             for (uint32_t i = 0; i < n; ++i) {
                 std::string mk = rRawStr(in);
@@ -962,6 +987,7 @@ static Mc3::Mc3Document readDocument(std::istream& in) {
             }
         }
         else if (k == "materials") {
+            expectTag(tag, TAG_MAP, "materials");
             uint32_t n = rU32Bounded(in);
             for (uint32_t i = 0; i < n; ++i) {
                 std::string mk = rRawStr(in);
@@ -971,6 +997,7 @@ static Mc3::Mc3Document readDocument(std::istream& in) {
             }
         }
         else if (k == "definitions") {
+            expectTag(tag, TAG_MAP, "definitions");
             uint32_t n = rU32Bounded(in);
             for (uint32_t i = 0; i < n; ++i) {
                 std::string mk = rRawStr(in);
@@ -980,6 +1007,7 @@ static Mc3::Mc3Document readDocument(std::istream& in) {
             }
         }
         else if (k == "objects") {
+            expectTag(tag, TAG_ARR, "objects");
             uint32_t n = rU32Bounded(in);
             doc.objects.reserve(n);
             for (uint32_t i = 0; i < n; ++i) {
@@ -989,6 +1017,7 @@ static Mc3::Mc3Document readDocument(std::istream& in) {
             }
         }
         else if (k == "actions") {
+            expectTag(tag, TAG_MAP, "actions");
             uint32_t n = rU32Bounded(in);
             for (uint32_t i = 0; i < n; ++i) {
                 std::string mk = rRawStr(in);
