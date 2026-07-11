@@ -46,11 +46,18 @@ Ran a 12-dimension audit, adversarially re-verified every finding (57 confirmed,
 | `22b7129` | P1 | glTF spot lights no longer at origin; light position/range unit-scaled |
 | `dcd0d33` | P1 | `insertAnimKeyframes` mirror converged with production (Gate B) |
 | `2d126bf` | P1 | Deterministic shutdown: dangling SDL event watch removed, ImGui/GL teardown |
+| `e53af49` | P1 | Stop advertising non-functional editor graphics backends (Gate C) |
+| `ac75eb6` | P1 | Ear-clip extrude caps → concave cross-sections triangulate correctly |
+| `901965f` | P1 | Confine exporter texture/mesh paths to document root by default |
 
-All P0s from the audit are closed (Gate A). Full suite: **94/94**, green after
-each commit. Also: consolidated planning docs — one active [`plan.md`](plan.md)
-(96 evidence-grounded tasks), archived 6 superseded status/plan docs to
+**Every P0 and every identified P1 from the audit is addressed (Gate A met).**
+Full suite: **95/95**, green after each commit. Also: consolidated planning docs
+— one active [`plan.md`](plan.md), archived 6 superseded status/plan docs to
 [`docs/history/`](docs/history/), and rewrote this baseline.
+
+Not done (owner-gated): CI activation — `.github_/workflows/ci.yml` needs a
+`workflow`-scoped push token to move to `.github/`. Parked workflow was made
+correct/ready this session.
 
 ## 3. Next tasks
 

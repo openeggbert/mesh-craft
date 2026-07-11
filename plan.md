@@ -53,10 +53,21 @@ All P0s surfaced by the audit are fixed. Verification for each:
 | W7 lights | P1 | glTF spot lights no longer exported at origin; light position/range unit-scaled | `22b7129` | `ctest -R mc3togltf_light` |
 | W4 anim | P1 | `insertAnimKeyframes` mirror converged with production (Gate B); Deform/Material seed live values | `dcd0d33` | `ctest -R mc3_commands` |
 | W0 life | P1 | Deterministic shutdown; dangling SDL event watch removed; ImGui/GL teardown | `2d126bf` | `ctest -L render` |
+| W8 truth | P1 | Stop advertising non-functional editor backends (Gate C): configure-time warning + honest CMake/README | `e53af49` | configure with non-EASYGL → warning |
+| W7 caps | P1 | Ear-clip extrude caps so concave (Star/Custom) cross-sections triangulate correctly | `ac75eb6` | `ctest -R mc3togltf_earclip` |
+| W1 paths | P1 | Confine exporter texture/mesh paths to the document root by default (`--allow-external-resources` opt-out) | `901965f` | `ctest -R mc3togltf_hostile_geometry` |
 
 Also: archived 6 superseded status/plan docs to `docs/history/`; added `unit`/
-`lint` CTest labels; test count 87 → 94. Every P0 from the audit is closed
-(Gate A). Full suite green after each commit.
+`lint` CTest labels; test count 87 → 95. **Every P0 from the audit is closed
+(Gate A), and every P1 identified by the audit is addressed.** Full suite green
+after each commit.
+
+**Not done (owner-gated):** activating CI. `.github_/workflows/ci.yml` is parked
+because the repo push token lacks the GitHub `workflow` scope (owner-controlled)
+— documented in the file. The parked workflow was made correct and ready this
+session (de-staled comment counts, fixed the FetchContent cache key to include
+`mc3/CMakeLists.txt`). To activate: rename `.github_` → `.github` and push with a
+`workflow`-scoped token. See SYS-W11-01/03.
 
 ---
 
