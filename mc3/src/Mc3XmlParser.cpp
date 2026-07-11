@@ -254,6 +254,8 @@ struct DocumentBudget {
     long long totalIncludes = 0; // count of genuinely-new (non-cyclic, non-diamond-dup) <include> merges
     long long totalMaterials = 0; // SYS-W1-03
     long long totalTextures = 0;  // SYS-W1-03: <texture> and <texture type="svg"> combined
+    long long totalEmbeds = 0;      // SYS-W1-03
+    long long totalEmbedBytes = 0;  // SYS-W1-03: sum of every embed's base64Content.size()
 
     // Generous enough for any real scene (the largest checked-in stress
     // fixture sums to a few thousand) while still bounding the pathological
@@ -280,6 +282,18 @@ struct DocumentBudget {
     // worst-case map-entry memory.
     static constexpr long long kMaxTotalMaterials = 20'000;
     static constexpr long long kMaxTotalTextures = 20'000;
+
+    // SYS-W1-03: kMaxEmbedBase64Length (below, SYS-W1-04) already bounds any
+    // SINGLE <embed>'s inline base64 body to 64MB, but nothing previously
+    // bounded how many such embeds a document could have -- N embeds each
+    // individually under the 64MB cap can still sum to unbounded memory
+    // (e.g. 1000 embeds at 63MB each = ~63GB). kMaxTotalEmbeds bounds the
+    // COUNT (generous for any real prop/mesh library); kMaxTotalEmbedBytes
+    // separately bounds the SUM of every embed's base64 length, the same
+    // "per-field cap + document-wide running-total cap" pattern already
+    // established by kMaxTessellation + kMaxTotalTessellationWeight above.
+    static constexpr long long kMaxTotalEmbeds = 1'000;
+    static constexpr long long kMaxTotalEmbedBytes = 256ll * 1024 * 1024; // 256MB combined
 
     void chargeObject() {
         if (++totalObjects > kMaxTotalObjects) {
@@ -327,9 +341,27 @@ struct DocumentBudget {
             throw std::runtime_error(msg);
         }
     }
+    void chargeEmbed(size_t base64Bytes) {
+        if (++totalEmbeds > kMaxTotalEmbeds) {
+            std::string msg = "MC3: document exceeds the total embed budget (" +
+                std::to_string(kMaxTotalEmbeds) + ")";
+            reportErrorDoc("embeds", msg);
+            throw std::runtime_error(msg);
+        }
+        totalEmbedBytes += static_cast<long long>(base64Bytes);
+        if (totalEmbedBytes > kMaxTotalEmbedBytes) {
+            std::string msg = "MC3: document's total embed base64 content (" +
+                std::to_string(totalEmbedBytes) + " bytes) exceeds the combined budget (" +
+                std::to_string(kMaxTotalEmbedBytes) + " bytes) -- rejected before holding "
+                "it all in memory (many embeds each individually under the per-embed cap?)";
+            reportErrorDoc("embeds", msg);
+            throw std::runtime_error(msg);
+        }
+    }
     void reset() {
         totalObjects = 0; totalTessellationWeight = 0; totalIncludes = 0;
         totalMaterials = 0; totalTextures = 0;
+        totalEmbeds = 0; totalEmbedBytes = 0;
     }
 };
 static thread_local DocumentBudget g_budget;
@@ -1112,6 +1144,7 @@ static void parseEmbeds(const XMLElement* el, Mc3Document& doc) {
                        "rejected (not held in memory)");
             throw std::runtime_error(msg);
         }
+        g_budget.chargeEmbed(em.base64Content.size()); // SYS-W1-03
         doc.embeds[id] = std::move(em);
     }
 }

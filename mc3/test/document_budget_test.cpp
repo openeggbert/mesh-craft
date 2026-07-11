@@ -99,9 +99,57 @@ static void testTextureBudget() {
     check(doc.textures.size() == 500, "500 textures (under budget) all load fine");
 }
 
+// ---------------------------------------------------------------------------
+// Embeds: kMaxTotalEmbeds = 1,000 (count) and kMaxTotalEmbedBytes = 256MB
+// (sum of every embed's base64Content.size(), independent of the existing
+// per-embed 64MB kMaxEmbedBase64Length ceiling).
+// ---------------------------------------------------------------------------
+static void testEmbedCountBudget() {
+    // 1,001 trivial (near-empty base64) embeds: exceeds the COUNT budget
+    // while staying nowhere near the aggregate-bytes budget.
+    std::string xml = "<mc3 version=\"0.3\" model=\"embed-count-budget\">\n  <embeds>\n";
+    for (int i = 0; i < 1'001; ++i)
+        xml += "    <embed id=\"e" + std::to_string(i) + "\" type=\"gltf\">AA==</embed>\n";
+    xml += "  </embeds>\n</mc3>\n";
+
+    std::string what = loadExpectingThrow(xml);
+    check(!what.empty(), "1,001 trivial embeds exceeds the embed COUNT budget and is rejected");
+    check(what.find("embed") != std::string::npos,
+          "rejection names the embed budget, not an unrelated failure: " + what);
+
+    std::string okXml = "<mc3 version=\"0.3\" model=\"embed-count-ok\">\n  <embeds>\n";
+    for (int i = 0; i < 100; ++i)
+        okXml += "    <embed id=\"e" + std::to_string(i) + "\" type=\"gltf\">AA==</embed>\n";
+    okXml += "  </embeds>\n</mc3>\n";
+    Mc3Document doc = load(okXml);
+    check(doc.embeds.size() == 100, "100 trivial embeds (under budget) all load fine");
+}
+
+static void testEmbedAggregateBytesBudget() {
+    // 5 embeds at 60MB of base64 each (each individually well under the
+    // existing 64MB per-embed ceiling, and 5 is nowhere near the 1,000
+    // embed COUNT budget) sum to 300MB, over the 256MB aggregate budget.
+    const size_t perEmbed = 60ull * 1024ull * 1024ull;
+    std::string bigBody(perEmbed, 'A');
+    std::string xml = "<mc3 version=\"0.3\" model=\"embed-bytes-budget\">\n  <embeds>\n";
+    for (int i = 0; i < 5; ++i)
+        xml += "    <embed id=\"e" + std::to_string(i) + "\" type=\"gltf\">" + bigBody + "</embed>\n";
+    xml += "  </embeds>\n</mc3>\n";
+    bigBody.clear(); bigBody.shrink_to_fit();
+
+    std::string what = loadExpectingThrow(xml);
+    check(!what.empty(),
+          "5 embeds at 60MB each (300MB combined, each individually legal) "
+          "exceeds the aggregate embed-bytes budget and is rejected");
+    check(what.find("embed") != std::string::npos && what.find("byte") != std::string::npos,
+          "rejection names the aggregate embed-bytes budget, not an unrelated failure: " + what);
+}
+
 int main() {
     testMaterialBudget();
     testTextureBudget();
+    testEmbedCountBudget();
+    testEmbedAggregateBytesBudget();
 
     if (failures == 0) { std::cout << "All document-budget tests passed.\n"; return 0; }
     std::cerr << failures << " document-budget test(s) failed.\n";
