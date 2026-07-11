@@ -603,89 +603,18 @@ void MeshCraftApplication::exportSelectionToFile(const std::string& path) {
 // F4: Merge scene from MC3 XML
 // ---------------------------------------------------------------------------
 
-namespace {
-
-// STAB-0289: object ids live on every object in the tree (top-level and
-// nested children alike), not just a flat map like textures/materials/
-// actions, so merging two documents that happen to share an id previously
-// produced a destination document with two objects silently sharing one id.
-// Mirrors mergeDocumentsAlg()'s collectObjectIdsAlg()/
-// resolveObjectIdCollisionsAlg() in EditorAlgorithms.hpp (this project's Alg
-// mirror pattern — kept as a parallel duplicate since this .cpp is
-// CNA-coupled and can't include the headless-testable Alg header).
-void collectObjectIds(const std::vector<std::shared_ptr<Mc3::Mc3Object>>& objs,
-                       std::set<std::string>& ids) {
-    for (const auto& o : objs) {
-        if (!o) continue;
-        if (!o->id.empty()) ids.insert(o->id);
-        collectObjectIds(o->children, ids);
-    }
-}
-
-void resolveObjectIdCollisions(const std::shared_ptr<Mc3::Mc3Object>& obj,
-                                std::set<std::string>& existingIds) {
-    if (!obj) return;
-    if (!obj->id.empty()) {
-        if (existingIds.count(obj->id)) {
-            std::string base = obj->id;
-            std::string k = base;
-            int n = 2;
-            while (existingIds.count(k)) k = base + "_" + std::to_string(n++);
-            obj->id = k;
-        }
-        existingIds.insert(obj->id);
-    }
-    for (auto& child : obj->children)
-        resolveObjectIdCollisions(child, existingIds);
-}
-
-} // namespace
-
 void MeshCraftApplication::mergeSceneFromFile(const std::string& path) {
     Mc3::Mc3Document src = Mc3::Mc3Document::loadFromFile(path);
     pushUndo();
-
-    // Merge textures (skip on key collision — existing wins)
-    for (auto& [key, tex] : src.textures) {
-        if (!document_.textures.count(key))
-            document_.textures[key] = tex;
-    }
-
-    // Merge materials (suffix on collision)
-    for (auto& [key, mat] : src.materials) {
-        std::string k = key;
-        int n = 2;
-        while (document_.materials.count(k)) k = key + "_" + std::to_string(n++);
-        document_.materials[k] = mat;
-        document_.materials[k].name = k;
-    }
-
-    // Append objects (deep-copy already done by loadFromFile), resolving any
-    // object-id collision (top-level or nested) against the destination's
-    // existing tree first (STAB-0289).
-    std::set<std::string> existingIds;
-    collectObjectIds(document_.objects, existingIds);
-
-    int added = 0;
-    for (auto& obj : src.objects) {
-        resolveObjectIdCollisions(obj, existingIds);
-        document_.objects.push_back(obj);
-        ++added;
-    }
-
-    // Merge actions (suffix on collision — STAB-0469: previously not merged
-    // at all, so merging a scene silently discarded all of its animations).
-    // Channel targetObject references don't need remapping here: the merged
-    // objects above keep their original names unchanged, so a suffixed
-    // action's channels still correctly resolve to them.
-    for (auto& [key, action] : src.actions) {
-        std::string k = key;
-        int n = 2;
-        while (document_.actions.count(k)) k = key + "_" + std::to_string(n++);
-        document_.actions[k] = action;
-        document_.actions[k].name = k;
-    }
-
+    // AUD-031: was a hand-copied duplicate of mergeDocumentsAlg (textures/
+    // materials/objects-with-id-collision-resolution/actions) plus its own
+    // local collectObjectIds()/resolveObjectIdCollisions() duplicating
+    // collectObjectIdsAlg()/resolveObjectIdCollisionsAlg() -- the comment
+    // claiming this .cpp "can't include the headless-testable Alg header"
+    // because it's CNA-coupled was simply wrong (EditorAlgorithms.hpp is
+    // CNA-free; this file already includes it for loadPrefs()/savePrefs(),
+    // AUD-031/AUD-032). Delegates to the single tested implementation now.
+    int added = mergeDocumentsAlg(document_, src);
     modified_ = true; updateWindowTitle();
     setStatusMsg("Merged " + std::to_string(added) + " object(s) from " + path, false, 3.0f);
 }
