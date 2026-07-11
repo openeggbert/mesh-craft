@@ -107,47 +107,12 @@ void MeshCraftApplication::insertAnimKeyframes(
     pushUndo();
     auto& action = document_.actions[currentActionName_]; // re-find after pushUndo (safe: same map)
 
-    for (auto prop : props) {
-        // Find or create channel
-        int ci = -1;
-        for (int i = 0; i < (int)action.channels.size(); ++i) {
-            if (action.channels[i].targetObject == obj.name &&
-                action.channels[i].property == prop) { ci = i; break; }
-        }
-        if (ci < 0) {
-            Mc3::Mc3Channel ch;
-            ch.targetObject = obj.name;
-            ch.property     = prop;
-            action.channels.push_back(std::move(ch));
-            ci = static_cast<int>(action.channels.size()) - 1;
-        }
+    // AUD-031: was a hand-copied duplicate of insertAnimKeyframesAlg's own
+    // find-or-create-channel / insert-or-replace-keyframe loop (already
+    // sharing resolveObjectPropertyValueAlg for the value-resolution half
+    // since AUD-030/STAB-0715); now delegates the whole loop to it.
+    insertAnimKeyframesAlg(document_, action, obj, props, animTime_);
 
-        // STAB-0715: was a 10-way switch (Position/Rotation/Scale/Visible
-        // read the object's live value; everything else fell through to
-        // evaluateChannel(), which for a brand-new empty channel always
-        // returns 0.0f regardless of property -- an inconsistency versus
-        // the other 9, which is what resolveObjectPropertyValue() now
-        // fixes for all 22 properties uniformly (Deform/Material are also
-        // live, directly-editable object properties, same as
-        // position/rotation/scale, so reading them the same way is the
-        // behavior-preserving generalization, not a behavior change for
-        // the original 10).
-        float value = resolveObjectPropertyValueAlg(document_, obj, prop);
-
-        auto& ch = action.channels[ci];
-        // Replace existing keyframe at this time, or insert a new one
-        bool replaced = false;
-        for (auto& kf : ch.keyframes) {
-            if (std::abs(kf.time - animTime_) < 0.001f) { kf.value = value; replaced = true; break; }
-        }
-        if (!replaced) {
-            Mc3::Mc3Keyframe kf;
-            kf.time = animTime_; kf.value = value;
-            ch.keyframes.push_back(kf);
-            std::sort(ch.keyframes.begin(), ch.keyframes.end(),
-                [](const Mc3::Mc3Keyframe& a, const Mc3::Mc3Keyframe& b){ return a.time < b.time; });
-        }
-    }
     modified_ = true;
     evaluateAndPushAnimOverrides();
 }
