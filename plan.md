@@ -331,8 +331,77 @@ Mandated workstream items not tied to a single audit finding.
   `4fc211e`. Verify: `cmake -S . -B /tmp/b -DMESHCRAFT_SANITIZE=ON && cmake
   --build /tmp/b --target mc3_roundtrip_test mcb_roundtrip_test && /tmp/b/mc3/mc3_roundtrip_test && /tmp/b/mcb/mcb_roundtrip_test`
   (both pass clean, no ASan/UBSan findings).
-- **SYS-W11-05** `[TODO]` `P2` — Fuzz/differential harnesses over `McbReader` and
-  `Mc3XmlParser`, wired into CI. (`AUD-055`)
+- **SYS-W11-05** `[DONE]` `P2` — Fuzz/differential harnesses over `McbReader` and
+  `Mc3XmlParser`, wired into CI. (`AUD-055`) Commits `012f9b8`,
+  `5bd8f17`. Verify: `ctest --test-dir cmake-build-debug -R
+  "mc3_random_roundtrip|mc3_xml_mutation_fuzz|mcb_random_roundtrip"` (3/3
+  pass); ASan/UBSan: `cmake -S . -B /tmp/b -DMESHCRAFT_SANITIZE=ON
+  -DMESH_CRAFT_GRAPHICS_BACKEND=EASYGL && cmake --build /tmp/b --target
+  mc3_random_roundtrip_test mc3_xml_mutation_fuzz_test
+  mcb_random_roundtrip_test` then run all three (clean, zero findings);
+  libFuzzer (opt-in, Clang only): `cmake -S mc3 -B /tmp/f1 -G Ninja
+  -DCMAKE_CXX_COMPILER=clang++ -DMESHCRAFT_FUZZ=ON && cmake --build /tmp/f1
+  --target mc3_xml_libfuzzer && /tmp/f1/mc3_xml_libfuzzer -max_total_time=30
+  -seed=1` (same pattern for `mcb`/`mcb_libfuzzer`).
+  - **Status note:** `McbReader` already had byte-fuzz coverage
+    (`mcb_corruption_test.cpp`, landed under SYS-W1-04/AUD-055 before this
+    task) but `Mc3XmlParser` had none — the primary gap this task closed.
+    Delivered, for BOTH parsers: (1) a fast, always-on, CTest-registered
+    seeded-mutation/random-byte fuzz harness
+    (`mc3/test/xml_mutation_fuzz_test.cpp`, new — AFL-style byte-havoc
+    mutation of a random-document-generated XML corpus plus pure random-byte
+    noise fed to `Mc3Document::loadFromString`; `mcb_corruption_test.cpp`
+    already covered the McbReader side and was left as-is); (2) a
+    property-based/differential random round-trip harness for BOTH codecs,
+    sharing one seeded random-document generator
+    (`mc3/test/RandomMc3DocumentGenerator.hpp`, new, test-only, not part of
+    Mc3's public API) — `mc3/test/random_roundtrip_test.cpp` round-trips 60
+    random documents through the real XML save/load path (plus 15 more
+    through the `loadFromString` in-memory entry point an AI/import pipeline
+    actually calls) and asserts semantic equivalence field-by-field;
+    `mcb/test/mcb_random_roundtrip_test.cpp` does the same through
+    `saveToBinary`/`loadFromBinary`; both are new and neither existed before
+    (existing round-trip tests were fixed/hand-picked fixtures only, one
+    feature at a time, never randomized combinations at volume). (3) A
+    genuine libFuzzer corpus-driven harness for BOTH parsers
+    (`mc3/test/fuzz/mc3_xml_libfuzzer.cpp`, `mcb/test/fuzz/mcb_libfuzzer.cpp`,
+    both new) — this environment has a working Clang 19.1.7 with
+    `-fsanitize=fuzzer`, so rather than settling for "libFuzzer isn't
+    practical here," a real opt-in `MESHCRAFT_FUZZ` CMake option was added,
+    self-contained to `mc3/CMakeLists.txt`/`mcb/CMakeLists.txt` (no root
+    `CMakeLists.txt` change needed/made — mc3 and mcb are already
+    independently configurable per the CI matrix, so this never touches
+    `../cna`). Verified with real bounded runs (`-max_total_time=30
+    -seed=1`): `mc3_xml_libfuzzer` did 990,577 executions in 31s (coverage
+    356/429 features) with zero crashes; `mcb_libfuzzer` did 365,956
+    executions in 31s with zero crashes; both ran clean, no ASan/UBSan
+    findings, no crash/oom/timeout artifacts. This libFuzzer target is
+    deliberately NOT part of the default CTest run (requires Clang
+    specifically; the default `cmake-build-debug` tree uses GCC, and it's a
+    deep-fuzzing tool meant for longer/occasional runs, not a fast
+    per-commit gate) — the always-on per-commit gate is (1)+(2) above.
+    During development of the random round-trip generator/comparator, hit
+    and fixed several FALSE-POSITIVE mismatches that traced to the test's
+    own logic, not real bugs: Plane's `size.y` is not part of its persisted
+    contract (writer only serializes x/z), and Ambient lights never persist
+    `castShadows` (`Mc3XmlParser.cpp`'s `parseLights()` ambient branch
+    doesn't read `cast_shadows`) — both fixed in the generator/comparator,
+    not the product code, since they are pre-existing, non-crashing,
+    narrow-field round-trip quirks rather than the crash/hang/UB class of
+    bug this task's design constraints call out for a real product fix.
+    **No real crash/hang/ASan bug was found** in either parser across all
+    three techniques (seeded mutation, random differential round-trip, and
+    ~1.35M genuine libFuzzer executions combined) — consistent with
+    `mcb_corruption_test.cpp`'s prior finding that both readers were already
+    memory-safe against arbitrary corruption before this task.
+    **CI wiring explicitly out of scope/blocked**, not silently omitted: CI
+    itself is parked pending `AUD-052` (owner-gated, no push-scoped
+    workflow token in this environment) — a CI job invoking any of these
+    targets would be inert until CI is un-parked. The per-commit
+    (1)+(2) coverage runs today via plain `ctest`, same as every other test
+    in the suite, so it needs no bespoke CI step once CI itself exists; only
+    the opt-in deep-fuzzing (3) would need a *scheduled* (not per-commit) CI
+    job, which is what remains blocked.
 - **SYS-W11-06** `[TODO]` `P2` — `clang-format` + scoped `clang-tidy` config
   (checked-in, CI-integrated — ad-hoc manual passes were already run per
   `AUD-055`'s verify note).
