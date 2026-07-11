@@ -736,10 +736,11 @@ static Mc3::Mc3Action readAction(std::istream& in) {
     while (true) {
         std::string k = rKey(in); if (k.empty()) break;
         uint8_t tag = rU8(in);
-        if      (k == "name")     act.name     = rRawStr(in);
-        else if (k == "duration") act.duration = rF32(in);
-        else if (k == "loop")     act.loop     = rU8(in) != 0;
-        else if (k == "autoplay") act.autoplay = rU8(in) != 0;
+        if      (k == "name")      act.name      = rRawStr(in);
+        else if (k == "duration")  act.duration  = rF32(in);
+        else if (k == "loop")      act.loop      = rU8(in) != 0;
+        else if (k == "autoplay")  act.autoplay  = rU8(in) != 0;
+        else if (k == "timeScale") act.timeScale = rF32(in); // STAB-0460
         else if (k == "channels") {
             uint32_t n = rU32Bounded(in);
             act.channels.reserve(n);

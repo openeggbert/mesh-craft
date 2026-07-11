@@ -556,8 +556,9 @@ static void testAnimationLinear() {
     Mc3Document doc;
     Mc3Action action;
     action.name     = "Spin";
-    action.duration = 3.0f;
-    action.loop     = true;
+    action.duration  = 3.0f;
+    action.loop      = true;
+    action.timeScale = 2.0f; // STAB-0460
 
     Mc3Channel ch;
     ch.targetObject = "Sphere1";
@@ -576,6 +577,7 @@ static void testAnimationLinear() {
     CHECK(a.name == "Spin",     "anim linear: action.name");
     CHECKF(a.duration, 3.0f,   "anim linear: action.duration");
     CHECK(a.loop == true,       "anim linear: action.loop");
+    CHECKF(a.timeScale, 2.0f,   "anim linear: action.timeScale (STAB-0460)");
     CHECK(a.channels.size() == 1, "anim linear: channel count");
     if (a.channels.empty()) return;
     const auto& c = a.channels[0];
@@ -589,6 +591,33 @@ static void testAnimationLinear() {
         CHECKF(c.keyframes[1].time,   3.0f,   "anim linear: kf[1].time");
         CHECKF(c.keyframes[1].value, 360.0f,  "anim linear: kf[1].value");
     }
+}
+
+// STAB-0460: timeScale's default (1.0, no-op) must not be written to XML,
+// matching the "only write non-default" convention already used for
+// orthoAspect/mip_maps -- keeps every scene authored before this field
+// existed byte-for-byte unchanged on re-save.
+static void testActionTimeScaleDefaultNotWritten() {
+    Mc3Document doc;
+    Mc3Action action;
+    action.name     = "Idle";
+    action.duration = 1.0f;
+    Mc3Channel ch;
+    ch.targetObject = "Sphere1";
+    ch.property     = AnimatedProperty::PositionY;
+    ch.keyframes    = { Mc3Keyframe::linear(0.0f, 0.0f) };
+    action.channels.push_back(ch);
+    doc.actions["Idle"] = std::move(action);
+
+    auto p = tmpPath();
+    doc.saveToFile(p);
+    std::ifstream f(p);
+    std::string saved((std::istreambuf_iterator<char>(f)), {});
+    f.close();
+    std::filesystem::remove(p);
+
+    CHECK(saved.find("time_scale") == std::string::npos,
+          "action timeScale: default (1.0) is NOT written to XML");
 }
 
 static void testAnimationCubicBezier() {
@@ -3477,6 +3506,7 @@ int main(int argc, char* argv[]) {
     testDiskLegacyMinorRadius();
     testMaterialAllFieldsRoundtrip();
     testAnimationLinear();
+    testActionTimeScaleDefaultNotWritten();
     testAnimationCubicBezier();
     testAnimationStep();
     testAnimationMultiAction();

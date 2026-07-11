@@ -129,6 +129,23 @@ def test_animation(binary, anim_xml):
             ta = g["accessors"][spin["samplers"][ch["sampler"]]["input"]]
             check(ta["count"] == 2,
                   f"anim: Spin rotation has exactly 2 samples (linear), got {ta['count']}")
+            # STAB-0460: Spin has time_scale="2.0" in the fixture -- exported
+            # keyframe times (authored 0.0/3.0) must be baked (divided) by
+            # that multiplier, so a plain glTF viewer with no notion of
+            # "time scale" still reproduces the editor's real-time playback
+            # speed (2x speed -> half the exported duration).
+            check(ta["min"] == [0.0],
+                  f"anim: Spin time accessor min==0.0 (unaffected by time_scale), got {ta['min']}")
+            check(ta["max"] == [1.5],
+                  f"anim: Spin time accessor max==1.5 (authored 3.0 / time_scale 2.0), got {ta['max']}")
+
+    check(spin.get("extras", {}).get("time_scale") == 2.0,
+          f"anim: Spin extras.time_scale==2.0, got {spin.get('extras', {}).get('time_scale')}")
+    for anim in anims:
+        if anim["name"] != "Spin":
+            check(anim.get("extras", {}).get("time_scale") == 1.0,
+                  f"anim: {anim['name']} extras.time_scale==1.0 (default), "
+                  f"got {anim.get('extras', {}).get('time_scale')}")
 
     # Pulse: scale.x/y/z → merged into a single scale channel (VEC3)
     pulse = next(a for a in anims if a["name"] == "Pulse")

@@ -74,6 +74,12 @@ struct Mc3Action {
     float       duration{ 1.0f };
     bool        loop{ false };
     bool        autoplay{ false }; // start automatically when the scene is opened
+    // STAB-0460: playback-speed multiplier (2.0 = twice as fast, 0.5 = half
+    // speed). Multiplies dt when the editor advances its playback clock
+    // (MeshCraftApplication.cpp); channel/keyframe times themselves stay in
+    // the action's own unscaled time domain. Defaults to 1.0 (no-op),
+    // matching every scene authored before this field existed.
+    float       timeScale{ 1.0f };
     std::vector<Mc3Channel> channels;
 
     // --- Builder helpers --------------------------------------------------
@@ -90,6 +96,7 @@ struct Mc3Action {
     }
     Mc3Action& withLoop(bool v = true)     { loop     = v; return *this; }
     Mc3Action& withAutoplay(bool v = true) { autoplay = v; return *this; }
+    Mc3Action& withTimeScale(float v)      { timeScale = v; return *this; }
 };
 
 // Property name ↔ enum conversions (XML attribute values).

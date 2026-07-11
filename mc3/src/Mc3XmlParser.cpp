@@ -664,10 +664,11 @@ static void parseActions(const XMLElement* el, Mc3Document& doc) {
     for (const XMLElement* ae = el->FirstChildElement("action"); ae;
          ae = ae->NextSiblingElement("action")) {
         Mc3Action action;
-        action.name     = attr(ae, "name");
-        action.duration = attrF(ae, "duration", 1.0f);
-        action.loop     = attrB(ae, "loop", false);
-        action.autoplay = attrB(ae, "autoplay", false);
+        action.name      = attr(ae, "name");
+        action.duration  = attrF(ae, "duration", 1.0f);
+        action.loop      = attrB(ae, "loop", false);
+        action.autoplay  = attrB(ae, "autoplay", false);
+        action.timeScale = attrF(ae, "time_scale", 1.0f); // STAB-0460
         if (action.name.empty()) continue;
 
         for (const XMLElement* ce = ae->FirstChildElement("channel"); ce;

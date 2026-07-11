@@ -43,8 +43,9 @@
       </channel>
     </action>
 
-    <!-- Spin: SpinningSphere rotates 360° over 3 seconds -->
-    <action name="Spin" duration="3.0" loop="true">
+    <!-- Spin: SpinningSphere rotates 360° over 3 seconds, played back at 2x
+         speed (STAB-0460); exported glTF keyframe times should be halved. -->
+    <action name="Spin" duration="3.0" loop="true" time_scale="2.0">
       <channel target="SpinningSphere" property="rotation.y">
         <keyframe time="0.0"  value="0.0"   interp="linear"/>
         <keyframe time="3.0"  value="360.0" interp="linear"/>

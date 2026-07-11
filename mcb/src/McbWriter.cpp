@@ -440,10 +440,11 @@ static void writeChannel(std::ostream& o, const Mc3::Mc3Channel& ch) {
 
 static void writeAction(std::ostream& o, const Mc3::Mc3Action& act) {
     const Mc3::Mc3Action def;
-    wIfStr (o, "name",     act.name,     "");
-    wIfF32 (o, "duration", act.duration, def.duration);
-    wIfBool(o, "loop",     act.loop,     def.loop);
-    wIfBool(o, "autoplay", act.autoplay, def.autoplay);
+    wIfStr (o, "name",      act.name,      "");
+    wIfF32 (o, "duration",  act.duration,  def.duration);
+    wIfBool(o, "loop",      act.loop,      def.loop);
+    wIfBool(o, "autoplay",  act.autoplay,  def.autoplay);
+    wIfF32 (o, "timeScale", act.timeScale, def.timeScale); // STAB-0460
     if (!act.channels.empty()) {
         wKeyArr(o, "channels", static_cast<uint32_t>(act.channels.size()));
         for (const auto& ch : act.channels) { wU8(o, TAG_OBJ); writeChannel(o, ch); }

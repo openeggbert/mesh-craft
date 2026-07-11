@@ -311,6 +311,17 @@ void MeshCraftApplication::drawTimelinePanel(int screenW, int screenH) {
             // adjacent Loop checkbox -- settable only via hand-edited
             // XML/MCB. Same unconditional-pushUndo() pattern as Loop above.
             if (ImGui::Checkbox("Autoplay##ap", &act.autoplay)) { pushUndo(); modified_ = true; }
+            ImGui::SameLine();
+            // STAB-0460: playback-speed multiplier. Same IsItemActivated()-
+            // gated pushUndo() pattern as the Dur widget above.
+            ImGui::Text("Speed:"); ImGui::SameLine();
+            ImGui::SetNextItemWidth(55.0f);
+            float ts = act.timeScale;
+            if (ImGui::DragFloat("##ts", &ts, 0.01f, 0.05f, 10.0f, "%.2fx", ImGuiSliderFlags_AlwaysClamp)) {
+                if (ImGui::IsItemActivated()) pushUndo();
+                act.timeScale = std::max(0.05f, ts);
+                modified_     = true;
+            }
             ImGui::SameLine(); ImGui::Text("|"); ImGui::SameLine();
             if (ImGui::SmallButton("|<##rew"))  { animTime_ = 0.0f; evaluateAndPushAnimOverrides(); }
             ImGui::SameLine();

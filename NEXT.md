@@ -1,6 +1,6 @@
 # NEXT.md
 
-_Last updated: 2026-07-11, prior commit `485b5d5` (branch `develop`). Four product-decision rows resolved this session: `STAB-0092` (`<embeds>` not merged from `<include>`d files), `STAB-0289` (Merge Scene object-id collision handling), `STAB-0327` (prefs.ini auto-created on first launch), and `STAB-0360` (registry DB path env var override), all owner-approved and implemented — see §3._
+_Last updated: 2026-07-11, prior commit `af4c9ab` (branch `develop`). Five product-decision rows resolved this session: `STAB-0092` (`<embeds>` not merged from `<include>`d files), `STAB-0289` (Merge Scene object-id collision handling), `STAB-0327` (prefs.ini auto-created on first launch), `STAB-0360` (registry DB path env var override), and `STAB-0460` (animation playback-speed multiplier — a deliberate, owner-approved exception to the feature moratorium, unlike the other four which were narrow bug-shaped gaps), all owner-approved and implemented — see §3._
 
 ---
 
@@ -10,7 +10,7 @@ _Last updated: 2026-07-11, prior commit `485b5d5` (branch `develop`). Four produ
 
 **Main goal**: reach a fully stabilized, test-covered codebase before adding new product features. All stabilization work is tracked in `plan.md` as `STAB-XXXX` tasks across sections S0–S25 (`STABILIZATION.md` holds the gate policy). The original S0–S20 (650 tasks) was later extended with 5 audit-driven sections: S21 (mc3 format spec-vs-impl), S22 (MCB binary coverage), S23 (mc3togltf export quality), S24 (editor UI coverage of the mc3 format — driven by `missing.md`), and S25 (live-preview rendering correctness) — 723 tasks total.
 
-**Current phase**: stabilization is functionally complete but not formally "all green." `plan.md`: **687/723 rows ✅, 34 🟡 (mostly implemented-but-pending-live-visual-verification — this headless environment can't drive ImGui click/drag interaction; a smaller number are permanently-flagged real gaps or product decisions), 0 needs_human, 2 📋 (one blocked on an external action, one explicitly skipped), 0 🔴**. Per this project's own policy, **new feature work is not yet authorized** without explicit per-task owner approval — the S24 UI-coverage work (§3) was all individually approved task-by-task per `CLAUDE.md`'s `plan.md` review workflow, not a blanket go-ahead. A partial live-verification pass over §S24 happened 2026-07-10 (see §3) — 8 of the 14 newest 🟡 rows got real click-through confirmation (6 flipped to ✅, 2 real bugs found+fixed), the owner then stopped testing; the remaining rows (§8 item 4) are still open whenever there's appetite for more.
+**Current phase**: stabilization is functionally complete but not formally "all green." `plan.md`: **688/723 rows ✅, 33 🟡 (mostly implemented-but-pending-live-visual-verification — this headless environment can't drive ImGui click/drag interaction; a smaller number are permanently-flagged real gaps or product decisions), 0 needs_human, 2 📋 (one blocked on an external action, one explicitly skipped), 0 🔴**. Per this project's own policy, **new feature work is not yet authorized** without explicit per-task owner approval — the S24 UI-coverage work (§3) was all individually approved task-by-task per `CLAUDE.md`'s `plan.md` review workflow, not a blanket go-ahead. A partial live-verification pass over §S24 happened 2026-07-10 (see §3) — 8 of the 14 newest 🟡 rows got real click-through confirmation (6 flipped to ✅, 2 real bugs found+fixed), the owner then stopped testing; the remaining rows (§8 item 4) are still open whenever there's appetite for more.
 
 **Important architectural decisions**:
 - `mc3` (data model + XML parser/writer) and `mcb` (binary serializer) are **CNA-free standalone libraries** — must build and test independently of CNA/ImGui.
@@ -62,6 +62,15 @@ Clean from an **absolute-zero** build directory (not just incremental): `rm -rf 
 ---
 
 ## 3. Recent changes
+
+**2026-07-11 — `STAB-0460` resolved as a deliberate, owner-approved exception to the feature moratorium (§S12).** Unlike this session's other 4 product-decision resolutions (narrow, bug-shaped gaps in existing code paths), this row's premise was a genuinely missing feature — no "scale time"/keyframe-time-scaling code existed anywhere. The owner explicitly chose to lift the moratorium for this one row and specified the scope: a per-action playback-speed multiplier. Implemented as `Mc3Action::timeScale` (default 1.0, no-op), wired full-stack mirroring the `orthoAspect` (`STAB-0695`) precedent:
+- `mc3/mc3.xsd` + `Mc3XmlParser.cpp`/`Mc3XmlWriter.cpp`: new XML attribute `time_scale`, only written when non-default.
+- `mcb/src/McbWriter.cpp`/`McbReader.cpp`: MCB persistence.
+- `src/MeshCraft/MeshCraftApplication.cpp`: the editor's playback clock now does `animTime_ += dt * timeScale`.
+- `src/MeshCraft/MeshCraftApplication_Anim.cpp`: a new "Speed" `DragFloat` in the Animation panel, `IsItemActivated()`-gated `pushUndo()` matching the adjacent Duration widget.
+- `mc3togltf/src/GltfExporter.cpp`: core glTF has no "playback speed" concept, so exported keyframe times are baked (divided by `timeScale`) — a standard glTF viewer (Blender, three.js, ...) reproduces the same real-time speed the editor shows, with no MeshCraft-specific knowledge needed. The raw multiplier is also stashed in `extras.time_scale` for round-trip/tooling use, mirroring the existing `autoplay`/`loop` extras convention.
+- New tests across all three formats: mc3 XML roundtrip (`testAnimationLinear`, `testActionTimeScaleDefaultNotWritten`), MCB roundtrip (`testActionAnimationRoundtrip`), and glTF export (`gltf_test.py`'s `test_animation`, extended with a `time_scale="2.0"` `Spin` action in `test/animation_test.mc3.xml`, asserting the exported time accessor is correctly halved and `extras.time_scale` round-trips).
+- Full 87/87 ctest green.
 
 **2026-07-11 — `STAB-0360` resolved (owner-approved product decision, §S9).** `ModelRegistry::defaultPath()` (`src/MeshCraft/ModelRegistry.cpp`) previously always computed a fixed `$HOME/.meshcraft/modelregistry.sqlite3` path, with no way to redirect it. Fixed by checking a new `MESHCRAFT_REGISTRY_DB` env var first — if set and non-empty, it's used directly as the DB path; otherwise the existing `$HOME`/`$USERPROFILE`-based default is unchanged. A single point of change: both real call sites (`MeshCraftApplication_UiRegistry.cpp`, `MeshCraftApplication_UiAi.cpp`) already go through `defaultPath()`. No prefs.ini field added — that would need new UI to edit it; the env var matches this project's existing `XDG_CONFIG_HOME` pattern with no UI cost. New test `testDefaultPathEnvOverride()` (`mc3/test/mc3_registry_test.cpp`) confirms both the override and the revert-to-default behavior. Full 87/87 ctest green.
 
@@ -177,8 +186,7 @@ Full history: `git log --oneline`. Per-task detail for the audit phase (both rou
 ## 5. Known bugs and limitations
 
 - **Confirmed, unfixed (out of this repo's scope)**: Windows GUI build fails (§4). Emscripten web build no longer builds from scratch (§4, new). Emscripten canvas renders blank — root cause now identified (canvas is 0×0, §2) but fix blocked on the build regression above.
-- **Confirmed, unfixed (in scope, deliberately deferred — needs a product-scope decision, not a quick patch)**:
-  - No animation scale-time function exists — `STAB-0460`.
+- **Confirmed, unfixed (in scope, deliberately deferred — new-feature-sized work needing a product-scope decision, also blocked on the Emscripten build regression, §4, until it can even be built/verified)**:
   - Web GLB export has no browser-download bridge (§2) — `STAB-0571`.
 - **Confirmed, by design (not a bug)**: SVG texture rasterization stub-only; embedded-glTF references not resolved; Scripts/Triggers have full editor UI now (§3) but no runtime execution (no Lua interpreter, no event dispatch); two independent material-editing UIs exist (`Scene/PropertiesPanel.cpp` and `MeshCraftApplication_UiLeftPanel.cpp`) — a fix in one doesn't apply to the other (verified 2026-07-09 via `plan_deep_audit.md` AUDIT-0013: read both side by side, no undocumented drift found beyond the already-known design). `<actions>` also deliberately not merged from `<include>`d files (confirmed via `mergeInclude()`'s own comment — distinct from the `<embeds>` gap, which *was* accidental and is now fixed, `STAB-0092`, §3). `rotation_units`/`euler_order` are export-only, resolved as won't-fix in the editor's own rendering 2026-07-10 (§3, `STAB-0701`) — a load-time warning covers the gap instead.
 - **Needs verification (blocked on tooling, not known-bad)**: **38 `plan.md` rows** (down from 44 after a 2026-07-10 partial live-verification pass, §3 — that pass confirmed 6 rows ✅ and found 2 real bugs, now fixed) need a live interactive display/mouse session this headless environment can't provide (curve-editor visibility, proportional-edit radius indicator, FPS counter, live drag-and-drop gesture, etc.) — genuinely untested either way, not confirmed broken; each was implemented with high code-review confidence and mirrors an already-working pattern elsewhere in the file. Still-unverified §S24 rows specifically: `STAB-0703`/`0704` (Inline-toggle fix just applied, not re-tested), `STAB-0706` (audio playback specifically — error path already confirmed correct), `STAB-0711` (needs an IcoSphere object, none in `features.mc3.xml`), `STAB-0672` (needs `test/csg_mesh_child.mc3.xml`, not `features.mc3.xml`), `STAB-0714`/`0717`/`0718`/`0719` (not checked at all yet).
@@ -255,20 +263,20 @@ Ordered, each scoped to one focused session:
    Verify: `./build-web.sh`, serve via `python3 -m http.server`, load in `google-chrome --headless=new --enable-unsafe-swiftshader --use-gl=angle --use-angle=swiftshader --dump-dom <url>`, confirm `<canvas>` has nonzero `width`/`height`; then screenshot and inspect for non-black 3D content.
 
 4. **A 2026-07-10 live-verification session already ran partway through §S24 — pick it back up when there's appetite for more.** 6 rows confirmed ✅, 2 real bugs found+fixed (see §3), owner then stopped testing. Remaining §S24-specific rows to check: `STAB-0703`/`0704` (re-test the Inline-toggle fix), `STAB-0706` (actual audio playback, using the new `test/sounds/test_tone.wav`), `STAB-0711` (needs `Add → IcoSphere` first, `features.mc3.xml` has none), `STAB-0672` (needs `test/csg_mesh_child.mc3.xml`, not `features.mc3.xml`), `STAB-0714`/`0717`/`0718`/`0719` (Autoplay checkbox, OBJ import/export menu items, undo-fix spot-checks — not attempted yet). Beyond §S24, 24 older rows are also still unverified: gizmos, SSAO/bloom/wireframe toggles, drag-drop, curve editor, etc.
-   Files: `plan.md` — search for `🟡` to find all 34 remaining rows.
+   Files: `plan.md` — search for `🟡` to find all 33 remaining rows.
    Verify: N/A until the session happens.
 
-5. **Get an explicit scope decision from the project owner on the last remaining flagged product-decision row, `STAB-0460`** (no animation scale-time function exists — this would be new-feature-sized work, not a quick patch), then implement only if approved. (`STAB-0092`/`0289`/`0327`/`0360` were resolved 2026-07-11, see §3. `STAB-0571` needs the Emscripten build fixed first — see item 3.)
-   Files: varies per row — see `plan.md` for the specific row's "Key File(s)" column.
-   Verify: whatever test the chosen row's own `plan.md` entry specifies.
-
-6. **Once `../sharp-runtime`'s Emscripten regression clears (see item 3), also implement `plan_deep_audit.md` AUDIT-0050** (real IDBFS mount/syncfs for web config persistence — currently `-lidbfs.js` is linked but never actually invoked, so prefs/recent-files/keybindings silently vanish on every web reload). Same blocker as item 3, different fix.
+5. **Once `../sharp-runtime`'s Emscripten regression clears (see item 3), also implement `plan_deep_audit.md` AUDIT-0050** (real IDBFS mount/syncfs for web config persistence — currently `-lidbfs.js` is linked but never actually invoked, so prefs/recent-files/keybindings silently vanish on every web reload). Same blocker as item 3, different fix.
    Files: `src/MeshCraft/MeshCraftPrivate.hpp`, web init path, `CMakeLists.txt:347`.
    Verify: see `plan_deep_audit.md` AUDIT-0050 for the exact steps.
 
-7. **Get the project owner's decision on `plan_deep_audit.md`'s last remaining `needs_human` row, `AUDIT-0038`** (MCB version-migration policy — currently hard-fails on any version mismatch, by design; decide whether to ever invest in a migration path). `AUDIT-0037`/`0039`/`0040`/`0055` were already resolved 2026-07-10 (see §3).
+6. **Get the project owner's decision on `plan_deep_audit.md`'s last remaining `needs_human` row, `AUDIT-0038`** (MCB version-migration policy — currently hard-fails on any version mismatch, by design; decide whether to ever invest in a migration path). `AUDIT-0037`/`0039`/`0040`/`0055` were already resolved 2026-07-10 (see §3).
    Files: none — communication/handoff task.
    Verify: N/A (external decision).
+
+7. **`STAB-0571`'s browser-download bridge for web GLB export** is the one remaining new-feature-sized item — same category as `STAB-0460` (needs an explicit owner scope decision, and separately needs the Emscripten build regression, §4, fixed before it can even be built/verified). Not actionable yet on either front.
+   Files: likely a custom Emscripten HTML shell + `EM_ASM`/`EM_JS` glue; see `plan.md` STAB-0571 for what was already investigated.
+   Verify: N/A until both blockers clear.
 
 ---
 
@@ -278,7 +286,7 @@ Ordered, each scoped to one focused session:
 - **No CNA or SHARP_RUNTIME source changes** without explicit owner permission — this includes the GLES3 header gap and the 3 sharp-runtime `-Werror` issues in §4, even though the fixes are individually easy to guess at.
 - **No `Mc3Document` public API changes** without checking `mc3togltf`, `mc3tomcb`, and every test fixture that touches it.
 - **No mass refactor or blanket fix** for the ~100+ un-clamped ImGui slider sites (§5) — each needs its own downstream-safety check first.
-- **No speculative implementation** of any of the 6 flagged product-decision rows (§8 item 5) without first getting the scope decision — guessing at scope risks building the wrong thing.
+- **No speculative implementation** of `STAB-0571` (the one remaining flagged product-decision row, §8 item 7) without first getting the scope decision — guessing at scope risks building the wrong thing. (The other 5 — `STAB-0092`/`0289`/`0327`/`0360`/`0460` — were resolved 2026-07-11, see §3.)
 - **No SVG rasterization or `embed:`/`<embeds>` resolution work** without an explicit decision on which library/approach to use.
 - **No re-running the full "delete cmake-build-debug and rebuild from scratch" verification** unless a meaningful amount of new work has landed since the last clean-build check — it would just re-confirm the same pass with no new information (incremental `ninja` + `ctest` after each commit is sufficient; this was done after every commit in the 2026-07-10 §S23/§S24/§S25 batch).
 

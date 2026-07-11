@@ -783,8 +783,9 @@ static void testActionAnimationRoundtrip() {
     Mc3Action action;
     action.name     = "Walk";
     action.duration = 2.5f;
-    action.loop     = true;
-    action.autoplay = true; // real bug found & fixed this task: MCB never wrote/read this field at all
+    action.loop      = true;
+    action.autoplay  = true; // real bug found & fixed this task: MCB never wrote/read this field at all
+    action.timeScale = 2.0f; // STAB-0460
 
     Mc3Channel channel;
     channel.targetObject = "hero";
@@ -809,6 +810,7 @@ static void testActionAnimationRoundtrip() {
     CHECKF(ract.duration, action.duration, "action: duration survives");
     CHECK(ract.loop     == action.loop,     "action: loop survives");
     CHECK(ract.autoplay == action.autoplay, "action: autoplay survives (previously silently dropped by MCB)");
+    CHECKF(ract.timeScale, action.timeScale, "action: timeScale survives (STAB-0460)");
     CHECK(ract.channels.size() == 1, "action: channel count survives");
     if (ract.channels.empty()) return;
 

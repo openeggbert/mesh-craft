@@ -355,7 +355,7 @@ void MeshCraftApplication::Update(GameTime& gameTime) {
         if (it != document_.actions.end()) {
             float dt = static_cast<float>(
                 gameTime.getElapsedGameTimeProperty().getTotalSecondsProperty());
-            animTime_ += dt;
+            animTime_ += dt * it->second.timeScale; // STAB-0460
             float dur = it->second.duration;
             if (animTime_ >= dur) {
                 if (it->second.loop) animTime_ = std::fmod(animTime_, dur);

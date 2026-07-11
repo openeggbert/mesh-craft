@@ -698,6 +698,8 @@ void Mc3XmlWriter::write(const Mc3Document& doc, const std::filesystem::path& pa
             ae->SetAttribute("duration", fStr(act.duration).c_str());
             if (act.loop)     ae->SetAttribute("loop",     "true");
             if (act.autoplay) ae->SetAttribute("autoplay", "true");
+            if (act.timeScale != 1.0f) // STAB-0460: only write non-default
+                ae->SetAttribute("time_scale", fStr(act.timeScale).c_str());
 
             for (const auto& ch : act.channels) {
                 XMLElement* ce = xml.NewElement("channel");

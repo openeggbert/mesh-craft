@@ -1290,16 +1290,31 @@ static void exportAnimations(
                 }
 
                 // Time accessor (SCALAR, min/max required by glTF spec).
+                //
+                // STAB-0460: bake the action's playback-speed multiplier
+                // into the exported keyframe times, so a standard glTF
+                // viewer -- which has no notion of "time scale" -- still
+                // reproduces the same real-time playback speed the editor
+                // shows (2x speed -> keyframe times halved -> exported
+                // animation finishes in half the real-world time). `times`
+                // itself must stay unscaled: it's also used above to sample
+                // evaluateChannel(), which binary-searches against the
+                // keyframes' own unscaled time domain.
                 {
-                    int bv = addBufferView(model, times.data(), times.size() * sizeof(float), 0);
+                    float invTimeScale = (action.timeScale > 1e-6f) ? 1.0f / action.timeScale : 1.0f;
+                    std::vector<float> outTimes;
+                    outTimes.reserve(times.size());
+                    for (float t : times) outTimes.push_back(t * invTimeScale);
+
+                    int bv = addBufferView(model, outTimes.data(), outTimes.size() * sizeof(float), 0);
                     tinygltf::Accessor acc;
                     acc.bufferView    = bv;
                     acc.byteOffset    = 0;
                     acc.componentType = TINYGLTF_COMPONENT_TYPE_FLOAT;
-                    acc.count         = static_cast<int>(times.size());
+                    acc.count         = static_cast<int>(outTimes.size());
                     acc.type          = TINYGLTF_TYPE_SCALAR;
-                    acc.minValues     = {static_cast<double>(times.front())};
-                    acc.maxValues     = {static_cast<double>(times.back())};
+                    acc.minValues     = {static_cast<double>(outTimes.front())};
+                    acc.maxValues     = {static_cast<double>(outTimes.back())};
                     model.accessors.push_back(std::move(acc));
                 }
                 int inputAcc = static_cast<int>(model.accessors.size()) - 1;
@@ -1345,8 +1360,13 @@ static void exportAnimations(
             // castShadows, environment, asset mc3_version) for otherwise-
             // inexpressible mc3 data, which this was previously missing.
             tinygltf::Value::Object extras;
-            extras["autoplay"] = tinygltf::Value(action.autoplay);
-            extras["loop"]     = tinygltf::Value(action.loop);
+            extras["autoplay"]   = tinygltf::Value(action.autoplay);
+            extras["loop"]       = tinygltf::Value(action.loop);
+            // STAB-0460: the raw multiplier, for round-trip/tooling use --
+            // independent of the baked keyframe-time scaling above, which
+            // is what makes a plain glTF viewer actually play back at the
+            // right speed.
+            extras["time_scale"] = tinygltf::Value(static_cast<double>(action.timeScale));
             anim.extras = tinygltf::Value(extras);
             model.animations.push_back(std::move(anim));
         }

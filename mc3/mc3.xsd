@@ -865,10 +865,13 @@
     <xs:sequence>
       <xs:element name="channel" type="mc3ChannelType" minOccurs="0" maxOccurs="unbounded"/>
     </xs:sequence>
-    <xs:attribute name="name"     type="xs:string"  use="required"/>
-    <xs:attribute name="duration" type="xs:float"   default="1.0"/>
-    <xs:attribute name="loop"     type="xs:boolean" default="false"/>
-    <xs:attribute name="autoplay" type="xs:boolean" default="false"/>
+    <xs:attribute name="name"       type="xs:string"  use="required"/>
+    <xs:attribute name="duration"   type="xs:float"   default="1.0"/>
+    <xs:attribute name="loop"       type="xs:boolean" default="false"/>
+    <xs:attribute name="autoplay"   type="xs:boolean" default="false"/>
+    <!-- STAB-0460: playback-speed multiplier (2.0 = 2x speed). Optional,
+         defaults to 1.0 (no-op). -->
+    <xs:attribute name="time_scale" type="xs:float"   default="1.0"/>
   </xs:complexType>
 
   <xs:complexType name="mc3ActionsType">
