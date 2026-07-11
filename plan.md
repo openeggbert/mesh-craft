@@ -277,7 +277,32 @@ Mandated workstream items not tied to a single audit finding.
 - **SYS-W7-01** `[TODO]` `P2` — Truthful export matrix per model feature,
   machine-checked. UV mapping ignored (`AUD-024`), per-object metadata dropped
   (`AUD-029`), `--stats` warning undercounts (`AUD-026`).
-- **SYS-W7-02** `[TODO]` `P2` — Differential geometry tests (viewport vs exporter).
+- **SYS-W7-02** `[DONE]` `P2` — Differential geometry tests (viewport vs exporter).
+  Commits `6edbb54` (extracted the viewport's tessellation math into a
+  CNA-free `PrimitiveTessellationAlg.hpp`, verified behavior-preserving via
+  a full 113/113 `ctest` incl. all "render" pixel tests) and `1ae9087`
+  (added `differential_geometry_test`, 138 invariant-based assertions:
+  bounding box / divergence-theorem volume / watertightness, checked
+  against each other AND against independent analytical ground truth).
+  Covers 8 of 10 primitive types (Box/Sphere/Cylinder/Cone/Plane/Torus/
+  Capsule/IcoSphere); Disk/Grid out of scope (dynamic per-frame builders in
+  `SceneRenderer_Extrude.cpp` with no "unit mesh + scale" split to extract,
+  and open/flat surfaces for which the volume invariant is degenerate); CSG
+  out of scope (already provably shared code via `buildPrimitive()`,
+  STAB-0670 — a differential test there would be tautological). Found and
+  documented four real cross-path discrepancies (not blindly fixed —
+  correctness-critical rendering code, judged too risky to touch without a
+  live-visual re-verification loop this task doesn't have): a structural
+  Torus/Capsule viewport scale bug (single affine scale of one fixed-ratio
+  unit mesh can't reproduce an arbitrary majorRadius/minorRadius or
+  radius/height pair — elliptical tube / ellipsoidal caps whenever the
+  ratio differs from the unit mesh's own), an IcoSphere WYSIWYG gap (the
+  viewport hardcodes `subdivisions=2` and never reads the primitive's
+  `segments`, unlike every other curved primitive's LOD tiers), a Capsule
+  hemisphere-ring-count formula mismatch below `segments=16`, and a narrow
+  Cylinder VPC-index-buffer topology inconsistency confirmed (via a real
+  headless `--screenshot` render) NOT to reach the screen. Verify: `ctest
+  --test-dir cmake-build-debug -R differential_geometry`.
 
 ### W8 — Backend truth
 - **SYS-W8-01** `[DONE]` `P1` — Editor backend truthfulness. Commit `e53af49`
