@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<mc3 version="0.3" model="UvMappingTest">
+  <objects>
+    <!-- Control: no uv_mapping at all, default unit UV unwrap, U in [0,1]. -->
+    <box name="PlainBox" size="1 1 1" position="0 0 0"/>
+
+    <!-- AUD-024: scale/offset/rotation must actually transform TEXCOORD_0. -->
+    <box name="ScaledUvBox" size="1 1 1" position="2 0 0">
+      <uv_mapping projection="planar" scale_u="4" scale_v="1" offset_u="0.5" offset_v="0"/>
+    </box>
+
+    <!-- Box projection: scale/offset/rotation still applied to the default
+         unwrap, but projection itself is unimplemented, so it must warn. -->
+    <box name="BoxProjectedBox" size="1 1 1" position="4 0 0">
+      <uv_mapping projection="box"/>
+    </box>
+  </objects>
+</mc3>

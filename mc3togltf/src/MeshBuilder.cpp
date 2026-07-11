@@ -26,6 +26,21 @@ void MeshData::applyScale(float sx, float sy, float sz) {
     }
 }
 
+void MeshData::applyUvMapping(float scaleU, float scaleV,
+                              float offsetU, float offsetV,
+                              float rotationDegrees) {
+    const float rad = rotationDegrees * std::numbers::pi_v<float> / 180.0f;
+    const float c = std::cos(rad), s = std::sin(rad);
+    for (size_t i = 0; i < texcoords.size(); i += 2) {
+        float u = texcoords[i] * scaleU;
+        float v = texcoords[i+1] * scaleV;
+        float ru = u * c - v * s;
+        float rv = u * s + v * c;
+        texcoords[i]   = ru + offsetU;
+        texcoords[i+1] = rv + offsetV;
+    }
+}
+
 // ---------------------------------------------------------------------------
 // Internal helpers
 // ---------------------------------------------------------------------------

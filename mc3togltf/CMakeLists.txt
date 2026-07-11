@@ -216,6 +216,7 @@ if(BUILD_TESTING)
         set(_scene_with_include_xml   "${CMAKE_CURRENT_SOURCE_DIR}/../test/scene_with_include.mc3.xml")
         set(_embed_mesh_source_xml    "${CMAKE_CURRENT_SOURCE_DIR}/../test/embed_mesh_source.mc3.xml")
         set(_object_metadata_xml      "${CMAKE_CURRENT_SOURCE_DIR}/../test/object_metadata_export.mc3.xml")
+        set(_uv_mapping_xml           "${CMAKE_CURRENT_SOURCE_DIR}/../test/uv_mapping_export.mc3.xml")
         set(_light_export_xml         "${CMAKE_CURRENT_SOURCE_DIR}/../test/light_export_all_types.mc3.xml")
         if(EXISTS "${_light_export_xml}")
             add_test(
@@ -693,6 +694,16 @@ if(BUILD_TESTING)
                         "${_object_metadata_xml}"
             )
             set_tests_properties(mc3togltf_object_metadata_export PROPERTIES TIMEOUT 30 LABELS "export")
+        endif()
+        if(EXISTS "${_uv_mapping_xml}")
+            add_test(
+                NAME mc3togltf_uv_mapping_export
+                COMMAND "${PYTHON3_EXEC}"
+                        "${CMAKE_CURRENT_SOURCE_DIR}/test/uv_mapping_export_test.py"
+                        "$<TARGET_FILE:mc3togltf>"
+                        "${_uv_mapping_xml}"
+            )
+            set_tests_properties(mc3togltf_uv_mapping_export PROPERTIES TIMEOUT 30 LABELS "export")
         endif()
         if(EXISTS "${_svg_material_xml}")
             add_test(

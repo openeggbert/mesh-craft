@@ -39,6 +39,17 @@ struct MeshData {
 
     // Apply per-axis scale to all vertex positions (for <deform>)
     void applyScale(float sx, float sy, float sz);
+
+    // AUD-024: apply a Mc3UvMapping's scale/offset/rotation to the existing
+    // TEXCOORD_0 pairs (rotation in degrees, about the UV origin, applied
+    // before offset -- scale/rotate/translate order). Does NOT regenerate
+    // UVs from a projection (Box/Sphere) -- the caller is responsible for
+    // warning when the mapping's projection isn't Planar, since no code path
+    // anywhere (editor viewport or exporter) actually recomputes UVs from a
+    // projection type.
+    void applyUvMapping(float scaleU, float scaleV,
+                        float offsetU, float offsetV,
+                        float rotationDegrees);
 };
 
 MeshData buildPrimitive(const MeshCraft::Mc3::Mc3Primitive& prim);

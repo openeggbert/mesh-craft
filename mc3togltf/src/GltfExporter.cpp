@@ -158,6 +158,18 @@ static std::string buildGeomCacheKey(const Mc3Object& obj, int matIdx) {
         k << "|D" << d.scale[0] << ',' << d.scale[1] << ',' << d.scale[2];
     }
 
+    // AUD-024: uv_mapping changes the built MeshData's texcoords (see
+    // buildMesh) but was omitted here, so two same-size/same-material boxes
+    // that differ only by uv_mapping collided on the same cache key -- the
+    // second one silently reused the first's (wrongly, differently-mapped)
+    // TEXCOORD_0 instead of getting its own.
+    if (obj.uvMapping.has_value()) {
+        const auto& uv = *obj.uvMapping;
+        k << "|UV" << static_cast<int>(uv.projection) << ','
+          << uv.scaleU << ',' << uv.scaleV << ','
+          << uv.offsetU << ',' << uv.offsetV << ',' << uv.rotation;
+    }
+
     k << "|M" << matIdx;
     return k.str();
 }
@@ -639,6 +651,26 @@ static int buildMesh(ExportCtx& ctx,
         md.applyScale(obj.deform->scale[0],
                       obj.deform->scale[1],
                       obj.deform->scale[2]);
+    }
+
+    // AUD-024: per-object UV mapping (scale/offset/rotation) was previously
+    // silently ignored by the exporter -- authored uvMapping round-tripped
+    // through XML/MCB but never affected the actual exported TEXCOORD_0.
+    // Box/Sphere projection genuinely isn't implemented anywhere (editor
+    // viewport or exporter both only ever emit the primitive's default
+    // planar unwrap), so that part is truthfully warned about rather than
+    // silently dropped or falsely claimed as applied.
+    if (obj.uvMapping.has_value()) {
+        const auto& uv = *obj.uvMapping;
+        md.applyUvMapping(uv.scaleU, uv.scaleV, uv.offsetU, uv.offsetV, uv.rotation);
+        if (uv.projection != UvProjection::Planar) {
+            std::cerr << "[mc3togltf] Warning: object '" << obj.name
+                      << "' uses uv_mapping projection '"
+                      << (uv.projection == UvProjection::Box ? "box" : "sphere")
+                      << "' -- projection-based UV generation is not implemented, only "
+                         "scale/offset/rotation were applied to the default unwrap.\n";
+            ctx.stats.warnings++;
+        }
     }
 
     // Apply unit scale to geometry positions
