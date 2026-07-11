@@ -124,6 +124,15 @@ if(BUILD_TESTING)
     add_test(NAME mc3_oversized_base64 COMMAND mc3_oversized_base64_test)
     set_tests_properties(mc3_oversized_base64 PROPERTIES TIMEOUT 30 LABELS "format")
 
+    # SYS-W1-04: duplicate object ids -- proves the current (safe,
+    # non-crashing, non-data-losing) library-level behavior; see the test
+    # file's header comment for why this is a documented judgment call and
+    # not a policy fix.
+    add_executable(mc3_duplicate_ids_test test/duplicate_ids_test.cpp)
+    target_link_libraries(mc3_duplicate_ids_test PRIVATE Mc3)
+    add_test(NAME mc3_duplicate_ids COMMAND mc3_duplicate_ids_test)
+    set_tests_properties(mc3_duplicate_ids PROPERTIES TIMEOUT 15 LABELS "format")
+
     # SYS-W9-02: crash-recovery mechanism (mtime comparison + Mc3Document
     # round-trip through the ".autosave" path convention that
     # MeshCraftApplication::checkForNewerAutosave()/recoverFromAutosave() rely
