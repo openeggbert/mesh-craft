@@ -11,10 +11,10 @@ exported glTF, not just some internal counter that could drift from it.
     to make this row's ask checkable)
   - STAB-0192: "Warnings:" equals the real number of warning-triggering
     conditions in the input, verified two ways: 0 for a clean scene
-    (house.mc3.xml), and 3 for obj_robustness.mc3.xml (which references
-    one negative-index OBJ, one infinite-coordinate OBJ, and one missing
-    OBJ file -- three independently-known warning sources, see
-    obj_robustness_test.py).
+    (house.mc3.xml), and 4 for obj_robustness.mc3.xml (which references
+    one negative-index OBJ, one infinite-coordinate OBJ, one missing OBJ
+    file, and (AUD-002) one out-of-range-positive-index OBJ -- four
+    independently-known warning sources, see obj_robustness_test.py).
 """
 import json
 import os
@@ -81,16 +81,16 @@ if __name__ == "__main__":
         )
         print("STAB-0192: Warnings stat is 0 for a clean scene — PASS")
 
-        # --- Scene with 3 known warning sources: warning count must reflect that exactly ---
+        # --- Scene with 4 known warning sources: warning count must reflect that exactly ---
         out2 = os.path.join(tmpdir, "obj_rob.glb")
         r2 = run([mc3togltf, obj_rob_xml, out2, "--stats"])
         assert r2.returncode == 0, f"Export failed:\n{r2.stderr}"
         stats2 = parse_stats(r2.stdout)
-        assert stats2.get("Warnings") == 3, (
-            f"STAB-0192: expected exactly 3 warnings (negative-index OBJ, "
-            f"infinite-coord OBJ, missing OBJ file), got {stats2.get('Warnings')}\n"
-            f"stdout:\n{r2.stdout}"
+        assert stats2.get("Warnings") == 4, (
+            f"STAB-0192: expected exactly 4 warnings (negative-index OBJ, "
+            f"infinite-coord OBJ, missing OBJ file, out-of-range-positive-index "
+            f"OBJ), got {stats2.get('Warnings')}\nstdout:\n{r2.stdout}"
         )
-        print(f"STAB-0192: Warnings stat (3) matches the 3 known bad-OBJ sources — PASS")
+        print(f"STAB-0192: Warnings stat (4) matches the 4 known bad-OBJ sources — PASS")
 
     print("\nExport statistics accuracy test: PASS")

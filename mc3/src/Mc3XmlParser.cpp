@@ -750,10 +750,18 @@ static void processIncludes(const XMLElement* root, Mc3Document& doc,
 // unrelated absolute path). Used to confine includes for untrusted content.
 static bool includePathWithinRoot(const std::filesystem::path& candidate,
                                    const std::filesystem::path& rootDir) {
+    // doc.sourcePath (rootDir) is `selfPath.parent_path()`, which is EMPTY when
+    // the document was opened via a bare relative filename with no directory
+    // component (e.g. `mc3togltf scene.mc3.xml out.glb` run from the scene's own
+    // directory -- the common case). weakly_canonical("") returns an empty path
+    // rather than resolving to the current working directory or erroring, so an
+    // empty rootDir must be normalized to "." first; otherwise `r` stays empty,
+    // relative(c, r) against an empty base returns empty too, and every
+    // same-directory include would be wrongly rejected as "escaping the root".
     std::error_code ec;
     auto c = std::filesystem::weakly_canonical(candidate, ec);
     if (ec) return false;
-    auto r = std::filesystem::weakly_canonical(rootDir, ec);
+    auto r = std::filesystem::weakly_canonical(rootDir.empty() ? std::filesystem::path(".") : rootDir, ec);
     if (ec) return false;
     auto rel = std::filesystem::relative(c, r, ec);
     if (ec || rel.empty()) return false;

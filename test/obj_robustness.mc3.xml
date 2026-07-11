@@ -6,6 +6,7 @@
     <mesh name="NegativeIndex" src="obj_malformed_negative.obj" position="2 0 0"/>
     <mesh name="InfiniteCoord" src="obj_malformed_infinite.obj" position="4 0 0"/>
     <mesh name="MissingFile" src="obj_does_not_exist.obj" position="6 0 0"/>
+    <mesh name="OobPositiveIndex" src="obj_malformed_oob_positive.obj" position="8 0 0"/>
   </objects>
 
 </mc3>

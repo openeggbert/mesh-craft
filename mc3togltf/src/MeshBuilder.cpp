@@ -1045,9 +1045,18 @@ void assertResourceAllowed(const std::filesystem::path& basePath,
             "' is an absolute path outside the document root; refusing to read it "
             "(pass --allow-external-resources to override).");
 
+    // doc.sourcePath (basePath) is EMPTY when the document was opened via a bare
+    // relative filename with no directory component (the common
+    // `mc3togltf scene.mc3.xml out.glb` invocation, run from the scene's own
+    // directory). weakly_canonical("") returns an empty path rather than
+    // resolving to the current working directory, so an empty basePath must be
+    // normalized to "." first -- otherwise `root` stays empty, relative(cand,
+    // root) against an empty base returns empty too, and every same-directory
+    // resource would be wrongly rejected as "escaping the document root".
+    const auto& effectiveBase = basePath.empty() ? std::filesystem::path(".") : basePath;
     std::error_code ec;
-    auto cand = std::filesystem::weakly_canonical(basePath / p, ec);
-    auto root = std::filesystem::weakly_canonical(basePath, ec);
+    auto cand = std::filesystem::weakly_canonical(effectiveBase / p, ec);
+    auto root = std::filesystem::weakly_canonical(effectiveBase, ec);
     std::error_code ec2;
     auto rel = std::filesystem::relative(cand, root, ec2);
     if (ec || ec2 || rel.empty() || rel.native().rfind("..", 0) == 0)
@@ -1247,6 +1256,27 @@ MeshData loadObjMesh(const std::filesystem::path& basePath, const std::string& s
         }
     }
 
+    // AUD-002: tinyobjloader validates vertex_index against the vertex count
+    // for the quad/polygon triangulation paths, but a plain 3-vertex face
+    // (npolys==3, the common case) bypasses those guards entirely and only
+    // emits a non-fatal warning (already surfaced above) for an out-of-range
+    // index -- it does not reject the face. normal_index/texcoord_index are
+    // likewise only checked against -1 ("absent"), never against an upper
+    // bound. A malformed/hostile .obj referenced by an mc3 <mesh src=...> can
+    // therefore drive an out-of-bounds read on attrib.vertices/normals/
+    // texcoords. Reject any out-of-range index with a clear error instead of
+    // reading past the array.
+    auto checkIndex = [&](int idx, size_t arraySize, int stride, const char* what) {
+        if (idx < 0 || static_cast<size_t>(idx) * static_cast<size_t>(stride) + static_cast<size_t>(stride - 1)
+                >= arraySize) {
+            throw std::runtime_error("OBJ load failed (" + objPath.string() +
+                                      "): " + what + " index " + std::to_string(idx) +
+                                      " out of range (array has " +
+                                      std::to_string(arraySize / static_cast<size_t>(stride)) +
+                                      " entries)");
+        }
+    };
+
     MeshData m;
     // STAB-0667: shape.mesh.material_ids (per-face OBJ material assignment)
     // is intentionally not read here -- all shapes/faces are flattened into
@@ -1271,6 +1301,7 @@ MeshData loadObjMesh(const std::filesystem::path& basePath, const std::string& s
                                    tri[2]->normal_index < 0);
             if (needFaceNormal) {
                 auto pos = [&](int k) -> std::array<float,3> {
+                    checkIndex(tri[k]->vertex_index, attrib.vertices.size(), 3, "vertex");
                     auto vi = static_cast<size_t>(tri[k]->vertex_index);
                     return {attrib.vertices[3*vi], attrib.vertices[3*vi+1], attrib.vertices[3*vi+2]};
                 };
@@ -1283,12 +1314,14 @@ MeshData loadObjMesh(const std::filesystem::path& basePath, const std::string& s
 
             for (int k = 0; k < 3; ++k) {
                 const auto& idx = *tri[k];
+                checkIndex(idx.vertex_index, attrib.vertices.size(), 3, "vertex");
                 auto vi = static_cast<size_t>(idx.vertex_index);
                 m.positions.push_back(attrib.vertices[3*vi+0]);
                 m.positions.push_back(attrib.vertices[3*vi+1]);
                 m.positions.push_back(attrib.vertices[3*vi+2]);
 
                 if (idx.normal_index >= 0) {
+                    checkIndex(idx.normal_index, attrib.normals.size(), 3, "normal");
                     auto ni = static_cast<size_t>(idx.normal_index);
                     m.normals.push_back(attrib.normals[3*ni+0]);
                     m.normals.push_back(attrib.normals[3*ni+1]);
@@ -1300,6 +1333,7 @@ MeshData loadObjMesh(const std::filesystem::path& basePath, const std::string& s
                 }
 
                 if (idx.texcoord_index >= 0) {
+                    checkIndex(idx.texcoord_index, attrib.texcoords.size(), 2, "texcoord");
                     auto ti = static_cast<size_t>(idx.texcoord_index);
                     m.texcoords.push_back(attrib.texcoords[2*ti+0]);
                     m.texcoords.push_back(1.0f - attrib.texcoords[2*ti+1]); // flip V

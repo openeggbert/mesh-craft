@@ -1,0 +1,11 @@
+# AUD-002 fixture: a triangle face (npolys==3, tinyobjloader's fast
+# triangulate=true path) referencing a vertex index far beyond the vertex
+# count. tinyobjloader's out-of-range guards protect only the quad/polygon
+# triangulation paths, not this one -- it previously reached mc3togltf's
+# loadObjMesh() and was subscripted into attrib.vertices with no bounds
+# check (an out-of-bounds read). Must now be rejected with a clear error.
+v 0.0 0.0 0.0
+v 1.0 0.0 0.0
+v 0.0 1.0 0.0
+
+f 1 2 9999

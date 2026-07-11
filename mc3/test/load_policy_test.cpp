@@ -92,6 +92,41 @@ int main() {
         check(threw, "confined policy rejects a `..`-escaping <include>");
     }
 
+    // Regression: doc.sourcePath (rootDir) is EMPTY when the document is opened
+    // via a bare relative filename with no directory component -- the common
+    // invocation when running from the scene's own directory. weakly_canonical
+    // of an empty path returns an empty path rather than resolving to the
+    // current working directory, so includePathWithinRoot() used to treat that
+    // as "root is empty, relative-to-empty is empty, empty looks like an
+    // escape" and wrongly rejected every same-directory include under a
+    // confined policy. Reproduce by chdir'ing into `dir` and opening
+    // "main.mc3.xml" (no directory prefix) directly.
+    {
+        fs::path cwd = fs::current_path();
+        fs::current_path(dir);
+
+        Mc3LoadPolicy confined;
+        confined.allowIncludes = true;
+        confined.confineIncludesToRoot = true;
+
+        bool threw = false;
+        std::string what;
+        try {
+            Mc3Document doc = Mc3Document::loadFromFile("main.mc3.xml", confined);
+            check(doc.definitions.count("leaked") == 1,
+                  "confined policy + bare relative filename still merges a "
+                  "same-directory include (empty-basePath regression)");
+        } catch (const std::exception& e) {
+            threw = true;
+            what = e.what();
+        }
+        check(!threw, std::string("confined policy does not reject a same-directory "
+              "include when opened via a bare relative filename") +
+              (threw ? (": " + what) : ""));
+
+        fs::current_path(cwd);
+    }
+
     fs::remove_all(dir);
 
     if (failures == 0) { std::cout << "All load-policy tests passed.\n"; return 0; }
