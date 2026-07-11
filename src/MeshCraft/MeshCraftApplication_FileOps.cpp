@@ -50,7 +50,7 @@ void MeshCraftApplication::newScene() {
 }
 
 std::filesystem::path MeshCraftApplication::autoSavePath(const std::filesystem::path& file) {
-    return std::filesystem::path(file.string() + ".autosave");
+    return std::filesystem::path(autoSavePathAlg(file.string()));
 }
 
 void MeshCraftApplication::performAutoSave() {
@@ -173,15 +173,9 @@ void MeshCraftApplication::openFile() {
 void MeshCraftApplication::saveFile() {
     if (currentFile_.empty()) { saveFileAs(); return; }
     try {
-        // F6: rotate backups before overwriting
-        if (std::filesystem::exists(currentFile_)) {
-            auto b1 = std::filesystem::path(currentFile_.string() + ".backup.1");
-            auto b2 = std::filesystem::path(currentFile_.string() + ".backup.2");
-            std::error_code ec;
-            if (std::filesystem::exists(b1)) std::filesystem::rename(b1, b2, ec);
-            std::filesystem::copy_file(currentFile_, b1,
-                std::filesystem::copy_options::overwrite_existing, ec);
-        }
+        // F6: rotate backups before overwriting. AUD-031: was a hand-copied
+        // duplicate of rotateBackupsAlg's own logic; now delegates to it.
+        rotateBackupsAlg(currentFile_);
         document_.saveToFile(currentFile_);
         addRecentFile(currentFile_);
         modified_ = false;
