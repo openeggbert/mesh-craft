@@ -2,6 +2,7 @@
 // Private implementation helpers shared across MeshCraftApplication_*.cpp files.
 // Do NOT include from public headers.
 
+#include "MeshCraft/Editor/ObjectTypeName.hpp"
 #include "MeshCraft/Mc3/Mc3Document.hpp"
 #include "MeshCraft/Mc3/Mc3Object.hpp"
 
@@ -46,24 +47,6 @@ inline std::filesystem::path recentFilesPath()   { return meshcraftConfigDir() /
 inline std::filesystem::path prefsPath()         { return meshcraftConfigDir() / "prefs.ini"; }
 inline std::filesystem::path keybindingsPath()   { return meshcraftConfigDir() / "keybindings.ini"; }
 inline std::filesystem::path macroPath()         { return meshcraftConfigDir() / "macro.mc3macro"; }
-
-inline Mc3::ObjectType objectTypeFromName(const std::string& n) {
-    if (n == "Sphere")       return Mc3::ObjectType::Sphere;
-    if (n == "Cylinder")     return Mc3::ObjectType::Cylinder;
-    if (n == "Cone")         return Mc3::ObjectType::Cone;
-    if (n == "Plane")        return Mc3::ObjectType::Plane;
-    if (n == "Torus")        return Mc3::ObjectType::Torus;
-    if (n == "Capsule")      return Mc3::ObjectType::Capsule;
-    if (n == "Disk")         return Mc3::ObjectType::Disk;
-    if (n == "Grid")         return Mc3::ObjectType::Grid;
-    if (n == "IcoSphere")    return Mc3::ObjectType::IcoSphere;
-    if (n == "Extrude")      return Mc3::ObjectType::Extrude;
-    if (n == "Union")        return Mc3::ObjectType::Union;
-    if (n == "Difference")   return Mc3::ObjectType::Difference;
-    if (n == "Intersection") return Mc3::ObjectType::Intersection;
-    if (n == "Group")        return Mc3::ObjectType::Group;
-    return Mc3::ObjectType::Box;
-}
 
 inline void removeFromList(std::vector<std::shared_ptr<Mc3::Mc3Object>>& list,
                            const Mc3::Mc3Object* target)
@@ -136,26 +119,8 @@ inline Mc3::Mc3Object* findParentObject(
     return nullptr;
 }
 
-inline const char* objectTypeName(Mc3::ObjectType t)
-{
-    switch (t) {
-        case Mc3::ObjectType::Box:          return "Box";
-        case Mc3::ObjectType::Cube:         return "Cube";
-        case Mc3::ObjectType::Sphere:       return "Sphere";
-        case Mc3::ObjectType::Cylinder:     return "Cylinder";
-        case Mc3::ObjectType::Cone:         return "Cone";
-        case Mc3::ObjectType::Plane:        return "Plane";
-        case Mc3::ObjectType::Mesh:         return "Mesh";
-        case Mc3::ObjectType::Extrude:      return "Extrude";
-        case Mc3::ObjectType::Group:        return "Group";
-        case Mc3::ObjectType::Instance:     return "Instance";
-        case Mc3::ObjectType::Union:        return "Union";
-        case Mc3::ObjectType::Difference:   return "Difference";
-        case Mc3::ObjectType::Intersection: return "Intersection";
-        case Mc3::ObjectType::Area:         return "Area";
-        default:                            return "Object";
-    }
-}
+// objectTypeName() and objectTypeFromName() are the canonical, exhaustive,
+// bidirectional mapping in MeshCraft/Editor/ObjectTypeName.hpp (included above).
 
 inline std::string applyRenamePattern(const std::string& pat, const std::string& origName,
                                       int idx1, const char* typeName)

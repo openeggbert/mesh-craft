@@ -2,6 +2,7 @@
 // Pure editor command algorithms — no CNA / ImGui / SDL / OpenGL dependencies.
 // Included by MeshCraftApplication_Commands.cpp and editor_commands_test.cpp.
 
+#include <MeshCraft/Editor/ObjectTypeName.hpp>
 #include <MeshCraft/Editor/SelectionManager.hpp>
 #include <MeshCraft/Mc3/Mc3Document.hpp>
 #include <MeshCraft/Mc3/Mc3Object.hpp>
@@ -27,26 +28,10 @@ namespace MeshCraft {
 
 // ── Object type name ──────────────────────────────────────────────────────────
 
-inline const char* objectTypeNameAlg(Mc3::ObjectType t)
-{
-    switch (t) {
-        case Mc3::ObjectType::Box:          return "Box";
-        case Mc3::ObjectType::Cube:         return "Cube";
-        case Mc3::ObjectType::Sphere:       return "Sphere";
-        case Mc3::ObjectType::Cylinder:     return "Cylinder";
-        case Mc3::ObjectType::Cone:         return "Cone";
-        case Mc3::ObjectType::Plane:        return "Plane";
-        case Mc3::ObjectType::Mesh:         return "Mesh";
-        case Mc3::ObjectType::Extrude:      return "Extrude";
-        case Mc3::ObjectType::Group:        return "Group";
-        case Mc3::ObjectType::Instance:     return "Instance";
-        case Mc3::ObjectType::Union:        return "Union";
-        case Mc3::ObjectType::Difference:   return "Difference";
-        case Mc3::ObjectType::Intersection: return "Intersection";
-        case Mc3::ObjectType::Area:         return "Area";
-        default:                            return "Object";
-    }
-}
+// Thin alias for the canonical mapping in MeshCraft/Editor/ObjectTypeName.hpp.
+// Kept so existing *Alg call sites read consistently; both resolve to the one
+// exhaustive definition, so they can no longer drift apart.
+inline const char* objectTypeNameAlg(Mc3::ObjectType t) { return objectTypeName(t); }
 
 // ── Deep copy ─────────────────────────────────────────────────────────────────
 

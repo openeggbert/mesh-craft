@@ -417,6 +417,19 @@ if(MESH_CRAFT_BUILD_TESTING AND UNIX AND NOT ANDROID AND NOT EMSCRIPTEN)
     add_test(NAME active_tool COMMAND active_tool_test)
     set_tests_properties(active_tool PROPERTIES TIMEOUT 15 LABELS "unit")
 
+    # Pure unit test: ObjectType <-> display-name round-trip. Header-only.
+    # Regression guard for the Torus/Capsule/Disk/Grid/IcoSphere -> "Object"
+    # mislabel and the lossy macro round-trip.
+    add_executable(object_type_name_test
+        ${CMAKE_CURRENT_SOURCE_DIR}/test/object_type_name_test.cpp)
+    target_include_directories(object_type_name_test PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/include
+        ${CMAKE_CURRENT_SOURCE_DIR}/mc3/include)
+    target_link_libraries(object_type_name_test PRIVATE Mc3)
+    target_compile_features(object_type_name_test PRIVATE cxx_std_23)
+    add_test(NAME object_type_name COMMAND object_type_name_test)
+    set_tests_properties(object_type_name PROPERTIES TIMEOUT 15 LABELS "unit")
+
     add_test(
         NAME smoke_test
         COMMAND bash ${CMAKE_CURRENT_SOURCE_DIR}/test/smoke_test.sh

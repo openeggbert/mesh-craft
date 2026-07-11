@@ -45,7 +45,10 @@ void MeshCraftApplication::executeMacroStep(const MacroStep& step) {
     };
 
     if (v == "add") {
-        addPrimitive(objectTypeFromName(arg(0)));
+        if (auto type = objectTypeFromName(arg(0)))
+            addPrimitive(*type);
+        else
+            setStatusMsg("Macro: skipped 'add' with unknown object type", true, 3.0f);
     } else if (v == "delete") {
         deleteSelected();
     } else if (v == "duplicate") {
