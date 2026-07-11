@@ -71,6 +71,11 @@ public:
     // uses this to pick the process exit code (STAB-0528).
     [[nodiscard]] bool exportFailed() const { return exportFailed_; }
 
+    // Tears down the SDL event watch, ImGui context/backends, and GL resources
+    // registered in LoadContent(). Runs before the base Game destructor, while
+    // the SDL window and GL context are still alive.
+    ~MeshCraftApplication() override;
+
     void LoadContent() override;
     void Update(Microsoft::Xna::Framework::GameTime& gameTime) override;
     void Draw(const Microsoft::Xna::Framework::GameTime& gameTime) override;
@@ -279,6 +284,10 @@ private:
     unsigned shadowDebugFbo_{0};
     unsigned shadowDebugColorTex_{0};
     unsigned shadowDebugDepthTex_{0};
+
+    // True once LoadContent() has initialized the ImGui context + backends, so
+    // the destructor only tears them down when they were actually created.
+    bool     imguiInitialized_{false};
     static constexpr int kShadowDebugRes = 256;
     void initShadowDebug();
     void renderShadowDebugFbo(const Microsoft::Xna::Framework::Matrix& lightView,

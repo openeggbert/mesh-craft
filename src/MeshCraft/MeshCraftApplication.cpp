@@ -211,6 +211,7 @@ void MeshCraftApplication::LoadContent() {
     SDL_GLContext  glCtx     = SDL_GL_GetCurrentContext();
     ImGui_ImplSDL3_InitForOpenGL(sdlWindow, glCtx);
     ImGui_ImplOpenGL3_Init("#version 300 es");
+    imguiInitialized_ = true;
 
     SDL_AddEventWatch(reinterpret_cast<SDL_EventFilter>(sdlEventWatch), this);
 
@@ -1593,6 +1594,39 @@ void MeshCraftApplication::initShadowDebug()
         std::cerr << "[ShadowDebug] FBO incomplete\n";
     gl.BindFramebuffer(kGL_FRAMEBUFFER, 0);
     gl.BindTexture(kGL_TEXTURE_2D, 0);
+}
+
+// ---------------------------------------------------------------------------
+// Destructor — deterministic teardown of everything LoadContent() set up.
+//
+// Runs when `app` goes out of scope in main() (after Run() returns), which is
+// before the base Game destructor, so the SDL window and GL context are still
+// valid here. Defined here (rather than beside the constructor) so the
+// file-static GL function table s_bloom is already in scope. Ordering mirrors
+// LoadContent in reverse.
+// ---------------------------------------------------------------------------
+MeshCraftApplication::~MeshCraftApplication() {
+    // Remove the event watch first so the callback can never fire against this
+    // half-destroyed object. Harmless if it was never added.
+    SDL_RemoveEventWatch(reinterpret_cast<SDL_EventFilter>(sdlEventWatch), this);
+
+    if (imguiInitialized_) {
+        ImGui_ImplOpenGL3_Shutdown();
+        ImGui_ImplSDL3_Shutdown();
+        ImGui::DestroyContext();
+        imguiInitialized_ = false;
+    }
+
+    // Release the lazily-created shadow-debug GL objects (initShadowDebug()).
+    auto& gl = s_bloom;
+    if (gl.DeleteFramebuffers && shadowDebugFbo_) {
+        gl.DeleteFramebuffers(1, &shadowDebugFbo_);
+        shadowDebugFbo_ = 0;
+    }
+    if (gl.DeleteTextures) {
+        if (shadowDebugColorTex_) { gl.DeleteTextures(1, &shadowDebugColorTex_); shadowDebugColorTex_ = 0; }
+        if (shadowDebugDepthTex_) { gl.DeleteTextures(1, &shadowDebugDepthTex_); shadowDebugDepthTex_ = 0; }
+    }
 }
 
 void MeshCraftApplication::renderShadowDebugFbo(const Matrix& lightView, const Matrix& lightProj)
