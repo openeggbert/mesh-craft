@@ -133,6 +133,14 @@ if(BUILD_TESTING)
     add_test(NAME mc3_duplicate_ids COMMAND mc3_duplicate_ids_test)
     set_tests_properties(mc3_duplicate_ids PROPERTIES TIMEOUT 15 LABELS "format")
 
+    # SYS-W1-04: invalid UTF-8 byte sequences in attribute values / text
+    # content -- proves the current safe pass-through behavior (no crash, no
+    # OOB read at EOF, bytes preserved verbatim).
+    add_executable(mc3_invalid_utf8_test test/invalid_utf8_test.cpp)
+    target_link_libraries(mc3_invalid_utf8_test PRIVATE Mc3)
+    add_test(NAME mc3_invalid_utf8 COMMAND mc3_invalid_utf8_test)
+    set_tests_properties(mc3_invalid_utf8 PROPERTIES TIMEOUT 15 LABELS "format")
+
     # SYS-W9-02: crash-recovery mechanism (mtime comparison + Mc3Document
     # round-trip through the ".autosave" path convention that
     # MeshCraftApplication::checkForNewerAutosave()/recoverFromAutosave() rely
