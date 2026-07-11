@@ -106,11 +106,14 @@ void MeshCraftApplication::addRecentFile(const std::filesystem::path& path) {
     saveRecentFiles();
 }
 
+// AUD-031: delegates the modified-check to confirmIfModifiedAlg (was a
+// bare `!modified_` -- trivial, but this is the last remaining place that
+// logic was expressed independently of the tested mirror).
 void MeshCraftApplication::confirmIfModified(PendingAction action, std::filesystem::path path) {
     pendingAction_   = action;
     pendingOpenPath_ = std::move(path);
-    if (!modified_) executePendingAction();
-    else            unsavedDlgOpen_ = true;
+    if (confirmIfModifiedAlg(modified_)) executePendingAction();
+    else                                 unsavedDlgOpen_ = true;
 }
 
 void MeshCraftApplication::executePendingAction() {
