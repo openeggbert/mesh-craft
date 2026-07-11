@@ -103,13 +103,11 @@ authoritative live state is always the AUD/SYS task table plus
 ## Priority execution queue (next up, in order)
 
 1. **AUD-052 (P1/W11)** — CI is permanently parked under `.github_/`; GitHub
-   Actions never runs. This is the root blocker for AUD-053 (all CI-hardening
-   tasks that depend on CI actually running first) — long documented
+   Actions never runs. This is the root blocker for AUD-053 (a CI-hardening
+   task that depends on CI actually running first) — long documented
    elsewhere as owner-gated (enabling Actions on the repo isn't something
    available in this environment), so treat as blocked-pending-owner-action
-   rather than something to force through. AUD-054/055 (warnings, sanitizer
-   build) did NOT actually depend on live CI and are now DONE — that
-   dependency claim in earlier queue text was inaccurate for those two.
+   rather than something to force through.
 2. **AUD-042 (P2/W8)** — Android build path forces SDL_RENDERER; blocked
    (no Android NDK in this environment; also intersects CNA backend
    behavior, out of scope per CLAUDE.md's "no CNA changes without owner
