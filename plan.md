@@ -168,13 +168,92 @@ Mandated workstream items not tied to a single audit finding.
   per the task's own guidance to prefer a well-verified conservative slice
   over a rushed full sweep once safe, well-tested ground for load/MCB-load
   was exhausted.
-- **SYS-W1-02** `[TODO]` `P1` — Documented numeric ranges per domain (geometry,
+- **SYS-W1-02** `[DONE]` `P1` — Documented numeric ranges per domain (geometry,
   material, camera near/far/FOV/aspect, environment, animation, audio, transforms,
   post-processing) with tests.
-- **SYS-W1-03** `[TODO]` `P1` — Document-complexity budgets beyond `AUD-059`
+  **DONE (6 of 8 named domains; audio/post-processing found N/A -- no field
+  exists to range-check, not skipped):** `Mc3XmlParser.cpp`'s pre-existing
+  `finiteOr`/`attrF` only sanitize NaN/Inf/malformed text (SYS-W1-01 era) --
+  no SEMANTIC range check existed for any domain before this session. One
+  domain per commit, each clamped (not rejected -- authoring-mistake
+  judgment call, matching `AUD-059`'s tessellation-clamp precedent), each
+  covered by new `mc3_numeric_range_test`: **camera** (commit `1b1b81f`) --
+  `fov` clamped to [1,179] degrees, `near` clamped to > 0, `far` clamped to
+  exceed `near` by a margin, `aspect` clamped to > 0. **material** (commit
+  `ea17322`) -- `roughness`/`metallic`/`occlusion_strength`/`alpha_cutoff`
+  and `base_color`'s alpha channel clamped to glTF's [0,1] PBR convention
+  (RGB/`emissive_color` deliberately left unclamped -- HDR emissive is
+  documented as intentional). **geometry** (commit `e80c99f`) -- primitive
+  `radius`/`height`/`size`/`major_radius`/`minor_radius`, extrude
+  `cross_section` `width`/`height`/`radius`/`inner_radius`, and extrude
+  `path` `length`/`radius`/`height` all reject negative (clamp to 0);
+  disk's pre-existing `inner_radius=-1` sentinel fallback also gained a
+  diagnostic for a genuinely-negative input. **environment** (commit
+  `caa2a58`) -- fog `density` rejects negative; fog `start>=end` is
+  diagnostic-only (confirmed by reading `SceneRenderer.cpp`, which already
+  guards `end > start` before dividing -- not a genuine crash risk, so not
+  clamped, just flagged). **animation** (commit `31a7bb2`) -- `time_scale`
+  rejects zero/negative (stalls playback), clamped to a small epsilon not a
+  fixed fallback; keyframe time ordering was already handled (pre-existing
+  `stable_sort`), bounds intentionally left unenforced (product decision,
+  not universally-invalid input). **transforms** (commit `03772b8`) -- base
+  transform / `<deform>` / named `<state>` scale all reject near-zero
+  magnitude per axis (degenerates the transform matrix); sign is
+  deliberately preserved -- negative scale is a legitimate glTF-supported
+  mirroring feature, confirmed by reading `GltfExporter.cpp:830`.
+  **N/A, not a gap (2 domains, no field exists to check):** **audio** --
+  `Mc3Sound`/`Mc3Music` have no `volume`/`pitch` field at all (`id`/`src`/
+  `loop` only); audio playback itself isn't implemented yet (MC3_FORMAT.md's
+  own Sounds and Music section already documents this). **post-processing**
+  -- confirmed via `roundtrip_test.cpp`'s own comment that bloom/post-fx is
+  a runtime/editor UI toggle, not scene-file data; there is no
+  `Mc3Environment` (or any other) field for it. Both would need a format
+  field added first, out of this task's scope. All ranges documented in
+  `MC3_FORMAT.md` (commit `103526a`). Full tree: 116/116 ctest at every
+  step, `field_matrix.py` clean (one false-positive gap found+fixed --
+  `attrFClamped` added to its recognized `xml_read` helper list), zero new
+  `-Wall -Wextra` warnings.
+- **SYS-W1-03** `[DONE]` `P1` — Document-complexity budgets beyond `AUD-059`
   (total object count + total tessellation weight, done, commit `9a4b8f6`):
   max bytes, definitions, materials, textures, embeds, actions, channels,
   keyframes, children-per-node, recursion depth enforced at load.
+  **DONE (all 10 named dimensions):** extended `DocumentBudget`
+  (`Mc3XmlParser.cpp`) with a `charge*()` method per dimension, one commit
+  each, each proven by new `mc3_document_budget_test` constructing a
+  document that exceeds ONLY that dimension while staying under every other
+  budget (including the pre-existing object/tessellation/include budgets),
+  confirming the rejection names the right one: **materials** (20,000) and
+  **textures** (20,000, regular+svg combined) (commit `862a58b`). **embeds**
+  -- count (1,000) AND aggregate bytes (256MB combined, independent of the
+  existing 64MB PER-embed cap -- closes a real gap: N embeds each
+  individually legal could otherwise sum to unbounded memory) (commit
+  `861be54`). **actions** (10,000), **channels** (200,000), **keyframes**
+  (2,000,000) (commit `29f4727`). **children-per-node** (20,000) -- a LOCAL
+  per-call breadth cap, not a `DocumentBudget` running total (breadth is
+  inherently per-node, not document-wide); proven distinct from total-object
+  count with a fixture that stays under `kMaxTotalObjects` while exceeding
+  this cap. **recursion depth** -- investigated whether mc3's XML reader
+  needs a McbReader.cpp-style `RecursionGuard`; confirmed empirically
+  (reading sharp-runtime's vendored tinyxml2 source) that tinyxml2's own
+  built-in `TINYXML2_MAX_ELEMENT_DEPTH=500` already rejects deep nesting
+  before `Mc3XmlParser`'s own recursion is ever reached -- NOT a novel gap
+  (unlike MCB's hand-rolled binary parser, which had none and segfaulted at
+  ~20,000 levels before its guard existed), proven with a 2000-level fixture
+  (both in commit `786a1fc`). **definitions** (20,000) (commit `a525937`).
+  **max bytes** -- interpreted as the raw INPUT file/string byte size (512MB
+  ceiling), checked via `std::filesystem::file_size()` before tinyxml2
+  buffers anything, at all three load entry points (`parse`/`mergeInclude`/
+  `parseString`) (commit `441892a`). All budget ceilings and rationale
+  documented in `MC3_FORMAT.md` (commit `103526a`).
+  **Explicitly NOT implemented (by design, not oversight):** a "total
+  generated output bytes" estimate (guessing at eventual GLB/geometry
+  allocation size across the whole document) -- no precise formula exists
+  for it (tessellation weight and texture/embed byte totals already bound
+  the largest real cost centers), so a fuzzy estimate wouldn't usefully
+  bound anything beyond what the dimensions above already do; the precise
+  INPUT-byte ceiling above supersedes it as the actionable version of "max
+  bytes". Full tree: 116/116 ctest at every step, `field_matrix.py` clean,
+  zero new `-Wall -Wextra` warnings.
 - **SYS-W1-04** `[IN_PROGRESS]` `P1` — Pathological-input fixture corpus. Seeded:
   `finite_input_test`, `input_budget_test`, `hostile_geometry_test`,
   `load_policy_test`. 4 of the 5 originally-remaining categories now done with
