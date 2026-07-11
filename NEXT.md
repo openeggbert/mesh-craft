@@ -1,6 +1,6 @@
 # NEXT.md
 
-_Last updated: 2026-07-11, prior commit `9e1b91a` (branch `develop`). Six items resolved this session, all owner-approved — see §3: 5 `plan.md` product-decision rows (`STAB-0092`, `STAB-0289`, `STAB-0327`, `STAB-0360`, `STAB-0460`) plus `plan_deep_audit.md`'s last `needs_human` row (`AUDIT-0038`, MCB version-migration policy). Also: the Emscripten web build regression (§4) is now resolved — verified via a genuinely clean rebuild, nothing needed on this project's side._
+_Last updated: 2026-07-11, prior commit `eadf23a` (branch `develop`). Six items resolved this session, all owner-approved — see §3: 5 `plan.md` product-decision rows (`STAB-0092`, `STAB-0289`, `STAB-0327`, `STAB-0360`, `STAB-0460`) plus `plan_deep_audit.md`'s last `needs_human` row (`AUDIT-0038`, MCB version-migration policy). Also: both known cross-repo build blockers were re-verified fresh — the Emscripten regression is fully resolved (nothing needed on this side), and the MinGW build is down to 1 remaining failure (was 4), now 100% in `../cna` since sharp-runtime fixed its 3 — see §4._
 
 ---
 
@@ -49,7 +49,7 @@ Clean from an **absolute-zero** build directory (not just incremental): `rm -rf 
 - Web (Emscripten) build: **a fresh `./build-web.sh --clean` now succeeds again** (re-verified 2026-07-11, see §4 — the 2026-07-09 regression is gone, `../sharp-runtime` moved on). The **2026-07-06 build artifacts** were previously the only known-good ones; not yet re-confirmed whether *this* fresh build's output actually renders correctly in headless Chrome (the canvas-sizing bug, §2/§4 item below, was never retried against this build — only that it compiles/links cleanly).
 
 ### What does NOT work yet
-- **Windows GUI build (MinGW)**: does not compile — see §4. Not touched this session.
+- **Windows GUI build (MinGW)**: does not compile — see §4. Re-verified 2026-07-11: down to 1 remaining failure (was 4), 100% in `../cna` now.
 - **Web GLB export download**: exporting a GLB in the web build writes to Emscripten's in-browser virtual filesystem only — there is no JS bridge to actually download the file to the user's real filesystem.
 - SVG texture rasterization: parsed/serialized but never rasterized (stub only) — now has a full editor UI (§S24) but rasterization itself is unchanged.
 - Embedded glTF references (`<mesh src="embed:id"/>`): parsed/serialized but not resolved by the exporter — now has a full editor UI (§S24) but exporter-side resolution is unchanged.
@@ -162,22 +162,19 @@ Full history: `git log --oneline`. Per-task detail for the audit phase (both rou
 
 **Nothing blocks Linux development, building, or testing** — the build is clean and 87/87 tests pass. If forced to name the single most significant *known, unresolved* problem in the project right now, it is:
 
-**The Windows (MinGW cross-compile) build of the full GUI editor does not complete.**
+**The Windows (MinGW cross-compile) build of the full GUI editor does not complete — but the blocker is narrower than previously documented.** Re-verified 2026-07-11 with a genuinely fresh MinGW cross-compile (`cmake/toolchains/mingw-w64.cmake` + `ninja -k 0`, so every independent failure surfaces, not just the first). Result: **only 1 failure now**, 100% inside `../cna`. The 3 previously-documented `../sharp-runtime` MinGW `-Werror` failures (`Socket.cpp`, `UnixDomainSocketEndPoint.cpp`, `XmlConvert.cpp`) are **gone** — sharp-runtime fixed them upstream at some point since they were last checked; not investigated further since it's moot now they don't reproduce. `CNA_dep/SHARP_RUNTIME/*` (sharp-runtime's own MinGW compile, done as part of this repo's build) completes fully clean.
 
-- **Failing command**: a MinGW cross-compile build (`x86_64-w64-mingw32-g++` toolchain) of the `MeshCraft` target.
-- **Exact symptom / first failure**:
+- **Failing command**: MinGW cross-compile (`x86_64-w64-mingw32-g++`) of the `MeshCraft` target — `cmake -S . -B build-windows -DCMAKE_TOOLCHAIN_FILE=cmake/toolchains/mingw-w64.cmake -DMESH_CRAFT_BUILD_TESTING=OFF -G Ninja && ninja -C build-windows -k 0`.
+- **The one remaining failure**:
   ```
-  /rv/data/development/github.com/openeggbert/cna/.../imgui_impl_opengl3.cpp:159:10:
+  FAILED: CMakeFiles/imgui.dir/_deps/imgui-src/backends/imgui_impl_opengl3.cpp.obj
+  /rv/data/development/github.com/openeggbert/mesh-craft/build-windows/_deps/imgui-src/backends/imgui_impl_opengl3.cpp:159:10:
   fatal error: GLES3/gl3.h: No such file or directory
   ```
-- **Affected files/modules**: `../cna` (configures `-DIMGUI_IMPL_OPENGL_ES3` unconditionally for its `EASYGL` backend, regardless of target platform) — **outside this repo**, must not be modified without permission.
-- **Additional failures found when building past the first one** (`ninja -k 0`), all also outside this repo, in `../sharp-runtime`:
-  - `System/Net/Sockets/Socket.cpp:361` — `-Werror=unused-function`.
-  - `System/Net/Sockets/UnixDomainSocketEndPoint.cpp` — `afunix.h`'s `ADDRESS_FAMILY` type not visible (MinGW header/include-order issue).
-  - `System/Xml/XmlConvert.cpp` (via `CharUnicodeInfo.hpp:162`) — `-Werror=sign-compare`.
-- **Suspected cause**: cross-repo API drift (CNA's Windows GL backend was never wired to a real GLES3-on-Windows solution; sharp-runtime's Windows networking code has 3 unrelated warnings-as-errors under this specific MinGW version).
-- **What's already been tried / confirmed**: `CNA_ENABLE_NET=OFF` (this project's own fix) removes an unrelated, previously-masking failure but does not touch any of the above. The two **CNA-free** CLI tools, `mc3togltf.exe` and `mc3tomcb.exe`, **do** build and link successfully as real Windows PE32+ executables — confirmed via `file mc3togltf.exe`. Only the full ImGui/CNA-dependent GUI editor is blocked.
-- **Not something to fix here**: all 4 failures are in `../cna` or `../sharp-runtime`. Fixing them needs the maintainer(s) of those repos.
+- **Affected files/modules**: `../cna` (configures `-DIMGUI_IMPL_OPENGL_ES3` unconditionally for its `EASYGL` backend, regardless of target platform — there is no `GLES3/gl3.h` on a standard Windows toolchain, that header ships with GLES/EGL platforms, not Windows desktop GL) — **outside this repo**, must not be modified without permission.
+- **What's already been tried / confirmed**: `CNA_ENABLE_NET=OFF` (this project's own `CMakeLists.txt`, forced via `CACHE`) avoids an unrelated, previously-masking sharp-runtime networking issue — already in place. The two **CNA-free** CLI tools, `mc3togltf.exe` and `mc3tomcb.exe`, **do** build and link successfully as real Windows PE32+ executables (confirmed in this same fresh build). Only the full ImGui/CNA-dependent GUI editor is blocked, and only by this one CNA-side issue.
+- **What CNA needs**: either a real GLES3-on-Windows solution (e.g. ANGLE, which provides a GLES3-compatible `gl3.h` + implementation over D3D/desktop GL), or to stop forcing `IMGUI_IMPL_OPENGL_ES3` on Windows targets and use imgui's desktop-GL OpenGL3 backend path instead.
+- **Not something to fix here**: the one remaining failure is in `../cna`. Fixing it needs that repo's maintainer(s).
 
 **RESOLVED 2026-07-11: the Emscripten (web) build regression found 2026-07-09 is gone.** Ran a genuinely clean `./build-web.sh --clean` (wipes `cmake-build-web` first, full reconfigure) against current `../sharp-runtime` HEAD `7f677de` (moved on considerably from the `e5e38db` that had the regression — many commits landed in between, unrelated to this project). Result: **builds clean, 0 errors** — no `-Werror` failures, no `clock_cast` hard error, `MeshCraft.{html,js,wasm,data}` produced. Whichever upstream commit(s) fixed the 16 `-Werror` sites and the `clock_cast` gap, this project didn't need to do anything — not investigated further since it's moot now that the build works. Original details, kept for history:
 - **Previously-failing command**: `cmake --build cmake-build-web` (or a fresh `./build-web.sh`) against `../sharp-runtime` HEAD `e5e38db` (2026-07-07).
@@ -258,7 +255,7 @@ Ordered, each scoped to one focused session:
    Files: `.github_/workflows/ci.yml` → rename to `.github/workflows/ci.yml`.
    Verify: push a trivial commit and confirm the Actions tab actually runs and reports a consistent result (`STAB-0650`).
 
-2. **Report the remaining cross-repo build failure (§4) to the CNA/sharp-runtime maintainer(s)** — only the original 4 MinGW failures now (all in `../cna`/`../sharp-runtime`). The Emscripten/sharp-runtime regression is resolved as of 2026-07-11 (§4) — no longer needs reporting.
+2. **Report the remaining MinGW build failure (§4) to CNA's maintainer(s)** — down to 1 issue now, 100% in `../cna` (the `GLES3/gl3.h` / `IMGUI_IMPL_OPENGL_ES3` problem). Re-verified 2026-07-11: the 3 `../sharp-runtime`-side failures are gone (fixed upstream), and the Emscripten/sharp-runtime regression is separately resolved (§4) — neither needs reporting anymore.
    Files: none in this repo — this is a communication/handoff task, not code. Include the exact errors from §4.
    Verify: N/A (external action).
 
