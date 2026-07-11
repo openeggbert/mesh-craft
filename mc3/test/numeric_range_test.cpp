@@ -259,11 +259,43 @@ static void testEnvironmentRanges() {
     check(foundFogWarning, "fog start>=end reported via Mc3Validation");
 }
 
+// ---------------------------------------------------------------------------
+// Animation: time_scale must reject zero/negative (clamped to a small
+// positive epsilon, not a fixed fallback, so a legitimately-slow authored
+// value survives).
+// ---------------------------------------------------------------------------
+static void testAnimationRanges() {
+    Mc3Document doc = load(
+        "<mc3 version=\"0.3\" model=\"anim\">\n"
+        "  <actions>\n"
+        "    <action name=\"zero\" time_scale=\"0\"/>\n"
+        "    <action name=\"negative\" time_scale=\"-2\"/>\n"
+        "    <action name=\"ok\" time_scale=\"0.5\"/>\n"
+        "  </actions>\n"
+        "</mc3>\n");
+
+    check(doc.actions.count("zero") == 1, "action 'zero' parsed");
+    if (doc.actions.count("zero"))
+        check(doc.actions.at("zero").timeScale > 0.0f,
+              "time_scale=0 clamped to > 0: got " + std::to_string(doc.actions.at("zero").timeScale));
+
+    check(doc.actions.count("negative") == 1, "action 'negative' parsed");
+    if (doc.actions.count("negative"))
+        check(doc.actions.at("negative").timeScale > 0.0f,
+              "time_scale=-2 clamped to > 0: got " +
+              std::to_string(doc.actions.at("negative").timeScale));
+
+    check(doc.actions.count("ok") == 1, "action 'ok' parsed");
+    if (doc.actions.count("ok"))
+        check(doc.actions.at("ok").timeScale == 0.5f, "legitimate time_scale=0.5 preserved unchanged");
+}
+
 int main() {
     testCameraRanges();
     testMaterialRanges();
     testGeometryRanges();
     testEnvironmentRanges();
+    testAnimationRanges();
 
     if (failures == 0) { std::cout << "All numeric-range tests passed.\n"; return 0; }
     std::cerr << failures << " numeric-range test(s) failed.\n";

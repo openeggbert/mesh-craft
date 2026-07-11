@@ -1079,6 +1079,17 @@ static Interpolation parseInterpolation(const char* s) {
     return Interpolation::Linear;
 }
 
+// SYS-W1-02: time_scale is a playback-speed multiplier (STAB-0460's own
+// comment: "2.0 = twice as fast, 0.5 = half speed"); a value of exactly 0
+// permanently stalls the action's clock (dt * 0 == 0, forever) and a
+// negative value isn't a documented/supported "play in reverse" feature
+// here (unlike, say, extrude path arcAngle's legitimate negative-direction
+// use) -- both are almost certainly an authoring mistake, not intentional.
+// Clamped to a small positive epsilon rather than a specific fallback like
+// 1.0 so a near-correct authored value (e.g. "0.001" for very slow motion)
+// survives unchanged.
+static constexpr float kMinTimeScale = 1e-3f;
+
 static void parseActions(const XMLElement* el, Mc3Document& doc) {
     for (const XMLElement* ae = el->FirstChildElement("action"); ae;
          ae = ae->NextSiblingElement("action")) {
@@ -1087,7 +1098,10 @@ static void parseActions(const XMLElement* el, Mc3Document& doc) {
         action.duration  = attrF(ae, "duration", 1.0f);
         action.loop      = attrB(ae, "loop", false);
         action.autoplay  = attrB(ae, "autoplay", false);
-        action.timeScale = attrF(ae, "time_scale", 1.0f); // STAB-0460
+        action.timeScale = clampMin(ae, "time_scale", attrF(ae, "time_scale", 1.0f),
+                                     kMinTimeScale,
+                                     "must be > 0 (a zero/negative time_scale stalls or "
+                                     "breaks playback)"); // STAB-0460
         if (action.name.empty()) continue;
 
         for (const XMLElement* ce = ae->FirstChildElement("channel"); ce;
