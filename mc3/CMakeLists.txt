@@ -148,6 +148,15 @@ if(BUILD_TESTING)
     add_test(NAME mc3_input_budget COMMAND mc3_input_budget_test)
     set_tests_properties(mc3_input_budget PROPERTIES TIMEOUT 15 LABELS "format")
 
+    # SYS-W1-02: documented per-field numeric ranges (camera/material/
+    # geometry/environment/animation/transform) -- a value that's finite but
+    # outside its field's documented domain (fov=600, roughness=-3,
+    # radius=-5, ...) must be clamped, not passed through as garbage.
+    add_executable(mc3_numeric_range_test test/numeric_range_test.cpp)
+    target_link_libraries(mc3_numeric_range_test PRIVATE Mc3)
+    add_test(NAME mc3_numeric_range COMMAND mc3_numeric_range_test)
+    set_tests_properties(mc3_numeric_range PROPERTIES TIMEOUT 15 LABELS "format")
+
     # Load-policy test: untrusted content (AI/import) must not process <include>;
     # include-confinement rejects path traversal.
     add_executable(mc3_load_policy_test test/load_policy_test.cpp)

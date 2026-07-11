@@ -139,6 +139,55 @@ static int attrI(const XMLElement* el, const char* name, int def = 0) {
     }
 }
 
+// ---------------------------------------------------------------------------
+// SYS-W1-02: generic per-field numeric-range helpers
+// ---------------------------------------------------------------------------
+//
+// attrCount() (below) already clamps integer tessellation counts into a
+// range; these are the float equivalents, used for fields whose valid domain
+// is documented in MC3_FORMAT.md but was previously enforced nowhere beyond
+// attrF()'s own NaN/Inf sanitization (finiteOr) -- a value could be a
+// perfectly finite float and still be semantically nonsensical (a FOV of
+// 600 degrees, a roughness of -3, a negative sphere radius). Named per-field
+// constants live next to the call sites that use them (camera/material/
+// geometry/environment/animation/transform sections below), following the
+// same "named constant + short rationale comment" convention kMaxTessellation
+// established.
+
+// Clamps an already-finite float into [lo, hi], reporting a Mc3Validation
+// warning (clamped, not rejected -- an out-of-range field is treated as a
+// likely authoring mistake, not a resource-exhaustion attack, matching this
+// session's established judgment call for AUD-059's tessellation clamp) when
+// the raw value was actually outside the range.
+static float clampRange(const XMLElement* el, const char* field, float raw,
+                         float lo, float hi) {
+    if (raw >= lo && raw <= hi) return raw;
+    float v = std::clamp(raw, lo, hi);
+    reportWarning(el, field,
+                  "value " + std::to_string(raw) + " is outside the documented range [" +
+                  std::to_string(lo) + ", " + std::to_string(hi) + "]",
+                  "clamped to " + std::to_string(v));
+    return v;
+}
+
+// attrF() + clampRange() combined: parse a float attribute and clamp it into
+// a documented semantic range in one call.
+static float attrFClamped(const XMLElement* el, const char* name, float def,
+                           float lo, float hi) {
+    return clampRange(el, name, attrF(el, name, def), lo, hi);
+}
+
+// One-sided floor clamp: reports+clamps `raw` up to `minv` when it falls
+// below it. `reason` is a short human-readable clause appended to the
+// diagnostic message (e.g. "must be > 0").
+static float clampMin(const XMLElement* el, const char* field, float raw, float minv,
+                       const char* reason) {
+    if (raw >= minv) return raw;
+    reportWarning(el, field, "value " + std::to_string(raw) + " " + reason,
+                  "clamped to " + std::to_string(minv));
+    return minv;
+}
+
 // Tessellation counts (segments / sides / subdivisions) come from untrusted
 // input and directly drive geometry allocation, so they are clamped to a sane
 // range. The upper bound is far above any legitimate mesh but stops a hostile
@@ -668,6 +717,30 @@ static void parseLights(const XMLElement* el, Mc3Document& doc) {
     }
 }
 
+// SYS-W1-02: camera field ranges (documented in MC3_FORMAT.md's Cameras
+// section).
+//
+// fov: vertical field of view in degrees. Perspective projection matrices
+// divide by tan(fov/2) -- fov == 0 makes that divide-by-zero-adjacent
+// (tan(0) == 0) and fov >= 180 is not representable by a symmetric frustum
+// at all (tan(90 deg) is undefined). Clamped, not rejected: an out-of-range
+// FOV (e.g. a "600" typo for "60") is a common accidental authoring mistake,
+// not an attack.
+static constexpr float kMinCameraFovDegrees = 1.0f;
+static constexpr float kMaxCameraFovDegrees = 179.0f;
+
+// near/far clip planes: near must be strictly positive -- the standard
+// perspective projection matrix divides by near, and a zero/negative near
+// plane is undefined. far must exceed near by a usable margin, or the
+// z-buffer's depth range collapses to nothing (near>=far also makes the
+// projection matrix singular).
+static constexpr float kMinCameraNear = 1e-4f;
+static constexpr float kMinCameraNearFarMargin = 1e-3f;
+
+// orthoAspect: view-volume width/height ratio -- must be strictly positive;
+// zero or negative mirrors or collapses the ortho frustum.
+static constexpr float kMinCameraAspect = 1e-4f;
+
 static void parseCameras(const XMLElement* el, Mc3Document& doc) {
     // Only overrides the root-level default_camera (set before this runs)
     // when <cameras default="..."> is explicitly present.
@@ -678,11 +751,25 @@ static void parseCameras(const XMLElement* el, Mc3Document& doc) {
         cam.name      = attr(c, "name");
         cam.position  = attrVec3(c, "position", {0,5,10});
         cam.target    = attrVec3(c, "target",   {0,0,0});
-        cam.nearPlane = attrF(c, "near",  0.1f);
-        cam.farPlane  = attrF(c, "far",  1000.0f);
-        cam.fov       = attrF(c, "fov",   60.0f);
+        float near = clampMin(c, "near", attrF(c, "near", 0.1f), kMinCameraNear,
+                               "must be > 0 (a zero/negative near plane is undefined for a "
+                               "perspective projection)");
+        float far = attrF(c, "far", 1000.0f);
+        if (far < near + kMinCameraNearFarMargin) {
+            float clampedFar = near + kMinCameraNearFarMargin;
+            reportWarning(c, "far",
+                          "value " + std::to_string(far) + " does not exceed near (" +
+                          std::to_string(near) + ") by a usable z-buffer-precision margin",
+                          "clamped to " + std::to_string(clampedFar));
+            far = clampedFar;
+        }
+        cam.nearPlane = near;
+        cam.farPlane  = far;
+        cam.fov       = attrFClamped(c, "fov", 60.0f, kMinCameraFovDegrees, kMaxCameraFovDegrees);
         cam.orthoSize = attrF(c, "size",  10.0f);
-        cam.orthoAspect = attrF(c, "aspect", 1.0f);   // STAB-0695
+        cam.orthoAspect = clampMin(c, "aspect", attrF(c, "aspect", 1.0f), kMinCameraAspect,
+                                    "must be > 0 (a zero/negative aspect ratio mirrors or "
+                                    "collapses the view volume)");   // STAB-0695
         std::string t = attr(c, "type", "perspective");
         cam.type = (t == "orthographic") ? CameraType::Orthographic : CameraType::Perspective;
         if (const char* rot = c->Attribute("rotation"))

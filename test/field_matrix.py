@@ -246,7 +246,7 @@ def classify_model_field(raw_type: str, enum_types: set) -> str:
 # ---------------------------------------------------------------------------
 
 _XML_READ_HELPER_RE = re.compile(
-    r'\b(?:attr|attrF|attrI|attrB|attrVec3|attrCount|attrCountBudgeted)\s*\('
+    r'\b(?:attr|attrF|attrI|attrB|attrVec3|attrCount|attrCountBudgeted|attrFClamped)\s*\('
     r'\s*[a-zA-Z_]\w*,\s*"([a-zA-Z0-9_]+)"')
 _XML_READ_DIRECT_RE = re.compile(r'->Attribute\(\s*"([a-zA-Z0-9_]+)"')
 _XML_WRITE_RE = re.compile(r'->SetAttribute\(\s*"([a-zA-Z0-9_]+)"')
