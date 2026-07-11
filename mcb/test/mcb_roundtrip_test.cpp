@@ -1065,6 +1065,78 @@ static void testFileSizeSmallerThanXml() {
 }
 
 // ---------------------------------------------------------------------------
+// AUD-015 — known-key tag/type validation
+// ---------------------------------------------------------------------------
+
+// A corrupt file whose known field carries a tag that doesn't match what the
+// reader expects for that key (e.g. "visible" -- normally TAG_BOOL -- tagged
+// as TAG_STR instead) must be rejected with a clear type-mismatch error at
+// the field, not silently decoded as the wrong type / desynced downstream.
+static void testKnownKeyTagMismatchRejected() {
+    std::ostringstream out(std::ios::binary);
+    out.write(MCB_MAGIC, 4);
+    rawU8(out, MCB_VERSION);
+    rawU8(out, 0);                  // flags
+    rawU8(out, 0); rawU8(out, 0);   // reserved
+    rawU8(out, TAG_OBJ);            // root object
+
+    rawKey(out, "model"); rawU8(out, TAG_STR); rawStr(out, "TagMismatch");
+    rawKey(out, "objects"); rawU8(out, TAG_ARR); rawU32(out, 1);
+    rawU8(out, TAG_OBJ);
+        rawKey(out, "name"); rawU8(out, TAG_STR); rawStr(out, "Obj");
+        // "visible" is normally TAG_BOOL (1 byte). Tag it TAG_STR instead --
+        // the reader must reject this at the field, not read the following
+        // length-prefixed bytes as if they were a bool.
+        rawKey(out, "visible"); rawU8(out, TAG_STR); rawStr(out, "true");
+    rawEnd(out); // end object
+    rawEnd(out); // end root object
+
+    std::istringstream in(out.str(), std::ios::binary);
+    bool threw = false;
+    std::string what;
+    try {
+        Mc3Document doc = loadFromBinary(in);
+        (void)doc;
+    } catch (const std::exception& e) {
+        threw = true;
+        what = e.what();
+    }
+    CHECK(threw, "tag-mismatch: loadFromBinary rejects 'visible' tagged as TAG_STR instead of TAG_BOOL");
+    CHECK(what.find("visible") != std::string::npos,
+          "tag-mismatch: error message names the offending key ('visible')");
+}
+
+// A file where every known field's tag genuinely matches must still load
+// correctly -- the new check must not be a false-positive trap on valid input.
+static void testKnownKeyTagMatchStillLoads() {
+    std::ostringstream out(std::ios::binary);
+    out.write(MCB_MAGIC, 4);
+    rawU8(out, MCB_VERSION);
+    rawU8(out, 0);
+    rawU8(out, 0); rawU8(out, 0);
+    rawU8(out, TAG_OBJ);
+
+    rawKey(out, "objects"); rawU8(out, TAG_ARR); rawU32(out, 1);
+    rawU8(out, TAG_OBJ);
+        rawKey(out, "name");    rawU8(out, TAG_STR);  rawStr(out, "Obj");
+        rawKey(out, "visible"); rawU8(out, TAG_BOOL); rawU8(out, 1);
+    rawEnd(out);
+    rawEnd(out);
+
+    std::istringstream in(out.str(), std::ios::binary);
+    bool threw = false;
+    Mc3Document doc;
+    try {
+        doc = loadFromBinary(in);
+    } catch (const std::exception&) {
+        threw = true;
+    }
+    CHECK(!threw, "tag-match: correctly-tagged 'visible' field loads without error");
+    CHECK(!threw && doc.objects.size() == 1 && doc.objects[0]->visible == true,
+          "tag-match: 'visible' value decodes correctly (true)");
+}
+
+// ---------------------------------------------------------------------------
 
 int main() {
     testSmoke();
@@ -1101,6 +1173,8 @@ int main() {
     testHugeStringLengthRejectedCleanly();
     testHugeCollectionCountRejectedCleanly();
     testFileSizeSmallerThanXml();
+    testKnownKeyTagMismatchRejected();
+    testKnownKeyTagMatchStillLoads();
 
     if (failures == 0)
         std::cout << "All MCB roundtrip tests passed.\n";

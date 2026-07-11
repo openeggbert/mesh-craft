@@ -362,12 +362,22 @@ struct Mat4 {
     }
 };
 
+// AUD-003: buf.data is tinygltf's std::vector<unsigned char> -- no `float`/
+// `uint16_t`/`uint32_t` object was ever created there, and byteOffset/stride
+// are not guaranteed aligned to those types' requirements. Reading through a
+// reinterpret_cast pointer is undefined behavior (type-punning through an
+// incompatible type, plus a potentially-misaligned load); std::memcpy into a
+// properly-typed local is well-defined and handles misalignment. This data is
+// self-generated (a freshly-written GLB re-read in runObjExport), so nothing
+// was observed to misbehave on mainstream x86/ARM -- but the construct is
+// still non-portable UB, worth fixing at zero behavior change.
 std::array<double,3> ReadVec3(const tinygltf::Model& model, const tinygltf::Accessor& acc, size_t i) {
     const auto& bv = model.bufferViews[acc.bufferView];
     const auto& buf = model.buffers[bv.buffer];
     size_t stride = bv.byteStride ? bv.byteStride : 12;
     size_t offset = bv.byteOffset + acc.byteOffset + i * stride;
-    const float* f = reinterpret_cast<const float*>(&buf.data[offset]);
+    float f[3];
+    std::memcpy(f, &buf.data[offset], sizeof(f));
     return { static_cast<double>(f[0]), static_cast<double>(f[1]), static_cast<double>(f[2]) };
 }
 
@@ -376,7 +386,8 @@ std::array<double,2> ReadVec2(const tinygltf::Model& model, const tinygltf::Acce
     const auto& buf = model.buffers[bv.buffer];
     size_t stride = bv.byteStride ? bv.byteStride : 8;
     size_t offset = bv.byteOffset + acc.byteOffset + i * stride;
-    const float* f = reinterpret_cast<const float*>(&buf.data[offset]);
+    float f[2];
+    std::memcpy(f, &buf.data[offset], sizeof(f));
     return { static_cast<double>(f[0]), static_cast<double>(f[1]) };
 }
 
@@ -385,9 +396,18 @@ uint32_t ReadIndex(const tinygltf::Model& model, const tinygltf::Accessor& acc, 
     const auto& buf = model.buffers[bv.buffer];
     size_t offset = bv.byteOffset + acc.byteOffset;
     switch (acc.componentType) {
-    case TINYGLTF_COMPONENT_TYPE_UNSIGNED_BYTE:  return buf.data[offset + i];
-    case TINYGLTF_COMPONENT_TYPE_UNSIGNED_SHORT: return reinterpret_cast<const uint16_t*>(&buf.data[offset])[i];
-    default:                                     return reinterpret_cast<const uint32_t*>(&buf.data[offset])[i];
+    case TINYGLTF_COMPONENT_TYPE_UNSIGNED_BYTE:
+        return buf.data[offset + i];
+    case TINYGLTF_COMPONENT_TYPE_UNSIGNED_SHORT: {
+        uint16_t v;
+        std::memcpy(&v, &buf.data[offset + i * sizeof(v)], sizeof(v));
+        return v;
+    }
+    default: {
+        uint32_t v;
+        std::memcpy(&v, &buf.data[offset + i * sizeof(v)], sizeof(v));
+        return v;
+    }
     }
 }
 

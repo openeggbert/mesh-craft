@@ -194,6 +194,23 @@ static void skipValue(std::istream& in, uint8_t tag) {
     }
 }
 
+// AUD-015: for every recognized key, the writer always emits a specific tag
+// (McbWriter.cpp's wField*/wKeyObj/wIfI32/etc.), but the reader previously
+// used `tag` only in the unknown-key fallback (`skipValue(in, tag)`) -- known
+// keys were decoded purely by name, with no check that the byte stream's tag
+// actually matched what that decode function expects. A corrupt/hostile file
+// whose known field carries a mismatched tag (e.g. key "visible" with a
+// TAG_STR length-prefixed string where a TAG_BOOL byte is expected) was not
+// rejected at the field; it desynced the stream and read whatever bytes
+// happened to be next as if they were the expected type. expectTag() makes a
+// tag/decoder mismatch a clear, immediate error instead.
+static void expectTag(uint8_t got, uint8_t want, const char* key) {
+    if (got != want)
+        throw std::runtime_error("MCB: type mismatch for key '" + std::string(key) +
+                                  "' (expected tag " + std::to_string(want) +
+                                  ", got " + std::to_string(got) + ")");
+}
+
 // ---------------------------------------------------------------------------
 // Mc3 type deserializers
 // ---------------------------------------------------------------------------
@@ -381,24 +398,25 @@ static std::shared_ptr<Mc3::Mc3Object> readObject(std::istream& in) {
     while (true) {
         std::string k = rKey(in); if (k.empty()) break;
         uint8_t tag = rU8(in);
-        if      (k == "type")             obj->type             = static_cast<Mc3::ObjectType>(rI32(in));
-        else if (k == "name")             obj->name             = rRawStr(in);
-        else if (k == "id")               obj->id               = rRawStr(in);
-        else if (k == "material")         obj->material         = rRawStr(in);
-        else if (k == "visible")          obj->visible          = rU8(in) != 0;
-        else if (k == "collision")        obj->collision        = rRawStr(in);
-        else if (k == "layer")            obj->layer            = rRawStr(in);
-        else if (k == "isCutter")         obj->isCutter         = rU8(in) != 0;
-        else if (k == "definition")       obj->definition       = rRawStr(in);
-        else if (k == "meshSource")       obj->meshSource       = rRawStr(in);
-        else if (k == "materialOverride") obj->materialOverride = rRawStr(in);
-        else if (k == "transform")        obj->transform        = readTransform(in);
-        else if (k == "deform")           obj->deform           = readDeform(in);
-        else if (k == "primitive")        obj->primitive        = readPrimitive(in);
-        else if (k == "csgOperation")     obj->csgOperation     = readCsgOp(in);
-        else if (k == "extrude")          obj->extrude          = readExtrude(in);
-        else if (k == "uvMapping")        obj->uvMapping        = readUvMapping(in);
+        if      (k == "type")             { expectTag(tag, TAG_I32, "type");             obj->type             = static_cast<Mc3::ObjectType>(rI32(in)); }
+        else if (k == "name")             { expectTag(tag, TAG_STR, "name");             obj->name             = rRawStr(in); }
+        else if (k == "id")               { expectTag(tag, TAG_STR, "id");               obj->id               = rRawStr(in); }
+        else if (k == "material")         { expectTag(tag, TAG_STR, "material");         obj->material         = rRawStr(in); }
+        else if (k == "visible")          { expectTag(tag, TAG_BOOL, "visible");         obj->visible          = rU8(in) != 0; }
+        else if (k == "collision")        { expectTag(tag, TAG_STR, "collision");        obj->collision        = rRawStr(in); }
+        else if (k == "layer")            { expectTag(tag, TAG_STR, "layer");            obj->layer            = rRawStr(in); }
+        else if (k == "isCutter")         { expectTag(tag, TAG_BOOL, "isCutter");        obj->isCutter         = rU8(in) != 0; }
+        else if (k == "definition")       { expectTag(tag, TAG_STR, "definition");       obj->definition       = rRawStr(in); }
+        else if (k == "meshSource")       { expectTag(tag, TAG_STR, "meshSource");       obj->meshSource       = rRawStr(in); }
+        else if (k == "materialOverride") { expectTag(tag, TAG_STR, "materialOverride"); obj->materialOverride = rRawStr(in); }
+        else if (k == "transform")        { expectTag(tag, TAG_OBJ, "transform");        obj->transform        = readTransform(in); }
+        else if (k == "deform")           { expectTag(tag, TAG_OBJ, "deform");           obj->deform           = readDeform(in); }
+        else if (k == "primitive")        { expectTag(tag, TAG_OBJ, "primitive");        obj->primitive        = readPrimitive(in); }
+        else if (k == "csgOperation")     { expectTag(tag, TAG_OBJ, "csgOperation");     obj->csgOperation     = readCsgOp(in); }
+        else if (k == "extrude")          { expectTag(tag, TAG_OBJ, "extrude");          obj->extrude          = readExtrude(in); }
+        else if (k == "uvMapping")        { expectTag(tag, TAG_OBJ, "uvMapping");        obj->uvMapping        = readUvMapping(in); }
         else if (k == "tags") {
+            expectTag(tag, TAG_ARR, "tags");
             uint32_t n = rU32Bounded(in);
             obj->tags.reserve(n);
             for (uint32_t i = 0; i < n; ++i) {
@@ -408,6 +426,7 @@ static std::shared_ptr<Mc3::Mc3Object> readObject(std::istream& in) {
             }
         }
         else if (k == "variantDefs") {
+            expectTag(tag, TAG_ARR, "variantDefs");
             uint32_t n = rU32Bounded(in);
             obj->variantDefinitions.reserve(n);
             for (uint32_t i = 0; i < n; ++i) {
@@ -417,6 +436,7 @@ static std::shared_ptr<Mc3::Mc3Object> readObject(std::istream& in) {
             }
         }
         else if (k == "metadata") {
+            expectTag(tag, TAG_MAP, "metadata");
             uint32_t n = rU32Bounded(in);
             for (uint32_t i = 0; i < n; ++i) {
                 std::string mk = rRawStr(in);
@@ -426,6 +446,7 @@ static std::shared_ptr<Mc3::Mc3Object> readObject(std::istream& in) {
             }
         }
         else if (k == "states") {
+            expectTag(tag, TAG_MAP, "states");
             uint32_t n = rU32Bounded(in);
             for (uint32_t i = 0; i < n; ++i) {
                 std::string sk = rRawStr(in);
@@ -435,6 +456,7 @@ static std::shared_ptr<Mc3::Mc3Object> readObject(std::istream& in) {
             }
         }
         else if (k == "children") {
+            expectTag(tag, TAG_ARR, "children");
             uint32_t n = rU32Bounded(in);
             obj->children.reserve(n);
             for (uint32_t i = 0; i < n; ++i) {
