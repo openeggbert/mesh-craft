@@ -64,6 +64,59 @@ void MeshCraftApplication::performAutoSave() {
     }
 }
 
+// SYS-W9-02: the single call site all three load paths (startup, Open
+// Recent, Open File dialog) share to detect a newer `.autosave` sibling.
+// Previously this check only existed inline in Initialize() as a passive
+// status-message toast that vanished after 8s with no way to act on it, and
+// the other two load paths didn't check at all -- a crash immediately
+// followed by File > Open on the same file silently ignored the autosave.
+void MeshCraftApplication::checkForNewerAutosave(const std::filesystem::path& file) {
+    if (file.empty()) return;
+    auto asPath = autoSavePath(file);
+    std::error_code ec;
+    if (!std::filesystem::exists(asPath, ec)) return;
+    auto savedTime = std::filesystem::last_write_time(file, ec);
+    if (ec) return;
+    auto asTime = std::filesystem::last_write_time(asPath, ec);
+    if (ec) return;
+    if (asTime > savedTime) {
+        recoveryFilePath_ = file;
+        recoveryDlgOpen_  = true;
+    }
+}
+
+// Loads the `.autosave` sibling's content in place of what's on disk at
+// recoveryFilePath_, but keeps currentFile_ pointing at the real path so a
+// subsequent Save writes back there (not to the .autosave file itself).
+// The autosave is intentionally NOT deleted here -- it stays as a safety
+// net until the user actually saves (saveFile() already removes it on a
+// successful save).
+void MeshCraftApplication::recoverFromAutosave() {
+    try {
+        document_ = Mc3::Mc3Document::loadFromFile(autoSavePath(recoveryFilePath_));
+        currentFile_ = recoveryFilePath_;
+        addRecentFile(currentFile_);
+        selection_.clear();
+        undoStack_.clear(); redoStack_.clear();
+        if (sceneRenderer_) sceneRenderer_->clearCsgCache();
+        modified_ = true; // recovered content differs from what's saved at currentFile_
+        setStatusMsg("Recovered unsaved changes from autosave", false, 3.0f);
+        checkRotationConventionNotice();
+        updateWindowTitle();
+    } catch (const std::exception& e) {
+        std::cerr << "[MeshCraft] Autosave recovery error: " << e.what() << "\n";
+        setStatusMsg(std::string("Failed to recover autosave: ") + e.what(), true);
+    }
+    recoveryDlgOpen_ = false;
+}
+
+void MeshCraftApplication::discardAutosave() {
+    std::error_code ec;
+    std::filesystem::remove(autoSavePath(recoveryFilePath_), ec);
+    setStatusMsg("Discarded autosave", false, 2.0f);
+    recoveryDlgOpen_ = false;
+}
+
 void MeshCraftApplication::setStatusMsg(std::string msg, bool isError, float duration) {
     statusMsg_ = std::move(msg);
     statusMsgIsError_ = isError;
@@ -136,6 +189,7 @@ void MeshCraftApplication::executePendingAction() {
                 modified_ = false;
                 setStatusMsg("Opened " + currentFile_.filename().string(), false, 2.0f);
                 checkRotationConventionNotice();
+                checkForNewerAutosave(currentFile_);
                 updateWindowTitle();
             } catch (const std::exception& e) {
                 std::cerr << "[MeshCraft] Open recent file error: " << e.what() << "\n";

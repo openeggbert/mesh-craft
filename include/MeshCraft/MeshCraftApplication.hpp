@@ -497,6 +497,18 @@ private:
     void confirmIfModified(PendingAction action, std::filesystem::path path = {});
     void executePendingAction();
 
+    // SYS-W9-02: crash-recovery guard. Offered whenever a file finishes
+    // loading (startup, Open Recent, Open File dialog) and its `.autosave`
+    // sibling is newer than the file itself -- a strong signal the editor
+    // previously crashed/closed with unsaved changes. checkForNewerAutosave()
+    // is the single call site all three load paths share so the check can't
+    // silently drift out of sync between them again.
+    bool                  recoveryDlgOpen_{false};
+    std::filesystem::path recoveryFilePath_;
+    void checkForNewerAutosave(const std::filesystem::path& file);
+    void recoverFromAutosave();
+    void discardAutosave();
+
     // Help dialog
     bool showShortcutsDialog_{false};
 

@@ -7,7 +7,6 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
-#include <numbers>
 
 #include <imgui.h>
 
@@ -47,8 +46,6 @@ void MeshCraftApplication::updateWalkMode(float dt,
                                            const KeyboardState& ks,
                                            int mouseDx, int mouseDy)
 {
-    const float pi = std::numbers::pi_v<float>;
-
     // Escape: exit walk mode
     if (ks.IsKeyDown(Keys::Escape)) {
         exitWalkMode();

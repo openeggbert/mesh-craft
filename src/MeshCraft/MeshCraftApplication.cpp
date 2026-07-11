@@ -269,16 +269,11 @@ void MeshCraftApplication::LoadContent() {
                     }
                 }
             }
-            // Warn if a newer autosave exists (unsaved crash recovery hint)
-            auto asPath = autoSavePath(currentFile_);
-            std::error_code ec;
-            if (std::filesystem::exists(asPath, ec)) {
-                auto savedTime = std::filesystem::last_write_time(currentFile_,  ec);
-                auto asTime    = std::filesystem::last_write_time(asPath, ec);
-                if (asTime > savedTime)
-                    setStatusMsg("Autosave found — may be newer than saved file: " +
-                                 asPath.filename().string(), true, 8.0f);
-            }
+            // SYS-W9-02: offer real recovery (not just a status-message hint)
+            // when a newer .autosave sibling exists -- see
+            // checkForNewerAutosave()/recoverFromAutosave() in
+            // MeshCraftApplication_FileOps.cpp.
+            checkForNewerAutosave(currentFile_);
         } catch (const std::exception& e) {
             std::cerr << "[MeshCraft] Failed to load file: " << e.what() << "\n";
         }

@@ -1172,6 +1172,7 @@ void MeshCraftApplication::drawDialogs()
                 std::cout << "[MeshCraft] Loaded: " << openDialogBuf_ << "\n";
                 setStatusMsg("Opened " + currentFile_.filename().string(), false, 2.0f);
                 checkRotationConventionNotice();
+                checkForNewerAutosave(currentFile_);
                 updateWindowTitle();
                 ImGui::CloseCurrentPopup();
             } catch (const std::exception& e) {
@@ -1258,6 +1259,39 @@ void MeshCraftApplication::drawDialogs()
         if (ImGui::Button("Cancel", ImVec2(90, 0)) || ImGui::IsKeyPressed(ImGuiKey_Escape, false)) {
             if (!unsavedDialogResolvesToExecuteAlg(UnsavedDialogChoiceAlg::Cancel, !currentFile_.empty()))
                 pendingAction_ = PendingAction::None;
+            ImGui::CloseCurrentPopup();
+        }
+        ImGui::EndPopup();
+    }
+
+    // -----------------------------------------------------------------------
+    // Crash-recovery dialog (SYS-W9-02) -- offered when a file finishes
+    // loading and its .autosave sibling is newer, a strong signal the
+    // editor previously crashed/closed with unsaved changes. See
+    // checkForNewerAutosave()/recoverFromAutosave()/discardAutosave() in
+    // MeshCraftApplication_FileOps.cpp.
+    // -----------------------------------------------------------------------
+    if (recoveryDlgOpen_) {
+        ImGui::OpenPopup("Recover Unsaved Changes##recoverdlg");
+        recoveryDlgOpen_ = false;
+    }
+    if (ImGui::BeginPopupModal("Recover Unsaved Changes##recoverdlg", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
+        ImGui::Text("An autosave for '%s' is newer than the saved file.",
+                    recoveryFilePath_.filename().string().c_str());
+        ImGui::Text("This usually means the editor closed or crashed with");
+        ImGui::Text("unsaved changes. Recover them?");
+        ImGui::Spacing();
+        if (ImGui::Button("Recover", ImVec2(90, 0))) {
+            recoverFromAutosave();
+            ImGui::CloseCurrentPopup();
+        }
+        ImGui::SameLine();
+        if (ImGui::Button("Discard Autosave", ImVec2(140, 0))) {
+            discardAutosave();
+            ImGui::CloseCurrentPopup();
+        }
+        ImGui::SameLine();
+        if (ImGui::Button("Keep Saved File", ImVec2(120, 0)) || ImGui::IsKeyPressed(ImGuiKey_Escape, false)) {
             ImGui::CloseCurrentPopup();
         }
         ImGui::EndPopup();
