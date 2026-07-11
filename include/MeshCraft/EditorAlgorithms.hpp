@@ -402,6 +402,11 @@ inline std::shared_ptr<Mc3::Mc3Object> convertToDefinitionAlg(
     inst->transform  = src->transform;
     inst->visible    = src->visible;
     inst->tags       = src->tags;
+    // AUD-034: was missing here (though present in the near-identical
+    // exportSubtreeAsTemplate, MeshCraftApplication_Commands.cpp), so
+    // Convert-to-Definition on an object assigned to a named layer silently
+    // moved the resulting Instance to the default layer.
+    inst->layer      = src->layer;
 
     auto* parentList = findParentListAlg(doc.objects, src.get());
     if (parentList) {

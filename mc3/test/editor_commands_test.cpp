@@ -571,6 +571,7 @@ static void testConvertToDefinition()
     src->transform.scale    = {2.0f, 2.0f, 2.0f};
     src->visible = false;
     src->tags    = {"prop", "reusable"};
+    src->layer   = "bg";
     auto child = makeObj("box1_child", "Child");
     src->children.push_back(child);
     doc.objects.push_back(src);
@@ -605,6 +606,9 @@ static void testConvertToDefinition()
     CHECK(inst->visible == false, "convert: Instance keeps src's original visibility");
     CHECK(inst->tags.size() == 2 && inst->tags[0] == "prop" && inst->tags[1] == "reusable",
           "convert: Instance keeps src's original tags");
+    // AUD-034: was silently dropped -- exportSubtreeAsTemplate (the
+    // near-identical sibling operation) already preserved it.
+    CHECK(inst->layer == "bg", "convert: Instance keeps src's original layer (AUD-034)");
 
     // A second conversion (of the new Instance's sibling, here just re-run on
     // inst itself) must not collide with "def_1" — proves unique-key search works.
