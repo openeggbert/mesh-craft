@@ -139,8 +139,33 @@ Mandated workstream items not tied to a single audit finding.
   keyframes, children-per-node, recursion depth enforced at load.
 - **SYS-W1-04** `[IN_PROGRESS]` `P1` — Pathological-input fixture corpus. Seeded:
   `finite_input_test`, `input_budget_test`, `hostile_geometry_test`,
-  `load_policy_test`. Remaining: duplicate IDs, oversized base64, invalid UTF-8,
-  include bombs, MCB corruption.
+  `load_policy_test`. 4 of the 5 originally-remaining categories now done with
+  real fixes + tests: **oversized base64** — `mc3_oversized_base64_test`;
+  found and fixed a genuine unbounded-memory gap (a 20MB inline `<embed>`
+  base64 body loaded with no error before the fix), added a 64MB parse-time
+  ceiling (commit `b9e5a0a`). **Include bombs** — `mc3_include_bomb_test`;
+  cycles and per-chain depth were already bounded, but fan-out (many distinct
+  sibling `<include>`s) was not — confirmed 1500 trivial includes merged with
+  no error before the fix, added a 1000-include document-wide budget (commit
+  `21a3890`). **Invalid UTF-8** — `mc3_invalid_utf8_test`; already adequately
+  handled (tinyxml2/Mc3XmlParser pass malformed byte sequences through
+  byte-for-byte with no crash/OOB/further corruption), proven with a
+  regression test and verified clean under ASan+UBSan (commit `999be67`).
+  **MCB corruption** — `mcb_corruption_test`; already adequately handled
+  (every read is bounds-checked, lengths/counts are sanity-capped,
+  unrecognized tags throw, recursion is guarded), proven with a byte-offset
+  truncation sweep (1659 offsets) and a seeded random-byte fuzz (350 buffers,
+  0–16KB) over a rich multi-section document, both clean under ASan+UBSan
+  (commit `a38eb88`); also materially advances `SYS-W6-02`. **Remaining,
+  left open deliberately: duplicate object IDs** — `mc3_duplicate_ids_test`
+  proves the current mc3-library behavior is safe (no crash/data-loss; a
+  document with two same-`id` objects parses and round-trips both
+  unchanged), but the only ID-keyed *lookups* in the codebase
+  (`flatFindById`, the `lockedIds_` object-lock set) live in the editor
+  application layer, not mc3 itself — whether a duplicate id should become a
+  hard parse error or be auto-renamed is a product/UX decision this pass is
+  not authorized to make unilaterally (commit `be9dd55`). Row stays
+  IN_PROGRESS pending that decision.
 - **SYS-W1-05** `[TODO]` `P2` — Graph-cycle / shared-node policy for API-built trees.
 
 ### W2 — AI / import sandbox
@@ -184,6 +209,14 @@ Mandated workstream items not tied to a single audit finding.
 - **SYS-W6-02** `[TODO]` `P3` — Malformed/truncated/corrupt/random/fuzz MCB tests
   incl. the untested compression-flag rejection path (`AUD-019`); byte-for-byte
   determinism; XML→MCB→XML equivalence.
+  **Status note (via SYS-W1-04):** the malformed/truncated/corrupt/random/fuzz
+  sub-scope is now substantially covered: `mcb_corruption_test` (commit
+  `a38eb88`) sweeps every byte-offset truncation of a rich multi-section
+  document and fuzzes 350 random byte buffers (0–16KB, seeded), both clean
+  under ASan+UBSan, on top of `mcb_roundtrip_test.cpp`'s existing
+  compression-flag rejection (`AUD-019`) and writer-determinism coverage. Not
+  marked DONE: XML→MCB→XML round-trip equivalence has no dedicated test yet
+  and remains open.
 - **SYS-W6-03** `[TODO]` `P3` — Fix `MCB_FORMAT.md` stale field-order list
   (`AUD-018`).
 
