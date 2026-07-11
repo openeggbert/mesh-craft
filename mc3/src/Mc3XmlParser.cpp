@@ -259,6 +259,7 @@ struct DocumentBudget {
     long long totalActions = 0;   // SYS-W1-03
     long long totalChannels = 0;  // SYS-W1-03
     long long totalKeyframes = 0; // SYS-W1-03
+    long long totalDefinitions = 0; // SYS-W1-03
 
     // Generous enough for any real scene (the largest checked-in stress
     // fixture sums to a few thousand) while still bounding the pathological
@@ -308,6 +309,15 @@ struct DocumentBudget {
     static constexpr long long kMaxTotalActions = 10'000;
     static constexpr long long kMaxTotalChannels = 200'000;
     static constexpr long long kMaxTotalKeyframes = 2'000'000;
+
+    // SYS-W1-03: a <definition>'s own root object already separately charges
+    // chargeObject() (and, transitively, its subtree does too), so this
+    // dimension isn't primarily about geometry/allocation cost -- it bounds
+    // std::map<std::string, shared_ptr<Mc3Object>> entry-count overhead
+    // (doc.definitions) independent of what's inside each definition. Same
+    // order of magnitude as materials/textures: far beyond any real prop
+    // library (hundreds of reusable definitions is already a large one).
+    static constexpr long long kMaxTotalDefinitions = 20'000;
 
     void chargeObject() {
         if (++totalObjects > kMaxTotalObjects) {
@@ -396,11 +406,20 @@ struct DocumentBudget {
             throw std::runtime_error(msg);
         }
     }
+    void chargeDefinition() {
+        if (++totalDefinitions > kMaxTotalDefinitions) {
+            std::string msg = "MC3: document exceeds the total definition budget (" +
+                std::to_string(kMaxTotalDefinitions) + ")";
+            reportErrorDoc("definitions", msg);
+            throw std::runtime_error(msg);
+        }
+    }
     void reset() {
         totalObjects = 0; totalTessellationWeight = 0; totalIncludes = 0;
         totalMaterials = 0; totalTextures = 0;
         totalEmbeds = 0; totalEmbedBytes = 0;
         totalActions = 0; totalChannels = 0; totalKeyframes = 0;
+        totalDefinitions = 0;
     }
 };
 static thread_local DocumentBudget g_budget;
@@ -1219,6 +1238,7 @@ static void parseEmbeds(const XMLElement* el, Mc3Document& doc) {
 static void parseDefinitions(const XMLElement* el, Mc3Document& doc) {
     for (const XMLElement* c = el->FirstChildElement("definition"); c;
          c = c->NextSiblingElement("definition")) {
+        g_budget.chargeDefinition(); // SYS-W1-03
         std::string id = attr(c, "id");
         for (const XMLElement* child = c->FirstChildElement(); child;
              child = child->NextSiblingElement()) {

@@ -295,6 +295,36 @@ static void testRecursionDepthAlreadyBounded() {
           "element-depth cap), not a crash");
 }
 
+// ---------------------------------------------------------------------------
+// Definitions: kMaxTotalDefinitions = 20,000 -- 20,001 definitions, each
+// with exactly one trivial object, totals ~20,001 objects, nowhere near the
+// 100,000 total-object budget.
+// ---------------------------------------------------------------------------
+static void testDefinitionBudget() {
+    std::string xml = "<mc3 version=\"0.3\" model=\"def-budget\">\n  <definitions>\n";
+    for (int i = 0; i < 20'001; ++i)
+        xml += "    <definition id=\"d" + std::to_string(i) +
+               "\"><box segments=\"0\" subdivisions_x=\"1\" subdivisions_z=\"1\"/></definition>\n";
+    xml += "  </definitions>\n</mc3>\n";
+
+    std::string what = loadExpectingThrow(xml);
+    check(!what.empty(),
+          "20,001 definitions (total objects ~20,001, well under the "
+          "100,000 total-object budget) is rejected");
+    check(what.find("definition") != std::string::npos,
+          "rejection names the definition budget specifically, not "
+          "total-objects or another budget: " + what);
+    check(what.find("object budget") == std::string::npos,
+          "rejection is NOT the total-object budget: " + what);
+
+    std::string okXml = "<mc3 version=\"0.3\" model=\"def-ok\">\n  <definitions>\n";
+    for (int i = 0; i < 500; ++i)
+        okXml += "    <definition id=\"d" + std::to_string(i) + "\"><box/></definition>\n";
+    okXml += "  </definitions>\n</mc3>\n";
+    Mc3Document doc = load(okXml);
+    check(doc.definitions.size() == 500, "500 definitions (under budget) all load fine");
+}
+
 int main() {
     testMaterialBudget();
     testTextureBudget();
@@ -305,6 +335,7 @@ int main() {
     testKeyframeBudget();
     testChildrenPerNodeBudget();
     testRecursionDepthAlreadyBounded();
+    testDefinitionBudget();
 
     if (failures == 0) { std::cout << "All document-budget tests passed.\n"; return 0; }
     std::cerr << failures << " document-budget test(s) failed.\n";
