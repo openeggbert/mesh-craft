@@ -82,10 +82,12 @@ P1s already being fixed in git history. This session:
    is per-field only) not part of the original audit, filed as new `TODO`
    tasks.
 
-   **Net across all 64 AUD-### rows (57 original + 7 session-2 additions,
+   **Net across all 67 AUD-### rows (57 original + 7 session-2 additions,
    the 7th — AUD-036c — split off from AUD-036b so its verified-done portion
-   could be marked DONE without also claiming its still-open portion):
-   58 DONE, 4 TODO, 2 DEFERRED** — recompute with
+   could be marked DONE without also claiming its still-open portion, + 3
+   more found by `SYS-W7-02`'s differential geometry test: `AUD-061`/`062`/
+   `063`):
+   58 DONE, 7 TODO, 2 DEFERRED** — recompute with
    `python3 test/validate_plan_consistency.py . <build-dir>` rather than
    trusting this number as time passes.
 5. Archived `plan_deep_audit.md` (all 57 of its own tasks were already
@@ -102,22 +104,31 @@ authoritative live state is always the AUD/SYS task table plus
 
 ## Priority execution queue (next up, in order)
 
-1. **AUD-052 (P1/W11)** — CI is permanently parked under `.github_/`; GitHub
+1. **AUD-061 (P2/W7)** — viewport Torus/Capsule render the wrong shape for
+   any radius ratio that doesn't match the fixed unit mesh's own baked-in
+   ratio. Newly found by the differential geometry test added for the W7-02
+   workstream item; not blocked, needs an actual design decision (per-object
+   tessellation vs. multiple unit-ratio variants vs. a documented
+   limitation) rather than a one-line fix.
+2. **AUD-062 (P3/W7)** / **AUD-063 (P3/W7)** — viewport IcoSphere ignoring
+   its own subdivision field, and a Capsule hemisphere-ring-count formula
+   mismatch below `segments=16`. Also newly found by that same test; lower
+   severity, not blocked.
+3. **AUD-052 (P1/W11)** — CI is permanently parked under `.github_/`; GitHub
    Actions never runs. This is the root blocker for AUD-053 (a CI-hardening
-   task that depends on CI actually running first) — long documented
-   elsewhere as owner-gated (enabling Actions on the repo isn't something
-   available in this environment), so treat as blocked-pending-owner-action
-   rather than something to force through.
-2. **AUD-042 (P2/W8)** — Android build path forces SDL_RENDERER; blocked
+   task that depends on CI actually running first) and the CI-job half of
+   AUD-057 — long documented elsewhere as owner-gated (enabling Actions on
+   the repo isn't something available in this environment), so treat as
+   blocked-pending-owner-action rather than something to force through.
+   AUD-057's configure-time-assertion half (recording/checking the sibling
+   repos' current git SHA) landed independently in commit `d2943e3` — only
+   the CI-job half is still open, and it's blocked here, not actionable.
+4. **AUD-042 (P2/W8)** — Android build path forces SDL_RENDERER; blocked
    (no Android NDK in this environment; also intersects CNA backend
    behavior, out of scope per CLAUDE.md's "no CNA changes without owner
    permission").
-3. **AUD-057 (P2/W11)** — sibling-repo (`../cna`, `../sharp-runtime`)
-   version pinning. The CI-job half is blocked on AUD-052, but the
-   configure-time-assertion half (recording/checking the sibling repos'
-   current git SHA, independent of CI) is actionable now.
-4. Remaining `TODO` AUD-### rows by severity (AUD-053, downstream of
-   AUD-052), then SYS-### rows.
+5. Remaining `TODO` AUD-### rows by severity (AUD-053, downstream of
+   AUD-052; AUD-057's CI-job half, same blocker), then SYS-### rows.
 
 ---
 
@@ -1001,3 +1012,21 @@ DONE marker without checking its cited commit/verify command.
 - **Tests:** `mc3/test/load_policy_test.cpp` gained a case that `chdir`s into the fixture directory and opens `"main.mc3.xml"` (no directory prefix) under a confined policy, asserting the same-directory `<include>` still merges instead of being rejected. `test/obj_malformed_oob_positive.obj`'s wiring into `obj_robustness_test.py` (run via a relative path in its own `WORKING_DIRECTORY`) exercises the mc3togltf-side fix identically.
 - **Resolved:** commit `d701df7` — verify: `ctest -R "mc3_load_policy|mc3togltf_obj_robustness"`
 - **Status note:** This was a real regression in this session's own earlier AUD-006 fix (commit `901965f`) that would have broken the exporter's single most common real-world invocation pattern for any scene referencing a texture or mesh file. Caught only by incidentally testing AUD-002 with co-located relative paths instead of the test suite's habitual absolute tempdir paths — a reminder that "all tests pass" is not the same as "the common real invocation works."
+
+### AUD-061 `[TODO]` `P2` `W7` · Viewport Torus/Capsule render the wrong shape whenever the primitive's own radius ratio differs from the fixed unit mesh's baked-in ratio
+- **Component:** src/MeshCraft/Renderer/SceneRenderer.cpp (drawE), include/MeshCraft/Renderer/PrimitiveTessellationAlg.hpp
+- **Evidence:** Found by `SYS-W7-02`'s differential geometry test (`differential_geometry_test`, commit `1ae9087`). The viewport builds ONE fixed unit torus mesh (`majorRadius=0.35`, `minorRadius=0.15`, baked into vertex positions by `tessellateUnitTorusAlg`, `PrimitiveTessellationAlg.hpp:195`) and reproduces every document Torus by a single non-uniform affine scale: `SceneRenderer.cpp:971` `Matrix::CreateScale({R/0.35f, r/0.15f, R/0.35f})`. This can only correctly reproduce a torus whose `majorRadius/minorRadius` ratio equals `0.35/0.15` (≈2.33) — any other ratio produces an elliptical-cross-section tube, not a true torus. The same structural bug applies to Capsule: `SceneRenderer.cpp:977` `Matrix::CreateScale({r*2.0f, (h+r*2.0f)/2.0f, r*2.0f})` scales one fixed unit capsule, correct only when the document's `radius`/`height` ratio matches the unit mesh's own — otherwise the hemisphere caps become ellipsoidal instead of spherical. The independent glTF exporter (`mc3togltf/src/MeshBuilder.cpp`) tessellates each Torus/Capsule directly from its actual parameters and is confirmed correct by the same differential test — so this is a viewport-only bug; exported files are unaffected.
+- **Outcome:** Either tessellate Torus/Capsule per-object at their actual parameters (like the exporter does, dropping the fixed-unit-mesh-plus-scale optimization for these two primitive types), or bake several unit-ratio variants and pick/interpolate the nearest, or accept the current behavior as a documented approximation for non-default ratios and surface that limitation in the UI. A pure-scale fix is not possible for a non-uniform ratio — this needs an actual design decision, not a one-line change.
+- **Tests:** `differential_geometry_test` (`test/differential_geometry_test.cpp` — check the SYS-W7-02 commits for the exact path) already has a regression assertion pinning the current (wrong) behavior for a non-default ratio; once fixed, that assertion needs updating to assert correctness instead of just pinning current behavior.
+
+### AUD-062 `[TODO]` `P3` `W7` · Viewport IcoSphere ignores the primitive's own `segments`/subdivision field — always renders at a fixed subdivision level
+- **Component:** src/MeshCraft/Renderer/SceneRenderer.cpp, src/MeshCraft/Renderer/SceneRenderer_Builders.cpp
+- **Evidence:** Found by `SYS-W7-02`'s differential geometry test. Every other curved primitive gets 3 pre-built LOD tiers selected by camera distance at draw time (`SceneRenderer.cpp:368` `buildUnitSphere(32,...); buildUnitSphere(16,...); buildUnitSphere(6,...)`; similarly for Torus at line 372, Capsule at line 373). IcoSphere gets exactly one: `SceneRenderer.cpp:374` `buildUnitIcoSphere(2)` — a single hardcoded `subdivisions=2` mesh, reused for every document IcoSphere at every distance via a pure uniform-radius scale (`SceneRenderer.cpp:781/982` `Matrix::CreateScale({r,r,r})`). The document's own `segments`/subdivision field (whatever `Mc3Primitive` calls it for IcoSphere — verify the exact field name) is read by the independent glTF exporter (confirmed correct by the differential test) but never consulted by the viewport at all.
+- **Outcome:** Either build IcoSphere unit meshes at multiple subdivision tiers keyed off the document's requested value (matching how Sphere/Torus/Capsule already vary tessellation quality), or, at minimum, document that IcoSphere's viewport LOD is currently fixed regardless of the scene's declared subdivision level.
+- **Tests:** Extend `differential_geometry_test` (or a new focused test) to assert the viewport's IcoSphere vertex/triangle count actually varies with the primitive's declared subdivision level, once fixed.
+
+### AUD-063 `[TODO]` `P3` `W7` · Viewport Capsule hemisphere-ring-count formula diverges from the exporter's below segments=16
+- **Component:** include/MeshCraft/Renderer/PrimitiveTessellationAlg.hpp (tessellateUnitCapsuleAlg), mc3togltf/src/MeshBuilder.cpp
+- **Evidence:** Found by `SYS-W7-02`'s differential geometry test. `PrimitiveTessellationAlg.hpp:242` computes hemisphere ring count as `hRings = std::max(4, segments/4)`; the exporter's equivalent computation uses `std::max(2, segments/4)` (see `mc3togltf/src/MeshBuilder.cpp` — verify exact line). For `segments < 16` the two formulas diverge (e.g. `segments=8` gives the viewport `hRings=4` vs. the exporter's `hRings=2`), so a low-tessellation capsule's viewport preview and its exported mesh have different hemisphere-cap resolution — not a shape-correctness bug like `AUD-061` (both are still spherical caps, just different triangle density), but a minor viewport/export tessellation-quality mismatch.
+- **Outcome:** Align the two formulas (pick one and use it in both places), or document why they're intentionally different if there's a real reason (e.g. the viewport's `max(4,...)` floor exists to avoid a degenerate low-poly cap at very low LOD tiers, which the exporter doesn't need to worry about since it always tessellates at the document's exact requested value).
+- **Tests:** `differential_geometry_test` already surfaces the discrepancy for low-`segments` capsules; add an explicit assertion once the formulas are reconciled (or documented as intentional).
