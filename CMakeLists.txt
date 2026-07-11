@@ -590,6 +590,22 @@ if(MESH_CRAFT_BUILD_TESTING AND UNIX AND NOT ANDROID AND NOT EMSCRIPTEN)
     add_test(NAME graphics_backend_check COMMAND graphics_backend_check_test)
     set_tests_properties(graphics_backend_check PROPERTIES TIMEOUT 15 LABELS "unit")
 
+    # SYS-W7-02: differential geometry tests -- viewport renderer (via the
+    # CNA-free tessellateUnit*Alg() mirror in
+    # include/MeshCraft/Renderer/PrimitiveTessellationAlg.hpp) vs. the glTF
+    # exporter's independent mc3togltf_lib::buildPrimitive(). No CNA/GL
+    # dependency -- links Mc3 (transitively, via mc3togltf_lib) + mc3togltf_lib
+    # directly, exactly like mc3togltf_earclip_test above.
+    add_executable(differential_geometry_test
+        ${CMAKE_CURRENT_SOURCE_DIR}/test/differential_geometry_test.cpp)
+    target_include_directories(differential_geometry_test PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/include)
+    target_link_libraries(differential_geometry_test PRIVATE mc3togltf_lib)
+    target_compile_features(differential_geometry_test PRIVATE cxx_std_23)
+    target_compile_options(differential_geometry_test PRIVATE -Wall -Wextra)
+    add_test(NAME differential_geometry COMMAND differential_geometry_test)
+    set_tests_properties(differential_geometry PROPERTIES TIMEOUT 30 LABELS "unit")
+
     # AUD-036b: frame-driven regression test for the undo-snapshot-timing fix.
     # Drives real ImGui frames through a full click-drag gesture on
     # DragFloat/DragFloat3/ColorEdit3 (the widget classes AUD-036 fixed) plus
