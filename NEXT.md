@@ -1,6 +1,6 @@
 # NEXT.md
 
-_Last updated: 2026-07-11, prior commit `dce64c6` (branch `develop`). One product-decision row resolved this session: `STAB-0092` (`<embeds>` not merged from `<include>`d files), owner-approved and implemented — see §3._
+_Last updated: 2026-07-11, prior commit `94e8a0b` (branch `develop`). Two product-decision rows resolved this session: `STAB-0092` (`<embeds>` not merged from `<include>`d files) and `STAB-0289` (Merge Scene object-id collision handling), both owner-approved and implemented — see §3._
 
 ---
 
@@ -10,7 +10,7 @@ _Last updated: 2026-07-11, prior commit `dce64c6` (branch `develop`). One produc
 
 **Main goal**: reach a fully stabilized, test-covered codebase before adding new product features. All stabilization work is tracked in `plan.md` as `STAB-XXXX` tasks across sections S0–S25 (`STABILIZATION.md` holds the gate policy). The original S0–S20 (650 tasks) was later extended with 5 audit-driven sections: S21 (mc3 format spec-vs-impl), S22 (MCB binary coverage), S23 (mc3togltf export quality), S24 (editor UI coverage of the mc3 format — driven by `missing.md`), and S25 (live-preview rendering correctness) — 723 tasks total.
 
-**Current phase**: stabilization is functionally complete but not formally "all green." `plan.md`: **684/723 rows ✅, 37 🟡 (mostly implemented-but-pending-live-visual-verification — this headless environment can't drive ImGui click/drag interaction; a smaller number are permanently-flagged real gaps or product decisions), 0 needs_human, 2 📋 (one blocked on an external action, one explicitly skipped), 0 🔴**. Per this project's own policy, **new feature work is not yet authorized** without explicit per-task owner approval — the S24 UI-coverage work (§3) was all individually approved task-by-task per `CLAUDE.md`'s `plan.md` review workflow, not a blanket go-ahead. A partial live-verification pass over §S24 happened 2026-07-10 (see §3) — 8 of the 14 newest 🟡 rows got real click-through confirmation (6 flipped to ✅, 2 real bugs found+fixed), the owner then stopped testing; the remaining rows (§8 item 4) are still open whenever there's appetite for more.
+**Current phase**: stabilization is functionally complete but not formally "all green." `plan.md`: **685/723 rows ✅, 36 🟡 (mostly implemented-but-pending-live-visual-verification — this headless environment can't drive ImGui click/drag interaction; a smaller number are permanently-flagged real gaps or product decisions), 0 needs_human, 2 📋 (one blocked on an external action, one explicitly skipped), 0 🔴**. Per this project's own policy, **new feature work is not yet authorized** without explicit per-task owner approval — the S24 UI-coverage work (§3) was all individually approved task-by-task per `CLAUDE.md`'s `plan.md` review workflow, not a blanket go-ahead. A partial live-verification pass over §S24 happened 2026-07-10 (see §3) — 8 of the 14 newest 🟡 rows got real click-through confirmation (6 flipped to ✅, 2 real bugs found+fixed), the owner then stopped testing; the remaining rows (§8 item 4) are still open whenever there's appetite for more.
 
 **Important architectural decisions**:
 - `mc3` (data model + XML parser/writer) and `mcb` (binary serializer) are **CNA-free standalone libraries** — must build and test independently of CNA/ImGui.
@@ -62,6 +62,11 @@ Clean from an **absolute-zero** build directory (not just incremental): `rm -rf 
 ---
 
 ## 3. Recent changes
+
+**2026-07-11 — `STAB-0289` resolved (owner-approved product decision, §S6).** Merge Scene (F4) suffixed colliding *keys* for textures/materials/actions (all maps) on collision, but had **no id-collision handling at all for objects** — `src.objects` were unconditionally appended, so merging two documents that happened to share an object id (e.g. both built from the same template) left two objects silently sharing one id in the destination. Fixed by walking the entire source object subtree (ids exist on every nested child, not just top-level objects) and renaming any id colliding with the destination's existing tree, using the same `_2`/`_3`/... suffix idiom already used for materials/actions:
+- New `collectObjectIds()`/`resolveObjectIdCollisions()` helpers applied in both the real call site (`MeshCraftApplication::mergeSceneFromFile()`, `src/MeshCraft/MeshCraftApplication_FileOps.cpp`) and its headless-testable mirror (`mergeDocumentsAlg()`, `include/MeshCraft/EditorAlgorithms.hpp`) — this project's Alg-mirror pattern requires touching both sides.
+- `mc3/test/editor_commands_test.cpp`'s `testMergeSceneObjectIdCollisionNotHandled()` (which proved the gap) replaced with `testMergeSceneObjectIdCollisionResolved()`, covering both a top-level id collision and a nested-child id collision (against `makeUndoScene()`'s existing `"a_child"` fixture).
+- Full 86/86 ctest green.
 
 **2026-07-11 — `STAB-0092` resolved (owner-approved product decision, §S2).** `<embeds>` was previously never merged from an `<include>`d file at all — only parsed from the main document's own top-level `<embeds>` section. This meant a `<definition>` merged from an include, if it referenced `<mesh src="embed:xyz"/>` where `xyz` was declared in *that same included file's own* `<embeds>` section, would silently fail to resolve. Owner approved implementing the fix (per `CLAUDE.md`'s `plan.md` review workflow). Changes:
 - `mc3/src/Mc3XmlParser.cpp`'s `mergeInclude()` now merges `<embeds>` from included files, mirroring the existing definitions/materials/textures pattern: id collisions log a `Warning:` to stderr (last-write-wins, same as the other three types), and merged ids are tracked in a new `Mc3Document::includedEmbeds` set (`mc3/include/MeshCraft/Mc3/Mc3Document.hpp`). An external embed's `src` path is rebased the same way texture `uri`/SVG `src` already are (STAB-0550 pattern).
@@ -166,7 +171,6 @@ Full history: `git log --oneline`. Per-task detail for the audit phase (both rou
 
 - **Confirmed, unfixed (out of this repo's scope)**: Windows GUI build fails (§4). Emscripten web build no longer builds from scratch (§4, new). Emscripten canvas renders blank — root cause now identified (canvas is 0×0, §2) but fix blocked on the build regression above.
 - **Confirmed, unfixed (in scope, deliberately deferred — needs a product-scope decision, not a quick patch)**:
-  - Merge Scene has no object-id collision handling (materials/textures/actions get suffixed on collision, objects don't) — `STAB-0289`.
   - No first-launch `prefs.ini` auto-creation (only written when the Preferences dialog is explicitly closed) — `STAB-0327`.
   - No registry-DB-path override mechanism (env var/prefs) — `STAB-0360`.
   - No animation scale-time function exists — `STAB-0460`.
@@ -246,10 +250,10 @@ Ordered, each scoped to one focused session:
    Verify: `./build-web.sh`, serve via `python3 -m http.server`, load in `google-chrome --headless=new --enable-unsafe-swiftshader --use-gl=angle --use-angle=swiftshader --dump-dom <url>`, confirm `<canvas>` has nonzero `width`/`height`; then screenshot and inspect for non-black 3D content.
 
 4. **A 2026-07-10 live-verification session already ran partway through §S24 — pick it back up when there's appetite for more.** 6 rows confirmed ✅, 2 real bugs found+fixed (see §3), owner then stopped testing. Remaining §S24-specific rows to check: `STAB-0703`/`0704` (re-test the Inline-toggle fix), `STAB-0706` (actual audio playback, using the new `test/sounds/test_tone.wav`), `STAB-0711` (needs `Add → IcoSphere` first, `features.mc3.xml` has none), `STAB-0672` (needs `test/csg_mesh_child.mc3.xml`, not `features.mc3.xml`), `STAB-0714`/`0717`/`0718`/`0719` (Autoplay checkbox, OBJ import/export menu items, undo-fix spot-checks — not attempted yet). Beyond §S24, 24 older rows are also still unverified: gizmos, SSAO/bloom/wireframe toggles, drag-drop, curve editor, etc.
-   Files: `plan.md` — search for `🟡` to find all 37 remaining rows.
+   Files: `plan.md` — search for `🟡` to find all 36 remaining rows.
    Verify: N/A until the session happens.
 
-5. **Pick one of the remaining flagged product-decision rows (`STAB-0289`/`0327`/`0360`/`0460`) and get an explicit scope decision from the project owner**, then implement only that one. (`STAB-0092` was resolved 2026-07-11, see §3. `STAB-0571` needs the Emscripten build fixed first — see item 3.)
+5. **Pick one of the remaining flagged product-decision rows (`STAB-0327`/`0360`/`0460`) and get an explicit scope decision from the project owner**, then implement only that one. (`STAB-0092`/`0289` were resolved 2026-07-11, see §3. `STAB-0571` needs the Emscripten build fixed first — see item 3.)
    Files: varies per row — see `plan.md` for the specific row's "Key File(s)" column.
    Verify: whatever test the chosen row's own `plan.md` entry specifies.
 

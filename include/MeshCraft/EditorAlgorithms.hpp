@@ -1117,7 +1117,50 @@ inline bool unsavedDialogResolvesToExecuteAlg(UnsavedDialogChoiceAlg choice, boo
     return false;
 }
 
-// ── Merge scene (STAB-0271, STAB-0469) ────────────────────────────────────────
+// ── Merge scene id collision resolution (STAB-0289) ───────────────────────────
+//
+// Object ids live on every object in the tree (top-level and nested children
+// alike), not just a flat map like textures/materials/actions, so merging
+// two documents that happen to share an id (plausible: both built from the
+// same template, or both simply leaving id empty) previously produced a
+// destination document with two objects silently sharing one id — nothing
+// was overwritten (doc.objects is a vector, not a map) but anything that
+// looks an object up *by id* post-merge could resolve ambiguously.
+
+inline void collectObjectIdsAlg(const std::vector<std::shared_ptr<Mc3::Mc3Object>>& objs,
+                                 std::set<std::string>& ids)
+{
+    for (const auto& o : objs) {
+        if (!o) continue;
+        if (!o->id.empty()) ids.insert(o->id);
+        collectObjectIdsAlg(o->children, ids);
+    }
+}
+
+// Renames obj->id (and recursively every descendant's id) with a _2, _3, ...
+// suffix whenever it collides with something already in existingIds — same
+// suffix idiom as the materials/actions maps below — then registers the
+// (possibly new) id in existingIds so later siblings/descendants in the same
+// merge see it too. Empty ids are left alone (nothing to collide with).
+inline void resolveObjectIdCollisionsAlg(const std::shared_ptr<Mc3::Mc3Object>& obj,
+                                          std::set<std::string>& existingIds)
+{
+    if (!obj) return;
+    if (!obj->id.empty()) {
+        if (existingIds.count(obj->id)) {
+            std::string base = obj->id;
+            std::string k = base;
+            int n = 2;
+            while (existingIds.count(k)) k = base + "_" + std::to_string(n++);
+            obj->id = k;
+        }
+        existingIds.insert(obj->id);
+    }
+    for (auto& child : obj->children)
+        resolveObjectIdCollisionsAlg(child, existingIds);
+}
+
+// ── Merge scene (STAB-0271, STAB-0289, STAB-0469) ─────────────────────────────
 //
 // Mirrors MeshCraftApplication::mergeSceneFromFile() (MeshCraftApplication_
 // FileOps.cpp:258-299), minus pushUndo()/modified_/updateWindowTitle()/
@@ -1126,9 +1169,11 @@ inline bool unsavedDialogResolvesToExecuteAlg(UnsavedDialogChoiceAlg choice, boo
 // unique, and rename the copy's `name` field to match its new key (STAB-0469
 // added action-merging to the real method — this mirror had fallen out of
 // sync and never merged actions at all until STAB-0534/0535 caught it).
-// Objects: appended by sharing the same shared_ptr (matches the real code —
-// safe because src is always freshly loaded from file and shares no
-// ownership with dst). Returns the number of objects appended.
+// Objects: id collisions (top-level or nested) are resolved the same way via
+// resolveObjectIdCollisionsAlg() above, then appended by sharing the same
+// shared_ptr (matches the real code — safe because src is always freshly
+// loaded from file and shares no ownership with dst). Returns the number of
+// objects appended.
 
 inline int mergeDocumentsAlg(Mc3::Mc3Document& dst, const Mc3::Mc3Document& src)
 {
@@ -1145,8 +1190,12 @@ inline int mergeDocumentsAlg(Mc3::Mc3Document& dst, const Mc3::Mc3Document& src)
         dst.materials[k].name = k;
     }
 
+    std::set<std::string> existingIds;
+    collectObjectIdsAlg(dst.objects, existingIds);
+
     int added = 0;
     for (const auto& obj : src.objects) {
+        resolveObjectIdCollisionsAlg(obj, existingIds);
         dst.objects.push_back(obj);
         ++added;
     }

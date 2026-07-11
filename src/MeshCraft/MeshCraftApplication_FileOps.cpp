@@ -521,6 +521,45 @@ void MeshCraftApplication::exportSelectionToFile(const std::string& path) {
 // ---------------------------------------------------------------------------
 // F4: Merge scene from MC3 XML
 // ---------------------------------------------------------------------------
+
+namespace {
+
+// STAB-0289: object ids live on every object in the tree (top-level and
+// nested children alike), not just a flat map like textures/materials/
+// actions, so merging two documents that happen to share an id previously
+// produced a destination document with two objects silently sharing one id.
+// Mirrors mergeDocumentsAlg()'s collectObjectIdsAlg()/
+// resolveObjectIdCollisionsAlg() in EditorAlgorithms.hpp (this project's Alg
+// mirror pattern — kept as a parallel duplicate since this .cpp is
+// CNA-coupled and can't include the headless-testable Alg header).
+void collectObjectIds(const std::vector<std::shared_ptr<Mc3::Mc3Object>>& objs,
+                       std::set<std::string>& ids) {
+    for (const auto& o : objs) {
+        if (!o) continue;
+        if (!o->id.empty()) ids.insert(o->id);
+        collectObjectIds(o->children, ids);
+    }
+}
+
+void resolveObjectIdCollisions(const std::shared_ptr<Mc3::Mc3Object>& obj,
+                                std::set<std::string>& existingIds) {
+    if (!obj) return;
+    if (!obj->id.empty()) {
+        if (existingIds.count(obj->id)) {
+            std::string base = obj->id;
+            std::string k = base;
+            int n = 2;
+            while (existingIds.count(k)) k = base + "_" + std::to_string(n++);
+            obj->id = k;
+        }
+        existingIds.insert(obj->id);
+    }
+    for (auto& child : obj->children)
+        resolveObjectIdCollisions(child, existingIds);
+}
+
+} // namespace
+
 void MeshCraftApplication::mergeSceneFromFile(const std::string& path) {
     Mc3::Mc3Document src = Mc3::Mc3Document::loadFromFile(path);
     pushUndo();
@@ -540,9 +579,15 @@ void MeshCraftApplication::mergeSceneFromFile(const std::string& path) {
         document_.materials[k].name = k;
     }
 
-    // Append objects (deep-copy already done by loadFromFile)
+    // Append objects (deep-copy already done by loadFromFile), resolving any
+    // object-id collision (top-level or nested) against the destination's
+    // existing tree first (STAB-0289).
+    std::set<std::string> existingIds;
+    collectObjectIds(document_.objects, existingIds);
+
     int added = 0;
     for (auto& obj : src.objects) {
+        resolveObjectIdCollisions(obj, existingIds);
         document_.objects.push_back(obj);
         ++added;
     }

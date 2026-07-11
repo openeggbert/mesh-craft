@@ -1722,42 +1722,61 @@ static void testMergeSceneCollisionHandling()
           "mergeScene: non-colliding source action is merged in");
 }
 
-// STAB-0289: unlike textures/materials/actions (all map-keyed, all suffix a
-// colliding key), mergeDocumentsAlg() has NO id-collision handling at all for
-// objects — src.objects are unconditionally appended (see the "for (const
-// auto& obj : src.objects) dst.objects.push_back(obj);" loop). This is a real,
-// confirmed gap: merging two documents that both use the same object id
-// (plausible when both were created from the same template, or when both
-// simply leave id empty, which many fixtures in this codebase do) produces a
-// destination document with two objects sharing one id, silently, with no
-// suffixing and no warning. Documented as a real gap rather than a
-// speculative fix: doc.objects is a `std::vector`, not a map, so a colliding
-// id doesn't cause data loss the way a colliding *key* does for materials/
-// actions/textures — nothing is silently overwritten — but anything that
-// looks an object up *by id* after a merge (e.g. Mc3SceneState/
-// Mc3ObjectOverride's `id` field) could resolve ambiguously. A correct fix
-// needs to walk the entire source object subtree (ids exist on every nested
-// child too, not just top-level objects) and rename any id colliding with one
-// already present anywhere in the destination's existing tree — materially
-// more work than the flat-map suffix idiom used for materials/actions, and
-// out of scope to implement speculatively without a driving STAB-0289 test
-// failure. This test proves the *current* behavior so future work can target
-// exactly this gap.
-static void testMergeSceneObjectIdCollisionNotHandled()
+// STAB-0289: object ids live on every object in the tree (top-level and
+// nested children alike), not just a flat map like textures/materials/
+// actions. mergeDocumentsAlg() now resolves any id collision (top-level or
+// nested) against the destination's existing tree the same way materials/
+// actions suffix a colliding key, via collectObjectIdsAlg()/
+// resolveObjectIdCollisionsAlg() (EditorAlgorithms.hpp).
+static void testMergeSceneObjectIdCollisionResolved()
 {
-    Mc3Document dst = makeUndoScene(); // has an object with id "a"
-    Mc3Document src;
-    src.objects = { makeObj("a", "SrcBoxWithCollidingId") }; // same id as dst's "a"
+    // Top-level collision: src's top-level object shares dst's top-level "a".
+    {
+        Mc3Document dst = makeUndoScene(); // objects: "a" (with nested child "a_child"), "b"
+        Mc3Document src;
+        src.objects = { makeObj("a", "SrcBoxWithCollidingId") };
 
-    int added = mergeDocumentsAlg(dst, src);
+        int added = mergeDocumentsAlg(dst, src);
 
-    CHECK(added == 1, "mergeScene: object with a colliding id is still appended (not dropped)");
-    int countWithIdA = 0;
-    for (const auto& o : dst.objects) if (o->id == "a") ++countWithIdA;
-    CHECK(countWithIdA == 2,
-          "mergeScene: confirmed gap (STAB-0289) — object id collisions are NOT "
-          "suffixed/resolved like materials/actions/textures; two objects now "
-          "share id \"a\" in the merged document");
+        CHECK(added == 1, "mergeScene: object with a colliding id is still appended (not dropped)");
+        int countWithIdA = 0;
+        for (const auto& o : dst.objects) if (o->id == "a") ++countWithIdA;
+        CHECK(countWithIdA == 1,
+              "mergeScene (STAB-0289): original destination object keeps id \"a\" unchanged");
+        auto it = std::find_if(dst.objects.begin(), dst.objects.end(),
+            [](const auto& o){ return o->name == "SrcBoxWithCollidingId"; });
+        CHECK(it != dst.objects.end() && (*it)->id == "a_2",
+              "mergeScene (STAB-0289): colliding top-level object id is suffixed to a unique "
+              "value (\"a_2\"), matching the materials/actions suffix idiom");
+    }
+
+    // Nested collision: src's child object shares dst's *nested* child id
+    // "a_child" (makeUndoScene()'s "a" object has a child with that id) —
+    // proves the fix walks the whole subtree, not just top-level objects.
+    {
+        Mc3Document dst = makeUndoScene();
+        Mc3Document src;
+        auto srcChild  = makeObj("a_child", "SrcNestedChild");
+        auto srcParent = makeObj("newparent", "SrcParent");
+        srcParent->children.push_back(srcChild);
+        src.objects = { srcParent };
+
+        int added = mergeDocumentsAlg(dst, src);
+        CHECK(added == 1, "mergeScene: parent with a nested colliding child id is still appended");
+
+        auto parentIt = std::find_if(dst.objects.begin(), dst.objects.end(),
+            [](const auto& o){ return o->name == "SrcParent"; });
+        CHECK(parentIt != dst.objects.end(), "mergeScene: merged parent present");
+        if (parentIt != dst.objects.end()) {
+            CHECK((*parentIt)->id == "newparent",
+                  "mergeScene: merged parent's own (non-colliding) id is untouched");
+            CHECK(!(*parentIt)->children.empty() &&
+                  (*parentIt)->children[0]->id == "a_child_2",
+                  "mergeScene (STAB-0289): nested child id colliding with the destination's "
+                  "own nested child (\"a_child\") is suffixed to a unique value, not just "
+                  "top-level ids");
+        }
+    }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -3287,7 +3306,7 @@ int main()
     testUndoRedoAiApply();
     testUndoRedoMergeScene();
     testMergeSceneCollisionHandling();
-    testMergeSceneObjectIdCollisionNotHandled();
+    testMergeSceneObjectIdCollisionResolved();
     testResolveSaveAsPath();
     testSaveAsDoesNotOverwriteOriginal();
     testExportSelectionOnlySelectedObjects();
