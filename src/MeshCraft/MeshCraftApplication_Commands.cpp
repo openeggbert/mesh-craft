@@ -307,10 +307,10 @@ void MeshCraftApplication::updateWindowTitle() {
 // ---------------------------------------------------------------------------
 // ImGui UI
 // ---------------------------------------------------------------------------
+// AUD-031: the push-then-trim-to-cap pattern at all 3 stack mutation sites
+// below was hand-copied 3 times; now delegates to pushWithCapAlg.
 void MeshCraftApplication::pushUndo() {
-    undoStack_.push_back(deepCopyDoc(document_));
-    if (static_cast<int>(undoStack_.size()) > kUndoMax)
-        undoStack_.erase(undoStack_.begin());
+    pushWithCapAlg(undoStack_, deepCopyDoc(document_), kUndoMax);
     redoStack_.clear();
     // CSG cache no longer cleared here: hash-based invalidation handles it (K1)
 }
@@ -325,9 +325,7 @@ bool MeshCraftApplication::undoOnActivate(bool widgetChanged) {
 // hand-copied and free to drift.
 void MeshCraftApplication::performUndo() {
     if (undoStack_.empty()) return;
-    redoStack_.push_back(deepCopyDoc(document_));
-    if (static_cast<int>(redoStack_.size()) > kUndoMax)
-        redoStack_.erase(redoStack_.begin());
+    pushWithCapAlg(redoStack_, deepCopyDoc(document_), kUndoMax);
     document_ = std::move(undoStack_.back());
     undoStack_.pop_back();
     selection_.clear();
@@ -338,9 +336,7 @@ void MeshCraftApplication::performUndo() {
 
 void MeshCraftApplication::performRedo() {
     if (redoStack_.empty()) return;
-    undoStack_.push_back(deepCopyDoc(document_));
-    if (static_cast<int>(undoStack_.size()) > kUndoMax)
-        undoStack_.erase(undoStack_.begin());
+    pushWithCapAlg(undoStack_, deepCopyDoc(document_), kUndoMax);
     document_ = std::move(redoStack_.back());
     redoStack_.pop_back();
     selection_.clear();
