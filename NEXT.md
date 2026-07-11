@@ -1,6 +1,6 @@
 # NEXT.md — baseline & handoff
 
-_Last updated: 2026-07-11 (session 2). Branch `develop`, working tree clean at
+_Last updated: 2026-07-11 (session 3). Branch `develop`, working tree clean at
 the start of each session below. See `git log --oneline -20` for the exact
 current HEAD — it is not hard-coded here because this file is edited in the
 same commits it describes, which would make a literal hash stale immediately.
@@ -84,15 +84,83 @@ See [`plan.md`](plan.md)'s session log for the fuller version of this entry.
 **This narrative will itself go stale — the live source of truth is always
 `git log` + `ctest -N` + the `AUD-###`/`SYS-###` task table, not this prose.**
 
+### Session 3 (2026-07-11, continued) — plan.md marker fix, AUD-031/036c, and a fleet of SYS-### items
+
+Picked up from session 2 with an explicit standing instruction to fix a
+plan.md self-consistency bug first, then work through every remaining
+unblocked `AUD-###` task, then the `SYS-###` backlog, pushing regularly and
+continuing autonomously rather than stopping at milestones.
+
+- Fixed `AUD-015`'s completion marker (`**Resolved (full):**` didn't match
+  `test/validate_plan_consistency.py`'s exact `**Resolved:**` substring
+  check) — the literal bug the standing instruction called out.
+- `AUD-036c` (undo-coverage audit triage) and `AUD-031` (all 26 `*Alg` mirror
+  functions individually classified/rewired or deliberately left
+  divergent — one, `keyBindToStringAlg`, is intentionally NOT rewired since
+  it's a documented reduced toy table, not a bug) — both DONE.
+- `AUD-054`/`AUD-055`: `-Wall -Wextra` enabled on every first-party target
+  (was 2 of ~7); fixed one real bug it surfaced (`-Wswitch` on a bounding-box
+  primitive-type switch missing 5 of 11 cases). Added an opt-in
+  `MESHCRAFT_SANITIZE` ASan+UBSan build; fixed a link-time propagation bug
+  where per-target `target_link_options()` on a static library doesn't reach
+  its consuming executables.
+- `AUD-057` (partial): a non-fatal configure-time check warns when `../cna`/
+  `../sharp-runtime` drift from the last-verified SHA; the CI-gating half
+  stays blocked on `AUD-052`.
+- Real crash recovery (`SYS-W9-02`): a "Recover Unsaved Changes" dialog now
+  fires from all three file-load paths (was a passive, easily-missed
+  8-second toast, startup-only) when a newer `.autosave` sibling exists.
+- `SYS-W1-04` (pathological-input corpus): closed 4 of 5 remaining
+  categories with real fixes (an unbounded include-fan-out bomb, an
+  unbounded inline-embed base64 size) or proof-of-safety tests (invalid
+  UTF-8, MCB truncation/random-byte fuzzing); duplicate object IDs stays
+  `IN_PROGRESS` — proven safe at the library level, but whether duplicates
+  should be a hard error is a product decision, not made unilaterally.
+- `SYS-W5-01`: a real, `ctest`-gated cross-layer field matrix
+  (`test/field_matrix.py`) catching "added to the model, forgot the MCB
+  writer"-class bugs across 6 layers (XSD/model/XML read/XML write/MCB
+  read/MCB write).
+- `SYS-W1-01` (partial): a first-class `Mc3Validation` diagnostics type,
+  wired as an additive side-channel into MC3 XML load and MCB load (2 of the
+  7 named integration points — AI-apply/pre-render/pre-export/save remain).
+- `SYS-W11-05`: fuzz/differential coverage for both parsers — seeded
+  mutation fuzzing, property-based random round-trip testing, and a genuine
+  libFuzzer corpus harness (~1.35M executions, zero crashes in either
+  parser).
+- `SYS-W7-02`: an invariant-based differential test (bounding box /
+  divergence-theorem volume / watertightness) comparing the viewport
+  renderer against the independent glTF exporter for 8 of 10 primitive
+  types. Found 3 real cross-path discrepancies, filed as new findings
+  (`AUD-061`/`062`/`063`).
+- `AUD-061` fixed: the viewport's Torus/Capsule rendered the wrong shape
+  (elliptical tube / ellipsoidal caps) whenever the object's own radius
+  ratio didn't match one fixed unit mesh's baked-in ratio — now tessellated
+  per-object at the real parameters, cached, verified with a real headless
+  screenshot render. `AUD-062`/`063` (lower severity, same root cause class)
+  remain open.
+- `SYS-W1-02`/`SYS-W1-03`: documented numeric ranges (camera/material/
+  geometry/environment/animation/transforms — audio and post-processing
+  confirmed not applicable, no such fields exist) and document-complexity
+  budgets (materials/textures/embeds/actions/channels/keyframes/children-
+  per-node/definitions/max-bytes) enforced at load, all DONE.
+
+Net: `AUD-###` went from 56 DONE/6 TODO/2 DEFERRED (64 rows) to **59
+DONE/6 TODO/2 DEFERRED (67 rows** — 3 new findings from `SYS-W7-02`'s
+differential test). Every remaining `TODO` `AUD-###` row is genuinely
+blocked (owner-gated CI, or missing Android NDK/out-of-scope CNA coupling)
+except `AUD-062`/`AUD-063`, which are open, unblocked, lower-severity
+follow-ups to `AUD-061`.
+
 ## 3. Next tasks
 
 See the **Priority execution queue** at the top of [`plan.md`](plan.md) — it
 is kept free of DONE items by `test/validate_plan_consistency.py`. As of
-session 2 the top items are: `AUD-058` (call the dead `BloomGL::cleanup()`),
-`AUD-002` (bounds-check `loadObjMesh` tinyobj indices), `AUD-039b` (real
-Gate C enforcement), `AUD-006b` (broaden resource confinement past mc3togltf
-export), `AUD-059` (total-document allocation budget), `AUD-036b` (undo
-transaction abstraction — large, incremental).
+session 3 the top items are: `AUD-062`/`AUD-063` (viewport IcoSphere/Capsule
+tessellation-quality gaps, unblocked), then the SYS-### backlog (`SYS-W1-01`'s
+remaining 5 integration points, `SYS-W3-01` MeshCraftApplication
+decomposition, `SYS-W11-06` clang-format/clang-tidy config) — everything
+else in the `AUD-###` table is blocked (owner-gated CI via `AUD-052`, or
+missing Android NDK / out-of-scope CNA coupling).
 
 ## 4. Current blockers (external, re-verified 2026-07-11)
 
