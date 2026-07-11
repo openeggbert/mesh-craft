@@ -1206,6 +1206,33 @@ static void parseScripts(const XMLElement* el, Mc3Document& doc) {
 // already used for MCB string fields (kMcbMaxStringLen in McbReader.cpp).
 static constexpr size_t kMaxEmbedBase64Length = 64ull * 1024ull * 1024ull;
 
+// SYS-W1-03 "max bytes": a raw ceiling on the INPUT XML text/file size
+// itself, checked before tinyxml2 even attempts to buffer/parse it --
+// deliberately NOT a DocumentBudget running total like the dimensions
+// above: a single oversized document doesn't need accumulation across
+// <include>s to be dangerous on its own, and checking it up front avoids
+// ever handing tinyxml2 (or this process' own file-read buffer) a
+// pathologically large blob in the first place. 512MB is far beyond any
+// legitimate mc3 scene's XML text -- even a scene with many embedded assets
+// near the existing kMaxTotalEmbedBytes=256MB aggregate cap would still be
+// comfortably under this, since base64 embed content IS part of the XML
+// text at that point. (This is the one budget dimension this session
+// decided NOT to also express as a fuzzy "total generated output bytes"
+// estimate -- that would require guessing at downstream GLB/geometry size
+// across the whole document, which is imprecise enough to not usefully
+// bound anything; the INPUT byte ceiling here is precise and directly
+// actionable.)
+static constexpr uintmax_t kMaxDocumentBytes = 512ull * 1024ull * 1024ull;
+
+static void checkDocumentByteBudget(uintmax_t bytes, const std::string& sourceDescription) {
+    if (bytes <= kMaxDocumentBytes) return;
+    std::string msg = "MC3: " + sourceDescription + " (" + std::to_string(bytes) +
+        " bytes) exceeds the maximum document size (" + std::to_string(kMaxDocumentBytes) +
+        " bytes) -- rejected before parsing";
+    reportErrorDoc("bytes", msg);
+    throw std::runtime_error(msg);
+}
+
 static void parseEmbeds(const XMLElement* el, Mc3Document& doc) {
     for (const XMLElement* c = el->FirstChildElement("embed"); c;
          c = c->NextSiblingElement("embed")) {
@@ -1486,6 +1513,15 @@ static void mergeInclude(const std::filesystem::path& includePath,
     // merged (includePath), not its parent -- restored automatically (even on
     // exception) when this function returns.
     SourceFileScope fileScope(includePath);
+
+    // SYS-W1-03 "max bytes": checked before tinyxml2 buffers this included
+    // file's contents, same as the top-level parse() below.
+    {
+        std::error_code ec;
+        auto sz = std::filesystem::file_size(includePath, ec);
+        if (!ec)
+            checkDocumentByteBudget(sz, "<include> file '" + includePath.string() + "'");
+    }
 
     XMLDocument xml;
     if (xml.LoadFile(includePath.string().c_str()) != XML_SUCCESS) {
@@ -1781,6 +1817,13 @@ Mc3Document Mc3XmlParser::parse(const std::filesystem::path& path,
     ValidationScope vscope(validation);
     g_currentSourceFile = path;
 
+    // SYS-W1-03 "max bytes": checked before tinyxml2 buffers the file.
+    {
+        std::error_code ec;
+        auto sz = std::filesystem::file_size(path, ec);
+        if (!ec) checkDocumentByteBudget(sz, "document '" + path.string() + "'");
+    }
+
     XMLDocument xml;
     if (xml.LoadFile(path.string().c_str()) != XML_SUCCESS) {
         std::string msg = "Failed to load XML: " + path.string() + ": " + xml.ErrorStr();
@@ -1806,6 +1849,12 @@ Mc3Document Mc3XmlParser::parseString(const std::string& xmlText,
     // <include> switches it (see SourceFileScope).
     std::filesystem::path selfPath = sourceDir / "in-memory.mc3.xml";
     g_currentSourceFile = selfPath;
+
+    // SYS-W1-03 "max bytes": checked before tinyxml2 buffers/parses the
+    // in-memory string (the caller already holds it in memory, but this
+    // still bounds any further work this parser would otherwise do on top
+    // of an already-oversized string).
+    checkDocumentByteBudget(xmlText.size(), "in-memory XML document");
 
     XMLDocument xml;
     if (xml.Parse(xmlText.c_str(), xmlText.size()) != XML_SUCCESS) {

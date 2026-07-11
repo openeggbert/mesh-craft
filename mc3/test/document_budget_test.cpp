@@ -14,6 +14,8 @@
 #include <MeshCraft/Mc3/Mc3Document.hpp>
 #include <MeshCraft/Mc3/Mc3Object.hpp>
 
+#include <algorithm>
+#include <cstdint>
 #include <filesystem>
 #include <fstream>
 #include <iostream>
@@ -325,6 +327,40 @@ static void testDefinitionBudget() {
     check(doc.definitions.size() == 500, "500 definitions (under budget) all load fine");
 }
 
+// ---------------------------------------------------------------------------
+// Max document bytes: kMaxDocumentBytes = 512MB -- checked against the raw
+// input size BEFORE tinyxml2 even attempts to buffer/parse it, so the file
+// doesn't need to be valid (or even well-formed) XML at all: padding bytes
+// are enough to prove the check fires ahead of any parse attempt.
+// ---------------------------------------------------------------------------
+static void testMaxDocumentBytesBudget() {
+    auto path = std::filesystem::temp_directory_path() / "mc3_document_budget_bytes_test.mc3.xml";
+    {
+        std::ofstream f(path, std::ios::binary);
+        const size_t chunkSize = 16ull * 1024ull * 1024ull;
+        std::string chunk(chunkSize, 'A');
+        const uintmax_t target = 512ull * 1024ull * 1024ull + 1024ull; // just over the ceiling
+        uintmax_t written = 0;
+        while (written < target) {
+            size_t toWrite = static_cast<size_t>(std::min<uintmax_t>(chunkSize, target - written));
+            f.write(chunk.data(), static_cast<std::streamsize>(toWrite));
+            written += toWrite;
+        }
+    }
+
+    std::string what;
+    try {
+        Mc3Document::loadFromFile(path);
+    } catch (const std::exception& e) {
+        what = e.what();
+    }
+    std::filesystem::remove(path);
+
+    check(!what.empty(), "a 512MB+ document file is rejected before parsing begins");
+    check(what.find("bytes") != std::string::npos,
+          "rejection names the document-byte-size budget, not an unrelated failure: " + what);
+}
+
 int main() {
     testMaterialBudget();
     testTextureBudget();
@@ -336,6 +372,7 @@ int main() {
     testChildrenPerNodeBudget();
     testRecursionDepthAlreadyBounded();
     testDefinitionBudget();
+    testMaxDocumentBytesBudget();
 
     if (failures == 0) { std::cout << "All document-budget tests passed.\n"; return 0; }
     std::cerr << failures << " document-budget test(s) failed.\n";
