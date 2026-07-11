@@ -116,11 +116,13 @@ cmake --build b-web -j$(nproc)
 cd b-web && python3 -m http.server 8765   # then open http://localhost:8765/MeshCraft.html
 ```
 
-Builds and links cleanly (449/449 objects) and the produced page loads
-and initializes correctly in a real browser (WebGL 2.0 context,
-`SDL_CreateWindow` succeeds, no console errors) — **but the 3D viewport
-currently renders a blank canvas**, an open, undiagnosed limitation (see
-`NEXT.md` §4 for what's been ruled out so far). CLI tools (`mc3togltf`,
+Builds and links cleanly, and the page loads and initializes (WebGL 2.0
+context, `SDL_CreateWindow` succeeds, scene creation logs) — **but the app then
+crashes on the first window-resize event before rendering a frame**, so the
+viewport never appears. The crash is a `std::runtime_error` thrown inside CNA
+(`GameWindow::queryClientBoundsFromSDL()` → `SDL_GetWindowSize()` reports the
+video subsystem uninitialized); it is out of this repo's scope to fix. See
+`NEXT.md` §4 for the full traced root cause. CLI tools (`mc3togltf`,
 `mc3tomcb`) build the same way and run correctly under Node.
 
 ### Run
@@ -200,19 +202,21 @@ reference.
 Status as of the S16 (Cross-Platform Stability) stabilization pass, re-verified
 2026-07-07 against a fresh MinGW cross-compile attempt (with the
 `CNA_ENABLE_NET=OFF` fix — see `plan.md`'s "Post-650 Follow-Up Findings" — applied).
-Web-column rows further updated 2026-07-09 after finding a new Emscripten build
-regression and root-causing the blank-canvas bug — see `web_issues.md`.
+Web-column rows re-diagnosed 2026-07-11: the blank canvas is a downstream
+symptom of a CNA-side crash on the first resize event, not a canvas-sizing
+config bug — full trace in `NEXT.md` §4. The earlier sizing theory is archived
+in `docs/history/web_issues.md`.
 Legend: ✅ verified working &nbsp; 🟡 partially verified / known gap &nbsp;
 ❌ not available on this platform &nbsp; ❓ not yet attempted (no toolchain
 available to test with).
 
 | Feature | Linux | Windows (MinGW) | Web (Emscripten) | Android |
 |---|---|---|---|---|
-| Full desktop/native build | ✅ | 🟡 the full GUI editor (`MeshCraft.exe`) still fails, but on the same pre-existing CNA-side `GLES3/gl3.h` header gap as before (`imgui_impl_opengl3.cpp` — CNA configures `-DIMGUI_IMPL_OPENGL_ES3` unconditionally for the `EASYGL` backend regardless of target platform), **plus** 3 separate `../sharp-runtime`-side `-Werror` build failures in its `System.Net.Sockets`/`System.Xml` namespaces (`afunix.h`'s `ADDRESS_FAMILY` on this MinGW version, an unused-function warning, a sign-compare warning) — none of these are in this project's own source, all out of scope to fix without CNA/sharp-runtime maintainer involvement. **New finding**: the two CNA-free CLI tools (`mc3togltf.exe`, `mc3tomcb.exe`) build and link successfully as real Windows PE32+ executables, since neither links SHARP_RUNTIME or CNA at all — confirmed by running `file` on the actual output binaries, not just a partial object count | 🟡 **update 2026-07-09**: the *last-known-good* build (2026-07-06 artifacts) still builds/runs fine, but a *fresh* rebuild now fails — `../sharp-runtime` gained a new Emscripten-only regression since then (16 `-Werror` failures + 1 hard `std::chrono::clock_cast` compile error). See `web_issues.md` for full detail. | ❓ never attempted (no Android NDK installed here) |
-| App launches / runs | ✅ | ❌ (build doesn't complete) | 🟡 (using the 2026-07-06 artifacts, since a fresh build currently fails — see row above) loads, initializes (`SDL_CreateWindow`, WebGL2 context), no crash — but renders a blank canvas, not yet visually usable | ❓ |
-| 3D viewport rendering | ✅ | ❌ (build doesn't complete) | ❌ blank canvas. **Root cause identified 2026-07-09**: the live `<canvas>` DOM element is `width="0" height="0"` (confirmed via headless-Chrome `--dump-dom`), even though CNA requests 1024×768 from `SDL_CreateWindow` — the size is lost somewhere inside SDL3's own Emscripten backend. A fix can't be attempted/verified until the build regression in the row above is resolved upstream. See `web_issues.md`. | ❓ |
+| Full desktop/native build | ✅ | 🟡 the full GUI editor (`MeshCraft.exe`) still fails, but on the same pre-existing CNA-side `GLES3/gl3.h` header gap as before (`imgui_impl_opengl3.cpp` — CNA configures `-DIMGUI_IMPL_OPENGL_ES3` unconditionally for the `EASYGL` backend regardless of target platform), **plus** 3 separate `../sharp-runtime`-side `-Werror` build failures in its `System.Net.Sockets`/`System.Xml` namespaces (`afunix.h`'s `ADDRESS_FAMILY` on this MinGW version, an unused-function warning, a sign-compare warning) — none of these are in this project's own source, all out of scope to fix without CNA/sharp-runtime maintainer involvement. **New finding**: the two CNA-free CLI tools (`mc3togltf.exe`, `mc3tomcb.exe`) build and link successfully as real Windows PE32+ executables, since neither links SHARP_RUNTIME or CNA at all — confirmed by running `file` on the actual output binaries, not just a partial object count | 🟡 **update 2026-07-09**: the *last-known-good* build (2026-07-06 artifacts) still builds/runs fine, but a *fresh* rebuild now fails — `../sharp-runtime` gained a new Emscripten-only regression since then (16 `-Werror` failures + 1 hard `std::chrono::clock_cast` compile error). See `docs/history/web_issues.md` (archived). | ❓ never attempted (no Android NDK installed here) |
+| App launches / runs | ✅ | ❌ (build doesn't complete) | ❌ loads and initializes (`SDL_CreateWindow`, WebGL2 context, scene creation) but then **crashes on the first resize event**, before any frame renders — see below | ❓ |
+| 3D viewport rendering | ✅ | ❌ (build doesn't complete) | ❌ never reached. **Root cause (re-diagnosed 2026-07-11, supersedes the earlier "canvas 0×0" theory)**: an uncaught `std::runtime_error` from CNA's `GameWindow::queryClientBoundsFromSDL()` — `SDL_GetWindowSize()` reports "Video subsystem has not been initialized" on the first `SDL_EVENT_WINDOW_RESIZED`, killing the wasm module. 100% inside CNA; not fixable from this repo. Full trace in `NEXT.md` §4. | ❓ |
 | Shaders (GLSL ES 3.00 / WebGL2) | ✅ (desktop GL) | ❌ (build doesn't complete) | ✅ all 7 CNA EasyGL 3D shader programs are `#version 300 es` and compile/link cleanly | ❓ |
-| Config/prefs/recent-files/keybindings persistence | ✅ `~/.config/meshcraft` | ✅ `%APPDATA%\meshcraft` (code-verified; no working build to run it against yet) | ❌ **correction 2026-07-09**: not actually persisted. `meshcraftConfigDir()` (`src/MeshCraft/MeshCraftPrivate.hpp`) has only `_WIN32`/POSIX branches, no `__EMSCRIPTEN__` branch, so it resolves into Emscripten's in-memory MEMFS. `-lidbfs.js` is linked (`CMakeLists.txt`) but `FS.mount`/`FS.syncfs` are never called anywhere in this repo or `../cna` — prefs/recent-files/keybindings/macros are silently lost on every reload. See `plan_deep_audit.md` AUDIT-0050 for the tracked implementation (currently blocked on the Emscripten build regression, `web_issues.md`). | ❓ (falls through to the same non-Windows `$HOME`-based logic as Linux; not verified on-device) |
+| Config/prefs/recent-files/keybindings persistence | ✅ `~/.config/meshcraft` | ✅ `%APPDATA%\meshcraft` (code-verified; no working build to run it against yet) | ❌ **correction 2026-07-09**: not actually persisted. `meshcraftConfigDir()` (`src/MeshCraft/MeshCraftPrivate.hpp`) has only `_WIN32`/POSIX branches, no `__EMSCRIPTEN__` branch, so it resolves into Emscripten's in-memory MEMFS. `-lidbfs.js` is linked (`CMakeLists.txt`) but `FS.mount`/`FS.syncfs` are never called anywhere in this repo or `../cna` — prefs/recent-files/keybindings/macros are silently lost on every reload. See `plan_deep_audit.md` AUDIT-0050 for the tracked implementation (currently blocked on the Emscripten crash — see `NEXT.md` §4). | ❓ (falls through to the same non-Windows `$HOME`-based logic as Linux; not verified on-device) |
 | SQLite Model Registry | ✅ (or gracefully stubbed if SQLite3 dev package absent) | 🟡 gracefully stubbed when SQLite3 absent (code-verified; no working build to run it against yet) | ❌ always stubbed (`MESHCRAFT_HAS_SQLITE3` never defined) | ❌ always stubbed (same guard as Web) |
 | AI Assistant (Claude API) | ✅ (or gracefully stubbed if OpenSSL absent) | 🟡 same as SQLite3 above | ❌ always stubbed (`MESHCRAFT_HAS_AI` never defined) | ❌ always stubbed (same guard as Web) |
 | File dialogs (text-path-field fallback) | ✅ | ✅ (no native OS dialog anywhere — plain `ImGui::InputText`, platform-agnostic by construction) | ✅ | ✅ |

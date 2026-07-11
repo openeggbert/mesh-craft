@@ -21,21 +21,24 @@ _Last updated: 2026-07-07, re-verified as part of a conservative-maintainer audi
 
 ## Stabilization Gates
 
-The full backlog is **650** `STAB-XXXX` tasks in `plan.md`, sectioned S0-S20. Each gate below requires its **entire** `STAB-XXXX` range green — not just the handful of tasks in that gate's "Priority Execution Order" shortlist (`plan.md`'s own fast-path subset for getting a gate's headline risk closed quickly). Counts below are per-row status markers within each gate's exact ID range, recomputed directly from `plan.md` on 2026-07-07.
+This file defines the **stable quality bar**. Live task status and counts belong
+in `plan.md` (the single active backlog) and `NEXT.md` (the current baseline) —
+they are deliberately kept out of this file so it does not go stale. The gates
+below are exit criteria, not a progress tracker.
 
-Overall: **620 ✅ / 29 🟡 / 0 🧪 / 1 📋 / 0 🔴** across all 650 rows.
+| Gate | Name | Exit criterion |
+|------|------|-----------------|
+| **A** | No known P0 defects | No open UB / crash / data-loss / unsafe-input / broken round-trip / use-after-free / race / silent-destructive-fallback / invalid-output-reported-as-success. |
+| **B** | Tests validate production code | Tests exercise the real production path, not a copied `*Alg` helper that production doesn't call. |
+| **C** | Truthful capability claims | Every backend / platform / format feature / UI action is documented as exactly one of: implemented+verified, implemented+unverified, partial (with stated limits), or unsupported+rejected. No selectable-but-non-functional configs. |
+| **D** | Input budgets & deterministic diagnostics | Every externally-controlled parser/importer has finite-number checks, size/count/depth limits, allocation budgets, clear diagnostics, deterministic failure, and pathological-input tests. |
+| **E** | No documentation drift | XSD / parser / writer / model / MCB / exporter / UI / examples / docs checked for parity by automated matrices where possible. |
+| **F** | New-feature readiness | Major new features start only after P0 tasks are closed, baseline tests are green in available environments, and the relevant architecture is not duplicated/unsafe. Small safety/diagnostics/recovery features may land earlier. |
 
-| Gate | Name | Required range | Status |
-|------|------|-----------------|----------------------|
-| **Gate 0** | Build | STAB-0001–0025 (25 rows) | 24 ✅ / 1 🟡 — the 1 remaining row (STAB-0012, MinGW cross-compile) is blocked on a CNA-side gap out of this project's scope, not unattempted |
-| **Gate 1** | Format | STAB-0066–0150 (85 rows) | 84 ✅ / 1 🟡 |
-| **Gate 2** | Export | STAB-0151–0260 (110 rows) | 110 ✅ / 0 🟡 — **fully green** |
-| **Gate 3** | Editor safety | STAB-0261–0335 (75 rows) | 73 ✅ / 2 🟡 |
-| **Gate 4** | Registry/AI | STAB-0336–0410 (75 rows) | 73 ✅ / 2 🟡 |
-| **Gate 5** | Large scene | STAB-0411–0470 (60 rows) | 57 ✅ / 3 🟡 |
-| **Gate 6** | Documentation | STAB-0576–0650 (75 rows) | 73 ✅ / 1 🟡 / 1 📋 — STAB-0617 (large-file audit, needs a live display to verify after a mechanical split) and STAB-0650 (CI report, blocked on the repo owner rotating a PAT before CI can even run) are the only 2 not done |
-
-No gate is 100% ✅ in the strictest sense except **Gate 2 (Export)**, which is fully green. Every remaining row across every other gate is a documented, permanently-flagged 🟡 (genuinely needs a live interactive display session, is blocked on the CNA repo which this project may not modify, or is a deliberate product-scope decision awaiting a call from the project owner) or the single 📋 blocked on external action (STAB-0650). **None are "unattempted" or "unverified claimed as done."** See `plan.md`'s own per-section summary table (bottom of the file) for the exact section-by-section breakdown, and its "Post-650 Follow-Up Findings" section for bugs found and fixed after the original 650-row backlog was substantially closed. `NEXT.md` tracks the specific next task to pick up, if any (as of this writing, there is no open stabilization-plan backlog left — see `NEXT.md` §1).
+Legacy note: earlier revisions of this file tracked a 650/723-row `STAB-XXXX`
+gate scheme (Gate 0–6). That backlog is archived in
+`docs/history/plan_stabilization_master.md`; its status is superseded by
+`plan.md`.
 
 ---
 
@@ -70,6 +73,6 @@ Sections S1-S12 (referenced in commit history and early planning docs) predate t
 
 ## Where to Look Next
 
-- **`plan.md`** — the full 650-task backlog (STAB-0001 through STAB-0650), the authoritative per-task status.
+- **`plan.md`** — the single active backlog (`AUD-###` audit findings + `SYS-###` workstream tasks), the authoritative per-task status.
 - **`NEXT.md`** — short, operational: current status, current blocker (if any), and the exact next task to pick up.
 - **`MC3_FORMAT.md`** — the format specification, including per-feature implementation status notes.

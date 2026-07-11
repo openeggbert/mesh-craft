@@ -9,23 +9,9 @@ promise of exact chronological order within each entry.
 
 Currently in an active **stabilization phase**: fixing and test-covering
 what already exists rather than adding features. See `STABILIZATION.md`
-for the policy and `plan.md` for the full 650-task backlog
-(`STAB-0001`–`STAB-0650`, sectioned S0–S20).
-
-**Note on this section's title:** `plan.md`'s own verification text for
-this file asks for "completed feature groups (A–N), stabilization groups
-(S1–S12)" — that's the *original* pre-replan terminology. It doesn't map
-onto anything findable in this repo's actual history (git log only shows
-lettered feature groups `E` through `T`, not `A`–`D`, and the
-stabilization sections were renumbered `S0`–`S20` during a 2026-06-27
-replan — see `STABILIZATION.md`'s "Historical Note"). This changelog
-uses what's actually verifiable in `git log` instead of reviving stale
-labels.
-
-As of this writing: **194 ✅ done, 3 🟡 partial, 136 🧪 has a plan but
-not executed, 317 📋 not started** out of 650 `STAB-XXXX` tasks (see
-`plan.md`'s summary table for the exact per-section breakdown, or
-`NEXT.md` for the current session-to-session status).
+for the quality gates and `plan.md` for the active backlog. Live task
+counts are tracked in `plan.md`/`NEXT.md`, not duplicated here (they went
+stale the last time they were).
 
 Highlights from the stabilization phase so far:
 - Full XML round-trip test coverage for all 10 primitive types and all
