@@ -56,10 +56,20 @@ cmake -S . -B cmake-build-debug -G Ninja
 ninja -C cmake-build-debug
 ```
 
-### Build with SDL_RENDERER backend
+### Graphics backend (editor GUI requires EASYGL)
+
+`MESH_CRAFT_GRAPHICS_BACKEND` selects the **CNA engine** backend
+(`EASYGL` | `SDL_RENDERER` | `BGFX` | `VULKAN`, default `EASYGL`). It is **not**
+the editor GUI backend: the MeshCraft editor's ImGui layer is hard-wired to
+OpenGL/GLES3, so the **GUI editor only renders under `EASYGL`** (desktop GL, or
+its WebGL2 variant on Emscripten). Building with `SDL_RENDERER`/`BGFX`/`VULKAN`
+compiles, but the editor UI will not render (a configure-time warning says so);
+those backends are for CNA-level experimentation only. The CNA-free CLI tools
+(`mc3togltf`, `mc3tomcb`) do not depend on the backend at all.
 
 ```sh
-cmake -S . -B cmake-build-debug -G Ninja -DMESH_CRAFT_GRAPHICS_BACKEND=SDL_RENDERER
+# Working editor (default):
+cmake -S . -B cmake-build-debug -G Ninja -DMESH_CRAFT_GRAPHICS_BACKEND=EASYGL
 ninja -C cmake-build-debug
 ```
 

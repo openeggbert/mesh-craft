@@ -20,14 +20,26 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 # Graphics backend selection
 # -----------------------------------------------------------------------------
 #
-# Override with:
-#   cmake -S . -B build -DMESH_CRAFT_GRAPHICS_BACKEND=SDL_RENDERER
-#   cmake -S . -B build -DMESH_CRAFT_GRAPHICS_BACKEND=EASYGL
+# This variable selects the CNA *engine* backend. IMPORTANT: it is NOT the
+# MeshCraft editor GUI backend. The editor's ImGui layer is hard-wired to
+# OpenGL/GLES3 (ImGui_ImplOpenGL3 + ImGui_ImplSDL3_InitForOpenGL +
+# SDL_GL_GetCurrentContext, see src/MeshCraft/MeshCraftApplication.cpp), so the
+# GUI editor only renders under a GL context — i.e. EASYGL (desktop GL) or its
+# Emscripten WebGL2 variant. SDL_RENDERER / BGFX / VULKAN configure CNA's engine
+# but leave the editor UI unable to render (no matching ImGui backend, no GL
+# context). Use them only for CNA-level experimentation or the CNA-free CLI
+# tools (mc3togltf / mc3tomcb), which don't depend on the backend at all.
 #
-# Supported: SDL_RENDERER, EASYGL, BGFX, VULKAN
+# Override with:
+#   cmake -S . -B build -DMESH_CRAFT_GRAPHICS_BACKEND=EASYGL   # editor GUI works
+#   cmake -S . -B build -DMESH_CRAFT_GRAPHICS_BACKEND=SDL_RENDERER  # CNA engine only
+#
+# Accepted (CNA engine): SDL_RENDERER, EASYGL, BGFX, VULKAN.
+# Functional for the MeshCraft editor GUI: EASYGL only.
 # -----------------------------------------------------------------------------
 
-set(MESH_CRAFT_GRAPHICS_BACKEND "EASYGL" CACHE STRING "MeshCraft graphics backend")
+set(MESH_CRAFT_GRAPHICS_BACKEND "EASYGL" CACHE STRING
+        "CNA engine backend. The editor GUI only renders on EASYGL.")
 set_property(CACHE MESH_CRAFT_GRAPHICS_BACKEND PROPERTY STRINGS
         SDL_RENDERER EASYGL BGFX VULKAN)
 
@@ -50,7 +62,22 @@ if(NOT MESH_CRAFT_GRAPHICS_BACKEND_UPPER MATCHES "^(SDL_RENDERER|EASYGL|BGFX|VUL
             "Use SDL_RENDERER, EASYGL, BGFX, or VULKAN.")
 endif()
 
-message(STATUS "MeshCraft graphics backend: ${MESH_CRAFT_GRAPHICS_BACKEND_UPPER}")
+message(STATUS "MeshCraft graphics backend (CNA engine): ${MESH_CRAFT_GRAPHICS_BACKEND_UPPER}")
+
+# Gate C truthfulness: the editor GUI only renders on EASYGL. Warn loudly for any
+# other backend so a non-functional editor build is never produced silently. The
+# CNA-free CLI tools are unaffected. Set MESH_CRAFT_SILENCE_BACKEND_WARNING=ON to
+# suppress this when you are deliberately building CNA-only / a CLI-only target.
+if(NOT MESH_CRAFT_GRAPHICS_BACKEND_UPPER STREQUAL "EASYGL"
+        AND NOT MESH_CRAFT_SILENCE_BACKEND_WARNING)
+    message(WARNING
+        "MESH_CRAFT_GRAPHICS_BACKEND='${MESH_CRAFT_GRAPHICS_BACKEND_UPPER}' selects the "
+        "CNA engine backend, but the MeshCraft *editor GUI* is hard-wired to OpenGL/GLES3 "
+        "(ImGui_ImplOpenGL3). Under this backend the editor will build but its UI will NOT "
+        "render (no GL context / no matching ImGui backend). Use EASYGL for a working editor; "
+        "the CNA-free CLI tools (mc3togltf, mc3tomcb) work under any backend. "
+        "Set -DMESH_CRAFT_SILENCE_BACKEND_WARNING=ON to silence this.")
+endif()
 
 if(MESH_CRAFT_GRAPHICS_BACKEND_UPPER STREQUAL "SDL_RENDERER")
     set(CNA_BACKEND_SDL_RENDERER ON  CACHE BOOL "" FORCE)
