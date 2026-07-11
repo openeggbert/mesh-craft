@@ -2395,6 +2395,42 @@ static void testPrefsPersistenceRoundTrip()
     std::filesystem::remove(path, ec);
 }
 
+// AUD-032: loadPrefsAlg previously assigned raw stof/stoi values with no
+// bounds, unlike production loadPrefs() (MeshCraftApplication_FileOps.cpp),
+// which clamps every field to the widest range any slider UI allows -- a
+// hand-edited prefs.ini could set e.g. a negative snapScale that no UI
+// control could ever produce. Writes every field out of its documented
+// clamp range and asserts each lands at the boundary, matching production's
+// bounds exactly (kept in sync by hand, see loadPrefsAlg's own comment).
+static void testPrefsLoadClampsOutOfRangeValues()
+{
+    static int tmpIdx = 0;
+    auto path = std::filesystem::temp_directory_path() /
+                ("mc3_prefs_outofrange_" + std::to_string(tmpIdx++) + ".ini");
+    std::error_code ec;
+    {
+        std::ofstream f(path);
+        f << "autoSaveInterval=99999\n";  // clamp [0, 300]
+        f << "snapTranslate=-5\n";        // clamp [0.01, 100]
+        f << "snapRotate=0\n";            // clamp [1, 180]
+        f << "snapScale=-5\n";            // clamp [0.01, 10]
+        f << "gridSpacing=0\n";           // clamp [0.1, 10]
+        f << "theme=99\n";                // clamp [0, 2]
+    }
+
+    PrefsAlg p;
+    loadPrefsAlg(path, p);
+
+    CHECKF(p.autoSaveInterval, 300.0f, "prefs: autoSaveInterval=99999 clamped to 300.0 (AUD-032)");
+    CHECKF(p.snapTranslate,    0.01f,  "prefs: snapTranslate=-5 clamped to 0.01 (AUD-032)");
+    CHECKF(p.snapRotate,       1.0f,   "prefs: snapRotate=0 clamped to 1.0 (AUD-032)");
+    CHECKF(p.snapScale,        0.01f,  "prefs: snapScale=-5 clamped to 0.01 (AUD-032)");
+    CHECKF(p.gridSpacing,      0.1f,   "prefs: gridSpacing=0 clamped to 0.1 (AUD-032)");
+    CHECK(p.theme == 2, "prefs: theme=99 clamped to 2 (AUD-032)");
+
+    std::filesystem::remove(path, ec);
+}
+
 static void testPrefsLoadIgnoresMissingFile()
 {
     PrefsAlg p; // defaults
@@ -3377,6 +3413,7 @@ int main()
     testKeybindingPersistenceRoundTrip();
     testKeybindingsLoadSkipsGarbageLines();
     testPrefsPersistenceRoundTrip();
+    testPrefsLoadClampsOutOfRangeValues();
     testPrefsLoadIgnoresMissingFile();
     testPrefsLoadSkipsMalformedLines();
     testMacroSaveLoadRoundTrip();

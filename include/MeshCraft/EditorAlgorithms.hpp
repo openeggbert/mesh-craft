@@ -1668,12 +1668,18 @@ inline void loadPrefsAlg(const std::filesystem::path& path, PrefsAlg& p)
         std::string key = line.substr(0, eq);
         std::string val = line.substr(eq + 1);
         try {
-            if      (key == "autoSaveInterval") p.autoSaveInterval = std::stof(val);
-            else if (key == "snapTranslate")    p.snapTranslate    = std::stof(val);
-            else if (key == "snapRotate")       p.snapRotate       = std::stof(val);
-            else if (key == "snapScale")        p.snapScale        = std::stof(val);
-            else if (key == "gridSpacing")      p.gridSpacing      = std::stof(val);
-            else if (key == "theme")            p.theme            = std::stoi(val);
+            // AUD-032: clamped to the same bounds production loadPrefs()
+            // (MeshCraftApplication_FileOps.cpp) uses -- the widest range
+            // any slider UI for this value allows -- so a hand-edited
+            // prefs.ini can't set a value neither slider could ever reach,
+            // e.g. 0 or negative snapScale. Values here must be kept in
+            // sync with loadPrefs() by hand; there is no shared constant.
+            if      (key == "autoSaveInterval") p.autoSaveInterval = std::clamp(std::stof(val), 0.0f, 300.0f);
+            else if (key == "snapTranslate")    p.snapTranslate    = std::clamp(std::stof(val), 0.01f, 100.0f);
+            else if (key == "snapRotate")       p.snapRotate       = std::clamp(std::stof(val), 1.0f, 180.0f);
+            else if (key == "snapScale")        p.snapScale        = std::clamp(std::stof(val), 0.01f, 10.0f);
+            else if (key == "gridSpacing")      p.gridSpacing      = std::clamp(std::stof(val), 0.1f, 10.0f);
+            else if (key == "theme")            p.theme            = std::clamp(std::stoi(val), 0, 2);
         } catch (...) {}
     }
 }
