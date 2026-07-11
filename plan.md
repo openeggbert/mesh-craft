@@ -84,7 +84,7 @@ P1s already being fixed in git history. This session:
 
    **Net across all 63 AUD-### rows (57 original + 6 session-2 additions,
    the 6th — AUD-060 — found and fixed while testing AUD-002):
-   31 DONE, 30 TODO, 2 DEFERRED** — recompute with
+   32 DONE, 29 TODO, 2 DEFERRED** — recompute with
    `python3 test/validate_plan_consistency.py . <build-dir>` rather than
    trusting this number as time passes.
 5. Archived `plan_deep_audit.md` (all 57 of its own tasks were already
@@ -106,10 +106,10 @@ authoritative live state is always the AUD/SYS task table plus
 3. **AUD-059 (P1/W1)** — total-document allocation budget (not just per-field).
 4. **AUD-036b (P0/W9)** — undo transaction abstraction + full triage (large;
    incremental).
-5. **AUD-003 (P3/W0)**, **AUD-015 (P2/W6)** — memory-safety cleanup
-   (`reinterpret_cast` alignment, MCB tag validation).
-6. **AUD-027/AUD-028 (P1/W7)** — pivot+translation and rotation-quaternion
+5. **AUD-027/AUD-028 (P1/W7)** — pivot+translation and rotation-quaternion
    animation export correctness.
+6. **AUD-015 (P2/W6)** — extend `expectTag` tag validation to the other 27
+   `read*` deserializers (`readObject` done; see its status note).
 7. Remaining `TODO` AUD-### rows by severity, then SYS-### rows.
 
 ---
@@ -263,11 +263,13 @@ DONE marker without checking its cited commit/verify command.
 - **Status note:** Added an explicit `checkIndex()` bounds check on vertex_index/normal_index/texcoord_index before every `attrib.vertices`/`normals`/`texcoords` subscript, throwing a clear "index N out of range" error that the existing `buildMesh()` try/catch turns into a "Warning:" + skipped node (same pattern as the other malformed-OBJ cases, STAB-0630). Regression fixture `test/obj_malformed_oob_positive.obj` (a triangle face referencing a vertex index far beyond the file's vertex count) wired into the existing `obj_robustness_test.py`/`export_stats_test.py` harness. While building this fixture, found and fixed a real, separate bug this exposed — see `AUD-060`.
 - **Blocked:** Confidence is PLAUSIBLE: proving an actual OOB requires confirming tinyobjloader passes through out-of-range indices, and tinyobjloader is vendored under _deps (out of audit scope). The first-party missing bounds check is certain; the trigger depends on loader behavior.
 
-### AUD-003 `[TODO]` `P3` `W0` · glTF re-read type-puns via reinterpret_cast from a byte vector (strict-aliasing/alignment UB)
+### AUD-003 `[DONE]` `P3` `W0` · glTF re-read type-puns via reinterpret_cast from a byte vector (strict-aliasing/alignment UB)
 - **Component:** src/MeshCraft/MeshCraftApplication_FileOps.cpp (ReadVec3/ReadVec2/ReadIndex, OBJ export)
 - **Evidence:** FileOps.cpp:370 `const float* f = reinterpret_cast<const float*>(&buf.data[offset]);` and FileOps.cpp:379 (ReadVec2) read `float` objects out of `buf.data`, which is tinygltf's `std::vector<unsigned char>` where no `float` object was ever created (reading a value through a type that doesn't match the object's dynamic type is UB), and `offset = bv.byteOffset + acc.byteOffset + i*stride` is not guaranteed 4-byte aligned. ReadIndex is worse: FileOps.cpp:389 `reinterpret_cast<const uint16_t*>(&buf.data[offset])[i]` and :390 `reinterpret_cast<const uint32_t*>(&buf.data[offset])[i]` perform potentially-unaligned 2/4-byte reads. The buffer here is a self-generated GLB re-read in runObjExport (FileOps.cpp:466-473), so it is trusted and works on mainstream x86/ARM in practice, but the construct is technically undefined and non-portable.
 - **Outcome:** Read the bytes into a properly-typed local via std::memcpy (e.g. `float f; std::memcpy(&f, &buf.data[offset], sizeof f);`) instead of reinterpret_cast+deref, which is well-defined and handles misalignment.
 - **Tests:** N/A behavioral (self-generated trusted data); a UBSan/ASan run over an OBJ export would flag any alignment issue if a platform enforces it.
+- **Resolved:** commit `a0c1d8a` — verify: `ctest -R editor_export_test`
+- **Status note:** All three functions (ReadVec3/ReadVec2/ReadIndex) now memcpy into a properly-typed local instead of reinterpret_cast+deref. Zero behavior change (verified via editor_export_test, which exercises this exact re-read path).
 - **Blocked:** Low severity: operates only on MeshCraft's own freshly-written GLB, not on untrusted input, so no observed misbehavior on supported platforms.
 
 ### AUD-004 `[DONE]` `P0` `W1` · MC3 parser accepts NaN/Inf floats unchecked; they flow into geometry and produce a spec-invalid glTF reported as success
@@ -352,12 +354,13 @@ DONE marker without checking its cited commit/verify command.
 - **Outcome:** Track the in-flight worker and, on shutdown, either join it (with a bounded timeout) or ensure the process does not begin static/OpenSSL teardown while a request thread is live; at minimum document/guard the exit ordering.
 - **Tests:** Start a request against a slow/blocking mock endpoint, trigger app exit mid-request, and run under TSan/ASan to confirm no thread is executing library code during static destruction.
 
-### AUD-015 `[TODO]` `P2` `W6` · Known-key value decoding ignores the declared tag byte (no type validation on the hot read path)
+### AUD-015 `[TODO]` `P2` `W6` · Known-key value decoding ignores the declared tag byte (no type validation on the hot read path) — PARTIAL: readObject done, 27 sibling read* functions remain
 - **Component:** mcb/src/McbReader.cpp — readObject/readDocument and all read* deserializers
 - **Evidence:** For every recognized key the reader reads the tag byte but never validates it against the expected type; it decodes the value purely by key name. readObject reads `uint8_t tag = rU8(in);` (McbReader.cpp:383) then for "type" does `obj->type = static_cast<Mc3::ObjectType>(rI32(in));` (line 384) and for "visible" does `obj->visible = rU8(in) != 0;` (line 388) — `tag` is used ONLY in the final `else skipValue(in, tag);` (line 446), never checked for known keys. Same pattern in every read* helper (e.g. readTransform 206-209, readMaterial 608-622). So a file whose known field carries a mismatched tag (e.g. key "visible" with tag TAG_STR + a 4-byte length) is not rejected at the field; the reader reads by the wrong type and desyncs the stream. There is also no checksum in the header (McbFormat.hpp:6-20), so this type info is the only per-field integrity signal and it is discarded.
 - **Outcome:** For recognized keys, verify the read tag equals the expected tag before decoding (throw "MCB: type mismatch for key ..." otherwise), so a corrupt/hostile tag/value mismatch is detected at the field instead of silently desyncing into a wrong-but-parsed document. Bounds already hold (rRawStr/rU32Bounded), so this is a strictness/integrity fix, not a crash fix.
 - **Tests:** Add a corruption test in mcb_roundtrip_test.cpp: hand-write a stream with a known key (e.g. "visible") carrying a wrong tag and assert loadFromBinary throws a type-mismatch error rather than succeeding or throwing an unrelated 'unknown tag' later.
 - **Verify note:** Evidence path correction: the header is at mcb/include/MeshCraft/Mcb/McbFormat.hpp (not bare "McbFormat.hpp:6-20"); the no-checksum claim is still accurate (lines 6-32 define only MAGIC/VERSION/MIN_SUPPORTED_VERSION/FLAG_COMPRESSED and TAG_* constants). The readTransform "206-209" and readMaterial "608-622" ranges point at the value-decode lines; the tag-read lines are 205 and 607 respectively. Severity P2 is appropriate and not inflated given the bounded (exception-only) impact.
+- **Status note (partial, commit `a0c1d8a`):** Added `expectTag(got, want, key)` and applied it to every field in `readObject` (the function this finding's evidence literally cites — all scalar/TAG_OBJ/TAG_ARR/TAG_MAP branches: type, name, id, material, visible, collision, layer, isCutter, definition, meshSource, materialOverride, transform, deform, primitive, csgOperation, extrude, uvMapping, tags, variantDefs, metadata, states, children). Verified with `mcb_roundtrip_test`'s new `testKnownKeyTagMismatchRejected`/`testKnownKeyTagMatchStillLoads`. **NOT yet done:** the same pattern in the other 27 `read*` deserializers (readTransform, readPrimitive, readDeform, readCsgOp, readCrossSection, readPathPoint, readPath, readExtrude, readUvMapping, readObjectState, readTexture, readSvgTexture, readObjectOverride, readSceneState, readTrigger, readSound, readMusic, readScript, readEmbed, readMaterial, readLight, readCamera, readFog, readEnvironment, readKeyframe, readChannel, readAction, readDocument) — each has the identical unchecked-tag pattern and needs the identical mechanical fix. Left `[TODO]` rather than `[DONE]` because most of the cited surface area is still open; verify with `grep -c "expectTag(" mcb/src/McbReader.cpp` (currently 24 call sites, all in `readObject`; each of the other 27 `read*` functions currently contributes 0).
 
 ### AUD-016 `[TODO]` `P3` `W6` · RecursionGuard comment claims two independent depth counters, but both recursion trees share one
 - **Component:** mcb/src/McbReader.cpp — RecursionGuard
