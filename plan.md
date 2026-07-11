@@ -85,7 +85,7 @@ P1s already being fixed in git history. This session:
    **Net across all 64 AUD-### rows (57 original + 7 session-2 additions,
    the 7th — AUD-036c — split off from AUD-036b so its verified-done portion
    could be marked DONE without also claiming its still-open portion):
-   50 DONE, 12 TODO, 2 DEFERRED** — recompute with
+   51 DONE, 11 TODO, 2 DEFERRED** — recompute with
    `python3 test/validate_plan_consistency.py . <build-dir>` rather than
    trusting this number as time passes.
 5. Archived `plan_deep_audit.md` (all 57 of its own tasks were already
@@ -520,12 +520,14 @@ DONE marker without checking its cited commit/verify command.
 - **Resolved:** commit `d057728` — verify: `ctest -R mc3_commands`
 - **Status note:** Added `inst->layer = src->layer;` right after the `tags` copy in `convertToDefinitionAlg`, exactly matching `exportSubtreeAsTemplate`'s pattern. Confirmed this Alg function is a genuine production call site (`MeshCraftApplication::convertToDefinition` calls it directly), not one of AUD-031's test-only mirrors, so this fixes the real editor behavior, not just a test double. Extended `testConvertToDefinition` with `src->layer = "bg"` and an assertion the returned Instance keeps it.
 
-### AUD-035 `[TODO]` `P3` `W4` · Batch-rename live preview uses a parallel rename copy that ignores lockedIds, so it shows locked objects being renamed when Apply skips them
+### AUD-035 `[DONE]` `P3` `W4` · Batch-rename live preview uses a parallel rename copy that ignores lockedIds, so it shows locked objects being renamed when Apply skips them
 - **Component:** src/MeshCraft/MeshCraftApplication_UiOverlays.cpp:564 vs include/MeshCraft/EditorAlgorithms.hpp:152
 - **Evidence:** The preview loop (UiOverlays.cpp:564-569) calls applyRenamePattern for the first 3 selected objects unconditionally and displays "old → new" for each. The actual apply, batchRenameObjects (EditorAlgorithms.hpp:152-164), skips locked objects: `if (lockedIds.count(s->id)) { ++idx; continue; }` — a locked object keeps its name. So a locked object in the top 3 of the selection shows a rename in the preview that will not occur on Apply. (Index numbering itself matches: both advance the counter for every object, preview uses i+1, apply increments idx even for locked.)
 - **Outcome:** Have the preview consult lockedIds_ and render locked objects as unchanged (or grey "(locked)"), or drive the preview through the same batchRenameObjects code path used by Apply.
 - **Tests:** Manual/UI: select a locked + unlocked object, open Batch Rename, confirm the locked row shows no rename.
 - **Verify note:** The EditorAlgorithms.hpp line citation is imprecise. The batchRenameObjects function spans lines 129-150 (not 152-164); the locked-skip `if (lockedIds.count(s->id)) { ++idx; continue; }` is at line 138. Line 152 is actually the "// ── Find-replace helpers ──" comment. Corrected component: src/MeshCraft/MeshCraftApplication_UiOverlays.cpp:564 vs include/MeshCraft/EditorAlgorithms.hpp:138. Everything else in the finding is accurate; severity P3 stands.
+- **Resolved:** commit `75390a5` — verify: build MeshCraft, manually open Batch Rename with a locked + unlocked object selected (P3/UI-only per Tests field, no automated test)
+- **Status note:** Took the first Outcome option: the preview loop now checks `lockedIds_.count(obj->id)` (the same set Apply consults) and renders "(locked, skipped)" instead of a rename arrow for that row; the remaining rows' `i + 1` index numbering is unaffected since it already matched Apply's unconditionally-advancing `idx` per-position. Deliberately did NOT add a new EditorAlgorithms.hpp pure-function mirror of this preview logic — AUD-031 already flags that file's existing test-only mirrors as a duplication problem, and adding another one for a P3 UI-preview nicety would repeat the exact anti-pattern that finding is about.
 
 ### AUD-036 `[DONE]` `P0` `W9` · Undo never records Drag/Color edits: `if(IsItemActivated()) pushUndo()` inside the `if(DragFloat/ColorEdit)` block is dead code (transforms, all primitive dims, lights, camera, fog, material, keyframes — none undoable; also breaks redo-invalidation → silent data loss)
 - **Component:** src/MeshCraft/Scene/PropertiesPanel.cpp, src/MeshCraft/MeshCraftApplication_UiLeftPanel.cpp, src/MeshCraft/MeshCraftApplication_Anim.cpp
