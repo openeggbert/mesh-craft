@@ -2,6 +2,7 @@
 
 #include "MeshCraft/AiAssistant.hpp"
 #include "MeshCraft/ModelRegistry.hpp"
+#include "MeshCraft/Editor/ActiveTool.hpp"
 #include "MeshCraft/Editor/EditorCamera.hpp"
 #include "MeshCraft/Editor/EditorTool.hpp"
 #include "MeshCraft/Editor/SelectionManager.hpp"
@@ -37,7 +38,9 @@
 
 namespace MeshCraft {
 
-enum class ActiveTool { Select, Move, Rotate, Scale, AddBox, AddSphere, AddCylinder, AddCone, AddPlane, Measure };
+// ActiveTool and its bounds-safe activeToolName() mapping live in
+// MeshCraft/Editor/ActiveTool.hpp so they can be unit-tested without linking
+// the full editor. Included above.
 
 // H12: Macro recorder — one recorded editing step
 struct MacroStep {

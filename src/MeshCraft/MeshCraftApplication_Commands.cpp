@@ -318,8 +318,10 @@ void MeshCraftApplication::updateWindowTitle() {
     if (!currentFile_.empty())
         title += " [" + currentFile_.filename().string() + "]";
     if (modified_) title += " *";
-    const char* toolNames[] = { "Select","Move","Rotate","Scale","Add Box","Add Sphere","Add Cylinder","Add Cone","Add Plane" };
-    title += " | "; title += toolNames[static_cast<int>(activeTool_)];
+    // Bounds-safe, exhaustive mapping (MeshCraft/Editor/ActiveTool.hpp).
+    // Previously indexed a 9-element array with the 10-value ActiveTool enum,
+    // so the Measure tool read one past the end (undefined behavior).
+    title += " | "; title += activeToolName(activeTool_);
     getWindowProperty().setTitleProperty(title);
 }
 

@@ -406,6 +406,17 @@ endif()
 # -----------------------------------------------------------------------------
 
 if(MESH_CRAFT_BUILD_TESTING AND UNIX AND NOT ANDROID AND NOT EMSCRIPTEN)
+    # Pure unit test: ActiveTool enum <-> name mapping. Header-only, no CNA/GL
+    # deps, so it always builds. Regression guard for the Measure-tool
+    # out-of-bounds title read (activeToolName exhaustive switch).
+    add_executable(active_tool_test
+        ${CMAKE_CURRENT_SOURCE_DIR}/test/active_tool_test.cpp)
+    target_include_directories(active_tool_test PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/include)
+    target_compile_features(active_tool_test PRIVATE cxx_std_23)
+    add_test(NAME active_tool COMMAND active_tool_test)
+    set_tests_properties(active_tool PROPERTIES TIMEOUT 15 LABELS "unit")
+
     add_test(
         NAME smoke_test
         COMMAND bash ${CMAKE_CURRENT_SOURCE_DIR}/test/smoke_test.sh
