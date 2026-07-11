@@ -945,7 +945,8 @@ static int buildNode(ExportCtx& ctx, const Mc3Object& obj, int depth)
 
 static void addLights(tinygltf::Model& model,
                       const std::vector<Mc3Light>& lights,
-                      std::vector<int>& outLightNodeIndices)
+                      std::vector<int>& outLightNodeIndices,
+                      float unitScale)
 {
     if (lights.empty()) return;
 
@@ -979,8 +980,10 @@ static void addLights(tinygltf::Model& model,
         }
         lo["type"] = tinygltf::Value(typeStr);
 
+        // Range is a distance, so it scales with the document's unit scale —
+        // matching geometry and camera positions (STAB-0693).
         if (light.range > 0.0f)
-            lo["range"] = tinygltf::Value(static_cast<double>(light.range));
+            lo["range"] = tinygltf::Value(static_cast<double>(light.range) * unitScale);
 
         if (light.type == LightType::Spot) {
             // STAB-0692: light.angle is already a half-angle in degrees
@@ -1000,16 +1003,23 @@ static void addLights(tinygltf::Model& model,
         tinygltf::Node lnode;
         lnode.name = light.name;
 
+        // Directional lights are purely rotational (glTF ignores their
+        // position). Spot lights are BOTH positioned and aimed; point lights are
+        // positioned only. Previously spot lights took the rotation-only branch,
+        // so every spotlight exported at the world origin regardless of its
+        // authored position. Positions scale with unitScale like all geometry
+        // and camera nodes (STAB-0693).
         if (light.type == LightType::Directional || light.type == LightType::Spot) {
             auto q = directionToQuat(light.direction[0],
                                      light.direction[1],
                                      light.direction[2]);
             lnode.rotation = {q[0], q[1], q[2], q[3]};
-        } else {
+        }
+        if (light.type == LightType::Spot || light.type == LightType::Point) {
             lnode.translation = {
-                static_cast<double>(light.position[0]),
-                static_cast<double>(light.position[1]),
-                static_cast<double>(light.position[2])
+                static_cast<double>(light.position[0]) * unitScale,
+                static_cast<double>(light.position[1]) * unitScale,
+                static_cast<double>(light.position[2]) * unitScale
             };
         }
 
@@ -1474,7 +1484,7 @@ void GltfExporter::exportDocument(const Mc3Document& doc,
 
     // Lights
     std::vector<int> lightNodes;
-    addLights(model, doc.lights, lightNodes);
+    addLights(model, doc.lights, lightNodes, ctx.unitScale);
     for (int i : lightNodes) scene.nodes.push_back(i);
 
     // Cameras

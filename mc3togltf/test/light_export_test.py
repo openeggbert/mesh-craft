@@ -67,9 +67,57 @@ def main():
             check(actual is None or abs(actual - expected / 2.0) > 1e-4,
                   "spot outerConeAngle is NOT the old halved (buggy) value")
 
+        # --- Light NODE placement (regression: spot lights used to export at
+        # the world origin because they took the rotation-only branch). The
+        # light node carries the light's name, so match on that. ---
+        nodes = g.get("nodes", [])
+        by_name = {n.get("name"): n for n in nodes}
+
+        pt = by_name.get("Bulb")
+        check(pt is not None and pt.get("translation") == [1.0, 2.0, 3.0],
+              f"point light 'Bulb' node translation == [1,2,3]; got "
+              f"{pt.get('translation') if pt else None}")
+
+        sp = by_name.get("Torch")
+        check(sp is not None and sp.get("translation") == [4.0, 5.0, 6.0],
+              f"spot light 'Torch' node translation == [4,5,6] (not dropped to "
+              f"origin); got {sp.get('translation') if sp else None}")
+        check(sp is not None and "rotation" in sp,
+              "spot light node is still aimed (has a rotation)")
+
+        dr = by_name.get("Sun")
+        check(dr is not None and not dr.get("translation"),
+              "directional light 'Sun' node has no translation (rotation only)")
+
     finally:
         if os.path.exists(out):
             os.unlink(out)
+
+    # --- Unit scale: point/spot position and range scale like all geometry. ---
+    with tempfile.TemporaryDirectory() as td:
+        cm = os.path.join(td, "cm.mc3.xml")
+        with open(cm, "w") as f:
+            f.write(
+                '<mc3 version="0.3" model="cm" unit="centimeter">\n'
+                '  <lights>\n'
+                '    <point name="P" color="1 1 1" brightness="1"'
+                ' position="100 200 300" range="1000"/>\n'
+                '  </lights>\n'
+                '  <objects><box name="B" size="1 1 1"/></objects>\n'
+                '</mc3>\n')
+        out2 = os.path.join(td, "cm.gltf")
+        r2 = subprocess.run([binary, cm, out2], capture_output=True, text=True)
+        check(r2.returncode == 0, f"centimeter fixture exits 0 (stderr {r2.stderr.strip()!r})")
+        if r2.returncode == 0:
+            g2 = json.load(open(out2))
+            l2 = g2.get("extensions", {}).get("KHR_lights_punctual", {}).get("lights", [])
+            pnode = next((n for n in g2.get("nodes", []) if n.get("name") == "P"), None)
+            tr = pnode.get("translation") if pnode else None
+            check(tr is not None and all(abs(a - b) < 1e-5 for a, b in zip(tr, [1.0, 2.0, 3.0])),
+                  f"centimeter point translation scaled by 0.01 -> [1,2,3]; got {tr}")
+            check(l2 and abs(l2[0].get("range", 0) - 10.0) < 1e-6,
+                  f"centimeter point range 1000cm scaled -> 10m; got "
+                  f"{l2[0].get('range') if l2 else None}")
 
     if failures:
         print(f"\n{failures} FAILURE(S)", file=sys.stderr)
