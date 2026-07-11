@@ -90,33 +90,19 @@ void MeshCraftApplication::checkRotationConventionNotice() {
 }
 
 
+// AUD-031: loadRecentFiles/saveRecentFiles/addRecentFile were hand-copied
+// duplicates of loadRecentFilesAlg/saveRecentFilesAlg/addRecentFileAlg's
+// own logic (confirmed byte-identical); now delegate directly.
 void MeshCraftApplication::loadRecentFiles() {
-    std::ifstream f(recentFilesPath());
-    std::string line;
-    while (std::getline(f, line) && static_cast<int>(recentFiles_.size()) < kMaxRecentFiles) {
-        if (!line.empty() && std::filesystem::exists(line))
-            recentFiles_.emplace_back(line);
-    }
+    loadRecentFilesAlg(recentFilesPath(), recentFiles_, kMaxRecentFiles);
 }
 
 void MeshCraftApplication::saveRecentFiles() {
-    auto p = recentFilesPath();
-    std::error_code ec;
-    std::filesystem::create_directories(p.parent_path(), ec);
-    std::ofstream f(p);
-    for (const auto& r : recentFiles_)
-        f << r.string() << "\n";
+    saveRecentFilesAlg(recentFilesPath(), recentFiles_);
 }
 
 void MeshCraftApplication::addRecentFile(const std::filesystem::path& path) {
-    auto abs = std::filesystem::absolute(path);
-    recentFiles_.erase(
-        std::remove_if(recentFiles_.begin(), recentFiles_.end(),
-            [&](const auto& r){ return r == abs; }),
-        recentFiles_.end());
-    recentFiles_.insert(recentFiles_.begin(), abs);
-    if (static_cast<int>(recentFiles_.size()) > kMaxRecentFiles)
-        recentFiles_.resize(static_cast<size_t>(kMaxRecentFiles));
+    addRecentFileAlg(recentFiles_, path, kMaxRecentFiles);
     saveRecentFiles();
 }
 
