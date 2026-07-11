@@ -108,6 +108,15 @@ if(BUILD_TESTING)
     add_test(NAME mc3_load_policy COMMAND mc3_load_policy_test)
     set_tests_properties(mc3_load_policy PROPERTIES TIMEOUT 15 LABELS "format")
 
+    # SYS-W1-04: include bombs -- depth (bounded by Mc3LoadPolicy::
+    # maxIncludeDepth) and fan-out (bounded by the new DocumentBudget::
+    # chargeInclude); cycles are already covered by mc3_roundtrip's
+    # include_cycle_a/b.mc3.xml fixture, not duplicated here.
+    add_executable(mc3_include_bomb_test test/include_bomb_test.cpp)
+    target_link_libraries(mc3_include_bomb_test PRIVATE Mc3)
+    add_test(NAME mc3_include_bomb COMMAND mc3_include_bomb_test)
+    set_tests_properties(mc3_include_bomb PROPERTIES TIMEOUT 30 LABELS "format")
+
     # SYS-W9-02: crash-recovery mechanism (mtime comparison + Mc3Document
     # round-trip through the ".autosave" path convention that
     # MeshCraftApplication::checkForNewerAutosave()/recoverFromAutosave() rely

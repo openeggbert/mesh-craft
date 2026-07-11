@@ -84,12 +84,24 @@ static int attrCount(const XMLElement* el, const char* name, int def,
 struct DocumentBudget {
     long long totalObjects = 0;
     long long totalTessellationWeight = 0; // sum of every segments/sides/subdivisions value
+    long long totalIncludes = 0; // count of genuinely-new (non-cyclic, non-diamond-dup) <include> merges
 
     // Generous enough for any real scene (the largest checked-in stress
     // fixture sums to a few thousand) while still bounding the pathological
     // many-objects-near-the-per-field-cap case to a small multiple of that cap.
     static constexpr long long kMaxTotalObjects = 100'000;
     static constexpr long long kMaxTotalTessellationWeight = 500'000;
+
+    // SYS-W1-04: cycle detection (inProgress set) and per-chain depth
+    // (policy.maxIncludeDepth) already bound a cyclic or deep-linear
+    // <include> chain, but neither bounds FAN-OUT -- a single document
+    // directly including thousands of distinct sibling files (e.g. <include
+    // file="f0.mc3.xml"/> ... <include file="f9999.mc3.xml"/>), each of
+    // which is individually well-formed and non-cyclic. Empirically
+    // confirmed unbounded before this fix: 1500 trivial sibling includes
+    // merged successfully with no error. No legitimate scene includes
+    // anywhere near this many distinct files.
+    static constexpr long long kMaxTotalIncludes = 1'000;
 
     void chargeObject() {
         if (++totalObjects > kMaxTotalObjects)
@@ -108,7 +120,14 @@ struct DocumentBudget {
                 std::to_string(kMaxTotalTessellationWeight) +
                 ") -- rejected before allocating geometry for all of it");
     }
-    void reset() { totalObjects = 0; totalTessellationWeight = 0; }
+    void chargeInclude() {
+        if (++totalIncludes > kMaxTotalIncludes)
+            throw std::runtime_error(
+                "MC3: document exceeds the total <include> budget (" +
+                std::to_string(kMaxTotalIncludes) + ") -- rejected (a hostile "
+                "fan-out of many distinct include files?)");
+    }
+    void reset() { totalObjects = 0; totalTessellationWeight = 0; totalIncludes = 0; }
 };
 static thread_local DocumentBudget g_budget;
 
@@ -924,6 +943,11 @@ static void mergeInclude(const std::filesystem::path& includePath,
 
     if (processed.count(canonical))
         return;  // already merged via a different include path — skip silently
+
+    // AUD-006b follow-up (SYS-W1-04): charge against the fan-out budget only
+    // for a genuinely new file (past the cycle/diamond-dedup checks above),
+    // matching g_budget.chargeObject()'s charge-on-real-work discipline.
+    g_budget.chargeInclude();
 
     XMLDocument xml;
     if (xml.LoadFile(includePath.string().c_str()) != XML_SUCCESS)
