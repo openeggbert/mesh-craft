@@ -108,6 +108,15 @@ if(BUILD_TESTING)
     add_test(NAME mc3_load_policy COMMAND mc3_load_policy_test)
     set_tests_properties(mc3_load_policy PROPERTIES TIMEOUT 15 LABELS "format")
 
+    # SYS-W9-02: crash-recovery mechanism (mtime comparison + Mc3Document
+    # round-trip through the ".autosave" path convention that
+    # MeshCraftApplication::checkForNewerAutosave()/recoverFromAutosave() rely
+    # on -- see src/MeshCraft/MeshCraftApplication_FileOps.cpp).
+    add_executable(mc3_autosave_recovery_test test/autosave_recovery_test.cpp)
+    target_link_libraries(mc3_autosave_recovery_test PRIVATE Mc3)
+    add_test(NAME mc3_autosave_recovery COMMAND mc3_autosave_recovery_test)
+    set_tests_properties(mc3_autosave_recovery PROPERTIES TIMEOUT 15 LABELS "format")
+
     # editor_commands_test pulls in MeshCraft/EditorAlgorithms.hpp from the
     # MeshCraft editor's public include dir, which lives at the repo root
     # (include/) — outside the mc3/ subtree. Only build it when those
