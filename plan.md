@@ -85,7 +85,7 @@ P1s already being fixed in git history. This session:
    **Net across all 64 AUD-### rows (57 original + 7 session-2 additions,
    the 7th — AUD-036c — split off from AUD-036b so its verified-done portion
    could be marked DONE without also claiming its still-open portion):
-   40 DONE, 22 TODO, 2 DEFERRED** — recompute with
+   41 DONE, 21 TODO, 2 DEFERRED** — recompute with
    `python3 test/validate_plan_consistency.py . <build-dir>` rather than
    trusting this number as time passes.
 5. Archived `plan_deep_audit.md` (all 57 of its own tasks were already
@@ -517,11 +517,13 @@ DONE marker without checking its cited commit/verify command.
 - **Resolved:** commit `737af77` — verify: `ctest -R undo_snapshot_lint`
 - **Status note:** The specific dead-pattern bug (undo snapshot nested inside Drag/ColorEdit changed-block) is fixed at all 80 identified sites, with a source-lint regression guard. This does NOT constitute a full undo-system audit/rearchitecture -- see AUD-036b for the broader undo-transaction work the adversarial re-review requested (pre-mutation capture verification for all widget types, central transaction abstraction, frame-driven behavioral test, full undo_coverage_audit.py triage).
 
-### AUD-037 `[TODO]` `P2` `W9` · GLB/GLTF export reports unqualified 'Exported' success in the UI even when the exporter counted warnings or skipped geometry (warnings only go to stdout)
+### AUD-037 `[DONE]` `P2` `W9` · GLB/GLTF export reports unqualified 'Exported' success in the UI even when the exporter counted warnings or skipped geometry (warnings only go to stdout)
 - **Component:** src/MeshCraft/MeshCraftApplication_FileOps.cpp, mc3togltf/src/GltfExporter.cpp
 - **Evidence:** src/MeshCraft/MeshCraftApplication_FileOps.cpp:282-297 builds `statusMsg = "Exported " + ... + " (" + uniqueMeshes + " meshes"...)` and unconditionally `setStatusMsg(statusMsg);`. The warning count is emitted only to std::cout at line 300 (`... << s.warnings << " warnings"`), never surfaced in the on-screen status. The exporter drops geometry while merely incrementing counters: GltfExporter.cpp:846-849 approximate-CSG path (`ctx.stats.warnings++`) exports children as geometrically-incorrect separate meshes, and GltfExporter.cpp:838-840 `if (!csgData.empty()) addMeshDataToGltf(...)` else silently emits no mesh and skips children — in both cases the editor still shows a green 'Exported N meshes' with no indication the output is partial/approximate.
 - **Outcome:** Surface s.warnings (and approximate-CSG usage) in the user-facing status message and mark it as a warning-colored status when warnings>0, so a partial/approximate export is not presented as a clean success.
 - **Tests:** Export a scene containing an unsupported/approximate CSG node with allowApproximateCSG and assert the returned status string is flagged as a warning and includes the warning count.
+- **Resolved:** commit `d882237` — verify: `ctest -R editor_export_test`
+- **Status note:** `runGltfExport()` now appends `" — N warning(s) (export may be incomplete or approximate; see console)"` to `statusMsg` when `s.warnings > 0`, and passes that as `setStatusMsg(statusMsg, hasWarnings)` — reusing the existing `isError` red styling (`MeshCraftApplication_UiOverlays.cpp:301`) rather than adding a third color tier, consistent with how this class already uses `isError=true` for non-fatal cautions elsewhere (e.g. `MeshCraftApplication_Macro.cpp`). This directly builds on AUD-026's fix (`79cc9c0`), which made `stats.warnings` actually count every warning path — without that fix this status text would still have undercounted. Verified via `editor_export_test.py`'s existing `--export` CLI flag (runs the real `runGltfExport()` codepath): house.mc3.xml's known unnamed-ambient-light warning (AUD-026) now produces the exact expected status text in stdout, not just the pre-existing trailing "N warnings" tally.
 
 ### AUD-038 `[DEFERRED]` `P3` `W9` · Undo history is a bounded 20-entry whole-document deep-copy stack; oldest entries are silently dropped (informational — answers the audit question, by-design)
 - **Component:** include/MeshCraft/MeshCraftApplication.hpp, src/MeshCraft/MeshCraftApplication_Commands.cpp
