@@ -466,6 +466,16 @@ if(MESH_CRAFT_BUILD_TESTING AND UNIX AND NOT ANDROID AND NOT EMSCRIPTEN)
                          "${CMAKE_CURRENT_SOURCE_DIR}/test/undo_snapshot_lint_test.py"
                          "${CMAKE_CURRENT_SOURCE_DIR}")
         set_tests_properties(undo_snapshot_lint PROPERTIES TIMEOUT 15 LABELS "lint")
+
+        # plan.md/NEXT.md mechanical self-consistency: unique task IDs, DONE
+        # counts match the summary line, DONE tasks cite a commit, the priority
+        # queue never points at a DONE task, no machine-specific absolute paths.
+        add_test(NAME plan_consistency
+                 COMMAND "${PYTHON3_FOR_LINT}"
+                         "${CMAKE_CURRENT_SOURCE_DIR}/test/validate_plan_consistency.py"
+                         "${CMAKE_CURRENT_SOURCE_DIR}"
+                         "${CMAKE_BINARY_DIR}")
+        set_tests_properties(plan_consistency PROPERTIES TIMEOUT 30 LABELS "lint")
     endif()
 
     add_test(
