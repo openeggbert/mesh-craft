@@ -189,9 +189,29 @@ Mandated workstream items not tied to a single audit finding.
   bridge — with narrow interfaces, not another god object.
 
 ### W5 — MC3 governance
-- **SYS-W5-01** `[TODO]` `P2` — Machine-readable field matrix (XSD / model /
-  reader / writer / MCB / UI / renderer / exporter / examples / tests); CI-fail on
-  a field present in one layer but missing another.
+- **SYS-W5-01** `[DONE]` `P2` — Machine-readable field matrix, `test/field_matrix.py`,
+  registered as a real pass/fail `ctest` gate (`field_matrix`, `LABELS "lint"`) —
+  CI itself stays parked (`AUD-052`). Hard-gates 6 layers (XSD attributes /
+  C++ model / XML reader / XML writer / MCB reader / MCB writer) with a
+  documented, triaged allowlist for intentional asymmetries (naming-
+  convention differences, element-vs-attribute representation, tag-inferred
+  enums, delimited-string-vs-array shape). Scoped down from the original
+  9-layer wishlist: XSD *elements* and the examples/fixtures layer are
+  informational-only (not gating — see the script's own docstring for why:
+  XSD elements aren't attribute-shaped, and example files are intentionally
+  sparse by design); the exporter layer (`mc3togltf/src/GltfExporter.cpp`) is
+  extracted via a best-effort variable-name-prefix heuristic and kept
+  informational-only, not hard-gated, due to a known false-positive source
+  (a local `prim` variable is a glTF-JSON object, not `Mc3Primitive`); UI
+  (`PropertiesPanel.cpp`) and the renderer are not extracted at all — spot-
+  checked and found to use short/generic local variable names with no
+  reliable name-to-Mc3-type correlation, so a regex extractor there would be
+  noise, not signal. Running the tool against the tree found 0 real
+  production bugs and 3 bugs in the extraction tool itself (regex missed
+  space-before-paren call styles and one `sk`-named loop variable), all
+  fixed; the 53 flagged asymmetries were individually verified against the
+  actual reader/writer source and allowlisted with per-field reasons.
+  Commit `e728b62`. Verify: `ctest --test-dir cmake-build-debug -R field_matrix`.
 - **SYS-W5-02** `[TODO]` `P2/W13` — Document the 5 elements + 12 attributes
   `xsd_docs_diff.py` still reports missing from `MC3_FORMAT.md`: `area`,
   `background_texture`, `deform`, `skybox_texture`, `uv_mapping`; `aspect`,
