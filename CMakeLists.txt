@@ -183,6 +183,51 @@ set(EASYGL_BUILD_EXAMPLES   OFF CACHE BOOL "" FORCE)
 # optional CNA feature this project doesn't use.
 set(CNA_ENABLE_NET OFF CACHE BOOL "" FORCE)
 
+# -----------------------------------------------------------------------------
+# AUD-057: sibling-repo revision check (informational, configure-time)
+#
+# ../cna and ../sharp-runtime are separate git repositories consumed by
+# relative path (not a submodule or pinned dependency) -- whatever happens to
+# be checked out there is what gets built. That is non-reproducible and,
+# per README.md, has previously broken a from-scratch rebuild without
+# warning. A hard version PIN with a FATAL_ERROR on mismatch is deliberately
+# NOT used here: CNA is developed by a separate process (see CLAUDE.md --
+# "No CNA changes without owner permission. A separate Claude Code instance
+# handles CNA.") and legitimately moves ahead of whatever revision this
+# project last verified against; failing configure on every such move would
+# block that work. Instead this prints a non-fatal heads-up so a drifted
+# sibling revision is the first, not the last, suspect when something breaks.
+# Update the two *_VERIFIED_SHA values below after re-running `ctest` against
+# a newer sibling checkout and confirming it still passes.
+# -----------------------------------------------------------------------------
+set(MESHCRAFT_CNA_VERIFIED_SHA "d0c21ee613ebd8f8b0055f7868103dd5c5c30fc7")
+set(MESHCRAFT_SHARP_RUNTIME_VERIFIED_SHA "5cdaafb2bace46dce5393da21dad9ff9f8ad3c58")
+
+function(meshcraft_check_sibling_revision name path expected_sha)
+    if(EXISTS "${path}/.git")
+        execute_process(
+            COMMAND git -C "${path}" rev-parse HEAD
+            OUTPUT_VARIABLE _actual_sha
+            OUTPUT_STRIP_TRAILING_WHITESPACE
+            RESULT_VARIABLE _git_rc
+            ERROR_QUIET
+        )
+        if(_git_rc EQUAL 0 AND NOT _actual_sha STREQUAL expected_sha)
+            message(WARNING
+                "AUD-057: ${name} at '${path}' is checked out at ${_actual_sha}, "
+                "not the revision (${expected_sha}) MeshCraft's own test "
+                "suite was last verified against. Not necessarily broken -- "
+                "${name} is developed independently -- but if the build or "
+                "tests fail, this drift is a likely first suspect. Re-verify "
+                "with `ctest` and update MESHCRAFT_${name}_VERIFIED_SHA in "
+                "CMakeLists.txt once confirmed working.")
+        endif()
+    endif()
+endfunction()
+
+meshcraft_check_sibling_revision(CNA "${CMAKE_CURRENT_SOURCE_DIR}/../cna" "${MESHCRAFT_CNA_VERIFIED_SHA}")
+meshcraft_check_sibling_revision(SHARP_RUNTIME "${CMAKE_CURRENT_SOURCE_DIR}/../sharp-runtime" "${MESHCRAFT_SHARP_RUNTIME_VERIFIED_SHA}")
+
 # CNA — XNA-like runtime (window, input, audio, graphics)
 add_subdirectory(../cna CNA_dep)
 
