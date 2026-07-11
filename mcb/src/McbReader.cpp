@@ -19,6 +19,7 @@
 #include <cstring>
 #include <fstream>
 #include <istream>
+#include <map>
 #include <memory>
 #include <stdexcept>
 #include <string>
@@ -959,6 +960,35 @@ static Mc3::Mc3Document readDocument(std::istream& in) {
 }
 
 // ---------------------------------------------------------------------------
+// Version migration (AUDIT-0038)
+// ---------------------------------------------------------------------------
+//
+// MCB_VERSION has never been bumped since the format's introduction (still
+// 1), so there is nothing to migrate FROM yet -- this registry is
+// intentionally empty. Policy going forward: a version bump that changes
+// wire-level *meaning* registers an upgrade function here, keyed by the
+// version it upgrades FROM (the reader has already fully parsed that
+// version's wire format into a Mc3Document at this point -- an "upgrade"
+// is any in-memory transform needed to match current semantics, e.g. a
+// renamed/repurposed field). loadFromBinary() applies every registered
+// upgrade whose source version is >= the file's version, in ascending
+// version order, so a v1 file read by a hypothetical v3 reader would run
+// the v1 upgrade then the v2 upgrade in sequence. Never remove an entry
+// while MCB_MIN_SUPPORTED_VERSION still covers its source version.
+using McbUpgradeFn = void (*)(Mc3::Mc3Document&);
+static const std::map<uint8_t, McbUpgradeFn>& mcbUpgrades() {
+    static const std::map<uint8_t, McbUpgradeFn> kUpgrades = {
+        // e.g. {1, &upgradeV1ToV2},  -- register here on the next version bump
+    };
+    return kUpgrades;
+}
+
+static void applyMcbUpgrades(Mc3::Mc3Document& doc, uint8_t fromVersion) {
+    for (const auto& [srcVersion, fn] : mcbUpgrades())
+        if (srcVersion >= fromVersion) fn(doc);
+}
+
+// ---------------------------------------------------------------------------
 // Public API
 // ---------------------------------------------------------------------------
 
@@ -968,7 +998,7 @@ Mc3::Mc3Document loadFromBinary(std::istream& in) {
     if (!in.read(magic, 4) || std::memcmp(magic, MCB_MAGIC, 4) != 0)
         throw std::runtime_error("MCB: invalid magic");
     uint8_t version = rU8(in);
-    if (version != MCB_VERSION)
+    if (version < MCB_MIN_SUPPORTED_VERSION || version > MCB_VERSION)
         throw std::runtime_error("MCB: unsupported version " + std::to_string(version));
     uint8_t flags = rU8(in);
     if (flags & MCB_FLAG_COMPRESSED)
@@ -980,7 +1010,9 @@ Mc3::Mc3Document loadFromBinary(std::istream& in) {
     if (rootTag != TAG_OBJ)
         throw std::runtime_error("MCB: root is not an object");
 
-    return readDocument(in);
+    Mc3::Mc3Document doc = readDocument(in);
+    if (version != MCB_VERSION) applyMcbUpgrades(doc, version);
+    return doc;
 }
 
 Mc3::Mc3Document loadFromFile(const std::filesystem::path& path) {

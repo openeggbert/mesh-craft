@@ -925,6 +925,45 @@ static void testDeeplyNestedChildrenDoesNotCrash() {
           "recursion-depth guard, not some other failure");
 }
 
+// ---------------------------------------------------------------------------
+// AUDIT-0038 — version validation now checks a range
+// (MCB_MIN_SUPPORTED_VERSION..MCB_VERSION), not exact equality, to make
+// room for the chained-upgrade mechanism. Both boundaries must still
+// reject a header they don't cover.
+// ---------------------------------------------------------------------------
+
+static bool loadThrowsContaining(uint8_t version, const std::string& needle) {
+    std::ostringstream out(std::ios::binary);
+    out.write(MCB_MAGIC, 4);
+    rawU8(out, version);
+    rawU8(out, 0);                  // flags
+    rawU8(out, 0); rawU8(out, 0);   // reserved
+    rawU8(out, TAG_OBJ);            // root document object
+    rawEnd(out);
+
+    std::istringstream in(out.str(), std::ios::binary);
+    try {
+        Mc3Document rt = loadFromBinary(in);
+        (void)rt;
+        return false;
+    } catch (const std::exception& e) {
+        return std::string(e.what()).find(needle) != std::string::npos;
+    }
+}
+
+static void testVersionBelowMinSupportedRejected() {
+    CHECK(MCB_MIN_SUPPORTED_VERSION > 0,
+          "version bounds: MCB_MIN_SUPPORTED_VERSION > 0 (0 is guaranteed below it)");
+    CHECK(loadThrowsContaining(0, "unsupported version"),
+          "version: below MCB_MIN_SUPPORTED_VERSION is rejected (AUDIT-0038)");
+}
+
+static void testVersionAboveCurrentRejected() {
+    CHECK(loadThrowsContaining(static_cast<uint8_t>(MCB_VERSION + 1), "unsupported version"),
+          "version: above MCB_VERSION (a newer format this reader doesn't "
+          "know) is rejected, not silently misparsed (AUDIT-0038)");
+}
+
 static void testHugeStringLengthRejectedCleanly() {
     std::ostringstream out(std::ios::binary);
     out.write(MCB_MAGIC, 4);
@@ -1057,6 +1096,8 @@ int main() {
     testActionAnimationRoundtrip();
     testLargeStringRoundtrip();
     testDeeplyNestedChildrenDoesNotCrash();
+    testVersionBelowMinSupportedRejected();
+    testVersionAboveCurrentRejected();
     testHugeStringLengthRejectedCleanly();
     testHugeCollectionCountRejectedCleanly();
     testFileSizeSmallerThanXml();

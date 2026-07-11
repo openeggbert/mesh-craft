@@ -6,6 +6,16 @@ namespace MeshCraft::Mcb {
 inline constexpr char     MCB_MAGIC[4] = {'M','C','B','\0'};
 inline constexpr uint8_t  MCB_VERSION  = 1;
 
+// AUDIT-0038: oldest MCB version loadFromBinary() will still accept, via
+// the chained-upgrade mechanism in McbReader.cpp. Equal to MCB_VERSION
+// today -- no version older than 1 has ever existed, so there is nothing
+// to upgrade from yet. A future version bump that changes wire-level
+// *meaning* (not just adds new optional keys, which the key-tagged format
+// already tolerates via skipValue()) should register an upgrade function
+// in McbReader.cpp and can leave this constant alone, unless a version is
+// deliberately dropped from support.
+inline constexpr uint8_t  MCB_MIN_SUPPORTED_VERSION = 1;
+
 // Flags byte (offset 5 in header)
 inline constexpr uint8_t  MCB_FLAG_COMPRESSED = 0x01; // zlib payload (not yet implemented)
 

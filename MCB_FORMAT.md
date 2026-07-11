@@ -191,10 +191,21 @@ path. Verified in `testWriterDeterminism()` (STAB-0140).
   were added additively mid-effort (STAB-0131/0144) without a version bump,
   per the forward-compatibility rule above.
 
-**No version migration.** `McbReader::loadFromBinary()` rejects any file
-whose version byte doesn't exactly equal the reader's own `MCB_VERSION`
-(`"MCB: unsupported version N"`) — there is currently no forward- or
-backward-compatibility path across a version bump; a reader built against
-one `MCB_VERSION` cannot read a file written by any other version. This is
-a deliberate current limitation, not a bug: whether to ever invest in a
-migration path is an open product/format-roadmap decision, not yet made.
+**Version migration policy (AUDIT-0038, decided 2026-07-11).** `McbReader::
+loadFromBinary()` accepts any version in the range `MCB_MIN_SUPPORTED_
+VERSION..MCB_VERSION` (`"MCB: unsupported version N"` outside that range).
+Both constants are currently `1` — no version older than 1 has ever
+existed, so there is nothing to migrate from yet. A version bump that adds
+new *optional* keys needs no bump at all (the key-tagged format already
+tolerates those, both directions, via `skipValue()`/missing-key defaults —
+see `includes`/`includedDefs`/etc. above). A version bump that changes
+wire-level *meaning* must register a chained-upgrade function in
+`McbReader.cpp` (`mcbUpgrades()`), keyed by the version it upgrades FROM;
+`loadFromBinary()` applies every registered upgrade whose source version
+is `>=` the file's own version, in ascending order, so a `v1` file read by
+a hypothetical `v3` reader runs the `v1→v2` upgrade then the `v2→v3`
+upgrade in sequence. `MCB_MIN_SUPPORTED_VERSION` only needs to move if a
+version is deliberately dropped from support (its upgrade function
+removed). This mechanism is real but currently exercises no live upgrade
+path — it exists so the next version bump has a place to plug into rather
+than needing this decision re-litigated.

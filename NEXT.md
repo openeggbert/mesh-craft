@@ -1,6 +1,6 @@
 # NEXT.md
 
-_Last updated: 2026-07-11, prior commit `af4c9ab` (branch `develop`). Five product-decision rows resolved this session: `STAB-0092` (`<embeds>` not merged from `<include>`d files), `STAB-0289` (Merge Scene object-id collision handling), `STAB-0327` (prefs.ini auto-created on first launch), `STAB-0360` (registry DB path env var override), and `STAB-0460` (animation playback-speed multiplier — a deliberate, owner-approved exception to the feature moratorium, unlike the other four which were narrow bug-shaped gaps), all owner-approved and implemented — see §3._
+_Last updated: 2026-07-11, prior commit `9e1b91a` (branch `develop`). Six items resolved this session, all owner-approved — see §3: 5 `plan.md` product-decision rows (`STAB-0092`, `STAB-0289`, `STAB-0327`, `STAB-0360`, `STAB-0460`) plus `plan_deep_audit.md`'s last `needs_human` row (`AUDIT-0038`, MCB version-migration policy). Also: the Emscripten web build regression (§4) is now resolved — verified via a genuinely clean rebuild, nothing needed on this project's side._
 
 ---
 
@@ -61,6 +61,15 @@ Clean from an **absolute-zero** build directory (not just incremental): `rm -rf 
 ---
 
 ## 3. Recent changes
+
+**2026-07-11 — `AUDIT-0038` resolved (owner-approved, the last remaining `needs_human` row in `plan_deep_audit.md`).** Decision: MCB should support version migration via chained upgrades, for any older version (not just N-1). Implemented as real, testable infrastructure — but deliberately *not* speculative migration code, since `MCB_VERSION` has never been bumped since the format's introduction (still `1`); there is no older version's wire format to actually migrate from yet:
+- `mcb/include/MeshCraft/Mcb/McbFormat.hpp`: new `MCB_MIN_SUPPORTED_VERSION` constant (currently equal to `MCB_VERSION`, both `1`).
+- `mcb/src/McbReader.cpp`: the version check changed from exact-equality (`version != MCB_VERSION`) to a range check (`version < MCB_MIN_SUPPORTED_VERSION || version > MCB_VERSION`). A new `mcbUpgrades()` registry (currently empty — nothing to register yet) holds upgrade functions keyed by source version; `loadFromBinary()` applies every applicable one in ascending order after parsing, so a future `v1` file read by a `v3` reader would run `v1→v2` then `v2→v3` in sequence once those upgrade functions exist.
+- `MCB_FORMAT.md`'s "No version migration" section rewritten to document the new policy for whoever does the next version bump.
+- New tests (`mcb_roundtrip_test.cpp`): `testVersionBelowMinSupportedRejected`/`testVersionAboveCurrentRejected` confirm the new range check's both boundaries still reject correctly (regression coverage for the boundary-logic change itself, since there's no live upgrade path to test yet).
+- Full 87/87 ctest green.
+
+**2026-07-11 — the Emscripten web build regression (§4) is resolved — see §4 for detail.** Verified via a genuinely clean `./build-web.sh --clean` against current `../sharp-runtime`; builds with 0 errors. Nothing needed on this project's side. Unblocks §8 items 3 (canvas-sizing retry) and 5 (AUDIT-0050).
 
 **2026-07-11 — `STAB-0460` resolved as a deliberate, owner-approved exception to the feature moratorium (§S12).** Unlike this session's other 4 product-decision resolutions (narrow, bug-shaped gaps in existing code paths), this row's premise was a genuinely missing feature — no "scale time"/keyframe-time-scaling code existed anywhere. The owner explicitly chose to lift the moratorium for this one row and specified the scope: a per-action playback-speed multiplier. Implemented as `Mc3Action::timeScale` (default 1.0, no-op), wired full-stack mirroring the `orthoAspect` (`STAB-0695`) precedent:
 - `mc3/mc3.xsd` + `Mc3XmlParser.cpp`/`Mc3XmlWriter.cpp`: new XML attribute `time_scale`, only written when non-default.
@@ -265,11 +274,7 @@ Ordered, each scoped to one focused session:
    Files: `src/MeshCraft/MeshCraftPrivate.hpp`, web init path, `CMakeLists.txt:347`.
    Verify: see `plan_deep_audit.md` AUDIT-0050 for the exact steps.
 
-6. **Get the project owner's decision on `plan_deep_audit.md`'s last remaining `needs_human` row, `AUDIT-0038`** (MCB version-migration policy — currently hard-fails on any version mismatch, by design; decide whether to ever invest in a migration path). `AUDIT-0037`/`0039`/`0040`/`0055` were already resolved 2026-07-10 (see §3).
-   Files: none — communication/handoff task.
-   Verify: N/A (external decision).
-
-7. **`STAB-0571`'s browser-download bridge for web GLB export** is the one remaining new-feature-sized item — same category as `STAB-0460` (needs an explicit owner scope decision before implementing). No longer blocked on the Emscripten build regression (§4, resolved 2026-07-11) — it can now actually be built/verified once scoped.
+6. **`STAB-0571`'s browser-download bridge for web GLB export** is the one remaining new-feature-sized item — same category as `STAB-0460` (needs an explicit owner scope decision before implementing). No longer blocked on the Emscripten build regression (§4, resolved 2026-07-11) — it can now actually be built/verified once scoped.
    Files: likely a custom Emscripten HTML shell + `EM_ASM`/`EM_JS` glue; see `plan.md` STAB-0571 for what was already investigated.
    Verify: N/A until the scope decision is made.
 
