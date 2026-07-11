@@ -563,6 +563,19 @@ void MeshCraftApplication::drawDialogs()
             int previewN = std::min(selCount, 3);
             for (int i = 0; i < previewN; ++i) {
                 const auto& obj = selection_.selection()[static_cast<size_t>(i)];
+                // AUD-035: batchRenameObjects (the real Apply path) skips
+                // locked objects entirely -- the preview must match, or a
+                // locked object among the first 3 selected shows a rename
+                // here that will not actually happen on Apply. Locked-
+                // object index numbering still advances in Apply (see
+                // batchRenameObjects's unconditional `++idx`), so `i + 1`
+                // here already lines up positionally; only the locked
+                // object's own row needs to stop rendering a rename.
+                if (lockedIds_.count(obj->id)) {
+                    ImGui::TextColored(ImVec4(0.6f, 0.6f, 0.6f, 1.0f),
+                        "  %s  (locked, skipped)", obj->name.c_str());
+                    continue;
+                }
                 std::string preview = applyRenamePattern(
                     batchRenameBuf_, obj->name, i + 1, objectTypeName(obj->type));
                 ImGui::TextColored(ImVec4(0.6f, 0.85f, 1.0f, 1.0f),
