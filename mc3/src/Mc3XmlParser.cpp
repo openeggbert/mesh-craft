@@ -6,6 +6,7 @@
 #include "MeshCraft/Mc3/Mc3Environment.hpp"
 #include "MeshCraft/Mc3/Mc3Extrude.hpp"
 #include "MeshCraft/Mc3/Mc3Light.hpp"
+#include "MeshCraft/Mc3/Mc3Validation.hpp"
 
 #include <tinyxml2.h>
 
@@ -30,6 +31,80 @@ static const char* attr(const XMLElement* el, const char* name, const char* def 
     return v ? v : def;
 }
 
+// ---------------------------------------------------------------------------
+// SYS-W1-01: Mc3Validation reporting
+// ---------------------------------------------------------------------------
+//
+// Mirrors the g_budget / g_confineResourcePaths thread_local pattern already
+// used in this file (see the DocumentBudget comment further down for the full
+// rationale): parseObject/parseChildren/parsePrimitive/parseCrossSection/
+// parseExtrude/attrF/attrI/attrCount/etc. form a large, already-recursive
+// call graph with no existing context-object parameter to thread a
+// diagnostics sink through, and adding one now is a much larger refactor
+// than this task's scope justifies. `g_validation` is set once per top-level
+// parse() / parseString() call (nullptr when the caller didn't ask for
+// diagnostics -- every report*() call below is then a no-op) and reset
+// unconditionally at the start of every call, so nothing can leak a stale
+// pointer into an unrelated later parse on the same thread.
+static thread_local Mc3Validation* g_validation = nullptr;
+
+// The file currently being parsed -- the top-level document, or whichever
+// <include>d file is being merged right now. Set at the top of parse()/
+// parseString() and temporarily overridden (via SourceFileScope, defined
+// near mergeInclude()) for the duration of merging one <include> file.
+static thread_local std::filesystem::path g_currentSourceFile;
+
+// Best-effort object identity for a diagnostic: the element's `id` if
+// present, else its `name`, else its tag name. Never guesses/synthesizes
+// beyond what's actually on the element.
+static std::string objectIdentity(const XMLElement* el) {
+    if (!el) return {};
+    if (const char* id = el->Attribute("id"); id && id[0]) return id;
+    if (const char* name = el->Attribute("name"); name && name[0]) return name;
+    return el->Name() ? el->Name() : std::string{};
+}
+
+static void reportWarning(const XMLElement* el, const char* field,
+                           const std::string& message, const std::string& repair = {}) {
+    if (!g_validation) return;
+    g_validation->addWarning(g_currentSourceFile.string(), objectIdentity(el), field,
+                             message, repair);
+}
+
+static void reportError(const XMLElement* el, const char* field,
+                         const std::string& message, const std::string& repair = {}) {
+    if (!g_validation) return;
+    g_validation->addError(g_currentSourceFile.string(), objectIdentity(el), field,
+                           message, repair);
+}
+
+// Whole-document findings (no single element is responsible), e.g. a
+// document-wide budget overflow or an <include> resolution failure.
+static void reportWarningDoc(const char* field, const std::string& message,
+                              const std::string& repair = {}) {
+    if (!g_validation) return;
+    g_validation->addWarning(g_currentSourceFile.string(), std::string{}, field,
+                             message, repair);
+}
+
+static void reportErrorDoc(const char* field, const std::string& message,
+                            const std::string& repair = {}) {
+    if (!g_validation) return;
+    g_validation->addError(g_currentSourceFile.string(), std::string{}, field,
+                           message, repair);
+}
+
+// RAII guard for g_validation, used at the top of Mc3XmlParser::parse()/
+// parseString() (the only two call sites that own a top-level parse). Clears
+// the thread_local pointer again on scope exit -- including via exception --
+// so a caller-owned Mc3Validation never remains reachable via the thread_local
+// past the end of the call that was given it.
+struct ValidationScope {
+    explicit ValidationScope(Mc3Validation* v) { g_validation = v; }
+    ~ValidationScope() { g_validation = nullptr; }
+    ValidationScope(const ValidationScope&) = delete;
+};
+
 // STAB-0080: a malformed value (e.g. "abc") previously threw std::invalid_argument
 // straight out of std::stof/std::stoi, which failed the *entire* file load with an
 // unhelpful "Failed to load file: stof" message instead of gracefully defaulting
@@ -40,13 +115,28 @@ static float attrF(const XMLElement* el, const char* name, float def = 0.0f) {
     if (!v) return def;
     // finiteOr rejects "nan"/"inf" (which std::stof accepts without throwing);
     // the catch handles non-numeric junk like "abc".
-    try { return Internal::finiteOr(std::stof(v), def); } catch (...) { return def; }
+    try {
+        float raw = std::stof(v);
+        float sanitized = Internal::finiteOr(raw, def);
+        if (sanitized != raw) // NaN/Inf were replaced (NaN != NaN is true under IEEE-754)
+            reportWarning(el, name, std::string("value '") + v + "' is not finite (NaN/Inf)",
+                          "replaced with " + std::to_string(sanitized));
+        return sanitized;
+    } catch (...) {
+        reportWarning(el, name, std::string("value '") + v + "' is not a valid number",
+                      "defaulted to " + std::to_string(def));
+        return def;
+    }
 }
 
 static int attrI(const XMLElement* el, const char* name, int def = 0) {
     const char* v = el->Attribute(name);
     if (!v) return def;
-    try { return std::stoi(v); } catch (...) { return def; }
+    try { return std::stoi(v); } catch (...) {
+        reportWarning(el, name, std::string("value '") + v + "' is not a valid integer",
+                      "defaulted to " + std::to_string(def));
+        return def;
+    }
 }
 
 // Tessellation counts (segments / sides / subdivisions) come from untrusted
@@ -58,9 +148,17 @@ static constexpr int kMaxTessellation = 4096;
 
 static int attrCount(const XMLElement* el, const char* name, int def,
                      int minv, int maxv = kMaxTessellation) {
-    int v = attrI(el, name, def);
-    if (v < minv) return minv;
-    if (v > maxv) return maxv;
+    int raw = attrI(el, name, def);
+    int v = raw;
+    if (v < minv) v = minv;
+    if (v > maxv) v = maxv;
+    // Only report when an attribute that was actually PRESENT got clamped --
+    // not when a missing attribute's own default happens to need no clamping.
+    if (v != raw && el->Attribute(name))
+        reportWarning(el, name,
+                      "value " + std::to_string(raw) + " is outside the allowed range [" +
+                      std::to_string(minv) + ", " + std::to_string(maxv) + "]",
+                      "clamped to " + std::to_string(v));
     return v;
 }
 
@@ -104,28 +202,34 @@ struct DocumentBudget {
     static constexpr long long kMaxTotalIncludes = 1'000;
 
     void chargeObject() {
-        if (++totalObjects > kMaxTotalObjects)
-            throw std::runtime_error(
-                "MC3: document exceeds the total object budget (" +
+        if (++totalObjects > kMaxTotalObjects) {
+            std::string msg = "MC3: document exceeds the total object budget (" +
                 std::to_string(kMaxTotalObjects) + ") -- rejected before allocating"
-                " geometry for all of them");
+                " geometry for all of them";
+            reportErrorDoc("objects", msg);
+            throw std::runtime_error(msg);
+        }
     }
     void chargeTessellation(int weight) {
         totalTessellationWeight += weight;
-        if (totalTessellationWeight > kMaxTotalTessellationWeight)
-            throw std::runtime_error(
-                "MC3: document's total tessellation complexity (sum of all "
+        if (totalTessellationWeight > kMaxTotalTessellationWeight) {
+            std::string msg = "MC3: document's total tessellation complexity (sum of all "
                 "segments/sides/subdivisions values, " +
                 std::to_string(totalTessellationWeight) + ") exceeds the budget (" +
                 std::to_string(kMaxTotalTessellationWeight) +
-                ") -- rejected before allocating geometry for all of it");
+                ") -- rejected before allocating geometry for all of it";
+            reportErrorDoc("tessellation", msg);
+            throw std::runtime_error(msg);
+        }
     }
     void chargeInclude() {
-        if (++totalIncludes > kMaxTotalIncludes)
-            throw std::runtime_error(
-                "MC3: document exceeds the total <include> budget (" +
+        if (++totalIncludes > kMaxTotalIncludes) {
+            std::string msg = "MC3: document exceeds the total <include> budget (" +
                 std::to_string(kMaxTotalIncludes) + ") -- rejected (a hostile "
-                "fan-out of many distinct include files?)");
+                "fan-out of many distinct include files?)";
+            reportErrorDoc("include", msg);
+            throw std::runtime_error(msg);
+        }
     }
     void reset() { totalObjects = 0; totalTessellationWeight = 0; totalIncludes = 0; }
 };
@@ -143,8 +247,10 @@ static int attrCountBudgeted(const XMLElement* el, const char* name, int def,
 // AUD-006b: forward-declared here so parseObject/parseTextures/parseSounds/
 // parseMusic/parseEmbeds (all defined before validateResourcePathIfConfined's
 // own definition, further down this file) can call it. Full documentation is
-// at the definition site.
-static void validateResourcePathIfConfined(const std::string& rawPath, const char* kind);
+// at the definition site. `el` (SYS-W1-01) is the element the path came from,
+// used only for the Mc3Validation entry's object identity -- may be nullptr.
+static void validateResourcePathIfConfined(const XMLElement* el, const std::string& rawPath,
+                                            const char* kind);
 
 static bool attrB(const XMLElement* el, const char* name, bool def = false) {
     const char* v = el->Attribute(name);
@@ -179,7 +285,11 @@ static Mc3Transform parseTransform(const XMLElement* el) {
             // STAB-0080: a malformed single-value scale (e.g. "abc") must not
             // throw uncaught and fail the whole file load.
             try { float f = Internal::finiteOr(std::stof(s), 1.0f); t.scale = {f, f, f}; }
-            catch (...) { t.scale = {1, 1, 1}; }
+            catch (...) {
+                t.scale = {1, 1, 1};
+                reportWarning(el, "scale", "value '" + s + "' is not a valid number",
+                              "defaulted to 1 1 1");
+            }
         } else {
             t.scale = parseVec3(s, {1,1,1});
         }
@@ -252,6 +362,8 @@ static std::optional<Mc3Extrude> parseExtrude(const XMLElement* el) {
     const XMLElement* pt = el->FirstChildElement("path");
     if (!cs || !pt) {
         std::cerr << "Warning: <extrude> missing <cross_section> or <path>, skipped.\n";
+        reportWarning(el, "cross_section/path", "<extrude> missing <cross_section> or <path>",
+                      "extrude skipped");
         return std::nullopt;
     }
     Mc3Extrude ext;
@@ -290,7 +402,11 @@ static Mc3Primitive parsePrimitive(const XMLElement* el, ObjectType type) {
             // STAB-0080: a malformed single-value size (e.g. "abc") must not
             // throw uncaught and fail the whole file load.
             try { float f = Internal::finiteOr(std::stof(s), 1.0f); p.size = {f, f, f}; }
-            catch (...) { /* p.size keeps its default-constructed value */ }
+            catch (...) {
+                /* p.size keeps its default-constructed value */
+                reportWarning(el, "size", "value '" + s + "' is not a valid number",
+                              "kept default size");
+            }
         } else if (type == ObjectType::Plane) {
             // Plane size is vec2 (width × depth = X × Z). Legacy XMLs may have "W 0 D" (3 values).
             std::istringstream iss(s);
@@ -422,7 +538,7 @@ static std::shared_ptr<Mc3Object> parseObject(const XMLElement* el) {
         obj->meshSource = attr(el, "src");
         if (obj->meshSource.empty())          // accept legacy source= attribute
             obj->meshSource = attr(el, "source");
-        validateResourcePathIfConfined(obj->meshSource, "mesh source");
+        validateResourcePathIfConfined(el, obj->meshSource, "mesh source");
     } else if (tag == "extrude") {
         obj->type   = ObjectType::Extrude;
         obj->extrude = parseExtrude(el);
@@ -456,6 +572,7 @@ static std::shared_ptr<Mc3Object> parseObject(const XMLElement* el) {
         if (el->Attribute("size")) obj->primitive = parsePrimitive(el, ObjectType::Area);
     } else {
         std::cerr << "Warning: unknown object type <" << tag << ">, skipped.\n";
+        reportWarning(el, "type", "unknown object type <" + tag + ">", "object skipped");
         return nullptr;
     }
 
@@ -544,6 +661,7 @@ static void parseLights(const XMLElement* el, Mc3Document& doc) {
             light.castShadows = attrB(c, "cast_shadows");
         } else {
             std::cerr << "Warning: unknown light type <" << t << ">, ignored.\n";
+            reportWarning(c, "type", "unknown light type <" + t + ">", "light ignored");
             continue;
         }
         doc.lights.push_back(light);
@@ -584,7 +702,7 @@ static void parseTextures(const XMLElement* el, Mc3Document& doc) {
             Mc3SvgTexture svg;
             svg.id  = id;
             svg.src = attr(c, "src");
-            validateResourcePathIfConfined(svg.src, "SVG texture src");
+            validateResourcePathIfConfined(c, svg.src, "SVG texture src");
             if (svg.src.empty()) {
                 const char* text = c->GetText();
                 if (text) svg.inlineContent = text;
@@ -595,7 +713,7 @@ static void parseTextures(const XMLElement* el, Mc3Document& doc) {
         Mc3Texture tex;
         tex.name       = attr(c, "name", id.c_str());
         tex.uri        = attr(c, "uri");
-        validateResourcePathIfConfined(tex.uri, "texture uri");
+        validateResourcePathIfConfined(c, tex.uri, "texture uri");
         tex.wrapU      = attr(c, "wrap_u",      "repeat");
         tex.wrapV      = attr(c, "wrap_v",      "repeat");
         tex.filter     = attr(c, "filter",      "linear");
@@ -691,7 +809,7 @@ static void parseSounds(const XMLElement* el, Mc3Document& doc) {
         Mc3Sound snd;
         snd.id   = id;
         snd.src  = attr(c, "src");
-        validateResourcePathIfConfined(snd.src, "sound src");
+        validateResourcePathIfConfined(c, snd.src, "sound src");
         snd.loop = attrB(c, "loop", false);
         doc.sounds[id] = std::move(snd);
     }
@@ -705,7 +823,7 @@ static void parseMusic(const XMLElement* el, Mc3Document& doc) {
         Mc3Music mus;
         mus.id   = id;
         mus.src  = attr(c, "src");
-        validateResourcePathIfConfined(mus.src, "music src");
+        validateResourcePathIfConfined(c, mus.src, "music src");
         mus.loop = attrB(c, "loop", true);
         doc.musicTracks[id] = std::move(mus);
     }
@@ -746,18 +864,21 @@ static void parseEmbeds(const XMLElement* el, Mc3Document& doc) {
         Mc3EmbedGltf em;
         em.id  = id;
         em.src = attr(c, "src");
-        validateResourcePathIfConfined(em.src, "embed src");
+        validateResourcePathIfConfined(c, em.src, "embed src");
         if (em.src.empty()) {
             const char* text = c->GetText();
             if (text) em.base64Content = text;
         }
-        if (em.base64Content.size() > kMaxEmbedBase64Length)
-            throw std::runtime_error(
-                "MC3: embed '" + id + "' inline base64Content length (" +
+        if (em.base64Content.size() > kMaxEmbedBase64Length) {
+            std::string msg = "MC3: embed '" + id + "' inline base64Content length (" +
                 std::to_string(em.base64Content.size()) + ") exceeds the sanity "
                 "limit (" + std::to_string(kMaxEmbedBase64Length) +
                 ") -- rejected before holding it in memory (corrupted or "
-                "malicious file?)");
+                "malicious file?)";
+            reportError(c, "base64Content", msg,
+                       "rejected (not held in memory)");
+            throw std::runtime_error(msg);
+        }
         doc.embeds[id] = std::move(em);
     }
 }
@@ -890,22 +1011,27 @@ static thread_local std::filesystem::path g_resourceRoot;
 // documents keep full permissive behavior) or when `rawPath` is empty or a
 // non-filesystem pseudo-path (`embed:`/`data:`). Throws a clear error naming
 // `kind` when the path is absolute or escapes the document root.
-static void validateResourcePathIfConfined(const std::string& rawPath, const char* kind) {
+static void validateResourcePathIfConfined(const XMLElement* el, const std::string& rawPath,
+                                            const char* kind) {
     if (!g_confineResourcePaths || rawPath.empty()) return;
     if (rawPath.rfind("embed:", 0) == 0 || rawPath.rfind("data:", 0) == 0) return;
 
     std::filesystem::path p(rawPath);
-    if (p.is_absolute())
-        throw std::runtime_error(
-            std::string("MC3: ") + kind + " '" + rawPath +
+    if (p.is_absolute()) {
+        std::string msg = std::string("MC3: ") + kind + " '" + rawPath +
             "' is an absolute path outside the document root; rejected under "
-            "the untrusted-content load policy");
+            "the untrusted-content load policy";
+        reportError(el, kind, msg);
+        throw std::runtime_error(msg);
+    }
 
-    if (!includePathWithinRoot(g_resourceRoot / p, g_resourceRoot))
-        throw std::runtime_error(
-            std::string("MC3: ") + kind + " '" + rawPath +
+    if (!includePathWithinRoot(g_resourceRoot / p, g_resourceRoot)) {
+        std::string msg = std::string("MC3: ") + kind + " '" + rawPath +
             "' escapes the document root; rejected under the untrusted-content "
-            "load policy");
+            "load policy";
+        reportError(el, kind, msg);
+        throw std::runtime_error(msg);
+    }
 }
 
 // Re-express a path that's relative to `fromDir` (the file that actually
@@ -939,6 +1065,19 @@ static void rebaseDefinitionMeshSources(Mc3Object& obj,
         if (child) rebaseDefinitionMeshSources(*child, fromDir, toDir);
 }
 
+// SYS-W1-01: RAII scope guard that temporarily points g_currentSourceFile at
+// `file` for the duration of the enclosing block (restoring the previous
+// value on exit, including via exception), so diagnostics reported while
+// merging one <include> file are attributed to that file rather than its
+// parent (or a sibling include processed earlier).
+struct SourceFileScope {
+    std::filesystem::path previous;
+    explicit SourceFileScope(const std::filesystem::path& file)
+        : previous(g_currentSourceFile) { g_currentSourceFile = file; }
+    ~SourceFileScope() { g_currentSourceFile = previous; }
+    SourceFileScope(const SourceFileScope&) = delete;
+};
+
 // Merge definitions/materials/textures from one included file into doc.
 // Respects cycle detection: throws on cyclic includes, silently skips
 // already-processed files (diamond-include deduplication).
@@ -956,8 +1095,11 @@ static void mergeInclude(const std::filesystem::path& includePath,
         canonical = std::filesystem::absolute(includePath);
     }
 
-    if (inProgress.count(canonical))
-        throw std::runtime_error("Cyclic <include> detected: " + includePath.string());
+    if (inProgress.count(canonical)) {
+        std::string msg = "Cyclic <include> detected: " + includePath.string();
+        reportErrorDoc("include", msg);
+        throw std::runtime_error(msg);
+    }
 
     if (processed.count(canonical))
         return;  // already merged via a different include path — skip silently
@@ -965,17 +1107,30 @@ static void mergeInclude(const std::filesystem::path& includePath,
     // AUD-006b follow-up (SYS-W1-04): charge against the fan-out budget only
     // for a genuinely new file (past the cycle/diamond-dedup checks above),
     // matching g_budget.chargeObject()'s charge-on-real-work discipline.
+    // Charged (and, on overflow, reported) against the PARENT file -- the one
+    // containing the offending <include> -- since g_currentSourceFile hasn't
+    // been switched to includePath yet at this point.
     g_budget.chargeInclude();
 
+    // SYS-W1-01: from here on, diagnostics are attributed to the file being
+    // merged (includePath), not its parent -- restored automatically (even on
+    // exception) when this function returns.
+    SourceFileScope fileScope(includePath);
+
     XMLDocument xml;
-    if (xml.LoadFile(includePath.string().c_str()) != XML_SUCCESS)
-        throw std::runtime_error("Failed to load <include> file '" +
-                                  includePath.string() + "': " + xml.ErrorStr());
+    if (xml.LoadFile(includePath.string().c_str()) != XML_SUCCESS) {
+        std::string msg = "Failed to load <include> file '" +
+                           includePath.string() + "': " + xml.ErrorStr();
+        reportErrorDoc("include", msg);
+        throw std::runtime_error(msg);
+    }
 
     const XMLElement* root = xml.FirstChildElement("mc3");
-    if (!root)
-        throw std::runtime_error("No <mc3> root element in included file: " +
-                                  includePath.string());
+    if (!root) {
+        std::string msg = "No <mc3> root element in included file: " + includePath.string();
+        reportErrorDoc("include", msg);
+        throw std::runtime_error(msg);
+    }
 
     inProgress.insert(canonical);
 
@@ -991,10 +1146,14 @@ static void mergeInclude(const std::filesystem::path& includePath,
         for (const XMLElement* c = txs->FirstChildElement("texture"); c;
              c = c->NextSiblingElement("texture"))
             if (const char* id = c->Attribute("id"))
-                if (doc.textures.count(id) || doc.svgTextures.count(id))
+                if (doc.textures.count(id) || doc.svgTextures.count(id)) {
                     std::cerr << "Warning: <include file=\"" << includePath.string()
                               << "\"> texture id '" << id
                               << "' collides with an already-loaded texture; last-write-wins.\n";
+                    reportWarning(c, "id", std::string("texture id '") + id +
+                                  "' collides with an already-loaded texture",
+                                  "last-write-wins");
+                }
         parseTextures(txs, doc);
         for (const XMLElement* c = txs->FirstChildElement("texture"); c;
              c = c->NextSiblingElement("texture"))
@@ -1018,10 +1177,14 @@ static void mergeInclude(const std::filesystem::path& includePath,
         for (const XMLElement* c = mats->FirstChildElement("material"); c;
              c = c->NextSiblingElement("material"))
             if (const char* id = c->Attribute("id"))
-                if (doc.materials.count(id))
+                if (doc.materials.count(id)) {
                     std::cerr << "Warning: <include file=\"" << includePath.string()
                               << "\"> material id '" << id
                               << "' collides with an already-loaded material; last-write-wins.\n";
+                    reportWarning(c, "id", std::string("material id '") + id +
+                                  "' collides with an already-loaded material",
+                                  "last-write-wins");
+                }
         parseMaterials(mats, doc);
         for (const XMLElement* c = mats->FirstChildElement("material"); c;
              c = c->NextSiblingElement("material"))
@@ -1032,10 +1195,14 @@ static void mergeInclude(const std::filesystem::path& includePath,
         for (const XMLElement* c = defs->FirstChildElement("definition"); c;
              c = c->NextSiblingElement("definition"))
             if (const char* id = c->Attribute("id"))
-                if (doc.definitions.count(id))
+                if (doc.definitions.count(id)) {
                     std::cerr << "Warning: <include file=\"" << includePath.string()
                               << "\"> definition id '" << id
                               << "' collides with an already-loaded definition; last-write-wins.\n";
+                    reportWarning(c, "id", std::string("definition id '") + id +
+                                  "' collides with an already-loaded definition",
+                                  "last-write-wins");
+                }
         parseDefinitions(defs, doc);
         for (const XMLElement* c = defs->FirstChildElement("definition"); c;
              c = c->NextSiblingElement("definition"))
@@ -1058,10 +1225,14 @@ static void mergeInclude(const std::filesystem::path& includePath,
         for (const XMLElement* c = embs->FirstChildElement("embed"); c;
              c = c->NextSiblingElement("embed"))
             if (const char* id = c->Attribute("id"))
-                if (doc.embeds.count(id))
+                if (doc.embeds.count(id)) {
                     std::cerr << "Warning: <include file=\"" << includePath.string()
                               << "\"> embed id '" << id
                               << "' collides with an already-loaded embed; last-write-wins.\n";
+                    reportWarning(c, "id", std::string("embed id '") + id +
+                                  "' collides with an already-loaded embed",
+                                  "last-write-wins");
+                }
         parseEmbeds(embs, doc);
         for (const XMLElement* c = embs->FirstChildElement("embed"); c;
              c = c->NextSiblingElement("embed"))
@@ -1088,10 +1259,12 @@ static void processIncludes(const XMLElement* root, Mc3Document& doc,
                              const Mc3LoadPolicy& policy,
                              int depth)
 {
-    if (depth > policy.maxIncludeDepth)
-        throw std::runtime_error(
-            "<include> nesting exceeds the policy limit (" +
-            std::to_string(policy.maxIncludeDepth) + ")");
+    if (depth > policy.maxIncludeDepth) {
+        std::string msg = "<include> nesting exceeds the policy limit (" +
+            std::to_string(policy.maxIncludeDepth) + ")";
+        reportErrorDoc("include", msg);
+        throw std::runtime_error(msg);
+    }
 
     for (const XMLElement* inc = root->FirstChildElement("include"); inc;
          inc = inc->NextSiblingElement("include")) {
@@ -1105,9 +1278,10 @@ static void processIncludes(const XMLElement* root, Mc3Document& doc,
         // (absolute path or `..` traversal) when the policy demands it.
         if (policy.confineIncludesToRoot &&
             !includePathWithinRoot(includePath, doc.sourcePath)) {
-            throw std::runtime_error(
-                "<include file=\"" + std::string(fileAttr) +
-                "\"> escapes the document root (rejected by load policy)");
+            std::string msg = "<include file=\"" + std::string(fileAttr) +
+                "\"> escapes the document root (rejected by load policy)";
+            reportError(inc, "file", msg);
+            throw std::runtime_error(msg);
         }
 
         // Only record at the top level (not when called recursively from mergeInclude)
@@ -1184,6 +1358,8 @@ static Mc3Document buildDocumentFromRoot(const XMLElement* root,
     } else if (root->FirstChildElement("include")) {
         std::cerr << "Note: <include> ignored (parsing under a no-include policy, "
                      "e.g. untrusted/AI content).\n";
+        reportWarningDoc("include", "<include> present but ignored under the current "
+                         "load policy (untrusted/AI content)", "include(s) skipped");
     }
 
     if (const XMLElement* env  = root->FirstChildElement("environment"))  parseEnvironment(env,  doc);
@@ -1227,25 +1403,51 @@ static Mc3Document buildDocumentFromRoot(const XMLElement* root,
 }
 
 Mc3Document Mc3XmlParser::parse(const std::filesystem::path& path,
-                                const Mc3LoadPolicy& policy) {
+                                const Mc3LoadPolicy& policy,
+                                Mc3Validation* validation) {
+    // SYS-W1-01: set the diagnostics sink and current-source-file BEFORE the
+    // very first thing that can fail, so even a "file won't load"/"no <mc3>
+    // root" rejection is captured for a caller that passed a validation sink.
+    ValidationScope vscope(validation);
+    g_currentSourceFile = path;
+
     XMLDocument xml;
-    if (xml.LoadFile(path.string().c_str()) != XML_SUCCESS)
-        throw std::runtime_error("Failed to load XML: " + path.string() + ": " + xml.ErrorStr());
+    if (xml.LoadFile(path.string().c_str()) != XML_SUCCESS) {
+        std::string msg = "Failed to load XML: " + path.string() + ": " + xml.ErrorStr();
+        reportErrorDoc("file", msg);
+        throw std::runtime_error(msg);
+    }
     const XMLElement* root = xml.FirstChildElement("mc3");
-    if (!root)
-        throw std::runtime_error("Root element <mc3> not found in " + path.string());
+    if (!root) {
+        std::string msg = "Root element <mc3> not found in " + path.string();
+        reportErrorDoc("root", msg);
+        throw std::runtime_error(msg);
+    }
     return buildDocumentFromRoot(root, path, policy);
 }
 
 Mc3Document Mc3XmlParser::parseString(const std::string& xmlText,
                                       const std::filesystem::path& sourceDir,
-                                      const Mc3LoadPolicy& policy) {
+                                      const Mc3LoadPolicy& policy,
+                                      Mc3Validation* validation) {
+    ValidationScope vscope(validation);
+    // Synthetic self-path so relative includes/resources resolve against
+    // sourceDir; also used as the diagnostics source-path until/unless an
+    // <include> switches it (see SourceFileScope).
+    std::filesystem::path selfPath = sourceDir / "in-memory.mc3.xml";
+    g_currentSourceFile = selfPath;
+
     XMLDocument xml;
-    if (xml.Parse(xmlText.c_str(), xmlText.size()) != XML_SUCCESS)
-        throw std::runtime_error(std::string("Failed to parse XML: ") + xml.ErrorStr());
+    if (xml.Parse(xmlText.c_str(), xmlText.size()) != XML_SUCCESS) {
+        std::string msg = std::string("Failed to parse XML: ") + xml.ErrorStr();
+        reportErrorDoc("file", msg);
+        throw std::runtime_error(msg);
+    }
     const XMLElement* root = xml.FirstChildElement("mc3");
-    if (!root)
-        throw std::runtime_error("Root element <mc3> not found in in-memory document");
-    // Synthetic self-path so relative includes/resources resolve against sourceDir.
-    return buildDocumentFromRoot(root, sourceDir / "in-memory.mc3.xml", policy);
+    if (!root) {
+        std::string msg = "Root element <mc3> not found in in-memory document";
+        reportErrorDoc("root", msg);
+        throw std::runtime_error(msg);
+    }
+    return buildDocumentFromRoot(root, selfPath, policy);
 }

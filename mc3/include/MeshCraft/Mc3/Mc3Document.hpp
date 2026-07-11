@@ -15,6 +15,7 @@
 #include "MeshCraft/Mc3/Mc3Trigger.hpp"
 #include "MeshCraft/Mc3/Mc3SvgTexture.hpp"
 #include "MeshCraft/Mc3/Mc3Texture.hpp"
+#include "MeshCraft/Mc3/Mc3Validation.hpp"
 
 #include <filesystem>
 #include <map>
@@ -81,12 +82,28 @@ public:
     static Mc3Document loadFromFile(const std::filesystem::path& path,
                                     const Mc3LoadPolicy& policy);
 
+    // SYS-W1-01: same as above, but additionally populates `validation` with a
+    // warning/error entry for every clamp/default/rejection the parse
+    // performs (main document AND any merged <include> files) -- an ADDITIVE
+    // side-channel; the throw-on-hard-rejection behavior of the overloads
+    // above is unchanged. See Mc3Validation.hpp for the entry shape.
+    static Mc3Document loadFromFile(const std::filesystem::path& path,
+                                    const Mc3LoadPolicy& policy,
+                                    Mc3Validation& validation);
+
     // Parse MC3 XML already held in memory (no temp file). `sourceDir` is the
     // directory that relative resource/include paths resolve against. Intended
     // for untrusted content — the default policy here is untrusted().
     static Mc3Document loadFromString(const std::string& xml,
                                       const std::filesystem::path& sourceDir = {},
                                       const Mc3LoadPolicy& policy = Mc3LoadPolicy::untrusted());
+
+    // SYS-W1-01: validation-capturing counterpart, same semantics as the
+    // loadFromFile overload above.
+    static Mc3Document loadFromString(const std::string& xml,
+                                      const std::filesystem::path& sourceDir,
+                                      const Mc3LoadPolicy& policy,
+                                      Mc3Validation& validation);
 
     // Save to XML
     void saveToFile(const std::filesystem::path& path) const;

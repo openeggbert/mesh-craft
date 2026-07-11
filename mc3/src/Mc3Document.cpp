@@ -14,11 +14,26 @@ Mc3Document Mc3Document::loadFromFile(const std::filesystem::path& path,
     return parser.parse(path, policy);
 }
 
+Mc3Document Mc3Document::loadFromFile(const std::filesystem::path& path,
+                                     const Mc3LoadPolicy& policy,
+                                     Mc3Validation& validation) {
+    Internal::Mc3XmlParser parser;
+    return parser.parse(path, policy, &validation);
+}
+
 Mc3Document Mc3Document::loadFromString(const std::string& xml,
                                         const std::filesystem::path& sourceDir,
                                         const Mc3LoadPolicy& policy) {
     Internal::Mc3XmlParser parser;
     return parser.parseString(xml, sourceDir, policy);
+}
+
+Mc3Document Mc3Document::loadFromString(const std::string& xml,
+                                        const std::filesystem::path& sourceDir,
+                                        const Mc3LoadPolicy& policy,
+                                        Mc3Validation& validation) {
+    Internal::Mc3XmlParser parser;
+    return parser.parseString(xml, sourceDir, policy, &validation);
 }
 
 void Mc3Document::saveToFile(const std::filesystem::path& path) const {

@@ -124,6 +124,15 @@ if(BUILD_TESTING)
     add_test(NAME mc3_oversized_base64 COMMAND mc3_oversized_base64_test)
     set_tests_properties(mc3_oversized_base64 PROPERTIES TIMEOUT 30 LABELS "format")
 
+    # SYS-W1-01: Mc3Validation diagnostics -- proves the structured
+    # warning/error surface itself is populated (source path, object/field
+    # identity, message, suggested repair), not just that clamped VALUES are
+    # correct (already covered by mc3_input_budget above).
+    add_executable(mc3_validation_test test/validation_test.cpp)
+    target_link_libraries(mc3_validation_test PRIVATE Mc3)
+    add_test(NAME mc3_validation COMMAND mc3_validation_test)
+    set_tests_properties(mc3_validation PROPERTIES TIMEOUT 15 LABELS "format")
+
     # SYS-W1-04: duplicate object ids -- proves the current (safe,
     # non-crashing, non-data-losing) library-level behavior; see the test
     # file's header comment for why this is a documented judgment call and
