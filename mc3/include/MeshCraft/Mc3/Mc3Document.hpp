@@ -5,6 +5,7 @@
 #include "MeshCraft/Mc3/Mc3EmbedGltf.hpp"
 #include "MeshCraft/Mc3/Mc3Environment.hpp"
 #include "MeshCraft/Mc3/Mc3Light.hpp"
+#include "MeshCraft/Mc3/Mc3LoadPolicy.hpp"
 #include "MeshCraft/Mc3/Mc3Material.hpp"
 #include "MeshCraft/Mc3/Mc3Object.hpp"
 #include "MeshCraft/Mc3/Mc3Music.hpp"
@@ -73,8 +74,19 @@ public:
     std::vector<std::shared_ptr<Mc3Object>> objects;
     std::map<std::string, Mc3Action> actions;
 
-    // Load from MC3 XML (.mc3.xml) — implemented in mc3togltf
+    // Load from MC3 XML (.mc3.xml). The default policy is trusted (permissive,
+    // processes <include>) — pass Mc3LoadPolicy::untrusted() for AI/imported
+    // content that must not open arbitrary local files.
     static Mc3Document loadFromFile(const std::filesystem::path& path);
+    static Mc3Document loadFromFile(const std::filesystem::path& path,
+                                    const Mc3LoadPolicy& policy);
+
+    // Parse MC3 XML already held in memory (no temp file). `sourceDir` is the
+    // directory that relative resource/include paths resolve against. Intended
+    // for untrusted content — the default policy here is untrusted().
+    static Mc3Document loadFromString(const std::string& xml,
+                                      const std::filesystem::path& sourceDir = {},
+                                      const Mc3LoadPolicy& policy = Mc3LoadPolicy::untrusted());
 
     // Save to XML
     void saveToFile(const std::filesystem::path& path) const;

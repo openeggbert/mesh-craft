@@ -89,26 +89,15 @@ inline std::string repairXmlAlg(const std::string& xml)
 }
 
 // Parse an xml string into a document; throws on malformed XML or a missing
-// <mc3> root (via Mc3Document::loadFromFile, round-tripped through a temp
-// file since the parser is file-based). The temp file is always removed,
-// including when loadFromFile() throws (STAB-0392: malformed AI responses —
-// by far the common failure case this function exists to handle — used to
-// leak a temp file every time, since the original code only removed it after
-// a successful load).
+// <mc3> root. Parses in-memory under the untrusted() load policy (no temp file,
+// no <include> processing) — see Mc3Document::loadFromString.
 inline Mc3::Mc3Document parseXmlAlg(const std::string& xml)
 {
-    namespace fs = std::filesystem;
-    auto tmp = uniqueTempPath("mc_ai_parse", ".mc3.xml");
-    { std::ofstream f(tmp); f << xml; }
-    std::error_code ec;
-    try {
-        auto doc = Mc3::Mc3Document::loadFromFile(tmp);
-        fs::remove(tmp, ec);
-        return doc;
-    } catch (...) {
-        fs::remove(tmp, ec);
-        throw;
-    }
+    // AI output is untrusted: parse it in-memory (no temp file) under the
+    // untrusted() load policy, which disables <include> so the response cannot
+    // open and merge arbitrary local files (a local-file-inclusion vector).
+    return Mc3::Mc3Document::loadFromString(xml, /*sourceDir=*/{},
+                                            Mc3::Mc3LoadPolicy::untrusted());
 }
 
 // A parsed AI response that has neither objects nor definitions would

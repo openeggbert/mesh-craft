@@ -742,7 +742,23 @@ static void processIncludes(const XMLElement* root, Mc3Document& doc,
                              const std::filesystem::path& selfPath,
                              std::set<std::filesystem::path>& inProgress,
                              std::set<std::filesystem::path>& processed,
-                             bool recordIncludes);
+                             bool recordIncludes,
+                             const Mc3LoadPolicy& policy,
+                             int depth);
+
+// Returns true if `candidate` resolves inside `rootDir` (no `..`-escape, not an
+// unrelated absolute path). Used to confine includes for untrusted content.
+static bool includePathWithinRoot(const std::filesystem::path& candidate,
+                                   const std::filesystem::path& rootDir) {
+    std::error_code ec;
+    auto c = std::filesystem::weakly_canonical(candidate, ec);
+    if (ec) return false;
+    auto r = std::filesystem::weakly_canonical(rootDir, ec);
+    if (ec) return false;
+    auto rel = std::filesystem::relative(c, r, ec);
+    if (ec || rel.empty()) return false;
+    return rel.native().rfind("..", 0) != 0;  // does not start with ".."
+}
 
 // Re-express a path that's relative to `fromDir` (the file that actually
 // contains it) so it resolves correctly relative to `toDir` (doc.sourcePath,
@@ -781,7 +797,9 @@ static void rebaseDefinitionMeshSources(Mc3Object& obj,
 static void mergeInclude(const std::filesystem::path& includePath,
                           Mc3Document& doc,
                           std::set<std::filesystem::path>& inProgress,
-                          std::set<std::filesystem::path>& processed)
+                          std::set<std::filesystem::path>& processed,
+                          const Mc3LoadPolicy& policy,
+                          int depth)
 {
     std::filesystem::path canonical;
     try {
@@ -809,7 +827,8 @@ static void mergeInclude(const std::filesystem::path& includePath,
     inProgress.insert(canonical);
 
     // Recurse into nested includes first (do NOT record them in doc.includes)
-    processIncludes(root, doc, includePath, inProgress, processed, /*recordIncludes=*/false);
+    processIncludes(root, doc, includePath, inProgress, processed,
+                    /*recordIncludes=*/false, policy, depth + 1);
 
     // Merge shared assets (NOT objects/lights/cameras/environment/actions —
     // those belong to the main scene only). AUDIT-0037: id collisions across
@@ -912,8 +931,15 @@ static void processIncludes(const XMLElement* root, Mc3Document& doc,
                              const std::filesystem::path& selfPath,
                              std::set<std::filesystem::path>& inProgress,
                              std::set<std::filesystem::path>& processed,
-                             bool recordIncludes)
+                             bool recordIncludes,
+                             const Mc3LoadPolicy& policy,
+                             int depth)
 {
+    if (depth > policy.maxIncludeDepth)
+        throw std::runtime_error(
+            "<include> nesting exceeds the policy limit (" +
+            std::to_string(policy.maxIncludeDepth) + ")");
+
     for (const XMLElement* inc = root->FirstChildElement("include"); inc;
          inc = inc->NextSiblingElement("include")) {
         const char* fileAttr = inc->Attribute("file");
@@ -922,11 +948,20 @@ static void processIncludes(const XMLElement* root, Mc3Document& doc,
         // Resolve relative to the file that contains the <include>
         std::filesystem::path includePath = selfPath.parent_path() / fileAttr;
 
+        // Confinement: reject an include that escapes the document root
+        // (absolute path or `..` traversal) when the policy demands it.
+        if (policy.confineIncludesToRoot &&
+            !includePathWithinRoot(includePath, doc.sourcePath)) {
+            throw std::runtime_error(
+                "<include file=\"" + std::string(fileAttr) +
+                "\"> escapes the document root (rejected by load policy)");
+        }
+
         // Only record at the top level (not when called recursively from mergeInclude)
         if (recordIncludes)
             doc.includes.push_back(fileAttr);
 
-        mergeInclude(includePath, doc, inProgress, processed);
+        mergeInclude(includePath, doc, inProgress, processed, policy, depth);
     }
 }
 
@@ -934,17 +969,14 @@ static void processIncludes(const XMLElement* root, Mc3Document& doc,
 // Entry point
 // ---------------------------------------------------------------------------
 
-Mc3Document Mc3XmlParser::parse(const std::filesystem::path& path) {
-    XMLDocument xml;
-    if (xml.LoadFile(path.string().c_str()) != XML_SUCCESS)
-        throw std::runtime_error("Failed to load XML: " + path.string() + ": " + xml.ErrorStr());
-
-    const XMLElement* root = xml.FirstChildElement("mc3");
-    if (!root)
-        throw std::runtime_error("Root element <mc3> not found in " + path.string());
-
+// Shared builder: everything after the XML is loaded (from a file or a string)
+// and the <mc3> root is located. `selfPath` is the notional path of the document
+// being parsed; its parent_path() is the base for relative includes/resources.
+static Mc3Document buildDocumentFromRoot(const XMLElement* root,
+                                         const std::filesystem::path& selfPath,
+                                         const Mc3LoadPolicy& policy) {
     Mc3Document doc;
-    doc.sourcePath       = path.parent_path();
+    doc.sourcePath       = selfPath.parent_path();
     doc.version          = attr(root, "version", "0.3");
     doc.model            = attr(root, "model",   "unnamed");
     doc.unit             = attr(root, "unit",    "meter");
@@ -972,14 +1004,20 @@ Mc3Document Mc3XmlParser::parse(const std::filesystem::path& path) {
 
     // Process <include> elements before any local sections so that included
     // definitions/materials/textures are available when the main file is parsed.
-    {
+    // Untrusted content (AI output, imports) parses with allowIncludes=false so
+    // it cannot open and merge arbitrary local files.
+    if (policy.allowIncludes) {
         std::set<std::filesystem::path> inProgress, processed;
         try {
-            inProgress.insert(std::filesystem::weakly_canonical(path));
+            inProgress.insert(std::filesystem::weakly_canonical(selfPath));
         } catch (...) {
-            inProgress.insert(std::filesystem::absolute(path));
+            inProgress.insert(std::filesystem::absolute(selfPath));
         }
-        processIncludes(root, doc, path, inProgress, processed, /*recordIncludes=*/true);
+        processIncludes(root, doc, selfPath, inProgress, processed,
+                        /*recordIncludes=*/true, policy, /*depth=*/0);
+    } else if (root->FirstChildElement("include")) {
+        std::cerr << "Note: <include> ignored (parsing under a no-include policy, "
+                     "e.g. untrusted/AI content).\n";
     }
 
     if (const XMLElement* env  = root->FirstChildElement("environment"))  parseEnvironment(env,  doc);
@@ -1020,4 +1058,28 @@ Mc3Document Mc3XmlParser::parse(const std::filesystem::path& path) {
     if (const XMLElement* acts = root->FirstChildElement("actions"))      parseActions(acts,     doc);
 
     return doc;
+}
+
+Mc3Document Mc3XmlParser::parse(const std::filesystem::path& path,
+                                const Mc3LoadPolicy& policy) {
+    XMLDocument xml;
+    if (xml.LoadFile(path.string().c_str()) != XML_SUCCESS)
+        throw std::runtime_error("Failed to load XML: " + path.string() + ": " + xml.ErrorStr());
+    const XMLElement* root = xml.FirstChildElement("mc3");
+    if (!root)
+        throw std::runtime_error("Root element <mc3> not found in " + path.string());
+    return buildDocumentFromRoot(root, path, policy);
+}
+
+Mc3Document Mc3XmlParser::parseString(const std::string& xmlText,
+                                      const std::filesystem::path& sourceDir,
+                                      const Mc3LoadPolicy& policy) {
+    XMLDocument xml;
+    if (xml.Parse(xmlText.c_str(), xmlText.size()) != XML_SUCCESS)
+        throw std::runtime_error(std::string("Failed to parse XML: ") + xml.ErrorStr());
+    const XMLElement* root = xml.FirstChildElement("mc3");
+    if (!root)
+        throw std::runtime_error("Root element <mc3> not found in in-memory document");
+    // Synthetic self-path so relative includes/resources resolve against sourceDir.
+    return buildDocumentFromRoot(root, sourceDir / "in-memory.mc3.xml", policy);
 }

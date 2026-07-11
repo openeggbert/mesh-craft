@@ -94,6 +94,13 @@ if(BUILD_TESTING)
     add_test(NAME mc3_input_budget COMMAND mc3_input_budget_test)
     set_tests_properties(mc3_input_budget PROPERTIES TIMEOUT 15 LABELS "format")
 
+    # Load-policy test: untrusted content (AI/import) must not process <include>;
+    # include-confinement rejects path traversal.
+    add_executable(mc3_load_policy_test test/load_policy_test.cpp)
+    target_link_libraries(mc3_load_policy_test PRIVATE Mc3)
+    add_test(NAME mc3_load_policy COMMAND mc3_load_policy_test)
+    set_tests_properties(mc3_load_policy PROPERTIES TIMEOUT 15 LABELS "format")
+
     # editor_commands_test pulls in MeshCraft/EditorAlgorithms.hpp from the
     # MeshCraft editor's public include dir, which lives at the repo root
     # (include/) — outside the mc3/ subtree. Only build it when those

@@ -5,8 +5,20 @@
 namespace MeshCraft::Mc3 {
 
 Mc3Document Mc3Document::loadFromFile(const std::filesystem::path& path) {
+    return loadFromFile(path, Mc3LoadPolicy::trusted());
+}
+
+Mc3Document Mc3Document::loadFromFile(const std::filesystem::path& path,
+                                     const Mc3LoadPolicy& policy) {
     Internal::Mc3XmlParser parser;
-    return parser.parse(path);
+    return parser.parse(path, policy);
+}
+
+Mc3Document Mc3Document::loadFromString(const std::string& xml,
+                                        const std::filesystem::path& sourceDir,
+                                        const Mc3LoadPolicy& policy) {
+    Internal::Mc3XmlParser parser;
+    return parser.parseString(xml, sourceDir, policy);
 }
 
 void Mc3Document::saveToFile(const std::filesystem::path& path) const {
