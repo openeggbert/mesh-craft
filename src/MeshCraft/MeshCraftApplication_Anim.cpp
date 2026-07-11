@@ -298,12 +298,13 @@ void MeshCraftApplication::drawTimelinePanel(int screenW, int screenH) {
             // frame during a drag), unconditional for the single-fire
             // checkbox, matching this file's own established pattern
             // elsewhere (e.g. the New/Del/Dup action buttons above).
-            if (ImGui::DragFloat("##dur", &dur, 0.01f, 0.01f, 3600.0f, "%.2f", ImGuiSliderFlags_AlwaysClamp)) {
-                if (ImGui::IsItemActivated()) pushUndo();
+            { bool _undoCh301 = ImGui::DragFloat("##dur", &dur, 0.01f, 0.01f, 3600.0f, "%.2f", ImGuiSliderFlags_AlwaysClamp);
+            if (ImGui::IsItemActivated()) pushUndo();
+            if (_undoCh301) {
                 act.duration = std::max(0.01f, dur);
                 animTime_    = std::min(animTime_, act.duration);
                 modified_    = true;
-            }
+            } }
             ImGui::SameLine();
             if (ImGui::Checkbox("Loop##lp", &act.loop)) { pushUndo(); modified_ = true; }
             ImGui::SameLine();
@@ -317,11 +318,12 @@ void MeshCraftApplication::drawTimelinePanel(int screenW, int screenH) {
             ImGui::Text("Speed:"); ImGui::SameLine();
             ImGui::SetNextItemWidth(55.0f);
             float ts = act.timeScale;
-            if (ImGui::DragFloat("##ts", &ts, 0.01f, 0.05f, 10.0f, "%.2fx", ImGuiSliderFlags_AlwaysClamp)) {
-                if (ImGui::IsItemActivated()) pushUndo();
+            { bool _undoCh320 = ImGui::DragFloat("##ts", &ts, 0.01f, 0.05f, 10.0f, "%.2fx", ImGuiSliderFlags_AlwaysClamp);
+            if (ImGui::IsItemActivated()) pushUndo();
+            if (_undoCh320) {
                 act.timeScale = std::max(0.05f, ts);
                 modified_     = true;
-            }
+            } }
             ImGui::SameLine(); ImGui::Text("|"); ImGui::SameLine();
             if (ImGui::SmallButton("|<##rew"))  { animTime_ = 0.0f; evaluateAndPushAnimOverrides(); }
             ImGui::SameLine();
@@ -960,9 +962,10 @@ void MeshCraftApplication::drawTimelinePanel(int screenW, int screenH) {
                 // continuous-drag fields, unconditional for the single-fire
                 // interpolation Combo.
                 float t = kf.time;
-                if (ImGui::DragFloat("##kft", &t, 0.001f, 0.0f,
-                                     act.duration, "%.3f")) {
+                { bool _undoCh965 = ImGui::DragFloat("##kft", &t, 0.001f, 0.0f,
+                                     act.duration, "%.3f");
                     if (ImGui::IsItemActivated()) pushUndo();
+                    if (_undoCh965) {
                     kf.time = std::clamp(t, 0.0f, act.duration);
                     std::stable_sort(ch.keyframes.begin(), ch.keyframes.end(),
                         [](const Mc3::Mc3Keyframe& a, const Mc3::Mc3Keyframe& b){
@@ -970,15 +973,16 @@ void MeshCraftApplication::drawTimelinePanel(int screenW, int screenH) {
                     animTime_ = kf.time;
                     evaluateAndPushAnimOverrides();
                     modified_ = true;
-                }
+                } }
                 ImGui::SameLine();
                 ImGui::Text("val=");
                 ImGui::SameLine();
                 ImGui::SetNextItemWidth(80.0f);
-                if (ImGui::DragFloat("##kfv", &kf.value, 0.01f)) {
-                    if (ImGui::IsItemActivated()) pushUndo();
+                { bool _undoCh978 = ImGui::DragFloat("##kfv", &kf.value, 0.01f);
+                if (ImGui::IsItemActivated()) pushUndo();
+                if (_undoCh978) {
                     evaluateAndPushAnimOverrides(); modified_ = true;
-                }
+                } }
                 ImGui::SameLine();
                 const char* interpNames[] = {"Step", "Linear", "Cubic"};
                 int interp = static_cast<int>(kf.interpolation);
@@ -993,34 +997,38 @@ void MeshCraftApplication::drawTimelinePanel(int screenW, int screenH) {
                     ImGui::Text("L(dt=");
                     ImGui::SameLine();
                     ImGui::SetNextItemWidth(50.0f);
-                    if (ImGui::DragFloat("##ldt", &kf.handleLeft.dt, 0.001f)) {
-                        if (ImGui::IsItemActivated()) pushUndo();
+                    { bool _undoCh996 = ImGui::DragFloat("##ldt", &kf.handleLeft.dt, 0.001f);
+                    if (ImGui::IsItemActivated()) pushUndo();
+                    if (_undoCh996) {
                         evaluateAndPushAnimOverrides(); modified_ = true;
-                    }
+                    } }
                     ImGui::SameLine();
                     ImGui::Text("dv=");
                     ImGui::SameLine();
                     ImGui::SetNextItemWidth(50.0f);
-                    if (ImGui::DragFloat("##ldv", &kf.handleLeft.dv, 0.01f)) {
-                        if (ImGui::IsItemActivated()) pushUndo();
+                    { bool _undoCh1004 = ImGui::DragFloat("##ldv", &kf.handleLeft.dv, 0.01f);
+                    if (ImGui::IsItemActivated()) pushUndo();
+                    if (_undoCh1004) {
                         evaluateAndPushAnimOverrides(); modified_ = true;
-                    }
+                    } }
                     ImGui::SameLine();
                     ImGui::Text(") R(dt=");
                     ImGui::SameLine();
                     ImGui::SetNextItemWidth(50.0f);
-                    if (ImGui::DragFloat("##rdt", &kf.handleRight.dt, 0.001f)) {
-                        if (ImGui::IsItemActivated()) pushUndo();
+                    { bool _undoCh1012 = ImGui::DragFloat("##rdt", &kf.handleRight.dt, 0.001f);
+                    if (ImGui::IsItemActivated()) pushUndo();
+                    if (_undoCh1012) {
                         evaluateAndPushAnimOverrides(); modified_ = true;
-                    }
+                    } }
                     ImGui::SameLine();
                     ImGui::Text("dv=");
                     ImGui::SameLine();
                     ImGui::SetNextItemWidth(50.0f);
-                    if (ImGui::DragFloat("##rdv", &kf.handleRight.dv, 0.01f)) {
-                        if (ImGui::IsItemActivated()) pushUndo();
+                    { bool _undoCh1020 = ImGui::DragFloat("##rdv", &kf.handleRight.dv, 0.01f);
+                    if (ImGui::IsItemActivated()) pushUndo();
+                    if (_undoCh1020) {
                         evaluateAndPushAnimOverrides(); modified_ = true;
-                    }
+                    } }
                     ImGui::SameLine();
                     ImGui::Text(")");
                 }

@@ -430,6 +430,17 @@ if(MESH_CRAFT_BUILD_TESTING AND UNIX AND NOT ANDROID AND NOT EMSCRIPTEN)
     add_test(NAME object_type_name COMMAND object_type_name_test)
     set_tests_properties(object_type_name PROPERTIES TIMEOUT 15 LABELS "unit")
 
+    # Source-lint guard: the dead undo-snapshot pattern (undo nested inside a
+    # Drag*/ColorEdit* changed-block, which never fires) must not reappear.
+    find_program(PYTHON3_FOR_LINT NAMES python3 python)
+    if(PYTHON3_FOR_LINT)
+        add_test(NAME undo_snapshot_lint
+                 COMMAND "${PYTHON3_FOR_LINT}"
+                         "${CMAKE_CURRENT_SOURCE_DIR}/test/undo_snapshot_lint_test.py"
+                         "${CMAKE_CURRENT_SOURCE_DIR}")
+        set_tests_properties(undo_snapshot_lint PROPERTIES TIMEOUT 15 LABELS "lint")
+    endif()
+
     add_test(
         NAME smoke_test
         COMMAND bash ${CMAKE_CURRENT_SOURCE_DIR}/test/smoke_test.sh

@@ -187,11 +187,12 @@ void MeshCraftApplication::drawLeftPanel(float panelY, float panelH)
                 // Checkbox fires once per click, so it's safe unconditional.
                 ImGui::TextDisabled("Color");
                 ImGui::SetNextItemWidth(-1);
-                if (ImGui::ColorEdit3("##lcol", li.color.data(),
-                        ImGuiColorEditFlags_NoLabel)) {
+                { bool _undoCh190 = ImGui::ColorEdit3("##lcol", li.color.data(),
+                        ImGuiColorEditFlags_NoLabel);
                     if (ImGui::IsItemActivated()) pushUndo();
+                    if (_undoCh190) {
                     modified_ = true; updateWindowTitle();
-                }
+                } }
 
                 // Brightness
                 ImGui::TextDisabled("Brightness");
@@ -201,10 +202,11 @@ void MeshCraftApplication::drawLeftPanel(float panelY, float panelH)
                 // out-of-range Ctrl+Click-typed value; unbounded ones
                 // (position/rotation/direction DragFloat3 calls with no
                 // explicit min/max) are deliberately left untouched.
-                if (ImGui::DragFloat("##lbrt", &li.brightness, 0.01f, 0.0f, 100.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp)) {
-                    if (ImGui::IsItemActivated()) pushUndo();
+                { bool _undoCh204 = ImGui::DragFloat("##lbrt", &li.brightness, 0.01f, 0.0f, 100.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
+                if (ImGui::IsItemActivated()) pushUndo();
+                if (_undoCh204) {
                     modified_ = true; updateWindowTitle();
-                }
+                } }
 
                 // Cast shadows
                 if (ImGui::Checkbox("Cast Shadows", &li.castShadows)) {
@@ -215,26 +217,29 @@ void MeshCraftApplication::drawLeftPanel(float panelY, float panelH)
                 if (li.type == Mc3::LightType::Directional || li.type == Mc3::LightType::Spot) {
                     ImGui::TextDisabled("Direction");
                     ImGui::SetNextItemWidth(-1);
-                    if (ImGui::DragFloat3("##ldir", li.direction.data(), 0.01f, -1.0f, 1.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp)) {
-                        if (ImGui::IsItemActivated()) pushUndo();
+                    { bool _undoCh218 = ImGui::DragFloat3("##ldir", li.direction.data(), 0.01f, -1.0f, 1.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
+                    if (ImGui::IsItemActivated()) pushUndo();
+                    if (_undoCh218) {
                         modified_ = true; updateWindowTitle();
-                    }
+                    } }
                 }
 
                 // Position (Spot / Point)
                 if (li.type == Mc3::LightType::Spot || li.type == Mc3::LightType::Point) {
                     ImGui::TextDisabled("Position");
                     ImGui::SetNextItemWidth(-1);
-                    if (ImGui::DragFloat3("##lpos", li.position.data(), 0.1f)) {
-                        if (ImGui::IsItemActivated()) pushUndo();
+                    { bool _undoCh228 = ImGui::DragFloat3("##lpos", li.position.data(), 0.1f);
+                    if (ImGui::IsItemActivated()) pushUndo();
+                    if (_undoCh228) {
                         modified_ = true; updateWindowTitle();
-                    }
+                    } }
                     ImGui::TextDisabled("Range (0=unlimited)");
                     ImGui::SetNextItemWidth(-1);
-                    if (ImGui::DragFloat("##lrng", &li.range, 0.1f, 0.0f, 10000.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp)) {
-                        if (ImGui::IsItemActivated()) pushUndo();
+                    { bool _undoCh234 = ImGui::DragFloat("##lrng", &li.range, 0.1f, 0.0f, 10000.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
+                    if (ImGui::IsItemActivated()) pushUndo();
+                    if (_undoCh234) {
                         modified_ = true; updateWindowTitle();
-                    }
+                    } }
                 }
 
                 // Spot-only params
@@ -281,11 +286,12 @@ void MeshCraftApplication::drawLeftPanel(float panelY, float panelH)
                 // per-frame push during a continuous color-picker drag.
                 ImGui::TextDisabled("Background Color");
                 ImGui::SetNextItemWidth(-1);
-                if (ImGui::ColorEdit3("##envbg", env.backgroundColor.data(),
-                        ImGuiColorEditFlags_NoLabel)) {
+                { bool _undoCh288 = ImGui::ColorEdit3("##envbg", env.backgroundColor.data(),
+                        ImGuiColorEditFlags_NoLabel);
                     if (ImGui::IsItemActivated()) pushUndo();
+                    if (_undoCh288) {
                     modified_ = true; updateWindowTitle();
-                }
+                } }
 
                 // Background texture
                 ImGui::TextDisabled("Background Texture");
@@ -331,11 +337,12 @@ void MeshCraftApplication::drawLeftPanel(float panelY, float panelH)
 
                     ImGui::TextDisabled("Fog Color");
                     ImGui::SetNextItemWidth(-1);
-                    if (ImGui::ColorEdit3("##fogcol", fog.color.data(),
-                            ImGuiColorEditFlags_NoLabel)) {
+                    { bool _undoCh338 = ImGui::ColorEdit3("##fogcol", fog.color.data(),
+                            ImGuiColorEditFlags_NoLabel);
                         if (ImGui::IsItemActivated()) pushUndo();
+                        if (_undoCh338) {
                         modified_ = true; updateWindowTitle();
-                    }
+                    } }
 
                     ImGui::TextDisabled("Mode");
                     ImGui::SetNextItemWidth(-1);
@@ -350,23 +357,26 @@ void MeshCraftApplication::drawLeftPanel(float panelY, float panelH)
                     if (fog.mode == Mc3::FogMode::Linear) {
                         ImGui::TextDisabled("Start");
                         ImGui::SetNextItemWidth(-1);
-                        if (ImGui::DragFloat("##fogstart", &fog.start, 0.5f, 0.0f, 10000.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp)) {
-                            if (ImGui::IsItemActivated()) pushUndo();
+                        { bool _undoCh353 = ImGui::DragFloat("##fogstart", &fog.start, 0.5f, 0.0f, 10000.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
+                        if (ImGui::IsItemActivated()) pushUndo();
+                        if (_undoCh353) {
                             modified_ = true; updateWindowTitle();
-                        }
+                        } }
                         ImGui::TextDisabled("End");
                         ImGui::SetNextItemWidth(-1);
-                        if (ImGui::DragFloat("##fogend", &fog.end, 0.5f, 0.0f, 10000.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp)) {
-                            if (ImGui::IsItemActivated()) pushUndo();
+                        { bool _undoCh359 = ImGui::DragFloat("##fogend", &fog.end, 0.5f, 0.0f, 10000.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
+                        if (ImGui::IsItemActivated()) pushUndo();
+                        if (_undoCh359) {
                             modified_ = true; updateWindowTitle();
-                        }
+                        } }
                     } else {
                         ImGui::TextDisabled("Density");
                         ImGui::SetNextItemWidth(-1);
-                        if (ImGui::DragFloat("##fogdens", &fog.density, 0.001f, 0.0f, 1.0f, "%.4f", ImGuiSliderFlags_AlwaysClamp)) {
-                            if (ImGui::IsItemActivated()) pushUndo();
+                        { bool _undoCh366 = ImGui::DragFloat("##fogdens", &fog.density, 0.001f, 0.0f, 1.0f, "%.4f", ImGuiSliderFlags_AlwaysClamp);
+                        if (ImGui::IsItemActivated()) pushUndo();
+                        if (_undoCh366) {
                             modified_ = true; updateWindowTitle();
-                        }
+                        } }
                     }
                 }
             }
@@ -464,18 +474,20 @@ void MeshCraftApplication::drawLeftPanel(float panelY, float panelH)
                 // Position
                 ImGui::TextDisabled("Position");
                 ImGui::SetNextItemWidth(-1);
-                if (ImGui::DragFloat3("##cpos", cam.position.data(), 0.1f)) {
-                    if (ImGui::IsItemActivated()) pushUndo();
+                { bool _undoCh467 = ImGui::DragFloat3("##cpos", cam.position.data(), 0.1f);
+                if (ImGui::IsItemActivated()) pushUndo();
+                if (_undoCh467) {
                     modified_ = true; updateWindowTitle();
-                }
+                } }
 
                 // Target
                 ImGui::TextDisabled("Target");
                 ImGui::SetNextItemWidth(-1);
-                if (ImGui::DragFloat3("##ctgt", cam.target.data(), 0.1f)) {
-                    if (ImGui::IsItemActivated()) pushUndo();
+                { bool _undoCh475 = ImGui::DragFloat3("##ctgt", cam.target.data(), 0.1f);
+                if (ImGui::IsItemActivated()) pushUndo();
+                if (_undoCh475) {
                     modified_ = true; updateWindowTitle();
-                }
+                } }
 
                 // Rotation override (optional)
                 {
@@ -488,10 +500,11 @@ void MeshCraftApplication::drawLeftPanel(float panelY, float panelH)
                     }
                     if (cam.rotation.has_value()) {
                         ImGui::SetNextItemWidth(-1);
-                        if (ImGui::DragFloat3("##crot", cam.rotation->data(), 0.5f)) {
-                            if (ImGui::IsItemActivated()) pushUndo();
+                        { bool _undoCh491 = ImGui::DragFloat3("##crot", cam.rotation->data(), 0.5f);
+                        if (ImGui::IsItemActivated()) pushUndo();
+                        if (_undoCh491) {
                             modified_ = true; updateWindowTitle();
-                        }
+                        } }
                     }
                 }
 
@@ -501,16 +514,18 @@ void MeshCraftApplication::drawLeftPanel(float panelY, float panelH)
                 // AlwaysClamp: keeps the near/far invariant (near <= far)
                 // enforced even against a Ctrl+Click typed value, not just
                 // the drag gesture.
-                if (ImGui::DragFloat("##cnear", &cam.nearPlane, 0.01f, 0.001f, cam.farPlane, "%.3f", ImGuiSliderFlags_AlwaysClamp)) {
-                    if (ImGui::IsItemActivated()) pushUndo();
+                { bool _undoCh504 = ImGui::DragFloat("##cnear", &cam.nearPlane, 0.01f, 0.001f, cam.farPlane, "%.3f", ImGuiSliderFlags_AlwaysClamp);
+                if (ImGui::IsItemActivated()) pushUndo();
+                if (_undoCh504) {
                     modified_ = true; updateWindowTitle();
-                }
+                } }
                 ImGui::TextDisabled("Far Plane");
                 ImGui::SetNextItemWidth(-1);
-                if (ImGui::DragFloat("##cfar", &cam.farPlane, 1.0f, cam.nearPlane, 100000.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp)) {
-                    if (ImGui::IsItemActivated()) pushUndo();
+                { bool _undoCh510 = ImGui::DragFloat("##cfar", &cam.farPlane, 1.0f, cam.nearPlane, 100000.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
+                if (ImGui::IsItemActivated()) pushUndo();
+                if (_undoCh510) {
                     modified_ = true; updateWindowTitle();
-                }
+                } }
 
                 // Perspective-only: FOV
                 if (cam.type == Mc3::CameraType::Perspective) {
@@ -526,20 +541,22 @@ void MeshCraftApplication::drawLeftPanel(float panelY, float panelH)
                 if (cam.type == Mc3::CameraType::Orthographic) {
                     ImGui::TextDisabled("Ortho Size");
                     ImGui::SetNextItemWidth(-1);
-                    if (ImGui::DragFloat("##cortho", &cam.orthoSize, 0.1f, 0.001f, 10000.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp)) {
-                        if (ImGui::IsItemActivated()) pushUndo();
+                    { bool _undoCh529 = ImGui::DragFloat("##cortho", &cam.orthoSize, 0.1f, 0.001f, 10000.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
+                    if (ImGui::IsItemActivated()) pushUndo();
+                    if (_undoCh529) {
                         modified_ = true; updateWindowTitle();
-                    }
+                    } }
                     // STAB-0695: width/height ratio baked into the exported
                     // glTF orthographic camera (xmag = size * aspect, ymag =
                     // size). Doesn't affect the editor's own "look through
                     // camera" preview, which already fits the live viewport.
                     ImGui::TextDisabled("Aspect (export)");
                     ImGui::SetNextItemWidth(-1);
-                    if (ImGui::DragFloat("##corthoaspect", &cam.orthoAspect, 0.01f, 0.01f, 100.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp)) {
-                        if (ImGui::IsItemActivated()) pushUndo();
+                    { bool _undoCh539 = ImGui::DragFloat("##corthoaspect", &cam.orthoAspect, 0.01f, 0.01f, 100.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
+                    if (ImGui::IsItemActivated()) pushUndo();
+                    if (_undoCh539) {
                         modified_ = true; updateWindowTitle();
-                    }
+                    } }
                     if (ImGui::IsItemHovered())
                         ImGui::SetTooltip("Width/height ratio of the exported orthographic view volume (xmag = size x aspect). 1.0 = square.");
                 }
@@ -923,25 +940,27 @@ void MeshCraftApplication::drawLeftPanel(float panelY, float panelH)
                     {
                         float pos[3] = { defObj->transform.position[0], defObj->transform.position[1], defObj->transform.position[2] };
                         ImGui::SetNextItemWidth(-1);
-                        if (ImGui::DragFloat3("##dpos", pos, 0.1f)) {
-                            if (ImGui::IsItemActivated()) pushUndo();
+                        { bool _undoCh926 = ImGui::DragFloat3("##dpos", pos, 0.1f);
+                        if (ImGui::IsItemActivated()) pushUndo();
+                        if (_undoCh926) {
                             defObj->transform.position[0] = pos[0];
                             defObj->transform.position[1] = pos[1];
                             defObj->transform.position[2] = pos[2];
                             modified_ = true; updateWindowTitle();
-                        }
+                        } }
                     }
                     ImGui::TextDisabled("Rotation");
                     {
                         float rot[3] = { defObj->transform.rotation[0], defObj->transform.rotation[1], defObj->transform.rotation[2] };
                         ImGui::SetNextItemWidth(-1);
-                        if (ImGui::DragFloat3("##drot", rot, 0.5f)) {
-                            if (ImGui::IsItemActivated()) pushUndo();
+                        { bool _undoCh938 = ImGui::DragFloat3("##drot", rot, 0.5f);
+                        if (ImGui::IsItemActivated()) pushUndo();
+                        if (_undoCh938) {
                             defObj->transform.rotation[0] = rot[0];
                             defObj->transform.rotation[1] = rot[1];
                             defObj->transform.rotation[2] = rot[2];
                             modified_ = true; updateWindowTitle();
-                        }
+                        } }
                     }
                     ImGui::TextDisabled("Scale");
                     {
@@ -951,13 +970,14 @@ void MeshCraftApplication::drawLeftPanel(float panelY, float panelH)
                         // defensively (std::max below), this keeps the
                         // widget's own displayed value consistent within
                         // the same frame.
-                        if (ImGui::DragFloat3("##dscl", scl, 0.01f, 0.001f, 100.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp)) {
-                            if (ImGui::IsItemActivated()) pushUndo();
+                        { bool _undoCh954 = ImGui::DragFloat3("##dscl", scl, 0.01f, 0.001f, 100.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
+                        if (ImGui::IsItemActivated()) pushUndo();
+                        if (_undoCh954) {
                             defObj->transform.scale[0] = std::max(0.001f, scl[0]);
                             defObj->transform.scale[1] = std::max(0.001f, scl[1]);
                             defObj->transform.scale[2] = std::max(0.001f, scl[2]);
                             modified_ = true; updateWindowTitle();
-                        }
+                        } }
                     }
                 }
             }
@@ -1156,11 +1176,12 @@ void MeshCraftApplication::drawLeftPanel(float panelY, float panelH)
                 // Base color
                 ImGui::TextDisabled("Base Color");
                 ImGui::SetNextItemWidth(-1);
-                if (ImGui::ColorEdit4("##matbc", mat.baseColor.data(),
-                    ImGuiColorEditFlags_Float)) {
+                { bool _undoCh1176 = ImGui::ColorEdit4("##matbc", mat.baseColor.data(),
+                    ImGuiColorEditFlags_Float);
                     if (ImGui::IsItemActivated()) pushUndo();
+                    if (_undoCh1176) {
                     modified_ = true;
-                }
+                } }
 
                 // Roughness
                 ImGui::TextDisabled("Roughness");
@@ -1188,11 +1209,12 @@ void MeshCraftApplication::drawLeftPanel(float panelY, float panelH)
                 // Emissive
                 ImGui::TextDisabled("Emissive");
                 ImGui::SetNextItemWidth(-1);
-                if (ImGui::ColorEdit3("##matemi", mat.emissiveColor.data(),
-                    ImGuiColorEditFlags_Float)) {
+                { bool _undoCh1208 = ImGui::ColorEdit3("##matemi", mat.emissiveColor.data(),
+                    ImGuiColorEditFlags_Float);
                     if (ImGui::IsItemActivated()) pushUndo();
+                    if (_undoCh1208) {
                     modified_ = true;
-                }
+                } }
 
                 // Alpha mode
                 ImGui::TextDisabled("Alpha Mode");
@@ -1789,10 +1811,11 @@ void MeshCraftApplication::drawLeftPanel(float panelY, float panelH)
                         if (ov.position.has_value()) {
                             ImGui::SameLine();
                             ImGui::SetNextItemWidth(180);
-                            if (ImGui::DragFloat3("##ovposval", ov.position->data(), 0.01f)) {
-                                if (ImGui::IsItemActivated()) pushUndo();
+                            { bool _undoCh1792 = ImGui::DragFloat3("##ovposval", ov.position->data(), 0.01f);
+                            if (ImGui::IsItemActivated()) pushUndo();
+                            if (_undoCh1792) {
                                 modified_ = true; updateWindowTitle();
-                            }
+                            } }
                         }
                     }
 
@@ -1807,10 +1830,11 @@ void MeshCraftApplication::drawLeftPanel(float panelY, float panelH)
                         if (ov.rotation.has_value()) {
                             ImGui::SameLine();
                             ImGui::SetNextItemWidth(180);
-                            if (ImGui::DragFloat3("##ovrotval", ov.rotation->data(), 0.5f)) {
-                                if (ImGui::IsItemActivated()) pushUndo();
+                            { bool _undoCh1810 = ImGui::DragFloat3("##ovrotval", ov.rotation->data(), 0.5f);
+                            if (ImGui::IsItemActivated()) pushUndo();
+                            if (_undoCh1810) {
                                 modified_ = true; updateWindowTitle();
-                            }
+                            } }
                         }
                     }
 
