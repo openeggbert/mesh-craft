@@ -30,6 +30,12 @@ static void printUsage(const char* prog) {
               << "    separate meshes instead — geometrically incorrect and intended only\n"
               << "    as a debug fallback.\n"
               << "\n"
+              << "  --allow-external-resources\n"
+              << "    By default, texture/mesh file paths that are absolute or escape the\n"
+              << "    input document's directory are rejected, so an untrusted .mc3 cannot\n"
+              << "    read arbitrary local files into the output. Pass this flag for trusted\n"
+              << "    scenes that legitimately reference files outside their own directory.\n"
+              << "\n"
               << "  --stats\n"
               << "    Print export statistics after writing the output file.\n";
 }
@@ -38,6 +44,7 @@ static void printUsage(const char* prog) {
 int main(int argc, char* argv[]) {
     bool allowApproxCSG = false;
     bool showStats      = false;
+    bool allowExternalResources = false;
 
     // Collect non-flag arguments
     std::vector<std::string> args;
@@ -47,6 +54,7 @@ int main(int argc, char* argv[]) {
             printUsage(argv[0]);
             return 0;
         } else if (a == "--allow-approximate-csg") allowApproxCSG = true;
+        else if (a == "--allow-external-resources") allowExternalResources = true;
         else if (a == "--stats")            showStats = true;
         else args.push_back(a);
     }
@@ -88,6 +96,7 @@ int main(int argc, char* argv[]) {
 
         GltfExporter exporter;
         exporter.allowApproximateCSG = allowApproxCSG;
+        exporter.allowExternalResources = allowExternalResources;
         exporter.exportDocument(doc, outputPath, fmt);
 
         std::cout << "Written: " << outputPath << '\n';

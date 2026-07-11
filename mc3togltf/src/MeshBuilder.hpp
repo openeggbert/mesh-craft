@@ -16,6 +16,18 @@ namespace mc3togltf {
 std::vector<std::array<uint32_t,3>>
 earClipPolygon(const std::vector<std::array<float,2>>& pts);
 
+// Untrusted-input containment for external resources (texture URIs, OBJ mesh
+// sources). The exporter embeds referenced file bytes into the GLB, so a
+// malicious .mc3 could exfiltrate arbitrary local files. Unless external
+// resources are explicitly allowed, a resource path that is absolute or escapes
+// the document root (`..` traversal) is rejected with a std::runtime_error.
+// `embed:` and `data:` references are not filesystem paths and are ignored.
+// `kind` names the resource in the error message.
+void assertResourceAllowed(const std::filesystem::path& basePath,
+                           const std::string& rawPath,
+                           bool allowExternal,
+                           const char* kind);
+
 struct MeshData {
     std::vector<float>    positions;  // x,y,z triplets
     std::vector<float>    normals;    // x,y,z triplets

@@ -58,6 +58,7 @@ struct ExportCtx {
     float unitScale{1.0f};           // conversion factor to metres
     std::filesystem::path basePath;  // directory of source .mc3.xml (for OBJ paths)
     bool allowApproximateCSG{false};
+    bool allowExternalResources{false}; // permit out-of-root texture/mesh paths
     bool rotationIsRadians{false};   // STAB-0691: doc.rotationUnits == "radians"
     std::string eulerOrder{"XYZ"};   // STAB-0691: doc.eulerOrder
 
@@ -413,10 +414,14 @@ buildTextures(tinygltf::Model& model,
               const std::map<std::string, Mc3Texture>& textures,
               const std::filesystem::path& basePath,
               const std::filesystem::path& outDir,
-              bool embedImages)
+              bool embedImages,
+              bool allowExternalResources)
 {
     std::unordered_map<std::string, int> texIdx;
     for (const auto& [name, tex] : textures) {
+        // Untrusted-input containment: refuse a texture URI that escapes the
+        // document root (see assertResourceAllowed) unless explicitly allowed.
+        assertResourceAllowed(basePath, tex.uri, allowExternalResources, "texture uri");
         auto wrapMode = [](const std::string& w) {
             if (w == "clamp")  return TINYGLTF_TEXTURE_WRAP_CLAMP_TO_EDGE;
             if (w == "mirror") return TINYGLTF_TEXTURE_WRAP_MIRRORED_REPEAT;
@@ -597,6 +602,11 @@ static int buildMesh(ExportCtx& ctx,
     MeshData md;
 
     if (obj.type == ObjectType::Mesh && !obj.meshSource.empty()) {
+        // Untrusted-input containment: a path-traversal / absolute mesh source is
+        // a hard error (thrown outside the try below), not a silently-skipped
+        // warning like a merely-missing file.
+        assertResourceAllowed(ctx.basePath, obj.meshSource, ctx.allowExternalResources,
+                              "mesh source");
         try {
             md = loadObjMesh(ctx.basePath, obj.meshSource);
         } catch (const std::exception& e) {
@@ -1457,7 +1467,8 @@ void GltfExporter::exportDocument(const Mc3Document& doc,
     // Textures (embedImages=true for GLB so images are embedded as data URIs)
     bool embedImagesNow = (format == OutputFormat::GLB);
     auto texIdx = buildTextures(model, doc.textures, doc.sourcePath,
-                                 outputPath.parent_path(), embedImagesNow);
+                                 outputPath.parent_path(), embedImagesNow,
+                                 allowExternalResources);
 
     // Materials
     std::unordered_map<std::string, int> matNameToIdx;
@@ -1473,7 +1484,7 @@ void GltfExporter::exportDocument(const Mc3Document& doc,
     // Object nodes (recursive)
     ExportCtx ctx{model, matNameToIdx, doc.definitions,
                   unitScaleFactor(doc.unit), doc.sourcePath,
-                  allowApproximateCSG,
+                  allowApproximateCSG, allowExternalResources,
                   doc.rotationUnits == "radians", doc.eulerOrder,
                   {}, {}, {}};
     for (const auto& objPtr : doc.objects) {

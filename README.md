@@ -148,6 +148,12 @@ video subsystem uninitialized); it is out of this repo's scope to fix. See
 ./cmake-build-debug/mc3togltf/mc3togltf --stats scene.mc3.xml scene.glb  # print export statistics
 ```
 
+For safety with untrusted scenes, `mc3togltf` **rejects texture/mesh paths that
+are absolute or escape the input document's directory by default** (so a
+malicious `.mc3` can't read arbitrary local files into the output GLB). Pass
+`--allow-external-resources` for trusted scenes that legitimately reference
+files outside their own directory.
+
 ### Convert to MCB
 
 ```sh

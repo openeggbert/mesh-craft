@@ -52,15 +52,35 @@ DEGENERATE_HELIX = """<mc3 version="0.3" model="DegenerateHelix">
 </mc3>
 """
 
+# Absolute texture path — would exfiltrate /etc/passwd bytes into the GLB.
+ABSOLUTE_TEXTURE = """<mc3 version="0.3" model="AbsTex">
+  <textures>
+    <texture id="t" name="t" uri="/etc/passwd"/>
+  </textures>
+  <objects><box name="b" material="m"/></objects>
+  <materials><material id="m" name="m" base_color_texture="t"/></materials>
+</mc3>
+"""
 
-def check_rejected(mc3togltf, label, xml):
+# Relative traversal escaping the document root.
+TRAVERSAL_TEXTURE = """<mc3 version="0.3" model="TravTex">
+  <textures>
+    <texture id="t" name="t" uri="../../../../../../etc/passwd"/>
+  </textures>
+  <objects><box name="b" material="m"/></objects>
+  <materials><material id="m" name="m" base_color_texture="t"/></materials>
+</mc3>
+"""
+
+
+def check_rejected(mc3togltf, label, xml, extra_args=None):
     with tempfile.TemporaryDirectory() as tmpdir:
         src = os.path.join(tmpdir, "in.mc3.xml")
         with open(src, "w") as f:
             f.write(xml)
         out = os.path.join(tmpdir, "out.glb")
         try:
-            r = run([mc3togltf, src, out])
+            r = run([mc3togltf] + (extra_args or []) + [src, out])
         except subprocess.TimeoutExpired:
             print(f"FAIL ({label}): mc3togltf hung (likely unbounded recursion)")
             return False
@@ -81,6 +101,25 @@ def check_rejected(mc3togltf, label, xml):
         return ok
 
 
+def check_flag_allows_past_confinement(mc3togltf, label, xml):
+    """With --allow-external-resources the path check no longer fires; the
+    export may still fail because the file is genuinely absent, but the error
+    must NOT be the confinement rejection."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        src = os.path.join(tmpdir, "in.mc3.xml")
+        with open(src, "w") as f:
+            f.write(xml)
+        out = os.path.join(tmpdir, "out.glb")
+        r = run([mc3togltf, "--allow-external-resources", src, out])
+        confinement = ("refusing to read" in r.stderr) or ("escapes the document root" in r.stderr)
+        if confinement:
+            print(f"FAIL ({label}): --allow-external-resources still hit confinement: "
+                  f"{r.stderr.strip()!r}")
+            return False
+        print(f"PASS ({label}): --allow-external-resources bypasses the path check")
+        return True
+
+
 if __name__ == "__main__":
     if len(sys.argv) < 2:
         print(f"Usage: {sys.argv[0]} <mc3togltf>")
@@ -90,5 +129,10 @@ if __name__ == "__main__":
     results = [
         check_rejected(mc3togltf, "cyclic-instance", CYCLIC_INSTANCE),
         check_rejected(mc3togltf, "degenerate-helix", DEGENERATE_HELIX),
+        # Resource-path confinement is on by default: these must be rejected.
+        check_rejected(mc3togltf, "absolute-texture", ABSOLUTE_TEXTURE),
+        check_rejected(mc3togltf, "traversal-texture", TRAVERSAL_TEXTURE),
+        # ...and the opt-out flag must bypass the path check.
+        check_flag_allows_past_confinement(mc3togltf, "absolute-texture+flag", ABSOLUTE_TEXTURE),
     ]
     sys.exit(0 if all(results) else 1)

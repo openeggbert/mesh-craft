@@ -1030,6 +1030,33 @@ earClipPolygon(const std::vector<std::array<float,2>>& pts) {
     return tris;
 }
 
+void assertResourceAllowed(const std::filesystem::path& basePath,
+                           const std::string& rawPath,
+                           bool allowExternal,
+                           const char* kind) {
+    if (allowExternal || rawPath.empty()) return;
+    // Not filesystem paths — resolved elsewhere.
+    if (rawPath.rfind("embed:", 0) == 0 || rawPath.rfind("data:", 0) == 0) return;
+
+    std::filesystem::path p(rawPath);
+    if (p.is_absolute())
+        throw std::runtime_error(
+            std::string("mc3togltf: ") + kind + " '" + rawPath +
+            "' is an absolute path outside the document root; refusing to read it "
+            "(pass --allow-external-resources to override).");
+
+    std::error_code ec;
+    auto cand = std::filesystem::weakly_canonical(basePath / p, ec);
+    auto root = std::filesystem::weakly_canonical(basePath, ec);
+    std::error_code ec2;
+    auto rel = std::filesystem::relative(cand, root, ec2);
+    if (ec || ec2 || rel.empty() || rel.native().rfind("..", 0) == 0)
+        throw std::runtime_error(
+            std::string("mc3togltf: ") + kind + " '" + rawPath +
+            "' escapes the document root; refusing to read it "
+            "(pass --allow-external-resources to override).");
+}
+
 // ---------------------------------------------------------------------------
 // Extrude (solid cross-section)
 // ---------------------------------------------------------------------------

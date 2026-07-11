@@ -35,6 +35,13 @@ public:
     // useful only for debugging or previewing unsupported scene graphs.
     bool allowApproximateCSG{false};
 
+    // When false (default), external resources (texture URIs, OBJ mesh sources)
+    // whose path is absolute or escapes the document root are rejected, so an
+    // untrusted .mc3 cannot exfiltrate arbitrary local files into the output
+    // GLB. Set true (--allow-external-resources) to permit them for trusted
+    // scenes that legitimately reference files outside their own directory.
+    bool allowExternalResources{false};
+
     // Populated after exportDocument() returns successfully.
     ExportStats stats;
 
