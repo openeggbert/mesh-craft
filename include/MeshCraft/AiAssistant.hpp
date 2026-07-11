@@ -1,5 +1,6 @@
 #pragma once
 #include <atomic>
+#include <chrono>
 #include <memory>
 #include <mutex>
 #include <string>
@@ -75,6 +76,23 @@ public:
     static std::string jsonEscape(const std::string& s);
     static std::string extractStopReason(const std::string& json);
     static std::string extractFirstTextValue(const std::string& json);
+
+    // AUD-014: sendAsync() detaches its network worker thread (see reset()'s
+    // STAB-0387/0388 comment for why it must not block the UI thread). That
+    // means nothing stops the process from returning from main() while a
+    // worker is still executing cpp-httplib/OpenSSL code -- static
+    // destructors and OpenSSL's own atexit cleanup would then race a live
+    // thread still inside that library, a classic exit-time UB/crash. Call
+    // this once, right before the process would otherwise exit, to block
+    // (bounded by `timeout`, NOT indefinitely -- an unbounded wait here
+    // would reintroduce the exact hang STAB-0387/0388 removed from reset())
+    // until every in-flight sendAsync() worker across every AiAssistant
+    // instance has finished. Returns true if all workers finished within
+    // the timeout, false if the timeout elapsed with one or more still
+    // running (those are abandoned exactly as before this fix -- no
+    // regression for the already-hung case, but a request that was moments
+    // from finishing now gets to finish cleanly instead of racing teardown).
+    static bool waitForAllInFlight(std::chrono::milliseconds timeout);
 
 private:
     std::shared_ptr<AiRequestResult> pending_; // null when no request has ever been sent

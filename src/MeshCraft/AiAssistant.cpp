@@ -10,12 +10,52 @@
 #endif
 
 #include <chrono>
+#include <condition_variable>
 #include <cstdio>
+#include <mutex>
 #include <stdexcept>
 #include <string>
 #include <thread>
 
 namespace MeshCraft {
+
+// AUD-014: process-wide count of currently-executing sendAsync() worker
+// threads, so waitForAllInFlight() (called once at process exit) can block
+// until it reaches zero. Incremented synchronously on the CALLING thread
+// before the worker std::thread is even constructed (not inside the worker
+// lambda) -- incrementing inside the lambda would leave a race window
+// between std::thread's constructor returning and the new thread's first
+// instruction actually running, during which waitForAllInFlight() could
+// observe count==0 and return immediately despite a worker being about to
+// start real (httplib/OpenSSL) work.
+namespace {
+std::mutex              g_inFlightMutex;
+std::condition_variable g_inFlightCv;
+int                     g_inFlightCount = 0;
+
+void beginAiWorker() {
+    std::lock_guard<std::mutex> lock(g_inFlightMutex);
+    ++g_inFlightCount;
+}
+
+// RAII: decrements + notifies on every exit path from the worker lambda
+// (normal return or the lambda's own catch already turned any exception
+// into the hasError/error fields, so this always runs on scope exit).
+struct AiWorkerScopeGuard {
+    ~AiWorkerScopeGuard() {
+        {
+            std::lock_guard<std::mutex> lock(g_inFlightMutex);
+            --g_inFlightCount;
+        }
+        g_inFlightCv.notify_all();
+    }
+};
+} // namespace
+
+bool AiAssistant::waitForAllInFlight(std::chrono::milliseconds timeout) {
+    std::unique_lock<std::mutex> lock(g_inFlightMutex);
+    return g_inFlightCv.wait_for(lock, timeout, [] { return g_inFlightCount == 0; });
+}
 
 // ---------------------------------------------------------------------------
 // JSON helpers — just enough for the Claude API request/response
@@ -177,10 +217,12 @@ void AiAssistant::sendAsync(const std::string& systemPrompt,
     auto pending = std::make_shared<AiRequestResult>();
     pending_ = pending;
 
+    beginAiWorker(); // see AUD-014 comment above -- must happen before the thread starts
     std::thread([pending, apiKeyCopy, modelCopy, maxTokensCopy, baseUrlCopy,
                  connectTimeoutCopy, readTimeoutCopy, writeTimeoutCopy,
                  systemPrompt, sceneXml, taskPrompt]()
     {
+        AiWorkerScopeGuard workerGuard;
         std::string text, stopReason, error;
         bool hasError = false;
         try {

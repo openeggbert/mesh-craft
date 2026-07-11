@@ -1,5 +1,7 @@
+#include "MeshCraft/AiAssistant.hpp"
 #include "MeshCraft/GraphicsBackendCheck.hpp"
 #include "MeshCraft/MeshCraftApplication.hpp"
+#include <chrono>
 #include <cstdlib>
 #include <filesystem>
 #include <iostream>
@@ -58,7 +60,25 @@ static void printUsage(const char* prog) {
         "  --help                Show this help\n";
 }
 
+// AUD-014: declared first (so, per C++ local-destruction-is-reverse-of-
+// construction, it is destroyed LAST -- after `app` and everything else in
+// main(), right before main() actually returns, on every return path
+// below). Its destructor bounded-waits for any AiAssistant::sendAsync()
+// worker thread still in flight, so the process doesn't begin static/
+// OpenSSL teardown while that thread is still executing httplib/OpenSSL
+// code. 5s is enough for a request that's moments from finishing; a
+// genuinely hung/slow request is still abandoned after the timeout,
+// exactly as before this fix -- this only helps the near-finished case,
+// it does not turn sendAsync() into a blocking call in the common case
+// (no request in flight -> waitForAllInFlight returns immediately).
+struct AiShutdownWaiter {
+    ~AiShutdownWaiter() {
+        MeshCraft::AiAssistant::waitForAllInFlight(std::chrono::milliseconds(5000));
+    }
+};
+
 int main(int argc, char* argv[]) {
+    AiShutdownWaiter aiShutdownWaiter;
     if (!checkBackendSupported()) return 1;
 
     std::string filePath;

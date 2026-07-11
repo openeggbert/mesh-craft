@@ -663,6 +663,76 @@ static void testNetworkTimeoutPreventsIndefiniteHang() {
     serverThread.join();
 }
 
+// AUD-014: sendAsync()'s worker thread is detached, so nothing previously
+// stopped the process from exiting (and beginning static/OpenSSL teardown)
+// while that thread was still executing httplib/OpenSSL code.
+// AiAssistant::waitForAllInFlight() is the fix -- called once by main.cpp
+// right before the process would otherwise exit. Exercises both halves of
+// its contract directly against a real in-flight worker thread (not just
+// the happy path where nothing is running): (1) it is genuinely BOUNDED --
+// while a request is still blocked server-side, a short-timeout call
+// returns false rather than hanging (this is the property that keeps it
+// from reintroducing the exact indefinite-hang bug STAB-0387/0388 removed
+// from reset()); (2) it genuinely WAITS -- once the server responds, a
+// longer-timeout call observes the worker actually finish and returns true.
+static void testWaitForAllInFlightBoundedThenCompletes() {
+    std::mutex              releaseMutex;
+    std::condition_variable releaseCv;
+    bool                    release = false;
+
+    httplib::Server svr;
+    svr.Post("/v1/messages", [&](const httplib::Request&, httplib::Response& res) {
+        std::unique_lock<std::mutex> lk(releaseMutex);
+        releaseCv.wait(lk, [&] { return release; });
+        res.set_content(
+            R"({"content":[{"type":"text","text":"<mc3 version=\"0.3\"/>"}],"stop_reason":"end_turn"})",
+            "application/json");
+    });
+    int port = svr.bind_to_any_port("127.0.0.1");
+    std::thread serverThread([&]{ svr.listen_after_bind(); });
+    waitUntilServerRunning(svr);
+
+    AiAssistant ai;
+    ai.apiKey            = "test-key";
+    ai.apiBaseUrl        = "http://127.0.0.1:" + std::to_string(port);
+    // Deliberately far longer than this test's own wait windows below, so
+    // the client's own read timeout can't be what finishes the request --
+    // only releasing the mock server can.
+    ai.connectTimeoutSec = 10;
+    ai.readTimeoutSec    = 10;
+    ai.writeTimeoutSec   = 10;
+
+    ai.sendAsync("system prompt", "<mc3/>", "add a box");
+
+    bool finishedTooEarly = AiAssistant::waitForAllInFlight(std::chrono::milliseconds(150));
+    CHECK(!finishedTooEarly,
+          "AUD-014: waitForAllInFlight() returns false (bounded, not hung) "
+          "while the worker is still genuinely blocked server-side");
+
+    {
+        std::lock_guard<std::mutex> lk(releaseMutex);
+        release = true;
+    }
+    releaseCv.notify_all();
+
+    bool finishedInTime = AiAssistant::waitForAllInFlight(std::chrono::milliseconds(4000));
+    CHECK(finishedInTime,
+          "AUD-014: waitForAllInFlight() returns true once the released "
+          "worker actually finishes, within its timeout");
+
+    // The worker's result should already be fully visible -- poll should
+    // need zero further waiting since waitForAllInFlight() only returned
+    // true after the AiWorkerScopeGuard destructor ran, which is strictly
+    // after pending->done.store() in sendAsync()'s lambda.
+    bool polled = pollUntilDone(ai, 100);
+    CHECK(polled && !ai.hasError(),
+          "AUD-014: after waitForAllInFlight() returns true, the result is "
+          "already fully published (no race between the wait and the data)");
+
+    svr.stop();
+    serverThread.join();
+}
+
 #endif // MESHCRAFT_HAS_AI
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -701,6 +771,7 @@ int main() {
     testMalformedJsonResponseHandledGracefully();
     testBackToBackSendAsyncCallsDoNotCrash();
     testNetworkTimeoutPreventsIndefiniteHang();
+    testWaitForAllInFlightBoundedThenCompletes();
 #else
     std::cout << "SKIP: mock HTTP server tests require MESHCRAFT_HAS_AI\n";
 #endif
