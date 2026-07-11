@@ -84,7 +84,7 @@ P1s already being fixed in git history. This session:
 
    **Net across all 63 AUD-### rows (57 original + 6 session-2 additions,
    the 6th — AUD-060 — found and fixed while testing AUD-002):
-   33 DONE, 28 TODO, 2 DEFERRED** — recompute with
+   34 DONE, 27 TODO, 2 DEFERRED** — recompute with
    `python3 test/validate_plan_consistency.py . <build-dir>` rather than
    trusting this number as time passes.
 5. Archived `plan_deep_audit.md` (all 57 of its own tasks were already
@@ -102,14 +102,13 @@ authoritative live state is always the AUD/SYS task table plus
 ## Priority execution queue (next up, in order)
 
 1. **AUD-006b (P1/W1)** — extend resource confinement beyond mc3togltf export.
-2. **AUD-059 (P1/W1)** — total-document allocation budget (not just per-field).
-3. **AUD-036b (P0/W9)** — undo transaction abstraction + full triage (large;
+2. **AUD-036b (P0/W9)** — undo transaction abstraction + full triage (large;
    incremental).
-4. **AUD-027/AUD-028 (P1/W7)** — pivot+translation and rotation-quaternion
+3. **AUD-027/AUD-028 (P1/W7)** — pivot+translation and rotation-quaternion
    animation export correctness.
-5. **AUD-015 (P2/W6)** — extend `expectTag` tag validation to the other 27
+4. **AUD-015 (P2/W6)** — extend `expectTag` tag validation to the other 27
    `read*` deserializers (`readObject` done; see its status note).
-6. Remaining `TODO` AUD-### rows by severity, then SYS-### rows.
+5. Remaining `TODO` AUD-### rows by severity, then SYS-### rows.
 
 ---
 
@@ -125,10 +124,10 @@ Mandated workstream items not tied to a single audit finding.
 - **SYS-W1-02** `[TODO]` `P1` — Documented numeric ranges per domain (geometry,
   material, camera near/far/FOV/aspect, environment, animation, audio, transforms,
   post-processing) with tests.
-- **SYS-W1-03** `[TODO]` `P1` — Document-complexity budgets (max bytes, objects,
-  definitions, materials, textures, embeds, actions, channels, keyframes,
-  children-per-node, total nodes, recursion depth) enforced at load. Superseded in
-  scope by `AUD-059` (total-budget, not per-field) — implement together.
+- **SYS-W1-03** `[TODO]` `P1` — Document-complexity budgets beyond `AUD-059`
+  (total object count + total tessellation weight, done, commit `9a4b8f6`):
+  max bytes, definitions, materials, textures, embeds, actions, channels,
+  keyframes, children-per-node, recursion depth enforced at load.
 - **SYS-W1-04** `[IN_PROGRESS]` `P1` — Pathological-input fixture corpus. Seeded:
   `finite_input_test`, `input_budget_test`, `hostile_geometry_test`,
   `load_policy_test`. Remaining: duplicate IDs, oversized base64, invalid UTF-8,
@@ -706,11 +705,13 @@ DONE marker without checking its cited commit/verify command.
 - **Resolved:** commit `0c150e5` — verify: `ctest -R gl_shutdown_leak`
 - **Status note:** Added `gl.cleanup()` call plus a self-checking `allReleased()`/`leakCheck()` regression guard (catches a FUTURE un-wired resource, not just this one). Audited for sibling GL-owning structures with an unreferenced cleanup method — found none (`SceneRenderer`/`GridRenderer` go through CNA's own `GraphicsDevice`-managed resource types, disposed via `Game::Dispose()`, a different and already-correct lifecycle path; the only other raw-GL surface in this file is a one-shot `glReadPixels` screenshot readback with no persistent allocation). Verified the regression test has real teeth: manually reverted the fix, confirmed the test fails naming the exact leaked handles, restored the fix, confirmed it passes again — 5/5 clean runs each way (isolating one unrelated flaky-driver segfault hit during testing that reproduced regardless of this fix and was not caused by it).
 
-### AUD-059 `[TODO]` `P1` `W1` · Tessellation clamp is a per-field cap only — no total-document allocation budget, so many objects near the cap still sum to unbounded memory
+### AUD-059 `[DONE]` `P1` `W1` · Tessellation clamp is a per-field cap only — no total-document allocation budget, so many objects near the cap still sum to unbounded memory
 - **Component:** mc3/src/Mc3XmlParser.cpp (attrCount / kMaxTessellation)
 - **Evidence:** AUD-005's fix (commit fd606d2) clamps each individual segments/sides/subdivisions field to kMaxTessellation=4096, closing the single-primitive-with-absurd-segment-count DoS. It does not bound the SUM across a document: a hostile/AI-generated document with, say, 100,000 `<sphere segments="4096"/>` objects (each individually legal, well under the per-field cap) still requests roughly 100,000 × (4096/2+1) × (4096+1) ≈ 8.6e11 vertices in aggregate — the same memory-exhaustion class of attack the per-field clamp was meant to close, just redistributed across many objects instead of one. There is also no cap today on total object count, total tree node count, definitions/instances count, animation channels/keyframes, or embedded/base64 byte totals.
 - **Outcome:** Add a running allocation-budget system during parse (or as a post-parse validation pass): track estimated total vertices/indices/generated bytes, total object/node count, definitions+instances, recursion depth (already partially covered), CSG input count, extrude cross-section/path sample totals, animation channel/keyframe counts, and embedded/base64 byte totals against fixed ceilings, rejecting with a clear diagnostic before attempting the corresponding large allocation (not after allocating and then discovering it was too much).
 - **Tests:** A fixture with many (e.g. 50,000) individually-legal objects whose combined estimated vertex count exceeds the budget; assert the loader rejects it BEFORE allocating hundreds of megabytes (verified via a peak-RSS check or an allocation-counting hook, not just wall-clock time).
+- **Resolved:** commit `9a4b8f6` — verify: `ctest -R mc3_input_budget`
+- **Status note:** Implemented the primary attack surface this finding's evidence describes: a `DocumentBudget` (Mc3XmlParser.cpp) tracks total object count (100,000 ceiling) and total tessellation weight -- the sum of every segments/sides/subdivisions value across the whole document, including extrude cross-section/path segments (500,000 ceiling) -- rejecting with a clear error naming the budget before any downstream geometry generation. Since mc3 itself never allocates vertex buffers (only mc3togltf does), a parse-time throw is proof no large allocation was attempted; verified with a 200-object/max-segments fixture (combined weight 819,200) that is rejected, and a 500-object/modest-segments fixture (weight 8,000) that still loads correctly. **NOT covered** (broader scope than this finding's core evidence, tracked instead under `SYS-W1-03`): total generated-byte estimates, definitions+instances count as a distinct budget, animation channel/keyframe counts, embedded/base64 byte totals. Object recursion depth is separately covered by `RecursionGuard`-equivalent limits noted elsewhere in the audit.
 
 
 ### AUD-060 `[DONE]` `P1` `W1` · Resource-confinement (AUD-006) false-positive rejects same-directory files when the document is opened via a bare relative filename
