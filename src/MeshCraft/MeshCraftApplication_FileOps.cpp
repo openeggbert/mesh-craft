@@ -701,45 +701,46 @@ void MeshCraftApplication::applyTheme() {
     }
 }
 
+// AUD-031: previously a separate hand-copied implementation of
+// loadPrefsAlg/savePrefsAlg (EditorAlgorithms.hpp) with zero production
+// call sites -- the two had already drifted (snapTranslate/snapScale
+// default values differed, see PrefsAlg's own AUD-031 comment) since
+// nothing forced them to stay in sync. Now delegates to the *Alg
+// functions so there is exactly one tested implementation of the parse/
+// clamp/serialize logic; seeding `p` from the live members before the
+// call preserves "a missing file / an unparsed key leaves that field
+// untouched" exactly as before (loadPrefsAlg only overwrites the keys it
+// actually finds and successfully parses).
 void MeshCraftApplication::loadPrefs() {
-    std::ifstream f(prefsPath());
-    if (!f) return;
-    std::string line;
-    while (std::getline(f, line)) {
-        auto eq = line.find('=');
-        if (eq == std::string::npos) continue;
-        std::string key = line.substr(0, eq);
-        std::string val = line.substr(eq + 1);
-        try {
-            // Clamped to the widest range any slider UI for this value allows
-            // (snapTranslate/Rotate/Scale each have two UI locations with
-            // different bounds -- MeshCraftApplication_UiOverlays.cpp and
-            // MeshCraftApplication_UiToolbar.cpp -- clamp to the wider one so
-            // a hand-edited prefs.ini can't set a value neither slider could
-            // ever reach, e.g. 0 or negative snapScale).
-            if      (key == "autoSaveInterval") autoSaveInterval_ = std::clamp(std::stof(val), 0.0f, 300.0f);
-            else if (key == "snapTranslate")    snapTranslate_    = std::clamp(std::stof(val), 0.01f, 100.0f);
-            else if (key == "snapRotate")       snapRotate_       = std::clamp(std::stof(val), 1.0f, 180.0f);
-            else if (key == "snapScale")        snapScale_        = std::clamp(std::stof(val), 0.01f, 10.0f);
-            else if (key == "gridSpacing")      gridSpacing_      = std::clamp(std::stof(val), 0.1f, 10.0f);
-            else if (key == "theme")            prefTheme_        = std::clamp(std::stoi(val), 0, 2);
-        } catch (...) {}
-    }
+    PrefsAlg p;
+    p.autoSaveInterval = autoSaveInterval_;
+    p.snapTranslate    = snapTranslate_;
+    p.snapRotate       = snapRotate_;
+    p.snapScale        = snapScale_;
+    p.gridSpacing       = gridSpacing_;
+    p.theme             = prefTheme_;
+    loadPrefsAlg(prefsPath(), p);
+    autoSaveInterval_ = p.autoSaveInterval;
+    snapTranslate_    = p.snapTranslate;
+    snapRotate_       = p.snapRotate;
+    snapScale_        = p.snapScale;
+    gridSpacing_      = p.gridSpacing;
+    prefTheme_        = p.theme;
     applyTheme();
 }
 
 void MeshCraftApplication::savePrefs() {
-    auto p = prefsPath();
+    auto path = prefsPath();
     std::error_code ec;
-    std::filesystem::create_directories(p.parent_path(), ec);
-    std::ofstream f(p);
-    if (!f) return;
-    f << "autoSaveInterval=" << autoSaveInterval_ << "\n";
-    f << "snapTranslate="    << snapTranslate_    << "\n";
-    f << "snapRotate="       << snapRotate_       << "\n";
-    f << "snapScale="        << snapScale_        << "\n";
-    f << "gridSpacing="      << gridSpacing_      << "\n";
-    f << "theme="            << prefTheme_        << "\n";
+    std::filesystem::create_directories(path.parent_path(), ec);
+    PrefsAlg p;
+    p.autoSaveInterval = autoSaveInterval_;
+    p.snapTranslate    = snapTranslate_;
+    p.snapRotate       = snapRotate_;
+    p.snapScale        = snapScale_;
+    p.gridSpacing      = gridSpacing_;
+    p.theme            = prefTheme_;
+    savePrefsAlg(path, p);
 }
 
 } // namespace MeshCraft

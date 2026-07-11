@@ -1638,11 +1638,15 @@ inline void loadKeybindingsAlg(const std::filesystem::path& path,
 // applyTheme()'s ImGui side effect is intentionally not mirrored (rendering
 // only, not data).
 
+// AUD-031: snapTranslate/snapScale defaults here had drifted from
+// MeshCraftApplication's real member-initializer defaults (1.0f/0.1f here
+// vs the real 0.5f/0.25f) -- exactly the kind of silent divergence this
+// finding warns two hand-synced copies are prone to. Corrected to match.
 struct PrefsAlg {
     float autoSaveInterval{60.0f};
-    float snapTranslate{1.0f};
+    float snapTranslate{0.5f};
     float snapRotate{15.0f};
-    float snapScale{0.1f};
+    float snapScale{0.25f};
     float gridSpacing{1.0f};
     int   theme{0};
 };
