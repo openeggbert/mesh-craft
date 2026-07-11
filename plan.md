@@ -85,7 +85,7 @@ P1s already being fixed in git history. This session:
    **Net across all 64 AUD-### rows (57 original + 7 session-2 additions,
    the 7th — AUD-036c — split off from AUD-036b so its verified-done portion
    could be marked DONE without also claiming its still-open portion):
-   56 DONE, 6 TODO, 2 DEFERRED** — recompute with
+   58 DONE, 4 TODO, 2 DEFERRED** — recompute with
    `python3 test/validate_plan_consistency.py . <build-dir>` rather than
    trusting this number as time passes.
 5. Archived `plan_deep_audit.md` (all 57 of its own tasks were already
@@ -103,17 +103,23 @@ authoritative live state is always the AUD/SYS task table plus
 ## Priority execution queue (next up, in order)
 
 1. **AUD-052 (P1/W11)** — CI is permanently parked under `.github_/`; GitHub
-   Actions never runs. This is the root blocker for AUD-053/054/055/057
-   (all CI-hardening tasks that depend on CI actually running first) — long
-   documented elsewhere as owner-gated (enabling Actions on the repo isn't
-   something available in this environment), so treat as blocked-pending-
-   owner-action rather than something to force through.
+   Actions never runs. This is the root blocker for AUD-053 (all CI-hardening
+   tasks that depend on CI actually running first) — long documented
+   elsewhere as owner-gated (enabling Actions on the repo isn't something
+   available in this environment), so treat as blocked-pending-owner-action
+   rather than something to force through. AUD-054/055 (warnings, sanitizer
+   build) did NOT actually depend on live CI and are now DONE — that
+   dependency claim in earlier queue text was inaccurate for those two.
 2. **AUD-042 (P2/W8)** — Android build path forces SDL_RENDERER; blocked
    (no Android NDK in this environment; also intersects CNA backend
    behavior, out of scope per CLAUDE.md's "no CNA changes without owner
    permission").
-3. Remaining `TODO` AUD-### rows by severity (AUD-053/054/055/057, all
-   downstream of AUD-052), then SYS-### rows.
+3. **AUD-057 (P2/W11)** — sibling-repo (`../cna`, `../sharp-runtime`)
+   version pinning. The CI-job half is blocked on AUD-052, but the
+   configure-time-assertion half (recording/checking the sibling repos'
+   current git SHA, independent of CI) is actionable now.
+4. Remaining `TODO` AUD-### rows by severity (AUD-053, downstream of
+   AUD-052), then SYS-### rows.
 
 ---
 
@@ -693,18 +699,22 @@ DONE marker without checking its cited commit/verify command.
 - **Tests:** New CI job runs `ctest` at the repo root under xvfb-run and passes the render-labeled tests.
 - **Verify note:** Minor line-range imprecision only: the root-level test registrations actually span lines 408–807 (the final add_test, mc3_ai at line 807, and set_tests_properties through ~808), not 408–798 — CMakeLists.txt is 810 lines total. All other numbers (matrix components, 32 files / 18,529 LOC, the TODO quote at 19-24) are exact. Substance of the finding is unchanged.
 
-### AUD-054 `[TODO]` `P2` `W11` · Compiler warnings enabled on only 2 of the first-party targets; the whole editor + Mcb + mc3tomcb build warning-free, and -Werror is used nowhere
+### AUD-054 `[DONE]` `P2` `W11` · Compiler warnings enabled on only 2 of the first-party targets; the whole editor + Mcb + mc3tomcb build warning-free, and -Werror is used nowhere
 - **Component:** CMakeLists.txt
 - **Evidence:** `-Wall -Wextra` appear on exactly two targets: `target_compile_options(Mc3 PRIVATE -Wall -Wextra)` (mc3/CMakeLists.txt:54) and `target_compile_options(mc3togltf_lib PRIVATE -Wall -Wextra)` (mc3togltf/CMakeLists.txt:92). The main editor target is created at CMakeLists.txt:275 (`add_executable(${_target} ${SOURCES})`) with NO warning options anywhere for it — so all 32 files / 18,529 LOC under src/MeshCraft compile with warnings off. Mcb (mcb/CMakeLists.txt), mc3tomcb (mc3tomcb/CMakeLists.txt), and the ai_test/mc3_registry_test executables likewise set no warning flags. A tree-wide grep for `Werror` in all first-party CMake/scripts returns nothing, so even where warnings are on they never fail a build.
 - **Outcome:** Enable `-Wall -Wextra` on the MeshCraft/Mcb/mc3tomcb targets (ideally via a shared interface target) and turn on `-Werror` in CI so regressions surface, rather than only decorating two library targets.
 - **Tests:** Build the editor with `-Wall -Wextra -Werror` and triage/fix the resulting diagnostics; add the flags to the CI configure step.
+- **Resolved:** commit `4fc211e` — verify: `cmake --build cmake-build-debug 2>&1 | grep -c warning` (0) and `ctest --test-dir cmake-build-debug -j$(nproc)` (101/101)
+- **Status note:** Added `-Wall -Wextra` to the editor target, Mcb, mc3tomcb, and the mc3togltf executable (mc3togltf_lib and Mc3 already had it). Triaging the resulting warnings on a clean full rebuild found one real bug: the "Focus on Selection" bounding-box `switch (p.primitiveType)` (MeshCraftApplication_Keyboard.cpp) was missing 5 of 11 `PrimitiveType` cases (`-Wswitch`), silently falling back to a wrong hardcoded `hx=hy=hz=0.5f` half-extent for Torus/Capsule/Disk/Grid/IcoSphere — fixed with correct per-primitive geometry (majorRadius/minorRadius for Torus, radius+height for Capsule, etc.). Remaining warnings were narrow buffer-size (`-Wformat-truncation=` on 4 `snprintf` label buffers) and unused-parameter/-variable fixes. Full tree now builds with zero warnings. `-Werror` in CI is not added — CI itself is parked pending AUD-052 (owner-gated), so a CI-side flag would be inert; the local build-warning-free state is the actionable part of this finding and is now true.
 
-### AUD-055 `[TODO]` `P2` `W11` · No ASan/UBSan/clang-tidy/clang-format/coverage/fuzz config anywhere, despite parsing untrusted MCB binary + MC3 XML input
+### AUD-055 `[DONE]` `P2` `W11` · No ASan/UBSan/clang-tidy/clang-format/coverage/fuzz config anywhere, despite parsing untrusted MCB binary + MC3 XML input
 - **Component:** CMakeLists.txt (build hardening)
 - **Evidence:** Tree-wide grep across all first-party CMakeLists/*.cmake/*.sh/*.yml for `sanitize|clang-tidy|clang-format|gcov|--coverage|lcov|libfuzzer|afl|cppcheck|iwyu` returns zero hits; no `.clang-format`/`.clang-tidy`/`.editorconfig` files exist. The one fuzzing knob present is a disable: `set(MANIFOLD_FUZZ OFF ... FORCE)` (CMakeLists.txt:180). Yet the project parses untrusted, attacker-controllable inputs — the MCB binary reader (mcb/src/McbReader.cpp) and the MC3 XML parser (mc3/src/Mc3XmlParser.cpp) — with no sanitizer build option or fuzz target guarding them.
 - **Outcome:** Add an opt-in ASan/UBSan build configuration and at least one fuzz/differential harness over McbReader and Mc3XmlParser, wired into CI; add clang-format/clang-tidy config for consistency.
 - **Tests:** Run the existing round-trip/parse tests under `-fsanitize=address,undefined` and a short libFuzzer/AFL run over the two parsers to confirm no UB on malformed input.
 - **Verify note:** Severity P2 is fair (could also be argued P3 polish). Two evidence refinements for accuracy: (a) clang-tidy (19.1.7) and cppcheck (2.17.1) WERE actually run as one-off manual passes over mc3/src/ per plan_20260710.md STAB-0614/STAB-0620 — so the precise defect is 'no checked-in .clang-tidy/.clang-format config and no CI-integrated/repeatable sanitizer/static-analysis/fuzz gating', not literally 'clang-tidy never run'. (b) The MANIFOLD_FUZZ OFF at CMakeLists.txt:180 disables fuzzing of the vendored Manifold geometry dependency, not the project's own McbReader/Mc3XmlParser, so it is tangential to the untrusted-input hardening argument rather than direct evidence of it.
+- **Resolved:** commit `4fc211e` — verify: `cmake -S . -B /tmp/asan-build -DMESHCRAFT_SANITIZE=ON -DMESH_CRAFT_GRAPHICS_BACKEND=EASYGL && cmake --build /tmp/asan-build --target mc3_roundtrip_test mcb_roundtrip_test && /tmp/asan-build/mc3/mc3_roundtrip_test && /tmp/asan-build/mcb/mcb_roundtrip_test`
+- **Status note:** Added an opt-in `MESHCRAFT_SANITIZE` CMake option building first-party targets (Mc3/Mcb/mc3togltf/mc3tomcb/editor) with ASan+UBSan, deliberately excluding CNA/SHARP_RUNTIME/vendored deps (out of scope per CLAUDE.md). Fixed a link-time propagation bug found during verification: a per-target `target_link_options()` on a STATIC LIBRARY (Mc3/Mcb) does not carry to executables that link against it, so `mc3_roundtrip_test`/`mcb_roundtrip_test` failed with `undefined reference to '__asan_report_load8'` etc. Root-caused to needing the sanitizer runtime linked at every final-executable link step, not just the instrumented library; fixed via a global `add_link_options(-fsanitize=address,undefined)` at the CMakeLists.txt root, before any `add_subdirectory()`, so every final link in the tree picks up the runtime (harmless for non-instrumented CNA/vendored object code) while compile-time instrumentation stays scoped to first-party targets via `meshcraft_apply_sanitize()`. Verified `mc3_roundtrip_test` and `mcb_roundtrip_test` both link and run clean under ASan/UBSan with zero findings. **Not done** (explicitly out of scope for this pass, left for follow-up): CI wiring (blocked on AUD-052), clang-format/clang-tidy checked-in config, and a dedicated libFuzzer/AFL harness over McbReader/Mc3XmlParser — those remain open work, tracked separately (SYS-W11-04 covers the sanitizer-config half of this gap; SYS-W11-05 covers fuzzing).
 
 ### AUD-056 `[DONE]` `P3` `W11` · CI FetchContent cache key omits the file where 3 of 4 components' real dependency is pinned — documented invalidation guarantee is inaccurate
 - **Component:** .github_/workflows/ci.yml
