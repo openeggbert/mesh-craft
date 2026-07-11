@@ -89,7 +89,10 @@ std::string AiAssistant::jsonEscape(const std::string& s) {
 }
 
 // Extract the value of "stop_reason" from a Claude /v1/messages response JSON.
-// Returns "end_turn", "max_tokens", or empty string if not found.
+// Returns "end_turn", "max_tokens", or empty string if not found (including
+// a literal `"stop_reason":null` -- that and "not present at all" are not
+// distinguished, but wasTruncated() only ever compares against "max_tokens",
+// so both collapse to the same "not truncated" outcome either way).
 std::string AiAssistant::extractStopReason(const std::string& json) {
     const std::string key = "\"stop_reason\":\"";
     auto pos = json.find(key);
@@ -101,60 +104,122 @@ std::string AiAssistant::extractStopReason(const std::string& json) {
     return out;
 }
 
-// Extract the text value of the first "text" key in the JSON response.
-// Claude /v1/messages response: {"content":[{"type":"text","text":"..."}]}
+namespace {
+
+// Appends `code` (a full Unicode code point, already surrogate-pair-
+// combined if it came from one) to `out` as UTF-8. A code point still in
+// the surrogate range (0xD800-0xDFFF) here is always a LONE, unpaired
+// surrogate -- extractFirstTextValue() below already combines valid pairs
+// before ever reaching this function -- so it is replaced with U+FFFD (the
+// standard Unicode "invalid sequence" replacement character) instead of
+// being encoded as an invalid 3-byte pseudo-UTF-8 sequence.
+void appendUtf8CodePoint(std::string& out, unsigned code) {
+    if (code >= 0xD800 && code <= 0xDFFF) code = 0xFFFD;
+    if (code < 0x80) {
+        out += static_cast<char>(code);
+    } else if (code < 0x800) {
+        out += static_cast<char>(0xC0 | (code >> 6));
+        out += static_cast<char>(0x80 | (code & 0x3F));
+    } else if (code < 0x10000) {
+        out += static_cast<char>(0xE0 | (code >> 12));
+        out += static_cast<char>(0x80 | ((code >> 6) & 0x3F));
+        out += static_cast<char>(0x80 | (code & 0x3F));
+    } else {
+        out += static_cast<char>(0xF0 | (code >> 18));
+        out += static_cast<char>(0x80 | ((code >> 12) & 0x3F));
+        out += static_cast<char>(0x80 | ((code >> 6) & 0x3F));
+        out += static_cast<char>(0x80 | (code & 0x3F));
+    }
+}
+
+// Reads the 4 hex digits of a `\uXXXX` escape, where `pos` is the index of
+// the backslash. Returns -1 if out of bounds or not valid hex.
+long readHex4(const std::string& json, size_t pos) {
+    if (pos + 5 >= json.size()) return -1;
+    unsigned code = 0;
+    for (int i = 2; i <= 5; ++i) {
+        char h = json[pos + i];
+        code <<= 4;
+        if      (h >= '0' && h <= '9') code |= static_cast<unsigned>(h - '0');
+        else if (h >= 'a' && h <= 'f') code |= static_cast<unsigned>(h - 'a' + 10);
+        else if (h >= 'A' && h <= 'F') code |= static_cast<unsigned>(h - 'A' + 10);
+        else return -1;
+    }
+    return static_cast<long>(code);
+}
+
+} // namespace
+
+// Extract the text value from the first {"type":"text","text":"..."} block
+// in a Claude /v1/messages response, e.g.
+// {"content":[{"type":"text","text":"..."}],"stop_reason":"end_turn"}.
+//
+// AUD-009: previously searched for the bare "text":" key anywhere in the
+// body -- Claude's Messages API can emit other content-block types
+// (citations, tool_use, future server-tool blocks) that might themselves
+// carry an unrelated "text"-named field earlier in the response, which
+// would have been extracted instead of the real answer. Anchoring on the
+// full "type":"text","text":" prefix scopes this to an actual text block,
+// without introducing a real JSON parser dependency (a deliberate,
+// documented scope choice for this file) -- it assumes compact JSON with no
+// inter-token whitespace, which every other hand-rolled scan here already
+// assumes (this is how api.anthropic.com actually serializes responses).
 std::string AiAssistant::extractFirstTextValue(const std::string& json) {
-    const std::string key = "\"text\":\"";
+    const std::string key = "\"type\":\"text\",\"text\":\"";
     auto pos = json.find(key);
     if (pos == std::string::npos) return {};
     pos += key.size();
+
     std::string out;
     while (pos < json.size()) {
         char c = json[pos];
-        if (c == '\\' && pos + 1 < json.size()) {
-            char n = json[pos + 1];
-            switch (n) {
-                case '"':  out += '"';  break;
-                case '\\': out += '\\'; break;
-                case '/':  out += '/';  break;
-                case 'n':  out += '\n'; break;
-                case 'r':  out += '\r'; break;
-                case 't':  out += '\t'; break;
-                case 'b':  out += '\b'; break;
-                case 'f':  out += '\f'; break;
-                case 'u':
-                    if (pos + 5 < json.size()) {
-                        unsigned code = 0;
-                        for (int i = 2; i <= 5; ++i) {
-                            char h = json[pos + i];
-                            code <<= 4;
-                            if (h >= '0' && h <= '9') code |= h - '0';
-                            else if (h >= 'a' && h <= 'f') code |= h - 'a' + 10;
-                            else if (h >= 'A' && h <= 'F') code |= h - 'A' + 10;
-                        }
-                        // Encode as UTF-8 (BMP only)
-                        if (code < 0x80) {
-                            out += static_cast<char>(code);
-                        } else if (code < 0x800) {
-                            out += static_cast<char>(0xC0 | (code >> 6));
-                            out += static_cast<char>(0x80 | (code & 0x3F));
-                        } else {
-                            out += static_cast<char>(0xE0 | (code >> 12));
-                            out += static_cast<char>(0x80 | ((code >> 6) & 0x3F));
-                            out += static_cast<char>(0x80 | (code & 0x3F));
-                        }
-                        pos += 4; // extra 4 (plus the 2 from outer +=2)
-                    }
-                    break;
-                default: out += n; break;
+        if (c == '"') break;
+        if (c != '\\' || pos + 1 >= json.size()) { out += c; ++pos; continue; }
+
+        char n = json[pos + 1];
+        if (n == 'u') {
+            long code = readHex4(json, pos);
+            if (code < 0) { pos += 2; continue; } // malformed escape, skip just the "\u"
+
+            if (code >= 0xD800 && code <= 0xDBFF) {
+                // Possible high surrogate: combine with an immediately
+                // following low surrogate into one astral code point
+                // (AUD-009 -- previously each half was UTF-8-encoded
+                // independently, producing two invalid sequences for any
+                // character outside the Basic Multilingual Plane, e.g.
+                // most emoji).
+                size_t lowPos = pos + 6; // just past this "\uXXXX"
+                long low = (lowPos + 1 < json.size() && json[lowPos] == '\\' && json[lowPos + 1] == 'u')
+                               ? readHex4(json, lowPos) : -1;
+                if (low >= 0xDC00 && low <= 0xDFFF) {
+                    unsigned astral = 0x10000u
+                        + ((static_cast<unsigned>(code) - 0xD800u) << 10)
+                        + (static_cast<unsigned>(low) - 0xDC00u);
+                    appendUtf8CodePoint(out, astral);
+                    pos = lowPos + 6; // consumed both "\uXXXX" escapes
+                    continue;
+                }
+                // Lone high surrogate -- no valid low surrogate follows;
+                // falls through to appendUtf8CodePoint(code) below, which
+                // maps it to U+FFFD.
             }
-            pos += 2;
-        } else if (c == '"') {
-            break;
-        } else {
-            out += c;
-            ++pos;
+            appendUtf8CodePoint(out, static_cast<unsigned>(code));
+            pos += 6;
+            continue;
         }
+
+        switch (n) {
+            case '"':  out += '"';  break;
+            case '\\': out += '\\'; break;
+            case '/':  out += '/';  break;
+            case 'n':  out += '\n'; break;
+            case 'r':  out += '\r'; break;
+            case 't':  out += '\t'; break;
+            case 'b':  out += '\b'; break;
+            case 'f':  out += '\f'; break;
+            default:   out += n;    break;
+        }
+        pos += 2;
     }
     return out;
 }

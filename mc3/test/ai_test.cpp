@@ -20,6 +20,7 @@
 #include <chrono>
 #include <condition_variable>
 #include <filesystem>
+#include <fstream>
 #include <iostream>
 #include <mutex>
 #include <set>
@@ -98,6 +99,38 @@ static void testExtractFirstTextValue() {
           "extractFirstTextValue: decodes a \\u00e9 JSON escape to UTF-8 (2-byte case)");
     CHECK(AiAssistant::extractFirstTextValue(R"({"no_text_key":1})").empty(),
           "extractFirstTextValue: missing key returns empty string");
+
+    // AUD-009(a): a bare "text":"..." field appearing before the real
+    // {"type":"text","text":"..."} content block (e.g. a citation or a
+    // future block shape that happens to carry its own unrelated "text"
+    // key) must NOT be extracted -- only a "text" key genuinely scoped
+    // under "type":"text" counts.
+    CHECK(AiAssistant::extractFirstTextValue(
+              R"({"content":[{"type":"citation","text":"decoy"},)"
+              R"({"type":"text","text":"the real answer"}]})")
+              == "the real answer",
+          "extractFirstTextValue: skips a decoy \"text\" field not scoped under type=text");
+
+    // AUD-009(b): an astral-plane character (outside the Basic
+    // Multilingual Plane) is encoded by JSON as a UTF-16 surrogate PAIR
+    // (two consecutive \uXXXX escapes). They must be combined into one
+    // code point and UTF-8-encoded as 4 bytes -- encoding each half
+    // independently (the pre-fix behavior) produces two invalid 3-byte
+    // sequences instead. 😀 is U+1F600 (grinning face emoji),
+    // UTF-8 F0 9F 98 80.
+    std::string jsonWithAstralEscape =
+        std::string(R"({"content":[{"type":"text","text":")") + "\\ud83d\\ude00" + R"("}]})";
+    std::string expectedEmoji = "\xF0\x9F\x98\x80";
+    CHECK(AiAssistant::extractFirstTextValue(jsonWithAstralEscape) == expectedEmoji,
+          "extractFirstTextValue: combines a UTF-16 surrogate pair into valid 4-byte UTF-8 (astral emoji)");
+
+    // A lone (unpaired) high surrogate is not silently emitted as invalid
+    // UTF-8 -- it's replaced with U+FFFD (EF BF BD), the standard Unicode
+    // "invalid sequence" marker.
+    std::string jsonWithLoneSurrogate =
+        std::string(R"({"content":[{"type":"text","text":"x)") + "\\ud83d" + R"(y"}]})";
+    CHECK(AiAssistant::extractFirstTextValue(jsonWithLoneSurrogate) == "x\xEF\xBF\xBDy",
+          "extractFirstTextValue: a lone high surrogate becomes U+FFFD, not invalid UTF-8");
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -244,6 +277,60 @@ static void testValidateAndParseAcceptsNonEmptyDocument() {
     if (result.doc)
         CHECK(result.doc->objects.size() == 1,
               "validateAndParseAiResponseAlg: the accepted document has the expected object");
+}
+
+// AUD-010: parseXmlAlg (the AI-response entry point) already calls
+// Mc3Document::loadFromString with Mc3LoadPolicy::untrusted(), which sets
+// allowIncludes=false -- but that was never actually exercised through the
+// AI-response pipeline by any test (only the underlying include-resolution
+// machinery itself, via mc3/test/roundtrip_test.cpp, and Mc3LoadPolicy
+// directly, via mc3/test/load_policy_test.cpp). A regression that
+// accidentally routed AI responses through Mc3LoadPolicy::trusted() instead
+// would have passed CI undetected. Proves it with a REAL file whose content
+// would be observably merged if <include> were honored -- the absence of
+// that content is the actual proof, not merely "no exception was thrown".
+static void testAiResponseIncludeIsIgnoredNotResolved() {
+    auto secretPath = uniqueTempPath("mc3_ai_test_secret", ".mc3.xml");
+    {
+        std::ofstream f(secretPath);
+        f << R"(<mc3 version="0.3"><definitions>)"
+             R"(<definition id="leaked_from_ai_include"><box name="b"/></definition>)"
+             R"(</definitions></mc3>)";
+    }
+
+    std::string maliciousResponse =
+        "<mc3 version=\"0.3\">"
+        "<include file=\"" + secretPath.string() + "\"/>"
+        "<objects><box name=\"visible\"/></objects>"
+        "</mc3>";
+
+    auto result = validateAndParseAiResponseAlg(maliciousResponse);
+    CHECK(result.doc.has_value(),
+          "AUD-010: an AI response containing <include> still parses successfully "
+          "(the include is silently ignored, not treated as a fatal error)");
+    if (result.doc) {
+        CHECK(result.doc->definitions.count("leaked_from_ai_include") == 0,
+              "AUD-010: <include> in an AI response is NOT resolved -- the target file's "
+              "content (a distinctive definition id) is absent from the parsed document");
+        bool hasVisible = false;
+        for (const auto& o : result.doc->objects) if (o && o->name == "visible") hasVisible = true;
+        CHECK(hasVisible, "AUD-010: the rest of the malicious response still parses normally");
+    }
+
+    // Same, for a path-traversal-shaped target that doesn't even exist --
+    // must still be silently ignored, since allowIncludes=false skips
+    // <include> processing unconditionally, regardless of what the path
+    // looks like (no path-shape-dependent special case to bypass).
+    auto traversalResult = validateAndParseAiResponseAlg(
+        "<mc3 version=\"0.3\">"
+        "<include file=\"../../../../etc/passwd\"/>"
+        "<objects><box name=\"visible2\"/></objects>"
+        "</mc3>");
+    CHECK(traversalResult.doc.has_value(),
+          "AUD-010: a path-traversal-shaped <include> target is ignored, not treated as an "
+          "error or attempted, exactly like any other <include> in an AI response");
+
+    std::filesystem::remove(secretPath);
 }
 
 // STAB-0392 — a real bug found while writing this test: parseXmlAlg wrote its
@@ -751,6 +838,7 @@ int main() {
     testValidateAndParseMalformedXmlSetsError();
     testValidateAndParseEmptyDocumentRejected();
     testValidateAndParseAcceptsNonEmptyDocument();
+    testAiResponseIncludeIsIgnoredNotResolved();
     testValidateAndParseAcceptsDefinitionsOnlyDocument();
     testMalformedResponseDoesNotLeakTempFiles();
     testValidateXmlAgainstXsdAcceptsValidDocument();
