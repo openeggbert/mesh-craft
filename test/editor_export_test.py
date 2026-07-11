@@ -21,6 +21,13 @@ makes these four rows testable:
   STAB-0529: after a successful export, stdout contains the same
              "Exported <file> (N meshes...)" stats message shown in the
              editor's status bar, plus object/triangle/warning counts.
+  AUD-037:   the fixture scene (house.mc3.xml) has an unnamed <ambient>
+             light, which the exporter always warns about (STAB-0696/
+             AUD-026) -- so its export status message must surface that
+             warning count instead of reading as an unqualified clean
+             success, matching what the editor's on-screen status bar
+             now shows (runGltfExport() passes isError=true to
+             setStatusMsg() when stats.warnings > 0).
 
 Usage: editor_export_test.py <MeshCraft-binary> <scene.mc3.xml>
 """
@@ -61,6 +68,17 @@ def main():
         m = re.search(r"\[MeshCraft\] Exported .+\(\d+ meshes.*\).* — \d+ objects, \d+ triangles, \d+ warnings", r.stdout)
         assert m, f"expected an 'Exported ... meshes ... objects, triangles, warnings' stats line in stdout.\nstdout={r.stdout}"
         print(f"PASS (STAB-0529): stats message found — {m.group(0)}")
+
+        # AUD-037: house.mc3.xml's unnamed ambient light always produces
+        # exactly 1 export warning (AUD-026); the status message text
+        # itself (not just the trailing "N warnings" tally that was always
+        # printed) must call that out, since this same string is what
+        # setStatusMsg() shows on-screen with the isError=true red styling.
+        assert re.search(r"\[MeshCraft\] Exported .+— 1 warning \(export may be incomplete or approximate", r.stdout), (
+            f"expected the status message itself (not just the trailing tally) to surface "
+            f"the 1 known warning from house.mc3.xml's unnamed ambient light.\nstdout={r.stdout}"
+        )
+        print("PASS (AUD-037): export status message surfaces the warning count, not just the trailing tally")
 
         # STAB-0527: glTF (JSON) export — file created, valid JSON.
         gltf_path = os.path.join(tmpdir, "out.gltf")

@@ -285,6 +285,22 @@ void MeshCraftApplication::runGltfExport(const std::string& outPath) {
         + (s.reusedMeshRefs > 0 ? ", " + std::to_string(s.reusedMeshRefs) + " reused" : "")
         + ")";
 
+    // AUD-037: the exporter can drop/approximate geometry (e.g. an
+    // approximate-CSG node exported as separate, geometrically-incorrect
+    // meshes) while merely incrementing stats.warnings -- previously that
+    // count only reached std::cout below, never the on-screen status, so
+    // the editor showed an unqualified green "Exported" for a partial
+    // export. Surface it and reuse the existing isError=true red styling
+    // (already used elsewhere in this class for non-fatal cautions, not
+    // just hard failures) so a warning-carrying export doesn't read as a
+    // clean success.
+    bool hasWarnings = s.warnings > 0;
+    if (hasWarnings) {
+        statusMsg += " — " + std::to_string(s.warnings)
+            + (s.warnings == 1 ? " warning" : " warnings")
+            + " (export may be incomplete or approximate; see console)";
+    }
+
 #ifdef __EMSCRIPTEN__
     if (fmt == mc3togltf::OutputFormat::GLB) {
         meshcraftWebDownloadFile(out.string().c_str(), out.filename().string().c_str());
@@ -294,7 +310,7 @@ void MeshCraftApplication::runGltfExport(const std::string& outPath) {
     }
 #endif
 
-    setStatusMsg(statusMsg);
+    setStatusMsg(statusMsg, hasWarnings);
     std::cout << "[MeshCraft] " << statusMsg
                << " — " << s.objectsProcessed << " objects, "
                << s.totalTriangles << " triangles, " << s.warnings << " warnings\n";
