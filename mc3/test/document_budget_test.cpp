@@ -145,11 +145,95 @@ static void testEmbedAggregateBytesBudget() {
           "rejection names the aggregate embed-bytes budget, not an unrelated failure: " + what);
 }
 
+// ---------------------------------------------------------------------------
+// Actions: kMaxTotalActions = 10,000 -- each action here has no channels,
+// so this stays nowhere near the channel/keyframe budgets.
+// ---------------------------------------------------------------------------
+static void testActionBudget() {
+    std::string xml = "<mc3 version=\"0.3\" model=\"action-budget\">\n  <actions>\n";
+    for (int i = 0; i < 10'001; ++i)
+        xml += "    <action name=\"a" + std::to_string(i) + "\"/>\n";
+    xml += "  </actions>\n</mc3>\n";
+
+    std::string what = loadExpectingThrow(xml);
+    check(!what.empty(), "10,001 empty actions exceeds the action budget and is rejected");
+    check(what.find("action") != std::string::npos,
+          "rejection names the action budget, not an unrelated failure: " + what);
+
+    std::string okXml = "<mc3 version=\"0.3\" model=\"action-ok\">\n  <actions>\n";
+    for (int i = 0; i < 500; ++i)
+        okXml += "    <action name=\"a" + std::to_string(i) + "\"/>\n";
+    okXml += "  </actions>\n</mc3>\n";
+    Mc3Document doc = load(okXml);
+    check(doc.actions.size() == 500, "500 actions (under budget) all load fine");
+}
+
+// ---------------------------------------------------------------------------
+// Channels: kMaxTotalChannels = 200,000 -- a single action with many
+// channels (no keyframes each), staying well under the action budget (1)
+// and the keyframe budget (0 keyframes).
+// ---------------------------------------------------------------------------
+static void testChannelBudget() {
+    std::string xml = "<mc3 version=\"0.3\" model=\"channel-budget\">\n  <actions>\n"
+                       "    <action name=\"a\">\n";
+    for (int i = 0; i < 200'001; ++i)
+        xml += "      <channel target=\"obj\" property=\"position.x\"/>\n";
+    xml += "    </action>\n  </actions>\n</mc3>\n";
+
+    std::string what = loadExpectingThrow(xml);
+    check(!what.empty(), "200,001 channels (1 action) exceeds the channel budget and is rejected");
+    check(what.find("channel") != std::string::npos,
+          "rejection names the channel budget, not an unrelated failure: " + what);
+
+    std::string okXml = "<mc3 version=\"0.3\" model=\"channel-ok\">\n  <actions>\n"
+                         "    <action name=\"a\">\n";
+    for (int i = 0; i < 500; ++i)
+        okXml += "      <channel target=\"obj\" property=\"position.x\"/>\n";
+    okXml += "    </action>\n  </actions>\n</mc3>\n";
+    Mc3Document doc = load(okXml);
+    check(doc.actions.count("a") == 1 && doc.actions.at("a").channels.size() == 500,
+          "500 channels (under budget) all load fine");
+}
+
+// ---------------------------------------------------------------------------
+// Keyframes: kMaxTotalKeyframes = 2,000,000 -- a single channel with many
+// keyframes, staying well under the action and channel budgets.
+// ---------------------------------------------------------------------------
+static void testKeyframeBudget() {
+    std::string xml = "<mc3 version=\"0.3\" model=\"keyframe-budget\">\n  <actions>\n"
+                       "    <action name=\"a\">\n"
+                       "      <channel target=\"obj\" property=\"position.x\">\n";
+    for (int i = 0; i < 2'000'001; ++i)
+        xml += "        <keyframe time=\"" + std::to_string(i) + "\" value=\"0\"/>\n";
+    xml += "      </channel>\n    </action>\n  </actions>\n</mc3>\n";
+
+    std::string what = loadExpectingThrow(xml);
+    check(!what.empty(),
+          "2,000,001 keyframes (1 action, 1 channel) exceeds the keyframe budget and is rejected");
+    check(what.find("keyframe") != std::string::npos,
+          "rejection names the keyframe budget, not an unrelated failure: " + what);
+
+    std::string okXml = "<mc3 version=\"0.3\" model=\"keyframe-ok\">\n  <actions>\n"
+                         "    <action name=\"a\">\n"
+                         "      <channel target=\"obj\" property=\"position.x\">\n";
+    for (int i = 0; i < 1000; ++i)
+        okXml += "        <keyframe time=\"" + std::to_string(i) + "\" value=\"0\"/>\n";
+    okXml += "      </channel>\n    </action>\n  </actions>\n</mc3>\n";
+    Mc3Document doc = load(okXml);
+    check(doc.actions.count("a") == 1 &&
+          doc.actions.at("a").channels.size() == 1 &&
+          doc.actions.at("a").channels[0].keyframes.size() == 1000,
+          "1000 keyframes (under budget) all load fine");
+}
+
 int main() {
     testMaterialBudget();
     testTextureBudget();
     testEmbedCountBudget();
     testEmbedAggregateBytesBudget();
+    testActionBudget();
+    testChannelBudget();
+    testKeyframeBudget();
 
     if (failures == 0) { std::cout << "All document-budget tests passed.\n"; return 0; }
     std::cerr << failures << " document-budget test(s) failed.\n";

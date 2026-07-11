@@ -256,6 +256,9 @@ struct DocumentBudget {
     long long totalTextures = 0;  // SYS-W1-03: <texture> and <texture type="svg"> combined
     long long totalEmbeds = 0;      // SYS-W1-03
     long long totalEmbedBytes = 0;  // SYS-W1-03: sum of every embed's base64Content.size()
+    long long totalActions = 0;   // SYS-W1-03
+    long long totalChannels = 0;  // SYS-W1-03
+    long long totalKeyframes = 0; // SYS-W1-03
 
     // Generous enough for any real scene (the largest checked-in stress
     // fixture sums to a few thousand) while still bounding the pathological
@@ -294,6 +297,17 @@ struct DocumentBudget {
     // established by kMaxTessellation + kMaxTotalTessellationWeight above.
     static constexpr long long kMaxTotalEmbeds = 1'000;
     static constexpr long long kMaxTotalEmbedBytes = 256ll * 1024 * 1024; // 256MB combined
+
+    // SYS-W1-03: an animation action/channel/keyframe is one of the
+    // cheapest structures in the format (a handful of floats/enums each),
+    // so these ceilings are generous even by kMaxTotalObjects' standard --
+    // sized to comfortably cover any real character-rig-scale animation set
+    // (hundreds of actions, tens of channels each, tens to low-hundreds of
+    // keyframes each) while still bounding worst-case vector/map memory
+    // against a document that's all animation data and nothing else.
+    static constexpr long long kMaxTotalActions = 10'000;
+    static constexpr long long kMaxTotalChannels = 200'000;
+    static constexpr long long kMaxTotalKeyframes = 2'000'000;
 
     void chargeObject() {
         if (++totalObjects > kMaxTotalObjects) {
@@ -358,10 +372,35 @@ struct DocumentBudget {
             throw std::runtime_error(msg);
         }
     }
+    void chargeAction() {
+        if (++totalActions > kMaxTotalActions) {
+            std::string msg = "MC3: document exceeds the total action budget (" +
+                std::to_string(kMaxTotalActions) + ")";
+            reportErrorDoc("actions", msg);
+            throw std::runtime_error(msg);
+        }
+    }
+    void chargeChannel() {
+        if (++totalChannels > kMaxTotalChannels) {
+            std::string msg = "MC3: document exceeds the total channel budget (" +
+                std::to_string(kMaxTotalChannels) + ")";
+            reportErrorDoc("channels", msg);
+            throw std::runtime_error(msg);
+        }
+    }
+    void chargeKeyframe() {
+        if (++totalKeyframes > kMaxTotalKeyframes) {
+            std::string msg = "MC3: document exceeds the total keyframe budget (" +
+                std::to_string(kMaxTotalKeyframes) + ")";
+            reportErrorDoc("keyframes", msg);
+            throw std::runtime_error(msg);
+        }
+    }
     void reset() {
         totalObjects = 0; totalTessellationWeight = 0; totalIncludes = 0;
         totalMaterials = 0; totalTextures = 0;
         totalEmbeds = 0; totalEmbedBytes = 0;
+        totalActions = 0; totalChannels = 0; totalKeyframes = 0;
     }
 };
 static thread_local DocumentBudget g_budget;
@@ -1190,6 +1229,7 @@ static constexpr float kMinTimeScale = 1e-3f;
 static void parseActions(const XMLElement* el, Mc3Document& doc) {
     for (const XMLElement* ae = el->FirstChildElement("action"); ae;
          ae = ae->NextSiblingElement("action")) {
+        g_budget.chargeAction(); // SYS-W1-03
         Mc3Action action;
         action.name      = attr(ae, "name");
         action.duration  = attrF(ae, "duration", 1.0f);
@@ -1203,6 +1243,7 @@ static void parseActions(const XMLElement* el, Mc3Document& doc) {
 
         for (const XMLElement* ce = ae->FirstChildElement("channel"); ce;
              ce = ce->NextSiblingElement("channel")) {
+            g_budget.chargeChannel(); // SYS-W1-03
             Mc3Channel ch;
             ch.targetObject = attr(ce, "target");
             auto prop = animatedPropertyFromName(attr(ce, "property", ""));
@@ -1211,6 +1252,7 @@ static void parseActions(const XMLElement* el, Mc3Document& doc) {
 
             for (const XMLElement* ke = ce->FirstChildElement("keyframe"); ke;
                  ke = ke->NextSiblingElement("keyframe")) {
+                g_budget.chargeKeyframe(); // SYS-W1-03
                 Mc3Keyframe kf;
                 kf.time          = attrF(ke, "time",  0.0f);
                 kf.value         = attrF(ke, "value", 0.0f);
