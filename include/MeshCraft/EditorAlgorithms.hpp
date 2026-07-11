@@ -1406,19 +1406,82 @@ inline bool isDroppableScenePathAlg(const std::filesystem::path& path)
     return path.extension() == ".xml" || path.string().find(".mc3") != std::string::npos;
 }
 
+// ── Live object-property resolution (STAB-0715) ───────────────────────────────
+//
+// Reads an object's REAL current value for a given AnimatedProperty — used to
+// seed a newly-created channel's first keyframe. This is the single source of
+// truth shared by production (MeshCraftApplication_Anim.cpp) and the headless
+// insertAnimKeyframesAlg mirror below, so the two can no longer diverge (they
+// previously did: the mirror returned 0.0 for every Material/Deform property
+// while production returned the object's live value — DeformX/Y/Z 1.0,
+// MaterialBaseColor 0.8, alpha 1.0, roughness 0.5, etc.).
+inline float resolveObjectPropertyValueAlg(const Mc3::Mc3Document& doc,
+                                           const Mc3::Mc3Object& obj,
+                                           Mc3::AnimatedProperty prop)
+{
+    using AP = Mc3::AnimatedProperty;
+    switch (prop) {
+    case AP::PositionX: return obj.transform.position[0];
+    case AP::PositionY: return obj.transform.position[1];
+    case AP::PositionZ: return obj.transform.position[2];
+    case AP::RotationX: return obj.transform.rotation[0];
+    case AP::RotationY: return obj.transform.rotation[1];
+    case AP::RotationZ: return obj.transform.rotation[2];
+    case AP::ScaleX:    return obj.transform.scale[0];
+    case AP::ScaleY:    return obj.transform.scale[1];
+    case AP::ScaleZ:    return obj.transform.scale[2];
+    case AP::Visible:   return obj.visible ? 1.0f : 0.0f;
+    case AP::DeformX:   return obj.deform.has_value() ? obj.deform->scale[0] : 1.0f;
+    case AP::DeformY:   return obj.deform.has_value() ? obj.deform->scale[1] : 1.0f;
+    case AP::DeformZ:   return obj.deform.has_value() ? obj.deform->scale[2] : 1.0f;
+    case AP::MaterialBaseColorR:
+    case AP::MaterialBaseColorG:
+    case AP::MaterialBaseColorB:
+    case AP::MaterialBaseColorA:
+    case AP::MaterialRoughness:
+    case AP::MaterialMetallic:
+    case AP::MaterialEmissiveR:
+    case AP::MaterialEmissiveG:
+    case AP::MaterialEmissiveB: {
+        const std::string& matName = !obj.materialOverride.empty() ? obj.materialOverride : obj.material;
+        auto it = matName.empty() ? doc.materials.end() : doc.materials.find(matName);
+        if (it == doc.materials.end()) {
+            switch (prop) {
+            case AP::MaterialBaseColorR: case AP::MaterialBaseColorG: case AP::MaterialBaseColorB: return 0.8f;
+            case AP::MaterialBaseColorA: return 1.0f;
+            case AP::MaterialRoughness:  return 0.5f;
+            default: return 0.0f; // metallic, emissive r/g/b
+            }
+        }
+        const auto& mat = it->second;
+        switch (prop) {
+        case AP::MaterialBaseColorR: return mat.baseColor[0];
+        case AP::MaterialBaseColorG: return mat.baseColor[1];
+        case AP::MaterialBaseColorB: return mat.baseColor[2];
+        case AP::MaterialBaseColorA: return mat.baseColor[3];
+        case AP::MaterialRoughness:  return mat.roughness;
+        case AP::MaterialMetallic:   return mat.metallic;
+        case AP::MaterialEmissiveR:  return mat.emissiveColor[0];
+        case AP::MaterialEmissiveG:  return mat.emissiveColor[1];
+        case AP::MaterialEmissiveB:  return mat.emissiveColor[2];
+        default: return 0.0f; // unreachable, silences -Wswitch
+        }
+    }
+    }
+    return 0.0f; // unreachable, silences -Wswitch
+}
+
 // ── Animation keyframe insertion (STAB-0284) ──────────────────────────────────
 //
-// Mirrors MeshCraftApplication::insertAnimKeyframes() (MeshCraftApplication_
-// Anim.cpp:94-153), minus pushUndo()/modified_/evaluateAndPushAnimOverrides().
-// For each requested property: finds the channel for (obj.name, prop) or
-// creates one; evaluates the object's *current* transform/visibility field as
-// the keyframe value (for TRS/Visible properties) or the channel's currently
-// animated value at animTime (for every other property — there's no live
-// "current value" on Mc3Object for those, e.g. material/deform channels);
-// then either overwrites an existing keyframe within 0.001 of animTime, or
-// inserts a new one and re-sorts the channel by time.
+// Mirrors MeshCraftApplication::insertAnimKeyframes(), minus pushUndo()/
+// modified_/evaluateAndPushAnimOverrides(). For each requested property: finds
+// or creates the channel for (obj.name, prop); seeds the keyframe with the
+// object's live value via the shared resolveObjectPropertyValueAlg() (same
+// resolution production uses); then overwrites an existing keyframe within
+// 0.001 of animTime or inserts a new one and re-sorts the channel by time.
 
 inline void insertAnimKeyframesAlg(
+    const Mc3::Mc3Document&                    doc,
     Mc3::Mc3Action&                            action,
     const Mc3::Mc3Object&                      obj,
     const std::vector<Mc3::AnimatedProperty>&  props,
@@ -1438,21 +1501,7 @@ inline void insertAnimKeyframesAlg(
             ci = static_cast<int>(action.channels.size()) - 1;
         }
 
-        float value = 0.0f;
-        switch (prop) {
-        case Mc3::AnimatedProperty::PositionX: value = obj.transform.position[0]; break;
-        case Mc3::AnimatedProperty::PositionY: value = obj.transform.position[1]; break;
-        case Mc3::AnimatedProperty::PositionZ: value = obj.transform.position[2]; break;
-        case Mc3::AnimatedProperty::RotationX: value = obj.transform.rotation[0]; break;
-        case Mc3::AnimatedProperty::RotationY: value = obj.transform.rotation[1]; break;
-        case Mc3::AnimatedProperty::RotationZ: value = obj.transform.rotation[2]; break;
-        case Mc3::AnimatedProperty::ScaleX:    value = obj.transform.scale[0];    break;
-        case Mc3::AnimatedProperty::ScaleY:    value = obj.transform.scale[1];    break;
-        case Mc3::AnimatedProperty::ScaleZ:    value = obj.transform.scale[2];    break;
-        case Mc3::AnimatedProperty::Visible:   value = obj.visible ? 1.0f : 0.0f; break;
-        default:
-            value = Mc3::evaluateChannel(action.channels[ci], animTime); break;
-        }
+        float value = resolveObjectPropertyValueAlg(doc, obj, prop);
 
         auto& ch = action.channels[ci];
         bool replaced = false;

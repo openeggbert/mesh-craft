@@ -2163,7 +2163,7 @@ static void testUndoRedoAnimKeyframe()
     Mc3Document doc = makeUndoScene();
     doc.actions["Walk"] = Mc3::Mc3Action::make("Walk", 2.0f);
     checkUndoRedo("animKeyframe", doc, [&](Mc3Document& d) {
-        insertAnimKeyframesAlg(d.actions["Walk"], *d.objects.front(),
+        insertAnimKeyframesAlg(d, d.actions["Walk"], *d.objects.front(),
             { Mc3::AnimatedProperty::PositionX, Mc3::AnimatedProperty::Visible }, 0.5f);
     });
 }
@@ -2175,7 +2175,7 @@ static void testInsertAnimKeyframesCreatesAndReplaces()
     obj.transform.position[0] = 3.0f;
     Mc3::Mc3Action action = Mc3::Mc3Action::make("Walk");
 
-    insertAnimKeyframesAlg(action, obj, { Mc3::AnimatedProperty::PositionX }, 0.0f);
+    insertAnimKeyframesAlg(doc, action, obj, { Mc3::AnimatedProperty::PositionX }, 0.0f);
     CHECK(action.channels.size() == 1,
           "anim keyframe: creates a new channel for a never-animated property");
     CHECK(action.channels[0].keyframes.size() == 1,
@@ -2184,17 +2184,64 @@ static void testInsertAnimKeyframesCreatesAndReplaces()
           "anim keyframe: captures the object's current value");
 
     obj.transform.position[0] = 9.0f;
-    insertAnimKeyframesAlg(action, obj, { Mc3::AnimatedProperty::PositionX }, 1.0f);
+    insertAnimKeyframesAlg(doc, action, obj, { Mc3::AnimatedProperty::PositionX }, 1.0f);
     CHECK(action.channels.size() == 1,
           "anim keyframe: reuses the existing channel for the same property");
     CHECK(action.channels[0].keyframes.size() == 2,
           "anim keyframe: adds a second keyframe at a new time");
 
-    insertAnimKeyframesAlg(action, obj, { Mc3::AnimatedProperty::PositionX }, 1.0f);
+    insertAnimKeyframesAlg(doc, action, obj, { Mc3::AnimatedProperty::PositionX }, 1.0f);
     CHECK(action.channels[0].keyframes.size() == 2,
           "anim keyframe: re-inserting at the same time replaces, not duplicates");
     CHECKF(action.channels[0].keyframes[1].value, 9.0f,
           "anim keyframe: the replaced keyframe holds the latest value");
+}
+
+// Regression: the headless mirror used to capture Deform/Material keyframes as
+// 0.0 (it fell through to evaluateChannel on an empty channel) while production
+// captured the object's live value. Both now share resolveObjectPropertyValueAlg,
+// so a Deform/Material keyframe must seed with the live default, not 0.0.
+static void testInsertAnimKeyframesDeformMaterialLiveValue()
+{
+    Mc3Document doc = makeUndoScene();
+    auto& obj = *doc.objects.front();
+    Mc3::Mc3Action action = Mc3::Mc3Action::make("Fx");
+
+    // Object has no deform and no material -> documented live defaults apply.
+    insertAnimKeyframesAlg(doc, action, obj,
+        { Mc3::AnimatedProperty::DeformX,
+          Mc3::AnimatedProperty::MaterialBaseColorR,
+          Mc3::AnimatedProperty::MaterialBaseColorA,
+          Mc3::AnimatedProperty::MaterialRoughness }, 0.0f);
+
+    auto val = [&](Mc3::AnimatedProperty p) -> float {
+        for (const auto& ch : action.channels)
+            if (ch.property == p && !ch.keyframes.empty())
+                return ch.keyframes[0].value;
+        return -999.0f;
+    };
+    CHECKF(val(Mc3::AnimatedProperty::DeformX), 1.0f,
+          "deform keyframe seeds with live default 1.0, not 0.0");
+    CHECKF(val(Mc3::AnimatedProperty::MaterialBaseColorR), 0.8f,
+          "material base-color R keyframe seeds with default 0.8, not 0.0");
+    CHECKF(val(Mc3::AnimatedProperty::MaterialBaseColorA), 1.0f,
+          "material base-color A keyframe seeds with default 1.0, not 0.0");
+    CHECKF(val(Mc3::AnimatedProperty::MaterialRoughness), 0.5f,
+          "material roughness keyframe seeds with default 0.5, not 0.0");
+
+    // With an actual material assigned, the live material value is captured.
+    Mc3::Mc3Material mat; mat.name = "Red";
+    mat.baseColor = {0.9f, 0.1f, 0.2f, 0.7f};
+    doc.materials["Red"] = mat;
+    obj.material = "Red";
+    Mc3::Mc3Action action2 = Mc3::Mc3Action::make("Fx2");
+    insertAnimKeyframesAlg(doc, action2, obj,
+        { Mc3::AnimatedProperty::MaterialBaseColorR }, 0.0f);
+    float r = -999.0f;
+    for (const auto& ch : action2.channels)
+        if (ch.property == Mc3::AnimatedProperty::MaterialBaseColorR && !ch.keyframes.empty())
+            r = ch.keyframes[0].value;
+    CHECKF(r, 0.9f, "material keyframe captures the assigned material's live value");
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -3320,6 +3367,7 @@ int main()
     testInvalidFileLoadThrowsNamedError();
     testUndoRedoAnimKeyframe();
     testInsertAnimKeyframesCreatesAndReplaces();
+    testInsertAnimKeyframesDeformMaterialLiveValue();
     testUndoRedoRegistryInsert();
     testKeyBindStringFormat();
     testKeybindingPersistenceRoundTrip();

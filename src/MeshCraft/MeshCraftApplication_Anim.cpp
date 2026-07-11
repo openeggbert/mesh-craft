@@ -1,4 +1,5 @@
 #include "MeshCraft/MeshCraftApplication.hpp"
+#include "MeshCraft/EditorAlgorithms.hpp"
 
 #include <imgui.h>
 
@@ -14,71 +15,10 @@ namespace MeshCraft {
 
 using namespace Microsoft::Xna::Framework;
 
-// STAB-0715: reads an object's REAL current value for a given AnimatedProperty,
-// used to seed a newly-created channel's first keyframe. Previously only the
-// 10 Position/Rotation/Scale/Visible properties were handled (both at this
-// function's two call sites, which duplicated the same switch) -- the other
-// 12 Deform/Material properties fell through to a hardcoded 0.0f instead of
-// the object's actual deform scale / material value, a real (if minor,
-// user-correctable) inconsistency versus every other property type.
-static float resolveObjectPropertyValue(const Mc3::Mc3Document& doc,
-                                        const Mc3::Mc3Object& obj,
-                                        Mc3::AnimatedProperty prop)
-{
-    using AP = Mc3::AnimatedProperty;
-    switch (prop) {
-    case AP::PositionX: return obj.transform.position[0];
-    case AP::PositionY: return obj.transform.position[1];
-    case AP::PositionZ: return obj.transform.position[2];
-    case AP::RotationX: return obj.transform.rotation[0];
-    case AP::RotationY: return obj.transform.rotation[1];
-    case AP::RotationZ: return obj.transform.rotation[2];
-    case AP::ScaleX:    return obj.transform.scale[0];
-    case AP::ScaleY:    return obj.transform.scale[1];
-    case AP::ScaleZ:    return obj.transform.scale[2];
-    case AP::Visible:   return obj.visible ? 1.0f : 0.0f;
-    case AP::DeformX:   return obj.deform.has_value() ? obj.deform->scale[0] : 1.0f;
-    case AP::DeformY:   return obj.deform.has_value() ? obj.deform->scale[1] : 1.0f;
-    case AP::DeformZ:   return obj.deform.has_value() ? obj.deform->scale[2] : 1.0f;
-    case AP::MaterialBaseColorR:
-    case AP::MaterialBaseColorG:
-    case AP::MaterialBaseColorB:
-    case AP::MaterialBaseColorA:
-    case AP::MaterialRoughness:
-    case AP::MaterialMetallic:
-    case AP::MaterialEmissiveR:
-    case AP::MaterialEmissiveG:
-    case AP::MaterialEmissiveB: {
-        const std::string& matName = !obj.materialOverride.empty() ? obj.materialOverride : obj.material;
-        auto it = matName.empty() ? doc.materials.end() : doc.materials.find(matName);
-        if (it == doc.materials.end()) {
-            // No material assigned/found -- fall back to Mc3Material's own
-            // documented defaults (Mc3Material.hpp), not an arbitrary 0.0f.
-            switch (prop) {
-            case AP::MaterialBaseColorR: case AP::MaterialBaseColorG: case AP::MaterialBaseColorB: return 0.8f;
-            case AP::MaterialBaseColorA: return 1.0f;
-            case AP::MaterialRoughness:  return 0.5f;
-            default: return 0.0f; // metallic, emissive r/g/b
-            }
-        }
-        const auto& mat = it->second;
-        switch (prop) {
-        case AP::MaterialBaseColorR: return mat.baseColor[0];
-        case AP::MaterialBaseColorG: return mat.baseColor[1];
-        case AP::MaterialBaseColorB: return mat.baseColor[2];
-        case AP::MaterialBaseColorA: return mat.baseColor[3];
-        case AP::MaterialRoughness:  return mat.roughness;
-        case AP::MaterialMetallic:   return mat.metallic;
-        case AP::MaterialEmissiveR:  return mat.emissiveColor[0];
-        case AP::MaterialEmissiveG:  return mat.emissiveColor[1];
-        case AP::MaterialEmissiveB:  return mat.emissiveColor[2];
-        default: return 0.0f; // unreachable, silences -Wswitch
-        }
-    }
-    }
-    return 0.0f; // unreachable, silences -Wswitch
-}
-
+// resolveObjectPropertyValue lives in EditorAlgorithms.hpp as the CNA-free,
+// headlessly-testable resolveObjectPropertyValueAlg() (STAB-0715), so this
+// production code and the insertAnimKeyframesAlg test mirror share one
+// implementation and cannot drift.
 void MeshCraftApplication::evaluateAndPushAnimOverrides() {
     // If the current action no longer exists in the document, clear it
     if (!currentActionName_.empty() && !document_.actions.count(currentActionName_)) {
@@ -192,7 +132,7 @@ void MeshCraftApplication::insertAnimKeyframes(
         // position/rotation/scale, so reading them the same way is the
         // behavior-preserving generalization, not a behavior change for
         // the original 10).
-        float value = resolveObjectPropertyValue(document_, obj, prop);
+        float value = resolveObjectPropertyValueAlg(document_, obj, prop);
 
         auto& ch = action.channels[ci];
         // Replace existing keyframe at this time, or insert a new one
@@ -488,7 +428,7 @@ void MeshCraftApplication::drawTimelinePanel(int screenW, int screenH) {
             float initVal = 0.0f;
             auto* obj = flatFindByName(addChannelObjBuf_);
             if (obj) {
-                initVal = resolveObjectPropertyValue(document_, *obj, prop);
+                initVal = resolveObjectPropertyValueAlg(document_, *obj, prop);
             }
             Mc3::Mc3Channel ch;
             ch.targetObject = addChannelObjBuf_;
