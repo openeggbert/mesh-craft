@@ -82,10 +82,11 @@ P1s already being fixed in git history. This session:
    is per-field only) not part of the original audit, filed as new `TODO`
    tasks.
 
-   **Net across all 62 AUD-### rows (57 original + 5 session-2 additions):
-   29 DONE, 31 TODO, 2 DEFERRED** — recompute with
-   `python3 test/validate_plan_consistency.py` rather than trusting this
-   number as time passes.
+   **Net across all 63 AUD-### rows (57 original + 6 session-2 additions,
+   the 6th — AUD-060 — found and fixed while testing AUD-002):
+   31 DONE, 30 TODO, 2 DEFERRED** — recompute with
+   `python3 test/validate_plan_consistency.py . <build-dir>` rather than
+   trusting this number as time passes.
 5. Archived `plan_deep_audit.md` (all 57 of its own tasks were already
    completed) and fixed `RELEASE.md`'s stale 66/66 test count.
 6. Removed machine-specific absolute source paths from this file's evidence
@@ -100,17 +101,16 @@ authoritative live state is always the AUD/SYS task table plus
 
 ## Priority execution queue (next up, in order)
 
-1. **AUD-002 (P1/W0)** — bounds-check `loadObjMesh` tinyobj indices.
-2. **AUD-039b (P1/W8)** — real Gate C enforcement (hard-fail, not a warning).
-3. **AUD-006b (P1/W1)** — extend resource confinement beyond mc3togltf export.
-4. **AUD-059 (P1/W1)** — total-document allocation budget (not just per-field).
-5. **AUD-036b (P0/W9)** — undo transaction abstraction + full triage (large;
+1. **AUD-039b (P1/W8)** — real Gate C enforcement (hard-fail, not a warning).
+2. **AUD-006b (P1/W1)** — extend resource confinement beyond mc3togltf export.
+3. **AUD-059 (P1/W1)** — total-document allocation budget (not just per-field).
+4. **AUD-036b (P0/W9)** — undo transaction abstraction + full triage (large;
    incremental).
-6. **AUD-003 (P3/W0)**, **AUD-015 (P2/W6)** — memory-safety cleanup
+5. **AUD-003 (P3/W0)**, **AUD-015 (P2/W6)** — memory-safety cleanup
    (`reinterpret_cast` alignment, MCB tag validation).
-7. **AUD-027/AUD-028 (P1/W7)** — pivot+translation and rotation-quaternion
+6. **AUD-027/AUD-028 (P1/W7)** — pivot+translation and rotation-quaternion
    animation export correctness.
-9. Remaining `TODO` AUD-### rows by severity, then SYS-### rows.
+7. Remaining `TODO` AUD-### rows by severity, then SYS-### rows.
 
 ---
 
@@ -253,12 +253,14 @@ DONE marker without checking its cited commit/verify command.
 - **Resolved:** commit `fd606d2` — verify: `ctest -R mc3togltf_hostile_geometry`
 - **Status note:** Root cause (helix tangent divide-by-zero) NOT changed; instead the exporter's finiteness gate (addAccessorVec3) now throws before writing NaN accessor data, so a degenerate helix fails loudly instead of emitting an invalid glTF reported as success -- the finding's own stated acceptable alternative outcome.
 
-### AUD-002 `[TODO]` `P1 (self-assigned P2, elevated/adjusted per adversarial correction)` `W0` · loadObjMesh indexes attrib arrays with unvalidated tinyobj face indices (potential OOB read)
+### AUD-002 `[DONE]` `P1 (self-assigned P2, elevated/adjusted per adversarial correction)` `W0` · loadObjMesh indexes attrib arrays with unvalidated tinyobj face indices (potential OOB read)
 - **Component:** mc3togltf/src/MeshBuilder.cpp (loadObjMesh)
 - **Evidence:** MeshBuilder.cpp:1188-1191 reads `auto vi = static_cast<size_t>(idx.vertex_index); m.positions.push_back(attrib.vertices[3*vi+0]); ...[3*vi+1]; ...[3*vi+2];` with no check that `3*vi+2 < attrib.vertices.size()`. Same for normals (MeshBuilder.cpp:1194-1197: `attrib.normals[3*ni+2]`) and texcoords (MeshBuilder.cpp:1204-1207: `attrib.texcoords[2*ti+1]`), and in the face-normal fallback (MeshBuilder.cpp:1176-1177). The code already validates vertex *values* are finite (MeshBuilder.cpp:1145-1150) but never validates *indices*. This path parses an arbitrary user-supplied .obj referenced by an mc3 <mesh src=...> (MeshBuilder.cpp:1123-1135). If tinyobjloader yields an out-of-range positive index or an unresolved negative index for a malformed face, `static_cast<size_t>` of a negative int becomes a huge value and the array subscript is an out-of-bounds read (undefined behavior / crash).
 - **Outcome:** Bounds-check each index against the corresponding attrib array size before subscripting (e.g. skip or reject the face/vertex when `3*vi+2 >= attrib.vertices.size()`, `ni<0 || 3*ni+2 >= attrib.normals.size()`, `ti<0 || 2*ti+1 >= attrib.texcoords.size()`), throwing a clear error like the finite-vertex guard already does.
 - **Tests:** Add an mc3togltf test that imports a hand-crafted malformed .obj whose face references a vertex index beyond the vertex count; it must fail with a clear error, not crash or read OOB (verify under ASan).
 - **Verify note:** Mechanism precision: the OOB is reachable specifically because a triangle face (npolys==3) with triangulate=true bypasses the (3*vi+2)>=v.size() guards that protect the quad/polygon triangulation paths, landing in the unchecked else branch at tiny_obj_loader.h:1965-1979; tinyobjloader emits only a non-fatal warning, which MeshBuilder.cpp:1136-1137 prints but does not treat as an error. The finding's secondary claim that a negative int becomes a huge size_t does not apply to vertex_index (fixIndex rejects idx<=0 for vertices with allow_zero=false), but the positive-out-of-range case it also cites is the real, confirmed vector; normal_index/texcoord_index are guarded by >=0 checks only against -1, so out-of-range POSITIVE vn/vt indices are also OOB. Severity: understated. This is an OOB read (undefined behavior, possible crash, or garbage floats silently written into a glTF reported as a successful conversion) reachable from an arbitrary user-supplied .obj referenced by mc3 <mesh src=...>. Under the audit rubric that classifies unsafe-input/UB/crash and invalid-output-reported-as-success as P0, this is P0 (P1 at minimum), not P2.
+- **Resolved:** commit `d701df7` — verify: `ctest -R mc3togltf_obj_robustness`
+- **Status note:** Added an explicit `checkIndex()` bounds check on vertex_index/normal_index/texcoord_index before every `attrib.vertices`/`normals`/`texcoords` subscript, throwing a clear "index N out of range" error that the existing `buildMesh()` try/catch turns into a "Warning:" + skipped node (same pattern as the other malformed-OBJ cases, STAB-0630). Regression fixture `test/obj_malformed_oob_positive.obj` (a triangle face referencing a vertex index far beyond the file's vertex count) wired into the existing `obj_robustness_test.py`/`export_stats_test.py` harness. While building this fixture, found and fixed a real, separate bug this exposed — see `AUD-060`.
 - **Blocked:** Confidence is PLAUSIBLE: proving an actual OOB requires confirming tinyobjloader passes through out-of-range indices, and tinyobjloader is vendored under _deps (out of audit scope). The first-party missing bounds check is certain; the trigger depends on loader behavior.
 
 ### AUD-003 `[TODO]` `P3` `W0` · glTF re-read type-puns via reinterpret_cast from a byte vector (strict-aliasing/alignment UB)
@@ -705,3 +707,11 @@ DONE marker without checking its cited commit/verify command.
 - **Outcome:** Add a running allocation-budget system during parse (or as a post-parse validation pass): track estimated total vertices/indices/generated bytes, total object/node count, definitions+instances, recursion depth (already partially covered), CSG input count, extrude cross-section/path sample totals, animation channel/keyframe counts, and embedded/base64 byte totals against fixed ceilings, rejecting with a clear diagnostic before attempting the corresponding large allocation (not after allocating and then discovering it was too much).
 - **Tests:** A fixture with many (e.g. 50,000) individually-legal objects whose combined estimated vertex count exceeds the budget; assert the loader rejects it BEFORE allocating hundreds of megabytes (verified via a peak-RSS check or an allocation-counting hook, not just wall-clock time).
 
+
+### AUD-060 `[DONE]` `P1` `W1` · Resource-confinement (AUD-006) false-positive rejects same-directory files when the document is opened via a bare relative filename
+- **Component:** mc3togltf/src/MeshBuilder.cpp (assertResourceAllowed), mc3/src/Mc3XmlParser.cpp (includePathWithinRoot)
+- **Evidence:** Found while building AUD-002's regression fixture. `doc.sourcePath` (the `basePath`/`rootDir` argument both confinement functions receive) is `selfPath.parent_path()`, which is EMPTY when the document is opened via a bare relative filename with no directory component — the common `mc3togltf scene.mc3.xml out.glb` invocation run from the scene's own directory. `std::filesystem::weakly_canonical("")` returns an empty path rather than resolving to the current working directory or erroring, so `root` stayed empty, `std::filesystem::relative(cand, root)` against an empty base returned empty too, and the `rel.empty()` branch of both functions' rejection check fired — wrongly treating every same-directory texture/mesh reference or `<include>` as "escaping the document root". Reproduced directly: `mc3togltf oob_test.mc3.xml out.glb` run from within the fixture's own directory (both files co-located) failed with "mesh source '...' escapes the document root" even though it plainly does not. No existing test caught this because every confinement/hostile-input test fixture used `tempfile`-style absolute paths for both the `.mc3.xml` and its resources.
+- **Outcome:** Normalize an empty base path to `"."` before canonicalizing in both `assertResourceAllowed` and `includePathWithinRoot`.
+- **Tests:** `mc3/test/load_policy_test.cpp` gained a case that `chdir`s into the fixture directory and opens `"main.mc3.xml"` (no directory prefix) under a confined policy, asserting the same-directory `<include>` still merges instead of being rejected. `test/obj_malformed_oob_positive.obj`'s wiring into `obj_robustness_test.py` (run via a relative path in its own `WORKING_DIRECTORY`) exercises the mc3togltf-side fix identically.
+- **Resolved:** commit `d701df7` — verify: `ctest -R "mc3_load_policy|mc3togltf_obj_robustness"`
+- **Status note:** This was a real regression in this session's own earlier AUD-006 fix (commit `901965f`) that would have broken the exporter's single most common real-world invocation pattern for any scene referencing a texture or mesh file. Caught only by incidentally testing AUD-002 with co-located relative paths instead of the test suite's habitual absolute tempdir paths — a reminder that "all tests pass" is not the same as "the common real invocation works."
