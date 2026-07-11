@@ -726,6 +726,17 @@ static void parseScripts(const XMLElement* el, Mc3Document& doc) {
     }
 }
 
+// SYS-W1-04: an inline <embed> body is base64-encoded GLB data held as a raw
+// std::string with no consumer-side decode step yet (SYS-W14-05 is
+// deferred), but the string itself is already fully materialized in memory
+// at parse time regardless -- an attacker can simply submit a very large
+// base64 text blob directly (no compression-bomb trick needed). Empirically
+// confirmed unbounded before this fix: a 20MB inline embed body loaded with
+// no error in ~120ms. 64MB of base64 text (~48MB decoded) is far beyond any
+// legitimate embedded prop/mesh and matches the sanity-limit philosophy
+// already used for MCB string fields (kMcbMaxStringLen in McbReader.cpp).
+static constexpr size_t kMaxEmbedBase64Length = 64ull * 1024ull * 1024ull;
+
 static void parseEmbeds(const XMLElement* el, Mc3Document& doc) {
     for (const XMLElement* c = el->FirstChildElement("embed"); c;
          c = c->NextSiblingElement("embed")) {
@@ -740,6 +751,13 @@ static void parseEmbeds(const XMLElement* el, Mc3Document& doc) {
             const char* text = c->GetText();
             if (text) em.base64Content = text;
         }
+        if (em.base64Content.size() > kMaxEmbedBase64Length)
+            throw std::runtime_error(
+                "MC3: embed '" + id + "' inline base64Content length (" +
+                std::to_string(em.base64Content.size()) + ") exceeds the sanity "
+                "limit (" + std::to_string(kMaxEmbedBase64Length) +
+                ") -- rejected before holding it in memory (corrupted or "
+                "malicious file?)");
         doc.embeds[id] = std::move(em);
     }
 }

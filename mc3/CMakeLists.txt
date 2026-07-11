@@ -117,6 +117,13 @@ if(BUILD_TESTING)
     add_test(NAME mc3_include_bomb COMMAND mc3_include_bomb_test)
     set_tests_properties(mc3_include_bomb PROPERTIES TIMEOUT 30 LABELS "format")
 
+    # SYS-W1-04: oversized inline <embed> base64 body -- must be rejected at
+    # parse time by a sanity-limit ceiling, not held unbounded in memory.
+    add_executable(mc3_oversized_base64_test test/oversized_base64_test.cpp)
+    target_link_libraries(mc3_oversized_base64_test PRIVATE Mc3)
+    add_test(NAME mc3_oversized_base64 COMMAND mc3_oversized_base64_test)
+    set_tests_properties(mc3_oversized_base64 PROPERTIES TIMEOUT 30 LABELS "format")
+
     # SYS-W9-02: crash-recovery mechanism (mtime comparison + Mc3Document
     # round-trip through the ".autosave" path convention that
     # MeshCraftApplication::checkForNewerAutosave()/recoverFromAutosave() rely
