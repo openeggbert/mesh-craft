@@ -854,6 +854,32 @@ static void mergeInclude(const std::filesystem::path& includePath,
                                                  doc.sourcePath);
             }
     }
+    // STAB-0092: <embeds> was previously never merged from an included file
+    // at all (only parsed from the main document's own top-level <embeds>),
+    // so a <definition> merged from an include whose meshSource referenced
+    // "embed:<id>" declared in that same included file would silently fail
+    // to resolve. Mirrors the definitions-merge pattern above.
+    if (const XMLElement* embs = root->FirstChildElement("embeds")) {
+        for (const XMLElement* c = embs->FirstChildElement("embed"); c;
+             c = c->NextSiblingElement("embed"))
+            if (const char* id = c->Attribute("id"))
+                if (doc.embeds.count(id))
+                    std::cerr << "Warning: <include file=\"" << includePath.string()
+                              << "\"> embed id '" << id
+                              << "' collides with an already-loaded embed; last-write-wins.\n";
+        parseEmbeds(embs, doc);
+        for (const XMLElement* c = embs->FirstChildElement("embed"); c;
+             c = c->NextSiblingElement("embed"))
+            if (const char* id = c->Attribute("id")) {
+                doc.includedEmbeds.insert(id);
+                // STAB-0550-style rebase: an external embed's src is a path
+                // relative to the included file's own directory.
+                auto embIt = doc.embeds.find(id);
+                if (embIt != doc.embeds.end() && !embIt->second.src.empty())
+                    embIt->second.src = rebaseRelativePath(
+                        embIt->second.src, includePath.parent_path(), doc.sourcePath);
+            }
+    }
 
     inProgress.erase(canonical);
     processed.insert(canonical);
@@ -956,7 +982,12 @@ Mc3Document Mc3XmlParser::parse(const std::filesystem::path& path) {
              c = c->NextSiblingElement("definition"))
             if (const char* id = c->Attribute("id")) doc.includedDefs.erase(id);
     }
-    if (const XMLElement* embs = root->FirstChildElement("embeds"))       parseEmbeds(embs,      doc);
+    if (const XMLElement* embs = root->FirstChildElement("embeds")) {
+        parseEmbeds(embs, doc);
+        for (const XMLElement* c = embs->FirstChildElement("embed"); c;
+             c = c->NextSiblingElement("embed"))
+            if (const char* id = c->Attribute("id")) doc.includedEmbeds.erase(id);
+    }
     if (const XMLElement* scrs = root->FirstChildElement("scripts"))      parseScripts(scrs,     doc);
     if (const XMLElement* snds = root->FirstChildElement("sounds"))       parseSounds(snds,      doc);
     if (const XMLElement* mus  = root->FirstChildElement("music"))        parseMusic(mus,        doc);

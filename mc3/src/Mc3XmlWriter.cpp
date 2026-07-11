@@ -550,10 +550,11 @@ void Mc3XmlWriter::write(const Mc3Document& doc, const std::filesystem::path& pa
         root->InsertEndChild(mEl);
     }
 
-    // Embedded GLTF assets
+    // Embedded GLTF assets — skip entries that came from <include> files
     if (!doc.embeds.empty()) {
         XMLElement* eEl = xml.NewElement("embeds");
         for (const auto& [id, em] : doc.embeds) {
+            if (doc.includedEmbeds.count(id)) continue;
             XMLElement* ee = xml.NewElement("embed");
             ee->SetAttribute("type", "gltf");
             ee->SetAttribute("id",   id.c_str());

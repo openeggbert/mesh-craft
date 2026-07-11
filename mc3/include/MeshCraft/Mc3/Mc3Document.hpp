@@ -53,6 +53,7 @@ public:
     std::set<std::string> includedDefs;
     std::set<std::string> includedMaterials;
     std::set<std::string> includedTextures;
+    std::set<std::string> includedEmbeds;
 
     std::optional<Mc3Environment> environment;
     std::vector<Mc3Light>   lights;

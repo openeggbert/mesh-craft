@@ -490,6 +490,10 @@ static void writeDocument(std::ostream& o, const Mc3::Mc3Document& doc) {
         wKeyArr(o, "includedTextures", static_cast<uint32_t>(doc.includedTextures.size()));
         for (const auto& id : doc.includedTextures) { wU8(o, TAG_STR); wRawStr(o, id); }
     }
+    if (!doc.includedEmbeds.empty()) {
+        wKeyArr(o, "includedEmbeds", static_cast<uint32_t>(doc.includedEmbeds.size()));
+        for (const auto& id : doc.includedEmbeds) { wU8(o, TAG_STR); wRawStr(o, id); }
+    }
 
     if (doc.environment) { wKeyObj(o, "environment"); writeEnvironment(o, *doc.environment); }
 

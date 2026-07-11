@@ -817,6 +817,14 @@ static Mc3::Mc3Document readDocument(std::istream& in) {
                 else               skipValue(in, t);
             }
         }
+        else if (k == "includedEmbeds") {
+            uint32_t n = rU32Bounded(in);
+            for (uint32_t i = 0; i < n; ++i) {
+                uint8_t t = rU8(in);
+                if (t == TAG_STR) doc.includedEmbeds.insert(rRawStr(in));
+                else               skipValue(in, t);
+            }
+        }
         else if (k == "environment")      doc.environment      = readEnvironment(in);
         else if (k == "lights") {
             uint32_t n = rU32Bounded(in);

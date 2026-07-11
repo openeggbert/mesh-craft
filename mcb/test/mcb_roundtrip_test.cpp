@@ -419,6 +419,7 @@ static void testIncludesList() {
     doc.includedDefs.insert("crate");
     doc.includedMaterials.insert("stone");
     doc.includedTextures.insert("tex1");
+    doc.includedEmbeds.insert("prop");
 
     auto rt = roundtrip(doc);
 
@@ -430,6 +431,7 @@ static void testIncludesList() {
     CHECK(rt.includedDefs.count("crate") == 1,        "includes: includedDefs skip-set survives");
     CHECK(rt.includedMaterials.count("stone") == 1,   "includes: includedMaterials skip-set survives");
     CHECK(rt.includedTextures.count("tex1") == 1,      "includes: includedTextures skip-set survives");
+    CHECK(rt.includedEmbeds.count("prop") == 1,        "includes: includedEmbeds skip-set survives");
 }
 
 // STAB-0144 — doc.metadata (the legacy <metadata><property> map, distinct

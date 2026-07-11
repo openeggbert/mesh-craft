@@ -1355,6 +1355,105 @@ static void testIncludedSvgTextureNotDuplicatedOnSave() {
     std::filesystem::remove_all(root, ec);
 }
 
+// STAB-0092: <embeds> was previously never merged from <include>d files at
+// all (only parsed from the main document's own top-level <embeds>) --
+// mirrors testIncludedSvgTextureNotDuplicatedOnSave() above, plus an
+// include-vs-include id collision check mirroring
+// testMaterialIdCollisionAcrossIncludes().
+static void testIncludedEmbedMergeAndCollision() {
+    auto root = std::filesystem::temp_directory_path() /
+                ("mc3_include_embed_" + std::to_string(tmpIdx++));
+    std::error_code ec;
+    std::filesystem::create_directories(root, ec);
+
+    auto libPath = root / "lib.mc3.xml";
+    {
+        std::ofstream f(libPath);
+        f << R"(<?xml version="1.0" encoding="UTF-8"?>
+<mc3 version="0.3" model="Lib">
+  <embeds>
+    <embed type="gltf" id="prop" src="prop.glb"/>
+  </embeds>
+</mc3>
+)";
+    }
+
+    auto scenePath = root / "scene.mc3.xml";
+    {
+        std::ofstream f(scenePath);
+        f << R"(<?xml version="1.0" encoding="UTF-8"?>
+<mc3 version="0.3" model="Scene">
+  <include file="lib.mc3.xml"/>
+  <objects/>
+</mc3>
+)";
+    }
+
+    try {
+        auto doc = Mc3Document::loadFromFile(scenePath);
+        CHECK(doc.embeds.count("prop") == 1, "included embed: present after load");
+        CHECK(doc.includedEmbeds.count("prop") == 1, "included embed: tracked in includedEmbeds");
+        if (doc.embeds.count("prop"))
+            CHECK(doc.embeds.at("prop").src == "prop.glb",
+                  "included embed: src path rebased correctly (same directory, unchanged)");
+
+        auto savedPath = root / "scene_saved.mc3.xml";
+        doc.saveToFile(savedPath);
+        std::ifstream f(savedPath);
+        std::string saved((std::istreambuf_iterator<char>(f)), {});
+        CHECK(saved.find("<include") != std::string::npos,
+              "included embed: <include> re-emitted in saved file");
+        CHECK(saved.find("id=\"prop\"") == std::string::npos,
+              "included embed: NOT re-inlined into the saved file");
+    } catch (const std::exception& e) {
+        fail(std::string("included embed test threw: ") + e.what());
+    }
+
+    // Include-vs-include collision: two different includes declare the same
+    // embed id, neither in the main document -- last-write-wins + a warning.
+    auto lib2Path = root / "lib2.mc3.xml";
+    {
+        std::ofstream f(lib2Path);
+        f << R"(<?xml version="1.0" encoding="UTF-8"?>
+<mc3 version="0.3" model="Lib2">
+  <embeds>
+    <embed type="gltf" id="prop" src="other_prop.glb"/>
+  </embeds>
+</mc3>
+)";
+    }
+    auto scene2Path = root / "scene2.mc3.xml";
+    {
+        std::ofstream f(scene2Path);
+        f << R"(<?xml version="1.0" encoding="UTF-8"?>
+<mc3 version="0.3" model="Scene2">
+  <include file="lib.mc3.xml"/>
+  <include file="lib2.mc3.xml"/>
+  <objects/>
+</mc3>
+)";
+    }
+    try {
+        std::ostringstream capturedErr;
+        std::streambuf* origCerr = std::cerr.rdbuf(capturedErr.rdbuf());
+        auto doc = Mc3Document::loadFromFile(scene2Path);
+        std::cerr.rdbuf(origCerr);
+
+        CHECK(doc.embeds.count("prop") == 1,
+              "embed id collision (include vs include): exactly one entry (map semantics)");
+        if (doc.embeds.count("prop"))
+            CHECK(doc.embeds.at("prop").src == "other_prop.glb",
+                  "embed id collision (include vs include): the LAST <include> processed wins");
+        CHECK(capturedErr.str().find("embed id 'prop'") != std::string::npos,
+              "embed id collision (include vs include): a collision warning naming the id "
+              "was printed to stderr");
+    } catch (const std::exception& e) {
+        fail(std::string("embed id collision (include vs include) test threw: ") + e.what());
+    }
+
+    std::filesystem::remove_all(root, ec);
+}
+
 // STAB-0088: an <include file="..."/> whose filename contains spaces must
 // resolve and load correctly — includePath is a std::filesystem::path built
 // via selfPath.parent_path() / fileAttr (Mc3XmlParser.cpp), same
@@ -3412,6 +3511,7 @@ int main(int argc, char* argv[]) {
     testMaterialIdCollisionAcrossIncludes();
     testDanglingReferencesDoNotThrowAtParseTime();
     testIncludedSvgTextureNotDuplicatedOnSave();
+    testIncludedEmbedMergeAndCollision();
     testIncludePathWithSpaces();
     testIncludeNonexistentFileClearError();
     testMalformedXmlParseErrorIsClean();
