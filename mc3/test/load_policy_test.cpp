@@ -127,6 +127,87 @@ int main() {
         fs::current_path(cwd);
     }
 
+    // AUD-006b: untrusted content must not gain local-file access merely by
+    // using a texture/mesh/SVG/sound/music/embed path instead of <include> --
+    // the same root-escape confinement now applies to every filesystem-
+    // reference field, not just <include>. Each case is deliberately a
+    // DIFFERENT field, since the check is wired in separately at each parse
+    // site (there is no single shared code path that would make fixing one
+    // automatically fix the rest).
+    auto checkFieldConfined = [&](const std::string& fieldXml, const char* label) {
+        std::string xml =
+            "<mc3 version=\"0.3\" model=\"resource-escape\">\n" + fieldXml + "</mc3>\n";
+        bool threw = false;
+        std::string what;
+        try {
+            Mc3Document::loadFromString(xml, dir); // untrusted() default
+        } catch (const std::exception& e) {
+            threw = true;
+            what = e.what();
+        }
+        check(threw, std::string("untrusted policy rejects an absolute ") + label + " path");
+    };
+
+    checkFieldConfined(
+        "  <objects><mesh name=\"m\" src=\"/etc/passwd\"/></objects>\n",
+        "mesh src");
+    checkFieldConfined(
+        "  <textures><texture id=\"t\" uri=\"/etc/passwd\"/></textures>\n"
+        "  <objects><box name=\"b\"/></objects>\n",
+        "texture uri");
+    checkFieldConfined(
+        "  <textures><texture id=\"s\" type=\"svg\" src=\"/etc/passwd\"/></textures>\n"
+        "  <objects><box name=\"b\"/></objects>\n",
+        "SVG texture src");
+    checkFieldConfined(
+        "  <sounds><sound id=\"snd\" src=\"/etc/passwd\"/></sounds>\n"
+        "  <objects><box name=\"b\"/></objects>\n",
+        "sound src");
+    checkFieldConfined(
+        "  <music><track id=\"trk\" src=\"/etc/passwd\"/></music>\n"
+        "  <objects><box name=\"b\"/></objects>\n",
+        "music src");
+    checkFieldConfined(
+        "  <embeds><embed id=\"e\" type=\"gltf\" src=\"/etc/passwd\"/></embeds>\n"
+        "  <objects><box name=\"b\"/></objects>\n",
+        "embed src");
+
+    // A trusted (permissive) load of the exact same absolute-path documents
+    // must NOT reject them -- confinement is opt-in via the policy, not a
+    // universal restriction that would break a legitimate local scene
+    // referencing a texture elsewhere on disk.
+    {
+        std::string xml =
+            "<mc3 version=\"0.3\" model=\"trusted-abs\">\n"
+            "  <textures><texture id=\"t\" uri=\"/etc/hostname\"/></textures>\n"
+            "  <objects><box name=\"b\"/></objects>\n"
+            "</mc3>\n";
+        bool threw = false;
+        try {
+            Mc3Document::loadFromString(xml, dir, Mc3LoadPolicy::trusted());
+        } catch (const std::exception&) {
+            threw = true;
+        }
+        check(!threw, "trusted policy does not reject an absolute texture uri "
+              "(confinement is opt-in, not universal)");
+    }
+
+    // `embed:<id>` is a pseudo-reference (resolved against doc.embeds, not the
+    // filesystem) and must never be treated as an escaping path.
+    {
+        std::string xml =
+            "<mc3 version=\"0.3\" model=\"embed-ref\">\n"
+            "  <objects><mesh name=\"m\" src=\"embed:someId\"/></objects>\n"
+            "</mc3>\n";
+        bool threw = false;
+        try {
+            Mc3Document::loadFromString(xml, dir); // untrusted() default
+        } catch (const std::exception&) {
+            threw = true;
+        }
+        check(!threw, "untrusted policy does not reject an embed: pseudo-reference");
+    }
+
     fs::remove_all(dir);
 
     if (failures == 0) { std::cout << "All load-policy tests passed.\n"; return 0; }

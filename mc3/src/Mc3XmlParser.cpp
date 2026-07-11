@@ -121,6 +121,12 @@ static int attrCountBudgeted(const XMLElement* el, const char* name, int def,
     return v;
 }
 
+// AUD-006b: forward-declared here so parseObject/parseTextures/parseSounds/
+// parseMusic/parseEmbeds (all defined before validateResourcePathIfConfined's
+// own definition, further down this file) can call it. Full documentation is
+// at the definition site.
+static void validateResourcePathIfConfined(const std::string& rawPath, const char* kind);
+
 static bool attrB(const XMLElement* el, const char* name, bool def = false) {
     const char* v = el->Attribute(name);
     if (!v) return def;
@@ -397,6 +403,7 @@ static std::shared_ptr<Mc3Object> parseObject(const XMLElement* el) {
         obj->meshSource = attr(el, "src");
         if (obj->meshSource.empty())          // accept legacy source= attribute
             obj->meshSource = attr(el, "source");
+        validateResourcePathIfConfined(obj->meshSource, "mesh source");
     } else if (tag == "extrude") {
         obj->type   = ObjectType::Extrude;
         obj->extrude = parseExtrude(el);
@@ -558,6 +565,7 @@ static void parseTextures(const XMLElement* el, Mc3Document& doc) {
             Mc3SvgTexture svg;
             svg.id  = id;
             svg.src = attr(c, "src");
+            validateResourcePathIfConfined(svg.src, "SVG texture src");
             if (svg.src.empty()) {
                 const char* text = c->GetText();
                 if (text) svg.inlineContent = text;
@@ -568,6 +576,7 @@ static void parseTextures(const XMLElement* el, Mc3Document& doc) {
         Mc3Texture tex;
         tex.name       = attr(c, "name", id.c_str());
         tex.uri        = attr(c, "uri");
+        validateResourcePathIfConfined(tex.uri, "texture uri");
         tex.wrapU      = attr(c, "wrap_u",      "repeat");
         tex.wrapV      = attr(c, "wrap_v",      "repeat");
         tex.filter     = attr(c, "filter",      "linear");
@@ -663,6 +672,7 @@ static void parseSounds(const XMLElement* el, Mc3Document& doc) {
         Mc3Sound snd;
         snd.id   = id;
         snd.src  = attr(c, "src");
+        validateResourcePathIfConfined(snd.src, "sound src");
         snd.loop = attrB(c, "loop", false);
         doc.sounds[id] = std::move(snd);
     }
@@ -676,6 +686,7 @@ static void parseMusic(const XMLElement* el, Mc3Document& doc) {
         Mc3Music mus;
         mus.id   = id;
         mus.src  = attr(c, "src");
+        validateResourcePathIfConfined(mus.src, "music src");
         mus.loop = attrB(c, "loop", true);
         doc.musicTracks[id] = std::move(mus);
     }
@@ -705,6 +716,7 @@ static void parseEmbeds(const XMLElement* el, Mc3Document& doc) {
         Mc3EmbedGltf em;
         em.id  = id;
         em.src = attr(c, "src");
+        validateResourcePathIfConfined(em.src, "embed src");
         if (em.src.empty()) {
             const char* text = c->GetText();
             if (text) em.base64Content = text;
@@ -824,6 +836,39 @@ static bool includePathWithinRoot(const std::filesystem::path& candidate,
     auto rel = std::filesystem::relative(c, r, ec);
     if (ec || rel.empty()) return false;
     return rel.native().rfind("..", 0) != 0;  // does not start with ".."
+}
+
+// AUD-006b: current parse's resource-confinement state, set once at the top of
+// buildDocumentFromRoot() (same thread_local pattern as g_budget above, for
+// the same reason: parseObject/parseTextures/parseSounds/parseMusic/
+// parseEmbeds have no existing context-object parameter to thread a policy
+// through, and adding one is a larger refactor than this fix's scope
+// justifies). Reset once per top-level parse, not per <include>, matching
+// g_budget's reset discipline.
+static thread_local bool g_confineResourcePaths = false;
+static thread_local std::filesystem::path g_resourceRoot;
+
+// Validates a texture/SVG/mesh/embed/sound/music `src`/`uri` field against the
+// current parse's confinement policy. No-op when not confining (trusted
+// documents keep full permissive behavior) or when `rawPath` is empty or a
+// non-filesystem pseudo-path (`embed:`/`data:`). Throws a clear error naming
+// `kind` when the path is absolute or escapes the document root.
+static void validateResourcePathIfConfined(const std::string& rawPath, const char* kind) {
+    if (!g_confineResourcePaths || rawPath.empty()) return;
+    if (rawPath.rfind("embed:", 0) == 0 || rawPath.rfind("data:", 0) == 0) return;
+
+    std::filesystem::path p(rawPath);
+    if (p.is_absolute())
+        throw std::runtime_error(
+            std::string("MC3: ") + kind + " '" + rawPath +
+            "' is an absolute path outside the document root; rejected under "
+            "the untrusted-content load policy");
+
+    if (!includePathWithinRoot(g_resourceRoot / p, g_resourceRoot))
+        throw std::runtime_error(
+            std::string("MC3: ") + kind + " '" + rawPath +
+            "' escapes the document root; rejected under the untrusted-content "
+            "load policy");
 }
 
 // Re-express a path that's relative to `fromDir` (the file that actually
@@ -1048,6 +1093,11 @@ static Mc3Document buildDocumentFromRoot(const XMLElement* root,
     // primitives correctly accumulate against this same top-level budget
     // rather than resetting it and escaping the cap).
     g_budget.reset();
+
+    // AUD-006b: set the resource-confinement state for this parse before any
+    // texture/SVG/mesh/embed/sound/music field is read.
+    g_confineResourcePaths = policy.confineResourcePathsToRoot;
+    g_resourceRoot = selfPath.parent_path();
 
     Mc3Document doc;
     doc.sourcePath       = selfPath.parent_path();

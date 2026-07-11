@@ -25,17 +25,30 @@ struct Mc3LoadPolicy {
     // infinite recursion, but a deep linear chain is still bounded here.
     int maxIncludeDepth = 16;
 
+    // AUD-006b: <include> is not the only way untrusted content can name a
+    // local file -- texture uri, SVG src, mesh src, embed src, sound src, and
+    // music src are all filesystem references too. When true, any of those
+    // that is absolute or escapes the document root via `..` is rejected with
+    // a clear error at parse time (mirroring confineIncludesToRoot), so
+    // untrusted content cannot gain local-file access merely by using one of
+    // these fields instead of <include>. This applies at PARSE time -- before
+    // the document object exists at all for the caller to inspect -- so it
+    // protects every consumer (the editor UI, mc3togltf export) uniformly,
+    // not just whichever one happens to check the path itself.
+    bool confineResourcePathsToRoot = false;
+
     // Permissive policy: current behavior for trusted, locally-authored files.
     static Mc3LoadPolicy trusted() { return Mc3LoadPolicy{}; }
 
     // Restricted policy for untrusted content (AI output, imports): no
-    // filesystem includes at all, and path confinement on if they were ever
-    // re-enabled.
+    // filesystem includes at all, and path confinement on for every remaining
+    // filesystem-reference field (texture/SVG/mesh/embed/sound/music).
     static Mc3LoadPolicy untrusted() {
         Mc3LoadPolicy p;
         p.allowIncludes = false;
         p.confineIncludesToRoot = true;
         p.maxIncludeDepth = 0;
+        p.confineResourcePathsToRoot = true;
         return p;
     }
 };
