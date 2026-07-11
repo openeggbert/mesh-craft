@@ -85,7 +85,7 @@ P1s already being fixed in git history. This session:
    **Net across all 64 AUD-### rows (57 original + 7 session-2 additions,
    the 7th — AUD-036c — split off from AUD-036b so its verified-done portion
    could be marked DONE without also claiming its still-open portion):
-   49 DONE, 13 TODO, 2 DEFERRED** — recompute with
+   50 DONE, 12 TODO, 2 DEFERRED** — recompute with
    `python3 test/validate_plan_consistency.py . <build-dir>` rather than
    trusting this number as time passes.
 5. Archived `plan_deep_audit.md` (all 57 of its own tasks were already
@@ -511,12 +511,14 @@ DONE marker without checking its cited commit/verify command.
 - **Tests:** No behavior change expected; existing rename/duplicate tests should still pass against the single surviving copy.
 - **Verify note:** Retitle to FOUR byte-identical duplicates, not five. Correct pairs and lines: removeFromList (src/MeshCraft/MeshCraftPrivate.hpp:51-59) vs removeFromListAlg (include/MeshCraft/EditorAlgorithms.hpp:65-73); deepCopyObject (Private.hpp:61-68) vs deepCopyObjectAlg (EditorAlgorithms.hpp:38-45); findParentList (Private.hpp:70-82) vs findParentListAlg (EditorAlgorithms.hpp:49-61); applyRenamePattern (Private.hpp:125-146) vs applyRenamePatternAlg (EditorAlgorithms.hpp:79-101). Drop the objectTypeName pair entirely: objectTypeName is NOT duplicated in Private.hpp (only a comment at line 122), objectTypeNameAlg (EditorAlgorithms.hpp:34) is a thin wrapper over the single canonical objectTypeName() in ObjectTypeName.hpp, and the code explicitly documents they cannot drift. Severity P2 (maintainability/duplication) is correct; the applyRenamePattern token-drift scenario (prod UiOverlays.cpp:566 uses the non-Alg copy, tests use the Alg copy) is the strongest concrete instance.
 
-### AUD-034 `[TODO]` `P2` `W4` · convertToDefinition drops the object's layer on the replacement Instance, while the sibling exportSubtreeAsTemplate preserves it
+### AUD-034 `[DONE]` `P2` `W4` · convertToDefinition drops the object's layer on the replacement Instance, while the sibling exportSubtreeAsTemplate preserves it
 - **Component:** include/MeshCraft/EditorAlgorithms.hpp:412 vs src/MeshCraft/MeshCraftApplication_Commands.cpp:553
 - **Evidence:** convertToDefinition (Commands.cpp:507-518) delegates to convertToDefinitionAlg, whose new Instance copies id/name/type/definition/transform/visible/tags but NOT layer: EditorAlgorithms.hpp:412-419 has no `inst->layer = src->layer;`. The near-identical exportSubtreeAsTemplate, which also replaces the source with an Instance, DOES preserve it: `inst->layer = src->layer;` (Commands.cpp:553). layer is a real, filter-affecting field (Mc3Object.hpp:73 `std::string layer; // named layer`; SceneHierarchyPanel.cpp:239 filters on `o.layer==layerFilter_`). So Convert-to-Definition on an object assigned to layer "background" silently moves the resulting Instance to the default layer.
 - **Outcome:** Add `inst->tags = src->tags;`-adjacent `inst->layer = src->layer;` in convertToDefinitionAlg so it matches exportSubtreeAsTemplate and preserves the object's layer.
 - **Tests:** Unit test: object with layer="bg", convertToDefinitionAlg, assert returned Instance->layer=="bg".
 - **Verify note:** Line-number corrections: (1) The exportSubtreeAsTemplate layer-preserving line is Commands.cpp:555 (`inst->layer = src->layer;`), not 553 — line 553 is `inst->transform = src->transform;`. (2) The convertToDefinitionAlg field-copy block that omits layer is EditorAlgorithms.hpp:398-404 (not 412-419; line 411-412 is the `doc.objects.push_back(inst);}` fallback branch, after the copy). Severity P2 is appropriate.
+- **Resolved:** commit `d057728` — verify: `ctest -R mc3_commands`
+- **Status note:** Added `inst->layer = src->layer;` right after the `tags` copy in `convertToDefinitionAlg`, exactly matching `exportSubtreeAsTemplate`'s pattern. Confirmed this Alg function is a genuine production call site (`MeshCraftApplication::convertToDefinition` calls it directly), not one of AUD-031's test-only mirrors, so this fixes the real editor behavior, not just a test double. Extended `testConvertToDefinition` with `src->layer = "bg"` and an assertion the returned Instance keeps it.
 
 ### AUD-035 `[TODO]` `P3` `W4` · Batch-rename live preview uses a parallel rename copy that ignores lockedIds, so it shows locked objects being renamed when Apply skips them
 - **Component:** src/MeshCraft/MeshCraftApplication_UiOverlays.cpp:564 vs include/MeshCraft/EditorAlgorithms.hpp:152
