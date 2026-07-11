@@ -126,10 +126,43 @@ authoritative live state is always the AUD/SYS task table plus
 Mandated workstream items not tied to a single audit finding.
 
 ### W1 — Validation subsystem
-- **SYS-W1-01** `[TODO]` `P1` — First-class `Mc3Validation` result type (errors +
-  warnings, each with source path, object/field identity, suggested safe repair).
-  Wire into load / MCB-load / include-merge / AI-apply / pre-render / pre-export /
-  save. Replaces scattered clamps.
+- **SYS-W1-01** `[IN_PROGRESS]` `P1` — First-class `Mc3Validation` result type
+  (errors + warnings, each with source path, object/field identity, suggested
+  safe repair). Wire into load / MCB-load / include-merge / AI-apply /
+  pre-render / pre-export / save. Replaces scattered clamps.
+  `mc3/include/MeshCraft/Mc3/Mc3Validation.hpp` added: `Mc3ValidationSeverity`,
+  `Mc3ValidationEntry{severity, sourcePath, objectId, field, message,
+  suggestedRepair}`, `Mc3Validation` accumulator. Design: an ADDITIVE
+  side-channel, not a replacement for the existing throw-on-hard-rejection /
+  clamp-on-recoverable-issue contract (many existing tests catch
+  `std::runtime_error` and check `.what()`) — new `Mc3Validation&`/`*`
+  overloads are added alongside the untouched originals.
+  **DONE (2 of 7 named integration points, fully tested):**
+  **MC3 XML load + include-merge** (`Mc3XmlParser.cpp`, commit `e8d68d8`) —
+  tessellation clamps, NaN/Inf/malformed-numeric sanitization, the three
+  `DocumentBudget` throw sites, resource-path confinement rejections,
+  oversized-embed-base64 rejection, cyclic/depth/confinement include
+  failures, and the existing include-merge id-collision + unknown-type
+  `cerr` warnings all now also report structured entries. New test
+  `mc3_validation_test` proves the diagnostic surface itself is populated
+  (not just clamped values). **MCB load** (`McbReader.cpp`, commit
+  `d91bf4f`) — `expectTag` type-mismatches, `clampEnum` out-of-range enums,
+  the string/collection sanity-limit and recursion-depth throws, and the
+  binary-header validation failures all report entries via a best-effort
+  `IdentityScope` object-identity stack (MCB has no XML-element-like
+  attribute bag to read identity from on demand, unlike the XML side). New
+  test `mcb_validation_test`. Both increments: full tree green (110/110
+  ctest), zero new `-Wall -Wextra` warnings.
+  **NOT done (explicitly deferred, not attempted this session):** AI-apply
+  (`src/MeshCraft/AiResponseAlgorithms.hpp`'s
+  `validateAndParseAiResponseAlg`/`validateXmlAgainstXsdAlg`), pre-render,
+  pre-export (`mc3togltf/src/GltfExporter.cpp`), and save
+  (`MeshCraftApplication_FileOps.cpp`'s `saveFile()`) wiring — all touch
+  CNA-coupled application code, explicitly named in the task as
+  higher-risk/lower-priority than load/MCB-load/include-merge. Stopped here
+  per the task's own guidance to prefer a well-verified conservative slice
+  over a rushed full sweep once safe, well-tested ground for load/MCB-load
+  was exhausted.
 - **SYS-W1-02** `[TODO]` `P1` — Documented numeric ranges per domain (geometry,
   material, camera near/far/FOV/aspect, environment, animation, audio, transforms,
   post-processing) with tests.
