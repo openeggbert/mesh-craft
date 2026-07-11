@@ -734,6 +734,89 @@ Mc3::Mc3Document doc2 = MeshCraft::Mcb::loadFromFile("scene.mcb");
 
 ---
 
+## Numeric ranges and document-complexity budgets (SYS-W1-02 / SYS-W1-03)
+
+Two related but distinct kinds of input limits are enforced at load time in
+`mc3/src/Mc3XmlParser.cpp`. Both are additive safety nets over the base
+type/finiteness checks every numeric attribute already gets (`finiteOr`
+rejects NaN/Inf; malformed non-numeric text like `"abc"` is defaulted, not
+thrown) — see `finite_input_test`/`mc3_numeric_range_test` for the former and
+`mc3_input_budget_test`/`mc3_document_budget_test` for the latter.
+
+**Per-field numeric ranges (SYS-W1-02)** — a value that's a perfectly finite
+float can still be outside its field's documented valid domain (a FOV of
+600 degrees, a roughness of -3). Out-of-range values are **clamped**, not
+rejected — the whole document isn't refused over what's almost always an
+authoring typo, not an attack (the same judgment call this doc's
+"tessellation count" note below makes). Named constants live next to each
+check in `Mc3XmlParser.cpp`.
+
+| Domain | Field(s) | Valid range | Notes |
+|--------|----------|-------------|-------|
+| Camera | `fov` | `[1, 179]` degrees | 0 or ≥180 isn't representable by a symmetric perspective frustum |
+| Camera | `near` | `> 0` | perspective projection divides by `near` |
+| Camera | `far` | `> near` (by ≥ 0.001) | near≥far collapses the z-buffer's usable depth range |
+| Camera | `aspect` | `> 0` | zero/negative mirrors or collapses the view volume |
+| Material | `roughness`, `metallic` | `[0, 1]` | glTF PBR convention; every consumer (live shading, glTF export) assumes it |
+| Material | `occlusion_strength`, `alpha_cutoff` | `[0, 1]` | same glTF PBR convention |
+| Material | `base_color`'s alpha channel | `[0, 1]` | opacity; RGB channels and `emissive_color` are deliberately left unclamped (emissive explicitly allows HDR values above 1.0) |
+| Geometry | primitive `radius`/`height`/`size`/`major_radius`/`minor_radius` | `>= 0` | negative has no physical meaning; only negative is clamped (to 0) — zero itself is already meaningful for some fields, e.g. `<disk inner_radius="0"/>` |
+| Geometry | extrude `<cross_section>` `width`/`height`/`radius`/`inner_radius` | `>= 0` | same reasoning |
+| Geometry | extrude `<path>` `length`/`radius` (arc or helix)/`height` (helix) | `>= 0` | same reasoning; `angle`/`turns` are left unclamped (legitimately signed, for direction) |
+| Environment | `<fog density="...">` | `>= 0` | negative inverts the exponential falloff's intended direction |
+| Environment | `<fog start="..." end="...">` | `start < end` | **not clamped** — `SceneRenderer.cpp` already guards `end > start` before dividing, so this is diagnostic-only (a warning), not a value repair |
+| Animation | `<action time_scale="...">` | `> 0` | 0 permanently stalls playback; negative isn't a supported "reverse" feature |
+| Transform | `scale` (base transform, `<deform scale="...">`, and named `<state scale="...">`) | magnitude `>= 1e-4` per axis | near-zero degenerates the transform matrix (non-invertible); **sign is preserved** — negative scale is a legitimate glTF-supported mirroring feature, only near-zero *magnitude* is clamped |
+
+**Not applicable — no field exists to range-check:** Audio (`<sound>`/
+`<music><track>`) has no `volume`/`pitch` field at all in the current format
+(`id`/`src`/`loop` only — see the Sounds and Music section above; audio
+playback itself isn't implemented yet). Post-processing/bloom is a
+runtime/editor UI toggle, not scene-file data at all (see the
+`testEnvironmentAllFieldsRoundtrip` note in `mc3/test/roundtrip_test.cpp`) —
+there is no `Mc3Environment` field for it to range-check. Both would need a
+field added to the format first, which is out of this task's scope.
+
+**Document-complexity budgets (SYS-W1-03)** — independent of any single
+field's own range, a document-wide *running total* across many
+individually-legal values can still be pathological (100,000 spheres at
+`segments="4096"` are each legal on their own but request ~8.6e11 vertices
+combined). These are hard **rejections** (the document fails to load with a
+clear error naming the budget), not clamps — unlike a per-field range, there
+is no sane "clamp" for "too many objects", only "refuse before the
+corresponding allocation is attempted downstream." A `DocumentBudget`
+(thread-local, reset once per top-level `parse()`/`parseString()` call,
+shared across all `<include>`s merged into it) tracks each dimension:
+
+| Dimension | Ceiling | Notes |
+|-----------|---------|-------|
+| Total objects | 100,000 | AUD-059; every parsed `<box>`/`<group>`/... counts, including inside `<definitions>` |
+| Total tessellation weight | 500,000 | AUD-059; sum of every `segments`/`sides`/`subdivisions_*` value across the whole document |
+| Total `<include>` fan-out | 1,000 | SYS-W1-04; distinct non-cyclic, non-diamond-duplicate included files |
+| Total materials | 20,000 | |
+| Total textures | 20,000 | `<texture>` and `<texture type="svg">` combined |
+| Total embeds (count) | 1,000 | independent of the existing 64MB **per-embed** base64 size ceiling |
+| Total embed bytes (sum) | 256MB | sum of every embed's base64 content length combined — bounds N embeds each individually under the per-embed cap from summing to unbounded memory |
+| Total actions | 10,000 | |
+| Total channels | 200,000 | across all actions |
+| Total keyframes | 2,000,000 | across all channels |
+| Total definitions | 20,000 | `doc.definitions` map-entry count, independent of each definition's own object-tree cost (already counted under "total objects") |
+| Children per node | 20,000 | **not** a document-wide running total — a LOCAL per-node breadth cap (one `<group>`/`<union>`/`<difference>`/`<intersection>`/`<area>`'s direct children), distinct from total object count (a wide-but-shallow tree can stay under the total-object budget while still choking non-virtualized UI tree widgets) |
+| Max document bytes | 512MB | the raw input file/string size itself, checked via `std::filesystem::file_size()` **before** tinyxml2 buffers or parses anything |
+| Recursion (nesting) depth | 500 (tinyxml2's own `TINYXML2_MAX_ELEMENT_DEPTH`) | **not a novel MC3-level guard** — confirmed empirically that tinyxml2's own built-in element-depth cap already rejects (`XML_ELEMENT_DEPTH_EXCEEDED`) any XML nested deeper than this before `Mc3XmlParser`'s own `parseObject`/`parseChildren` recursion is ever reached, so the C++ call stack can never recurse past ~500 levels regardless of input |
+
+**Explicitly not implemented:** a "total generated output bytes" estimate
+(i.e. guessing at the eventual exported GLB or in-memory geometry size
+across the whole document) was considered and deliberately skipped — it
+would require estimating downstream allocation with no precise formula
+(tessellation weight already approximates geometry complexity; texture/
+embed byte totals already bound the largest binary blobs), so a fuzzy
+byte-estimate budget wouldn't usefully bound anything beyond what the
+dimensions above already do. The **input** byte ceiling above ("Max document
+bytes") is the precise, actionable version of a "max bytes" budget.
+
+---
+
 ## Validation
 
 The XSD schema is at `mc3/mc3.xsd`. Validate with:
