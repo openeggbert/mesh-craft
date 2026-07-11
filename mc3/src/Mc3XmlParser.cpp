@@ -38,7 +38,9 @@ static const char* attr(const XMLElement* el, const char* name, const char* def 
 static float attrF(const XMLElement* el, const char* name, float def = 0.0f) {
     const char* v = el->Attribute(name);
     if (!v) return def;
-    try { return std::stof(v); } catch (...) { return def; }
+    // finiteOr rejects "nan"/"inf" (which std::stof accepts without throwing);
+    // the catch handles non-numeric junk like "abc".
+    try { return Internal::finiteOr(std::stof(v), def); } catch (...) { return def; }
 }
 
 static int attrI(const XMLElement* el, const char* name, int def = 0) {
@@ -79,7 +81,7 @@ static Mc3Transform parseTransform(const XMLElement* el) {
         if (s.find(' ') == std::string::npos && s.find(',') == std::string::npos) {
             // STAB-0080: a malformed single-value scale (e.g. "abc") must not
             // throw uncaught and fail the whole file load.
-            try { float f = std::stof(s); t.scale = {f, f, f}; }
+            try { float f = Internal::finiteOr(std::stof(s), 1.0f); t.scale = {f, f, f}; }
             catch (...) { t.scale = {1, 1, 1}; }
         } else {
             t.scale = parseVec3(s, {1,1,1});
@@ -190,7 +192,7 @@ static Mc3Primitive parsePrimitive(const XMLElement* el, ObjectType type) {
         if (s.find(' ') == std::string::npos && s.find(',') == std::string::npos) {
             // STAB-0080: a malformed single-value size (e.g. "abc") must not
             // throw uncaught and fail the whole file load.
-            try { float f = std::stof(s); p.size = {f, f, f}; }
+            try { float f = Internal::finiteOr(std::stof(s), 1.0f); p.size = {f, f, f}; }
             catch (...) { /* p.size keeps its default-constructed value */ }
         } else if (type == ObjectType::Plane) {
             // Plane size is vec2 (width × depth = X × Z). Legacy XMLs may have "W 0 D" (3 values).

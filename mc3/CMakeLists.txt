@@ -80,6 +80,13 @@ if(BUILD_TESTING)
              COMMAND mc3_roundtrip_test ${MC3_FEATURES_XML})
     set_tests_properties(mc3_roundtrip PROPERTIES TIMEOUT 15 LABELS "format")
 
+    # Hostile-numeric-input test: NaN/Inf/out-of-range attributes must not
+    # survive parsing into the model (finiteOr sanitization).
+    add_executable(mc3_finite_input_test test/finite_input_test.cpp)
+    target_link_libraries(mc3_finite_input_test PRIVATE Mc3)
+    add_test(NAME mc3_finite_input COMMAND mc3_finite_input_test)
+    set_tests_properties(mc3_finite_input PROPERTIES TIMEOUT 15 LABELS "format")
+
     # editor_commands_test pulls in MeshCraft/EditorAlgorithms.hpp from the
     # MeshCraft editor's public include dir, which lives at the repo root
     # (include/) — outside the mc3/ subtree. Only build it when those
