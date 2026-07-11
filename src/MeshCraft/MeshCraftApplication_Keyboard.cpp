@@ -1,5 +1,6 @@
 #include "MeshCraft/MeshCraftApplication.hpp"
 #include "MeshCraftPrivate.hpp"
+#include "MeshCraft/EditorAlgorithms.hpp"
 
 #include <Microsoft/Xna/Framework/Input/Keys.hpp>
 #include <Microsoft/Xna/Framework/Input/KeyboardState.hpp>
@@ -338,7 +339,7 @@ void MeshCraftApplication::handleKeyboardShortcuts(const KeyboardState& ks, cons
     {
         bool moveUp = justPressed(ks, prevKs, Keys::Up);
         auto* target = selection_.selection().front().get();
-        auto* parentList = findParentList(document_.objects, target);
+        auto* parentList = findParentListAlg(document_.objects, target);
         if (parentList && parentList->size() > 1) {
             auto it = std::find_if(parentList->begin(), parentList->end(),
                 [target](const auto& p) { return p.get() == target; });

@@ -1,5 +1,6 @@
 #include "MeshCraft/MeshCraftApplication.hpp"
 #include "MeshCraftPrivate.hpp"
+#include "MeshCraft/EditorAlgorithms.hpp"
 
 #include "GltfExporter.hpp"
 #include <tiny_gltf.h>
@@ -570,7 +571,7 @@ void MeshCraftApplication::exportSelectionToFile(const std::string& path) {
         };
 
     for (const auto& sel : selection_.selection()) {
-        tmp.objects.push_back(deepCopyObject(*sel));
+        tmp.objects.push_back(deepCopyObjectAlg(*sel));
         collectMats(*sel);
     }
 

@@ -48,38 +48,14 @@ inline std::filesystem::path prefsPath()         { return meshcraftConfigDir() /
 inline std::filesystem::path keybindingsPath()   { return meshcraftConfigDir() / "keybindings.ini"; }
 inline std::filesystem::path macroPath()         { return meshcraftConfigDir() / "macro.mc3macro"; }
 
-inline void removeFromList(std::vector<std::shared_ptr<Mc3::Mc3Object>>& list,
-                           const Mc3::Mc3Object* target)
-{
-    list.erase(std::remove_if(list.begin(), list.end(),
-        [&](const auto& o){ return o.get() == target; }), list.end());
-    for (auto& obj : list)
-        if (!obj->children.empty())
-            removeFromList(obj->children, target);
-}
-
-inline std::shared_ptr<Mc3::Mc3Object> deepCopyObject(const Mc3::Mc3Object& src)
-{
-    auto copy = std::make_shared<Mc3::Mc3Object>(src);
-    copy->children.clear();
-    for (const auto& child : src.children)
-        copy->children.push_back(deepCopyObject(*child));
-    return copy;
-}
-
-inline std::vector<std::shared_ptr<Mc3::Mc3Object>>*
-findParentList(std::vector<std::shared_ptr<Mc3::Mc3Object>>& list,
-               const Mc3::Mc3Object* target)
-{
-    for (auto& obj : list) {
-        if (obj.get() == target) return &list;
-        if (!obj->children.empty()) {
-            auto* found = findParentList(obj->children, target);
-            if (found) return found;
-        }
-    }
-    return nullptr;
-}
+// AUD-033: removeFromList/deepCopyObject/findParentList/applyRenamePattern
+// used to be byte-identical duplicates of EditorAlgorithms.hpp's
+// removeFromListAlg/deepCopyObjectAlg/findParentListAlg/
+// applyRenamePatternAlg, with both copies compiled into the same
+// translation units and production using the ones formerly here -- a
+// change to one copy (e.g. a new batch-rename token) would silently not
+// affect the other, since tests only ever exercised the *Alg versions.
+// Deleted; all former call sites now use the *Alg versions directly.
 
 inline std::shared_ptr<Mc3::Mc3Object> deepCopyObj(const std::shared_ptr<Mc3::Mc3Object>& src)
 {
@@ -121,28 +97,8 @@ inline Mc3::Mc3Object* findParentObject(
 
 // objectTypeName() and objectTypeFromName() are the canonical, exhaustive,
 // bidirectional mapping in MeshCraft/Editor/ObjectTypeName.hpp (included above).
-
-inline std::string applyRenamePattern(const std::string& pat, const std::string& origName,
-                                      int idx1, const char* typeName)
-{
-    std::string r = pat;
-    auto rep = [&](const std::string& from, const std::string& to) {
-        size_t pos = 0;
-        while ((pos = r.find(from, pos)) != std::string::npos) {
-            r.replace(pos, from.size(), to);
-            pos += to.size();
-        }
-    };
-    char buf[32];
-    std::snprintf(buf, sizeof(buf), "%03d", idx1);     rep("{index:03d}", buf);
-    std::snprintf(buf, sizeof(buf), "%02d", idx1);     rep("{index:02d}", buf);
-    std::snprintf(buf, sizeof(buf), "%d",   idx1);     rep("{index}",     buf);
-    std::snprintf(buf, sizeof(buf), "%03d", idx1 - 1); rep("{index0:03d}", buf);
-    std::snprintf(buf, sizeof(buf), "%02d", idx1 - 1); rep("{index0:02d}", buf);
-    std::snprintf(buf, sizeof(buf), "%d",   idx1 - 1); rep("{index0}",     buf);
-    rep("{name}", origName);
-    rep("{type}", typeName);
-    return r;
-}
+//
+// applyRenamePattern (AUD-033): deleted, see the note above deepCopyObj --
+// use applyRenamePatternAlg (MeshCraft/EditorAlgorithms.hpp) instead.
 
 } // namespace MeshCraft

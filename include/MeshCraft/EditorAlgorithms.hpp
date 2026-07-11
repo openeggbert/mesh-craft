@@ -60,8 +60,10 @@ findParentListAlg(std::vector<std::shared_ptr<Mc3::Mc3Object>>& list,
     return nullptr;
 }
 
-// Mirrors removeFromList() in MeshCraftPrivate.hpp: removes target from list
-// (searching recursively into children) wherever it appears.
+// Removes target from list (searching recursively into children) wherever
+// it appears. (AUD-033: this used to note "mirrors removeFromList() in
+// MeshCraftPrivate.hpp" -- that byte-identical duplicate was deleted;
+// this is now the only implementation.)
 inline void removeFromListAlg(std::vector<std::shared_ptr<Mc3::Mc3Object>>& list,
                               const Mc3::Mc3Object* target)
 {

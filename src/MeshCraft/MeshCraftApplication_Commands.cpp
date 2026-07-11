@@ -118,7 +118,7 @@ void MeshCraftApplication::deleteSelected() {
     pushUndo();
     for (const auto& s : selection_.selection()) {
         if (lockedIds_.count(s->id)) continue;
-        removeFromList(document_.objects, s.get());
+        removeFromListAlg(document_.objects, s.get());
     }
     selection_.clear();
     modified_ = true;
@@ -190,9 +190,9 @@ void MeshCraftApplication::duplicateSelected() {
     std::vector<std::shared_ptr<Mc3::Mc3Object>> newObjs;
 
     for (const auto& s : prev) {
-        auto* parent = findParentList(document_.objects, s.get());
+        auto* parent = findParentListAlg(document_.objects, s.get());
         if (!parent) continue;
-        auto copy = deepCopyObject(*s);
+        auto copy = deepCopyObjectAlg(*s);
         copy->name = s->name + "_copy";
         copy->id = s->id.empty() ? copy->name : s->id + "_copy";
         auto it = std::find_if(parent->begin(), parent->end(),
@@ -215,7 +215,7 @@ void MeshCraftApplication::copySelected() {
     if (!selection_.hasSelection()) return;
     clipboard_.clear();
     for (const auto& s : selection_.selection())
-        clipboard_.push_back(deepCopyObject(*s));
+        clipboard_.push_back(deepCopyObjectAlg(*s));
 }
 
 void MeshCraftApplication::cutSelected() {
@@ -229,7 +229,7 @@ void MeshCraftApplication::pasteClipboard() {
     pushUndo();
     std::vector<std::shared_ptr<Mc3::Mc3Object>> newObjs;
     for (const auto& src : clipboard_) {
-        auto copy = deepCopyObject(*src);
+        auto copy = deepCopyObjectAlg(*src);
         copy->transform.position[0] += 1.0f;
         newObjs.push_back(copy);
     }
@@ -273,7 +273,7 @@ void MeshCraftApplication::groupSelected() {
 
     for (const auto& s : prev) {
         group->children.push_back(s);
-        removeFromList(document_.objects, s.get());
+        removeFromListAlg(document_.objects, s.get());
     }
     insertIdx = std::min(insertIdx, document_.objects.size());
     document_.objects.insert(document_.objects.begin() + static_cast<std::ptrdiff_t>(insertIdx), group);
@@ -289,7 +289,7 @@ void MeshCraftApplication::ungroupSelected() {
     if (sel0->type != Mc3::ObjectType::Group || sel0->children.empty()) return;
     pushUndo();
     auto children = sel0->children;
-    auto* parentList = findParentList(document_.objects, sel0.get());
+    auto* parentList = findParentListAlg(document_.objects, sel0.get());
     if (!parentList) return;
     auto it = std::find_if(parentList->begin(), parentList->end(),
         [&](const auto& o) { return o.get() == sel0.get(); });
@@ -535,7 +535,7 @@ void MeshCraftApplication::exportSubtreeAsTemplate(const std::string& defName,
     pushUndo();
 
     // Deep-copy subtree into definitions map (reset transform to identity)
-    auto defObj = deepCopyObject(*src);
+    auto defObj = deepCopyObjectAlg(*src);
     defObj->id   = defName;
     defObj->name = defName;
     defObj->transform.position = {0.0f, 0.0f, 0.0f};
@@ -562,7 +562,7 @@ void MeshCraftApplication::exportSubtreeAsTemplate(const std::string& defName,
     inst->layer      = src->layer;
     inst->tags       = src->tags;
 
-    auto* parentList = findParentList(document_.objects, src.get());
+    auto* parentList = findParentListAlg(document_.objects, src.get());
     if (parentList) {
         for (auto& obj : *parentList) {
             if (obj.get() == src.get()) { obj = inst; break; }

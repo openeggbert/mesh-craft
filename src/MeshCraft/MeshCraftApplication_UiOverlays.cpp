@@ -576,7 +576,7 @@ void MeshCraftApplication::drawDialogs()
                         "  %s  (locked, skipped)", obj->name.c_str());
                     continue;
                 }
-                std::string preview = applyRenamePattern(
+                std::string preview = applyRenamePatternAlg(
                     batchRenameBuf_, obj->name, i + 1, objectTypeName(obj->type));
                 ImGui::TextColored(ImVec4(0.6f, 0.85f, 1.0f, 1.0f),
                     "  %s  →  %s", obj->name.c_str(), preview.c_str());
