@@ -252,6 +252,8 @@ struct DocumentBudget {
     long long totalObjects = 0;
     long long totalTessellationWeight = 0; // sum of every segments/sides/subdivisions value
     long long totalIncludes = 0; // count of genuinely-new (non-cyclic, non-diamond-dup) <include> merges
+    long long totalMaterials = 0; // SYS-W1-03
+    long long totalTextures = 0;  // SYS-W1-03: <texture> and <texture type="svg"> combined
 
     // Generous enough for any real scene (the largest checked-in stress
     // fixture sums to a few thousand) while still bounding the pathological
@@ -269,6 +271,15 @@ struct DocumentBudget {
     // merged successfully with no error. No legitimate scene includes
     // anywhere near this many distinct files.
     static constexpr long long kMaxTotalIncludes = 1'000;
+
+    // SYS-W1-03: materials/textures are heavier than a bare object (several
+    // string fields each: name/uri/wrap/filter/color_space, or 5 texture
+    // slots + several floats for materials) but still far cheaper than
+    // geometry -- a ceiling an order of magnitude below kMaxTotalObjects,
+    // generous for any real material/texture library, still bounds
+    // worst-case map-entry memory.
+    static constexpr long long kMaxTotalMaterials = 20'000;
+    static constexpr long long kMaxTotalTextures = 20'000;
 
     void chargeObject() {
         if (++totalObjects > kMaxTotalObjects) {
@@ -300,7 +311,26 @@ struct DocumentBudget {
             throw std::runtime_error(msg);
         }
     }
-    void reset() { totalObjects = 0; totalTessellationWeight = 0; totalIncludes = 0; }
+    void chargeMaterial() {
+        if (++totalMaterials > kMaxTotalMaterials) {
+            std::string msg = "MC3: document exceeds the total material budget (" +
+                std::to_string(kMaxTotalMaterials) + ")";
+            reportErrorDoc("materials", msg);
+            throw std::runtime_error(msg);
+        }
+    }
+    void chargeTexture() {
+        if (++totalTextures > kMaxTotalTextures) {
+            std::string msg = "MC3: document exceeds the total texture budget (" +
+                std::to_string(kMaxTotalTextures) + ")";
+            reportErrorDoc("textures", msg);
+            throw std::runtime_error(msg);
+        }
+    }
+    void reset() {
+        totalObjects = 0; totalTessellationWeight = 0; totalIncludes = 0;
+        totalMaterials = 0; totalTextures = 0;
+    }
 };
 static thread_local DocumentBudget g_budget;
 
@@ -872,6 +902,7 @@ static void parseCameras(const XMLElement* el, Mc3Document& doc) {
 static void parseTextures(const XMLElement* el, Mc3Document& doc) {
     for (const XMLElement* c = el->FirstChildElement("texture"); c;
          c = c->NextSiblingElement("texture")) {
+        g_budget.chargeTexture(); // SYS-W1-03
         std::string id   = attr(c, "id");
         std::string type = attr(c, "type");
         if (type == "svg") {
@@ -921,6 +952,7 @@ static constexpr float kMaxMaterialUnit = 1.0f;
 static void parseMaterials(const XMLElement* el, Mc3Document& doc) {
     for (const XMLElement* c = el->FirstChildElement("material"); c;
          c = c->NextSiblingElement("material")) {
+        g_budget.chargeMaterial(); // SYS-W1-03
         Mc3Material mat;
         std::string id = attr(c, "id");
         mat.name        = id;

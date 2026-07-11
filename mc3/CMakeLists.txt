@@ -157,6 +157,14 @@ if(BUILD_TESTING)
     add_test(NAME mc3_numeric_range COMMAND mc3_numeric_range_test)
     set_tests_properties(mc3_numeric_range PROPERTIES TIMEOUT 15 LABELS "format")
 
+    # SYS-W1-03: document-complexity budgets beyond AUD-059's total object
+    # count + total tessellation weight -- materials/textures/embeds/actions/
+    # channels/keyframes counts, children-per-node breadth.
+    add_executable(mc3_document_budget_test test/document_budget_test.cpp)
+    target_link_libraries(mc3_document_budget_test PRIVATE Mc3)
+    add_test(NAME mc3_document_budget COMMAND mc3_document_budget_test)
+    set_tests_properties(mc3_document_budget PROPERTIES TIMEOUT 30 LABELS "format")
+
     # Load-policy test: untrusted content (AI/import) must not process <include>;
     # include-confinement rejects path traversal.
     add_executable(mc3_load_policy_test test/load_policy_test.cpp)
