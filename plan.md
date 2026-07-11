@@ -85,7 +85,7 @@ P1s already being fixed in git history. This session:
    **Net across all 64 AUD-### rows (57 original + 7 session-2 additions,
    the 7th — AUD-036c — split off from AUD-036b so its verified-done portion
    could be marked DONE without also claiming its still-open portion):
-   41 DONE, 21 TODO, 2 DEFERRED** — recompute with
+   43 DONE, 19 TODO, 2 DEFERRED** — recompute with
    `python3 test/validate_plan_consistency.py . <build-dir>` rather than
    trusting this number as time passes.
 5. Archived `plan_deep_audit.md` (all 57 of its own tasks were already
@@ -347,11 +347,13 @@ DONE marker without checking its cited commit/verify command.
 - **Tests:** Enable shadow-map debug, exit, and confirm the FBO + 2 textures are deleted (GL object counter or apitrace); add a regression test that the handles are freed.
 - **Resolved:** commit `2d126bf` — verify: `ctest -L render`
 
-### AUD-014 `[TODO]` `P2` `W0` · Detached AI worker thread is never joined; may run httplib/OpenSSL during process-exit static destruction
+### AUD-014 `[DONE]` `P2` `W0` · Detached AI worker thread is never joined; may run httplib/OpenSSL during process-exit static destruction
 - **Component:** src/MeshCraft/AiAssistant.cpp (sendAsync)
 - **Evidence:** sendAsync spawns and immediately detaches a network worker: AiAssistant.cpp:180 `std::thread([...]() {...}).detach();` (`.detach()` at :264). reset() (:148-163) only drops the shared_ptr result box and explicitly does NOT wait for the worker ('no blocking anywhere', comment :149-156). isInFlight() (:126) is polled but nothing joins or cancels the thread at exit. main.cpp returns after app.Run() with no shutdown barrier. If an AI request is still in flight when the process exits, the detached thread keeps executing cpp-httplib / OpenSSL code while C++ static destructors and OpenSSL atexit cleanup run, a classic exit-time data race / UB that can crash on shutdown.
 - **Outcome:** Track the in-flight worker and, on shutdown, either join it (with a bounded timeout) or ensure the process does not begin static/OpenSSL teardown while a request thread is live; at minimum document/guard the exit ordering.
 - **Tests:** Start a request against a slow/blocking mock endpoint, trigger app exit mid-request, and run under TSan/ASan to confirm no thread is executing library code during static destruction.
+- **Resolved:** commit `3cd27d7` — verify: `ctest -R mc3_ai`
+- **Status note:** Added `AiAssistant::waitForAllInFlight(timeout)`: a process-wide in-flight-worker counter incremented on the CALLING thread before `std::thread(...)` is constructed (avoids a race where the counter could read 0 momentarily between thread creation and the worker's first instruction), decremented via an RAII guard (`AiWorkerScopeGuard`) constructed as the worker lambda's first statement so it decrements on every exit path. `main.cpp` calls it with a bounded 5s timeout via an RAII local (`AiShutdownWaiter`) declared first in `main()` so it is destroyed LAST, right before the process actually returns, on every exit path (`--help`/`--version`/`--screenshot`/`--export`/interactive). Bounded, not indefinite, deliberately — an unbounded wait here would reintroduce the exact hang STAB-0387/0388 removed from `reset()`; a genuinely-stuck request is still abandoned after the timeout, same as before this fix, this only helps the near-finished case. Did not attempt the TSan/ASan verification named in Tests (that's covered by the separate, broader AUD-055 CI-hardening task) — instead directly exercised the synchronization primitive against a real in-flight worker thread (mock `httplib::Server` blocked via a released condition_variable): a short-timeout call returns `false` while genuinely still blocked, a longer one returns `true` once released and the worker actually finishes, and the result is confirmed already-published at that point (no wait/data race).
 
 ### AUD-015 `[TODO]` `P2` `W6` · Known-key value decoding ignores the declared tag byte (no type validation on the hot read path) — PARTIAL: readObject done, 27 sibling read* functions remain
 - **Component:** mcb/src/McbReader.cpp — readObject/readDocument and all read* deserializers
@@ -415,12 +417,14 @@ DONE marker without checking its cited commit/verify command.
 - **Tests:** Export an Extrude with a Helix path, helixTurns=0; assert the exporter throws (or the output contains no NaN) rather than exiting 0 with NaN accessor bounds.
 - **Resolved:** commit `fd606d2` — verify: `ctest -R mc3togltf_hostile_geometry`
 
-### AUD-024 `[TODO]` `P2` `W7` · Per-object UV mapping (projection/scale/offset/rotation) is silently ignored by the exporter
+### AUD-024 `[DONE]` `P2` `W7` · Per-object UV mapping (projection/scale/offset/rotation) is silently ignored by the exporter
 - **Component:** mc3togltf/src/GltfExporter.cpp / MeshBuilder.cpp
 - **Evidence:** Mc3Object carries `std::optional<Mc3UvMapping> uvMapping;` (Mc3Object.hpp:91; Mc3UvMapping has projection + scaleU/V, offsetU/V, rotation, Mc3Object.hpp:21-28). grep across mc3togltf/src for uvMapping/scaleU/offsetU returns NONE — no exporter code reads it. buildMesh/buildPrimitive emit only the primitive's built-in TEXCOORD_0. A user who set UV scale=4 or a Box/Sphere projection in the editor gets 1x planar UVs in the export, with no warning. MC3_FORMAT.md lists 'Materials (PBR, textures) ✅', implying textures round-trip faithfully.
 - **Outcome:** Apply Mc3UvMapping (scale/offset/rotation and projection) to generated texcoords, or warn that authored UV mapping is not exported.
 - **Tests:** Export an object with uvMapping scaleU=4; assert exported TEXCOORD_0 U range spans ~4x, or a warning is emitted.
 - **Verify note:** Evidence is accurate except one nuance: the finding implies the editor viewport applies uvMapping while only the export drops it. In fact the editor renderer (src/MeshCraft/Renderer/*) also never reads uvMapping — a grep shows only PropertiesPanel.cpp (the property editor) touches it. So uvMapping is applied NOWHERE in geometry generation (neither live viewport nor glTF export); it merely round-trips through XML/MCB serialization. Full path of the field is mc3/include/MeshCraft/Mc3/Mc3Object.hpp:91 (line number matches the claim). Severity P2 stands.
+- **Resolved:** commit `29e5706` — verify: `ctest -R mc3togltf_uv_mapping_export`
+- **Status note:** Added `MeshData::applyUvMapping()` (scale, then rotate about the UV origin, then offset) and wired it into `buildMesh()` whenever `obj.uvMapping` is set. Box/Sphere projection remains genuinely unimplemented (confirmed by the Verify note: nowhere in the codebase recomputes UVs from a projection type) — a non-Planar projection now warns rather than silently claiming to apply something that has no effect, taking the "or warn" branch of this task's Outcome for that part. Also fixed an adjacent bug this task's own testing surfaced: `buildGeomCacheKey()` omitted `uvMapping`, so two same-size/material objects differing only by `uv_mapping` collided on the same cache key and silently shared the first object's TEXCOORD_0. **Known remaining gap** (out of this task's scope, not fixed here): the live editor viewport (src/MeshCraft/Renderer/*) still never reads `uvMapping` either — only the exporter was fixed. A user editing UV mapping still sees no visual feedback in the 3D view itself, only in the final export; not filed as a separate AUD-### since the Verify note already documents it as a known, pre-existing, viewport-side gap distinct from this exporter fix.
 
 ### AUD-025 `[DEFERRED]` `P2` `W7` · embed: mesh source is treated as a literal OBJ path — node exports with no mesh while export exits 0 'Written'
 - **Component:** mc3togltf/src/GltfExporter.cpp buildMesh()
