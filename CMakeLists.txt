@@ -727,6 +727,22 @@ if(MESH_CRAFT_BUILD_TESTING AND UNIX AND NOT ANDROID AND NOT EMSCRIPTEN)
             )
             set_tests_properties(editor_export_test PROPERTIES TIMEOUT 60 LABELS "export")
         endif()
+
+        # STAB-0327: confirms prefs.ini is auto-created on first launch
+        # (LoadContent() now calls savePrefs() if the file doesn't already
+        # exist), not only after the user explicitly closes the Preferences
+        # dialog.
+        if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/test/house.mc3.xml")
+            add_test(
+                NAME prefs_first_launch_test
+                COMMAND "${PYTHON3_EXEC}"
+                        "${CMAKE_CURRENT_SOURCE_DIR}/test/prefs_first_launch_test.py"
+                        $<TARGET_FILE:MeshCraft>
+                        "${CMAKE_CURRENT_SOURCE_DIR}/test/house.mc3.xml"
+                WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
+            )
+            set_tests_properties(prefs_first_launch_test PROPERTIES TIMEOUT 30 LABELS "render")
+        endif()
     endif()
 
     # mc3togltf_gltf test is registered by mc3togltf/CMakeLists.txt via $<TARGET_FILE:mc3togltf>

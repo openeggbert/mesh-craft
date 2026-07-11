@@ -1,5 +1,6 @@
 #include "MeshCraft/MeshCraftApplication.hpp"
 #include "MeshCraft/EditorAlgorithms.hpp"
+#include "MeshCraftPrivate.hpp"
 
 #include <imgui.h>
 #include <imgui_impl_sdl3.h>
@@ -23,6 +24,7 @@
 #include <cmath>
 #include <cstdio>
 #include <cstring>
+#include <filesystem>
 #include <fstream>
 #include <functional>
 #include <initializer_list>
@@ -218,6 +220,12 @@ void MeshCraftApplication::LoadContent() {
 
     loadRecentFiles();
     loadPrefs();
+    // STAB-0327: savePrefs() previously only ran from the Preferences
+    // dialog's own Close button, so a fresh install never got a prefs.ini
+    // on disk until the user explicitly opened and closed that dialog.
+    // Write one immediately on first launch, with the defaults loadPrefs()
+    // just left in place.
+    if (!std::filesystem::exists(prefsPath())) savePrefs();
     loadKeybindings();
 
     if (!currentFile_.empty() && std::filesystem::exists(currentFile_)) {
