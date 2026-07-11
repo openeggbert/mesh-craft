@@ -45,4 +45,14 @@ if(BUILD_TESTING)
     target_link_libraries(mcb_roundtrip_test PRIVATE Mcb)
     add_test(NAME mcb_roundtrip COMMAND mcb_roundtrip_test)
     set_tests_properties(mcb_roundtrip PROPERTIES TIMEOUT 30 LABELS "format")
+
+    # SYS-W1-04 / SYS-W6-02: MCB corruption coverage beyond mcb_roundtrip_test
+    # -- a byte-offset truncation sweep over a rich multi-section document,
+    # and genuinely random (not just structured all-zeros) byte-noise fuzzing.
+    add_executable(mcb_corruption_test
+        test/mcb_corruption_test.cpp
+    )
+    target_link_libraries(mcb_corruption_test PRIVATE Mcb)
+    add_test(NAME mcb_corruption COMMAND mcb_corruption_test)
+    set_tests_properties(mcb_corruption PROPERTIES TIMEOUT 30 LABELS "format")
 endif()
