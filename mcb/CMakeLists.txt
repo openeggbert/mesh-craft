@@ -55,4 +55,15 @@ if(BUILD_TESTING)
     target_link_libraries(mcb_corruption_test PRIVATE Mcb)
     add_test(NAME mcb_corruption COMMAND mcb_corruption_test)
     set_tests_properties(mcb_corruption PROPERTIES TIMEOUT 30 LABELS "format")
+
+    # SYS-W1-01: Mc3Validation diagnostics for the MCB reader -- proves the
+    # structured warning/error surface itself is populated (not just that
+    # clamped/rejected VALUES are correct, already covered by
+    # mcb_roundtrip's AUD-015/AUD-017 tests).
+    add_executable(mcb_validation_test
+        test/mcb_validation_test.cpp
+    )
+    target_link_libraries(mcb_validation_test PRIVATE Mcb)
+    add_test(NAME mcb_validation COMMAND mcb_validation_test)
+    set_tests_properties(mcb_validation PROPERTIES TIMEOUT 15 LABELS "format")
 endif()

@@ -14,17 +14,89 @@
 #include "MeshCraft/Mc3/Mc3Trigger.hpp"
 #include "MeshCraft/Mc3/Mc3SvgTexture.hpp"
 #include "MeshCraft/Mc3/Mc3Texture.hpp"
+#include "MeshCraft/Mc3/Mc3Validation.hpp"
 
 #include <array>
 #include <cstring>
+#include <filesystem>
 #include <fstream>
 #include <istream>
 #include <map>
 #include <memory>
 #include <stdexcept>
 #include <string>
+#include <vector>
 
 namespace MeshCraft::Mcb {
+
+// ---------------------------------------------------------------------------
+// SYS-W1-01: Mc3Validation reporting
+// ---------------------------------------------------------------------------
+//
+// Mirrors the thread_local pattern used for the same reason in
+// mc3/src/Mc3XmlParser.cpp: the read*() call graph here is large and already
+// recursive (readObject -> readPrimitive/readTransform/... -> readObject for
+// children) with no existing context-object parameter to thread a
+// diagnostics sink through. `g_validation` is set once per top-level
+// loadFromFile()/loadFromBinary() call (nullptr when the caller didn't ask
+// for diagnostics) via ValidationScope below, and reset unconditionally on
+// scope exit, so nothing can leak a stale pointer into an unrelated later
+// call on the same thread.
+static thread_local Mc3::Mc3Validation* g_validation = nullptr;
+
+// The file currently being read, when known (loadFromFile knows its path;
+// loadFromBinary(std::istream&) does not and leaves this empty).
+static thread_local std::filesystem::path g_sourceFile;
+
+// Best-effort "current object" identity stack. Unlike the MC3 XML parser
+// (which has an XMLElement with attributes available at every clamp site),
+// MCB is a flat key/value binary stream -- an object's own id/name field may
+// be read before OR after the field that triggers a diagnostic, and for a
+// deliberately-adversarial file may not appear at all. Each recursive
+// read*() for a thing with its own identity (readObject, readLight,
+// readCamera, ..., or any read*(id) helper that already knows its id from
+// the enclosing map key) pushes one entry via IdentityScope and updates it
+// as soon as a name/id field is actually read; anything read while that
+// entry is on top of the stack (including nested sub-structures like
+// transform/primitive that have no identity of their own) is attributed to
+// it. This is a best-effort identity, not a guarantee -- exactly the same
+// caveat plan.md accepts ("as much as is practically threadable... without a
+// huge refactor").
+static thread_local std::vector<std::string> g_identityStack;
+
+struct IdentityScope {
+    IdentityScope() { g_identityStack.emplace_back(); }
+    explicit IdentityScope(std::string id) { g_identityStack.push_back(std::move(id)); }
+    ~IdentityScope() { g_identityStack.pop_back(); }
+    void set(std::string id) { g_identityStack.back() = std::move(id); }
+    IdentityScope(const IdentityScope&) = delete;
+};
+
+static std::string currentIdentity() {
+    return g_identityStack.empty() ? std::string{} : g_identityStack.back();
+}
+
+static void reportWarning(const char* field, const std::string& message,
+                           const std::string& repair = {}) {
+    if (!g_validation) return;
+    g_validation->addWarning(g_sourceFile.string(), currentIdentity(), field, message, repair);
+}
+
+static void reportError(const char* field, const std::string& message,
+                         const std::string& repair = {}) {
+    if (!g_validation) return;
+    g_validation->addError(g_sourceFile.string(), currentIdentity(), field, message, repair);
+}
+
+// RAII guard for g_validation -- set at the top of each public entry point
+// (loadFromFile/loadFromBinary, both overloads), cleared again on scope exit
+// (including via exception) so a caller-owned Mc3Validation never remains
+// reachable via the thread_local past the end of the call it was given to.
+struct ValidationScope {
+    explicit ValidationScope(Mc3::Mc3Validation* v) { g_validation = v; }
+    ~ValidationScope() { g_validation = nullptr; }
+    ValidationScope(const ValidationScope&) = delete;
+};
 
 // ---------------------------------------------------------------------------
 // Low-level read helpers
@@ -72,9 +144,12 @@ static constexpr uint32_t kMcbMaxStringLen = 64u * 1024u * 1024u; // 64 MB
 static std::string rRawStr(std::istream& in) {
     uint32_t len = rU32(in);
     if (len == 0) return {};
-    if (len > kMcbMaxStringLen)
-        throw std::runtime_error("MCB: string length " + std::to_string(len) +
-            " exceeds sanity limit (corrupted or malicious file?)");
+    if (len > kMcbMaxStringLen) {
+        std::string msg = "MCB: string length " + std::to_string(len) +
+            " exceeds sanity limit (corrupted or malicious file?)";
+        reportError("string", msg);
+        throw std::runtime_error(msg);
+    }
     std::string s(len, '\0');
     if (!in.read(s.data(), static_cast<std::streamsize>(len)))
         throw std::runtime_error("MCB: string truncated");
@@ -91,9 +166,12 @@ static constexpr uint32_t kMcbMaxCollectionCount = 10u * 1000u * 1000u; // 10M
 
 static uint32_t rU32Bounded(std::istream& in) {
     uint32_t n = rU32(in);
-    if (n > kMcbMaxCollectionCount)
-        throw std::runtime_error("MCB: collection count " + std::to_string(n) +
-            " exceeds sanity limit (corrupted or malicious file?)");
+    if (n > kMcbMaxCollectionCount) {
+        std::string msg = "MCB: collection count " + std::to_string(n) +
+            " exceeds sanity limit (corrupted or malicious file?)";
+        reportError("collection", msg);
+        throw std::runtime_error(msg);
+    }
     return n;
 }
 
@@ -142,9 +220,10 @@ public:
     RecursionGuard() {
         if (++depth_ > MaxDepth) {
             --depth_;
-            throw std::runtime_error(
-                "MCB: nesting depth exceeds " + std::to_string(MaxDepth) +
-                " (corrupted or malicious file?)");
+            std::string msg = "MCB: nesting depth exceeds " + std::to_string(MaxDepth) +
+                " (corrupted or malicious file?)";
+            reportError("nesting", msg);
+            throw std::runtime_error(msg);
         }
     }
     ~RecursionGuard() { --depth_; }
@@ -195,8 +274,11 @@ static void skipValue(std::istream& in, uint8_t tag) {
         }
         break;
     }
-    default:
-        throw std::runtime_error("MCB: unknown tag " + std::to_string(tag));
+    default: {
+        std::string msg = "MCB: unknown tag " + std::to_string(tag);
+        reportError("tag", msg);
+        throw std::runtime_error(msg);
+    }
     }
 }
 
@@ -211,10 +293,13 @@ static void skipValue(std::istream& in, uint8_t tag) {
 // happened to be next as if they were the expected type. expectTag() makes a
 // tag/decoder mismatch a clear, immediate error instead.
 static void expectTag(uint8_t got, uint8_t want, const char* key) {
-    if (got != want)
-        throw std::runtime_error("MCB: type mismatch for key '" + std::string(key) +
-                                  "' (expected tag " + std::to_string(want) +
-                                  ", got " + std::to_string(got) + ")");
+    if (got != want) {
+        std::string msg = "MCB: type mismatch for key '" + std::string(key) +
+                           "' (expected tag " + std::to_string(want) +
+                           ", got " + std::to_string(got) + ")";
+        reportError(key, msg);
+        throw std::runtime_error(msg);
+    }
 }
 
 // AUD-017: every enum field read from a file is a raw static_cast of an
@@ -228,8 +313,13 @@ static void expectTag(uint8_t got, uint8_t want, const char* key) {
 // `count` is the enum's real enumerator count and must be kept in sync by
 // hand -- C++ has no reflection to derive it from the enum definition.
 template <typename Enum>
-static Enum clampEnum(int32_t raw, int count) {
-    return (raw >= 0 && raw < count) ? static_cast<Enum>(raw) : static_cast<Enum>(0);
+static Enum clampEnum(int32_t raw, int count, const char* field) {
+    if (raw >= 0 && raw < count) return static_cast<Enum>(raw);
+    reportWarning(field,
+                  "enum value " + std::to_string(raw) + " is out of range [0, " +
+                  std::to_string(count) + ")",
+                  "clamped to enumerator 0");
+    return static_cast<Enum>(0);
 }
 
 // ---------------------------------------------------------------------------
@@ -255,7 +345,7 @@ static Mc3::Mc3Primitive readPrimitive(std::istream& in) {
     while (true) {
         std::string k = rKey(in); if (k.empty()) break;
         uint8_t tag = rU8(in);
-        if      (k == "primitiveType") { expectTag(tag, TAG_I32, "primitiveType"); p.primitiveType = clampEnum<Mc3::PrimitiveType>(rI32(in), 11); }
+        if      (k == "primitiveType") { expectTag(tag, TAG_I32, "primitiveType"); p.primitiveType = clampEnum<Mc3::PrimitiveType>(rI32(in), 11, "primitiveType"); }
         else if (k == "size")          { expectTag(tag, TAG_VEC3, "size");         p.size          = rVec3(in); }
         else if (k == "radius")        { expectTag(tag, TAG_F32, "radius");        p.radius        = rF32(in); }
         else if (k == "height")        { expectTag(tag, TAG_F32, "height");        p.height        = rF32(in); }
@@ -286,7 +376,7 @@ static Mc3::Mc3CsgOperation readCsgOp(std::istream& in) {
     while (true) {
         std::string k = rKey(in); if (k.empty()) break;
         uint8_t tag = rU8(in);
-        if (k == "csgType") { expectTag(tag, TAG_I32, "csgType"); csg.csgType = clampEnum<Mc3::CsgType>(rI32(in), 3); }
+        if (k == "csgType") { expectTag(tag, TAG_I32, "csgType"); csg.csgType = clampEnum<Mc3::CsgType>(rI32(in), 3, "csgType"); }
         else                 skipValue(in, tag);
     }
     return csg;
@@ -297,7 +387,7 @@ static Mc3::Mc3CrossSection readCrossSection(std::istream& in) {
     while (true) {
         std::string k = rKey(in); if (k.empty()) break;
         uint8_t tag = rU8(in);
-        if      (k == "type")        { expectTag(tag, TAG_I32, "type");        cs.type        = clampEnum<Mc3::CrossSectionType>(rI32(in), 5); }
+        if      (k == "type")        { expectTag(tag, TAG_I32, "type");        cs.type        = clampEnum<Mc3::CrossSectionType>(rI32(in), 5, "type"); }
         else if (k == "width")       { expectTag(tag, TAG_F32, "width");       cs.width       = rF32(in); }
         else if (k == "height")      { expectTag(tag, TAG_F32, "height");      cs.height      = rF32(in); }
         else if (k == "radius")      { expectTag(tag, TAG_F32, "radius");      cs.radius      = rF32(in); }
@@ -344,7 +434,7 @@ static Mc3::Mc3ExtrudePath readPath(std::istream& in) {
         uint8_t tag = rU8(in);
         // AUD-017: ExtrudePathType(5 members) was missed by the original
         // enum-clamp pass -- clampEnum applied here too now.
-        if      (k == "type")        { expectTag(tag, TAG_I32, "type");        p.type        = clampEnum<Mc3::ExtrudePathType>(rI32(in), 5); }
+        if      (k == "type")        { expectTag(tag, TAG_I32, "type");        p.type        = clampEnum<Mc3::ExtrudePathType>(rI32(in), 5, "type"); }
         else if (k == "length")      { expectTag(tag, TAG_F32, "length");      p.length      = rF32(in); }
         else if (k == "axis")        { expectTag(tag, TAG_STR, "axis");        p.axis        = rRawStr(in); }
         else if (k == "arcRadius")   { expectTag(tag, TAG_F32, "arcRadius");   p.arcRadius   = rF32(in); }
@@ -390,7 +480,7 @@ static Mc3::Mc3UvMapping readUvMapping(std::istream& in) {
         uint8_t tag = rU8(in);
         // AUD-017: UvProjection (3 members) was missed by the original
         // enum-clamp pass -- clampEnum applied here too now.
-        if      (k == "projection") { expectTag(tag, TAG_I32, "projection"); uv.projection = clampEnum<Mc3::UvProjection>(rI32(in), 3); }
+        if      (k == "projection") { expectTag(tag, TAG_I32, "projection"); uv.projection = clampEnum<Mc3::UvProjection>(rI32(in), 3, "projection"); }
         else if (k == "scaleU")     { expectTag(tag, TAG_F32, "scaleU");     uv.scaleU     = rF32(in); }
         else if (k == "scaleV")     { expectTag(tag, TAG_F32, "scaleV");     uv.scaleV     = rF32(in); }
         else if (k == "offsetU")    { expectTag(tag, TAG_F32, "offsetU");    uv.offsetU    = rF32(in); }
@@ -421,13 +511,14 @@ static std::shared_ptr<Mc3::Mc3Object> readObject(std::istream& in);
 
 static std::shared_ptr<Mc3::Mc3Object> readObject(std::istream& in) {
     RecursionGuard<256> guard;
+    IdentityScope idScope; // SYS-W1-01: updated below once name/id is read
     auto obj = std::make_shared<Mc3::Mc3Object>();
     while (true) {
         std::string k = rKey(in); if (k.empty()) break;
         uint8_t tag = rU8(in);
-        if      (k == "type")             { expectTag(tag, TAG_I32, "type");             obj->type             = clampEnum<Mc3::ObjectType>(rI32(in), 19); }
-        else if (k == "name")             { expectTag(tag, TAG_STR, "name");             obj->name             = rRawStr(in); }
-        else if (k == "id")               { expectTag(tag, TAG_STR, "id");               obj->id               = rRawStr(in); }
+        if      (k == "type")             { expectTag(tag, TAG_I32, "type");             obj->type             = clampEnum<Mc3::ObjectType>(rI32(in), 19, "type"); }
+        else if (k == "name")             { expectTag(tag, TAG_STR, "name");             obj->name             = rRawStr(in); idScope.set(obj->name); }
+        else if (k == "id")               { expectTag(tag, TAG_STR, "id");               obj->id               = rRawStr(in); idScope.set(obj->id); }
         else if (k == "material")         { expectTag(tag, TAG_STR, "material");         obj->material         = rRawStr(in); }
         else if (k == "visible")          { expectTag(tag, TAG_BOOL, "visible");         obj->visible          = rU8(in) != 0; }
         else if (k == "collision")        { expectTag(tag, TAG_STR, "collision");        obj->collision        = rRawStr(in); }
@@ -499,10 +590,11 @@ static std::shared_ptr<Mc3::Mc3Object> readObject(std::istream& in) {
 
 static Mc3::Mc3Texture readTexture(std::istream& in) {
     Mc3::Mc3Texture tex;
+    IdentityScope idScope;
     while (true) {
         std::string k = rKey(in); if (k.empty()) break;
         uint8_t tag = rU8(in);
-        if      (k == "name")       { expectTag(tag, TAG_STR, "name");       tex.name       = rRawStr(in); }
+        if      (k == "name")       { expectTag(tag, TAG_STR, "name");       tex.name       = rRawStr(in); idScope.set(tex.name); }
         else if (k == "uri")        { expectTag(tag, TAG_STR, "uri");        tex.uri        = rRawStr(in); }
         else if (k == "wrapU")      { expectTag(tag, TAG_STR, "wrapU");      tex.wrapU      = rRawStr(in); }
         else if (k == "wrapV")      { expectTag(tag, TAG_STR, "wrapV");      tex.wrapV      = rRawStr(in); }
@@ -515,6 +607,7 @@ static Mc3::Mc3Texture readTexture(std::istream& in) {
 }
 
 static Mc3::Mc3SvgTexture readSvgTexture(std::istream& in, const std::string& id) {
+    IdentityScope idScope(id);
     Mc3::Mc3SvgTexture svg;
     svg.id = id;
     while (true) {
@@ -529,10 +622,11 @@ static Mc3::Mc3SvgTexture readSvgTexture(std::istream& in, const std::string& id
 
 static Mc3::Mc3ObjectOverride readObjectOverride(std::istream& in) {
     Mc3::Mc3ObjectOverride ovr;
+    IdentityScope idScope;
     while (true) {
         std::string k = rKey(in); if (k.empty()) break;
         uint8_t tag = rU8(in);
-        if      (k == "id")       { expectTag(tag, TAG_STR, "id");       ovr.id       = rRawStr(in); }
+        if      (k == "id")       { expectTag(tag, TAG_STR, "id");       ovr.id       = rRawStr(in); idScope.set(ovr.id); }
         else if (k == "visible")  { expectTag(tag, TAG_BOOL, "visible"); ovr.visible  = rU8(in) != 0; }
         else if (k == "position") { expectTag(tag, TAG_VEC3, "position"); ovr.position = rVec3(in); }
         else if (k == "rotation") { expectTag(tag, TAG_VEC3, "rotation"); ovr.rotation = rVec3(in); }
@@ -543,6 +637,7 @@ static Mc3::Mc3ObjectOverride readObjectOverride(std::istream& in) {
 }
 
 static Mc3::Mc3SceneState readSceneState(std::istream& in, const std::string& name) {
+    IdentityScope idScope(name);
     Mc3::Mc3SceneState state;
     state.name = name;
     while (true) {
@@ -570,6 +665,7 @@ static Mc3::TriggerStepType parseTriggerStepType(const std::string& s) {
 }
 
 static Mc3::Mc3Trigger readTrigger(std::istream& in, const std::string& id) {
+    IdentityScope idScope(id);
     Mc3::Mc3Trigger trig;
     trig.id = id;
     while (true) {
@@ -598,6 +694,7 @@ static Mc3::Mc3Trigger readTrigger(std::istream& in, const std::string& id) {
 }
 
 static Mc3::Mc3Sound readSound(std::istream& in, const std::string& id) {
+    IdentityScope idScope(id);
     Mc3::Mc3Sound snd;
     snd.id = id;
     while (true) {
@@ -611,6 +708,7 @@ static Mc3::Mc3Sound readSound(std::istream& in, const std::string& id) {
 }
 
 static Mc3::Mc3Music readMusic(std::istream& in, const std::string& id) {
+    IdentityScope idScope(id);
     Mc3::Mc3Music mus;
     mus.id = id;
     while (true) {
@@ -624,6 +722,7 @@ static Mc3::Mc3Music readMusic(std::istream& in, const std::string& id) {
 }
 
 static Mc3::Mc3Script readScript(std::istream& in, const std::string& id) {
+    IdentityScope idScope(id);
     Mc3::Mc3Script sc;
     sc.id = id;
     while (true) {
@@ -637,6 +736,7 @@ static Mc3::Mc3Script readScript(std::istream& in, const std::string& id) {
 }
 
 static Mc3::Mc3EmbedGltf readEmbed(std::istream& in, const std::string& id) {
+    IdentityScope idScope(id);
     Mc3::Mc3EmbedGltf em;
     em.id = id;
     while (true) {
@@ -651,10 +751,11 @@ static Mc3::Mc3EmbedGltf readEmbed(std::istream& in, const std::string& id) {
 
 static Mc3::Mc3Material readMaterial(std::istream& in) {
     Mc3::Mc3Material m;
+    IdentityScope idScope;
     while (true) {
         std::string k = rKey(in); if (k.empty()) break;
         uint8_t tag = rU8(in);
-        if      (k == "name")                     { expectTag(tag, TAG_STR, "name");                     m.name                     = rRawStr(in); }
+        if      (k == "name")                     { expectTag(tag, TAG_STR, "name");                     m.name                     = rRawStr(in); idScope.set(m.name); }
         else if (k == "baseColor")                { expectTag(tag, TAG_VEC4, "baseColor");                m.baseColor                = rVec4(in); }
         else if (k == "baseColorTexture")         { expectTag(tag, TAG_STR, "baseColorTexture");         m.baseColorTexture         = rRawStr(in); }
         else if (k == "normalTexture")            { expectTag(tag, TAG_STR, "normalTexture");            m.normalTexture            = rRawStr(in); }
@@ -676,11 +777,12 @@ static Mc3::Mc3Material readMaterial(std::istream& in) {
 
 static Mc3::Mc3Light readLight(std::istream& in) {
     Mc3::Mc3Light lt;
+    IdentityScope idScope;
     while (true) {
         std::string k = rKey(in); if (k.empty()) break;
         uint8_t tag = rU8(in);
-        if      (k == "type")        { expectTag(tag, TAG_I32, "type");        lt.type        = clampEnum<Mc3::LightType>(rI32(in), 4); }
-        else if (k == "name")        { expectTag(tag, TAG_STR, "name");        lt.name        = rRawStr(in); }
+        if      (k == "type")        { expectTag(tag, TAG_I32, "type");        lt.type        = clampEnum<Mc3::LightType>(rI32(in), 4, "type"); }
+        else if (k == "name")        { expectTag(tag, TAG_STR, "name");        lt.name        = rRawStr(in); idScope.set(lt.name); }
         else if (k == "color")       { expectTag(tag, TAG_VEC3, "color");      lt.color       = rVec3(in); }
         else if (k == "brightness")  { expectTag(tag, TAG_F32, "brightness");  lt.brightness  = rF32(in); }
         else if (k == "direction")   { expectTag(tag, TAG_VEC3, "direction");  lt.direction   = rVec3(in); }
@@ -696,11 +798,12 @@ static Mc3::Mc3Light readLight(std::istream& in) {
 
 static Mc3::Mc3Camera readCamera(std::istream& in) {
     Mc3::Mc3Camera cam;
+    IdentityScope idScope;
     while (true) {
         std::string k = rKey(in); if (k.empty()) break;
         uint8_t tag = rU8(in);
-        if      (k == "name")      { expectTag(tag, TAG_STR, "name");      cam.name      = rRawStr(in); }
-        else if (k == "type")      { expectTag(tag, TAG_I32, "type");      cam.type      = clampEnum<Mc3::CameraType>(rI32(in), 2); }
+        if      (k == "name")      { expectTag(tag, TAG_STR, "name");      cam.name      = rRawStr(in); idScope.set(cam.name); }
+        else if (k == "type")      { expectTag(tag, TAG_I32, "type");      cam.type      = clampEnum<Mc3::CameraType>(rI32(in), 2, "type"); }
         else if (k == "position")  { expectTag(tag, TAG_VEC3, "position"); cam.position  = rVec3(in); }
         else if (k == "target")    { expectTag(tag, TAG_VEC3, "target");   cam.target    = rVec3(in); }
         else if (k == "rotation")  { expectTag(tag, TAG_VEC3, "rotation"); cam.rotation  = rVec3(in); }
@@ -720,7 +823,7 @@ static Mc3::Mc3Fog readFog(std::istream& in) {
         std::string k = rKey(in); if (k.empty()) break;
         uint8_t tag = rU8(in);
         if      (k == "color")   { expectTag(tag, TAG_VEC3, "color");   fog.color   = rVec3(in); }
-        else if (k == "mode")    { expectTag(tag, TAG_I32, "mode");     fog.mode    = clampEnum<Mc3::FogMode>(rI32(in), 2); }
+        else if (k == "mode")    { expectTag(tag, TAG_I32, "mode");     fog.mode    = clampEnum<Mc3::FogMode>(rI32(in), 2, "mode"); }
         else if (k == "start")   { expectTag(tag, TAG_F32, "start");    fog.start   = rF32(in); }
         else if (k == "end")     { expectTag(tag, TAG_F32, "end");      fog.end     = rF32(in); }
         else if (k == "density") { expectTag(tag, TAG_F32, "density");  fog.density = rF32(in); }
@@ -750,7 +853,7 @@ static Mc3::Mc3Keyframe readKeyframe(std::istream& in) {
         uint8_t tag = rU8(in);
         if      (k == "time")          { expectTag(tag, TAG_F32, "time");          kf.time                = rF32(in); }
         else if (k == "value")         { expectTag(tag, TAG_F32, "value");         kf.value               = rF32(in); }
-        else if (k == "interpolation") { expectTag(tag, TAG_I32, "interpolation"); kf.interpolation       = clampEnum<Mc3::Interpolation>(rI32(in), 3); }
+        else if (k == "interpolation") { expectTag(tag, TAG_I32, "interpolation"); kf.interpolation       = clampEnum<Mc3::Interpolation>(rI32(in), 3, "interpolation"); }
         else if (k == "leftDt")        { expectTag(tag, TAG_F32, "leftDt");        kf.handleLeft.dt       = rF32(in); }
         else if (k == "leftDv")        { expectTag(tag, TAG_F32, "leftDv");        kf.handleLeft.dv       = rF32(in); }
         else if (k == "rightDt")       { expectTag(tag, TAG_F32, "rightDt");       kf.handleRight.dt      = rF32(in); }
@@ -766,7 +869,7 @@ static Mc3::Mc3Channel readChannel(std::istream& in) {
         std::string k = rKey(in); if (k.empty()) break;
         uint8_t tag = rU8(in);
         if      (k == "targetObject") { expectTag(tag, TAG_STR, "targetObject"); ch.targetObject = rRawStr(in); }
-        else if (k == "property")     { expectTag(tag, TAG_I32, "property");     ch.property     = clampEnum<Mc3::AnimatedProperty>(rI32(in), 22); }
+        else if (k == "property")     { expectTag(tag, TAG_I32, "property");     ch.property     = clampEnum<Mc3::AnimatedProperty>(rI32(in), 22, "property"); }
         else if (k == "keyframes") {
             expectTag(tag, TAG_ARR, "keyframes");
             uint32_t n = rU32Bounded(in);
@@ -784,10 +887,11 @@ static Mc3::Mc3Channel readChannel(std::istream& in) {
 
 static Mc3::Mc3Action readAction(std::istream& in) {
     Mc3::Mc3Action act;
+    IdentityScope idScope;
     while (true) {
         std::string k = rKey(in); if (k.empty()) break;
         uint8_t tag = rU8(in);
-        if      (k == "name")      { expectTag(tag, TAG_STR, "name");      act.name      = rRawStr(in); }
+        if      (k == "name")      { expectTag(tag, TAG_STR, "name");      act.name      = rRawStr(in); idScope.set(act.name); }
         else if (k == "duration")  { expectTag(tag, TAG_F32, "duration");  act.duration  = rF32(in); }
         else if (k == "loop")      { expectTag(tag, TAG_BOOL, "loop");     act.loop      = rU8(in) != 0; }
         else if (k == "autoplay")  { expectTag(tag, TAG_BOOL, "autoplay"); act.autoplay  = rU8(in) != 0; }
@@ -1064,33 +1168,80 @@ static void applyMcbUpgrades(Mc3::Mc3Document& doc, uint8_t fromVersion) {
 // Public API
 // ---------------------------------------------------------------------------
 
-Mc3::Mc3Document loadFromBinary(std::istream& in) {
+// SYS-W1-01: shared implementation. Assumes g_validation/g_sourceFile have
+// already been set up by the caller (each public overload below owns exactly
+// one ValidationScope, so nesting/reset ambiguity can't arise).
+static Mc3::Mc3Document loadFromBinaryImpl(std::istream& in) {
     // Validate header
     char magic[4];
-    if (!in.read(magic, 4) || std::memcmp(magic, MCB_MAGIC, 4) != 0)
-        throw std::runtime_error("MCB: invalid magic");
+    if (!in.read(magic, 4) || std::memcmp(magic, MCB_MAGIC, 4) != 0) {
+        std::string msg = "MCB: invalid magic";
+        reportError("magic", msg);
+        throw std::runtime_error(msg);
+    }
     uint8_t version = rU8(in);
-    if (version < MCB_MIN_SUPPORTED_VERSION || version > MCB_VERSION)
-        throw std::runtime_error("MCB: unsupported version " + std::to_string(version));
+    if (version < MCB_MIN_SUPPORTED_VERSION || version > MCB_VERSION) {
+        std::string msg = "MCB: unsupported version " + std::to_string(version);
+        reportError("version", msg);
+        throw std::runtime_error(msg);
+    }
     uint8_t flags = rU8(in);
-    if (flags & MCB_FLAG_COMPRESSED)
-        throw std::runtime_error("MCB: compressed format not yet supported");
+    if (flags & MCB_FLAG_COMPRESSED) {
+        std::string msg = "MCB: compressed format not yet supported";
+        reportError("flags", msg);
+        throw std::runtime_error(msg);
+    }
     rU8(in); rU8(in); // reserved
 
     // Root must be TAG_OBJ
     uint8_t rootTag = rU8(in);
-    if (rootTag != TAG_OBJ)
-        throw std::runtime_error("MCB: root is not an object");
+    if (rootTag != TAG_OBJ) {
+        std::string msg = "MCB: root is not an object";
+        reportError("root", msg);
+        throw std::runtime_error(msg);
+    }
 
     Mc3::Mc3Document doc = readDocument(in);
     if (version != MCB_VERSION) applyMcbUpgrades(doc, version);
     return doc;
 }
 
+Mc3::Mc3Document loadFromBinary(std::istream& in) {
+    ValidationScope vscope(nullptr);
+    g_sourceFile.clear(); // no path known for a raw stream
+    return loadFromBinaryImpl(in);
+}
+
+Mc3::Mc3Document loadFromBinary(std::istream& in, Mc3::Mc3Validation& validation) {
+    ValidationScope vscope(&validation);
+    g_sourceFile.clear();
+    return loadFromBinaryImpl(in);
+}
+
 Mc3::Mc3Document loadFromFile(const std::filesystem::path& path) {
+    ValidationScope vscope(nullptr);
+    g_sourceFile = path;
     std::ifstream f(path, std::ios::binary);
-    if (!f) throw std::runtime_error("MCB: cannot open: " + path.string());
-    auto doc = loadFromBinary(f);
+    if (!f) {
+        std::string msg = "MCB: cannot open: " + path.string();
+        reportError("file", msg);
+        throw std::runtime_error(msg);
+    }
+    auto doc = loadFromBinaryImpl(f);
+    doc.sourcePath = path.parent_path();
+    return doc;
+}
+
+Mc3::Mc3Document loadFromFile(const std::filesystem::path& path, Mc3::Mc3Validation& validation) {
+    ValidationScope vscope(&validation);
+    g_sourceFile = path;
+    std::ifstream f(path, std::ios::binary);
+    if (!f) {
+        std::string msg = "MCB: cannot open: " + path.string();
+        reportError("file", msg);
+        throw std::runtime_error(msg);
+    }
+    auto doc = loadFromBinaryImpl(f);
     doc.sourcePath = path.parent_path();
     return doc;
 }
