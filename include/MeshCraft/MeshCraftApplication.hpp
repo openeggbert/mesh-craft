@@ -645,6 +645,25 @@ private:
     void performUndo();
     void performRedo();
 
+    // AUD-036b: central helper for the mutating-widget undo pattern. Call
+    // immediately after a Drag*/ColorEdit*/Input* widget, passing its own
+    // return value:
+    //
+    //     if (undoOnActivate(ImGui::DragFloat3("##pos", pos, 0.1f))) {
+    //         ...apply the edit...; modified_ = true;
+    //     }
+    //
+    // Snapshots on the widget's activation frame unconditionally, before the
+    // caller's mutation code ever runs -- so the AUD-036 bug class (a
+    // `pushUndo()` nested inside the widget's changed-block, which silently
+    // never fires because IsItemActivated() and a Drag widget's own changed
+    // return never coincide) is structurally impossible at call sites that
+    // use this helper instead of hand-rolling the pattern. Must be called
+    // right after the widget, same as ImGui::IsItemActivated() itself
+    // requires. Returns `widgetChanged` unmodified so a call site reads the
+    // same as calling the widget directly.
+    bool undoOnActivate(bool widgetChanged);
+
     // SDL event watcher for ImGui event forwarding
     static bool sdlEventWatch(void* userdata, void* event);
 

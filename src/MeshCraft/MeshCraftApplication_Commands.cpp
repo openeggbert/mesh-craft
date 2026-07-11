@@ -2,6 +2,8 @@
 #include "MeshCraftPrivate.hpp"
 #include "MeshCraft/EditorAlgorithms.hpp"
 
+#include <imgui.h>
+
 #include <SDL3/SDL.h>
 
 #include <Microsoft/Xna/Framework/Matrix.hpp>
@@ -334,6 +336,11 @@ void MeshCraftApplication::pushUndo() {
         undoStack_.erase(undoStack_.begin());
     redoStack_.clear();
     // CSG cache no longer cleared here: hash-based invalidation handles it (K1)
+}
+
+bool MeshCraftApplication::undoOnActivate(bool widgetChanged) {
+    if (ImGui::IsItemActivated()) pushUndo();
+    return widgetChanged;
 }
 
 // Shared by the keyboard shortcut, the Edit menu, and the command palette

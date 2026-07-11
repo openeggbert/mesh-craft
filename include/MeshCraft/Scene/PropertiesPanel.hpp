@@ -29,6 +29,14 @@ struct PropertiesContext {
     const std::string&           selectedMaterialKey;
     // Callbacks
     std::function<void()>        pushUndo;
+    // AUD-036b: forwards to MeshCraftApplication::undoOnActivate -- snapshots
+    // on the just-drawn widget's activation frame and returns its `changed`
+    // value unmodified. Prefer this over hand-rolling
+    // `if (IsItemActivated()) ctx.pushUndo();` next to a separately-stored
+    // changed bool: it collapses the two steps into one call so the snapshot
+    // can't end up nested inside the changed-block by accident (the AUD-036
+    // dead-pattern bug class).
+    std::function<bool(bool)>    undoOnActivate;
     std::function<void()>        markModified;    // modified_ = true; updateWindowTitle()
     std::function<void()>        updateTitle;     // updateWindowTitle() only
     std::function<void(Mc3::Mc3Object&, const std::vector<Mc3::AnimatedProperty>&)>

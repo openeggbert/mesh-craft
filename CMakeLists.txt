@@ -484,6 +484,22 @@ if(MESH_CRAFT_BUILD_TESTING AND UNIX AND NOT ANDROID AND NOT EMSCRIPTEN)
     add_test(NAME graphics_backend_check COMMAND graphics_backend_check_test)
     set_tests_properties(graphics_backend_check PROPERTIES TIMEOUT 15 LABELS "unit")
 
+    # AUD-036b: frame-driven regression test for the undo-snapshot-timing fix.
+    # Drives real ImGui frames through a full click-drag gesture on
+    # DragFloat/DragFloat3/ColorEdit3 (the widget classes AUD-036 fixed) plus
+    # SliderFloat as a control case, and asserts exactly one undo snapshot
+    # fires per gesture, on/before the first mutation frame -- not just that
+    # the fixed source pattern is present (undo_snapshot_lint_test.py already
+    # checks that), but that it behaves correctly across real frames. Needs
+    # only ImGui's core (no CNA/window/GL context; the imgui target link deps
+    # are unused at runtime here).
+    add_executable(undo_gesture_frame_test
+        ${CMAKE_CURRENT_SOURCE_DIR}/test/undo_gesture_frame_test.cpp)
+    target_link_libraries(undo_gesture_frame_test PRIVATE imgui)
+    target_compile_features(undo_gesture_frame_test PRIVATE cxx_std_23)
+    add_test(NAME undo_gesture_frame COMMAND undo_gesture_frame_test)
+    set_tests_properties(undo_gesture_frame PROPERTIES TIMEOUT 15 LABELS "unit")
+
     # Source-lint guard: the dead undo-snapshot pattern (undo nested inside a
     # Drag*/ColorEdit* changed-block, which never fires) must not reappear.
     find_program(PYTHON3_FOR_LINT NAMES python3 python)

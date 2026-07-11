@@ -132,9 +132,7 @@ void PropertiesPanel::draw(float panelX, float panelY, float panelW, float panel
         {
             float pos[3] = { sel0->transform.position[0], sel0->transform.position[1], sel0->transform.position[2] };
             ImGui::SetNextItemWidth(-1);
-            { bool _undoCh135 = ImGui::DragFloat3("##pos", pos, 0.1f);
-            if (ImGui::IsItemActivated()) ctx.pushUndo();
-            if (_undoCh135) {
+            { if (ctx.undoOnActivate(ImGui::DragFloat3("##pos", pos, 0.1f))) {
                 float dp[3] = { pos[0]-sel0->transform.position[0],
                                  pos[1]-sel0->transform.position[1],
                                  pos[2]-sel0->transform.position[2] };
@@ -165,9 +163,7 @@ void PropertiesPanel::draw(float panelX, float panelY, float panelW, float panel
         {
             float rot[3] = { sel0->transform.rotation[0], sel0->transform.rotation[1], sel0->transform.rotation[2] };
             ImGui::SetNextItemWidth(-1);
-            { bool _undoCh167 = ImGui::DragFloat3("##rot", rot, 0.5f);
-            if (ImGui::IsItemActivated()) ctx.pushUndo();
-            if (_undoCh167) {
+            { if (ctx.undoOnActivate(ImGui::DragFloat3("##rot", rot, 0.5f))) {
                 float dr[3] = { rot[0]-sel0->transform.rotation[0],
                                  rot[1]-sel0->transform.rotation[1],
                                  rot[2]-sel0->transform.rotation[2] };
@@ -196,9 +192,7 @@ void PropertiesPanel::draw(float panelX, float panelY, float panelW, float panel
             // out-of-range Ctrl+Click-typed value; unbounded ones
             // (position/rotation/pivot/path-point DragFloat3 calls with no
             // explicit min/max) are deliberately left untouched.
-            { bool _undoCh197 = ImGui::DragFloat3("##scl", scl, 0.01f, 0.001f, 100.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
-            if (ImGui::IsItemActivated()) ctx.pushUndo();
-            if (_undoCh197) {
+            { if (ctx.undoOnActivate(ImGui::DragFloat3("##scl", scl, 0.01f, 0.001f, 100.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp))) {
                 float ds[3] = { scl[0]-sel0->transform.scale[0],
                                  scl[1]-sel0->transform.scale[1],
                                  scl[2]-sel0->transform.scale[2] };

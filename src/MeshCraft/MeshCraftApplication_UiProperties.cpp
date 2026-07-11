@@ -25,6 +25,7 @@ void MeshCraftApplication::drawPropertiesPanel(float panelY, float panelH, int s
         .hoveredTexMatId    = hoveredTexMatId_,
         .selectedMaterialKey = selectedMaterialKey_,
         .pushUndo           = [this]{ pushUndo(); },
+        .undoOnActivate     = [this](bool changed){ return undoOnActivate(changed); },
         .markModified       = [this]{ modified_ = true; updateWindowTitle(); },
         .updateTitle        = [this]{ updateWindowTitle(); },
         .insertKeyframes    = [this](Mc3::Mc3Object& obj,
