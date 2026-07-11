@@ -187,20 +187,10 @@ void MeshCraftApplication::duplicateSelected() {
     if (!selection_.hasSelection()) return;
     pushUndo();
     auto prev = selection_.selection();
-    std::vector<std::shared_ptr<Mc3::Mc3Object>> newObjs;
-
-    for (const auto& s : prev) {
-        auto* parent = findParentListAlg(document_.objects, s.get());
-        if (!parent) continue;
-        auto copy = deepCopyObjectAlg(*s);
-        copy->name = s->name + "_copy";
-        copy->id = s->id.empty() ? copy->name : s->id + "_copy";
-        auto it = std::find_if(parent->begin(), parent->end(),
-            [&](const auto& o){ return o.get() == s.get(); });
-        if (it != parent->end()) ++it;
-        parent->insert(it, copy);
-        newObjs.push_back(copy);
-    }
+    // AUD-031: was a hand-copied duplicate of duplicateObjectsAlg's own
+    // document-mutation loop; now delegates to it directly (single tested
+    // implementation).
+    auto newObjs = duplicateObjectsAlg(document_.objects, prev);
 
     if (!newObjs.empty()) {
         selection_.clear();
@@ -259,24 +249,15 @@ void MeshCraftApplication::groupSelected() {
     if (!selection_.hasSelection()) return;
     pushUndo();
     auto prev = selection_.selection();
-    size_t insertIdx = document_.objects.size();
-    for (const auto& s : prev)
-        for (size_t i = 0; i < document_.objects.size(); ++i)
-            if (document_.objects[i].get() == s.get()) { insertIdx = std::min(insertIdx, i); break; }
-
-    auto group = std::make_shared<Mc3::Mc3Object>();
-    group->type = Mc3::ObjectType::Group;
+    // Naming policy (a session-lifetime counter) stays here -- it's an
+    // editor-session concern, not part of the document-mutation logic
+    // groupObjectsAlg mirrors.
     static int groupCounter = 0;
     char buf[32];
     std::snprintf(buf, sizeof(buf), "Group%d", ++groupCounter);
-    group->name = buf;
-
-    for (const auto& s : prev) {
-        group->children.push_back(s);
-        removeFromListAlg(document_.objects, s.get());
-    }
-    insertIdx = std::min(insertIdx, document_.objects.size());
-    document_.objects.insert(document_.objects.begin() + static_cast<std::ptrdiff_t>(insertIdx), group);
+    // AUD-031: was a hand-copied duplicate of groupObjectsAlg's own
+    // document-mutation logic; now delegates to it directly.
+    auto group = groupObjectsAlg(document_.objects, prev, buf);
     selection_.clear(); selection_.select(group);
     modified_ = true;
     updateWindowTitle();
@@ -288,14 +269,10 @@ void MeshCraftApplication::ungroupSelected() {
     auto& sel0 = selection_.selection().front();
     if (sel0->type != Mc3::ObjectType::Group || sel0->children.empty()) return;
     pushUndo();
-    auto children = sel0->children;
-    auto* parentList = findParentListAlg(document_.objects, sel0.get());
-    if (!parentList) return;
-    auto it = std::find_if(parentList->begin(), parentList->end(),
-        [&](const auto& o) { return o.get() == sel0.get(); });
-    if (it == parentList->end()) return;
-    auto insertIt = parentList->erase(it);
-    for (const auto& child : children) { insertIt = parentList->insert(insertIt, child); ++insertIt; }
+    // AUD-031: was a hand-copied duplicate of ungroupObjectAlg's own
+    // document-mutation logic; now delegates to it directly.
+    auto children = ungroupObjectAlg(document_.objects, sel0);
+    if (children.empty()) return;
     selection_.clear();
     for (auto& child : children) selection_.select(child);
     modified_ = true;
