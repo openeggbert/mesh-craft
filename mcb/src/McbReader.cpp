@@ -124,12 +124,18 @@ static std::string rKey(std::istream& in) {
 // few-hundred-KB file with ~20,000 levels of nested <children> segfaults,
 // even though every real call site (mc3tomcb, the editor's Open dialog)
 // wraps loadFromFile/loadFromBinary in a plain catch(const
-// std::exception&). Mirrors CsgEvaluator.cpp's CSG_MAX_DEPTH pattern. Two
-// independent counters (one per recursion tree: skipValue's skip-path,
-// readObject's real-object-tree path) are used rather than one shared
-// counter — simpler than threading state across both call chains, and the
-// combined worst-case stack depth (each counter capped independently) is
-// still trivially within a normal 8MB thread stack.
+// std::exception&). Mirrors CsgEvaluator.cpp's CSG_MAX_DEPTH pattern.
+//
+// AUD-016: both recursion sites (skipValue below, and readObject further
+// down) instantiate the SAME specialization, RecursionGuard<256> — one
+// template instantiation means one shared `thread_local depth_`, NOT two
+// independent 256-deep counters as an earlier version of this comment
+// claimed. The combined object-tree-depth + skip-path-depth therefore
+// share a single 256 budget. This is harmless (strictly more conservative
+// than two independent counters would be) and not worth the added
+// complexity of tagging the two call sites with distinct template
+// parameters just to reach a 512 combined budget no real file needs — but
+// the comment must describe what the code actually does.
 template <int MaxDepth>
 class RecursionGuard {
 public:
@@ -211,6 +217,21 @@ static void expectTag(uint8_t got, uint8_t want, const char* key) {
                                   ", got " + std::to_string(got) + ")");
 }
 
+// AUD-017: every enum field read from a file is a raw static_cast of an
+// attacker-controlled int32, with no check that the value is one of the
+// enum's real (sequential, 0-based) enumerators -- a malformed/hostile file
+// could inject an out-of-range value that a downstream switch (mesh
+// generation, glTF export) has no default case for. Clamp any out-of-range
+// value to enumerator 0 instead, matching the unknown-key forward-
+// compatibility philosophy already used throughout this reader (degrade to
+// a defined value rather than reject the whole file over one bad field).
+// `count` is the enum's real enumerator count and must be kept in sync by
+// hand -- C++ has no reflection to derive it from the enum definition.
+template <typename Enum>
+static Enum clampEnum(int32_t raw, int count) {
+    return (raw >= 0 && raw < count) ? static_cast<Enum>(raw) : static_cast<Enum>(0);
+}
+
 // ---------------------------------------------------------------------------
 // Mc3 type deserializers
 // ---------------------------------------------------------------------------
@@ -234,7 +255,7 @@ static Mc3::Mc3Primitive readPrimitive(std::istream& in) {
     while (true) {
         std::string k = rKey(in); if (k.empty()) break;
         uint8_t tag = rU8(in);
-        if      (k == "primitiveType") p.primitiveType = static_cast<Mc3::PrimitiveType>(rI32(in));
+        if      (k == "primitiveType") p.primitiveType = clampEnum<Mc3::PrimitiveType>(rI32(in), 11);
         else if (k == "size")          p.size          = rVec3(in);
         else if (k == "radius")        p.radius        = rF32(in);
         else if (k == "height")        p.height        = rF32(in);
@@ -265,7 +286,7 @@ static Mc3::Mc3CsgOperation readCsgOp(std::istream& in) {
     while (true) {
         std::string k = rKey(in); if (k.empty()) break;
         uint8_t tag = rU8(in);
-        if (k == "csgType") csg.csgType = static_cast<Mc3::CsgType>(rI32(in));
+        if (k == "csgType") csg.csgType = clampEnum<Mc3::CsgType>(rI32(in), 3);
         else                 skipValue(in, tag);
     }
     return csg;
@@ -276,7 +297,7 @@ static Mc3::Mc3CrossSection readCrossSection(std::istream& in) {
     while (true) {
         std::string k = rKey(in); if (k.empty()) break;
         uint8_t tag = rU8(in);
-        if      (k == "type")        cs.type        = static_cast<Mc3::CrossSectionType>(rI32(in));
+        if      (k == "type")        cs.type        = clampEnum<Mc3::CrossSectionType>(rI32(in), 5);
         else if (k == "width")       cs.width       = rF32(in);
         else if (k == "height")      cs.height      = rF32(in);
         else if (k == "radius")      cs.radius      = rF32(in);
@@ -398,7 +419,7 @@ static std::shared_ptr<Mc3::Mc3Object> readObject(std::istream& in) {
     while (true) {
         std::string k = rKey(in); if (k.empty()) break;
         uint8_t tag = rU8(in);
-        if      (k == "type")             { expectTag(tag, TAG_I32, "type");             obj->type             = static_cast<Mc3::ObjectType>(rI32(in)); }
+        if      (k == "type")             { expectTag(tag, TAG_I32, "type");             obj->type             = clampEnum<Mc3::ObjectType>(rI32(in), 19); }
         else if (k == "name")             { expectTag(tag, TAG_STR, "name");             obj->name             = rRawStr(in); }
         else if (k == "id")               { expectTag(tag, TAG_STR, "id");               obj->id               = rRawStr(in); }
         else if (k == "material")         { expectTag(tag, TAG_STR, "material");         obj->material         = rRawStr(in); }
@@ -652,7 +673,7 @@ static Mc3::Mc3Light readLight(std::istream& in) {
     while (true) {
         std::string k = rKey(in); if (k.empty()) break;
         uint8_t tag = rU8(in);
-        if      (k == "type")        lt.type        = static_cast<Mc3::LightType>(rI32(in));
+        if      (k == "type")        lt.type        = clampEnum<Mc3::LightType>(rI32(in), 4);
         else if (k == "name")        lt.name        = rRawStr(in);
         else if (k == "color")       lt.color       = rVec3(in);
         else if (k == "brightness")  lt.brightness  = rF32(in);
@@ -673,7 +694,7 @@ static Mc3::Mc3Camera readCamera(std::istream& in) {
         std::string k = rKey(in); if (k.empty()) break;
         uint8_t tag = rU8(in);
         if      (k == "name")      cam.name      = rRawStr(in);
-        else if (k == "type")      cam.type      = static_cast<Mc3::CameraType>(rI32(in));
+        else if (k == "type")      cam.type      = clampEnum<Mc3::CameraType>(rI32(in), 2);
         else if (k == "position")  cam.position  = rVec3(in);
         else if (k == "target")    cam.target    = rVec3(in);
         else if (k == "rotation")  cam.rotation  = rVec3(in);
@@ -693,7 +714,7 @@ static Mc3::Mc3Fog readFog(std::istream& in) {
         std::string k = rKey(in); if (k.empty()) break;
         uint8_t tag = rU8(in);
         if      (k == "color")   fog.color   = rVec3(in);
-        else if (k == "mode")    fog.mode    = static_cast<Mc3::FogMode>(rI32(in));
+        else if (k == "mode")    fog.mode    = clampEnum<Mc3::FogMode>(rI32(in), 2);
         else if (k == "start")   fog.start   = rF32(in);
         else if (k == "end")     fog.end     = rF32(in);
         else if (k == "density") fog.density = rF32(in);
@@ -723,7 +744,7 @@ static Mc3::Mc3Keyframe readKeyframe(std::istream& in) {
         uint8_t tag = rU8(in);
         if      (k == "time")          kf.time                = rF32(in);
         else if (k == "value")         kf.value               = rF32(in);
-        else if (k == "interpolation") kf.interpolation       = static_cast<Mc3::Interpolation>(rI32(in));
+        else if (k == "interpolation") kf.interpolation       = clampEnum<Mc3::Interpolation>(rI32(in), 3);
         else if (k == "leftDt")        kf.handleLeft.dt       = rF32(in);
         else if (k == "leftDv")        kf.handleLeft.dv       = rF32(in);
         else if (k == "rightDt")       kf.handleRight.dt      = rF32(in);
@@ -739,7 +760,7 @@ static Mc3::Mc3Channel readChannel(std::istream& in) {
         std::string k = rKey(in); if (k.empty()) break;
         uint8_t tag = rU8(in);
         if      (k == "targetObject") ch.targetObject = rRawStr(in);
-        else if (k == "property")     ch.property     = static_cast<Mc3::AnimatedProperty>(rI32(in));
+        else if (k == "property")     ch.property     = clampEnum<Mc3::AnimatedProperty>(rI32(in), 22);
         else if (k == "keyframes") {
             uint32_t n = rU32Bounded(in);
             ch.keyframes.reserve(n);

@@ -98,8 +98,8 @@ in this order (mirrored exactly by `McbReader.cpp`'s `readDocument()`, which
 does not require this order — see "Forward compatibility" below):
 
 ```
-version, model, unit, coordinateSystem, defaultCamera,
-meta, metadata, includes, includedDefs, includedMaterials, includedTextures,
+version, model, unit, coordinateSystem, rotationUnits, eulerOrder, defaultCamera,
+meta, metadata, includes, includedDefs, includedMaterials, includedTextures, includedEmbeds,
 environment, lights, cameras,
 textures, svgTextures, embeds, scripts, sounds, musicTracks, triggers,
 sceneStates, materials, definitions, objects, actions

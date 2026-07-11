@@ -964,6 +964,38 @@ static void testVersionAboveCurrentRejected() {
           "know) is rejected, not silently misparsed (AUDIT-0038)");
 }
 
+// AUD-019: MCB_FORMAT.md documents that a file with MCB_FLAG_COMPRESSED set
+// is "rejected with a clear error, not silently misread" -- a guarantee
+// that had never actually been exercised by a test (only that the WRITER
+// never sets the bit, via testSmoke's flags==0 check). Hand-write an
+// otherwise-valid, empty-document header with that bit set and confirm the
+// reader takes the documented reject path.
+static void testCompressedFlagRejected() {
+    std::ostringstream out(std::ios::binary);
+    out.write(MCB_MAGIC, 4);
+    rawU8(out, MCB_VERSION);
+    rawU8(out, MCB_FLAG_COMPRESSED); // flags
+    rawU8(out, 0); rawU8(out, 0);    // reserved
+    rawU8(out, TAG_OBJ);             // root document object
+    rawEnd(out);
+
+    std::istringstream in(out.str(), std::ios::binary);
+    bool threw = false;
+    std::string what;
+    try {
+        Mc3Document rt = loadFromBinary(in);
+        (void)rt;
+    } catch (const std::exception& e) {
+        threw = true;
+        what = e.what();
+    }
+    CHECK(threw, "compressed flag: a file with MCB_FLAG_COMPRESSED set throws, "
+          "instead of being silently misread as an uncompressed payload");
+    CHECK(what.find("compressed format not yet supported") != std::string::npos,
+          "compressed flag: the error message names the documented reason "
+          "(got: " + what + ")");
+}
+
 static void testHugeStringLengthRejectedCleanly() {
     std::ostringstream out(std::ios::binary);
     out.write(MCB_MAGIC, 4);
@@ -1137,6 +1169,50 @@ static void testKnownKeyTagMatchStillLoads() {
 }
 
 // ---------------------------------------------------------------------------
+// AUD-017 — enum fields clamped to a valid enumerator on out-of-range input
+// ---------------------------------------------------------------------------
+
+// A corrupt/hostile file can claim any int32 for an enum-typed field (the
+// tag itself is correctly TAG_I32 -- this isn't a type-mismatch case like
+// AUD-015 above, the VALUE is simply out of the enum's real range). Reading
+// it must not store an unhandled enumerator value for a downstream switch
+// (mesh generation, glTF export) to mishandle -- it must clamp to
+// enumerator 0, the same forward-compat philosophy already used for
+// unknown keys.
+static void testOutOfRangeEnumClampedToDefault() {
+    std::ostringstream out(std::ios::binary);
+    out.write(MCB_MAGIC, 4);
+    rawU8(out, MCB_VERSION);
+    rawU8(out, 0);                  // flags
+    rawU8(out, 0); rawU8(out, 0);   // reserved
+    rawU8(out, TAG_OBJ);            // root object
+
+    rawKey(out, "objects"); rawU8(out, TAG_ARR); rawU32(out, 1);
+    rawU8(out, TAG_OBJ);
+        rawKey(out, "name"); rawU8(out, TAG_STR); rawStr(out, "Obj");
+        // ObjectType has 19 real enumerators (0..18) -- 9999 is nonsense.
+        rawKey(out, "type"); rawU8(out, TAG_I32); rawU32(out, 9999);
+    rawEnd(out); // end object
+    rawEnd(out); // end root object
+
+    std::istringstream in(out.str(), std::ios::binary);
+    bool threw = false;
+    Mc3Document doc;
+    try {
+        doc = loadFromBinary(in);
+    } catch (const std::exception&) {
+        threw = true;
+    }
+    CHECK(!threw, "out-of-range enum: a nonsense 'type' int (correctly tagged "
+          "TAG_I32, just out of range) does not reject the whole file");
+    CHECK(!threw && doc.objects.size() == 1 &&
+          doc.objects[0]->type == ObjectType::Box,
+          "out-of-range enum: an out-of-range 'type' value is clamped to "
+          "enumerator 0 (Box, Mc3Object's own default), not stored as an "
+          "unhandled 9999");
+}
+
+// ---------------------------------------------------------------------------
 
 int main() {
     testSmoke();
@@ -1170,11 +1246,13 @@ int main() {
     testDeeplyNestedChildrenDoesNotCrash();
     testVersionBelowMinSupportedRejected();
     testVersionAboveCurrentRejected();
+    testCompressedFlagRejected();
     testHugeStringLengthRejectedCleanly();
     testHugeCollectionCountRejectedCleanly();
     testFileSizeSmallerThanXml();
     testKnownKeyTagMismatchRejected();
     testKnownKeyTagMatchStillLoads();
+    testOutOfRangeEnumClampedToDefault();
 
     if (failures == 0)
         std::cout << "All MCB roundtrip tests passed.\n";
