@@ -226,6 +226,75 @@ static void testKeyframeBudget() {
           "1000 keyframes (under budget) all load fine");
 }
 
+// ---------------------------------------------------------------------------
+// Children-per-node: kMaxChildrenPerNode = 20,000 -- a single <group> with
+// 20,001 direct children stays at ~20,002 TOTAL objects (group + children),
+// nowhere near kMaxTotalObjects (100,000), so only the new per-node breadth
+// check can catch it.
+// ---------------------------------------------------------------------------
+static void testChildrenPerNodeBudget() {
+    // parsePrimitive() unconditionally charges segments/subdivisions_x/
+    // subdivisions_z against the tessellation-weight budget regardless of
+    // primitive type (even a <box>, which doesn't semantically use any of
+    // them) -- explicit minimal values here (segments=0, subdivisions=1
+    // each, the lowest attrCountBudgeted allows) keep 20,001 children's
+    // combined tessellation weight (~40,002) far under the 500,000 budget,
+    // so it's genuinely the children-per-node check that fires, not
+    // tessellation.
+    std::string xml = "<mc3 version=\"0.3\" model=\"children-budget\">\n"
+                       "  <objects>\n    <group name=\"wide\">\n";
+    for (int i = 0; i < 20'001; ++i)
+        xml += "      <box name=\"c" + std::to_string(i) +
+               "\" segments=\"0\" subdivisions_x=\"1\" subdivisions_z=\"1\"/>\n";
+    xml += "    </group>\n  </objects>\n</mc3>\n";
+
+    std::string what = loadExpectingThrow(xml);
+    check(!what.empty(),
+          "20,001 direct children of one group (total objects ~20,002, well "
+          "under the 100,000 total-object budget) is rejected");
+    check(what.find("children") != std::string::npos,
+          "rejection names the children-per-node budget specifically, not "
+          "total-objects or another budget: " + what);
+    check(what.find("object budget") == std::string::npos,
+          "rejection is NOT the total-object budget (would prove the wrong "
+          "check caught it): " + what);
+
+    std::string okXml = "<mc3 version=\"0.3\" model=\"children-ok\">\n"
+                         "  <objects>\n    <group name=\"wide\">\n";
+    for (int i = 0; i < 500; ++i)
+        okXml += "      <box name=\"c" + std::to_string(i) + "\"/>\n";
+    okXml += "    </group>\n  </objects>\n</mc3>\n";
+    Mc3Document doc = load(okXml);
+    check(doc.objects.size() == 1 && doc.objects[0] && doc.objects[0]->children.size() == 500,
+          "500 direct children (under budget) all load fine");
+}
+
+// ---------------------------------------------------------------------------
+// Recursion depth: mc3's own parseObject/parseChildren recursion has no
+// dedicated depth guard (unlike MCB's RecursionGuard<256>, McbReader.cpp),
+// but empirically this is ALREADY safe -- tinyxml2 itself caps element
+// nesting at TINYXML2_MAX_ELEMENT_DEPTH=500 (tinyxml2.h) and rejects deeper
+// XML with XML_ELEMENT_DEPTH_EXCEEDED before Mc3XmlParser's own recursion is
+// ever reached, so the C++ call stack can never recurse past ~500 levels
+// (trivially safe; the underlying `std::vector`-of-shared_ptr children
+// representation doesn't blow the stack at that depth). This test proves
+// that empirically: a few-thousand-level-deep <group> nesting must be
+// rejected with a clear error (not crash the process).
+// ---------------------------------------------------------------------------
+static void testRecursionDepthAlreadyBounded() {
+    const int N = 2000; // well past tinyxml2's own 500-level cap
+    std::string xml = "<mc3 version=\"0.3\" model=\"deep\">\n  <objects>\n";
+    for (int i = 0; i < N; ++i) xml += "<group name=\"g" + std::to_string(i) + "\">";
+    xml += "<box name=\"leaf\"/>";
+    for (int i = 0; i < N; ++i) xml += "</group>";
+    xml += "\n  </objects>\n</mc3>\n";
+
+    std::string what = loadExpectingThrow(xml);
+    check(!what.empty(),
+          std::to_string(N) + "-level-deep nesting is rejected (by tinyxml2's own "
+          "element-depth cap), not a crash");
+}
+
 int main() {
     testMaterialBudget();
     testTextureBudget();
@@ -234,6 +303,8 @@ int main() {
     testActionBudget();
     testChannelBudget();
     testKeyframeBudget();
+    testChildrenPerNodeBudget();
+    testRecursionDepthAlreadyBounded();
 
     if (failures == 0) { std::cout << "All document-budget tests passed.\n"; return 0; }
     std::cerr << failures << " document-budget test(s) failed.\n";

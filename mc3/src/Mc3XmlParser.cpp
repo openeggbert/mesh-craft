@@ -700,8 +700,36 @@ static void parseCommonObjectAttribs(const XMLElement* el, Mc3Object& obj) {
                     obj.metadata[n] = v;
 }
 
+// SYS-W1-03: a single object with an enormous number of DIRECT children
+// (breadth) is a distinct pathological shape from either total object count
+// (kMaxTotalObjects, chargeObject() above) or nesting DEPTH (bounded by
+// tinyxml2's own built-in TINYXML2_MAX_ELEMENT_DEPTH=500 -- see
+// mc3_document_budget_test's recursion-depth coverage). A single <group>
+// with, say, 25,000 trivial direct <box> children stays comfortably under
+// kMaxTotalObjects (100,000) yet produces one absurdly wide node that chokes
+// any per-child linear-scan UI code (hierarchy panel, selection) or a
+// non-virtualized tree widget. This is a LOCAL per-call counter, not a
+// DocumentBudget running total -- "per node" is inherently scoped to one
+// parseChildren() call, unlike the whole-document dimensions above.
+//
+// Deliberately scoped to actual nested-group children only (parseChildren,
+// used for group/union/difference/intersection/area), not the top-level
+// <objects>/<definitions> lists -- top-level breadth is already effectively
+// the same dimension as total object count when there's no nesting, so a
+// separate cap there would be redundant.
+static constexpr int kMaxChildrenPerNode = 20'000;
+
 static void parseChildren(const XMLElement* el, Mc3Object& obj) {
+    int childIndex = 0;
     for (const XMLElement* c = el->FirstChildElement(); c; c = c->NextSiblingElement()) {
+        if (++childIndex > kMaxChildrenPerNode) {
+            std::string msg = "MC3: object '" + objectIdentity(el) +
+                "' exceeds the per-node children budget (" +
+                std::to_string(kMaxChildrenPerNode) + ") -- rejected (a hostile wide "
+                "fan-out under a single node?)";
+            reportError(el, "children", msg);
+            throw std::runtime_error(msg);
+        }
         auto child = parseObject(c);
         if (child) obj.children.push_back(child);
     }
