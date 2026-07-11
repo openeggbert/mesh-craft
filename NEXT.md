@@ -42,9 +42,14 @@ Ran a 12-dimension audit, adversarially re-verified every finding (57 confirmed,
 | `dae910f` | P0 | Reject NaN/Inf floats at MC3 parse (`finiteOr`) + hostile-input test |
 | `fd606d2` | P1 | Tessellation-count clamp; instance-cycle depth cap; glTF non-finite export gate + tests |
 | `737af77` | P0 | Editor undo never recorded drag/color edits (80 dead sites) → snapshot relocated + source-lint guard |
+| `40643a4` | P1 | `Mc3LoadPolicy`: AI/untrusted parsing can't process `<include>` (LFI); in-memory parse |
+| `22b7129` | P1 | glTF spot lights no longer at origin; light position/range unit-scaled |
+| `dcd0d33` | P1 | `insertAnimKeyframes` mirror converged with production (Gate B) |
+| `2d126bf` | P1 | Deterministic shutdown: dangling SDL event watch removed, ImGui/GL teardown |
 
-Also: consolidated planning docs — one active [`plan.md`](plan.md) (96
-evidence-grounded tasks), archived 5 superseded status/plan docs to
+All P0s from the audit are closed (Gate A). Full suite: **94/94**, green after
+each commit. Also: consolidated planning docs — one active [`plan.md`](plan.md)
+(96 evidence-grounded tasks), archived 6 superseded status/plan docs to
 [`docs/history/`](docs/history/), and rewrote this baseline.
 
 ## 3. Next tasks

@@ -49,9 +49,14 @@ All P0s surfaced by the audit are fixed. Verification for each:
 | AUD-000c | P0 | NaN/Inf floats rejected at MC3 parse (`finiteOr`) | `dae910f` | `ctest -R mc3_finite_input` |
 | AUD-000d | P1 | Tessellation counts clamped; instance-cycle depth cap; glTF non-finite export gate | `fd606d2` | `ctest -R "mc3_input_budget|mc3togltf_hostile_geometry"` |
 | AUD-000e | P0 | Editor undo never recorded drag/color edits (80 dead sites) → snapshot relocated + lint guard | `737af77` | `ctest -R undo_snapshot_lint` |
+| AUD-005  | P1 | AI/untrusted MC3 parsing sandboxed via `Mc3LoadPolicy` (no `<include>` LFI; in-memory parse) | `40643a4` | `ctest -R mc3_load_policy` |
+| W7 lights | P1 | glTF spot lights no longer exported at origin; light position/range unit-scaled | `22b7129` | `ctest -R mc3togltf_light` |
+| W4 anim | P1 | `insertAnimKeyframes` mirror converged with production (Gate B); Deform/Material seed live values | `dcd0d33` | `ctest -R mc3_commands` |
+| W0 life | P1 | Deterministic shutdown; dangling SDL event watch removed; ImGui/GL teardown | `2d126bf` | `ctest -L render` |
 
-Also: archived 5 superseded status/plan docs to `docs/history/`; added `unit`/
-`lint` CTest labels; test count 87 → 93.
+Also: archived 6 superseded status/plan docs to `docs/history/`; added `unit`/
+`lint` CTest labels; test count 87 → 94. Every P0 from the audit is closed
+(Gate A). Full suite green after each commit.
 
 ---
 
