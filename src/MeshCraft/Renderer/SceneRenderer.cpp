@@ -1,5 +1,6 @@
 #include "MeshCraft/Renderer/SceneRenderer.hpp"
 #include "MeshCraft/Renderer/CsgCacheAlg.hpp"
+#include "MeshCraft/EditorAlgorithms.hpp"
 #include <iostream>
 
 #include <Microsoft/Xna/Framework/Graphics/BufferUsage.hpp>
@@ -393,19 +394,15 @@ Matrix SceneRenderer::objectWorldMatrix(const Mc3Transform& t) const {
            Matrix::CreateTranslation({t.position[0] + px, t.position[1] + py, t.position[2] + pz});
 }
 
+// AUD-031: was a hand-copied duplicate of materialColorAlg's own
+// find-material/clamp/fallback-gray logic (materialColorAlg returns a
+// plain float array instead of CNA's Color type, since it must stay
+// CNA-free to be headlessly testable); now delegates to it and converts
+// the result to Color here at the CNA boundary.
 Color SceneRenderer::materialColor(const std::string& matId, const Mc3Document& doc) const {
-    if (!matId.empty()) {
-        auto it = doc.materials.find(matId);
-        if (it != doc.materials.end()) {
-            const auto& bc = it->second.baseColor;
-            return Color(
-                static_cast<int>(std::clamp(bc[0], 0.0f, 1.0f) * 255),
-                static_cast<int>(std::clamp(bc[1], 0.0f, 1.0f) * 255),
-                static_cast<int>(std::clamp(bc[2], 0.0f, 1.0f) * 255),
-                static_cast<int>(std::clamp(bc[3], 0.0f, 1.0f) * 255));
-        }
-    }
-    return Color(180, 180, 180, 255);
+    auto c = materialColorAlg(matId, doc);
+    return Color(static_cast<int>(c[0] * 255), static_cast<int>(c[1] * 255),
+                 static_cast<int>(c[2] * 255), static_cast<int>(c[3] * 255));
 }
 
 bool SceneRenderer::isSelected(const Mc3Object& obj, const std::vector<const Mc3Object*>& sel) const {

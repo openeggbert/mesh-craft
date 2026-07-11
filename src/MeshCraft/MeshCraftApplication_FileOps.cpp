@@ -539,44 +539,12 @@ void MeshCraftApplication::runObjExport(const std::string& outPath) {
 // ---------------------------------------------------------------------------
 // F3: Export selection to MC3 XML
 // ---------------------------------------------------------------------------
+// AUD-031: was a hand-copied duplicate of exportSelectionAlg's own
+// document-building logic; now delegates to it directly.
 void MeshCraftApplication::exportSelectionToFile(const std::string& path) {
     if (path.empty() || !selection_.hasSelection()) return;
 
-    Mc3::Mc3Document tmp;
-
-    // Collect material + texture keys referenced in an object subtree
-    std::set<std::string> matKeys;
-    std::function<void(const Mc3::Mc3Object&)> collectMats =
-        [&](const Mc3::Mc3Object& obj) {
-            if (!obj.material.empty())         matKeys.insert(obj.material);
-            if (!obj.materialOverride.empty()) matKeys.insert(obj.materialOverride);
-            for (const auto& c : obj.children) collectMats(*c);
-        };
-
-    for (const auto& sel : selection_.selection()) {
-        tmp.objects.push_back(deepCopyObjectAlg(*sel));
-        collectMats(*sel);
-    }
-
-    // Copy referenced materials
-    std::set<std::string> texKeys;
-    for (const auto& key : matKeys) {
-        auto it = document_.materials.find(key);
-        if (it == document_.materials.end()) continue;
-        tmp.materials[key] = it->second;
-        const auto& m = it->second;
-        for (const auto& tk : { m.baseColorTexture, m.normalTexture,
-                                 m.emissiveTexture, m.metallicRoughnessTexture,
-                                 m.occlusionTexture })
-            if (!tk.empty()) texKeys.insert(tk);
-    }
-
-    // Copy referenced textures
-    for (const auto& key : texKeys) {
-        auto it = document_.textures.find(key);
-        if (it != document_.textures.end()) tmp.textures[key] = it->second;
-    }
-
+    Mc3::Mc3Document tmp = exportSelectionAlg(document_, selection_.selection());
     tmp.saveToFile(path);
     setStatusMsg("Exported " + std::to_string(selection_.selection().size()) +
                  " object(s) → " + path, false, 3.0f);
