@@ -36,6 +36,21 @@ struct Mc3LibraryInfo {
     std::string contentHash;       // "sha256:<64 lowercase hex chars>"
 };
 
+// R101 -- a single <import>/import entry (mesh_world_revival.md §7):
+// pulls a `.mc3lib` library into this document under a local alias
+// (`importNamespace`), so instances can reference its definitions as
+// "<importNamespace>:<definitionId>". `source` is a "mc3lib://<library-
+// name>@<version>" URI -- the library's OWN name/version (as declared in
+// its own `library->libraryNamespace`/`library->version`), which may
+// differ from the local alias this document chooses to import it under.
+// `hash`, if non-empty, is verified against the resolved library's own
+// `computeLibraryContentHash()` (see Mc3ImportResolver).
+struct Mc3Import {
+    std::string importNamespace;  // local alias, e.g. "city"
+    std::string source;           // "mc3lib://city-core@3.2.1"
+    std::string hash;             // "sha256:...", optional (empty = not pinned)
+};
+
 class Mc3Document {
 public:
     std::string version{"0.3"};
@@ -56,6 +71,12 @@ public:
 
     // R110 -- set only for .mc3lib.xml/.mc3lib.json library documents.
     std::optional<Mc3LibraryInfo> library;
+
+    // R101 -- libraries this document imports (see Mc3Import above / the
+    // resolver in Mc3ImportResolver.hpp). Empty for an ordinary document
+    // (and typically for a library itself, though nothing prevents a
+    // library from importing another one).
+    std::vector<Mc3Import> imports;
 
     // Files referenced via <include file="..."/> — preserved so the writer
     // can re-emit them instead of inlining the included content.

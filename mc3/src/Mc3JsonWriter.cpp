@@ -308,6 +308,19 @@ std::string Mc3JsonWriter::toString(const Mc3Document& doc) {
         j["library"] = std::move(lib);
     }
 
+    // R101 -- library imports (see Mc3Import's own doc comment).
+    if (!doc.imports.empty()) {
+        json imports = json::array();
+        for (const auto& imp : doc.imports) {
+            json impJson = json::object();
+            impJson["namespace"] = imp.importNamespace;
+            impJson["source"]    = imp.source;
+            if (!imp.hash.empty()) impJson["hash"] = imp.hash;
+            imports.push_back(std::move(impJson));
+        }
+        j["imports"] = std::move(imports);
+    }
+
     if (!doc.includes.empty()) j["includes"] = doc.includes;
 
     if (!doc.metadata.empty()) {

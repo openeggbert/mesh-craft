@@ -294,6 +294,16 @@ Mc3Document Mc3JsonParser::parseString(const std::string& jsonText,
         doc.library = std::move(info);
     }
 
+    // R101 -- library imports (see Mc3Import's own doc comment).
+    if (j.contains("imports"))
+        for (const auto& impJson : j["imports"]) {
+            Mc3Import imp;
+            imp.importNamespace = impJson.value("namespace", "");
+            imp.source          = impJson.value("source", "");
+            imp.hash            = impJson.value("hash", "");
+            doc.imports.push_back(std::move(imp));
+        }
+
     if (j.contains("includes"))
         doc.includes = j["includes"].get<std::vector<std::string>>();
 

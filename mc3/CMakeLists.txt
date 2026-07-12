@@ -99,6 +99,7 @@ add_library(Mc3 STATIC
     src/Mc3JsonWriter.cpp
     src/Mc3JsonParser.cpp
     src/Mc3Sha256.cpp
+    src/Mc3ImportResolver.cpp
 )
 
 target_include_directories(Mc3
@@ -180,6 +181,14 @@ if(BUILD_TESTING)
     target_link_libraries(mc3_asset_metadata_test PRIVATE Mc3)
     add_test(NAME mc3_asset_metadata COMMAND mc3_asset_metadata_test)
     set_tests_properties(mc3_asset_metadata PROPERTIES TIMEOUT 15 LABELS "format")
+
+    # R101: Mc3ImportResolver -- basic resolution, missing-dependency error,
+    # content-hash match/mismatch, cycle detection, and nested-import
+    # definitions NOT being merged into the top-level caller's map.
+    add_executable(mc3_import_resolver_test test/import_resolver_test.cpp)
+    target_link_libraries(mc3_import_resolver_test PRIVATE Mc3)
+    add_test(NAME mc3_import_resolver COMMAND mc3_import_resolver_test)
+    set_tests_properties(mc3_import_resolver PROPERTIES TIMEOUT 15 LABELS "format")
 
     # Hostile-numeric-input test: NaN/Inf/out-of-range attributes must not
     # survive parsing into the model (finiteOr sanitization).

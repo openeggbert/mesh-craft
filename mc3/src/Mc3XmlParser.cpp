@@ -1793,6 +1793,17 @@ static Mc3Document buildDocumentFromRoot(const XMLElement* root,
         doc.library = std::move(lib);
     }
 
+    // R101 -- library imports (see Mc3Import's own doc comment).
+    if (const XMLElement* importsEl = root->FirstChildElement("imports"))
+        for (const XMLElement* impEl = importsEl->FirstChildElement("import"); impEl;
+             impEl = impEl->NextSiblingElement("import")) {
+            Mc3Import imp;
+            imp.importNamespace = attr(impEl, "namespace");
+            imp.source          = attr(impEl, "source");
+            imp.hash            = attr(impEl, "hash");
+            doc.imports.push_back(std::move(imp));
+        }
+
     if (const XMLElement* meta = root->FirstChildElement("metadata"))
         for (const XMLElement* p = meta->FirstChildElement("property"); p;
              p = p->NextSiblingElement("property"))

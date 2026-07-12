@@ -427,6 +427,19 @@ void Mc3XmlWriter::write(const Mc3Document& doc, const std::filesystem::path& pa
         root->InsertEndChild(libEl);
     }
 
+    // R101 -- library imports (see Mc3Import's own doc comment).
+    if (!doc.imports.empty()) {
+        XMLElement* importsEl = xml.NewElement("imports");
+        for (const auto& imp : doc.imports) {
+            XMLElement* impEl = xml.NewElement("import");
+            impEl->SetAttribute("namespace", imp.importNamespace.c_str());
+            impEl->SetAttribute("source",    imp.source.c_str());
+            if (!imp.hash.empty()) impEl->SetAttribute("hash", imp.hash.c_str());
+            importsEl->InsertEndChild(impEl);
+        }
+        root->InsertEndChild(importsEl);
+    }
+
     // Include references (written before all other sections so they appear at
     // the top and can be processed first on the next load).
     for (const auto& inc : doc.includes) {
