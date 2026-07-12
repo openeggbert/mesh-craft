@@ -276,7 +276,11 @@ inline RawTessellation tessellateUnitCapsuleAlg(int segments, float radius = 0.5
     RawTessellation rt;
     auto& verts = rt.positions;
 
-    const int hRings = std::max(4, segments / 4);
+    // Keep the viewport's low-detail capsule topology aligned with the
+    // independent glTF exporter (MeshBuilder.cpp::buildCapsule).  The old
+    // floor of four rings made the viewport visibly denser than exported
+    // geometry at segments=4 and 8.
+    const int hRings = std::max(2, segments / 4);
     const float pi  = std::numbers::pi_v<float>;
     const float pi2 = 2.0f * pi;
     const float halfHeight = height * 0.5f;

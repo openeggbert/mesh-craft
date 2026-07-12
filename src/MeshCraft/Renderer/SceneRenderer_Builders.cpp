@@ -450,7 +450,10 @@ void SceneRenderer::buildUnitCapsule(int segments, RenderMesh& target,
     // the historical 0.5/1.0 default, and removes the old formula's implicit
     // dependency on radius==0.5 entirely.
     {
-        const int hRings = std::max(4, segments / 4);
+        // Must match tessellateUnitCapsuleAlg() exactly: `tv` and the VPC
+        // mesh share an index buffer, so a different ring count would make
+        // the textured capsule use mismatched vertex/index topology.
+        const int hRings = std::max(2, segments / 4);
         std::vector<VertexPositionNormalTexture> tv;
         tv.reserve(verts.size());
 

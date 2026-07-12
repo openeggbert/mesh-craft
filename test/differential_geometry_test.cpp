@@ -90,8 +90,8 @@
 // old bugged behavior.
 //
 // AUD-062 is fixed: the viewport now maps the MC3 `segments` field to the
-// same 1..4 subdivision range as the exporter. AUD-063 (Capsule
-// hemisphere-ring-count formula mismatch below segments=16) remains open.
+// same 1..4 subdivision range as the exporter. AUD-063 is also fixed: the
+// Capsule viewport and exporter both use max(2, segments/4) hemisphere rings.
 
 #include <MeshCraft/Renderer/PrimitiveTessellationAlg.hpp>
 #include <MeshCraft/Mc3/Mc3Primitive.hpp>
@@ -530,15 +530,9 @@ static void testTorus() {
 }
 
 // ---------------------------------------------------------------------------
-// Capsule -- tiers 16/8/4 (unitCapsule_/L1_/L2_).
-//
-// hRings formula mismatch (AUD-063, separate finding, out of scope here):
-// renderer uses hRings=max(4,segments/4); exporter uses
-// rings=max(2,segments/4). These only agree when segments/4 >= 4 (i.e.
-// segments >= 16) -- so only the segments=16 tier is a true matching-
-// discretization comparison; segments=8/4 use DIFFERENT hemisphere ring
-// counts on each side (documented via info(), not asserted equal). Untouched
-// by the AUD-061 fix below.
+// Capsule -- tiers 16/8/4 (unitCapsule_/L1_/L2_). AUD-063 aligns the
+// viewport and exporter on hRings=max(2,segments/4), so every tier below is
+// a true matching-discretization comparison.
 //
 // AUD-061 FIX VERIFIED: like Torus, SceneRenderer.cpp's Capsule case used to
 // scale one fixed unit capsule (radius=0.5, cylinder height=1) via
@@ -574,20 +568,15 @@ static void testCapsule() {
             double vGT  = (4.0/3.0)*std::numbers::pi*radius*radius*radius + std::numbers::pi*radius*radius*height;
 
             std::string tag = "capsule(r=" + fmt(radius) + ",h=" + fmt(height) + ",segs=" + fmt(segments) + ",height==2r)";
-            // Empirical: segments=4 is very coarse (hRings clamps to 4 either
-            // way here) so needs a looser bound than 8/16.
+            // Empirical: segments=4 is especially coarse (two hemisphere
+            // rings), so needs a looser ground-truth bound than 8/16.
             double gtTol = segments >= 8 ? 0.25 : 0.45;
             check(relErr(vRen, vGT) < gtTol, tag + ": renderer volume within " + fmt(gtTol*100) + "% of analytical capsule volume");
             check(relErr(vExp, vGT) < gtTol, tag + ": exporter volume within " + fmt(gtTol*100) + "% of analytical capsule volume");
             check(isWatertight(welded(exportMesh)), tag + ": exporter mesh is watertight");
             check(isWatertight(welded(renderMesh)), tag + ": renderer mesh is watertight");
-            if (segments >= 16) {
-                check(relErr(vExp, vRen) < 1e-3,
-                      tag + ": exporter and renderer volumes agree tightly (hRings formulas coincide at segments>=16)");
-            } else {
-                info(tag + ": hRings formula differs below segments=16 (renderer max(4,segs/4) vs exporter max(2,segs/4))"
-                     " -- exporter=" + fmt(vExp) + " renderer=" + fmt(vRen) + " (AUD-063, not asserted equal, documented gap)");
-            }
+            check(relErr(vExp, vRen) < 1e-3,
+                  tag + ": exporter and renderer volumes agree tightly (AUD-063: matching hemisphere-ring formula)");
         }
     }
 
@@ -596,7 +585,7 @@ static void testCapsule() {
     // Now asserted correct, not just pinned.
     {
         float radius = 0.4f, height = 1.5f;
-        int segments = 16; // matching-hRings tier (AUD-063 doesn't apply here)
+        int segments = 16;
         Mc3Primitive p = Mc3Primitive::capsule(radius, height, segments);
         auto exportMesh = fromMeshData(mc3togltf::buildPrimitive(p));
         auto renderMesh = fromRaw(tessellateUnitCapsuleAlg(segments, radius, height));
