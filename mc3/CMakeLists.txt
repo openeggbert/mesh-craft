@@ -98,6 +98,7 @@ add_library(Mc3 STATIC
     src/Mc3XmlWriter.cpp
     src/Mc3JsonWriter.cpp
     src/Mc3JsonParser.cpp
+    src/Mc3Sha256.cpp
 )
 
 target_include_directories(Mc3
@@ -162,6 +163,15 @@ if(BUILD_TESTING)
     add_test(NAME mc3_json_roundtrip
              COMMAND mc3_json_roundtrip_test ${MC3_FEATURES_XML})
     set_tests_properties(mc3_json_roundtrip PROPERTIES TIMEOUT 15 LABELS "format")
+
+    # R110: .mc3lib.xml/.mc3lib.json reusable-definition-library file type --
+    # sha256Hex() correctness, saveToLibraryFile{,Json} requiring `library`,
+    # namespace/version/contentHash round-tripping through both surfaces, and
+    # computeLibraryContentHash() stability/sensitivity/no-self-reference.
+    add_executable(mc3lib_test test/mc3lib_test.cpp)
+    target_link_libraries(mc3lib_test PRIVATE Mc3)
+    add_test(NAME mc3lib COMMAND mc3lib_test)
+    set_tests_properties(mc3lib PROPERTIES TIMEOUT 15 LABELS "format")
 
     # Hostile-numeric-input test: NaN/Inf/out-of-range attributes must not
     # survive parsing into the model (finiteOr sanitization).

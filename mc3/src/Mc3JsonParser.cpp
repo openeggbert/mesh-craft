@@ -246,6 +246,17 @@ Mc3Document Mc3JsonParser::parseString(const std::string& jsonText,
     doc.rotationUnits   = j.value("rotationUnits", doc.rotationUnits);
     doc.eulerOrder      = j.value("eulerOrder", doc.eulerOrder);
 
+    // R110 -- library identity (.mc3lib.json only; absent on ordinary
+    // scene/model documents).
+    if (j.contains("library")) {
+        const auto& lib = j["library"];
+        Mc3LibraryInfo info;
+        info.libraryNamespace = lib.value("namespace", "");
+        info.version          = lib.value("version", "");
+        info.contentHash      = lib.value("hash", "");
+        doc.library = std::move(info);
+    }
+
     if (j.contains("includes"))
         doc.includes = j["includes"].get<std::vector<std::string>>();
 

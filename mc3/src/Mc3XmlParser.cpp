@@ -1734,6 +1734,16 @@ static Mc3Document buildDocumentFromRoot(const XMLElement* root,
     // runs after this) takes priority if both are present.
     doc.defaultCamera    = attr(root, "default_camera");
 
+    // R110 -- library identity (.mc3lib.xml only; absent on ordinary
+    // scene/model documents).
+    if (const XMLElement* libEl = root->FirstChildElement("library")) {
+        Mc3LibraryInfo lib;
+        lib.libraryNamespace = attr(libEl, "namespace");
+        lib.version          = attr(libEl, "version");
+        lib.contentHash      = attr(libEl, "hash");
+        doc.library = std::move(lib);
+    }
+
     if (const XMLElement* meta = root->FirstChildElement("metadata"))
         for (const XMLElement* p = meta->FirstChildElement("property"); p;
              p = p->NextSiblingElement("property"))

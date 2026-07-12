@@ -350,6 +350,17 @@ void Mc3XmlWriter::write(const Mc3Document& doc, const std::filesystem::path& pa
         root->SetAttribute("euler_order", doc.eulerOrder.c_str());
     xml.InsertEndChild(root);
 
+    // R110 -- library identity (.mc3lib.xml only; absent on ordinary
+    // scene/model documents).
+    if (doc.library) {
+        XMLElement* libEl = xml.NewElement("library");
+        libEl->SetAttribute("namespace", doc.library->libraryNamespace.c_str());
+        libEl->SetAttribute("version",   doc.library->version.c_str());
+        if (!doc.library->contentHash.empty())
+            libEl->SetAttribute("hash", doc.library->contentHash.c_str());
+        root->InsertEndChild(libEl);
+    }
+
     // Include references (written before all other sections so they appear at
     // the top and can be processed first on the next load).
     for (const auto& inc : doc.includes) {

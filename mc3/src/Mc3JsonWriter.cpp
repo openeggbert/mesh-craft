@@ -255,6 +255,16 @@ std::string Mc3JsonWriter::toString(const Mc3Document& doc) {
     j["rotationUnits"]     = doc.rotationUnits;
     j["eulerOrder"]        = doc.eulerOrder;
 
+    // R110 -- library identity (.mc3lib.json only; absent on ordinary
+    // scene/model documents).
+    if (doc.library) {
+        json lib = json::object();
+        lib["namespace"] = doc.library->libraryNamespace;
+        lib["version"]   = doc.library->version;
+        if (!doc.library->contentHash.empty()) lib["hash"] = doc.library->contentHash;
+        j["library"] = std::move(lib);
+    }
+
     if (!doc.includes.empty()) j["includes"] = doc.includes;
 
     if (!doc.metadata.empty()) {

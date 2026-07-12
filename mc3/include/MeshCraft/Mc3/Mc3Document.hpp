@@ -27,6 +27,15 @@
 
 namespace MeshCraft::Mc3 {
 
+// R110 -- present only on a `.mc3lib.xml`/`.mc3lib.json` reusable-definition
+// library document (mesh_world_revival.md §7/§8), absent on an ordinary
+// scene/model document. Referenced elsewhere as "mc3lib://<namespace>@<version>".
+struct Mc3LibraryInfo {
+    std::string libraryNamespace;  // e.g. "city-core"
+    std::string version;           // semver "major.minor.patch", e.g. "3.2.1"
+    std::string contentHash;       // "sha256:<64 lowercase hex chars>"
+};
+
 class Mc3Document {
 public:
     std::string version{"0.3"};
@@ -44,6 +53,9 @@ public:
 
     // Directory of the source .mc3.xml file — used for resolving relative asset paths
     std::filesystem::path sourcePath;
+
+    // R110 -- set only for .mc3lib.xml/.mc3lib.json library documents.
+    std::optional<Mc3LibraryInfo> library;
 
     // Files referenced via <include file="..."/> — preserved so the writer
     // can re-emit them instead of inlining the included content.
@@ -124,6 +136,28 @@ public:
 
     // Save to mc3.json (R109).
     void saveToJsonFile(const std::filesystem::path& path) const;
+
+    // R110 -- .mc3lib.xml/.mc3lib.json save/load: same Mc3Document AST and
+    // XML/JSON writers/parsers as an ordinary scene/model file (one semantic
+    // model, per mesh_world_revival.md §4.3), just conventionally named and
+    // required to carry `library` (namespace + version) so a resolver always
+    // has an identity to reference it by. Throws std::invalid_argument if
+    // `library` is unset. Does not implicitly (re)compute contentHash --
+    // call computeLibraryContentHash() first if a fresh hash is wanted.
+    void saveToLibraryFile(const std::filesystem::path& path) const;
+    void saveToLibraryJsonFile(const std::filesystem::path& path) const;
+    static Mc3Document loadFromLibraryFile(const std::filesystem::path& path);
+    static Mc3Document loadFromLibraryJsonFile(const std::filesystem::path& path);
+
+    // R110 -- sha256 (see Mc3Sha256.hpp) of this document's canonical
+    // mc3.json body (definitions/materials/textures/etc.), EXCLUDING the
+    // `library` block itself (a hash covering its own hash field couldn't be
+    // verified). Representation-independent: XML and JSON share one AST, so
+    // this is stable regardless of which surface a library was authored in.
+    // Returns the hex digest WITHOUT a "sha256:" prefix; assign it into
+    // `library->contentHash` with that prefix yourself, e.g.:
+    //   doc.library->contentHash = "sha256:" + doc.computeLibraryContentHash();
+    std::string computeLibraryContentHash() const;
 
     // --- Builder / helper methods -----------------------------------------
     // These add objects to the document and return a reference to the stored

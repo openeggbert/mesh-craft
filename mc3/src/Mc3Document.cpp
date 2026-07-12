@@ -1,8 +1,11 @@
 #include "MeshCraft/Mc3/Mc3Document.hpp"
+#include "MeshCraft/Mc3/Mc3Sha256.hpp"
 #include "Mc3XmlParser.hpp"
 #include "Mc3XmlWriter.hpp"
 #include "Mc3JsonParser.hpp"
 #include "Mc3JsonWriter.hpp"
+
+#include <stdexcept>
 
 namespace MeshCraft::Mc3 {
 
@@ -65,6 +68,47 @@ Mc3Document Mc3Document::loadFromJsonString(const std::string& jsonText,
 void Mc3Document::saveToJsonFile(const std::filesystem::path& path) const {
     Internal::Mc3JsonWriter writer;
     writer.write(*this, path);
+}
+
+// --- R110 -- .mc3lib.xml/.mc3lib.json ------------------------------------
+
+namespace {
+void requireLibraryInfo(const Mc3Document& doc) {
+    if (!doc.library)
+        throw std::invalid_argument(
+            "Mc3Document: saveToLibraryFile/saveToLibraryJsonFile requires "
+            "`library` (namespace + version) to be set -- this document has "
+            "no library identity to reference it by");
+}
+} // namespace
+
+void Mc3Document::saveToLibraryFile(const std::filesystem::path& path) const {
+    requireLibraryInfo(*this);
+    saveToFile(path);
+}
+
+void Mc3Document::saveToLibraryJsonFile(const std::filesystem::path& path) const {
+    requireLibraryInfo(*this);
+    saveToJsonFile(path);
+}
+
+Mc3Document Mc3Document::loadFromLibraryFile(const std::filesystem::path& path) {
+    Mc3Document doc = loadFromFile(path);
+    requireLibraryInfo(doc);
+    return doc;
+}
+
+Mc3Document Mc3Document::loadFromLibraryJsonFile(const std::filesystem::path& path) {
+    Mc3Document doc = loadFromJsonFile(path);
+    requireLibraryInfo(doc);
+    return doc;
+}
+
+std::string Mc3Document::computeLibraryContentHash() const {
+    Mc3Document contentOnly = *this;
+    contentOnly.library.reset();
+    Internal::Mc3JsonWriter writer;
+    return sha256Hex(writer.toString(contentOnly));
 }
 
 // --- Builder / helper method implementations ------------------------------
