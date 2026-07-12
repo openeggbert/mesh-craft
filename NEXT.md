@@ -1,6 +1,6 @@
 # NEXT.md — baseline & handoff
 
-_Last updated: 2026-07-11 (session 3). Branch `develop`, working tree clean at
+_Last updated: 2026-07-12 (session 4). Branch `develop`, working tree clean at
 the start of each session below. See `git log --oneline -20` for the exact
 current HEAD — it is not hard-coded here because this file is edited in the
 same commits it describes, which would make a literal hash stale immediately.
@@ -150,6 +150,23 @@ differential test). Every remaining `TODO` `AUD-###` row is genuinely
 blocked (owner-gated CI, or missing Android NDK/out-of-scope CNA coupling)
 except `AUD-062`/`AUD-063`, which are open, unblocked, lower-severity
 follow-ups to `AUD-061`.
+
+### Session 4 (2026-07-12) — AUD-062/AUD-063 viewport-export parity
+
+- `AUD-062` DONE (commit `0d3faa3`): IcoSphere now selects one of four
+  pre-built subdivision meshes from its MC3 `segments` field using the same
+  `clamp(segments / 8, 1, 4)` rule as the glTF exporter. This applies to the
+  normal draw pass, emissive pass, and polygon statistics.
+- `AUD-063` DONE (commit `134d6c2`): the Capsule position-only and textured
+  viewport meshes now both use `max(2, segments / 4)` hemisphere rings,
+  matching the exporter at the 16/8/4 viewport LOD tiers.
+- `differential_geometry` passed after each change; it now verifies IcoSphere
+  at segments 2/16/32 and Capsule parity at 16/8/4. The full CTest run built
+  all 116 tests, but GUI tests could not access an SDL video device in this
+  sandbox; this is environmental and separate from the headless geometry
+  checks.
+- Current AUD status: **61 DONE, 4 TODO, 2 DEFERRED**. Every remaining AUD
+  TODO is externally blocked; the next actionable work is the SYS backlog.
 
 ## 3. Next tasks
 
