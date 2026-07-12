@@ -1,5 +1,6 @@
 #pragma once
 
+#include "MeshCraft/Mc3/Mc3AssetMetadata.hpp"
 #include "MeshCraft/Mc3/Mc3CsgOperation.hpp"
 #include "MeshCraft/Mc3/Mc3Deform.hpp"
 #include "MeshCraft/Mc3/Mc3Extrude.hpp"
@@ -92,6 +93,10 @@ public:
 
     // Opaque key/value pass-through store (mirrors <metadata> in the XSD).
     std::map<std::string, std::string> metadata;
+
+    // R111 -- structured asset metadata (mesh_world_revival.md §6). Set
+    // only on definitions where authored/known.
+    std::optional<Mc3AssetMetadata> assetMetadata;
 
     // --- Static factory methods -------------------------------------------
     // Each factory returns a shared_ptr so objects can be added directly to

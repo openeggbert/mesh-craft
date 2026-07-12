@@ -173,6 +173,14 @@ if(BUILD_TESTING)
     add_test(NAME mc3lib COMMAND mc3lib_test)
     set_tests_properties(mc3lib PROPERTIES TIMEOUT 15 LABELS "format")
 
+    # R111: structured asset metadata (Mc3Object::assetMetadata) round-trips
+    # through both XML and JSON, and stays genuinely absent (not defaulted)
+    # on a definition that never set it.
+    add_executable(mc3_asset_metadata_test test/asset_metadata_test.cpp)
+    target_link_libraries(mc3_asset_metadata_test PRIVATE Mc3)
+    add_test(NAME mc3_asset_metadata COMMAND mc3_asset_metadata_test)
+    set_tests_properties(mc3_asset_metadata PROPERTIES TIMEOUT 15 LABELS "format")
+
     # Hostile-numeric-input test: NaN/Inf/out-of-range attributes must not
     # survive parsing into the model (finiteOr sanitization).
     add_executable(mc3_finite_input_test test/finite_input_test.cpp)

@@ -310,6 +310,72 @@ static XMLElement* writeObject(XMLDocument& xmlDoc, const std::shared_ptr<Mc3Obj
         el->InsertEndChild(metaEl);
     }
 
+    // R111 -- structured asset metadata (mesh_world_revival.md §6).
+    if (obj->assetMetadata) {
+        const auto& am = *obj->assetMetadata;
+        XMLElement* ame = xmlDoc.NewElement("assetMetadata");
+        if (!am.category.empty())    ame->SetAttribute("category", am.category.c_str());
+        if (!am.subcategory.empty()) ame->SetAttribute("subcategory", am.subcategory.c_str());
+        if (!am.facing.empty())      ame->SetAttribute("facing", am.facing.c_str());
+        if (!am.collisionProxy.empty()) ame->SetAttribute("collision_proxy", am.collisionProxy.c_str());
+        if (!am.shadowPolicy.empty())   ame->SetAttribute("shadow_policy", am.shadowPolicy.c_str());
+        if (!am.license.empty())       ame->SetAttribute("license", am.license.c_str());
+        if (!am.provenance.empty())    ame->SetAttribute("provenance", am.provenance.c_str());
+        if (!am.sourceGeneratorOrHash.empty()) ame->SetAttribute("source", am.sourceGeneratorOrHash.c_str());
+        if (!am.semanticVersion.empty())       ame->SetAttribute("version", am.semanticVersion.c_str());
+        if (!am.instancingEligible) ame->SetAttribute("instancing_eligible", "false");
+        if (am.maxVisibilityDistanceM != 0.f) ame->SetAttribute("max_visibility_distance", am.maxVisibilityDistanceM);
+        if (am.selectionWeight != 1.f)        ame->SetAttribute("selection_weight", am.selectionWeight);
+        if (am.nominalSize != std::array<float,3>{0.f,0.f,0.f})
+            ame->SetAttribute("nominal_size", vec3Str(am.nominalSize).c_str());
+        if (am.boundsMin != std::array<float,3>{0.f,0.f,0.f} ||
+            am.boundsMax != std::array<float,3>{0.f,0.f,0.f}) {
+            ame->SetAttribute("bounds_min", vec3Str(am.boundsMin).c_str());
+            ame->SetAttribute("bounds_max", vec3Str(am.boundsMax).c_str());
+        }
+        if (am.clearanceVolume != std::array<float,3>{0.f,0.f,0.f})
+            ame->SetAttribute("clearance_volume", vec3Str(am.clearanceVolume).c_str());
+
+        auto writeTagList = [&](const char* tag, const std::vector<std::string>& tags) {
+            if (tags.empty()) return;
+            XMLElement* te = xmlDoc.NewElement(tag);
+            for (const auto& t : tags) {
+                XMLElement* ie = xmlDoc.NewElement("tag");
+                ie->SetAttribute("value", t.c_str());
+                te->InsertEndChild(ie);
+            }
+            ame->InsertEndChild(te);
+        };
+        writeTagList("semanticTags", am.semanticTags);
+        writeTagList("styleTags",    am.styleTags);
+        writeTagList("regionTags",   am.regionTags);
+        writeTagList("periodTags",   am.periodTags);
+        writeTagList("materialSlots", am.materialSlots);
+
+        if (!am.sockets.empty()) {
+            XMLElement* se = xmlDoc.NewElement("sockets");
+            for (const auto& [name, pos] : am.sockets) {
+                XMLElement* pe = xmlDoc.NewElement("socket");
+                pe->SetAttribute("name", name.c_str());
+                pe->SetAttribute("position", vec3Str(pos).c_str());
+                se->InsertEndChild(pe);
+            }
+            ame->InsertEndChild(se);
+        }
+        if (!am.lods.empty()) {
+            XMLElement* le = xmlDoc.NewElement("lods");
+            for (const auto& [tier, defId] : am.lods) {
+                XMLElement* te = xmlDoc.NewElement("lod");
+                te->SetAttribute("tier", tier.c_str());
+                te->SetAttribute("definition", defId.c_str());
+                le->InsertEndChild(te);
+            }
+            ame->InsertEndChild(le);
+        }
+
+        el->InsertEndChild(ame);
+    }
+
     // Named states
     for (const auto& [stateId, st] : obj->states) {
         XMLElement* se = xmlDoc.NewElement("state");

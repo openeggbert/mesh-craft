@@ -204,6 +204,43 @@ std::shared_ptr<Mc3Object> toObject(const json& j) {
             obj->metadata[it.key()] = it.value().get<std::string>();
     }
 
+    // R111 -- structured asset metadata (mesh_world_revival.md §6).
+    if (j.contains("assetMetadata")) {
+        const auto& m = j["assetMetadata"];
+        Mc3AssetMetadata am;
+        am.category            = m.value("category", "");
+        am.subcategory          = m.value("subcategory", "");
+        if (m.contains("semanticTags")) am.semanticTags = m["semanticTags"].get<std::vector<std::string>>();
+        if (m.contains("styleTags"))    am.styleTags    = m["styleTags"].get<std::vector<std::string>>();
+        if (m.contains("regionTags"))   am.regionTags   = m["regionTags"].get<std::vector<std::string>>();
+        if (m.contains("periodTags"))   am.periodTags   = m["periodTags"].get<std::vector<std::string>>();
+        if (m.contains("nominalSize"))  am.nominalSize  = toVec3(m["nominalSize"]);
+        if (m.contains("bounds")) {
+            const auto& b = m["bounds"];
+            if (b.contains("min")) am.boundsMin = toVec3(b["min"]);
+            if (b.contains("max")) am.boundsMax = toVec3(b["max"]);
+        }
+        am.facing = m.value("facing", "");
+        if (m.contains("sockets"))
+            for (auto it = m["sockets"].begin(); it != m["sockets"].end(); ++it)
+                am.sockets[it.key()] = toVec3(it.value());
+        if (m.contains("materialSlots")) am.materialSlots = m["materialSlots"].get<std::vector<std::string>>();
+        am.collisionProxy = m.value("collisionProxy", "");
+        if (m.contains("clearanceVolume")) am.clearanceVolume = toVec3(m["clearanceVolume"]);
+        if (m.contains("lods"))
+            for (auto it = m["lods"].begin(); it != m["lods"].end(); ++it)
+                am.lods[it.key()] = it.value().get<std::string>();
+        am.instancingEligible     = m.value("instancingEligible", true);
+        am.shadowPolicy           = m.value("shadowPolicy", "");
+        am.maxVisibilityDistanceM = m.value("maxVisibilityDistanceM", 0.0f);
+        am.selectionWeight        = m.value("selectionWeight", 1.0f);
+        am.license                = m.value("license", "");
+        am.provenance             = m.value("provenance", "");
+        am.sourceGeneratorOrHash  = m.value("sourceGeneratorOrHash", "");
+        am.semanticVersion        = m.value("semanticVersion", "");
+        obj->assetMetadata = std::move(am);
+    }
+
     if (j.contains("states")) {
         for (auto it = j["states"].begin(); it != j["states"].end(); ++it) {
             const auto& se = it.value();

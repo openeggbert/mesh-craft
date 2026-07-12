@@ -717,6 +717,55 @@ static void parseCommonObjectAttribs(const XMLElement* el, Mc3Object& obj) {
             if (const char* n = p->Attribute("name"))
                 if (const char* v = p->Attribute("value"))
                     obj.metadata[n] = v;
+
+    // R111 -- structured asset metadata (mesh_world_revival.md §6).
+    if (const XMLElement* ame = el->FirstChildElement("assetMetadata")) {
+        Mc3AssetMetadata am;
+        am.category            = attr(ame, "category");
+        am.subcategory          = attr(ame, "subcategory");
+        am.facing               = attr(ame, "facing");
+        am.collisionProxy       = attr(ame, "collision_proxy");
+        am.shadowPolicy         = attr(ame, "shadow_policy");
+        am.license              = attr(ame, "license");
+        am.provenance           = attr(ame, "provenance");
+        am.sourceGeneratorOrHash= attr(ame, "source");
+        am.semanticVersion      = attr(ame, "version");
+        am.instancingEligible   = std::strcmp(attr(ame, "instancing_eligible", "true"), "false") != 0;
+        am.maxVisibilityDistanceM = attrF(ame, "max_visibility_distance", 0.0f);
+        am.selectionWeight        = attrF(ame, "selection_weight", 1.0f);
+        if (const char* ns = ame->Attribute("nominal_size")) am.nominalSize = parseVec3(ns);
+        if (const char* bmin = ame->Attribute("bounds_min")) am.boundsMin = parseVec3(bmin);
+        if (const char* bmax = ame->Attribute("bounds_max")) am.boundsMax = parseVec3(bmax);
+        if (const char* cv = ame->Attribute("clearance_volume")) am.clearanceVolume = parseVec3(cv);
+
+        auto readTagList = [&](const char* tag, std::vector<std::string>& out) {
+            if (const XMLElement* te = ame->FirstChildElement(tag))
+                for (const XMLElement* ie = te->FirstChildElement("tag"); ie;
+                     ie = ie->NextSiblingElement("tag"))
+                    if (const char* v = ie->Attribute("value")) out.emplace_back(v);
+        };
+        readTagList("semanticTags", am.semanticTags);
+        readTagList("styleTags",    am.styleTags);
+        readTagList("regionTags",   am.regionTags);
+        readTagList("periodTags",   am.periodTags);
+        readTagList("materialSlots", am.materialSlots);
+
+        if (const XMLElement* se = ame->FirstChildElement("sockets"))
+            for (const XMLElement* pe = se->FirstChildElement("socket"); pe;
+                 pe = pe->NextSiblingElement("socket"))
+                if (const char* name = pe->Attribute("name"))
+                    if (const char* pos = pe->Attribute("position"))
+                        am.sockets[name] = parseVec3(pos);
+
+        if (const XMLElement* le = ame->FirstChildElement("lods"))
+            for (const XMLElement* te = le->FirstChildElement("lod"); te;
+                 te = te->NextSiblingElement("lod"))
+                if (const char* tier = te->Attribute("tier"))
+                    if (const char* defId = te->Attribute("definition"))
+                        am.lods[tier] = defId;
+
+        obj.assetMetadata = std::move(am);
+    }
 }
 
 // SYS-W1-03: a single object with an enormous number of DIRECT children

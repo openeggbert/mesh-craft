@@ -212,6 +212,49 @@ json objectJson(const std::shared_ptr<Mc3Object>& obj) {
         j["metadata"] = std::move(m);
     }
 
+    // R111 -- structured asset metadata (mesh_world_revival.md §6).
+    if (obj->assetMetadata) {
+        const auto& am = *obj->assetMetadata;
+        json m = json::object();
+        if (!am.category.empty())    m["category"] = am.category;
+        if (!am.subcategory.empty()) m["subcategory"] = am.subcategory;
+        if (!am.semanticTags.empty()) m["semanticTags"] = am.semanticTags;
+        if (!am.styleTags.empty())    m["styleTags"] = am.styleTags;
+        if (!am.regionTags.empty())   m["regionTags"] = am.regionTags;
+        if (!am.periodTags.empty())   m["periodTags"] = am.periodTags;
+        if (am.nominalSize != std::array<float,3>{0.f,0.f,0.f}) m["nominalSize"] = vec3(am.nominalSize);
+        if (am.boundsMin != std::array<float,3>{0.f,0.f,0.f} ||
+            am.boundsMax != std::array<float,3>{0.f,0.f,0.f}) {
+            json b = json::object();
+            b["min"] = vec3(am.boundsMin);
+            b["max"] = vec3(am.boundsMax);
+            m["bounds"] = std::move(b);
+        }
+        if (!am.facing.empty()) m["facing"] = am.facing;
+        if (!am.sockets.empty()) {
+            json s = json::object();
+            for (const auto& [name, pos] : am.sockets) s[name] = vec3(pos);
+            m["sockets"] = std::move(s);
+        }
+        if (!am.materialSlots.empty()) m["materialSlots"] = am.materialSlots;
+        if (!am.collisionProxy.empty()) m["collisionProxy"] = am.collisionProxy;
+        if (am.clearanceVolume != std::array<float,3>{0.f,0.f,0.f}) m["clearanceVolume"] = vec3(am.clearanceVolume);
+        if (!am.lods.empty()) {
+            json l = json::object();
+            for (const auto& [tier, defId] : am.lods) l[tier] = defId;
+            m["lods"] = std::move(l);
+        }
+        if (!am.instancingEligible) m["instancingEligible"] = am.instancingEligible;
+        if (!am.shadowPolicy.empty()) m["shadowPolicy"] = am.shadowPolicy;
+        if (am.maxVisibilityDistanceM != 0.f) m["maxVisibilityDistanceM"] = am.maxVisibilityDistanceM;
+        if (am.selectionWeight != 1.f) m["selectionWeight"] = am.selectionWeight;
+        if (!am.license.empty()) m["license"] = am.license;
+        if (!am.provenance.empty()) m["provenance"] = am.provenance;
+        if (!am.sourceGeneratorOrHash.empty()) m["sourceGeneratorOrHash"] = am.sourceGeneratorOrHash;
+        if (!am.semanticVersion.empty()) m["semanticVersion"] = am.semanticVersion;
+        j["assetMetadata"] = std::move(m);
+    }
+
     if (!obj->states.empty()) {
         json states = json::object();
         for (const auto& [stateId, st] : obj->states) {
