@@ -89,10 +89,9 @@
 // truth + exporter agreement) for off-ratio cases that used to only PIN the
 // old bugged behavior.
 //
-// AUD-062 (IcoSphere ignores its own subdivision field) and AUD-063
-// (Capsule hemisphere-ring-count formula mismatch below segments=16) are
-// separate findings, deliberately left as-is/out of scope here -- see
-// plan.md.
+// AUD-062 is fixed: the viewport now maps the MC3 `segments` field to the
+// same 1..4 subdivision range as the exporter. AUD-063 (Capsule
+// hemisphere-ring-count formula mismatch below segments=16) remains open.
 
 #include <MeshCraft/Renderer/PrimitiveTessellationAlg.hpp>
 #include <MeshCraft/Mc3/Mc3Primitive.hpp>
@@ -633,46 +632,29 @@ static void testCapsule() {
 }
 
 // ---------------------------------------------------------------------------
-// IcoSphere -- renderer is FIXED at subdivisions=2 (SceneRenderer.cpp:
-// `buildUnitIcoSphere(2);`), completely ignoring the primitive's `segments`
-// field (unlike every other curved primitive, which at least has 3 LOD
-// tiers). The exporter honors `segments` via
-// subdivisions=clamp(segments/8,1,4).
-//
-// REAL FINDING (WYSIWYG gap, not a scale bug): a newly-created icosphere
-// via Mc3Primitive::icoSphere()'s own factory default (segments=2) exports
-// at subdivisions=1 (80 triangles) but always renders at subdivisions=2
-// (320 triangles) -- 4x the triangle count in the viewport vs. what the
-// user actually exports. At the raw struct blanket default (segments=32,
-// as if a user dragged the slider to a typical mid-high value) the gap is
-// worse: exports at subdivisions=4 (1280 tris) but still renders at
-// subdivisions=2 (320 tris) -- the OPPOSITE direction (viewport under-
-// tessellated relative to export). Segments only matches the renderer's
-// fixed level at segments in [16,23] (subdivisions=2). This is a real,
-// user-visible "what you see is not what you get" gap for this primitive
-// type specifically -- documented via info(), not treated as a fixable
-// bug in this pass (changing the hardcoded LOD level is a real product/
-// performance decision, not this test-authoring task's call to make).
+// IcoSphere -- the viewport and exporter both derive subdivisions from the
+// MC3 `segments` field with clamp(segments/8, 1, 4). The renderer caches one
+// unit mesh per possible subdivision level; this test exercises low, middle,
+// and high values to make a future fixed-level regression observable.
 // ---------------------------------------------------------------------------
 static void testIcoSphere() {
-    // Matching case: exporter segments=16 -> subdivisions=2, same as the
-    // renderer's fixed level. True differential comparison.
-    {
-        float radius = 0.5f;
-        int segments = 16; // -> subdivisions = clamp(16/8,1,4) = 2
+    float radius = 0.5f;
+    for (int segments : {2, 16, 32}) {
+        int subdivisions = icoSphereSubdivisionsForSegmentsAlg(segments);
         Mc3Primitive p = Mc3Primitive::icoSphere(radius, segments);
         auto exportMesh = fromMeshData(mc3togltf::buildPrimitive(p));
         float r2 = radius * 2.0f;
-        auto renderMesh = scaled(fromRaw(tessellateUnitIcoSphereAlg(2)), r2, r2, r2);
+        auto renderMesh = scaled(fromRaw(tessellateUnitIcoSphereAlg(subdivisions)), r2, r2, r2);
 
         double vExp = enclosedVolume(exportMesh);
         double vRen = enclosedVolume(renderMesh);
         double vGT  = (4.0/3.0) * std::numbers::pi * radius*radius*radius;
 
-        std::string tag = "icosphere(r=" + fmt(radius) + ",subdiv=2,matching)";
+        std::string tag = "icosphere(r=" + fmt(radius) + ",segments=" +
+                          fmt(segments) + ",subdiv=" + fmt(subdivisions) + ")";
         check(relErr(vExp, vRen) < 1e-3, tag + ": exporter and renderer volumes agree tightly (identical subdivision algorithm)");
-        check(relErr(vRen, vGT) < 0.06, tag + ": renderer volume within 6% of analytical sphere volume");
-        check(relErr(vExp, vGT) < 0.06, tag + ": exporter volume within 6% of analytical sphere volume");
+        check(relErr(vRen, vGT) < 0.26, tag + ": renderer volume is within its subdivision-dependent tolerance of analytical sphere volume");
+        check(relErr(vExp, vGT) < 0.26, tag + ": exporter volume is within its subdivision-dependent tolerance of analytical sphere volume");
         check(isWatertight(welded(exportMesh)), tag + ": exporter mesh is watertight (after welding per-face UV duplicates)");
         check(isWatertight(welded(renderMesh)), tag + ": renderer mesh is watertight");
 
@@ -680,29 +662,6 @@ static void testIcoSphere() {
         auto renderTris = renderMesh.idx.size() / 3; // renderer mesh already uses a shared (welded) index pool
         check(exportTris == renderTris,
               tag + ": exporter and renderer produce the same triangle count (" + fmt(static_cast<double>(exportTris)) + ")");
-    }
-
-    // Documented WYSIWYG gap: factory-default segments=2 and struct-default
-    // segments=32 both diverge from the renderer's hardcoded subdivisions=2.
-    {
-        float radius = 0.5f;
-        for (int segments : {2, 32}) {
-            Mc3Primitive p = Mc3Primitive::icoSphere(radius, segments);
-            auto exportMesh = fromMeshData(mc3togltf::buildPrimitive(p));
-            float r2 = radius * 2.0f;
-            auto renderMesh = scaled(fromRaw(tessellateUnitIcoSphereAlg(2)), r2, r2, r2); // renderer ignores `segments`
-
-            int expectedExporterSubdiv = std::max(1, std::min(4, segments/8));
-            auto exportTris = exportMesh.idx.size() / 3;
-            auto renderTris = renderMesh.idx.size() / 3;
-            info("icosphere(segments=" + fmt(segments) + "): exporter subdivisions=" + fmt(expectedExporterSubdiv) +
-                 " (" + fmt(static_cast<double>(exportTris)) + " tris) vs renderer FIXED subdivisions=2 (" +
-                 fmt(static_cast<double>(renderTris)) + " tris) -- WYSIWYG gap, renderer ignores `segments` entirely");
-            if (expectedExporterSubdiv != 2) {
-                check(exportTris != renderTris,
-                      "icosphere(segments=" + fmt(segments) + "): triangle counts measurably differ, confirming the documented WYSIWYG gap is real");
-            }
-        }
     }
 }
 

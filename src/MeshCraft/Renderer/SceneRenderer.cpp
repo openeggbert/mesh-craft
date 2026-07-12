@@ -1,5 +1,6 @@
 #include "MeshCraft/Renderer/SceneRenderer.hpp"
 #include "MeshCraft/Renderer/CsgCacheAlg.hpp"
+#include "MeshCraft/Renderer/PrimitiveTessellationAlg.hpp"
 #include "MeshCraft/EditorAlgorithms.hpp"
 #include <iostream>
 
@@ -371,7 +372,11 @@ SceneRenderer::SceneRenderer(GraphicsDevice& device)
     buildUnitPlane();
     buildUnitTorus(32, 16, unitTorus_);   buildUnitTorus(16, 8, unitTorusL1_);   buildUnitTorus(8, 4, unitTorusL2_);
     buildUnitCapsule(16, unitCapsule_);   buildUnitCapsule(8,  unitCapsuleL1_);   buildUnitCapsule(4, unitCapsuleL2_);
-    buildUnitIcoSphere(2);
+    // AUD-062: match mc3togltf::buildPrimitive()'s segments -> subdivision
+    // mapping.  These are small, bounded meshes (20 * 4^n triangles for
+    // n=1..4), so building all four once avoids any per-frame tessellation.
+    for (int subdivisions = 1; subdivisions <= 4; ++subdivisions)
+        buildUnitIcoSphere(subdivisions, unitIcoSpheres_[subdivisions - 1]);
     buildWireBox();
     buildWireShapes(16);
 }
@@ -566,6 +571,12 @@ const RenderMesh& SceneRenderer::getOrBuildCapsuleMesh(int segments, float radiu
     auto [ins, ok] = capsuleMeshCache_.emplace(key, std::move(mesh));
     (void)ok;
     return ins->second;
+}
+
+const RenderMesh& SceneRenderer::icoSphereMeshForSegments(int segments) const
+{
+    const int subdivisions = icoSphereSubdivisionsForSegmentsAlg(segments);
+    return unitIcoSpheres_[subdivisions - 1];
 }
 
 void SceneRenderer::drawObjectWireframe(const Mc3Object& obj,
@@ -831,7 +842,9 @@ void SceneRenderer::drawObject(const Mc3Object& obj, const Mc3Document& doc,
     }
     case ObjectType::IcoSphere: {
         float r = obj.primitive ? obj.primitive->radius * 2.0f : 1.0f;
-        drawAuto(unitIcoSphere_, deform * Matrix::CreateScale({r,r,r}) * world);
+        int segments = obj.primitive ? obj.primitive->segments : 2;
+        drawAuto(icoSphereMeshForSegments(segments),
+                 deform * Matrix::CreateScale({r,r,r}) * world);
         break;
     }
     case ObjectType::Group:
@@ -1047,7 +1060,9 @@ void SceneRenderer::drawEmissiveObject(
     }
     case ObjectType::IcoSphere: {
         float r = obj.primitive ? obj.primitive->radius * 2.0f : 1.0f;
-        drawE(unitIcoSphere_, deform * Matrix::CreateScale({r, r, r}) * world);
+        int segments = obj.primitive ? obj.primitive->segments : 2;
+        drawE(icoSphereMeshForSegments(segments),
+              deform * Matrix::CreateScale({r, r, r}) * world);
         break;
     }
     case ObjectType::Group:
@@ -1362,7 +1377,9 @@ void SceneRenderer::objectPolyStats(const Mc3::Mc3Object& obj,
         case Mc3::ObjectType::Plane:     rm = &unitPlane_;     break;
         case Mc3::ObjectType::Torus:     rm = &unitTorus_;     break;
         case Mc3::ObjectType::Capsule:   rm = &unitCapsule_;   break;
-        case Mc3::ObjectType::IcoSphere: rm = &unitIcoSphere_; break;
+        case Mc3::ObjectType::IcoSphere:
+            rm = &icoSphereMeshForSegments(o.primitive ? o.primitive->segments : 2);
+            break;
         case Mc3::ObjectType::Disk: {
             int segs = o.primitive ? o.primitive->segments : 32;
             verts += segs * 2; tris += segs * 2; break;

@@ -204,7 +204,11 @@ private:
     RenderMesh unitPlane_;
     RenderMesh unitTorus_;
     RenderMesh unitCapsule_;
-    RenderMesh unitIcoSphere_;
+    // AUD-062: the IcoSphere's `segments` field maps to one of the same
+    // four subdivision levels the glTF exporter uses (segments / 8, clamped
+    // to [1, 4]).  Keep one unit mesh for each level rather than silently
+    // drawing every IcoSphere with a fixed subdivision level.
+    std::array<RenderMesh, 4> unitIcoSpheres_;
 
     // LOD variants: L1 = half segments, L2 = quarter segments (G8)
     RenderMesh unitSphereL1_;    // 16 seg
@@ -253,7 +257,8 @@ private:
     // getOrBuildCapsuleMesh().
     void buildUnitCapsule(int segments, RenderMesh& target,
                           float radius = 0.5f, float height = 1.0f);
-    void buildUnitIcoSphere(int subdivisions);
+    void buildUnitIcoSphere(int subdivisions, RenderMesh& target);
+    const RenderMesh& icoSphereMeshForSegments(int segments) const;
     void buildWireBox();
     void buildWireShapes(int segments);
 

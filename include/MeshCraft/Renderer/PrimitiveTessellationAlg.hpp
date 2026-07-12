@@ -38,6 +38,7 @@
 // test/differential_geometry_test.cpp.
 
 #include <array>
+#include <algorithm>
 #include <cmath>
 #include <cstdint>
 #include <map>
@@ -46,6 +47,14 @@
 #include <vector>
 
 namespace MeshCraft::Renderer {
+
+// MC3 stores IcoSphere detail in its generic `segments` field, while the
+// tessellator uses subdivision levels. Keep this conversion at the
+// CNA-free boundary so the renderer's mesh selection is directly covered by
+// the differential test as well as matching the exporter contract.
+inline int icoSphereSubdivisionsForSegmentsAlg(int segments) {
+    return std::clamp(segments / 8, 1, 4);
+}
 
 // Plain CPU mesh: triangle-list indices into `positions`. No normals/UVs --
 // callers that need the textured (VPNT) variant still generate it

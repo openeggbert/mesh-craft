@@ -488,7 +488,7 @@ void SceneRenderer::buildUnitCapsule(int segments, RenderMesh& target,
     }
 }
 
-void SceneRenderer::buildUnitIcoSphere(int subdivisions) {
+void SceneRenderer::buildUnitIcoSphere(int subdivisions, RenderMesh& target) {
     // SYS-W7-02: icosahedron construction, subdivision, and the
     // STAB-castle-fix winding swap (f[0],f[2],f[1], not f[0],f[1],f[2]) now
     // live in tessellateUnitIcoSphereAlg() (PrimitiveTessellationAlg.hpp),
@@ -509,12 +509,12 @@ void SceneRenderer::buildUnitIcoSphere(int subdivisions) {
     for (auto idx : rti.indices) indices.push_back(ui16(static_cast<int>(idx)));
 
     int ni = static_cast<int>(indices.size());
-    unitIcoSphere_.vb = std::make_unique<VertexBuffer>(device_, nv);
-    unitIcoSphere_.vb->SetData(verts.data(), nv);
-    unitIcoSphere_.ib = std::make_unique<IndexBuffer>(device_, ni);
-    unitIcoSphere_.ib->SetData(indices.data(), ni);
-    unitIcoSphere_.primitiveCount = ni / 3;
-    storePositions(verts, unitIcoSphere_);
+    target.vb = std::make_unique<VertexBuffer>(device_, nv);
+    target.vb->SetData(verts.data(), nv);
+    target.ib = std::make_unique<IndexBuffer>(device_, ni);
+    target.ib->SetData(indices.data(), ni);
+    target.primitiveCount = ni / 3;
+    storePositions(verts, target);
 }
 
 void SceneRenderer::buildWireBox() {
