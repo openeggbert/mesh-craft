@@ -154,9 +154,9 @@ follow-ups to `AUD-061`.
 ## 3. Next tasks
 
 See the **Priority execution queue** at the top of [`plan.md`](plan.md) — it
-is kept free of DONE items by `test/validate_plan_consistency.py`. The top
-actionable item is `AUD-063` (the Capsule viewport/export tessellation-quality
-gap), then the SYS-### backlog (`SYS-W1-01`'s remaining 5 integration points,
+is kept free of DONE items by `test/validate_plan_consistency.py`. All
+remaining `AUD-###` TODO rows are blocked, so the next actionable work is the
+SYS-### backlog (`SYS-W1-01`'s remaining 5 integration points,
 `SYS-W3-01` MeshCraftApplication
 decomposition, `SYS-W11-06` clang-format/clang-tidy config) — everything
 else in the `AUD-###` table is blocked (owner-gated CI via `AUD-052`, or

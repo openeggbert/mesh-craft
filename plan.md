@@ -87,7 +87,7 @@ P1s already being fixed in git history. This session:
    could be marked DONE without also claiming its still-open portion, + 3
    more found by `SYS-W7-02`'s differential geometry test: `AUD-061`/`062`/
    `063`):
-   60 DONE, 5 TODO, 2 DEFERRED** — recompute with
+   61 DONE, 4 TODO, 2 DEFERRED** — recompute with
    `python3 test/validate_plan_consistency.py . <build-dir>` rather than
    trusting this number as time passes.
 5. Archived `plan_deep_audit.md` (all 57 of its own tasks were already
@@ -104,10 +104,7 @@ authoritative live state is always the AUD/SYS task table plus
 
 ## Priority execution queue (next up, in order)
 
-1. **AUD-063 (P3/W7)** — viewport Capsule hemisphere-ring-count formula
-   mismatch below `segments=16`. Newly found by the differential geometry
-   test added for the W7-02 workstream item; lower severity, not blocked.
-2. **AUD-052 (P1/W11)** — CI is permanently parked under `.github_/`; GitHub
+1. **AUD-052 (P1/W11)** — CI is permanently parked under `.github_/`; GitHub
    Actions never runs. This is the root blocker for AUD-053 (a CI-hardening
    task that depends on CI actually running first) and the CI-job half of
    AUD-057 — long documented elsewhere as owner-gated (enabling Actions on
@@ -116,11 +113,11 @@ authoritative live state is always the AUD/SYS task table plus
    AUD-057's configure-time-assertion half (recording/checking the sibling
    repos' current git SHA) landed independently in commit `d2943e3` — only
    the CI-job half is still open, and it's blocked here, not actionable.
-3. **AUD-042 (P2/W8)** — Android build path forces SDL_RENDERER; blocked
+2. **AUD-042 (P2/W8)** — Android build path forces SDL_RENDERER; blocked
    (no Android NDK in this environment; also intersects CNA backend
    behavior, out of scope per CLAUDE.md's "no CNA changes without owner
    permission").
-4. Remaining `TODO` AUD-### rows by severity (AUD-053, downstream of
+3. Remaining `TODO` AUD-### rows by severity (AUD-053, downstream of
    AUD-052; AUD-057's CI-job half, same blocker), then SYS-### rows.
 
 ---
@@ -1101,8 +1098,10 @@ DONE marker without checking its cited commit/verify command.
 - **Resolved:** commit `0d3faa3` — verify: `ctest --test-dir b-release -R differential_geometry --output-on-failure`
 - **Status note:** The renderer now pre-builds the four bounded subdivision levels and selects one through the same `segments / 8`, clamped-to-[1,4] mapping as `mc3togltf::buildPrimitive()`. This applies to the normal draw pass, emissive pass, and displayed polygon statistics. The CNA-free selection helper is exercised for `segments` 2, 16, and 32 by `differential_geometry_test`, which verifies the resulting renderer tessellation has the same volume, watertightness, and triangle count as the independent exporter output.
 
-### AUD-063 `[TODO]` `P3` `W7` · Viewport Capsule hemisphere-ring-count formula diverges from the exporter's below segments=16
+### AUD-063 `[DONE]` `P3` `W7` · Viewport Capsule hemisphere-ring-count formula diverges from the exporter's below segments=16
 - **Component:** include/MeshCraft/Renderer/PrimitiveTessellationAlg.hpp (tessellateUnitCapsuleAlg), mc3togltf/src/MeshBuilder.cpp
 - **Evidence:** Found by `SYS-W7-02`'s differential geometry test. `PrimitiveTessellationAlg.hpp:242` computes hemisphere ring count as `hRings = std::max(4, segments/4)`; the exporter's equivalent computation uses `std::max(2, segments/4)` (see `mc3togltf/src/MeshBuilder.cpp` — verify exact line). For `segments < 16` the two formulas diverge (e.g. `segments=8` gives the viewport `hRings=4` vs. the exporter's `hRings=2`), so a low-tessellation capsule's viewport preview and its exported mesh have different hemisphere-cap resolution — not a shape-correctness bug like `AUD-061` (both are still spherical caps, just different triangle density), but a minor viewport/export tessellation-quality mismatch.
 - **Outcome:** Align the two formulas (pick one and use it in both places), or document why they're intentionally different if there's a real reason (e.g. the viewport's `max(4,...)` floor exists to avoid a degenerate low-poly cap at very low LOD tiers, which the exporter doesn't need to worry about since it always tessellates at the document's exact requested value).
 - **Tests:** `differential_geometry_test` already surfaces the discrepancy for low-`segments` capsules; add an explicit assertion once the formulas are reconciled (or documented as intentional).
+- **Resolved:** commit `134d6c2` — verify: `ctest --test-dir b-release -R differential_geometry --output-on-failure`
+- **Status note:** Changed both the position-only viewport tessellation and its VPNT textured-mesh companion to `std::max(2, segments / 4)`, exactly matching `mc3togltf::buildCapsule()`. The two renderer variants must stay aligned because they share an index topology. `differential_geometry_test` now requires tight renderer/exporter volume agreement for all viewport tiers (`segments` 16, 8, and 4), rather than merely documenting the mismatch below 16.
