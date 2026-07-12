@@ -1,6 +1,8 @@
 #include "MeshCraft/Mc3/Mc3Document.hpp"
 #include "Mc3XmlParser.hpp"
 #include "Mc3XmlWriter.hpp"
+#include "Mc3JsonParser.hpp"
+#include "Mc3JsonWriter.hpp"
 
 namespace MeshCraft::Mc3 {
 
@@ -38,6 +40,30 @@ Mc3Document Mc3Document::loadFromString(const std::string& xml,
 
 void Mc3Document::saveToFile(const std::filesystem::path& path) const {
     Internal::Mc3XmlWriter writer;
+    writer.write(*this, path);
+}
+
+// --- R109 -- mc3.json counterparts --------------------------------------
+
+Mc3Document Mc3Document::loadFromJsonFile(const std::filesystem::path& path) {
+    return loadFromJsonFile(path, Mc3LoadPolicy::trusted());
+}
+
+Mc3Document Mc3Document::loadFromJsonFile(const std::filesystem::path& path,
+                                          const Mc3LoadPolicy& policy) {
+    Internal::Mc3JsonParser parser;
+    return parser.parse(path, policy);
+}
+
+Mc3Document Mc3Document::loadFromJsonString(const std::string& jsonText,
+                                            const std::filesystem::path& sourceDir,
+                                            const Mc3LoadPolicy& policy) {
+    Internal::Mc3JsonParser parser;
+    return parser.parseString(jsonText, sourceDir, policy);
+}
+
+void Mc3Document::saveToJsonFile(const std::filesystem::path& path) const {
+    Internal::Mc3JsonWriter writer;
     writer.write(*this, path);
 }
 

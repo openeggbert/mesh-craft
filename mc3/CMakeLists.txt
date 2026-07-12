@@ -26,6 +26,22 @@ if(TARGET tinyxml2 AND NOT TARGET tinyxml2::tinyxml2)
 endif()
 
 # -----------------------------------------------------------------------------
+# nlohmann/json — R109: semantic mc3.json reader/writer (Mc3JsonWriter /
+# Mc3JsonParser). Header-only, MIT-licensed; fetched the same way tinyxml2
+# is above so mc3/ stays independently buildable/standalone.
+# -----------------------------------------------------------------------------
+
+if(NOT TARGET nlohmann_json::nlohmann_json)
+    FetchContent_Declare(
+        nlohmann_json
+        GIT_REPOSITORY https://github.com/nlohmann/json.git
+        GIT_TAG        v3.11.3
+    )
+    set(JSON_BuildTests OFF CACHE INTERNAL "")
+    FetchContent_MakeAvailable(nlohmann_json)
+endif()
+
+# -----------------------------------------------------------------------------
 # SYS-W11-05: opt-in genuine libFuzzer corpus-driven harness (mc3_xml_libfuzzer)
 # over Mc3XmlParser, complementing the always-on, fast, seeded-mutation
 # mc3_xml_mutation_fuzz_test CTest target below. OFF by default; requires
@@ -80,6 +96,8 @@ add_library(Mc3 STATIC
     src/Mc3CsgOperation.cpp
     src/Mc3XmlParser.cpp
     src/Mc3XmlWriter.cpp
+    src/Mc3JsonWriter.cpp
+    src/Mc3JsonParser.cpp
 )
 
 target_include_directories(Mc3
@@ -90,7 +108,7 @@ target_include_directories(Mc3
         ${CMAKE_CURRENT_SOURCE_DIR}/src
 )
 
-target_link_libraries(Mc3 PRIVATE tinyxml2::tinyxml2)
+target_link_libraries(Mc3 PRIVATE tinyxml2::tinyxml2 nlohmann_json::nlohmann_json)
 
 target_compile_options(Mc3 PRIVATE -Wall -Wextra)
 
@@ -133,6 +151,17 @@ if(BUILD_TESTING)
     add_test(NAME mc3_roundtrip
              COMMAND mc3_roundtrip_test ${MC3_FEATURES_XML})
     set_tests_properties(mc3_roundtrip PROPERTIES TIMEOUT 15 LABELS "format")
+
+    # R109: mc3.json semantic JSON round-trip (Mc3JsonWriter/Mc3JsonParser) --
+    # both handwritten documents covering every AST feature and, when
+    # available, the same features.mc3.xml fixture the XML round-trip test
+    # above uses (load XML -> Mc3Document -> write JSON -> read JSON ->
+    # compare against the XML-loaded document).
+    add_executable(mc3_json_roundtrip_test test/json_roundtrip_test.cpp)
+    target_link_libraries(mc3_json_roundtrip_test PRIVATE Mc3)
+    add_test(NAME mc3_json_roundtrip
+             COMMAND mc3_json_roundtrip_test ${MC3_FEATURES_XML})
+    set_tests_properties(mc3_json_roundtrip PROPERTIES TIMEOUT 15 LABELS "format")
 
     # Hostile-numeric-input test: NaN/Inf/out-of-range attributes must not
     # survive parsing into the model (finiteOr sanitization).

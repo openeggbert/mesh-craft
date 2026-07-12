@@ -105,8 +105,25 @@ public:
                                       const Mc3LoadPolicy& policy,
                                       Mc3Validation& validation);
 
+    // R109 -- semantic mc3.json counterparts of the XML loaders/saver above.
+    // Both formats parse into this SAME Mc3Document AST (see
+    // mesh_world_revival.md §4.3): mc3.json is not a mechanical XML mirror,
+    // it's a genuinely semantic JSON document (arrays for vectors, nested
+    // objects for transform/primitive/extrude/...), produced/consumed by
+    // Mc3JsonWriter/Mc3JsonParser. Does not process <include>-equivalent
+    // merging -- `includes` round-trips as a plain string list either way.
+    static Mc3Document loadFromJsonFile(const std::filesystem::path& path);
+    static Mc3Document loadFromJsonFile(const std::filesystem::path& path,
+                                        const Mc3LoadPolicy& policy);
+    static Mc3Document loadFromJsonString(const std::string& json,
+                                          const std::filesystem::path& sourceDir = {},
+                                          const Mc3LoadPolicy& policy = Mc3LoadPolicy::untrusted());
+
     // Save to XML
     void saveToFile(const std::filesystem::path& path) const;
+
+    // Save to mc3.json (R109).
+    void saveToJsonFile(const std::filesystem::path& path) const;
 
     // --- Builder / helper methods -----------------------------------------
     // These add objects to the document and return a reference to the stored
