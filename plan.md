@@ -87,7 +87,7 @@ P1s already being fixed in git history. This session:
    could be marked DONE without also claiming its still-open portion, + 3
    more found by `SYS-W7-02`'s differential geometry test: `AUD-061`/`062`/
    `063`):
-   59 DONE, 6 TODO, 2 DEFERRED** — recompute with
+   60 DONE, 5 TODO, 2 DEFERRED** — recompute with
    `python3 test/validate_plan_consistency.py . <build-dir>` rather than
    trusting this number as time passes.
 5. Archived `plan_deep_audit.md` (all 57 of its own tasks were already
@@ -104,8 +104,7 @@ authoritative live state is always the AUD/SYS task table plus
 
 ## Priority execution queue (next up, in order)
 
-1. **AUD-062 (P3/W7)** / **AUD-063 (P3/W7)** — viewport IcoSphere ignoring
-   its own subdivision field, and a Capsule hemisphere-ring-count formula
+1. **AUD-063 (P3/W7)** — viewport Capsule hemisphere-ring-count formula
    mismatch below `segments=16`. Newly found by the differential geometry
    test added for the W7-02 workstream item; lower severity, not blocked.
 2. **AUD-052 (P1/W11)** — CI is permanently parked under `.github_/`; GitHub
@@ -1094,11 +1093,13 @@ DONE marker without checking its cited commit/verify command.
 - **Resolved:** commit `2cb8d25` — verify: `ctest --test-dir cmake-build-debug -R differential_geometry` (or the full suite)
 - **Status note:** `objectPolyStats()`'s Torus/Capsule vertex/triangle counts still reference the fixed full-quality `unitTorus_`/`unitCapsule_` members directly rather than the per-object cache — this remains correct because ring/tube/segment COUNTS are identical across all ratio variants at a given LOD tier (only vertex positions differ, not counts), so no change was needed there. Not fixed as part of this task (out of scope, unrelated to AUD-061's shape-correctness finding): `drawObjectWireframe()`'s Torus/Capsule selection-outline wireframe still scales the fixed-ratio `wireShapeTorus_`/`wireShapeCapsule_` non-uniformly by the object's actual dimensions — the same structural issue as the fixed bug, but only affects the thin selection-highlight outline, not the solid rendered shape, and was not covered by the differential test's evidence for this finding.
 
-### AUD-062 `[TODO]` `P3` `W7` · Viewport IcoSphere ignores the primitive's own `segments`/subdivision field — always renders at a fixed subdivision level
+### AUD-062 `[DONE]` `P3` `W7` · Viewport IcoSphere ignores the primitive's own `segments`/subdivision field — always renders at a fixed subdivision level
 - **Component:** src/MeshCraft/Renderer/SceneRenderer.cpp, src/MeshCraft/Renderer/SceneRenderer_Builders.cpp
 - **Evidence:** Found by `SYS-W7-02`'s differential geometry test. Every other curved primitive gets 3 pre-built LOD tiers selected by camera distance at draw time (`SceneRenderer.cpp:368` `buildUnitSphere(32,...); buildUnitSphere(16,...); buildUnitSphere(6,...)`; similarly for Torus at line 372, Capsule at line 373). IcoSphere gets exactly one: `SceneRenderer.cpp:374` `buildUnitIcoSphere(2)` — a single hardcoded `subdivisions=2` mesh, reused for every document IcoSphere at every distance via a pure uniform-radius scale (`SceneRenderer.cpp:781/982` `Matrix::CreateScale({r,r,r})`). The document's own `segments`/subdivision field (whatever `Mc3Primitive` calls it for IcoSphere — verify the exact field name) is read by the independent glTF exporter (confirmed correct by the differential test) but never consulted by the viewport at all.
 - **Outcome:** Either build IcoSphere unit meshes at multiple subdivision tiers keyed off the document's requested value (matching how Sphere/Torus/Capsule already vary tessellation quality), or, at minimum, document that IcoSphere's viewport LOD is currently fixed regardless of the scene's declared subdivision level.
 - **Tests:** Extend `differential_geometry_test` (or a new focused test) to assert the viewport's IcoSphere vertex/triangle count actually varies with the primitive's declared subdivision level, once fixed.
+- **Resolved:** commit `0d3faa3` — verify: `ctest --test-dir b-release -R differential_geometry --output-on-failure`
+- **Status note:** The renderer now pre-builds the four bounded subdivision levels and selects one through the same `segments / 8`, clamped-to-[1,4] mapping as `mc3togltf::buildPrimitive()`. This applies to the normal draw pass, emissive pass, and displayed polygon statistics. The CNA-free selection helper is exercised for `segments` 2, 16, and 32 by `differential_geometry_test`, which verifies the resulting renderer tessellation has the same volume, watertightness, and triangle count as the independent exporter output.
 
 ### AUD-063 `[TODO]` `P3` `W7` · Viewport Capsule hemisphere-ring-count formula diverges from the exporter's below segments=16
 - **Component:** include/MeshCraft/Renderer/PrimitiveTessellationAlg.hpp (tessellateUnitCapsuleAlg), mc3togltf/src/MeshBuilder.cpp
