@@ -47,6 +47,24 @@ public:
     //  - an import cycle (message names the cyclic source chain).
     std::map<std::string, std::shared_ptr<Mc3Object>> resolve(const Mc3Document& doc) const;
 
+    // R102 -- convenience that makes an import actually USABLE end-to-end
+    // before R103's dynamic `<script>` placement exists: calls resolve(doc)
+    // and inserts every resulting definition directly into
+    // doc.definitions[...] under its own "<importNamespace>:<definitionId>"
+    // key. Every EXISTING instance consumer (SceneRenderer, mc3togltf, CSG
+    // evaluation -- anything that already resolves an `<instance
+    // definition="...">` by looking up doc.definitions[key], see
+    // Mc3Object::resolvedInstanceDefinitionKey()'s own doc comment) then
+    // resolves an imported instance transparently, with no consumer-side
+    // changes at all -- a composite object (e.g. a house `<instance
+    // definition="door_lib:door.simple">`) just works once its document
+    // imports "door_lib" and this is called. Same throw conditions as
+    // resolve(). A key that already exists in doc.definitions (a local id
+    // that happens to collide with "namespace:id" syntax) is overwritten --
+    // an imported definition takes precedence, the same "last write wins"
+    // discipline this codebase's <include> merging already uses.
+    void resolveAndMergeInto(Mc3Document& doc) const;
+
 private:
     std::filesystem::path resolveSourceToPath(const std::string& source) const;
     Mc3Document loadLibrary(const std::string& source, const std::string& expectedHash) const;

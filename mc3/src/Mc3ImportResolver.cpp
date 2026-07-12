@@ -97,4 +97,8 @@ std::map<std::string, std::shared_ptr<Mc3Object>> Mc3ImportResolver::resolve(con
     return out;
 }
 
+void Mc3ImportResolver::resolveAndMergeInto(Mc3Document& doc) const {
+    for (auto& [key, obj] : resolve(doc)) doc.definitions[key] = std::move(obj);
+}
+
 } // namespace MeshCraft::Mc3

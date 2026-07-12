@@ -3,7 +3,11 @@
 // from search directories. Covers: basic resolution, missing-dependency
 // error, content-hash match/mismatch, cycle detection (direct and via a
 // nested import), and that a nested import's own definitions are NOT
-// merged into the top-level caller's map.
+// merged into the top-level caller's map. Also covers R102's own
+// composite-object scenario: resolveAndMergeInto() makes an `<instance
+// definition="namespace:id">` resolvable through the EXISTING
+// doc.definitions[...] lookup every instance consumer already uses, with
+// zero consumer-side changes.
 
 #include <MeshCraft/Mc3/Mc3Document.hpp>
 #include <MeshCraft/Mc3/Mc3ImportResolver.hpp>
@@ -161,9 +165,42 @@ int main() {
         CHECK(message.find("cycle") != std::string::npos, "cycle error message mentions 'cycle'");
     }
 
+    // --- 7. R102: resolveAndMergeInto() makes a composite object's
+    //        imported-part instance resolvable through the ordinary
+    //        doc.definitions[...] lookup every existing instance consumer
+    //        already uses (SceneRenderer, mc3togltf, CSG evaluation, ...) --
+    //        a house imports a door part and places one instance of it. ---
+    {
+        writeLibrary("door-parts", "1.0.0", "door.simple");
+
+        Mc3Document house;
+        house.model = "house";
+        house.imports.push_back(Mc3Import{"door_lib", "mc3lib://door-parts@1.0.0", ""});
+
+        auto houseShell = std::make_shared<Mc3Object>();
+        houseShell->type = ObjectType::Group;
+        houseShell->addChild(Mc3Object::makeInstance("front_door", "door_lib:door.simple"));
+        house.defineObject("house.simple", houseShell);
+
+        CHECK(house.definitions.count("door_lib:door.simple") == 0,
+              "R102: imported definition absent before resolveAndMergeInto()");
+
+        Mc3ImportResolver resolver({testDir()});
+        resolver.resolveAndMergeInto(house);
+
+        CHECK(house.definitions.count("door_lib:door.simple") == 1,
+              "R102: imported definition present after resolveAndMergeInto()");
+
+        const auto& doorInstance = house.definitions["house.simple"]->children[0];
+        CHECK(doorInstance->resolvedInstanceDefinitionKey() == "door_lib:door.simple",
+              "R102: instance's own resolved key matches the imported definition's merged key");
+        CHECK(house.definitions.count(doorInstance->resolvedInstanceDefinitionKey()) == 1,
+              "R102: instance's resolved key is a real, resolvable entry in doc.definitions");
+    }
+
     if (failures == 0)
-        std::cout << "All MC3 import resolver (R101) tests passed.\n";
+        std::cout << "All MC3 import resolver (R101/R102) tests passed.\n";
     else
-        std::cerr << failures << " MC3 import resolver (R101) test(s) FAILED.\n";
+        std::cerr << failures << " MC3 import resolver (R101/R102) test(s) FAILED.\n";
     return failures != 0 ? 1 : 0;
 }
