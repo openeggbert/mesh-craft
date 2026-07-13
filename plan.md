@@ -127,7 +127,7 @@ authoritative live state is always the AUD/SYS task table plus
 Mandated workstream items not tied to a single audit finding.
 
 ### W1 — Validation subsystem
-- **SYS-W1-01** `[IN_PROGRESS]` `P1` — First-class `Mc3Validation` result type
+- **SYS-W1-01** `[DONE]` `P1` — First-class `Mc3Validation` result type
   (errors + warnings, each with source path, object/field identity, suggested
   safe repair). Wire into load / MCB-load / include-merge / AI-apply /
   pre-render / pre-export / save. Replaces scattered clamps.
@@ -138,7 +138,7 @@ Mandated workstream items not tied to a single audit finding.
   clamp-on-recoverable-issue contract (many existing tests catch
   `std::runtime_error` and check `.what()`) — new `Mc3Validation&`/`*`
   overloads are added alongside the untouched originals.
-  **DONE (2 of 7 named integration points, fully tested):**
+  **DONE (all 7 of 7 named integration points, fully tested):**
   **MC3 XML load + include-merge** (`Mc3XmlParser.cpp`, commit `e8d68d8`) —
   tessellation clamps, NaN/Inf/malformed-numeric sanitization, the three
   `DocumentBudget` throw sites, resource-path confinement rejections,
@@ -154,16 +154,50 @@ Mandated workstream items not tied to a single audit finding.
   attribute bag to read identity from on demand, unlike the XML side). New
   test `mcb_validation_test`. Both increments: full tree green (110/110
   ctest), zero new `-Wall -Wextra` warnings.
-  **NOT done (explicitly deferred, not attempted this session):** AI-apply
-  (`src/MeshCraft/AiResponseAlgorithms.hpp`'s
-  `validateAndParseAiResponseAlg`/`validateXmlAgainstXsdAlg`), pre-render,
-  pre-export (`mc3togltf/src/GltfExporter.cpp`), and save
-  (`MeshCraftApplication_FileOps.cpp`'s `saveFile()`) wiring — all touch
-  CNA-coupled application code, explicitly named in the task as
-  higher-risk/lower-priority than load/MCB-load/include-merge. Stopped here
-  per the task's own guidance to prefer a well-verified conservative slice
-  over a rushed full sweep once safe, well-tested ground for load/MCB-load
-  was exhausted.
+  **`Mc3Document::validate()` foundation** (commit `a119415`) — re-validates
+  a document's CURRENT in-memory state by round-tripping it through the
+  same XML writer/parser the validating overloads above use, discarding the
+  reparsed copy; closes the gap for documents that never went through a
+  parser load at all (built programmatically via `Mc3Object::make*()`, or
+  mutated in place after loading). Diagnostic-only, never throws. New test
+  `mc3_document_validate_test`. **AI-apply** (commit `92c6246`) —
+  `src/MeshCraft/AiResponseAlgorithms.hpp`'s `parseXmlAlg`/
+  `validateAndParseAiResponseAlg` gain `Mc3Validation&` overloads; the three
+  rejection cases with no `Mc3XmlParser` equivalent (missing `<mc3>` root,
+  empty document, XSD non-conformance) are also recorded as error entries,
+  not just via `errorMessage`. Extended `ai_test.cpp`. **Pre-export**
+  (commit `297af3e`) — `GltfExporter` gains a `Mc3Validation validation`
+  member (mirroring the existing `ExportStats stats`), populated by calling
+  `doc.validate()` before any glTF output is built; printed by the CLI under
+  `--stats`. New `mc3togltf_pre_export_validation_test` — deliberately uses
+  a moderate out-of-range value (5000), not an extreme one like the other
+  new tests use safely, since `exportDocument()` actually tessellates the
+  still-unclamped live document and an extreme `segments` value would
+  attempt a many-petabyte allocation (confirmed by first hitting exactly
+  that, an OOM-killed test process, before reducing the value). **Pre-render
+  + save** (commit `899b486`) — the 4 real application call sites that swap
+  in a freshly-loaded document (startup, Open File dialog's `.mc3.xml`/
+  `.mcb` branches, Open Recent File, autosave recovery) now use the
+  validating `loadFromFile()`/`Mcb::loadFromFile()` overloads instead of
+  discarding the diagnostics, logging a one-line count when non-empty;
+  deliberately NOT wired into the undo/redo document-swap sites (those
+  restore an already-in-memory, previously-valid snapshot, and undo/redo is
+  a hot path where revalidation would hurt responsiveness for no benefit).
+  `saveFile()` calls `Mc3Document::validate()` right before writing (catches
+  values that reached memory via a path bypassing the parser entirely —
+  Properties-panel edits, AI-apply, scripting), logging findings and folding
+  a note count into the "Saved …" status message; diagnostic-only, never
+  blocks the save. Neither adds a dedicated new test: pre-render reuses the
+  already-tested validating load overloads verbatim, and save's addition is
+  a few lines of already-tested glue in CNA-coupled application code with no
+  headless test seam, matching this file's own established "Alg mirror"
+  precedent (test the reusable pure logic, not every call site that
+  consumes it). Surfacing these console-only diagnostics in the UI itself is
+  `SYS-W14-02` (already a separate, not-yet-started backlog item). Full tree
+  rebuilt after every increment: 121/122 ctest (the 1 failure, `field_matrix`,
+  is unrelated — see `AUD-` prefix note in the session log — pre-existing
+  drift from a concurrent, separately-tracked initiative, not from this
+  task), zero new `-Wall -Wextra` warnings.
 - **SYS-W1-02** `[DONE]` `P1` — Documented numeric ranges per domain (geometry,
   material, camera near/far/FOV/aspect, environment, animation, audio, transforms,
   post-processing) with tests.

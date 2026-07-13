@@ -1,6 +1,6 @@
 # NEXT.md — baseline & handoff
 
-_Last updated: 2026-07-12 (session 4). Branch `develop`, working tree clean at
+_Last updated: 2026-07-13 (session 5). Branch `develop`, working tree clean at
 the start of each session below. See `git log --oneline -20` for the exact
 current HEAD — it is not hard-coded here because this file is edited in the
 same commits it describes, which would make a literal hash stale immediately.
@@ -168,16 +168,74 @@ follow-ups to `AUD-061`.
 - Current AUD status: **61 DONE, 4 TODO, 2 DEFERRED**. Every remaining AUD
   TODO is externally blocked; the next actionable work is the SYS backlog.
 
+### Session 5 (2026-07-13) — SYS-W1-01 completion (all 7 integration points) + a cross-repo discovery
+
+- Fixed 2 XSD-invalid fixtures found while re-verifying the baseline
+  (commit `d9e98d5`): `test/house3.mc3.xml`'s decorative
+  `<!-- ---------- Section ---------- -->` comments (the documented
+  double-hyphen-in-comment gotcha, §6) and `test/city-street-block.mc3.xml`'s
+  duplicate `id="bollard"` shared between a `<material>` and a
+  `<definition>` (`xs:ID` is document-wide, not per-element-type).
+- **SYS-W1-01 DONE** (was `IN_PROGRESS` at 2 of 7 named integration points;
+  now all 7): added `Mc3Document::validate()` (commit `a119415`) — a
+  round-trip-based re-validator for a document's CURRENT in-memory state,
+  closing the gap for documents that never went through a parser load at
+  all (built programmatically, or mutated in place after loading). Wired
+  into **AI-apply** (commit `92c6246`), **pre-export** (commit `297af3e`,
+  `GltfExporter::validation`), and **pre-render + save** (commit `899b486`:
+  4 real app load call sites — startup, Open File's `.mc3.xml`/`.mcb`
+  branches, Open Recent File, autosave recovery — now use the
+  already-existing validating load overloads instead of discarding
+  diagnostics; `saveFile()` re-validates before writing). Deliberately NOT
+  wired into undo/redo document-swaps (hot path, already-valid in-memory
+  snapshots) or the ImGui UI display layer itself (that's `SYS-W14-02`,
+  a separate, already-tracked, not-yet-started backlog item) — see
+  `plan.md`'s SYS-W1-01 entry for the full per-point writeup.
+- **A significant cross-repo discovery, not this session's own work but
+  important for future sessions to know about:** while this session was in
+  progress, **6 more commits landed directly on `develop`**
+  (`ff63ef5` R110 `.mc3lib` format, `7110ebd` R111 asset metadata, `83819f8`
+  R101 `<imports>`, `df9d5ea` R102 composite-object split, `f392d41` R103
+  script IDs — all pushed under the repo owner's own git identity, landing
+  within about 14 hours) driven by a **completely separate backlog**: the
+  sibling `mesh-world` repo's `mesh_world_revival.md` design doc and its own
+  `plan.md` "Revival architecture tasks (R-series)" section (`R109`, the
+  commit already on `develop` at this session's start, is the same series —
+  see session 4's entry above, which predates this discovery). None of these
+  touched files this session's SYS-W1-01 work needed, so no real conflict —
+  but one of them (`R111`'s new `Mc3Object::assetMetadata` fields) is why
+  **`field_matrix` now fails** (`bounds_max`/`bounds_min`/`category`/
+  `license`/`tier`/etc. reached the model/XML layers but not `xsd_attr`/
+  `mcb_read`/`mcb_write` yet) — deliberately left alone this session since
+  it's actively-evolving work owned by that other stream, not a regression
+  from anything here. **Before trusting this repo's `git log` matches only
+  `plan.md`'s own AUD/SYS backlog, check for an `R\d+` commit-message prefix
+  or a non-`Co-authored-by: Claude` trailer** — this repo now receives
+  commits from at least one other tool (a `Junie <junie@jetbrains.com>`
+  trailer appeared on the original `R109` commit) working from a plan that
+  lives entirely outside this repo.
+- Full tree rebuilt from scratch (network fetch of the `nlohmann/json`
+  `FetchContent` dependency `R109` introduced) after every commit this
+  session: **121/122 ctest** — the 1 failure is the pre-existing,
+  out-of-scope `field_matrix` gap described above, not a regression from
+  this session's own changes (confirmed unchanged in content before/after,
+  modulo the other stream adding one more missing field mid-session).
+  `test/validate_plan_consistency.py` passes cleanly against the updated
+  counts (67 AUD rows: 61 DONE/4 TODO/2 DEFERRED, unchanged this session;
+  122 live `ctest -N`).
+
 ## 3. Next tasks
 
 See the **Priority execution queue** at the top of [`plan.md`](plan.md) — it
 is kept free of DONE items by `test/validate_plan_consistency.py`. All
-remaining `AUD-###` TODO rows are blocked, so the next actionable work is the
-SYS-### backlog (`SYS-W1-01`'s remaining 5 integration points,
-`SYS-W3-01` MeshCraftApplication
-decomposition, `SYS-W11-06` clang-format/clang-tidy config) — everything
-else in the `AUD-###` table is blocked (owner-gated CI via `AUD-052`, or
-missing Android NDK / out-of-scope CNA coupling).
+remaining `AUD-###` TODO rows are blocked, and `SYS-W1-01` is now fully DONE
+(session 5), so the next actionable work is the rest of the SYS-### backlog:
+`SYS-W3-01` (MeshCraftApplication decomposition — large), `SYS-W11-06`
+(clang-format/clang-tidy config — small), or `SYS-W14-02` (scene validation
+& diagnostics UI, the natural follow-up to `SYS-W1-01` — surface the
+console-only warnings/errors it now produces somewhere in the ImGui UI
+itself) — everything else in the `AUD-###` table is blocked (owner-gated CI
+via `AUD-052`, or missing Android NDK / out-of-scope CNA coupling).
 
 ## 4. Current blockers (external, re-verified 2026-07-11)
 
