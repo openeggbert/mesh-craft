@@ -1,0 +1,464 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Realistic Detached House Showcase
+  MC3 format v0.3
+  Front = -Z
+-->
+<mc3 version="0.3" model="RealisticDetachedHouse" unit="meter">
+
+    <!-- ========================================================= -->
+    <!-- ENVIRONMENT -->
+    <!-- ========================================================= -->
+    <environment>
+        <background color="0.58 0.74 0.92"/>
+        <fog mode="linear" color="0.72 0.80 0.90" start="120" end="340"/>
+    </environment>
+
+    <!-- ========================================================= -->
+    <!-- LIGHTS -->
+    <!-- ========================================================= -->
+    <lights>
+        <ambient color="0.32 0.38 0.48" brightness="0.42"/>
+        <directional
+                name="Sun"
+                color="1.0 0.96 0.88"
+                brightness="3.6"
+                direction="-0.48 -1.0 0.24"
+                cast_shadows="true"/>
+
+        <!-- warm porch / exterior lights -->
+        <point name="PorchLight"  color="1.0 0.85 0.62" brightness="4.0" position="-2.4 2.9 -5.1" range="9"/>
+        <point name="GarageLight" color="1.0 0.84 0.58" brightness="3.2" position=" 8.5 2.8 -3.5" range="8"/>
+
+        <!-- interior glow -->
+        <point name="LivingRoomGlow" color="1.0 0.80 0.55" brightness="2.8" position="-1.2 2.3 -0.6" range="10"/>
+        <point name="KitchenGlow"    color="1.0 0.82 0.60" brightness="2.4" position=" 2.8 2.4  1.8" range="8"/>
+        <point name="BedroomGlow"    color="0.95 0.82 0.70" brightness="1.9" position="-1.0 5.6  0.5" range="8"/>
+    </lights>
+
+    <!-- ========================================================= -->
+    <!-- CAMERAS -->
+    <!-- ========================================================= -->
+    <cameras>
+        <camera name="StreetView" position="0 3.2 -24" target="0 3.4 -2.2" fov="42"/>
+        <camera name="FrontClose" position="-8 2.7 -14" target="-2.2 2.5 -4.6" fov="46"/>
+        <camera name="Aerial"     position="22 16 -26" target="2 4 0" fov="45"/>
+        <camera name="Backyard"   position="0 3.5 22" target="0 3.2 6" fov="48"/>
+        <camera name="Entry"      position="-2.4 1.8 -10.5" target="-2.4 2.0 -4.7" fov="52"/>
+    </cameras>
+
+    <!-- ========================================================= -->
+    <!-- TEXTURES -->
+    <!-- ========================================================= -->
+    <textures>
+        <texture id="tex_stucco"        uri="textures/stucco_beige.png"      filter="linear"/>
+        <texture id="tex_brick"         uri="textures/brick_red_brown.png"   filter="linear"/>
+        <texture id="tex_roof_shingle"  uri="textures/roof_shingles_grey.png" filter="linear"/>
+        <texture id="tex_trim_white"    uri="textures/paint_white.png"       filter="linear"/>
+        <texture id="tex_wood_oak"      uri="textures/wood_oak.png"          filter="linear"/>
+        <texture id="tex_wood_dark"     uri="textures/wood_dark.png"         filter="linear"/>
+        <texture id="tex_concrete"      uri="textures/concrete.png"          filter="linear"/>
+        <texture id="tex_asphalt"       uri="textures/asphalt.png"           filter="linear"/>
+        <texture id="tex_grass"         uri="textures/grass.png"             filter="linear"/>
+        <texture id="tex_bark"          uri="textures/bark.png"              filter="linear"/>
+        <texture id="tex_leaf_green"    uri="textures/leaves_green.png"      filter="linear"/>
+        <texture id="tex_fence"         uri="textures/fence_wood.png"        filter="linear"/>
+    </textures>
+
+    <!-- ========================================================= -->
+    <!-- MATERIALS -->
+    <!-- ========================================================= -->
+    <materials>
+        <material id="ground_grass" roughness="0.95" metallic="0.0">
+            <base_color>0.24 0.55 0.18 1.0</base_color>
+            <base_color_texture>tex_grass</base_color_texture>
+        </material>
+
+        <material id="road_asphalt" roughness="0.92" metallic="0.0">
+            <base_color>0.18 0.19 0.20 1.0</base_color>
+            <base_color_texture>tex_asphalt</base_color_texture>
+        </material>
+
+        <material id="concrete" roughness="0.90" metallic="0.0">
+            <base_color>0.72 0.72 0.72 1.0</base_color>
+            <base_color_texture>tex_concrete</base_color_texture>
+        </material>
+
+        <material id="foundation_stone" roughness="0.92" metallic="0.0">
+            <base_color>0.46 0.45 0.44 1.0</base_color>
+        </material>
+
+        <material id="wall_stucco" roughness="0.88" metallic="0.0">
+            <base_color>0.86 0.80 0.70 1.0</base_color>
+            <base_color_texture>tex_stucco</base_color_texture>
+        </material>
+
+        <material id="wall_brick" roughness="0.89" metallic="0.0">
+            <base_color>0.49 0.25 0.20 1.0</base_color>
+            <base_color_texture>tex_brick</base_color_texture>
+        </material>
+
+        <material id="roof_shingle" roughness="0.82" metallic="0.0">
+            <base_color>0.20 0.22 0.25 1.0</base_color>
+            <base_color_texture>tex_roof_shingle</base_color_texture>
+        </material>
+
+        <material id="trim_white" roughness="0.72" metallic="0.0">
+            <base_color>0.96 0.96 0.95 1.0</base_color>
+            <base_color_texture>tex_trim_white</base_color_texture>
+        </material>
+
+        <material id="wood_oak" roughness="0.78" metallic="0.0">
+            <base_color>0.55 0.40 0.22 1.0</base_color>
+            <base_color_texture>tex_wood_oak</base_color_texture>
+        </material>
+
+        <material id="wood_dark" roughness="0.80" metallic="0.0">
+            <base_color>0.28 0.18 0.10 1.0</base_color>
+            <base_color_texture>tex_wood_dark</base_color_texture>
+        </material>
+
+        <material id="metal_dark" roughness="0.42" metallic="0.88">
+            <base_color>0.18 0.18 0.20 1.0</base_color>
+        </material>
+
+        <material id="glass_window" roughness="0.04" metallic="0.04" alpha_mode="blend">
+            <base_color>0.72 0.85 1.0 0.28</base_color>
+        </material>
+
+        <material id="curtain_sheer" roughness="0.55" metallic="0.0" alpha_mode="blend">
+            <base_color>0.98 0.96 0.92 0.35</base_color>
+        </material>
+
+        <material id="porch_lamp_glow" roughness="0.18" metallic="0.0" alpha_mode="blend">
+            <base_color>1.0 0.90 0.65 0.88</base_color>
+            <emissive_color>1.9 1.4 0.55</emissive_color>
+        </material>
+
+        <material id="interior_light_glow" roughness="0.20" metallic="0.0" alpha_mode="blend">
+            <base_color>1.0 0.88 0.60 0.78</base_color>
+            <emissive_color>1.2 0.9 0.3</emissive_color>
+        </material>
+
+        <material id="tree_bark" roughness="0.90" metallic="0.0">
+            <base_color>0.32 0.21 0.10 1.0</base_color>
+            <base_color_texture>tex_bark</base_color_texture>
+        </material>
+
+        <material id="leaf_green" roughness="0.88" metallic="0.0">
+            <base_color>0.19 0.48 0.15 1.0</base_color>
+            <base_color_texture>tex_leaf_green</base_color_texture>
+        </material>
+
+        <material id="hedge_green" roughness="0.90" metallic="0.0">
+            <base_color>0.17 0.39 0.12 1.0</base_color>
+        </material>
+
+        <material id="mailbox_red" roughness="0.68" metallic="0.05">
+            <base_color>0.72 0.10 0.10 1.0</base_color>
+        </material>
+
+        <material id="fence_wood" roughness="0.86" metallic="0.0">
+            <base_color>0.72 0.64 0.54 1.0</base_color>
+            <base_color_texture>tex_fence</base_color_texture>
+        </material>
+
+        <material id="soil_dark" roughness="0.95" metallic="0.0">
+            <base_color>0.33 0.24 0.15 1.0</base_color>
+        </material>
+    </materials>
+
+    <!-- ========================================================= -->
+    <!-- DEFINITIONS -->
+    <!-- ========================================================= -->
+    <definitions>
+
+        <!-- Reusable shuttered residential window -->
+        <definition id="window_shuttered">
+            <group name="WindowShuttered">
+                <box name="Trim"     size="1.70 1.95 0.14" position="0 0 0"       material="trim_white"/>
+                <box name="Glass"    size="1.25 1.45 0.05" position="0 0 0.05"    material="glass_window"/>
+                <box name="MullionV" size="0.08 1.45 0.04" position="0 0 0.08"    material="trim_white"/>
+                <box name="MullionH" size="1.25 0.08 0.04" position="0 0 0.08"    material="trim_white"/>
+                <box name="LeftSh"   size="0.22 1.55 0.06" position="-0.78 0 0.02" material="wood_dark"/>
+                <box name="RightSh"  size="0.22 1.55 0.06" position=" 0.78 0 0.02" material="wood_dark"/>
+                <box name="Sill"     size="1.95 0.10 0.18" position="0 -1.02 0.00" material="trim_white"/>
+                <box name="Curtain"  size="1.10 1.30 0.02" position="0 0 0.00"     material="curtain_sheer"/>
+            </group>
+        </definition>
+
+        <!-- Simpler side/back window -->
+        <definition id="window_simple">
+            <group name="WindowSimple">
+                <box name="Trim"     size="1.40 1.65 0.12" position="0 0 0"    material="trim_white"/>
+                <box name="Glass"    size="1.02 1.20 0.05" position="0 0 0.05" material="glass_window"/>
+                <box name="MullionV" size="0.07 1.20 0.04" position="0 0 0.08" material="trim_white"/>
+                <box name="MullionH" size="1.02 0.07 0.04" position="0 0 0.08" material="trim_white"/>
+                <box name="Curtain"  size="0.90 1.04 0.02" position="0 0 0.00" material="curtain_sheer"/>
+            </group>
+        </definition>
+
+        <!-- Front door with sidelights -->
+        <definition id="front_door_assembly">
+            <group name="FrontDoorAssembly">
+                <box name="DoorFrame" size="1.90 2.45 0.20" position="0 0 0"      material="trim_white"/>
+                <box name="Door"      size="1.02 2.10 0.10" position="0 0 0.04"   material="wood_oak"/>
+                <box name="Panel1"    size="0.70 0.55 0.03" position="0 -0.55 0.10" material="wood_dark"/>
+                <box name="Panel2"    size="0.70 0.55 0.03" position="0  0.15 0.10" material="wood_dark"/>
+                <box name="GlassTop"  size="0.62 0.42 0.04" position="0 0.72 0.10" material="glass_window"/>
+                <box name="SideL"     size="0.22 1.85 0.05" position="-0.72 0 0.07" material="glass_window"/>
+                <box name="SideR"     size="0.22 1.85 0.05" position=" 0.72 0 0.07" material="glass_window"/>
+                <sphere name="Knob"   radius="0.06" segments="8" position="0.34 -0.10 0.10" material="metal_dark"/>
+            </group>
+        </definition>
+
+        <!-- Garage door -->
+        <definition id="garage_door">
+            <group name="GarageDoor">
+                <box name="Frame"  size="3.80 2.60 0.16" position="0 0 0"      material="trim_white"/>
+                <box name="Panel"  size="3.40 2.20 0.10" position="0 0 0.03"   material="trim_white"/>
+                <box name="Line1"  size="3.25 0.04 0.02" position="0 -0.70 0.08" material="metal_dark"/>
+                <box name="Line2"  size="3.25 0.04 0.02" position="0  0.00 0.08" material="metal_dark"/>
+                <box name="Line3"  size="3.25 0.04 0.02" position="0  0.70 0.08" material="metal_dark"/>
+                <box name="Win1"   size="0.42 0.26 0.04" position="-1.05 0.72 0.08" material="glass_window"/>
+                <box name="Win2"   size="0.42 0.26 0.04" position="-0.35 0.72 0.08" material="glass_window"/>
+                <box name="Win3"   size="0.42 0.26 0.04" position=" 0.35 0.72 0.08" material="glass_window"/>
+                <box name="Win4"   size="0.42 0.26 0.04" position=" 1.05 0.72 0.08" material="glass_window"/>
+            </group>
+        </definition>
+
+        <!-- Porch post -->
+        <definition id="porch_post">
+            <group name="PorchPost">
+                <box name="Base" size="0.30 0.16 0.30" position="0 0.08 0" material="trim_white"/>
+                <box name="Shaft" size="0.18 2.60 0.18" position="0 1.46 0" material="trim_white"/>
+                <box name="Cap" size="0.32 0.14 0.32" position="0 2.83 0" material="trim_white"/>
+            </group>
+        </definition>
+
+        <!-- Dormer -->
+        <definition id="dormer_front">
+            <group name="DormerFront">
+                <box name="Body"    size="1.90 1.35 1.10" position="0 0.68 0" material="wall_stucco"/>
+                <instance name="Win" definition="window_simple" position="0 0.68 -0.58"/>
+                <box name="RoofL"   size="2.10 0.12 0.90" position="0 1.58 -0.22" rotation="32 0 0" material="roof_shingle"/>
+                <box name="RoofR"   size="2.10 0.12 0.90" position="0 1.58  0.22" rotation="-32 0 0" material="roof_shingle"/>
+                <box name="Ridge"   size="2.12 0.08 0.08" position="0 1.76 0" material="roof_shingle"/>
+            </group>
+        </definition>
+
+        <!-- Chimney -->
+        <definition id="chimney_stack">
+            <group name="ChimneyStack">
+                <box name="Stack" size="0.90 2.20 0.90" position="0 1.10 0" material="wall_brick"/>
+                <box name="Cap"   size="1.10 0.14 1.10" position="0 2.24 0" material="foundation_stone"/>
+                <box name="Flue1" size="0.22 0.34 0.22" position="-0.18 2.48 0" material="metal_dark"/>
+                <box name="Flue2" size="0.22 0.34 0.22" position=" 0.18 2.48 0" material="metal_dark"/>
+            </group>
+        </definition>
+
+        <!-- Tree -->
+        <definition id="tree_maple">
+            <group name="TreeMaple">
+                <cylinder name="Trunk" radius="0.24" height="4.8" segments="10" position="0 2.4 0" material="tree_bark"/>
+                <sphere name="C1" radius="1.55" segments="14" position="0 5.2 0" material="leaf_green"/>
+                <sphere name="C2" radius="1.20" segments="12" position="-1.0 5.0 0.4" material="leaf_green"/>
+                <sphere name="C3" radius="1.05" segments="12" position="1.0 5.0 -0.3" material="leaf_green"/>
+                <sphere name="C4" radius="0.85" segments="10" position="0.2 6.2 0.3" material="leaf_green"/>
+            </group>
+        </definition>
+
+        <!-- Hedge segment -->
+        <definition id="hedge_segment">
+            <group name="HedgeSegment">
+                <box name="Body" size="2.20 0.82 0.70" position="0 0.41 0" material="hedge_green"/>
+                <sphere name="Left"  radius="0.36" segments="8" position="-1.05 0.55 0" material="hedge_green"/>
+                <sphere name="Right" radius="0.36" segments="8" position=" 1.05 0.55 0" material="hedge_green"/>
+            </group>
+        </definition>
+
+        <!-- Mailbox -->
+        <definition id="mailbox">
+            <group name="Mailbox">
+                <cylinder name="Post" radius="0.05" height="1.40" segments="6" position="0 0.70 0" material="wood_dark"/>
+                <box      name="Arm"  size="0.58 0.08 0.08" position="0.28 1.18 0" material="wood_dark"/>
+                <box      name="Box"  size="0.50 0.34 0.62" position="0.58 1.24 0" material="mailbox_red"/>
+                <box      name="Door" size="0.48 0.32 0.03" position="0.84 1.24 0" material="trim_white"/>
+                <box      name="Flag" size="0.04 0.25 0.18" position="0.42 1.36 0.30" rotation="0 0 18" material="mailbox_red"/>
+            </group>
+        </definition>
+
+        <!-- Fence segment -->
+        <definition id="fence_segment">
+            <group name="FenceSegment">
+                <box name="PostL" size="0.10 1.10 0.10" position="-1.0 0.55 0" material="fence_wood"/>
+                <box name="PostR" size="0.10 1.10 0.10" position=" 1.0 0.55 0" material="fence_wood"/>
+                <box name="Rail1" size="2.00 0.08 0.06" position="0 0.82 0" material="fence_wood"/>
+                <box name="Rail2" size="2.00 0.08 0.06" position="0 0.42 0" material="fence_wood"/>
+            </group>
+        </definition>
+
+        <!-- Exterior lamp -->
+        <definition id="wall_lamp">
+            <group name="WallLamp">
+                <box      name="Bracket" size="0.10 0.28 0.10" position="0 0.14 0" material="metal_dark"/>
+                <cylinder name="Frame"   radius="0.10" height="0.28" segments="8" position="0 0.44 0.10" material="metal_dark"/>
+                <sphere   name="Glow"    radius="0.13" segments="8" position="0 0.44 0.10" material="porch_lamp_glow"/>
+            </group>
+        </definition>
+
+    </definitions>
+
+    <!-- ========================================================= -->
+    <!-- OBJECTS -->
+    <!-- ========================================================= -->
+    <objects>
+
+        <!-- ========== Site ========== -->
+        <plane name="Ground" size="80 80" axis="y" position="0 0 0" material="ground_grass"/>
+        <box name="Road"     size="80 0.10 8.0" position="0 0.05 -20.0" material="road_asphalt"/>
+        <box name="Sidewalk" size="80 0.12 3.0" position="0 0.06 -14.5" material="concrete"/>
+        <box name="Driveway" size="5.6 0.08 11.0" position="8.6 0.04 -8.8" material="concrete"/>
+        <box name="Walkway"  size="1.6 0.06 7.0" position="-2.4 0.03 -10.8" material="concrete"/>
+        <box name="Patio"    size="7.6 0.08 4.2" position="0 0.04 10.4" material="concrete"/>
+
+        <!-- flower/soil strip -->
+        <box name="FrontBedL" size="5.8 0.10 1.3" position="-6.5 0.05 -9.7" material="soil_dark"/>
+        <box name="FrontBedR" size="4.0 0.10 1.3" position=" 2.3 0.05 -9.7" material="soil_dark"/>
+
+        <!-- ========== Foundation / Main House ========== -->
+        <box name="FoundationMain" size="12.6 0.70 9.6" position="0 0.35 0" material="foundation_stone"/>
+        <box name="MainGroundFloor" size="12.0 3.40 9.0" position="0 2.40 0" material="wall_stucco"/>
+        <box name="MainUpperFloor"  size="10.8 3.00 8.6" position="0 5.60 0" material="wall_stucco"/>
+
+        <!-- subtle brick accent -->
+        <box name="FrontAccent" size="3.2 3.20 0.20" position="4.8 2.35 -4.45" material="wall_brick"/>
+
+        <!-- ========== Garage ========== -->
+        <box name="FoundationGarage" size="5.8 0.68 6.8" position="8.6 0.34 -0.7" material="foundation_stone"/>
+        <box name="GarageBody"       size="5.4 3.35 6.4" position="8.6 2.36 -0.7" material="wall_stucco"/>
+
+        <!-- ========== Porch ========== -->
+        <box name="PorchSlab" size="4.4 0.20 2.8" position="-2.4 0.10 -5.7" material="concrete"/>
+        <box name="PorchSteps1" size="2.2 0.14 0.50" position="-2.4 0.07 -7.15" material="concrete"/>
+        <box name="PorchSteps2" size="1.8 0.14 0.42" position="-2.4 -0.01 -7.55" material="concrete"/>
+        <box name="PorchRoof" size="5.0 0.18 3.0" position="-2.4 3.55 -5.55" rotation="-3 0 0" material="roof_shingle"/>
+        <instance name="PorchPostL" definition="porch_post" position="-4.0 0.00 -6.10"/>
+        <instance name="PorchPostR" definition="porch_post" position="-0.8 0.00 -6.10"/>
+        <instance name="PorchLamp"  definition="wall_lamp"  position="-2.4 2.45 -4.58"/>
+
+        <!-- ========== Main Roof ========== -->
+        <box name="RoofMainFront" size="12.8 0.20 5.8" position="0 7.72 -1.66" rotation="36 0 0" material="roof_shingle"/>
+        <box name="RoofMainBack"  size="12.8 0.20 5.8" position="0 7.72  1.66" rotation="-36 0 0" material="roof_shingle"/>
+        <box name="RoofMainRidge" size="12.84 0.10 0.10" position="0 8.52 0" material="roof_shingle"/>
+
+        <!-- eave fascia -->
+        <box name="FasciaFront" size="12.5 0.12 0.16" position="0 6.18 -4.78" rotation="36 0 0" material="trim_white"/>
+        <box name="FasciaBack"  size="12.5 0.12 0.16" position="0 6.18  4.78" rotation="-36 0 0" material="trim_white"/>
+
+        <!-- ========== Garage Roof ========== -->
+        <box name="RoofGarageFront" size="6.0 0.18 3.8" position="8.6 4.48 -1.85" rotation="28 0 0" material="roof_shingle"/>
+        <box name="RoofGarageBack"  size="6.0 0.18 3.8" position="8.6 4.48  0.45" rotation="-28 0 0" material="roof_shingle"/>
+        <box name="RoofGarageRidge" size="6.04 0.08 0.08" position="8.6 4.98 -0.7" material="roof_shingle"/>
+
+        <!-- ========== Dormers + Chimney ========== -->
+        <instance name="DormerLeft"  definition="dormer_front" position="-3.1 6.55 -2.55"/>
+        <instance name="DormerRight" definition="dormer_front" position=" 2.2 6.55 -2.55"/>
+        <instance name="Chimney"     definition="chimney_stack" position="3.9 8.20 1.2"/>
+
+        <!-- ========== Front Door ========== -->
+        <instance name="FrontDoor" definition="front_door_assembly" position="-2.4 1.82 -4.58"/>
+
+        <!-- ========== Front Windows ========== -->
+        <instance name="FrontWinGroundL" definition="window_shuttered" position="-5.0 2.45 -4.58"/>
+        <instance name="FrontWinGroundR" definition="window_shuttered" position=" 1.2 2.45 -4.58"/>
+        <instance name="FrontWinUpperL"  definition="window_shuttered" position="-4.5 5.45 -4.38"/>
+        <instance name="FrontWinUpperR"  definition="window_shuttered" position=" 0.8 5.45 -4.38"/>
+
+        <!-- Garage front -->
+        <instance name="GarageDoorMain" definition="garage_door" position="8.6 1.95 -3.92"/>
+        <instance name="GarageLamp"     definition="wall_lamp"   position="11.1 2.20 -3.70"/>
+
+        <!-- ========== Side Windows ========== -->
+        <instance name="WestWinGround1" definition="window_simple" position="-6.08 2.35 -1.8" rotation="0 90 0"/>
+        <instance name="WestWinGround2" definition="window_simple" position="-6.08 2.35  2.1" rotation="0 90 0"/>
+        <instance name="WestWinUpper1"  definition="window_simple" position="-5.50 5.30 -1.4" rotation="0 90 0"/>
+        <instance name="WestWinUpper2"  definition="window_simple" position="-5.50 5.30  2.0" rotation="0 90 0"/>
+
+        <instance name="EastWinGround1" definition="window_simple" position="5.50 2.35 -0.9" rotation="0 -90 0"/>
+        <instance name="EastWinGround2" definition="window_simple" position="5.50 2.35  2.4" rotation="0 -90 0"/>
+        <instance name="EastWinUpper1"  definition="window_simple" position="4.95 5.30 -0.4" rotation="0 -90 0"/>
+        <instance name="EastWinUpper2"  definition="window_simple" position="4.95 5.30  2.7" rotation="0 -90 0"/>
+
+        <!-- garage side -->
+        <instance name="GarageSideWin"  definition="window_simple" position="11.35 2.15 0.3" rotation="0 -90 0"/>
+
+        <!-- ========== Rear Windows ========== -->
+        <instance name="RearWinGroundL" definition="window_shuttered" position="-4.1 2.45 4.58" rotation="0 180 0"/>
+        <instance name="RearWinGroundC" definition="window_shuttered" position=" 0.7 2.45 4.58" rotation="0 180 0"/>
+        <instance name="RearWinGroundR" definition="window_simple"    position=" 4.8 2.35 4.53" rotation="0 180 0"/>
+        <instance name="RearWinUpperL"  definition="window_simple"    position="-4.0 5.30 4.33" rotation="0 180 0"/>
+        <instance name="RearWinUpperR"  definition="window_simple"    position=" 0.7 5.30 4.33" rotation="0 180 0"/>
+
+        <!-- rear door -->
+        <instance name="RearDoorLike" definition="front_door_assembly" position="3.0 1.82 4.60" rotation="0 180 0"/>
+
+        <!-- ========== Gutters / downspouts ========== -->
+        <cylinder name="GutterFront" radius="0.06" height="12.4" segments="8" position="0 6.16 -4.84" rotation="0 0 90" material="metal_dark"/>
+        <cylinder name="GutterBack"  radius="0.06" height="12.4" segments="8" position="0 6.16  4.84" rotation="0 0 90" material="metal_dark"/>
+
+        <cylinder name="DownspoutFL" radius="0.05" height="5.8" segments="8" position="-5.95 2.95 -4.86" material="metal_dark"/>
+        <cylinder name="DownspoutFR" radius="0.05" height="5.8" segments="8" position=" 5.95 2.95 -4.86" material="metal_dark"/>
+        <cylinder name="DownspoutBL" radius="0.05" height="5.8" segments="8" position="-5.95 2.95  4.86" material="metal_dark"/>
+        <cylinder name="DownspoutBR" radius="0.05" height="5.8" segments="8" position=" 5.95 2.95  4.86" material="metal_dark"/>
+
+        <!-- ========== Fences ========== -->
+        <instance name="FenceBack1" definition="fence_segment" position="-8.0 0.0 14.6"/>
+        <instance name="FenceBack2" definition="fence_segment" position="-6.0 0.0 14.6"/>
+        <instance name="FenceBack3" definition="fence_segment" position="-4.0 0.0 14.6"/>
+        <instance name="FenceBack4" definition="fence_segment" position="-2.0 0.0 14.6"/>
+        <instance name="FenceBack5" definition="fence_segment" position=" 0.0 0.0 14.6"/>
+        <instance name="FenceBack6" definition="fence_segment" position=" 2.0 0.0 14.6"/>
+        <instance name="FenceBack7" definition="fence_segment" position=" 4.0 0.0 14.6"/>
+        <instance name="FenceBack8" definition="fence_segment" position=" 6.0 0.0 14.6"/>
+        <instance name="FenceBack9" definition="fence_segment" position=" 8.0 0.0 14.6"/>
+
+        <instance name="FenceLeft1" definition="fence_segment" position="-10.0 0.0 12.6" rotation="0 90 0"/>
+        <instance name="FenceLeft2" definition="fence_segment" position="-10.0 0.0 10.6" rotation="0 90 0"/>
+        <instance name="FenceLeft3" definition="fence_segment" position="-10.0 0.0  8.6" rotation="0 90 0"/>
+        <instance name="FenceRight1" definition="fence_segment" position="10.0 0.0 12.6" rotation="0 90 0"/>
+        <instance name="FenceRight2" definition="fence_segment" position="10.0 0.0 10.6" rotation="0 90 0"/>
+        <instance name="FenceRight3" definition="fence_segment" position="10.0 0.0  8.6" rotation="0 90 0"/>
+
+        <!-- ========== Hedges ========== -->
+        <instance name="Hedge1" definition="hedge_segment" position="-7.2 0.0 -9.0"/>
+        <instance name="Hedge2" definition="hedge_segment" position="-4.8 0.0 -9.0"/>
+        <instance name="Hedge3" definition="hedge_segment" position="-2.4 0.0 -9.0"/>
+        <instance name="Hedge4" definition="hedge_segment" position=" 2.2 0.0 -9.0"/>
+
+        <!-- ========== Trees ========== -->
+        <instance name="TreeFrontLeft"  definition="tree_maple" position="-14.0 0.0 -8.0"/>
+        <instance name="TreeBackRight"  definition="tree_maple" position=" 15.0 0.0 10.0"/>
+        <instance name="TreeBackLeft"   definition="tree_maple" position="-15.5 0.0 11.0"/>
+
+        <!-- ========== Mailbox ========== -->
+        <instance name="MailboxMain" definition="mailbox" position="-6.5 0.0 -15.3"/>
+
+        <!-- ========== Simple outdoor furniture on patio ========== -->
+        <box name="PatioTableTop" size="1.4 0.08 1.4" position="1.6 0.78 10.5" material="wood_dark"/>
+        <cylinder name="PatioTableLeg" radius="0.09" height="0.72" segments="8" position="1.6 0.36 10.5" material="metal_dark"/>
+
+        <box name="Chair1Seat" size="0.52 0.08 0.52" position="0.5 0.46 9.5" material="wood_oak"/>
+        <box name="Chair1Back" size="0.52 0.62 0.08" position="0.5 0.79 9.24" material="wood_oak"/>
+        <box name="Chair2Seat" size="0.52 0.08 0.52" position="2.7 0.46 9.5" material="wood_oak"/>
+        <box name="Chair2Back" size="0.52 0.62 0.08" position="2.7 0.79 9.24" material="wood_oak"/>
+
+        <!-- ========== Subtle visible interior proxies ========== -->
+        <box name="LivingSofa" size="2.2 0.8 0.9" position="-1.6 1.15 -0.8" material="wood_dark"/>
+        <box name="KitchenIsland" size="1.8 0.95 0.9" position="2.5 1.05 1.8" material="concrete"/>
+        <sphere name="InteriorLamp1" radius="0.18" segments="10" position="-1.3 3.0 -0.4" material="interior_light_glow"/>
+        <sphere name="InteriorLamp2" radius="0.16" segments="10" position=" 2.5 2.9  1.8" material="interior_light_glow"/>
+        <sphere name="InteriorLamp3" radius="0.14" segments="10" position="-0.9 6.0  0.5" material="interior_light_glow"/>
+
+    </objects>
+</mc3>

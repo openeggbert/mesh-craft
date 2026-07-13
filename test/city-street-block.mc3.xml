@@ -1,0 +1,602 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  City Street Block Showcase
+  MC3 format v0.3
+  Front = -Z, Right = +X, Up = +Y
+-->
+<mc3 version="0.3" model="CityStreetBlock" unit="meter">
+
+  <environment>
+    <background color="0.58 0.74 0.92"/>
+    <fog mode="linear" color="0.70 0.78 0.88" start="140" end="340"/>
+  </environment>
+
+  <lights>
+    <ambient color="0.34 0.38 0.45" brightness="0.42"/>
+    <directional name="Sun" color="1.0 0.96 0.88" brightness="3.4"
+                 direction="-0.42 -1.0 0.28" cast_shadows="true"/>
+    <point name="ShopGlow1" color="1.0 0.82 0.58" brightness="3.2" position="-10 3.1 -6.6" range="10"/>
+    <point name="CafeGlow"  color="1.0 0.84 0.62" brightness="3.2" position="11 3.2 -6.0" range="10"/>
+    <point name="OfficeGlow" color="0.92 0.96 1.0" brightness="2.2" position="10 6 8" range="12"/>
+    <point name="SignalCornerNW" color="1.0 0.16 0.16" brightness="2.2" position="-6.8 4.9 -6.8" range="3"/>
+    <point name="SignalCornerSE" color="0.16 1.0 0.24" brightness="2.2" position="6.8 4.1 6.8" range="3"/>
+  </lights>
+
+  <cameras>
+    <camera name="StreetView"  position="0 3.4 -28" target="0 3 0" fov="44"/>
+    <camera name="Crosswalk"   position="-11 2.4 -9" target="0 2.5 0" fov="52"/>
+    <camera name="Aerial"      position="24 20 -26" target="0 4 0" fov="42"/>
+    <camera name="CornerView"  position="16 3.1 12" target="4 3.4 2" fov="46"/>
+    <camera name="SideStreet"  position="-24 2.9 1" target="0 3 1" fov="48"/>
+  </cameras>
+
+  <textures>
+    <texture id="tex_asphalt"      uri="textures/asphalt.png" filter="linear"/>
+    <texture id="tex_concrete"     uri="textures/concrete.png" filter="linear"/>
+    <texture id="tex_brick_red"    uri="textures/brick_red_brown.png" filter="linear"/>
+    <texture id="tex_brick_grey"   uri="textures/stone_grey.png" filter="linear"/>
+    <texture id="tex_stucco_beige" uri="textures/stucco_beige.png" filter="linear"/>
+    <texture id="tex_glass"        uri="textures/water.png" filter="linear"/>
+    <texture id="tex_wood_dark"    uri="textures/wood_dark.png" filter="linear"/>
+    <texture id="tex_wood_light"   uri="textures/wood_light.png" filter="linear"/>
+    <texture id="tex_roof_slate"   uri="textures/roof_slate.png" filter="linear"/>
+    <texture id="tex_bark"         uri="textures/bark.png" filter="linear"/>
+    <texture id="tex_leaves"       uri="textures/oak_leaves.png" filter="linear"/>
+    <texture id="tex_grass"        uri="textures/grass.png" filter="linear"/>
+    <texture id="tex_iron"         uri="textures/iron.png" filter="linear"/>
+  </textures>
+
+  <materials>
+    <material id="asphalt" roughness="0.92" metallic="0.0">
+      <base_color>0.18 0.19 0.20 1.0</base_color>
+      <base_color_texture>tex_asphalt</base_color_texture>
+    </material>
+    <material id="concrete" roughness="0.88" metallic="0.0">
+      <base_color>0.70 0.70 0.70 1.0</base_color>
+      <base_color_texture>tex_concrete</base_color_texture>
+    </material>
+    <material id="curb" roughness="0.88" metallic="0.0">
+      <base_color>0.76 0.76 0.76 1.0</base_color>
+      <base_color_texture>tex_concrete</base_color_texture>
+    </material>
+    <material id="road_marking" roughness="0.78" metallic="0.0">
+      <base_color>0.97 0.96 0.92 1.0</base_color>
+    </material>
+    <material id="road_marking_yellow" roughness="0.78" metallic="0.0">
+      <base_color>0.96 0.82 0.08 1.0</base_color>
+    </material>
+    <material id="signal_pole" roughness="0.40" metallic="0.9">
+      <base_color>0.18 0.18 0.20 1.0</base_color>
+      <base_color_texture>tex_iron</base_color_texture>
+    </material>
+    <material id="signal_housing" roughness="0.42" metallic="0.9">
+      <base_color>0.12 0.12 0.12 1.0</base_color>
+    </material>
+    <material id="signal_red" roughness="0.20" metallic="0.0">
+      <base_color>1.0 0.16 0.16 1.0</base_color>
+      <emissive_color>2.2 0.15 0.15</emissive_color>
+    </material>
+    <material id="signal_yellow" roughness="0.20" metallic="0.0">
+      <base_color>1.0 0.82 0.10 1.0</base_color>
+      <emissive_color>1.8 1.2 0.08</emissive_color>
+    </material>
+    <material id="signal_green" roughness="0.20" metallic="0.0">
+      <base_color>0.18 1.0 0.24 1.0</base_color>
+      <emissive_color>0.20 1.8 0.22</emissive_color>
+    </material>
+    <material id="ped_signal_white" roughness="0.20" metallic="0.0">
+      <base_color>0.98 0.98 0.98 1.0</base_color>
+      <emissive_color>1.8 1.8 1.8</emissive_color>
+    </material>
+    <material id="ped_signal_orange" roughness="0.20" metallic="0.0">
+      <base_color>1.0 0.58 0.10 1.0</base_color>
+      <emissive_color>2.0 0.8 0.1</emissive_color>
+    </material>
+    <material id="shop_brick" roughness="0.88" metallic="0.0">
+      <base_color>0.56 0.28 0.22 1.0</base_color>
+      <base_color_texture>tex_brick_red</base_color_texture>
+    </material>
+    <material id="apt_stucco" roughness="0.90" metallic="0.0">
+      <base_color>0.84 0.78 0.70 1.0</base_color>
+      <base_color_texture>tex_stucco_beige</base_color_texture>
+    </material>
+    <material id="office_grey" roughness="0.86" metallic="0.0">
+      <base_color>0.62 0.64 0.68 1.0</base_color>
+      <base_color_texture>tex_brick_grey</base_color_texture>
+    </material>
+    <material id="trim_white" roughness="0.76" metallic="0.0">
+      <base_color>0.95 0.95 0.94 1.0</base_color>
+    </material>
+    <material id="dark_frame" roughness="0.74" metallic="0.0">
+      <base_color>0.20 0.20 0.22 1.0</base_color>
+    </material>
+    <material id="glass" roughness="0.04" metallic="0.04" alpha_mode="blend">
+      <base_color>0.68 0.82 1.0 0.28</base_color>
+      <base_color_texture>tex_glass</base_color_texture>
+    </material>
+    <material id="shop_glass" roughness="0.05" metallic="0.06" alpha_mode="blend">
+      <base_color>0.72 0.88 1.0 0.22</base_color>
+    </material>
+    <material id="awning_red" roughness="0.76" metallic="0.0">
+      <base_color>0.82 0.18 0.16 1.0</base_color>
+    </material>
+    <material id="awning_blue" roughness="0.76" metallic="0.0">
+      <base_color>0.20 0.32 0.78 1.0</base_color>
+    </material>
+    <material id="wood_dark" roughness="0.80" metallic="0.0">
+      <base_color>0.28 0.18 0.10 1.0</base_color>
+      <base_color_texture>tex_wood_dark</base_color_texture>
+    </material>
+    <material id="wood_light" roughness="0.78" metallic="0.0">
+      <base_color>0.58 0.42 0.22 1.0</base_color>
+      <base_color_texture>tex_wood_light</base_color_texture>
+    </material>
+    <material id="roof_slate" roughness="0.82" metallic="0.0">
+      <base_color>0.24 0.24 0.28 1.0</base_color>
+      <base_color_texture>tex_roof_slate</base_color_texture>
+    </material>
+    <material id="tree_bark" roughness="0.90" metallic="0.0">
+      <base_color>0.30 0.20 0.10 1.0</base_color>
+      <base_color_texture>tex_bark</base_color_texture>
+    </material>
+    <material id="leaf_green" roughness="0.88" metallic="0.0">
+      <base_color>0.18 0.48 0.16 1.0</base_color>
+      <base_color_texture>tex_leaves</base_color_texture>
+    </material>
+    <material id="grass" roughness="0.94" metallic="0.0">
+      <base_color>0.22 0.52 0.18 1.0</base_color>
+      <base_color_texture>tex_grass</base_color_texture>
+    </material>
+    <material id="soil" roughness="0.94" metallic="0.0">
+      <base_color>0.38 0.28 0.18 1.0</base_color>
+    </material>
+    <material id="car_red" roughness="0.42" metallic="0.50">
+      <base_color>0.78 0.12 0.12 1.0</base_color>
+    </material>
+    <material id="car_blue" roughness="0.42" metallic="0.50">
+      <base_color>0.14 0.26 0.72 1.0</base_color>
+    </material>
+    <material id="car_white" roughness="0.40" metallic="0.40">
+      <base_color>0.94 0.94 0.95 1.0</base_color>
+    </material>
+    <material id="car_grey" roughness="0.42" metallic="0.46">
+      <base_color>0.60 0.62 0.66 1.0</base_color>
+    </material>
+    <material id="tire" roughness="0.94" metallic="0.0">
+      <base_color>0.08 0.08 0.08 1.0</base_color>
+    </material>
+    <material id="wheel" roughness="0.50" metallic="0.84">
+      <base_color>0.74 0.74 0.74 1.0</base_color>
+    </material>
+    <material id="lamp_glow" roughness="0.18" metallic="0.0" alpha_mode="blend">
+      <base_color>1.0 0.92 0.62 0.90</base_color>
+      <emissive_color>2.0 1.5 0.4</emissive_color>
+    </material>
+    <material id="bench_metal" roughness="0.42" metallic="0.84">
+      <base_color>0.20 0.20 0.20 1.0</base_color>
+    </material>
+    <material id="bench_wood" roughness="0.76" metallic="0.0">
+      <base_color>0.54 0.38 0.18 1.0</base_color>
+    </material>
+    <material id="bollard" roughness="0.44" metallic="0.86">
+      <base_color>0.16 0.16 0.17 1.0</base_color>
+    </material>
+    <material id="sign_blue" roughness="0.64" metallic="0.0">
+      <base_color>0.12 0.30 0.86 1.0</base_color>
+    </material>
+    <material id="sign_white" roughness="0.72" metallic="0.0">
+      <base_color>0.96 0.96 0.96 1.0</base_color>
+    </material>
+  </materials>
+
+  <definitions>
+
+    <definition id="window_modern">
+      <group name="WindowModern">
+        <box name="Frame" size="1.52 1.72 0.12" position="0 0 0" material="dark_frame"/>
+        <box name="Glass" size="1.28 1.46 0.03" position="0 0 0.05" material="glass"/>
+        <box name="MullionV" size="0.06 1.46 0.04" position="0 0 0.07" material="trim_white"/>
+        <box name="MullionH" size="1.28 0.06 0.04" position="0 0 0.07" material="trim_white"/>
+        <box name="Sill" size="1.62 0.10 0.12" position="0 -0.90 0" material="trim_white"/>
+      </group>
+    </definition>
+
+    <definition id="shop_window">
+      <group name="ShopWindow">
+        <box name="FrameL" size="0.16 2.70 0.12" position="-1.70 0 0" material="dark_frame"/>
+        <box name="FrameR" size="0.16 2.70 0.12" position="1.70 0 0" material="dark_frame"/>
+        <box name="FrameT" size="3.56 0.16 0.12" position="0 1.27 0" material="dark_frame"/>
+        <box name="FrameB" size="3.56 0.16 0.12" position="0 -1.27 0" material="dark_frame"/>
+        <box name="Glass"  size="3.32 2.42 0.04" position="0 0 0.05" material="shop_glass"/>
+      </group>
+    </definition>
+
+    <definition id="entry_door">
+      <group name="EntryDoor">
+        <box name="Frame" size="1.36 2.48 0.12" position="0 0 0" material="trim_white"/>
+        <box name="Door"  size="1.00 2.12 0.08" position="0 0 0.04" material="wood_dark"/>
+        <box name="Glass" size="0.58 0.62 0.03" position="0 0.52 0.08" material="glass"/>
+        <sphere name="Knob" radius="0.05" segments="8" position="0.30 -0.10 0.08" material="signal_pole"/>
+      </group>
+    </definition>
+
+    <definition id="street_lamp">
+      <group name="StreetLamp">
+        <cylinder name="Post" radius="0.08" height="4.2" segments="10" position="0 2.1 0" material="signal_pole"/>
+        <box name="Arm" size="0.58 0.08 0.08" position="0.28 3.9 0" material="signal_pole"/>
+        <cylinder name="Head" radius="0.18" height="0.36" segments="8" position="0.58 3.70 0" material="signal_pole"/>
+        <sphere name="Glow" radius="0.14" segments="8" position="0.58 3.70 0" material="lamp_glow"/>
+      </group>
+    </definition>
+
+    <definition id="traffic_light_vehicle_red">
+      <group name="TrafficLightVehicleRed">
+        <cylinder name="Pole" radius="0.08" height="4.8" segments="10" position="0 2.4 0" material="signal_pole"/>
+        <box name="Base" size="0.34 0.20 0.34" position="0 0.10 0" material="signal_pole"/>
+        <box name="Arm" size="2.2 0.10 0.10" position="1.10 4.55 0" material="signal_pole"/>
+        <box name="Housing" size="0.34 0.94 0.30" position="2.18 4.30 0" material="signal_housing"/>
+        <sphere name="Red"    radius="0.10" segments="8" position="2.18 4.58 0.16" material="signal_red"/>
+        <sphere name="Yellow" radius="0.10" segments="8" position="2.18 4.30 0.16" material="signal_housing"/>
+        <sphere name="Green"  radius="0.10" segments="8" position="2.18 4.02 0.16" material="signal_housing"/>
+      </group>
+    </definition>
+
+    <definition id="traffic_light_vehicle_green">
+      <group name="TrafficLightVehicleGreen">
+        <cylinder name="Pole" radius="0.08" height="4.8" segments="10" position="0 2.4 0" material="signal_pole"/>
+        <box name="Base" size="0.34 0.20 0.34" position="0 0.10 0" material="signal_pole"/>
+        <box name="Arm" size="2.2 0.10 0.10" position="1.10 4.55 0" material="signal_pole"/>
+        <box name="Housing" size="0.34 0.94 0.30" position="2.18 4.30 0" material="signal_housing"/>
+        <sphere name="Red"    radius="0.10" segments="8" position="2.18 4.58 0.16" material="signal_housing"/>
+        <sphere name="Yellow" radius="0.10" segments="8" position="2.18 4.30 0.16" material="signal_housing"/>
+        <sphere name="Green"  radius="0.10" segments="8" position="2.18 4.02 0.16" material="signal_green"/>
+      </group>
+    </definition>
+
+    <definition id="ped_signal_walk">
+      <group name="PedSignalWalk">
+        <cylinder name="Pole" radius="0.06" height="3.3" segments="8" position="0 1.65 0" material="signal_pole"/>
+        <box name="Box" size="0.34 0.48 0.16" position="0 2.65 0" material="signal_housing"/>
+        <box name="Lit" size="0.22 0.28 0.04" position="0 2.65 0.10" material="ped_signal_white"/>
+      </group>
+    </definition>
+
+    <definition id="ped_signal_stop">
+      <group name="PedSignalStop">
+        <cylinder name="Pole" radius="0.06" height="3.3" segments="8" position="0 1.65 0" material="signal_pole"/>
+        <box name="Box" size="0.34 0.48 0.16" position="0 2.65 0" material="signal_housing"/>
+        <box name="Lit" size="0.22 0.28 0.04" position="0 2.65 0.10" material="ped_signal_orange"/>
+      </group>
+    </definition>
+
+    <definition id="street_tree">
+      <group name="StreetTree">
+        <cylinder name="Trunk" radius="0.18" height="3.8" segments="10" position="0 1.9 0" material="tree_bark"/>
+        <sphere name="C1" radius="1.25" segments="12" position="0 4.5 0" material="leaf_green"/>
+        <sphere name="C2" radius="0.95" segments="10" position="-0.8 4.4 0.2" material="leaf_green"/>
+        <sphere name="C3" radius="0.90" segments="10" position="0.8 4.3 -0.2" material="leaf_green"/>
+      </group>
+    </definition>
+
+    <definition id="bench">
+      <group name="Bench">
+        <box name="Seat" size="1.40 0.08 0.38" position="0 0.46 0" material="bench_wood"/>
+        <box name="Back" size="1.40 0.08 0.38" position="0 0.84 -0.16" rotation="-14 0 0" material="bench_wood"/>
+        <box name="Leg1" size="0.08 0.46 0.34" position="-0.55 0.23 0" material="bench_metal"/>
+        <box name="Leg2" size="0.08 0.46 0.34" position="0.55 0.23 0" material="bench_metal"/>
+      </group>
+    </definition>
+
+    <definition id="bollard_def">
+      <group name="Bollard">
+        <cylinder name="Body" radius="0.09" height="0.90" segments="8" position="0 0.45 0" material="bollard"/>
+        <sphere name="Cap" radius="0.10" segments="8" position="0 0.92 0" material="bollard"/>
+      </group>
+    </definition>
+
+    <definition id="parking_sign">
+      <group name="ParkingSign">
+        <cylinder name="Pole" radius="0.04" height="2.3" segments="8" position="0 1.15 0" material="signal_pole"/>
+        <box name="Panel" size="0.54 0.70 0.05" position="0 2.0 0" material="sign_blue"/>
+        <box name="Stripe" size="0.34 0.08 0.02" position="0 2.10 0.04" material="sign_white"/>
+        <box name="Stem" size="0.08 0.28 0.02" position="0 1.92 0.04" material="sign_white"/>
+      </group>
+    </definition>
+
+    <definition id="sedan_red">
+      <group name="SedanRed">
+        <box name="BodyLower" size="3.90 0.72 1.82" position="0 0.54 0" material="car_red"/>
+        <box name="BodyUpper" size="2.10 0.62 1.58" position="-0.10 1.10 0" material="car_red"/>
+        <box name="Hood" size="1.10 0.24 1.54" position="1.40 1.00 0" rotation="8 0 0" material="car_red"/>
+        <box name="Rear" size="0.82 0.30 1.50" position="-1.52 1.02 0" rotation="-10 0 0" material="car_red"/>
+        <box name="Windshield" size="0.64 0.36 1.44" position="0.65 1.25 0" rotation="-34 0 0" material="glass"/>
+        <box name="RearGlass" size="0.50 0.28 1.38" position="-0.92 1.24 0" rotation="34 0 0" material="glass"/>
+        <box name="SideGlassL" size="1.14 0.34 0.03" position="-0.12 1.22 -0.71" material="glass"/>
+        <box name="SideGlassR" size="1.14 0.34 0.03" position="-0.12 1.22 0.71" material="glass"/>
+        <cylinder name="WheelFL" radius="0.34" height="0.20" segments="14" position="1.10 0.34 -0.82" rotation="90 0 0" material="tire"/>
+        <cylinder name="WheelFR" radius="0.34" height="0.20" segments="14" position="1.10 0.34 0.82" rotation="90 0 0" material="tire"/>
+        <cylinder name="WheelRL" radius="0.34" height="0.20" segments="14" position="-1.12 0.34 -0.82" rotation="90 0 0" material="tire"/>
+        <cylinder name="WheelRR" radius="0.34" height="0.20" segments="14" position="-1.12 0.34 0.82" rotation="90 0 0" material="tire"/>
+        <sphere name="HeadL" radius="0.09" segments="8" position="1.92 0.72 -0.48" material="trim_white"/>
+        <sphere name="HeadR" radius="0.09" segments="8" position="1.92 0.72 0.48" material="trim_white"/>
+      </group>
+    </definition>
+
+    <definition id="hatchback_blue">
+      <group name="HatchbackBlue">
+        <box name="BodyLower" size="3.45 0.70 1.76" position="0 0.52 0" material="car_blue"/>
+        <box name="BodyUpper" size="1.90 0.70 1.54" position="-0.12 1.10 0" material="car_blue"/>
+        <box name="FrontGlass" size="0.60 0.36 1.34" position="0.70 1.24 0" rotation="-34 0 0" material="glass"/>
+        <box name="RearGlass" size="0.62 0.50 1.36" position="-1.02 1.18 0" rotation="40 0 0" material="glass"/>
+        <box name="SideGlassL" size="0.92 0.36 0.03" position="-0.05 1.20 -0.68" material="glass"/>
+        <box name="SideGlassR" size="0.92 0.36 0.03" position="-0.05 1.20 0.68" material="glass"/>
+        <cylinder name="WheelFL" radius="0.32" height="0.18" segments="14" position="0.98 0.32 -0.78" rotation="90 0 0" material="tire"/>
+        <cylinder name="WheelFR" radius="0.32" height="0.18" segments="14" position="0.98 0.32 0.78" rotation="90 0 0" material="tire"/>
+        <cylinder name="WheelRL" radius="0.32" height="0.18" segments="14" position="-0.92 0.32 -0.78" rotation="90 0 0" material="tire"/>
+        <cylinder name="WheelRR" radius="0.32" height="0.18" segments="14" position="-0.92 0.32 0.78" rotation="90 0 0" material="tire"/>
+      </group>
+    </definition>
+
+    <definition id="van_white">
+      <group name="VanWhite">
+        <box name="Body" size="4.60 1.42 1.96" position="0 0.90 0" material="car_white"/>
+        <box name="CabRoof" size="2.00 0.24 1.82" position="0.38 1.74 0" material="car_white"/>
+        <box name="FrontGlass" size="0.66 0.48 1.46" position="1.46 1.46 0" rotation="-30 0 0" material="glass"/>
+        <box name="SideGlassL" size="0.64 0.34 0.03" position="1.10 1.30 -0.76" material="glass"/>
+        <box name="SideGlassR" size="0.64 0.34 0.03" position="1.10 1.30 0.76" material="glass"/>
+        <cylinder name="WheelFL" radius="0.36" height="0.20" segments="14" position="1.36 0.36 -0.88" rotation="90 0 0" material="tire"/>
+        <cylinder name="WheelFR" radius="0.36" height="0.20" segments="14" position="1.36 0.36 0.88" rotation="90 0 0" material="tire"/>
+        <cylinder name="WheelRL" radius="0.36" height="0.20" segments="14" position="-1.36 0.36 -0.88" rotation="90 0 0" material="tire"/>
+        <cylinder name="WheelRR" radius="0.36" height="0.20" segments="14" position="-1.36 0.36 0.88" rotation="90 0 0" material="tire"/>
+      </group>
+    </definition>
+
+  </definitions>
+
+  <objects>
+
+    <!-- Ground and streets -->
+    <plane name="Ground" size="90 90" axis="y" position="0 0 0" material="grass"/>
+
+    <box name="MainRoad"  size="12 0.08 60" position="0 0.04 0" material="asphalt"/>
+    <box name="CrossRoad" size="46 0.08 12" position="0 0.04 0" material="asphalt"/>
+
+    <!-- Sidewalk slabs -->
+    <box name="SidewalkNorthWest" size="17 0.14 17" position="-14.5 0.07 -14.5" material="concrete"/>
+    <box name="SidewalkNorthEast" size="17 0.14 17" position="14.5 0.07 -14.5" material="concrete"/>
+    <box name="SidewalkSouthWest" size="17 0.14 17" position="-14.5 0.07 14.5" material="concrete"/>
+    <box name="SidewalkSouthEast" size="17 0.14 17" position="14.5 0.07 14.5" material="concrete"/>
+    <box name="SidewalkNorthRoadL" size="17 0.14 6" position="-14.5 0.07 -27" material="concrete"/>
+    <box name="SidewalkNorthRoadR" size="17 0.14 6" position="14.5 0.07 -27" material="concrete"/>
+    <box name="SidewalkSouthRoadL" size="17 0.14 6" position="-14.5 0.07 27" material="concrete"/>
+    <box name="SidewalkSouthRoadR" size="17 0.14 6" position="14.5 0.07 27" material="concrete"/>
+    <box name="SidewalkWestArmN" size="6 0.14 17" position="-27 0.07 -14.5" material="concrete"/>
+    <box name="SidewalkWestArmS" size="6 0.14 17" position="-27 0.07 14.5" material="concrete"/>
+    <box name="SidewalkEastArmN" size="6 0.14 17" position="27 0.07 -14.5" material="concrete"/>
+    <box name="SidewalkEastArmS" size="6 0.14 17" position="27 0.07 14.5" material="concrete"/>
+
+    <!-- Curbs -->
+    <box name="CurbN1" size="34 0.22 0.34" position="0 0.11 -6.18" material="curb"/>
+    <box name="CurbS1" size="34 0.22 0.34" position="0 0.11 6.18" material="curb"/>
+    <box name="CurbW1" size="0.34 0.22 34" position="-6.18 0.11 0" material="curb"/>
+    <box name="CurbE1" size="0.34 0.22 34" position="6.18 0.11 0" material="curb"/>
+
+    <!-- Crosswalks -->
+    <box name="CrossN1" size="0.70 0.01 3.40" position="-2.6 0.09 -7.7" material="road_marking"/>
+    <box name="CrossN2" size="0.70 0.01 3.40" position="-1.3 0.09 -7.7" material="road_marking"/>
+    <box name="CrossN3" size="0.70 0.01 3.40" position=" 0.0 0.09 -7.7" material="road_marking"/>
+    <box name="CrossN4" size="0.70 0.01 3.40" position=" 1.3 0.09 -7.7" material="road_marking"/>
+    <box name="CrossN5" size="0.70 0.01 3.40" position=" 2.6 0.09 -7.7" material="road_marking"/>
+
+    <box name="CrossS1" size="0.70 0.01 3.40" position="-2.6 0.09 7.7" material="road_marking"/>
+    <box name="CrossS2" size="0.70 0.01 3.40" position="-1.3 0.09 7.7" material="road_marking"/>
+    <box name="CrossS3" size="0.70 0.01 3.40" position=" 0.0 0.09 7.7" material="road_marking"/>
+    <box name="CrossS4" size="0.70 0.01 3.40" position=" 1.3 0.09 7.7" material="road_marking"/>
+    <box name="CrossS5" size="0.70 0.01 3.40" position=" 2.6 0.09 7.7" material="road_marking"/>
+
+    <box name="CrossW1" size="3.40 0.01 0.70" position="-7.7 0.09 -2.6" material="road_marking"/>
+    <box name="CrossW2" size="3.40 0.01 0.70" position="-7.7 0.09 -1.3" material="road_marking"/>
+    <box name="CrossW3" size="3.40 0.01 0.70" position="-7.7 0.09 0.0"  material="road_marking"/>
+    <box name="CrossW4" size="3.40 0.01 0.70" position="-7.7 0.09 1.3"  material="road_marking"/>
+    <box name="CrossW5" size="3.40 0.01 0.70" position="-7.7 0.09 2.6"  material="road_marking"/>
+
+    <box name="CrossE1" size="3.40 0.01 0.70" position="7.7 0.09 -2.6" material="road_marking"/>
+    <box name="CrossE2" size="3.40 0.01 0.70" position="7.7 0.09 -1.3" material="road_marking"/>
+    <box name="CrossE3" size="3.40 0.01 0.70" position="7.7 0.09 0.0"  material="road_marking"/>
+    <box name="CrossE4" size="3.40 0.01 0.70" position="7.7 0.09 1.3"  material="road_marking"/>
+    <box name="CrossE5" size="3.40 0.01 0.70" position="7.7 0.09 2.6"  material="road_marking"/>
+
+    <!-- Lane lines -->
+    <box name="LaneMain1" size="0.18 0.01 3.0" position="0 0.09 -16" material="road_marking_yellow"/>
+    <box name="LaneMain2" size="0.18 0.01 3.0" position="0 0.09 -10" material="road_marking_yellow"/>
+    <box name="LaneMain3" size="0.18 0.01 3.0" position="0 0.09 10" material="road_marking_yellow"/>
+    <box name="LaneMain4" size="0.18 0.01 3.0" position="0 0.09 16" material="road_marking_yellow"/>
+    <box name="LaneCross1" size="3.0 0.01 0.18" position="-14 0.09 0" material="road_marking_yellow"/>
+    <box name="LaneCross2" size="3.0 0.01 0.18" position="-8 0.09 0" material="road_marking_yellow"/>
+    <box name="LaneCross3" size="3.0 0.01 0.18" position="8 0.09 0" material="road_marking_yellow"/>
+    <box name="LaneCross4" size="3.0 0.01 0.18" position="14 0.09 0" material="road_marking_yellow"/>
+
+    <!-- Street trees / planters -->
+    <box name="PlanterNW" size="2.6 0.16 2.6" position="-11 0.08 -11" material="soil"/>
+    <box name="PlanterNE" size="2.6 0.16 2.6" position="11 0.08 -11" material="soil"/>
+    <box name="PlanterSW" size="2.6 0.16 2.6" position="-11 0.08 11" material="soil"/>
+    <box name="PlanterSE" size="2.6 0.16 2.6" position="11 0.08 11" material="soil"/>
+    <instance name="TreeNW" definition="street_tree" position="-11 0.16 -11"/>
+    <instance name="TreeNE" definition="street_tree" position="11 0.16 -11"/>
+    <instance name="TreeSW" definition="street_tree" position="-11 0.16 11"/>
+    <instance name="TreeSE" definition="street_tree" position="11 0.16 11"/>
+
+    <!-- Traffic lights -->
+    <instance name="TL_NW" definition="traffic_light_vehicle_red" position="-6.8 0 -6.8"/>
+    <instance name="TL_NE" definition="traffic_light_vehicle_red" position="6.8 0 -6.8" rotation="0 90 0"/>
+    <instance name="TL_SW" definition="traffic_light_vehicle_green" position="-6.8 0 6.8" rotation="0 -90 0"/>
+    <instance name="TL_SE" definition="traffic_light_vehicle_green" position="6.8 0 6.8" rotation="0 180 0"/>
+    <instance name="Ped_NW" definition="ped_signal_stop" position="-5.7 0 -5.7" rotation="0 45 0"/>
+    <instance name="Ped_NE" definition="ped_signal_stop" position="5.7 0 -5.7" rotation="0 -45 0"/>
+    <instance name="Ped_SW" definition="ped_signal_walk" position="-5.7 0 5.7" rotation="0 135 0"/>
+    <instance name="Ped_SE" definition="ped_signal_walk" position="5.7 0 5.7" rotation="0 -135 0"/>
+
+    <!-- Street lamps -->
+    <instance name="Lamp1" definition="street_lamp" position="-19 0 -18"/>
+    <instance name="Lamp2" definition="street_lamp" position="19 0 -18" rotation="0 180 0"/>
+    <instance name="Lamp3" definition="street_lamp" position="-19 0 18"/>
+    <instance name="Lamp4" definition="street_lamp" position="19 0 18" rotation="0 180 0"/>
+    <instance name="Lamp5" definition="street_lamp" position="-29 0 -9"/>
+    <instance name="Lamp6" definition="street_lamp" position="29 0 9" rotation="0 180 0"/>
+
+    <!-- Benches and bollards -->
+    <instance name="BenchNW" definition="bench" position="-18 0 -10" rotation="0 90 0"/>
+    <instance name="BenchSE" definition="bench" position="18 0 10" rotation="0 -90 0"/>
+    <instance name="Bollard1" definition="bollard_def" position="-8.5 0 -9.3"/>
+    <instance name="Bollard2" definition="bollard_def" position="-9.3 0 -8.5"/>
+    <instance name="Bollard3" definition="bollard_def" position="8.5 0 9.3"/>
+    <instance name="Bollard4" definition="bollard_def" position="9.3 0 8.5"/>
+    <instance name="Sign1" definition="parking_sign" position="-22 0 7"/>
+    <instance name="Sign2" definition="parking_sign" position="22 0 -7"/>
+
+    <!-- Buildings: North-west corner shop building -->
+    <box name="NW_BldgBase" size="14 0.40 12" position="-15 0.20 -15" material="concrete"/>
+    <box name="NW_Ground"   size="14 4.2 12" position="-15 2.50 -15" material="shop_brick"/>
+    <box name="NW_Second"   size="14 3.8 12" position="-15 6.50 -15" material="apt_stucco"/>
+    <box name="NW_Third"    size="14 3.6 12" position="-15 10.20 -15" material="apt_stucco"/>
+    <box name="NW_Cornice"  size="14.4 0.24 12.4" position="-15 12.20 -15" material="trim_white"/>
+    <box name="NW_Roof"     size="14.8 0.26 12.8" position="-15 12.55 -15" material="roof_slate"/>
+    <instance name="NW_ShopWinA" definition="shop_window" position="-11.2 2.55 -8.95"/>
+    <instance name="NW_ShopWinB" definition="shop_window" position="-15.0 2.55 -8.95"/>
+    <instance name="NW_DoorFront" definition="entry_door" position="-18.6 2.20 -8.95"/>
+    <instance name="NW_SideShop" definition="shop_window" position="-8.95 2.55 -12.0" rotation="0 90 0"/>
+    <instance name="NW_SideDoor" definition="entry_door" position="-8.95 2.20 -18.2" rotation="0 90 0"/>
+    <box name="NW_AwningFront" size="11.2 0.20 1.8" position="-15 4.55 -8.1" rotation="-8 0 0" material="awning_red"/>
+    <box name="NW_AwningSide"  size="6.0 0.20 1.8" position="-8.1 4.55 -15.4" rotation="-8 90 0" material="awning_red"/>
+    <instance name="NW_Win2A" definition="window_modern" position="-11.8 6.6 -8.90"/>
+    <instance name="NW_Win2B" definition="window_modern" position="-15.0 6.6 -8.90"/>
+    <instance name="NW_Win2C" definition="window_modern" position="-18.2 6.6 -8.90"/>
+    <instance name="NW_Win3A" definition="window_modern" position="-11.8 10.1 -8.90"/>
+    <instance name="NW_Win3B" definition="window_modern" position="-15.0 10.1 -8.90"/>
+    <instance name="NW_Win3C" definition="window_modern" position="-18.2 10.1 -8.90"/>
+    <instance name="NW_SideWin2A" definition="window_modern" position="-8.90 6.6 -12.1" rotation="0 90 0"/>
+    <instance name="NW_SideWin2B" definition="window_modern" position="-8.90 6.6 -15.0" rotation="0 90 0"/>
+    <instance name="NW_SideWin2C" definition="window_modern" position="-8.90 6.6 -17.9" rotation="0 90 0"/>
+    <instance name="NW_SideWin3A" definition="window_modern" position="-8.90 10.1 -12.1" rotation="0 90 0"/>
+    <instance name="NW_SideWin3B" definition="window_modern" position="-8.90 10.1 -15.0" rotation="0 90 0"/>
+    <instance name="NW_SideWin3C" definition="window_modern" position="-8.90 10.1 -17.9" rotation="0 90 0"/>
+
+    <!-- Buildings: North-east cafe building -->
+    <box name="NE_BldgBase" size="13 0.40 12" position="15 0.20 -15" material="concrete"/>
+    <box name="NE_Ground"   size="13 4.0 12" position="15 2.40 -15" material="apt_stucco"/>
+    <box name="NE_Second"   size="13 3.7 12" position="15 6.25 -15" material="shop_brick"/>
+    <box name="NE_Third"    size="13 3.5 12" position="15 9.85 -15" material="shop_brick"/>
+    <box name="NE_Cornice"  size="13.4 0.24 12.4" position="15 11.78 -15" material="trim_white"/>
+    <box name="NE_Roof"     size="13.8 0.24 12.8" position="15 12.15 -15" material="roof_slate"/>
+    <instance name="NE_CafeWin1" definition="shop_window" position="12.0 2.45 -8.95"/>
+    <instance name="NE_CafeWin2" definition="shop_window" position="16.0 2.45 -8.95"/>
+    <instance name="NE_CafeDoor" definition="entry_door"  position="19.3 2.15 -8.95"/>
+    <box name="NE_Awning" size="11.0 0.18 1.7" position="15.2 4.25 -8.1" rotation="-8 0 0" material="awning_blue"/>
+    <instance name="NE_W2A" definition="window_modern" position="11.8 6.35 -8.90"/>
+    <instance name="NE_W2B" definition="window_modern" position="15.0 6.35 -8.90"/>
+    <instance name="NE_W2C" definition="window_modern" position="18.2 6.35 -8.90"/>
+    <instance name="NE_W3A" definition="window_modern" position="11.8 9.75 -8.90"/>
+    <instance name="NE_W3B" definition="window_modern" position="15.0 9.75 -8.90"/>
+    <instance name="NE_W3C" definition="window_modern" position="18.2 9.75 -8.90"/>
+    <instance name="NE_SideWinA" definition="window_modern" position="21.05 6.35 -12.1" rotation="0 -90 0"/>
+    <instance name="NE_SideWinB" definition="window_modern" position="21.05 6.35 -15.0" rotation="0 -90 0"/>
+    <instance name="NE_SideWinC" definition="window_modern" position="21.05 6.35 -17.9" rotation="0 -90 0"/>
+    <instance name="NE_SideWinD" definition="window_modern" position="21.05 9.75 -12.1" rotation="0 -90 0"/>
+    <instance name="NE_SideWinE" definition="window_modern" position="21.05 9.75 -15.0" rotation="0 -90 0"/>
+    <instance name="NE_SideWinF" definition="window_modern" position="21.05 9.75 -17.9" rotation="0 -90 0"/>
+
+    <!-- Buildings: South-west row building -->
+    <box name="SW_BldgBase" size="15 0.40 11" position="-15 0.20 15" material="concrete"/>
+    <box name="SW_Ground"   size="15 4.0 11" position="-15 2.40 15" material="office_grey"/>
+    <box name="SW_Second"   size="15 3.7 11" position="-15 6.25 15" material="apt_stucco"/>
+    <box name="SW_Third"    size="15 3.5 11" position="-15 9.85 15" material="apt_stucco"/>
+    <box name="SW_Roof"     size="15.6 0.24 11.6" position="-15 11.95 15" material="roof_slate"/>
+    <instance name="SW_Door1" definition="entry_door" position="-10.6 2.15 9.55"/>
+    <instance name="SW_Door2" definition="entry_door" position="-15.0 2.15 9.55"/>
+    <instance name="SW_Door3" definition="entry_door" position="-19.4 2.15 9.55"/>
+    <instance name="SW_WinG1" definition="window_modern" position="-12.8 2.45 9.55"/>
+    <instance name="SW_WinG2" definition="window_modern" position="-17.2 2.45 9.55"/>
+    <instance name="SW_Win2A" definition="window_modern" position="-10.8 6.35 9.55"/>
+    <instance name="SW_Win2B" definition="window_modern" position="-15.0 6.35 9.55"/>
+    <instance name="SW_Win2C" definition="window_modern" position="-19.2 6.35 9.55"/>
+    <instance name="SW_Win3A" definition="window_modern" position="-10.8 9.75 9.55"/>
+    <instance name="SW_Win3B" definition="window_modern" position="-15.0 9.75 9.55"/>
+    <instance name="SW_Win3C" definition="window_modern" position="-19.2 9.75 9.55"/>
+    <instance name="SW_SideA" definition="window_modern" position="-8.95 6.35 12.4" rotation="0 90 0"/>
+    <instance name="SW_SideB" definition="window_modern" position="-8.95 6.35 15.0" rotation="0 90 0"/>
+    <instance name="SW_SideC" definition="window_modern" position="-8.95 6.35 17.6" rotation="0 90 0"/>
+    <instance name="SW_SideD" definition="window_modern" position="-8.95 9.75 12.4" rotation="0 90 0"/>
+    <instance name="SW_SideE" definition="window_modern" position="-8.95 9.75 15.0" rotation="0 90 0"/>
+    <instance name="SW_SideF" definition="window_modern" position="-8.95 9.75 17.6" rotation="0 90 0"/>
+
+    <!-- Buildings: South-east office / mixed use -->
+    <box name="SE_BldgBase" size="16 0.40 12" position="15 0.20 15" material="concrete"/>
+    <box name="SE_Ground"   size="16 4.1 12" position="15 2.45 15" material="office_grey"/>
+    <box name="SE_Second"   size="16 3.9 12" position="15 6.45 15" material="office_grey"/>
+    <box name="SE_Third"    size="16 3.7 12" position="15 10.25 15" material="office_grey"/>
+    <box name="SE_Roof"     size="16.4 0.26 12.4" position="15 12.45 15" material="roof_slate"/>
+    <instance name="SE_Door" definition="entry_door" position="15.0 2.20 9.45"/>
+    <instance name="SE_GWin1" definition="window_modern" position="10.8 2.55 9.45"/>
+    <instance name="SE_GWin2" definition="window_modern" position="19.2 2.55 9.45"/>
+    <instance name="SE_2Win1" definition="window_modern" position="10.8 6.55 9.45"/>
+    <instance name="SE_2Win2" definition="window_modern" position="15.0 6.55 9.45"/>
+    <instance name="SE_2Win3" definition="window_modern" position="19.2 6.55 9.45"/>
+    <instance name="SE_3Win1" definition="window_modern" position="10.8 10.15 9.45"/>
+    <instance name="SE_3Win2" definition="window_modern" position="15.0 10.15 9.45"/>
+    <instance name="SE_3Win3" definition="window_modern" position="19.2 10.15 9.45"/>
+    <instance name="SE_SideA" definition="window_modern" position="21.05 6.55 12.2" rotation="0 -90 0"/>
+    <instance name="SE_SideB" definition="window_modern" position="21.05 6.55 15.0" rotation="0 -90 0"/>
+    <instance name="SE_SideC" definition="window_modern" position="21.05 6.55 17.8" rotation="0 -90 0"/>
+    <instance name="SE_SideD" definition="window_modern" position="21.05 10.15 12.2" rotation="0 -90 0"/>
+    <instance name="SE_SideE" definition="window_modern" position="21.05 10.15 15.0" rotation="0 -90 0"/>
+    <instance name="SE_SideF" definition="window_modern" position="21.05 10.15 17.8" rotation="0 -90 0"/>
+
+    <!-- More mid-block buildings along main road -->
+    <box name="NorthLeftMid" size="14 8.8 8" position="-15 4.4 -27" material="shop_brick"/>
+    <box name="NorthLeftRoof" size="14.4 0.24 8.4" position="-15 8.95 -27" material="roof_slate"/>
+    <instance name="NLM_D1" definition="entry_door" position="-18.8 2.2 -22.95"/>
+    <instance name="NLM_S1" definition="shop_window" position="-14.6 2.55 -22.95"/>
+    <instance name="NLM_S2" definition="shop_window" position="-10.8 2.55 -22.95"/>
+    <instance name="NLM_W2a" definition="window_modern" position="-18.0 6.2 -22.95"/>
+    <instance name="NLM_W2b" definition="window_modern" position="-14.6 6.2 -22.95"/>
+    <instance name="NLM_W2c" definition="window_modern" position="-11.2 6.2 -22.95"/>
+
+    <box name="NorthRightMid" size="14 8.8 8" position="15 4.4 -27" material="apt_stucco"/>
+    <box name="NorthRightRoof" size="14.4 0.24 8.4" position="15 8.95 -27" material="roof_slate"/>
+    <instance name="NRM_D1" definition="entry_door" position="11.0 2.2 -22.95"/>
+    <instance name="NRM_S1" definition="shop_window" position="15.0 2.55 -22.95"/>
+    <instance name="NRM_S2" definition="shop_window" position="18.8 2.55 -22.95"/>
+    <instance name="NRM_W2a" definition="window_modern" position="12.0 6.2 -22.95"/>
+    <instance name="NRM_W2b" definition="window_modern" position="15.4 6.2 -22.95"/>
+    <instance name="NRM_W2c" definition="window_modern" position="18.8 6.2 -22.95"/>
+
+    <box name="SouthLeftMid" size="14 8.6 8" position="-15 4.3 27" material="apt_stucco"/>
+    <box name="SouthLeftRoof" size="14.4 0.24 8.4" position="-15 8.75 27" material="roof_slate"/>
+    <instance name="SLM_D1" definition="entry_door" position="-18.8 2.2 22.95"/>
+    <instance name="SLM_S1" definition="shop_window" position="-14.6 2.55 22.95"/>
+    <instance name="SLM_S2" definition="shop_window" position="-10.8 2.55 22.95"/>
+    <instance name="SLM_W2a" definition="window_modern" position="-18.0 6.1 22.95"/>
+    <instance name="SLM_W2b" definition="window_modern" position="-14.6 6.1 22.95"/>
+    <instance name="SLM_W2c" definition="window_modern" position="-11.2 6.1 22.95"/>
+
+    <box name="SouthRightMid" size="14 8.6 8" position="15 4.3 27" material="shop_brick"/>
+    <box name="SouthRightRoof" size="14.4 0.24 8.4" position="15 8.75 27" material="roof_slate"/>
+    <instance name="SRM_D1" definition="entry_door" position="11.0 2.2 22.95"/>
+    <instance name="SRM_S1" definition="shop_window" position="15.0 2.55 22.95"/>
+    <instance name="SRM_S2" definition="shop_window" position="18.8 2.55 22.95"/>
+    <instance name="SRM_W2a" definition="window_modern" position="12.0 6.1 22.95"/>
+    <instance name="SRM_W2b" definition="window_modern" position="15.4 6.1 22.95"/>
+    <instance name="SRM_W2c" definition="window_modern" position="18.8 6.1 22.95"/>
+
+    <!-- Cars -->
+    <instance name="Car_StopNorth" definition="sedan_red" position="-2.2 0 -12.3" rotation="0 180 0"/>
+    <instance name="Car_GoSouth"   definition="hatchback_blue" position="2.2 0 12.0" rotation="0 0 0"/>
+    <instance name="Car_ParkWest1" definition="van_white" position="-20.5 0 3.8" rotation="0 90 0"/>
+    <instance name="Car_ParkWest2" definition="hatchback_blue" position="-20.5 0 -6.8" rotation="0 90 0"/>
+    <instance name="Car_ParkEast1" definition="sedan_red" position="20.5 0 -3.8" rotation="0 -90 0"/>
+    <instance name="Car_ParkEast2" definition="van_white" position="20.5 0 7.2" rotation="0 -90 0"/>
+    <instance name="Car_ParkSouth" definition="sedan_red" position="4.0 0 20.5" rotation="0 180 0"/>
+    <instance name="Car_ParkNorth" definition="hatchback_blue" position="-4.0 0 -20.5" rotation="0 0 0"/>
+
+  </objects>
+</mc3>
