@@ -253,6 +253,14 @@ if(BUILD_TESTING)
     add_test(NAME mc3_validation COMMAND mc3_validation_test)
     set_tests_properties(mc3_validation PROPERTIES TIMEOUT 15 LABELS "format")
 
+    # SYS-W1-01: Mc3Document::validate() -- the pre-render/pre-export/save
+    # integration points, for documents that never went through a parser
+    # load at all (built programmatically, or mutated in place afterward).
+    add_executable(mc3_document_validate_test test/document_validate_test.cpp)
+    target_link_libraries(mc3_document_validate_test PRIVATE Mc3)
+    add_test(NAME mc3_document_validate COMMAND mc3_document_validate_test)
+    set_tests_properties(mc3_document_validate PROPERTIES TIMEOUT 15 LABELS "format")
+
     # SYS-W1-04: duplicate object ids -- proves the current (safe,
     # non-crashing, non-data-losing) library-level behavior; see the test
     # file's header comment for why this is a documented judgment call and

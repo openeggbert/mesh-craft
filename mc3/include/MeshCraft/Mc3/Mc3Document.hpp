@@ -155,6 +155,21 @@ public:
     // Save to XML
     void saveToFile(const std::filesystem::path& path) const;
 
+    // SYS-W1-01: re-validates this document's CURRENT in-memory state --
+    // useful right before an expensive/consequential operation (export,
+    // save, first render of a newly-swapped-in document) on a document that
+    // may have been built programmatically (e.g. a world generator using the
+    // builder methods below) or mutated in place after loading (e.g. editor
+    // UI edits), neither of which goes through Mc3XmlParser's load-time
+    // checks. Implemented by round-tripping through the same XML writer/
+    // parser the validating loadFromFile/loadFromString overloads above use
+    // (see Mc3Document.cpp), so it reports exactly the diagnostics a fresh
+    // load of this content would produce. Never throws -- a revalidation
+    // failure is itself reported as an error entry, not propagated, since
+    // this is a diagnostic side-channel, not a gate. O(document size): not
+    // free, so callers should not run it once per frame.
+    void validate(Mc3Validation& validation) const;
+
     // Save to mc3.json (R109).
     void saveToJsonFile(const std::filesystem::path& path) const;
 

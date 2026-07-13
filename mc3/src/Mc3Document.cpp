@@ -5,9 +5,26 @@
 #include "Mc3JsonParser.hpp"
 #include "Mc3JsonWriter.hpp"
 
+#include <filesystem>
+#include <fstream>
+#include <random>
+#include <sstream>
 #include <stdexcept>
 
 namespace MeshCraft::Mc3 {
+
+namespace {
+// Self-contained temp-path helper for Mc3Document::validate() below. Not
+// reusing include/MeshCraft/TempFile.hpp's uniqueTempPath() -- that header
+// lives on the main editor's include path, and mc3/ must stay buildable
+// standalone (CNA-free), so it deliberately does not depend on it.
+std::filesystem::path uniqueValidationTempPath() {
+    thread_local std::mt19937_64 rng{std::random_device{}()};
+    std::ostringstream oss;
+    oss << "mc3_validate_" << std::hex << rng() << ".mc3.xml";
+    return std::filesystem::temp_directory_path() / oss.str();
+}
+} // namespace
 
 Mc3Document Mc3Document::loadFromFile(const std::filesystem::path& path) {
     return loadFromFile(path, Mc3LoadPolicy::trusted());
@@ -44,6 +61,36 @@ Mc3Document Mc3Document::loadFromString(const std::string& xml,
 void Mc3Document::saveToFile(const std::filesystem::path& path) const {
     Internal::Mc3XmlWriter writer;
     writer.write(*this, path);
+}
+
+void Mc3Document::validate(Mc3Validation& validation) const {
+    std::filesystem::path tmp = uniqueValidationTempPath();
+    try {
+        saveToFile(tmp);
+        std::string xml;
+        {
+            std::ifstream f(tmp, std::ios::binary);
+            xml.assign(std::istreambuf_iterator<char>(f), std::istreambuf_iterator<char>());
+        }
+        std::error_code ec;
+        std::filesystem::remove(tmp, ec);
+        try {
+            // sourcePath doubles as the source DIRECTORY here (see its own
+            // field comment) so relative <include>/resource paths resolve
+            // against the ORIGINAL document's directory, not tmp's.
+            (void)loadFromString(xml, sourcePath, Mc3LoadPolicy::trusted(), validation);
+        } catch (const std::exception&) {
+            // A hard rejection already recorded its own entry into
+            // `validation` before throwing (Mc3Validation.hpp's design
+            // note) -- swallow it here since validate() is diagnostic-only
+            // and must never block the caller's real save/export/render.
+        }
+    } catch (const std::exception& ex) {
+        std::error_code ec;
+        std::filesystem::remove(tmp, ec);
+        validation.addError({}, {}, {},
+                             std::string("could not revalidate document: ") + ex.what());
+    }
 }
 
 // --- R109 -- mc3.json counterparts --------------------------------------
