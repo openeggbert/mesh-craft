@@ -567,6 +567,25 @@ if(MESH_CRAFT_BUILD_TESTING AND UNIX AND NOT ANDROID AND NOT EMSCRIPTEN)
     add_test(NAME active_tool COMMAND active_tool_test)
     set_tests_properties(active_tool PROPERTIES TIMEOUT 15 LABELS "unit")
 
+    # SYS-W3-01: Editor::KeybindingManager, extracted from
+    # MeshCraftApplication (H9). No test existed for this subsystem before
+    # the extraction. Needs real Microsoft::Xna::Framework::Input::Keys/
+    # KeyboardState (CNA), so unlike active_tool_test/object_type_name_test
+    # above it links CNA + SHARP_RUNTIME (SDL3 comes in transitively via CNA
+    # on this native, non-Emscripten path -- see the "Link" section below for
+    # why SDL3 isn't named explicitly here) -- but not Mc3/Mcb/
+    # mc3togltf_lib/imgui, which this subsystem has no dependency on.
+    add_executable(keybinding_manager_test
+        ${CMAKE_CURRENT_SOURCE_DIR}/test/keybinding_manager_test.cpp
+        ${CMAKE_CURRENT_SOURCE_DIR}/src/MeshCraft/Editor/KeybindingManager.cpp)
+    target_include_directories(keybinding_manager_test PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/include)
+    target_link_libraries(keybinding_manager_test PRIVATE
+        CNA ${_cna_backend_target} SHARP_RUNTIME)
+    target_compile_features(keybinding_manager_test PRIVATE cxx_std_23)
+    add_test(NAME keybinding_manager COMMAND keybinding_manager_test)
+    set_tests_properties(keybinding_manager PROPERTIES TIMEOUT 15 LABELS "unit")
+
     # Pure unit test: ObjectType <-> display-name round-trip. Header-only.
     # Regression guard for the Torus/Capsule/Disk/Grid/IcoSphere -> "Object"
     # mislabel and the lossy macro round-trip.

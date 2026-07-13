@@ -1527,13 +1527,15 @@ inline void insertAnimKeyframesAlg(
 
 // ── Keybinding persistence format (STAB-0286) ─────────────────────────────────
 //
-// Mirrors the persistence format used by KeyBind::toString()/fromString() and
-// loadKeybindings()/saveKeybindings() (MeshCraftApplication_Keybindings.cpp):
-// each binding serializes as "id=[ctrl+][shift+][alt+]KEYNAME" (or an empty
-// value when unbound), one "id=value" line per binding; loading re-parses the
-// same tokens case-insensitively and only overwrites ids present in the file
-// (an id absent from the file keeps its pre-load — i.e. default — value, the
-// same merge behavior `initDefaultBindings()` + `loadKeybindings()` produce
+// Mirrors the persistence format used by Editor::KeyBind::toString()/
+// fromString() and Editor::KeybindingManager::load()/save() (SYS-W3-01:
+// relocated from MeshCraftApplication_Keybindings.cpp into
+// MeshCraft/Editor/KeybindingManager.{hpp,cpp}): each binding serializes as
+// "id=[ctrl+][shift+][alt+]KEYNAME" (or an empty value when unbound), one
+// "id=value" line per binding; loading re-parses the same tokens
+// case-insensitively and only overwrites ids present in the file (an id
+// absent from the file keeps its pre-load — i.e. default — value, the same
+// merge behavior `KeybindingManager::initDefaults()` + `load()` produce
 // together in the real code). Uses its own small key-name table — distinct
 // from the real `Keys::` enum, which lives in CNA and can't be included here
 // — because what's under test is the tokenize/join *format*, not any

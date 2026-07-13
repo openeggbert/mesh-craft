@@ -5,6 +5,7 @@
 #include "MeshCraft/Editor/ActiveTool.hpp"
 #include "MeshCraft/Editor/EditorCamera.hpp"
 #include "MeshCraft/Editor/EditorTool.hpp"
+#include "MeshCraft/Editor/KeybindingManager.hpp"
 #include "MeshCraft/Editor/SelectionManager.hpp"
 #include "MeshCraft/Editor/TransformGizmo.hpp"
 #include "MeshCraft/Mc3/Mc3Animation.hpp"
@@ -48,14 +49,8 @@ struct MacroStep {
     std::vector<std::string> args;
 };
 
-// H9: customizable key binding
-struct KeyBind {
-    bool ctrl{false}, shift{false}, alt{false};
-    int  key{0};                 // Keys:: enum value; 0 = unbound
-    std::string toLabel() const; // e.g. "Ctrl+S"
-    static KeyBind fromString(const std::string& s);
-    std::string toString() const;
-};
+// H9: customizable key binding -- KeyBind/KeybindingManager now live in
+// MeshCraft/Editor/KeybindingManager.hpp (SYS-W3-01), included above.
 
 class MeshCraftApplication : public Microsoft::Xna::Framework::Game {
 public:
@@ -607,16 +602,10 @@ private:
     void  performAutoSave();
     static std::filesystem::path autoSavePath(const std::filesystem::path& file);
 
-    // Customizable keybindings (H9)
-    std::unordered_map<std::string, KeyBind> keybindings_;
+    // Customizable keybindings (H9, SYS-W3-01: extracted into KeybindingManager)
+    Editor::KeybindingManager keybindings_;
     std::string keyCaptureAction_;   // non-empty = waiting for next keypress
     bool        keybindOpen_{false}; // open keybind editor dialog
-    void initDefaultBindings();
-    void loadKeybindings();
-    void saveKeybindings();
-    bool shortcutFired(const std::string& id,
-                       const Microsoft::Xna::Framework::Input::KeyboardState& ks,
-                       const Microsoft::Xna::Framework::Input::KeyboardState& prev) const;
 
     // Macro recorder (H12)
     bool                   isRecording_{false};

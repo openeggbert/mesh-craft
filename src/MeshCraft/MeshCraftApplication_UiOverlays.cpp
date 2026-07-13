@@ -1491,7 +1491,7 @@ void MeshCraftApplication::drawDialogs()
         ImGui::BeginChild("##kbeditscroll", ImVec2(480, 430), false);
         for (const auto& a : kActions) {
             ImGui::PushID(a.id);
-            const KeyBind& bind = keybindings_[a.id];
+            const Editor::KeyBind& bind = keybindings_.bindings()[a.id];
             bool capturing = (keyCaptureAction_ == a.id);
 
             // Action label
@@ -1511,7 +1511,7 @@ void MeshCraftApplication::drawDialogs()
             // Clear button
             ImGui::SameLine();
             if (ImGui::SmallButton("×##clr")) {
-                keybindings_[a.id] = KeyBind{};
+                keybindings_.bindings()[a.id] = Editor::KeyBind{};
                 if (keyCaptureAction_ == a.id) keyCaptureAction_.clear();
             }
             if (ImGui::IsItemHovered()) ImGui::SetTooltip("Clear this binding");
@@ -1547,14 +1547,14 @@ void MeshCraftApplication::drawDialogs()
             auto& io = ImGui::GetIO();
             for (const auto& m : kImGuiToXna) {
                 if (ImGui::IsKeyPressed(m.imgui, false)) {
-                    KeyBind nb;
+                    Editor::KeyBind nb;
                     nb.ctrl  = io.KeyCtrl;
                     nb.shift = io.KeyShift;
                     nb.alt   = io.KeyAlt;
                     nb.key   = m.xna;
-                    keybindings_[keyCaptureAction_] = nb;
+                    keybindings_.bindings()[keyCaptureAction_] = nb;
                     keyCaptureAction_.clear();
-                    saveKeybindings();
+                    keybindings_.save(keybindingsPath());
                     break;
                 }
             }
@@ -1565,14 +1565,14 @@ void MeshCraftApplication::drawDialogs()
 
         ImGui::Separator();
         if (ImGui::Button("Reset to Defaults", ImVec2(140, 0))) {
-            keybindings_.clear();
-            initDefaultBindings();
-            saveKeybindings();
+            keybindings_.bindings().clear();
+            keybindings_.initDefaults();
+            keybindings_.save(keybindingsPath());
         }
         ImGui::SameLine();
         if (ImGui::Button("Close", ImVec2(100, 0)) || ImGui::IsKeyPressed(ImGuiKey_Escape, false)) {
             keyCaptureAction_.clear();
-            saveKeybindings();
+            keybindings_.save(keybindingsPath());
             ImGui::CloseCurrentPopup();
         }
         ImGui::EndPopup();

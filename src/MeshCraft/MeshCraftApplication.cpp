@@ -239,7 +239,7 @@ void MeshCraftApplication::LoadContent() {
     // Write one immediately on first launch, with the defaults loadPrefs()
     // just left in place.
     if (!std::filesystem::exists(prefsPath())) savePrefs();
-    loadKeybindings();
+    keybindings_.load(keybindingsPath());
 
     if (!currentFile_.empty() && std::filesystem::exists(currentFile_)) {
         try {

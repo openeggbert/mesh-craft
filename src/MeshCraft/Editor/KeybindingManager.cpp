@@ -1,26 +1,23 @@
-#include "MeshCraft/MeshCraftApplication.hpp"
-#include "MeshCraftPrivate.hpp"
+#include "MeshCraft/Editor/KeybindingManager.hpp"
 
 #include <Microsoft/Xna/Framework/Input/Keys.hpp>
-#include <Microsoft/Xna/Framework/Input/KeyboardState.hpp>
 
-#include <algorithm>
 #include <cctype>
-#include <fstream>
 #include <filesystem>
-#include <sstream>
-#include <string>
+#include <fstream>
 #include <vector>
 
-namespace MeshCraft {
+namespace MeshCraft::Editor {
 
 using namespace Microsoft::Xna::Framework::Input;
 
 // ---------------------------------------------------------------------------
-// Key name ↔ Keys:: enum conversion table
+// Key name <-> Keys:: enum conversion table
 // ---------------------------------------------------------------------------
+namespace {
+
 struct KeyEntry { int key; const char* name; };
-static const KeyEntry kKeyTable[] = {
+const KeyEntry kKeyTable[] = {
     { (int)Keys::A,"A" }, { (int)Keys::B,"B" }, { (int)Keys::C,"C" },
     { (int)Keys::D,"D" }, { (int)Keys::E,"E" }, { (int)Keys::F,"F" },
     { (int)Keys::G,"G" }, { (int)Keys::H,"H" }, { (int)Keys::I,"I" },
@@ -48,12 +45,12 @@ static const KeyEntry kKeyTable[] = {
     { (int)Keys::Insert,  "Insert"  },
 };
 
-static const char* keyToName(int key) {
+const char* keyToName(int key) {
     for (auto& e : kKeyTable) if (e.key == key) return e.name;
     return "?";
 }
 
-static int nameToKey(const std::string& n) {
+int nameToKey(const std::string& n) {
     std::string upper = n;
     for (auto& c : upper) c = static_cast<char>(std::toupper(static_cast<unsigned char>(c)));
     for (auto& e : kKeyTable) {
@@ -64,9 +61,20 @@ static int nameToKey(const std::string& n) {
     return 0;
 }
 
+// Local edge-detect predicate -- deliberately not sharing
+// MeshCraftPrivate.hpp's justPressed(): that header also pulls in
+// Mc3Document/ObjectTypeName, which this class has no other reason to
+// depend on (KeybindingManager knows nothing about the scene document).
+bool justPressed(const KeyboardState& cur, const KeyboardState& prev, Keys k) {
+    return cur.IsKeyDown(k) && prev.IsKeyUp(k);
+}
+
+} // namespace
+
 // ---------------------------------------------------------------------------
-// KeyBind methods
+// KeyBind
 // ---------------------------------------------------------------------------
+
 std::string KeyBind::toLabel() const {
     if (!key) return "(unbound)";
     std::string s;
@@ -90,7 +98,6 @@ std::string KeyBind::toString() const {
 KeyBind KeyBind::fromString(const std::string& raw) {
     KeyBind b;
     if (raw.empty()) return b;
-    // Tokenise by '+'
     std::vector<std::string> parts;
     std::string cur;
     for (char c : raw) {
@@ -110,13 +117,13 @@ KeyBind KeyBind::fromString(const std::string& raw) {
 }
 
 // ---------------------------------------------------------------------------
-// Default bindings
+// KeybindingManager
 // ---------------------------------------------------------------------------
-void MeshCraftApplication::initDefaultBindings() {
+
+void KeybindingManager::initDefaults() {
     auto add = [&](const char* id, bool c, bool s, bool a, int k) {
-        if (!keybindings_.count(id)) {
-            keybindings_[id] = KeyBind{c, s, a, k};
-        }
+        if (!bindings_.count(id))
+            bindings_[id] = KeyBind{c, s, a, k};
     };
     using K = Keys;
     add("file.new",         true,  false, false, (int)K::N);
@@ -153,12 +160,9 @@ void MeshCraftApplication::initDefaultBindings() {
     add("ui.screenshot",    false, false, false, (int)K::F11);
 }
 
-// ---------------------------------------------------------------------------
-// Load / save
-// ---------------------------------------------------------------------------
-void MeshCraftApplication::loadKeybindings() {
-    initDefaultBindings();
-    std::ifstream f(keybindingsPath());
+void KeybindingManager::load(const std::filesystem::path& path) {
+    initDefaults();
+    std::ifstream f(path);
     if (!f) return;
     std::string line;
     while (std::getline(f, line)) {
@@ -166,28 +170,24 @@ void MeshCraftApplication::loadKeybindings() {
         if (eq == std::string::npos) continue;
         std::string id  = line.substr(0, eq);
         std::string val = line.substr(eq + 1);
-        keybindings_[id] = KeyBind::fromString(val);
+        bindings_[id] = KeyBind::fromString(val);
     }
 }
 
-void MeshCraftApplication::saveKeybindings() {
-    auto p = keybindingsPath();
+void KeybindingManager::save(const std::filesystem::path& path) const {
     std::error_code ec;
-    std::filesystem::create_directories(p.parent_path(), ec);
-    std::ofstream f(p);
+    std::filesystem::create_directories(path.parent_path(), ec);
+    std::ofstream f(path);
     if (!f) return;
-    for (const auto& [id, bind] : keybindings_)
+    for (const auto& [id, bind] : bindings_)
         f << id << "=" << bind.toString() << "\n";
 }
 
-// ---------------------------------------------------------------------------
-// Runtime check
-// ---------------------------------------------------------------------------
-bool MeshCraftApplication::shortcutFired(const std::string& id,
-                                          const KeyboardState& ks,
-                                          const KeyboardState& prev) const {
-    auto it = keybindings_.find(id);
-    if (it == keybindings_.end() || !it->second.key) return false;
+bool KeybindingManager::shortcutFired(const std::string& id,
+                                       const KeyboardState& ks,
+                                       const KeyboardState& prev) const {
+    auto it = bindings_.find(id);
+    if (it == bindings_.end() || !it->second.key) return false;
     const KeyBind& b = it->second;
     bool ctrl  = ks.IsKeyDown(Keys::LeftControl) || ks.IsKeyDown(Keys::RightControl);
     bool shift = ks.IsKeyDown(Keys::LeftShift)   || ks.IsKeyDown(Keys::RightShift);
@@ -196,4 +196,4 @@ bool MeshCraftApplication::shortcutFired(const std::string& id,
     return justPressed(ks, prev, static_cast<Keys>(b.key));
 }
 
-} // namespace MeshCraft
+} // namespace MeshCraft::Editor
