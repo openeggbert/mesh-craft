@@ -1,414 +1,400 @@
-# NEXT.md — baseline & handoff
+# NEXT.md
 
-_Last updated: 2026-07-13 (session 5). Branch `develop`, working tree clean at
-the start of each session below. See `git log --oneline -20` for the exact
-current HEAD — it is not hard-coded here because this file is edited in the
-same commits it describes, which would make a literal hash stale immediately.
-See [`plan.md`](plan.md) for the full backlog and
-`python3 test/validate_plan_consistency.py . <build-dir>` to mechanically
-check this file and `plan.md` haven't drifted apart again._
+_Last updated: 2026-07-13. Branch `develop` @ commit `d2264ad`, working tree
+clean except two untracked, unrelated scratch scene files
+(`test/crownspire-citadel.mc3.xml`, `test/house3.glb` — manually authored
+demo content, not part of any tracked task, left as-is). 0 commits ahead/behind
+`origin/develop`. See `git log --oneline -20` for anything newer than this._
 
 ---
 
-## 1. Baseline (verified now, 2026-07-11)
+## 1. Project summary
 
-- **Toolchain:** GCC 14.2, Clang 19.1.7, CMake 3.31.6, Ninja 1.12.1, Python
-  3.11.9, Blender present. `emcc` absent (no local web build). Display `:0`
-  available. Network up.
-- **Configure + build (Release, EASYGL backend):**
+**MeshCraft** is a desktop 3D scene editor (C++23, built on the CNA game
+framework — an XNA/FNA-style API over SDL3 + OpenGL ES) for **MC3**, this
+project's own scene/model format. A scene is a document (`Mc3Document`) of
+primitives, CSG operations, materials, lights, cameras, animation, and
+several extension namespaces (scripts, sounds/music, triggers, scene
+states). The same in-memory AST has two serialization surfaces: `.mc3.xml`
+(original) and `.mc3.json` (added recently, genuinely semantic JSON, not a
+mechanical XML mirror). A separate binary format, `.mcb`, and a glTF/GLB
+exporter (`mc3togltf`) round out the format family.
+
+**Main goal (current phase):** this project has been in a **stabilization
+phase** for several sessions — an evidence-based audit (`AUD-###` findings)
+plus a systematic hardening workstream (`SYS-###`), not new user-facing
+features. That backlog is now almost fully closed: every `AUD-###` finding
+that isn't externally blocked is done, and of the systematic workstream only
+one item remains, itself broken into phases (see §4).
+
+**Important architectural decisions:**
+- `Mc3Document` (in `mc3/`) is the single canonical in-memory AST. It has no
+  CNA/GUI dependency and is shared by both parsers/writers, `mcb`,
+  `mc3togltf`, `mc3tomcb`, and the editor.
+- The editor (`MeshCraftApplication`) and the exporter (`mc3togltf`) are
+  **two independent geometry generators** reading the same `Mc3Document` —
+  there is no shared mesh-building code between "what you see in the editor"
+  and "what gets exported." This is a deliberate but risky duplication (see
+  §6).
+- `../cna` and `../sharp-runtime` are **sibling repositories, not part of
+  this repo, and not to be modified from here** — a separate process/owner
+  handles them. This repo only consumes them via `add_subdirectory`.
+- A second, unrelated sibling repository, **`../mesh-world`** (a
+  procedurally-generated 3D world explorer built on top of MC3), drives its
+  own feature work directly into this repo's `mc3/` library from time to
+  time (see §3 and §5) — commits can land here that this repo's own
+  `plan.md` never asked for.
+
+## 2. Current status
+
+- **Build:** last verified this session, Release config, EasyGL graphics
+  backend — clean, zero warnings, exit 0.
   ```bash
-  cmake -S . -B b-release            # already configured; reconfigure is a no-op
-  cmake --build b-release -j"$(nproc)"
+  cmake -S . -B b-release && cmake --build b-release -j"$(nproc)"
   ```
-  Result: **clean build, exit 0.**
-- **Tests:** `(cd b-release && ctest -j"$(nproc)")` → all pass. Run
-  `ctest -N` for the exact live count (do not trust a hard-coded number in
-  prose — it changes every session; `test/validate_plan_consistency.py`
-  cross-checks it against this file when a build dir is available).
-- **Standalone libs** (`mc3`, `mcb`, `mc3tomcb`, `mc3togltf`): build and their
-  tests pass as part of the above (`mc3_*`, `mcb_*`, `mc3togltf_*`).
-- **Blocked configurations:** Emscripten/web (no `emcc` here; and a CNA-side
-  crash blocks the web build even where `emcc` exists — see §4). MinGW/Windows
-  (1 remaining failure, all in `../cna`). Android (no NDK).
+- **Tests:** **122 / 123 `ctest` passing.** The one failure is
+  `field_matrix` — see §4, not a regression from anything tracked in this
+  repo's own backlog.
+- **CLI/tools/apps/libraries currently available:**
+  - `MeshCraft` — the interactive editor (`./b-release/MeshCraft
+    scene.mc3.xml`, or `--screenshot out.png` / `--export out.glb` for
+    headless one-shot runs).
+  - `mc3togltf` — MC3 → glTF/GLB exporter (`--stats` prints export +
+    pre-export-validation diagnostics).
+  - `mc3tomcb` — MC3 XML → MCB binary converter.
+  - Standalone libraries `mc3` (format/AST + XML/JSON parse-writer),
+    `mcb` (binary format) — both buildable and testable without CNA.
+- **Recently implemented** (this session; see §3 for the exact commit
+  list): `Mc3Document::validate()` and its wiring into AI-apply/pre-export/
+  pre-render/save (`Mc3Validation` diagnostics, previously console-only);
+  a "Validation" ImGui panel + status-bar indicator surfacing those
+  diagnostics; a checked-in `.clang-format`/`.clang-tidy` config (not
+  applied to the existing tree); the first extraction out of the
+  `MeshCraftApplication` "god object" (`Editor::KeybindingManager`).
+- **Known working examples:** `./b-release/MeshCraft test/house.mc3.xml`;
+  `./b-release/MeshCraft <scene> --screenshot out.png` (verified this
+  session to genuinely capture the composited ImGui+3D framebuffer, not
+  just the viewport); `./b-release/mc3togltf/mc3togltf test/features.mc3.xml
+  /tmp/out.glb`.
+- **What does not work yet / is not verified:**
+  - Web (Emscripten) build: blocked by a crash inside `../cna`, not this
+    repo (see §4/§5).
+  - Windows (MinGW): does not compile — 1 remaining failure, in `../cna`.
+  - CI: present and believed correct (`.github_/workflows/ci.yml`) but
+    parked under a non-standard directory name and never actually runs
+    (owner-gated — needs a workflow-scoped push token).
+  - `field_matrix` ctest gate: currently red (see §4).
 
-Distinction of evidence in this file: "verified now" = run in this environment
-today; "blocked" = could not run here; older narrative claims are in
-[`docs/history/`](docs/history/).
+## 3. Recent changes
 
-## 2. Session log
+This session (11 commits, oldest first, all on `develop`, all pushed):
 
-### Session 1 (2026-07-11) — deep stabilization
+- `d9e98d5` — fixed 2 pre-existing XSD-invalid test fixtures (unrelated
+  double-hyphen-in-XML-comment and duplicate-`id` bugs found while
+  re-verifying the baseline).
+- `a119415` — **added** `Mc3Document::validate(Mc3Validation&)`: re-validates
+  a document's current in-memory state by round-tripping it through the
+  XML writer/parser, for documents that never went through a parsing load
+  at all (built programmatically or mutated after loading). New
+  `mc3_document_validate_test`.
+- `92c6246` — wired the above into the AI-response path
+  (`AiResponseAlgorithms.hpp`); extended `ai_test.cpp`.
+- `297af3e` — wired it into `mc3togltf`'s `GltfExporter` (new `validation`
+  member, printed under `--stats`); new
+  `mc3togltf_pre_export_validation_test`.
+- `899b486` — wired it into 4 real load call sites (startup, Open File,
+  Open Recent File, autosave recovery) and into `saveFile()`.
+- `f0b33b1` — docs: closed out `SYS-W1-01`.
+- `9c7bfa5` — **added** a "Validation" ImGui panel + status-bar indicator
+  (`MeshCraftApplication_UiValidation.cpp`) surfacing the diagnostics above
+  in the UI, not just the console.
+- `d388529` — docs: closed out `SYS-W14-02`.
+- `c9b48a6` — **added** root `.clang-format` / `.clang-tidy` (config only —
+  no file in the tree was reformatted; `clang-tidy` actually run and found
+  only pre-existing, already-triaged issues).
+- `d364712` — docs: closed out `SYS-W11-06`.
+- `95aaa90` — **refactor:** extracted `Editor::KeybindingManager`
+  (`include/MeshCraft/Editor/KeybindingManager.hpp` +
+  `src/MeshCraft/Editor/KeybindingManager.cpp`) out of
+  `MeshCraftApplication`; deleted `MeshCraftApplication_Keybindings.cpp`;
+  updated ~90 call sites; new `keybinding_manager_test` (no coverage existed
+  for this subsystem before).
+- `d2264ad` — docs: recorded `SYS-W3-01`'s full scope/roadmap and marked
+  Phase 1 done.
 
-Ran a 12-dimension audit, adversarially re-verified every finding (57
-confirmed, 18 refuted), and fixed the 2 confirmed P0s plus most confirmed
-P1s. Commits on `develop` (oldest first): `afb1159` (`ActiveTool::Measure`
-OOB), `838eefc` (`ObjectType` mapping), `dae910f` (NaN/Inf rejection),
-`fd606d2` (input budgets + instance-cycle + finiteness gate), `737af77`
-(undo dead-pattern), `0dfcd4f` (docs consolidation), `40643a4`
-(`Mc3LoadPolicy`), `22b7129` (glTF lights), `dcd0d33` (anim mirror Gate B),
-`2d126bf` (deterministic shutdown), `e53af49` (backend-truth warning),
-`ac75eb6` (concave extrude caps), `901965f` (resource-path confinement),
-`d16c82c` (CI file readiness).
+**Also present on `develop` but NOT done by this session** — landed from
+the sibling `mesh-world` repo's own, separate backlog while this session
+was in progress: `e7bed06` (R109, semantic `mc3.json`), `ff63ef5` (R110,
+`.mc3lib` library format), `7110ebd` (R111, `Mc3Object::assetMetadata`),
+`83819f8` (R101, `<imports>`), `df9d5ea` (R102, composite-object split),
+`f392d41` (R103, script IDs). These are real and tested, but **R111 is the
+direct cause of the one currently-failing test** (§4).
 
-The session's own end-of-session summary claimed "every P0 and every
-identified P1 addressed" and reported inconsistent test counts (93/93 in one
-place, 95/95 in another) — **both claims were wrong on inspection**; see
-Session 2.
+## 4. Current blocker / main problem
 
-### Session 2 (2026-07-11, continued) — adversarial re-open + reconciliation
+**There is no build-breaking or work-stopping blocker.** The closest things
+to one:
 
-A fresh adversarial pass re-opened the session-1 summary against actual
-source and git history:
+**(a) `field_matrix` ctest gate is red.**
+- Symptom: `ctest -R field_matrix --output-on-failure` (from `b-release`)
+  reports 18 fields "missing from `['xsd_attr', 'mcb_read', 'mcb_write']`"
+  (some also missing from `model`): `bounds_min`, `bounds_max`, `category`,
+  `subcategory`, `nominal_size`, `collision_proxy`, `clearance_volume`,
+  `facing`, `hash`, `license`, `provenance`, `instancing_eligible`,
+  `shadow_policy`, `max_visibility_distance`, `selection_weight`,
+  `namespace`, `script`, `tier`.
+- Affected files: `mc3/include/MeshCraft/Mc3/Mc3AssetMetadata.hpp` (where
+  these fields live in the model), `mc3/mc3.xsd`, `mcb/src/McbReader.cpp` /
+  `McbWriter.cpp` (where they're absent).
+- Suspected cause: commit `7110ebd` (R111, from the sibling `mesh-world`
+  repo's own backlog, not this repo's `plan.md`) added these
+  `Mc3Object::assetMetadata` fields to the model/XML layers but not yet to
+  `xsd_attr`/`mcb_read`/`mcb_write`.
+- What's been tried: nothing, deliberately. This session's own `plan.md`/
+  `SYS-###` work never touched `Mc3AssetMetadata.hpp`; fixing someone else's
+  in-flight cross-repo work risks colliding with their next commit. Before
+  touching this, **check `git log` for newer R-series commits** — the gap
+  may already be closed.
+- Verification once addressed: `(cd b-release && ctest -R field_matrix
+  --output-on-failure)` should print no `FAIL:` lines.
 
-- Only 4 of 57 detailed `AUD-###` tasks in `plan.md` were marked DONE despite
-  16+ P1s already being fixed in git history — `plan.md` was not tracking
-  reality. Re-verified all 57 against current source: **28 DONE, 27 TODO, 2
-  DEFERRED** among the originals.
-- 3 findings reported "fixed" were only partially fixed: resource-path
-  confinement covers mc3togltf export only, not the editor/AI application
-  layer (`AUD-006b`); the undo fix closed one dead-code pattern but not a
-  full transaction-safety audit (`AUD-036b`); Gate C backend truthfulness got
-  a warning, not real enforcement (`AUD-039b`).
-- 2 new defects found by direct code reading: `s_bloom.cleanup()` exists but
-  has zero call sites, so bloom/SSAO/skybox/material-preview GL resources
-  leak on every shutdown (`AUD-058`); the tessellation clamp is per-field
-  only, not a total-document budget (`AUD-059`).
-- Fixed this file's own 93-vs-95 test-count inconsistency and stale
-  `HEAD 737af77` reference (both are exactly the class of drift this session
-  exists to catch — see `test/validate_plan_consistency.py`, added this
-  session, which now gates this from recurring silently a third time).
-- Archived `plan_deep_audit.md` (all 57 of its own tasks already completed)
-  and fixed `RELEASE.md`'s stale 66/66 test count.
+**(b) `SYS-W3-01` (decompose the `MeshCraftApplication` "god object") is a
+genuinely multi-session task, not a bug.** Research this session found
+**280 data members + 113 methods** in that one class (11,544 lines of
+implementation across 17 `.cpp` files); only 10 subsystems are cleanly
+extracted so far (the 9 pre-existing ones plus this session's
+`KeybindingManager`). This isn't blocking anything else in the repo — it's
+just large and not close to finished. Full roadmap in `plan.md`'s
+`SYS-W3-01` entry.
 
-See [`plan.md`](plan.md)'s session log for the fuller version of this entry.
-**This narrative will itself go stale — the live source of truth is always
-`git log` + `ctest -N` + the `AUD-###`/`SYS-###` task table, not this prose.**
+## 5. Known bugs and limitations
 
-### Session 3 (2026-07-11, continued) — plan.md marker fix, AUD-031/036c, and a fleet of SYS-### items
+- **Confirmed, external, not actionable from this repo:** Web/Emscripten
+  build crashes inside `../cna` on the first `SDL_EVENT_WINDOW_RESIZED`
+  (`GameWindow::queryClientBoundsFromSDL()` calls `SDL_GetWindowSize()`
+  after the video subsystem reports uninitialized) — blocks web
+  live-verification entirely. Windows/MinGW: 1 remaining compile failure,
+  also in `../cna`.
+- **Confirmed, currently red:** `field_matrix` ctest gate — see §4(a).
+- **Confirmed, by design, deferred:** SVG textures parse/edit but are never
+  rasterized; `embed:` mesh references parse/edit but aren't resolved on
+  export; scripts/triggers are data-model + editing only, no runtime
+  execution; `rotation_units="radians"` / non-default `euler_order` are
+  honored on export but not in live editor interaction (won't-fix, tracked
+  as `STAB-0701`); no native file-browse dialog (drag-and-drop works).
+- **Confirmed, open, low-severity:** `AiAssistant`'s detached background
+  HTTP thread is never joined at shutdown (`AUD-014`) — doesn't currently
+  cause a hang (deterministic shutdown is otherwise handled) but is a loose
+  end.
+- **Incomplete:** `Editor::EditorViewport` (bundles a camera + gizmo +
+  `pickRay()`) is dead code — added as an explicit "stub" in commit
+  `580105d`, never included by `MeshCraftApplication.hpp`, never
+  instantiated. No decision has been made to finish wiring it in or delete
+  it.
+- **Unresolved product decision, not a bug:** duplicate object IDs are
+  proven safe at the `mc3` library level (no crash/data loss), but whether
+  they should be a hard parse error is a product call nobody has made
+  (`SYS-W1-04`).
+- **Needs verification:** whether the sibling `mesh-world` repo's R-series
+  work (R104+) will touch files this repo also cares about — check
+  `git log` at the start of any future session, don't assume `plan.md`
+  alone reflects everything that has changed.
+- **Risky assumption to watch:** the editor (`SceneRenderer`) and the
+  exporter (`mc3togltf/MeshBuilder.cpp`) independently generate geometry
+  for every primitive/CSG type from the same `Mc3Document` fields. Nothing
+  enforces they agree except a differential test that doesn't cover every
+  primitive/case (see §6). A change to one without checking the other can
+  silently make "what you see" not match "what you export."
 
-Picked up from session 2 with an explicit standing instruction to fix a
-plan.md self-consistency bug first, then work through every remaining
-unblocked `AUD-###` task, then the `SYS-###` backlog, pushing regularly and
-continuing autonomously rather than stopping at milestones.
+## 6. Architecture notes
 
-- Fixed `AUD-015`'s completion marker (`**Resolved (full):**` didn't match
-  `test/validate_plan_consistency.py`'s exact `**Resolved:**` substring
-  check) — the literal bug the standing instruction called out.
-- `AUD-036c` (undo-coverage audit triage) and `AUD-031` (all 26 `*Alg` mirror
-  functions individually classified/rewired or deliberately left
-  divergent — one, `keyBindToStringAlg`, is intentionally NOT rewired since
-  it's a documented reduced toy table, not a bug) — both DONE.
-- `AUD-054`/`AUD-055`: `-Wall -Wextra` enabled on every first-party target
-  (was 2 of ~7); fixed one real bug it surfaced (`-Wswitch` on a bounding-box
-  primitive-type switch missing 5 of 11 cases). Added an opt-in
-  `MESHCRAFT_SANITIZE` ASan+UBSan build; fixed a link-time propagation bug
-  where per-target `target_link_options()` on a static library doesn't reach
-  its consuming executables.
-- `AUD-057` (partial): a non-fatal configure-time check warns when `../cna`/
-  `../sharp-runtime` drift from the last-verified SHA; the CI-gating half
-  stays blocked on `AUD-052`.
-- Real crash recovery (`SYS-W9-02`): a "Recover Unsaved Changes" dialog now
-  fires from all three file-load paths (was a passive, easily-missed
-  8-second toast, startup-only) when a newer `.autosave` sibling exists.
-- `SYS-W1-04` (pathological-input corpus): closed 4 of 5 remaining
-  categories with real fixes (an unbounded include-fan-out bomb, an
-  unbounded inline-embed base64 size) or proof-of-safety tests (invalid
-  UTF-8, MCB truncation/random-byte fuzzing); duplicate object IDs stays
-  `IN_PROGRESS` — proven safe at the library level, but whether duplicates
-  should be a hard error is a product decision, not made unilaterally.
-- `SYS-W5-01`: a real, `ctest`-gated cross-layer field matrix
-  (`test/field_matrix.py`) catching "added to the model, forgot the MCB
-  writer"-class bugs across 6 layers (XSD/model/XML read/XML write/MCB
-  read/MCB write).
-- `SYS-W1-01` (partial): a first-class `Mc3Validation` diagnostics type,
-  wired as an additive side-channel into MC3 XML load and MCB load (2 of the
-  7 named integration points — AI-apply/pre-render/pre-export/save remain).
-- `SYS-W11-05`: fuzz/differential coverage for both parsers — seeded
-  mutation fuzzing, property-based random round-trip testing, and a genuine
-  libFuzzer corpus harness (~1.35M executions, zero crashes in either
-  parser).
-- `SYS-W7-02`: an invariant-based differential test (bounding box /
-  divergence-theorem volume / watertightness) comparing the viewport
-  renderer against the independent glTF exporter for 8 of 10 primitive
-  types. Found 3 real cross-path discrepancies, filed as new findings
-  (`AUD-061`/`062`/`063`).
-- `AUD-061` fixed: the viewport's Torus/Capsule rendered the wrong shape
-  (elliptical tube / ellipsoidal caps) whenever the object's own radius
-  ratio didn't match one fixed unit mesh's baked-in ratio — now tessellated
-  per-object at the real parameters, cached, verified with a real headless
-  screenshot render. `AUD-062`/`063` (lower severity, same root cause class)
-  remain open.
-- `SYS-W1-02`/`SYS-W1-03`: documented numeric ranges (camera/material/
-  geometry/environment/animation/transforms — audio and post-processing
-  confirmed not applicable, no such fields exist) and document-complexity
-  budgets (materials/textures/embeds/actions/channels/keyframes/children-
-  per-node/definitions/max-bytes) enforced at load, all DONE.
-
-Net: `AUD-###` went from 56 DONE/6 TODO/2 DEFERRED (64 rows) to **59
-DONE/6 TODO/2 DEFERRED (67 rows** — 3 new findings from `SYS-W7-02`'s
-differential test). Every remaining `TODO` `AUD-###` row is genuinely
-blocked (owner-gated CI, or missing Android NDK/out-of-scope CNA coupling)
-except `AUD-062`/`AUD-063`, which are open, unblocked, lower-severity
-follow-ups to `AUD-061`.
-
-### Session 4 (2026-07-12) — AUD-062/AUD-063 viewport-export parity
-
-- `AUD-062` DONE (commit `0d3faa3`): IcoSphere now selects one of four
-  pre-built subdivision meshes from its MC3 `segments` field using the same
-  `clamp(segments / 8, 1, 4)` rule as the glTF exporter. This applies to the
-  normal draw pass, emissive pass, and polygon statistics.
-- `AUD-063` DONE (commit `134d6c2`): the Capsule position-only and textured
-  viewport meshes now both use `max(2, segments / 4)` hemisphere rings,
-  matching the exporter at the 16/8/4 viewport LOD tiers.
-- `differential_geometry` passed after each change; it now verifies IcoSphere
-  at segments 2/16/32 and Capsule parity at 16/8/4. The full CTest run built
-  all 116 tests, but GUI tests could not access an SDL video device in this
-  sandbox; this is environmental and separate from the headless geometry
-  checks.
-- Current AUD status: **61 DONE, 4 TODO, 2 DEFERRED**. Every remaining AUD
-  TODO is externally blocked; the next actionable work is the SYS backlog.
-
-### Session 5 (2026-07-13) — SYS-W1-01 completion (all 7 integration points) + a cross-repo discovery
-
-- Fixed 2 XSD-invalid fixtures found while re-verifying the baseline
-  (commit `d9e98d5`): `test/house3.mc3.xml`'s decorative
-  `<!-- ---------- Section ---------- -->` comments (the documented
-  double-hyphen-in-comment gotcha, §6) and `test/city-street-block.mc3.xml`'s
-  duplicate `id="bollard"` shared between a `<material>` and a
-  `<definition>` (`xs:ID` is document-wide, not per-element-type).
-- **SYS-W1-01 DONE** (was `IN_PROGRESS` at 2 of 7 named integration points;
-  now all 7): added `Mc3Document::validate()` (commit `a119415`) — a
-  round-trip-based re-validator for a document's CURRENT in-memory state,
-  closing the gap for documents that never went through a parser load at
-  all (built programmatically, or mutated in place after loading). Wired
-  into **AI-apply** (commit `92c6246`), **pre-export** (commit `297af3e`,
-  `GltfExporter::validation`), and **pre-render + save** (commit `899b486`:
-  4 real app load call sites — startup, Open File's `.mc3.xml`/`.mcb`
-  branches, Open Recent File, autosave recovery — now use the
-  already-existing validating load overloads instead of discarding
-  diagnostics; `saveFile()` re-validates before writing). Deliberately NOT
-  wired into undo/redo document-swaps (hot path, already-valid in-memory
-  snapshots) or the ImGui UI display layer itself (that's `SYS-W14-02`,
-  a separate, already-tracked, not-yet-started backlog item) — see
-  `plan.md`'s SYS-W1-01 entry for the full per-point writeup.
-- **A significant cross-repo discovery, not this session's own work but
-  important for future sessions to know about:** while this session was in
-  progress, **6 more commits landed directly on `develop`**
-  (`ff63ef5` R110 `.mc3lib` format, `7110ebd` R111 asset metadata, `83819f8`
-  R101 `<imports>`, `df9d5ea` R102 composite-object split, `f392d41` R103
-  script IDs — all pushed under the repo owner's own git identity, landing
-  within about 14 hours) driven by a **completely separate backlog**: the
-  sibling `mesh-world` repo's `mesh_world_revival.md` design doc and its own
-  `plan.md` "Revival architecture tasks (R-series)" section (`R109`, the
-  commit already on `develop` at this session's start, is the same series —
-  see session 4's entry above, which predates this discovery). None of these
-  touched files this session's SYS-W1-01 work needed, so no real conflict —
-  but one of them (`R111`'s new `Mc3Object::assetMetadata` fields) is why
-  **`field_matrix` now fails** (`bounds_max`/`bounds_min`/`category`/
-  `license`/`tier`/etc. reached the model/XML layers but not `xsd_attr`/
-  `mcb_read`/`mcb_write` yet) — deliberately left alone this session since
-  it's actively-evolving work owned by that other stream, not a regression
-  from anything here. **Before trusting this repo's `git log` matches only
-  `plan.md`'s own AUD/SYS backlog, check for an `R\d+` commit-message prefix
-  or a non-`Co-authored-by: Claude` trailer** — this repo now receives
-  commits from at least one other tool (a `Junie <junie@jetbrains.com>`
-  trailer appeared on the original `R109` commit) working from a plan that
-  lives entirely outside this repo.
-- Full tree rebuilt from scratch (network fetch of the `nlohmann/json`
-  `FetchContent` dependency `R109` introduced) after every commit this
-  session: **121/122 ctest** — the 1 failure is the pre-existing,
-  out-of-scope `field_matrix` gap described above, not a regression from
-  this session's own changes (confirmed unchanged in content before/after,
-  modulo the other stream adding one more missing field mid-session).
-  `test/validate_plan_consistency.py` passes cleanly against the updated
-  counts (67 AUD rows: 61 DONE/4 TODO/2 DEFERRED, unchanged this session;
-  122 live `ctest -N`).
-- Pushed all of the above (6 commits) to `origin/develop` — clean
-  fast-forward, `origin` hadn't moved past `f392d41` since the cross-repo
-  discovery above.
-- **`SYS-W14-02` DONE** (commit `9c7bfa5`), picked as the natural next step
-  right after `SYS-W1-01`: a "Validation" ImGui panel + a status-bar
-  indicator surface `SYS-W1-01`'s diagnostics, which were console-only
-  until now. See `plan.md`'s `SYS-W14-02` entry for the full writeup.
-  **Visually verified with a real screenshot** (not just a compile check)
-  — worth recording the technique since it isn't what earlier sessions'
-  "no SDL video device in this sandbox" notes might suggest: a real X
-  display *is* reachable (`DISPLAY=:0`, `xdpyinfo` succeeds) and the app's
-  window *does* initialize OpenGL against it, but capturing that desktop
-  with ImageMagick (`import -window ...`) or `xwd` fails
-  (`BadMatch`/generic `import` error) — **`ffmpeg -f x11grab` works**
-  where those don't, AND separately, MeshCraft's own `--screenshot <path>`
-  flag (writes a `.ppm` despite the `.png`-looking name some session
-  fixtures use for it — `convert`/`magick` reads it fine) captures the
-  real composited framebuffer including ImGui, not just the 3D viewport,
-  since `ImGui::Render()`/`ImGui_ImplOpenGL3_RenderDrawData()` run
-  unconditionally before the screenshot is taken. That's what let this
-  session confirm the status-bar indicator AND the panel's table (the
-  panel's `show*Panel_` default was flipped to `true` only long enough to
-  screenshot it, then reverted — `--screenshot` mode has no interactive
-  input, so there's no other way to see a menu-toggled panel in one shot).
-- Full tree rebuilt + re-tested after `SYS-W14-02` too: still **121/122
-  ctest** (same pre-existing `field_matrix` gap, untouched by this work).
-- Pushed the `SYS-W14-02` commits, then picked `SYS-W11-06` next.
-  **`SYS-W11-06` DONE**: checked-in root `.clang-format`/`.clang-tidy`,
-  config only (not a mass reformat/lint-fix pass — see `plan.md`'s entry for
-  the full reasoning). `clang-format` isn't preinstalled in this sandbox —
-  `pip install clang-format` got a working binary with no root needed, used
-  only to verify the config's diffs against representative files, not run
-  `-i` against the tree. `clang-tidy` (already present, 19.1.7) actually ran
-  clean: 15 warnings total across both a standalone `mc3/` compile database
-  and the full project's, all pre-existing and already triaged in
-  `docs/history/plan_20260710.md` (STAB-0614/615/620) — nothing new. Usage
-  documented in `CONTRIBUTING.md`.
-- Full tree rebuilt + re-tested once more after `SYS-W11-06`: still
-  **121/122 ctest**, same pre-existing `field_matrix` gap.
-- **`SYS-W3-01` started (IN_PROGRESS, Phase 1 of a multi-session task)** —
-  entered plan mode given the scale (per CLAUDE.md's plan.md workflow, this
-  is exactly the kind of multi-file architectural change that warrants
-  presenting a concrete plan before touching code). 3 parallel Explore
-  agents mapped `MeshCraftApplication` precisely: **280 data members + 113
-  methods**, 692-line header, 11,544 lines across 17 `.cpp` files, only 9
-  subsystems already delegated to an owned helper. Found a previously
-  abandoned partial attempt at this exact task: `Editor::EditorViewport`
-  (camera+gizmo+pickRay), added as an explicit "stub" in commit `580105d`,
-  never wired into `MeshCraftApplication`, still dead code today. Full
-  writeup + phased roadmap (Phase 2+: Preferences/Macro, `EditorViewport`'s
-  fate, undo/redo, animation, file dialogs, post-processing, audio/walk
-  mode) is in `plan.md`'s `SYS-W3-01` entry.
-  **Phase 1 DONE (commit `95aaa90`):** extracted `Editor::KeybindingManager`
-  — chosen over the originally-proposed Preferences/Macro bundle because
-  reading the actual implementation (not just member counts) showed those
-  two have real cross-domain entanglement (Macro's `executeMacroStep()`
-  calls 8 other app methods; Preferences persists fields that belong to
-  3 other domains), while Keybindings is genuinely self-contained. New
-  `keybinding_manager_test` — no coverage existed for this subsystem before;
-  12 checks covering default-seeding, `shortcutFired()`'s just-pressed/
-  modifier-matching, and the save/load round-trip, all passing. Full tree
-  rebuilt + **122/123 ctest** (same pre-existing `field_matrix` gap, +1 net
-  new test).
-
-## 3. Next tasks
-
-See the **Priority execution queue** at the top of [`plan.md`](plan.md) — it
-is kept free of DONE items by `test/validate_plan_consistency.py`. All
-remaining `AUD-###` TODO rows are blocked, and `SYS-W1-01`/`SYS-W14-02`/
-`SYS-W11-06` are fully DONE, so the only remaining actionable item is
-`SYS-W3-01` (MeshCraftApplication decomposition), now `IN_PROGRESS` with
-Phase 1 (Keybindings) done. **Next up is Phase 2** — see `plan.md`'s
-`SYS-W3-01` entry for the full phased roadmap: Preferences (decide first
-whether it owns cross-domain fields or just theme+dialog-toggle) and/or
-Macro recorder
-(needs a `PropertiesPanel`-style callback-DI struct), then a decision on
-`EditorViewport`'s fate, then undo/redo, animation, file dialogs,
-post-processing, audio/walk-mode. Everything else in the `AUD-###` table is
-blocked (owner-gated CI via `AUD-052`, or missing Android NDK / out-of-scope
-CNA coupling). Once all of `SYS-W3-01`'s phases close, re-run
-`python3 test/validate_plan_consistency.py . <build-dir>` — this repo may be
-at (or very near) the bottom of the currently-known, unblocked backlog.
-
-## 4. Current blockers (external, re-verified 2026-07-11)
-
-- **Web (Emscripten) canvas crash — in CNA, not this repo.** The web build
-  loads (window + WebGL2/EasyGL init + scene creation all succeed), then dies on
-  the first `SDL_EVENT_WINDOW_RESIZED`: CNA's `GameWindow::queryClientBoundsFromSDL()`
-  calls `SDL_GetWindowSize()`, which fails with *"Video subsystem has not been
-  initialized"* seconds after the same subsystem worked, throwing an uncaught
-  `std::runtime_error` that kills the wasm module. 100% inside CNA
-  (`Game.cpp`/`GameWindow.cpp`); no MeshCraft-side hook runs early enough to
-  catch it. Blocks web live-verification (including the `STAB-0571` GLB download
-  bridge, which is implemented and present in the wasm import table but unrun).
-- **Windows GUI (MinGW):** does not compile — 1 remaining failure, all in `../cna`.
-- **Web GLB export:** writes to Emscripten MEMFS; the JS download bridge exists
-  but is unverified pending the crash above.
-- **CI activation (owner-gated):** `.github_/workflows/ci.yml` needs a
-  `workflow`-scoped push token to move to `.github/`. The workflow file itself
-  was made correct/ready in commit `d16c82c` (`AUD-052`/`AUD-056`).
-
-Not modifiable from this repo: `../cna`, `../sharp-runtime` (owner permission
-required). Record precise repro and continue with in-repo work.
-
-## 5. Known limitations (by design or deferred)
-
-SVG textures parsed/edited but not rasterized; `embed:` mesh refs parsed/edited
-but not resolved on export; scripts/triggers are data-model + editing only (no
-runtime execution); `rotation_units="radians"`/non-default `euler_order` honored
-on export but not in live editor interaction (won't-fix `STAB-0701`, status-bar
-warning on load); native file-browse dialog not wired (`CNA_DEVICES` all-or-
-nothing flag). These are tracked in [`plan.md`](plan.md) W14 / DEFERRED.
-
-## 6. Architecture notes (load-bearing invariants)
-
+- **`Mc3Document`** (`mc3/include/MeshCraft/Mc3/Mc3Document.hpp`) — the
+  canonical AST. CNA-free. Public API is depended on by `mc3togltf`,
+  `mc3tomcb`, the editor, and every test fixture — **additive changes
+  only**; check all four before changing an existing signature.
+- **Two independent geometry generators, same source data:**
+  `mc3togltf/src/MeshBuilder.cpp::buildPrimitive()` (export + CSG) and
+  `SceneRenderer`'s primitive dispatch (`SceneRenderer_Builders.cpp`,
+  editor viewport). No shared code. **Triangle winding differs
+  deliberately between them** — export is CCW-from-outside (glTF/OpenGL
+  convention), the editor preview is CW-from-outside (CNA's default
+  `RasterizerState`). Do not "fix" one to match the other; getting it
+  backwards renders a see-through mirrored interior, not an obvious crash.
 - **CSG dual-path invariant:** `mc3togltf/src/CsgEvaluator.cpp` (export) and
-  `SceneRenderer`'s CSG preview cache (editor) both key off `isCutter`/
-  `role="cutter"`. A missing cutter flag silently turns a subtraction into a
-  union. Keep both in sync if CSG semantics change.
-- **Primitive dual-path invariant:** `mc3togltf/src/MeshBuilder.cpp::buildPrimitive()`
-  (export + CSG) and `SceneRenderer`'s primitive dispatch (editor unit-mesh +
-  scale + LOD) are two independent geometry generators for all 11 `PrimitiveType`
-  values. No automated cross-check yet (see plan W7 SYS-W7-02).
-- **Triangle winding differs by convention between those two paths — do not
-  "fix" one to match the other.** Export (`MeshBuilder.cpp`) targets
-  **CCW-from-outside** (glTF/OpenGL). Editor preview
-  (`SceneRenderer_Builders.cpp`) needs **CW-from-outside** (CNA's default
-  `RasterizerState` is `CullCounterClockwiseFace`). Getting it backwards renders
-  the mirrored interior — looks see-through, not obviously wrong.
-- **`Alg` mirror pattern:** pure logic in CNA-free headers for headless testing.
-  Most mirrors are the single source of truth their `.cpp` calls into, but a few
-  (documented in-header) are intentionally-unwired duplicates — and at least
-  two (`insertAnimKeyframesAlg`/`loadPrefsAlg`) have already been caught
-  DRIFTING from production despite that intent (`AUD-030` fixed,
-  `AUD-032`/`AUD-031`/`AUD-033` still open). Check whether an `Alg` function is
-  actually called before assuming a fix there takes effect.
-- **Undo/redo:** snapshot-based (whole-document deep copy), not command-diff.
-  The dead-pattern bug fixed in `AUD-036`/commit `737af77` is not the full
-  story — see `AUD-036b` for the remaining transaction-safety work.
-- **`mc3.xsd` is compiled into the binary at configure time** — editing it needs
-  a reconfigure, not just a rebuild.
-- **XML comment gotcha:** a literal `--` inside an XML comment is rejected by
-  `lxml`/`test/validate_xsd.py` though `tinyxml2` tolerates it. Run
-  `test/validate_xsd.py` on new fixtures.
-- **`AiAssistant` threading invariant:** background HTTP runs on a detached
-  `std::thread` writing into a `shared_ptr<AiRequestResult>` (atomic done flag +
-  mutex). Never `std::async`/`std::future` (destructor-blocking hang-on-close).
-  The detached thread is still never joined at shutdown (`AUD-014`, open).
-- **`CNA_ENABLE_NET` must stay `OFF`** — unused CNA subsystem that fails to
-  compile; re-enabling breaks the default build.
-- **API/compat boundaries:** `Mc3Document`'s public API is depended on by
-  `mc3togltf` and every test fixture — additive changes only; check both. CNA /
-  SHARP_RUNTIME must not be modified without owner permission.
+  `SceneRenderer`'s CSG preview cache (editor) both key off `isCutter` /
+  `role="cutter"`. Keep both in sync if CSG semantics change.
+- **`MeshCraftApplication`** (`include/MeshCraft/MeshCraftApplication.hpp`)
+  — the main editor class, historically a "god object": 280 data members +
+  113 methods, implementation spread across 17 `.cpp` files by *area* (not
+  by *ownership*). Being incrementally decomposed (`SYS-W3-01`, in
+  progress, see §4b). Ten subsystems are already extracted into owned
+  helper objects with narrow interfaces: `SelectionManager`,
+  `EditorCamera`, `TransformGizmo`, `SceneRenderer`, `GridRenderer`,
+  `SceneHierarchyPanel`, `PropertiesPanel`, `AiAssistant`, `ModelRegistry`,
+  `KeybindingManager`. The established idiom for extracting a new one:
+  self-contained value member, zero/near-zero-arg constructor, whatever
+  document/app state it needs passed per-call rather than stored (see any
+  of the above for a template) — a `PropertiesPanel`-style
+  context-struct-of-callbacks idiom exists for logic that must call back
+  into many private `MeshCraftApplication` members.
+- **`Alg` mirror pattern:** pure-logic, CNA-free free functions
+  (`include/MeshCraft/EditorAlgorithms.hpp`,
+  `src/MeshCraft/AiResponseAlgorithms.hpp`) mirror some production code
+  paths so they're headlessly testable. Most are the real production
+  implementation (the `.cpp` calls into them); a few are deliberately-kept
+  duplicates. At least two have already drifted from production despite
+  the "kept in sync" intent (`insertAnimKeyframesAlg`/`loadPrefsAlg`,
+  `AUD-030` fixed the first, `AUD-031`/`032`/`033` cover the audit of the
+  rest). **Check whether an `Alg` function is actually called from
+  production before assuming a fix there takes effect.**
+- **Undo/redo:** whole-document snapshot-based (deep copy on every
+  mutating command), not command/diff-based. `undoStack_`/`redoStack_` are
+  raw `std::vector<Mc3::Mc3Document>` members, not yet extracted.
+- **`mc3.xsd` is compiled into the binary at configure time** — editing it
+  requires a reconfigure, not just a rebuild.
+- **XML comment gotcha:** a literal `--` inside an XML comment is rejected
+  by `lxml`/`test/validate_xsd.py`, though `tinyxml2` tolerates it
+  silently. Run `test/validate_xsd.py` on any new/edited `.mc3.xml`
+  fixture before trusting it.
+- **`AiAssistant` threading invariant:** background HTTP runs on a
+  detached `std::thread` writing into a `shared_ptr<AiRequestResult>`
+  (atomic done flag + mutex). Never switch this to `std::async`/
+  `std::future` (reintroduces a destructor-blocking hang-on-close that was
+  already fixed once).
+- **`CNA_ENABLE_NET` must stay `OFF`** — an unused CNA subsystem that fails
+  to compile; re-enabling breaks the default build.
+- **Boundaries that must not be broken:** no changes to `../cna` or
+  `../sharp-runtime` without owner permission (a separate process handles
+  them). No `${meta-gl_SOURCE_DIR}/include` in `CMakeLists.txt` (triggers a
+  full CNA recompile). Commits from the sibling `mesh-world` repo's
+  R-series backlog can land on this repo's `develop` independent of this
+  repo's own `plan.md` — don't assume `git log` only contains commits this
+  repo's own backlog asked for.
 
 ## 7. Useful commands
 
 ```bash
-# Configure + build (this session used system cmake on b-release successfully).
-# For a separate Debug tree, if your system cmake has a documented reconfigure
-# bug for this project, point CLION_CMAKE at your own CLion's bundled cmake
-# binary instead of the system one (path is machine-specific — find yours
-# under your CLion install's cmake/<platform>/bin/cmake, or just use system
-# cmake if it works, as b-release does above).
-cmake -S . -B cmake-build-debug -DBUILD_TESTING=ON -DCMAKE_POLICY_VERSION_MINIMUM=3.5 -G Ninja
-cd cmake-build-debug && ninja -j"$(nproc)"
+# Configure + build (Release, EasyGL backend — the tree this session verified)
+cmake -S . -B b-release
+cmake --build b-release -j"$(nproc)"
 
-# Release tree used this session:
-cmake -S . -B b-release && cmake --build b-release -j"$(nproc)"
+# Full test suite
+(cd b-release && ctest -j"$(nproc)")
+(cd b-release && ctest -N)                              # list registered tests + live count
+(cd b-release && ctest -R field_matrix --output-on-failure)   # reproduce the current failure
 
-# Test
-(cd b-release && ctest --output-on-failure)        # full suite
-(cd b-release && ctest -N)                          # list registered tests + live count
-(cd b-release && ctest -R undo_snapshot_lint -V)    # session-1 lint guard
-
-# Plan/doc self-consistency (added session 2 — run before trusting any count in plan.md/NEXT.md)
+# Plan/doc self-consistency (run before trusting any count in plan.md/NEXT.md)
 python3 test/validate_plan_consistency.py . b-release
 
 # XSD validation of a new/changed fixture
 python3 test/validate_xsd.py mc3/mc3.xsd test/some_fixture.mc3.xml
 
-# Static audits
-python3 test/xsd_docs_diff.py            # MC3_FORMAT.md vs XSD drift
-python3 test/undo_coverage_audit.py .    # undo-coverage candidates (78 untriaged, AUD-036b)
+# Lint/format (config checked in this session; clang-format needs
+# `pip install clang-format` first if not already on PATH)
+clang-format -i path/to/changed/file.cpp
+cmake -S . -B b-release -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
+clang-tidy -p b-release path/to/changed/file.cpp
 
 # Run / demo
 ./b-release/MeshCraft test/house.mc3.xml
-./b-release/mc3togltf/mc3togltf test/features.mc3.xml /tmp/out.glb
+./b-release/MeshCraft test/house.mc3.xml --screenshot /tmp/out.png   # writes a .ppm despite the name; `convert` reads it
+./b-release/mc3togltf/mc3togltf test/features.mc3.xml /tmp/out.glb --stats
 ./b-release/mc3tomcb/mc3tomcb test/house.mc3.xml /tmp/out.mcb
+```
+
+## 8. Next smallest tasks
+
+1. **Re-check `field_matrix` before touching it.**
+   Goal: confirm whether the sibling `mesh-world` repo's ongoing R-series
+   work has already closed the gap described in §4(a), to avoid duplicate
+   or conflicting work.
+   Files: none changed — just `git log --oneline -20` and re-run the test.
+   Verify: `(cd b-release && ctest -R field_matrix --output-on-failure)`.
+
+2. **If still open, close the `field_matrix` gap for the 18 listed fields.**
+   Goal: add `xsd_attr` (mc3.xsd) + `mcb_read`/`mcb_write`
+   (`McbReader.cpp`/`McbWriter.cpp`) coverage for `Mc3Object::assetMetadata`'s
+   fields, or explicitly allowlist any that are intentionally
+   XML/JSON-only, matching `test/field_matrix.py`'s existing allowlist
+   pattern.
+   Files: `mc3/mc3.xsd`, `mcb/src/McbReader.cpp`, `mcb/src/McbWriter.cpp`,
+   `mc3/include/MeshCraft/Mc3/Mc3AssetMetadata.hpp`, `test/field_matrix.py`.
+   Verify: `(cd b-release && ctest -R field_matrix)` passes; full `ctest`
+   still green.
+
+3. **Decide `EditorViewport`'s fate.**
+   Goal: either finish wiring it in (retarget the ~76 `camera_.` + ~12
+   `gizmo_.` call sites across 7 files to go through it) or delete it as
+   abandoned scaffolding — either way, record the decision in `plan.md`
+   (`SYS-W3-01`'s roadmap already names this as Phase 3).
+   Files: `include/MeshCraft/Editor/EditorViewport.hpp`,
+   `src/MeshCraft/Editor/EditorViewport.cpp`, and (if finishing it)
+   `MeshCraftApplication.hpp` + the 7 files referencing `camera_`/`gizmo_`.
+   Verify: full rebuild + `ctest`; if finished, a `--screenshot` check that
+   the viewport still renders/orbits correctly.
+
+4. **`SYS-W3-01` Phase 2: Preferences ownership decision.**
+   Goal: decide whether a new `Preferences`/`AppSettings` class owns only
+   `prefTheme_`/`prefsOpen_`/`applyTheme()` (narrow) or also the
+   cross-domain fields `loadPrefs()`/`savePrefs()` currently persist
+   (`autoSaveInterval_`, `snapTranslate_`/`snapRotate_`/`snapScale_`,
+   `gridSpacing_`) — then extract accordingly.
+   Files: `include/MeshCraft/MeshCraftApplication.hpp`,
+   `src/MeshCraft/MeshCraftApplication_FileOps.cpp` (`loadPrefs`/
+   `savePrefs`/`applyTheme`), `include/MeshCraft/EditorAlgorithms.hpp`
+   (`PrefsAlg`, `loadPrefsAlg`/`savePrefsAlg`).
+   Verify: full rebuild + `ctest`; a manual load/save round-trip test
+   (following `keybinding_manager_test.cpp`'s pattern) for the new class.
+
+5. **Investigate `AUD-014`: join the `AiAssistant` background thread at
+   shutdown.**
+   Goal: confirm whether the detached thread noted in §6 can be safely
+   joined (with a bounded timeout, reusing the existing
+   `waitForAllInFlight()`) during `MeshCraftApplication`'s destructor,
+   closing this long-open loose end.
+   Files: `src/MeshCraft/AiAssistant.cpp`, `include/MeshCraft/AiAssistant.hpp`,
+   `src/MeshCraft/MeshCraftApplication.cpp` (destructor).
+   Verify: `ctest -R ai` (the `ai_test` binary) plus a manual check that
+   the app still exits promptly with a request in flight.
+
+## 9. Do not do yet
+
+- **No broad `MeshCraftApplication` refactor in one pass.** `SYS-W3-01` is
+  explicitly phased (research this session sized it at 280 members/113
+  methods); do one subsystem at a time, verify, commit.
+- **No mass `clang-format -i` across the existing 18.5k LOC.** The config
+  added this session (`.clang-format`) was deliberately not applied
+  tree-wide — that's a separate, much larger, not-yet-decided change.
+- **No "fixing" `field_matrix` without first checking `git log`** for newer
+  commits from the sibling `mesh-world` repo — it may already be resolved,
+  and racing that other work risks a real merge conflict or duplicated
+  effort.
+- **No changes to `../cna` or `../sharp-runtime`** without explicit owner
+  permission.
+- **No `Mc3Document` public API changes** without checking `mc3togltf`,
+  `mc3tomcb`, the editor, and all test fixtures first — additive only.
+- **No attempt to unpark CI** (`.github_/workflows/ci.yml` → `.github/`) —
+  owner-gated, needs a workflow-scoped push token nobody in this session
+  has.
+- **No speculative work on `EditorViewport`** (e.g. partially rewiring it)
+  without first making the explicit finish-or-delete decision in task 3
+  above — it's already been left half-done once.
+- **No new user-facing features** until the current backlog (`SYS-W3-01`
+  and its open phases) is closed — this project is still in a
+  stabilization phase by its own stated policy (`STABILIZATION.md`).
+
+## 10. Resume prompt
+
+```
+Read NEXT.md first, in full. Then work on exactly ONE task from its
+"Next smallest tasks" section — start with task 1 unless told otherwise.
+Inspect only the files that task names; do not refactor or "clean up"
+anything else you notice along the way. Make one small, verified
+improvement: implement it, then run the exact verification command the
+task lists (and the full `ctest` suite) before considering it done. Do
+not start a second task in the same session unless the first is fully
+committed and verified. When finished, update NEXT.md: move the completed
+task out of "Next smallest tasks", update "Current status"/"Recent
+changes" with what actually changed (not what was planned), and re-check
+every other section for anything your change made stale.
 ```
