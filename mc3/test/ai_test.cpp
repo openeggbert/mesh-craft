@@ -14,6 +14,7 @@
 #include "AiResponseAlgorithms.hpp"
 
 #include <MeshCraft/Mc3/Mc3Document.hpp>
+#include <MeshCraft/Mc3/Mc3Validation.hpp>
 #include <MeshCraft/TempFile.hpp>
 
 #include <atomic>
@@ -414,6 +415,53 @@ static void testValidateAndParseAiResponseAcceptsPreviouslyUndeclaredConstructs(
         "</objects></mc3>");
     CHECK(result.doc.has_value(),
           "XSD audit regression: layer/state/material_override/variants no longer false-reject");
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SYS-W1-01 — validateAndParseAiResponseAlg(rawResponse, validation): the
+// AI-apply integration point. Proves the diagnostic surface itself (mirrors
+// mc3_validation_test.cpp's approach), for the single least-trusted content
+// source this application parses.
+// ─────────────────────────────────────────────────────────────────────────────
+
+static void testValidateAndParseAiResponseValidationOverload() {
+    // A hostile-but-recoverable value: the parser clamps it (doesn't
+    // reject), so the document still parses, but a warning entry must
+    // appear naming the field.
+    Mc3Validation validation;
+    auto result = validateAndParseAiResponseAlg(
+        "<mc3 version=\"0.3\"><objects>"
+        "<sphere id=\"huge\" name=\"huge\" radius=\"1\" segments=\"100000000\"/>"
+        "</objects></mc3>", validation);
+    CHECK(result.doc.has_value(),
+          "SYS-W1-01: a hostile-but-recoverable AI response still parses to a usable document");
+    CHECK(validation.hasWarnings(),
+          "SYS-W1-01: the validation-capturing overload records the segments clamp as a warning");
+
+    // A hard rejection (no <mc3> root) must ALSO record an error entry, not
+    // just set errorMessage -- this rejection has no Mc3XmlParser equivalent
+    // (it never reaches the parser at all), so it's recorded directly here.
+    Mc3Validation rejectValidation;
+    auto rejected = validateAndParseAiResponseAlg("not xml here, sorry", rejectValidation);
+    CHECK(!rejected.doc.has_value(), "SYS-W1-01: still rejects a non-XML response");
+    CHECK(rejectValidation.hasErrors(),
+          "SYS-W1-01: the missing-<mc3>-root rejection is ALSO recorded as a validation error "
+          "entry, not just returned via errorMessage");
+
+    // The empty-document rejection (STAB-0376) must be recorded too.
+    Mc3Validation emptyValidation;
+    auto empty = validateAndParseAiResponseAlg("<mc3 version=\"0.3\"></mc3>", emptyValidation);
+    CHECK(!empty.doc.has_value(), "SYS-W1-01: still rejects an empty document");
+    CHECK(emptyValidation.hasErrors(),
+          "SYS-W1-01: the empty-document rejection is recorded as a validation error entry too");
+
+    // A clean, unremarkable response must produce zero findings.
+    Mc3Validation cleanValidation;
+    auto clean = validateAndParseAiResponseAlg(
+        "<mc3 version=\"0.3\"><objects><box id=\"b1\"/></objects></mc3>", cleanValidation);
+    CHECK(clean.doc.has_value(), "SYS-W1-01: a clean response still parses normally");
+    CHECK(cleanValidation.empty(),
+          "SYS-W1-01: a clean response produces no validation findings at all");
 }
 
 #ifdef MESHCRAFT_HAS_LIBXML2
@@ -844,6 +892,7 @@ int main() {
     testValidateXmlAgainstXsdAcceptsValidDocument();
     testValidateAndParseAiResponsePipelineAcceptsValidXsd();
     testValidateAndParseAiResponseAcceptsPreviouslyUndeclaredConstructs();
+    testValidateAndParseAiResponseValidationOverload();
 #ifdef MESHCRAFT_HAS_LIBXML2
     testValidateXmlAgainstXsdRejectsInvalidDocument();
     testValidateAndParseAiResponsePipelineRejectsInvalidXsd();

@@ -5,6 +5,7 @@
 // ai_test.cpp (headless).
 
 #include <MeshCraft/Mc3/Mc3Document.hpp>
+#include <MeshCraft/Mc3/Mc3Validation.hpp>
 #include <MeshCraft/TempFile.hpp>
 
 #include <cstdarg>
@@ -98,6 +99,17 @@ inline Mc3::Mc3Document parseXmlAlg(const std::string& xml)
     // open and merge arbitrary local files (a local-file-inclusion vector).
     return Mc3::Mc3Document::loadFromString(xml, /*sourceDir=*/{},
                                             Mc3::Mc3LoadPolicy::untrusted());
+}
+
+// SYS-W1-01: validation-capturing counterpart -- same semantics as above,
+// additionally populating `validation` with a warning/error entry for every
+// clamp/default/rejection the parse performs (AI responses are the single
+// least-trusted content source this application parses, so this is where
+// the diagnostic surface arguably matters most).
+inline Mc3::Mc3Document parseXmlAlg(const std::string& xml, Mc3::Mc3Validation& validation)
+{
+    return Mc3::Mc3Document::loadFromString(xml, /*sourceDir=*/{},
+                                            Mc3::Mc3LoadPolicy::untrusted(), validation);
 }
 
 // A parsed AI response that has neither objects nor definitions would
@@ -216,6 +228,46 @@ inline AiResponseParseResultAlg validateAndParseAiResponseAlg(const std::string&
         r.doc = std::move(parsed);
     } catch (const std::exception& ex) {
         r.errorMessage = ex.what();
+    }
+    return r;
+}
+
+// SYS-W1-01: validation-capturing counterpart -- same pipeline as above,
+// additionally recording every rejection (including the ones below that
+// have no Mc3XmlParser equivalent: no <mc3> root, an empty document, XSD
+// non-conformance) as an Mc3Validation error entry, plus every parser-level
+// clamp/default via the parseXmlAlg(xml, validation) overload. Entries have
+// no sourcePath/objectId (there is no file on disk and no single offending
+// element for a whole-response rejection) -- mirrors the Mc3XmlParser
+// convention for whole-document findings (see reportErrorDoc there).
+inline AiResponseParseResultAlg validateAndParseAiResponseAlg(const std::string& rawResponse,
+                                                                Mc3::Mc3Validation& validation)
+{
+    AiResponseParseResultAlg r;
+    std::string xml = repairXmlAlg(extractXmlAlg(rawResponse));
+    if (xml.find("<mc3") == std::string::npos) {
+        r.errorMessage = "Response does not contain a <mc3> root element";
+        validation.addError({}, {}, "root", r.errorMessage);
+        return r;
+    }
+    try {
+        Mc3::Mc3Document parsed = parseXmlAlg(xml, validation);
+        if (isEmptyMc3DocumentAlg(parsed)) {
+            r.errorMessage =
+                "AI returned an empty document (no objects, no definitions). "
+                "Not applying to avoid destroying the current scene.";
+            validation.addError({}, {}, "objects", r.errorMessage);
+            return r;
+        }
+        if (auto xsdError = validateXmlAgainstXsdAlg(xml)) {
+            r.errorMessage = "AI response does not conform to mc3.xsd: " + *xsdError;
+            validation.addError({}, {}, "xsd", *xsdError);
+            return r;
+        }
+        r.doc = std::move(parsed);
+    } catch (const std::exception& ex) {
+        r.errorMessage = ex.what();
+        validation.addError({}, {}, {}, ex.what());
     }
     return r;
 }
