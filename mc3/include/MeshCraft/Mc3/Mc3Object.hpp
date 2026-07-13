@@ -98,6 +98,16 @@ public:
     // only on definitions where authored/known.
     std::optional<Mc3AssetMetadata> assetMetadata;
 
+    // R103 -- id of an entry in the owning Mc3Document's own `scripts` map
+    // (see Mc3Script.hpp), run at build/compose time by a consumer that
+    // supports it (mesh_world_revival.md §6/§7: placing imported R101/R102
+    // definitions into this object at its own assetMetadata.sockets).
+    // Empty (the default) means "no script" -- a plain definition works
+    // exactly as before. This field only carries the REFERENCE; nothing in
+    // mesh-craft itself executes it (that's each consumer's own choice of
+    // Lua binding/sandbox, per R104's own scoping note).
+    std::string scriptId;
+
     // --- Static factory methods -------------------------------------------
     // Each factory returns a shared_ptr so objects can be added directly to
     // children vectors or Mc3Document::objects.

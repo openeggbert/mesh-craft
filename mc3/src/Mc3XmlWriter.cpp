@@ -55,6 +55,7 @@ static void setCommonAttribs(XMLElement* el, const Mc3Object& obj) {
     if (obj.collision != "none" && !obj.collision.empty())
                                 el->SetAttribute("collision", obj.collision.c_str());
     if (!obj.layer.empty())     el->SetAttribute("layer",     obj.layer.c_str());
+    if (!obj.scriptId.empty())  el->SetAttribute("script",    obj.scriptId.c_str());
     if (obj.isCutter)           el->SetAttribute("role",      "cutter");
     if (!obj.tags.empty()) {
         std::string tags;

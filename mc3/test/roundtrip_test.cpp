@@ -2741,6 +2741,47 @@ static void testScript() {
         CHECK(rt.scripts.count("main")  == 1, "script+embed+obj: script preserved");
         CHECK(!rt.objects.empty(),             "script+embed+obj: object preserved");
     }
+    // R103: Mc3Object::scriptId -- a definition referencing one of the
+    // document's own scripts by id (mesh_world_revival.md §6/§7's
+    // build/compose-time placement, executed by whatever consumer opts
+    // in -- mesh-craft itself only carries the reference).
+    {
+        Mc3Document doc;
+        Mc3Script sc;
+        sc.id     = "house.facade";
+        sc.type   = "lua";
+        sc.source = "def:place('w', 'windows:window.classic_01', 'window_front_l')";
+        doc.addScript(sc);
+
+        auto def = std::make_shared<Mc3Object>();
+        def->type     = ObjectType::Group;
+        def->id       = "house.modular_01";
+        def->scriptId = "house.facade";
+        doc.defineObject("house.modular_01", def);
+
+        auto rt = roundtrip(doc);
+        CHECK(rt.definitions.count("house.modular_01") == 1, "scriptId: definition preserved");
+        if (rt.definitions.count("house.modular_01")) {
+            CHECK(rt.definitions["house.modular_01"]->scriptId == "house.facade",
+                  "scriptId: reference preserved");
+            CHECK(rt.scripts.count(rt.definitions["house.modular_01"]->scriptId) == 1,
+                  "scriptId: resolves to a real script in the same document");
+        }
+    }
+    // scriptId absent by default -- a plain definition with no script
+    // reference must not gain one from round-tripping.
+    {
+        Mc3Document doc;
+        auto def = std::make_shared<Mc3Object>();
+        def->type = ObjectType::Group;
+        def->id   = "plain";
+        doc.defineObject("plain", def);
+
+        auto rt = roundtrip(doc);
+        CHECK(rt.definitions.count("plain") == 1, "scriptId absent: definition preserved");
+        if (rt.definitions.count("plain"))
+            CHECK(rt.definitions["plain"]->scriptId.empty(), "scriptId absent: stays empty");
+    }
 }
 
 static void testSvgTexture() {

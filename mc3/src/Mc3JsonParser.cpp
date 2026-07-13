@@ -172,6 +172,7 @@ std::shared_ptr<Mc3Object> toObject(const json& j) {
     obj->visible  = j.value("visible", true);
     obj->collision = j.value("collision", "none");
     obj->layer    = j.value("layer", "");
+    obj->scriptId = j.value("script", "");
     if (j.contains("tags"))
         obj->tags = j["tags"].get<std::vector<std::string>>();
     obj->isCutter = j.value("role", "") == "cutter";

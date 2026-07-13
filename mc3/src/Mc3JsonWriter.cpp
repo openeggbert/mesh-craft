@@ -180,6 +180,7 @@ json objectJson(const std::shared_ptr<Mc3Object>& obj) {
     if (obj->collision != "none" && !obj->collision.empty())
                                  j["collision"] = obj->collision;
     if (!obj->layer.empty())    j["layer"] = obj->layer;
+    if (!obj->scriptId.empty()) j["script"] = obj->scriptId;
     if (!obj->tags.empty())     j["tags"] = obj->tags;
     if (obj->isCutter)          j["role"] = "cutter";
 
