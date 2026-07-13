@@ -243,7 +243,16 @@ void MeshCraftApplication::LoadContent() {
 
     if (!currentFile_.empty() && std::filesystem::exists(currentFile_)) {
         try {
-            document_ = Mc3::Mc3Document::loadFromFile(currentFile_);
+            // SYS-W1-01 (pre-render integration point): capture load-time
+            // diagnostics for the file about to become the active document
+            // (and be rendered) -- same clamp/default/rejection entries a
+            // plain loadFromFile() already silently applies, now reported.
+            Mc3::Mc3Validation loadValidation;
+            document_ = Mc3::Mc3Document::loadFromFile(currentFile_, Mc3::Mc3LoadPolicy::trusted(),
+                                                        loadValidation);
+            if (!loadValidation.empty())
+                std::cout << "[MeshCraft] Load: " << loadValidation.warningCount() << " warning(s), "
+                          << loadValidation.errorCount() << " error(s) in " << currentFile_ << "\n";
             addRecentFile(currentFile_);
             std::cout << "[MeshCraft] Loaded: " << currentFile_ << "\n";
             checkRotationConventionNotice();

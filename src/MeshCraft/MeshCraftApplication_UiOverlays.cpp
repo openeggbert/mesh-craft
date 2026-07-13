@@ -1154,10 +1154,18 @@ void MeshCraftApplication::drawDialogs()
         if (ImGui::Button("Open") || ImGui::IsKeyPressed(ImGuiKey_Enter)) {
             try {
                 std::filesystem::path p{openDialogBuf_};
+                // SYS-W1-01 (pre-render integration point): see the matching
+                // comment in MeshCraftApplication::Initialize().
+                Mc3::Mc3Validation loadValidation;
                 if (p.extension() == ".mcb")
-                    document_ = Mcb::loadFromFile(p);
+                    document_ = Mcb::loadFromFile(p, loadValidation);
                 else
-                    document_ = Mc3::Mc3Document::loadFromFile(p);
+                    document_ = Mc3::Mc3Document::loadFromFile(p, Mc3::Mc3LoadPolicy::trusted(),
+                                                                loadValidation);
+                if (!loadValidation.empty())
+                    std::cout << "[MeshCraft] Load: " << loadValidation.warningCount()
+                              << " warning(s), " << loadValidation.errorCount() << " error(s) in "
+                              << openDialogBuf_ << "\n";
                 currentFile_ = openDialogBuf_;
                 addRecentFile(currentFile_);
                 selection_.clear();

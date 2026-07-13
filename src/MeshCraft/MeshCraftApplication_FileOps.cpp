@@ -93,7 +93,14 @@ void MeshCraftApplication::checkForNewerAutosave(const std::filesystem::path& fi
 // successful save).
 void MeshCraftApplication::recoverFromAutosave() {
     try {
-        document_ = Mc3::Mc3Document::loadFromFile(autoSavePath(recoveryFilePath_));
+        // SYS-W1-01 (pre-render integration point): see the matching
+        // comment in MeshCraftApplication::Initialize().
+        Mc3::Mc3Validation loadValidation;
+        document_ = Mc3::Mc3Document::loadFromFile(autoSavePath(recoveryFilePath_),
+                                                    Mc3::Mc3LoadPolicy::trusted(), loadValidation);
+        if (!loadValidation.empty())
+            std::cout << "[MeshCraft] Autosave recovery: " << loadValidation.warningCount()
+                      << " warning(s), " << loadValidation.errorCount() << " error(s)\n";
         currentFile_ = recoveryFilePath_;
         addRecentFile(currentFile_);
         selection_.clear();
@@ -180,7 +187,16 @@ void MeshCraftApplication::executePendingAction() {
     case PendingAction::OpenRecentFile:
         if (!pendingOpenPath_.empty()) {
             try {
-                document_ = Mc3::Mc3Document::loadFromFile(pendingOpenPath_);
+                // SYS-W1-01 (pre-render integration point): see the matching
+                // comment in MeshCraftApplication::Initialize().
+                Mc3::Mc3Validation loadValidation;
+                document_ = Mc3::Mc3Document::loadFromFile(pendingOpenPath_,
+                                                            Mc3::Mc3LoadPolicy::trusted(),
+                                                            loadValidation);
+                if (!loadValidation.empty())
+                    std::cout << "[MeshCraft] Load: " << loadValidation.warningCount()
+                              << " warning(s), " << loadValidation.errorCount() << " error(s) in "
+                              << pendingOpenPath_ << "\n";
                 currentFile_ = pendingOpenPath_;
                 addRecentFile(currentFile_);
                 selection_.clear();
@@ -216,6 +232,27 @@ void MeshCraftApplication::openFile() {
 void MeshCraftApplication::saveFile() {
     if (currentFile_.empty()) { saveFileAs(); return; }
     try {
+        // SYS-W1-01 (save integration point): re-validate the in-memory
+        // document right before writing -- catches values that reached
+        // memory via a path that bypasses Mc3XmlParser's own clamps (direct
+        // Properties-panel edits, AI-apply, scripting), not just whatever
+        // was true when the file was last loaded. Diagnostic-only: never
+        // blocks the save itself (see Mc3Document::validate()'s doc comment).
+        Mc3::Mc3Validation validation;
+        document_.validate(validation);
+        if (!validation.empty()) {
+            std::cerr << "[MeshCraft] Save: " << validation.warningCount() << " warning(s), "
+                      << validation.errorCount() << " error(s) found while re-validating:\n";
+            for (const auto& e : validation.entries) {
+                std::cerr << "  [" << (e.severity == Mc3::Mc3ValidationSeverity::Error ? "error" : "warning")
+                          << "] " << (e.objectId.empty() ? "(document)" : e.objectId);
+                if (!e.field.empty()) std::cerr << "." << e.field;
+                std::cerr << ": " << e.message;
+                if (!e.suggestedRepair.empty()) std::cerr << " (" << e.suggestedRepair << ")";
+                std::cerr << "\n";
+            }
+        }
+
         // F6: rotate backups before overwriting. AUD-031: was a hand-copied
         // duplicate of rotateBackupsAlg's own logic; now delegates to it.
         rotateBackupsAlg(currentFile_);
@@ -225,7 +262,10 @@ void MeshCraftApplication::saveFile() {
         autoSaveCountdown_ = autoSaveInterval_ > 0.0f ? autoSaveInterval_ : 60.0f;
         { std::error_code ec; std::filesystem::remove(autoSavePath(currentFile_), ec); }
         std::cout << "[MeshCraft] Saved: " << currentFile_ << "\n";
-        setStatusMsg("Saved " + currentFile_.filename().string(), false, 2.0f);
+        std::string statusMsg = "Saved " + currentFile_.filename().string();
+        if (!validation.empty())
+            statusMsg += " (" + std::to_string(validation.entries.size()) + " validation note(s), see console)";
+        setStatusMsg(statusMsg, false, 2.0f);
         updateWindowTitle();
     } catch (const std::exception& e) {
         std::cerr << "[MeshCraft] Save error: " << e.what() << "\n";
