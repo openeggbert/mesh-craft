@@ -115,3 +115,22 @@ from this repo**:
 - Update `NEXT.md` after a change lands — it's meant to always reflect
   current, verified state (see its own §10 "Resume prompt" for the
   expected update discipline).
+
+## Code style (`SYS-W11-06`)
+
+Checked-in `.clang-format`/`.clang-tidy` at the repo root, scoped to first-party
+code (`mc3/`, `mcb/`, `mc3togltf/`, `mc3tomcb/`, `src/MeshCraft/`,
+`include/MeshCraft/`) — `../cna`/`../sharp-runtime` and every vendored
+`FetchContent` dependency are excluded via `.clang-tidy`'s `HeaderFilterRegex`.
+Neither is CI-enforced yet (CI itself is parked, `AUD-052`); run them locally:
+
+```bash
+# Format a file you touched (does not exist as a repo-wide pass — the
+# existing 18.5k LOC was never mass-reformatted against this config, so a
+# blind `-i` over the whole tree will produce a large, unreviewed diff)
+clang-format -i path/to/your/file.cpp
+
+# Lint first-party code (needs a compile database)
+cmake -S . -B <build-dir> -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
+clang-tidy -p <build-dir> path/to/your/file.cpp
+```

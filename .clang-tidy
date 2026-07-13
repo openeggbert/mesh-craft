@@ -1,0 +1,26 @@
+# SYS-W11-06: scoped clang-tidy config. Base set (clang-diagnostic-*,
+# clang-analyzer-*) matches what was already run manually and clean
+# (docs/history/plan_20260710.md STAB-0614/STAB-0615) before this config
+# existed; bugprone-*/performance-* added on top (excluding two checks that
+# are pure style opinions with no correctness value on this codebase, not
+# because anything they found was wrong). Deliberately NOT modernize-* --
+# high noise, mostly style preference, and this project's own stated
+# philosophy is no mass refactoring of passing code (see plan.md).
+Checks: >
+  clang-diagnostic-*,
+  clang-analyzer-*,
+  bugprone-*,
+  performance-*,
+  -bugprone-easily-swappable-parameters,
+  -bugprone-narrowing-conversions
+
+WarningsAsErrors: ''
+
+# First-party code only: mc3/mcb/mc3togltf/mc3tomcb (standalone,
+# CNA-free libs) and the editor's own src/MeshCraft + include/MeshCraft.
+# Excludes ../cna, ../sharp-runtime (owner-gated per CLAUDE.md), and every
+# vendored FetchContent dependency (tinyxml2, nlohmann/json, manifold,
+# tinygltf, httplib, ...) under */build*/_deps/.
+HeaderFilterRegex: '^.*/(mc3|mcb|mc3togltf|mc3tomcb)/(include|src)/.*|^.*/include/MeshCraft/.*|^.*/src/MeshCraft/.*'
+
+FormatStyle: none

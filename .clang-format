@@ -1,0 +1,41 @@
+# SYS-W11-06: derived from the existing hand-formatted style in mc3/, mcb/,
+# mc3togltf/, mc3tomcb/, and src/MeshCraft/ -- NOT applied as a mass reformat
+# (see plan.md's SYS-W11-06 entry for why). Intended for new/changed code
+# and IDE integration; a whole-tree `clang-format -i` pass is a separate,
+# much larger, not-yet-decided undertaking.
+BasedOnStyle: LLVM
+Language: Cpp
+Standard: c++20
+
+IndentWidth: 4
+TabWidth: 4
+UseTab: Never
+ColumnLimit: 100
+NamespaceIndentation: None
+AccessModifierOffset: -4
+
+BreakBeforeBraces: Attach
+Cpp11BracedListStyle: true
+AllowShortIfStatementsOnASingleLine: WithoutElse
+AllowShortLoopsOnASingleLine: false
+AllowShortFunctionsOnASingleLine: Inline
+AllowShortBlocksOnASingleLine: Never
+
+PointerAlignment: Left
+ReferenceAlignment: Left
+DerivePointerAlignment: false
+
+IncludeBlocks: Preserve
+SortIncludes: Never
+
+SpaceBeforeParens: ControlStatements
+SpaceAfterTemplateKeyword: false
+AlignAfterOpenBracket: Align
+AlignConsecutiveAssignments: false
+AlignConsecutiveDeclarations: false
+AlignTrailingComments: true
+
+BinPackArguments: true
+BinPackParameters: true
+ConstructorInitializerIndentWidth: 4
+ContinuationIndentWidth: 4
