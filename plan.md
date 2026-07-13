@@ -329,11 +329,51 @@ Mandated workstream items not tied to a single audit finding.
   bound HTTP + extracted-XML size.
 
 ### W3 — Architecture decomposition
-- **SYS-W3-01** `[TODO]` `P2` — Extract from `MeshCraftApplication` (a god object
-  split across .cpp files, not by responsibility): document/session, command/undo,
-  selection, transform/gizmo, camera, animation, import/export, file/autosave,
-  preferences, render pipeline, AI, registry, audio, dialog/status, platform
-  bridge — with narrow interfaces, not another god object.
+- **SYS-W3-01** `[IN_PROGRESS]` `P2` — Extract from `MeshCraftApplication` (a god
+  object split across .cpp files, not by responsibility): document/session,
+  command/undo, selection, transform/gizmo, camera, animation, import/export,
+  file/autosave, preferences, render pipeline, AI, registry, audio,
+  dialog/status, platform bridge — with narrow interfaces, not another god
+  object. **Confirmed a genuinely multi-session task, not a one-sitting fix:**
+  a 3-way research pass (full header + all 17 implementation files + every
+  already-extracted subsystem) found **280 data members + 113 methods** in the
+  class (692-line header body, 11,544 lines of implementation across 17
+  `.cpp` files), of which only **9 are already delegated** to an owned
+  helper (`camera_`/`selection_`/`gizmo_`/`sceneRenderer_`/`gridRenderer_`/
+  `hierarchyPanel_`/`propertiesPanel_`/`aiAssistant_`/`registry_`) — the
+  remaining ~270 raw members are the actual "god object" surface. Also found
+  a previously-abandoned partial attempt at exactly this task:
+  `Editor::EditorViewport` (bundling `camera_`+`gizmo_`+a `pickRay()`
+  helper) was added in commit `580105d` as an explicit "stub" and never
+  wired into `MeshCraftApplication` — still dead code today. Full research
+  writeup + phased roadmap (Phase 2 onward: Preferences/Macro, then
+  `EditorViewport`'s fate, undo/redo, animation, file dialogs,
+  post-processing, audio/walk-mode) recorded in this session's plan file for
+  continuity, condensed here:
+  **Phase 1 DONE (commit `95aaa90`):** extracted `Editor::KeybindingManager`
+  (`include/MeshCraft/Editor/KeybindingManager.hpp` /
+  `src/MeshCraft/Editor/KeybindingManager.cpp`) — the `keybindings_` map,
+  `KeyBind` struct, default-seeding, load/save (ini format unchanged), and
+  `shortcutFired()`'s modifier+just-pressed matching, all moved out of
+  `MeshCraftApplication` verbatim; `MeshCraftApplication_Keybindings.cpp`
+  deleted. Chosen first because it was the one of the three originally
+  bundled candidates (Preferences + Macro recorder + Keybindings) with
+  genuinely no cross-domain entanglement — reading the actual
+  implementation (not just member counts) showed Macro's
+  `executeMacroStep()` calls 8 other `MeshCraftApplication` methods plus
+  direct field access (needs a `PropertiesPanel`-style callback-DI struct,
+  deferred to a future phase alongside a broader Commands extraction), and
+  Preferences' `loadPrefs()`/`savePrefs()` persist a cross-cutting struct
+  spanning autosave/gizmo-snap/render-grid fields that aren't Preferences'
+  own (needs a deliberate ownership decision, also deferred). New
+  `keybinding_manager_test` (root `CMakeLists.txt`, needs real CNA
+  `Keys`/`KeyboardState` so it links `CNA`/`SHARP_RUNTIME` unlike the
+  header-only `active_tool_test` next to it) — no test existed for this
+  subsystem before the extraction; covers default-seeding,
+  `shortcutFired()`'s just-pressed/modifier-matching edge cases, and the
+  save/load round-trip (a user rebind survives while untouched ids still
+  re-seed to their default). Full tree rebuilt + 122/123 ctest (the 1
+  pre-existing, out-of-scope `field_matrix` failure, unrelated).
 
 ### W5 — MC3 governance
 - **SYS-W5-01** `[DONE]` `P2` — Machine-readable field matrix, `test/field_matrix.py`,

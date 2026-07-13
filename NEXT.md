@@ -262,20 +262,49 @@ follow-ups to `AUD-061`.
   documented in `CONTRIBUTING.md`.
 - Full tree rebuilt + re-tested once more after `SYS-W11-06`: still
   **121/122 ctest**, same pre-existing `field_matrix` gap.
+- **`SYS-W3-01` started (IN_PROGRESS, Phase 1 of a multi-session task)** —
+  entered plan mode given the scale (per CLAUDE.md's plan.md workflow, this
+  is exactly the kind of multi-file architectural change that warrants
+  presenting a concrete plan before touching code). 3 parallel Explore
+  agents mapped `MeshCraftApplication` precisely: **280 data members + 113
+  methods**, 692-line header, 11,544 lines across 17 `.cpp` files, only 9
+  subsystems already delegated to an owned helper. Found a previously
+  abandoned partial attempt at this exact task: `Editor::EditorViewport`
+  (camera+gizmo+pickRay), added as an explicit "stub" in commit `580105d`,
+  never wired into `MeshCraftApplication`, still dead code today. Full
+  writeup + phased roadmap (Phase 2+: Preferences/Macro, `EditorViewport`'s
+  fate, undo/redo, animation, file dialogs, post-processing, audio/walk
+  mode) is in `plan.md`'s `SYS-W3-01` entry.
+  **Phase 1 DONE (commit `95aaa90`):** extracted `Editor::KeybindingManager`
+  — chosen over the originally-proposed Preferences/Macro bundle because
+  reading the actual implementation (not just member counts) showed those
+  two have real cross-domain entanglement (Macro's `executeMacroStep()`
+  calls 8 other app methods; Preferences persists fields that belong to
+  3 other domains), while Keybindings is genuinely self-contained. New
+  `keybinding_manager_test` — no coverage existed for this subsystem before;
+  12 checks covering default-seeding, `shortcutFired()`'s just-pressed/
+  modifier-matching, and the save/load round-trip, all passing. Full tree
+  rebuilt + **122/123 ctest** (same pre-existing `field_matrix` gap, +1 net
+  new test).
 
 ## 3. Next tasks
 
 See the **Priority execution queue** at the top of [`plan.md`](plan.md) — it
 is kept free of DONE items by `test/validate_plan_consistency.py`. All
 remaining `AUD-###` TODO rows are blocked, and `SYS-W1-01`/`SYS-W14-02`/
-`SYS-W11-06` are now fully DONE (session 5), so the only remaining
-actionable SYS-### item is `SYS-W3-01` (MeshCraftApplication decomposition —
-large, a real architectural undertaking, not a quick task) — everything
-else in the `AUD-###` table is blocked (owner-gated CI via `AUD-052`, or
-missing Android NDK / out-of-scope CNA coupling). Once `SYS-W3-01` closes,
-re-run `python3 test/validate_plan_consistency.py . <build-dir>` — this repo
-may be at (or very near) the bottom of the currently-known, unblocked
-backlog.
+`SYS-W11-06` are fully DONE, so the only remaining actionable item is
+`SYS-W3-01` (MeshCraftApplication decomposition), now `IN_PROGRESS` with
+Phase 1 (Keybindings) done. **Next up is Phase 2** — see `plan.md`'s
+`SYS-W3-01` entry for the full phased roadmap: Preferences (decide first
+whether it owns cross-domain fields or just theme+dialog-toggle) and/or
+Macro recorder
+(needs a `PropertiesPanel`-style callback-DI struct), then a decision on
+`EditorViewport`'s fate, then undo/redo, animation, file dialogs,
+post-processing, audio/walk-mode. Everything else in the `AUD-###` table is
+blocked (owner-gated CI via `AUD-052`, or missing Android NDK / out-of-scope
+CNA coupling). Once all of `SYS-W3-01`'s phases close, re-run
+`python3 test/validate_plan_consistency.py . <build-dir>` — this repo may be
+at (or very near) the bottom of the currently-known, unblocked backlog.
 
 ## 4. Current blockers (external, re-verified 2026-07-11)
 
