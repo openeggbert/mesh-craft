@@ -561,7 +561,25 @@ Mandated workstream items not tied to a single audit finding.
 
 ### W14 — New features (after P0/P1 gates)
 - **SYS-W14-01** `[TODO]` `P2` — Autosave + crash recovery.
-- **SYS-W14-02** `[TODO]` `P2` — Scene validation & diagnostics UI (builds on SYS-W1-01).
+- **SYS-W14-02** `[DONE]` `P2` — Scene validation & diagnostics UI (builds on SYS-W1-01).
+  Commit `9c7bfa5`: a new "Validation" ImGui panel (same `show*Panel_`
+  toggle convention as the AI Assistant/Model Registry panels, View menu
+  entry) shows the most recent load/save/export's `Mc3Validation` result as
+  a table (severity/object/field/message/suggested repair) — `SYS-W1-01`'s
+  diagnostics were console-only until now. A small status-bar indicator
+  ("[!] N validation note(s)") appears whenever the last run produced
+  findings, clickable to open the panel. `MeshCraftApplication::
+  recordValidation()` captures the result at every real call site: the 4
+  pre-render load sites, save, and both export paths (`runGltfExport`,
+  `runObjExport`). Visually verified end-to-end with a real screenshot
+  (`--screenshot` against a scene with an out-of-range value, panel forced
+  open temporarily then reverted) — this sandbox's SDL window doesn't map
+  onto a visible desktop for interactive driving, but `ffmpeg x11grab` +
+  the app's own `--screenshot` framebuffer dump both work (ImageMagick
+  `import`/`xwd` against the same X display do not). No new automated
+  test — thin ImGui glue over already-tested `Mc3Validation`/
+  `recordValidation()` plumbing, matching this codebase's own precedent of
+  not testing every UI call site that consumes already-tested logic.
 - **SYS-W14-03** `[TODO]` `P2` — PNG screenshot / image export.
 - **SYS-W14-04** `[DEFERRED]` `P3` — SVG texture rasterization pipeline.
 - **SYS-W14-05** `[DEFERRED]` `P3` — Safe `embed:` mesh/resource support end-to-end. (`AUD-025`)

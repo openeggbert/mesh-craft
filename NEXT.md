@@ -223,18 +223,42 @@ follow-ups to `AUD-061`.
   `test/validate_plan_consistency.py` passes cleanly against the updated
   counts (67 AUD rows: 61 DONE/4 TODO/2 DEFERRED, unchanged this session;
   122 live `ctest -N`).
+- Pushed all of the above (6 commits) to `origin/develop` — clean
+  fast-forward, `origin` hadn't moved past `f392d41` since the cross-repo
+  discovery above.
+- **`SYS-W14-02` DONE** (commit `9c7bfa5`), picked as the natural next step
+  right after `SYS-W1-01`: a "Validation" ImGui panel + a status-bar
+  indicator surface `SYS-W1-01`'s diagnostics, which were console-only
+  until now. See `plan.md`'s `SYS-W14-02` entry for the full writeup.
+  **Visually verified with a real screenshot** (not just a compile check)
+  — worth recording the technique since it isn't what earlier sessions'
+  "no SDL video device in this sandbox" notes might suggest: a real X
+  display *is* reachable (`DISPLAY=:0`, `xdpyinfo` succeeds) and the app's
+  window *does* initialize OpenGL against it, but capturing that desktop
+  with ImageMagick (`import -window ...`) or `xwd` fails
+  (`BadMatch`/generic `import` error) — **`ffmpeg -f x11grab` works**
+  where those don't, AND separately, MeshCraft's own `--screenshot <path>`
+  flag (writes a `.ppm` despite the `.png`-looking name some session
+  fixtures use for it — `convert`/`magick` reads it fine) captures the
+  real composited framebuffer including ImGui, not just the 3D viewport,
+  since `ImGui::Render()`/`ImGui_ImplOpenGL3_RenderDrawData()` run
+  unconditionally before the screenshot is taken. That's what let this
+  session confirm the status-bar indicator AND the panel's table (the
+  panel's `show*Panel_` default was flipped to `true` only long enough to
+  screenshot it, then reverted — `--screenshot` mode has no interactive
+  input, so there's no other way to see a menu-toggled panel in one shot).
+- Full tree rebuilt + re-tested after `SYS-W14-02` too: still **121/122
+  ctest** (same pre-existing `field_matrix` gap, untouched by this work).
 
 ## 3. Next tasks
 
 See the **Priority execution queue** at the top of [`plan.md`](plan.md) — it
 is kept free of DONE items by `test/validate_plan_consistency.py`. All
-remaining `AUD-###` TODO rows are blocked, and `SYS-W1-01` is now fully DONE
-(session 5), so the next actionable work is the rest of the SYS-### backlog:
-`SYS-W3-01` (MeshCraftApplication decomposition — large), `SYS-W11-06`
-(clang-format/clang-tidy config — small), or `SYS-W14-02` (scene validation
-& diagnostics UI, the natural follow-up to `SYS-W1-01` — surface the
-console-only warnings/errors it now produces somewhere in the ImGui UI
-itself) — everything else in the `AUD-###` table is blocked (owner-gated CI
+remaining `AUD-###` TODO rows are blocked, and both `SYS-W1-01` and
+`SYS-W14-02` are now fully DONE (session 5), so the next actionable work is
+the rest of the SYS-### backlog: `SYS-W3-01` (MeshCraftApplication
+decomposition — large) or `SYS-W11-06` (clang-format/clang-tidy config —
+small) — everything else in the `AUD-###` table is blocked (owner-gated CI
 via `AUD-052`, or missing Android NDK / out-of-scope CNA coupling).
 
 ## 4. Current blockers (external, re-verified 2026-07-11)
