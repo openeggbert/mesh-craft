@@ -249,17 +249,33 @@ follow-ups to `AUD-061`.
   input, so there's no other way to see a menu-toggled panel in one shot).
 - Full tree rebuilt + re-tested after `SYS-W14-02` too: still **121/122
   ctest** (same pre-existing `field_matrix` gap, untouched by this work).
+- Pushed the `SYS-W14-02` commits, then picked `SYS-W11-06` next.
+  **`SYS-W11-06` DONE**: checked-in root `.clang-format`/`.clang-tidy`,
+  config only (not a mass reformat/lint-fix pass — see `plan.md`'s entry for
+  the full reasoning). `clang-format` isn't preinstalled in this sandbox —
+  `pip install clang-format` got a working binary with no root needed, used
+  only to verify the config's diffs against representative files, not run
+  `-i` against the tree. `clang-tidy` (already present, 19.1.7) actually ran
+  clean: 15 warnings total across both a standalone `mc3/` compile database
+  and the full project's, all pre-existing and already triaged in
+  `docs/history/plan_20260710.md` (STAB-0614/615/620) — nothing new. Usage
+  documented in `CONTRIBUTING.md`.
+- Full tree rebuilt + re-tested once more after `SYS-W11-06`: still
+  **121/122 ctest**, same pre-existing `field_matrix` gap.
 
 ## 3. Next tasks
 
 See the **Priority execution queue** at the top of [`plan.md`](plan.md) — it
 is kept free of DONE items by `test/validate_plan_consistency.py`. All
-remaining `AUD-###` TODO rows are blocked, and both `SYS-W1-01` and
-`SYS-W14-02` are now fully DONE (session 5), so the next actionable work is
-the rest of the SYS-### backlog: `SYS-W3-01` (MeshCraftApplication
-decomposition — large) or `SYS-W11-06` (clang-format/clang-tidy config —
-small) — everything else in the `AUD-###` table is blocked (owner-gated CI
-via `AUD-052`, or missing Android NDK / out-of-scope CNA coupling).
+remaining `AUD-###` TODO rows are blocked, and `SYS-W1-01`/`SYS-W14-02`/
+`SYS-W11-06` are now fully DONE (session 5), so the only remaining
+actionable SYS-### item is `SYS-W3-01` (MeshCraftApplication decomposition —
+large, a real architectural undertaking, not a quick task) — everything
+else in the `AUD-###` table is blocked (owner-gated CI via `AUD-052`, or
+missing Android NDK / out-of-scope CNA coupling). Once `SYS-W3-01` closes,
+re-run `python3 test/validate_plan_consistency.py . <build-dir>` — this repo
+may be at (or very near) the bottom of the currently-known, unblocked
+backlog.
 
 ## 4. Current blockers (external, re-verified 2026-07-11)
 

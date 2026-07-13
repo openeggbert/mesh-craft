@@ -541,9 +541,33 @@ Mandated workstream items not tied to a single audit finding.
     in the suite, so it needs no bespoke CI step once CI itself exists; only
     the opt-in deep-fuzzing (3) would need a *scheduled* (not per-commit) CI
     job, which is what remains blocked.
-- **SYS-W11-06** `[TODO]` `P2` — `clang-format` + scoped `clang-tidy` config
+- **SYS-W11-06** `[DONE]` `P2` — `clang-format` + scoped `clang-tidy` config
   (checked-in, CI-integrated — ad-hoc manual passes were already run per
-  `AUD-055`'s verify note).
+  `AUD-055`'s verify note). **Checked-in config only, not a mass
+  reformat/lint-fix pass** (deliberate scope, matching this file's own
+  "conservative slice" precedent): root `.clang-format` (derived from the
+  existing hand-formatted style — verified with `--dry-run`-style diffs
+  against representative files across `mc3/`/`mcb/`/`mc3togltf`/
+  `src/MeshCraft`, not applied `-i`, since the existing 18.5k LOC was never
+  written against it and a whole-tree reformat is a separate, much larger,
+  not-yet-decided undertaking) and root `.clang-tidy` (`clang-diagnostic-*`/
+  `clang-analyzer-*`, matching the already-verified-clean manual baseline
+  from `docs/history/plan_20260710.md` STAB-0614/STAB-0615, plus
+  `bugprone-*`/`performance-*`; deliberately NOT `modernize-*`, high-noise
+  style opinions with no correctness value; `HeaderFilterRegex` scoped to
+  first-party dirs only, excluding `../cna`/`../sharp-runtime`/vendored
+  `FetchContent` deps). Verified both actually run: `clang-format` (not
+  preinstalled in this sandbox — installed via `pip install clang-format`,
+  no root needed) checked against representative files; `clang-tidy` (19.1.7,
+  already present) run against both a standalone `mc3/` compile database and
+  the full project's, surfacing exactly 15 warnings, all pre-existing and
+  already triaged (12 `performance-enum-size` suggestions on scoped enums;
+  the same `Mc3Texture::withWrap` pass-by-value note cppcheck already
+  surfaced per STAB-0620, already explicitly left as-is there for the same
+  "no API churn for a lint nitpick" reason) — zero new/surprising findings,
+  zero findings in `CNA`/`SHARP_RUNTIME`/vendored code. CI wiring stays
+  blocked on `AUD-052` (no CI to wire into); usage documented in
+  `CONTRIBUTING.md`'s new "Code style" section.
 - **SYS-W11-07** `[TODO, partial]` `P2` — Package-first discovery + offline
   mode; pin sibling repos to recorded SHAs. (`AUD-057`) The pin/check half is
   done: commit `d2943e3` added a non-fatal configure-time `git rev-parse`
