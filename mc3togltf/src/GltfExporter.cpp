@@ -1534,6 +1534,13 @@ void GltfExporter::exportDocument(const Mc3Document& doc,
                                    const std::filesystem::path& outputPath,
                                    OutputFormat format)
 {
+    // SYS-W1-01: re-validate doc's current in-memory state before building
+    // any glTF output -- see the `validation` member's doc comment. Runs
+    // first (and unconditionally) so it covers documents that fail later in
+    // this function too, not just ones that export successfully.
+    validation.clear();
+    doc.validate(validation);
+
     tinygltf::Model model;
     tinygltf::TinyGLTF writer;
 

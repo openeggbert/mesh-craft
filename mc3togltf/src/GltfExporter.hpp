@@ -1,5 +1,6 @@
 #pragma once
 #include <MeshCraft/Mc3/Mc3Document.hpp>
+#include <MeshCraft/Mc3/Mc3Validation.hpp>
 #include <filesystem>
 #include <string>
 
@@ -44,6 +45,15 @@ public:
 
     // Populated after exportDocument() returns successfully.
     ExportStats stats;
+
+    // SYS-W1-01 (pre-export integration point): populated by exportDocument()
+    // BEFORE it builds any glTF output, by re-validating `doc`'s current
+    // in-memory state (see Mc3Document::validate()). Documents reaching
+    // export without ever going through a validating parse -- built
+    // programmatically via the Mc3Object::make*() builders, or mutated in
+    // place after loading -- get the same diagnostics a fresh load would
+    // produce. Diagnostic-only: never gates the export itself.
+    MeshCraft::Mc3::Mc3Validation validation;
 
     void exportDocument(const MeshCraft::Mc3::Mc3Document& doc,
                         const std::filesystem::path& outputPath,

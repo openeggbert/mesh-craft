@@ -11,6 +11,7 @@
 namespace fs = std::filesystem;
 using namespace mc3togltf;
 using MeshCraft::Mc3::Mc3Document;
+using MeshCraft::Mc3::Mc3ValidationSeverity;
 
 static void printUsage(const char* prog) {
     std::cerr << "Usage: " << prog << " [options] <input.mc3.xml> [output.gltf|output.glb]\n"
@@ -114,6 +115,24 @@ int main(int argc, char* argv[]) {
                       << "  OBJ files loaded:  " << s.objMeshesLoaded     << "\n"
                       << "  CSG evaluations:   " << s.csgMeshesEvaluated  << "\n"
                       << "  Warnings:          " << s.warnings             << "\n";
+
+            // SYS-W1-01: pre-export validation findings (documents that
+            // reached export without a validating load -- see
+            // GltfExporter::validation's doc comment).
+            const auto& v = exporter.validation;
+            if (!v.empty()) {
+                std::cout << "Pre-export validation (" << v.warningCount() << " warning(s), "
+                          << v.errorCount() << " error(s)):\n";
+                for (const auto& entry : v.entries) {
+                    std::cout << "  ["
+                              << (entry.severity == Mc3ValidationSeverity::Error ? "error" : "warning")
+                              << "] " << (entry.objectId.empty() ? "(document)" : entry.objectId);
+                    if (!entry.field.empty()) std::cout << "." << entry.field;
+                    std::cout << ": " << entry.message;
+                    if (!entry.suggestedRepair.empty()) std::cout << " (" << entry.suggestedRepair << ")";
+                    std::cout << "\n";
+                }
+            }
         }
     } catch (const std::exception& e) {
         std::cerr << "Error: " << e.what() << '\n';
