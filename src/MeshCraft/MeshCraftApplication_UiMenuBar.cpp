@@ -585,6 +585,7 @@ float MeshCraftApplication::drawMenuBar()
             ImGui::MenuItem("Timeline",       "Ctrl+T", &showTimeline_);
             ImGui::MenuItem("Model Registry", nullptr,  &showRegistryPanel_);
             ImGui::MenuItem("AI Assistant",   nullptr,  &showAiPanel_);
+            ImGui::MenuItem("Validation",     nullptr,  &showValidationPanel_);
             ImGui::EndMenu();
         }
         if (ImGui::BeginMenu("Help")) {

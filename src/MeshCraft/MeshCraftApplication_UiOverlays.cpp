@@ -317,6 +317,20 @@ void MeshCraftApplication::drawStatusBar(int screenW, int screenH)
                 ImGui::Text("%d objects", totalObjs);
             }
         }
+
+        // SYS-W14-02: small clickable indicator for the last load/save/export's
+        // validation findings -- otherwise SYS-W1-01's diagnostics are console-only.
+        if (!lastValidation_.empty()) {
+            const std::string label =
+                "[!] " + std::to_string(lastValidation_.entries.size()) + " validation note(s)";
+            ImVec2 textSize = ImGui::CalcTextSize(label.c_str());
+            ImGui::SameLine(ImGui::GetWindowWidth() - textSize.x - 12.0f);
+            ImGui::TextColored(ImVec4(1.0f, 0.75f, 0.35f, 1.0f), "%s", label.c_str());
+            if (ImGui::IsItemClicked()) showValidationPanel_ = true;
+            if (ImGui::IsItemHovered())
+                ImGui::SetTooltip("From: %s\nClick to open the Validation panel",
+                                   lastValidationSource_.c_str());
+        }
     }
     ImGui::End();
     ImGui::PopStyleColor();
@@ -1166,6 +1180,7 @@ void MeshCraftApplication::drawDialogs()
                     std::cout << "[MeshCraft] Load: " << loadValidation.warningCount()
                               << " warning(s), " << loadValidation.errorCount() << " error(s) in "
                               << openDialogBuf_ << "\n";
+                recordValidation("Load: " + p.filename().string(), loadValidation);
                 currentFile_ = openDialogBuf_;
                 addRecentFile(currentFile_);
                 selection_.clear();
@@ -2189,6 +2204,7 @@ void MeshCraftApplication::drawDialogs()
 
     drawRegistryPanel();
     drawAiPanel();
+    drawValidationPanel();
 }
 
 void MeshCraftApplication::drawPanelSplitters(int screenW, int screenH)

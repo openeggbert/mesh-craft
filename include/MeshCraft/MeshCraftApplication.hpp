@@ -691,6 +691,16 @@ private:
     bool aiApplyConfirmPending_{false};  // STAB-0395: awaiting 2nd click on a drastic-shrink Apply
     void drawAiPanel();
 
+    // Validation diagnostics (SYS-W14-02, builds on SYS-W1-01)
+    bool showValidationPanel_{false};
+    Mc3::Mc3Validation lastValidation_;    // result of the most recent load/save/export
+    std::string        lastValidationSource_;  // e.g. "Load: house.mc3.xml", "Save", "Export"
+    void drawValidationPanel();
+    // Records `v` as the most recent validation result and stamps its source
+    // label -- called from every load/save/export call site so the panel
+    // always reflects "what just happened", not a stale earlier run.
+    void recordValidation(std::string source, Mc3::Mc3Validation v);
+
     // Model Registry (M2)
     ModelRegistry registry_;
     bool showRegistryPanel_{false};

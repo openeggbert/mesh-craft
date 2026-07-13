@@ -253,6 +253,7 @@ void MeshCraftApplication::LoadContent() {
             if (!loadValidation.empty())
                 std::cout << "[MeshCraft] Load: " << loadValidation.warningCount() << " warning(s), "
                           << loadValidation.errorCount() << " error(s) in " << currentFile_ << "\n";
+            recordValidation("Load: " + currentFile_.filename().string(), loadValidation);
             addRecentFile(currentFile_);
             std::cout << "[MeshCraft] Loaded: " << currentFile_ << "\n";
             checkRotationConventionNotice();

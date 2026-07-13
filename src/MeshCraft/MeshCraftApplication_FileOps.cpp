@@ -101,6 +101,7 @@ void MeshCraftApplication::recoverFromAutosave() {
         if (!loadValidation.empty())
             std::cout << "[MeshCraft] Autosave recovery: " << loadValidation.warningCount()
                       << " warning(s), " << loadValidation.errorCount() << " error(s)\n";
+        recordValidation("Autosave recovery", loadValidation);
         currentFile_ = recoveryFilePath_;
         addRecentFile(currentFile_);
         selection_.clear();
@@ -197,6 +198,7 @@ void MeshCraftApplication::executePendingAction() {
                     std::cout << "[MeshCraft] Load: " << loadValidation.warningCount()
                               << " warning(s), " << loadValidation.errorCount() << " error(s) in "
                               << pendingOpenPath_ << "\n";
+                recordValidation("Load: " + pendingOpenPath_.filename().string(), loadValidation);
                 currentFile_ = pendingOpenPath_;
                 addRecentFile(currentFile_);
                 selection_.clear();
@@ -252,6 +254,7 @@ void MeshCraftApplication::saveFile() {
                 std::cerr << "\n";
             }
         }
+        recordValidation("Save: " + currentFile_.filename().string(), validation);
 
         // F6: rotate backups before overwriting. AUD-031: was a hand-copied
         // duplicate of rotateBackupsAlg's own logic; now delegates to it.
@@ -356,6 +359,9 @@ void MeshCraftApplication::runGltfExport(const std::string& outPath) {
     mc3togltf::GltfExporter exporter;
     exporter.allowApproximateCSG = glbAllowApproxCSG_;
     exporter.exportDocument(document_, out, fmt);
+    // SYS-W1-01/SYS-W14-02 (pre-export integration point): see
+    // GltfExporter::validation's doc comment.
+    recordValidation("Export: " + out.filename().string(), exporter.validation);
 
     const auto& s = exporter.stats;
     std::string statusMsg = "Exported " + out.filename().string()
@@ -580,6 +586,7 @@ void MeshCraftApplication::runObjExport(const std::string& outPath) {
     mc3togltf::GltfExporter exporter;
     exporter.allowApproximateCSG = glbAllowApproxCSG_;
     exporter.exportDocument(document_, tempGlb, mc3togltf::OutputFormat::GLB);
+    recordValidation("Export: " + out.filename().string(), exporter.validation);
 
     tinygltf::Model model;
     tinygltf::TinyGLTF loader;
