@@ -1,12 +1,15 @@
 # NEXT.md
 
 _Last updated: 2026-07-17, end of an extended autonomous session. Branch
-`develop` @ commit `e59d586`, working tree clean except the same two
-untracked, unrelated scratch scene files noted previously
+`develop` @ commit `2a2c3a2` (this file's own final-wrap-up commit —
+self-referential by nature, see any other `NEXT.md`-only commit for the
+same pattern), working tree clean except the same two untracked,
+unrelated scratch scene files noted previously
 (`test/crownspire-citadel.mc3.xml`, `test/house3.glb` — manually authored
-demo content, not part of any tracked task, left as-is). **20 commits**
-ahead of the session's starting point (`f1900e3`), all pushed to
-`develop`. See `git log --oneline -25` for anything newer than this._
+demo content, not part of any tracked task, left as-is). **21 commits**
+ahead of the session's starting point (`f1900e3`) — pushed to `origin/develop`
+at the end of this session (previously local-only throughout). See
+`git log --oneline -25` for anything newer than this._
 
 **This session ran in two parts** (first 9 commits: the 4 originally-
 requested human decisions + immediate follow-through; next 11: continuing
