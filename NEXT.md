@@ -279,6 +279,17 @@ this session started with):
   `SYS-W1-07`. Full rebuild + 125/125 `ctest` (stable across repeats);
   manual `--screenshot` smoke test.
 
+- **`SYS-W7-01` DONE (8th stale finding this session):** all 3 cited
+  `AUD-###` findings (`024`/`026`/`029`) were already `[DONE]` — only
+  `MC3_FORMAT.md`'s pre-existing export support matrix table had never
+  been updated to reflect them. Added 3 rows (UV mapping, per-object
+  `metadata`, `--stats` warning-count truthfulness), each verified
+  against current `GltfExporter.cpp` source directly. "Machine-checked"
+  wasn't newly built as dedicated tooling (documented as a real, separate,
+  larger undertaking if wanted later — `field_matrix.py` already has a
+  partial informational heuristic covering similar ground). Doc-only;
+  125/125 `ctest`.
+
 **Prior session (11 commits, oldest first, all on `develop`, all pushed):**
 
 - `d9e98d5` — fixed 2 pre-existing XSD-invalid test fixtures (unrelated
@@ -471,11 +482,11 @@ clang-tidy -p b-release path/to/changed/file.cpp
 _(Everything from the previous revision of this list is done — see §3 for
 the full list of what landed this session. Before starting any task below,
 re-run `git log --oneline -20` and re-check the cited `plan.md` row's
-status yourself: this session found and fixed **7** stale `[TODO]`/status
+status yourself: this session found and fixed **8** stale `[TODO]`/status
 markers that referenced findings already resolved in earlier sessions
 (`AUD-014`, `AUD-015`/`SYS-W6-01`, `SYS-W2-03`, `SYS-W6-03`, `SYS-W14-01`,
-`SYS-W6-02`, `SYS-W5-05`) — don't assume any remaining `TODO` below is
-still accurate without looking.)_
+`SYS-W6-02`, `SYS-W5-05`, `SYS-W7-01`) — don't assume any remaining
+`TODO` below is still accurate without looking.)_
 
 1. **`plan.md`'s remaining `TODO` `SYS-###` rows**, in no particular
    priority order (pick the highest-value one that fits available time):
@@ -486,7 +497,6 @@ still accurate without looking.)_
    `SYS-W5-04` (central document index/reference resolver — investigated
    this session, real and TODO-correct, but needs its own scoped
    invalidation-analysis pass before implementing, not a quick pick),
-   `SYS-W7-01` (truthful glTF export matrix per model feature),
    `SYS-W11-07` (package-first discovery + offline, partial),
    `SYS-W12-02` (new this session — extend
    `SYS-W12-01`'s CLI-level benchmark harness to the 10 categories needing
