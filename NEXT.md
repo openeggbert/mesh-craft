@@ -1,10 +1,24 @@
 # NEXT.md
 
-_Last updated: 2026-07-13. Branch `develop` @ commit `d2264ad`, working tree
-clean except two untracked, unrelated scratch scene files
-(`test/crownspire-citadel.mc3.xml`, `test/house3.glb` — manually authored
-demo content, not part of any tracked task, left as-is). 0 commits ahead/behind
-`origin/develop`. See `git log --oneline -20` for anything newer than this._
+_Last updated: 2026-07-17, start of a new autonomous session. Branch
+`develop` @ commit `f1900e3` (a NEXT.md-only doc commit; `d2264ad` is the
+last real code commit), working tree clean except the same two untracked,
+unrelated scratch scene files noted previously (`test/crownspire-citadel.mc3.xml`,
+`test/house3.glb` — manually authored demo content, not part of any tracked
+task, left as-is). 0 commits ahead/behind `origin/develop` at session start.
+See `git log --oneline -20` for anything newer than this._
+
+**Human decisions obtained at the start of this session** (see `plan.md`'s
+`SYS-W1-04`/`SYS-W3-01`/`AUD-036c` entries for the full rationale — recorded
+here too since they resolve 4 previously-open items from `NEXT.md`'s own
+task list):
+1. `EditorViewport` — **delete** (not finish wiring in).
+2. `SYS-W3-01` Phase 2 Preferences — **narrow** scope (theme/panel-open
+   only; autosave/snap/grid fields stay put for now).
+3. Duplicate object ids (`SYS-W1-04`) — **warning-level `Mc3Validation`
+   diagnostic**, parsing stays permissive.
+4. Undo/redo selection (`AUD-036c` open item) — **restore** the pre-
+   mutation selection (new `SYS-W9-03`), not clear it.
 
 ---
 

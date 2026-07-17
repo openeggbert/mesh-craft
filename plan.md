@@ -313,6 +313,11 @@ Mandated workstream items not tied to a single audit finding.
   hard parse error or be auto-renamed is a product/UX decision this pass is
   not authorized to make unilaterally (commit `be9dd55`). Row stays
   IN_PROGRESS pending that decision.
+- **Decision (2026-07-17, human-authorized):** duplicate ids stay a warning-
+  level `Mc3Validation` diagnostic, not a hard parse error or auto-rename —
+  least breaking, reuses the validation infrastructure `SYS-W1-01` already
+  wired into load/save/AI-apply/pre-export/pre-render. Implementing now;
+  row moves to `DONE` once the diagnostic + test land.
 - **SYS-W1-05** `[TODO]` `P2` — Graph-cycle / shared-node policy for API-built trees.
 
 ### W2 — AI / import sandbox
@@ -374,6 +379,17 @@ Mandated workstream items not tied to a single audit finding.
   save/load round-trip (a user rebind survives while untouched ids still
   re-seed to their default). Full tree rebuilt + 122/123 ctest (the 1
   pre-existing, out-of-scope `field_matrix` failure, unrelated).
+  **Decisions (2026-07-17, human-authorized), unblocking Phase 2 onward:**
+  (1) `EditorViewport` — **delete**, not finish. It's abandoned scaffolding
+  (stub added `580105d`, never wired in, zero call sites); removing it is
+  lower-risk than retargeting ~76 `camera_.`/~12 `gizmo_.` call sites across
+  7 files during a stabilization phase. (2) Preferences (Phase 2) —
+  **narrow**: the new class owns only `prefTheme_`/`prefsOpen_`/
+  `applyTheme()`. `autoSaveInterval_`/`snapTranslate_`/`snapRotate_`/
+  `snapScale_`/`gridSpacing_` stay on `MeshCraftApplication` for now,
+  matching the single-domain-extraction idiom `KeybindingManager`
+  established, to be picked up by their own future subsystem extractions
+  rather than folded into Preferences.
 
 ### W5 — MC3 governance
 - **SYS-W5-01** `[DONE]` `P2` — Machine-readable field matrix, `test/field_matrix.py`,
@@ -495,6 +511,16 @@ Mandated workstream items not tied to a single audit finding.
   comparison + reload mechanism it depends on is headlessly tested
   (`mc3_autosave_recovery_test`, `mc3/test/autosave_recovery_test.cpp`, 9
   assertions).
+- **SYS-W9-03** `[TODO]` `P2` — Restore selection on undo/redo. See
+  `AUD-036c`'s decision note: `performUndo()`/`performRedo()`
+  (`MeshCraftApplication_Commands.cpp`) currently unconditionally
+  `selection_.clear()`; change to restore whatever was selected immediately
+  before the mutating command ran (store selection alongside each
+  undo/redo snapshot). Add frame-driven/behavioral test coverage
+  (`test/undo_gesture_frame_test.cpp` or a sibling) proving selection
+  survives an Undo and a Redo, including the case where the restored
+  selection references an object that no longer exists post-swap (must not
+  dangle/crash — fall back to empty selection for that entry).
 
 ### W11 — Build / CI / DX
 - **SYS-W11-01** `[TODO, owner-gated]` `P1` — Un-park CI (`.github_` → `.github`)
@@ -1163,7 +1189,7 @@ DONE marker without checking its cited commit/verify command.
 - **Tests:** Extend test/undo_gesture_frame_test.cpp (or a sibling file) with Checkbox/Combo/InputText/multi-object cases; a `test/undo_triage.md`-style artifact or plan.md sub-table recording the 78-candidate classification.
 - **Blocked:** None — scoped, in-repo, large in surface area (78 candidates across PropertiesPanel.cpp/UiLeftPanel.cpp/UiOverlays.cpp/UiMenuBar.cpp/UiRegistry.cpp/Anim.cpp), continuing incrementally.
 - **Resolved:** commit `d8c14af` (audit-script false-positive fix) + `737e338` (extended test coverage) — verify: `ctest -R undo_gesture_frame`, `python3 test/undo_coverage_audit.py .`
-- **Status note:** All 81 candidates (grew from 78 to 81 between sessions as new call sites were added elsewhere) individually classified by reading real surrounding code, not guessed from widget names: **0 REAL_MUTATION** (AUD-036/AUD-036b already closed the actual bug class), 39 TRANSIENT_PREVIEW (each traced to a real Apply/Confirm handler that calls `pushUndo()` before mutating, including batch operations — confirmed exactly one snapshot per batch regardless of selection size), 3 FALSE_POSITIVE (`PropertiesPanel.cpp:135,166,195`, already correctly using `ctx.undoOnActivate(...)`, just unrecognized by the audit script's regex — fixed, candidate count now 78), 39 INTENTIONALLY_NON_UNDOABLE (plain UI/tool/renderer preference members never written into `document_`). `test/undo_gesture_frame_test.cpp` extended with frame-driven coverage for Checkbox, Combo (open+select as one atomic gesture), InputText (confirmed the codebase's actual convention is `ImGuiInputTextFlags_EnterReturnsTrue` + commit-on-Enter — `IsItemDeactivatedAfterEdit` has zero call sites in `src/`), a synthetic multi-object batch edit modeled on a real batch handler, a hover-only no-op check, and a redo-invalidation check mirroring `pushUndo()`'s `redoStack_.clear()` — 27 assertions, all passing. **Two open items intentionally left as design questions, not silently claimed fixed:** (1) `performUndo()`/`performRedo()` (`MeshCraftApplication_Commands.cpp`) unconditionally `selection_.clear()` rather than restoring the pre-undo/redo selection — safe (no dangling pointers into the swapped snapshot) but the "selection restored correctly after undo/redo" guarantee from AUD-036b's Outcome does not literally hold as written, and is untested; a real product decision (should Ctrl+Z restore selection?), not a bug this task's scope authorized fixing unilaterally. (2) "Locked objects untouched by undo/redo" is well-tested at the per-command level (batchRename/findReplace/align/scatter/rotate/scale already exclude locked objects, `mc3/test/editor_commands_test.cpp`), but undo/redo itself is a whole-document snapshot swap with no separate lock-awareness — by design (a lock is a property stored ON an object, so it round-trips through the snapshot automatically), not a gap, but also not independently tested as its own guarantee.
+- **Status note:** All 81 candidates (grew from 78 to 81 between sessions as new call sites were added elsewhere) individually classified by reading real surrounding code, not guessed from widget names: **0 REAL_MUTATION** (AUD-036/AUD-036b already closed the actual bug class), 39 TRANSIENT_PREVIEW (each traced to a real Apply/Confirm handler that calls `pushUndo()` before mutating, including batch operations — confirmed exactly one snapshot per batch regardless of selection size), 3 FALSE_POSITIVE (`PropertiesPanel.cpp:135,166,195`, already correctly using `ctx.undoOnActivate(...)`, just unrecognized by the audit script's regex — fixed, candidate count now 78), 39 INTENTIONALLY_NON_UNDOABLE (plain UI/tool/renderer preference members never written into `document_`). `test/undo_gesture_frame_test.cpp` extended with frame-driven coverage for Checkbox, Combo (open+select as one atomic gesture), InputText (confirmed the codebase's actual convention is `ImGuiInputTextFlags_EnterReturnsTrue` + commit-on-Enter — `IsItemDeactivatedAfterEdit` has zero call sites in `src/`), a synthetic multi-object batch edit modeled on a real batch handler, a hover-only no-op check, and a redo-invalidation check mirroring `pushUndo()`'s `redoStack_.clear()` — 27 assertions, all passing. **Two open items intentionally left as design questions, not silently claimed fixed:** (1) `performUndo()`/`performRedo()` (`MeshCraftApplication_Commands.cpp`) unconditionally `selection_.clear()` rather than restoring the pre-undo/redo selection — safe (no dangling pointers into the swapped snapshot) but the "selection restored correctly after undo/redo" guarantee from AUD-036b's Outcome does not literally hold as written, and is untested; a real product decision (should Ctrl+Z restore selection?), not a bug this task's scope authorized fixing unilaterally. **Decision (2026-07-17, human-authorized): yes** — `performUndo()`/`performRedo()` should restore the pre-undo/redo selection rather than clearing it; tracked as `SYS-W9-03` below for implementation. (2) "Locked objects untouched by undo/redo" is well-tested at the per-command level (batchRename/findReplace/align/scatter/rotate/scale already exclude locked objects, `mc3/test/editor_commands_test.cpp`), but undo/redo itself is a whole-document snapshot swap with no separate lock-awareness — by design (a lock is a property stored ON an object, so it round-trips through the snapshot automatically), not a gap, but also not independently tested as its own guarantee.
 
 ### AUD-039b `[DONE]` `P1` `W8` · Gate C requires real enforcement, not a configure-time warning — the editor still builds (non-functionally) under BGFX/VULKAN/SDL_RENDERER
 - **Component:** CMakeLists.txt
