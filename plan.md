@@ -909,10 +909,38 @@ Mandated workstream items not tied to a single audit finding.
   `add_subdirectory`) is still open.
 
 ### W12 — Performance baselines
-- **SYS-W12-01** `[TODO]` `P2` — Benchmark scenes + baselines (XML open/save, MCB
-  convert/load, mesh-gen, CSG + cache, traversal, picking, undo snapshot, export,
-  texture processing, animation eval, registry, startup, first frame). Optimize
-  only measured bottlenecks.
+- **SYS-W12-01** `[DONE, Phase 1 of 2 — see SYS-W12-02]` `P2` — Benchmark
+  scenes + baselines (XML open/save, MCB convert/load, mesh-gen, CSG +
+  cache, traversal, picking, undo snapshot, export, texture processing,
+  animation eval, registry, startup, first frame). Optimize only measured
+  bottlenecks.
+  **Implementation (2026-07-17):** new `test/benchmark.py` times the
+  existing `mc3tomcb`/`mc3togltf` CLI tools end to end (median of N runs)
+  against small/medium/large real fixtures (`house.mc3.xml`/
+  `features.mc3.xml`/`medieval_castle.mc3.xml`), covering 3 of the
+  13 named categories: XML open + MCB save, MCB load + XML save, and
+  glTF export (combined — the export number necessarily also exercises
+  mesh-gen/CSG/texture processing, just not broken out per-phase).
+  Registered as a new `benchmark` ctest, **informational only, never
+  fails on timing** (only if a tool crashes) — wall-clock timing on a
+  shared/virtualized/loaded machine is too noisy across runs/machines for
+  a hard regression threshold to be a real signal rather than flakiness;
+  see the script's own docstring. Recorded baseline numbers + methodology
+  in new `test/BENCHMARK_BASELINE.md`. **Deliberately Phase 1, not the
+  full 13-category ask:** mesh-gen/CSG-cache/traversal/picking/undo-
+  snapshot/animation-eval/registry/startup/first-frame in isolation, and
+  texture processing in isolation, all need either code instrumentation
+  inside the editor/library or driving a live `MeshCraftApplication` —
+  materially more work than CLI-level timing; tracked as new `SYS-W12-02`.
+  Full rebuild + 125/125 `ctest` (was 124/124 — new `benchmark` test).
+  Verify: `ctest -R benchmark`.
+- **SYS-W12-02** `[TODO]` `P3` — Extend `SYS-W12-01`'s benchmark harness to
+  the remaining categories that need in-process instrumentation rather
+  than CLI-level timing: mesh-gen, CSG + cache, traversal, picking, undo
+  snapshot, texture processing (in isolation), animation eval, registry,
+  startup, first frame. Likely needs either a small headless benchmark
+  executable linking `MeshCraftApplication`'s internals directly, or new
+  timing instrumentation exposed through `--stats`-style CLI output.
 
 ### W14 — New features (after P0/P1 gates)
 - **SYS-W14-01** `[DONE]` `P2` — Autosave + crash recovery.

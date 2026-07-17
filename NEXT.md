@@ -68,9 +68,9 @@ one item remains, itself broken into phases (see §4).
   ```bash
   cmake -S . -B b-release && cmake --build b-release -j"$(nproc)"
   ```
-- **Tests:** **124 / 124 `ctest` passing** (was 122/123 at session start —
-  `field_matrix` now passes, see `SYS-W6-04`; net +1 test, +~50 new
-  assertions across extended existing tests, see §3).
+- **Tests:** **125 / 125 `ctest` passing** (was 122/123 at session start —
+  `field_matrix` now passes, see `SYS-W6-04`; net +2 tests (`preferences`,
+  `benchmark`), +~60 new assertions across extended existing tests, see §3).
 - **CLI/tools/apps/libraries currently available:**
   - `MeshCraft` — the interactive editor (`./b-release/MeshCraft
     scene.mc3.xml`, or `--screenshot out.png` / `--export out.glb` for
@@ -232,6 +232,17 @@ this session started with):
   `MeshBuilder`) — tracked as new `SYS-W1-06`, lower priority since a
   cycle there would surface via a less-immediate operation. Full rebuild
   + 124/124 `ctest`; manual `--screenshot`/`--export` smoke tests.
+
+- **`SYS-W12-01` DONE (Phase 1 of 2):** new `test/benchmark.py` times
+  `mc3tomcb`/`mc3togltf` CLI tools (median of N runs) against small/
+  medium/large real fixtures — XML↔MCB convert + glTF export, 3 of the
+  13 originally-named categories. New `benchmark` ctest, informational
+  only (never fails on timing, only on a crash — wall-clock timing on a
+  shared machine is too noisy for a hard threshold to be a real signal).
+  Baseline numbers recorded in new `test/BENCHMARK_BASELINE.md`. The
+  remaining 10 categories need in-process instrumentation, not just
+  CLI timing — tracked as new `SYS-W12-02`. Full rebuild + **125/125
+  ctest** (new `benchmark` test).
 
 **Prior session (11 commits, oldest first, all on `develop`, all pushed):**
 
@@ -440,8 +451,11 @@ without looking.)_
    document index/reference resolver), `SYS-W5-05` (property-based
    round-trip tests + parser fuzz target), `SYS-W7-01` (truthful glTF
    export matrix per model feature), `SYS-W11-07` (package-first
-   discovery + offline, partial), `SYS-W12-01` (benchmark scenes +
-   baselines).
+   discovery + offline, partial), `SYS-W12-02` (new this session — extend
+   `SYS-W12-01`'s CLI-level benchmark harness to the 10 categories needing
+   in-process instrumentation: mesh-gen, CSG+cache, traversal, picking,
+   undo snapshot, texture processing, animation eval, registry, startup,
+   first frame).
    `SYS-W11-01`/`SYS-W11-03`/`AUD-042`/`AUD-052`/`AUD-053`/`AUD-057` stay
    correctly blocked/owner-gated (CI parked, no Android NDK in this
    environment) — don't attempt those without the missing external

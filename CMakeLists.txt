@@ -827,6 +827,23 @@ if(MESH_CRAFT_BUILD_TESTING AND UNIX AND NOT ANDROID AND NOT EMSCRIPTEN)
             set_tests_properties(xsd_validation PROPERTIES TIMEOUT 30 LABELS "format")
         endif()
 
+        # SYS-W12-01 (Phase 1): CLI-level performance benchmarks (XML/MCB
+        # convert, glTF export) against small/medium/large fixtures.
+        # Informational only (see test/benchmark.py's own docstring for
+        # why this isn't a pass/fail timing gate) -- always green unless a
+        # tool actually crashes.
+        if(TARGET mc3tomcb AND TARGET mc3togltf)
+            add_test(
+                NAME benchmark
+                COMMAND "${PYTHON3_EXEC}"
+                        "${CMAKE_CURRENT_SOURCE_DIR}/test/benchmark.py"
+                        "$<TARGET_FILE:mc3tomcb>"
+                        "$<TARGET_FILE:mc3togltf>"
+                        "${CMAKE_CURRENT_SOURCE_DIR}"
+            )
+            set_tests_properties(benchmark PROPERTIES TIMEOUT 60 LABELS "perf")
+        endif()
+
         # STAB-0511: fog is a document-level <environment><fog> setting, applied
         # unconditionally (unlike the bloom/SSAO/wireframe UI toggles) — verify
         # a fully-fogged distant object actually renders fog-colored, not its
