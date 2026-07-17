@@ -1,12 +1,26 @@
 # NEXT.md
 
-_Last updated: 2026-07-17, end of an autonomous session. Branch `develop`
-@ commit `f4e00b3`, working tree clean except the same two untracked,
-unrelated scratch scene files noted previously (`test/crownspire-citadel.mc3.xml`,
-`test/house3.glb` — manually authored demo content, not part of any tracked
-task, left as-is). 9 commits ahead of the session's starting point
-(`f1900e3`), all pushed to `develop`. See `git log --oneline -20` for
-anything newer than this._
+_Last updated: 2026-07-17, end of an extended autonomous session. Branch
+`develop` @ commit `e59d586`, working tree clean except the same two
+untracked, unrelated scratch scene files noted previously
+(`test/crownspire-citadel.mc3.xml`, `test/house3.glb` — manually authored
+demo content, not part of any tracked task, left as-is). **20 commits**
+ahead of the session's starting point (`f1900e3`), all pushed to
+`develop`. See `git log --oneline -25` for anything newer than this._
+
+**This session ran in two parts** (first 9 commits: the 4 originally-
+requested human decisions + immediate follow-through; next 11: continuing
+through `plan.md`'s backlog on explicit instruction to keep going). Full
+final validation: **125/125 `ctest`** (clean at `-j4`; this sandbox got
+busier as the session went on and `-j16`/`-j$(nproc)` runs late in the
+session saw 1-2 environmental TIMEOUT flakes on the slowest tests —
+confirmed not a regression by re-running at lower parallelism, see §3's
+last entry for the specific investigation). A repo-wide sweep for stray
+`TODO`/`FIXME`/`HACK` markers outside the `STAB-`/`AUD-`/`SYS-` ticket
+system found nothing real (one hit, a deliberate UI placeholder string,
+not unfinished code). No external commits landed from the sibling
+`mesh-world` repo during this session (checked at the end too, not just
+the start).
 
 **Human decisions obtained at the start of this session** (see `plan.md`'s
 `SYS-W1-04`/`SYS-W3-01`/`AUD-036c` entries for the full rationale) — **all
@@ -521,6 +535,13 @@ markers that referenced findings already resolved in earlier sessions
    in-process instrumentation: mesh-gen, CSG+cache, traversal, picking,
    undo snapshot, texture processing, animation eval, registry, startup,
    first frame).
+   **All 3 of these were deliberately NOT attempted this session because
+   each genuinely needs its own dedicated pass** (research-then-implement
+   for `SYS-W5-04`'s cache invalidation, real GL verification for
+   `SYS-W1-07`, new instrumentation infrastructure for `SYS-W12-02`) — they
+   are not quick picks the way most of this session's other work was; size
+   the next session's time budget accordingly rather than expecting to
+   finish all 3 alongside other work.
    `SYS-W11-01`/`SYS-W11-03`/`AUD-042`/`AUD-052`/`AUD-053`/`AUD-057` stay
    correctly blocked/owner-gated (CI parked, no Android NDK in this
    environment) — don't attempt those without the missing external
