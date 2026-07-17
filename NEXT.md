@@ -150,6 +150,19 @@ this session started with):
   prefs file. New `preferences_test` (no coverage existed before). Full
   rebuild + **124/124 ctest** (new `preferences` test); manual
   `--screenshot` smoke test confirms the app still boots/renders.
+- **`SYS-W9-03` DONE:** `performUndo()`/`performRedo()` now restore the
+  pre-mutation selection instead of clearing it. New
+  `undoSelectionStack_`/`redoSelectionStack_` kept in lockstep with
+  `undoStack_`/`redoStack_` everywhere those are pushed/popped/cleared
+  (including the "Undo History" jump-to-step dialog and the 3 file-load
+  `.clear()` sites). Restore is by id (`flatFindSharedById()`, a new
+  shared-ptr counterpart of `flatFindById()`), silently skipping an id no
+  longer present post-swap rather than dangling/crashing. 5 new mirror-
+  model assertions in `test/undo_gesture_frame_test.cpp` (the real
+  functions are CNA-coupled and not headlessly callable, matching that
+  file's existing convention for this class of test). Full rebuild +
+  **124/124 ctest**; manual `--screenshot` smoke test confirms the app
+  still boots/renders.
 
 **Prior session (11 commits, oldest first, all on `develop`, all pushed):**
 
@@ -344,26 +357,15 @@ clang-tidy -p b-release path/to/changed/file.cpp
 
 ## 8. Next smallest tasks
 
-_(Tasks 1-5 from the previous revision of this list — re-check + close
+_(Tasks 1-6 from the previous revision of this list — re-check + close
 `field_matrix`, the duplicate-ID validation warning, deleting
-`EditorViewport`, and `SYS-W3-01` Phase 2 (narrow `Preferences`) — are all
-done; see §3's `SYS-W6-04`/`SYS-W1-04` entries and `plan.md`'s `SYS-W3-01`
-entry.)_
+`EditorViewport`, `SYS-W3-01` Phase 2 (narrow `Preferences`), and
+`SYS-W9-03` (undo/redo selection restore) — are all done; see §3's
+`SYS-W6-04`/`SYS-W1-04`/`SYS-W9-03` entries and `plan.md`'s `SYS-W3-01`
+entry. All 4 of this session's originally-requested human decisions are
+now fully implemented, not just decided.)_
 
-1. **`AUD-036c`/`SYS-W9-03`: restore selection on undo/redo** (decision
-   made 2026-07-17: yes, restore — see top-of-file decisions block).
-   Goal: `performUndo()`/`performRedo()` (`MeshCraftApplication_Commands.cpp`)
-   currently unconditionally `selection_.clear()`; change to restore the
-   pre-mutation selection (store it alongside each undo/redo snapshot),
-   falling back to empty selection if a restored id no longer exists
-   post-swap.
-   Files: `src/MeshCraft/MeshCraftApplication_Commands.cpp`,
-   `include/MeshCraft/MeshCraftApplication.hpp` (`undoStack_`/`redoStack_`
-   or a parallel selection-snapshot stack), `test/undo_gesture_frame_test.cpp`
-   (extend with a selection-survives-undo/redo case).
-   Verify: `ctest -R undo_gesture_frame`; full `ctest` green.
-
-2. **Investigate `AUD-014`: join the `AiAssistant` background thread at
+1. **Investigate `AUD-014`: join the `AiAssistant` background thread at
    shutdown.**
    Goal: confirm whether the detached thread noted in §6 can be safely
    joined (with a bounded timeout, reusing the existing

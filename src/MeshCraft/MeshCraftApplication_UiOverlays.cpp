@@ -1115,17 +1115,27 @@ void MeshCraftApplication::drawDialogs()
             if (ImGui::Selectable(label)) {
                 // Restore: push current + everything newer onto redo, then restore this state
                 redoStack_.push_back(deepCopyDoc(document_));
-                for (int j = n - 1; j > i; --j)
+                // SYS-W9-03: keep undoSelectionStack_/redoSelectionStack_ in
+                // lockstep with undoStack_/redoStack_ through this multi-step
+                // jump, mirroring every push/resize below exactly.
+                redoSelectionStack_.push_back(currentSelectionIds());
+                for (int j = n - 1; j > i; --j) {
                     redoStack_.push_back(std::move(undoStack_[j]));
+                    redoSelectionStack_.push_back(std::move(undoSelectionStack_[j]));
+                }
                 // AUDIT-0056: unlike performUndo()/performRedo(), this loop can push
                 // many entries at once (jumping to the oldest of a full history) --
                 // apply the same kUndoMax cap those two already enforce, or the
                 // redo stack silently grows unbounded relative to the documented cap.
                 while (static_cast<int>(redoStack_.size()) > kUndoMax)
                     redoStack_.erase(redoStack_.begin());
+                while (static_cast<int>(redoSelectionStack_.size()) > kUndoMax)
+                    redoSelectionStack_.erase(redoSelectionStack_.begin());
                 document_ = std::move(undoStack_[i]);
+                std::vector<std::string> ids = std::move(undoSelectionStack_[i]);
                 undoStack_.resize(i);
-                selection_.clear();
+                undoSelectionStack_.resize(i);
+                restoreSelectionByIds(ids);
                 modified_ = true; updateWindowTitle();
                 ImGui::CloseCurrentPopup();
             }
@@ -1185,6 +1195,7 @@ void MeshCraftApplication::drawDialogs()
                 addRecentFile(currentFile_);
                 selection_.clear();
                 undoStack_.clear(); redoStack_.clear();
+                undoSelectionStack_.clear(); redoSelectionStack_.clear();
                 // STAB-0250: same rationale as the "Open Recent File" path —
                 // without this, a stale CSG preview cache entry from the
                 // previous document could collide (same content hash) with a

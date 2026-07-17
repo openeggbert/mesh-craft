@@ -307,11 +307,38 @@ void MeshCraftApplication::updateWindowTitle() {
 // ---------------------------------------------------------------------------
 // ImGui UI
 // ---------------------------------------------------------------------------
+// SYS-W9-03: ids of the currently selected objects, in selection order.
+// Objects with no id (empty string) can't be reliably re-found via
+// flatFindSharedById() later -- matching flatFindById's own first-match-
+// by-id semantics -- so they're skipped rather than recorded.
+std::vector<std::string> MeshCraftApplication::currentSelectionIds() const {
+    std::vector<std::string> ids;
+    ids.reserve(selection_.selection().size());
+    for (const auto& obj : selection_.selection())
+        if (obj && !obj->id.empty()) ids.push_back(obj->id);
+    return ids;
+}
+
+// SYS-W9-03: re-resolves each id against the CURRENT document_ (post-swap)
+// and selects the objects found. An id that no longer exists post-swap
+// (e.g. undone past the command that created it) is silently skipped --
+// falls back toward an empty/partial selection rather than dangling or
+// crashing, exactly as the human-authorized decision specified.
+void MeshCraftApplication::restoreSelectionByIds(const std::vector<std::string>& ids) {
+    selection_.clear();
+    for (const auto& id : ids) {
+        auto obj = flatFindSharedById(id);
+        if (obj) selection_.select(obj);
+    }
+}
+
 // AUD-031: the push-then-trim-to-cap pattern at all 3 stack mutation sites
 // below was hand-copied 3 times; now delegates to pushWithCapAlg.
 void MeshCraftApplication::pushUndo() {
     pushWithCapAlg(undoStack_, deepCopyDoc(document_), kUndoMax);
+    pushWithCapAlg(undoSelectionStack_, currentSelectionIds(), kUndoMax);
     redoStack_.clear();
+    redoSelectionStack_.clear();
     // CSG cache no longer cleared here: hash-based invalidation handles it (K1)
 }
 
@@ -323,12 +350,22 @@ bool MeshCraftApplication::undoOnActivate(bool widgetChanged) {
 // Shared by the keyboard shortcut, the Edit menu, and the command palette
 // (STAB-0486) so all 3 entry points stay behaviorally identical instead of
 // hand-copied and free to drift.
+//
+// SYS-W9-03 (human-authorized decision, 2026-07-17): restores the selection
+// that was active immediately before the command being undone/redone ran,
+// instead of unconditionally clearing it. undoSelectionStack_/
+// redoSelectionStack_ are kept in lockstep (index-for-index) with
+// undoStack_/redoStack_ by pushUndo()/performUndo()/performRedo() always
+// pushing/popping both pairs together.
 void MeshCraftApplication::performUndo() {
     if (undoStack_.empty()) return;
     pushWithCapAlg(redoStack_, deepCopyDoc(document_), kUndoMax);
+    pushWithCapAlg(redoSelectionStack_, currentSelectionIds(), kUndoMax);
     document_ = std::move(undoStack_.back());
     undoStack_.pop_back();
-    selection_.clear();
+    std::vector<std::string> ids = std::move(undoSelectionStack_.back());
+    undoSelectionStack_.pop_back();
+    restoreSelectionByIds(ids);
     modified_ = true;
     updateWindowTitle();
     evaluateAndPushAnimOverrides();
@@ -337,9 +374,12 @@ void MeshCraftApplication::performUndo() {
 void MeshCraftApplication::performRedo() {
     if (redoStack_.empty()) return;
     pushWithCapAlg(undoStack_, deepCopyDoc(document_), kUndoMax);
+    pushWithCapAlg(undoSelectionStack_, currentSelectionIds(), kUndoMax);
     document_ = std::move(redoStack_.back());
     redoStack_.pop_back();
-    selection_.clear();
+    std::vector<std::string> ids = std::move(redoSelectionStack_.back());
+    redoSelectionStack_.pop_back();
+    restoreSelectionByIds(ids);
     modified_ = true;
     updateWindowTitle();
     evaluateAndPushAnimOverrides();
@@ -391,6 +431,21 @@ Mc3::Mc3Object* MeshCraftApplication::flatFindById(const std::string& id) const 
             if (obj->id == id) return obj.get();
             if (!obj->children.empty()) {
                 auto* r = find(obj->children);
+                if (r) return r;
+            }
+        }
+        return nullptr;
+    };
+    return find(document_.objects);
+}
+
+std::shared_ptr<Mc3::Mc3Object> MeshCraftApplication::flatFindSharedById(const std::string& id) const {
+    std::function<std::shared_ptr<Mc3::Mc3Object>(const std::vector<std::shared_ptr<Mc3::Mc3Object>>&)> find;
+    find = [&](const std::vector<std::shared_ptr<Mc3::Mc3Object>>& list) -> std::shared_ptr<Mc3::Mc3Object> {
+        for (const auto& obj : list) {
+            if (obj->id == id) return obj;
+            if (!obj->children.empty()) {
+                auto r = find(obj->children);
                 if (r) return r;
             }
         }

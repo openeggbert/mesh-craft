@@ -106,6 +106,7 @@ void MeshCraftApplication::recoverFromAutosave() {
         addRecentFile(currentFile_);
         selection_.clear();
         undoStack_.clear(); redoStack_.clear();
+        undoSelectionStack_.clear(); redoSelectionStack_.clear();
         if (sceneRenderer_) sceneRenderer_->clearCsgCache();
         modified_ = true; // recovered content differs from what's saved at currentFile_
         setStatusMsg("Recovered unsaved changes from autosave", false, 3.0f);
@@ -203,6 +204,7 @@ void MeshCraftApplication::executePendingAction() {
                 addRecentFile(currentFile_);
                 selection_.clear();
                 undoStack_.clear(); redoStack_.clear();
+                undoSelectionStack_.clear(); redoSelectionStack_.clear();
                 sceneRenderer_->clearCsgCache();
                 modified_ = false;
                 setStatusMsg("Opened " + currentFile_.filename().string(), false, 2.0f);

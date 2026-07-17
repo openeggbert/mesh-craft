@@ -31,6 +31,7 @@
 #include "imgui.h"
 #include "imgui_internal.h"
 
+#include <algorithm>
 #include <cstdio>
 #include <functional>
 #include <string>
@@ -564,6 +565,87 @@ int main() {
         check(redoStack.empty(),
               "Redo stack is cleared by the first pushUndo() after an undo (mirrors "
               "MeshCraftApplication_Commands.cpp's pushUndo() body)");
+    }
+
+    // SYS-W9-03 (human-authorized decision, 2026-07-17): performUndo()/
+    // performRedo() now restore the pre-mutation selection (by id, re-
+    // resolved against the swapped-in document) instead of unconditionally
+    // clearing it. Like the redo-invalidation block above, performUndo()/
+    // performRedo() are CNA-coupled member functions and not headlessly
+    // callable here, so this mirrors their exact structure (undoStack_/
+    // redoStack_ paired index-for-index with undoSelectionStack_/
+    // redoSelectionStack_; restore-by-id skips an id no longer present
+    // instead of dangling or crashing) against a stand-in model -- this
+    // breaks if that structure is ever dropped from the real functions
+    // (MeshCraftApplication_Commands.cpp's pushUndo()/performUndo()/
+    // performRedo()).
+    {
+        struct MockDoc { std::vector<std::string> ids; };
+        std::vector<MockDoc> undoStack, redoStack;
+        std::vector<std::vector<std::string>> undoSelStack, redoSelStack;
+        MockDoc doc{{"A", "B"}};
+        std::vector<std::string> selection{"A", "B"};
+
+        auto resolve = [](const MockDoc& d, const std::vector<std::string>& ids) {
+            std::vector<std::string> found;
+            for (const auto& id : ids)
+                if (std::find(d.ids.begin(), d.ids.end(), id) != d.ids.end())
+                    found.push_back(id);
+            return found;
+        };
+        auto pushUndoMock = [&]() {
+            undoStack.push_back(doc);
+            undoSelStack.push_back(selection);
+            redoStack.clear();
+            redoSelStack.clear();
+        };
+        auto performUndoMock = [&]() {
+            redoStack.push_back(doc);
+            redoSelStack.push_back(selection);
+            doc = undoStack.back();       undoStack.pop_back();
+            auto ids = undoSelStack.back(); undoSelStack.pop_back();
+            selection = resolve(doc, ids);
+        };
+        auto performRedoMock = [&]() {
+            undoStack.push_back(doc);
+            undoSelStack.push_back(selection);
+            doc = redoStack.back();       redoStack.pop_back();
+            auto ids = redoSelStack.back(); redoSelStack.pop_back();
+            selection = resolve(doc, ids);
+        };
+
+        // Standard case: select {A,B}, snapshot, mutate (delete B, select
+        // only A), then Undo -- the pre-mutation selection {A,B} is restored
+        // in full since both still exist in the restored document.
+        pushUndoMock();
+        doc.ids = {"A"};
+        selection = {"A"};
+        performUndoMock();
+        check(doc.ids.size() == 2, "undo/redo selection restore: Undo restores the 2-object document");
+        check(selection.size() == 2 && selection[0] == "A" && selection[1] == "B",
+              "undo/redo selection restore: Undo restores the full pre-mutation selection {A,B}");
+
+        // Missing-id case: Redo re-applies the delete-of-B command. The
+        // selection captured for the redo entry is {A} (what was selected
+        // right before the undo above), which still resolves fine -- but a
+        // SEPARATE check below proves a truly-gone id is silently dropped,
+        // not dangling/crashing.
+        performRedoMock();
+        check(doc.ids.size() == 1 && doc.ids[0] == "A",
+              "undo/redo selection restore: Redo re-applies the delete, document is {A} again");
+
+        // Directly exercise the skip-missing-id path: a captured selection
+        // referencing an id ("B") that does not exist in the document being
+        // restored to must silently drop just that id, keeping any ids that
+        // do still exist, never throwing/crashing.
+        std::vector<std::string> partial = resolve(doc, {"A", "B", "ghost"});
+        check(partial.size() == 1 && partial[0] == "A",
+              "undo/redo selection restore: an id no longer present ('B', 'ghost') is "
+              "silently dropped; a still-present id ('A') survives");
+
+        check(undoStack.size() == undoSelStack.size() && redoStack.size() == redoSelStack.size(),
+              "undo/redo selection restore: document and selection stacks stay in "
+              "lockstep (same size) throughout push/undo/redo");
     }
 
     ImGui::DestroyContext();

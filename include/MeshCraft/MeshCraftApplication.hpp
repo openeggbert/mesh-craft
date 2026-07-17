@@ -455,6 +455,10 @@ private:
     std::vector<const Mc3::Mc3Object*> selectedPointers() const;
     Mc3::Mc3Object* flatFindById(const std::string& id) const;
     Mc3::Mc3Object* flatFindByName(const std::string& name) const;
+    // Shared-ownership counterpart of flatFindById(), for callers (e.g.
+    // undo/redo selection restore) that need a shared_ptr to hand to
+    // SelectionManager::select() rather than a raw observing pointer.
+    std::shared_ptr<Mc3::Mc3Object> flatFindSharedById(const std::string& id) const;
 
     void evaluateAndPushAnimOverrides();
     void insertAnimKeyframes(Mc3::Mc3Object& obj,
@@ -644,6 +648,15 @@ private:
     static constexpr int kUndoMax = 20;
     std::vector<Mc3::Mc3Document> undoStack_;
     std::vector<Mc3::Mc3Document> redoStack_;
+    // SYS-W9-03 (human-authorized decision, 2026-07-17): the ids selected at
+    // the moment each undoStack_/redoStack_ entry was pushed, kept in
+    // lockstep (index-for-index, same push/cap calls) with those stacks --
+    // lets performUndo()/performRedo() restore the pre-mutation selection
+    // instead of unconditionally clearing it.
+    std::vector<std::vector<std::string>> undoSelectionStack_;
+    std::vector<std::vector<std::string>> redoSelectionStack_;
+    [[nodiscard]] std::vector<std::string> currentSelectionIds() const;
+    void restoreSelectionByIds(const std::vector<std::string>& ids);
     void pushUndo();
     void performUndo();
     void performRedo();

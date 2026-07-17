@@ -590,16 +590,38 @@ Mandated workstream items not tied to a single audit finding.
   comparison + reload mechanism it depends on is headlessly tested
   (`mc3_autosave_recovery_test`, `mc3/test/autosave_recovery_test.cpp`, 9
   assertions).
-- **SYS-W9-03** `[TODO]` `P2` — Restore selection on undo/redo. See
+- **SYS-W9-03** `[DONE]` `P2` — Restore selection on undo/redo. See
   `AUD-036c`'s decision note: `performUndo()`/`performRedo()`
-  (`MeshCraftApplication_Commands.cpp`) currently unconditionally
-  `selection_.clear()`; change to restore whatever was selected immediately
-  before the mutating command ran (store selection alongside each
-  undo/redo snapshot). Add frame-driven/behavioral test coverage
-  (`test/undo_gesture_frame_test.cpp` or a sibling) proving selection
-  survives an Undo and a Redo, including the case where the restored
-  selection references an object that no longer exists post-swap (must not
-  dangle/crash — fall back to empty selection for that entry).
+  (`MeshCraftApplication_Commands.cpp`) previously unconditionally called
+  `selection_.clear()`; now restore whatever was selected immediately
+  before the mutating command ran.
+  **Implementation (2026-07-17):** added `undoSelectionStack_`/
+  `redoSelectionStack_` (`std::vector<std::vector<std::string>>`) to
+  `MeshCraftApplication`, kept index-for-index in lockstep with
+  `undoStack_`/`redoStack_` — every push/pop/clear/cap of the document
+  stacks (`pushUndo()`, `performUndo()`, `performRedo()`, plus the "Undo
+  History" jump-to-step dialog's multi-entry push loop in
+  `MeshCraftApplication_UiOverlays.cpp`, plus the 3 `undoStack_.clear();
+  redoStack_.clear();` sites on file load in `MeshCraftApplication_FileOps.cpp`/
+  `MeshCraftApplication_UiOverlays.cpp`) got a matching selection-stack
+  operation. Two new helpers: `currentSelectionIds()` (selected objects'
+  ids, skipping any with an empty id — same first-match-by-id semantics
+  `flatFindById` already relies on) and `restoreSelectionByIds(ids)`
+  (clears `selection_`, re-resolves each id against the just-swapped-in
+  `document_` via a new `flatFindSharedById()` — the shared-ownership
+  counterpart of `flatFindById()`, since `SelectionManager::select()` needs
+  a `shared_ptr` — and silently skips an id no longer present, matching the
+  human-authorized decision's "fall back toward empty/partial selection,
+  never dangle/crash" requirement). Test coverage added to
+  `test/undo_gesture_frame_test.cpp`: since `performUndo()`/`performRedo()`
+  are CNA-coupled member functions (not headlessly callable, same
+  constraint the file's pre-existing redo-invalidation block already
+  documents), the new block mirrors the exact structure (paired stacks,
+  restore-by-id, skip-missing) against a stand-in model — 5 new assertions
+  covering full restore, partial restore when an id no longer exists, and
+  the stacks-stay-in-lockstep invariant. Full rebuild + 124/124 `ctest`;
+  manual `--screenshot` smoke test confirms the app still boots/renders.
+  Verify: `ctest -R undo_gesture_frame`.
 
 ### W11 — Build / CI / DX
 - **SYS-W11-01** `[TODO, owner-gated]` `P1` — Un-park CI (`.github_` → `.github`)
@@ -1274,7 +1296,7 @@ DONE marker without checking its cited commit/verify command.
 - **Tests:** Extend test/undo_gesture_frame_test.cpp (or a sibling file) with Checkbox/Combo/InputText/multi-object cases; a `test/undo_triage.md`-style artifact or plan.md sub-table recording the 78-candidate classification.
 - **Blocked:** None — scoped, in-repo, large in surface area (78 candidates across PropertiesPanel.cpp/UiLeftPanel.cpp/UiOverlays.cpp/UiMenuBar.cpp/UiRegistry.cpp/Anim.cpp), continuing incrementally.
 - **Resolved:** commit `d8c14af` (audit-script false-positive fix) + `737e338` (extended test coverage) — verify: `ctest -R undo_gesture_frame`, `python3 test/undo_coverage_audit.py .`
-- **Status note:** All 81 candidates (grew from 78 to 81 between sessions as new call sites were added elsewhere) individually classified by reading real surrounding code, not guessed from widget names: **0 REAL_MUTATION** (AUD-036/AUD-036b already closed the actual bug class), 39 TRANSIENT_PREVIEW (each traced to a real Apply/Confirm handler that calls `pushUndo()` before mutating, including batch operations — confirmed exactly one snapshot per batch regardless of selection size), 3 FALSE_POSITIVE (`PropertiesPanel.cpp:135,166,195`, already correctly using `ctx.undoOnActivate(...)`, just unrecognized by the audit script's regex — fixed, candidate count now 78), 39 INTENTIONALLY_NON_UNDOABLE (plain UI/tool/renderer preference members never written into `document_`). `test/undo_gesture_frame_test.cpp` extended with frame-driven coverage for Checkbox, Combo (open+select as one atomic gesture), InputText (confirmed the codebase's actual convention is `ImGuiInputTextFlags_EnterReturnsTrue` + commit-on-Enter — `IsItemDeactivatedAfterEdit` has zero call sites in `src/`), a synthetic multi-object batch edit modeled on a real batch handler, a hover-only no-op check, and a redo-invalidation check mirroring `pushUndo()`'s `redoStack_.clear()` — 27 assertions, all passing. **Two open items intentionally left as design questions, not silently claimed fixed:** (1) `performUndo()`/`performRedo()` (`MeshCraftApplication_Commands.cpp`) unconditionally `selection_.clear()` rather than restoring the pre-undo/redo selection — safe (no dangling pointers into the swapped snapshot) but the "selection restored correctly after undo/redo" guarantee from AUD-036b's Outcome does not literally hold as written, and is untested; a real product decision (should Ctrl+Z restore selection?), not a bug this task's scope authorized fixing unilaterally. **Decision (2026-07-17, human-authorized): yes** — `performUndo()`/`performRedo()` should restore the pre-undo/redo selection rather than clearing it; tracked as `SYS-W9-03` below for implementation. (2) "Locked objects untouched by undo/redo" is well-tested at the per-command level (batchRename/findReplace/align/scatter/rotate/scale already exclude locked objects, `mc3/test/editor_commands_test.cpp`), but undo/redo itself is a whole-document snapshot swap with no separate lock-awareness — by design (a lock is a property stored ON an object, so it round-trips through the snapshot automatically), not a gap, but also not independently tested as its own guarantee.
+- **Status note:** All 81 candidates (grew from 78 to 81 between sessions as new call sites were added elsewhere) individually classified by reading real surrounding code, not guessed from widget names: **0 REAL_MUTATION** (AUD-036/AUD-036b already closed the actual bug class), 39 TRANSIENT_PREVIEW (each traced to a real Apply/Confirm handler that calls `pushUndo()` before mutating, including batch operations — confirmed exactly one snapshot per batch regardless of selection size), 3 FALSE_POSITIVE (`PropertiesPanel.cpp:135,166,195`, already correctly using `ctx.undoOnActivate(...)`, just unrecognized by the audit script's regex — fixed, candidate count now 78), 39 INTENTIONALLY_NON_UNDOABLE (plain UI/tool/renderer preference members never written into `document_`). `test/undo_gesture_frame_test.cpp` extended with frame-driven coverage for Checkbox, Combo (open+select as one atomic gesture), InputText (confirmed the codebase's actual convention is `ImGuiInputTextFlags_EnterReturnsTrue` + commit-on-Enter — `IsItemDeactivatedAfterEdit` has zero call sites in `src/`), a synthetic multi-object batch edit modeled on a real batch handler, a hover-only no-op check, and a redo-invalidation check mirroring `pushUndo()`'s `redoStack_.clear()` — 27 assertions, all passing. **Two open items intentionally left as design questions, not silently claimed fixed:** (1) `performUndo()`/`performRedo()` (`MeshCraftApplication_Commands.cpp`) unconditionally `selection_.clear()` rather than restoring the pre-undo/redo selection — safe (no dangling pointers into the swapped snapshot) but the "selection restored correctly after undo/redo" guarantee from AUD-036b's Outcome does not literally hold as written, and is untested; a real product decision (should Ctrl+Z restore selection?), not a bug this task's scope authorized fixing unilaterally. **Decision (2026-07-17, human-authorized): yes** — `performUndo()`/`performRedo()` should restore the pre-undo/redo selection rather than clearing it; implemented same day, see `SYS-W9-03` below. (2) "Locked objects untouched by undo/redo" is well-tested at the per-command level (batchRename/findReplace/align/scatter/rotate/scale already exclude locked objects, `mc3/test/editor_commands_test.cpp`), but undo/redo itself is a whole-document snapshot swap with no separate lock-awareness — by design (a lock is a property stored ON an object, so it round-trips through the snapshot automatically), not a gap, but also not independently tested as its own guarantee.
 
 ### AUD-039b `[DONE]` `P1` `W8` · Gate C requires real enforcement, not a configure-time warning — the editor still builds (non-functionally) under BGFX/VULKAN/SDL_RENDERER
 - **Component:** CMakeLists.txt
