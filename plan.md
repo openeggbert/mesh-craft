@@ -329,7 +329,51 @@ Mandated workstream items not tied to a single audit finding.
   duplicated `dup` id, duplicate ids are never elevated to an error, and an
   unrelated unique id gets no diagnostic. Verify: `ctest -R
   mc3_duplicate_ids`; full suite 123/123.
-- **SYS-W1-05** `[TODO]` `P2` — Graph-cycle / shared-node policy for API-built trees.
+- **SYS-W1-05** `[DONE, partial — see scope note]` `P2` — Graph-cycle /
+  shared-node policy for API-built trees.
+  **Implementation (2026-07-17):** XML-parsed content can never form a
+  cycle (each `<tag>` always creates a fresh `Mc3Object`), but
+  `Mc3Object::children` (`std::vector<shared_ptr<Mc3Object>>`) is a plain,
+  freely-mutable public field with no `addChild()`-style choke point to
+  validate at — nothing stops a document built/mutated via the C++ API
+  from introducing a cycle (e.g. `obj->children.push_back(obj)`). Added a
+  256-deep recursion guard (matching `mc3togltf/src/GltfExporter.cpp`'s
+  existing `kMaxNodeDepth` precedent) to the two most frequently-invoked
+  recursive tree walks: `deepCopyObjectAlg` (`EditorAlgorithms.hpp`,
+  called directly by Duplicate/Group/Convert-to-Definition/Break-Instance/
+  macro playback — a cycle here crashes on a single user click) and
+  `deepCopyObj`/`deepCopyDoc` (`MeshCraftPrivate.hpp`, called by
+  `pushUndo()` on every mutating command). Both now throw a clean,
+  catchable `std::runtime_error` naming the depth limit instead of an
+  unbounded-recursion stack-overflow crash. New tests
+  (`testDeepCopyObjectAlgRejectsCyclicChildren`, 2-cycle and self-cycle
+  cases) confirm the guard actually fires. **Scope note, "partial" —
+  deliberately not a full sweep:** several OTHER recursive walks over
+  `Mc3Object::children` remain unguarded (`findParentListAlg`/
+  `removeFromListAlg` in `EditorAlgorithms.hpp`, `Mc3XmlWriter`'s
+  `writeObject`, the editor's `SceneRenderer` traversal, `mc3togltf`'s
+  `MeshBuilder.cpp`) — guarding every one of them is a materially larger
+  task than this row's terse one-line, no-evidence-cited description
+  suggested; the two guarded here are the highest-value (most frequently
+  executed, most directly user-triggered) paths. "Shared-node" (a
+  non-cyclic DAG — the same child object appearing under two different
+  parents) was investigated and found lower-priority: it terminates fine
+  in a depth-first walk (no crash risk), the only real consequence is
+  `deepCopyObjectAlg`/`deepCopyObj` silently duplicating the shared node
+  into two independent copies — surprising but not unsafe, left as
+  documented behavior rather than a "policy" requiring a product decision.
+  Full rebuild + 124/124 `ctest`; manual `--screenshot`/`--export` smoke
+  tests. Verify: `ctest -R mc3_commands`.
+- **SYS-W1-06** `[TODO]` `P3` — Extend `SYS-W1-05`'s cycle-guard pattern to
+  the remaining unguarded recursive walks over `Mc3Object::children`:
+  `findParentListAlg`/`removeFromListAlg` (`EditorAlgorithms.hpp`),
+  `Mc3XmlWriter::writeObject`, the editor's `SceneRenderer` traversal,
+  `mc3togltf/src/MeshBuilder.cpp`. Lower priority than the two guarded in
+  `SYS-W1-05` since those two are the highest-frequency/most directly
+  user-triggered paths; these remaining ones would still eventually
+  surface a cycle (just via a less-immediate operation — Delete,
+  Save/Export, or opening a scene with a cyclic definition) rather than
+  the very next click/edit.
 
 ### W2 — AI / import sandbox
 - **SYS-W2-01** `[DONE]` `P1` — `Mc3LoadPolicy` threaded through parsing

@@ -2890,6 +2890,47 @@ static void testDeepCopyPreservesIdentityForSnapshots()
           "duplicateObjectsAlg (built on deepCopyObjectAlg): the DUPLICATE command does assign a new id");
 }
 
+// SYS-W1-05: Mc3Object::children has no built-in cycle protection (only
+// XML parsing structurally can't produce one -- each <tag> always creates
+// a fresh object; a document built/mutated via the C++ API can). Confirms
+// deepCopyObjectAlg's depth guard turns what would otherwise be an
+// unbounded-recursion stack-overflow crash into a clean, catchable
+// std::runtime_error -- exercised on the exact function ordinary user
+// actions (Duplicate/Group/etc.) call directly, not just via undo.
+static void testDeepCopyObjectAlgRejectsCyclicChildren()
+{
+    auto a = makeObj("a", "A");
+    auto b = makeObj("b", "B");
+    a->children.push_back(b);
+    b->children.push_back(a); // 2-cycle: a -> b -> a -> ...
+
+    bool threw = false;
+    std::string what;
+    try {
+        (void)deepCopyObjectAlg(*a);
+    } catch (const std::exception& e) {
+        threw = true;
+        what = e.what();
+    }
+    CHECK(threw,
+          "deepCopyObjectAlg: a cyclic children graph throws a catchable exception "
+          "instead of crashing (stack overflow) or hanging");
+    CHECK(what.find("256") != std::string::npos,
+          "deepCopyObjectAlg: the exception names the nesting-depth limit that was hit");
+
+    // A self-cycle (an object that is its own child) must be caught too.
+    auto self = makeObj("self", "Self");
+    self->children.push_back(self);
+    bool selfThrew = false;
+    try {
+        (void)deepCopyObjectAlg(*self);
+    } catch (const std::exception&) {
+        selfThrew = true;
+    }
+    CHECK(selfThrew,
+          "deepCopyObjectAlg: a direct self-cycle (obj is its own child) is also caught");
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Undo/redo stack depth cap (STAB-0481)
 // ─────────────────────────────────────────────────────────────────────────────
@@ -3432,6 +3473,7 @@ int main()
     testApplyRenamePatternZeroPaddingSequence();
     testFindReplaceTreatsSpecialCharsLiterally();
     testDeepCopyPreservesIdentityForSnapshots();
+    testDeepCopyObjectAlgRejectsCyclicChildren();
     testUndoStackDepthCapped();
     testUndoStackBelowCapUnaffected();
     testPickObjectByRay();

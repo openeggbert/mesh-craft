@@ -220,6 +220,19 @@ this session started with):
   replacement. Full rebuild + 124/124 `ctest`; manual `--screenshot`
   smoke test.
 
+- **`SYS-W1-05` DONE (partial, honestly scoped):** added a 256-deep
+  recursion guard (matching `GltfExporter.cpp`'s existing `kMaxNodeDepth`
+  precedent) to `deepCopyObjectAlg` and `deepCopyObj`/`deepCopyDoc` — the
+  two most frequently-invoked recursive walks over `Mc3Object::children`
+  (called directly by Duplicate/Group/undo on every action) — so a cyclic
+  children graph (only possible via C++-API misuse; XML parsing can't
+  produce one) now throws a clean error instead of stack-overflow-
+  crashing. 2 new tests (2-cycle, self-cycle). Several other recursive
+  walkers remain unguarded (`Mc3XmlWriter`, `SceneRenderer`, `mc3togltf`'s
+  `MeshBuilder`) — tracked as new `SYS-W1-06`, lower priority since a
+  cycle there would surface via a less-immediate operation. Full rebuild
+  + 124/124 `ctest`; manual `--screenshot`/`--export` smoke tests.
+
 **Prior session (11 commits, oldest first, all on `develop`, all pushed):**
 
 - `d9e98d5` — fixed 2 pre-existing XSD-invalid test fixtures (unrelated
@@ -420,13 +433,15 @@ without looking.)_
 
 1. **`plan.md`'s remaining `TODO` `SYS-###` rows**, in no particular
    priority order (pick the highest-value one that fits available time):
-   `SYS-W1-05` (graph-cycle/shared-node policy for API-built trees),
-   `SYS-W5-03` (MC3 versioning + unknown element/attribute policy),
-   `SYS-W5-04` (central document index/reference resolver), `SYS-W5-05`
-   (property-based round-trip tests + parser fuzz target), `SYS-W7-01`
-   (truthful glTF export matrix per model feature), `SYS-W11-07`
-   (package-first discovery + offline, partial), `SYS-W12-01` (benchmark
-   scenes + baselines).
+   `SYS-W1-06` (new this session — extend `SYS-W1-05`'s cycle-guard
+   pattern to the remaining unguarded recursive walks: `Mc3XmlWriter`,
+   `SceneRenderer`, `mc3togltf`'s `MeshBuilder`), `SYS-W5-03` (MC3
+   versioning + unknown element/attribute policy), `SYS-W5-04` (central
+   document index/reference resolver), `SYS-W5-05` (property-based
+   round-trip tests + parser fuzz target), `SYS-W7-01` (truthful glTF
+   export matrix per model feature), `SYS-W11-07` (package-first
+   discovery + offline, partial), `SYS-W12-01` (benchmark scenes +
+   baselines).
    `SYS-W11-01`/`SYS-W11-03`/`AUD-042`/`AUD-052`/`AUD-053`/`AUD-057` stay
    correctly blocked/owner-gated (CI parked, no Android NDK in this
    environment) — don't attempt those without the missing external

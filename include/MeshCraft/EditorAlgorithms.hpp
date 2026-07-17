@@ -20,6 +20,7 @@
 #include <numbers>
 #include <set>
 #include <sstream>
+#include <stdexcept>
 #include <string>
 #include <utility>
 #include <vector>
@@ -35,8 +36,27 @@ inline const char* objectTypeNameAlg(Mc3::ObjectType t) { return objectTypeName(
 
 // ── Deep copy ─────────────────────────────────────────────────────────────────
 
+// SYS-W1-05: same cycle-protection rationale as deepCopyObj() in
+// MeshCraftPrivate.hpp (see its own comment) -- this is the more heavily
+// used of the two, called directly from ordinary user actions (Duplicate,
+// Group, Convert to Definition, Break Instance, macro playback), so an
+// unguarded cycle here crashes on a single click, not just on undo.
 inline std::shared_ptr<Mc3::Mc3Object> deepCopyObjectAlg(const Mc3::Mc3Object& src)
 {
+    static thread_local int depth = 0;
+    struct DepthGuard {
+        DepthGuard() {
+            if (++depth > 256) {
+                --depth;
+                throw std::runtime_error(
+                    "deepCopyObjectAlg: object nesting exceeds 256 levels (cyclic "
+                    "Mc3Object::children graph?)");
+            }
+        }
+        ~DepthGuard() { --depth; }
+        DepthGuard(const DepthGuard&) = delete;
+    } guard;
+
     auto copy = std::make_shared<Mc3::Mc3Object>(src);
     copy->children.clear();
     for (const auto& child : src.children)

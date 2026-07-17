@@ -14,6 +14,7 @@
 #include <cstdlib>
 #include <filesystem>
 #include <memory>
+#include <stdexcept>
 #include <string>
 #include <vector>
 
@@ -57,8 +58,33 @@ inline std::filesystem::path macroPath()         { return meshcraftConfigDir() /
 // affect the other, since tests only ever exercised the *Alg versions.
 // Deleted; all former call sites now use the *Alg versions directly.
 
+// SYS-W1-05: Mc3Object::children is a plain, freely-mutable
+// std::vector<shared_ptr<Mc3Object>> with no addChild()-style choke point
+// to validate at -- so nothing stops a document built/mutated via the C++
+// API (as opposed to XML-parsed, which can never form a cycle: each <tag>
+// always creates a fresh object) from introducing a cyclic children graph,
+// e.g. obj->children.push_back(obj). deepCopyDoc() runs this on every
+// pushUndo() call (every mutating editor command), so an unguarded cycle
+// here would stack-overflow-crash the app on the very next edit. 256
+// matches mc3togltf/src/GltfExporter.cpp's kMaxNodeDepth precedent for
+// general object/instance nesting depth (no legitimate authored scene
+// nests anywhere close to that deep).
 inline std::shared_ptr<Mc3::Mc3Object> deepCopyObj(const std::shared_ptr<Mc3::Mc3Object>& src)
 {
+    static thread_local int depth = 0;
+    struct DepthGuard {
+        DepthGuard() {
+            if (++depth > 256) {
+                --depth;
+                throw std::runtime_error(
+                    "deepCopyObj: object nesting exceeds 256 levels (cyclic "
+                    "Mc3Object::children graph?)");
+            }
+        }
+        ~DepthGuard() { --depth; }
+        DepthGuard(const DepthGuard&) = delete;
+    } guard;
+
     auto copy = std::make_shared<Mc3::Mc3Object>(*src);
     copy->children.clear();
     for (const auto& child : src->children)
