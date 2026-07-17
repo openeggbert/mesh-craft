@@ -235,10 +235,6 @@ the decisions block at the top of this file and §8 below.
   execution; `rotation_units="radians"` / non-default `euler_order` are
   honored on export but not in live editor interaction (won't-fix, tracked
   as `STAB-0701`); no native file-browse dialog (drag-and-drop works).
-- **Confirmed, open, low-severity:** `AiAssistant`'s detached background
-  HTTP thread is never joined at shutdown (`AUD-014`) — doesn't currently
-  cause a hang (deterministic shutdown is otherwise handled) but is a loose
-  end.
 - **Resolved:** `Editor::EditorViewport`'s long-open finish-or-delete
   decision (bundled a camera + gizmo + `pickRay()`, added as an explicit
   "stub" in commit `580105d`, never wired in) — **deleted 2026-07-17**
@@ -365,16 +361,23 @@ _(Tasks 1-6 from the previous revision of this list — re-check + close
 entry. All 4 of this session's originally-requested human decisions are
 now fully implemented, not just decided.)_
 
-1. **Investigate `AUD-014`: join the `AiAssistant` background thread at
-   shutdown.**
-   Goal: confirm whether the detached thread noted in §6 can be safely
-   joined (with a bounded timeout, reusing the existing
-   `waitForAllInFlight()`) during `MeshCraftApplication`'s destructor,
-   closing this long-open loose end.
-   Files: `src/MeshCraft/AiAssistant.cpp`, `include/MeshCraft/AiAssistant.hpp`,
-   `src/MeshCraft/MeshCraftApplication.cpp` (destructor).
-   Verify: `ctest -R ai` (the `ai_test` binary) plus a manual check that
-   the app still exits promptly with a request in flight.
+_(Former task "Investigate `AUD-014`" turned out to be **stale documentation,
+not real remaining work**: `plan.md`'s own `AUD-014` entry has read `[DONE]`
+since an earlier session, commit `3cd27d7` — `main.cpp`'s `AiShutdownWaiter`
+RAII local, declared first so it's destroyed last, already calls
+`AiAssistant::waitForAllInFlight(5000ms)` on every exit path
+(`--help`/`--version`/`--screenshot`/`--export`/interactive), and `ai_test.cpp`
+already covers it (~line 804). Only this file's §5/§8 hadn't been updated
+to match — corrected, matching the `AUD-015`/`SYS-W6-01` staleness found
+and fixed earlier this same session. No code change needed; verified with
+`ctest -R ai`, part of the full 124/124 green run.)_
+
+This session continues on into `plan.md`'s remaining `TODO` `SYS-###` rows
+next (`SYS-W1-05`, `SYS-W2-03`/`04`, `SYS-W5-02`..`05`, `SYS-W6-02`/`03`,
+`SYS-W7-01`, `SYS-W11-03`/`07`, `SYS-W12-01`, `SYS-W14-*`), picking the
+highest-value safe one each time — see §3 for what's landed since this
+paragraph was written, and re-run `git log --oneline -20` for anything
+newer still.
 
 ## 9. Do not do yet
 
