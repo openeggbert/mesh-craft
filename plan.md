@@ -707,24 +707,75 @@ Mandated workstream items not tied to a single audit finding.
   instructions say requires a human, not a unilateral implementation
   choice. Needs a human answer to: **should MC3 preserve unrecognized
   XML data on round-trip at all, and if so, via which mechanism?**
-- **SYS-W5-04** `[TODO]` `P2` — Central document index / reference resolver.
-  **Investigation (2026-07-17):** confirmed real, not stale — 13 call
-  sites across the codebase (editor commands, animation channel target
-  resolution, `MeshCraftApplication::flatFindById`/`flatFindByName`,
-  `EditorAlgorithms.hpp`'s near-duplicate `flatFindByIdAlg`) each
-  independently do an O(n) recursive tree walk to resolve an id/name to
-  an object, with no caching/indexing anywhere — `R101`'s
-  `Mc3ImportResolver` only resolves CROSS-library (`mc3lib://...`)
-  references, not same-document id lookups. Deliberately left `TODO`
-  rather than attempted here: a real cached id→object index needs correct
-  invalidation on every mutation path in the ~18.5k LOC editor (rename,
-  delete, undo/redo document-swap, merge, import, group/ungroup, ...) —
-  a subtly wrong invalidation rule is a classic stale-cache correctness
-  bug class, and this is a bigger, riskier design+implementation task than
-  fits a single "continue working through the backlog" pass; needs its
-  own scoped session (enumerate every `document_`-mutating call site
-  first, the same way `SYS-W3-01`'s research pass did for
-  `MeshCraftApplication`, before choosing an invalidation strategy).
+- **SYS-W5-04** `[DONE]` `P2` — Central document index / reference resolver.
+  **Investigation (2026-07-17, session 1 of 2):** confirmed real, not
+  stale — 13+ call sites across the codebase (editor commands, animation
+  channel target resolution, `MeshCraftApplication::flatFindById`/
+  `flatFindByName`, `EditorAlgorithms.hpp`'s near-duplicate
+  `flatFindByIdAlg`) each independently do an O(n) recursive tree walk to
+  resolve an id/name to an object, with no caching/indexing anywhere —
+  `R101`'s `Mc3ImportResolver` only resolves CROSS-library
+  (`mc3lib://...`) references, not same-document id lookups. Deliberately
+  left `TODO` at the time rather than attempted immediately: a real cached
+  id→object index needs correct invalidation on every mutation path in
+  the ~18.5k LOC editor — a subtly wrong invalidation rule is a classic
+  stale-cache correctness bug class — needing its own scoped session
+  (enumerate every `document_`-mutating call site first, the same way
+  `SYS-W3-01`'s research pass did for `MeshCraftApplication`).
+  **Scoped research pass (2026-07-17, session 2, two parallel agents):**
+  (1) exhaustively enumerated every id/name-resolution call site with a
+  per-frame-vs-one-shot classification, and (2) exhaustively enumerated
+  every `document_`-mutating call site (add/remove/rename-id/rename-name/
+  reparent/wholesale-replace), each independently verified against the
+  actual source. Key finding that reshaped the implementation: of the
+  13+ lookup call sites, only **one** is a genuine per-frame hot path —
+  `MeshCraftApplication_Anim.cpp`'s `evaluateAndPushAnimOverrides()`
+  re-resolves the same animation-channel `targetObject` names via
+  `flatFindByName` every single frame during playback, for a document
+  that isn't changing frame-to-frame. Every other call site (Delete,
+  Break Instance, Registry Insert, hierarchy drag-and-drop, batch
+  rename, Find & Replace, ...) is one-shot per user action, where an
+  O(n) walk is negligible even on a large scene — indexing those too
+  would add real invalidation-correctness risk for no measurable
+  benefit, so they were deliberately left as direct tree walks (this
+  session's own no-premature-optimization principle, applied here as a
+  scope correction to the original row's broader framing, the same
+  rigor as this session's other stale-finding corrections).
+  **Implementation:** new `Editor::ObjectIndex` (CNA-free,
+  `include/MeshCraft/Editor/ObjectIndex.hpp` +
+  `src/MeshCraft/Editor/ObjectIndex.cpp`, matching the established
+  narrow-owned-helper idiom, e.g. `SelectionManager`) — an
+  `unordered_map`-backed id/name→object cache over `doc.objects` only
+  (not `doc.definitions`, matching `flatFindById`'s own existing scope),
+  rebuilt lazily on the next lookup after `invalidate()`. Pre-order
+  build order reproduces `flatFindById`/`flatFindByName`'s existing
+  "first match in document order" semantics exactly for documents with
+  duplicate ids (`SYS-W1-04` confirmed these are possible, parsing stays
+  permissive) — verified by a dedicated test. New 256-depth cyclic-
+  children guard (matching the `SYS-W1-05`/`06`/`07` convention for any
+  new recursive `Mc3Object::children` walk). `MeshCraftApplication`'s 3
+  existing accessor methods (`flatFindById`/`flatFindSharedById`/
+  `flatFindByName`) now delegate to a new `objectIndex_` member — their
+  signatures and every call site are unchanged. Invalidation: a single
+  line in `pushUndo()` (called before virtually every mutating command,
+  confirmed by grep across the whole `src/MeshCraft/` tree — Commands,
+  Mouse, Keyboard, Macro, all 3 panels, both menu bars, the AI panel)
+  plus one line at each of the 10 wholesale `document_ = ...`
+  replacement sites (`performUndo`/`performRedo`, the Undo History
+  jump-to-step dialog, both Open File branches, New Scene, autosave
+  recovery, Open Recent File, startup load, AI-apply) — all 10
+  cross-checked file:line against the research pass's own independent
+  enumeration before writing any code. Reparenting/moving an object
+  without changing its id/name does not invalidate (confirmed: no
+  reparent path touches id/name).
+  **New test** `test/object_index_test.cpp` (`object_index` ctest,
+  CNA-free, no `Mc3` library link needed) — 17 assertions: empty
+  document, nested-tree id/name lookups, not-found cases, duplicate-id
+  and duplicate-name first-match ordering, invalidate-then-rebuild
+  picking up a real mutation, cyclic-children throws. Full rebuild +
+  **126/126 `ctest`** (was 125, +1 new test); manual `--screenshot`
+  smoke tests on `test/house.mc3.xml` and `test/animation_demo.mc3.xml`
+  (clean GL state, no crash). Verify: `ctest -R object_index`.
 - **SYS-W5-05** `[DONE]` `P2` — Property-based round-trip tests + parser fuzz target.
   **Status note (2026-07-17):** duplicate row — this exact scope is
   already delivered under `SYS-W11-05` (`[DONE]`): `mc3_random_roundtrip`

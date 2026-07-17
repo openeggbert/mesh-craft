@@ -6,6 +6,7 @@
 #include "MeshCraft/Editor/EditorCamera.hpp"
 #include "MeshCraft/Editor/EditorTool.hpp"
 #include "MeshCraft/Editor/KeybindingManager.hpp"
+#include "MeshCraft/Editor/ObjectIndex.hpp"
 #include "MeshCraft/Editor/Preferences.hpp"
 #include "MeshCraft/Editor/SelectionManager.hpp"
 #include "MeshCraft/Editor/TransformGizmo.hpp"
@@ -85,6 +86,10 @@ private:
     Mc3::Mc3Document document_;
     std::filesystem::path currentFile_;
     bool modified_{false};
+    // SYS-W5-04: id/name -> object cache over document_.objects, invalidated
+    // by pushUndo() and every wholesale document_ replacement. See
+    // ObjectIndex.hpp for the exact invariant this depends on.
+    Editor::ObjectIndex objectIndex_;
 
     // Editor state
     Editor::EditorCamera  camera_;

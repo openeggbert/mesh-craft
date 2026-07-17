@@ -340,6 +340,9 @@ void MeshCraftApplication::pushUndo() {
     redoStack_.clear();
     redoSelectionStack_.clear();
     // CSG cache no longer cleared here: hash-based invalidation handles it (K1)
+    // SYS-W5-04: called before virtually every mutating command, so this is
+    // objectIndex_'s single invalidation choke point for in-place tree edits.
+    objectIndex_.invalidate();
 }
 
 bool MeshCraftApplication::undoOnActivate(bool widgetChanged) {
@@ -362,6 +365,7 @@ void MeshCraftApplication::performUndo() {
     pushWithCapAlg(redoStack_, deepCopyDoc(document_), kUndoMax);
     pushWithCapAlg(redoSelectionStack_, currentSelectionIds(), kUndoMax);
     document_ = std::move(undoStack_.back());
+    objectIndex_.invalidate();  // SYS-W5-04: wholesale document_ replacement
     undoStack_.pop_back();
     std::vector<std::string> ids = std::move(undoSelectionStack_.back());
     undoSelectionStack_.pop_back();
@@ -376,6 +380,7 @@ void MeshCraftApplication::performRedo() {
     pushWithCapAlg(undoStack_, deepCopyDoc(document_), kUndoMax);
     pushWithCapAlg(undoSelectionStack_, currentSelectionIds(), kUndoMax);
     document_ = std::move(redoStack_.back());
+    objectIndex_.invalidate();  // SYS-W5-04: wholesale document_ replacement
     redoStack_.pop_back();
     std::vector<std::string> ids = std::move(redoSelectionStack_.back());
     redoSelectionStack_.pop_back();
@@ -424,49 +429,20 @@ void MeshCraftApplication::saveScreenshot(const std::string& path) {
 // Misc helpers
 // ---------------------------------------------------------------------------
 
+// SYS-W5-04: delegates to objectIndex_ (Editor::ObjectIndex), a lazily-
+// rebuilt id/name -> object cache, instead of a fresh O(n) tree walk per
+// call. Signature and first-match-in-document-order semantics unchanged --
+// see ObjectIndex.hpp for the invalidation invariant this depends on.
 Mc3::Mc3Object* MeshCraftApplication::flatFindById(const std::string& id) const {
-    std::function<Mc3::Mc3Object*(const std::vector<std::shared_ptr<Mc3::Mc3Object>>&)> find;
-    find = [&](const std::vector<std::shared_ptr<Mc3::Mc3Object>>& list) -> Mc3::Mc3Object* {
-        for (const auto& obj : list) {
-            if (obj->id == id) return obj.get();
-            if (!obj->children.empty()) {
-                auto* r = find(obj->children);
-                if (r) return r;
-            }
-        }
-        return nullptr;
-    };
-    return find(document_.objects);
+    return objectIndex_.findById(document_, id);
 }
 
 std::shared_ptr<Mc3::Mc3Object> MeshCraftApplication::flatFindSharedById(const std::string& id) const {
-    std::function<std::shared_ptr<Mc3::Mc3Object>(const std::vector<std::shared_ptr<Mc3::Mc3Object>>&)> find;
-    find = [&](const std::vector<std::shared_ptr<Mc3::Mc3Object>>& list) -> std::shared_ptr<Mc3::Mc3Object> {
-        for (const auto& obj : list) {
-            if (obj->id == id) return obj;
-            if (!obj->children.empty()) {
-                auto r = find(obj->children);
-                if (r) return r;
-            }
-        }
-        return nullptr;
-    };
-    return find(document_.objects);
+    return objectIndex_.findSharedById(document_, id);
 }
 
 Mc3::Mc3Object* MeshCraftApplication::flatFindByName(const std::string& name) const {
-    std::function<Mc3::Mc3Object*(const std::vector<std::shared_ptr<Mc3::Mc3Object>>&)> find;
-    find = [&](const std::vector<std::shared_ptr<Mc3::Mc3Object>>& list) -> Mc3::Mc3Object* {
-        for (const auto& obj : list) {
-            if (obj->name == name) return obj.get();
-            if (!obj->children.empty()) {
-                auto* r = find(obj->children);
-                if (r) return r;
-            }
-        }
-        return nullptr;
-    };
-    return find(document_.objects);
+    return objectIndex_.findByName(document_, name);
 }
 
 // ---------------------------------------------------------------------------

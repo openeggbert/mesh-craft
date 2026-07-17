@@ -2,22 +2,24 @@
 
 _Last updated: 2026-07-17. This entry continues the same-day session
 recorded below (which itself ended, was resumed per its own §10 "Resume
-prompt", picked up `SYS-W1-07` as task 1 of §8's list, and then — on
-explicit user instruction, after the user asked exactly where the CNA
-regression broke — fixed it directly in `../cna`) with two more commits
-on top of the `2a2c3a2`/`7b1c045` pair described in the next paragraph —
-this file's own commit is, as always, self-referential (it cannot cite
-its own hash), see any `NEXT.md`-only commit for the same pattern.
-Working tree clean except the same two untracked, unrelated scratch
-scene files noted previously (`test/crownspire-citadel.mc3.xml`,
-`test/house3.glb` — manually authored demo content, not part of any
-tracked task, left as-is). **23 commits** ahead of the original session's
-starting point (`f1900e3`); pushed to `origin/develop`. See
-`git log --oneline -25` for anything newer than this._
+prompt", picked up `SYS-W1-07` as task 1 of §8's list, then — on explicit
+user instruction, after the user asked exactly where the CNA regression
+broke — fixed it directly in `../cna`, then picked up `SYS-W5-04` next)
+with three more commits on top of the `2a2c3a2`/`7b1c045` pair described
+in the next paragraph — this file's own commit is, as always,
+self-referential (it cannot cite its own hash), see any `NEXT.md`-only
+commit for the same pattern. Working tree clean except the same two
+untracked, unrelated scratch scene files noted previously
+(`test/crownspire-citadel.mc3.xml`, `test/house3.glb` — manually authored
+demo content, not part of any tracked task, left as-is). **24 commits**
+ahead of the original session's starting point (`f1900e3`); pushed to
+`origin/develop`. See `git log --oneline -25` for anything newer than
+this._
 
 **The §4/§5 "CNA build regression" described below is now RESOLVED** —
 see the update at the top of §4. A fresh reconfigure + full rebuild +
-125/125 `ctest` all pass again as of `../cna` commit `730ebbe9`.
+ctest (126/126, +1 since `SYS-W5-04` added a new test) all pass again as
+of `../cna` commit `730ebbe9`.
 
 **This session ran in two parts** (first 9 commits: the 4 originally-
 requested human decisions + immediate follow-through; next 11: continuing
@@ -99,11 +101,11 @@ one item remains, itself broken into phases (see §4).
   ```bash
   cmake -S . -B b-release && cmake --build b-release -j"$(nproc)"
   ```
-- **Tests: 125 / 125 `ctest` passing**, re-run against the fresh
+- **Tests: 126 / 126 `ctest` passing**, re-run against the fresh
   post-fix build above (was 122/123 at the start of this session's first
-  half — `field_matrix` now passes, see `SYS-W6-04`; net +2 tests
-  (`preferences`, `benchmark`), +~60 new assertions across extended
-  existing tests, see §3).
+  half — `field_matrix` now passes, see `SYS-W6-04`; net +3 tests
+  (`preferences`, `benchmark`, `object_index`), +~60 new assertions
+  across extended existing tests, see §3).
 - **CLI/tools/apps/libraries currently available:**
   - `MeshCraft` — the interactive editor (`./b-release/MeshCraft
     scene.mc3.xml`, or `--screenshot out.png` / `--export out.glb` for
@@ -125,7 +127,11 @@ one item remains, itself broken into phases (see §4).
   `plan.md`/`NEXT.md` status markers referencing findings that were
   actually already done in earlier sessions; guarded `SceneRenderer`'s 4
   remaining unguarded recursive traversals against cyclic children graphs
-  (`SYS-W1-07`, new second-half continuation).
+  (`SYS-W1-07`); fixed a `../cna`-side build regression with explicit user
+  authorization (see §4); added `Editor::ObjectIndex`, a cached id/name
+  lookup replacing `flatFindById`/`flatFindByName`/`flatFindSharedById`'s
+  O(n) tree walks, after a scoped research pass found only animation
+  playback is a genuine per-frame hot path (`SYS-W5-04`).
 - **Known working examples:** `./b-release/MeshCraft test/house.mc3.xml`;
   `./b-release/MeshCraft <scene> --screenshot out.png` (genuinely captures
   the composited ImGui+3D framebuffer, not just the viewport — used
@@ -300,7 +306,9 @@ this session started with):
   in this pass — a correct cached index needs careful invalidation
   analysis across every `document_`-mutating call site first (the same
   research-before-implementing discipline `SYS-W3-01` used), a bigger,
-  riskier task than fits one "continue working" iteration.
+  riskier task than fits one "continue working" iteration. **Done later
+  the same day, third pickup this session — see its own `DONE` entry
+  further down.**
 
 - **`SYS-W1-06` DONE (3 walkers guarded):** extended `SYS-W1-05`'s
   256-deep cycle guard to `findParentListAlg`/`removeFromListAlg`
@@ -358,6 +366,52 @@ this session started with):
   `SYS-W1-07` entry for the full per-function breakdown. **While verifying
   this, discovered the CNA build regression described in §4 — unrelated to
   this fix (reproduces identically with it reverted), not fixed here.**
+
+- **`SYS-W5-04` DONE (third pickup this session):** ran the "scoped
+  invalidation-analysis pass" this row itself said it needed — two parallel
+  research agents independently enumerated (1) every id/name lookup call
+  site with a per-frame-vs-one-shot classification and (2) every
+  `document_`-mutating call site (add/remove/rename/reparent/wholesale-
+  replace), each cross-checked against the real source before any code was
+  written. **Key finding that reshaped the fix:** of the 13+ lookup call
+  sites the row originally cited, only ONE is a genuine per-frame hot path
+  — `evaluateAndPushAnimOverrides()`'s `flatFindByName` calls, re-resolving
+  the same animation-channel target names every frame during playback.
+  Every other call site is one-shot per user action (Delete, Break
+  Instance, Registry Insert, drag-and-drop, batch rename, Find & Replace,
+  ...), where an O(n) walk is negligible even on a large scene — indexing
+  those too would add real invalidation-correctness risk for zero
+  measurable benefit, so this session deliberately scoped the fix down to
+  just the 3 already-existing accessor methods that already serve the one
+  real hot path. New `Editor::ObjectIndex` (CNA-free,
+  `include/MeshCraft/Editor/ObjectIndex.hpp` +
+  `src/MeshCraft/Editor/ObjectIndex.cpp`, matching the `SelectionManager`
+  narrow-owned-helper idiom): an `unordered_map`-backed id/name→object
+  cache over `doc.objects` (not `doc.definitions`, matching
+  `flatFindById`'s own existing scope), rebuilt lazily on the next lookup
+  after `invalidate()`. Pre-order build reproduces
+  `flatFindById`/`flatFindByName`'s existing "first match in document
+  order" semantics exactly, including for documents with duplicate ids
+  (`SYS-W1-04`) — verified by a dedicated test, not just assumed. New
+  256-depth cyclic-children guard, matching `SYS-W1-05`/`06`/`07`'s
+  convention for any new recursive `Mc3Object::children` walk.
+  `flatFindById`/`flatFindSharedById`/`flatFindByName` now delegate to a
+  new `objectIndex_` member — same signatures, zero call sites changed.
+  Invalidation: one line in `pushUndo()` (confirmed via grep to run before
+  virtually every mutating command across the whole `src/MeshCraft/` tree)
+  plus one line at each of the 10 wholesale `document_ = ...` replacement
+  sites (`performUndo`/`performRedo`, Undo History jump-to-step, both Open
+  File branches, New Scene, autosave recovery, Open Recent File, startup
+  load, AI-apply) — all 10 individually cross-checked file:line against
+  the research pass's own independent enumeration. New
+  `test/object_index_test.cpp` (`object_index` ctest, CNA-free, no `Mc3`
+  library link needed) — 17 assertions covering nested-tree lookups,
+  not-found cases, duplicate-id/name first-match ordering,
+  invalidate-then-rebuild against a real mutation, and the cyclic-children
+  guard. Full rebuild + **126/126 `ctest`** (was 125, +1 new test); manual
+  `--screenshot` smoke tests on `test/house.mc3.xml` and
+  `test/animation_demo.mc3.xml` (clean GL state). See `plan.md`'s
+  `SYS-W5-04` entry for the full write-up.
 
 **Prior session (11 commits, oldest first, all on `develop`, all pushed):**
 
@@ -630,23 +684,15 @@ regression noted in §4 is now resolved and re-verified — no need to
 re-check it before starting, though `../cna`'s HEAD is still worth a
 glance if a build ever fails mysteriously again.)_
 
-1. **`plan.md`'s remaining `TODO` `SYS-###` rows** (`SYS-W1-07` is now
-   `DONE`, see §3 — pick the highest-value one of the 2 below that fits
-   available time):
-   `SYS-W5-04` (central document index/reference resolver — investigated
-   this session, real and TODO-correct, but needs its own scoped
-   invalidation-analysis pass before implementing, not a quick pick),
-   `SYS-W12-02` (new this session — extend
-   `SYS-W12-01`'s CLI-level benchmark harness to the 10 categories needing
-   in-process instrumentation: mesh-gen, CSG+cache, traversal, picking,
-   undo snapshot, texture processing, animation eval, registry, startup,
-   first frame).
-   **Both of these were deliberately NOT attempted this session because
-   each genuinely needs its own dedicated pass** (research-then-implement
-   for `SYS-W5-04`'s cache invalidation, new instrumentation infrastructure
-   for `SYS-W12-02`) — they are not quick picks the way most of this
-   session's other work was; size the next session's time budget
-   accordingly rather than expecting to finish both alongside other work.
+1. **`plan.md`'s one remaining `TODO` `SYS-###` row** (`SYS-W1-07` and
+   `SYS-W5-04` are now both `DONE`, see §3):
+   `SYS-W12-02` (new this session — extend `SYS-W12-01`'s CLI-level
+   benchmark harness to the 10 categories needing in-process
+   instrumentation: mesh-gen, CSG+cache, traversal, picking, undo
+   snapshot, texture processing, animation eval, registry, startup, first
+   frame). Deliberately NOT attempted this session — it needs new
+   instrumentation infrastructure, not a quick pick; size the next
+   session's time budget accordingly.
    `SYS-W11-01`/`SYS-W11-03`/`AUD-042`/`AUD-052`/`AUD-053`/`AUD-057` stay
    correctly blocked/owner-gated (CI parked, no Android NDK in this
    environment) — don't attempt those without the missing external

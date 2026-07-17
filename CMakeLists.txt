@@ -600,6 +600,22 @@ if(MESH_CRAFT_BUILD_TESTING AND UNIX AND NOT ANDROID AND NOT EMSCRIPTEN)
     add_test(NAME preferences COMMAND preferences_test)
     set_tests_properties(preferences PROPERTIES TIMEOUT 15 LABELS "unit")
 
+    # SYS-W5-04: Editor::ObjectIndex, a lazily-rebuilt id/name -> object
+    # cache over Mc3Document.objects extracted out of
+    # MeshCraftApplication::flatFindById()/flatFindByName(). CNA-free (only
+    # depends on Mc3Object/Mc3Document, which are header-only for this
+    # class's purposes -- no factory methods are called), so unlike
+    # keybinding_manager_test above this needs neither CNA nor Mc3 linked.
+    add_executable(object_index_test
+        ${CMAKE_CURRENT_SOURCE_DIR}/test/object_index_test.cpp
+        ${CMAKE_CURRENT_SOURCE_DIR}/src/MeshCraft/Editor/ObjectIndex.cpp)
+    target_include_directories(object_index_test PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/include
+        ${CMAKE_CURRENT_SOURCE_DIR}/mc3/include)
+    target_compile_features(object_index_test PRIVATE cxx_std_23)
+    add_test(NAME object_index COMMAND object_index_test)
+    set_tests_properties(object_index PROPERTIES TIMEOUT 15 LABELS "unit")
+
     # Pure unit test: ObjectType <-> display-name round-trip. Header-only.
     # Regression guard for the Torus/Capsule/Disk/Grid/IcoSphere -> "Object"
     # mislabel and the lossy macro round-trip.

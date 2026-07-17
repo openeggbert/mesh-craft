@@ -31,6 +31,7 @@ namespace MeshCraft {
 
 void MeshCraftApplication::newScene() {
     document_ = Mc3::Mc3Document{};
+    objectIndex_.invalidate();  // SYS-W5-04: wholesale document_ replacement
     document_.model = "Untitled";
     selection_.clear();
     modified_ = false;
@@ -98,6 +99,7 @@ void MeshCraftApplication::recoverFromAutosave() {
         Mc3::Mc3Validation loadValidation;
         document_ = Mc3::Mc3Document::loadFromFile(autoSavePath(recoveryFilePath_),
                                                     Mc3::Mc3LoadPolicy::trusted(), loadValidation);
+        objectIndex_.invalidate();  // SYS-W5-04: wholesale document_ replacement
         if (!loadValidation.empty())
             std::cout << "[MeshCraft] Autosave recovery: " << loadValidation.warningCount()
                       << " warning(s), " << loadValidation.errorCount() << " error(s)\n";
@@ -195,6 +197,7 @@ void MeshCraftApplication::executePendingAction() {
                 document_ = Mc3::Mc3Document::loadFromFile(pendingOpenPath_,
                                                             Mc3::Mc3LoadPolicy::trusted(),
                                                             loadValidation);
+                objectIndex_.invalidate();  // SYS-W5-04: wholesale document_ replacement
                 if (!loadValidation.empty())
                     std::cout << "[MeshCraft] Load: " << loadValidation.warningCount()
                               << " warning(s), " << loadValidation.errorCount() << " error(s) in "

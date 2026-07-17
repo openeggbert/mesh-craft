@@ -1132,6 +1132,7 @@ void MeshCraftApplication::drawDialogs()
                 while (static_cast<int>(redoSelectionStack_.size()) > kUndoMax)
                     redoSelectionStack_.erase(redoSelectionStack_.begin());
                 document_ = std::move(undoStack_[i]);
+                objectIndex_.invalidate();  // SYS-W5-04: wholesale document_ replacement
                 std::vector<std::string> ids = std::move(undoSelectionStack_[i]);
                 undoStack_.resize(i);
                 undoSelectionStack_.resize(i);
@@ -1186,6 +1187,7 @@ void MeshCraftApplication::drawDialogs()
                 else
                     document_ = Mc3::Mc3Document::loadFromFile(p, Mc3::Mc3LoadPolicy::trusted(),
                                                                 loadValidation);
+                objectIndex_.invalidate();  // SYS-W5-04: wholesale document_ replacement
                 if (!loadValidation.empty())
                     std::cout << "[MeshCraft] Load: " << loadValidation.warningCount()
                               << " warning(s), " << loadValidation.errorCount() << " error(s) in "

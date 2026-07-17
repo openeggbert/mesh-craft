@@ -250,6 +250,7 @@ void MeshCraftApplication::LoadContent() {
             Mc3::Mc3Validation loadValidation;
             document_ = Mc3::Mc3Document::loadFromFile(currentFile_, Mc3::Mc3LoadPolicy::trusted(),
                                                         loadValidation);
+            objectIndex_.invalidate();  // SYS-W5-04: wholesale document_ replacement
             if (!loadValidation.empty())
                 std::cout << "[MeshCraft] Load: " << loadValidation.warningCount() << " warning(s), "
                           << loadValidation.errorCount() << " error(s) in " << currentFile_ << "\n";
