@@ -99,6 +99,7 @@ does not require this order — see "Forward compatibility" below):
 
 ```
 version, model, unit, coordinateSystem, rotationUnits, eulerOrder, defaultCamera,
+library, imports,
 meta, metadata, includes, includedDefs, includedMaterials, includedTextures, includedEmbeds,
 environment, lights, cameras,
 textures, svgTextures, embeds, scripts, sounds, musicTracks, triggers,
@@ -110,7 +111,9 @@ Each nested type (`Mc3Object`, `Mc3Material`, `Mc3Light`, `Mc3Camera`,
 `Mc3ExtrudePath`, `Mc3Deform`, `Mc3CsgOperation`, `Mc3Keyframe`,
 `Mc3Channel`, `Mc3Action`, `Mc3SceneState`/`Mc3ObjectOverride`,
 `Mc3Trigger`/`Mc3TriggerStep`, `Mc3Script`, `Mc3Sound`, `Mc3Music`,
-`Mc3EmbedGltf`, `Mc3SvgTexture`, `Mc3Texture`, `Mc3Environment`/`Mc3Fog`) is
+`Mc3EmbedGltf`, `Mc3SvgTexture`, `Mc3Texture`, `Mc3Environment`/`Mc3Fog`,
+`Mc3AssetMetadata` (R111, `Mc3Object::assetMetadata`), `Mc3LibraryInfo`
+(R110, root `library`), `Mc3Import` (R101, root `imports` array)) is
 its own `TAG_OBJ` with its own field key names — see the paired
 `write*()`/`read*()` function for each type in `McbWriter.cpp`/
 `McbReader.cpp` for the authoritative field list; they are kept in lockstep

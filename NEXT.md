@@ -168,6 +168,22 @@ this session started with):
   `3cd27d7`, `plan.md` already read `[DONE]`) — only this file's §5/§8
   hadn't caught up. Corrected, no code change. Same class of staleness as
   the `AUD-015`/`SYS-W6-01` fix above.
+- **Stale-`TODO` sweep:** after finding `AUD-014`/`AUD-015`/`SYS-W6-01`
+  stale earlier this session, did a quick pass over the remaining
+  `SYS-###` `TODO` rows and found 3 more: `SYS-W2-03` (its `AUD-009` has
+  read `[DONE]` since commit `ca82b0b`), `SYS-W6-03` (its `AUD-018` has
+  read `[DONE]` since commit `ba3e73c`), `SYS-W14-01` (duplicate of the
+  already-`[DONE]` `SYS-W9-02`, autosave+crash-recovery). All 3 flipped to
+  `[DONE]` with a status note, no code change. While re-verifying
+  `SYS-W6-03`, found this session's own earlier `SYS-W6-04` work had
+  freshly re-broken `MCB_FORMAT.md`'s field-order list (missing the new
+  `library`/`imports` fields) — fixed that too.
+- **`SYS-W5-02` DONE:** documented every `MC3_FORMAT.md` gap
+  `xsd_docs_diff.py` reports (grew from the original 5+12 to 14+25 by the
+  time this was picked up, partly from this session's own `SYS-W6-04`
+  additions) — new "Library and Imports"/"UV Mapping"/"Asset Metadata"
+  sections plus several attribute-table additions. `xsd_docs_diff.py` now
+  reports 0 gaps (was 14 elements + 25 attributes).
 - **`SYS-W2-04` (now DONE, one sub-point deliberately left open):**
   "extracted-XML size" turned out to already be bounded (`SYS-W1-03`'s
   512MB `checkDocumentByteBudget()` already runs inside the AI-apply

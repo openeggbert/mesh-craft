@@ -339,8 +339,20 @@ Mandated workstream items not tied to a single audit finding.
   Verify: `ctest -R mc3_load_policy`.
 - **SYS-W2-02** `[DONE]` `P1` — In-memory AI parse path (no temp file). Commit
   `40643a4` (`Mc3Document::loadFromString`). Verify: `ctest -R mc3_load_policy`.
-- **SYS-W2-03** `[TODO]` `P2` — Real JSON parse scoped to `content[].type=="text"`;
+- **SYS-W2-03** `[DONE]` `P2` — Real JSON parse scoped to `content[].type=="text"`;
   correct UTF-16 surrogate pairs. (`AUD-009`)
+  **Status note (2026-07-17):** stale `TODO` — `AUD-009` itself has read
+  `[DONE]` since commit `ca82b0b` (an earlier session): `extractFirstTextValue`'s
+  search key is the full `"type":"text","text":"` prefix (scopes extraction
+  to an actual text block, not just any `"text":"` substring anywhere in
+  the body), and its `\u` escape handling combines high/low UTF-16
+  surrogate pairs into correct 4-byte UTF-8, mapping a genuinely lone
+  surrogate to U+FFFD instead of emitting invalid UTF-8. Tested
+  (`ai_test.cpp`: a decoy non-text `"text":"decoy"` field, a `😀` astral
+  pair, a lone high surrogate). This row was simply never flipped to match
+  — same class of staleness as `AUD-015`/`SYS-W6-01`/`AUD-014` found and
+  fixed earlier this session. No code change needed; verified via the
+  existing `ctest -R mc3_ai` coverage.
 - **SYS-W2-04** `[DONE, one sub-point deliberately partial]` `P2` — Redact
   API keys / auth headers from errors/logs; bound HTTP + extracted-XML
   size. Not tied to a single `AUD-###` finding (mandated hardening item).
@@ -503,11 +515,32 @@ Mandated workstream items not tied to a single audit finding.
   fixed; the 53 flagged asymmetries were individually verified against the
   actual reader/writer source and allowlisted with per-field reasons.
   Commit `e728b62`. Verify: `ctest --test-dir cmake-build-debug -R field_matrix`.
-- **SYS-W5-02** `[TODO]` `P2/W13` — Document the 5 elements + 12 attributes
-  `xsd_docs_diff.py` still reports missing from `MC3_FORMAT.md`: `area`,
-  `background_texture`, `deform`, `skybox_texture`, `uv_mapping`; `aspect`,
-  `autoplay`, `euler_order`, `material_override`, `mip_maps`, `offset_u`,
-  `offset_v`, `projection`, `rotation_units`, `scale_u`, `scale_v`, `time_scale`.
+- **SYS-W5-02** `[DONE]` `P2/W13` — Document the elements/attributes
+  `xsd_docs_diff.py` reports missing from `MC3_FORMAT.md`.
+  **Implementation (2026-07-17):** the original 5+12 gap had grown to 14
+  elements + 25 attributes by the time this was picked up — partly
+  pre-existing (`background_texture`/`skybox_texture`/`uv_mapping`
+  elements; `autoplay`/`euler_order`/`material_override`/`mip_maps`/
+  `offset_u`/`offset_v`/`rotation_units`/`scale_u`/`scale_v` attributes),
+  partly freshly introduced by this session's own `SYS-W6-04` work
+  (`assetMetadata`/`imports`/`lod`/`lods`/`materialSlots`/`periodTags`/
+  `regionTags`/`semanticTags`/`socket`/`sockets` elements; `bounds_max`/
+  `bounds_min`/`category`/`clearance_volume`/`collision_proxy`/`facing`/
+  `hash`/`instancing_eligible`/`max_visibility_distance`/`namespace`/
+  `nominal_size`/`provenance`/`selection_weight`/`shadow_policy`/
+  `subcategory`/`tier` attributes) — documented both. Added: a "Library
+  and Imports" section (`<library>`/`<imports>`, R110/R101), a "UV
+  Mapping" section (`<uv_mapping>`, per-object UV override), an "Asset
+  Metadata" section (`<assetMetadata>`, R111, full attribute + child-
+  element table), `rotation_units`/`euler_order` to the root element
+  table, `script` to the shared object-attributes table, `material_override`/
+  `variants` to the `<instance>` section, `background_texture`/
+  `skybox_texture` to Environment, `mip_maps` to Textures, `autoplay` to
+  Animations. `python3 test/xsd_docs_diff.py` now reports "0 not
+  mentioned" for both elements and attributes (was 14/25). Doc-only, no
+  runtime test (informational-only tool per its own docstring) — full
+  124/124 `ctest` confirms no regression from the doc edits themselves.
+  Verify: `python3 test/xsd_docs_diff.py`.
 - **SYS-W5-03** `[TODO]` `P2` — MC3 versioning + unknown element/attribute policy;
   round-trip must not silently drop unknown data unless policy says so.
 - **SYS-W5-04** `[TODO]` `P2` — Central document index / reference resolver.
@@ -533,8 +566,20 @@ Mandated workstream items not tied to a single audit finding.
   compression-flag rejection (`AUD-019`) and writer-determinism coverage. Not
   marked DONE: XML→MCB→XML round-trip equivalence has no dedicated test yet
   and remains open.
-- **SYS-W6-03** `[TODO]` `P3` — Fix `MCB_FORMAT.md` stale field-order list
-  (`AUD-018`).
+- **SYS-W6-03** `[DONE]` `P3` — Fix `MCB_FORMAT.md` stale field-order list
+  (`AUD-018`). **Status note (2026-07-17):** `AUD-018` itself has read
+  `[DONE]` since commit `ba3e73c` — another stale `TODO` row simply never
+  flipped to match (same class as `AUD-015`/`SYS-W6-01`/`SYS-W2-03` found
+  this session). While re-verifying it, found that this session's own
+  earlier `SYS-W6-04` work (adding `library`/`imports` to
+  `writeDocument()`) had freshly re-broken the exact invariant `AUD-018`
+  fixed — the field-order list didn't mention the two new fields. Fixed
+  both: added `library, imports` in their actual written position
+  (between `defaultCamera` and `meta`) to the field-order block, and added
+  `Mc3AssetMetadata`/`Mc3LibraryInfo`/`Mc3Import` to the "each nested type"
+  list. Doc-only, no runtime test (matches `AUD-018`'s own "Tests:
+  Doc-only" note) — verified by reading `MCB_FORMAT.md`'s block against
+  `writeDocument()` in `mcb/src/McbWriter.cpp` directly.
 - **SYS-W6-04** `[DONE]` `P1` — Close `field_matrix`'s 18-field gate gap:
   `Mc3Object::assetMetadata` (R111, whole struct), `Mc3Object::scriptId`
   (R103), and `Mc3Document::library`/`imports` (R110/R101) were completely
@@ -798,7 +843,15 @@ Mandated workstream items not tied to a single audit finding.
   only measured bottlenecks.
 
 ### W14 — New features (after P0/P1 gates)
-- **SYS-W14-01** `[TODO]` `P2` — Autosave + crash recovery.
+- **SYS-W14-01** `[DONE]` `P2` — Autosave + crash recovery.
+  **Status note (2026-07-17):** duplicate row — this exact feature was
+  delivered under `SYS-W9-02` (see that entry above: atomic save,
+  autosave, `checkForNewerAutosave()`/`recoverFromAutosave()`/
+  `discardAutosave()`, a real "Recover Unsaved Changes" modal dialog,
+  `mc3_autosave_recovery_test`). This W14 row was simply never flipped/
+  removed once W9's version shipped — same class of staleness as
+  `AUD-015`/`SYS-W6-01`/`SYS-W2-03`/`SYS-W6-03` found this session. No new
+  work; verify via `SYS-W9-02`'s own verification steps.
 - **SYS-W14-02** `[DONE]` `P2` — Scene validation & diagnostics UI (builds on SYS-W1-01).
   Commit `9c7bfa5`: a new "Validation" ImGui panel (same `show*Panel_`
   toggle convention as the AI Assistant/Model Registry panels, View menu

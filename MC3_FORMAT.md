@@ -19,7 +19,14 @@ MC3 (MeshCraft 3D) is an XML-based scene format (`.mc3.xml`). It describes a 3D 
 | `model` | string | `"unnamed"` |
 | `unit` | `"meter"`, `"centimeter"`, `"inch"` | `"meter"` |
 | `coordinate_system` | `"right_handed_y_up"` | `"right_handed_y_up"` |
+| `rotation_units` | `"degrees"`, `"radians"` | `"degrees"` |
+| `euler_order` | `"XYZ"`, `"XZY"`, `"YXZ"`, `"YZX"`, `"ZXY"`, `"ZYX"` | `"XYZ"` |
 | `default_camera` | string (references a `<camera>`'s `name`) | — (see [Cameras](#cameras)) |
+
+**`rotation_units`/`euler_order` are export-only** — honored by `mc3togltf`,
+but the live editor's transform gizmo, keyboard nudging, and mouse-drag
+rotation always assume degrees in a fixed XYZ order regardless of what a
+loaded document declares (won't-fix, tracked as `STAB-0701`).
 
 ---
 
@@ -27,6 +34,8 @@ MC3 (MeshCraft 3D) is an XML-based scene format (`.mc3.xml`). It describes a 3D 
 
 ```xml
 <mc3 ...>
+  <library namespace="..." version="..."/>
+  <imports>...</imports>
   <include file="..."/>
   <meta>...</meta>
   <environment>...</environment>
@@ -52,6 +61,45 @@ even though `Mc3XmlParser` itself is lenient about order. This matters
 in practice: the AI Assistant's "Apply to Scene" pipeline validates
 AI-generated XML against this schema (see MESHCRAFT_HAS_LIBXML2 in
 `AiResponseAlgorithms.hpp`) and rejects out-of-order responses.
+
+---
+
+## Library and Imports (`<library>`, `<imports>`)
+
+R110/R101: reusable-library identity and cross-library references, mostly
+relevant to `.mc3lib.xml`/`.mc3lib.json` reusable-definition-library files
+(`Mc3Document::saveToLibraryFile()`/`loadFromLibraryFile()`) rather than
+ordinary scene documents.
+
+```xml
+<mc3 version="0.3" model="CityAssets">
+  <library namespace="city-core" version="3.2.1" hash="sha256:..."/>
+  <imports>
+    <import namespace="furniture" source="mc3lib://furniture-pack@1.0.0" hash="sha256:..."/>
+  </imports>
+  ...
+</mc3>
+```
+
+`<library>` (at most one, root-level) declares that **this document itself**
+is a reusable library, referenced elsewhere as `mc3lib://<namespace>@<version>`.
+Absent on an ordinary scene/model document.
+
+| Attribute | Type | Required | Description |
+|-----------|------|----------|--------------|
+| `namespace` | string | yes | e.g. `"city-core"` |
+| `version` | string | yes | semver `major.minor.patch` |
+| `hash` | string | no | `"sha256:<64 lowercase hex chars>"` of the library's own content (`Mc3Document::computeLibraryContentHash()`) |
+
+`<imports>` (at most one, root-level) lists libraries this document pulls
+in under a local alias, so `<instance>`s can reference their definitions as
+`"<namespace>:<definitionId>"`.
+
+| `<import>` attribute | Type | Required | Description |
+|-----------------------|------|----------|--------------|
+| `namespace` | string | yes | local alias, e.g. `"furniture"` |
+| `source` | string | yes | `"mc3lib://<library-name>@<version>"` — the library's own declared name/version, which may differ from the local alias |
+| `hash` | string | no | if present, verified against the resolved library's own content hash on import |
 
 ---
 
@@ -172,9 +220,16 @@ Free-form document-level key/value metadata — author, license, description, ve
 ```xml
 <environment>
   <background color="0.1 0.1 0.15"/>
+  <background_texture>textures/sky.png</background_texture>
+  <skybox_texture>textures/skybox.png</skybox_texture>
   <fog mode="linear" color="0.5 0.5 0.5" start="10" end="100" density="0.01"/>
 </environment>
 ```
+
+`<background_texture>`/`<skybox_texture>` are element **text content**
+(not attributes on `<background>`), each holding a path resolved the same
+way `<texture uri="...">` is (relative to the top-level scene file's
+directory).
 
 ---
 
@@ -231,9 +286,13 @@ form on save, regardless of which spelling was used on load.
 ```xml
 <textures>
   <texture id="wall_tex" uri="textures/wall.png" wrap_u="repeat" wrap_v="repeat"
-           filter="linear" color_space="srgb"/>
+           filter="linear" color_space="srgb" mip_maps="true"/>
 </textures>
 ```
+
+| Attribute | Type | Default | Description |
+|-----------|------|---------|--------------|
+| `mip_maps` | bool | `true` | Whether mipmaps should be generated for this texture |
 
 **Path resolution:** `uri` is resolved **relative to the top-level
 scene file's directory** — every consumer (`GltfExporter.cpp`,
@@ -410,6 +469,8 @@ All objects share common transform attributes:
 | `collision` | string | `"none"` | `"none"`, `"box"`, `"mesh"` |
 | `tags` | space-separated | `""` | Arbitrary tags |
 | `layer` | string | `""` | Named layer |
+| `role` | string | `""` | `"cutter"` marks this object as a CSG cutter (see [CSG operations](#csg-operations)) |
+| `script` | string | `""` | R103: references a `<script id="...">` (see [Scripts](#scripts-n3)) to run when this object triggers |
 
 ### Primitives
 
@@ -522,6 +583,31 @@ the canonical name and the only one in the schema.
 
 All five are supported by the MeshCraft editor and exported by `mc3togltf`.
 
+### `<uv_mapping>` — per-object UV override
+
+Optional child element on most primitives (box/sphere/cylinder/cone/plane/
+cube/torus/capsule/disk/grid/icosphere/mesh/extrude/group/CSG roots),
+overriding that object's default UV generation.
+
+```xml
+<box name="Wall" size="4 3 0.2">
+  <uv_mapping projection="box" scale_u="2.0" scale_v="1.0" offset_u="0" offset_v="0" rotation="0"/>
+</box>
+```
+
+| Attribute | Type | Default | Description |
+|-----------|------|---------|--------------|
+| `projection` | `"planar"`, `"box"`, `"sphere"` | unset | Projection mode |
+| `scale_u` / `scale_v` | float | `1.0` | Per-axis UV scale (tiling) |
+| `offset_u` / `offset_v` | float | `0.0` | Per-axis UV offset |
+| `rotation` | float (degrees) | `0.0` | UV rotation |
+
+Per-object UV mapping is ignored on CSG boolean output (see
+[CSG operations](#csg-operations)'s "UV coordinates are not real"
+limitation) — it only affects primitives whose geometry is generated
+directly, not the Manifold-evaluated result of a `<union>`/`<difference>`/
+`<intersection>`.
+
 ### `<mesh>` — external OBJ file
 
 ```xml
@@ -576,8 +662,15 @@ Path types: `line` (length, axis), `arc` (radius, angle), `helix` (radius, heigh
 </definitions>
 <objects>
   <instance name="Tree1" definition="tree_def" position="3 0 0"/>
+  <instance name="Tree2" definition="tree_def" position="5 0 0" material_override="autumn_mat"/>
 </objects>
 ```
+
+| Attribute | Type | Required | Description |
+|-----------|------|----------|--------------|
+| `definition` | string | yes | References a `<definition id="...">` |
+| `material_override` | string | no | Material id applied to this instance in place of the definition's own material |
+| `variants` | space-separated definition ids | no | Alternate definitions this instance may be randomly assigned among (variant picking) |
 
 ### CSG operations
 
@@ -609,11 +702,71 @@ Pass `--allow-approximate-csg` (CLI) or enable the "Allow approximate CSG export
 
 ---
 
+## Asset Metadata (`<assetMetadata>`)
+
+R111: optional child element on any object (mesh_world_revival.md §6),
+in practice authored on `<definition>` contents describing catalog/
+authoring metadata about a reusable asset — deliberately covers only
+AUTHORABLE fields (things a human/generator would author), not derived
+data like triangle counts or a validation-status snapshot (see
+`Mc3AssetMetadata.hpp`'s own doc comment for the full rationale of what
+was deliberately left out).
+
+```xml
+<definition id="chair_def">
+  <box name="Chair" size="0.5 0.9 0.5">
+    <assetMetadata category="furniture" subcategory="chair" facing="-Z"
+                    collision_proxy="box" shadow_policy="cast_receive"
+                    license="CC-BY-4.0" provenance="hand-authored"
+                    source="lua.object.chair.simple" version="1.2.3"
+                    instancing_eligible="true" max_visibility_distance="250"
+                    selection_weight="1.0" nominal_size="0.5 0.9 0.5"
+                    bounds_min="-0.25 0 -0.25" bounds_max="0.25 0.9 0.25"
+                    clearance_volume="0.8 1.2 0.8">
+      <semanticTags><tag value="seating"/><tag value="wood"/></semanticTags>
+      <styleTags><tag value="rustic"/></styleTags>
+      <regionTags/>
+      <periodTags/>
+      <materialSlots><tag value="seat"/><tag value="legs"/></materialSlots>
+      <sockets><socket name="seat_top" position="0 0.45 0"/></sockets>
+      <lods><lod tier="near" definition="chair_def"/></lods>
+    </assetMetadata>
+  </box>
+</definition>
+```
+
+| Attribute | Type | Default | Description |
+|-----------|------|---------|--------------|
+| `category` / `subcategory` | string | `""` | Catalog classification |
+| `facing` | string | `""` | Front-facing axis convention, e.g. `"-Z"`, `"+X"` |
+| `collision_proxy` | string | `""` | Free-form collision shape descriptor, e.g. `"box"`, `"convex_hull"`, `"none"` |
+| `shadow_policy` | string | `""` | Free-form shadow behavior descriptor, e.g. `"cast_receive"`, `"cast_only"`, `"none"` |
+| `license` | string | `""` | SPDX id or free text |
+| `provenance` | string | `""` | Author/source description |
+| `source` | string | `""` | Generator id (e.g. `"lua.object.window.simple"`) or an AI request/recipe hash |
+| `version` | string | `""` | Per-definition semantic version (distinct from `<library version="...">`, which versions the whole library file) |
+| `instancing_eligible` | bool | `true` | Whether this definition is safe to instance many times |
+| `max_visibility_distance` | float | `0` | LOD/culling hint; `0` = unspecified/no limit |
+| `selection_weight` | float | `1.0` | Relative weight for random-variant picking; higher = more common |
+| `nominal_size` | vec3 | `0 0 0` | Approximate authored size |
+| `bounds_min` / `bounds_max` | vec3 | `0 0 0` | Bounding box in the definition's own local space |
+| `clearance_volume` | vec3 | `0 0 0` | Required clearance as a width/height/depth size (not a positioned box) |
+
+Child elements (all optional):
+
+| Element | Contains | Description |
+|---------|----------|--------------|
+| `<semanticTags>` / `<styleTags>` / `<regionTags>` / `<periodTags>` / `<materialSlots>` | zero or more `<tag value="..."/>` | Free-form tag lists |
+| `<sockets>` | zero or more `<socket name="..." position="x y z"/>` | Named anchor points/attachment sockets in local space |
+| `<lods>` | zero or more `<lod tier="..." definition="..."/>` | LOD tier name → definition id (e.g. `tier="near"` → a higher-detail definition); `definition` may reference an id in an imported library, not just this document |
+
+---
+
 ## Animations
 
 ```xml
 <actions>
-  <action name="Spin" duration="2.0" loop="true">
+  <action name="Spin" duration="2.0" loop="true" autoplay="false">
     <channel target="Wheel" property="rotation_y">
       <keyframe time="0" value="0"   interp="linear"/>
       <keyframe time="2" value="360" interp="linear"/>
@@ -621,6 +774,10 @@ Pass `--allow-approximate-csg` (CLI) or enable the "Allow approximate CSG export
   </action>
 </actions>
 ```
+
+| Attribute | Type | Default | Description |
+|-----------|------|---------|--------------|
+| `autoplay` | bool | `false` | Whether this action starts playing automatically when the document loads |
 
 **Animated properties:** `position_x/y/z`, `rotation_x/y/z`, `scale_x/y/z`, `visible`, `emissive_r/g/b`, `deform_x/y/z`
 
