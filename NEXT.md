@@ -204,12 +204,21 @@ this session started with):
   embedded HTTP response body capped at 4KB with a truncation note. New
   pure-function tests plus a real mock-`httplib::Server` integration test
   proving a 20000-byte error body produces a ~4KB `errorMsg()`.
-  **Deliberately not done:** capping the response size during the actual
-  network *read* (httplib buffers the full body in memory regardless of
-  the later truncation) — this httplib version's `Client::Post()` has no
-  response-streaming overload; tracked as new `SYS-W2-05`, low real-world
-  risk since `apiBaseUrl` is self-configured. Full rebuild + 124/124
-  `ctest`.
+  At the time, capping the response size during the actual network *read*
+  was deliberately left open as new `SYS-W2-05` — **closed later this same
+  session, see below.**
+- **`SYS-W2-05` DONE (closes the gap `SYS-W2-04` left open):** replaced
+  `sendAsync()`'s `cli.Post(...)` convenience call with a raw
+  `httplib::Request` sent via `cli.send(req)`, with a `content_receiver`
+  that aborts the read once a response exceeds the new public
+  `AiAssistant::maxResponseBytes` field (default 8MB, overridable like the
+  existing timeout fields). Response body genuinely never grows past the
+  cap in memory now, not just when later displayed. 2 new mock-server
+  tests (cap-exceeded aborts cleanly; comfortably-under-cap still
+  succeeds); every pre-existing `ai_test.cpp` mock-server test still
+  passes unmodified, confirming the rewrite is a faithful `Post()`
+  replacement. Full rebuild + 124/124 `ctest`; manual `--screenshot`
+  smoke test.
 
 **Prior session (11 commits, oldest first, all on `develop`, all pushed):**
 
@@ -412,8 +421,6 @@ without looking.)_
 1. **`plan.md`'s remaining `TODO` `SYS-###` rows**, in no particular
    priority order (pick the highest-value one that fits available time):
    `SYS-W1-05` (graph-cycle/shared-node policy for API-built trees),
-   `SYS-W2-05` (new this session — cap the Claude API HTTP response body
-   size during the network read itself, not just when displayed),
    `SYS-W5-03` (MC3 versioning + unknown element/attribute policy),
    `SYS-W5-04` (central document index/reference resolver), `SYS-W5-05`
    (property-based round-trip tests + parser fuzz target), `SYS-W7-01`

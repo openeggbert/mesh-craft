@@ -661,6 +661,69 @@ static void testMockServerOversizedErrorBodyIsBounded() {
     serverThread.join();
 }
 
+// SYS-W2-05 — the response size cap must actually abort the network READ
+// itself (via the streaming content_receiver), not just truncate an
+// already-fully-buffered body afterward (that's SYS-W2-04, proven above).
+// Uses a small maxResponseBytes override so the test doesn't need to
+// actually transfer megabytes to prove the behavior.
+static void testMockServerResponseExceedingCapIsAborted() {
+    const std::string oversized(2000, 'q'); // > the 500-byte cap below
+    httplib::Server svr;
+    svr.Post("/v1/messages", [&](const httplib::Request&, httplib::Response& res) {
+        res.status = 200;
+        res.set_content(oversized, "application/json");
+    });
+    int port = svr.bind_to_any_port("127.0.0.1");
+    std::thread serverThread([&]{ svr.listen_after_bind(); });
+    waitUntilServerRunning(svr);
+
+    AiAssistant ai;
+    ai.apiKey          = "test-key";
+    ai.apiBaseUrl      = "http://127.0.0.1:" + std::to_string(port);
+    ai.maxResponseBytes = 500;
+    ai.sendAsync("system prompt", "<mc3/>", "add a box");
+
+    bool finished = pollUntilDone(ai, 5000);
+    CHECK(finished, "response cap: request completes within the timeout, not a hang");
+    CHECK(ai.hasError(),
+          "response cap: a response exceeding maxResponseBytes is reported as an error, "
+          "not silently accepted");
+    CHECK(ai.errorMsg().find("500") != std::string::npos,
+          "response cap: the error message names the configured byte cap");
+
+    svr.stop();
+    serverThread.join();
+}
+
+// SYS-W2-05 — a response comfortably under the cap must still work exactly
+// as before (the streaming rewrite must not have broken the success path).
+static void testMockServerResponseUnderCapStillSucceeds() {
+    httplib::Server svr;
+    svr.Post("/v1/messages", [](const httplib::Request&, httplib::Response& res) {
+        res.set_content(
+            R"({"content":[{"type":"text","text":"<mc3 version=\"0.3\"/>"}],"stop_reason":"end_turn"})",
+            "application/json");
+    });
+    int port = svr.bind_to_any_port("127.0.0.1");
+    std::thread serverThread([&]{ svr.listen_after_bind(); });
+    waitUntilServerRunning(svr);
+
+    AiAssistant ai;
+    ai.apiKey          = "test-key";
+    ai.apiBaseUrl      = "http://127.0.0.1:" + std::to_string(port);
+    ai.maxResponseBytes = 500; // small but well above this tiny fixture's real size
+    ai.sendAsync("system prompt", "<mc3/>", "add a box");
+
+    bool finished = pollUntilDone(ai, 5000);
+    CHECK(finished, "response under cap: request completes within the timeout");
+    CHECK(!ai.hasError(), "response under cap: no error reported");
+    CHECK(ai.result().find("<mc3") != std::string::npos,
+          "response under cap: the response text is still extracted correctly");
+
+    svr.stop();
+    serverThread.join();
+}
+
 // STAB-0381 — the Model field is genuinely user-configurable: whatever value
 // is set on AiAssistant::model ends up verbatim in the outgoing request body,
 // not just editable in the UI with no effect on the wire.
@@ -967,6 +1030,8 @@ int main() {
     testMockServerTruncatedResponse();
     testMockServerHttpErrorStatus();
     testMockServerOversizedErrorBodyIsBounded();
+    testMockServerResponseExceedingCapIsAborted();
+    testMockServerResponseUnderCapStillSucceeds();
     testModelNameSentInRequestBody();
     testConnectionRefusedProducesUserVisibleError();
     testMalformedJsonResponseHandledGracefully();

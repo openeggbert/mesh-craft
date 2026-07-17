@@ -392,16 +392,33 @@ Mandated workstream items not tied to a single audit finding.
   path than this task's scope justified in one sitting; left as a
   follow-up if a future session wants it. Full rebuild + 124/124 `ctest`.
   Verify: `ctest -R mc3_ai`.
-- **SYS-W2-05** `[TODO]` `P3` — Cap the Claude API HTTP response body size
+- **SYS-W2-05** `[DONE]` `P3` — Cap the Claude API HTTP response body size
   during the network read itself (not just when it's later embedded in an
-  error message, which `SYS-W2-04` already bounds). Needs a raw
-  `httplib::Request`/`Response` pair via `Client::send()` with a manual
-  size-checking `content_receiver` set on the request, since this
-  httplib version's `Client::Post()` has no overload that streams the
-  response through a size cap (only `Get()` does). Low real-world risk
-  (`apiBaseUrl` is self-configured, not attacker-controlled by default)
-  but a genuine gap if a user points it somewhere untrusted or a MITM
-  proxy returns a huge body.
+  error message, which `SYS-W2-04` already bounds).
+  **Implementation (2026-07-17):** replaced the `cli.Post(path, headers,
+  body, content_type)` convenience call with a raw `httplib::Request`
+  (`method`/`path`/`headers`/`body` set to mirror `Post()`'s own internal
+  `send_with_content_provider()` exactly) sent via `cli.send(req)`, with
+  `req.content_receiver` set to a lambda that accumulates into a local
+  `responseBody` string and returns `false` (aborting the read/connection)
+  once `responseBody.size() + len > maxResponseBytesCopy` — confirmed via
+  `httplib.h`'s own `read_content()` that setting `content_receiver` means
+  `res->body` is NOT auto-populated (the whole point of streaming), so
+  every downstream use (`extractStopReason`/`extractFirstTextValue`/error
+  messages) now reads `responseBody` instead. New public field
+  `AiAssistant::maxResponseBytes` (default 8MB — generous for any real
+  response even at 64k `max_tokens`, matches the existing overridable-
+  timeout-field convention so a test can verify rejection without
+  transferring megabytes). New tests:
+  `testMockServerResponseExceedingCapIsAborted` (a 2000-byte mock response
+  against a 500-byte cap correctly errors, not hangs) and
+  `testMockServerResponseUnderCapStillSucceeds` (proves the streaming
+  rewrite didn't break the success path). All pre-existing `ai_test.cpp`
+  mock-server tests (success round-trip, truncated response, error status,
+  model-name-in-body, malformed JSON, connection-refused, timeout) still
+  pass unmodified, confirming `cli.send(req)` is a faithful replacement
+  for `cli.Post(...)`. Full rebuild + 124/124 `ctest`; manual
+  `--screenshot` smoke test. Verify: `ctest -R mc3_ai`.
 
 ### W3 — Architecture decomposition
 - **SYS-W3-01** `[IN_PROGRESS]` `P2` — Extract from `MeshCraftApplication` (a god

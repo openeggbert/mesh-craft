@@ -43,6 +43,16 @@ public:
     int readTimeoutSec{600};
     int writeTimeoutSec{120};
 
+    // SYS-W2-05: hard cap on the HTTP response body size, enforced DURING
+    // the network read itself (a streaming content_receiver aborts the
+    // connection once exceeded) -- not just when later embedded in an
+    // error message (SYS-W2-04 already bounds that separately). 8MB is
+    // generous for any real Claude API response (even at 64k max_tokens)
+    // but bounds memory against a misconfigured apiBaseUrl or a
+    // malicious/broken endpoint. Overridable, matching the timeout fields
+    // above, so a test can verify rejection without transferring 8MB.
+    size_t maxResponseBytes{8 * 1024 * 1024};
+
     // Starts a background HTTPS call to the Claude API with prompt caching.
     // systemPrompt — role/format instructions (cached)
     // sceneXml     — serialized mc3.xml scene sent as context (cached)

@@ -295,6 +295,7 @@ void AiAssistant::sendAsync(const std::string& systemPrompt,
     int         connectTimeoutCopy = connectTimeoutSec;
     int         readTimeoutCopy    = readTimeoutSec;
     int         writeTimeoutCopy   = writeTimeoutSec;
+    size_t      maxResponseBytesCopy = maxResponseBytes;
 
     auto pending = std::make_shared<AiRequestResult>();
     pending_ = pending;
@@ -302,7 +303,7 @@ void AiAssistant::sendAsync(const std::string& systemPrompt,
     beginAiWorker(); // see AUD-014 comment above -- must happen before the thread starts
     std::thread([pending, apiKeyCopy, modelCopy, maxTokensCopy, baseUrlCopy,
                  connectTimeoutCopy, readTimeoutCopy, writeTimeoutCopy,
-                 systemPrompt, sceneXml, taskPrompt]()
+                 maxResponseBytesCopy, systemPrompt, sceneXml, taskPrompt]()
     {
         AiWorkerScopeGuard workerGuard;
         std::string text, stopReason, error;
@@ -350,8 +351,38 @@ void AiAssistant::sendAsync(const std::string& systemPrompt,
                 {"content-type",       "application/json"}
             };
 
-            auto res = cli.Post("/v1/messages", headers, body, "application/json");
+            // SYS-W2-05: cap the response body size DURING the network read
+            // itself (SYS-W2-04 already bounds how much of it can appear in
+            // an error message, but that alone doesn't stop httplib from
+            // buffering an unbounded body in memory first). This httplib
+            // version's Post() convenience wrapper has no response-
+            // streaming overload -- only Get() does -- so a raw Request is
+            // built here and sent via Client::send(), mirroring exactly
+            // what Post(path, headers, body, content_type) does internally
+            // (see send_with_content_provider()) plus a content_receiver
+            // that aborts the read once the cap is exceeded.
+            std::string responseBody;
+            bool responseTooLarge = false;
+            httplib::Request req;
+            req.method  = "POST";
+            req.path    = "/v1/messages";
+            req.headers = headers;
+            req.body    = body;
+            req.content_receiver = [&](const char* data, size_t len, uint64_t, uint64_t) -> bool {
+                if (responseBody.size() + len > maxResponseBytesCopy) {
+                    responseTooLarge = true;
+                    return false; // aborts the connection/read
+                }
+                responseBody.append(data, len);
+                return true;
+            };
+
+            auto res = cli.send(req);
             if (!res) {
+                if (responseTooLarge) {
+                    throw std::runtime_error("API response exceeded the " +
+                        std::to_string(maxResponseBytesCopy) + "-byte cap and was aborted");
+                }
                 throw std::runtime_error("HTTP request failed: " +
                     httplib::to_string(res.error()));
             }
@@ -360,14 +391,14 @@ void AiAssistant::sendAsync(const std::string& systemPrompt,
             // propagate into an error message/the UI.
             if (res->status != 200) {
                 throw std::runtime_error("API error " + std::to_string(res->status) +
-                    ": " + AiAssistant::boundedForDisplay(res->body));
+                    ": " + AiAssistant::boundedForDisplay(responseBody));
             }
 
-            stopReason = AiAssistant::extractStopReason(res->body);
-            text       = AiAssistant::extractFirstTextValue(res->body);
+            stopReason = AiAssistant::extractStopReason(responseBody);
+            text       = AiAssistant::extractFirstTextValue(responseBody);
             if (text.empty()) {
                 throw std::runtime_error("Empty response from API: " +
-                    AiAssistant::boundedForDisplay(res->body));
+                    AiAssistant::boundedForDisplay(responseBody));
             }
 #else
             (void)apiKeyCopy; (void)modelCopy; (void)maxTokensCopy; (void)baseUrlCopy;
