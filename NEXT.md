@@ -2,16 +2,22 @@
 
 _Last updated: 2026-07-17. This entry continues the same-day session
 recorded below (which itself ended, was resumed per its own §10 "Resume
-prompt", and picked up `SYS-W1-07` as task 1 of §8's list) with one more
-commit on top of the `2a2c3a2`/`7b1c045` pair described in the next
-paragraph — this file's own commit is, as always, self-referential (it
-cannot cite its own hash), see any `NEXT.md`-only commit for the same
-pattern. Working tree clean except the same two untracked, unrelated
-scratch scene files noted previously (`test/crownspire-citadel.mc3.xml`,
+prompt", picked up `SYS-W1-07` as task 1 of §8's list, and then — on
+explicit user instruction, after the user asked exactly where the CNA
+regression broke — fixed it directly in `../cna`) with two more commits
+on top of the `2a2c3a2`/`7b1c045` pair described in the next paragraph —
+this file's own commit is, as always, self-referential (it cannot cite
+its own hash), see any `NEXT.md`-only commit for the same pattern.
+Working tree clean except the same two untracked, unrelated scratch
+scene files noted previously (`test/crownspire-citadel.mc3.xml`,
 `test/house3.glb` — manually authored demo content, not part of any
-tracked task, left as-is). **22 commits** ahead of the original session's
+tracked task, left as-is). **23 commits** ahead of the original session's
 starting point (`f1900e3`); pushed to `origin/develop`. See
 `git log --oneline -25` for anything newer than this._
+
+**The §4/§5 "CNA build regression" described below is now RESOLVED** —
+see the update at the top of §4. A fresh reconfigure + full rebuild +
+125/125 `ctest` all pass again as of `../cna` commit `730ebbe9`.
 
 **This session ran in two parts** (first 9 commits: the 4 originally-
 requested human decisions + immediate follow-through; next 11: continuing
@@ -82,31 +88,22 @@ one item remains, itself broken into phases (see §4).
 
 ## 2. Current status
 
-- **Build: BROKEN on a fresh reconfigure, as of 2026-07-17 (new finding,
-  see §4) — not caused by anything in this repo.** A `cmake -S . -B <dir>`
-  from scratch (or any change that forces CMake to regenerate `build.ninja`)
-  now fails compiling almost every file that transitively includes
-  `CNA/GraphicsBackendType.hpp` (i.e. most of `MeshCraftApplication*.cpp`
-  and `SceneRenderer*.cpp`), with `#error "CNA: no CNA_BACKEND_* compile
-  definition set"`. Root-caused to the sibling `../cna` repo's current
-  `develop` HEAD (`58e82fd3`, a `feature/graphics` merge landed mid-session)
-  — reproduces identically with every change in this repo reverted, so it
-  is not a regression from this session's own work. See §4 for the full
-  writeup; **do not attempt to fix it here** (CNA is out of bounds per
-  `CLAUDE.md`).
-  An **already-built** `b-release/MeshCraft` binary from earlier in this
-  same session (before the CNA regression surfaced, ninja never got far
-  enough to relink it afterward) still exists and still works — that
-  pre-built binary is what this session's own verification (below) used.
+- **Build: clean, RE-VERIFIED against a genuine fresh reconfigure.** A
+  `../cna`-side regression briefly broke every fresh build of this repo
+  mid-session (see §4 for the full history) — **fixed in `../cna` commit
+  `730ebbe9`** (with this session's own user's explicit authorization,
+  since it required touching the normally-out-of-bounds sibling repo).
+  Re-verified after the fix: fresh `cmake -S . -B b-release` + full
+  `cmake --build b-release -j"$(nproc)"` from a clean reconfigure, zero
+  errors/warnings.
   ```bash
-  cmake -S . -B b-release && cmake --build b-release -j"$(nproc)"   # currently fails, see §4
+  cmake -S . -B b-release && cmake --build b-release -j"$(nproc)"
   ```
-- **Tests: 125 / 125 `ctest` passing**, using the pre-existing build from
-  before the CNA regression (was 122/123 at the start of this session's
-  first half — `field_matrix` now passes, see `SYS-W6-04`; net +2 tests
+- **Tests: 125 / 125 `ctest` passing**, re-run against the fresh
+  post-fix build above (was 122/123 at the start of this session's first
+  half — `field_matrix` now passes, see `SYS-W6-04`; net +2 tests
   (`preferences`, `benchmark`), +~60 new assertions across extended
-  existing tests, see §3). Not re-verified against a from-scratch build —
-  see the build note above.
+  existing tests, see §3).
 - **CLI/tools/apps/libraries currently available:**
   - `MeshCraft` — the interactive editor (`./b-release/MeshCraft
     scene.mc3.xml`, or `--screenshot out.png` / `--export out.glb` for
@@ -408,16 +405,16 @@ R110/R101) left `mc3.xsd`/MCB gaps — closed this session, see §3's
 
 ## 4. Current blocker / main problem
 
-**NEW, 2026-07-17 (second half of this session): a fresh build of this repo
-is currently broken, root-caused entirely to the sibling `../cna` repo, not
-to anything here.** Discovered while verifying `SYS-W1-07` (below). A plain
+**RESOLVED, 2026-07-17 (same session): a `../cna`-side regression briefly
+broke every fresh build of this repo; fixed in `../cna` with the user's
+explicit authorization.** Discovered while verifying `SYS-W1-07`. A plain
 
 ```bash
 cmake -S . -B <any-dir>    # or anything that forces build.ninja to regenerate
 cmake --build <any-dir> -j"$(nproc)"
 ```
 
-now fails compiling almost every `MeshCraftApplication*.cpp`/
+failed compiling almost every `MeshCraftApplication*.cpp`/
 `SceneRenderer*.cpp` file with:
 
 ```
@@ -426,37 +423,51 @@ compile definition set -- graphics backend selection
 (cmake/BackendSelection.cmake) is broken"
 ```
 
-**Confirmed not caused by this session's own work:** reproduces identically
+**Confirmed not caused by this session's own work:** reproduced identically
 against a clean checkout of this repo (SceneRenderer.cpp's changes fully
 `git stash`ed out) — the only thing that changed is `../cna`'s `develop`
 HEAD, which moved to `58e82fd3` ("Merge branch 'feature/graphics'",
 D3D11/D3D12 PBR + skinned-vertex-color work) partway through this session.
-**Root cause (traced, not fixed):** `cna/cmake/BackendSelection.cmake` sets
+
+**Root cause (traced and fixed):** `cna/cmake/BackendSelection.cmake` sets
 the `CNA_BACKEND_EASYGL` macro via a directory-scoped `add_compile_definitions()`
 call inside `../cna`'s own `CMakeLists.txt`. Directory-scoped compile
 definitions propagate *down* into subdirectories `../cna` itself adds (like
-`../easy-gl`), but do **not** propagate *up* to this repo's own targets —
-this repo adds `../cna` via `add_subdirectory(../cna CNA_dep)`, so `../cna`
-is the child here, not the parent. `GraphicsBackendType.hpp` is a header
-included by both `../cna`'s own `.cpp` files and this repo's — every
-translation unit needs the macro at its *own* compile time, so this only
-ever worked if some target-level (`PUBLIC`/`INTERFACE`) `target_compile_definitions`
-call carried it across the target-link boundary; no such call currently
-exists for any `cna_backend_graphics_*` target grepped in `../cna`'s cmake
-files. Whether this always needed such a call and something silently
-regressed it, or the `feature/graphics` merge changed something else that
-newly exposed a pre-existing gap, needs someone with `../cna` write access
-to determine — **not investigated further or touched here**, per
-`CLAUDE.md`'s explicit "no CNA changes without owner permission."
-**Practical impact:** this repo's own build is unverifiable via a fresh
-reconfigure until `../cna`'s owner (or the separate Claude Code instance
-handling it) fixes this. This session's own `SYS-W1-07` verification used
-an already-linked `b-release/MeshCraft` binary built earlier in the same
-session, before this surfaced (see §2). **Next session: re-check `../cna`'s
-`develop` HEAD (`git -C ../cna log --oneline -5`) before assuming this is
-still broken** — if it has moved past `58e82fd3` with a fix, re-run
-`cmake -S . -B b-release` fresh and confirm before trusting any cached
-"clean build" claim in this file.
+`../easy-gl`), but never *up* to this repo's own targets — this repo adds
+`../cna` via `add_subdirectory(../cna CNA_dep)`, so `../cna` is the child
+here. `GraphicsBackendType.hpp` is a header included by both `../cna`'s
+own `.cpp` files and this repo's — every translation unit needs the macro
+at its *own* compile time. This gap was invisible until `../cna` commit
+`2bd79fe9` (2026-07-17 06:45, landed on `develop` via the `feature/graphics`
+merge at 20:46 the same day) added `GraphicsBackendType.hpp` itself — a
+plain (non-template) header-defined function whose `#error` fires in
+*every* including translation unit, immediately exposing the pre-existing
+propagation gap as a hard build break for any consumer, this repo
+included.
+
+**Fix landed, 2026-07-17, in `../cna` commit `730ebbe9`** (pushed to
+`origin/develop`, user explicitly authorized touching `../cna` for this
+one change after asking exactly where the break was): each of
+`BackendSelection.cmake`'s 14 backend branches now also does
+`set(CNA_BACKEND_DEFINE "CNA_BACKEND_XXX")` next to its existing
+`add_compile_definitions(...)` call, and `CnaLibrary.cmake`'s
+`target_compile_definitions(CNA PUBLIC ...)` now includes
+`${CNA_BACKEND_DEFINE}` — making the backend macro a real PUBLIC usage
+requirement of the `CNA` target, so it now propagates through
+`target_link_libraries` to any consumer regardless of directory scope.
+`add_compile_definitions()` itself was left in place (still needed for
+`../cna`'s own in-tree targets created before the `CNA` library target).
+**Verified:** fresh `cmake -S . -B b-release` + full rebuild + 125/125
+`ctest`, all green, on the EASYGL backend (the only one buildable in this
+environment). All 14 backend branches checked for exact name-consistency
+between `add_compile_definitions()` and `CNA_BACKEND_DEFINE` (all match);
+the other 13 backends could not be built/tested here (no Vulkan SDK,
+no Windows toolchain, etc.) but the change is structurally identical
+across all of them. Pushing this fix also pushed **52 previously
+local-only commits** already sitting in the `../cna` checkout (the full
+`feature/graphics` PBR/skinned-vertex-color merge chain) to
+`origin/develop` — worth knowing since it moved that remote branch much
+further than this one fix commit alone.
 
 `SYS-W3-01` (decompose the `MeshCraftApplication` "god object") remains the
 main *in-repo* multi-session task, not a bug: research found **280 data
@@ -470,12 +481,12 @@ Full roadmap in `plan.md`'s `SYS-W3-01` entry; this session decided
 
 ## 5. Known bugs and limitations
 
-- **NEW, confirmed, external, not actionable from this repo (see §4 for
-  the full writeup):** a fresh CMake reconfigure of this repo's default
-  Release/EasyGL build currently fails entirely — `../cna`'s current
-  `develop` HEAD (`58e82fd3`) doesn't propagate its `CNA_BACKEND_EASYGL`
-  compile definition to this repo's own targets. Not caused by, or fixable
-  from, this repo.
+- **Resolved:** a fresh CMake reconfigure of this repo's default
+  Release/EasyGL build briefly failed entirely — `../cna`'s `develop` HEAD
+  didn't propagate its `CNA_BACKEND_EASYGL` compile definition to this
+  repo's own targets. Not caused by this repo; **fixed 2026-07-17 in
+  `../cna` commit `730ebbe9`** with explicit user authorization to touch
+  the normally-out-of-bounds sibling repo (see §4 for the full writeup).
 - **Confirmed, external, not actionable from this repo:** Web/Emscripten
   build crashes inside `../cna` on the first `SDL_EVENT_WINDOW_RESIZED`
   (`GameWindow::queryClientBoundsFromSDL()` calls `SDL_GetWindowSize()`
@@ -576,9 +587,8 @@ Full roadmap in `plan.md`'s `SYS-W3-01` entry; this session decided
 ## 7. Useful commands
 
 ```bash
-# Configure + build (Release, EasyGL backend). CURRENTLY FAILS on a fresh
-# reconfigure -- see §4 -- unrelated to this repo, root-caused to ../cna's
-# current develop HEAD. Check ../cna's HEAD has moved past 58e82fd3 first.
+# Configure + build (Release, EasyGL backend — verified clean on a fresh
+# reconfigure as of ../cna commit 730ebbe9, see §4).
 cmake -S . -B b-release
 cmake --build b-release -j"$(nproc)"
 
@@ -615,9 +625,10 @@ status yourself: this session found and fixed **8** stale `[TODO]`/status
 markers that referenced findings already resolved in earlier sessions
 (`AUD-014`, `AUD-015`/`SYS-W6-01`, `SYS-W2-03`, `SYS-W6-03`, `SYS-W14-01`,
 `SYS-W6-02`, `SYS-W5-05`, `SYS-W7-01`) — don't assume any remaining
-`TODO` below is still accurate without looking. **Also check §4 first** —
-a fresh build is currently broken for reasons entirely outside this repo;
-confirm `../cna`'s `develop` HEAD before assuming a clean build.)_
+`TODO` below is still accurate without looking. The `../cna` build
+regression noted in §4 is now resolved and re-verified — no need to
+re-check it before starting, though `../cna`'s HEAD is still worth a
+glance if a build ever fails mysteriously again.)_
 
 1. **`plan.md`'s remaining `TODO` `SYS-###` rows** (`SYS-W1-07` is now
    `DONE`, see §3 — pick the highest-value one of the 2 below that fits

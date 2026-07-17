@@ -432,13 +432,15 @@ Mandated workstream items not tied to a single audit finding.
   screenshot smoke test is this codebase's existing convention for
   `SceneRenderer`-level verification (see `differential_geometry_test.cpp`'s
   file header for the same reasoning).
-  **Discovered but NOT fixed (out of this row's scope, see NEXT.md §4):**
-  while verifying, found that a *fresh* `cmake -S . -B <dir>` reconfigure
-  of this exact tree now fails to build at all — unrelated to this row's
-  code change (reproduces identically with it reverted) and traced to the
-  sibling `../cna` repo's current `develop` HEAD (`58e82fd3`, landed after
-  this session started), not anything in this repo. See NEXT.md for the
-  full writeup; not touched here per `CLAUDE.md`'s CNA boundary.
+  **Discovered and later fixed, out of this row's own scope (see NEXT.md
+  §4):** while verifying, found that a *fresh* `cmake -S . -B <dir>`
+  reconfigure of this exact tree failed to build at all — unrelated to
+  this row's code change (reproduced identically with it reverted) and
+  traced to the sibling `../cna` repo's current `develop` HEAD (`58e82fd3`,
+  landed after this session started), not anything in this repo. Fixed the
+  same session, in `../cna` itself, with the user's explicit authorization
+  to touch that normally-out-of-bounds repo (`../cna` commit `730ebbe9`) —
+  see NEXT.md §4 for the full writeup and root cause.
 
 ### W2 — AI / import sandbox
 - **SYS-W2-01** `[DONE]` `P1` — `Mc3LoadPolicy` threaded through parsing
