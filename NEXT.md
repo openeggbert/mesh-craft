@@ -1,24 +1,26 @@
 # NEXT.md
 
-_Last updated: 2026-07-17, start of a new autonomous session. Branch
-`develop` @ commit `f1900e3` (a NEXT.md-only doc commit; `d2264ad` is the
-last real code commit), working tree clean except the same two untracked,
+_Last updated: 2026-07-17, end of an autonomous session. Branch `develop`
+@ commit `f4e00b3`, working tree clean except the same two untracked,
 unrelated scratch scene files noted previously (`test/crownspire-citadel.mc3.xml`,
 `test/house3.glb` — manually authored demo content, not part of any tracked
-task, left as-is). 0 commits ahead/behind `origin/develop` at session start.
-See `git log --oneline -20` for anything newer than this._
+task, left as-is). 9 commits ahead of the session's starting point
+(`f1900e3`), all pushed to `develop`. See `git log --oneline -20` for
+anything newer than this._
 
 **Human decisions obtained at the start of this session** (see `plan.md`'s
-`SYS-W1-04`/`SYS-W3-01`/`AUD-036c` entries for the full rationale — recorded
-here too since they resolve 4 previously-open items from `NEXT.md`'s own
-task list):
-1. `EditorViewport` — **delete** (not finish wiring in).
+`SYS-W1-04`/`SYS-W3-01`/`AUD-036c` entries for the full rationale) — **all
+4 are now fully implemented**, not just decided:
+1. `EditorViewport` — **deleted** (not finished wiring in). Done.
 2. `SYS-W3-01` Phase 2 Preferences — **narrow** scope (theme/panel-open
-   only; autosave/snap/grid fields stay put for now).
+   only; autosave/snap/grid fields stay put). Extracted as
+   `Editor::Preferences`. Done.
 3. Duplicate object ids (`SYS-W1-04`) — **warning-level `Mc3Validation`
-   diagnostic**, parsing stays permissive.
-4. Undo/redo selection (`AUD-036c` open item) — **restore** the pre-
-   mutation selection (new `SYS-W9-03`), not clear it.
+   diagnostic**, parsing stays permissive. Implemented in
+   `Mc3XmlParser.cpp`. Done.
+4. Undo/redo selection (`AUD-036c` open item) — **restores** the pre-
+   mutation selection (`SYS-W9-03`), not cleared. Implemented in
+   `MeshCraftApplication_Commands.cpp`. Done.
 
 ---
 
@@ -61,13 +63,14 @@ one item remains, itself broken into phases (see §4).
 
 ## 2. Current status
 
-- **Build:** last verified this session, Release config, EasyGL graphics
-  backend — clean, zero warnings, exit 0.
+- **Build:** re-verified at the end of this session, Release config,
+  EasyGL graphics backend — clean, zero warnings, exit 0.
   ```bash
   cmake -S . -B b-release && cmake --build b-release -j"$(nproc)"
   ```
-- **Tests:** **124 / 124 `ctest` passing.** (`field_matrix` now passes —
-  see §3, `SYS-W6-04`; new `preferences` test added this session.)
+- **Tests:** **124 / 124 `ctest` passing** (was 122/123 at session start —
+  `field_matrix` now passes, see `SYS-W6-04`; net +1 test, +~50 new
+  assertions across extended existing tests, see §3).
 - **CLI/tools/apps/libraries currently available:**
   - `MeshCraft` — the interactive editor (`./b-release/MeshCraft
     scene.mc3.xml`, or `--screenshot out.png` / `--export out.glb` for
@@ -78,16 +81,21 @@ one item remains, itself broken into phases (see §4).
   - Standalone libraries `mc3` (format/AST + XML/JSON parse-writer),
     `mcb` (binary format) — both buildable and testable without CNA.
 - **Recently implemented** (this session; see §3 for the exact commit
-  list): `Mc3Document::validate()` and its wiring into AI-apply/pre-export/
-  pre-render/save (`Mc3Validation` diagnostics, previously console-only);
-  a "Validation" ImGui panel + status-bar indicator surfacing those
-  diagnostics; a checked-in `.clang-format`/`.clang-tidy` config (not
-  applied to the existing tree); the first extraction out of the
-  `MeshCraftApplication` "god object" (`Editor::KeybindingManager`).
+  list): closed `field_matrix`'s 18-field gate gap for real
+  (`Mc3Object::assetMetadata`/`scriptId`, `Mc3Document::library`/`imports`
+  now in `mc3.xsd` + MCB, not just XML); duplicate-object-id `Mc3Validation`
+  warning; deleted the dead `EditorViewport` stub; extracted narrow
+  `Editor::Preferences` (`SYS-W3-01` Phase 2); undo/redo now restores
+  selection instead of clearing it (`SYS-W9-03`); `AiAssistant` API-key
+  redaction + bounded error-message size (`SYS-W2-04`); closed every
+  `MC3_FORMAT.md` documentation gap (`SYS-W5-02`); found and fixed 5 stale
+  `plan.md`/`NEXT.md` status markers referencing findings that were
+  actually already done in earlier sessions.
 - **Known working examples:** `./b-release/MeshCraft test/house.mc3.xml`;
-  `./b-release/MeshCraft <scene> --screenshot out.png` (verified this
-  session to genuinely capture the composited ImGui+3D framebuffer, not
-  just the viewport); `./b-release/mc3togltf/mc3togltf test/features.mc3.xml
+  `./b-release/MeshCraft <scene> --screenshot out.png` (genuinely captures
+  the composited ImGui+3D framebuffer, not just the viewport — used
+  repeatedly this session as a real smoke test after `MeshCraftApplication`
+  changes); `./b-release/mc3togltf/mc3togltf test/features.mc3.xml
   /tmp/out.glb`.
 - **What does not work yet / is not verified:**
   - Web (Emscripten) build: blocked by a crash inside `../cna`, not this
@@ -392,31 +400,55 @@ clang-tidy -p b-release path/to/changed/file.cpp
 
 ## 8. Next smallest tasks
 
-_(Tasks 1-6 from the previous revision of this list — re-check + close
-`field_matrix`, the duplicate-ID validation warning, deleting
-`EditorViewport`, `SYS-W3-01` Phase 2 (narrow `Preferences`), and
-`SYS-W9-03` (undo/redo selection restore) — are all done; see §3's
-`SYS-W6-04`/`SYS-W1-04`/`SYS-W9-03` entries and `plan.md`'s `SYS-W3-01`
-entry. All 4 of this session's originally-requested human decisions are
-now fully implemented, not just decided.)_
+_(Everything from the previous revision of this list is done — see §3 for
+the full list of what landed this session. Before starting any task below,
+re-run `git log --oneline -20` and re-check the cited `plan.md` row's
+status yourself: this session found and fixed **5** stale `[TODO]`/status
+markers that referenced findings already resolved in earlier sessions
+(`AUD-014`, `AUD-015`/`SYS-W6-01`, `SYS-W2-03`, `SYS-W6-03`, `SYS-W14-01`)
+— don't assume any remaining `TODO` below is still accurate without
+looking.)_
 
-_(Former task "Investigate `AUD-014`" turned out to be **stale documentation,
-not real remaining work**: `plan.md`'s own `AUD-014` entry has read `[DONE]`
-since an earlier session, commit `3cd27d7` — `main.cpp`'s `AiShutdownWaiter`
-RAII local, declared first so it's destroyed last, already calls
-`AiAssistant::waitForAllInFlight(5000ms)` on every exit path
-(`--help`/`--version`/`--screenshot`/`--export`/interactive), and `ai_test.cpp`
-already covers it (~line 804). Only this file's §5/§8 hadn't been updated
-to match — corrected, matching the `AUD-015`/`SYS-W6-01` staleness found
-and fixed earlier this same session. No code change needed; verified with
-`ctest -R ai`, part of the full 124/124 green run.)_
+1. **`plan.md`'s remaining `TODO` `SYS-###` rows**, in no particular
+   priority order (pick the highest-value one that fits available time):
+   `SYS-W1-05` (graph-cycle/shared-node policy for API-built trees),
+   `SYS-W2-05` (new this session — cap the Claude API HTTP response body
+   size during the network read itself, not just when displayed),
+   `SYS-W5-03` (MC3 versioning + unknown element/attribute policy),
+   `SYS-W5-04` (central document index/reference resolver), `SYS-W5-05`
+   (property-based round-trip tests + parser fuzz target), `SYS-W6-02`
+   (its own status note flags one remaining sub-piece: XML→MCB→XML
+   round-trip equivalence has no dedicated test yet — everything else in
+   that row is done), `SYS-W7-01` (truthful glTF export matrix per model
+   feature), `SYS-W11-07` (package-first discovery + offline, partial),
+   `SYS-W12-01` (benchmark scenes + baselines).
+   `SYS-W11-01`/`SYS-W11-03`/`AUD-042`/`AUD-052`/`AUD-053`/`AUD-057` stay
+   correctly blocked/owner-gated (CI parked, no Android NDK in this
+   environment) — don't attempt those without the missing external
+   resource.
 
-This session continues on into `plan.md`'s remaining `TODO` `SYS-###` rows
-next (`SYS-W1-05`, `SYS-W2-03`/`04`, `SYS-W5-02`..`05`, `SYS-W6-02`/`03`,
-`SYS-W7-01`, `SYS-W11-03`/`07`, `SYS-W12-01`, `SYS-W14-*`), picking the
-highest-value safe one each time — see §3 for what's landed since this
-paragraph was written, and re-run `git log --oneline -20` for anything
-newer still.
+2. **`SYS-W3-01` Phase 3+** (`MeshCraftApplication` decomposition
+   continues): per the roadmap in `plan.md`'s `SYS-W3-01` entry, remaining
+   candidates are Macro recorder (deliberately deferred at Phase 1 — needs
+   a `PropertiesPanel`-style callback-DI struct since `executeMacroStep()`
+   calls 8+ other `MeshCraftApplication` methods), undo/redo stack
+   ownership, animation, file dialogs, post-processing, audio/walk-mode.
+   No decision has been made on which is next — that's itself worth a
+   quick research pass (read the actual member/method list for each
+   candidate, matching how Phase 1/2 were scoped) before picking, not an
+   assumption.
+
+3. **`AUD-036c`'s remaining open item (2 of 2):** "locked objects untouched
+   by undo/redo" is well-tested at the per-command level but not
+   independently tested as its own whole-document-snapshot guarantee (see
+   `AUD-036c`'s status note, second open item — the first, selection
+   restore, is what this session's `SYS-W9-03` closed). Low priority,
+   by-design not a gap, but flagged as untested.
+
+Do a **repo-wide staleness spot-check early in the next session** — this
+one found real value in it (5 status corrections, one doc actively
+re-broken by this session's own earlier commit) — before assuming any
+`[TODO]` row represents real remaining work.
 
 ## 9. Do not do yet
 
