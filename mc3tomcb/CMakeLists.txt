@@ -57,6 +57,7 @@ if(BUILD_TESTING)
             "${CMAKE_CURRENT_SOURCE_DIR}/../test/n5_triggers.mc3.xml"
             "${CMAKE_CURRENT_SOURCE_DIR}/../test/n6_scene_states.mc3.xml"
             "${CMAKE_CURRENT_SOURCE_DIR}/../test/n7_meta.mc3.xml"
+            "${CMAKE_CURRENT_SOURCE_DIR}/../test/asset_metadata_library_import.mc3.xml"
         )
         set(_rt_existing)
         foreach(_fx IN LISTS _rt_fixtures)

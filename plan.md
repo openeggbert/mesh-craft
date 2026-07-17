@@ -555,7 +555,7 @@ Mandated workstream items not tied to a single audit finding.
   been corrected to match its later completion note (fixed above). No new
   work needed — verify with `grep -c "expectTag(" mcb/src/McbReader.cpp`
   (189) and `ctest -R mcb_roundtrip`.
-- **SYS-W6-02** `[TODO]` `P3` — Malformed/truncated/corrupt/random/fuzz MCB tests
+- **SYS-W6-02** `[DONE]` `P3` — Malformed/truncated/corrupt/random/fuzz MCB tests
   incl. the untested compression-flag rejection path (`AUD-019`); byte-for-byte
   determinism; XML→MCB→XML equivalence.
   **Status note (via SYS-W1-04):** the malformed/truncated/corrupt/random/fuzz
@@ -563,9 +563,20 @@ Mandated workstream items not tied to a single audit finding.
   `a38eb88`) sweeps every byte-offset truncation of a rich multi-section
   document and fuzzes 350 random byte buffers (0–16KB, seeded), both clean
   under ASan+UBSan, on top of `mcb_roundtrip_test.cpp`'s existing
-  compression-flag rejection (`AUD-019`) and writer-determinism coverage. Not
-  marked DONE: XML→MCB→XML round-trip equivalence has no dedicated test yet
-  and remains open.
+  compression-flag rejection (`AUD-019`) and writer-determinism coverage.
+  **Status note (2026-07-17): the "XML→MCB→XML equivalence has no dedicated
+  test" claim was itself stale** — `mc3tomcb/test/mc3tomcb_roundtrip_test.py`
+  (`mc3tomcb_roundtrip` ctest, `STAB-0058`, predates this whole audit
+  session) already drives the real `mc3tomcb` CLI through exactly
+  `fixture.mc3.xml → a.mcb → b.mc3.xml → c.mcb → d.mc3.xml` for 9 real
+  fixtures, asserting MCB-header validity, byte-for-byte determinism
+  (`a.mcb == c.mcb`, `b.xml == d.xml`), and no dropped element-tag/`model`
+  content. Only gap: it didn't cover this session's own `SYS-W6-04`
+  additions (`assetMetadata`/`library`/`imports`) — added
+  `test/asset_metadata_library_import.mc3.xml` to its fixture list (10
+  fixtures now), confirmed passing standalone before wiring it in. Same
+  class of stale-`TODO` as the 5 other findings this session. Verify:
+  `ctest -R mc3tomcb_roundtrip`.
 - **SYS-W6-03** `[DONE]` `P3` — Fix `MCB_FORMAT.md` stale field-order list
   (`AUD-018`). **Status note (2026-07-17):** `AUD-018` itself has read
   `[DONE]` since commit `ba3e73c` — another stale `TODO` row simply never

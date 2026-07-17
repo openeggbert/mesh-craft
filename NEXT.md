@@ -403,11 +403,11 @@ clang-tidy -p b-release path/to/changed/file.cpp
 _(Everything from the previous revision of this list is done — see §3 for
 the full list of what landed this session. Before starting any task below,
 re-run `git log --oneline -20` and re-check the cited `plan.md` row's
-status yourself: this session found and fixed **5** stale `[TODO]`/status
+status yourself: this session found and fixed **6** stale `[TODO]`/status
 markers that referenced findings already resolved in earlier sessions
-(`AUD-014`, `AUD-015`/`SYS-W6-01`, `SYS-W2-03`, `SYS-W6-03`, `SYS-W14-01`)
-— don't assume any remaining `TODO` below is still accurate without
-looking.)_
+(`AUD-014`, `AUD-015`/`SYS-W6-01`, `SYS-W2-03`, `SYS-W6-03`, `SYS-W14-01`,
+`SYS-W6-02`) — don't assume any remaining `TODO` below is still accurate
+without looking.)_
 
 1. **`plan.md`'s remaining `TODO` `SYS-###` rows**, in no particular
    priority order (pick the highest-value one that fits available time):
@@ -416,12 +416,10 @@ looking.)_
    size during the network read itself, not just when displayed),
    `SYS-W5-03` (MC3 versioning + unknown element/attribute policy),
    `SYS-W5-04` (central document index/reference resolver), `SYS-W5-05`
-   (property-based round-trip tests + parser fuzz target), `SYS-W6-02`
-   (its own status note flags one remaining sub-piece: XML→MCB→XML
-   round-trip equivalence has no dedicated test yet — everything else in
-   that row is done), `SYS-W7-01` (truthful glTF export matrix per model
-   feature), `SYS-W11-07` (package-first discovery + offline, partial),
-   `SYS-W12-01` (benchmark scenes + baselines).
+   (property-based round-trip tests + parser fuzz target), `SYS-W7-01`
+   (truthful glTF export matrix per model feature), `SYS-W11-07`
+   (package-first discovery + offline, partial), `SYS-W12-01` (benchmark
+   scenes + baselines).
    `SYS-W11-01`/`SYS-W11-03`/`AUD-042`/`AUD-052`/`AUD-053`/`AUD-057` stay
    correctly blocked/owner-gated (CI parked, no Android NDK in this
    environment) — don't attempt those without the missing external
