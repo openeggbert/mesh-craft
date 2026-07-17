@@ -379,20 +379,39 @@ Mandated workstream items not tied to a single audit finding.
   throws a catchable, named error instead of stack-overflow-crashing on a
   hand-built 2-cycle. Full rebuild + 125/125 `ctest` (stable across 3
   repeated runs); manual `--screenshot` smoke test. **Not done — the
-  editor's `SceneRenderer` traversal and `mc3togltf/src/MeshBuilder.cpp`
-  remain unguarded**, tracked as new `SYS-W1-07`: both need a live
-  CNA/GL or Manifold context to exercise properly (can't be verified with
-  a quick headless unit test the way the three guarded here could), and a
-  cycle surviving all the way to Render/Export would already have been
-  caught earlier by `deepCopyObjectAlg`'s `pushUndo()`-time guard in
-  virtually every real editing workflow — lower marginal value, not
-  attempted in this pass. Verify: `ctest -R mc3_roundtrip`.
-- **SYS-W1-07** `[TODO]` `P3` — Guard the editor's `SceneRenderer`
-  traversal and `mc3togltf/src/MeshBuilder.cpp` against a cyclic
+  editor's `SceneRenderer` traversal remains unguarded** (the export
+  path, originally believed unguarded too, turned out to already be
+  covered by a pre-existing `AUD-007` fix — see `SYS-W1-07`'s own
+  correction note), tracked as new `SYS-W1-07`: needs a live CNA/GL
+  context to exercise properly (can't be verified with a quick headless
+  unit test the way the three guarded here could), and a cycle surviving
+  all the way to Render would already have been caught earlier by
+  `deepCopyObjectAlg`'s `pushUndo()`-time guard in virtually every real
+  editing workflow — lower marginal value, not attempted in this pass.
+  Verify: `ctest -R mc3_roundtrip`.
+- **SYS-W1-07** `[TODO, smaller than originally scoped — see correction]`
+  `P3` — Guard the editor's `SceneRenderer` traversal against a cyclic
   `Mc3Object::children` graph, completing `SYS-W1-05`/`SYS-W1-06`'s
-  pattern. Needs a live CNA/GL (`SceneRenderer`) or Manifold
-  (`MeshBuilder.cpp`) context to test properly, unlike the three sites
-  already guarded (pure headless unit tests).
+  pattern.
+  **Correction (2026-07-17):** the export half of this row's original
+  scope — `"mc3togltf/src/MeshBuilder.cpp"` — was factually wrong; that
+  file has no `children` recursion at all. The actual recursive node-
+  building function, `GltfExporter.cpp`'s `buildNode()`, was **already
+  guarded** by a pre-existing, pre-this-session fix (`AUD-007`,
+  `kMaxNodeDepth = 256`, confirmed present and correctly checking `depth >
+  kMaxNodeDepth` before this row was even written) — so the export path
+  needs no new work. Own mistake, corrected the same session it was made,
+  same rigor applied to every other stale/inaccurate claim found today.
+  **Remaining real scope:** `src/MeshCraft/Renderer/SceneRenderer.cpp` has
+  **~11 separate, scattered recursive traversal call sites** across
+  different functions (draw, picking, CSG-cache-key computation,
+  bounding-box computation, visibility skip, ...) — not one shared
+  function the way `deepCopyObjectAlg`/`writeObject` were, so this is
+  materially bigger than the 3 sites already guarded and needs a live
+  CNA/GL context plus real `--screenshot`-based before/after verification
+  per touched function to be confident a uniform depth cap doesn't
+  subtly change legitimate-deep-scene rendering behavior. Not attempted
+  in this pass — genuinely deferred, not stale.
 
 ### W2 — AI / import sandbox
 - **SYS-W2-01** `[DONE]` `P1` — `Mc3LoadPolicy` threaded through parsing

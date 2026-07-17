@@ -267,16 +267,19 @@ this session started with):
   research-before-implementing discipline `SYS-W3-01` used), a bigger,
   riskier task than fits one "continue working" iteration.
 
-- **`SYS-W1-06` DONE (3 of 4 remaining walkers guarded):** extended
-  `SYS-W1-05`'s 256-deep cycle guard to `findParentListAlg`/
-  `removeFromListAlg` (Delete/reparenting) and — most importantly —
-  `Mc3XmlWriter::writeObject`, the actual Save/Export path. New test
-  confirms `saveToFile()` throws a clean error instead of crashing on a
-  cyclic document. `SceneRenderer`/`mc3togltf`'s `MeshBuilder.cpp` remain
-  unguarded (need a live GL/Manifold context to test properly, lower
+- **`SYS-W1-06` DONE (3 walkers guarded):** extended `SYS-W1-05`'s
+  256-deep cycle guard to `findParentListAlg`/`removeFromListAlg`
+  (Delete/reparenting) and — most importantly — `Mc3XmlWriter::writeObject`,
+  the actual Save/Export path. New test confirms `saveToFile()` throws a
+  clean error instead of crashing on a cyclic document. `SceneRenderer`
+  remains unguarded (needs a live GL context to test properly, lower
   marginal value since a cycle would already be caught earlier by
   `deepCopyObjectAlg` in virtually every real workflow) — tracked as new
-  `SYS-W1-07`. Full rebuild + 125/125 `ctest` (stable across repeats);
+  `SYS-W1-07`. (The export path's own recursion, `GltfExporter.cpp`'s
+  `buildNode()`, turned out to already be guarded by a pre-existing,
+  pre-this-session `AUD-007` fix — corrected a same-session mistake in
+  `SYS-W1-07`'s own scope, see its `plan.md` entry.) Full rebuild +
+  125/125 `ctest` (stable across repeats);
   manual `--screenshot` smoke test.
 
 - **`SYS-W7-01` DONE (8th stale finding this session):** all 3 cited
@@ -503,10 +506,13 @@ markers that referenced findings already resolved in earlier sessions
 
 1. **`plan.md`'s remaining `TODO` `SYS-###` rows**, in no particular
    priority order (pick the highest-value one that fits available time):
-   `SYS-W1-07` (new this session — guard `SceneRenderer`/`mc3togltf`'s
-   `MeshBuilder.cpp` against a cyclic `Mc3Object::children` graph,
-   completing `SYS-W1-05`/`06`'s pattern; needs a live GL/Manifold
-   context to test properly, unlike the 3 sites already guarded),
+   `SYS-W1-07` (new this session, rescoped down after a same-session
+   self-correction — guard `SceneRenderer`'s ~11 scattered recursive
+   traversal call sites against a cyclic `Mc3Object::children` graph,
+   completing `SYS-W1-05`/`06`'s pattern; the export path turned out to
+   already be covered by a pre-existing `AUD-007` guard, so it does NOT
+   need this — needs a live GL context plus real `--screenshot` before/
+   after verification per touched function),
    `SYS-W5-04` (central document index/reference resolver — investigated
    this session, real and TODO-correct, but needs its own scoped
    invalidation-analysis pass before implementing, not a quick pick),
