@@ -77,6 +77,23 @@ public:
     static std::string extractStopReason(const std::string& json);
     static std::string extractFirstTextValue(const std::string& json);
 
+    // SYS-W2-04: redacts every occurrence of `secret` in `text`, replacing
+    // it with "[REDACTED]" -- defense-in-depth so the API key can never
+    // appear in an error message/log even if a future change accidentally
+    // interpolates a request header into one (today's error paths don't,
+    // but nothing structurally prevented that). No-op if `secret` is empty
+    // (never redacts everything to "[REDACTED]").
+    static std::string redactSecret(std::string text, const std::string& secret);
+
+    // SYS-W2-04: truncates `text` to at most `maxLen` bytes, appending a
+    // "... (truncated, N bytes total)" note, so an oversized or malicious
+    // HTTP response body can't propagate an unbounded string into an error
+    // message or the UI. Does NOT shrink the buffer httplib itself already
+    // holds in memory for the response (this httplib version has no Post()
+    // overload that streams the response through a size-capping
+    // ContentReceiver) -- that remains a known gap, tracked in plan.md.
+    static std::string boundedForDisplay(const std::string& text, size_t maxLen = 4096);
+
     // AUD-014: sendAsync() detaches its network worker thread (see reset()'s
     // STAB-0387/0388 comment for why it must not block the UI thread). That
     // means nothing stops the process from returning from main() while a

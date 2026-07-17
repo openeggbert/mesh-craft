@@ -341,8 +341,55 @@ Mandated workstream items not tied to a single audit finding.
   `40643a4` (`Mc3Document::loadFromString`). Verify: `ctest -R mc3_load_policy`.
 - **SYS-W2-03** `[TODO]` `P2` — Real JSON parse scoped to `content[].type=="text"`;
   correct UTF-16 surrogate pairs. (`AUD-009`)
-- **SYS-W2-04** `[TODO]` `P2` — Redact API keys / auth headers from errors/logs;
-  bound HTTP + extracted-XML size.
+- **SYS-W2-04** `[DONE, one sub-point deliberately partial]` `P2` — Redact
+  API keys / auth headers from errors/logs; bound HTTP + extracted-XML
+  size. Not tied to a single `AUD-###` finding (mandated hardening item).
+  **"extracted-XML size" was already bounded** before this task:
+  `Mc3XmlParser.cpp`'s `checkDocumentByteBudget()` (512MB, `SYS-W1-03`)
+  already runs inside `parseString()`, which the AI-apply path
+  (`AiResponseAlgorithms.hpp`) already calls via
+  `Mc3Document::loadFromString(xml, {}, Mc3LoadPolicy::untrusted())` —
+  verified, not re-implemented. **Added this session:**
+  `AiAssistant::redactSecret(text, secret)` (replaces every occurrence of
+  a secret with `[REDACTED]`, defense-in-depth — no current error-message
+  path actually interpolates `apiKey` today, but nothing structurally
+  prevented a future one from doing so) applied to every caught exception
+  message in `sendAsync()`; `AiAssistant::boundedForDisplay(text, maxLen)`
+  (truncates to 4096 bytes + a "...(truncated, N bytes total)" note)
+  applied to `res->body` wherever it's embedded in an error message (a
+  non-200 status, an empty-response error) — bounds how much of a
+  huge/malicious HTTP response body can propagate into `errorMsg()`/the
+  UI. Both exposed as public static methods (matching the existing
+  `jsonEscape`/`extractStopReason`/`extractFirstTextValue` convention) so
+  `ai_test.cpp` can test them directly, plus a real mock-`httplib::Server`
+  integration test (`testMockServerOversizedErrorBodyIsBounded`) proving
+  a 20000-byte error body produces a ~4KB `errorMsg()`, not a 20000-byte
+  one. **Deliberately NOT done — a real, documented gap, not silently
+  claimed fixed:** this httplib version (`_deps/httplib-src`) has no
+  `Client::Post()` overload that streams the *response* through a
+  size-capping `ContentReceiver` (only `Get()` exposes that; `Post()`'s
+  `ContentProvider`/`content_length` parameters are for the *request*
+  body, not the response) — so the full response is still buffered in
+  memory by httplib itself before `boundedForDisplay()` ever runs on it.
+  A genuinely malicious/huge response therefore still costs memory
+  proportional to its real size during the network read, even though the
+  *propagated* error string is now bounded. Fixing that would mean
+  constructing a raw `httplib::Request`/`Response` pair and calling
+  `Client::send()` directly with a manual size-checking content receiver
+  — a larger, riskier change to a working, tested, production network
+  path than this task's scope justified in one sitting; left as a
+  follow-up if a future session wants it. Full rebuild + 124/124 `ctest`.
+  Verify: `ctest -R mc3_ai`.
+- **SYS-W2-05** `[TODO]` `P3` — Cap the Claude API HTTP response body size
+  during the network read itself (not just when it's later embedded in an
+  error message, which `SYS-W2-04` already bounds). Needs a raw
+  `httplib::Request`/`Response` pair via `Client::send()` with a manual
+  size-checking `content_receiver` set on the request, since this
+  httplib version's `Client::Post()` has no overload that streams the
+  response through a size cap (only `Get()` does). Low real-world risk
+  (`apiBaseUrl` is self-configured, not attacker-controlled by default)
+  but a genuine gap if a user points it somewhere untrusted or a MITM
+  proxy returns a huge body.
 
 ### W3 — Architecture decomposition
 - **SYS-W3-01** `[IN_PROGRESS]` `P2` — Extract from `MeshCraftApplication` (a god

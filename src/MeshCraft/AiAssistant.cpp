@@ -224,6 +224,23 @@ std::string AiAssistant::extractFirstTextValue(const std::string& json) {
     return out;
 }
 
+std::string AiAssistant::redactSecret(std::string text, const std::string& secret) {
+    if (secret.empty()) return text;
+    static constexpr const char* kRedacted = "[REDACTED]";
+    size_t pos = 0;
+    while ((pos = text.find(secret, pos)) != std::string::npos) {
+        text.replace(pos, secret.size(), kRedacted);
+        pos += std::char_traits<char>::length(kRedacted);
+    }
+    return text;
+}
+
+std::string AiAssistant::boundedForDisplay(const std::string& text, size_t maxLen) {
+    if (text.size() <= maxLen) return text;
+    return text.substr(0, maxLen) + "... (truncated, " +
+           std::to_string(text.size()) + " bytes total)";
+}
+
 // ---------------------------------------------------------------------------
 // AiAssistant implementation
 // ---------------------------------------------------------------------------
@@ -338,15 +355,19 @@ void AiAssistant::sendAsync(const std::string& systemPrompt,
                 throw std::runtime_error("HTTP request failed: " +
                     httplib::to_string(res.error()));
             }
+            // SYS-W2-04: bound how much of a (possibly huge or malicious,
+            // e.g. from a user-pointed apiBaseUrl) response body can
+            // propagate into an error message/the UI.
             if (res->status != 200) {
                 throw std::runtime_error("API error " + std::to_string(res->status) +
-                    ": " + res->body);
+                    ": " + AiAssistant::boundedForDisplay(res->body));
             }
 
             stopReason = AiAssistant::extractStopReason(res->body);
             text       = AiAssistant::extractFirstTextValue(res->body);
             if (text.empty()) {
-                throw std::runtime_error("Empty response from API: " + res->body);
+                throw std::runtime_error("Empty response from API: " +
+                    AiAssistant::boundedForDisplay(res->body));
             }
 #else
             (void)apiKeyCopy; (void)modelCopy; (void)maxTokensCopy; (void)baseUrlCopy;
@@ -357,7 +378,10 @@ void AiAssistant::sendAsync(const std::string& systemPrompt,
 #endif
         } catch (const std::exception& e) {
             hasError = true;
-            error    = e.what();
+            // SYS-W2-04: defense-in-depth -- no current path above
+            // interpolates apiKeyCopy into a message, but nothing
+            // structurally prevented that either, so redact just in case.
+            error    = AiAssistant::redactSecret(e.what(), apiKeyCopy);
         }
 
         {

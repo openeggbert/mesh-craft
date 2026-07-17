@@ -59,6 +59,33 @@ static void testJsonEscape() {
           "jsonEscape: other control characters escaped as \\u00XX");
 }
 
+// SYS-W2-04 — redactSecret()/boundedForDisplay(), the pure helpers
+// sendAsync() applies to every error-message-construction path.
+static void testRedactSecretAndBoundedForDisplay() {
+    CHECK(AiAssistant::redactSecret("connection refused", "sk-ant-abc123") ==
+          "connection refused",
+          "redactSecret: message without the secret is unchanged");
+    CHECK(AiAssistant::redactSecret("key was sk-ant-abc123 in the header", "sk-ant-abc123") ==
+          "key was [REDACTED] in the header",
+          "redactSecret: a single occurrence is replaced with [REDACTED]");
+    CHECK(AiAssistant::redactSecret("sk-ant-abc123...sk-ant-abc123", "sk-ant-abc123") ==
+          "[REDACTED]...[REDACTED]",
+          "redactSecret: every occurrence is replaced, not just the first");
+    CHECK(AiAssistant::redactSecret("no secret set here", "") == "no secret set here",
+          "redactSecret: an empty secret is a no-op (never redacts everything)");
+
+    CHECK(AiAssistant::boundedForDisplay("short") == "short",
+          "boundedForDisplay: text under the limit is returned unchanged");
+    std::string big(5000, 'x');
+    std::string bounded = AiAssistant::boundedForDisplay(big, 4096);
+    CHECK(bounded.size() < big.size(),
+          "boundedForDisplay: an oversized body is shortened");
+    CHECK(bounded.rfind("... (truncated, 5000 bytes total)") != std::string::npos,
+          "boundedForDisplay: the truncation note states the real original size");
+    CHECK(AiAssistant::boundedForDisplay(std::string(10, 'y'), 10) == std::string(10, 'y'),
+          "boundedForDisplay: text exactly at the limit is not truncated");
+}
+
 // STAB-0611/STAB-0635 — uniqueTempPath() must not repeat, even for the same
 // prefix/extension in the same process (the bug this replaces was a
 // per-process counter that reset to 0 on every launch, so two MeshCraft
@@ -599,6 +626,41 @@ static void testMockServerHttpErrorStatus() {
     serverThread.join();
 }
 
+// SYS-W2-04 — a pathological/misconfigured server (e.g. apiBaseUrl pointed
+// somewhere it shouldn't be) returning a huge error body must not produce a
+// proportionally huge errorMsg(); AiAssistant::boundedForDisplay() must
+// actually be wired into the real sendAsync() error path, not just proven
+// correct in isolation above.
+static void testMockServerOversizedErrorBodyIsBounded() {
+    const std::string hugeBody(20000, 'z');
+    httplib::Server svr;
+    svr.Post("/v1/messages", [&](const httplib::Request&, httplib::Response& res) {
+        res.status = 500;
+        res.set_content(hugeBody, "text/plain");
+    });
+    int port = svr.bind_to_any_port("127.0.0.1");
+    std::thread serverThread([&]{ svr.listen_after_bind(); });
+    waitUntilServerRunning(svr);
+
+    AiAssistant ai;
+    ai.apiKey     = "test-key";
+    ai.apiBaseUrl = "http://127.0.0.1:" + std::to_string(port);
+    ai.sendAsync("system prompt", "<mc3/>", "add a box");
+
+    bool finished = pollUntilDone(ai, 5000);
+    CHECK(finished, "oversized error body: request completes within the timeout");
+    CHECK(ai.hasError(), "oversized error body: a 500 status is reported as an error");
+    CHECK(ai.errorMsg().size() < hugeBody.size(),
+          "oversized error body: errorMsg() is bounded well below the 20000-byte body "
+          "sendAsync() actually received (got " + std::to_string(ai.errorMsg().size()) +
+          " bytes)");
+    CHECK(ai.errorMsg().find("truncated") != std::string::npos,
+          "oversized error body: errorMsg() states that truncation happened");
+
+    svr.stop();
+    serverThread.join();
+}
+
 // STAB-0381 — the Model field is genuinely user-configurable: whatever value
 // is set on AiAssistant::model ends up verbatim in the outgoing request body,
 // not just editable in the UI with no effect on the wire.
@@ -875,6 +937,7 @@ static void testWaitForAllInFlightBoundedThenCompletes() {
 int main() {
     testUniqueTempPathNoCollision();
     testJsonEscape();
+    testRedactSecretAndBoundedForDisplay();
     testExtractStopReason();
     testExtractFirstTextValue();
     testExtractXmlPlain();
@@ -903,6 +966,7 @@ int main() {
     testMockServerSuccessRoundTrip();
     testMockServerTruncatedResponse();
     testMockServerHttpErrorStatus();
+    testMockServerOversizedErrorBodyIsBounded();
     testModelNameSentInRequestBody();
     testConnectionRefusedProducesUserVisibleError();
     testMalformedJsonResponseHandledGracefully();

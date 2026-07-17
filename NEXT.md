@@ -163,6 +163,29 @@ this session started with):
   file's existing convention for this class of test). Full rebuild +
   **124/124 ctest**; manual `--screenshot` smoke test confirms the app
   still boots/renders.
+- **Doc fix:** `AUD-014` ("join the AiAssistant background thread at
+  shutdown") was already fully fixed in an earlier session (commit
+  `3cd27d7`, `plan.md` already read `[DONE]`) — only this file's §5/§8
+  hadn't caught up. Corrected, no code change. Same class of staleness as
+  the `AUD-015`/`SYS-W6-01` fix above.
+- **`SYS-W2-04` (now DONE, one sub-point deliberately left open):**
+  "extracted-XML size" turned out to already be bounded (`SYS-W1-03`'s
+  512MB `checkDocumentByteBudget()` already runs inside the AI-apply
+  path's `loadFromString()` call — verified, not re-implemented). Added
+  `AiAssistant::redactSecret()`/`boundedForDisplay()` (both exposed as
+  public static methods, matching the existing `jsonEscape` convention):
+  every caught-exception error message in `sendAsync()` now has the API
+  key redacted (defense-in-depth — no current path actually leaked it,
+  but nothing structurally prevented a future one from doing so) and any
+  embedded HTTP response body capped at 4KB with a truncation note. New
+  pure-function tests plus a real mock-`httplib::Server` integration test
+  proving a 20000-byte error body produces a ~4KB `errorMsg()`.
+  **Deliberately not done:** capping the response size during the actual
+  network *read* (httplib buffers the full body in memory regardless of
+  the later truncation) — this httplib version's `Client::Post()` has no
+  response-streaming overload; tracked as new `SYS-W2-05`, low real-world
+  risk since `apiBaseUrl` is self-configured. Full rebuild + 124/124
+  `ctest`.
 
 **Prior session (11 commits, oldest first, all on `develop`, all pushed):**
 
