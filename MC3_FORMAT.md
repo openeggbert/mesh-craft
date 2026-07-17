@@ -981,3 +981,25 @@ The XSD schema is at `mc3/mc3.xsd`. Validate with:
 ```sh
 python3 test/validate_xsd.py mc3/mc3.xsd scene.mc3.xml
 ```
+
+---
+
+## Forward/backward compatibility (`SYS-W5-03`)
+
+**Unrecognized XML attributes and elements are silently dropped on
+round-trip** (load, then save). `Mc3XmlParser.cpp` reads every field via
+named, explicit lookups with no "collect anything I didn't recognize"
+fallback, and `Mc3XmlWriter.cpp` rebuilds the XML element from scratch on
+save, emitting only the fields it knows about. There is no attribute-bag,
+raw-node-preservation, or version-gate mechanism anywhere in either layer.
+
+This is a **deliberate, accepted limitation**, not a bug: a document
+authored with a newer MeshCraft version (or hand-edited with an
+experimental attribute) that's opened and saved by an older version, or
+vice versa, will lose whatever the loading version doesn't recognize —
+silently, with no warning. (`doc.metadata`/`<meta>` are a separate,
+narrow, opt-in passthrough store for exactly those two elements — not a
+general mechanism for arbitrary unrecognized data.) Revisit only if a
+concrete forward/backward-compatibility need arises; see `plan.md`'s
+`SYS-W5-03` entry for the tradeoffs considered (generic attribute bag /
+raw-node preservation / hard version gate) and why none was adopted.

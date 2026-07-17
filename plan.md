@@ -602,10 +602,15 @@ Mandated workstream items not tied to a single audit finding.
   runtime test (informational-only tool per its own docstring) — full
   124/124 `ctest` confirms no regression from the doc edits themselves.
   Verify: `python3 test/xsd_docs_diff.py`.
-- **SYS-W5-03** `[BLOCKED, needs a human design decision]` `P2` — MC3
+- **SYS-W5-03** `[DEFERRED, human-authorized decision]` `P2` — MC3
   versioning + unknown element/attribute policy; round-trip must not
   silently drop unknown data unless policy says so.
-  **Investigation (2026-07-17):** confirmed, with real evidence (this was
+  **Decision (2026-07-17, human-authorized): leave current behavior as-is
+  and document it as an accepted limitation.** No implementation work —
+  silently dropping unrecognized XML attributes/elements on round-trip
+  stays the documented, intentional behavior; not revisited unless a
+  concrete need for forward/backward compatibility arises later.
+  **Investigation (2026-07-17): confirmed, with real evidence (this was
   a genuinely-unverified one-line claim before): a fresh
   `<mc3 ... totally_unknown_root_attr="keep-me">` root attribute, an
   unrecognized `<box ... totally_unknown_obj_attr="also-keep-me">` object

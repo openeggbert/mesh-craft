@@ -249,19 +249,16 @@ this session started with):
   (`mc3_random_roundtrip`) and fuzz (`mc3_xml_mutation_fuzz`,
   `mcb_random_roundtrip`, plus standalone libFuzzer harnesses) coverage
   already exists and is ctest-registered. No new work.
-- **`SYS-W5-03` investigated, genuinely `BLOCKED` on a human decision (not
-  stale — this one's real):** confirmed with a live test that MC3
-  round-tripping silently drops any unrecognized XML attribute/element
-  (root, object, or a whole unknown element) — by design, not a bug: the
-  parser reads only named known fields, the writer rebuilds the element
-  from scratch emitting only known fields, there's no "preserve what I
-  don't recognize" codepath anywhere. **Needs a human answer:** should MC3
-  preserve unrecognized XML data on round-trip at all, and if so, via a
-  generic attribute bag, raw-node preservation, a hard version gate, or
-  is silently dropping it an accepted, document-and-close limitation? See
-  `plan.md`'s `SYS-W5-03` entry for the full tradeoff writeup. Not
-  implemented unilaterally — this is a real format-design decision, not
-  an engineering judgment call.
+- **`SYS-W5-03` investigated + resolved (human-authorized decision,
+  2026-07-17):** confirmed with a live test that MC3 round-tripping
+  silently drops any unrecognized XML attribute/element (root, object, or
+  a whole unknown element) — by design, not a bug: the parser reads only
+  named known fields, the writer rebuilds the element from scratch
+  emitting only known fields, there's no "preserve what I don't
+  recognize" codepath anywhere. **Decision: leave as-is, document as an
+  accepted limitation.** No implementation. Documented in `MC3_FORMAT.md`
+  (new "Forward/backward compatibility" section) and `plan.md` (now
+  `DEFERRED`).
 - **`SYS-W5-04` investigated, left `TODO` (correctly, not stale):**
   confirmed 13 real call sites doing independent O(n) tree-walk id/name
   lookups with zero caching/indexing anywhere. Deliberately not attempted
@@ -467,15 +464,6 @@ markers that referenced findings already resolved in earlier sessions
 (`AUD-014`, `AUD-015`/`SYS-W6-01`, `SYS-W2-03`, `SYS-W6-03`, `SYS-W14-01`,
 `SYS-W6-02`, `SYS-W5-05`) — don't assume any remaining `TODO` below is
 still accurate without looking.)_
-
-0. **`SYS-W5-03` needs a human decision before any implementation** (not
-   an engineering judgment call this session is authorized to make
-   unilaterally): should MC3 preserve unrecognized XML attributes/
-   elements on round-trip, and if so, via which mechanism (generic
-   attribute bag / raw-node preservation / hard version gate), or is
-   silently dropping them an accepted limitation to document and close?
-   See `plan.md`'s `SYS-W5-03` entry for the confirmed-with-evidence
-   current behavior and the tradeoffs of each option.
 
 1. **`plan.md`'s remaining `TODO` `SYS-###` rows**, in no particular
    priority order (pick the highest-value one that fits available time):
