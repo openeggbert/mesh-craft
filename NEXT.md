@@ -128,6 +128,12 @@ this session started with):
   skip-not-throw exception (see its own plan.md note) was left as-is after
   a brief revert (see git history on this file if curious — not worth its
   own bullet).
+- **`SYS-W1-04` (now DONE):** implemented the decided duplicate-object-id
+  handling — `checkDuplicateObjectIds()` in `Mc3XmlParser.cpp` (called at
+  the end of `buildDocumentFromRoot()`) walks `doc.objects` + recursive
+  `.children` (the same scope `flatFindById` searches) and emits one
+  warning-level `Mc3Validation` diagnostic per duplicated id. Parsing stays
+  fully permissive. 4 new assertions in `mc3_duplicate_ids_test.cpp`.
 
 **Prior session (11 commits, oldest first, all on `develop`, all pushed):**
 
@@ -209,10 +215,10 @@ the decisions block at the top of this file and §8 below.
   explicit "stub" in commit `580105d`, never included by
   `MeshCraftApplication.hpp`, never instantiated. **Decided 2026-07-17:
   delete** (see top-of-file decisions block) — not yet executed, see §8.
-- **Decision made, execution pending:** duplicate object IDs are proven
-  safe at the `mc3` library level (no crash/data loss). **Decided
-  2026-07-17: surface as a warning-level `Mc3Validation` diagnostic**,
-  parsing stays permissive (`SYS-W1-04`) — not yet executed, see §8.
+- **Resolved:** duplicate object IDs are proven safe at the `mc3` library
+  level (no crash/data loss) and now surface a warning-level
+  `Mc3Validation` diagnostic (decided + implemented 2026-07-17,
+  `SYS-W1-04`, now `DONE`); parsing stays permissive.
 - **Needs verification:** whether the sibling `mesh-world` repo's R-series
   work (R104+) will touch files this repo also cares about — check
   `git log` at the start of any future session, don't assume `plan.md`
@@ -322,8 +328,9 @@ clang-tidy -p b-release path/to/changed/file.cpp
 
 ## 8. Next smallest tasks
 
-_(Tasks 1-2 from the previous revision of this list — re-check + close
-`field_matrix` — are done; see §3's `SYS-W6-04` entry.)_
+_(Tasks 1-3 from the previous revision of this list — re-check + close
+`field_matrix`, and the duplicate-ID validation warning — are done; see
+§3's `SYS-W6-04`/`SYS-W1-04` entries.)_
 
 1. **Delete `EditorViewport`** (decision made 2026-07-17, see top-of-file
    decisions block).
@@ -336,18 +343,7 @@ _(Tasks 1-2 from the previous revision of this list — re-check + close
    Verify: full rebuild + `ctest` (nothing should reference the deleted
    files — confirm with `grep -rn EditorViewport` before deleting).
 
-2. **Duplicate object IDs: `Mc3Validation` warning** (decision made
-   2026-07-17, see top-of-file decisions block).
-   Goal: keep parsing permissive but add a warning-level `Mc3Validation`
-   diagnostic when a document has duplicate ids, surfaced in the existing
-   Validation panel/status bar (`SYS-W1-01`). Closes `SYS-W1-04`.
-   Files: `mc3/include/MeshCraft/Mc3/Mc3Validation.hpp`,
-   `mc3/src/Mc3Document.cpp` (or wherever `validate()`/load-time validation
-   lives), a new/extended test alongside `mc3_duplicate_ids_test.cpp`.
-   Verify: new test asserting the diagnostic fires; full `ctest` green;
-   `mc3_duplicate_ids_test` (proves the *load* still succeeds) still passes.
-
-3. **`SYS-W3-01` Phase 2: extract narrow `Preferences`** (decision made
+2. **`SYS-W3-01` Phase 2: extract narrow `Preferences`** (decision made
    2026-07-17: narrow, see top-of-file decisions block).
    Goal: new `Editor::Preferences` class owns only `prefTheme_`/
    `prefsOpen_`/`applyTheme()`. `autoSaveInterval_`/`snapTranslate_`/
@@ -362,7 +358,7 @@ _(Tasks 1-2 from the previous revision of this list — re-check + close
    Verify: full rebuild + `ctest`; a manual load/save round-trip test
    (following `keybinding_manager_test.cpp`'s pattern) for the new class.
 
-4. **`AUD-036c`/`SYS-W9-03`: restore selection on undo/redo** (decision
+3. **`AUD-036c`/`SYS-W9-03`: restore selection on undo/redo** (decision
    made 2026-07-17: yes, restore — see top-of-file decisions block).
    Goal: `performUndo()`/`performRedo()` (`MeshCraftApplication_Commands.cpp`)
    currently unconditionally `selection_.clear()`; change to restore the
@@ -375,7 +371,7 @@ _(Tasks 1-2 from the previous revision of this list — re-check + close
    (extend with a selection-survives-undo/redo case).
    Verify: `ctest -R undo_gesture_frame`; full `ctest` green.
 
-5. **Investigate `AUD-014`: join the `AiAssistant` background thread at
+4. **Investigate `AUD-014`: join the `AiAssistant` background thread at
    shutdown.**
    Goal: confirm whether the detached thread noted in §6 can be safely
    joined (with a bounded timeout, reusing the existing

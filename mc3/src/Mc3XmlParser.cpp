@@ -13,6 +13,7 @@
 #include <algorithm>
 #include <filesystem>
 #include <iostream>
+#include <map>
 #include <set>
 #include <sstream>
 #include <stdexcept>
@@ -1283,6 +1284,39 @@ static void checkDocumentByteBudget(uintmax_t bytes, const std::string& sourceDe
     throw std::runtime_error(msg);
 }
 
+// SYS-W1-04 (human-authorized decision, 2026-07-17): the mc3 library itself
+// round-trips duplicate object ids safely (see mc3/test/duplicate_ids_test.cpp
+// for the proof -- no crash, no data loss, both objects preserved). Parsing
+// stays permissive; this only surfaces a warning-level Mc3Validation
+// diagnostic so it's visible in the editor's Validation panel/status bar
+// (SYS-W1-01), since the editor APPLICATION layer's id-keyed lookups
+// (MeshCraftApplication::flatFindById, the lockedIds_ object-lock set) ARE
+// ambiguous when ids collide -- walks the same scope flatFindById does
+// (doc.objects and their recursive .children; not doc.definitions, which
+// flatFindById never searches).
+static void collectObjectIds(const std::vector<std::shared_ptr<Mc3Object>>& list,
+                              std::map<std::string, int>& idCounts) {
+    for (const auto& obj : list) {
+        if (!obj->id.empty()) ++idCounts[obj->id];
+        if (!obj->children.empty()) collectObjectIds(obj->children, idCounts);
+    }
+}
+
+static void checkDuplicateObjectIds(const Mc3Document& doc) {
+    if (!g_validation) return;
+    std::map<std::string, int> idCounts;
+    collectObjectIds(doc.objects, idCounts);
+    for (const auto& [id, count] : idCounts) {
+        if (count < 2) continue;
+        g_validation->addWarning(
+            g_currentSourceFile.string(), id, "id",
+            "id '" + id + "' is used by " + std::to_string(count) + " objects -- "
+            "mc3 itself round-trips this safely, but editor id-keyed lookups "
+            "(select/lock/find) are ambiguous when ids collide",
+            "none (parsing stays permissive by design -- SYS-W1-04)");
+    }
+}
+
 static void parseEmbeds(const XMLElement* el, Mc3Document& doc) {
     for (const XMLElement* c = el->FirstChildElement("embed"); c;
          c = c->NextSiblingElement("embed")) {
@@ -1875,6 +1909,8 @@ static Mc3Document buildDocumentFromRoot(const XMLElement* root,
     if (const XMLElement* sts  = root->FirstChildElement("states"))       parseStates(sts,       doc);
     if (const XMLElement* objs = root->FirstChildElement("objects"))      parseObjects(objs,     doc);
     if (const XMLElement* acts = root->FirstChildElement("actions"))      parseActions(acts,     doc);
+
+    checkDuplicateObjectIds(doc);
 
     return doc;
 }

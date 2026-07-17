@@ -28,6 +28,7 @@
 
 #include <MeshCraft/Mc3/Mc3Document.hpp>
 #include <MeshCraft/Mc3/Mc3Object.hpp>
+#include <MeshCraft/Mc3/Mc3Validation.hpp>
 
 #include <filesystem>
 #include <fstream>
@@ -103,6 +104,37 @@ int main() {
         for (const auto& o : reloaded.objects) if (o->id == "dup") ++dupCount;
         check(dupCount == 2,
               "duplicate ids: both 'dup'-id objects survive a full save->reload cycle");
+    }
+
+    // SYS-W1-04 (human-authorized decision, 2026-07-17): duplicate ids stay a
+    // permissive parse (proven above) but now surface a warning-level
+    // Mc3Validation diagnostic, since the mc3-library-level safety this test
+    // proves does NOT extend to the editor application layer's id-keyed
+    // lookups (flatFindById, lockedIds_) -- see checkDuplicateObjectIds() in
+    // Mc3XmlParser.cpp.
+    {
+        Mc3Validation validation;
+        Mc3Document validated = Mc3Document::loadFromFile(path, Mc3LoadPolicy::trusted(), validation);
+        check(validated.objects.size() == 3,
+              "duplicate ids + validation: loading with a validation sink still "
+              "succeeds and preserves all 3 objects");
+
+        int dupWarnings = 0;
+        for (const auto& e : validation.entries)
+            if (e.severity == Mc3ValidationSeverity::Warning && e.objectId == "dup")
+                ++dupWarnings;
+        check(dupWarnings == 1,
+              "duplicate ids + validation: exactly one warning-level diagnostic for "
+              "id 'dup' (not one per duplicate object)");
+        check(validation.hasWarnings() && !validation.hasErrors(),
+              "duplicate ids + validation: duplicate ids are a warning, never an "
+              "error -- parsing must not be rejected");
+
+        // The unique-id object must not spuriously trigger a diagnostic.
+        for (const auto& e : validation.entries)
+            check(e.objectId != "unique",
+                  "duplicate ids + validation: the non-duplicated 'unique' id gets "
+                  "no diagnostic");
     }
 
     fs::remove_all(dir);

@@ -284,7 +284,7 @@ Mandated workstream items not tied to a single audit finding.
   INPUT-byte ceiling above supersedes it as the actionable version of "max
   bytes". Full tree: 116/116 ctest at every step, `field_matrix.py` clean,
   zero new `-Wall -Wextra` warnings.
-- **SYS-W1-04** `[IN_PROGRESS]` `P1` — Pathological-input fixture corpus. Seeded:
+- **SYS-W1-04** `[DONE]` `P1` — Pathological-input fixture corpus. Seeded:
   `finite_input_test`, `input_budget_test`, `hostile_geometry_test`,
   `load_policy_test`. 4 of the 5 originally-remaining categories now done with
   real fixes + tests: **oversized base64** — `mc3_oversized_base64_test`;
@@ -313,11 +313,22 @@ Mandated workstream items not tied to a single audit finding.
   hard parse error or be auto-renamed is a product/UX decision this pass is
   not authorized to make unilaterally (commit `be9dd55`). Row stays
   IN_PROGRESS pending that decision.
-- **Decision (2026-07-17, human-authorized):** duplicate ids stay a warning-
-  level `Mc3Validation` diagnostic, not a hard parse error or auto-rename —
-  least breaking, reuses the validation infrastructure `SYS-W1-01` already
-  wired into load/save/AI-apply/pre-export/pre-render. Implementing now;
-  row moves to `DONE` once the diagnostic + test land.
+- **Decision (2026-07-17, human-authorized) — implemented:** duplicate ids
+  stay a warning-level `Mc3Validation` diagnostic, not a hard parse error or
+  auto-rename — least breaking, reuses the validation infrastructure
+  `SYS-W1-01` already wired into load/save/AI-apply/pre-export/pre-render.
+  Added `checkDuplicateObjectIds()` to `Mc3XmlParser.cpp` (called at the end
+  of `buildDocumentFromRoot()`, covering both `parse()`/`parseString()`):
+  walks `doc.objects` + recursive `.children` (the exact scope
+  `MeshCraftApplication::flatFindById` searches — not `doc.definitions`,
+  which that lookup never checks), emits one warning per duplicated id
+  (not one per object) naming the id and its use count. Parsing remains
+  fully permissive — the warning is diagnostic-only. Extended
+  `mc3_duplicate_ids_test.cpp` with 4 new assertions proving: loading with
+  a validation sink still succeeds, exactly one warning fires for the
+  duplicated `dup` id, duplicate ids are never elevated to an error, and an
+  unrelated unique id gets no diagnostic. Verify: `ctest -R
+  mc3_duplicate_ids`; full suite 123/123.
 - **SYS-W1-05** `[TODO]` `P2` — Graph-cycle / shared-node policy for API-built trees.
 
 ### W2 — AI / import sandbox
