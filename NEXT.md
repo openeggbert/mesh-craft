@@ -1,14 +1,16 @@
 # NEXT.md
 
-_Last updated: 2026-07-17, end of an extended autonomous session. Branch
-`develop` @ commit `2a2c3a2` (this file's own final-wrap-up commit —
-self-referential by nature, see any other `NEXT.md`-only commit for the
-same pattern), working tree clean except the same two untracked,
-unrelated scratch scene files noted previously
-(`test/crownspire-citadel.mc3.xml`, `test/house3.glb` — manually authored
-demo content, not part of any tracked task, left as-is). **21 commits**
-ahead of the session's starting point (`f1900e3`) — pushed to `origin/develop`
-at the end of this session (previously local-only throughout). See
+_Last updated: 2026-07-17. This entry continues the same-day session
+recorded below (which itself ended, was resumed per its own §10 "Resume
+prompt", and picked up `SYS-W1-07` as task 1 of §8's list) with one more
+commit on top of the `2a2c3a2`/`7b1c045` pair described in the next
+paragraph — this file's own commit is, as always, self-referential (it
+cannot cite its own hash), see any `NEXT.md`-only commit for the same
+pattern. Working tree clean except the same two untracked, unrelated
+scratch scene files noted previously (`test/crownspire-citadel.mc3.xml`,
+`test/house3.glb` — manually authored demo content, not part of any
+tracked task, left as-is). **22 commits** ahead of the original session's
+starting point (`f1900e3`); pushed to `origin/develop`. See
 `git log --oneline -25` for anything newer than this._
 
 **This session ran in two parts** (first 9 commits: the 4 originally-
@@ -80,14 +82,31 @@ one item remains, itself broken into phases (see §4).
 
 ## 2. Current status
 
-- **Build:** re-verified at the end of this session, Release config,
-  EasyGL graphics backend — clean, zero warnings, exit 0.
+- **Build: BROKEN on a fresh reconfigure, as of 2026-07-17 (new finding,
+  see §4) — not caused by anything in this repo.** A `cmake -S . -B <dir>`
+  from scratch (or any change that forces CMake to regenerate `build.ninja`)
+  now fails compiling almost every file that transitively includes
+  `CNA/GraphicsBackendType.hpp` (i.e. most of `MeshCraftApplication*.cpp`
+  and `SceneRenderer*.cpp`), with `#error "CNA: no CNA_BACKEND_* compile
+  definition set"`. Root-caused to the sibling `../cna` repo's current
+  `develop` HEAD (`58e82fd3`, a `feature/graphics` merge landed mid-session)
+  — reproduces identically with every change in this repo reverted, so it
+  is not a regression from this session's own work. See §4 for the full
+  writeup; **do not attempt to fix it here** (CNA is out of bounds per
+  `CLAUDE.md`).
+  An **already-built** `b-release/MeshCraft` binary from earlier in this
+  same session (before the CNA regression surfaced, ninja never got far
+  enough to relink it afterward) still exists and still works — that
+  pre-built binary is what this session's own verification (below) used.
   ```bash
-  cmake -S . -B b-release && cmake --build b-release -j"$(nproc)"
+  cmake -S . -B b-release && cmake --build b-release -j"$(nproc)"   # currently fails, see §4
   ```
-- **Tests:** **125 / 125 `ctest` passing** (was 122/123 at session start —
-  `field_matrix` now passes, see `SYS-W6-04`; net +2 tests (`preferences`,
-  `benchmark`), +~60 new assertions across extended existing tests, see §3).
+- **Tests: 125 / 125 `ctest` passing**, using the pre-existing build from
+  before the CNA regression (was 122/123 at the start of this session's
+  first half — `field_matrix` now passes, see `SYS-W6-04`; net +2 tests
+  (`preferences`, `benchmark`), +~60 new assertions across extended
+  existing tests, see §3). Not re-verified against a from-scratch build —
+  see the build note above.
 - **CLI/tools/apps/libraries currently available:**
   - `MeshCraft` — the interactive editor (`./b-release/MeshCraft
     scene.mc3.xml`, or `--screenshot out.png` / `--export out.glb` for
@@ -107,7 +126,9 @@ one item remains, itself broken into phases (see §4).
   redaction + bounded error-message size (`SYS-W2-04`); closed every
   `MC3_FORMAT.md` documentation gap (`SYS-W5-02`); found and fixed 5 stale
   `plan.md`/`NEXT.md` status markers referencing findings that were
-  actually already done in earlier sessions.
+  actually already done in earlier sessions; guarded `SceneRenderer`'s 4
+  remaining unguarded recursive traversals against cyclic children graphs
+  (`SYS-W1-07`, new second-half continuation).
 - **Known working examples:** `./b-release/MeshCraft test/house.mc3.xml`;
   `./b-release/MeshCraft <scene> --screenshot out.png` (genuinely captures
   the composited ImGui+3D framebuffer, not just the viewport — used
@@ -323,6 +344,24 @@ this session started with):
   find, and adding one is a `cna`-side change out of bounds per
   `CLAUDE.md`. Doc-only; 125/125 `ctest`.
 
+- **`SYS-W1-07` DONE (continuation, second half of this same session):**
+  actually read `SceneRenderer.cpp`/`SceneRenderer_Extrude.cpp`/
+  `CsgCacheAlg.hpp` in full instead of estimating from the row's one-line
+  description — of the ~11 recursive `Mc3Object::children` traversal call
+  sites, 7 were already guarded (`buildManifoldTree`/`csgSubtreeWarning`/
+  `csgSubtreeHashAlg` at `depth > 12`; `drawObject`/`drawEmissiveObject`/
+  `drawObjectEdges` at `depth > 16`) and only 4 local lambda helpers had no
+  guard at all: `computeObjectWorldMatrix`'s `find`, `drawCsgGizmos`'s
+  `visit`, and `objectPolyStats`/`scenePolyStats`'s `walk`. Added a
+  `depth` parameter to each, capped at the same `depth > 16` this file
+  already uses for equivalent non-CSG object-tree recursion. No public
+  API change. Verify: full rebuild + 125/125 `ctest`, plus a real live-GL
+  `--screenshot` before/after byte-diff (identical) on `test/house.mc3.xml`,
+  `test/csg_cache.mc3.xml`, `test/features.mc3.xml` — see `plan.md`'s
+  `SYS-W1-07` entry for the full per-function breakdown. **While verifying
+  this, discovered the CNA build regression described in §4 — unrelated to
+  this fix (reproduces identically with it reverted), not fixed here.**
+
 **Prior session (11 commits, oldest first, all on `develop`, all pushed):**
 
 - `d9e98d5` — fixed 2 pre-existing XSD-invalid test fixtures (unrelated
@@ -369,19 +408,74 @@ R110/R101) left `mc3.xsd`/MCB gaps — closed this session, see §3's
 
 ## 4. Current blocker / main problem
 
-**There is no build-breaking or work-stopping blocker.** `SYS-W3-01`
-(decompose the `MeshCraftApplication` "god object") is a genuinely
-multi-session task, not a bug: research found **280 data members + 113
-methods** in that one class (11,544 lines of implementation across 17
-`.cpp` files); only 10 subsystems are cleanly extracted so far (the 9
-pre-existing ones plus `KeybindingManager`). This isn't blocking anything
-else in the repo — it's just large and not close to finished. Full roadmap
-in `plan.md`'s `SYS-W3-01` entry; this session decided `EditorViewport`'s
-long-open fate (delete) and Phase 2's Preferences scope (narrow) — see
-the decisions block at the top of this file and §8 below.
+**NEW, 2026-07-17 (second half of this session): a fresh build of this repo
+is currently broken, root-caused entirely to the sibling `../cna` repo, not
+to anything here.** Discovered while verifying `SYS-W1-07` (below). A plain
+
+```bash
+cmake -S . -B <any-dir>    # or anything that forces build.ninja to regenerate
+cmake --build <any-dir> -j"$(nproc)"
+```
+
+now fails compiling almost every `MeshCraftApplication*.cpp`/
+`SceneRenderer*.cpp` file with:
+
+```
+CNA/GraphicsBackendType.hpp:93:2: error: #error "CNA: no CNA_BACKEND_*
+compile definition set -- graphics backend selection
+(cmake/BackendSelection.cmake) is broken"
+```
+
+**Confirmed not caused by this session's own work:** reproduces identically
+against a clean checkout of this repo (SceneRenderer.cpp's changes fully
+`git stash`ed out) — the only thing that changed is `../cna`'s `develop`
+HEAD, which moved to `58e82fd3` ("Merge branch 'feature/graphics'",
+D3D11/D3D12 PBR + skinned-vertex-color work) partway through this session.
+**Root cause (traced, not fixed):** `cna/cmake/BackendSelection.cmake` sets
+the `CNA_BACKEND_EASYGL` macro via a directory-scoped `add_compile_definitions()`
+call inside `../cna`'s own `CMakeLists.txt`. Directory-scoped compile
+definitions propagate *down* into subdirectories `../cna` itself adds (like
+`../easy-gl`), but do **not** propagate *up* to this repo's own targets —
+this repo adds `../cna` via `add_subdirectory(../cna CNA_dep)`, so `../cna`
+is the child here, not the parent. `GraphicsBackendType.hpp` is a header
+included by both `../cna`'s own `.cpp` files and this repo's — every
+translation unit needs the macro at its *own* compile time, so this only
+ever worked if some target-level (`PUBLIC`/`INTERFACE`) `target_compile_definitions`
+call carried it across the target-link boundary; no such call currently
+exists for any `cna_backend_graphics_*` target grepped in `../cna`'s cmake
+files. Whether this always needed such a call and something silently
+regressed it, or the `feature/graphics` merge changed something else that
+newly exposed a pre-existing gap, needs someone with `../cna` write access
+to determine — **not investigated further or touched here**, per
+`CLAUDE.md`'s explicit "no CNA changes without owner permission."
+**Practical impact:** this repo's own build is unverifiable via a fresh
+reconfigure until `../cna`'s owner (or the separate Claude Code instance
+handling it) fixes this. This session's own `SYS-W1-07` verification used
+an already-linked `b-release/MeshCraft` binary built earlier in the same
+session, before this surfaced (see §2). **Next session: re-check `../cna`'s
+`develop` HEAD (`git -C ../cna log --oneline -5`) before assuming this is
+still broken** — if it has moved past `58e82fd3` with a fix, re-run
+`cmake -S . -B b-release` fresh and confirm before trusting any cached
+"clean build" claim in this file.
+
+`SYS-W3-01` (decompose the `MeshCraftApplication` "god object") remains the
+main *in-repo* multi-session task, not a bug: research found **280 data
+members + 113 methods** in that one class (11,544 lines of implementation
+across 17 `.cpp` files); only 10 subsystems are cleanly extracted so far
+(the 9 pre-existing ones plus `KeybindingManager`). This isn't blocking
+anything else in the repo — it's just large and not close to finished.
+Full roadmap in `plan.md`'s `SYS-W3-01` entry; this session decided
+`EditorViewport`'s long-open fate (delete) and Phase 2's Preferences scope
+(narrow) — see the decisions block at the top of this file and §8 below.
 
 ## 5. Known bugs and limitations
 
+- **NEW, confirmed, external, not actionable from this repo (see §4 for
+  the full writeup):** a fresh CMake reconfigure of this repo's default
+  Release/EasyGL build currently fails entirely — `../cna`'s current
+  `develop` HEAD (`58e82fd3`) doesn't propagate its `CNA_BACKEND_EASYGL`
+  compile definition to this repo's own targets. Not caused by, or fixable
+  from, this repo.
 - **Confirmed, external, not actionable from this repo:** Web/Emscripten
   build crashes inside `../cna` on the first `SDL_EVENT_WINDOW_RESIZED`
   (`GameWindow::queryClientBoundsFromSDL()` calls `SDL_GetWindowSize()`
@@ -482,7 +576,9 @@ the decisions block at the top of this file and §8 below.
 ## 7. Useful commands
 
 ```bash
-# Configure + build (Release, EasyGL backend — the tree this session verified)
+# Configure + build (Release, EasyGL backend). CURRENTLY FAILS on a fresh
+# reconfigure -- see §4 -- unrelated to this repo, root-caused to ../cna's
+# current develop HEAD. Check ../cna's HEAD has moved past 58e82fd3 first.
 cmake -S . -B b-release
 cmake --build b-release -j"$(nproc)"
 
@@ -519,17 +615,13 @@ status yourself: this session found and fixed **8** stale `[TODO]`/status
 markers that referenced findings already resolved in earlier sessions
 (`AUD-014`, `AUD-015`/`SYS-W6-01`, `SYS-W2-03`, `SYS-W6-03`, `SYS-W14-01`,
 `SYS-W6-02`, `SYS-W5-05`, `SYS-W7-01`) — don't assume any remaining
-`TODO` below is still accurate without looking.)_
+`TODO` below is still accurate without looking. **Also check §4 first** —
+a fresh build is currently broken for reasons entirely outside this repo;
+confirm `../cna`'s `develop` HEAD before assuming a clean build.)_
 
-1. **`plan.md`'s remaining `TODO` `SYS-###` rows**, in no particular
-   priority order (pick the highest-value one that fits available time):
-   `SYS-W1-07` (new this session, rescoped down after a same-session
-   self-correction — guard `SceneRenderer`'s ~11 scattered recursive
-   traversal call sites against a cyclic `Mc3Object::children` graph,
-   completing `SYS-W1-05`/`06`'s pattern; the export path turned out to
-   already be covered by a pre-existing `AUD-007` guard, so it does NOT
-   need this — needs a live GL context plus real `--screenshot` before/
-   after verification per touched function),
+1. **`plan.md`'s remaining `TODO` `SYS-###` rows** (`SYS-W1-07` is now
+   `DONE`, see §3 — pick the highest-value one of the 2 below that fits
+   available time):
    `SYS-W5-04` (central document index/reference resolver — investigated
    this session, real and TODO-correct, but needs its own scoped
    invalidation-analysis pass before implementing, not a quick pick),
@@ -538,13 +630,12 @@ markers that referenced findings already resolved in earlier sessions
    in-process instrumentation: mesh-gen, CSG+cache, traversal, picking,
    undo snapshot, texture processing, animation eval, registry, startup,
    first frame).
-   **All 3 of these were deliberately NOT attempted this session because
+   **Both of these were deliberately NOT attempted this session because
    each genuinely needs its own dedicated pass** (research-then-implement
-   for `SYS-W5-04`'s cache invalidation, real GL verification for
-   `SYS-W1-07`, new instrumentation infrastructure for `SYS-W12-02`) — they
-   are not quick picks the way most of this session's other work was; size
-   the next session's time budget accordingly rather than expecting to
-   finish all 3 alongside other work.
+   for `SYS-W5-04`'s cache invalidation, new instrumentation infrastructure
+   for `SYS-W12-02`) — they are not quick picks the way most of this
+   session's other work was; size the next session's time budget
+   accordingly rather than expecting to finish both alongside other work.
    `SYS-W11-01`/`SYS-W11-03`/`AUD-042`/`AUD-052`/`AUD-053`/`AUD-057` stay
    correctly blocked/owner-gated (CI parked, no Android NDK in this
    environment) — don't attempt those without the missing external

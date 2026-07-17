@@ -1312,8 +1312,9 @@ void SceneRenderer::drawCsgGizmos(const Mc3::Mc3Document& doc,
 
     std::vector<VertexPositionColor> lines;
 
-    std::function<void(const Mc3Object&, const Matrix&)> visit;
-    visit = [&](const Mc3Object& obj, const Matrix& parentWorld) {
+    std::function<void(const Mc3Object&, const Matrix&, int)> visit;
+    visit = [&](const Mc3Object& obj, const Matrix& parentWorld, int depth) {
+        if (depth > 16) return;  // SYS-W1-07: guard against a cyclic children graph
         Matrix world = objectWorldMatrix(obj.transform) * parentWorld;
 
         if (obj.type == ObjectType::Union ||
@@ -1333,12 +1334,12 @@ void SceneRenderer::drawCsgGizmos(const Mc3::Mc3Document& doc,
         }
 
         for (const auto& child : obj.children)
-            visit(*child, world);
+            visit(*child, world, depth + 1);
     };
 
     Matrix identity = Matrix::getIdentityProperty();
     for (const auto& obj : doc.objects)
-        visit(*obj, identity);
+        visit(*obj, identity, 0);
 
     if (!lines.empty())
         drawLineList(lines, view, proj);
@@ -1349,24 +1350,26 @@ void SceneRenderer::drawCsgGizmos(const Mc3::Mc3Document& doc,
 Matrix SceneRenderer::computeObjectWorldMatrix(const Mc3Object& target,
                                                const Mc3Document& doc) const {
     Matrix result = Matrix::getIdentityProperty();
-    std::function<bool(const std::vector<std::shared_ptr<Mc3Object>>&, const Matrix&)> find;
-    find = [&](const std::vector<std::shared_ptr<Mc3Object>>& list, const Matrix& parent) -> bool {
+    std::function<bool(const std::vector<std::shared_ptr<Mc3Object>>&, const Matrix&, int)> find;
+    find = [&](const std::vector<std::shared_ptr<Mc3Object>>& list, const Matrix& parent, int depth) -> bool {
+        if (depth > 16) return false;  // SYS-W1-07: guard against a cyclic children graph
         for (const auto& obj : list) {
             Matrix world = objectWorldMatrix(obj->transform) * parent;
             if (obj.get() == &target) { result = world; return true; }
-            if (!obj->children.empty() && find(obj->children, world)) return true;
+            if (!obj->children.empty() && find(obj->children, world, depth + 1)) return true;
         }
         return false;
     };
-    find(doc.objects, Matrix::getIdentityProperty());
+    find(doc.objects, Matrix::getIdentityProperty(), 0);
     return result;
 }
 
 void SceneRenderer::objectPolyStats(const Mc3::Mc3Object& obj,
                                     int& verts, int& tris) const {
     verts = 0; tris = 0;
-    std::function<void(const Mc3::Mc3Object&)> walk;
-    walk = [&](const Mc3::Mc3Object& o) {
+    std::function<void(const Mc3::Mc3Object&, int)> walk;
+    walk = [&](const Mc3::Mc3Object& o, int depth) {
+        if (depth > 16) return;  // SYS-W1-07: guard against a cyclic children graph
         const RenderMesh* rm = nullptr;
         switch (o.type) {
         case Mc3::ObjectType::Box:
@@ -1403,9 +1406,9 @@ void SceneRenderer::objectPolyStats(const Mc3::Mc3Object& obj,
             verts += static_cast<int>(rm->positions.size());
             tris  += rm->primitiveCount;
         }
-        for (const auto& child : o.children) if (child) walk(*child);
+        for (const auto& child : o.children) if (child) walk(*child, depth + 1);
     };
-    walk(obj);
+    walk(obj, 0);
 }
 
 void SceneRenderer::scenePolyStats(const Mc3::Mc3Document& doc,
@@ -1413,17 +1416,18 @@ void SceneRenderer::scenePolyStats(const Mc3::Mc3Document& doc,
     totalVerts = 0;
     totalTris  = 0;
 
-    std::function<void(const std::vector<std::shared_ptr<Mc3::Mc3Object>>&)> walk;
-    walk = [&](const std::vector<std::shared_ptr<Mc3::Mc3Object>>& list) {
+    std::function<void(const std::vector<std::shared_ptr<Mc3::Mc3Object>>&, int)> walk;
+    walk = [&](const std::vector<std::shared_ptr<Mc3::Mc3Object>>& list, int depth) {
+        if (depth > 16) return;  // SYS-W1-07: guard against a cyclic children graph
         for (const auto& obj : list) {
-            if (!obj->visible) { walk(obj->children); continue; }
+            if (!obj->visible) { walk(obj->children, depth + 1); continue; }
             int v = 0, t = 0;
             objectPolyStats(*obj, v, t);
             totalVerts += v;
             totalTris  += t;
         }
     };
-    walk(doc.objects);
+    walk(doc.objects, 0);
 }
 
 // ---------------------------------------------------------------------------

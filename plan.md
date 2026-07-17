@@ -389,10 +389,9 @@ Mandated workstream items not tied to a single audit finding.
   `deepCopyObjectAlg`'s `pushUndo()`-time guard in virtually every real
   editing workflow — lower marginal value, not attempted in this pass.
   Verify: `ctest -R mc3_roundtrip`.
-- **SYS-W1-07** `[TODO, smaller than originally scoped — see correction]`
-  `P3` — Guard the editor's `SceneRenderer` traversal against a cyclic
-  `Mc3Object::children` graph, completing `SYS-W1-05`/`SYS-W1-06`'s
-  pattern.
+- **SYS-W1-07** `[DONE]` `P3` — Guard the editor's `SceneRenderer`
+  traversal against a cyclic `Mc3Object::children` graph, completing
+  `SYS-W1-05`/`SYS-W1-06`'s pattern.
   **Correction (2026-07-17):** the export half of this row's original
   scope — `"mc3togltf/src/MeshBuilder.cpp"` — was factually wrong; that
   file has no `children` recursion at all. The actual recursive node-
@@ -402,16 +401,44 @@ Mandated workstream items not tied to a single audit finding.
   kMaxNodeDepth` before this row was even written) — so the export path
   needs no new work. Own mistake, corrected the same session it was made,
   same rigor applied to every other stale/inaccurate claim found today.
-  **Remaining real scope:** `src/MeshCraft/Renderer/SceneRenderer.cpp` has
-  **~11 separate, scattered recursive traversal call sites** across
-  different functions (draw, picking, CSG-cache-key computation,
-  bounding-box computation, visibility skip, ...) — not one shared
-  function the way `deepCopyObjectAlg`/`writeObject` were, so this is
-  materially bigger than the 3 sites already guarded and needs a live
-  CNA/GL context plus real `--screenshot`-based before/after verification
-  per touched function to be confident a uniform depth cap doesn't
-  subtly change legitimate-deep-scene rendering behavior. Not attempted
-  in this pass — genuinely deferred, not stale.
+  **Implementation (2026-07-17):** actually enumerated every recursive
+  `Mc3Object::children` traversal in `SceneRenderer.cpp` (plus its sibling
+  `SceneRenderer_Extrude.cpp` and `CsgCacheAlg.hpp`) instead of estimating
+  from a one-line description. Of the ~11 scattered call sites, **7 were
+  already guarded** (`buildManifoldTree`/`csgSubtreeWarning` at
+  `depth > 12`; `drawObject`/`drawEmissiveObject`/`drawObjectEdges` at
+  `depth > 16`; `csgSubtreeHashAlg` in `CsgCacheAlg.hpp` at `depth > 12`) —
+  only **4 local lambda helpers had no guard at all**:
+  `computeObjectWorldMatrix`'s `find` (world-matrix lookup, used by
+  picking/gizmo placement), `drawCsgGizmos`'s `visit` (CSG gizmo overlay
+  draw), and `objectPolyStats`/`scenePolyStats`'s `walk` (poly-count
+  stats, the latter also being the "visibility skip" traversal). Added a
+  `depth` parameter to each (threaded through the existing
+  `std::function` recursive lambdas) with the same `depth > 16` cap this
+  file already uses for equivalent plain (non-CSG) object-tree recursion,
+  for consistency with the 3 already-guarded sibling functions rather
+  than introducing a different threshold. No public API change — the
+  depth parameter is internal to each function's own recursive helper,
+  not part of any member-function signature. Verify:
+  full rebuild + **125/125 `ctest`**, plus a real live-GL `--screenshot`
+  before/after diff (byte-identical, confirming no behavior change for
+  legitimate non-cyclic scenes) on `test/house.mc3.xml`,
+  `test/csg_cache.mc3.xml` (exercises the CSG gizmo + world-matrix
+  lookup path), and `test/features.mc3.xml`. No new automated cycle-safety
+  test added — per this row's own note and the established
+  `mc3/test/editor_commands_test.cpp` precedent, `SceneRenderer` requires
+  a live `GraphicsDevice` to construct at all, so there is no headless way
+  to build a cyclic-children fixture through this code path; the manual
+  screenshot smoke test is this codebase's existing convention for
+  `SceneRenderer`-level verification (see `differential_geometry_test.cpp`'s
+  file header for the same reasoning).
+  **Discovered but NOT fixed (out of this row's scope, see NEXT.md §4):**
+  while verifying, found that a *fresh* `cmake -S . -B <dir>` reconfigure
+  of this exact tree now fails to build at all — unrelated to this row's
+  code change (reproduces identically with it reverted) and traced to the
+  sibling `../cna` repo's current `develop` HEAD (`58e82fd3`, landed after
+  this session started), not anything in this repo. See NEXT.md for the
+  full writeup; not touched here per `CLAUDE.md`'s CNA boundary.
 
 ### W2 — AI / import sandbox
 - **SYS-W2-01** `[DONE]` `P1` — `Mc3LoadPolicy` threaded through parsing
