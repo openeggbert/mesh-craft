@@ -135,6 +135,54 @@ video subsystem uninitialized); it is out of this repo's scope to fix. See
 `NEXT.md` §4 for the full traced root cause. CLI tools (`mc3togltf`,
 `mc3tomcb`) build the same way and run correctly under Node.
 
+### Offline / vendored build (`SYS-W11-07`)
+
+Every third-party dependency this repo fetches is pinned to an exact
+version tag, so a fully offline build is possible without any code
+change — CMake's built-in `FETCHCONTENT_SOURCE_DIR_<NAME>` cache
+variable (uppercase of the `FetchContent_Declare` name) redirects that
+dependency to a local directory instead of cloning it, verified working
+in this repo directly (`cmake -DFETCHCONTENT_SOURCE_DIR_NLOHMANN_JSON=/path/to/local/checkout ...`
+logs "Using the multi-header code from /path/to/local/checkout/include/",
+no network access attempted). Pre-populate each directory (a plain `git
+clone <repo> --branch <tag>` works) and pass the matching variable at
+configure time:
+
+| Dependency | Repository | Tag | CMake variable |
+|---|---|---|---|
+| tinyxml2 | `leethomason/tinyxml2` | `10.0.0` | `FETCHCONTENT_SOURCE_DIR_TINYXML2` |
+| nlohmann/json | `nlohmann/json` | `v3.11.3` | `FETCHCONTENT_SOURCE_DIR_NLOHMANN_JSON` |
+| Dear ImGui | `ocornut/imgui` | `v1.91.6` | `FETCHCONTENT_SOURCE_DIR_IMGUI` |
+| Manifold | `elalish/manifold` | `v3.0.0` | `FETCHCONTENT_SOURCE_DIR_MANIFOLD` |
+| tinyobjloader | `tinyobjloader/tinyobjloader` | `v2.0.0rc13` | `FETCHCONTENT_SOURCE_DIR_TINYOBJLOADER` |
+| tinygltf | `syoyo/tinygltf` | `v2.9.3` | `FETCHCONTENT_SOURCE_DIR_TINYGLTF` |
+| cpp-httplib (optional, AI feature) | `yhirose/cpp-httplib` | `v0.18.3` | `FETCHCONTENT_SOURCE_DIR_HTTPLIB` |
+
+```sh
+cmake -S . -B b-offline -G Ninja \
+  -DFETCHCONTENT_SOURCE_DIR_TINYXML2=/path/to/tinyxml2 \
+  -DFETCHCONTENT_SOURCE_DIR_NLOHMANN_JSON=/path/to/json \
+  -DFETCHCONTENT_SOURCE_DIR_IMGUI=/path/to/imgui \
+  -DFETCHCONTENT_SOURCE_DIR_MANIFOLD=/path/to/manifold \
+  -DFETCHCONTENT_SOURCE_DIR_TINYOBJLOADER=/path/to/tinyobjloader \
+  -DFETCHCONTENT_SOURCE_DIR_TINYGLTF=/path/to/tinygltf \
+  -DFETCHCONTENT_SOURCE_DIR_HTTPLIB=/path/to/cpp-httplib
+```
+
+Omit any variable for a dependency you're fine fetching normally — they
+mix freely. `../cna`/`../sharp-runtime` are never fetched at all (plain
+sibling-directory `add_subdirectory`, see Prerequisites above), so they
+need no override.
+
+**Not implemented, and not possible from this repo alone:**
+"package-first discovery" (trying `find_package(CNA)` before falling
+back to `add_subdirectory(../cna)`) needs `cna`'s own `CMakeLists.txt`
+to `install()`/export a package config first — it doesn't today (no
+`install(TARGETS ...)`, no generated `CNAConfig.cmake` anywhere in that
+tree). Adding that is a change to `cna` itself, out of bounds per this
+project's own boundary rules (`CLAUDE.md`: "No CNA changes without
+owner permission").
+
 ### Run
 
 ```sh

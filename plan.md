@@ -1002,14 +1002,34 @@ Mandated workstream items not tied to a single audit finding.
   zero findings in `CNA`/`SHARP_RUNTIME`/vendored code. CI wiring stays
   blocked on `AUD-052` (no CI to wire into); usage documented in
   `CONTRIBUTING.md`'s new "Code style" section.
-- **SYS-W11-07** `[TODO, partial]` `P2` — Package-first discovery + offline
-  mode; pin sibling repos to recorded SHAs. (`AUD-057`) The pin/check half is
-  done: commit `d2943e3` added a non-fatal configure-time `git rev-parse`
-  check against two recorded `MESHCRAFT_*_VERIFIED_SHA` values (warns, does
-  not fail, on drift — see AUD-057's status note for why fatal was rejected).
-  Package-first discovery + offline mode (finding sibling repos via an
-  installed package/CMake `find_package` before falling back to relative-path
-  `add_subdirectory`) is still open.
+- **SYS-W11-07** `[DONE, offline half — package-first half genuinely blocked]`
+  `P2` — Package-first discovery + offline mode; pin sibling repos to
+  recorded SHAs. (`AUD-057`) The pin/check half was already done: commit
+  `d2943e3` added a non-fatal configure-time `git rev-parse` check against
+  two recorded `MESHCRAFT_*_VERIFIED_SHA` values (warns, does not fail, on
+  drift — see `AUD-057`'s status note for why fatal was rejected).
+  **Offline mode, implemented (2026-07-17):** every third-party dependency
+  this repo fetches (`tinyxml2`, `nlohmann_json`, `imgui`, `manifold`,
+  `tinyobjloader`, `tinygltf`, `httplib`) was already pinned to an exact
+  `GIT_TAG` — the prerequisite for reliable vendoring — so a fully offline
+  build turned out to already be possible via CMake's built-in
+  `FETCHCONTENT_SOURCE_DIR_<NAME>` cache variable, **zero code change
+  needed**, just documentation. Verified empirically before writing it up
+  (not assumed): configuring `mc3/`'s own `CMakeLists.txt` with
+  `-DFETCHCONTENT_SOURCE_DIR_NLOHMANN_JSON=<local path>` logs "Using the
+  multi-header code from <local path>/include/" with no clone attempted.
+  Documented in `README.md`'s new "Offline / vendored build" section: the
+  full dependency→repo→tag→variable table and a ready-to-copy multi-`-D`
+  configure command. **Package-first discovery (the other half) is
+  genuinely blocked, not just deferred:** `find_package(CNA)` needs `cna`'s
+  own `CMakeLists.txt` to `install()`/export a package config first — it
+  does not today (confirmed: no `install(TARGETS ...)`, no generated
+  `CNAConfig.cmake` anywhere in that tree) — adding that is a change to
+  `cna` itself, out of bounds per `CLAUDE.md`'s "No CNA changes without
+  owner permission." Documented as such in `README.md` rather than left
+  unexplained. Doc-only change; full 125/125 `ctest` (no behavior
+  touched). Verify: read `README.md`'s new section; re-run the empirical
+  `FETCHCONTENT_SOURCE_DIR_...` test above to reconfirm.
 
 ### W12 — Performance baselines
 - **SYS-W12-01** `[DONE, Phase 1 of 2 — see SYS-W12-02]` `P2` — Benchmark

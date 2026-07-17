@@ -290,6 +290,19 @@ this session started with):
   partial informational heuristic covering similar ground). Doc-only;
   125/125 `ctest`.
 
+- **`SYS-W11-07` DONE (offline half) / genuinely blocked (package-first
+  half):** every fetched dependency was already pinned to an exact
+  `GIT_TAG`, so a fully offline build turned out to already work via
+  CMake's built-in `FETCHCONTENT_SOURCE_DIR_<NAME>` override — zero code
+  change, just documentation (verified empirically first: a real
+  `-DFETCHCONTENT_SOURCE_DIR_NLOHMANN_JSON=<path>` configure reused the
+  local dir with no clone attempted). New `README.md` "Offline / vendored
+  build" section with the full dependency table + a ready configure
+  command. Package-first discovery (`find_package(CNA)`) is genuinely
+  blocked, not deferred: `cna` has no `install()`/package-config export to
+  find, and adding one is a `cna`-side change out of bounds per
+  `CLAUDE.md`. Doc-only; 125/125 `ctest`.
+
 **Prior session (11 commits, oldest first, all on `develop`, all pushed):**
 
 - `d9e98d5` — fixed 2 pre-existing XSD-invalid test fixtures (unrelated
@@ -497,7 +510,6 @@ markers that referenced findings already resolved in earlier sessions
    `SYS-W5-04` (central document index/reference resolver — investigated
    this session, real and TODO-correct, but needs its own scoped
    invalidation-analysis pass before implementing, not a quick pick),
-   `SYS-W11-07` (package-first discovery + offline, partial),
    `SYS-W12-02` (new this session — extend
    `SYS-W12-01`'s CLI-level benchmark harness to the 10 categories needing
    in-process instrumentation: mesh-gen, CSG+cache, traversal, picking,
