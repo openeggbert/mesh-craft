@@ -244,6 +244,32 @@ this session started with):
   CLI timing — tracked as new `SYS-W12-02`. Full rebuild + **125/125
   ctest** (new `benchmark` test).
 
+- **`SYS-W5-05` DONE (7th stale finding this session):** duplicate of the
+  already-`[DONE]` `SYS-W11-05` — property-based round-trip
+  (`mc3_random_roundtrip`) and fuzz (`mc3_xml_mutation_fuzz`,
+  `mcb_random_roundtrip`, plus standalone libFuzzer harnesses) coverage
+  already exists and is ctest-registered. No new work.
+- **`SYS-W5-03` investigated, genuinely `BLOCKED` on a human decision (not
+  stale — this one's real):** confirmed with a live test that MC3
+  round-tripping silently drops any unrecognized XML attribute/element
+  (root, object, or a whole unknown element) — by design, not a bug: the
+  parser reads only named known fields, the writer rebuilds the element
+  from scratch emitting only known fields, there's no "preserve what I
+  don't recognize" codepath anywhere. **Needs a human answer:** should MC3
+  preserve unrecognized XML data on round-trip at all, and if so, via a
+  generic attribute bag, raw-node preservation, a hard version gate, or
+  is silently dropping it an accepted, document-and-close limitation? See
+  `plan.md`'s `SYS-W5-03` entry for the full tradeoff writeup. Not
+  implemented unilaterally — this is a real format-design decision, not
+  an engineering judgment call.
+- **`SYS-W5-04` investigated, left `TODO` (correctly, not stale):**
+  confirmed 13 real call sites doing independent O(n) tree-walk id/name
+  lookups with zero caching/indexing anywhere. Deliberately not attempted
+  in this pass — a correct cached index needs careful invalidation
+  analysis across every `document_`-mutating call site first (the same
+  research-before-implementing discipline `SYS-W3-01` used), a bigger,
+  riskier task than fits one "continue working" iteration.
+
 **Prior session (11 commits, oldest first, all on `develop`, all pushed):**
 
 - `d9e98d5` — fixed 2 pre-existing XSD-invalid test fixtures (unrelated
@@ -436,20 +462,29 @@ clang-tidy -p b-release path/to/changed/file.cpp
 _(Everything from the previous revision of this list is done — see §3 for
 the full list of what landed this session. Before starting any task below,
 re-run `git log --oneline -20` and re-check the cited `plan.md` row's
-status yourself: this session found and fixed **6** stale `[TODO]`/status
+status yourself: this session found and fixed **7** stale `[TODO]`/status
 markers that referenced findings already resolved in earlier sessions
 (`AUD-014`, `AUD-015`/`SYS-W6-01`, `SYS-W2-03`, `SYS-W6-03`, `SYS-W14-01`,
-`SYS-W6-02`) — don't assume any remaining `TODO` below is still accurate
-without looking.)_
+`SYS-W6-02`, `SYS-W5-05`) — don't assume any remaining `TODO` below is
+still accurate without looking.)_
+
+0. **`SYS-W5-03` needs a human decision before any implementation** (not
+   an engineering judgment call this session is authorized to make
+   unilaterally): should MC3 preserve unrecognized XML attributes/
+   elements on round-trip, and if so, via which mechanism (generic
+   attribute bag / raw-node preservation / hard version gate), or is
+   silently dropping them an accepted limitation to document and close?
+   See `plan.md`'s `SYS-W5-03` entry for the confirmed-with-evidence
+   current behavior and the tradeoffs of each option.
 
 1. **`plan.md`'s remaining `TODO` `SYS-###` rows**, in no particular
    priority order (pick the highest-value one that fits available time):
    `SYS-W1-06` (new this session — extend `SYS-W1-05`'s cycle-guard
    pattern to the remaining unguarded recursive walks: `Mc3XmlWriter`,
-   `SceneRenderer`, `mc3togltf`'s `MeshBuilder`), `SYS-W5-03` (MC3
-   versioning + unknown element/attribute policy), `SYS-W5-04` (central
-   document index/reference resolver), `SYS-W5-05` (property-based
-   round-trip tests + parser fuzz target), `SYS-W7-01` (truthful glTF
+   `SceneRenderer`, `mc3togltf`'s `MeshBuilder`), `SYS-W5-04` (central
+   document index/reference resolver — investigated this session, real
+   and TODO-correct, but needs its own scoped invalidation-analysis pass
+   before implementing, not a quick pick), `SYS-W7-01` (truthful glTF
    export matrix per model feature), `SYS-W11-07` (package-first
    discovery + offline, partial), `SYS-W12-02` (new this session — extend
    `SYS-W12-01`'s CLI-level benchmark harness to the 10 categories needing

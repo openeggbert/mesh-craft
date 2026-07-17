@@ -602,10 +602,69 @@ Mandated workstream items not tied to a single audit finding.
   runtime test (informational-only tool per its own docstring) — full
   124/124 `ctest` confirms no regression from the doc edits themselves.
   Verify: `python3 test/xsd_docs_diff.py`.
-- **SYS-W5-03** `[TODO]` `P2` — MC3 versioning + unknown element/attribute policy;
-  round-trip must not silently drop unknown data unless policy says so.
+- **SYS-W5-03** `[BLOCKED, needs a human design decision]` `P2` — MC3
+  versioning + unknown element/attribute policy; round-trip must not
+  silently drop unknown data unless policy says so.
+  **Investigation (2026-07-17):** confirmed, with real evidence (this was
+  a genuinely-unverified one-line claim before): a fresh
+  `<mc3 ... totally_unknown_root_attr="keep-me">` root attribute, an
+  unrecognized `<box ... totally_unknown_obj_attr="also-keep-me">` object
+  attribute, and an unrecognized `<totally_unknown_element foo="bar"/>`
+  root child are **all silently dropped** on any load+save round-trip.
+  Root cause, by design (not a bug to patch): `Mc3XmlParser.cpp` reads
+  every field via explicit, named `attr(el, "known_name")` calls (21+
+  call sites just for root/object-level attributes) with no
+  "collect everything I didn't recognize" fallback, and `Mc3XmlWriter.cpp`
+  builds a brand-new `XMLElement` from scratch on save, emitting only
+  known fields via named `SetAttribute()` calls — there is no
+  attribute-preserving codepath anywhere for either layer to lose data
+  from in the first place. (`doc.metadata`/`doc.meta` are a deliberate,
+  narrow, opt-in passthrough for the specific `<metadata>`/`<meta>`
+  elements only — not a generic "preserve anything I don't recognize"
+  mechanism.) **Why this stays `BLOCKED`, not implemented unilaterally:**
+  the task's own title says "policy" for a reason — there are several
+  materially different ways to actually solve this (a generic per-object/
+  per-document "extra attributes" bag akin to `metadata`; raw-XML-node
+  preservation; a hard schema-version gate that rejects unrecognized
+  constructs instead of silently accepting+dropping them; simply
+  documenting current behavior as an accepted limitation and closing this
+  as DEFERRED) with real, different tradeoffs for every future format
+  extension (this project's own `mc3.xsd`, and any external tool/consumer
+  built against MC3) — exactly the kind of "could substantially affect
+  architecture... format data" decision this session's own operating
+  instructions say requires a human, not a unilateral implementation
+  choice. Needs a human answer to: **should MC3 preserve unrecognized
+  XML data on round-trip at all, and if so, via which mechanism?**
 - **SYS-W5-04** `[TODO]` `P2` — Central document index / reference resolver.
-- **SYS-W5-05** `[TODO]` `P2` — Property-based round-trip tests + parser fuzz target.
+  **Investigation (2026-07-17):** confirmed real, not stale — 13 call
+  sites across the codebase (editor commands, animation channel target
+  resolution, `MeshCraftApplication::flatFindById`/`flatFindByName`,
+  `EditorAlgorithms.hpp`'s near-duplicate `flatFindByIdAlg`) each
+  independently do an O(n) recursive tree walk to resolve an id/name to
+  an object, with no caching/indexing anywhere — `R101`'s
+  `Mc3ImportResolver` only resolves CROSS-library (`mc3lib://...`)
+  references, not same-document id lookups. Deliberately left `TODO`
+  rather than attempted here: a real cached id→object index needs correct
+  invalidation on every mutation path in the ~18.5k LOC editor (rename,
+  delete, undo/redo document-swap, merge, import, group/ungroup, ...) —
+  a subtly wrong invalidation rule is a classic stale-cache correctness
+  bug class, and this is a bigger, riskier design+implementation task than
+  fits a single "continue working through the backlog" pass; needs its
+  own scoped session (enumerate every `document_`-mutating call site
+  first, the same way `SYS-W3-01`'s research pass did for
+  `MeshCraftApplication`, before choosing an invalidation strategy).
+- **SYS-W5-05** `[DONE]` `P2` — Property-based round-trip tests + parser fuzz target.
+  **Status note (2026-07-17):** duplicate row — this exact scope is
+  already delivered under `SYS-W11-05` (`[DONE]`): `mc3_random_roundtrip`
+  (seeded-RNG property-based XML round-trip, `mc3/test/random_roundtrip_test.cpp`),
+  `mc3_xml_mutation_fuzz` (`mc3/test/xml_mutation_fuzz_test.cpp`),
+  `mcb_random_roundtrip`, plus standalone libFuzzer harnesses
+  (`mc3/test/fuzz/mc3_xml_libfuzzer.cpp`, `mcb/test/fuzz/mcb_libfuzzer.cpp`)
+  — all 3 ctest-registered entries confirmed present and passing in this
+  session's full test runs. Same class of staleness as the 6 other
+  findings this session (`AUD-014`, `AUD-015`/`SYS-W6-01`, `SYS-W2-03`,
+  `SYS-W6-03`, `SYS-W14-01`, `SYS-W6-02`). No new work; verify: `ctest -R
+  'random_roundtrip|xml_mutation_fuzz'`.
 
 ### W6 — MCB hardening
 - **SYS-W6-01** `[DONE]` `P2` — Tag/type validation on the hot read path
