@@ -401,6 +401,14 @@ Mandated workstream items not tied to a single audit finding.
   matching the single-domain-extraction idiom `KeybindingManager`
   established, to be picked up by their own future subsystem extractions
   rather than folded into Preferences.
+  **`EditorViewport` deletion executed (2026-07-17):** removed
+  `include/MeshCraft/Editor/EditorViewport.hpp` and
+  `src/MeshCraft/Editor/EditorViewport.cpp` outright (`git rm`) — confirmed
+  zero references anywhere else in the tree first
+  (`grep -rln EditorViewport`). Sources are `file(GLOB_RECURSE ...)`-picked
+  up in `CMakeLists.txt`, so no `CMakeLists.txt` edit was needed, just a
+  reconfigure (`cmake .`) before the next build. Full rebuild + 123/123
+  `ctest`, zero new warnings.
 
 ### W5 — MC3 governance
 - **SYS-W5-01** `[DONE]` `P2` — Machine-readable field matrix, `test/field_matrix.py`,

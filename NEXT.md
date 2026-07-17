@@ -134,6 +134,13 @@ this session started with):
   `.children` (the same scope `flatFindById` searches) and emits one
   warning-level `Mc3Validation` diagnostic per duplicated id. Parsing stays
   fully permissive. 4 new assertions in `mc3_duplicate_ids_test.cpp`.
+- **`EditorViewport` deleted:** removed the abandoned-scaffolding stub
+  (`include/MeshCraft/Editor/EditorViewport.hpp` +
+  `src/MeshCraft/Editor/EditorViewport.cpp`) outright — zero references
+  anywhere else, confirmed before deleting. Sources are globbed, so a
+  `cmake .` reconfigure (not a `CMakeLists.txt` edit) was needed to pick up
+  the removal. `camera_`/`gizmo_` remain separate `MeshCraftApplication`
+  members, unchanged.
 
 **Prior session (11 commits, oldest first, all on `develop`, all pushed):**
 
@@ -210,11 +217,11 @@ the decisions block at the top of this file and §8 below.
   HTTP thread is never joined at shutdown (`AUD-014`) — doesn't currently
   cause a hang (deterministic shutdown is otherwise handled) but is a loose
   end.
-- **Incomplete, decision made, execution pending:** `Editor::EditorViewport`
-  (bundles a camera + gizmo + `pickRay()`) is dead code — added as an
-  explicit "stub" in commit `580105d`, never included by
-  `MeshCraftApplication.hpp`, never instantiated. **Decided 2026-07-17:
-  delete** (see top-of-file decisions block) — not yet executed, see §8.
+- **Resolved:** `Editor::EditorViewport`'s long-open finish-or-delete
+  decision (bundled a camera + gizmo + `pickRay()`, added as an explicit
+  "stub" in commit `580105d`, never wired in) — **deleted 2026-07-17**
+  (see top-of-file decisions block). `camera_`/`gizmo_` remain separate
+  `MeshCraftApplication` members.
 - **Resolved:** duplicate object IDs are proven safe at the `mc3` library
   level (no crash/data loss) and now surface a warning-level
   `Mc3Validation` diagnostic (decided + implemented 2026-07-17,
@@ -328,22 +335,12 @@ clang-tidy -p b-release path/to/changed/file.cpp
 
 ## 8. Next smallest tasks
 
-_(Tasks 1-3 from the previous revision of this list — re-check + close
-`field_matrix`, and the duplicate-ID validation warning — are done; see
-§3's `SYS-W6-04`/`SYS-W1-04` entries.)_
+_(Tasks 1-4 from the previous revision of this list — re-check + close
+`field_matrix`, the duplicate-ID validation warning, and deleting
+`EditorViewport` — are all done; see §3's `SYS-W6-04`/`SYS-W1-04` entries
+and `plan.md`'s `SYS-W3-01` entry.)_
 
-1. **Delete `EditorViewport`** (decision made 2026-07-17, see top-of-file
-   decisions block).
-   Goal: remove the dead-code stub outright — it's abandoned scaffolding
-   with zero call sites, not a partially-finished feature.
-   Files: `include/MeshCraft/Editor/EditorViewport.hpp`,
-   `src/MeshCraft/Editor/EditorViewport.cpp` (delete both), root
-   `CMakeLists.txt` (remove their build entries), `plan.md` (`SYS-W3-01`
-   roadmap — mark this sub-item done).
-   Verify: full rebuild + `ctest` (nothing should reference the deleted
-   files — confirm with `grep -rn EditorViewport` before deleting).
-
-2. **`SYS-W3-01` Phase 2: extract narrow `Preferences`** (decision made
+1. **`SYS-W3-01` Phase 2: extract narrow `Preferences`** (decision made
    2026-07-17: narrow, see top-of-file decisions block).
    Goal: new `Editor::Preferences` class owns only `prefTheme_`/
    `prefsOpen_`/`applyTheme()`. `autoSaveInterval_`/`snapTranslate_`/
@@ -358,7 +355,7 @@ _(Tasks 1-3 from the previous revision of this list — re-check + close
    Verify: full rebuild + `ctest`; a manual load/save round-trip test
    (following `keybinding_manager_test.cpp`'s pattern) for the new class.
 
-3. **`AUD-036c`/`SYS-W9-03`: restore selection on undo/redo** (decision
+2. **`AUD-036c`/`SYS-W9-03`: restore selection on undo/redo** (decision
    made 2026-07-17: yes, restore — see top-of-file decisions block).
    Goal: `performUndo()`/`performRedo()` (`MeshCraftApplication_Commands.cpp`)
    currently unconditionally `selection_.clear()`; change to restore the
@@ -371,7 +368,7 @@ _(Tasks 1-3 from the previous revision of this list — re-check + close
    (extend with a selection-survives-undo/redo case).
    Verify: `ctest -R undo_gesture_frame`; full `ctest` green.
 
-4. **Investigate `AUD-014`: join the `AiAssistant` background thread at
+3. **Investigate `AUD-014`: join the `AiAssistant` background thread at
    shutdown.**
    Goal: confirm whether the detached thread noted in §6 can be safely
    joined (with a bounded timeout, reusing the existing
