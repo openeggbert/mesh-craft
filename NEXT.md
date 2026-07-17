@@ -66,8 +66,8 @@ one item remains, itself broken into phases (see §4).
   ```bash
   cmake -S . -B b-release && cmake --build b-release -j"$(nproc)"
   ```
-- **Tests:** **123 / 123 `ctest` passing.** (`field_matrix` now passes —
-  see §3, `SYS-W6-04`.)
+- **Tests:** **124 / 124 `ctest` passing.** (`field_matrix` now passes —
+  see §3, `SYS-W6-04`; new `preferences` test added this session.)
 - **CLI/tools/apps/libraries currently available:**
   - `MeshCraft` — the interactive editor (`./b-release/MeshCraft
     scene.mc3.xml`, or `--screenshot out.png` / `--export out.glb` for
@@ -141,6 +141,15 @@ this session started with):
   `cmake .` reconfigure (not a `CMakeLists.txt` edit) was needed to pick up
   the removal. `camera_`/`gizmo_` remain separate `MeshCraftApplication`
   members, unchanged.
+- **`SYS-W3-01` Phase 2 (narrow) DONE:** extracted `Editor::Preferences`
+  (theme + Preferences-dialog-open state + `applyTheme()` only —
+  `autoSaveInterval_`/`snap*`/`gridSpacing_` deliberately stay on
+  `MeshCraftApplication`, per the narrow-scope decision).
+  `loadPrefs()`/`savePrefs()` stay on `MeshCraftApplication` too, since
+  they persist the theme together with those cross-domain fields in one
+  prefs file. New `preferences_test` (no coverage existed before). Full
+  rebuild + **124/124 ctest** (new `preferences` test); manual
+  `--screenshot` smoke test confirms the app still boots/renders.
 
 **Prior session (11 commits, oldest first, all on `develop`, all pushed):**
 
@@ -335,27 +344,13 @@ clang-tidy -p b-release path/to/changed/file.cpp
 
 ## 8. Next smallest tasks
 
-_(Tasks 1-4 from the previous revision of this list — re-check + close
-`field_matrix`, the duplicate-ID validation warning, and deleting
-`EditorViewport` — are all done; see §3's `SYS-W6-04`/`SYS-W1-04` entries
-and `plan.md`'s `SYS-W3-01` entry.)_
+_(Tasks 1-5 from the previous revision of this list — re-check + close
+`field_matrix`, the duplicate-ID validation warning, deleting
+`EditorViewport`, and `SYS-W3-01` Phase 2 (narrow `Preferences`) — are all
+done; see §3's `SYS-W6-04`/`SYS-W1-04` entries and `plan.md`'s `SYS-W3-01`
+entry.)_
 
-1. **`SYS-W3-01` Phase 2: extract narrow `Preferences`** (decision made
-   2026-07-17: narrow, see top-of-file decisions block).
-   Goal: new `Editor::Preferences` class owns only `prefTheme_`/
-   `prefsOpen_`/`applyTheme()`. `autoSaveInterval_`/`snapTranslate_`/
-   `snapRotate_`/`snapScale_`/`gridSpacing_` stay on `MeshCraftApplication`
-   for now (their own future extraction), following the
-   `KeybindingManager` extraction idiom (self-contained value member,
-   near-zero-arg constructor).
-   Files: new `include/MeshCraft/Editor/Preferences.hpp` +
-   `src/MeshCraft/Editor/Preferences.cpp`, `include/MeshCraft/MeshCraftApplication.hpp`,
-   `src/MeshCraft/MeshCraftApplication_FileOps.cpp` (`loadPrefs`/
-   `savePrefs`/`applyTheme`), new `preferences_test`.
-   Verify: full rebuild + `ctest`; a manual load/save round-trip test
-   (following `keybinding_manager_test.cpp`'s pattern) for the new class.
-
-2. **`AUD-036c`/`SYS-W9-03`: restore selection on undo/redo** (decision
+1. **`AUD-036c`/`SYS-W9-03`: restore selection on undo/redo** (decision
    made 2026-07-17: yes, restore — see top-of-file decisions block).
    Goal: `performUndo()`/`performRedo()` (`MeshCraftApplication_Commands.cpp`)
    currently unconditionally `selection_.clear()`; change to restore the
@@ -368,7 +363,7 @@ and `plan.md`'s `SYS-W3-01` entry.)_
    (extend with a selection-survives-undo/redo case).
    Verify: `ctest -R undo_gesture_frame`; full `ctest` green.
 
-3. **Investigate `AUD-014`: join the `AiAssistant` background thread at
+2. **Investigate `AUD-014`: join the `AiAssistant` background thread at
    shutdown.**
    Goal: confirm whether the detached thread noted in §6 can be safely
    joined (with a bounded timeout, reusing the existing

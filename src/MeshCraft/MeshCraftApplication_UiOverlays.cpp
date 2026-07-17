@@ -1896,9 +1896,9 @@ void MeshCraftApplication::drawDialogs()
     // -----------------------------------------------------------------------
     // Preferences dialog (F5)
     // -----------------------------------------------------------------------
-    if (prefsOpen_) {
+    if (prefs_.windowOpen()) {
         ImGui::OpenPopup("Preferences##prefsdlg");
-        prefsOpen_ = false;
+        prefs_.setWindowOpen(false);
     }
     if (ImGui::BeginPopupModal("Preferences##prefsdlg", nullptr,
                                ImGuiWindowFlags_AlwaysAutoResize)) {
@@ -1941,9 +1941,9 @@ void MeshCraftApplication::drawDialogs()
             static const char* kThemes[] = { "Dark", "Light", "Classic" };
             for (int i = 0; i < 3; ++i) {
                 if (i > 0) ImGui::SameLine();
-                bool active = (prefTheme_ == i);
+                bool active = (prefs_.theme() == i);
                 if (active) ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.20f, 0.45f, 0.20f, 1.f));
-                if (ImGui::SmallButton(kThemes[i])) { prefTheme_ = i; applyTheme(); }
+                if (ImGui::SmallButton(kThemes[i])) { prefs_.setTheme(i); prefs_.applyTheme(); }
                 if (active) ImGui::PopStyleColor();
             }
         }

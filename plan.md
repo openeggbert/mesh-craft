@@ -409,6 +409,28 @@ Mandated workstream items not tied to a single audit finding.
   up in `CMakeLists.txt`, so no `CMakeLists.txt` edit was needed, just a
   reconfigure (`cmake .`) before the next build. Full rebuild + 123/123
   `ctest`, zero new warnings.
+  **Phase 2 (narrow) DONE (2026-07-17):** extracted `Editor::Preferences`
+  (`include/MeshCraft/Editor/Preferences.hpp` +
+  `src/MeshCraft/Editor/Preferences.cpp`) owning exactly `prefTheme_`
+  (renamed `theme_`, via `theme()`/`setTheme()`), `prefsOpen_` (renamed
+  `windowOpen_`, via `windowOpen()`/`setWindowOpen()`), and `applyTheme()` —
+  and nothing else, per the narrow-scope decision. `MeshCraftApplication`'s
+  `loadPrefs()`/`savePrefs()` stay put (they persist `prefs_.theme()`
+  together with `autoSaveInterval_`/`snapTranslate_`/`snapRotate_`/
+  `snapScale_`/`gridSpacing_` in one prefs file via `PrefsAlg` — splitting
+  that shared load/save mechanism was explicitly out of scope for this
+  narrow extraction). Updated all 3 call sites
+  (`MeshCraftApplication_UiOverlays.cpp`'s Preferences dialog + theme
+  buttons, `MeshCraftApplication_UiMenuBar.cpp`'s Help menu item,
+  `MeshCraftApplication_FileOps.cpp`'s `loadPrefs()`/`savePrefs()`). New
+  `preferences_test` (no coverage existed for this subsystem before):
+  default theme/windowOpen values, accessor round-trips, and — since
+  `applyTheme()`'s ImGui side effect can't be asserted by inspecting a
+  return value — a differential check that `theme()` 0/1/2 each apply a
+  visibly different `ImGuiCol_WindowBg`, plus an out-of-range value falling
+  back to Dark instead of crashing. Full rebuild + 124/124 `ctest` (new
+  `preferences` test registered); manual `--screenshot` smoke test confirms
+  the app still boots, loads prefs, and renders after the refactor.
 
 ### W5 — MC3 governance
 - **SYS-W5-01** `[DONE]` `P2` — Machine-readable field matrix, `test/field_matrix.py`,

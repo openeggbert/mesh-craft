@@ -672,15 +672,11 @@ void MeshCraftApplication::mergeSceneFromFile(const std::string& path) {
 }
 
 // ---------------------------------------------------------------------------
-// H7: Preferences — load / save / apply theme
+// H7: Preferences — load / save (theme itself is Editor::Preferences,
+// SYS-W3-01 Phase 2; load/save stay here since they persist prefs_.theme()
+// together with the cross-domain autoSaveInterval_/snap*/gridSpacing_
+// fields in one prefs file via PrefsAlg)
 // ---------------------------------------------------------------------------
-void MeshCraftApplication::applyTheme() {
-    switch (prefTheme_) {
-    case 1:  ImGui::StyleColorsLight();   break;
-    case 2:  ImGui::StyleColorsClassic(); break;
-    default: ImGui::StyleColorsDark();    break;
-    }
-}
 
 // AUD-031: previously a separate hand-copied implementation of
 // loadPrefsAlg/savePrefsAlg (EditorAlgorithms.hpp) with zero production
@@ -699,15 +695,15 @@ void MeshCraftApplication::loadPrefs() {
     p.snapRotate       = snapRotate_;
     p.snapScale        = snapScale_;
     p.gridSpacing       = gridSpacing_;
-    p.theme             = prefTheme_;
+    p.theme             = prefs_.theme();
     loadPrefsAlg(prefsPath(), p);
     autoSaveInterval_ = p.autoSaveInterval;
     snapTranslate_    = p.snapTranslate;
     snapRotate_       = p.snapRotate;
     snapScale_        = p.snapScale;
     gridSpacing_      = p.gridSpacing;
-    prefTheme_        = p.theme;
-    applyTheme();
+    prefs_.setTheme(p.theme);
+    prefs_.applyTheme();
 }
 
 void MeshCraftApplication::savePrefs() {
@@ -720,7 +716,7 @@ void MeshCraftApplication::savePrefs() {
     p.snapRotate       = snapRotate_;
     p.snapScale        = snapScale_;
     p.gridSpacing      = gridSpacing_;
-    p.theme            = prefTheme_;
+    p.theme            = prefs_.theme();
     savePrefsAlg(path, p);
 }
 

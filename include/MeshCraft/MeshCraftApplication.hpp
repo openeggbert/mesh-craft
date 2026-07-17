@@ -6,6 +6,7 @@
 #include "MeshCraft/Editor/EditorCamera.hpp"
 #include "MeshCraft/Editor/EditorTool.hpp"
 #include "MeshCraft/Editor/KeybindingManager.hpp"
+#include "MeshCraft/Editor/Preferences.hpp"
 #include "MeshCraft/Editor/SelectionManager.hpp"
 #include "MeshCraft/Editor/TransformGizmo.hpp"
 #include "MeshCraft/Mc3/Mc3Animation.hpp"
@@ -618,10 +619,11 @@ private:
     void saveMacro(const std::string& path);
     void loadMacro(const std::string& path);
 
-    // Preferences dialog (H7)
-    bool prefsOpen_{false};
-    int  prefTheme_{0};   // 0=Dark, 1=Light, 2=Classic
-    void applyTheme();
+    // Preferences dialog (H7, SYS-W3-01 Phase 2: theme + window-open state
+    // extracted into Editor::Preferences; loadPrefs()/savePrefs() stay here
+    // since they persist prefs_.theme() together with the cross-domain
+    // autoSaveInterval_/snap*/gridSpacing_ fields below in one prefs file)
+    Editor::Preferences prefs_;
     void loadPrefs();
     void savePrefs();
 

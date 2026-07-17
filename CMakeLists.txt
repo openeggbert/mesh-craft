@@ -586,6 +586,20 @@ if(MESH_CRAFT_BUILD_TESTING AND UNIX AND NOT ANDROID AND NOT EMSCRIPTEN)
     add_test(NAME keybinding_manager COMMAND keybinding_manager_test)
     set_tests_properties(keybinding_manager PROPERTIES TIMEOUT 15 LABELS "unit")
 
+    # SYS-W3-01 Phase 2 (narrow): Editor::Preferences, extracted from
+    # MeshCraftApplication (H7). No test existed for this subsystem before
+    # the extraction. Needs only ImGui's core (no CNA/window/GL context),
+    # matching undo_gesture_frame_test's minimal-dependency pattern above.
+    add_executable(preferences_test
+        ${CMAKE_CURRENT_SOURCE_DIR}/test/preferences_test.cpp
+        ${CMAKE_CURRENT_SOURCE_DIR}/src/MeshCraft/Editor/Preferences.cpp)
+    target_include_directories(preferences_test PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/include)
+    target_link_libraries(preferences_test PRIVATE imgui)
+    target_compile_features(preferences_test PRIVATE cxx_std_23)
+    add_test(NAME preferences COMMAND preferences_test)
+    set_tests_properties(preferences PROPERTIES TIMEOUT 15 LABELS "unit")
+
     # Pure unit test: ObjectType <-> display-name round-trip. Header-only.
     # Regression guard for the Torus/Capsule/Disk/Grid/IcoSphere -> "Object"
     # mislabel and the lossy macro round-trip.
