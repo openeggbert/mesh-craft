@@ -364,16 +364,35 @@ Mandated workstream items not tied to a single audit finding.
   documented behavior rather than a "policy" requiring a product decision.
   Full rebuild + 124/124 `ctest`; manual `--screenshot`/`--export` smoke
   tests. Verify: `ctest -R mc3_commands`.
-- **SYS-W1-06** `[TODO]` `P3` — Extend `SYS-W1-05`'s cycle-guard pattern to
-  the remaining unguarded recursive walks over `Mc3Object::children`:
-  `findParentListAlg`/`removeFromListAlg` (`EditorAlgorithms.hpp`),
-  `Mc3XmlWriter::writeObject`, the editor's `SceneRenderer` traversal,
-  `mc3togltf/src/MeshBuilder.cpp`. Lower priority than the two guarded in
-  `SYS-W1-05` since those two are the highest-frequency/most directly
-  user-triggered paths; these remaining ones would still eventually
-  surface a cycle (just via a less-immediate operation — Delete,
-  Save/Export, or opening a scene with a cyclic definition) rather than
-  the very next click/edit.
+- **SYS-W1-06** `[DONE, 3 of 4 — see SYS-W1-07]` `P3` — Extend
+  `SYS-W1-05`'s cycle-guard pattern to the remaining unguarded recursive
+  walks over `Mc3Object::children`.
+  **Implementation (2026-07-17):** added the same 256-deep
+  `std::runtime_error`-throwing guard to `findParentListAlg`/
+  `removeFromListAlg` (`EditorAlgorithms.hpp` — used by Delete and
+  reparenting operations) and `Mc3XmlWriter::writeObject`
+  (`mc3/src/Mc3XmlWriter.cpp` — the actual Save/Export path, arguably the
+  single most consequential place for a cyclic document to silently hang
+  or crash instead of failing cleanly). New test
+  `testSaveRejectsCyclicChildrenInsteadOfCrashing`
+  (`mc3/test/roundtrip_test.cpp`) confirms `Mc3Document::saveToFile()`
+  throws a catchable, named error instead of stack-overflow-crashing on a
+  hand-built 2-cycle. Full rebuild + 125/125 `ctest` (stable across 3
+  repeated runs); manual `--screenshot` smoke test. **Not done — the
+  editor's `SceneRenderer` traversal and `mc3togltf/src/MeshBuilder.cpp`
+  remain unguarded**, tracked as new `SYS-W1-07`: both need a live
+  CNA/GL or Manifold context to exercise properly (can't be verified with
+  a quick headless unit test the way the three guarded here could), and a
+  cycle surviving all the way to Render/Export would already have been
+  caught earlier by `deepCopyObjectAlg`'s `pushUndo()`-time guard in
+  virtually every real editing workflow — lower marginal value, not
+  attempted in this pass. Verify: `ctest -R mc3_roundtrip`.
+- **SYS-W1-07** `[TODO]` `P3` — Guard the editor's `SceneRenderer`
+  traversal and `mc3togltf/src/MeshBuilder.cpp` against a cyclic
+  `Mc3Object::children` graph, completing `SYS-W1-05`/`SYS-W1-06`'s
+  pattern. Needs a live CNA/GL (`SceneRenderer`) or Manifold
+  (`MeshBuilder.cpp`) context to test properly, unlike the three sites
+  already guarded (pure headless unit tests).
 
 ### W2 — AI / import sandbox
 - **SYS-W2-01** `[DONE]` `P1` — `Mc3LoadPolicy` threaded through parsing

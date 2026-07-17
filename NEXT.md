@@ -267,6 +267,18 @@ this session started with):
   research-before-implementing discipline `SYS-W3-01` used), a bigger,
   riskier task than fits one "continue working" iteration.
 
+- **`SYS-W1-06` DONE (3 of 4 remaining walkers guarded):** extended
+  `SYS-W1-05`'s 256-deep cycle guard to `findParentListAlg`/
+  `removeFromListAlg` (Delete/reparenting) and — most importantly —
+  `Mc3XmlWriter::writeObject`, the actual Save/Export path. New test
+  confirms `saveToFile()` throws a clean error instead of crashing on a
+  cyclic document. `SceneRenderer`/`mc3togltf`'s `MeshBuilder.cpp` remain
+  unguarded (need a live GL/Manifold context to test properly, lower
+  marginal value since a cycle would already be caught earlier by
+  `deepCopyObjectAlg` in virtually every real workflow) — tracked as new
+  `SYS-W1-07`. Full rebuild + 125/125 `ctest` (stable across repeats);
+  manual `--screenshot` smoke test.
+
 **Prior session (11 commits, oldest first, all on `develop`, all pushed):**
 
 - `d9e98d5` — fixed 2 pre-existing XSD-invalid test fixtures (unrelated
@@ -467,14 +479,16 @@ still accurate without looking.)_
 
 1. **`plan.md`'s remaining `TODO` `SYS-###` rows**, in no particular
    priority order (pick the highest-value one that fits available time):
-   `SYS-W1-06` (new this session — extend `SYS-W1-05`'s cycle-guard
-   pattern to the remaining unguarded recursive walks: `Mc3XmlWriter`,
-   `SceneRenderer`, `mc3togltf`'s `MeshBuilder`), `SYS-W5-04` (central
-   document index/reference resolver — investigated this session, real
-   and TODO-correct, but needs its own scoped invalidation-analysis pass
-   before implementing, not a quick pick), `SYS-W7-01` (truthful glTF
-   export matrix per model feature), `SYS-W11-07` (package-first
-   discovery + offline, partial), `SYS-W12-02` (new this session — extend
+   `SYS-W1-07` (new this session — guard `SceneRenderer`/`mc3togltf`'s
+   `MeshBuilder.cpp` against a cyclic `Mc3Object::children` graph,
+   completing `SYS-W1-05`/`06`'s pattern; needs a live GL/Manifold
+   context to test properly, unlike the 3 sites already guarded),
+   `SYS-W5-04` (central document index/reference resolver — investigated
+   this session, real and TODO-correct, but needs its own scoped
+   invalidation-analysis pass before implementing, not a quick pick),
+   `SYS-W7-01` (truthful glTF export matrix per model feature),
+   `SYS-W11-07` (package-first discovery + offline, partial),
+   `SYS-W12-02` (new this session — extend
    `SYS-W12-01`'s CLI-level benchmark harness to the 10 categories needing
    in-process instrumentation: mesh-gen, CSG+cache, traversal, picking,
    undo snapshot, texture processing, animation eval, registry, startup,

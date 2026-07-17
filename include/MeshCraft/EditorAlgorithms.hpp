@@ -66,10 +66,28 @@ inline std::shared_ptr<Mc3::Mc3Object> deepCopyObjectAlg(const Mc3::Mc3Object& s
 
 // ── Tree helpers ──────────────────────────────────────────────────────────────
 
+// SYS-W1-06: same cycle-protection rationale as deepCopyObjectAlg's own
+// comment above -- a cyclic Mc3Object::children graph (only possible via
+// C++-API misuse, never from XML parsing) would otherwise recurse forever
+// here too whenever `target` isn't found in the cyclic portion.
 inline std::vector<std::shared_ptr<Mc3::Mc3Object>>*
 findParentListAlg(std::vector<std::shared_ptr<Mc3::Mc3Object>>& list,
                   const Mc3::Mc3Object* target)
 {
+    static thread_local int depth = 0;
+    struct DepthGuard {
+        DepthGuard() {
+            if (++depth > 256) {
+                --depth;
+                throw std::runtime_error(
+                    "findParentListAlg: object nesting exceeds 256 levels (cyclic "
+                    "Mc3Object::children graph?)");
+            }
+        }
+        ~DepthGuard() { --depth; }
+        DepthGuard(const DepthGuard&) = delete;
+    } guard;
+
     for (auto& obj : list) {
         if (obj.get() == target) return &list;
         if (!obj->children.empty()) {
@@ -84,9 +102,24 @@ findParentListAlg(std::vector<std::shared_ptr<Mc3::Mc3Object>>& list,
 // it appears. (AUD-033: this used to note "mirrors removeFromList() in
 // MeshCraftPrivate.hpp" -- that byte-identical duplicate was deleted;
 // this is now the only implementation.)
+// SYS-W1-06: same cycle-protection rationale as findParentListAlg above.
 inline void removeFromListAlg(std::vector<std::shared_ptr<Mc3::Mc3Object>>& list,
                               const Mc3::Mc3Object* target)
 {
+    static thread_local int depth = 0;
+    struct DepthGuard {
+        DepthGuard() {
+            if (++depth > 256) {
+                --depth;
+                throw std::runtime_error(
+                    "removeFromListAlg: object nesting exceeds 256 levels (cyclic "
+                    "Mc3Object::children graph?)");
+            }
+        }
+        ~DepthGuard() { --depth; }
+        DepthGuard(const DepthGuard&) = delete;
+    } guard;
+
     list.erase(std::remove_if(list.begin(), list.end(),
         [&](const auto& o){ return o.get() == target; }), list.end());
     for (auto& obj : list)

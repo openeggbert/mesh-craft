@@ -3522,6 +3522,40 @@ static void testNonAsciiObjectNameRoundtrip() {
               "non-ascii name: UTF-8 name preserved exactly");
 }
 
+// SYS-W1-06: Mc3Object::children has no built-in cycle protection (only
+// XML parsing structurally can't produce one -- a document built/mutated
+// via the C++ API could, e.g. obj->children.push_back(obj)). Confirms
+// Mc3XmlWriter::writeObject's depth guard turns what would otherwise be an
+// unbounded-recursion stack-overflow crash on save into a clean,
+// catchable std::runtime_error.
+static void testSaveRejectsCyclicChildrenInsteadOfCrashing() {
+    Mc3Document doc;
+    auto a = std::make_shared<Mc3Object>();
+    a->id = "a"; a->type = ObjectType::Box; a->primitive = Mc3Primitive{};
+    auto b = std::make_shared<Mc3Object>();
+    b->id = "b"; b->type = ObjectType::Box; b->primitive = Mc3Primitive{};
+    a->children.push_back(b);
+    b->children.push_back(a); // 2-cycle
+    doc.objects.push_back(a);
+
+    auto p = tmpPath();
+    bool threw = false;
+    std::string what;
+    try {
+        doc.saveToFile(p);
+    } catch (const std::exception& e) {
+        threw = true;
+        what = e.what();
+    }
+    std::filesystem::remove(p);
+
+    CHECK(threw,
+          "saveToFile: a cyclic children graph throws a catchable exception "
+          "instead of crashing (stack overflow) on save");
+    CHECK(what.find("256") != std::string::npos,
+          "saveToFile: the exception names the nesting-depth limit that was hit");
+}
+
 // ---------------------------------------------------------------------------
 
 int main(int argc, char* argv[]) {
@@ -3599,6 +3633,7 @@ int main(int argc, char* argv[]) {
     testUtf8FilenameRoundtrip();
     testPathWithSpacesRoundtrip();
     testNonAsciiObjectNameRoundtrip();
+    testSaveRejectsCyclicChildrenInsteadOfCrashing();
     testGoldenFileBasicScene();
 
     if (argc >= 2) {

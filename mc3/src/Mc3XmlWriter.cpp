@@ -71,6 +71,24 @@ static XMLElement* writeObject(XMLDocument& doc, const std::shared_ptr<Mc3Object
 static XMLElement* writeObject(XMLDocument& xmlDoc, const std::shared_ptr<Mc3Object>& obj) {
     if (!obj) return nullptr;
 
+    // SYS-W1-06: Mc3Object::children has no built-in cycle protection (only
+    // XML parsing structurally can't produce one -- a document built/
+    // mutated via the C++ API could). 256 matches mc3togltf/src/
+    // GltfExporter.cpp's kMaxNodeDepth precedent.
+    static thread_local int depth = 0;
+    struct DepthGuard {
+        DepthGuard() {
+            if (++depth > 256) {
+                --depth;
+                throw std::runtime_error(
+                    "Mc3XmlWriter::writeObject: object nesting exceeds 256 levels "
+                    "(cyclic Mc3Object::children graph?)");
+            }
+        }
+        ~DepthGuard() { --depth; }
+        DepthGuard(const DepthGuard&) = delete;
+    } depthGuard;
+
     const char* tag = "group";
     switch (obj->type) {
     case ObjectType::Box:          tag = "box";         break;
