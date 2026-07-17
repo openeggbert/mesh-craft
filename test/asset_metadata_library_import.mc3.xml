@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  SYS-W1-04 field_matrix closure fixture: exercises the XSD schema added for
+  R111 assetMetadata, R103 object script, and R110/R101 library/imports;
+  none of these had any XSD coverage before this fixture (any document
+  using them would have failed test/validate_xsd.py outright).
+-->
+<mc3 version="0.3" model="AssetMetadataLibraryImportFixture">
+  <library namespace="test-library" version="1.0.0" hash="sha256:deadbeef"/>
+  <imports>
+    <import namespace="city" source="mc3lib://city-core@3.2.1" hash="sha256:cafef00d"/>
+  </imports>
+  <scripts>
+    <script id="onOpenDoor" type="lua">print("open")</script>
+  </scripts>
+  <definitions>
+    <definition id="chair_def">
+      <box name="Chair" size="0.5 0.9 0.5" script="onOpenDoor">
+        <assetMetadata category="furniture" subcategory="chair" facing="-Z"
+                        collision_proxy="box" shadow_policy="cast_receive"
+                        license="CC-BY-4.0" provenance="hand-authored"
+                        source="lua.object.chair.simple" version="1.2.3"
+                        instancing_eligible="false" max_visibility_distance="250"
+                        selection_weight="2.5" nominal_size="0.5 0.9 0.5"
+                        bounds_min="-0.25 0 -0.25" bounds_max="0.25 0.9 0.25"
+                        clearance_volume="0.8 1.2 0.8">
+          <semanticTags>
+            <tag value="seating"/>
+            <tag value="wood"/>
+          </semanticTags>
+          <styleTags>
+            <tag value="rustic"/>
+          </styleTags>
+          <materialSlots>
+            <tag value="seat"/>
+            <tag value="legs"/>
+          </materialSlots>
+          <sockets>
+            <socket name="seat_top" position="0 0.45 0"/>
+          </sockets>
+          <lods>
+            <lod tier="near" definition="chair.oak.lod0"/>
+            <lod tier="far" definition="chair.oak.lod1"/>
+          </lods>
+        </assetMetadata>
+      </box>
+    </definition>
+  </definitions>
+  <objects>
+    <instance id="chair1" definition="chair_def" position="0 0 0"/>
+  </objects>
+</mc3>

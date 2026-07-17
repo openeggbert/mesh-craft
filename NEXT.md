@@ -66,9 +66,8 @@ one item remains, itself broken into phases (see §4).
   ```bash
   cmake -S . -B b-release && cmake --build b-release -j"$(nproc)"
   ```
-- **Tests:** **122 / 123 `ctest` passing.** The one failure is
-  `field_matrix` — see §4, not a regression from anything tracked in this
-  repo's own backlog.
+- **Tests:** **123 / 123 `ctest` passing.** (`field_matrix` now passes —
+  see §3, `SYS-W6-04`.)
 - **CLI/tools/apps/libraries currently available:**
   - `MeshCraft` — the interactive editor (`./b-release/MeshCraft
     scene.mc3.xml`, or `--screenshot out.png` / `--export out.glb` for
@@ -97,11 +96,40 @@ one item remains, itself broken into phases (see §4).
   - CI: present and believed correct (`.github_/workflows/ci.yml`) but
     parked under a non-standard directory name and never actually runs
     (owner-gated — needs a workflow-scoped push token).
-  - `field_matrix` ctest gate: currently red (see §4).
 
 ## 3. Recent changes
 
-This session (11 commits, oldest first, all on `develop`, all pushed):
+**New autonomous session, 2026-07-17** (continues from the session below;
+see the top-of-file decisions block for the 4 human-authorized decisions
+this session started with):
+
+- Recorded the 4 decisions in `plan.md` (`SYS-W1-04`, `SYS-W3-01`,
+  `AUD-036c`, new `SYS-W9-03`) and here.
+- **`SYS-W6-04` (new, DONE):** closed `field_matrix`'s 18-field gap for
+  real — `Mc3Object::assetMetadata` (R111), `Mc3Object::scriptId` (R103),
+  and `Mc3Document::library`/`imports` (R110/R101) were completely absent
+  from both `mc3.xsd` (not a lint nitpick — any document actually using
+  `<assetMetadata>`/`<library>`/`<imports>` failed XSD validation outright)
+  and MCB (silent XML/JSON→MCB→XML data loss for the same features). Added
+  the missing XSD types/elements and `McbReader.cpp`/`McbWriter.cpp`
+  read/write support; the 4 residual field_matrix rows
+  (`max_visibility_distance`/`namespace`/`script`/`tier`) are genuine
+  naming-convention asymmetries, now allowlisted with reasons. New fixture
+  `test/asset_metadata_library_import.mc3.xml` + 3 new
+  `mcb_roundtrip_test` functions (~40 assertions). Full details in
+  `plan.md`'s `SYS-W6-04` entry. **123/123 ctest** (was 122/123).
+- **Documentation fix:** `AUD-015`'s header line still said "PARTIAL: ...
+  27 sibling read* functions remain" despite the entry's own later
+  "Resolved"/completion notes showing it was fully finished in a prior
+  session (commit `00aee08`, 189 `expectTag` call sites). Corrected the
+  header; also flipped `SYS-W6-01` from stale `[TODO]` to `[DONE]` since
+  all 3 of its constituent `AUD-###` findings were already independently
+  `[DONE]`. No code change from this fix, `readSceneState`'s deliberate
+  skip-not-throw exception (see its own plan.md note) was left as-is after
+  a brief revert (see git history on this file if curious — not worth its
+  own bullet).
+
+**Prior session (11 commits, oldest first, all on `develop`, all pushed):**
 
 - `d9e98d5` — fixed 2 pre-existing XSD-invalid test fixtures (unrelated
   double-hyphen-in-XML-comment and duplicate-`id` bugs found while
@@ -141,45 +169,22 @@ the sibling `mesh-world` repo's own, separate backlog while this session
 was in progress: `e7bed06` (R109, semantic `mc3.json`), `ff63ef5` (R110,
 `.mc3lib` library format), `7110ebd` (R111, `Mc3Object::assetMetadata`),
 `83819f8` (R101, `<imports>`), `df9d5ea` (R102, composite-object split),
-`f392d41` (R103, script IDs). These are real and tested, but **R111 is the
-direct cause of the one currently-failing test** (§4).
+`f392d41` (R103, script IDs). These are real and tested, but R111 (plus
+R110/R101) left `mc3.xsd`/MCB gaps — closed this session, see §3's
+`SYS-W6-04` entry above.
 
 ## 4. Current blocker / main problem
 
-**There is no build-breaking or work-stopping blocker.** The closest things
-to one:
-
-**(a) `field_matrix` ctest gate is red.**
-- Symptom: `ctest -R field_matrix --output-on-failure` (from `b-release`)
-  reports 18 fields "missing from `['xsd_attr', 'mcb_read', 'mcb_write']`"
-  (some also missing from `model`): `bounds_min`, `bounds_max`, `category`,
-  `subcategory`, `nominal_size`, `collision_proxy`, `clearance_volume`,
-  `facing`, `hash`, `license`, `provenance`, `instancing_eligible`,
-  `shadow_policy`, `max_visibility_distance`, `selection_weight`,
-  `namespace`, `script`, `tier`.
-- Affected files: `mc3/include/MeshCraft/Mc3/Mc3AssetMetadata.hpp` (where
-  these fields live in the model), `mc3/mc3.xsd`, `mcb/src/McbReader.cpp` /
-  `McbWriter.cpp` (where they're absent).
-- Suspected cause: commit `7110ebd` (R111, from the sibling `mesh-world`
-  repo's own backlog, not this repo's `plan.md`) added these
-  `Mc3Object::assetMetadata` fields to the model/XML layers but not yet to
-  `xsd_attr`/`mcb_read`/`mcb_write`.
-- What's been tried: nothing, deliberately. This session's own `plan.md`/
-  `SYS-###` work never touched `Mc3AssetMetadata.hpp`; fixing someone else's
-  in-flight cross-repo work risks colliding with their next commit. Before
-  touching this, **check `git log` for newer R-series commits** — the gap
-  may already be closed.
-- Verification once addressed: `(cd b-release && ctest -R field_matrix
-  --output-on-failure)` should print no `FAIL:` lines.
-
-**(b) `SYS-W3-01` (decompose the `MeshCraftApplication` "god object") is a
-genuinely multi-session task, not a bug.** Research this session found
-**280 data members + 113 methods** in that one class (11,544 lines of
-implementation across 17 `.cpp` files); only 10 subsystems are cleanly
-extracted so far (the 9 pre-existing ones plus this session's
-`KeybindingManager`). This isn't blocking anything else in the repo — it's
-just large and not close to finished. Full roadmap in `plan.md`'s
-`SYS-W3-01` entry.
+**There is no build-breaking or work-stopping blocker.** `SYS-W3-01`
+(decompose the `MeshCraftApplication` "god object") is a genuinely
+multi-session task, not a bug: research found **280 data members + 113
+methods** in that one class (11,544 lines of implementation across 17
+`.cpp` files); only 10 subsystems are cleanly extracted so far (the 9
+pre-existing ones plus `KeybindingManager`). This isn't blocking anything
+else in the repo — it's just large and not close to finished. Full roadmap
+in `plan.md`'s `SYS-W3-01` entry; this session decided `EditorViewport`'s
+long-open fate (delete) and Phase 2's Preferences scope (narrow) — see
+the decisions block at the top of this file and §8 below.
 
 ## 5. Known bugs and limitations
 
@@ -189,7 +194,6 @@ just large and not close to finished. Full roadmap in `plan.md`'s
   after the video subsystem reports uninitialized) — blocks web
   live-verification entirely. Windows/MinGW: 1 remaining compile failure,
   also in `../cna`.
-- **Confirmed, currently red:** `field_matrix` ctest gate — see §4(a).
 - **Confirmed, by design, deferred:** SVG textures parse/edit but are never
   rasterized; `embed:` mesh references parse/edit but aren't resolved on
   export; scripts/triggers are data-model + editing only, no runtime
@@ -200,15 +204,15 @@ just large and not close to finished. Full roadmap in `plan.md`'s
   HTTP thread is never joined at shutdown (`AUD-014`) — doesn't currently
   cause a hang (deterministic shutdown is otherwise handled) but is a loose
   end.
-- **Incomplete:** `Editor::EditorViewport` (bundles a camera + gizmo +
-  `pickRay()`) is dead code — added as an explicit "stub" in commit
-  `580105d`, never included by `MeshCraftApplication.hpp`, never
-  instantiated. No decision has been made to finish wiring it in or delete
-  it.
-- **Unresolved product decision, not a bug:** duplicate object IDs are
-  proven safe at the `mc3` library level (no crash/data loss), but whether
-  they should be a hard parse error is a product call nobody has made
-  (`SYS-W1-04`).
+- **Incomplete, decision made, execution pending:** `Editor::EditorViewport`
+  (bundles a camera + gizmo + `pickRay()`) is dead code — added as an
+  explicit "stub" in commit `580105d`, never included by
+  `MeshCraftApplication.hpp`, never instantiated. **Decided 2026-07-17:
+  delete** (see top-of-file decisions block) — not yet executed, see §8.
+- **Decision made, execution pending:** duplicate object IDs are proven
+  safe at the `mc3` library level (no crash/data loss). **Decided
+  2026-07-17: surface as a warning-level `Mc3Validation` diagnostic**,
+  parsing stays permissive (`SYS-W1-04`) — not yet executed, see §8.
 - **Needs verification:** whether the sibling `mesh-world` repo's R-series
   work (R104+) will touch files this repo also cares about — check
   `git log` at the start of any future session, don't assume `plan.md`
@@ -295,7 +299,7 @@ cmake --build b-release -j"$(nproc)"
 # Full test suite
 (cd b-release && ctest -j"$(nproc)")
 (cd b-release && ctest -N)                              # list registered tests + live count
-(cd b-release && ctest -R field_matrix --output-on-failure)   # reproduce the current failure
+(cd b-release && ctest -R field_matrix --output-on-failure)   # SYS-W6-04's gate, now green
 
 # Plan/doc self-consistency (run before trusting any count in plan.md/NEXT.md)
 python3 test/validate_plan_consistency.py . b-release
@@ -318,47 +322,58 @@ clang-tidy -p b-release path/to/changed/file.cpp
 
 ## 8. Next smallest tasks
 
-1. **Re-check `field_matrix` before touching it.**
-   Goal: confirm whether the sibling `mesh-world` repo's ongoing R-series
-   work has already closed the gap described in §4(a), to avoid duplicate
-   or conflicting work.
-   Files: none changed — just `git log --oneline -20` and re-run the test.
-   Verify: `(cd b-release && ctest -R field_matrix --output-on-failure)`.
+_(Tasks 1-2 from the previous revision of this list — re-check + close
+`field_matrix` — are done; see §3's `SYS-W6-04` entry.)_
 
-2. **If still open, close the `field_matrix` gap for the 18 listed fields.**
-   Goal: add `xsd_attr` (mc3.xsd) + `mcb_read`/`mcb_write`
-   (`McbReader.cpp`/`McbWriter.cpp`) coverage for `Mc3Object::assetMetadata`'s
-   fields, or explicitly allowlist any that are intentionally
-   XML/JSON-only, matching `test/field_matrix.py`'s existing allowlist
-   pattern.
-   Files: `mc3/mc3.xsd`, `mcb/src/McbReader.cpp`, `mcb/src/McbWriter.cpp`,
-   `mc3/include/MeshCraft/Mc3/Mc3AssetMetadata.hpp`, `test/field_matrix.py`.
-   Verify: `(cd b-release && ctest -R field_matrix)` passes; full `ctest`
-   still green.
-
-3. **Decide `EditorViewport`'s fate.**
-   Goal: either finish wiring it in (retarget the ~76 `camera_.` + ~12
-   `gizmo_.` call sites across 7 files to go through it) or delete it as
-   abandoned scaffolding — either way, record the decision in `plan.md`
-   (`SYS-W3-01`'s roadmap already names this as Phase 3).
+1. **Delete `EditorViewport`** (decision made 2026-07-17, see top-of-file
+   decisions block).
+   Goal: remove the dead-code stub outright — it's abandoned scaffolding
+   with zero call sites, not a partially-finished feature.
    Files: `include/MeshCraft/Editor/EditorViewport.hpp`,
-   `src/MeshCraft/Editor/EditorViewport.cpp`, and (if finishing it)
-   `MeshCraftApplication.hpp` + the 7 files referencing `camera_`/`gizmo_`.
-   Verify: full rebuild + `ctest`; if finished, a `--screenshot` check that
-   the viewport still renders/orbits correctly.
+   `src/MeshCraft/Editor/EditorViewport.cpp` (delete both), root
+   `CMakeLists.txt` (remove their build entries), `plan.md` (`SYS-W3-01`
+   roadmap — mark this sub-item done).
+   Verify: full rebuild + `ctest` (nothing should reference the deleted
+   files — confirm with `grep -rn EditorViewport` before deleting).
 
-4. **`SYS-W3-01` Phase 2: Preferences ownership decision.**
-   Goal: decide whether a new `Preferences`/`AppSettings` class owns only
-   `prefTheme_`/`prefsOpen_`/`applyTheme()` (narrow) or also the
-   cross-domain fields `loadPrefs()`/`savePrefs()` currently persist
-   (`autoSaveInterval_`, `snapTranslate_`/`snapRotate_`/`snapScale_`,
-   `gridSpacing_`) — then extract accordingly.
-   Files: `include/MeshCraft/MeshCraftApplication.hpp`,
+2. **Duplicate object IDs: `Mc3Validation` warning** (decision made
+   2026-07-17, see top-of-file decisions block).
+   Goal: keep parsing permissive but add a warning-level `Mc3Validation`
+   diagnostic when a document has duplicate ids, surfaced in the existing
+   Validation panel/status bar (`SYS-W1-01`). Closes `SYS-W1-04`.
+   Files: `mc3/include/MeshCraft/Mc3/Mc3Validation.hpp`,
+   `mc3/src/Mc3Document.cpp` (or wherever `validate()`/load-time validation
+   lives), a new/extended test alongside `mc3_duplicate_ids_test.cpp`.
+   Verify: new test asserting the diagnostic fires; full `ctest` green;
+   `mc3_duplicate_ids_test` (proves the *load* still succeeds) still passes.
+
+3. **`SYS-W3-01` Phase 2: extract narrow `Preferences`** (decision made
+   2026-07-17: narrow, see top-of-file decisions block).
+   Goal: new `Editor::Preferences` class owns only `prefTheme_`/
+   `prefsOpen_`/`applyTheme()`. `autoSaveInterval_`/`snapTranslate_`/
+   `snapRotate_`/`snapScale_`/`gridSpacing_` stay on `MeshCraftApplication`
+   for now (their own future extraction), following the
+   `KeybindingManager` extraction idiom (self-contained value member,
+   near-zero-arg constructor).
+   Files: new `include/MeshCraft/Editor/Preferences.hpp` +
+   `src/MeshCraft/Editor/Preferences.cpp`, `include/MeshCraft/MeshCraftApplication.hpp`,
    `src/MeshCraft/MeshCraftApplication_FileOps.cpp` (`loadPrefs`/
-   `savePrefs`/`applyTheme`), `include/MeshCraft/EditorAlgorithms.hpp`
-   (`PrefsAlg`, `loadPrefsAlg`/`savePrefsAlg`).
+   `savePrefs`/`applyTheme`), new `preferences_test`.
    Verify: full rebuild + `ctest`; a manual load/save round-trip test
    (following `keybinding_manager_test.cpp`'s pattern) for the new class.
+
+4. **`AUD-036c`/`SYS-W9-03`: restore selection on undo/redo** (decision
+   made 2026-07-17: yes, restore — see top-of-file decisions block).
+   Goal: `performUndo()`/`performRedo()` (`MeshCraftApplication_Commands.cpp`)
+   currently unconditionally `selection_.clear()`; change to restore the
+   pre-mutation selection (store it alongside each undo/redo snapshot),
+   falling back to empty selection if a restored id no longer exists
+   post-swap.
+   Files: `src/MeshCraft/MeshCraftApplication_Commands.cpp`,
+   `include/MeshCraft/MeshCraftApplication.hpp` (`undoStack_`/`redoStack_`
+   or a parallel selection-snapshot stack), `test/undo_gesture_frame_test.cpp`
+   (extend with a selection-survives-undo/redo case).
+   Verify: `ctest -R undo_gesture_frame`; full `ctest` green.
 
 5. **Investigate `AUD-014`: join the `AiAssistant` background thread at
    shutdown.**
@@ -379,10 +394,6 @@ clang-tidy -p b-release path/to/changed/file.cpp
 - **No mass `clang-format -i` across the existing 18.5k LOC.** The config
   added this session (`.clang-format`) was deliberately not applied
   tree-wide — that's a separate, much larger, not-yet-decided change.
-- **No "fixing" `field_matrix` without first checking `git log`** for newer
-  commits from the sibling `mesh-world` repo — it may already be resolved,
-  and racing that other work risks a real merge conflict or duplicated
-  effort.
 - **No changes to `../cna` or `../sharp-runtime`** without explicit owner
   permission.
 - **No `Mc3Document` public API changes** without checking `mc3togltf`,
@@ -390,9 +401,6 @@ clang-tidy -p b-release path/to/changed/file.cpp
 - **No attempt to unpark CI** (`.github_/workflows/ci.yml` → `.github/`) —
   owner-gated, needs a workflow-scoped push token nobody in this session
   has.
-- **No speculative work on `EditorViewport`** (e.g. partially rewiring it)
-  without first making the explicit finish-or-delete decision in task 3
-  above — it's already been left half-done once.
 - **No new user-facing features** until the current backlog (`SYS-W3-01`
   and its open phases) is closed — this project is still in a
   stabilization phase by its own stated policy (`STABILIZATION.md`).

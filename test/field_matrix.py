@@ -566,6 +566,41 @@ ALLOWLIST = {
               "('accept legacy source= attribute'), which is why xml_read "
               "(but not xml_write, which only ever emits 'src') sees it.",
 
+    # --- Group K: SYS-W1-04 field_matrix closure (R111 assetMetadata / "
+    #     "R110/R101 library+imports / R103 script -- newly wired into "
+    #     "xsd_attr+mcb_read+mcb_write; these 4 residual rows are naming-"
+    #     "convention asymmetries, not missing data ---
+    "max_visibility_distance": "XSD/XML/MCB wire name is the bare "
+        "'maxVisibilityDistance' (McbWriter.cpp writeAssetMetadata / "
+        "Mc3XmlWriter.cpp 'max_visibility_distance'); the C++ model field is "
+        "qualified as Mc3AssetMetadata::maxVisibilityDistanceM (an explicit "
+        "unit suffix), so it canonicalizes to a different name "
+        "('max_visibility_distance_m') and never matches here. Verified "
+        "round-trip in Mc3XmlParser.cpp/McbReader.cpp readAssetMetadata().",
+    "namespace": "XSD/XML/MCB wire attribute name 'namespace' is shared by "
+        "two distinct, separately-qualified model fields -- "
+        "Mc3LibraryInfo::libraryNamespace (<library namespace=\"...\"/>) and "
+        "Mc3Import::importNamespace (<import namespace=\"...\"/>) -- neither "
+        "of which literally canonicalizes to 'namespace'. Same shape as the "
+        "'aspect'/'far'/'near' qualified-name group above. Verified in "
+        "Mc3XmlParser.cpp/Mc3XmlWriter.cpp and the new "
+        "McbReader.cpp/McbWriter.cpp readLibraryInfo/readImport pair.",
+    "script": "XSD/XML/JSON/MCB wire attribute name is the bare 'script' "
+        "(Mc3XmlWriter.cpp el->SetAttribute(\"script\", obj->scriptId...); "
+        "Mc3JsonWriter.cpp j[\"script\"]); the C++ model field is qualified "
+        "as Mc3Object::scriptId to avoid colliding with the unrelated "
+        "<script> element (scriptElementType, a Lua script body) in the "
+        "same flat namespace this tool uses. Verified round-trip in the new "
+        "McbReader.cpp/McbWriter.cpp 'script' key (deliberately not "
+        "'scriptId', to agree with XML/JSON's wire name).",
+    "tier": "XML/MCB attribute/map-key name for Mc3AssetMetadata::lods "
+        "(map<tier, definitionId>) entries -- <lod tier=\"...\" "
+        "definition=\"...\"/> in XML, a native MCB TAG_MAP key in MCB "
+        "(McbWriter.cpp/McbReader.cpp readAssetMetadata's 'lods' map, same "
+        "as the already-allowlisted 'key' entry above). There is no "
+        "separate 'tier' field in the model to match -- the tier name is "
+        "map-key data, not a field name.",
+
     # --- MCB-only internal fields with no XML/XSD equivalent by design ---
     "base64_content": "Mc3EmbedGltf::base64Content -- MCB-only inline "
                        "payload; the XML layer stores embeds by external "

@@ -426,9 +426,14 @@ Mandated workstream items not tied to a single audit finding.
 - **SYS-W5-05** `[TODO]` `P2` — Property-based round-trip tests + parser fuzz target.
 
 ### W6 — MCB hardening
-- **SYS-W6-01** `[TODO]` `P2` — Tag/type validation on the hot read path
+- **SYS-W6-01** `[DONE]` `P2` — Tag/type validation on the hot read path
   (`AUD-015`); enum range validation (`AUD-017`); RecursionGuard comment/code
-  mismatch (`AUD-016`).
+  mismatch (`AUD-016`). **Status note (2026-07-17):** all three constituent
+  `AUD-###` findings are independently `[DONE]` (see each entry below); this
+  row was left stale at `[TODO]` because `AUD-015`'s own header line hadn't
+  been corrected to match its later completion note (fixed above). No new
+  work needed — verify with `grep -c "expectTag(" mcb/src/McbReader.cpp`
+  (189) and `ctest -R mcb_roundtrip`.
 - **SYS-W6-02** `[TODO]` `P3` — Malformed/truncated/corrupt/random/fuzz MCB tests
   incl. the untested compression-flag rejection path (`AUD-019`); byte-for-byte
   determinism; XML→MCB→XML equivalence.
@@ -442,6 +447,39 @@ Mandated workstream items not tied to a single audit finding.
   and remains open.
 - **SYS-W6-03** `[TODO]` `P3` — Fix `MCB_FORMAT.md` stale field-order list
   (`AUD-018`).
+- **SYS-W6-04** `[DONE]` `P1` — Close `field_matrix`'s 18-field gate gap:
+  `Mc3Object::assetMetadata` (R111, whole struct), `Mc3Object::scriptId`
+  (R103), and `Mc3Document::library`/`imports` (R110/R101) were completely
+  absent from **both** `mc3.xsd` (any document using `<assetMetadata>`,
+  `<library>`, or `<imports>` failed XSD validation outright — not just a
+  field_matrix nitpick) **and** MCB (`McbReader.cpp`/`McbWriter.cpp` never
+  referenced any of them at all — a real, silent XML/JSON→MCB→XML data-loss
+  bug for any document using these R109-R111 features, landed by the
+  sibling `mesh-world` repo's own backlog outside this repo's `plan.md`
+  tracking). Added: `assetMetadataType`/`libraryType`/`importType`/
+  `importsType` complex types + child types (`assetTagListType`,
+  `assetSocketsType`, `assetLodsType`) to `mc3.xsd`, wired as optional
+  children/elements into all 16 object-shape types and the root `<mc3>`
+  sequence; `script` attribute added to the shared `objectAttrs` group;
+  `writeAssetMetadata`/`readAssetMetadata`, `writeLibraryInfo`/
+  `readLibraryInfo`, `writeImport`/`readImport` added to
+  `McbWriter.cpp`/`McbReader.cpp` (the new reader functions use
+  `expectTag`, matching the codebase's now-universal convention — see
+  `AUD-015`). MCB wire key names were deliberately chosen to match the
+  XML/JSON attribute names (not always the literal camelCase C++ field
+  name, e.g. `maxVisibilityDistance` not `maxVisibilityDistanceM`) so all
+  three formats share one wire vocabulary. Remaining 4 field_matrix rows
+  (`max_visibility_distance`, `namespace`, `script`, `tier`) are genuine
+  naming-convention asymmetries (qualified C++ field name vs. a shared bare
+  wire name, or a map-key-as-attribute-name shape), allowlisted with
+  per-field reasons matching the tool's existing Group A/F patterns — not
+  remaining gaps. New fixture `test/asset_metadata_library_import.mc3.xml`
+  (first fixture to exercise any of the three) plus 3 new
+  `mcb_roundtrip_test` functions (`testAssetMetadataRoundtrip`/
+  `testScriptIdRoundtrip`/`testLibraryAndImportsRoundtrip`, ~40 new
+  assertions) proving the previously-silent data loss is fixed. Full tree:
+  123/123 `ctest` (up from 122/123 — `field_matrix` now passes), zero new
+  warnings. Verify: `ctest -R 'field_matrix|xsd_validation|mcb_roundtrip'`.
 
 ### W7 — glTF fidelity
 - **SYS-W7-01** `[TODO]` `P2` — Truthful export matrix per model feature,
@@ -805,7 +843,13 @@ DONE marker without checking its cited commit/verify command.
 - **Resolved:** commit `3cd27d7` — verify: `ctest -R mc3_ai`
 - **Status note:** Added `AiAssistant::waitForAllInFlight(timeout)`: a process-wide in-flight-worker counter incremented on the CALLING thread before `std::thread(...)` is constructed (avoids a race where the counter could read 0 momentarily between thread creation and the worker's first instruction), decremented via an RAII guard (`AiWorkerScopeGuard`) constructed as the worker lambda's first statement so it decrements on every exit path. `main.cpp` calls it with a bounded 5s timeout via an RAII local (`AiShutdownWaiter`) declared first in `main()` so it is destroyed LAST, right before the process actually returns, on every exit path (`--help`/`--version`/`--screenshot`/`--export`/interactive). Bounded, not indefinite, deliberately — an unbounded wait here would reintroduce the exact hang STAB-0387/0388 removed from `reset()`; a genuinely-stuck request is still abandoned after the timeout, same as before this fix, this only helps the near-finished case. Did not attempt the TSan/ASan verification named in Tests (that's covered by the separate, broader AUD-055 CI-hardening task) — instead directly exercised the synchronization primitive against a real in-flight worker thread (mock `httplib::Server` blocked via a released condition_variable): a short-timeout call returns `false` while genuinely still blocked, a longer one returns `true` once released and the worker actually finishes, and the result is confirmed already-published at that point (no wait/data race).
 
-### AUD-015 `[DONE]` `P2` `W6` · Known-key value decoding ignores the declared tag byte (no type validation on the hot read path) — PARTIAL: readObject done, 27 sibling read* functions remain
+### AUD-015 `[DONE]` `P2` `W6` · Known-key value decoding ignores the declared tag byte (no type validation on the hot read path)
+- **Header note (2026-07-17):** the summary above previously still read
+  "PARTIAL: readObject done, 27 sibling read* functions remain" despite the
+  entry's own "Resolved"/"Status note (completion)" lines below already
+  recording the full rollout (commit `00aee08`, 189 `expectTag` call sites).
+  Corrected here — verify with `grep -c "expectTag(" mcb/src/McbReader.cpp`
+  (189, confirmed still current).
 - **Component:** mcb/src/McbReader.cpp — readObject/readDocument and all read* deserializers
 - **Evidence:** For every recognized key the reader reads the tag byte but never validates it against the expected type; it decodes the value purely by key name. readObject reads `uint8_t tag = rU8(in);` (McbReader.cpp:383) then for "type" does `obj->type = static_cast<Mc3::ObjectType>(rI32(in));` (line 384) and for "visible" does `obj->visible = rU8(in) != 0;` (line 388) — `tag` is used ONLY in the final `else skipValue(in, tag);` (line 446), never checked for known keys. Same pattern in every read* helper (e.g. readTransform 206-209, readMaterial 608-622). So a file whose known field carries a mismatched tag (e.g. key "visible" with tag TAG_STR + a 4-byte length) is not rejected at the field; the reader reads by the wrong type and desyncs the stream. There is also no checksum in the header (McbFormat.hpp:6-20), so this type info is the only per-field integrity signal and it is discarded.
 - **Outcome:** For recognized keys, verify the read tag equals the expected tag before decoding (throw "MCB: type mismatch for key ..." otherwise), so a corrupt/hostile tag/value mismatch is detected at the field instead of silently desyncing into a wrong-but-parsed document. Bounds already hold (rRawStr/rU32Bounded), so this is a strictness/integrity fix, not a crash fix.

@@ -215,12 +215,100 @@
     <xs:attribute name="tags"      type="xs:string"/>
     <xs:attribute name="layer"     type="xs:string"/>
     <xs:attribute name="role"      type="roleType"/>
+    <xs:attribute name="script"    type="xs:IDREF"/>   <!-- R103: references script/@id -->
   </xs:attributeGroup>
 
   <!-- ── Deform element ───────────────────────────────────────── -->
 
   <xs:complexType name="deformType">
     <xs:attribute name="scale" type="vec3Type" use="required"/>
+  </xs:complexType>
+
+  <!-- ── R111 asset metadata (mesh_world_revival.md §6) ──────────
+       Present only on definitions where authored/known; see
+       Mc3AssetMetadata.hpp for the authorable-fields-only rationale. -->
+
+  <xs:complexType name="assetTagListType">
+    <xs:sequence>
+      <xs:element name="tag" minOccurs="0" maxOccurs="unbounded">
+        <xs:complexType>
+          <xs:attribute name="value" type="xs:string" use="required"/>
+        </xs:complexType>
+      </xs:element>
+    </xs:sequence>
+  </xs:complexType>
+
+  <xs:complexType name="assetSocketsType">
+    <xs:sequence>
+      <xs:element name="socket" minOccurs="0" maxOccurs="unbounded">
+        <xs:complexType>
+          <xs:attribute name="name"     type="xs:string" use="required"/>
+          <xs:attribute name="position" type="vec3Type"  use="required"/>
+        </xs:complexType>
+      </xs:element>
+    </xs:sequence>
+  </xs:complexType>
+
+  <xs:complexType name="assetLodsType">
+    <xs:sequence>
+      <xs:element name="lod" minOccurs="0" maxOccurs="unbounded">
+        <xs:complexType>
+          <!-- "definition" is a plain string, not xs:IDREF: the referenced
+               id may live in an imported library, not this document. -->
+          <xs:attribute name="tier"       type="xs:string" use="required"/>
+          <xs:attribute name="definition" type="xs:string" use="required"/>
+        </xs:complexType>
+      </xs:element>
+    </xs:sequence>
+  </xs:complexType>
+
+  <xs:complexType name="assetMetadataType">
+    <xs:sequence>
+      <xs:element name="semanticTags"  type="assetTagListType" minOccurs="0"/>
+      <xs:element name="styleTags"     type="assetTagListType" minOccurs="0"/>
+      <xs:element name="regionTags"    type="assetTagListType" minOccurs="0"/>
+      <xs:element name="periodTags"    type="assetTagListType" minOccurs="0"/>
+      <xs:element name="materialSlots" type="assetTagListType" minOccurs="0"/>
+      <xs:element name="sockets"       type="assetSocketsType" minOccurs="0"/>
+      <xs:element name="lods"          type="assetLodsType"    minOccurs="0"/>
+    </xs:sequence>
+    <xs:attribute name="category"                type="xs:string"/>
+    <xs:attribute name="subcategory"             type="xs:string"/>
+    <xs:attribute name="facing"                  type="xs:string"/>
+    <xs:attribute name="collision_proxy"         type="xs:string"/>
+    <xs:attribute name="shadow_policy"           type="xs:string"/>
+    <xs:attribute name="license"                 type="xs:string"/>
+    <xs:attribute name="provenance"              type="xs:string"/>
+    <xs:attribute name="source"                  type="xs:string"/>
+    <xs:attribute name="version"                 type="xs:string"/>
+    <xs:attribute name="instancing_eligible"     type="xs:boolean" default="true"/>
+    <xs:attribute name="max_visibility_distance" type="xs:float"/>
+    <xs:attribute name="selection_weight"        type="xs:float" default="1"/>
+    <xs:attribute name="nominal_size"            type="vec3Type"/>
+    <xs:attribute name="bounds_min"              type="vec3Type"/>
+    <xs:attribute name="bounds_max"              type="vec3Type"/>
+    <xs:attribute name="clearance_volume"        type="vec3Type"/>
+  </xs:complexType>
+
+  <!-- ── R110/R101 library identity + imports (root-level, .mc3lib.xml
+       and any document that imports one) ────────────────────────── -->
+
+  <xs:complexType name="libraryType">
+    <xs:attribute name="namespace" type="xs:string" use="required"/>
+    <xs:attribute name="version"   type="xs:string" use="required"/>
+    <xs:attribute name="hash"      type="xs:string"/>
+  </xs:complexType>
+
+  <xs:complexType name="importType">
+    <xs:attribute name="namespace" type="xs:string" use="required"/>
+    <xs:attribute name="source"    type="xs:string" use="required"/>
+    <xs:attribute name="hash"      type="xs:string"/>
+  </xs:complexType>
+
+  <xs:complexType name="importsType">
+    <xs:sequence>
+      <xs:element name="import" type="importType" minOccurs="0" maxOccurs="unbounded"/>
+    </xs:sequence>
   </xs:complexType>
 
   <!-- ── Extrude sub-elements ─────────────────────────────────── -->
@@ -298,6 +386,7 @@
       <xs:element name="deform"     type="deformType"    minOccurs="0"/>
       <xs:element name="uv_mapping" type="uvMappingType" minOccurs="0"/>
       <xs:element name="metadata"   type="metadataType"  minOccurs="0"/>
+      <xs:element name="assetMetadata" type="assetMetadataType" minOccurs="0"/>
       <xs:element name="state"      type="objectStateType" minOccurs="0" maxOccurs="unbounded"/>
     </xs:sequence>
     <xs:attributeGroup ref="objectAttrs"/>
@@ -311,6 +400,7 @@
       <xs:element name="deform"     type="deformType"    minOccurs="0"/>
       <xs:element name="uv_mapping" type="uvMappingType" minOccurs="0"/>
       <xs:element name="metadata"   type="metadataType"  minOccurs="0"/>
+      <xs:element name="assetMetadata" type="assetMetadataType" minOccurs="0"/>
       <xs:element name="state"      type="objectStateType" minOccurs="0" maxOccurs="unbounded"/>
     </xs:sequence>
     <xs:attributeGroup ref="objectAttrs"/>
@@ -324,6 +414,7 @@
       <xs:element name="deform"     type="deformType"    minOccurs="0"/>
       <xs:element name="uv_mapping" type="uvMappingType" minOccurs="0"/>
       <xs:element name="metadata"   type="metadataType"  minOccurs="0"/>
+      <xs:element name="assetMetadata" type="assetMetadataType" minOccurs="0"/>
       <xs:element name="state"      type="objectStateType" minOccurs="0" maxOccurs="unbounded"/>
     </xs:sequence>
     <xs:attributeGroup ref="objectAttrs"/>
@@ -339,6 +430,7 @@
       <xs:element name="deform"     type="deformType"    minOccurs="0"/>
       <xs:element name="uv_mapping" type="uvMappingType" minOccurs="0"/>
       <xs:element name="metadata"   type="metadataType"  minOccurs="0"/>
+      <xs:element name="assetMetadata" type="assetMetadataType" minOccurs="0"/>
       <xs:element name="state"      type="objectStateType" minOccurs="0" maxOccurs="unbounded"/>
     </xs:sequence>
     <xs:attributeGroup ref="objectAttrs"/>
@@ -353,6 +445,7 @@
       <xs:element name="deform"     type="deformType"    minOccurs="0"/>
       <xs:element name="uv_mapping" type="uvMappingType" minOccurs="0"/>
       <xs:element name="metadata"   type="metadataType"  minOccurs="0"/>
+      <xs:element name="assetMetadata" type="assetMetadataType" minOccurs="0"/>
       <xs:element name="state"      type="objectStateType" minOccurs="0" maxOccurs="unbounded"/>
     </xs:sequence>
     <xs:attributeGroup ref="objectAttrs"/>
@@ -367,6 +460,7 @@
       <xs:element name="deform"     type="deformType"    minOccurs="0"/>
       <xs:element name="uv_mapping" type="uvMappingType" minOccurs="0"/>
       <xs:element name="metadata"   type="metadataType"  minOccurs="0"/>
+      <xs:element name="assetMetadata" type="assetMetadataType" minOccurs="0"/>
       <xs:element name="state"      type="objectStateType" minOccurs="0" maxOccurs="unbounded"/>
     </xs:sequence>
     <xs:attributeGroup ref="objectAttrs"/>
@@ -380,6 +474,7 @@
       <xs:element name="deform"     type="deformType"    minOccurs="0"/>
       <xs:element name="uv_mapping" type="uvMappingType" minOccurs="0"/>
       <xs:element name="metadata"   type="metadataType"  minOccurs="0"/>
+      <xs:element name="assetMetadata" type="assetMetadataType" minOccurs="0"/>
       <xs:element name="state"      type="objectStateType" minOccurs="0" maxOccurs="unbounded"/>
     </xs:sequence>
     <xs:attributeGroup ref="objectAttrs"/>
@@ -394,6 +489,7 @@
       <xs:element name="deform"     type="deformType"    minOccurs="0"/>
       <xs:element name="uv_mapping" type="uvMappingType" minOccurs="0"/>
       <xs:element name="metadata"   type="metadataType"  minOccurs="0"/>
+      <xs:element name="assetMetadata" type="assetMetadataType" minOccurs="0"/>
       <xs:element name="state"      type="objectStateType" minOccurs="0" maxOccurs="unbounded"/>
     </xs:sequence>
     <xs:attributeGroup ref="objectAttrs"/>
@@ -409,6 +505,7 @@
       <xs:element name="deform"     type="deformType"    minOccurs="0"/>
       <xs:element name="uv_mapping" type="uvMappingType" minOccurs="0"/>
       <xs:element name="metadata"   type="metadataType"  minOccurs="0"/>
+      <xs:element name="assetMetadata" type="assetMetadataType" minOccurs="0"/>
       <xs:element name="state"      type="objectStateType" minOccurs="0" maxOccurs="unbounded"/>
     </xs:sequence>
     <xs:attributeGroup ref="objectAttrs"/>
@@ -424,6 +521,7 @@
       <xs:element name="deform"     type="deformType"    minOccurs="0"/>
       <xs:element name="uv_mapping" type="uvMappingType" minOccurs="0"/>
       <xs:element name="metadata"   type="metadataType"  minOccurs="0"/>
+      <xs:element name="assetMetadata" type="assetMetadataType" minOccurs="0"/>
       <xs:element name="state"      type="objectStateType" minOccurs="0" maxOccurs="unbounded"/>
     </xs:sequence>
     <xs:attributeGroup ref="objectAttrs"/>
@@ -438,6 +536,7 @@
       <xs:element name="deform"     type="deformType"    minOccurs="0"/>
       <xs:element name="uv_mapping" type="uvMappingType" minOccurs="0"/>
       <xs:element name="metadata"   type="metadataType"  minOccurs="0"/>
+      <xs:element name="assetMetadata" type="assetMetadataType" minOccurs="0"/>
       <xs:element name="state"      type="objectStateType" minOccurs="0" maxOccurs="unbounded"/>
     </xs:sequence>
     <xs:attributeGroup ref="objectAttrs"/>
@@ -451,6 +550,7 @@
       <xs:element name="deform"     type="deformType"    minOccurs="0"/>
       <xs:element name="uv_mapping" type="uvMappingType" minOccurs="0"/>
       <xs:element name="metadata"   type="metadataType"  minOccurs="0"/>
+      <xs:element name="assetMetadata" type="assetMetadataType" minOccurs="0"/>
       <xs:element name="state"      type="objectStateType" minOccurs="0" maxOccurs="unbounded"/>
     </xs:sequence>
     <xs:attributeGroup ref="objectAttrs"/>
@@ -465,6 +565,7 @@
       <xs:element name="cross_section" type="crossSectionType" minOccurs="1" maxOccurs="1"/>
       <xs:element name="path"          type="pathType"         minOccurs="1" maxOccurs="1"/>
       <xs:element name="metadata"      type="metadataType"     minOccurs="0"/>
+      <xs:element name="assetMetadata" type="assetMetadataType" minOccurs="0"/>
       <xs:element name="state"         type="objectStateType"  minOccurs="0" maxOccurs="unbounded"/>
     </xs:sequence>
     <xs:attributeGroup ref="objectAttrs"/>
@@ -479,6 +580,7 @@
     <xs:sequence>
       <xs:element name="deform"   type="deformType"      minOccurs="0"/>
       <xs:element name="metadata" type="metadataType"    minOccurs="0"/>
+      <xs:element name="assetMetadata" type="assetMetadataType" minOccurs="0"/>
       <xs:element name="state"    type="objectStateType" minOccurs="0" maxOccurs="unbounded"/>
     </xs:sequence>
     <xs:attributeGroup ref="objectAttrs"/>
@@ -492,6 +594,7 @@
     <xs:sequence>
       <xs:element name="deform"   type="deformType"      minOccurs="0"/>
       <xs:element name="metadata" type="metadataType"    minOccurs="0"/>
+      <xs:element name="assetMetadata" type="assetMetadataType" minOccurs="0"/>
       <xs:element name="state"    type="objectStateType" minOccurs="0" maxOccurs="unbounded"/>
     </xs:sequence>
     <xs:attributeGroup ref="objectAttrs"/>
@@ -504,6 +607,7 @@
     <xs:sequence>
       <xs:element name="deform"   type="deformType"      minOccurs="0"/>
       <xs:element name="metadata" type="metadataType"    minOccurs="0"/>
+      <xs:element name="assetMetadata" type="assetMetadataType" minOccurs="0"/>
       <xs:element name="state"    type="objectStateType" minOccurs="0" maxOccurs="unbounded"/>
       <xs:choice  minOccurs="0" maxOccurs="unbounded">
         <xs:element name="box"          type="boxType"/>
@@ -885,6 +989,10 @@
   <xs:element name="mc3">
     <xs:complexType>
       <xs:sequence>
+        <!-- R110 library identity (.mc3lib.xml only) and R101 imports;
+             written before includes by Mc3XmlWriter, so declared first here. -->
+        <xs:element name="library" type="libraryType" minOccurs="0"/>
+        <xs:element name="imports" type="importsType" minOccurs="0"/>
         <!-- Zero or more file includes (must appear before other sections) -->
         <xs:element name="include" minOccurs="0" maxOccurs="unbounded">
           <xs:complexType>

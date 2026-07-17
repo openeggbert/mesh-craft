@@ -506,6 +506,68 @@ static Mc3::Mc3ObjectState readObjectState(std::istream& in) {
     return st;
 }
 
+static Mc3::Mc3AssetMetadata readAssetMetadata(std::istream& in) {
+    Mc3::Mc3AssetMetadata am;
+    while (true) {
+        std::string k = rKey(in); if (k.empty()) break;
+        uint8_t tag = rU8(in);
+        if      (k == "category")         { expectTag(tag, TAG_STR, "category");         am.category         = rRawStr(in); }
+        else if (k == "subcategory")      { expectTag(tag, TAG_STR, "subcategory");      am.subcategory      = rRawStr(in); }
+        else if (k == "facing")           { expectTag(tag, TAG_STR, "facing");           am.facing           = rRawStr(in); }
+        else if (k == "collisionProxy")   { expectTag(tag, TAG_STR, "collisionProxy");   am.collisionProxy   = rRawStr(in); }
+        else if (k == "shadowPolicy")     { expectTag(tag, TAG_STR, "shadowPolicy");     am.shadowPolicy     = rRawStr(in); }
+        else if (k == "license")          { expectTag(tag, TAG_STR, "license");          am.license          = rRawStr(in); }
+        else if (k == "provenance")       { expectTag(tag, TAG_STR, "provenance");       am.provenance       = rRawStr(in); }
+        else if (k == "source")           { expectTag(tag, TAG_STR, "source");           am.sourceGeneratorOrHash = rRawStr(in); }
+        else if (k == "version")          { expectTag(tag, TAG_STR, "version");          am.semanticVersion  = rRawStr(in); }
+        else if (k == "instancingEligible") { expectTag(tag, TAG_BOOL, "instancingEligible"); am.instancingEligible = rU8(in) != 0; }
+        else if (k == "maxVisibilityDistance") { expectTag(tag, TAG_F32, "maxVisibilityDistance"); am.maxVisibilityDistanceM = rF32(in); }
+        else if (k == "selectionWeight")  { expectTag(tag, TAG_F32, "selectionWeight");  am.selectionWeight  = rF32(in); }
+        else if (k == "nominalSize")      { expectTag(tag, TAG_VEC3, "nominalSize");     am.nominalSize      = rVec3(in); }
+        else if (k == "boundsMin")        { expectTag(tag, TAG_VEC3, "boundsMin");       am.boundsMin        = rVec3(in); }
+        else if (k == "boundsMax")        { expectTag(tag, TAG_VEC3, "boundsMax");       am.boundsMax        = rVec3(in); }
+        else if (k == "clearanceVolume")  { expectTag(tag, TAG_VEC3, "clearanceVolume"); am.clearanceVolume  = rVec3(in); }
+        else if (k == "semanticTags" || k == "styleTags" || k == "regionTags" ||
+                 k == "periodTags"   || k == "materialSlots") {
+            expectTag(tag, TAG_ARR, k.c_str());
+            auto& out = k == "semanticTags" ? am.semanticTags
+                      : k == "styleTags"    ? am.styleTags
+                      : k == "regionTags"   ? am.regionTags
+                      : k == "periodTags"   ? am.periodTags
+                      :                        am.materialSlots;
+            uint32_t n = rU32Bounded(in);
+            out.reserve(n);
+            for (uint32_t i = 0; i < n; ++i) {
+                uint8_t t = rU8(in);
+                if (t == TAG_STR) out.push_back(rRawStr(in));
+                else               skipValue(in, t);
+            }
+        }
+        else if (k == "sockets") {
+            expectTag(tag, TAG_MAP, "sockets");
+            uint32_t n = rU32Bounded(in);
+            for (uint32_t i = 0; i < n; ++i) {
+                std::string name = rRawStr(in);
+                uint8_t t = rU8(in);
+                if (t == TAG_VEC3) am.sockets[name] = rVec3(in);
+                else               skipValue(in, t);
+            }
+        }
+        else if (k == "lods") {
+            expectTag(tag, TAG_MAP, "lods");
+            uint32_t n = rU32Bounded(in);
+            for (uint32_t i = 0; i < n; ++i) {
+                std::string tier = rRawStr(in);
+                uint8_t t = rU8(in);
+                if (t == TAG_STR) am.lods[tier] = rRawStr(in);
+                else               skipValue(in, t);
+            }
+        }
+        else skipValue(in, tag);
+    }
+    return am;
+}
+
 // Forward declaration for recursive children
 static std::shared_ptr<Mc3::Mc3Object> readObject(std::istream& in);
 
@@ -527,12 +589,14 @@ static std::shared_ptr<Mc3::Mc3Object> readObject(std::istream& in) {
         else if (k == "definition")       { expectTag(tag, TAG_STR, "definition");       obj->definition       = rRawStr(in); }
         else if (k == "meshSource")       { expectTag(tag, TAG_STR, "meshSource");       obj->meshSource       = rRawStr(in); }
         else if (k == "materialOverride") { expectTag(tag, TAG_STR, "materialOverride"); obj->materialOverride = rRawStr(in); }
+        else if (k == "script")           { expectTag(tag, TAG_STR, "script");           obj->scriptId         = rRawStr(in); }
         else if (k == "transform")        { expectTag(tag, TAG_OBJ, "transform");        obj->transform        = readTransform(in); }
         else if (k == "deform")           { expectTag(tag, TAG_OBJ, "deform");           obj->deform           = readDeform(in); }
         else if (k == "primitive")        { expectTag(tag, TAG_OBJ, "primitive");        obj->primitive        = readPrimitive(in); }
         else if (k == "csgOperation")     { expectTag(tag, TAG_OBJ, "csgOperation");     obj->csgOperation     = readCsgOp(in); }
         else if (k == "extrude")          { expectTag(tag, TAG_OBJ, "extrude");          obj->extrude          = readExtrude(in); }
         else if (k == "uvMapping")        { expectTag(tag, TAG_OBJ, "uvMapping");        obj->uvMapping        = readUvMapping(in); }
+        else if (k == "assetMetadata")    { expectTag(tag, TAG_OBJ, "assetMetadata");    obj->assetMetadata    = readAssetMetadata(in); }
         else if (k == "tags") {
             expectTag(tag, TAG_ARR, "tags");
             uint32_t n = rU32Bounded(in);
@@ -911,6 +975,32 @@ static Mc3::Mc3Action readAction(std::istream& in) {
     return act;
 }
 
+static Mc3::Mc3LibraryInfo readLibraryInfo(std::istream& in) {
+    Mc3::Mc3LibraryInfo lib;
+    while (true) {
+        std::string k = rKey(in); if (k.empty()) break;
+        uint8_t tag = rU8(in);
+        if      (k == "namespace") { expectTag(tag, TAG_STR, "namespace"); lib.libraryNamespace = rRawStr(in); }
+        else if (k == "version")   { expectTag(tag, TAG_STR, "version");   lib.version          = rRawStr(in); }
+        else if (k == "hash")      { expectTag(tag, TAG_STR, "hash");      lib.contentHash      = rRawStr(in); }
+        else skipValue(in, tag);
+    }
+    return lib;
+}
+
+static Mc3::Mc3Import readImport(std::istream& in) {
+    Mc3::Mc3Import imp;
+    while (true) {
+        std::string k = rKey(in); if (k.empty()) break;
+        uint8_t tag = rU8(in);
+        if      (k == "namespace") { expectTag(tag, TAG_STR, "namespace"); imp.importNamespace = rRawStr(in); }
+        else if (k == "source")    { expectTag(tag, TAG_STR, "source");    imp.source          = rRawStr(in); }
+        else if (k == "hash")      { expectTag(tag, TAG_STR, "hash");      imp.hash            = rRawStr(in); }
+        else skipValue(in, tag);
+    }
+    return imp;
+}
+
 static Mc3::Mc3Document readDocument(std::istream& in) {
     Mc3::Mc3Document doc;
     while (true) {
@@ -923,6 +1013,17 @@ static Mc3::Mc3Document readDocument(std::istream& in) {
         else if (k == "rotationUnits")    { expectTag(tag, TAG_STR, "rotationUnits");    doc.rotationUnits    = rRawStr(in); }
         else if (k == "eulerOrder")       { expectTag(tag, TAG_STR, "eulerOrder");       doc.eulerOrder       = rRawStr(in); }
         else if (k == "defaultCamera")    { expectTag(tag, TAG_STR, "defaultCamera");    doc.defaultCamera    = rRawStr(in); }
+        else if (k == "library") { expectTag(tag, TAG_OBJ, "library"); doc.library = readLibraryInfo(in); }
+        else if (k == "imports") {
+            expectTag(tag, TAG_ARR, "imports");
+            uint32_t n = rU32Bounded(in);
+            doc.imports.reserve(n);
+            for (uint32_t i = 0; i < n; ++i) {
+                uint8_t t = rU8(in);
+                if (t == TAG_OBJ) doc.imports.push_back(readImport(in));
+                else               skipValue(in, t);
+            }
+        }
         else if (k == "meta") {
             expectTag(tag, TAG_MAP, "meta");
             uint32_t n = rU32Bounded(in);

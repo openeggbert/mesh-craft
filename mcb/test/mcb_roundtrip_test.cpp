@@ -220,6 +220,124 @@ static void testObjectMetadata() {
 }
 
 // ---------------------------------------------------------------------------
+// SYS-W1-04 field_matrix closure — R111 Mc3Object::assetMetadata, R103
+// Mc3Object::scriptId, and R110/R101 Mc3Document::library/imports were all
+// entirely absent from MCB (writeObject/writeDocument never touched them),
+// so an XML -> MCB -> XML roundtrip of any document using these R109-R111
+// features silently dropped the data instead of losing bytes visibly.
+// ---------------------------------------------------------------------------
+
+static void testAssetMetadataRoundtrip() {
+    Mc3Document doc;
+    auto obj  = std::make_shared<Mc3Object>();
+    obj->id   = "chair1";
+    obj->type = ObjectType::Box;
+    obj->primitive = Mc3Primitive{};
+
+    Mc3AssetMetadata am;
+    am.category         = "furniture";
+    am.subcategory       = "chair";
+    am.facing            = "-Z";
+    am.collisionProxy    = "box";
+    am.shadowPolicy       = "cast_receive";
+    am.license            = "CC-BY-4.0";
+    am.provenance         = "hand-authored";
+    am.sourceGeneratorOrHash = "lua.object.chair.simple";
+    am.semanticVersion    = "1.2.3";
+    am.instancingEligible = false;
+    am.maxVisibilityDistanceM = 250.0f;
+    am.selectionWeight     = 2.5f;
+    am.nominalSize         = {0.5f, 0.9f, 0.5f};
+    am.boundsMin            = {-0.25f, 0.0f, -0.25f};
+    am.boundsMax            = {0.25f, 0.9f, 0.25f};
+    am.clearanceVolume      = {0.8f, 1.2f, 0.8f};
+    am.semanticTags         = {"seating", "wood"};
+    am.styleTags            = {"rustic"};
+    am.materialSlots        = {"seat", "legs"};
+    am.sockets["seat_top"]  = {0.0f, 0.45f, 0.0f};
+    am.lods["near"]         = "chair.oak.lod0";
+    am.lods["far"]          = "chair.oak.lod1";
+    obj->assetMetadata = am;
+    doc.objects.push_back(obj);
+
+    auto rt = roundtrip(doc);
+    CHECK(!rt.objects.empty(), "assetMetadata: object present after roundtrip");
+    if (rt.objects.empty()) return;
+    CHECK(rt.objects[0]->assetMetadata.has_value(), "assetMetadata: struct present after roundtrip");
+    if (!rt.objects[0]->assetMetadata) return;
+    const auto& r = *rt.objects[0]->assetMetadata;
+    CHECK(r.category == "furniture",        "assetMetadata: category survives");
+    CHECK(r.subcategory == "chair",         "assetMetadata: subcategory survives");
+    CHECK(r.facing == "-Z",                 "assetMetadata: facing survives");
+    CHECK(r.collisionProxy == "box",        "assetMetadata: collisionProxy survives");
+    CHECK(r.shadowPolicy == "cast_receive", "assetMetadata: shadowPolicy survives");
+    CHECK(r.license == "CC-BY-4.0",         "assetMetadata: license survives");
+    CHECK(r.provenance == "hand-authored",  "assetMetadata: provenance survives");
+    CHECK(r.sourceGeneratorOrHash == "lua.object.chair.simple", "assetMetadata: sourceGeneratorOrHash survives");
+    CHECK(r.semanticVersion == "1.2.3",     "assetMetadata: semanticVersion survives");
+    CHECK(r.instancingEligible == false,    "assetMetadata: instancingEligible survives");
+    CHECKF(r.maxVisibilityDistanceM, 250.0f, "assetMetadata: maxVisibilityDistanceM survives");
+    CHECKF(r.selectionWeight, 2.5f,          "assetMetadata: selectionWeight survives");
+    CHECKF(r.nominalSize[1], 0.9f,           "assetMetadata: nominalSize.y survives");
+    CHECKF(r.boundsMin[0], -0.25f,           "assetMetadata: boundsMin.x survives");
+    CHECKF(r.boundsMax[1], 0.9f,             "assetMetadata: boundsMax.y survives");
+    CHECKF(r.clearanceVolume[0], 0.8f,       "assetMetadata: clearanceVolume.x survives");
+    CHECK(r.semanticTags.size() == 2,        "assetMetadata: semanticTags count survives");
+    CHECK(r.styleTags.size() == 1 && r.styleTags[0] == "rustic", "assetMetadata: styleTags survive");
+    CHECK(r.materialSlots.size() == 2,       "assetMetadata: materialSlots count survives");
+    CHECK(r.sockets.count("seat_top") == 1,  "assetMetadata: socket key survives");
+    if (r.sockets.count("seat_top"))
+        CHECKF(r.sockets.at("seat_top")[1], 0.45f, "assetMetadata: socket position survives");
+    CHECK(r.lods.size() == 2,                "assetMetadata: lods count survives");
+    CHECK(r.lods.count("near") == 1 && r.lods.at("near") == "chair.oak.lod0",
+          "assetMetadata: lod tier->definition survives");
+}
+
+static void testScriptIdRoundtrip() {
+    Mc3Document doc;
+    auto obj      = std::make_shared<Mc3Object>();
+    obj->id       = "door1";
+    obj->type     = ObjectType::Box;
+    obj->primitive = Mc3Primitive{};
+    obj->scriptId = "onOpenDoor";
+    doc.objects.push_back(obj);
+
+    auto rt = roundtrip(doc);
+    CHECK(!rt.objects.empty(), "scriptId: object present after roundtrip");
+    if (rt.objects.empty()) return;
+    CHECK(rt.objects[0]->scriptId == "onOpenDoor", "scriptId: survives (was silently dropped by MCB)");
+}
+
+static void testLibraryAndImportsRoundtrip() {
+    Mc3Document doc;
+    Mc3LibraryInfo lib;
+    lib.libraryNamespace = "city-core";
+    lib.version           = "3.2.1";
+    lib.contentHash        = "sha256:deadbeef";
+    doc.library = lib;
+
+    Mc3Import imp;
+    imp.importNamespace = "city";
+    imp.source            = "mc3lib://city-core@3.2.1";
+    imp.hash               = "sha256:cafef00d";
+    doc.imports.push_back(imp);
+
+    auto rt = roundtrip(doc);
+    CHECK(rt.library.has_value(), "library: present after roundtrip (was silently dropped by MCB)");
+    if (rt.library) {
+        CHECK(rt.library->libraryNamespace == "city-core", "library: namespace survives");
+        CHECK(rt.library->version == "3.2.1",              "library: version survives");
+        CHECK(rt.library->contentHash == "sha256:deadbeef", "library: contentHash survives");
+    }
+    CHECK(rt.imports.size() == 1, "imports: entry present after roundtrip (was silently dropped by MCB)");
+    if (rt.imports.size() == 1) {
+        CHECK(rt.imports[0].importNamespace == "city",                    "imports: namespace survives");
+        CHECK(rt.imports[0].source == "mc3lib://city-core@3.2.1",         "imports: source survives");
+        CHECK(rt.imports[0].hash == "sha256:cafef00d",                    "imports: hash survives");
+    }
+}
+
+// ---------------------------------------------------------------------------
 // STAB-0123 — N1 svgTextures map
 // ---------------------------------------------------------------------------
 
@@ -1311,6 +1429,9 @@ int main() {
     testEnvironmentAllFields();
     testTextureAllFields();
     testObjectMetadata();
+    testAssetMetadataRoundtrip();
+    testScriptIdRoundtrip();
+    testLibraryAndImportsRoundtrip();
     testSvgTexture();
     testEmbed();
     testScript();

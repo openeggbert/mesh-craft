@@ -202,6 +202,53 @@ static void writeUvMapping(std::ostream& o, const Mc3::Mc3UvMapping& uv) {
     wEnd(o);
 }
 
+static void writeAssetMetadata(std::ostream& o, const Mc3::Mc3AssetMetadata& am) {
+    const Mc3::Mc3AssetMetadata def;
+    // Key names deliberately match the XML/JSON wire attribute names (not
+    // always the literal C++ field name, e.g. "maxVisibilityDistance" not
+    // "maxVisibilityDistanceM") so all three formats agree on one wire
+    // vocabulary for this struct -- see field_matrix.py / SYS-W1-04.
+    wIfStr (o, "category",           am.category,           "");
+    wIfStr (o, "subcategory",        am.subcategory,        "");
+    wIfStr (o, "facing",             am.facing,             "");
+    wIfStr (o, "collisionProxy",     am.collisionProxy,     "");
+    wIfStr (o, "shadowPolicy",       am.shadowPolicy,       "");
+    wIfStr (o, "license",            am.license,            "");
+    wIfStr (o, "provenance",         am.provenance,         "");
+    wIfStr (o, "source",             am.sourceGeneratorOrHash, "");
+    wIfStr (o, "version",            am.semanticVersion,    "");
+    wIfBool(o, "instancingEligible", am.instancingEligible, def.instancingEligible);
+    wIfF32 (o, "maxVisibilityDistance", am.maxVisibilityDistanceM, def.maxVisibilityDistanceM);
+    wIfF32 (o, "selectionWeight",    am.selectionWeight,    def.selectionWeight);
+    wIfVec3(o, "nominalSize",        am.nominalSize,        kZero3);
+    wIfVec3(o, "boundsMin",          am.boundsMin,          kZero3);
+    wIfVec3(o, "boundsMax",          am.boundsMax,          kZero3);
+    wIfVec3(o, "clearanceVolume",    am.clearanceVolume,    kZero3);
+
+    auto writeTagList = [&](const char* key, const std::vector<std::string>& tags) {
+        if (tags.empty()) return;
+        wKeyArr(o, key, static_cast<uint32_t>(tags.size()));
+        for (const auto& t : tags) { wU8(o, TAG_STR); wRawStr(o, t); }
+    };
+    writeTagList("semanticTags",  am.semanticTags);
+    writeTagList("styleTags",     am.styleTags);
+    writeTagList("regionTags",    am.regionTags);
+    writeTagList("periodTags",    am.periodTags);
+    writeTagList("materialSlots", am.materialSlots);
+
+    if (!am.sockets.empty()) {
+        wKeyMap(o, "sockets", static_cast<uint32_t>(am.sockets.size()));
+        for (const auto& [name, pos] : am.sockets) { wRawStr(o, name); wU8(o, TAG_VEC3); wVec3(o, pos); }
+    }
+    if (!am.lods.empty()) {
+        // "tier" is a native map key here (Mc3AssetMetadata::lods), not a
+        // separate field -- same shape as the allowlisted "key" entries.
+        wKeyMap(o, "lods", static_cast<uint32_t>(am.lods.size()));
+        for (const auto& [tier, defId] : am.lods) { wRawStr(o, tier); wU8(o, TAG_STR); wRawStr(o, defId); }
+    }
+    wEnd(o);
+}
+
 static void writeObjectState(std::ostream& o, const Mc3::Mc3ObjectState& st) {
     if (st.position) wFieldVec3(o, "position", *st.position);
     if (st.rotation) wFieldVec3(o, "rotation", *st.rotation);
@@ -226,6 +273,9 @@ static void writeObject(std::ostream& o, const Mc3::Mc3Object& obj) {
     if (!obj.definition.empty())       wFieldStr (o, "definition",       obj.definition);
     if (!obj.meshSource.empty())       wFieldStr (o, "meshSource",       obj.meshSource);
     if (!obj.materialOverride.empty()) wFieldStr (o, "materialOverride", obj.materialOverride);
+    // R103: MCB/XML/JSON all agree on the wire name "script" (not the C++
+    // field name "scriptId") -- see field_matrix.py's "script" allowlist entry.
+    if (!obj.scriptId.empty())         wFieldStr (o, "script",           obj.scriptId);
 
     // Transform — only write if non-default
     const Mc3::Mc3Transform tdef;
@@ -241,6 +291,7 @@ static void writeObject(std::ostream& o, const Mc3::Mc3Object& obj) {
     if (obj.csgOperation) { wKeyObj(o, "csgOperation"); writeCsgOp(o, *obj.csgOperation); }
     if (obj.extrude)      { wKeyObj(o, "extrude");      writeExtrude(o, *obj.extrude); }
     if (obj.uvMapping)    { wKeyObj(o, "uvMapping");    writeUvMapping(o, *obj.uvMapping); }
+    if (obj.assetMetadata) { wKeyObj(o, "assetMetadata"); writeAssetMetadata(o, *obj.assetMetadata); }
 
     if (!obj.tags.empty()) {
         wKeyArr(o, "tags", static_cast<uint32_t>(obj.tags.size()));
@@ -452,6 +503,20 @@ static void writeAction(std::ostream& o, const Mc3::Mc3Action& act) {
     wEnd(o);
 }
 
+static void writeLibraryInfo(std::ostream& o, const Mc3::Mc3LibraryInfo& lib) {
+    wIfStr(o, "namespace", lib.libraryNamespace, "");
+    wIfStr(o, "version",   lib.version,          "");
+    wIfStr(o, "hash",      lib.contentHash,      "");
+    wEnd(o);
+}
+
+static void writeImport(std::ostream& o, const Mc3::Mc3Import& imp) {
+    wIfStr(o, "namespace", imp.importNamespace, "");
+    wIfStr(o, "source",    imp.source,          "");
+    wIfStr(o, "hash",      imp.hash,            "");
+    wEnd(o);
+}
+
 static void writeDocument(std::ostream& o, const Mc3::Mc3Document& doc) {
     const Mc3::Mc3Document def;
     wIfStr(o, "version",          doc.version,          def.version.c_str());
@@ -461,6 +526,13 @@ static void writeDocument(std::ostream& o, const Mc3::Mc3Document& doc) {
     wIfStr(o, "rotationUnits",    doc.rotationUnits,    def.rotationUnits.c_str());
     wIfStr(o, "eulerOrder",       doc.eulerOrder,       def.eulerOrder.c_str());
     wIfStr(o, "defaultCamera",    doc.defaultCamera,    "");
+
+    // R110/R101: library identity + imports (mc3lib documents / consumers).
+    if (doc.library) { wKeyObj(o, "library"); writeLibraryInfo(o, *doc.library); }
+    if (!doc.imports.empty()) {
+        wKeyArr(o, "imports", static_cast<uint32_t>(doc.imports.size()));
+        for (const auto& imp : doc.imports) { wU8(o, TAG_OBJ); writeImport(o, imp); }
+    }
 
     if (!doc.meta.empty()) {
         wKeyMap(o, "meta", static_cast<uint32_t>(doc.meta.size()));
