@@ -84,12 +84,12 @@ P1s already being fixed in git history. This session:
    is per-field only) not part of the original audit, filed as new `TODO`
    tasks.
 
-   **Net across all 7 AUD-### rows remaining in this active backlog (61
+   **Net across all 8 AUD-### rows remaining in this active backlog (61
    additional rows completed and archived to `docs/history/plan_20260718.md`
    on 2026-07-18 — see that file for their full evidence/resolution text):
-   1 DONE, 4 TODO, 2 DEFERRED** — the 1 DONE (`AUD-064`) is a fresh finding
-   from a 2026-07-18 (later same day) independent re-audit, not one of the
-   original 6; recompute with
+   2 DONE, 4 TODO, 2 DEFERRED** — the 2 DONE (`AUD-064`, `AUD-065`) are
+   fresh findings from a 2026-07-18 (later same day) independent re-audit,
+   not part of the original 6; recompute with
    `python3 test/validate_plan_consistency.py . <build-dir>` rather than
    trusting this number as time passes.
 5. Archived `plan_deep_audit.md` (all 57 of its own tasks were already
@@ -1063,3 +1063,11 @@ remain in this active file.
 - **Tests:** New `test/grid_stress.mc3.xml` fixture (`subdivisions_x="4096" subdivisions_z="4096"`) + `smoke_test_grid_stress` ctest (TIMEOUT 30, `test/smoke_test.sh`).
 - **Resolved:** commit `ecbe3e7` — verify: `ctest -R smoke_test_grid_stress`
 - **Status note:** Empirically confirmed as a real freeze, not just a theoretical risk, before writing the fix: `MeshCraft grid_stress.mc3.xml --screenshot out.png` did not complete within a 20s timeout on the unpatched binary (reproduced via `git stash` of the one-line fix); with the fix it completes in ~3s, the same as normal startup. Severity assessed as P0 (unsafe/untrusted-input-driven crash-or-freeze on a live, interactive path — an AI-generated or hand-edited `.mc3.xml`/`.mc3.json` can trigger it with no warning), one step above `AUD-059`'s own P1, since that finding's fix does not cover this exact multiplicative case. Scope was deliberately kept to the one confirmed, reproduced instance (`drawGridDynamic`); a closely related but unconfirmed-severity issue in the same file (`drawExtrudeDynamic` builds its full buffer before its own existing `numVerts>65535` bailout, wasting allocation but not looping past it) was found by the same audit pass and is a good candidate for a small follow-up, not folded into this fix to keep it minimal and independently verifiable.
+
+### AUD-065 `[DONE]` `P1` `W1` · .mc3.json load path applies none of the XML path's per-field tessellation clamps — bypasses AUD-005/AUD-064 hardening entirely
+- **Component:** mc3/src/Mc3JsonParser.cpp (toPrimitive/toCrossSection/toExtrude)
+- **Evidence:** Found via the same fresh adversarial re-audit as `AUD-064`. `Mc3XmlParser.cpp` clamps every `segments`/`sides`/`subdivisions_x`/`subdivisions_z` attribute to `kMaxTessellation=4096` via `attrCountBudgeted` (`AUD-005`). `Mc3JsonParser.cpp:79,83-84,101-102,143` (pre-fix) read the equivalent JSON keys (`segments`, `subdivisionsX`, `subdivisionsZ`, `sides`, extrude `segments`) with a raw `j["..."].get<int>()` and no clamp whatsoever — a `.mc3.json` with `"segments": 100000000` or `"subdivisionsX": 4096, "subdivisionsZ": 4096` (the exact `AUD-064` trigger) passed straight through, reaching `SceneRenderer`/`mc3togltf` unclamped. Since `.mc3.json` is a fully supported, documented second serialization of the same `Mc3Document` AST (not a debug/internal format), this is a real, reachable bypass of both `AUD-005`'s and `AUD-064`'s protections, not a hypothetical one.
+- **Outcome:** Apply the same per-field clamps (mirroring `Mc3XmlParser.cpp`'s bounds exactly) on the JSON load path.
+- **Tests:** New `mc3/test/json_input_budget_test.cpp` (`mc3_json_input_budget` ctest, 13 assertions) — mirrors `mc3_input_budget`'s XML fixture shape: hostile `segments`/`subdivisionsX`/`subdivisionsZ`/extrude `sides`/`segments` values are clamped to `<=4096`, negative `segments` floors at `0`, legitimate values pass through unchanged.
+- **Resolved:** commit `2ac7db4` — verify: `ctest -R mc3_json_input_budget`
+- **Status note:** Fixed with a small `clampTess()` helper (`Mc3JsonParser.cpp`, mirrors `Mc3XmlParser.cpp`'s `kMaxTessellation`/per-field minimums) applied at all 6 read sites. Full CNA-free `mc3` standalone suite: 20/20 `ctest` (was 19); also built and verified from the root `b-release` tree directly (target + `ctest -R` both pass there too). **Not covered by this fix, deliberately (separate, larger follow-ups):** (1) the JSON path is still not wired into `Mc3XmlParser.cpp`'s document-wide `DocumentBudget`/total-tessellation-weight tracking (`AUD-059`) — that budget is a `thread_local` file-static with no shared header, and covers materials/textures/embeds/actions/etc. too, not just tessellation; (2) `Mc3JsonParser::parseString`'s `Mc3LoadPolicy` parameter is still entirely unused (a separate, pre-existing finding from the same audit pass, not folded in here). **Could not run the full root `ctest` suite end-to-end** while verifying this — see §4's new blocker note in `NEXT.md` (an unrelated, external `../easy-gl`/`../meta-gl` mid-edit breaking the CNA-linked build, discovered incidentally, out of this repo's bounds to fix).

@@ -15,10 +15,28 @@ the live editor (empirically confirmed: unpatched binary did not finish a
 a bounds check before allocating, matching `drawExtrudeDynamic`'s own
 existing fallback convention in the same file. New `test/grid_stress.mc3.xml`
 + `smoke_test_grid_stress` ctest (regression guard). Full rebuild + fresh
-`ctest`: **133/133** (was 132). The remaining 11 findings from this same
-audit pass are not yet actioned — see the user/session transcript for the
-full ranked list; re-derive from a fresh audit if this note has gone stale
-rather than trusting it indefinitely.
+root `ctest` immediately after this fix, before the second fix below and
+before the blocker described next: 133 of 133 tests passing (was 132).
+Second: **`AUD-065`** (commit `2ac7db4`) — `Mc3JsonParser.cpp` (the
+`.mc3.json` load path) applied NONE of the per-field tessellation clamps
+(`kMaxTessellation=4096`) the XML path has enforced since `AUD-005`, so a
+hand-edited or AI-generated `.mc3.json` bypassed that hardening entirely,
+including `AUD-064`'s own Grid case. Fixed with a `clampTess()` helper at
+all 6 read sites (primitive segments/subdivisionsX/Z, extrude cross-section
+sides/segments, extrude path segments); new `mc3_json_input_budget` test
+(13 assertions), mirrors `mc3_input_budget`'s XML coverage. Verified via
+the standalone CNA-free `mc3/build` tree: 20 of 20 tests passing (was 19),
+and confirmed the new test also builds and passes when built directly from
+the root `b-release` tree. **Could NOT re-verify the full root `ctest`
+suite after this second fix** — see the new blocker note in §4/§5 below,
+discovered mid-way through this item, unrelated to it: the root tree now
+registers 134 tests total (configure succeeds), but the CNA-linked portion
+cannot currently be built at all, so no root-suite N/N claim can be made
+honestly right now — read §4 before trusting any root-level test count
+until that blocker is confirmed cleared. The remaining 10 findings from
+this same audit pass are not yet actioned — see the user/session
+transcript for the full ranked list; re-derive from a fresh audit if this
+note has gone stale rather than trusting it indefinitely.
 
 _Last updated: 2026-07-18 (later same day, third continuation this date).
 Continues the two 2026-07-18 sessions recorded below (SYS-W14-10..17 +
@@ -38,9 +56,13 @@ Pushed to `origin/develop`; see `git log --oneline -20` for the exact
 commit list newer than this._
 
 **The §4/§5 "CNA build regression" described below is long RESOLVED** —
-see the update at the top of §4. A fresh reconfigure + full rebuild +
-ctest (**133/133**, up from 126/126 at the start of the referenced session,
-+1 more from `AUD-064`'s `smoke_test_grid_stress` above) all pass.
+see the update at the top of §4 (a DIFFERENT, unrelated blocker affecting
+`../easy-gl`/`../meta-gl` is open as of this same day's later top-of-file
+note, read that before trusting any current full-suite count). At the
+point this paragraph was written (right after `AUD-064`, before `AUD-065`
+and before the new blocker), a fresh reconfigure + full rebuild + ctest had
+133 of 133 tests passing, up from 126 of 126 at the start of the
+referenced session (+1 from `AUD-064`'s `smoke_test_grid_stress` above).
 
 **Today ran in three parts, all on `origin/develop`:** (1) the 9
 `SYS-W14-10`..`17` + `SYS-W12-02` tasks, implemented one at a time per
@@ -573,6 +595,37 @@ R110/R101) left `mc3.xsd`/MCB gaps — closed this session, see §3's
 `SYS-W6-04` entry above.
 
 ## 4. Current blocker / main problem
+
+**NEW, 2026-07-18 (this session), UNRESOLVED: `../easy-gl`/`../meta-gl`
+(two-level-deep siblings of `../cna`) are mid-edit and currently break the
+full root build.** Discovered incidentally while verifying `AUD-065` (a
+mc3-only, CNA-free fix) — NOT caused by this session's own work; confirmed
+by building the unrelated `Mc3` library and its tests in isolation (both
+the standalone `mc3/build` tree and the root `b-release` tree), which
+compile and pass cleanly. The failure is entirely inside `../easy-gl`:
+
+```
+easy-gl/include/easygl/Device.hpp:50: error: 'ClearBuffer' has not been declared
+easy-gl/src/Device.cpp:141: error: 'ClearBuffer' was not declared in this scope
+```
+
+`git status` in `../meta-gl` shows real uncommitted local modifications to
+`include/metagl/Enums.hpp`/`EnumNames.hpp`/`Functions.hpp` (adding/renaming
+`ClearBuffer`-related entries) with a very recent mtime — this looks like
+another process's in-progress edit (per `CLAUDE.md`, a separate instance
+handles CNA and its own dependency chain), not a committed regression.
+`cmake --build b-release -j4 -- -k0` confirms all 16 failing `.o` files are
+inside `easy-gl` (`Buffer.cpp`, `Device.cpp`, `Program.cpp`, `Texture.cpp`,
+...) — nothing in `mesh-craft`'s own tree. **Do not touch `../easy-gl` or
+`../meta-gl` from here** (out of bounds, same as `../cna`/`../sharp-runtime`
+per `CLAUDE.md`) — this should resolve itself once that other edit
+finishes/commits; re-run a fresh `cmake --build` to check before assuming
+it's still broken. Until then, the editor (`MeshCraft`) and every
+CNA-linked test (`render`/`perf`/`ai`/`commands`/`registry` labels) cannot
+be built or verified from this repo; the CNA-free libraries (`mc3`, `mcb`)
+and their tests are unaffected and fully verifiable via the standalone
+`mc3/build`/`mcb/build` trees or by building just their own root-tree
+targets.
 
 **RESOLVED, 2026-07-17 (same session): a `../cna`-side regression briefly
 broke every fresh build of this repo; fixed in `../cna` with the user's
