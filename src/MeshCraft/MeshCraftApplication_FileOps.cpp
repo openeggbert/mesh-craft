@@ -134,23 +134,35 @@ void MeshCraftApplication::setStatusMsg(std::string msg, bool isError, float dur
     statusMsgTimer_ = duration;
 }
 
-// STAB-0701: see header comment. Non-fatal -- the file still loads and
-// displays/edits fine, only the *interpretation* of its rotation values
-// during live rendering differs from what the file declares.
+// STAB-0701/SYS-W14-14: see header comment. Non-fatal -- the file still
+// loads and displays/edits fine, only the *interpretation* of these 3
+// declared conventions during live rendering (and, for coordinate_system,
+// export too) differs from what the file declares.
 void MeshCraftApplication::checkRotationConventionNotice() {
-    const bool nonDefaultUnits = document_.rotationUnits != "degrees";
-    const bool nonDefaultOrder = document_.eulerOrder != "XYZ";
-    if (!nonDefaultUnits && !nonDefaultOrder) return;
+    const bool nonDefaultUnits  = document_.rotationUnits != "degrees";
+    const bool nonDefaultOrder  = document_.eulerOrder != "XYZ";
+    const bool nonDefaultCoords = document_.coordinateSystem != "right_handed_y_up";
+    if (!nonDefaultUnits && !nonDefaultOrder && !nonDefaultCoords) return;
 
-    std::string what = nonDefaultUnits && nonDefaultOrder
-        ? "rotation_units=\"" + document_.rotationUnits + "\" and euler_order=\"" + document_.eulerOrder + "\""
-        : nonDefaultUnits
-            ? "rotation_units=\"" + document_.rotationUnits + "\""
-            : "euler_order=\"" + document_.eulerOrder + "\"";
+    std::vector<std::string> declared;
+    if (nonDefaultUnits)  declared.push_back("rotation_units=\"" + document_.rotationUnits + "\"");
+    if (nonDefaultOrder)  declared.push_back("euler_order=\"" + document_.eulerOrder + "\"");
+    if (nonDefaultCoords) declared.push_back("coordinate_system=\"" + document_.coordinateSystem + "\"");
+
+    std::string what;
+    for (size_t i = 0; i < declared.size(); ++i) {
+        if (i > 0) what += (i + 1 == declared.size()) ? " and " : ", ";
+        what += declared[i];
+    }
+    std::string honored = nonDefaultUnits || nonDefaultOrder
+        ? "renders rotations as degrees in XYZ order and treats geometry as right-handed Y-up"
+        : "treats geometry as right-handed Y-up";
     setStatusMsg("Note: this file declares " + what +
-                 " -- the editor's live preview always renders rotations as "
-                 "degrees in XYZ order (export-only field, see STAB-0701)",
-                 /*isError=*/false, /*duration=*/6.0f);
+                 " -- the editor's live preview always " + honored +
+                 " regardless (rotation_units/euler_order are export-only, "
+                 "STAB-0701; coordinate_system is never honored anywhere, "
+                 "not even by mc3togltf, SYS-W14-14 -- see MC3_FORMAT.md)",
+                 /*isError=*/false, /*duration=*/7.0f);
 }
 
 

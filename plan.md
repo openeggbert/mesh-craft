@@ -360,19 +360,54 @@ _All items in this workstream are DONE — archived to [`docs/history/plan_20260
   memory) — re-check whether that initiative itself has stabilized this
   format before building UI against it, to avoid UI churn if the underlying
   fields still move. Found via `missing.md`'s 2026-07-18 update.
-- **SYS-W14-14** `[TODO]` `P2` — Wire up `coordinate_system` so it actually
-  affects something. The invalid `"left_handed_y_up"` combo option was
-  already removed (`STAB-0713`, combo now only offers the 2 XSD-valid
-  values), but `Mc3Document::coordinateSystem` is still write-only — stored
-  and editable, but never read anywhere in `mc3togltf/` or `src/MeshCraft/`
+- **SYS-W14-14** `[DEFERRED, human-authorized-precedent decision — see note]`
+  `P2` — Wire up `coordinate_system` so it actually affects something. The
+  invalid `"left_handed_y_up"` combo option was already removed
+  (`STAB-0713`, combo now only offers the 2 XSD-valid values), but
+  `Mc3Document::coordinateSystem` is still write-only — stored and
+  editable, but never read anywhere in `mc3togltf/` or `src/MeshCraft/`
   (confirmed by direct grep, no read sites found). A user can correctly set
   this field through the GUI and it has zero effect on rendering or export.
-  This is more of a real completeness/correctness gap than a missing-UI one
-  — either implement the actual coordinate-system conversion (editor
-  preview + exporter), or explicitly document it as declarative-only
-  metadata with no behavioral effect (matching how `SYS-W5-03` handled a
-  similar "policy decision needed" MC3-governance question). Found via
-  `missing.md`'s 2026-07-18 update.
+  Found via `missing.md`'s 2026-07-18 update.
+  **Investigation + decision (2026-07-18):** this row's own text offered
+  two paths — implement the real conversion, or document as declarative-
+  only (matching `SYS-W5-03`'s precedent). Investigated what "implement
+  the real conversion" would actually require: `right_handed_z_up` vs.
+  `right_handed_y_up` differ only in which axis is "up," so a single
+  root-transform (axis swap) applied once at the scene root would in
+  principle be enough — mechanically simple. But that root transform would
+  need to be applied **consistently across every independent root-matrix
+  call site**: `SceneRenderer::draw()`, `drawEmissivePass()`,
+  `drawCsgGizmos()`, and `computeObjectWorldMatrix()` (used by picking and
+  the Properties panel's world-position display) in the editor, plus
+  `GltfExporter.cpp`'s own root node construction — matching this
+  project's own already-documented "two independent geometry generators"
+  risk (`NEXT.md`'s architecture notes: the editor and exporter build
+  geometry independently with no shared code, and are known to require
+  careful manual sync, e.g. deliberately-opposite triangle winding).
+  Missing even one of these call sites would make gizmos/picking silently
+  disagree with rendered geometry — a worse, harder-to-notice bug than
+  today's "field does nothing" gap. Chose the same resolution as
+  `SYS-W5-03`'s precedent: **documented as a known, by-design limitation
+  rather than implemented**, since a correct implementation needs the same
+  careful multi-site consistency discipline `SYS-W1-05`/`06`/`07` used for
+  cycle-guards, not a single-file quick fix, and a "why not just do it"
+  investigation belongs in this file even when the answer is "not yet."
+  **What DID ship, matching the `rotation_units`/`euler_order` precedent
+  exactly (`STAB-0701`):** `checkRotationConventionNotice()`
+  (`MeshCraftApplication_FileOps.cpp`) now also checks `coordinateSystem`
+  and includes it in the combined load-time status-bar notice (was
+  rotation-only, now covers all 3 declarative-but-unhonored conventions in
+  one combined message when more than one applies). `MC3_FORMAT.md`
+  updated: `coordinate_system`'s value table was missing
+  `right_handed_z_up` entirely (a pre-existing doc bug, fixed in passing),
+  plus a new paragraph stating plainly that this field is honored
+  **nowhere**, not even by the exporter (a weaker guarantee than
+  `rotation_units`/`euler_order`, which are at least export-honored), with
+  the same reasoning as above for why. Verify: full rebuild +
+  `ctest -j"$(nproc)"` (126/126, unchanged), `test/validate_xsd.py` against
+  a hand-built `coordinate_system="right_handed_z_up"` fixture (valid),
+  manual `--screenshot` smoke test loading it (no crash, clean GL state).
 - **SYS-W14-15** `[DONE, material texture slots only — see scope note]` `P3`
   — Native file-browse dialog for texture/mesh path fields (currently plain
   `ImGui::InputText` boxes everywhere, including the Import OBJ dialog and

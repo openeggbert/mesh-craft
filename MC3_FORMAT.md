@@ -18,7 +18,7 @@ MC3 (MeshCraft 3D) is an XML-based scene format (`.mc3.xml`). It describes a 3D 
 | `version` | string | `"0.3"` |
 | `model` | string | `"unnamed"` |
 | `unit` | `"meter"`, `"centimeter"`, `"inch"` | `"meter"` |
-| `coordinate_system` | `"right_handed_y_up"` | `"right_handed_y_up"` |
+| `coordinate_system` | `"right_handed_y_up"`, `"right_handed_z_up"` | `"right_handed_y_up"` |
 | `rotation_units` | `"degrees"`, `"radians"` | `"degrees"` |
 | `euler_order` | `"XYZ"`, `"XZY"`, `"YXZ"`, `"YZX"`, `"ZXY"`, `"ZYX"` | `"XYZ"` |
 | `default_camera` | string (references a `<camera>`'s `name`) | — (see [Cameras](#cameras)) |
@@ -27,6 +27,29 @@ MC3 (MeshCraft 3D) is an XML-based scene format (`.mc3.xml`). It describes a 3D 
 but the live editor's transform gizmo, keyboard nudging, and mouse-drag
 rotation always assume degrees in a fixed XYZ order regardless of what a
 loaded document declares (won't-fix, tracked as `STAB-0701`).
+
+**`coordinate_system` is declarative metadata only — not honored anywhere,
+not even by `mc3togltf`** (won't-fix, tracked as `SYS-W14-14`; a weaker
+guarantee than `rotation_units`/`euler_order` above, which are at least
+export-honored). Both the live editor and the exporter always treat scene
+geometry, cameras, and lights as right-handed Y-up (matching glTF's own
+fixed convention) regardless of what a document declares. Setting
+`right_handed_z_up` parses, round-trips, and is settable through the
+Scene Properties panel, but has zero effect on rendering or export.
+Actually honoring it would mean applying a consistent axis-conversion
+transform across every renderer/exporter/picking/gizmo entry point that
+walks the scene graph — `SceneRenderer.cpp` alone has several independent
+root-transform call sites (`draw()`, `drawEmissivePass()`,
+`drawCsgGizmos()`, `computeObjectWorldMatrix()`) that would all need the
+exact same conversion applied consistently, matching this project's own
+documented "two independent geometry generators" risk (see the
+architecture notes in `NEXT.md`) — getting even one of them wrong would
+make gizmos/picking silently disagree with rendered geometry, a worse bug
+than today's inert-field gap. Loading a document with a non-default
+`coordinate_system` (or `rotation_units`/`euler_order`) now shows a
+combined status-bar notice naming every declared-but-unhonored
+convention (`checkRotationConventionNotice()`,
+`MeshCraftApplication_FileOps.cpp`).
 
 ---
 
