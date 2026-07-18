@@ -1,6 +1,14 @@
 # MeshCraft Stabilization Policy and Summary
 
-_Last updated: 2026-07-07, re-verified as part of a conservative-maintainer audit — every count below was recomputed directly from `plan.md`'s per-row status markers and `ctest`, not carried over from a prior revision of this document._
+_Last updated: 2026-07-18, re-verified against current `plan.md`/`ctest` state (was last touched 2026-07-07; every count below was recomputed fresh, not carried over)._
+
+**Gate status as of this update: all gates (A–E) satisfied.** `plan.md`
+has zero open P0 findings — the only remaining `AUD-###` rows are P1–P3,
+each owner-gated/environment-blocked (CI parked, no Android NDK) or
+DEFERRED (informational, by-design). Gate F ("no new features until
+gates are green") was explicitly, knowingly overridden by the user for a
+batch of `SYS-W14-##` feature rows — a granted exception, not a broken
+gate; see `NEXT.md` §9 for how that's actually been handled in practice.
 
 ---
 
@@ -42,25 +50,25 @@ gate scheme (Gate 0–6). That backlog is archived in
 
 ---
 
-## Current Test Suite (2026-07-07)
+## Current Test Suite (2026-07-18)
 
-**66 CTest tests, all passing** — verified from a genuinely clean build (`rm -rf cmake-build-debug`, full reconfigure + rebuild, then `ctest`) as part of this session's audit, not carried over from an incrementally-updated build directory. Label breakdown: `ai` 1, `commands` 1, `export` 44, `format` 3, `registry` 1, `render` 16. Full per-test reference (all 66, not just a representative subset) lives in `TESTING.md` — this section is intentionally not a duplicate list; see there.
+**132 CTest tests, all passing** — re-verified against a fresh build as of today's last commit (was 66 at the 2026-07-07 count above; growth is organic backlog/feature work across many sessions since, not a one-time jump — see `plan.md`/`NEXT.md` for the session-by-session history). Full per-test reference lives in `TESTING.md` — this section is intentionally not a duplicate list; see there, and re-run `ctest -N` for the live count rather than trusting any number here as time passes.
 
-Also verified independently of the root build: standalone (CNA-free) configure/build/test for `mc3/` (1/1), `mcb/` (1/1), `mc3togltf/` (41/41), `mc3tomcb/` (3/3) — each must stay buildable without CNA/ImGui, per `CLAUDE.md`. Re-run from scratch 2026-07-07, not assumed from a prior count.
+Also verified independently of the root build: standalone (CNA-free) configure/build/test for `mc3/`, `mcb/`, `mc3togltf/`, `mc3tomcb/` — each must stay buildable without CNA/ImGui, per `CLAUDE.md`.
 
-Run: `cd cmake-build-debug && ctest --output-on-failure` (see `NEXT.md` section 7 for the full command list, including a fresh configure).
+Run: `cd b-release && ctest --output-on-failure` (see `NEXT.md` section 7 for the full command list, including a fresh configure).
 
 ---
 
-## Known Gaps (re-verified 2026-07-07 — headlines below are still accurate; no new architectural gaps found this session beyond what's listed)
+## Known Gaps (re-verified 2026-07-18 — see `NEXT.md` §5 for anything newer)
 
 See `NEXT.md` section 5 ("Known bugs and limitations") for the authoritative, actively-maintained list — it is kept current every session, unlike this document's historical narrative below. Headlines:
 
 - CI workflow exists but is parked deactivated under `.github_/` — the git PAT lacks the `workflow` OAuth scope needed to activate it (owner action required).
 - SVG texture rasterization (N1) is parsed/serialized but not rasterized (stub only).
 - Embedded glTF (N2) is parsed/serialized but not resolved/inlined by `GltfExporter`.
-- `EditorViewport` is not integrated into `MeshCraftApplication`'s render loop.
-- N3-N7 extensions (scripts, sounds, music, triggers, scene states) are fully round-tripped (XML, MCB, XSD) but **not executed/applied at runtime** — no Lua interpreter, no audio playback, no trigger-firing event system, no "switch active scene state" logic. This is by design at the current stage (data model first), not a bug — see `MC3_FORMAT.md` for the per-feature status notes.
+- `EditorViewport` — **resolved 2026-07-17**: deleted outright (abandoned scaffolding, never wired in), not integrated.
+- N3-N7 extensions (scripts, sounds, music, triggers, scene states) are fully round-tripped (XML, MCB, XSD) but **not executed/applied at runtime** — no Lua interpreter, no trigger-firing event system, no "switch active scene state" logic. The editor does have a sound/music *preview* button (`Editor::AudioPreview`, added 2026-07-18) — that's an editing convenience, not a runtime audio engine for the exported scene. By design at the current stage (data model first), not a bug — see `MC3_FORMAT.md` for the per-feature status notes.
 - MCB compression flag is reserved in the header but not implemented.
 
 ---

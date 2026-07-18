@@ -1,38 +1,39 @@
 # NEXT.md
 
-_Last updated: 2026-07-18. Continues the 2026-07-17 session recorded below
-(`SYS-W1-07` → `../cna` fix → `SYS-W5-04`) with a new-day continuation:
-`plan.md` was pruned (61 `DONE` `AUD-###` + 33 `DONE` `SYS-###` rows moved
-to `docs/history/plan_20260718.md`), `missing.md` was re-verified against
-current source and updated, and 8 new `SYS-W14-10`..`17` rows were added
-per explicit user selection — see §3's newest entries and §8 for details.
+_Last updated: 2026-07-18 (later same day, third continuation this date).
+Continues the two 2026-07-18 sessions recorded below (SYS-W14-10..17 +
+SYS-W12-02 batch, then SYS-W14-16's undo/redo audit) with two further
+autonomous stretches: (1) `SYS-W3-01` Phases 3-7 (`MacroRecorder`,
+`UndoManager`, animation-override computation, `WalkController`,
+`AudioPreview`), `SYS-W14-03` (real PNG screenshots), `SYS-W14-08` (AI
+apply diff), and closing the stale `SYS-W9-01` row; (2) investigating and
+declining the two remaining `SYS-W3-01` roadmap candidates (file dialogs,
+post-processing) for different reasons — see §3's newest entries and §8.
 This file's own commit is, as always, self-referential (it cannot cite its
 own hash), see any `NEXT.md`-only commit for the same pattern. Working tree
 clean except the same two untracked, unrelated scratch scene files noted
 previously (`test/crownspire-citadel.mc3.xml`, `test/house3.glb` —
 manually authored demo content, not part of any tracked task, left as-is).
-**27 commits** ahead of the 2026-07-17 session's starting point
-(`f1900e3`); pushed to `origin/develop`. See `git log --oneline -25` for
-anything newer than this._
+Pushed to `origin/develop`; see `git log --oneline -20` for the exact
+commit list newer than this._
 
-**The §4/§5 "CNA build regression" described below is now RESOLVED** —
+**The §4/§5 "CNA build regression" described below is long RESOLVED** —
 see the update at the top of §4. A fresh reconfigure + full rebuild +
-ctest (126/126, +1 since `SYS-W5-04` added a new test) all pass again as
-of `../cna` commit `730ebbe9`.
+ctest (**132/132**, up from 126/126 at the start of today) all pass.
 
-**This session ran in two parts** (first 9 commits: the 4 originally-
-requested human decisions + immediate follow-through; next 11: continuing
-through `plan.md`'s backlog on explicit instruction to keep going). Full
-final validation: **125/125 `ctest`** (clean at `-j4`; this sandbox got
-busier as the session went on and `-j16`/`-j$(nproc)` runs late in the
-session saw 1-2 environmental TIMEOUT flakes on the slowest tests —
-confirmed not a regression by re-running at lower parallelism, see §3's
-last entry for the specific investigation). A repo-wide sweep for stray
-`TODO`/`FIXME`/`HACK` markers outside the `STAB-`/`AUD-`/`SYS-` ticket
-system found nothing real (one hit, a deliberate UI placeholder string,
-not unfinished code). No external commits landed from the sibling
-`mesh-world` repo during this session (checked at the end too, not just
-the start).
+**Today ran in three parts, all on `origin/develop`:** (1) the 9
+`SYS-W14-10`..`17` + `SYS-W12-02` tasks, implemented one at a time per
+`CLAUDE.md`'s ask-before-each workflow; (2) `SYS-W14-16`'s dedicated
+undo/redo audit (two parallel research agents, 27 real gaps found+fixed);
+(3) an explicitly user-authorized autonomous stretch across two
+sub-sessions completing `SYS-W3-01` Phases 3-7, `SYS-W14-03`, `SYS-W14-08`,
+closing stale `SYS-W9-01`, and investigating (then declining) file dialogs
+and post-processing as further `SYS-W3-01` candidates. Build parallelism
+was deliberately throttled to `-j4` for the back half of today (shared
+machine running many concurrent sessions — see the RAM-caution note a
+`free -h` check surfaced mid-session) rather than the earlier `-j$(nproc)`.
+No external commits landed from the sibling `mesh-world` repo today
+(checked at the end, not just the start).
 
 **Human decisions obtained at the start of this session** (see `plan.md`'s
 `SYS-W1-04`/`SYS-W3-01`/`AUD-036c` entries for the full rationale) — **all
@@ -100,11 +101,11 @@ one item remains, itself broken into phases (see §4).
   ```bash
   cmake -S . -B b-release && cmake --build b-release -j"$(nproc)"
   ```
-- **Tests: 126 / 126 `ctest` passing**, re-run against the fresh
-  post-fix build above (was 122/123 at the start of this session's first
-  half — `field_matrix` now passes, see `SYS-W6-04`; net +3 tests
-  (`preferences`, `benchmark`, `object_index`), +~60 new assertions
-  across extended existing tests, see §3).
+- **Tests: 132 / 132 `ctest` passing**, re-run against a fresh build as of
+  today's last commit. Net +6 tests since this morning's 126/126
+  (`macro_recorder`, `undo_manager`, `walk_controller`, `audio_preview`,
+  `png_screenshot_test`, plus assertions added to existing binaries
+  `ai_test`/`mc3_commands_test`/`undo_gesture_frame_test` — see §3).
 - **CLI/tools/apps/libraries currently available:**
   - `MeshCraft` — the interactive editor (`./b-release/MeshCraft
     scene.mc3.xml`, or `--screenshot out.png` / `--export out.glb` for
@@ -114,29 +115,29 @@ one item remains, itself broken into phases (see §4).
   - `mc3tomcb` — MC3 XML → MCB binary converter.
   - Standalone libraries `mc3` (format/AST + XML/JSON parse-writer),
     `mcb` (binary format) — both buildable and testable without CNA.
-- **Recently implemented** (this session; see §3 for the exact commit
-  list): closed `field_matrix`'s 18-field gate gap for real
-  (`Mc3Object::assetMetadata`/`scriptId`, `Mc3Document::library`/`imports`
-  now in `mc3.xsd` + MCB, not just XML); duplicate-object-id `Mc3Validation`
-  warning; deleted the dead `EditorViewport` stub; extracted narrow
-  `Editor::Preferences` (`SYS-W3-01` Phase 2); undo/redo now restores
-  selection instead of clearing it (`SYS-W9-03`); `AiAssistant` API-key
-  redaction + bounded error-message size (`SYS-W2-04`); closed every
-  `MC3_FORMAT.md` documentation gap (`SYS-W5-02`); found and fixed 5 stale
-  `plan.md`/`NEXT.md` status markers referencing findings that were
-  actually already done in earlier sessions; guarded `SceneRenderer`'s 4
-  remaining unguarded recursive traversals against cyclic children graphs
-  (`SYS-W1-07`); fixed a `../cna`-side build regression with explicit user
-  authorization (see §4); added `Editor::ObjectIndex`, a cached id/name
-  lookup replacing `flatFindById`/`flatFindByName`/`flatFindSharedById`'s
-  O(n) tree walks, after a scoped research pass found only animation
-  playback is a genuine per-frame hot path (`SYS-W5-04`).
+- **Recently implemented (today, 2026-07-18; see §3 for the exact commit
+  list):** the 8 `SYS-W14-10..17` editor-UI-coverage tasks + `SYS-W12-02`
+  (`--benchmark` mode); `SYS-W14-16`'s undo/redo audit (27 real gaps
+  found+fixed: 6 missing `pushUndo()` calls, 21 `AUD-036`-style dead
+  patterns); `SYS-W3-01` Phases 3-7 — extracted `Editor::MacroRecorder`,
+  `Editor::UndoManager`, the animation-override computation
+  (`computeAnimOverridesAlg`), `Editor::WalkController`, and
+  `Editor::AudioPreview` out of `MeshCraftApplication`; `SYS-W14-03` (real
+  PNG encoding for `--screenshot` — it used to silently write raw PPM
+  under a `.png` name, despite `--help` promising PNG); `SYS-W14-08` (AI
+  apply preview/diff before "Apply to Scene"); closed stale `SYS-W9-01`
+  (already resolved via `AUD-036b`+`SYS-W9-03`+`SYS-W14-16`, left
+  incorrectly marked `TODO`/`P0`). File dialogs and post-processing
+  (bloom/skybox/SSAO) were investigated as further `SYS-W3-01` candidates
+  and explicitly declined — see §4/§8.
 - **Known working examples:** `./b-release/MeshCraft test/house.mc3.xml`;
-  `./b-release/MeshCraft <scene> --screenshot out.png` (genuinely captures
-  the composited ImGui+3D framebuffer, not just the viewport — used
-  repeatedly this session as a real smoke test after `MeshCraftApplication`
-  changes); `./b-release/mc3togltf/mc3togltf test/features.mc3.xml
-  /tmp/out.glb`.
+  `./b-release/MeshCraft <scene> --screenshot out.png` (now writes a real,
+  decodable PNG — `SYS-W14-03` fixed the long-standing "always raw PPM
+  regardless of extension" gap; genuinely captures the composited
+  ImGui+3D framebuffer, not just the viewport); `./b-release/MeshCraft
+  <scene> --benchmark` (`SYS-W12-02`, in-process timing for
+  startup/frame/traversal/picking/undo/anim/registry);
+  `./b-release/mc3togltf/mc3togltf test/features.mc3.xml /tmp/out.glb`.
 - **What does not work yet / is not verified:**
   - Web (Emscripten) build: blocked by a crash inside `../cna`, not this
     repo (see §4/§5).
@@ -146,6 +147,67 @@ one item remains, itself broken into phases (see §4).
     (owner-gated — needs a workflow-scoped push token).
 
 ## 3. Recent changes
+
+**2026-07-18 (today, three parts — see the top-of-file summary):**
+
+- **Part 1 — the 8 `SYS-W14-10..17` rows + `SYS-W12-02`, all DONE:**
+  `scriptId` object-attachment combo (`-10`); native file-browse dialog
+  via `CNA::Devices::FileDialog`, new `CNA_DEVICES` CMake option (`-15`);
+  wired up write-only `coordinate_system` into the rotation-convention
+  status-bar notice (`-14`); `.mc3.json` editor open/save, plus a real
+  pre-existing bug fix (`saveFile()` always wrote XML regardless of the
+  current file's actual extension) (`-11`); Area properties panel
+  investigation, closed with no further UI needed (`-17`); Library/Imports
+  UI — new Scene Properties section + "Imports" tab (`-13`); `assetMetadata`
+  editor, all 23 fields, new "Defs" tab tree node (`-12`); `--benchmark`
+  headless CLI mode timing 7 of 10 categories directly (`SYS-W12-02`).
+- **Part 2 — `SYS-W14-16`, undo/redo structural-guarantee audit, DONE:**
+  two parallel research agents (command/input/macro files; panel/UI files)
+  found 27 real gaps: 6 missing `pushUndo()` calls (`toggleIsolate()`,
+  Anim Loop/Autoplay checkboxes, macro `show_all`, Default Camera combo,
+  States/UV rotation fields) and 21 `AUD-036`-style dead patterns
+  (`IsItemActivated()` nested inside a Slider/Drag changed-check across
+  every primitive segment slider + both Material tabs' Roughness/Metallic/
+  Alpha-Cutoff sliders). All fixed; a mechanical grep confirmed zero
+  remaining instances. 127/127 `ctest`.
+- **Part 3 — `SYS-W3-01` Phases 3-7 + two standalone features + one stale
+  closure, all DONE (user explicitly authorized an autonomous run, asked
+  "co potrebujes"/checked in twice for genuinely riskier decisions):**
+  - **Phase 3:** `Editor::MacroRecorder` — the harder of the two Phase-1-
+    deferred candidates; resolved with a `PropertiesContext`-style
+    callback `Context` built per call site (`macroContext()`), not stored.
+  - **Phase 4:** `Editor::UndoManager` — found a 4th real consumer beyond
+    push/undo/redo by grepping first (the Undo History dialog's
+    jump-to-step logic). Needed NO callback Context at all, unlike Macro.
+  - **`SYS-W14-03` DONE:** real PNG encoding for `--screenshot` (reused
+    `mc3togltf_lib`'s already-compiled `stb_image_write.h`, zero new
+    dependency) — it had always silently written raw PPM under a `.png`
+    name despite `--help` promising PNG.
+  - **`SYS-W14-08` DONE:** AI apply preview/diff
+    (`computeAiChangeSummaryAlg`) — added/removed/modified object summary
+    shown before "Apply to Scene", explicitly scoped to
+    name/type/visible/material/transform, not exhaustive.
+  - **`SYS-W9-01` closed as DONE** (docs-only): was a stale pointer-only
+    row to `AUD-036b`, already resolved via `AUD-036b`+`SYS-W9-03`+this
+    same day's `SYS-W14-16`.
+  - **Phase 5 (narrowed):** only `evaluateAndPushAnimOverrides()`'s pure
+    computation extracted (`computeAnimOverridesAlg`), not the ~800-line
+    timeline UI — same narrowing judgment as Phase 2's Preferences.
+  - **File dialogs investigated, declined:** already well-factored thin UI
+    glue over existing tested `Alg` functions, zero testability payoff.
+  - **Phase 6:** `Editor::WalkController` — the cleanest extraction of the
+    series (zero `document_`/`selection_` coupling). Found and removed
+    genuinely dead code (`walkSettingsOpen_`) along the way.
+  - **Phase 7:** `Editor::AudioPreview` — small, self-contained, a real
+    correctness constraint worth encapsulating (loop must be set before
+    `Play()`) plus a real duplicated `isPlaying()` check unified.
+  - **Post-processing (bloom/skybox/SSAO) investigated, declined:** 100%
+    side-effecting raw GL calls sharing one fragile shared resource
+    bundle, with a documented prior bug (see `project_bloom_bug` memory).
+    No pure logic to extract; correctness only verifiable by real pixel
+    comparison, not unit tests — declined rather than force the risk.
+  - 132/132 `ctest` at the end of today. Build parallelism throttled to
+    `-j4` partway through (shared machine, many concurrent sessions).
 
 **New autonomous session, 2026-07-17** (continues from the session below;
 see the top-of-file decisions block for the 4 human-authorized decisions
@@ -555,15 +617,24 @@ local-only commits** already sitting in the `../cna` checkout (the full
 `origin/develop` — worth knowing since it moved that remote branch much
 further than this one fix commit alone.
 
-`SYS-W3-01` (decompose the `MeshCraftApplication` "god object") remains the
-main *in-repo* multi-session task, not a bug: research found **280 data
-members + 113 methods** in that one class (11,544 lines of implementation
-across 17 `.cpp` files); only 10 subsystems are cleanly extracted so far
-(the 9 pre-existing ones plus `KeybindingManager`). This isn't blocking
-anything else in the repo — it's just large and not close to finished.
-Full roadmap in `plan.md`'s `SYS-W3-01` entry; this session decided
-`EditorViewport`'s long-open fate (delete) and Phase 2's Preferences scope
-(narrow) — see the decisions block at the top of this file and §8 below.
+`SYS-W3-01` (decompose the `MeshCraftApplication` "god object") is the main
+*in-repo* multi-session task, not a bug — research originally found **280
+data members + 113 methods** in that one class (11,544 lines across 17
+`.cpp` files). As of today (2026-07-18), **7 phases are done**:
+`KeybindingManager` (Phase 1), `Preferences` (Phase 2, narrow), and this
+session's own `MacroRecorder` (3), `UndoManager` (4), the animation-
+override computation (5, narrowed — only `computeAnimOverridesAlg`, not
+the ~800-line timeline UI), `WalkController` (6), `AudioPreview` (7). Two
+further roadmap candidates were investigated and explicitly **declined**
+rather than silently skipped: file dialogs (already well-factored UI glue
+over tested `Alg` functions, no testability win) and post-processing
+(bloom/skybox/SSAO — 100% side-effecting raw GL calls sharing one fragile
+resource bundle with a documented prior bug, no unit-testable logic, real
+regression risk with no de-risking tool available). This isn't blocking
+anything else in the repo — `MeshCraftApplication` is still a large class
+overall, but every remaining piece has now been looked at directly rather
+than assumed extractable. Full roadmap + every phase's writeup in
+`plan.md`'s `SYS-W3-01` entry.
 
 ## 5. Known bugs and limitations
 
@@ -582,9 +653,16 @@ Full roadmap in `plan.md`'s `SYS-W3-01` entry; this session decided
 - **Confirmed, by design, deferred:** SVG textures parse/edit but are never
   rasterized; `embed:` mesh references parse/edit but aren't resolved on
   export; scripts/triggers are data-model + editing only, no runtime
-  execution; `rotation_units="radians"` / non-default `euler_order` are
-  honored on export but not in live editor interaction (won't-fix, tracked
-  as `STAB-0701`); no native file-browse dialog (drag-and-drop works).
+  execution (the editor's Audio-tab preview-playback button, added
+  `SYS-W3-01` Phase 7, is an editor convenience — it does not mean the
+  exported scene has a runtime audio engine); `rotation_units="radians"` /
+  non-default `euler_order`, and now also `coordinate_system`
+  (`SYS-W14-14`), are honored on export but not in live editor interaction
+  (won't-fix, tracked as `STAB-0701`).
+- **Resolved (`SYS-W14-15`, 2026-07-18):** native file-browse dialog via
+  `CNA::Devices::FileDialog` (material texture slots only — other
+  manual-path fields, e.g. Import OBJ, still use text entry). Was
+  previously "no native dialog, drag-and-drop only."
 - **Resolved:** `Editor::EditorViewport`'s long-open finish-or-delete
   decision (bundled a camera + gizmo + `pickRay()`, added as an explicit
   "stub" in commit `580105d`, never wired in) — **deleted 2026-07-17**
@@ -625,17 +703,23 @@ Full roadmap in `plan.md`'s `SYS-W3-01` entry; this session decided
 - **`MeshCraftApplication`** (`include/MeshCraft/MeshCraftApplication.hpp`)
   — the main editor class, historically a "god object": 280 data members +
   113 methods, implementation spread across 17 `.cpp` files by *area* (not
-  by *ownership*). Being incrementally decomposed (`SYS-W3-01`, in
-  progress, see §4b). Ten subsystems are already extracted into owned
-  helper objects with narrow interfaces: `SelectionManager`,
-  `EditorCamera`, `TransformGizmo`, `SceneRenderer`, `GridRenderer`,
-  `SceneHierarchyPanel`, `PropertiesPanel`, `AiAssistant`, `ModelRegistry`,
-  `KeybindingManager`. The established idiom for extracting a new one:
-  self-contained value member, zero/near-zero-arg constructor, whatever
-  document/app state it needs passed per-call rather than stored (see any
-  of the above for a template) — a `PropertiesPanel`-style
-  context-struct-of-callbacks idiom exists for logic that must call back
-  into many private `MeshCraftApplication` members.
+  by *ownership*). Being incrementally decomposed (`SYS-W3-01`, see §4).
+  Fifteen subsystems are extracted into owned helper objects with narrow
+  interfaces: the 9 pre-existing (`SelectionManager`, `EditorCamera`,
+  `TransformGizmo`, `SceneRenderer`, `GridRenderer`, `SceneHierarchyPanel`,
+  `PropertiesPanel`, `AiAssistant`, `ModelRegistry`) plus
+  `KeybindingManager`, `Preferences`, `MacroRecorder`, `UndoManager`,
+  `WalkController`, `AudioPreview`. Two idioms coexist, chosen per
+  subsystem's actual entanglement (research the real call-site surface
+  first, don't assume): (1) fully self-contained value member with
+  whatever it needs passed per-call, no back-reference to the owner
+  (`Preferences`/`KeybindingManager`/`UndoManager`/`WalkController`/
+  `AudioPreview`); (2) a `PropertiesPanel`-style callback `Context` struct
+  built fresh per call site, for logic that genuinely must call back into
+  many private `MeshCraftApplication` members (`MacroRecorder`). File
+  dialogs and post-processing were investigated as further candidates and
+  explicitly declined (see §4/§8) — not every remaining piece is a good
+  extraction target.
 - **`Alg` mirror pattern:** pure-logic, CNA-free free functions
   (`include/MeshCraft/EditorAlgorithms.hpp`,
   `src/MeshCraft/AiResponseAlgorithms.hpp`) mirror some production code
@@ -647,8 +731,11 @@ Full roadmap in `plan.md`'s `SYS-W3-01` entry; this session decided
   rest). **Check whether an `Alg` function is actually called from
   production before assuming a fix there takes effect.**
 - **Undo/redo:** whole-document snapshot-based (deep copy on every
-  mutating command), not command/diff-based. `undoStack_`/`redoStack_` are
-  raw `std::vector<Mc3::Mc3Document>` members, not yet extracted.
+  mutating command), not command/diff-based. The stacks now live in
+  `Editor::UndoManager` (`SYS-W3-01` Phase 4) — `MeshCraftApplication`'s
+  `pushUndo()`/`performUndo()`/`performRedo()` are thin wrappers that
+  prepare an independent `deepCopyDoc()` copy and hand it in; the manager
+  itself has no dependency on `deepCopyDoc()` or any CNA type.
 - **`mc3.xsd` is compiled into the binary at configure time** — editing it
   requires a reconfigure, not just a rebuild.
 - **XML comment gotcha:** a literal `--` inside an XML comment is rejected
@@ -697,7 +784,8 @@ clang-tidy -p b-release path/to/changed/file.cpp
 
 # Run / demo
 ./b-release/MeshCraft test/house.mc3.xml
-./b-release/MeshCraft test/house.mc3.xml --screenshot /tmp/out.png   # writes a .ppm despite the name; `convert` reads it
+./b-release/MeshCraft test/house.mc3.xml --screenshot /tmp/out.png   # real PNG now (SYS-W14-03); .ppm still raw PPM
+./b-release/MeshCraft test/house.mc3.xml --benchmark                # SYS-W12-02: in-process timing, no GUI needed
 ./b-release/mc3togltf/mc3togltf test/features.mc3.xml /tmp/out.glb --stats
 ./b-release/mc3tomcb/mc3tomcb test/house.mc3.xml /tmp/out.mcb
 ```
@@ -705,72 +793,52 @@ clang-tidy -p b-release path/to/changed/file.cpp
 ## 8. Next smallest tasks
 
 _(Everything from the previous revision of this list is done — see §3 for
-the full list of what landed this session. Before starting any task below,
-re-run `git log --oneline -20` and re-check the cited `plan.md` row's
-status yourself: this session found and fixed **8** stale `[TODO]`/status
-markers that referenced findings already resolved in earlier sessions
-(`AUD-014`, `AUD-015`/`SYS-W6-01`, `SYS-W2-03`, `SYS-W6-03`, `SYS-W14-01`,
-`SYS-W6-02`, `SYS-W5-05`, `SYS-W7-01`) — don't assume any remaining
-`TODO` below is still accurate without looking. The `../cna` build
-regression noted in §4 is now resolved and re-verified — no need to
-re-check it before starting, though `../cna`'s HEAD is still worth a
-glance if a build ever fails mysteriously again. **`plan.md` was pruned
-this session** (2026-07-18): its 61 `DONE` `AUD-###` + 33 `DONE`
-`SYS-###` rows were moved verbatim to
-`docs/history/plan_20260718.md` — if a citation looks missing from
-`plan.md`, check there before assuming it was lost. `missing.md` (an
-editor-UI-coverage-gaps audit) was also re-verified against current
-source and found mostly stale (most of its findings were already fixed
-in an earlier session this file didn't know about) — updated in place,
-and 8 of its still-open findings were turned into new `SYS-W14-10`
-through `SYS-W14-17` rows per explicit user selection.)_
+today's full list. Before starting any task below, re-run
+`git log --oneline -20` and re-check the cited `plan.md` row's status
+yourself — this file has repeatedly found stale `[TODO]` markers across
+sessions; don't assume anything below is still accurate without looking.
+Re-run `python3 test/validate_plan_consistency.py . <build-dir>` too, it
+recomputes every count live.)_
 
-1. **`plan.md`'s 9 remaining `TODO` `SYS-###` rows**, in no particular
-   priority order (pick the highest-value one that fits available time):
-   `SYS-W12-02` (extend `SYS-W12-01`'s CLI-level benchmark harness to the
-   10 categories needing in-process instrumentation — needs new
-   instrumentation infrastructure, not a quick pick), and 8 new
-   editor-UI-coverage rows from this session's `missing.md` re-verification:
-   `SYS-W14-10` (scriptId object-attachment UI, small), `SYS-W14-11`
-   (`.mc3.json` open/save support in the editor, P2), `SYS-W14-12`
-   (`assetMetadata` editor, large/substantial), `SYS-W14-13`
-   (library/imports `.mc3lib` UI — flagged as possibly premature, the
-   underlying format may still be evolving in the sibling `mesh-world`
-   repo), `SYS-W14-14` (wire up `coordinate_system`, currently write-only
-   — arguably a real correctness gap, not just missing UI, P2),
-   `SYS-W14-15` (native file-browse dialog — CNA already ships an unused
-   `FileDialog` device, may be smaller than it looks), `SYS-W14-16`
-   (undo/redo structural-guarantee audit — needs its own scoped research
-   pass first, matching how `SYS-W5-04` was approached, not a quick pick),
-   `SYS-W14-17` (dedicated Area properties panel, cosmetic/small). See
-   each row in `plan.md` for full file:line evidence.
-   `SYS-W11-01`/`SYS-W11-03`/`AUD-042`/`AUD-052`/`AUD-053`/`AUD-057` stay
-   correctly blocked/owner-gated (CI parked, no Android NDK in this
-   environment) — don't attempt those without the missing external
-   resource.
+**Everything actionable is done.** What's left in `plan.md` is either
+owner-gated/externally blocked, or a `SYS-W3-01` candidate already
+investigated and explicitly declined this session (not silently skipped —
+see §4 and `plan.md`'s `SYS-W3-01` entry for the reasoning):
 
-2. **`SYS-W3-01` Phase 3+** (`MeshCraftApplication` decomposition
-   continues): per the roadmap in `plan.md`'s `SYS-W3-01` entry, remaining
-   candidates are Macro recorder (deliberately deferred at Phase 1 — needs
-   a `PropertiesPanel`-style callback-DI struct since `executeMacroStep()`
-   calls 8+ other `MeshCraftApplication` methods), undo/redo stack
-   ownership, animation, file dialogs, post-processing, audio/walk-mode.
-   No decision has been made on which is next — that's itself worth a
-   quick research pass (read the actual member/method list for each
-   candidate, matching how Phase 1/2 were scoped) before picking, not an
-   assumption.
-
-3. **`AUD-036c`'s remaining open item (2 of 2):** "locked objects untouched
-   by undo/redo" is well-tested at the per-command level but not
+1. **CI enablement — needs the repo owner, not more investigation:**
+   `AUD-052`/`SYS-W11-01` (un-park `.github_/workflows/ci.yml` →
+   `.github/` — needs a `workflow`-scoped push token nobody in this
+   environment has), which is the hard blocker for `AUD-053`/`SYS-W11-03`
+   (editor build+test CI job) and the CI-job half of `AUD-057` (sibling-
+   repo revision pinning — its configure-time-assertion half already
+   landed, commit `d2943e3`). Nothing to do here without that token; don't
+   re-investigate, just wait for owner action.
+2. **`AUD-042`** (P2) — Android build forces `SDL_RENDERER`. Blocked: no
+   Android NDK in this environment, and it intersects CNA backend
+   behavior (out of scope without owner permission per `CLAUDE.md`).
+3. **`AUD-025`/`AUD-038`** (DEFERRED) — informational findings
+   (`embed:` mesh handling, the 20-entry undo cap), not gaps to close.
+4. **If `SYS-W3-01` is ever revisited:** the two declined candidates
+   (file dialogs, post-processing) were investigated with real reasoning,
+   not skipped for lack of time — re-read `plan.md`'s `SYS-W3-01` entry
+   before assuming either is still worth a fresh look. Post-processing in
+   particular would need a dedicated visual-regression harness (real
+   before/after pixel comparison against an emissive-material scene)
+   built *first* if it's ever attempted, given its documented fragility
+   history (`project_bloom_bug` memory).
+5. **`AUD-036c`'s one intentionally-accepted gap:** "locked objects
+   untouched by undo/redo" is well-tested at the per-command level but not
    independently tested as its own whole-document-snapshot guarantee (see
-   `AUD-036c`'s status note, second open item — the first, selection
-   restore, is what this session's `SYS-W9-03` closed). Low priority,
-   by-design not a gap, but flagged as untested.
+   `AUD-036c`'s status note in `docs/history/plan_20260718.md` — the
+   sibling item, selection restore, was closed by `SYS-W9-03`). By design,
+   not a real gap; lowest priority of anything listed here.
 
-Do a **repo-wide staleness spot-check early in the next session** — this
-one found real value in it (5 status corrections, one doc actively
-re-broken by this session's own earlier commit) — before assuming any
-`[TODO]` row represents real remaining work.
+If none of the above is actionable (the common case right now), the next
+useful move is a **repo-wide staleness spot-check** — this file's own
+history shows real value in that (multiple sessions have each found a
+handful of stale `[TODO]`/status markers) — or asking the user directly
+what they'd like worked on next, since the backlog itself is essentially
+exhausted of unblocked work.
 
 ## 9. Do not do yet
 
@@ -787,9 +855,13 @@ re-broken by this session's own earlier commit) — before assuming any
 - **No attempt to unpark CI** (`.github_/workflows/ci.yml` → `.github/`) —
   owner-gated, needs a workflow-scoped push token nobody in this session
   has.
-- **No new user-facing features** until the current backlog (`SYS-W3-01`
-  and its open phases) is closed — this project is still in a
-  stabilization phase by its own stated policy (`STABILIZATION.md`).
+- **No new user-facing features by default** — this project is still in a
+  stabilization phase per `STABILIZATION.md`'s own stated policy. In
+  practice the user has explicitly authorized exceptions in whole batches
+  (the `SYS-W14-##` rows, including `-03`/`-08` today) — treat that as a
+  standing willingness to grant scoped exceptions on request, not as the
+  default having changed; still ask before assuming a new feature is in
+  scope, per `CLAUDE.md`'s plan.md workflow.
 
 ## 10. Resume prompt
 
