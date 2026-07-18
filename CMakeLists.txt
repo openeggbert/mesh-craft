@@ -737,6 +737,20 @@ if(MESH_CRAFT_BUILD_TESTING AND UNIX AND NOT ANDROID AND NOT EMSCRIPTEN)
     add_test(NAME differential_geometry COMMAND differential_geometry_test)
     set_tests_properties(differential_geometry PROPERTIES TIMEOUT 30 LABELS "unit")
 
+    # AUD-073: SceneRenderer_Extrude.cpp's hollow/innerScale formula (both
+    # drawExtrudeDynamic() and drawObjectEdges()) divided by cross-section
+    # radius with no zero-guard. SceneRenderer is CNA-coupled and can't be
+    # unit-tested directly, so this mirrors the exact two-line formula --
+    # same idiom as differential_geometry_test above. No CNA/GL dependency,
+    # links only Mc3 (for Mc3CrossSection/CrossSectionType).
+    add_executable(extrude_hollow_zero_radius_test
+        ${CMAKE_CURRENT_SOURCE_DIR}/test/extrude_hollow_zero_radius_test.cpp)
+    target_link_libraries(extrude_hollow_zero_radius_test PRIVATE Mc3)
+    target_compile_features(extrude_hollow_zero_radius_test PRIVATE cxx_std_23)
+    target_compile_options(extrude_hollow_zero_radius_test PRIVATE -Wall -Wextra)
+    add_test(NAME extrude_hollow_zero_radius COMMAND extrude_hollow_zero_radius_test)
+    set_tests_properties(extrude_hollow_zero_radius PROPERTIES TIMEOUT 15 LABELS "unit")
+
     # AUD-036b: frame-driven regression test for the undo-snapshot-timing fix.
     # Drives real ImGui frames through a full click-drag gesture on
     # DragFloat/DragFloat3/ColorEdit3 (the widget classes AUD-036 fixed) plus

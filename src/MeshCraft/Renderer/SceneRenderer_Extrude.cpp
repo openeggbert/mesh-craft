@@ -240,7 +240,19 @@ void SceneRenderer::drawExtrudeDynamic(const Mc3Extrude& ex,
     int N = static_cast<int>(profile.size());
     if (M < 2 || N < 3) { drawMesh(unitBox_, world, view, proj, color); return; }
 
+    // AUD-073: radius==0 is a legal document value (the parser only rejects
+    // negatives) -- without the radius>1e-6f guard, a hollow cross-section
+    // with radius=0 and innerRadius>0 (a nonsensical shape anyway: the
+    // "inner" radius would be larger than the "outer" one) made
+    // innerScale = innerRadius/radius evaluate to +inf below, and
+    // profile[j].u/.v are already 0 when radius==0 (makeProfile scales a
+    // unit circle/polygon by radius), so inf*0 produced NaN vertex
+    // positions in the live viewport. Treating a near-zero-radius
+    // cross-section as solid (not hollow) avoids the degenerate case
+    // entirely rather than trying to define what "hollow" even means when
+    // the outer radius is zero.
     bool hollow = (ex.crossSection.innerRadius > 0.0f) &&
+                  (ex.crossSection.radius > 1e-6f) &&
                   (ex.crossSection.type == CrossSectionType::Circle ||
                    ex.crossSection.type == CrossSectionType::Polygon);
 
@@ -567,7 +579,11 @@ void SceneRenderer::drawObjectEdges(const Mc3Object& obj, const Mc3Document& doc
         int N = static_cast<int>(profile.size());
         if (M < 2 || N < 2) { drawWireShape(wireShapeBox_, deform * world, view, proj, edgeColor); break; }
 
+        // AUD-073: same radius>1e-6f guard as drawExtrudeDynamic() above --
+        // radius==0 is legal, and without this guard innerScale below
+        // evaluates to +inf, producing NaN edge-overlay vertex positions.
         bool hollow = (ex.crossSection.innerRadius > 0.0f) &&
+                      (ex.crossSection.radius > 1e-6f) &&
                       (ex.crossSection.type == CrossSectionType::Circle ||
                        ex.crossSection.type == CrossSectionType::Polygon);
         float innerScale = hollow ? (ex.crossSection.innerRadius / ex.crossSection.radius) : 0.0f;
