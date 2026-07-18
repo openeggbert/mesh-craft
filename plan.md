@@ -310,14 +310,23 @@ _All items in this workstream are DONE — archived to [`docs/history/plan_20260
 - **SYS-W14-08** `[TODO]` `P2` — AI change preview/diff before destructive replace.
 - **SYS-W14-09** `[BLOCKED]` `P3` — Web persistence & export verification (blocked on
   CNA/browser — see NEXT.md).
-- **SYS-W14-10** `[TODO]` `P3` — Editor UI to attach a script to an object
+- **SYS-W14-10** `[DONE]` `P3` — Editor UI to attach a script to an object
   (`Mc3Object::scriptId`, `mc3/include/MeshCraft/Mc3/Mc3Object.hpp`). Scripts
   themselves are fully editable (`doc.scripts`, the "Scripts" tab,
   `STAB-0705`), but no UI anywhere sets an object's `scriptId` to attach one
-  — confirmed via `grep -rn "scriptId" src/MeshCraft/` (zero hits). Likely a
-  combo box in `PropertiesPanel.cpp` listing `doc.scripts`' keys, next to
-  where other per-object references (e.g. material) are already edited.
-  Found via `missing.md`'s 2026-07-18 update.
+  — confirmed via `grep -rn "scriptId" src/MeshCraft/` (zero hits). Found via
+  `missing.md`'s 2026-07-18 update.
+  **Implementation (2026-07-18):** added a "Script" combo box in
+  `PropertiesPanel.cpp`, directly mirroring the existing Material combo's
+  structure (a `(none)` sentinel + every `doc.scripts` key, first-match
+  mixed-selection handling via the file's existing `allMatchStr` helper,
+  `pushUndo()`/`markModified()` on change) — minus the color swatch,
+  plus a `(type)` suffix per entry read from `Mc3Script::type`. Placed
+  right after the Material block. No new call sites elsewhere needed since
+  this is a pure UI addition over an existing, already-parsed/written
+  field. Verify: full rebuild + `ctest -j"$(nproc)"` (126/126, unchanged
+  count — no new test registered, this is UI-only over an already-tested
+  field), manual `--screenshot` smoke test (clean GL state, no crash).
 - **SYS-W14-11** `[TODO]` `P2` — Editor support for opening/saving `.mc3.json`
   (`Mc3Document::loadFromJsonFile`/`saveToJsonFile`, `mc3/src/Mc3Document.cpp`,
   R109's semantic-JSON format). These already work at the library level, but

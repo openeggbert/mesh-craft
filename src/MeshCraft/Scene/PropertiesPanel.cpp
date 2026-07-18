@@ -383,6 +383,44 @@ void PropertiesPanel::draw(float panelX, float panelY, float panelW, float panel
                 ImGui::TextDisabled("(define materials in the Mat tab)");
         }
 
+        // SYS-W14-10: Mc3Object::scriptId attachment. Scripts themselves are
+        // authored in the left panel's "Scripts" tab (doc.scripts); this is
+        // just the reference from an object to one of them (R103 -- the
+        // script's actual execution is left to each consumer, not run by
+        // this editor). Mirrors the Material combo above (a doc-level
+        // std::map<std::string,...> resolved by key), minus the color swatch.
+        {
+            bool scriptTopMixed = !allMatchStr([](const Mc3::Mc3Object* o){ return o->scriptId; });
+            ImGui::TextDisabled("Script");
+            if (scriptTopMixed) { ImGui::SameLine(); ImGui::TextColored(ImVec4(1.0f,0.75f,0.2f,1.0f),"~"); if (ImGui::IsItemHovered()) ImGui::SetTooltip("Values differ across selection"); }
+            std::vector<std::string> scriptKeys;
+            scriptKeys.push_back("(none)");
+            for (const auto& [k, _] : ctx.document.scripts) scriptKeys.push_back(k);
+            int scriptCurIdx = 0;
+            for (int i = 1; i < (int)scriptKeys.size(); ++i)
+                if (scriptKeys[i] == sel0->scriptId) { scriptCurIdx = i; break; }
+            ImGui::SetNextItemWidth(-1);
+            const char* scriptPreview = scriptTopMixed ? "(mixed)" : (scriptCurIdx == 0 ? "(none)" : sel0->scriptId.c_str());
+            if (ImGui::BeginCombo("##scriptsel0", scriptPreview)) {
+                for (int i = 0; i < (int)scriptKeys.size(); ++i) {
+                    bool isSel = (!scriptTopMixed && i == scriptCurIdx);
+                    std::string label = scriptKeys[i];
+                    if (i > 0 && ctx.document.scripts.count(scriptKeys[i]))
+                        label += " (" + ctx.document.scripts.at(scriptKeys[i]).type + ")";
+                    if (ImGui::Selectable(label.c_str(), isSel)) {
+                        ctx.pushUndo();
+                        const std::string newScript = (i == 0) ? "" : scriptKeys[i];
+                        for (const auto& s : selAll) s->scriptId = newScript;
+                        ctx.markModified();
+                    }
+                    if (isSel) ImGui::SetItemDefaultFocus();
+                }
+                ImGui::EndCombo();
+            }
+            if (ctx.document.scripts.empty())
+                ImGui::TextDisabled("(define scripts in the Scripts tab)");
+        }
+
         // Collision
         {
             bool colMixed = !allMatchStr([](const Mc3::Mc3Object* o){ return o->collision; });
