@@ -1877,6 +1877,77 @@ void MeshCraftApplication::drawLeftPanel(float panelY, float panelH)
             ImGui::EndTabItem();
         }
 
+        // ---------------------------------------------------------------
+        // Tab: Imports (R101/SYS-W14-13) -- doc.imports (std::vector<Mc3Import>,
+        // an ordered list rather than a map like scripts/triggers/sounds, so no
+        // "selected key" concept: just a direct index-based row editor,
+        // mirroring the Triggers tab's per-step editor above.
+        // ---------------------------------------------------------------
+        if (ImGui::BeginTabItem("Imports")) {
+            ImGui::TextDisabled("Pulls a .mc3lib library into this document under a");
+            ImGui::TextDisabled("local alias, so instances can reference its definitions");
+            ImGui::TextDisabled("as \"<namespace>:<definitionId>\".");
+            ImGui::Spacing();
+            ImGui::Separator();
+            ImGui::Spacing();
+
+            int removeIdx = -1;
+            for (size_t i = 0; i < document_.imports.size(); ++i) {
+                auto& imp = document_.imports[i];
+                ImGui::PushID(static_cast<int>(i));
+
+                ImGui::TextDisabled("Namespace");
+                {
+                    char buf[128];
+                    std::strncpy(buf, imp.importNamespace.c_str(), sizeof(buf)-1); buf[127]='\0';
+                    ImGui::SetNextItemWidth(-1);
+                    if (ImGui::InputText("##impns", buf, sizeof(buf),
+                            ImGuiInputTextFlags_EnterReturnsTrue)) {
+                        pushUndo(); imp.importNamespace = buf; modified_ = true; updateWindowTitle();
+                    }
+                }
+                ImGui::TextDisabled("Source (mc3lib://<library-name>@<version>)");
+                {
+                    char buf[256];
+                    std::strncpy(buf, imp.source.c_str(), sizeof(buf)-1); buf[255]='\0';
+                    ImGui::SetNextItemWidth(-1);
+                    if (ImGui::InputText("##impsrc", buf, sizeof(buf),
+                            ImGuiInputTextFlags_EnterReturnsTrue)) {
+                        pushUndo(); imp.source = buf; modified_ = true; updateWindowTitle();
+                    }
+                }
+                ImGui::TextDisabled("Hash (optional, \"sha256:...\" -- empty = not pinned)");
+                {
+                    char buf[128];
+                    std::strncpy(buf, imp.hash.c_str(), sizeof(buf)-1); buf[127]='\0';
+                    ImGui::SetNextItemWidth(-1);
+                    if (ImGui::InputText("##imphash", buf, sizeof(buf),
+                            ImGuiInputTextFlags_EnterReturnsTrue)) {
+                        pushUndo(); imp.hash = buf; modified_ = true; updateWindowTitle();
+                    }
+                }
+                if (ImGui::SmallButton("Remove")) removeIdx = static_cast<int>(i);
+
+                ImGui::PopID();
+                ImGui::Spacing();
+                ImGui::Separator();
+                ImGui::Spacing();
+            }
+            if (removeIdx >= 0) {
+                pushUndo();
+                document_.imports.erase(document_.imports.begin() + removeIdx);
+                modified_ = true; updateWindowTitle();
+            }
+
+            if (ImGui::SmallButton("+ Add Import")) {
+                pushUndo();
+                document_.imports.push_back(Mc3::Mc3Import{});
+                modified_ = true; updateWindowTitle();
+            }
+
+            ImGui::EndTabItem();
+        }
+
         ImGui::EndTabBar();
     }
 

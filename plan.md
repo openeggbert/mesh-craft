@@ -371,18 +371,51 @@ _All items in this workstream are DONE — archived to [`docs/history/plan_20260
   `PropertiesPanel.cpp` rather than a quick add; scope out which sub-fields
   are worth editing vs. read-only-displaying before implementing. Found via
   `missing.md`'s 2026-07-18 update.
-- **SYS-W14-13** `[TODO]` `P3` — Editor UI for library metadata and imports
-  (`Mc3Document::library` (`Mc3LibraryInfo`), `Mc3Document::imports`
-  (`Mc3Import`), the `.mc3lib` reusable-library file format). Zero editor UI
-  — no panel shows/edits the library namespace/version, no way to add/remove
-  an `<imports>` entry, no File-menu action creates/opens a `.mc3lib` file
-  (`saveToLibraryFile`/`saveToLibraryJsonFile` exist in
-  `mc3/src/Mc3Document.cpp` but nothing in `src/MeshCraft/` calls them).
-  **Caution:** this is a newer, still-evolving format addition from a
-  separate cross-repo initiative (see the `project_meshworld_r_series_cross_repo`
-  memory) — re-check whether that initiative itself has stabilized this
-  format before building UI against it, to avoid UI churn if the underlying
-  fields still move. Found via `missing.md`'s 2026-07-18 update.
+- **SYS-W14-13** `[DONE, data-field editing only — see scope note]` `P3` —
+  Editor UI for library metadata and imports (`Mc3Document::library`
+  (`Mc3LibraryInfo`), `Mc3Document::imports` (`Mc3Import`), the `.mc3lib`
+  reusable-library file format). Zero editor UI — no panel showed/edited
+  the library namespace/version, no way to add/remove an `<imports>`
+  entry. Found via `missing.md`'s 2026-07-18 update.
+  **Readiness investigation (2026-07-18):** this row's own caution asked
+  whether the format is still evolving upstream before building UI against
+  it. Checked the sibling `mesh-world` repo's own tracking directly (not
+  assumed): `git log` there is already at `R114` (well past `R101`/`R110`),
+  and both rows are marked `[x]` DONE in `mesh-world/plan.md` — `R110`'s
+  own note explicitly says "dependency pruning" was a deliberate, separate,
+  already-decided scope cut, not an open design question. `R112`+ build
+  new *consuming* features (facade modules, street layout) on top of
+  `R101`/`R110`, not changes to the `library`/`imports` schema itself. So
+  the underlying fields are stable, not still moving — the original
+  caution doesn't apply; proceeded with implementation.
+  **Implementation:** new "Library (.mc3lib)" section in the Scene
+  Properties panel (`PropertiesPanel.cpp`, shown when nothing is
+  selected, same place `model`/`unit`/`coordinate_system` are already
+  edited) — a checkbox creates/clears the optional `doc.library`, then
+  namespace/version text fields plus a "Recompute" button calling the
+  existing `Mc3Document::computeLibraryContentHash()` (never auto-computed
+  implicitly, matching that method's own documented contract). New
+  "Imports" tab (`MeshCraftApplication_UiLeftPanel.cpp`) for
+  `doc.imports` — an ordered `std::vector`, not a map like
+  scripts/triggers/sounds, so a direct index-based row editor (namespace/
+  source/hash per row + Remove), mirroring the existing Triggers tab's
+  per-step editor (`trigger.steps`, the closest existing "vector of small
+  multi-field structs" precedent in this file) rather than the map-keyed
+  pattern the other new-tab additions used.
+  **Scope, deliberately narrowed:** only the DATA fields are editable.
+  The separate `saveToLibraryFile()`/`saveToLibraryJsonFile()`/
+  `loadFromLibraryFile()`/`loadFromLibraryJsonFile()` file-I/O surface
+  (a distinct "Save/Open as .mc3lib" feature, with its own contract —
+  throws if `library` is unset) is NOT wired into the File menu in this
+  pass; a user can populate `library`/`imports` and save via the regular
+  Save/Save As (XML/JSON) path, but there's no dedicated "Save As
+  Library" action yet. Left as a smaller, separate follow-up rather than
+  conflating two different features in one pass.
+  **Verify:** full rebuild + `ctest -j"$(nproc)"` (126/126, unchanged —
+  UI-only over already-round-trip-tested R101/R110 fields, no new library-
+  level test needed). `test/validate_xsd.py` against a hand-built fixture
+  with `<library>`/`<imports>` populated; manual `--screenshot` smoke test
+  loading it (no crash, clean GL state).
 - **SYS-W14-14** `[DEFERRED, human-authorized-precedent decision — see note]`
   `P2` — Wire up `coordinate_system` so it actually affects something. The
   invalid `"left_handed_y_up"` combo option was already removed

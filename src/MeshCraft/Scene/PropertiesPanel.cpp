@@ -2103,6 +2103,60 @@ void PropertiesPanel::draw(float panelX, float panelY, float panelW, float panel
         ImGui::Separator();
         ImGui::Spacing();
 
+        // SYS-W14-13: R110's doc.library (Mc3LibraryInfo -- namespace,
+        // version, contentHash) had zero editor UI. Optional -- most scenes
+        // are plain scenes, not reusable .mc3lib libraries -- so gated
+        // behind a checkbox that creates/clears ctx.document.library.
+        // Importing another library's definitions (doc.imports,
+        // Mc3Import) is a separate, ordered-list concern edited in its own
+        // "Imports" tab (left panel), not here.
+        {
+            ImGui::TextColored(ImVec4(0.75f, 0.85f, 1.0f, 1.0f), "Library (.mc3lib)");
+            bool hasLib = ctx.document.library.has_value();
+            if (ImGui::Checkbox("This document is a reusable library", &hasLib)) {
+                ctx.pushUndo();
+                if (hasLib) ctx.document.library = Mc3::Mc3LibraryInfo{};
+                else        ctx.document.library.reset();
+                ctx.markModified();
+            }
+            if (hasLib) {
+                auto& lib = *ctx.document.library;
+
+                ImGui::TextDisabled("Namespace");
+                char nsBuf[128];
+                std::strncpy(nsBuf, lib.libraryNamespace.c_str(), sizeof(nsBuf)-1); nsBuf[127]='\0';
+                ImGui::SetNextItemWidth(-1);
+                if (ImGui::InputText("##libns", nsBuf, sizeof(nsBuf),
+                        ImGuiInputTextFlags_EnterReturnsTrue)) {
+                    ctx.pushUndo(); lib.libraryNamespace = nsBuf; ctx.markModified();
+                }
+
+                ImGui::TextDisabled("Version (semver, e.g. 1.0.0)");
+                char verBuf[32];
+                std::strncpy(verBuf, lib.version.c_str(), sizeof(verBuf)-1); verBuf[31]='\0';
+                ImGui::SetNextItemWidth(-1);
+                if (ImGui::InputText("##libver", verBuf, sizeof(verBuf),
+                        ImGuiInputTextFlags_EnterReturnsTrue)) {
+                    ctx.pushUndo(); lib.version = verBuf; ctx.markModified();
+                }
+
+                ImGui::TextDisabled("Content Hash");
+                ImGui::TextWrapped("%s", lib.contentHash.empty() ? "(not computed)" : lib.contentHash.c_str());
+                if (ImGui::SmallButton("Recompute##libhash")) {
+                    ctx.pushUndo();
+                    lib.contentHash = "sha256:" + ctx.document.computeLibraryContentHash();
+                    ctx.markModified();
+                }
+                if (ImGui::IsItemHovered())
+                    ImGui::SetTooltip("Hashes this document's content (excluding the library block "
+                                       "itself) -- recompute after editing definitions.");
+            }
+        }
+
+        ImGui::Spacing();
+        ImGui::Separator();
+        ImGui::Spacing();
+
         // STAB-0709: N7 meta (doc.meta, arbitrary key/value pairs, mirrors
         // <meta><metaentry key="..." value="..."/> in the XSD) had zero
         // editor UI -- lowest priority of all the N-extensions, a simple
