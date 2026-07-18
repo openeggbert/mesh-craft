@@ -18,11 +18,13 @@
 #include <map>
 #include <memory>
 #include <numbers>
+#include <optional>
 #include <set>
 #include <sstream>
 #include <stdexcept>
 #include <string>
 #include <string_view>
+#include <unordered_map>
 #include <utility>
 #include <vector>
 
@@ -1583,6 +1585,115 @@ inline void insertAnimKeyframesAlg(
                 [](const Mc3::Mc3Keyframe& a, const Mc3::Mc3Keyframe& b){ return a.time < b.time; });
         }
     }
+}
+
+// ── Animation override evaluation (SYS-W3-01 Phase 5) ─────────────────────────
+//
+// Mirrors MeshCraftApplication::evaluateAndPushAnimOverrides()'s core
+// computation, minus the stale-currentActionName_/animPlaying_ clearing
+// (a stateful side effect on MeshCraftApplication itself, not part of this
+// pure computation) and the final SceneRenderer::setAnimOverrides() push.
+//
+// AnimOverrideAlg is a field-for-field CNA-free mirror of
+// Renderer::AnimOverride (MeshCraft/Renderer/SceneRenderer.hpp) -- that
+// header cannot be included from here without pulling in CNA-coupled
+// dependencies (BasicEffect/GraphicsDevice/VertexBuffer/etc.) needed by
+// its OTHER, unrelated structs. The caller converts one to the other,
+// matching MacroStep/MacroStepAlg's established duplication-for-
+// testability idiom.
+struct AnimOverrideAlg {
+    std::optional<std::array<float,3>> position;
+    std::optional<std::array<float,3>> rotation;
+    std::optional<std::array<float,3>> scale;
+    std::optional<bool>                visible;
+
+    std::optional<std::array<float,4>> baseColor;
+    std::optional<float>               roughness;
+    std::optional<float>               metallic;
+    std::optional<std::array<float,3>> emissive;
+
+    std::optional<std::array<float,3>> deformScale;
+};
+
+// Computes the per-object override map for `action` at `animTime`: a first
+// pass seeds each target object's override from its current document state
+// (transform + material + deform), then a second pass overwrites whichever
+// specific property each channel animates with Mc3::evaluateChannel()'s
+// result at animTime. findObjectByName resolves a channel's targetObject
+// (mirrors MeshCraftApplication::flatFindByName()'s exact semantics) --
+// passed in rather than baked in, since this function has no document
+// access of its own beyond what's given per call. An object that can't be
+// resolved (stale/renamed target) is silently skipped, matching the
+// pre-extraction production behavior exactly.
+inline std::unordered_map<std::string, AnimOverrideAlg> computeAnimOverridesAlg(
+    const Mc3::Mc3Action&                                    action,
+    float                                                     animTime,
+    const std::map<std::string, Mc3::Mc3Material>&           materials,
+    const std::function<Mc3::Mc3Object*(const std::string&)>& findObjectByName)
+{
+    std::unordered_map<std::string, AnimOverrideAlg> overrides;
+
+    // First pass: seed each target object's override from its current
+    // document-state (transform + material).
+    for (const auto& ch : action.channels) {
+        if (ch.targetObject.empty() || overrides.count(ch.targetObject)) continue;
+        Mc3::Mc3Object* obj = findObjectByName(ch.targetObject);
+        if (!obj) continue;
+        auto& ov = overrides[ch.targetObject];
+        ov.position = obj->transform.position;
+        ov.rotation = obj->transform.rotation;
+        ov.scale    = obj->transform.scale;
+        ov.visible  = obj->visible;
+        if (!obj->material.empty()) {
+            auto matIt = materials.find(obj->material);
+            if (matIt != materials.end()) {
+                const auto& m = matIt->second;
+                ov.baseColor = m.baseColor;
+                ov.roughness = m.roughness;
+                ov.metallic  = m.metallic;
+                ov.emissive  = std::array<float,3>{m.emissiveColor[0], m.emissiveColor[1], m.emissiveColor[2]};
+            }
+        }
+        ov.deformScale = obj->deform
+            ? obj->deform->scale
+            : std::array<float,3>{1.0f, 1.0f, 1.0f};
+    }
+
+    // Second pass: apply each channel's evaluated value at animTime.
+    using AP = Mc3::AnimatedProperty;
+    for (const auto& ch : action.channels) {
+        auto it = overrides.find(ch.targetObject);
+        if (it == overrides.end()) continue;
+        float v = Mc3::evaluateChannel(ch, animTime);
+        auto& ov = it->second;
+        switch (ch.property) {
+        case AP::PositionX: (*ov.position)[0] = v; break;
+        case AP::PositionY: (*ov.position)[1] = v; break;
+        case AP::PositionZ: (*ov.position)[2] = v; break;
+        case AP::RotationX: (*ov.rotation)[0] = v; break;
+        case AP::RotationY: (*ov.rotation)[1] = v; break;
+        case AP::RotationZ: (*ov.rotation)[2] = v; break;
+        case AP::ScaleX:    (*ov.scale)[0]    = v; break;
+        case AP::ScaleY:    (*ov.scale)[1]    = v; break;
+        case AP::ScaleZ:    (*ov.scale)[2]    = v; break;
+        case AP::Visible:   ov.visible        = (v >= 0.5f); break;
+        case AP::MaterialBaseColorR: if (ov.baseColor) (*ov.baseColor)[0] = v; break;
+        case AP::MaterialBaseColorG: if (ov.baseColor) (*ov.baseColor)[1] = v; break;
+        case AP::MaterialBaseColorB: if (ov.baseColor) (*ov.baseColor)[2] = v; break;
+        case AP::MaterialBaseColorA: if (ov.baseColor) (*ov.baseColor)[3] = v; break;
+        case AP::MaterialRoughness:  ov.roughness = v; break;
+        case AP::MaterialMetallic:   ov.metallic  = v; break;
+        case AP::MaterialEmissiveR:  if (ov.emissive) (*ov.emissive)[0] = v; break;
+        case AP::MaterialEmissiveG:  if (ov.emissive) (*ov.emissive)[1] = v; break;
+        case AP::MaterialEmissiveB:  if (ov.emissive) (*ov.emissive)[2] = v; break;
+        case AP::DeformX: if (ov.deformScale) (*ov.deformScale)[0] = v; break;
+        case AP::DeformY: if (ov.deformScale) (*ov.deformScale)[1] = v; break;
+        case AP::DeformZ: if (ov.deformScale) (*ov.deformScale)[2] = v; break;
+        default: break;
+        }
+    }
+
+    return overrides;
 }
 
 // ── Keybinding persistence format (STAB-0286) ─────────────────────────────────

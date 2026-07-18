@@ -313,9 +313,54 @@ _All items in this workstream are DONE — archived to [`docs/history/plan_20260
   `--benchmark` run confirming the live app's actual `pushUndo()` →
   `undoManager_.push()` → `popUndoWithoutApplying()` path executes cleanly
   end-to-end with a plausible timing, not just the unit test's mocks.
-  **Remaining roadmap (Phase 5+, not started):** animation, file dialogs,
-  post-processing, audio/walk-mode — each its own future phase, per the
-  original research writeup.
+  **Phase 5 (narrowed) DONE (2026-07-18):** the original roadmap named
+  "animation" as a whole future phase, but a closer look showed the same
+  kind of over-broad framing Preferences' Phase 2 already corrected once:
+  `MeshCraftApplication_Anim.cpp` is 975 lines, but only 1 of its 3
+  top-level functions (`evaluateAndPushAnimOverrides()`) is a genuinely
+  self-contained pure computation — `drawTimelinePanel()` is a ~800-line
+  ImGui widget (drag/box-select/multi-select/3 dialogs/keyframe clipboard)
+  tightly coupled to playback-control state (`animTime_`/
+  `currentActionName_`/`animPlaying_`) referenced from 8 other files
+  (`_Keyboard.cpp`, `_Mouse.cpp`, `_UiLeftPanel.cpp`, `_UiMenuBar.cpp`,
+  `_UiOverlays.cpp`, `_UiProperties.cpp`, `_FileOps.cpp`,
+  `_Benchmark.cpp`) — untangling that now would mean redoing the same
+  work `SYS-W14-16` just finished auditing, for no proportionate benefit.
+  **Narrowed scope, matching the Preferences precedent:** extracted only
+  `evaluateAndPushAnimOverrides()`'s core computation — a two-pass
+  seed-then-override calculation over `document_.actions`/materials that
+  had **zero existing test coverage** (unlike the neighboring
+  `insertAnimKeyframesAlg()`, already tested) — as a new
+  `computeAnimOverridesAlg()` in `EditorAlgorithms.hpp`, mirroring the
+  file's own established `resolveObjectPropertyValueAlg()`/STAB-0715
+  precedent for exactly this kind of production/test-mirror sharing. Uses
+  a new CNA-free `AnimOverrideAlg` mirror struct (field-for-field
+  identical to `Renderer::AnimOverride`, which can't be included from a
+  CNA-free header without pulling in `SceneRenderer.hpp`'s unrelated
+  CNA-coupled dependencies — same `MacroStep`/`MacroStepAlg` duplication-
+  for-testability idiom). `evaluateAndPushAnimOverrides()` itself is now a
+  thin wrapper: clear a stale `currentActionName_`/`animPlaying_` (a
+  stateful side effect that stays here), call the pure function, convert
+  `AnimOverrideAlg` → `Renderer::AnimOverride`, push to `SceneRenderer`.
+  New tests in `mc3/test/editor_commands_test.cpp` (18 assertions):
+  transform channel override at a mid-timeline value while untouched
+  transform fields stay seeded from the object's live state, material
+  channel override (roughness) with base color correctly seeded-not-
+  touched, deform defaulting to (1,1,1) with no `Mc3Deform`, an
+  unresolvable/renamed target object and an empty `targetObject` both
+  silently skipped (matching pre-extraction behavior exactly, not a
+  behavior change), and multiple distinct target objects each getting
+  their own keyed entry. Full rebuild + 130/130 `ctest`; manually ran
+  `--benchmark` against `animation_demo.mc3.xml` (confirms `animation
+  eval (Showcase)` fires with the real action name and a plausible
+  timing) and `--screenshot` against the same scene (visually confirmed
+  via direct image read — SpinPole/GlowCube/PulseSphere etc. render
+  correctly with no visual corruption), not just "compiles and doesn't
+  crash."
+  **Remaining roadmap (Phase 6+, not started):** the timeline UI/dialogs/
+  clipboard state (deliberately NOT extracted this phase, per the
+  narrowing above), file dialogs, post-processing, audio/walk-mode — each
+  its own future phase.
 
 ### W5 — MC3 governance
 - **SYS-W5-03** `[DEFERRED, human-authorized decision]` `P2` — MC3

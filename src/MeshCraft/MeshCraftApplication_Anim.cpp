@@ -15,10 +15,16 @@ namespace MeshCraft {
 
 using namespace Microsoft::Xna::Framework;
 
-// resolveObjectPropertyValue lives in EditorAlgorithms.hpp as the CNA-free,
-// headlessly-testable resolveObjectPropertyValueAlg() (STAB-0715), so this
-// production code and the insertAnimKeyframesAlg test mirror share one
-// implementation and cannot drift.
+// SYS-W3-01 Phase 5: the actual per-frame override computation now lives in
+// EditorAlgorithms.hpp's CNA-free, headlessly-testable computeAnimOverridesAlg()
+// (mirroring resolveObjectPropertyValueAlg's STAB-0715 precedent for the
+// sibling keyframe-insertion path) -- this keeps only the stateful parts
+// that genuinely belong to MeshCraftApplication: clearing a stale
+// currentActionName_/animPlaying_, and converting the CNA-free
+// AnimOverrideAlg result to Renderer::AnimOverride before pushing it to
+// SceneRenderer (AnimOverrideAlg exists specifically because
+// SceneRenderer.hpp cannot be included from the CNA-free algorithms header
+// without pulling in unrelated CNA-coupled dependencies).
 void MeshCraftApplication::evaluateAndPushAnimOverrides() {
     // If the current action no longer exists in the document, clear it
     if (!currentActionName_.empty() && !document_.actions.count(currentActionName_)) {
@@ -31,66 +37,24 @@ void MeshCraftApplication::evaluateAndPushAnimOverrides() {
     }
 
     const auto& action = document_.actions.at(currentActionName_);
+    auto overridesAlg = computeAnimOverridesAlg(
+        action, animTime_, document_.materials,
+        [this](const std::string& name) { return flatFindByName(name); });
+
     std::unordered_map<std::string, Renderer::AnimOverride> overrides;
-
-    // First pass: for each target object that has channels, initialize the
-    // override from the object's current document-state (transform + material).
-    for (const auto& ch : action.channels) {
-        if (ch.targetObject.empty() || overrides.count(ch.targetObject)) continue;
-        Mc3::Mc3Object* obj = flatFindByName(ch.targetObject);
-        if (!obj) continue;
-        auto& ov = overrides[ch.targetObject];
-        ov.position = obj->transform.position;
-        ov.rotation = obj->transform.rotation;
-        ov.scale    = obj->transform.scale;
-        ov.visible  = obj->visible;
-        if (!obj->material.empty()) {
-            auto matIt = document_.materials.find(obj->material);
-            if (matIt != document_.materials.end()) {
-                const auto& m = matIt->second;
-                ov.baseColor = m.baseColor;
-                ov.roughness = m.roughness;
-                ov.metallic  = m.metallic;
-                ov.emissive  = std::array<float,3>{m.emissiveColor[0], m.emissiveColor[1], m.emissiveColor[2]};
-            }
-        }
-        ov.deformScale = obj->deform
-            ? obj->deform->scale
-            : std::array<float,3>{1.0f, 1.0f, 1.0f};
-    }
-
-    // Second pass: apply evaluated channel values at the current time
-    using AP = Mc3::AnimatedProperty;
-    for (const auto& ch : action.channels) {
-        auto it = overrides.find(ch.targetObject);
-        if (it == overrides.end()) continue;
-        float v = Mc3::evaluateChannel(ch, animTime_);
-        auto& ov = it->second;
-        switch (ch.property) {
-        case AP::PositionX: (*ov.position)[0] = v; break;
-        case AP::PositionY: (*ov.position)[1] = v; break;
-        case AP::PositionZ: (*ov.position)[2] = v; break;
-        case AP::RotationX: (*ov.rotation)[0] = v; break;
-        case AP::RotationY: (*ov.rotation)[1] = v; break;
-        case AP::RotationZ: (*ov.rotation)[2] = v; break;
-        case AP::ScaleX:    (*ov.scale)[0]    = v; break;
-        case AP::ScaleY:    (*ov.scale)[1]    = v; break;
-        case AP::ScaleZ:    (*ov.scale)[2]    = v; break;
-        case AP::Visible:   ov.visible        = (v >= 0.5f); break;
-        case AP::MaterialBaseColorR: if (ov.baseColor) (*ov.baseColor)[0] = v; break;
-        case AP::MaterialBaseColorG: if (ov.baseColor) (*ov.baseColor)[1] = v; break;
-        case AP::MaterialBaseColorB: if (ov.baseColor) (*ov.baseColor)[2] = v; break;
-        case AP::MaterialBaseColorA: if (ov.baseColor) (*ov.baseColor)[3] = v; break;
-        case AP::MaterialRoughness:  ov.roughness = v; break;
-        case AP::MaterialMetallic:   ov.metallic  = v; break;
-        case AP::MaterialEmissiveR:  if (ov.emissive) (*ov.emissive)[0] = v; break;
-        case AP::MaterialEmissiveG:  if (ov.emissive) (*ov.emissive)[1] = v; break;
-        case AP::MaterialEmissiveB:  if (ov.emissive) (*ov.emissive)[2] = v; break;
-        case AP::DeformX: if (ov.deformScale) (*ov.deformScale)[0] = v; break;
-        case AP::DeformY: if (ov.deformScale) (*ov.deformScale)[1] = v; break;
-        case AP::DeformZ: if (ov.deformScale) (*ov.deformScale)[2] = v; break;
-        default: break;
-        }
+    overrides.reserve(overridesAlg.size());
+    for (auto& [targetObject, ovAlg] : overridesAlg) {
+        Renderer::AnimOverride ov;
+        ov.position    = ovAlg.position;
+        ov.rotation    = ovAlg.rotation;
+        ov.scale       = ovAlg.scale;
+        ov.visible     = ovAlg.visible;
+        ov.baseColor   = ovAlg.baseColor;
+        ov.roughness   = ovAlg.roughness;
+        ov.metallic    = ovAlg.metallic;
+        ov.emissive    = ovAlg.emissive;
+        ov.deformScale = ovAlg.deformScale;
+        overrides.emplace(targetObject, std::move(ov));
     }
 
     sceneRenderer_->setAnimOverrides(std::move(overrides));

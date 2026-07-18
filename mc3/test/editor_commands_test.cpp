@@ -2259,6 +2259,124 @@ static void testInsertAnimKeyframesDeformMaterialLiveValue()
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// computeAnimOverridesAlg (SYS-W3-01 Phase 5): the per-frame animation
+// override computation extracted out of
+// MeshCraftApplication::evaluateAndPushAnimOverrides().
+// ─────────────────────────────────────────────────────────────────────────────
+
+static void testComputeAnimOverridesSeedsAndAppliesChannel()
+{
+    Mc3Document doc;
+    auto obj = makeObj("walker", "Walker", Mc3::ObjectType::Box);
+    obj->transform.position = {1.f, 2.f, 3.f};
+    obj->transform.rotation = {0.f, 90.f, 0.f};
+    obj->transform.scale    = {2.f, 2.f, 2.f};
+    obj->visible = true;
+
+    Mc3::Mc3Action action = Mc3::Mc3Action::make("Walk", 1.0f);
+    action.addChannel("Walker", Mc3::AnimatedProperty::PositionX,
+        { Mc3::Mc3Keyframe::linear(0.0f, 1.0f), Mc3::Mc3Keyframe::linear(1.0f, 9.0f) });
+
+    auto findByName = [&](const std::string& name) -> Mc3Object* {
+        return name == obj->name ? obj.get() : nullptr;
+    };
+    auto overrides = computeAnimOverridesAlg(action, 0.5f, doc.materials, findByName);
+
+    CHECK(overrides.size() == 1, "computeAnimOverridesAlg: one entry for the one animated object");
+    auto it = overrides.find("Walker");
+    CHECK(it != overrides.end(), "computeAnimOverridesAlg: entry is keyed by the channel's targetObject");
+    if (it != overrides.end()) {
+        const auto& ov = it->second;
+        CHECK(ov.position.has_value(), "computeAnimOverridesAlg: position is seeded (object has a channel)");
+        CHECKF((*ov.position)[0], 5.0f, "computeAnimOverridesAlg: PositionX channel overrides at animTime=0.5 (halfway 1->9)");
+        CHECKF((*ov.position)[1], 2.0f, "computeAnimOverridesAlg: PositionY is seeded from the object's live value, untouched by any channel");
+        CHECKF((*ov.position)[2], 3.0f, "computeAnimOverridesAlg: PositionZ is likewise seeded, untouched");
+        CHECK(ov.rotation.has_value() && (*ov.rotation)[1] == 90.f,
+              "computeAnimOverridesAlg: rotation is seeded from the object's live transform even with no rotation channel");
+        CHECK(ov.scale.has_value() && (*ov.scale)[0] == 2.f,
+              "computeAnimOverridesAlg: scale is seeded from the object's live transform");
+        CHECK(ov.visible.has_value() && *ov.visible == true,
+              "computeAnimOverridesAlg: visible is seeded from the object's live state");
+        std::array<float,3> expectedDeform{1.f,1.f,1.f};
+        CHECK(ov.deformScale.has_value() && (*ov.deformScale) == expectedDeform,
+              "computeAnimOverridesAlg: deformScale defaults to (1,1,1) when the object has no deform");
+    }
+}
+
+static void testComputeAnimOverridesMaterialChannel()
+{
+    Mc3Document doc;
+    Mc3::Mc3Material mat; mat.name = "Red";
+    mat.baseColor = {0.9f, 0.1f, 0.2f, 1.0f};
+    mat.roughness = 0.5f;
+    doc.materials["Red"] = mat;
+
+    auto obj = makeObj("prop", "Prop", Mc3::ObjectType::Box);
+    obj->material = "Red";
+
+    Mc3::Mc3Action action = Mc3::Mc3Action::make("Fx");
+    action.addChannel("Prop", Mc3::AnimatedProperty::MaterialRoughness,
+        { Mc3::Mc3Keyframe::linear(0.0f, 0.0f), Mc3::Mc3Keyframe::linear(1.0f, 1.0f) });
+
+    auto findByName = [&](const std::string& name) -> Mc3Object* {
+        return name == obj->name ? obj.get() : nullptr;
+    };
+    auto overrides = computeAnimOverridesAlg(action, 1.0f, doc.materials, findByName);
+
+    auto it = overrides.find("Prop");
+    CHECK(it != overrides.end(), "computeAnimOverridesAlg (material): entry exists for the animated object");
+    if (it != overrides.end()) {
+        const auto& ov = it->second;
+        CHECK(ov.baseColor.has_value(), "computeAnimOverridesAlg (material): baseColor is seeded from the assigned material");
+        CHECKF((*ov.baseColor)[0], 0.9f, "computeAnimOverridesAlg (material): seeded baseColor.R matches the material, untouched by any channel");
+        CHECK(ov.roughness.has_value(), "computeAnimOverridesAlg (material): roughness is present");
+        CHECKF(*ov.roughness, 1.0f, "computeAnimOverridesAlg (material): MaterialRoughness channel overrides the seeded value at animTime=1.0");
+    }
+}
+
+static void testComputeAnimOverridesSkipsUnresolvableAndEmptyTargets()
+{
+    Mc3Document doc;
+    Mc3::Mc3Action action = Mc3::Mc3Action::make("Broken");
+    action.addChannel("GhostObject", Mc3::AnimatedProperty::PositionX,
+        { Mc3::Mc3Keyframe::linear(0.0f, 5.0f) });
+    action.addChannel("", Mc3::AnimatedProperty::PositionX,
+        { Mc3::Mc3Keyframe::linear(0.0f, 5.0f) });
+
+    auto findByName = [](const std::string&) -> Mc3Object* { return nullptr; };
+    auto overrides = computeAnimOverridesAlg(action, 0.0f, doc.materials, findByName);
+
+    CHECK(overrides.empty(),
+          "computeAnimOverridesAlg: a channel whose target can't be resolved (stale/renamed) "
+          "and a channel with an empty targetObject both produce no override entry, matching "
+          "the pre-extraction production behavior of silently skipping them");
+}
+
+static void testComputeAnimOverridesMultipleObjects()
+{
+    Mc3Document doc;
+    auto a = makeObj("a", "A", Mc3::ObjectType::Box);
+    auto b = makeObj("b", "B", Mc3::ObjectType::Sphere);
+    a->transform.position = {1.f, 0.f, 0.f};
+    b->transform.position = {0.f, 1.f, 0.f};
+
+    Mc3::Mc3Action action = Mc3::Mc3Action::make("Both");
+    action.addChannel("A", Mc3::AnimatedProperty::PositionX, { Mc3::Mc3Keyframe::linear(0.0f, 1.0f) });
+    action.addChannel("B", Mc3::AnimatedProperty::PositionY, { Mc3::Mc3Keyframe::linear(0.0f, 1.0f) });
+
+    auto findByName = [&](const std::string& name) -> Mc3Object* {
+        if (name == "A") return a.get();
+        if (name == "B") return b.get();
+        return nullptr;
+    };
+    auto overrides = computeAnimOverridesAlg(action, 0.0f, doc.materials, findByName);
+
+    CHECK(overrides.size() == 2, "computeAnimOverridesAlg: each distinct target object gets its own override entry");
+    CHECK(overrides.count("A") == 1 && overrides.count("B") == 1,
+          "computeAnimOverridesAlg: both target objects are present, keyed by name");
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Registry insert is undoable (STAB-0285)
 //
 // The "Insert" button (MeshCraftApplication_UiRegistry.cpp:80-101) does
@@ -3459,6 +3577,10 @@ int main()
     testUndoRedoAnimKeyframe();
     testInsertAnimKeyframesCreatesAndReplaces();
     testInsertAnimKeyframesDeformMaterialLiveValue();
+    testComputeAnimOverridesSeedsAndAppliesChannel();
+    testComputeAnimOverridesMaterialChannel();
+    testComputeAnimOverridesSkipsUnresolvableAndEmptyTargets();
+    testComputeAnimOverridesMultipleObjects();
     testUndoRedoRegistryInsert();
     testKeyBindStringFormat();
     testKeybindingPersistenceRoundTrip();
