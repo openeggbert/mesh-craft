@@ -417,7 +417,43 @@ _All items in this workstream are DONE — archived to [`docs/history/plan_20260
   updated with a sample reading.
 
 ### W14 — New features (after P0/P1 gates)
-- **SYS-W14-03** `[TODO]` `P2` — PNG screenshot / image export.
+- **SYS-W14-03** `[DONE]` `P2` — PNG screenshot / image export.
+  `main.cpp`'s own `--help` text and usage example have always promised
+  `scene.mc3.xml --screenshot output.png` renders "to PNG", but
+  `saveScreenshot()` unconditionally wrote raw PPM (P6) bytes regardless
+  of the requested extension — a real `.png` path got PPM data with a
+  misleading extension, not a decodable PNG (confirmed directly: this
+  session's own earlier `--screenshot foo.png` calls needed `convert` to
+  become viewable). **Implementation (2026-07-18):** `saveScreenshot()`
+  now dispatches on the path's extension — an explicit `.png` path is
+  encoded with `stbi_write_png()` (tinygltf's vendored
+  `stb_image_write.h`); every other extension (in particular every
+  `.ppm` path this test suite's own screenshot-based tests use) keeps
+  writing the exact same raw PPM bytes as before, byte-for-byte
+  unchanged. No new dependency or `CMakeLists.txt` change was needed:
+  `GltfExporter.cpp` (`mc3togltf_lib`, which `MeshCraft` already links)
+  already defines `STB_IMAGE_WRITE_IMPLEMENTATION` for its own glTF
+  texture embedding, so the encoder is already compiled into the binary —
+  this only adds a declarations-only `#include <stb_image_write.h>` (the
+  header is already on `MeshCraft`'s include path via `mc3togltf_lib`'s
+  `SYSTEM PUBLIC` include dir). The GL-readback buffer is bottom-up; PNG
+  (like the existing PPM writer) expects top-down, so the fix flips into
+  a second buffer explicitly rather than using `stb_image_write`'s global
+  `stbi_flip_vertically_on_write()` flag, which would also affect
+  `mc3togltf`'s own unrelated `stbi_write_png()` calls. New
+  `png_screenshot_test.py`: a `.png` path decodes as a real PNG (magic
+  bytes + `IHDR` width/height/bit-depth/color-type match the viewport,
+  hand-parsed rather than adding a Pillow dependency this test suite
+  doesn't otherwise have), and a `.ppm` path is confirmed still exactly
+  raw PPM (P6) — a regression guard for the ~15 existing screenshot-based
+  tests (`csg_*_cutter_test.py`, `background_texture_test.py`,
+  `skybox_texture_test.py`, `*_gizmo_test.py`, etc.) that all pass `.ppm`
+  explicitly and were confirmed unaffected. Full rebuild + 130/130
+  `ctest` (new `png_screenshot_test` registered); manually ran
+  `--screenshot foo.png` for real and visually confirmed (via a direct
+  image read) it renders correctly and matches the equivalent `.ppm`
+  capture pixel-for-pixel in composition, not just "decodes without
+  erroring."
 - **SYS-W14-04** `[DEFERRED]` `P3` — SVG texture rasterization pipeline.
 - **SYS-W14-05** `[DEFERRED]` `P3` — Safe `embed:` mesh/resource support end-to-end. (`AUD-025`)
 - **SYS-W14-06** `[DEFERRED]` `P3` — Improved CSG output (smooth normals/UVs/materials).

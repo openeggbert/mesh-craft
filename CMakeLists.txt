@@ -1122,6 +1122,22 @@ if(MESH_CRAFT_BUILD_TESTING AND UNIX AND NOT ANDROID AND NOT EMSCRIPTEN)
             set_tests_properties(editor_export_test PROPERTIES TIMEOUT 60 LABELS "export")
         endif()
 
+        # SYS-W14-03: confirms --screenshot writes a real, decodable PNG for
+        # a ".png" path (magic bytes + IHDR width/height/bit-depth/color-type),
+        # and that a ".ppm" path is still exactly the same raw PPM (P6) format
+        # every other screenshot-based test in this suite depends on.
+        if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/test/house.mc3.xml")
+            add_test(
+                NAME png_screenshot_test
+                COMMAND "${PYTHON3_EXEC}"
+                        "${CMAKE_CURRENT_SOURCE_DIR}/test/png_screenshot_test.py"
+                        $<TARGET_FILE:MeshCraft>
+                        "${CMAKE_CURRENT_SOURCE_DIR}/test/house.mc3.xml"
+                WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
+            )
+            set_tests_properties(png_screenshot_test PROPERTIES TIMEOUT 30 LABELS "render")
+        endif()
+
         # STAB-0327: confirms prefs.ini is auto-created on first launch
         # (LoadContent() now calls savePrefs() if the file doesn't already
         # exist), not only after the user explicitly closes the Preferences

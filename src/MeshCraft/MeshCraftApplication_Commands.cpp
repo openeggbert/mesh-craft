@@ -4,6 +4,15 @@
 
 #include <imgui.h>
 
+// SYS-W14-03: declarations only -- deliberately NOT defining
+// STB_IMAGE_WRITE_IMPLEMENTATION here. GltfExporter.cpp (mc3togltf_lib,
+// which MeshCraft already links) already does that exactly once for the
+// whole program; a second definition here would be a duplicate-symbol
+// link error. mc3togltf_lib exposes tinygltf's vendored source directory
+// as a SYSTEM PUBLIC include dir, so this header is already reachable
+// with no new CMakeLists.txt dependency.
+#include <stb_image_write.h>
+
 #include <SDL3/SDL.h>
 
 #include <Microsoft/Xna/Framework/Matrix.hpp>
@@ -409,6 +418,38 @@ void MeshCraftApplication::saveScreenshot(const std::string& path) {
     constexpr unsigned int GL_UNSIGNED_BYTE = 0x1401;
     std::vector<unsigned char> pixels(w * h * 4);
     fnReadPixels(0, 0, w, h, GL_RGBA, GL_UNSIGNED_BYTE, pixels.data());
+
+    // SYS-W14-03: --help/main.cpp's usage text has always promised "Render
+    // scene to PNG and exit", but this unconditionally wrote raw PPM (P6)
+    // bytes regardless of the requested extension -- a real path ending in
+    // ".png" got PPM data with a misleading extension, not a decodable PNG.
+    // A real PNG encoder (stbi_write_png(), from tinygltf's vendored
+    // stb_image_write.h -- its implementation is already compiled into
+    // mc3togltf_lib via GltfExporter.cpp's STB_IMAGE_WRITE_IMPLEMENTATION,
+    // which MeshCraft already links, so this needs no new dependency) now
+    // handles an explicit ".png" path; every other extension (in
+    // particular every ".ppm" path this codebase's own test suite uses)
+    // keeps writing the exact same raw PPM bytes as before, unchanged.
+    std::string ext = std::filesystem::path(path).extension().string();
+    for (auto& c : ext) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+    if (ext == ".png") {
+        // glReadPixels() returns rows bottom-to-top; PNG (like the PPM
+        // writer below) expects top-to-bottom, so flip into a second
+        // buffer rather than relying on stb_image_write's global
+        // stbi_flip_vertically_on_write() flag, which would also affect
+        // any unrelated stbi_write_png() call elsewhere in the process.
+        std::vector<unsigned char> flipped(pixels.size());
+        for (int row = 0; row < h; ++row)
+            std::memcpy(&flipped[static_cast<size_t>(row) * w * 4],
+                        &pixels[static_cast<size_t>(h - 1 - row) * w * 4],
+                        static_cast<size_t>(w) * 4);
+        if (stbi_write_png(path.c_str(), w, h, 4, flipped.data(), w * 4)) {
+            std::cout << "[Screenshot] written " << path << "\n";
+        } else {
+            std::cerr << "[Screenshot] failed to write PNG: " << path << "\n";
+        }
+        return;
+    }
 
     std::ofstream f(path, std::ios::binary);
     f << "P6\n" << w << " " << h << "\n255\n";
