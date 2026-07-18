@@ -60,10 +60,36 @@ finite ring, not a NaN-corrupted mesh). New
 POSITION/NORMAL accessors and confirms every float is finite; verified
 both directions via `git stash` (unpatched: export fails with exit 2;
 patched: succeeds, 312 vertices/164 triangles). Full root `ctest`: 136 of
-136 (was 135). The remaining 8 findings from this same audit pass are not
-yet actioned — see the user/session transcript for the full ranked list;
-re-derive from a fresh audit if this note has gone stale rather than
-trusting it indefinitely.
+136 (was 135). Fifth: **`AUD-068`** (commit `491f278`) —
+`Mc3JsonParser::parseString()`'s `Mc3LoadPolicy` parameter was entirely
+unused (`/*policy*/`) — `confineResourcePathsToRoot` was a silent no-op on
+the `.mc3.json` load path (6 resource-path fields: mesh source, texture
+uri, SVG src, embed src, sound src, music src), unlike the already-hardened
+XML path (`AUD-006b`). No production call site currently passes
+`untrusted()` to this parser, so latent, not yet exploited. Fixed by
+mirroring `Mc3XmlParser.cpp`'s own `g_confineResourcePaths`/
+`g_resourceRoot`/`includePathWithinRoot` exactly. Deliberately scoped to
+`confineResourcePathsToRoot` only — `.mc3.json`'s `includes` field is an
+inert passthrough list, never resolved/merged anywhere, so
+`allowIncludes`/`confineIncludesToRoot`/`maxIncludeDepth` have nothing to
+enforce on this path. New `mc3_json_load_policy` test (12 assertions);
+verified both directions via `git stash` (unpatched: 7 confinement
+assertions fail; patched: all 12 pass). Full root `ctest`: 137 of 137 (was
+136); standalone CNA-free `mc3/build`: 21 of 21 (was 20). **New finding,
+filed separately as `AUD-069` (P3/TODO, not fixed):** while writing this
+fix's test, found a pre-existing latent bug SHARED with the XML parser's
+`includePathWithinRoot` — a same-directory relative resource reference is
+wrongly rejected as "escaping the root" when the target file doesn't
+exist on disk AND the document was opened via a bare relative filename
+(empty `sourceDir`); `weakly_canonical()` only resolves existing paths, so
+a non-existent relative candidate stays unresolved and produces a
+degenerate `relative()` result. Fails SAFE (a false rejection, not a
+bypass) — low severity, not fixed here to keep `AUD-068` scoped to
+porting the existing, verified XML behavior, not improving on it. The
+remaining 7 findings from this same audit pass are not yet actioned —
+see the user/session transcript for the full ranked list; re-derive from
+a fresh audit if this note has gone stale rather than trusting it
+indefinitely.
 
 _Last updated: 2026-07-18 (later same day, third continuation this date).
 Continues the two 2026-07-18 sessions recorded below (SYS-W14-10..17 +
