@@ -7,6 +7,8 @@
 #include <imgui_impl_opengl3.h>
 #include <SDL3/SDL.h>
 
+#include <chrono>
+
 #include <Microsoft/Xna/Framework/Input/Keyboard.hpp>
 #include <Microsoft/Xna/Framework/Input/Keys.hpp>
 #include <Microsoft/Xna/Framework/Input/Mouse.hpp>
@@ -91,6 +93,15 @@ MeshCraftApplication::MeshCraftApplication(std::filesystem::path filePath, std::
     setIsMouseVisibleProperty(true);
 }
 
+MeshCraftApplication::MeshCraftApplication(std::filesystem::path filePath, bool benchmarkMode)
+    : currentFile_(std::move(filePath))
+    , benchmarkMode_(benchmarkMode)
+    , benchmarkFramesRemaining_(benchmarkMode ? kBenchmarkFrames : 0)
+{
+    getWindowProperty().setTitleProperty("Mesh Craft");
+    setIsMouseVisibleProperty(true);
+}
+
 // ---------------------------------------------------------------------------
 // SDL event watcher — forwards each event to ImGui before CNA processes it
 // ---------------------------------------------------------------------------
@@ -122,6 +133,11 @@ bool MeshCraftApplication::sdlEventWatch(void* userdata, void* eventPtr) {
 // ---------------------------------------------------------------------------
 
 void MeshCraftApplication::LoadContent() {
+    // SYS-W12-02: "startup" benchmark category -- times this whole function
+    // (scene load + renderer/panel construction), the editor's real
+    // one-time initialization cost.
+    auto benchmarkLoadStart = std::chrono::steady_clock::now();
+
     auto& gd = getGraphicsDeviceProperty();
 
     gridRenderer_  = std::make_unique<Renderer::GridRenderer>(gd);
@@ -228,7 +244,7 @@ void MeshCraftApplication::LoadContent() {
     SDL_AddEventWatch(reinterpret_cast<SDL_EventFilter>(sdlEventWatch), this);
 
     // F7: hide window in screenshot/headless mode
-    if (!autoScreenshotPath_.empty())
+    if (!autoScreenshotPath_.empty() || benchmarkMode_)
         SDL_HideWindow(sdlWindow);
 
     loadRecentFiles();
@@ -294,6 +310,11 @@ void MeshCraftApplication::LoadContent() {
     }
 
     updateWindowTitle();
+
+    if (benchmarkMode_) {
+        benchmarkLoadContentMs_ = std::chrono::duration<double, std::milli>(
+            std::chrono::steady_clock::now() - benchmarkLoadStart).count();
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -334,6 +355,12 @@ void MeshCraftApplication::EndDraw() {
             std::cout << "[CsgTriCount] count=" << sceneRenderer_->csgCachedTriCount(document_.objects.front()->id) << "\n";
         }
         std::cout << "[GLCheck] " << (lastGlErrorSeen_ ? "error" : "clean") << "\n";
+        Exit();
+    }
+
+    if (pendingBenchmark_) {
+        pendingBenchmark_ = false;
+        runBenchmarkSuite();
         Exit();
     }
     Game::EndDraw();
@@ -472,6 +499,12 @@ void MeshCraftApplication::Update(GameTime& gameTime) {
 // ---------------------------------------------------------------------------
 
 void MeshCraftApplication::Draw(const GameTime& /*gameTime*/) {
+    // SYS-W12-02: "first frame" vs "warm frame" benchmark timing -- wraps
+    // the REAL per-frame render path (correct camera_/view/proj already
+    // computed below) rather than a hand-rolled stand-in, so cold-vs-warm
+    // cache costs (CSG evaluation, texture load, mesh load) are genuine.
+    auto benchmarkFrameStart = std::chrono::steady_clock::now();
+
     auto& gd = getGraphicsDeviceProperty();
 
     // ImGui_ImplSDL3_NewFrame() (called in BeginDraw) queries SDL_GetWindowSizeInPixels
@@ -735,6 +768,14 @@ void MeshCraftApplication::Draw(const GameTime& /*gameTime*/) {
         --autoExportCountdown_;
         if (autoExportCountdown_ == 0 && !autoExportPath_.empty())
             pendingExport_ = true;
+    }
+
+    if (benchmarkMode_ && benchmarkFramesRemaining_ > 0) {
+        double ms = std::chrono::duration<double, std::milli>(
+            std::chrono::steady_clock::now() - benchmarkFrameStart).count();
+        benchmarkFrameTimesMs_.push_back(ms);
+        if (--benchmarkFramesRemaining_ == 0)
+            pendingBenchmark_ = true;
     }
 }
 

@@ -80,6 +80,9 @@ public:
     MeshCraftApplication(std::filesystem::path filePath, std::string screenshotPath);
     MeshCraftApplication(std::filesystem::path filePath, std::string screenshotPath,
                          std::string exportPath);
+    // SYS-W12-02: headless one-shot benchmark mode (see main.cpp's
+    // --benchmark flag and runBenchmarkSuite()'s own comment).
+    MeshCraftApplication(std::filesystem::path filePath, bool benchmarkMode);
 
     // True if a non-interactive --export run (see main.cpp) failed — main()
     // uses this to pick the process exit code (STAB-0528).
@@ -170,6 +173,23 @@ private:
     int  autoExportCountdown_{0};
     bool pendingExport_{false};
     bool exportFailed_{false};
+
+    // SYS-W12-02: headless one-shot benchmark mode (`--benchmark`, no
+    // scene modification, prints timing to stdout then exits). Frame
+    // timings are captured for the first `kBenchmarkFrames` real Draw()
+    // calls (using the app's actual camera/view/proj -- not a hand-rolled
+    // stand-in) so "first frame" vs "warm frame" reflects genuine cold-vs-
+    // warm cache costs (CSG evaluation, texture load, mesh load) without
+    // risking a mismatched render setup. See runBenchmarkSuite() for the
+    // rest (traversal/picking/undo-snapshot/animation-eval/registry,
+    // which don't need a render context and are timed directly).
+    static constexpr int kBenchmarkFrames = 10;
+    bool   benchmarkMode_{false};
+    int    benchmarkFramesRemaining_{0};
+    std::vector<double> benchmarkFrameTimesMs_;
+    bool   pendingBenchmark_{false};
+    double benchmarkLoadContentMs_{0.0};
+    void runBenchmarkSuite();
 
     // Lights panel selection
     int selectedLightIdx_{-1};

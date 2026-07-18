@@ -293,13 +293,42 @@ _All items in this workstream are DONE — archived to [`docs/history/plan_20260
 - **SYS-W11-03** `[TODO]` `P2` — Editor build+test CI job. (`AUD-053`)
 
 ### W12 — Performance baselines
-- **SYS-W12-02** `[TODO]` `P3` — Extend `SYS-W12-01`'s benchmark harness to
-  the remaining categories that need in-process instrumentation rather
-  than CLI-level timing: mesh-gen, CSG + cache, traversal, picking, undo
-  snapshot, texture processing (in isolation), animation eval, registry,
-  startup, first frame. Likely needs either a small headless benchmark
-  executable linking `MeshCraftApplication`'s internals directly, or new
-  timing instrumentation exposed through `--stats`-style CLI output.
+- **SYS-W12-02** `[DONE, 7 of 10 categories isolated — see honesty note]`
+  `P3` — Extend `SYS-W12-01`'s benchmark harness to the remaining
+  categories that need in-process instrumentation rather than CLI-level
+  timing: mesh-gen, CSG + cache, traversal, picking, undo snapshot,
+  texture processing, animation eval, registry, startup, first frame.
+  **Implementation (2026-07-18):** new `MeshCraft <scene> --benchmark`
+  headless CLI mode (`MeshCraftApplication_Benchmark.cpp`, a new
+  constructor overload + `main.cpp` flag, following the exact same
+  countdown/`pendingX_`/`EndDraw()`-triggers-`Exit()` pattern
+  `--screenshot`/`--export` already established). `startup` times
+  `LoadContent()` directly; `first frame`/`warm frame` wrap the first 10
+  REAL `Draw()` calls (genuine `camera_`/view/proj, not a hand-rolled
+  stand-in, so cold-vs-warm cache costs are real); `traversal`
+  (`scenePolyStats`), `picking` (`computeObjectWorldMatrix` over every
+  object), `undo snapshot` (`pushUndo()`'s deep-copy cost), `animation
+  eval` (`evaluateAndPushAnimOverrides()`, skipped with a clear message if
+  the scene has no actions), and `registry` (real SQLite open + `search`)
+  are all timed directly, no render context needed.
+  **Honesty note (3 of 10 NOT isolated, matching this session's own
+  established convention of not overstating coverage):** `mesh-gen`,
+  `CSG + cache`, and `texture processing` are reflected only in the
+  combined first-vs-warm-frame delta, since all three populate their
+  respective caches during those same early frames — isolating each
+  individually would need deeper per-subsystem hooks (e.g. inside
+  `SceneRenderer`'s own mesh/texture loaders), left as a smaller
+  follow-up, not claimed as done.
+  **Verify:** full rebuild + `ctest -j"$(nproc)"` (127/127, +1 new
+  `benchmark_editor` test — a smoke check that every expected category
+  line appears and the process exits 0, same "informational, not a
+  timing gate" philosophy `SYS-W12-01`'s own `benchmark` test already
+  established, not a new precedent). Manually ran `--benchmark` against
+  3 real fixtures (`house.mc3.xml`, `animation_demo.mc3.xml` — confirms
+  animation eval fires with a real action name, `csg_cache.mc3.xml` —
+  confirms a real warm-up delta from CSG cache population) and confirmed
+  every number is plausible, not just "didn't crash." `test/BENCHMARK_BASELINE.md`
+  updated with a sample reading.
 
 ### W14 — New features (after P0/P1 gates)
 - **SYS-W14-03** `[TODO]` `P2` — PNG screenshot / image export.

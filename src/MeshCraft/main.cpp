@@ -52,10 +52,14 @@ static void printUsage(const char* prog) {
         "  " << prog << " [scene.mc3.xml]\n"
         "  " << prog << " scene.mc3.xml --screenshot output.png\n"
         "  " << prog << " scene.mc3.xml --export output.glb\n"
+        "  " << prog << " scene.mc3.xml --benchmark\n"
         "\n"
         "Options:\n"
         "  --screenshot <path>   Render scene to PNG and exit (headless)\n"
         "  --export <path>       Export scene to .glb/.gltf and exit (headless)\n"
+        "  --benchmark           Time startup/traversal/picking/undo-snapshot/\n"
+        "                        animation-eval/registry/first-vs-warm-frame\n"
+        "                        (SYS-W12-02), print to stdout, and exit (headless)\n"
         "  --version             Print version and exit\n"
         "  --help                Show this help\n";
 }
@@ -84,6 +88,7 @@ int main(int argc, char* argv[]) {
     std::string filePath;
     std::string screenshotPath;
     std::string exportPath;
+    bool benchmarkMode = false;
 
     for (int i = 1; i < argc; ++i) {
         std::string arg = argv[i];
@@ -97,6 +102,8 @@ int main(int argc, char* argv[]) {
             screenshotPath = argv[++i];
         } else if (arg == "--export" && i + 1 < argc) {
             exportPath = argv[++i];
+        } else if (arg == "--benchmark") {
+            benchmarkMode = true;
         } else if (arg.rfind("--", 0) == 0) {
             std::cerr << "[MeshCraft] Unknown option: " << arg << "\n";
             printUsage(argv[0]);
@@ -106,18 +113,25 @@ int main(int argc, char* argv[]) {
         }
     }
 
-    // Screenshot/export modes require an existing scene file
-    if ((!screenshotPath.empty() || !exportPath.empty()) && filePath.empty()) {
-        std::cerr << "[MeshCraft] --screenshot/--export require a scene file argument.\n";
+    // Screenshot/export/benchmark modes require an existing scene file
+    if ((!screenshotPath.empty() || !exportPath.empty() || benchmarkMode) && filePath.empty()) {
+        std::cerr << "[MeshCraft] --screenshot/--export/--benchmark require a scene file argument.\n";
         printUsage(argv[0]);
         return 1;
     }
-    if ((!screenshotPath.empty() || !exportPath.empty()) && !std::filesystem::exists(filePath)) {
+    if ((!screenshotPath.empty() || !exportPath.empty() || benchmarkMode) && !std::filesystem::exists(filePath)) {
         std::cerr << "[MeshCraft] File not found: " << filePath << "\n";
         return 1;
     }
+    if (benchmarkMode && (!screenshotPath.empty() || !exportPath.empty())) {
+        std::cerr << "[MeshCraft] --benchmark cannot be combined with --screenshot/--export.\n";
+        return 1;
+    }
 
-    if (!filePath.empty() && (!screenshotPath.empty() || !exportPath.empty())) {
+    if (benchmarkMode) {
+        MeshCraft::MeshCraftApplication app(std::filesystem::path(filePath), /*benchmarkMode=*/true);
+        app.Run();
+    } else if (!filePath.empty() && (!screenshotPath.empty() || !exportPath.empty())) {
         MeshCraft::MeshCraftApplication app(std::filesystem::path(filePath), screenshotPath, exportPath);
         app.Run();
         if (!exportPath.empty() && app.exportFailed())

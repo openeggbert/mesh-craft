@@ -1,4 +1,4 @@
-# Benchmark baseline (SYS-W12-01, Phase 1)
+# Benchmark baseline (SYS-W12-01 Phase 1 + SYS-W12-02 Phase 2)
 
 Reference numbers from `test/benchmark.py`, for a human (or a future
 session) to eyeball against a fresh run and notice anything wildly off —
@@ -37,9 +37,45 @@ which part of export dominates, if that becomes useful.
 
 This covers 3 of the categories `SYS-W12-01`'s original description named
 (XML open/save, MCB convert/load, export — combined, not broken out
-per-phase). Deliberately not covered here, since each needs either code
-instrumentation inside the editor/library or driving a live
-`MeshCraftApplication` (materially more work than CLI-level timing):
-mesh-gen, CSG + cache, traversal, picking, undo snapshot, texture
-processing (in isolation), animation eval, registry, startup, first frame.
-Tracked as `SYS-W12-02` in `plan.md`.
+per-phase). The remaining 10 (mesh-gen, CSG + cache, traversal, picking,
+undo snapshot, texture processing, animation eval, registry, startup,
+first frame) needed either code instrumentation inside the editor/library
+or driving a live `MeshCraftApplication` — done in `SYS-W12-02` below.
+
+## `SYS-W12-02` Phase 2 — in-process editor benchmarks (2026-07-18)
+
+`MeshCraft <scene> --benchmark` (`MeshCraftApplication_Benchmark.cpp`) runs
+headlessly, times each category using the app's real internals (not a
+CLI-level proxy), and prints to stdout. Also informational, not a gate —
+see `test/benchmark_editor_test.sh` (the registered `benchmark_editor`
+ctest) for the smoke-level check this project actually runs (every
+category line appears, process exits 0 — not a timing assertion).
+
+```bash
+./b-release/MeshCraft test/house.mc3.xml --benchmark
+```
+
+Sample reading, this sandbox, 2026-07-18, `test/house.mc3.xml` (5 root
+objects, 713 verts / 1290 tris), Release build:
+
+| Category | Reading |
+|---|---|
+| startup (`LoadContent()`) | ~14 ms |
+| first frame | ~2.1 ms |
+| warm frame (avg of 9) | ~0.5 ms |
+| traversal (`scenePolyStats`) | ~0.001 ms |
+| picking (`computeObjectWorldMatrix` × object count) | ~0.005 ms |
+| undo snapshot (`pushUndo()` deep-copy) | ~0.025 ms |
+| animation eval | skipped (scene has no actions — see `test/animation_demo.mc3.xml` for a populated reading) |
+| registry (open + search) | ~0.9 ms |
+
+**Honesty note:** mesh-gen, CSG + cache, and texture processing are NOT
+isolated into their own separate timings — they're reflected in the
+first-vs-warm frame delta (~1.6 ms here), since all three populate their
+respective caches during those same early frames. Fully isolating them
+would need deeper per-subsystem instrumentation (e.g. a hook inside
+`SceneRenderer`'s own mesh/texture loaders); left as a smaller follow-up,
+not claimed as done. Traversal/picking/undo-snapshot/registry numbers on
+this tiny fixture are near the timer's own resolution floor — meaningful
+relative comparisons need a larger fixture (`test/medieval_castle.mc3.xml`
+or similar), not these absolute values.

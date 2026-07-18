@@ -721,6 +721,19 @@ if(MESH_CRAFT_BUILD_TESTING AND UNIX AND NOT ANDROID AND NOT EMSCRIPTEN)
     )
     set_tests_properties(smoke_test PROPERTIES TIMEOUT 30 LABELS "render")
 
+    # SYS-W12-02: smoke test for the new `--benchmark` headless mode (see
+    # MeshCraftApplication_Benchmark.cpp) -- informational, same philosophy
+    # as SYS-W12-01's own test/benchmark.py (checks it runs to completion
+    # and prints every expected category, not that any timing is fast).
+    add_test(
+        NAME benchmark_editor
+        COMMAND bash ${CMAKE_CURRENT_SOURCE_DIR}/test/benchmark_editor_test.sh
+                $<TARGET_FILE:MeshCraft>
+                ${CMAKE_CURRENT_SOURCE_DIR}/test/house.mc3.xml
+        WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
+    )
+    set_tests_properties(benchmark_editor PROPERTIES TIMEOUT 30 LABELS "perf")
+
     # AUD-058: real lifecycle verification -- runs the app end-to-end and
     # asserts BloomGL::leakCheck()/shadowDebug's shutdown self-check never
     # reports a surviving GL handle. Regression guard for s_bloom.cleanup()
