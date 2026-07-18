@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<mc3 version="0.3" model="ExtrudeStress">
+  <!-- path segments and cross_section segments are each individually legal
+       (kMaxTessellation=4096, Mc3XmlParser.cpp), but their PRODUCT used to
+       be rebuilt (trig-computed + allocated) from scratch every single
+       frame with no cache before the existing numVerts>65535 bailout
+       discarded the result. Regression fixture for that fix, see
+       drawExtrudeDynamic, SceneRenderer_Extrude.cpp, AUD-072. -->
+  <objects>
+    <extrude name="Pipe" segments="4096">
+      <cross_section type="circle" radius="0.15" segments="4096"/>
+      <path type="line" length="4" axis="y"/>
+    </extrude>
+  </objects>
+</mc3>

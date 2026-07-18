@@ -858,6 +858,24 @@ if(MESH_CRAFT_BUILD_TESTING AND UNIX AND NOT ANDROID AND NOT EMSCRIPTEN)
         set_tests_properties(smoke_test_grid_stress PROPERTIES TIMEOUT 30 LABELS "render")
     endif()
 
+    # AUD-072: the same class of regression as smoke_test_grid_stress above,
+    # in drawExtrudeDynamic() -- path segments x cross_section segments
+    # (each individually legal per kMaxTessellation) combine multiplicatively
+    # and used to be rebuilt from scratch every frame before the
+    # numVerts>65535 bailout discarded the result (confirmed: unpatched run
+    # did not finish within 25s; the vertex-count budget is now checked
+    # before any allocation).
+    if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/test/extrude_stress.mc3.xml")
+        add_test(
+            NAME smoke_test_extrude_stress
+            COMMAND bash ${CMAKE_CURRENT_SOURCE_DIR}/test/smoke_test.sh
+                    $<TARGET_FILE:MeshCraft>
+                    ${CMAKE_CURRENT_SOURCE_DIR}/test/extrude_stress.mc3.xml
+            WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
+        )
+        set_tests_properties(smoke_test_extrude_stress PROPERTIES TIMEOUT 30 LABELS "render")
+    endif()
+
     # STAB-0498: same smoke-test mechanism, but against a scene with zero
     # objects, to confirm the parser/renderer handle a genuinely empty
     # scene without crashing.

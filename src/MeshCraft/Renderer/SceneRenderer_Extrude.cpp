@@ -243,6 +243,22 @@ void SceneRenderer::drawExtrudeDynamic(const Mc3Extrude& ex,
     bool hollow = (ex.crossSection.innerRadius > 0.0f) &&
                   (ex.crossSection.type == CrossSectionType::Circle ||
                    ex.crossSection.type == CrossSectionType::Polygon);
+
+    // AUD-072: path segments (M) and cross-section points (N) are each
+    // independently capped at parse time (kMaxTessellation=4096,
+    // Mc3XmlParser.cpp), but nothing previously bounded their PRODUCT
+    // before allocating -- ex.segments=4096 with a circular cross-section
+    // segments=4096 built the full ~16.8M-vertex buffer (trig-computing
+    // every ring point) every single frame, only to discard it at the
+    // numVerts>65535 bailout that used to live at the very end of this
+    // function. Compute the same vertex-count formula the ring-building
+    // loops below actually produce (hollow doubles it: an inner ring is
+    // built in addition to the outer one) and bail to a placeholder
+    // BEFORE doing any of that work, not after -- matching AUD-064's own
+    // fix to the neighboring drawGridDynamic() in this same file.
+    long long vertBudget = hollow ? 2LL * M * N : static_cast<long long>(M) * N + 2;
+    if (vertBudget > 65535) { drawMesh(unitBox_, world, view, proj, color); return; }
+
     float innerScale = hollow ? (ex.crossSection.innerRadius / ex.crossSection.radius) : 0.0f;
 
     float twistRad     = ex.twist * (std::numbers::pi_v<float> / 180.0f);
@@ -364,6 +380,12 @@ void SceneRenderer::drawExtrudeDynamic(const Mc3Extrude& ex,
     int numVerts = static_cast<int>(verts.size());
     int numTris  = static_cast<int>(indices.size()) / 3;
 
+    // Defensive backstop, not the primary guard anymore: the vertBudget
+    // check above already bails before any allocation once numVerts would
+    // exceed this same bound, so this should be unreachable in practice.
+    // Left in place as a cheap belt-and-suspenders check against the
+    // uint16_t index buffer wrapping, in case the two vertex-count
+    // formulas ever drift out of sync with each other.
     if (numVerts > 65535) { drawMesh(unitBox_, world, view, proj, color); return; }
 
     VertexBuffer tmpVB(device_, numVerts);
