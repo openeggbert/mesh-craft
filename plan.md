@@ -84,12 +84,12 @@ P1s already being fixed in git history. This session:
    is per-field only) not part of the original audit, filed as new `TODO`
    tasks.
 
-   **Net across all 14 AUD-### rows remaining in this active backlog (61
+   **Net across all 15 AUD-### rows remaining in this active backlog (61
    additional rows completed and archived to `docs/history/plan_20260718.md`
    on 2026-07-18 — see that file for their full evidence/resolution text):
-   7 DONE, 5 TODO, 2 DEFERRED** — the 7 DONE (`AUD-064`..`068`, `AUD-070`,
-   `AUD-071`) and 1 of the 5 TODO (`AUD-069`) are fresh findings from a
-   2026-07-18 (later same day) independent re-audit, not part of the
+   8 DONE, 5 TODO, 2 DEFERRED** — the 8 DONE (`AUD-064`..`068`, `AUD-070`,
+   `AUD-071`, `AUD-072`) and 1 of the 5 TODO (`AUD-069`) are fresh findings
+   from a 2026-07-18 (later same day) independent re-audit, not part of the
    original 6; recompute with
    `python3 test/validate_plan_consistency.py . <build-dir>` rather than
    trusting this number as time passes.
@@ -1120,3 +1120,11 @@ remain in this active file.
 - **Tests:** New `mcb/test/tag_mismatch_rejection_test.cpp` (`mcb_tag_mismatch_rejection` ctest, 12 assertions).
 - **Resolved:** commit `c70ba77` — verify: `ctest -R mcb_tag_mismatch_rejection`
 - **Status note:** Fixed by adding `expectTag(tag, TAG_ARR, "overrides")`/`expectTag(tag, TAG_ARR, "steps")` right before each field's existing read logic, matching the pattern used everywhere else in the file. **Empirically verified both directions** (`git stash`): the test patches the tag byte immediately following each key's exact, unambiguously-located byte pattern from `TAG_ARR` to `TAG_STR` — unpatched, both mismatch-detection assertions correctly FAIL (the field is silently dropped, no exception); patched, loading throws `"MCB: type mismatch for key 'overrides' (expected tag 8, got 4)"` / the `steps` equivalent, and all 12 assertions pass. Also confirms a legitimate document with both fields present still round-trips correctly. Full root `ctest`: 139/139 (was 138).
+
+### AUD-072 `[DONE]` `P0` `W1` · drawExtrudeDynamic builds its full vertex buffer before its own size bailout, freezing the editor every frame
+- **Component:** src/MeshCraft/Renderer/SceneRenderer_Extrude.cpp (drawExtrudeDynamic)
+- **Evidence:** Found via the same fresh adversarial re-audit as `AUD-064`..`071` — the same class of bug as `AUD-064`'s `drawGridDynamic`, in the neighboring function in the same file. Path segments (`M`, from `ex.segments`) and cross-section points (`N`, from `ex.crossSection.segments`/`.sides`) are each individually capped at parse time (`kMaxTessellation=4096`), but nothing bounded their PRODUCT before allocating. `ex.segments="4096"` with a circular cross-section `segments="4096"` trig-computed and allocated the full `hollow ? 2*M*N : M*N+2` vertex buffer (~16.8M vertices) every single frame — the existing `numVerts>65535` bailout (previously at the very end of the function) only discarded the result AFTER all that work was already done, not before.
+- **Outcome:** Compute the vertex-count formula up front (right after `M`/`N`/`hollow` are known) and bail to a placeholder mesh before any allocation or trig work, matching `AUD-064`'s fix to `drawGridDynamic` in the same file.
+- **Tests:** New `test/extrude_stress.mc3.xml` fixture (`segments="4096"` path, `segments="4096"` circular cross-section) + `smoke_test_extrude_stress` ctest (TIMEOUT 30, `test/smoke_test.sh`).
+- **Resolved:** commit `ea31df7` — verify: `ctest -R smoke_test_extrude_stress`
+- **Status note:** Empirically confirmed as a real freeze before writing the fix, matching `AUD-064`'s own verification approach: `MeshCraft extrude_stress.mc3.xml --screenshot out.png` did not complete within a 25s timeout on the unpatched binary (`git stash` of the fix); with the fix it completes in ~2.3s, the same as normal startup. The old end-of-function `numVerts>65535` check is now provably unreachable given the new early bailout (both use the exact same formula the ring-building loops actually produce) — left in place as a cheap defensive backstop against the `uint16_t` index buffer wrapping, with a comment explaining it should never fire rather than silently removed. Full root `ctest`: 140/140 (was 139).

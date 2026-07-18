@@ -115,10 +115,24 @@ the same `expectTag()`-then-read pattern every other known key uses. New
 right after each key's exact byte pattern from `TAG_ARR` to `TAG_STR` and
 confirms loading now throws `"MCB: type mismatch for key '...'"` instead
 of silently succeeding; verified both directions via `git stash`. Full
-root `ctest`: 139 of 139 (was 138). The remaining 5 findings from this
-same audit pass are not yet actioned — see the user/session transcript
-for the full ranked list; re-derive from a fresh audit if this note has
-gone stale rather than trusting it indefinitely.
+root `ctest`: 139 of 139 (was 138). Eighth: **`AUD-072`** (commit
+`ea31df7`) — `SceneRenderer_Extrude.cpp`'s `drawExtrudeDynamic()`, the
+neighboring function to `AUD-064`'s `drawGridDynamic`, had the same class
+of bug: path segments × cross-section points combine multiplicatively and
+used to be rebuilt (trig-computed + allocated) from scratch every frame
+before the existing `numVerts>65535` bailout discarded the result —
+`ex.segments="4096"` with a `4096`-segment circular cross-section built
+the full ~16.8M-vertex buffer every frame. Empirically confirmed as a
+real freeze (unpatched: did not finish within 25s; patched: ~2.3s, via
+`git stash`). Fixed by computing the same vertex-count formula up front
+and bailing before any allocation, mirroring `AUD-064`'s fix exactly; the
+old end-of-function check is now provably unreachable but left in place
+as a documented defensive backstop. New `test/extrude_stress.mc3.xml` +
+`smoke_test_extrude_stress` ctest. Full root `ctest`: 140 of 140 (was
+139). The remaining 4 findings from this same audit pass are not yet
+actioned — see the user/session transcript for the full ranked list;
+re-derive from a fresh audit if this note has gone stale rather than
+trusting it indefinitely.
 
 _Last updated: 2026-07-18 (later same day, third continuation this date).
 Continues the two 2026-07-18 sessions recorded below (SYS-W14-10..17 +
