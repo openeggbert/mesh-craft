@@ -32,41 +32,6 @@ using namespace Microsoft::Xna::Framework::Input;
 using namespace Microsoft::Xna::Framework::Graphics;
 
 
-// STAB-0706: preview playback for Mc3Sound/Mc3Music entries, via CNA's
-// SoundEffect/SoundEffectInstance (Microsoft::Xna::Framework::Audio). One
-// shared preview at a time -- starting a new one stops whatever was
-// playing. Loop must be set before the first Play() call (setIsLoopedProperty
-// throws InvalidOperationException once playback has started), so it's
-// applied here, before Play(), not toggleable afterward.
-void MeshCraftApplication::playAudioPreview(const std::string& key, const std::string& srcPath, bool loop)
-{
-    using namespace Microsoft::Xna::Framework::Audio;
-
-    stopAudioPreview();
-    audioPreviewError_.clear();
-
-    try {
-        SoundEffect se(srcPath);
-        audioPreviewInstance_ = std::make_unique<SoundEffectInstance>(se.CreateInstance());
-        audioPreviewInstance_->setIsLoopedProperty(loop);
-        audioPreviewInstance_->Play();
-        audioPreviewKey_ = key;
-    } catch (const std::exception& e) {
-        audioPreviewInstance_.reset();
-        audioPreviewKey_.clear();
-        audioPreviewError_ = std::string("Playback failed: ") + e.what();
-    }
-}
-
-void MeshCraftApplication::stopAudioPreview()
-{
-    if (audioPreviewInstance_) {
-        audioPreviewInstance_->Stop();
-        audioPreviewInstance_.reset();
-    }
-    audioPreviewKey_.clear();
-}
-
 void MeshCraftApplication::drawLeftPanel(float panelY, float panelH)
 {
     int tlPanelH = showTimeline_ ? kTimelineH : 0;
@@ -1554,9 +1519,9 @@ void MeshCraftApplication::drawLeftPanel(float panelY, float panelH)
         // playback via CNA's SoundEffect/SoundEffectInstance.
         // -------------------------------------------------------------------
         if (ImGui::BeginTabItem("Audio")) {
-            if (!audioPreviewError_.empty()) {
+            if (!audioPreview_.error().empty()) {
                 ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.4f, 0.4f, 1.0f));
-                ImGui::TextWrapped("%s", audioPreviewError_.c_str());
+                ImGui::TextWrapped("%s", audioPreview_.error().c_str());
                 ImGui::PopStyleColor();
                 ImGui::Separator();
             }
@@ -1593,7 +1558,7 @@ void MeshCraftApplication::drawLeftPanel(float panelY, float panelH)
             ImGui::SameLine();
             if (ImGui::SmallButton("-##soundremove") && !selectedSoundKey_.empty()) {
                 pushUndo();
-                if (audioPreviewKey_ == selectedSoundKey_) stopAudioPreview();
+                if (audioPreview_.currentKey() == selectedSoundKey_) audioPreview_.stop();
                 document_.sounds.erase(selectedSoundKey_);
                 selectedSoundKey_.clear();
                 modified_ = true; updateWindowTitle();
@@ -1601,14 +1566,13 @@ void MeshCraftApplication::drawLeftPanel(float panelY, float panelH)
 
             for (const auto& [key, sound] : document_.sounds) {
                 bool sel = (key == selectedSoundKey_);
-                bool playing = (key == audioPreviewKey_) && audioPreviewInstance_ &&
-                               audioPreviewInstance_->getStateProperty() == Microsoft::Xna::Framework::Audio::SoundState::Playing;
+                bool playing = audioPreview_.isPlaying(key);
                 ImGui::PushID(("sound_" + key).c_str());
                 if (playing) {
-                    if (ImGui::SmallButton("■")) stopAudioPreview();
+                    if (ImGui::SmallButton("■")) audioPreview_.stop();
                 } else {
                     if (ImGui::SmallButton("▶") && !sound.src.empty())
-                        playAudioPreview(key, resolveSrc(sound.src), sound.loop);
+                        audioPreview_.play(key, resolveSrc(sound.src), sound.loop);
                 }
                 ImGui::SameLine();
                 if (ImGui::Selectable(key.c_str(), sel))
@@ -1669,7 +1633,7 @@ void MeshCraftApplication::drawLeftPanel(float panelY, float panelH)
             ImGui::SameLine();
             if (ImGui::SmallButton("-##musicremove") && !selectedMusicKey_.empty()) {
                 pushUndo();
-                if (audioPreviewKey_ == selectedMusicKey_) stopAudioPreview();
+                if (audioPreview_.currentKey() == selectedMusicKey_) audioPreview_.stop();
                 document_.musicTracks.erase(selectedMusicKey_);
                 selectedMusicKey_.clear();
                 modified_ = true; updateWindowTitle();
@@ -1677,14 +1641,13 @@ void MeshCraftApplication::drawLeftPanel(float panelY, float panelH)
 
             for (const auto& [key, music] : document_.musicTracks) {
                 bool sel = (key == selectedMusicKey_);
-                bool playing = (key == audioPreviewKey_) && audioPreviewInstance_ &&
-                               audioPreviewInstance_->getStateProperty() == Microsoft::Xna::Framework::Audio::SoundState::Playing;
+                bool playing = audioPreview_.isPlaying(key);
                 ImGui::PushID(("music_" + key).c_str());
                 if (playing) {
-                    if (ImGui::SmallButton("■")) stopAudioPreview();
+                    if (ImGui::SmallButton("■")) audioPreview_.stop();
                 } else {
                     if (ImGui::SmallButton("▶") && !music.src.empty())
-                        playAudioPreview(key, resolveSrc(music.src), music.loop);
+                        audioPreview_.play(key, resolveSrc(music.src), music.loop);
                 }
                 ImGui::SameLine();
                 if (ImGui::Selectable(key.c_str(), sel))

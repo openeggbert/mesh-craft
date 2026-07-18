@@ -681,6 +681,23 @@ if(MESH_CRAFT_BUILD_TESTING AND UNIX AND NOT ANDROID AND NOT EMSCRIPTEN)
     add_test(NAME walk_controller COMMAND walk_controller_test)
     set_tests_properties(walk_controller PROPERTIES TIMEOUT 15 LABELS "unit")
 
+    # SYS-W3-01 Phase 7: Editor::AudioPreview, extracted from
+    # MeshCraftApplication (STAB-0706, sound/music preview playback). No
+    # test existed for this subsystem before the extraction. Needs real
+    # Microsoft::Xna::Framework::Audio::SoundEffect/SoundEffectInstance
+    # (CNA), so like keybinding_manager_test/walk_controller_test above it
+    # links CNA + SHARP_RUNTIME.
+    add_executable(audio_preview_test
+        ${CMAKE_CURRENT_SOURCE_DIR}/test/audio_preview_test.cpp
+        ${CMAKE_CURRENT_SOURCE_DIR}/src/MeshCraft/Editor/AudioPreview.cpp)
+    target_include_directories(audio_preview_test PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/include)
+    target_link_libraries(audio_preview_test PRIVATE
+        CNA ${_cna_backend_target} SHARP_RUNTIME)
+    target_compile_features(audio_preview_test PRIVATE cxx_std_23)
+    add_test(NAME audio_preview COMMAND audio_preview_test)
+    set_tests_properties(audio_preview PROPERTIES TIMEOUT 15 LABELS "unit")
+
     # Pure unit test: ObjectType <-> display-name round-trip. Header-only.
     # Regression guard for the Torus/Capsule/Disk/Grid/IcoSphere -> "Object"
     # mislabel and the lossy macro round-trip.

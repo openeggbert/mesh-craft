@@ -3,6 +3,7 @@
 #include "MeshCraft/AiAssistant.hpp"
 #include "MeshCraft/ModelRegistry.hpp"
 #include "MeshCraft/Editor/ActiveTool.hpp"
+#include "MeshCraft/Editor/AudioPreview.hpp"
 #include "MeshCraft/Editor/EditorCamera.hpp"
 #include "MeshCraft/Editor/EditorTool.hpp"
 #include "MeshCraft/Editor/KeybindingManager.hpp"
@@ -215,17 +216,11 @@ private:
     // Scene states panel selection (STAB-0708)
     std::string selectedSceneStateKey_;
 
-    // Audio panel selection + preview playback (STAB-0706). One shared
-    // preview instance at a time (starting a new preview stops any
-    // currently-playing one) -- SoundEffectInstance keeps its own audio
-    // resource alive independent of the originating SoundEffect (CP-7 in
-    // CNA's SoundEffectInstance.hpp), so no separate SoundEffect member is
-    // needed here.
+    // Audio panel selection + preview playback (STAB-0706, SYS-W3-01
+    // Phase 7: extracted into Editor::AudioPreview).
     std::string selectedSoundKey_;
     std::string selectedMusicKey_;
-    std::unique_ptr<Microsoft::Xna::Framework::Audio::SoundEffectInstance> audioPreviewInstance_;
-    std::string audioPreviewKey_;   // which sound/music id audioPreviewInstance_ belongs to
-    std::string audioPreviewError_; // last load/play error, shown inline; cleared on next attempt
+    Editor::AudioPreview audioPreview_;
 
     // Materials panel selection
     std::string selectedMaterialKey_;
@@ -482,14 +477,6 @@ private:
     void updateWindowTitle();
     void saveScreenshot(const std::string& path);
     void drawImGuiUi(int screenW, int screenH);
-
-    // Audio preview playback (STAB-0706): plays/stops a one-shot preview of
-    // a Mc3Sound/Mc3Music entry via CNA's SoundEffect/SoundEffectInstance.
-    // `key` identifies which sound/music this preview belongs to (for UI
-    // highlighting); `srcPath` is resolved relative to document_.sourcePath
-    // by the caller before being passed in.
-    void playAudioPreview(const std::string& key, const std::string& srcPath, bool loop);
-    void stopAudioPreview();
 
     // drawImGuiUi sub-sections
     float drawMenuBar();

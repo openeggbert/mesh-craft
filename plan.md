@@ -411,8 +411,50 @@ _All items in this workstream are DONE — archived to [`docs/history/plan_20260
   `SYS-W14-08`'s AI-panel diff UI) — confidence here comes from the 32
   real-class unit tests plus a clean compile/link/smoke-boot, not an
   interactive screenshot of walk mode itself.
+  **Phase 7 DONE (2026-07-18) — audio preview:** extracted
+  `Editor::AudioPreview` (STAB-0706's sound/music preview playback) —
+  another small, self-contained subsystem like walk mode: 3 fields + 2
+  methods, all living in one file (`MeshCraftApplication_UiLeftPanel.cpp`,
+  both implementation and every call site), with zero `document_`/
+  `selection_` coupling beyond an already-resolved `srcPath` string passed
+  in by the caller. Unlike file dialogs, this had real behavior worth
+  encapsulating: a stop-before-play invariant, error-clearing-on-each-
+  attempt, and a genuine correctness constraint (`setIsLoopedProperty()`
+  must be called before `Play()` — it throws afterward) that's now a
+  documented, enforced-by-construction invariant of the class rather than
+  an implicit ordering a future edit could accidentally break. Also
+  deduplicated a real repeat: the "is this key currently playing" boolean
+  expression (`key == audioPreviewKey_ && audioPreviewInstance_ && ...
+  == SoundState::Playing`) was hand-copied at both the sound-list and
+  music-list call sites; now one `isPlaying()` method. Added a
+  `currentKey()` accessor distinct from `isPlaying()` for the
+  remove-button guard, which cares about "is a live instance associated
+  with this key at all" regardless of playback state, not "is it actively
+  Playing" specifically. Since both the implementation and every call
+  site lived in the same file with no other consumer, `playAudioPreview()`/
+  `stopAudioPreview()` were removed outright rather than kept as thin
+  wrappers (unlike walk mode, where 3 other files needed the existing
+  method names preserved). No callback DI needed — self-contained, CNA-
+  coupled where unavoidable (real `SoundEffect`/`SoundEffectInstance`),
+  matching `WalkController`/`KeybindingManager`'s precedent. New
+  `audio_preview_test` (CNA-coupled; no coverage existed for this
+  subsystem before): 13 assertions covering the error path exhaustively —
+  a nonexistent source path exercises the exact same catch block a
+  missing-audio-device error would, so this is meaningful even without a
+  working audio backend in this sandbox — initial state, `play()` failure
+  clearing state and reporting `error()`, `stop()` as a safe no-op,
+  `error()` not accumulating across repeated failed attempts, and
+  `isPlaying()`/`currentKey()`'s distinct semantics. **Honesty note:** the
+  real-playback success path (a valid audio file actually reaching the
+  Playing state) is NOT covered — would need a real audio device/fixture
+  this headless sandbox can't guarantee, matching the same limitation
+  already noted for walk mode's live-input path and the native file
+  dialog. Full rebuild + 132/132 `ctest` (new `audio_preview` test
+  registered); manual `--screenshot` smoke test confirms the app still
+  boots and renders cleanly (the Audio tab itself needs live interaction
+  to exercise beyond compile/link correctness, same limitation).
   **Remaining roadmap (not started):** file dialogs (investigated, no
-  narrow win found), post-processing, audio — each still open.
+  narrow win found), post-processing — still open.
 
 ### W5 — MC3 governance
 - **SYS-W5-03** `[DEFERRED, human-authorized decision]` `P2` — MC3
