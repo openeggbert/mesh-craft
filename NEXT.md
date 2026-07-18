@@ -31,11 +31,23 @@ while verifying this item) briefly blocked the CNA-linked root build in
 between — see §4's now-`RESOLVED` note — so the full root suite couldn't
 be re-verified until that cleared; re-checked afterward on the user's
 prompt and confirmed clean: full root `ctest -j4`, 134 of 134 tests
-passing (`plan_consistency` included), both fixes good end-to-end. The
-remaining 10 findings from this same audit pass are not yet actioned —
-see the user/session transcript for the full ranked list; re-derive from a
-fresh audit if this note has gone stale rather than trusting it
-indefinitely.
+passing (`plan_consistency` included), both fixes good end-to-end. Third:
+**`AUD-066`** (commit `42c24cb`) — `McbReader.cpp` validated every claimed
+collection count against a 10M sanity ceiling (`rU32Bounded`) but then
+`.reserve()`'d the FULL claimed count up front at all 13 call sites,
+before reading a single element — a tiny corrupted/malicious file (valid
+fields up to one oversized-but-legal count, then EOF) could force a large
+up-front allocation. Fixed with `reserveHint(n) = min(n, 4096)`. New
+`mcb_reserve_bomb` test (11 assertions) measures `/proc/self/status`
+VmPeak, not RSS — empirically confirmed `reserve()` alone leaves RSS flat
+(Linux lazy page commit) while VmPeak on the unpatched reader jumped from
+~6MB to ~850MB for a 43-byte hostile file claiming 9,000,000 lights;
+patched, only ~350KB. Verified both directions (unpatched reader's test
+correctly FAILS via `git stash`; patched reader's test passes). Full root
+`ctest`: 135 of 135 (was 134). The remaining 9 findings from this same
+audit pass are not yet actioned — see the user/session transcript for the
+full ranked list; re-derive from a fresh audit if this note has gone
+stale rather than trusting it indefinitely.
 
 _Last updated: 2026-07-18 (later same day, third continuation this date).
 Continues the two 2026-07-18 sessions recorded below (SYS-W14-10..17 +

@@ -84,12 +84,12 @@ P1s already being fixed in git history. This session:
    is per-field only) not part of the original audit, filed as new `TODO`
    tasks.
 
-   **Net across all 8 AUD-### rows remaining in this active backlog (61
+   **Net across all 9 AUD-### rows remaining in this active backlog (61
    additional rows completed and archived to `docs/history/plan_20260718.md`
    on 2026-07-18 — see that file for their full evidence/resolution text):
-   2 DONE, 4 TODO, 2 DEFERRED** — the 2 DONE (`AUD-064`, `AUD-065`) are
-   fresh findings from a 2026-07-18 (later same day) independent re-audit,
-   not part of the original 6; recompute with
+   3 DONE, 4 TODO, 2 DEFERRED** — the 3 DONE (`AUD-064`, `AUD-065`,
+   `AUD-066`) are fresh findings from a 2026-07-18 (later same day)
+   independent re-audit, not part of the original 6; recompute with
    `python3 test/validate_plan_consistency.py . <build-dir>` rather than
    trusting this number as time passes.
 5. Archived `plan_deep_audit.md` (all 57 of its own tasks were already
@@ -1071,3 +1071,11 @@ remain in this active file.
 - **Tests:** New `mc3/test/json_input_budget_test.cpp` (`mc3_json_input_budget` ctest, 13 assertions) — mirrors `mc3_input_budget`'s XML fixture shape: hostile `segments`/`subdivisionsX`/`subdivisionsZ`/extrude `sides`/`segments` values are clamped to `<=4096`, negative `segments` floors at `0`, legitimate values pass through unchanged.
 - **Resolved:** commit `2ac7db4` — verify: `ctest -R mc3_json_input_budget`
 - **Status note:** Fixed with a small `clampTess()` helper (`Mc3JsonParser.cpp`, mirrors `Mc3XmlParser.cpp`'s `kMaxTessellation`/per-field minimums) applied at all 6 read sites. Full CNA-free `mc3` standalone suite: 20/20 `ctest` (was 19); also built and verified from the root `b-release` tree directly (target + `ctest -R` both pass there too). **Not covered by this fix, deliberately (separate, larger follow-ups):** (1) the JSON path is still not wired into `Mc3XmlParser.cpp`'s document-wide `DocumentBudget`/total-tessellation-weight tracking (`AUD-059`) — that budget is a `thread_local` file-static with no shared header, and covers materials/textures/embeds/actions/etc. too, not just tessellation; (2) `Mc3JsonParser::parseString`'s `Mc3LoadPolicy` parameter is still entirely unused (a separate, pre-existing finding from the same audit pass, not folded in here). **Could not run the full root `ctest` suite end-to-end** while verifying this — see §4's new blocker note in `NEXT.md` (an unrelated, external `../easy-gl`/`../meta-gl` mid-edit breaking the CNA-linked build, discovered incidentally, out of this repo's bounds to fix).
+
+### AUD-066 `[DONE]` `P1` `W6` · McbReader.cpp reserves the FULL claimed collection count up front, before validating the stream actually contains that many elements
+- **Component:** mcb/src/McbReader.cpp (rU32Bounded / 13 `.reserve(n)` call sites)
+- **Evidence:** Found via the same fresh adversarial re-audit as `AUD-064`/`AUD-065`. `rU32Bounded()` (`McbReader.cpp:167-176`) validates a claimed collection count against `kMcbMaxCollectionCount=10,000,000` — a real bound, but only proof the count is under the sanity ceiling, not that the stream actually contains that many elements. 13 call sites (`doc.lights`/`doc.cameras`/`doc.objects`/`obj->children`/`ch.keyframes`/`act.channels`/`doc.imports`/`doc.includes`/`obj->tags`/`obj->variantDefinitions`/extrude cross-section `customPoints`/path `points`/a generic array helper) then called `.reserve(n)` with that full claimed count, before reading a single element. A tiny, corrupted/malicious file (valid header/fields up to one oversized-but-legal count, then EOF) could therefore force a large up-front allocation.
+- **Outcome:** Cap the up-front `.reserve()` to a small constant hint regardless of the claimed count; let a genuinely large legitimate file grow the vector via normal amortized reallocation as elements are actually read.
+- **Tests:** New `mcb/test/reserve_bomb_test.cpp` (`mcb_reserve_bomb` ctest, 11 assertions).
+- **Resolved:** commit `42c24cb` — verify: `ctest -R mcb_reserve_bomb`
+- **Status note:** Fixed with `reserveHint(n) = min(n, 4096)` applied at all 13 sites. **Empirically measured, not just reasoned about** (matching `AUD-064`'s own before/after-timing precedent): the regression test hand-crafts a 43-byte file whose `lights` array count is patched to 9,000,000 then truncated immediately after, and measures `/proc/self/status` VmPeak (virtual-memory high-water mark) around the load attempt — **NOT RSS**: a `vector<Mc3Light>::reserve(9000000)` was confirmed to leave RSS essentially flat (Linux lazily commits pages; `reserve()` never touches/constructs elements) while jumping VmPeak from ~6MB to ~850MB, so an RSS/`getrusage`-based check would have silently passed regardless of the bug. Verified both directions: the unpatched reader (checked via `git stash` of the one-line-per-site fix) grows VmPeak by ~824MB and the test correctly FAILS against it; the patched reader grows VmPeak by only ~350KB and the test passes. Also confirms a legitimate 50-light document still round-trips all 50 lights (the hint doesn't truncate real data). Full root `ctest`: 135/135 (was 134). Left a pointer comment in `mcb_corruption_test.cpp` (whose own header comment previously implied the reader was already fully memory-safe against arbitrary corruption) noting this refinement — that file's crash-safety/rejection-correctness sweeps were never positioned to catch an allocation-SIZE issue like this one.

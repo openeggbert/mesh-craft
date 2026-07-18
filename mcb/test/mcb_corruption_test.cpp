@@ -29,6 +29,17 @@
 // corruption and this file would be a regression-PROVING addition, not a
 // bug hunt -- confirmed by the results below (all cases pass; verified
 // additionally under an ASan+UBSan build with zero findings).
+//
+// AUD-066 refinement (found later, by a separate audit pass -- see
+// reserve_bomb_test.cpp): "capped BEFORE being used to allocate/reserve"
+// above is true but incomplete -- kMcbMaxCollectionCount alone (10M) still
+// let a tiny file's claimed count drive a single up-front .reserve() of
+// that FULL size, which is a large-but-bounded allocation, not a memory-
+// safety hole (no OOB read/write, no crash) but still a real resource-
+// exhaustion DoS vector this file's own truncation/fuzz sweeps did not
+// happen to surface (they check crash-safety and rejection correctness,
+// not allocation SIZE). Fixed separately by capping the up-front reserve
+// itself (reserveHint()), not by lowering kMcbMaxCollectionCount.
 
 #include "MeshCraft/Mcb/McbReader.hpp"
 #include "MeshCraft/Mcb/McbWriter.hpp"
