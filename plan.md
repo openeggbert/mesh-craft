@@ -357,10 +357,62 @@ _All items in this workstream are DONE — archived to [`docs/history/plan_20260
   via direct image read — SpinPole/GlowCube/PulseSphere etc. render
   correctly with no visual corruption), not just "compiles and doesn't
   crash."
-  **Remaining roadmap (Phase 6+, not started):** the timeline UI/dialogs/
-  clipboard state (deliberately NOT extracted this phase, per the
-  narrowing above), file dialogs, post-processing, audio/walk-mode — each
-  its own future phase.
+  **Remaining roadmap after Phase 5:** the timeline UI/dialogs/clipboard
+  state (deliberately NOT extracted in Phase 5, per the narrowing above),
+  file dialogs, post-processing, audio/walk-mode — each its own future
+  phase.
+  **Phase 6 DONE (2026-07-18) — walk mode:** investigated "file dialogs"
+  first and declined it — the 3 dialogs (Open/Save-As/Import-OBJ) are
+  already well-factored thin UI glue over existing, already-tested Alg
+  functions (`resolveSaveAsPathAlg`, `loadSceneFileDispatched`,
+  `addPrimitive`); pulling their handful of booleans/char-buffers into a
+  class would have had zero testability payoff, unlike every other phase
+  so far. Walk mode (H15), by contrast, turned out to be the cleanest
+  extraction yet: `MeshCraftApplication_WalkMode.cpp` is only 168 lines,
+  and `updateWalkMode()` is a genuinely self-contained physics/look
+  simulation — no `document_`/`selection_` dependency at all, unlike
+  every other subsystem extracted so far. Extracted `Editor::WalkController`
+  (`include/`+`src/MeshCraft/Editor/WalkController.hpp`/`.cpp`): owns the
+  position/yaw/pitch/velocity/on-ground state plus the tunable
+  height/speed/turnSpeed/mouseSens settings (public fields, mirroring
+  `EditorCamera`'s own yaw/pitch/distance/fovDegrees style so the walk-
+  settings ImGui sliders can still bind directly to them). No callback DI
+  needed (unlike `MacroRecorder`) — genuinely self-contained, like
+  `Preferences`/`KeybindingManager`, and like `KeybindingManager` it's
+  unavoidably CNA-coupled (needs a real `KeyboardState` for `update()`).
+  `enter()`/`exit()`/`update()` mirror the pre-extraction
+  `enterWalkMode()`/`exitWalkMode()`/`updateWalkMode()` logic exactly,
+  returning an `ExitCameraState` (target/yaw/pitch/distance) for the
+  caller to apply to `Editor::EditorCamera` rather than reaching into it
+  directly. `viewMatrix()` computes the first-person view from its own
+  state; the projection matrix deliberately stays in
+  `MeshCraftApplication::Draw()` since walk mode has never had its own
+  FOV/clip-plane settings, only borrowed `camera_`'s. Found and removed
+  one piece of genuinely dead code while touching this state:
+  `walkSettingsOpen_` was declared but never read or written anywhere.
+  New `walk_controller_test` (CNA-coupled like `keybinding_manager_test`
+  — needs a real `KeyboardState`; no coverage existed for this subsystem
+  before): 32 assertions covering `enter()`'s ground-relative position
+  seeding (including clamping a below-ground seed to 0), `exit()`'s
+  camera-state restoration (including the pitch sign flip between the
+  walk-camera and orbit-camera conventions), forward/backward movement
+  following yaw, keyboard yaw turning, mouse look, pitch clamping at
+  ~±85°, jump+gravity+ground-collision settling back at y=0 with
+  on-ground correctly re-armed for a second jump, `update()`'s implicit
+  exit on Escape (matching the pre-extraction early-return exactly), and
+  a differential check that `viewMatrix()` actually incorporates
+  position/yaw/height (not hand-deriving `CreateLookAt`'s exact matrix,
+  matching `preferences_test.cpp`'s own differential-check precedent for
+  a third-party formula). Full rebuild + 131/131 `ctest` (new
+  `walk_controller` test registered); manual `--screenshot` smoke test
+  confirms the normal (non-walk) orbit-camera rendering path is unaffected.
+  Walk mode itself needs live F5+WASD input with no CLI-triggerable path
+  to exercise it end-to-end in this sandbox (same limitation as
+  `SYS-W14-08`'s AI-panel diff UI) — confidence here comes from the 32
+  real-class unit tests plus a clean compile/link/smoke-boot, not an
+  interactive screenshot of walk mode itself.
+  **Remaining roadmap (not started):** file dialogs (investigated, no
+  narrow win found), post-processing, audio — each still open.
 
 ### W5 — MC3 governance
 - **SYS-W5-03** `[DEFERRED, human-authorized decision]` `P2` — MC3

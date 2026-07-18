@@ -473,7 +473,7 @@ void MeshCraftApplication::Update(GameTime& gameTime) {
     if (!firstFrame_) {
         auto& io = ImGui::GetIO();
 
-        if (walkModeEnabled_) {
+        if (walkController_.isActive()) {
             // Walk mode consumes all keyboard + mouse; skip normal handlers
             float dt = static_cast<float>(
                 gameTime.getElapsedGameTimeProperty().getTotalSecondsProperty());
@@ -576,16 +576,13 @@ void MeshCraftApplication::Draw(const GameTime& /*gameTime*/) {
     Matrix proj = camera_.projectionMatrix(aspect);
     float effectiveFovDegrees = camera_.fovDegrees;
 
-    // Walk mode: override view with first-person camera
-    if (walkModeEnabled_) {
+    // Walk mode: override view with first-person camera. The projection
+    // stays computed from camera_'s own fovDegrees/nearPlane/farPlane --
+    // walk mode has never had its own FOV/clip-plane settings, only its
+    // own eye position/orientation (Editor::WalkController::viewMatrix()).
+    if (walkController_.isActive()) {
         const float pi = std::numbers::pi_v<float>;
-        float cosP = std::cos(walkPitch_), sinP = std::sin(walkPitch_);
-        float sinY = std::sin(walkYaw_),   cosY = std::cos(walkYaw_);
-        float eyeX = walkPosX_, eyeY = walkPosY_ + walkHeight_, eyeZ = walkPosZ_;
-        Vector3 eye(eyeX, eyeY, eyeZ);
-        Vector3 target(eyeX + sinY * cosP, eyeY + sinP, eyeZ - cosY * cosP);
-        Vector3 up(0.0f, 1.0f, 0.0f);
-        view = Matrix::CreateLookAt(eye, target, up);
+        view = walkController_.viewMatrix();
         float fovRad = camera_.fovDegrees * pi / 180.0f;
         proj = Matrix::CreatePerspectiveFieldOfView(fovRad, aspect,
                                                      camera_.nearPlane, camera_.farPlane);
@@ -804,12 +801,12 @@ void MeshCraftApplication::drawImGuiUi(int screenW, int screenH)
     if (showTimeline_)
         drawTimelinePanel(screenW, screenH);
 
-    if (walkModeEnabled_)
+    if (walkController_.isActive())
         drawWalkModeHud(screenW, screenH);
     else
         drawStatsOverlay(screenW, screenH);
     drawStatusBar(screenW, screenH);
-    if (!walkModeEnabled_)
+    if (!walkController_.isActive())
         drawPanelSplitters(screenW, screenH);
     drawShadowDebugOverlay(screenW, screenH);
     drawDialogs();

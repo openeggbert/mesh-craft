@@ -663,6 +663,24 @@ if(MESH_CRAFT_BUILD_TESTING AND UNIX AND NOT ANDROID AND NOT EMSCRIPTEN)
     add_test(NAME undo_manager COMMAND undo_manager_test)
     set_tests_properties(undo_manager PROPERTIES TIMEOUT 15 LABELS "unit")
 
+    # SYS-W3-01 Phase 6: Editor::WalkController, extracted from
+    # MeshCraftApplication (H15, first-person walk mode). No test existed
+    # for this subsystem before the extraction. Needs real
+    # Microsoft::Xna::Framework::Input::Keys/KeyboardState/Matrix/Vector3
+    # (CNA), so like keybinding_manager_test above it links CNA +
+    # SHARP_RUNTIME -- but not Mc3/Mcb/mc3togltf_lib/imgui, which this
+    # subsystem has no dependency on.
+    add_executable(walk_controller_test
+        ${CMAKE_CURRENT_SOURCE_DIR}/test/walk_controller_test.cpp
+        ${CMAKE_CURRENT_SOURCE_DIR}/src/MeshCraft/Editor/WalkController.cpp)
+    target_include_directories(walk_controller_test PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/include)
+    target_link_libraries(walk_controller_test PRIVATE
+        CNA ${_cna_backend_target} SHARP_RUNTIME)
+    target_compile_features(walk_controller_test PRIVATE cxx_std_23)
+    add_test(NAME walk_controller COMMAND walk_controller_test)
+    set_tests_properties(walk_controller PROPERTIES TIMEOUT 15 LABELS "unit")
+
     # Pure unit test: ObjectType <-> display-name round-trip. Header-only.
     # Regression guard for the Torus/Capsule/Disk/Grid/IcoSphere -> "Object"
     # mislabel and the lossy macro round-trip.

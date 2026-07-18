@@ -47,7 +47,7 @@ void MeshCraftApplication::handleKeyboardShortcuts(const KeyboardState& ks, cons
 
     // Walk mode toggle (F5)
     if (justPressed(ks, prevKs, Keys::F5)) {
-        if (walkModeEnabled_) exitWalkMode(); else enterWalkMode();
+        if (walkController_.isActive()) exitWalkMode(); else enterWalkMode();
         return;
     }
 

@@ -12,6 +12,7 @@
 #include "MeshCraft/Editor/SelectionManager.hpp"
 #include "MeshCraft/Editor/TransformGizmo.hpp"
 #include "MeshCraft/Editor/UndoManager.hpp"
+#include "MeshCraft/Editor/WalkController.hpp"
 #include "MeshCraft/Mc3/Mc3Animation.hpp"
 #include "MeshCraft/Mc3/Mc3Document.hpp"
 #include "MeshCraft/Mc3/Mc3Object.hpp"
@@ -777,19 +778,12 @@ private:
     void resetPivot(); // zero pivot, compensate position so world geometry stays fixed
 
     // -----------------------------------------------------------------------
-    // Walk mode (H15) — first-person exploration
+    // Walk mode (H15) — first-person exploration (SYS-W3-01 Phase 6:
+    // extracted into Editor::WalkController; walkSettingsOpen_ was dead
+    // code -- declared, never read or written anywhere -- removed rather
+    // than carried forward)
     // -----------------------------------------------------------------------
-    bool  walkModeEnabled_{false};
-    float walkPosX_{0.0f}, walkPosY_{0.0f}, walkPosZ_{5.0f};
-    float walkYaw_{0.0f};        // radians, horizontal look
-    float walkPitch_{0.0f};      // radians, vertical look (clamped ±85°)
-    float walkVelY_{0.0f};       // vertical velocity (gravity / jump)
-    bool  walkOnGround_{true};
-    float walkHeight_{1.8f};     // eye height above ground (meters)
-    float walkSpeed_{5.0f};      // movement speed (m/s)
-    float walkTurnSpeed_{1.5f};  // keyboard yaw speed (rad/s)
-    float walkMouseSens_{0.003f};// mouse sensitivity (rad/px)
-    bool  walkSettingsOpen_{false};
+    Editor::WalkController walkController_;
     void  updateWalkMode(float dt, const Microsoft::Xna::Framework::Input::KeyboardState& ks,
                          int mouseDx, int mouseDy);
     void  enterWalkMode();
