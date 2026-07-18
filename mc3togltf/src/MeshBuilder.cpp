@@ -666,7 +666,18 @@ static void frameAxes(std::array<float,3> t,
                              : std::array<float,3>{0,1,0};
     bx = t[1]*up[2]-t[2]*up[1]; by = t[2]*up[0]-t[0]*up[2]; bz = t[0]*up[1]-t[1]*up[0];
     float bl = std::sqrt(bx*bx+by*by+bz*bz);
-    bx/=bl; by/=bl; bz/=bl;
+    // AUD-067: a degenerate (zero-length) tangent -- e.g. two consecutive
+    // identical <point> elements in a Polyline extrude path, which (unlike
+    // the Bezier path's own {0,1,0} fallback a few functions up) has no
+    // fallback and passes a {0,0,0} tangent straight through -- makes
+    // bl == 0 here. Guard it the same way norm3() above guards its own
+    // divide, rather than dividing by zero into NaN. b staying {0,0,0} is
+    // fine: n below is cross(b,t), which is always {0,0,0} when t == {0,0,0}
+    // regardless of what b is, so there is no fallback direction that would
+    // avoid a degenerate frame here anyway -- the honest result of a
+    // zero-length path segment is a single pinched (zero-radius), but
+    // finite, ring at that one point, not a NaN-corrupted mesh.
+    if (bl > 1e-6f) { bx/=bl; by/=bl; bz/=bl; }
     nx = by*t[2]-bz*t[1]; ny = bz*t[0]-bx*t[2]; nz = bx*t[1]-by*t[0];
 }
 

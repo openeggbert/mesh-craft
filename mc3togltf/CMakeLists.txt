@@ -541,6 +541,13 @@ if(BUILD_TESTING)
                     "$<TARGET_FILE:mc3togltf>"
         )
         set_tests_properties(mc3togltf_degenerate_cone PROPERTIES TIMEOUT 30 LABELS "export")
+        add_test(
+            NAME mc3togltf_degenerate_polyline_extrude
+            COMMAND "${PYTHON3_EXEC}"
+                    "${CMAKE_CURRENT_SOURCE_DIR}/test/degenerate_polyline_extrude_test.py"
+                    "$<TARGET_FILE:mc3togltf>"
+        )
+        set_tests_properties(mc3togltf_degenerate_polyline_extrude PROPERTIES TIMEOUT 30 LABELS "export")
         set(_csg_root_material_xml "${CMAKE_CURRENT_SOURCE_DIR}/../test/csg_root_material.mc3.xml")
         if(EXISTS "${_csg_root_material_xml}")
             add_test(
