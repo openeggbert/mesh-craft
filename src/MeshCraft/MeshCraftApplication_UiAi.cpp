@@ -243,6 +243,44 @@ void MeshCraftApplication::drawAiPanel() {
         ImGui::InputTextMultiline("##aiprev", const_cast<char*>(preview.c_str()),
                                   preview.size() + 1, ImVec2(-1, 70),
                                   ImGuiInputTextFlags_ReadOnly);
+
+        // SYS-W14-08: preview/diff of what "Apply to Scene" would actually
+        // change, shown before the user commits. aiApplyNeedsConfirmationAlg()
+        // below only warns on a drastic top-level *count* drop; this shows
+        // which specific objects would be added/removed/modified (by id).
+        AiChangeSummaryAlg change = computeAiChangeSummaryAlg(document_, *aiPendingDoc_);
+        ImGui::Spacing();
+        ImGui::TextDisabled("Changes vs. current scene:");
+        ImGui::SameLine();
+        ImGui::TextColored(ImVec4(0.5f, 0.9f, 0.5f, 1.0f), "%zu added", change.added.size());
+        ImGui::SameLine(); ImGui::TextDisabled(",");
+        ImGui::SameLine();
+        ImGui::TextColored(ImVec4(0.95f, 0.4f, 0.4f, 1.0f), "%zu removed", change.removed.size());
+        ImGui::SameLine(); ImGui::TextDisabled(",");
+        ImGui::SameLine();
+        ImGui::TextColored(ImVec4(0.9f, 0.8f, 0.3f, 1.0f), "%zu modified*", change.modified.size());
+        if (!change.added.empty() || !change.removed.empty() || !change.modified.empty()) {
+            if (ImGui::TreeNode("##aidiffdetail", "Show details")) {
+                constexpr size_t kMaxListed = 20;
+                auto listChanges = [](const char* label, const std::vector<AiObjectChangeAlg>& items) {
+                    if (items.empty()) return;
+                    ImGui::Text("%s (%zu):", label, items.size());
+                    for (size_t i = 0; i < items.size() && i < kMaxListed; ++i) {
+                        const auto& c = items[i];
+                        ImGui::BulletText("%s (%s)", c.name.empty() ? "(unnamed)" : c.name.c_str(),
+                                          c.id.c_str());
+                    }
+                    if (items.size() > kMaxListed)
+                        ImGui::TextDisabled("  ... and %zu more", items.size() - kMaxListed);
+                };
+                listChanges("Added", change.added);
+                listChanges("Removed", change.removed);
+                listChanges("Modified", change.modified);
+                ImGui::TreePop();
+            }
+            ImGui::TextDisabled("* modified = name/type/visible/material/transform changed "
+                                 "(not an exhaustive field-by-field diff)");
+        }
     }
 
     ImGui::Spacing();

@@ -13,8 +13,12 @@
 #include <cstring>
 #include <filesystem>
 #include <fstream>
+#include <map>
+#include <memory>
 #include <optional>
+#include <stdexcept>
 #include <string>
+#include <vector>
 
 #ifdef MESHCRAFT_HAS_LIBXML2
 #include <MeshCraft/Mc3XsdEmbed.hpp>
@@ -130,6 +134,99 @@ inline bool isEmptyMc3DocumentAlg(const Mc3::Mc3Document& doc)
 inline bool aiApplyNeedsConfirmationAlg(size_t oldObjectCount, size_t newObjectCount)
 {
     return oldObjectCount >= 10 && newObjectCount < oldObjectCount / 2;
+}
+
+// SYS-W14-03's sibling P2 feature (SYS-W14-08): aiApplyNeedsConfirmationAlg()
+// above only warns on a drastic top-level *count* drop -- it says nothing
+// about which specific objects would be added, removed, or changed by
+// "Apply to Scene" (a full document replace with no way back except Undo).
+// This computes exactly that, by id, so the AI panel can show a real
+// preview/diff before the user commits.
+//
+// Scope, stated plainly rather than implied: "modified" compares only
+// name/type/visible/material/transform (position/rotation/scale) -- the
+// fields most likely to matter to "did the AI move/rename/hide/reassign
+// my object" at a glance. It does NOT deep-compare every Mc3Object field
+// (primitive params, extrude, csgOperation, tags, states, uvMapping,
+// metadata, assetMetadata, scriptId, children) -- an object that keeps its
+// name/type/visible/material/transform but has, say, a changed primitive
+// radius is reported as unchanged here. A full field-by-field structural
+// diff would need its own dedicated pass; this is intentionally the
+// high-signal subset, not an exhaustive one.
+struct AiObjectChangeAlg {
+    std::string id;
+    std::string name;
+};
+
+struct AiChangeSummaryAlg {
+    std::vector<AiObjectChangeAlg> added;
+    std::vector<AiObjectChangeAlg> removed;
+    std::vector<AiObjectChangeAlg> modified;
+};
+
+namespace detail {
+
+// Same cycle-protection rationale as deepCopyObjectAlg() (EditorAlgorithms.hpp)
+// -- an AI response is untrusted content, so a malicious or malformed
+// cyclic children graph must not stack-overflow-crash the diff pass.
+inline void flattenObjectsByIdAlg(const std::vector<std::shared_ptr<Mc3::Mc3Object>>& objects,
+                                   std::map<std::string, const Mc3::Mc3Object*>& out)
+{
+    static thread_local int depth = 0;
+    struct DepthGuard {
+        DepthGuard() {
+            if (++depth > 256) {
+                --depth;
+                throw std::runtime_error(
+                    "flattenObjectsByIdAlg: object nesting exceeds 256 levels (cyclic "
+                    "Mc3Object::children graph?)");
+            }
+        }
+        ~DepthGuard() { --depth; }
+        DepthGuard(const DepthGuard&) = delete;
+    } guard;
+
+    for (const auto& obj : objects) {
+        if (!obj) continue;
+        // Duplicate ids: first-match-in-document-order wins, matching
+        // Editor::ObjectIndex's own established semantics for this codebase.
+        if (!obj->id.empty() && out.find(obj->id) == out.end())
+            out[obj->id] = obj.get();
+        flattenObjectsByIdAlg(obj->children, out);
+    }
+}
+
+inline bool aiObjectCoreFieldsEqualAlg(const Mc3::Mc3Object& a, const Mc3::Mc3Object& b)
+{
+    return a.name == b.name
+        && a.type == b.type
+        && a.visible == b.visible
+        && a.material == b.material
+        && a.transform.position == b.transform.position
+        && a.transform.rotation == b.transform.rotation
+        && a.transform.scale == b.transform.scale;
+}
+
+} // namespace detail
+
+inline AiChangeSummaryAlg computeAiChangeSummaryAlg(const Mc3::Mc3Document& oldDoc,
+                                                     const Mc3::Mc3Document& newDoc)
+{
+    std::map<std::string, const Mc3::Mc3Object*> oldById, newById;
+    detail::flattenObjectsByIdAlg(oldDoc.objects, oldById);
+    detail::flattenObjectsByIdAlg(newDoc.objects, newById);
+
+    AiChangeSummaryAlg summary;
+    for (const auto& [id, obj] : newById)
+        if (!oldById.count(id)) summary.added.push_back({id, obj->name});
+    for (const auto& [id, obj] : oldById) {
+        auto it = newById.find(id);
+        if (it == newById.end())
+            summary.removed.push_back({id, obj->name});
+        else if (!detail::aiObjectCoreFieldsEqualAlg(*obj, *it->second))
+            summary.modified.push_back({id, obj->name});
+    }
+    return summary;
 }
 
 #ifdef MESHCRAFT_HAS_LIBXML2

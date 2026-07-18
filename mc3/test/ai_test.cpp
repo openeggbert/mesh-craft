@@ -277,6 +277,125 @@ static void testValidateAndParseEmptyDocumentRejected() {
           "STAB-0376: the error message explains it's an empty-document rejection");
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// computeAiChangeSummaryAlg (SYS-W14-08) — the AI-apply preview/diff
+// ─────────────────────────────────────────────────────────────────────────────
+
+static std::shared_ptr<Mc3Object> makeAiTestObj(std::string id, std::string name) {
+    auto o = std::make_shared<Mc3Object>();
+    o->id = std::move(id);
+    o->name = std::move(name);
+    return o;
+}
+
+static void testComputeAiChangeSummaryDetectsAddedAndRemoved() {
+    Mc3Document oldDoc, newDoc;
+    oldDoc.objects.push_back(makeAiTestObj("a", "A"));
+    oldDoc.objects.push_back(makeAiTestObj("b", "B"));
+    newDoc.objects.push_back(makeAiTestObj("a", "A"));
+    newDoc.objects.push_back(makeAiTestObj("c", "C"));
+
+    auto summary = computeAiChangeSummaryAlg(oldDoc, newDoc);
+    CHECK(summary.added.size() == 1 && summary.added[0].id == "c",
+          "computeAiChangeSummaryAlg: an id only in the new document is 'added'");
+    CHECK(summary.removed.size() == 1 && summary.removed[0].id == "b",
+          "computeAiChangeSummaryAlg: an id only in the old document is 'removed'");
+    CHECK(summary.modified.empty(),
+          "computeAiChangeSummaryAlg: an untouched shared id ('a') is not 'modified'");
+}
+
+static void testComputeAiChangeSummaryDetectsModified() {
+    Mc3Document oldDoc, newDoc;
+    auto oldObj = makeAiTestObj("a", "A");
+    oldDoc.objects.push_back(oldObj);
+    auto renamed = makeAiTestObj("a", "A-renamed");
+    newDoc.objects.push_back(renamed);
+
+    auto summary = computeAiChangeSummaryAlg(oldDoc, newDoc);
+    CHECK(summary.modified.size() == 1 && summary.modified[0].id == "a",
+          "computeAiChangeSummaryAlg: a name change on a shared id is 'modified'");
+    CHECK(summary.added.empty() && summary.removed.empty(),
+          "computeAiChangeSummaryAlg: a modified id is not also reported as added/removed");
+
+    // Same check for a transform change, since that's the other high-signal
+    // field this intentionally-partial diff covers.
+    Mc3Document oldDoc2, newDoc2;
+    oldDoc2.objects.push_back(makeAiTestObj("m", "Moved"));
+    auto moved = makeAiTestObj("m", "Moved");
+    moved->transform.position = {5.f, 0.f, 0.f};
+    newDoc2.objects.push_back(moved);
+    auto summary2 = computeAiChangeSummaryAlg(oldDoc2, newDoc2);
+    CHECK(summary2.modified.size() == 1 && summary2.modified[0].id == "m",
+          "computeAiChangeSummaryAlg: a transform.position change on a shared id is 'modified'");
+}
+
+static void testComputeAiChangeSummaryIgnoresUnchangedAndUncoveredFields() {
+    Mc3Document oldDoc, newDoc;
+    auto oldObj = makeAiTestObj("a", "A");
+    oldDoc.objects.push_back(oldObj);
+    auto sameCore = makeAiTestObj("a", "A");
+    // Deliberately differs in a field outside this diff's stated scope
+    // (tags aren't one of the compared core fields) -- must NOT be flagged.
+    sameCore->tags = {"outside-scope"};
+    newDoc.objects.push_back(sameCore);
+
+    auto summary = computeAiChangeSummaryAlg(oldDoc, newDoc);
+    CHECK(summary.added.empty() && summary.removed.empty() && summary.modified.empty(),
+          "computeAiChangeSummaryAlg: identical core fields report no change, even if an "
+          "out-of-scope field (tags) differs -- matches this diff's documented partial scope");
+}
+
+static void testComputeAiChangeSummaryWalksNestedChildren() {
+    Mc3Document oldDoc, newDoc;
+    auto oldParent = makeAiTestObj("p", "Parent");
+    auto oldChild  = makeAiTestObj("c", "Child");
+    oldParent->children.push_back(oldChild);
+    oldDoc.objects.push_back(oldParent);
+
+    auto newParent = makeAiTestObj("p", "Parent");
+    auto newChild  = makeAiTestObj("c", "Child-renamed");
+    newParent->children.push_back(newChild);
+    newDoc.objects.push_back(newParent);
+
+    auto summary = computeAiChangeSummaryAlg(oldDoc, newDoc);
+    CHECK(summary.modified.size() == 1 && summary.modified[0].id == "c",
+          "computeAiChangeSummaryAlg: a nested child's change is detected, not just top-level objects");
+}
+
+static void testComputeAiChangeSummaryDuplicateIdFirstMatchWins() {
+    Mc3Document oldDoc, newDoc;
+    oldDoc.objects.push_back(makeAiTestObj("dup", "First"));
+    oldDoc.objects.push_back(makeAiTestObj("dup", "Second"));
+    newDoc.objects.push_back(makeAiTestObj("dup", "First"));
+    newDoc.objects.push_back(makeAiTestObj("dup", "Second-changed"));
+
+    auto summary = computeAiChangeSummaryAlg(oldDoc, newDoc);
+    // Matches Editor::ObjectIndex's own "first match in document order"
+    // semantics for duplicate ids: the FIRST "dup" (unchanged "First") wins
+    // the comparison on both sides, so this is reported as unmodified.
+    CHECK(summary.modified.empty(),
+          "computeAiChangeSummaryAlg: duplicate ids resolve to the first occurrence "
+          "in document order on both sides, matching ObjectIndex's convention");
+}
+
+static void testComputeAiChangeSummaryCyclicChildrenThrows() {
+    Mc3Document cyclicDoc, otherDoc;
+    auto x = makeAiTestObj("x", "X");
+    auto y = makeAiTestObj("y", "Y");
+    x->children.push_back(y);
+    y->children.push_back(x); // 2-cycle
+    cyclicDoc.objects.push_back(x);
+    otherDoc.objects.push_back(makeAiTestObj("z", "Z"));
+
+    bool threw = false;
+    try {
+        (void)computeAiChangeSummaryAlg(cyclicDoc, otherDoc);
+    } catch (const std::exception&) {
+        threw = true;
+    }
+    CHECK(threw, "computeAiChangeSummaryAlg: a cyclic children graph throws instead of crashing");
+}
+
 // STAB-0410 — a response with only <definitions> and no top-level <objects>
 // is a legitimate AI result (e.g. "add a reusable crate definition to the
 // library") and must not be rejected by the same empty-document guard that
@@ -1011,6 +1130,12 @@ int main() {
     testValidateAndParseInvalidXmlSetsError();
     testValidateAndParseMalformedXmlSetsError();
     testValidateAndParseEmptyDocumentRejected();
+    testComputeAiChangeSummaryDetectsAddedAndRemoved();
+    testComputeAiChangeSummaryDetectsModified();
+    testComputeAiChangeSummaryIgnoresUnchangedAndUncoveredFields();
+    testComputeAiChangeSummaryWalksNestedChildren();
+    testComputeAiChangeSummaryDuplicateIdFirstMatchWins();
+    testComputeAiChangeSummaryCyclicChildrenThrows();
     testValidateAndParseAcceptsNonEmptyDocument();
     testAiResponseIncludeIsIgnoredNotResolved();
     testValidateAndParseAcceptsDefinitionsOnlyDocument();

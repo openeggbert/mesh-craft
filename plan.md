@@ -458,7 +458,48 @@ _All items in this workstream are DONE — archived to [`docs/history/plan_20260
 - **SYS-W14-05** `[DEFERRED]` `P3` — Safe `embed:` mesh/resource support end-to-end. (`AUD-025`)
 - **SYS-W14-06** `[DEFERRED]` `P3` — Improved CSG output (smooth normals/UVs/materials).
 - **SYS-W14-07** `[DEFERRED]` `P3` — Improved walk/navigation collision.
-- **SYS-W14-08** `[TODO]` `P2` — AI change preview/diff before destructive replace.
+- **SYS-W14-08** `[DONE]` `P2` — AI change preview/diff before destructive
+  replace. Before this, "Apply to Scene" replaced `document_` wholesale
+  with only two safety nets: full Undo, and `STAB-0395`'s
+  `aiApplyNeedsConfirmationAlg()` — a single heuristic that only warns on
+  a drastic top-level *object-count* drop (e.g. 50→3). Nothing told the
+  user WHICH specific objects an AI response would add, remove, or change
+  — only a truncated 280-char raw-text preview of the response body.
+  **Implementation (2026-07-18):** `computeAiChangeSummaryAlg()`
+  (`src/MeshCraft/AiResponseAlgorithms.hpp`) flattens both the current and
+  pending documents' object trees by id (first-match-in-document-order for
+  duplicates, matching `Editor::ObjectIndex`'s established convention;
+  same 256-depth cycle guard as `deepCopyObjectAlg` — AI responses are
+  untrusted content) and reports three id-keyed lists: added, removed,
+  modified. **Scope, stated plainly in the code (not implied):**
+  "modified" compares only name/type/visible/material/transform
+  (position/rotation/scale) — the highest-signal fields for "did the AI
+  move/rename/hide/reassign my object" at a glance — NOT a full
+  field-by-field structural diff (primitive params, extrude,
+  csgOperation, tags, states, uvMapping, metadata, assetMetadata,
+  scriptId are not compared; an object keeping its core fields but
+  gaining, say, a changed primitive radius is reported as unchanged
+  here). A full exhaustive diff would need its own dedicated pass — this
+  is intentionally the high-signal subset. Wired into
+  `MeshCraftApplication_UiAi.cpp`: right after "Response validated.", the
+  AI panel now shows an "N added, M removed, K modified*" summary line
+  (color-coded) with an optional expandable details tree listing each
+  changed object's name/id (capped at 20 per category with an explicit
+  "...and N more" rather than silently truncating), shown before the
+  Apply/Confirm Replace buttons — informing the decision, not gating it
+  (Undo remains the actual safety net). New tests in `mc3/test/ai_test.cpp`
+  (10 assertions): added/removed detection, modified detection (name
+  change and transform change, both independently), unchanged objects
+  with an out-of-scope field difference (tags) correctly NOT flagged,
+  nested children walked (not just top-level objects), duplicate-id
+  first-match-wins semantics, and the cyclic-children throw guard. Full
+  rebuild + 130/130 `ctest`; manual `--screenshot` smoke test confirms no
+  regression to the overall app (the new code only runs inside the
+  already-existing `aiPendingDoc_.has_value()` branch, which needs a live
+  AI response to populate — not independently triggerable via CLI, so
+  this task's confidence comes from the dedicated unit tests plus a clean
+  compile/link/smoke-boot, not an interactive screenshot of the panel
+  itself).
 - **SYS-W14-09** `[BLOCKED]` `P3` — Web persistence & export verification (blocked on
   CNA/browser — see NEXT.md).
 - **SYS-W14-10** `[DONE]` `P3` — Editor UI to attach a script to an object
