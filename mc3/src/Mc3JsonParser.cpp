@@ -4,6 +4,7 @@
 #include <MeshCraft/Mc3/Mc3Trigger.hpp>
 #include <nlohmann/json.hpp>
 #include <algorithm>
+#include <filesystem>
 #include <fstream>
 #include <sstream>
 #include <stdexcept>
@@ -22,16 +23,82 @@ namespace {
 // multiply into a per-frame freeze. This JSON loader read every one of
 // these fields with a raw get<int>() and applied no bound at all, so a
 // hand-edited or AI-generated .mc3.json bypassed that hardening entirely.
-// Mirrors the same per-field ceiling here. Not yet wired into
+// Mirrors the same per-field ceiling here. Still not wired into
 // Mc3XmlParser.cpp's document-wide total-tessellation-weight budget
 // (AUD-059's thread_local DocumentBudget, file-static with no shared
-// header) -- that cross-document protection, and this parser's separate,
-// pre-existing gap of never honoring Mc3LoadPolicy at all, are each their
-// own larger follow-up, deliberately not folded into this fix.
+// header) -- that cross-document protection remains a separate, larger
+// follow-up. This parser's other pre-existing gap noted here at the time
+// (never honoring Mc3LoadPolicy at all) is now fixed -- see
+// validateResourcePathIfConfined below (AUD-068).
 constexpr int kMaxTessellation = 4096;
 
 int clampTess(int v, int minv, int maxv = kMaxTessellation) {
     return std::clamp(v, minv, maxv);
+}
+
+// AUD-068: parseString()'s policy parameter used to be entirely unused
+// (`const Mc3LoadPolicy& /*policy*/`) -- confineResourcePathsToRoot was a
+// silent no-op on this load path, so an untrusted .mc3.json (e.g. from a
+// future JSON-based AI-apply/import caller -- no production call site
+// currently passes untrusted() to this parser, so this was latent, not yet
+// exploited) could name an absolute or `..`-escaping meshSource/texture
+// uri/SVG src/embed src/sound src/music src and it would pass straight
+// through unvalidated, unlike the equivalent Mc3XmlParser.cpp path.
+//
+// Scope: only confineResourcePathsToRoot is enforced here, deliberately.
+// allowIncludes/confineIncludesToRoot/maxIncludeDepth are NOT wired in --
+// unlike the XML format, .mc3.json's `includes` field (parsed further
+// down, see doc.includes) is an inert flat string list, never resolved/
+// merged into another file's content anywhere in this codebase (confirmed:
+// grep for `doc.includes` across mc3/src and src/MeshCraft turns up only
+// this file's own read and Mc3JsonWriter.cpp's matching write -- no merge
+// logic exists for the JSON path at all). There is therefore no
+// local-file-inclusion vector here to gate; wiring those three fields in
+// would be dead code enforcing a behavior this parser doesn't have.
+//
+// Mirrors Mc3XmlParser.cpp's own g_confineResourcePaths/g_resourceRoot +
+// includePathWithinRoot exactly (same names, same logic) for consistency
+// between the two independent parsers. thread_local, not a parameter
+// threaded through toObject() (called recursively for children) and the
+// textures/embeds/sounds/music loops in parseString() -- matching
+// Mc3XmlParser.cpp's own established reasoning for choosing this pattern
+// over threading a policy parameter through every parse* free function.
+thread_local bool g_confineResourcePaths = false;
+thread_local std::filesystem::path g_resourceRoot;
+
+bool includePathWithinRoot(const std::filesystem::path& candidate,
+                            const std::filesystem::path& rootDir) {
+    std::error_code ec;
+    auto c = std::filesystem::weakly_canonical(candidate, ec);
+    if (ec) return false;
+    auto r = std::filesystem::weakly_canonical(
+        rootDir.empty() ? std::filesystem::path(".") : rootDir, ec);
+    if (ec) return false;
+    auto rel = std::filesystem::relative(c, r, ec);
+    if (ec || rel.empty()) return false;
+    return rel.native().rfind("..", 0) != 0;  // does not start with ".."
+}
+
+// Validates a texture/SVG/mesh/embed/sound/music `src`/`uri` field against
+// the current parse's confinement policy. No-op when not confining or when
+// `rawPath` is empty or a non-filesystem pseudo-path (`embed:`/`data:`).
+void validateResourcePathIfConfined(const std::string& rawPath, const char* kind) {
+    if (!g_confineResourcePaths || rawPath.empty()) return;
+    if (rawPath.rfind("embed:", 0) == 0 || rawPath.rfind("data:", 0) == 0) return;
+
+    std::filesystem::path p(rawPath);
+    if (p.is_absolute()) {
+        throw std::runtime_error(
+            std::string("MC3: ") + kind + " '" + rawPath +
+            "' is an absolute path outside the document root; rejected "
+            "under the untrusted-content load policy");
+    }
+    if (!includePathWithinRoot(g_resourceRoot / p, g_resourceRoot)) {
+        throw std::runtime_error(
+            std::string("MC3: ") + kind + " '" + rawPath +
+            "' escapes the document root; rejected under the "
+            "untrusted-content load policy");
+    }
 }
 
 std::array<float,3> toVec3(const json& j, std::array<float,3> def = {0.f,0.f,0.f}) {
@@ -212,7 +279,10 @@ std::shared_ptr<Mc3Object> toObject(const json& j) {
         obj->csgOperation = csg;
     }
 
-    if (j.contains("meshSource")) obj->meshSource = j["meshSource"].get<std::string>();
+    if (j.contains("meshSource")) {
+        obj->meshSource = j["meshSource"].get<std::string>();
+        validateResourcePathIfConfined(obj->meshSource, "mesh source");
+    }
 
     if (obj->type == ObjectType::Instance) {
         obj->definition = j.value("definition", "");
@@ -288,13 +358,19 @@ std::shared_ptr<Mc3Object> toObject(const json& j) {
 
 Mc3Document Mc3JsonParser::parseString(const std::string& jsonText,
                                        const std::filesystem::path& sourceDir,
-                                       const Mc3LoadPolicy& /*policy*/) {
+                                       const Mc3LoadPolicy& policy) {
     json j;
     try {
         j = json::parse(jsonText);
     } catch (const json::parse_error& e) {
         throw std::runtime_error(std::string("Failed to parse mc3.json: ") + e.what());
     }
+
+    // AUD-068: set the resource-confinement state for this parse before any
+    // texture/SVG/mesh/embed/sound/music field is read (matches
+    // Mc3XmlParser.cpp's buildDocumentFromRoot() ordering).
+    g_confineResourcePaths = policy.confineResourcePathsToRoot;
+    g_resourceRoot = sourceDir;
 
     Mc3Document doc;
     doc.sourcePath      = sourceDir;
@@ -404,12 +480,14 @@ Mc3Document Mc3JsonParser::parseString(const std::string& jsonText,
                 Mc3SvgTexture svg;
                 svg.id = id;
                 svg.src = te.value("src", "");
+                validateResourcePathIfConfined(svg.src, "SVG texture src");
                 svg.inlineContent = te.value("inlineContent", "");
                 doc.svgTextures[id] = svg;
             } else {
                 Mc3Texture tex;
                 tex.name = te.value("name", id);
                 tex.uri  = te.value("uri", "");
+                validateResourcePathIfConfined(tex.uri, "texture uri");
                 tex.wrapU = te.value("wrapU", tex.wrapU);
                 tex.wrapV = te.value("wrapV", tex.wrapV);
                 tex.filter = te.value("filter", tex.filter);
@@ -448,6 +526,7 @@ Mc3Document Mc3JsonParser::parseString(const std::string& jsonText,
             Mc3EmbedGltf em;
             em.id = ee.value("id", "");
             em.src = ee.value("src", "");
+            validateResourcePathIfConfined(em.src, "embed src");
             em.base64Content = ee.value("base64Content", "");
             doc.embeds[em.id] = em;
         }
@@ -468,6 +547,7 @@ Mc3Document Mc3JsonParser::parseString(const std::string& jsonText,
             Mc3Sound snd;
             snd.id   = se.value("id", "");
             snd.src  = se.value("src", "");
+            validateResourcePathIfConfined(snd.src, "sound src");
             snd.loop = se.value("loop", false);
             doc.sounds[snd.id] = snd;
         }
@@ -478,6 +558,7 @@ Mc3Document Mc3JsonParser::parseString(const std::string& jsonText,
             Mc3Music mus;
             mus.id   = te.value("id", "");
             mus.src  = te.value("src", "");
+            validateResourcePathIfConfined(mus.src, "music src");
             mus.loop = te.value("loop", true);
             doc.musicTracks[mus.id] = mus;
         }

@@ -236,6 +236,14 @@ if(BUILD_TESTING)
     add_test(NAME mc3_load_policy COMMAND mc3_load_policy_test)
     set_tests_properties(mc3_load_policy PROPERTIES TIMEOUT 15 LABELS "format")
 
+    # AUD-068: the .mc3.json load path's own Mc3LoadPolicy coverage --
+    # mirrors mc3_load_policy above's resource-confinement cases (the
+    # <include>-specific cases don't apply; see the test file's own header).
+    add_executable(mc3_json_load_policy_test test/json_load_policy_test.cpp)
+    target_link_libraries(mc3_json_load_policy_test PRIVATE Mc3)
+    add_test(NAME mc3_json_load_policy COMMAND mc3_json_load_policy_test)
+    set_tests_properties(mc3_json_load_policy PROPERTIES TIMEOUT 15 LABELS "format")
+
     # SYS-W1-04: include bombs -- depth (bounded by Mc3LoadPolicy::
     # maxIncludeDepth) and fan-out (bounded by the new DocumentBudget::
     # chargeInclude); cycles are already covered by mc3_roundtrip's
