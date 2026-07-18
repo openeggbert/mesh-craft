@@ -1,20 +1,19 @@
 # NEXT.md
 
-_Last updated: 2026-07-17. This entry continues the same-day session
-recorded below (which itself ended, was resumed per its own §10 "Resume
-prompt", picked up `SYS-W1-07` as task 1 of §8's list, then — on explicit
-user instruction, after the user asked exactly where the CNA regression
-broke — fixed it directly in `../cna`, then picked up `SYS-W5-04` next)
-with three more commits on top of the `2a2c3a2`/`7b1c045` pair described
-in the next paragraph — this file's own commit is, as always,
-self-referential (it cannot cite its own hash), see any `NEXT.md`-only
-commit for the same pattern. Working tree clean except the same two
-untracked, unrelated scratch scene files noted previously
-(`test/crownspire-citadel.mc3.xml`, `test/house3.glb` — manually authored
-demo content, not part of any tracked task, left as-is). **24 commits**
-ahead of the original session's starting point (`f1900e3`); pushed to
-`origin/develop`. See `git log --oneline -25` for anything newer than
-this._
+_Last updated: 2026-07-18. Continues the 2026-07-17 session recorded below
+(`SYS-W1-07` → `../cna` fix → `SYS-W5-04`) with a new-day continuation:
+`plan.md` was pruned (61 `DONE` `AUD-###` + 33 `DONE` `SYS-###` rows moved
+to `docs/history/plan_20260718.md`), `missing.md` was re-verified against
+current source and updated, and 8 new `SYS-W14-10`..`17` rows were added
+per explicit user selection — see §3's newest entries and §8 for details.
+This file's own commit is, as always, self-referential (it cannot cite its
+own hash), see any `NEXT.md`-only commit for the same pattern. Working tree
+clean except the same two untracked, unrelated scratch scene files noted
+previously (`test/crownspire-citadel.mc3.xml`, `test/house3.glb` —
+manually authored demo content, not part of any tracked task, left as-is).
+**27 commits** ahead of the 2026-07-17 session's starting point
+(`f1900e3`); pushed to `origin/develop`. See `git log --oneline -25` for
+anything newer than this._
 
 **The §4/§5 "CNA build regression" described below is now RESOLVED** —
 see the update at the top of §4. A fresh reconfigure + full rebuild +
@@ -413,6 +412,39 @@ this session started with):
   `test/animation_demo.mc3.xml` (clean GL state). See `plan.md`'s
   `SYS-W5-04` entry for the full write-up.
 
+**New day, 2026-07-18 (3 commits, continuing the same overall thread):**
+
+- **Archived `plan.md`'s completed rows:** the file had grown to 1778
+  lines, almost entirely `DONE` rows kept only for provenance. Moved every
+  `DONE`-status `AUD-###` (61) and `SYS-###` (33) row out to
+  `docs/history/plan_20260718.md` verbatim (full evidence/resolution text
+  preserved, nothing summarized away) — plan.md is now 370-ish lines,
+  tracking only its 6 still-open `AUD-###` rows (4 TODO, 2 DEFERRED) and
+  (before this session's own additions) 13 still-open `SYS-###` rows.
+  Fully-archived workstreams (W1, W2, W6, W7, W8) keep their heading with a
+  pointer to the history file rather than silently disappearing. Verified
+  every id lands in exactly one file (no losses/duplicates) before
+  committing; `test/validate_plan_consistency.py` re-run clean against the
+  much smaller file.
+- **Re-verified `missing.md`** (an editor-UI-coverage-gaps audit dated
+  2026-07-10) against current source via two parallel research passes.
+  Finding: almost the whole file was stale — all 7 "zero UI" extension
+  findings (N1-N7: SVG textures/embeds/scripts/audio/triggers/scene
+  states/meta) and 6 of 12 "partial gap" findings had already been fixed in
+  an earlier session this file's date predates (`STAB-0703`..`STAB-0721`).
+  Updated the file in place: added a "Resolved since 2026-07-10" section
+  for credit/history, refined the still-genuinely-open findings
+  (`coordinate_system` is UI-valid now but still never read anywhere by
+  rendering/export; `rotation_units`/`euler_order` gained a read-only
+  load-time notice but still no editing UI, confirmed still won't-fix by
+  design), and added 4 new findings for mc3 fields added since 2026-07-10
+  that still have zero editor UI (`scriptId`, `assetMetadata`,
+  `library`/`imports`, `.mc3.json` file I/O).
+- **Added 8 new `plan.md` tasks** (`SYS-W14-10` through `SYS-W14-17`) from
+  `missing.md`'s still-open findings, per the user's explicit selection —
+  see §8 for the list and `plan.md`'s W14 section for full evidence per
+  row.
+
 **Prior session (11 commits, oldest first, all on `develop`, all pushed):**
 
 - `d9e98d5` — fixed 2 pre-existing XSD-invalid test fixtures (unrelated
@@ -682,17 +714,36 @@ markers that referenced findings already resolved in earlier sessions
 `TODO` below is still accurate without looking. The `../cna` build
 regression noted in §4 is now resolved and re-verified — no need to
 re-check it before starting, though `../cna`'s HEAD is still worth a
-glance if a build ever fails mysteriously again.)_
+glance if a build ever fails mysteriously again. **`plan.md` was pruned
+this session** (2026-07-18): its 61 `DONE` `AUD-###` + 33 `DONE`
+`SYS-###` rows were moved verbatim to
+`docs/history/plan_20260718.md` — if a citation looks missing from
+`plan.md`, check there before assuming it was lost. `missing.md` (an
+editor-UI-coverage-gaps audit) was also re-verified against current
+source and found mostly stale (most of its findings were already fixed
+in an earlier session this file didn't know about) — updated in place,
+and 8 of its still-open findings were turned into new `SYS-W14-10`
+through `SYS-W14-17` rows per explicit user selection.)_
 
-1. **`plan.md`'s one remaining `TODO` `SYS-###` row** (`SYS-W1-07` and
-   `SYS-W5-04` are now both `DONE`, see §3):
-   `SYS-W12-02` (new this session — extend `SYS-W12-01`'s CLI-level
-   benchmark harness to the 10 categories needing in-process
-   instrumentation: mesh-gen, CSG+cache, traversal, picking, undo
-   snapshot, texture processing, animation eval, registry, startup, first
-   frame). Deliberately NOT attempted this session — it needs new
-   instrumentation infrastructure, not a quick pick; size the next
-   session's time budget accordingly.
+1. **`plan.md`'s 9 remaining `TODO` `SYS-###` rows**, in no particular
+   priority order (pick the highest-value one that fits available time):
+   `SYS-W12-02` (extend `SYS-W12-01`'s CLI-level benchmark harness to the
+   10 categories needing in-process instrumentation — needs new
+   instrumentation infrastructure, not a quick pick), and 8 new
+   editor-UI-coverage rows from this session's `missing.md` re-verification:
+   `SYS-W14-10` (scriptId object-attachment UI, small), `SYS-W14-11`
+   (`.mc3.json` open/save support in the editor, P2), `SYS-W14-12`
+   (`assetMetadata` editor, large/substantial), `SYS-W14-13`
+   (library/imports `.mc3lib` UI — flagged as possibly premature, the
+   underlying format may still be evolving in the sibling `mesh-world`
+   repo), `SYS-W14-14` (wire up `coordinate_system`, currently write-only
+   — arguably a real correctness gap, not just missing UI, P2),
+   `SYS-W14-15` (native file-browse dialog — CNA already ships an unused
+   `FileDialog` device, may be smaller than it looks), `SYS-W14-16`
+   (undo/redo structural-guarantee audit — needs its own scoped research
+   pass first, matching how `SYS-W5-04` was approached, not a quick pick),
+   `SYS-W14-17` (dedicated Area properties panel, cosmetic/small). See
+   each row in `plan.md` for full file:line evidence.
    `SYS-W11-01`/`SYS-W11-03`/`AUD-042`/`AUD-052`/`AUD-053`/`AUD-057` stay
    correctly blocked/owner-gated (CI parked, no Android NDK in this
    environment) — don't attempt those without the missing external
