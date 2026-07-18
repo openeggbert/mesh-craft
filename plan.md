@@ -84,12 +84,12 @@ P1s already being fixed in git history. This session:
    is per-field only) not part of the original audit, filed as new `TODO`
    tasks.
 
-   **Net across all 9 AUD-### rows remaining in this active backlog (61
+   **Net across all 10 AUD-### rows remaining in this active backlog (61
    additional rows completed and archived to `docs/history/plan_20260718.md`
    on 2026-07-18 — see that file for their full evidence/resolution text):
-   3 DONE, 4 TODO, 2 DEFERRED** — the 3 DONE (`AUD-064`, `AUD-065`,
-   `AUD-066`) are fresh findings from a 2026-07-18 (later same day)
-   independent re-audit, not part of the original 6; recompute with
+   4 DONE, 4 TODO, 2 DEFERRED** — the 4 DONE (`AUD-064`, `AUD-065`,
+   `AUD-066`, `AUD-067`) are fresh findings from a 2026-07-18 (later same
+   day) independent re-audit, not part of the original 6; recompute with
    `python3 test/validate_plan_consistency.py . <build-dir>` rather than
    trusting this number as time passes.
 5. Archived `plan_deep_audit.md` (all 57 of its own tasks were already
@@ -1079,3 +1079,11 @@ remain in this active file.
 - **Tests:** New `mcb/test/reserve_bomb_test.cpp` (`mcb_reserve_bomb` ctest, 11 assertions).
 - **Resolved:** commit `42c24cb` — verify: `ctest -R mcb_reserve_bomb`
 - **Status note:** Fixed with `reserveHint(n) = min(n, 4096)` applied at all 13 sites. **Empirically measured, not just reasoned about** (matching `AUD-064`'s own before/after-timing precedent): the regression test hand-crafts a 43-byte file whose `lights` array count is patched to 9,000,000 then truncated immediately after, and measures `/proc/self/status` VmPeak (virtual-memory high-water mark) around the load attempt — **NOT RSS**: a `vector<Mc3Light>::reserve(9000000)` was confirmed to leave RSS essentially flat (Linux lazily commits pages; `reserve()` never touches/constructs elements) while jumping VmPeak from ~6MB to ~850MB, so an RSS/`getrusage`-based check would have silently passed regardless of the bug. Verified both directions: the unpatched reader (checked via `git stash` of the one-line-per-site fix) grows VmPeak by ~824MB and the test correctly FAILS against it; the patched reader grows VmPeak by only ~350KB and the test passes. Also confirms a legitimate 50-light document still round-trips all 50 lights (the hint doesn't truncate real data). Full root `ctest`: 135/135 (was 134). Left a pointer comment in `mcb_corruption_test.cpp` (whose own header comment previously implied the reader was already fully memory-safe against arbitrary corruption) noting this refinement — that file's crash-safety/rejection-correctness sweeps were never positioned to catch an allocation-SIZE issue like this one.
+
+### AUD-067 `[DONE]` `P1` `W7` · frameAxes() has no zero-length tangent guard — a degenerate polyline point produces NaN that aborts the whole export
+- **Component:** mc3togltf/src/MeshBuilder.cpp (frameAxes)
+- **Evidence:** Found via the same fresh adversarial re-audit as `AUD-064`/`065`/`066`. `frameAxes()` (`MeshBuilder.cpp:660-671`) computes a binormal `b` then divides by its own length `bl` with no guard, unlike `norm3()` (`:654-657`, a few lines above in the same file) which does guard (`if (l > 1e-6f)`). `samplePath`'s `Polyline` case (`:769-793`) computes each segment's tangent as `{dx,dy,dz} * tang`; two consecutive identical `<point>` elements make `dx=dy=dz=0`, so the tangent is `{0,0,0}` regardless of the `tang` fallback value (a plausible authoring/AI mistake — duplicate points in a hand-edited or generated path). Unlike the neighboring `Bezier` path (`:830-832`, which explicitly falls back to `{0,1,0}` for the same degenerate case), `Polyline` has no such fallback and feeds `{0,0,0}` straight into `frameAxes`, dividing `0/0` into NaN. That NaN reaches `GltfExporter.cpp`'s finiteness gate and aborts the ENTIRE export with a generic "non-finite vertex position" error, not just a confusing diagnostic — a full, otherwise-valid extrude mesh becomes unexportable because of one duplicate point anywhere in its path.
+- **Outcome:** Guard the `bl` division in `frameAxes()`, matching `norm3()`'s existing convention in the same file.
+- **Tests:** New `mc3togltf/test/degenerate_polyline_extrude_test.py` (`mc3togltf_degenerate_polyline_extrude` ctest) — mirrors `degenerate_cone_test.py`'s pattern (export must succeed; parse the GLB's POSITION/NORMAL accessor data AND declared min/max, assert every float is finite).
+- **Resolved:** commit `b2946f9` — verify: `ctest -R mc3togltf_degenerate_polyline_extrude`
+- **Status note:** Fixed by guarding only the `bl` division (`if (bl > 1e-6f) { ... }`, else `b` stays `{0,0,0}`) — sufficient, not just "doesn't crash": `n` is `cross(b,t)`, which is always `{0,0,0}` when `t=={0,0,0}` regardless of what `b` is, so no fallback direction for `b` would avoid a degenerate frame anyway; the honest result of a zero-length path segment is a single pinched (zero-radius but finite) ring at that one point, matching how a genuinely zero-length input segment should look, not a NaN-corrupted mesh. **Empirically verified both directions** (`git stash` of the one-line fix, matching this session's own established before/after convention): unpatched, the fixture (a polyline with points `(0,0,0)→(0,1,0)→(0,1,0)→(1,2,0)`, the middle pair duplicated) fails export with exit 2 / "Error: non-finite vertex position generated"; patched, it succeeds (312 vertices, 164 triangles, exit 0), and the new test's own GLB accessor scan confirms every POSITION/NORMAL float (data and declared min/max) is finite. Full root `ctest`: 136/136 (was 135). Both `frameAxes()` call sites (`MeshBuilder.cpp:878` and `:1113`) are covered by the single shared-function fix — no second call site needed a separate change.

@@ -44,10 +44,26 @@ VmPeak, not RSS — empirically confirmed `reserve()` alone leaves RSS flat
 ~6MB to ~850MB for a 43-byte hostile file claiming 9,000,000 lights;
 patched, only ~350KB. Verified both directions (unpatched reader's test
 correctly FAILS via `git stash`; patched reader's test passes). Full root
-`ctest`: 135 of 135 (was 134). The remaining 9 findings from this same
-audit pass are not yet actioned — see the user/session transcript for the
-full ranked list; re-derive from a fresh audit if this note has gone
-stale rather than trusting it indefinitely.
+`ctest`: 135 of 135 (was 134). Fourth: **`AUD-067`** (commit `b2946f9`) —
+`MeshBuilder.cpp`'s `frameAxes()` divided by its own binormal length with
+no zero-guard (unlike `norm3()` a few lines above it in the same file,
+which does guard) — a Polyline extrude path with two consecutive
+identical `<point>` elements produces a `{0,0,0}` tangent (the neighboring
+Bezier path already falls back to `{0,1,0}` for this exact case; Polyline
+had no such fallback), dividing `0/0` into NaN that aborted the ENTIRE
+export with a generic "non-finite vertex position" error. Fixed by
+guarding the division (`b` stays `{0,0,0}` when degenerate — sufficient,
+since the resulting normal `n=cross(b,t)` is always `{0,0,0}` when
+`t=={0,0,0}` regardless of `b`, so the honest result is one pinched-but-
+finite ring, not a NaN-corrupted mesh). New
+`mc3togltf_degenerate_polyline_extrude` test parses the exported GLB's
+POSITION/NORMAL accessors and confirms every float is finite; verified
+both directions via `git stash` (unpatched: export fails with exit 2;
+patched: succeeds, 312 vertices/164 triangles). Full root `ctest`: 136 of
+136 (was 135). The remaining 8 findings from this same audit pass are not
+yet actioned — see the user/session transcript for the full ranked list;
+re-derive from a fresh audit if this note has gone stale rather than
+trusting it indefinitely.
 
 _Last updated: 2026-07-18 (later same day, third continuation this date).
 Continues the two 2026-07-18 sessions recorded below (SYS-W14-10..17 +
