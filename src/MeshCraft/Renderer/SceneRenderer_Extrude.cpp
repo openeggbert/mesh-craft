@@ -698,6 +698,20 @@ void SceneRenderer::drawGridDynamic(float sizeX, float sizeZ, int subX, int subZ
 
     const int cols = subX + 1;
     const int rows = subZ + 1;
+
+    // subX/subZ are each individually capped at parse time (kMaxTessellation,
+    // Mc3XmlParser.cpp), but that per-field cap doesn't stop their PRODUCT --
+    // a single <grid subdivisions_x="4096" subdivisions_z="4096"/> is legal
+    // per-field yet requests ~16.8M vertices, rebuilt from scratch every
+    // frame with no cache (unlike other primitives). Bail out to a
+    // placeholder before allocating anything, matching drawExtrudeDynamic's
+    // own numVerts>65535 fallback below -- also keeps the uint16_t index
+    // buffer from silently wrapping.
+    if (static_cast<long long>(cols) * static_cast<long long>(rows) > 65535) {
+        drawMesh(unitBox_, world, view, proj, color);
+        return;
+    }
+
     std::vector<VertexPositionColor> verts;
     verts.reserve(cols * rows);
 

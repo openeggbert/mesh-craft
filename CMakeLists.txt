@@ -841,6 +841,23 @@ if(MESH_CRAFT_BUILD_TESTING AND UNIX AND NOT ANDROID AND NOT EMSCRIPTEN)
         set_tests_properties(smoke_test_all_objects PROPERTIES TIMEOUT 30 LABELS "render")
     endif()
 
+    # Regression guard: a <grid subdivisions_x="4096" subdivisions_z="4096"/>
+    # is legal per-field (kMaxTessellation) but its PRODUCT used to rebuild
+    # ~16.8M vertices from scratch every frame with no cache, hanging the
+    # editor well past this TIMEOUT (confirmed: unpatched run did not finish
+    # within 20s; drawGridDynamic now bails to a placeholder mesh before
+    # allocating when cols*rows exceeds the uint16_t index range).
+    if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/test/grid_stress.mc3.xml")
+        add_test(
+            NAME smoke_test_grid_stress
+            COMMAND bash ${CMAKE_CURRENT_SOURCE_DIR}/test/smoke_test.sh
+                    $<TARGET_FILE:MeshCraft>
+                    ${CMAKE_CURRENT_SOURCE_DIR}/test/grid_stress.mc3.xml
+            WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
+        )
+        set_tests_properties(smoke_test_grid_stress PROPERTIES TIMEOUT 30 LABELS "render")
+    endif()
+
     # STAB-0498: same smoke-test mechanism, but against a scene with zero
     # objects, to confirm the parser/renderer handle a genuinely empty
     # scene without crashing.

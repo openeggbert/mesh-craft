@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<mc3 version="0.3" model="GridStress">
+  <objects>
+    <!-- subdivisions_x/z are each individually legal (kMaxTessellation=4096,
+         Mc3XmlParser.cpp), but their PRODUCT (~16.8M grid cells) used to be
+         rebuilt from scratch every single frame with no cache, freezing the
+         editor. Regression fixture for that fix (see drawGridDynamic,
+         SceneRenderer_Extrude.cpp). -->
+    <grid name="StressGrid" size="10 1 10" subdivisions_x="4096" subdivisions_z="4096"/>
+  </objects>
+</mc3>
