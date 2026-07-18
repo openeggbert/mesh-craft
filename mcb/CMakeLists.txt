@@ -104,6 +104,17 @@ if(BUILD_TESTING)
     add_test(NAME mcb_reserve_bomb COMMAND mcb_reserve_bomb_test)
     set_tests_properties(mcb_reserve_bomb PROPERTIES TIMEOUT 30 LABELS "format")
 
+    # AUD-071: Mc3SceneState's `overrides` and Mc3Trigger's `steps` were the
+    # only two known keys that skipped expectTag() (AUD-015's own
+    # established policy) and silently dropped the field on a tag mismatch
+    # instead of rejecting the file with a clear error.
+    add_executable(mcb_tag_mismatch_rejection_test
+        test/tag_mismatch_rejection_test.cpp
+    )
+    target_link_libraries(mcb_tag_mismatch_rejection_test PRIVATE Mcb)
+    add_test(NAME mcb_tag_mismatch_rejection COMMAND mcb_tag_mismatch_rejection_test)
+    set_tests_properties(mcb_tag_mismatch_rejection PROPERTIES TIMEOUT 30 LABELS "format")
+
     # SYS-W1-01: Mc3Validation diagnostics for the MCB reader -- proves the
     # structured warning/error surface itself is populated (not just that
     # clamped/rejected VALUES are correct, already covered by

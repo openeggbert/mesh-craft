@@ -724,7 +724,8 @@ static Mc3::Mc3SceneState readSceneState(std::istream& in, const std::string& na
     while (true) {
         std::string k = rKey(in); if (k.empty()) break;
         uint8_t tag = rU8(in);
-        if (k == "overrides" && tag == TAG_ARR) {
+        if (k == "overrides") {
+            expectTag(tag, TAG_ARR, "overrides");
             uint32_t n = rU32Bounded(in);
             for (uint32_t i = 0; i < n; ++i) {
                 uint8_t t = rU8(in);
@@ -752,7 +753,8 @@ static Mc3::Mc3Trigger readTrigger(std::istream& in, const std::string& id) {
     while (true) {
         std::string k = rKey(in); if (k.empty()) break;
         uint8_t tag = rU8(in);
-        if (k == "steps" && tag == TAG_ARR) {
+        if (k == "steps") {
+            expectTag(tag, TAG_ARR, "steps");
             uint32_t n = rU32Bounded(in);
             for (uint32_t i = 0; i < n; ++i) {
                 uint8_t t = rU8(in);
