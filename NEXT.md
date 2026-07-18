@@ -85,8 +85,26 @@ exist on disk AND the document was opened via a bare relative filename
 a non-existent relative candidate stays unresolved and produces a
 degenerate `relative()` result. Fails SAFE (a false rejection, not a
 bypass) — low severity, not fixed here to keep `AUD-068` scoped to
-porting the existing, verified XML behavior, not improving on it. The
-remaining 7 findings from this same audit pass are not yet actioned —
+porting the existing, verified XML behavior, not improving on it. Sixth:
+**`AUD-070`** (commit `c3d5875`) — `Mc3XmlWriter.cpp` wrote SVG
+inlineContent/script source/embed base64Content into a CDATA section
+unconditionally, with no scan for an embedded `]]>` (a CDATA section
+cannot contain its own closing delimiter). Content containing `]]>`
+followed by attacker-chosen text closed the CDATA early and let the rest
+be parsed as literal XML on the next load — empirically confirmed WORSE
+than "garbled content": the unpatched writer's output for a crafted
+payload is XML so broken it doesn't even parse back on reload
+(`XML_ERROR_MISMATCHED_ELEMENT`), crashing the pre-fix test on an
+uncaught exception (verified via `git stash`). Fixed with
+`appendTextOrCData()`: CDATA when safe, entity-escaped plain text when
+`]]>` is present. Deliberately NOT multi-CDATA-section splitting (the
+other standard technique) — `Mc3XmlParser.cpp`'s `GetText()` only reads
+the first child text node and would silently truncate a split payload.
+New `mc3_cdata_injection` test (7 assertions) round-trips a payload
+containing `]]>` + a fake injected `<object>` and confirms byte-identical
+round-trip with no spurious object created. Full root `ctest`: 138 of 138
+(was 137); standalone CNA-free `mc3/build`: 22 of 22 (was 21). The
+remaining 6 findings from this same audit pass are not yet actioned —
 see the user/session transcript for the full ranked list; re-derive from
 a fresh audit if this note has gone stale rather than trusting it
 indefinitely.

@@ -84,14 +84,14 @@ P1s already being fixed in git history. This session:
    is per-field only) not part of the original audit, filed as new `TODO`
    tasks.
 
-   **Net across all 12 AUD-### rows remaining in this active backlog (61
+   **Net across all 13 AUD-### rows remaining in this active backlog (61
    additional rows completed and archived to `docs/history/plan_20260718.md`
    on 2026-07-18 — see that file for their full evidence/resolution text):
-   5 DONE, 5 TODO, 2 DEFERRED** — the 5 DONE (`AUD-064`..`068`) and 1 of
-   the 5 TODO (`AUD-069`) are fresh findings from a 2026-07-18 (later same
-   day) independent re-audit, not part of the original 6; recompute with
-   `python3 test/validate_plan_consistency.py . <build-dir>` rather than
-   trusting this number as time passes.
+   6 DONE, 5 TODO, 2 DEFERRED** — the 6 DONE (`AUD-064`..`068`, `AUD-070`)
+   and 1 of the 5 TODO (`AUD-069`) are fresh findings from a 2026-07-18
+   (later same day) independent re-audit, not part of the original 6;
+   recompute with `python3 test/validate_plan_consistency.py . <build-dir>`
+   rather than trusting this number as time passes.
 5. Archived `plan_deep_audit.md` (all 57 of its own tasks were already
    completed) and fixed `RELEASE.md`'s stale 66/66 test count.
 6. Removed machine-specific absolute source paths from this file's evidence
@@ -1103,3 +1103,11 @@ remain in this active file.
 - **Outcome:** This is a false REJECTION (fails safe — an over-strict false positive), not a bypass (no escaping path is ever wrongly accepted), so severity is low. Fix direction: resolve the candidate against an explicitly-normalized base (e.g. `weakly_canonical(rootDir.empty() ? current_path() : rootDir) / candidate`, canonicalized as a unit) instead of canonicalizing the bare candidate first, so resolution does not depend on the target's existence.
 - **Tests:** Extend both `load_policy_test.cpp` (XML) and `json_load_policy_test.cpp` (JSON, already has a same-directory case, but only with the file pre-created — add a non-existent-file variant) to cover the non-existent-file + empty-rootDir combination once fixed.
 - **Blocked:** Not blocked — simply not yet attempted; found and filed during `AUD-068`'s work, deliberately not fixed there to keep that change scoped to "port the existing, verified XML behavior to JSON" rather than "improve behavior shared by both parsers."
+
+### AUD-070 `[DONE]` `P2` `W6` · Mc3XmlWriter emits CDATA sections with no scan for an embedded "]]>", letting attacker-controlled content break out of the CDATA section on save
+- **Component:** mc3/src/Mc3XmlWriter.cpp (SVG inlineContent, script source, embed base64Content)
+- **Evidence:** Found via the same fresh adversarial re-audit as `AUD-064`..`069`. Three call sites (SVG `inlineContent`, script `source`, embed `base64Content`) called `t->SetCData(true)` unconditionally with no check that the text doesn't itself contain the CDATA terminator `]]>`. A single CDATA section cannot contain its own closing delimiter — content containing `]]>` followed by attacker-chosen text (a plausible AI-generated `<script>` or a pasted SVG whose own markup contains a CDATA section) closes the CDATA early, and whatever follows in the string is then parsed as literal XML markup on the next load.
+- **Outcome:** Detect an embedded `]]>` before choosing CDATA; fall back to normal escaped text (safe, since `]]>` has no special meaning outside a CDATA section) rather than emitting a structurally-broken section.
+- **Tests:** New `mc3/test/cdata_injection_test.cpp` (`mc3_cdata_injection` ctest, 7 assertions).
+- **Resolved:** commit `c3d5875` — verify: `ctest -R mc3_cdata_injection`
+- **Status note:** Empirically confirmed MORE severe than "garbled content" while writing the fix: the unpatched writer's output for a crafted script/SVG payload is XML so structurally broken it doesn't even parse back on reload (`XML_ERROR_MISMATCHED_ELEMENT`), crashing the (pre-fix) test process on an uncaught exception — verified via `git stash` of the fix. Fixed with `appendTextOrCData()`: CDATA when safe, entity-escaped plain text when the content contains `]]>`. Deliberately NOT the other standard technique (splitting into multiple adjacent CDATA sections) — `Mc3XmlParser.cpp` reads these fields via `GetText()`, which returns only the FIRST child text node's value and would silently truncate anything after the first split point; the single-node fallback used instead has no such risk. Applied at all 3 `SetCData` sites, including embed `base64Content` (safe by construction — base64's alphabet can never contain `]` or `>` — applied anyway for consistency/defense in depth rather than trusting that invariant forever). Full root `ctest`: 138/138 (was 137); standalone CNA-free `mc3/build` tree: 22/22 (was 21).
