@@ -479,16 +479,30 @@ _All items in this workstream are DONE — archived to [`docs/history/plan_20260
   research used) before choosing an enforcement mechanism — a real,
   possibly P1-worthy risk area (a missed `pushUndo()` is silent data loss on
   undo), but not a quick pick. Found via `missing.md`'s 2026-07-18 update.
-- **SYS-W14-17** `[TODO]` `P3` — Dedicated Area object properties panel.
-  `STAB-0721` added an `"Area (trigger zone)"` label when editing an Area
-  object, but the editor still falls through to the same generic Box size
-  fields immediately below (by design at the time, per that commit's own
-  comment — `ObjectType::Area` structurally carries a Box-shaped primitive
-  with no parser case of its own). Cosmetic remainder: either accept the
-  labeled-Box-editor as final, or design Area-specific fields if there's a
-  real editing need beyond size (e.g. trigger-specific properties already
-  covered by `doc.triggers`/`STAB-0707`, which are edited separately from
-  the object itself). Found via `missing.md`'s 2026-07-18 update.
+- **SYS-W14-17** `[DONE, no further UI needed — see investigation]` `P3` —
+  Dedicated Area object properties panel. `STAB-0721` added an `"Area
+  (trigger zone)"` label when editing an Area object, but the editor still
+  falls through to the same generic Box size fields immediately below (by
+  design at the time, per that commit's own comment — `ObjectType::Area`
+  structurally carries a Box-shaped primitive with no parser case of its
+  own). Found via `missing.md`'s 2026-07-18 update.
+  **Investigation (2026-07-18):** checked whether Area objects have any
+  distinct data to edit beyond size, and whether `doc.triggers`
+  (`Mc3Trigger`) links back to a specific object. Confirmed neither:
+  `Mc3XmlParser.cpp` genuinely has no `ObjectType::Area` case in
+  `parsePrimitive`'s switch (Area really is just a Box-shaped primitive
+  with a different `type` tag, nothing more), and `Mc3Trigger` itself
+  (`id` + a list of `{type, ref}` steps) carries no field referencing an
+  `Mc3Object` at all — an Area and a same-named Trigger are correlated
+  only by convention for whatever runtime consumes the scene, not by any
+  schema-level link this editor could surface. So there is no hidden field
+  or cross-reference to wire up: the labeled-Box-editor added by
+  `STAB-0721` (which resolved the original "cosmetically unclear, looks
+  like a plain box" complaint) is the complete, correct fix given the
+  current data model — not a partial one. No further UI work needed;
+  closing without new code, matching this backlog's own precedent for
+  findings that turn out to already be fully resolved on investigation
+  (e.g. `SYS-W5-05`, `SYS-W7-01` in the archived history).
 
 ---
 
