@@ -126,6 +126,12 @@ void MeshCraftApplication::deleteSelected() {
     recordStep("delete");
 }
 void MeshCraftApplication::toggleIsolate() {
+    // SYS-W14-16: Mc3Object::visible is a real, persisted document field
+    // (not editor-only state), and both branches below mutate it plus set
+    // modified_ -- but neither called pushUndo(), so Ctrl+Z right after
+    // isolating/un-isolating couldn't restore the pre-toggle visibility.
+    // Found by a dedicated undo-coverage audit, not a quick pick.
+    pushUndo();
     std::function<void(std::vector<std::shared_ptr<Mc3::Mc3Object>>&)> walk;
     if (!isolateActive_) {
         // Activate: save visibility, hide non-selected

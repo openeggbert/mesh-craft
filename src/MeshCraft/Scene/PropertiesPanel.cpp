@@ -572,8 +572,17 @@ void PropertiesPanel::draw(float panelX, float panelY, float panelW, float panel
                         if (st.position) {
                             ImGui::SameLine();
                             ImGui::SetNextItemWidth(-1);
-                            if (ImGui::DragFloat3("##stpv", st.position->data(), 0.01f))
-                                { ctx.pushUndo(); ctx.markModified(); }
+                            // SYS-W14-16: was bound straight to st.position's
+                            // live storage with pushUndo() nested inside the
+                            // changed-check and no IsItemActivated() gate --
+                            // found by a dedicated undo-coverage audit. Since
+                            // the widget mutates in place every frame of the
+                            // drag, that pattern pushed a snapshot ALREADY
+                            // containing the new value on every frame, so
+                            // Ctrl+Z could never reach the pre-drag value.
+                            bool changed = ImGui::DragFloat3("##stpv", st.position->data(), 0.01f);
+                            if (ImGui::IsItemActivated()) ctx.pushUndo();
+                            if (changed) ctx.markModified();
                         }
                     }
 
@@ -589,8 +598,10 @@ void PropertiesPanel::draw(float panelX, float panelY, float panelW, float panel
                         if (st.rotation) {
                             ImGui::SameLine();
                             ImGui::SetNextItemWidth(-1);
-                            if (ImGui::DragFloat3("##strv", st.rotation->data(), 0.5f))
-                                { ctx.pushUndo(); ctx.markModified(); }
+                            // SYS-W14-16: same fix as the Position field above.
+                            bool changed = ImGui::DragFloat3("##strv", st.rotation->data(), 0.5f);
+                            if (ImGui::IsItemActivated()) ctx.pushUndo();
+                            if (changed) ctx.markModified();
                         }
                     }
 
@@ -606,8 +617,10 @@ void PropertiesPanel::draw(float panelX, float panelY, float panelW, float panel
                         if (st.scale) {
                             ImGui::SameLine();
                             ImGui::SetNextItemWidth(-1);
-                            if (ImGui::DragFloat3("##stsv", st.scale->data(), 0.01f, 0.001f, 1000.f, "%.3f", ImGuiSliderFlags_AlwaysClamp))
-                                { ctx.pushUndo(); ctx.markModified(); }
+                            // SYS-W14-16: same fix as the Position field above.
+                            bool changed = ImGui::DragFloat3("##stsv", st.scale->data(), 0.01f, 0.001f, 1000.f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
+                            if (ImGui::IsItemActivated()) ctx.pushUndo();
+                            if (changed) ctx.markModified();
                         }
                     }
 
@@ -875,11 +888,12 @@ void PropertiesPanel::draw(float panelX, float panelY, float panelW, float panel
                 ImGui::TextDisabled("Segments");
                 int segs = p.segments;
                 ImGui::SetNextItemWidth(-1);
-                if (ImGui::SliderInt("##psegs", &segs, 4, 64, "%d", ImGuiSliderFlags_AlwaysClamp)) {
-                    if (ImGui::IsItemActivated()) ctx.pushUndo();
+                { bool _undoChSegs = ImGui::SliderInt("##psegs", &segs, 4, 64, "%d", ImGuiSliderFlags_AlwaysClamp);
+                if (ImGui::IsItemActivated()) ctx.pushUndo();
+                if (_undoChSegs) {
                     p.segments = segs;
                     ctx.markModified();
-                }
+                } }
                 break;
             }
             case Mc3::PrimitiveType::Cylinder:
@@ -905,11 +919,12 @@ void PropertiesPanel::draw(float panelX, float panelY, float panelW, float panel
                 ImGui::TextDisabled("Segments");
                 int segs = p.segments;
                 ImGui::SetNextItemWidth(-1);
-                if (ImGui::SliderInt("##psegs", &segs, 4, 64, "%d", ImGuiSliderFlags_AlwaysClamp)) {
-                    if (ImGui::IsItemActivated()) ctx.pushUndo();
+                { bool _undoChSegs = ImGui::SliderInt("##psegs", &segs, 4, 64, "%d", ImGuiSliderFlags_AlwaysClamp);
+                if (ImGui::IsItemActivated()) ctx.pushUndo();
+                if (_undoChSegs) {
                     p.segments = segs;
                     ctx.markModified();
-                }
+                } }
                 // STAB-0712: Mc3Primitive::axis had no UI anywhere -- Cone
                 // doesn't consume it (buildCone() is always Y-axis-only,
                 // confirmed by reading MeshBuilder.cpp's buildPrimitive()
@@ -962,11 +977,12 @@ void PropertiesPanel::draw(float panelX, float panelY, float panelW, float panel
                 ImGui::TextDisabled("Segments");
                 int segs = p.segments;
                 ImGui::SetNextItemWidth(-1);
-                if (ImGui::SliderInt("##pdsk_segs", &segs, 3, 128, "%d", ImGuiSliderFlags_AlwaysClamp)) {
-                    if (ImGui::IsItemActivated()) ctx.pushUndo();
+                { bool _undoChDskSegs = ImGui::SliderInt("##pdsk_segs", &segs, 3, 128, "%d", ImGuiSliderFlags_AlwaysClamp);
+                if (ImGui::IsItemActivated()) ctx.pushUndo();
+                if (_undoChDskSegs) {
                     p.segments = segs;
                     ctx.markModified();
-                }
+                } }
                 // STAB-0712: buildDisk() also takes an axis param
                 // (MeshBuilder.cpp's buildPrimitive() switch) -- the
                 // original finding only named Cylinder/Capsule/Plane, Disk
@@ -997,11 +1013,12 @@ void PropertiesPanel::draw(float panelX, float panelY, float panelW, float panel
                 ImGui::TextDisabled("Segments");
                 int segs = p.segments;
                 ImGui::SetNextItemWidth(-1);
-                if (ImGui::SliderInt("##pcap_segs", &segs, 6, 64, "%d", ImGuiSliderFlags_AlwaysClamp)) {
-                    if (ImGui::IsItemActivated()) ctx.pushUndo();
+                { bool _undoChCapSegs = ImGui::SliderInt("##pcap_segs", &segs, 6, 64, "%d", ImGuiSliderFlags_AlwaysClamp);
+                if (ImGui::IsItemActivated()) ctx.pushUndo();
+                if (_undoChCapSegs) {
                     p.segments = segs;
                     ctx.markModified();
-                }
+                } }
                 drawAxisCombo(ctx, p, "##pcap_axis");
                 break;
             }
@@ -1027,19 +1044,21 @@ void PropertiesPanel::draw(float panelX, float panelY, float panelW, float panel
                 ImGui::TextDisabled("Subdivisions X");
                 int subX = p.subdivisionsX;
                 ImGui::SetNextItemWidth(-1);
-                if (ImGui::SliderInt("##pgrd_subx", &subX, 1, 64, "%d", ImGuiSliderFlags_AlwaysClamp)) {
-                    if (ImGui::IsItemActivated()) ctx.pushUndo();
+                { bool _undoChSubX = ImGui::SliderInt("##pgrd_subx", &subX, 1, 64, "%d", ImGuiSliderFlags_AlwaysClamp);
+                if (ImGui::IsItemActivated()) ctx.pushUndo();
+                if (_undoChSubX) {
                     p.subdivisionsX = std::max(1, subX);
                     ctx.markModified();
-                }
+                } }
                 ImGui::TextDisabled("Subdivisions Z");
                 int subZ = p.subdivisionsZ;
                 ImGui::SetNextItemWidth(-1);
-                if (ImGui::SliderInt("##pgrd_subz", &subZ, 1, 64, "%d", ImGuiSliderFlags_AlwaysClamp)) {
-                    if (ImGui::IsItemActivated()) ctx.pushUndo();
+                { bool _undoChSubZ = ImGui::SliderInt("##pgrd_subz", &subZ, 1, 64, "%d", ImGuiSliderFlags_AlwaysClamp);
+                if (ImGui::IsItemActivated()) ctx.pushUndo();
+                if (_undoChSubZ) {
                     p.subdivisionsZ = std::max(1, subZ);
                     ctx.markModified();
-                }
+                } }
                 break;
             }
             case Mc3::PrimitiveType::IcoSphere: {
@@ -1064,11 +1083,12 @@ void PropertiesPanel::draw(float panelX, float panelY, float panelW, float panel
                 int subdivisions = std::clamp(p.segments / 8, 1, 4);
                 ImGui::TextDisabled("Subdivisions");
                 ImGui::SetNextItemWidth(-1);
-                if (ImGui::SliderInt("##pico_sub", &subdivisions, 1, 4, "%d", ImGuiSliderFlags_AlwaysClamp)) {
-                    if (ImGui::IsItemActivated()) ctx.pushUndo();
+                { bool _undoChIcoSub = ImGui::SliderInt("##pico_sub", &subdivisions, 1, 4, "%d", ImGuiSliderFlags_AlwaysClamp);
+                if (ImGui::IsItemActivated()) ctx.pushUndo();
+                if (_undoChIcoSub) {
                     p.segments = subdivisions * 8;
                     ctx.markModified();
-                }
+                } }
                 int triCount = 20;
                 for (int i = 0; i < subdivisions; ++i) triCount *= 4;
                 ImGui::TextDisabled("%d triangles", triCount);
@@ -1096,11 +1116,12 @@ void PropertiesPanel::draw(float panelX, float panelY, float panelW, float panel
                 ImGui::TextDisabled("Segments");
                 int segs = p.segments;
                 ImGui::SetNextItemWidth(-1);
-                if (ImGui::SliderInt("##ptor_segs", &segs, 4, 64, "%d", ImGuiSliderFlags_AlwaysClamp)) {
-                    if (ImGui::IsItemActivated()) ctx.pushUndo();
+                { bool _undoChTorSegs = ImGui::SliderInt("##ptor_segs", &segs, 4, 64, "%d", ImGuiSliderFlags_AlwaysClamp);
+                if (ImGui::IsItemActivated()) ctx.pushUndo();
+                if (_undoChTorSegs) {
                     p.segments = segs;
                     ctx.markModified();
-                }
+                } }
                 break;
             }
             }
@@ -1126,10 +1147,11 @@ void PropertiesPanel::draw(float panelX, float panelY, float panelW, float panel
             } }
             ImGui::TextDisabled("Path Segments");
             ImGui::SetNextItemWidth(-1);
-            if (ImGui::SliderInt("##exsegs", &ex.segments, 1, 128, "%d", ImGuiSliderFlags_AlwaysClamp)) {
-                if (ImGui::IsItemActivated()) ctx.pushUndo();
+            { bool _undoChExSegs = ImGui::SliderInt("##exsegs", &ex.segments, 1, 128, "%d", ImGuiSliderFlags_AlwaysClamp);
+            if (ImGui::IsItemActivated()) ctx.pushUndo();
+            if (_undoChExSegs) {
                 ctx.markModified();
-            }
+            } }
             // STAB-0719: these two were the only Extrude fields in this
             // block missing pushUndo() -- every sibling field (e.g. the
             // Path Segments slider directly above) already has it.
@@ -1186,10 +1208,11 @@ void PropertiesPanel::draw(float panelX, float panelY, float panelW, float panel
                     } }
                     ImGui::TextDisabled("Segments");
                     ImGui::SetNextItemWidth(-1);
-                    if (ImGui::SliderInt("##csseg", &cs.segments, 3, 64, "%d", ImGuiSliderFlags_AlwaysClamp)) {
-                        if (ImGui::IsItemActivated()) ctx.pushUndo();
+                    { bool _undoChCsSeg = ImGui::SliderInt("##csseg", &cs.segments, 3, 64, "%d", ImGuiSliderFlags_AlwaysClamp);
+                    if (ImGui::IsItemActivated()) ctx.pushUndo();
+                    if (_undoChCsSeg) {
                         ctx.markModified();
-                    }
+                    } }
                     break;
                 case Mc3::CrossSectionType::Polygon:
                     ImGui::TextDisabled("Radius");
@@ -1210,19 +1233,21 @@ void PropertiesPanel::draw(float panelX, float panelY, float panelW, float panel
                     } }
                     ImGui::TextDisabled("Sides");
                     ImGui::SetNextItemWidth(-1);
-                    if (ImGui::SliderInt("##cspsd", &cs.sides, 3, 32, "%d", ImGuiSliderFlags_AlwaysClamp)) {
-                        if (ImGui::IsItemActivated()) ctx.pushUndo();
+                    { bool _undoChCsPsd = ImGui::SliderInt("##cspsd", &cs.sides, 3, 32, "%d", ImGuiSliderFlags_AlwaysClamp);
+                    if (ImGui::IsItemActivated()) ctx.pushUndo();
+                    if (_undoChCsPsd) {
                         ctx.markModified();
-                    }
+                    } }
                     break;
                 case Mc3::CrossSectionType::Star:
                     ImGui::TextDisabled("Points (tips)");
                     ImGui::SetNextItemWidth(-1);
-                    if (ImGui::SliderInt("##csstpts", &cs.sides, 3, 16, "%d", ImGuiSliderFlags_AlwaysClamp)) {
-                        if (ImGui::IsItemActivated()) ctx.pushUndo();
+                    { bool _undoChCsStPts = ImGui::SliderInt("##csstpts", &cs.sides, 3, 16, "%d", ImGuiSliderFlags_AlwaysClamp);
+                    if (ImGui::IsItemActivated()) ctx.pushUndo();
+                    if (_undoChCsStPts) {
                         cs.sides = std::max(3, cs.sides);
                         ctx.markModified();
-                    }
+                    } }
                     ImGui::TextDisabled("Outer Radius");
                     ImGui::SetNextItemWidth(-1);
                     { bool _undoCh1169 = ImGui::DragFloat("##csstr", &cs.radius, 0.01f, 0.001f, 1000.f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
@@ -1666,22 +1691,24 @@ void PropertiesPanel::draw(float panelX, float panelY, float panelW, float panel
                 // AlwaysClamp: without it, Ctrl+Click lets a typed value go
                 // out of [0,1], which would export a spec-invalid glTF
                 // pbrMetallicRoughness.roughnessFactor with no other guard.
-                if (ImGui::SliderFloat("##mrough", &mat.roughness, 0.0f, 1.0f, "%.3f",
-                                       ImGuiSliderFlags_AlwaysClamp)) {
-                    if (ImGui::IsItemActivated()) ctx.pushUndo();
+                { bool _undoChRough = ImGui::SliderFloat("##mrough", &mat.roughness, 0.0f, 1.0f, "%.3f",
+                                       ImGuiSliderFlags_AlwaysClamp);
+                if (ImGui::IsItemActivated()) ctx.pushUndo();
+                if (_undoChRough) {
                     ctx.markModified();
-                }
+                } }
 
                 // Metallic
                 ImGui::TextDisabled("Metallic");
                 ImGui::SetNextItemWidth(-1);
                 // AlwaysClamp: same out-of-[0,1]-via-Ctrl+Click risk as
                 // roughness above (spec-invalid metallicFactor on export).
-                if (ImGui::SliderFloat("##mmetal", &mat.metallic, 0.0f, 1.0f, "%.3f",
-                                       ImGuiSliderFlags_AlwaysClamp)) {
-                    if (ImGui::IsItemActivated()) ctx.pushUndo();
+                { bool _undoChMetal = ImGui::SliderFloat("##mmetal", &mat.metallic, 0.0f, 1.0f, "%.3f",
+                                       ImGuiSliderFlags_AlwaysClamp);
+                if (ImGui::IsItemActivated()) ctx.pushUndo();
+                if (_undoChMetal) {
                     ctx.markModified();
-                }
+                } }
 
                 // Emissive color
                 ImGui::TextDisabled("Emissive");
@@ -1710,11 +1737,12 @@ void PropertiesPanel::draw(float panelX, float panelY, float panelW, float panel
                     ImGui::SetNextItemWidth(-1);
                     // AlwaysClamp: same out-of-[0,1]-via-Ctrl+Click risk as
                     // roughness/metallic above (spec-invalid alphaCutoff).
-                    if (ImGui::SliderFloat("##mcut", &mat.alphaCutoff, 0.0f, 1.0f, "%.3f",
-                                           ImGuiSliderFlags_AlwaysClamp)) {
-                        if (ImGui::IsItemActivated()) ctx.pushUndo();
+                    { bool _undoChCutoff = ImGui::SliderFloat("##mcut", &mat.alphaCutoff, 0.0f, 1.0f, "%.3f",
+                                           ImGuiSliderFlags_AlwaysClamp);
+                    if (ImGui::IsItemActivated()) ctx.pushUndo();
+                    if (_undoChCutoff) {
                         ctx.markModified();
-                    }
+                    } }
                 }
 
                 // Double sided
@@ -2003,9 +2031,9 @@ void PropertiesPanel::draw(float panelX, float panelY, float panelW, float panel
             ImGui::Text("Rotation:  ");
             ImGui::SameLine();
             ImGui::SetNextItemWidth(80.0f);
-            if (ImGui::DragFloat("##uvrot", &m.rotation, 0.5f, -360.0f, 360.0f, "%.1f\xc2\xb0", ImGuiSliderFlags_AlwaysClamp)) {
-                ctx.pushUndo(); ctx.markModified();
-            }
+            bool uvRotChanged = ImGui::DragFloat("##uvrot", &m.rotation, 0.5f, -360.0f, 360.0f, "%.1f\xc2\xb0", ImGuiSliderFlags_AlwaysClamp);
+            if (ImGui::IsItemActivated()) ctx.pushUndo();
+            if (uvRotChanged) ctx.markModified();
         }
         ImGui::EndTabItem();
         } // end UV tab
@@ -2086,13 +2114,24 @@ void PropertiesPanel::draw(float panelX, float panelY, float panelW, float panel
             const char* dcPrev = ctx.document.defaultCamera.empty()
                 ? "(none)" : ctx.document.defaultCamera.c_str();
             ImGui::SetNextItemWidth(-1);
+            // SYS-W14-16: found by a dedicated undo-coverage audit -- every
+            // sibling field in this block (Name/Unit/Coord System) calls
+            // both pushUndo() and ctx.markModified(); this combo called
+            // neither, so picking/clearing the default camera couldn't be
+            // undone and didn't even mark the document dirty.
             if (ImGui::BeginCombo("##scdc", dcPrev)) {
-                if (ImGui::Selectable("(none)", ctx.document.defaultCamera.empty()))
+                if (ImGui::Selectable("(none)", ctx.document.defaultCamera.empty())) {
+                    ctx.pushUndo();
                     ctx.document.defaultCamera = "";
+                    ctx.markModified();
+                }
                 for (const auto& cam : ctx.document.cameras) {
                     bool sel = (cam.name == ctx.document.defaultCamera);
-                    if (ImGui::Selectable(cam.name.c_str(), sel))
+                    if (ImGui::Selectable(cam.name.c_str(), sel)) {
+                        ctx.pushUndo();
                         ctx.document.defaultCamera = cam.name;
+                        ctx.markModified();
+                    }
                     if (sel) ImGui::SetItemDefaultFocus();
                 }
                 ImGui::EndCombo();

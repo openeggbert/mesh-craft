@@ -211,12 +211,38 @@ void MeshCraftApplication::drawTimelinePanel(int screenW, int screenH) {
                 modified_    = true;
             } }
             ImGui::SameLine();
-            if (ImGui::Checkbox("Loop##lp", &act.loop)) { pushUndo(); modified_ = true; }
+            // SYS-W14-16: this comment block used to claim binding pushUndo()
+            // straight to Checkbox's own bound bool was fine ("unconditional
+            // for the single-fire checkbox") -- a dedicated undo-coverage
+            // audit found that's wrong: ImGui::Checkbox writes *v in place
+            // and returns true on the SAME call, so pushUndo() here ran
+            // AFTER act.loop already held its new value, meaning the
+            // deep-copy captured the new state, not the old one -- Ctrl+Z
+            // right after toggling Loop was a silent no-op for this field.
+            // Fixed by copying into a local first (same "local copy, gate,
+            // write back" shape the Dur widget above already uses for a
+            // continuous drag; here it's simpler since Checkbox only fires
+            // once per click, so no IsItemActivated() gate is needed).
+            {
+                bool loopLocal = act.loop;
+                if (ImGui::Checkbox("Loop##lp", &loopLocal)) {
+                    pushUndo();
+                    act.loop = loopLocal;
+                    modified_ = true;
+                }
+            }
             ImGui::SameLine();
             // STAB-0714: Mc3Action::autoplay had no UI at all, unlike the
             // adjacent Loop checkbox -- settable only via hand-edited
-            // XML/MCB. Same unconditional-pushUndo() pattern as Loop above.
-            if (ImGui::Checkbox("Autoplay##ap", &act.autoplay)) { pushUndo(); modified_ = true; }
+            // XML/MCB. Same local-copy fix as Loop above (SYS-W14-16).
+            {
+                bool autoplayLocal = act.autoplay;
+                if (ImGui::Checkbox("Autoplay##ap", &autoplayLocal)) {
+                    pushUndo();
+                    act.autoplay = autoplayLocal;
+                    modified_ = true;
+                }
+            }
             ImGui::SameLine();
             // STAB-0460: playback-speed multiplier. Same IsItemActivated()-
             // gated pushUndo() pattern as the Dur widget above.

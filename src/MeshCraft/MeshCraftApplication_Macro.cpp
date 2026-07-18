@@ -77,6 +77,12 @@ void MeshCraftApplication::executeMacroStep(const MacroStep& step) {
         modified_ = true;
         updateWindowTitle();
     } else if (v == "show_all") {
+        // SYS-W14-16: found by a dedicated undo-coverage audit -- the
+        // adjacent "hide" verb above correctly calls pushUndo() first;
+        // this one didn't, a straightforward copy/paste omission (the
+        // Keyboard.cpp and UiMenuBar.cpp equivalents of this same
+        // operation both already call pushUndo() correctly).
+        pushUndo();
         std::function<void(std::vector<std::shared_ptr<Mc3::Mc3Object>>&)> showAll;
         showAll = [&](auto& list) {
             for (auto& o : list) { o->visible = true; showAll(o->children); }

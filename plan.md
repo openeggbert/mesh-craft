@@ -549,19 +549,66 @@ _All items in this workstream are DONE — archived to [`docs/history/plan_20260
   `FileDialog`'s own doc comment about why its test-swap hook exists) —
   confidence instead comes from reusing already-tested consumption logic
   verbatim and mirroring `AiAssistant`'s already-proven threading idiom.
-- **SYS-W14-16** `[TODO]` `P2` — Undo/redo structural-guarantee audit.
-  Currently a manual discipline: 332 `pushUndo()` call sites (fresh count),
-  each independently relying on the author remembering to call it before a
-  mutation, verified only by grep/spot-check rather than any structural
-  enforcement (e.g. a Command-pattern wrapper, a mutation-tracking proxy, or
-  a debug-build assertion that `document_` didn't change since the last
-  `pushUndo()`). `SYS-W5-04` did related exhaustive-enumeration work but was
-  explicitly scoped to a lookup cache, not to this. This needs its own
-  scoped research pass first (enumerate every `document_`-mutating call
-  site not currently covered, the same discipline `SYS-W5-04`'s own
-  research used) before choosing an enforcement mechanism — a real,
-  possibly P1-worthy risk area (a missed `pushUndo()` is silent data loss on
-  undo), but not a quick pick. Found via `missing.md`'s 2026-07-18 update.
+- **SYS-W14-16** `[DONE]` `P2` — Undo/redo structural-guarantee audit.
+  Ran two parallel research agents over the full ~332 `pushUndo()`-family
+  call-site population (one covering command/input/macro files, one
+  covering panel/UI files) to exhaustively enumerate real undo-coverage
+  gaps, rather than choosing a structural-enforcement mechanism (Command
+  pattern, mutation-tracking proxy, debug-build snapshot-diff assertion)
+  up front with no evidence of where it would actually pay off. The audit
+  found two distinct bug classes, no full-blown enforcement mechanism, and
+  fixed every confirmed instance of both:
+  1. **Missing `pushUndo()` entirely** (6 confirmed): `toggleIsolate()`
+     (`MeshCraftApplication_Commands.cpp`) had no snapshot on either the
+     activate or deactivate path; the Loop and Autoplay checkboxes
+     (`MeshCraftApplication_Anim.cpp`) mutated `act.loop`/`act.autoplay`
+     directly via `Checkbox(label, bool*)` with `pushUndo()` called only
+     *after* the in-place mutation already happened (`ImGui::Checkbox`
+     writes `*v` and returns `true` in the same call, so a `pushUndo()`
+     inside `if (Checkbox(...))` always snapshots the *new* value, not the
+     old one — fixed via the standard local-copy-then-writeback pattern,
+     which needs no `IsItemActivated()` gate since Checkbox only fires
+     once per click); the macro `show_all` verb
+     (`MeshCraftApplication_Macro.cpp`) was a copy/paste omission relative
+     to its sibling `hide` verb just above it; the Default Camera combo
+     and the States tab's Position/Rotation/Scale `DragFloat3` fields plus
+     the UV tab's Rotation `DragFloat` (all in
+     `src/MeshCraft/Scene/PropertiesPanel.cpp`) had no `pushUndo()` call
+     at all on any path.
+  2. **AUD-036-style dead pattern** (21 confirmed: 15 in
+     `PropertiesPanel.cpp`, 6 in `MeshCraftApplication_UiLeftPanel.cpp`) —
+     `if (ImGui::SliderInt/SliderFloat(...)) { if (IsItemActivated())
+     pushUndo(); ... }`, i.e. the activation check nested *inside* the
+     changed-check. `SliderInt`/`SliderFloat` fire `changed=true` every
+     frame during a drag but `IsItemActivated()` is only true on the
+     first frame, so nesting them means `pushUndo()` can silently never
+     fire if the two don't land on the same frame. Covered: every
+     primitive segment/subdivision slider (Sphere, Cylinder/Cone, Disk,
+     Capsule, Grid X/Z, IcoSphere, Torus), Extrude path-segments and all
+     3 CrossSection-type segment/side sliders, both Material-tab
+     Roughness/Metallic/Alpha-Cutoff sliders (Properties panel and
+     left-panel copy), and the left-panel's Light Spot Angle, Light
+     Falloff, and Camera FOV sliders. Fix applied uniformly: hoist the
+     widget's return value into a locally-scoped `bool`, check
+     `IsItemActivated()` unconditionally right after (outside the
+     changed-check), and only run the mutation/`markModified()` inside
+     `if (thatBool)`.
+  Verified: full rebuild + `ctest -j"$(nproc)"` (127/127, unchanged
+  count — pure bug fixes to existing UI, no new tests needed), manual
+  `--screenshot` smoke test against `test/house.mc3.xml` (clean GL state,
+  UI renders correctly including the SYS-W14-13 Library section and
+  Default Camera combo). A mechanical grep-based check confirmed zero
+  remaining instances of `IsItemActivated()` nested inside a
+  widget-changed `if`-block anywhere in either audited file. Honesty
+  note: this pass fixed every gap the two audits actually found in the
+  files they covered; it did **not** re-derive a fresh call-site count
+  across the *entire* codebase from scratch, so it should not be read as
+  a proof that all 332+ `pushUndo()` sites are now individually correct —
+  only that the two recognized bug classes (missing call, dead
+  activation-gate pattern) are eliminated everywhere the audits looked.
+  No structural enforcement mechanism (Command pattern, mutation-tracking
+  proxy, debug assertion) was added; if this class of bug recurs, that
+  would be the next escalation, not another manual audit pass.
 - **SYS-W14-17** `[DONE, no further UI needed — see investigation]` `P3` —
   Dedicated Area object properties panel. `STAB-0721` added an `"Area
   (trigger zone)"` label when editing an Area object, but the editor still

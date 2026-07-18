@@ -248,16 +248,18 @@ void MeshCraftApplication::drawLeftPanel(float panelY, float panelH)
                 if (li.type == Mc3::LightType::Spot) {
                     ImGui::TextDisabled("Angle (deg)");
                     ImGui::SetNextItemWidth(-1);
-                    if (ImGui::SliderFloat("##lang", &li.angle, 0.0f, 90.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp)) {
-                        if (ImGui::IsItemActivated()) pushUndo();
+                    { bool _undoChLAng = ImGui::SliderFloat("##lang", &li.angle, 0.0f, 90.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
+                    if (ImGui::IsItemActivated()) pushUndo();
+                    if (_undoChLAng) {
                         modified_ = true; updateWindowTitle();
-                    }
+                    } }
                     ImGui::TextDisabled("Falloff");
                     ImGui::SetNextItemWidth(-1);
-                    if (ImGui::SliderFloat("##lfal", &li.falloff, 0.0f, 1.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp)) {
-                        if (ImGui::IsItemActivated()) pushUndo();
+                    { bool _undoChLFal = ImGui::SliderFloat("##lfal", &li.falloff, 0.0f, 1.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
+                    if (ImGui::IsItemActivated()) pushUndo();
+                    if (_undoChLFal) {
                         modified_ = true; updateWindowTitle();
-                    }
+                    } }
                 }
             }
 
@@ -533,10 +535,11 @@ void MeshCraftApplication::drawLeftPanel(float panelY, float panelH)
                 if (cam.type == Mc3::CameraType::Perspective) {
                     ImGui::TextDisabled("FOV (deg)");
                     ImGui::SetNextItemWidth(-1);
-                    if (ImGui::SliderFloat("##cfov", &cam.fov, 1.0f, 170.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp)) {
-                        if (ImGui::IsItemActivated()) pushUndo();
+                    { bool _undoChCFov = ImGui::SliderFloat("##cfov", &cam.fov, 1.0f, 170.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
+                    if (ImGui::IsItemActivated()) pushUndo();
+                    if (_undoChCFov) {
                         modified_ = true; updateWindowTitle();
-                    }
+                    } }
                 }
 
                 // Orthographic-only: ortho size
@@ -1402,22 +1405,24 @@ void MeshCraftApplication::drawLeftPanel(float panelY, float panelH)
                 // AlwaysClamp: without it, Ctrl+Click lets a typed value go
                 // out of [0,1], which would export a spec-invalid glTF
                 // pbrMetallicRoughness.roughnessFactor with no other guard.
-                if (ImGui::SliderFloat("##matrgh", &mat.roughness, 0.0f, 1.0f, "%.2f",
-                                       ImGuiSliderFlags_AlwaysClamp)) {
-                    if (ImGui::IsItemActivated()) pushUndo();
+                { bool _undoChMatRgh = ImGui::SliderFloat("##matrgh", &mat.roughness, 0.0f, 1.0f, "%.2f",
+                                       ImGuiSliderFlags_AlwaysClamp);
+                if (ImGui::IsItemActivated()) pushUndo();
+                if (_undoChMatRgh) {
                     modified_ = true;
-                }
+                } }
 
                 // Metallic
                 ImGui::TextDisabled("Metallic");
                 ImGui::SetNextItemWidth(-1);
                 // AlwaysClamp: same out-of-[0,1]-via-Ctrl+Click risk as
                 // roughness above (spec-invalid metallicFactor on export).
-                if (ImGui::SliderFloat("##matmet", &mat.metallic, 0.0f, 1.0f, "%.2f",
-                                       ImGuiSliderFlags_AlwaysClamp)) {
-                    if (ImGui::IsItemActivated()) pushUndo();
+                { bool _undoChMatMet = ImGui::SliderFloat("##matmet", &mat.metallic, 0.0f, 1.0f, "%.2f",
+                                       ImGuiSliderFlags_AlwaysClamp);
+                if (ImGui::IsItemActivated()) pushUndo();
+                if (_undoChMatMet) {
                     modified_ = true;
-                }
+                } }
 
                 // Emissive
                 ImGui::TextDisabled("Emissive");
@@ -1446,11 +1451,12 @@ void MeshCraftApplication::drawLeftPanel(float panelY, float panelH)
                     ImGui::SetNextItemWidth(-1);
                     // AlwaysClamp: same out-of-[0,1]-via-Ctrl+Click risk as
                     // roughness/metallic above (spec-invalid alphaCutoff).
-                    if (ImGui::SliderFloat("##matac", &mat.alphaCutoff, 0.0f, 1.0f, "%.2f",
-                                           ImGuiSliderFlags_AlwaysClamp)) {
-                        if (ImGui::IsItemActivated()) pushUndo();
+                    { bool _undoChMatAc = ImGui::SliderFloat("##matac", &mat.alphaCutoff, 0.0f, 1.0f, "%.2f",
+                                           ImGuiSliderFlags_AlwaysClamp);
+                    if (ImGui::IsItemActivated()) pushUndo();
+                    if (_undoChMatAc) {
                         modified_ = true;
-                    }
+                    } }
                 }
 
                 // Double-sided
