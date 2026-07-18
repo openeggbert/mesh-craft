@@ -25,18 +25,17 @@ including `AUD-064`'s own Grid case. Fixed with a `clampTess()` helper at
 all 6 read sites (primitive segments/subdivisionsX/Z, extrude cross-section
 sides/segments, extrude path segments); new `mc3_json_input_budget` test
 (13 assertions), mirrors `mc3_input_budget`'s XML coverage. Verified via
-the standalone CNA-free `mc3/build` tree: 20 of 20 tests passing (was 19),
-and confirmed the new test also builds and passes when built directly from
-the root `b-release` tree. **Could NOT re-verify the full root `ctest`
-suite after this second fix** — see the new blocker note in §4/§5 below,
-discovered mid-way through this item, unrelated to it: the root tree now
-registers 134 tests total (configure succeeds), but the CNA-linked portion
-cannot currently be built at all, so no root-suite N/N claim can be made
-honestly right now — read §4 before trusting any root-level test count
-until that blocker is confirmed cleared. The remaining 10 findings from
-this same audit pass are not yet actioned — see the user/session
-transcript for the full ranked list; re-derive from a fresh audit if this
-note has gone stale rather than trusting it indefinitely.
+the standalone CNA-free `mc3/build` tree: 20 of 20 tests passing (was 19).
+An external, unrelated `../easy-gl`/`../meta-gl` mid-edit (discovered
+while verifying this item) briefly blocked the CNA-linked root build in
+between — see §4's now-`RESOLVED` note — so the full root suite couldn't
+be re-verified until that cleared; re-checked afterward on the user's
+prompt and confirmed clean: full root `ctest -j4`, 134 of 134 tests
+passing (`plan_consistency` included), both fixes good end-to-end. The
+remaining 10 findings from this same audit pass are not yet actioned —
+see the user/session transcript for the full ranked list; re-derive from a
+fresh audit if this note has gone stale rather than trusting it
+indefinitely.
 
 _Last updated: 2026-07-18 (later same day, third continuation this date).
 Continues the two 2026-07-18 sessions recorded below (SYS-W14-10..17 +
@@ -596,36 +595,37 @@ R110/R101) left `mc3.xsd`/MCB gaps — closed this session, see §3's
 
 ## 4. Current blocker / main problem
 
-**NEW, 2026-07-18 (this session), UNRESOLVED: `../easy-gl`/`../meta-gl`
-(two-level-deep siblings of `../cna`) are mid-edit and currently break the
+**RESOLVED, 2026-07-18 (same session, ~1 hour later): `../easy-gl`/`../meta-gl`
+(two-level-deep siblings of `../cna`) were mid-edit and briefly broke the
 full root build.** Discovered incidentally while verifying `AUD-065` (a
 mc3-only, CNA-free fix) — NOT caused by this session's own work; confirmed
-by building the unrelated `Mc3` library and its tests in isolation (both
-the standalone `mc3/build` tree and the root `b-release` tree), which
-compile and pass cleanly. The failure is entirely inside `../easy-gl`:
+at the time by building the unrelated `Mc3` library and its tests in
+isolation (both the standalone `mc3/build` tree and the root `b-release`
+tree), which compiled and passed cleanly throughout. The failure was
+entirely inside `../easy-gl`:
 
 ```
 easy-gl/include/easygl/Device.hpp:50: error: 'ClearBuffer' has not been declared
 easy-gl/src/Device.cpp:141: error: 'ClearBuffer' was not declared in this scope
 ```
 
-`git status` in `../meta-gl` shows real uncommitted local modifications to
-`include/metagl/Enums.hpp`/`EnumNames.hpp`/`Functions.hpp` (adding/renaming
-`ClearBuffer`-related entries) with a very recent mtime — this looks like
+At the time, `git status` in `../meta-gl` showed real uncommitted local
+modifications to `include/metagl/Enums.hpp`/`EnumNames.hpp`/`Functions.hpp`
+(adding/renaming `ClearBuffer`-related entries) with a very recent mtime —
 another process's in-progress edit (per `CLAUDE.md`, a separate instance
 handles CNA and its own dependency chain), not a committed regression.
-`cmake --build b-release -j4 -- -k0` confirms all 16 failing `.o` files are
-inside `easy-gl` (`Buffer.cpp`, `Device.cpp`, `Program.cpp`, `Texture.cpp`,
-...) — nothing in `mesh-craft`'s own tree. **Do not touch `../easy-gl` or
-`../meta-gl` from here** (out of bounds, same as `../cna`/`../sharp-runtime`
-per `CLAUDE.md`) — this should resolve itself once that other edit
-finishes/commits; re-run a fresh `cmake --build` to check before assuming
-it's still broken. Until then, the editor (`MeshCraft`) and every
-CNA-linked test (`render`/`perf`/`ai`/`commands`/`registry` labels) cannot
-be built or verified from this repo; the CNA-free libraries (`mc3`, `mcb`)
-and their tests are unaffected and fully verifiable via the standalone
-`mc3/build`/`mcb/build` trees or by building just their own root-tree
-targets.
+`cmake --build b-release -j4 -- -k0` confirmed all 16 failing `.o` files
+were inside `easy-gl` (`Buffer.cpp`, `Device.cpp`, `Program.cpp`,
+`Texture.cpp`, ...) — nothing in `mesh-craft`'s own tree. Per `CLAUDE.md`
+this stayed untouched from here (out of bounds, same as
+`../cna`/`../sharp-runtime`) and, as predicted, resolved itself: re-checked
+on the user's prompt, `../meta-gl`'s working tree is now clean (the
+`ClearBuffer` enum landed for real, `include/metagl/Enums.hpp:1768`) and a
+completely fresh `cmake -S . -B b-release` + `cmake --build b-release -j4`
+compiles/links every target with zero errors, including `MeshCraft` itself.
+**Full root `ctest -j4`: 134 of 134 tests passing** (`plan_consistency`
+included), confirming both `AUD-064` and `AUD-065` are good end-to-end in
+the real CNA-linked build, not just their CNA-free subsets.
 
 **RESOLVED, 2026-07-17 (same session): a `../cna`-side regression briefly
 broke every fresh build of this repo; fixed in `../cna` with the user's
