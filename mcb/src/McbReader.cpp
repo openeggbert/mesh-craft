@@ -16,6 +16,7 @@
 #include "MeshCraft/Mc3/Mc3Texture.hpp"
 #include "MeshCraft/Mc3/Mc3Validation.hpp"
 
+#include <algorithm>
 #include <array>
 #include <cstring>
 #include <filesystem>
@@ -173,6 +174,22 @@ static uint32_t rU32Bounded(std::istream& in) {
         throw std::runtime_error(msg);
     }
     return n;
+}
+
+// rU32Bounded above only proves a claimed count is under kMcbMaxCollectionCount
+// (10M) -- it is not a promise the stream actually CONTAINS that many
+// elements. Every .reserve(n) call site below used to reserve the full
+// claimed count up front, so a tiny malicious/corrupted file (a valid
+// header + one oversized-but-legal count + EOF) could force a near-
+// gigabyte transient allocation (e.g. 10M x a ~100-byte Mc3Light/Mc3Camera)
+// before a single element was read or validated. Cap the up-front reserve
+// to a small hint instead; a genuinely large, legitimate file still grows
+// the vector correctly via normal amortized push_back/emplace_back
+// reallocation as elements are actually read -- this only removes the
+// single unconditional worst-case allocation.
+static constexpr uint32_t kMcbReserveHint = 4096;
+static size_t reserveHint(uint32_t n) {
+    return std::min(n, kMcbReserveHint);
 }
 
 static std::array<float,3> rVec3(std::istream& in) {
@@ -398,7 +415,7 @@ static Mc3::Mc3CrossSection readCrossSection(std::istream& in) {
             expectTag(tag, TAG_ARR, "customPoints");
             // TAG_ARR of TAG_VEC3
             uint32_t n = rU32Bounded(in);
-            cs.customPoints.reserve(n);
+            cs.customPoints.reserve(reserveHint(n));
             for (uint32_t i = 0; i < n; ++i) {
                 uint8_t t = rU8(in);
                 if (t == TAG_VEC3) {
@@ -445,7 +462,7 @@ static Mc3::Mc3ExtrudePath readPath(std::istream& in) {
         else if (k == "points") {
             expectTag(tag, TAG_ARR, "points");
             uint32_t n = rU32Bounded(in);
-            p.points.reserve(n);
+            p.points.reserve(reserveHint(n));
             for (uint32_t i = 0; i < n; ++i) {
                 uint8_t t = rU8(in);
                 if (t == TAG_OBJ) p.points.push_back(readPathPoint(in));
@@ -536,7 +553,7 @@ static Mc3::Mc3AssetMetadata readAssetMetadata(std::istream& in) {
                       : k == "periodTags"   ? am.periodTags
                       :                        am.materialSlots;
             uint32_t n = rU32Bounded(in);
-            out.reserve(n);
+            out.reserve(reserveHint(n));
             for (uint32_t i = 0; i < n; ++i) {
                 uint8_t t = rU8(in);
                 if (t == TAG_STR) out.push_back(rRawStr(in));
@@ -600,7 +617,7 @@ static std::shared_ptr<Mc3::Mc3Object> readObject(std::istream& in) {
         else if (k == "tags") {
             expectTag(tag, TAG_ARR, "tags");
             uint32_t n = rU32Bounded(in);
-            obj->tags.reserve(n);
+            obj->tags.reserve(reserveHint(n));
             for (uint32_t i = 0; i < n; ++i) {
                 uint8_t t = rU8(in);
                 if (t == TAG_STR) obj->tags.push_back(rRawStr(in));
@@ -610,7 +627,7 @@ static std::shared_ptr<Mc3::Mc3Object> readObject(std::istream& in) {
         else if (k == "variantDefs") {
             expectTag(tag, TAG_ARR, "variantDefs");
             uint32_t n = rU32Bounded(in);
-            obj->variantDefinitions.reserve(n);
+            obj->variantDefinitions.reserve(reserveHint(n));
             for (uint32_t i = 0; i < n; ++i) {
                 uint8_t t = rU8(in);
                 if (t == TAG_STR) obj->variantDefinitions.push_back(rRawStr(in));
@@ -640,7 +657,7 @@ static std::shared_ptr<Mc3::Mc3Object> readObject(std::istream& in) {
         else if (k == "children") {
             expectTag(tag, TAG_ARR, "children");
             uint32_t n = rU32Bounded(in);
-            obj->children.reserve(n);
+            obj->children.reserve(reserveHint(n));
             for (uint32_t i = 0; i < n; ++i) {
                 uint8_t t = rU8(in);
                 if (t == TAG_OBJ) obj->children.push_back(readObject(in));
@@ -937,7 +954,7 @@ static Mc3::Mc3Channel readChannel(std::istream& in) {
         else if (k == "keyframes") {
             expectTag(tag, TAG_ARR, "keyframes");
             uint32_t n = rU32Bounded(in);
-            ch.keyframes.reserve(n);
+            ch.keyframes.reserve(reserveHint(n));
             for (uint32_t i = 0; i < n; ++i) {
                 uint8_t t = rU8(in);
                 if (t == TAG_OBJ) ch.keyframes.push_back(readKeyframe(in));
@@ -963,7 +980,7 @@ static Mc3::Mc3Action readAction(std::istream& in) {
         else if (k == "channels") {
             expectTag(tag, TAG_ARR, "channels");
             uint32_t n = rU32Bounded(in);
-            act.channels.reserve(n);
+            act.channels.reserve(reserveHint(n));
             for (uint32_t i = 0; i < n; ++i) {
                 uint8_t t = rU8(in);
                 if (t == TAG_OBJ) act.channels.push_back(readChannel(in));
@@ -1017,7 +1034,7 @@ static Mc3::Mc3Document readDocument(std::istream& in) {
         else if (k == "imports") {
             expectTag(tag, TAG_ARR, "imports");
             uint32_t n = rU32Bounded(in);
-            doc.imports.reserve(n);
+            doc.imports.reserve(reserveHint(n));
             for (uint32_t i = 0; i < n; ++i) {
                 uint8_t t = rU8(in);
                 if (t == TAG_OBJ) doc.imports.push_back(readImport(in));
@@ -1047,7 +1064,7 @@ static Mc3::Mc3Document readDocument(std::istream& in) {
         else if (k == "includes") {
             expectTag(tag, TAG_ARR, "includes");
             uint32_t n = rU32Bounded(in);
-            doc.includes.reserve(n);
+            doc.includes.reserve(reserveHint(n));
             for (uint32_t i = 0; i < n; ++i) {
                 uint8_t t = rU8(in);
                 if (t == TAG_STR) doc.includes.push_back(rRawStr(in));
@@ -1094,7 +1111,7 @@ static Mc3::Mc3Document readDocument(std::istream& in) {
         else if (k == "lights") {
             expectTag(tag, TAG_ARR, "lights");
             uint32_t n = rU32Bounded(in);
-            doc.lights.reserve(n);
+            doc.lights.reserve(reserveHint(n));
             for (uint32_t i = 0; i < n; ++i) {
                 uint8_t t = rU8(in);
                 if (t == TAG_OBJ) doc.lights.push_back(readLight(in));
@@ -1104,7 +1121,7 @@ static Mc3::Mc3Document readDocument(std::istream& in) {
         else if (k == "cameras") {
             expectTag(tag, TAG_ARR, "cameras");
             uint32_t n = rU32Bounded(in);
-            doc.cameras.reserve(n);
+            doc.cameras.reserve(reserveHint(n));
             for (uint32_t i = 0; i < n; ++i) {
                 uint8_t t = rU8(in);
                 if (t == TAG_OBJ) doc.cameras.push_back(readCamera(in));
@@ -1214,7 +1231,7 @@ static Mc3::Mc3Document readDocument(std::istream& in) {
         else if (k == "objects") {
             expectTag(tag, TAG_ARR, "objects");
             uint32_t n = rU32Bounded(in);
-            doc.objects.reserve(n);
+            doc.objects.reserve(reserveHint(n));
             for (uint32_t i = 0; i < n; ++i) {
                 uint8_t t = rU8(in);
                 if (t == TAG_OBJ) doc.objects.push_back(readObject(in));

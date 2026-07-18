@@ -91,6 +91,19 @@ if(BUILD_TESTING)
     add_test(NAME mcb_corruption COMMAND mcb_corruption_test)
     set_tests_properties(mcb_corruption PROPERTIES TIMEOUT 30 LABELS "format")
 
+    # AUD-066: a claimed collection count under kMcbMaxCollectionCount (10M)
+    # used to be .reserve()'d in full up front regardless of whether the
+    # stream actually contained that many elements -- a tiny corrupted/
+    # malicious file claiming e.g. 9,000,000 lights could force a near-
+    # gigabyte transient allocation. Proves the fix (reserveHint()) via real
+    # peak-RSS measurement, not just code inspection.
+    add_executable(mcb_reserve_bomb_test
+        test/reserve_bomb_test.cpp
+    )
+    target_link_libraries(mcb_reserve_bomb_test PRIVATE Mcb)
+    add_test(NAME mcb_reserve_bomb COMMAND mcb_reserve_bomb_test)
+    set_tests_properties(mcb_reserve_bomb PROPERTIES TIMEOUT 30 LABELS "format")
+
     # SYS-W1-01: Mc3Validation diagnostics for the MCB reader -- proves the
     # structured warning/error surface itself is populated (not just that
     # clamped/rejected VALUES are correct, already covered by
