@@ -247,9 +247,10 @@ void MeshCraftApplication::LoadContent() {
             // diagnostics for the file about to become the active document
             // (and be rendered) -- same clamp/default/rejection entries a
             // plain loadFromFile() already silently applies, now reported.
+            // SYS-W14-11: dispatches on extension (.mcb/.json/else), so
+            // `MeshCraft scene.mc3.json` on the command line now works too.
             Mc3::Mc3Validation loadValidation;
-            document_ = Mc3::Mc3Document::loadFromFile(currentFile_, Mc3::Mc3LoadPolicy::trusted(),
-                                                        loadValidation);
+            document_ = loadSceneFileDispatched(currentFile_, loadValidation);
             objectIndex_.invalidate();  // SYS-W5-04: wholesale document_ replacement
             if (!loadValidation.empty())
                 std::cout << "[MeshCraft] Load: " << loadValidation.warningCount() << " warning(s), "

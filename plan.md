@@ -327,17 +327,40 @@ _All items in this workstream are DONE — archived to [`docs/history/plan_20260
   field. Verify: full rebuild + `ctest -j"$(nproc)"` (126/126, unchanged
   count — no new test registered, this is UI-only over an already-tested
   field), manual `--screenshot` smoke test (clean GL state, no crash).
-- **SYS-W14-11** `[TODO]` `P2` — Editor support for opening/saving `.mc3.json`
+- **SYS-W14-11** `[DONE]` `P2` — Editor support for opening/saving `.mc3.json`
   (`Mc3Document::loadFromJsonFile`/`saveToJsonFile`, `mc3/src/Mc3Document.cpp`,
-  R109's semantic-JSON format). These already work at the library level, but
-  `MeshCraftApplication_FileOps.cpp`'s Open/Save/Save As exclusively call the
-  XML load/save path — no File-menu entry or dialog filter offers
-  `.mc3.json` (confirmed via `grep -rn "loadFromJsonFile\|saveToJsonFile\|JsonFile" src/MeshCraft/`,
-  zero hits). Needs: a file-extension dispatch in `openFile()`/`saveFile()`/
-  `saveFileAs()` (mirroring how `.mcb` is already dispatched separately from
-  `.mc3.xml` in the Open File dialog, `MeshCraftApplication_UiOverlays.cpp`),
-  plus a Save As filter/extension option. Found via `missing.md`'s
-  2026-07-18 update.
+  R109's semantic-JSON format). These already worked at the library level,
+  but `MeshCraftApplication_FileOps.cpp`'s Open/Save/Save As exclusively
+  called the XML load/save path. Found via `missing.md`'s 2026-07-18 update.
+  **Implementation (2026-07-18):** `EditorAlgorithms.hpp`'s
+  `resolveSaveAsPathAlg()` (used by Save As) now returns a 3-way
+  `SaveAsFormat{Xml,Mcb,Json}` instead of an `isMcb` bool — `.json`/
+  `.mc3.json` route to the JSON writer, same as `.mcb` already did to the
+  MCB writer; updated its 6 call sites (1 production, 5 test) accordingly,
+  plus 2 new test cases. New shared `MeshCraftApplication::loadSceneFileDispatched()`
+  (extension dispatch: `.mcb`→MCB reader, `.json`→JSON parser, else→XML
+  parser) replaces 3 independent copies of this same dispatch that had
+  drifted apart (startup load, "Open Recent File", and the Open File
+  dialog, which previously only special-cased `.mcb` and would have
+  mis-parsed a `.json` file as XML) — extracted per this codebase's own
+  established de-duplication idiom (`AUD-031`'s precedent). `saveFile()`
+  (File > Save, re-saving to the already-open path) also gained the same
+  3-way dispatch. **Found and fixed a related pre-existing bug while doing
+  this:** `saveFile()` previously called the XML writer *unconditionally*
+  regardless of `currentFile_`'s actual extension — so re-saving a file
+  originally opened as `.mcb` (via File > Save, not Save As) silently
+  overwrote it with XML content under the same `.mcb` filename. Fixed as
+  part of the same 3-way dispatch, not filed separately, since it's the
+  exact same root cause this task was already fixing.
+  **Verify:** full rebuild + `ctest -j"$(nproc)"` (126/126, +2 assertions
+  in the existing `mc3_commands`/`editor_commands_test.cpp` test, no new
+  test binary). Real end-to-end check (not just unit-level path
+  resolution): converted `test/house.mc3.xml` to `.mc3.json` via the
+  `mc3` library directly, loaded it through the app's real command-line
+  startup path (`./MeshCraft house.mc3.json --screenshot`), and confirmed
+  the rendered screenshot is **byte-identical** to loading the original
+  `.mc3.xml` — proves the dispatch and the underlying R109 JSON
+  round-trip are both correct together, not just in isolation.
 - **SYS-W14-12** `[TODO]` `P3` — Editor UI for asset metadata
   (`Mc3Object::assetMetadata`, `Mc3AssetMetadata` struct,
   `mc3/include/MeshCraft/Mc3/Mc3AssetMetadata.hpp` — category/subcategory/

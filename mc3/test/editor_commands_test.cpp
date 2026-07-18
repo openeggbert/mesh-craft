@@ -1789,21 +1789,31 @@ static void testMergeSceneObjectIdCollisionResolved()
 
 static void testResolveSaveAsPath()
 {
-    auto [p1, mcb1] = resolveSaveAsPathAlg("scene");
-    CHECK(p1 == "scene.mc3.xml" && !mcb1,
+    auto [p1, fmt1] = resolveSaveAsPathAlg("scene");
+    CHECK(p1 == "scene.mc3.xml" && fmt1 == SaveAsFormat::Xml,
           "Save As: bare name gets .mc3.xml appended");
 
-    auto [p2, mcb2] = resolveSaveAsPathAlg("scene.mc3.xml");
-    CHECK(p2 == "scene.mc3.xml" && !mcb2,
+    auto [p2, fmt2] = resolveSaveAsPathAlg("scene.mc3.xml");
+    CHECK(p2 == "scene.mc3.xml" && fmt2 == SaveAsFormat::Xml,
           "Save As: already-suffixed path is left unchanged");
 
-    auto [p3, mcb3] = resolveSaveAsPathAlg("scene.mcb");
-    CHECK(p3 == "scene.mcb" && mcb3,
+    auto [p3, fmt3] = resolveSaveAsPathAlg("scene.mcb");
+    CHECK(p3 == "scene.mcb" && fmt3 == SaveAsFormat::Mcb,
           "Save As: .mcb path is routed to the MCB writer, not suffixed with .mc3.xml");
 
-    auto [p4, mcb4] = resolveSaveAsPathAlg("/tmp/proj/house");
-    CHECK(p4 == "/tmp/proj/house.mc3.xml" && !mcb4,
+    auto [p4, fmt4] = resolveSaveAsPathAlg("/tmp/proj/house");
+    CHECK(p4 == "/tmp/proj/house.mc3.xml" && fmt4 == SaveAsFormat::Xml,
           "Save As: directory prefix is preserved");
+
+    // SYS-W14-11: .mc3.json and bare .json both route to the JSON writer,
+    // neither gets .mc3.xml appended.
+    auto [p5, fmt5] = resolveSaveAsPathAlg("scene.mc3.json");
+    CHECK(p5 == "scene.mc3.json" && fmt5 == SaveAsFormat::Json,
+          "Save As: .mc3.json path is routed to the JSON writer, unchanged");
+
+    auto [p6, fmt6] = resolveSaveAsPathAlg("scene.json");
+    CHECK(p6 == "scene.json" && fmt6 == SaveAsFormat::Json,
+          "Save As: bare .json path is also routed to the JSON writer");
 }
 
 static void testSaveAsDoesNotOverwriteOriginal()
@@ -1823,8 +1833,8 @@ static void testSaveAsDoesNotOverwriteOriginal()
 
     // Simulate "Save As" to a different path: same document, resolved path.
     doc.model = "SavedAs";
-    auto [resolved, isMcb] = resolveSaveAsPathAlg(newPath.string());
-    CHECK(!isMcb, "Save As target resolves to the XML writer");
+    auto [resolved, fmt] = resolveSaveAsPathAlg(newPath.string());
+    CHECK(fmt == SaveAsFormat::Xml, "Save As target resolves to the XML writer");
     doc.saveToFile(resolved);
 
     CHECK(std::filesystem::exists(original), "Save As: original file still exists");

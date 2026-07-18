@@ -1,6 +1,8 @@
 #include "MeshCraft/MeshCraftApplication.hpp"
 #include "MeshCraftPrivate.hpp"
 #include "MeshCraft/EditorAlgorithms.hpp"
+#include "MeshCraft/Mcb/McbReader.hpp"
+#include "MeshCraft/Mcb/McbWriter.hpp"
 
 #include "GltfExporter.hpp"
 #include <tiny_gltf.h>
@@ -128,6 +130,19 @@ void MeshCraftApplication::discardAutosave() {
     recoveryDlgOpen_ = false;
 }
 
+// SYS-W14-11: see header comment. Mc3JsonParser has no Mc3Validation-
+// capturing overload yet, so validation stays empty (not populated, not an
+// error) for the .json branch -- a pre-existing gap in the JSON parser
+// itself, not introduced here.
+Mc3::Mc3Document MeshCraftApplication::loadSceneFileDispatched(
+    const std::filesystem::path& path, Mc3::Mc3Validation& validation) {
+    if (path.extension() == ".mcb")
+        return Mcb::loadFromFile(path, validation);
+    if (path.extension() == ".json")
+        return Mc3::Mc3Document::loadFromJsonFile(path, Mc3::Mc3LoadPolicy::trusted());
+    return Mc3::Mc3Document::loadFromFile(path, Mc3::Mc3LoadPolicy::trusted(), validation);
+}
+
 void MeshCraftApplication::setStatusMsg(std::string msg, bool isError, float duration) {
     statusMsg_ = std::move(msg);
     statusMsgIsError_ = isError;
@@ -206,9 +221,7 @@ void MeshCraftApplication::executePendingAction() {
                 // SYS-W1-01 (pre-render integration point): see the matching
                 // comment in MeshCraftApplication::Initialize().
                 Mc3::Mc3Validation loadValidation;
-                document_ = Mc3::Mc3Document::loadFromFile(pendingOpenPath_,
-                                                            Mc3::Mc3LoadPolicy::trusted(),
-                                                            loadValidation);
+                document_ = loadSceneFileDispatched(pendingOpenPath_, loadValidation);
                 objectIndex_.invalidate();  // SYS-W5-04: wholesale document_ replacement
                 if (!loadValidation.empty())
                     std::cout << "[MeshCraft] Load: " << loadValidation.warningCount()
@@ -276,7 +289,18 @@ void MeshCraftApplication::saveFile() {
         // F6: rotate backups before overwriting. AUD-031: was a hand-copied
         // duplicate of rotateBackupsAlg's own logic; now delegates to it.
         rotateBackupsAlg(currentFile_);
-        document_.saveToFile(currentFile_);
+        // SYS-W14-11: dispatch on currentFile_'s own extension so re-saving a
+        // file opened as .mcb/.json doesn't silently overwrite it with XML
+        // content (a real pre-existing gap found while adding .mc3.json
+        // support -- this unconditional XML write previously ran regardless
+        // of what format the file was actually opened as).
+        const std::string ext = currentFile_.extension().string();
+        if (ext == ".mcb")
+            Mcb::saveToFile(document_, currentFile_);
+        else if (ext == ".json")
+            document_.saveToJsonFile(currentFile_);
+        else
+            document_.saveToFile(currentFile_);
         addRecentFile(currentFile_);
         modified_ = false;
         autoSaveCountdown_ = autoSaveInterval_ > 0.0f ? autoSaveInterval_ : 60.0f;

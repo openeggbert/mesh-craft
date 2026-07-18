@@ -673,6 +673,15 @@ private:
     // once per load rather than silently rendering such a file wrong.
     void checkRotationConventionNotice();
 
+    // SYS-W14-11: shared extension dispatch for the 3 real load call sites
+    // (startup, Open Recent File, Open File dialog) -- .mcb routes to the
+    // MCB reader, .json to the semantic-JSON parser, everything else to the
+    // XML parser. Extracted so all 3 sites can't drift out of sync with
+    // each other (matching this codebase's established Alg-extraction
+    // idiom for exactly this class of duplication risk).
+    Mc3::Mc3Document loadSceneFileDispatched(const std::filesystem::path& path,
+                                              Mc3::Mc3Validation& validation);
+
     // Undo/redo
     static constexpr int kUndoMax = 20;
     std::vector<Mc3::Mc3Document> undoStack_;

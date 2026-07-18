@@ -1180,13 +1180,11 @@ void MeshCraftApplication::drawDialogs()
             try {
                 std::filesystem::path p{openDialogBuf_};
                 // SYS-W1-01 (pre-render integration point): see the matching
-                // comment in MeshCraftApplication::Initialize().
+                // comment in MeshCraftApplication::Initialize(). SYS-W14-11:
+                // dispatch (.mcb/.json/else) shared with startup + Open
+                // Recent File via loadSceneFileDispatched().
                 Mc3::Mc3Validation loadValidation;
-                if (p.extension() == ".mcb")
-                    document_ = Mcb::loadFromFile(p, loadValidation);
-                else
-                    document_ = Mc3::Mc3Document::loadFromFile(p, Mc3::Mc3LoadPolicy::trusted(),
-                                                                loadValidation);
+                document_ = loadSceneFileDispatched(p, loadValidation);
                 objectIndex_.invalidate();  // SYS-W5-04: wholesale document_ replacement
                 if (!loadValidation.empty())
                     std::cout << "[MeshCraft] Load: " << loadValidation.warningCount()
@@ -1233,10 +1231,13 @@ void MeshCraftApplication::drawDialogs()
         if (ImGui::Button("Save") || ImGui::IsKeyPressed(ImGuiKey_Enter)) {
             // AUD-031: was a hand-copied duplicate of resolveSaveAsPathAlg's
             // own path-normalization logic; now delegates to it.
-            auto [path, isMcb] = resolveSaveAsPathAlg(saveDialogBuf_);
+            auto [path, fmt] = resolveSaveAsPathAlg(saveDialogBuf_);
             try {
-                if (isMcb) Mcb::saveToFile(document_, path);
-                else        document_.saveToFile(path);
+                switch (fmt) {
+                case SaveAsFormat::Mcb:  Mcb::saveToFile(document_, path); break;
+                case SaveAsFormat::Json: document_.saveToJsonFile(path);  break;
+                case SaveAsFormat::Xml:  document_.saveToFile(path);      break;
+                }
                 currentFile_ = path;
                 addRecentFile(currentFile_);
                 modified_ = false;

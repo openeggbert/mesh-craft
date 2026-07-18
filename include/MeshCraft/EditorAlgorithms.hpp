@@ -22,6 +22,7 @@
 #include <sstream>
 #include <stdexcept>
 #include <string>
+#include <string_view>
 #include <utility>
 #include <vector>
 
@@ -1255,20 +1256,26 @@ inline int mergeDocumentsAlg(Mc3::Mc3Document& dst, const Mc3::Mc3Document& src)
     return added;
 }
 
-// ── Save As path resolution (STAB-0272) ───────────────────────────────────────
+// ── Save As path resolution (STAB-0272, extended SYS-W14-11) ─────────────────
 //
 // Mirrors the path-normalization logic in the "Save As" dialog's Save button
-// body (MeshCraftApplication_UiOverlays.cpp:1196-1198): a path already ending
-// in ".mcb" is saved via the MCB writer as-is; any other path gets ".mc3.xml"
-// appended unless it already contains that suffix. Returns {resolvedPath,
-// isMcb}.
+// body (MeshCraftApplication_UiOverlays.cpp): a path already ending in
+// ".mcb"/".json"/".mc3.json" is saved via the matching writer as-is; any
+// other path gets ".mc3.xml" appended unless it already contains that
+// suffix. Returns {resolvedPath, format}.
+enum class SaveAsFormat { Xml, Mcb, Json };
 
-inline std::pair<std::string, bool> resolveSaveAsPathAlg(const std::string& rawPath)
+inline std::pair<std::string, SaveAsFormat> resolveSaveAsPathAlg(const std::string& rawPath)
 {
     std::string path = rawPath;
-    bool isMcb = path.size() >= 4 && path.substr(path.size() - 4) == ".mcb";
-    if (!isMcb && path.find(".mc3.xml") == std::string::npos) path += ".mc3.xml";
-    return {path, isMcb};
+    auto endsWith = [&](const char* suffix) {
+        std::string_view s(suffix);
+        return path.size() >= s.size() && path.compare(path.size() - s.size(), s.size(), s) == 0;
+    };
+    if (endsWith(".mcb"))  return {path, SaveAsFormat::Mcb};
+    if (endsWith(".json")) return {path, SaveAsFormat::Json}; // covers both .json and .mc3.json
+    if (path.find(".mc3.xml") == std::string::npos) path += ".mc3.xml";
+    return {path, SaveAsFormat::Xml};
 }
 
 // ── Export selection (STAB-0273/0274) ─────────────────────────────────────────
