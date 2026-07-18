@@ -103,11 +103,22 @@ the first child text node and would silently truncate a split payload.
 New `mc3_cdata_injection` test (7 assertions) round-trips a payload
 containing `]]>` + a fake injected `<object>` and confirms byte-identical
 round-trip with no spurious object created. Full root `ctest`: 138 of 138
-(was 137); standalone CNA-free `mc3/build`: 22 of 22 (was 21). The
-remaining 6 findings from this same audit pass are not yet actioned —
-see the user/session transcript for the full ranked list; re-derive from
-a fresh audit if this note has gone stale rather than trusting it
-indefinitely.
+(was 137); standalone CNA-free `mc3/build`: 22 of 22 (was 21). Seventh:
+**`AUD-071`** (commit `c70ba77`) — `McbReader.cpp`'s `readSceneState()`
+(`overrides` key) and `readTrigger()` (`steps` key) were the only two
+known keys left using `if (k == "X" && tag == TAG_ARR) {...} else {
+skipValue(...) }` instead of `expectTag()` (`AUD-015`'s own established
+policy) — a corrupted file with the right key but wrong tag byte silently
+dropped the field instead of being rejected. Fixed by switching both to
+the same `expectTag()`-then-read pattern every other known key uses. New
+`mcb_tag_mismatch_rejection` test (12 assertions) patches the tag byte
+right after each key's exact byte pattern from `TAG_ARR` to `TAG_STR` and
+confirms loading now throws `"MCB: type mismatch for key '...'"` instead
+of silently succeeding; verified both directions via `git stash`. Full
+root `ctest`: 139 of 139 (was 138). The remaining 5 findings from this
+same audit pass are not yet actioned — see the user/session transcript
+for the full ranked list; re-derive from a fresh audit if this note has
+gone stale rather than trusting it indefinitely.
 
 _Last updated: 2026-07-18 (later same day, third continuation this date).
 Continues the two 2026-07-18 sessions recorded below (SYS-W14-10..17 +

@@ -84,14 +84,15 @@ P1s already being fixed in git history. This session:
    is per-field only) not part of the original audit, filed as new `TODO`
    tasks.
 
-   **Net across all 13 AUD-### rows remaining in this active backlog (61
+   **Net across all 14 AUD-### rows remaining in this active backlog (61
    additional rows completed and archived to `docs/history/plan_20260718.md`
    on 2026-07-18 — see that file for their full evidence/resolution text):
-   6 DONE, 5 TODO, 2 DEFERRED** — the 6 DONE (`AUD-064`..`068`, `AUD-070`)
-   and 1 of the 5 TODO (`AUD-069`) are fresh findings from a 2026-07-18
-   (later same day) independent re-audit, not part of the original 6;
-   recompute with `python3 test/validate_plan_consistency.py . <build-dir>`
-   rather than trusting this number as time passes.
+   7 DONE, 5 TODO, 2 DEFERRED** — the 7 DONE (`AUD-064`..`068`, `AUD-070`,
+   `AUD-071`) and 1 of the 5 TODO (`AUD-069`) are fresh findings from a
+   2026-07-18 (later same day) independent re-audit, not part of the
+   original 6; recompute with
+   `python3 test/validate_plan_consistency.py . <build-dir>` rather than
+   trusting this number as time passes.
 5. Archived `plan_deep_audit.md` (all 57 of its own tasks were already
    completed) and fixed `RELEASE.md`'s stale 66/66 test count.
 6. Removed machine-specific absolute source paths from this file's evidence
@@ -1111,3 +1112,11 @@ remain in this active file.
 - **Tests:** New `mc3/test/cdata_injection_test.cpp` (`mc3_cdata_injection` ctest, 7 assertions).
 - **Resolved:** commit `c3d5875` — verify: `ctest -R mc3_cdata_injection`
 - **Status note:** Empirically confirmed MORE severe than "garbled content" while writing the fix: the unpatched writer's output for a crafted script/SVG payload is XML so structurally broken it doesn't even parse back on reload (`XML_ERROR_MISMATCHED_ELEMENT`), crashing the (pre-fix) test process on an uncaught exception — verified via `git stash` of the fix. Fixed with `appendTextOrCData()`: CDATA when safe, entity-escaped plain text when the content contains `]]>`. Deliberately NOT the other standard technique (splitting into multiple adjacent CDATA sections) — `Mc3XmlParser.cpp` reads these fields via `GetText()`, which returns only the FIRST child text node's value and would silently truncate anything after the first split point; the single-node fallback used instead has no such risk. Applied at all 3 `SetCData` sites, including embed `base64Content` (safe by construction — base64's alphabet can never contain `]` or `>` — applied anyway for consistency/defense in depth rather than trusting that invariant forever). Full root `ctest`: 138/138 (was 137); standalone CNA-free `mc3/build` tree: 22/22 (was 21).
+
+### AUD-071 `[DONE]` `P2` `W6` · McbReader silently drops the overrides/steps field on a tag mismatch instead of rejecting, unlike every other known key
+- **Component:** mcb/src/McbReader.cpp (readSceneState, readTrigger)
+- **Evidence:** Found via the same fresh adversarial re-audit as `AUD-064`..`070`. `readSceneState()`'s `overrides` key and `readTrigger()`'s `steps` key were each read with `if (k == "X" && tag == TAG_ARR) { ... } else { skipValue(in, tag); }` — the only two remaining call sites in the file using this pattern (confirmed via grep for `&& tag == TAG_`). Every other known key uses `expectTag()` (`AUD-015`'s own established policy), which throws a clear "type mismatch" error when a known key's tag doesn't match its expected decoder. These two instead fell straight into the unknown-key fallback on a mismatch, silently dropping the field — a corrupted/malicious file with the right key name but the wrong tag byte produced a valid-looking document quietly missing its scene-state overrides or trigger steps, no error or diagnostic at all.
+- **Outcome:** Switch both sites to the same `expectTag()`-then-read pattern every other known key already uses.
+- **Tests:** New `mcb/test/tag_mismatch_rejection_test.cpp` (`mcb_tag_mismatch_rejection` ctest, 12 assertions).
+- **Resolved:** commit `c70ba77` — verify: `ctest -R mcb_tag_mismatch_rejection`
+- **Status note:** Fixed by adding `expectTag(tag, TAG_ARR, "overrides")`/`expectTag(tag, TAG_ARR, "steps")` right before each field's existing read logic, matching the pattern used everywhere else in the file. **Empirically verified both directions** (`git stash`): the test patches the tag byte immediately following each key's exact, unambiguously-located byte pattern from `TAG_ARR` to `TAG_STR` — unpatched, both mismatch-detection assertions correctly FAIL (the field is silently dropped, no exception); patched, loading throws `"MCB: type mismatch for key 'overrides' (expected tag 8, got 4)"` / the `steps` equivalent, and all 12 assertions pass. Also confirms a legitimate document with both fields present still round-trips correctly. Full root `ctest`: 139/139 (was 138).
