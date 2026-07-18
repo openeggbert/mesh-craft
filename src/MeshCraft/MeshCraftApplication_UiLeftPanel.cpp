@@ -21,7 +21,9 @@
 #include <functional>
 #include <iostream>
 #include <set>
+#include <sstream>
 #include <string>
+#include <vector>
 
 namespace MeshCraft {
 
@@ -978,6 +980,217 @@ void MeshCraftApplication::drawLeftPanel(float panelY, float panelH)
                             defObj->transform.scale[2] = std::max(0.001f, scl[2]);
                             modified_ = true; updateWindowTitle();
                         } }
+                    }
+
+                    // SYS-W14-12: Mc3Object::assetMetadata (R111) had zero
+                    // editor UI. Present only on definitions (per its own
+                    // header comment), so this is the right home -- the Defs
+                    // tab already edits document_.definitions[selectedDefId_].
+                    // Collapsed by default (23 fields across 6 shapes) so it
+                    // doesn't dominate this tab when not in use.
+                    ImGui::Spacing();
+                    ImGui::Separator();
+                    if (ImGui::TreeNode("Asset Metadata (R111)")) {
+                        bool hasMeta = defObj->assetMetadata.has_value();
+                        if (ImGui::Checkbox("Has asset metadata", &hasMeta)) {
+                            pushUndo();
+                            if (hasMeta) defObj->assetMetadata = Mc3::Mc3AssetMetadata{};
+                            else         defObj->assetMetadata.reset();
+                            modified_ = true; updateWindowTitle();
+                        }
+                        if (hasMeta) {
+                            auto& am = *defObj->assetMetadata;
+
+                            auto strField = [&](const char* label, std::string& field, size_t bufSize) {
+                                ImGui::TextDisabled("%s", label);
+                                std::vector<char> buf(bufSize);
+                                std::strncpy(buf.data(), field.c_str(), bufSize - 1);
+                                buf[bufSize - 1] = '\0';
+                                ImGui::SetNextItemWidth(-1);
+                                ImGui::PushID(label);
+                                if (ImGui::InputText("##amstr", buf.data(), bufSize,
+                                        ImGuiInputTextFlags_EnterReturnsTrue)) {
+                                    pushUndo(); field = buf.data(); modified_ = true; updateWindowTitle();
+                                }
+                                ImGui::PopID();
+                            };
+                            auto vec3Field = [&](const char* label, std::array<float, 3>& v) {
+                                ImGui::TextDisabled("%s", label);
+                                float f[3] = { v[0], v[1], v[2] };
+                                ImGui::SetNextItemWidth(-1);
+                                ImGui::PushID(label);
+                                bool changed = ImGui::DragFloat3("##amvec3", f, 0.01f);
+                                if (ImGui::IsItemActivated()) pushUndo();
+                                if (changed) {
+                                    v = {f[0], f[1], f[2]};
+                                    modified_ = true; updateWindowTitle();
+                                }
+                                ImGui::PopID();
+                            };
+                            // Comma-separated single-line editor for a tag
+                            // list -- simpler than a full per-item add/
+                            // remove UI, proportionate to there being 5 of
+                            // these (4 tag categories + materialSlots).
+                            auto tagListField = [&](const char* label, std::vector<std::string>& tags) {
+                                ImGui::TextDisabled("%s (comma-separated)", label);
+                                std::string joined;
+                                for (size_t i = 0; i < tags.size(); ++i) {
+                                    if (i) joined += ", ";
+                                    joined += tags[i];
+                                }
+                                char buf[512];
+                                std::strncpy(buf, joined.c_str(), sizeof(buf) - 1); buf[511] = '\0';
+                                ImGui::SetNextItemWidth(-1);
+                                ImGui::PushID(label);
+                                if (ImGui::InputText("##amtags", buf, sizeof(buf),
+                                        ImGuiInputTextFlags_EnterReturnsTrue)) {
+                                    pushUndo();
+                                    tags.clear();
+                                    std::string cur;
+                                    std::istringstream iss(std::string(buf) + ",");
+                                    while (std::getline(iss, cur, ',')) {
+                                        size_t b = cur.find_first_not_of(" \t");
+                                        size_t e = cur.find_last_not_of(" \t");
+                                        if (b != std::string::npos) tags.push_back(cur.substr(b, e - b + 1));
+                                    }
+                                    modified_ = true; updateWindowTitle();
+                                }
+                                ImGui::PopID();
+                            };
+
+                            strField("Category", am.category, 128);
+                            strField("Subcategory", am.subcategory, 128);
+                            tagListField("Semantic Tags", am.semanticTags);
+                            tagListField("Style Tags", am.styleTags);
+                            tagListField("Region Tags", am.regionTags);
+                            tagListField("Period Tags", am.periodTags);
+                            vec3Field("Nominal Size", am.nominalSize);
+                            vec3Field("Bounds Min", am.boundsMin);
+                            vec3Field("Bounds Max", am.boundsMax);
+                            strField("Facing (e.g. -Z, +X)", am.facing, 16);
+                            tagListField("Material Slots", am.materialSlots);
+                            strField("Collision Proxy (box/convex_hull/none)", am.collisionProxy, 64);
+                            vec3Field("Clearance Volume", am.clearanceVolume);
+
+                            ImGui::Checkbox("Instancing Eligible", &am.instancingEligible);
+                            if (ImGui::IsItemDeactivatedAfterEdit()) { pushUndo(); modified_ = true; updateWindowTitle(); }
+
+                            strField("Shadow Policy (cast_receive/cast_only/none)", am.shadowPolicy, 32);
+
+                            ImGui::TextDisabled("Max Visibility Distance (m, 0=unlimited)");
+                            ImGui::SetNextItemWidth(-1);
+                            { bool ch = ImGui::DragFloat("##ammaxvis", &am.maxVisibilityDistanceM, 1.0f, 0.0f, 100000.0f);
+                              if (ImGui::IsItemActivated()) pushUndo();
+                              if (ch) { modified_ = true; updateWindowTitle(); } }
+
+                            ImGui::TextDisabled("Selection Weight (higher = more common)");
+                            ImGui::SetNextItemWidth(-1);
+                            { bool ch = ImGui::DragFloat("##amselw", &am.selectionWeight, 0.05f, 0.0f, 1000.0f);
+                              if (ImGui::IsItemActivated()) pushUndo();
+                              if (ch) { modified_ = true; updateWindowTitle(); } }
+
+                            strField("License (SPDX id or free text)", am.license, 128);
+                            strField("Provenance", am.provenance, 256);
+                            strField("Source Generator / Hash", am.sourceGeneratorOrHash, 256);
+                            strField("Semantic Version (this definition)", am.semanticVersion, 32);
+
+                            // Sockets: map<string, array<float,3>> -- named
+                            // anchor/socket points, key rename + vec3 edit +
+                            // remove, matching the Meta editor's rename
+                            // pattern (PropertiesPanel.cpp) adapted for a
+                            // vec3 value instead of a string.
+                            ImGui::Spacing();
+                            ImGui::TextDisabled("Sockets (named local-space points)");
+                            {
+                                std::string renameFrom, renameTo, removeKey;
+                                for (auto& [key, pos] : am.sockets) {
+                                    ImGui::PushID(("sock_" + key).c_str());
+                                    char keyBuf[128];
+                                    std::strncpy(keyBuf, key.c_str(), sizeof(keyBuf)-1); keyBuf[127]='\0';
+                                    ImGui::SetNextItemWidth(120);
+                                    if (ImGui::InputText("##sockkey", keyBuf, sizeof(keyBuf),
+                                            ImGuiInputTextFlags_EnterReturnsTrue) && keyBuf[0] && key != keyBuf) {
+                                        renameFrom = key; renameTo = keyBuf;
+                                    }
+                                    ImGui::SameLine();
+                                    float p[3] = { pos[0], pos[1], pos[2] };
+                                    ImGui::SetNextItemWidth(-32);
+                                    bool ch = ImGui::DragFloat3("##sockpos", p, 0.01f);
+                                    if (ImGui::IsItemActivated()) pushUndo();
+                                    if (ch) { pos = {p[0], p[1], p[2]}; modified_ = true; updateWindowTitle(); }
+                                    ImGui::SameLine();
+                                    if (ImGui::SmallButton("x##sockrm")) removeKey = key;
+                                    ImGui::PopID();
+                                }
+                                if (!renameFrom.empty()) {
+                                    pushUndo();
+                                    auto node = am.sockets.extract(renameFrom);
+                                    node.key() = renameTo;
+                                    am.sockets.insert(std::move(node));
+                                    modified_ = true; updateWindowTitle();
+                                }
+                                if (!removeKey.empty()) {
+                                    pushUndo(); am.sockets.erase(removeKey);
+                                    modified_ = true; updateWindowTitle();
+                                }
+                                if (ImGui::SmallButton("+ Add Socket")) {
+                                    pushUndo();
+                                    int n = 1; std::string key;
+                                    do { key = "socket_" + std::to_string(n++); }
+                                    while (am.sockets.count(key));
+                                    am.sockets[key] = {0.f, 0.f, 0.f};
+                                    modified_ = true; updateWindowTitle();
+                                }
+                            }
+
+                            // LODs: map<string, string> (tier name -> def id).
+                            ImGui::Spacing();
+                            ImGui::TextDisabled("LOD tiers (tier name -> definition id)");
+                            {
+                                std::string renameFrom, renameTo, removeKey;
+                                for (auto& [key, targetId] : am.lods) {
+                                    ImGui::PushID(("lod_" + key).c_str());
+                                    char keyBuf[64];
+                                    std::strncpy(keyBuf, key.c_str(), sizeof(keyBuf)-1); keyBuf[63]='\0';
+                                    ImGui::SetNextItemWidth(100);
+                                    if (ImGui::InputText("##lodkey", keyBuf, sizeof(keyBuf),
+                                            ImGuiInputTextFlags_EnterReturnsTrue) && keyBuf[0] && key != keyBuf) {
+                                        renameFrom = key; renameTo = keyBuf;
+                                    }
+                                    ImGui::SameLine();
+                                    char valBuf[128];
+                                    std::strncpy(valBuf, targetId.c_str(), sizeof(valBuf)-1); valBuf[127]='\0';
+                                    ImGui::SetNextItemWidth(-32);
+                                    if (ImGui::InputText("##lodval", valBuf, sizeof(valBuf),
+                                            ImGuiInputTextFlags_EnterReturnsTrue)) {
+                                        pushUndo(); targetId = valBuf; modified_ = true; updateWindowTitle();
+                                    }
+                                    ImGui::SameLine();
+                                    if (ImGui::SmallButton("x##lodrm")) removeKey = key;
+                                    ImGui::PopID();
+                                }
+                                if (!renameFrom.empty()) {
+                                    pushUndo();
+                                    auto node = am.lods.extract(renameFrom);
+                                    node.key() = renameTo;
+                                    am.lods.insert(std::move(node));
+                                    modified_ = true; updateWindowTitle();
+                                }
+                                if (!removeKey.empty()) {
+                                    pushUndo(); am.lods.erase(removeKey);
+                                    modified_ = true; updateWindowTitle();
+                                }
+                                if (ImGui::SmallButton("+ Add LOD Tier")) {
+                                    pushUndo();
+                                    int n = 1; std::string key;
+                                    do { key = "tier_" + std::to_string(n++); }
+                                    while (am.lods.count(key));
+                                    am.lods[key] = "";
+                                    modified_ = true; updateWindowTitle();
+                                }
+                            }
+                        }
+                        ImGui::TreePop();
                     }
                 }
             }

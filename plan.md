@@ -361,16 +361,37 @@ _All items in this workstream are DONE — archived to [`docs/history/plan_20260
   the rendered screenshot is **byte-identical** to loading the original
   `.mc3.xml` — proves the dispatch and the underlying R109 JSON
   round-trip are both correct together, not just in isolation.
-- **SYS-W14-12** `[TODO]` `P3` — Editor UI for asset metadata
+- **SYS-W14-12** `[DONE]` `P3` — Editor UI for asset metadata
   (`Mc3Object::assetMetadata`, `Mc3AssetMetadata` struct,
-  `mc3/include/MeshCraft/Mc3/Mc3AssetMetadata.hpp` — category/subcategory/
-  tags/bounds/facing/sockets/materialSlots/collisionProxy/lods/license/
-  provenance/semanticVersion). Zero editor UI today (confirmed via
-  `grep -rn "assetMetadata\|AssetMetadata" src/MeshCraft/`, zero hits). This
-  is a large struct — likely its own collapsible section in
-  `PropertiesPanel.cpp` rather than a quick add; scope out which sub-fields
-  are worth editing vs. read-only-displaying before implementing. Found via
-  `missing.md`'s 2026-07-18 update.
+  `mc3/include/MeshCraft/Mc3/Mc3AssetMetadata.hpp` — 23 fields across 6
+  shapes: strings, string vectors, `array<float,3>`, two different maps,
+  a bool, two floats). Zero editor UI before this (confirmed via
+  `grep -rn "assetMetadata\|AssetMetadata" src/MeshCraft/`, zero hits).
+  Found via `missing.md`'s 2026-07-18 update.
+  **Implementation (2026-07-18):** `assetMetadata`'s own header comment
+  says it's "present only on definitions where authored/known" — so the
+  right home is the existing "Defs" tab
+  (`MeshCraftApplication_UiLeftPanel.cpp`, which already edits
+  `document_.definitions[selectedDefId_]`), not the main Properties panel
+  (which edits placed scene objects/Instances, not the definitions they
+  reference). New collapsible "Asset Metadata (R111)" tree node there,
+  gated behind a checkbox since `assetMetadata` is optional. All 23
+  fields editable via 3 local field-editor lambdas covering the 3
+  most-repeated shapes (plain string, `array<float,3>`, comma-separated
+  string-vector) plus 2 explicit map editors (`sockets`, `lods`) mirroring
+  the existing Meta editor's key-rename pattern
+  (`PropertiesPanel.cpp`) adapted for non-string values. Tag lists
+  (`semanticTags`/`styleTags`/`regionTags`/`periodTags`/`materialSlots`)
+  use a single comma-separated line rather than 5 separate full add/
+  remove list UIs — proportionate given there are 5 of them, still fully
+  editable, not read-only.
+  **Verify:** full rebuild + `ctest -j"$(nproc)"` (126/126, unchanged —
+  UI-only over an already-parsed/written field, no new library-level
+  test needed). Manual `--screenshot` smoke test loading the pre-existing
+  `test/asset_metadata_library_import.mc3.xml` fixture (which already
+  populates every field this UI edits, including non-empty `sockets`/
+  `lods` maps and tag lists — a real exercise of the exact data shapes,
+  not a hand-picked trivial case) — clean GL state, no crash.
 - **SYS-W14-13** `[DONE, data-field editing only — see scope note]` `P3` —
   Editor UI for library metadata and imports (`Mc3Document::library`
   (`Mc3LibraryInfo`), `Mc3Document::imports` (`Mc3Import`), the `.mc3lib`
