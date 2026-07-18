@@ -855,13 +855,15 @@ exhausted of unblocked work.
 - **No attempt to unpark CI** (`.github_/workflows/ci.yml` → `.github/`) —
   owner-gated, needs a workflow-scoped push token nobody in this session
   has.
-- **No new user-facing features by default** — this project is still in a
-  stabilization phase per `STABILIZATION.md`'s own stated policy. In
-  practice the user has explicitly authorized exceptions in whole batches
-  (the `SYS-W14-##` rows, including `-03`/`-08` today) — treat that as a
-  standing willingness to grant scoped exceptions on request, not as the
-  default having changed; still ask before assuming a new feature is in
-  scope, per `CLAUDE.md`'s plan.md workflow.
+- **Ask before assuming a new feature is in scope**, per `CLAUDE.md`'s
+  plan.md workflow. `STABILIZATION.md`'s original "no new features until
+  gates are green" policy was the project's default for a long time; it's
+  now archived (`docs/history/STABILIZATION.md`, moved 2026-07-18) since
+  the stabilization phase is substantively complete (gates A-E satisfied)
+  and the user has repeatedly, explicitly authorized batches of new
+  features in practice (the `SYS-W14-##` rows, including `-03`/`-08`
+  today) — treat that as a standing willingness to grant scoped
+  exceptions on request, not a blanket "anything goes now."
 
 ## 10. Resume prompt
 

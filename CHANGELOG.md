@@ -7,11 +7,12 @@ promise of exact chronological order within each entry.
 
 ## [Unreleased] — 0.1.0
 
-Currently in an active **stabilization phase**: fixing and test-covering
-what already exists rather than adding features. See `STABILIZATION.md`
-for the quality gates and `plan.md` for the active backlog. Live task
-counts are tracked in `plan.md`/`NEXT.md`, not duplicated here (they went
-stale the last time they were).
+Ran a long **stabilization phase**: fixing and test-covering what already
+existed before adding features. That phase is now substantively complete
+(see `NEXT.md` for current status); the original policy document is
+archived at `docs/history/STABILIZATION.md`. See `plan.md` for the active
+backlog. Live task counts are tracked in `plan.md`/`NEXT.md`, not
+duplicated here (they went stale the last time they were).
 
 Highlights from the stabilization phase so far:
 - Full XML round-trip test coverage for all 10 primitive types and all

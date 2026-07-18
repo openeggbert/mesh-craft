@@ -6,11 +6,11 @@ the repository root:
 
 - `plan.md` — the single active backlog.
 - `NEXT.md` — the current baseline and handoff.
-- `STABILIZATION.md` — stable process and quality gates.
 - `TESTING.md` — the registered test suite.
 
 | File | Was | Superseded by |
 |------|-----|---------------|
+| `STABILIZATION.md` | The stabilization policy + Gates A-F quality-bar definitions. Moved here 2026-07-18 once the stabilization phase was substantively complete (all gates A-E satisfied per `plan.md`'s state; remaining backlog is owner-gated/deferred, not active defect work) — most of its own content (CNA/`Mc3Document`/meta-gl boundary rules) was already duplicated in `CLAUDE.md`, and its emoji status legend (✅🟡🧪📋🔴) no longer matched `plan.md`'s actual `[DONE]`/`[TODO]`/`[BLOCKED]`/`[DEFERRED]` notation | `CLAUDE.md` (boundary rules); `plan.md`/`NEXT.md` (live status). The Gates A-F table itself has no live replacement — cite this archived copy if a future audit needs to reference a specific gate |
 | `plan_20260710.md` | The 723-row STAB stabilization plan | `plan.md` (evidence-based backlog) |
 | `STABILIZATION_VERIFICATION.md` | A point-in-time verification snapshot (claimed Web/Emscripten ✅) | `NEXT.md` baseline (Web is a documented blocker) |
 | `STABILIZATION_WORKLOG.md` | Running STAB worklog | Git history + `CHANGELOG.md` |

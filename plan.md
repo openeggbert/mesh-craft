@@ -1,10 +1,12 @@
 # Mesh Craft — Active Backlog
 
 **This is the single active backlog.** For a compact baseline and handoff see
-[`NEXT.md`](NEXT.md); for quality gates and process see
-[`STABILIZATION.md`](STABILIZATION.md); for the registered tests see
+[`NEXT.md`](NEXT.md); for the registered tests see
 [`TESTING.md`](TESTING.md). Superseded plans live in
-[`docs/history/`](docs/history/).
+[`docs/history/`](docs/history/), including the former
+[`STABILIZATION.md`](docs/history/STABILIZATION.md) (moved there
+2026-07-18 — the stabilization phase is now substantively complete; see
+`NEXT.md` for current status and boundary rules now live in `CLAUDE.md`).
 
 ## Status legend
 

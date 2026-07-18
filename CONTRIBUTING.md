@@ -1,9 +1,10 @@
 # Contributing to MeshCraft
 
-This project is in an active **stabilization phase**: the priority is a
-fully tested, correctness-verified codebase before new features land. See
-`STABILIZATION.md` for the policy and `plan.md` for the task backlog
-(`STAB-XXXX` IDs) that governs what gets worked on and in what order.
+This project ran a long **stabilization phase** (fully tested,
+correctness-verified codebase before new features land) that is now
+substantively complete — see `plan.md` for the active backlog
+(`AUD-###`/`SYS-###` IDs) and `NEXT.md` for current status. The original
+policy document is archived at `docs/history/STABILIZATION.md`.
 
 ## Build setup
 

@@ -1,10 +1,11 @@
 # Release Checklist
 
-MeshCraft is currently in a **stabilization phase** (see
-`STABILIZATION.md`) — no gate is fully green yet (each requires its
-entire `STAB-XXXX` range in `plan.md`, not just the priority-list
-subset). This checklist is for when a release is actually being cut;
-until then, treat it as the bar to clear, not a completed process.
+MeshCraft ran a long **stabilization phase** (policy archived at
+`docs/history/STABILIZATION.md`) that is now substantively complete —
+gates A-E satisfied, remaining `plan.md` items are owner-gated/deferred,
+not active defect work. This checklist is for when a release is actually
+being cut; until then, treat it as the bar to clear, not a completed
+process.
 
 ## Build clean
 

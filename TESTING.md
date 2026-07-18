@@ -122,9 +122,8 @@ Blender-based tests (`mc3togltf_blender_import`, `mc3togltf_material_pbr_blender
 - **New CLI-driving Python test**: follow `mc3togltf/test/large_scene_generated_test.py`'s pattern — take the target binary path as `sys.argv[1]`, build a temp scene/file, run the subprocess, assert on its output or exit code, `print(...)` a `PASS:`-style line per check, and register the test with `add_test(NAME ... COMMAND "${PYTHON3_EXEC}" "${CMAKE_CURRENT_SOURCE_DIR}/test/your_test.py" "$<TARGET_FILE:your_target>")` plus a `TIMEOUT`.
 - Either way: reconfigure with **CLion's bundled cmake (4.2.2)** for `cmake-build-debug/`, not the system cmake — see `README.md`/`NEXT.md` for why.
 
-## `TESTING.md` vs `NEXT.md` vs `STABILIZATION.md`
+## `TESTING.md` vs `NEXT.md` vs `plan.md`
 
 - **This file** — how to run tests and what each one checks. Reference material, changes rarely.
 - **`NEXT.md`** — current status, current blocker, exact next task. Changes every session.
-- **`STABILIZATION.md`** — the stabilization policy and gate structure. Changes when a gate closes.
-- **`plan.md`** — the authoritative per-task (`STAB-XXXX`) status for all 650 backlog items, including ones not yet covered by any test above.
+- **`plan.md`** — the authoritative per-task (`AUD-###`/`SYS-###`) status for the active backlog, including tasks not yet covered by any test above. (The stabilization policy and Gates A-F structure that used to live in `STABILIZATION.md` is archived at `docs/history/STABILIZATION.md` — the phase it governed is now substantively complete.)
