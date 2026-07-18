@@ -373,15 +373,41 @@ _All items in this workstream are DONE — archived to [`docs/history/plan_20260
   metadata with no behavioral effect (matching how `SYS-W5-03` handled a
   similar "policy decision needed" MC3-governance question). Found via
   `missing.md`'s 2026-07-18 update.
-- **SYS-W14-15** `[TODO]` `P3` — Native file-browse dialog for texture/mesh
-  path fields (currently plain `ImGui::InputText` boxes everywhere,
-  including the Import OBJ dialog and material texture-slot fields).
-  Notably, the CNA dependency already ships a `FileDialog` device (SDL
-  backend) that is never called from anywhere in `src/MeshCraft/` or
-  `mc3togltf/` — the capability exists one layer down and is simply unused,
-  so this is plausibly a smaller task than building a picker from scratch
-  (verify CNA's `FileDialog` API surface first). Found via `missing.md`'s
-  2026-07-18 update.
+- **SYS-W14-15** `[DONE, material texture slots only — see scope note]` `P3`
+  — Native file-browse dialog for texture/mesh path fields (currently plain
+  `ImGui::InputText` boxes everywhere, including the Import OBJ dialog and
+  material texture-slot fields). Notably, the CNA dependency already ships
+  a `FileDialog` device (SDL backend) that was never called from anywhere
+  in `src/MeshCraft/` or `mc3togltf/` — the capability existed one layer
+  down and was simply unused. Found via `missing.md`'s 2026-07-18 update.
+  **Implementation (2026-07-18):** enabled CNA's `CNA_DEVICES` CMake option
+  (a mesh-craft-side `CMakeLists.txt` consumer choice, off by default in
+  CNA itself — not a CNA edit) to compile in `CNA::Devices::FileDialog`.
+  Added a "..." Browse button next to each of the 5 material texture-slot
+  fields in `PropertiesPanel.cpp`'s `texField` lambda, gated on
+  `FileDialog::getIsSupportedProperty()` (false on Web/iOS, where the
+  manual-entry-only field is kept instead of a dead button).
+  `FileDialog::ShowOpenFile()` is asynchronous and its callback may run on
+  a different thread per its own documented contract — handled with a new
+  `PendingFileBrowse` result box (`MeshCraftApplication.hpp`) mirroring
+  `AiRequestResult`'s existing threading pattern (mutex + atomic done
+  flag), drained once per frame in `Update()` by feeding the resolved path
+  into the *existing* `pendingDropTexture_`/`hoveredTexSlot_`/
+  `hoveredTexMatId_` pipeline the OS drag-and-drop path (D6) already used
+  — full reuse of that consumption logic, no duplication.
+  **Scope, deliberately narrowed:** only the 5 material texture slots are
+  wired up (the single highest-value, most-repeated integration point).
+  The Import OBJ dialog's path field and other manual-path fields (SVG/
+  sound/music/embed src, mesh source) still use manual entry only — left
+  as a smaller follow-up rather than wiring every path field in one pass,
+  now that the `PendingFileBrowse` plumbing exists to reuse. Verify: full
+  rebuild + `ctest -j"$(nproc)"` (126/126, unchanged count), manual
+  `--screenshot` smoke test (clean GL state). The actual native dialog
+  itself was **not** interactively triggered during verification (would
+  spawn a real, hanging `zenity`-class process in this sandbox, per
+  `FileDialog`'s own doc comment about why its test-swap hook exists) —
+  confidence instead comes from reusing already-tested consumption logic
+  verbatim and mirroring `AiAssistant`'s already-proven threading idiom.
 - **SYS-W14-16** `[TODO]` `P2` — Undo/redo structural-guarantee audit.
   Currently a manual discipline: 332 `pushUndo()` call sites (fresh count),
   each independently relying on the author remembering to call it before a

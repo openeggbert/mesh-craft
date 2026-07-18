@@ -228,6 +228,12 @@ endfunction()
 meshcraft_check_sibling_revision(CNA "${CMAKE_CURRENT_SOURCE_DIR}/../cna" "${MESHCRAFT_CNA_VERIFIED_SHA}")
 meshcraft_check_sibling_revision(SHARP_RUNTIME "${CMAKE_CURRENT_SOURCE_DIR}/../sharp-runtime" "${MESHCRAFT_SHARP_RUNTIME_VERIFIED_SHA}")
 
+# SYS-W14-15: enables CNA::Devices::FileDialog (native open/save dialogs) for
+# the editor's texture/mesh path fields. CNA_DEVICES is an existing CNA-side
+# CMake option (off by default, "device/sensor extensions beyond XNA 4.0");
+# forcing it on here is a mesh-craft-side consumer choice, not a CNA edit.
+set(CNA_DEVICES ON CACHE BOOL "" FORCE)
+
 # CNA — XNA-like runtime (window, input, audio, graphics)
 add_subdirectory(../cna CNA_dep)
 

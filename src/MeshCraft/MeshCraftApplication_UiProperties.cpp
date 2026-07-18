@@ -51,9 +51,36 @@ void MeshCraftApplication::drawPropertiesPanel(float panelY, float panelH, int s
             meshBrowseErr_[0] = '\0';
             meshBrowseOpen_   = true;
         },
+        .browseForTexture   = [this](const std::string& matId, const std::string& slot) {
+            browseForMaterialTexture(matId, slot);
+        },
     };
 
     propertiesPanel_->draw(panelX, panelY, panelW, panelH, ctx);
+}
+
+// SYS-W14-15: opens a native OS file-open dialog for a material's texture
+// slot. CNA::Devices::FileDialog::ShowOpenFile is asynchronous and its
+// callback may run on a different thread (see PendingFileBrowse's own
+// comment) -- the callback only ever writes into the shared, mutex-guarded
+// result box; Update() is the sole place that acts on it.
+void MeshCraftApplication::browseForMaterialTexture(const std::string& matId, const std::string& slot) {
+    auto pending = std::make_shared<PendingFileBrowse>();
+    pending->targetMatId = matId;
+    pending->targetSlot  = slot;
+    pendingFileBrowse_ = pending;
+
+    static const std::vector<CNA::Devices::FileDialogFilter> kImageFilters = {
+        {"Images", "png;jpg;jpeg;webp;tga;bmp;hdr"},
+        {"All files", "*"},
+    };
+    CNA::Devices::FileDialog::ShowOpenFile(
+        [pending](const std::vector<std::string>& files) {
+            std::lock_guard<std::mutex> lock(pending->mutex);
+            if (!files.empty()) pending->path = files.front();
+            pending->done.store(true);
+        },
+        kImageFilters);
 }
 
 } // namespace MeshCraft

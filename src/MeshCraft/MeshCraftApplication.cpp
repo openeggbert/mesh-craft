@@ -394,6 +394,27 @@ void MeshCraftApplication::Update(GameTime& gameTime) {
             setStatusMsg("Unsupported file type: " + dropPath.filename().string(), true, 3.0f);
     }
 
+    // SYS-W14-15: consume a resolved native file-browse dialog by feeding it
+    // into the exact same pendingDropTexture_/hoveredTex*_ pipeline the OS
+    // drag-and-drop path (D6) already uses below -- the browse target
+    // (matId/slot) was recorded at click time, unlike hover state, so this
+    // always takes the "assign directly" branch, never the picker-popup one.
+    if (pendingFileBrowse_ && pendingFileBrowse_->done.load()) {
+        std::string browsedPath, targetMatId, targetSlot;
+        {
+            std::lock_guard<std::mutex> lock(pendingFileBrowse_->mutex);
+            browsedPath = pendingFileBrowse_->path;
+            targetMatId = pendingFileBrowse_->targetMatId;
+            targetSlot  = pendingFileBrowse_->targetSlot;
+        }
+        pendingFileBrowse_.reset();
+        if (!browsedPath.empty()) {
+            hoveredTexMatId_    = targetMatId;
+            hoveredTexSlot_     = targetSlot;
+            pendingDropTexture_ = browsedPath;
+        }
+    }
+
     // Consume dropped texture image (D6)
     if (!pendingDropTexture_.empty()) {
         std::string texPath = std::move(pendingDropTexture_);

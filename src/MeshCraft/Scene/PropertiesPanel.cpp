@@ -4,6 +4,7 @@
 
 #include <imgui.h>
 
+#include <CNA/Devices/FileDialog.hpp>
 #include <Microsoft/Xna/Framework/Matrix.hpp>
 #include <Microsoft/Xna/Framework/Vector3.hpp>
 #include <Microsoft/Xna/Framework/Color.hpp>
@@ -1748,11 +1749,19 @@ void PropertiesPanel::draw(float panelX, float panelY, float panelW, float panel
                 if (ImGui::TreeNode("Textures")) {
                     bool hasPendingTex = !ctx.pendingDropTexture.empty();
                     // texField: tracks hover for OS drag-drop (D6)
+                    // SYS-W14-15: native file-browse "..." button, one line
+                    // this file previously called out as missing entirely
+                    // (every texture path was drag-drop or manual-typed
+                    // only). Gated on FileDialog's own platform-support
+                    // check (false on Web/iOS, where no native backend
+                    // exists) so those builds keep the manual-entry-only
+                    // field instead of a dead button.
+                    const bool canBrowse = CNA::Devices::FileDialog::getIsSupportedProperty();
                     auto texField = [&](const char* label, std::string& field, const char* slot) {
                         ImGui::TextDisabled("%s", label);
                         char buf[512];
                         std::strncpy(buf, field.c_str(), sizeof(buf) - 1); buf[511] = '\0';
-                        ImGui::SetNextItemWidth(-1);
+                        ImGui::SetNextItemWidth(canBrowse ? -32.0f : -1.0f);
                         // Highlight field that is the current drop target
                         bool isHov = (ctx.hoveredTexSlot == slot && ctx.hoveredTexMatId == ctx.selectedMaterialKey);
                         if (isHov && hasPendingTex)
@@ -1767,6 +1776,14 @@ void PropertiesPanel::draw(float panelX, float panelY, float panelW, float panel
                         if (ImGui::IsItemHovered()) {
                             ctx.hoveredTexSlot  = slot;
                             ctx.hoveredTexMatId = ctx.selectedMaterialKey;
+                        }
+                        if (canBrowse) {
+                            ImGui::SameLine();
+                            std::string btnId = std::string("...##b") + label;
+                            if (ImGui::Button(btnId.c_str()))
+                                ctx.browseForTexture(ctx.selectedMaterialKey, slot);
+                            if (ImGui::IsItemHovered())
+                                ImGui::SetTooltip("Browse for a file (native OS dialog)");
                         }
                     };
                     if (hasPendingTex)

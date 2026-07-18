@@ -45,6 +45,9 @@ struct PropertiesContext {
     std::function<void()>        setPivotMoveTool;
     std::function<void(const Mc3::Mc3Object*)>  openCsgExport;
     std::function<void(const std::string&)>     openMeshBrowse;
+    // SYS-W14-15: opens a native OS file-open dialog for a material's texture
+    // slot (matId, slot) -- see MeshCraftApplication::browseForMaterialTexture.
+    std::function<void(const std::string&, const std::string&)> browseForTexture;
 };
 
 class PropertiesPanel {

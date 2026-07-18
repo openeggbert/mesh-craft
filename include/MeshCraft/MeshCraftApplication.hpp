@@ -26,12 +26,15 @@
 #include <Microsoft/Xna/Framework/Input/Keyboard.hpp>
 #include <Microsoft/Xna/Framework/Input/KeyboardState.hpp>
 #include <Microsoft/Xna/Framework/Input/MouseState.hpp>
+#include <CNA/Devices/FileDialog.hpp>
 #include <System/Object.hpp>
 #include <array>
+#include <atomic>
 #include <cstdio>
 #include <filesystem>
 #include <map>
 #include <memory>
+#include <mutex>
 #include <optional>
 #include <set>
 #include <string>
@@ -40,6 +43,20 @@
 #include <vector>
 
 namespace MeshCraft {
+
+// SYS-W14-15: result box for an in-flight native file-browse dialog
+// (CNA::Devices::FileDialog). Its callback may run on a different thread
+// than the one that opened the dialog (per FileDialog's own documented
+// contract) -- mirrors AiRequestResult's threading pattern (AiAssistant.hpp):
+// heap-allocated, mutex-guarded, drained once per frame from Update(), never
+// touched directly from the callback thread beyond writing into it.
+struct PendingFileBrowse {
+    std::atomic<bool> done{false};
+    std::mutex        mutex; // guards the fields below
+    std::string       path;  // empty if canceled
+    std::string       targetMatId;
+    std::string       targetSlot;
+};
 
 // ActiveTool and its bounds-safe activeToolName() mapping live in
 // MeshCraft/Editor/ActiveTool.hpp so they can be unit-tested without linking
@@ -133,6 +150,13 @@ private:
     bool        dropTexPickerOpen_{false}; // slot-picker popup trigger
     std::string dropTexPickerPath_;        // image path pending slot assignment
     std::string dropTexPickerMatId_;       // material to assign to
+
+    // SYS-W14-15: native file-browse dialog for a material texture slot. Only
+    // one dialog is meaningfully open at a time (a second click replaces the
+    // pending target); see PendingFileBrowse's own comment for the threading
+    // invariant.
+    std::shared_ptr<PendingFileBrowse> pendingFileBrowse_;
+    void browseForMaterialTexture(const std::string& matId, const std::string& slot);
 
     // Auto-screenshot mode
     std::string autoScreenshotPath_;
