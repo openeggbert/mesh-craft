@@ -84,11 +84,11 @@ P1s already being fixed in git history. This session:
    is per-field only) not part of the original audit, filed as new `TODO`
    tasks.
 
-   **Net across all 15 AUD-### rows remaining in this active backlog (61
+   **Net across all 16 AUD-### rows remaining in this active backlog (61
    additional rows completed and archived to `docs/history/plan_20260718.md`
    on 2026-07-18 — see that file for their full evidence/resolution text):
-   8 DONE, 5 TODO, 2 DEFERRED** — the 8 DONE (`AUD-064`..`068`, `AUD-070`,
-   `AUD-071`, `AUD-072`) and 1 of the 5 TODO (`AUD-069`) are fresh findings
+   9 DONE, 5 TODO, 2 DEFERRED** — the 9 DONE (`AUD-064`..`068`, `AUD-070`
+   through `AUD-073`) and 1 of the 5 TODO (`AUD-069`) are fresh findings
    from a 2026-07-18 (later same day) independent re-audit, not part of the
    original 6; recompute with
    `python3 test/validate_plan_consistency.py . <build-dir>` rather than
@@ -1128,3 +1128,11 @@ remain in this active file.
 - **Tests:** New `test/extrude_stress.mc3.xml` fixture (`segments="4096"` path, `segments="4096"` circular cross-section) + `smoke_test_extrude_stress` ctest (TIMEOUT 30, `test/smoke_test.sh`).
 - **Resolved:** commit `ea31df7` — verify: `ctest -R smoke_test_extrude_stress`
 - **Status note:** Empirically confirmed as a real freeze before writing the fix, matching `AUD-064`'s own verification approach: `MeshCraft extrude_stress.mc3.xml --screenshot out.png` did not complete within a 25s timeout on the unpatched binary (`git stash` of the fix); with the fix it completes in ~2.3s, the same as normal startup. The old end-of-function `numVerts>65535` check is now provably unreachable given the new early bailout (both use the exact same formula the ring-building loops actually produce) — left in place as a cheap defensive backstop against the `uint16_t` index buffer wrapping, with a comment explaining it should never fire rather than silently removed. Full root `ctest`: 140/140 (was 139).
+
+### AUD-073 `[DONE]` `P2` `W1` · Extrude hollow cross-section divides by zero when radius=0, producing NaN vertex positions
+- **Component:** src/MeshCraft/Renderer/SceneRenderer_Extrude.cpp (drawExtrudeDynamic, drawObjectEdges)
+- **Evidence:** Found via the same fresh adversarial re-audit as `AUD-064`..`072`. Both `drawExtrudeDynamic()` and `drawObjectEdges()` independently compute `bool hollow = (cs.innerRadius > 0.0f) && (type == Circle || Polygon);` then `float innerScale = hollow ? (cs.innerRadius / cs.radius) : 0.0f;` with no check that `cs.radius` is nonzero. `radius==0` is a legal document value (the parsers only reject negatives); a hollow cross-section with `radius=0, innerRadius>0` (already a nonsensical shape — the "inner" radius would be larger than the "outer" one) made `innerScale` evaluate to `+inf`, propagating NaN vertex positions into both the live solid viewport and the edge-overlay wireframe. `mc3togltf`'s own export-side `buildExtrude()` was already safe — confirmed its hollow condition requires `innerRadius < radius`, which `radius=0` can never satisfy — so this was an editor-only gap, not shared with the export path.
+- **Outcome:** Require `radius > 1e-6f` (matching `norm3()`'s/`AUD-067`'s existing epsilon convention in the same file) before treating a cross-section as hollow, at both call sites.
+- **Tests:** New `test/extrude_hollow_zero_radius_test.cpp` (`extrude_hollow_zero_radius` ctest, 12 assertions).
+- **Resolved:** commit `3af58fe` — verify: `ctest -R extrude_hollow_zero_radius`
+- **Status note:** `SceneRenderer` is CNA-coupled and can't be unit-tested directly, so the new test mirrors the exact two-line formula (both call sites are byte-for-byte identical) rather than calling the real function — same idiom as `differential_geometry_test.cpp`. The test concretely reproduces the bug first (the pre-fix formula genuinely computes `+inf` for `0.3f/0.0f`, not just asserted as a hypothesis) before proving the fix (finite `0.0f` for both Circle and Polygon, and for a near-zero — not just exact-zero — radius; a legitimate hollow shape and a solid `radius=0` cross-section are both confirmed unaffected). **A live-render screenshot comparison was also tried and deliberately NOT kept as a committed test**, documented honestly rather than silently omitted: a `radius=0` cross-section produces byte-identical output whether or not this fix is applied, because `makeProfile()`'s Circle case already collapses every profile point to `(0,0)` when `radius==0` — the whole extruded tube's OUTER ring is already degenerate/invisible for a reason unrelated to this fix, so pixel comparison cannot discriminate it; only the formula-level test can. Full root `ctest`: 141/141 (was 140).

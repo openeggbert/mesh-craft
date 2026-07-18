@@ -129,10 +129,29 @@ and bailing before any allocation, mirroring `AUD-064`'s fix exactly; the
 old end-of-function check is now provably unreachable but left in place
 as a documented defensive backstop. New `test/extrude_stress.mc3.xml` +
 `smoke_test_extrude_stress` ctest. Full root `ctest`: 140 of 140 (was
-139). The remaining 4 findings from this same audit pass are not yet
-actioned — see the user/session transcript for the full ranked list;
-re-derive from a fresh audit if this note has gone stale rather than
-trusting it indefinitely.
+139). Ninth: **`AUD-073`** (commit `3af58fe`) — the same
+`SceneRenderer_Extrude.cpp` file's hollow-cross-section `innerScale`
+formula (`drawExtrudeDynamic()` and `drawObjectEdges()`, both identical)
+divided by `cs.radius` with no zero-guard; `radius=0` is legal, and a
+hollow cross-section (`innerRadius>0`) with `radius=0` made `innerScale`
+evaluate to `+inf`, producing NaN vertices in both the solid viewport and
+the edge-overlay wireframe. `mc3togltf`'s own export-side `buildExtrude()`
+was already safe (`innerRadius < radius` can never hold when
+`radius=0`) — editor-only gap. Fixed by requiring `radius > 1e-6f` before
+treating a cross-section as hollow, matching `AUD-067`'s epsilon
+convention. New `extrude_hollow_zero_radius_test` (12 assertions) mirrors
+the exact formula (SceneRenderer is CNA-coupled, can't be unit-tested
+directly) and concretely reproduces `+inf` from the pre-fix formula
+before proving the fix stays finite. **Honestly documented, not silently
+dropped:** a live-render screenshot comparison was tried first and found
+to NOT discriminate this bug at all — a `radius=0` cross-section renders
+byte-identical output either way, because the outer ring is already fully
+degenerate/invisible when `radius=0` regardless of the inner-ring NaN, for
+a reason unrelated to this fix. Full root `ctest`: 141 of 141 (was 140).
+The remaining 3 findings from this same audit pass are not yet actioned —
+see the user/session transcript for the full ranked list; re-derive from
+a fresh audit if this note has gone stale rather than trusting it
+indefinitely.
 
 _Last updated: 2026-07-18 (later same day, third continuation this date).
 Continues the two 2026-07-18 sessions recorded below (SYS-W14-10..17 +
