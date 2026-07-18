@@ -453,8 +453,34 @@ _All items in this workstream are DONE — archived to [`docs/history/plan_20260
   registered); manual `--screenshot` smoke test confirms the app still
   boots and renders cleanly (the Audio tab itself needs live interaction
   to exercise beyond compile/link correctness, same limitation).
-  **Remaining roadmap (not started):** file dialogs (investigated, no
-  narrow win found), post-processing — still open.
+  **Post-processing (bloom/skybox/SSAO) investigated, declined
+  (2026-07-18):** unlike every phase above, this has no pure/testable
+  logic to isolate — `initBloom()`/`applyBloom()`/`initSkybox()`/
+  `drawSkybox()`/`initSsao()` are 100% side-effecting raw GL calls
+  sharing one combined GL-resource bundle (`s_bloom`: function pointers,
+  shader programs, FBOs, textures for all three effects at once, not
+  three separate boundaries) with a documented history of real fragility
+  — a prior fix (see `project_bloom_bug` memory / this file's own
+  earlier bloom-effect history) resolved a silent VAO/VBO draw failure
+  plus CNA leaking `GL_CULL_FACE`/`GL_STENCIL_TEST`/`GL_SCISSOR_TEST`
+  state that had to be explicitly disabled. Its correctness can only be
+  verified by actually rendering and pixel-comparing, not by unit tests
+  (unlike `WalkController`'s differential matrix checks or
+  `computeAnimOverridesAlg`'s direct assertions) — extracting it now
+  would carry real regression risk with no proportionate de-risking tool
+  available. Left untouched; would need a dedicated visual-regression
+  harness (before/after pixel comparison against a real emissive-
+  material scene) built first if ever revisited.
+  **SYS-W3-01 roadmap status after this session's investigation round:**
+  Phases 1–7 done (Keybindings, Preferences, MacroRecorder, UndoManager,
+  animation-override computation, WalkController, AudioPreview,
+  in-that-order). File dialogs and post-processing were each
+  investigated and explicitly declined for different reasons (no
+  testability win vs. real regression risk with no verification tool) —
+  not silently skipped. `MeshCraftApplication` itself is still a large
+  class (the god-object surface named at the top of this entry hasn't
+  been reduced to zero), but every remaining piece has now been looked
+  at directly rather than assumed extractable.
 
 ### W5 — MC3 governance
 - **SYS-W5-03** `[DEFERRED, human-authorized decision]` `P2` — MC3
