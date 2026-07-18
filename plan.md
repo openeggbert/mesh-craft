@@ -310,6 +310,92 @@ _All items in this workstream are DONE — archived to [`docs/history/plan_20260
 - **SYS-W14-08** `[TODO]` `P2` — AI change preview/diff before destructive replace.
 - **SYS-W14-09** `[BLOCKED]` `P3` — Web persistence & export verification (blocked on
   CNA/browser — see NEXT.md).
+- **SYS-W14-10** `[TODO]` `P3` — Editor UI to attach a script to an object
+  (`Mc3Object::scriptId`, `mc3/include/MeshCraft/Mc3/Mc3Object.hpp`). Scripts
+  themselves are fully editable (`doc.scripts`, the "Scripts" tab,
+  `STAB-0705`), but no UI anywhere sets an object's `scriptId` to attach one
+  — confirmed via `grep -rn "scriptId" src/MeshCraft/` (zero hits). Likely a
+  combo box in `PropertiesPanel.cpp` listing `doc.scripts`' keys, next to
+  where other per-object references (e.g. material) are already edited.
+  Found via `missing.md`'s 2026-07-18 update.
+- **SYS-W14-11** `[TODO]` `P2` — Editor support for opening/saving `.mc3.json`
+  (`Mc3Document::loadFromJsonFile`/`saveToJsonFile`, `mc3/src/Mc3Document.cpp`,
+  R109's semantic-JSON format). These already work at the library level, but
+  `MeshCraftApplication_FileOps.cpp`'s Open/Save/Save As exclusively call the
+  XML load/save path — no File-menu entry or dialog filter offers
+  `.mc3.json` (confirmed via `grep -rn "loadFromJsonFile\|saveToJsonFile\|JsonFile" src/MeshCraft/`,
+  zero hits). Needs: a file-extension dispatch in `openFile()`/`saveFile()`/
+  `saveFileAs()` (mirroring how `.mcb` is already dispatched separately from
+  `.mc3.xml` in the Open File dialog, `MeshCraftApplication_UiOverlays.cpp`),
+  plus a Save As filter/extension option. Found via `missing.md`'s
+  2026-07-18 update.
+- **SYS-W14-12** `[TODO]` `P3` — Editor UI for asset metadata
+  (`Mc3Object::assetMetadata`, `Mc3AssetMetadata` struct,
+  `mc3/include/MeshCraft/Mc3/Mc3AssetMetadata.hpp` — category/subcategory/
+  tags/bounds/facing/sockets/materialSlots/collisionProxy/lods/license/
+  provenance/semanticVersion). Zero editor UI today (confirmed via
+  `grep -rn "assetMetadata\|AssetMetadata" src/MeshCraft/`, zero hits). This
+  is a large struct — likely its own collapsible section in
+  `PropertiesPanel.cpp` rather than a quick add; scope out which sub-fields
+  are worth editing vs. read-only-displaying before implementing. Found via
+  `missing.md`'s 2026-07-18 update.
+- **SYS-W14-13** `[TODO]` `P3` — Editor UI for library metadata and imports
+  (`Mc3Document::library` (`Mc3LibraryInfo`), `Mc3Document::imports`
+  (`Mc3Import`), the `.mc3lib` reusable-library file format). Zero editor UI
+  — no panel shows/edits the library namespace/version, no way to add/remove
+  an `<imports>` entry, no File-menu action creates/opens a `.mc3lib` file
+  (`saveToLibraryFile`/`saveToLibraryJsonFile` exist in
+  `mc3/src/Mc3Document.cpp` but nothing in `src/MeshCraft/` calls them).
+  **Caution:** this is a newer, still-evolving format addition from a
+  separate cross-repo initiative (see the `project_meshworld_r_series_cross_repo`
+  memory) — re-check whether that initiative itself has stabilized this
+  format before building UI against it, to avoid UI churn if the underlying
+  fields still move. Found via `missing.md`'s 2026-07-18 update.
+- **SYS-W14-14** `[TODO]` `P2` — Wire up `coordinate_system` so it actually
+  affects something. The invalid `"left_handed_y_up"` combo option was
+  already removed (`STAB-0713`, combo now only offers the 2 XSD-valid
+  values), but `Mc3Document::coordinateSystem` is still write-only — stored
+  and editable, but never read anywhere in `mc3togltf/` or `src/MeshCraft/`
+  (confirmed by direct grep, no read sites found). A user can correctly set
+  this field through the GUI and it has zero effect on rendering or export.
+  This is more of a real completeness/correctness gap than a missing-UI one
+  — either implement the actual coordinate-system conversion (editor
+  preview + exporter), or explicitly document it as declarative-only
+  metadata with no behavioral effect (matching how `SYS-W5-03` handled a
+  similar "policy decision needed" MC3-governance question). Found via
+  `missing.md`'s 2026-07-18 update.
+- **SYS-W14-15** `[TODO]` `P3` — Native file-browse dialog for texture/mesh
+  path fields (currently plain `ImGui::InputText` boxes everywhere,
+  including the Import OBJ dialog and material texture-slot fields).
+  Notably, the CNA dependency already ships a `FileDialog` device (SDL
+  backend) that is never called from anywhere in `src/MeshCraft/` or
+  `mc3togltf/` — the capability exists one layer down and is simply unused,
+  so this is plausibly a smaller task than building a picker from scratch
+  (verify CNA's `FileDialog` API surface first). Found via `missing.md`'s
+  2026-07-18 update.
+- **SYS-W14-16** `[TODO]` `P2` — Undo/redo structural-guarantee audit.
+  Currently a manual discipline: 332 `pushUndo()` call sites (fresh count),
+  each independently relying on the author remembering to call it before a
+  mutation, verified only by grep/spot-check rather than any structural
+  enforcement (e.g. a Command-pattern wrapper, a mutation-tracking proxy, or
+  a debug-build assertion that `document_` didn't change since the last
+  `pushUndo()`). `SYS-W5-04` did related exhaustive-enumeration work but was
+  explicitly scoped to a lookup cache, not to this. This needs its own
+  scoped research pass first (enumerate every `document_`-mutating call
+  site not currently covered, the same discipline `SYS-W5-04`'s own
+  research used) before choosing an enforcement mechanism — a real,
+  possibly P1-worthy risk area (a missed `pushUndo()` is silent data loss on
+  undo), but not a quick pick. Found via `missing.md`'s 2026-07-18 update.
+- **SYS-W14-17** `[TODO]` `P3` — Dedicated Area object properties panel.
+  `STAB-0721` added an `"Area (trigger zone)"` label when editing an Area
+  object, but the editor still falls through to the same generic Box size
+  fields immediately below (by design at the time, per that commit's own
+  comment — `ObjectType::Area` structurally carries a Box-shaped primitive
+  with no parser case of its own). Cosmetic remainder: either accept the
+  labeled-Box-editor as final, or design Area-specific fields if there's a
+  real editing need beyond size (e.g. trigger-specific properties already
+  covered by `doc.triggers`/`STAB-0707`, which are edited separately from
+  the object itself). Found via `missing.md`'s 2026-07-18 update.
 
 ---
 
