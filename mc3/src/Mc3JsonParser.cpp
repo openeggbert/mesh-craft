@@ -3,6 +3,7 @@
 #include <MeshCraft/Mc3/Mc3SceneState.hpp>
 #include <MeshCraft/Mc3/Mc3Trigger.hpp>
 #include <nlohmann/json.hpp>
+#include <algorithm>
 #include <fstream>
 #include <sstream>
 #include <stdexcept>
@@ -12,6 +13,26 @@ using namespace MeshCraft::Mc3;
 using namespace MeshCraft::Mc3::Internal;
 
 namespace {
+
+// AUD-005 clamps every segments/sides/subdivisions field to this ceiling on
+// the XML load path (Mc3XmlParser.cpp's own kMaxTessellation) because these
+// counts come from untrusted input and directly drive geometry allocation
+// -- e.g. an unclamped "segments": 100000000 requests ~5e15 vertices, and
+// AUD-064 found that even individually-legal Grid subdivisionsX/Z can
+// multiply into a per-frame freeze. This JSON loader read every one of
+// these fields with a raw get<int>() and applied no bound at all, so a
+// hand-edited or AI-generated .mc3.json bypassed that hardening entirely.
+// Mirrors the same per-field ceiling here. Not yet wired into
+// Mc3XmlParser.cpp's document-wide total-tessellation-weight budget
+// (AUD-059's thread_local DocumentBudget, file-static with no shared
+// header) -- that cross-document protection, and this parser's separate,
+// pre-existing gap of never honoring Mc3LoadPolicy at all, are each their
+// own larger follow-up, deliberately not folded into this fix.
+constexpr int kMaxTessellation = 4096;
+
+int clampTess(int v, int minv, int maxv = kMaxTessellation) {
+    return std::clamp(v, minv, maxv);
+}
 
 std::array<float,3> toVec3(const json& j, std::array<float,3> def = {0.f,0.f,0.f}) {
     if (!j.is_array() || j.size() < 3) return def;
@@ -76,12 +97,12 @@ Mc3Primitive toPrimitive(const json& j) {
     if (j.contains("size"))          p.size          = toVec3(j["size"], {1.f,1.f,1.f});
     if (j.contains("radius"))        p.radius        = j["radius"].get<float>();
     if (j.contains("height"))        p.height        = j["height"].get<float>();
-    if (j.contains("segments"))      p.segments      = j["segments"].get<int>();
+    if (j.contains("segments"))      p.segments      = clampTess(j["segments"].get<int>(), 0);
     if (j.contains("axis"))          p.axis          = j["axis"].get<std::string>();
     if (j.contains("majorRadius"))   p.majorRadius   = j["majorRadius"].get<float>();
     if (j.contains("minorRadius"))   p.minorRadius   = j["minorRadius"].get<float>();
-    if (j.contains("subdivisionsX")) p.subdivisionsX = j["subdivisionsX"].get<int>();
-    if (j.contains("subdivisionsZ")) p.subdivisionsZ = j["subdivisionsZ"].get<int>();
+    if (j.contains("subdivisionsX")) p.subdivisionsX = clampTess(j["subdivisionsX"].get<int>(), 1);
+    if (j.contains("subdivisionsZ")) p.subdivisionsZ = clampTess(j["subdivisionsZ"].get<int>(), 1);
     return p;
 }
 
@@ -98,8 +119,8 @@ Mc3CrossSection toCrossSection(const json& j) {
     if (j.contains("height"))      cs.height      = j["height"].get<float>();
     if (j.contains("radius"))      cs.radius      = j["radius"].get<float>();
     if (j.contains("innerRadius")) cs.innerRadius = j["innerRadius"].get<float>();
-    if (j.contains("sides"))       cs.sides       = j["sides"].get<int>();
-    if (j.contains("segments"))    cs.segments    = j["segments"].get<int>();
+    if (j.contains("sides"))       cs.sides       = clampTess(j["sides"].get<int>(), 3);
+    if (j.contains("segments"))    cs.segments    = clampTess(j["segments"].get<int>(), 1);
     if (j.contains("customPoints")) {
         for (const auto& pt : j["customPoints"])
             cs.customPoints.push_back({pt.at(0).get<float>(), pt.at(1).get<float>()});
@@ -140,7 +161,7 @@ Mc3Extrude toExtrude(const json& j) {
     if (j.contains("crossSection")) ex.crossSection = toCrossSection(j["crossSection"]);
     if (j.contains("path"))         ex.path         = toPath(j["path"]);
     if (j.contains("twist"))        ex.twist        = j["twist"].get<float>();
-    if (j.contains("segments"))     ex.segments     = j["segments"].get<int>();
+    if (j.contains("segments"))     ex.segments     = clampTess(j["segments"].get<int>(), 1);
     if (j.contains("smooth"))       ex.smooth       = j["smooth"].get<bool>();
     if (j.contains("caps"))         ex.caps         = j["caps"].get<bool>();
     return ex;

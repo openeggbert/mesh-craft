@@ -204,6 +204,14 @@ if(BUILD_TESTING)
     add_test(NAME mc3_input_budget COMMAND mc3_input_budget_test)
     set_tests_properties(mc3_input_budget PROPERTIES TIMEOUT 15 LABELS "format")
 
+    # AUD-064 follow-up: the .mc3.json load path had none of the above
+    # per-field tessellation clamps at all (raw get<int>(), no bound) --
+    # this is the JSON-path equivalent of mc3_input_budget above.
+    add_executable(mc3_json_input_budget_test test/json_input_budget_test.cpp)
+    target_link_libraries(mc3_json_input_budget_test PRIVATE Mc3)
+    add_test(NAME mc3_json_input_budget COMMAND mc3_json_input_budget_test)
+    set_tests_properties(mc3_json_input_budget PROPERTIES TIMEOUT 15 LABELS "format")
+
     # SYS-W1-02: documented per-field numeric ranges (camera/material/
     # geometry/environment/animation/transform) -- a value that's finite but
     # outside its field's documented domain (fov=600, roughness=-3,
