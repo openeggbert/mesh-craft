@@ -107,9 +107,9 @@ float MeshCraftApplication::drawMenuBar()
             ImGui::EndMenu();
         }
         if (ImGui::BeginMenu("Edit")) {
-            if (ImGui::MenuItem("Undo", "Ctrl+Z", false, !undoStack_.empty())) performUndo();
-            if (ImGui::MenuItem("Redo", "Ctrl+Y", false, !redoStack_.empty())) performRedo();
-            if (ImGui::MenuItem("Undo History...", nullptr, false, !undoStack_.empty()))
+            if (ImGui::MenuItem("Undo", "Ctrl+Z", false, undoManager_.canUndo())) performUndo();
+            if (ImGui::MenuItem("Redo", "Ctrl+Y", false, undoManager_.canRedo())) performRedo();
+            if (ImGui::MenuItem("Undo History...", nullptr, false, undoManager_.canUndo()))
                 undoHistoryOpen_ = true;
             ImGui::Separator();
             if (ImGui::MenuItem("Cut",       "Ctrl+X")) cutSelected();

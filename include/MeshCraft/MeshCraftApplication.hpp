@@ -11,6 +11,7 @@
 #include "MeshCraft/Editor/Preferences.hpp"
 #include "MeshCraft/Editor/SelectionManager.hpp"
 #include "MeshCraft/Editor/TransformGizmo.hpp"
+#include "MeshCraft/Editor/UndoManager.hpp"
 #include "MeshCraft/Mc3/Mc3Animation.hpp"
 #include "MeshCraft/Mc3/Mc3Document.hpp"
 #include "MeshCraft/Mc3/Mc3Object.hpp"
@@ -698,17 +699,12 @@ private:
     Mc3::Mc3Document loadSceneFileDispatched(const std::filesystem::path& path,
                                               Mc3::Mc3Validation& validation);
 
-    // Undo/redo
-    static constexpr int kUndoMax = 20;
-    std::vector<Mc3::Mc3Document> undoStack_;
-    std::vector<Mc3::Mc3Document> redoStack_;
-    // SYS-W9-03 (human-authorized decision, 2026-07-17): the ids selected at
-    // the moment each undoStack_/redoStack_ entry was pushed, kept in
-    // lockstep (index-for-index, same push/cap calls) with those stacks --
-    // lets performUndo()/performRedo() restore the pre-mutation selection
-    // instead of unconditionally clearing it.
-    std::vector<std::vector<std::string>> undoSelectionStack_;
-    std::vector<std::vector<std::string>> redoSelectionStack_;
+    // Undo/redo (SYS-W3-01 Phase 4: stack mechanism extracted into
+    // Editor::UndoManager; SYS-W9-03's selection-restore stacks moved with
+    // it). currentSelectionIds()/restoreSelectionByIds() stay here since
+    // they need selection_/flatFindSharedById(), which UndoManager has no
+    // dependency on by design.
+    Editor::UndoManager undoManager_;
     [[nodiscard]] std::vector<std::string> currentSelectionIds() const;
     void restoreSelectionByIds(const std::vector<std::string>& ids);
     void pushUndo();

@@ -96,8 +96,7 @@ void MeshCraftApplication::runBenchmarkSuite() {
     // keeping the invariant clean costs nothing).
     {
         double ms = timeMs([&] { pushUndo(); });
-        if (!undoStack_.empty()) undoStack_.pop_back();
-        if (!undoSelectionStack_.empty()) undoSelectionStack_.pop_back();
+        undoManager_.popUndoWithoutApplying();
         std::cout << "[Benchmark] undo snapshot (pushUndo deep-copy): " << ms << " ms\n";
     }
 

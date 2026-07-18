@@ -544,14 +544,17 @@ int main() {
     }
 
     // Redo invalidation on the first new mutation after an undo is enforced
-    // structurally inside pushUndo() itself (MeshCraftApplication_Commands.cpp,
-    // `void MeshCraftApplication::pushUndo() { undoStack_.push_back(...);
-    // ...; redoStack_.clear(); }") -- independent of any widget/gesture
-    // timing, so no ImGui frames are needed to exercise it. That function
-    // isn't headlessly callable here (it's a CNA-coupled member function),
-    // so this mirrors its exact 2-statement invariant against a stand-in
-    // stack pair -- this breaks if that invariant is ever dropped from the
-    // real function.
+    // structurally inside Editor::UndoManager::push() (SYS-W3-01 Phase 4
+    // moved it there from MeshCraftApplication::pushUndo(), which now just
+    // delegates: `undoManager_.push(deepCopyDoc(document_), ...)` --
+    // push()'s own body still does `undoStack_.push_back(...); ...;
+    // redoStack_.clear();`) -- independent of any widget/gesture timing, so
+    // no ImGui frames are needed to exercise it. UndoManager itself has its
+    // own dedicated unit test (macro_recorder_test's sibling,
+    // undo_manager_test) covering this directly; this block predates that
+    // extraction and mirrors the same 2-statement invariant against a
+    // stand-in stack pair for a second, independent check -- this breaks if
+    // that invariant is ever dropped from the real function.
     {
         std::vector<int> undoStack, redoStack;
         auto pushUndoMock = [&](int snapshot) {
@@ -570,15 +573,17 @@ int main() {
     // SYS-W9-03 (human-authorized decision, 2026-07-17): performUndo()/
     // performRedo() now restore the pre-mutation selection (by id, re-
     // resolved against the swapped-in document) instead of unconditionally
-    // clearing it. Like the redo-invalidation block above, performUndo()/
-    // performRedo() are CNA-coupled member functions and not headlessly
-    // callable here, so this mirrors their exact structure (undoStack_/
-    // redoStack_ paired index-for-index with undoSelectionStack_/
-    // redoSelectionStack_; restore-by-id skips an id no longer present
-    // instead of dangling or crashing) against a stand-in model -- this
-    // breaks if that structure is ever dropped from the real functions
-    // (MeshCraftApplication_Commands.cpp's pushUndo()/performUndo()/
-    // performRedo()).
+    // clearing it -- the pairing itself (document stack paired
+    // index-for-index with a selection-id stack) now lives inside
+    // Editor::UndoManager (SYS-W3-01 Phase 4), which returns both together
+    // as one Entry; MeshCraftApplication::performUndo()/performRedo() just
+    // call restoreSelectionByIds(entry->selectionIds) afterward. Like the
+    // redo-invalidation block above, this mirrors that pairing invariant
+    // (restore-by-id skips an id no longer present instead of dangling or
+    // crashing) against a stand-in model as a second, independent check --
+    // this breaks if that structure is ever dropped from the real classes
+    // (Editor::UndoManager and MeshCraftApplication_Commands.cpp's
+    // performUndo()/performRedo()).
     {
         struct MockDoc { std::vector<std::string> ids; };
         std::vector<MockDoc> undoStack, redoStack;

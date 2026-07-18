@@ -338,13 +338,11 @@ void MeshCraftApplication::restoreSelectionByIds(const std::vector<std::string>&
     }
 }
 
-// AUD-031: the push-then-trim-to-cap pattern at all 3 stack mutation sites
-// below was hand-copied 3 times; now delegates to pushWithCapAlg.
+// SYS-W3-01 Phase 4: the stack push-then-trim-to-cap mechanism itself now
+// lives in Editor::UndoManager (AUD-031's pushWithCapAlg moved with it) --
+// this just prepares an independent copy of the current state for it.
 void MeshCraftApplication::pushUndo() {
-    pushWithCapAlg(undoStack_, deepCopyDoc(document_), kUndoMax);
-    pushWithCapAlg(undoSelectionStack_, currentSelectionIds(), kUndoMax);
-    redoStack_.clear();
-    redoSelectionStack_.clear();
+    undoManager_.push(deepCopyDoc(document_), currentSelectionIds());
     // CSG cache no longer cleared here: hash-based invalidation handles it (K1)
     // SYS-W5-04: called before virtually every mutating command, so this is
     // objectIndex_'s single invalidation choke point for in-place tree edits.
@@ -362,35 +360,26 @@ bool MeshCraftApplication::undoOnActivate(bool widgetChanged) {
 //
 // SYS-W9-03 (human-authorized decision, 2026-07-17): restores the selection
 // that was active immediately before the command being undone/redone ran,
-// instead of unconditionally clearing it. undoSelectionStack_/
-// redoSelectionStack_ are kept in lockstep (index-for-index) with
-// undoStack_/redoStack_ by pushUndo()/performUndo()/performRedo() always
-// pushing/popping both pairs together.
+// instead of unconditionally clearing it -- UndoManager keeps the
+// selection-id stacks in lockstep with the document stacks internally now
+// (SYS-W3-01 Phase 4), returning both together as one Entry.
 void MeshCraftApplication::performUndo() {
-    if (undoStack_.empty()) return;
-    pushWithCapAlg(redoStack_, deepCopyDoc(document_), kUndoMax);
-    pushWithCapAlg(redoSelectionStack_, currentSelectionIds(), kUndoMax);
-    document_ = std::move(undoStack_.back());
+    auto entry = undoManager_.undo(deepCopyDoc(document_), currentSelectionIds());
+    if (!entry) return;
+    document_ = std::move(entry->doc);
     objectIndex_.invalidate();  // SYS-W5-04: wholesale document_ replacement
-    undoStack_.pop_back();
-    std::vector<std::string> ids = std::move(undoSelectionStack_.back());
-    undoSelectionStack_.pop_back();
-    restoreSelectionByIds(ids);
+    restoreSelectionByIds(entry->selectionIds);
     modified_ = true;
     updateWindowTitle();
     evaluateAndPushAnimOverrides();
 }
 
 void MeshCraftApplication::performRedo() {
-    if (redoStack_.empty()) return;
-    pushWithCapAlg(undoStack_, deepCopyDoc(document_), kUndoMax);
-    pushWithCapAlg(undoSelectionStack_, currentSelectionIds(), kUndoMax);
-    document_ = std::move(redoStack_.back());
+    auto entry = undoManager_.redo(deepCopyDoc(document_), currentSelectionIds());
+    if (!entry) return;
+    document_ = std::move(entry->doc);
     objectIndex_.invalidate();  // SYS-W5-04: wholesale document_ replacement
-    redoStack_.pop_back();
-    std::vector<std::string> ids = std::move(redoSelectionStack_.back());
-    redoSelectionStack_.pop_back();
-    restoreSelectionByIds(ids);
+    restoreSelectionByIds(entry->selectionIds);
     modified_ = true;
     updateWindowTitle();
     evaluateAndPushAnimOverrides();

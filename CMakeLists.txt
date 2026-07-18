@@ -641,6 +641,28 @@ if(MESH_CRAFT_BUILD_TESTING AND UNIX AND NOT ANDROID AND NOT EMSCRIPTEN)
     add_test(NAME macro_recorder COMMAND macro_recorder_test)
     set_tests_properties(macro_recorder PROPERTIES TIMEOUT 15 LABELS "unit")
 
+    # SYS-W3-01 Phase 4: Editor::UndoManager, extracted from
+    # MeshCraftApplication (the undo/redo stack mechanism, SYS-W9-03's
+    # selection-restore stacks included). No test existed for this
+    # subsystem before the extraction (undo_gesture_frame_test.cpp covers
+    # the same invariants against hand-rolled stand-ins, since
+    # MeshCraftApplication's real pushUndo()/performUndo()/performRedo()
+    # aren't headlessly callable -- this exercises the real class
+    # directly). CNA-free -- unlike MacroRecorder, this needs no callback
+    # Context at all: every side effect beyond stack bookkeeping
+    # (deepCopyDoc(), objectIndex_ invalidation, selection restore) stays
+    # the caller's responsibility, so this only needs Mc3Document.hpp
+    # (header-only), matching object_index_test above.
+    add_executable(undo_manager_test
+        ${CMAKE_CURRENT_SOURCE_DIR}/test/undo_manager_test.cpp
+        ${CMAKE_CURRENT_SOURCE_DIR}/src/MeshCraft/Editor/UndoManager.cpp)
+    target_include_directories(undo_manager_test PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/include
+        ${CMAKE_CURRENT_SOURCE_DIR}/mc3/include)
+    target_compile_features(undo_manager_test PRIVATE cxx_std_23)
+    add_test(NAME undo_manager COMMAND undo_manager_test)
+    set_tests_properties(undo_manager PROPERTIES TIMEOUT 15 LABELS "unit")
+
     # Pure unit test: ObjectType <-> display-name round-trip. Header-only.
     # Regression guard for the Torus/Capsule/Disk/Grid/IcoSphere -> "Object"
     # mislabel and the lossy macro round-trip.

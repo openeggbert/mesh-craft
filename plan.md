@@ -273,9 +273,49 @@ _All items in this workstream are DONE — archived to [`docs/history/plan_20260
   test registered, CNA-free like `object_index_test`); manual
   `--screenshot` smoke test confirms the app still boots and renders
   cleanly after the refactor.
-  **Remaining roadmap (Phase 4+, not started):** undo/redo, animation,
-  file dialogs, post-processing, audio/walk-mode — each its own future
-  phase, per the original research writeup.
+  **Phase 4 DONE (2026-07-18):** extracted `Editor::UndoManager`
+  (`include/MeshCraft/Editor/UndoManager.hpp` +
+  `src/MeshCraft/Editor/UndoManager.cpp`) — `undoStack_`/`redoStack_` plus
+  `SYS-W9-03`'s `undoSelectionStack_`/`redoSelectionStack_` (kept in
+  lockstep exactly as before, now returned together as one `Entry`).
+  Investigated the call-site surface first rather than assuming
+  `pushUndo()`/`performUndo()`/`performRedo()` were the whole story: a
+  direct grep found a 4th real consumer — the Undo History dialog
+  (`MeshCraftApplication_UiOverlays.cpp`) has its own "jump straight to
+  step N" logic (`AUDIT-0056`'s own redo-stack-cap fix included), not just
+  push/undo/redo — plus 3 "clear both stacks" sites (`FileOps.cpp`'s Open/
+  autosave-recovery, `UiOverlays.cpp`'s Open dialog) and one direct-pop
+  site (`SYS-W12-02`'s benchmark, measuring `pushUndo()`'s cost then
+  undoing the push). All 4 shapes got a matching method
+  (`push`/`undo`/`redo`/`jumpTo`/`popUndoWithoutApplying`/`clear`), so no
+  call site needed a workaround. Unlike `MacroRecorder`, this needed no
+  callback `Context` at all: every side effect beyond stack bookkeeping
+  (`deepCopyDoc()`, `objectIndex_.invalidate()`, `restoreSelectionByIds()`,
+  `modified_`/`updateWindowTitle()`, `evaluateAndPushAnimOverrides()`)
+  stays the caller's responsibility before/after calling in — `deepCopyDoc()`
+  in particular is a `MeshCraftPrivate.hpp` helper, and keeping
+  `UndoManager` from depending on it (the caller always passes an
+  already-independent copy in) matches `KeybindingManager`'s established
+  precedent of keeping extracted classes' dependency footprint minimal.
+  `AUD-031`'s `pushWithCapAlg` moved with it (reused directly, header-only,
+  no duplication). New `undo_manager_test` (no coverage existed for this
+  subsystem before — `undo_gesture_frame_test.cpp` covers the same
+  invariants against hand-rolled stand-ins since `MeshCraftApplication`'s
+  real methods aren't headlessly callable, and stays as a second,
+  independent check; this new test exercises the real class directly):
+  41 assertions covering push/undo/redo semantics, redo invalidation on a
+  new push, the `kMax` depth cap on both stacks, selection ids traveling
+  in lockstep, `jumpTo()`'s multi-step redo-stack rebuild (including its
+  own cap and out-of-range rejection), and
+  `popUndoWithoutApplying()`/`clear()`. Full rebuild + 129/129 `ctest`
+  (new `undo_manager` test registered, CNA-free like `object_index_test`/
+  `macro_recorder_test`); manual `--screenshot` smoke test plus a real
+  `--benchmark` run confirming the live app's actual `pushUndo()` →
+  `undoManager_.push()` → `popUndoWithoutApplying()` path executes cleanly
+  end-to-end with a plausible timing, not just the unit test's mocks.
+  **Remaining roadmap (Phase 5+, not started):** animation, file dialogs,
+  post-processing, audio/walk-mode — each its own future phase, per the
+  original research writeup.
 
 ### W5 — MC3 governance
 - **SYS-W5-03** `[DEFERRED, human-authorized decision]` `P2` — MC3

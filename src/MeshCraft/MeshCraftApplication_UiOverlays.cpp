@@ -411,8 +411,8 @@ void MeshCraftApplication::drawDialogs()
         ImVec4 cSel (1.0f,  0.60f, 0.60f, 1.0f);
 
         bool hasSel = selection_.hasSelection();
-        bool hasUndo = !undoStack_.empty();
-        bool hasRedo = !redoStack_.empty();
+        bool hasUndo = undoManager_.canUndo();
+        bool hasRedo = undoManager_.canRedo();
 
         // ---- File commands ----
         if (entry(  "File", cFile, "New Scene",        "Ctrl+N"))   confirmIfModified(PendingAction::NewScene);
@@ -1097,7 +1097,7 @@ void MeshCraftApplication::drawDialogs()
     }
     if (ImGui::BeginPopupModal("Undo History##uhdlg", nullptr,
                                ImGuiWindowFlags_AlwaysAutoResize)) {
-        int n = static_cast<int>(undoStack_.size());
+        int n = undoManager_.undoCount();
         ImGui::TextDisabled("%d step(s) available  (newest first)", n);
         ImGui::Separator();
         ImGui::BeginChild("##uhscroll", ImVec2(340, std::min(n * 22 + 8, 300)), false);
@@ -1107,37 +1107,22 @@ void MeshCraftApplication::drawDialogs()
         ImGui::Selectable("  Current  (active)", false, ImGuiSelectableFlags_Disabled);
         ImGui::PopStyleColor();
 
-        for (int i = n - 1; i >= 0; --i) {
-            int stepsAgo = n - i;
+        for (int stepsAgo = 1; stepsAgo <= n; ++stepsAgo) {
             char label[64];
             std::snprintf(label, sizeof(label), "  Step -%d  (%d step%s ago)",
                           stepsAgo, stepsAgo, stepsAgo == 1 ? "" : "s");
             if (ImGui::Selectable(label)) {
-                // Restore: push current + everything newer onto redo, then restore this state
-                redoStack_.push_back(deepCopyDoc(document_));
-                // SYS-W9-03: keep undoSelectionStack_/redoSelectionStack_ in
-                // lockstep with undoStack_/redoStack_ through this multi-step
-                // jump, mirroring every push/resize below exactly.
-                redoSelectionStack_.push_back(currentSelectionIds());
-                for (int j = n - 1; j > i; --j) {
-                    redoStack_.push_back(std::move(undoStack_[j]));
-                    redoSelectionStack_.push_back(std::move(undoSelectionStack_[j]));
+                // SYS-W3-01 Phase 4: UndoManager::jumpTo() does the multi-step
+                // "push current + everything newer onto redo, then restore
+                // this state" bookkeeping (including the AUDIT-0056 redo-cap
+                // enforcement) internally now.
+                auto entry = undoManager_.jumpTo(stepsAgo, deepCopyDoc(document_), currentSelectionIds());
+                if (entry) {
+                    document_ = std::move(entry->doc);
+                    objectIndex_.invalidate();  // SYS-W5-04: wholesale document_ replacement
+                    restoreSelectionByIds(entry->selectionIds);
+                    modified_ = true; updateWindowTitle();
                 }
-                // AUDIT-0056: unlike performUndo()/performRedo(), this loop can push
-                // many entries at once (jumping to the oldest of a full history) --
-                // apply the same kUndoMax cap those two already enforce, or the
-                // redo stack silently grows unbounded relative to the documented cap.
-                while (static_cast<int>(redoStack_.size()) > kUndoMax)
-                    redoStack_.erase(redoStack_.begin());
-                while (static_cast<int>(redoSelectionStack_.size()) > kUndoMax)
-                    redoSelectionStack_.erase(redoSelectionStack_.begin());
-                document_ = std::move(undoStack_[i]);
-                objectIndex_.invalidate();  // SYS-W5-04: wholesale document_ replacement
-                std::vector<std::string> ids = std::move(undoSelectionStack_[i]);
-                undoStack_.resize(i);
-                undoSelectionStack_.resize(i);
-                restoreSelectionByIds(ids);
-                modified_ = true; updateWindowTitle();
                 ImGui::CloseCurrentPopup();
             }
         }
@@ -1194,8 +1179,7 @@ void MeshCraftApplication::drawDialogs()
                 currentFile_ = openDialogBuf_;
                 addRecentFile(currentFile_);
                 selection_.clear();
-                undoStack_.clear(); redoStack_.clear();
-                undoSelectionStack_.clear(); redoSelectionStack_.clear();
+                undoManager_.clear();
                 // STAB-0250: same rationale as the "Open Recent File" path —
                 // without this, a stale CSG preview cache entry from the
                 // previous document could collide (same content hash) with a
