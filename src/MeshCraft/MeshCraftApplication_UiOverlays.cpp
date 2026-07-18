@@ -1602,56 +1602,55 @@ void MeshCraftApplication::drawDialogs()
     if (ImGui::BeginPopupModal("Macro Recorder##macrodlg", nullptr,
                                ImGuiWindowFlags_AlwaysAutoResize)) {
         // Status indicator
-        if (isRecording_) {
+        if (macroRecorder_.isRecording()) {
             ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.f, 0.35f, 0.35f, 1.f));
-            ImGui::Text("REC  %d step(s) captured", static_cast<int>(macroSteps_.size()));
+            ImGui::Text("REC  %d step(s) captured", macroRecorder_.stepCount());
             ImGui::PopStyleColor();
         } else {
-            ImGui::Text("%d step(s) recorded", static_cast<int>(macroSteps_.size()));
+            ImGui::Text("%d step(s) recorded", macroRecorder_.stepCount());
         }
         ImGui::Separator();
 
         // Record / Stop toggle
-        if (isRecording_) {
+        if (macroRecorder_.isRecording()) {
             if (ImGui::Button("Stop", ImVec2(100, 0))) {
-                isRecording_ = false;
+                macroRecorder_.stopRecording();
                 setStatusMsg("Recording stopped", false, 2.f);
             }
         } else {
             if (ImGui::Button("Record", ImVec2(100, 0))) {
-                macroSteps_.clear();
-                isRecording_ = true;
+                macroRecorder_.startRecording();
                 setStatusMsg("Recording started — edit the scene, then Stop", false, 3.f);
             }
         }
         ImGui::SameLine();
 
         // Play
-        bool canPlay = !macroSteps_.empty() && !isRecording_;
+        bool canPlay = macroRecorder_.stepCount() > 0 && !macroRecorder_.isRecording();
         if (!canPlay) ImGui::BeginDisabled();
         if (ImGui::Button("Play", ImVec2(100, 0))) {
             ImGui::CloseCurrentPopup();
-            playMacro();
+            macroRecorder_.play(macroContext());
         }
         if (!canPlay) ImGui::EndDisabled();
         ImGui::SameLine();
 
         // Clear
         if (ImGui::Button("Clear", ImVec2(80, 0))) {
-            macroSteps_.clear();
-            isRecording_ = false;
+            macroRecorder_.clear();
         }
 
         // Step list
         ImGui::Separator();
         ImGui::BeginChild("##macrosteps", ImVec2(440, 180), true);
-        if (macroSteps_.empty()) {
+        if (macroRecorder_.stepCount() == 0) {
             ImGui::TextDisabled("(no steps)");
             ImGui::TextDisabled("Press Record, then edit the scene,");
             ImGui::TextDisabled("then Stop. Play repeats the sequence.");
         } else {
-            for (int i = 0; i < static_cast<int>(macroSteps_.size()); ++i) {
-                const auto& step = macroSteps_[static_cast<size_t>(i)];
+            const auto& macroSteps = macroRecorder_.steps();
+            for (int i = 0; i < static_cast<int>(macroSteps.size()); ++i) {
+                const auto& step = macroSteps[static_cast<size_t>(i)];
                 std::string line = std::to_string(i + 1) + ". " + step.verb;
                 for (const auto& a : step.args) { line += ' '; line += a; }
                 ImGui::TextUnformatted(line.c_str());
@@ -1665,14 +1664,14 @@ void MeshCraftApplication::drawDialogs()
         ImGui::SetNextItemWidth(310);
         ImGui::InputText("##macrofile", macroFileBuf_, sizeof(macroFileBuf_));
         ImGui::SameLine();
-        if (ImGui::Button("Save##macrosave", ImVec2(55, 0))) saveMacro(macroFileBuf_);
+        if (ImGui::Button("Save##macrosave", ImVec2(55, 0))) macroRecorder_.save(macroFileBuf_, macroContext());
         ImGui::SameLine();
-        if (ImGui::Button("Load##macroload", ImVec2(55, 0))) loadMacro(macroFileBuf_);
+        if (ImGui::Button("Load##macroload", ImVec2(55, 0))) macroRecorder_.load(macroFileBuf_, macroContext());
 
         ImGui::Separator();
         if (ImGui::Button("Close", ImVec2(100, 0)) ||
             ImGui::IsKeyPressed(ImGuiKey_Escape, false)) {
-            isRecording_ = false;
+            macroRecorder_.stopRecording();
             ImGui::CloseCurrentPopup();
         }
         ImGui::EndPopup();

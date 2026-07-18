@@ -6,6 +6,7 @@
 #include "MeshCraft/Editor/EditorCamera.hpp"
 #include "MeshCraft/Editor/EditorTool.hpp"
 #include "MeshCraft/Editor/KeybindingManager.hpp"
+#include "MeshCraft/Editor/MacroRecorder.hpp"
 #include "MeshCraft/Editor/ObjectIndex.hpp"
 #include "MeshCraft/Editor/Preferences.hpp"
 #include "MeshCraft/Editor/SelectionManager.hpp"
@@ -62,11 +63,8 @@ struct PendingFileBrowse {
 // MeshCraft/Editor/ActiveTool.hpp so they can be unit-tested without linking
 // the full editor. Included above.
 
-// H12: Macro recorder — one recorded editing step
-struct MacroStep {
-    std::string              verb;
-    std::vector<std::string> args;
-};
+// H12: Macro recorder -- MacroStep/MacroRecorder now live in
+// MeshCraft/Editor/MacroRecorder.hpp (SYS-W3-01 Phase 3), included above.
 
 // H9: customizable key binding -- KeyBind/KeybindingManager now live in
 // MeshCraft/Editor/KeybindingManager.hpp (SYS-W3-01), included above.
@@ -661,16 +659,14 @@ private:
     std::string keyCaptureAction_;   // non-empty = waiting for next keypress
     bool        keybindOpen_{false}; // open keybind editor dialog
 
-    // Macro recorder (H12)
-    bool                   isRecording_{false};
-    std::vector<MacroStep> macroSteps_;
+    // Macro recorder (H12, SYS-W3-01 Phase 3: extracted into
+    // Editor::MacroRecorder; macroContext() builds the callback struct it
+    // needs to call back into this class, built fresh at each play/save/
+    // load call site)
+    Editor::MacroRecorder macroRecorder_;
     bool                   macroOpen_{false};
     char                   macroFileBuf_[512]{};
-    void recordStep(const std::string& verb, std::vector<std::string> args = {});
-    void playMacro();
-    void executeMacroStep(const MacroStep& step);
-    void saveMacro(const std::string& path);
-    void loadMacro(const std::string& path);
+    Editor::MacroRecorder::Context macroContext();
 
     // Preferences dialog (H7, SYS-W3-01 Phase 2: theme + window-open state
     // extracted into Editor::Preferences; loadPrefs()/savePrefs() stay here

@@ -230,6 +230,52 @@ _All items in this workstream are DONE — archived to [`docs/history/plan_20260
   back to Dark instead of crashing. Full rebuild + 124/124 `ctest` (new
   `preferences` test registered); manual `--screenshot` smoke test confirms
   the app still boots, loads prefs, and renders after the refactor.
+  **Phase 3 DONE (2026-07-18):** extracted `Editor::MacroRecorder`
+  (`include/MeshCraft/Editor/MacroRecorder.hpp` +
+  `src/MeshCraft/Editor/MacroRecorder.cpp`) — the `isRecording_`/
+  `macroSteps_` state, `recordStep()`/`playMacro()`/`executeMacroStep()`/
+  `saveMacro()`/`loadMacro()`. This was the harder of the two originally-
+  bundled Phase-1 candidates (Preferences' own entanglement turned out
+  narrow and was resolved in Phase 2; Macro's was real):
+  `executeMacroStep()` calls 8 other `MeshCraftApplication` methods
+  (`addPrimitive`/`deleteSelected`/`duplicateSelected`/`groupSelected`/
+  `ungroupSelected`/`groupScaleSelected`/`batchRenameSelected`/
+  `arrayDuplicate`) plus inline direct mutation of `document_.objects`/
+  `selection_`/`lockedIds_`/`modified_` for the `hide`/`show_all`/`lock`/
+  `unlock` verbs — resolved with a `MacroRecorder::Context` callback
+  struct (a `PropertiesContext`-style DI struct), built fresh at each
+  `play()`/`save()`/`load()` call site by a new
+  `MeshCraftApplication::macroContext()` factory method (in the now much
+  smaller `MeshCraftApplication_Macro.cpp`, which contains only that
+  method), rather than storing a back-reference to `MeshCraftApplication`
+  — matching `ObjectIndex`'s "dependencies passed as parameters, not
+  held" idiom, since play/save/load are on-demand actions with no
+  per-frame staleness risk (unlike `PropertiesContext` itself, which is
+  rebuilt every frame for that reason). `MacroStep`/`MacroStepAlg`'s
+  pre-existing AUD-031 duplication (a real type vs. a CNA-free test
+  mirror) is unchanged — `MacroRecorder` is itself now fully CNA-free, but
+  keeping the two types separate still lets `EditorAlgorithms.hpp`'s
+  `saveMacroAlg`/`loadMacroAlg` be unit-tested standalone without linking
+  the new class, so the conversion at the save/load boundary was kept
+  rather than merged. Updated all direct-field-access call sites
+  (`MeshCraftApplication_Commands.cpp`'s 8 `recordStep()` calls,
+  `MeshCraftApplication_UiMenuBar.cpp`'s Record/Stop/Play menu items,
+  `MeshCraftApplication_UiOverlays.cpp`'s Macro Editor dialog). New
+  `macro_recorder_test` (no coverage existed for this subsystem before):
+  a `Spy` context logging every callback invocation, covering
+  `recordStep()`'s no-op-while-not-recording guard, start/stop/clear,
+  every one of the 12 verbs dispatching to the right callback with
+  correctly-parsed args (including `group_scale`/`linear_array`'s numeric
+  parsing), playback not re-recording itself and restoring the prior
+  `isRecording()` state, the unknown-`add`-type error path, a real
+  save/load round-trip through a temp file, and the empty-path/missing-
+  file error messages. Full rebuild + 128/128 `ctest` (new `macro_recorder`
+  test registered, CNA-free like `object_index_test`); manual
+  `--screenshot` smoke test confirms the app still boots and renders
+  cleanly after the refactor.
+  **Remaining roadmap (Phase 4+, not started):** undo/redo, animation,
+  file dialogs, post-processing, audio/walk-mode — each its own future
+  phase, per the original research writeup.
 
 ### W5 — MC3 governance
 - **SYS-W5-03** `[DEFERRED, human-authorized decision]` `P2` — MC3

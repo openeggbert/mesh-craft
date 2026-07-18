@@ -386,23 +386,23 @@ float MeshCraftApplication::drawMenuBar()
                                 !selection_.selection().empty()))
                 randomizeOpen_ = true;
             ImGui::Separator();
-            // H12: Macro recorder
-            if (isRecording_) {
+            // H12: Macro recorder (SYS-W3-01 Phase 3: Editor::MacroRecorder)
+            if (macroRecorder_.isRecording()) {
                 ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.f, 0.4f, 0.4f, 1.f));
                 if (ImGui::MenuItem("Stop Recording")) {
-                    isRecording_ = false;
+                    macroRecorder_.stopRecording();
                     setStatusMsg("Recording stopped", false, 2.f);
                 }
                 ImGui::PopStyleColor();
             } else {
                 if (ImGui::MenuItem("Record Macro")) {
-                    macroSteps_.clear();
-                    isRecording_ = true;
+                    macroRecorder_.startRecording();
                     setStatusMsg("Recording started — edit the scene, then Stop", false, 3.f);
                 }
             }
-            if (ImGui::MenuItem("Play Macro", nullptr, false, !macroSteps_.empty() && !isRecording_))
-                playMacro();
+            if (ImGui::MenuItem("Play Macro", nullptr, false,
+                                 macroRecorder_.stepCount() > 0 && !macroRecorder_.isRecording()))
+                macroRecorder_.play(macroContext());
             if (ImGui::MenuItem("Macro Editor…"))
                 macroOpen_ = true;
             ImGui::Separator();

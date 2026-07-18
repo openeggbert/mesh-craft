@@ -622,6 +622,25 @@ if(MESH_CRAFT_BUILD_TESTING AND UNIX AND NOT ANDROID AND NOT EMSCRIPTEN)
     add_test(NAME object_index COMMAND object_index_test)
     set_tests_properties(object_index PROPERTIES TIMEOUT 15 LABELS "unit")
 
+    # SYS-W3-01 Phase 3: Editor::MacroRecorder, extracted from
+    # MeshCraftApplication (H12). No test existed for this subsystem before
+    # the extraction. CNA-free -- executeStep()'s cross-domain calls
+    # (addPrimitive/deleteSelected/document_/selection_/etc.) are resolved
+    # through a Context of std::function callbacks (a PropertiesContext-
+    # style DI struct) rather than linking MeshCraftApplication itself, so
+    # this only needs Mc3Object.hpp's ObjectType enum (header-only) plus
+    # EditorAlgorithms.hpp's save/load helpers -- neither needs Mc3/CNA
+    # linked, matching object_index_test above.
+    add_executable(macro_recorder_test
+        ${CMAKE_CURRENT_SOURCE_DIR}/test/macro_recorder_test.cpp
+        ${CMAKE_CURRENT_SOURCE_DIR}/src/MeshCraft/Editor/MacroRecorder.cpp)
+    target_include_directories(macro_recorder_test PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/include
+        ${CMAKE_CURRENT_SOURCE_DIR}/mc3/include)
+    target_compile_features(macro_recorder_test PRIVATE cxx_std_23)
+    add_test(NAME macro_recorder COMMAND macro_recorder_test)
+    set_tests_properties(macro_recorder PROPERTIES TIMEOUT 15 LABELS "unit")
+
     # Pure unit test: ObjectType <-> display-name round-trip. Header-only.
     # Regression guard for the Torus/Capsule/Disk/Grid/IcoSphere -> "Object"
     # mislabel and the lossy macro round-trip.

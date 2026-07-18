@@ -101,7 +101,7 @@ void MeshCraftApplication::addPrimitive(Mc3::ObjectType type) {
             selection_.clear(); selection_.select(obj);
             modified_ = true;
             updateWindowTitle();
-            recordStep("add", {objectTypeName(type)});
+            macroRecorder_.recordStep("add", {objectTypeName(type)});
             return;
         }
     }
@@ -109,7 +109,7 @@ void MeshCraftApplication::addPrimitive(Mc3::ObjectType type) {
     selection_.clear(); selection_.select(obj);
     modified_ = true;
     updateWindowTitle();
-    recordStep("add", {objectTypeName(type)});
+    macroRecorder_.recordStep("add", {objectTypeName(type)});
 }
 
 // (removeFromList is defined in MeshCraftPrivate.hpp)
@@ -123,7 +123,7 @@ void MeshCraftApplication::deleteSelected() {
     selection_.clear();
     modified_ = true;
     updateWindowTitle();
-    recordStep("delete");
+    macroRecorder_.recordStep("delete");
 }
 void MeshCraftApplication::toggleIsolate() {
     // SYS-W14-16: Mc3Object::visible is a real, persisted document field
@@ -203,7 +203,7 @@ void MeshCraftApplication::duplicateSelected() {
         for (auto& o : newObjs) selection_.select(o);
         modified_ = true;
         updateWindowTitle();
-        recordStep("duplicate");
+        macroRecorder_.recordStep("duplicate");
     }
 }
 
@@ -267,7 +267,7 @@ void MeshCraftApplication::groupSelected() {
     selection_.clear(); selection_.select(group);
     modified_ = true;
     updateWindowTitle();
-    recordStep("group");
+    macroRecorder_.recordStep("group");
 }
 
 void MeshCraftApplication::ungroupSelected() {
@@ -283,7 +283,7 @@ void MeshCraftApplication::ungroupSelected() {
     for (auto& child : children) selection_.select(child);
     modified_ = true;
     updateWindowTitle();
-    recordStep("ungroup");
+    macroRecorder_.recordStep("ungroup");
 }
 
 // ---------------------------------------------------------------------------
@@ -465,7 +465,7 @@ void MeshCraftApplication::batchRenameSelected() {
     char msg[64];
     std::snprintf(msg, sizeof(msg), "Renamed %d object(s)", renamed);
     setStatusMsg(msg);
-    recordStep("batch_rename", {batchRenameBuf_});
+    macroRecorder_.recordStep("batch_rename", {batchRenameBuf_});
 }
 
 // ---------------------------------------------------------------------------
@@ -638,7 +638,7 @@ void MeshCraftApplication::groupScaleSelected() {
     modified_ = true; updateWindowTitle();
     setStatusMsg("Group scale ×" + std::to_string(f).substr(0, 5) +
                  " on " + std::to_string(scaled) + " object(s)", false, 2.0f);
-    recordStep("group_scale", {std::to_string(f)});
+    macroRecorder_.recordStep("group_scale", {std::to_string(f)});
 }
 
 void MeshCraftApplication::selectChildren() {
@@ -744,7 +744,7 @@ void MeshCraftApplication::arrayDuplicate() {
         std::snprintf(msg, sizeof(msg), "Array: %d object(s) created",
                       static_cast<int>(newObjs.size()));
         setStatusMsg(msg);
-        recordStep("linear_array", {std::to_string(std::max(2, arrayDupCount_)),
+        macroRecorder_.recordStep("linear_array", {std::to_string(std::max(2, arrayDupCount_)),
                                     std::to_string(std::clamp(arrayDupAxis_, 0, 2)),
                                     std::to_string(arrayDupSpacing_)});
     }

@@ -1754,10 +1754,12 @@ inline void loadPrefsAlg(const std::filesystem::path& path, PrefsAlg& p)
 
 // ── Macro save/load (STAB-0292) ───────────────────────────────────────────────
 //
-// Mirrors saveMacro()/loadMacro() (MeshCraftApplication_Macro.cpp:94-131):
-// each step is one tab-separated line ("verb\targ1\targ2..."); loading skips
-// blank lines. MacroStepAlg mirrors the real (CNA-coupled, declared inside
-// MeshCraftApplication.hpp) MacroStep struct's fields exactly.
+// Mirrors Editor::MacroRecorder::save()/load() (SYS-W3-01 Phase 3,
+// src/MeshCraft/Editor/MacroRecorder.cpp): each step is one tab-separated
+// line ("verb\targ1\targ2..."); loading skips blank lines. MacroStepAlg
+// mirrors Editor::MacroRecorder::Step's fields exactly -- kept as a
+// separate type since these Alg functions are unit-tested standalone
+// without linking MacroRecorder itself.
 
 struct MacroStepAlg {
     std::string              verb;
