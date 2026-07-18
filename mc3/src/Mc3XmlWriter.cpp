@@ -34,6 +34,32 @@ static std::string fStr(float f) {
     return buf;
 }
 
+// AUD-070: appends `text` as a child text node of `parent`, using a CDATA
+// section (the normal, readable form for embedded SVG/script content)
+// UNLESS `text` itself contains the CDATA terminator "]]>" -- a single
+// CDATA section cannot contain its own closing delimiter, so blindly
+// calling SetCData(true) on such content (AI/attacker-controlled SVG
+// inlineContent or script source, both free-form text an author could put
+// anything in) would emit an unescaped "]]>" mid-section, closing the
+// CDATA early and letting whatever text follows in the source string be
+// interpreted as raw XML markup on the next load -- a document-structure
+// injection, not just garbled content. Falls back to plain (non-CDATA)
+// text in that case: tinyxml2 entity-escapes it as usual, and "]]>" has
+// no special meaning outside a CDATA section, so this is always safe.
+// Deliberately NOT "split into multiple adjacent CDATA sections" (the
+// other standard technique) -- Mc3XmlParser.cpp reads these fields via
+// GetText(), which returns only the FIRST child text node's value and
+// would silently truncate anything after the first split point; the
+// single-node fallback here has no such risk since GetText() reads it
+// back whole either way.
+static void appendTextOrCData(XMLDocument& xml, XMLElement* parent, const std::string& text) {
+    XMLText* t = xml.NewText(text.c_str());
+    if (text.find("]]>") == std::string::npos) {
+        t->SetCData(true);
+    }
+    parent->InsertEndChild(t);
+}
+
 static void setTransform(XMLElement* el, const Mc3Transform& t) {
     auto nonzero3 = [](const std::array<float,3>& v) {
         return v[0] != 0.0f || v[1] != 0.0f || v[2] != 0.0f;
@@ -615,9 +641,7 @@ void Mc3XmlWriter::write(const Mc3Document& doc, const std::filesystem::path& pa
             if (!svg.src.empty()) {
                 te->SetAttribute("src", svg.src.c_str());
             } else if (!svg.inlineContent.empty()) {
-                XMLText* t = xml.NewText(svg.inlineContent.c_str());
-                t->SetCData(true);
-                te->InsertEndChild(t);
+                appendTextOrCData(xml, te, svg.inlineContent);
             }
             tEl->InsertEndChild(te);
         }
@@ -670,9 +694,12 @@ void Mc3XmlWriter::write(const Mc3Document& doc, const std::filesystem::path& pa
             if (!em.src.empty()) {
                 ee->SetAttribute("src", em.src.c_str());
             } else if (!em.base64Content.empty()) {
-                XMLText* t = xml.NewText(em.base64Content.c_str());
-                t->SetCData(true);
-                ee->InsertEndChild(t);
+                // base64's alphabet ([A-Za-z0-9+/=]) can never contain "]"
+                // or ">", so this can never actually hit the escaped-text
+                // fallback -- appendTextOrCData used anyway for defense in
+                // depth and consistency with the other two CDATA sites,
+                // rather than assuming that invariant holds forever.
+                appendTextOrCData(xml, ee, em.base64Content);
             }
             eEl->InsertEndChild(ee);
         }
@@ -687,9 +714,7 @@ void Mc3XmlWriter::write(const Mc3Document& doc, const std::filesystem::path& pa
             se->SetAttribute("id",   id.c_str());
             se->SetAttribute("type", sc.type.c_str());
             if (!sc.source.empty()) {
-                XMLText* t = xml.NewText(sc.source.c_str());
-                t->SetCData(true);
-                se->InsertEndChild(t);
+                appendTextOrCData(xml, se, sc.source);
             }
             sEl->InsertEndChild(se);
         }

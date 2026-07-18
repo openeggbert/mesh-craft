@@ -244,6 +244,14 @@ if(BUILD_TESTING)
     add_test(NAME mc3_json_load_policy COMMAND mc3_json_load_policy_test)
     set_tests_properties(mc3_json_load_policy PROPERTIES TIMEOUT 15 LABELS "format")
 
+    # AUD-070: a "]]>" inside SVG inlineContent/script source used to break
+    # out of its CDATA section on save, letting whatever followed it in the
+    # string be parsed as real XML on the next load.
+    add_executable(mc3_cdata_injection_test test/cdata_injection_test.cpp)
+    target_link_libraries(mc3_cdata_injection_test PRIVATE Mc3)
+    add_test(NAME mc3_cdata_injection COMMAND mc3_cdata_injection_test)
+    set_tests_properties(mc3_cdata_injection PROPERTIES TIMEOUT 15 LABELS "format")
+
     # SYS-W1-04: include bombs -- depth (bounded by Mc3LoadPolicy::
     # maxIncludeDepth) and fan-out (bounded by the new DocumentBudget::
     # chargeInclude); cycles are already covered by mc3_roundtrip's
