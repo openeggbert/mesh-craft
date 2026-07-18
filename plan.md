@@ -367,10 +367,33 @@ _All items in this workstream are DONE — archived to [`docs/history/plan_20260
 _All items in this workstream are DONE — archived to [`docs/history/plan_20260718.md`](docs/history/plan_20260718.md)._
 
 ### W9 — Undo & data-loss
-- **SYS-W9-01** `[TODO, superseded in scope by AUD-036b]` `P0` — Full undo/redo
-  correctness: transaction abstraction, pre-mutation capture verification,
-  `undo_coverage_audit.py` triage, atomicity, redo invalidation, selection
-  restore. See `AUD-036b` for the authoritative task text.
+- **SYS-W9-01** `[DONE, via AUD-036b + SYS-W9-03 + SYS-W14-16]` `P0` — Full
+  undo/redo correctness: transaction abstraction, pre-mutation capture
+  verification, `undo_coverage_audit.py` triage, atomicity, redo
+  invalidation, selection restore. This row was always just a pointer
+  ("See `AUD-036b` for the authoritative task text") rather than
+  independent scope, and had gone stale relative to work already done
+  elsewhere in this same file: `AUD-036b` (`docs/history/plan_20260718.md`)
+  is `DONE` — all 81 `undo_coverage_audit.py` candidates individually
+  triaged (0 REAL_MUTATION, the rest TRANSIENT_PREVIEW/FALSE_POSITIVE/
+  INTENTIONALLY_NON_UNDOABLE), frame-driven behavioral coverage extended
+  to Checkbox/Combo/InputText/multi-object batch edits, and every
+  guarantee from its own Outcome verified except "selection restored
+  after undo/redo" — which was an explicit open product-question at the
+  time, resolved human-authorized **yes** and implemented same-day as
+  `SYS-W9-03` (`performUndo()`/`performRedo()` restore the pre-mutation
+  selection by id instead of clearing it). This session's own
+  `SYS-W14-16` (2026-07-18) then ran a fresh, independent undo-coverage
+  audit (two parallel research agents) and found + fixed 27 further real
+  gaps (6 missing `pushUndo()` calls, 21 `AUD-036`-style dead patterns)
+  that had accumulated since `AUD-036b` closed — i.e. this row's actual
+  intent (find and close real undo-coverage gaps) has now been executed
+  twice, not left undone. **Not done, by explicit prior scope:** a formal
+  "transaction abstraction" class (Command pattern / mutation-tracking
+  proxy) was never built — the manual `pushUndo()`-before-every-mutation
+  discipline remains, now backed by three rounds of audit rather than a
+  structural guarantee. If this bug class recurs a third time, that
+  escalation (not a fourth manual audit) would be the right next step.
 
 ### W11 — Build / CI / DX
 - **SYS-W11-01** `[TODO, owner-gated]` `P1` — Un-park CI (`.github_` → `.github`)
