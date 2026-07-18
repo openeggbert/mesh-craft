@@ -1,5 +1,25 @@
 # NEXT.md
 
+_Update, 2026-07-18 (new session, following a fresh independent re-audit):
+a from-scratch, four-agent adversarial audit (build/test verification,
+core-code bug audit, architecture/docs staleness, UX gap audit — none of
+them trusting this file's own "backlog exhausted" claim below at face
+value) found the backlog genuinely was accurate on build/test health but
+surfaced 12 new, previously-undocumented findings (ranked by severity) plus
+several stale docs. The user picked the most severe first: **`AUD-064`**
+(commit `ecbe3e7`) — a `<grid subdivisions_x="4096" subdivisions_z="4096"/>`
+was individually legal per-field but the PRODUCT was unbounded, rebuilding
+~16.8M vertices from scratch every single frame with no cache and freezing
+the live editor (empirically confirmed: unpatched binary did not finish a
+`--screenshot` within 20s on the stress fixture; patched, ~3s). Fixed with
+a bounds check before allocating, matching `drawExtrudeDynamic`'s own
+existing fallback convention in the same file. New `test/grid_stress.mc3.xml`
++ `smoke_test_grid_stress` ctest (regression guard). Full rebuild + fresh
+`ctest`: **133/133** (was 132). The remaining 11 findings from this same
+audit pass are not yet actioned — see the user/session transcript for the
+full ranked list; re-derive from a fresh audit if this note has gone stale
+rather than trusting it indefinitely.
+
 _Last updated: 2026-07-18 (later same day, third continuation this date).
 Continues the two 2026-07-18 sessions recorded below (SYS-W14-10..17 +
 SYS-W12-02 batch, then SYS-W14-16's undo/redo audit) with two further
@@ -19,7 +39,8 @@ commit list newer than this._
 
 **The §4/§5 "CNA build regression" described below is long RESOLVED** —
 see the update at the top of §4. A fresh reconfigure + full rebuild +
-ctest (**132/132**, up from 126/126 at the start of today) all pass.
+ctest (**133/133**, up from 126/126 at the start of the referenced session,
++1 more from `AUD-064`'s `smoke_test_grid_stress` above) all pass.
 
 **Today ran in three parts, all on `origin/develop`:** (1) the 9
 `SYS-W14-10`..`17` + `SYS-W12-02` tasks, implemented one at a time per
