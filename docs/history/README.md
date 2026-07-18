@@ -17,3 +17,4 @@ the repository root:
 | `web_issues.md` | Early Web-build issue theories (sizing) | `NEXT.md` (crash root-cause) |
 | `plan_stabilization_master.md` | The original 723-row STAB master plan (was the root `plan.md`) | `plan.md` (evidence-based backlog) |
 | `plan_deep_audit.md` | The 2026-07-09 deep-audit follow-up plan; all 57 of its AUDIT-#### tasks are completed | `plan.md` (current backlog); code comments citing `AUDIT-####` IDs still point here for context |
+| `plan_20260718.md` | Not a superseded plan — a **pruned snapshot**: the 61 `AUD-###` + 33 `SYS-###` rows that were `DONE` in `plan.md` as of 2026-07-18, moved out verbatim (full evidence/resolution text) to keep the active file down to just its still-open rows | `plan.md` (still tracks these ids in its "Net across all"/session-log tallies; code comments citing an archived id resolve here) |
