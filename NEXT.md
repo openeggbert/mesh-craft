@@ -1,17 +1,20 @@
 # NEXT.md
 
-_Last updated: 2026-07-19 (late night), mid an autonomous continuation of
-the same session — the user explicitly asked to keep implementing the
+_Last updated: 2026-07-19 (late night), end of an autonomous continuation
+of the same session — the user explicitly asked to keep implementing the
 remaining "Next smallest tasks" items without stopping to ask each time
-(they were going to sleep until ~06:00). Four tasks fixed so far: the AI
-Assistant thread-creation-failure wedge, the no-op undo snapshots on
-locked-object commands, the latent CSG nested-Intersection null-deref,
-and `AUD-069`'s `includePathWithinRoot()` false-rejection. The 2026-07-18
-session ran a fresh independent adversarial audit and fixed 10 of its 12
-findings; this file was fully rewritten (not appended to) at that point —
-its previous revision had grown to 1072 lines of session-by-session
-narrative; see `git log -- NEXT.md` and `docs/history/` if that history
-is ever needed._
+(they were going to sleep until ~06:00). All 4 queued tasks are now
+fixed: the AI Assistant thread-creation-failure wedge, the no-op undo
+snapshots on locked-object commands, the latent CSG nested-Intersection
+null-deref, `AUD-069`'s `includePathWithinRoot()` false-rejection, plus a
+low-risk doc cleanup pass. **§8 is now empty — see its own note for what
+a future session should do next**, since there is no more pre-queued
+work to just pick up. The 2026-07-18 session ran a fresh independent
+adversarial audit and fixed 10 of its 12 findings; this file was fully
+rewritten (not appended to) at that point — its previous revision had
+grown to 1072 lines of session-by-session narrative; see
+`git log -- NEXT.md` and `docs/history/` if that history is ever
+needed._
 
 ## 1. Project summary
 
@@ -34,15 +37,15 @@ hunt, architecture/docs staleness, UX gaps) that found 12 new, previously-
 undocumented findings. All 10 originally-planned fixes are merged
 (`AUD-064` through `AUD-073`) — `AUD-069` was the one deliberately
 deferred at the time (2026-07-18), then fixed the next day (2026-07-19).
-Zero of the audit's own findings remain open (see §8 for what's next —
-none of it traces back to this specific audit anymore). The two
-separately-noted gaps found alongside the audit (the AI Assistant
-thread-creation-failure wedge and the no-op undo snapshots on
-locked-object commands) are also both fixed, 2026-07-19 — see §3. The
-project is in an **ongoing hardening / bug-fixing** phase, not active
-new-feature
-development, though scoped new
-features have
+Zero of the audit's own findings remain open. The two separately-noted
+gaps found alongside the audit (the AI Assistant thread-creation-failure
+wedge and the no-op undo snapshots on locked-object commands) are also
+both fixed, 2026-07-19 — see §3. `plan.md`'s own remaining `AUD-###` rows
+are now all `DONE`/`DEFERRED`/owner-gated `TODO` (`AUD-042`/`052`/`053`/
+`057` — CI/Android/sibling-pin, all blocked, not actionable here); there
+is genuinely no small, unblocked, pre-scoped task left queued anywhere —
+see §8. The project is in an **ongoing hardening / bug-fixing** phase,
+not active new-feature development, though scoped new features have
 landed before when explicitly requested (`SYS-W14-##` rows).
 
 **Important architectural decisions:**
@@ -65,14 +68,17 @@ landed before when explicitly requested (`SYS-W14-##` rows).
 
 ## 2. Current status
 
-- **Build: clean**, last verified this session at commit `c393ca1` (fresh
-  `cmake --build b-release -j4`, zero errors/warnings, EASYGL backend on
-  Linux — the only backend buildable in this environment).
-- **Tests: 142/142 `ctest` passing**, last verified this session at the
-  same commit (`ctest -j4`). Net +1 since this session started at 141 —
-  only the CSG null-child fix (task 3) added a genuinely new
-  `ctest`-registered target (`mc3togltf_csg_null_child`); tasks 1, 2, and
-  4 each only added new cases inside existing binaries.
+- **Build: clean**, last verified this session at commit `c393ca1` (the
+  last commit touching code — `a49021d`'s doc cleanup pass has no code
+  changes, verified separately by re-running the full suite unchanged;
+  fresh `cmake --build b-release -j4`, zero errors/warnings, EASYGL
+  backend on Linux — the only backend buildable in this environment).
+- **Tests: 142/142 `ctest` passing**, last verified this session at
+  commit `c393ca1` and reconfirmed unchanged after `a49021d` (`ctest
+  -j4`). Net +1 since this session started at 141 — only the CSG
+  null-child fix (task 3) added a genuinely new `ctest`-registered target
+  (`mc3togltf_csg_null_child`); tasks 1, 2, and 4 each only added new
+  cases inside existing binaries; task 5 (doc cleanup) added none.
 - **CLI/tools/apps/libraries currently available:**
   - `MeshCraft` — the interactive editor (`./b-release/MeshCraft
     scene.mc3.xml`, or `--screenshot out.png` / `--export out.glb` /
@@ -168,6 +174,27 @@ landed before when explicitly requested (`SYS-W14-##` rows).
   case; verified both fail against the pre-fix code and pass against the
   fix (`git stash`). This one IS a formal `plan.md` row (unlike tasks 1-3)
   — updated to `[DONE]` there too.
+- **Also implemented (this session, 2026-07-19):** task 5, the last
+  queued item — a low-risk doc cleanup pass, no code change. Archived
+  `AI_TRUNCATION_BUG.md` to `docs/history/` (confirmed via grep all 3 of
+  its proposed fixes are implemented and live). Fixed `README.md:254`'s
+  stale PPM claim and added a new "Headless one-shot flags" subsection
+  documenting `--screenshot`/`--export`/`--benchmark` (previously
+  undocumented in `README.md`, only in `--help`'s own usage text).
+  Refreshed `missing.md`: verified via grep that `N8`/`N9`/`N10`/`N11`
+  and the texture file-browse dialog are now implemented
+  (`SYS-W14-10`/`11`/`12`/`13`/`15`); `coordinate_system` and Area's
+  properties panel were formally closed as by-design won't-fix /
+  confirmed-complete (`SYS-W14-14`/`17`, docs-only decisions); undo/redo
+  coverage had 27 further gaps closed (`SYS-W14-16`) but is still
+  intentionally a manual discipline, not structural. Updated `render.md`:
+  verified via grep that P1 (lighting) and P2 (dynamic edge-overlay push)
+  are both implemented — landed via the sibling `mesh-world` repo's own
+  R-series work (commits `84b8c1a`/`3c33ba6`), not a `plan.md`-tracked
+  task in this repo; P3-P6 confirmed still unimplemented. Verified:
+  `ctest -R plan_consistency` passes; full root `ctest -j4` unchanged at
+  142/142 (no code touched); confirmed no other file references
+  `AI_TRUNCATION_BUG.md` by its old root-level path.
 - **Recently implemented (previous session, 2026-07-18):** 10 fixes from a
   fresh audit, each with a regression test, each verified both broken
   (via `git stash` of the one-line/few-line fix) and fixed:
@@ -315,6 +342,27 @@ Task 4 — `AUD-069`'s `includePathWithinRoot()` false-rejection:
    and the session log's DONE/TODO tally (9→10 DONE, 5→4 TODO).
    `python3 test/validate_plan_consistency.py . b-release` confirmed
    consistent afterward.
+
+Task 5 — doc cleanup pass (last queued item, no code change):
+1. Commit `a49021d` — `docs: doc cleanup pass — archive fixed bug
+   report, refresh 3 stale docs`. Every claim was independently verified
+   against current source via grep BEFORE editing the doc, rather than
+   trusting the task's own description or the doc's existing claims at
+   face value (matching §9's own standing rule) — see the "Also
+   implemented" bullet in §2 for the full list of what was verified and
+   how.
+2. Files: `AI_TRUNCATION_BUG.md` moved to `docs/history/` (+ a "FIXED"
+   banner + a `docs/history/README.md` index row); `README.md` (PPM
+   claim fixed, new "Headless one-shot flags" subsection);
+   `missing.md` (new "Resolved since 2026-07-18" section, summary table
+   updated, now-empty "total gaps" section trimmed); `render.md` (status
+   banner, P1/P2 status notes, recommended-action-order table updated).
+3. Verified: `ctest -R plan_consistency` passes; full root `ctest -j4`
+   unchanged at 142/142 (no code touched, only confirmed nothing broke);
+   grepped the whole repo to confirm no other file still references
+   `AI_TRUNCATION_BUG.md` by its old root-level path.
+4. This was the last item in §8 — it is now empty. See §8's own note for
+   what a future session should do next.
 
 **Previous session (2026-07-18), in order:**
 1. Ran a fresh, independent 4-agent audit (build/test verification,
@@ -528,17 +576,35 @@ git stash pop && cmake --build b-release -j4 --target <affected-target>
 
 ## 8. Next smallest tasks
 
-1. **Doc cleanup pass (low-risk, several small pieces):**
-   - Archive `AI_TRUNCATION_BUG.md` to `docs/history/` (bug is fixed).
-   - Fix `README.md:254`'s stale PPM claim; add `--benchmark` to its
-     flag list.
-   - Refresh `missing.md` (6 stale "still open" items).
-   - Update or archive `render.md` (P1/P2 done, P3-P6 still open).
-   - Files: `AI_TRUNCATION_BUG.md`, `README.md`, `missing.md`, `render.md`,
-     `docs/history/`.
-   - Verify: no code change, so just confirm `ctest -R plan_consistency`
-     (or the equivalent doc-consistency checks) still pass, and that
-     nothing else references the archived file by its old root path.
+**Empty as of 2026-07-19 (late night).** Every item queued at the start
+of this session (5 total: AI Assistant thread-creation-failure wedge,
+no-op undo snapshots on locked-object commands, latent CSG
+nested-Intersection null-deref, `AUD-069`'s `includePathWithinRoot()`
+false-rejection, doc cleanup pass) is now fixed and pushed. There is no
+further pre-scoped, ready-to-implement small task sitting anywhere right
+now — this is a genuine "ran out of queued work" state, not an oversight:
+
+- `plan.md`'s remaining `AUD-###` rows are all `DONE`/`DEFERRED`, or
+  owner-gated `TODO` and explicitly not actionable in this environment
+  (`AUD-042` — no Android NDK + CNA-boundary restriction; `AUD-052` — CI
+  needs a workflow-scoped push token nobody here has; `AUD-053`/`AUD-057`
+  — both downstream of `AUD-052`).
+- `SYS-W3-01` (`MeshCraftApplication` decomposition) has 7 phases done;
+  its own most recent investigation round explicitly looked at the two
+  remaining candidates (file dialogs, post-processing) and declined both
+  (no testability win vs. real regression risk with no verification
+  tool) — not silently skipped, but also not a ready "next phase" to
+  just pick up without fresh investigation first.
+
+**For a future session:** the honest options are (a) run a fresh
+independent audit like the 2026-07-18 session did, to surface new
+findings from scratch (this is how this session's entire task list
+originated) — a bigger undertaking than a "smallest task," needs the
+user's own buy-in first, not something to just start; or (b) wait for
+the user's own next priority (new feature, specific bug report, etc.).
+Per `CLAUDE.md`'s workflow, don't invent and start a new task without
+describing it and getting explicit confirmation first — this section
+being empty is not license to skip that step.
 
 ## 9. Do not do yet
 
@@ -556,11 +622,15 @@ git stash pop && cmake --build b-release -j4 --target <affected-target>
   in this environment has.
 - **No new features without asking first.** Per `CLAUDE.md`'s workflow:
   describe the task and get explicit confirmation before implementing
-  anything, one item at a time — the 2026-07-18 session's entire 10-fix
-  sequence and this session's two-task fix sequence both followed that
-  pattern (each task individually confirmed, fully committed before the
-  next started) and it worked well; don't switch to batching multiple
-  unconfirmed fixes at once.
+  anything, one item at a time. The 2026-07-18 session's entire 10-fix
+  sequence, and this session's tasks 1-2 (each individually confirmed
+  before implementing), all followed that pattern. Tasks 3-5 of this
+  session were implemented WITHOUT a per-task confirmation — but only
+  because the user explicitly, in-session, authorized continuing
+  autonomously through the rest of an ALREADY-QUEUED, already-described
+  list while they slept; that authorization does not extend to inventing
+  NEW tasks not already in §8. §8 is now empty — the next task, whatever
+  it is, still needs describing + confirmation first, same as always.
 - **Don't trust a stale doc's claims at face value.** The 2026-07-18
   session's own audit found the *prior* session's "backlog exhausted"
   claim was accurate on build/test health but missed 12 real findings —
@@ -569,19 +639,35 @@ git stash pop && cmake --build b-release -j4 --target <affected-target>
 ## 10. Resume prompt
 
 ```
-Read NEXT.md first, in full. Then work on exactly ONE task from its
-"Next smallest tasks" section — start with task 1 unless told otherwise.
-Inspect only the files that task names; do not refactor or "clean up"
-anything else you notice along the way. Confirm the specific task with
-the user first (what will change, which files, why) before implementing,
-per CLAUDE.md's workflow. Make one small, verified improvement: implement
-it, add/extend a regression test that fails against the pre-fix code and
-passes against the fix (verify this with git stash, matching this
-session's own established pattern), then run the exact verification
-command the task lists plus the full `ctest` suite. Do not start a second
-task in the same session unless the first is fully committed and pushed.
-When finished, update NEXT.md: move the completed task out of "Next
-smallest tasks", update "Current status"/"Recent changes" with what
-actually changed (not what was planned), and re-check every other section
-for anything your change made stale.
+Read NEXT.md first, in full. If its "Next smallest tasks" section (§8)
+has entries, work on exactly ONE — start with task 1 unless told
+otherwise. Inspect only the files that task names; do not refactor or
+"clean up" anything else you notice along the way. Confirm the specific
+task with the user first (what will change, which files, why) before
+implementing, per CLAUDE.md's workflow, UNLESS the user has explicitly,
+in THIS conversation, authorized working through the queue
+autonomously without asking each time (that authorization covers only
+tasks already listed in §8 when given, not new ones invented later).
+Make one small, verified improvement: implement it, add/extend a
+regression test that fails against the pre-fix code and passes against
+the fix (verify this with git stash, matching this session's own
+established pattern -- unless the fix genuinely isn't headlessly
+testable, e.g. it lives in a class that can't be instantiated without a
+GPU/window; if so, say so explicitly and find the nearest testable
+seam, matching how this session's undo-snapshot and CSG fixes each
+required a similar judgment call), then run the exact verification
+command the task lists plus the full `ctest` suite. Do not start a
+second task in the same session unless the first is fully committed and
+pushed. When finished, update NEXT.md: move the completed task out of
+"Next smallest tasks", update "Current status"/"Recent changes" with
+what actually changed (not what was planned), and re-check every other
+section for anything your change made stale.
+
+If §8 is EMPTY (as it is as of 2026-07-19 late night — see its own
+note), do not invent a new task and start implementing it. Read §8's
+note for the honest state of what's left (plan.md's remaining rows are
+blocked/owner-gated; SYS-W3-01 has no ready next phase without fresh
+investigation) and surface that to the user, asking what they'd like
+next -- e.g. a fresh audit (the mechanism that generated this session's
+entire task list), a specific feature, or something else entirely.
 ```
