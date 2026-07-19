@@ -1098,6 +1098,36 @@ static void testFlattenDescendants()
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// anySelectedUnlockedAlg (NEXT.md task, 2026-07-19)
+//
+// MeshCraftApplication_Commands.cpp's deleteSelected()/
+// dropSelectedToGroundPlane()/groupScaleSelected()/
+// randomizeTransformSelected()/resetPivot() each call this before
+// pushUndo() to decide whether the command would actually mutate
+// anything -- MeshCraftApplication itself isn't headlessly instantiable
+// (no test in this repo constructs the real CNA-dependent class), so this
+// tests the extracted pure predicate directly rather than the 5 command
+// methods themselves.
+// ─────────────────────────────────────────────────────────────────────────────
+
+static void testAnySelectedUnlockedAlg()
+{
+    auto a = makeObj("a", "A");
+    auto b = makeObj("b", "B");
+
+    CHECK(anySelectedUnlockedAlg({a, b}, {}) == true,
+          "any-selected-unlocked: no locked ids -> true");
+    CHECK(anySelectedUnlockedAlg({a, b}, {"a"}) == true,
+          "any-selected-unlocked: one of two locked -> still true");
+    CHECK(anySelectedUnlockedAlg({a, b}, {"a", "b"}) == false,
+          "any-selected-unlocked: every selected object locked -> false");
+    CHECK(anySelectedUnlockedAlg({}, {}) == false,
+          "any-selected-unlocked: empty selection -> false");
+    CHECK(anySelectedUnlockedAlg({a}, {"z"}) == true,
+          "any-selected-unlocked: lockedIds referencing an unselected object doesn't affect the result");
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // groupScaleAlg (STAB-0495)
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -3534,6 +3564,7 @@ int main()
     testVertexSnap();
     testRotationDragSnap();
     testFlattenDescendants();
+    testAnySelectedUnlockedAlg();
     testGroupScale();
     testDeepCopy();
     testUndoRedoBatchRename();

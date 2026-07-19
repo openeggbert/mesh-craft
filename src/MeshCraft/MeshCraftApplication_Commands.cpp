@@ -124,6 +124,7 @@ void MeshCraftApplication::addPrimitive(Mc3::ObjectType type) {
 // (removeFromList is defined in MeshCraftPrivate.hpp)
 
 void MeshCraftApplication::deleteSelected() {
+    if (!anySelectedUnlockedAlg(selection_.selection(), lockedIds_)) return;
     pushUndo();
     for (const auto& s : selection_.selection()) {
         if (lockedIds_.count(s->id)) continue;
@@ -633,6 +634,7 @@ void MeshCraftApplication::alignToObject() {
 // behaviorally identical instead of hand-copied and free to drift.
 void MeshCraftApplication::dropSelectedToGroundPlane() {
     if (!selection_.hasSelection()) return;
+    if (!anySelectedUnlockedAlg(selection_.selection(), lockedIds_)) return;
     pushUndo();
     int dropped = 0;
     for (const auto& s : selection_.selection()) {
@@ -661,6 +663,7 @@ void MeshCraftApplication::dropSelectedToGroundPlane() {
 void MeshCraftApplication::groupScaleSelected() {
     const auto& sel = selection_.selection();
     if (sel.empty()) return;
+    if (!anySelectedUnlockedAlg(sel, lockedIds_)) return;
     const float f = groupScaleFactor_;
 
     pushUndo();
@@ -691,6 +694,7 @@ void MeshCraftApplication::selectChildren() {
 void MeshCraftApplication::randomizeTransformSelected() {
     auto& sel = selection_.selection();
     if (sel.empty()) return;
+    if (!anySelectedUnlockedAlg(sel, lockedIds_)) return;
     pushUndo();
     std::mt19937 rng{std::random_device{}()};
     auto rand11 = [&]() -> float {
@@ -856,6 +860,7 @@ void MeshCraftApplication::copyPropsToSelected() {
 void MeshCraftApplication::resetPivot() {
     using namespace Microsoft::Xna::Framework;
     if (!selection_.hasSelection()) return;
+    if (!anySelectedUnlockedAlg(selection_.selection(), lockedIds_)) return;
     pushUndo();
     const float deg = std::numbers::pi_v<float> / 180.0f;
     for (const auto& s : selection_.selection()) {

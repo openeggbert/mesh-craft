@@ -828,6 +828,27 @@ inline std::vector<std::shared_ptr<Mc3::Mc3Object>> flattenDescendantsAlg(
     return out;
 }
 
+// ── Lock-aware selection dry-run (NEXT.md task, 2026-07-19) ───────────────────
+//
+// Several selection commands in MeshCraftApplication_Commands.cpp
+// (deleteSelected, dropSelectedToGroundPlane, groupScaleSelected,
+// randomizeTransformSelected, resetPivot) skip locked objects inside their
+// own mutation loop, but must decide BEFORE calling pushUndo() whether
+// there is anything to do at all -- if the selection is empty or every
+// targeted object is locked, nothing would actually mutate, so
+// pushUndo()/modified_=true must be skipped too. Mirrors
+// findReplaceNames()'s existing dry-run-then-commit pattern (via
+// countFindReplaceMatches() above): compute the dry-run result first,
+// bail out early if it says there's nothing to do.
+inline bool anySelectedUnlockedAlg(
+    const std::vector<std::shared_ptr<Mc3::Mc3Object>>& selected,
+    const std::set<std::string>&                        lockedIds)
+{
+    for (const auto& o : selected)
+        if (!lockedIds.count(o->id)) return true;
+    return false;
+}
+
 // ── Group Scale (H14 / STAB-0495) ─────────────────────────────────────────────
 //
 // Mirrors groupScaleSelected() (MeshCraftApplication_Commands.cpp): scales
