@@ -1,12 +1,14 @@
 # NEXT.md
 
-_Last updated: 2026-07-19, after fixing task 1 of the previous session's
-"Next smallest tasks" list (the AI Assistant thread-creation-failure
-wedge). The 2026-07-18 session ran a fresh independent adversarial audit
-and fixed 10 of its 12 findings; this file was fully rewritten (not
-appended to) at that point — its previous revision had grown to 1072 lines
-of session-by-session narrative; see `git log -- NEXT.md` and
-`docs/history/` if that history is ever needed._
+_Last updated: 2026-07-19, after fixing two tasks from the "Next smallest
+tasks" list in one continued session: the AI Assistant
+thread-creation-failure wedge, then the no-op undo snapshots on
+locked-object commands. The 2026-07-18 session ran a fresh independent
+adversarial audit and fixed 10 of its 12 findings; this file was fully
+rewritten (not appended to) at that point — its previous revision had
+grown to 1072 lines of session-by-session narrative; see
+`git log -- NEXT.md` and `docs/history/` if that history is ever
+needed._
 
 ## 1. Project summary
 
@@ -27,9 +29,10 @@ a 2026-07-11 audit) is substantively complete and archived
 (four parallel review agents: build/test verification, core-code bug
 hunt, architecture/docs staleness, UX gaps) that found 12 new, previously-
 undocumented findings. 10 are fixed and merged (`AUD-064` through
-`AUD-073`, skipping the deliberately-not-fixed `AUD-069`); 3 of the
-audit's own findings remain open (see §8) plus one separately-noted,
-now-fixed gap (the AI Assistant thread-creation-failure wedge, fixed
+`AUD-073`, skipping the deliberately-not-fixed `AUD-069`); 2 of the
+audit's own findings remain open (see §8) plus two separately-noted gaps
+that are now both fixed (the AI Assistant thread-creation-failure wedge
+and the no-op undo snapshots on locked-object commands, both fixed
 2026-07-19 — see §3). The project is in an **ongoing hardening /
 bug-fixing** phase, not active new-feature development, though scoped new
 features have
@@ -55,13 +58,14 @@ landed before when explicitly requested (`SYS-W14-##` rows).
 
 ## 2. Current status
 
-- **Build: clean**, last verified this session at commit `63df1bc` (fresh
+- **Build: clean**, last verified this session at commit `424d027` (fresh
   `cmake --build b-release -j4`, zero errors/warnings, EASYGL backend on
   Linux — the only backend buildable in this environment).
 - **Tests: 141/141 `ctest` passing**, last verified this session at the
-  same commit (`ctest -j4`). Same total as before — this session's fix
-  added a new case inside the existing `mc3_ai` binary rather than a new
-  `ctest`-registered target, so the registered-test count didn't move.
+  same commit (`ctest -j4`). Same total as before both of this session's
+  fixes — each added a new case inside an existing binary (`mc3_ai`,
+  `mc3_commands`) rather than a new `ctest`-registered target, so the
+  registered-test count didn't move.
 - **CLI/tools/apps/libraries currently available:**
   - `MeshCraft` — the interactive editor (`./b-release/MeshCraft
     scene.mc3.xml`, or `--screenshot out.png` / `--export out.glb` /
@@ -88,6 +92,36 @@ landed before when explicitly requested (`SYS-W14-##` rows).
   on the parent process or anything else on this shared machine); verified
   failing against the pre-fix code and passing against the fix via
   `git stash`, matching this project's established pattern.
+- **Also implemented (this session, 2026-07-19):** task 2 from the same
+  list — no-op undo snapshots on locked-object commands.
+  `deleteSelected()`/`dropSelectedToGroundPlane()`/`groupScaleSelected()`/
+  `randomizeTransformSelected()`/`resetPivot()` (all in
+  `src/MeshCraft/MeshCraftApplication_Commands.cpp`) each already skipped
+  individual locked objects inside their own mutation loop, but all five
+  called `pushUndo()`/set `modified_=true` unconditionally, before that
+  loop — locking every selected object and invoking any of these commands
+  still consumed an undo slot and marked the document modified, even
+  though nothing changed (`deleteSelected()` additionally had no
+  `hasSelection()` guard at all, so it did this even with zero selection).
+  Fixed by adding `anySelectedUnlockedAlg(selected, lockedIds)` to
+  `include/MeshCraft/EditorAlgorithms.hpp` (a pure dry-run predicate
+  mirroring `findReplaceNames()`'s existing dry-run-then-commit pattern)
+  and an early return using it at the top of all five commands, before
+  `pushUndo()`. `MeshCraftApplication` itself isn't headlessly
+  instantiable (confirmed: no test in this repo constructs the real
+  CNA-dependent class directly), so — after discussing this with the
+  user and getting confirmation to deviate from the task's suggested
+  verify files — the fix was extracted into this already-established
+  pure-`Alg` pattern (`groupScaleAlg` already does the same for
+  `groupScaleSelected()`) specifically so it could be genuinely
+  unit-tested, rather than left inline-only and untestable in the command
+  methods. New test (`testAnySelectedUnlockedAlg`,
+  `mc3/test/editor_commands_test.cpp` / `mc3_commands` in `ctest`) covers
+  no-locks / partial-lock / all-locked / empty-selection /
+  lock-references-unselected-object. Verified the test fails to *build*
+  against the pre-fix state (`git stash` of just the header addition —
+  the predicate didn't exist before this commit) and passes against the
+  fix.
 - **Recently implemented (previous session, 2026-07-18):** 10 fixes from a
   fresh audit, each with a regression test, each verified both broken
   (via `git stash` of the one-line/few-line fix) and fixed:
@@ -129,11 +163,16 @@ landed before when explicitly requested (`SYS-W14-##` rows).
 
 ## 3. Recent changes
 
-**This session (2026-07-19):**
-1. Read `NEXT.md` in full, confirmed with the user, then implemented
-   exactly task 1 from §8's "Next smallest tasks" (per this project's
-   `CLAUDE.md`/resume-prompt workflow: one confirmed task per session).
-2. Commit `63df1bc` — `fix(ai-assistant): roll back sendAsync() state on
+**This session (2026-07-19):** the user asked to continue past task 1 in
+the same session, so two tasks from §8's "Next smallest tasks" were
+implemented — each still individually confirmed with the user first, per
+`CLAUDE.md`'s workflow, and each fully committed (and its own `ctest`
+verification run) before the next one started. All builds/tests this
+session used `-j4` (not `-j$(nproc)`), per the user's explicit request
+mid-session.
+
+Task 1 — AI Assistant thread-creation-failure wedge:
+1. Commit `63df1bc` — `fix(ai-assistant): roll back sendAsync() state on
    worker thread-creation failure`. Files modified: `src/MeshCraft/
    AiAssistant.cpp` (try/catch around the worker `std::thread`
    construction; factored the scope guard's decrement+notify into a new
@@ -142,14 +181,37 @@ landed before when explicitly requested (`SYS-W14-##` rows).
    `testThreadCreationFailureRollsBackState()`, Linux-only, forces a real
    `std::thread` constructor failure via `fork()` + child-scoped
    `RLIMIT_NPROC=0`).
-3. Verified: the new test fails against the pre-fix code and passes
+2. Verified: the new test fails against the pre-fix code and passes
    against the fix (`git stash`); `ctest -R mc3_ai` passes; full root
    `ctest -j4` is 141/141 (same total — no new `ctest`-registered target,
    just a new case inside the existing `mc3_ai` binary).
-4. This finding was tracked only in `NEXT.md` (never filed as an `AUD-0NN`
+3. This finding was tracked only in `NEXT.md` (never filed as an `AUD-0NN`
    row in `plan.md`, since it was found outside the 2026-07-18 audit's
-   formal findings list) — so `plan.md` is unchanged this session; only
-   `NEXT.md` needed updating.
+   formal findings list) — so `plan.md` is unchanged; only `NEXT.md`
+   needed updating.
+
+Task 2 — no-op undo snapshots on locked-object commands:
+1. Commit `424d027` — `fix(undo): skip no-op undo snapshots when every
+   targeted object is locked`. Files modified: `src/MeshCraft/
+   MeshCraftApplication_Commands.cpp` (one-line early-return guard added
+   to the top of `deleteSelected()`/`dropSelectedToGroundPlane()`/
+   `groupScaleSelected()`/`randomizeTransformSelected()`/`resetPivot()`,
+   before their existing `pushUndo()` calls), `include/MeshCraft/
+   EditorAlgorithms.hpp` (new `anySelectedUnlockedAlg()` pure predicate —
+   added because `MeshCraftApplication` isn't headlessly instantiable, so
+   this is what made the fix genuinely unit-testable; deviates from the
+   task's file list, done with the user's explicit confirmation). File
+   extended: `mc3/test/editor_commands_test.cpp`
+   (`testAnySelectedUnlockedAlg`, registered in `ctest` as `mc3_commands`).
+2. Verified: the new test fails to *build* against the pre-fix state
+   (`git stash` of just the `EditorAlgorithms.hpp` addition — the
+   predicate didn't exist before this commit) and passes against the fix;
+   `ctest -R "commands|undo_manager|undo_gesture_frame"` passes (the
+   latter two are the files the task originally suggested — confirmed
+   unaffected); full root `ctest -j4` is 141/141 (same total, new case
+   inside the existing `mc3_commands` binary).
+3. Also tracked only in `NEXT.md`, not `plan.md` (same reasoning as
+   task 1).
 
 **Previous session (2026-07-18), in order:**
 1. Ran a fresh, independent 4-agent audit (build/test verification,
@@ -211,15 +273,6 @@ The closest thing to a standing blocker is **owner-gated, not a bug**:
   filename (empty `sourceDir`) — `weakly_canonical()` only resolves
   paths that exist. **Fails safe** (a false rejection, not a bypass), so
   low severity. See `plan.md`'s `AUD-069` row for the fix direction.
-- **No-op undo snapshots on locked objects (found, not yet filed/fixed):**
-  several `MeshCraftApplication_Commands.cpp` commands (`deleteSelected`,
-  `dropSelectedToGroundPlane`, `groupScaleSelected`,
-  `randomizeTransformSelected`, `resetPivot`) call `pushUndo()`
-  unconditionally before checking per-object locks inside their loop —
-  locking every selected object and invoking the command still consumes
-  an undo slot and marks the document modified, even though nothing
-  changed. `findReplaceNames()` already shows the correct dry-run-first
-  pattern to copy.
 - **Latent CSG null-deref (found, not yet filed/fixed, unreachable
   today):** `mc3togltf/src/CsgEvaluator.cpp:304-311`'s nested
   `Intersection` case dereferences `obj.children[0]` without the
@@ -283,7 +336,16 @@ The closest thing to a standing blocker is **owner-gated, not a bug**:
   always check whether an `Alg` function is actually called from
   production before assuming a fix there takes effect. This session's
   `AUD-073` test deliberately mirrors a 2-line formula rather than a
-  whole algorithm, to keep drift risk low.
+  whole algorithm, to keep drift risk low. Some `EditorAlgorithms.hpp`
+  functions (`groupScaleAlg`, `countFindReplaceMatches`, and now
+  `anySelectedUnlockedAlg`, added 2026-07-19) aren't mirrors at all —
+  `MeshCraftApplication_Commands.cpp` calls them directly, specifically
+  *because* `MeshCraftApplication` itself can't be instantiated
+  headlessly for testing (confirmed: no test in this repo constructs it),
+  so this is the only way to make that logic unit-testable. Zero drift
+  risk for these three; check for this "directly called, not mirrored"
+  variant before assuming every `Alg` function needs a
+  called-from-production check.
 - **Resource-path confinement (`Mc3LoadPolicy`):** both `Mc3XmlParser.cpp`
   and `Mc3JsonParser.cpp` now enforce `confineResourcePathsToRoot`
   (as of `AUD-068`) via an identically-named, independently-defined
@@ -376,18 +438,7 @@ git stash pop && cmake --build b-release -j4 --target <affected-target>
 
 ## 8. Next smallest tasks
 
-1. **Fix no-op undo snapshots on locked-object commands.**
-   - Goal: make `deleteSelected()`, `dropSelectedToGroundPlane()`,
-     `groupScaleSelected()`, `randomizeTransformSelected()`,
-     `resetPivot()` skip `pushUndo()`/`modified_=true` when every
-     targeted object is locked (no actual mutation happens) — mirror
-     `findReplaceNames()`'s existing dry-run-first pattern.
-   - Files: `src/MeshCraft/MeshCraftApplication_Commands.cpp`.
-   - Verify: extend `undo_manager_test`/`undo_gesture_frame_test.cpp`
-     with a "all-selected-objects-locked" case asserting no undo push;
-     `ctest -R "undo_manager|undo_gesture_frame"`.
-
-2. **Guard the latent CSG null-deref.**
+1. **Guard the latent CSG null-deref.**
    - Goal: add the same `if (child)` guard `CsgEvaluator.cpp` uses
      everywhere else in the nested-`Intersection` case at line ~306.
    - Files: `mc3togltf/src/CsgEvaluator.cpp`.
@@ -396,7 +447,7 @@ git stash pop && cmake --build b-release -j4 --target <affected-target>
      `mc3togltf_earclip`/CSG-related tests still pass:
      `ctest -R mc3togltf`.
 
-3. **Fix `AUD-069`'s `includePathWithinRoot()` false-rejection.**
+2. **Fix `AUD-069`'s `includePathWithinRoot()` false-rejection.**
    - Goal: resolve the candidate against an explicitly-normalized base
      (`weakly_canonical(rootDir.empty() ? current_path() : rootDir) /
      candidate`, canonicalized as a unit) instead of canonicalizing the
@@ -409,7 +460,7 @@ git stash pop && cmake --build b-release -j4 --target <affected-target>
      has a same-directory case but only with the file pre-created);
      `ctest -R "load_policy"`.
 
-4. **Doc cleanup pass (low-risk, several small pieces):**
+3. **Doc cleanup pass (low-risk, several small pieces):**
    - Archive `AI_TRUNCATION_BUG.md` to `docs/history/` (bug is fixed).
    - Fix `README.md:254`'s stale PPM claim; add `--benchmark` to its
      flag list.
@@ -438,9 +489,10 @@ git stash pop && cmake --build b-release -j4 --target <affected-target>
 - **No new features without asking first.** Per `CLAUDE.md`'s workflow:
   describe the task and get explicit confirmation before implementing
   anything, one item at a time — the 2026-07-18 session's entire 10-fix
-  sequence and this session's single-task fix both followed that pattern
-  and it worked well; don't switch to batching multiple unconfirmed fixes
-  at once.
+  sequence and this session's two-task fix sequence both followed that
+  pattern (each task individually confirmed, fully committed before the
+  next started) and it worked well; don't switch to batching multiple
+  unconfirmed fixes at once.
 - **Don't trust a stale doc's claims at face value.** The 2026-07-18
   session's own audit found the *prior* session's "backlog exhausted"
   claim was accurate on build/test health but missed 12 real findings —
