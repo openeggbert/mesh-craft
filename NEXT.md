@@ -3,14 +3,15 @@
 _Last updated: 2026-07-19 (late night), mid an autonomous continuation of
 the same session — the user explicitly asked to keep implementing the
 remaining "Next smallest tasks" items without stopping to ask each time
-(they were going to sleep until ~06:00). Three tasks fixed so far: the AI
+(they were going to sleep until ~06:00). Four tasks fixed so far: the AI
 Assistant thread-creation-failure wedge, the no-op undo snapshots on
-locked-object commands, and the latent CSG nested-Intersection
-null-deref. The 2026-07-18 session ran a fresh independent adversarial
-audit and fixed 10 of its 12 findings; this file was fully rewritten (not
-appended to) at that point — its previous revision had grown to 1072
-lines of session-by-session narrative; see `git log -- NEXT.md` and
-`docs/history/` if that history is ever needed._
+locked-object commands, the latent CSG nested-Intersection null-deref,
+and `AUD-069`'s `includePathWithinRoot()` false-rejection. The 2026-07-18
+session ran a fresh independent adversarial audit and fixed 10 of its 12
+findings; this file was fully rewritten (not appended to) at that point —
+its previous revision had grown to 1072 lines of session-by-session
+narrative; see `git log -- NEXT.md` and `docs/history/` if that history
+is ever needed._
 
 ## 1. Project summary
 
@@ -30,14 +31,16 @@ a 2026-07-11 audit) is substantively complete and archived
 2026-07-18 session ran a **second, independent, fresh adversarial audit**
 (four parallel review agents: build/test verification, core-code bug
 hunt, architecture/docs staleness, UX gaps) that found 12 new, previously-
-undocumented findings. 10 are fixed and merged (`AUD-064` through
-`AUD-073`, skipping the deliberately-not-fixed `AUD-069`); only
-`AUD-069` itself remains open from the audit's own findings (see §8)
-— the other two separately-noted gaps found alongside it (the AI
-Assistant thread-creation-failure wedge and the no-op undo snapshots on
-locked-object commands) plus the latent CSG nested-Intersection
-null-deref are all now fixed, 2026-07-19 — see §3. The project is in an
-**ongoing hardening / bug-fixing** phase, not active new-feature
+undocumented findings. All 10 originally-planned fixes are merged
+(`AUD-064` through `AUD-073`) — `AUD-069` was the one deliberately
+deferred at the time (2026-07-18), then fixed the next day (2026-07-19).
+Zero of the audit's own findings remain open (see §8 for what's next —
+none of it traces back to this specific audit anymore). The two
+separately-noted gaps found alongside the audit (the AI Assistant
+thread-creation-failure wedge and the no-op undo snapshots on
+locked-object commands) are also both fixed, 2026-07-19 — see §3. The
+project is in an **ongoing hardening / bug-fixing** phase, not active
+new-feature
 development, though scoped new
 features have
 landed before when explicitly requested (`SYS-W14-##` rows).
@@ -62,14 +65,14 @@ landed before when explicitly requested (`SYS-W14-##` rows).
 
 ## 2. Current status
 
-- **Build: clean**, last verified this session at commit `8ff59c8` (fresh
+- **Build: clean**, last verified this session at commit `c393ca1` (fresh
   `cmake --build b-release -j4`, zero errors/warnings, EASYGL backend on
   Linux — the only backend buildable in this environment).
 - **Tests: 142/142 `ctest` passing**, last verified this session at the
   same commit (`ctest -j4`). Net +1 since this session started at 141 —
-  the CSG null-child fix (task 3) added a genuinely new `ctest`-registered
-  target (`mc3togltf_csg_null_child`); tasks 1 and 2 each only added a new
-  case inside an existing binary, not a new target.
+  only the CSG null-child fix (task 3) added a genuinely new
+  `ctest`-registered target (`mc3togltf_csg_null_child`); tasks 1, 2, and
+  4 each only added new cases inside existing binaries.
 - **CLI/tools/apps/libraries currently available:**
   - `MeshCraft` — the interactive editor (`./b-release/MeshCraft
     scene.mc3.xml`, or `--screenshot out.png` / `--export out.glb` /
@@ -141,6 +144,30 @@ landed before when explicitly requested (`SYS-W14-##` rows).
   this specific nesting. Verified a **real SIGSEGV** against the pre-fix
   code (`git stash`, rebuild, run — exit 139) and a clean pass against the
   fix, plus geometric-equivalence assertions (a null child is inert).
+- **Also implemented (this session, 2026-07-19):** task 4 — `AUD-069`'s
+  `includePathWithinRoot()` false-rejection. Wrongly rejected a
+  same-directory relative resource reference (e.g. `meshSource="model.obj"`)
+  as "escaping the root" whenever the target didn't exist on disk AND the
+  document was opened via a bare relative filename (empty `sourceDir`).
+  Root cause, found empirically (differs from the mechanism NEXT.md/
+  `plan.md` originally assumed): `weakly_canonical()` on a non-existent,
+  single-component relative path (a bare `"model.obj"`) does NOT resolve
+  it against the current directory at all — confirmed via direct debug
+  instrumentation that it returns the path unchanged, still relative,
+  while the root side always resolves to an absolute path, so `relative()`
+  compared an unresolved relative path against an absolute one. Fixed by
+  making the candidate absolute via `std::filesystem::absolute()` FIRST
+  (never requires existence), then `weakly_canonical`-ing the combined
+  absolute path as a unit — deviates from the originally-sketched fix
+  direction (joining candidate onto an explicitly-canonicalized root)
+  because both call sites already pre-join their own base onto the
+  candidate, so re-joining the root a second time would double-prefix.
+  Applied identically to both `Mc3XmlParser.cpp` and `Mc3JsonParser.cpp`
+  (independently duplicated). Both `load_policy_test.cpp` and
+  `json_load_policy_test.cpp` gain a same-directory, non-existent-target
+  case; verified both fail against the pre-fix code and pass against the
+  fix (`git stash`). This one IS a formal `plan.md` row (unlike tasks 1-3)
+  — updated to `[DONE]` there too.
 - **Recently implemented (previous session, 2026-07-18):** 10 fixes from a
   fresh audit, each with a regression test, each verified both broken
   (via `git stash` of the one-line/few-line fix) and fixed:
@@ -262,6 +289,33 @@ no per-task confirmation asked, per the user's explicit go-ahead above):
    both pass.
 4. Tracked only in `NEXT.md` (same reasoning as tasks 1/2).
 
+Task 4 — `AUD-069`'s `includePathWithinRoot()` false-rejection:
+1. Wrote a reproduction test FIRST (against `develop` HEAD, before writing
+   any fix) to empirically confirm the bug was still live rather than
+   trusting the description — confirmed it failed exactly as described.
+2. Investigated the root cause with temporary debug instrumentation
+   (`fprintf`/`std::cerr` prints in `includePathWithinRoot()`, removed
+   before committing) rather than assuming the mechanism NEXT.md/`plan.md`
+   described — found the actual mechanism differs (see the "Also
+   implemented" bullet in §2 for the technical detail).
+3. Commit `c393ca1` — `fix(AUD-069): make includePathWithinRoot() resolve
+   non-existent paths`. Files modified: `mc3/src/Mc3XmlParser.cpp`,
+   `mc3/src/Mc3JsonParser.cpp` (both copies of `includePathWithinRoot()`).
+   Files extended: `mc3/test/load_policy_test.cpp`,
+   `mc3/test/json_load_policy_test.cpp` (also removed a now-stale comment
+   in the latter that had explicitly flagged this exact gap as a known,
+   deliberately-unfixed follow-up).
+4. Verified: both new test cases fail against the pre-fix code and pass
+   against the fix (`git stash`); `ctest -R "load_policy"` (2/2) and full
+   root `ctest -j4` (142/142, same total — no new `ctest` target) both
+   pass.
+5. Updated `plan.md`'s `AUD-069` row to `[DONE]` (this task, unlike 1-3,
+   has a formal row there since it came from the 2026-07-18 audit
+   itself) — updated the row's Outcome/Tests/Resolved/Status-note fields
+   and the session log's DONE/TODO tally (9→10 DONE, 5→4 TODO).
+   `python3 test/validate_plan_consistency.py . b-release` confirmed
+   consistent afterward.
+
 **Previous session (2026-07-18), in order:**
 1. Ran a fresh, independent 4-agent audit (build/test verification,
    core-code bug hunt, architecture/docs staleness, UX gaps) rather than
@@ -309,19 +363,11 @@ The closest thing to a standing blocker is **owner-gated, not a bug**:
   this environment has. This blocks `AUD-053` (editor CI job) and the
   CI-job half of `AUD-057` (sibling-repo pin enforcement — the
   configure-time-assertion half already landed).
-- Nothing else is currently blocking forward progress; the next work is
-  simply the remaining audit findings (§8), which are unblocked.
+- Nothing else is currently blocking forward progress; the only item left
+  in §8 is a low-risk doc cleanup pass, which is unblocked.
 
 ## 5. Known bugs and limitations
 
-- **`AUD-069` (confirmed, low severity, TODO):** `includePathWithinRoot()`
-  (duplicated identically in `Mc3XmlParser.cpp` and `Mc3JsonParser.cpp`)
-  wrongly rejects a same-directory relative resource reference (e.g.
-  `meshSource="model.obj"`) as "escaping the root" when the target file
-  does not exist on disk AND the document was opened via a bare relative
-  filename (empty `sourceDir`) — `weakly_canonical()` only resolves
-  paths that exist. **Fails safe** (a false rejection, not a bypass), so
-  low severity. See `plan.md`'s `AUD-069` row for the fix direction.
 - **Stale documentation (found, not yet fixed):**
   - `AI_TRUNCATION_BUG.md` (repo root) describes a bug that is fully
     fixed (configurable `maxTokens` slider, `wasTruncated()` check,
@@ -482,20 +528,7 @@ git stash pop && cmake --build b-release -j4 --target <affected-target>
 
 ## 8. Next smallest tasks
 
-1. **Fix `AUD-069`'s `includePathWithinRoot()` false-rejection.**
-   - Goal: resolve the candidate against an explicitly-normalized base
-     (`weakly_canonical(rootDir.empty() ? current_path() : rootDir) /
-     candidate`, canonicalized as a unit) instead of canonicalizing the
-     bare candidate first, so resolution doesn't depend on the target
-     file's existence. Fix in BOTH `Mc3XmlParser.cpp` and
-     `Mc3JsonParser.cpp` (independently duplicated, not shared).
-   - Files: `mc3/src/Mc3XmlParser.cpp`, `mc3/src/Mc3JsonParser.cpp`.
-   - Verify: extend `load_policy_test.cpp` and `json_load_policy_test.cpp`
-     with a non-existent-file + empty-rootDir case (the JSON test already
-     has a same-directory case but only with the file pre-created);
-     `ctest -R "load_policy"`.
-
-2. **Doc cleanup pass (low-risk, several small pieces):**
+1. **Doc cleanup pass (low-risk, several small pieces):**
    - Archive `AI_TRUNCATION_BUG.md` to `docs/history/` (bug is fixed).
    - Fix `README.md:254`'s stale PPM claim; add `--benchmark` to its
      flag list.
