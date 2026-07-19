@@ -38,17 +38,19 @@ void beginAiWorker() {
     ++g_inFlightCount;
 }
 
+void endAiWorker() {
+    {
+        std::lock_guard<std::mutex> lock(g_inFlightMutex);
+        --g_inFlightCount;
+    }
+    g_inFlightCv.notify_all();
+}
+
 // RAII: decrements + notifies on every exit path from the worker lambda
 // (normal return or the lambda's own catch already turned any exception
 // into the hasError/error fields, so this always runs on scope exit).
 struct AiWorkerScopeGuard {
-    ~AiWorkerScopeGuard() {
-        {
-            std::lock_guard<std::mutex> lock(g_inFlightMutex);
-            --g_inFlightCount;
-        }
-        g_inFlightCv.notify_all();
-    }
+    ~AiWorkerScopeGuard() { endAiWorker(); }
 };
 } // namespace
 
@@ -298,13 +300,13 @@ void AiAssistant::sendAsync(const std::string& systemPrompt,
     size_t      maxResponseBytesCopy = maxResponseBytes;
 
     auto pending = std::make_shared<AiRequestResult>();
-    pending_ = pending;
 
     beginAiWorker(); // see AUD-014 comment above -- must happen before the thread starts
-    std::thread([pending, apiKeyCopy, modelCopy, maxTokensCopy, baseUrlCopy,
-                 connectTimeoutCopy, readTimeoutCopy, writeTimeoutCopy,
-                 maxResponseBytesCopy, systemPrompt, sceneXml, taskPrompt]()
-    {
+    try {
+        std::thread([pending, apiKeyCopy, modelCopy, maxTokensCopy, baseUrlCopy,
+                     connectTimeoutCopy, readTimeoutCopy, writeTimeoutCopy,
+                     maxResponseBytesCopy, systemPrompt, sceneXml, taskPrompt]()
+        {
         AiWorkerScopeGuard workerGuard;
         std::string text, stopReason, error;
         bool hasError = false;
@@ -423,7 +425,24 @@ void AiAssistant::sendAsync(const std::string& systemPrompt,
             pending->hasError   = hasError;
         }
         pending->done.store(true, std::memory_order_release);
-    }).detach();
+        }).detach();
+    } catch (const std::exception& e) {
+        // Thread construction itself failed (e.g. std::system_error from
+        // pthread_create() under real thread/resource exhaustion) before
+        // the worker lambda -- and therefore AiWorkerScopeGuard -- ever
+        // ran, so g_inFlightCount's increment above is rolled back here
+        // manually. pending_ is deliberately left unset (reset() already
+        // cleared it above) instead of being assigned the now-orphaned
+        // `pending`, so isInFlight() reports false instead of wedging true
+        // forever; hasError_/errorMsg_ are set directly so the UI still
+        // surfaces a visible failure instead of silently doing nothing.
+        endAiWorker();
+        hasError_   = true;
+        errorMsg_   = std::string("Failed to start AI request: ") + e.what();
+        done_       = true;
+        return;
+    }
+    pending_ = pending;
 }
 
 } // namespace MeshCraft

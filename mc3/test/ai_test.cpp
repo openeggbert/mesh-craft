@@ -32,6 +32,12 @@
 #include <httplib.h>
 #endif
 
+#if defined(__linux__)
+#include <sys/resource.h>
+#include <sys/wait.h>
+#include <unistd.h>
+#endif
+
 using namespace MeshCraft;
 using namespace MeshCraft::Mc3;
 
@@ -1114,6 +1120,70 @@ static void testWaitForAllInFlightBoundedThenCompletes() {
 
 #endif // MESHCRAFT_HAS_AI
 
+#if defined(__linux__)
+// NEXT.md task 1: sendAsync() used to set pending_ and increment the
+// process-wide g_inFlightCount BEFORE constructing the worker std::thread.
+// If thread construction itself throws (std::thread's constructor throws
+// std::system_error when pthread_create() fails, e.g. under real
+// thread/resource exhaustion), that state was never rolled back:
+// isInFlight() (== pending_ != nullptr && !done_) would then report true
+// for the rest of the process's life -- the Send button (gated on
+// !isInFlight() in MeshCraftApplication_UiAi.cpp) would stay disabled
+// permanently, with no error ever surfaced to the user.
+//
+// This test forces a REAL std::thread constructor failure rather than a
+// stand-in, so it exercises the exact code path a real failure would take.
+// Reliably forcing that in-process would mean either spawning a large,
+// slow, unpredictable number of real threads, or lowering THIS process's
+// own RLIMIT_NPROC directly -- both risk starving real OS thread/process
+// resources on a machine this project's own notes say runs many concurrent
+// Claude Code sessions and builds under the same user. fork() sidesteps
+// that: rlimits are a per-process attribute, copied (not shared) at
+// fork(), so setting RLIMIT_NPROC to 0 in the CHILD only affects the
+// child's own subsequent thread-creation attempts -- zero effect on the
+// parent test process or any other process on the machine. The child
+// exits immediately after one check, via _exit() (skips atexit/static
+// destructors, since its memory is a fork()ed copy of the parent's).
+static void testThreadCreationFailureRollsBackState() {
+    // Drain any still-detached workers from earlier tests first so fork()
+    // happens from a single-threaded state (forking a multithreaded
+    // process is only safe if the child never touches state a vanished
+    // sibling thread might have been mid-mutation of).
+    AiAssistant::waitForAllInFlight(std::chrono::milliseconds(4000));
+
+    pid_t pid = fork();
+    CHECK(pid >= 0, "AI-THREAD-WEDGE: fork() for the isolated failure-injection child succeeds");
+    if (pid < 0) return;
+
+    if (pid == 0) {
+        // Child only: force every subsequent thread/process-creation
+        // attempt in this process to fail, then run the real sendAsync()
+        // against that real failure.
+        struct rlimit rl;
+        rl.rlim_cur = 0;
+        rl.rlim_max = 0;
+        setrlimit(RLIMIT_NPROC, &rl);
+
+        AiAssistant ai;
+        ai.apiKey = "test-key";
+        ai.sendAsync("system prompt", "<mc3/>", "add a box");
+
+        bool ok = !ai.isInFlight() && ai.isDone() && ai.hasError() &&
+                  !ai.errorMsg().empty();
+        _exit(ok ? 0 : 1);
+    }
+
+    int status = 0;
+    CHECK(waitpid(pid, &status, 0) == pid,
+          "AI-THREAD-WEDGE: parent successfully waits for the child");
+    CHECK(WIFEXITED(status) && WEXITSTATUS(status) == 0,
+          "AI-THREAD-WEDGE: after a real std::thread construction failure, "
+          "sendAsync() rolls back pending_/the in-flight counter (isInFlight() "
+          "false, hasError() true) instead of wedging isInFlight() permanently "
+          "true");
+}
+#endif // __linux__
+
 // ─────────────────────────────────────────────────────────────────────────────
 
 int main() {
@@ -1165,6 +1235,11 @@ int main() {
     testWaitForAllInFlightBoundedThenCompletes();
 #else
     std::cout << "SKIP: mock HTTP server tests require MESHCRAFT_HAS_AI\n";
+#endif
+#if defined(__linux__)
+    testThreadCreationFailureRollsBackState();
+#else
+    std::cout << "SKIP: thread-creation-failure test requires __linux__ (fork()/RLIMIT_NPROC)\n";
 #endif
 
     std::cout << "\n" << (failures == 0 ? "All AI tests passed."
