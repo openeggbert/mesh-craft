@@ -1,8 +1,17 @@
 # MeshCraft Renderer — Analysis and Improvement Proposals
 
-This document describes the current state of the MeshCraft renderer, the root
-causes of known visual problems (flat shading, poor edge overlay appearance),
-and concrete proposals for improvement.
+This document describes the state of the MeshCraft renderer, the root causes
+of known visual problems (flat shading, poor edge overlay appearance), and
+concrete proposals for improvement.
+
+> **Status update (2026-07-19):** P1 and P2 are **implemented** — see each
+> proposal's own note below. Both landed via the sibling `mesh-world` repo's
+> own R-series work (commits `84b8c1a`/`3c33ba6`, outside this repo's own
+> `plan.md` tracking — see `NEXT.md`'s "MeshWorld R-series cross-repo" note),
+> not as a `plan.md`-tracked task in this repo. "Problem 1"/"Problem 2" below
+> describe the PRE-fix state and are kept for historical context; the actual
+> current behavior is described in each proposal's status note. P3-P6 remain
+> open, unimplemented proposals.
 
 ---
 
@@ -117,7 +126,13 @@ This means:
 
 The proposals are ordered from lowest to highest implementation effort.
 
-### P1 — Enable a single ambient + directional light (low effort)
+### P1 — Enable a single ambient + directional light (low effort) — ✅ DONE
+
+**Status (2026-07-19):** implemented (commit `84b8c1a`, "R1: Enable 3-point
+directional lighting for solid primitive draw pass"). `SceneRenderer.cpp`
+calls `effect_->EnableDefaultLighting()` once at setup and toggles
+`setLightingEnabledProperty(true)`/`(false)` around the solid draw pass vs.
+the edge-overlay/gizmo passes, matching this proposal's own step 3.
 
 Enable `LightingEnabled` in the solid pass and add one key light (sun) plus
 ambient. This requires no vertex format change — VPNT buffers already exist
@@ -143,7 +158,15 @@ faceted shading (each face has a single normal value, which is correct for
 low-poly art style). If CNA exposes per-pixel lighting controls (`PreferPerPixelLighting`),
 that flag can also be set for smoother gradients on curved surfaces.
 
-### P2 — Dynamic world-space push for edge overlay (low effort)
+### P2 — Dynamic world-space push for edge overlay (low effort) — ✅ DONE
+
+**Status (2026-07-19):** implemented (commit `3c33ba6`, "R1/R2 lighting +
+edge fix..."). `SceneRenderer_Extrude.cpp`'s `kPush` is now
+`std::clamp(1.0f + 0.25f / std::max(maxScale, 0.001f), 1.003f, 1.02f)` — a
+world-scale-derived push clamped to a sane range, not the fixed `1.003f`
+this proposal originally flagged. (Applied to the Extrude draw path; not
+independently re-verified against every other primitive's own edge-overlay
+call site.)
 
 Replace the fixed `kPush = 1.003f` with a value derived from the actual world
 scale of the object. The goal is a constant-size push in world space rather
@@ -219,16 +242,16 @@ fragment shader).
 
 ## Recommended action order
 
-| Priority | Proposal | Effort | Prerequisite |
-|----------|----------|--------|--------------|
-| 1 | P1 — enable 1 directional light + ambient | 1–2 h | none (VPNT already built) |
-| 2 | P2 — world-space depth push for edges | 1 h | none |
-| 3 | P3 — normal-shaded edge colour | 2–3 h | P1 (needs normals) |
-| 4 | P4 — silhouette-only edges | half day | P1 |
-| 5 | P5 — flat-shading fragment shader | 1 day | CNA shader upload API |
-| 6 | P6 — screen-space edge post-pass | 2–3 days | CNA FBO + shader API |
+| Priority | Proposal | Effort | Prerequisite | Status |
+|----------|----------|--------|--------------|--------|
+| 1 | P1 — enable 1 directional light + ambient | 1–2 h | none (VPNT already built) | ✅ done (`84b8c1a`) |
+| 2 | P2 — world-space depth push for edges | 1 h | none | ✅ done (`3c33ba6`) |
+| 3 | P3 — normal-shaded edge colour | 2–3 h | P1 (needs normals) | open |
+| 4 | P4 — silhouette-only edges | half day | P1 | open |
+| 5 | P5 — flat-shading fragment shader | 1 day | CNA shader upload API | open |
+| 6 | P6 — screen-space edge post-pass | 2–3 days | CNA FBO + shader API | open |
 
-P1 and P2 can be done immediately with the current CNA API and will eliminate
-the majority of the visual problems described above.
+P1 and P2 are done (2026-07-19 status update, above) and eliminated the
+majority of the visual problems described above.
 P5 and P6 are the correct long-term solutions and should be the target once
 CNA extends beyond XNA 4.0.

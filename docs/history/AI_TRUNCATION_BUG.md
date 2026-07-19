@@ -1,5 +1,20 @@
 # Bug: AI Assistant produces truncated / invalid XML for complex prompts
 
+> **FIXED.** Archived here 2026-07-19 (moved from the repo root, where it
+> had continued to read as an open bug report long after the fix landed).
+> All three fixes below are implemented and live:
+> - Fix A (raise `max_tokens`): `AiAssistant::maxTokens` defaults to
+>   32000, user-adjustable 4096–64000 via a slider in the AI panel
+>   (`MeshCraftApplication_UiAi.cpp`).
+> - Fix B (detect `stop_reason`): `AiAssistant::wasTruncated()` checks
+>   `stop_reason == "max_tokens"`; the UI shows a dedicated message
+>   naming the configured `maxTokens` value instead of a raw XML parse
+>   error.
+> - Fix C (expose `max_tokens` in the UI): the slider mentioned above.
+>
+> The rest of this document is kept verbatim for historical context only
+> — do not treat it as describing current behavior.
+
 ## Symptom
 
 When the user sends an ambitious prompt (e.g. "generate a house with garden, fence,

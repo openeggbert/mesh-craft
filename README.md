@@ -189,6 +189,21 @@ owner permission").
 ./cmake-build-debug/MeshCraft path/to/scene.mc3.xml
 ```
 
+#### Headless one-shot flags
+
+`MeshCraft` also supports three headless (no window shown, no interactive
+loop) one-shot modes, each rendering/measuring the scene and exiting:
+
+```sh
+./cmake-build-debug/MeshCraft scene.mc3.xml --screenshot out.png   # or out.ppm — see note below
+./cmake-build-debug/MeshCraft scene.mc3.xml --export out.glb
+./cmake-build-debug/MeshCraft scene.mc3.xml --benchmark            # timing breakdown to stdout
+```
+
+`--screenshot`'s output format is chosen by the path's extension: `.png`
+writes a real PNG; any other extension (e.g. `.ppm`) writes raw PPM (P6)
+bytes regardless of what the extension says.
+
 ### Export to glTF
 
 ```sh
@@ -251,7 +266,7 @@ reference.
 - Bloom post-process: pipeline runs (FBO + Gaussian blur + composite) but visual effect not always visible depending on scene emissive brightness
 - Walk mode: floor collision at y=0 only; no collision with scene geometry
 - Preferences dialog: auto-save interval, snap (translate/rotate/scale), grid spacing, and theme are all persisted (`savePrefsAlg`/`loadPrefsAlg`)
-- Headless screenshot: always writes PPM regardless of file extension
+- Headless screenshot: a `.png` path writes a real PNG (`stbi_write_png`); every other extension (e.g. `.ppm`) writes raw PPM (P6) bytes regardless of what the extension actually says
 - MCB: compression flag reserved in header but not implemented
 - CSG export to glTF: evaluated by Manifold (union/difference/intersection). Unsupported child types inside a CSG node (Plane, Disk, Grid, Mesh, Extrude) cause the export to fail with a clear error in default mode. Pass `--allow-approximate-csg` (CLI) or enable "Allow approximate CSG export" (editor) to bypass Manifold and export children separately (debug fallback, geometrically incorrect). CSG result mesh has flat normals; child materials are not preserved (CSG root material is used)
 - No automated UI tests; only XML roundtrip and smoke test

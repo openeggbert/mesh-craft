@@ -1,7 +1,9 @@
 # MeshCraft Editor — mc3 Format Coverage Gaps
 
-Analysis date: 2026-07-18 (updated from the original 2026-07-10 analysis —
-see "Resolved since 2026-07-10" below for what closed in between). Scope:
+Analysis date: 2026-07-19 (refreshed from the 2026-07-18 analysis — see
+"Resolved since 2026-07-18" below for what closed same-day, after this
+file's own last edit; "Resolved since 2026-07-10" further down for the
+earlier round). Scope:
 what the **MeshCraft editor's interactive GUI** can create/edit/view, versus
 what the **mc3 format** (mc3.xsd, `Mc3Document` and friends) actually
 supports. This is *not* about `mc3togltf` export fidelity — that surface is
@@ -11,11 +13,72 @@ interactive editing surface, or have one that's incomplete.
 
 Findings are grouped by severity: **still-open total gaps** (zero UI,
 XML-hand-edit only) first, then **still-open partial gaps** (UI exists but
-incomplete or buggy), then **non-gaps** worth noting for context, then a
-**resolved-since-2026-07-10** list for historical credit, then a summary
-table.
+incomplete or buggy), then **non-gaps** worth noting for context, then two
+resolved-history lists (**2026-07-18**, then the earlier **2026-07-10**
+round) for historical credit, then a summary table. As of this refresh,
+sections 1 and 2 below have no remaining open findings — everything that
+was open as of 2026-07-18 closed the same day.
 
 ---
+
+## Resolved since 2026-07-18
+
+All 4 "total gap" findings (N8/N9/N10/N11), plus the texture file-browse
+gap and the `coordinate_system`/Area partial gaps, closed the same day as
+this file's own last edit (`SYS-W14-10` through `SYS-W14-17`,
+`git log --oneline --grep="SYS-W14-1"`):
+
+- **N8 Object `scriptId` attachment** — a "Script" combo added to
+  `PropertiesPanel.cpp`, mirroring the existing Material combo's
+  structure (none-sentinel, mixed-selection handling, pushUndo/
+  markModified on change) (`SYS-W14-10`, `643b238`).
+- **N9 Library metadata / imports (`.mc3lib`)** — new "Library (.mc3lib)"
+  section (namespace/version + a hash-recompute button) and a new
+  "Imports" tab (an index-based row editor for the ordered `doc.imports`
+  vector) in the Scene Properties panel (`SYS-W14-13`, `8a2d02c`).
+- **N10 Semantic JSON file I/O (`.mc3.json`)** — Open/Save/Save As now
+  dispatch on extension (`.mcb`/`.json`/else) via one shared
+  `loadSceneFileDispatched()`, replacing 3 independently-drifted copies
+  of that dispatch; also fixed a related pre-existing bug where `Save`
+  always wrote XML regardless of the file's real extension (`SYS-W14-11`,
+  `166a712`).
+- **N11 Asset metadata (`assetMetadata`)** — all 23 fields, in a
+  collapsible "Asset Metadata" section on the Defs tab (definitions, not
+  placed instances — matches the field's own "present only on
+  definitions" documented scope) (`SYS-W14-12`, `0634aa8`).
+- **Texture file-browse dialog** — a "..." Browse button next to each of
+  the 5 material texture-slot fields, using CNA's own `FileDialog`
+  device (previously fully implemented but never called from this repo)
+  (`SYS-W14-15`, `7229b63`).
+- **`coordinate_system`** — investigated implementing real axis-swap
+  conversion (would need touching every independent root-matrix call
+  site in `SceneRenderer` AND `GltfExporter`'s own root node
+  construction — missing even one would make gizmos/picking silently
+  disagree with rendered geometry, worse than today's inert-field gap).
+  **Confirmed by-design won't-fix**, same resolution as
+  `rotation_units`/`euler_order`'s existing precedent — the load-time
+  notice (`checkRotationConventionNotice()`) now also names
+  `coordinateSystem` (`SYS-W14-14`, `43c40e8`). The field is still never
+  *read* for rendering/export, but this is now a documented, accepted
+  limitation, not an open gap.
+- **Area properties panel** — investigated whether Area objects carry
+  distinct data beyond size, or whether `doc.triggers` links back to a
+  specific object; confirmed neither (no `ObjectType::Area` parser case
+  exists — Area is just a Box-shaped primitive with a different type
+  tag; `Mc3Trigger` has no field referencing an `Mc3Object` at all).
+  **Confirmed the existing labeled-generic-Box editor is the complete,
+  correct UI given the current data model**, not a partial one — no code
+  change needed (`SYS-W14-17`, `784a222`).
+- **Undo/redo coverage** — a fresh independent 2-agent audit found and
+  fixed 27 further real gaps (6 missing `pushUndo()` entirely, 21 more
+  instances of the `AUD-036`-style nested-`IsItemActivated()` dead
+  pattern) across `PropertiesPanel.cpp`/`MeshCraftApplication_UiLeftPanel.cpp`
+  (`SYS-W14-16`, `4c2d535`). **Still accurately a manual discipline, not a
+  structural guarantee** — explicitly confirmed intentional scope, not an
+  oversight, when `SYS-W9-01` was closed the same day: "no formal
+  transaction-abstraction class was built; the manual
+  pushUndo()-before-every-mutation discipline remains, now backed by
+  three audit rounds rather than a structural guarantee" (`dc69b7a`).
 
 ## Resolved since 2026-07-10
 
@@ -69,33 +132,9 @@ All 7 of the original "zero UI" extension-namespace findings, plus 6 of 12
 
 ## 1. Total gaps — zero editor UI
 
-- **N8 — Object-level script attachment** (`Mc3Object::scriptId`,
-  `mc3/include/MeshCraft/Mc3/Mc3Object.hpp`). Scripts themselves are fully
-  editable (`doc.scripts`, N3 above), but there is no UI anywhere to set an
-  *object's* `scriptId` to attach one of those scripts to it — confirmed via
-  `grep -rn "scriptId" src/MeshCraft/` (zero hits). XML-hand-edit only.
-- **N9 — Library metadata and imports** (`Mc3Document::library`
-  (`Mc3LibraryInfo`), `Mc3Document::imports` (`Mc3Import`), the `.mc3lib`
-  reusable-library file format). Zero editor UI — no panel shows/edits the
-  library namespace/version, no way to add/remove an `<imports>` entry, and
-  no File-menu action creates/opens a `.mc3lib` file (`saveToLibraryFile`/
-  `saveToLibraryJsonFile` exist in `mc3/src/Mc3Document.cpp` but nothing in
-  `src/MeshCraft/` calls them). This is a newer, still-evolving format
-  addition (part of a separate cross-repo initiative — see the
-  `project_meshworld_r_series_cross_repo` memory) — may not be worth
-  editor UI yet if that initiative itself isn't finished; flagged for a
-  human call, not assumed.
-- **N10 — Semantic JSON file I/O** (`.mc3.json`, `Mc3JsonWriter`/
-  `Mc3JsonParser`). `Mc3Document::loadFromJsonFile`/`saveToJsonFile` exist
-  and work, but the editor's Open/Save/Save As (`MeshCraftApplication_FileOps.cpp`)
-  exclusively call the XML load/save path — no File-menu entry or dialog
-  filter offers `.mc3.json` at all. XML-only in practice from the GUI.
-- **N11 — Asset metadata** (`Mc3Object::assetMetadata`, `Mc3AssetMetadata`
-  struct — category/subcategory/tags/bounds/facing/sockets/materialSlots/
-  collisionProxy/lods/license/provenance/semanticVersion). Zero editor UI —
-  confirmed via `grep -rn "assetMetadata\|AssetMetadata" src/MeshCraft/`
-  (zero hits). A large struct; a full editor would be a substantial UI
-  task, not a quick add.
+None remaining — N8/N9/N10/N11 (the 4 findings originally in this
+section) were all closed 2026-07-18; see "Resolved since 2026-07-18"
+above.
 
 ## 2. Total gaps — document-level attributes
 
@@ -114,38 +153,12 @@ All 7 of the original "zero UI" extension-namespace findings, plus 6 of 12
 
 ## 3. Partial gaps — UI exists but incomplete, inconsistent, or buggy
 
-- **`coordinate_system` is write-only.** The invalid `"left_handed_y_up"`
-  combo option was removed (`STAB-0713` — the combo now only offers the 2
-  XSD-valid values), but the deeper half of the original finding persists
-  unchanged: `coordinateSystem` is stored and editable, but still **never
-  read** anywhere in `mc3togltf/` or `src/MeshCraft/` (confirmed by direct
-  grep, no read sites found) — it has zero effect on rendering or export
-  today. This is arguably more of a real completeness/correctness gap than
-  a pure "missing UI" one: the field can be set correctly through the GUI
-  and it still does nothing.
-- **No native texture file-browse dialog.** Still true, unchanged — plain
-  `ImGui::InputText` path boxes everywhere (material texture slots, the
-  Import OBJ dialog), no picker. Notably, the CNA dependency already ships
-  a `FileDialog` device (SDL backend) that is never called from anywhere in
-  `src/MeshCraft/`/`mc3togltf/` — the capability exists one layer down and
-  is simply unused.
-- **Undo/redo coverage is a manual discipline, not a structural
-  guarantee.** Still true. `SYS-W5-04` (2026-07-17/18) did related
-  exhaustive-audit work, but it was scoped to building a lookup cache
-  (`Editor::ObjectIndex`), not to converting undo/redo coverage into a
-  structural guarantee — its own invalidation-correctness argument still
-  rests on "confirmed via grep that `pushUndo()` runs before virtually
-  every mutating command" (332 call sites, per a fresh count), the same
-  manual-discipline pattern this finding originally flagged, not a
-  Command-pattern/wrapper enforcement. Flagged as a risk area, not a
-  confirmed live bug.
-- **Area objects have no dedicated properties UI.** Upgraded from "generic
-  Box editor, cosmetically unclear" to "labeled but still generic":
-  `STAB-0721` added an `"Area (trigger zone)"` label when editing an Area
-  object, but the editor still falls through to the same generic Box size
-  fields immediately below (by design, per that commit's own comment —
-  Area objects structurally carry a Box-shaped primitive with no parser
-  case of their own, so a fully separate editing block wasn't built).
+None remaining as open code gaps — `coordinate_system`, the texture
+file-browse dialog, undo/redo coverage, and Area's properties panel (the
+4 findings originally in this section) were all resolved or formally
+closed 2026-07-18; see "Resolved since 2026-07-18" above for exactly what
+changed and what's still intentionally not a structural guarantee
+(undo/redo) or not read anywhere (`coordinate_system`, by design).
 
 ## 4. Non-gaps (re-confirmed 2026-07-18, no regressions)
 
@@ -167,21 +180,21 @@ All 7 of the original "zero UI" extension-namespace findings, plus 6 of 12
 | Area | Status |
 |------|--------|
 | N1-N7 (SVG textures, embeds, scripts, audio, triggers, scene states, meta) | ✅ resolved (`STAB-0703`..`0709`) |
-| N8 Object `scriptId` attachment | ❌ no UI |
-| N9 Library metadata / imports (`.mc3lib`) | ❌ no UI (newer format, may not need UI yet — human call) |
-| N10 Semantic JSON file I/O (`.mc3.json`) | ❌ no UI (File menu is XML-only) |
-| N11 Asset metadata (`assetMetadata`) | ❌ no UI (large struct, substantial task) |
+| N8 Object `scriptId` attachment | ✅ resolved (`SYS-W14-10`) |
+| N9 Library metadata / imports (`.mc3lib`) | ✅ resolved (`SYS-W14-13`) |
+| N10 Semantic JSON file I/O (`.mc3.json`) | ✅ resolved (`SYS-W14-11`) |
+| N11 Asset metadata (`assetMetadata`) | ✅ resolved (`SYS-W14-12`) |
 | `rotation_units`/`euler_order` | 🟡 read-only load-time notice only; no editing UI; won't-fix by design (`STAB-0701`) |
 | IcoSphere subdivision level | ✅ resolved (`STAB-0711`) |
 | Primitive `axis` | ✅ resolved (`STAB-0712`) |
-| `coordinate_system` | 🟡 UI now XSD-valid, but the value is still never read anywhere (real gap, not just UI) |
+| `coordinate_system` | 🟡 confirmed by-design won't-fix (`SYS-W14-14`), same precedent as `rotation_units` — still never read anywhere, but now a documented limitation, not an open gap |
 | Animation `autoplay` | ✅ resolved (`STAB-0714`) |
 | Animation Deform/Material channel initial value | ✅ resolved (`STAB-0715`) |
 | Camera orthographic `xmag`/`ymag` | ✅ resolved (`STAB-0695`) |
-| Texture import (file-browse dialog) | 🟡 still drag-drop/manual path only |
+| Texture import (file-browse dialog) | ✅ resolved (`SYS-W14-15`) |
 | Whole-scene Import (OBJ) | ✅ resolved (`STAB-0717`) |
 | Non-glTF Export | ✅ resolved (`STAB-0718`, OBJ export) |
-| Undo/redo structural guarantee | 🟡 still a manual (grep-audited) discipline, not structural |
+| Undo/redo structural guarantee | 🟡 27 further gaps closed (`SYS-W14-16`); still intentionally a manual discipline, not structural (confirmed scope, not an oversight — see `dc69b7a`) |
 | Group in Add menu | ✅ resolved |
-| Area properties panel | 🟡 label added, still generic Box editor underneath |
+| Area properties panel | ✅ confirmed complete given the current data model, no code change needed (`SYS-W14-17`) |
 | Materials, Lights, Cameras (core), Extrude, CSG, Groups/Definitions/Instances, Interpolation, model/unit/default_camera | ✅ complete |
