@@ -1,10 +1,12 @@
 # NEXT.md
 
-_Last updated: 2026-07-18, end of a same-day session that ran a fresh
-independent adversarial audit and fixed 10 of its 12 findings. This file
-was fully rewritten (not appended to) at this point — its previous
-revision had grown to 1072 lines of session-by-session narrative; see
-`git log -- NEXT.md` and `docs/history/` if that history is ever needed._
+_Last updated: 2026-07-19, after fixing task 1 of the previous session's
+"Next smallest tasks" list (the AI Assistant thread-creation-failure
+wedge). The 2026-07-18 session ran a fresh independent adversarial audit
+and fixed 10 of its 12 findings; this file was fully rewritten (not
+appended to) at that point — its previous revision had grown to 1072 lines
+of session-by-session narrative; see `git log -- NEXT.md` and
+`docs/history/` if that history is ever needed._
 
 ## 1. Project summary
 
@@ -20,14 +22,17 @@ round out the format family.
 
 **Current phase:** the original stabilization backlog (AUD/SYS tasks from
 a 2026-07-11 audit) is substantively complete and archived
-(`docs/history/STABILIZATION.md`, `docs/history/plan_20260718.md`). This
-session ran a **second, independent, fresh adversarial audit** (four
-parallel review agents: build/test verification, core-code bug hunt,
-architecture/docs staleness, UX gaps) that found 12 new, previously-
+(`docs/history/STABILIZATION.md`, `docs/history/plan_20260718.md`). The
+2026-07-18 session ran a **second, independent, fresh adversarial audit**
+(four parallel review agents: build/test verification, core-code bug
+hunt, architecture/docs staleness, UX gaps) that found 12 new, previously-
 undocumented findings. 10 are fixed and merged (`AUD-064` through
-`AUD-073`, skipping the deliberately-not-fixed `AUD-069`); 3 remain open
-(see §8). The project is in an **ongoing hardening / bug-fixing** phase,
-not active new-feature development, though scoped new features have
+`AUD-073`, skipping the deliberately-not-fixed `AUD-069`); 3 of the
+audit's own findings remain open (see §8) plus one separately-noted,
+now-fixed gap (the AI Assistant thread-creation-failure wedge, fixed
+2026-07-19 — see §3). The project is in an **ongoing hardening /
+bug-fixing** phase, not active new-feature development, though scoped new
+features have
 landed before when explicitly requested (`SYS-W14-##` rows).
 
 **Important architectural decisions:**
@@ -50,15 +55,13 @@ landed before when explicitly requested (`SYS-W14-##` rows).
 
 ## 2. Current status
 
-- **Build: clean**, last verified this session at commit `8673665` (fresh
-  `cmake -S . -B b-release` + `cmake --build b-release -j4`, zero
-  errors/warnings, EASYGL backend on Linux — the only backend buildable in
-  this environment). A same-day, unrelated `../easy-gl`/`../meta-gl`
-  in-progress edit briefly broke this build mid-session; confirmed
-  resolved (see §4/§5).
+- **Build: clean**, last verified this session at commit `63df1bc` (fresh
+  `cmake --build b-release -j4`, zero errors/warnings, EASYGL backend on
+  Linux — the only backend buildable in this environment).
 - **Tests: 141/141 `ctest` passing**, last verified this session at the
-  same commit. Net +9 tests since this session started at 132/132 (one
-  new regression test per fix below).
+  same commit (`ctest -j4`). Same total as before — this session's fix
+  added a new case inside the existing `mc3_ai` binary rather than a new
+  `ctest`-registered target, so the registered-test count didn't move.
 - **CLI/tools/apps/libraries currently available:**
   - `MeshCraft` — the interactive editor (`./b-release/MeshCraft
     scene.mc3.xml`, or `--screenshot out.png` / `--export out.glb` /
@@ -68,7 +71,24 @@ landed before when explicitly requested (`SYS-W14-##` rows).
   - Standalone libraries `mc3` (format/AST + XML/JSON parse-writer),
     `mcb` (binary format) — both buildable and testable without CNA via
     their own `mc3/build`/`mcb/build` trees (no live GPU/GL needed).
-- **Recently implemented (this session, 2026-07-18):** 10 fixes from a
+- **Recently implemented (this session, 2026-07-19):** task 1 from the
+  2026-07-18 session's "Next smallest tasks" list — the AI Assistant
+  thread-creation-failure wedge. `AiAssistant::sendAsync()`
+  (`src/MeshCraft/AiAssistant.cpp`) used to set `pending_` and increment
+  the process-wide in-flight counter *before* constructing the worker
+  `std::thread`; if that construction itself threw (a real
+  `std::system_error` from `pthread_create()` under thread/resource
+  exhaustion), neither was ever rolled back, so `isInFlight()` would
+  report `true` forever and the Send button would stay disabled
+  permanently with no visible error. Fixed by wrapping the thread
+  construction in `try`/`catch` and rolling back both plus surfacing
+  `hasError_`/`errorMsg_` on failure. Regression test (`mc3/test/ai_test.cpp`,
+  Linux-only) forces a **real** `std::thread` constructor failure via
+  `fork()` + `RLIMIT_NPROC=0` scoped to the child process only (zero effect
+  on the parent process or anything else on this shared machine); verified
+  failing against the pre-fix code and passing against the fix via
+  `git stash`, matching this project's established pattern.
+- **Recently implemented (previous session, 2026-07-18):** 10 fixes from a
   fresh audit, each with a regression test, each verified both broken
   (via `git stash` of the one-line/few-line fix) and fixed:
   - `AUD-064` — unbounded `<grid>` `subdivisions_x * subdivisions_z`
@@ -109,7 +129,29 @@ landed before when explicitly requested (`SYS-W14-##` rows).
 
 ## 3. Recent changes
 
-**This session (2026-07-18), in order:**
+**This session (2026-07-19):**
+1. Read `NEXT.md` in full, confirmed with the user, then implemented
+   exactly task 1 from §8's "Next smallest tasks" (per this project's
+   `CLAUDE.md`/resume-prompt workflow: one confirmed task per session).
+2. Commit `63df1bc` — `fix(ai-assistant): roll back sendAsync() state on
+   worker thread-creation failure`. Files modified: `src/MeshCraft/
+   AiAssistant.cpp` (try/catch around the worker `std::thread`
+   construction; factored the scope guard's decrement+notify into a new
+   `endAiWorker()` shared by both the normal-completion and failure
+   paths). File extended: `mc3/test/ai_test.cpp` (new
+   `testThreadCreationFailureRollsBackState()`, Linux-only, forces a real
+   `std::thread` constructor failure via `fork()` + child-scoped
+   `RLIMIT_NPROC=0`).
+3. Verified: the new test fails against the pre-fix code and passes
+   against the fix (`git stash`); `ctest -R mc3_ai` passes; full root
+   `ctest -j4` is 141/141 (same total — no new `ctest`-registered target,
+   just a new case inside the existing `mc3_ai` binary).
+4. This finding was tracked only in `NEXT.md` (never filed as an `AUD-0NN`
+   row in `plan.md`, since it was found outside the 2026-07-18 audit's
+   formal findings list) — so `plan.md` is unchanged this session; only
+   `NEXT.md` needed updating.
+
+**Previous session (2026-07-18), in order:**
 1. Ran a fresh, independent 4-agent audit (build/test verification,
    core-code bug hunt, architecture/docs staleness, UX gaps) rather than
    trusting the prior session's "backlog exhausted" claim — found 12 new
@@ -169,13 +211,6 @@ The closest thing to a standing blocker is **owner-gated, not a bug**:
   filename (empty `sourceDir`) — `weakly_canonical()` only resolves
   paths that exist. **Fails safe** (a false rejection, not a bypass), so
   low severity. See `plan.md`'s `AUD-069` row for the fix direction.
-- **AI Assistant thread-creation-failure wedge (found, not yet
-  filed/fixed):** `AiAssistant.cpp` sets `pending_`/increments an
-  in-flight counter *before* constructing the worker `std::thread`; if
-  thread construction itself throws (e.g. thread exhaustion), that state
-  is never rolled back and `isInFlight()` returns true forever — Send
-  stays disabled for the rest of the session. Needs a try/catch around
-  the thread construction.
 - **No-op undo snapshots on locked objects (found, not yet filed/fixed):**
   several `MeshCraftApplication_Commands.cpp` commands (`deleteSelected`,
   `dropSelectedToGroundPlane`, `groupScaleSelected`,
@@ -276,7 +311,11 @@ The closest thing to a standing blocker is **owner-gated, not a bug**:
   detached `std::thread` writing into a `shared_ptr<AiRequestResult>`
   (atomic done flag + mutex). Never switch this to `std::async`/
   `std::future` (reintroduces a destructor-blocking hang-on-close
-  already fixed once). See §5 for a related, not-yet-fixed gap.
+  already fixed once). `sendAsync()` now wraps the worker `std::thread`'s
+  own construction in try/catch (2026-07-19 fix) — on a real construction
+  failure it rolls back the in-flight counter via `endAiWorker()` and
+  leaves `pending_` unset rather than wedging `isInFlight()` true forever;
+  keep that rollback if this function is ever restructured further.
 - **`CNA_ENABLE_NET` must stay `OFF`** — an unused CNA subsystem that
   fails to compile; re-enabling breaks the default build.
 - **Boundaries that must not be broken:** no changes to `../cna` or
@@ -337,18 +376,7 @@ git stash pop && cmake --build b-release -j4 --target <affected-target>
 
 ## 8. Next smallest tasks
 
-1. **Fix the AI Assistant thread-creation-failure wedge.**
-   - Goal: wrap the `std::thread(...).detach()` construction in
-     `AiAssistant.cpp`'s `sendAsync()` in a try/catch; roll back
-     `pending_`/the in-flight counter on failure instead of leaving them
-     permanently set.
-   - Files: `src/MeshCraft/AiAssistant.cpp`.
-   - Verify: new/extended case in `mc3_ai`/`ai_test.cpp` simulating a
-     thread-construction failure (or documenting why that's
-     impractical to simulate and testing the rollback logic directly);
-     `ctest -R mc3_ai`.
-
-2. **Fix no-op undo snapshots on locked-object commands.**
+1. **Fix no-op undo snapshots on locked-object commands.**
    - Goal: make `deleteSelected()`, `dropSelectedToGroundPlane()`,
      `groupScaleSelected()`, `randomizeTransformSelected()`,
      `resetPivot()` skip `pushUndo()`/`modified_=true` when every
@@ -359,7 +387,7 @@ git stash pop && cmake --build b-release -j4 --target <affected-target>
      with a "all-selected-objects-locked" case asserting no undo push;
      `ctest -R "undo_manager|undo_gesture_frame"`.
 
-3. **Guard the latent CSG null-deref.**
+2. **Guard the latent CSG null-deref.**
    - Goal: add the same `if (child)` guard `CsgEvaluator.cpp` uses
      everywhere else in the nested-`Intersection` case at line ~306.
    - Files: `mc3togltf/src/CsgEvaluator.cpp`.
@@ -368,7 +396,7 @@ git stash pop && cmake --build b-release -j4 --target <affected-target>
      `mc3togltf_earclip`/CSG-related tests still pass:
      `ctest -R mc3togltf`.
 
-4. **Fix `AUD-069`'s `includePathWithinRoot()` false-rejection.**
+3. **Fix `AUD-069`'s `includePathWithinRoot()` false-rejection.**
    - Goal: resolve the candidate against an explicitly-normalized base
      (`weakly_canonical(rootDir.empty() ? current_path() : rootDir) /
      candidate`, canonicalized as a unit) instead of canonicalizing the
@@ -381,7 +409,7 @@ git stash pop && cmake --build b-release -j4 --target <affected-target>
      has a same-directory case but only with the file pre-created);
      `ctest -R "load_policy"`.
 
-5. **Doc cleanup pass (low-risk, several small pieces):**
+4. **Doc cleanup pass (low-risk, several small pieces):**
    - Archive `AI_TRUNCATION_BUG.md` to `docs/history/` (bug is fixed).
    - Fix `README.md:254`'s stale PPM claim; add `--benchmark` to its
      flag list.
@@ -409,13 +437,14 @@ git stash pop && cmake --build b-release -j4 --target <affected-target>
   in this environment has.
 - **No new features without asking first.** Per `CLAUDE.md`'s workflow:
   describe the task and get explicit confirmation before implementing
-  anything, one item at a time — this session's entire 10-fix sequence
-  followed that pattern and it worked well; don't switch to batching
-  multiple unconfirmed fixes at once.
-- **Don't trust a stale doc's claims at face value.** This session's own
-  audit found the *previous* session's "backlog exhausted" claim was
-  accurate on build/test health but missed 12 real findings — re-derive
-  from source when in doubt, especially for anything doc-only.
+  anything, one item at a time — the 2026-07-18 session's entire 10-fix
+  sequence and this session's single-task fix both followed that pattern
+  and it worked well; don't switch to batching multiple unconfirmed fixes
+  at once.
+- **Don't trust a stale doc's claims at face value.** The 2026-07-18
+  session's own audit found the *prior* session's "backlog exhausted"
+  claim was accurate on build/test health but missed 12 real findings —
+  re-derive from source when in doubt, especially for anything doc-only.
 
 ## 10. Resume prompt
 
