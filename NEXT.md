@@ -1,14 +1,16 @@
 # NEXT.md
 
-_Last updated: 2026-07-19, after fixing two tasks from the "Next smallest
-tasks" list in one continued session: the AI Assistant
-thread-creation-failure wedge, then the no-op undo snapshots on
-locked-object commands. The 2026-07-18 session ran a fresh independent
-adversarial audit and fixed 10 of its 12 findings; this file was fully
-rewritten (not appended to) at that point — its previous revision had
-grown to 1072 lines of session-by-session narrative; see
-`git log -- NEXT.md` and `docs/history/` if that history is ever
-needed._
+_Last updated: 2026-07-19 (late night), mid an autonomous continuation of
+the same session — the user explicitly asked to keep implementing the
+remaining "Next smallest tasks" items without stopping to ask each time
+(they were going to sleep until ~06:00). Three tasks fixed so far: the AI
+Assistant thread-creation-failure wedge, the no-op undo snapshots on
+locked-object commands, and the latent CSG nested-Intersection
+null-deref. The 2026-07-18 session ran a fresh independent adversarial
+audit and fixed 10 of its 12 findings; this file was fully rewritten (not
+appended to) at that point — its previous revision had grown to 1072
+lines of session-by-session narrative; see `git log -- NEXT.md` and
+`docs/history/` if that history is ever needed._
 
 ## 1. Project summary
 
@@ -29,12 +31,14 @@ a 2026-07-11 audit) is substantively complete and archived
 (four parallel review agents: build/test verification, core-code bug
 hunt, architecture/docs staleness, UX gaps) that found 12 new, previously-
 undocumented findings. 10 are fixed and merged (`AUD-064` through
-`AUD-073`, skipping the deliberately-not-fixed `AUD-069`); 2 of the
-audit's own findings remain open (see §8) plus two separately-noted gaps
-that are now both fixed (the AI Assistant thread-creation-failure wedge
-and the no-op undo snapshots on locked-object commands, both fixed
-2026-07-19 — see §3). The project is in an **ongoing hardening /
-bug-fixing** phase, not active new-feature development, though scoped new
+`AUD-073`, skipping the deliberately-not-fixed `AUD-069`); only
+`AUD-069` itself remains open from the audit's own findings (see §8)
+— the other two separately-noted gaps found alongside it (the AI
+Assistant thread-creation-failure wedge and the no-op undo snapshots on
+locked-object commands) plus the latent CSG nested-Intersection
+null-deref are all now fixed, 2026-07-19 — see §3. The project is in an
+**ongoing hardening / bug-fixing** phase, not active new-feature
+development, though scoped new
 features have
 landed before when explicitly requested (`SYS-W14-##` rows).
 
@@ -58,14 +62,14 @@ landed before when explicitly requested (`SYS-W14-##` rows).
 
 ## 2. Current status
 
-- **Build: clean**, last verified this session at commit `424d027` (fresh
+- **Build: clean**, last verified this session at commit `8ff59c8` (fresh
   `cmake --build b-release -j4`, zero errors/warnings, EASYGL backend on
   Linux — the only backend buildable in this environment).
-- **Tests: 141/141 `ctest` passing**, last verified this session at the
-  same commit (`ctest -j4`). Same total as before both of this session's
-  fixes — each added a new case inside an existing binary (`mc3_ai`,
-  `mc3_commands`) rather than a new `ctest`-registered target, so the
-  registered-test count didn't move.
+- **Tests: 142/142 `ctest` passing**, last verified this session at the
+  same commit (`ctest -j4`). Net +1 since this session started at 141 —
+  the CSG null-child fix (task 3) added a genuinely new `ctest`-registered
+  target (`mc3togltf_csg_null_child`); tasks 1 and 2 each only added a new
+  case inside an existing binary, not a new target.
 - **CLI/tools/apps/libraries currently available:**
   - `MeshCraft` — the interactive editor (`./b-release/MeshCraft
     scene.mc3.xml`, or `--screenshot out.png` / `--export out.glb` /
@@ -122,6 +126,21 @@ landed before when explicitly requested (`SYS-W14-##` rows).
   against the pre-fix state (`git stash` of just the header addition —
   the predicate didn't exist before this commit) and passes against the
   fix.
+- **Also implemented (this session, 2026-07-19):** task 3 — the latent CSG
+  nested-Intersection null-deref. `CsgEvaluator.cpp`'s `buildManifoldNode()`
+  switch handles CSG nodes nested inside another CSG node's children;
+  Union/Difference/Group/Area all guard every child with `if (child)`, but
+  nested Intersection dereferenced `*obj.children[0]` unconditionally to
+  seed its result. Unreachable via any parser path (confirmed), but a real
+  bug if ever reached. Fixed by finding the first non-null child to seed
+  from. New test (`mc3togltf/test/csg_null_child_test.cpp`, new
+  `mc3togltf_csg_null_child` `ctest` target) builds the `Mc3Object` tree
+  programmatically and nests the Intersection under a parent `Union` —
+  `evaluateCsgNode()`'s own root-level CSG handling is a SEPARATE,
+  already-correctly-guarded code path, so the bug is only reachable via
+  this specific nesting. Verified a **real SIGSEGV** against the pre-fix
+  code (`git stash`, rebuild, run — exit 139) and a clean pass against the
+  fix, plus geometric-equivalence assertions (a null child is inert).
 - **Recently implemented (previous session, 2026-07-18):** 10 fixes from a
   fresh audit, each with a regression test, each verified both broken
   (via `git stash` of the one-line/few-line fix) and fixed:
@@ -163,13 +182,16 @@ landed before when explicitly requested (`SYS-W14-##` rows).
 
 ## 3. Recent changes
 
-**This session (2026-07-19):** the user asked to continue past task 1 in
-the same session, so two tasks from §8's "Next smallest tasks" were
-implemented — each still individually confirmed with the user first, per
-`CLAUDE.md`'s workflow, and each fully committed (and its own `ctest`
-verification run) before the next one started. All builds/tests this
-session used `-j4` (not `-j$(nproc)`), per the user's explicit request
-mid-session.
+**This session (2026-07-19):** tasks 1 and 2 were each individually
+confirmed with the user first, per `CLAUDE.md`'s workflow, before
+implementing. After task 2 the user explicitly asked to continue
+autonomously through the rest of §8's "Next smallest tasks" without
+stopping to ask each time (going to sleep, back ~06:00 — waiting for a
+confirmation would have cost hours of idle time). From task 3 onward,
+each task is still individually implemented, tested, verified, and fully
+committed+pushed before the next one starts (same rigor, no more
+per-task confirmation gate). All builds/tests this session used `-j4`
+(not `-j$(nproc)`), per the user's explicit request mid-session.
 
 Task 1 — AI Assistant thread-creation-failure wedge:
 1. Commit `63df1bc` — `fix(ai-assistant): roll back sendAsync() state on
@@ -212,6 +234,33 @@ Task 2 — no-op undo snapshots on locked-object commands:
    inside the existing `mc3_commands` binary).
 3. Also tracked only in `NEXT.md`, not `plan.md` (same reasoning as
    task 1).
+
+Task 3 — latent CSG nested-Intersection null-deref (first autonomous task,
+no per-task confirmation asked, per the user's explicit go-ahead above):
+1. Commit `8ff59c8` — `fix(csg): guard nested Intersection's first child
+   against a null pointer`. Files modified: `mc3togltf/src/CsgEvaluator.cpp`
+   (find the first non-null child to seed `result` from, instead of
+   assuming index 0 is always populated). Files added:
+   `mc3togltf/test/csg_null_child_test.cpp` (new
+   `mc3togltf_csg_null_child` `ctest` target, registered in
+   `mc3togltf/CMakeLists.txt`).
+2. Discovered mid-task: `evaluateCsgNode()` (the public entry point) has
+   its OWN separate, already-correctly-guarded root-level
+   Union/Difference/Intersection handling — the bug in
+   `buildManifoldNode()`'s switch is unreachable from a CSG root's direct
+   children, only from an Intersection NESTED inside another CSG node's
+   children. The test nests accordingly (wraps the Intersection under a
+   parent `Union`).
+3. Verified: a first test draft (Intersection called directly via
+   `evaluateCsgNode()`, not nested) passed even against the pre-fix code —
+   caught this via this session's own "verify pre-fix fails" discipline,
+   which is exactly what caught the wrong-entry-point mistake. Rewrote
+   the test to nest properly; confirmed a **real SIGSEGV** (exit code
+   139) against the pre-fix code via `git stash` + rebuild + run, then a
+   clean pass against the fix. `ctest -R mc3togltf` (65/65) and full root
+   `ctest -j4` (142/142, +1 — a genuinely new `ctest` target this time)
+   both pass.
+4. Tracked only in `NEXT.md` (same reasoning as tasks 1/2).
 
 **Previous session (2026-07-18), in order:**
 1. Ran a fresh, independent 4-agent audit (build/test verification,
@@ -273,11 +322,6 @@ The closest thing to a standing blocker is **owner-gated, not a bug**:
   filename (empty `sourceDir`) — `weakly_canonical()` only resolves
   paths that exist. **Fails safe** (a false rejection, not a bypass), so
   low severity. See `plan.md`'s `AUD-069` row for the fix direction.
-- **Latent CSG null-deref (found, not yet filed/fixed, unreachable
-  today):** `mc3togltf/src/CsgEvaluator.cpp:304-311`'s nested
-  `Intersection` case dereferences `obj.children[0]` without the
-  `if (child)` guard every other child in the same loop uses. No current
-  parser path produces a null child, so this is a latent, not live, risk.
 - **Stale documentation (found, not yet fixed):**
   - `AI_TRUNCATION_BUG.md` (repo root) describes a bug that is fully
     fixed (configurable `maxTokens` slider, `wasTruncated()` check,
@@ -438,16 +482,7 @@ git stash pop && cmake --build b-release -j4 --target <affected-target>
 
 ## 8. Next smallest tasks
 
-1. **Guard the latent CSG null-deref.**
-   - Goal: add the same `if (child)` guard `CsgEvaluator.cpp` uses
-     everywhere else in the nested-`Intersection` case at line ~306.
-   - Files: `mc3togltf/src/CsgEvaluator.cpp`.
-   - Verify: no test can reach this today (no parser path produces a
-     null child) — a defensive one-line change; confirm
-     `mc3togltf_earclip`/CSG-related tests still pass:
-     `ctest -R mc3togltf`.
-
-2. **Fix `AUD-069`'s `includePathWithinRoot()` false-rejection.**
+1. **Fix `AUD-069`'s `includePathWithinRoot()` false-rejection.**
    - Goal: resolve the candidate against an explicitly-normalized base
      (`weakly_canonical(rootDir.empty() ? current_path() : rootDir) /
      candidate`, canonicalized as a unit) instead of canonicalizing the
@@ -460,7 +495,7 @@ git stash pop && cmake --build b-release -j4 --target <affected-target>
      has a same-directory case but only with the file pre-created);
      `ctest -R "load_policy"`.
 
-3. **Doc cleanup pass (low-risk, several small pieces):**
+2. **Doc cleanup pass (low-risk, several small pieces):**
    - Archive `AI_TRUNCATION_BUG.md` to `docs/history/` (bug is fixed).
    - Fix `README.md:254`'s stale PPM claim; add `--benchmark` to its
      flag list.
