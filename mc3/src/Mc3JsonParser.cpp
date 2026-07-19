@@ -69,11 +69,29 @@ thread_local std::filesystem::path g_resourceRoot;
 bool includePathWithinRoot(const std::filesystem::path& candidate,
                             const std::filesystem::path& rootDir) {
     std::error_code ec;
-    auto c = std::filesystem::weakly_canonical(candidate, ec);
-    if (ec) return false;
     auto r = std::filesystem::weakly_canonical(
         rootDir.empty() ? std::filesystem::path(".") : rootDir, ec);
     if (ec) return false;
+
+    // AUD-069 (mirrors Mc3XmlParser.cpp's own includePathWithinRoot fix
+    // exactly, same reasoning): `candidate` may reference a file that
+    // doesn't exist on disk yet. weakly_canonical() only resolves the
+    // longest EXISTING prefix of its argument and, empirically, does NOT
+    // fall back to resolving a non-existent single-component relative path
+    // (like a bare "model.obj" with no directory component) against the
+    // current directory at all -- it returns such a path unchanged, still
+    // relative. Canonicalizing `candidate` on its own therefore made the
+    // result depend on whether the target file exists.
+    // std::filesystem::absolute() never requires existence (it
+    // unconditionally prepends current_path() to a relative path), so
+    // making `candidate` absolute FIRST, then weakly_canonical-ing that
+    // combined absolute path as a single unit, resolves it consistently
+    // with `r` above regardless of whether the file exists.
+    auto absCandidate = std::filesystem::absolute(candidate, ec);
+    if (ec) return false;
+    auto c = std::filesystem::weakly_canonical(absCandidate, ec);
+    if (ec) return false;
+
     auto rel = std::filesystem::relative(c, r, ec);
     if (ec || rel.empty()) return false;
     return rel.native().rfind("..", 0) != 0;  // does not start with ".."

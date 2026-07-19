@@ -208,6 +208,39 @@ int main() {
         check(!threw, "untrusted policy does not reject an embed: pseudo-reference");
     }
 
+    // AUD-069: same empty-basePath scenario as the earlier <include>
+    // regression, but for a resource path (mesh src) under
+    // confineResourcePathsToRoot (not confineIncludesToRoot) that does NOT
+    // exist on disk -- deliberately not creating dir/model.obj at all.
+    {
+        const std::string missingXml =
+            "<mc3 version=\"0.3\" model=\"missing-resource\">\n"
+            "  <objects><mesh name=\"m\" src=\"model.obj\"/></objects>\n"
+            "</mc3>\n";
+        { std::ofstream f(dir / "missing_resource.mc3.xml"); f << missingXml; }
+
+        fs::path cwd = fs::current_path();
+        fs::current_path(dir);
+
+        Mc3LoadPolicy confined;
+        confined.confineResourcePathsToRoot = true;
+
+        bool threw = false;
+        std::string what;
+        try {
+            Mc3Document::loadFromFile("missing_resource.mc3.xml", confined);
+        } catch (const std::exception& e) {
+            threw = true;
+            what = e.what();
+        }
+        check(!threw, std::string("AUD-069: confined policy does not reject a "
+              "same-directory mesh src referencing a file that doesn't exist "
+              "on disk, when opened via a bare relative filename") +
+              (threw ? (": " + what) : ""));
+
+        fs::current_path(cwd);
+    }
+
     fs::remove_all(dir);
 
     if (failures == 0) { std::cout << "All load-policy tests passed.\n"; return 0; }

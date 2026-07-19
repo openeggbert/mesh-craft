@@ -131,18 +131,6 @@ int main() {
     // root, at least for a resource that actually exists at that location
     // (chdir'd into `dir`, matching the XML test's own precedent for this
     // exact regression).
-    //
-    // NOTE (found while writing this test, shared with the XML parser --
-    // NOT specific to this fix, out of scope to fix here): the confinement
-    // check's weakly_canonical()-based resolution only resolves a relative
-    // candidate correctly when the referenced path actually EXISTS on
-    // disk; a genuinely same-directory but non-existent relative reference
-    // under an empty sourceDir is wrongly rejected as "escaping the root"
-    // (fails safe -- overly strict, not a bypass -- but still a real
-    // usability gap in the shared includePathWithinRoot() logic both
-    // parsers use). Worth its own follow-up finding; not fixed here to
-    // keep this fix scoped to "port the existing, verified XML behavior to
-    // JSON", not "improve on it".
     {
         fs::path cwd = fs::current_path();
         fs::current_path(dir);
@@ -161,6 +149,39 @@ int main() {
         }
         check(!threw, std::string("untrusted policy + empty sourceDir does not reject a "
               "same-directory relative mesh source that actually exists on disk") +
+              (threw ? (": " + what) : ""));
+
+        fs::current_path(cwd);
+    }
+
+    // AUD-069: same empty-sourceDir scenario as immediately above, but for
+    // a resource path that does NOT exist on disk at all -- deliberately
+    // not creating dir/missing.obj. Previously the confinement check's
+    // weakly_canonical()-based resolution only resolved a relative
+    // candidate correctly when the referenced path actually existed;
+    // a genuinely same-directory but non-existent relative reference under
+    // an empty sourceDir was wrongly rejected as "escaping the root"
+    // (fails safe -- overly strict, not a bypass -- but a real usability
+    // gap). Fixed by making the candidate absolute before canonicalizing it
+    // (see includePathWithinRoot() in both Mc3XmlParser.cpp and this file's
+    // own copy), so resolution no longer depends on the target existing.
+    {
+        fs::path cwd = fs::current_path();
+        fs::current_path(dir);
+
+        std::string js =
+            R"({"version":"0.3","model":"same-dir-missing",)"
+            R"("objects":[{"id":"m","name":"m","type":"mesh","meshSource":"missing.obj"}]})";
+        bool threw = false;
+        std::string what;
+        try {
+            Mc3Document::loadFromJsonString(js, /*sourceDir=*/{});
+        } catch (const std::exception& e) {
+            threw = true;
+            what = e.what();
+        }
+        check(!threw, std::string("AUD-069: untrusted policy + empty sourceDir does not "
+              "reject a same-directory relative mesh source that does NOT exist on disk") +
               (threw ? (": " + what) : ""));
 
         fs::current_path(cwd);
