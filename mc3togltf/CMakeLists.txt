@@ -135,6 +135,16 @@ if(BUILD_TESTING)
     add_test(NAME mc3togltf_pre_export_validation COMMAND mc3togltf_pre_export_validation_test)
     set_tests_properties(mc3togltf_pre_export_validation PROPERTIES TIMEOUT 15 LABELS "export")
 
+    # NEXT.md task (2026-07-19): CsgEvaluator.cpp's Intersection case null
+    # first-child guard. Built the same way as pre_export_validation_test.cpp
+    # above -- an Mc3Object tree constructed programmatically, since no
+    # parser path produces a null child.
+    add_executable(mc3togltf_csg_null_child_test test/csg_null_child_test.cpp)
+    target_link_libraries(mc3togltf_csg_null_child_test PRIVATE mc3togltf_lib)
+    target_include_directories(mc3togltf_csg_null_child_test PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
+    add_test(NAME mc3togltf_csg_null_child COMMAND mc3togltf_csg_null_child_test)
+    set_tests_properties(mc3togltf_csg_null_child PROPERTIES TIMEOUT 15 LABELS "export")
+
     find_program(PYTHON3_EXEC python3)
     find_program(BLENDER_EXEC blender)
     if(PYTHON3_EXEC)

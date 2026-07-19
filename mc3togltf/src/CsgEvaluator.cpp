@@ -302,9 +302,17 @@ static manifold::Manifold buildManifoldNode(
         return result;
     }
     case ObjectType::Intersection: {
-        if (obj.children.empty()) return Manifold{};
-        Manifold result = buildManifoldNode(*obj.children[0], definitions, nodeMat, depth + 1, csgRootName);
-        for (size_t i = 1; i < obj.children.size(); ++i)
+        // Every other nested-CSG case (Union/Difference/Group/Area) guards
+        // EVERY child with `if (child)`; this one used to seed `result` from
+        // obj.children[0] unconditionally, dereferencing it even if it were
+        // null. No current parser path produces a null child, but this finds
+        // the first non-null child to seed from instead of assuming index 0
+        // is always populated, matching the guard used everywhere else.
+        size_t first = 0;
+        while (first < obj.children.size() && !obj.children[first]) ++first;
+        if (first >= obj.children.size()) return Manifold{};
+        Manifold result = buildManifoldNode(*obj.children[first], definitions, nodeMat, depth + 1, csgRootName);
+        for (size_t i = first + 1; i < obj.children.size(); ++i)
             if (obj.children[i])
                 result = result ^ buildManifoldNode(*obj.children[i], definitions, nodeMat, depth + 1, csgRootName);
         return result;
