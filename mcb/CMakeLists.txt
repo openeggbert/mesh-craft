@@ -104,6 +104,19 @@ if(BUILD_TESTING)
     add_test(NAME mcb_reserve_bomb COMMAND mcb_reserve_bomb_test)
     set_tests_properties(mcb_reserve_bomb PROPERTIES TIMEOUT 30 LABELS "format")
 
+    # 2026-07-20 audit F1: segments/sides/subdivisionsX/subdivisionsZ used to
+    # be read via a bare rI32() with no clamp at all, unlike the XML/JSON
+    # parsers' kMaxTessellation=4096 -- a hostile/corrupted .mcb file could
+    # claim an arbitrarily large tessellation field, driving a downstream
+    # geometry-building allocation many orders of magnitude beyond any
+    # legitimate scene's needs.
+    add_executable(mcb_tessellation_clamp_test
+        test/tessellation_clamp_test.cpp
+    )
+    target_link_libraries(mcb_tessellation_clamp_test PRIVATE Mcb)
+    add_test(NAME mcb_tessellation_clamp COMMAND mcb_tessellation_clamp_test)
+    set_tests_properties(mcb_tessellation_clamp PROPERTIES TIMEOUT 15 LABELS "format")
+
     # AUD-071: Mc3SceneState's `overrides` and Mc3Trigger's `steps` were the
     # only two known keys that skipped expectTag() (AUD-015's own
     # established policy) and silently dropped the field on a tag mismatch

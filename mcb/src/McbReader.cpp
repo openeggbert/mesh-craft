@@ -192,6 +192,20 @@ static size_t reserveHint(uint32_t n) {
     return std::min(n, kMcbReserveHint);
 }
 
+// 2026-07-20 audit F1: mirrors Mc3XmlParser.cpp's kMaxTessellation /
+// Mc3JsonParser.cpp's clampTess() -- neither sibling parser ever leaves a
+// tessellation-driving field (segments/sides/subdivisions) unclamped, since
+// their PRODUCT (e.g. a Grid's subdivisions_x * subdivisions_z, or a
+// hollow Extrude's path segments * cross-section sides) feeds vertex-buffer
+// allocation downstream. This reader read all of these via a bare rI32()
+// with no clamp at all -- a hostile/corrupted .mcb file could request an
+// allocation many orders of magnitude beyond what any legitimate scene
+// needs, reachable directly from the editor's own Open-file path.
+static constexpr int kMcbMaxTessellation = 4096;
+static int clampTess(int v, int minv, int maxv = kMcbMaxTessellation) {
+    return std::clamp(v, minv, maxv);
+}
+
 static std::array<float,3> rVec3(std::istream& in) {
     float x = rF32(in), y = rF32(in), z = rF32(in);
     return {x, y, z};
@@ -366,12 +380,12 @@ static Mc3::Mc3Primitive readPrimitive(std::istream& in) {
         else if (k == "size")          { expectTag(tag, TAG_VEC3, "size");         p.size          = rVec3(in); }
         else if (k == "radius")        { expectTag(tag, TAG_F32, "radius");        p.radius        = rF32(in); }
         else if (k == "height")        { expectTag(tag, TAG_F32, "height");        p.height        = rF32(in); }
-        else if (k == "segments")      { expectTag(tag, TAG_I32, "segments");      p.segments      = rI32(in); }
+        else if (k == "segments")      { expectTag(tag, TAG_I32, "segments");      p.segments      = clampTess(rI32(in), 0); }
         else if (k == "axis")          { expectTag(tag, TAG_STR, "axis");          p.axis          = rRawStr(in); }
         else if (k == "majorRadius")   { expectTag(tag, TAG_F32, "majorRadius");   p.majorRadius   = rF32(in); }
         else if (k == "minorRadius")   { expectTag(tag, TAG_F32, "minorRadius");   p.minorRadius   = rF32(in); }
-        else if (k == "subdivisionsX") { expectTag(tag, TAG_I32, "subdivisionsX"); p.subdivisionsX = rI32(in); }
-        else if (k == "subdivisionsZ") { expectTag(tag, TAG_I32, "subdivisionsZ"); p.subdivisionsZ = rI32(in); }
+        else if (k == "subdivisionsX") { expectTag(tag, TAG_I32, "subdivisionsX"); p.subdivisionsX = clampTess(rI32(in), 1); }
+        else if (k == "subdivisionsZ") { expectTag(tag, TAG_I32, "subdivisionsZ"); p.subdivisionsZ = clampTess(rI32(in), 1); }
         else                           skipValue(in, tag);
     }
     return p;
@@ -409,8 +423,8 @@ static Mc3::Mc3CrossSection readCrossSection(std::istream& in) {
         else if (k == "height")      { expectTag(tag, TAG_F32, "height");      cs.height      = rF32(in); }
         else if (k == "radius")      { expectTag(tag, TAG_F32, "radius");      cs.radius      = rF32(in); }
         else if (k == "innerRadius") { expectTag(tag, TAG_F32, "innerRadius"); cs.innerRadius = rF32(in); }
-        else if (k == "sides")       { expectTag(tag, TAG_I32, "sides");       cs.sides       = rI32(in); }
-        else if (k == "segments")    { expectTag(tag, TAG_I32, "segments");    cs.segments    = rI32(in); }
+        else if (k == "sides")       { expectTag(tag, TAG_I32, "sides");       cs.sides       = clampTess(rI32(in), 3); }
+        else if (k == "segments")    { expectTag(tag, TAG_I32, "segments");    cs.segments    = clampTess(rI32(in), 1); }
         else if (k == "customPoints") {
             expectTag(tag, TAG_ARR, "customPoints");
             // TAG_ARR of TAG_VEC3
@@ -482,7 +496,7 @@ static Mc3::Mc3Extrude readExtrude(std::istream& in) {
         if      (k == "crossSection") { expectTag(tag, TAG_OBJ, "crossSection"); ex.crossSection = readCrossSection(in); }
         else if (k == "path")         { expectTag(tag, TAG_OBJ, "path");         ex.path         = readPath(in); }
         else if (k == "twist")        { expectTag(tag, TAG_F32, "twist");        ex.twist        = rF32(in); }
-        else if (k == "segments")     { expectTag(tag, TAG_I32, "segments");     ex.segments     = rI32(in); }
+        else if (k == "segments")     { expectTag(tag, TAG_I32, "segments");     ex.segments     = clampTess(rI32(in), 1); }
         else if (k == "smooth")       { expectTag(tag, TAG_BOOL, "smooth");      ex.smooth       = rU8(in) != 0; }
         else if (k == "caps")         { expectTag(tag, TAG_BOOL, "caps");        ex.caps         = rU8(in) != 0; }
         else                          skipValue(in, tag);
