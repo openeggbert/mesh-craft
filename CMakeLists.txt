@@ -767,6 +767,29 @@ if(MESH_CRAFT_BUILD_TESTING AND UNIX AND NOT ANDROID AND NOT EMSCRIPTEN)
     add_test(NAME undo_gesture_frame COMMAND undo_gesture_frame_test)
     set_tests_properties(undo_gesture_frame PROPERTIES TIMEOUT 15 LABELS "unit")
 
+    # 2026-07-20 audit F2 (P0): SceneHierarchyPanel.cpp's drawHierarchy()
+    # range-for-iterates over document_.objects/children by reference;
+    # dragging an earlier sibling onto a later one in the same list used to
+    # call doReparent() (which erases from that same live vector)
+    # synchronously mid-loop -- real iterator-invalidation UB, reachable via
+    # ordinary drag-and-drop. Drives a REAL multi-frame ImGui drag gesture
+    # (same technique as undo_gesture_frame_test.cpp's driveClickDragGesture)
+    # between two actual tree rows rendered by the real SceneHierarchyPanel
+    # class, not a mock -- CNA-free (SceneHierarchyPanel.cpp only depends on
+    # imgui + EditorAlgorithms.hpp (header-only) + Mc3Object/SelectionManager),
+    # so this links Mc3 + imgui only, no CNA/window/GL context.
+    add_executable(scene_hierarchy_panel_test
+        ${CMAKE_CURRENT_SOURCE_DIR}/test/scene_hierarchy_panel_test.cpp
+        ${CMAKE_CURRENT_SOURCE_DIR}/src/MeshCraft/Scene/SceneHierarchyPanel.cpp
+        ${CMAKE_CURRENT_SOURCE_DIR}/src/MeshCraft/Editor/SelectionManager.cpp)
+    target_include_directories(scene_hierarchy_panel_test PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/include
+        ${CMAKE_CURRENT_SOURCE_DIR}/mc3/include)
+    target_link_libraries(scene_hierarchy_panel_test PRIVATE Mc3 imgui)
+    target_compile_features(scene_hierarchy_panel_test PRIVATE cxx_std_23)
+    add_test(NAME scene_hierarchy_panel COMMAND scene_hierarchy_panel_test)
+    set_tests_properties(scene_hierarchy_panel PROPERTIES TIMEOUT 15 LABELS "unit")
+
     # Source-lint guard: the dead undo-snapshot pattern (undo nested inside a
     # Drag*/ColorEdit* changed-block, which never fires) must not reappear.
     find_program(PYTHON3_FOR_LINT NAMES python3 python)

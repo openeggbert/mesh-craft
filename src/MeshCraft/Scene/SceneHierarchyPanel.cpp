@@ -67,6 +67,21 @@ void SceneHierarchyPanel::draw(Editor::SelectionManager& selection,
         cb.markModified();
     };
 
+    // 2026-07-20 audit F2 (P0): drawHierarchy() below range-for-iterates
+    // over document_.objects (or a nested children vector) by reference.
+    // Several actions reachable from a node WHILE it's rendering --
+    // drag-drop reparent (doReparent -> detachObj -> list.erase()), Delete,
+    // Duplicate, Group Selection, Set as Root -- used to mutate that SAME
+    // live vector synchronously, mid-loop. Erasing/inserting on a vector
+    // currently being range-for'd invalidates the loop's own begin()/end()
+    // iterators (real UB, not just theoretical -- reparenting an earlier
+    // sibling onto a later one is an entirely ordinary drag-and-drop
+    // action). Every such action now stores what it wants to do here
+    // instead of doing it immediately; it actually runs once, safely,
+    // right after drawHierarchy(document_.objects) has fully returned and
+    // no iteration is in progress anywhere in the tree.
+    std::function<void()> pendingAction;
+
     // --- Search filter + expand/collapse all ---
     float btnW = 22.0f;
     ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x - btnW * 2 - ImGui::GetStyle().ItemSpacing.x * 2);
@@ -343,8 +358,14 @@ void SceneHierarchyPanel::draw(Editor::SelectionManager& selection,
                     ImGui::EndDragDropSource();
                 }
                 if (ImGui::BeginDragDropTarget()) {
-                    if (const ImGuiPayload* pl = ImGui::AcceptDragDropPayload("MC3_OBJ"))
-                        doReparent(std::string(static_cast<const char*>(pl->Data)), obj);
+                    if (const ImGuiPayload* pl = ImGui::AcceptDragDropPayload("MC3_OBJ")) {
+                        std::string dragId(static_cast<const char*>(pl->Data));
+                        // obj captured BY VALUE (shared_ptr copy): doReparent
+                        // runs after this frame's full tree traversal, once
+                        // document_.objects/children are no longer being
+                        // iterated (see pendingAction's own comment above).
+                        pendingAction = [&doReparent, dragId, obj]{ doReparent(dragId, obj); };
+                    }
                     ImGui::EndDragDropTarget();
                 }
 
@@ -393,32 +414,43 @@ void SceneHierarchyPanel::draw(Editor::SelectionManager& selection,
                         renameNeedsFocus_ = true;
                     }
                     if (ImGui::MenuItem("Batch Rename...\tCtrl+Shift+R")) cb.openBatchRename();
-                    if (ImGui::MenuItem("Duplicate")) cb.duplicateSel();
-                    if (ImGui::MenuItem("Delete", nullptr, false, !isLocked)) cb.deleteSel();
+                    if (ImGui::MenuItem("Duplicate")) pendingAction = [&cb]{ cb.duplicateSel(); };
+                    if (ImGui::MenuItem("Delete", nullptr, false, !isLocked))
+                        pendingAction = [&cb]{ cb.deleteSel(); };
                     ImGui::Separator();
                     if (ImGui::MenuItem("Group Selection")) {
-                        cb.pushUndo();
-                        int gn = 1;
-                        std::string gid;
-                        do { gid = "group_" + std::to_string(gn++); }
-                        while (findObj(document_.objects, gid) != nullptr);
-                        auto grp = std::make_shared<Mc3::Mc3Object>();
-                        grp->id   = gid;
-                        grp->name = gid;
-                        grp->type = Mc3::ObjectType::Group;
-                        grp->transform.scale = {1.0f, 1.0f, 1.0f};
-                        auto selCopy = selection.selection();
-                        for (const auto& s : selCopy) {
-                            detachObj(document_.objects, s->id);
-                            grp->children.push_back(s);
-                        }
-                        document_.objects.push_back(grp);
-                        selection.clear();
-                        selection.select(grp);
-                        cb.markModified();
+                        // selCopy snapshot taken NOW (click time), not
+                        // lazily inside the deferred lambda -- matches the
+                        // original code's own snapshot-at-click-time
+                        // ordering; selection state cannot change between
+                        // this click and pendingAction running later in the
+                        // same frame anyway (no user interaction happens in
+                        // between), but this keeps the intent explicit.
+                        pendingAction = [&, selCopy = selection.selection()]{
+                            cb.pushUndo();
+                            int gn = 1;
+                            std::string gid;
+                            do { gid = "group_" + std::to_string(gn++); }
+                            while (findObj(document_.objects, gid) != nullptr);
+                            auto grp = std::make_shared<Mc3::Mc3Object>();
+                            grp->id   = gid;
+                            grp->name = gid;
+                            grp->type = Mc3::ObjectType::Group;
+                            grp->transform.scale = {1.0f, 1.0f, 1.0f};
+                            for (const auto& s : selCopy) {
+                                detachObj(document_.objects, s->id);
+                                grp->children.push_back(s);
+                            }
+                            document_.objects.push_back(grp);
+                            selection.clear();
+                            selection.select(grp);
+                            cb.markModified();
+                        };
                     }
-                    if (ImGui::MenuItem("Set as Root"))
-                        doReparent(obj->id, nullptr);
+                    if (ImGui::MenuItem("Set as Root")) {
+                        std::string id = obj->id;
+                        pendingAction = [&doReparent, id]{ doReparent(id, nullptr); };
+                    }
                     ImGui::Separator();
                     if (ImGui::MenuItem(obj->visible ? "Hide" : "Show")) {
                         cb.pushUndo();
@@ -484,6 +516,16 @@ void SceneHierarchyPanel::draw(Editor::SelectionManager& selection,
         }
     };
     drawHierarchy(document_.objects);
+
+    // Run the deferred mutation, if any, now that drawHierarchy() (and
+    // every recursive call it made into nested children vectors) has fully
+    // returned -- no range-for iteration over document_.objects/children is
+    // in progress anywhere at this point, so it's safe to erase/insert.
+    if (pendingAction) {
+        auto action = std::move(pendingAction);
+        pendingAction = nullptr;
+        action();
+    }
 
     // Root-level drop zone
     ImGui::Dummy(ImVec2(-1.0f, 10.0f));
