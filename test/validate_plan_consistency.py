@@ -22,8 +22,17 @@ Checks:
      absolute source path (/home/..., /rv/..., /Users/..., C:\\...).
   7. If a CMake build directory is available, the ctest count documented in
      NEXT.md matches the live `ctest -N` count.
+  8. (opt-in, --run-tests) Actually RUNS the registered test suite (not just
+     `ctest -N`'s listing) and checks every test passes. F29 (2026-07-20
+     audit): check 7 only diffs the registered COUNT against NEXT.md's own
+     claim -- a real regression in PASS RATE (a registered, correctly-
+     counted test that then fails or times out, e.g. F28's too-tight
+     TIMEOUT) is invisible to every check above it. Opt-in (not run by
+     default) because actually executing the whole suite is materially
+     slower/heavier than the static checks above -- pass --run-tests
+     explicitly when you want that stronger guarantee.
 
-Usage: python3 test/validate_plan_consistency.py [repo_root] [build_dir]
+Usage: python3 test/validate_plan_consistency.py [repo_root] [build_dir] [--run-tests]
 Exit 0 if all checks pass, 1 otherwise. Prints PASS/FAIL per check.
 """
 import re
@@ -66,8 +75,10 @@ ABS_PATH_RE = re.compile(r"(?:^|[\s`(\"'])(/home/[^\s`)\"']+|/rv/[^\s`)\"']+|/Us
 
 
 def main():
-    repo = Path(sys.argv[1]) if len(sys.argv) > 1 else Path(__file__).resolve().parent.parent
-    build_dir = Path(sys.argv[2]) if len(sys.argv) > 2 else None
+    run_tests = "--run-tests" in sys.argv
+    positional = [a for a in sys.argv[1:] if a != "--run-tests"]
+    repo = Path(positional[0]) if len(positional) > 0 else Path(__file__).resolve().parent.parent
+    build_dir = Path(positional[1]) if len(positional) > 1 else None
 
     plan_path = repo / "plan.md"
     next_path = repo / "NEXT.md"
@@ -177,6 +188,35 @@ def main():
             print(f"SKIP: ctest -N check ({e})")
     else:
         print("SKIP: no build_dir given/found -- pass one as argv[2] to check the live ctest count")
+
+    # --- 8. (opt-in) actually run the suite -- catches pass-rate drift a
+    # registered-count check can never see (F29, 2026-07-20 audit) ---
+    if run_tests and build_dir and build_dir.exists():
+        try:
+            out = subprocess.run(
+                ["ctest", "-j4", "--output-on-failure"],
+                cwd=str(build_dir), capture_output=True, text=True, timeout=1800)
+            m3 = re.search(r"(\d+)% tests passed, (\d+) tests failed out of (\d+)", out.stdout)
+            if m3:
+                pct, num_failed, num_total = m3.group(1), int(m3.group(2)), m3.group(3)
+                failed_names = re.findall(r"^\s*\d+/\d+ Test\s*#\d+:\s*(\S+)\s*\.+\**Failed", out.stdout, re.MULTILINE)
+                check(num_failed == 0,
+                      f"live ctest run: {pct}% passed ({num_total} total, {num_failed} failed) "
+                      f"-- registered count matching NEXT.md's claim is not the same as actually "
+                      f"passing (failed: {failed_names})" if num_failed
+                      else f"live ctest run: {pct}% passed ({num_total} total, 0 failed)")
+            else:
+                check(False, "could not parse a 'N% tests passed' summary from `ctest -j4` output "
+                              "-- treat as a failure, not a skip, since --run-tests was explicitly requested")
+        except subprocess.TimeoutExpired:
+            check(False, "live ctest run completed within 1800s (--run-tests)")
+        except Exception as e:
+            check(False, f"live ctest run completed without error (--run-tests): {e}")
+    elif run_tests:
+        check(False, "--run-tests was passed but no valid build_dir was given/found (argv[2])")
+    else:
+        print("SKIP: --run-tests not passed -- add it (with a build_dir) to actually execute the "
+              "suite and catch pass-rate drift, not just registered-count drift")
 
     print()
     if failures == 0:
