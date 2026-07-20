@@ -198,6 +198,70 @@ int main() {
               "R102: instance's resolved key is a real, resolvable entry in doc.definitions");
     }
 
+    // --- 8 (F18, 2026-07-20 audit): a long CHAIN of DISTINCT libraries (no
+    //     repeats -- not a cycle) must be rejected once it exceeds the
+    //     depth cap, with a catchable exception, not left to recurse until
+    //     a native stack overflow. Every other recursive parse path in this
+    //     codebase already has an equivalent cap (Mc3LoadPolicy's own
+    //     maxIncludeDepth for <include>, McbReader's RecursionGuard<256>,
+    //     GltfExporter's kMaxNodeDepth, CsgEvaluator's CSG_MAX_DEPTH) --
+    //     this was the one recursive descent left with cycle detection but
+    //     no depth bound. ---
+    {
+        // chain0 -> chain1 -> chain2 -> ... -> chain19: 20 distinct
+        // libraries, comfortably past the 16-deep cap, zero repeats (so
+        // this must NOT trip cycle detection instead -- a different error).
+        const int kChainLen = 20;
+        for (int i = kChainLen - 1; i >= 0; --i) {
+            std::vector<Mc3Import> ownImports;
+            if (i + 1 < kChainLen)
+                ownImports.push_back(Mc3Import{
+                    "next", "mc3lib://depthchain" + std::to_string(i + 1) + "@1.0.0", ""});
+            writeLibrary("depthchain" + std::to_string(i), "1.0.0",
+                         "thing" + std::to_string(i), ownImports);
+        }
+
+        Mc3Document doc;
+        doc.model = "scene";
+        doc.imports.push_back(Mc3Import{"d0", "mc3lib://depthchain0@1.0.0", ""});
+
+        Mc3ImportResolver resolver({testDir()});
+        bool threw = false;
+        std::string message;
+        try { resolver.resolve(doc); }
+        catch (const std::runtime_error& e) { threw = true; message = e.what(); }
+        CHECK(threw, "F18: an import chain of 20 distinct libraries (past the depth cap) throws");
+        CHECK(message.find("cycle") == std::string::npos,
+              "F18: rejected for exceeding the depth limit, NOT misreported as a cycle "
+              "(got: " + message + ")");
+        CHECK(message.find("depth") != std::string::npos,
+              "F18: error message names the actual reason (depth limit)");
+    }
+
+    // --- 9 (F18): a chain WITHIN the depth cap must still resolve fine --
+    //     confirms the cap doesn't reject legitimate, moderately-deep
+    //     compositions (the whole point of a generous, not tight, limit). ---
+    {
+        const int kChainLen = 5;
+        for (int i = kChainLen - 1; i >= 0; --i) {
+            std::vector<Mc3Import> ownImports;
+            if (i + 1 < kChainLen)
+                ownImports.push_back(Mc3Import{
+                    "next", "mc3lib://shortchain" + std::to_string(i + 1) + "@1.0.0", ""});
+            writeLibrary("shortchain" + std::to_string(i), "1.0.0",
+                         "thing" + std::to_string(i), ownImports);
+        }
+
+        Mc3Document doc;
+        doc.model = "scene";
+        doc.imports.push_back(Mc3Import{"s0", "mc3lib://shortchain0@1.0.0", ""});
+
+        Mc3ImportResolver resolver({testDir()});
+        bool threw = false;
+        try { resolver.resolve(doc); } catch (const std::runtime_error&) { threw = true; }
+        CHECK(!threw, "F18: a 5-deep import chain (well within the cap) resolves without error");
+    }
+
     if (failures == 0)
         std::cout << "All MC3 import resolver (R101/R102) tests passed.\n";
     else

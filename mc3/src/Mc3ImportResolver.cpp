@@ -23,6 +23,20 @@ std::pair<std::string, std::string> parseMc3LibSource(const std::string& source)
     return {rest.substr(0, at), rest.substr(at + 1)};
 }
 
+// F18 (2026-07-20 audit): every other recursive parse path in this codebase
+// has a depth cap (Mc3XmlParser.cpp's <include> processing via
+// Mc3LoadPolicy::maxIncludeDepth, McbReader.cpp's RecursionGuard<256>,
+// GltfExporter.cpp's kMaxNodeDepth, CsgEvaluator.cpp's CSG_MAX_DEPTH) --
+// specifically because a native C++ stack overflow is not a catchable
+// exception, unlike every other rejection this class already throws
+// cleanly. checkNoCycleAndDescend() below had cycle detection (a REPEATED
+// source in the chain) but nothing bounding a long CHAIN of DISTINCT
+// .mc3lib files (A imports B imports C imports ... imports Z, no repeats),
+// which recursed unbounded. 16 matches Mc3LoadPolicy::maxIncludeDepth's own
+// default for the same reason: deep enough for any legitimate composed
+// asset, far short of where a real stack overflow becomes a risk.
+constexpr size_t kMaxImportDepth = 16;
+
 } // namespace
 
 Mc3ImportResolver::Mc3ImportResolver(std::vector<std::filesystem::path> searchDirs)
@@ -64,6 +78,12 @@ Mc3Document Mc3ImportResolver::loadLibrary(const std::string& source,
 
 void Mc3ImportResolver::checkNoCycleAndDescend(const Mc3Document& libDoc,
                                                 std::vector<std::string>& inProgress) const {
+    if (inProgress.size() > kMaxImportDepth) {
+        std::ostringstream chain;
+        for (const auto& s : inProgress) chain << s << " -> ";
+        throw std::runtime_error("Mc3ImportResolver: import chain exceeds the depth limit (" +
+                                  std::to_string(kMaxImportDepth) + "): " + chain.str() + "...");
+    }
     for (const auto& imp : libDoc.imports) {
         if (std::find(inProgress.begin(), inProgress.end(), imp.source) != inProgress.end()) {
             std::ostringstream chain;
