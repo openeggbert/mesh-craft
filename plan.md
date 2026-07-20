@@ -87,16 +87,16 @@ P1s already being fixed in git history. This session:
    **Net across all 31 AUD-### rows remaining in this active backlog (61
    additional rows completed and archived to `docs/history/plan_20260718.md`
    on 2026-07-18 — see that file for their full evidence/resolution text):
-   19 DONE, 10 TODO, 2 DEFERRED** — 10 of the 19 DONE (`AUD-064` through
+   20 DONE, 9 TODO, 2 DEFERRED** — 10 of the 20 DONE (`AUD-064` through
    `AUD-073`) are fresh findings from a 2026-07-18 (later same day)
    independent re-audit, not part of the original 6 (`AUD-069` itself fixed
-   2026-07-19, the day after it was filed); the other 9 (`AUD-074` through
-   `AUD-082`) are from a third independent audit on 2026-07-20 (later the
-   same day as this session's SYS-W14-18..27 work) — `AUD-080`/`AUD-081`
-   are documentation-only fixes with no code change, `AUD-082` is the
-   first of the raw-OpenGL(ES)-vs-CNA group (`AUD-082`-`AUD-088`, see
-   below) to actually land.
-   6 more (`AUD-083` through `AUD-088`, all `TODO`) are from the same
+   2026-07-19, the day after it was filed); the other 10 (`AUD-074`
+   through `AUD-083`) are from a third independent audit on 2026-07-20
+   (later the same day as this session's SYS-W14-18..27 work) —
+   `AUD-080`/`AUD-081` are documentation-only fixes with no code change,
+   `AUD-082`/`AUD-083` are the first two of the raw-OpenGL(ES)-vs-CNA
+   group (`AUD-082`-`AUD-088`, see below) to actually land.
+   5 more (`AUD-084` through `AUD-088`, all `TODO`) are from the same
    targeted 2026-07-20 (later still) investigation into how much raw
    OpenGL(ES) the editor calls outside CNA's own API — genuinely
    actionable, unlike the other open `TODO`s; `AUD-088` was found and
@@ -132,23 +132,20 @@ still internally consistent.
 
 ## Priority execution queue (next up, in order)
 
-1. **AUD-083 through AUD-088 (P2/W8)** — migrate the editor's remaining
-   raw-OpenGL(ES) reach-arounds (`--screenshot` pixel readback, and the
-   shared Bloom/SSAO/skybox/material-preview/shadow-map-debug `s_bloom`
-   FBO+shader table) onto CNA's own already-existing, unused
-   `GraphicsDevice.GetBackBufferData`/`SetRenderTarget`, `RenderTarget2D`,
-   and `NOXNA ShaderEffect` APIs — see the shared preamble in the AUD-###
-   table above (immediately before this group's first row) for the full
-   rationale and the "file a NOXNA capability request rather than write
-   new raw GL" rule for any residual. The panel scissor/viewport clip
-   part of this group is already done — see the AUD-### table above for
-   which row and its empirical verification. Do `AUD-083` next (small,
-   self-contained, no new test-coverage debt, but
-   the highest blast-radius of the group since most render tests depend
-   on it), then the 5 `s_bloom` migrations (`AUD-084`-`AUD-088`, each of
-   which also adds a missing visual-correctness test the feature never
-   had), leaving `s_bloom`'s final teardown to whichever of those 5 lands
-   last.
+1. **AUD-084 through AUD-088 (P2/W8)** — migrate the editor's remaining
+   raw-OpenGL(ES) reach-around (the shared Bloom/SSAO/skybox/material-
+   preview/shadow-map-debug `s_bloom` FBO+shader table) onto CNA's own
+   already-existing, unused `GraphicsDevice.SetRenderTarget`,
+   `RenderTarget2D`, and `NOXNA ShaderEffect` APIs — see the shared
+   preamble in the AUD-### table above (immediately before this group's
+   first row) for the full rationale and the "file a NOXNA capability
+   request rather than write new raw GL" rule for any residual. The
+   panel scissor/viewport clip and `--screenshot` readback parts of this
+   group are already done — see the AUD-### table above for which rows
+   and their empirical verification. 5 `s_bloom` migrations remain
+   (`AUD-084`-`AUD-088`, each of which also adds a missing visual-
+   correctness test the feature never had), with `s_bloom`'s final
+   teardown left to whichever of those 5 lands last.
 2. **AUD-052 (P1/W11)** — CI is permanently parked under `.github_/`; GitHub
    Actions never runs. This is the root blocker for AUD-053 (a CI-hardening
    task that depends on CI actually running first) and the CI-job half of
@@ -162,7 +159,7 @@ still internally consistent.
    (no Android NDK in this environment; also intersects CNA backend
    behavior, out of scope per CLAUDE.md's "no CNA changes without owner
    permission").
-4. The remaining `TODO` AUD-### rows besides `AUD-083`-`AUD-088` are all
+4. The remaining `TODO` AUD-### rows besides `AUD-084`-`AUD-088` are all
    downstream of the two blockers above (AUD-053 needs AUD-052; AUD-057's
    CI-job half needs the same) — none of those are independently
    actionable right now.
@@ -1803,11 +1800,12 @@ final acceptance check (expected: no output, combined with `AUD-082`/
 - **Tests:** No new test needed — `camera_rotation_test`/`light_shading_test`/`fog_exponential_test`/the 6 `smoke_test*` variants (all real `--screenshot` pixel-sampling through this exact clipped-viewport path) all still pass unchanged (166/166 full suite). **Empirically verified via `git stash` on just this fix**: captured a `light_shading.mc3.xml` `--screenshot` PPM with the post-fix binary, stashed the 2 changed files, rebuilt, captured the identical fixture with the pre-fix binary, and byte-diffed the two PPMs with `cmp` — **bytewise identical** output, confirming the migration is truly behavior-preserving, not just "tests still pass by coincidence."
 - **Resolved:** commit `773437f` — verify: `cmp` a `--screenshot` PPM from before/after this commit on any fixture (expect identical bytes); `grep -c 'SDL_GL_GetProcAddress' src/MeshCraft/MeshCraftApplication.cpp` (expect the count to have dropped by the 4 removed here — `AUD-084`-`AUD-088`'s `s_bloom` consumers still account for the rest).
 
-### AUD-083 `[TODO]` `P2` `W8` · --screenshot's saveScreenshot() hand-loads glFinish/glBindBuffer/glReadPixels instead of using GraphicsDevice.GetBackBufferData()
+### AUD-083 `[DONE]` `P2` `W8` · --screenshot's saveScreenshot() hand-loads glFinish/glBindBuffer/glReadPixels instead of using GraphicsDevice.GetBackBufferData()
 - **Component:** src/MeshCraft/MeshCraftApplication_Commands.cpp `saveScreenshot()`
-- **Evidence:** `MeshCraftApplication_Commands.cpp:402-421`: loads `glFinish`/`glBindBuffer`/`glReadPixels` via `SDL_GL_GetProcAddress` on every call, then calls `glReadPixels(0,0,w,h,GL_RGBA,GL_UNSIGNED_BYTE,...)` directly into a manually-allocated `std::vector<unsigned char>`. `../cna`'s `GraphicsDevice` already exposes a public, cross-backend pixel-readback API for exactly this — `GetBackBufferData(Color* data, int elementCount)` / `GetBackBufferData(Color* data, int startIndex, int elementCount)` / `GetBackBufferData(const Rectangle* rect, Color* data, int startIndex, int elementCount)` (`GraphicsDevice.hpp:274-289`) — implemented per-backend (`ReadBackbuffer(x,y,w,h,pixels)` exists on every `IGraphicsBackend`: D3D9/11/12, SDL, Software, per `grep -rn ReadBackbuffer ../cna/include`), so it already does the "block until GPU work is flushed, then read the real backbuffer" sequencing this raw code hand-rolls with `glFinish`.
-- **Outcome:** Replace the 3 raw function pointers with `gd.GetBackBufferData(pixels.data(), w*h)` (or the `Color*`-typed overload, converting to/from the existing `RGBA8` byte buffer the PNG/PPM writers expect), removing the `SDL_GL_GetProcAddress` calls and the manual `glFinish`/`glBindBuffer(0x88EC,0)` PBO-unbind dance entirely — `GetBackBufferData`'s own backend implementation is responsible for correct synchronization.
-- **Tests:** This is the mechanism every `--screenshot`-based render test in the suite depends on (`camera_rotation_test.py`, `light_shading_test.py`, `fog_exponential_test.py`, etc. — the majority of the `render` label). Full rebuild + `ctest -L render` must produce byte-identical PNG/PPM output before and after (verify with a direct pixel diff against a pre-migration screenshot of the same fixture, matching AUD-078's own before/after binary-diff technique) — this is the highest blast-radius of the 6 migrations here precisely because so much of this session's own verification tooling depends on it working correctly.
+- **Evidence:** `MeshCraftApplication_Commands.cpp:402-421`: loaded `glFinish`/`glBindBuffer`/`glReadPixels` via `SDL_GL_GetProcAddress` on every call, then called `glReadPixels(0,0,w,h,GL_RGBA,GL_UNSIGNED_BYTE,...)` directly into a manually-allocated `std::vector<unsigned char>`. `../cna`'s `GraphicsDevice` already exposes a public, cross-backend pixel-readback API for exactly this — `GetBackBufferData(Color* data, int elementCount)` (`GraphicsDevice.hpp:274-289`) — implemented per-backend (`ReadBackbuffer(x,y,w,h,pixels)` exists on every `IGraphicsBackend`: D3D9/11/12, SDL, Software), so it already does the "block until GPU work is flushed, then read the real backbuffer" sequencing this raw code hand-rolled with `glFinish`. **Non-obvious wrinkle found while implementing:** `GetBackBufferData`'s own implementation (`GraphicsDevice.cpp:1778-1812`) already returns pixels in XNA-native **top-to-bottom** row order (`EasyGLGraphicsBackend::ReadBackbuffer` explicitly flips GL's bottom-to-top rows before returning), whereas the raw `glReadPixels` this replaced returned bottom-to-top — the old code's PNG path flipped into a second buffer and the PPM path iterated rows in reverse to compensate; both compensations had to be *removed*, not just have their data source swapped, or the migration would have silently produced upside-down screenshots.
+- **Outcome:** Replaced the 3 raw function pointers with `gd.GetBackBufferData(backBuffer.data(), w*h)` into a `std::vector<Color>` (`Color` has no default constructor, so the vector needs an explicit fill value, e.g. `Color(0,0,0,0)`), then unpacked each `Color`'s `getRProperty()`/`getGProperty()`/`getBProperty()`/`getAProperty()` into the existing `RGBA8` byte buffer the PNG/PPM writers expect. Removed the PNG path's row-flip loop and changed the PPM path's row loop from reverse to forward order, since the source data is already top-to-bottom. Removed the now-unused `#include <SDL3/SDL.h>` (nothing else in this file used SDL directly).
+- **Tests:** This is the mechanism every `--screenshot`-based render test in the suite depends on — full rebuild + `ctest -L render` (27/27, one transient flake on a full parallel run traced to shared-machine contention, reproducibly passing both alone and under `-j1`) and the full suite (166/166) both pass unchanged. **Empirically verified via `git stash` on just this fix**: captured both a `.ppm` and a `.png` screenshot of `light_shading.mc3.xml` with the post-fix binary, stashed the change, rebuilt, captured the identical fixture+formats with the pre-fix binary, and `cmp`'d each pair — **both PPM and PNG bytewise identical**, directly confirming the row-order handling above is correct (an upside-down regression would have shown up here immediately).
+- **Resolved:** commit `0796d62` — verify: `cmp` a `--screenshot .png` and `.ppm` from before/after this commit on any fixture (expect identical bytes both ways).
 
 ### AUD-084 `[TODO]` `P2` `W8` · Bloom post-processing (I6) is a hand-rolled raw-GL FBO+shader pipeline instead of RenderTarget2D + ShaderEffect
 - **Component:** src/MeshCraft/MeshCraftApplication.cpp (`BloomGL`/`s_bloom`, `initBloom()`, `applyBloom()`, `kBloomVS`/`kBloomBlurFS`/`kBloomCompositeFS`)
