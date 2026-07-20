@@ -87,20 +87,20 @@ P1s already being fixed in git history. This session:
    **Net across all 31 AUD-### rows remaining in this active backlog (61
    additional rows completed and archived to `docs/history/plan_20260718.md`
    on 2026-07-18 — see that file for their full evidence/resolution text):
-   23 DONE, 6 TODO, 2 DEFERRED** — 10 of the 23 DONE (`AUD-064` through
+   24 DONE, 5 TODO, 2 DEFERRED** — 10 of the 24 DONE (`AUD-064` through
    `AUD-073`) are fresh findings from a 2026-07-18 (later same day)
    independent re-audit, not part of the original 6 (`AUD-069` itself fixed
-   2026-07-19, the day after it was filed); the other 13 (`AUD-074`
-   through `AUD-087`, excluding `AUD-085` which stays `TODO`) are from a
+   2026-07-19, the day after it was filed); the other 14 (`AUD-074`
+   through `AUD-088`, excluding `AUD-085` which stays `TODO`) are from a
    third independent audit on 2026-07-20 (later the same day as this
    session's SYS-W14-18..27 work) — `AUD-080`/`AUD-081` are documentation-
    only fixes with no code change, `AUD-082`/`AUD-083`/`AUD-084`/`AUD-086`/
-   `AUD-087` are 5 of the raw-OpenGL(ES)-vs-CNA group (`AUD-082`-`AUD-088`,
-   see below) to actually land so far (`AUD-085` deliberately skipped, see
-   its own row).
-   2 remain (`AUD-088`, `TODO`, plus `AUD-085` itself) from the same
-   targeted 2026-07-20 (later still) investigation into how much raw
-   OpenGL(ES) the editor calls outside CNA's own API.
+   `AUD-087`/`AUD-088` are 6 of the 7 raw-OpenGL(ES)-vs-CNA group rows
+   (`AUD-082`-`AUD-088`, see below) to land — only `AUD-085` (SSAO)
+   remains, deliberately deferred, see its own row.
+   1 remains (`AUD-085` itself) from the same targeted 2026-07-20 (later
+   still) investigation into how much raw OpenGL(ES) the editor calls
+   outside CNA's own API.
    Recompute with
    `python3 test/validate_plan_consistency.py . <build-dir>` rather than
    trusting this number as time passes.
@@ -131,32 +131,25 @@ still internally consistent.
 
 ## Priority execution queue (next up, in order)
 
-1. **AUD-088 (P2/W8)** — migrate the editor's last raw-OpenGL(ES) reach-
-   around (Shadow Map Debug's `s_bloom`-shared FBO) onto CNA's own
-   already-existing, unused `GraphicsDevice.SetRenderTarget` and
-   `RenderTarget2D` — see the shared preamble in the AUD-### table above
-   (immediately before this group's first row) for the full rationale
-   and the "file a NOXNA capability request rather than write new raw
-   GL" rule for any residual. The panel scissor/viewport clip,
-   `--screenshot` readback, Bloom, Skybox, and Material-preview parts of
-   this group are already done — see the AUD-### table above for which
-   rows, their empirical verification, and (for the Bloom row) two real,
-   non-obvious CNA gotchas found and fixed along the way that will recur
-   here too: `RenderTarget2D`'s `DiscardContents` default makes
-   `SetRenderTarget()` clear on *every* bind (no redundant re-binds), and
-   `SpriteBatch`'s custom-effect draws only honor a bound `RenderTarget2D`'s
-   own size for their projection — a backbuffer-targeted draw always
-   projects to the full window, so destRects for those must be window-
-   absolute, not viewport-local (`AUD-088` itself needs no `ShaderEffect`
-   at all, per its own row, so the second gotcha likely doesn't apply).
-   **SSAO is deliberately skipped for now** — user-authorized deferral;
-   it needs a genuine depth-pre-pass rewrite (no CNA depth-buffer-read
-   equivalent exists), not a mechanical swap like the other 5, see its
-   own row for the full finding. `AUD-088` is the last `s_bloom`
-   migration (also adds a missing visual-correctness test the feature
-   never had); `s_bloom` itself cannot be torn down until SSAO is also
-   migrated, so that final cleanup step waits on a future SSAO decision
-   even after `AUD-088` lands.
+1. The raw-OpenGL(ES)-vs-CNA migration group (see the shared preamble in
+   the AUD-### table above, immediately before that group's first row) is
+   now complete except for one deliberately-deferred row: the panel
+   scissor/viewport clip, `--screenshot` readback, Bloom, Skybox,
+   Material-preview, and Shadow-Map-Debug parts are all done — see the
+   AUD-### table above for which rows, their empirical verification, and
+   two real, non-obvious CNA gotchas found and fixed along the way:
+   `RenderTarget2D`'s `DiscardContents` default makes `SetRenderTarget()`
+   clear on *every* bind (no redundant re-binds), and `SpriteBatch`'s
+   custom-effect draws only honor a bound `RenderTarget2D`'s own size for
+   their projection — a backbuffer-targeted draw always projects to the
+   full window, so destRects for those must be window-absolute, not
+   viewport-local. **SSAO is deliberately skipped for now** —
+   user-authorized deferral; it needs a genuine depth-pre-pass rewrite (no
+   CNA depth-buffer-read equivalent exists), not a mechanical swap like
+   the others, see its own row for the full finding. The shared
+   `BloomGL`/`s_bloom` struct itself cannot be torn down until that
+   deferred row is also migrated, so that final cleanup step waits on a
+   future SSAO decision.
 2. **AUD-052 (P1/W11)** — CI is permanently parked under `.github_/`; GitHub
    Actions never runs. This is the root blocker for AUD-053 (a CI-hardening
    task that depends on CI actually running first) and the CI-job half of
@@ -170,7 +163,7 @@ still internally consistent.
    (no Android NDK in this environment; also intersects CNA backend
    behavior, out of scope per CLAUDE.md's "no CNA changes without owner
    permission").
-4. The remaining `TODO` AUD-### rows besides `AUD-085` and `AUD-088` are
+4. The remaining `TODO` AUD-### rows besides the one deferred row above are
    all downstream of the two blockers above (AUD-053 needs AUD-052;
    AUD-057's CI-job half needs the same) — none of those are
    independently actionable right now.
@@ -1793,16 +1786,17 @@ should that residual be written up as a NOXNA capability request for a
 **future** `../cna` change — not silently kept as more raw GL, and not
 implemented in `../cna` directly without the owner's explicit
 permission (`CLAUDE.md`'s CNA boundary). Expectation stated by the user:
-"snad nic nezbyde" (hopefully nothing is left over). **`s_bloom`'s 5
-consumers** are `AUD-084` (Bloom), `AUD-085` (SSAO), `AUD-086` (Skybox),
-`AUD-087` (Material preview), `AUD-088` (Shadow Map Debug) — once ALL
-FIVE are migrated off it, delete the shared `BloomGL` struct, the
-`s_bloom` instance, the `LD(...)` macro, and every remaining
-`SDL_GL_GetProcAddress` call in `MeshCraftApplication.cpp` as part of
-whichever of those five rows is implemented last; re-run
-`grep -rl SDL_GL_GetProcAddress src/ include/` afterward as the group's
-final acceptance check (expected: no output, combined with `AUD-082`/
-`AUD-083` also done).
+"snad nic nezbyde" (hopefully nothing is left over). **Update (same
+session): 4 of `s_bloom`'s 5 consumers are now migrated** — `AUD-084`
+(Bloom), `AUD-086` (Skybox), `AUD-087` (Material preview), `AUD-088`
+(Shadow Map Debug) are all `DONE`; only `AUD-085` (SSAO) remains, and it
+is intentionally deferred (see its own row — a genuine CNA API gap, not
+a mechanical swap). Because of that, `SDL_GL_GetProcAddress` still
+appears once in `MeshCraftApplication.cpp` (the `LD(...)` macro
+definition SSAO still uses) — the shared `BloomGL` struct/`s_bloom`
+instance cannot be deleted until SSAO is also migrated (or its own
+`TODO` is otherwise resolved); that final cleanup step is recorded on
+`AUD-085`'s own row, not tied to a specific "last of five" row anymore.
 
 ### AUD-082 `[DONE]` `P2` `W8` · Editor viewport/panel clipping hand-loads glViewport/glScissor/glEnable/glDisable instead of using GraphicsDevice's own Viewport/ScissorRectangle
 - **Component:** include/MeshCraft/MeshCraftApplication.hpp (`fnGlViewport_`/`fnGlScissor_`/`fnGlEnable_`/`fnGlDisable_`), src/MeshCraft/MeshCraftApplication.cpp
@@ -1848,8 +1842,9 @@ final acceptance check (expected: no output, combined with `AUD-082`/
 - **Tests:** New `test/matpreview_test.py` (`matpreview_test` ctest, reuses the existing `light_shading.mc3.xml` fixture since the swatch's content comes entirely from the hook's own hardcoded color, not the scene) — real `--screenshot` pixel sampling with/without `MESHCRAFT_TEST_FORCE_MATPREVIEW=1`: swatch center is red-dominant only with the hook on, and the swatch corner (outside the SDF sphere's `discard`-clipped radius) shows the dark-gray clear color, confirming the sphere-shape logic survived the migration. Visual confirmation: the specular highlight sits in the upper-left of the swatch, matching the shader's own light direction — the orientation-sensitive check `AUD-086` couldn't do with its solid-color test texture. Full rebuild + 168/168 `ctest` (was 167; +1 for `matpreview_test`). No pre-existing test/hook existed to `git stash`-diff against (both the migration and the headless-testability hook are new together), so verification relies on the visual+automated checks above plus the pre-existing `gl_shutdown_leak_test` (part of the 168) confirming no new GL resource leak.
 - **Resolved:** commit `e47a846` — verify: `ctest -R matpreview_test`.
 
-### AUD-088 `[TODO]` `P2` `W8` · Shadow Map Debug overlay (I7) hand-rolls a raw-GL FBO instead of RenderTarget2D — and reuses the normal scene-render path, so it needs no ShaderEffect at all
-- **Component:** src/MeshCraft/MeshCraftApplication.cpp (`BloomGL`/`s_bloom`'s shadow-debug fields, `initShadowDebug()`, `renderShadowDebugFbo()`), src/MeshCraft/MeshCraftApplication_UiOverlays.cpp (`drawShadowDebugOverlay()`), include/MeshCraft/MeshCraftApplication.hpp (`shadowDebugEnabled_`/`shadowDebugFbo_`/`shadowDebugColorTex_`/`shadowDebugDepthTex_`)
-- **Evidence:** Missed by the initial `AUD-082`..`AUD-087` pass (found only while reading the header immediately before starting `AUD-082`'s implementation — see the shared preamble's correction note). `initShadowDebug()` (`MeshCraftApplication.cpp:1692-1727`) builds a 256×256 color+depth FBO via the same shared `s_bloom` table as `AUD-084`-`AUD-087`. `renderShadowDebugFbo()` (`:1786-1802`) binds it, sets a raw `gl.Viewport(0,0,kShadowDebugRes,kShadowDebugRes)`, and — unlike the other 4 `s_bloom` consumers — renders into it by calling the **existing, already-CNA-based** `sceneRenderer_->draw(document_, lightView, lightProj, {})` (the same scene-render path the main viewport uses, just from the shadow-casting light's point of view), then restores the real viewport. `drawShadowDebugOverlay()` (`MeshCraftApplication_UiOverlays.cpp:2263-2293`) is an ImGui debug window ("Shadow Frustum") showing the resulting color texture via `ImGui::Image((ImTextureID)(intptr_t)shadowDebugColorTex_, ...)`, gated behind `shadowDebugEnabled_` (a UI-menu-only debug toggle, off by default). No custom GLSL shader is involved anywhere in this feature — the FBO exists purely to redirect `sceneRenderer_`'s normal draw calls somewhere other than the backbuffer.
-- **Outcome:** Because this feature does no custom shading, its raw-GL surface is strictly narrower than `AUD-084`-`AUD-087`: replace `initShadowDebug()`'s manual FBO+color+depth-texture setup with a `RenderTarget2D` (constructed with a depth format, per `RenderTarget2D.hpp`'s `DepthFormat.hpp` include) and replace `renderShadowDebugFbo()`'s raw `BindFramebuffer`/`Viewport` pair with `gd.SetRenderTarget(&shadowDebugRt_)` / `gd.SetRenderTarget(nullptr)` bracketing the unchanged `sceneRenderer_->draw(...)` call — `GraphicsDevice.SetRenderTarget()` already resets `Viewport`/`ScissorRectangle` to the new target's size on bind and restores them on unbind (`GraphicsDevice.hpp:867-877`'s own documented behavior), so the manual `gl.Viewport(...)` save/restore pair in this function becomes unnecessary, not just replaced. No `ShaderEffect` migration needed for this row (contrast with `AUD-084`-`AUD-087`, all of which do need one).
-- **Tests:** No dedicated correctness test exists for this debug overlay today (it is off by default and has no `AUD-058`-style resource-pool hook either). Given it is a debug-only, opt-in feature, a lightweight regression is enough: a `--screenshot` test that enables `shadowDebugEnabled_` via whatever mechanism the app exposes for test-only state (matching `AUD-058`'s own precedent) on a fixture with one shadow-casting directional light, asserting the small preview region in the corner is non-empty (not just the window-clear color) — add as part of this migration, verified `git stash` pre/post.
+### AUD-088 `[DONE]` `P2` `W8` · Shadow Map Debug overlay (I7) hand-rolls a raw-GL FBO instead of RenderTarget2D — and reuses the normal scene-render path, so it needs no ShaderEffect at all
+- **Component:** src/MeshCraft/MeshCraftApplication.cpp (`initShadowDebug()`, `renderShadowDebugFbo()`), src/MeshCraft/MeshCraftApplication_UiOverlays.cpp (`drawShadowDebugOverlay()`, unchanged), include/MeshCraft/MeshCraftApplication.hpp (`shadowDebugEnabled_`, `shadowDebugRt_`, `shadowDebugColorTex_`)
+- **Evidence:** `initShadowDebug()` built a 256×256 color+depth FBO via the shared `s_bloom` table. `renderShadowDebugFbo()` bound it, set a raw `gl.Viewport(...)`, and — unlike `AUD-084`/`AUD-086`/`AUD-087` — rendered into it by calling the **already-CNA-based** `sceneRenderer_->draw(document_, lightView, lightProj, {})` (the same scene-render path the main viewport uses, just from the shadow-casting light's point of view). No custom GLSL shader was involved anywhere in this feature — the FBO existed purely to redirect `sceneRenderer_`'s normal draw calls somewhere other than the backbuffer, confirming this row's own original assessment.
+- **Outcome:** Replaced the manual FBO+color+depth-texture setup with `RenderTarget2D(gd, kShadowDebugRes, kShadowDebugRes, /*mipMap=*/false, SurfaceFormat::Color, DepthFormat::Depth24)`, and the raw `BindFramebuffer`/`Viewport` pair with `gd.SetRenderTarget(&*shadowDebugRt_)` / `gd.SetRenderTarget(nullptr)` bracketing the unchanged `sceneRenderer_->draw(...)` call — confirmed `SetRenderTarget()` already resets `Viewport`/`ScissorRectangle` to the target's size on bind and to the full backbuffer on unbind, so the manual viewport save/restore became unnecessary entirely, not just replaced (same `AUD-084` gotcha #1 shape: no redundant re-bind needed either, since this function only binds once). `shadowDebugColorTex_` stays as a public field of the same name/type (`drawShadowDebugOverlay()`, `AUD-088`'s own ImGui consumer, needed zero changes) but is now populated via `IRenderTargetBackend::GetColorGLHandle()` after each render, same pattern as `AUD-087`. The destructor's manual `glDeleteFramebuffers`/`glDeleteTextures` cleanup block for the 3 old raw fields was removed entirely — `shadowDebugRt_`'s own RAII destructor now handles it, matching `bloomRtA_`/`skyboxTex_`/`matPreviewRt_`'s already-established pattern — along with the leak-check block that referenced those 3 now-nonexistent fields.
+- **Tests:** New `test/shadow_debug.mc3.xml` (one `cast_shadows="true"` directional light + one box) + `test/shadowdebug_test.py` (`shadowdebug_test` ctest) + a new `MESHCRAFT_TEST_FORCE_SHADOWDEBUG` test-only hook (`AUD-058`'s pattern — this toggle has no CLI/scene-file equivalent either) + a dedicated test-only corner blit (`AUD-087`'s pattern, deliberately not relying on the real "Shadow Frustum" ImGui overlay's own window-layout math for a test's pixel coordinates). Real `--screenshot` pixel sampling: the blitted corner shows the light-view clear color everywhere except a small ~8×8px cluster near its center — the box, correctly rendered small because it's a 2×2×2 object inside a ±50m ortho frustum (visually cross-checked against the real "Shadow Frustum" ImGui window in the same screenshot, which independently shows the identical small bright cluster at a different screen position, confirming both consumers read the same real render target content). No pre-existing test/hook existed to `git stash`-diff against (both the migration and the headless-testability hook are new together, same situation as `AUD-087`). Full rebuild + 169/169 `ctest` (was 168; +1 for `shadowdebug_test`), including `gl_shutdown_leak_test` confirming the destructor changes introduced no new GL resource leak. **`SDL_GL_GetProcAddress` now appears exactly once in `MeshCraftApplication.cpp`** (the `LD(...)` macro's own definition, still used by `initSsao()`) — `AUD-084`/`AUD-086`/`AUD-087`/`AUD-088` are the 4 of 5 `s_bloom` consumers now migrated; SSAO (`AUD-085`) is the sole holdout, so — per the shared preamble and `AUD-085`'s own row — the shared `BloomGL`/`s_bloom` struct itself is intentionally NOT deleted yet, since SSAO still depends on it.
+- **Resolved:** commit `95327bc` — verify: `ctest -R shadowdebug_test`; `grep -c SDL_GL_GetProcAddress src/MeshCraft/MeshCraftApplication.cpp` (expect exactly 1, the `LD` macro definition, until `AUD-085` also lands).
