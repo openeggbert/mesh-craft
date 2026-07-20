@@ -375,6 +375,11 @@ private:
     void applySsao(int vx, int glViewY, int vw, int vh,
                    float tanHalfFovX, float tanHalfFovY,
                    float nearPlane, float farPlane);
+    // AUD-086: RenderTarget2D + ShaderEffect (CNA-native) instead of a raw-GL
+    // texture + hand-compiled GLSL program -- see initSkybox()/drawSkybox().
+    std::optional<Microsoft::Xna::Framework::Graphics::Texture2D> skyboxTex_;
+    std::string skyboxTexPath_;
+    std::optional<Microsoft::Xna::Framework::Graphics::ShaderEffect> skyboxFx_;
     void initSkybox();
     void drawSkybox(const Microsoft::Xna::Framework::Matrix& view,
                     float fovDegrees, float aspect);

@@ -15,6 +15,7 @@
 #include <Microsoft/Xna/Framework/Input/ButtonState.hpp>
 #include <Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp>
 #include <Microsoft/Xna/Framework/Graphics/RasterizerState.hpp>
+#include <Microsoft/Xna/Framework/Graphics/SamplerState.hpp>
 #include <Microsoft/Xna/Framework/Graphics/Viewport.hpp>
 #include <Microsoft/Xna/Framework/Matrix.hpp>
 #include <Microsoft/Xna/Framework/Vector3.hpp>
@@ -1201,33 +1202,30 @@ void main() {
 }
 )";
 
-const char* kSkyboxVS = R"(#version 300 es
+// AUD-086: Skybox now goes through SpriteBatch + ShaderEffect like Bloom's
+// blur/composite passes (see kBloomVertSrc, reused directly below), so the
+// per-fragment view-direction math that used to live in the vertex shader
+// (computed from gl_VertexID-synthesized NDC) is recomputed here from
+// SpriteBatch's own TexCoord varying instead -- same formula, just fed
+// from TexCoord*2-1 (X) / 1-TexCoord*2 (Y, flipping SpriteBatch's top-left-
+// origin UV convention back to the original's +Y-is-up NDC convention).
+const char* kSkyboxFragSrc = R"(#version 300 es
+precision mediump float;
+uniform sampler2D texture1;
 uniform vec3 u_right;
 uniform vec3 u_up;
 uniform vec3 u_forward;
 uniform vec2 u_tanFov;
-out vec3 v_dir;
-void main() {
-    float x = float(gl_VertexID >> 1) * 2.0 - 1.0;
-    float y = 1.0 - float(gl_VertexID & 1) * 2.0;
-    v_dir = u_forward
-          + x * u_tanFov.x * u_right
-          + y * u_tanFov.y * u_up;
-    gl_Position = vec4(x, y, 0.9999, 1.0);
-}
-)";
-
-const char* kSkyboxFS = R"(#version 300 es
-precision mediump float;
-uniform sampler2D u_tex;
-in vec3 v_dir;
+in vec2 TexCoord;
 out vec4 fragColor;
 const float PI = 3.14159265;
 void main() {
-    vec3 d = normalize(v_dir);
+    vec2 ndc = vec2(TexCoord.x * 2.0 - 1.0, 1.0 - TexCoord.y * 2.0);
+    vec3 dir = u_forward + ndc.x * u_tanFov.x * u_right + ndc.y * u_tanFov.y * u_up;
+    vec3 d = normalize(dir);
     float u = atan(d.z, d.x) / (2.0 * PI) + 0.5;
     float v = asin(clamp(d.y, -1.0, 1.0)) / PI + 0.5;
-    fragColor = texture(u_tex, vec2(u, 1.0 - v));
+    fragColor = texture(texture1, vec2(u, 1.0 - v));
 }
 )";
 
@@ -1374,11 +1372,12 @@ void MeshCraftApplication::initBloom(int w, int h)
 
 void MeshCraftApplication::initSkybox()
 {
-    auto& gl = s_bloom;
-    if (!gl.loadFunctions()) return;
-    if (gl.progSkybox) gl.DeleteProgram(gl.progSkybox);
-    gl.progSkybox = gl.makeProgram(kSkyboxVS, kSkyboxFS);
-    if (!gl.progSkybox) std::cerr << "[Skybox] Failed to compile shader\n";
+    auto& gd = getGraphicsDeviceProperty();
+    skyboxFx_.emplace(gd, kBloomVertSrc, kSkyboxFragSrc);
+    if (!skyboxFx_->IsEffectValid()) {
+        std::cerr << "[Skybox] Failed to compile shader\n";
+        skyboxFx_.reset();
+    }
 }
 
 void MeshCraftApplication::drawSkybox(const Matrix& view, float fovDegrees, float aspect)
@@ -1389,35 +1388,22 @@ void MeshCraftApplication::drawSkybox(const Matrix& view, float fovDegrees, floa
         ? uriRaw
         : (document_.sourcePath / uriRaw).string();
 
-    auto& gl = s_bloom;
-    if (!gl.progSkybox) initSkybox();
-    if (!gl.progSkybox) return;
+    if (!skyboxFx_) initSkybox();
+    if (!skyboxFx_) return;
 
     // (Re)load texture when path changes
-    if (absPath != gl.skyboxTexPath) {
-        if (gl.skyboxTex) { gl.DeleteTextures(1, &gl.skyboxTex); gl.skyboxTex = 0; }
-        gl.skyboxTexPath.clear();
-        int w = 0, h = 0, ch = 0;
-        stbi_set_flip_vertically_on_load(0);
-        unsigned char* data = stbi_load(absPath.c_str(), &w, &h, &ch, 4);
-        if (data) {
-            gl.GenTextures(1, &gl.skyboxTex);
-            gl.BindTexture(kGL_TEXTURE_2D, gl.skyboxTex);
-            gl.TexImage2D(kGL_TEXTURE_2D, 0, (int)kGL_RGBA8, w, h, 0,
-                          kGL_RGBA, kGL_UNSIGNED_BYTE, data);
-            gl.TexParameteri(kGL_TEXTURE_2D, kGL_TEXTURE_MIN_FILTER, (int)kGL_LINEAR);
-            gl.TexParameteri(kGL_TEXTURE_2D, kGL_TEXTURE_MAG_FILTER, (int)kGL_LINEAR);
-            gl.TexParameteri(kGL_TEXTURE_2D, kGL_TEXTURE_WRAP_S,     (int)kGL_REPEAT);
-            gl.TexParameteri(kGL_TEXTURE_2D, kGL_TEXTURE_WRAP_T,     (int)kGL_CLAMP_TO_EDGE);
-            gl.BindTexture(kGL_TEXTURE_2D, 0);
-            stbi_image_free(data);
-            gl.skyboxTexPath = absPath;
-        } else {
+    if (absPath != skyboxTexPath_) {
+        skyboxTex_.reset();
+        skyboxTexPath_.clear();
+        try {
+            skyboxTex_.emplace(absPath, getGraphicsDeviceProperty());
+            skyboxTexPath_ = absPath;
+        } catch (...) {
             std::cerr << "[Skybox] Failed to load: " << absPath << "\n";
             return;
         }
     }
-    if (!gl.skyboxTex) return;
+    if (!skyboxTex_) return;
 
     // Extract camera basis vectors from view matrix (XNA row-major):
     //   row 0 = right, row 1 = up, row 2 = back (-forward)
@@ -1429,26 +1415,31 @@ void MeshCraftApplication::drawSkybox(const Matrix& view, float fovDegrees, floa
     float tanHalfFovY = std::tan(fovDegrees * pi / 180.0f * 0.5f);
     float tanHalfFovX = tanHalfFovY * aspect;
 
-    constexpr unsigned int kGL_CULL_FACE = 0x0B44u;
-    gl.Disable(kGL_DEPTH_TEST);
-    gl.Disable(kGL_BLEND);
-    gl.Disable(kGL_CULL_FACE);
-    gl.UseProgram(gl.progSkybox);
-    gl.ActiveTexture(kGL_TEXTURE0);
-    gl.BindTexture(kGL_TEXTURE_2D, gl.skyboxTex);
-    gl.Uniform1i(gl.GetUniformLocation(gl.progSkybox, "u_tex"), 0);
-    gl.Uniform3f(gl.GetUniformLocation(gl.progSkybox, "u_right"),   rx, ry, rz);
-    gl.Uniform3f(gl.GetUniformLocation(gl.progSkybox, "u_up"),      ux, uy, uz);
-    gl.Uniform3f(gl.GetUniformLocation(gl.progSkybox, "u_forward"), fx, fy, fz);
-    gl.Uniform2f(gl.GetUniformLocation(gl.progSkybox, "u_tanFov"),  tanHalfFovX, tanHalfFovY);
-    // Generate the full-screen quad procedurally from gl_VertexID (see
-    // kSkyboxVS) instead of a bound VAO/VBO + vertex attribute — the
-    // VAO-based approach silently produced a degenerate, invisible draw
-    // in this environment (STAB-0524); gl_VertexID matches the working
-    // pattern already used by the bloom passes below.
-    gl.BindVertexArray(0);
-    gl.DrawArrays(kGL_TRIANGLE_STRIP, 0, 4);
-    gl.BindTexture(kGL_TEXTURE_2D, 0);
+    auto& gd = getGraphicsDeviceProperty();
+    gd.SetDepthTestEnabled(false);
+    skyboxFx_->Apply();
+    skyboxFx_->SetUniformVec3("u_right",   rx, ry, rz);
+    skyboxFx_->SetUniformVec3("u_up",      ux, uy, uz);
+    skyboxFx_->SetUniformVec3("u_forward", fx, fy, fz);
+    skyboxFx_->SetUniformVec2("u_tanFov",  tanHalfFovX, tanHalfFovY);
+    // Equirect wraps horizontally at the seam (u=0/1) but must not wrap
+    // vertically (v=0/1 are the poles) -- matches the original raw-GL
+    // GL_REPEAT(S)/GL_CLAMP_TO_EDGE(T) pair.
+    SamplerState skyboxSampler = SamplerState::LinearWrap;
+    skyboxSampler.setAddressVProperty(TextureAddressMode::Clamp);
+    // The viewport is already set to the clipped 3D-viewport rectangle by
+    // Draw() before this call; SpriteBatch's custom-effect draws only size
+    // their projection to a bound RenderTarget2D, not a custom Viewport, so
+    // (like AUD-084's Bloom composite pass) the destRect for this
+    // backbuffer-targeted draw must be window-absolute.
+    const auto& vp = gd.getViewportProperty();
+    const Rectangle screenRect(vp.getXProperty(), vp.getYProperty(),
+                               vp.getWidthProperty(), vp.getHeightProperty());
+    spriteBatch_->Begin(SpriteSortMode::Deferred, BlendState::Opaque,
+                        &skyboxSampler, nullptr, nullptr, &*skyboxFx_);
+    spriteBatch_->Draw(*skyboxTex_, screenRect, Color::White);
+    spriteBatch_->End();
+    gd.SetDepthTestEnabled(true);
 }
 
 void MeshCraftApplication::applyBloom(
