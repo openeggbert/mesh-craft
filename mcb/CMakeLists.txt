@@ -192,6 +192,18 @@ if(BUILD_TESTING)
     add_test(NAME mcb_random_roundtrip COMMAND mcb_random_roundtrip_test)
     set_tests_properties(mcb_random_roundtrip PROPERTIES TIMEOUT 30 LABELS "format")
 
+    # 2026-07-20 audit finding #1 (P0): McbReader.cpp had no document-wide
+    # aggregate budget, unlike Mc3XmlParser.cpp/Mc3JsonParser.cpp's own
+    # DocumentBudget -- a ~20MB crafted file could force construction of
+    # millions of heap objects via real (not truncated) data. New
+    # DocumentBudget mirrors the XML/JSON parsers' constants exactly.
+    add_executable(mcb_document_budget_test
+        test/document_budget_test.cpp
+    )
+    target_link_libraries(mcb_document_budget_test PRIVATE Mcb)
+    add_test(NAME mcb_document_budget COMMAND mcb_document_budget_test)
+    set_tests_properties(mcb_document_budget PROPERTIES TIMEOUT 15 LABELS "format")
+
     # SYS-W14-25 (2026-07-20): real zlib compression for MCB_FLAG_COMPRESSED
     # -- round-trip correctness, actual size reduction, and the zip-bomb
     # defenses (claimed uncompressed/compressed size sanity ceilings,

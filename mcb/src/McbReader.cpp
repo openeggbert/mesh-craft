@@ -335,6 +335,150 @@ static int clampTess(int v, int minv, int maxv = kMcbMaxTessellation) {
     return std::clamp(v, minv, maxv);
 }
 
+// 2026-07-20 audit finding #1 (P0): every per-field/per-collection cap in
+// this reader (kMcbMaxStringLen, kMcbMaxCollectionCount, kMcbMaxTessellation
+// via clampTess, kMcbMaxUncompressedPayload/kMcbMaxCompressedPayload) bounds
+// a SINGLE field/collection -- none of them bound the AGGREGATE across the
+// whole document. Mc3XmlParser.cpp/Mc3JsonParser.cpp both defend against
+// exactly this with a DocumentBudget (see Mc3XmlParser.cpp's own copy for
+// the full per-field rationale) that this reader never got. Concretely
+// exploitable before this fix: the "objects" array accepts up to
+// kMcbMaxCollectionCount (10,000,000) entries, and each entry can be
+// encoded as just 2 bytes (TAG_OBJ + a zero-length key immediately ending
+// readObject()) -- a ~20MB crafted file could force construction of 10
+// million std::shared_ptr<Mc3Object>, reachable directly from the editor's
+// Open-file dialog. Mirrors Mc3XmlParser.cpp's DocumentBudget exactly (same
+// constants, same charge*() call-site placement) rather than inventing a
+// different set of limits for the same format.
+struct DocumentBudget {
+    long long totalObjects = 0;
+    long long totalTessellationWeight = 0;
+    long long totalMaterials = 0;
+    long long totalTextures = 0;
+    long long totalEmbeds = 0;
+    long long totalEmbedBytes = 0;
+    long long totalActions = 0;
+    long long totalChannels = 0;
+    long long totalKeyframes = 0;
+    long long totalDefinitions = 0;
+
+    static constexpr long long kMaxTotalObjects = 100'000;
+    static constexpr long long kMaxTotalTessellationWeight = 500'000;
+    static constexpr long long kMaxTotalMaterials = 20'000;
+    static constexpr long long kMaxTotalTextures = 20'000;
+    static constexpr long long kMaxTotalEmbeds = 1'000;
+    static constexpr long long kMaxTotalEmbedBytes = 256ll * 1024 * 1024; // 256MB combined
+    static constexpr long long kMaxTotalActions = 10'000;
+    static constexpr long long kMaxTotalChannels = 200'000;
+    static constexpr long long kMaxTotalKeyframes = 2'000'000;
+    static constexpr long long kMaxTotalDefinitions = 20'000;
+
+    void chargeObject() {
+        if (++totalObjects > kMaxTotalObjects) {
+            std::string msg = "MCB: document exceeds the total object budget (" +
+                std::to_string(kMaxTotalObjects) + ") -- rejected before allocating"
+                " geometry for all of them";
+            reportError("objects", msg);
+            throw std::runtime_error(msg);
+        }
+    }
+    void chargeTessellation(int weight) {
+        totalTessellationWeight += weight;
+        if (totalTessellationWeight > kMaxTotalTessellationWeight) {
+            std::string msg = "MCB: document's total tessellation complexity (sum of all "
+                "segments/sides/subdivisions values, " +
+                std::to_string(totalTessellationWeight) + ") exceeds the budget (" +
+                std::to_string(kMaxTotalTessellationWeight) +
+                ") -- rejected before allocating geometry for all of it";
+            reportError("tessellation", msg);
+            throw std::runtime_error(msg);
+        }
+    }
+    void chargeMaterial() {
+        if (++totalMaterials > kMaxTotalMaterials) {
+            std::string msg = "MCB: document exceeds the total material budget (" +
+                std::to_string(kMaxTotalMaterials) + ")";
+            reportError("materials", msg);
+            throw std::runtime_error(msg);
+        }
+    }
+    void chargeTexture() {
+        if (++totalTextures > kMaxTotalTextures) {
+            std::string msg = "MCB: document exceeds the total texture budget (" +
+                std::to_string(kMaxTotalTextures) + ")";
+            reportError("textures", msg);
+            throw std::runtime_error(msg);
+        }
+    }
+    void chargeEmbed(size_t base64Bytes) {
+        if (++totalEmbeds > kMaxTotalEmbeds) {
+            std::string msg = "MCB: document exceeds the total embed budget (" +
+                std::to_string(kMaxTotalEmbeds) + ")";
+            reportError("embeds", msg);
+            throw std::runtime_error(msg);
+        }
+        totalEmbedBytes += static_cast<long long>(base64Bytes);
+        if (totalEmbedBytes > kMaxTotalEmbedBytes) {
+            std::string msg = "MCB: document's total embed base64 content (" +
+                std::to_string(totalEmbedBytes) + " bytes) exceeds the combined budget (" +
+                std::to_string(kMaxTotalEmbedBytes) + " bytes) -- rejected before holding "
+                "it all in memory (many embeds each individually under the per-embed cap?)";
+            reportError("embeds", msg);
+            throw std::runtime_error(msg);
+        }
+    }
+    void chargeAction() {
+        if (++totalActions > kMaxTotalActions) {
+            std::string msg = "MCB: document exceeds the total action budget (" +
+                std::to_string(kMaxTotalActions) + ")";
+            reportError("actions", msg);
+            throw std::runtime_error(msg);
+        }
+    }
+    void chargeChannel() {
+        if (++totalChannels > kMaxTotalChannels) {
+            std::string msg = "MCB: document exceeds the total channel budget (" +
+                std::to_string(kMaxTotalChannels) + ")";
+            reportError("channels", msg);
+            throw std::runtime_error(msg);
+        }
+    }
+    void chargeKeyframe() {
+        if (++totalKeyframes > kMaxTotalKeyframes) {
+            std::string msg = "MCB: document exceeds the total keyframe budget (" +
+                std::to_string(kMaxTotalKeyframes) + ")";
+            reportError("keyframes", msg);
+            throw std::runtime_error(msg);
+        }
+    }
+    void chargeDefinition() {
+        if (++totalDefinitions > kMaxTotalDefinitions) {
+            std::string msg = "MCB: document exceeds the total definition budget (" +
+                std::to_string(kMaxTotalDefinitions) + ")";
+            reportError("definitions", msg);
+            throw std::runtime_error(msg);
+        }
+    }
+    void reset() {
+        totalObjects = 0; totalTessellationWeight = 0;
+        totalMaterials = 0; totalTextures = 0;
+        totalEmbeds = 0; totalEmbedBytes = 0;
+        totalActions = 0; totalChannels = 0; totalKeyframes = 0;
+        totalDefinitions = 0;
+    }
+};
+static thread_local DocumentBudget g_budget;
+
+// Mirrors Mc3XmlParser.cpp's attrCountBudgeted(): clamps a tessellation
+// field to the per-field ceiling AND charges it against the document-wide
+// running total, at every one of this reader's 6 tessellation-driving
+// field sites.
+static int clampTessBudgeted(int v, int minv, int maxv = kMcbMaxTessellation) {
+    int clamped = clampTess(v, minv, maxv);
+    g_budget.chargeTessellation(clamped);
+    return clamped;
+}
+
 static std::array<float,3> rVec3(std::istream& in) {
     float x = rF32(in), y = rF32(in), z = rF32(in);
     return {x, y, z};
@@ -509,12 +653,12 @@ static Mc3::Mc3Primitive readPrimitive(std::istream& in) {
         else if (k == "size")          { expectTag(tag, TAG_VEC3, "size");         p.size          = rVec3(in); }
         else if (k == "radius")        { expectTag(tag, TAG_F32, "radius");        p.radius        = rF32(in); }
         else if (k == "height")        { expectTag(tag, TAG_F32, "height");        p.height        = rF32(in); }
-        else if (k == "segments")      { expectTag(tag, TAG_I32, "segments");      p.segments      = clampTess(rI32(in), 0); }
+        else if (k == "segments")      { expectTag(tag, TAG_I32, "segments");      p.segments      = clampTessBudgeted(rI32(in), 0); }
         else if (k == "axis")          { expectTag(tag, TAG_STR, "axis");          p.axis          = rRawStr(in); }
         else if (k == "majorRadius")   { expectTag(tag, TAG_F32, "majorRadius");   p.majorRadius   = rF32(in); }
         else if (k == "minorRadius")   { expectTag(tag, TAG_F32, "minorRadius");   p.minorRadius   = rF32(in); }
-        else if (k == "subdivisionsX") { expectTag(tag, TAG_I32, "subdivisionsX"); p.subdivisionsX = clampTess(rI32(in), 1); }
-        else if (k == "subdivisionsZ") { expectTag(tag, TAG_I32, "subdivisionsZ"); p.subdivisionsZ = clampTess(rI32(in), 1); }
+        else if (k == "subdivisionsX") { expectTag(tag, TAG_I32, "subdivisionsX"); p.subdivisionsX = clampTessBudgeted(rI32(in), 1); }
+        else if (k == "subdivisionsZ") { expectTag(tag, TAG_I32, "subdivisionsZ"); p.subdivisionsZ = clampTessBudgeted(rI32(in), 1); }
         else                           skipValue(in, tag);
     }
     return p;
@@ -552,8 +696,8 @@ static Mc3::Mc3CrossSection readCrossSection(std::istream& in) {
         else if (k == "height")      { expectTag(tag, TAG_F32, "height");      cs.height      = rF32(in); }
         else if (k == "radius")      { expectTag(tag, TAG_F32, "radius");      cs.radius      = rF32(in); }
         else if (k == "innerRadius") { expectTag(tag, TAG_F32, "innerRadius"); cs.innerRadius = rF32(in); }
-        else if (k == "sides")       { expectTag(tag, TAG_I32, "sides");       cs.sides       = clampTess(rI32(in), 3); }
-        else if (k == "segments")    { expectTag(tag, TAG_I32, "segments");    cs.segments    = clampTess(rI32(in), 1); }
+        else if (k == "sides")       { expectTag(tag, TAG_I32, "sides");       cs.sides       = clampTessBudgeted(rI32(in), 3); }
+        else if (k == "segments")    { expectTag(tag, TAG_I32, "segments");    cs.segments    = clampTessBudgeted(rI32(in), 1); }
         else if (k == "customPoints") {
             expectTag(tag, TAG_ARR, "customPoints");
             // TAG_ARR of TAG_VEC3
@@ -625,7 +769,7 @@ static Mc3::Mc3Extrude readExtrude(std::istream& in) {
         if      (k == "crossSection") { expectTag(tag, TAG_OBJ, "crossSection"); ex.crossSection = readCrossSection(in); }
         else if (k == "path")         { expectTag(tag, TAG_OBJ, "path");         ex.path         = readPath(in); }
         else if (k == "twist")        { expectTag(tag, TAG_F32, "twist");        ex.twist        = rF32(in); }
-        else if (k == "segments")     { expectTag(tag, TAG_I32, "segments");     ex.segments     = clampTess(rI32(in), 1); }
+        else if (k == "segments")     { expectTag(tag, TAG_I32, "segments");     ex.segments     = clampTessBudgeted(rI32(in), 1); }
         else if (k == "smooth")       { expectTag(tag, TAG_BOOL, "smooth");      ex.smooth       = rU8(in) != 0; }
         else if (k == "caps")         { expectTag(tag, TAG_BOOL, "caps");        ex.caps         = rU8(in) != 0; }
         else                          skipValue(in, tag);
@@ -734,6 +878,7 @@ static std::shared_ptr<Mc3::Mc3Object> readObject(std::istream& in);
 static std::shared_ptr<Mc3::Mc3Object> readObject(std::istream& in) {
     RecursionGuard<256> guard;
     IdentityScope idScope; // SYS-W1-01: updated below once name/id is read
+    g_budget.chargeObject();
     auto obj = std::make_shared<Mc3::Mc3Object>();
     while (true) {
         std::string k = rKey(in); if (k.empty()) break;
@@ -1102,7 +1247,7 @@ static Mc3::Mc3Channel readChannel(std::istream& in) {
             ch.keyframes.reserve(reserveHint(n));
             for (uint32_t i = 0; i < n; ++i) {
                 uint8_t t = rU8(in);
-                if (t == TAG_OBJ) ch.keyframes.push_back(readKeyframe(in));
+                if (t == TAG_OBJ) { g_budget.chargeKeyframe(); ch.keyframes.push_back(readKeyframe(in)); }
                 else               skipValue(in, t);
             }
         }
@@ -1135,7 +1280,7 @@ static Mc3::Mc3Action readAction(std::istream& in) {
             act.channels.reserve(reserveHint(n));
             for (uint32_t i = 0; i < n; ++i) {
                 uint8_t t = rU8(in);
-                if (t == TAG_OBJ) act.channels.push_back(readChannel(in));
+                if (t == TAG_OBJ) { g_budget.chargeChannel(); act.channels.push_back(readChannel(in)); }
                 else               skipValue(in, t);
             }
         }
@@ -1286,7 +1431,7 @@ static Mc3::Mc3Document readDocument(std::istream& in) {
             for (uint32_t i = 0; i < n; ++i) {
                 std::string mk = rRawStr(in);
                 uint8_t t = rU8(in);
-                if (t == TAG_OBJ) doc.textures[mk] = readTexture(in);
+                if (t == TAG_OBJ) { g_budget.chargeTexture(); doc.textures[mk] = readTexture(in); }
                 else               skipValue(in, t);
             }
         }
@@ -1306,7 +1451,11 @@ static Mc3::Mc3Document readDocument(std::istream& in) {
             for (uint32_t i = 0; i < n; ++i) {
                 std::string mk = rRawStr(in);
                 uint8_t t = rU8(in);
-                if (t == TAG_OBJ) doc.embeds[mk] = readEmbed(in, mk);
+                if (t == TAG_OBJ) {
+                    Mc3::Mc3EmbedGltf em = readEmbed(in, mk);
+                    g_budget.chargeEmbed(em.base64Content.size());
+                    doc.embeds[mk] = std::move(em);
+                }
                 else               skipValue(in, t);
             }
         }
@@ -1366,7 +1515,7 @@ static Mc3::Mc3Document readDocument(std::istream& in) {
             for (uint32_t i = 0; i < n; ++i) {
                 std::string mk = rRawStr(in);
                 uint8_t t = rU8(in);
-                if (t == TAG_OBJ) doc.materials[mk] = readMaterial(in);
+                if (t == TAG_OBJ) { g_budget.chargeMaterial(); doc.materials[mk] = readMaterial(in); }
                 else               skipValue(in, t);
             }
         }
@@ -1376,7 +1525,7 @@ static Mc3::Mc3Document readDocument(std::istream& in) {
             for (uint32_t i = 0; i < n; ++i) {
                 std::string mk = rRawStr(in);
                 uint8_t t = rU8(in);
-                if (t == TAG_OBJ) doc.definitions[mk] = readObject(in);
+                if (t == TAG_OBJ) { g_budget.chargeDefinition(); doc.definitions[mk] = readObject(in); }
                 else               skipValue(in, t);
             }
         }
@@ -1396,7 +1545,7 @@ static Mc3::Mc3Document readDocument(std::istream& in) {
             for (uint32_t i = 0; i < n; ++i) {
                 std::string mk = rRawStr(in);
                 uint8_t t = rU8(in);
-                if (t == TAG_OBJ) doc.actions[mk] = readAction(in);
+                if (t == TAG_OBJ) { g_budget.chargeAction(); doc.actions[mk] = readAction(in); }
                 else               skipValue(in, t);
             }
         }
@@ -1442,6 +1591,11 @@ static void applyMcbUpgrades(Mc3::Mc3Document& doc, uint8_t fromVersion) {
 // already been set up by the caller (each public overload below owns exactly
 // one ValidationScope, so nesting/reset ambiguity can't arise).
 static Mc3::Mc3Document loadFromBinaryImpl(std::istream& in) {
+    // 2026-07-20 audit finding #1: reset the document-wide budget once per
+    // top-level load, matching Mc3XmlParser.cpp's own g_budget.reset()
+    // placement at the start of its top-level entry point.
+    g_budget.reset();
+
     // Validate header
     char magic[4];
     if (!in.read(magic, 4) || std::memcmp(magic, MCB_MAGIC, 4) != 0) {

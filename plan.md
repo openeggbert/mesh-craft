@@ -84,13 +84,15 @@ P1s already being fixed in git history. This session:
    is per-field only) not part of the original audit, filed as new `TODO`
    tasks.
 
-   **Net across all 16 AUD-### rows remaining in this active backlog (61
+   **Net across all 17 AUD-### rows remaining in this active backlog (61
    additional rows completed and archived to `docs/history/plan_20260718.md`
    on 2026-07-18 — see that file for their full evidence/resolution text):
-   10 DONE, 4 TODO, 2 DEFERRED** — all 10 DONE (`AUD-064` through `AUD-073`)
-   are fresh findings from a 2026-07-18 (later same day) independent
-   re-audit, not part of the original 6 (`AUD-069` itself fixed 2026-07-19,
-   the day after it was filed); recompute with
+   11 DONE, 4 TODO, 2 DEFERRED** — 10 of the 11 DONE (`AUD-064` through
+   `AUD-073`) are fresh findings from a 2026-07-18 (later same day)
+   independent re-audit, not part of the original 6 (`AUD-069` itself fixed
+   2026-07-19, the day after it was filed); the 11th, `AUD-074`, is from a
+   third independent audit on 2026-07-20 (later the same day as this
+   session's SYS-W14-18..27 work). Recompute with
    `python3 test/validate_plan_consistency.py . <build-dir>` rather than
    trusting this number as time passes.
 5. Archived `plan_deep_audit.md` (all 57 of its own tasks were already
@@ -1515,6 +1517,17 @@ total to **16 AUD-### rows** (the 6 remaining from the original 67, plus
 those 10). `test/validate_plan_consistency.py` is authoritative for this
 count — re-run it rather than trusting this paragraph.
 
+**Update (2026-07-20, later same day, after SYS-W14-18..27):** a third
+independent fresh audit (4 parallel agents: build/test health, core-code
+bug hunt, docs/architecture staleness, editor UX/wiring gaps) added
+`AUD-074` (`DONE`), bringing the total to **17 AUD-### rows**. Several
+other findings from that same audit round (UI-vs-live-shading gaps,
+no-op-undo Checkbox instances, NaN-vertex primitives, stale
+`MCB_FORMAT.md`/`TESTING.md`) are tracked as this session's own in-progress
+work, not yet all filed as their own `AUD-###` rows — check the session
+log / recent commits for their current status rather than assuming this
+paragraph is exhaustive.
+
 ### AUD-025 `[DEFERRED]` `P2` `W7` · embed: mesh source is treated as a literal OBJ path — node exports with no mesh while export exits 0 'Written'
 - **Component:** mc3togltf/src/GltfExporter.cpp buildMesh()
 - **Evidence:** GltfExporter.cpp:586-593: `if (obj.type == ObjectType::Mesh && !obj.meshSource.empty()) { try { md = loadObjMesh(ctx.basePath, obj.meshSource); } catch (...) { std::cerr << Warning ...; ctx.stats.warnings++; return -1; } }`. The exporter never checks for the `embed:<id>` form the mc3 parser/writer round-trip (Mc3XmlParser.cpp:743-749). `loadObjMesh` tries to open a file literally named 'embed:tree', fails, warning printed, node gets no mesh. main.cpp:93 then prints 'Written:' and returns 0. Documented (MC3_FORMAT.md, STAB-0194/0549) and a warning + stats.warnings signal it, so not fully silent — but the tool still reports success with dropped geometry.
@@ -1645,3 +1658,11 @@ count — re-run it rather than trusting this paragraph.
 - **Tests:** New `test/extrude_hollow_zero_radius_test.cpp` (`extrude_hollow_zero_radius` ctest, 12 assertions).
 - **Resolved:** commit `7889fd0` — verify: `ctest -R extrude_hollow_zero_radius`
 - **Status note:** `SceneRenderer` is CNA-coupled and can't be unit-tested directly, so the new test mirrors the exact two-line formula (both call sites are byte-for-byte identical) rather than calling the real function — same idiom as `differential_geometry_test.cpp`. The test concretely reproduces the bug first (the pre-fix formula genuinely computes `+inf` for `0.3f/0.0f`, not just asserted as a hypothesis) before proving the fix (finite `0.0f` for both Circle and Polygon, and for a near-zero — not just exact-zero — radius; a legitimate hollow shape and a solid `radius=0` cross-section are both confirmed unaffected). **A live-render screenshot comparison was also tried and deliberately NOT kept as a committed test**, documented honestly rather than silently omitted: a `radius=0` cross-section produces byte-identical output whether or not this fix is applied, because `makeProfile()`'s Circle case already collapses every profile point to `(0,0)` when `radius==0` — the whole extruded tube's OUTER ring is already degenerate/invisible for a reason unrelated to this fix, so pixel comparison cannot discriminate it; only the formula-level test can. Full root `ctest`: 141/141 (was 140).
+
+### AUD-074 `[DONE]` `P0` `W1` · McbReader has no document-wide aggregate budget, unlike the XML/JSON parsers' DocumentBudget
+- **Component:** mcb/src/McbReader.cpp (readObject, readTexture, readMaterial, readEmbed, readAction/readChannel/readKeyframe, definitions map, loadFromBinaryImpl)
+- **Evidence:** Found via a fresh 4-agent independent audit run 2026-07-20 (same day as this session's SYS-W14-18..27 feature work), specifically the core-code-correctness-bug-hunt dimension. `Mc3XmlParser.cpp`/`Mc3JsonParser.cpp` both implement a `DocumentBudget` struct (`kMaxTotalObjects=100'000`, `kMaxTotalMaterials=20'000`, `kMaxTotalTessellationWeight=500'000`, etc., charged at every read site) specifically because a per-field/per-collection cap (`kMcbMaxCollectionCount=10'000'000`, `McbReader.cpp`) bounds any *single* array/map but not the AGGREGATE across the whole document. `McbReader.cpp` never got this protection — confirmed via grep, zero occurrences of "Budget"/"charge" before this fix. Concretely exploitable with REAL, present data (not just a false/truncated claim, which `mcb_reserve_bomb_test.cpp` already covered a different variant of): the `"objects"` array accepts up to `kMcbMaxCollectionCount` entries, and each entry can be encoded as just 2 bytes (`TAG_OBJ` + a zero-length key immediately ending `readObject()`) — a file well under 1MB could claim and actually deliver enough entries to force construction of far more heap `shared_ptr<Mc3Object>` instances than any legitimate scene needs, reachable directly from the editor's Open-file dialog.
+- **Outcome:** Port `Mc3XmlParser.cpp`'s `DocumentBudget` to `McbReader.cpp` — same constants, same charge-site placement (inside `readObject()` for the recursive object-tree dimension since children re-enter the same function; at each top-level map/array loop in `readDocument()` for the flat collections: textures/materials/embeds/definitions/actions; inside `readChannel()`/`readAction()` for the nested channel/keyframe dimensions; a new `clampTessBudgeted()` wrapping the existing `clampTess()` at all 6 tessellation-field sites) — reusing the exact same reasoning/comments as the XML parser's copy rather than inventing a different set of limits for the same format. `g_budget.reset()` added at the top of `loadFromBinaryImpl()` (MCB has no `<include>`-equivalent recursive re-entry into this function, so unlike the XML parser's reset-once-at-top-level-only care, there's no nested-call subtlety to preserve here).
+- **Tests:** New `mcb/test/document_budget_test.cpp` (`mcb_document_budget` ctest, 11 assertions) — deliberately constructs REAL (not truncated) minimal-but-numerous data crossing 3 different budget dimensions (objects: 100,001 real 2-byte entries over the 100,000 cap; tessellation: 200 spheres at segments=3000 each, individually under the 4096 per-field cap but summing to 600,000 over the 500,000 aggregate cap; materials: 20,001 real empty materials over the 20,000 cap), confirms the exact boundary (100,000 objects, not 100,001) still loads successfully with no false-positive, and confirms an ordinary small document is completely unaffected. All 10 pre-existing `mcb_*` tests re-run and confirmed still passing (no false-positive against any existing legitimate fixture).
+- **Resolved:** commit (pending, this session) — verify: `ctest -R mcb_document_budget`
+- **Status note:** Caught a real bug in the test's OWN construction while writing it (not the reader): `Mc3XmlParser.cpp`'s `rKey()`-style object-field keys use a 1-byte length prefix, but `TAG_MAP` entry keys use `rRawStr()`'s 4-byte length prefix — a different wire encoding for the same-looking "string key" concept. The materials-budget test case initially used the 1-byte encoding for a `TAG_MAP` key, which misparsed as garbage and threw a `"string length exceeds sanity limit"` error instead of the expected `"material budget"` error; fixed by adding a distinct `appendRawStr()` test helper and using it specifically for `TAG_MAP` keys, `appendKey()` (1-byte) only for `TAG_OBJ` field keys. Full rebuild + 162/162 `ctest` (was 161).
