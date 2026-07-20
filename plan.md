@@ -84,14 +84,14 @@ P1s already being fixed in git history. This session:
    is per-field only) not part of the original audit, filed as new `TODO`
    tasks.
 
-   **Net across all 21 AUD-### rows remaining in this active backlog (61
+   **Net across all 22 AUD-### rows remaining in this active backlog (61
    additional rows completed and archived to `docs/history/plan_20260718.md`
    on 2026-07-18 — see that file for their full evidence/resolution text):
-   15 DONE, 4 TODO, 2 DEFERRED** — 10 of the 15 DONE (`AUD-064` through
+   16 DONE, 4 TODO, 2 DEFERRED** — 10 of the 16 DONE (`AUD-064` through
    `AUD-073`) are fresh findings from a 2026-07-18 (later same day)
    independent re-audit, not part of the original 6 (`AUD-069` itself fixed
-   2026-07-19, the day after it was filed); the other 5 (`AUD-074` through
-   `AUD-078`) are from a third independent audit on 2026-07-20 (later the
+   2026-07-19, the day after it was filed); the other 6 (`AUD-074` through
+   `AUD-079`) are from a third independent audit on 2026-07-20 (later the
    same day as this session's SYS-W14-18..27 work). Recompute with
    `python3 test/validate_plan_consistency.py . <build-dir>` rather than
    trusting this number as time passes.
@@ -1520,17 +1520,16 @@ count — re-run it rather than trusting this paragraph.
 **Update (2026-07-20, later same day, after SYS-W14-18..27):** a third
 independent fresh audit (4 parallel agents: build/test health, core-code
 bug hunt, docs/architecture staleness, editor UX/wiring gaps) added
-`AUD-074` through `AUD-078` (all `DONE`), bringing the total to
-**21 AUD-### rows**. `AUD-078` (fog) was downgraded from the audit's own
-initial P1/P2 "visibly double-applied" framing to P2 "dead/incorrect
-code" after direct empirical investigation found zero actual pixel
-difference — see its own row for the full story. One smaller finding
-from that same audit round (camera `rotation` override ignored by the
-gizmo/look-through preview) plus the stale `MCB_FORMAT.md`/`TESTING.md`
-docs findings are tracked as this session's own in-progress work, not yet
-filed as their own `AUD-###` rows — check the session log / recent
-commits for their current status rather than assuming this paragraph is
-exhaustive.
+`AUD-074` through `AUD-079` (all `DONE`), bringing the total to
+**22 AUD-### rows** — every finding from this audit round's "solid,
+verified" list is now closed. `AUD-078` (fog) was downgraded from the
+audit's own initial P1/P2 "visibly double-applied" framing to P2
+"dead/incorrect code" after direct empirical investigation found zero
+actual pixel difference — see its own row for the full story. The stale
+`MCB_FORMAT.md`/`TESTING.md` docs findings from the same audit round are
+still tracked as this session's own in-progress work, not yet filed as
+their own `AUD-###` rows — check the session log / recent commits for
+their current status rather than assuming this paragraph is exhaustive.
 
 ### AUD-025 `[DEFERRED]` `P2` `W7` · embed: mesh source is treated as a literal OBJ path — node exports with no mesh while export exits 0 'Written'
 - **Component:** mc3togltf/src/GltfExporter.cpp buildMesh()
@@ -1698,3 +1697,10 @@ exhaustive.
 - **Outcome:** Remove the `BasicEffect`-fog-enabling block from `draw()` entirely; rely solely on the already-correct, already-complete CPU-side per-object blend.
 - **Tests:** New `test/fog_exponential_a.mc3.xml`/`fog_exponential_nofog.mc3.xml` fixtures + `test/fog_exponential_test.py` (`fog_exponential_test` ctest) — (1) a static source check that `setFogEnabledProperty(true)` does not appear in `SceneRenderer.cpp` (the actual regression guard: empirically confirmed via `git stash` that this alone correctly fails when the removed pattern is reintroduced, without even needing a rebuild), and (2) a real `--screenshot` render check that `mode="exponential"` fog (previously entirely untested — the pre-existing `fog_linear_test.py` only covers Linear mode) produces a real, measurable, PARTIAL blend toward the fog color via the CPU path alone (qualitative bounds, not an exact numeric prediction — an earlier draft tried predicting the precise blended color via the documented CPU formula and hand-computed camera distance, but hit persistent, unexplained numeric discrepancies against the actual renderer; abandoned in favor of the simpler, still-meaningful directional/partial-blend check, documented honestly in the test file itself rather than silently papered over). Full rebuild + 165/165 `ctest` (was 164). **Caught the same XML-comment double-hyphen bug (3rd time this session)** while writing the fixtures — fixed before committing.
 - **Resolved:** commit `f7361fa` — verify: `ctest -R fog_exponential_test`
+
+### AUD-079 `[DONE]` `P1` `W1` · Mc3Camera::rotation ("alternative to target") ignored by the camera gizmo and Look-Through-Camera mode
+- **Component:** src/MeshCraft/Renderer/SceneRenderer.cpp/.hpp (new `cameraForwardFromRotation()`, `drawCameraGizmos()`), src/MeshCraft/MeshCraftApplication.cpp (Look-Through-Camera mode)
+- **Evidence:** Found via the same fresh 4-agent independent audit as `AUD-074`..`AUD-078`, the editor-UX/wiring-gaps dimension. `Mc3Camera::rotation` (`std::optional<std::array<float,3>>`, "alternative to target") has full editor UI (`MeshCraftApplication_UiLeftPanel.cpp`'s "Override Rotation" checkbox + `DragFloat3`, correctly wired with undo). But `drawCameraGizmos()` (`SceneRenderer.cpp`) always built the frustum gizmo's direction from `cam.target - cam.position`, and Look-Through-Camera mode (`MeshCraftApplication.cpp`) always called `Matrix::CreateLookAt(camPos, cam.target, up)` — neither checked `cam.rotation.has_value()`. So a camera authored with only `rotation` (`target` left at its `{0,0,0}` default) silently showed a gizmo/live-preview pointing at the origin instead of the authored direction. `mc3togltf`'s `GltfExporter.cpp` (`STAB-0694`-era code) already correctly checked `cam.rotation.has_value()` and quaternion-converted it — so export was right and only the two live-viewport consumers were wrong, undisclosed anywhere in the UI.
+- **Outcome:** New `SceneRenderer::cameraForwardFromRotation(rotationDegrees)` (static, so both consumers can call it) converts a rotation triple into a forward direction using `Matrix::CreateFromYawPitchRoll(rotation[1], rotation[0], rotation[2])` (this codebase's own established convention for every other rotation field, e.g. `objectWorldMatrix()`) applied to a base forward of `(0,0,-1)` (this project's right_handed_y_up "looks down -Z at identity rotation" convention). `drawCameraGizmos()` and Look-Through-Camera mode both now check `cam.rotation.has_value()` first and use this helper, falling back to the existing `target`-based direction only when `rotation` is absent — matching the exporter's own priority order.
+- **Tests:** New `test/camera_rotation.mc3.xml` (a camera with `rotation="0 0 0"` and no `target` authored, so `target` defaults to `{0,0,0}` — a point far outside this camera's frame; a box is placed exactly at `camera_position + (0,0,-distance)`, dead-center in frame if and only if `rotation` is honored) + `test/camera_rotation_test.py` (`camera_rotation_test` ctest, real `--screenshot` pixel sampling, same code path Look-Through-Camera mode uses). **Empirically verified via `git stash`**: rendered the identical fixture with the pre-fix and post-fix binaries — pre-fix, the box is completely off-screen (camera looking at the unused `target` default); post-fix, 1120 bright center-region samples confirm the box is dead-center. Also documented the previously entirely-undocumented `rotation` attribute in `MC3_FORMAT.md`'s Cameras section (a pre-existing gap, not something this fix introduced). Full rebuild + 166/166 `ctest` (was 165). **Caught the same XML-comment double-hyphen bug (4th time this session)** while writing the fixture — fixed before committing.
+- **Resolved:** commit (pending, this session) — verify: `ctest -R camera_rotation_test`

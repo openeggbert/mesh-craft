@@ -1315,6 +1315,13 @@ void SceneRenderer::drawLightGizmos(
         drawLineList(lines, view, proj);
 }
 
+Vector3 SceneRenderer::cameraForwardFromRotation(const std::array<float,3>& rotationDegrees) {
+    constexpr float d = std::numbers::pi_v<float> / 180.0f;
+    Matrix rot = Matrix::CreateFromYawPitchRoll(
+        rotationDegrees[1] * d, rotationDegrees[0] * d, rotationDegrees[2] * d);
+    return Vector3::TransformNormal(Vector3{0.0f, 0.0f, -1.0f}, rot);
+}
+
 void SceneRenderer::drawCameraGizmos(
     const std::vector<Mc3::Mc3Camera>& cameras,
     const Matrix& view, const Matrix& proj)
@@ -1329,13 +1336,24 @@ void SceneRenderer::drawCameraGizmos(
 
     for (const auto& cam : cameras) {
         const auto& p = cam.position;
-        const auto& t = cam.target;
+
+        // 2026-07-20 audit finding #6: a camera authored with `rotation`
+        // instead of `target` (target left at its {0,0,0} default) used
+        // to always compute this gizmo's direction from target-minus-
+        // position, silently pointing it at the origin.
+        float dx, dy, dz;
+        if (cam.rotation.has_value()) {
+            Vector3 fwd = cameraForwardFromRotation(*cam.rotation);
+            dx = fwd.X; dy = fwd.Y; dz = fwd.Z;
+        } else {
+            dx = cam.target[0]-p[0]; dy = cam.target[1]-p[1]; dz = cam.target[2]-p[2];
+        }
+        std::array<float,3> t = { p[0]+dx, p[1]+dy, p[2]+dz };
 
         // Line from position to target
         addLine(p, t);
 
         // Frustum pyramid: 4 spokes to a small rect in the view direction
-        float dx = t[0]-p[0], dy = t[1]-p[1], dz = t[2]-p[2];
         float len = std::sqrt(dx*dx + dy*dy + dz*dz);
         if (len < 1e-5f) continue;
         dx /= len; dy /= len; dz /= len;

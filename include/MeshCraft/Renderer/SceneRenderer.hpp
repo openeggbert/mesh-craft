@@ -192,6 +192,23 @@ public:
     Microsoft::Xna::Framework::Matrix computeObjectWorldMatrix(
         const Mc3::Mc3Object& obj, const Mc3::Mc3Document& doc) const;
 
+    // 2026-07-20 audit finding #6: Mc3Camera::rotation ("alternative to
+    // target") had editor UI to set it, but neither drawCameraGizmos()
+    // (below) nor MeshCraftApplication's Look-Through-Camera mode ever
+    // read it -- both always derived the view direction from `target`
+    // instead, so a camera authored with only `rotation` (target left at
+    // its {0,0,0} default) silently pointed at the origin in the live
+    // preview, while mc3togltf's export already handled it correctly.
+    // Converts a rotation triple (degrees, same [pitch,yaw,roll] axis
+    // convention as every other rotation field in this codebase --
+    // objectWorldMatrix()'s own CreateFromYawPitchRoll(rotation[1],
+    // rotation[0], rotation[2])) into a forward direction, starting from
+    // this project's right_handed_y_up "looks down -Z at identity
+    // rotation" convention. Static (no instance state needed) so
+    // MeshCraftApplication.cpp's Look-Through-Camera code can call it too.
+    static Microsoft::Xna::Framework::Vector3 cameraForwardFromRotation(
+        const std::array<float, 3>& rotationDegrees);
+
 private:
     Microsoft::Xna::Framework::Graphics::GraphicsDevice& device_;
     std::unique_ptr<Microsoft::Xna::Framework::Graphics::BasicEffect> effect_;

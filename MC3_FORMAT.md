@@ -369,6 +369,8 @@ live viewport, a separate and less capable renderer, can and can't show.
           fov="60" near="0.1" far="1000"/>
   <camera name="OrthoTop" type="orthographic" position="0 10 0" target="0 0 0"
           size="10"/>
+  <camera name="RotCam" type="perspective" position="0 2 5" rotation="-10 0 0"
+          fov="60" near="0.1" far="1000"/>
 </cameras>
 ```
 
@@ -377,6 +379,16 @@ attribute instead of `<cameras default="...">`. If both are present,
 `<cameras default="...">` wins. If neither is present, the first `<camera>`
 in document order is used. The writer always outputs the `<cameras default>`
 form on save, regardless of which spelling was used on load.
+
+`rotation` (optional `[x, y, z]` degrees, same axis convention as every
+other rotation field in this format) is an **alternative to `target`** for
+aiming the camera — set one or the other, not both meaningfully at once
+(if `rotation` is present, it takes priority over `target`). **Live-editor
+status (`AUD-079`, 2026-07-20):** both the camera gizmo and Look-Through-Camera
+mode now actually honor `rotation` when present — previously both always
+derived the view direction from `target` (silently pointing at its unused
+`{0,0,0}` default whenever a camera was authored with `rotation` alone),
+while `mc3togltf`'s export already handled it correctly.
 
 ---
 

@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- 2026-07-20 audit finding #6 regression fixture. Camera authored with
+     `rotation` (identity, "0 0 0") instead of `target`. `target` is left
+     at its {0,0,0} default, a DIFFERENT point than the box's own
+     position, so this fixture only renders correctly if `rotation` is
+     actually read: at identity rotation, the camera looks down its local
+     Z axis (negative direction, this project's right_handed_y_up
+     convention), so a box placed exactly at
+     `camera_position + (0,0,-distance)` is dead-center in frame if (and
+     only if) rotation is honored. If the renderer instead falls back to
+     target={0,0,0} (far outside the frame from this camera
+     position/FOV), the box is invisible. -->
+<mc3 version="0.3" model="CameraRotationFixture">
+
+  <cameras default="Cam">
+    <camera name="Cam" position="10 0 10" rotation="0 0 0" fov="50" near="0.1" far="200"/>
+  </cameras>
+
+  <materials>
+    <material id="white"><base_color>0.9 0.9 0.9 1.0</base_color></material>
+  </materials>
+
+  <objects>
+    <box name="Target" size="2 2 2" position="10 0 0" material="white"/>
+  </objects>
+
+</mc3>

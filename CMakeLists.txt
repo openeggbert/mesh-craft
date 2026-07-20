@@ -1289,6 +1289,25 @@ if(MESH_CRAFT_BUILD_TESTING AND UNIX AND NOT ANDROID AND NOT EMSCRIPTEN)
             set_tests_properties(fog_exponential_test PROPERTIES TIMEOUT 30 LABELS "render")
         endif()
 
+        # 2026-07-20 audit finding #6: a camera authored with `rotation`
+        # instead of `target` used to be silently ignored by both the
+        # camera gizmo and Look-Through-Camera mode -- both always looked
+        # at `target`'s unused {0,0,0} default. Verify via real pixel
+        # sampling that the document's own camera (rendered via
+        # --screenshot, the same code path Look-Through-Camera uses)
+        # actually honors `rotation`.
+        if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/test/camera_rotation.mc3.xml")
+            add_test(
+                NAME camera_rotation_test
+                COMMAND "${PYTHON3_EXEC}"
+                        "${CMAKE_CURRENT_SOURCE_DIR}/test/camera_rotation_test.py"
+                        $<TARGET_FILE:MeshCraft>
+                        "${CMAKE_CURRENT_SOURCE_DIR}/test/camera_rotation.mc3.xml"
+                WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
+            )
+            set_tests_properties(camera_rotation_test PROPERTIES TIMEOUT 30 LABELS "render")
+        endif()
+
         # 2026-07-20 audit finding #4: doc.lights had zero effect on live
         # shading (BasicEffect's fixed 3-point default rig was used
         # unconditionally regardless of what was authored) -- verify a

@@ -603,8 +603,20 @@ void MeshCraftApplication::Draw(const GameTime& /*gameTime*/) {
         const auto& cam = document_.cameras[selectedCameraIdx_];
         const float pi = std::numbers::pi_v<float>;
         Vector3 camPos(cam.position[0], cam.position[1], cam.position[2]);
-        Vector3 camTarget(cam.target[0], cam.target[1], cam.target[2]);
         Vector3 up(0.0f, 1.0f, 0.0f);
+        // 2026-07-20 audit finding #6: a camera authored with `rotation`
+        // instead of `target` (target left at its {0,0,0} default) used to
+        // always look at the origin here -- CreateLookAt needs a target
+        // point, not a direction, so derive one an arbitrary distance
+        // along the rotation-derived forward vector (any positive
+        // distance produces the same view direction).
+        Vector3 camTarget;
+        if (cam.rotation.has_value()) {
+            Vector3 fwd = Renderer::SceneRenderer::cameraForwardFromRotation(*cam.rotation);
+            camTarget = camPos + fwd;
+        } else {
+            camTarget = Vector3(cam.target[0], cam.target[1], cam.target[2]);
+        }
         view = Matrix::CreateLookAt(camPos, camTarget, up);
         if (cam.type == Mc3::CameraType::Orthographic) {
             float hw = cam.orthoSize * aspect;
