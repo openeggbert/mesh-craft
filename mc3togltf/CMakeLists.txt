@@ -133,7 +133,13 @@ if(BUILD_TESTING)
     target_link_libraries(mc3togltf_pre_export_validation_test PRIVATE mc3togltf_lib)
     target_include_directories(mc3togltf_pre_export_validation_test PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
     add_test(NAME mc3togltf_pre_export_validation COMMAND mc3togltf_pre_export_validation_test)
-    set_tests_properties(mc3togltf_pre_export_validation PROPERTIES TIMEOUT 15 LABELS "export")
+    # F28 (2026-07-20 audit): this test's own 5000-segment sphere fixture
+    # (used to exercise the hostile-tessellation-value diagnostic) measured
+    # ~22-25s to tessellate on a fresh unoptimized (Debug) build -- past the
+    # 15s TIMEOUT this test had, a deterministic failure, not machine-load-
+    # related. 60s matches the convention this file already uses for its
+    # other heavier tests (mc3togltf_csg_export, mc3togltf_export_verification).
+    set_tests_properties(mc3togltf_pre_export_validation PROPERTIES TIMEOUT 60 LABELS "export")
 
     # NEXT.md task (2026-07-19): CsgEvaluator.cpp's Intersection case null
     # first-child guard. Built the same way as pre_export_validation_test.cpp
