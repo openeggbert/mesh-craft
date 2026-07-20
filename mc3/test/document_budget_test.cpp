@@ -333,6 +333,62 @@ static void testDefinitionBudget() {
 // doesn't need to be valid (or even well-formed) XML at all: padding bytes
 // are enough to prove the check fires ahead of any parse attempt.
 // ---------------------------------------------------------------------------
+// ---------------------------------------------------------------------------
+// 2026-07-20 audit F6: <cross_section>/<path> <point> child-element counts
+// had no cap at all, unlike every other tessellation-driving field
+// (sides/segments on the same elements) -- kMaxTessellation (4096) applies
+// here too now.
+// ---------------------------------------------------------------------------
+static void testCrossSectionPointBudget() {
+    std::string xml = "<mc3 version=\"0.3\" model=\"cs-point-budget\">\n"
+                       "  <objects>\n    <extrude name=\"e\" segments=\"1\">\n"
+                       "      <cross_section type=\"custom\">\n";
+    for (int i = 0; i < 4097; ++i)
+        xml += "        <point x=\"" + std::to_string(i) + "\" y=\"0\"/>\n";
+    xml += "      </cross_section>\n      <path type=\"line\"/>\n    </extrude>\n  </objects>\n</mc3>\n";
+
+    std::string what = loadExpectingThrow(xml);
+    check(!what.empty(), "4097 cross_section <point> children exceeds the budget and is rejected");
+    check(what.find("point") != std::string::npos,
+          "rejection names the point-count budget, not an unrelated failure: " + what);
+
+    std::string okXml = "<mc3 version=\"0.3\" model=\"cs-point-ok\">\n"
+                         "  <objects>\n    <extrude name=\"e\" segments=\"1\">\n"
+                         "      <cross_section type=\"custom\">\n";
+    for (int i = 0; i < 50; ++i)
+        okXml += "        <point x=\"" + std::to_string(i) + "\" y=\"0\"/>\n";
+    okXml += "      </cross_section>\n      <path type=\"line\"/>\n    </extrude>\n  </objects>\n</mc3>\n";
+    Mc3Document doc = load(okXml);
+    check(doc.objects.size() == 1 && doc.objects[0]->extrude &&
+          doc.objects[0]->extrude->crossSection.customPoints.size() == 50,
+          "50 cross_section points (under budget) all load fine");
+}
+
+static void testPathPointBudget() {
+    std::string xml = "<mc3 version=\"0.3\" model=\"path-point-budget\">\n"
+                       "  <objects>\n    <extrude name=\"e\" segments=\"1\">\n"
+                       "      <cross_section type=\"rect\"/>\n      <path type=\"bezier\">\n";
+    for (int i = 0; i < 4097; ++i)
+        xml += "        <point x=\"0\" y=\"" + std::to_string(i) + "\" z=\"0\"/>\n";
+    xml += "      </path>\n    </extrude>\n  </objects>\n</mc3>\n";
+
+    std::string what = loadExpectingThrow(xml);
+    check(!what.empty(), "4097 path <point> children exceeds the budget and is rejected");
+    check(what.find("point") != std::string::npos,
+          "rejection names the point-count budget, not an unrelated failure: " + what);
+
+    std::string okXml = "<mc3 version=\"0.3\" model=\"path-point-ok\">\n"
+                         "  <objects>\n    <extrude name=\"e\" segments=\"1\">\n"
+                         "      <cross_section type=\"rect\"/>\n      <path type=\"bezier\">\n";
+    for (int i = 0; i < 50; ++i)
+        okXml += "        <point x=\"0\" y=\"" + std::to_string(i) + "\" z=\"0\"/>\n";
+    okXml += "      </path>\n    </extrude>\n  </objects>\n</mc3>\n";
+    Mc3Document doc = load(okXml);
+    check(doc.objects.size() == 1 && doc.objects[0]->extrude &&
+          doc.objects[0]->extrude->path.points.size() == 50,
+          "50 path points (under budget) all load fine");
+}
+
 static void testMaxDocumentBytesBudget() {
     auto path = std::filesystem::temp_directory_path() / "mc3_document_budget_bytes_test.mc3.xml";
     {
@@ -372,6 +428,8 @@ int main() {
     testChildrenPerNodeBudget();
     testRecursionDepthAlreadyBounded();
     testDefinitionBudget();
+    testCrossSectionPointBudget();
+    testPathPointBudget();
     testMaxDocumentBytesBudget();
 
     if (failures == 0) { std::cout << "All document-budget tests passed.\n"; return 0; }

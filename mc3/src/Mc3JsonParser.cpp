@@ -334,9 +334,16 @@ Mc3CrossSection toCrossSection(const json& j) {
     if (j.contains("segments"))    cs.segments    = clampTess(j["segments"].get<int>(), 1);
     g_budget.chargeTessellation(cs.sides);
     g_budget.chargeTessellation(cs.segments);
+    // 2026-07-20 audit F6: mirrors Mc3XmlParser.cpp's own parseCrossSection()
+    // fix exactly -- unlike sides/segments above, this child list had no
+    // count cap at all.
     if (j.contains("customPoints")) {
-        for (const auto& pt : j["customPoints"])
+        for (const auto& pt : j["customPoints"]) {
+            if (static_cast<long long>(cs.customPoints.size()) >= kMaxTessellation)
+                throw std::runtime_error("MC3: crossSection exceeds the maximum "
+                    "customPoints count (" + std::to_string(kMaxTessellation) + ")");
             cs.customPoints.push_back({pt.at(0).get<float>(), pt.at(1).get<float>()});
+        }
     }
     return cs;
 }
@@ -357,8 +364,13 @@ Mc3ExtrudePath toPath(const json& j) {
     if (j.contains("helixRadius")) path.helixRadius = j["helixRadius"].get<float>();
     if (j.contains("helixHeight")) path.helixHeight = j["helixHeight"].get<float>();
     if (j.contains("helixTurns"))  path.helixTurns  = j["helixTurns"].get<float>();
+    // 2026-07-20 audit F6: mirrors Mc3XmlParser.cpp's own parsePath() fix
+    // exactly -- unbounded <path> point list.
     if (j.contains("points")) {
         for (const auto& pe : j["points"]) {
+            if (static_cast<long long>(path.points.size()) >= kMaxTessellation)
+                throw std::runtime_error("MC3: path exceeds the maximum points count (" +
+                    std::to_string(kMaxTessellation) + ")");
             Mc3PathPoint pt;
             if (pe.contains("position"))  pt.position  = toVec3(pe["position"]);
             if (pe.contains("controlIn")) pt.controlIn = toVec3(pe["controlIn"]);

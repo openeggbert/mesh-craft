@@ -272,6 +272,68 @@ static void testTotalObjectBudget() {
 // Max document bytes: kMaxDocumentBytes = 512MB -- checked against the raw
 // input size BEFORE json::parse() even attempts to parse it.
 // ---------------------------------------------------------------------------
+// ---------------------------------------------------------------------------
+// 2026-07-20 audit F6: crossSection.customPoints / path.points had no
+// count cap at all, mirroring Mc3XmlParser.cpp's own equivalent fix.
+// ---------------------------------------------------------------------------
+static void testCrossSectionPointBudget() {
+    std::string js = R"({"version":"0.3","model":"cs-point-budget","objects":[)"
+                      R"({"id":"e","type":"extrude","extrude":{"segments":1,)"
+                      R"("crossSection":{"type":"custom","customPoints":[)";
+    for (int i = 0; i < 4097; ++i) {
+        if (i) js += ",";
+        js += "[" + std::to_string(i) + ",0]";
+    }
+    js += R"(]},"path":{"type":"line"}}}]})";
+
+    std::string what = loadExpectingThrow(js);
+    check(!what.empty(), "4097 crossSection.customPoints entries exceeds the budget and is rejected");
+    check(what.find("customPoints") != std::string::npos || what.find("Points") != std::string::npos,
+          "rejection names the point-count budget, not an unrelated failure: " + what);
+
+    std::string okJs = R"({"version":"0.3","model":"cs-point-ok","objects":[)"
+                        R"({"id":"e","type":"extrude","extrude":{"segments":1,)"
+                        R"("crossSection":{"type":"custom","customPoints":[)";
+    for (int i = 0; i < 50; ++i) {
+        if (i) okJs += ",";
+        okJs += "[" + std::to_string(i) + ",0]";
+    }
+    okJs += R"(]},"path":{"type":"line"}}}]})";
+    Mc3Document doc = Mc3Document::loadFromJsonString(okJs);
+    check(doc.objects.size() == 1 && doc.objects[0]->extrude &&
+          doc.objects[0]->extrude->crossSection.customPoints.size() == 50,
+          "50 crossSection points (under budget) all load fine");
+}
+
+static void testPathPointBudget() {
+    std::string js = R"({"version":"0.3","model":"path-point-budget","objects":[)"
+                      R"({"id":"e","type":"extrude","extrude":{"segments":1,)"
+                      R"("crossSection":{"type":"rect"},"path":{"type":"bezier","points":[)";
+    for (int i = 0; i < 4097; ++i) {
+        if (i) js += ",";
+        js += R"({"position":[0,)" + std::to_string(i) + R"(,0]})";
+    }
+    js += "]}}}]}";
+
+    std::string what = loadExpectingThrow(js);
+    check(!what.empty(), "4097 path.points entries exceeds the budget and is rejected");
+    check(what.find("points") != std::string::npos,
+          "rejection names the point-count budget, not an unrelated failure: " + what);
+
+    std::string okJs = R"({"version":"0.3","model":"path-point-ok","objects":[)"
+                        R"({"id":"e","type":"extrude","extrude":{"segments":1,)"
+                        R"("crossSection":{"type":"rect"},"path":{"type":"bezier","points":[)";
+    for (int i = 0; i < 50; ++i) {
+        if (i) okJs += ",";
+        okJs += R"({"position":[0,)" + std::to_string(i) + R"(,0]})";
+    }
+    okJs += "]}}}]}";
+    Mc3Document doc = Mc3Document::loadFromJsonString(okJs);
+    check(doc.objects.size() == 1 && doc.objects[0]->extrude &&
+          doc.objects[0]->extrude->path.points.size() == 50,
+          "50 path points (under budget) all load fine");
+}
+
 static void testMaxDocumentBytesBudget() {
     auto path = std::filesystem::temp_directory_path() / "mc3_json_document_budget_bytes_test.mc3.json";
     {
@@ -310,6 +372,8 @@ int main() {
     testKeyframeBudget();
     testDefinitionBudget();
     testTotalObjectBudget();
+    testCrossSectionPointBudget();
+    testPathPointBudget();
     testMaxDocumentBytesBudget();
 
     if (failures == 0) { std::cout << "All JSON document-budget tests passed.\n"; return 0; }

@@ -540,7 +540,21 @@ static Mc3CrossSection parseCrossSection(const XMLElement* el) {
     cs.innerRadius = rejectNegative(el, "inner_radius", attrF(el, "inner_radius", 0.0f));
     cs.sides       = attrCountBudgeted(el, "sides",    6, 3);
     cs.segments    = attrCountBudgeted(el, "segments", 32, 1);
+    // 2026-07-20 audit F6: unlike every other tessellation-driving field on
+    // this element (sides/segments above, both attrCountBudgeted()), the
+    // <point> child-element count itself had no cap at all -- a hostile
+    // file could carry an unbounded <point> list, feeding directly into
+    // makeProfile() downstream (SceneRenderer_Extrude.cpp) whose own
+    // AUD-064/072 vertex-budget guards assume a bounded input list size,
+    // not just a bounded final vertex count. Same kMaxTessellation (4096)
+    // ceiling every other field here already uses.
     for (const XMLElement* p = el->FirstChildElement("point"); p; p = p->NextSiblingElement("point")) {
+        if (static_cast<long long>(cs.customPoints.size()) >= kMaxTessellation) {
+            std::string msg = "MC3: <cross_section> exceeds the maximum <point> count (" +
+                std::to_string(kMaxTessellation) + ")";
+            reportError(el, "point", msg);
+            throw std::runtime_error(msg);
+        }
         Mc3CrossSection::Point2D pt;
         pt.x = attrF(p, "x", 0);
         pt.y = attrF(p, "y", 0);
@@ -564,7 +578,16 @@ static Mc3ExtrudePath parsePath(const XMLElement* el) {
     path.helixRadius = rejectNegative(el, "radius", attrF(el, "radius", 0.5f));
     path.helixHeight = rejectNegative(el, "height", attrF(el, "height", 2.0f));
     path.helixTurns  = attrF(el, "turns",  4.0f);
+    // 2026-07-20 audit F6: same gap as parseCrossSection()'s <point> loop
+    // above, same fix -- an unbounded <path><point> list feeds directly
+    // into makePathFrames() downstream with no cap of its own.
     for (const XMLElement* p = el->FirstChildElement("point"); p; p = p->NextSiblingElement("point")) {
+        if (static_cast<long long>(path.points.size()) >= kMaxTessellation) {
+            std::string msg = "MC3: <path> exceeds the maximum <point> count (" +
+                std::to_string(kMaxTessellation) + ")";
+            reportError(el, "point", msg);
+            throw std::runtime_error(msg);
+        }
         Mc3PathPoint pt;
         pt.position = {attrF(p,"x",0), attrF(p,"y",0), attrF(p,"z",0)};
         pt.controlIn = {attrF(p,"cx",0), attrF(p,"cy",0), attrF(p,"cz",0)};
