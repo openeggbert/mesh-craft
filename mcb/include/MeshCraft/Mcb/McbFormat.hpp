@@ -17,7 +17,17 @@ inline constexpr uint8_t  MCB_VERSION  = 1;
 inline constexpr uint8_t  MCB_MIN_SUPPORTED_VERSION = 1;
 
 // Flags byte (offset 5 in header)
-inline constexpr uint8_t  MCB_FLAG_COMPRESSED = 0x01; // zlib payload (not yet implemented)
+//
+// SYS-W14-25 (2026-07-20): when set, the header's 2 reserved bytes are
+// followed by two little-endian uint32 fields (uncompressed payload size,
+// compressed payload size) and then the zlib (deflate)-compressed payload
+// itself, instead of the plain TAG_OBJ + document bytes an unset flag
+// means. See McbWriter::saveToBinary's `compress` parameter / McbReader's
+// loadFromBinaryImpl. Requires this build to have been compiled with zlib
+// available (mcb/CMakeLists.txt's `find_package(ZLIB)`) -- writing throws
+// if compression is requested without it; reading a compressed file
+// throws a distinct "requires zlib" error rather than misparsing it.
+inline constexpr uint8_t  MCB_FLAG_COMPRESSED = 0x01;
 
 // Type tags
 inline constexpr uint8_t TAG_NULL    = 0x00; // absent optional — no data bytes

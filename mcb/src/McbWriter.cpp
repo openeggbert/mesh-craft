@@ -19,8 +19,14 @@
 #include <cstring>
 #include <fstream>
 #include <ostream>
+#include <sstream>
 #include <stdexcept>
 #include <string>
+#include <vector>
+
+#ifdef MESHCRAFT_HAS_ZLIB
+#include <zlib.h>
+#endif
 
 namespace MeshCraft::Mcb {
 
@@ -631,19 +637,65 @@ static void writeDocument(std::ostream& o, const Mc3::Mc3Document& doc) {
 }
 
 // ---------------------------------------------------------------------------
+// SYS-W14-25: zlib (deflate) compression of the document payload
+// ---------------------------------------------------------------------------
+
+#ifdef MESHCRAFT_HAS_ZLIB
+// One-shot in-memory compress via zlib's compress2() -- the whole document
+// payload is already fully materialized in `raw` (a legitimate mc3 scene is
+// at most tens of MB, never a streaming-scale workload), so the simpler
+// one-shot API is appropriate here, not the incremental deflate()/inflate()
+// streaming loop zlib also offers.
+static std::vector<uint8_t> zlibCompress(const std::string& raw) {
+    uLongf destLen = compressBound(static_cast<uLong>(raw.size()));
+    std::vector<uint8_t> dest(destLen);
+    int rc = compress2(dest.data(), &destLen,
+                       reinterpret_cast<const Bytef*>(raw.data()),
+                       static_cast<uLong>(raw.size()), Z_BEST_COMPRESSION);
+    if (rc != Z_OK)
+        throw std::runtime_error("MCB: zlib compression failed (code " + std::to_string(rc) + ")");
+    dest.resize(destLen);
+    return dest;
+}
+#endif
+
+// ---------------------------------------------------------------------------
 // Public API
 // ---------------------------------------------------------------------------
 
-void saveToBinary(const Mc3::Mc3Document& doc, std::ostream& out) {
+void saveToBinary(const Mc3::Mc3Document& doc, std::ostream& out, bool compress) {
     out.write(MCB_MAGIC, 4);
     wU8(out, MCB_VERSION);
+
+    if (compress) {
+#ifdef MESHCRAFT_HAS_ZLIB
+        std::ostringstream payload(std::ios::binary);
+        wU8(payload, TAG_OBJ);
+        writeDocument(payload, doc);
+        const std::string raw = payload.str();
+
+        const std::vector<uint8_t> compressed = zlibCompress(raw);
+
+        wU8(out, MCB_FLAG_COMPRESSED);
+        wU8(out, 0); wU8(out, 0); // reserved
+        wU32(out, static_cast<uint32_t>(raw.size()));        // uncompressed payload size
+        wU32(out, static_cast<uint32_t>(compressed.size())); // compressed payload size
+        out.write(reinterpret_cast<const char*>(compressed.data()),
+                  static_cast<std::streamsize>(compressed.size()));
+        return;
+#else
+        throw std::runtime_error(
+            "MCB: compression requested but this build was compiled without zlib support");
+#endif
+    }
+
     wU8(out, 0); // no compression
     wU8(out, 0); wU8(out, 0); // reserved
     wU8(out, TAG_OBJ);
     writeDocument(out, doc);
 }
 
-void saveToFile(const Mc3::Mc3Document& doc, const std::filesystem::path& path) {
+void saveToFile(const Mc3::Mc3Document& doc, const std::filesystem::path& path, bool compress) {
     // AUDIT-0019: write to a sibling temp file and rename over the real
     // destination only after a fully successful write, so a crash/disk-full/
     // permission failure mid-write can never leave a truncated or corrupt
@@ -654,7 +706,7 @@ void saveToFile(const Mc3::Mc3Document& doc, const std::filesystem::path& path) 
     {
         std::ofstream f(tmpPath, std::ios::binary | std::ios::trunc);
         if (!f) throw std::runtime_error("Cannot open for writing: " + tmpPath.string());
-        saveToBinary(doc, f);
+        saveToBinary(doc, f, compress);
         if (!f) {
             f.close();
             std::error_code ec;

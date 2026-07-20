@@ -960,14 +960,43 @@ Mc3::Mc3Document doc2 = MeshCraft::Mcb::loadFromFile("scene.mcb");
 |--------|------|-------|-------|
 | 0 | 4 bytes | Magic | `"MCB\0"` |
 | 4 | 1 byte | Version | Currently `1` (`MCB_VERSION`); readers reject any other value |
-| 5 | 1 byte | Flags | Bit 0 = compressed payload — **defined but not implemented**; a reader throws if this bit is set |
+| 5 | 1 byte | Flags | Bit 0 = compressed payload (`SYS-W14-25`, 2026-07-20 — see below) |
 | 6-7 | 2 bytes | Reserved | Always `0` |
+| 8+ | — | Payload | See below — layout depends on the Flags byte |
+
+**Uncompressed (flags bit 0 unset, the default):**
+
+| Offset | Size | Field | Notes |
+|--------|------|-------|-------|
 | 8 | 1 byte | Root tag | Always `TAG_OBJ` (`0x07`) |
-| 9+ | — | Payload | The document as a tagged key/value tree (see below) |
+| 9+ | — | Document | The document as a tagged key/value tree (see below) |
+
+**Compressed (flags bit 0 set):**
+
+| Offset | Size | Field | Notes |
+|--------|------|-------|-------|
+| 8 | 4 bytes | Uncompressed size | uint32 LE, byte length of the decompressed document payload (root tag + document) |
+| 12 | 4 bytes | Compressed size | uint32 LE, byte length of the zlib-deflated bytes that follow |
+| 16+ | — | Compressed bytes | zlib (deflate) compression, at `Z_BEST_COMPRESSION`, of `[TAG_OBJ byte][document payload]` |
+
+`MeshCraft::Mcb::saveToBinary(doc, out, /*compress=*/true)` opts into
+the compressed layout (default `false` — writes the uncompressed
+layout, byte-for-byte the same as before this option existed).
+`loadFromBinary`/`loadFromFile` transparently detect and decompress
+either layout via the flags byte — callers never need to know which
+one a given `.mcb` file uses. Requires this build to have been compiled
+with zlib available (`mcb/CMakeLists.txt`'s `find_package(ZLIB)`,
+optional — see `THIRD_PARTY.md`); `compress=true` throws a clear error
+if zlib is unavailable, and reading a compressed file throws a distinct
+"requires zlib" error rather than misparsing it. The claimed
+uncompressed/compressed sizes are each validated against a 512MB sanity
+ceiling before being used to size any buffer — the same zip-bomb
+defense already applied to every other length-prefixed field in this
+reader (`kMcbMaxStringLen`/`kMcbMaxCollectionCount`).
 
 **Payload encoding:** every value is a 1-byte type tag followed by its data — `TAG_BOOL`/`TAG_I32`/`TAG_F32` (fixed-size), `TAG_STR` (uint32 length + UTF-8 bytes, no null terminator), `TAG_VEC3`/`TAG_VEC4` (3 or 4 float32), `TAG_OBJ` (key/value pairs terminated by a zero-length key), `TAG_ARR` (uint32 count + that many tagged values), `TAG_MAP` (uint32 count + that many `STR key` + tagged value pairs). Every `Mc3Document` field (objects, materials, textures, definitions, scripts, sounds, music, triggers, states, meta, etc. — including all N1-N7 extensions) is written under a string key matching its XML element/attribute name, so the two formats stay structurally parallel.
 
-**Relationship to `.mc3.xml`:** MCB is a runtime-loading optimization, not an authoring format — there is no MCB-specific editor UI; you edit `.mc3.xml` and convert to `.mcb` as a build/export step (or open a `.mcb` directly, which the app transparently round-trips through the same `Mc3Document` model). Compression (flags bit 0) is reserved in the header for a future zlib payload but not implemented — an MCB file with that bit set cannot currently be read.
+**Relationship to `.mc3.xml`:** MCB is a runtime-loading optimization, not an authoring format — there is no MCB-specific editor UI; you edit `.mc3.xml` and convert to `.mcb` as a build/export step (or open a `.mcb` directly, which the app transparently round-trips through the same `Mc3Document` model). Compression (flags bit 0) is opt-in via `saveToBinary`/`saveToFile`'s `compress` parameter — there is no editor UI toggle for it (out of scope for `SYS-W14-25`); a compressed `.mcb` produced by another caller still loads transparently through the normal `loadFromFile()` path either way.
 
 ---
 

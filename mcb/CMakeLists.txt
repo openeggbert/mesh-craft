@@ -58,6 +58,24 @@ target_include_directories(Mcb
 
 target_link_libraries(Mcb PUBLIC Mc3)
 
+# SYS-W14-25 (2026-07-20): zlib (deflate) support for MCB's reserved
+# compression flag (McbFormat.hpp's MCB_FLAG_COMPRESSED) -- optional, not
+# REQUIRED, matching the same "guarded, graceful absence" pattern the root
+# CMakeLists.txt already uses for SQLite3/OpenSSL/LibXml2: an environment or
+# cross-compile toolchain without a zlib dev package still builds Mcb fine,
+# it just can't write with compress=true, and correctly refuses (rather than
+# misparses) a compressed file it's asked to read. MESHCRAFT_HAS_ZLIB is
+# PUBLIC so any translation unit that sees McbWriter.hpp/McbReader.cpp's
+# #ifdef-guarded code paths agrees on whether zlib support is compiled in.
+find_package(ZLIB)
+if(ZLIB_FOUND)
+    target_link_libraries(Mcb PUBLIC ZLIB::ZLIB)
+    target_compile_definitions(Mcb PUBLIC MESHCRAFT_HAS_ZLIB=1)
+    message(STATUS "zlib found: MCB compression (SYS-W14-25) enabled")
+else()
+    message(STATUS "zlib not found -- MCB compression (SYS-W14-25) unavailable at runtime")
+endif()
+
 # AUD-054/AUD-055: Mcb (the binary reader/writer -- untrusted-input parsing
 # surface) previously had no warning flags at all.
 target_compile_options(Mcb PRIVATE -Wall -Wextra)
@@ -173,6 +191,17 @@ if(BUILD_TESTING)
     target_link_libraries(mcb_random_roundtrip_test PRIVATE Mcb)
     add_test(NAME mcb_random_roundtrip COMMAND mcb_random_roundtrip_test)
     set_tests_properties(mcb_random_roundtrip PROPERTIES TIMEOUT 30 LABELS "format")
+
+    # SYS-W14-25 (2026-07-20): real zlib compression for MCB_FLAG_COMPRESSED
+    # -- round-trip correctness, actual size reduction, and the zip-bomb
+    # defenses (claimed uncompressed/compressed size sanity ceilings,
+    # truncated/corrupted payload).
+    add_executable(mcb_compression_test
+        test/compression_test.cpp
+    )
+    target_link_libraries(mcb_compression_test PRIVATE Mcb)
+    add_test(NAME mcb_compression COMMAND mcb_compression_test)
+    set_tests_properties(mcb_compression PROPERTIES TIMEOUT 15 LABELS "format")
 
     # SYS-W11-05: opt-in libFuzzer harness (see the MESHCRAFT_FUZZ block near
     # the top of this file). Deliberately NOT registered as a ctest test --

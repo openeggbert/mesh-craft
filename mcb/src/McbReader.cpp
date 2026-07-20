@@ -25,9 +25,14 @@
 #include <istream>
 #include <map>
 #include <memory>
+#include <sstream>
 #include <stdexcept>
 #include <string>
 #include <vector>
+
+#ifdef MESHCRAFT_HAS_ZLIB
+#include <zlib.h>
+#endif
 
 namespace MeshCraft::Mcb {
 
@@ -256,6 +261,49 @@ static uint32_t rU32Bounded(std::istream& in) {
     }
     return n;
 }
+
+// ---------------------------------------------------------------------------
+// SYS-W14-25: zlib (deflate) decompression of a compressed document payload
+// ---------------------------------------------------------------------------
+//
+// Same zip-bomb defense as every other length-prefixed field in this reader
+// (kMcbMaxStringLen/kMcbMaxCollectionCount above): the claimed *uncompressed*
+// size is checked against a sanity ceiling BEFORE it is used to size the
+// decompression output buffer -- a tiny malicious/corrupted file (a valid
+// header + one absurd uncompressed-size claim) must not force a multi-GB
+// allocation before decompression even starts. 512 MB is generous for any
+// legitimate mc3 scene (which is already sanity-capped well below that by
+// kMcbMaxStringLen/kMcbMaxCollectionCount on every field within it).
+static constexpr uint32_t kMcbMaxUncompressedPayload = 512u * 1024u * 1024u; // 512 MB
+static constexpr uint32_t kMcbMaxCompressedPayload   = 512u * 1024u * 1024u; // 512 MB
+
+#ifdef MESHCRAFT_HAS_ZLIB
+// Decompresses exactly `uncompressedSize` bytes via zlib's uncompress() --
+// the destination buffer is pre-sized to the claimed size (already sanity-
+// checked by the caller), so a compressed stream that would inflate to MORE
+// than it claims fails with Z_BUF_ERROR (destination too small) rather than
+// silently over-running or growing unbounded; one that inflates to LESS
+// fails because destLen won't match uncompressedSize on return.
+static std::string zlibDecompress(const std::vector<uint8_t>& compressed, uint32_t uncompressedSize) {
+    std::string raw(uncompressedSize, '\0');
+    uLongf destLen = uncompressedSize;
+    int rc = uncompress(reinterpret_cast<Bytef*>(raw.data()), &destLen,
+                        compressed.data(), static_cast<uLong>(compressed.size()));
+    if (rc != Z_OK) {
+        std::string msg = "MCB: zlib decompression failed (code " + std::to_string(rc) +
+            ") -- corrupted or malicious file?";
+        reportError("flags", msg);
+        throw std::runtime_error(msg);
+    }
+    if (destLen != uncompressedSize) {
+        std::string msg = "MCB: decompressed size (" + std::to_string(destLen) +
+            ") does not match the claimed size (" + std::to_string(uncompressedSize) + ")";
+        reportError("flags", msg);
+        throw std::runtime_error(msg);
+    }
+    return raw;
+}
+#endif
 
 // rU32Bounded above only proves a claimed count is under kMcbMaxCollectionCount
 // (10M) -- it is not a promise the stream actually CONTAINS that many
@@ -1408,11 +1456,57 @@ static Mc3::Mc3Document loadFromBinaryImpl(std::istream& in) {
         throw std::runtime_error(msg);
     }
     uint8_t flags = rU8(in);
+
+    // SYS-W14-25: compressed payload -- read the (sanity-capped) claimed
+    // uncompressed/compressed sizes, pull exactly that many compressed bytes
+    // off `in`, decompress into a memory buffer, then parse the document
+    // from an istringstream over that buffer via the exact same
+    // rootTag+readDocument() path the uncompressed branch below uses.
     if (flags & MCB_FLAG_COMPRESSED) {
-        std::string msg = "MCB: compressed format not yet supported";
+#ifdef MESHCRAFT_HAS_ZLIB
+        rU8(in); rU8(in); // reserved
+        uint32_t uncompressedSize = rU32(in);
+        if (uncompressedSize > kMcbMaxUncompressedPayload) {
+            std::string msg = "MCB: claimed uncompressed size " + std::to_string(uncompressedSize) +
+                " exceeds sanity limit (corrupted or malicious file?)";
+            reportError("flags", msg);
+            throw std::runtime_error(msg);
+        }
+        uint32_t compressedSize = rU32(in);
+        if (compressedSize > kMcbMaxCompressedPayload) {
+            std::string msg = "MCB: claimed compressed size " + std::to_string(compressedSize) +
+                " exceeds sanity limit (corrupted or malicious file?)";
+            reportError("flags", msg);
+            throw std::runtime_error(msg);
+        }
+        std::vector<uint8_t> compressed(compressedSize);
+        if (compressedSize > 0 &&
+            !in.read(reinterpret_cast<char*>(compressed.data()), compressedSize)) {
+            std::string msg = "MCB: compressed payload truncated";
+            reportError("flags", msg);
+            throw std::runtime_error(msg);
+        }
+
+        std::string raw = zlibDecompress(compressed, uncompressedSize);
+        std::istringstream payloadIn(raw, std::ios::binary);
+
+        uint8_t rootTag = rU8(payloadIn);
+        if (rootTag != TAG_OBJ) {
+            std::string msg = "MCB: root is not an object";
+            reportError("root", msg);
+            throw std::runtime_error(msg);
+        }
+        Mc3::Mc3Document doc = readDocument(payloadIn);
+        if (version != MCB_VERSION) applyMcbUpgrades(doc, version);
+        return doc;
+#else
+        std::string msg = "MCB: compressed format requires zlib, but this build was "
+                          "compiled without it";
         reportError("flags", msg);
         throw std::runtime_error(msg);
+#endif
     }
+
     rU8(in); rU8(in); // reserved
 
     // Root must be TAG_OBJ

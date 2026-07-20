@@ -147,10 +147,11 @@ still internally consistent.
    half (live-viewport half documented as blocked on a CNA API gap, see
    its own row). The `colorSpace`-unused-at-export gap (P3) is now done
    too (slot-mismatch warning), and so is UV mapping box/sphere
-   projection (P3, exporter-side triplanar/equirectangular generation).
-   **SYS-W14-25..27** (P3) — remaining smaller format-vs-editor
-   completeness gaps (MCB compression, light-brightness unit conversion,
-   ambient-light export). Independent, small, good
+   projection (P3, exporter-side triplanar/equirectangular generation)
+   and MCB compression (P3, real zlib support, user picked "implement").
+   **SYS-W14-26..27** (P3) — remaining smaller format-vs-editor
+   completeness gaps (light-brightness unit conversion, ambient-light
+   export). Independent, small, good
    filler/warm-up tasks between the larger items above.
 
 ---
@@ -1359,7 +1360,7 @@ _All items in this workstream are DONE — archived to [`docs/history/plan_20260
   rewording the comments, not by suppressing the check. Full rebuild +
   160/160 `ctest` (unchanged count -- extended existing tests, not new
   ones).
-- **SYS-W14-25** `[TODO]` `P3` — MCB compression reserved but never
+- **SYS-W14-25** `[DONE]` `P3` — MCB compression reserved but never
   implemented. `McbWriter.cpp:640` always writes the compression byte as
   `0` (no compression); `McbReader.cpp:1412` throws "compressed format
   not yet supported" if it's ever nonzero -- so the reader's own
@@ -1369,6 +1370,53 @@ _All items in this workstream are DONE — archived to [`docs/history/plan_20260
   the sanity-limit philosophy already used elsewhere in this reader) or
   remove the reserved byte/exception entirely if compression is not
   actually planned, rather than leaving a half-declared feature.
+  User picked "implement real compression (zlib)".
+  **Implementation:** `saveToBinary`/`saveToFile` (`McbWriter.hpp`/`.cpp`)
+  gained an opt-in `bool compress = false` parameter (default preserves
+  every existing caller's output byte-for-byte) -- when true, the document
+  payload is serialized into an in-memory buffer, zlib-`compress2()`'d at
+  `Z_BEST_COMPRESSION`, and written as `flags=MCB_FLAG_COMPRESSED` +
+  `reserved(2)` + `uncompressedSize(u32)` + `compressedSize(u32)` +
+  compressed bytes, instead of the plain `flags=0` + `TAG_OBJ` + document
+  bytes an unset flag means -- the 8-byte magic/version/flags/reserved
+  prefix itself is byte-identical either way, so old readers still
+  correctly recognize a compressed file by its flags byte rather than
+  misparsing it. `McbReader.cpp`'s `loadFromBinaryImpl()` reads the two
+  size fields (each validated against a 512MB sanity ceiling BEFORE being
+  used to size any buffer -- the same zip-bomb defense philosophy as
+  `kMcbMaxStringLen`/`kMcbMaxCollectionCount` elsewhere in this reader,
+  applied to the new claimed-uncompressed/claimed-compressed-size fields),
+  reads exactly that many compressed bytes, `uncompress()`s them (erroring
+  if the actual decompressed size doesn't match what was claimed -- not
+  just trusting zlib's return code alone), and parses the document from an
+  `istringstream` over the result via the exact same rootTag+`readDocument()`
+  path the uncompressed branch already used. `mcb/CMakeLists.txt` gained
+  `find_package(ZLIB)`, guarded exactly like the root CMakeLists.txt's own
+  SQLite3/OpenSSL/LibXml2 blocks (optional, not `REQUIRED` -- a toolchain
+  without zlib still builds `Mcb` fine, `compress=true` throws a clear
+  "this build was compiled without zlib support" error instead, and
+  reading a compressed file throws a distinct "requires zlib" error
+  instead of misparsing it). No editor UI wiring (a compression toggle in
+  the Save-As-MCB dialog) -- out of scope; the task's own outcome text
+  was about the reader/writer capability itself, not UI exposure.
+  **Tests:** new `mcb/test/compression_test.cpp` (`mcb_compression`
+  ctest, guarded `#ifdef MESHCRAFT_HAS_ZLIB` with a SKIP fallback,
+  matching `mc3_registry_test.cpp`'s established pattern for optional
+  system deps) -- round-trip correctness, the flags byte actually
+  reflecting compression, real measured size reduction on a repetitive
+  document, and 4 zip-bomb/corruption defenses (oversized claimed
+  uncompressed size, oversized claimed compressed size, truncated
+  payload, corrupted deflate bytes). Updated the pre-existing
+  `mcb_roundtrip_test.cpp` `testCompressedFlagRejected` (AUD-019) -- its
+  hand-crafted "compressed flag set" fixture predates the new
+  size-prefix fields the real format now requires, so it's genuinely
+  malformed now rather than merely "unimplemented"; split into a
+  zlib-available variant (still fails safely, now via "unexpected end of
+  stream" while reading the missing size fields, plus a new sibling test
+  proving a PROPERLY-shaped compressed document loads successfully) and
+  a no-zlib variant (fails via a distinct "requires zlib" message) so
+  AUD-019's "clear error, not silent misread" guarantee is verified in
+  both build configurations. Full rebuild + 161/161 `ctest` (was 160).
 - **SYS-W14-26** `[TODO]` `P3` — Light brightness sent to glTF without
   physical unit conversion. `GltfExporter.cpp:1040` sets
   `intensity = light.brightness` identically for Directional/Point/Spot,

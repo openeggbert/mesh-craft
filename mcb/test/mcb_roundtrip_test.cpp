@@ -1082,19 +1082,88 @@ static void testVersionAboveCurrentRejected() {
           "know) is rejected, not silently misparsed (AUDIT-0038)");
 }
 
-// AUD-019: MCB_FORMAT.md documents that a file with MCB_FLAG_COMPRESSED set
-// is "rejected with a clear error, not silently misread" -- a guarantee
-// that had never actually been exercised by a test (only that the WRITER
-// never sets the bit, via testSmoke's flags==0 check). Hand-write an
-// otherwise-valid, empty-document header with that bit set and confirm the
-// reader takes the documented reject path.
-static void testCompressedFlagRejected() {
+// AUD-019 / SYS-W14-25 (2026-07-20): MCB_FORMAT.md documents that a file
+// with MCB_FLAG_COMPRESSED set is "rejected with a clear error, not
+// silently misread" if it can't actually be decoded. That guarantee
+// predates real compression support -- back then EVERY compressed-flagged
+// file was rejected outright ("not yet supported"), so this test only ever
+// needed to prove the flag bit itself was checked. Now that
+// McbWriter/McbReader actually implement MCB_FLAG_COMPRESSED when this
+// build was compiled with zlib available (mcb/test/compression_test.cpp
+// covers the real round-trip/zip-bomb-defense/corruption behavior
+// exhaustively), the exact rejection reason for a malformed
+// compressed-flagged file now depends on that build configuration -- see
+// the two variants below.
+#ifdef MESHCRAFT_HAS_ZLIB
+// zlib available: a compressed-flagged file with no compressed payload
+// behind it -- as this hand-crafted one still is, it jumps straight from
+// the flags/reserved bytes to TAG_OBJ+rawEnd() with none of the new
+// uncompressedSize/compressedSize header fields the real format now
+// requires -- is malformed, not merely "unimplemented", and must still
+// fail safely (a clean exception, not a crash or garbage document) rather
+// than silently misreading those bytes as something else.
+static void testMalformedCompressedHeaderRejected() {
     std::ostringstream out(std::ios::binary);
     out.write(MCB_MAGIC, 4);
     rawU8(out, MCB_VERSION);
     rawU8(out, MCB_FLAG_COMPRESSED); // flags
     rawU8(out, 0); rawU8(out, 0);    // reserved
-    rawU8(out, TAG_OBJ);             // root document object
+    rawU8(out, TAG_OBJ);             // NOT a real compressed payload anymore --
+    rawEnd(out);                     // too short to be the required size-prefix fields
+
+    std::istringstream in(out.str(), std::ios::binary);
+    bool threw = false;
+    std::string what;
+    try {
+        Mc3Document rt = loadFromBinary(in);
+        (void)rt;
+    } catch (const std::exception& e) {
+        threw = true;
+        what = e.what();
+    }
+    CHECK(threw, "malformed compressed header: throws, instead of being silently "
+          "misread as something else");
+    CHECK(what.find("unexpected end of stream") != std::string::npos,
+          "malformed compressed header: fails while trying to read the missing "
+          "size-prefix fields (got: " + what + ")");
+}
+
+// A PROPERLY-shaped compressed empty document (the real header format:
+// flags + reserved + uncompressedSize + compressedSize + zlib-deflated
+// payload, as McbWriter::saveToBinary(doc, out, true) now actually
+// produces) round-trips successfully -- the flag is no longer a
+// guaranteed-reject path when the file is genuinely well-formed.
+static void testCompressedEmptyDocumentRoundtrips() {
+    Mc3Document doc;
+    doc.model = "CompressedEmpty";
+    std::ostringstream out(std::ios::binary);
+    saveToBinary(doc, out, /*compress=*/true);
+    std::istringstream in(out.str(), std::ios::binary);
+
+    bool threw = false;
+    Mc3Document loaded;
+    try {
+        loaded = loadFromBinary(in);
+    } catch (const std::exception&) {
+        threw = true;
+    }
+    CHECK(!threw, "a properly-formed compressed document loads without error");
+    CHECK(loaded.model == "CompressedEmpty",
+          "a properly-formed compressed document's content survives the round-trip");
+}
+#else
+// zlib NOT available in this build: ANY compressed-flagged file, malformed
+// or not, is rejected immediately with a distinct "requires zlib" error --
+// before ever attempting to read the (in this build, irrelevant)
+// size-prefix fields. Still satisfies AUD-019's "clear error, not silent
+// misread" guarantee, just via a different, build-appropriate reason.
+static void testCompressedFlagRequiresZlibRejected() {
+    std::ostringstream out(std::ios::binary);
+    out.write(MCB_MAGIC, 4);
+    rawU8(out, MCB_VERSION);
+    rawU8(out, MCB_FLAG_COMPRESSED); // flags
+    rawU8(out, 0); rawU8(out, 0);    // reserved
+    rawU8(out, TAG_OBJ);
     rawEnd(out);
 
     std::istringstream in(out.str(), std::ios::binary);
@@ -1107,12 +1176,13 @@ static void testCompressedFlagRejected() {
         threw = true;
         what = e.what();
     }
-    CHECK(threw, "compressed flag: a file with MCB_FLAG_COMPRESSED set throws, "
-          "instead of being silently misread as an uncompressed payload");
-    CHECK(what.find("compressed format not yet supported") != std::string::npos,
-          "compressed flag: the error message names the documented reason "
+    CHECK(threw, "compressed flag (no zlib in this build): throws, instead of being "
+          "silently misread as an uncompressed payload");
+    CHECK(what.find("requires zlib") != std::string::npos,
+          "compressed flag (no zlib in this build): the error names the reason "
           "(got: " + what + ")");
 }
+#endif
 
 static void testHugeStringLengthRejectedCleanly() {
     std::ostringstream out(std::ios::binary);
@@ -1457,7 +1527,12 @@ int main() {
     testDeeplyNestedChildrenDoesNotCrash();
     testVersionBelowMinSupportedRejected();
     testVersionAboveCurrentRejected();
-    testCompressedFlagRejected();
+#ifdef MESHCRAFT_HAS_ZLIB
+    testMalformedCompressedHeaderRejected();
+    testCompressedEmptyDocumentRoundtrips();
+#else
+    testCompressedFlagRequiresZlibRejected();
+#endif
     testHugeStringLengthRejectedCleanly();
     testHugeCollectionCountRejectedCleanly();
     testFileSizeSmallerThanXml();

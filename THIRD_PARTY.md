@@ -32,6 +32,7 @@ own third-party notices.
 | [SQLite3](https://sqlite.org/) | Public domain | Model Registry (`ModelRegistry.cpp`) | System package (`libsqlite3-dev` on Debian/Ubuntu); desktop builds only — stubbed out on Emscripten/Android |
 | [OpenSSL](https://openssl.org/) | Apache-2.0 (3.x) | AI Assistant's HTTPS transport (via cpp-httplib) | System package; desktop builds only |
 | [LibXml2](http://xmlsoft.org/) | MIT | AI-response XSD validation (`AiResponseAlgorithms.hpp`, STAB-0391) | System package; optional — degrades gracefully to no-op validation if absent |
+| [zlib](https://zlib.net/) | zlib | MCB binary format compression (`McbFormat.hpp`'s `MCB_FLAG_COMPRESSED`, `mcb/CMakeLists.txt`, SYS-W14-25) | System package (`zlib1g-dev` on Debian/Ubuntu); optional — `saveToBinary(..., compress=true)` throws and reading a compressed file throws a distinct "requires zlib" error if absent, rather than either silently no-op'ing or hard-blocking the whole build |
 | [SDL3](https://www.libsdl.org/) | zlib | Windowing/input/audio (via **CNA**, below) | Not fetched directly by this repo — provided as a build product of the sibling `cna` repo |
 
 ## Sibling repositories (not vendored, checked out alongside `mesh-craft/`)
