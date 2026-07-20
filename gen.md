@@ -157,6 +157,34 @@ Optional child elements on any object: `<deform scale="X Y Z"/>` `<uv_mapping pr
 ```
 `axis` = normal direction (`y` = horizontal ground plane).
 
+### `<torus>`
+```xml
+<torus name="Ring" major_radius="0.35" minor_radius="0.15" segments="32" position="0 1 0" material="mat"/>
+```
+
+### `<capsule>`
+```xml
+<capsule name="Pill" radius="0.5" height="1.0" segments="32" axis="y" position="0 1 0" material="mat"/>
+```
+`axis`: `x` | `y` (default) | `z`
+
+### `<disk>`
+```xml
+<disk name="Coin" radius="0.5" inner_radius="0" segments="32" axis="y" position="0 0 0" material="mat"/>
+```
+`inner_radius` (default `0` = solid; > 0 makes an annulus/ring).
+
+### `<grid>`
+```xml
+<grid name="Terrain" size="10 1 10" subdivisions_x="4" subdivisions_z="4" position="0 0 0" material="grass"/>
+```
+
+### `<icosphere>`
+```xml
+<icosphere name="Rock" radius="0.5" segments="2" position="0 1 0" material="mat"/>
+```
+`segments` here is subdivision level (default `2`), unlike the tessellation-count meaning it has on the other primitives above.
+
 ### `<mesh>` (external file)
 ```xml
 <mesh name="Chair" src="assets/chair.obj" position="2 0 1" material="wood"/>
