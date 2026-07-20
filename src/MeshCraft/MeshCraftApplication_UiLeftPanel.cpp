@@ -698,6 +698,19 @@ void MeshCraftApplication::drawLeftPanel(float panelY, float panelH)
                         pushUndoTex(); tex.colorSpace = spaces[sidx]; modified_ = true; updateWindowTitle();
                     }
                 }
+
+                // F21 (2026-07-20 audit): mipMaps parses/round-trips
+                // correctly (XML/JSON/MCB) but had no editor UI at all --
+                // the only way to change it was hand-editing the file.
+                // (Not currently read by SceneRenderer.cpp or
+                // GltfExporter.cpp -- grepped, zero hits outside the
+                // parsers/writers -- so this doesn't yet affect rendering
+                // or export; still worth exposing since it's a real,
+                // documented per-texture field a user/AI can legitimately
+                // author and expect to edit.)
+                if (ImGui::Checkbox("Mip Maps", &tex.mipMaps)) {
+                    pushUndoTex(); modified_ = true; updateWindowTitle();
+                }
             }
 
             // STAB-0703: SVG textures (N1, doc.svgTextures) previously had
