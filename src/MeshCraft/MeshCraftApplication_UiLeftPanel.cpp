@@ -2211,6 +2211,42 @@ void MeshCraftApplication::drawLeftPanel(float panelY, float panelH)
                     ImGui::SetClipboardText(selectedSceneStateKey_.c_str());
                 ImGui::TextUnformatted(selectedSceneStateKey_.c_str());
 
+                // SYS-W14-20 (2026-07-20 audit): states were fully
+                // editable but selecting/applying one never touched the
+                // live document_ objects -- there was no runtime "apply
+                // state" logic at all, only the round-tripped overrides
+                // data. Writes each override's set fields onto the
+                // matching live object (by id), so state transitions
+                // ("day"/"night" etc.) become previewable in the editor
+                // itself, not just stored data.
+                if (ImGui::Button("\xe2\x96\xb6 Apply State", ImVec2(-1, 0))) {
+                    bool anyResolvable = false;
+                    for (const auto& ov : state.overrides)
+                        if (flatFindById(ov.id)) { anyResolvable = true; break; }
+                    if (anyResolvable) pushUndo();
+
+                    int applied = 0, missing = 0;
+                    for (const auto& ov : state.overrides) {
+                        Mc3::Mc3Object* obj = flatFindById(ov.id);
+                        if (!obj) { ++missing; continue; }
+                        if (ov.visible.has_value())  obj->visible = *ov.visible;
+                        if (ov.position.has_value()) obj->transform.position = *ov.position;
+                        if (ov.rotation.has_value()) obj->transform.rotation = *ov.rotation;
+                        if (ov.material.has_value()) obj->material = *ov.material;
+                        ++applied;
+                    }
+                    if (applied > 0) { modified_ = true; updateWindowTitle(); }
+
+                    std::string msg = "State '" + selectedSceneStateKey_ + "' applied: " +
+                        std::to_string(applied) + " object" + (applied == 1 ? "" : "s") + " updated";
+                    if (missing > 0)
+                        msg += ", " + std::to_string(missing) + " skipped (object id not found)";
+                    setStatusMsg(msg, /*isError=*/missing > 0);
+                }
+                if (ImGui::IsItemHovered())
+                    ImGui::SetTooltip("Writes this state's overrides onto the matching live "
+                                       "objects (by id), right now");
+
                 ImGui::Spacing();
                 ImGui::TextDisabled("Object Overrides");
 

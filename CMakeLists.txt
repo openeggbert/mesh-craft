@@ -948,6 +948,19 @@ if(MESH_CRAFT_BUILD_TESTING AND UNIX AND NOT ANDROID AND NOT EMSCRIPTEN)
     add_test(NAME trigger_fire COMMAND trigger_fire_test)
     set_tests_properties(trigger_fire PROPERTIES TIMEOUT 15 LABELS "unit")
 
+    # SYS-W14-20 (2026-07-20): the States tab's new "Apply State" action --
+    # actually writes a scene state's overrides onto the matching live
+    # objects instead of states being purely round-tripped data with no
+    # way to preview them. CNA-free mirror (MeshCraftApplication is not
+    # headlessly instantiable), matching trigger_fire_test's own pattern.
+    add_executable(scene_state_apply_test
+        ${CMAKE_CURRENT_SOURCE_DIR}/test/scene_state_apply_test.cpp)
+    target_include_directories(scene_state_apply_test PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/mc3/include)
+    target_compile_features(scene_state_apply_test PRIVATE cxx_std_23)
+    add_test(NAME scene_state_apply COMMAND scene_state_apply_test)
+    set_tests_properties(scene_state_apply PROPERTIES TIMEOUT 15 LABELS "unit")
+
     # 2026-07-20 audit F2 (P0): SceneHierarchyPanel.cpp's drawHierarchy()
     # range-for-iterates over document_.objects/children by reference;
     # dragging an earlier sibling onto a later one in the same list used to

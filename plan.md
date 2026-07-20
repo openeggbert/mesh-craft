@@ -139,9 +139,9 @@ still internally consistent.
 4. Both P1 "format supports it, editor never runs it" gaps found 2026-07-20
    (user request: "co mc3 nabízí, ale MeshCraft to ještě neumí" --
    trigger event-firing and Lua scripting execution) are now done.
-5. **SYS-W14-20/21** (P2) — Scene States runtime switching; wiring
-   `Mc3ImportResolver` into the editor. Independent of each other. Ask
-   the user which to start with next.
+5. Scene States runtime switching (P2) is now done -- user picked it to
+   go next 2026-07-20. **SYS-W14-21** (P2) — wiring `Mc3ImportResolver`
+   into the editor, still open.
 6. **SYS-W14-22..27** (P3) — smaller format-vs-editor completeness gaps
    (`mipMaps`/`colorSpace` unused downstream, UV box/sphere projection,
    MCB compression, light-brightness unit conversion, ambient-light
@@ -1151,7 +1151,7 @@ _All items in this workstream are DONE — archived to [`docs/history/plan_20260
   fired/missing/unimplemented counts correctly in one status message.
   Full rebuild + 156/156 `ctest` (was 155; `trigger_fire` is the only
   new registration).
-- **SYS-W14-20** `[TODO]` `P2` — Scene States runtime switching.
+- **SYS-W14-20** `[DONE]` `P2` — Scene States runtime switching.
   `doc.sceneStates` (`Mc3SceneState`: named visibility/position/rotation/
   material overrides — e.g. "day"/"night" variants) parse/serialize/
   round-trip and are editable in the "States" tab, but selecting/applying
@@ -1159,10 +1159,30 @@ _All items in this workstream are DONE — archived to [`docs/history/plan_20260
   there is no code path that actually applies a state's overrides.
   `MC3_FORMAT.md` documents this as a deliberate "data model first"
   limitation (N6), not a bug. Found 2026-07-20 (same review).
-  **Outcome:** an "Apply" action per state in the States tab that pushes
-  undo then writes each override's visible/position/rotation/material
-  onto the matching live object (by id), so state transitions become
-  previewable in the editor itself.
+  **Implementation:** a "▶ Apply State" button in the States tab's
+  selected-state detail view (`MeshCraftApplication_UiLeftPanel.cpp`).
+  Uses the existing `flatFindById()` (same lookup `def:place()`-style
+  code elsewhere in the app already relies on) to resolve each
+  override's `id` against the live document, then writes only the
+  override's SET fields (`visible`/`position`/`rotation`/`material`) --
+  an unset field on an override leaves the object's existing value
+  untouched, matching `Mc3ObjectOverride`'s own documented "only present
+  attributes are overridden" contract exactly. `pushUndo()`/`modified_`
+  are conditional on at least one override actually resolving to a real
+  object -- a state whose overrides ALL reference missing/deleted
+  object ids (or an empty-overrides state) pushes no undo snapshot at
+  all, matching this session's own established no-op-undo discipline
+  (same pattern as `SYS-W14-18/19`'s `fireTrigger()`). A missing object
+  id is reported in the status message, not silently skipped, and
+  doesn't block the other overrides in the same state from applying.
+  **Tests:** new `test/scene_state_apply_test.cpp`
+  (`scene_state_apply` ctest) -- CNA-free mirror (same rationale as
+  `trigger_fire_test`). Covers: multiple overrides actually mutating
+  the real objects; only-the-set-fields-applied (an unset field is
+  left alone); a missing object id reported without blocking a sibling
+  override in the same state; the no-op-undo cases (all-missing,
+  empty-overrides) pushing zero undo snapshots.
+  Full rebuild + 158/158 `ctest` (was 157).
 - **SYS-W14-21** `[TODO]` `P2` — Wire `Mc3ImportResolver` into the editor.
   `mc3/src/Mc3ImportResolver.cpp` (R101, `resolve()`/`resolveAndMergeInto()`)
   is a complete, tested, standalone implementation that resolves a

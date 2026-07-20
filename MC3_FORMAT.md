@@ -471,7 +471,7 @@ Named snapshots of per-object property overrides (visibility, transform, materia
 
 Only the attributes present on `<object-override>` are overridden; everything else keeps the target object's base value.
 
-**Status:** data model, parser, writer, MCB round-trip, and XSD validation are complete (STAB-0044). There is no runtime "apply state" logic in the editor yet — states are stored and round-tripped, not switched between at runtime.
+**Status:** data model, parser, writer, MCB round-trip, and XSD validation are complete (STAB-0044). As of `SYS-W14-20` (2026-07-20), the editor's States tab has an "Apply State" button that writes a state's overrides onto the matching live objects (by id) right now, so a state can be previewed interactively. Only the SET fields on an override are applied — an unset field leaves the target object's existing value untouched, matching this section's own "only the attributes present... are overridden" contract exactly. Still no automatic state-switching (e.g. triggered by a game event) — only this explicit manual action.
 
 ---
 
