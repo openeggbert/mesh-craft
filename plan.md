@@ -132,8 +132,8 @@ still internally consistent.
 
 ## Priority execution queue (next up, in order)
 
-1. **AUD-085 through AUD-088 (P2/W8)** — migrate the editor's remaining
-   raw-OpenGL(ES) reach-around (the shared SSAO/skybox/material-preview/
+1. **AUD-086 through AUD-088 (P2/W8)** — migrate the editor's remaining
+   raw-OpenGL(ES) reach-around (the shared skybox/material-preview/
    shadow-map-debug `s_bloom` FBO+shader table) onto CNA's own already-
    existing, unused `GraphicsDevice.SetRenderTarget`, `RenderTarget2D`,
    and `NOXNA ShaderEffect` APIs — see the shared preamble in the AUD-###
@@ -144,15 +144,20 @@ still internally consistent.
    done — see the AUD-### table above for which rows, their empirical
    verification, and (for the Bloom row) two real, non-obvious CNA
    gotchas found and fixed along the way that will recur in the
-   remaining 4: `RenderTarget2D`'s `DiscardContents` default makes
+   remaining 3: `RenderTarget2D`'s `DiscardContents` default makes
    `SetRenderTarget()` clear on *every* bind (no redundant re-binds), and
    `SpriteBatch`'s custom-effect draws only honor a bound `RenderTarget2D`'s
    own size for their projection — a backbuffer-targeted draw always
    projects to the full window, so destRects for those must be window-
-   absolute, not viewport-local. 4 `s_bloom` migrations remain
-   (`AUD-085`-`AUD-088`, each of which also adds a missing visual-
-   correctness test the feature never had), with `s_bloom`'s final
-   teardown left to whichever of those 4 lands last.
+   absolute, not viewport-local. **SSAO (the row between Bloom and
+   Skybox) is deliberately skipped for now** — user-authorized deferral;
+   it needs a genuine depth-pre-pass rewrite (no CNA depth-buffer-read
+   equivalent exists), not a mechanical swap like the other 4, see its
+   own row for the full finding. 3 `s_bloom` migrations remain
+   (`AUD-086`-`AUD-088`, each of which also adds a missing visual-
+   correctness test the feature never had); `s_bloom` itself cannot be
+   torn down until SSAO is also migrated, so that final cleanup step
+   waits on a future SSAO decision even after `AUD-086`-`AUD-088` land.
 2. **AUD-052 (P1/W11)** — CI is permanently parked under `.github_/`; GitHub
    Actions never runs. This is the root blocker for AUD-053 (a CI-hardening
    task that depends on CI actually running first) and the CI-job half of
@@ -1826,9 +1831,9 @@ final acceptance check (expected: no output, combined with `AUD-082`/
 
 ### AUD-085 `[TODO]` `P2` `W8` · SSAO post-processing (I5) is a hand-rolled raw-GL FBO+shader pipeline instead of RenderTarget2D + ShaderEffect
 - **Component:** src/MeshCraft/MeshCraftApplication.cpp (`BloomGL`/`s_bloom`'s SSAO fields, `initSsao()`, `applySsao()`, `kSsaoFS`/`kSsaoBlurFS`/`kSsaoCompositeFS`)
-- **Evidence:** `initSsao()`/`applySsao()` (`MeshCraftApplication.cpp:1530-1613`ish) share the exact same `s_bloom` raw-GL table as `AUD-084`, adding a depth pre-pass FBO + AO FBO + blur FBO or the same manual `glGenFramebuffers`/shader-compile pattern. `RenderTarget2D` supports a depth buffer/format directly (`RenderTarget2D.hpp` includes `DepthFormat.hpp`), so the depth pre-pass target does not need any different treatment than `AUD-084`'s color targets — same migration shape, same `ShaderEffect` mechanism for `kSsaoFS`/`kSsaoBlurFS`/`kSsaoCompositeFS`.
-- **Outcome:** Same pattern as `AUD-084`: `RenderTarget2D` (depth pre-pass + AO + blur targets) + `ShaderEffect` (existing GLSL source, unchanged) + `GraphicsDevice.SetRenderTarget()`, removing this feature's dependency on `s_bloom`. Any call with no CNA/NOXNA equivalent gets written up as a capability request rather than kept as raw GL, same rule as `AUD-084`.
-- **Tests:** No dedicated visual-correctness test for SSAO exists yet (only the same `AUD-058` resource-pool-release hook, which is orthogonal to whether the darkening is visually correct) — add a real `--screenshot` test analogous to `AUD-084`'s (two adjacent surfaces at a concave corner, `ssaoEnabled` on vs. off, asserting the corner pixels darken relative to the flat-wall pixels) as part of this migration, verified `git stash` pre/post.
+- **Evidence:** `initSsao()`/`applySsao()` (`MeshCraftApplication.cpp:1517-1677`) share the exact same `s_bloom` raw-GL table as `AUD-084`. **Correction, found while starting this row's implementation (after `AUD-084` landed):** unlike `AUD-084`, this is NOT the same migration shape. `applySsao()`'s Step 1 (`:1614-1620`) does `glBlitFramebuffer()`-ing the **depth buffer of the already-rendered main scene** (read framebuffer 0, i.e. the real backbuffer) into `ssaoDepthFbo`'s depth texture, then samples that depth texture in the AO pass. Confirmed by direct inspection of `../cna`'s public headers that this has **no CNA/NOXNA equivalent**: `GraphicsDevice.hpp` has no blit/depth-readback/depth-as-texture method anywhere (`grep -n Depth GraphicsDevice.hpp` — only `DepthStencilState` get/set and `SetDepthTestEnabled`/`SetDepthWriteEnabled`, nothing that exposes a depth buffer's contents), and `RenderTarget2D` accepts a `DepthFormat` for its own depth-stencil *attachment* but exposes no accessor to sample that attachment as a `Texture2D` — matching real XNA 4.0's own well-known historical limitation (XNA never exposed depth buffers as sampleable textures either; real-world XNA SSAO implementations universally worked around this with a manual depth-to-color pre-pass, not a depth-buffer read).
+- **Outcome:** Not implemented this session (user-authorized deferral, 2026-07-20 — asked via `AskUserQuestion` whether to build the depth-pre-pass rewrite, skip to `AUD-086`, or stop here; chose to skip to `AUD-086`). The only CNA-API-only path forward is a genuine architecture change, not a mechanical swap: add a dedicated depth-to-color `ShaderEffect` pass that re-renders the scene's geometry a second time (real `World`/`View`/`Projection`-driven `DrawIndexedPrimitives` calls, matching `ShaderEffect`'s documented 3D-draw support) writing linearized depth into a plain color `RenderTarget2D`, replacing the blit — functionally equivalent, fully achievable with existing CNA/NOXNA API (this is **not** a capability gap requiring a `../cna` change), but meaningfully more code than `AUD-084`'s swap (a new depth-only shader + new scene-traversal draw logic mirroring `SceneRenderer::drawEmissivePass`'s shape) and a real behavior/perf change (a second full scene traversal every frame SSAO is on, vs. today's cheap blit of already-computed depth). Left `TODO`, not `BLOCKED`, since a real CNA-only path exists — just deferred pending a future session's explicit go-ahead given the added scope.
+- **Tests:** No dedicated visual-correctness test for SSAO exists yet (only the same `AUD-058` resource-pool-release hook, which is orthogonal to whether the darkening is visually correct) — add a real `--screenshot` test analogous to `AUD-084`'s (two adjacent surfaces at a concave corner, `ssaoEnabled` on vs. off, asserting the corner pixels darken relative to the flat-wall pixels) as part of whichever future session implements the depth-prepass rewrite above.
 
 ### AUD-086 `[TODO]` `P2` `W8` · Equirectangular skybox (I2) is drawn via hand-rolled raw-GL texture+shader calls instead of Texture2D + ShaderEffect
 - **Component:** src/MeshCraft/MeshCraftApplication.cpp (`BloomGL`/`s_bloom`'s skybox fields, `initSkybox()`, `drawSkybox()`, `kSkyboxVS`/`kSkyboxFS`)
