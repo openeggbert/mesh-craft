@@ -147,11 +147,12 @@ still internally consistent.
    half (live-viewport half documented as blocked on a CNA API gap, see
    its own row). The `colorSpace`-unused-at-export gap (P3) is now done
    too (slot-mismatch warning), and so is UV mapping box/sphere
-   projection (P3, exporter-side triplanar/equirectangular generation)
-   and MCB compression (P3, real zlib support, user picked "implement").
-   **SYS-W14-26..27** (P3) — remaining smaller format-vs-editor
-   completeness gaps (light-brightness unit conversion, ambient-light
-   export). Independent, small, good
+   projection (P3, exporter-side triplanar/equirectangular generation),
+   MCB compression (P3, real zlib support, user picked "implement"), and
+   light-brightness unit conversion (P3, per-type lux/candela scale
+   factor, user picked "implement").
+   **SYS-W14-27** (P3) — the one remaining smaller format-vs-editor
+   completeness gap (ambient-light export). Independent, small, good
    filler/warm-up tasks between the larger items above.
 
 ---
@@ -1417,7 +1418,7 @@ _All items in this workstream are DONE — archived to [`docs/history/plan_20260
   a no-zlib variant (fails via a distinct "requires zlib" message) so
   AUD-019's "clear error, not silent misread" guarantee is verified in
   both build configurations. Full rebuild + 161/161 `ctest` (was 160).
-- **SYS-W14-26** `[TODO]` `P3` — Light brightness sent to glTF without
+- **SYS-W14-26** `[DONE]` `P3` — Light brightness sent to glTF without
   physical unit conversion. `GltfExporter.cpp:1040` sets
   `intensity = light.brightness` identically for Directional/Point/Spot,
   but glTF's `KHR_lights_punctual` spec defines directional intensity in
@@ -1430,6 +1431,35 @@ _All items in this workstream are DONE — archived to [`docs/history/plan_20260
   an arbitrary non-physical unit not meant to round-trip physically
   through glTF (a legitimate design choice too, if made explicitly
   rather than left as an unexamined gap).
+  User picked "implement conversion to physical units".
+  **Implementation:** confirmed `brightness` has no real-world meaning
+  anywhere in this codebase today (the live viewport only uses it to
+  color a light's gizmo icon, `SceneRenderer.cpp`'s `drawLightGizmos()`
+  -- never for actual illumination, since the viewport has no real-time
+  lighting pass at all), so this adopts an established, documented
+  external convention rather than inventing an arbitrary one: the same
+  Watts-to-photometric formula Blender's own glTF exporter uses (the de
+  facto reference other glTF pipelines already expect). New
+  `lightIntensityForExport()` (`GltfExporter.cpp`): directional passes
+  `brightness` through unconverted (matches Blender's Sun-lamp
+  convention -- W/m^2 usable directly as lux); point/spot convert via
+  `brightness / (4*pi) * 683` (`kPbrWattsToLumens = 683.0`, the CIE
+  photometric luminous-efficacy constant at the 555nm peak-sensitivity
+  wavelength, matching Blender's own Point/Spot-lamp formula). A
+  deliberate, documented per-type scale factor, not a claim that
+  `brightness` is now a fully physically-calibrated quantity -- no
+  editor-side lux/candela input mode was added, and the live viewport's
+  gizmo-only use of `brightness` is unaffected (out of scope, matching
+  this session's established "exporter is the ground truth for exported
+  appearance" precedent for the other P3 gaps).
+  **Tests:** extended `mc3togltf/test/light_export_test.py` (existing
+  `light_export_all_types.mc3.xml` fixture: Sun brightness=2.0,
+  Bulb brightness=5.0, Torch brightness=3.0) with intensity-value
+  assertions for all 3 exported light types, checking each against the
+  documented formula. No existing test asserted on `intensity` before
+  this, so nothing needed correcting for the new values -- only new
+  coverage was added. Full rebuild + 161/161 `ctest` (unchanged count --
+  extended an existing test, not a new one).
 - **SYS-W14-27** `[TODO]` `P3` — Ambient light dropped on glTF export.
   `GltfExporter.cpp:1023-1027` (`STAB-0696`) explicitly warns and drops
   any `LightType::Ambient` light -- glTF 2.0 core + `KHR_lights_punctual`

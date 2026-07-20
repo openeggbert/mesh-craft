@@ -1052,6 +1052,44 @@ static int buildNode(ExportCtx& ctx, const Mc3Object& obj, int depth)
 // Lights (KHR_lights_punctual)
 // ---------------------------------------------------------------------------
 
+// SYS-W14-25/26 (2026-07-20): Mc3Light::brightness is a single unitless
+// authored scalar (default 1.0, no established real-world meaning anywhere
+// in this codebase -- the live editor viewport only ever uses it to color
+// a gizmo icon, never for actual illumination) that used to be written
+// identically into every light type's glTF `intensity`. But
+// KHR_lights_punctual defines directional intensity in lux (illuminance --
+// not per-steradian) and point/spot intensity in candela (luminous
+// intensity -- IS per-steradian), which are physically different units:
+// writing the same raw number into both makes a point/spot light's
+// authored "brightness" mean something like 200x dimmer in a real
+// glTF-conformant PBR viewer than the identical number on a directional
+// light (a candela is a much "denser" unit than a lux, since it isn't
+// already spread over a hemisphere). This adopts the same
+// Watts-to-photometric convention Blender's own glTF exporter (the de
+// facto reference other pipelines already expect) uses: treat
+// `brightness` as if it were input light power, pass it through
+// unconverted for directional (matching Blender's own Sun-lamp
+// convention: W/m^2 exported directly as lux), and convert point/spot via
+// the standard luminous-efficacy constant (683 lm/W, the CIE photometric
+// conversion at the 555nm peak-sensitivity wavelength) divided by the 4*pi
+// steradians of a full sphere, matching Blender's own Point/Spot-lamp
+// formula. This is a deliberate, documented per-type scale factor (as the
+// tracked task calls for), not an attempt to make `brightness` a fully
+// physically-calibrated real-world quantity.
+inline constexpr double kPbrWattsToLumens = 683.0; // CIE photometric luminous efficacy, lm/W
+
+static double lightIntensityForExport(const Mc3Light& light) {
+    switch (light.type) {
+        case LightType::Point:
+        case LightType::Spot:
+            return static_cast<double>(light.brightness) / (4.0 * std::numbers::pi) *
+                   kPbrWattsToLumens;
+        case LightType::Directional:
+        default:
+            return static_cast<double>(light.brightness);
+    }
+}
+
 static void addLights(tinygltf::Model& model,
                       const std::vector<Mc3Light>& lights,
                       std::vector<int>& outLightNodeIndices,
@@ -1080,7 +1118,7 @@ static void addLights(tinygltf::Model& model,
             tinygltf::Value(static_cast<double>(light.color[1])),
             tinygltf::Value(static_cast<double>(light.color[2]))
         });
-        lo["intensity"] = tinygltf::Value(static_cast<double>(light.brightness));
+        lo["intensity"] = tinygltf::Value(lightIntensityForExport(light));
 
         std::string typeStr;
         switch (light.type) {

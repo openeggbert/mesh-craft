@@ -282,18 +282,29 @@ directory).
 </lights>
 ```
 
-`brightness` is an arbitrary, unitless multiplier — not physical lux/candela units.
-The editor renders it as a direct scale on the light's contribution, and
-`mc3togltf` passes it straight through as `KHR_lights_punctual`'s `intensity`
-field with no per-light-type conversion. glTF's `KHR_lights_punctual` spec
-defines `intensity` as lux for directional lights and candela for point/spot
-— physically-based glTF viewers/renderers may therefore render exported
-lights at different *relative* brightness than the MeshCraft editor's own
-preview, since the same raw number is being reinterpreted under different
-physical units per light type. Not planned to change without a product
-decision on whether physically-correct cross-renderer brightness is worth
-requiring real unit conversion (and, likely, an editor-side lux/candela
-input mode) — this is a deliberate, documented limitation, not an oversight.
+`brightness` is an arbitrary, unitless authored scalar (default `1.0`) —
+not a physical lux/candela value itself, and the live editor viewport
+doesn't use it for actual illumination at all (only to color a light's
+gizmo icon; MeshCraft's viewport has no real-time lighting pass). glTF's
+`KHR_lights_punctual` spec requires `intensity` to be lux for directional
+lights and candela for point/spot — physically different units, since a
+candela is already "per steradian" and a lux isn't. As of `SYS-W14-26`
+(2026-07-20), `mc3togltf` applies a deliberate, documented per-light-type
+conversion instead of writing `brightness` unconverted into every type
+(which made the same authored number implicitly ~13× dimmer as a
+point/spot candela value than as a directional lux value, in any
+glTF-conformant PBR viewer): `directional.intensity = brightness`
+(unconverted — matches Blender's own glTF exporter's Sun-lamp convention,
+treating W/m² as directly usable as lux), `point.intensity =
+spot.intensity = brightness / (4π) × 683` (683 lm/W is the CIE
+photometric luminous-efficacy constant at the 555nm peak-sensitivity
+wavelength; ÷4π converts from total emitted "power" to per-steradian
+candela — the same formula Blender's exporter uses for Point/Spot lamps).
+This is a deliberate scale factor chosen to match an established,
+widely-recognized exporter convention, not a claim that `brightness` is
+now a fully physically-calibrated real-world quantity — there is still no
+editor-side lux/candela input mode, and the live viewport's gizmo-only
+use of `brightness` is unaffected.
 `ambient` has no glTF equivalent at all and is dropped on export (with a
 warning) since `KHR_lights_punctual` doesn't support ambient lighting.
 

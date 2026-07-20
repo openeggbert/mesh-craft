@@ -55,6 +55,31 @@ def main():
         check("point" in by_type, "point light present")
         check("spot" in by_type, "spot light present")
 
+        # SYS-W14-26 (2026-07-20): KHR_lights_punctual mandates directional
+        # intensity in lux and point/spot intensity in candela -- physically
+        # different units -- so the exporter now converts per light type
+        # instead of writing the same raw brightness number into all three.
+        # Matches Blender's own glTF exporter convention: directional
+        # (Sun brightness=2.0 in the fixture) passes through unconverted
+        # (W/m^2 == lux by that convention); point/spot (brightness=5.0/3.0)
+        # convert via brightness / (4*pi) * 683 (CIE luminous efficacy).
+        PBR_WATTS_TO_LUMENS = 683.0
+        if "directional" in by_type:
+            expected = 2.0
+            actual = by_type["directional"].get("intensity")
+            check(actual is not None and abs(actual - expected) < 1e-4,
+                  f"directional 'Sun' intensity == brightness unconverted ({expected}); got {actual}")
+        if "point" in by_type:
+            expected = 5.0 / (4.0 * math.pi) * PBR_WATTS_TO_LUMENS
+            actual = by_type["point"].get("intensity")
+            check(actual is not None and abs(actual - expected) < 1e-2,
+                  f"point 'Bulb' intensity == brightness/(4*pi)*683 ({expected:.4f}); got {actual}")
+        if "spot" in by_type:
+            expected = 3.0 / (4.0 * math.pi) * PBR_WATTS_TO_LUMENS
+            actual = by_type["spot"].get("intensity")
+            check(actual is not None and abs(actual - expected) < 1e-2,
+                  f"spot 'Torch' intensity == brightness/(4*pi)*683 ({expected:.4f}); got {actual}")
+
         if "spot" in by_type:
             spot = by_type["spot"]
             # STAB-0692: angle="25" in the fixture is a half-angle in degrees.
