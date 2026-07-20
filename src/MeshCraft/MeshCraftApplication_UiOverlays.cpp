@@ -1680,7 +1680,11 @@ void MeshCraftApplication::drawDialogs()
         } else {
             auto& mat = document_.materials[dropTexPickerMatId_];
             auto assign = [&](std::string& slot) {
-                pushUndo(); slot = dropTexPickerPath_;
+                // F8: promote to local -- see MeshCraftApplication_UiLeftPanel.cpp's
+                // "Mat" tab pushUndoMat for the full rationale.
+                pushUndo();
+                document_.includedMaterials.erase(dropTexPickerMatId_);
+                slot = dropTexPickerPath_;
                 modified_ = true;
                 setStatusMsg("Texture assigned → " + dropTexPickerMatId_);
                 ImGui::CloseCurrentPopup();

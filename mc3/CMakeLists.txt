@@ -239,6 +239,17 @@ if(BUILD_TESTING)
     add_test(NAME mc3_json_document_budget COMMAND mc3_json_document_budget_test)
     set_tests_properties(mc3_json_document_budget PROPERTIES TIMEOUT 30 LABELS "format")
 
+    # 2026-07-20 audit F8: editing an <include>-sourced material/texture/
+    # definition/embed in the GUI editor and saving used to silently drop
+    # the edit (the writer skips any id still marked in doc.includedX).
+    # Proves the fix's underlying mechanism -- erasing an id from includedX
+    # at edit time makes it survive a save+reload round trip -- entirely
+    # through the public mc3/ document API (no ImGui/CNA dependency).
+    add_executable(mc3_included_resource_edit_test test/included_resource_edit_test.cpp)
+    target_link_libraries(mc3_included_resource_edit_test PRIVATE Mc3)
+    add_test(NAME mc3_included_resource_edit COMMAND mc3_included_resource_edit_test)
+    set_tests_properties(mc3_included_resource_edit PROPERTIES TIMEOUT 15 LABELS "format")
+
     # Load-policy test: untrusted content (AI/import) must not process <include>;
     # include-confinement rejects path traversal.
     add_executable(mc3_load_policy_test test/load_policy_test.cpp)

@@ -589,12 +589,30 @@ void MeshCraftApplication::drawLeftPanel(float panelY, float panelH)
                 ImGui::Separator();
                 ImGui::Spacing();
 
+                // F8: an edit to a texture merged in from an <include> must
+                // survive Save. The writer skips any id still present in
+                // doc.includedTextures (it expects that content to keep
+                // coming from the include file), so editing it in place
+                // without promoting it to local silently drops the edit on
+                // the next save. Erasing here -- at the moment a real edit
+                // begins (pushUndo() fires) -- mirrors the parser's own
+                // convention: a locally (re)declared id already erases the
+                // included marker (Mc3XmlParser.cpp's "Task 1" comment), so
+                // this makes an in-editor edit behave exactly like the user
+                // had retyped the same id into a local <textures> block.
+                auto pushUndoTex = [&]() {
+                    pushUndo();
+                    document_.includedTextures.erase(selectedTextureKey_);
+                };
+
                 // ID (read-only) with copy button
                 ImGui::TextDisabled("ID");
                 ImGui::SameLine();
                 if (ImGui::SmallButton("Copy##texid"))
                     ImGui::SetClipboardText(selectedTextureKey_.c_str());
                 ImGui::TextUnformatted(selectedTextureKey_.c_str());
+                if (document_.includedTextures.count(selectedTextureKey_))
+                    ImGui::TextDisabled("(from <include> -- editing makes a local copy)");
 
                 // Display name
                 ImGui::TextDisabled("Name");
@@ -604,7 +622,7 @@ void MeshCraftApplication::drawLeftPanel(float panelY, float panelH)
                     ImGui::SetNextItemWidth(-1);
                     if (ImGui::InputText("##texname", buf, sizeof(buf),
                             ImGuiInputTextFlags_EnterReturnsTrue)) {
-                        pushUndo(); tex.name = buf; modified_ = true; updateWindowTitle();
+                        pushUndoTex(); tex.name = buf; modified_ = true; updateWindowTitle();
                     }
                 }
 
@@ -616,7 +634,7 @@ void MeshCraftApplication::drawLeftPanel(float panelY, float panelH)
                     ImGui::SetNextItemWidth(-1);
                     if (ImGui::InputText("##texuri", buf, sizeof(buf),
                             ImGuiInputTextFlags_EnterReturnsTrue)) {
-                        pushUndo(); tex.uri = buf; modified_ = true; updateWindowTitle();
+                        pushUndoTex(); tex.uri = buf; modified_ = true; updateWindowTitle();
                     }
                 }
 
@@ -628,7 +646,7 @@ void MeshCraftApplication::drawLeftPanel(float panelY, float panelH)
                     ImGui::TextDisabled("Wrap U");
                     ImGui::SetNextItemWidth(-1);
                     if (ImGui::Combo("##twrapu", &widx, wraps, 3)) {
-                        pushUndo(); tex.wrapU = wraps[widx]; modified_ = true; updateWindowTitle();
+                        pushUndoTex(); tex.wrapU = wraps[widx]; modified_ = true; updateWindowTitle();
                     }
                 }
 
@@ -640,7 +658,7 @@ void MeshCraftApplication::drawLeftPanel(float panelY, float panelH)
                     ImGui::TextDisabled("Wrap V");
                     ImGui::SetNextItemWidth(-1);
                     if (ImGui::Combo("##twrapv", &widx, wraps, 3)) {
-                        pushUndo(); tex.wrapV = wraps[widx]; modified_ = true; updateWindowTitle();
+                        pushUndoTex(); tex.wrapV = wraps[widx]; modified_ = true; updateWindowTitle();
                     }
                 }
 
@@ -651,7 +669,7 @@ void MeshCraftApplication::drawLeftPanel(float panelY, float panelH)
                     ImGui::TextDisabled("Filter");
                     ImGui::SetNextItemWidth(-1);
                     if (ImGui::Combo("##tfilter", &fidx, filters, 2)) {
-                        pushUndo(); tex.filter = filters[fidx]; modified_ = true; updateWindowTitle();
+                        pushUndoTex(); tex.filter = filters[fidx]; modified_ = true; updateWindowTitle();
                     }
                 }
 
@@ -662,7 +680,7 @@ void MeshCraftApplication::drawLeftPanel(float panelY, float panelH)
                     ImGui::TextDisabled("Color Space");
                     ImGui::SetNextItemWidth(-1);
                     if (ImGui::Combo("##tcolorsp", &sidx, spaces, 2)) {
-                        pushUndo(); tex.colorSpace = spaces[sidx]; modified_ = true; updateWindowTitle();
+                        pushUndoTex(); tex.colorSpace = spaces[sidx]; modified_ = true; updateWindowTitle();
                     }
                 }
             }
@@ -722,11 +740,22 @@ void MeshCraftApplication::drawLeftPanel(float panelY, float panelH)
                 auto& svg = document_.svgTextures[selectedSvgTextureKey_];
                 ImGui::Spacing();
 
+                // F8: SVG textures share doc.includedTextures with regular
+                // textures (a texture id is unique across both maps, per
+                // Mc3XmlParser.cpp's include-merge collision check), so the
+                // same promote-on-edit fix applies here.
+                auto pushUndoSvg = [&]() {
+                    pushUndo();
+                    document_.includedTextures.erase(selectedSvgTextureKey_);
+                };
+
                 ImGui::TextDisabled("ID");
                 ImGui::SameLine();
                 if (ImGui::SmallButton("Copy##svgid"))
                     ImGui::SetClipboardText(selectedSvgTextureKey_.c_str());
                 ImGui::TextUnformatted(selectedSvgTextureKey_.c_str());
+                if (document_.includedTextures.count(selectedSvgTextureKey_))
+                    ImGui::TextDisabled("(from <include> -- editing makes a local copy)");
 
                 // External vs inline are mutually exclusive per
                 // Mc3SvgTexture's own contract (src empty <=> inline set).
@@ -734,13 +763,13 @@ void MeshCraftApplication::drawLeftPanel(float panelY, float panelH)
                 ImGui::TextDisabled("Type");
                 if (ImGui::RadioButton("External##svgtype", !isInline)) {
                     if (isInline) {
-                        pushUndo(); svg.inlineContent.clear(); modified_ = true; updateWindowTitle();
+                        pushUndoSvg(); svg.inlineContent.clear(); modified_ = true; updateWindowTitle();
                     }
                 }
                 ImGui::SameLine();
                 if (ImGui::RadioButton("Inline##svgtype", isInline)) {
                     if (!isInline) {
-                        pushUndo(); svg.src.clear();
+                        pushUndoSvg(); svg.src.clear();
                         // isInline() requires inlineContent to be non-empty
                         // (src empty && !inlineContent.empty()) -- without
                         // seeding it, the radio button could never actually
@@ -758,7 +787,7 @@ void MeshCraftApplication::drawLeftPanel(float panelY, float panelH)
                     ImGui::SetNextItemWidth(-1);
                     if (ImGui::InputText("##svgsrc", buf, sizeof(buf),
                             ImGuiInputTextFlags_EnterReturnsTrue)) {
-                        pushUndo(); svg.src = buf; modified_ = true; updateWindowTitle();
+                        pushUndoSvg(); svg.src = buf; modified_ = true; updateWindowTitle();
                     }
                 } else {
                     ImGui::TextDisabled("Inline SVG markup");
@@ -767,7 +796,7 @@ void MeshCraftApplication::drawLeftPanel(float panelY, float panelH)
                     ImGui::SetNextItemWidth(-1);
                     if (ImGui::InputTextMultiline("##svginline", buf, sizeof(buf),
                             ImVec2(-1, 120), ImGuiInputTextFlags_EnterReturnsTrue)) {
-                        pushUndo(); svg.inlineContent = buf; modified_ = true; updateWindowTitle();
+                        pushUndoSvg(); svg.inlineContent = buf; modified_ = true; updateWindowTitle();
                     }
                 }
             }
@@ -830,6 +859,21 @@ void MeshCraftApplication::drawLeftPanel(float panelY, float panelH)
                     ImGui::Separator();
                     ImGui::Spacing();
 
+                    // F8: an edit to a definition merged in from an
+                    // <include> must survive Save (same rationale as the Tex
+                    // tab's pushUndoTex above) -- used by every field below
+                    // EXCEPT the ID-rename block immediately following,
+                    // which already gets this for free (a rename moves the
+                    // definition to a brand-new map key that was never in
+                    // includedDefs to begin with, so the writer already
+                    // treats it as local).
+                    auto pushUndoDef = [&]() {
+                        pushUndo();
+                        document_.includedDefs.erase(selectedDefId_);
+                    };
+                    if (document_.includedDefs.count(selectedDefId_))
+                        ImGui::TextDisabled("(from <include> -- editing makes a local copy)");
+
                     // ID (rename — updates map key + all Instance references)
                     ImGui::TextDisabled("ID");
                     {
@@ -877,7 +921,7 @@ void MeshCraftApplication::drawLeftPanel(float panelY, float panelH)
                         ImGui::SetNextItemWidth(-1);
                         if (ImGui::InputText("##defname", nameBuf, sizeof(nameBuf),
                                 ImGuiInputTextFlags_EnterReturnsTrue)) {
-                            pushUndo(); defObj->name = nameBuf; modified_ = true; updateWindowTitle();
+                            pushUndoDef(); defObj->name = nameBuf; modified_ = true; updateWindowTitle();
                         }
                     }
 
@@ -897,7 +941,7 @@ void MeshCraftApplication::drawLeftPanel(float panelY, float panelH)
                             if (defObj->type == typeVals[i]) { tidx = i; break; }
                         ImGui::SetNextItemWidth(-1);
                         if (ImGui::Combo("##deftype", &tidx, typeNames, 9)) {
-                            pushUndo(); defObj->type = typeVals[tidx]; modified_ = true; updateWindowTitle();
+                            pushUndoDef(); defObj->type = typeVals[tidx]; modified_ = true; updateWindowTitle();
                         }
                     }
 
@@ -911,7 +955,7 @@ void MeshCraftApplication::drawLeftPanel(float panelY, float panelH)
                         float pos[3] = { defObj->transform.position[0], defObj->transform.position[1], defObj->transform.position[2] };
                         ImGui::SetNextItemWidth(-1);
                         { bool _undoCh926 = ImGui::DragFloat3("##dpos", pos, 0.1f);
-                        if (ImGui::IsItemActivated()) pushUndo();
+                        if (ImGui::IsItemActivated()) pushUndoDef();
                         if (_undoCh926) {
                             defObj->transform.position[0] = pos[0];
                             defObj->transform.position[1] = pos[1];
@@ -924,7 +968,7 @@ void MeshCraftApplication::drawLeftPanel(float panelY, float panelH)
                         float rot[3] = { defObj->transform.rotation[0], defObj->transform.rotation[1], defObj->transform.rotation[2] };
                         ImGui::SetNextItemWidth(-1);
                         { bool _undoCh938 = ImGui::DragFloat3("##drot", rot, 0.5f);
-                        if (ImGui::IsItemActivated()) pushUndo();
+                        if (ImGui::IsItemActivated()) pushUndoDef();
                         if (_undoCh938) {
                             defObj->transform.rotation[0] = rot[0];
                             defObj->transform.rotation[1] = rot[1];
@@ -941,7 +985,7 @@ void MeshCraftApplication::drawLeftPanel(float panelY, float panelH)
                         // widget's own displayed value consistent within
                         // the same frame.
                         { bool _undoCh954 = ImGui::DragFloat3("##dscl", scl, 0.01f, 0.001f, 100.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
-                        if (ImGui::IsItemActivated()) pushUndo();
+                        if (ImGui::IsItemActivated()) pushUndoDef();
                         if (_undoCh954) {
                             defObj->transform.scale[0] = std::max(0.001f, scl[0]);
                             defObj->transform.scale[1] = std::max(0.001f, scl[1]);
@@ -961,7 +1005,7 @@ void MeshCraftApplication::drawLeftPanel(float panelY, float panelH)
                     if (ImGui::TreeNode("Asset Metadata (R111)")) {
                         bool hasMeta = defObj->assetMetadata.has_value();
                         if (ImGui::Checkbox("Has asset metadata", &hasMeta)) {
-                            pushUndo();
+                            pushUndoDef();
                             if (hasMeta) defObj->assetMetadata = Mc3::Mc3AssetMetadata{};
                             else         defObj->assetMetadata.reset();
                             modified_ = true; updateWindowTitle();
@@ -978,7 +1022,7 @@ void MeshCraftApplication::drawLeftPanel(float panelY, float panelH)
                                 ImGui::PushID(label);
                                 if (ImGui::InputText("##amstr", buf.data(), bufSize,
                                         ImGuiInputTextFlags_EnterReturnsTrue)) {
-                                    pushUndo(); field = buf.data(); modified_ = true; updateWindowTitle();
+                                    pushUndoDef(); field = buf.data(); modified_ = true; updateWindowTitle();
                                 }
                                 ImGui::PopID();
                             };
@@ -988,7 +1032,7 @@ void MeshCraftApplication::drawLeftPanel(float panelY, float panelH)
                                 ImGui::SetNextItemWidth(-1);
                                 ImGui::PushID(label);
                                 bool changed = ImGui::DragFloat3("##amvec3", f, 0.01f);
-                                if (ImGui::IsItemActivated()) pushUndo();
+                                if (ImGui::IsItemActivated()) pushUndoDef();
                                 if (changed) {
                                     v = {f[0], f[1], f[2]};
                                     modified_ = true; updateWindowTitle();
@@ -1012,7 +1056,7 @@ void MeshCraftApplication::drawLeftPanel(float panelY, float panelH)
                                 ImGui::PushID(label);
                                 if (ImGui::InputText("##amtags", buf, sizeof(buf),
                                         ImGuiInputTextFlags_EnterReturnsTrue)) {
-                                    pushUndo();
+                                    pushUndoDef();
                                     tags.clear();
                                     std::string cur;
                                     std::istringstream iss(std::string(buf) + ",");
@@ -1041,20 +1085,20 @@ void MeshCraftApplication::drawLeftPanel(float panelY, float panelH)
                             vec3Field("Clearance Volume", am.clearanceVolume);
 
                             ImGui::Checkbox("Instancing Eligible", &am.instancingEligible);
-                            if (ImGui::IsItemDeactivatedAfterEdit()) { pushUndo(); modified_ = true; updateWindowTitle(); }
+                            if (ImGui::IsItemDeactivatedAfterEdit()) { pushUndoDef(); modified_ = true; updateWindowTitle(); }
 
                             strField("Shadow Policy (cast_receive/cast_only/none)", am.shadowPolicy, 32);
 
                             ImGui::TextDisabled("Max Visibility Distance (m, 0=unlimited)");
                             ImGui::SetNextItemWidth(-1);
                             { bool ch = ImGui::DragFloat("##ammaxvis", &am.maxVisibilityDistanceM, 1.0f, 0.0f, 100000.0f);
-                              if (ImGui::IsItemActivated()) pushUndo();
+                              if (ImGui::IsItemActivated()) pushUndoDef();
                               if (ch) { modified_ = true; updateWindowTitle(); } }
 
                             ImGui::TextDisabled("Selection Weight (higher = more common)");
                             ImGui::SetNextItemWidth(-1);
                             { bool ch = ImGui::DragFloat("##amselw", &am.selectionWeight, 0.05f, 0.0f, 1000.0f);
-                              if (ImGui::IsItemActivated()) pushUndo();
+                              if (ImGui::IsItemActivated()) pushUndoDef();
                               if (ch) { modified_ = true; updateWindowTitle(); } }
 
                             strField("License (SPDX id or free text)", am.license, 128);
@@ -1084,25 +1128,25 @@ void MeshCraftApplication::drawLeftPanel(float panelY, float panelH)
                                     float p[3] = { pos[0], pos[1], pos[2] };
                                     ImGui::SetNextItemWidth(-32);
                                     bool ch = ImGui::DragFloat3("##sockpos", p, 0.01f);
-                                    if (ImGui::IsItemActivated()) pushUndo();
+                                    if (ImGui::IsItemActivated()) pushUndoDef();
                                     if (ch) { pos = {p[0], p[1], p[2]}; modified_ = true; updateWindowTitle(); }
                                     ImGui::SameLine();
                                     if (ImGui::SmallButton("x##sockrm")) removeKey = key;
                                     ImGui::PopID();
                                 }
                                 if (!renameFrom.empty()) {
-                                    pushUndo();
+                                    pushUndoDef();
                                     auto node = am.sockets.extract(renameFrom);
                                     node.key() = renameTo;
                                     am.sockets.insert(std::move(node));
                                     modified_ = true; updateWindowTitle();
                                 }
                                 if (!removeKey.empty()) {
-                                    pushUndo(); am.sockets.erase(removeKey);
+                                    pushUndoDef(); am.sockets.erase(removeKey);
                                     modified_ = true; updateWindowTitle();
                                 }
                                 if (ImGui::SmallButton("+ Add Socket")) {
-                                    pushUndo();
+                                    pushUndoDef();
                                     int n = 1; std::string key;
                                     do { key = "socket_" + std::to_string(n++); }
                                     while (am.sockets.count(key));
@@ -1131,25 +1175,25 @@ void MeshCraftApplication::drawLeftPanel(float panelY, float panelH)
                                     ImGui::SetNextItemWidth(-32);
                                     if (ImGui::InputText("##lodval", valBuf, sizeof(valBuf),
                                             ImGuiInputTextFlags_EnterReturnsTrue)) {
-                                        pushUndo(); targetId = valBuf; modified_ = true; updateWindowTitle();
+                                        pushUndoDef(); targetId = valBuf; modified_ = true; updateWindowTitle();
                                     }
                                     ImGui::SameLine();
                                     if (ImGui::SmallButton("x##lodrm")) removeKey = key;
                                     ImGui::PopID();
                                 }
                                 if (!renameFrom.empty()) {
-                                    pushUndo();
+                                    pushUndoDef();
                                     auto node = am.lods.extract(renameFrom);
                                     node.key() = renameTo;
                                     am.lods.insert(std::move(node));
                                     modified_ = true; updateWindowTitle();
                                 }
                                 if (!removeKey.empty()) {
-                                    pushUndo(); am.lods.erase(removeKey);
+                                    pushUndoDef(); am.lods.erase(removeKey);
                                     modified_ = true; updateWindowTitle();
                                 }
                                 if (ImGui::SmallButton("+ Add LOD Tier")) {
-                                    pushUndo();
+                                    pushUndoDef();
                                     int n = 1; std::string key;
                                     do { key = "tier_" + std::to_string(n++); }
                                     while (am.lods.count(key));
@@ -1319,6 +1363,20 @@ void MeshCraftApplication::drawLeftPanel(float panelY, float panelH)
                     ImGui::Spacing();
                 }
 
+                // F8: an edit to a material merged in from an <include> must
+                // survive Save (same rationale as the Tex tab's pushUndoTex
+                // above) -- used by every field below EXCEPT the rename
+                // block immediately following, which already gets this for
+                // free (a rename moves the material to a brand-new map key
+                // that was never in includedMaterials to begin with, so the
+                // writer already treats it as local).
+                auto pushUndoMat = [&]() {
+                    pushUndo();
+                    document_.includedMaterials.erase(selectedMaterialKey_);
+                };
+                if (document_.includedMaterials.count(selectedMaterialKey_))
+                    ImGui::TextDisabled("(from <include> -- editing makes a local copy)");
+
                 // Rename key
                 {
                     char kbuf[128];
@@ -1359,7 +1417,7 @@ void MeshCraftApplication::drawLeftPanel(float panelY, float panelH)
                 ImGui::SetNextItemWidth(-1);
                 { bool _undoCh1176 = ImGui::ColorEdit4("##matbc", mat.baseColor.data(),
                     ImGuiColorEditFlags_Float);
-                    if (ImGui::IsItemActivated()) pushUndo();
+                    if (ImGui::IsItemActivated()) pushUndoMat();
                     if (_undoCh1176) {
                     modified_ = true;
                 } }
@@ -1372,7 +1430,7 @@ void MeshCraftApplication::drawLeftPanel(float panelY, float panelH)
                 // pbrMetallicRoughness.roughnessFactor with no other guard.
                 { bool _undoChMatRgh = ImGui::SliderFloat("##matrgh", &mat.roughness, 0.0f, 1.0f, "%.2f",
                                        ImGuiSliderFlags_AlwaysClamp);
-                if (ImGui::IsItemActivated()) pushUndo();
+                if (ImGui::IsItemActivated()) pushUndoMat();
                 if (_undoChMatRgh) {
                     modified_ = true;
                 } }
@@ -1384,7 +1442,7 @@ void MeshCraftApplication::drawLeftPanel(float panelY, float panelH)
                 // roughness above (spec-invalid metallicFactor on export).
                 { bool _undoChMatMet = ImGui::SliderFloat("##matmet", &mat.metallic, 0.0f, 1.0f, "%.2f",
                                        ImGuiSliderFlags_AlwaysClamp);
-                if (ImGui::IsItemActivated()) pushUndo();
+                if (ImGui::IsItemActivated()) pushUndoMat();
                 if (_undoChMatMet) {
                     modified_ = true;
                 } }
@@ -1394,7 +1452,7 @@ void MeshCraftApplication::drawLeftPanel(float panelY, float panelH)
                 ImGui::SetNextItemWidth(-1);
                 { bool _undoCh1208 = ImGui::ColorEdit3("##matemi", mat.emissiveColor.data(),
                     ImGuiColorEditFlags_Float);
-                    if (ImGui::IsItemActivated()) pushUndo();
+                    if (ImGui::IsItemActivated()) pushUndoMat();
                     if (_undoCh1208) {
                     modified_ = true;
                 } }
@@ -1407,7 +1465,7 @@ void MeshCraftApplication::drawLeftPanel(float panelY, float panelH)
                 if (mat.alphaMode == "blend") alphaIdx = 2;
                 ImGui::SetNextItemWidth(-1);
                 if (ImGui::Combo("##matam", &alphaIdx, alphaModes, 3)) {
-                    pushUndo();
+                    pushUndoMat();
                     mat.alphaMode = alphaModes[alphaIdx];
                     modified_ = true;
                 }
@@ -1418,7 +1476,7 @@ void MeshCraftApplication::drawLeftPanel(float panelY, float panelH)
                     // roughness/metallic above (spec-invalid alphaCutoff).
                     { bool _undoChMatAc = ImGui::SliderFloat("##matac", &mat.alphaCutoff, 0.0f, 1.0f, "%.2f",
                                            ImGuiSliderFlags_AlwaysClamp);
-                    if (ImGui::IsItemActivated()) pushUndo();
+                    if (ImGui::IsItemActivated()) pushUndoMat();
                     if (_undoChMatAc) {
                         modified_ = true;
                     } }
@@ -1426,7 +1484,7 @@ void MeshCraftApplication::drawLeftPanel(float panelY, float panelH)
 
                 // Double-sided
                 if (ImGui::Checkbox("Double-sided##matds", &mat.doubleSided)) {
-                    pushUndo();
+                    pushUndoMat();
                     modified_ = true;
                 }
             }
@@ -1836,24 +1894,34 @@ void MeshCraftApplication::drawLeftPanel(float panelY, float panelH)
                 auto& embed = document_.embeds[selectedEmbedKey_];
                 ImGui::Spacing();
 
+                // F8: an edit to an embed merged in from an <include> must
+                // survive Save (same rationale as the Tex tab's pushUndoTex
+                // above).
+                auto pushUndoEmbed = [&]() {
+                    pushUndo();
+                    document_.includedEmbeds.erase(selectedEmbedKey_);
+                };
+
                 ImGui::TextDisabled("ID");
                 ImGui::SameLine();
                 if (ImGui::SmallButton("Copy##embedid"))
                     ImGui::SetClipboardText(selectedEmbedKey_.c_str());
                 ImGui::TextUnformatted(selectedEmbedKey_.c_str());
                 ImGui::TextDisabled("Reference from a Mesh object's Source: embed:%s", selectedEmbedKey_.c_str());
+                if (document_.includedEmbeds.count(selectedEmbedKey_))
+                    ImGui::TextDisabled("(from <include> -- editing makes a local copy)");
 
                 bool isInline = embed.isInline();
                 ImGui::TextDisabled("Type");
                 if (ImGui::RadioButton("External##embedtype", !isInline)) {
                     if (isInline) {
-                        pushUndo(); embed.base64Content.clear(); modified_ = true; updateWindowTitle();
+                        pushUndoEmbed(); embed.base64Content.clear(); modified_ = true; updateWindowTitle();
                     }
                 }
                 ImGui::SameLine();
                 if (ImGui::RadioButton("Inline (base64)##embedtype", isInline)) {
                     if (!isInline) {
-                        pushUndo(); embed.src.clear();
+                        pushUndoEmbed(); embed.src.clear();
                         // isInline() requires base64Content to be non-empty
                         // (src empty && !base64Content.empty()) -- without
                         // seeding it, the radio button could never actually
@@ -1871,7 +1939,7 @@ void MeshCraftApplication::drawLeftPanel(float panelY, float panelH)
                     ImGui::SetNextItemWidth(-1);
                     if (ImGui::InputText("##embedsrc", buf, sizeof(buf),
                             ImGuiInputTextFlags_EnterReturnsTrue)) {
-                        pushUndo(); embed.src = buf; modified_ = true; updateWindowTitle();
+                        pushUndoEmbed(); embed.src = buf; modified_ = true; updateWindowTitle();
                     }
                 } else {
                     ImGui::TextDisabled("Base64 GLB data");
@@ -1880,7 +1948,7 @@ void MeshCraftApplication::drawLeftPanel(float panelY, float panelH)
                     ImGui::SetNextItemWidth(-1);
                     if (ImGui::InputTextMultiline("##embedbase64", buf, sizeof(buf),
                             ImVec2(-1, 120), ImGuiInputTextFlags_EnterReturnsTrue)) {
-                        pushUndo(); embed.base64Content = buf; modified_ = true; updateWindowTitle();
+                        pushUndoEmbed(); embed.base64Content = buf; modified_ = true; updateWindowTitle();
                     }
                 }
             }

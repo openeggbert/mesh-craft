@@ -582,6 +582,11 @@ void MeshCraftApplication::exportSubtreeAsTemplate(const std::string& defName,
     defObj->transform.position = {0.0f, 0.0f, 0.0f};
     defObj->transform.rotation = {0.0f, 0.0f, 0.0f};
     defObj->transform.scale    = {1.0f, 1.0f, 1.0f};
+    // F8: if defName happens to collide with an existing <include>-sourced
+    // definition id, this overwrite must win locally, not get silently
+    // skipped by the writer on the next save because the old included
+    // marker is still set for that id.
+    document_.includedDefs.erase(defName);
     document_.definitions[defName] = defObj;
 
     // Optionally save the subtree to a file — carries along any materials/

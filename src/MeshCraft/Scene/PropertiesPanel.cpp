@@ -1675,12 +1675,27 @@ void PropertiesPanel::draw(float panelX, float panelY, float panelW, float panel
             if (matIt != ctx.document.materials.end()) {
                 auto& mat = matIt->second;
 
+                // F8: an edit to a material merged in from an <include> must
+                // survive Save -- the writer skips any id still present in
+                // doc.includedMaterials, so editing it in place here without
+                // promoting it to local silently drops the edit on the next
+                // save (same fix as MeshCraftApplication_UiLeftPanel.cpp's
+                // "Mat" tab, applied to this SEPARATE inline material
+                // editor). matIt->first is the material's actual key
+                // (== sel0->material, already resolved by the find() above).
+                auto pushUndoMat = [&]() {
+                    ctx.pushUndo();
+                    ctx.document.includedMaterials.erase(matIt->first);
+                };
+                if (ctx.document.includedMaterials.count(matIt->first))
+                    ImGui::TextDisabled("(from <include> -- editing makes a local copy)");
+
                 // Base color
                 ImGui::TextDisabled("Base Color");
                 ImGui::SetNextItemWidth(-1);
                 { bool _undoCh1623 = ImGui::ColorEdit4("##mbc", mat.baseColor.data(),
                         ImGuiColorEditFlags_NoLabel);
-                    if (ImGui::IsItemActivated()) ctx.pushUndo();
+                    if (ImGui::IsItemActivated()) pushUndoMat();
                     if (_undoCh1623) {
                     ctx.markModified();
                 } }
@@ -1693,7 +1708,7 @@ void PropertiesPanel::draw(float panelX, float panelY, float panelW, float panel
                 // pbrMetallicRoughness.roughnessFactor with no other guard.
                 { bool _undoChRough = ImGui::SliderFloat("##mrough", &mat.roughness, 0.0f, 1.0f, "%.3f",
                                        ImGuiSliderFlags_AlwaysClamp);
-                if (ImGui::IsItemActivated()) ctx.pushUndo();
+                if (ImGui::IsItemActivated()) pushUndoMat();
                 if (_undoChRough) {
                     ctx.markModified();
                 } }
@@ -1705,7 +1720,7 @@ void PropertiesPanel::draw(float panelX, float panelY, float panelW, float panel
                 // roughness above (spec-invalid metallicFactor on export).
                 { bool _undoChMetal = ImGui::SliderFloat("##mmetal", &mat.metallic, 0.0f, 1.0f, "%.3f",
                                        ImGuiSliderFlags_AlwaysClamp);
-                if (ImGui::IsItemActivated()) ctx.pushUndo();
+                if (ImGui::IsItemActivated()) pushUndoMat();
                 if (_undoChMetal) {
                     ctx.markModified();
                 } }
@@ -1715,7 +1730,7 @@ void PropertiesPanel::draw(float panelX, float panelY, float panelW, float panel
                 ImGui::SetNextItemWidth(-1);
                 { bool _undoCh1655 = ImGui::ColorEdit3("##memit", mat.emissiveColor.data(),
                         ImGuiColorEditFlags_NoLabel);
-                    if (ImGui::IsItemActivated()) ctx.pushUndo();
+                    if (ImGui::IsItemActivated()) pushUndoMat();
                     if (_undoCh1655) {
                     ctx.markModified();
                 } }
@@ -1728,7 +1743,7 @@ void PropertiesPanel::draw(float panelX, float panelY, float panelW, float panel
                 for (int i = 0; i < 3; ++i)
                     if (mat.alphaMode == alphaModes[i]) { alphaIdx = i; break; }
                 if (ImGui::Combo("##malpha", &alphaIdx, alphaModes, 3)) {
-                    ctx.pushUndo();
+                    pushUndoMat();
                     mat.alphaMode = alphaModes[alphaIdx];
                     ctx.markModified();
                 }
@@ -1739,7 +1754,7 @@ void PropertiesPanel::draw(float panelX, float panelY, float panelW, float panel
                     // roughness/metallic above (spec-invalid alphaCutoff).
                     { bool _undoChCutoff = ImGui::SliderFloat("##mcut", &mat.alphaCutoff, 0.0f, 1.0f, "%.3f",
                                            ImGuiSliderFlags_AlwaysClamp);
-                    if (ImGui::IsItemActivated()) ctx.pushUndo();
+                    if (ImGui::IsItemActivated()) pushUndoMat();
                     if (_undoChCutoff) {
                         ctx.markModified();
                     } }
@@ -1747,7 +1762,7 @@ void PropertiesPanel::draw(float panelX, float panelY, float panelW, float panel
 
                 // Double sided
                 if (ImGui::Checkbox("Double Sided", &mat.doubleSided)) {
-                    ctx.pushUndo();
+                    pushUndoMat();
                     ctx.markModified();
                 }
 
@@ -1759,14 +1774,14 @@ void PropertiesPanel::draw(float panelX, float panelY, float panelW, float panel
                     // roughness/metallic/alphaCutoff above -- occlusionStrength
                     // in particular is glTF-spec-bounded to [0,1].
                     { bool _undoCh1659 = ImGui::DragFloat("##mnrmscl", &mat.normalScale, 0.01f, 0.0f, 10.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
-                    if (ImGui::IsItemActivated()) ctx.pushUndo();
+                    if (ImGui::IsItemActivated()) pushUndoMat();
                     if (_undoCh1659) {
                         ctx.markModified();
                     } }
                     ImGui::TextDisabled("Occlusion Strength");
                     ImGui::SetNextItemWidth(-1);
                     { bool _undoCh1665 = ImGui::DragFloat("##moccstr", &mat.occlusionStrength, 0.01f, 0.0f, 1.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
-                    if (ImGui::IsItemActivated()) ctx.pushUndo();
+                    if (ImGui::IsItemActivated()) pushUndoMat();
                     if (_undoCh1665) {
                         ctx.markModified();
                     } }
@@ -1797,7 +1812,7 @@ void PropertiesPanel::draw(float panelX, float panelY, float panelW, float panel
                         std::string id = std::string("##t") + label;
                         if (ImGui::InputText(id.c_str(), buf, sizeof(buf),
                                 ImGuiInputTextFlags_EnterReturnsTrue)) {
-                            ctx.pushUndo();
+                            pushUndoMat();
                             field = buf; ctx.markModified();
                         }
                         if (isHov && hasPendingTex) ImGui::PopStyleColor();

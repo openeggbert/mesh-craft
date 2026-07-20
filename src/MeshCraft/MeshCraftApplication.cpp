@@ -450,7 +450,10 @@ void MeshCraftApplication::Update(GameTime& gameTime) {
         if (!hoveredTexSlot_.empty() && !hoveredTexMatId_.empty() &&
             document_.materials.count(hoveredTexMatId_)) {
             // Assign directly to the hovered slot
+            // F8: promote to local -- see MeshCraftApplication_UiLeftPanel.cpp's
+            // "Mat" tab pushUndoMat for the full rationale.
             pushUndo();
+            document_.includedMaterials.erase(hoveredTexMatId_);
             auto& mat = document_.materials[hoveredTexMatId_];
             if      (hoveredTexSlot_ == "base")       mat.baseColorTexture         = texPath;
             else if (hoveredTexSlot_ == "normal")     mat.normalTexture            = texPath;
