@@ -790,7 +790,7 @@ Child elements (all optional):
 ```xml
 <actions>
   <action name="Spin" duration="2.0" loop="true" autoplay="false">
-    <channel target="Wheel" property="rotation_y">
+    <channel target="Wheel" property="rotation.y">
       <keyframe time="0" value="0"   interp="linear"/>
       <keyframe time="2" value="360" interp="linear"/>
     </channel>
@@ -802,7 +802,16 @@ Child elements (all optional):
 |-----------|------|---------|--------------|
 | `autoplay` | bool | `false` | Whether this action starts playing automatically when the document loads |
 
-**Animated properties:** `position_x/y/z`, `rotation_x/y/z`, `scale_x/y/z`, `visible`, `emissive_r/g/b`, `deform_x/y/z`
+**Animated properties** (`property` attribute — dot notation, not underscores; see
+`Mc3Animation.cpp`'s `animatedPropertyName()`/`animatedPropertyFromName()`, the
+single source of truth both the parser and the editor's Timeline/Anim panel use):
+
+- Transform: `position.x/y/z`, `rotation.x/y/z`, `scale.x/y/z`
+- Visibility: `visible`
+- Deform: `deform.x/y/z`
+- Material (targets the object's assigned material — see `Mc3Object.material`):
+  `material.baseColor.r/g/b/a`, `material.roughness`, `material.metallic`,
+  `material.emissive.r/g/b`
 
 **Interpolation:** `linear`, `step`, `cubic` (cubic bezier with `<handle_left dt dv/>` and `<handle_right dt dv/>`)
 
@@ -838,7 +847,7 @@ curve in a short time window could in principle be under-sampled.
 | Lights | ✅ |
 | Cameras | ✅ |
 | Animations (position/rotation/scale) | ✅ |
-| Animations (`visible`, `emissive_r/g/b`, `deform_x/y/z`) | ❌ (no glTF core-spec equivalent — glTF animation channels can only target `translation`/`rotation`/`scale`/`weights`). The channel is skipped with a warning naming it; no fallback is attempted (e.g. `visible` is not approximated via a scale-to-zero animation) — this is a deliberate, accepted limitation, not a bug. |
+| Animations (`visible`, `deform.x/y/z`, all `material.*` channels) | ❌ (no glTF core-spec equivalent — glTF animation channels can only target `translation`/`rotation`/`scale`/`weights`). The channel is skipped with a warning naming it; no fallback is attempted (e.g. `visible` is not approximated via a scale-to-zero animation) — this is a deliberate, accepted limitation, not a bug. |
 | Torus, Capsule, Disk, Grid, IcoSphere | ✅ |
 | CSG (union/difference/intersection) | ✅ (evaluated by Manifold; unsupported child types fail the export; `--allow-approximate-csg` exports children separately as debug fallback) |
 | Instance (via definitions) | ✅ |
