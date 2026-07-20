@@ -1003,16 +1003,21 @@ void SceneRenderer::draw(const Mc3Document& doc,
 
     applyDocumentLighting(doc);
 
-    // Fog visualization (I3): apply fog from environment to BasicEffect
-    if (doc.environment && doc.environment->fog) {
-        const auto& f = *doc.environment->fog;
-        effect_->setFogEnabledProperty(true);
-        effect_->setFogColorProperty(Vector3{f.color[0], f.color[1], f.color[2]});
-        effect_->setFogStartProperty(f.start);
-        effect_->setFogEndProperty(f.end);
-    } else {
-        effect_->setFogEnabledProperty(false);
-    }
+    // 2026-07-20 audit finding #5: BasicEffect's own GPU fog used to be
+    // enabled here too, unconditionally whenever doc.environment->fog
+    // existed, ALWAYS using linear start/end regardless of f.mode -- this
+    // is now removed. drawObject()'s per-object CPU-side blend (below,
+    // "I3: per-object fog") already correctly handles both Linear and
+    // Exponential mode and re-colors each object's own draw color before
+    // rasterization -- it's a complete, correct implementation on its own.
+    // Layering BasicEffect's GPU fog on top double-applied it in Linear
+    // mode (visibly over-fogged: the already-fogged color got a second,
+    // independent fog blend from the GPU using its own distance metric)
+    // and applied a WRONG extra linear contribution in Exponential mode
+    // (BasicEffect has no exponential-fog concept at all, so it always
+    // used f.start/f.end regardless of f.mode, on top of the already-
+    // correct exponential CPU result). Fog is real Mc3Environment content
+    // and doesn't need CNA's fixed-function fog at all to work correctly.
 
     // Extract camera world position from view matrix for LOD (G8)
     camPosX_ = -(view.M41*view.M11 + view.M42*view.M21 + view.M43*view.M31);
@@ -1023,8 +1028,6 @@ void SceneRenderer::draw(const Mc3Document& doc,
 
     for (const auto& obj : doc.objects)
         drawObject(*obj, doc, identity, view, proj, selected);
-
-    effect_->setFogEnabledProperty(false);
 }
 
 // ---------------------------------------------------------------------------

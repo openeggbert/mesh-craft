@@ -1268,6 +1268,27 @@ if(MESH_CRAFT_BUILD_TESTING AND UNIX AND NOT ANDROID AND NOT EMSCRIPTEN)
             set_tests_properties(fog_linear_test PROPERTIES TIMEOUT 30 LABELS "render")
         endif()
 
+        # 2026-07-20 audit finding #5: BasicEffect's own GPU fog used to be
+        # enabled unconditionally whenever doc.environment->fog existed,
+        # ALWAYS using linear start/end regardless of the document's
+        # declared mode -- double-applying fog in Linear mode and applying
+        # a wrong extra linear contribution in Exponential mode (which has
+        # no start/end concept). Verify start/end have zero effect in
+        # Exponential mode via real pixel comparison of two otherwise-
+        # identical scenes differing only in start/end.
+        if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/test/fog_exponential_a.mc3.xml")
+            add_test(
+                NAME fog_exponential_test
+                COMMAND "${PYTHON3_EXEC}"
+                        "${CMAKE_CURRENT_SOURCE_DIR}/test/fog_exponential_test.py"
+                        $<TARGET_FILE:MeshCraft>
+                        "${CMAKE_CURRENT_SOURCE_DIR}/test/fog_exponential_a.mc3.xml"
+                        "${CMAKE_CURRENT_SOURCE_DIR}/test/fog_exponential_nofog.mc3.xml"
+                WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
+            )
+            set_tests_properties(fog_exponential_test PROPERTIES TIMEOUT 30 LABELS "render")
+        endif()
+
         # 2026-07-20 audit finding #4: doc.lights had zero effect on live
         # shading (BasicEffect's fixed 3-point default rig was used
         # unconditionally regardless of what was authored) -- verify a

@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- 2026-07-20 audit finding #5 regression fixture. Exponential fog on a
+     red box 20 units from the camera, mode-aware and driven purely by
+     `density` (SceneRenderer.cpp's per-object CPU-side fog blend). Paired
+     with fog_exponential_nofog.mc3.xml (identical scene, no environment
+     block at all), used by fog_exponential_test.py as the "un-fogged
+     base color" reference to confirm this scene's rendered color has
+     shifted, partially, toward the fog color. See fog_exponential_test.py
+     for the full rationale, including why an earlier draft of this test
+     tried (and had to abandon) an exact numeric fogFactor prediction. -->
+<mc3 version="0.3" model="FogExponentialFixture" default_camera="Main">
+
+  <environment>
+    <fog mode="exponential" color="0 1 0" start="100" end="200" density="0.034657"/>
+  </environment>
+
+  <cameras>
+    <camera name="Main" position="0 0 20" target="0 0 0" fov="50" near="0.1" far="200"/>
+  </cameras>
+
+  <materials>
+    <material id="red"><base_color>1.0 0.0 0.0 1.0</base_color></material>
+  </materials>
+
+  <objects>
+    <box name="FarBox" size="4 4 4" position="0 0 0" material="red"/>
+  </objects>
+
+</mc3>

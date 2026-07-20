@@ -84,14 +84,14 @@ P1s already being fixed in git history. This session:
    is per-field only) not part of the original audit, filed as new `TODO`
    tasks.
 
-   **Net across all 20 AUD-### rows remaining in this active backlog (61
+   **Net across all 21 AUD-### rows remaining in this active backlog (61
    additional rows completed and archived to `docs/history/plan_20260718.md`
    on 2026-07-18 — see that file for their full evidence/resolution text):
-   14 DONE, 4 TODO, 2 DEFERRED** — 10 of the 14 DONE (`AUD-064` through
+   15 DONE, 4 TODO, 2 DEFERRED** — 10 of the 15 DONE (`AUD-064` through
    `AUD-073`) are fresh findings from a 2026-07-18 (later same day)
    independent re-audit, not part of the original 6 (`AUD-069` itself fixed
-   2026-07-19, the day after it was filed); the other 4 (`AUD-074` through
-   `AUD-077`) are from a third independent audit on 2026-07-20 (later the
+   2026-07-19, the day after it was filed); the other 5 (`AUD-074` through
+   `AUD-078`) are from a third independent audit on 2026-07-20 (later the
    same day as this session's SYS-W14-18..27 work). Recompute with
    `python3 test/validate_plan_consistency.py . <build-dir>` rather than
    trusting this number as time passes.
@@ -1520,14 +1520,17 @@ count — re-run it rather than trusting this paragraph.
 **Update (2026-07-20, later same day, after SYS-W14-18..27):** a third
 independent fresh audit (4 parallel agents: build/test health, core-code
 bug hunt, docs/architecture staleness, editor UX/wiring gaps) added
-`AUD-074` through `AUD-077` (all `DONE`), bringing the total to
-**20 AUD-### rows**. Two smaller findings from that same audit round (fog
-double-applied via CPU+GPU paths, camera `rotation` override ignored by
-the gizmo/look-through preview) plus the stale `MCB_FORMAT.md`/
-`TESTING.md` docs findings are tracked as this session's own in-progress
-work, not yet all filed as their own `AUD-###` rows — check the session
-log / recent commits for their current status rather than assuming this
-paragraph is exhaustive.
+`AUD-074` through `AUD-078` (all `DONE`), bringing the total to
+**21 AUD-### rows**. `AUD-078` (fog) was downgraded from the audit's own
+initial P1/P2 "visibly double-applied" framing to P2 "dead/incorrect
+code" after direct empirical investigation found zero actual pixel
+difference — see its own row for the full story. One smaller finding
+from that same audit round (camera `rotation` override ignored by the
+gizmo/look-through preview) plus the stale `MCB_FORMAT.md`/`TESTING.md`
+docs findings are tracked as this session's own in-progress work, not yet
+filed as their own `AUD-###` rows — check the session log / recent
+commits for their current status rather than assuming this paragraph is
+exhaustive.
 
 ### AUD-025 `[DEFERRED]` `P2` `W7` · embed: mesh source is treated as a literal OBJ path — node exports with no mesh while export exits 0 'Written'
 - **Component:** mc3togltf/src/GltfExporter.cpp buildMesh()
@@ -1688,3 +1691,10 @@ paragraph is exhaustive.
 - **Outcome:** Investigated CNA's `BasicEffect` API before implementing (`cna/include/Microsoft/Xna/Framework/Graphics/BasicEffect.hpp`/`DirectionalLight.hpp`): a faithful port of real XNA's fixed-function lighting model, exposing exactly 3 `DirectionalLight0/1/2` slots (`Direction`/`DiffuseColor`/`SpecularColor`/`Enabled`) plus one `AmbientLightColor` — no position/attenuation API at all, so `point`/`spot` genuinely cannot be represented without a custom shader (a materially larger change than this finding's scope). **User confirmed the resulting scoped proposal** (map up to 3 `directional` lights + the first `ambient` light onto BasicEffect's real API; `point`/`spot` stay gizmo-only, documented) before implementation began. New `SceneRenderer::applyDocumentLighting(doc)`, called once per `draw()` (cheap — a handful of float writes, no allocation, so Lights-tab edits are reflected immediately): maps up to the first 3 `Directional` lights onto `DirectionalLight0-2` (`direction` normalized with a zero-length guard matching `drawLightGizmos()`'s own convention, `color × brightness` clamped to `[0,1]`, applied as both diffuse and specular) and the first `Ambient` light onto `AmbientLightColor`; falls back untouched to the constructor's original default rig when the document has no `Directional`/`Ambient` lights to represent (including documents with only `Point`/`Spot` lights, or none at all) — preserving today's look for the common unlit-by-design case.
 - **Tests:** New `test/light_shading_test.py` (`light_shading_test` ctest, real headless `--screenshot` pixel sampling) + two new fixtures: `light_shading.mc3.xml` (a white sphere lit by one strong pure-red directional light aimed at the camera-facing hemisphere) and `light_shading_control.mc3.xml` (the identical scene with NO lights, for the default rig). Asserts the lit scene's sphere has a substantial red-dominant pixel cluster (>200 samples) AND the control scene has essentially none (<10) — proving the redness is actually caused by the authored light, not a default-rig coincidence. **Empirically verified via `git stash`**: the test genuinely fails pre-fix (0 red-dominant samples, real assertion failure reproduced, not just a hypothesized risk) and passes post-fix (1020 samples). Also manually verified visually — rendered both scenes and inspected the actual PNG output before writing the automated test: the lit scene's sphere is unmistakably red-shaded from the light's direction, the control sphere is warm-white as before. Full rebuild + 164/164 `ctest` (was 163). **Caught and fixed the same XML-comment double-hyphen bug as `SYS-W14-24`** while writing the fixtures (invalid XML, caught immediately by `xsd_validation`) — also had to fix the fixtures' element ordering (`<cameras>` must precede `<materials>`/`<objects>` per `mc3.xsd`), both before committing.
 - **Resolved:** commit `8a80d55` — verify: `ctest -R light_shading_test`
+
+### AUD-078 `[DONE]` `P2` `W1` · BasicEffect's own GPU fog was enabled redundantly and mode-blind alongside the already-complete CPU-side per-object fog blend
+- **Component:** src/MeshCraft/Renderer/SceneRenderer.cpp (`draw()`)
+- **Evidence:** Found via the same fresh 4-agent independent audit as `AUD-074`..`AUD-077`, the editor-UX/wiring-gaps dimension (initially reported as a P1/P2 "fog is visibly double-applied" finding). `drawObject()`'s per-object CPU-side blend ("I3", further down the same file) is a complete, correct implementation honoring both `mode="linear"` (`start`/`end`) and `mode="exponential"` (`density`). `draw()` additionally called `effect_->setFogEnabledProperty(true)` + `setFogStartProperty`/`setFogEndProperty` (CNA `BasicEffect`'s own built-in GPU fog) unconditionally whenever `doc.environment->fog` existed, regardless of `mode` — wrong for Exponential mode (`BasicEffect` has no exponential-fog concept at all, so it always used `start`/`end` even then) and redundant even for Linear mode (the CPU blend already produces the correct color; a second GPU-side blend on top is at best a no-op, at worst a real double-application). **Downgraded from the audit's own initial P1/P2 "visibly over-fogged" framing to P2 "dead/incorrect code, not a currently-visible defect" after direct empirical investigation while writing the fix**: rendered the exact same fixture with and without the GPU-fog-enabling code (via `git stash`, saved binaries from both) and diffed the output pixel-for-pixel — **zero difference**, in either the fogged or un-fogged case. The GPU-fog branch was not visibly reachable in this renderer's actual effect/shader configuration (likely `VertexColorEnabled=true` routes to a shader permutation where CNA's fog uniform is never consumed — a CNA-side question, out of scope here per the "no CNA changes" boundary, and not necessary to resolve since the fix doesn't depend on knowing why). This is a real code-correctness fix (removes logic that is unconditionally wrong for one fog mode and redundant for the other, and could become visibly double-applying under a different CNA build/backend/effect configuration) — just not a fix for a defect users could currently see.
+- **Outcome:** Remove the `BasicEffect`-fog-enabling block from `draw()` entirely; rely solely on the already-correct, already-complete CPU-side per-object blend.
+- **Tests:** New `test/fog_exponential_a.mc3.xml`/`fog_exponential_nofog.mc3.xml` fixtures + `test/fog_exponential_test.py` (`fog_exponential_test` ctest) — (1) a static source check that `setFogEnabledProperty(true)` does not appear in `SceneRenderer.cpp` (the actual regression guard: empirically confirmed via `git stash` that this alone correctly fails when the removed pattern is reintroduced, without even needing a rebuild), and (2) a real `--screenshot` render check that `mode="exponential"` fog (previously entirely untested — the pre-existing `fog_linear_test.py` only covers Linear mode) produces a real, measurable, PARTIAL blend toward the fog color via the CPU path alone (qualitative bounds, not an exact numeric prediction — an earlier draft tried predicting the precise blended color via the documented CPU formula and hand-computed camera distance, but hit persistent, unexplained numeric discrepancies against the actual renderer; abandoned in favor of the simpler, still-meaningful directional/partial-blend check, documented honestly in the test file itself rather than silently papered over). Full rebuild + 165/165 `ctest` (was 164). **Caught the same XML-comment double-hyphen bug (3rd time this session)** while writing the fixtures — fixed before committing.
+- **Resolved:** commit (pending, this session) — verify: `ctest -R fog_exponential_test`

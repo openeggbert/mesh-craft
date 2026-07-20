@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- 2026-07-20 audit finding #5 regression fixture: control case for
+     fog_exponential_a.mc3.xml. Identical box/camera/material, but no
+     <environment> at all, so this scene's rendered color is exactly the
+     "base" (lit-but-unfogged) color fog_exponential_test.py uses to
+     predict fog_exponential_a.mc3.xml's expected fogged color. -->
+<mc3 version="0.3" model="FogExponentialNoFogFixture" default_camera="Main">
+
+  <cameras>
+    <camera name="Main" position="0 0 20" target="0 0 0" fov="50" near="0.1" far="200"/>
+  </cameras>
+
+  <materials>
+    <material id="red"><base_color>1.0 0.0 0.0 1.0</base_color></material>
+  </materials>
+
+  <objects>
+    <box name="FarBox" size="4 4 4" position="0 0 0" material="red"/>
+  </objects>
+
+</mc3>

@@ -268,6 +268,21 @@ Free-form document-level key/value metadata — author, license, description, ve
 way `<texture uri="...">` is (relative to the top-level scene file's
 directory).
 
+**Live-viewport fog implementation (`AUD-078`, 2026-07-20):** `<fog>` is
+applied by `SceneRenderer.cpp` entirely via a per-object CPU-side color
+blend (mixes each object's draw color toward `fog.color` based on camera
+distance, correctly honoring both `mode="linear"` (`start`/`end`) and
+`mode="exponential"` (`density`)) — a complete, correct implementation on
+its own. An earlier version of this code *also* enabled CNA `BasicEffect`'s
+own built-in GPU fog on top, unconditionally whenever `<fog>` existed,
+always using linear `start`/`end` regardless of the declared `mode` —
+wrong for Exponential mode (which has no `start`/`end` concept at all) and
+redundant even for Linear mode. That extra GPU-fog call has been removed.
+Empirically confirmed (rendering the exact same scene with and without it)
+that it had produced no measurable pixel difference in this renderer's
+actual configuration — so this was a dead/incorrect code cleanup, not a
+fix for a previously-*visible* rendering defect.
+
 ---
 
 ## Lights
