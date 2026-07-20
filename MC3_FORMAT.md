@@ -380,7 +380,7 @@ Inline Lua source, referenced by id from `<triggers>` (`<run-script ref="..."/>`
 | `id` | ID | yes | Referenced by `<run-script ref="...">` |
 | `type` | string | yes | Only `"lua"` is currently defined |
 
-**Status:** data model, parser, writer, MCB round-trip, and XSD validation are complete (STAB-0032). There is no Lua interpreter embedded in the editor or exporters yet — scripts are stored and round-tripped, not executed.
+**Status:** data model, parser, writer, MCB round-trip, and XSD validation are complete (STAB-0032). As of `SYS-W14-18` (2026-07-20), a real sandboxed Lua 5.4 interpreter (`LuaScriptRunner`, Lua + sol2) IS embedded in the editor — run explicitly via the Scripts tab's "Run Script" button, or a trigger's `<run-script>` step ([Triggers (N5)](#triggers-n5)). Two globals are bound while a script runs: `def` (compose-time socket placement — `place`/`place_at`/`has_socket`, mirroring `../mesh-world`'s own established R103/R104 API) and `scene` (broader: `scene:find(idOrName)` returns a handle to read/write any object's position/rotation/scale/visible/material). No automatic execution exists yet (e.g. running a definition's script the moment it's placed/composed) — only the two explicit entry points above. Exporters (`mc3togltf`/`mc3tomcb`) still never execute scripts.
 
 ---
 
@@ -409,7 +409,7 @@ One-shot/loopable sound effects and background music tracks, referenced by id fr
 | `<track>` (inside `<music>`) | `src` | URI | yes | — |
 | `<track>` (inside `<music>`) | `loop` | bool | no | `true` |
 
-**Status:** data model, parser, writer, MCB round-trip, and XSD validation are complete (STAB-0032). No audio playback is implemented in the editor or exporters — these are data-only for now.
+**Status:** data model, parser, writer, MCB round-trip, and XSD validation are complete (STAB-0032). Real audio playback IS implemented in the editor (`Editor::AudioPreview`, STAB-0706) — the Audio tab's own ▶/■ buttons play a `<sound>`/`<track>` directly, and a trigger's `<play-sound>`/`<play-music>` step ([Triggers (N5)](#triggers-n5)) reuses the same mechanism when fired. Exporters still never touch audio (not a glTF/OBJ concept).
 
 ---
 
@@ -440,7 +440,7 @@ Named sequences of steps — references into `<actions>`, `<sounds>`, `<scripts>
 
 A `<trigger>` can contain any number of steps in any order/combination. `ref` values are plain strings in the schema (not `IDREF`) — cross-references are not validated at parse time.
 
-**Status:** data model, parser, writer, MCB round-trip, and XSD validation are complete (STAB-0043). Nothing in the editor or exporters currently fires triggers — there's no event system wired up to them yet.
+**Status:** data model, parser, writer, MCB round-trip, and XSD validation are complete (STAB-0043). As of `SYS-W14-19` (2026-07-20), the editor's Triggers tab has an explicit "Fire" action (a per-row button, and a "Fire Trigger" button in the detail view) that actually executes a trigger's steps in order: `<play-action>` drives the same Timeline playback state the Play button uses, `<play-sound>`/`<play-music>` call `Editor::AudioPreview::play()`, `<run-script>` runs via `LuaScriptRunner` ([Scripts (N3)](#scripts-n3)). There is still no automatic in-scene event system (collision/click/timer) that fires a trigger without this explicit manual action, and only one "current action"/one shared audio-preview slot exists, so multiple `<play-action>` (or multiple `<play-sound>`/`<play-music>`) steps in one trigger replace rather than layer.
 
 ---
 

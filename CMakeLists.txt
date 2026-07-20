@@ -325,6 +325,61 @@ FetchContent_Declare(tinyobjloader
     GIT_SHALLOW    TRUE)
 FetchContent_MakeAvailable(tinyobjloader)
 
+# Lua 5.4 + sol2 — SYS-W14-18 (2026-07-20): Mc3Object::scriptId/doc.scripts
+# ("lua") round-tripped/were editable but nothing ever executed a script.
+# Mirrors the sibling ../mesh-world repo's own already-working, sandboxed
+# setup exactly (library choice, versions, sandbox discipline) rather than
+# inventing a different one -- see its Mc3ScriptRunner.cpp/LuaRuntime.cpp.
+# mesh-world deliberately kept its Lua/sol2 dependency OUT of the shared
+# mc3/ library (also consumed by CNA/mc3togltf/mc3tomcb) to avoid forcing
+# it on every mc3/ consumer; that constraint doesn't apply here since this
+# is the MeshCraft EDITOR target specifically (which already vendors much
+# heavier dependencies like Manifold/ImGui), so it's added directly to it,
+# not to mc3/. Pure portable C/C++, unconditional like ImGui/Manifold
+# above -- not gated behind NOT EMSCRIPTEN/NOT ANDROID like SQLite3/
+# cpp-httplib below (those gate on external system libraries; Lua is
+# self-contained and commonly compiled to WASM/Android already).
+FetchContent_Declare(lua
+    GIT_REPOSITORY https://github.com/lua/lua.git
+    GIT_TAG        v5.4.7
+    GIT_SHALLOW    TRUE
+)
+FetchContent_MakeAvailable(lua)
+file(GLOB LUA_SOURCES "${lua_SOURCE_DIR}/*.c")
+# Exclude interpreter/compiler mains (lua.c/luac.c both define main()),
+# matching mesh-world's own exclusion list. ALSO exclude onelua.c and
+# ltests.c -- mesh-world fetched the lua.org release TARBALL, which
+# doesn't include either; this fetches the git mirror instead (matching
+# this repo's own GIT_REPOSITORY/GIT_TAG FetchContent convention), whose
+# checkout does include them. onelua.c #includes every other .c file
+# verbatim into one translation unit (its own header comment: "Lua core,
+# libraries, and interpreter in a single file") -- compiling it ALONGSIDE
+# the individual .c files below would duplicate-define every Lua symbol,
+# a link-time failure once something actually pulls both object files in
+# (confirmed: onelua.c.o built "successfully" as an object file on its
+# own, since a static library's ar step doesn't detect the conflict --
+# only linking a consumer that references these symbols would). ltests.c
+# is Lua's own internal test/diagnostics module, not needed for embedding.
+list(FILTER LUA_SOURCES EXCLUDE REGEX ".*/lua\\.c$")
+list(FILTER LUA_SOURCES EXCLUDE REGEX ".*/luac\\.c$")
+list(FILTER LUA_SOURCES EXCLUDE REGEX ".*/onelua\\.c$")
+list(FILTER LUA_SOURCES EXCLUDE REGEX ".*/ltests\\.c$")
+add_library(lua54 STATIC ${LUA_SOURCES})
+target_include_directories(lua54 PUBLIC "${lua_SOURCE_DIR}")
+if(NOT MSVC)
+    target_compile_options(lua54 PRIVATE -w)
+else()
+    target_compile_options(lua54 PRIVATE /w)
+endif()
+
+FetchContent_Declare(sol2
+    GIT_REPOSITORY https://github.com/ThePhD/sol2.git
+    GIT_TAG        v3.3.0
+    GIT_SHALLOW    TRUE
+)
+FetchContent_MakeAvailable(sol2)
+# sol2's own CMakeLists.txt creates the sol2::sol2 INTERFACE target.
+
 # mc3togltf — MC3 to glTF/GLB export tool (uses Mc3 + tinyobjloader already fetched above)
 add_subdirectory(mc3togltf)
 
@@ -491,7 +546,8 @@ if(EMSCRIPTEN)
     # SDL3 imported targets are directory-scoped; re-declare them in this scope.
     find_package(SDL3 REQUIRED CONFIG)
     target_link_libraries(${_target} PRIVATE
-        CNA ${_cna_backend_target} SHARP_RUNTIME Mc3 Mcb mc3togltf_lib imgui SDL3::SDL3-static)
+        CNA ${_cna_backend_target} SHARP_RUNTIME Mc3 Mcb mc3togltf_lib imgui SDL3::SDL3-static
+        lua54 sol2::sol2)
     target_link_options(${_target} PRIVATE
         -sALLOW_MEMORY_GROWTH=1
         -sSTACK_SIZE=1048576
@@ -513,12 +569,14 @@ elseif(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang" AND NOT WIN32 AND NOT ANDROID)
         mc3togltf_lib
         imgui
         manifold
-        tinyobjloader)
+        tinyobjloader
+        lua54
+        sol2::sol2)
     if(SQLite3_FOUND)
         target_link_libraries(${_target} PRIVATE ${SQLite3_LIBRARIES})
     endif()
 else()
-    target_link_libraries(${_target} PRIVATE CNA ${_cna_backend_target} SHARP_RUNTIME Mc3 Mcb mc3togltf_lib imgui manifold tinyobjloader)
+    target_link_libraries(${_target} PRIVATE CNA ${_cna_backend_target} SHARP_RUNTIME Mc3 Mcb mc3togltf_lib imgui manifold tinyobjloader lua54 sol2::sol2)
     if(SQLite3_FOUND)
         target_link_libraries(${_target} PRIVATE ${SQLite3_LIBRARIES})
     endif()
@@ -756,6 +814,24 @@ if(MESH_CRAFT_BUILD_TESTING AND UNIX AND NOT ANDROID AND NOT EMSCRIPTEN)
     add_test(NAME audio_preview COMMAND audio_preview_test)
     set_tests_properties(audio_preview PROPERTIES TIMEOUT 15 LABELS "unit")
 
+    # SYS-W14-18 (2026-07-20): LuaScriptRunner -- executes Mc3Script
+    # ("lua") source against a document. Unlike the CNA-coupled UI wiring
+    # (Scripts tab / Triggers tab, tested via mirrors elsewhere), this
+    # class itself is CNA-free, so this exercises it directly with real
+    # Lua execution (sandbox, def:place()/place_at()/has_socket(),
+    # scene:find() + property read/write, the instruction-budget guard
+    # against an actual infinite loop).
+    add_executable(lua_script_runner_test
+        ${CMAKE_CURRENT_SOURCE_DIR}/test/lua_script_runner_test.cpp
+        ${CMAKE_CURRENT_SOURCE_DIR}/src/MeshCraft/Editor/LuaScriptRunner.cpp)
+    target_include_directories(lua_script_runner_test PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/include
+        ${CMAKE_CURRENT_SOURCE_DIR}/mc3/include)
+    target_link_libraries(lua_script_runner_test PRIVATE lua54 sol2::sol2)
+    target_compile_features(lua_script_runner_test PRIVATE cxx_std_23)
+    add_test(NAME lua_script_runner COMMAND lua_script_runner_test)
+    set_tests_properties(lua_script_runner PROPERTIES TIMEOUT 30 LABELS "unit")
+
     # Pure unit test: ObjectType <-> display-name round-trip. Header-only.
     # Regression guard for the Torus/Capsule/Disk/Grid/IcoSphere -> "Object"
     # mislabel and the lossy macro round-trip.
@@ -862,9 +938,12 @@ if(MESH_CRAFT_BUILD_TESTING AND UNIX AND NOT ANDROID AND NOT EMSCRIPTEN)
     # and mock playback/audio trackers, matching this session's
     # established pattern (registry_insert_undo_test/obj_export_temp_cleanup_test).
     add_executable(trigger_fire_test
-        ${CMAKE_CURRENT_SOURCE_DIR}/test/trigger_fire_test.cpp)
+        ${CMAKE_CURRENT_SOURCE_DIR}/test/trigger_fire_test.cpp
+        ${CMAKE_CURRENT_SOURCE_DIR}/src/MeshCraft/Editor/LuaScriptRunner.cpp)
     target_include_directories(trigger_fire_test PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/include
         ${CMAKE_CURRENT_SOURCE_DIR}/mc3/include)
+    target_link_libraries(trigger_fire_test PRIVATE lua54 sol2::sol2)
     target_compile_features(trigger_fire_test PRIVATE cxx_std_23)
     add_test(NAME trigger_fire COMMAND trigger_fire_test)
     set_tests_properties(trigger_fire PROPERTIES TIMEOUT 15 LABELS "unit")

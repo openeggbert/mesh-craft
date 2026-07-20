@@ -7,6 +7,7 @@
 #include "MeshCraft/Editor/EditorCamera.hpp"
 #include "MeshCraft/Editor/EditorTool.hpp"
 #include "MeshCraft/Editor/KeybindingManager.hpp"
+#include "MeshCraft/Editor/LuaScriptRunner.hpp"
 #include "MeshCraft/Editor/MacroRecorder.hpp"
 #include "MeshCraft/Editor/ObjectIndex.hpp"
 #include "MeshCraft/Editor/Preferences.hpp"
@@ -232,6 +233,12 @@ private:
     std::string selectedSoundKey_;
     std::string selectedMusicKey_;
     Editor::AudioPreview audioPreview_;
+
+    // SYS-W14-18 (2026-07-20): executes Mc3Script ("lua") source against
+    // document_. Stateless across calls (a fresh sol::state per run), so
+    // a single shared instance is fine to reuse from both the Scripts
+    // tab's "Run Script" button and the Triggers tab's run-script step.
+    Editor::LuaScriptRunner luaScriptRunner_;
 
     // Materials panel selection
     std::string selectedMaterialKey_;

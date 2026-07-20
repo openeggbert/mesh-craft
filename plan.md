@@ -136,15 +136,12 @@ still internally consistent.
 3. Remaining `TODO` AUD-### rows are all downstream of the two blockers
    above (AUD-053 needs AUD-052; AUD-057's CI-job half needs the same) —
    none are independently actionable right now.
-4. **SYS-W14-18** (P1) — Lua scripting execution, the "format supports it,
-   editor never runs it" gap found 2026-07-20 (user request: "co mc3
-   nabízí, ale MeshCraft to ještě neumí"). Its lower-risk P1 sibling
-   (trigger event-firing) is now done — user picked it to start with
-   2026-07-20. Needs an upfront library/sandbox/execution-model design
-   decision (ask the user) before implementation.
+4. Both P1 "format supports it, editor never runs it" gaps found 2026-07-20
+   (user request: "co mc3 nabízí, ale MeshCraft to ještě neumí" --
+   trigger event-firing and Lua scripting execution) are now done.
 5. **SYS-W14-20/21** (P2) — Scene States runtime switching; wiring
-   `Mc3ImportResolver` into the editor. Independent of each other and of
-   item 4.
+   `Mc3ImportResolver` into the editor. Independent of each other. Ask
+   the user which to start with next.
 6. **SYS-W14-22..27** (P3) — smaller format-vs-editor completeness gaps
    (`mipMaps`/`colorSpace` unused downstream, UV box/sphere projection,
    MCB compression, light-brightness unit conversion, ambient-light
@@ -1005,7 +1002,7 @@ _All items in this workstream are DONE — archived to [`docs/history/plan_20260
   findings that turn out to already be fully resolved on investigation
   (e.g. `SYS-W5-05`, `SYS-W7-01` in the archived history).
 
-- **SYS-W14-18** `[TODO]` `P1` — Lua scripting execution engine.
+- **SYS-W14-18** `[DONE]` `P1` — Lua scripting execution engine.
   `Mc3Object::scriptId`/`doc.scripts` (`Mc3Script`, `type="lua"`) parse,
   serialize, round-trip (XML/JSON/MCB), and are fully editable in the
   "Scripts" tab and per-object "Script" field — but nothing in this
@@ -1018,13 +1015,87 @@ _All items in this workstream are DONE — archived to [`docs/history/plan_20260
   it, that's each consumer's own choice of Lua binding/sandbox." Found
   2026-07-20 during a "what does the format support that the editor
   doesn't" review (user request).
-  **Open design questions (ask before implementing):** which embeddable
-  Lua library (`lua.h`+manual bindings vs. a C++ wrapper like `sol2`/
-  `sol3`, license/vendoring implications), what the sandboxed API surface
-  exposes (read/write access to the document? just socket placement?),
-  and when execution actually happens (an explicit "Run Script" editor
-  action for authoring/preview, a trigger's `run-script` step once
-  `SYS-W14-19` exists, both?).
+  **Open design questions (asked before implementing), and the user's
+  answers:** library -- user said "look at how ../mesh-world does it"
+  rather than pick blind; investigated via a research fork and found
+  mesh-world already has a complete, working, sandboxed reference
+  implementation (`Mc3ScriptRunner.cpp`/`LuaRuntime.cpp`: **Lua 5.4.7 +
+  sol2 v3.3.0**, `sol::lib::base/math/string/table` only, `io`/`os`/
+  `debug`/`package`/`dofile`/`loadfile`/`load`/`collectgarbage` all
+  nil'd, `require` overridden to throw) -- mirrored exactly rather than
+  inventing a different one. `Mc3ScriptRunner.hpp`'s own header comment
+  explicitly frames this as "R104 asks for the Lua binding to live in
+  MeshCraft itself... deliberately deferred for v1" -- this task
+  completes that deferral. API surface -- user chose **broader**: not
+  just R103/R104's original "socket placement" scope, but read/write
+  object properties too. Execution trigger -- user chose **explicit
+  button + trigger step**, no automatic compose-time execution.
+  **Implementation:** new `Editor::LuaScriptRunner`
+  (`include/MeshCraft/Editor/LuaScriptRunner.hpp` +
+  `src/.../LuaScriptRunner.cpp`), CNA-free. Two globals bound per run
+  (fresh `sol::state` each time, no persistent state, matching
+  mesh-world's own convention): `def` -- mesh-world's own
+  `PlacementApi` unchanged (`place`/`place_at`/`has_socket`), except
+  `target` is nullable here (mesh-world's compose-time caller always
+  has one; MeshCraft's own call sites don't always); `scene` -- this
+  repo's own addition for the broader ask: `scene:find(idOrName)`
+  (two-pass id-then-name recursive search) returns a handle with
+  `get/set_position/rotation/scale`, `get/set_visible`,
+  `get/set_material`, read-only `.name`/`.id`. **Safety addition beyond
+  mesh-world's own reference** (which has none -- acceptable for an
+  offline/CLI tool, not for an interactive editor): an instruction-
+  count execution budget (`lua_sethook`, `LUA_MASKCOUNT`, 50M
+  instructions) aborts a genuine infinite loop instead of hanging the
+  whole editor UI thread forever -- empirically confirmed against a
+  real `while true do end` script in the test below (aborts in well
+  under a second, not hung).
+  Lua/sol2 vendored directly into the `MeshCraft` editor target's own
+  `CMakeLists.txt` (`GIT_REPOSITORY`/`GIT_TAG` convention, matching
+  this repo's other FetchContent deps) -- NOT into the shared `mc3/`
+  library, since mesh-world's own "materially bigger commitment"
+  concern was specifically about forcing the dependency onto every
+  `mc3/` consumer (CNA/mc3togltf/mc3tomcb too); that constraint doesn't
+  apply to the editor target itself, which already vendors much
+  heavier dependencies (Manifold/ImGui). Excludes `onelua.c`/`ltests.c`
+  from the compiled sources -- the git mirror's checkout (unlike
+  mesh-world's own lua.org release-tarball fetch) includes both, and
+  `onelua.c` `#include`s every other `.c` file into one translation
+  unit, which would duplicate-define every Lua symbol once anything
+  actually links against both it and the individual `.c` files.
+  **UI wiring:** Scripts tab gained a "▶ Run Script" button
+  (`target` = current selection's first object if any, else `nullptr`);
+  the Triggers tab's `run-script` step (`SYS-W14-19`'s `fireTrigger()`)
+  now actually calls `luaScriptRunner_.run()` with the same
+  selection-based target convention, instead of reporting "not
+  implemented." `pushUndo()`/`modified_` are now called by
+  `fireTrigger()` -- but ONLY when the trigger has at least one
+  `run-script` step (checked up front, snapshot taken before the loop
+  so Ctrl+Z covers a script's mutation even if a later step then
+  errors) -- a `play-action`/`play-sound`/`play-music`-only trigger
+  still pushes no snapshot at all, matching `SYS-W14-19`'s own original
+  behavior for those 3 step types (they never touched `document_`).
+  **Tests:** new `test/lua_script_runner_test.cpp` (`lua_script_runner`
+  ctest) -- CNA-free, so this exercises REAL Lua execution directly
+  (not a mirror): empty-source no-op, plain-script success, syntax/
+  runtime error reporting, sandbox verification (`os`/`io` are nil,
+  `require` blocked), the infinite-loop budget actually aborting a real
+  `while true do end`, `scene:find()` by id/name/not-found, real
+  property read/write mutating the actual `Mc3Object`, `def:place()`/
+  `place_at()`/`has_socket()` matching mesh-world's own contract
+  exactly (including the no-target and unresolved-definitionRef error
+  cases). `test/trigger_fire_test.cpp` (extended, mirrors
+  `fireTrigger()`'s control flow like before, but now uses the REAL
+  `LuaScriptRunner` for its `RunScript` case instead of a mock, since
+  that class itself is CNA-free) adds: a real script mutating a real
+  object end-to-end through the trigger path, a Lua syntax error
+  correctly distinguished from a missing-ref skip in the aggregated
+  status message, and the conditional-pushUndo() behavior (only for a
+  trigger containing a `run-script` step). Manual smoke test: a real
+  scene fixture with a script + a `run-script` trigger loads and
+  renders via `--screenshot` with no crash and a clean GL state.
+  Full rebuild + 157/157 `ctest` (was 155 after `SYS-W14-19`; 2 new
+  registrations, `lua_script_runner` and the `trigger_fire_test`
+  extension needed no new registration).
 - **SYS-W14-19** `[DONE]` `P1` — Trigger event-firing system.
   `doc.triggers` (`Mc3Trigger`: `id` + ordered `{type, ref}` steps —
   `play-action`/`play-sound`/`run-script`/`play-music`) parse/serialize/
@@ -1052,10 +1123,16 @@ _All items in this workstream are DONE — archived to [`docs/history/plan_20260
   (`MeshCraftApplication.cpp:279-284`), so a fired action drives the same
   Timeline playback a user pressing Play would see. `PlaySound`/
   `PlayMusic` call `audioPreview_.play()`, reusing the Audio tab's own
-  real `SoundEffectInstance` playback. `RunScript` reports "scripting not
-  implemented yet" via `setStatusMsg` rather than silently doing nothing.
-  A missing `step.ref` (dangling reference to a deleted sound/action/
-  track) is also reported, not silently skipped. **Known limitation,
+  real `SoundEffectInstance` playback. `RunScript` originally reported
+  "scripting not implemented yet" via `setStatusMsg` -- superseded the
+  same day by `SYS-W14-18` (see its own entry above), after which
+  `RunScript` actually runs the referenced script via
+  `luaScriptRunner_.run()`, with the current selection's first object
+  (if any) as the `def` target; `pushUndo()`/`modified_` are now called
+  conditionally (only when the trigger has a `run-script` step -- see
+  `SYS-W14-18`'s entry for why). A missing `step.ref` (dangling
+  reference to a deleted sound/action/track/script) is also reported,
+  not silently skipped. **Known limitation,
   inherited from the editor's existing architecture, not introduced
   here:** there is only ever one "current action" and one
   `AudioPreview`-shared audio slot in this editor (see `AudioPreview`'s

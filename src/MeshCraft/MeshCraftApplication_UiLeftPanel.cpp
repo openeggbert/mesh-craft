@@ -1617,6 +1617,32 @@ void MeshCraftApplication::drawLeftPanel(float panelY, float panelH)
                         pushUndo(); script.source = buf; modified_ = true; updateWindowTitle();
                     }
                 }
+
+                // SYS-W14-18 (2026-07-20 audit): scripts were fully
+                // editable but nothing ever interpreted a script's source
+                // -- there was no Lua interpreter anywhere in this
+                // codebase. This is the smallest useful slice: an
+                // explicit "Run" action for authoring/testing, mirroring
+                // the Triggers tab's own "Fire" pattern. `target` is the
+                // current selection's first object if any is selected
+                // (so def:place()/place_at()/has_socket() have something
+                // to operate on), else nullptr (def:place() then reports
+                // a clear error; scene:find()/property read-write still
+                // work fine with no selection either way).
+                if (ImGui::Button("\xe2\x96\xb6 Run Script", ImVec2(-1, 0))) {
+                    Mc3::Mc3Object* target = selection_.hasSelection()
+                        ? selection_.selection().front().get() : nullptr;
+                    pushUndo();
+                    std::string err = luaScriptRunner_.run(script.source, document_, target);
+                    modified_ = true; updateWindowTitle();
+                    if (err.empty())
+                        setStatusMsg("Script '" + selectedScriptKey_ + "' ran successfully");
+                    else
+                        setStatusMsg("Script '" + selectedScriptKey_ + "' failed: " + err, /*isError=*/true);
+                }
+                if (ImGui::IsItemHovered())
+                    ImGui::SetTooltip("Runs this script's source now, against the current "
+                                       "selection (if any) as its 'def' target");
             }
 
             ImGui::EndTabItem();
@@ -1840,10 +1866,30 @@ void MeshCraftApplication::drawLeftPanel(float panelY, float panelH)
             // top of it. That's an existing editor-wide constraint (see
             // AudioPreview's own "one-shared-preview-at-a-time" doc
             // comment), not something new introduced here. RunScript steps
-            // report that the scripting engine doesn't exist yet
-            // (SYS-W14-18) rather than silently doing nothing.
+            // (SYS-W14-18) run via luaScriptRunner_, with the current
+            // selection's first object (if any) as the 'def' target --
+            // same convention as the Scripts tab's own "Run Script"
+            // button, since a trigger step has no object of its own to
+            // bind as target.
             auto fireTrigger = [&](const Mc3::Mc3Trigger& trig) {
-                int fired = 0, missing = 0, unimplemented = 0;
+                int fired = 0, missing = 0, scriptErrors = 0;
+                std::string lastScriptError;
+                // Only RunScript steps can mutate document_ (def:place()/
+                // scene:find() property writes) -- Play*/PlaySound/
+                // PlayMusic only touch ephemeral playback state
+                // (currentActionName_/animPlaying_/audioPreview_), not
+                // document_ itself, so a script-free trigger must not
+                // push a needless undo snapshot or mark the document
+                // modified (matches this trigger-firing feature's own
+                // original, already-shipped behavior for those 3 step
+                // types). Snapshotting BEFORE the loop, not after, so
+                // Ctrl+Z covers a script's mutations even if a LATER
+                // step in the same trigger then errors.
+                bool hasScriptStep = false;
+                for (const auto& step : trig.steps)
+                    if (step.type == Mc3::TriggerStepType::RunScript) { hasScriptStep = true; break; }
+                if (hasScriptStep) pushUndo();
+
                 for (const auto& step : trig.steps) {
                     switch (step.type) {
                     case Mc3::TriggerStepType::PlayAction:
@@ -1869,7 +1915,14 @@ void MeshCraftApplication::drawLeftPanel(float panelY, float panelH)
                         } else ++missing;
                         break;
                     case Mc3::TriggerStepType::RunScript:
-                        ++unimplemented;
+                        if (document_.scripts.count(step.ref)) {
+                            Mc3::Mc3Object* target = selection_.hasSelection()
+                                ? selection_.selection().front().get() : nullptr;
+                            std::string err = luaScriptRunner_.run(
+                                document_.scripts[step.ref].source, document_, target);
+                            if (err.empty()) ++fired;
+                            else { ++scriptErrors; lastScriptError = err; }
+                        } else ++missing;
                         break;
                     }
                 }
@@ -1877,10 +1930,11 @@ void MeshCraftApplication::drawLeftPanel(float panelY, float panelH)
                     std::to_string(fired) + " step" + (fired == 1 ? "" : "s") + " ran";
                 if (missing > 0)
                     msg += ", " + std::to_string(missing) + " skipped (ref not found)";
-                if (unimplemented > 0)
-                    msg += ", " + std::to_string(unimplemented) +
-                           " skipped (scripting not implemented yet)";
-                setStatusMsg(msg, /*isError=*/missing > 0 || unimplemented > 0);
+                if (scriptErrors > 0)
+                    msg += ", " + std::to_string(scriptErrors) + " script error" +
+                           (scriptErrors == 1 ? "" : "s") + " (" + lastScriptError + ")";
+                if (hasScriptStep) { modified_ = true; updateWindowTitle(); }
+                setStatusMsg(msg, /*isError=*/missing > 0 || scriptErrors > 0);
             };
 
             if (ImGui::SmallButton("+##triggeradd")) {

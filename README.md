@@ -157,6 +157,8 @@ configure time:
 | tinyobjloader | `tinyobjloader/tinyobjloader` | `v2.0.0rc13` | `FETCHCONTENT_SOURCE_DIR_TINYOBJLOADER` |
 | tinygltf | `syoyo/tinygltf` | `v2.9.3` | `FETCHCONTENT_SOURCE_DIR_TINYGLTF` |
 | cpp-httplib (optional, AI feature) | `yhirose/cpp-httplib` | `v0.18.3` | `FETCHCONTENT_SOURCE_DIR_HTTPLIB` |
+| Lua (scripting, SYS-W14-18) | `lua/lua` | `v5.4.7` | `FETCHCONTENT_SOURCE_DIR_LUA` |
+| sol2 (scripting, SYS-W14-18) | `ThePhD/sol2` | `v3.3.0` | `FETCHCONTENT_SOURCE_DIR_SOL2` |
 
 ```sh
 cmake -S . -B b-offline -G Ninja \
@@ -166,7 +168,9 @@ cmake -S . -B b-offline -G Ninja \
   -DFETCHCONTENT_SOURCE_DIR_MANIFOLD=/path/to/manifold \
   -DFETCHCONTENT_SOURCE_DIR_TINYOBJLOADER=/path/to/tinyobjloader \
   -DFETCHCONTENT_SOURCE_DIR_TINYGLTF=/path/to/tinygltf \
-  -DFETCHCONTENT_SOURCE_DIR_HTTPLIB=/path/to/cpp-httplib
+  -DFETCHCONTENT_SOURCE_DIR_HTTPLIB=/path/to/cpp-httplib \
+  -DFETCHCONTENT_SOURCE_DIR_LUA=/path/to/lua \
+  -DFETCHCONTENT_SOURCE_DIR_SOL2=/path/to/sol2
 ```
 
 Omit any variable for a dependency you're fine fetching normally — they
@@ -274,7 +278,7 @@ reference.
 - Model Registry: no thumbnail column (design placeholder only, never implemented — see `m1m2m3.md`); requires the system SQLite3 library on desktop builds (stubbed out, feature disabled, on Emscripten/Android); no sync between multiple registry database files — it's a single local SQLite file at `~/.meshcraft/modelregistry.sqlite3`, not backed up or shared automatically
 - SVG textures (`<texture type="svg">`): parsed, serialized, and round-tripped, but never rasterized — a material referencing one resolves to nothing in `mc3togltf`'s `GltfExporter` and the texture is dropped from glTF export. As of STAB-0440 (2026-07-04) this is no longer silent: the exporter emits an explicit warning naming the material, the SVG texture id, and the affected slot. Blocked on picking a rasterization library (librsvg vs. NanoSVG)
 - Embedded glTF (`<mesh src="embed:id"/>`): parsed and serialized, but `GltfExporter` treats `embed:id` as a literal OBJ file path, which fails to parse — the export doesn't crash, but the node exports with no mesh (see `MC3_FORMAT.md`'s export support matrix)
-- N3–N7 scene data (scripts, sounds, music, triggers, scene states, meta): fully round-tripped (XML/MCB/XSD) but not executed at runtime — no Lua interpreter, no audio playback, no trigger-firing event system, no state-switching logic (data model first, by design at this stage — see `MC3_FORMAT.md`'s per-section status notes)
+- N3–N7 scene data (scripts, sounds, music, triggers, scene states, meta): fully round-tripped (XML/MCB/XSD) and editable. As of `SYS-W14-18`/`SYS-W14-19` (2026-07-20), scripts (`type="lua"`) actually run — a real sandboxed Lua interpreter (`LuaScriptRunner`) with `def:place()`/`place_at()`/`has_socket()` (compose-time socket placement) and `scene:find()` (read/write any object's position/rotation/scale/visible/material) — and triggers actually fire (an explicit "Fire" action executes `play-action`/`play-sound`/`play-music`/`run-script` steps for real). What's still data-model-only: there is no in-scene EVENT system (collision/click/timer) that fires a trigger automatically — only the explicit manual "Fire" action does — and Scene States still don't apply their overrides to the live document at runtime (`SYS-W14-20`, open). See `MC3_FORMAT.md`'s per-section status notes and `plan.md`'s `SYS-W14-##` rows.
 
 ## Platform Support Matrix
 
