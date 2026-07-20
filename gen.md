@@ -123,7 +123,7 @@ Every object accepts:
 
 Transform order: `T(pos+pivot) × R(rot) × S(scale) × T(-pivot)`
 
-Optional child elements on any object: `<deform scale="X Y Z"/>` `<uv_mapping scale="W H" offset="X Y" rotation="0"/>`
+Optional child elements on any object: `<deform scale="X Y Z"/>` `<uv_mapping projection="planar|box|sphere" scale_u="W" scale_v="H" offset_u="X" offset_v="Y" rotation="0"/>` (all `uv_mapping` attributes are separate scalars, not combined "W H"-style pairs; `projection` defaults to `planar`)
 
 ---
 
