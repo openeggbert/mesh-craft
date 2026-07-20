@@ -136,14 +136,12 @@ still internally consistent.
 3. Remaining `TODO` AUD-### rows are all downstream of the two blockers
    above (AUD-053 needs AUD-052; AUD-057's CI-job half needs the same) —
    none are independently actionable right now.
-4. **SYS-W14-18/19** (P1) — Lua scripting execution + trigger event-firing,
-   the two "format supports it, editor never runs it" gaps found
-   2026-07-20 (user request: "co mc3 nabízí, ale MeshCraft to ještě
-   neumí"). Ask the user which to start with — `SYS-W14-19`'s non-script
-   trigger steps (`play-sound`/`play-action`/`play-music`) are
-   independently implementable and lower-risk than `SYS-W14-18`'s Lua
-   engine (which needs an upfront library/sandbox/execution-model design
-   decision first).
+4. **SYS-W14-18** (P1) — Lua scripting execution, the "format supports it,
+   editor never runs it" gap found 2026-07-20 (user request: "co mc3
+   nabízí, ale MeshCraft to ještě neumí"). Its lower-risk P1 sibling
+   (trigger event-firing) is now done — user picked it to start with
+   2026-07-20. Needs an upfront library/sandbox/execution-model design
+   decision (ask the user) before implementation.
 5. **SYS-W14-20/21** (P2) — Scene States runtime switching; wiring
    `Mc3ImportResolver` into the editor. Independent of each other and of
    item 4.
@@ -1027,7 +1025,7 @@ _All items in this workstream are DONE — archived to [`docs/history/plan_20260
   and when execution actually happens (an explicit "Run Script" editor
   action for authoring/preview, a trigger's `run-script` step once
   `SYS-W14-19` exists, both?).
-- **SYS-W14-19** `[TODO]` `P1` — Trigger event-firing system.
+- **SYS-W14-19** `[DONE]` `P1` — Trigger event-firing system.
   `doc.triggers` (`Mc3Trigger`: `id` + ordered `{type, ref}` steps —
   `play-action`/`play-sound`/`run-script`/`play-music`) parse/serialize/
   round-trip and are editable in the "Triggers" tab, but nothing anywhere
@@ -1045,6 +1043,37 @@ _All items in this workstream are DONE — archived to [`docs/history/plan_20260
   explicit "Fire" button per trigger in the Triggers tab that executes
   all its non-script steps for real, so triggers become testable/usable
   in the editor even before any live in-scene event system exists.
+  **Implementation:** `MeshCraftApplication_UiLeftPanel.cpp`'s Triggers
+  tab gained a `fireTrigger(const Mc3::Mc3Trigger&)` lambda, a `▶` button
+  per trigger row, and a prominent "▶ Fire Trigger" button in the
+  selected-trigger detail view. `PlayAction` sets
+  `currentActionName_`/`animTime_`/`animPlaying_` — the exact same trio
+  the load-time `autoplay="true"` logic already uses
+  (`MeshCraftApplication.cpp:279-284`), so a fired action drives the same
+  Timeline playback a user pressing Play would see. `PlaySound`/
+  `PlayMusic` call `audioPreview_.play()`, reusing the Audio tab's own
+  real `SoundEffectInstance` playback. `RunScript` reports "scripting not
+  implemented yet" via `setStatusMsg` rather than silently doing nothing.
+  A missing `step.ref` (dangling reference to a deleted sound/action/
+  track) is also reported, not silently skipped. **Known limitation,
+  inherited from the editor's existing architecture, not introduced
+  here:** there is only ever one "current action" and one
+  `AudioPreview`-shared audio slot in this editor (see `AudioPreview`'s
+  own "one-shared-preview-at-a-time" doc comment) — a trigger with
+  multiple `play-action` (or multiple `play-sound`/`play-music`) steps
+  has each later one replace the previous rather than layering, since
+  there is no multi-track mixer to layer into.
+  **Tests:** new `test/trigger_fire_test.cpp` (`trigger_fire` ctest) --
+  `MeshCraftApplication` is CNA-coupled and not headlessly instantiable,
+  so this mirrors `fireTrigger()`'s exact control-flow shape against
+  plain `Mc3Document` data and mock playback-state/audio-call trackers.
+  Covers: `PlayAction` sets/doesn't-set the mock playback trio for a
+  valid/missing ref; `PlaySound`/`PlayMusic` record the right resolved
+  src (relative-vs-absolute) and loop flag; `RunScript` is reported, not
+  silently dropped; a 4-step trigger mixing all cases aggregates its
+  fired/missing/unimplemented counts correctly in one status message.
+  Full rebuild + 156/156 `ctest` (was 155; `trigger_fire` is the only
+  new registration).
 - **SYS-W14-20** `[TODO]` `P2` — Scene States runtime switching.
   `doc.sceneStates` (`Mc3SceneState`: named visibility/position/rotation/
   material overrides — e.g. "day"/"night" variants) parse/serialize/

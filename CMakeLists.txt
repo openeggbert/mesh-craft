@@ -853,6 +853,22 @@ if(MESH_CRAFT_BUILD_TESTING AND UNIX AND NOT ANDROID AND NOT EMSCRIPTEN)
     add_test(NAME fog_start_end_cross_clamp COMMAND fog_start_end_cross_clamp_test)
     set_tests_properties(fog_start_end_cross_clamp PROPERTIES TIMEOUT 15 LABELS "unit")
 
+    # SYS-W14-19 (2026-07-20): the Triggers tab's new "Fire" action --
+    # actually executes a trigger's steps (PlayAction/PlaySound/PlayMusic/
+    # RunScript) instead of triggers being purely round-tripped data with
+    # no way to run them. MeshCraftApplication_UiLeftPanel.cpp's
+    # fireTrigger() is CNA-coupled (not headlessly instantiable), so this
+    # mirrors its exact control-flow shape against plain Mc3Document data
+    # and mock playback/audio trackers, matching this session's
+    # established pattern (registry_insert_undo_test/obj_export_temp_cleanup_test).
+    add_executable(trigger_fire_test
+        ${CMAKE_CURRENT_SOURCE_DIR}/test/trigger_fire_test.cpp)
+    target_include_directories(trigger_fire_test PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/mc3/include)
+    target_compile_features(trigger_fire_test PRIVATE cxx_std_23)
+    add_test(NAME trigger_fire COMMAND trigger_fire_test)
+    set_tests_properties(trigger_fire PROPERTIES TIMEOUT 15 LABELS "unit")
+
     # 2026-07-20 audit F2 (P0): SceneHierarchyPanel.cpp's drawHierarchy()
     # range-for-iterates over document_.objects/children by reference;
     # dragging an earlier sibling onto a later one in the same list used to

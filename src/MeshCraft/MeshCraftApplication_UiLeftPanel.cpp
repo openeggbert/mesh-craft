@@ -1814,6 +1814,75 @@ void MeshCraftApplication::drawLeftPanel(float panelY, float panelH)
             if (!selectedTriggerKey_.empty() && !document_.triggers.count(selectedTriggerKey_))
                 selectedTriggerKey_.clear();
 
+            // SYS-W14-19 (2026-07-20 audit): triggers had zero event-firing
+            // path anywhere -- no in-scene event system exists yet to call
+            // one automatically, but there was also no way to fire one even
+            // manually, so the feature was untestable/unusable in the
+            // editor despite being fully editable. This "Fire" action is
+            // the smallest useful slice: execute a trigger's steps for
+            // real, right now, on demand.
+            //
+            // Resolves a Mc3Sound/Mc3Music's `src` the same way the Audio
+            // tab's own resolveSrc lambda does (duplicated locally --
+            // that one is scoped to the Audio tab's own block above).
+            auto resolveTriggerSrc = [&](const std::string& src) -> std::string {
+                if (src.empty()) return src;
+                std::filesystem::path p(src);
+                return p.is_absolute() ? p.string() : (document_.sourcePath / p).string();
+            };
+            // Executes every step in order. PlayAction/PlaySound/PlayMusic
+            // reuse the SAME single "current" playback state the Timeline/
+            // Audio tab already use (currentActionName_/animPlaying_,
+            // audioPreview_) -- there is only ever one active action and
+            // one active sound/music preview in this editor, so a trigger
+            // with multiple PlayAction (or multiple PlaySound/PlayMusic)
+            // steps has each later one replace the previous, not layer on
+            // top of it. That's an existing editor-wide constraint (see
+            // AudioPreview's own "one-shared-preview-at-a-time" doc
+            // comment), not something new introduced here. RunScript steps
+            // report that the scripting engine doesn't exist yet
+            // (SYS-W14-18) rather than silently doing nothing.
+            auto fireTrigger = [&](const Mc3::Mc3Trigger& trig) {
+                int fired = 0, missing = 0, unimplemented = 0;
+                for (const auto& step : trig.steps) {
+                    switch (step.type) {
+                    case Mc3::TriggerStepType::PlayAction:
+                        if (document_.actions.count(step.ref)) {
+                            currentActionName_ = step.ref;
+                            animTime_    = 0.0f;
+                            animPlaying_ = true;
+                            ++fired;
+                        } else ++missing;
+                        break;
+                    case Mc3::TriggerStepType::PlaySound:
+                        if (document_.sounds.count(step.ref)) {
+                            const auto& snd = document_.sounds[step.ref];
+                            audioPreview_.play(step.ref, resolveTriggerSrc(snd.src), snd.loop);
+                            ++fired;
+                        } else ++missing;
+                        break;
+                    case Mc3::TriggerStepType::PlayMusic:
+                        if (document_.musicTracks.count(step.ref)) {
+                            const auto& mus = document_.musicTracks[step.ref];
+                            audioPreview_.play(step.ref, resolveTriggerSrc(mus.src), mus.loop);
+                            ++fired;
+                        } else ++missing;
+                        break;
+                    case Mc3::TriggerStepType::RunScript:
+                        ++unimplemented;
+                        break;
+                    }
+                }
+                std::string msg = "Trigger '" + trig.id + "' fired: " +
+                    std::to_string(fired) + " step" + (fired == 1 ? "" : "s") + " ran";
+                if (missing > 0)
+                    msg += ", " + std::to_string(missing) + " skipped (ref not found)";
+                if (unimplemented > 0)
+                    msg += ", " + std::to_string(unimplemented) +
+                           " skipped (scripting not implemented yet)";
+                setStatusMsg(msg, /*isError=*/missing > 0 || unimplemented > 0);
+            };
+
             if (ImGui::SmallButton("+##triggeradd")) {
                 pushUndo();
                 int n = 1;
@@ -1841,6 +1910,9 @@ void MeshCraftApplication::drawLeftPanel(float panelY, float panelH)
                 std::string label = key + "  (" + std::to_string(trigger.steps.size()) + " step"
                                    + (trigger.steps.size() == 1 ? "" : "s") + ")";
                 ImGui::PushID(("trigger_" + key).c_str());
+                if (ImGui::SmallButton("▶")) fireTrigger(trigger);
+                if (ImGui::IsItemHovered()) ImGui::SetTooltip("Fire this trigger now");
+                ImGui::SameLine();
                 if (ImGui::Selectable(label.c_str(), sel))
                     selectedTriggerKey_ = key;
                 ImGui::PopID();
@@ -1856,6 +1928,13 @@ void MeshCraftApplication::drawLeftPanel(float panelY, float panelH)
                 if (ImGui::SmallButton("Copy##triggerid"))
                     ImGui::SetClipboardText(selectedTriggerKey_.c_str());
                 ImGui::TextUnformatted(selectedTriggerKey_.c_str());
+
+                if (ImGui::Button("▶ Fire Trigger", ImVec2(-1, 0)))
+                    fireTrigger(trigger);
+                if (ImGui::IsItemHovered())
+                    ImGui::SetTooltip("Executes every step below, right now, in order "
+                                       "(no in-scene event system exists yet -- this is "
+                                       "manual/on-demand firing)");
 
                 ImGui::Spacing();
                 ImGui::TextDisabled("Steps");
