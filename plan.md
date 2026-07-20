@@ -87,21 +87,20 @@ P1s already being fixed in git history. This session:
    **Net across all 31 AUD-### rows remaining in this active backlog (61
    additional rows completed and archived to `docs/history/plan_20260718.md`
    on 2026-07-18 — see that file for their full evidence/resolution text):
-   21 DONE, 8 TODO, 2 DEFERRED** — 10 of the 21 DONE (`AUD-064` through
+   22 DONE, 7 TODO, 2 DEFERRED** — 10 of the 22 DONE (`AUD-064` through
    `AUD-073`) are fresh findings from a 2026-07-18 (later same day)
    independent re-audit, not part of the original 6 (`AUD-069` itself fixed
-   2026-07-19, the day after it was filed); the other 11 (`AUD-074`
-   through `AUD-084`) are from a third independent audit on 2026-07-20
-   (later the same day as this session's SYS-W14-18..27 work) —
-   `AUD-080`/`AUD-081` are documentation-only fixes with no code change,
-   `AUD-082`/`AUD-083`/`AUD-084` are the first three of the raw-OpenGL(ES)-
-   vs-CNA group (`AUD-082`-`AUD-088`, see below) to actually land.
-   4 more (`AUD-085` through `AUD-088`, all `TODO`) are from the same
-   targeted 2026-07-20 (later still) investigation into how much raw
-   OpenGL(ES) the editor calls outside CNA's own API — genuinely
-   actionable, unlike the other open `TODO`s; `AUD-088` was found and
-   filed one task late (while
-   already starting `AUD-082`'s implementation, see that row's own note).
+   2026-07-19, the day after it was filed); the other 12 (`AUD-074`
+   through `AUD-086`, excluding `AUD-085` which stays `TODO`) are from a
+   third independent audit on 2026-07-20 (later the same day as this
+   session's SYS-W14-18..27 work) — `AUD-080`/`AUD-081` are documentation-
+   only fixes with no code change, `AUD-082`/`AUD-083`/`AUD-084`/`AUD-086`
+   are 4 of the raw-OpenGL(ES)-vs-CNA group (`AUD-082`-`AUD-088`, see
+   below) to actually land so far (`AUD-085` deliberately skipped, see its
+   own row).
+   3 more (`AUD-087`/`AUD-088`, both `TODO`, plus `AUD-085` itself) remain
+   from the same targeted 2026-07-20 (later still) investigation into how
+   much raw OpenGL(ES) the editor calls outside CNA's own API.
    Recompute with
    `python3 test/validate_plan_consistency.py . <build-dir>` rather than
    trusting this number as time passes.
@@ -132,32 +131,32 @@ still internally consistent.
 
 ## Priority execution queue (next up, in order)
 
-1. **AUD-086 through AUD-088 (P2/W8)** — migrate the editor's remaining
-   raw-OpenGL(ES) reach-around (the shared skybox/material-preview/
-   shadow-map-debug `s_bloom` FBO+shader table) onto CNA's own already-
-   existing, unused `GraphicsDevice.SetRenderTarget`, `RenderTarget2D`,
-   and `NOXNA ShaderEffect` APIs — see the shared preamble in the AUD-###
-   table above (immediately before this group's first row) for the full
+1. **AUD-087/AUD-088 (P2/W8)** — migrate the editor's remaining raw-
+   OpenGL(ES) reach-around (the shared material-preview/shadow-map-debug
+   `s_bloom` FBO+shader table) onto CNA's own already-existing, unused
+   `GraphicsDevice.SetRenderTarget`, `RenderTarget2D`, and `NOXNA
+   ShaderEffect` APIs — see the shared preamble in the AUD-### table
+   above (immediately before this group's first row) for the full
    rationale and the "file a NOXNA capability request rather than write
    new raw GL" rule for any residual. The panel scissor/viewport clip,
-   `--screenshot` readback, and Bloom parts of this group are already
-   done — see the AUD-### table above for which rows, their empirical
-   verification, and (for the Bloom row) two real, non-obvious CNA
-   gotchas found and fixed along the way that will recur in the
-   remaining 3: `RenderTarget2D`'s `DiscardContents` default makes
+   `--screenshot` readback, Bloom, and Skybox parts of this group are
+   already done — see the AUD-### table above for which rows, their
+   empirical verification, and (for the Bloom row) two real, non-obvious
+   CNA gotchas found and fixed along the way that will recur in the
+   remaining 2: `RenderTarget2D`'s `DiscardContents` default makes
    `SetRenderTarget()` clear on *every* bind (no redundant re-binds), and
    `SpriteBatch`'s custom-effect draws only honor a bound `RenderTarget2D`'s
    own size for their projection — a backbuffer-targeted draw always
    projects to the full window, so destRects for those must be window-
-   absolute, not viewport-local. **SSAO (the row between Bloom and
-   Skybox) is deliberately skipped for now** — user-authorized deferral;
-   it needs a genuine depth-pre-pass rewrite (no CNA depth-buffer-read
-   equivalent exists), not a mechanical swap like the other 4, see its
-   own row for the full finding. 3 `s_bloom` migrations remain
-   (`AUD-086`-`AUD-088`, each of which also adds a missing visual-
-   correctness test the feature never had); `s_bloom` itself cannot be
-   torn down until SSAO is also migrated, so that final cleanup step
-   waits on a future SSAO decision even after `AUD-086`-`AUD-088` land.
+   absolute, not viewport-local. **SSAO is deliberately skipped for
+   now** — user-authorized deferral; it needs a genuine depth-pre-pass
+   rewrite (no CNA depth-buffer-read equivalent exists), not a
+   mechanical swap like the other 4, see its own row for the full
+   finding. 2 `s_bloom` migrations remain (`AUD-087`/`AUD-088`, each of
+   which also adds a missing visual-correctness test the feature never
+   had); `s_bloom` itself cannot be torn down until SSAO is also
+   migrated, so that final cleanup step waits on a future SSAO decision
+   even after `AUD-087`/`AUD-088` land.
 2. **AUD-052 (P1/W11)** — CI is permanently parked under `.github_/`; GitHub
    Actions never runs. This is the root blocker for AUD-053 (a CI-hardening
    task that depends on CI actually running first) and the CI-job half of
@@ -171,10 +170,10 @@ still internally consistent.
    (no Android NDK in this environment; also intersects CNA backend
    behavior, out of scope per CLAUDE.md's "no CNA changes without owner
    permission").
-4. The remaining `TODO` AUD-### rows besides `AUD-085`-`AUD-088` are all
-   downstream of the two blockers above (AUD-053 needs AUD-052; AUD-057's
-   CI-job half needs the same) — none of those are independently
-   actionable right now.
+4. The remaining `TODO` AUD-### rows besides `AUD-085`, `AUD-087`, and
+   `AUD-088` are all downstream of the two blockers above (AUD-053 needs
+   AUD-052; AUD-057's CI-job half needs the same) — none of those are
+   independently actionable right now.
 5. All 10 of the mc3-format-vs-editor gaps found 2026-07-20 (user
    request: "co mc3 nabízí, ale MeshCraft to ještě neumí" -- "what does
    the mc3 format offer that MeshCraft doesn't yet handle") are now
@@ -1835,11 +1834,12 @@ final acceptance check (expected: no output, combined with `AUD-082`/
 - **Outcome:** Not implemented this session (user-authorized deferral, 2026-07-20 — asked via `AskUserQuestion` whether to build the depth-pre-pass rewrite, skip to `AUD-086`, or stop here; chose to skip to `AUD-086`). The only CNA-API-only path forward is a genuine architecture change, not a mechanical swap: add a dedicated depth-to-color `ShaderEffect` pass that re-renders the scene's geometry a second time (real `World`/`View`/`Projection`-driven `DrawIndexedPrimitives` calls, matching `ShaderEffect`'s documented 3D-draw support) writing linearized depth into a plain color `RenderTarget2D`, replacing the blit — functionally equivalent, fully achievable with existing CNA/NOXNA API (this is **not** a capability gap requiring a `../cna` change), but meaningfully more code than `AUD-084`'s swap (a new depth-only shader + new scene-traversal draw logic mirroring `SceneRenderer::drawEmissivePass`'s shape) and a real behavior/perf change (a second full scene traversal every frame SSAO is on, vs. today's cheap blit of already-computed depth). Left `TODO`, not `BLOCKED`, since a real CNA-only path exists — just deferred pending a future session's explicit go-ahead given the added scope.
 - **Tests:** No dedicated visual-correctness test for SSAO exists yet (only the same `AUD-058` resource-pool-release hook, which is orthogonal to whether the darkening is visually correct) — add a real `--screenshot` test analogous to `AUD-084`'s (two adjacent surfaces at a concave corner, `ssaoEnabled` on vs. off, asserting the corner pixels darken relative to the flat-wall pixels) as part of whichever future session implements the depth-prepass rewrite above.
 
-### AUD-086 `[TODO]` `P2` `W8` · Equirectangular skybox (I2) is drawn via hand-rolled raw-GL texture+shader calls instead of Texture2D + ShaderEffect
-- **Component:** src/MeshCraft/MeshCraftApplication.cpp (`BloomGL`/`s_bloom`'s skybox fields, `initSkybox()`, `drawSkybox()`, `kSkyboxVS`/`kSkyboxFS`)
-- **Evidence:** `initSkybox()`/`drawSkybox()` (`MeshCraftApplication.cpp:1378-1446`ish) load the skybox equirect image and compile/link `kSkyboxVS`+`kSkyboxFS` through the same shared `s_bloom` raw-GL table as `AUD-084`/`AUD-085`, including a manual `glGenTextures`/`glBindTexture`/(image decode, presumably via the same `stbi_*` helper `saveScreenshot()` already links) upload. This is simpler than `AUD-084`/`AUD-085` — no render-to-texture step, just "load a texture, run a full-screen shader sampling it" — so `Texture2D`'s normal load path (whatever this codebase already uses elsewhere for material/background textures, e.g. the existing `bgTexture_` `Texture2D` used at `MeshCraftApplication.cpp:559-573` for the I1 background-texture feature) plus `ShaderEffect` for `kSkyboxVS`/`kSkyboxFS` should cover 100% of this feature's raw-GL surface.
-- **Outcome:** Load the skybox equirect image as a normal CNA `Texture2D` (reusing whatever loader `bgTexture_` already uses, rather than a second bespoke image-loading path) and replace `kSkyboxVS`/`kSkyboxFS`'s manual compile/link/draw with `ShaderEffect`, removing this feature's dependency on `s_bloom`.
-- **Tests:** No dedicated visual-correctness test for the skybox exists yet — add a real `--screenshot` test (a scene with `environment.skyboxTexture` set to a fixture image with a distinctive color in a known direction, asserting the sampled background pixel matches) as part of this migration, verified `git stash` pre/post.
+### AUD-086 `[DONE]` `P2` `W8` · Equirectangular skybox (I2) is drawn via hand-rolled raw-GL texture+shader calls instead of Texture2D + ShaderEffect
+- **Component:** src/MeshCraft/MeshCraftApplication.cpp (`initSkybox()`, `drawSkybox()`, `kSkyboxFragSrc`), include/MeshCraft/MeshCraftApplication.hpp (`skyboxTex_`/`skyboxTexPath_`/`skyboxFx_`)
+- **Evidence:** `initSkybox()`/`drawSkybox()` loaded the skybox equirect image and compiled/linked `kSkyboxVS`+`kSkyboxFS` through the shared `s_bloom` raw-GL table — manual `glGenTextures`/`stbi_load` upload, and (unlike `AUD-084`) a `gl_VertexID`-driven vertex shader computing the per-vertex view direction directly from NDC, matching a historical workaround (STAB-0524, referenced in the old code's own comment) for a VAO/VBO-based quad silently failing in this environment. No render-to-texture step was needed — simpler than `AUD-084`, matching the row's original assessment. **Correction to the original "no dedicated visual-correctness test exists" claim**: `skybox_texture_test.py` + `skybox_texture.mc3.xml` (a solid-blue equirect, added in an earlier session per `docs/history/plan_20260710.md`'s STAB-0524 entry) already do real `--screenshot` pixel sampling (asserts >80% blue-dominant coverage in a safe viewport-interior rectangle) — this pre-existing coverage was missed when this row was first filed, corrected here rather than silently duplicating it.
+- **Outcome:** Loaded the skybox equirect image as a normal CNA `Texture2D` (the same `Texture2D(path, device)` file-loading constructor `bgTexture_` already uses) and replaced `kSkyboxVS`/`kSkyboxFS`'s manual compile/link/draw with `ShaderEffect` + `SpriteBatch`, reusing `kBloomVertSrc` (`AUD-084`) directly since it's the same generic full-screen-quad vertex shader every one of these passes needs. The per-fragment view-direction math that used to live in the vertex shader (computed from `gl_VertexID`-synthesized NDC) moved into the fragment shader instead, recomputed from `SpriteBatch`'s own `TexCoord` varying (`ndc = TexCoord*2-1` for X, `1-TexCoord*2` for Y — the Y-flip needed since `SpriteBatch`'s `TexCoord=(0,0)` is the destRect's screen-top, per `EasyGLSpriteBatchBackend::Draw()`'s own vertex-generation code read directly to confirm this rather than assumed). Used a custom `SamplerState` (`LinearWrap` with `AddressV` overridden to `Clamp`) to preserve the original's `GL_REPEAT`(S, horizontal equirect wraparound at the seam)/`GL_CLAMP_TO_EDGE`(T, vertical, avoiding pole artifacts) pair — `SamplerState`'s built-in presets are only all-Wrap or all-Clamp, none mix axes. Backbuffer-targeted draw (no RT involved at all for this feature), so — matching `AUD-084`'s gotcha #2 — used a window-absolute destRect read from `gd.getViewportProperty()` (the caller already sets the clipped 3D viewport before calling `drawSkybox()`).
+- **Tests:** Existing `skybox_texture_test` still passes unchanged (166/166 -> 167/167 unaffected by this row, no new test added since real coverage already existed). **Empirically verified via `git stash`**: pre-fix vs. post-fix `--screenshot` PNGs of `skybox_texture.mc3.xml`, decoded and compared pixel-by-pixel — zero differing pixels anywhere the skybox itself is visible; the only differing pixels (737, confirmed unrelated) sit in a narrow band matching the "Scene Properties" ImGui overlay panel's own boundary (gray-vs-gray, not skybox-blue), reproduced identically across two separate runs of the *same* post-fix binary too — a pre-existing panel-auto-size timing artifact, not a skybox regression. **Orientation correctness** (this fixture's solid-blue texture can't reveal a Y-flip, since every direction samples the same color) was verified by directly reading `EasyGLSpriteBatchBackend::Draw()`'s vertex-generation code rather than empirically, confirming the `TexCoord`-to-screen-position mapping assumed above. Full rebuild + 167/167 `ctest`.
+- **Resolved:** commit `43d8744` — verify: `ctest -R skybox_texture_test`; `cmp` a `--screenshot` PNG of `skybox_texture.mc3.xml` outside the overlay-panel region before/after (expect identical).
 
 ### AUD-087 `[TODO]` `P2` `W8` · Material-preview swatch render (PropertiesPanel) is a hand-rolled raw-GL FBO+shader pipeline instead of RenderTarget2D + ShaderEffect
 - **Component:** src/MeshCraft/MeshCraftApplication.cpp (`BloomGL`/`s_bloom`'s mat-preview fields, `initMatPreview()`, `renderMatPreview()`, `kMatPreviewFS`), include/MeshCraft/MeshCraftApplication.hpp (`matPreviewTexId_`)
