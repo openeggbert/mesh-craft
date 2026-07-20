@@ -16,20 +16,55 @@ author in `.mc3.xml` and convert to `.mcb` as a build/export step.
 |--------|------|-------|-------|
 | 0 | 4 bytes | Magic | `'M','C','B','\0'` (`MCB_MAGIC` in `McbFormat.hpp`) |
 | 4 | 1 byte | Version | `MCB_VERSION` (currently `1`) |
-| 5 | 1 byte | Flags | bit 0 = `MCB_FLAG_COMPRESSED` (zlib payload — **defined, not yet implemented**; a file with this bit set is rejected with a clear error, not silently misread) |
+| 5 | 1 byte | Flags | bit 0 = `MCB_FLAG_COMPRESSED` — **implemented as of `SYS-W14-25` (2026-07-20)**; see "Compression" below |
 | 6 | 2 bytes | Reserved | always `0x00 0x00`; not currently validated on read (skipped) |
-| 8 | 1 byte | Root tag | always `TAG_OBJ` — the document root is always a keyed object |
-| 9+ | — | Document body | a `TAG_OBJ` value (see below) |
+| 8+ | — | Document body | layout depends on the Flags byte — see "Compression" below |
 
-`McbReader::loadFromBinary()` validates the magic, version, flags, and root
-tag before parsing the body; each check throws a `std::runtime_error` with a
+`McbReader::loadFromBinary()` validates the magic, version, and flags
+before parsing the body; each check throws a `std::runtime_error` with a
 specific message on failure (`"MCB: invalid magic"`, `"MCB: unsupported
-version N"`, `"MCB: compressed format not yet supported"`, `"MCB: root is
-not an object"`). A truncated or all-zero file also fails cleanly — every
+version N"`, `"MCB: root is not an object"`, and — only if `MCB_FLAG_
+COMPRESSED` is set and this build was compiled without zlib available —
+`"MCB: compressed format requires zlib, but this build was compiled
+without it"`). A truncated or all-zero file also fails cleanly — every
 low-level reader (`rU8`/`rU32`/`rRawStr`) throws on a short read rather than
 reading uninitialized/out-of-bounds memory (empirically verified in
 `mcb/test/mcb_roundtrip_test.cpp`'s `testTruncatedFile()` /
 `testAllZerosInput()` / `testSingleByteInput()`, STAB-0133/0134/0135).
+
+### Compression (`SYS-W14-25`, 2026-07-20)
+
+**Uncompressed (flags bit 0 unset, the default — everything above this
+subsection describes this layout):**
+
+| Offset | Size | Field | Value |
+|--------|------|-------|-------|
+| 8 | 1 byte | Root tag | always `TAG_OBJ` |
+| 9+ | — | Document body | the `TAG_OBJ` document, as described throughout this file |
+
+**Compressed (flags bit 0 set):**
+
+| Offset | Size | Field | Value |
+|--------|------|-------|-------|
+| 8 | 4 bytes | Uncompressed size | `uint32` LE, byte length of the decompressed `[TAG_OBJ][document body]` |
+| 12 | 4 bytes | Compressed size | `uint32` LE, byte length of the zlib-deflated bytes that follow |
+| 16+ | — | Compressed bytes | zlib (`compress2()`, `Z_BEST_COMPRESSION`) of `[TAG_OBJ][document body]` |
+
+`MeshCraft::Mcb::saveToBinary(doc, out, /*compress=*/true)` (default
+`false` — writes the uncompressed layout, byte-for-byte the same as
+before this option existed) opts into the compressed layout.
+`loadFromBinary()`/`loadFromFile()` transparently detect and decompress
+either layout via the flags byte — callers never need to know which one a
+given file uses. The claimed uncompressed/compressed sizes are each
+validated against a 512MB sanity ceiling *before* being used to size any
+buffer (the same zip-bomb defense already applied to every other
+length-prefixed field in this reader), and the actual decompressed size is
+checked against what was claimed, not just trusted from zlib's return
+code alone. Requires this build to have been compiled with zlib available
+(`mcb/CMakeLists.txt`'s `find_package(ZLIB)`, optional — see
+`THIRD_PARTY.md`); `compress=true` throws a clear error if zlib is
+unavailable, and reading a compressed file throws a distinct "requires
+zlib" error rather than misparsing it.
 
 ---
 
