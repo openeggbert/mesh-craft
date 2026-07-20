@@ -84,17 +84,21 @@ P1s already being fixed in git history. This session:
    is per-field only) not part of the original audit, filed as new `TODO`
    tasks.
 
-   **Net across all 24 AUD-### rows remaining in this active backlog (61
+   **Net across all 30 AUD-### rows remaining in this active backlog (61
    additional rows completed and archived to `docs/history/plan_20260718.md`
    on 2026-07-18 — see that file for their full evidence/resolution text):
-   18 DONE, 4 TODO, 2 DEFERRED** — 10 of the 18 DONE (`AUD-064` through
+   18 DONE, 10 TODO, 2 DEFERRED** — 10 of the 18 DONE (`AUD-064` through
    `AUD-073`) are fresh findings from a 2026-07-18 (later same day)
    independent re-audit, not part of the original 6 (`AUD-069` itself fixed
    2026-07-19, the day after it was filed); the other 8 (`AUD-074` through
    `AUD-081`) are from a third independent audit on 2026-07-20 (later the
    same day as this session's SYS-W14-18..27 work) — the last two
    (`AUD-080`, `AUD-081`) are documentation-only fixes with no code change.
-   Recompute with
+   6 more (`AUD-082` through `AUD-087`, all `TODO`) are from a targeted
+   2026-07-20 (later still) investigation into how much raw OpenGL(ES) the
+   editor calls outside CNA's own API — genuinely actionable, unlike the
+   other open `TODO`s, but not yet confirmed by the user per `CLAUDE.md`'s
+   one-task-at-a-time workflow. Recompute with
    `python3 test/validate_plan_consistency.py . <build-dir>` rather than
    trusting this number as time passes.
 5. Archived `plan_deep_audit.md` (all 57 of its own tasks were already
@@ -124,7 +128,22 @@ still internally consistent.
 
 ## Priority execution queue (next up, in order)
 
-1. **AUD-052 (P1/W11)** — CI is permanently parked under `.github_/`; GitHub
+1. **AUD-082 through AUD-087 (P2/W8)** — migrate the editor's raw-OpenGL(ES)
+   reach-arounds (viewport/scissor panel clipping, `--screenshot` pixel
+   readback, and the shared Bloom/SSAO/skybox/material-preview `s_bloom`
+   FBO+shader table) onto CNA's own already-existing, unused
+   `GraphicsDevice.SetViewport`/`SetScissorRect`/`GetBackBufferData`,
+   `RenderTarget2D`, and `NOXNA ShaderEffect` APIs — see the shared
+   preamble right before `AUD-082`'s row for the full rationale and the
+   "file a NOXNA capability request rather than write new raw GL" rule
+   for any residual. **Not yet actionable without per-task confirmation**
+   — per `CLAUDE.md`'s workflow, each of these 6 still needs its own
+   "Mám implementovat **AUD-08N**...?" confirmation before being
+   implemented, one at a time; do `AUD-082`/`AUD-083` first (small,
+   self-contained, no new test-coverage debt) before the 4 heavier
+   `s_bloom` migrations (`AUD-084`-`AUD-087`, each of which also adds a
+   missing visual-correctness test the feature never had).
+2. **AUD-052 (P1/W11)** — CI is permanently parked under `.github_/`; GitHub
    Actions never runs. This is the root blocker for AUD-053 (a CI-hardening
    task that depends on CI actually running first) and the CI-job half of
    AUD-057 — long documented elsewhere as owner-gated (enabling Actions on
@@ -133,14 +152,15 @@ still internally consistent.
    AUD-057's configure-time-assertion half (recording/checking the sibling
    repos' current git SHA) landed independently in commit `d2943e3` — only
    the CI-job half is still open, and it's blocked here, not actionable.
-2. **AUD-042 (P2/W8)** — Android build path forces SDL_RENDERER; blocked
+3. **AUD-042 (P2/W8)** — Android build path forces SDL_RENDERER; blocked
    (no Android NDK in this environment; also intersects CNA backend
    behavior, out of scope per CLAUDE.md's "no CNA changes without owner
    permission").
-3. Remaining `TODO` AUD-### rows are all downstream of the two blockers
-   above (AUD-053 needs AUD-052; AUD-057's CI-job half needs the same) —
-   none are independently actionable right now.
-4. All 10 of the mc3-format-vs-editor gaps found 2026-07-20 (user
+4. The remaining `TODO` AUD-### rows besides `AUD-082`-`AUD-087` are all
+   downstream of the two blockers above (AUD-053 needs AUD-052; AUD-057's
+   CI-job half needs the same) — none of those are independently
+   actionable right now.
+5. All 10 of the mc3-format-vs-editor gaps found 2026-07-20 (user
    request: "co mc3 nabízí, ale MeshCraft to ještě neumí" -- "what does
    the mc3 format offer that MeshCraft doesn't yet handle") are now
    done: the two P1 gaps (trigger event-firing, Lua scripting execution),
@@ -1717,3 +1737,72 @@ actual pixel difference — see its own row for the full story.
 - **Outcome:** Re-derived every count from a live build rather than trusting the audit report or the prior doc revision: `ctest -L <label> -N` ("Total Tests:" line) per label gives `ai` 1, `commands` 1, `export` 69, `format` 37, `lint` 3, `perf` 2, `registry` 1, `render` 27, `unit` 25 = 166 total (matching `ctest -N`'s own count). Re-ran all 5 C++ assertion binaries directly and counted `^PASS:` lines: `mc3_registry` 156, `mc3_ai` 122, `mc3_roundtrip` 577, `mc3_commands` 558 (all already correct, no change needed) and `mcb_roundtrip_test` 236 (was documented as 234, now fixed). Updated the intro paragraph, the "Expected result" line, and the `mcb_roundtrip` table row; added an honest note that the file's own prior same-day revision had already gone stale within hours, and why.
 - **Tests:** n/a (doc-only correction). Verified by actually running `ctest -L <label> -N` and each C++ binary directly and counting real output lines, not by assumption. `python3 test/validate_plan_consistency.py . b-release --run-tests` passes, including its own live `ctest -N` cross-check (166) and a full live `ctest` run (166/166 passed, 0 failed).
 - **Resolved:** commit `6cc5702` — verify: manual diff of `TESTING.md` counts against a live `ctest -L <label> -N`/binary run
+
+**Raw-OpenGL-vs-CNA audit (2026-07-20), `AUD-082`..`AUD-087`:** a targeted
+investigation (user request: "zjisti jak moc je opengl(es) volano mimo
+standardni cna cestu" -- "find out how much OpenGL(ES) is called outside
+the standard CNA path") found that raw GL is loaded via
+`SDL_GL_GetProcAddress()` in exactly 2 files
+(`src/MeshCraft/MeshCraftApplication.cpp`,
+`src/MeshCraft/MeshCraftApplication_Commands.cpp` — confirmed by
+`grep -rl SDL_GL_GetProcAddress`, no other file and no raw
+`#include <GL/...>`/`GLES` header anywhere in the tree), across 4
+functional areas now split into `AUD-082`..`AUD-087` below. For every
+one of the 4 areas, direct inspection of `../cna`'s own public headers
+confirmed a real, already-existing, backend-agnostic CNA/NOXNA
+equivalent that the raw-GL code bypasses instead of using:
+`GraphicsDevice.SetViewport`/`SetScissorRect` +
+`RasterizerState.ScissorTestEnable`
+(`GraphicsDevice.hpp:165-178`, `RasterizerState.hpp:76-81`),
+`GraphicsDevice.GetBackBufferData(...)` (`GraphicsDevice.hpp:274-289`),
+`RenderTarget2D` (a real `Texture2D` subclass, so it can be bound
+straight back in as a shader input for a later pass — `RenderTarget2D.hpp`)
++ `GraphicsDevice.SetRenderTarget(RenderTarget2D*)`
+(`GraphicsDevice.hpp:296`), and `NOXNA ShaderEffect` (custom-GLSL/HLSL
+compile+link, cross-backend — `ShaderEffect.hpp:25-40`). None of this
+is a hidden CNA capability gap; it is unused, already-shipped API.
+**Goal, per the user's own framing:** migrate every one of `AUD-082`
+through `AUD-087` onto the CNA/NOXNA equivalent above; only if a
+specific raw-GL call in one of these areas turns out to have no
+expressible CNA/NOXNA equivalent (not yet hit in this investigation)
+should that residual be written up as a NOXNA capability request for a
+**future** `../cna` change — not silently kept as more raw GL, and not
+implemented in `../cna` directly without the owner's explicit
+permission (`CLAUDE.md`'s CNA boundary). Expectation stated by the user:
+"snad nic nezbyde" (hopefully nothing is left over).
+
+### AUD-082 `[TODO]` `P2` `W8` · Editor viewport/panel clipping hand-loads glViewport/glScissor/glEnable/glDisable instead of using GraphicsDevice's own Viewport/ScissorRectangle
+- **Component:** include/MeshCraft/MeshCraftApplication.hpp (`fnGlViewport_`/`fnGlScissor_`/`fnGlEnable_`/`fnGlDisable_`), src/MeshCraft/MeshCraftApplication.cpp
+- **Evidence:** `MeshCraftApplication.hpp:326-329` declares 4 raw function-pointer members. `MeshCraftApplication.cpp:151-154` loads them via `SDL_GL_GetProcAddress("glViewport"/"glScissor"/"glEnable"/"glDisable")` in `LoadContent()`. Used at `:544-545` (`fnGlEnable_(GL_SCISSOR_TEST)` + `fnGlScissor_(viewX, glViewY, viewW, viewH)`) and `:581` (`fnGlViewport_(...)`) to clip the 3D viewport to the area between the left/right panels, top toolbar, and timeline/status bar before `Draw()`'s scene render, then `:748-749` (`fnGlDisable_` + `fnGlViewport_(0,0,screenW,screenH)`) to restore the full-window viewport for ImGui. `../cna`'s `GraphicsDevice` already exposes exactly this: `getViewportProperty()`/`setViewportProperty(const Viewport&)` and `getScissorRectangleProperty()`/`setScissorRectangleProperty(const Rectangle&)` (`GraphicsDevice.hpp:165-178`), with `RasterizerState.getScissorTestEnableProperty()`/`setScissorTestEnableProperty(bool)` (`RasterizerState.hpp:76-81`) as the actual scissor-test on/off switch — confirmed in `EasyGLGraphicsBackend.cpp`'s `SetScissorRect()`/`SetViewport()` that these correctly XNA-top-left-to-GL-bottom-left Y-flip using the currently-bound render target's real height (something this raw-GL code does not do, since it always assumes the window's own `screenH`, latent-correct today only because mesh-craft never renders this path to an off-screen target).
+- **Outcome:** Replace the 4 raw function pointers and their 5 call sites with `gd.setViewportProperty(Viewport(viewX, viewY, viewW, viewH))` / `gd.setScissorRectangleProperty(Rectangle(viewX, viewY, viewW, viewH))` + a `RasterizerState` with `ScissorTestEnable=true` bound via `gd.setRasterizerStateProperty(...)` (matching however this codebase already sets other render state, e.g. `gd.setBlendStateProperty`/`setDepthStencilStateProperty` if present), restoring the full-window `Viewport`/disabling `ScissorTestEnable` before the ImGui pass. Delete `fnGlViewport_`/`fnGlScissor_`/`fnGlEnable_`/`fnGlDisable_` from the header once no call site references them.
+- **Tests:** Existing `--screenshot` render tests (e.g. `camera_rotation_test.py`, `light_shading_test.py`) already exercise the clipped viewport indirectly (the box/sphere they sample only appears inside this exact clipped rectangle) — a full rebuild + `ctest` run with no change in their pixel-sampling results is the regression check; add a small dedicated test only if none of the existing ones actually fail without the clip (verify via `git stash` on just this fix, matching this session's established empirical-verification discipline, before trusting the migration is behavior-preserving).
+
+### AUD-083 `[TODO]` `P2` `W8` · --screenshot's saveScreenshot() hand-loads glFinish/glBindBuffer/glReadPixels instead of using GraphicsDevice.GetBackBufferData()
+- **Component:** src/MeshCraft/MeshCraftApplication_Commands.cpp `saveScreenshot()`
+- **Evidence:** `MeshCraftApplication_Commands.cpp:402-421`: loads `glFinish`/`glBindBuffer`/`glReadPixels` via `SDL_GL_GetProcAddress` on every call, then calls `glReadPixels(0,0,w,h,GL_RGBA,GL_UNSIGNED_BYTE,...)` directly into a manually-allocated `std::vector<unsigned char>`. `../cna`'s `GraphicsDevice` already exposes a public, cross-backend pixel-readback API for exactly this — `GetBackBufferData(Color* data, int elementCount)` / `GetBackBufferData(Color* data, int startIndex, int elementCount)` / `GetBackBufferData(const Rectangle* rect, Color* data, int startIndex, int elementCount)` (`GraphicsDevice.hpp:274-289`) — implemented per-backend (`ReadBackbuffer(x,y,w,h,pixels)` exists on every `IGraphicsBackend`: D3D9/11/12, SDL, Software, per `grep -rn ReadBackbuffer ../cna/include`), so it already does the "block until GPU work is flushed, then read the real backbuffer" sequencing this raw code hand-rolls with `glFinish`.
+- **Outcome:** Replace the 3 raw function pointers with `gd.GetBackBufferData(pixels.data(), w*h)` (or the `Color*`-typed overload, converting to/from the existing `RGBA8` byte buffer the PNG/PPM writers expect), removing the `SDL_GL_GetProcAddress` calls and the manual `glFinish`/`glBindBuffer(0x88EC,0)` PBO-unbind dance entirely — `GetBackBufferData`'s own backend implementation is responsible for correct synchronization.
+- **Tests:** This is the mechanism every `--screenshot`-based render test in the suite depends on (`camera_rotation_test.py`, `light_shading_test.py`, `fog_exponential_test.py`, etc. — the majority of the `render` label). Full rebuild + `ctest -L render` must produce byte-identical PNG/PPM output before and after (verify with a direct pixel diff against a pre-migration screenshot of the same fixture, matching AUD-078's own before/after binary-diff technique) — this is the highest blast-radius of the 6 migrations here precisely because so much of this session's own verification tooling depends on it working correctly.
+
+### AUD-084 `[TODO]` `P2` `W8` · Bloom post-processing (I6) is a hand-rolled raw-GL FBO+shader pipeline instead of RenderTarget2D + ShaderEffect
+- **Component:** src/MeshCraft/MeshCraftApplication.cpp (`BloomGL`/`s_bloom`, `initBloom()`, `applyBloom()`, `kBloomVS`/`kBloomBlurFS`/`kBloomCompositeFS`)
+- **Evidence:** `initBloom()`/`applyBloom()` (`MeshCraftApplication.cpp:1326-1529`ish) build and drive the bloom extract/blur/composite passes entirely through the shared raw-GL function table `s_bloom` (see the shared preamble above and `AUD-085`/`AUD-086`/`AUD-087` for the table's other 3 consumers) — manual `glGenFramebuffers`/`glFramebufferTexture2D` FBOs, manual `glCreateShader`/`glShaderSource`/`glCompileShader`/`glCreateProgram`/`glLinkProgram` for `kBloomVS`+`kBloomBlurFS`+`kBloomCompositeFS` (`#version 300 es` GLSL literals embedded as C string constants), manual `glBlendFunc`/`glDrawArrays` compositing. `../cna` already has both halves of this as real, tested, cross-backend classes: `RenderTarget2D` (`RenderTarget2D.hpp` — a genuine `Texture2D` subclass, so the bloom-extract target can be bound straight back in as the blur pass's sampler input, and the blur target as the composite pass's, with no raw texture-id plumbing) and `NOXNA ShaderEffect` (`ShaderEffect.hpp:25-40`, constructible from a `GraphicsDevice&` — CNA's own supported "bring your own shader source" mechanism; `../cna/examples/easygl_postprocesseffect_shader_test.cpp` and `easygl_bloom_extract_test.cpp`/`easygl_bloom_gaussianblur_test.cpp`/`easygl_bloom_combine_test.cpp`/`easygl_bloom_pipeline_test.cpp` demonstrate this exact extract/blur/combine pipeline shape already working end-to-end against CNA's own API, not raw GL).
+- **Outcome:** Rebuild `initBloom()`/`applyBloom()` on `RenderTarget2D` (extract target, ping-pong blur targets) + `ShaderEffect` (loaded from `kBloomVS`/`kBloomBlurFS`/`kBloomCompositeFS`'s existing GLSL source, unchanged) + `GraphicsDevice.SetRenderTarget()`/`SpriteBatch` or a full-screen-triangle draw call for each pass, removing this feature's dependency on the shared `s_bloom` raw-GL table entirely. If any single call turns out to have no `ShaderEffect`/`RenderTarget2D`-expressible equivalent, stop and document it as a NOXNA capability request (see the shared preamble) rather than falling back to raw GL for just that one call.
+- **Tests:** `light_shading_test.py`-style real `--screenshot` pixel sampling on a fixture with an emissive/bright material and `bloomEnabled_=true` vs. `false`, asserting a measurable glow spread beyond the bright region's own geometric bounds — this coverage does not exist yet (`AUD-058`'s test-only hook only proves bloom's GL resource pool is fully released, per `MeshCraftApplication.cpp:81-89`, not that bloom is visually correct) and should be added as part of this migration, verified via `git stash` pre/post exactly like `AUD-077`/`AUD-078`/`AUD-079`.
+
+### AUD-085 `[TODO]` `P2` `W8` · SSAO post-processing (I5) is a hand-rolled raw-GL FBO+shader pipeline instead of RenderTarget2D + ShaderEffect
+- **Component:** src/MeshCraft/MeshCraftApplication.cpp (`BloomGL`/`s_bloom`'s SSAO fields, `initSsao()`, `applySsao()`, `kSsaoFS`/`kSsaoBlurFS`/`kSsaoCompositeFS`)
+- **Evidence:** `initSsao()`/`applySsao()` (`MeshCraftApplication.cpp:1530-1613`ish) share the exact same `s_bloom` raw-GL table as `AUD-084`, adding a depth pre-pass FBO + AO FBO + blur FBO or the same manual `glGenFramebuffers`/shader-compile pattern. `RenderTarget2D` supports a depth buffer/format directly (`RenderTarget2D.hpp` includes `DepthFormat.hpp`), so the depth pre-pass target does not need any different treatment than `AUD-084`'s color targets — same migration shape, same `ShaderEffect` mechanism for `kSsaoFS`/`kSsaoBlurFS`/`kSsaoCompositeFS`.
+- **Outcome:** Same pattern as `AUD-084`: `RenderTarget2D` (depth pre-pass + AO + blur targets) + `ShaderEffect` (existing GLSL source, unchanged) + `GraphicsDevice.SetRenderTarget()`, removing this feature's dependency on `s_bloom`. Any call with no CNA/NOXNA equivalent gets written up as a capability request rather than kept as raw GL, same rule as `AUD-084`.
+- **Tests:** No dedicated visual-correctness test for SSAO exists yet (only the same `AUD-058` resource-pool-release hook, which is orthogonal to whether the darkening is visually correct) — add a real `--screenshot` test analogous to `AUD-084`'s (two adjacent surfaces at a concave corner, `ssaoEnabled` on vs. off, asserting the corner pixels darken relative to the flat-wall pixels) as part of this migration, verified `git stash` pre/post.
+
+### AUD-086 `[TODO]` `P2` `W8` · Equirectangular skybox (I2) is drawn via hand-rolled raw-GL texture+shader calls instead of Texture2D + ShaderEffect
+- **Component:** src/MeshCraft/MeshCraftApplication.cpp (`BloomGL`/`s_bloom`'s skybox fields, `initSkybox()`, `drawSkybox()`, `kSkyboxVS`/`kSkyboxFS`)
+- **Evidence:** `initSkybox()`/`drawSkybox()` (`MeshCraftApplication.cpp:1378-1446`ish) load the skybox equirect image and compile/link `kSkyboxVS`+`kSkyboxFS` through the same shared `s_bloom` raw-GL table as `AUD-084`/`AUD-085`, including a manual `glGenTextures`/`glBindTexture`/(image decode, presumably via the same `stbi_*` helper `saveScreenshot()` already links) upload. This is simpler than `AUD-084`/`AUD-085` — no render-to-texture step, just "load a texture, run a full-screen shader sampling it" — so `Texture2D`'s normal load path (whatever this codebase already uses elsewhere for material/background textures, e.g. the existing `bgTexture_` `Texture2D` used at `MeshCraftApplication.cpp:559-573` for the I1 background-texture feature) plus `ShaderEffect` for `kSkyboxVS`/`kSkyboxFS` should cover 100% of this feature's raw-GL surface.
+- **Outcome:** Load the skybox equirect image as a normal CNA `Texture2D` (reusing whatever loader `bgTexture_` already uses, rather than a second bespoke image-loading path) and replace `kSkyboxVS`/`kSkyboxFS`'s manual compile/link/draw with `ShaderEffect`, removing this feature's dependency on `s_bloom`.
+- **Tests:** No dedicated visual-correctness test for the skybox exists yet — add a real `--screenshot` test (a scene with `environment.skyboxTexture` set to a fixture image with a distinctive color in a known direction, asserting the sampled background pixel matches) as part of this migration, verified `git stash` pre/post.
+
+### AUD-087 `[TODO]` `P2` `W8` · Material-preview swatch render (PropertiesPanel) is a hand-rolled raw-GL FBO+shader pipeline instead of RenderTarget2D + ShaderEffect; also the last consumer of the shared s_bloom raw-GL function table
+- **Component:** src/MeshCraft/MeshCraftApplication.cpp (`BloomGL`/`s_bloom`'s mat-preview fields, `initMatPreview()`, `renderMatPreview()`, `kMatPreviewFS`), include/MeshCraft/MeshCraftApplication.hpp (`matPreviewTexId_`)
+- **Evidence:** `initMatPreview()`/`renderMatPreview()` (`MeshCraftApplication.cpp:1807-1853`ish) render a small (`kMatPreviewRes`=128px) shaded sphere/swatch into an FBO for the PropertiesPanel's material-color preview, through the same shared `s_bloom` table, then hand the raw GL texture id (`matPreviewTexId_`) to ImGui as an `ImTextureID` for `ImGui::Image()`. This is the 4th and final consumer of `s_bloom`/`BloomGL` — once `AUD-084`, `AUD-085`, and `AUD-086` are migrated off it, this is the last one standing.
+- **Outcome:** Migrate to `RenderTarget2D` + `ShaderEffect` exactly as `AUD-084`/`AUD-085`/`AUD-086`; confirm (however ImGui's existing GL backend already exposes bound textures as `ImTextureID` elsewhere in this codebase — this project already draws `bgTexture_`/loaded model textures through ImGui in other panels, so the same mechanism should cover a `RenderTarget2D`'s underlying texture id too) that `ImGui::Image()` can consume a `RenderTarget2D`'s texture id the same way. **Once this lands, delete the entire `BloomGL` struct, the shared `s_bloom` instance, the `LD(...)` macro, and every remaining `SDL_GL_GetProcAddress` call in `MeshCraftApplication.cpp`** (cross-check against `AUD-082`/`AUD-083` too — if those are also done by this point, `grep -rl SDL_GL_GetProcAddress src/` should return nothing at all, meaning MeshCraft would no longer touch raw OpenGL(ES) anywhere outside of `../cna` itself).
+- **Tests:** `preferences_test`-style differential check (assert the rendered swatch's dominant color tracks the material's `base_color` input across 2-3 distinct colors) — no dedicated correctness test exists yet for this specific swatch, only the `AUD-058` resource-pool hook. Add it as part of this migration. After this row lands, also re-run `grep -rl SDL_GL_GetProcAddress src/ include/` as the final acceptance check for the whole `AUD-082`..`AUD-087` group.
