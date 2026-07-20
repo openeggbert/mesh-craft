@@ -418,4 +418,29 @@ inline RawTessellation tessellateUnitIcoSphereAlg(int subdivisions) {
     return rt;
 }
 
+// 2026-07-20 audit F5: SceneRenderer_Extrude.cpp's drawObjectEdges()
+// Extrude case had no vertex-budget guard at all, unlike its solid-mesh
+// sibling drawExtrudeDynamic() (AUD-072, same file). Cross-section point
+// count (N) is parser-clamped to 4096 -- well above what the
+// Properties-panel UI itself lets you type (only reachable via a loaded
+// file) -- and path segments (M) are capped to 20 in that function, but
+// its own ringStep formula (`max(1, (M-1)/19)`) always evaluates to
+// exactly 1 once M is capped at 20, so EVERY ring still renders, not a
+// sparse subset: the ring-building loop produces
+// (hollow ? 4 : 2) * M * N line vertices from scratch every frame,
+// uncached (up to ~327K for a loaded file with N near the parser
+// ceiling). Extracted as a pure, headlessly-testable function (rather
+// than left as an inline formula only exercisable via a live rendering
+// pipeline that drawObjectEdges() itself needs -- unlike
+// drawExtrudeDynamic()'s solid-mesh path, the edge overlay is gated
+// behind a showEdgeOverlay_/showWireframeMode_ UI toggle that defaults
+// off and has no headless CLI equivalent) -- SceneRenderer_Extrude.cpp
+// calls this directly, not a mirrored duplicate, so there's no drift risk.
+inline bool extrudeEdgeOverlayExceedsVertexBudgetAlg(int pathSegments, int crossSectionPoints,
+                                                      bool hollow, long long maxVerts = 65535) {
+    long long verts = (hollow ? 4LL : 2LL) *
+        static_cast<long long>(pathSegments) * static_cast<long long>(crossSectionPoints);
+    return verts > maxVerts;
+}
+
 } // namespace MeshCraft::Renderer

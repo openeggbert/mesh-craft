@@ -751,6 +751,18 @@ if(MESH_CRAFT_BUILD_TESTING AND UNIX AND NOT ANDROID AND NOT EMSCRIPTEN)
     add_test(NAME extrude_hollow_zero_radius COMMAND extrude_hollow_zero_radius_test)
     set_tests_properties(extrude_hollow_zero_radius PROPERTIES TIMEOUT 15 LABELS "unit")
 
+    # 2026-07-20 audit F5: extrudeEdgeOverlayExceedsVertexBudgetAlg()
+    # (PrimitiveTessellationAlg.hpp) is a pure, header-only function with no
+    # CNA/Mc3 dependency -- calls it directly, not a mirror.
+    add_executable(extrude_edge_overlay_budget_test
+        ${CMAKE_CURRENT_SOURCE_DIR}/test/extrude_edge_overlay_budget_test.cpp)
+    target_include_directories(extrude_edge_overlay_budget_test PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/include)
+    target_compile_features(extrude_edge_overlay_budget_test PRIVATE cxx_std_23)
+    target_compile_options(extrude_edge_overlay_budget_test PRIVATE -Wall -Wextra)
+    add_test(NAME extrude_edge_overlay_budget COMMAND extrude_edge_overlay_budget_test)
+    set_tests_properties(extrude_edge_overlay_budget PROPERTIES TIMEOUT 15 LABELS "unit")
+
     # AUD-036b: frame-driven regression test for the undo-snapshot-timing fix.
     # Drives real ImGui frames through a full click-drag gesture on
     # DragFloat/DragFloat3/ColorEdit3 (the widget classes AUD-036 fixed) plus

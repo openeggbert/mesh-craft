@@ -1,4 +1,5 @@
 #include "MeshCraft/Renderer/SceneRenderer.hpp"
+#include "MeshCraft/Renderer/PrimitiveTessellationAlg.hpp"
 
 #include <Microsoft/Xna/Framework/Graphics/BufferUsage.hpp>
 #include <Microsoft/Xna/Framework/Graphics/IndexElementSize.hpp>
@@ -586,6 +587,19 @@ void SceneRenderer::drawObjectEdges(const Mc3Object& obj, const Mc3Document& doc
                       (ex.crossSection.radius > 1e-6f) &&
                       (ex.crossSection.type == CrossSectionType::Circle ||
                        ex.crossSection.type == CrossSectionType::Polygon);
+
+        // 2026-07-20 audit F5: unlike its solid-mesh sibling
+        // drawExtrudeDynamic() (AUD-072), this function had no
+        // vertex-budget guard at all -- see
+        // extrudeEdgeOverlayExceedsVertexBudgetAlg()'s own doc comment
+        // (PrimitiveTessellationAlg.hpp) for the full reasoning. Bail to a
+        // placeholder wireframe before the ring-building loop below does
+        // any of that work.
+        if (extrudeEdgeOverlayExceedsVertexBudgetAlg(M, N, hollow)) {
+            drawWireShape(wireShapeBox_, deform * world, view, proj, edgeColor);
+            break;
+        }
+
         float innerScale = hollow ? (ex.crossSection.innerRadius / ex.crossSection.radius) : 0.0f;
 
         float twistRad     = ex.twist * (std::numbers::pi_v<float> / 180.0f);
