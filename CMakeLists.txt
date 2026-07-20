@@ -648,6 +648,21 @@ if(MESH_CRAFT_BUILD_TESTING AND UNIX AND NOT ANDROID AND NOT EMSCRIPTEN)
     add_test(NAME delete_reference_integrity COMMAND delete_reference_integrity_test)
     set_tests_properties(delete_reference_integrity PROPERTIES TIMEOUT 15 LABELS "unit")
 
+    # F19 (2026-07-20 audit): runObjExport()'s intermediate .glb temp path
+    # used to be derived from `this`'s pointer value (deterministic --
+    # collision risk across concurrent instances) and was only cleaned up
+    # on the success path (leaked on exportDocument()/LoadBinaryFromFile()
+    # throwing). Mirrors the fixed control-flow shape with real
+    # uniqueTempPath()/std::filesystem calls -- CNA-free, header-only
+    # (MeshCraft/TempFile.hpp), matching object_index_test's precedent.
+    add_executable(obj_export_temp_cleanup_test
+        ${CMAKE_CURRENT_SOURCE_DIR}/test/obj_export_temp_cleanup_test.cpp)
+    target_include_directories(obj_export_temp_cleanup_test PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/include)
+    target_compile_features(obj_export_temp_cleanup_test PRIVATE cxx_std_23)
+    add_test(NAME obj_export_temp_cleanup COMMAND obj_export_temp_cleanup_test)
+    set_tests_properties(obj_export_temp_cleanup PROPERTIES TIMEOUT 15 LABELS "unit")
+
     # SYS-W3-01 Phase 3: Editor::MacroRecorder, extracted from
     # MeshCraftApplication (H12). No test existed for this subsystem before
     # the extraction. CNA-free -- executeStep()'s cross-domain calls

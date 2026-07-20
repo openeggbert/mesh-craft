@@ -3,6 +3,7 @@
 #include "MeshCraft/EditorAlgorithms.hpp"
 #include "MeshCraft/Mcb/McbReader.hpp"
 #include "MeshCraft/Mcb/McbWriter.hpp"
+#include "MeshCraft/TempFile.hpp"
 
 #include "GltfExporter.hpp"
 #include <tiny_gltf.h>
@@ -619,22 +620,36 @@ void WriteObjNode(const tinygltf::Model& model, int nodeIdx, const Mat4& parent,
 
 void MeshCraftApplication::runObjExport(const std::string& outPath) {
     std::filesystem::path out(outPath);
-    std::filesystem::path tempGlb = std::filesystem::temp_directory_path() /
-        ("meshcraft_objexport_" + std::to_string(reinterpret_cast<uintptr_t>(this)) + ".glb");
+    // F19 (2026-07-20 audit): the temp path used to be derived from `this`'s
+    // pointer value alone -- deterministic, so two concurrent MeshCraft
+    // instances exporting OBJ around the same time (or two runs that happen
+    // to reuse the same address after an exit) could collide on the exact
+    // same filename. uniqueTempPath() (already used by ModelRegistry.cpp/
+    // MeshCraftApplication_UiAi.cpp for exactly this reason) adds a random
+    // suffix instead.
+    std::filesystem::path tempGlb = uniqueTempPath("meshcraft_objexport", ".glb");
 
     mc3togltf::GltfExporter exporter;
     exporter.allowApproximateCSG = glbAllowApproxCSG_;
-    exporter.exportDocument(document_, tempGlb, mc3togltf::OutputFormat::GLB);
-    recordValidation("Export: " + out.filename().string(), exporter.validation);
-
     tinygltf::Model model;
-    tinygltf::TinyGLTF loader;
-    std::string err, warn;
-    bool ok = loader.LoadBinaryFromFile(&model, &err, &warn, tempGlb.string());
     std::error_code ec;
-    std::filesystem::remove(tempGlb, ec);
-    if (!ok)
-        throw std::runtime_error("Failed to re-read intermediate GLB for OBJ export: " + err);
+    try {
+        exporter.exportDocument(document_, tempGlb, mc3togltf::OutputFormat::GLB);
+        recordValidation("Export: " + out.filename().string(), exporter.validation);
+
+        tinygltf::TinyGLTF loader;
+        std::string err, warn;
+        bool ok = loader.LoadBinaryFromFile(&model, &err, &warn, tempGlb.string());
+        std::filesystem::remove(tempGlb, ec);
+        if (!ok)
+            throw std::runtime_error("Failed to re-read intermediate GLB for OBJ export: " + err);
+    } catch (...) {
+        // F19: exportDocument()/LoadBinaryFromFile() throwing used to leave
+        // the temp .glb behind forever -- the removal above only ran on the
+        // success path.
+        std::filesystem::remove(tempGlb, ec);
+        throw;
+    }
 
     std::ofstream obj(out);
     if (!obj)
