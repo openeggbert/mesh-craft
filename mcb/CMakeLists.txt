@@ -117,6 +117,18 @@ if(BUILD_TESTING)
     add_test(NAME mcb_tessellation_clamp COMMAND mcb_tessellation_clamp_test)
     set_tests_properties(mcb_tessellation_clamp PROPERTIES TIMEOUT 15 LABELS "format")
 
+    # 2026-07-20 audit F3: McbReader/McbWriter had no Mc3LoadPolicy
+    # integration at all -- resource-path confinement (meshSource/texture
+    # uri/SVG/embed/sound/music src) was structurally impossible for MCB,
+    # unlike the XML/JSON parsers. Mirrors mc3/test/load_policy_test.cpp's
+    # own coverage, adapted for MCB.
+    add_executable(mcb_load_policy_test
+        test/load_policy_test.cpp
+    )
+    target_link_libraries(mcb_load_policy_test PRIVATE Mcb)
+    add_test(NAME mcb_load_policy COMMAND mcb_load_policy_test)
+    set_tests_properties(mcb_load_policy PROPERTIES TIMEOUT 15 LABELS "format")
+
     # AUD-071: Mc3SceneState's `overrides` and Mc3Trigger's `steps` were the
     # only two known keys that skipped expectTag() (AUD-015's own
     # established policy) and silently dropped the field on a tag mismatch

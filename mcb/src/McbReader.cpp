@@ -4,6 +4,7 @@
 #include "MeshCraft/Mc3/Mc3Camera.hpp"
 #include "MeshCraft/Mc3/Mc3Environment.hpp"
 #include "MeshCraft/Mc3/Mc3Light.hpp"
+#include "MeshCraft/Mc3/Mc3LoadPolicy.hpp"
 #include "MeshCraft/Mc3/Mc3Material.hpp"
 #include "MeshCraft/Mc3/Mc3Object.hpp"
 #include "MeshCraft/Mc3/Mc3EmbedGltf.hpp"
@@ -97,6 +98,86 @@ struct ValidationScope {
     explicit ValidationScope(Mc3::Mc3Validation* v) { g_validation = v; }
     ~ValidationScope() { g_validation = nullptr; }
     ValidationScope(const ValidationScope&) = delete;
+};
+
+// ---------------------------------------------------------------------------
+// 2026-07-20 audit F3: Mc3LoadPolicy resource-path confinement
+// ---------------------------------------------------------------------------
+//
+// Mirrors Mc3XmlParser.cpp's / Mc3JsonParser.cpp's own g_confineResourcePaths/
+// g_resourceRoot/includePathWithinRoot/validateResourcePathIfConfined
+// exactly (same names, same logic) for consistency across all three
+// independent parsers. Until this fix, McbReader had NO Mc3LoadPolicy
+// integration at all -- loadFromFile()/loadFromBinary() took no policy
+// parameter, so meshSource/texture uri/SVG src/embed src/sound src/music
+// src were read completely unconfined, structurally unable to reject an
+// absolute or `..`-escaping path the way the XML/JSON parsers already do.
+//
+// Deliberately scoped to confineResourcePathsToRoot only, matching
+// Mc3JsonParser.cpp's own established scope decision (AUD-068): MCB is a
+// binary snapshot of an already-fully-resolved document, with no
+// <include>-equivalent concept at all, so allowIncludes/
+// confineIncludesToRoot/maxIncludeDepth have nothing to gate here.
+static thread_local bool g_confineResourcePaths = false;
+static thread_local std::filesystem::path g_resourceRoot;
+
+static bool includePathWithinRoot(const std::filesystem::path& candidate,
+                                   const std::filesystem::path& rootDir) {
+    std::error_code ec;
+    auto r = std::filesystem::weakly_canonical(
+        rootDir.empty() ? std::filesystem::path(".") : rootDir, ec);
+    if (ec) return false;
+
+    // Mirrors Mc3XmlParser.cpp's/Mc3JsonParser.cpp's own AUD-069 fix: make
+    // `candidate` absolute FIRST (never requires existence), then
+    // weakly_canonical the combined absolute path as a single unit, so
+    // resolution doesn't depend on whether the target file exists.
+    auto absCandidate = std::filesystem::absolute(candidate, ec);
+    if (ec) return false;
+    auto c = std::filesystem::weakly_canonical(absCandidate, ec);
+    if (ec) return false;
+
+    auto rel = std::filesystem::relative(c, r, ec);
+    if (ec || rel.empty()) return false;
+    return rel.native().rfind("..", 0) != 0; // does not start with ".."
+}
+
+// Validates a texture/SVG/mesh/embed/sound/music `src`/`uri` field against
+// the current load's confinement policy. No-op when not confining or when
+// `rawPath` is empty or a non-filesystem pseudo-path (`embed:`/`data:`).
+static void validateResourcePathIfConfined(const std::string& rawPath, const char* kind) {
+    if (!g_confineResourcePaths || rawPath.empty()) return;
+    if (rawPath.rfind("embed:", 0) == 0 || rawPath.rfind("data:", 0) == 0) return;
+
+    std::filesystem::path p(rawPath);
+    if (p.is_absolute()) {
+        std::string msg = std::string("MCB: ") + kind + " '" + rawPath +
+            "' is an absolute path outside the document root; rejected "
+            "under the untrusted-content load policy";
+        reportError(kind, msg);
+        throw std::runtime_error(msg);
+    }
+    if (!includePathWithinRoot(g_resourceRoot / p, g_resourceRoot)) {
+        std::string msg = std::string("MCB: ") + kind + " '" + rawPath +
+            "' escapes the document root; rejected under the "
+            "untrusted-content load policy";
+        reportError(kind, msg);
+        throw std::runtime_error(msg);
+    }
+}
+
+// RAII guard for g_confineResourcePaths/g_resourceRoot -- same pattern as
+// ValidationScope above, set at the top of each public entry point.
+struct ResourcePolicyScope {
+    ResourcePolicyScope(bool confine, std::filesystem::path root) {
+        g_confineResourcePaths = confine;
+        g_resourceRoot = std::move(root);
+    }
+    ~ResourcePolicyScope() {
+        g_confineResourcePaths = false;
+        g_resourceRoot.clear();
+    }
+    ResourcePolicyScope(const ResourcePolicyScope&) = delete;
 };
 
 // ---------------------------------------------------------------------------
@@ -618,7 +699,7 @@ static std::shared_ptr<Mc3::Mc3Object> readObject(std::istream& in) {
         else if (k == "layer")            { expectTag(tag, TAG_STR, "layer");            obj->layer            = rRawStr(in); }
         else if (k == "isCutter")         { expectTag(tag, TAG_BOOL, "isCutter");        obj->isCutter         = rU8(in) != 0; }
         else if (k == "definition")       { expectTag(tag, TAG_STR, "definition");       obj->definition       = rRawStr(in); }
-        else if (k == "meshSource")       { expectTag(tag, TAG_STR, "meshSource");       obj->meshSource       = rRawStr(in); }
+        else if (k == "meshSource")       { expectTag(tag, TAG_STR, "meshSource");       obj->meshSource       = rRawStr(in); validateResourcePathIfConfined(obj->meshSource, "mesh source"); }
         else if (k == "materialOverride") { expectTag(tag, TAG_STR, "materialOverride"); obj->materialOverride = rRawStr(in); }
         else if (k == "script")           { expectTag(tag, TAG_STR, "script");           obj->scriptId         = rRawStr(in); }
         else if (k == "transform")        { expectTag(tag, TAG_OBJ, "transform");        obj->transform        = readTransform(in); }
@@ -690,7 +771,7 @@ static Mc3::Mc3Texture readTexture(std::istream& in) {
         std::string k = rKey(in); if (k.empty()) break;
         uint8_t tag = rU8(in);
         if      (k == "name")       { expectTag(tag, TAG_STR, "name");       tex.name       = rRawStr(in); idScope.set(tex.name); }
-        else if (k == "uri")        { expectTag(tag, TAG_STR, "uri");        tex.uri        = rRawStr(in); }
+        else if (k == "uri")        { expectTag(tag, TAG_STR, "uri");        tex.uri        = rRawStr(in); validateResourcePathIfConfined(tex.uri, "texture uri"); }
         else if (k == "wrapU")      { expectTag(tag, TAG_STR, "wrapU");      tex.wrapU      = rRawStr(in); }
         else if (k == "wrapV")      { expectTag(tag, TAG_STR, "wrapV");      tex.wrapV      = rRawStr(in); }
         else if (k == "filter")     { expectTag(tag, TAG_STR, "filter");     tex.filter     = rRawStr(in); }
@@ -708,7 +789,7 @@ static Mc3::Mc3SvgTexture readSvgTexture(std::istream& in, const std::string& id
     while (true) {
         std::string k = rKey(in); if (k.empty()) break;
         uint8_t tag = rU8(in);
-        if      (k == "src")           { expectTag(tag, TAG_STR, "src");           svg.src           = rRawStr(in); }
+        if      (k == "src")           { expectTag(tag, TAG_STR, "src");           svg.src           = rRawStr(in); validateResourcePathIfConfined(svg.src, "SVG texture src"); }
         else if (k == "inlineContent") { expectTag(tag, TAG_STR, "inlineContent"); svg.inlineContent = rRawStr(in); }
         else                           skipValue(in, tag);
     }
@@ -797,7 +878,7 @@ static Mc3::Mc3Sound readSound(std::istream& in, const std::string& id) {
     while (true) {
         std::string k = rKey(in); if (k.empty()) break;
         uint8_t tag = rU8(in);
-        if      (k == "src")  { expectTag(tag, TAG_STR, "src");  snd.src  = rRawStr(in); }
+        if      (k == "src")  { expectTag(tag, TAG_STR, "src");  snd.src  = rRawStr(in); validateResourcePathIfConfined(snd.src, "sound src"); }
         else if (k == "loop") { expectTag(tag, TAG_BOOL, "loop"); snd.loop = rU8(in) != 0; }
         else                  skipValue(in, tag);
     }
@@ -811,7 +892,7 @@ static Mc3::Mc3Music readMusic(std::istream& in, const std::string& id) {
     while (true) {
         std::string k = rKey(in); if (k.empty()) break;
         uint8_t tag = rU8(in);
-        if      (k == "src")  { expectTag(tag, TAG_STR, "src");  mus.src  = rRawStr(in); }
+        if      (k == "src")  { expectTag(tag, TAG_STR, "src");  mus.src  = rRawStr(in); validateResourcePathIfConfined(mus.src, "music src"); }
         else if (k == "loop") { expectTag(tag, TAG_BOOL, "loop"); mus.loop = rU8(in) != 0; }
         else                  skipValue(in, tag);
     }
@@ -839,7 +920,7 @@ static Mc3::Mc3EmbedGltf readEmbed(std::istream& in, const std::string& id) {
     while (true) {
         std::string k = rKey(in); if (k.empty()) break;
         uint8_t tag = rU8(in);
-        if      (k == "src")           { expectTag(tag, TAG_STR, "src");           em.src           = rRawStr(in); }
+        if      (k == "src")           { expectTag(tag, TAG_STR, "src");           em.src           = rRawStr(in); validateResourcePathIfConfined(em.src, "embed src"); }
         else if (k == "base64Content") { expectTag(tag, TAG_STR, "base64Content"); em.base64Content = rRawStr(in); }
         else                           skipValue(in, tag);
     }
@@ -1341,19 +1422,35 @@ static Mc3::Mc3Document loadFromBinaryImpl(std::istream& in) {
 }
 
 Mc3::Mc3Document loadFromBinary(std::istream& in) {
+    return loadFromBinary(in, Mc3::Mc3LoadPolicy::trusted());
+}
+
+Mc3::Mc3Document loadFromBinary(std::istream& in, const Mc3::Mc3LoadPolicy& policy) {
     ValidationScope vscope(nullptr);
+    ResourcePolicyScope pscope(policy.confineResourcePathsToRoot, {});
     g_sourceFile.clear(); // no path known for a raw stream
     return loadFromBinaryImpl(in);
 }
 
 Mc3::Mc3Document loadFromBinary(std::istream& in, Mc3::Mc3Validation& validation) {
+    return loadFromBinary(in, Mc3::Mc3LoadPolicy::trusted(), validation);
+}
+
+Mc3::Mc3Document loadFromBinary(std::istream& in, const Mc3::Mc3LoadPolicy& policy,
+                                 Mc3::Mc3Validation& validation) {
     ValidationScope vscope(&validation);
+    ResourcePolicyScope pscope(policy.confineResourcePathsToRoot, {});
     g_sourceFile.clear();
     return loadFromBinaryImpl(in);
 }
 
 Mc3::Mc3Document loadFromFile(const std::filesystem::path& path) {
+    return loadFromFile(path, Mc3::Mc3LoadPolicy::trusted());
+}
+
+Mc3::Mc3Document loadFromFile(const std::filesystem::path& path, const Mc3::Mc3LoadPolicy& policy) {
     ValidationScope vscope(nullptr);
+    ResourcePolicyScope pscope(policy.confineResourcePathsToRoot, path.parent_path());
     g_sourceFile = path;
     std::ifstream f(path, std::ios::binary);
     if (!f) {
@@ -1367,7 +1464,13 @@ Mc3::Mc3Document loadFromFile(const std::filesystem::path& path) {
 }
 
 Mc3::Mc3Document loadFromFile(const std::filesystem::path& path, Mc3::Mc3Validation& validation) {
+    return loadFromFile(path, Mc3::Mc3LoadPolicy::trusted(), validation);
+}
+
+Mc3::Mc3Document loadFromFile(const std::filesystem::path& path, const Mc3::Mc3LoadPolicy& policy,
+                               Mc3::Mc3Validation& validation) {
     ValidationScope vscope(&validation);
+    ResourcePolicyScope pscope(policy.confineResourcePathsToRoot, path.parent_path());
     g_sourceFile = path;
     std::ifstream f(path, std::ios::binary);
     if (!f) {
