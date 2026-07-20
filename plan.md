@@ -994,18 +994,24 @@ _All items in this workstream are DONE — archived to [`docs/history/plan_20260
 
 ## Audit-derived tasks (AUD-###)
 
-67 tasks total (see the Session log's "Net across all 67 AUD-### rows" note
-for the exact breakdown of where they came from): 57 from the session-1
-audit (re-verified against current source in session 2), plus session-2's
+67 tasks were created in total originally (see the Session log's "Net
+across all 16 AUD-### rows remaining in this active backlog" note for the
+exact breakdown of where they came from): 57 from the session-1 audit
+(re-verified against current source in session 2), plus session-2's
 adversarial re-open/new-defect findings. Ordered by discovery (AUD-001..057
 in original severity order, followed by the session-2 additions). Status is
 re-verified per row, not copied from a prior summary — do not trust a DONE
 marker without checking its cited commit/verify command.
 
-**Update (2026-07-18):** 61 of these 67 rows are now `DONE` and archived to
-[`docs/history/plan_20260718.md`](docs/history/plan_20260718.md) (full
-evidence/resolution text preserved there) — only the 6 still-open rows below
-remain in this active file.
+**Update (2026-07-18):** 61 of those original 67 rows are now `DONE` and
+archived to [`docs/history/plan_20260718.md`](docs/history/plan_20260718.md)
+(full evidence/resolution text preserved there). **The active row count
+below is NOT "67 minus 61 = 6"** — a later-same-day independent re-audit
+(2026-07-18) added 10 more rows, `AUD-064` through `AUD-073` (all now
+`DONE`; see the Session log note above), bringing this file's current
+total to **16 AUD-### rows** (the 6 remaining from the original 67, plus
+those 10). `test/validate_plan_consistency.py` is authoritative for this
+count — re-run it rather than trusting this paragraph.
 
 ### AUD-025 `[DEFERRED]` `P2` `W7` · embed: mesh source is treated as a literal OBJ path — node exports with no mesh while export exits 0 'Written'
 - **Component:** mc3togltf/src/GltfExporter.cpp buildMesh()
