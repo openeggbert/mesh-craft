@@ -13,8 +13,6 @@
 // with no new CMakeLists.txt dependency.
 #include <stb_image_write.h>
 
-#include <SDL3/SDL.h>
-
 #include <Microsoft/Xna/Framework/Matrix.hpp>
 #include <Microsoft/Xna/Framework/Vector3.hpp>
 #include <Microsoft/Xna/Framework/Color.hpp>
@@ -405,20 +403,20 @@ void MeshCraftApplication::saveScreenshot(const std::string& path) {
     int h = gd.getViewportProperty().getHeightProperty();
     if (w <= 0 || h <= 0) return;
 
-    using PFNGLFINISH     = void(*)();
-    using PFNGLBINDBUFFER = void(*)(unsigned int, unsigned int);
-    using PFNGLREADPIXELS = void(*)(int, int, int, int, unsigned int, unsigned int, void*);
-    auto fnFinish     = reinterpret_cast<PFNGLFINISH>    (SDL_GL_GetProcAddress("glFinish"));
-    auto fnBindBuffer = reinterpret_cast<PFNGLBINDBUFFER>(SDL_GL_GetProcAddress("glBindBuffer"));
-    auto fnReadPixels = reinterpret_cast<PFNGLREADPIXELS>(SDL_GL_GetProcAddress("glReadPixels"));
-    if (!fnReadPixels) { std::cerr << "[Screenshot] glReadPixels not available\n"; return; }
-    if (fnFinish)     fnFinish();
-    if (fnBindBuffer) fnBindBuffer(0x88EC, 0);
+    // AUD-083: GetBackBufferData() (backed by IGraphicsBackend::ReadBackbuffer
+    // on every CNA backend) already synchronizes with the GPU and returns
+    // pixels in XNA's top-to-bottom row order -- unlike raw glReadPixels(),
+    // no manual glFinish()/row-flip is needed here.
+    std::vector<Color> backBuffer(static_cast<size_t>(w) * h, Color(0, 0, 0, 0));
+    gd.GetBackBufferData(backBuffer.data(), static_cast<int>(backBuffer.size()));
 
-    constexpr unsigned int GL_RGBA          = 0x1908;
-    constexpr unsigned int GL_UNSIGNED_BYTE = 0x1401;
-    std::vector<unsigned char> pixels(w * h * 4);
-    fnReadPixels(0, 0, w, h, GL_RGBA, GL_UNSIGNED_BYTE, pixels.data());
+    std::vector<unsigned char> pixels(static_cast<size_t>(w) * h * 4);
+    for (size_t i = 0; i < backBuffer.size(); ++i) {
+        pixels[i * 4 + 0] = static_cast<unsigned char>(backBuffer[i].getRProperty());
+        pixels[i * 4 + 1] = static_cast<unsigned char>(backBuffer[i].getGProperty());
+        pixels[i * 4 + 2] = static_cast<unsigned char>(backBuffer[i].getBProperty());
+        pixels[i * 4 + 3] = static_cast<unsigned char>(backBuffer[i].getAProperty());
+    }
 
     // SYS-W14-03: --help/main.cpp's usage text has always promised "Render
     // scene to PNG and exit", but this unconditionally wrote raw PPM (P6)
@@ -434,17 +432,9 @@ void MeshCraftApplication::saveScreenshot(const std::string& path) {
     std::string ext = std::filesystem::path(path).extension().string();
     for (auto& c : ext) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
     if (ext == ".png") {
-        // glReadPixels() returns rows bottom-to-top; PNG (like the PPM
-        // writer below) expects top-to-bottom, so flip into a second
-        // buffer rather than relying on stb_image_write's global
-        // stbi_flip_vertically_on_write() flag, which would also affect
-        // any unrelated stbi_write_png() call elsewhere in the process.
-        std::vector<unsigned char> flipped(pixels.size());
-        for (int row = 0; row < h; ++row)
-            std::memcpy(&flipped[static_cast<size_t>(row) * w * 4],
-                        &pixels[static_cast<size_t>(h - 1 - row) * w * 4],
-                        static_cast<size_t>(w) * 4);
-        if (stbi_write_png(path.c_str(), w, h, 4, flipped.data(), w * 4)) {
+        // pixels is already top-to-bottom (see above), so no flip is needed
+        // before handing it to stb_image_write.
+        if (stbi_write_png(path.c_str(), w, h, 4, pixels.data(), w * 4)) {
             std::cout << "[Screenshot] written " << path << "\n";
         } else {
             std::cerr << "[Screenshot] failed to write PNG: " << path << "\n";
@@ -454,7 +444,7 @@ void MeshCraftApplication::saveScreenshot(const std::string& path) {
 
     std::ofstream f(path, std::ios::binary);
     f << "P6\n" << w << " " << h << "\n255\n";
-    for (int row = h - 1; row >= 0; --row)
+    for (int row = 0; row < h; ++row)
         for (int col = 0; col < w; ++col) {
             int idx = (row * w + col) * 4;
             f.write(reinterpret_cast<char*>(&pixels[idx]), 3);
