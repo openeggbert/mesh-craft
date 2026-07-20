@@ -87,17 +87,20 @@ P1s already being fixed in git history. This session:
    **Net across all 31 AUD-### rows remaining in this active backlog (61
    additional rows completed and archived to `docs/history/plan_20260718.md`
    on 2026-07-18 — see that file for their full evidence/resolution text):
-   18 DONE, 11 TODO, 2 DEFERRED** — 10 of the 18 DONE (`AUD-064` through
+   19 DONE, 10 TODO, 2 DEFERRED** — 10 of the 19 DONE (`AUD-064` through
    `AUD-073`) are fresh findings from a 2026-07-18 (later same day)
    independent re-audit, not part of the original 6 (`AUD-069` itself fixed
-   2026-07-19, the day after it was filed); the other 8 (`AUD-074` through
-   `AUD-081`) are from a third independent audit on 2026-07-20 (later the
-   same day as this session's SYS-W14-18..27 work) — the last two
-   (`AUD-080`, `AUD-081`) are documentation-only fixes with no code change.
-   7 more (`AUD-082` through `AUD-088`, all `TODO`) are from a targeted
-   2026-07-20 (later still) investigation into how much raw OpenGL(ES) the
-   editor calls outside CNA's own API — genuinely actionable, unlike the
-   other open `TODO`s; `AUD-088` was found and filed one task late (while
+   2026-07-19, the day after it was filed); the other 9 (`AUD-074` through
+   `AUD-082`) are from a third independent audit on 2026-07-20 (later the
+   same day as this session's SYS-W14-18..27 work) — `AUD-080`/`AUD-081`
+   are documentation-only fixes with no code change, `AUD-082` is the
+   first of the raw-OpenGL(ES)-vs-CNA group (`AUD-082`-`AUD-088`, see
+   below) to actually land.
+   6 more (`AUD-083` through `AUD-088`, all `TODO`) are from the same
+   targeted 2026-07-20 (later still) investigation into how much raw
+   OpenGL(ES) the editor calls outside CNA's own API — genuinely
+   actionable, unlike the other open `TODO`s; `AUD-088` was found and
+   filed one task late (while
    already starting `AUD-082`'s implementation, see that row's own note).
    Recompute with
    `python3 test/validate_plan_consistency.py . <build-dir>` rather than
@@ -129,19 +132,23 @@ still internally consistent.
 
 ## Priority execution queue (next up, in order)
 
-1. **AUD-082 through AUD-088 (P2/W8)** — migrate the editor's raw-OpenGL(ES)
-   reach-arounds (viewport/scissor panel clipping, `--screenshot` pixel
-   readback, and the shared Bloom/SSAO/skybox/material-preview/shadow-map-
-   debug `s_bloom` FBO+shader table) onto CNA's own already-existing,
-   unused `GraphicsDevice.SetViewport`/`SetScissorRect`/`GetBackBufferData`/
-   `SetRenderTarget`, `RenderTarget2D`, and `NOXNA ShaderEffect` APIs — see
-   the shared preamble right before `AUD-082`'s row for the full rationale
-   and the "file a NOXNA capability request rather than write new raw GL"
-   rule for any residual. Do `AUD-082`/`AUD-083` first (small,
-   self-contained, no new test-coverage debt), then the 5 `s_bloom`
-   migrations (`AUD-084`-`AUD-088`, each of which also adds a missing
-   visual-correctness test the feature never had), leaving `s_bloom`'s
-   final teardown to whichever of those 5 lands last.
+1. **AUD-083 through AUD-088 (P2/W8)** — migrate the editor's remaining
+   raw-OpenGL(ES) reach-arounds (`--screenshot` pixel readback, and the
+   shared Bloom/SSAO/skybox/material-preview/shadow-map-debug `s_bloom`
+   FBO+shader table) onto CNA's own already-existing, unused
+   `GraphicsDevice.GetBackBufferData`/`SetRenderTarget`, `RenderTarget2D`,
+   and `NOXNA ShaderEffect` APIs — see the shared preamble in the AUD-###
+   table above (immediately before this group's first row) for the full
+   rationale and the "file a NOXNA capability request rather than write
+   new raw GL" rule for any residual. The panel scissor/viewport clip
+   part of this group is already done — see the AUD-### table above for
+   which row and its empirical verification. Do `AUD-083` next (small,
+   self-contained, no new test-coverage debt, but
+   the highest blast-radius of the group since most render tests depend
+   on it), then the 5 `s_bloom` migrations (`AUD-084`-`AUD-088`, each of
+   which also adds a missing visual-correctness test the feature never
+   had), leaving `s_bloom`'s final teardown to whichever of those 5 lands
+   last.
 2. **AUD-052 (P1/W11)** — CI is permanently parked under `.github_/`; GitHub
    Actions never runs. This is the root blocker for AUD-053 (a CI-hardening
    task that depends on CI actually running first) and the CI-job half of
@@ -155,7 +162,7 @@ still internally consistent.
    (no Android NDK in this environment; also intersects CNA backend
    behavior, out of scope per CLAUDE.md's "no CNA changes without owner
    permission").
-4. The remaining `TODO` AUD-### rows besides `AUD-082`-`AUD-088` are all
+4. The remaining `TODO` AUD-### rows besides `AUD-083`-`AUD-088` are all
    downstream of the two blockers above (AUD-053 needs AUD-052; AUD-057's
    CI-job half needs the same) — none of those are independently
    actionable right now.
@@ -1789,11 +1796,12 @@ whichever of those five rows is implemented last; re-run
 final acceptance check (expected: no output, combined with `AUD-082`/
 `AUD-083` also done).
 
-### AUD-082 `[TODO]` `P2` `W8` · Editor viewport/panel clipping hand-loads glViewport/glScissor/glEnable/glDisable instead of using GraphicsDevice's own Viewport/ScissorRectangle
+### AUD-082 `[DONE]` `P2` `W8` · Editor viewport/panel clipping hand-loads glViewport/glScissor/glEnable/glDisable instead of using GraphicsDevice's own Viewport/ScissorRectangle
 - **Component:** include/MeshCraft/MeshCraftApplication.hpp (`fnGlViewport_`/`fnGlScissor_`/`fnGlEnable_`/`fnGlDisable_`), src/MeshCraft/MeshCraftApplication.cpp
-- **Evidence:** `MeshCraftApplication.hpp:326-329` declares 4 raw function-pointer members. `MeshCraftApplication.cpp:151-154` loads them via `SDL_GL_GetProcAddress("glViewport"/"glScissor"/"glEnable"/"glDisable")` in `LoadContent()`. Used at `:544-545` (`fnGlEnable_(GL_SCISSOR_TEST)` + `fnGlScissor_(viewX, glViewY, viewW, viewH)`) and `:581` (`fnGlViewport_(...)`) to clip the 3D viewport to the area between the left/right panels, top toolbar, and timeline/status bar before `Draw()`'s scene render, then `:748-749` (`fnGlDisable_` + `fnGlViewport_(0,0,screenW,screenH)`) to restore the full-window viewport for ImGui. `../cna`'s `GraphicsDevice` already exposes exactly this: `getViewportProperty()`/`setViewportProperty(const Viewport&)` and `getScissorRectangleProperty()`/`setScissorRectangleProperty(const Rectangle&)` (`GraphicsDevice.hpp:165-178`), with `RasterizerState.getScissorTestEnableProperty()`/`setScissorTestEnableProperty(bool)` (`RasterizerState.hpp:76-81`) as the actual scissor-test on/off switch — confirmed in `EasyGLGraphicsBackend.cpp`'s `SetScissorRect()`/`SetViewport()` that these correctly XNA-top-left-to-GL-bottom-left Y-flip using the currently-bound render target's real height (something this raw-GL code does not do, since it always assumes the window's own `screenH`, latent-correct today only because mesh-craft never renders this path to an off-screen target).
-- **Outcome:** Replace the 4 raw function pointers and their 5 call sites with `gd.setViewportProperty(Viewport(viewX, viewY, viewW, viewH))` / `gd.setScissorRectangleProperty(Rectangle(viewX, viewY, viewW, viewH))` + a `RasterizerState` with `ScissorTestEnable=true` bound via `gd.setRasterizerStateProperty(...)` (matching however this codebase already sets other render state, e.g. `gd.setBlendStateProperty`/`setDepthStencilStateProperty` if present), restoring the full-window `Viewport`/disabling `ScissorTestEnable` before the ImGui pass. Delete `fnGlViewport_`/`fnGlScissor_`/`fnGlEnable_`/`fnGlDisable_` from the header once no call site references them.
-- **Tests:** Existing `--screenshot` render tests (e.g. `camera_rotation_test.py`, `light_shading_test.py`) already exercise the clipped viewport indirectly (the box/sphere they sample only appears inside this exact clipped rectangle) — a full rebuild + `ctest` run with no change in their pixel-sampling results is the regression check; add a small dedicated test only if none of the existing ones actually fail without the clip (verify via `git stash` on just this fix, matching this session's established empirical-verification discipline, before trusting the migration is behavior-preserving).
+- **Evidence:** `MeshCraftApplication.hpp:326-329` declared 4 raw function-pointer members. `MeshCraftApplication.cpp:151-154` loaded them via `SDL_GL_GetProcAddress("glViewport"/"glScissor"/"glEnable"/"glDisable")` in `LoadContent()`. Used at `:544-545` (`fnGlEnable_(GL_SCISSOR_TEST)` + `fnGlScissor_(viewX, glViewY, viewW, viewH)`) and `:581` (`fnGlViewport_(...)`) to clip the 3D viewport to the area between the left/right panels, top toolbar, and timeline/status bar before `Draw()`'s scene render, then `:748-749` (`fnGlDisable_` + `fnGlViewport_(0,0,screenW,screenH)`) to restore the full-window viewport for ImGui. `../cna`'s `GraphicsDevice` already exposes exactly this: `getViewportProperty()`/`setViewportProperty(const Viewport&)` and `getScissorRectangleProperty()`/`setScissorRectangleProperty(const Rectangle&)` (`GraphicsDevice.hpp:165-178`), with `RasterizerState.getScissorTestEnableProperty()`/`setScissorTestEnableProperty(bool)` (`RasterizerState.hpp:76-81`) as the actual scissor-test on/off switch — confirmed in `EasyGLGraphicsBackend.cpp`'s `SetScissorRect()`/`SetViewport()` that these correctly XNA-top-left-to-GL-bottom-left Y-flip using the currently-bound render target's real height. Also confirmed nothing else in this codebase ever touched `RasterizerState` before this fix (`grep -rn setRasterizerStateProperty src/`), so the device's default `RasterizerState` (XNA's `CullCounterClockwise`, per `SceneRenderer_Builders.cpp`'s own STAB-castle-fix comment) was safe to read-modify-write via `getRasterizerStateProperty()` without disturbing any other pipeline state.
+- **Outcome:** Replaced the 4 raw function pointers and their 5 call sites with `gd.setScissorRectangleProperty(Rectangle(viewX, viewY, viewW, viewH))` + `gd.setViewportProperty(Viewport(viewX, viewY, viewW, viewH))`, toggling `ScissorTestEnable` via a copy-modify-write of `gd.getRasterizerStateProperty()` (preserving the existing `CullCounterClockwise` cull mode rather than resetting it) before/after — both calls pass XNA-native top-left coordinates directly; no manual Y-flip needed, since `EasyGLGraphicsBackend` already does that internally. Removed `fnGlViewport_`/`fnGlScissor_`/`fnGlEnable_`/`fnGlDisable_` from the header entirely. The pre-existing `Graphics::Viewport vpReset` block (already CNA-native, immediately following the old raw restore calls) is now the only viewport-restore path — the raw `fnGlViewport_(0,0,screenW,screenH)` it used to follow was fully redundant.
+- **Tests:** No new test needed — `camera_rotation_test`/`light_shading_test`/`fog_exponential_test`/the 6 `smoke_test*` variants (all real `--screenshot` pixel-sampling through this exact clipped-viewport path) all still pass unchanged (166/166 full suite). **Empirically verified via `git stash` on just this fix**: captured a `light_shading.mc3.xml` `--screenshot` PPM with the post-fix binary, stashed the 2 changed files, rebuilt, captured the identical fixture with the pre-fix binary, and byte-diffed the two PPMs with `cmp` — **bytewise identical** output, confirming the migration is truly behavior-preserving, not just "tests still pass by coincidence."
+- **Resolved:** commit (pending, this session) — verify: `cmp` a `--screenshot` PPM from before/after this commit on any fixture (expect identical bytes); `grep -c 'SDL_GL_GetProcAddress' src/MeshCraft/MeshCraftApplication.cpp` (expect the count to have dropped by the 4 removed here — `AUD-084`-`AUD-088`'s `s_bloom` consumers still account for the rest).
 
 ### AUD-083 `[TODO]` `P2` `W8` · --screenshot's saveScreenshot() hand-loads glFinish/glBindBuffer/glReadPixels instead of using GraphicsDevice.GetBackBufferData()
 - **Component:** src/MeshCraft/MeshCraftApplication_Commands.cpp `saveScreenshot()`
