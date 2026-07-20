@@ -10,7 +10,7 @@ Before implementing any task from plan.md, ask the user AND provide a short desc
 - If the user says **yes** → implement it.
 - If the user says **no** → remove that task from plan.md and move on.
 
-Go through tasks one at a time, in the priority order listed at the bottom of plan.md.
+Go through tasks one at a time, in the priority order listed in plan.md's "Priority execution queue" section (near the top of the file, not the bottom).
 Do **not** implement anything from plan.md without explicit confirmation first.
 
 ---
