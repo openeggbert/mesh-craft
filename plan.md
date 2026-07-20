@@ -133,8 +133,25 @@ still internally consistent.
    (no Android NDK in this environment; also intersects CNA backend
    behavior, out of scope per CLAUDE.md's "no CNA changes without owner
    permission").
-3. Remaining `TODO` AUD-### rows by severity (AUD-053, downstream of
-   AUD-052; AUD-057's CI-job half, same blocker), then SYS-### rows.
+3. Remaining `TODO` AUD-### rows are all downstream of the two blockers
+   above (AUD-053 needs AUD-052; AUD-057's CI-job half needs the same) —
+   none are independently actionable right now.
+4. **SYS-W14-18/19** (P1) — Lua scripting execution + trigger event-firing,
+   the two "format supports it, editor never runs it" gaps found
+   2026-07-20 (user request: "co mc3 nabízí, ale MeshCraft to ještě
+   neumí"). Ask the user which to start with — `SYS-W14-19`'s non-script
+   trigger steps (`play-sound`/`play-action`/`play-music`) are
+   independently implementable and lower-risk than `SYS-W14-18`'s Lua
+   engine (which needs an upfront library/sandbox/execution-model design
+   decision first).
+5. **SYS-W14-20/21** (P2) — Scene States runtime switching; wiring
+   `Mc3ImportResolver` into the editor. Independent of each other and of
+   item 4.
+6. **SYS-W14-22..27** (P3) — smaller format-vs-editor completeness gaps
+   (`mipMaps`/`colorSpace` unused downstream, UV box/sphere projection,
+   MCB compression, light-brightness unit conversion, ambient-light
+   export). Independent, small, good filler/warm-up tasks between the
+   larger items above.
 
 ---
 
@@ -989,6 +1006,144 @@ _All items in this workstream are DONE — archived to [`docs/history/plan_20260
   closing without new code, matching this backlog's own precedent for
   findings that turn out to already be fully resolved on investigation
   (e.g. `SYS-W5-05`, `SYS-W7-01` in the archived history).
+
+- **SYS-W14-18** `[TODO]` `P1` — Lua scripting execution engine.
+  `Mc3Object::scriptId`/`doc.scripts` (`Mc3Script`, `type="lua"`) parse,
+  serialize, round-trip (XML/JSON/MCB), and are fully editable in the
+  "Scripts" tab and per-object "Script" field — but nothing in this
+  codebase ever interprets a script's `source` text. Grepped: no Lua
+  library is vendored/linked anywhere in `CMakeLists.txt`/`mc3togltf/`.
+  `Mc3Object.hpp:101-108`'s own doc comment on `scriptId` frames the
+  intended use precisely: "compose-time" scripting for placing imported
+  definitions into a definition's own `assetMetadata.sockets` (R103/R104,
+  `mesh_world_revival.md` §6/§7) — "nothing in mesh-craft itself executes
+  it, that's each consumer's own choice of Lua binding/sandbox." Found
+  2026-07-20 during a "what does the format support that the editor
+  doesn't" review (user request).
+  **Open design questions (ask before implementing):** which embeddable
+  Lua library (`lua.h`+manual bindings vs. a C++ wrapper like `sol2`/
+  `sol3`, license/vendoring implications), what the sandboxed API surface
+  exposes (read/write access to the document? just socket placement?),
+  and when execution actually happens (an explicit "Run Script" editor
+  action for authoring/preview, a trigger's `run-script` step once
+  `SYS-W14-19` exists, both?).
+- **SYS-W14-19** `[TODO]` `P1` — Trigger event-firing system.
+  `doc.triggers` (`Mc3Trigger`: `id` + ordered `{type, ref}` steps —
+  `play-action`/`play-sound`/`run-script`/`play-music`) parse/serialize/
+  round-trip and are editable in the "Triggers" tab, but nothing anywhere
+  calls a trigger's steps — there is no event system (collision, click,
+  timer, or otherwise) that would fire one, and no explicit "run this
+  trigger now" action either. `MC3_FORMAT.md` documents this as a
+  deliberate "data model first" limitation (N5), not a bug. Found
+  2026-07-20 (same review as `SYS-W14-18`).
+  **Tractable independent of `SYS-W14-18`:** `play-sound`/`play-music`
+  steps only need to call into real playback (the "Audio" tab's
+  `AudioPreview` already does real `SoundEffect`/`SoundEffectInstance`
+  playback manually — reusable); `play-action` only needs to call the
+  existing action-playback system the Timeline already drives. Only
+  `run-script` steps depend on `SYS-W14-18`. Smallest useful slice: an
+  explicit "Fire" button per trigger in the Triggers tab that executes
+  all its non-script steps for real, so triggers become testable/usable
+  in the editor even before any live in-scene event system exists.
+- **SYS-W14-20** `[TODO]` `P2` — Scene States runtime switching.
+  `doc.sceneStates` (`Mc3SceneState`: named visibility/position/rotation/
+  material overrides — e.g. "day"/"night" variants) parse/serialize/
+  round-trip and are editable in the "States" tab, but selecting/applying
+  a state does nothing to the live `document_` objects in the editor —
+  there is no code path that actually applies a state's overrides.
+  `MC3_FORMAT.md` documents this as a deliberate "data model first"
+  limitation (N6), not a bug. Found 2026-07-20 (same review).
+  **Outcome:** an "Apply" action per state in the States tab that pushes
+  undo then writes each override's visible/position/rotation/material
+  onto the matching live object (by id), so state transitions become
+  previewable in the editor itself.
+- **SYS-W14-21** `[TODO]` `P2` — Wire `Mc3ImportResolver` into the editor.
+  `mc3/src/Mc3ImportResolver.cpp` (R101, `resolve()`/`resolveAndMergeInto()`)
+  is a complete, tested, standalone implementation that resolves a
+  document's `<imports>`/`mc3lib://name@version` references against a
+  search-directory list and merges namespace-qualified definitions in —
+  this session used/extended it directly (`F18`, import-chain depth cap).
+  But grepped `src/MeshCraft/`: zero references to `Mc3ImportResolver` or
+  `resolveAndMergeInto` anywhere. `SYS-W14-13`'s own scope note only
+  covers the separate "Save As .mc3lib" file-I/O surface being unwired
+  from the File menu — it does not mention import RESOLUTION at all, and
+  neither does any other tracked row (checked `plan.md`/`NEXT.md`/
+  `missing.md`). An `<instance definition="ns:id">` referencing an
+  imported (not locally-defined) definition therefore renders as nothing
+  in the live editor — the data round-trips correctly, but composing a
+  scene from a shared imported library doesn't actually work
+  interactively, only the metadata describing that it should.
+  **Outcome:** call `resolveAndMergeInto(document_)` (or equivalent) at
+  load time (and/or an explicit "Resolve Imports" action, given search
+  directories are a caller-supplied, possibly project-specific list) so
+  imported-definition instances actually resolve and render.
+- **SYS-W14-22** `[TODO]` `P3` — `Mc3Texture::mipMaps` unused downstream.
+  Round-trips (XML/JSON/MCB) and now has editor UI (added this session,
+  `F21`, 2026-07-20 audit) but grepped `SceneRenderer.cpp`/
+  `GltfExporter.cpp`: zero reads of `.mipMaps` in either. The live
+  viewport never generates/uses mipmaps for any texture regardless of
+  this flag, and the glTF exporter's sampler `minFilter` selection
+  ignores it too. **Outcome:** generate mipmaps for live-viewport
+  textures when set (or document why not, e.g. a real performance
+  tradeoff); have the exporter choose a mipmapped `minFilter`
+  (`LINEAR_MIPMAP_LINEAR` etc.) instead of its current unconditional
+  choice when `mipMaps` is true.
+- **SYS-W14-23** `[TODO]` `P3` — `Mc3Texture::colorSpace` unused at export.
+  `srgb`/`linear` round-trips and is editable, but grepped
+  `GltfExporter.cpp`: zero hits for `colorSpace` -- no conversion or
+  even a `KHR_texture_transform`-style hint is ever applied at export
+  regardless of the declared value. **Outcome:** at minimum, apply the
+  correct glTF `sRGB`/linear encoding convention per texture slot
+  (baseColor/emissive are sRGB by glTF convention; normal/metallic-
+  roughness/occlusion are linear) using this field rather than a fixed
+  per-slot assumption, so an author's explicit override is honored.
+- **SYS-W14-24** `[TODO]` `P3` — UV mapping box/sphere projection not
+  implemented. `Mc3UvMapping.projection` (`planar`/`box`/`sphere`) only
+  ever produces the primitive's default planar unwrap in both the live
+  viewport and `mc3togltf` -- confirmed honestly warned about, not
+  silently dropped (`GltfExporter.cpp:656-673`, `AUD-024`'s own comment:
+  "Box/Sphere projection genuinely isn't implemented anywhere"), but the
+  feature itself is still missing. **Outcome:** implement triplanar/box
+  and spherical UV generation for at least the exporter (editor-viewport
+  parity is a nice-to-have, not required, since `mc3togltf` is the
+  ground truth for exported appearance).
+- **SYS-W14-25** `[TODO]` `P3` — MCB compression reserved but never
+  implemented. `McbWriter.cpp:640` always writes the compression byte as
+  `0` (no compression); `McbReader.cpp:1412` throws "compressed format
+  not yet supported" if it's ever nonzero -- so the reader's own
+  rejection path is permanently dead code against this codebase's own
+  writer, only reachable via a hypothetical future/foreign writer.
+  **Outcome:** implement real compression (e.g. zlib/deflate, matching
+  the sanity-limit philosophy already used elsewhere in this reader) or
+  remove the reserved byte/exception entirely if compression is not
+  actually planned, rather than leaving a half-declared feature.
+- **SYS-W14-26** `[TODO]` `P3` — Light brightness sent to glTF without
+  physical unit conversion. `GltfExporter.cpp:1040` sets
+  `intensity = light.brightness` identically for Directional/Point/Spot,
+  but glTF's `KHR_lights_punctual` spec defines directional intensity in
+  lux and point/spot intensity in candela -- different physical units --
+  so the same raw authored number produces a physically-inconsistent
+  result depending on light type, and may look different in a
+  glTF-conformant viewer than in MeshCraft's own live preview.
+  **Outcome:** either apply a documented, deliberate conversion (or
+  scale factor) per light type, or clearly document that `brightness` is
+  an arbitrary non-physical unit not meant to round-trip physically
+  through glTF (a legitimate design choice too, if made explicitly
+  rather than left as an unexamined gap).
+- **SYS-W14-27** `[TODO]` `P3` — Ambient light dropped on glTF export.
+  `GltfExporter.cpp:1023-1027` (`STAB-0696`) explicitly warns and drops
+  any `LightType::Ambient` light -- glTF 2.0 core + `KHR_lights_punctual`
+  genuinely has no ambient-light equivalent, so this is a real spec gap,
+  not an oversight, and the current behavior (warn, don't silently drop)
+  is already honest. Filed as an open task, not closed as won't-fix like
+  `coordinate_system`/`rotation_units` (`STAB-0701`/`SYS-W14-14`),
+  because unlike those two a *lossy but useful* approximation is
+  possible here (e.g. bake the ambient contribution into every affected
+  material's emissive channel at export time) -- worth a real
+  scope/priority decision rather than defaulting to won't-fix.
+  **Outcome:** either implement an approximation (emissive-bake being
+  the most tractable) or formally close as won't-fix with the same
+  rigor `STAB-0701` got, instead of leaving it an implicit, undecided gap.
 
 ---
 
