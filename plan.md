@@ -84,15 +84,15 @@ P1s already being fixed in git history. This session:
    is per-field only) not part of the original audit, filed as new `TODO`
    tasks.
 
-   **Net across all 17 AUD-### rows remaining in this active backlog (61
+   **Net across all 18 AUD-### rows remaining in this active backlog (61
    additional rows completed and archived to `docs/history/plan_20260718.md`
    on 2026-07-18 — see that file for their full evidence/resolution text):
-   11 DONE, 4 TODO, 2 DEFERRED** — 10 of the 11 DONE (`AUD-064` through
+   12 DONE, 4 TODO, 2 DEFERRED** — 10 of the 12 DONE (`AUD-064` through
    `AUD-073`) are fresh findings from a 2026-07-18 (later same day)
    independent re-audit, not part of the original 6 (`AUD-069` itself fixed
-   2026-07-19, the day after it was filed); the 11th, `AUD-074`, is from a
-   third independent audit on 2026-07-20 (later the same day as this
-   session's SYS-W14-18..27 work). Recompute with
+   2026-07-19, the day after it was filed); the other 2 (`AUD-074`,
+   `AUD-075`) are from a third independent audit on 2026-07-20 (later the
+   same day as this session's SYS-W14-18..27 work). Recompute with
    `python3 test/validate_plan_consistency.py . <build-dir>` rather than
    trusting this number as time passes.
 5. Archived `plan_deep_audit.md` (all 57 of its own tasks were already
@@ -1520,9 +1520,9 @@ count — re-run it rather than trusting this paragraph.
 **Update (2026-07-20, later same day, after SYS-W14-18..27):** a third
 independent fresh audit (4 parallel agents: build/test health, core-code
 bug hunt, docs/architecture staleness, editor UX/wiring gaps) added
-`AUD-074` (`DONE`), bringing the total to **17 AUD-### rows**. Several
-other findings from that same audit round (UI-vs-live-shading gaps,
-no-op-undo Checkbox instances, NaN-vertex primitives, stale
+`AUD-074` and `AUD-075` (both `DONE`), bringing the total to
+**18 AUD-### rows**. Several other findings from that same audit round
+(UI-vs-live-shading gaps, no-op-undo Checkbox instances, stale
 `MCB_FORMAT.md`/`TESTING.md`) are tracked as this session's own in-progress
 work, not yet all filed as their own `AUD-###` rows — check the session
 log / recent commits for their current status rather than assuming this
@@ -1666,3 +1666,10 @@ paragraph is exhaustive.
 - **Tests:** New `mcb/test/document_budget_test.cpp` (`mcb_document_budget` ctest, 11 assertions) — deliberately constructs REAL (not truncated) minimal-but-numerous data crossing 3 different budget dimensions (objects: 100,001 real 2-byte entries over the 100,000 cap; tessellation: 200 spheres at segments=3000 each, individually under the 4096 per-field cap but summing to 600,000 over the 500,000 aggregate cap; materials: 20,001 real empty materials over the 20,000 cap), confirms the exact boundary (100,000 objects, not 100,001) still loads successfully with no false-positive, and confirms an ordinary small document is completely unaffected. All 10 pre-existing `mcb_*` tests re-run and confirmed still passing (no false-positive against any existing legitimate fixture).
 - **Resolved:** commit `75c9cbc` — verify: `ctest -R mcb_document_budget`
 - **Status note:** Caught a real bug in the test's OWN construction while writing it (not the reader): `Mc3XmlParser.cpp`'s `rKey()`-style object-field keys use a 1-byte length prefix, but `TAG_MAP` entry keys use `rRawStr()`'s 4-byte length prefix — a different wire encoding for the same-looking "string key" concept. The materials-budget test case initially used the 1-byte encoding for a `TAG_MAP` key, which misparsed as garbage and threw a `"string length exceeds sanity limit"` error instead of the expected `"material budget"` error; fixed by adding a distinct `appendRawStr()` test helper and using it specifically for `TAG_MAP` keys, `appendKey()` (1-byte) only for `TAG_OBJ` field keys. Full rebuild + 162/162 `ctest` (was 161).
+
+### AUD-075 `[DONE]` `P1` `W1` · Several primitive tessellators divide by an unclamped `segments` inside a `<= segments`-bounded loop, producing NaN vertices at `segments` 0 or 1
+- **Component:** mc3togltf/src/MeshBuilder.cpp (buildSphere, buildCylinder, buildCone, buildTorus, buildCapsule, buildDisk); include/MeshCraft/Renderer/PrimitiveTessellationAlg.hpp (tessellateUnitSphereAlg, tessellateUnitTorusAlg)
+- **Evidence:** Found via the same fresh 4-agent independent audit as `AUD-074`, the core-code-correctness-bug-hunt dimension. `mc3.xsd`/all three parsers only reject a negative `segments` value, so `segments=0` (or `1`, for Sphere specifically — `rings=segments/2` truncates to 0 there too) is a legal document value. Several tessellators use a `for (i = 0; i <= segments; ++i)` rim/pole loop that still executes once at `i==0` even when the divisor is 0, computing e.g. `2*pi*0/0` — an IEEE-754 NaN, not caught by any existing check. `buildSphere`'s `rings`/`sectors`, `buildTorus`'s `rings` (its sibling `sides` was already guarded, `std::max(4, segments/2)`), and `buildCapsule`'s `sectors` (its sibling `rings` was already guarded, `std::max(2, segments/4)`) were all unclamped entirely; `buildCylinder`/`buildCone`'s side loops were already safe (`< segments`, so segments=0 just emits nothing there), but their cap-rim loops used the vulnerable `<= segments` pattern; `buildDisk`'s both branches (solid and ring) used it too. **Independently re-verified during investigation that the live editor viewport has an identical, independently-implemented bug** in `PrimitiveTessellationAlg.hpp` (a second, CNA-free tessellator used by `SceneRenderer`, differential-tested against `MeshBuilder.cpp` by `differential_geometry_test.cpp`) — `tessellateUnitSphereAlg`'s `rings`/`sectors` and `tessellateUnitTorusAlg`'s `ringSeg`/`tubeSeg` have the exact same unclamped-divisor-in-a-`<=`-loop shape; `tessellateUnitCylinderAlg`/`ConeAlg`/`CapsuleAlg` were already safe (strict `<` bounds throughout, confirmed by direct reading, not just by analogy) and `drawDiskDynamic()` (`SceneRenderer_Extrude.cpp`, the live viewport's own dynamic Disk renderer) was ALREADY correctly guarded (`std::max(3, segments)`) — only the export-side `buildDisk` lacked the equivalent guard. Scope of this fix therefore ended up covering both independent geometry generators, not just the one the audit finding named.
+- **Outcome:** Clamp `segments` (and any value derived from it that's used as a loop-bound divisor) to a safe non-zero minimum at the top of each affected function, matching the `std::max(N, ...)` convention already used by this file's own already-guarded sibling dimensions (`buildCapsule`'s `rings`, `buildTorus`'s `sides`) and by `drawDiskDynamic()`'s own `std::max(3, segments)` for the same primitive.
+- **Tests:** New `test/primitive_zero_segments_test.cpp` (`primitive_zero_segments` ctest, CNA-free, links `mc3togltf_lib` — same idiom as `differential_geometry_test.cpp`) — constructs every one of the 6 shapes (Sphere/Cylinder/Cone/Torus/Capsule/Disk, the last in both solid and ring form) plus the 5 live-viewport tessellators at `segments` 0 and 1, asserting every position/normal/texcoord component is finite and every index is in-bounds. **Empirically verified against the unpatched source via `git stash`**: 23 of the test's assertions genuinely FAIL pre-fix (real NaN reproduced, not just a hypothesized risk) across all 6 shapes and both `tessellateUnitSphereAlg`/`tessellateUnitTorusAlg`; all pass again once the fix is restored. Also manually smoke-tested end-to-end past the unit-test level: a 7-object `segments=0`/`1` scene loads and renders in the real `MeshCraft` binary via `--screenshot` with a clean `[GLCheck]` (no GL errors, no crash), and the same scene exports via the real `mc3togltf` binary to a glTF whose 28 accessors all have finite `min`/`max` bounds (verified by loading the actual JSON output, not just re-running the unit test). Full rebuild + 163/163 `ctest` (was 162).
+- **Resolved:** commit (pending, this session) — verify: `ctest -R primitive_zero_segments`

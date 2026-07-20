@@ -93,8 +93,16 @@ inline RawTessellation tessellateUnitBoxAlg() {
 // ---------------------------------------------------------------------------
 inline RawTessellation tessellateUnitSphereAlg(int segments) {
     RawTessellation rt;
-    int rings   = segments / 2;
-    int sectors = segments;
+    // 2026-07-20 audit finding #2: same NaN risk as mc3togltf::buildSphere()
+    // (MeshBuilder.cpp) -- segments in {0,1} makes rings==0, and the
+    // "<= rings"/"<= sectors" pole/rim loops below still execute once at
+    // r==0/s==0 even when rings/sectors is 0, computing e.g. `pi*0/0` (NaN)
+    // into the live viewport's own vertex buffer. Two independent
+    // tessellators (this one and MeshBuilder.cpp's), same bug class, fixed
+    // identically -- neither previously clamped this shared "segments"
+    // primitive field, which mc3.xsd/the parsers only reject when negative.
+    int rings   = std::max(1, segments / 2);
+    int sectors = std::max(3, segments);
 
     for (int r = 0; r <= rings; ++r) {
         float phi = std::numbers::pi_v<float> * r / rings;
@@ -224,6 +232,12 @@ inline RawTessellation tessellateUnitTorusAlg(int ringSeg, int tubeSeg,
                                                float majorRadius = 0.35f,
                                                float minorRadius = 0.15f) {
     RawTessellation rt;
+    // 2026-07-20 audit finding #2: same NaN risk as
+    // mc3togltf::buildTorus()'s own `rings` (MeshBuilder.cpp) -- both loops
+    // below use "<= ringSeg"/"<= tubeSeg" bounds, still executing once at
+    // i==0/j==0 even when ringSeg/tubeSeg is 0, computing `pi2*0/0` (NaN).
+    ringSeg = std::max(3, ringSeg);
+    tubeSeg = std::max(3, tubeSeg);
     const float R = majorRadius;
     const float r = minorRadius;
     const float pi2 = 2.0f * std::numbers::pi_v<float>;

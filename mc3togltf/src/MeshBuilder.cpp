@@ -183,8 +183,16 @@ MeshData buildBox(float w, float h, float d) {
 
 MeshData buildSphere(float radius, int segments) {
     MeshData m;
-    int rings = segments / 2;
-    int sectors = segments;
+    // 2026-07-20 audit finding #2: segments in {0,1} makes rings==0 (integer
+    // division), and the pole/rim loops below use "<= rings"/"<= sectors"
+    // bounds that still execute once at r==0/s==0 even when rings/sectors
+    // is 0 -- computing e.g. `pi * 0 / 0` (0/0), a NaN that then propagates
+    // into the exported POSITION accessor. mc3.xsd/the parsers only reject
+    // negative segments, so 0/1 are legal document values that reached this
+    // unclamped. Matches drawDiskDynamic()'s established std::max(3, ...)
+    // convention (SceneRenderer_Extrude.cpp) for a closed-loop dimension.
+    int rings = std::max(1, segments / 2);
+    int sectors = std::max(3, segments);
     const float pi = std::numbers::pi_v<float>;
 
     // vertices (rings+1) * (sectors+1)
@@ -243,6 +251,12 @@ MeshData buildSphere(float radius, int segments) {
 
 MeshData buildCylinder(float radius, float height, int segments, const std::string& axis) {
     MeshData m;
+    // 2026-07-20 audit finding #2: the side loop below is already safe at
+    // segments==0 (a "< segments" bound simply emits nothing), but both cap
+    // rim loops use "<= segments" -- still executing once at i==0 even when
+    // segments is 0, computing `2*pi*0/0` (NaN) into the exported top/bottom
+    // cap center-adjacent vertex.
+    segments = std::max(3, segments);
     const float pi = std::numbers::pi_v<float>;
     float hh = height * 0.5f;
 
@@ -329,6 +343,10 @@ MeshData buildCylinder(float radius, float height, int segments, const std::stri
 
 MeshData buildCone(float radius, float height, int segments) {
     MeshData m;
+    // 2026-07-20 audit finding #2: same "<= segments" bottom-cap-rim NaN
+    // risk as buildCylinder() above (the side loop is already safe, using
+    // "< segments").
+    segments = std::max(3, segments);
     const float pi = std::numbers::pi_v<float>;
     float hh = height * 0.5f;
 
@@ -422,7 +440,11 @@ MeshData buildPlane(float w, float d, const std::string& axis) {
 MeshData buildTorus(float majorRadius, float minorRadius, int segments) {
     MeshData m;
     const float pi = std::numbers::pi_v<float>;
-    int rings = segments;
+    // 2026-07-20 audit finding #2: `rings` (unlike `sides` right below,
+    // which was already guarded) was segments unclamped -- segments==0
+    // makes the "<= rings" loop below compute `2*pi*0/0` (NaN) for its
+    // r==0 iteration, which still runs even though rings is 0.
+    int rings = std::max(3, segments);
     int sides = std::max(4, segments / 2);
     int rowSize = sides + 1;
 
@@ -476,7 +498,11 @@ MeshData buildCapsule(float radius, float height, int segments, const std::strin
     MeshData m;
     const float pi = std::numbers::pi_v<float>;
     int rings   = std::max(2, segments / 4);  // per hemisphere
-    int sectors = segments;
+    // 2026-07-20 audit finding #2: `sectors` (unlike `rings` right above,
+    // which was already guarded) was segments unclamped -- segments==0
+    // makes the "<= sectors" loop below compute `2*pi*0/0` (NaN) for its
+    // s==0 iteration, which still runs even though sectors is 0.
+    int sectors = std::max(3, segments);
     float hh    = height * 0.5f;
 
     // rows 0..rings = top hemisphere (phi 0..π/2, shifted +hh)
@@ -549,6 +575,13 @@ MeshData buildCapsule(float radius, float height, int segments, const std::strin
 MeshData buildDisk(float radius, float innerRadius, int segments, const std::string& axis) {
     MeshData m;
     const float pi = std::numbers::pi_v<float>;
+    // 2026-07-20 audit finding #2: both branches below use "<= segments"
+    // rim loops -- still executing once at i==0 even when segments is 0,
+    // computing `2*pi*0/0` (NaN). Matches drawDiskDynamic()'s own
+    // std::max(3, segments) convention for this exact primitive
+    // (SceneRenderer_Extrude.cpp) -- the live-viewport dynamic-disk path
+    // was already guarded; only this export-side builder was not.
+    segments = std::max(3, segments);
 
     if (innerRadius <= 0.0f) {
         // Solid disk: center + rim fan

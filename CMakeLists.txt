@@ -871,6 +871,22 @@ if(MESH_CRAFT_BUILD_TESTING AND UNIX AND NOT ANDROID AND NOT EMSCRIPTEN)
     add_test(NAME differential_geometry COMMAND differential_geometry_test)
     set_tests_properties(differential_geometry PROPERTIES TIMEOUT 30 LABELS "unit")
 
+    # 2026-07-20 audit finding #2 (P1): segments in {0,1} made several
+    # primitive tessellators -- in BOTH independent geometry generators
+    # (mc3togltf::MeshBuilder.cpp and PrimitiveTessellationAlg.hpp) --
+    # divide by an unclamped zero inside a "<= segments"-bounded loop that
+    # still executes once, producing a NaN vertex position. No CNA/GL
+    # dependency, same idiom as differential_geometry_test above.
+    add_executable(primitive_zero_segments_test
+        ${CMAKE_CURRENT_SOURCE_DIR}/test/primitive_zero_segments_test.cpp)
+    target_include_directories(primitive_zero_segments_test PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/include)
+    target_link_libraries(primitive_zero_segments_test PRIVATE mc3togltf_lib)
+    target_compile_features(primitive_zero_segments_test PRIVATE cxx_std_23)
+    target_compile_options(primitive_zero_segments_test PRIVATE -Wall -Wextra)
+    add_test(NAME primitive_zero_segments COMMAND primitive_zero_segments_test)
+    set_tests_properties(primitive_zero_segments PROPERTIES TIMEOUT 15 LABELS "unit")
+
     # AUD-073: SceneRenderer_Extrude.cpp's hollow/innerScale formula (both
     # drawExtrudeDynamic() and drawObjectEdges()) divided by cross-section
     # radius with no zero-guard. SceneRenderer is CNA-coupled and can't be
