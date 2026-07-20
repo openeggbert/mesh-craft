@@ -54,9 +54,15 @@ landed before when explicitly requested (`SYS-W14-##` rows).
   `mc3togltf`, `mc3tomcb`, and the editor.
 - The editor (`MeshCraftApplication`/`SceneRenderer`) and the exporter
   (`mc3togltf`) are **two independent geometry generators** reading the
-  same `Mc3Document` — no shared mesh-building code. Triangle winding
-  differs deliberately (export CCW-from-outside, editor preview
-  CW-from-outside) — do not "fix" one to match the other.
+  same `Mc3Document`, with one deliberate exception (`STAB-0670`):
+  Torus/Capsule/IcoSphere have no native Manifold primitive for CSG use,
+  so `SceneRenderer.cpp` (`:26,122`) directly calls `mc3togltf_lib`'s own
+  `buildPrimitive()` for those three shapes' preview mesh instead of
+  duplicating a second implementation — see `differential_geometry_test.cpp`,
+  which exists specifically to cover this shared path. Every other
+  primitive/CSG/extrude build has no shared mesh-building code at all.
+  Triangle winding differs deliberately (export CCW-from-outside, editor
+  preview CW-from-outside) — do not "fix" one to match the other.
 - `../cna` and `../sharp-runtime` are **sibling repositories, not part of
   this repo, and not to be modified from here** — a separate
   process/owner handles them. This repo only consumes them via
