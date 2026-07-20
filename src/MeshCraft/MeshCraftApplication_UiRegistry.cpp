@@ -79,7 +79,24 @@ void MeshCraftApplication::drawRegistryPanel() {
             ImGui::PushID(static_cast<int>(entry.id));
             if (ImGui::SmallButton("Insert")) {
                 try {
-                    std::string defId = registry_.insertIntoScene(document_, entry);
+                    // insertIntoScene() writes doc.textures/materials/definitions
+                    // directly (F7): pushUndo() must snapshot the document BEFORE
+                    // that call, not just before the objects.push_back() below,
+                    // or Ctrl+Z after an Insert leaves the imported definition and
+                    // its textures/materials permanently orphaned in the scene.
+                    // insertIntoScene() only ever throws before touching doc (temp
+                    // file I/O and the empty-definitions check both precede any
+                    // doc mutation), so on failure the just-pushed snapshot is
+                    // popped back off unapplied instead of leaving a no-op undo
+                    // step, mirroring this codebase's established no-op-undo rule.
+                    pushUndo();
+                    std::string defId;
+                    try {
+                        defId = registry_.insertIntoScene(document_, entry);
+                    } catch (...) {
+                        undoManager_.popUndoWithoutApplying();
+                        throw;
+                    }
                     // Place an instance of the definition at the origin
                     auto obj          = std::make_shared<Mc3::Mc3Object>();
                     obj->type         = Mc3::ObjectType::Instance;
@@ -92,7 +109,6 @@ void MeshCraftApplication::drawRegistryPanel() {
                     while (flatFindById(obj->id))
                         obj->id = base + "_" + std::to_string(n++);
 
-                    pushUndo();
                     document_.objects.push_back(obj);
                     modified_ = true;
                     setStatusMsg("Inserted '" + entry.name + "' from registry");

@@ -663,6 +663,23 @@ if(MESH_CRAFT_BUILD_TESTING AND UNIX AND NOT ANDROID AND NOT EMSCRIPTEN)
     add_test(NAME undo_manager COMMAND undo_manager_test)
     set_tests_properties(undo_manager PROPERTIES TIMEOUT 15 LABELS "unit")
 
+    # F7 (2026-07-20 audit): Model Registry Insert's undo ordering.
+    # drawRegistryPanel()'s Insert handler (MeshCraftApplication_UiRegistry.cpp)
+    # is not headlessly callable (full ImGui panel tied into the
+    # application), so this exercises the real Editor::UndoManager against a
+    # hand-rolled stand-in matching the handler's exact fixed control-flow
+    # shape (pushUndo() before insertIntoScene(), popUndoWithoutApplying()
+    # on failure). CNA-free, same dependency footprint as undo_manager_test.
+    add_executable(registry_insert_undo_test
+        ${CMAKE_CURRENT_SOURCE_DIR}/test/registry_insert_undo_test.cpp
+        ${CMAKE_CURRENT_SOURCE_DIR}/src/MeshCraft/Editor/UndoManager.cpp)
+    target_include_directories(registry_insert_undo_test PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/include
+        ${CMAKE_CURRENT_SOURCE_DIR}/mc3/include)
+    target_compile_features(registry_insert_undo_test PRIVATE cxx_std_23)
+    add_test(NAME registry_insert_undo COMMAND registry_insert_undo_test)
+    set_tests_properties(registry_insert_undo PROPERTIES TIMEOUT 15 LABELS "unit")
+
     # SYS-W3-01 Phase 6: Editor::WalkController, extracted from
     # MeshCraftApplication (H15, first-person walk mode). No test existed
     # for this subsystem before the extraction. Needs real
