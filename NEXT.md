@@ -416,18 +416,6 @@ The closest thing to a standing blocker is **owner-gated, not a bug**:
 
 ## 5. Known bugs and limitations
 
-- **Stale documentation (found, not yet fixed):**
-  - `AI_TRUNCATION_BUG.md` (repo root) describes a bug that is fully
-    fixed (configurable `maxTokens` slider, `wasTruncated()` check,
-    `stop_reason` parsing all exist) — should be archived, not left at
-    root looking open.
-  - `render.md` — its own P1/P2 proposals are already implemented; P3-P6
-    remain open. Needs a status update or archival + backlog entries.
-  - `README.md:254` — still claims `--screenshot` "always writes PPM
-    regardless of file extension"; `SYS-W14-03` made `.png` paths write
-    real PNG months ago. README also never mentions `--benchmark`.
-  - `missing.md` — 6 of its "still open" items were already fixed by
-    same-day commits after its last edit; needs a fresh pass.
 - **Web/Windows build status: needs re-verification**, not checked this
   session — see §2's caveat and README.md's own platform table.
 - **`SYS-W3-01` (in progress, not a bug):** `MeshCraftApplication` god
