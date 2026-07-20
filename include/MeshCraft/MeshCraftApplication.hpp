@@ -26,6 +26,8 @@
 #include <Microsoft/Xna/Framework/Audio/SoundEffectInstance.hpp>
 #include <Microsoft/Xna/Framework/Game.hpp>
 #include <Microsoft/Xna/Framework/GameTime.hpp>
+#include <Microsoft/Xna/Framework/Graphics/RenderTarget2D.hpp>
+#include <Microsoft/Xna/Framework/Graphics/ShaderEffect.hpp>
 #include <Microsoft/Xna/Framework/Graphics/SpriteBatch.hpp>
 #include <Microsoft/Xna/Framework/Graphics/Texture2D.hpp>
 #include <Microsoft/Xna/Framework/Input/Keyboard.hpp>
@@ -323,11 +325,16 @@ private:
     void exportSubtreeAsTemplate(const std::string& defName, const std::string& filePath);
 
     // Bloom post-processing (I6)
+    // AUD-084: RenderTarget2D + ShaderEffect (CNA-native) instead of a raw-GL
+    // FBO/texture pair + hand-compiled GLSL program -- see initBloom()/
+    // applyBloom() for the migration note.
     bool  bloomEnabled_{false};
     float bloomStrength_{2.5f};
     int   bloomFboW_{0}, bloomFboH_{0};
+    std::optional<Microsoft::Xna::Framework::Graphics::RenderTarget2D> bloomRtA_, bloomRtB_;
+    std::optional<Microsoft::Xna::Framework::Graphics::ShaderEffect> bloomBlurFx_, bloomCompositeFx_;
     void initBloom(int w, int h);
-    void applyBloom(int vx, int glViewY, int vw, int vh,
+    void applyBloom(int vx, int viewY, int vw, int vh,
                     const Microsoft::Xna::Framework::Matrix& view,
                     const Microsoft::Xna::Framework::Matrix& proj);
 

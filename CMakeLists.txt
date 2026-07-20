@@ -1308,6 +1308,25 @@ if(MESH_CRAFT_BUILD_TESTING AND UNIX AND NOT ANDROID AND NOT EMSCRIPTEN)
             set_tests_properties(camera_rotation_test PROPERTIES TIMEOUT 30 LABELS "render")
         endif()
 
+        # AUD-084: Bloom post-processing (I6) migrated from a hand-rolled
+        # raw-GL FBO+shader pipeline onto RenderTarget2D + ShaderEffect +
+        # SpriteBatch -- no dedicated visual-correctness test existed
+        # before (only AUD-058's GL-resource-leak check). Real pixel
+        # sampling proves a halo point just outside the box's own
+        # silhouette brightens with bloom on vs off, while a point further
+        # out (beyond the blur kernel's reach) does not.
+        if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/test/bloom.mc3.xml")
+            add_test(
+                NAME bloom_test
+                COMMAND "${PYTHON3_EXEC}"
+                        "${CMAKE_CURRENT_SOURCE_DIR}/test/bloom_test.py"
+                        $<TARGET_FILE:MeshCraft>
+                        "${CMAKE_CURRENT_SOURCE_DIR}/test/bloom.mc3.xml"
+                WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
+            )
+            set_tests_properties(bloom_test PROPERTIES TIMEOUT 30 LABELS "render")
+        endif()
+
         # 2026-07-20 audit finding #4: doc.lights had zero effect on live
         # shading (BasicEffect's fixed 3-point default rig was used
         # unconditionally regardless of what was authored) -- verify a

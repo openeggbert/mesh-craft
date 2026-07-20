@@ -766,10 +766,12 @@ void MeshCraftApplication::Draw(const GameTime& /*gameTime*/) {
     }
 
     // Bloom post-process (I6) — additive emissive glow
+    // AUD-084: applyBloom() now takes viewY (XNA top-left origin), not the
+    // GL-flipped glViewY the still-raw SSAO pass below needs.
     if (bloomEnabled_) {
         if (bloomFboW_ != viewW || bloomFboH_ != viewH)
             initBloom(viewW, viewH);
-        applyBloom(viewX, glViewY, viewW, viewH, view, proj);
+        applyBloom(viewX, viewY, viewW, viewH, view, proj);
     }
 
     // Box-select rectangle overlay drawn via ImGui in drawImGuiUi()
@@ -1149,29 +1151,53 @@ void main() {
     gl_Position = vec4(x, y, 0.0, 1.0);
 }
 )";
-const char* kBloomBlurFS = R"(#version 300 es
+// AUD-084: Bloom's own blur/composite passes now go through CNA's
+// SpriteBatch + ShaderEffect (RenderTarget2D-backed) instead of the raw-GL
+// gl_VertexID/FBO machinery above -- SpriteBatch supplies its own vertex
+// shader interface (aPos/aTexCoord/aColor + a `projection` uniform, and its
+// custom-effect texture unit 0 binds to a uniform literally named
+// `texture1` -- both confirmed against ../cna/examples/
+// easygl_bloom_pipeline_test.cpp, a real passing end-to-end SpriteBatch+
+// RenderTarget2D+ShaderEffect bloom pipeline test in this exact
+// environment), so these need a different vertex-shader interface than
+// kBloomVS above, but the blur/composite math itself is unchanged from the
+// original kBloomBlurFS/kBloomCompositeFS (just u_tex -> texture1,
+// v_uv -> TexCoord).
+const char* kBloomVertSrc = R"(#version 300 es
+precision highp float;
+layout(location = 0) in vec2 aPos;
+layout(location = 1) in vec2 aTexCoord;
+layout(location = 2) in vec4 aColor;
+out vec2 TexCoord;
+uniform mat4 projection;
+void main() {
+    gl_Position = projection * vec4(aPos, 0.0, 1.0);
+    TexCoord = aTexCoord;
+}
+)";
+const char* kBloomBlurFragSrc = R"(#version 300 es
 precision mediump float;
-uniform sampler2D u_tex;
+uniform sampler2D texture1;
 uniform vec2 u_dir;
-in vec2 v_uv;
+in vec2 TexCoord;
 out vec4 fragColor;
 void main() {
-    vec4 c  = texture(u_tex, v_uv)                          * 0.22702702;
-    c += texture(u_tex, v_uv + u_dir *  1.38461538) * 0.31621621;
-    c += texture(u_tex, v_uv - u_dir *  1.38461538) * 0.31621621;
-    c += texture(u_tex, v_uv + u_dir *  3.23076923) * 0.07027027;
-    c += texture(u_tex, v_uv - u_dir *  3.23076923) * 0.07027027;
+    vec4 c  = texture(texture1, TexCoord)                          * 0.22702702;
+    c += texture(texture1, TexCoord + u_dir *  1.38461538) * 0.31621621;
+    c += texture(texture1, TexCoord - u_dir *  1.38461538) * 0.31621621;
+    c += texture(texture1, TexCoord + u_dir *  3.23076923) * 0.07027027;
+    c += texture(texture1, TexCoord - u_dir *  3.23076923) * 0.07027027;
     fragColor = c;
 }
 )";
-const char* kBloomCompositeFS = R"(#version 300 es
+const char* kBloomCompositeFragSrc = R"(#version 300 es
 precision mediump float;
-uniform sampler2D u_tex;
+uniform sampler2D texture1;
 uniform float u_strength;
-in vec2 v_uv;
+in vec2 TexCoord;
 out vec4 fragColor;
 void main() {
-    fragColor = vec4(texture(u_tex, v_uv).rgb * u_strength, 1.0);
+    fragColor = vec4(texture(texture1, TexCoord).rgb * u_strength, 1.0);
 }
 )";
 
@@ -1328,53 +1354,22 @@ namespace MeshCraft {
 void MeshCraftApplication::initBloom(int w, int h)
 {
     if (w <= 0 || h <= 0) return;
-    auto& gl = s_bloom;
-    if (!gl.loadFunctions()) return;
-    ssaoGlReady_ = false;  // cleanup() will wipe SSAO GL objects
-    gl.cleanup();
+    auto& gd = getGraphicsDeviceProperty();
 
-    gl.GenTextures(1, &gl.texA);
-    gl.GenTextures(1, &gl.texB);
-    for (unsigned t : { gl.texA, gl.texB }) {
-        gl.BindTexture(kGL_TEXTURE_2D, t);
-        gl.TexImage2D(kGL_TEXTURE_2D, 0, (int)kGL_RGBA8, w, h, 0,
-                      kGL_RGBA, kGL_UNSIGNED_BYTE, nullptr);
-        gl.TexParameteri(kGL_TEXTURE_2D, kGL_TEXTURE_MIN_FILTER, (int)kGL_LINEAR);
-        gl.TexParameteri(kGL_TEXTURE_2D, kGL_TEXTURE_MAG_FILTER, (int)kGL_LINEAR);
-        gl.TexParameteri(kGL_TEXTURE_2D, kGL_TEXTURE_WRAP_S,     (int)kGL_CLAMP_TO_EDGE);
-        gl.TexParameteri(kGL_TEXTURE_2D, kGL_TEXTURE_WRAP_T,     (int)kGL_CLAMP_TO_EDGE);
+    bloomRtA_.emplace(gd, w, h);
+    bloomRtB_.emplace(gd, w, h);
+    bloomBlurFx_.emplace(gd, kBloomVertSrc, kBloomBlurFragSrc);
+    bloomCompositeFx_.emplace(gd, kBloomVertSrc, kBloomCompositeFragSrc);
+    if (!bloomBlurFx_->IsEffectValid() || !bloomCompositeFx_->IsEffectValid()) {
+        std::cerr << "[Bloom] Failed to compile shaders\n";
+        bloomRtA_.reset(); bloomRtB_.reset();
+        bloomBlurFx_.reset(); bloomCompositeFx_.reset();
+        bloomFboW_ = bloomFboH_ = 0;
+        return;
     }
-    gl.BindTexture(kGL_TEXTURE_2D, 0);
-
-    gl.GenFramebuffers(1, &gl.fboA);
-    gl.GenFramebuffers(1, &gl.fboB);
-    for (auto [fbo, tex] : { std::pair{gl.fboA, gl.texA}, std::pair{gl.fboB, gl.texB} }) {
-        gl.BindFramebuffer(kGL_FRAMEBUFFER, fbo);
-        gl.FramebufferTexture2D(kGL_FRAMEBUFFER, kGL_COLOR_ATTACHMENT0,
-                                kGL_TEXTURE_2D, tex, 0);
-        if (gl.CheckFramebufferStatus(kGL_FRAMEBUFFER) != kGL_FRAMEBUFFER_COMPLETE)
-            std::cerr << "[Bloom] FBO incomplete\n";
-    }
-    gl.BindFramebuffer(kGL_FRAMEBUFFER, 0);
-
-    gl.progBlur      = gl.makeProgram(kBloomVS, kBloomBlurFS);
-    gl.progComposite = gl.makeProgram(kBloomVS, kBloomCompositeFS);
-    if (!gl.progBlur || !gl.progComposite) { gl.cleanup(); return; }
-
-    gl.GenVertexArrays(1, &gl.quadVAO);
-    gl.BindVertexArray(gl.quadVAO);
-    gl.GenBuffers(1, &gl.quadVBO);
-    gl.BindBuffer(kGL_ARRAY_BUFFER, gl.quadVBO);
-    const float quad[] = { -1.f, 1.f,  -1.f, -1.f,  1.f, 1.f,  1.f, -1.f };
-    gl.BufferData(kGL_ARRAY_BUFFER, (long)sizeof(quad), quad, kGL_STATIC_DRAW);
-    gl.EnableVertexAttribArray(0);
-    gl.VertexAttribPointer(0, 2, kGL_FLOAT, 0, 8, nullptr);
-    gl.BindVertexArray(0);
-    gl.BindBuffer(kGL_ARRAY_BUFFER, 0);
 
     bloomFboW_ = w;
     bloomFboH_ = h;
-    gl.ready   = true;
 }
 
 void MeshCraftApplication::initSkybox()
@@ -1457,76 +1452,66 @@ void MeshCraftApplication::drawSkybox(const Matrix& view, float fovDegrees, floa
 }
 
 void MeshCraftApplication::applyBloom(
-    int vx, int glViewY, int vw, int vh,
+    int vx, int viewY, int vw, int vh,
     const Matrix& view, const Matrix& proj)
 {
-    auto& gl = s_bloom;
-    if (!gl.ready || vw <= 0 || vh <= 0) return;
+    if (!bloomRtA_ || !bloomRtB_ || !bloomBlurFx_ || !bloomCompositeFx_ ||
+        vw <= 0 || vh <= 0) return;
 
+    auto& gd = getGraphicsDeviceProperty();
     const float iw = 1.0f / static_cast<float>(vw);
     const float ih = 1.0f / static_cast<float>(vh);
+    // Blur passes render RT-to-RT, so destRect is in that RT's own local
+    // (0,0)-(vw,vh) space (EasyGLSpriteBatchBackend sizes its projection to
+    // the bound RenderTarget2D -- Task 1078 in EasyGLGraphicsBackend.cpp).
+    const Rectangle fullRect(0, 0, vw, vh);
 
-    // Pass 0: render emissive objects into FBO A
-    gl.BindFramebuffer(kGL_FRAMEBUFFER, gl.fboA);
-    gl.Viewport(0, 0, vw, vh);
-    gl.Disable(kGL_BLEND);
-    gl.Disable(kGL_DEPTH_TEST);
-    gl.ClearColor(0.f, 0.f, 0.f, 0.f);
-    gl.Clear(kGL_COLOR_BUFFER_BIT);
+    // Pass 0: render emissive objects into RT A.
+    // NOTE: RenderTarget2D defaults to RenderTargetUsage::DiscardContents, and
+    // GraphicsDevice::SetRenderTarget() unconditionally clears a DiscardContents
+    // target on every bind (matching real XNA/FNA semantics) -- a second,
+    // "defensive" SetRenderTarget(&*bloomRtA_) call here would silently wipe out
+    // the emissive draw immediately after making it. Bind exactly once.
+    gd.SetRenderTarget(&*bloomRtA_);
+    gd.SetDepthTestEnabled(false);
+    gd.Clear(Color(0, 0, 0, 0));
     sceneRenderer_->drawEmissivePass(document_, view, proj);
-    // Re-bind fboA: CNA may reset viewport/framebuffer state during emissive draw
-    gl.BindFramebuffer(kGL_FRAMEBUFFER, gl.fboA);
-    gl.Viewport(0, 0, vw, vh);
 
-    // Passes 1–4: ping-pong Gaussian blur (4 iterations H+V)
-    auto blur = [&](unsigned srcTex, unsigned dstFbo, float dx, float dy) {
-        gl.BindFramebuffer(kGL_FRAMEBUFFER, dstFbo);
-        gl.Viewport(0, 0, vw, vh);
-        gl.Disable(kGL_BLEND);
-        gl.Disable(kGL_DEPTH_TEST);
-        gl.UseProgram(gl.progBlur);
-        gl.Uniform1i(gl.GetUniformLocation(gl.progBlur, "u_tex"), 0);
-        gl.Uniform2f(gl.GetUniformLocation(gl.progBlur, "u_dir"), dx, dy);
-        gl.ActiveTexture(kGL_TEXTURE0);
-        gl.BindTexture(kGL_TEXTURE_2D, srcTex);
-        gl.BindVertexArray(0);
-        gl.DrawArrays(kGL_TRIANGLE_STRIP, 0, 4);
+    // Passes 1-8: ping-pong Gaussian blur (4 iterations H+V), same 5-tap
+    // weights/offsets as the original raw-GL shader.
+    auto blur = [&](RenderTarget2D& src, RenderTarget2D& dst, float dx, float dy) {
+        gd.SetRenderTarget(&dst);
+        bloomBlurFx_->Apply();
+        bloomBlurFx_->SetUniformVec2("u_dir", dx, dy);
+        spriteBatch_->Begin(SpriteSortMode::Deferred, BlendState::Opaque,
+                            nullptr, nullptr, nullptr, &*bloomBlurFx_);
+        spriteBatch_->Draw(src, fullRect, Color::White);
+        spriteBatch_->End();
     };
     for (int i = 0; i < 4; ++i) {
-        blur(gl.texA, gl.fboB, iw, 0.f);   // horizontal: A → B
-        blur(gl.texB, gl.fboA, 0.f, ih);   // vertical:   B → A
+        blur(*bloomRtA_, *bloomRtB_, iw, 0.f);   // horizontal: A → B
+        blur(*bloomRtB_, *bloomRtA_, 0.f, ih);   // vertical:   B → A
     }
 
-    // Pass 5: additive composite onto viewport area in default FB
-    gl.BindFramebuffer(kGL_FRAMEBUFFER, 0);
-    gl.Viewport(vx, glViewY, vw, vh);
-    gl.Disable(kGL_DEPTH_TEST);
-    constexpr unsigned kGL_CULL_FACE    = 0x0B44u;
-    constexpr unsigned kGL_STENCIL_TEST = 0x0B90u;
-    constexpr unsigned kGL_SCISSOR_TEST = 0x0C11u;
-    gl.Disable(kGL_CULL_FACE);
-    gl.Disable(kGL_STENCIL_TEST);
-    gl.Disable(kGL_SCISSOR_TEST);
-    gl.Enable(kGL_BLEND);
-    gl.BlendEquation(kGL_FUNC_ADD);
-    gl.BlendFunc(kGL_ONE, kGL_ONE);
-    if (gl.ColorMask) gl.ColorMask(1, 1, 1, 1);
-    gl.UseProgram(gl.progComposite);
-    gl.Uniform1i(gl.GetUniformLocation(gl.progComposite, "u_tex"), 0);
-    gl.Uniform1f(gl.GetUniformLocation(gl.progComposite, "u_strength"), bloomStrength_);
-    gl.ActiveTexture(kGL_TEXTURE0);
-    gl.BindTexture(kGL_TEXTURE_2D, gl.texA);
-    gl.BindVertexArray(0);
-    gl.DrawArrays(kGL_TRIANGLE_STRIP, 0, 4);
+    // Pass 5: additive composite onto viewport area in the default framebuffer.
+    // Unlike the RT-bound blur passes above, EasyGLSpriteBatchBackend::FlushBatch()
+    // sizes its projection to the *window* whenever no RenderTarget2D is bound --
+    // it does not honor a custom GraphicsDevice.Viewport in that case -- so the
+    // destRect here must be given in window-absolute coordinates (vx,viewY,vw,vh),
+    // not RT-local (0,0,vw,vh).
+    gd.SetRenderTarget(nullptr);
+    gd.setViewportProperty(Viewport(vx, viewY, vw, vh));
+    const Rectangle screenRect(vx, viewY, vw, vh);
+    bloomCompositeFx_->Apply();
+    bloomCompositeFx_->SetUniformFloat("u_strength", bloomStrength_);
+    spriteBatch_->Begin(SpriteSortMode::Deferred, BlendState::Additive,
+                        nullptr, nullptr, nullptr, &*bloomCompositeFx_);
+    spriteBatch_->Draw(*bloomRtA_, screenRect, Color::White);
+    spriteBatch_->End();
 
-    // Restore GL state for the rest of the frame
-    gl.Disable(kGL_BLEND);
-    gl.Enable(kGL_DEPTH_TEST);
-    gl.BlendFunc(kGL_SRC_ALPHA, kGL_ONE_MINUS_SRC_ALPHA);
-    gl.BlendEquation(kGL_FUNC_ADD);
-    gl.UseProgram(0);
-    gl.BindTexture(kGL_TEXTURE_2D, 0);
-    gl.Viewport(0, 0, cachedScreenW_, cachedScreenH_);
+    // Restore state for the rest of the frame.
+    gd.SetDepthTestEnabled(true);
+    gd.setViewportProperty(Viewport(0, 0, cachedScreenW_, cachedScreenH_));
 }
 
 void MeshCraftApplication::initSsao(int w, int h)

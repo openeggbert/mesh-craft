@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- AUD-084 regression fixture. A single bright-white emissive box, centered
+     in frame, against a near-black background with open space around it. A
+     halo point just outside the box's own rendered silhouette is pure
+     background (no geometry there at all) with an SSAO ao=1.0 fast-path
+     (kSsaoFS returns vec4(1.0) unconditionally when the depth sample is the
+     far clear value), so it is unaffected by SSAO even when
+     MESHCRAFT_TEST_FORCE_POSTFX forces both post-effects on together.
+     Any brightening there can only be Bloom's additive glow. -->
+<mc3 version="0.3" model="BloomFixture">
+
+  <environment>
+    <background color="0.02 0.02 0.02"/>
+  </environment>
+
+  <cameras default="Cam">
+    <camera name="Cam" position="0 0 4" target="0 0 0" fov="50"/>
+  </cameras>
+
+  <materials>
+    <material id="glow">
+      <base_color>1.0 1.0 1.0 1.0</base_color>
+      <emissive_color>1.0 1.0 1.0</emissive_color>
+    </material>
+  </materials>
+
+  <objects>
+    <box name="Glower" size="1 1 1" position="0 0 0" material="glow"/>
+  </objects>
+
+</mc3>
