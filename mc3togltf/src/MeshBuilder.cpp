@@ -41,6 +41,78 @@ void MeshData::applyUvMapping(float scaleU, float scaleV,
     }
 }
 
+namespace {
+// Local bounding-box center, used by both projections below: as the
+// position-based fallback axis source for box projection when a vertex
+// has no normal, and as the origin sphere projection's radius/direction
+// is measured from (so an off-center primitive still maps sensibly).
+std::array<float,3> boundingBoxCenter(const std::vector<float>& positions) {
+    if (positions.empty()) return {0.0f, 0.0f, 0.0f};
+    float minX = positions[0], maxX = positions[0];
+    float minY = positions[1], maxY = positions[1];
+    float minZ = positions[2], maxZ = positions[2];
+    for (size_t i = 0; i < positions.size(); i += 3) {
+        minX = std::min(minX, positions[i]);   maxX = std::max(maxX, positions[i]);
+        minY = std::min(minY, positions[i+1]); maxY = std::max(maxY, positions[i+1]);
+        minZ = std::min(minZ, positions[i+2]); maxZ = std::max(maxZ, positions[i+2]);
+    }
+    return {(minX + maxX) * 0.5f, (minY + maxY) * 0.5f, (minZ + maxZ) * 0.5f};
+}
+} // namespace
+
+void MeshData::applyBoxProjectionUv() {
+    if (positions.empty()) return;
+    const auto center = boundingBoxCenter(positions);
+    const bool haveNormals = normals.size() == positions.size();
+
+    texcoords.assign(positions.size() / 3 * 2, 0.0f);
+    for (size_t i = 0, vi = 0; i < positions.size(); i += 3, vi += 2) {
+        const float px = positions[i], py = positions[i+1], pz = positions[i+2];
+        float ax, ay, az;
+        if (haveNormals) {
+            ax = normals[i]; ay = normals[i+1]; az = normals[i+2];
+        } else {
+            ax = px - center[0]; ay = py - center[1]; az = pz - center[2];
+        }
+        const float absX = std::fabs(ax), absY = std::fabs(ay), absZ = std::fabs(az);
+
+        float u, v;
+        if (absX >= absY && absX >= absZ) {
+            u = pz; v = py;               // dominant axis X -> project onto ZY
+        } else if (absY >= absX && absY >= absZ) {
+            u = px; v = pz;               // dominant axis Y -> project onto XZ
+        } else {
+            u = px; v = py;               // dominant axis Z -> project onto XY
+        }
+        texcoords[vi]   = u;
+        texcoords[vi+1] = v;
+    }
+}
+
+void MeshData::applySphereProjectionUv() {
+    if (positions.empty()) return;
+    const auto center = boundingBoxCenter(positions);
+
+    texcoords.assign(positions.size() / 3 * 2, 0.0f);
+    for (size_t i = 0, vi = 0; i < positions.size(); i += 3, vi += 2) {
+        const float dx = positions[i]   - center[0];
+        const float dy = positions[i+1] - center[1];
+        const float dz = positions[i+2] - center[2];
+        const float r = std::sqrt(dx*dx + dy*dy + dz*dz);
+
+        float u, v;
+        if (r < 1e-8f) {
+            u = 0.5f; v = 0.5f;
+        } else {
+            u = 0.5f + std::atan2(dz, dx) / (2.0f * std::numbers::pi_v<float>);
+            const float clampedY = std::clamp(dy / r, -1.0f, 1.0f);
+            v = 0.5f - std::asin(clampedY) / std::numbers::pi_v<float>;
+        }
+        texcoords[vi]   = u;
+        texcoords[vi+1] = v;
+    }
+}
+
 // ---------------------------------------------------------------------------
 // Internal helpers
 // ---------------------------------------------------------------------------

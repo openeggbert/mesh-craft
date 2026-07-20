@@ -9,10 +9,19 @@
       <uv_mapping projection="planar" scale_u="4" scale_v="1" offset_u="0.5" offset_v="0"/>
     </box>
 
-    <!-- Box projection: scale/offset/rotation still applied to the default
-         unwrap, but projection itself is unimplemented, so it must warn. -->
+    <!-- SYS-W14-24: box/triplanar projection. Per-vertex UVs are raw
+         local-space coordinates on the two non-dominant axes (not
+         normalized to [0,1] like the default planar unwrap), so a unit
+         (size 1x1x1) box's projected TEXCOORD_0 spans [-0.5, 0.5]. -->
     <box name="BoxProjectedBox" size="1 1 1" position="4 0 0">
       <uv_mapping projection="box"/>
+    </box>
+
+    <!-- SYS-W14-24: spherical (equirectangular) projection around the
+         mesh's local bounding-box center. Normalized to [0,1] on both
+         axes regardless of object size. -->
+    <box name="SphereProjectedBox" size="1 1 1" position="6 0 0">
+      <uv_mapping projection="sphere"/>
     </box>
   </objects>
 </mc3>

@@ -699,21 +699,21 @@ static int buildMesh(ExportCtx& ctx,
     // AUD-024: per-object UV mapping (scale/offset/rotation) was previously
     // silently ignored by the exporter -- authored uvMapping round-tripped
     // through XML/MCB but never affected the actual exported TEXCOORD_0.
-    // Box/Sphere projection genuinely isn't implemented anywhere (editor
-    // viewport or exporter both only ever emit the primitive's default
-    // planar unwrap), so that part is truthfully warned about rather than
-    // silently dropped or falsely claimed as applied.
+    // SYS-W14-24: Box/Sphere projection now actually regenerates TEXCOORD_0
+    // (MeshData::applyBoxProjectionUv()/applySphereProjectionUv(),
+    // MeshBuilder.cpp) before scale/offset/rotation is applied on top,
+    // instead of only ever emitting the primitive's default planar unwrap
+    // with a "not implemented" warning. Editor-viewport parity is
+    // intentionally out of scope (per the tracked task's own outcome) --
+    // mc3togltf's export is the ground truth for exported appearance.
     if (obj.uvMapping.has_value()) {
         const auto& uv = *obj.uvMapping;
-        md.applyUvMapping(uv.scaleU, uv.scaleV, uv.offsetU, uv.offsetV, uv.rotation);
-        if (uv.projection != UvProjection::Planar) {
-            std::cerr << "[mc3togltf] Warning: object '" << obj.name
-                      << "' uses uv_mapping projection '"
-                      << (uv.projection == UvProjection::Box ? "box" : "sphere")
-                      << "' -- projection-based UV generation is not implemented, only "
-                         "scale/offset/rotation were applied to the default unwrap.\n";
-            ctx.stats.warnings++;
+        if (uv.projection == UvProjection::Box) {
+            md.applyBoxProjectionUv();
+        } else if (uv.projection == UvProjection::Sphere) {
+            md.applySphereProjectionUv();
         }
+        md.applyUvMapping(uv.scaleU, uv.scaleV, uv.offsetU, uv.offsetV, uv.rotation);
     }
 
     // Apply unit scale to geometry positions

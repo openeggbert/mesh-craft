@@ -4,6 +4,13 @@ AUD-024: per-object <uv_mapping> (scale/offset/rotation) must actually
 transform the exported TEXCOORD_0 -- it used to round-trip through XML/MCB
 and then be silently ignored by the exporter.
 
+SYS-W14-24 (2026-07-20): box/sphere projection now actually regenerates
+TEXCOORD_0 instead of only warning that it isn't implemented. Box
+projection uses raw (non-normalized) local-space coordinates on the two
+non-dominant axes, so a unit box's projected UVs span [-0.5, 0.5] instead
+of the default planar unwrap's [0, 1]. Sphere projection is an
+equirectangular mapping normalized to [0, 1] on both axes.
+
 Reads the real GLB buffer bytes (not just accessor min/max -- TEXCOORD_0
 accessors don't carry bounds) to verify actual sample values.
 
@@ -89,17 +96,39 @@ def main():
               f"ScaledUvBox: V unaffected by scale_u/offset_u (scale_v=1, offset_v=0), "
               f"got [{min(vs)}, {max(vs)}]")
 
-        # AUD-024: box-projection is not implemented -- scale/offset/rotation
-        # (defaults here, so UVs stay [0,1]) still applied, but a warning
-        # must fire since the projection itself has no effect.
+        # SYS-W14-24: box projection actually regenerates TEXCOORD_0 now --
+        # raw local-space coordinates on the two non-dominant axes, so a
+        # unit (size 1x1x1) box's projected UVs span [-0.5, 0.5], not the
+        # default planar unwrap's [0, 1]. No more "not implemented" warning.
         box_uv = texcoords_for(gltf, bin_data, "BoxProjectedBox")
         us = [uv[0] for uv in box_uv]
+        vs = [uv[1] for uv in box_uv]
+        check(abs(min(us) - (-0.5)) < 1e-3 and abs(max(us) - 0.5) < 1e-3,
+              f"BoxProjectedBox: box-projected U spans [-0.5, 0.5] (unit box, raw "
+              f"local coords), got [{min(us)}, {max(us)}]")
+        check(abs(min(vs) - (-0.5)) < 1e-3 and abs(max(vs) - 0.5) < 1e-3,
+              f"BoxProjectedBox: box-projected V spans [-0.5, 0.5] (unit box, raw "
+              f"local coords), got [{min(vs)}, {max(vs)}]")
+        check("not implemented" not in r.stderr,
+              f"BoxProjectedBox: no 'not implemented' warning now that box projection "
+              f"is actually applied (stderr: {r.stderr.strip()!r})")
+
+        # SYS-W14-24: sphere projection is an equirectangular mapping
+        # normalized to [0, 1] on both axes, distinct per-vertex (a box's 8
+        # distinct corner directions must not collapse to one UV).
+        sphere_uv = texcoords_for(gltf, bin_data, "SphereProjectedBox")
+        us = [uv[0] for uv in sphere_uv]
+        vs = [uv[1] for uv in sphere_uv]
         check(min(us) >= -1e-5 and max(us) <= 1.0 + 1e-5,
-              f"BoxProjectedBox: default-unwrap U stays in [0,1] (projection not "
-              f"implemented, only scale/offset/rotation apply), got [{min(us)}, {max(us)}]")
-        check("uv_mapping projection 'box'" in r.stderr and "not implemented" in r.stderr,
-              f"BoxProjectedBox: exporter warns that box projection isn't implemented "
-              f"(stderr: {r.stderr.strip()!r})")
+              f"SphereProjectedBox: U stays within [0,1], got [{min(us)}, {max(us)}]")
+        check(min(vs) >= -1e-5 and max(vs) <= 1.0 + 1e-5,
+              f"SphereProjectedBox: V stays within [0,1], got [{min(vs)}, {max(vs)}]")
+        check(len(set(round(u, 4) for u in us)) > 1,
+              f"SphereProjectedBox: U varies across the box's distinct corner "
+              f"directions (not degenerate/constant), got values {sorted(set(us))}")
+        check("not implemented" not in r.stderr,
+              f"SphereProjectedBox: no 'not implemented' warning now that sphere "
+              f"projection is actually applied (stderr: {r.stderr.strip()!r})")
     finally:
         if os.path.exists(out):
             os.unlink(out)

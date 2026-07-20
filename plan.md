@@ -146,10 +146,11 @@ still internally consistent.
 6. The `mipMaps`-unused-downstream gap (P3) is now done for the exporter
    half (live-viewport half documented as blocked on a CNA API gap, see
    its own row). The `colorSpace`-unused-at-export gap (P3) is now done
-   too (slot-mismatch warning). **SYS-W14-24..27** (P3) — remaining
-   smaller format-vs-editor completeness gaps (UV box/sphere projection,
-   MCB compression, light-brightness unit conversion, ambient-light
-   export). Independent, small, good
+   too (slot-mismatch warning), and so is UV mapping box/sphere
+   projection (P3, exporter-side triplanar/equirectangular generation).
+   **SYS-W14-25..27** (P3) — remaining smaller format-vs-editor
+   completeness gaps (MCB compression, light-brightness unit conversion,
+   ambient-light export). Independent, small, good
    filler/warm-up tasks between the larger items above.
 
 ---
@@ -1317,7 +1318,7 @@ _All items in this workstream are DONE — archived to [`docs/history/plan_20260
   declared value, and required value, for both mismatch directions
   (sRGB-slot-given-linear and linear-slot-given-sRGB). Full rebuild +
   160/160 `ctest` (was 159).
-- **SYS-W14-24** `[TODO]` `P3` — UV mapping box/sphere projection not
+- **SYS-W14-24** `[DONE]` `P3` — UV mapping box/sphere projection not
   implemented. `Mc3UvMapping.projection` (`planar`/`box`/`sphere`) only
   ever produces the primitive's default planar unwrap in both the live
   viewport and `mc3togltf` -- confirmed honestly warned about, not
@@ -1327,6 +1328,37 @@ _All items in this workstream are DONE — archived to [`docs/history/plan_20260
   and spherical UV generation for at least the exporter (editor-viewport
   parity is a nice-to-have, not required, since `mc3togltf` is the
   ground truth for exported appearance).
+  **Implementation:** two new `MeshData` methods
+  (`mc3togltf/src/MeshBuilder.hpp`/`.cpp`), called from `buildMesh()`
+  before `applyUvMapping()`'s existing scale/offset/rotation so both
+  compose (matching how scale/offset/rotation already layer on top of
+  the default planar unwrap): `applyBoxProjectionUv()` -- per vertex,
+  picks the dominant axis from that vertex's own normal (or, if normals
+  are absent, the direction from the mesh's local bounding-box center)
+  and projects onto the other two axes using raw, non-normalized
+  local-space coordinates (deliberate -- ties apparent texture scale to
+  object size, the standard box/triplanar convention in DCC tools, and
+  lets the existing `scale_u`/`scale_v` remain the tiling control rather
+  than adding a second competing scale concept). `applySphereProjectionUv()`
+  -- equirectangular mapping (`atan2`/`asin` of the position relative to
+  the mesh's local bounding-box center) normalized to `[0,1]`, degenerating
+  to `(0.5, 0.5)` at zero radius instead of NaN. The old "not implemented"
+  warning in `GltfExporter.cpp`'s `buildMesh()` is gone -- both
+  projections now actually run.
+  **Tests:** extended `test/uv_mapping_export.mc3.xml` (added
+  `SphereProjectedBox`, kept `BoxProjectedBox`) and `mc3togltf/test/
+  uv_mapping_export_test.py` to assert real geometry instead of the old
+  "still the default unwrap + warns" behavior: `BoxProjectedBox`'s
+  projected U/V now span `[-0.5, 0.5]` (raw local coords, unit box);
+  `SphereProjectedBox`'s U/V stay within `[0,1]` and vary across the
+  box's 8 distinct corner directions (not degenerate/constant); neither
+  emits the old warning. **Caught during verification:** the fixture's
+  first draft used `<!-- ... -- ... -->`-style XML comments, which is
+  invalid XML (a comment body may not contain `--` anywhere, not just at
+  the close) -- `xsd_validation` failed on it immediately; fixed by
+  rewording the comments, not by suppressing the check. Full rebuild +
+  160/160 `ctest` (unchanged count -- extended existing tests, not new
+  ones).
 - **SYS-W14-25** `[TODO]` `P3` — MCB compression reserved but never
   implemented. `McbWriter.cpp:640` always writes the compression byte as
   `0` (no compression); `McbReader.cpp:1412` throws "compressed format

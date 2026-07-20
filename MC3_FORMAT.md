@@ -656,6 +656,20 @@ overriding that object's default UV generation.
 | `offset_u` / `offset_v` | float | `0.0` | Per-axis UV offset |
 | `rotation` | float (degrees) | `0.0` | UV rotation |
 
+**`projection` (`SYS-W14-24`, 2026-07-20):** `"box"` and `"sphere"` are
+implemented by `mc3togltf` (editor-viewport parity is intentionally out
+of scope — the exported glTF is the ground truth for appearance).
+`"box"`/triplanar picks, per vertex, the dominant axis of that vertex's
+normal (or its direction from the mesh's local bounding-box center if
+normals are absent) and projects onto the other two axes using **raw,
+non-normalized local-space coordinates** — so a texture's apparent scale
+stays tied to object size, and `scale_u`/`scale_v` (applied afterward)
+are the tiling control, exactly as they already are against the default
+planar unwrap. `"sphere"` is an equirectangular mapping around the
+mesh's local bounding-box center, normalized to `[0, 1]` on both axes.
+`scale_u`/`scale_v`/`offset_u`/`offset_v`/`rotation` are still applied
+on top of either regenerated projection, same as for `"planar"`.
+
 Per-object UV mapping is ignored on CSG boolean output (see
 [CSG operations](#csg-operations)'s "UV coordinates are not real"
 limitation) — it only affects primitives whose geometry is generated
@@ -882,7 +896,7 @@ curve in a short time window could in principle be under-sampled.
 | Torus, Capsule, Disk, Grid, IcoSphere | ✅ |
 | CSG (union/difference/intersection) | ✅ (evaluated by Manifold; unsupported child types fail the export; `--allow-approximate-csg` exports children separately as debug fallback) |
 | Instance (via definitions) | ✅ |
-| Per-object UV mapping (`<uv_mapping scale_u/scale_v/offset_u/offset_v/rotation>`) | ✅ (`AUD-024`) — applied to generated `TEXCOORD_0` (scale, then rotate about the UV origin, then offset); a non-`"planar"` `projection` value is not implemented anywhere in the codebase (neither export nor the live editor viewport) and now warns rather than silently doing nothing |
+| Per-object UV mapping (`<uv_mapping scale_u/scale_v/offset_u/offset_v/rotation>`) | ✅ (`AUD-024`) — applied to generated `TEXCOORD_0` (scale, then rotate about the UV origin, then offset). `projection="box"`/`"sphere"` (`SYS-W14-24`, 2026-07-20) actually regenerate `TEXCOORD_0` in `mc3togltf` before scale/offset/rotation is applied — no longer a warn-only no-op. `<uv_mapping>` in general (any attribute, any projection mode) is `mc3togltf`-only — `SceneRenderer.cpp` never reads it, so the live editor viewport always shows each primitive's default planar unwrap regardless of what's authored. |
 | Per-object `metadata` (`<metadata><property name="..." value="..."/></metadata>`) | ✅ (`AUD-029`) — serialized into `node.extras.metadata`, alongside the pre-existing `tags`/`collision` extras |
 | `--stats` "Warnings" count | ✅ truthful (`AUD-026`) — every `"Warning:"` print site in `GltfExporter.cpp` increments the shared counter (verified by grep, not spot-checked); previously several paths (unknown material, SVG-slot warnings, ambient-light drop, duplicate node name, image-format detection, missing embed texture, action warnings) printed a warning without counting it |
 | `TANGENT` accessor (for `normal_texture`-mapped meshes) | ✅ (STAB-0664) — computed per-vertex (standard per-triangle-then-averaged-then-Gram-Schmidt-orthogonalized algorithm, not a full MikkTSpace port), only when a mesh has both `NORMAL`/`TEXCOORD_0` and its material sets `normal_texture`; meshes without a normal map get no `TANGENT` (not needed) |
