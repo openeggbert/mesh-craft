@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- 2026-07-20 audit finding #4 regression fixture: control case for
+     light_shading.mc3.xml. Identical scene/camera/material, but with NO
+     authored lights at all, so the live viewport falls back to
+     BasicEffect's fixed warm-white 3-point default rig. Used to confirm
+     the red-light fixture's result is actually caused by the authored
+     light (this control must NOT show a red-dominant sphere), not a
+     coincidence of the default rig's own colors. -->
+<mc3 version="0.3" model="LightShadingControlTest">
+
+  <cameras default="Cam">
+    <camera name="Cam" type="perspective" position="0 0 4" target="0 0 0" fov="50"/>
+  </cameras>
+
+  <materials>
+    <material id="white" roughness="0.8" metallic="0.0">
+      <base_color>0.9 0.9 0.9 1.0</base_color>
+    </material>
+  </materials>
+
+  <objects>
+    <sphere name="Ball" radius="1.0" segments="32" position="0 0 0" material="white"/>
+  </objects>
+
+</mc3>

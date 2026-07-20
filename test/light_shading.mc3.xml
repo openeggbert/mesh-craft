@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- 2026-07-20 audit finding #4 regression fixture: a white-material sphere
+     lit by a single strong, pure-red directional light pointed at the
+     camera-facing hemisphere. Before the fix, doc.lights had zero effect
+     on live shading (BasicEffect's fixed 3-point default rig was used
+     unconditionally), so the sphere would render warm-white regardless of
+     this light. After the fix, the camera-facing hemisphere should be
+     visibly red. -->
+<mc3 version="0.3" model="LightShadingTest">
+
+  <lights>
+    <directional name="RedSun" color="1 0 0" brightness="3.0" direction="0.3 -0.3 -0.9"/>
+  </lights>
+
+  <cameras default="Cam">
+    <camera name="Cam" type="perspective" position="0 0 4" target="0 0 0" fov="50"/>
+  </cameras>
+
+  <materials>
+    <material id="white" roughness="0.8" metallic="0.0">
+      <base_color>0.9 0.9 0.9 1.0</base_color>
+    </material>
+  </materials>
+
+  <objects>
+    <sphere name="Ball" radius="1.0" segments="32" position="0 0 0" material="white"/>
+  </objects>
+
+</mc3>

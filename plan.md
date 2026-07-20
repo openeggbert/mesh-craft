@@ -84,17 +84,17 @@ P1s already being fixed in git history. This session:
    is per-field only) not part of the original audit, filed as new `TODO`
    tasks.
 
-   **Net across all 19 AUD-### rows remaining in this active backlog (61
+   **Net across all 20 AUD-### rows remaining in this active backlog (61
    additional rows completed and archived to `docs/history/plan_20260718.md`
    on 2026-07-18 — see that file for their full evidence/resolution text):
-   13 DONE, 4 TODO, 2 DEFERRED** — 10 of the 13 DONE (`AUD-064` through
+   14 DONE, 4 TODO, 2 DEFERRED** — 10 of the 14 DONE (`AUD-064` through
    `AUD-073`) are fresh findings from a 2026-07-18 (later same day)
    independent re-audit, not part of the original 6 (`AUD-069` itself fixed
-   2026-07-19, the day after it was filed); the other 3 (`AUD-074`,
-   `AUD-075`, `AUD-076`) are from a third independent audit on 2026-07-20
-   (later the same day as this session's SYS-W14-18..27 work). Recompute
-   with `python3 test/validate_plan_consistency.py . <build-dir>` rather
-   than trusting this number as time passes.
+   2026-07-19, the day after it was filed); the other 4 (`AUD-074` through
+   `AUD-077`) are from a third independent audit on 2026-07-20 (later the
+   same day as this session's SYS-W14-18..27 work). Recompute with
+   `python3 test/validate_plan_consistency.py . <build-dir>` rather than
+   trusting this number as time passes.
 5. Archived `plan_deep_audit.md` (all 57 of its own tasks were already
    completed) and fixed `RELEASE.md`'s stale 66/66 test count.
 6. Removed machine-specific absolute source paths from this file's evidence
@@ -1520,12 +1520,14 @@ count — re-run it rather than trusting this paragraph.
 **Update (2026-07-20, later same day, after SYS-W14-18..27):** a third
 independent fresh audit (4 parallel agents: build/test health, core-code
 bug hunt, docs/architecture staleness, editor UX/wiring gaps) added
-`AUD-074`, `AUD-075`, and `AUD-076` (all `DONE`), bringing the total to
-**19 AUD-### rows**. Several other findings from that same audit round
-(UI-vs-live-shading gaps, stale `MCB_FORMAT.md`/`TESTING.md`) are tracked
-as this session's own in-progress work, not yet all filed as their own
-`AUD-###` rows — check the session log / recent commits for their current
-status rather than assuming this paragraph is exhaustive.
+`AUD-074` through `AUD-077` (all `DONE`), bringing the total to
+**20 AUD-### rows**. Two smaller findings from that same audit round (fog
+double-applied via CPU+GPU paths, camera `rotation` override ignored by
+the gizmo/look-through preview) plus the stale `MCB_FORMAT.md`/
+`TESTING.md` docs findings are tracked as this session's own in-progress
+work, not yet all filed as their own `AUD-###` rows — check the session
+log / recent commits for their current status rather than assuming this
+paragraph is exhaustive.
 
 ### AUD-025 `[DEFERRED]` `P2` `W7` · embed: mesh source is treated as a literal OBJ path — node exports with no mesh while export exits 0 'Written'
 - **Component:** mc3togltf/src/GltfExporter.cpp buildMesh()
@@ -1679,3 +1681,10 @@ status rather than assuming this paragraph is exhaustive.
 - **Outcome:** Local-copy-then-writeback at all 9 sites — bind `Checkbox` to a fresh local `bool` initialized from the live field, and only assign the live field (after `pushUndo()`) inside the `if` block once the widget reports a change — the exact fix `MeshCraftApplication_Anim.cpp`'s `act.loop`/`autoplay` already established.
 - **Tests:** Extended `test/undo_gesture_frame_test.cpp` (real ImGui frame-driving, no CNA/GL context needed) with a new pair of blocks using a mock "live field" + "snapshot" pair — one exercising the BUGGY direct-bind shape (proves the snapshot captures the wrong, post-click value, reproducing the bug's actual mechanism, not just asserting it exists) and one exercising the FIXED local-copy shape (proves the snapshot correctly captures the pre-click value). The pre-existing `driveCheckboxGesture()` helper in this file only asserted `pushUndo()` was *called* once per click, never *what value* it would have captured — which is why it never caught this class of bug despite testing Checkbox already; the new blocks close that specific gap. Also corrected the stale/incomplete `PropertiesPanel.cpp:1686` comment ("Checkbox/Combo/InputText get an unconditional pushUndo()") to caveat why Checkbox specifically needs the local-copy shape while Combo/InputText don't (their normal usage shape already requires an intermediate variable). Full rebuild + 163/163 `ctest` (unchanged count — extended an existing test, not a new one). Manually smoke-tested via `--screenshot` after the fix (clean `[GLCheck]`, no crash).
 - **Resolved:** commit `43e6838` — verify: `ctest -R undo_gesture_frame`
+
+### AUD-077 `[DONE]` `P1` `W1` · Authored lights have zero effect on live-viewport shading — only a gizmo icon
+- **Component:** src/MeshCraft/Renderer/SceneRenderer.cpp / SceneRenderer.hpp (constructor, `draw()`, new `applyDocumentLighting()`)
+- **Evidence:** Found via the same fresh 4-agent independent audit as `AUD-074`..`AUD-076`, the editor-UX/wiring-gaps dimension. `SceneRenderer`'s constructor calls `effect_->EnableDefaultLighting()` (CNA `BasicEffect`'s fixed built-in 3-directional-light rig) exactly once at init, and `doc.lights` was never read anywhere in the shading pipeline — grepped the whole renderer: `doc.lights` was used in exactly one place, `drawLightGizmos()` (icon overlay), plus separately a first-`castShadows`-directional-light-drives-a-debug-shadow-map path. A user could add a red point light, crank brightness to 50, and the object it's supposedly lighting looked exactly the same — only the small gizmo icon changed — while `mc3togltf`'s export (`SYS-W14-26`/`27`, this same session) correctly exports and unit-converts every light type. Undisclosed in the UI anywhere.
+- **Outcome:** Investigated CNA's `BasicEffect` API before implementing (`cna/include/Microsoft/Xna/Framework/Graphics/BasicEffect.hpp`/`DirectionalLight.hpp`): a faithful port of real XNA's fixed-function lighting model, exposing exactly 3 `DirectionalLight0/1/2` slots (`Direction`/`DiffuseColor`/`SpecularColor`/`Enabled`) plus one `AmbientLightColor` — no position/attenuation API at all, so `point`/`spot` genuinely cannot be represented without a custom shader (a materially larger change than this finding's scope). **User confirmed the resulting scoped proposal** (map up to 3 `directional` lights + the first `ambient` light onto BasicEffect's real API; `point`/`spot` stay gizmo-only, documented) before implementation began. New `SceneRenderer::applyDocumentLighting(doc)`, called once per `draw()` (cheap — a handful of float writes, no allocation, so Lights-tab edits are reflected immediately): maps up to the first 3 `Directional` lights onto `DirectionalLight0-2` (`direction` normalized with a zero-length guard matching `drawLightGizmos()`'s own convention, `color × brightness` clamped to `[0,1]`, applied as both diffuse and specular) and the first `Ambient` light onto `AmbientLightColor`; falls back untouched to the constructor's original default rig when the document has no `Directional`/`Ambient` lights to represent (including documents with only `Point`/`Spot` lights, or none at all) — preserving today's look for the common unlit-by-design case.
+- **Tests:** New `test/light_shading_test.py` (`light_shading_test` ctest, real headless `--screenshot` pixel sampling) + two new fixtures: `light_shading.mc3.xml` (a white sphere lit by one strong pure-red directional light aimed at the camera-facing hemisphere) and `light_shading_control.mc3.xml` (the identical scene with NO lights, for the default rig). Asserts the lit scene's sphere has a substantial red-dominant pixel cluster (>200 samples) AND the control scene has essentially none (<10) — proving the redness is actually caused by the authored light, not a default-rig coincidence. **Empirically verified via `git stash`**: the test genuinely fails pre-fix (0 red-dominant samples, real assertion failure reproduced, not just a hypothesized risk) and passes post-fix (1020 samples). Also manually verified visually — rendered both scenes and inspected the actual PNG output before writing the automated test: the lit scene's sphere is unmistakably red-shaded from the light's direction, the control sphere is warm-white as before. Full rebuild + 164/164 `ctest` (was 163). **Caught and fixed the same XML-comment double-hyphen bug as `SYS-W14-24`** while writing the fixtures (invalid XML, caught immediately by `xsd_validation`) — also had to fix the fixtures' element ordering (`<cameras>` must precede `<materials>`/`<objects>` per `mc3.xsd`), both before committing.
+- **Resolved:** commit (pending, this session) — verify: `ctest -R light_shading_test`

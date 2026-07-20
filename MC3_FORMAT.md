@@ -283,9 +283,11 @@ directory).
 ```
 
 `brightness` is an arbitrary, unitless authored scalar (default `1.0`) —
-not a physical lux/candela value itself, and the live editor viewport
-doesn't use it for actual illumination at all (only to color a light's
-gizmo icon; MeshCraft's viewport has no real-time lighting pass). glTF's
+not a physical lux/candela value itself. As of `AUD-077` (2026-07-20), the
+live editor viewport DOES use it for actual illumination for
+`directional`/`ambient` lights specifically — see "Live-viewport shading"
+below — though it's still just a multiplier on the light's own `color`,
+not a physically calibrated unit. glTF's
 `KHR_lights_punctual` spec requires `intensity` to be lux for directional
 lights and candela for point/spot — physically different units, since a
 candela is already "per steradian" and a lux isn't. As of `SYS-W14-26`
@@ -303,8 +305,7 @@ candela — the same formula Blender's exporter uses for Point/Spot lamps).
 This is a deliberate scale factor chosen to match an established,
 widely-recognized exporter convention, not a claim that `brightness` is
 now a fully physically-calibrated real-world quantity — there is still no
-editor-side lux/candela input mode, and the live viewport's gizmo-only
-use of `brightness` is unaffected.
+editor-side lux/candela input mode.
 `ambient` has no glTF equivalent at all — neither glTF 2.0 core nor
 `KHR_lights_punctual` support ambient lighting, a real spec gap, not an
 oversight — so it is never exported as an actual light. As of
@@ -322,6 +323,26 @@ render from looking fully unlit wherever an ambient fill was authored,
 instead of just silently going dark. A warning is still printed naming
 each ambient light and explaining that it was baked rather than
 exported as a light.
+
+**Live-viewport shading (`AUD-077`, 2026-07-20):** the editor's own
+BasicEffect-based renderer (`SceneRenderer.cpp`) now actually shades the
+live preview using `doc.lights`, instead of always using a fixed 3-point
+default rig regardless of what's authored — `applyDocumentLighting()`
+maps up to the first 3 `directional` lights onto BasicEffect's real
+`DirectionalLight0`/`1`/`2` slots (`direction`, `color × brightness`
+clamped to `[0,1]`, applied as both diffuse and specular) and the first
+`ambient` light onto `AmbientLightColor`. **`point`/`spot` remain
+gizmo-only in the live preview** — BasicEffect (a faithful port of real
+XNA's fixed-function lighting model) has no position/attenuation API at
+all, only up to 3 directional slots plus one ambient color, so there is
+no way to represent them without a custom shader (a materially larger
+change, out of scope here). If the document has no `directional`/
+`ambient` lights to represent (including documents with only `point`/
+`spot` lights, or no lights at all), the viewport falls back to the
+original fixed default rig, preserving the existing look for the common
+unlit-by-design case. `mc3togltf`'s export already handles every light
+type correctly (see above) — this section is specifically about what the
+live viewport, a separate and less capable renderer, can and can't show.
 
 ---
 

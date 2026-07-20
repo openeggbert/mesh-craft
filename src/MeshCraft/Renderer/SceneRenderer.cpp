@@ -925,12 +925,83 @@ void SceneRenderer::drawObject(const Mc3Object& obj, const Mc3Document& doc,
 // Public draw
 // ---------------------------------------------------------------------------
 
+// 2026-07-20 audit finding #4: see the declaration comment
+// (SceneRenderer.hpp) for the full rationale. Maps up to the first 3
+// Directional lights onto BasicEffect's DirectionalLight0-2 and the first
+// Ambient light onto AmbientLightColor; falls back to the original fixed
+// 3-point default rig (set up once in the constructor via
+// EnableDefaultLighting()) when the document has no Directional/Ambient
+// lights to represent, preserving today's look for the common case of an
+// unlit-by-design scene.
+void SceneRenderer::applyDocumentLighting(const Mc3Document& doc)
+{
+    const Mc3Light* dirLights[3] = {nullptr, nullptr, nullptr};
+    int dirCount = 0;
+    const Mc3Light* ambientLight = nullptr;
+
+    for (const auto& light : doc.lights) {
+        if (light.type == LightType::Directional && dirCount < 3) {
+            dirLights[dirCount++] = &light;
+        } else if (light.type == LightType::Ambient && !ambientLight) {
+            ambientLight = &light;
+        }
+    }
+
+    if (dirCount == 0 && !ambientLight) {
+        // Nothing this API can represent -- keep the default rig
+        // (already applied once in the constructor) untouched.
+        return;
+    }
+
+    DirectionalLight* slots[3] = {
+        &effect_->DirectionalLight0, &effect_->DirectionalLight1, &effect_->DirectionalLight2
+    };
+    for (int i = 0; i < 3; ++i) {
+        if (i >= dirCount) {
+            slots[i]->setEnabledProperty(false);
+            continue;
+        }
+        const Mc3Light& l = *dirLights[i];
+        Vector3 dir{l.direction[0], l.direction[1], l.direction[2]};
+        // A hostile/malformed document could author direction="0 0 0" --
+        // Vector3::Normalize on a zero vector is undefined, so fall back
+        // to the struct's own documented default (straight down), matching
+        // drawLightGizmos()'s own zero-length guard for the same field.
+        dir = (dir.Length() > 1e-5f) ? Vector3::Normalize(dir) : Vector3{0.0f, -1.0f, 0.0f};
+        Vector3 col{
+            std::clamp(l.color[0] * l.brightness, 0.0f, 1.0f),
+            std::clamp(l.color[1] * l.brightness, 0.0f, 1.0f),
+            std::clamp(l.color[2] * l.brightness, 0.0f, 1.0f)
+        };
+        slots[i]->setDirectionProperty(dir);
+        slots[i]->setDiffuseColorProperty(col);
+        slots[i]->setSpecularColorProperty(col);
+        slots[i]->setEnabledProperty(true);
+    }
+
+    if (ambientLight) {
+        const Mc3Light& l = *ambientLight;
+        effect_->setAmbientLightColorProperty(Vector3{
+            std::clamp(l.color[0] * l.brightness, 0.0f, 1.0f),
+            std::clamp(l.color[1] * l.brightness, 0.0f, 1.0f),
+            std::clamp(l.color[2] * l.brightness, 0.0f, 1.0f)
+        });
+    } else {
+        // No authored ambient -- matches the constructor's own brighter-
+        // than-XNA-default fill (0.35) so directional-only documents don't
+        // go pitch-black on their shadow side.
+        effect_->setAmbientLightColorProperty(Vector3{0.35f, 0.35f, 0.35f});
+    }
+}
+
 void SceneRenderer::draw(const Mc3Document& doc,
                           const Matrix& view, const Matrix& proj,
                           const std::vector<const Mc3Object*>& selected)
 {
     device_.SetDepthTestEnabled(true);
     device_.SetDepthWriteEnabled(true);
+
+    applyDocumentLighting(doc);
 
     // Fog visualization (I3): apply fog from environment to BasicEffect
     if (doc.environment && doc.environment->fog) {

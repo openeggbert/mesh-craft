@@ -1268,6 +1268,25 @@ if(MESH_CRAFT_BUILD_TESTING AND UNIX AND NOT ANDROID AND NOT EMSCRIPTEN)
             set_tests_properties(fog_linear_test PROPERTIES TIMEOUT 30 LABELS "render")
         endif()
 
+        # 2026-07-20 audit finding #4: doc.lights had zero effect on live
+        # shading (BasicEffect's fixed 3-point default rig was used
+        # unconditionally regardless of what was authored) -- verify a
+        # strong authored directional light actually reaches the rendered
+        # pixels via real pixel sampling, with a no-lights control scene
+        # proving the result isn't a default-rig coincidence.
+        if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/test/light_shading.mc3.xml")
+            add_test(
+                NAME light_shading_test
+                COMMAND "${PYTHON3_EXEC}"
+                        "${CMAKE_CURRENT_SOURCE_DIR}/test/light_shading_test.py"
+                        $<TARGET_FILE:MeshCraft>
+                        "${CMAKE_CURRENT_SOURCE_DIR}/test/light_shading.mc3.xml"
+                        "${CMAKE_CURRENT_SOURCE_DIR}/test/light_shading_control.mc3.xml"
+                WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
+            )
+            set_tests_properties(light_shading_test PROPERTIES TIMEOUT 30 LABELS "render")
+        endif()
+
         # STAB-0512: drawLightGizmos() is called unconditionally in the main
         # draw loop (not gated by selection/UI toggle like the translate/
         # rotate/bbox gizmos) — verify the point-light sphere+rays gizmo
