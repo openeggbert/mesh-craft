@@ -339,10 +339,14 @@ private:
                     const Microsoft::Xna::Framework::Matrix& proj);
 
     // Shadow Map Debug (I7)
+    // AUD-088: RenderTarget2D (CNA-native) instead of a raw-GL FBO + depth
+    // texture -- see initShadowDebug()/renderShadowDebugFbo(). No custom
+    // shader is needed here (unlike AUD-084/086/087): this pass reuses the
+    // normal, already-CNA-based sceneRenderer_->draw() path unchanged, just
+    // redirected into an off-screen target instead of the backbuffer.
     bool     shadowDebugEnabled_{false};
-    unsigned shadowDebugFbo_{0};
-    unsigned shadowDebugColorTex_{0};
-    unsigned shadowDebugDepthTex_{0};
+    std::optional<Microsoft::Xna::Framework::Graphics::RenderTarget2D> shadowDebugRt_;
+    unsigned shadowDebugColorTex_{0};   // GL texture name (GetColorGLHandle()), exposed for ImGui::Image
 
     // True once LoadContent() has initialized the ImGui context + backends, so
     // the destructor only tears them down when they were actually created.

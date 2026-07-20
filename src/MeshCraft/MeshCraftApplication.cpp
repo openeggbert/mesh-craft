@@ -14,9 +14,11 @@
 #include <Microsoft/Xna/Framework/Input/Mouse.hpp>
 #include <Microsoft/Xna/Framework/Input/ButtonState.hpp>
 #include <CNA/Internal/Backends/Common/IGraphicsBackend.hpp>
+#include <Microsoft/Xna/Framework/Graphics/DepthFormat.hpp>
 #include <Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp>
 #include <Microsoft/Xna/Framework/Graphics/RasterizerState.hpp>
 #include <Microsoft/Xna/Framework/Graphics/SamplerState.hpp>
+#include <Microsoft/Xna/Framework/Graphics/SurfaceFormat.hpp>
 #include <Microsoft/Xna/Framework/Graphics/Viewport.hpp>
 #include <Microsoft/Xna/Framework/Matrix.hpp>
 #include <Microsoft/Xna/Framework/Vector3.hpp>
@@ -91,6 +93,13 @@ MeshCraftApplication::MeshCraftApplication(std::filesystem::path filePath, std::
     if (std::getenv("MESHCRAFT_TEST_FORCE_POSTFX")) {
         bloomEnabled_ = true;
         ssaoEnabled_  = true;
+    }
+    // AUD-088 test-only hook, same shape as AUD-058's above: Shadow Map
+    // Debug is a UI-menu-only toggle with no CLI/scene-file equivalent, so
+    // a headless --screenshot run never exercises initShadowDebug()/
+    // renderShadowDebugFbo() at all.
+    if (std::getenv("MESHCRAFT_TEST_FORCE_SHADOWDEBUG")) {
+        shadowDebugEnabled_ = true;
     }
     getWindowProperty().setTitleProperty("Mesh Craft");
     setIsMouseVisibleProperty(true);
@@ -340,6 +349,21 @@ void MeshCraftApplication::EndDraw() {
         const Rectangle corner(0, 0, kMatPreviewRes, kMatPreviewRes);
         spriteBatch_->Begin(SpriteSortMode::Deferred, BlendState::Opaque);
         spriteBatch_->Draw(*matPreviewRt_, corner, Color::White);
+        spriteBatch_->End();
+    }
+
+    // AUD-088 test-only hook, same rationale as AUD-087's above: blit into
+    // a fixed, known top-right corner rather than relying on the real
+    // "Shadow Frustum" ImGui overlay's own ImGuiCond_FirstUseEver layout
+    // (title bar height, borders, text-line wrapping) for a test's pixel
+    // coordinates -- more robust than reverse-engineering ImGui's own
+    // window-chrome geometry.
+    if (std::getenv("MESHCRAFT_TEST_FORCE_SHADOWDEBUG") && shadowDebugColorTex_ && shadowDebugRt_) {
+        auto& gd = getGraphicsDeviceProperty();
+        gd.setViewportProperty(Viewport(0, 0, cachedScreenW_, cachedScreenH_));
+        const Rectangle corner(cachedScreenW_ - kShadowDebugRes, 0, kShadowDebugRes, kShadowDebugRes);
+        spriteBatch_->Begin(SpriteSortMode::Deferred, BlendState::Opaque);
+        spriteBatch_->Draw(*shadowDebugRt_, corner, Color::White);
         spriteBatch_->End();
     }
 
@@ -667,8 +691,8 @@ void MeshCraftApplication::Draw(const GameTime& /*gameTime*/) {
                 Matrix lv = Matrix::CreateLookAt(lpos, center, up);
                 Matrix lp = Matrix::CreateOrthographic(kShadowDist * 2.f, kShadowDist * 2.f,
                                                         0.1f, kShadowDist * 3.f);
-                if (!shadowDebugFbo_) initShadowDebug();
-                if (shadowDebugFbo_)  renderShadowDebugFbo(lv, lp);
+                if (!shadowDebugRt_) initShadowDebug();
+                if (shadowDebugRt_)  renderShadowDebugFbo(lv, lp);
                 break;
             }
         }
@@ -1706,39 +1730,9 @@ void MeshCraftApplication::applySsao(
 
 void MeshCraftApplication::initShadowDebug()
 {
-    auto& gl = s_bloom;
-    if (!gl.loadFunctions()) return;
-
-    const int res = kShadowDebugRes;
-
-    gl.GenTextures(1, &shadowDebugColorTex_);
-    gl.BindTexture(kGL_TEXTURE_2D, shadowDebugColorTex_);
-    gl.TexImage2D(kGL_TEXTURE_2D, 0, (int)kGL_RGBA8, res, res, 0,
-                  kGL_RGBA, kGL_UNSIGNED_BYTE, nullptr);
-    gl.TexParameteri(kGL_TEXTURE_2D, kGL_TEXTURE_MIN_FILTER, (int)kGL_LINEAR);
-    gl.TexParameteri(kGL_TEXTURE_2D, kGL_TEXTURE_MAG_FILTER, (int)kGL_LINEAR);
-    gl.TexParameteri(kGL_TEXTURE_2D, kGL_TEXTURE_WRAP_S,     (int)kGL_CLAMP_TO_EDGE);
-    gl.TexParameteri(kGL_TEXTURE_2D, kGL_TEXTURE_WRAP_T,     (int)kGL_CLAMP_TO_EDGE);
-
-    gl.GenTextures(1, &shadowDebugDepthTex_);
-    gl.BindTexture(kGL_TEXTURE_2D, shadowDebugDepthTex_);
-    gl.TexImage2D(kGL_TEXTURE_2D, 0, (int)kGL_DEPTH_COMPONENT24, res, res, 0,
-                  kGL_DEPTH_COMPONENT, kGL_UNSIGNED_INT, nullptr);
-    gl.TexParameteri(kGL_TEXTURE_2D, kGL_TEXTURE_MIN_FILTER, (int)kGL_NEAREST);
-    gl.TexParameteri(kGL_TEXTURE_2D, kGL_TEXTURE_MAG_FILTER, (int)kGL_NEAREST);
-    gl.TexParameteri(kGL_TEXTURE_2D, kGL_TEXTURE_WRAP_S,     (int)kGL_CLAMP_TO_EDGE);
-    gl.TexParameteri(kGL_TEXTURE_2D, kGL_TEXTURE_WRAP_T,     (int)kGL_CLAMP_TO_EDGE);
-
-    gl.GenFramebuffers(1, &shadowDebugFbo_);
-    gl.BindFramebuffer(kGL_FRAMEBUFFER, shadowDebugFbo_);
-    gl.FramebufferTexture2D(kGL_FRAMEBUFFER, kGL_COLOR_ATTACHMENT0,
-                            kGL_TEXTURE_2D, shadowDebugColorTex_, 0);
-    gl.FramebufferTexture2D(kGL_FRAMEBUFFER, kGL_DEPTH_ATTACHMENT,
-                            kGL_TEXTURE_2D, shadowDebugDepthTex_, 0);
-    if (gl.CheckFramebufferStatus(kGL_FRAMEBUFFER) != kGL_FRAMEBUFFER_COMPLETE)
-        std::cerr << "[ShadowDebug] FBO incomplete\n";
-    gl.BindFramebuffer(kGL_FRAMEBUFFER, 0);
-    gl.BindTexture(kGL_TEXTURE_2D, 0);
+    auto& gd = getGraphicsDeviceProperty();
+    shadowDebugRt_.emplace(gd, kShadowDebugRes, kShadowDebugRes,
+                           /*mipMap=*/false, SurfaceFormat::Color, DepthFormat::Depth24);
 }
 
 // ---------------------------------------------------------------------------
@@ -1762,26 +1756,22 @@ MeshCraftApplication::~MeshCraftApplication() {
         imguiInitialized_ = false;
     }
 
-    // Release the lazily-created shadow-debug GL objects (initShadowDebug()).
-    auto& gl = s_bloom;
-    if (gl.DeleteFramebuffers && shadowDebugFbo_) {
-        gl.DeleteFramebuffers(1, &shadowDebugFbo_);
-        shadowDebugFbo_ = 0;
-    }
-    if (gl.DeleteTextures) {
-        if (shadowDebugColorTex_) { gl.DeleteTextures(1, &shadowDebugColorTex_); shadowDebugColorTex_ = 0; }
-        if (shadowDebugDepthTex_) { gl.DeleteTextures(1, &shadowDebugDepthTex_); shadowDebugDepthTex_ = 0; }
-    }
+    // AUD-088: shadowDebugRt_ (RenderTarget2D) is released automatically via
+    // its own destructor (implicit member cleanup, after this body runs) --
+    // no manual glDelete* call needed here anymore, matching bloomRtA_/
+    // bloomRtB_/skyboxTex_/matPreviewRt_'s own established pattern.
 
-    // AUD-058: s_bloom.cleanup() releases the whole bloom/SSAO/skybox/
-    // material-preview/shader/VAO/VBO/FBO/texture pool -- previously it was
-    // only ever called mid-run (initBloom()'s rebuild-on-resize path and its
-    // shader-compile-failure path), never on shutdown, so every one of those
-    // GL objects leaked for the process lifetime. Safe to call unconditionally
-    // even if LoadContent's GL init never ran: every handle cleanup() guards
-    // on is zero-initialized, and it never got a chance to become non-zero
-    // without loadFunctions() having already populated the same function
-    // pointers cleanup() would use to delete it.
+    // AUD-058: s_bloom.cleanup() releases the whole SSAO/shader/VAO/VBO/FBO/
+    // texture pool for whichever of s_bloom's consumers are still raw-GL
+    // (currently just SSAO -- AUD-084/086/087/088 all migrated off it) --
+    // previously it was only ever called mid-run (initBloom()'s rebuild-on-
+    // resize path and its shader-compile-failure path), never on shutdown,
+    // so every one of those GL objects leaked for the process lifetime. Safe
+    // to call unconditionally even if LoadContent's GL init never ran: every
+    // handle cleanup() guards on is zero-initialized, and it never got a
+    // chance to become non-zero without loadFunctions() having already
+    // populated the same function pointers cleanup() would use to delete it.
+    auto& gl = s_bloom;
     gl.cleanup();
 
     // Real lifecycle verification, not just "the code compiles": leakCheck()
@@ -1791,29 +1781,26 @@ MeshCraftApplication::~MeshCraftApplication() {
     // here on every single run (see test/gl_shutdown_leak_test.py, which runs
     // the smoke-test binary and asserts this never prints).
     gl.leakCheck("MeshCraftApplication shutdown");
-    if (shadowDebugFbo_ || shadowDebugColorTex_ || shadowDebugDepthTex_) {
-        std::cerr << "[ShadowDebug] LEAK after MeshCraftApplication shutdown: "
-                  << "fbo=" << shadowDebugFbo_ << " colorTex=" << shadowDebugColorTex_
-                  << " depthTex=" << shadowDebugDepthTex_ << "\n";
-    }
 }
 
 void MeshCraftApplication::renderShadowDebugFbo(const Matrix& lightView, const Matrix& lightProj)
 {
-    if (!shadowDebugFbo_) return;
-    auto& gl = s_bloom;
+    if (!shadowDebugRt_) return;
+    auto& gd = getGraphicsDeviceProperty();
 
-    gl.BindFramebuffer(kGL_FRAMEBUFFER, shadowDebugFbo_);
-    gl.Viewport(0, 0, kShadowDebugRes, kShadowDebugRes);
-    gl.Disable(kGL_BLEND);
-    gl.ClearColor(0.4f, 0.4f, 0.5f, 1.f);
-    gl.Clear(kGL_COLOR_BUFFER_BIT | kGL_DEPTH_BUFFER_BIT);
-    getGraphicsDeviceProperty().SetDepthTestEnabled(true);
+    gd.SetRenderTarget(&*shadowDebugRt_);
+    gd.Clear(Color(102, 102, 128, 255), 1.0f);
+    gd.SetDepthTestEnabled(true);
 
     sceneRenderer_->draw(document_, lightView, lightProj, {});
 
-    gl.BindFramebuffer(kGL_FRAMEBUFFER, 0);
-    gl.Viewport(0, 0, cachedScreenW_, cachedScreenH_);
+    if (auto* rtBackend = shadowDebugRt_->GetRenderTargetBackend())
+        shadowDebugColorTex_ = rtBackend->GetColorGLHandle();
+
+    // SetRenderTarget(nullptr) already resets Viewport/ScissorRectangle to
+    // the full backbuffer size on its own -- see GraphicsDevice.cpp's own
+    // documented behavior (matches FNA), no separate restore call needed.
+    gd.SetRenderTarget(nullptr);
 }
 
 // ---------------------------------------------------------------------------
