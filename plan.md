@@ -84,17 +84,17 @@ P1s already being fixed in git history. This session:
    is per-field only) not part of the original audit, filed as new `TODO`
    tasks.
 
-   **Net across all 18 AUD-### rows remaining in this active backlog (61
+   **Net across all 19 AUD-### rows remaining in this active backlog (61
    additional rows completed and archived to `docs/history/plan_20260718.md`
    on 2026-07-18 — see that file for their full evidence/resolution text):
-   12 DONE, 4 TODO, 2 DEFERRED** — 10 of the 12 DONE (`AUD-064` through
+   13 DONE, 4 TODO, 2 DEFERRED** — 10 of the 13 DONE (`AUD-064` through
    `AUD-073`) are fresh findings from a 2026-07-18 (later same day)
    independent re-audit, not part of the original 6 (`AUD-069` itself fixed
-   2026-07-19, the day after it was filed); the other 2 (`AUD-074`,
-   `AUD-075`) are from a third independent audit on 2026-07-20 (later the
-   same day as this session's SYS-W14-18..27 work). Recompute with
-   `python3 test/validate_plan_consistency.py . <build-dir>` rather than
-   trusting this number as time passes.
+   2026-07-19, the day after it was filed); the other 3 (`AUD-074`,
+   `AUD-075`, `AUD-076`) are from a third independent audit on 2026-07-20
+   (later the same day as this session's SYS-W14-18..27 work). Recompute
+   with `python3 test/validate_plan_consistency.py . <build-dir>` rather
+   than trusting this number as time passes.
 5. Archived `plan_deep_audit.md` (all 57 of its own tasks were already
    completed) and fixed `RELEASE.md`'s stale 66/66 test count.
 6. Removed machine-specific absolute source paths from this file's evidence
@@ -1520,13 +1520,12 @@ count — re-run it rather than trusting this paragraph.
 **Update (2026-07-20, later same day, after SYS-W14-18..27):** a third
 independent fresh audit (4 parallel agents: build/test health, core-code
 bug hunt, docs/architecture staleness, editor UX/wiring gaps) added
-`AUD-074` and `AUD-075` (both `DONE`), bringing the total to
-**18 AUD-### rows**. Several other findings from that same audit round
-(UI-vs-live-shading gaps, no-op-undo Checkbox instances, stale
-`MCB_FORMAT.md`/`TESTING.md`) are tracked as this session's own in-progress
-work, not yet all filed as their own `AUD-###` rows — check the session
-log / recent commits for their current status rather than assuming this
-paragraph is exhaustive.
+`AUD-074`, `AUD-075`, and `AUD-076` (all `DONE`), bringing the total to
+**19 AUD-### rows**. Several other findings from that same audit round
+(UI-vs-live-shading gaps, stale `MCB_FORMAT.md`/`TESTING.md`) are tracked
+as this session's own in-progress work, not yet all filed as their own
+`AUD-###` rows — check the session log / recent commits for their current
+status rather than assuming this paragraph is exhaustive.
 
 ### AUD-025 `[DEFERRED]` `P2` `W7` · embed: mesh source is treated as a literal OBJ path — node exports with no mesh while export exits 0 'Written'
 - **Component:** mc3togltf/src/GltfExporter.cpp buildMesh()
@@ -1673,3 +1672,10 @@ paragraph is exhaustive.
 - **Outcome:** Clamp `segments` (and any value derived from it that's used as a loop-bound divisor) to a safe non-zero minimum at the top of each affected function, matching the `std::max(N, ...)` convention already used by this file's own already-guarded sibling dimensions (`buildCapsule`'s `rings`, `buildTorus`'s `sides`) and by `drawDiskDynamic()`'s own `std::max(3, segments)` for the same primitive.
 - **Tests:** New `test/primitive_zero_segments_test.cpp` (`primitive_zero_segments` ctest, CNA-free, links `mc3togltf_lib` — same idiom as `differential_geometry_test.cpp`) — constructs every one of the 6 shapes (Sphere/Cylinder/Cone/Torus/Capsule/Disk, the last in both solid and ring form) plus the 5 live-viewport tessellators at `segments` 0 and 1, asserting every position/normal/texcoord component is finite and every index is in-bounds. **Empirically verified against the unpatched source via `git stash`**: 23 of the test's assertions genuinely FAIL pre-fix (real NaN reproduced, not just a hypothesized risk) across all 6 shapes and both `tessellateUnitSphereAlg`/`tessellateUnitTorusAlg`; all pass again once the fix is restored. Also manually smoke-tested end-to-end past the unit-test level: a 7-object `segments=0`/`1` scene loads and renders in the real `MeshCraft` binary via `--screenshot` with a clean `[GLCheck]` (no GL errors, no crash), and the same scene exports via the real `mc3togltf` binary to a glTF whose 28 accessors all have finite `min`/`max` bounds (verified by loading the actual JSON output, not just re-running the unit test). Full rebuild + 163/163 `ctest` (was 162).
 - **Resolved:** commit `c99bfc5` — verify: `ctest -R primitive_zero_segments`
+
+### AUD-076 `[DONE]` `P1` `W1` · New instances of the AUD-036 "Checkbox variant" no-op-undo bug across 9 real call sites
+- **Component:** src/MeshCraft/MeshCraftApplication_UiLeftPanel.cpp (Light castShadows, Texture mipMaps, Material doubleSided, Sound loop, Music loop, AssetMetadata instancingEligible), src/MeshCraft/Scene/PropertiesPanel.cpp (Extrude smooth, Extrude caps, Material doubleSided inline editor)
+- **Evidence:** Found via the same fresh 4-agent independent audit as `AUD-074`/`AUD-075`, the core-code-correctness-bug-hunt dimension. `ImGui::Checkbox(label, bool* v)` writes `*v` in place and returns `true` on the SAME call — so `if (ImGui::Checkbox("X", &live.field)) { pushUndo(); ... }` (the "unconditional pushUndo() on Checkbox" convention this codebase otherwise correctly uses for Combo/InputText, per `PropertiesPanel.cpp`'s own STAB-0719 comment) runs `pushUndo()` AFTER `live.field` has already been mutated, so the `deepCopyDoc()` snapshot captures the NEW value, not the pre-click one — Ctrl+Z is a silent no-op. This is the exact same bug class `AUD-036`/`AUD-036b`/`SYS-W14-16` already fixed for `Slider`/`Drag`-nested-`IsItemActivated()` and a first Checkbox instance (`Mc3Action::loop`/`autoplay`, `MeshCraftApplication_Anim.cpp`), but 9 more Checkbox call sites added since then had drifted back into the buggy shape (one, `instancingEligible`, via a different gating call, `IsItemDeactivatedAfterEdit()`, which fires on the same click frame for a Checkbox and has the identical timing problem). **A full independent sweep of every `ImGui::Checkbox` call site in `src/MeshCraft/` (47 total) was run beyond the audit's own reported list**, confirming: the 9 found here are the only genuinely-buggy ones; the remaining ~30 in these two files already correctly bind to a derived local `bool` (e.g. `bool hasP = st.position.has_value();`) with the live write-back happening after `pushUndo()` (mostly from `SYS-W14-16`'s earlier systematic pass); and every Checkbox in `MeshCraftApplication_UiOverlays.cpp` is bound to app-level UI-preference state (e.g. `findCaseSensitive_`, `glbAllowApproxCSG_`), not `document_` content, so it correctly has no undo coverage at all.
+- **Outcome:** Local-copy-then-writeback at all 9 sites — bind `Checkbox` to a fresh local `bool` initialized from the live field, and only assign the live field (after `pushUndo()`) inside the `if` block once the widget reports a change — the exact fix `MeshCraftApplication_Anim.cpp`'s `act.loop`/`autoplay` already established.
+- **Tests:** Extended `test/undo_gesture_frame_test.cpp` (real ImGui frame-driving, no CNA/GL context needed) with a new pair of blocks using a mock "live field" + "snapshot" pair — one exercising the BUGGY direct-bind shape (proves the snapshot captures the wrong, post-click value, reproducing the bug's actual mechanism, not just asserting it exists) and one exercising the FIXED local-copy shape (proves the snapshot correctly captures the pre-click value). The pre-existing `driveCheckboxGesture()` helper in this file only asserted `pushUndo()` was *called* once per click, never *what value* it would have captured — which is why it never caught this class of bug despite testing Checkbox already; the new blocks close that specific gap. Also corrected the stale/incomplete `PropertiesPanel.cpp:1686` comment ("Checkbox/Combo/InputText get an unconditional pushUndo()") to caveat why Checkbox specifically needs the local-copy shape while Combo/InputText don't (their normal usage shape already requires an intermediate variable). Full rebuild + 163/163 `ctest` (unchanged count — extended an existing test, not a new one). Manually smoke-tested via `--screenshot` after the fix (clean `[GLCheck]`, no crash).
+- **Resolved:** commit (pending, this session) — verify: `ctest -R undo_gesture_frame`

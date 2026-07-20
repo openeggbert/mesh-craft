@@ -177,8 +177,20 @@ void MeshCraftApplication::drawLeftPanel(float panelY, float panelH)
                 } }
 
                 // Cast shadows
-                if (ImGui::Checkbox("Cast Shadows", &li.castShadows)) {
-                    pushUndo(); modified_ = true; updateWindowTitle();
+                // 2026-07-20 audit finding #3: ImGui::Checkbox writes *v in
+                // place and returns true on the SAME call, so pushUndo()
+                // used to run AFTER li.castShadows already held its new
+                // value -- the deep-copy snapshot captured the new state,
+                // not the old one, making Ctrl+Z a silent no-op. Local-copy-
+                // then-writeback, same established fix as
+                // MeshCraftApplication_Anim.cpp's act.loop/autoplay.
+                {
+                    bool castShadowsLocal = li.castShadows;
+                    if (ImGui::Checkbox("Cast Shadows", &castShadowsLocal)) {
+                        pushUndo();
+                        li.castShadows = castShadowsLocal;
+                        modified_ = true; updateWindowTitle();
+                    }
                 }
 
                 // Direction (Directional / Spot)
@@ -701,15 +713,22 @@ void MeshCraftApplication::drawLeftPanel(float panelY, float panelH)
 
                 // F21 (2026-07-20 audit): mipMaps parses/round-trips
                 // correctly (XML/JSON/MCB) but had no editor UI at all --
-                // the only way to change it was hand-editing the file.
-                // (Not currently read by SceneRenderer.cpp or
-                // GltfExporter.cpp -- grepped, zero hits outside the
-                // parsers/writers -- so this doesn't yet affect rendering
-                // or export; still worth exposing since it's a real,
-                // documented per-texture field a user/AI can legitimately
-                // author and expect to edit.)
-                if (ImGui::Checkbox("Mip Maps", &tex.mipMaps)) {
-                    pushUndoTex(); modified_ = true; updateWindowTitle();
+                // the only way to change it was hand-editing the file. As of
+                // SYS-W14-22 (2026-07-20), GltfExporter.cpp honors it (a
+                // false value emits a non-mipmapped sampler minFilter); the
+                // live viewport still doesn't (see MC3_FORMAT.md's Textures
+                // section for why -- a CNA API gap, not this session's
+                // scope).
+                //
+                // 2026-07-20 audit finding #3: ImGui::Checkbox writes *v in
+                // place and returns true on the SAME call, so pushUndoTex()
+                // used to run AFTER tex.mipMaps already held its new value --
+                // Ctrl+Z was a silent no-op. Local-copy-then-writeback, same
+                // established fix as MeshCraftApplication_Anim.cpp's
+                // act.loop/autoplay.
+                bool mipMapsLocal = tex.mipMaps;
+                if (ImGui::Checkbox("Mip Maps", &mipMapsLocal)) {
+                    pushUndoTex(); tex.mipMaps = mipMapsLocal; modified_ = true; updateWindowTitle();
                 }
             }
 
@@ -1124,8 +1143,24 @@ void MeshCraftApplication::drawLeftPanel(float panelY, float panelH)
                             strField("Collision Proxy (box/convex_hull/none)", am.collisionProxy, 64);
                             vec3Field("Clearance Volume", am.clearanceVolume);
 
-                            ImGui::Checkbox("Instancing Eligible", &am.instancingEligible);
-                            if (ImGui::IsItemDeactivatedAfterEdit()) { pushUndoDef(); modified_ = true; updateWindowTitle(); }
+                            // 2026-07-20 audit finding #3: IsItemDeactivatedAfterEdit()
+                            // fires on the SAME frame a Checkbox click
+                            // toggles it (activate+edit+deactivate all
+                            // happen in that one click), so am.instancingEligible
+                            // already held its new value by the time
+                            // pushUndoDef() ran here -- the same no-op-Ctrl+Z
+                            // bug as the other Checkbox sites this session,
+                            // just reached via a different ImGui gating call.
+                            // Local-copy-then-writeback, same established fix.
+                            {
+                                bool instancingEligibleLocal = am.instancingEligible;
+                                ImGui::Checkbox("Instancing Eligible", &instancingEligibleLocal);
+                                if (ImGui::IsItemDeactivatedAfterEdit()) {
+                                    pushUndoDef();
+                                    am.instancingEligible = instancingEligibleLocal;
+                                    modified_ = true; updateWindowTitle();
+                                }
+                            }
 
                             strField("Shadow Policy (cast_receive/cast_only/none)", am.shadowPolicy, 32);
 
@@ -1528,9 +1563,18 @@ void MeshCraftApplication::drawLeftPanel(float panelY, float panelH)
                 }
 
                 // Double-sided
-                if (ImGui::Checkbox("Double-sided##matds", &mat.doubleSided)) {
-                    pushUndoMat();
-                    modified_ = true;
+                // 2026-07-20 audit finding #3: local-copy-then-writeback --
+                // Checkbox writes in place and returns true on the SAME
+                // call, so pushUndoMat() used to run after the value was
+                // already changed (silent no-op Ctrl+Z). Same established
+                // fix as MeshCraftApplication_Anim.cpp's act.loop/autoplay.
+                {
+                    bool doubleSidedLocal = mat.doubleSided;
+                    if (ImGui::Checkbox("Double-sided##matds", &doubleSidedLocal)) {
+                        pushUndoMat();
+                        mat.doubleSided = doubleSidedLocal;
+                        modified_ = true;
+                    }
                 }
             }
 
@@ -1741,8 +1785,16 @@ void MeshCraftApplication::drawLeftPanel(float panelY, float panelH)
                     }
                 }
 
-                if (ImGui::Checkbox("Loop##soundloop", &sound.loop)) {
-                    pushUndo(); modified_ = true; updateWindowTitle();
+                // 2026-07-20 audit finding #3: local-copy-then-writeback --
+                // Checkbox writes in place and returns true on the SAME
+                // call, so pushUndo() used to run after the value was
+                // already changed (silent no-op Ctrl+Z). Same established
+                // fix as MeshCraftApplication_Anim.cpp's act.loop/autoplay.
+                {
+                    bool loopLocal = sound.loop;
+                    if (ImGui::Checkbox("Loop##soundloop", &loopLocal)) {
+                        pushUndo(); sound.loop = loopLocal; modified_ = true; updateWindowTitle();
+                    }
                 }
             }
 
@@ -1821,8 +1873,16 @@ void MeshCraftApplication::drawLeftPanel(float panelY, float panelH)
                     }
                 }
 
-                if (ImGui::Checkbox("Loop##musicloop", &music.loop)) {
-                    pushUndo(); modified_ = true; updateWindowTitle();
+                // 2026-07-20 audit finding #3: local-copy-then-writeback --
+                // Checkbox writes in place and returns true on the SAME
+                // call, so pushUndo() used to run after the value was
+                // already changed (silent no-op Ctrl+Z). Same established
+                // fix as MeshCraftApplication_Anim.cpp's act.loop/autoplay.
+                {
+                    bool loopLocal = music.loop;
+                    if (ImGui::Checkbox("Loop##musicloop", &loopLocal)) {
+                        pushUndo(); music.loop = loopLocal; modified_ = true; updateWindowTitle();
+                    }
                 }
             }
 

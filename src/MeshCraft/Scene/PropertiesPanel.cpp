@@ -1155,9 +1155,27 @@ void PropertiesPanel::draw(float panelX, float panelY, float panelW, float panel
             // STAB-0719: these two were the only Extrude fields in this
             // block missing pushUndo() -- every sibling field (e.g. the
             // Path Segments slider directly above) already has it.
-            if (ImGui::Checkbox("Smooth", &ex.smooth))  { ctx.pushUndo(); ctx.markModified(); }
+            //
+            // 2026-07-20 audit finding #3: STAB-0719's own fix was still
+            // wrong in a subtler way -- ImGui::Checkbox writes *v in place
+            // and returns true on the SAME call, so ctx.pushUndo() here ran
+            // AFTER ex.smooth/ex.caps already held the new value, making
+            // Ctrl+Z a silent no-op (same bug class as
+            // MeshCraftApplication_Anim.cpp's act.loop/autoplay had, fixed
+            // via the same local-copy-then-writeback shape).
+            {
+                bool smoothLocal = ex.smooth;
+                if (ImGui::Checkbox("Smooth", &smoothLocal)) {
+                    ctx.pushUndo(); ex.smooth = smoothLocal; ctx.markModified();
+                }
+            }
             ImGui::SameLine();
-            if (ImGui::Checkbox("Caps",   &ex.caps))    { ctx.pushUndo(); ctx.markModified(); }
+            {
+                bool capsLocal = ex.caps;
+                if (ImGui::Checkbox("Caps", &capsLocal)) {
+                    ctx.pushUndo(); ex.caps = capsLocal; ctx.markModified();
+                }
+            }
 
             // --- Cross-section ---
             if (ImGui::TreeNodeEx("Cross-section", ImGuiTreeNodeFlags_DefaultOpen)) {
@@ -1671,6 +1689,21 @@ void PropertiesPanel::draw(float panelX, float panelY, float panelW, float panel
             // dragging, so gate to one undo step per drag session) --
             // matches e.g. this same file's Extrude segments slider and
             // the left panel's light-color ColorEdit3.
+            //
+            // 2026-07-20 audit finding #3: this rule is incomplete as
+            // stated for Checkbox specifically. Combo/InputText are safe
+            // with a plain `if (Widget(...)) { pushUndo(); ...write-back...; }`
+            // because their normal usage shape already requires an
+            // intermediate variable (an index into a local for Combo, a
+            // char buffer for InputText) that's explicitly written back to
+            // the live field AFTER pushUndo() -- but ImGui::Checkbox(&v)
+            // writes *v in place and returns true on the SAME call, so
+            // binding it directly to a live field's address (compiles
+            // fine, looks identical to the "safe" shape above) mutates the
+            // field BEFORE pushUndo() ever runs, making the undo snapshot
+            // capture the NEW value. Checkbox must always be bound to a
+            // fresh local bool with the write-back inside the `if`, same
+            // as this block's own "Double Sided" checkbox below.
             auto matIt = ctx.document.materials.find(sel0->material);
             if (matIt != ctx.document.materials.end()) {
                 auto& mat = matIt->second;
@@ -1761,9 +1794,18 @@ void PropertiesPanel::draw(float panelX, float panelY, float panelW, float panel
                 }
 
                 // Double sided
-                if (ImGui::Checkbox("Double Sided", &mat.doubleSided)) {
-                    pushUndoMat();
-                    ctx.markModified();
+                // 2026-07-20 audit finding #3: local-copy-then-writeback --
+                // Checkbox writes in place and returns true on the SAME
+                // call, so pushUndoMat() used to run after the value was
+                // already changed (silent no-op Ctrl+Z). Same established
+                // fix as MeshCraftApplication_Anim.cpp's act.loop/autoplay.
+                {
+                    bool doubleSidedLocal = mat.doubleSided;
+                    if (ImGui::Checkbox("Double Sided", &doubleSidedLocal)) {
+                        pushUndoMat();
+                        mat.doubleSided = doubleSidedLocal;
+                        ctx.markModified();
+                    }
                 }
 
                 // Normal scale + occlusion strength (collapsed by default)

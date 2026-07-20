@@ -431,6 +431,101 @@ int main() {
         check(v == true, "Checkbox: value actually toggled by the click");
     }
 
+    // 2026-07-20 audit finding #3: driveCheckboxGesture() above (AUD-036c)
+    // only proves pushUndo() is CALLED once per click -- it doesn't prove
+    // WHAT VALUE a real snapshot would capture, so it never caught this bug.
+    // ImGui::Checkbox(&v) writes *v in place and returns true on the SAME
+    // call, so binding it directly to a live document field (compiles
+    // fine, looks identical to the "safe" Combo/InputText shape this file's
+    // own PropertiesPanel.cpp:1686 comment describes) and calling
+    // pushUndo() AFTER, inside the changed-block, captures the NEW value in
+    // the undo snapshot, not the pre-click one -- Ctrl+Z is then a silent
+    // no-op. This directly exercises the property that actually matters
+    // (what a real snapshot would hold), using a mock "live field" +
+    // "snapshot" pair, first for the BUGGY direct-bind shape (demonstrating
+    // the bug is real, not just theoretical) and then for the FIXED
+    // local-copy-then-writeback shape this session applied at 9 real call
+    // sites (MeshCraftApplication_UiLeftPanel.cpp/Scene/PropertiesPanel.cpp).
+    {
+        bool liveField = false;   // stand-in for e.g. Mc3Light::castShadows
+        int snapshotValue = -1;   // stand-in for what deepCopyDoc() would have captured
+        bool snapshotTaken = false;
+        ImGuiIO& io2 = ImGui::GetIO();
+        auto pushUndoMock = [&]() { snapshotTaken = true; snapshotValue = liveField ? 1 : 0; };
+
+        auto frame = [&](float mx, float my, bool mouseDown) {
+            io2.AddMousePosEvent(mx, my);
+            io2.AddMouseButtonEvent(0, mouseDown);
+            ImGui::NewFrame();
+            ImGui::SetNextWindowPos(ImVec2(0, 0));
+            ImGui::SetNextWindowSize(ImVec2(400, 300));
+            ImGui::Begin("w", nullptr, ImGuiWindowFlags_NoSavedSettings);
+            // THE BUGGY SHAPE (pre-fix): Checkbox bound directly to the
+            // live field's address.
+            if (ImGui::Checkbox("##buggycb", &liveField)) {
+                pushUndoMock(); // runs AFTER liveField has already flipped
+            }
+            ImVec2 mn = ImGui::GetItemRectMin(), mx2 = ImGui::GetItemRectMax();
+            ImGui::End();
+            ImGui::Render();
+            return std::pair{mn, mx2};
+        };
+
+        auto [mn, mx] = frame(600, 600, false);
+        float cx = (mn.x + mx.x) * 0.5f, cy = (mn.y + mx.y) * 0.5f;
+        frame(cx, cy, false);  // hover
+        frame(cx, cy, true);   // press
+        frame(cx, cy, false);  // release -- click completes, value toggles false->true
+
+        check(snapshotTaken, "Buggy Checkbox pattern: pushUndo() still fires once per click");
+        check(liveField == true, "Buggy Checkbox pattern: live field toggled to true by the click");
+        check(snapshotValue == 1,
+              "Buggy Checkbox pattern REPRODUCED: the 'undo snapshot' captured the NEW "
+              "value (1), not the pre-click value (0) -- this is exactly why Ctrl+Z was "
+              "a silent no-op for a Checkbox bound directly to a live field");
+    }
+    {
+        bool liveField = false;
+        int snapshotValue = -1;
+        bool snapshotTaken = false;
+        ImGuiIO& io2 = ImGui::GetIO();
+        auto pushUndoMock = [&]() { snapshotTaken = true; snapshotValue = liveField ? 1 : 0; };
+
+        auto frame = [&](float mx, float my, bool mouseDown) {
+            io2.AddMousePosEvent(mx, my);
+            io2.AddMouseButtonEvent(0, mouseDown);
+            ImGui::NewFrame();
+            ImGui::SetNextWindowPos(ImVec2(0, 0));
+            ImGui::SetNextWindowSize(ImVec2(400, 300));
+            ImGui::Begin("w", nullptr, ImGuiWindowFlags_NoSavedSettings);
+            // THE FIXED SHAPE (this session's actual fix, all 9 real call
+            // sites): local copy, gate on the widget's own return, write
+            // the live field back AFTER pushUndo().
+            bool local = liveField;
+            if (ImGui::Checkbox("##fixedcb", &local)) {
+                pushUndoMock();    // runs while liveField STILL holds the old value
+                liveField = local; // write-back happens after the snapshot
+            }
+            ImVec2 mn = ImGui::GetItemRectMin(), mx2 = ImGui::GetItemRectMax();
+            ImGui::End();
+            ImGui::Render();
+            return std::pair{mn, mx2};
+        };
+
+        auto [mn, mx] = frame(600, 600, false);
+        float cx = (mn.x + mx.x) * 0.5f, cy = (mn.y + mx.y) * 0.5f;
+        frame(cx, cy, false);
+        frame(cx, cy, true);
+        frame(cx, cy, false);
+
+        check(snapshotTaken, "Fixed Checkbox pattern: pushUndo() fires once per click");
+        check(liveField == true, "Fixed Checkbox pattern: live field toggled to true by the click");
+        check(snapshotValue == 0,
+              "Fixed Checkbox pattern (2026-07-20 audit finding #3): the undo snapshot "
+              "correctly captured the PRE-click value (0), not the new one -- Ctrl+Z "
+              "after this click genuinely restores the old state");
+    }
+
     // Combo (AUD-036c): opening the dropdown and then selecting an item must
     // produce exactly ONE snapshot for the whole gesture -- not one for the
     // open-click and another for the item-click.
