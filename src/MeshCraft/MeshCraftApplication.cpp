@@ -14,6 +14,7 @@
 #include <Microsoft/Xna/Framework/Input/Mouse.hpp>
 #include <Microsoft/Xna/Framework/Input/ButtonState.hpp>
 #include <Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp>
+#include <Microsoft/Xna/Framework/Graphics/RasterizerState.hpp>
 #include <Microsoft/Xna/Framework/Graphics/Viewport.hpp>
 #include <Microsoft/Xna/Framework/Matrix.hpp>
 #include <Microsoft/Xna/Framework/Vector3.hpp>
@@ -146,12 +147,6 @@ void MeshCraftApplication::LoadContent() {
 
     hierarchyPanel_  = std::make_unique<Scene::SceneHierarchyPanel>(document_);
     propertiesPanel_ = std::make_unique<Scene::PropertiesPanel>();
-
-    // Load GL function pointers for direct viewport/scissor control
-    fnGlViewport_ = reinterpret_cast<void(*)(int,int,int,int)>(SDL_GL_GetProcAddress("glViewport"));
-    fnGlScissor_  = reinterpret_cast<void(*)(int,int,int,int)>(SDL_GL_GetProcAddress("glScissor"));
-    fnGlEnable_   = reinterpret_cast<void(*)(unsigned int)>   (SDL_GL_GetProcAddress("glEnable"));
-    fnGlDisable_  = reinterpret_cast<void(*)(unsigned int)>   (SDL_GL_GetProcAddress("glDisable"));
 
     // ImGui init
     IMGUI_CHECKVERSION();
@@ -538,11 +533,17 @@ void MeshCraftApplication::Draw(const GameTime& /*gameTime*/) {
     int timelineH = showTimeline_ ? kTimelineH : 0;
     int viewH = std::max(1, screenH - topH - timelineH - kStatusH);
 
-    constexpr unsigned int GL_SCISSOR_TEST = 0x0C11;
+    // AUD-082: glViewY is still needed (in GL bottom-left-origin form) by the
+    // as-yet-unmigrated raw-GL Bloom/SSAO passes below (AUD-084/AUD-085);
+    // the scissor rect and viewport themselves now go through GraphicsDevice
+    // directly in its native top-left-origin form -- EasyGLGraphicsBackend's
+    // SetScissorRect()/SetViewport() do their own Y-flip internally.
     int glViewY = screenH - viewY - viewH;
 
-    if (fnGlEnable_)  fnGlEnable_(GL_SCISSOR_TEST);
-    if (fnGlScissor_) fnGlScissor_(viewX, glViewY, viewW, viewH);
+    RasterizerState rsScissorOn = gd.getRasterizerStateProperty();
+    rsScissorOn.setScissorTestEnableProperty(true);
+    gd.setScissorRectangleProperty(Rectangle(viewX, viewY, viewW, viewH));
+    gd.setRasterizerStateProperty(rsScissorOn);
 
     Color bgColor(64, 72, 80, 255);
     if (document_.environment) {
@@ -578,7 +579,7 @@ void MeshCraftApplication::Draw(const GameTime& /*gameTime*/) {
         bgTexture_.reset();
     }
 
-    if (fnGlViewport_) fnGlViewport_(viewX, glViewY, viewW, viewH);
+    gd.setViewportProperty(Viewport(viewX, viewY, viewW, viewH));
 
     float aspect = (viewH > 0) ? static_cast<float>(viewW) / viewH : 16.0f / 9.0f;
     Matrix view = camera_.viewMatrix();
@@ -745,8 +746,9 @@ void MeshCraftApplication::Draw(const GameTime& /*gameTime*/) {
         drawLocked(document_.objects);
     }
 
-    if (fnGlDisable_)  fnGlDisable_(GL_SCISSOR_TEST);
-    if (fnGlViewport_) fnGlViewport_(0, 0, screenW, screenH);
+    RasterizerState rsScissorOff = gd.getRasterizerStateProperty();
+    rsScissorOff.setScissorTestEnableProperty(false);
+    gd.setRasterizerStateProperty(rsScissorOff);
 
     Graphics::Viewport vpReset;
     vpReset.setXProperty(0); vpReset.setYProperty(0);

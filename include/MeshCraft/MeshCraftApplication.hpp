@@ -322,12 +322,6 @@ private:
     char subtreeExportErr_[256]{};
     void exportSubtreeAsTemplate(const std::string& defName, const std::string& filePath);
 
-    // Cached GL function pointers for viewport/scissor control
-    void (*fnGlViewport_)(int, int, int, int) = nullptr;
-    void (*fnGlScissor_)(int, int, int, int)  = nullptr;
-    void (*fnGlEnable_)(unsigned int)          = nullptr;
-    void (*fnGlDisable_)(unsigned int)         = nullptr;
-
     // Bloom post-processing (I6)
     bool  bloomEnabled_{false};
     float bloomStrength_{2.5f};
