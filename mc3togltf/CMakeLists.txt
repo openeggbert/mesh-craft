@@ -240,6 +240,7 @@ if(BUILD_TESTING)
         set_tests_properties(mc3togltf_large_obj_stress PROPERTIES TIMEOUT 90 LABELS "export")
         set(_obj_robustness_xml       "${CMAKE_CURRENT_SOURCE_DIR}/../test/obj_robustness.mc3.xml")
         set(_texture_sampler_xml      "${CMAKE_CURRENT_SOURCE_DIR}/../test/texture_sampler.mc3.xml")
+        set(_color_space_export_xml   "${CMAKE_CURRENT_SOURCE_DIR}/../test/color_space_export.mc3.xml")
         set(_material_pbr_xml         "${CMAKE_CURRENT_SOURCE_DIR}/../test/material_pbr.mc3.xml")
         set(_node_transform_xml       "${CMAKE_CURRENT_SOURCE_DIR}/../test/node_transform.mc3.xml")
         set(_empty_scene_xml          "${CMAKE_CURRENT_SOURCE_DIR}/../test/empty_scene.mc3.xml")
@@ -443,6 +444,16 @@ if(BUILD_TESTING)
                         "${_texture_sampler_xml}"
             )
             set_tests_properties(mc3togltf_texture_sampler PROPERTIES TIMEOUT 30 LABELS "export")
+        endif()
+        if(EXISTS "${_color_space_export_xml}")
+            add_test(
+                NAME mc3togltf_color_space_export
+                COMMAND "${PYTHON3_EXEC}"
+                        "${CMAKE_CURRENT_SOURCE_DIR}/test/color_space_export_test.py"
+                        "$<TARGET_FILE:mc3togltf>"
+                        "${_color_space_export_xml}"
+            )
+            set_tests_properties(mc3togltf_color_space_export PROPERTIES TIMEOUT 30 LABELS "export")
         endif()
         if(EXISTS "${_material_pbr_xml}")
             add_test(

@@ -536,6 +536,7 @@ static int buildMaterial(tinygltf::Model& model,
                          const Mc3Material& mat,
                          const std::unordered_map<std::string, int>& texIdx,
                          const std::map<std::string, Mc3SvgTexture>& svgTextures,
+                         const std::map<std::string, Mc3Texture>& textures,
                          int& warningCount)
 {
     tinygltf::Material m;
@@ -553,6 +554,32 @@ static int buildMaterial(tinygltf::Model& model,
         }
     };
 
+    // SYS-W14-23: glTF 2.0 requires baseColorTexture/emissiveTexture to be
+    // sRGB-encoded and normalTexture/metallicRoughnessTexture/
+    // occlusionTexture to be linear (non-color) data -- a fixed, spec-
+    // mandated convention per slot, not something a per-texture attribute
+    // can override in the exported file itself (glTF has no per-texture
+    // color-space field). tex.color_space was parsed and stored but never
+    // read back anywhere, so an author who explicitly (and incorrectly)
+    // marked e.g. a normal map as color_space="srgb" got no signal that
+    // their declared intent doesn't match what glTF will actually do with
+    // it. Warn (don't fail/silently "fix") when a texture's own declared
+    // color_space conflicts with the slot's mandated encoding.
+    auto warnIfColorSpaceMismatch = [&](const std::string& texRef, const char* slot,
+                                         const char* expectedSpace) {
+        auto texIt = textures.find(texRef);
+        if (texIt == textures.end()) return;
+        const std::string& declared = texIt->second.colorSpace;
+        if (!declared.empty() && declared != expectedSpace) {
+            std::cerr << "Warning: material '" << mat.name << "' texture '" << texRef
+                      << "' used as " << slot << " declares color_space=\"" << declared
+                      << "\", but glTF requires " << expectedSpace << " for this slot -- "
+                      << "the exported file follows the glTF convention regardless "
+                      << "(no per-texture color-space override exists in glTF 2.0)\n";
+            ++warningCount;
+        }
+    };
+
     auto& pbr = m.pbrMetallicRoughness;
     pbr.baseColorFactor = {
         mat.baseColor[0], mat.baseColor[1], mat.baseColor[2], mat.baseColor[3]
@@ -565,6 +592,7 @@ static int buildMaterial(tinygltf::Model& model,
         if (it != texIdx.end()) {
             pbr.baseColorTexture.index    = it->second;
             pbr.baseColorTexture.texCoord = 0;
+            warnIfColorSpaceMismatch(mat.baseColorTexture, "base_color_texture", "srgb");
         } else {
             warnIfUnresolvedSvg(mat.baseColorTexture, "base_color_texture");
         }
@@ -574,6 +602,7 @@ static int buildMaterial(tinygltf::Model& model,
         if (it != texIdx.end()) {
             pbr.metallicRoughnessTexture.index    = it->second;
             pbr.metallicRoughnessTexture.texCoord = 0;
+            warnIfColorSpaceMismatch(mat.metallicRoughnessTexture, "metallic_roughness_texture", "linear");
         } else {
             warnIfUnresolvedSvg(mat.metallicRoughnessTexture, "metallic_roughness_texture");
         }
@@ -584,6 +613,7 @@ static int buildMaterial(tinygltf::Model& model,
             m.normalTexture.index    = it->second;
             m.normalTexture.texCoord = 0;
             m.normalTexture.scale    = mat.normalScale;
+            warnIfColorSpaceMismatch(mat.normalTexture, "normal_texture", "linear");
         } else {
             warnIfUnresolvedSvg(mat.normalTexture, "normal_texture");
         }
@@ -594,6 +624,7 @@ static int buildMaterial(tinygltf::Model& model,
             m.occlusionTexture.index    = it->second;
             m.occlusionTexture.texCoord = 0;
             m.occlusionTexture.strength = mat.occlusionStrength;
+            warnIfColorSpaceMismatch(mat.occlusionTexture, "occlusion_texture", "linear");
         } else {
             warnIfUnresolvedSvg(mat.occlusionTexture, "occlusion_texture");
         }
@@ -603,6 +634,7 @@ static int buildMaterial(tinygltf::Model& model,
         if (it != texIdx.end()) {
             m.emissiveTexture.index    = it->second;
             m.emissiveTexture.texCoord = 0;
+            warnIfColorSpaceMismatch(mat.emissiveTexture, "emissive_texture", "srgb");
         } else {
             warnIfUnresolvedSvg(mat.emissiveTexture, "emissive_texture");
         }
@@ -1606,7 +1638,7 @@ void GltfExporter::exportDocument(const Mc3Document& doc,
     // Materials
     std::unordered_map<std::string, int> matNameToIdx;
     for (const auto& [name, mat] : doc.materials) {
-        int idx = buildMaterial(model, mat, texIdx, doc.svgTextures, preCtxWarnings);
+        int idx = buildMaterial(model, mat, texIdx, doc.svgTextures, doc.textures, preCtxWarnings);
         matNameToIdx[name] = idx;
     }
 

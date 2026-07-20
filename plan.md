@@ -145,10 +145,11 @@ still internally consistent.
    2026-07-20 are complete.
 6. The `mipMaps`-unused-downstream gap (P3) is now done for the exporter
    half (live-viewport half documented as blocked on a CNA API gap, see
-   its own row). **SYS-W14-23..27** (P3) — remaining smaller
-   format-vs-editor completeness gaps (`colorSpace` unused downstream,
-   UV box/sphere projection, MCB compression, light-brightness unit
-   conversion, ambient-light export). Independent, small, good
+   its own row). The `colorSpace`-unused-at-export gap (P3) is now done
+   too (slot-mismatch warning). **SYS-W14-24..27** (P3) — remaining
+   smaller format-vs-editor completeness gaps (UV box/sphere projection,
+   MCB compression, light-brightness unit conversion, ambient-light
+   export). Independent, small, good
    filler/warm-up tasks between the larger items above.
 
 ---
@@ -1282,7 +1283,7 @@ _All items in this workstream are DONE — archived to [`docs/history/plan_20260
   the missing-texture-warning count assertion from 4 to 5. Full rebuild +
   159/159 `ctest` (unchanged count -- extended an existing test, not a
   new one).
-- **SYS-W14-23** `[TODO]` `P3` — `Mc3Texture::colorSpace` unused at export.
+- **SYS-W14-23** `[DONE]` `P3` — `Mc3Texture::colorSpace` unused at export.
   `srgb`/`linear` round-trips and is editable, but grepped
   `GltfExporter.cpp`: zero hits for `colorSpace` -- no conversion or
   even a `KHR_texture_transform`-style hint is ever applied at export
@@ -1291,6 +1292,31 @@ _All items in this workstream are DONE — archived to [`docs/history/plan_20260
   (baseColor/emissive are sRGB by glTF convention; normal/metallic-
   roughness/occlusion are linear) using this field rather than a fixed
   per-slot assumption, so an author's explicit override is honored.
+  **Implementation:** glTF 2.0 has no per-texture color-space override —
+  the encoding convention per slot is fixed by the spec itself, not
+  something an exported file can honor per-author-intent. So instead of
+  a silent "fixed per-slot assumption" with the field simply doing
+  nothing, `GltfExporter.cpp`'s `buildMaterial()` now takes `doc.textures`
+  and, for each of the 5 PBR texture slots it resolves
+  (`base_color_texture`/`emissive_texture` = sRGB;
+  `normal_texture`/`metallic_roughness_texture`/`occlusion_texture` =
+  linear), checks the referenced texture's own declared `color_space`
+  against that slot's mandated encoding and emits an explicit warning
+  (naming the material, texture id, slot, declared value, and required
+  value) when they conflict — surfacing likely-mistaken authoring intent
+  (e.g. a normal map declared `color_space="srgb"`) instead of silently
+  discarding the signal. Does not fail the export, matching this
+  session's established warn-don't-fail precedent for informational
+  mismatches (SVG-texture-unresolved, missing-texture-file).
+  **Tests:** new `test/color_space_export.mc3.xml` (2 materials — one
+  with correctly-declared color_space on its `base_color_texture`/
+  `normal_texture`, one with both deliberately wrong) + new
+  `mc3togltf/test/color_space_export_test.py` (`mc3togltf_color_space_export`
+  ctest) — asserts the matched material produces no color-space warning
+  and the mismatched material's warning text names the right slot,
+  declared value, and required value, for both mismatch directions
+  (sRGB-slot-given-linear and linear-slot-given-sRGB). Full rebuild +
+  160/160 `ctest` (was 159).
 - **SYS-W14-24** `[TODO]` `P3` — UV mapping box/sphere projection not
   implemented. `Mc3UvMapping.projection` (`planar`/`box`/`sphere`) only
   ever produces the primitive's default planar unwrap in both the live

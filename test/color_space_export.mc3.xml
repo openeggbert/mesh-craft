@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- SYS-W14-23 regression fixture: materials whose texture slots'
+     declared color_space either matches or mismatches glTF 2.0's
+     mandated per-slot encoding (baseColorTexture/emissiveTexture = sRGB,
+     normalTexture/metallicRoughnessTexture/occlusionTexture = linear).
+     mat_matched uses correctly-declared textures (no warning expected);
+     mat_mismatched deliberately declares the wrong color_space on its
+     base_color_texture and normal_texture (both directions of the
+     mismatch) to verify mc3togltf warns without failing the export. -->
+<mc3 version="0.3" model="ColorSpaceExportFixture">
+
+  <textures>
+    <texture id="tex_base_ok"     uri="textures/base_ok.png"     color_space="srgb"/>
+    <texture id="tex_normal_ok"   uri="textures/normal_ok.png"   color_space="linear"/>
+    <texture id="tex_base_wrong"  uri="textures/base_wrong.png"  color_space="linear"/>
+    <texture id="tex_normal_wrong" uri="textures/normal_wrong.png" color_space="srgb"/>
+  </textures>
+
+  <materials>
+    <material id="mat_matched" roughness="0.5" metallic="0.0">
+      <base_color>1 1 1 1</base_color>
+      <base_color_texture>tex_base_ok</base_color_texture>
+      <normal_texture>tex_normal_ok</normal_texture>
+    </material>
+    <material id="mat_mismatched" roughness="0.5" metallic="0.0">
+      <base_color>1 1 1 1</base_color>
+      <base_color_texture>tex_base_wrong</base_color_texture>
+      <normal_texture>tex_normal_wrong</normal_texture>
+    </material>
+  </materials>
+
+  <objects>
+    <box name="BoxMatched"    size="1 1 1" material="mat_matched"    position="-2 0 0"/>
+    <box name="BoxMismatched" size="1 1 1" material="mat_mismatched" position="2 0 0"/>
+  </objects>
+
+</mc3>
