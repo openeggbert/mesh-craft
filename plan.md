@@ -87,16 +87,16 @@ P1s already being fixed in git history. This session:
    **Net across all 31 AUD-### rows remaining in this active backlog (61
    additional rows completed and archived to `docs/history/plan_20260718.md`
    on 2026-07-18 — see that file for their full evidence/resolution text):
-   20 DONE, 9 TODO, 2 DEFERRED** — 10 of the 20 DONE (`AUD-064` through
+   21 DONE, 8 TODO, 2 DEFERRED** — 10 of the 21 DONE (`AUD-064` through
    `AUD-073`) are fresh findings from a 2026-07-18 (later same day)
    independent re-audit, not part of the original 6 (`AUD-069` itself fixed
-   2026-07-19, the day after it was filed); the other 10 (`AUD-074`
-   through `AUD-083`) are from a third independent audit on 2026-07-20
+   2026-07-19, the day after it was filed); the other 11 (`AUD-074`
+   through `AUD-084`) are from a third independent audit on 2026-07-20
    (later the same day as this session's SYS-W14-18..27 work) —
    `AUD-080`/`AUD-081` are documentation-only fixes with no code change,
-   `AUD-082`/`AUD-083` are the first two of the raw-OpenGL(ES)-vs-CNA
-   group (`AUD-082`-`AUD-088`, see below) to actually land.
-   5 more (`AUD-084` through `AUD-088`, all `TODO`) are from the same
+   `AUD-082`/`AUD-083`/`AUD-084` are the first three of the raw-OpenGL(ES)-
+   vs-CNA group (`AUD-082`-`AUD-088`, see below) to actually land.
+   4 more (`AUD-085` through `AUD-088`, all `TODO`) are from the same
    targeted 2026-07-20 (later still) investigation into how much raw
    OpenGL(ES) the editor calls outside CNA's own API — genuinely
    actionable, unlike the other open `TODO`s; `AUD-088` was found and
@@ -132,20 +132,27 @@ still internally consistent.
 
 ## Priority execution queue (next up, in order)
 
-1. **AUD-084 through AUD-088 (P2/W8)** — migrate the editor's remaining
-   raw-OpenGL(ES) reach-around (the shared Bloom/SSAO/skybox/material-
-   preview/shadow-map-debug `s_bloom` FBO+shader table) onto CNA's own
-   already-existing, unused `GraphicsDevice.SetRenderTarget`,
-   `RenderTarget2D`, and `NOXNA ShaderEffect` APIs — see the shared
-   preamble in the AUD-### table above (immediately before this group's
-   first row) for the full rationale and the "file a NOXNA capability
-   request rather than write new raw GL" rule for any residual. The
-   panel scissor/viewport clip and `--screenshot` readback parts of this
-   group are already done — see the AUD-### table above for which rows
-   and their empirical verification. 5 `s_bloom` migrations remain
-   (`AUD-084`-`AUD-088`, each of which also adds a missing visual-
+1. **AUD-085 through AUD-088 (P2/W8)** — migrate the editor's remaining
+   raw-OpenGL(ES) reach-around (the shared SSAO/skybox/material-preview/
+   shadow-map-debug `s_bloom` FBO+shader table) onto CNA's own already-
+   existing, unused `GraphicsDevice.SetRenderTarget`, `RenderTarget2D`,
+   and `NOXNA ShaderEffect` APIs — see the shared preamble in the AUD-###
+   table above (immediately before this group's first row) for the full
+   rationale and the "file a NOXNA capability request rather than write
+   new raw GL" rule for any residual. The panel scissor/viewport clip,
+   `--screenshot` readback, and Bloom parts of this group are already
+   done — see the AUD-### table above for which rows, their empirical
+   verification, and (for the Bloom row) two real, non-obvious CNA
+   gotchas found and fixed along the way that will recur in the
+   remaining 4: `RenderTarget2D`'s `DiscardContents` default makes
+   `SetRenderTarget()` clear on *every* bind (no redundant re-binds), and
+   `SpriteBatch`'s custom-effect draws only honor a bound `RenderTarget2D`'s
+   own size for their projection — a backbuffer-targeted draw always
+   projects to the full window, so destRects for those must be window-
+   absolute, not viewport-local. 4 `s_bloom` migrations remain
+   (`AUD-085`-`AUD-088`, each of which also adds a missing visual-
    correctness test the feature never had), with `s_bloom`'s final
-   teardown left to whichever of those 5 lands last.
+   teardown left to whichever of those 4 lands last.
 2. **AUD-052 (P1/W11)** — CI is permanently parked under `.github_/`; GitHub
    Actions never runs. This is the root blocker for AUD-053 (a CI-hardening
    task that depends on CI actually running first) and the CI-job half of
@@ -159,7 +166,7 @@ still internally consistent.
    (no Android NDK in this environment; also intersects CNA backend
    behavior, out of scope per CLAUDE.md's "no CNA changes without owner
    permission").
-4. The remaining `TODO` AUD-### rows besides `AUD-084`-`AUD-088` are all
+4. The remaining `TODO` AUD-### rows besides `AUD-085`-`AUD-088` are all
    downstream of the two blockers above (AUD-053 needs AUD-052; AUD-057's
    CI-job half needs the same) — none of those are independently
    actionable right now.
@@ -1807,11 +1814,15 @@ final acceptance check (expected: no output, combined with `AUD-082`/
 - **Tests:** This is the mechanism every `--screenshot`-based render test in the suite depends on — full rebuild + `ctest -L render` (27/27, one transient flake on a full parallel run traced to shared-machine contention, reproducibly passing both alone and under `-j1`) and the full suite (166/166) both pass unchanged. **Empirically verified via `git stash` on just this fix**: captured both a `.ppm` and a `.png` screenshot of `light_shading.mc3.xml` with the post-fix binary, stashed the change, rebuilt, captured the identical fixture+formats with the pre-fix binary, and `cmp`'d each pair — **both PPM and PNG bytewise identical**, directly confirming the row-order handling above is correct (an upside-down regression would have shown up here immediately).
 - **Resolved:** commit `0796d62` — verify: `cmp` a `--screenshot .png` and `.ppm` from before/after this commit on any fixture (expect identical bytes both ways).
 
-### AUD-084 `[TODO]` `P2` `W8` · Bloom post-processing (I6) is a hand-rolled raw-GL FBO+shader pipeline instead of RenderTarget2D + ShaderEffect
-- **Component:** src/MeshCraft/MeshCraftApplication.cpp (`BloomGL`/`s_bloom`, `initBloom()`, `applyBloom()`, `kBloomVS`/`kBloomBlurFS`/`kBloomCompositeFS`)
-- **Evidence:** `initBloom()`/`applyBloom()` (`MeshCraftApplication.cpp:1326-1529`ish) build and drive the bloom extract/blur/composite passes entirely through the shared raw-GL function table `s_bloom` (see the shared preamble above and `AUD-085`/`AUD-086`/`AUD-087` for the table's other 3 consumers) — manual `glGenFramebuffers`/`glFramebufferTexture2D` FBOs, manual `glCreateShader`/`glShaderSource`/`glCompileShader`/`glCreateProgram`/`glLinkProgram` for `kBloomVS`+`kBloomBlurFS`+`kBloomCompositeFS` (`#version 300 es` GLSL literals embedded as C string constants), manual `glBlendFunc`/`glDrawArrays` compositing. `../cna` already has both halves of this as real, tested, cross-backend classes: `RenderTarget2D` (`RenderTarget2D.hpp` — a genuine `Texture2D` subclass, so the bloom-extract target can be bound straight back in as the blur pass's sampler input, and the blur target as the composite pass's, with no raw texture-id plumbing) and `NOXNA ShaderEffect` (`ShaderEffect.hpp:25-40`, constructible from a `GraphicsDevice&` — CNA's own supported "bring your own shader source" mechanism; `../cna/examples/easygl_postprocesseffect_shader_test.cpp` and `easygl_bloom_extract_test.cpp`/`easygl_bloom_gaussianblur_test.cpp`/`easygl_bloom_combine_test.cpp`/`easygl_bloom_pipeline_test.cpp` demonstrate this exact extract/blur/combine pipeline shape already working end-to-end against CNA's own API, not raw GL).
-- **Outcome:** Rebuild `initBloom()`/`applyBloom()` on `RenderTarget2D` (extract target, ping-pong blur targets) + `ShaderEffect` (loaded from `kBloomVS`/`kBloomBlurFS`/`kBloomCompositeFS`'s existing GLSL source, unchanged) + `GraphicsDevice.SetRenderTarget()`/`SpriteBatch` or a full-screen-triangle draw call for each pass, removing this feature's dependency on the shared `s_bloom` raw-GL table entirely. If any single call turns out to have no `ShaderEffect`/`RenderTarget2D`-expressible equivalent, stop and document it as a NOXNA capability request (see the shared preamble) rather than falling back to raw GL for just that one call.
-- **Tests:** `light_shading_test.py`-style real `--screenshot` pixel sampling on a fixture with an emissive/bright material and `bloomEnabled_=true` vs. `false`, asserting a measurable glow spread beyond the bright region's own geometric bounds — this coverage does not exist yet (`AUD-058`'s test-only hook only proves bloom's GL resource pool is fully released, per `MeshCraftApplication.cpp:81-89`, not that bloom is visually correct) and should be added as part of this migration, verified via `git stash` pre/post exactly like `AUD-077`/`AUD-078`/`AUD-079`.
+### AUD-084 `[DONE]` `P2` `W8` · Bloom post-processing (I6) is a hand-rolled raw-GL FBO+shader pipeline instead of RenderTarget2D + ShaderEffect
+- **Component:** src/MeshCraft/MeshCraftApplication.cpp (`initBloom()`, `applyBloom()`, `kBloomVertSrc`/`kBloomBlurFragSrc`/`kBloomCompositeFragSrc`), include/MeshCraft/MeshCraftApplication.hpp (`bloomRtA_`/`bloomRtB_`/`bloomBlurFx_`/`bloomCompositeFx_`)
+- **Evidence:** `initBloom()`/`applyBloom()` built and drove the bloom emissive/blur/composite passes entirely through the shared raw-GL function table `s_bloom` (see the shared preamble above and `AUD-085`/`AUD-086`/`AUD-087`/`AUD-088` for the table's other 4 consumers) — manual `glGenFramebuffers`/`glFramebufferTexture2D` FBOs, manual `glCreateShader`/`glShaderSource`/`glCompileShader`/`glCreateProgram`/`glLinkProgram` for `kBloomVS`+`kBloomBlurFS`+`kBloomCompositeFS` (a `gl_VertexID`-driven, no-VBO fullscreen triangle-strip, `#version 300 es` GLSL literals embedded as C string constants), manual `glBlendFunc`/`glDrawArrays` compositing. `../cna` already has both halves of this as real, tested, cross-backend classes — `RenderTarget2D` and `NOXNA ShaderEffect` — confirmed working end-to-end in this exact environment (OpenGL ES 3.2 Mesa 25.0.7-2) by building and running `../cna/cmake-build-debug/cna_test_easygl_bloom_pipeline` directly (PASS, real bloom spillover measured) before starting the migration.
+- **Outcome:** Rebuilt `initBloom()`/`applyBloom()` on `RenderTarget2D` (2 full-viewport-res ping-pong targets, replacing `texA`/`texB`/`fboA`/`fboB`) + `ShaderEffect` (2 effects: blur, composite — replacing `progBlur`/`progComposite`) + `SpriteBatch` (drawing each RT as a full-screen textured quad with the custom effect applied, replacing the `gl_VertexID` triangle-strip trick) + `GraphicsDevice.SetRenderTarget()`. Same 8-pass ping-pong Gaussian blur (4 iterations H+V, identical 5-tap weights/offsets) and additive composite (`BlendState.Additive`) as before; `sceneRenderer_->drawEmissivePass()` (already CNA-based) is unchanged, just now drawing into a `RenderTarget2D` instead of a raw FBO. **Two genuine, non-obvious CNA behavioral gotchas found and fixed during this migration** (both will recur in `AUD-085` through `AUD-088`, which do the same kind of RT+SpriteBatch+ShaderEffect work):
+  1. **`RenderTarget2D`'s default `RenderTargetUsage::DiscardContents` makes `GraphicsDevice::SetRenderTarget()` unconditionally clear the target to black on *every* bind** (`GraphicsDevice.cpp:1843-1857`, matching real XNA/FNA semantics). The initial migration included a "defensive" second `SetRenderTarget(&sameTarget)` call right after the emissive draw (in case some future change started switching render targets mid-function) — this silently wiped out the just-drawn emissive content on every single frame, with no error of any kind. Root-caused by systematically ruling out every other layer (draw-call issuance confirmed via `SceneRenderer::emissiveDrawCount()`, texture-unit binding, `TexCoord` interpolation, solid-color shader overrides to isolate blend vs. sampling) before finally testing a `gd.Clear(Color::White)` in place of the real emissive draw and finding *that* content survived the pipeline while the real draw's didn't — the only difference being the redundant re-bind sitting between them. Fixed by binding each render target exactly once per pass.
+  2. **`EasyGLSpriteBatchBackend::FlushBatch()` sizes its orthographic projection to the *bound RenderTarget2D* when one is bound, but to the full *window* size when none is bound — it does not honor a custom `GraphicsDevice.Viewport` for backbuffer-targeted draws** (confirmed by reading `EasyGLGraphicsBackend.cpp:1103-1130`, `Task 1078`'s own comment covers only the RT-bound half of this). The final composite pass draws to the backbuffer within the clipped 3D-viewport sub-rectangle (`vx,viewY,vw,vh`, offset from the window origin by the side panels) — using an RT-local `Rectangle(0,0,vw,vh)` destRect (correct for the RT-bound blur passes) placed the composite draw at the window's own origin instead, off by `(vx,viewY)`. Fixed by using a window-absolute `Rectangle(vx,viewY,vw,vh)` destRect specifically for the one draw that targets the backbuffer.
+  A third early hypothesis (SpriteBatch's custom-effect draws inheriting a stale active GL texture unit from earlier 3D rendering, requiring an explicit `ShaderEffect::SetTexture(0,...)`/`SetUniformInt("texture1",0)` workaround) was tested and found **not** to be a real factor — added, then removed once the two fixes above were confirmed sufficient on their own.
+- **Tests:** New `test/bloom.mc3.xml` (a bright-white emissive box on a near-black background, open space around it) + `test/bloom_test.py` (`bloom_test` ctest, real `--screenshot` pixel sampling): renders the fixture with and without `MESHCRAFT_TEST_FORCE_POSTFX=1` (the existing `AUD-058` test-only hook), asserting a halo point a few pixels outside the box's own silhouette is measurably brighter with bloom on (only additive glow spillover can explain that) while a point further out (beyond the blur kernel's small ~5px reach) stays background-dark. **Empirically verified via `git stash`**: `bloom_test.py` run directly against the pre-migration (original raw-GL) binary passes with an *identical* halo reading (delta=143, on=148) to the post-migration binary — strong evidence the migration is behaviorally equivalent, not just independently-plausible-looking. Full rebuild + 167/167 `ctest` (was 166; +1 for `bloom_test`). Caught the XML-comment double-hyphen bug (5th time this session) in the new fixture's own comment — fixed before committing. The pre-existing "GL error 0x502" leak when SSAO+Bloom are both force-enabled (unrelated to this migration — confirmed present on the pre-migration binary too via the same `git stash` check) is out of scope for this row.
+- **Resolved:** commit `c1be563` — verify: `ctest -R bloom_test`; `grep -c SDL_GL_GetProcAddress src/MeshCraft/MeshCraftApplication.cpp` (expect the count to have dropped; `AUD-085`-`AUD-088`'s remaining `s_bloom` consumers still account for the rest).
 
 ### AUD-085 `[TODO]` `P2` `W8` · SSAO post-processing (I5) is a hand-rolled raw-GL FBO+shader pipeline instead of RenderTarget2D + ShaderEffect
 - **Component:** src/MeshCraft/MeshCraftApplication.cpp (`BloomGL`/`s_bloom`'s SSAO fields, `initSsao()`, `applySsao()`, `kSsaoFS`/`kSsaoBlurFS`/`kSsaoCompositeFS`)
