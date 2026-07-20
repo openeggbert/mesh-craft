@@ -331,6 +331,18 @@ form on save, regardless of which spelling was used on load.
 |-----------|------|---------|--------------|
 | `mip_maps` | bool | `true` | Whether mipmaps should be generated for this texture |
 
+**`mip_maps` status (`SYS-W14-22`, 2026-07-20):** honored by `mc3togltf` —
+`false` makes the exporter emit a plain (non-mipmap) `LINEAR`/`NEAREST`
+glTF sampler `minFilter` instead of unconditionally requesting a
+mipmapped one. **Not honored by the live editor viewport** — CNA's
+`Texture2D` asset-loading constructor has no mipmap parameter (only its
+raw-pixel constructor does, and CNA's own OpenGL backend explicitly does
+not generate mipmaps by default for the `Linear` filter that path uses),
+so no mip chain is ever generated for viewport textures regardless of
+this flag. Closing that gap needs a CNA-side API addition, out of scope
+per `CLAUDE.md`'s CNA boundary — documented here as a known, deliberate
+gap rather than left unexamined.
+
 **Path resolution:** `uri` is resolved **relative to the top-level
 scene file's directory** — every consumer (`GltfExporter.cpp`,
 `SceneRenderer.cpp`) resolves it as `doc.sourcePath / uri`, where

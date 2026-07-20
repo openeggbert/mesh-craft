@@ -143,11 +143,13 @@ still internally consistent.
    go next 2026-07-20. Wiring `Mc3ImportResolver` into the editor (P2) is
    now done too -- all four of the P1/P2 format-vs-editor gaps found
    2026-07-20 are complete.
-6. **SYS-W14-22..27** (P3) — smaller format-vs-editor completeness gaps
-   (`mipMaps`/`colorSpace` unused downstream, UV box/sphere projection,
-   MCB compression, light-brightness unit conversion, ambient-light
-   export). Independent, small, good filler/warm-up tasks between the
-   larger items above.
+6. The `mipMaps`-unused-downstream gap (P3) is now done for the exporter
+   half (live-viewport half documented as blocked on a CNA API gap, see
+   its own row). **SYS-W14-23..27** (P3) — remaining smaller
+   format-vs-editor completeness gaps (`colorSpace` unused downstream,
+   UV box/sphere projection, MCB compression, light-brightness unit
+   conversion, ambient-light export). Independent, small, good
+   filler/warm-up tasks between the larger items above.
 
 ---
 
@@ -1236,7 +1238,7 @@ _All items in this workstream are DONE — archived to [`docs/history/plan_20260
   caught and reported via the error-status shape without propagating,
   leaving `document.definitions` untouched (not a partial merge).
   Full rebuild + 159/159 `ctest` (was 158).
-- **SYS-W14-22** `[TODO]` `P3` — `Mc3Texture::mipMaps` unused downstream.
+- **SYS-W14-22** `[DONE]` `P3` — `Mc3Texture::mipMaps` unused downstream.
   Round-trips (XML/JSON/MCB) and now has editor UI (added this session,
   `F21`, 2026-07-20 audit) but grepped `SceneRenderer.cpp`/
   `GltfExporter.cpp`: zero reads of `.mipMaps` in either. The live
@@ -1247,6 +1249,39 @@ _All items in this workstream are DONE — archived to [`docs/history/plan_20260
   tradeoff); have the exporter choose a mipmapped `minFilter`
   (`LINEAR_MIPMAP_LINEAR` etc.) instead of its current unconditional
   choice when `mipMaps` is true.
+  **Implementation (exporter half):** `GltfExporter.cpp`'s `buildTextures()`
+  now only requests the `*_MIPMAP_*` sampler `minFilter` variant when
+  `tex.mipMaps` is actually true; when false it emits the plain
+  `LINEAR`/`NEAREST` filter instead of unconditionally requesting a
+  mipmapped one regardless of the author's choice.
+  **Live-viewport half: investigated, documented as blocked on a CNA API
+  gap, not implemented.** `SceneRenderer::loadOrGetTexture()` constructs
+  a `Texture2D` via CNA's file-loading constructor
+  (`Texture2D(assetName, graphicsDevice)`), which does not expose a
+  mipmap parameter — only the raw-pixel constructor
+  (`Texture2D(device, w, h, bool mipMap, format)`) does, and it requires
+  the caller to already have decoded pixel data + a manual `SetData()`
+  call, not a drop-in replacement for the file-loading path. Confirmed
+  in `cna/src/.../EasyGLGraphicsBackend.cpp`: the backend's own comment
+  states outright that "CNA does not generate mipmaps by default" for
+  the Linear filter this path uses, and no public
+  `Texture2D::GenerateMipmap()`/equivalent exists to retrofit onto an
+  already-loaded texture (`SamplerState`'s mipmap knobs only bias/clamp
+  *existing* mip levels, they don't generate new ones). Making the live
+  viewport actually honor `mipMaps=true` therefore requires extending
+  CNA's own `Texture2D` API — out of scope per `CLAUDE.md`'s "no CNA
+  changes without owner permission" (same class of boundary as
+  `AUD-042`'s Android/SDL_RENDERER gap). Left as a legitimate, explicitly
+  documented gap rather than an unexamined oversight; a future CNA-side
+  change (owner-authorized) could add a `mipMap` bool to the asset-loading
+  `Texture2D` constructor(s) to close it.
+  **Tests:** extended `test/texture_sampler.mc3.xml` with a 5th texture
+  (`tex_no_mipmaps`, `mip_maps="false"`) and `mc3togltf/test/
+  texture_sampler_test.py`'s `EXPECTED`/`EXPECTED_URI` tables to assert
+  it exports with the plain (non-mipmap) `LINEAR` `minFilter`, and bumped
+  the missing-texture-warning count assertion from 4 to 5. Full rebuild +
+  159/159 `ctest` (unchanged count -- extended an existing test, not a
+  new one).
 - **SYS-W14-23** `[TODO]` `P3` — `Mc3Texture::colorSpace` unused at export.
   `srgb`/`linear` round-trips and is editable, but grepped
   `GltfExporter.cpp`: zero hits for `colorSpace` -- no conversion or

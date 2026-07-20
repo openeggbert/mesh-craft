@@ -6,6 +6,7 @@
     <texture id="tex_clamp"   uri="textures/b.png" wrap_u="clamp"  wrap_v="clamp"  filter="linear"/>
     <texture id="tex_mirror"  uri="textures/c.png" wrap_u="mirror" wrap_v="mirror" filter="linear"/>
     <texture id="tex_nearest" uri="textures/d.png" wrap_u="repeat" wrap_v="repeat" filter="nearest"/>
+    <texture id="tex_no_mipmaps" uri="textures/e.png" wrap_u="repeat" wrap_v="repeat" filter="linear" mip_maps="false"/>
   </textures>
 
   <objects>

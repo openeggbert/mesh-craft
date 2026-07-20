@@ -451,8 +451,19 @@ buildTextures(tinygltf::Model& model,
         samp.wrapS = wrapMode(tex.wrapU);
         samp.wrapT = wrapMode(tex.wrapV);
         bool nearest = (tex.filter == "nearest");
-        samp.minFilter = nearest ? TINYGLTF_TEXTURE_FILTER_NEAREST_MIPMAP_NEAREST
-                                  : TINYGLTF_TEXTURE_FILTER_LINEAR_MIPMAP_LINEAR;
+        // SYS-W14-22: minFilter used to unconditionally request a mipmapped
+        // filter regardless of tex.mipMaps -- a texture explicitly authored
+        // with mipMaps="false" (e.g. pixel-art/UI textures where mip
+        // blending is undesirable) still told glTF-conformant viewers to
+        // generate and sample a mip chain for it. Honor the flag: only
+        // request the *_MIPMAP_* variant when mipMaps is actually true.
+        if (tex.mipMaps) {
+            samp.minFilter = nearest ? TINYGLTF_TEXTURE_FILTER_NEAREST_MIPMAP_NEAREST
+                                      : TINYGLTF_TEXTURE_FILTER_LINEAR_MIPMAP_LINEAR;
+        } else {
+            samp.minFilter = nearest ? TINYGLTF_TEXTURE_FILTER_NEAREST
+                                      : TINYGLTF_TEXTURE_FILTER_LINEAR;
+        }
         samp.magFilter = nearest ? TINYGLTF_TEXTURE_FILTER_NEAREST
                                   : TINYGLTF_TEXTURE_FILTER_LINEAR;
 

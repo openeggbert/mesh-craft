@@ -18,6 +18,12 @@ default image writer (tinygltf::WriteImageData) truncates external-reference
 URIs down to GetBaseFilename() — silently dropping any subdirectory prefix —
 so GltfExporter.cpp installs a custom SetImageWriter() override for the
 external-reference case.
+
+SYS-W14-22 (2026-07-20): minFilter used to unconditionally request a
+mipmapped variant (LINEAR_MIPMAP_LINEAR/NEAREST_MIPMAP_NEAREST) regardless
+of the texture's own mip_maps attribute — tex_no_mipmaps (mip_maps="false")
+covers that this is now honored: minFilter falls back to the plain
+LINEAR/NEAREST enum instead.
 """
 import json
 import os
@@ -35,17 +41,19 @@ NEAREST_MIPMAP_NEAREST = 9984
 LINEAR_MIPMAP_LINEAR = 9987
 
 EXPECTED = {
-    "tex_repeat":  {"wrapS": REPEAT,          "wrapT": REPEAT,          "minFilter": LINEAR_MIPMAP_LINEAR,     "magFilter": LINEAR},
-    "tex_clamp":   {"wrapS": CLAMP_TO_EDGE,   "wrapT": CLAMP_TO_EDGE,   "minFilter": LINEAR_MIPMAP_LINEAR,     "magFilter": LINEAR},
-    "tex_mirror":  {"wrapS": MIRRORED_REPEAT, "wrapT": MIRRORED_REPEAT, "minFilter": LINEAR_MIPMAP_LINEAR,     "magFilter": LINEAR},
-    "tex_nearest": {"wrapS": REPEAT,          "wrapT": REPEAT,          "minFilter": NEAREST_MIPMAP_NEAREST,   "magFilter": NEAREST},
+    "tex_repeat":     {"wrapS": REPEAT,          "wrapT": REPEAT,          "minFilter": LINEAR_MIPMAP_LINEAR,     "magFilter": LINEAR},
+    "tex_clamp":      {"wrapS": CLAMP_TO_EDGE,   "wrapT": CLAMP_TO_EDGE,   "minFilter": LINEAR_MIPMAP_LINEAR,     "magFilter": LINEAR},
+    "tex_mirror":     {"wrapS": MIRRORED_REPEAT, "wrapT": MIRRORED_REPEAT, "minFilter": LINEAR_MIPMAP_LINEAR,     "magFilter": LINEAR},
+    "tex_nearest":    {"wrapS": REPEAT,          "wrapT": REPEAT,          "minFilter": NEAREST_MIPMAP_NEAREST,   "magFilter": NEAREST},
+    "tex_no_mipmaps": {"wrapS": REPEAT,          "wrapT": REPEAT,          "minFilter": LINEAR,                   "magFilter": LINEAR},
 }
 
 EXPECTED_URI = {
-    "tex_repeat":  "textures/a.png",
-    "tex_clamp":   "textures/b.png",
-    "tex_mirror":  "textures/c.png",
-    "tex_nearest": "textures/d.png",
+    "tex_repeat":     "textures/a.png",
+    "tex_clamp":      "textures/b.png",
+    "tex_mirror":     "textures/c.png",
+    "tex_nearest":    "textures/d.png",
+    "tex_no_mipmaps": "textures/e.png",
 }
 
 
@@ -144,8 +152,8 @@ if __name__ == "__main__":
         assert os.path.exists(out_glb) and os.path.getsize(out_glb) > 0, \
             "Output GLB is missing or empty"
         combined = r_glb.stdout + r_glb.stderr
-        assert combined.count("not found") >= 4, (
-            f"Expected a 'not found' warning for each of the 4 missing texture "
+        assert combined.count("not found") >= 5, (
+            f"Expected a 'not found' warning for each of the 5 missing texture "
             f"files, got:\n{combined}"
         )
         print(f"Missing-texture warning (--embed/.glb mode): PASS "
