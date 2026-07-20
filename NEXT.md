@@ -1,20 +1,20 @@
 # NEXT.md
 
-_Last updated: 2026-07-19 (late night), end of an autonomous continuation
-of the same session — the user explicitly asked to keep implementing the
-remaining "Next smallest tasks" items without stopping to ask each time
-(they were going to sleep until ~06:00). All 4 queued tasks are now
-fixed: the AI Assistant thread-creation-failure wedge, the no-op undo
-snapshots on locked-object commands, the latent CSG nested-Intersection
-null-deref, `AUD-069`'s `includePathWithinRoot()` false-rejection, plus a
-low-risk doc cleanup pass. **§8 is now empty — see its own note for what
-a future session should do next**, since there is no more pre-queued
-work to just pick up. The 2026-07-18 session ran a fresh independent
-adversarial audit and fixed 10 of its 12 findings; this file was fully
-rewritten (not appended to) at that point — its previous revision had
-grown to 1072 lines of session-by-session narrative; see
-`git log -- NEXT.md` and `docs/history/` if that history is ever
-needed._
+_Last updated: 2026-07-20, end of a session that started with a research
+request ("how much raw OpenGL(ES) does the editor call outside CNA's own
+API?"), then filed `AUD-082` through `AUD-088` in `plan.md` for every
+consumer found, then implemented 6 of those 7 migrations (`AUD-082`,
+`083`, `084`, `086`, `087`, `088`) with the user's explicit go-ahead
+("commitni pushni, pote jde na tyto nove ukoly"). The 7th, `AUD-085`
+(SSAO), was deliberately **not** implemented — it needs a genuine
+depth-pre-pass rewrite (no CNA depth-buffer-read API exists, unlike the
+other six, which were mechanical swaps) — the user chose to skip it via
+an explicit `AskUserQuestion` prompt ("Přeskoč SSAO, pokračuj rovnou na
+AUD-086"). **§8 is not empty this time** — `AUD-085` sits there,
+described but not authorized. See §3 for the full six-task writeup. The
+2026-07-19 session's own work (5 further fixes, all fully committed and
+pushed before this session started) is preserved below it, unchanged;
+see `git log -- NEXT.md` and `docs/history/` for anything older._
 
 ## 1. Project summary
 
@@ -40,13 +40,19 @@ deferred at the time (2026-07-18), then fixed the next day (2026-07-19).
 Zero of the audit's own findings remain open. The two separately-noted
 gaps found alongside the audit (the AI Assistant thread-creation-failure
 wedge and the no-op undo snapshots on locked-object commands) are also
-both fixed, 2026-07-19 — see §3. `plan.md`'s own remaining `AUD-###` rows
-are now all `DONE`/`DEFERRED`/owner-gated `TODO` (`AUD-042`/`052`/`053`/
-`057` — CI/Android/sibling-pin, all blocked, not actionable here); there
-is genuinely no small, unblocked, pre-scoped task left queued anywhere —
-see §8. The project is in an **ongoing hardening / bug-fixing** phase,
-not active new-feature development, though scoped new features have
-landed before when explicitly requested (`SYS-W14-##` rows).
+both fixed, 2026-07-19 — see §3. A 2026-07-20 session then ran a
+**targeted (not general) audit**: how much raw OpenGL(ES) the editor
+calls outside CNA's own API. Found 5 consumers sharing one raw-GL
+function table (`s_bloom`/`BloomGL`) plus 2 smaller standalone spots;
+filed as `AUD-082`-`AUD-088`. 6 of those 7 are now migrated onto CNA's
+`RenderTarget2D`/`ShaderEffect`/`GraphicsDevice` APIs — only `AUD-085`
+(SSAO) remains, deliberately deferred (see §8). `plan.md`'s remaining
+`AUD-###` rows are now all `DONE`/`DEFERRED`/owner-gated `TODO`
+(`AUD-042`/`052`/`053`/`057` — CI/Android/sibling-pin, all blocked, not
+actionable here; `AUD-085` — SSAO, deferred pending a future decision).
+The project is in an **ongoing hardening / bug-fixing** phase, not
+active new-feature development, though scoped new features have landed
+before when explicitly requested (`SYS-W14-##` rows).
 
 **Important architectural decisions:**
 - `Mc3Document` (in `mc3/`) is the single canonical in-memory AST. It has
@@ -74,17 +80,22 @@ landed before when explicitly requested (`SYS-W14-##` rows).
 
 ## 2. Current status
 
-- **Build: clean**, last verified this session at commit `c393ca1` (the
-  last commit touching code — `a49021d`'s doc cleanup pass has no code
-  changes, verified separately by re-running the full suite unchanged;
-  fresh `cmake --build b-release -j4`, zero errors/warnings, EASYGL
+- **Build: clean**, last verified this session at commit `f07445d`
+  (fresh `cmake --build b-release -j4`, zero errors/warnings, EASYGL
   backend on Linux — the only backend buildable in this environment).
-- **Tests: 142/142 `ctest` passing**, last verified this session at
-  commit `c393ca1` and reconfirmed unchanged after `a49021d` (`ctest
-  -j4`). Net +1 since this session started at 141 — only the CSG
-  null-child fix (task 3) added a genuinely new `ctest`-registered target
-  (`mc3togltf_csg_null_child`); tasks 1, 2, and 4 each only added new
-  cases inside existing binaries; task 5 (doc cleanup) added none.
+- **Tests: 169/169 `ctest` passing**, last verified this session at
+  commit `f07445d` via `python3 test/validate_plan_consistency.py .
+  b-release --run-tests` (`ctest -j4` under the hood). This session's own
+  `AUD-082`-`088` work added 3 brand-new ctest targets — `bloom_test`,
+  `matpreview_test`, `shadowdebug_test` — one per migrated feature that
+  previously had zero visual-correctness coverage (see §3). The 142
+  count this file last recorded (2026-07-19) predates unrelated work not
+  narrated here (a further audit pass and the `SYS-W14-18..27`
+  mc3-format-vs-editor gap closures — see `plan.md`/memory, not fully
+  reflected in this file's own history) — don't treat 142→169 as this
+  session's own delta.
+  All builds/tests this session used `-j4` (not `-j$(nproc)`), per the
+  user's standing request (shared machine).
 - **CLI/tools/apps/libraries currently available:**
   - `MeshCraft` — the interactive editor (`./b-release/MeshCraft
     scene.mc3.xml`, or `--screenshot out.png` / `--export out.glb` /
@@ -94,7 +105,58 @@ landed before when explicitly requested (`SYS-W14-##` rows).
   - Standalone libraries `mc3` (format/AST + XML/JSON parse-writer),
     `mcb` (binary format) — both buildable and testable without CNA via
     their own `mc3/build`/`mcb/build` trees (no live GPU/GL needed).
-- **Recently implemented (this session, 2026-07-19):** task 1 from the
+- **Recently implemented (this session, 2026-07-20):** 6 raw-OpenGL(ES)-
+  vs-CNA migrations, `AUD-082` through `AUD-088` (`AUD-085` excluded,
+  deliberately deferred) — full detail with file:line evidence and
+  verification commands lives in `plan.md`'s own rows; condensed summary
+  here:
+  - `AUD-082` — panel scissor/viewport clip: raw `glViewport`/`glScissor`/
+    `glEnable(GL_SCISSOR_TEST)` calls replaced with `RasterizerState` +
+    `GraphicsDevice.Viewport`/`ScissorRectangle`.
+  - `AUD-083` — `--screenshot` pixel readback: raw `glReadPixels` replaced
+    with `GraphicsDevice.GetBackBufferData()`.
+  - `AUD-084` — Bloom post-process: hand-rolled FBO ping-pong + raw
+    shaders replaced with 2 `RenderTarget2D`s + 2 `ShaderEffect`s (blur,
+    composite) + `SpriteBatch`. Found and fixed **two genuine, previously
+    undocumented CNA behavioral gotchas** along the way (recorded in
+    §6): `RenderTarget2D`'s `DiscardContents` default means
+    `SetRenderTarget()` clears the target on *every* bind, so a
+    redundant re-bind silently wipes just-rendered content; and
+    `SpriteBatch`'s custom-effect draws project to the full window (not
+    a custom `Viewport`) when targeting the backbuffer directly, so
+    destRects for those must be window-absolute, not viewport-local.
+  - `AUD-085` — SSAO: **investigated, not implemented.** Needs a genuine
+    depth-pre-pass rewrite (no CNA depth-buffer-read API exists — unlike
+    the other six, this isn't a mechanical RT/ShaderEffect swap). The
+    user was asked how to proceed (`AskUserQuestion`) and chose to skip
+    it for now; see §8.
+  - `AUD-086` — Skybox: raw VAO/shader equirect draw replaced with
+    `Texture2D` (mixed-axis `SamplerState`: wrap-U/clamp-V, built by
+    mutating a preset) + `ShaderEffect` + `SpriteBatch`, full-screen.
+  - `AUD-087` — Material-preview swatch: raw FBO render + manual GL
+    texture handle handed to `ImGui::Image()` replaced with
+    `RenderTarget2D` + `ShaderEffect`, bridged to ImGui via
+    `IRenderTargetBackend::GetColorGLHandle()` (the correct, documented,
+    cross-backend-safe way to get a native texture handle out of a CNA
+    render target — see §6).
+  - `AUD-088` — Shadow Map Debug overlay: raw FBO + separate color/depth
+    texture pair replaced with one `RenderTarget2D(..., DepthFormat::
+    Depth24)`; needs no custom `ShaderEffect` at all since it just
+    redirects the already-CNA-based `sceneRenderer_->draw()` call into
+    an off-screen target. This was the 5th and last consumer of the
+    shared `s_bloom`/`BloomGL` raw-GL table — that struct is **not**
+    torn down yet, since SSAO (`AUD-085`) still depends on it.
+  - Every migration verified with real `--screenshot` pixel sampling
+    (not `Texture2D::GetData()` — confirmed unreliable for reading a
+    render target's just-rendered content within the same frame, see
+    §6), plus `git stash`-based before/after pixel-diffs where a
+    pre-existing baseline existed (`AUD-082`/`083`/`084`/`086`).
+  - Commits: `773437f` (`AUD-082`), `0796d62` (`AUD-083`), `c1be563`
+    (`AUD-084`), `43d8744` (`AUD-086`), `e47a846` (`AUD-087`), `95327bc`
+    (`AUD-088`) — each with a matching `docs(AUD-0NN): ...` follow-up
+    commit in `plan.md`, same two-commit pattern as every prior `AUD-###`
+    row.
+- **Recently implemented (previous session, 2026-07-19):** task 1 from the
   2026-07-18 session's "Next smallest tasks" list — the AI Assistant
   thread-creation-failure wedge. `AiAssistant::sendAsync()`
   (`src/MeshCraft/AiAssistant.cpp`) used to set `pending_` and increment
@@ -242,7 +304,36 @@ landed before when explicitly requested (`SYS-W14-##` rows).
 
 ## 3. Recent changes
 
-**This session (2026-07-19):** tasks 1 and 2 were each individually
+**This session (2026-07-20):** started as a pure research request ("how
+much raw OpenGL(ES) does the editor call outside CNA's own API?" —
+no code change, just an investigation, reported directly to the user).
+The user then asked to file `plan.md` tasks for migrating whatever is
+mechanically migratable, with any genuine gap going through a future CNA
+NOXNA capability request instead of new raw GL. That produced `AUD-082`
+through `AUD-087` (later corrected to include an `AUD-088`, a 5th
+`s_bloom` consumer initially missed). The user then authorized
+implementing them ("commitni pushni, pote jde na tyto nove ukoly"),
+which was carried out one task at a time, same rigor as every prior
+`AUD-###` fix in this project (implement, add a regression test that
+exercises the migrated path, verify via real `--screenshot` pixel
+sampling and/or a `git stash` before/after diff, run the full suite,
+commit code then commit `plan.md`'s writeup, push) — see §2's condensed
+per-task summary and `plan.md`'s own `AUD-082`-`AUD-088` rows for full
+evidence/verification detail. Commits, in order: `773437f`/`940298f`/
+`6d5d381` (`AUD-082`), `0796d62`/`f80bdc0` (`AUD-083`), `c1be563`/
+`2cdc5e7` (`AUD-084`), `df217c8` (`AUD-085`, filed as `TODO`/deferred,
+no code), `43d8744`/`196e52a` (`AUD-086`), `e47a846`/`b134fd2`
+(`AUD-087`), `95327bc`/`f07445d` (`AUD-088`). Mid-series, when `AUD-085`
+(SSAO) turned out to need a genuine architecture change rather than a
+mechanical swap, asked the user how to proceed (`AskUserQuestion`) —
+they chose to skip it and continue with `AUD-086` — so `AUD-085` stays
+`TODO`/described in `plan.md` and queued (not silently dropped) in §8
+here, not implemented. All builds/tests used `-j4` per the user's
+mid-session request. `python3 test/validate_plan_consistency.py .
+b-release --run-tests` confirmed 169/169 passing and `plan.md`
+internally consistent after every single commit in this sequence.
+
+**Previous session (2026-07-19):** tasks 1 and 2 were each individually
 confirmed with the user first, per `CLAUDE.md`'s workflow, before
 implementing. After task 2 the user explicitly asked to continue
 autonomously through the rest of §8's "Next smallest tasks" without
@@ -370,7 +461,7 @@ Task 5 — doc cleanup pass (last queued item, no code change):
 4. This was the last item in §8 — it is now empty. See §8's own note for
    what a future session should do next.
 
-**Previous session (2026-07-18), in order:**
+**Session before that (2026-07-18), in order:**
 1. Ran a fresh, independent 4-agent audit (build/test verification,
    core-code bug hunt, architecture/docs staleness, UX gaps) rather than
    trusting the prior session's "backlog exhausted" claim — found 12 new
@@ -418,7 +509,8 @@ The closest thing to a standing blocker is **owner-gated, not a bug**:
   CI-job half of `AUD-057` (sibling-repo pin enforcement — the
   configure-time-assertion half already landed).
 - Nothing else is currently blocking forward progress; the only item left
-  in §8 is a low-risk doc cleanup pass, which is unblocked.
+  in §8 is `AUD-085` (SSAO), which needs a user decision, not a fix for
+  something broken — see §8.
 
 ## 5. Known bugs and limitations
 
@@ -430,6 +522,11 @@ The closest thing to a standing blocker is **owner-gated, not a bug**:
   computation, `WalkController`, `AudioPreview`). File dialogs and
   post-processing were investigated and explicitly declined as further
   extraction targets (see `plan.md`).
+- **`AUD-085` (SSAO still raw-GL, not a regression):** the sole
+  remaining consumer of the shared `s_bloom`/`BloomGL` raw-GL function
+  table, after `AUD-084`/`086`/`087`/`088` all migrated off it onto CNA's
+  `RenderTarget2D`/`ShaderEffect`. Deliberately deferred, not broken —
+  needs a depth-pre-pass rewrite CNA has no API for yet. See §8.
 - **By-design, not bugs:** MC3 silently drops unrecognized XML
   attributes/elements on round-trip (`SYS-W5-03`, human-decided,
   documented in `MC3_FORMAT.md`); editor/exporter use different triangle
@@ -439,6 +536,43 @@ The closest thing to a standing blocker is **owner-gated, not a bug**:
 
 ## 6. Architecture notes
 
+- **CNA `RenderTarget2D`/`ShaderEffect`/`SpriteBatch` gotchas** (found
+  during `AUD-084`/`086`/`087`, 2026-07-20 — relevant to any future
+  off-screen-render work, including a future `AUD-085`):
+  - `RenderTarget2D` defaults to `RenderTargetUsage::DiscardContents`,
+    and `GraphicsDevice::SetRenderTarget()` unconditionally clears a
+    `DiscardContents` target on **every** bind call
+    (`GraphicsDevice.cpp:1843-1857` in `../cna`) — a redundant
+    "defensive" re-bind of the same target silently wipes out
+    just-rendered content, with zero error indication. Bind exactly once
+    per pass.
+  - `EasyGLSpriteBatchBackend::FlushBatch()` sizes its orthographic
+    projection to the bound `RenderTarget2D`'s own dimensions when one
+    IS bound, but to the full **window** size when none is bound
+    (backbuffer-targeted draws) — it does not honor a custom
+    `GraphicsDevice.Viewport` for backbuffer draws. Use window-absolute
+    destRect coordinates for any `SpriteBatch` draw targeting the
+    backbuffer directly, not RT-local `(0,0,w,h)` coordinates.
+  - `Texture2D::GetData()` is unreliable for reading a `RenderTarget2D`'s
+    content immediately after rendering to it, within the same frame —
+    gave false zero readings during debugging. Trust real
+    `--screenshot` output (`GetBackBufferData`) for verification, not
+    `GetData()`.
+  - `IRenderTargetBackend::GetColorGLHandle()`
+    (`CNA/Internal/Backends/Common/IGraphicsBackend.hpp:222`, reached via
+    `RenderTarget2D::GetRenderTargetBackend()`) is the correct,
+    documented, cross-backend-safe way to bridge a CNA render target to
+    `ImGui::Image()` (which needs a raw native texture handle) — not a
+    private `Internal/`-path detail to avoid, despite where it lives.
+  - `SamplerState` only ships combined presets (`LinearWrap`,
+    `LinearClamp`, etc. — same mode both axes). A mixed-axis mode (e.g.
+    wrap-U/clamp-V for an equirect skybox) needs constructing a preset
+    then calling `setAddressUProperty()`/`setAddressVProperty()`
+    individually.
+  - `drawImGuiUi()` only queues ImGui's draw list; actual rasterization
+    happens later, in `EndDraw()`'s `ImGui_ImplOpenGL3_RenderDrawData()`
+    call. Any test-only "blit on top of everything" hook must run AFTER
+    that call, not in `Draw()`, or it's silently overwritten.
 - **`Mc3Document`** (`mc3/include/MeshCraft/Mc3/Mc3Document.hpp`) — the
   canonical AST. CNA-free. Public API is depended on by `mc3togltf`,
   `mc3tomcb`, the editor, and every test fixture — **additive changes
@@ -570,35 +704,46 @@ git stash pop && cmake --build b-release -j4 --target <affected-target>
 
 ## 8. Next smallest tasks
 
-**Empty as of 2026-07-19 (late night).** Every item queued at the start
-of this session (5 total: AI Assistant thread-creation-failure wedge,
-no-op undo snapshots on locked-object commands, latent CSG
-nested-Intersection null-deref, `AUD-069`'s `includePathWithinRoot()`
-false-rejection, doc cleanup pass) is now fixed and pushed. There is no
-further pre-scoped, ready-to-implement small task sitting anywhere right
-now — this is a genuine "ran out of queued work" state, not an oversight:
+**One item, deliberately not ready to just pick up — needs a fresh
+user decision, not a re-ask of the same question:**
 
-- `plan.md`'s remaining `AUD-###` rows are all `DONE`/`DEFERRED`, or
-  owner-gated `TODO` and explicitly not actionable in this environment
-  (`AUD-042` — no Android NDK + CNA-boundary restriction; `AUD-052` — CI
-  needs a workflow-scoped push token nobody here has; `AUD-053`/`AUD-057`
-  — both downstream of `AUD-052`).
-- `SYS-W3-01` (`MeshCraftApplication` decomposition) has 7 phases done;
-  its own most recent investigation round explicitly looked at the two
-  remaining candidates (file dialogs, post-processing) and declined both
-  (no testability win vs. real regression risk with no verification
-  tool) — not silently skipped, but also not a ready "next phase" to
-  just pick up without fresh investigation first.
+1. **`AUD-085` — SSAO post-processing (I5) still hand-rolled raw-GL.**
+   Unlike the 6 already-migrated `s_bloom` consumers (`AUD-082`/`084`/
+   `086`/`087`/`088`, plus the 2 standalone `AUD-082`/`083` spots), this
+   one is **not** a mechanical `RenderTarget2D`/`ShaderEffect` swap — SSAO
+   needs to read the scene's depth buffer, and CNA currently has no API
+   for that (confirmed by investigation during this session). Real
+   options, any of which the user could pick when this comes up again:
+   (a) file a NOXNA capability request against `../cna` for a
+   depth-buffer-read API, then migrate once it exists (biggest, but the
+   most "matches everything else" option); (b) do the depth-pre-pass
+   rewrite some other way inside `mesh-craft` itself, without touching
+   CNA; (c) leave it raw-GL indefinitely and just accept `s_bloom`/
+   `BloomGL` as permanent, SSAO-only infrastructure. The user chose to
+   skip this for the 2026-07-20 session (see `plan.md`'s own `AUD-085`
+   row and NEXT.md §3) — **do not implement without asking again**, this
+   is a real open decision, not a forgotten task.
+2. `plan.md`'s remaining `AUD-###` rows besides `AUD-085` are all
+   `DONE`/`DEFERRED`, or owner-gated `TODO` and explicitly not actionable
+   in this environment (`AUD-042` — no Android NDK + CNA-boundary
+   restriction; `AUD-052` — CI needs a workflow-scoped push token nobody
+   here has; `AUD-053`/`AUD-057` — both downstream of `AUD-052`).
+3. `SYS-W3-01` (`MeshCraftApplication` decomposition) has 7 phases done;
+   its own most recent investigation round explicitly looked at the two
+   remaining candidates (file dialogs, post-processing) and declined both
+   (no testability win vs. real regression risk with no verification
+   tool) — not silently skipped, but also not a ready "next phase" to
+   just pick up without fresh investigation first.
 
-**For a future session:** the honest options are (a) run a fresh
-independent audit like the 2026-07-18 session did, to surface new
-findings from scratch (this is how this session's entire task list
-originated) — a bigger undertaking than a "smallest task," needs the
-user's own buy-in first, not something to just start; or (b) wait for
-the user's own next priority (new feature, specific bug report, etc.).
-Per `CLAUDE.md`'s workflow, don't invent and start a new task without
-describing it and getting explicit confirmation first — this section
-being empty is not license to skip that step.
+**For a future session:** ask the user what they'd like for `AUD-085`
+(see the 3 options above) before touching it. Otherwise, the honest
+options are (a) run a fresh independent audit like the 2026-07-18/
+2026-07-20 sessions did, to surface new findings from scratch — a bigger
+undertaking than a "smallest task," needs the user's own buy-in first,
+not something to just start; or (b) wait for the user's own next
+priority (new feature, specific bug report, etc.). Per `CLAUDE.md`'s
+workflow, don't invent and start a new task without describing it and
+getting explicit confirmation first.
 
 ## 9. Do not do yet
 
@@ -617,14 +762,20 @@ being empty is not license to skip that step.
 - **No new features without asking first.** Per `CLAUDE.md`'s workflow:
   describe the task and get explicit confirmation before implementing
   anything, one item at a time. The 2026-07-18 session's entire 10-fix
-  sequence, and this session's tasks 1-2 (each individually confirmed
-  before implementing), all followed that pattern. Tasks 3-5 of this
-  session were implemented WITHOUT a per-task confirmation — but only
+  sequence, this session's (2026-07-20) `AUD-082`-`088` sequence, and the
+  2026-07-19 session's tasks 1-2 (each individually confirmed before
+  implementing), all followed that pattern. The 2026-07-19 session's
+  tasks 3-5, and this session's `AUD-082`-`088` implementation itself,
+  were each carried out WITHOUT a per-task re-confirmation — but only
   because the user explicitly, in-session, authorized continuing
-  autonomously through the rest of an ALREADY-QUEUED, already-described
-  list while they slept; that authorization does not extend to inventing
-  NEW tasks not already in §8. §8 is now empty — the next task, whatever
-  it is, still needs describing + confirmation first, same as always.
+  autonomously through an ALREADY-DESCRIBED, already-filed list; that
+  authorization does not extend to inventing NEW tasks not already
+  described and filed.
+- **No `AUD-085` (SSAO) implementation without asking again.** The user
+  explicitly chose to skip it (via `AskUserQuestion`, 2026-07-20) rather
+  than have it force-implemented as a larger architecture change — this
+  is a live, described, open decision sitting in §8, not a forgotten or
+  silently-declined task. See §8 for the 3 real options.
 - **Don't trust a stale doc's claims at face value.** The 2026-07-18
   session's own audit found the *prior* session's "backlog exhausted"
   claim was accurate on build/test health but missed 12 real findings —
@@ -657,11 +808,19 @@ pushed. When finished, update NEXT.md: move the completed task out of
 what actually changed (not what was planned), and re-check every other
 section for anything your change made stale.
 
-If §8 is EMPTY (as it is as of 2026-07-19 late night — see its own
-note), do not invent a new task and start implementing it. Read §8's
-note for the honest state of what's left (plan.md's remaining rows are
-blocked/owner-gated; SYS-W3-01 has no ready next phase without fresh
-investigation) and surface that to the user, asking what they'd like
-next -- e.g. a fresh audit (the mechanism that generated this session's
-entire task list), a specific feature, or something else entirely.
+§8's one entry (`AUD-085`, SSAO) is NOT a normal "pick it up and
+implement" task -- it is a live, described, open DECISION the user
+already deferred once (2026-07-20, via AskUserQuestion). Do not
+implement it just because it's the only thing listed in §8; surface the
+3 options from §8 and get an explicit choice first, same as if §8 were
+empty. If the user picks an option, treat it like any other described
+task from here (confirm scope, implement, test, commit, push, update
+this file). If §8 is otherwise empty (no live decision, nothing
+queued), do not invent a new task and start implementing it -- read
+§8's own note for the honest state of what's left (plan.md's remaining
+rows are blocked/owner-gated; SYS-W3-01 has no ready next phase without
+fresh investigation) and surface that to the user, asking what they'd
+like next -- e.g. a fresh audit (the mechanism that generated both the
+2026-07-18 and 2026-07-20 sessions' entire task lists), a specific
+feature, or something else entirely.
 ```
