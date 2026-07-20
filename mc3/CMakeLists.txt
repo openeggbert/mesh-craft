@@ -229,6 +229,16 @@ if(BUILD_TESTING)
     add_test(NAME mc3_document_budget COMMAND mc3_document_budget_test)
     set_tests_properties(mc3_document_budget PROPERTIES TIMEOUT 30 LABELS "format")
 
+    # 2026-07-20 audit F4: the .mc3.json load path had none of
+    # document_budget_test.cpp's document-wide running-total budgets at all
+    # (materials/textures/embeds/actions/channels/keyframes/definitions/
+    # total-object counts, max document bytes) -- this is the JSON-path
+    # equivalent, mirroring that file's own coverage.
+    add_executable(mc3_json_document_budget_test test/json_document_budget_test.cpp)
+    target_link_libraries(mc3_json_document_budget_test PRIVATE Mc3)
+    add_test(NAME mc3_json_document_budget COMMAND mc3_json_document_budget_test)
+    set_tests_properties(mc3_json_document_budget PROPERTIES TIMEOUT 30 LABELS "format")
+
     # Load-policy test: untrusted content (AI/import) must not process <include>;
     # include-confinement rejects path traversal.
     add_executable(mc3_load_policy_test test/load_policy_test.cpp)

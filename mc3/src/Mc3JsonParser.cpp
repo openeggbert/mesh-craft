@@ -36,6 +36,129 @@ int clampTess(int v, int minv, int maxv = kMaxTessellation) {
     return std::clamp(v, minv, maxv);
 }
 
+// 2026-07-20 audit F4: the "separate, larger follow-up" flagged in the
+// comment above -- this parser had per-field tessellation clamps
+// (kMaxTessellation above) but none of Mc3XmlParser.cpp's document-wide
+// running-total budgets (object count, aggregate tessellation weight,
+// materials/textures/embeds/actions/channels/keyframes/definitions
+// counts, embed byte total). A document with many objects each
+// individually under the per-field cap can still sum to an enormous
+// aggregate allocation (e.g. 100,000 objects at segments=4096 each), and
+// this parser also read the ENTIRE input file into memory unconditionally
+// before any size check at all (parse(), below), unlike
+// Mc3XmlParser.cpp's checkDocumentByteBudget() which checks file_size()
+// BEFORE the file is ever opened for reading.
+//
+// Mirrors Mc3XmlParser.cpp's own DocumentBudget exactly (same constants,
+// same charge*() names) except totalIncludes/chargeInclude(): JSON has no
+// <include>-equivalent merge concept at all (AUD-068's own established
+// scope decision -- `includes` round-trips as an inert passthrough list),
+// so there is nothing for that one dimension to bound here.
+struct DocumentBudget {
+    long long totalObjects = 0;
+    long long totalTessellationWeight = 0;
+    long long totalMaterials = 0;
+    long long totalTextures = 0;
+    long long totalEmbeds = 0;
+    long long totalEmbedBytes = 0;
+    long long totalActions = 0;
+    long long totalChannels = 0;
+    long long totalKeyframes = 0;
+    long long totalDefinitions = 0;
+
+    static constexpr long long kMaxTotalObjects = 100'000;
+    static constexpr long long kMaxTotalTessellationWeight = 500'000;
+    static constexpr long long kMaxTotalMaterials = 20'000;
+    static constexpr long long kMaxTotalTextures = 20'000;
+    static constexpr long long kMaxTotalEmbeds = 1'000;
+    static constexpr long long kMaxTotalEmbedBytes = 256ll * 1024 * 1024; // 256MB combined
+    static constexpr long long kMaxTotalActions = 10'000;
+    static constexpr long long kMaxTotalChannels = 200'000;
+    static constexpr long long kMaxTotalKeyframes = 2'000'000;
+    static constexpr long long kMaxTotalDefinitions = 20'000;
+
+    void chargeObject() {
+        if (++totalObjects > kMaxTotalObjects) {
+            throw std::runtime_error("MC3: document exceeds the total object budget (" +
+                std::to_string(kMaxTotalObjects) + ") -- rejected before allocating "
+                "geometry for all of them");
+        }
+    }
+    void chargeTessellation(int weight) {
+        totalTessellationWeight += weight;
+        if (totalTessellationWeight > kMaxTotalTessellationWeight) {
+            throw std::runtime_error("MC3: document's total tessellation complexity (sum of all "
+                "segments/sides/subdivisions values, " + std::to_string(totalTessellationWeight) +
+                ") exceeds the budget (" + std::to_string(kMaxTotalTessellationWeight) +
+                ") -- rejected before allocating geometry for all of it");
+        }
+    }
+    void chargeMaterial() {
+        if (++totalMaterials > kMaxTotalMaterials)
+            throw std::runtime_error("MC3: document exceeds the total material budget (" +
+                std::to_string(kMaxTotalMaterials) + ")");
+    }
+    void chargeTexture() {
+        if (++totalTextures > kMaxTotalTextures)
+            throw std::runtime_error("MC3: document exceeds the total texture budget (" +
+                std::to_string(kMaxTotalTextures) + ")");
+    }
+    void chargeEmbed(size_t base64Bytes) {
+        if (++totalEmbeds > kMaxTotalEmbeds)
+            throw std::runtime_error("MC3: document exceeds the total embed budget (" +
+                std::to_string(kMaxTotalEmbeds) + ")");
+        totalEmbedBytes += static_cast<long long>(base64Bytes);
+        if (totalEmbedBytes > kMaxTotalEmbedBytes)
+            throw std::runtime_error("MC3: document's total embed base64 content (" +
+                std::to_string(totalEmbedBytes) + " bytes) exceeds the combined budget (" +
+                std::to_string(kMaxTotalEmbedBytes) + " bytes) -- rejected before holding "
+                "it all in memory (many embeds each individually under the per-embed cap?)");
+    }
+    void chargeAction() {
+        if (++totalActions > kMaxTotalActions)
+            throw std::runtime_error("MC3: document exceeds the total action budget (" +
+                std::to_string(kMaxTotalActions) + ")");
+    }
+    void chargeChannel() {
+        if (++totalChannels > kMaxTotalChannels)
+            throw std::runtime_error("MC3: document exceeds the total channel budget (" +
+                std::to_string(kMaxTotalChannels) + ")");
+    }
+    void chargeKeyframe() {
+        if (++totalKeyframes > kMaxTotalKeyframes)
+            throw std::runtime_error("MC3: document exceeds the total keyframe budget (" +
+                std::to_string(kMaxTotalKeyframes) + ")");
+    }
+    void chargeDefinition() {
+        if (++totalDefinitions > kMaxTotalDefinitions)
+            throw std::runtime_error("MC3: document exceeds the total definition budget (" +
+                std::to_string(kMaxTotalDefinitions) + ")");
+    }
+    void reset() {
+        totalObjects = 0; totalTessellationWeight = 0;
+        totalMaterials = 0; totalTextures = 0;
+        totalEmbeds = 0; totalEmbedBytes = 0;
+        totalActions = 0; totalChannels = 0; totalKeyframes = 0;
+        totalDefinitions = 0;
+    }
+};
+
+thread_local DocumentBudget g_budget;
+
+// Mirrors Mc3XmlParser.cpp's own kMaxDocumentBytes/checkDocumentByteBudget:
+// checked BEFORE the input is buffered into memory (parse()) or, for
+// parseString(), before json::parse() touches the already-in-memory
+// string -- still bounds any further work this parser would otherwise do
+// on top of an already-oversized document.
+constexpr uintmax_t kMaxDocumentBytes = 512ull * 1024ull * 1024ull;
+
+void checkDocumentByteBudget(uintmax_t bytes) {
+    if (bytes <= kMaxDocumentBytes) return;
+    throw std::runtime_error("MC3: document (" + std::to_string(bytes) +
+        " bytes) exceeds the maximum document size (" + std::to_string(kMaxDocumentBytes) +
+        " bytes) -- rejected before parsing");
+}
+
 // AUD-068: parseString()'s policy parameter used to be entirely unused
 // (`const Mc3LoadPolicy& /*policy*/`) -- confineResourcePathsToRoot was a
 // silent no-op on this load path, so an untrusted .mc3.json (e.g. from a
@@ -188,6 +311,9 @@ Mc3Primitive toPrimitive(const json& j) {
     if (j.contains("minorRadius"))   p.minorRadius   = j["minorRadius"].get<float>();
     if (j.contains("subdivisionsX")) p.subdivisionsX = clampTess(j["subdivisionsX"].get<int>(), 1);
     if (j.contains("subdivisionsZ")) p.subdivisionsZ = clampTess(j["subdivisionsZ"].get<int>(), 1);
+    g_budget.chargeTessellation(p.segments);
+    g_budget.chargeTessellation(p.subdivisionsX);
+    g_budget.chargeTessellation(p.subdivisionsZ);
     return p;
 }
 
@@ -206,6 +332,8 @@ Mc3CrossSection toCrossSection(const json& j) {
     if (j.contains("innerRadius")) cs.innerRadius = j["innerRadius"].get<float>();
     if (j.contains("sides"))       cs.sides       = clampTess(j["sides"].get<int>(), 3);
     if (j.contains("segments"))    cs.segments    = clampTess(j["segments"].get<int>(), 1);
+    g_budget.chargeTessellation(cs.sides);
+    g_budget.chargeTessellation(cs.segments);
     if (j.contains("customPoints")) {
         for (const auto& pt : j["customPoints"])
             cs.customPoints.push_back({pt.at(0).get<float>(), pt.at(1).get<float>()});
@@ -249,6 +377,7 @@ Mc3Extrude toExtrude(const json& j) {
     if (j.contains("segments"))     ex.segments     = clampTess(j["segments"].get<int>(), 1);
     if (j.contains("smooth"))       ex.smooth       = j["smooth"].get<bool>();
     if (j.contains("caps"))         ex.caps         = j["caps"].get<bool>();
+    g_budget.chargeTessellation(ex.segments);
     return ex;
 }
 
@@ -267,6 +396,7 @@ Mc3UvMapping toUvMapping(const json& j) {
 }
 
 std::shared_ptr<Mc3Object> toObject(const json& j) {
+    g_budget.chargeObject();
     auto obj = std::make_shared<Mc3Object>();
     if (!j.is_object()) return obj;
 
@@ -377,6 +507,10 @@ std::shared_ptr<Mc3Object> toObject(const json& j) {
 Mc3Document Mc3JsonParser::parseString(const std::string& jsonText,
                                        const std::filesystem::path& sourceDir,
                                        const Mc3LoadPolicy& policy) {
+    // 2026-07-20 audit F4: checked before json::parse() touches the
+    // already-in-memory string, same as Mc3XmlParser.cpp's parseString().
+    checkDocumentByteBudget(jsonText.size());
+
     json j;
     try {
         j = json::parse(jsonText);
@@ -389,6 +523,12 @@ Mc3Document Mc3JsonParser::parseString(const std::string& jsonText,
     // Mc3XmlParser.cpp's buildDocumentFromRoot() ordering).
     g_confineResourcePaths = policy.confineResourcePathsToRoot;
     g_resourceRoot = sourceDir;
+
+    // 2026-07-20 audit F4: reset once per top-level parse, matching
+    // Mc3XmlParser.cpp's own g_budget.reset() discipline, so a later
+    // unrelated parse on the same thread (e.g. the next test in the same
+    // process) starts fresh rather than accumulating across calls.
+    g_budget.reset();
 
     Mc3Document doc;
     doc.sourcePath      = sourceDir;
@@ -493,6 +633,7 @@ Mc3Document Mc3JsonParser::parseString(const std::string& jsonText,
 
     if (j.contains("textures")) {
         for (const auto& te : j["textures"]) {
+            g_budget.chargeTexture();
             const std::string id = te.value("id", "");
             if (te.value("type", "bitmap") == "svg") {
                 Mc3SvgTexture svg;
@@ -518,6 +659,7 @@ Mc3Document Mc3JsonParser::parseString(const std::string& jsonText,
 
     if (j.contains("materials")) {
         for (const auto& me : j["materials"]) {
+            g_budget.chargeMaterial();
             const std::string id = me.value("id", "");
             Mc3Material mat;
             mat.name = id;
@@ -546,6 +688,7 @@ Mc3Document Mc3JsonParser::parseString(const std::string& jsonText,
             em.src = ee.value("src", "");
             validateResourcePathIfConfined(em.src, "embed src");
             em.base64Content = ee.value("base64Content", "");
+            g_budget.chargeEmbed(em.base64Content.size());
             doc.embeds[em.id] = em;
         }
     }
@@ -623,6 +766,7 @@ Mc3Document Mc3JsonParser::parseString(const std::string& jsonText,
 
     if (j.contains("definitions")) {
         for (const auto& de : j["definitions"]) {
+            g_budget.chargeDefinition();
             const std::string id = de.value("id", "");
             doc.definitions[id] = toObject(de.value("object", json::object()));
         }
@@ -635,6 +779,7 @@ Mc3Document Mc3JsonParser::parseString(const std::string& jsonText,
 
     if (j.contains("actions")) {
         for (const auto& ae : j["actions"]) {
+            g_budget.chargeAction();
             Mc3Action act;
             act.name      = ae.value("name", "");
             act.duration  = ae.value("duration", 1.0f);
@@ -643,6 +788,7 @@ Mc3Document Mc3JsonParser::parseString(const std::string& jsonText,
             act.timeScale = ae.value("timeScale", 1.0f);
             if (ae.contains("channels")) {
                 for (const auto& ce : ae["channels"]) {
+                    g_budget.chargeChannel();
                     Mc3Channel ch;
                     ch.targetObject = ce.value("target", "");
                     const std::string propName = ce.value("property", "");
@@ -650,6 +796,7 @@ Mc3Document Mc3JsonParser::parseString(const std::string& jsonText,
                         ch.property = *prop;
                     if (ce.contains("keyframes")) {
                         for (const auto& ke : ce["keyframes"]) {
+                            g_budget.chargeKeyframe();
                             Mc3Keyframe kf;
                             kf.time  = ke.value("time", 0.0f);
                             kf.value = ke.value("value", 0.0f);
@@ -675,6 +822,17 @@ Mc3Document Mc3JsonParser::parseString(const std::string& jsonText,
 }
 
 Mc3Document Mc3JsonParser::parse(const std::filesystem::path& path, const Mc3LoadPolicy& policy) {
+    // 2026-07-20 audit F4: checked via file_size() BEFORE the file is ever
+    // opened for reading, same as Mc3XmlParser.cpp's parse() -- unlike
+    // parseString()'s check below (which still has to hold the string in
+    // memory first, since the caller already does), this one avoids ever
+    // buffering an oversized file into memory at all.
+    {
+        std::error_code ec;
+        auto sz = std::filesystem::file_size(path, ec);
+        if (!ec) checkDocumentByteBudget(sz);
+    }
+
     std::ifstream in(path, std::ios::binary);
     if (!in) throw std::runtime_error("Failed to open mc3.json: " + path.string());
     std::ostringstream ss;
