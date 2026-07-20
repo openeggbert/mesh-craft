@@ -84,15 +84,17 @@ P1s already being fixed in git history. This session:
    is per-field only) not part of the original audit, filed as new `TODO`
    tasks.
 
-   **Net across all 22 AUD-### rows remaining in this active backlog (61
+   **Net across all 24 AUD-### rows remaining in this active backlog (61
    additional rows completed and archived to `docs/history/plan_20260718.md`
    on 2026-07-18 — see that file for their full evidence/resolution text):
-   16 DONE, 4 TODO, 2 DEFERRED** — 10 of the 16 DONE (`AUD-064` through
+   18 DONE, 4 TODO, 2 DEFERRED** — 10 of the 18 DONE (`AUD-064` through
    `AUD-073`) are fresh findings from a 2026-07-18 (later same day)
    independent re-audit, not part of the original 6 (`AUD-069` itself fixed
-   2026-07-19, the day after it was filed); the other 6 (`AUD-074` through
-   `AUD-079`) are from a third independent audit on 2026-07-20 (later the
-   same day as this session's SYS-W14-18..27 work). Recompute with
+   2026-07-19, the day after it was filed); the other 8 (`AUD-074` through
+   `AUD-081`) are from a third independent audit on 2026-07-20 (later the
+   same day as this session's SYS-W14-18..27 work) — the last two
+   (`AUD-080`, `AUD-081`) are documentation-only fixes with no code change.
+   Recompute with
    `python3 test/validate_plan_consistency.py . <build-dir>` rather than
    trusting this number as time passes.
 5. Archived `plan_deep_audit.md` (all 57 of its own tasks were already
@@ -1520,16 +1522,13 @@ count — re-run it rather than trusting this paragraph.
 **Update (2026-07-20, later same day, after SYS-W14-18..27):** a third
 independent fresh audit (4 parallel agents: build/test health, core-code
 bug hunt, docs/architecture staleness, editor UX/wiring gaps) added
-`AUD-074` through `AUD-079` (all `DONE`), bringing the total to
-**22 AUD-### rows** — every finding from this audit round's "solid,
-verified" list is now closed. `AUD-078` (fog) was downgraded from the
-audit's own initial P1/P2 "visibly double-applied" framing to P2
+`AUD-074` through `AUD-081` (all `DONE`), bringing the total to
+**24 AUD-### rows** — every finding from this audit round, including the
+two documentation-only staleness findings (`AUD-080` MCB_FORMAT.md,
+`AUD-081` TESTING.md), is now closed. `AUD-078` (fog) was downgraded from
+the audit's own initial P1/P2 "visibly double-applied" framing to P2
 "dead/incorrect code" after direct empirical investigation found zero
-actual pixel difference — see its own row for the full story. The stale
-`MCB_FORMAT.md`/`TESTING.md` docs findings from the same audit round are
-still tracked as this session's own in-progress work, not yet filed as
-their own `AUD-###` rows — check the session log / recent commits for
-their current status rather than assuming this paragraph is exhaustive.
+actual pixel difference — see its own row for the full story.
 
 ### AUD-025 `[DEFERRED]` `P2` `W7` · embed: mesh source is treated as a literal OBJ path — node exports with no mesh while export exits 0 'Written'
 - **Component:** mc3togltf/src/GltfExporter.cpp buildMesh()
@@ -1704,3 +1703,17 @@ their current status rather than assuming this paragraph is exhaustive.
 - **Outcome:** New `SceneRenderer::cameraForwardFromRotation(rotationDegrees)` (static, so both consumers can call it) converts a rotation triple into a forward direction using `Matrix::CreateFromYawPitchRoll(rotation[1], rotation[0], rotation[2])` (this codebase's own established convention for every other rotation field, e.g. `objectWorldMatrix()`) applied to a base forward of `(0,0,-1)` (this project's right_handed_y_up "looks down -Z at identity rotation" convention). `drawCameraGizmos()` and Look-Through-Camera mode both now check `cam.rotation.has_value()` first and use this helper, falling back to the existing `target`-based direction only when `rotation` is absent — matching the exporter's own priority order.
 - **Tests:** New `test/camera_rotation.mc3.xml` (a camera with `rotation="0 0 0"` and no `target` authored, so `target` defaults to `{0,0,0}` — a point far outside this camera's frame; a box is placed exactly at `camera_position + (0,0,-distance)`, dead-center in frame if and only if `rotation` is honored) + `test/camera_rotation_test.py` (`camera_rotation_test` ctest, real `--screenshot` pixel sampling, same code path Look-Through-Camera mode uses). **Empirically verified via `git stash`**: rendered the identical fixture with the pre-fix and post-fix binaries — pre-fix, the box is completely off-screen (camera looking at the unused `target` default); post-fix, 1120 bright center-region samples confirm the box is dead-center. Also documented the previously entirely-undocumented `rotation` attribute in `MC3_FORMAT.md`'s Cameras section (a pre-existing gap, not something this fix introduced). Full rebuild + 166/166 `ctest` (was 165). **Caught the same XML-comment double-hyphen bug (4th time this session)** while writing the fixture — fixed before committing.
 - **Resolved:** commit `c66d618` — verify: `ctest -R camera_rotation_test`
+
+### AUD-080 `[DONE]` `P3` `W1` · MCB_FORMAT.md still claimed compression was "not yet implemented"
+- **Component:** MCB_FORMAT.md (documentation only, no code change)
+- **Evidence:** Found via the same fresh 4-agent independent audit as `AUD-074`..`AUD-079`, the docs-staleness dimension. `SYS-W14-25` (implemented earlier the same day) added real zlib-based MCB compression (`saveToBinary(doc, out, /*compress=*/true)`, `MCB_FLAG_COMPRESSED`), but `MCB_FORMAT.md`'s header-flags table still said the compression bit was "defined, not yet implemented" and its validation-error section still described the now-superseded `"MCB: compressed format not yet supported"` rejection message — actively wrong documentation for a feature that existed and had its own passing tests.
+- **Outcome:** Rewrote the Flags row to point at a new "Compression (`SYS-W14-25`, 2026-07-20)" subsection; replaced the stale error-message list with the current real ones (`"MCB: invalid magic"`, `"MCB: unsupported version N"`, `"MCB: root is not an object"`, `"MCB: compressed format requires zlib, but this build was compiled without it"`); documented both the uncompressed layout (offset 8 = root tag) and compressed layout (offset 8 = 4-byte uncompressed size, 12 = 4-byte compressed size, 16+ = zlib-deflated payload), the 512MB zip-bomb sanity ceiling on both claimed sizes, actual-decompressed-size verification against the claim, and the optional `find_package(ZLIB)` graceful-degradation behavior — matching the already-correct description in `MC3_FORMAT.md`.
+- **Tests:** n/a (doc-only correction). Verified by direct comparison against `mcb/src/McbWriter.cpp`/`McbReader.cpp`'s actual current error strings and header-layout code, not carried over from the stale prior text. Full `ctest` re-run (166/166) confirms the doc change touched no code path.
+- **Resolved:** commit `6cc5702` — verify: manual diff of `MCB_FORMAT.md` against `mcb/src/McbReader.cpp`/`McbWriter.cpp`
+
+### AUD-081 `[DONE]` `P3` `W1` · TESTING.md test counts stale within hours of its own "re-verified" revision
+- **Component:** TESTING.md (documentation only, no code change)
+- **Evidence:** Found via the same fresh 4-agent independent audit as `AUD-074`..`AUD-080`, the docs-staleness dimension. `TESTING.md`'s intro claimed "151 tests today" with a 9-label breakdown (`export` 68, `format` 33, `render` 24, `unit` 18, etc.) and its "Running the tests" section claimed "151/151 Passed" — both stale, since the 10 SYS-W14-18..27 feature-commit tests and the 5 AUD-074..079 fix-commit tests (`mcb_document_budget_test`, `primitive_zero_segments_test`, `light_shading_test`, `fog_exponential_test`, `camera_rotation_test`) landed without a doc follow-up. The audit also flagged a secondary, more granular staleness: the C++ assertion-count table claimed `mcb_roundtrip_test` prints 234 `PASS:` lines, when `SYS-W14-25`'s new compression-roundtrip cases actually brought it to 236.
+- **Outcome:** Re-derived every count from a live build rather than trusting the audit report or the prior doc revision: `ctest -L <label> -N` ("Total Tests:" line) per label gives `ai` 1, `commands` 1, `export` 69, `format` 37, `lint` 3, `perf` 2, `registry` 1, `render` 27, `unit` 25 = 166 total (matching `ctest -N`'s own count). Re-ran all 5 C++ assertion binaries directly and counted `^PASS:` lines: `mc3_registry` 156, `mc3_ai` 122, `mc3_roundtrip` 577, `mc3_commands` 558 (all already correct, no change needed) and `mcb_roundtrip_test` 236 (was documented as 234, now fixed). Updated the intro paragraph, the "Expected result" line, and the `mcb_roundtrip` table row; added an honest note that the file's own prior same-day revision had already gone stale within hours, and why.
+- **Tests:** n/a (doc-only correction). Verified by actually running `ctest -L <label> -N` and each C++ binary directly and counting real output lines, not by assumption. `python3 test/validate_plan_consistency.py . b-release --run-tests` passes, including its own live `ctest -N` cross-check (166) and a full live `ctest` run (166/166 passed, 0 failed).
+- **Resolved:** commit `6cc5702` — verify: manual diff of `TESTING.md` counts against a live `ctest -L <label> -N`/binary run
