@@ -136,24 +136,17 @@ still internally consistent.
 3. Remaining `TODO` AUD-### rows are all downstream of the two blockers
    above (AUD-053 needs AUD-052; AUD-057's CI-job half needs the same) —
    none are independently actionable right now.
-4. Both P1 "format supports it, editor never runs it" gaps found 2026-07-20
-   (user request: "co mc3 nabízí, ale MeshCraft to ještě neumí" --
-   trigger event-firing and Lua scripting execution) are now done.
-5. Scene States runtime switching (P2) is now done -- user picked it to
-   go next 2026-07-20. Wiring `Mc3ImportResolver` into the editor (P2) is
-   now done too -- all four of the P1/P2 format-vs-editor gaps found
-   2026-07-20 are complete.
-6. The `mipMaps`-unused-downstream gap (P3) is now done for the exporter
-   half (live-viewport half documented as blocked on a CNA API gap, see
-   its own row). The `colorSpace`-unused-at-export gap (P3) is now done
-   too (slot-mismatch warning), and so is UV mapping box/sphere
-   projection (P3, exporter-side triplanar/equirectangular generation),
-   MCB compression (P3, real zlib support, user picked "implement"), and
-   light-brightness unit conversion (P3, per-type lux/candela scale
-   factor, user picked "implement").
-   **SYS-W14-27** (P3) — the one remaining smaller format-vs-editor
-   completeness gap (ambient-light export). Independent, small, good
-   filler/warm-up tasks between the larger items above.
+4. All 10 of the mc3-format-vs-editor gaps found 2026-07-20 (user
+   request: "co mc3 nabízí, ale MeshCraft to ještě neumí" -- "what does
+   the mc3 format offer that MeshCraft doesn't yet handle") are now
+   done: the two P1 gaps (trigger event-firing, Lua scripting execution),
+   both P2 gaps (Scene States runtime switching, wiring
+   `Mc3ImportResolver` into the editor), and all six P3 completeness gaps
+   (`mipMaps` unused downstream -- exporter half done, live-viewport half
+   documented as blocked on a CNA API gap; `colorSpace` unused at export;
+   UV box/sphere projection; MCB compression; light-brightness unit
+   conversion; ambient-light export). Nothing left queued from that
+   research pass.
 
 ---
 
@@ -1460,7 +1453,7 @@ _All items in this workstream are DONE — archived to [`docs/history/plan_20260
   this, so nothing needed correcting for the new values -- only new
   coverage was added. Full rebuild + 161/161 `ctest` (unchanged count --
   extended an existing test, not a new one).
-- **SYS-W14-27** `[TODO]` `P3` — Ambient light dropped on glTF export.
+- **SYS-W14-27** `[DONE]` `P3` — Ambient light dropped on glTF export.
   `GltfExporter.cpp:1023-1027` (`STAB-0696`) explicitly warns and drops
   any `LightType::Ambient` light -- glTF 2.0 core + `KHR_lights_punctual`
   genuinely has no ambient-light equivalent, so this is a real spec gap,
@@ -1474,6 +1467,30 @@ _All items in this workstream are DONE — archived to [`docs/history/plan_20260
   **Outcome:** either implement an approximation (emissive-bake being
   the most tractable) or formally close as won't-fix with the same
   rigor `STAB-0701` got, instead of leaving it an implicit, undecided gap.
+  User picked "implement emissive-bake approximation".
+  **Implementation:** `addLights()` (`GltfExporter.cpp`) sums every
+  `<ambient>` light's `color × brightness` in the document into one
+  combined RGB contribution (multiple ambients combine the same way
+  multiple real fill lights would), then bakes it into every material in
+  `model.materials`' `emissiveFactor`, tinted by that material's own
+  `baseColorFactor` (so the approximation still reflects each material's
+  own albedo instead of washing every material to the same flat color)
+  and clamped to `[0,1]` (matching glTF core's `emissiveFactor` range --
+  no `KHR_materials_emissive_strength` extension used). Applied even when
+  every light in the document is ambient-only (the function's existing
+  `if (lightsArray.empty()) return` early exit -- meaning "no
+  `KHR_lights_punctual` lights to add" -- sits AFTER the bake, not
+  before it, since the two are independent concerns). The per-ambient
+  warning text was updated to explain it was baked, not just dropped.
+  **Tests:** extended the existing `test/light_export_all_types.mc3.xml`
+  fixture with a `mat_box` material (`base_color="0.8 0.6 0.4 1.0"`)
+  assigned to its one object, and `mc3togltf/test/light_export_test.py`
+  with an assertion that `mat_box`'s exported `emissiveFactor` exactly
+  equals `(ambient.color × ambient.brightness) × mat_box.base_color`
+  (`Fill`'s `color=0.2/0.2/0.2, brightness=0.5` → expected
+  `[0.08, 0.06, 0.04]`) -- verified this matches the real exported bytes,
+  not just that some warning fired. Full rebuild + 161/161 `ctest`
+  (unchanged count -- extended an existing test, not a new one).
 
 ---
 

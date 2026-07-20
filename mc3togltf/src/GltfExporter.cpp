@@ -1100,13 +1100,32 @@ static void addLights(tinygltf::Model& model,
 
     tinygltf::Value::Array lightsArray;
 
+    // SYS-W14-27 (2026-07-20): glTF 2.0 core + KHR_lights_punctual has no
+    // ambient-light concept at all -- a real spec gap, not an oversight
+    // (STAB-0696 already warned rather than silently dropping it). Unlike
+    // coordinate_system/rotation_units (won't-fix, no meaningful
+    // approximation exists), a lossy-but-useful one DOES exist here: sum
+    // every <ambient> light's color*brightness in the document (multiple
+    // ambients combine the same way multiple real fill lights would) and
+    // bake that flat contribution into every material's own emissive
+    // channel, tinted by that material's base color (so it still reflects
+    // each material's own albedo rather than washing every material out
+    // to the same flat color) -- an unlit-viewer-visible approximation of
+    // "the scene isn't fully black where an ambient fill was authored",
+    // not a physically accurate global-illumination substitute.
+    std::array<float,3> ambientContribution{0.0f, 0.0f, 0.0f};
+    bool hasAmbient = false;
+
     for (const auto& light : lights) {
         if (light.type == LightType::Ambient) {
-            // STAB-0696: glTF 2.0 / KHR_lights_punctual has no ambient light
-            // type -- warn instead of silently dropping it, matching the
-            // CSG approximate-mode "can't fully represent this" pattern.
+            hasAmbient = true;
+            ambientContribution[0] += light.color[0] * light.brightness;
+            ambientContribution[1] += light.color[1] * light.brightness;
+            ambientContribution[2] += light.color[2] * light.brightness;
             std::cerr << "[mc3togltf] Warning: ambient light '" << light.name
-                      << "' has no glTF equivalent, omitted from export.\n";
+                      << "' has no glTF equivalent -- approximated by baking "
+                         "into every material's emissive channel instead of "
+                         "an actual light, omitted as a KHR_lights_punctual light.\n";
             ++warningCount;
             continue;
         }
@@ -1187,7 +1206,25 @@ static void addLights(tinygltf::Model& model,
         outLightNodeIndices.push_back(nodeIdx);
     }
 
-    if (lightsArray.empty()) return;  // all lights were ambient-only (STAB-0696)
+    // SYS-W14-27: bake the combined ambient contribution into every
+    // material's emissive channel, tinted by that material's own base
+    // color -- applied even when every light in the document was ambient
+    // (the lightsArray.empty() early return right below only means "no
+    // KHR_lights_punctual lights to add", not "nothing to do here").
+    // emissiveFactor is a plain additive term (not a multiplier), so this
+    // combines correctly with a material's own authored emissive_color.
+    if (hasAmbient) {
+        for (auto& mat : model.materials) {
+            for (int c = 0; c < 3; ++c) {
+                double contribution = static_cast<double>(ambientContribution[c]) *
+                                      mat.pbrMetallicRoughness.baseColorFactor[c];
+                mat.emissiveFactor[c] =
+                    std::clamp(mat.emissiveFactor[c] + contribution, 0.0, 1.0);
+            }
+        }
+    }
+
+    if (lightsArray.empty()) return;  // no KHR_lights_punctual lights to add (STAB-0696)
 
     model.extensionsUsed.push_back("KHR_lights_punctual");
     tinygltf::Value::Object extObj;

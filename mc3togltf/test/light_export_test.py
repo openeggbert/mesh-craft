@@ -80,6 +80,23 @@ def main():
             check(actual is not None and abs(actual - expected) < 1e-2,
                   f"spot 'Torch' intensity == brightness/(4*pi)*683 ({expected:.4f}); got {actual}")
 
+        # SYS-W14-27 (2026-07-20): ambient light 'Fill' (color=0.2/0.2/0.2,
+        # brightness=0.5) has no glTF equivalent, so instead of being
+        # omitted outright it's baked into every material's emissive
+        # channel, tinted by that material's own base_color:
+        # emissive[c] = clamp(0 + (0.2*0.5) * baseColor[c], 0, 1).
+        # mat_box's base_color is 0.8/0.6/0.4 -> expected emissive
+        # 0.08/0.06/0.04.
+        materials = g.get("materials", [])
+        mat_box = next((m for m in materials if m.get("name") == "mat_box"), None)
+        check(mat_box is not None, "material 'mat_box' present in export")
+        if mat_box is not None:
+            emissive = mat_box.get("emissiveFactor", [0.0, 0.0, 0.0])
+            expected_emissive = [0.1 * 0.8, 0.1 * 0.6, 0.1 * 0.4]
+            check(all(abs(a - b) < 1e-4 for a, b in zip(emissive, expected_emissive)),
+                  f"ambient bake: mat_box.emissiveFactor == {expected_emissive} "
+                  f"(ambient contribution tinted by base_color); got {emissive}")
+
         if "spot" in by_type:
             spot = by_type["spot"]
             # STAB-0692: angle="25" in the fixture is a half-angle in degrees.

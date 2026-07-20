@@ -305,8 +305,23 @@ widely-recognized exporter convention, not a claim that `brightness` is
 now a fully physically-calibrated real-world quantity — there is still no
 editor-side lux/candela input mode, and the live viewport's gizmo-only
 use of `brightness` is unaffected.
-`ambient` has no glTF equivalent at all and is dropped on export (with a
-warning) since `KHR_lights_punctual` doesn't support ambient lighting.
+`ambient` has no glTF equivalent at all — neither glTF 2.0 core nor
+`KHR_lights_punctual` support ambient lighting, a real spec gap, not an
+oversight — so it is never exported as an actual light. As of
+`SYS-W14-27` (2026-07-20), it is instead **approximated by baking its
+contribution into every material's own emissive channel**: every
+`<ambient>` light's `color × brightness` in the document is summed
+(multiple ambients combine the same way multiple real fill lights
+would), then that flat RGB contribution is added to each material's
+`emissiveFactor`, tinted by that material's own `base_color` (so the
+approximation still reflects each material's own albedo rather than
+washing every material out to the same flat color) and clamped to
+`[0, 1]`. This is a lossy but useful approximation — not physically
+accurate global illumination — that keeps a glTF-conformant viewer's
+render from looking fully unlit wherever an ambient fill was authored,
+instead of just silently going dark. A warning is still printed naming
+each ambient light and explaining that it was baked rather than
+exported as a light.
 
 ---
 
