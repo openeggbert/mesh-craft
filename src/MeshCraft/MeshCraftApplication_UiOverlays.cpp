@@ -1684,7 +1684,10 @@ void MeshCraftApplication::drawDialogs()
                 // "Mat" tab pushUndoMat for the full rationale.
                 pushUndo();
                 document_.includedMaterials.erase(dropTexPickerMatId_);
-                slot = dropTexPickerPath_;
+                // F9: a texture-slot field is a doc.textures KEY, not a raw
+                // path -- see MeshCraftApplication.cpp's drop-consumption
+                // block for the full rationale.
+                slot = registerTextureFromPath(dropTexPickerPath_);
                 modified_ = true;
                 setStatusMsg("Texture assigned → " + dropTexPickerMatId_);
                 ImGui::CloseCurrentPopup();

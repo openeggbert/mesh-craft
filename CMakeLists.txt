@@ -622,6 +622,19 @@ if(MESH_CRAFT_BUILD_TESTING AND UNIX AND NOT ANDROID AND NOT EMSCRIPTEN)
     add_test(NAME object_index COMMAND object_index_test)
     set_tests_properties(object_index PROPERTIES TIMEOUT 15 LABELS "unit")
 
+    # F9 (2026-07-20 audit): registerTextureFromPathAlg() (EditorAlgorithms.hpp),
+    # backing MeshCraftApplication::registerTextureFromPath(). CNA-free --
+    # EditorAlgorithms.hpp only needs Mc3Document/Mc3Object (header-only),
+    # matching object_index_test above.
+    add_executable(texture_from_path_test
+        ${CMAKE_CURRENT_SOURCE_DIR}/test/texture_from_path_test.cpp)
+    target_include_directories(texture_from_path_test PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/include
+        ${CMAKE_CURRENT_SOURCE_DIR}/mc3/include)
+    target_compile_features(texture_from_path_test PRIVATE cxx_std_23)
+    add_test(NAME texture_from_path COMMAND texture_from_path_test)
+    set_tests_properties(texture_from_path PROPERTIES TIMEOUT 15 LABELS "unit")
+
     # SYS-W3-01 Phase 3: Editor::MacroRecorder, extracted from
     # MeshCraftApplication (H12). No test existed for this subsystem before
     # the extraction. CNA-free -- executeStep()'s cross-domain calls

@@ -455,11 +455,16 @@ void MeshCraftApplication::Update(GameTime& gameTime) {
             pushUndo();
             document_.includedMaterials.erase(hoveredTexMatId_);
             auto& mat = document_.materials[hoveredTexMatId_];
-            if      (hoveredTexSlot_ == "base")       mat.baseColorTexture         = texPath;
-            else if (hoveredTexSlot_ == "normal")     mat.normalTexture            = texPath;
-            else if (hoveredTexSlot_ == "emissive")   mat.emissiveTexture          = texPath;
-            else if (hoveredTexSlot_ == "metalrough") mat.metallicRoughnessTexture = texPath;
-            else if (hoveredTexSlot_ == "occlusion")  mat.occlusionTexture         = texPath;
+            // F9: a texture-slot field is a doc.textures KEY, not a raw
+            // path -- register (or reuse) an entry for the dropped file and
+            // assign its id, or the renderer's/exporter's doc.textures.find()
+            // lookup silently fails to resolve it.
+            std::string texId = registerTextureFromPath(texPath);
+            if      (hoveredTexSlot_ == "base")       mat.baseColorTexture         = texId;
+            else if (hoveredTexSlot_ == "normal")     mat.normalTexture            = texId;
+            else if (hoveredTexSlot_ == "emissive")   mat.emissiveTexture          = texId;
+            else if (hoveredTexSlot_ == "metalrough") mat.metallicRoughnessTexture = texId;
+            else if (hoveredTexSlot_ == "occlusion")  mat.occlusionTexture         = texId;
             modified_ = true;
             setStatusMsg("Texture dropped into " + hoveredTexSlot_ + " slot");
         } else {

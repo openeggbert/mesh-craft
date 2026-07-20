@@ -2029,6 +2029,38 @@ inline std::array<float,4> materialColorAlg(const std::string& matId, const Mc3:
     return { 180.0f/255.0f, 180.0f/255.0f, 180.0f/255.0f, 1.0f };
 }
 
+// ── Texture registration from a raw file path (F9, 2026-07-20 audit) ─────────
+//
+// Mirrors MeshCraftApplication::registerTextureFromPath(). A material's
+// texture-slot fields (baseColorTexture etc.) are doc.textures KEYS,
+// resolved by both the live renderer (SceneRenderer.cpp) and the glTF
+// exporter (GltfExporter.cpp) via doc.textures.find(...) -- never a raw
+// file path. Browse ("..." button) and drag-drop both used to write the
+// OS-provided path directly into the material field, which that lookup
+// then silently fails to resolve (texture treated as absent). This
+// registers (or reuses, if `path` already matches an existing entry's uri)
+// a doc.textures entry and returns its id, so the slot field always holds
+// something the renderer/exporter can actually resolve.
+
+inline std::string registerTextureFromPathAlg(const std::string& path, Mc3::Mc3Document& doc)
+{
+    for (auto& [id, tex] : doc.textures)
+        if (tex.uri == path) return id;
+
+    std::string base = std::filesystem::path(path).stem().string();
+    if (base.empty()) base = "tex";
+    std::string key = base;
+    int n = 1;
+    while (doc.textures.count(key))
+        key = base + "_" + std::to_string(n++);
+
+    Mc3::Mc3Texture tex;
+    tex.name = key;
+    tex.uri  = path;
+    doc.textures[key] = tex;
+    return key;
+}
+
 // ── Undo/redo stack depth cap (STAB-0481) ─────────────────────────────────────
 //
 // Mirrors the push-then-trim pattern duplicated at all three undo/redo stack

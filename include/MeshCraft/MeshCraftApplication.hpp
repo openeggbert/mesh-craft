@@ -162,6 +162,17 @@ private:
     std::shared_ptr<PendingFileBrowse> pendingFileBrowse_;
     void browseForMaterialTexture(const std::string& matId, const std::string& slot);
 
+    // F9 (2026-07-20 audit): a material's texture-slot fields
+    // (baseColorTexture etc.) are doc.textures KEYS, resolved by both the
+    // live renderer (SceneRenderer.cpp) and the glTF exporter via
+    // doc.textures.find(...) -- never a raw file path. Browse/drag-drop
+    // hand this a raw OS path, so it must register (or reuse) a
+    // doc.textures entry and return that entry's id, instead of the path
+    // itself ending up directly in the material field. Reuses an existing
+    // entry whose uri already matches `path` so repeatedly assigning the
+    // same file doesn't spawn duplicate texture ids.
+    std::string registerTextureFromPath(const std::string& path);
+
     // Auto-screenshot mode
     std::string autoScreenshotPath_;
     int autoScreenshotCountdown_{0};

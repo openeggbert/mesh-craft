@@ -1,3 +1,4 @@
+#include "MeshCraft/EditorAlgorithms.hpp"
 #include "MeshCraft/MeshCraftApplication.hpp"
 #include "MeshCraft/Scene/PropertiesPanel.hpp"
 
@@ -81,6 +82,10 @@ void MeshCraftApplication::browseForMaterialTexture(const std::string& matId, co
             pending->done.store(true);
         },
         kImageFilters);
+}
+
+std::string MeshCraftApplication::registerTextureFromPath(const std::string& path) {
+    return registerTextureFromPathAlg(path, document_);
 }
 
 } // namespace MeshCraft
