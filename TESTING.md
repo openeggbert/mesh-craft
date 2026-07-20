@@ -1,8 +1,8 @@
 # Testing
 
-_Last updated: 2026-07-07, re-verified from a genuinely clean build (`rm -rf cmake-build-debug` then full reconfigure+rebuild) as part of a conservative-maintainer stabilization audit — every count below was produced by actually running the command shown, not carried over from a prior doc revision. This document is derived from the actual `CMakeLists.txt` test registrations and test source files — if it drifts from `ctest -N`'s output, trust `ctest -N`._
+_Last updated: 2026-07-20, re-verified from a genuinely clean build as part of the 2026-07-20 audit's doc-staleness pass — every count below was produced by actually running the command shown (`ctest -L <label> -N | grep -c` per label), not carried over from a prior doc revision. This document is derived from the actual `CMakeLists.txt` test registrations and test source files — if it drifts from `ctest -N`'s output, trust `ctest -N`._
 
-MeshCraft's tests run through **CTest** — **66 tests today** (`ctest --print-labels` label breakdown: `ai` 1, `commands` 1, `export` 44, `format` 3, `registry` 1, `render` 16), mixing C++ assertion-based binaries and Python/bash subprocess-driven checks against the `mc3togltf`/`mc3tomcb` CLIs and the `MeshCraft` editor binary itself (headless `--screenshot` real-pixel-sampling tests, plus 3 tests that drive real headless Blender for GLB-import verification). **Known gap:** the "CLI-driving Python tests" table below documents the most significant/representative tests in each category but is not exhaustively 1:1 with all 44 `export`-labeled and 16 `render`-labeled registrations — `ctest -N` and `ctest --print-labels` are authoritative for the complete list.
+MeshCraft's tests run through **CTest** — **151 tests today** (`ctest --print-labels` label breakdown: `ai` 1, `commands` 1, `export` 68, `format` 33, `lint` 3, `perf` 2, `registry` 1, `render` 24, `unit` 18), mixing C++ assertion-based binaries and Python/bash subprocess-driven checks against the `mc3togltf`/`mc3tomcb` CLIs and the `MeshCraft` editor binary itself (headless `--screenshot` real-pixel-sampling tests, plus 3 tests that drive real headless Blender for GLB-import verification). **Known gap:** the "CLI-driving Python tests" table below documents the most significant/representative tests in each category but is not exhaustively 1:1 with all 68 `export`-labeled and 24 `render`-labeled registrations — `ctest -N` and `ctest --print-labels` are authoritative for the complete list.
 
 ---
 
@@ -23,7 +23,7 @@ ctest -N
 ctest -R mc3_commands --output-on-failure
 ctest -R mc3togltf_csg --output-on-failure   # matches all 4 CSG tests
 
-# Run one group by label (format/export/render/registry/ai/commands)
+# Run one group by label (format/export/render/registry/ai/commands/lint/perf/unit)
 ctest -L export --output-on-failure
 ctest --print-labels   # list all labels
 
@@ -31,7 +31,7 @@ ctest --print-labels   # list all labels
 ctest --rerun-failed --output-on-failure
 ```
 
-Expected result: **66/66 Passed** (verified 2026-07-07 from a genuinely clean build — see `STABILIZATION_WORKLOG.md` for the full from-scratch verification trace). A failing test prints its assertion/subprocess output inline with `--output-on-failure`; without that flag, CTest only shows pass/fail per test name.
+Expected result: **151/151 Passed** (verified 2026-07-20 from a genuinely clean build). A failing test prints its assertion/subprocess output inline with `--output-on-failure`; without that flag, CTest only shows pass/fail per test name.
 
 Each C++ test binary can also be run directly (bypassing CTest) for faster iteration:
 
@@ -65,11 +65,11 @@ Expected: `mc3` 1/1, `mcb` 1/1, `mc3togltf` 41/41, `mc3tomcb` 3/3 (re-verified 2
 
 | Test | Binary | Covers | Pass criteria |
 |------|--------|--------|----------------|
-| `mc3_registry` | `mc3_registry_test` | `ModelRegistry` (SQLite): open/save/search/remove/migration (including a real legacy-schema `ALTER TABLE ADD COLUMN` migration test, STAB-0061), unavailable-registry and DB-open-failure edge cases, schema introspection, a mock AI-response → registry pipeline test, and a temp-file-leak regression for malformed registry entries | 152 `PASS:` assertions, 0 `FAIL:` (re-counted 2026-07-07; was 109 as of 2026-07-03 — grew from AI-integration and bug-fix regression tests added since) |
-| `mc3_ai` | `ai_test` | `AiAssistant`'s JSON helpers; the AI-response validation pipeline (extract markdown/prose → repair → parse → reject-if-empty → validate against `mc3.xsd`); mock-HTTP-server round-trips (success, truncation, HTTP error, indefinite-hang timeout, model-name-on-the-wire, connection-refused, malformed-JSON-body, back-to-back-calls) — no real network call | 73 `PASS:` assertions, 0 `FAIL:` (re-counted 2026-07-07; was 57 as of 2026-07-03). The mock-server and libxml2-dependent cases are skipped (with a `SKIP:` line, not a failure) on builds without `MESHCRAFT_HAS_AI`/`MESHCRAFT_HAS_LIBXML2` |
-| `mc3_roundtrip` | `mc3_roundtrip_test` | Full `.mc3.xml` parser/writer roundtrip for every element type, including all N1-N7 extensions, UTF-8/space-containing paths, and edge cases (legacy attribute forms, defaults) | 542 `PASS:` assertions, ends with `All tests passed.` (re-counted 2026-07-07; was 413 as of 2026-07-03) |
-| `mc3_commands` | `mc3_commands_test` | Editor command algorithms (rename incl. empty-pattern/backslash edge cases, find/replace, array-dup, duplicate, group/ungroup), undo/redo round-trips for every mutating command, auto-save/backup, Save-As/Export-Selection/drag-drop/invalid-file-load workflows, keybinding/preferences/macro persistence formats, hierarchy-panel filtering, material-color resolution, undo-stack depth capping, AI-panel + unsaved-changes-confirmation dialog lifecycles | 510 `PASS:` assertions (re-counted 2026-07-07; was 489 as of 2026-07-03) |
-| `mcb_roundtrip` | `mcb_roundtrip_test` | MCB binary encode/decode roundtrip for the base scene and all N1-N7 extension types, plus regression tests for a recursion-depth guard and a string-length sanity check (both fixed 2026-07-07 — see `plan.md`'s "Post-650 Follow-Up Findings") | 155 `PASS:` assertions, ends with `All MCB roundtrip tests passed.` (re-counted 2026-07-07; was 50 as of 2026-07-03) |
+| `mc3_registry` | `mc3_registry_test` | `ModelRegistry` (SQLite): open/save/search/remove/migration (including a real legacy-schema `ALTER TABLE ADD COLUMN` migration test, STAB-0061), unavailable-registry and DB-open-failure edge cases, schema introspection, a mock AI-response → registry pipeline test, and a temp-file-leak regression for malformed registry entries | 156 `PASS:` assertions, 0 `FAIL:` (re-counted 2026-07-20; was 152 as of 2026-07-07) |
+| `mc3_ai` | `ai_test` | `AiAssistant`'s JSON helpers; the AI-response validation pipeline (extract markdown/prose → repair → parse → reject-if-empty → validate against `mc3.xsd`); mock-HTTP-server round-trips (success, truncation, HTTP error, indefinite-hang timeout, model-name-on-the-wire, connection-refused, malformed-JSON-body, back-to-back-calls) — no real network call | 122 `PASS:` assertions, 0 `FAIL:` (re-counted 2026-07-20; was 73 as of 2026-07-07). The mock-server and libxml2-dependent cases are skipped (with a `SKIP:` line, not a failure) on builds without `MESHCRAFT_HAS_AI`/`MESHCRAFT_HAS_LIBXML2` |
+| `mc3_roundtrip` | `mc3_roundtrip_test` | Full `.mc3.xml` parser/writer roundtrip for every element type, including all N1-N7 extensions, UTF-8/space-containing paths, and edge cases (legacy attribute forms, defaults) | 577 `PASS:` assertions, ends with `All tests passed.` (re-counted 2026-07-20; was 542 as of 2026-07-07) |
+| `mc3_commands` | `mc3_commands_test` | Editor command algorithms (rename incl. empty-pattern/backslash edge cases, find/replace, array-dup, duplicate, group/ungroup), undo/redo round-trips for every mutating command, auto-save/backup, Save-As/Export-Selection/drag-drop/invalid-file-load workflows, keybinding/preferences/macro persistence formats, hierarchy-panel filtering, material-color resolution, undo-stack depth capping, AI-panel + unsaved-changes-confirmation dialog lifecycles | 558 `PASS:` assertions (re-counted 2026-07-20; was 510 as of 2026-07-07) |
+| `mcb_roundtrip` | `mcb_roundtrip_test` | MCB binary encode/decode roundtrip for the base scene and all N1-N7 extension types, plus regression tests for a recursion-depth guard and a string-length sanity check | 234 `PASS:` assertions, ends with `All MCB roundtrip tests passed.` (re-counted 2026-07-20; was 155 as of 2026-07-07) |
 
 All five print one `PASS: <description>` or `FAIL: <description>` line per assertion and exit non-zero if any `FAIL:` occurred — grep for `^FAIL:` to find failures quickly in CI-style output.
 
