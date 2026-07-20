@@ -2320,6 +2320,26 @@ void PropertiesPanel::draw(float panelX, float panelY, float panelW, float panel
                     }
                 }
 
+                // Skybox texture (equirectangular panorama). F20 (2026-07-20
+                // audit): this field existed in the "Env" left-panel tab
+                // (MeshCraftApplication_UiLeftPanel.cpp) but was missing
+                // here entirely -- the two editors share one
+                // Mc3Environment, so a skybox set via the Env tab was
+                // invisible/unreachable from this panel.
+                ImGui::TextDisabled("Skybox Texture (equirect)");
+                {
+                    char sbuf[256];
+                    std::strncpy(sbuf, env.skyboxTexture.c_str(), sizeof(sbuf)-1);
+                    sbuf[255] = '\0';
+                    ImGui::SetNextItemWidth(-1);
+                    if (ImGui::InputText("##envskybox", sbuf, sizeof(sbuf),
+                            ImGuiInputTextFlags_EnterReturnsTrue)) {
+                        ctx.pushUndo();
+                        env.skyboxTexture = sbuf;
+                        ctx.markModified();
+                    }
+                }
+
                 // Fog
                 {
                     bool fogEnabled = env.fog.has_value();

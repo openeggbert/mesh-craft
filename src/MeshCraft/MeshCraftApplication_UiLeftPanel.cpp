@@ -327,14 +327,20 @@ void MeshCraftApplication::drawLeftPanel(float panelY, float panelH)
                     if (fog.mode == Mc3::FogMode::Linear) {
                         ImGui::TextDisabled("Start");
                         ImGui::SetNextItemWidth(-1);
-                        { bool _undoCh353 = ImGui::DragFloat("##fogstart", &fog.start, 0.5f, 0.0f, 10000.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
+                        // F20 (2026-07-20 audit): cross-clamped against the
+                        // OTHER field (matching Scene/PropertiesPanel.cpp's
+                        // "Scene Properties" Fog editor, which already got
+                        // this right) so Start/End can't invert -- this tab
+                        // previously clamped each independently to
+                        // [0,10000], letting Start end up greater than End.
+                        { bool _undoCh353 = ImGui::DragFloat("##fogstart", &fog.start, 0.5f, 0.0f, fog.end, "%.3f", ImGuiSliderFlags_AlwaysClamp);
                         if (ImGui::IsItemActivated()) pushUndo();
                         if (_undoCh353) {
                             modified_ = true; updateWindowTitle();
                         } }
                         ImGui::TextDisabled("End");
                         ImGui::SetNextItemWidth(-1);
-                        { bool _undoCh359 = ImGui::DragFloat("##fogend", &fog.end, 0.5f, 0.0f, 10000.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
+                        { bool _undoCh359 = ImGui::DragFloat("##fogend", &fog.end, 0.5f, fog.start, 10000.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
                         if (ImGui::IsItemActivated()) pushUndo();
                         if (_undoCh359) {
                             modified_ = true; updateWindowTitle();

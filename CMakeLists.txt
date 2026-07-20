@@ -837,6 +837,22 @@ if(MESH_CRAFT_BUILD_TESTING AND UNIX AND NOT ANDROID AND NOT EMSCRIPTEN)
     add_test(NAME undo_gesture_frame COMMAND undo_gesture_frame_test)
     set_tests_properties(undo_gesture_frame PROPERTIES TIMEOUT 15 LABELS "unit")
 
+    # F20 (2026-07-20 audit): the "Env" left-panel tab's Fog Start/End
+    # fields used to clamp each independently to [0,10000], letting Start
+    # end up greater than End -- unlike Scene/PropertiesPanel.cpp's own
+    # Fog editor, which was already cross-clamped. Drives the exact shared
+    # DragFloat pattern both editors now use directly against a plain
+    # Mc3Fog struct -- CNA-free (no MeshCraftApplication/PropertiesPanel
+    # dependency), matching undo_gesture_frame_test's approach.
+    add_executable(fog_start_end_cross_clamp_test
+        ${CMAKE_CURRENT_SOURCE_DIR}/test/fog_start_end_cross_clamp_test.cpp)
+    target_include_directories(fog_start_end_cross_clamp_test PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/mc3/include)
+    target_link_libraries(fog_start_end_cross_clamp_test PRIVATE imgui)
+    target_compile_features(fog_start_end_cross_clamp_test PRIVATE cxx_std_23)
+    add_test(NAME fog_start_end_cross_clamp COMMAND fog_start_end_cross_clamp_test)
+    set_tests_properties(fog_start_end_cross_clamp PROPERTIES TIMEOUT 15 LABELS "unit")
+
     # 2026-07-20 audit F2 (P0): SceneHierarchyPanel.cpp's drawHierarchy()
     # range-for-iterates over document_.objects/children by reference;
     # dragging an earlier sibling onto a later one in the same list used to
