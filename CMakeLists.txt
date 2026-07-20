@@ -635,6 +635,19 @@ if(MESH_CRAFT_BUILD_TESTING AND UNIX AND NOT ANDROID AND NOT EMSCRIPTEN)
     add_test(NAME texture_from_path COMMAND texture_from_path_test)
     set_tests_properties(texture_from_path PROPERTIES TIMEOUT 15 LABELS "unit")
 
+    # F10 (2026-07-20 audit): clear*ReferencesAlg()/removeTriggerStepsReferencingAlg()
+    # (EditorAlgorithms.hpp), backing the Tex/Defs/Mat/Scripts/Sounds/Music/
+    # Embeds Delete buttons' reference-integrity cleanup. CNA-free, matching
+    # object_index_test/texture_from_path_test above.
+    add_executable(delete_reference_integrity_test
+        ${CMAKE_CURRENT_SOURCE_DIR}/test/delete_reference_integrity_test.cpp)
+    target_include_directories(delete_reference_integrity_test PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/include
+        ${CMAKE_CURRENT_SOURCE_DIR}/mc3/include)
+    target_compile_features(delete_reference_integrity_test PRIVATE cxx_std_23)
+    add_test(NAME delete_reference_integrity COMMAND delete_reference_integrity_test)
+    set_tests_properties(delete_reference_integrity PROPERTIES TIMEOUT 15 LABELS "unit")
+
     # SYS-W3-01 Phase 3: Editor::MacroRecorder, extracted from
     # MeshCraftApplication (H12). No test existed for this subsystem before
     # the extraction. CNA-free -- executeStep()'s cross-domain calls

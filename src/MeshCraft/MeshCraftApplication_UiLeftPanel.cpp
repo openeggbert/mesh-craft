@@ -1,3 +1,4 @@
+#include "MeshCraft/EditorAlgorithms.hpp"
 #include "MeshCraft/MeshCraftApplication.hpp"
 #include "MeshCraftPrivate.hpp"
 #include "MeshCraft/Scene/SceneHierarchyPanel.hpp"
@@ -560,9 +561,17 @@ void MeshCraftApplication::drawLeftPanel(float panelY, float panelH)
             ImGui::SameLine();
             if (ImGui::SmallButton("-") && !selectedTextureKey_.empty()) {
                 pushUndo();
+                // F10: clear dangling references BEFORE erasing, mirroring
+                // the reference-rewriting Rename already does elsewhere --
+                // otherwise every material still assigning this texture is
+                // left pointing at a nonexistent id.
+                int cleared = clearTextureReferencesAlg(document_, selectedTextureKey_);
                 document_.textures.erase(selectedTextureKey_);
                 selectedTextureKey_.clear();
                 modified_ = true; updateWindowTitle();
+                if (cleared > 0)
+                    setStatusMsg("Texture deleted (cleared " + std::to_string(cleared) +
+                                 " material reference" + (cleared == 1 ? "" : "s") + ")");
             }
 
             // List
@@ -714,9 +723,16 @@ void MeshCraftApplication::drawLeftPanel(float panelY, float panelH)
             ImGui::SameLine();
             if (ImGui::SmallButton("-##svgremove") && !selectedSvgTextureKey_.empty()) {
                 pushUndo();
+                // F10: an SVG texture shares the same id-namespace material
+                // texture-slot fields reference (GltfExporter.cpp checks
+                // both doc.textures and doc.svgTextures for the same ref).
+                int cleared = clearTextureReferencesAlg(document_, selectedSvgTextureKey_);
                 document_.svgTextures.erase(selectedSvgTextureKey_);
                 selectedSvgTextureKey_.clear();
                 modified_ = true; updateWindowTitle();
+                if (cleared > 0)
+                    setStatusMsg("SVG texture deleted (cleared " + std::to_string(cleared) +
+                                 " material reference" + (cleared == 1 ? "" : "s") + ")");
             }
 
             for (const auto& [key, svg] : document_.svgTextures) {
@@ -833,9 +849,14 @@ void MeshCraftApplication::drawLeftPanel(float panelY, float panelH)
             ImGui::BeginDisabled(selectedDefId_.empty());
             if (ImGui::SmallButton("-")) {
                 pushUndo();
+                // F10: clear dangling Instance/variant/LOD references before erasing.
+                int cleared = clearDefinitionReferencesAlg(document_, selectedDefId_);
                 document_.definitions.erase(selectedDefId_);
                 selectedDefId_.clear();
                 modified_ = true; updateWindowTitle();
+                if (cleared > 0)
+                    setStatusMsg("Definition deleted (cleared " + std::to_string(cleared) +
+                                 " reference" + (cleared == 1 ? "" : "s") + ")");
             }
             ImGui::EndDisabled();
 
@@ -1238,9 +1259,14 @@ void MeshCraftApplication::drawLeftPanel(float panelY, float panelH)
                 if (!canRemove) ImGui::BeginDisabled();
                 if (ImGui::SmallButton("×##matrem")) {
                     pushUndo();
+                    // F10: clear dangling object/state/scene-state references.
+                    int cleared = clearMaterialReferencesAlg(document_, selectedMaterialKey_);
                     document_.materials.erase(selectedMaterialKey_);
                     selectedMaterialKey_.clear();
                     modified_ = true; updateWindowTitle();
+                    if (cleared > 0)
+                        setStatusMsg("Material deleted (cleared " + std::to_string(cleared) +
+                                     " reference" + (cleared == 1 ? "" : "s") + ")");
                 }
                 if (!canRemove) ImGui::EndDisabled();
             }
@@ -1519,9 +1545,15 @@ void MeshCraftApplication::drawLeftPanel(float panelY, float panelH)
             ImGui::SameLine();
             if (ImGui::SmallButton("-##scriptremove") && !selectedScriptKey_.empty()) {
                 pushUndo();
+                // F10: clear dangling Mc3Object::scriptId refs and remove
+                // now-useless RunScript trigger steps before erasing.
+                int cleared = clearScriptReferencesAlg(document_, selectedScriptKey_);
                 document_.scripts.erase(selectedScriptKey_);
                 selectedScriptKey_.clear();
                 modified_ = true; updateWindowTitle();
+                if (cleared > 0)
+                    setStatusMsg("Script deleted (cleared " + std::to_string(cleared) +
+                                 " reference" + (cleared == 1 ? "" : "s") + ")");
             }
 
             ImGui::Separator();
@@ -1617,9 +1649,14 @@ void MeshCraftApplication::drawLeftPanel(float panelY, float panelH)
             if (ImGui::SmallButton("-##soundremove") && !selectedSoundKey_.empty()) {
                 pushUndo();
                 if (audioPreview_.currentKey() == selectedSoundKey_) audioPreview_.stop();
+                // F10: remove now-useless PlaySound trigger steps before erasing.
+                int cleared = clearSoundReferencesAlg(document_, selectedSoundKey_);
                 document_.sounds.erase(selectedSoundKey_);
                 selectedSoundKey_.clear();
                 modified_ = true; updateWindowTitle();
+                if (cleared > 0)
+                    setStatusMsg("Sound deleted (cleared " + std::to_string(cleared) +
+                                 " trigger step" + (cleared == 1 ? "" : "s") + ")");
             }
 
             for (const auto& [key, sound] : document_.sounds) {
@@ -1692,9 +1729,14 @@ void MeshCraftApplication::drawLeftPanel(float panelY, float panelH)
             if (ImGui::SmallButton("-##musicremove") && !selectedMusicKey_.empty()) {
                 pushUndo();
                 if (audioPreview_.currentKey() == selectedMusicKey_) audioPreview_.stop();
+                // F10: remove now-useless PlayMusic trigger steps before erasing.
+                int cleared = clearMusicReferencesAlg(document_, selectedMusicKey_);
                 document_.musicTracks.erase(selectedMusicKey_);
                 selectedMusicKey_.clear();
                 modified_ = true; updateWindowTitle();
+                if (cleared > 0)
+                    setStatusMsg("Music track deleted (cleared " + std::to_string(cleared) +
+                                 " trigger step" + (cleared == 1 ? "" : "s") + ")");
             }
 
             for (const auto& [key, music] : document_.musicTracks) {
@@ -1869,9 +1911,14 @@ void MeshCraftApplication::drawLeftPanel(float panelY, float panelH)
             ImGui::SameLine();
             if (ImGui::SmallButton("-##embedremove") && !selectedEmbedKey_.empty()) {
                 pushUndo();
+                // F10: clear dangling Mesh object "embed:<id>" meshSource refs.
+                int cleared = clearEmbedReferencesAlg(document_, selectedEmbedKey_);
                 document_.embeds.erase(selectedEmbedKey_);
                 selectedEmbedKey_.clear();
                 modified_ = true; updateWindowTitle();
+                if (cleared > 0)
+                    setStatusMsg("Embed deleted (cleared " + std::to_string(cleared) +
+                                 " mesh reference" + (cleared == 1 ? "" : "s") + ")");
             }
 
             ImGui::Separator();

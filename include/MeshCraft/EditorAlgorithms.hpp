@@ -2061,6 +2061,162 @@ inline std::string registerTextureFromPathAlg(const std::string& path, Mc3::Mc3D
     return key;
 }
 
+// ── Delete reference-integrity cleanup (F10, 2026-07-20 audit) ───────────────
+//
+// Rename already rewrites every live reference to a resource's OLD id over
+// to its NEW one (the Mat/Defs tabs' own fixRefs lambdas in
+// MeshCraftApplication_UiLeftPanel.cpp, ModelRegistry.cpp's
+// remapMaterialRefs()). Delete had no equivalent: erasing a shared
+// resource left every object/material/trigger that referenced it pointing
+// at a now-nonexistent id, with no warning and no cleanup -- silently
+// broken material/texture/mesh assignments and dead trigger steps that
+// would only surface later (a validation warning, a blank material in the
+// renderer, glTF export dropping the reference).
+//
+// Each function below returns how many references it cleared, so the
+// caller can report it in the status message. Trigger steps are REMOVED
+// entirely rather than left with a cleared ref -- a PlaySound/PlayMusic/
+// RunScript step with an empty ref does nothing useful, unlike a cleared
+// Mc3Object::material (an object with no material is a normal, valid
+// state -- it just renders with the default fallback color, same as
+// materialColorAlg above already handles).
+
+inline int clearMaterialRefsInObjectAlg(Mc3::Mc3Object& obj, const std::string& deletedId)
+{
+    int n = 0;
+    if (obj.material == deletedId)         { obj.material.clear();         ++n; }
+    if (obj.materialOverride == deletedId) { obj.materialOverride.clear(); ++n; }
+    for (auto& [stateName, state] : obj.states)
+        if (state.material && *state.material == deletedId) { state.material.reset(); ++n; }
+    for (auto& child : obj.children)
+        if (child) n += clearMaterialRefsInObjectAlg(*child, deletedId);
+    return n;
+}
+
+inline int clearMaterialReferencesAlg(Mc3::Mc3Document& doc, const std::string& deletedId)
+{
+    int n = 0;
+    for (auto& obj : doc.objects)
+        if (obj) n += clearMaterialRefsInObjectAlg(*obj, deletedId);
+    for (auto& [defId, defObj] : doc.definitions)
+        if (defObj) n += clearMaterialRefsInObjectAlg(*defObj, deletedId);
+    for (auto& [stateName, state] : doc.sceneStates)
+        for (auto& ovr : state.overrides)
+            if (ovr.material && *ovr.material == deletedId) { ovr.material.reset(); ++n; }
+    return n;
+}
+
+inline int clearDefinitionRefsInObjectAlg(Mc3::Mc3Object& obj, const std::string& deletedId)
+{
+    int n = 0;
+    if (obj.type == Mc3::ObjectType::Instance && obj.definition == deletedId) {
+        obj.definition.clear();
+        ++n;
+    }
+    auto& variants = obj.variantDefinitions;
+    auto vEnd = std::remove(variants.begin(), variants.end(), deletedId);
+    n += static_cast<int>(std::distance(vEnd, variants.end()));
+    variants.erase(vEnd, variants.end());
+    if (obj.assetMetadata) {
+        auto& lods = obj.assetMetadata->lods;
+        for (auto it = lods.begin(); it != lods.end(); ) {
+            if (it->second == deletedId) { it = lods.erase(it); ++n; }
+            else ++it;
+        }
+    }
+    for (auto& child : obj.children)
+        if (child) n += clearDefinitionRefsInObjectAlg(*child, deletedId);
+    return n;
+}
+
+inline int clearDefinitionReferencesAlg(Mc3::Mc3Document& doc, const std::string& deletedId)
+{
+    int n = 0;
+    for (auto& obj : doc.objects)
+        if (obj) n += clearDefinitionRefsInObjectAlg(*obj, deletedId);
+    for (auto& [defId, defObj] : doc.definitions)
+        if (defObj) n += clearDefinitionRefsInObjectAlg(*defObj, deletedId);
+    return n;
+}
+
+inline int clearTextureReferencesAlg(Mc3::Mc3Document& doc, const std::string& deletedId)
+{
+    int n = 0;
+    for (auto& [matId, mat] : doc.materials) {
+        if (mat.baseColorTexture == deletedId)         { mat.baseColorTexture.clear();         ++n; }
+        if (mat.normalTexture == deletedId)            { mat.normalTexture.clear();            ++n; }
+        if (mat.emissiveTexture == deletedId)          { mat.emissiveTexture.clear();          ++n; }
+        if (mat.metallicRoughnessTexture == deletedId) { mat.metallicRoughnessTexture.clear(); ++n; }
+        if (mat.occlusionTexture == deletedId)         { mat.occlusionTexture.clear();         ++n; }
+    }
+    return n;
+}
+
+inline int clearMeshSourceRefsInObjectAlg(Mc3::Mc3Object& obj, const std::string& meshSourceValue)
+{
+    int n = 0;
+    if (obj.meshSource == meshSourceValue) { obj.meshSource.clear(); ++n; }
+    for (auto& child : obj.children)
+        if (child) n += clearMeshSourceRefsInObjectAlg(*child, meshSourceValue);
+    return n;
+}
+
+// A Mesh object's src references an embed via the "embed:<id>" scheme
+// (see Mc3XmlParser.cpp's mesh tag handling) -- not the bare id.
+inline int clearEmbedReferencesAlg(Mc3::Mc3Document& doc, const std::string& deletedId)
+{
+    std::string embedRef = "embed:" + deletedId;
+    int n = 0;
+    for (auto& obj : doc.objects)
+        if (obj) n += clearMeshSourceRefsInObjectAlg(*obj, embedRef);
+    for (auto& [defId, defObj] : doc.definitions)
+        if (defObj) n += clearMeshSourceRefsInObjectAlg(*defObj, embedRef);
+    return n;
+}
+
+inline int clearScriptRefsInObjectAlg(Mc3::Mc3Object& obj, const std::string& deletedId)
+{
+    int n = 0;
+    if (obj.scriptId == deletedId) { obj.scriptId.clear(); ++n; }
+    for (auto& child : obj.children)
+        if (child) n += clearScriptRefsInObjectAlg(*child, deletedId);
+    return n;
+}
+
+inline int removeTriggerStepsReferencingAlg(Mc3::Mc3Document& doc, Mc3::TriggerStepType type,
+                                             const std::string& deletedId)
+{
+    int n = 0;
+    for (auto& [trigId, trig] : doc.triggers) {
+        auto stepsEnd = std::remove_if(trig.steps.begin(), trig.steps.end(),
+            [&](const Mc3::Mc3TriggerStep& s) { return s.type == type && s.ref == deletedId; });
+        n += static_cast<int>(std::distance(stepsEnd, trig.steps.end()));
+        trig.steps.erase(stepsEnd, trig.steps.end());
+    }
+    return n;
+}
+
+inline int clearScriptReferencesAlg(Mc3::Mc3Document& doc, const std::string& deletedId)
+{
+    int n = 0;
+    for (auto& obj : doc.objects)
+        if (obj) n += clearScriptRefsInObjectAlg(*obj, deletedId);
+    for (auto& [defId, defObj] : doc.definitions)
+        if (defObj) n += clearScriptRefsInObjectAlg(*defObj, deletedId);
+    n += removeTriggerStepsReferencingAlg(doc, Mc3::TriggerStepType::RunScript, deletedId);
+    return n;
+}
+
+inline int clearSoundReferencesAlg(Mc3::Mc3Document& doc, const std::string& deletedId)
+{
+    return removeTriggerStepsReferencingAlg(doc, Mc3::TriggerStepType::PlaySound, deletedId);
+}
+
+inline int clearMusicReferencesAlg(Mc3::Mc3Document& doc, const std::string& deletedId)
+{
+    return removeTriggerStepsReferencingAlg(doc, Mc3::TriggerStepType::PlayMusic, deletedId);
+}
+
 // ── Undo/redo stack depth cap (STAB-0481) ─────────────────────────────────────
 //
 // Mirrors the push-then-trim pattern duplicated at all three undo/redo stack
