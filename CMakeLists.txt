@@ -961,6 +961,21 @@ if(MESH_CRAFT_BUILD_TESTING AND UNIX AND NOT ANDROID AND NOT EMSCRIPTEN)
     add_test(NAME scene_state_apply COMMAND scene_state_apply_test)
     set_tests_properties(scene_state_apply PROPERTIES TIMEOUT 15 LABELS "unit")
 
+    # SYS-W14-21 (2026-07-20): the Imports tab's new "Resolve Imports" button
+    # and the automatic post-load resolution -- resolveImports() wires the
+    # already-tested Mc3ImportResolver (R101) into the editor. CNA-free
+    # mirror of resolveImports()'s exact control flow (MeshCraftApplication
+    # is not headlessly instantiable), against the real Mc3ImportResolver and
+    # real Mc3Document -- matching trigger_fire_test/scene_state_apply_test's
+    # established pattern. Links Mc3 for Mc3ImportResolver/Mc3Document's
+    # compiled methods (saveToLibraryFile, computeLibraryContentHash, ...).
+    add_executable(resolve_imports_test
+        ${CMAKE_CURRENT_SOURCE_DIR}/test/resolve_imports_test.cpp)
+    target_link_libraries(resolve_imports_test PRIVATE Mc3)
+    target_compile_features(resolve_imports_test PRIVATE cxx_std_23)
+    add_test(NAME resolve_imports COMMAND resolve_imports_test)
+    set_tests_properties(resolve_imports PROPERTIES TIMEOUT 15 LABELS "unit")
+
     # 2026-07-20 audit F2 (P0): SceneHierarchyPanel.cpp's drawHierarchy()
     # range-for-iterates over document_.objects/children by reference;
     # dragging an earlier sibling onto a later one in the same list used to

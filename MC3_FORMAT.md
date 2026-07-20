@@ -124,6 +124,20 @@ in under a local alias, so `<instance>`s can reference their definitions as
 | `source` | string | yes | `"mc3lib://<library-name>@<version>"` — the library's own declared name/version, which may differ from the local alias |
 | `hash` | string | no | if present, verified against the resolved library's own content hash on import |
 
+**Editor status (`SYS-W14-21`, 2026-07-20):** `<imports>` are actually
+resolved by the editor, not just round-tripped — `Mc3ImportResolver`
+(R101, `mc3/src/Mc3ImportResolver.cpp`) is invoked automatically right
+after every load (search directory = the loaded document's own
+directory) and merges each imported library's definitions into
+`document_.definitions` under its local alias, so
+`<instance definition="namespace:id">` referencing an imported
+definition renders. An explicit "Resolve Imports" button in the editor's
+Imports tab re-runs resolution after editing the rows, without a full
+reload. A resolution failure (missing library file, content-hash
+mismatch, an import cycle, or exceeding the resolver's chain-depth cap)
+does not fail the whole document load — it's reported to the user and
+the affected imports simply stay unresolved.
+
 ---
 
 ## Include (`<include>`)

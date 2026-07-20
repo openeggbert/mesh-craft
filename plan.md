@@ -140,8 +140,9 @@ still internally consistent.
    (user request: "co mc3 nabízí, ale MeshCraft to ještě neumí" --
    trigger event-firing and Lua scripting execution) are now done.
 5. Scene States runtime switching (P2) is now done -- user picked it to
-   go next 2026-07-20. **SYS-W14-21** (P2) — wiring `Mc3ImportResolver`
-   into the editor, still open.
+   go next 2026-07-20. Wiring `Mc3ImportResolver` into the editor (P2) is
+   now done too -- all four of the P1/P2 format-vs-editor gaps found
+   2026-07-20 are complete.
 6. **SYS-W14-22..27** (P3) — smaller format-vs-editor completeness gaps
    (`mipMaps`/`colorSpace` unused downstream, UV box/sphere projection,
    MCB compression, light-brightness unit conversion, ambient-light
@@ -1183,7 +1184,7 @@ _All items in this workstream are DONE — archived to [`docs/history/plan_20260
   override in the same state; the no-op-undo cases (all-missing,
   empty-overrides) pushing zero undo snapshots.
   Full rebuild + 158/158 `ctest` (was 157).
-- **SYS-W14-21** `[TODO]` `P2` — Wire `Mc3ImportResolver` into the editor.
+- **SYS-W14-21** `[DONE]` `P2` — Wire `Mc3ImportResolver` into the editor.
   `mc3/src/Mc3ImportResolver.cpp` (R101, `resolve()`/`resolveAndMergeInto()`)
   is a complete, tested, standalone implementation that resolves a
   document's `<imports>`/`mc3lib://name@version` references against a
@@ -1199,10 +1200,42 @@ _All items in this workstream are DONE — archived to [`docs/history/plan_20260
   in the live editor — the data round-trips correctly, but composing a
   scene from a shared imported library doesn't actually work
   interactively, only the metadata describing that it should.
-  **Outcome:** call `resolveAndMergeInto(document_)` (or equivalent) at
-  load time (and/or an explicit "Resolve Imports" action, given search
-  directories are a caller-supplied, possibly project-specific list) so
-  imported-definition instances actually resolve and render.
+  **Implementation (per the user's confirmed 3-part plan):**
+  new `MeshCraftApplication::resolveImports()`
+  (`MeshCraftApplication_FileOps.cpp`) — a no-op if `document_.imports`
+  is empty; otherwise constructs `Mc3::Mc3ImportResolver` with
+  `document_.sourcePath` (the loaded document's own directory, matching
+  how both `Mc3XmlParser`/`Mc3JsonParser` already set `sourcePath`) as
+  the sole search directory, calls `resolveAndMergeInto(document_)`, and
+  reports success/failure via `setStatusMsg()`. A resolution failure
+  (missing library file, hash mismatch, import cycle, or the resolver's
+  own `F18` chain-depth cap) is caught and reported, not rethrown — it
+  does not fail an otherwise-loadable document, matching this session's
+  established "a recoverable data issue shouldn't make an otherwise-
+  loadable document unopenable" precedent (same shape as `SYS-W14-18`'s
+  script-error handling). (1) Called automatically right after every
+  load, alongside `checkRotationConventionNotice()`, at all 4 load call
+  sites: initial launch-with-file-argument (`MeshCraftApplication.cpp`),
+  the Open-file-dialog confirm handler (`MeshCraftApplication_UiOverlays.cpp`),
+  `OpenRecentFile` (`MeshCraftApplication_FileOps.cpp`), and autosave
+  recovery (`MeshCraftApplication_FileOps.cpp`). (2) An explicit
+  "Resolve Imports" button added to the Imports tab
+  (`MeshCraftApplication_UiLeftPanel.cpp`) for re-resolving after
+  editing the import rows without a full reload.
+  **Tests:** new `test/resolve_imports_test.cpp` (`resolve_imports`
+  ctest) — CNA-free mirror of `resolveImports()`'s exact control flow
+  (`MeshCraftApplication` is not headlessly instantiable, same rationale
+  as `trigger_fire_test`/`scene_state_apply_test`), against the REAL
+  `Mc3ImportResolver` and real `.mc3lib.xml` fixture files on disk (not
+  a mock — the resolver itself is already exhaustively covered by
+  `mc3/test/import_resolver_test.cpp`, so this test only needs to prove
+  the thin wrapper's own contract). Covers: empty-imports no-op (no
+  status message, no resolver constructed); successful resolution
+  merging the imported definition into `document.definitions` with the
+  correct singular/plural status message; a missing-library failure
+  caught and reported via the error-status shape without propagating,
+  leaving `document.definitions` untouched (not a partial merge).
+  Full rebuild + 159/159 `ctest` (was 158).
 - **SYS-W14-22** `[TODO]` `P3` — `Mc3Texture::mipMaps` unused downstream.
   Round-trips (XML/JSON/MCB) and now has editor UI (added this session,
   `F21`, 2026-07-20 audit) but grepped `SceneRenderer.cpp`/

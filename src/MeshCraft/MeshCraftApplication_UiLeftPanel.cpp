@@ -2373,6 +2373,19 @@ void MeshCraftApplication::drawLeftPanel(float panelY, float panelH)
             ImGui::TextDisabled("local alias, so instances can reference its definitions");
             ImGui::TextDisabled("as \"<namespace>:<definitionId>\".");
             ImGui::Spacing();
+
+            // SYS-W14-21 (2026-07-20 audit): resolution already runs
+            // automatically right after every load (resolveImports(),
+            // MeshCraftApplication_FileOps.cpp/.cpp/UiOverlays.cpp) -- this
+            // is for re-resolving after editing the rows below (adding a
+            // new import, fixing a typo'd source) without a full reload.
+            if (ImGui::Button("Resolve Imports", ImVec2(-1, 0))) resolveImports();
+            if (ImGui::IsItemHovered())
+                ImGui::SetTooltip("Re-runs import resolution now, against the rows below "
+                                   "(useful after editing them -- this already runs "
+                                   "automatically on every load)");
+
+            ImGui::Spacing();
             ImGui::Separator();
             ImGui::Spacing();
 

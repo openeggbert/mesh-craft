@@ -1190,6 +1190,7 @@ void MeshCraftApplication::drawDialogs()
                 std::cout << "[MeshCraft] Loaded: " << openDialogBuf_ << "\n";
                 setStatusMsg("Opened " + currentFile_.filename().string(), false, 2.0f);
                 checkRotationConventionNotice();
+                resolveImports();
                 checkForNewerAutosave(currentFile_);
                 updateWindowTitle();
                 ImGui::CloseCurrentPopup();

@@ -696,6 +696,14 @@ private:
     // once per load rather than silently rendering such a file wrong.
     void checkRotationConventionNotice();
 
+    // SYS-W14-21: resolves doc.imports (mc3lib://name@version references)
+    // against document_.sourcePath and merges namespace-qualified
+    // definitions into document_.definitions, via Mc3ImportResolver
+    // (mc3/, R101). No-op if document_.imports is empty. A resolution
+    // failure is reported via setStatusMsg, not thrown further -- doesn't
+    // fail an otherwise-loadable document.
+    void resolveImports();
+
     // SYS-W14-11: shared extension dispatch for the 3 real load call sites
     // (startup, Open Recent File, Open File dialog) -- .mcb routes to the
     // MCB reader, .json to the semantic-JSON parser, everything else to the

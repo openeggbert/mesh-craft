@@ -1,6 +1,7 @@
 #include "MeshCraft/MeshCraftApplication.hpp"
 #include "MeshCraftPrivate.hpp"
 #include "MeshCraft/EditorAlgorithms.hpp"
+#include "MeshCraft/Mc3/Mc3ImportResolver.hpp"
 #include "MeshCraft/Mcb/McbReader.hpp"
 #include "MeshCraft/Mcb/McbWriter.hpp"
 #include "MeshCraft/TempFile.hpp"
@@ -115,6 +116,7 @@ void MeshCraftApplication::recoverFromAutosave() {
         modified_ = true; // recovered content differs from what's saved at currentFile_
         setStatusMsg("Recovered unsaved changes from autosave", false, 3.0f);
         checkRotationConventionNotice();
+        resolveImports();
         updateWindowTitle();
     } catch (const std::exception& e) {
         std::cerr << "[MeshCraft] Autosave recovery error: " << e.what() << "\n";
@@ -180,6 +182,41 @@ void MeshCraftApplication::checkRotationConventionNotice() {
                  /*isError=*/false, /*duration=*/7.0f);
 }
 
+// SYS-W14-21 (2026-07-20 audit): Mc3ImportResolver (R101, mc3/) is a
+// complete, tested, standalone implementation that resolves
+// doc.imports/mc3lib://name@version references and merges namespace-
+// qualified definitions into doc.definitions -- but nothing in this
+// editor ever called it, so an <instance definition="ns:id"> referencing
+// an imported (not locally-defined) definition rendered as nothing in the
+// live editor even though the data round-tripped correctly. Called once
+// after every successful document load (recoverFromAutosave(),
+// executePendingAction()'s OpenRecentFile case, Initialize()'s initial-
+// file-argument load, and the Open-file dialog's own confirm handler),
+// alongside checkRotationConventionNotice() -- and separately via the
+// Imports tab's own explicit "Resolve Imports" button, for re-resolving
+// after editing doc.imports without needing a full reload.
+//
+// A no-op if doc.imports is empty (the overwhelmingly common case --
+// don't touch anything or print a status message for a document that
+// doesn't use imports at all). A resolution failure (missing library
+// file, content-hash mismatch, an import cycle/depth-limit) does NOT
+// fail the whole document load -- it's reported via setStatusMsg and the
+// affected imports simply stay unresolved (same as before this fix),
+// matching this session's own "a recoverable data issue shouldn't make
+// an otherwise-loadable document unopenable" precedent.
+void MeshCraftApplication::resolveImports() {
+    if (document_.imports.empty()) return;
+    try {
+        Mc3::Mc3ImportResolver resolver({document_.sourcePath});
+        resolver.resolveAndMergeInto(document_);
+        setStatusMsg("Resolved " + std::to_string(document_.imports.size()) +
+                     " import" + (document_.imports.size() == 1 ? "" : "s"),
+                     /*isError=*/false, /*duration=*/3.0f);
+    } catch (const std::exception& e) {
+        setStatusMsg(std::string("Import resolution failed: ") + e.what(), /*isError=*/true);
+    }
+}
+
 
 // AUD-031: loadRecentFiles/saveRecentFiles/addRecentFile were hand-copied
 // duplicates of loadRecentFilesAlg/saveRecentFilesAlg/addRecentFileAlg's
@@ -236,6 +273,7 @@ void MeshCraftApplication::executePendingAction() {
                 modified_ = false;
                 setStatusMsg("Opened " + currentFile_.filename().string(), false, 2.0f);
                 checkRotationConventionNotice();
+                resolveImports();
                 checkForNewerAutosave(currentFile_);
                 updateWindowTitle();
             } catch (const std::exception& e) {
