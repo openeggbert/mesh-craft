@@ -212,6 +212,14 @@ if(BUILD_TESTING)
     add_test(NAME mc3_json_input_budget COMMAND mc3_json_input_budget_test)
     set_tests_properties(mc3_json_input_budget PROPERTIES TIMEOUT 15 LABELS "format")
 
+    # F17 (2026-07-20 audit): Mc3XmlParser.cpp sorts a channel's keyframes by
+    # time after parsing; the JSON path never did, and Mc3Animation.cpp's
+    # evaluateChannel() assumes sorted input (std::upper_bound).
+    add_executable(mc3_keyframe_sort_test test/keyframe_sort_test.cpp)
+    target_link_libraries(mc3_keyframe_sort_test PRIVATE Mc3)
+    add_test(NAME mc3_keyframe_sort COMMAND mc3_keyframe_sort_test)
+    set_tests_properties(mc3_keyframe_sort PROPERTIES TIMEOUT 15 LABELS "format")
+
     # SYS-W1-02: documented per-field numeric ranges (camera/material/
     # geometry/environment/animation/transform) -- a value that's finite but
     # outside its field's documented domain (fov=600, roughness=-3,

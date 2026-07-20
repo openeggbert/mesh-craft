@@ -117,6 +117,14 @@ if(BUILD_TESTING)
     add_test(NAME mcb_tessellation_clamp COMMAND mcb_tessellation_clamp_test)
     set_tests_properties(mcb_tessellation_clamp PROPERTIES TIMEOUT 15 LABELS "format")
 
+    # 2026-07-20 audit F17: Mc3XmlParser.cpp sorts a channel's keyframes by
+    # time after parsing; McbReader.cpp never did, and Mc3Animation.cpp's
+    # evaluateChannel() assumes sorted input (std::upper_bound).
+    add_executable(mcb_keyframe_sort_test test/keyframe_sort_test.cpp)
+    target_link_libraries(mcb_keyframe_sort_test PRIVATE Mcb)
+    add_test(NAME mcb_keyframe_sort COMMAND mcb_keyframe_sort_test)
+    set_tests_properties(mcb_keyframe_sort PROPERTIES TIMEOUT 15 LABELS "format")
+
     # 2026-07-20 audit F3: McbReader/McbWriter had no Mc3LoadPolicy
     # integration at all -- resource-path confinement (meshSource/texture
     # uri/SVG/embed/sound/music src) was structurally impossible for MCB,

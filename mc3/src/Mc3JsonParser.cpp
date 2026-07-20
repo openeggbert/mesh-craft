@@ -823,6 +823,14 @@ Mc3Document Mc3JsonParser::parseString(const std::string& jsonText,
                             ch.keyframes.push_back(kf);
                         }
                     }
+                    // F17 (2026-07-20 audit): Mc3XmlParser.cpp sorts keyframes
+                    // by time (stable, so equal-time keyframes keep their
+                    // first-declared-wins order -- STAB-0468); this path
+                    // never did. Mc3Animation.cpp's evaluateChannel() assumes
+                    // sorted input (std::upper_bound) -- an out-of-order
+                    // .mc3.json-authored channel silently interpolated wrong.
+                    std::stable_sort(ch.keyframes.begin(), ch.keyframes.end(),
+                        [](const Mc3Keyframe& a, const Mc3Keyframe& b){ return a.time < b.time; });
                     act.channels.push_back(std::move(ch));
                 }
             }
