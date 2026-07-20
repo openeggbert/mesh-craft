@@ -1327,6 +1327,25 @@ if(MESH_CRAFT_BUILD_TESTING AND UNIX AND NOT ANDROID AND NOT EMSCRIPTEN)
             set_tests_properties(bloom_test PROPERTIES TIMEOUT 30 LABELS "render")
         endif()
 
+        # AUD-087: material-preview swatch (D7) migrated from a hand-rolled
+        # raw-GL FBO+shader pipeline onto RenderTarget2D + ShaderEffect +
+        # SpriteBatch -- no dedicated test existed before (it's only ever
+        # drawn inside an ImGui panel, no CLI/scene-file equivalent). Reuses
+        # the existing light_shading.mc3.xml fixture -- any scene works,
+        # since the swatch is driven entirely by the test-only hook's own
+        # hardcoded color, not scene content.
+        if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/test/light_shading.mc3.xml")
+            add_test(
+                NAME matpreview_test
+                COMMAND "${PYTHON3_EXEC}"
+                        "${CMAKE_CURRENT_SOURCE_DIR}/test/matpreview_test.py"
+                        $<TARGET_FILE:MeshCraft>
+                        "${CMAKE_CURRENT_SOURCE_DIR}/test/light_shading.mc3.xml"
+                WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
+            )
+            set_tests_properties(matpreview_test PROPERTIES TIMEOUT 30 LABELS "render")
+        endif()
+
         # 2026-07-20 audit finding #4: doc.lights had zero effect on live
         # shading (BasicEffect's fixed 3-point default rig was used
         # unconditionally regardless of what was authored) -- verify a

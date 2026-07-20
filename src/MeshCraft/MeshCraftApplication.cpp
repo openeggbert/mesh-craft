@@ -13,6 +13,7 @@
 #include <Microsoft/Xna/Framework/Input/Keys.hpp>
 #include <Microsoft/Xna/Framework/Input/Mouse.hpp>
 #include <Microsoft/Xna/Framework/Input/ButtonState.hpp>
+#include <CNA/Internal/Backends/Common/IGraphicsBackend.hpp>
 #include <Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp>
 #include <Microsoft/Xna/Framework/Graphics/RasterizerState.hpp>
 #include <Microsoft/Xna/Framework/Graphics/SamplerState.hpp>
@@ -328,6 +329,20 @@ bool MeshCraftApplication::BeginDraw() {
 void MeshCraftApplication::EndDraw() {
     ImGui::Render();
     ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
+
+    // AUD-087 test-only hook (see the render-to-RT half in Draw()): blit the
+    // swatch on top of everything, including ImGui, which only just finished
+    // rasterizing above -- a blit anywhere in Draw() would have been
+    // overwritten by this same ImGui render call.
+    if (std::getenv("MESHCRAFT_TEST_FORCE_MATPREVIEW") && matPreviewTexId_ && matPreviewRt_) {
+        auto& gd = getGraphicsDeviceProperty();
+        gd.setViewportProperty(Viewport(0, 0, cachedScreenW_, cachedScreenH_));
+        const Rectangle corner(0, 0, kMatPreviewRes, kMatPreviewRes);
+        spriteBatch_->Begin(SpriteSortMode::Deferred, BlendState::Opaque);
+        spriteBatch_->Draw(*matPreviewRt_, corner, Color::White);
+        spriteBatch_->End();
+    }
+
     if (pendingExport_) {
         pendingExport_ = false;
         try {
@@ -773,6 +788,22 @@ void MeshCraftApplication::Draw(const GameTime& /*gameTime*/) {
         if (bloomFboW_ != viewW || bloomFboH_ != viewH)
             initBloom(viewW, viewH);
         applyBloom(viewX, viewY, viewW, viewH, view, proj);
+    }
+
+    // AUD-087 test-only hook: the material preview swatch is only ever drawn
+    // inside the left panel's Materials section, gated on a material being
+    // selected in the UI -- no CLI/scene-file equivalent exists, so a plain
+    // headless --screenshot run never exercises initMatPreview()/
+    // renderMatPreview() at all. Setting this env var renders a swatch with
+    // a known distinctive color, matching AUD-058's own established pattern
+    // for bloom/SSAO; the actual on-screen blit happens in EndDraw(), after
+    // ImGui_ImplOpenGL3_RenderDrawData() -- drawImGuiUi() here only queues
+    // ImGui's draw list, it doesn't rasterize pixels yet, so a blit anywhere
+    // in Draw() (even after this call) would still get overwritten once
+    // ImGui's own real rendering runs afterward in EndDraw().
+    if (std::getenv("MESHCRAFT_TEST_FORCE_MATPREVIEW")) {
+        initMatPreview();
+        renderMatPreview(1.0f, 0.0f, 0.0f, 0.5f, 0.0f);
     }
 
     // Box-select rectangle overlay drawn via ImGui in drawImGuiUi()
@@ -1316,15 +1347,21 @@ void main() {
 }
 )";
 
-// Material preview sphere shader (D7): fullscreen triangle, SDF sphere with Blinn-Phong
-const char* kMatPreviewFS = R"(#version 300 es
+// Material preview sphere shader (D7): fullscreen triangle, SDF sphere with Blinn-Phong.
+// AUD-087: TexCoord (SpriteBatch's varying, top-left origin) is flipped in Y here to
+// match the original v_uv's bottom-left-origin convention (the old kBloomVS's own
+// gl_VertexID-driven UV) -- the light direction below is Y-asymmetric (L.y=1.0), so
+// getting this flip right actually matters for a faithful highlight position, unlike
+// AUD-086's skybox (whose own Y-flip need was verified against the same reference).
+const char* kMatPreviewFragSrc = R"(#version 300 es
 precision mediump float;
 uniform vec3  u_color;
 uniform float u_roughness;
 uniform float u_metallic;
-in vec2 v_uv;
+in vec2 TexCoord;
 out vec4 fragColor;
 void main() {
+    vec2 v_uv = vec2(TexCoord.x, 1.0 - TexCoord.y);
     vec2 p = v_uv * 2.0 - 1.0;
     float r2 = dot(p, p);
     if (r2 > 1.0) discard;
@@ -1783,52 +1820,45 @@ void MeshCraftApplication::renderShadowDebugFbo(const Matrix& lightView, const M
 // D7: Material preview sphere (128×128 FBO, SDF Blinn-Phong shader)
 // ---------------------------------------------------------------------------
 void MeshCraftApplication::initMatPreview() {
-    auto& gl = s_bloom;
-    if (!gl.loadFunctions()) return;
-    if (gl.matPreviewTex) return;  // already initialised
+    if (matPreviewRt_) return;  // already initialised
 
-    constexpr int res = kMatPreviewRes;
-    gl.GenFramebuffers(1, &gl.matPreviewFbo);
-    gl.BindFramebuffer(kGL_FRAMEBUFFER, gl.matPreviewFbo);
-    gl.GenTextures(1, &gl.matPreviewTex);
-    gl.BindTexture(kGL_TEXTURE_2D, gl.matPreviewTex);
-    gl.TexImage2D(kGL_TEXTURE_2D, 0, kGL_RGBA8, res, res, 0, kGL_RGBA, kGL_UNSIGNED_BYTE, nullptr);
-    gl.TexParameteri(kGL_TEXTURE_2D, kGL_TEXTURE_MIN_FILTER, kGL_LINEAR);
-    gl.TexParameteri(kGL_TEXTURE_2D, kGL_TEXTURE_MAG_FILTER, kGL_LINEAR);
-    gl.FramebufferTexture2D(kGL_FRAMEBUFFER, kGL_COLOR_ATTACHMENT0,
-                            kGL_TEXTURE_2D, gl.matPreviewTex, 0);
-    gl.BindFramebuffer(kGL_FRAMEBUFFER, 0);
-    gl.BindTexture(kGL_TEXTURE_2D, 0);
-
-    gl.progMatPreview = gl.makeProgram(kBloomVS, kMatPreviewFS);
-    if (!gl.progMatPreview) {
-        gl.DeleteFramebuffers(1, &gl.matPreviewFbo); gl.matPreviewFbo = 0;
-        gl.DeleteTextures(1, &gl.matPreviewTex);     gl.matPreviewTex = 0;
+    auto& gd = getGraphicsDeviceProperty();
+    matPreviewRt_.emplace(gd, kMatPreviewRes, kMatPreviewRes);
+    matPreviewFx_.emplace(gd, kBloomVertSrc, kMatPreviewFragSrc);
+    const std::vector<std::uint8_t> white{255, 255, 255, 255};
+    matPreviewDummyTex_ = Texture2D::CreateFromPixels(gd, 1, 1, white);
+    if (!matPreviewFx_->IsEffectValid()) {
+        matPreviewRt_.reset();
+        matPreviewFx_.reset();
+        matPreviewDummyTex_.reset();
     }
 }
 
 void MeshCraftApplication::renderMatPreview(float r, float g, float b,
                                              float roughness, float metallic) {
-    auto& gl = s_bloom;
-    if (!gl.matPreviewTex || !gl.progMatPreview) return;
+    if (!matPreviewRt_ || !matPreviewFx_ || !matPreviewDummyTex_) return;
 
-    constexpr int res = kMatPreviewRes;
-    gl.BindFramebuffer(kGL_FRAMEBUFFER, gl.matPreviewFbo);
-    gl.Viewport(0, 0, res, res);
-    gl.Disable(kGL_BLEND);
-    gl.Disable(kGL_DEPTH_TEST);
-    gl.ClearColor(0.18f, 0.18f, 0.18f, 1.f);
-    gl.Clear(kGL_COLOR_BUFFER_BIT);
-    gl.UseProgram(gl.progMatPreview);
-    gl.Uniform3f(gl.GetUniformLocation(gl.progMatPreview, "u_color"), r, g, b);
-    gl.Uniform1f(gl.GetUniformLocation(gl.progMatPreview, "u_roughness"), roughness);
-    gl.Uniform1f(gl.GetUniformLocation(gl.progMatPreview, "u_metallic"),  metallic);
-    gl.DrawArrays(kGL_TRIANGLE_STRIP, 0, 4);
-    gl.UseProgram(0);
-    gl.BindFramebuffer(kGL_FRAMEBUFFER, 0);
-    gl.Viewport(0, 0, cachedScreenW_, cachedScreenH_);
-    gl.Enable(kGL_BLEND);
-    matPreviewTexId_ = gl.matPreviewTex;
+    auto& gd = getGraphicsDeviceProperty();
+    gd.SetRenderTarget(&*matPreviewRt_);
+    gd.SetDepthTestEnabled(false);
+    gd.Clear(Color(46, 46, 46, 255));  // 0.18 srgb-ish, matches the original ClearColor
+    matPreviewFx_->Apply();
+    matPreviewFx_->SetUniformVec3("u_color", r, g, b);
+    matPreviewFx_->SetUniformFloat("u_roughness", roughness);
+    matPreviewFx_->SetUniformFloat("u_metallic", metallic);
+    const Rectangle fullRect(0, 0, kMatPreviewRes, kMatPreviewRes);
+    spriteBatch_->Begin(SpriteSortMode::Deferred, BlendState::Opaque,
+                        nullptr, nullptr, nullptr, &*matPreviewFx_);
+    spriteBatch_->Draw(*matPreviewDummyTex_, fullRect, Color::White);
+    spriteBatch_->End();
+    gd.SetRenderTarget(nullptr);
+    gd.setViewportProperty(Viewport(0, 0, cachedScreenW_, cachedScreenH_));
+    gd.SetDepthTestEnabled(true);
+    // NOXNA cross-backend accessor (returns 0 on non-GL backends) -- the
+    // only way to hand a render target's content to ImGui::Image(), which
+    // needs a raw native texture handle, not a CNA Texture2D object.
+    if (auto* rtBackend = matPreviewRt_->GetRenderTargetBackend())
+        matPreviewTexId_ = rtBackend->GetColorGLHandle();
 }
 
 // STAB-0521: glGetError() is a queue, not a single flag — a pass that

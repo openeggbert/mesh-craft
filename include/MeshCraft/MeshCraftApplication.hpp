@@ -354,8 +354,18 @@ private:
     void drawShadowDebugOverlay(int screenW, int screenH);
 
     // Material preview sphere (D7)
+    // AUD-087: RenderTarget2D + ShaderEffect (CNA-native) instead of a raw-GL
+    // FBO + hand-compiled GLSL program -- see initMatPreview()/renderMatPreview().
     static constexpr int kMatPreviewRes = 128;
     unsigned             matPreviewTexId_{0};   // GL texture name, exposed for ImGui::Image
+    std::optional<Microsoft::Xna::Framework::Graphics::RenderTarget2D> matPreviewRt_;
+    std::optional<Microsoft::Xna::Framework::Graphics::ShaderEffect> matPreviewFx_;
+    // kMatPreviewFragSrc is purely procedural (no texture() calls at all) --
+    // SpriteBatch::Draw() still needs *some* Texture2D argument, and it must
+    // not be matPreviewRt_ itself (reading a render target that is also the
+    // currently-bound draw target is a GL feedback-loop hazard), so this
+    // throwaway 1x1 texture stands in; the shader ignores its content.
+    std::optional<Microsoft::Xna::Framework::Graphics::Texture2D> matPreviewDummyTex_;
     void initMatPreview();
     void renderMatPreview(float r, float g, float b, float roughness, float metallic);
 
