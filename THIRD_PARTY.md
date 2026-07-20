@@ -16,11 +16,12 @@ copied from memory.
 | [tinyobjloader](https://github.com/tinyobjloader/tinyobjloader) | `v2.0.0rc13` | MIT | `CMakeLists.txt`, `mc3togltf/CMakeLists.txt` | Loading `<mesh src="*.obj">` external meshes |
 | [tinygltf](https://github.com/syoyo/tinygltf) | `v2.9.3` | MIT | `mc3togltf/CMakeLists.txt` | Writing `.gltf`/`.glb` output |
 | [cpp-httplib](https://github.com/yhirose/cpp-httplib) | `v0.18.3` | MIT | `CMakeLists.txt` | HTTPS client for the AI Assistant's Claude API calls |
+| [nlohmann/json](https://github.com/nlohmann/json) | `v3.11.3` | MIT | `mc3/CMakeLists.txt` | `.mc3.json` parsing/writing (`Mc3JsonParser`/`Mc3JsonWriter`, R109) |
 
 Manifold and tinygltf each vendor their own further sub-dependencies
-(e.g. Clipper2, nlohmann/json, stb_image) as part of their own build —
-not individually itemized here; see each project's own repository for
-its own third-party notices.
+(e.g. Clipper2, stb_image) as part of their own build — not
+individually itemized here; see each project's own repository for its
+own third-party notices.
 
 ## System / `find_package` dependencies (not vendored)
 
