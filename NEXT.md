@@ -99,7 +99,7 @@ before when explicitly requested (`SYS-W14-##` rows).
 
 ## 2. Current status
 
-- **Last full build: clean after the current Phase 13 Edit-scatter-along-curve
+- **Last full build: clean after the current Phase 13 Edit-batch-rename
   slice.** Testing is enabled in the current Ninja Release tree, and
   `CCACHE_DISABLE=1 cmake --build b-release -j4` linked all targets successfully
   on EASYGL. Alternate-backend runtime qualification remains blocked.
@@ -787,7 +787,7 @@ Edit-select-by-type/tag/material, Edit-copy-properties, Edit-grouping,
 Edit-convert-to-definition, Edit-export-subtree, Edit-break-instance,
 Edit-align-selection, Edit-distribute-selection, Edit-drop-to-ground,
 Edit-snap-selection-to-grid, Edit-mirror-selection, Edit-group-scale,
-Edit-linear-array, and Edit-scatter-along-curve slices.
+Edit-linear-array, Edit-scatter-along-curve, and Edit-batch-rename slices.
 `EditHistoryContext` exposes only `canUndo`/`canRedo` plus Undo, Redo, and
 Open History callbacks; `Editor::UndoManager`, document replacement,
 selection restoration, dialog state, and keyboard handling remain
@@ -887,15 +887,22 @@ one open-dialog callback. Selection, dialog state and scatter parameters,
 line/arc placement, jitter, duplication, undo, document and selection mutation,
 window-title updates, and status reporting remain application-owned; `MenuBar`
 owns only the unchanged label, availability, and click dispatch.
+`EditBatchRenameContext` exposes only current-selection availability and one
+open-dialog callback. Selection, dialog state and pattern buffer, live preview,
+rename algorithm, object-lock state, undo, document mutation, window-title and
+status reporting, and the keyboard, hierarchy-menu, command-palette, and
+macro-execution routes remain in their existing owners; `MenuBar` owns only the
+unchanged label, shortcut, availability, and click dispatch.
 
 **Next candidate, not yet authorized:** continue Phase 13 with the single
-Batch Rename... item, passing only current-selection availability and one
-open-dialog callback. Selection, dialog state and pattern buffer, preview,
-rename algorithm, undo, document mutation, window-title and status reporting,
-and the keyboard, hierarchy-menu, command-palette, and macro-execution routes
-would remain in their existing owners. The later Edit dialog openers and the
-View-menu Bloom/SSAO block remain outside that slice. Per `CLAUDE.md`, describe
-and confirm the Batch-Rename item slice before implementing it.
+Find & Replace Names... item, passing only one open-dialog callback. Dialog
+state, find/replace buffers and options, live preview, scene traversal,
+selection and object-lock state, rename algorithm, undo, document mutation,
+window-title and status reporting, and the keyboard and command-palette routes
+would remain in their existing owners. The following Randomize Transform...
+item, later Edit controls, and the View-menu Bloom/SSAO block remain outside
+that slice. Per `CLAUDE.md`, describe and confirm the Find-and-Replace item
+slice before implementing it.
 
 ## 9. Do not do yet
 

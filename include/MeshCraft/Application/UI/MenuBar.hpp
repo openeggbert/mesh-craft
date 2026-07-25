@@ -144,6 +144,11 @@ struct EditScatterAlongCurveContext {
     std::function<void()> openDialog;
 };
 
+struct EditBatchRenameContext {
+    bool canOpen;
+    std::function<void()> openDialog;
+};
+
 class MenuBar final {
 public:
     static void drawAddMenu(const std::function<void(Mc3::ObjectType)>& addPrimitive);
@@ -161,6 +166,7 @@ public:
     static void drawEditGroupScale(const EditGroupScaleContext& context);
     static void drawEditLinearArray(const EditLinearArrayContext& context);
     static void drawEditScatterAlongCurve(const EditScatterAlongCurveContext& context);
+    static void drawEditBatchRename(const EditBatchRenameContext& context);
     static void drawEditHistory(const EditHistoryContext& context);
     static void drawEditObjectActions(const EditObjectActionsContext& context);
     static void drawEditSelectionActions(const EditSelectionActionsContext& context);
