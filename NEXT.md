@@ -20,7 +20,7 @@ replacing the former flat `src/MeshCraft/MeshCraftApplication_*.cpp` layout.
 `MeshCraft::Application::MeshCraftApplication`; the old public include remains
 a compatibility forwarder. Actual UI components currently cover Validation,
 Registry results, Toolbar tools/display/snap-surface/proportional/grid controls,
-Properties delegation, Camera Preset Overlay, Gizmo Drag Overlay, Stats Overlay, Measurement Overlay, and the View-menu panel/overlay/direction/focus/
+Properties delegation, Camera Preset Overlay, Gizmo Drag Overlay, Stats Overlay, Measurement Overlay, Status Bar, and the View-menu panel/overlay/direction/focus/
 Camera-Bookmarks/Walk-Mode/Bloom-SSAO presentation, plus the Add/CSG and Help menu
 presentation and the Edit-history, clipboard, object-action, and
 selection-action groups, the Select-by-Type/Tag/Material, Align-Selection,
@@ -105,7 +105,7 @@ before when explicitly requested (`SYS-W14-##` rows).
 ## 2. Current status
 
 - **Last full build: clean after the current Phase 13 File-open-recent,
-  View-Bloom/SSAO, SSAO-regression, Camera Preset Overlay, Gizmo Drag Overlay, Stats Overlay, and Measurement Overlay slices.** Testing is enabled in the current Ninja Release tree, and
+  View-Bloom/SSAO, SSAO-regression, Camera Preset Overlay, Gizmo Drag Overlay, Stats Overlay, Measurement Overlay, and Status Bar slices.** Testing is enabled in the current Ninja Release tree, and
   `CCACHE_DISABLE=1 cmake --build b-release -j4` linked all targets successfully
   on EASYGL. Alternate-backend runtime qualification remains blocked.
 - **Tests:** the fresh Release tree registers 182 tests. All passed again after
@@ -174,7 +174,7 @@ before when explicitly requested (`SYS-W14-##` rows).
   application into `MeshCraft::Application`, organized implementation files
   by application/UI ownership, and is extracting UI presentation through
   narrow contexts. Validation, Registry results, Toolbar controls, Properties
-  delegation, Camera Preset Overlay, Gizmo Drag Overlay, Stats Overlay, Measurement Overlay, and the View-menu directions/focus/overlays/panels/
+  delegation, Camera Preset Overlay, Gizmo Drag Overlay, Stats Overlay, Measurement Overlay, Status Bar, and the View-menu directions/focus/overlays/panels/
   Camera-Bookmarks/Walk-Mode/Bloom-SSAO presentation, plus the Add/CSG and Help menu
   presentation and the Edit-history, clipboard, object-action, and
   selection-action groups, the Select-by-Type/Tag/Material, Align-Selection,
@@ -249,6 +249,14 @@ before when explicitly requested (`SYS-W14-##` rows).
   point hint, and lower-left result panel without access to the camera,
   document, or mutation paths. Its header compiles independently and focused
   `mc3_commands` plus Xvfb `smoke_test` regressions passed.
+- **Recently implemented (2026-07-25):** the bottom bar is now
+  `Application::UI::StatusBar`. The application prepares either a timed
+  notification or a scene-summary snapshot and supplies validation metadata
+  plus the sole callback to open the existing panel. Notification lifetime,
+  document traversal, selection, and validation-panel state remain in the
+  application. The component preserves the colors, selected-object text,
+  validation indicator, tooltip, and click action; its header compiles
+  independently and focused `mc3_commands` plus Xvfb `smoke_test` passed.
 - **Recently implemented (2026-07-20 through 2026-07-25):** all 7
   raw-OpenGL(ES)-vs-CNA migrations, `AUD-082` through `AUD-088` — full
   detail with file:line evidence and
@@ -850,7 +858,7 @@ git stash pop && cmake --build b-release -j4 --target <affected-target>
 No actionable follow-up audit task remains: `AUD-089` through `AUD-092` are
 complete, while Android (`AUD-042`) is environment/owner deferred.
 `SYS-W3-01` has 12 completed subsystem phases and an active Phase 13 for
-application/UI ownership. The authorized Camera Bookmarks, Camera Preset Overlay, Gizmo Drag Overlay, Stats Overlay, Measurement Overlay, Walk Mode, View
+application/UI ownership. The authorized Camera Bookmarks, Camera Preset Overlay, Gizmo Drag Overlay, Stats Overlay, Measurement Overlay, Status Bar, Walk Mode, View
 Bloom/SSAO, Help, Add/CSG, Edit-history, Edit-clipboard, and Edit-object-actions
 menu slices are implemented and verified, together with Edit-selection-actions,
 Edit-select-by-type/tag/material, Edit-copy-properties, Edit-grouping,
@@ -1113,10 +1121,19 @@ one item does not authorize the next.
    retains measurement state and world-to-screen projection, passing only
    projected points, values, and viewport bounds to the component.
 
-5. **Fresh post-overlay boundary audit.** Identify the next coherent
-   presentation-only cluster before changing `MeshCraftApplication`; avoid a
-   broad `Overlays.cpp` extraction or a context that exposes document/renderer
-   internals.
+5. **Fourth post-overlay follow-up — complete.** The bottom bar is now
+   `Application::UI::StatusBar`; application code constructs its notification
+   or scene-summary snapshot and retains the validation-panel transition.
+
+### Final post-overlay audit (2026-07-25)
+
+No additional safe narrow extraction remains. `drawDialogs()` is composed of
+stateful workflows with their own buffers, transitions, undo/document effects,
+and keyboard routes; `drawPanelSplitters()` owns global panel geometry; and
+`drawShadowDebugOverlay()` carries a live renderer texture token plus shadow
+light lookup. Splitting any one without a new, broader ownership design would
+create a god-context or relocate application state into UI. The next work should
+be a separately scoped subsystem, not another mechanical `Overlays.cpp` slice.
 
 ### Tracked work that is not implementation-ready
 

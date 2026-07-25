@@ -3,6 +3,7 @@
 #include "MeshCraft/Application/UI/GizmoDragOverlay.hpp"
 #include "MeshCraft/Application/UI/MeasurementOverlay.hpp"
 #include "MeshCraft/Application/UI/StatsOverlay.hpp"
+#include "MeshCraft/Application/UI/StatusBar.hpp"
 #include "MeshCraft/MeshCraftPrivate.hpp"
 #include "MeshCraft/EditorAlgorithms.hpp"
 #include "MeshCraft/Scene/SceneHierarchyPanel.hpp"
@@ -165,59 +166,37 @@ void MeshCraftApplication::drawStatsOverlay(int screenW, [[maybe_unused]] int sc
 
 void MeshCraftApplication::drawStatusBar(int screenW, int screenH)
 {
-    (void)screenW;
-    // Status bar (bottom)
-    // -----------------------------------------------------------------------
-    ImGui::SetNextWindowPos(ImVec2(0, static_cast<float>(screenH - kStatusH)));
-    ImGui::SetNextWindowSize(ImVec2(static_cast<float>(screenW), static_cast<float>(kStatusH)));
-    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(6, 3));
-    ImGui::PushStyleColor(ImGuiCol_WindowBg, ImVec4(0.086f, 0.094f, 0.176f, 1.0f));
-    ImGui::Begin("##statusbar", nullptr,
-        ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove |
-        ImGuiWindowFlags_NoBringToFrontOnFocus | ImGuiWindowFlags_NoScrollbar |
-        ImGuiWindowFlags_NoScrollWithMouse | ImGuiWindowFlags_NoSavedSettings);
-    {
-        // Timed notification takes priority; falls back to scene info
-        if (statusNotification_.active()) {
-            ImVec4 col = statusNotification_.isError() ? ImVec4(1.0f, 0.45f, 0.45f, 1.0f)
-                                                        : ImVec4(0.55f, 1.0f, 0.55f, 1.0f);
-            ImGui::TextColored(col, "%s", statusNotification_.message().c_str());
-        } else {
-            int totalObjs = 0;
-            std::function<void(const std::vector<std::shared_ptr<Mc3::Mc3Object>>&)> countAll =
-                [&](const std::vector<std::shared_ptr<Mc3::Mc3Object>>& list) {
-                    totalObjs += static_cast<int>(list.size());
-                    for (const auto& o : list) countAll(o->children);
-                };
-            countAll(document_.objects);
-            int selCount = static_cast<int>(selection_.selection().size());
-            if (selCount > 0) {
-                const std::string& selName = selection_.selection().front()->name;
-                ImGui::Text("%d objects | %d selected | %s", totalObjs, selCount, selName.c_str());
-            } else {
-                ImGui::Text("%d objects", totalObjs);
-            }
-        }
-
-        // SYS-W14-02: small clickable indicator for the last load/save/export's
-        // validation findings -- otherwise SYS-W1-01's diagnostics are console-only.
-        if (!lastValidation_.empty()) {
-            const std::string label =
-                "[!] " + std::to_string(lastValidation_.entries.size()) + " validation note(s)";
-            ImVec2 textSize = ImGui::CalcTextSize(label.c_str());
-            ImGui::SameLine(ImGui::GetWindowWidth() - textSize.x - 12.0f);
-            ImGui::TextColored(ImVec4(1.0f, 0.75f, 0.35f, 1.0f), "%s", label.c_str());
-            if (ImGui::IsItemClicked()) showValidationPanel_ = true;
-            if (ImGui::IsItemHovered())
-                ImGui::SetTooltip("From: %s\nClick to open the Validation panel",
-                                   lastValidationSource_.c_str());
-        }
+    const bool hasNotification = statusNotification_.active();
+    int totalObjects = 0;
+    int selectedObjects = 0;
+    std::string_view selectedObjectName;
+    if (!hasNotification) {
+        std::function<void(const std::vector<std::shared_ptr<Mc3::Mc3Object>>&)> countAll =
+            [&](const std::vector<std::shared_ptr<Mc3::Mc3Object>>& list) {
+                totalObjects += static_cast<int>(list.size());
+                for (const auto& object : list)
+                    countAll(object->children);
+            };
+        countAll(document_.objects);
+        selectedObjects = static_cast<int>(selection_.selection().size());
+        if (selectedObjects > 0)
+            selectedObjectName = selection_.selection().front()->name;
     }
-    ImGui::End();
-    ImGui::PopStyleColor();
-    ImGui::PopStyleVar();
-
-
+    UI::StatusBar::draw({
+        .screenWidth = screenW,
+        .screenHeight = screenH,
+        .statusHeight = kStatusH,
+        .hasNotification = hasNotification,
+        .notificationIsError = statusNotification_.isError(),
+        .notificationMessage = statusNotification_.message(),
+        .totalObjectCount = totalObjects,
+        .selectedObjectCount = selectedObjects,
+        .selectedObjectName = selectedObjectName,
+        .hasValidation = !lastValidation_.empty(),
+        .validationEntryCount = static_cast<int>(lastValidation_.entries.size()),
+        .validationSource = lastValidationSource_,
+        .openValidation = [this] { showValidationPanel_ = true; },
+    });
 }
 
 void MeshCraftApplication::drawDialogs()

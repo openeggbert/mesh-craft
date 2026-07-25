@@ -164,7 +164,7 @@ still internally consistent.
    research pass.
 6. **SYS-W3-01 (P2/W3), Phase 13 is active:** application/UI ownership is
    being reduced one narrow presentation slice at a time. The authorized
-   Camera Bookmarks, Camera Preset Overlay, Gizmo Drag Overlay, Stats Overlay, Measurement Overlay, Walk Mode, View Bloom/SSAO, Help, Add/CSG, Edit-history,
+   Camera Bookmarks, Camera Preset Overlay, Gizmo Drag Overlay, Stats Overlay, Measurement Overlay, Status Bar, Walk Mode, View Bloom/SSAO, Help, Add/CSG, Edit-history,
    Edit-clipboard,
    Edit-object-actions, Edit-selection-actions, Edit-select-by-type,
    Edit-select-by-tag/material, Edit-copy-properties, Edit-grouping,
@@ -194,7 +194,12 @@ still internally consistent.
    traversal and renderer statistics stay application-owned. The next audit
    moved 2D measurement rendering into `Application::UI::MeasurementOverlay`;
    world-to-screen projection and measurement state stay application-owned.
-   The next Phase 13 action is a fresh narrow boundary audit.
+   The final narrow overlay slice moved the bottom status bar into
+   `Application::UI::StatusBar`; scene summary calculation, notification
+   lifecycle, and validation-panel state remain application-owned. A final
+   audit found no additional safe narrow boundary: the remaining dialogs are
+   stateful workflows, splitters own global layout, and Shadow Debug carries a
+   live render resource token.
 
 ---
 
@@ -638,6 +643,10 @@ _All items in this workstream are DONE — archived to [`docs/history/plan_20260
   point markers, hint, and result panel. `Overlays.cpp` retains the cached
   view-projection calculation and all measurement state, passing projected
   points, immutable coordinates, distance, and viewport bounds by value.
+  `Application::UI::StatusBar` owns only bottom-bar presentation. The
+  application constructs the notification or scene-summary snapshot and retains
+  notification lifetime, scene traversal, selection, validation data, and the
+  sole callback that opens the existing validation panel.
   The bookmark state remains the already-extracted
   `Editor::CameraBookmarks`; a `CameraBookmarksContext` exposes only the
   read-only slots plus Save/Restore callbacks, leaving camera mutation and
@@ -814,7 +823,7 @@ _All items in this workstream are DONE — archived to [`docs/history/plan_20260
   File-export-selection, File-export-GLB, File-export-OBJ, File-save,
   File-save-as, File-import-OBJ, File-new, File-open, File-open-recent, and
   File-exit slices, the Bloom/SSAO controls, CameraPresetOverlay, and
-  GizmoDragOverlay, StatsOverlay, and MeasurementOverlay,
+  GizmoDragOverlay, StatsOverlay, MeasurementOverlay, and StatusBar,
   each incremental Release link and the same 147/147 + 35/35 partitions pass
   again.
   For the current MenuBar slices, the public UI header also compiles as a
@@ -827,7 +836,9 @@ _All items in this workstream are DONE — archived to [`docs/history/plan_20260
   and callbacks. GizmoDragOverlay follows the same boundary for a pure
   read-only drag snapshot, and StatsOverlay does so for the renderer-derived
   top-right summary. MeasurementOverlay similarly consumes only projected
-  ruler values. The next Phase 13 action is a fresh narrow-boundary audit.
+  ruler values, while StatusBar presents the application-computed bottom
+  summary. No further safe narrow Phase 13 extraction remains after the final
+  overlay audit.
   **SYS-W3-01 roadmap status after this session's investigation round:**
   Phases 1–12 done (Keybindings, Preferences, MacroRecorder, UndoManager,
   animation-override computation, WalkController, AudioPreview,
