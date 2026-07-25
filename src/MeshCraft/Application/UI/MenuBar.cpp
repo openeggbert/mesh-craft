@@ -75,11 +75,14 @@ float MeshCraftApplication::drawMenuBar()
             // the scene as a fresh object. Adds one, in the same current-
             // scene ("new object", not "replace scene") behavior as every
             // other Add-menu creation action.
-            if (ImGui::MenuItem("Import OBJ...")) {
-                importObjDialogBuf_[0] = '\0';
-                importObjDialogErr_[0] = '\0';
-                importObjDialogOpen_   = true;
-            }
+            const UI::FileImportObjContext fileImportObjContext{
+                .openDialog = [this] {
+                    importObjDialogBuf_[0] = '\0';
+                    importObjDialogErr_[0] = '\0';
+                    importObjDialogOpen_   = true;
+                },
+            };
+            UI::MenuBar::drawFileImportObj(fileImportObjContext);
             ImGui::Separator();
             const UI::FileSaveContext fileSaveContext{
                 .save = [this] { saveFile(); },
@@ -619,6 +622,10 @@ void MenuBar::drawFileSave(const FileSaveContext& context) {
 
 void MenuBar::drawFileSaveAs(const FileSaveAsContext& context) {
     if (ImGui::MenuItem("Save As...", "Ctrl+Shift+S")) context.openDialog();
+}
+
+void MenuBar::drawFileImportObj(const FileImportObjContext& context) {
+    if (ImGui::MenuItem("Import OBJ...")) context.openDialog();
 }
 
 void MenuBar::drawEditHistory(const EditHistoryContext& context) {
