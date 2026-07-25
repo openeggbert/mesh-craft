@@ -169,9 +169,9 @@ still internally consistent.
    Edit-select-by-tag/material, Edit-copy-properties, Edit-grouping,
    Edit-convert-to-definition, Edit-export-subtree, Edit-break-instance,
    Edit-align-selection, Edit-distribute-selection, Edit-drop-to-ground,
-   Edit-snap-selection-to-grid, Edit-mirror-selection, Edit-group-scale, and
-   Edit-linear-array menu slices are implemented and verified. Their state
-   remains in the existing editor/application owners;
+   Edit-snap-selection-to-grid, Edit-mirror-selection, Edit-group-scale,
+   Edit-linear-array, and Edit-scatter-along-curve menu slices are implemented
+   and verified. Their state remains in the existing editor/application owners;
    `Application::UI::MenuBar` receives only the read-only values and callbacks
    required for presentation. Any further slice requires its own confirmation
    per `CLAUDE.md`.
@@ -708,9 +708,14 @@ _All items in this workstream are DONE — archived to [`docs/history/plan_20260
   current-selection availability and one open-dialog callback. Selection,
   dialog state and array parameters, duplication algorithm, undo, document and
   selection mutation, window-title and status reporting, and the
-  command-palette and macro-execution routes remain application-owned. File,
-  the remaining Edit groups, and the remaining View controls are still
-  application-owned.
+  command-palette and macro-execution routes remain application-owned. The
+  following Scatter Along Curve... item is now component-owned through
+  `EditScatterAlongCurveContext`, which exposes only current-selection
+  availability and one open-dialog callback. Selection, dialog state and
+  scatter parameters, line/arc placement, jitter, duplication, undo, document
+  and selection mutation, window-title and status reporting remain
+  application-owned. File, the remaining Edit groups, and the remaining View
+  controls are still application-owned.
   The historical audit references retain their former paths as time-accurate
   evidence.
   Static undo-audit and snapshot-lint path checks pass after their tracked
@@ -728,9 +733,9 @@ _All items in this workstream are DONE — archived to [`docs/history/plan_20260
   Edit-select-by-material, Edit-copy-properties, Edit-grouping,
   Edit-convert-to-definition, Edit-export-subtree, Edit-break-instance,
   Edit-align-selection, Edit-distribute-selection, Edit-drop-to-ground,
-  Edit-snap-selection-to-grid, Edit-mirror-selection, Edit-group-scale, and
-  Edit-linear-array slices, each incremental Release link and the same
-  147/147 + 34/34 partitions pass again.
+  Edit-snap-selection-to-grid, Edit-mirror-selection, Edit-group-scale,
+  Edit-linear-array, and Edit-scatter-along-curve slices, each incremental
+  Release link and the same 147/147 + 34/34 partitions pass again.
   For the current MenuBar slices, the public UI header also compiles as a
   self-contained C++23 include, `undo_snapshot_lint_test.py` passes, and
   `git diff --check` is clean. A further Phase 13 slice requires separate

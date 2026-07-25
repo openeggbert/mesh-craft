@@ -349,9 +349,11 @@ float MeshCraftApplication::drawMenuBar()
                 .openDialog = [this] { arrayDupOpen_ = true; },
             };
             UI::MenuBar::drawEditLinearArray(editLinearArrayContext);
-            if (ImGui::MenuItem("Scatter Along Curve...", nullptr, false,
-                                !selection_.selection().empty()))
-                scatterCurveOpen_ = true;
+            const UI::EditScatterAlongCurveContext editScatterAlongCurveContext{
+                .canOpen = !selection_.selection().empty(),
+                .openDialog = [this] { scatterCurveOpen_ = true; },
+            };
+            UI::MenuBar::drawEditScatterAlongCurve(editScatterAlongCurveContext);
             if (ImGui::MenuItem("Batch Rename...", "Ctrl+Shift+R", false,
                                 !selection_.selection().empty()))
                 batchRenameOpen_ = true;
@@ -772,6 +774,12 @@ void MenuBar::drawEditGroupScale(const EditGroupScaleContext& context) {
 
 void MenuBar::drawEditLinearArray(const EditLinearArrayContext& context) {
     if (ImGui::MenuItem("Linear Array...", nullptr, false, context.canOpen)) {
+        context.openDialog();
+    }
+}
+
+void MenuBar::drawEditScatterAlongCurve(const EditScatterAlongCurveContext& context) {
+    if (ImGui::MenuItem("Scatter Along Curve...", nullptr, false, context.canOpen)) {
         context.openDialog();
     }
 }
