@@ -80,7 +80,7 @@ before when explicitly requested (`SYS-W14-##` rows).
 - **Build: clean**, `cmake --build b-release -j4` passed after SVG texture
   support was added (EASYGL backend on Linux — the only backend buildable
   here).
-- **Tests:** 178 tests are registered. SVG-specific verification passes with
+- **Tests:** 179 tests are registered. SVG-specific verification passes with
   `-j4`: external and inline SVG export to glTF PNGs, bounded/malformed input,
   cache invalidation, and real headless viewport screenshots sampling the
   rasterized material pixels. This session's own
@@ -90,7 +90,7 @@ before when explicitly requested (`SYS-W14-##` rows).
   count this file last recorded (2026-07-19) predates unrelated work not
   narrated here (a further audit pass and the `SYS-W14-18..27`
   mc3-format-vs-editor gap closures — see `plan.md`/memory, not fully
-  reflected in this file's own history) — don't treat 142→178 as this
+  reflected in this file's own history) — don't treat 142→179 as this
   session's own delta.
   All builds/tests this session used `-j4` (not `-j$(nproc)`), per the
   user's standing request (shared machine).
@@ -528,14 +528,16 @@ backlog (650+ STAB tasks, then a 57-finding audit, all archived DONE).
 
 ## 4. Current blocker / main problem
 
-**The release build is clean, but the full CTest suite is not currently
-green in this host environment.** The audit rebuilt the project with `-j4`;
-the targeted `scene_hierarchy_panel` and `object_lock_state` tests pass.
-The render-dependent tests cannot initialize SDL video because this host's
-Xvfb listener is unusable (`AUD-090`). The initially reported `mc3_ai`
-definitions-only timeout was invalidated by a forced rebuild: the unchanged
-test completed in 1.27 seconds, so `AUD-091` is closed as a stale-build false
-positive rather than hidden as a longer timeout.
+**The release build is clean and the non-render suite is green.** `AUD-090`
+now preflights `xvfb-run` with a real `xdpyinfo` client at configure time.
+On this host that check reports a clear CTest skip and disables the 35 real
+render tests, instead of misreporting them as product failures; `ctest -LE
+render -j4` passes all 143 remaining tests. CI explicitly installs `xvfb`
+and `x11-utils`, so a healthy GitHub runner executes the render subset.
+The initially reported `mc3_ai` definitions-only timeout was invalidated by
+a forced rebuild: the unchanged test completed in 1.27 seconds, so `AUD-091`
+is closed as a stale-build false positive rather than hidden as a longer
+timeout.
 
 The only deferred audit item is Android (`AUD-042`): this workspace has no
 Android NDK, and selecting a real Android graphics path would require a CNA
@@ -728,15 +730,15 @@ git stash pop && cmake --build b-release -j4 --target <affected-target>
 
 ## 8. Next smallest tasks
 
-The only remaining follow-up implementation candidate is `AUD-090` (render
-CTest display preflight and labels), awaiting the owner's explicit
-confirmation required by `CLAUDE.md`. `AUD-091` is closed as a stale-build
-false positive after a forced rebuild completed it in 1.27 seconds; its test
-now isolates parser, XSD, and full-pipeline stages (commit `64d187c`).
-`AUD-089` (truthful `--screenshot` failure/exit status) is complete in commit
-`5bcfbdc`; its new end-to-end CTest is registered but needs a working virtual
-display, tracked separately by `AUD-090`. Android (`AUD-042`) remains
-deferred until an Android NDK is
+No currently authorized, actionable follow-up audit task remains. `AUD-090`
+is complete in commit `13c27a5`: it labels every editor-launching test as
+`render`, preflights a real Xvfb client, skips/disabled render tests only when
+the host cannot provide a display, and makes CI install its display tooling.
+`AUD-091` is closed as a stale-build false positive after a forced rebuild
+completed it in 1.27 seconds; its test now isolates parser, XSD, and full-
+pipeline stages (commit `64d187c`). `AUD-089` (truthful `--screenshot`
+failure/exit status) is complete in commit `5bcfbdc`. Android (`AUD-042`)
+remains deferred until an Android NDK is
 available and its CNA backend choice is explicitly in scope. `SYS-W3-01`
 (`MeshCraftApplication` decomposition)
 has 11 phases done; its investigation rounds also explicitly looked at the

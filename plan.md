@@ -87,7 +87,7 @@ P1s already being fixed in git history. This session:
    **Net across all 34 AUD-### rows remaining in this active backlog (61
    additional rows completed and archived to `docs/history/plan_20260718.md`
    on 2026-07-18 — see that file for their full evidence/resolution text):
-   30 DONE, 2 TODO, 2 DEFERRED** — 10 of the 30 DONE (`AUD-064` through
+   31 DONE, 1 TODO, 2 DEFERRED** — 10 of the 31 DONE (`AUD-064` through
    `AUD-073`) are fresh findings from a 2026-07-18 (later same day)
    independent re-audit, not part of the original 6 (`AUD-069` itself fixed
    2026-07-19, the day after it was filed); the other 14 (`AUD-074`
@@ -144,17 +144,14 @@ still internally consistent.
    out the two sibling repositories at the recorded verified SHAs, then
    configures, builds and runs the root CTest suite with at most two jobs.
    The standalone matrix uses the same job limit.
-3. **AUD-090 (P2/W11)** — render-dependent CTests need a working-display
-   preflight and complete `render` labels, so a non-render selection is
-   actually headless-safe and CI failures are actionable.
-4. **AUD-042 (P2/W8)** — Android build path forces SDL_RENDERER; blocked
+3. **AUD-042 (P2/W8)** — Android build path forces SDL_RENDERER; blocked
    (no Android NDK in this environment; also intersects CNA backend
    behavior, out of scope per CLAUDE.md's "no CNA changes without owner
    permission").
-5. Android remains deferred because this environment has no Android NDK and
-   the work crosses the CNA ownership boundary; the remaining audit row does
-   not authorize implementation by itself.
-6. All 10 of the mc3-format-vs-editor gaps found 2026-07-20 (user
+4. Android remains deferred because this environment has no Android NDK and
+   the work crosses the CNA ownership boundary; no other approved audit row
+   remains.
+5. All 10 of the mc3-format-vs-editor gaps found 2026-07-20 (user
    request: "co mc3 nabízí, ale MeshCraft to ještě neumí" -- "what does
    the mc3 format offer that MeshCraft doesn't yet handle") are now
    done: the two P1 gaps (trigger event-firing, Lua scripting execution),
@@ -1912,12 +1909,13 @@ as a CNA depth-to-color pre-pass (2026-07-25). The remaining direct
 - **Audit verification (2026-07-25):** source-path review followed the CNA readback migration (`AUD-083`); it found that pixel acquisition is no longer the risk, but output-result propagation was never added.
 - **Resolved:** commit `5bcfbdc` — `saveScreenshot()` now returns success/failure, checks invalid viewports, PPM open/write/close errors and PNG encoder results; the one-shot path prints `Auto-screenshot saved` only on success and `main()` maps screenshot failure to exit code 1. New `screenshot_error_test` passes a temporary directory as the output path (deterministically not a writable image file), requiring non-zero exit, a screenshot error, and no false saved message. The target builds and registers as CTest #68. Its end-to-end execution remains blocked only by this host's already-recorded unusable Xvfb listener (`AUD-090`), which aborts before rendering or output writing.
 
-### AUD-090 `[TODO]` `P2` `W11` · Render-dependent CTests lack a reliable display preflight and complete `render` labels
+### AUD-090 `[DONE]` `P2` `W11` · Render-dependent CTests lacked a reliable display preflight and complete `render` labels
 - **Component:** `CMakeLists.txt`, render-test Python launch helpers, and `.github/workflows/ci.yml`.
 - **Evidence:** The full 177-test CTest run reached many failures with `SDL_InitSubSystem(SDL_INIT_VIDEO) failed: No available video device`. The audit host had an `xvfb-run` executable, but it could not establish a usable X listener, so mere executable discovery is insufficient. In addition, `editor_export_test` is labelled only `export` and `benchmark_editor` only `perf` although both launch `MeshCraft` and require video; `ctest -LE render` therefore still starts graphics tests and fails. The CI workflow does not explicitly establish or preflight a virtual display for its root editor test job.
 - **Outcome:** Add a robust, explicit virtual-display availability check for render tests/CI, make an unavailable display an intentional CTest skip with a clear diagnostic rather than a false product failure, and add the `render` label to every graphics-dependent test (including export/performance wrappers). Ensure CI installs and uses the selected display mechanism.
 - **Tests:** Verify label selection with `ctest -N -LE render`, test the explicit no-display skip path, and run the render subset under a verified virtual display. Keep non-render CTest selection genuinely free of video initialization.
 - **Audit verification (2026-07-25):** the failure was reproduced across the visual suite; it is an environment/test-orchestration defect, not evidence of separate rendering regressions in every affected test.
+- **Resolved:** commit `13c27a5` — CMake configures an actual `xvfb-run --auto-servernum xdpyinfo` preflight. If it fails, the 35 render-labelled editor tests are marked `DISABLED`, while `render_display_preflight` itself returns CTest's skip code 77 and prints the exact display failure. `editor_export_test` and `benchmark_editor` now have the additional `render` label, so `ctest -N -LE render` selects 143 genuinely non-render tests; they pass with `ctest --test-dir b-release -LE render --output-on-failure -j4`. CI explicitly installs `xvfb` and `x11-utils`, so a healthy runner preflights and executes render tests rather than silently omitting them.
 
 ### AUD-091 `[DONE]` `P1` `W1` · Reported definitions-only AI-response timeout was not reproducible after a forced rebuild
 - **Component:** `mc3/test/ai_test.cpp`, `src/MeshCraft/AiResponseAlgorithms.hpp`, and the MC3 definition parsing/validation path reached by `Mc3Document::loadFromString()`.
