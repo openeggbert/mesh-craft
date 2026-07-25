@@ -48,43 +48,8 @@ float MeshCraftApplication::drawToolbar(float menuBarH, int screenW)
     };
     UI::Toolbar::drawTools(toolsContext);
 
-    // Local/World space toggle for gizmo
-    {
-        const char* spaceLabel = gizmoLocalSpace_ ? "Local" : "World";
-        bool wasLocal = gizmoLocalSpace_;
-        if (wasLocal) ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.55f, 0.35f, 0.70f, 1.f));
-        if (ImGui::Button(spaceLabel, ImVec2(48, 30))) gizmoLocalSpace_ = !gizmoLocalSpace_;
-        if (wasLocal) ImGui::PopStyleColor();
-        if (ImGui::IsItemHovered()) ImGui::SetTooltip("Gizmo space: %s  (click to toggle)", spaceLabel);
-        ImGui::SameLine();
-    }
-
-    ImGui::TextDisabled("|");
-    ImGui::SameLine();
-
-    // Edge overlay toggle button
-    { bool was = showEdgeOverlay_;
-      if (was) ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.20f, 0.20f, 0.20f, 1.f));
-      if (ImGui::Button("Edges", ImVec2(50, 30))) showEdgeOverlay_ = !showEdgeOverlay_;
-      if (was) ImGui::PopStyleColor(); }
-    if (ImGui::IsItemHovered()) ImGui::SetTooltip("Edge overlay (wireframe lines over solid objects)");
-    ImGui::SameLine();
-
-    // Full wireframe mode toggle button
-    { bool was = showWireframeMode_;
-      if (was) ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.15f, 0.55f, 0.30f, 1.f));
-      if (ImGui::Button("Wire", ImVec2(44, 30))) showWireframeMode_ = !showWireframeMode_;
-      if (was) ImGui::PopStyleColor(); }
-    if (ImGui::IsItemHovered()) ImGui::SetTooltip("Full wireframe mode (hide solid fills, show only edges)");
-    ImGui::SameLine();
-
-    // Bounding box toggle button
-    { bool was = showBoundingBox_;
-      if (was) ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.10f, 0.45f, 0.55f, 1.f));
-      if (ImGui::Button("BBox", ImVec2(44, 30))) showBoundingBox_ = !showBoundingBox_;
-      if (was) ImGui::PopStyleColor(); }
-    if (ImGui::IsItemHovered()) ImGui::SetTooltip("Show bounding box for selected objects");
-    ImGui::SameLine();
+    UI::Toolbar::drawDisplayToggles(gizmoLocalSpace_, showEdgeOverlay_,
+                                    showWireframeMode_, showBoundingBox_);
 
     // Snap-to-grid toggle button (left-click toggles, right-click configures)
     { bool was = snapEnabled_;
@@ -257,6 +222,34 @@ void Toolbar::drawTools(ToolbarToolsContext& context) {
     }
     ImGui::TextDisabled("|");
     ImGui::SameLine();
+}
+
+void Toolbar::drawDisplayToggles(bool& gizmoLocalSpace, bool& showEdges,
+                                 bool& showWireframe, bool& showBoundingBox) {
+    const char* spaceLabel = gizmoLocalSpace ? "Local" : "World";
+    const bool wasLocal = gizmoLocalSpace;
+    if (wasLocal) ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.55f, 0.35f, 0.70f, 1.f));
+    if (ImGui::Button(spaceLabel, ImVec2(48, 30))) gizmoLocalSpace = !gizmoLocalSpace;
+    if (wasLocal) ImGui::PopStyleColor();
+    if (ImGui::IsItemHovered()) ImGui::SetTooltip("Gizmo space: %s  (click to toggle)", spaceLabel);
+    ImGui::SameLine();
+    ImGui::TextDisabled("|");
+    ImGui::SameLine();
+
+    const auto toggle = [](const char* label, float width, ImVec4 color, bool& value, const char* tooltip) {
+        const bool wasEnabled = value;
+        if (wasEnabled) ImGui::PushStyleColor(ImGuiCol_Button, color);
+        if (ImGui::Button(label, ImVec2(width, 30))) value = !value;
+        if (wasEnabled) ImGui::PopStyleColor();
+        if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s", tooltip);
+        ImGui::SameLine();
+    };
+    toggle("Edges", 50, ImVec4(0.20f, 0.20f, 0.20f, 1.f), showEdges,
+           "Edge overlay (wireframe lines over solid objects)");
+    toggle("Wire", 44, ImVec4(0.15f, 0.55f, 0.30f, 1.f), showWireframe,
+           "Full wireframe mode (hide solid fills, show only edges)");
+    toggle("BBox", 44, ImVec4(0.10f, 0.45f, 0.55f, 1.f), showBoundingBox,
+           "Show bounding box for selected objects");
 }
 
 } // namespace MeshCraft::Application::UI

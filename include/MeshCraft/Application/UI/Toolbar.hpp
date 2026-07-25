@@ -16,6 +16,8 @@ struct ToolbarToolsContext {
 class Toolbar final {
 public:
     static void drawTools(ToolbarToolsContext& context);
+    static void drawDisplayToggles(bool& gizmoLocalSpace, bool& showEdges,
+                                   bool& showWireframe, bool& showBoundingBox);
 };
 
 } // namespace MeshCraft::Application::UI
