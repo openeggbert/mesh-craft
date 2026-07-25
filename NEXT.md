@@ -77,16 +77,17 @@ before when explicitly requested (`SYS-W14-##` rows).
 - **Build: clean**, `cmake --build b-release -j4` passed after SVG texture
   support was added (EASYGL backend on Linux — the only backend buildable
   here).
-- **Tests:** 170 tests are registered. SVG-specific verification passes with
-  `-j4`: external and inline SVG export to glTF PNGs, and a real headless
-  viewport screenshot samples the rasterized material pixels. This session's own
+- **Tests:** 173 tests are registered. SVG-specific verification passes with
+  `-j4`: external and inline SVG export to glTF PNGs, bounded/malformed input,
+  cache invalidation, and real headless viewport screenshots sampling the
+  rasterized material pixels. This session's own
   `AUD-082`-`088` work added 3 brand-new ctest targets — `bloom_test`,
   `matpreview_test`, `shadowdebug_test` — one per migrated feature that
   previously had zero visual-correctness coverage (see §3). The 142
   count this file last recorded (2026-07-19) predates unrelated work not
   narrated here (a further audit pass and the `SYS-W14-18..27`
   mc3-format-vs-editor gap closures — see `plan.md`/memory, not fully
-  reflected in this file's own history) — don't treat 142→170 as this
+  reflected in this file's own history) — don't treat 142→173 as this
   session's own delta.
   All builds/tests this session used `-j4` (not `-j$(nproc)`), per the
   user's standing request (shared machine).
@@ -103,7 +104,13 @@ before when explicitly requested (`SYS-W14-##` rows).
   and inline SVG texture entries through pinned NanoSVG code. The resulting
   RGBA pixels are used by the live CNA viewport and generated as PNG images
   for glTF/GLB export; a 2048px dimension cap prevents hostile SVG dimensions
-  from allocating unbounded memory (commit `8cb14be`).
+  from allocating unbounded memory (commit `8cb14be`). The viewport cache uses
+  compact content hashes rather than retaining inline markup as map keys;
+  external SVG changes invalidate both successful and failed rasterizations.
+  SVG textures now round-trip and honor `wrap_u`, `wrap_v`, and `filter` in
+  the viewport and glTF sampler. `mip_maps` is honored by glTF export; live
+  CNA textures remain level-zero only because the available CNA API has no
+  mip-chain generation (follow-up commit `026fc2d`).
 - **Recently implemented (2026-07-20 through 2026-07-25):** all 7
   raw-OpenGL(ES)-vs-CNA migrations, `AUD-082` through `AUD-088` — full
   detail with file:line evidence and

@@ -683,7 +683,13 @@ _All items in this workstream are DONE — archived to [`docs/history/plan_20260
   Rasterization failures remain non-fatal export warnings with the texture id.
   `mc3togltf_svg_texture_export` covers external and inline input; the new
   `svg_texture_viewport_test` confirms a rasterized SVG appears in a real
-  headless editor screenshot. **Resolved:** commit `8cb14be`.
+  headless editor screenshot. A 2026-07-25 follow-up uses compact hashed cache
+  keys, invalidates external successful and failed entries on file changes,
+  round-trips SVG sampler metadata, and applies wrap/filter settings in the
+  viewport and glTF output. `mip_maps` remains export-only in the live editor:
+  CNA exposes no mip-chain generation for pixel-created textures. Added
+  malformed/capped-dimension, cache-invalidation, inline viewport, and GLB
+  coverage. **Resolved:** commits `8cb14be`, `026fc2d`.
 - **SYS-W14-05** `[DEFERRED]` `P3` — Safe `embed:` mesh/resource support end-to-end. (`AUD-025`)
 - **SYS-W14-06** `[DEFERRED]` `P3` — Improved CSG output (smooth normals/UVs/materials).
 - **SYS-W14-07** `[DEFERRED]` `P3` — Improved walk/navigation collision.
