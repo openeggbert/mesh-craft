@@ -104,8 +104,7 @@ MeshCraftApplication::MeshCraftApplication(std::filesystem::path filePath, std::
 
 MeshCraftApplication::MeshCraftApplication(std::filesystem::path filePath, bool benchmarkMode)
     : currentFile_(std::move(filePath))
-    , benchmarkMode_(benchmarkMode)
-    , benchmarkFramesRemaining_(benchmarkMode ? kBenchmarkFrames : 0)
+    , benchmarkProgress_(benchmarkMode)
 {
     getWindowProperty().setTitleProperty("Mesh Craft");
     setIsMouseVisibleProperty(true);
@@ -259,7 +258,7 @@ void MeshCraftApplication::LoadContent() {
     SDL_AddEventWatch(reinterpret_cast<SDL_EventFilter>(sdlEventWatch), this);
 
     // F7: hide window in screenshot/headless mode
-    if (!autoScreenshotPath_.empty() || benchmarkMode_)
+    if (!autoScreenshotPath_.empty() || benchmarkProgress_.enabled())
         SDL_HideWindow(sdlWindow);
 
     loadRecentFiles();
@@ -327,10 +326,9 @@ void MeshCraftApplication::LoadContent() {
 
     updateWindowTitle();
 
-    if (benchmarkMode_) {
-        benchmarkLoadContentMs_ = std::chrono::duration<double, std::milli>(
-            std::chrono::steady_clock::now() - benchmarkLoadStart).count();
-    }
+    if (benchmarkProgress_.enabled())
+        benchmarkProgress_.setLoadContentMs(std::chrono::duration<double, std::milli>(
+            std::chrono::steady_clock::now() - benchmarkLoadStart).count());
 }
 
 // ---------------------------------------------------------------------------
@@ -405,8 +403,7 @@ void MeshCraftApplication::EndDraw() {
         Exit();
     }
 
-    if (pendingBenchmark_) {
-        pendingBenchmark_ = false;
+    if (benchmarkProgress_.consumeCompletion()) {
         runBenchmarkSuite();
         Exit();
     }
@@ -849,12 +846,10 @@ void MeshCraftApplication::Draw(const GameTime& /*gameTime*/) {
             pendingExport_ = true;
     }
 
-    if (benchmarkMode_ && benchmarkFramesRemaining_ > 0) {
+    if (benchmarkProgress_.recordingFrames()) {
         double ms = std::chrono::duration<double, std::milli>(
             std::chrono::steady_clock::now() - benchmarkFrameStart).count();
-        benchmarkFrameTimesMs_.push_back(ms);
-        if (--benchmarkFramesRemaining_ == 0)
-            pendingBenchmark_ = true;
+        benchmarkProgress_.recordFrame(ms);
     }
 }
 

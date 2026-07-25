@@ -80,7 +80,7 @@ before when explicitly requested (`SYS-W14-##` rows).
 - **Build: clean**, `cmake --build b-release -j4` passed after SVG texture
   support was added (EASYGL backend on Linux). The CNA-backed ImGui adapter
   also builds there; alternate-backend runtime qualification remains blocked.
-- **Tests:** 180 tests are registered. SVG-specific verification passes with
+- **Tests:** 181 tests are registered. SVG-specific verification passes with
   `-j4`: external and inline SVG export to glTF PNGs, bounded/malformed input,
   cache invalidation, and real headless viewport screenshots sampling the
   rasterized material pixels. This session's own
@@ -134,6 +134,11 @@ before when explicitly requested (`SYS-W14-##` rows).
   its narrow lock/query interface; scene, selection, undo, and UI ownership
   remain where they were. The new direct regression test covers idempotent
   lock/unlock and toggle behavior (commit `4bb30ea`).
+- **Recently implemented (2026-07-25):** `SYS-W3-01` Phase 12 extracts the
+  headless `--benchmark` frame-progress lifecycle into
+  `Editor::BenchmarkProgress`. It has a direct CNA-free test for frame
+  counting, samples, completion and startup timing; the application retains
+  rendering and benchmark-category presentation.
 - **Recently implemented (2026-07-20 through 2026-07-25):** all 7
   raw-OpenGL(ES)-vs-CNA migrations, `AUD-082` through `AUD-088` — full
   detail with file:line evidence and
@@ -549,12 +554,13 @@ ownership decision. It is intentionally not being pursued in this session.
 - **Web/Windows build status: needs re-verification**, not checked this
   session — see §2's caveat and README.md's own platform table.
 - **`SYS-W3-01` (in progress, not a bug):** `MeshCraftApplication` god
-  object, 11 subsystems extracted so far (`KeybindingManager`,
+  object, 12 subsystems extracted so far (`KeybindingManager`,
   `Preferences`, `MacroRecorder`, `UndoManager`, animation-override
   computation, `WalkController`, `AudioPreview`, `CameraBookmarks`). File
   dialogs and post-processing were investigated and explicitly declined as
-  further extraction targets; `TransformClipboard` and `StatusNotification`
-  and `ObjectLockState` are now also separate (see `plan.md`).
+  further extraction targets; `TransformClipboard`, `StatusNotification`,
+  `ObjectLockState`, and `BenchmarkProgress` are now also separate (see
+  `plan.md`).
 - **By-design, not bugs:** MC3 silently drops unrecognized XML
   attributes/elements on round-trip (`SYS-W5-03`, human-decided,
   documented in `MC3_FORMAT.md`); editor/exporter use different triangle
@@ -742,7 +748,7 @@ failure/exit status) is complete in commit `5bcfbdc`. Android (`AUD-042`)
 remains deferred until an Android NDK is
 available and its CNA backend choice is explicitly in scope. `SYS-W3-01`
 (`MeshCraftApplication` decomposition)
-has 11 phases done; its investigation rounds also explicitly looked at the
+has 12 phases done; its investigation rounds also explicitly looked at the
 two originally remaining candidates (file dialogs, post-processing) and
 declined both (no testability win vs. real regression risk with no
 verification tool) — not silently skipped, but also not a ready "next phase"

@@ -545,11 +545,23 @@ _All items in this workstream are DONE — archived to [`docs/history/plan_20260
   multiple states, idempotent locking, harmless unknown unlocks, and both
   directions of toggle. Targeted eight-subsystem suite passes (8/8); full
   `MeshCraft` rebuild passes. **Resolved:** commit `4bb30ea`.
+  **Phase 12 DONE (2026-07-25) — benchmark progress:** extracted the
+  headless `--benchmark` lifecycle into `Editor::BenchmarkProgress`:
+  enabled state, remaining real-frame samples, timing storage, one-shot
+  completion hand-off, and `LoadContent()` timing. `MeshCraftApplication`
+  still owns rendering, category-specific measurement, console output, and
+  process exit; it simply supplies actual Draw durations and consumes the
+  completion signal. The new CNA-free `benchmark_progress` test covers
+  disabled behavior, configured frame count, startup-time storage, sample
+  order, completion delivery exactly once, post-completion rejection, and
+  invalid count clamping. The focused test and both application source files
+  that integrate it compiled with one job and ccache disabled to limit local
+  disk writes. **Resolved:** working tree, pending commit.
   **SYS-W3-01 roadmap status after this session's investigation round:**
-  Phases 1–11 done (Keybindings, Preferences, MacroRecorder, UndoManager,
+  Phases 1–12 done (Keybindings, Preferences, MacroRecorder, UndoManager,
   animation-override computation, WalkController, AudioPreview,
   CameraBookmarks, TransformClipboard, StatusNotification, ObjectLockState,
-  in-that-order).
+  BenchmarkProgress, in-that-order).
   File dialogs and post-processing were each
   investigated and explicitly declined for different reasons (no
   testability win vs. real regression risk with no verification tool) —

@@ -6,7 +6,7 @@
 //
 // Triggered by `MeshCraft <scene> --benchmark` (main.cpp), which constructs
 // MeshCraftApplication in benchmark mode: LoadContent() is timed directly
-// (the "startup" category), the first kBenchmarkFrames real Draw() calls
+// (the "startup" category), the first BenchmarkProgress real Draw() calls
 // are timed (using the app's actual camera_/view/proj -- not a hand-rolled
 // stand-in) to get a genuine "first frame" vs "warm frame" comparison, and
 // this file's runBenchmarkSuite() then times the remaining categories that
@@ -44,22 +44,22 @@ void MeshCraftApplication::runBenchmarkSuite() {
     std::cout << "[Benchmark] scene: " << currentFile_.string()
               << " (" << document_.objects.size() << " root objects)\n";
 
-    std::cout << "[Benchmark] startup (LoadContent): " << benchmarkLoadContentMs_ << " ms\n";
+    std::cout << "[Benchmark] startup (LoadContent): " << benchmarkProgress_.loadContentMs() << " ms\n";
 
-    if (benchmarkFrameTimesMs_.size() >= 2) {
-        double first = benchmarkFrameTimesMs_.front();
-        double warmSum = std::accumulate(benchmarkFrameTimesMs_.begin() + 1,
-                                          benchmarkFrameTimesMs_.end(), 0.0);
-        double warmAvg = warmSum / static_cast<double>(benchmarkFrameTimesMs_.size() - 1);
+    const auto& frameTimesMs = benchmarkProgress_.frameTimesMs();
+    if (frameTimesMs.size() >= 2) {
+        double first = frameTimesMs.front();
+        double warmSum = std::accumulate(frameTimesMs.begin() + 1, frameTimesMs.end(), 0.0);
+        double warmAvg = warmSum / static_cast<double>(frameTimesMs.size() - 1);
         std::cout << "[Benchmark] first frame: " << first << " ms\n";
-        std::cout << "[Benchmark] warm frame (avg of " << (benchmarkFrameTimesMs_.size() - 1)
+        std::cout << "[Benchmark] warm frame (avg of " << (frameTimesMs.size() - 1)
                   << "): " << warmAvg << " ms\n";
         std::cout << "[Benchmark] mesh-gen/CSG+cache/texture warm-up delta (first-minus-warm, "
                   << "not isolated per-category -- see this file's header comment): "
                   << (first - warmAvg) << " ms\n";
     } else {
         std::cout << "[Benchmark] first/warm frame: skipped (need >=2 frames, got "
-                  << benchmarkFrameTimesMs_.size() << ")\n";
+                  << frameTimesMs.size() << ")\n";
     }
 
     // Traversal: a full scene poly-stat walk (every object, recursively).

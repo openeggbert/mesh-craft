@@ -4,6 +4,7 @@
 #include "MeshCraft/ModelRegistry.hpp"
 #include "MeshCraft/Editor/ActiveTool.hpp"
 #include "MeshCraft/Editor/AudioPreview.hpp"
+#include "MeshCraft/Editor/BenchmarkProgress.hpp"
 #include "MeshCraft/Editor/CameraBookmarks.hpp"
 #include "MeshCraft/Editor/EditorCamera.hpp"
 #include "MeshCraft/Editor/EditorTool.hpp"
@@ -199,21 +200,9 @@ private:
     bool pendingExport_{false};
     bool exportFailed_{false};
 
-    // SYS-W12-02: headless one-shot benchmark mode (`--benchmark`, no
-    // scene modification, prints timing to stdout then exits). Frame
-    // timings are captured for the first `kBenchmarkFrames` real Draw()
-    // calls (using the app's actual camera/view/proj -- not a hand-rolled
-    // stand-in) so "first frame" vs "warm frame" reflects genuine cold-vs-
-    // warm cache costs (CSG evaluation, texture load, mesh load) without
-    // risking a mismatched render setup. See runBenchmarkSuite() for the
-    // rest (traversal/picking/undo-snapshot/animation-eval/registry,
-    // which don't need a render context and are timed directly).
-    static constexpr int kBenchmarkFrames = 10;
-    bool   benchmarkMode_{false};
-    int    benchmarkFramesRemaining_{0};
-    std::vector<double> benchmarkFrameTimesMs_;
-    bool   pendingBenchmark_{false};
-    double benchmarkLoadContentMs_{0.0};
+    // SYS-W12-02: headless one-shot benchmark lifecycle and its real Draw()
+    // samples are owned by the narrow, independently tested progress object.
+    Editor::BenchmarkProgress benchmarkProgress_;
     void runBenchmarkSuite();
 
     // Lights panel selection
