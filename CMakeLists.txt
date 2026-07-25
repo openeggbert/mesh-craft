@@ -1127,7 +1127,9 @@ if(MESH_CRAFT_BUILD_TESTING AND UNIX AND NOT ANDROID AND NOT EMSCRIPTEN)
                 ${CMAKE_CURRENT_SOURCE_DIR}/test/house.mc3.xml
         WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
     )
-    set_tests_properties(benchmark_editor PROPERTIES TIMEOUT 30 LABELS "perf")
+    # This starts the editor and therefore needs an SDL video display even
+    # though the assertion concerns benchmark output, not pixels.
+    set_tests_properties(benchmark_editor PROPERTIES TIMEOUT 30 LABELS "perf;render")
 
     # AUD-058: real lifecycle verification -- runs the app end-to-end and
     # asserts BloomGL::leakCheck()/shadowDebug's shutdown self-check never
@@ -1648,7 +1650,9 @@ if(MESH_CRAFT_BUILD_TESTING AND UNIX AND NOT ANDROID AND NOT EMSCRIPTEN)
                         "${CMAKE_CURRENT_SOURCE_DIR}/test/house.mc3.xml"
                 WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
             )
-            set_tests_properties(editor_export_test PROPERTIES TIMEOUT 60 LABELS "export")
+            # --export still constructs and runs the editor, so it needs the
+            # same virtual-display preflight as screenshot/render tests.
+            set_tests_properties(editor_export_test PROPERTIES TIMEOUT 60 LABELS "export;render")
         endif()
 
         # SYS-W14-03: confirms --screenshot writes a real, decodable PNG for
@@ -1746,5 +1750,50 @@ if(MESH_CRAFT_BUILD_TESTING AND UNIX AND NOT ANDROID AND NOT EMSCRIPTEN)
         target_link_libraries(ai_test PRIVATE Threads::Threads)
         add_test(NAME mc3_ai COMMAND ai_test)
         set_tests_properties(mc3_ai PROPERTIES TIMEOUT 30 LABELS "ai")
+    endif()
+
+    # AUD-090: all root tests that launch MeshCraft need a real X display.
+    # Checking merely that xvfb-run exists is insufficient: a host can have
+    # the wrapper installed but be unable to create an X listener. Preflight
+    # an actual X client at configure time; when it fails, disable only
+    # render-labelled tests and leave the non-render suite meaningful.
+    find_program(MESHCRAFT_XVFB_RUN NAMES xvfb-run)
+    find_program(MESHCRAFT_XDPYINFO NAMES xdpyinfo)
+    find_program(MESHCRAFT_RENDER_PREFLIGHT_PYTHON NAMES python3 python)
+    set(MESHCRAFT_RENDER_DISPLAY_AVAILABLE FALSE)
+    if(MESHCRAFT_XVFB_RUN AND MESHCRAFT_XDPYINFO)
+        execute_process(
+            COMMAND "${MESHCRAFT_XVFB_RUN}" --auto-servernum "${MESHCRAFT_XDPYINFO}"
+            RESULT_VARIABLE MESHCRAFT_RENDER_DISPLAY_RESULT
+            OUTPUT_QUIET
+            ERROR_QUIET
+            TIMEOUT 10)
+        if(MESHCRAFT_RENDER_DISPLAY_RESULT EQUAL 0)
+            set(MESHCRAFT_RENDER_DISPLAY_AVAILABLE TRUE)
+        endif()
+    endif()
+
+    if(MESHCRAFT_RENDER_PREFLIGHT_PYTHON)
+        add_test(
+            NAME render_display_preflight
+            COMMAND "${MESHCRAFT_RENDER_PREFLIGHT_PYTHON}"
+                    "${CMAKE_CURRENT_SOURCE_DIR}/test/render_display_preflight.py"
+        )
+        set_tests_properties(render_display_preflight PROPERTIES
+            TIMEOUT 15 LABELS "render" SKIP_RETURN_CODE 77)
+    endif()
+
+    if(NOT MESHCRAFT_RENDER_DISPLAY_AVAILABLE)
+        get_property(MESHCRAFT_ROOT_TESTS DIRECTORY PROPERTY TESTS)
+        foreach(MESHCRAFT_TEST IN LISTS MESHCRAFT_ROOT_TESTS)
+            if(MESHCRAFT_TEST STREQUAL "render_display_preflight")
+                continue()
+            endif()
+            get_property(MESHCRAFT_TEST_LABELS TEST "${MESHCRAFT_TEST}" PROPERTY LABELS)
+            if("render" IN_LIST MESHCRAFT_TEST_LABELS)
+                set_tests_properties("${MESHCRAFT_TEST}" PROPERTIES DISABLED TRUE)
+            endif()
+        endforeach()
+        message(STATUS "AUD-090: render CTests disabled: xvfb-run + xdpyinfo preflight failed")
     endif()
 endif()
