@@ -363,9 +363,11 @@ float MeshCraftApplication::drawMenuBar()
                 .openDialog = [this] { findReplaceOpen_ = true; },
             };
             UI::MenuBar::drawEditFindReplaceNames(editFindReplaceNamesContext);
-            if (ImGui::MenuItem("Randomize Transform...", nullptr, false,
-                                !selection_.selection().empty()))
-                randomizeOpen_ = true;
+            const UI::EditRandomizeTransformContext editRandomizeTransformContext{
+                .canOpen = !selection_.selection().empty(),
+                .openDialog = [this] { randomizeOpen_ = true; },
+            };
+            UI::MenuBar::drawEditRandomizeTransform(editRandomizeTransformContext);
             ImGui::Separator();
             // H12: Macro recorder (SYS-W3-01 Phase 3: Editor::MacroRecorder)
             if (macroRecorder_.isRecording()) {
@@ -796,6 +798,12 @@ void MenuBar::drawEditBatchRename(const EditBatchRenameContext& context) {
 
 void MenuBar::drawEditFindReplaceNames(const EditFindReplaceNamesContext& context) {
     if (ImGui::MenuItem("Find & Replace Names...", "Ctrl+H")) {
+        context.openDialog();
+    }
+}
+
+void MenuBar::drawEditRandomizeTransform(const EditRandomizeTransformContext& context) {
+    if (ImGui::MenuItem("Randomize Transform...", nullptr, false, context.canOpen)) {
         context.openDialog();
     }
 }

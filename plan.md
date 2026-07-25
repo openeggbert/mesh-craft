@@ -171,11 +171,11 @@ still internally consistent.
    Edit-align-selection, Edit-distribute-selection, Edit-drop-to-ground,
    Edit-snap-selection-to-grid, Edit-mirror-selection, Edit-group-scale,
    Edit-linear-array, Edit-scatter-along-curve, Edit-batch-rename, and
-   Edit-find-replace-names menu slices are implemented and verified. Their
-   state remains in the existing editor/application owners;
-   `Application::UI::MenuBar` receives only the read-only values and callbacks
-   required for presentation. Any further slice requires its own confirmation
-   per `CLAUDE.md`.
+   Edit-find-replace-names, and Edit-randomize-transform menu slices are
+   implemented and verified. Their state remains in the existing
+   editor/application owners; `Application::UI::MenuBar` receives only the
+   read-only values and callbacks required for presentation. Any further slice
+   requires its own confirmation per `CLAUDE.md`.
 
 ---
 
@@ -726,8 +726,14 @@ _All items in this workstream are DONE — archived to [`docs/history/plan_20260
   open-dialog callback. Dialog state, find/replace buffers and options, live
   preview, scene traversal, selection and object-lock state, rename algorithm,
   undo, document mutation, window-title and status reporting, and the keyboard
-  and command-palette routes remain in their existing owners. File, the
-  remaining Edit groups, and the remaining View controls are still
+  and command-palette routes remain in their existing owners. The following
+  Randomize Transform... item is now component-owned through
+  `EditRandomizeTransformContext`, which exposes only current-selection
+  availability and one open-dialog callback. Selection, dialog state and
+  position/rotation/scale ranges, random-number generation, object-lock state,
+  transform mutation, undo, document mutation, window-title and status
+  reporting, and the command-palette route remain in their existing owners.
+  File, the remaining Edit groups, and the remaining View controls are still
   application-owned.
   The historical audit references retain their former paths as time-accurate
   evidence.
@@ -748,8 +754,8 @@ _All items in this workstream are DONE — archived to [`docs/history/plan_20260
   Edit-align-selection, Edit-distribute-selection, Edit-drop-to-ground,
   Edit-snap-selection-to-grid, Edit-mirror-selection, Edit-group-scale,
   Edit-linear-array, Edit-scatter-along-curve, Edit-batch-rename, and
-  Edit-find-replace-names slices, each incremental Release link and the same
-  147/147 + 34/34 partitions pass again.
+  Edit-find-replace-names, and Edit-randomize-transform slices, each
+  incremental Release link and the same 147/147 + 34/34 partitions pass again.
   For the current MenuBar slices, the public UI header also compiles as a
   self-contained C++23 include, `undo_snapshot_lint_test.py` passes, and
   `git diff --check` is clean. A further Phase 13 slice requires separate
