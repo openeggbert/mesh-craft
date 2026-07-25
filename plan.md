@@ -168,9 +168,10 @@ still internally consistent.
    Edit-object-actions, Edit-selection-actions, Edit-select-by-type,
    Edit-select-by-tag/material, Edit-copy-properties, Edit-grouping,
    Edit-convert-to-definition, Edit-export-subtree, Edit-break-instance,
-   Edit-align-selection, Edit-distribute-selection, Edit-drop-to-ground, and
-   Edit-snap-selection-to-grid menu slices are implemented and verified. Their
-   state remains in the existing editor/application owners;
+   Edit-align-selection, Edit-distribute-selection, Edit-drop-to-ground,
+   Edit-snap-selection-to-grid, and Edit-mirror-selection menu slices are
+   implemented and verified. Their state remains in the existing
+   editor/application owners;
    `Application::UI::MenuBar` receives only the read-only values and callbacks
    required for presentation. Any further slice requires its own confirmation
    per `CLAUDE.md`.
@@ -693,8 +694,12 @@ _All items in this workstream are DONE — archived to [`docs/history/plan_20260
   `EditSnapSelectionToGridContext`, which exposes only current-selection
   availability and one action callback. Selection and object-lock state, grid
   spacing, rounding, undo, document mutation, window-title and status reporting
-  remain application-owned. File, the remaining Edit groups, and the remaining
-  View controls are still application-owned.
+  remain application-owned. The following Mirror Selection submenu is now
+  component-owned through `EditMirrorSelectionContext`, which exposes only
+  current-selection availability and one axis callback. Selection and
+  object-lock state, scale mutation, undo, document mutation, window-title and
+  status reporting remain application-owned. File, the remaining Edit groups,
+  and the remaining View controls are still application-owned.
   The historical audit references retain their former paths as time-accurate
   evidence.
   Static undo-audit and snapshot-lint path checks pass after their tracked
@@ -711,9 +716,9 @@ _All items in this workstream are DONE — archived to [`docs/history/plan_20260
   slices, the Select-by-Type allocation hardening, and the Edit-select-by-tag,
   Edit-select-by-material, Edit-copy-properties, Edit-grouping,
   Edit-convert-to-definition, Edit-export-subtree, Edit-break-instance,
-  Edit-align-selection, Edit-distribute-selection, Edit-drop-to-ground, and
-  Edit-snap-selection-to-grid slices, each incremental Release link and the
-  same 147/147 + 34/34 partitions pass again.
+  Edit-align-selection, Edit-distribute-selection, Edit-drop-to-ground,
+  Edit-snap-selection-to-grid, and Edit-mirror-selection slices, each
+  incremental Release link and the same 147/147 + 34/34 partitions pass again.
   For the current MenuBar slices, the public UI header also compiles as a
   self-contained C++23 include, `undo_snapshot_lint_test.py` passes, and
   `git diff --check` is clean. A further Phase 13 slice requires separate

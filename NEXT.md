@@ -21,8 +21,8 @@ Registry results, Toolbar tools/display/snap-surface/proportional/grid controls,
 Properties delegation, and the View-menu panel/overlay/direction/focus/
 Camera-Bookmarks/Walk-Mode presentation, plus the Add/CSG and Help menu
 presentation and the Edit-history, clipboard, object-action, and
-selection-action groups, the Select-by-Type/Tag/Material, Align-Selection, and
-Distribute-Selection submenus, and the Copy-Properties,
+selection-action groups, the Select-by-Type/Tag/Material, Align-Selection,
+Distribute-Selection, and Mirror-Selection submenus, and the Copy-Properties,
 Convert-to-Definition, Export-Subtree, Break-Instance, Drop-to-Ground, and
 Snap-to-Grid items plus the Group/Ungroup pair. The detailed toolbar Snap
 interval contents and the remaining MenuBar sections are still
@@ -98,9 +98,8 @@ before when explicitly requested (`SYS-W14-##` rows).
 
 ## 2. Current status
 
-- **Last full build: clean after the current Phase 13
-  Edit-snap-selection-to-grid slice.** Testing is enabled in the current Ninja
-  Release tree, and
+- **Last full build: clean after the current Phase 13 Edit-mirror-selection
+  slice.** Testing is enabled in the current Ninja Release tree, and
   `CCACHE_DISABLE=1 cmake --build b-release -j4` linked all targets successfully
   on EASYGL. Alternate-backend runtime qualification remains blocked.
 - **Tests:** the fresh Release tree registers 181 tests. All passed in two
@@ -172,7 +171,7 @@ before when explicitly requested (`SYS-W14-##` rows).
   Camera-Bookmarks/Walk-Mode presentation, plus the Add/CSG and Help menu
   presentation and the Edit-history, clipboard, object-action, and
   selection-action groups, the Select-by-Type/Tag/Material, Align-Selection,
-  and Distribute-Selection submenus, and the Copy-Properties,
+  Distribute-Selection, and Mirror-Selection submenus, and the Copy-Properties,
   Convert-to-Definition, Export-Subtree, Break-Instance, Drop-to-Ground, and
   Snap-to-Grid items plus the Group/Ungroup pair are now component-owned.
   Bookmark, walk, document, undo, clipboard, selection, grid, preferences,
@@ -577,7 +576,7 @@ backlog (650+ STAB tasks, then a 57-finding audit, all archived DONE).
 verification.** `AUD-090` preflights `xvfb-run` with a real `xdpyinfo` client.
 The execution sandbox blocks the local sockets needed by Xvfb and the
 `mc3_ai` loopback mock server, but the permitted host run completed both
-partitions cleanly: 147/147 non-render tests (including `mc3_ai` in 1.36
+partitions cleanly: 147/147 non-render tests (including `mc3_ai` in 1.27
 seconds) and 34/34 render tests. CI explicitly installs `xvfb` and
 `x11-utils` for the same render path. `AUD-091` therefore remains closed as
 a stale-build false positive rather than hidden behind a longer timeout.
@@ -784,8 +783,8 @@ Add/CSG, Edit-history, Edit-clipboard, and Edit-object-actions menu slices are
 implemented and verified, together with Edit-selection-actions,
 Edit-select-by-type/tag/material, Edit-copy-properties, Edit-grouping,
 Edit-convert-to-definition, Edit-export-subtree, Edit-break-instance,
-Edit-align-selection, Edit-distribute-selection, Edit-drop-to-ground, and
-Edit-snap-selection-to-grid slices.
+Edit-align-selection, Edit-distribute-selection, Edit-drop-to-ground,
+Edit-snap-selection-to-grid, and Edit-mirror-selection slices.
 `EditHistoryContext` exposes only `canUndo`/`canRedo` plus Undo, Redo, and
 Open History callbacks; `Editor::UndoManager`, document replacement,
 selection restoration, dialog state, and keyboard handling remain
@@ -864,14 +863,20 @@ and one action callback. Selection and object-lock state, grid spacing,
 rounding, undo, document mutation, window-title updates, and status reporting
 remain application-owned; `MenuBar` owns only the unchanged label,
 availability, and click dispatch.
+`EditMirrorSelectionContext` exposes only current-selection availability and
+one axis callback. Selection and object-lock state, scale mutation, undo,
+document mutation, window-title updates, and status reporting remain
+application-owned; `MenuBar` owns only the unchanged submenu and child labels,
+order, availability, and click dispatch.
 
-**Next candidate, not yet authorized:** continue Phase 13 with the
-Mirror Selection submenu, passing only current-selection availability and one
-axis callback. Selection and object-lock state, scale mutation, undo, document
-mutation, window-title updates, and status reporting would remain
-application-owned. The later Edit groups and the View-menu Bloom/SSAO block
-remain outside that slice. Per `CLAUDE.md`, describe and confirm the
-Mirror-Selection slice before implementing it.
+**Next candidate, not yet authorized:** continue Phase 13 with the single
+Group Scale… item, passing only 2+-selection availability and one open-dialog
+callback. Selection, dialog state and contents, scale factor, lock-aware
+transformation, undo, document mutation, window-title and status reporting, and
+the macro-execution route would remain application-owned. The later Edit dialog
+openers and the View-menu Bloom/SSAO block remain outside that slice. Per
+`CLAUDE.md`, describe and confirm the Group-Scale item slice before implementing
+it.
 
 ## 9. Do not do yet
 

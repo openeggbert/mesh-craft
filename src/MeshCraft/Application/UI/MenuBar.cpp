@@ -322,29 +322,23 @@ float MeshCraftApplication::drawMenuBar()
                 },
             };
             UI::MenuBar::drawEditSnapSelectionToGrid(editSnapSelectionToGridContext);
-            {
-                // Mirror / flip
-                bool hasSel2d = !selection_.selection().empty();
-                if (ImGui::BeginMenu("Mirror Selection", hasSel2d)) {
-                    static const char* flipLabel[3] = { "Flip X", "Flip Y", "Flip Z" };
-                    for (int ax = 0; ax < 3; ++ax) {
-                        if (ImGui::MenuItem(flipLabel[ax])) {
-                            pushUndo();
-                            for (const auto& s : selection_.selection()) {
-                                if (objectLockState_.isLocked(s->id)) continue;
-                                s->transform.scale[ax] = -s->transform.scale[ax];
-                            }
-                            modified_ = true; updateWindowTitle();
-                            char mbuf[48];
-                            std::snprintf(mbuf, sizeof(mbuf), "Mirrored %d object(s) on %c",
-                                          static_cast<int>(selection_.selection().size()),
-                                          "XYZ"[ax]);
-                            setStatusMsg(mbuf);
-                        }
+            const UI::EditMirrorSelectionContext editMirrorSelectionContext{
+                .canMirror = !selection_.selection().empty(),
+                .mirror = [this](int axis) {
+                    pushUndo();
+                    for (const auto& s : selection_.selection()) {
+                        if (objectLockState_.isLocked(s->id)) continue;
+                        s->transform.scale[axis] = -s->transform.scale[axis];
                     }
-                    ImGui::EndMenu();
-                }
-            }
+                    modified_ = true; updateWindowTitle();
+                    char mbuf[48];
+                    std::snprintf(mbuf, sizeof(mbuf), "Mirrored %d object(s) on %c",
+                                  static_cast<int>(selection_.selection().size()),
+                                  "XYZ"[axis]);
+                    setStatusMsg(mbuf);
+                },
+            };
+            UI::MenuBar::drawEditMirrorSelection(editMirrorSelectionContext);
             if (ImGui::MenuItem("Group Scale…", nullptr, false,
                                 selection_.selection().size() >= 2))
                 groupScaleOpen_ = true;
@@ -754,6 +748,16 @@ void MenuBar::drawEditSnapSelectionToGrid(const EditSnapSelectionToGridContext& 
     if (ImGui::MenuItem("Snap Selection to Grid", nullptr, false, context.canSnap)) {
         context.snap();
     }
+}
+
+void MenuBar::drawEditMirrorSelection(const EditMirrorSelectionContext& context) {
+    if (!ImGui::BeginMenu("Mirror Selection", context.canMirror)) return;
+
+    static const char* labels[3] = { "Flip X", "Flip Y", "Flip Z" };
+    for (int axis = 0; axis < 3; ++axis) {
+        if (ImGui::MenuItem(labels[axis])) context.mirror(axis);
+    }
+    ImGui::EndMenu();
 }
 
 void MenuBar::drawPanelToggles(bool& timeline, bool& registry, bool& ai, bool& validation) {
