@@ -430,20 +430,25 @@ float MeshCraftApplication::drawMenuBar()
             };
             UI::MenuBar::drawEditResetTransform(editResetTransformContext);
             ImGui::Separator();
-            if (ImGui::MenuItem("Copy Transform", "Ctrl+Shift+C", false, hasSel)) {
-                const auto& src = selection_.selection().front();
-                transformClipboard_.copyFrom(*src);
-                setStatusMsg("Transform copied from \"" + src->name + "\"");
-            }
-            if (ImGui::MenuItem("Paste Transform", "Ctrl+Shift+V", false, hasSel && transformClipboard_.hasValue())) {
-                pushUndo();
-                for (const auto& s : selection_.selection()) {
-                    if (objectLockState_.isLocked(s->id)) continue;
-                    transformClipboard_.pasteTo(*s);
-                }
-                modified_ = true; updateWindowTitle();
-                setStatusMsg("Transform pasted to " + std::to_string(selection_.selection().size()) + " object(s)");
-            }
+            const UI::EditTransformClipboardContext editTransformClipboardContext{
+                .canCopy = hasSel,
+                .canPaste = hasSel && transformClipboard_.hasValue(),
+                .copy = [this] {
+                    const auto& src = selection_.selection().front();
+                    transformClipboard_.copyFrom(*src);
+                    setStatusMsg("Transform copied from \"" + src->name + "\"");
+                },
+                .paste = [this] {
+                    pushUndo();
+                    for (const auto& s : selection_.selection()) {
+                        if (objectLockState_.isLocked(s->id)) continue;
+                        transformClipboard_.pasteTo(*s);
+                    }
+                    modified_ = true; updateWindowTitle();
+                    setStatusMsg("Transform pasted to " + std::to_string(selection_.selection().size()) + " object(s)");
+                },
+            };
+            UI::MenuBar::drawEditTransformClipboard(editTransformClipboardContext);
             ImGui::Separator();
             if (ImGui::MenuItem(isolateActive_ ? "Exit Isolation" : "Isolate Selection",
                                "Alt+I", false,
@@ -842,6 +847,15 @@ void MenuBar::drawEditResetTransform(const EditResetTransformContext& context) {
     ImGui::Separator();
     if (ImGui::MenuItem("All")) context.reset(EditResetTransformTarget::All);
     ImGui::EndMenu();
+}
+
+void MenuBar::drawEditTransformClipboard(const EditTransformClipboardContext& context) {
+    if (ImGui::MenuItem("Copy Transform", "Ctrl+Shift+C", false, context.canCopy)) {
+        context.copy();
+    }
+    if (ImGui::MenuItem("Paste Transform", "Ctrl+Shift+V", false, context.canPaste)) {
+        context.paste();
+    }
 }
 
 void MenuBar::drawPanelToggles(bool& timeline, bool& registry, bool& ai, bool& validation) {
