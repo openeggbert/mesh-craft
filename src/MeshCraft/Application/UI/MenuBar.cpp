@@ -527,9 +527,13 @@ float MeshCraftApplication::drawMenuBar()
             };
             UI::MenuBar::drawCameraBookmarks(cameraBookmarksContext);
             ImGui::Separator();
-            if (ImGui::MenuItem("Walk Mode", "F5", walkController_.isActive())) {
-                if (walkController_.isActive()) exitWalkMode(); else enterWalkMode();
-            }
+            const UI::WalkModeContext walkModeContext{
+                .active = walkController_.isActive(),
+                .toggle = [this] {
+                    if (walkController_.isActive()) exitWalkMode(); else enterWalkMode();
+                },
+            };
+            UI::MenuBar::drawWalkMode(walkModeContext);
             ImGui::Separator();
             UI::MenuBar::drawOverlays(showEdgeOverlay_, showWireframeMode_,
                                       showStatsOverlay_, shadowDebugEnabled_, snapEnabled_);
@@ -640,6 +644,10 @@ void MenuBar::drawCameraBookmarks(const CameraBookmarksContext& context) {
         if (slot + 1 < Editor::CameraBookmarks::kSlotCount) ImGui::Separator();
     }
     ImGui::EndMenu();
+}
+
+void MenuBar::drawWalkMode(const WalkModeContext& context) {
+    if (ImGui::MenuItem("Walk Mode", "F5", context.active)) context.toggle();
 }
 
 } // namespace MeshCraft::Application::UI

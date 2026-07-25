@@ -163,11 +163,12 @@ still internally consistent.
    conversion; ambient-light export). Nothing left queued from that
    research pass.
 6. **SYS-W3-01 (P2/W3), Phase 13 is active:** application/UI ownership is
-   being reduced one narrow presentation slice at a time. The currently
-   authorized Camera Bookmarks menu slice is implemented and verified;
-   bookmark state remains in `Editor::CameraBookmarks`, with only read-only
-   slots and Save/Restore callbacks exposed to `Application::UI::MenuBar`.
-   Any further slice requires its own confirmation per `CLAUDE.md`.
+   being reduced one narrow presentation slice at a time. The authorized
+   Camera Bookmarks and Walk Mode menu slices are implemented and verified.
+   Their state remains in `Editor::CameraBookmarks` and
+   `Editor::WalkController`; `Application::UI::MenuBar` receives only the
+   read-only values and callbacks required for presentation. Any further
+   slice requires its own confirmation per `CLAUDE.md`.
 
 ---
 
@@ -590,12 +591,15 @@ _All items in this workstream are DONE — archived to [`docs/history/plan_20260
   have not leaked into the component. `Application::UI::Properties` is a
   narrow delegation facade over the existing `Scene::PropertiesPanel`.
   `Application::UI::MenuBar` now owns the View-menu panel toggles, overlay
-  toggles, direction choices, focus action, and Camera Bookmarks presentation.
-  The bookmark state remains the already-extracted
+  toggles, direction choices, focus action, Camera Bookmarks presentation,
+  and the Walk Mode menu item. The bookmark state remains the already-extracted
   `Editor::CameraBookmarks`; a `CameraBookmarksContext` exposes only the
   read-only slots plus Save/Restore callbacks, leaving camera mutation and
-  status reporting in the application. File/Edit/Add, the remaining View
-  controls, and Help are still application-owned. The
+  status reporting in the application. Likewise, `WalkModeContext` exposes
+  only the current active flag plus a toggle callback. `Editor::WalkController`,
+  F5 keyboard handling, enter/exit behavior, camera mutation, collider
+  rebuilding, and status reporting remain application-owned. File/Edit/Add,
+  the remaining View controls, and Help are still application-owned. The
   historical audit references retain their former paths as time-accurate
   evidence.
   Static undo-audit and snapshot-lint path checks pass after their tracked
@@ -607,11 +611,12 @@ _All items in this workstream are DONE — archived to [`docs/history/plan_20260
   and `CCACHE_DISABLE=1 cmake --build b-release -j4` linked every target.
   The complete suite passed in two disjoint groups with the required local
   socket access: 147/147 non-render tests and 34/34 render-labelled tests
-  under Xvfb. For the Camera Bookmarks slice, the public UI header also
-  compiles as a self-contained C++23 include,
-  `undo_snapshot_lint_test.py` passes, and `git diff --check` is clean. A
-  further Phase 13 slice requires separate authorization and should keep
-  using the same narrow-context boundary.
+  under Xvfb. After the Walk Mode slice, the incremental Release link and the
+  same 147/147 + 34/34 partitions pass again. For the Camera Bookmarks and
+  Walk Mode slices, the public UI header also compiles as a self-contained
+  C++23 include, `undo_snapshot_lint_test.py` passes, and `git diff --check`
+  is clean. A further Phase 13 slice requires separate authorization and
+  should keep using the same narrow-context boundary.
   **SYS-W3-01 roadmap status after this session's investigation round:**
   Phases 1–12 done (Keybindings, Preferences, MacroRecorder, UndoManager,
   animation-override computation, WalkController, AudioPreview,
