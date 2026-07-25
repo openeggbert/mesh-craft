@@ -12,6 +12,7 @@
 #include <Microsoft/Xna/Framework/Graphics/Viewport.hpp>
 
 #include <algorithm>
+#include <cstddef>
 #include <cmath>
 #include <cstdio>
 #include <cstring>
@@ -155,11 +156,15 @@ float MeshCraftApplication::drawMenuBar()
             UI::MenuBar::drawEditSelectionActions(editSelectionActionsContext);
             const UI::EditSelectByTypeContext editSelectByTypeContext{
                 .getPresentTypes = [this, &walkAll] {
-                    std::set<Mc3::ObjectType> presentTypes;
+                    std::vector<Mc3::ObjectType> presentTypes;
+                    presentTypes.reserve(static_cast<std::size_t>(Mc3::ObjectType::Area) + 1);
                     walkAll(document_.objects, [&](const auto& o) {
-                        presentTypes.insert(o->type);
+                        if (std::find(presentTypes.begin(), presentTypes.end(), o->type) ==
+                            presentTypes.end()) {
+                            presentTypes.push_back(o->type);
+                        }
                     });
-                    return std::vector<Mc3::ObjectType>(presentTypes.begin(), presentTypes.end());
+                    return presentTypes;
                 },
                 .selectType = [&selectBy](Mc3::ObjectType type) {
                     selectBy([type](const auto& o) { return o->type == type; });

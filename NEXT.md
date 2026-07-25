@@ -95,9 +95,9 @@ before when explicitly requested (`SYS-W14-##` rows).
 
 ## 2. Current status
 
-- **Last full build: clean after the current Phase 13 Edit-select-by-type
-  slice.** The current Ninja Release tree has testing enabled, and
-  `CCACHE_DISABLE=1 cmake --build b-release -j4` linked all targets
+- **Last full build: clean after the current Phase 13 Select-by-Type
+  allocation hardening.** Testing is enabled in the current Ninja Release
+  tree, and `CCACHE_DISABLE=1 cmake --build b-release -j4` linked all targets
   successfully on EASYGL. Alternate-backend runtime qualification remains
   blocked.
 - **Tests:** the fresh Release tree registers 181 tests. All passed in two
@@ -796,7 +796,9 @@ Ctrl+A/Ctrl+I keyboard paths remain application-owned.
 type-selection callback. The provider runs only while the submenu is open;
 scene traversal, selection mutation, and window-title updates remain
 application-owned, while `MenuBar` owns the unchanged type labels and
-empty-scene presentation.
+empty-scene presentation. The provider collects unique values directly into
+one enum-capacity-reserved vector, avoiding the former set-node allocations and
+set-to-vector copy.
 
 **Next candidate, not yet authorized:** continue Phase 13 with the compact
 Select by Tag submenu, passing a lazy read-only provider for the sorted tags

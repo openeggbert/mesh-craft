@@ -630,8 +630,11 @@ _All items in this workstream are DONE — archived to [`docs/history/plan_20260
   The provider runs only while the submenu is open; scene traversal, selection
   mutation, and window-title updates remain application-owned. The existing
   supported-type list, labels, order, and empty-scene presentation are
-  unchanged. File, the remaining Edit groups, and the remaining View controls
-  are still application-owned.
+  unchanged. The provider was then allocation-hardened to collect unique
+  values directly into one enum-capacity-reserved vector, eliminating the
+  temporary set's node allocations and the set-to-vector copy. File, the
+  remaining Edit groups, and the remaining View controls are still
+  application-owned.
   The historical audit references retain their former paths as time-accurate
   evidence.
   Static undo-audit and snapshot-lint path checks pass after their tracked
@@ -645,12 +648,12 @@ _All items in this workstream are DONE — archived to [`docs/history/plan_20260
   socket access: 147/147 non-render tests and 34/34 render-labelled tests
   under Xvfb. After the Walk Mode, Help, Add, Edit-history, Edit-clipboard,
   Edit-object-actions, Edit-selection-actions, and Edit-select-by-type menu
-  slices, each incremental Release link and the same 147/147 + 34/34
-  partitions pass again. For the current MenuBar slices, the public UI header
-  also compiles as a self-contained C++23 include,
-  `undo_snapshot_lint_test.py` passes, and `git diff --check` is clean. A
-  further Phase 13 slice requires separate authorization and should keep using
-  the same narrow-context boundary.
+  slices plus the Select-by-Type allocation hardening, each incremental Release
+  link and the same 147/147 + 34/34 partitions pass again. For the current
+  MenuBar slices, the public UI header also compiles as a self-contained C++23
+  include, `undo_snapshot_lint_test.py` passes, and `git diff --check` is
+  clean. A further Phase 13 slice requires separate authorization and should
+  keep using the same narrow-context boundary.
   **SYS-W3-01 roadmap status after this session's investigation round:**
   Phases 1–12 done (Keybindings, Preferences, MacroRecorder, UndoManager,
   animation-override computation, WalkController, AudioPreview,
