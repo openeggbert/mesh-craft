@@ -52,7 +52,7 @@ float MeshCraftApplication::drawToolbar(float menuBarH, int screenW)
                                     showWireframeMode_, showBoundingBox_);
 
     UI::Toolbar::drawSnapToggle(snapEnabled_, snapTranslate_, snapRotate_, snapScale_);
-    if (ImGui::BeginPopupContextItem("##snapcfg")) {
+    UI::Toolbar::drawSnapSettings([this] {
         ImGui::TextDisabled("Snap Intervals");
         ImGui::Separator();
         // Move presets
@@ -103,8 +103,7 @@ float MeshCraftApplication::drawToolbar(float menuBarH, int screenW)
         ImGui::NewLine();
         ImGui::SetNextItemWidth(120);
         ImGui::DragFloat("##ss", &snapScale_, 0.01f, 0.01f, 10.0f, "%.3g", ImGuiSliderFlags_AlwaysClamp);
-        ImGui::EndPopup();
-    }
+    });
     ImGui::SameLine();
 
     UI::Toolbar::drawSurfaceSnap(surfaceSnapEnabled_);
@@ -212,6 +211,12 @@ void Toolbar::drawSnapToggle(bool& enabled, float translate, float rotate, float
     if (ImGui::IsItemHovered())
         ImGui::SetTooltip("Snap to grid  Move: %.2g u  Rotate: %.0f°  Scale: %.2g\nRight-click to configure",
                           translate, rotate, scale);
+}
+
+void Toolbar::drawSnapSettings(const std::function<void()>& drawContents) {
+    if (!ImGui::BeginPopupContextItem("##snapcfg")) return;
+    drawContents();
+    ImGui::EndPopup();
 }
 
 void Toolbar::drawProportionalEdit(bool& enabled, float& radius) {
