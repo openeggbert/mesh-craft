@@ -236,12 +236,12 @@ float MeshCraftApplication::drawMenuBar()
                 },
             };
             UI::MenuBar::drawEditExportSubtree(editExportSubtreeContext);
-            {
-                bool isInst = !selection_.selection().empty() &&
-                              selection_.selection().front()->type == Mc3::ObjectType::Instance;
-                if (ImGui::MenuItem("Break Instance", nullptr, false, isInst))
-                    breakInstance();
-            }
+            const UI::EditBreakInstanceContext editBreakInstanceContext{
+                .canBreak = !selection_.selection().empty() &&
+                            selection_.selection().front()->type == Mc3::ObjectType::Instance,
+                .breakInstance = [this] { breakInstance(); },
+            };
+            UI::MenuBar::drawEditBreakInstance(editBreakInstanceContext);
             bool hasSel2 = !selection_.selection().empty();
             if (ImGui::BeginMenu("Align Selection", hasSel2)) {
                 // Compute bounding box of selected objects' pivot positions
@@ -703,6 +703,12 @@ void MenuBar::drawEditConvertToDefinition(const EditConvertToDefinitionContext& 
 void MenuBar::drawEditExportSubtree(const EditExportSubtreeContext& context) {
     if (ImGui::MenuItem("Export Subtree as Template...", nullptr, false, context.canExport)) {
         context.openDialog();
+    }
+}
+
+void MenuBar::drawEditBreakInstance(const EditBreakInstanceContext& context) {
+    if (ImGui::MenuItem("Break Instance", nullptr, false, context.canBreak)) {
+        context.breakInstance();
     }
 }
 
