@@ -532,18 +532,18 @@ float MeshCraftApplication::drawMenuBar()
                 static const char* kSlotKeys[5] = {"Ctrl+F1","Ctrl+F2","Ctrl+F3","Ctrl+F4","Ctrl+F5"};
                 static const char* kRestKeys[5] = {"F6","F7","F8","F9","F10"};
                 for (int i = 0; i < 5; ++i) {
-                    const auto& bm = cameraBookmarks_[i];
+                    const auto* bm = cameraBookmarks_.get(i);
                     char saveLabel[48];
                     std::snprintf(saveLabel, sizeof(saveLabel), "Save Slot %d", i + 1);
                     if (ImGui::MenuItem(saveLabel, kSlotKeys[i]))
                         saveCameraBookmark(i);
                     char restLabel[80];
-                    if (bm.valid)
+                    if (bm && bm->valid)
                         std::snprintf(restLabel, sizeof(restLabel),
-                            "Go to Slot %d  [%.1f,%.1f,%.1f]", i+1, bm.targetX, bm.targetY, bm.targetZ);
+                            "Go to Slot %d  [%.1f,%.1f,%.1f]", i+1, bm->targetX, bm->targetY, bm->targetZ);
                     else
                         std::snprintf(restLabel, sizeof(restLabel), "Go to Slot %d  (empty)", i+1);
-                    if (ImGui::MenuItem(restLabel, kRestKeys[i], false, bm.valid))
+                    if (ImGui::MenuItem(restLabel, kRestKeys[i], false, bm && bm->valid))
                         restoreCameraBookmark(i);
                     if (i < 4) ImGui::Separator();
                 }

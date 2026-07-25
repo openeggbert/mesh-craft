@@ -4,6 +4,7 @@
 #include "MeshCraft/ModelRegistry.hpp"
 #include "MeshCraft/Editor/ActiveTool.hpp"
 #include "MeshCraft/Editor/AudioPreview.hpp"
+#include "MeshCraft/Editor/CameraBookmarks.hpp"
 #include "MeshCraft/Editor/EditorCamera.hpp"
 #include "MeshCraft/Editor/EditorTool.hpp"
 #include "MeshCraft/Editor/KeybindingManager.hpp"
@@ -661,13 +662,9 @@ private:
     bool  showStatsOverlay_{true};
     float displayFps_{0.0f};
 
-    // Camera bookmarks (5 slots)
-    struct CameraBookmark {
-        float yaw{0}, pitch{0.4f}, distance{15.0f};
-        float targetX{0}, targetY{0}, targetZ{0};
-        bool  valid{false};
-    };
-    std::array<CameraBookmark, 5> cameraBookmarks_{};
+    // SYS-W3-01 Phase 8: capture/restore storage lives in the independently
+    // testable Editor::CameraBookmarks subsystem.
+    Editor::CameraBookmarks cameraBookmarks_;
     void saveCameraBookmark(int slot);
     void restoreCameraBookmark(int slot);
 

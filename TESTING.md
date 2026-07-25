@@ -1,8 +1,8 @@
 # Testing
 
-_Last updated: 2026-07-20 (later same day), re-verified from a genuinely clean build as part of a third independent audit's doc-staleness pass — every count below was produced by actually running the command shown (`ctest -L <label> -N`, "Total Tests" line), not carried over from a prior doc revision. **A previous revision of this file, from an earlier the-same-day pass, claimed 151 tests and was itself already stale within hours** — 10 tests landed via the SYS-W14-18..27 feature commits (`lua_script_runner`, `trigger_fire`, `scene_state_apply`, `mc3togltf_light_export`, `mc3togltf_uv_mapping_export`, etc.) without a follow-up doc update, then several more via this session's own AUD-074..079 audit-fix commits. This document is derived from the actual `CMakeLists.txt` test registrations and test source files — if it drifts from `ctest -N`'s output (it eventually will, again), trust `ctest -N`, not this file's claimed count._
+_Last updated: 2026-07-25. Counts below were produced from the live release build with `ctest -L <label> -N`, not carried over from an earlier revision. This document is derived from the actual `CMakeLists.txt` test registrations and test source files — if it drifts from `ctest -N`'s output, trust `ctest -N`, not this file's claimed count._
 
-MeshCraft's tests run through **CTest** — **166 tests today** (`ctest --print-labels` label breakdown: `ai` 1, `commands` 1, `export` 69, `format` 37, `lint` 3, `perf` 2, `registry` 1, `render` 27, `unit` 25), mixing C++ assertion-based binaries and Python/bash subprocess-driven checks against the `mc3togltf`/`mc3tomcb` CLIs and the `MeshCraft` editor binary itself (headless `--screenshot` real-pixel-sampling tests, plus 3 tests that drive real headless Blender for GLB-import verification). **Known gap:** the "CLI-driving Python tests" table below documents the most significant/representative tests in each category but is not exhaustively 1:1 with all 69 `export`-labeled and 27 `render`-labeled registrations — `ctest -N` and `ctest --print-labels` are authoritative for the complete list.
+MeshCraft's tests run through **CTest** — **174 tests registered** (`ctest --print-labels` label breakdown: `ai` 1, `commands` 1, `export` 71, `format` 37, `lint` 3, `perf` 2, `registry` 1, `render` 32, `unit` 26), mixing C++ assertion-based binaries and Python/bash subprocess-driven checks against the `mc3togltf`/`mc3tomcb` CLIs and the `MeshCraft` editor binary itself (headless `--screenshot` real-pixel-sampling tests, plus 3 tests that drive real headless Blender for GLB-import verification). **Known gap:** the "CLI-driving Python tests" table below documents the most significant/representative tests in each category but is not exhaustively 1:1 with all registrations — `ctest -N` and `ctest --print-labels` are authoritative for the complete list.
 
 ---
 
@@ -31,7 +31,7 @@ ctest --print-labels   # list all labels
 ctest --rerun-failed --output-on-failure
 ```
 
-Expected result: **166/166 Passed** (verified 2026-07-20 from a genuinely clean build). A failing test prints its assertion/subprocess output inline with `--output-on-failure`; without that flag, CTest only shows pass/fail per test name.
+Expected result: every registered test passes. The 174-registration count was checked 2026-07-25; the relevant focused suites are run with `-j4` after each change. A failing test prints its assertion/subprocess output inline with `--output-on-failure`; without that flag, CTest only shows pass/fail per test name.
 
 Each C++ test binary can also be run directly (bypassing CTest) for faster iteration:
 
@@ -70,6 +70,7 @@ Expected: `mc3` 1/1, `mcb` 1/1, `mc3togltf` 41/41, `mc3tomcb` 3/3 (re-verified 2
 | `mc3_roundtrip` | `mc3_roundtrip_test` | Full `.mc3.xml` parser/writer roundtrip for every element type, including all N1-N7 extensions, UTF-8/space-containing paths, and edge cases (legacy attribute forms, defaults) | 577 `PASS:` assertions, ends with `All tests passed.` (re-counted 2026-07-20; was 542 as of 2026-07-07) |
 | `mc3_commands` | `mc3_commands_test` | Editor command algorithms (rename incl. empty-pattern/backslash edge cases, find/replace, array-dup, duplicate, group/ungroup), undo/redo round-trips for every mutating command, auto-save/backup, Save-As/Export-Selection/drag-drop/invalid-file-load workflows, keybinding/preferences/macro persistence formats, hierarchy-panel filtering, material-color resolution, undo-stack depth capping, AI-panel + unsaved-changes-confirmation dialog lifecycles | 558 `PASS:` assertions (re-counted 2026-07-20; was 510 as of 2026-07-07) |
 | `mcb_roundtrip` | `mcb_roundtrip_test` | MCB binary encode/decode roundtrip for the base scene and all N1-N7 extension types, plus regression tests for a recursion-depth guard and a string-length sanity check | 236 `PASS:` assertions, ends with `All MCB roundtrip tests passed.` (re-counted 2026-07-20, later same day; was 234 earlier the same day, before the `SYS-W14-25` compression roundtrip cases landed, and 155 as of 2026-07-07) |
+| `camera_bookmarks` | `camera_bookmarks_test` | Editor camera-bookmark capture/restore state | Empty/invalid slots are rejected; all orbit-camera fields round-trip |
 
 All five print one `PASS: <description>` or `FAIL: <description>` line per assertion and exit non-zero if any `FAIL:` occurred — grep for `^FAIL:` to find failures quickly in CI-style output.
 

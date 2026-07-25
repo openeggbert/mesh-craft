@@ -173,26 +173,15 @@ void MeshCraftApplication::toggleIsolate() {
 }
 
 void MeshCraftApplication::saveCameraBookmark(int slot) {
-    auto& bm     = cameraBookmarks_[slot];
-    bm.yaw       = camera_.yaw;
-    bm.pitch     = camera_.pitch;
-    bm.distance  = camera_.distance;
-    bm.targetX   = camera_.target.X;
-    bm.targetY   = camera_.target.Y;
-    bm.targetZ   = camera_.target.Z;
-    bm.valid     = true;
+    if (!cameraBookmarks_.save(slot, camera_)) return;
     char msg[64];
     std::snprintf(msg, sizeof(msg), "Camera saved to slot %d", slot + 1);
     setStatusMsg(msg, false, 2.0f);
 }
 
 void MeshCraftApplication::restoreCameraBookmark(int slot) {
-    const auto& bm = cameraBookmarks_[slot];
-    if (!bm.valid) { setStatusMsg("Slot is empty", true, 1.5f); return; }
-    camera_.yaw      = bm.yaw;
-    camera_.pitch    = bm.pitch;
-    camera_.distance = bm.distance;
-    camera_.target   = { bm.targetX, bm.targetY, bm.targetZ };
+    if (!cameraBookmarks_.restore(slot, camera_))
+        setStatusMsg("Slot is empty", true, 1.5f);
 }
 
 // (deepCopyObject and findParentList are defined in MeshCraftPrivate.hpp)

@@ -814,6 +814,22 @@ if(MESH_CRAFT_BUILD_TESTING AND UNIX AND NOT ANDROID AND NOT EMSCRIPTEN)
     add_test(NAME audio_preview COMMAND audio_preview_test)
     set_tests_properties(audio_preview PROPERTIES TIMEOUT 15 LABELS "unit")
 
+    # SYS-W3-01 Phase 8: orbit-camera bookmark capture/restore was extracted
+    # from MeshCraftApplication. It uses EditorCamera's CNA Vector3 type but
+    # needs no window, scene document, or ImGui frame.
+    add_executable(camera_bookmarks_test
+        ${CMAKE_CURRENT_SOURCE_DIR}/test/camera_bookmarks_test.cpp
+        ${CMAKE_CURRENT_SOURCE_DIR}/src/MeshCraft/Editor/CameraBookmarks.cpp
+        ${CMAKE_CURRENT_SOURCE_DIR}/src/MeshCraft/Editor/EditorCamera.cpp)
+    target_include_directories(camera_bookmarks_test PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/include
+        ${CMAKE_CURRENT_SOURCE_DIR}/mc3/include)
+    target_link_libraries(camera_bookmarks_test PRIVATE
+        CNA ${_cna_backend_target} SHARP_RUNTIME)
+    target_compile_features(camera_bookmarks_test PRIVATE cxx_std_23)
+    add_test(NAME camera_bookmarks COMMAND camera_bookmarks_test)
+    set_tests_properties(camera_bookmarks PROPERTIES TIMEOUT 15 LABELS "unit")
+
     # SYS-W14-18 (2026-07-20): LuaScriptRunner -- executes Mc3Script
     # ("lua") source against a document. Unlike the CNA-coupled UI wiring
     # (Scripts tab / Triggers tab, tested via mirrors elsewhere), this
