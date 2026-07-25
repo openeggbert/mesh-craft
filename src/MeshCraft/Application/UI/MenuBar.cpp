@@ -92,7 +92,10 @@ float MeshCraftApplication::drawMenuBar()
             // from the editor GUI. Reuses the existing GltfExporter as a
             // black box (see runObjExport()'s own comment) rather than a
             // second from-scratch scene-traversal implementation.
-            if (ImGui::MenuItem("Export OBJ...")) exportObj();
+            const UI::FileExportObjContext fileExportObjContext{
+                .openDialog = [this] { exportObj(); },
+            };
+            UI::MenuBar::drawFileExportObj(fileExportObjContext);
             const UI::FileExportSelectionContext fileExportSelectionContext{
                 .canExport = !selection_.selection().empty(),
                 .openDialog = [this] {
@@ -598,6 +601,10 @@ void MenuBar::drawFileExportSelection(const FileExportSelectionContext& context)
 
 void MenuBar::drawFileExportGltf(const FileExportGltfContext& context) {
     if (ImGui::MenuItem("Export GLB", "Ctrl+E")) context.openDialog();
+}
+
+void MenuBar::drawFileExportObj(const FileExportObjContext& context) {
+    if (ImGui::MenuItem("Export OBJ...")) context.openDialog();
 }
 
 void MenuBar::drawEditHistory(const EditHistoryContext& context) {

@@ -99,7 +99,7 @@ before when explicitly requested (`SYS-W14-##` rows).
 
 ## 2. Current status
 
-- **Last full build: clean after the current Phase 13 File-export-GLB
+- **Last full build: clean after the current Phase 13 File-export-OBJ
   slice.** Testing is enabled in the current Ninja Release tree, and
   `CCACHE_DISABLE=1 cmake --build b-release -j4` linked all targets successfully
   on EASYGL. Alternate-backend runtime qualification remains blocked.
@@ -791,8 +791,8 @@ Edit-linear-array, Edit-scatter-along-curve, Edit-batch-rename,
 Edit-find-replace-names, Edit-randomize-transform, Edit-macro-recording,
 Edit-play-macro, Edit-macro-editor, Edit-lock-selection, Edit-reset-transform,
 Edit-transform-clipboard, Edit-isolate-selection, Edit-hide-selection,
-Edit-show-all-hidden, File-merge-scene, File-export-selection, and
-File-export-GLB slices.
+Edit-show-all-hidden, File-merge-scene, File-export-selection, File-export-GLB,
+and File-export-OBJ slices.
 `EditHistoryContext` exposes only `canUndo`/`canRedo` plus Undo, Redo, and
 Open History callbacks; `Editor::UndoManager`, document replacement,
 selection restoration, dialog state, and keyboard handling remain
@@ -968,14 +968,18 @@ validation, output-path derivation, GLB/glTF export settings, dialog state and
 buffers, export implementation, document and error handling, and the Ctrl+E
 keyboard route remain in their existing owners; `MenuBar` owns only the
 unchanged label, shortcut, and click dispatch.
+`FileExportObjContext` exposes only one open-dialog callback. Saved-file
+validation, output-path derivation, dialog state and buffers, OBJ export
+implementation, document and error handling remain in their existing owners;
+`MenuBar` owns only the unchanged label and click dispatch.
 
-**Next candidate, not yet authorized:** `File → Export OBJ…`, passing only one
-open-dialog callback. Saved-file validation, output-path derivation, dialog
-state and buffers, OBJ export implementation, document and error handling
-would remain in their existing owners; `MenuBar` would own only the unchanged
-label and click dispatch. Other File items and the View-menu Bloom/SSAO block
-remain outside that slice. Per `CLAUDE.md`, describe and confirm the Export-OBJ
-item before implementing it.
+**Next candidate, not yet authorized:** `File → Save`, passing only one save
+callback. Current-file state, document validation and persistence, title and
+status updates, error handling, and the Ctrl+S keyboard route would remain in
+their existing owners; `MenuBar` would own only the unchanged label, shortcut,
+and click dispatch. Other File items and the View-menu Bloom/SSAO block remain
+outside that slice. Per `CLAUDE.md`, describe and confirm the Save item before
+implementing it.
 
 ## 9. Do not do yet
 
