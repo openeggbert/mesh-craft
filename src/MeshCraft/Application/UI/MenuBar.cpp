@@ -207,12 +207,11 @@ float MeshCraftApplication::drawMenuBar()
                 },
             };
             UI::MenuBar::drawEditSelectByMaterial(editSelectByMaterialContext);
-            {
-                bool hasSel2plus = selection_.selection().size() >= 2;
-                if (ImGui::MenuItem("Copy Properties to Selected...", "Ctrl+Shift+P", false, hasSel2plus))
-                    copyPropsOpen_ = true;
-            }
-            ImGui::Separator();
+            const UI::EditCopyPropertiesContext editCopyPropertiesContext{
+                .canCopy = selection_.selection().size() >= 2,
+                .openDialog = [this] { copyPropsOpen_ = true; },
+            };
+            UI::MenuBar::drawEditCopyProperties(editCopyPropertiesContext);
             if (ImGui::MenuItem("Group",   "Ctrl+G"))       groupSelected();
             if (ImGui::MenuItem("Ungroup", "Ctrl+Shift+G")) ungroupSelected();
             if (ImGui::MenuItem("Convert to Definition", nullptr, false, !selection_.selection().empty()))
@@ -669,6 +668,14 @@ void MenuBar::drawEditSelectByMaterial(const EditSelectByMaterialContext& contex
         }
     }
     ImGui::EndMenu();
+}
+
+void MenuBar::drawEditCopyProperties(const EditCopyPropertiesContext& context) {
+    if (ImGui::MenuItem("Copy Properties to Selected...", "Ctrl+Shift+P", false,
+                        context.canCopy)) {
+        context.openDialog();
+    }
+    ImGui::Separator();
 }
 
 void MenuBar::drawPanelToggles(bool& timeline, bool& registry, bool& ai, bool& validation) {

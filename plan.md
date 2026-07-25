@@ -166,8 +166,9 @@ still internally consistent.
    being reduced one narrow presentation slice at a time. The authorized
    Camera Bookmarks, Walk Mode, Help, Add/CSG, Edit-history, Edit-clipboard,
    Edit-object-actions, Edit-selection-actions, Edit-select-by-type, and
-   Edit-select-by-tag/material menu slices are implemented and verified. Their
-   state remains in the existing editor/application owners;
+   Edit-select-by-tag/material and Edit-copy-properties menu slices are
+   implemented and verified. Their state remains in the existing
+   editor/application owners;
    `Application::UI::MenuBar` receives only the read-only values and callbacks
    required for presentation. Any further slice requires its own confirmation
    per `CLAUDE.md`.
@@ -645,8 +646,12 @@ _All items in this workstream are DONE — archived to [`docs/history/plan_20260
   provider runs only while the submenu is open, excludes empty names, and
   returns its set directly without a conversion copy; scene traversal,
   selection mutation, status reporting, and window-title updates remain
-  application-owned. File, the remaining Edit groups, and the remaining View
-  controls are still application-owned.
+  application-owned. The following Copy Properties to Selected item and its
+  separator are now component-owned through `EditCopyPropertiesContext`, which
+  exposes only 2+-selection availability and one open-dialog callback.
+  Selection state, dialog state and contents, property copying, and the
+  Ctrl+Shift+P keyboard path remain application-owned. File, the remaining Edit
+  groups, and the remaining View controls are still application-owned.
   The historical audit references retain their former paths as time-accurate
   evidence.
   Static undo-audit and snapshot-lint path checks pass after their tracked
@@ -661,12 +666,12 @@ _All items in this workstream are DONE — archived to [`docs/history/plan_20260
   under Xvfb. After the Walk Mode, Help, Add, Edit-history, Edit-clipboard,
   Edit-object-actions, Edit-selection-actions, and Edit-select-by-type menu
   slices, the Select-by-Type allocation hardening, and the Edit-select-by-tag
-  and Edit-select-by-material slices, each incremental Release link and the
-  same 147/147 + 34/34 partitions pass again. For the current MenuBar slices,
-  the public UI header also compiles as a self-contained C++23 include,
-  `undo_snapshot_lint_test.py` passes, and `git diff --check` is clean. A
-  further Phase 13 slice requires separate authorization and should keep using
-  the same narrow-context boundary.
+  and Edit-select-by-material slices plus the Edit-copy-properties slice, each
+  incremental Release link and the same 147/147 + 34/34 partitions pass again.
+  For the current MenuBar slices, the public UI header also compiles as a
+  self-contained C++23 include, `undo_snapshot_lint_test.py` passes, and
+  `git diff --check` is clean. A further Phase 13 slice requires separate
+  authorization and should keep using the same narrow-context boundary.
   **SYS-W3-01 roadmap status after this session's investigation round:**
   Phases 1–12 done (Keybindings, Preferences, MacroRecorder, UndoManager,
   animation-override computation, WalkController, AudioPreview,
