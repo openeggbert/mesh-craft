@@ -129,7 +129,10 @@ float MeshCraftApplication::drawMenuBar()
             };
             UI::MenuBar::drawFileMergeScene(fileMergeSceneContext);
             ImGui::Separator();
-            if (ImGui::MenuItem("Exit")) confirmIfModified(PendingAction::ExitApp);
+            const UI::FileExitContext fileExitContext{
+                .requestExit = [this] { confirmIfModified(PendingAction::ExitApp); },
+            };
+            UI::MenuBar::drawFileExit(fileExitContext);
             ImGui::EndMenu();
         }
         if (ImGui::BeginMenu("Edit")) {
@@ -640,6 +643,10 @@ void MenuBar::drawFileNew(const FileNewContext& context) {
 
 void MenuBar::drawFileOpen(const FileOpenContext& context) {
     if (ImGui::MenuItem("Open...", "Ctrl+O")) context.requestOpenFile();
+}
+
+void MenuBar::drawFileExit(const FileExitContext& context) {
+    if (ImGui::MenuItem("Exit")) context.requestExit();
 }
 
 void MenuBar::drawEditHistory(const EditHistoryContext& context) {

@@ -67,6 +67,10 @@ struct FileOpenContext {
     std::function<void()> requestOpenFile;
 };
 
+struct FileExitContext {
+    std::function<void()> requestExit;
+};
+
 struct EditHistoryContext {
     bool canUndo;
     bool canRedo;
@@ -261,6 +265,7 @@ public:
     static void drawFileImportObj(const FileImportObjContext& context);
     static void drawFileNew(const FileNewContext& context);
     static void drawFileOpen(const FileOpenContext& context);
+    static void drawFileExit(const FileExitContext& context);
     static void drawEditClipboard(const EditClipboardContext& context);
     static void drawEditCopyProperties(const EditCopyPropertiesContext& context);
     static void drawEditGrouping(const EditGroupingContext& context);
