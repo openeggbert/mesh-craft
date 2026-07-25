@@ -1,5 +1,6 @@
 #include "MeshCraft/EditorAlgorithms.hpp"
 #include "MeshCraft/Application/MeshCraftApplication.hpp"
+#include "MeshCraft/Application/UI/Properties.hpp"
 #include "MeshCraft/Scene/PropertiesPanel.hpp"
 
 #include <cstring>
@@ -57,7 +58,7 @@ void MeshCraftApplication::drawPropertiesPanel(float panelY, float panelH, int s
         },
     };
 
-    propertiesPanel_->draw(panelX, panelY, panelW, panelH, ctx);
+    UI::Properties::draw(*propertiesPanel_, panelX, panelY, panelW, panelH, ctx);
 }
 
 // SYS-W14-15: opens a native OS file-open dialog for a material's texture
@@ -89,3 +90,12 @@ std::string MeshCraftApplication::registerTextureFromPath(const std::string& pat
 }
 
 } // namespace MeshCraft::Application
+
+namespace MeshCraft::Application::UI {
+
+void Properties::draw(Scene::PropertiesPanel& panel, float x, float y, float width,
+                      float height, Scene::PropertiesContext& context) {
+    panel.draw(x, y, width, height, context);
+}
+
+} // namespace MeshCraft::Application::UI
