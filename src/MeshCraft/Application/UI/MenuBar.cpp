@@ -339,9 +339,11 @@ float MeshCraftApplication::drawMenuBar()
                 },
             };
             UI::MenuBar::drawEditMirrorSelection(editMirrorSelectionContext);
-            if (ImGui::MenuItem("Group Scale…", nullptr, false,
-                                selection_.selection().size() >= 2))
-                groupScaleOpen_ = true;
+            const UI::EditGroupScaleContext editGroupScaleContext{
+                .canScale = selection_.selection().size() >= 2,
+                .openDialog = [this] { groupScaleOpen_ = true; },
+            };
+            UI::MenuBar::drawEditGroupScale(editGroupScaleContext);
             if (ImGui::MenuItem("Linear Array...", nullptr, false,
                                 !selection_.selection().empty()))
                 arrayDupOpen_ = true;
@@ -758,6 +760,12 @@ void MenuBar::drawEditMirrorSelection(const EditMirrorSelectionContext& context)
         if (ImGui::MenuItem(labels[axis])) context.mirror(axis);
     }
     ImGui::EndMenu();
+}
+
+void MenuBar::drawEditGroupScale(const EditGroupScaleContext& context) {
+    if (ImGui::MenuItem("Group Scale…", nullptr, false, context.canScale)) {
+        context.openDialog();
+    }
 }
 
 void MenuBar::drawPanelToggles(bool& timeline, bool& registry, bool& ai, bool& validation) {

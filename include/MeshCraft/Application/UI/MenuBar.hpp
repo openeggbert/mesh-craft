@@ -129,6 +129,11 @@ struct EditMirrorSelectionContext {
     std::function<void(int)> mirror;
 };
 
+struct EditGroupScaleContext {
+    bool canScale;
+    std::function<void()> openDialog;
+};
+
 class MenuBar final {
 public:
     static void drawAddMenu(const std::function<void(Mc3::ObjectType)>& addPrimitive);
@@ -143,6 +148,7 @@ public:
     static void drawEditDropToGround(const EditDropToGroundContext& context);
     static void drawEditSnapSelectionToGrid(const EditSnapSelectionToGridContext& context);
     static void drawEditMirrorSelection(const EditMirrorSelectionContext& context);
+    static void drawEditGroupScale(const EditGroupScaleContext& context);
     static void drawEditHistory(const EditHistoryContext& context);
     static void drawEditObjectActions(const EditObjectActionsContext& context);
     static void drawEditSelectionActions(const EditSelectionActionsContext& context);
