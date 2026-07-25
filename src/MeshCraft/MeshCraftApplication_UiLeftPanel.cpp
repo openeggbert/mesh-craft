@@ -1434,12 +1434,12 @@ void MeshCraftApplication::drawLeftPanel(float panelY, float panelH)
                 initMatPreview();
                 renderMatPreview(mat.baseColor[0], mat.baseColor[1], mat.baseColor[2],
                                  mat.roughness, mat.metallic);
-                if (matPreviewTexId_) {
+                if (matPreviewTextureToken_) {
                     float avail = ImGui::GetContentRegionAvail().x;
                     float sz = std::min(avail, (float)kMatPreviewRes);
                     float off = (avail - sz) * 0.5f;
                     if (off > 0.f) ImGui::SetCursorPosX(ImGui::GetCursorPosX() + off);
-                    ImGui::Image((ImTextureID)(intptr_t)matPreviewTexId_, ImVec2(sz, sz));
+                    ImGui::Image(static_cast<ImTextureID>(matPreviewTextureToken_), ImVec2(sz, sz));
                     ImGui::Spacing();
                 }
 

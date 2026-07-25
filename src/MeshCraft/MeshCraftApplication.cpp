@@ -4,7 +4,6 @@
 
 #include <imgui.h>
 #include <imgui_impl_sdl3.h>
-#include <imgui_impl_opengl3.h>
 #include <SDL3/SDL.h>
 
 #include <chrono>
@@ -13,7 +12,6 @@
 #include <Microsoft/Xna/Framework/Input/Keys.hpp>
 #include <Microsoft/Xna/Framework/Input/Mouse.hpp>
 #include <Microsoft/Xna/Framework/Input/ButtonState.hpp>
-#include <CNA/Internal/Backends/Common/IGraphicsBackend.hpp>
 #include <Microsoft/Xna/Framework/Graphics/DepthFormat.hpp>
 #include <Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp>
 #include <Microsoft/Xna/Framework/Graphics/RasterizerState.hpp>
@@ -239,10 +237,10 @@ void MeshCraftApplication::LoadContent() {
         c[ImGuiCol_ModalWindowDimBg]      = ImVec4(0.10f, 0.10f, 0.10f, 0.60f);
     }
 
-    SDL_Window*    sdlWindow = reinterpret_cast<SDL_Window*>(getWindowProperty().getHandleProperty());
-    SDL_GLContext  glCtx     = SDL_GL_GetCurrentContext();
-    ImGui_ImplSDL3_InitForOpenGL(sdlWindow, glCtx);
-    ImGui_ImplOpenGL3_Init("#version 300 es");
+    SDL_Window* sdlWindow = reinterpret_cast<SDL_Window*>(getWindowProperty().getHandleProperty());
+    imguiRenderer_ = ImGuiRenderer::createCnaRenderer();
+    if (!imguiRenderer_->initialize(getGraphicsDeviceProperty(), sdlWindow))
+        throw std::runtime_error("Failed to initialize the CNA ImGui renderer");
     imguiInitialized_ = true;
 
     SDL_AddEventWatch(reinterpret_cast<SDL_EventFilter>(sdlEventWatch), this);
@@ -327,21 +325,20 @@ void MeshCraftApplication::LoadContent() {
 // ---------------------------------------------------------------------------
 
 bool MeshCraftApplication::BeginDraw() {
-    ImGui_ImplOpenGL3_NewFrame();
-    ImGui_ImplSDL3_NewFrame();
+    imguiRenderer_->newFrame();
     ImGui::NewFrame();
     return Game::BeginDraw();
 }
 
 void MeshCraftApplication::EndDraw() {
     ImGui::Render();
-    ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
+    imguiRenderer_->render(ImGui::GetDrawData());
 
     // AUD-087 test-only hook (see the render-to-RT half in Draw()): blit the
     // swatch on top of everything, including ImGui, which only just finished
     // rasterizing above -- a blit anywhere in Draw() would have been
     // overwritten by this same ImGui render call.
-    if (std::getenv("MESHCRAFT_TEST_FORCE_MATPREVIEW") && matPreviewTexId_ && matPreviewRt_) {
+    if (std::getenv("MESHCRAFT_TEST_FORCE_MATPREVIEW") && matPreviewTextureToken_ && matPreviewRt_) {
         auto& gd = getGraphicsDeviceProperty();
         gd.setViewportProperty(Viewport(0, 0, cachedScreenW_, cachedScreenH_));
         const Rectangle corner(0, 0, kMatPreviewRes, kMatPreviewRes);
@@ -356,7 +353,7 @@ void MeshCraftApplication::EndDraw() {
     // (title bar height, borders, text-line wrapping) for a test's pixel
     // coordinates -- more robust than reverse-engineering ImGui's own
     // window-chrome geometry.
-    if (std::getenv("MESHCRAFT_TEST_FORCE_SHADOWDEBUG") && shadowDebugColorTex_ && shadowDebugRt_) {
+    if (std::getenv("MESHCRAFT_TEST_FORCE_SHADOWDEBUG") && shadowDebugTextureToken_ && shadowDebugRt_) {
         auto& gd = getGraphicsDeviceProperty();
         gd.setViewportProperty(Viewport(0, 0, cachedScreenW_, cachedScreenH_));
         const Rectangle corner(cachedScreenW_ - kShadowDebugRes, 0, kShadowDebugRes, kShadowDebugRes);
@@ -814,8 +811,8 @@ void MeshCraftApplication::Draw(const GameTime& /*gameTime*/) {
     // renderMatPreview() at all. Setting this env var renders a swatch with
     // a known distinctive color, matching AUD-058's own established pattern
     // for bloom/SSAO; the actual on-screen blit happens in EndDraw(), after
-    // ImGui_ImplOpenGL3_RenderDrawData() -- drawImGuiUi() here only queues
-    // ImGui's draw list, it doesn't rasterize pixels yet, so a blit anywhere
+    // the CNA renderer in EndDraw() -- drawImGuiUi() here only queues ImGui's
+    // draw list, it doesn't rasterize pixels yet, so a blit anywhere
     // in Draw() (even after this call) would still get overwritten once
     // ImGui's own real rendering runs afterward in EndDraw().
     if (std::getenv("MESHCRAFT_TEST_FORCE_MATPREVIEW")) {
@@ -1427,8 +1424,8 @@ MeshCraftApplication::~MeshCraftApplication() {
     SDL_RemoveEventWatch(reinterpret_cast<SDL_EventFilter>(sdlEventWatch), this);
 
     if (imguiInitialized_) {
-        ImGui_ImplOpenGL3_Shutdown();
-        ImGui_ImplSDL3_Shutdown();
+        imguiRenderer_->shutdown();
+        imguiRenderer_.reset();
         ImGui::DestroyContext();
         imguiInitialized_ = false;
     }
@@ -1451,8 +1448,8 @@ void MeshCraftApplication::renderShadowDebugFbo(const Matrix& lightView, const M
 
     sceneRenderer_->draw(document_, lightView, lightProj, {});
 
-    if (auto* rtBackend = shadowDebugRt_->GetRenderTargetBackend())
-        shadowDebugColorTex_ = rtBackend->GetColorGLHandle();
+    if (!shadowDebugTextureToken_)
+        shadowDebugTextureToken_ = imguiRenderer_->registerTexture(*shadowDebugRt_);
 
     // SetRenderTarget(nullptr) already resets Viewport/ScissorRectangle to
     // the full backbuffer size on its own -- see GraphicsDevice.cpp's own
@@ -1498,11 +1495,8 @@ void MeshCraftApplication::renderMatPreview(float r, float g, float b,
     gd.SetRenderTarget(nullptr);
     gd.setViewportProperty(Viewport(0, 0, cachedScreenW_, cachedScreenH_));
     gd.SetDepthTestEnabled(true);
-    // NOXNA cross-backend accessor (returns 0 on non-GL backends) -- the
-    // only way to hand a render target's content to ImGui::Image(), which
-    // needs a raw native texture handle, not a CNA Texture2D object.
-    if (auto* rtBackend = matPreviewRt_->GetRenderTargetBackend())
-        matPreviewTexId_ = rtBackend->GetColorGLHandle();
+    if (!matPreviewTextureToken_)
+        matPreviewTextureToken_ = imguiRenderer_->registerTexture(*matPreviewRt_);
 }
 
 } // namespace MeshCraft

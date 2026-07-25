@@ -15,7 +15,7 @@ screen's top-left 128x128 corner in EndDraw(), after ImGui's own real
 rendering (drawImGuiUi() during Draw() only queues ImGui's draw list; the
 actual rasterization -- which would otherwise cover this exact corner
 with the left panel's toolbar/hierarchy -- happens later in EndDraw()'s
-ImGui_ImplOpenGL3_RenderDrawData() call).
+CNA ImGui renderer call).
 
 Real pixel sampling proves: (1) the swatch center is red-dominant (the SDF
 sphere with Blinn-Phong shading applied), (2) the swatch corners (outside

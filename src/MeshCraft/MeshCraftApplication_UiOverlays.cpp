@@ -2262,7 +2262,7 @@ void MeshCraftApplication::drawPanelSplitters(int screenW, int screenH)
 
 void MeshCraftApplication::drawShadowDebugOverlay(int /*screenW*/, int screenH)
 {
-    if (!shadowDebugEnabled_ || !shadowDebugColorTex_) return;
+    if (!shadowDebugEnabled_ || !shadowDebugTextureToken_) return;
 
     const Mc3::Mc3Light* shadowLight = nullptr;
     for (const auto& l : document_.lights)
@@ -2280,7 +2280,7 @@ void MeshCraftApplication::drawShadowDebugOverlay(int /*screenW*/, int screenH)
                         shadowLight->direction[0],
                         shadowLight->direction[1],
                         shadowLight->direction[2]);
-            ImGui::Image((ImTextureID)(intptr_t)shadowDebugColorTex_, ImVec2(res, res));
+            ImGui::Image(static_cast<ImTextureID>(shadowDebugTextureToken_), ImVec2(res, res));
             ImGui::SameLine();
             ImGui::BeginGroup();
             ImGui::TextDisabled("Light view");

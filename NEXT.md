@@ -78,9 +78,9 @@ before when explicitly requested (`SYS-W14-##` rows).
 ## 2. Current status
 
 - **Build: clean**, `cmake --build b-release -j4` passed after SVG texture
-  support was added (EASYGL backend on Linux — the only backend buildable
-  here).
-- **Tests:** 177 tests are registered. SVG-specific verification passes with
+  support was added (EASYGL backend on Linux). The CNA-backed ImGui adapter
+  also builds there; alternate-backend runtime qualification remains blocked.
+- **Tests:** 180 tests are registered. SVG-specific verification passes with
   `-j4`: external and inline SVG export to glTF PNGs, bounded/malformed input,
   cache invalidation, and real headless viewport screenshots sampling the
   rasterized material pixels. This session's own
@@ -90,10 +90,10 @@ before when explicitly requested (`SYS-W14-##` rows).
   count this file last recorded (2026-07-19) predates unrelated work not
   narrated here (a further audit pass and the `SYS-W14-18..27`
   mc3-format-vs-editor gap closures — see `plan.md`/memory, not fully
-  reflected in this file's own history) — don't treat 142→177 as this
+  reflected in this file's own history) — don't treat 142→180 as this
   session's own delta.
-  All builds/tests this session used `-j4` (not `-j$(nproc)`), per the
-  user's standing request (shared machine).
+  All builds/tests this session used at most `-j4` (never `-j$(nproc)`), per
+  the user's standing request (shared machine).
 - **CLI/tools/apps/libraries currently available:**
   - `MeshCraft` — the interactive editor (`./b-release/MeshCraft
     scene.mc3.xml`, or `--screenshot out.png` / `--export out.glb` /

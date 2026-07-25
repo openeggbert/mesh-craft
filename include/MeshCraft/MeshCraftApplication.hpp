@@ -22,6 +22,7 @@
 #include "MeshCraft/Mc3/Mc3Animation.hpp"
 #include "MeshCraft/Mc3/Mc3Document.hpp"
 #include "MeshCraft/Mc3/Mc3Object.hpp"
+#include "MeshCraft/ImGuiRenderer.hpp"
 #include "MeshCraft/Renderer/GridRenderer.hpp"
 #include "MeshCraft/Renderer/SceneRenderer.hpp"
 #include "MeshCraft/Scene/PropertiesPanel.hpp"
@@ -100,9 +101,9 @@ public:
     // must not report exit-code success when its requested output was lost.
     [[nodiscard]] bool screenshotFailed() const { return screenshotFailed_; }
 
-    // Tears down the SDL event watch, ImGui context/backends, and GL resources
+    // Tears down the SDL event watch, ImGui context/backends, and CNA resources
     // registered in LoadContent(). Runs before the base Game destructor, while
-    // the SDL window and GL context are still alive.
+    // the SDL window and graphics device are still alive.
     ~MeshCraftApplication() override;
 
     void LoadContent() override;
@@ -355,11 +356,12 @@ private:
     // redirected into an off-screen target instead of the backbuffer.
     bool     shadowDebugEnabled_{false};
     std::optional<Microsoft::Xna::Framework::Graphics::RenderTarget2D> shadowDebugRt_;
-    unsigned shadowDebugColorTex_{0};   // GL texture name (GetColorGLHandle()), exposed for ImGui::Image
+    std::uintptr_t shadowDebugTextureToken_{0}; // opaque CNA ImGui texture token
 
     // True once LoadContent() has initialized the ImGui context + backends, so
     // the destructor only tears them down when they were actually created.
     bool     imguiInitialized_{false};
+    std::unique_ptr<ImGuiRenderer> imguiRenderer_;
     static constexpr int kShadowDebugRes = 256;
     void initShadowDebug();
     void renderShadowDebugFbo(const Microsoft::Xna::Framework::Matrix& lightView,
@@ -370,7 +372,7 @@ private:
     // AUD-087: RenderTarget2D + ShaderEffect (CNA-native) instead of a raw-GL
     // FBO + hand-compiled GLSL program -- see initMatPreview()/renderMatPreview().
     static constexpr int kMatPreviewRes = 128;
-    unsigned             matPreviewTexId_{0};   // GL texture name, exposed for ImGui::Image
+    std::uintptr_t       matPreviewTextureToken_{0}; // opaque CNA ImGui texture token
     std::optional<Microsoft::Xna::Framework::Graphics::RenderTarget2D> matPreviewRt_;
     std::optional<Microsoft::Xna::Framework::Graphics::ShaderEffect> matPreviewFx_;
     // kMatPreviewFragSrc is purely procedural (no texture() calls at all) --

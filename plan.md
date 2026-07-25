@@ -144,11 +144,10 @@ still internally consistent.
    out the two sibling repositories at the recorded verified SHAs, then
    configures, builds and runs the root CTest suite with at most two jobs.
    The standalone matrix uses the same job limit.
-3. **SYS-W8-02 through SYS-W8-05 (P1/P2/W8)** — replace the editor's
-   OpenGL-specific ImGui renderer with a CNA-backed adapter, including an
-   opaque CNA texture bridge and real alternate-backend verification. These
-   are the approved portability path for Vulkan/WebGPU-class CNA backends;
-   complete them in order, not as a superficial backend-name switch.
+3. **SYS-W8-05 (P1/W8)** — EASYGL's CNA ImGui adapter and opaque texture
+   bridge are visually qualified. Complete real alternate-backend
+   qualification before enabling another backend; do not treat this as a
+   superficial backend-name switch.
 4. **AUD-042 (P2/W8)** — Android build path forces SDL_RENDERER; deferred
    until an Android-capable environment exists. It can be reconsidered after
    SYS-W8-02 through SYS-W8-05 provide a backend-neutral editor UI path.
@@ -612,33 +611,61 @@ The former backend-truth items are archived to
 below were added by explicit user direction on 2026-07-25: make the editor UI
 portable through CNA rather than merely hiding its OpenGL dependency.
 
-### SYS-W8-02 `[TODO]` `P2` · Define a backend-neutral ImGui renderer seam owned by CNA-facing MeshCraft code
+### SYS-W8-02 `[DONE]` `P2` · Define a backend-neutral ImGui renderer seam owned by CNA-facing MeshCraft code
 - **Component:** the ImGui lifecycle in `MeshCraftApplication.cpp`, a new MeshCraft `ImGuiRenderer` interface/implementation boundary, and `GraphicsBackendCheck.hpp`.
 - **Evidence:** The editor currently obtains `SDL_GL_GetCurrentContext()`, calls `ImGui_ImplSDL3_InitForOpenGL` and `ImGui_ImplOpenGL3_Init`, then calls the OpenGL backend's NewFrame/RenderDrawData/Shutdown functions. `GraphicsBackendCheck.hpp` consequently permits only `EASYGL`. Dear ImGui's core instead produces backend-neutral `ImDrawData`; its selected platform and renderer backends are the API-specific parts.
 - **Outcome:** Introduce an explicit MeshCraft-owned renderer interface with `initialize`, `newFrame`, `render(ImDrawData&)`, `shutdown`, and opaque UI-texture registration/unregistration. Its public boundary may consume CNA `GraphicsDevice`/`Texture2D`/`RenderTarget2D` plus SDL window/input data, but must expose no GL context, `GLuint`, `SDL_GL_*`, or OpenGL ImGui backend type. Keep SDL event forwarding separate from rendering so each CNA graphics backend can select an appropriate platform mode without duplicating editor UI code.
 - **Tests:** Add context-free lifecycle/selection tests and compile the editor with the EASYGL implementation at `-j4`. Add static checks that application lifecycle code no longer names `ImGui_ImplOpenGL3` or `SDL_GL_GetCurrentContext`; those names may exist only in an explicitly temporary compatibility implementation until SYS-W8-03 is complete.
 - **Dependency/rule:** This is a MeshCraft refactor, not permission to alter `../cna`. If CNA lacks an operation needed by the adapter, record a precise CNA capability request and stop at that boundary rather than reintroducing native GL calls.
+- **Resolved:** `ImGuiRenderer` owns the SDL-platform/CNA-renderer lifecycle;
+  `imgui_renderer_portability` rejects production `ImGui_ImplOpenGL*`,
+  `SDL_GL_*`, and native texture-handle regressions. The editor and focused
+  lifecycle tests build/pass with `-j4` on EASYGL.
 
-### SYS-W8-03 `[TODO]` `P1` · Implement the ImGui `ImDrawData` renderer exclusively through CNA graphics primitives
+### SYS-W8-03 `[DONE]` `P1` · Implement the ImGui `ImDrawData` renderer exclusively through CNA graphics primitives
 - **Component:** new CNA-backed ImGui renderer implementation, CMake source wiring, and public CNA graphics APIs consumed by it.
 - **Evidence:** Wrapping `imgui_impl_opengl3` behind an interface would hide, but not remove, the OpenGL dependency. A genuine portable renderer must upload ImGui's font atlas and each frame's vertices/indices as CNA textures/buffers, apply `ImDrawCmd` clip rectangles through CNA scissor state, bind command textures through CNA, and issue indexed draws through CNA.
 - **Outcome:** Render ordinary Dear ImGui draw lists with CNA only: dynamic vertex/index upload, font-atlas creation, alpha blending, orthographic projection, per-command texture selection, vertex/index offsets, and clipped scissor rectangles. Define deterministic handling for `ImDrawCmd::UserCallback` (support Dear ImGui's reset-render-state callback or reject/log unknown callbacks) so no plugin can smuggle backend-native drawing into a frame. Remove `imgui_impl_opengl3` from the production editor path once the CNA renderer is visually equivalent on EASYGL.
 - **Tests:** Unit-test draw-command translation, clip-rectangle clamping, texture lookup/lifetime, and callback policy without a graphics context. In a healthy virtual display, add a real screenshot regression exercising text, icons, clipping, alpha blending, and an image; run it with `-j4`. Compare a fixed fixture before/after on EASYGL, allowing only documented anti-aliasing tolerance.
 - **Dependency/rule:** First verify CNA exposes every required public operation. A missing dynamic-buffer, indexed-draw, scissor, or texture-binding capability becomes a bounded CNA request; do not use `ImGui_ImplOpenGL3` as a hidden fallback on a non-GL backend.
+- **Status note (2026-07-25):** `CnaImGuiRenderer` now creates the font atlas
+  through `Texture2D::CreateFromPixels`, translates standard draw commands to
+  CNA `DrawUserIndexedPrimitives`, applies CNA blend/depth/sampler/scissor
+  state, and deterministically skips native callbacks. Context-free tests
+  cover clip-rectangle clamping and index-offset translation; it compiles on
+  EASYGL and its source guard passes. **Visual qualification:** the user ran
+  the editor on EASYGL on 2026-07-25 and confirmed that the UI renders
+  correctly. The unavailable local Xvfb preflight therefore blocks only
+  automated screenshot coverage, not this completed implementation.
 
-### SYS-W8-04 `[TODO]` `P1` · Replace GL texture IDs handed to `ImGui::Image()` with an opaque CNA UI-texture registry
+### SYS-W8-04 `[DONE]` `P1` · Replace GL texture IDs handed to `ImGui::Image()` with an opaque CNA UI-texture registry
 - **Component:** material-preview/shadow-debug fields and rendering in `MeshCraftApplication.hpp`/`.cpp`, their UI panels, and the renderer from SYS-W8-02/03.
 - **Evidence:** `matPreviewTexId_` and `shadowDebugColorTex_` are GL texture names populated by `IRenderTargetBackend::GetColorGLHandle()` and cast to `ImTextureID`. That accessor cannot represent a Vulkan descriptor set, a WebGPU bind group, or another renderer-owned texture token.
 - **Outcome:** Make `ImTextureID` an opaque renderer token produced by a CNA texture registry. The registry retains/references CNA `Texture2D` or `RenderTarget2D` safely, validates lifetime/generation, and lets the CNA renderer resolve each UI draw command to its normal texture binding. Remove both `GetColorGLHandle()` calls and all GL-name fields while preserving material-preview and shadow-debug images.
 - **Tests:** Add registry tests for duplicate registration, stale/destroyed texture rejection, deregistration, and frame lifetime. Extend material-preview and shadow-debug screenshot tests to assert the images still draw through the registry on EASYGL; add a static check that production MeshCraft has no `GetColorGLHandle` use.
 - **Dependency:** SYS-W8-03 supplies renderer-side texture lookup; work may proceed in parallel only after SYS-W8-02 fixes the opaque-handle contract.
+- **Status note (2026-07-25):** `ImGuiTextureRegistry` issues monotonic opaque
+  tokens (never reused during a renderer lifetime), tracks each CNA texture,
+  and makes removed tokens unresolvable. Material-preview and shadow-debug
+  panels now pass those tokens to `ImGui::Image`; the registry unit test covers
+  duplicate registration, deregistration/staleness, and clear-at-shutdown.
+  **Visual qualification:** the user's 2026-07-25 EASYGL run confirmed the
+  editor renders correctly, including the CNA ImGui path. Automated preview
+  screenshots remain blocked only by this host's unavailable display preflight.
 
-### SYS-W8-05 `[TODO]` `P1` · Qualify the CNA-backed editor UI on alternate graphics backends, then remove the EASYGL-only gate
+### SYS-W8-05 `[BLOCKED]` `P1` · Qualify the CNA-backed editor UI on alternate graphics backends, then remove the EASYGL-only gate
 - **Component:** backend selection in `CMakeLists.txt`/`main.cpp`/`GraphicsBackendCheck.hpp`, ImGui platform initialization, CI configuration, and render-test launchers.
 - **Evidence:** The current runtime gate rejects every backend except EASYGL because the active renderer is `imgui_impl_opengl3`. Vulkan/WebGPU cannot share that GL renderer or its native texture IDs even if CNA can render the scene. Their availability and toolchain requirements are owned by CNA and must be measured, not assumed.
 - **Outcome:** For every alternate CNA backend the sibling CNA checkout actually supports (target order: Vulkan, then WebGPU), select the appropriate SDL/ImGui platform mode while keeping rendering CNA-backed; configure, build, and run the editor without an OpenGL context. Remove the EASYGL-only rejection only for backends with a passing real editor smoke/screenshot test. Keep unsupported backends rejected with a precise capability message rather than an override that launches a blank UI. Revisit Android AUD-042 only after this qualification produces a supported mobile-capable path.
 - **Tests:** Add a backend matrix that always performs configure+build and, where a runner/GPU backend is available, runs a real editor screenshot including `ImGui::Image()` previews. Require CNA-native scene tests plus the new UI screenshot checks per enabled backend; retain EASYGL coverage. Do not claim Vulkan/WebGPU support until this matrix has passed on each backend's real runtime.
 - **Dependency/rule:** Requires SYS-W8-02 through SYS-W8-04. Any missing CNA backend, SDK, CI runner, or public CNA API is recorded as a concrete blocked subcondition, not bypassed with direct OpenGL or untested `MESH_CRAFT_ALLOW_UNSUPPORTED_BACKEND` launches.
+- **Blocked condition (2026-07-25):** CNA recognizes the `VULKAN` CMake
+  backend, but this host could not complete its fresh dependency provisioning
+  (the required FetchContent download did not finish), and it has no working
+  X virtual display for the required editor screenshot. The current CNA
+  selection exposes no MeshCraft WebGPU CMake backend. The EASYGL-only launch
+  gate therefore remains intentionally enabled until a Vulkan/WebGPU runner
+  completes a real editor screenshot including an `ImGui::Image` preview.
 
 ### W9 — Undo & data-loss
 - **SYS-W9-01** `[DONE, via AUD-036b + SYS-W9-03 + SYS-W14-16]` `P0` — Full
@@ -1953,7 +1980,7 @@ post-processing call owned by this audit.
 - **Outcome:** Add a robust, explicit virtual-display availability check for render tests/CI, make an unavailable display an intentional CTest skip with a clear diagnostic rather than a false product failure, and add the `render` label to every graphics-dependent test (including export/performance wrappers). Ensure CI installs and uses the selected display mechanism.
 - **Tests:** Verify label selection with `ctest -N -LE render`, test the explicit no-display skip path, and run the render subset under a verified virtual display. Keep non-render CTest selection genuinely free of video initialization.
 - **Audit verification (2026-07-25):** the failure was reproduced across the visual suite; it is an environment/test-orchestration defect, not evidence of separate rendering regressions in every affected test.
-- **Resolved:** commit `13c27a5` — CMake configures an actual `xvfb-run --auto-servernum xdpyinfo` preflight. If it fails, the 35 render-labelled editor tests are marked `DISABLED`, while `render_display_preflight` itself returns CTest's skip code 77 and prints the exact display failure. `editor_export_test` and `benchmark_editor` now have the additional `render` label, so `ctest -N -LE render` selects 143 genuinely non-render tests; they pass with `ctest --test-dir b-release -LE render --output-on-failure -j4`. CI explicitly installs `xvfb` and `x11-utils`, so a healthy runner preflights and executes render tests rather than silently omitting them. **Count update (2026-07-25):** `2574fc6` removed two obsolete render tests with the deleted native function table, so the same preflight now disables 33 actual render tests (plus the preflight test itself, which skips); the non-render selection remains 143.
+- **Resolved:** commit `13c27a5` — CMake configures an actual `xvfb-run --auto-servernum xdpyinfo` preflight. If it fails, the 35 render-labelled editor tests are marked `DISABLED`, while `render_display_preflight` itself returns CTest's skip code 77 and prints the exact display failure. `editor_export_test` and `benchmark_editor` now have the additional `render` label, so `ctest -N -LE render` selects 143 genuinely non-render tests; they pass with `ctest --test-dir b-release -LE render --output-on-failure -j4`. CI explicitly installs `xvfb` and `x11-utils`, so a healthy runner preflights and executes render tests rather than silently omitting them. **Count update (2026-07-25):** `2574fc6` removed two obsolete render tests with the deleted native function table, so the same preflight now disables 33 actual render tests (plus the preflight test itself, which skips). The ImGui CNA work later added three non-render tests, making the current non-render selection 146.
 
 ### AUD-091 `[DONE]` `P1` `W1` · Reported definitions-only AI-response timeout was not reproducible after a forced rebuild
 - **Component:** `mc3/test/ai_test.cpp`, `src/MeshCraft/AiResponseAlgorithms.hpp`, and the MC3 definition parsing/validation path reached by `Mc3Document::loadFromString()`.

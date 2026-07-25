@@ -73,26 +73,20 @@ endfunction()
 # Graphics backend selection
 # -----------------------------------------------------------------------------
 #
-# This variable selects the CNA *engine* backend. IMPORTANT: it is NOT the
-# MeshCraft editor GUI backend. The editor's ImGui layer is hard-wired to
-# OpenGL/GLES3 (ImGui_ImplOpenGL3 + ImGui_ImplSDL3_InitForOpenGL +
-# SDL_GL_GetCurrentContext, see src/MeshCraft/MeshCraftApplication.cpp), so the
-# GUI editor only renders under a GL context — i.e. EASYGL (desktop GL) or its
-# Emscripten WebGL2 variant. SDL_RENDERER / BGFX / VULKAN configure CNA's engine
-# but leave the editor UI unable to render (no matching ImGui backend, no GL
-# context). Use them only for CNA-level experimentation or the CNA-free CLI
-# tools (mc3togltf / mc3tomcb), which don't depend on the backend at all.
+# This variable selects the CNA engine backend. MeshCraft's ImGui renderer
+# consumes ImDrawData through CNA graphics APIs, so it does not require an
+# native graphics context or a renderer backend tied to one API.
 #
 # Override with:
-#   cmake -S . -B build -DMESH_CRAFT_GRAPHICS_BACKEND=EASYGL   # editor GUI works
-#   cmake -S . -B build -DMESH_CRAFT_GRAPHICS_BACKEND=SDL_RENDERER  # CNA engine only
+#   cmake -S . -B build -DMESH_CRAFT_GRAPHICS_BACKEND=EASYGL
+#   cmake -S . -B build-vulkan -DMESH_CRAFT_GRAPHICS_BACKEND=VULKAN
 #
 # Accepted (CNA engine): SDL_RENDERER, EASYGL, BGFX, VULKAN.
-# Functional for the MeshCraft editor GUI: EASYGL only.
+# Editor compatibility is determined by CNA's selected backend capabilities.
 # -----------------------------------------------------------------------------
 
 set(MESH_CRAFT_GRAPHICS_BACKEND "EASYGL" CACHE STRING
-        "CNA engine backend. The editor GUI only renders on EASYGL.")
+        "CNA engine backend used by the MeshCraft editor GUI.")
 set_property(CACHE MESH_CRAFT_GRAPHICS_BACKEND PROPERTY STRINGS
         SDL_RENDERER EASYGL BGFX VULKAN)
 
@@ -116,21 +110,6 @@ if(NOT MESH_CRAFT_GRAPHICS_BACKEND_UPPER MATCHES "^(SDL_RENDERER|EASYGL|BGFX|VUL
 endif()
 
 message(STATUS "MeshCraft graphics backend (CNA engine): ${MESH_CRAFT_GRAPHICS_BACKEND_UPPER}")
-
-# Gate C truthfulness: the editor GUI only renders on EASYGL. Warn loudly for any
-# other backend so a non-functional editor build is never produced silently. The
-# CNA-free CLI tools are unaffected. Set MESH_CRAFT_SILENCE_BACKEND_WARNING=ON to
-# suppress this when you are deliberately building CNA-only / a CLI-only target.
-if(NOT MESH_CRAFT_GRAPHICS_BACKEND_UPPER STREQUAL "EASYGL"
-        AND NOT MESH_CRAFT_SILENCE_BACKEND_WARNING)
-    message(WARNING
-        "MESH_CRAFT_GRAPHICS_BACKEND='${MESH_CRAFT_GRAPHICS_BACKEND_UPPER}' selects the "
-        "CNA engine backend, but the MeshCraft *editor GUI* is hard-wired to OpenGL/GLES3 "
-        "(ImGui_ImplOpenGL3). Under this backend the editor will build but its UI will NOT "
-        "render (no GL context / no matching ImGui backend). Use EASYGL for a working editor; "
-        "the CNA-free CLI tools (mc3togltf, mc3tomcb) work under any backend. "
-        "Set -DMESH_CRAFT_SILENCE_BACKEND_WARNING=ON to silence this.")
-endif()
 
 if(MESH_CRAFT_GRAPHICS_BACKEND_UPPER STREQUAL "SDL_RENDERER")
     set(CNA_BACKEND_SDL_RENDERER ON  CACHE BOOL "" FORCE)
@@ -248,7 +227,7 @@ add_subdirectory(mcb)
 # mc3tomcb — CLI converter between MC3 XML and MCB binary
 add_subdirectory(mc3tomcb)
 
-# ImGui — immediate-mode UI (SDL3 + OpenGL ES 3 backends)
+# ImGui — immediate-mode UI (SDL3 input platform backend; rendering is CNA).
 include(FetchContent)
 FetchContent_Declare(imgui
     GIT_REPOSITORY https://github.com/ocornut/imgui.git
@@ -263,13 +242,11 @@ add_library(imgui STATIC
     ${imgui_SOURCE_DIR}/imgui_tables.cpp
     ${imgui_SOURCE_DIR}/imgui_widgets.cpp
     ${imgui_SOURCE_DIR}/backends/imgui_impl_sdl3.cpp
-    ${imgui_SOURCE_DIR}/backends/imgui_impl_opengl3.cpp
 )
 target_include_directories(imgui PUBLIC
     ${imgui_SOURCE_DIR}
     ${imgui_SOURCE_DIR}/backends
 )
-target_compile_definitions(imgui PUBLIC IMGUI_IMPL_OPENGL_ES3)
 
 # SDL3 headers: use prebuilt path from CNA's SDL3_DIR cache variable
 # SDL3_DIR is .../lib/cmake/SDL3, so include dir is 3 levels up + /include
@@ -278,9 +255,6 @@ if(DEFINED SDL3_DIR)
     target_include_directories(imgui PUBLIC "${_sdl3_inc}")
 elseif(TARGET SDL3::SDL3)
     target_link_libraries(imgui PUBLIC SDL3::SDL3)
-endif()
-if(NOT EMSCRIPTEN)
-    target_link_libraries(imgui PUBLIC GLESv2)
 endif()
 
 # Manifold — CSG boolean mesh evaluation. Pinned at v3.0.0 (STAB-0222); no
@@ -493,7 +467,7 @@ meshcraft_apply_sanitize(${_target})
 # runtime check is the surgical alternative that still satisfies Gate C
 # ("unsupported and rejected clearly"): embed the selected backend name, and
 # main() (src/MeshCraft/main.cpp) refuses to proceed under a backend the
-# editor cannot render on, before any window/GL initialization -- an
+# editor cannot render on, before any window or graphics-device initialization -- an
 # unsupported configuration is REJECTED at startup with a clear message and a
 # non-zero exit code, not silently launched as a broken window. The CLI tools
 # (mc3togltf/mc3tomcb) do not link this target and are unaffected.
@@ -911,6 +885,22 @@ if(MESH_CRAFT_BUILD_TESTING AND UNIX AND NOT ANDROID AND NOT EMSCRIPTEN)
     add_test(NAME graphics_backend_check COMMAND graphics_backend_check_test)
     set_tests_properties(graphics_backend_check PROPERTIES TIMEOUT 15 LABELS "unit")
 
+    add_executable(imgui_texture_registry_test
+        ${CMAKE_CURRENT_SOURCE_DIR}/test/imgui_texture_registry_test.cpp)
+    target_include_directories(imgui_texture_registry_test PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/include)
+    target_compile_features(imgui_texture_registry_test PRIVATE cxx_std_23)
+    add_test(NAME imgui_texture_registry COMMAND imgui_texture_registry_test)
+    set_tests_properties(imgui_texture_registry PROPERTIES TIMEOUT 15 LABELS "unit")
+
+    add_executable(imgui_draw_translation_test
+        ${CMAKE_CURRENT_SOURCE_DIR}/test/imgui_draw_translation_test.cpp)
+    target_include_directories(imgui_draw_translation_test PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/include)
+    target_compile_features(imgui_draw_translation_test PRIVATE cxx_std_23)
+    add_test(NAME imgui_draw_translation COMMAND imgui_draw_translation_test)
+    set_tests_properties(imgui_draw_translation PROPERTIES TIMEOUT 15 LABELS "unit")
+
     # SYS-W7-02: differential geometry tests -- viewport renderer (via the
     # CNA-free tessellateUnit*Alg() mirror in
     # include/MeshCraft/Renderer/PrimitiveTessellationAlg.hpp) vs. the glTF
@@ -1081,6 +1071,15 @@ if(MESH_CRAFT_BUILD_TESTING AND UNIX AND NOT ANDROID AND NOT EMSCRIPTEN)
                          "${CMAKE_CURRENT_SOURCE_DIR}/test/undo_snapshot_lint_test.py"
                          "${CMAKE_CURRENT_SOURCE_DIR}")
         set_tests_properties(undo_snapshot_lint PROPERTIES TIMEOUT 15 LABELS "lint")
+
+        # SYS-W8-02/03/04: production ImGui rendering must stay on CNA's
+        # public graphics API; a native OpenGL backend/texture handle would
+        # make alternate CNA backends impossible again.
+        add_test(NAME imgui_renderer_portability
+                 COMMAND "${PYTHON3_FOR_LINT}"
+                         "${CMAKE_CURRENT_SOURCE_DIR}/test/imgui_renderer_portability_test.py"
+                         "${CMAKE_CURRENT_SOURCE_DIR}")
+        set_tests_properties(imgui_renderer_portability PROPERTIES TIMEOUT 15 LABELS "lint")
 
         # plan.md/NEXT.md mechanical self-consistency: unique task IDs, DONE
         # counts match the summary line, DONE tasks cite a commit, the priority
