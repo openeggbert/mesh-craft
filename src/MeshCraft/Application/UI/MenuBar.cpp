@@ -123,19 +123,21 @@ float MeshCraftApplication::drawMenuBar()
                 .paste = [this] { pasteClipboard(); },
             };
             UI::MenuBar::drawEditClipboard(editClipboardContext);
-            if (ImGui::MenuItem("Duplicate",           "Ctrl+D"))       duplicateSelected();
-            if (ImGui::MenuItem("Duplicate at Offset", "Ctrl+Shift+D",
-                                false, selection_.hasSelection())) {
-                duplicateSelected();
-                for (const auto& s : selection_.selection())
-                    s->transform.position[0] += gridSpacing_;
-                char dbuf[64];
-                std::snprintf(dbuf, sizeof(dbuf), "Duplicated %d object(s) (+%.4g u on X)",
-                              static_cast<int>(selection_.selection().size()), gridSpacing_);
-                setStatusMsg(dbuf);
-            }
-            if (ImGui::MenuItem("Delete",    "Del"))    deleteSelected();
-            ImGui::Separator();
+            const UI::EditObjectActionsContext editObjectActionsContext{
+                .canDuplicateAtOffset = selection_.hasSelection(),
+                .duplicate = [this] { duplicateSelected(); },
+                .duplicateAtOffset = [this] {
+                    duplicateSelected();
+                    for (const auto& s : selection_.selection())
+                        s->transform.position[0] += gridSpacing_;
+                    char dbuf[64];
+                    std::snprintf(dbuf, sizeof(dbuf), "Duplicated %d object(s) (+%.4g u on X)",
+                                  static_cast<int>(selection_.selection().size()), gridSpacing_);
+                    setStatusMsg(dbuf);
+                },
+                .deleteSelection = [this] { deleteSelected(); },
+            };
+            UI::MenuBar::drawEditObjectActions(editObjectActionsContext);
             if (ImGui::MenuItem("Select All","Ctrl+A")) {
                 selection_.clear();
                 for (auto& o : document_.objects) selection_.select(o);
@@ -609,6 +611,16 @@ void MenuBar::drawEditClipboard(const EditClipboardContext& context) {
     if (ImGui::MenuItem("Cut",  "Ctrl+X")) context.cut();
     if (ImGui::MenuItem("Copy", "Ctrl+C")) context.copy();
     if (ImGui::MenuItem("Paste", "Ctrl+V")) context.paste();
+}
+
+void MenuBar::drawEditObjectActions(const EditObjectActionsContext& context) {
+    if (ImGui::MenuItem("Duplicate", "Ctrl+D")) context.duplicate();
+    if (ImGui::MenuItem("Duplicate at Offset", "Ctrl+Shift+D", false,
+                        context.canDuplicateAtOffset)) {
+        context.duplicateAtOffset();
+    }
+    if (ImGui::MenuItem("Delete", "Del")) context.deleteSelection();
+    ImGui::Separator();
 }
 
 void MenuBar::drawPanelToggles(bool& timeline, bool& registry, bool& ai, bool& validation) {
