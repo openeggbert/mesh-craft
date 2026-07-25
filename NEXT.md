@@ -74,19 +74,19 @@ before when explicitly requested (`SYS-W14-##` rows).
 
 ## 2. Current status
 
-- **Build: clean**, `cmake --build b-release -j4` passed at commit
-  `41dd630` (EASYGL backend on Linux — the only backend buildable here).
-- **Tests:** the previous full 169/169 CTest run remains recorded at
-  `f07445d`; at `41dd630`, the affected `bloom_test`, `gl_shutdown_leak`,
-  and `gl_state_leak_test` passed with `-j4`, along with headless SSAO
-  screenshots covering dynamic extrude and grid geometry. This session's own
+- **Build: clean**, `cmake --build b-release -j4` passed after SVG texture
+  support was added (EASYGL backend on Linux — the only backend buildable
+  here).
+- **Tests:** 170 tests are registered. SVG-specific verification passes with
+  `-j4`: external and inline SVG export to glTF PNGs, and a real headless
+  viewport screenshot samples the rasterized material pixels. This session's own
   `AUD-082`-`088` work added 3 brand-new ctest targets — `bloom_test`,
   `matpreview_test`, `shadowdebug_test` — one per migrated feature that
   previously had zero visual-correctness coverage (see §3). The 142
   count this file last recorded (2026-07-19) predates unrelated work not
   narrated here (a further audit pass and the `SYS-W14-18..27`
   mc3-format-vs-editor gap closures — see `plan.md`/memory, not fully
-  reflected in this file's own history) — don't treat 142→169 as this
+  reflected in this file's own history) — don't treat 142→170 as this
   session's own delta.
   All builds/tests this session used `-j4` (not `-j$(nproc)`), per the
   user's standing request (shared machine).
@@ -99,6 +99,11 @@ before when explicitly requested (`SYS-W14-##` rows).
   - Standalone libraries `mc3` (format/AST + XML/JSON parse-writer),
     `mcb` (binary format) — both buildable and testable without CNA via
     their own `mc3/build`/`mcb/build` trees (no live GPU/GL needed).
+- **Recently implemented (2026-07-25):** `SYS-W14-04` rasterizes external
+  and inline SVG texture entries through pinned NanoSVG code. The resulting
+  RGBA pixels are used by the live CNA viewport and generated as PNG images
+  for glTF/GLB export; a 2048px dimension cap prevents hostile SVG dimensions
+  from allocating unbounded memory (commit `8cb14be`).
 - **Recently implemented (2026-07-20 through 2026-07-25):** all 7
   raw-OpenGL(ES)-vs-CNA migrations, `AUD-082` through `AUD-088` — full
   detail with file:line evidence and
@@ -325,7 +330,7 @@ they chose to skip it and continue with `AUD-086` — so `AUD-085` stays
 `TODO`/described in `plan.md` and queued (not silently dropped) in §8
 here, not implemented. All builds/tests used `-j4` per the user's
 mid-session request. `python3 test/validate_plan_consistency.py .
-b-release --run-tests` confirmed 169/169 passing and `plan.md`
+b-release --run-tests` confirmed the then-registered suite passing and `plan.md`
 internally consistent after every single commit in this sequence.
 
 **Previous session (2026-07-19):** tasks 1 and 2 were each individually

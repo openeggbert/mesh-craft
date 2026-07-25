@@ -674,7 +674,16 @@ _All items in this workstream are DONE — archived to [`docs/history/plan_20260
   image read) it renders correctly and matches the equivalent `.ppm`
   capture pixel-for-pixel in composition, not just "decodes without
   erroring."
-- **SYS-W14-04** `[DEFERRED]` `P3` — SVG texture rasterization pipeline.
+- **SYS-W14-04** `[DONE]` `P3` — SVG texture rasterization pipeline.
+  `mc3togltf/src/SvgRasterizer.cpp` uses the pinned, zlib-licensed NanoSVG
+  parser/rasterizer to turn both external `<texture type="svg" src="…">`
+  and inline CDATA SVG into bounded (maximum dimension 2048px) RGBA pixels.
+  The editor creates a CNA `Texture2D` from those pixels for the live viewport;
+  `mc3togltf` emits a generated PNG for `.gltf` and embeds it in `.glb`.
+  Rasterization failures remain non-fatal export warnings with the texture id.
+  `mc3togltf_svg_texture_export` covers external and inline input; the new
+  `svg_texture_viewport_test` confirms a rasterized SVG appears in a real
+  headless editor screenshot. **Resolved:** commit `8cb14be`.
 - **SYS-W14-05** `[DEFERRED]` `P3` — Safe `embed:` mesh/resource support end-to-end. (`AUD-025`)
 - **SYS-W14-06** `[DEFERRED]` `P3` — Improved CSG output (smooth normals/UVs/materials).
 - **SYS-W14-07** `[DEFERRED]` `P3` — Improved walk/navigation collision.
