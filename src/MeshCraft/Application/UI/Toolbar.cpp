@@ -109,23 +109,7 @@ float MeshCraftApplication::drawToolbar(float menuBarH, int screenW)
 
     UI::Toolbar::drawSurfaceSnap(surfaceSnapEnabled_);
 
-    // Proportional editing toggle + radius (H1)
-    { bool was = propEditEnabled_;
-      if (was) ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.45f, 0.20f, 0.45f, 1.f));
-      if (ImGui::Button("Prop", ImVec2(40, 30))) propEditEnabled_ = !propEditEnabled_;
-      if (was) ImGui::PopStyleColor(); }
-    if (ImGui::IsItemHovered())
-        ImGui::SetTooltip("Proportional editing: Move influences nearby objects (Gaussian falloff)\nRadius: %.2f u", propEditRadius_);
-    if (propEditEnabled_) {
-        ImGui::SameLine();
-        ImGui::SetNextItemWidth(70);
-        // AlwaysClamp (AUDIT-0046): same Ctrl+Click out-of-bounds risk; a
-        // zero/negative proportional-edit radius would break the Gaussian
-        // falloff math with no other downstream guard.
-        ImGui::SliderFloat("##propR", &propEditRadius_, 0.5f, 50.0f, "R:%.1f", ImGuiSliderFlags_AlwaysClamp);
-        if (ImGui::IsItemHovered()) ImGui::SetTooltip("Proportional edit radius (world units)");
-    }
-    ImGui::SameLine();
+    UI::Toolbar::drawProportionalEdit(propEditEnabled_, propEditRadius_);
 
     // Grid cell size button (right-click to configure)
     if (ImGui::Button("Grid", ImVec2(40, 30))) {}
@@ -256,6 +240,22 @@ void Toolbar::drawSnapToggle(bool& enabled, float translate, float rotate, float
     if (ImGui::IsItemHovered())
         ImGui::SetTooltip("Snap to grid  Move: %.2g u  Rotate: %.0f°  Scale: %.2g\nRight-click to configure",
                           translate, rotate, scale);
+}
+
+void Toolbar::drawProportionalEdit(bool& enabled, float& radius) {
+    const bool wasEnabled = enabled;
+    if (wasEnabled) ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.45f, 0.20f, 0.45f, 1.f));
+    if (ImGui::Button("Prop", ImVec2(40, 30))) enabled = !enabled;
+    if (wasEnabled) ImGui::PopStyleColor();
+    if (ImGui::IsItemHovered())
+        ImGui::SetTooltip("Proportional editing: Move influences nearby objects (Gaussian falloff)\nRadius: %.2f u", radius);
+    if (enabled) {
+        ImGui::SameLine();
+        ImGui::SetNextItemWidth(70);
+        ImGui::SliderFloat("##propR", &radius, 0.5f, 50.0f, "R:%.1f", ImGuiSliderFlags_AlwaysClamp);
+        if (ImGui::IsItemHovered()) ImGui::SetTooltip("Proportional edit radius (world units)");
+    }
+    ImGui::SameLine();
 }
 
 } // namespace MeshCraft::Application::UI

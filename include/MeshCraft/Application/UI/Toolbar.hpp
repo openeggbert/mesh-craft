@@ -20,6 +20,7 @@ public:
                                    bool& showWireframe, bool& showBoundingBox);
     static void drawSurfaceSnap(bool& enabled);
     static void drawSnapToggle(bool& enabled, float translate, float rotate, float scale);
+    static void drawProportionalEdit(bool& enabled, float& radius);
 };
 
 } // namespace MeshCraft::Application::UI
