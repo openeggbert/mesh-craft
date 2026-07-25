@@ -468,11 +468,14 @@ float MeshCraftApplication::drawMenuBar()
                 },
             };
             UI::MenuBar::drawEditHideSelection(editHideSelectionContext);
-            if (ImGui::MenuItem("Show All Hidden", "Alt+H")) {
-                pushUndo();
-                walkAll(document_.objects, [&](const auto& o) { o->visible = true; });
-                modified_ = true; updateWindowTitle();
-            }
+            const UI::EditShowAllHiddenContext editShowAllHiddenContext{
+                .showAll = [this, &walkAll] {
+                    pushUndo();
+                    walkAll(document_.objects, [&](const auto& o) { o->visible = true; });
+                    modified_ = true; updateWindowTitle();
+                },
+            };
+            UI::MenuBar::drawEditShowAllHidden(editShowAllHiddenContext);
             ImGui::EndMenu();
         }
         UI::MenuBar::drawAddMenu(
@@ -874,6 +877,10 @@ void MenuBar::drawEditHideSelection(const EditHideSelectionContext& context) {
     if (ImGui::MenuItem("Hide Selected", "H", false, context.canHide)) {
         context.hide();
     }
+}
+
+void MenuBar::drawEditShowAllHidden(const EditShowAllHiddenContext& context) {
+    if (ImGui::MenuItem("Show All Hidden", "Alt+H")) context.showAll();
 }
 
 void MenuBar::drawPanelToggles(bool& timeline, bool& registry, bool& ai, bool& validation) {
