@@ -242,51 +242,36 @@ float MeshCraftApplication::drawMenuBar()
                 .breakInstance = [this] { breakInstance(); },
             };
             UI::MenuBar::drawEditBreakInstance(editBreakInstanceContext);
-            bool hasSel2 = !selection_.selection().empty();
-            if (ImGui::BeginMenu("Align Selection", hasSel2)) {
-                // Compute bounding box of selected objects' pivot positions
-                float minV[3] = {1e30f, 1e30f, 1e30f};
-                float maxV[3] = {-1e30f,-1e30f,-1e30f};
-                for (const auto& s : selection_.selection()) {
-                    for (int i = 0; i < 3; ++i) {
-                        float v = s->transform.position[i];
-                        minV[i] = std::min(minV[i], v);
-                        maxV[i] = std::max(maxV[i], v);
+            const UI::EditAlignSelectionContext editAlignSelectionContext{
+                .canAlign = !selection_.selection().empty(),
+                .canAlignToFirst = selection_.selection().size() >= 2,
+                .align = [this](int axis, UI::EditAlignmentTarget target) {
+                    float minPosition = 1e30f;
+                    float maxPosition = -1e30f;
+                    for (const auto& selected : selection_.selection()) {
+                        const float position = selected->transform.position[axis];
+                        minPosition = std::min(minPosition, position);
+                        maxPosition = std::max(maxPosition, position);
                     }
-                }
-                float cenV[3] = {
-                    (minV[0]+maxV[0])*0.5f,
-                    (minV[1]+maxV[1])*0.5f,
-                    (minV[2]+maxV[2])*0.5f
-                };
 
-                auto doAlign = [&](int axis, float target) {
+                    float targetPosition = minPosition;
+                    if (target == UI::EditAlignmentTarget::Center) {
+                        targetPosition = (minPosition + maxPosition) * 0.5f;
+                    } else if (target == UI::EditAlignmentTarget::Maximum) {
+                        targetPosition = maxPosition;
+                    }
+
                     pushUndo();
-                    for (const auto& s : selection_.selection()) {
-                        if (objectLockState_.isLocked(s->id)) continue;
-                        s->transform.position[axis] = target;
+                    for (const auto& selected : selection_.selection()) {
+                        if (objectLockState_.isLocked(selected->id)) continue;
+                        selected->transform.position[axis] = targetPosition;
                     }
-                    modified_ = true; updateWindowTitle();
-                };
-
-                static const char* minLabel[3] = {"Min X (left)",  "Min Y (bottom)", "Min Z (front)"};
-                static const char* cenLabel[3] = {"Center X",      "Center Y",       "Center Z"     };
-                static const char* maxLabel[3] = {"Max X (right)", "Max Y (top)",    "Max Z (back)" };
-
-                for (int ax = 0; ax < 3; ++ax) {
-                    if (ax > 0) ImGui::Separator();
-                    if (ImGui::MenuItem(minLabel[ax])) doAlign(ax, minV[ax]);
-                    if (ImGui::MenuItem(cenLabel[ax])) doAlign(ax, cenV[ax]);
-                    if (ImGui::MenuItem(maxLabel[ax])) doAlign(ax, maxV[ax]);
-                }
-                ImGui::Separator();
-                if (ImGui::MenuItem("To First Selected (XYZ)",
-                                    nullptr, false,
-                                    selection_.selection().size() >= 2)) {
-                    alignToObject();
-                }
-                ImGui::EndMenu();
-            }
+                    modified_ = true;
+                    updateWindowTitle();
+                },
+                .alignToFirst = [this] { alignToObject(); },
+            };
+            UI::MenuBar::drawEditAlignSelection(editAlignSelectionContext);
             bool hasSel2b = selection_.selection().size() >= 2;
             if (ImGui::BeginMenu("Distribute Selection", hasSel2b)) {
                 static const char* distLabel[3] = {
@@ -710,6 +695,38 @@ void MenuBar::drawEditBreakInstance(const EditBreakInstanceContext& context) {
     if (ImGui::MenuItem("Break Instance", nullptr, false, context.canBreak)) {
         context.breakInstance();
     }
+}
+
+void MenuBar::drawEditAlignSelection(const EditAlignSelectionContext& context) {
+    if (!ImGui::BeginMenu("Align Selection", context.canAlign)) return;
+
+    static const char* minimumLabels[3] = {
+        "Min X (left)", "Min Y (bottom)", "Min Z (front)"
+    };
+    static const char* centerLabels[3] = {"Center X", "Center Y", "Center Z"};
+    static const char* maximumLabels[3] = {
+        "Max X (right)", "Max Y (top)", "Max Z (back)"
+    };
+
+    for (int axis = 0; axis < 3; ++axis) {
+        if (axis > 0) ImGui::Separator();
+        if (ImGui::MenuItem(minimumLabels[axis])) {
+            context.align(axis, EditAlignmentTarget::Minimum);
+        }
+        if (ImGui::MenuItem(centerLabels[axis])) {
+            context.align(axis, EditAlignmentTarget::Center);
+        }
+        if (ImGui::MenuItem(maximumLabels[axis])) {
+            context.align(axis, EditAlignmentTarget::Maximum);
+        }
+    }
+
+    ImGui::Separator();
+    if (ImGui::MenuItem("To First Selected (XYZ)", nullptr, false,
+                        context.canAlignToFirst)) {
+        context.alignToFirst();
+    }
+    ImGui::EndMenu();
 }
 
 void MenuBar::drawPanelToggles(bool& timeline, bool& registry, bool& ai, bool& validation) {

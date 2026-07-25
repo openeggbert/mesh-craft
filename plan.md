@@ -167,9 +167,9 @@ still internally consistent.
    Camera Bookmarks, Walk Mode, Help, Add/CSG, Edit-history, Edit-clipboard,
    Edit-object-actions, Edit-selection-actions, Edit-select-by-type,
    Edit-select-by-tag/material, Edit-copy-properties, Edit-grouping,
-   Edit-convert-to-definition, Edit-export-subtree, and Edit-break-instance
-   menu slices are implemented and verified. Their state remains in the
-   existing editor/application owners;
+   Edit-convert-to-definition, Edit-export-subtree, Edit-break-instance, and
+   Edit-align-selection menu slices are implemented and verified. Their state
+   remains in the existing editor/application owners;
    `Application::UI::MenuBar` receives only the read-only values and callbacks
    required for presentation. Any further slice requires its own confirmation
    per `CLAUDE.md`.
@@ -670,8 +670,16 @@ _All items in this workstream are DONE — archived to [`docs/history/plan_20260
   availability and one action callback. Selection/type inspection, definition
   lookup and object replacement, undo, document and selection mutation,
   window-title and status reporting, and the command-palette route remain
-  application-owned. File, the remaining Edit groups, and the remaining View
-  controls are still application-owned.
+  application-owned. The following Align Selection submenu is now
+  component-owned through `EditAlignSelectionContext` and
+  `EditAlignmentTarget`, which expose only selection and Align-to-First
+  availability plus axis/target and Align-to-First callbacks. Bounds
+  calculation, selection and lock state, undo, document mutation, window-title
+  updates, and the command-palette Align-to-First route remain
+  application-owned. Bounds are now calculated only for the clicked axis and
+  only after a click instead of for all axes whenever the submenu is open.
+  File, the remaining Edit groups, and the remaining View controls are still
+  application-owned.
   The historical audit references retain their former paths as time-accurate
   evidence.
   Static undo-audit and snapshot-lint path checks pass after their tracked
@@ -687,9 +695,9 @@ _All items in this workstream are DONE — archived to [`docs/history/plan_20260
   Edit-object-actions, Edit-selection-actions, and Edit-select-by-type menu
   slices, the Select-by-Type allocation hardening, and the Edit-select-by-tag,
   Edit-select-by-material, Edit-copy-properties, Edit-grouping,
-  Edit-convert-to-definition, Edit-export-subtree, and Edit-break-instance
-  slices, each incremental Release link and the same 147/147 + 34/34
-  partitions pass again.
+  Edit-convert-to-definition, Edit-export-subtree, Edit-break-instance, and
+  Edit-align-selection slices, each incremental Release link and the same
+  147/147 + 34/34 partitions pass again.
   For the current MenuBar slices, the public UI header also compiles as a
   self-contained C++23 include, `undo_snapshot_lint_test.py` passes, and
   `git diff --check` is clean. A further Phase 13 slice requires separate

@@ -21,14 +21,14 @@ Registry results, Toolbar tools/display/snap-surface/proportional/grid controls,
 Properties delegation, and the View-menu panel/overlay/direction/focus/
 Camera-Bookmarks/Walk-Mode presentation, plus the Add/CSG and Help menu
 presentation and the Edit-history, clipboard, object-action, and
-selection-action groups, the Select-by-Type/Tag/Material submenus, and the
-Copy-Properties, Convert-to-Definition, Export-Subtree, and Break-Instance
-items plus the Group/Ungroup pair. The detailed Snap interval contents and the
-remaining MenuBar sections are still application-owned. Camera bookmark, walk,
-document, undo, clipboard, selection, grid, and dialog state have **not** moved
-again: they remain in their existing editor/application owners; the UI
-component only reads presentation state and invokes application-owned
-callbacks.
+selection-action groups, the Select-by-Type/Tag/Material and Align-Selection
+submenus, and the Copy-Properties, Convert-to-Definition, Export-Subtree, and
+Break-Instance items plus the Group/Ungroup pair. The detailed Snap interval
+contents and the remaining MenuBar sections are still application-owned.
+Camera bookmark, walk, document, undo, clipboard, selection, grid, and dialog
+state have **not** moved again: they remain in their existing
+editor/application owners; the UI component only reads presentation state and
+invokes application-owned callbacks.
 Historical references below intentionally retain their then-current paths.
 
 ## 1. Project summary
@@ -97,7 +97,7 @@ before when explicitly requested (`SYS-W14-##` rows).
 
 ## 2. Current status
 
-- **Last full build: clean after the current Phase 13 Edit-break-instance
+- **Last full build: clean after the current Phase 13 Edit-align-selection
   slice.** Testing is enabled in the current Ninja Release tree, and
   `CCACHE_DISABLE=1 cmake --build b-release -j4` linked all targets successfully
   on EASYGL. Alternate-backend runtime qualification remains blocked.
@@ -169,12 +169,12 @@ before when explicitly requested (`SYS-W14-##` rows).
   delegation, and the View-menu directions/focus/overlays/panels/
   Camera-Bookmarks/Walk-Mode presentation, plus the Add/CSG and Help menu
   presentation and the Edit-history, clipboard, object-action, and
-  selection-action groups, the Select-by-Type/Tag/Material submenus, and the
-  Copy-Properties, Convert-to-Definition, Export-Subtree, and Break-Instance
-  items plus the Group/Ungroup pair are now component-owned. Bookmark, walk,
-  document, undo, clipboard, selection, grid, preferences, command-palette, and
-  shortcut-dialog state remain in their existing owners; the menu receives
-  only read-only state plus application-owned callbacks.
+  selection-action groups, the Select-by-Type/Tag/Material and Align-Selection
+  submenus, and the Copy-Properties, Convert-to-Definition, Export-Subtree, and
+  Break-Instance items plus the Group/Ungroup pair are now component-owned.
+  Bookmark, walk, document, undo, clipboard, selection, grid, preferences,
+  command-palette, and shortcut-dialog state remain in their existing owners;
+  the menu receives only read-only state plus application-owned callbacks.
 - **Recently implemented (2026-07-20 through 2026-07-25):** all 7
   raw-OpenGL(ES)-vs-CNA migrations, `AUD-082` through `AUD-088` — full
   detail with file:line evidence and
@@ -574,7 +574,7 @@ backlog (650+ STAB tasks, then a 57-finding audit, all archived DONE).
 verification.** `AUD-090` preflights `xvfb-run` with a real `xdpyinfo` client.
 The execution sandbox blocks the local sockets needed by Xvfb and the
 `mc3_ai` loopback mock server, but the permitted host run completed both
-partitions cleanly: 147/147 non-render tests (including `mc3_ai` in 1.27
+partitions cleanly: 147/147 non-render tests (including `mc3_ai` in 1.28
 seconds) and 34/34 render tests. CI explicitly installs `xvfb` and
 `x11-utils` for the same render path. `AUD-091` therefore remains closed as
 a stale-build false positive rather than hidden behind a longer timeout.
@@ -780,8 +780,8 @@ application/UI ownership. The authorized Camera Bookmarks, Walk Mode, Help,
 Add/CSG, Edit-history, Edit-clipboard, and Edit-object-actions menu slices are
 implemented and verified, together with Edit-selection-actions,
 Edit-select-by-type/tag/material, Edit-copy-properties, Edit-grouping,
-Edit-convert-to-definition, Edit-export-subtree, and Edit-break-instance
-slices.
+Edit-convert-to-definition, Edit-export-subtree, Edit-break-instance, and
+Edit-align-selection slices.
 `EditHistoryContext` exposes only `canUndo`/`canRedo` plus Undo, Redo, and
 Open History callbacks; `Editor::UndoManager`, document replacement,
 selection restoration, dialog state, and keyboard handling remain
@@ -837,16 +837,22 @@ action callback. Selection/type inspection, definition lookup and object
 replacement, undo, document and selection mutation, window-title and status
 reporting, and the command-palette route remain application-owned; `MenuBar`
 owns only the unchanged label, availability, and click dispatch.
+`EditAlignSelectionContext` exposes only selection and Align-to-First
+availability, one axis/`EditAlignmentTarget` callback, and one Align-to-First
+callback. Bounds calculation, selection and lock state, undo, document
+mutation, window-title updates, and the command-palette Align-to-First route
+remain application-owned; `MenuBar` owns the unchanged labels, order,
+separators, availability, and click dispatch. Bounds are now calculated only
+for the clicked axis and only after a click, instead of all three axes whenever
+the submenu is open.
 
 **Next candidate, not yet authorized:** continue Phase 13 with the fixed
-Align Selection submenu presentation, passing only selection availability,
-Align-to-First availability, an axis/target action callback, and one
-Align-to-First callback. Bounds calculation, selection and lock state, undo,
-document mutation, window-title updates, and the command-palette
-Align-to-First route would remain application-owned. Distribution, ground,
-grid, and mirror actions plus the View-menu Bloom/SSAO block remain outside
-that slice. Per `CLAUDE.md`, describe and confirm the Align-Selection slice
-before implementing it.
+three-item Distribute Selection submenu, passing only 2+-selection availability
+and one axis callback. Selection copying and sorting, spacing calculation,
+object-lock checks, undo, document mutation, and window-title updates would
+remain application-owned. Ground, grid, and mirror actions plus the View-menu
+Bloom/SSAO block remain outside that slice. Per `CLAUDE.md`, describe and
+confirm the Distribute-Selection slice before implementing it.
 
 ## 9. Do not do yet
 

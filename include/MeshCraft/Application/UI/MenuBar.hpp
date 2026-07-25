@@ -96,6 +96,19 @@ struct EditBreakInstanceContext {
     std::function<void()> breakInstance;
 };
 
+enum class EditAlignmentTarget {
+    Minimum,
+    Center,
+    Maximum,
+};
+
+struct EditAlignSelectionContext {
+    bool canAlign;
+    bool canAlignToFirst;
+    std::function<void(int, EditAlignmentTarget)> align;
+    std::function<void()> alignToFirst;
+};
+
 class MenuBar final {
 public:
     static void drawAddMenu(const std::function<void(Mc3::ObjectType)>& addPrimitive);
@@ -105,6 +118,7 @@ public:
     static void drawEditConvertToDefinition(const EditConvertToDefinitionContext& context);
     static void drawEditExportSubtree(const EditExportSubtreeContext& context);
     static void drawEditBreakInstance(const EditBreakInstanceContext& context);
+    static void drawEditAlignSelection(const EditAlignSelectionContext& context);
     static void drawEditHistory(const EditHistoryContext& context);
     static void drawEditObjectActions(const EditObjectActionsContext& context);
     static void drawEditSelectionActions(const EditSelectionActionsContext& context);
