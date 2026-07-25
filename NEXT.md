@@ -716,12 +716,11 @@ git stash pop && cmake --build b-release -j4 --target <affected-target>
 There is no currently authorized, actionable audit task. Android (`AUD-042`)
 remains deferred until an Android NDK is available and its CNA backend choice
 is explicitly in scope. `SYS-W3-01` (`MeshCraftApplication` decomposition)
-has 7 phases done;
-   its own most recent investigation round explicitly looked at the two
-   remaining candidates (file dialogs, post-processing) and declined both
-   (no testability win vs. real regression risk with no verification
-   tool) — not silently skipped, but also not a ready "next phase" to
-   just pick up without fresh investigation first.
+has 10 phases done; its investigation rounds also explicitly looked at the
+two originally remaining candidates (file dialogs, post-processing) and
+declined both (no testability win vs. real regression risk with no
+verification tool) — not silently skipped, but also not a ready "next phase"
+to just pick up without fresh investigation first.
 
 **For a future session:** ask the user for a new priority or authorization
 for a fresh audit; do not invent a new task.
