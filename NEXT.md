@@ -99,7 +99,7 @@ before when explicitly requested (`SYS-W14-##` rows).
 
 ## 2. Current status
 
-- **Last full build: clean after the current Phase 13 Edit-isolate-selection
+- **Last full build: clean after the current Phase 13 Edit-hide-selection
   slice.** Testing is enabled in the current Ninja Release tree, and
   `CCACHE_DISABLE=1 cmake --build b-release -j4` linked all targets successfully
   on EASYGL. Alternate-backend runtime qualification remains blocked.
@@ -790,7 +790,8 @@ Edit-snap-selection-to-grid, Edit-mirror-selection, Edit-group-scale,
 Edit-linear-array, Edit-scatter-along-curve, Edit-batch-rename,
 Edit-find-replace-names, Edit-randomize-transform, Edit-macro-recording,
 Edit-play-macro, Edit-macro-editor, Edit-lock-selection, Edit-reset-transform,
-Edit-transform-clipboard, and Edit-isolate-selection slices.
+Edit-transform-clipboard, Edit-isolate-selection, and Edit-hide-selection
+slices.
 `EditHistoryContext` exposes only `canUndo`/`canRedo` plus Undo, Redo, and
 Open History callbacks; `Editor::UndoManager`, document replacement,
 selection restoration, dialog state, and keyboard handling remain
@@ -943,16 +944,20 @@ visibility traversal, selection, undo, document and title updates, status
 reporting, and the Alt+I keyboard path remain in their existing owners;
 `MenuBar` owns only the unchanged dynamic labels, shortcut, availability, and
 click dispatch.
+`EditHideSelectionContext` exposes only current-selection availability and one
+hide callback. Selection state, object visibility mutation, selection clearing,
+undo, document and title updates, and the H keyboard path remain in their
+existing owners; `MenuBar` owns only the unchanged label, shortcut,
+availability, and click dispatch.
 
-**Next candidate, not yet authorized:** continue Phase 13 with the single Hide
-Selected item, passing only current-selection availability and one hide
-callback. Selection state, object visibility mutation, selection clearing,
-undo, document and title updates, and the H keyboard path would remain in
-their existing owners; `MenuBar` would own only the unchanged label, shortcut,
-availability, and click dispatch. The following Show All Hidden item, later
-Edit controls, and the View-menu Bloom/SSAO block remain outside that slice.
-Per `CLAUDE.md`, describe and confirm the Hide-Selected item before
-implementing it.
+**Next candidate, not yet authorized:** continue Phase 13 with the single Show
+All Hidden item, passing only one show-all callback. Scene traversal, object
+visibility mutation, undo, document and title updates, macro playback, and the
+Alt+H keyboard path would remain in their existing owners; `MenuBar` would own
+only the unchanged label, shortcut, always-enabled presentation, and click
+dispatch. Later Edit controls and the View-menu Bloom/SSAO block remain
+outside that slice. Per `CLAUDE.md`, describe and confirm the Show-All-Hidden
+item before implementing it.
 
 ## 9. Do not do yet
 

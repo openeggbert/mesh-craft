@@ -203,6 +203,11 @@ struct EditIsolateSelectionContext {
     std::function<void()> toggle;
 };
 
+struct EditHideSelectionContext {
+    bool canHide;
+    std::function<void()> hide;
+};
+
 class MenuBar final {
 public:
     static void drawAddMenu(const std::function<void(Mc3::ObjectType)>& addPrimitive);
@@ -230,6 +235,7 @@ public:
     static void drawEditResetTransform(const EditResetTransformContext& context);
     static void drawEditTransformClipboard(const EditTransformClipboardContext& context);
     static void drawEditIsolateSelection(const EditIsolateSelectionContext& context);
+    static void drawEditHideSelection(const EditHideSelectionContext& context);
     static void drawEditHistory(const EditHistoryContext& context);
     static void drawEditObjectActions(const EditObjectActionsContext& context);
     static void drawEditSelectionActions(const EditSelectionActionsContext& context);

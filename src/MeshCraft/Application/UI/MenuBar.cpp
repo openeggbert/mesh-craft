@@ -457,13 +457,17 @@ float MeshCraftApplication::drawMenuBar()
             };
             UI::MenuBar::drawEditIsolateSelection(editIsolateSelectionContext);
             ImGui::Separator();
-            if (ImGui::MenuItem("Hide Selected", "H", false, !selection_.selection().empty())) {
-                auto sel = selection_.selection();
-                pushUndo();
-                for (auto& s : sel) s->visible = false;
-                selection_.clear();
-                modified_ = true; updateWindowTitle();
-            }
+            const UI::EditHideSelectionContext editHideSelectionContext{
+                .canHide = !selection_.selection().empty(),
+                .hide = [this] {
+                    auto sel = selection_.selection();
+                    pushUndo();
+                    for (auto& s : sel) s->visible = false;
+                    selection_.clear();
+                    modified_ = true; updateWindowTitle();
+                },
+            };
+            UI::MenuBar::drawEditHideSelection(editHideSelectionContext);
             if (ImGui::MenuItem("Show All Hidden", "Alt+H")) {
                 pushUndo();
                 walkAll(document_.objects, [&](const auto& o) { o->visible = true; });
@@ -863,6 +867,12 @@ void MenuBar::drawEditIsolateSelection(const EditIsolateSelectionContext& contex
     if (ImGui::MenuItem(context.isActive ? "Exit Isolation" : "Isolate Selection",
                         "Alt+I", false, context.canToggle)) {
         context.toggle();
+    }
+}
+
+void MenuBar::drawEditHideSelection(const EditHideSelectionContext& context) {
+    if (ImGui::MenuItem("Hide Selected", "H", false, context.canHide)) {
+        context.hide();
     }
 }
 
