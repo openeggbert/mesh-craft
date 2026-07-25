@@ -503,10 +503,22 @@ _All items in this workstream are DONE — archived to [`docs/history/plan_20260
   available. Left untouched; would need a dedicated visual-regression
   harness (before/after pixel comparison against a real emissive-
   material scene) built first if ever revisited.
+  **Phase 8 DONE (2026-07-25) — camera bookmarks:** fresh investigation
+  found the five orbit-camera bookmark slots were a small, self-contained
+  state boundary: capture and restore only depend on `EditorCamera`, while
+  the application owns the status text and ImGui menu presentation. Extracted
+  `Editor::CameraBookmarks` (`include/` + `src/MeshCraft/Editor/`), including
+  bounds checking so invalid slots cannot index storage. The existing keyboard
+  shortcuts and menu now delegate through the class without changing their
+  labels or status behavior. New CNA-coupled `camera_bookmarks` test (8
+  assertions) covers empty and invalid slots plus complete yaw/pitch/distance/
+  target round-trip. Targeted `camera_bookmarks`, `keybinding_manager`,
+  `preferences`, `walk_controller`, and `audio_preview` tests pass (5/5);
+  full `MeshCraft` rebuild passes. **Resolved:** commit `239b43b`.
   **SYS-W3-01 roadmap status after this session's investigation round:**
-  Phases 1–7 done (Keybindings, Preferences, MacroRecorder, UndoManager,
+  Phases 1–8 done (Keybindings, Preferences, MacroRecorder, UndoManager,
   animation-override computation, WalkController, AudioPreview,
-  in-that-order). File dialogs and post-processing were each
+  CameraBookmarks, in-that-order). File dialogs and post-processing were each
   investigated and explicitly declined for different reasons (no
   testability win vs. real regression risk with no verification tool) —
   not silently skipped. `MeshCraftApplication` itself is still a large

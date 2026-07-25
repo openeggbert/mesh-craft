@@ -77,7 +77,7 @@ before when explicitly requested (`SYS-W14-##` rows).
 - **Build: clean**, `cmake --build b-release -j4` passed after SVG texture
   support was added (EASYGL backend on Linux — the only backend buildable
   here).
-- **Tests:** 173 tests are registered. SVG-specific verification passes with
+- **Tests:** 174 tests are registered. SVG-specific verification passes with
   `-j4`: external and inline SVG export to glTF PNGs, bounded/malformed input,
   cache invalidation, and real headless viewport screenshots sampling the
   rasterized material pixels. This session's own
@@ -111,6 +111,11 @@ before when explicitly requested (`SYS-W14-##` rows).
   the viewport and glTF sampler. `mip_maps` is honored by glTF export; live
   CNA textures remain level-zero only because the available CNA API has no
   mip-chain generation (follow-up commit `026fc2d`).
+- **Recently implemented (2026-07-25):** `SYS-W3-01` Phase 8 extracts the
+  five-slot `Editor::CameraBookmarks` state from `MeshCraftApplication`.
+  Capture/restore and invalid-slot behavior have their own focused test;
+  the menu and keyboard shortcuts retain their existing behavior (commit
+  `239b43b`).
 - **Recently implemented (2026-07-20 through 2026-07-25):** all 7
   raw-OpenGL(ES)-vs-CNA migrations, `AUD-082` through `AUD-088` — full
   detail with file:line evidence and
@@ -517,11 +522,11 @@ ownership decision. It is intentionally not being pursued in this session.
 - **Web/Windows build status: needs re-verification**, not checked this
   session — see §2's caveat and README.md's own platform table.
 - **`SYS-W3-01` (in progress, not a bug):** `MeshCraftApplication` god
-  object, 7 subsystems extracted so far (`KeybindingManager`,
+  object, 8 subsystems extracted so far (`KeybindingManager`,
   `Preferences`, `MacroRecorder`, `UndoManager`, animation-override
-  computation, `WalkController`, `AudioPreview`). File dialogs and
-  post-processing were investigated and explicitly declined as further
-  extraction targets (see `plan.md`).
+  computation, `WalkController`, `AudioPreview`, `CameraBookmarks`). File
+  dialogs and post-processing were investigated and explicitly declined as
+  further extraction targets (see `plan.md`).
 - **By-design, not bugs:** MC3 silently drops unrecognized XML
   attributes/elements on round-trip (`SYS-W5-03`, human-decided,
   documented in `MC3_FORMAT.md`); editor/exporter use different triangle
