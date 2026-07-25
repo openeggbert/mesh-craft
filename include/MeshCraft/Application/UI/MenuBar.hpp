@@ -109,6 +109,11 @@ struct EditAlignSelectionContext {
     std::function<void()> alignToFirst;
 };
 
+struct EditDistributeSelectionContext {
+    bool canDistribute;
+    std::function<void(int)> distribute;
+};
+
 class MenuBar final {
 public:
     static void drawAddMenu(const std::function<void(Mc3::ObjectType)>& addPrimitive);
@@ -119,6 +124,7 @@ public:
     static void drawEditExportSubtree(const EditExportSubtreeContext& context);
     static void drawEditBreakInstance(const EditBreakInstanceContext& context);
     static void drawEditAlignSelection(const EditAlignSelectionContext& context);
+    static void drawEditDistributeSelection(const EditDistributeSelectionContext& context);
     static void drawEditHistory(const EditHistoryContext& context);
     static void drawEditObjectActions(const EditObjectActionsContext& context);
     static void drawEditSelectionActions(const EditSelectionActionsContext& context);

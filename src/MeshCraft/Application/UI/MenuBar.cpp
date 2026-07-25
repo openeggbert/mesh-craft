@@ -272,35 +272,32 @@ float MeshCraftApplication::drawMenuBar()
                 .alignToFirst = [this] { alignToObject(); },
             };
             UI::MenuBar::drawEditAlignSelection(editAlignSelectionContext);
-            bool hasSel2b = selection_.selection().size() >= 2;
-            if (ImGui::BeginMenu("Distribute Selection", hasSel2b)) {
-                static const char* distLabel[3] = {
-                    "Distribute X (spacing)", "Distribute Y (spacing)", "Distribute Z (spacing)"
-                };
-                for (int ax = 0; ax < 3; ++ax) {
-                    if (ImGui::MenuItem(distLabel[ax])) {
-                        // Collect & sort by position on this axis
-                        auto objs = selection_.selection();
-                        std::sort(objs.begin(), objs.end(),
-                            [ax](const auto& a, const auto& b) {
-                                return a->transform.position[ax] < b->transform.position[ax];
-                            });
-                        int n = static_cast<int>(objs.size());
-                        if (n >= 2) {
-                            pushUndo();
-                            float lo = objs.front()->transform.position[ax];
-                            float hi = objs.back()->transform.position[ax];
-                            for (int i = 1; i < n - 1; ++i) {
-                                if (objectLockState_.isLocked(objs[i]->id)) continue;
-                                objs[i]->transform.position[ax] =
-                                    lo + static_cast<float>(i) * (hi - lo) / static_cast<float>(n - 1);
-                            }
-                            modified_ = true; updateWindowTitle();
-                        }
+            const UI::EditDistributeSelectionContext editDistributeSelectionContext{
+                .canDistribute = selection_.selection().size() >= 2,
+                .distribute = [this](int axis) {
+                    auto objects = selection_.selection();
+                    std::sort(objects.begin(), objects.end(),
+                              [axis](const auto& left, const auto& right) {
+                                  return left->transform.position[axis] <
+                                         right->transform.position[axis];
+                              });
+                    const int count = static_cast<int>(objects.size());
+                    if (count < 2) return;
+
+                    pushUndo();
+                    const float minimum = objects.front()->transform.position[axis];
+                    const float maximum = objects.back()->transform.position[axis];
+                    for (int index = 1; index < count - 1; ++index) {
+                        if (objectLockState_.isLocked(objects[index]->id)) continue;
+                        objects[index]->transform.position[axis] =
+                            minimum + (static_cast<float>(index) * (maximum - minimum) /
+                                       static_cast<float>(count - 1));
                     }
-                }
-                ImGui::EndMenu();
-            }
+                    modified_ = true;
+                    updateWindowTitle();
+                },
+            };
+            UI::MenuBar::drawEditDistributeSelection(editDistributeSelectionContext);
             {
                 bool hasSel2c = !selection_.selection().empty();
                 if (ImGui::MenuItem("Drop to Ground Plane", nullptr, false, hasSel2c)) {
@@ -725,6 +722,20 @@ void MenuBar::drawEditAlignSelection(const EditAlignSelectionContext& context) {
     if (ImGui::MenuItem("To First Selected (XYZ)", nullptr, false,
                         context.canAlignToFirst)) {
         context.alignToFirst();
+    }
+    ImGui::EndMenu();
+}
+
+void MenuBar::drawEditDistributeSelection(const EditDistributeSelectionContext& context) {
+    if (!ImGui::BeginMenu("Distribute Selection", context.canDistribute)) return;
+
+    static const char* labels[3] = {
+        "Distribute X (spacing)",
+        "Distribute Y (spacing)",
+        "Distribute Z (spacing)",
+    };
+    for (int axis = 0; axis < 3; ++axis) {
+        if (ImGui::MenuItem(labels[axis])) context.distribute(axis);
     }
     ImGui::EndMenu();
 }
