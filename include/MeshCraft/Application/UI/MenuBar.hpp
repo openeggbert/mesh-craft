@@ -66,6 +66,11 @@ struct EditSelectByTagContext {
     std::function<void(const std::string&)> selectTag;
 };
 
+struct EditSelectByMaterialContext {
+    std::function<std::set<std::string>()> getMaterials;
+    std::function<void(const std::string&)> selectMaterial;
+};
+
 class MenuBar final {
 public:
     static void drawAddMenu(const std::function<void(Mc3::ObjectType)>& addPrimitive);
@@ -75,6 +80,7 @@ public:
     static void drawEditSelectionActions(const EditSelectionActionsContext& context);
     static void drawEditSelectByType(const EditSelectByTypeContext& context);
     static void drawEditSelectByTag(const EditSelectByTagContext& context);
+    static void drawEditSelectByMaterial(const EditSelectByMaterialContext& context);
     static void drawPanelToggles(bool& timeline, bool& registry, bool& ai, bool& validation);
     static void drawOverlays(bool& edges, bool& wireframe, bool& stats, bool& shadowDebug, bool& snap);
     static void drawViewDirections(float& yaw, float& pitch);

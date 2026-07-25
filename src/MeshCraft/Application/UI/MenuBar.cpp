@@ -190,26 +190,23 @@ float MeshCraftApplication::drawMenuBar()
                 },
             };
             UI::MenuBar::drawEditSelectByTag(editSelectByTagContext);
-            if (ImGui::BeginMenu("Select by Material")) {
-                std::set<std::string> allMats;
-                walkAll(document_.objects, [&](const auto& o) {
-                    if (!o->material.empty()) allMats.insert(o->material);
-                });
-                if (allMats.empty()) {
-                    ImGui::TextDisabled("(no materials in scene)");
-                } else {
-                    for (const auto& mat : allMats) {
-                        if (ImGui::MenuItem(mat.c_str())) {
-                            selectBy([&](const auto& o) { return o->material == mat; });
-                            char sbuf[96];
-                            std::snprintf(sbuf, sizeof(sbuf), "Selected %d object(s) with material \"%s\"",
-                                          static_cast<int>(selection_.selection().size()), mat.c_str());
-                            setStatusMsg(sbuf);
-                        }
-                    }
-                }
-                ImGui::EndMenu();
-            }
+            const UI::EditSelectByMaterialContext editSelectByMaterialContext{
+                .getMaterials = [this, &walkAll] {
+                    std::set<std::string> allMaterials;
+                    walkAll(document_.objects, [&](const auto& o) {
+                        if (!o->material.empty()) allMaterials.insert(o->material);
+                    });
+                    return allMaterials;
+                },
+                .selectMaterial = [this, &selectBy](const std::string& material) {
+                    selectBy([&material](const auto& o) { return o->material == material; });
+                    char sbuf[96];
+                    std::snprintf(sbuf, sizeof(sbuf), "Selected %d object(s) with material \"%s\"",
+                                  static_cast<int>(selection_.selection().size()), material.c_str());
+                    setStatusMsg(sbuf);
+                },
+            };
+            UI::MenuBar::drawEditSelectByMaterial(editSelectByMaterialContext);
             {
                 bool hasSel2plus = selection_.selection().size() >= 2;
                 if (ImGui::MenuItem("Copy Properties to Selected...", "Ctrl+Shift+P", false, hasSel2plus))
@@ -655,6 +652,20 @@ void MenuBar::drawEditSelectByTag(const EditSelectByTagContext& context) {
     } else {
         for (const auto& tag : tags) {
             if (ImGui::MenuItem(tag.c_str())) context.selectTag(tag);
+        }
+    }
+    ImGui::EndMenu();
+}
+
+void MenuBar::drawEditSelectByMaterial(const EditSelectByMaterialContext& context) {
+    if (!ImGui::BeginMenu("Select by Material")) return;
+
+    const auto materials = context.getMaterials();
+    if (materials.empty()) {
+        ImGui::TextDisabled("(no materials in scene)");
+    } else {
+        for (const auto& material : materials) {
+            if (ImGui::MenuItem(material.c_str())) context.selectMaterial(material);
         }
     }
     ImGui::EndMenu();
