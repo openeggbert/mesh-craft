@@ -117,9 +117,12 @@ float MeshCraftApplication::drawMenuBar()
                 .openHistory = [this] { undoHistoryOpen_ = true; },
             };
             UI::MenuBar::drawEditHistory(editHistoryContext);
-            if (ImGui::MenuItem("Cut",       "Ctrl+X")) cutSelected();
-            if (ImGui::MenuItem("Copy",      "Ctrl+C")) copySelected();
-            if (ImGui::MenuItem("Paste",     "Ctrl+V")) pasteClipboard();
+            const UI::EditClipboardContext editClipboardContext{
+                .cut = [this] { cutSelected(); },
+                .copy = [this] { copySelected(); },
+                .paste = [this] { pasteClipboard(); },
+            };
+            UI::MenuBar::drawEditClipboard(editClipboardContext);
             if (ImGui::MenuItem("Duplicate",           "Ctrl+D"))       duplicateSelected();
             if (ImGui::MenuItem("Duplicate at Offset", "Ctrl+Shift+D",
                                 false, selection_.hasSelection())) {
@@ -600,6 +603,12 @@ void MenuBar::drawEditHistory(const EditHistoryContext& context) {
         context.openHistory();
     }
     ImGui::Separator();
+}
+
+void MenuBar::drawEditClipboard(const EditClipboardContext& context) {
+    if (ImGui::MenuItem("Cut",  "Ctrl+X")) context.cut();
+    if (ImGui::MenuItem("Copy", "Ctrl+C")) context.copy();
+    if (ImGui::MenuItem("Paste", "Ctrl+V")) context.paste();
 }
 
 void MenuBar::drawPanelToggles(bool& timeline, bool& registry, bool& ai, bool& validation) {
