@@ -84,10 +84,10 @@ P1s already being fixed in git history. This session:
    is per-field only) not part of the original audit, filed as new `TODO`
    tasks.
 
-   **Net across all 31 AUD-### rows remaining in this active backlog (61
+   **Net across all 34 AUD-### rows remaining in this active backlog (61
    additional rows completed and archived to `docs/history/plan_20260718.md`
    on 2026-07-18 — see that file for their full evidence/resolution text):
-   28 DONE, 1 TODO, 2 DEFERRED** — 10 of the 28 DONE (`AUD-064` through
+   28 DONE, 4 TODO, 2 DEFERRED** — 10 of the 28 DONE (`AUD-064` through
    `AUD-073`) are fresh findings from a 2026-07-18 (later same day)
    independent re-audit, not part of the original 6 (`AUD-069` itself fixed
    2026-07-19, the day after it was filed); the other 14 (`AUD-074`
@@ -144,14 +144,23 @@ still internally consistent.
    out the two sibling repositories at the recorded verified SHAs, then
    configures, builds and runs the root CTest suite with at most two jobs.
    The standalone matrix uses the same job limit.
-3. **AUD-042 (P2/W8)** — Android build path forces SDL_RENDERER; blocked
+3. **AUD-089 (P1/W11)** — `--screenshot` logs success and exits zero even
+   when its output cannot be written. This is the first approved follow-up
+   once the owner explicitly authorizes implementation.
+4. **AUD-091 (P1/W1)** — a definitions-only AI response makes `mc3_ai`
+   exceed its 30-second CTest timeout; it must be traced and bounded before
+   treating the AI-response path as robust.
+5. **AUD-090 (P2/W11)** — render-dependent CTests need a working-display
+   preflight and complete `render` labels, so a non-render selection is
+   actually headless-safe and CI failures are actionable.
+6. **AUD-042 (P2/W8)** — Android build path forces SDL_RENDERER; blocked
    (no Android NDK in this environment; also intersects CNA backend
    behavior, out of scope per CLAUDE.md's "no CNA changes without owner
    permission").
-4. The only remaining active AUD row is the Android backend decision
-   (`AUD-042`); it remains deferred because this environment has no Android
-   NDK and the work crosses the CNA ownership boundary.
-5. All 10 of the mc3-format-vs-editor gaps found 2026-07-20 (user
+7. Android remains deferred because this environment has no Android NDK and
+   the work crosses the CNA ownership boundary; the three new audit rows do
+   not authorize implementation by themselves.
+8. All 10 of the mc3-format-vs-editor gaps found 2026-07-20 (user
    request: "co mc3 nabízí, ale MeshCraft to ještě neumí" -- "what does
    the mc3 format offer that MeshCraft doesn't yet handle") are now
    done: the two P1 gaps (trigger event-firing, Lua scripting execution),
@@ -1900,3 +1909,24 @@ as a CNA depth-to-color pre-pass (2026-07-25). The remaining direct
 - **Outcome:** Replaced the manual FBO+color+depth-texture setup with `RenderTarget2D(gd, kShadowDebugRes, kShadowDebugRes, /*mipMap=*/false, SurfaceFormat::Color, DepthFormat::Depth24)`, and the raw `BindFramebuffer`/`Viewport` pair with `gd.SetRenderTarget(&*shadowDebugRt_)` / `gd.SetRenderTarget(nullptr)` bracketing the unchanged `sceneRenderer_->draw(...)` call — confirmed `SetRenderTarget()` already resets `Viewport`/`ScissorRectangle` to the target's size on bind and to the full backbuffer on unbind, so the manual viewport save/restore became unnecessary entirely, not just replaced (same `AUD-084` gotcha #1 shape: no redundant re-bind needed either, since this function only binds once). `shadowDebugColorTex_` stays as a public field of the same name/type (`drawShadowDebugOverlay()`, `AUD-088`'s own ImGui consumer, needed zero changes) but is now populated via `IRenderTargetBackend::GetColorGLHandle()` after each render, same pattern as `AUD-087`. The destructor's manual `glDeleteFramebuffers`/`glDeleteTextures` cleanup block for the 3 old raw fields was removed entirely — `shadowDebugRt_`'s own RAII destructor now handles it, matching `bloomRtA_`/`skyboxTex_`/`matPreviewRt_`'s already-established pattern — along with the leak-check block that referenced those 3 now-nonexistent fields.
 - **Tests:** New `test/shadow_debug.mc3.xml` (one `cast_shadows="true"` directional light + one box) + `test/shadowdebug_test.py` (`shadowdebug_test` ctest) + a new `MESHCRAFT_TEST_FORCE_SHADOWDEBUG` test-only hook (`AUD-058`'s pattern — this toggle has no CLI/scene-file equivalent either) + a dedicated test-only corner blit (`AUD-087`'s pattern, deliberately not relying on the real "Shadow Frustum" ImGui overlay's own window-layout math for a test's pixel coordinates). Real `--screenshot` pixel sampling: the blitted corner shows the light-view clear color everywhere except a small ~8×8px cluster near its center — the box, correctly rendered small because it's a 2×2×2 object inside a ±50m ortho frustum (visually cross-checked against the real "Shadow Frustum" ImGui window in the same screenshot, which independently shows the identical small bright cluster at a different screen position, confirming both consumers read the same real render target content). No pre-existing test/hook existed to `git stash`-diff against (both the migration and the headless-testability hook are new together, same situation as `AUD-087`). Full rebuild + 169/169 `ctest` (was 168; +1 for `shadowdebug_test`), including `gl_shutdown_leak_test` confirming the destructor changes introduced no new GL resource leak. **`SDL_GL_GetProcAddress` now appears exactly once in `MeshCraftApplication.cpp`** (the `LD(...)` macro's own definition, still used by `initSsao()`) — `AUD-084`/`AUD-086`/`AUD-087`/`AUD-088` are the 4 of 5 `s_bloom` consumers now migrated; SSAO (`AUD-085`) is the sole holdout, so — per the shared preamble and `AUD-085`'s own row — the shared `BloomGL`/`s_bloom` struct itself is intentionally NOT deleted yet, since SSAO still depends on it.
 - **Resolved:** commit `95327bc` — verify: `ctest -R shadowdebug_test`; `grep -c SDL_GL_GetProcAddress src/MeshCraft/MeshCraftApplication.cpp` (expect exactly 1, the `LD` macro definition, until `AUD-085` also lands).
+
+### AUD-089 `[TODO]` `P1` `W11` · `--screenshot` reports a successful output even when the image cannot be written
+- **Component:** `src/MeshCraft/MeshCraftApplication_Commands.cpp` (`saveScreenshot()`), `src/MeshCraft/MeshCraftApplication.cpp` (one-shot screenshot flow), `src/MeshCraft/main.cpp` (process exit status).
+- **Evidence:** `saveScreenshot()` returns `void`. Its PNG branch prints an error when `stbi_write_png()` fails but cannot propagate that failure; its PPM branch writes to an `std::ofstream` without checking open or write success and still prints `written`. The one-shot flow subsequently prints `Auto-screenshot saved` and exits, while `main.cpp` only maps export failure to a non-zero process status. Thus an unwritable screenshot destination can be reported as saved and return exit code zero, which is silent CLI output loss.
+- **Outcome:** Make screenshot writing report success/failure to the application, check PPM stream open/write errors and PNG encoder results, suppress success messages on failure, and make the one-shot CLI return non-zero when its requested screenshot was not produced.
+- **Tests:** Add a deterministic CLI regression test that requests a screenshot at a guaranteed-unwritable destination and asserts non-zero status plus an error; retain a normal writable-output success check. Run it in a known working virtual-display environment.
+- **Audit verification (2026-07-25):** source-path review followed the CNA readback migration (`AUD-083`); it found that pixel acquisition is no longer the risk, but output-result propagation was never added.
+
+### AUD-090 `[TODO]` `P2` `W11` · Render-dependent CTests lack a reliable display preflight and complete `render` labels
+- **Component:** `CMakeLists.txt`, render-test Python launch helpers, and `.github/workflows/ci.yml`.
+- **Evidence:** The full 177-test CTest run reached many failures with `SDL_InitSubSystem(SDL_INIT_VIDEO) failed: No available video device`. The audit host had an `xvfb-run` executable, but it could not establish a usable X listener, so mere executable discovery is insufficient. In addition, `editor_export_test` is labelled only `export` and `benchmark_editor` only `perf` although both launch `MeshCraft` and require video; `ctest -LE render` therefore still starts graphics tests and fails. The CI workflow does not explicitly establish or preflight a virtual display for its root editor test job.
+- **Outcome:** Add a robust, explicit virtual-display availability check for render tests/CI, make an unavailable display an intentional CTest skip with a clear diagnostic rather than a false product failure, and add the `render` label to every graphics-dependent test (including export/performance wrappers). Ensure CI installs and uses the selected display mechanism.
+- **Tests:** Verify label selection with `ctest -N -LE render`, test the explicit no-display skip path, and run the render subset under a verified virtual display. Keep non-render CTest selection genuinely free of video initialization.
+- **Audit verification (2026-07-25):** the failure was reproduced across the visual suite; it is an environment/test-orchestration defect, not evidence of separate rendering regressions in every affected test.
+
+### AUD-091 `[TODO]` `P1` `W1` · A valid definitions-only AI response causes `mc3_ai` to exceed its 30-second timeout
+- **Component:** `mc3/test/ai_test.cpp`, `src/MeshCraft/AiResponseAlgorithms.hpp`, and the MC3 definition parsing/validation path reached by `Mc3Document::loadFromString()`.
+- **Evidence:** `ctest -V -R '^mc3_ai$' -j1` consistently reaches the `AUD-010` include-policy checks, then times out at 30 seconds before `STAB-0410` can report its first assertion. Direct `timeout 8 b-release/ai_test` reproduces the same stopping point. The immediately preceding ordinary object response completes successfully; the next test passes a small, valid document containing only `<definitions><definition id="crate"><box .../></definition></definitions>`. This makes a legitimate AI response shape block the validation pipeline rather than returning a result or an error.
+- **Outcome:** Trace the definitions-only parse/validation call to its blocking operation, fix the underlying non-termination or bound it with a user-visible parse failure, and retain the definition-only acceptance contract (`STAB-0410`). Do not paper over it solely by extending CTest's timeout.
+- **Tests:** First add a focused reproducer that proves the definitions-only response completes under a short, meaningful bound; then run `mc3_ai` and the non-render CTest subset with `-j4` maximum.
+- **Audit verification (2026-07-25):** the `ai_test` target was rebuilt with no pending compilation work before both reproductions, ruling out a stale binary as the explanation.

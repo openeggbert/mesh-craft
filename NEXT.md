@@ -42,8 +42,11 @@ function table (`s_bloom`/`BloomGL`) plus 2 smaller standalone spots;
 filed as `AUD-082`-`AUD-088`. All 7 are now migrated onto CNA's
 `RenderTarget2D`/`ShaderEffect`/`GraphicsDevice` APIs; `AUD-085` uses a
 depth-to-color pre-pass. `plan.md`'s remaining
-`AUD-###` rows are now all `DONE`/`DEFERRED` except `AUD-042` (Android),
-which remains deferred for a future Android-capable environment.
+`AUD-###` rows were all `DONE`/`DEFERRED` except `AUD-042` (Android) until
+the 2026-07-25 follow-up audit filed `AUD-089` through `AUD-091`: CLI
+screenshot failure reporting, render-test environment/labels, and an AI
+definitions-only response timeout. Android remains deferred for a future
+Android-capable environment.
 The project is in an **ongoing hardening / bug-fixing** phase, not
 active new-feature development, though scoped new features have landed
 before when explicitly requested (`SYS-W14-##` rows).
@@ -525,8 +528,13 @@ backlog (650+ STAB tasks, then a 57-finding audit, all archived DONE).
 
 ## 4. Current blocker / main problem
 
-**No build-breaking blocker at present.** Build and tests are both green
-as of the last verification this session (§2).
+**The release build is clean, but the full CTest suite is not currently
+green in this host environment.** The audit rebuilt the project with `-j4`;
+the targeted `scene_hierarchy_panel` and `object_lock_state` tests pass.
+The render-dependent tests cannot initialize SDL video because this host's
+Xvfb listener is unusable, and `mc3_ai` reproducibly exceeds its 30-second
+timeout after the definitions-only AI-response case. These are recorded as
+`AUD-090` and `AUD-091`, rather than hidden by a passing test-count check.
 
 The only deferred audit item is Android (`AUD-042`): this workspace has no
 Android NDK, and selecting a real Android graphics path would require a CNA
@@ -719,17 +727,21 @@ git stash pop && cmake --build b-release -j4 --target <affected-target>
 
 ## 8. Next smallest tasks
 
-There is no currently authorized, actionable audit task. Android (`AUD-042`)
-remains deferred until an Android NDK is available and its CNA backend choice
-is explicitly in scope. `SYS-W3-01` (`MeshCraftApplication` decomposition)
+The follow-up audit has three implementation candidates, all awaiting the
+owner's explicit confirmation required by `CLAUDE.md`: `AUD-089` first
+(truthful `--screenshot` failure/exit status), then `AUD-091` (definitions-
+only AI-response timeout), then `AUD-090` (render CTest display preflight and
+labels). Android (`AUD-042`) remains deferred until an Android NDK is
+available and its CNA backend choice is explicitly in scope. `SYS-W3-01`
+(`MeshCraftApplication` decomposition)
 has 11 phases done; its investigation rounds also explicitly looked at the
 two originally remaining candidates (file dialogs, post-processing) and
 declined both (no testability win vs. real regression risk with no
 verification tool) — not silently skipped, but also not a ready "next phase"
 to just pick up without fresh investigation first.
 
-**For a future session:** ask the user for a new priority or authorization
-for a fresh audit; do not invent a new task.
+**For a future session:** ask the user to select and authorize one audit row;
+do not implement any of these findings merely because they are documented.
 
 ## 9. Do not do yet
 
