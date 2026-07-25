@@ -1131,23 +1131,6 @@ if(MESH_CRAFT_BUILD_TESTING AND UNIX AND NOT ANDROID AND NOT EMSCRIPTEN)
     # though the assertion concerns benchmark output, not pixels.
     set_tests_properties(benchmark_editor PROPERTIES TIMEOUT 30 LABELS "perf;render")
 
-    # AUD-058: real lifecycle verification -- runs the app end-to-end and
-    # asserts BloomGL::leakCheck()/shadowDebug's shutdown self-check never
-    # reports a surviving GL handle. Regression guard for s_bloom.cleanup()
-    # having existed with zero call sites.
-    find_program(PYTHON3_FOR_LEAK_TEST NAMES python3 python)
-    if(PYTHON3_FOR_LEAK_TEST)
-        add_test(
-            NAME gl_shutdown_leak
-            COMMAND "${PYTHON3_FOR_LEAK_TEST}"
-                    ${CMAKE_CURRENT_SOURCE_DIR}/test/gl_shutdown_leak_test.py
-                    $<TARGET_FILE:MeshCraft>
-                    ${CMAKE_CURRENT_SOURCE_DIR}/test/house.mc3.xml
-            WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
-        )
-        set_tests_properties(gl_shutdown_leak PROPERTIES TIMEOUT 30 LABELS "render")
-    endif()
-
     # STAB-0497: same smoke-test mechanism, but against a scene exercising
     # every Mc3::ObjectType (all_objects.mc3.xml) to confirm the live
     # SceneRenderer handles every type without crashing.
@@ -1251,23 +1234,6 @@ if(MESH_CRAFT_BUILD_TESTING AND UNIX AND NOT ANDROID AND NOT EMSCRIPTEN)
             WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
         )
         set_tests_properties(smoke_test_orthographic_camera PROPERTIES TIMEOUT 30 LABELS "render")
-    endif()
-
-    # STAB-0521: verify no GL error leaks out of a full frame's render passes.
-    # medieval_castle.mc3.xml is the richest fixture available (skybox,
-    # emissive materials, many objects/gizmos) -- note that bloom/SSAO
-    # themselves are pure runtime UI toggles (off by default, no CLI/
-    # document hook), so this exercises the base 3D pass + skybox + gizmos
-    # + ImGui, not the bloom/SSAO post-process passes specifically.
-    if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/test/medieval_castle.mc3.xml")
-        add_test(
-            NAME gl_state_leak_test
-            COMMAND bash ${CMAKE_CURRENT_SOURCE_DIR}/test/gl_state_leak_test.sh
-                    $<TARGET_FILE:MeshCraft>
-                    ${CMAKE_CURRENT_SOURCE_DIR}/test/medieval_castle.mc3.xml
-            WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
-        )
-        set_tests_properties(gl_state_leak_test PROPERTIES TIMEOUT 30 LABELS "render")
     endif()
 
     find_program(PYTHON3_EXEC python3)

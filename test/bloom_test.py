@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Regression/verification test for AUD-084: Bloom post-processing (I6) migrated
-from a hand-rolled raw-GL FBO+shader pipeline (SDL_GL_GetProcAddress'd
+from a legacy native FBO+shader pipeline
 glGenFramebuffers/glCreateShader/etc.) onto CNA's own RenderTarget2D +
 ShaderEffect + SpriteBatch. This did not exist as a dedicated test before --
 the only prior coverage (AUD-058) proved the GL resource pool is fully

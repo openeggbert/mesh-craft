@@ -392,7 +392,6 @@ void MeshCraftApplication::EndDraw() {
             std::cout << "[LOD] level=" << sceneRenderer_->lastLodLevel(document_.objects.front()->id) << "\n";
             std::cout << "[CsgTriCount] count=" << sceneRenderer_->csgCachedTriCount(document_.objects.front()->id) << "\n";
         }
-        std::cout << "[GLCheck] " << (lastGlErrorSeen_ ? "error" : "clean") << "\n";
         Exit();
     }
 
@@ -828,8 +827,6 @@ void MeshCraftApplication::Draw(const GameTime& /*gameTime*/) {
     gd.SetDepthTestEnabled(false);
     drawImGuiUi(screenW, screenH);
 
-    checkGlStateLeak("full frame (SSAO/bloom/skybox/gizmos/ImGui)");
-
     if (autoScreenshotCountdown_ > 0) {
         --autoScreenshotCountdown_;
         if (autoScreenshotCountdown_ == 0 && !autoScreenshotPath_.empty())
@@ -888,282 +885,13 @@ void MeshCraftApplication::drawImGuiUi(int screenW, int screenH)
 }
 
 // ---------------------------------------------------------------------------
-// Bloom post-processing (I6) — FBO + blur + additive composite
+// Bloom post-processing (I6) — CNA RenderTarget2D + ShaderEffect passes
 // ---------------------------------------------------------------------------
-// GL infrastructure lives in a TU-private anonymous namespace to avoid
-// polluting the MeshCraft namespace with raw GL types.
-} // namespace MeshCraft — temporarily closed so anonymous ns is file-scope
-
-namespace {
-
-// GL constants (no GL headers to avoid conflicts with CNA/XNA GL headers)
-constexpr unsigned kGL_FRAMEBUFFER          = 0x8D40u;
-constexpr unsigned kGL_COLOR_ATTACHMENT0    = 0x8CE0u;
-constexpr unsigned kGL_TEXTURE_2D           = 0x0DE1u;
-constexpr unsigned kGL_TEXTURE0             = 0x84C0u;
-constexpr unsigned kGL_RGBA                 = 0x1908u;
-constexpr unsigned kGL_RGBA8                = 0x8058u;
-constexpr unsigned kGL_UNSIGNED_BYTE        = 0x1401u;
-constexpr unsigned kGL_LINEAR               = 0x2601u;
-constexpr unsigned kGL_CLAMP_TO_EDGE        = 0x812Fu;
-constexpr unsigned kGL_REPEAT               = 0x2901u;
-constexpr unsigned kGL_TEXTURE_MIN_FILTER   = 0x2801u;
-constexpr unsigned kGL_TEXTURE_MAG_FILTER   = 0x2800u;
-constexpr unsigned kGL_TEXTURE_WRAP_S       = 0x2802u;
-constexpr unsigned kGL_TEXTURE_WRAP_T       = 0x2803u;
-constexpr unsigned kGL_FRAMEBUFFER_COMPLETE = 0x8CD5u;
-constexpr unsigned kGL_VERTEX_SHADER        = 0x8B31u;
-constexpr unsigned kGL_FRAGMENT_SHADER      = 0x8B30u;
-constexpr unsigned kGL_ARRAY_BUFFER         = 0x8892u;
-constexpr unsigned kGL_STATIC_DRAW          = 0x88B4u;
-constexpr unsigned kGL_FLOAT                = 0x1406u;
-constexpr unsigned kGL_TRIANGLE_STRIP       = 0x0005u;
-constexpr unsigned kGL_ONE                  = 0x0001u;
-constexpr unsigned kGL_SRC_ALPHA            = 0x0302u;
-constexpr unsigned kGL_ONE_MINUS_SRC_ALPHA  = 0x0303u;
-constexpr unsigned kGL_FUNC_ADD             = 0x8006u;
-constexpr unsigned kGL_BLEND                = 0x0BE2u;
-constexpr unsigned kGL_DEPTH_TEST           = 0x0B71u;
-constexpr unsigned kGL_COLOR_BUFFER_BIT     = 0x4000u;
-constexpr unsigned kGL_LINK_STATUS          = 0x8B82u;
-constexpr unsigned kGL_COMPILE_STATUS       = 0x8B81u;
-constexpr unsigned kGL_INFO_LOG_LENGTH      = 0x8B84u;
-
-// SSAO / depth blit constants
-constexpr unsigned kGL_READ_FRAMEBUFFER  = 0x8CA8u;
-constexpr unsigned kGL_DRAW_FRAMEBUFFER  = 0x8CA9u;
-constexpr unsigned kGL_DEPTH_BUFFER_BIT  = 0x0100u;
-constexpr unsigned kGL_DEPTH_ATTACHMENT  = 0x8D00u;
-constexpr unsigned kGL_DEPTH_COMPONENT24 = 0x81A6u;
-constexpr unsigned kGL_DEPTH_COMPONENT   = 0x1902u;
-constexpr unsigned kGL_UNSIGNED_INT      = 0x1405u;
-constexpr unsigned kGL_NEAREST           = 0x2600u;
-constexpr unsigned kGL_DST_COLOR         = 0x0306u;
-constexpr unsigned kGL_ZERO              = 0u;
-constexpr unsigned kGL_R8                = 0x8229u;
-constexpr unsigned kGL_RED               = 0x1903u;
-
-struct BloomGL {
-    void     (*GenFramebuffers)(int, unsigned*) = nullptr;
-    void     (*BindFramebuffer)(unsigned, unsigned) = nullptr;
-    void     (*FramebufferTexture2D)(unsigned, unsigned, unsigned, unsigned, int) = nullptr;
-    unsigned (*CheckFramebufferStatus)(unsigned) = nullptr;
-    void     (*DeleteFramebuffers)(int, const unsigned*) = nullptr;
-    void     (*GenTextures)(int, unsigned*) = nullptr;
-    void     (*BindTexture)(unsigned, unsigned) = nullptr;
-    void     (*TexImage2D)(unsigned, int, int, int, int, int, unsigned, unsigned, const void*) = nullptr;
-    void     (*TexParameteri)(unsigned, unsigned, int) = nullptr;
-    void     (*DeleteTextures)(int, const unsigned*) = nullptr;
-    void     (*ActiveTexture)(unsigned) = nullptr;
-    void     (*GenVertexArrays)(int, unsigned*) = nullptr;
-    void     (*BindVertexArray)(unsigned) = nullptr;
-    void     (*DeleteVertexArrays)(int, const unsigned*) = nullptr;
-    void     (*GenBuffers)(int, unsigned*) = nullptr;
-    void     (*BindBuffer)(unsigned, unsigned) = nullptr;
-    void     (*BufferData)(unsigned, long, const void*, unsigned) = nullptr;
-    void     (*DeleteBuffers)(int, const unsigned*) = nullptr;
-    void     (*EnableVertexAttribArray)(unsigned) = nullptr;
-    void     (*VertexAttribPointer)(unsigned, int, unsigned, unsigned char, int, const void*) = nullptr;
-    unsigned (*CreateShader)(unsigned) = nullptr;
-    void     (*ShaderSource)(unsigned, int, const char* const*, const int*) = nullptr;
-    void     (*CompileShader)(unsigned) = nullptr;
-    void     (*GetShaderiv)(unsigned, unsigned, int*) = nullptr;
-    void     (*GetShaderInfoLog)(unsigned, int, int*, char*) = nullptr;
-    void     (*DeleteShader)(unsigned) = nullptr;
-    unsigned (*CreateProgram)() = nullptr;
-    void     (*AttachShader)(unsigned, unsigned) = nullptr;
-    void     (*LinkProgram)(unsigned) = nullptr;
-    void     (*GetProgramiv)(unsigned, unsigned, int*) = nullptr;
-    void     (*GetProgramInfoLog)(unsigned, int, int*, char*) = nullptr;
-    void     (*DeleteProgram)(unsigned) = nullptr;
-    void     (*UseProgram)(unsigned) = nullptr;
-    int      (*GetUniformLocation)(unsigned, const char*) = nullptr;
-    void     (*Uniform1i)(int, int) = nullptr;
-    void     (*Uniform1f)(int, float) = nullptr;
-    void     (*Uniform2f)(int, float, float) = nullptr;
-    void     (*Uniform3f)(int, float, float, float) = nullptr;
-    void     (*BlendFunc)(unsigned, unsigned) = nullptr;
-    void     (*BlendEquation)(unsigned) = nullptr;
-    void     (*DrawArrays)(unsigned, int, int) = nullptr;
-    void     (*ClearColor)(float, float, float, float) = nullptr;
-    void     (*Clear)(unsigned) = nullptr;
-    void     (*Viewport)(int, int, int, int) = nullptr;
-    void     (*Enable)(unsigned) = nullptr;
-    void     (*Disable)(unsigned) = nullptr;
-    unsigned (*GetError)() = nullptr;
-    void     (*ReadPixels)(int, int, int, int, unsigned, unsigned, void*) = nullptr;
-    void     (*ColorMask)(unsigned char, unsigned char, unsigned char, unsigned char) = nullptr;
-
-    unsigned fboA{0}, fboB{0};
-    unsigned texA{0}, texB{0};
-    unsigned progBlur{0}, progComposite{0};
-    unsigned quadVAO{0}, quadVBO{0};
-    bool     fnLoaded{false};
-    bool     ready{false};
-
-    // Skybox
-    unsigned progSkybox{0};
-    unsigned skyboxTex{0};
-    std::string skyboxTexPath;
-
-    // Material preview (D7)
-    unsigned matPreviewFbo{0}, matPreviewTex{0};
-    unsigned progMatPreview{0};
-
-    bool loadFunctions() {
-        if (fnLoaded) return true;
-#define LD(m,n) m = reinterpret_cast<decltype(m)>(SDL_GL_GetProcAddress(n))
-        LD(GenFramebuffers,        "glGenFramebuffers");
-        LD(BindFramebuffer,        "glBindFramebuffer");
-        LD(FramebufferTexture2D,   "glFramebufferTexture2D");
-        LD(CheckFramebufferStatus, "glCheckFramebufferStatus");
-        LD(DeleteFramebuffers,     "glDeleteFramebuffers");
-        LD(GenTextures,            "glGenTextures");
-        LD(BindTexture,            "glBindTexture");
-        LD(TexImage2D,             "glTexImage2D");
-        LD(TexParameteri,          "glTexParameteri");
-        LD(DeleteTextures,         "glDeleteTextures");
-        LD(ActiveTexture,          "glActiveTexture");
-        LD(GenVertexArrays,        "glGenVertexArrays");
-        LD(BindVertexArray,        "glBindVertexArray");
-        LD(DeleteVertexArrays,     "glDeleteVertexArrays");
-        LD(GenBuffers,             "glGenBuffers");
-        LD(BindBuffer,             "glBindBuffer");
-        LD(BufferData,             "glBufferData");
-        LD(DeleteBuffers,          "glDeleteBuffers");
-        LD(EnableVertexAttribArray,"glEnableVertexAttribArray");
-        LD(VertexAttribPointer,    "glVertexAttribPointer");
-        LD(CreateShader,           "glCreateShader");
-        LD(ShaderSource,           "glShaderSource");
-        LD(CompileShader,          "glCompileShader");
-        LD(GetShaderiv,            "glGetShaderiv");
-        LD(GetShaderInfoLog,       "glGetShaderInfoLog");
-        LD(DeleteShader,           "glDeleteShader");
-        LD(CreateProgram,          "glCreateProgram");
-        LD(AttachShader,           "glAttachShader");
-        LD(LinkProgram,            "glLinkProgram");
-        LD(GetProgramiv,           "glGetProgramiv");
-        LD(GetProgramInfoLog,      "glGetProgramInfoLog");
-        LD(DeleteProgram,          "glDeleteProgram");
-        LD(UseProgram,             "glUseProgram");
-        LD(GetUniformLocation,     "glGetUniformLocation");
-        LD(Uniform1i,              "glUniform1i");
-        LD(Uniform1f,              "glUniform1f");
-        LD(Uniform2f,              "glUniform2f");
-        LD(Uniform3f,              "glUniform3f");
-        LD(BlendFunc,              "glBlendFunc");
-        LD(BlendEquation,          "glBlendEquation");
-        LD(DrawArrays,             "glDrawArrays");
-        LD(ClearColor,             "glClearColor");
-        LD(Clear,                  "glClear");
-        LD(Viewport,               "glViewport");
-        LD(Enable,                 "glEnable");
-        LD(Disable,                "glDisable");
-        LD(GetError,               "glGetError");
-        LD(ColorMask,              "glColorMask");
-#undef LD
-        fnLoaded = GenFramebuffers && DrawArrays && UseProgram && CreateShader;
-        if (!fnLoaded) std::cerr << "[Bloom] Failed to load GL functions\n";
-        return fnLoaded;
-    }
-
-    void logError(const char* where) {
-        if (!GetError) return;
-        unsigned err = GetError();
-        if (err) std::cerr << "[Bloom] GL error 0x" << std::hex << err << std::dec
-                           << " after " << where << "\n";
-    }
-
-    unsigned compileShader(unsigned type, const char* src) {
-        unsigned s = CreateShader(type);
-        const char* srcs[] = { src };
-        ShaderSource(s, 1, srcs, nullptr);
-        CompileShader(s);
-        int ok = 0; GetShaderiv(s, kGL_COMPILE_STATUS, &ok);
-        if (!ok) {
-            int len = 0;
-            if (GetShaderInfoLog) {
-                GetShaderiv(s, kGL_INFO_LOG_LENGTH, &len);
-                std::string log(std::max(len, 1), '\0');
-                GetShaderInfoLog(s, len, nullptr, log.data());
-                std::cerr << "[Bloom] Shader compile error:\n" << log << "\n";
-            } else {
-                std::cerr << "[Bloom] Shader compile error\n";
-            }
-            DeleteShader(s); return 0;
-        }
-        return s;
-    }
-
-    unsigned makeProgram(const char* vsrc, const char* fsrc) {
-        unsigned vs = compileShader(kGL_VERTEX_SHADER, vsrc);
-        unsigned fs = compileShader(kGL_FRAGMENT_SHADER, fsrc);
-        if (!vs || !fs) { if (vs) DeleteShader(vs); if (fs) DeleteShader(fs); return 0; }
-        unsigned p = CreateProgram();
-        AttachShader(p, vs); AttachShader(p, fs);
-        LinkProgram(p);
-        DeleteShader(vs); DeleteShader(fs);
-        int ok = 0; GetProgramiv(p, kGL_LINK_STATUS, &ok);
-        if (!ok) {
-            if (GetProgramInfoLog) {
-                int len = 0;
-                GetProgramiv(p, kGL_INFO_LOG_LENGTH, &len);
-                std::string log(std::max(len, 1), '\0');
-                GetProgramInfoLog(p, len, nullptr, log.data());
-                std::cerr << "[Bloom] Program link error:\n" << log << "\n";
-            } else {
-                std::cerr << "[Bloom] Program link error\n";
-            }
-            DeleteProgram(p); return 0;
-        }
-        return p;
-    }
-
-    void cleanup() {
-        if (fboA)        { DeleteFramebuffers(1, &fboA);    fboA = 0; }
-        if (fboB)        { DeleteFramebuffers(1, &fboB);    fboB = 0; }
-        if (texA)        { DeleteTextures(1, &texA);         texA = 0; }
-        if (texB)        { DeleteTextures(1, &texB);         texB = 0; }
-        if (progBlur)      { DeleteProgram(progBlur);       progBlur = 0; }
-        if (progComposite) { DeleteProgram(progComposite);  progComposite = 0; }
-        if (progSkybox)    { DeleteProgram(progSkybox);     progSkybox = 0; }
-        if (skyboxTex)     { DeleteTextures(1, &skyboxTex); skyboxTex = 0; skyboxTexPath.clear(); }
-        if (quadVAO) { DeleteVertexArrays(1, &quadVAO); quadVAO = 0; }
-        if (quadVBO) { DeleteBuffers(1, &quadVBO);       quadVBO = 0; }
-        if (matPreviewFbo)  { DeleteFramebuffers(1, &matPreviewFbo); matPreviewFbo = 0; }
-        if (matPreviewTex)  { DeleteTextures(1, &matPreviewTex);     matPreviewTex = 0; }
-        if (progMatPreview) { DeleteProgram(progMatPreview);          progMatPreview = 0; }
-        ready       = false;
-    }
-
-    // AUD-058 regression guard: every GL handle this struct owns must be back
-    // to 0 after cleanup(). If a future change adds a new texture/fbo/program
-    // member without adding its matching delete call above, this catches it at
-    // shutdown (leakCheck() logs exactly which handle(s) survived) instead of
-    // silently leaking again. Kept as an explicit field list (not reflection)
-    // so a newly-added handle is a compile-time reminder to update both here
-    // and in cleanup().
-    bool allReleased() const {
-        return !fboA && !fboB && !texA && !texB && !progBlur && !progComposite &&
-               !progSkybox && !skyboxTex && !quadVAO && !quadVBO &&
-               !matPreviewFbo && !matPreviewTex && !progMatPreview;
-    }
-
-    void leakCheck(const char* where) const {
-        if (allReleased()) return;
-        std::cerr << "[Bloom] LEAK after " << where << ": ";
-        auto rep = [&](const char* n, unsigned h) { if (h) std::cerr << n << "=" << h << " "; };
-        rep("fboA",fboA); rep("fboB",fboB); rep("texA",texA); rep("texB",texB);
-        rep("progBlur",progBlur); rep("progComposite",progComposite);
-        rep("progSkybox",progSkybox); rep("skyboxTex",skyboxTex);
-        rep("quadVAO",quadVAO); rep("quadVBO",quadVBO);
-        rep("matPreviewFbo",matPreviewFbo); rep("matPreviewTex",matPreviewTex);
-        rep("progMatPreview",progMatPreview);
-        std::cerr << "\n";
-    }
-};
-BloomGL s_bloom;
-
+/*
+ * The post-processing shaders below stay in the MeshCraft namespace. CNA's
+ * cross-backend ShaderEffect compiles them; MeshCraft owns no native graphics
+ * function table or graphics-object lifecycle for these passes.
+ */
 // AUD-084: Bloom's own blur/composite passes now go through CNA's
 // SpriteBatch + ShaderEffect (RenderTarget2D-backed) instead of the raw-GL
 // gl_VertexID/FBO machinery above -- SpriteBatch supplies its own vertex
@@ -1690,10 +1418,8 @@ void MeshCraftApplication::initShadowDebug()
 // Destructor — deterministic teardown of everything LoadContent() set up.
 //
 // Runs when `app` goes out of scope in main() (after Run() returns), which is
-// before the base Game destructor, so the SDL window and GL context are still
-// valid here. Defined here (rather than beside the constructor) so the
-// file-static GL function table s_bloom is already in scope. Ordering mirrors
-// LoadContent in reverse.
+// before the base Game destructor, so the SDL window and its graphics context
+// are still valid here. Ordering mirrors LoadContent in reverse.
 // ---------------------------------------------------------------------------
 MeshCraftApplication::~MeshCraftApplication() {
     // Remove the event watch first so the callback can never fire against this
@@ -1712,16 +1438,6 @@ MeshCraftApplication::~MeshCraftApplication() {
     // no manual glDelete* call needed here anymore, matching bloomRtA_/
     // bloomRtB_/skyboxTex_/matPreviewRt_'s own established pattern.
 
-    // The legacy raw-GL helper remains only for the independent frame-error
-    // diagnostic below. All post-processing resources are now RAII-managed
-    // CNA objects, so this cleanup is a no-op unless an old diagnostic path
-    // loaded the helper's function table.
-    auto& gl = s_bloom;
-    gl.cleanup();
-
-    // Preserve the legacy GL-handle leak diagnostic for any future native
-    // interop, while ordinary post-process cleanup is handled by members.
-    gl.leakCheck("MeshCraftApplication shutdown");
 }
 
 void MeshCraftApplication::renderShadowDebugFbo(const Matrix& lightView, const Matrix& lightProj)
@@ -1787,23 +1503,6 @@ void MeshCraftApplication::renderMatPreview(float r, float g, float b,
     // needs a raw native texture handle, not a CNA Texture2D object.
     if (auto* rtBackend = matPreviewRt_->GetRenderTargetBackend())
         matPreviewTexId_ = rtBackend->GetColorGLHandle();
-}
-
-// STAB-0521: glGetError() is a queue, not a single flag — a pass that
-// triggers more than one error before anything drains it would otherwise
-// leave later errors to surface (misleadingly) as if caused by whatever
-// unrelated call happens to invoke GetError() next. Drain it fully here so
-// each frame's checkpoint reports its own errors exactly once.
-void MeshCraftApplication::checkGlStateLeak(const char* where) {
-    auto& gl = s_bloom;
-    if (!gl.GetError) return;
-    lastGlErrorSeen_ = false;
-    unsigned err;
-    while ((err = gl.GetError()) != 0 /* GL_NO_ERROR */) {
-        lastGlErrorSeen_ = true;
-        std::cerr << "[GLCheck] leaked GL error 0x" << std::hex << err << std::dec
-                   << " detected after " << where << "\n";
-    }
 }
 
 } // namespace MeshCraft

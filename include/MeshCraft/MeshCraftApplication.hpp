@@ -382,12 +382,6 @@ private:
     void initMatPreview();
     void renderMatPreview(float r, float g, float b, float roughness, float metallic);
 
-    // STAB-0521: drains glGetError() after a full frame's render passes
-    // (SSAO/bloom/skybox/gizmos/ImGui) and reports any leaked GL error state,
-    // so a bad state left by one pass doesn't silently propagate into the next.
-    void checkGlStateLeak(const char* where);
-    bool lastGlErrorSeen_{false};
-
     // AUD-085: CNA-native SSAO. The first target contains depth encoded into
     // color by SceneRenderer::drawDepthPass(); the remaining two hold AO and
     // its blur. No raw OpenGL FBO, shader, or depth-buffer readback remains.
