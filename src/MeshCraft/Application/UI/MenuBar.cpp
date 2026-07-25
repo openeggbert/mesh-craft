@@ -391,11 +391,15 @@ float MeshCraftApplication::drawMenuBar()
             };
             UI::MenuBar::drawEditMacroEditor(editMacroEditorContext);
             ImGui::Separator();
-            if (ImGui::MenuItem("Lock/Unlock Selected", "Ctrl+L", false, !selection_.selection().empty())) {
-                for (const auto& s : selection_.selection()) {
-                    objectLockState_.toggle(s->id);
-                }
-            }
+            const UI::EditLockSelectionContext editLockSelectionContext{
+                .canToggle = !selection_.selection().empty(),
+                .toggle = [this] {
+                    for (const auto& s : selection_.selection()) {
+                        objectLockState_.toggle(s->id);
+                    }
+                },
+            };
+            UI::MenuBar::drawEditLockSelection(editLockSelectionContext);
             ImGui::Separator();
             bool hasSel = !selection_.selection().empty();
             if (ImGui::BeginMenu("Reset Transform", hasSel)) {
@@ -826,6 +830,12 @@ void MenuBar::drawEditPlayMacro(const EditPlayMacroContext& context) {
 
 void MenuBar::drawEditMacroEditor(const EditMacroEditorContext& context) {
     if (ImGui::MenuItem("Macro Editor…")) context.openDialog();
+}
+
+void MenuBar::drawEditLockSelection(const EditLockSelectionContext& context) {
+    if (ImGui::MenuItem("Lock/Unlock Selected", "Ctrl+L", false, context.canToggle)) {
+        context.toggle();
+    }
 }
 
 void MenuBar::drawPanelToggles(bool& timeline, bool& registry, bool& ai, bool& validation) {

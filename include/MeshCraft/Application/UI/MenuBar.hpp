@@ -173,6 +173,11 @@ struct EditMacroEditorContext {
     std::function<void()> openDialog;
 };
 
+struct EditLockSelectionContext {
+    bool canToggle;
+    std::function<void()> toggle;
+};
+
 class MenuBar final {
 public:
     static void drawAddMenu(const std::function<void(Mc3::ObjectType)>& addPrimitive);
@@ -196,6 +201,7 @@ public:
     static void drawEditMacroRecording(const EditMacroRecordingContext& context);
     static void drawEditPlayMacro(const EditPlayMacroContext& context);
     static void drawEditMacroEditor(const EditMacroEditorContext& context);
+    static void drawEditLockSelection(const EditLockSelectionContext& context);
     static void drawEditHistory(const EditHistoryContext& context);
     static void drawEditObjectActions(const EditObjectActionsContext& context);
     static void drawEditSelectionActions(const EditSelectionActionsContext& context);
