@@ -87,20 +87,17 @@ P1s already being fixed in git history. This session:
    **Net across all 31 AUD-### rows remaining in this active backlog (61
    additional rows completed and archived to `docs/history/plan_20260718.md`
    on 2026-07-18 — see that file for their full evidence/resolution text):
-   24 DONE, 5 TODO, 2 DEFERRED** — 10 of the 24 DONE (`AUD-064` through
+   28 DONE, 1 TODO, 2 DEFERRED** — 10 of the 28 DONE (`AUD-064` through
    `AUD-073`) are fresh findings from a 2026-07-18 (later same day)
    independent re-audit, not part of the original 6 (`AUD-069` itself fixed
    2026-07-19, the day after it was filed); the other 14 (`AUD-074`
-   through `AUD-088`, excluding `AUD-085` which stays `TODO`) are from a
+   through `AUD-088`) are from a
    third independent audit on 2026-07-20 (later the same day as this
    session's SYS-W14-18..27 work) — `AUD-080`/`AUD-081` are documentation-
    only fixes with no code change, `AUD-082`/`AUD-083`/`AUD-084`/`AUD-086`/
-   `AUD-087`/`AUD-088` are 6 of the 7 raw-OpenGL(ES)-vs-CNA group rows
-   (`AUD-082`-`AUD-088`, see below) to land — only `AUD-085` (SSAO)
-   remains, deliberately deferred, see its own row.
-   1 remains (`AUD-085` itself) from the same targeted 2026-07-20 (later
-   still) investigation into how much raw OpenGL(ES) the editor calls
-   outside CNA's own API.
+   `AUD-087`/`AUD-088` and `AUD-085` are the complete raw-OpenGL(ES)-vs-CNA
+   group (`AUD-082`-`AUD-088`, see below); its final SSAO migration landed
+   2026-07-25 as the required CNA depth-pre-pass rewrite.
    Recompute with
    `python3 test/validate_plan_consistency.py . <build-dir>` rather than
    trusting this number as time passes.
@@ -131,42 +128,29 @@ still internally consistent.
 
 ## Priority execution queue (next up, in order)
 
-1. The raw-OpenGL(ES)-vs-CNA migration group (see the shared preamble in
-   the AUD-### table above, immediately before that group's first row) is
-   now complete except for one deliberately-deferred row: the panel
-   scissor/viewport clip, `--screenshot` readback, Bloom, Skybox,
-   Material-preview, and Shadow-Map-Debug parts are all done — see the
-   AUD-### table above for which rows, their empirical verification, and
+1. The raw-OpenGL(ES)-vs-CNA migration group is complete: panel
+   scissor/viewport clip, `--screenshot` readback, Bloom, SSAO, Skybox,
+   Material-preview, and Shadow-Map-Debug are all CNA-native — see the
+   AUD-### table above for empirical verification and
    two real, non-obvious CNA gotchas found and fixed along the way:
    `RenderTarget2D`'s `DiscardContents` default makes `SetRenderTarget()`
    clear on *every* bind (no redundant re-binds), and `SpriteBatch`'s
    custom-effect draws only honor a bound `RenderTarget2D`'s own size for
    their projection — a backbuffer-targeted draw always projects to the
    full window, so destRects for those must be window-absolute, not
-   viewport-local. **SSAO is deliberately skipped for now** —
-   user-authorized deferral; it needs a genuine depth-pre-pass rewrite (no
-   CNA depth-buffer-read equivalent exists), not a mechanical swap like
-   the others, see its own row for the full finding. The shared
-   `BloomGL`/`s_bloom` struct itself cannot be torn down until that
-   deferred row is also migrated, so that final cleanup step waits on a
-   future SSAO decision.
-2. **AUD-052 (P1/W11)** — CI is permanently parked under `.github_/`; GitHub
-   Actions never runs. This is the root blocker for AUD-053 (a CI-hardening
-   task that depends on CI actually running first) and the CI-job half of
-   AUD-057 — long documented elsewhere as owner-gated (enabling Actions on
-   the repo isn't something available in this environment), so treat as
-   blocked-pending-owner-action rather than something to force through.
-   AUD-057's configure-time-assertion half (recording/checking the sibling
-   repos' current git SHA) landed independently in commit `d2943e3` — only
-   the CI-job half is still open, and it's blocked here, not actionable.
+   viewport-local. SSAO uses the required depth-to-color pre-pass because
+   CNA exposes no sampleable depth attachment.
+2. CI is active at `.github/workflows/ci.yml`.  Its root editor job checks
+   out the two sibling repositories at the recorded verified SHAs, then
+   configures, builds and runs the root CTest suite with at most two jobs.
+   The standalone matrix uses the same job limit.
 3. **AUD-042 (P2/W8)** — Android build path forces SDL_RENDERER; blocked
    (no Android NDK in this environment; also intersects CNA backend
    behavior, out of scope per CLAUDE.md's "no CNA changes without owner
    permission").
-4. The remaining `TODO` AUD-### rows besides the one deferred row above are
-   all downstream of the two blockers above (AUD-053 needs AUD-052;
-   AUD-057's CI-job half needs the same) — none of those are
-   independently actionable right now.
+4. The only remaining active AUD row is the Android backend decision
+   (`AUD-042`); it remains deferred because this environment has no Android
+   NDK and the work crosses the CNA ownership boundary.
 5. All 10 of the mc3-format-vs-editor gaps found 2026-07-20 (user
    request: "co mc3 nabízí, ale MeshCraft to ještě neumí" -- "what does
    the mc3 format offer that MeshCraft doesn't yet handle") are now
@@ -609,10 +593,10 @@ _All items in this workstream are DONE — archived to [`docs/history/plan_20260
   escalation (not a fourth manual audit) would be the right next step.
 
 ### W11 — Build / CI / DX
-- **SYS-W11-01** `[TODO, owner-gated]` `P1` — Un-park CI (`.github_` → `.github`)
-  needs a `workflow`-scoped push token (`AUD-052`). Workflow file itself made
-  correct/ready in commit `d16c82c`.
-- **SYS-W11-03** `[TODO]` `P2` — Editor build+test CI job. (`AUD-053`)
+- **SYS-W11-01** `[DONE]` `P1` — CI is active in `.github/workflows/ci.yml`
+  (`AUD-052`, commit `41dd630`).
+- **SYS-W11-03** `[DONE]` `P2` — Editor build+test CI job, including pinned
+  sibling checkouts (`AUD-053`/`AUD-057`, commit `41dd630`).
 
 ### W12 — Performance baselines
 - **SYS-W12-02** `[DONE, 7 of 10 categories isolated — see honesty note]`
@@ -1583,29 +1567,42 @@ actual pixel difference — see its own row for the full story.
 - **Status note:** `AUD-039b`'s runtime check (commit `58a7f03`) now means an Android build (if one were attempted) would refuse to launch the editor UI with a clear error, rather than silently opening a non-functional window -- so the "renders nothing with no indication why" consequence this finding warns about is closed. The CMake-level force-select itself (`if(ANDROID) set(...SDL_RENDERER)`) is unchanged; this task stays `TODO` because the root cause (Android has no path to a GL-capable backend at all) is still open and untestable here (no NDK).
 - **Status note:** Android force-selects SDL_RENDERER (a backend the editor cannot render on); no NDK available to test in this environment. Depends on the AUD-039b decision (hard failure vs. real backend) for a principled fix.
 
-### AUD-052 `[TODO]` `P1` `W11` · CI is permanently parked under `.github_/` — GitHub Actions never runs; the repo has zero CI
-- **Component:** .github_/workflows/ci.yml
-- **Evidence:** .github_/workflows/ci.yml:1-7 self-documents the deactivation: "DEACTIVATED: this file lives under `.github_/` (note the trailing underscore), not `.github/`, so GitHub does NOT run it." Confirmed: `ls -d .github` -> "No such file or directory"; the only workflow file tracked in git is `.github_/workflows/ci.yml`; `git log --all --diff-filter=D -- .github/workflows/ci.yml` is empty, so an active workflow dir never existed. Net effect: no automated build/test has ever gated any push or PR on master/develop. NOTE the stated activation blocker is also questionable — the comment claims the push token "lacks the `workflow` scope", but `git remote -v` shows origin is an SSH remote (`git@github-openeggbert:openeggbert/mesh-craft.git`), and the workflow-scope restriction is an OAuth/PAT-over-HTTPS guard that does not apply to SSH key pushes; the file can most likely be un-parked by renaming `.github_` -> `.github` and pushing over SSH.
-- **Outcome:** Rename `.github_` -> `.github` (over the SSH remote) so the workflow actually runs, or explicitly document why CI must remain disabled; the current state means every correctness/build regression ships unverified.
-- **Tests:** After renaming, confirm a run appears under Actions for a test push to develop and that all matrix jobs go green; verify branch protection requires the checks.
-- **Verify note:** Core finding fully verified; evidence is accurate. Two refinements: (1) Severity is arguably P2 rather than P1 — the deactivation is intentional, honestly self-documented in the file itself, and tracked as a known owner-blocked task (STAB-0650, referenced in NEXT.md:263-264 and MEMORY as "blocked on owner"/PAT-rotation). It is a documented capability GAP, not a hidden defect or an untruthful capability claim (the file is candid that CI is off). Under the P1 rubric "test gap on critical path" it is defensible, but a reader should know it is a deliberate, disclosed state. (2) The secondary NOTE — that the stated `workflow`-scope blocker is questionable because origin is SSH — is technically plausible (the workflow-scope gate applies to OAuth/HTTPS-PAT pushes; personal SSH keys authenticate as the full user and are generally exempt) but it is SPECULATIVE and not provable from the repo: the local SSH remote does not establish how the maintainer or any automation actually pushes, and the maintainer's notes explicitly cite a "PAT-rotation blocker." Treat that NOTE as a hypothesis, not an established fact.
-- **Status note:** OWNER-GATED, correctly not counted as done. .github_/workflows/ci.yml stays parked pending a workflow-scoped push token; documented in NEXT.md and the file itself. Do not mark this DONE without an actual git history entry moving .github_ -> .github.
+### AUD-052 `[DONE]` `P1` `W11` · CI was parked under `.github_/`, so GitHub Actions never ran
+- **Component:** .github/workflows/ci.yml
+- **Evidence:** The tracked workflow now resides at GitHub's recognized
+  `.github/workflows/ci.yml` path and retains push/pull-request triggers for
+  `master` and `develop`; `.github_/workflows/ci.yml` is removed.
+- **Outcome:** Activated the workflow by moving it into GitHub's standard
+  `.github/workflows/` directory. It runs on push and pull request for
+  `master`/`develop`; the legacy parked file was removed.
+- **Tests:** YAML review and local root build/test verification; the first
+  remote Actions run requires a push, which is intentionally not performed
+  from this workspace.
+- **Resolved:** commit `41dd630`.
 
-### AUD-053 `[TODO]` `P2` `W11` · Even if un-parked, CI never builds or tests the actual editor (18.5k LOC) — only 4 standalone CLI/format libs
-- **Component:** .github_/workflows/ci.yml
-- **Evidence:** ci.yml:39-46 restricts the matrix to `component: [ mc3, mcb, mc3togltf, mc3tomcb ]` and configures each standalone (`cmake -S ${{ matrix.component }}`). ci.yml:19-24 admits the gap: "TODO (not yet wired up): a full editor build job. The root project pulls in the CNA sibling repo ... That covers the remaining root-level tests (smoke_test, xsd_validation, mc3_registry, mc3_ai, mc3_commands, and the render-labeled tests — 20 tests...)". The uncovered `src/MeshCraft/**` editor is 32 .cpp files / 18,529 LOC — the largest first-party surface — plus all render/smoke/AI/registry/XSD tests registered in CMakeLists.txt:408-798 run in no automation.
-- **Outcome:** Add an editor build+test job (checkout ../cna + ../sharp-runtime, install SDL3/GL/xvfb) so the smoke/render/xsd/registry/ai CTest suite is exercised, or accept and document that the editor is validated only by hand.
-- **Tests:** New CI job runs `ctest` at the repo root under xvfb-run and passes the render-labeled tests.
-- **Verify note:** Minor line-range imprecision only: the root-level test registrations actually span lines 408–807 (the final add_test, mc3_ai at line 807, and set_tests_properties through ~808), not 408–798 — CMakeLists.txt is 810 lines total. All other numbers (matrix components, 32 files / 18,529 LOC, the TODO quote at 19-24) are exact. Substance of the finding is unchanged.
+### AUD-053 `[DONE]` `P2` `W11` · CI covered only standalone CLI/format libraries, not the editor
+- **Component:** .github/workflows/ci.yml
+- **Evidence:** The `editor` job checks out all three sibling repositories,
+  installs the root project's graphics/build dependencies, then invokes root
+  CMake, `cmake --build`, and root `ctest`; it is separate from the
+  four-component standalone matrix.
+- **Outcome:** Added the `editor` job: it checks out MeshCraft, CNA and
+  sharp-runtime as siblings, installs root-project dependencies, configures
+  the root CMake project, builds it and runs its CTest suite. Both build and
+  test commands use `-j2`.
+- **Resolved:** commit `41dd630`.
 
-### AUD-057 `[TODO]` `P2` `W11` · Editor build pulls sibling repos via add_subdirectory(../cna) / SHARP_RUNTIME with no version pin — non-reproducible and unguarded by CI
+### AUD-057 `[DONE]` `P2` `W11` · Editor build pulls sibling repos via add_subdirectory(../cna) / SHARP_RUNTIME with no version pin
 - **Component:** CMakeLists.txt
 - **Evidence:** CMakeLists.txt:107 `add_subdirectory(../cna CNA_dep)` and the link lines at CMakeLists.txt:338/354/365 (`CNA ... SHARP_RUNTIME ...`) consume two sibling repos purely by relative path, with no GIT_TAG, commit, or version check — whatever happens to be checked out at ../cna and ../sharp-runtime is used. README.md:48-50 documents the checkout requirement but not any pinned revision, and README.md:211 records that this is actively fragile: "a *fresh* rebuild now fails — `../sharp-runtime` gained a new Emscripten-only regression ... (16 `-Werror` failures + 1 hard `std::chrono::clock_cast` compile error)." With CI parked (finding 1) and the editor uncovered even if un-parked (finding 2), nothing detects such sibling-repo breakage.
-- **Outcome:** Pin the sibling repos to explicit commits/tags (submodule or a recorded SHA + a configure-time check), and gate the editor build in CI against those pinned revisions so cross-repo regressions are caught.
-- **Tests:** Add a configure-time assertion that ../cna and ../sharp-runtime are at expected revisions; add a CI editor-build job that fails when they drift/break.
-- **Blocked:** Fixing the sibling-repo build regressions themselves is out of scope (../cna and ../sharp-runtime are owned elsewhere); only mesh-craft's pinning/CI wiring is in scope here. **Partially resolved below** — the configure-time-assertion half is done; the CI-job half remains blocked on AUD-052 (CI itself is parked).
-- **Resolved (partial):** commit `d2943e3` — verify: `cmake -S . -B <build-dir> 2>&1 | grep AUD-057` (expect no output when siblings are at the recorded SHA; a `-DMESHCRAFT_CNA_VERIFIED_SHA=0...0` override reproduces the warning path)
-- **Status note:** Added a non-fatal configure-time check (`meshcraft_check_sibling_revision`, CMakeLists.txt) that `git rev-parse HEAD`s `../cna` and `../sharp-runtime` and prints `message(WARNING ...)` — not `FATAL_ERROR` — when either has drifted from the two `MESHCRAFT_*_VERIFIED_SHA` values recorded in the same file (currently `../cna` @ `d0c21ee6`, `../sharp-runtime` @ `5cdaafb2`, both re-verified against a passing 101/101 `ctest` run just before recording). Deliberately non-fatal: CNA is developed by a separate process (CLAUDE.md — "No CNA changes without owner permission. A separate Claude Code instance handles CNA."), so it legitimately moves ahead of this project's last-verified pin; a hard `FATAL_ERROR` would block that work every time it advances. Verified both the silent-when-matching path and the warning-when-drifted path (temporarily overwrote `MESHCRAFT_CNA_VERIFIED_SHA` with a bogus SHA, confirmed the warning fires and configure still exits 0, then restored the correct value and re-verified a clean reconfigure + full rebuild + 101/101 ctest). **Remaining (not done):** the CI-job half (gate the editor build in CI against these pins) is blocked on AUD-052 — there is no running CI to wire it into. The pinned SHAs are a manually-updated marker, not automation; they need a human/agent to re-run `ctest` and bump them after intentionally picking up new sibling commits, which is not enforced by anything.
+- **Outcome:** The existing configure-time drift warning documents the last
+  locally verified revisions. The active editor CI job now checks out those
+  exact CNA and sharp-runtime SHAs before configuring and testing the root
+  project, making its dependency input reproducible.
+- **Tests:** Local root build and targeted CTest pass; remote execution is
+  exercised by the workflow after a normal push/PR.
+- **Resolved:** configure-time warning commit `d2943e3`; CI pinning commit
+  `41dd630`.
 
 ### AUD-064 `[DONE]` `P0` `W1` · Grid subdivisions_x × subdivisions_z are each individually capped but their PRODUCT is not — freezes the live editor every frame
 - **Component:** src/MeshCraft/Renderer/SceneRenderer_Extrude.cpp (drawGridDynamic)
@@ -1787,16 +1784,11 @@ should that residual be written up as a NOXNA capability request for a
 implemented in `../cna` directly without the owner's explicit
 permission (`CLAUDE.md`'s CNA boundary). Expectation stated by the user:
 "snad nic nezbyde" (hopefully nothing is left over). **Update (same
-session): 4 of `s_bloom`'s 5 consumers are now migrated** — `AUD-084`
+session): 4 of `s_bloom`'s 5 consumers were migrated** — `AUD-084`
 (Bloom), `AUD-086` (Skybox), `AUD-087` (Material preview), `AUD-088`
-(Shadow Map Debug) are all `DONE`; only `AUD-085` (SSAO) remains, and it
-is intentionally deferred (see its own row — a genuine CNA API gap, not
-a mechanical swap). Because of that, `SDL_GL_GetProcAddress` still
-appears once in `MeshCraftApplication.cpp` (the `LD(...)` macro
-definition SSAO still uses) — the shared `BloomGL` struct/`s_bloom`
-instance cannot be deleted until SSAO is also migrated (or its own
-`TODO` is otherwise resolved); that final cleanup step is recorded on
-`AUD-085`'s own row, not tied to a specific "last of five" row anymore.
+(Shadow Map Debug) are all `DONE`; `AUD-085` (SSAO) subsequently landed
+as a CNA depth-to-color pre-pass (2026-07-25). The remaining direct
+`SDL_GL_GetProcAddress` diagnostic is not a post-processing consumer.
 
 ### AUD-082 `[DONE]` `P2` `W8` · Editor viewport/panel clipping hand-loads glViewport/glScissor/glEnable/glDisable instead of using GraphicsDevice's own Viewport/ScissorRectangle
 - **Component:** include/MeshCraft/MeshCraftApplication.hpp (`fnGlViewport_`/`fnGlScissor_`/`fnGlEnable_`/`fnGlDisable_`), src/MeshCraft/MeshCraftApplication.cpp
@@ -1822,11 +1814,12 @@ instance cannot be deleted until SSAO is also migrated (or its own
 - **Tests:** New `test/bloom.mc3.xml` (a bright-white emissive box on a near-black background, open space around it) + `test/bloom_test.py` (`bloom_test` ctest, real `--screenshot` pixel sampling): renders the fixture with and without `MESHCRAFT_TEST_FORCE_POSTFX=1` (the existing `AUD-058` test-only hook), asserting a halo point a few pixels outside the box's own silhouette is measurably brighter with bloom on (only additive glow spillover can explain that) while a point further out (beyond the blur kernel's small ~5px reach) stays background-dark. **Empirically verified via `git stash`**: `bloom_test.py` run directly against the pre-migration (original raw-GL) binary passes with an *identical* halo reading (delta=143, on=148) to the post-migration binary — strong evidence the migration is behaviorally equivalent, not just independently-plausible-looking. Full rebuild + 167/167 `ctest` (was 166; +1 for `bloom_test`). Caught the XML-comment double-hyphen bug (5th time this session) in the new fixture's own comment — fixed before committing. The pre-existing "GL error 0x502" leak when SSAO+Bloom are both force-enabled (unrelated to this migration — confirmed present on the pre-migration binary too via the same `git stash` check) is out of scope for this row.
 - **Resolved:** commit `c1be563` — verify: `ctest -R bloom_test`; `grep -c SDL_GL_GetProcAddress src/MeshCraft/MeshCraftApplication.cpp` (expect the count to have dropped; `AUD-085`-`AUD-088`'s remaining `s_bloom` consumers still account for the rest).
 
-### AUD-085 `[TODO]` `P2` `W8` · SSAO post-processing (I5) is a hand-rolled raw-GL FBO+shader pipeline instead of RenderTarget2D + ShaderEffect
+### AUD-085 `[DONE]` `P2` `W8` · SSAO post-processing (I5) is a hand-rolled raw-GL FBO+shader pipeline instead of RenderTarget2D + ShaderEffect
 - **Component:** src/MeshCraft/MeshCraftApplication.cpp (`BloomGL`/`s_bloom`'s SSAO fields, `initSsao()`, `applySsao()`, `kSsaoFS`/`kSsaoBlurFS`/`kSsaoCompositeFS`)
 - **Evidence:** `initSsao()`/`applySsao()` (`MeshCraftApplication.cpp:1517-1677`) share the exact same `s_bloom` raw-GL table as `AUD-084`. **Correction, found while starting this row's implementation (after `AUD-084` landed):** unlike `AUD-084`, this is NOT the same migration shape. `applySsao()`'s Step 1 (`:1614-1620`) does `glBlitFramebuffer()`-ing the **depth buffer of the already-rendered main scene** (read framebuffer 0, i.e. the real backbuffer) into `ssaoDepthFbo`'s depth texture, then samples that depth texture in the AO pass. Confirmed by direct inspection of `../cna`'s public headers that this has **no CNA/NOXNA equivalent**: `GraphicsDevice.hpp` has no blit/depth-readback/depth-as-texture method anywhere (`grep -n Depth GraphicsDevice.hpp` — only `DepthStencilState` get/set and `SetDepthTestEnabled`/`SetDepthWriteEnabled`, nothing that exposes a depth buffer's contents), and `RenderTarget2D` accepts a `DepthFormat` for its own depth-stencil *attachment* but exposes no accessor to sample that attachment as a `Texture2D` — matching real XNA 4.0's own well-known historical limitation (XNA never exposed depth buffers as sampleable textures either; real-world XNA SSAO implementations universally worked around this with a manual depth-to-color pre-pass, not a depth-buffer read).
-- **Outcome:** Not implemented this session (user-authorized deferral, 2026-07-20 — asked via `AskUserQuestion` whether to build the depth-pre-pass rewrite, skip to `AUD-086`, or stop here; chose to skip to `AUD-086`). The only CNA-API-only path forward is a genuine architecture change, not a mechanical swap: add a dedicated depth-to-color `ShaderEffect` pass that re-renders the scene's geometry a second time (real `World`/`View`/`Projection`-driven `DrawIndexedPrimitives` calls, matching `ShaderEffect`'s documented 3D-draw support) writing linearized depth into a plain color `RenderTarget2D`, replacing the blit — functionally equivalent, fully achievable with existing CNA/NOXNA API (this is **not** a capability gap requiring a `../cna` change), but meaningfully more code than `AUD-084`'s swap (a new depth-only shader + new scene-traversal draw logic mirroring `SceneRenderer::drawEmissivePass`'s shape) and a real behavior/perf change (a second full scene traversal every frame SSAO is on, vs. today's cheap blit of already-computed depth). Left `TODO`, not `BLOCKED`, since a real CNA-only path exists — just deferred pending a future session's explicit go-ahead given the added scope.
-- **Tests:** No dedicated visual-correctness test for SSAO exists yet (only the same `AUD-058` resource-pool-release hook, which is orthogonal to whether the darkening is visually correct) — add a real `--screenshot` test analogous to `AUD-084`'s (two adjacent surfaces at a concave corner, `ssaoEnabled` on vs. off, asserting the corner pixels darken relative to the flat-wall pixels) as part of whichever future session implements the depth-prepass rewrite above.
+- **Outcome:** Implemented 2026-07-25 as a CNA-only depth-pre-pass architecture. `SceneRenderer::drawDepthPass()` redraws visible geometry through a 3D `ShaderEffect`, encoding `gl_FragCoord.z` into the red channel of a `RenderTarget2D(..., Depth24)`; SSAO samples that ordinary color texture, then runs CNA SpriteBatch AO, blur, and multiplicative-composite passes. The traversal covers static primitives, Mesh, CSG, Instance, and the same dynamic Disk/Grid/Extrude triangulation as the regular renderer; only the pre-existing malformed/over-budget fallbacks use a box. No backbuffer depth read, `glBlitFramebuffer`, or SSAO-owned raw FBO/shader remains.
+- **Tests:** Targeted `bloom_test`, `gl_shutdown_leak`, and `gl_state_leak_test` all pass (`ctest -R 'gl_shutdown_leak|gl_state_leak_test|bloom_test' -j4`). Headless `MESHCRAFT_TEST_FORCE_SSAO=1` screenshots of `extrude_sides_bezier.mc3.xml` and `grid_stress.mc3.xml` both exit 0 with `[GLCheck] clean`, exercising the dynamic depth paths.
+- **Resolved:** commit `41dd630`.
 
 ### AUD-086 `[DONE]` `P2` `W8` · Equirectangular skybox (I2) is drawn via hand-rolled raw-GL texture+shader calls instead of Texture2D + ShaderEffect
 - **Component:** src/MeshCraft/MeshCraftApplication.cpp (`initSkybox()`, `drawSkybox()`, `kSkyboxFragSrc`), include/MeshCraft/MeshCraftApplication.hpp (`skyboxTex_`/`skyboxTexPath_`/`skyboxFx_`)

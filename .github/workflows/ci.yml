@@ -67,10 +67,10 @@ jobs:
           -DBUILD_TESTING=ON
 
       - name: Build
-        run: cmake --build build -j
+        run: cmake --build build -j2
 
       - name: Test
-        run: ctest --test-dir build --output-on-failure
+        run: ctest --test-dir build --output-on-failure -j2
 
   editor:
     name: Editor build and tests
@@ -91,12 +91,16 @@ jobs:
         with:
           repository: openeggbert/cna
           path: cna
+          # Keep the editor job on the sibling revision recorded and tested
+          # by this repository (AUD-057), rather than an arbitrary branch tip.
+          ref: d0c21ee613ebd8f8b0055f7868103dd5c5c30fc7
 
       - name: Checkout sharp-runtime
         uses: actions/checkout@v4
         with:
           repository: openeggbert/sharp-runtime
           path: sharp-runtime
+          ref: 5cdaafb2bace46dce5393da21dad9ff9f8ad3c58
 
       - name: Install editor build dependencies
         run: |
