@@ -386,11 +386,14 @@ void MeshCraftApplication::performRedo() {
 // Screenshot
 // ---------------------------------------------------------------------------
 
-void MeshCraftApplication::saveScreenshot(const std::string& path) {
+bool MeshCraftApplication::saveScreenshot(const std::string& path) {
     auto& gd = getGraphicsDeviceProperty();
     int w = gd.getViewportProperty().getWidthProperty();
     int h = gd.getViewportProperty().getHeightProperty();
-    if (w <= 0 || h <= 0) return;
+    if (w <= 0 || h <= 0) {
+        std::cerr << "[Screenshot] failed: invalid viewport dimensions " << w << "x" << h << "\n";
+        return false;
+    }
 
     // AUD-083: GetBackBufferData() (backed by IGraphicsBackend::ReadBackbuffer
     // on every CNA backend) already synchronizes with the GPU and returns
@@ -425,20 +428,31 @@ void MeshCraftApplication::saveScreenshot(const std::string& path) {
         // before handing it to stb_image_write.
         if (stbi_write_png(path.c_str(), w, h, 4, pixels.data(), w * 4)) {
             std::cout << "[Screenshot] written " << path << "\n";
+            return true;
         } else {
             std::cerr << "[Screenshot] failed to write PNG: " << path << "\n";
+            return false;
         }
-        return;
     }
 
     std::ofstream f(path, std::ios::binary);
+    if (!f) {
+        std::cerr << "[Screenshot] failed to open PPM for writing: " << path << "\n";
+        return false;
+    }
     f << "P6\n" << w << " " << h << "\n255\n";
     for (int row = 0; row < h; ++row)
         for (int col = 0; col < w; ++col) {
             int idx = (row * w + col) * 4;
             f.write(reinterpret_cast<char*>(&pixels[idx]), 3);
         }
+    f.close();
+    if (!f) {
+        std::cerr << "[Screenshot] failed to write PPM: " << path << "\n";
+        return false;
+    }
     std::cout << "[Screenshot] written " << path << "\n";
+    return true;
 }
 
 // ---------------------------------------------------------------------------

@@ -1665,6 +1665,18 @@ if(MESH_CRAFT_BUILD_TESTING AND UNIX AND NOT ANDROID AND NOT EMSCRIPTEN)
                 WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
             )
             set_tests_properties(png_screenshot_test PROPERTIES TIMEOUT 30 LABELS "render")
+
+            # AUD-089: a requested screenshot that cannot be written must
+            # fail the CLI command rather than logging a false success.
+            add_test(
+                NAME screenshot_error_test
+                COMMAND "${PYTHON3_EXEC}"
+                        "${CMAKE_CURRENT_SOURCE_DIR}/test/screenshot_error_test.py"
+                        $<TARGET_FILE:MeshCraft>
+                        "${CMAKE_CURRENT_SOURCE_DIR}/test/house.mc3.xml"
+                WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
+            )
+            set_tests_properties(screenshot_error_test PROPERTIES TIMEOUT 30 LABELS "render")
         endif()
 
         # STAB-0327: confirms prefs.ini is auto-created on first launch

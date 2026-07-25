@@ -380,8 +380,12 @@ void MeshCraftApplication::EndDraw() {
 
     if (pendingScreenshot_) {
         pendingScreenshot_ = false;
-        saveScreenshot(autoScreenshotPath_);
-        std::cout << "[MeshCraft] Auto-screenshot saved to: " << autoScreenshotPath_ << "\n";
+        if (saveScreenshot(autoScreenshotPath_)) {
+            std::cout << "[MeshCraft] Auto-screenshot saved to: " << autoScreenshotPath_ << "\n";
+        } else {
+            screenshotFailed_ = true;
+            std::cerr << "[MeshCraft] Auto-screenshot failed: " << autoScreenshotPath_ << "\n";
+        }
         std::cout << "[CsgCache] evaluations: " << sceneRenderer_->csgCacheEvaluationCount() << "\n";
         std::cout << "[CsgCache] size: " << sceneRenderer_->csgMeshCacheSize() << "\n";
         if (!document_.objects.empty()) {

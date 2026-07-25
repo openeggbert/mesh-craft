@@ -134,7 +134,8 @@ int main(int argc, char* argv[]) {
     } else if (!filePath.empty() && (!screenshotPath.empty() || !exportPath.empty())) {
         MeshCraft::MeshCraftApplication app(std::filesystem::path(filePath), screenshotPath, exportPath);
         app.Run();
-        if (!exportPath.empty() && app.exportFailed())
+        if ((!exportPath.empty() && app.exportFailed()) ||
+            (!screenshotPath.empty() && app.screenshotFailed()))
             return 1;
     } else if (!filePath.empty()) {
         if (!std::filesystem::exists(filePath)) {

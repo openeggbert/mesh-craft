@@ -96,6 +96,10 @@ public:
     // uses this to pick the process exit code (STAB-0528).
     [[nodiscard]] bool exportFailed() const { return exportFailed_; }
 
+    // Same contract for the non-interactive --screenshot path: a CLI command
+    // must not report exit-code success when its requested output was lost.
+    [[nodiscard]] bool screenshotFailed() const { return screenshotFailed_; }
+
     // Tears down the SDL event watch, ImGui context/backends, and GL resources
     // registered in LoadContent(). Runs before the base Game destructor, while
     // the SDL window and GL context are still alive.
@@ -184,6 +188,7 @@ private:
     std::string autoScreenshotPath_;
     int autoScreenshotCountdown_{0};
     bool pendingScreenshot_{false};
+    bool screenshotFailed_{false};
 
     // Auto-export mode (STAB-0526..0529): non-interactive
     // `--export <path>` runs the same runGltfExport() codepath a menu
@@ -522,7 +527,7 @@ private:
     void handleMouseInput(const Microsoft::Xna::Framework::Input::MouseState& ms,
                           const Microsoft::Xna::Framework::Input::MouseState& prev);
     void updateWindowTitle();
-    void saveScreenshot(const std::string& path);
+    bool saveScreenshot(const std::string& path);
     void drawImGuiUi(int screenW, int screenH);
 
     // drawImGuiUi sub-sections
