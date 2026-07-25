@@ -217,8 +217,11 @@ float MeshCraftApplication::drawMenuBar()
                 .ungroup = [this] { ungroupSelected(); },
             };
             UI::MenuBar::drawEditGrouping(editGroupingContext);
-            if (ImGui::MenuItem("Convert to Definition", nullptr, false, !selection_.selection().empty()))
-                convertToDefinition();
+            const UI::EditConvertToDefinitionContext editConvertToDefinitionContext{
+                .canConvert = !selection_.selection().empty(),
+                .convert = [this] { convertToDefinition(); },
+            };
+            UI::MenuBar::drawEditConvertToDefinition(editConvertToDefinitionContext);
             if (ImGui::MenuItem("Export Subtree as Template...", nullptr, false, !selection_.selection().empty())) {
                 auto* src = selection_.selection().front().get();
                 std::string suggested = src->name.empty() ? src->id : src->name;
@@ -684,6 +687,12 @@ void MenuBar::drawEditCopyProperties(const EditCopyPropertiesContext& context) {
 void MenuBar::drawEditGrouping(const EditGroupingContext& context) {
     if (ImGui::MenuItem("Group", "Ctrl+G")) context.group();
     if (ImGui::MenuItem("Ungroup", "Ctrl+Shift+G")) context.ungroup();
+}
+
+void MenuBar::drawEditConvertToDefinition(const EditConvertToDefinitionContext& context) {
+    if (ImGui::MenuItem("Convert to Definition", nullptr, false, context.canConvert)) {
+        context.convert();
+    }
 }
 
 void MenuBar::drawPanelToggles(bool& timeline, bool& registry, bool& ai, bool& validation) {
