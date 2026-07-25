@@ -20,11 +20,11 @@ a compatibility forwarder. Actual UI components currently cover Validation,
 Registry results, Toolbar tools/display/snap-surface/proportional/grid controls,
 Properties delegation, and the View-menu panel/overlay/direction/focus/
 Camera-Bookmarks/Walk-Mode presentation, plus the Add/CSG and Help menu
-presentation. The detailed Snap interval contents and the remaining MenuBar
-sections are still application-owned. Camera bookmark, walk, document, and
-dialog state have **not** moved again: they remain in their existing
-editor/application owners; the UI component only reads presentation state
-and invokes application-owned callbacks.
+presentation and the Edit-history group. The detailed Snap interval contents
+and the remaining MenuBar sections are still application-owned. Camera
+bookmark, walk, document, undo, and dialog state have **not** moved again:
+they remain in their existing editor/application owners; the UI component
+only reads presentation state and invokes application-owned callbacks.
 Historical references below intentionally retain their then-current paths.
 
 ## 1. Project summary
@@ -93,7 +93,7 @@ before when explicitly requested (`SYS-W14-##` rows).
 
 ## 2. Current status
 
-- **Last full build: clean after the current Phase 13 Add menu
+- **Last full build: clean after the current Phase 13 Edit-history
   slice.** The current Ninja Release tree has testing enabled, and
   `CCACHE_DISABLE=1 cmake --build b-release -j4` linked all targets
   successfully on EASYGL. Alternate-backend runtime qualification remains
@@ -165,10 +165,10 @@ before when explicitly requested (`SYS-W14-##` rows).
   narrow contexts. Validation, Registry results, Toolbar controls, Properties
   delegation, and the View-menu directions/focus/overlays/panels/
   Camera-Bookmarks/Walk-Mode presentation, plus the Add/CSG and Help menu
-  presentation, are now component-owned. Bookmark, walk, document,
-  preferences, command-palette, and shortcut-dialog state remain in their
-  existing owners; the menu receives only read-only state plus
-  application-owned callbacks.
+  presentation and the Edit-history group, are now component-owned. Bookmark,
+  walk, document, undo, preferences, command-palette, and shortcut-dialog
+  state remain in their existing owners; the menu receives only read-only
+  state plus application-owned callbacks.
 - **Recently implemented (2026-07-20 through 2026-07-25):** all 7
   raw-OpenGL(ES)-vs-CNA migrations, `AUD-082` through `AUD-088` — full
   detail with file:line evidence and
@@ -771,17 +771,18 @@ No actionable follow-up audit task remains: `AUD-089` through `AUD-091` are
 complete, while Android (`AUD-042`) is environment/owner deferred.
 `SYS-W3-01` has 12 completed subsystem phases and an active Phase 13 for
 application/UI ownership. The authorized Camera Bookmarks, Walk Mode, Help,
-and Add/CSG menu slices are implemented and verified. `drawAddMenu()` accepts
-one `addPrimitive(ObjectType)` callback; object creation, undo, selection,
-document mutation, status behavior, and the F1–F5 keyboard path remain
+Add/CSG, and Edit-history menu slices are implemented and verified.
+`EditHistoryContext` exposes only `canUndo`/`canRedo` plus Undo, Redo, and
+Open History callbacks; `Editor::UndoManager`, document replacement,
+selection restoration, dialog state, and keyboard handling remain
 application-owned.
 
 **Next candidate, not yet authorized:** continue Phase 13 with the compact
-Edit history group (Undo, Redo, Undo History), passing only availability flags
-and action callbacks while `Editor::UndoManager` and dialog state remain
-application-owned. The View-menu Bloom/SSAO block remains application-owned
-as previously decided. Per `CLAUDE.md`, describe and confirm the Edit-history
-slice before implementing it.
+Cut/Copy/Paste presentation group, passing only three action callbacks while
+clipboard, selection, undo, and document mutation remain application-owned.
+Duplicate/Delete and the View-menu Bloom/SSAO block remain outside that slice.
+Per `CLAUDE.md`, describe and confirm the clipboard slice before implementing
+it.
 
 ## 9. Do not do yet
 

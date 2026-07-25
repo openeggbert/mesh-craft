@@ -109,11 +109,14 @@ float MeshCraftApplication::drawMenuBar()
             ImGui::EndMenu();
         }
         if (ImGui::BeginMenu("Edit")) {
-            if (ImGui::MenuItem("Undo", "Ctrl+Z", false, undoManager_.canUndo())) performUndo();
-            if (ImGui::MenuItem("Redo", "Ctrl+Y", false, undoManager_.canRedo())) performRedo();
-            if (ImGui::MenuItem("Undo History...", nullptr, false, undoManager_.canUndo()))
-                undoHistoryOpen_ = true;
-            ImGui::Separator();
+            const UI::EditHistoryContext editHistoryContext{
+                .canUndo = undoManager_.canUndo(),
+                .canRedo = undoManager_.canRedo(),
+                .undo = [this] { performUndo(); },
+                .redo = [this] { performRedo(); },
+                .openHistory = [this] { undoHistoryOpen_ = true; },
+            };
+            UI::MenuBar::drawEditHistory(editHistoryContext);
             if (ImGui::MenuItem("Cut",       "Ctrl+X")) cutSelected();
             if (ImGui::MenuItem("Copy",      "Ctrl+C")) copySelected();
             if (ImGui::MenuItem("Paste",     "Ctrl+V")) pasteClipboard();
@@ -588,6 +591,15 @@ void MenuBar::drawAddMenu(const std::function<void(Mc3::ObjectType)>& addPrimiti
     }
 
     ImGui::EndMenu();
+}
+
+void MenuBar::drawEditHistory(const EditHistoryContext& context) {
+    if (ImGui::MenuItem("Undo", "Ctrl+Z", false, context.canUndo)) context.undo();
+    if (ImGui::MenuItem("Redo", "Ctrl+Y", false, context.canRedo)) context.redo();
+    if (ImGui::MenuItem("Undo History...", nullptr, false, context.canUndo)) {
+        context.openHistory();
+    }
+    ImGui::Separator();
 }
 
 void MenuBar::drawPanelToggles(bool& timeline, bool& registry, bool& ai, bool& validation) {

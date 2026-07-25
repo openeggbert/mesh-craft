@@ -27,9 +27,18 @@ struct HelpMenuContext {
     std::function<void()> openKeyboardShortcuts;
 };
 
+struct EditHistoryContext {
+    bool canUndo;
+    bool canRedo;
+    std::function<void()> undo;
+    std::function<void()> redo;
+    std::function<void()> openHistory;
+};
+
 class MenuBar final {
 public:
     static void drawAddMenu(const std::function<void(Mc3::ObjectType)>& addPrimitive);
+    static void drawEditHistory(const EditHistoryContext& context);
     static void drawPanelToggles(bool& timeline, bool& registry, bool& ai, bool& validation);
     static void drawOverlays(bool& edges, bool& wireframe, bool& stats, bool& shadowDebug, bool& snap);
     static void drawViewDirections(float& yaw, float& pitch);
