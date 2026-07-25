@@ -812,7 +812,13 @@ if(MESH_CRAFT_BUILD_TESTING AND UNIX AND NOT ANDROID AND NOT EMSCRIPTEN)
         CNA ${_cna_backend_target} SHARP_RUNTIME)
     target_compile_features(audio_preview_test PRIVATE cxx_std_23)
     add_test(NAME audio_preview COMMAND audio_preview_test)
-    set_tests_properties(audio_preview PROPERTIES TIMEOUT 15 LABELS "unit")
+    # The test deliberately exercises invalid-file failure paths only; use
+    # SDL's dummy backend so a missing PulseAudio server cannot block those
+    # assertions in a headless CTest environment.
+    set_tests_properties(audio_preview PROPERTIES
+        TIMEOUT 15
+        LABELS "unit"
+        ENVIRONMENT "SDL_AUDIODRIVER=dummy")
 
     # SYS-W3-01 Phase 8: orbit-camera bookmark capture/restore was extracted
     # from MeshCraftApplication. It uses EditorCamera's CNA Vector3 type but
