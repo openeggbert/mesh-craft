@@ -51,14 +51,7 @@ float MeshCraftApplication::drawToolbar(float menuBarH, int screenW)
     UI::Toolbar::drawDisplayToggles(gizmoLocalSpace_, showEdgeOverlay_,
                                     showWireframeMode_, showBoundingBox_);
 
-    // Snap-to-grid toggle button (left-click toggles, right-click configures)
-    { bool was = snapEnabled_;
-      if (was) ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.20f, 0.45f, 0.20f, 1.f));
-      if (ImGui::Button("Snap", ImVec2(44, 30))) snapEnabled_ = !snapEnabled_;
-      if (was) ImGui::PopStyleColor(); }
-    if (ImGui::IsItemHovered())
-        ImGui::SetTooltip("Snap to grid  Move: %.2g u  Rotate: %.0f°  Scale: %.2g\nRight-click to configure",
-                          snapTranslate_, snapRotate_, snapScale_);
+    UI::Toolbar::drawSnapToggle(snapEnabled_, snapTranslate_, snapRotate_, snapScale_);
     if (ImGui::BeginPopupContextItem("##snapcfg")) {
         ImGui::TextDisabled("Snap Intervals");
         ImGui::Separator();
@@ -253,6 +246,16 @@ void Toolbar::drawSurfaceSnap(bool& enabled) {
     if (ImGui::IsItemHovered())
         ImGui::SetTooltip("Surface snap: snap Y to the top of the surface below the object");
     ImGui::SameLine();
+}
+
+void Toolbar::drawSnapToggle(bool& enabled, float translate, float rotate, float scale) {
+    const bool wasEnabled = enabled;
+    if (wasEnabled) ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.20f, 0.45f, 0.20f, 1.f));
+    if (ImGui::Button("Snap", ImVec2(44, 30))) enabled = !enabled;
+    if (wasEnabled) ImGui::PopStyleColor();
+    if (ImGui::IsItemHovered())
+        ImGui::SetTooltip("Snap to grid  Move: %.2g u  Rotate: %.0f°  Scale: %.2g\nRight-click to configure",
+                          translate, rotate, scale);
 }
 
 } // namespace MeshCraft::Application::UI

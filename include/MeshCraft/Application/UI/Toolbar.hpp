@@ -19,6 +19,7 @@ public:
     static void drawDisplayToggles(bool& gizmoLocalSpace, bool& showEdges,
                                    bool& showWireframe, bool& showBoundingBox);
     static void drawSurfaceSnap(bool& enabled);
+    static void drawSnapToggle(bool& enabled, float translate, float rotate, float scale);
 };
 
 } // namespace MeshCraft::Application::UI
