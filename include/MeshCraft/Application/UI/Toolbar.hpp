@@ -18,6 +18,7 @@ public:
     static void drawTools(ToolbarToolsContext& context);
     static void drawDisplayToggles(bool& gizmoLocalSpace, bool& showEdges,
                                    bool& showWireframe, bool& showBoundingBox);
+    static void drawSurfaceSnap(bool& enabled);
 };
 
 } // namespace MeshCraft::Application::UI

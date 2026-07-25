@@ -114,14 +114,7 @@ float MeshCraftApplication::drawToolbar(float menuBarH, int screenW)
     }
     ImGui::SameLine();
 
-    // Surface snap toggle (B8)
-    { bool was = surfaceSnapEnabled_;
-      if (was) ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.20f, 0.45f, 0.20f, 1.f));
-      if (ImGui::Button("Surf", ImVec2(40, 30))) surfaceSnapEnabled_ = !surfaceSnapEnabled_;
-      if (was) ImGui::PopStyleColor(); }
-    if (ImGui::IsItemHovered())
-        ImGui::SetTooltip("Surface snap: snap Y to the top of the surface below the object");
-    ImGui::SameLine();
+    UI::Toolbar::drawSurfaceSnap(surfaceSnapEnabled_);
 
     // Proportional editing toggle + radius (H1)
     { bool was = propEditEnabled_;
@@ -250,6 +243,16 @@ void Toolbar::drawDisplayToggles(bool& gizmoLocalSpace, bool& showEdges,
            "Full wireframe mode (hide solid fills, show only edges)");
     toggle("BBox", 44, ImVec4(0.10f, 0.45f, 0.55f, 1.f), showBoundingBox,
            "Show bounding box for selected objects");
+}
+
+void Toolbar::drawSurfaceSnap(bool& enabled) {
+    const bool wasEnabled = enabled;
+    if (wasEnabled) ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.20f, 0.45f, 0.20f, 1.f));
+    if (ImGui::Button("Surf", ImVec2(40, 30))) enabled = !enabled;
+    if (wasEnabled) ImGui::PopStyleColor();
+    if (ImGui::IsItemHovered())
+        ImGui::SetTooltip("Surface snap: snap Y to the top of the surface below the object");
+    ImGui::SameLine();
 }
 
 } // namespace MeshCraft::Application::UI
