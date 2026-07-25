@@ -149,6 +149,10 @@ struct EditBatchRenameContext {
     std::function<void()> openDialog;
 };
 
+struct EditFindReplaceNamesContext {
+    std::function<void()> openDialog;
+};
+
 class MenuBar final {
 public:
     static void drawAddMenu(const std::function<void(Mc3::ObjectType)>& addPrimitive);
@@ -167,6 +171,7 @@ public:
     static void drawEditLinearArray(const EditLinearArrayContext& context);
     static void drawEditScatterAlongCurve(const EditScatterAlongCurveContext& context);
     static void drawEditBatchRename(const EditBatchRenameContext& context);
+    static void drawEditFindReplaceNames(const EditFindReplaceNamesContext& context);
     static void drawEditHistory(const EditHistoryContext& context);
     static void drawEditObjectActions(const EditObjectActionsContext& context);
     static void drawEditSelectionActions(const EditSelectionActionsContext& context);

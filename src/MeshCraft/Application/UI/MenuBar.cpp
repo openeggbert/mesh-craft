@@ -359,8 +359,10 @@ float MeshCraftApplication::drawMenuBar()
                 .openDialog = [this] { batchRenameOpen_ = true; },
             };
             UI::MenuBar::drawEditBatchRename(editBatchRenameContext);
-            if (ImGui::MenuItem("Find & Replace Names...", "Ctrl+H"))
-                findReplaceOpen_ = true;
+            const UI::EditFindReplaceNamesContext editFindReplaceNamesContext{
+                .openDialog = [this] { findReplaceOpen_ = true; },
+            };
+            UI::MenuBar::drawEditFindReplaceNames(editFindReplaceNamesContext);
             if (ImGui::MenuItem("Randomize Transform...", nullptr, false,
                                 !selection_.selection().empty()))
                 randomizeOpen_ = true;
@@ -788,6 +790,12 @@ void MenuBar::drawEditScatterAlongCurve(const EditScatterAlongCurveContext& cont
 
 void MenuBar::drawEditBatchRename(const EditBatchRenameContext& context) {
     if (ImGui::MenuItem("Batch Rename...", "Ctrl+Shift+R", false, context.canOpen)) {
+        context.openDialog();
+    }
+}
+
+void MenuBar::drawEditFindReplaceNames(const EditFindReplaceNamesContext& context) {
+    if (ImGui::MenuItem("Find & Replace Names...", "Ctrl+H")) {
         context.openDialog();
     }
 }
