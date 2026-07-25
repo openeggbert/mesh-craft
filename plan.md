@@ -180,8 +180,11 @@ still internally consistent.
    slices are implemented and verified. Their state remains in the existing
    editor/application owners;
    `Application::UI::MenuBar` receives only the read-only values and callbacks
-   required for presentation. Any further slice requires its own confirmation
-   per `CLAUDE.md`.
+   required for presentation. The remaining ordered Phase 13 queue is:
+   **File → Open Recent** (availability plus lazy provider/open/clear
+   callbacks), then **View → Bloom/SSAO controls** (preserve the capability
+   gate, ranges, and clamping), then a fresh audit for a new narrow boundary.
+   Every item requires its own confirmation per `CLAUDE.md`.
 
 ---
 

@@ -1002,15 +1002,37 @@ pending-action state, application shutdown, all platform lifecycle work, and
 the Escape fallback route remain in their existing owners; `MenuBar` owns only
 the unchanged label and click dispatch.
 
-**Next candidate, not yet authorized:** the `File → Open Recent` submenu,
-passing availability, a lazy recent-files provider, one open-recent callback,
-and one clear callback. Recent-file storage and persistence, unsaved-change
-handling, pending-action state, file loading, document replacement, title and
-status updates, and error handling would remain in their existing owners;
-`MenuBar` would own only the unchanged submenu label, item labels, tooltips,
-separator, availability, and click dispatch. The View-menu Bloom/SSAO block
-remains outside that slice. Per `CLAUDE.md`, describe and confirm the
-Open-Recent submenu before implementing it.
+### Ordered Phase 13 follow-up queue
+
+The sequence below is planning only. Per `CLAUDE.md`, each item must be
+described and explicitly confirmed immediately before implementation; finishing
+one item does not authorize the next.
+
+1. **File → Open Recent.** Extract the dynamic submenu with availability, a
+   lazy recent-files provider, one open-recent callback, and one clear callback.
+   `MenuBar` would preserve the submenu label, numbered hidden IDs, filename
+   labels, full-path tooltips, separator, and disabled behavior. Recent-file
+   storage and persistence, unsaved-change handling, pending-action state, file
+   loading, document replacement, title/status updates, and error handling stay
+   application-owned.
+2. **View → Bloom/SSAO controls.** Audit and extract only the text-shader
+   effects block, including its supported and unsupported presentation. Preserve
+   the conditional controls, labels, slider ranges, `AlwaysClamp` flags, and
+   existing state changes; renderer-capability checks and effect state remain
+   application-owned.
+3. **Post-menu boundary audit.** Once the remaining File and View blocks are
+   complete, identify one new narrow presentation boundary before changing
+   `MeshCraftApplication`. Do not start a broad application refactor.
+
+### Tracked work that is not implementation-ready
+
+- **SYS-W8-05:** alternate-backend runtime qualification needs the appropriate
+  backend environment and owner coordination.
+- **AUD-042:** Android remains deferred until an Android-capable toolchain and
+  a viable graphics-backend path are available.
+- **Deferred, decision-dependent work:** `SYS-W5-03`, `SYS-W14-05`,
+  `SYS-W14-06`, and `SYS-W14-14` require the documented human/owner decision;
+  they are not automatic follow-ups to Phase 13.
 
 ## 9. Do not do yet
 
