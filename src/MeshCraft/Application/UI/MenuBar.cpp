@@ -1,4 +1,5 @@
 #include "MeshCraft/Application/MeshCraftApplication.hpp"
+#include "MeshCraft/Application/UI/MenuBar.hpp"
 #include "MeshCraft/GraphicsBackendCheck.hpp"
 #include "MeshCraft/MeshCraftPrivate.hpp"
 
@@ -581,10 +582,8 @@ float MeshCraftApplication::drawMenuBar()
             }
             ImGui::MenuItem("Shadow Map Debug",         nullptr, &shadowDebugEnabled_);
             ImGui::MenuItem("Snap to Grid", nullptr, &snapEnabled_);
-            ImGui::MenuItem("Timeline",       "Ctrl+T", &showTimeline_);
-            ImGui::MenuItem("Model Registry", nullptr,  &showRegistryPanel_);
-            ImGui::MenuItem("AI Assistant",   nullptr,  &showAiPanel_);
-            ImGui::MenuItem("Validation",     nullptr,  &showValidationPanel_);
+            UI::MenuBar::drawPanelToggles(showTimeline_, showRegistryPanel_,
+                                          showAiPanel_, showValidationPanel_);
             ImGui::EndMenu();
         }
         if (ImGui::BeginMenu("Help")) {
@@ -602,3 +601,14 @@ float MeshCraftApplication::drawMenuBar()
 
 
 } // namespace MeshCraft::Application
+
+namespace MeshCraft::Application::UI {
+
+void MenuBar::drawPanelToggles(bool& timeline, bool& registry, bool& ai, bool& validation) {
+    ImGui::MenuItem("Timeline", "Ctrl+T", &timeline);
+    ImGui::MenuItem("Model Registry", nullptr, &registry);
+    ImGui::MenuItem("AI Assistant", nullptr, &ai);
+    ImGui::MenuItem("Validation", nullptr, &validation);
+}
+
+} // namespace MeshCraft::Application::UI
