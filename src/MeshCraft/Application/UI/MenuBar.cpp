@@ -303,9 +303,9 @@ float MeshCraftApplication::drawMenuBar()
                 .drop = [this] { dropSelectedToGroundPlane(); },
             };
             UI::MenuBar::drawEditDropToGround(editDropToGroundContext);
-            {
-                bool hasSel2c = !selection_.selection().empty();
-                if (ImGui::MenuItem("Snap Selection to Grid", nullptr, false, hasSel2c)) {
+            const UI::EditSnapSelectionToGridContext editSnapSelectionToGridContext{
+                .canSnap = !selection_.selection().empty(),
+                .snap = [this] {
                     int snapped = 0;
                     pushUndo();
                     for (const auto& s : selection_.selection()) {
@@ -319,8 +319,10 @@ float MeshCraftApplication::drawMenuBar()
                     char gsbuf[64];
                     std::snprintf(gsbuf, sizeof(gsbuf), "Snapped %d object(s) to grid (%.4g u)", snapped, gridSpacing_);
                     setStatusMsg(gsbuf);
-                }
-
+                },
+            };
+            UI::MenuBar::drawEditSnapSelectionToGrid(editSnapSelectionToGridContext);
+            {
                 // Mirror / flip
                 bool hasSel2d = !selection_.selection().empty();
                 if (ImGui::BeginMenu("Mirror Selection", hasSel2d)) {
@@ -745,6 +747,12 @@ void MenuBar::drawEditDistributeSelection(const EditDistributeSelectionContext& 
 void MenuBar::drawEditDropToGround(const EditDropToGroundContext& context) {
     if (ImGui::MenuItem("Drop to Ground Plane", nullptr, false, context.canDrop)) {
         context.drop();
+    }
+}
+
+void MenuBar::drawEditSnapSelectionToGrid(const EditSnapSelectionToGridContext& context) {
+    if (ImGui::MenuItem("Snap Selection to Grid", nullptr, false, context.canSnap)) {
+        context.snap();
     }
 }
 
