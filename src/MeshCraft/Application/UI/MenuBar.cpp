@@ -81,7 +81,10 @@ float MeshCraftApplication::drawMenuBar()
                 importObjDialogOpen_   = true;
             }
             ImGui::Separator();
-            if (ImGui::MenuItem("Save",    "Ctrl+S")) saveFile();
+            const UI::FileSaveContext fileSaveContext{
+                .save = [this] { saveFile(); },
+            };
+            UI::MenuBar::drawFileSave(fileSaveContext);
             if (ImGui::MenuItem("Save As...","Ctrl+Shift+S")) saveFileAs();
             ImGui::Separator();
             const UI::FileExportGltfContext fileExportGltfContext{
@@ -605,6 +608,10 @@ void MenuBar::drawFileExportGltf(const FileExportGltfContext& context) {
 
 void MenuBar::drawFileExportObj(const FileExportObjContext& context) {
     if (ImGui::MenuItem("Export OBJ...")) context.openDialog();
+}
+
+void MenuBar::drawFileSave(const FileSaveContext& context) {
+    if (ImGui::MenuItem("Save", "Ctrl+S")) context.save();
 }
 
 void MenuBar::drawEditHistory(const EditHistoryContext& context) {

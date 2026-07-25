@@ -99,7 +99,7 @@ before when explicitly requested (`SYS-W14-##` rows).
 
 ## 2. Current status
 
-- **Last full build: clean after the current Phase 13 File-export-OBJ
+- **Last full build: clean after the current Phase 13 File-save
   slice.** Testing is enabled in the current Ninja Release tree, and
   `CCACHE_DISABLE=1 cmake --build b-release -j4` linked all targets successfully
   on EASYGL. Alternate-backend runtime qualification remains blocked.
@@ -792,7 +792,7 @@ Edit-find-replace-names, Edit-randomize-transform, Edit-macro-recording,
 Edit-play-macro, Edit-macro-editor, Edit-lock-selection, Edit-reset-transform,
 Edit-transform-clipboard, Edit-isolate-selection, Edit-hide-selection,
 Edit-show-all-hidden, File-merge-scene, File-export-selection, File-export-GLB,
-and File-export-OBJ slices.
+File-export-OBJ, and File-save slices.
 `EditHistoryContext` exposes only `canUndo`/`canRedo` plus Undo, Redo, and
 Open History callbacks; `Editor::UndoManager`, document replacement,
 selection restoration, dialog state, and keyboard handling remain
@@ -972,13 +972,19 @@ unchanged label, shortcut, and click dispatch.
 validation, output-path derivation, dialog state and buffers, OBJ export
 implementation, document and error handling remain in their existing owners;
 `MenuBar` owns only the unchanged label and click dispatch.
+`FileSaveContext` exposes only one save callback. Current-file state, the
+Save-As fallback, document validation and persistence, backups, autosave
+cleanup, recent-files updates, title and status updates, error handling, and
+the Ctrl+S keyboard route remain in their existing owners; `MenuBar` owns only
+the unchanged label, shortcut, and click dispatch.
 
-**Next candidate, not yet authorized:** `File → Save`, passing only one save
-callback. Current-file state, document validation and persistence, title and
-status updates, error handling, and the Ctrl+S keyboard route would remain in
-their existing owners; `MenuBar` would own only the unchanged label, shortcut,
-and click dispatch. Other File items and the View-menu Bloom/SSAO block remain
-outside that slice. Per `CLAUDE.md`, describe and confirm the Save item before
+**Next candidate, not yet authorized:** `File → Save As…`, passing only one
+open-dialog callback. Current-file state, dialog buffers and state, path
+selection, document validation and persistence, title and status updates, error
+handling, and the Ctrl+Shift+S keyboard route would remain in their existing
+owners; `MenuBar` would own only the unchanged label, shortcut, and click
+dispatch. Other File items and the View-menu Bloom/SSAO block remain outside
+that slice. Per `CLAUDE.md`, describe and confirm the Save-As item before
 implementing it.
 
 ## 9. Do not do yet
