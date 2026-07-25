@@ -77,7 +77,7 @@ before when explicitly requested (`SYS-W14-##` rows).
 - **Build: clean**, `cmake --build b-release -j4` passed after SVG texture
   support was added (EASYGL backend on Linux — the only backend buildable
   here).
-- **Tests:** 176 tests are registered. SVG-specific verification passes with
+- **Tests:** 177 tests are registered. SVG-specific verification passes with
   `-j4`: external and inline SVG export to glTF PNGs, bounded/malformed input,
   cache invalidation, and real headless viewport screenshots sampling the
   rasterized material pixels. This session's own
@@ -87,7 +87,7 @@ before when explicitly requested (`SYS-W14-##` rows).
   count this file last recorded (2026-07-19) predates unrelated work not
   narrated here (a further audit pass and the `SYS-W14-18..27`
   mc3-format-vs-editor gap closures — see `plan.md`/memory, not fully
-  reflected in this file's own history) — don't treat 142→176 as this
+  reflected in this file's own history) — don't treat 142→177 as this
   session's own delta.
   All builds/tests this session used `-j4` (not `-j$(nproc)`), per the
   user's standing request (shared machine).
@@ -125,6 +125,12 @@ before when explicitly requested (`SYS-W14-##` rows).
   timed status notification. Message replacement, severity, and expiry are
   now CNA-free and regression-tested; the existing ImGui status-bar rendering
   remains in the application (commit `d287bc8`).
+- **Recently implemented (2026-07-25):** `SYS-W3-01` Phase 11 extracts
+  editor-session object-lock membership into `Editor::ObjectLockState`.
+  Commands, mouse/keyboard input, statistics, and hierarchy lock buttons use
+  its narrow lock/query interface; scene, selection, undo, and UI ownership
+  remain where they were. The new direct regression test covers idempotent
+  lock/unlock and toggle behavior (commit `4bb30ea`).
 - **Recently implemented (2026-07-20 through 2026-07-25):** all 7
   raw-OpenGL(ES)-vs-CNA migrations, `AUD-082` through `AUD-088` — full
   detail with file:line evidence and
@@ -531,12 +537,12 @@ ownership decision. It is intentionally not being pursued in this session.
 - **Web/Windows build status: needs re-verification**, not checked this
   session — see §2's caveat and README.md's own platform table.
 - **`SYS-W3-01` (in progress, not a bug):** `MeshCraftApplication` god
-  object, 10 subsystems extracted so far (`KeybindingManager`,
+  object, 11 subsystems extracted so far (`KeybindingManager`,
   `Preferences`, `MacroRecorder`, `UndoManager`, animation-override
   computation, `WalkController`, `AudioPreview`, `CameraBookmarks`). File
   dialogs and post-processing were investigated and explicitly declined as
   further extraction targets; `TransformClipboard` and `StatusNotification`
-  are now also separate (see `plan.md`).
+  and `ObjectLockState` are now also separate (see `plan.md`).
 - **By-design, not bugs:** MC3 silently drops unrecognized XML
   attributes/elements on round-trip (`SYS-W5-03`, human-decided,
   documented in `MC3_FORMAT.md`); editor/exporter use different triangle
@@ -716,7 +722,7 @@ git stash pop && cmake --build b-release -j4 --target <affected-target>
 There is no currently authorized, actionable audit task. Android (`AUD-042`)
 remains deferred until an Android NDK is available and its CNA backend choice
 is explicitly in scope. `SYS-W3-01` (`MeshCraftApplication` decomposition)
-has 10 phases done; its investigation rounds also explicitly looked at the
+has 11 phases done; its investigation rounds also explicitly looked at the
 two originally remaining candidates (file dialogs, post-processing) and
 declined both (no testability win vs. real regression risk with no
 verification tool) — not silently skipped, but also not a ready "next phase"

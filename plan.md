@@ -534,10 +534,22 @@ _All items in this workstream are DONE — archived to [`docs/history/plan_20260
   replacement of a still-live notification, error severity, and zero-duration
   behavior. Targeted seven-subsystem suite passes (7/7); full `MeshCraft`
   rebuild passes. **Resolved:** commit `d287bc8`.
+  **Phase 11 DONE (2026-07-25) — object lock state:** extracted editor-session
+  lock membership into `Editor::ObjectLockState` (`include/` +
+  `src/MeshCraft/Editor/`). Commands, input, overlays, and macro playback
+  now query its narrow interface; algorithms that need the complete set still
+  receive a read-only view. `SceneHierarchyPanel` was changed to take the
+  state object itself, so its lock buttons use the same interface rather than
+  regaining mutable-set access. Scene, selection, undo, and UI ownership stay
+  in the application. New CNA-free `object_lock_state` test covers empty and
+  multiple states, idempotent locking, harmless unknown unlocks, and both
+  directions of toggle. Targeted eight-subsystem suite passes (8/8); full
+  `MeshCraft` rebuild passes. **Resolved:** commit `4bb30ea`.
   **SYS-W3-01 roadmap status after this session's investigation round:**
-  Phases 1–10 done (Keybindings, Preferences, MacroRecorder, UndoManager,
+  Phases 1–11 done (Keybindings, Preferences, MacroRecorder, UndoManager,
   animation-override computation, WalkController, AudioPreview,
-  CameraBookmarks, TransformClipboard, StatusNotification, in-that-order).
+  CameraBookmarks, TransformClipboard, StatusNotification, ObjectLockState,
+  in-that-order).
   File dialogs and post-processing were each
   investigated and explicitly declined for different reasons (no
   testability win vs. real regression risk with no verification tool) —
