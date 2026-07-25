@@ -532,9 +532,10 @@ backlog (650+ STAB tasks, then a 57-finding audit, all archived DONE).
 green in this host environment.** The audit rebuilt the project with `-j4`;
 the targeted `scene_hierarchy_panel` and `object_lock_state` tests pass.
 The render-dependent tests cannot initialize SDL video because this host's
-Xvfb listener is unusable, and `mc3_ai` reproducibly exceeds its 30-second
-timeout after the definitions-only AI-response case. These are recorded as
-`AUD-090` and `AUD-091`, rather than hidden by a passing test-count check.
+Xvfb listener is unusable (`AUD-090`). The initially reported `mc3_ai`
+definitions-only timeout was invalidated by a forced rebuild: the unchanged
+test completed in 1.27 seconds, so `AUD-091` is closed as a stale-build false
+positive rather than hidden as a longer timeout.
 
 The only deferred audit item is Android (`AUD-042`): this workspace has no
 Android NDK, and selecting a real Android graphics path would require a CNA
@@ -727,13 +728,15 @@ git stash pop && cmake --build b-release -j4 --target <affected-target>
 
 ## 8. Next smallest tasks
 
-The follow-up audit has two implementation candidates awaiting the owner's
-explicit confirmation required by `CLAUDE.md`: `AUD-091` first (definitions-
-only AI-response timeout), then `AUD-090` (render CTest display preflight and
-labels). `AUD-089` (truthful `--screenshot` failure/exit status) is complete
-in commit `5bcfbdc`; its new end-to-end CTest is registered but needs a
-working virtual display, tracked separately by `AUD-090`. Android (`AUD-042`)
-remains deferred until an Android NDK is
+The only remaining follow-up implementation candidate is `AUD-090` (render
+CTest display preflight and labels), awaiting the owner's explicit
+confirmation required by `CLAUDE.md`. `AUD-091` is closed as a stale-build
+false positive after a forced rebuild completed it in 1.27 seconds; its test
+now isolates parser, XSD, and full-pipeline stages (commit `64d187c`).
+`AUD-089` (truthful `--screenshot` failure/exit status) is complete in commit
+`5bcfbdc`; its new end-to-end CTest is registered but needs a working virtual
+display, tracked separately by `AUD-090`. Android (`AUD-042`) remains
+deferred until an Android NDK is
 available and its CNA backend choice is explicitly in scope. `SYS-W3-01`
 (`MeshCraftApplication` decomposition)
 has 11 phases done; its investigation rounds also explicitly looked at the

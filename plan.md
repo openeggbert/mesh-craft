@@ -87,7 +87,7 @@ P1s already being fixed in git history. This session:
    **Net across all 34 AUD-### rows remaining in this active backlog (61
    additional rows completed and archived to `docs/history/plan_20260718.md`
    on 2026-07-18 — see that file for their full evidence/resolution text):
-   29 DONE, 3 TODO, 2 DEFERRED** — 10 of the 29 DONE (`AUD-064` through
+   30 DONE, 2 TODO, 2 DEFERRED** — 10 of the 30 DONE (`AUD-064` through
    `AUD-073`) are fresh findings from a 2026-07-18 (later same day)
    independent re-audit, not part of the original 6 (`AUD-069` itself fixed
    2026-07-19, the day after it was filed); the other 14 (`AUD-074`
@@ -144,20 +144,17 @@ still internally consistent.
    out the two sibling repositories at the recorded verified SHAs, then
    configures, builds and runs the root CTest suite with at most two jobs.
    The standalone matrix uses the same job limit.
-3. **AUD-091 (P1/W1)** — a definitions-only AI response makes `mc3_ai`
-   exceed its 30-second CTest timeout; it must be traced and bounded before
-   treating the AI-response path as robust.
-4. **AUD-090 (P2/W11)** — render-dependent CTests need a working-display
+3. **AUD-090 (P2/W11)** — render-dependent CTests need a working-display
    preflight and complete `render` labels, so a non-render selection is
    actually headless-safe and CI failures are actionable.
-5. **AUD-042 (P2/W8)** — Android build path forces SDL_RENDERER; blocked
+4. **AUD-042 (P2/W8)** — Android build path forces SDL_RENDERER; blocked
    (no Android NDK in this environment; also intersects CNA backend
    behavior, out of scope per CLAUDE.md's "no CNA changes without owner
    permission").
-6. Android remains deferred because this environment has no Android NDK and
-   the work crosses the CNA ownership boundary; the two remaining audit rows do
-   not authorize implementation by themselves.
-7. All 10 of the mc3-format-vs-editor gaps found 2026-07-20 (user
+5. Android remains deferred because this environment has no Android NDK and
+   the work crosses the CNA ownership boundary; the remaining audit row does
+   not authorize implementation by itself.
+6. All 10 of the mc3-format-vs-editor gaps found 2026-07-20 (user
    request: "co mc3 nabízí, ale MeshCraft to ještě neumí" -- "what does
    the mc3 format offer that MeshCraft doesn't yet handle") are now
    done: the two P1 gaps (trigger event-firing, Lua scripting execution),
@@ -1922,9 +1919,9 @@ as a CNA depth-to-color pre-pass (2026-07-25). The remaining direct
 - **Tests:** Verify label selection with `ctest -N -LE render`, test the explicit no-display skip path, and run the render subset under a verified virtual display. Keep non-render CTest selection genuinely free of video initialization.
 - **Audit verification (2026-07-25):** the failure was reproduced across the visual suite; it is an environment/test-orchestration defect, not evidence of separate rendering regressions in every affected test.
 
-### AUD-091 `[TODO]` `P1` `W1` · A valid definitions-only AI response causes `mc3_ai` to exceed its 30-second timeout
+### AUD-091 `[DONE]` `P1` `W1` · Reported definitions-only AI-response timeout was not reproducible after a forced rebuild
 - **Component:** `mc3/test/ai_test.cpp`, `src/MeshCraft/AiResponseAlgorithms.hpp`, and the MC3 definition parsing/validation path reached by `Mc3Document::loadFromString()`.
-- **Evidence:** `ctest -V -R '^mc3_ai$' -j1` consistently reaches the `AUD-010` include-policy checks, then times out at 30 seconds before `STAB-0410` can report its first assertion. Direct `timeout 8 b-release/ai_test` reproduces the same stopping point. The immediately preceding ordinary object response completes successfully; the next test passes a small, valid document containing only `<definitions><definition id="crate"><box .../></definition></definitions>`. This makes a legitimate AI response shape block the validation pipeline rather than returning a result or an error.
-- **Outcome:** Trace the definitions-only parse/validation call to its blocking operation, fix the underlying non-termination or bound it with a user-visible parse failure, and retain the definition-only acceptance contract (`STAB-0410`). Do not paper over it solely by extending CTest's timeout.
-- **Tests:** First add a focused reproducer that proves the definitions-only response completes under a short, meaningful bound; then run `mc3_ai` and the non-render CTest subset with `-j4` maximum.
-- **Audit verification (2026-07-25):** the `ai_test` target was rebuilt with no pending compilation work before both reproductions, ruling out a stale binary as the explanation.
+- **Evidence:** The initial audit observed a 30-second timeout at the start of `STAB-0410`. Rebuilding `ai_test` forced its current source to relink; the unchanged original test body then completed all AI tests in 1.27 seconds. A second rebuild after adding the focused stage checks completed in 1.26 seconds. The definition-only document is accepted by the MC3 parser, conforms to the embedded XSD, and completes the full AI pipeline.
+- **Outcome:** No production parser or AI-response change is justified: the reported failure was an obsolete test binary, not a current-source non-termination. The test now separately asserts parsing, XSD validation, and full-pipeline acceptance, so any future failure identifies its stage rather than presenting as an opaque timeout.
+- **Tests:** `cmake --build b-release --target ai_test -j4` followed by `ctest --test-dir b-release -R '^mc3_ai$' --output-on-failure -j1` passes 1/1 in 1.26 seconds.
+- **Resolved:** commit `64d187c` — adds the parser/XSD/full-pipeline checks around `STAB-0410`; the audit finding is closed as a stale-build false positive, without weakening its 30-second timeout.
