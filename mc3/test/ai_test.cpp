@@ -407,10 +407,21 @@ static void testComputeAiChangeSummaryCyclicChildrenThrows() {
 // library") and must not be rejected by the same empty-document guard that
 // exists to reject a truly empty response.
 static void testValidateAndParseAcceptsDefinitionsOnlyDocument() {
-    auto result = validateAndParseAiResponseAlg(
+    const std::string response =
         "<mc3 version=\"0.3\">"
         "<definitions><definition id=\"crate\"><box size=\"1 1 1\"/></definition></definitions>"
-        "</mc3>");
+        "</mc3>";
+
+    // Keep the parser and schema-validation stages independently observable:
+    // a future failure here must not look like an opaque full-pipeline timeout.
+    auto parsed = parseXmlAlg(response);
+    CHECK(parsed.definitions.count("crate") == 1,
+          "STAB-0410: the definitions-only response parses before XSD validation");
+    auto xsdError = validateXmlAgainstXsdAlg(response);
+    CHECK(!xsdError.has_value(),
+          "STAB-0410: the definitions-only response conforms to mc3.xsd");
+
+    auto result = validateAndParseAiResponseAlg(response);
     CHECK(result.doc.has_value(),
           "STAB-0410: a definitions-only response (no <objects>) is accepted, not rejected "
           "as an empty document");
