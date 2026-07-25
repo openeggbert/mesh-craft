@@ -369,20 +369,18 @@ float MeshCraftApplication::drawMenuBar()
             };
             UI::MenuBar::drawEditRandomizeTransform(editRandomizeTransformContext);
             ImGui::Separator();
-            // H12: Macro recorder (SYS-W3-01 Phase 3: Editor::MacroRecorder)
-            if (macroRecorder_.isRecording()) {
-                ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.f, 0.4f, 0.4f, 1.f));
-                if (ImGui::MenuItem("Stop Recording")) {
-                    macroRecorder_.stopRecording();
-                    setStatusMsg("Recording stopped", false, 2.f);
-                }
-                ImGui::PopStyleColor();
-            } else {
-                if (ImGui::MenuItem("Record Macro")) {
+            const UI::EditMacroRecordingContext editMacroRecordingContext{
+                .isRecording = macroRecorder_.isRecording(),
+                .startRecording = [this] {
                     macroRecorder_.startRecording();
                     setStatusMsg("Recording started — edit the scene, then Stop", false, 3.f);
-                }
-            }
+                },
+                .stopRecording = [this] {
+                    macroRecorder_.stopRecording();
+                    setStatusMsg("Recording stopped", false, 2.f);
+                },
+            };
+            UI::MenuBar::drawEditMacroRecording(editMacroRecordingContext);
             if (ImGui::MenuItem("Play Macro", nullptr, false,
                                  macroRecorder_.stepCount() > 0 && !macroRecorder_.isRecording()))
                 macroRecorder_.play(macroContext());
@@ -805,6 +803,16 @@ void MenuBar::drawEditFindReplaceNames(const EditFindReplaceNamesContext& contex
 void MenuBar::drawEditRandomizeTransform(const EditRandomizeTransformContext& context) {
     if (ImGui::MenuItem("Randomize Transform...", nullptr, false, context.canOpen)) {
         context.openDialog();
+    }
+}
+
+void MenuBar::drawEditMacroRecording(const EditMacroRecordingContext& context) {
+    if (context.isRecording) {
+        ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.f, 0.4f, 0.4f, 1.f));
+        if (ImGui::MenuItem("Stop Recording")) context.stopRecording();
+        ImGui::PopStyleColor();
+    } else if (ImGui::MenuItem("Record Macro")) {
+        context.startRecording();
     }
 }
 

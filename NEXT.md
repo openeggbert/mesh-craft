@@ -99,7 +99,7 @@ before when explicitly requested (`SYS-W14-##` rows).
 
 ## 2. Current status
 
-- **Last full build: clean after the current Phase 13 Edit-randomize-transform
+- **Last full build: clean after the current Phase 13 Edit-macro-recording
   slice.** Testing is enabled in the current Ninja Release tree, and
   `CCACHE_DISABLE=1 cmake --build b-release -j4` linked all targets successfully
   on EASYGL. Alternate-backend runtime qualification remains blocked.
@@ -787,8 +787,9 @@ Edit-select-by-type/tag/material, Edit-copy-properties, Edit-grouping,
 Edit-convert-to-definition, Edit-export-subtree, Edit-break-instance,
 Edit-align-selection, Edit-distribute-selection, Edit-drop-to-ground,
 Edit-snap-selection-to-grid, Edit-mirror-selection, Edit-group-scale,
-Edit-linear-array, Edit-scatter-along-curve, Edit-batch-rename, and
-Edit-find-replace-names, and Edit-randomize-transform slices.
+Edit-linear-array, Edit-scatter-along-curve, Edit-batch-rename,
+Edit-find-replace-names, Edit-randomize-transform, and Edit-macro-recording
+slices.
 `EditHistoryContext` exposes only `canUndo`/`canRedo` plus Undo, Redo, and
 Open History callbacks; `Editor::UndoManager`, document replacement,
 selection restoration, dialog state, and keyboard handling remain
@@ -906,15 +907,20 @@ ranges, random-number generation, object-lock state, transform mutation, undo,
 document mutation, window-title and status reporting, and the command-palette
 route remain in their existing owners; `MenuBar` owns only the unchanged label,
 availability, and click dispatch.
+`EditMacroRecordingContext` exposes only the recording flag plus Start and Stop
+callbacks. Macro step storage, action capture, recording lifecycle, playback,
+macro context, macro-editor dialog state, and status reporting remain in their
+existing owners; `MenuBar` owns only the unchanged labels, active-recording
+presentation, and click dispatch.
 
 **Next candidate, not yet authorized:** continue Phase 13 with the single
-conditional Record Macro/Stop Recording menu item, passing only the recording
-flag plus Start and Stop callbacks. Macro step storage, action capture,
-playback, macro context, macro-editor dialog state, and status reporting would
-remain in their existing owners; `MenuBar` would own the unchanged labels and
-active-recording presentation. Play Macro, Macro Editor…, later Edit controls,
-and the View-menu Bloom/SSAO block remain outside that slice. Per `CLAUDE.md`,
-describe and confirm the macro-recording item slice before implementing it.
+Play Macro item, passing only its availability and one playback callback. Macro
+step storage, playback implementation, macro context, all invoked command
+effects, and the macro-editor dialog state would remain in their existing
+owners; `MenuBar` would own only the unchanged label, availability, and click
+dispatch. Macro Editor…, later Edit controls, and the View-menu Bloom/SSAO
+block remain outside that slice. Per `CLAUDE.md`, describe and confirm the
+Play-Macro item slice before implementing it.
 
 ## 9. Do not do yet
 
