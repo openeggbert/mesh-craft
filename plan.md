@@ -1846,8 +1846,13 @@ permission (`CLAUDE.md`'s CNA boundary). Expectation stated by the user:
 session): 4 of `s_bloom`'s 5 consumers were migrated** — `AUD-084`
 (Bloom), `AUD-086` (Skybox), `AUD-087` (Material preview), `AUD-088`
 (Shadow Map Debug) are all `DONE`; `AUD-085` (SSAO) subsequently landed
-as a CNA depth-to-color pre-pass (2026-07-25). The remaining direct
-`SDL_GL_GetProcAddress` diagnostic is not a post-processing consumer.
+as a CNA depth-to-color pre-pass (2026-07-25). **Final cleanup
+(2026-07-25):** after all five consumers had moved, commit `2574fc6` deleted
+the now-dead native function table, its no-op shutdown/frame-error diagnostic,
+and its two vacuous render CTests. There is now no
+`SDL_GL_GetProcAddress` call in MeshCraft's `src/` tree. The editor's ImGui
+OpenGL renderer is a separate backend-portability boundary, not a raw scene or
+post-processing call owned by this audit.
 
 ### AUD-082 `[DONE]` `P2` `W8` · Editor viewport/panel clipping hand-loads glViewport/glScissor/glEnable/glDisable instead of using GraphicsDevice's own Viewport/ScissorRectangle
 - **Component:** include/MeshCraft/MeshCraftApplication.hpp (`fnGlViewport_`/`fnGlScissor_`/`fnGlEnable_`/`fnGlDisable_`), src/MeshCraft/MeshCraftApplication.cpp
@@ -1915,7 +1920,7 @@ as a CNA depth-to-color pre-pass (2026-07-25). The remaining direct
 - **Outcome:** Add a robust, explicit virtual-display availability check for render tests/CI, make an unavailable display an intentional CTest skip with a clear diagnostic rather than a false product failure, and add the `render` label to every graphics-dependent test (including export/performance wrappers). Ensure CI installs and uses the selected display mechanism.
 - **Tests:** Verify label selection with `ctest -N -LE render`, test the explicit no-display skip path, and run the render subset under a verified virtual display. Keep non-render CTest selection genuinely free of video initialization.
 - **Audit verification (2026-07-25):** the failure was reproduced across the visual suite; it is an environment/test-orchestration defect, not evidence of separate rendering regressions in every affected test.
-- **Resolved:** commit `13c27a5` — CMake configures an actual `xvfb-run --auto-servernum xdpyinfo` preflight. If it fails, the 35 render-labelled editor tests are marked `DISABLED`, while `render_display_preflight` itself returns CTest's skip code 77 and prints the exact display failure. `editor_export_test` and `benchmark_editor` now have the additional `render` label, so `ctest -N -LE render` selects 143 genuinely non-render tests; they pass with `ctest --test-dir b-release -LE render --output-on-failure -j4`. CI explicitly installs `xvfb` and `x11-utils`, so a healthy runner preflights and executes render tests rather than silently omitting them.
+- **Resolved:** commit `13c27a5` — CMake configures an actual `xvfb-run --auto-servernum xdpyinfo` preflight. If it fails, the 35 render-labelled editor tests are marked `DISABLED`, while `render_display_preflight` itself returns CTest's skip code 77 and prints the exact display failure. `editor_export_test` and `benchmark_editor` now have the additional `render` label, so `ctest -N -LE render` selects 143 genuinely non-render tests; they pass with `ctest --test-dir b-release -LE render --output-on-failure -j4`. CI explicitly installs `xvfb` and `x11-utils`, so a healthy runner preflights and executes render tests rather than silently omitting them. **Count update (2026-07-25):** `2574fc6` removed two obsolete render tests with the deleted native function table, so the same preflight now disables 33 actual render tests (plus the preflight test itself, which skips); the non-render selection remains 143.
 
 ### AUD-091 `[DONE]` `P1` `W1` · Reported definitions-only AI-response timeout was not reproducible after a forced rebuild
 - **Component:** `mc3/test/ai_test.cpp`, `src/MeshCraft/AiResponseAlgorithms.hpp`, and the MC3 definition parsing/validation path reached by `Mc3Document::loadFromString()`.

@@ -2,7 +2,7 @@
 
 _Last updated: 2026-07-25. Counts below were produced from the live release build with `ctest -L <label> -N`, not carried over from an earlier revision. This document is derived from the actual `CMakeLists.txt` test registrations and test source files — if it drifts from `ctest -N`'s output, trust `ctest -N`, not this file's claimed count._
 
-MeshCraft's tests run through **CTest** — **179 tests registered** (`ctest --print-labels` label breakdown: `ai` 1, `commands` 1, `export` 71, `format` 37, `lint` 3, `perf` 2, `registry` 1, `render` 36, `unit` 29), mixing C++ assertion-based binaries and Python/bash subprocess-driven checks against the `mc3togltf`/`mc3tomcb` CLIs and the `MeshCraft` editor binary itself (headless `--screenshot` real-pixel-sampling tests, plus 3 tests that drive real headless Blender for GLB-import verification). `render_display_preflight` verifies an actual `xvfb-run` + `xdpyinfo` X client before the render subset; if unavailable, it reports a CTest skip and CMake disables only the other render-labelled tests. **Known gap:** the "CLI-driving Python tests" table below documents the most significant/representative tests in each category but is not exhaustively 1:1 with all registrations — `ctest -N` and `ctest --print-labels` are authoritative for the complete list.
+MeshCraft's tests run through **CTest** — **177 tests registered** (`ctest --print-labels` label breakdown: `ai` 1, `commands` 1, `export` 71, `format` 37, `lint` 3, `perf` 2, `registry` 1, `render` 34, `unit` 29), mixing C++ assertion-based binaries and Python/bash subprocess-driven checks against the `mc3togltf`/`mc3tomcb` CLIs and the `MeshCraft` editor binary itself (headless `--screenshot` real-pixel-sampling tests, plus 3 tests that drive real headless Blender for GLB-import verification). `render_display_preflight` verifies an actual `xvfb-run` + `xdpyinfo` X client before the render subset; if unavailable, it reports a CTest skip and CMake disables only the other render-labelled tests. **Known gap:** the "CLI-driving Python tests" table below documents the most significant/representative tests in each category but is not exhaustively 1:1 with all registrations — `ctest -N` and `ctest --print-labels` are authoritative for the complete list.
 
 ---
 
@@ -31,7 +31,7 @@ ctest --print-labels   # list all labels
 ctest --rerun-failed --output-on-failure
 ```
 
-Expected result: every registered test passes. The 174-registration count was checked 2026-07-25; the relevant focused suites are run with `-j4` after each change. A failing test prints its assertion/subprocess output inline with `--output-on-failure`; without that flag, CTest only shows pass/fail per test name.
+Expected result: every registered test passes. The 177-registration count was checked 2026-07-25; the relevant focused suites are run with `-j4` after each change. A failing test prints its assertion/subprocess output inline with `--output-on-failure`; without that flag, CTest only shows pass/fail per test name.
 
 Each C++ test binary can also be run directly (bypassing CTest) for faster iteration:
 
@@ -86,7 +86,6 @@ These spawn the built `mc3togltf`/`mc3tomcb` binaries as subprocesses and assert
 | `smoke_test` | `test/smoke_test.sh` (bash, not Python — corrected 2026-07-07) | Editor binary starts, opens a scene headlessly (`--screenshot`), exits cleanly | Screenshot PPM written, non-empty, process exits 0 |
 | `smoke_test_all_objects` / `smoke_test_empty_scene` / `smoke_test_missing_material` / `smoke_test_orthographic_camera` | `test/smoke_test.sh` against different fixtures | Same smoke mechanism against edge-case scenes: every `ObjectType`, a genuinely empty scene, a missing-material reference, an orthographic camera | Same as `smoke_test` |
 | `missing_mesh_test` | `test/missing_mesh_test.sh` | A `<mesh>` with a nonexistent `src` renders a placeholder (not a crash) and prints a warning | Exit 0, warning printed |
-| `gl_state_leak_test` | `test/gl_state_leak_test.sh` | No leaked `glGetError()` state survives a full render frame (SSAO/bloom/skybox/gizmos/ImGui) — added 2026-07-07, see `plan.md` STAB-0521 | `[GLCheck] clean` appears in output |
 | `xsd_validation` | `test/validate_xsd.py` | Every `test/*.mc3.xml` fixture validates against `mc3/mc3.xsd` (via `lxml`) | `PASS:` per file, `All N files valid.` |
 | `mc3_roundtrip` / `mcb_roundtrip` | (C++ binaries, also `format`-labeled) | See the C++ assertion-based binaries table above | See above |
 | `fog_linear_test` / `point_light_gizmo_test` / `spot_light_gizmo_test` / `look_through_camera_test` / `background_texture_test` / `skybox_texture_test` / `lod_test` | `test/*_test.py` | Real-pixel-sampling checks against a headless `--screenshot` PPM for each visual feature named | Substantial pixel-cluster match for the expected color/effect |

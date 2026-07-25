@@ -38,7 +38,7 @@ wedge and the no-op undo snapshots on locked-object commands) are also
 both fixed, 2026-07-19 — see §3. A 2026-07-20 session then ran a
 **targeted (not general) audit**: how much raw OpenGL(ES) the editor
 calls outside CNA's own API. Found 5 consumers sharing one raw-GL
-function table (`s_bloom`/`BloomGL`) plus 2 smaller standalone spots;
+function table plus 2 smaller standalone spots;
 filed as `AUD-082`-`AUD-088`. All 7 are now migrated onto CNA's
 `RenderTarget2D`/`ShaderEffect`/`GraphicsDevice` APIs; `AUD-085` uses a
 depth-to-color pre-pass. `plan.md`'s remaining
@@ -80,7 +80,7 @@ before when explicitly requested (`SYS-W14-##` rows).
 - **Build: clean**, `cmake --build b-release -j4` passed after SVG texture
   support was added (EASYGL backend on Linux — the only backend buildable
   here).
-- **Tests:** 179 tests are registered. SVG-specific verification passes with
+- **Tests:** 177 tests are registered. SVG-specific verification passes with
   `-j4`: external and inline SVG export to glTF PNGs, bounded/malformed input,
   cache invalidation, and real headless viewport screenshots sampling the
   rasterized material pixels. This session's own
@@ -90,7 +90,7 @@ before when explicitly requested (`SYS-W14-##` rows).
   count this file last recorded (2026-07-19) predates unrelated work not
   narrated here (a further audit pass and the `SYS-W14-18..27`
   mc3-format-vs-editor gap closures — see `plan.md`/memory, not fully
-  reflected in this file's own history) — don't treat 142→179 as this
+  reflected in this file's own history) — don't treat 142→177 as this
   session's own delta.
   All builds/tests this session used `-j4` (not `-j$(nproc)`), per the
   user's standing request (shared machine).
@@ -173,8 +173,9 @@ before when explicitly requested (`SYS-W14-##` rows).
     Depth24)`; needs no custom `ShaderEffect` at all since it just
     redirects the already-CNA-based `sceneRenderer_->draw()` call into
     an off-screen target. This was the 5th and last consumer of the
-    shared `s_bloom`/`BloomGL` raw-GL table. The remaining helper is only a
-    GL-state diagnostic, not a post-processing path.
+    former raw-GL table. Its now-unused function loader, shutdown check,
+    frame-error diagnostic, and two vacuous tests were removed in `2574fc6`;
+    `src/` now has no `SDL_GL_GetProcAddress` call.
   - Every migration verified with real `--screenshot` pixel sampling
     (not `Texture2D::GetData()` — confirmed unreliable for reading a
     render target's just-rendered content within the same frame, see
@@ -341,7 +342,7 @@ The user then asked to file `plan.md` tasks for migrating whatever is
 mechanically migratable, with any genuine gap going through a future CNA
 NOXNA capability request instead of new raw GL. That produced `AUD-082`
 through `AUD-087` (later corrected to include an `AUD-088`, a 5th
-`s_bloom` consumer initially missed). The user then authorized
+raw-GL consumer initially missed). The user then authorized
 implementing them ("commitni pushni, pote jde na tyto nove ukoly"),
 which was carried out one task at a time, same rigor as every prior
 `AUD-###` fix in this project (implement, add a regression test that
