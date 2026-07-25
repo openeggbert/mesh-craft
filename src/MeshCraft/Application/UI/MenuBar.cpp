@@ -58,22 +58,20 @@ float MeshCraftApplication::drawMenuBar()
                 .requestOpenFile = [this] { confirmIfModified(PendingAction::OpenFile); },
             };
             UI::MenuBar::drawFileOpen(fileOpenContext);
-            if (ImGui::BeginMenu("Open Recent", !recentFiles_.empty())) {
-                for (int i = 0; i < static_cast<int>(recentFiles_.size()); ++i) {
-                    const auto& rf = recentFiles_[static_cast<size_t>(i)];
-                    std::string label = rf.filename().string() + "##rf" + std::to_string(i);
-                    if (ImGui::MenuItem(label.c_str()))
-                        confirmIfModified(PendingAction::OpenRecentFile, rf);
-                    if (ImGui::IsItemHovered())
-                        ImGui::SetTooltip("%s", rf.string().c_str());
-                }
-                ImGui::Separator();
-                if (ImGui::MenuItem("Clear Recent")) {
+            const UI::FileOpenRecentContext fileOpenRecentContext{
+                .hasRecentFiles = !recentFiles_.empty(),
+                .getRecentFiles = [this]() -> const std::vector<std::filesystem::path>& {
+                    return recentFiles_;
+                },
+                .requestOpenRecent = [this](const std::filesystem::path& path) {
+                    confirmIfModified(PendingAction::OpenRecentFile, path);
+                },
+                .clearRecent = [this] {
                     recentFiles_.clear();
                     saveRecentFiles();
-                }
-                ImGui::EndMenu();
-            }
+                },
+            };
+            UI::MenuBar::drawFileOpenRecent(fileOpenRecentContext);
             // STAB-0717: previously OBJ was only reachable indirectly, as a
             // per-object mesh-source path typed into an existing Mesh
             // object's Properties panel field (PropertiesPanel.cpp's
@@ -643,6 +641,21 @@ void MenuBar::drawFileNew(const FileNewContext& context) {
 
 void MenuBar::drawFileOpen(const FileOpenContext& context) {
     if (ImGui::MenuItem("Open...", "Ctrl+O")) context.requestOpenFile();
+}
+
+void MenuBar::drawFileOpenRecent(const FileOpenRecentContext& context) {
+    if (!ImGui::BeginMenu("Open Recent", context.hasRecentFiles)) return;
+
+    const auto& recentFiles = context.getRecentFiles();
+    for (int i = 0; i < static_cast<int>(recentFiles.size()); ++i) {
+        const auto& path = recentFiles[static_cast<size_t>(i)];
+        std::string label = path.filename().string() + "##rf" + std::to_string(i);
+        if (ImGui::MenuItem(label.c_str())) context.requestOpenRecent(path);
+        if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s", path.string().c_str());
+    }
+    ImGui::Separator();
+    if (ImGui::MenuItem("Clear Recent")) context.clearRecent();
+    ImGui::EndMenu();
 }
 
 void MenuBar::drawFileExit(const FileExitContext& context) {

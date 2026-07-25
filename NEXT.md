@@ -25,8 +25,9 @@ selection-action groups, the Select-by-Type/Tag/Material, Align-Selection,
 Distribute-Selection, and Mirror-Selection submenus, and the Copy-Properties,
 Convert-to-Definition, Export-Subtree, Break-Instance, Drop-to-Ground,
 Snap-to-Grid, Group-Scale, Linear-Array, and Scatter-Along-Curve items plus the
-Group/Ungroup pair. The detailed toolbar Snap interval contents and the
-remaining MenuBar sections are still application-owned. Camera bookmark, walk,
+Group/Ungroup pair, plus every File-menu action through Open Recent. The detailed
+toolbar Snap interval contents and the remaining MenuBar sections are still
+application-owned. Camera bookmark, walk,
 document, undo, clipboard, selection, grid, and dialog state have **not** moved
 again: they remain in their existing editor/application owners; the UI
 component only reads presentation state and invokes application-owned
@@ -179,6 +180,17 @@ before when explicitly requested (`SYS-W14-##` rows).
   undo, clipboard, selection, grid, preferences, command-palette, and
   shortcut-dialog state remain in their existing owners; the menu receives
   only read-only state plus application-owned callbacks.
+- **Recently implemented (2026-07-25):** `SYS-W3-01` Phase 13 moved the
+  `File → Open Recent` presentation into `Application::UI::MenuBar` through
+  `FileOpenRecentContext`. It receives only current availability, a lazy
+  recent-files provider, an open callback, and a clear callback. The component
+  preserves the submenu label, numbered hidden IDs, basename labels, full-path
+  tooltips, separator, and empty-list disabled state; persistence, unsaved
+  document handling, loading, document replacement, and status/error reporting
+  remain application-owned. `CCACHE_DISABLE=1 cmake --build b-release -j4
+  --target MeshCraft` and `ctest --test-dir b-release -R '^mc3_commands$'
+  --output-on-failure` passed; the latter already exercises recent-files'
+  load, save, MRU de-duplication, cap, and restart round-trip contract.
 - **Recently implemented (2026-07-20 through 2026-07-25):** all 7
   raw-OpenGL(ES)-vs-CNA migrations, `AUD-082` through `AUD-088` — full
   detail with file:line evidence and
@@ -793,7 +805,7 @@ Edit-play-macro, Edit-macro-editor, Edit-lock-selection, Edit-reset-transform,
 Edit-transform-clipboard, Edit-isolate-selection, Edit-hide-selection,
 Edit-show-all-hidden, File-merge-scene, File-export-selection, File-export-GLB,
 File-export-OBJ, File-save, File-save-as, File-import-OBJ, File-new,
-File-open, and File-exit slices.
+File-open, File-open-recent, and File-exit slices.
 `EditHistoryContext` exposes only `canUndo`/`canRedo` plus Undo, Redo, and
 Open History callbacks; `Editor::UndoManager`, document replacement,
 selection restoration, dialog state, and keyboard handling remain
@@ -997,6 +1009,13 @@ pending-action state, dialog buffers and state, file loading, document
 replacement, selection and undo initialization, title and status updates, error
 handling, and the Ctrl+O keyboard route remain in their existing owners;
 `MenuBar` owns only the unchanged label, shortcut, and click dispatch.
+`FileOpenRecentContext` exposes only current availability, a lazy recent-files
+provider, one open callback, and one clear callback. Recent-file storage and
+persistence, unsaved-change handling, pending-action state, file loading,
+document replacement, title/status updates, and error handling remain
+application-owned; `MenuBar` owns the unchanged submenu label, numbered hidden
+IDs, filename labels, full-path tooltips, separator, disabled state, and click
+dispatch.
 `FileExitContext` exposes only one exit callback. Unsaved-change handling,
 pending-action state, application shutdown, all platform lifecycle work, and
 the Escape fallback route remain in their existing owners; `MenuBar` owns only
@@ -1008,19 +1027,12 @@ The sequence below is planning only. Per `CLAUDE.md`, each item must be
 described and explicitly confirmed immediately before implementation; finishing
 one item does not authorize the next.
 
-1. **File → Open Recent.** Extract the dynamic submenu with availability, a
-   lazy recent-files provider, one open-recent callback, and one clear callback.
-   `MenuBar` would preserve the submenu label, numbered hidden IDs, filename
-   labels, full-path tooltips, separator, and disabled behavior. Recent-file
-   storage and persistence, unsaved-change handling, pending-action state, file
-   loading, document replacement, title/status updates, and error handling stay
-   application-owned.
-2. **View → Bloom/SSAO controls.** Audit and extract only the text-shader
+1. **View → Bloom/SSAO controls.** Audit and extract only the text-shader
    effects block, including its supported and unsupported presentation. Preserve
    the conditional controls, labels, slider ranges, `AlwaysClamp` flags, and
    existing state changes; renderer-capability checks and effect state remain
    application-owned.
-3. **Post-menu boundary audit.** Once the remaining File and View blocks are
+2. **Post-menu boundary audit.** Once the remaining File and View blocks are
    complete, identify one new narrow presentation boundary before changing
    `MeshCraftApplication`. Do not start a broad application refactor.
 

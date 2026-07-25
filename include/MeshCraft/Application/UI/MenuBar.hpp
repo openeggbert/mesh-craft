@@ -2,6 +2,7 @@
 
 #include "MeshCraft/Editor/CameraBookmarks.hpp"
 
+#include <filesystem>
 #include <functional>
 #include <set>
 #include <string>
@@ -65,6 +66,13 @@ struct FileNewContext {
 
 struct FileOpenContext {
     std::function<void()> requestOpenFile;
+};
+
+struct FileOpenRecentContext {
+    bool hasRecentFiles;
+    std::function<const std::vector<std::filesystem::path>&()> getRecentFiles;
+    std::function<void(const std::filesystem::path&)> requestOpenRecent;
+    std::function<void()> clearRecent;
 };
 
 struct FileExitContext {
@@ -265,6 +273,7 @@ public:
     static void drawFileImportObj(const FileImportObjContext& context);
     static void drawFileNew(const FileNewContext& context);
     static void drawFileOpen(const FileOpenContext& context);
+    static void drawFileOpenRecent(const FileOpenRecentContext& context);
     static void drawFileExit(const FileExitContext& context);
     static void drawEditClipboard(const EditClipboardContext& context);
     static void drawEditCopyProperties(const EditCopyPropertiesContext& context);

@@ -176,14 +176,13 @@ still internally consistent.
    Edit-reset-transform, Edit-transform-clipboard, Edit-isolate-selection,
    Edit-hide-selection, Edit-show-all-hidden, File-merge-scene,
    File-export-selection, File-export-GLB, File-export-OBJ, File-save,
-   File-save-as, File-import-OBJ, File-new, File-open, and File-exit menu
-   slices are implemented and verified. Their state remains in the existing
-   editor/application owners;
+   File-save-as, File-import-OBJ, File-new, File-open, File-open-recent, and
+   File-exit menu slices are implemented and verified. Their state remains in
+   the existing editor/application owners;
    `Application::UI::MenuBar` receives only the read-only values and callbacks
    required for presentation. The remaining ordered Phase 13 queue is:
-   **File → Open Recent** (availability plus lazy provider/open/clear
-   callbacks), then **View → Bloom/SSAO controls** (preserve the capability
-   gate, ranges, and clamping), then a fresh audit for a new narrow boundary.
+   **View → Bloom/SSAO controls** (preserve the capability gate, ranges, and
+   clamping), then a fresh audit for a new narrow boundary.
    Every item requires its own confirmation per `CLAUDE.md`.
 
 ---
@@ -781,7 +780,8 @@ _All items in this workstream are DONE — archived to [`docs/history/plan_20260
   Edit-reset-transform, Edit-transform-clipboard, Edit-isolate-selection,
   Edit-hide-selection, Edit-show-all-hidden, File-merge-scene,
   File-export-selection, File-export-GLB, File-export-OBJ, File-save,
-  File-save-as, File-import-OBJ, File-new, File-open, and File-exit slices,
+  File-save-as, File-import-OBJ, File-new, File-open, File-open-recent, and
+  File-exit slices,
   each incremental Release link and the same 147/147 + 34/34 partitions pass
   again.
   For the current MenuBar slices, the public UI header also compiles as a
