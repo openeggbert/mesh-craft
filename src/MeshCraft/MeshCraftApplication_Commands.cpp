@@ -122,10 +122,10 @@ void MeshCraftApplication::addPrimitive(Mc3::ObjectType type) {
 // (removeFromList is defined in MeshCraftPrivate.hpp)
 
 void MeshCraftApplication::deleteSelected() {
-    if (!anySelectedUnlockedAlg(selection_.selection(), lockedIds_)) return;
+    if (!anySelectedUnlockedAlg(selection_.selection(), objectLockState_.ids())) return;
     pushUndo();
     for (const auto& s : selection_.selection()) {
-        if (lockedIds_.count(s->id)) continue;
+        if (objectLockState_.isLocked(s->id)) continue;
         removeFromListAlg(document_.objects, s.get());
     }
     selection_.clear();
@@ -469,7 +469,7 @@ void MeshCraftApplication::batchRenameSelected() {
     auto& sel = selection_.selection();
     if (sel.empty()) return;
     pushUndo();
-    int renamed = batchRenameObjects(sel, lockedIds_, batchRenameBuf_, &document_.actions);
+    int renamed = batchRenameObjects(sel, objectLockState_.ids(), batchRenameBuf_, &document_.actions);
     modified_ = true;
     updateWindowTitle();
     char msg[64];
@@ -608,7 +608,7 @@ void MeshCraftApplication::alignToObject() {
     if (selection_.selection().size() < 2) return;
     const std::string& srcName = selection_.selection().front()->name;
     pushUndo();
-    int aligned = alignToObjectAlg(selection_.selection(), lockedIds_);
+    int aligned = alignToObjectAlg(selection_.selection(), objectLockState_.ids());
     modified_ = true; updateWindowTitle();
     setStatusMsg("Aligned " + std::to_string(aligned) +
                  " object(s) to " + srcName, false, 2.0f);
@@ -618,11 +618,11 @@ void MeshCraftApplication::alignToObject() {
 // behaviorally identical instead of hand-copied and free to drift.
 void MeshCraftApplication::dropSelectedToGroundPlane() {
     if (!selection_.hasSelection()) return;
-    if (!anySelectedUnlockedAlg(selection_.selection(), lockedIds_)) return;
+    if (!anySelectedUnlockedAlg(selection_.selection(), objectLockState_.ids())) return;
     pushUndo();
     int dropped = 0;
     for (const auto& s : selection_.selection()) {
-        if (lockedIds_.count(s->id)) continue;
+        if (objectLockState_.isLocked(s->id)) continue;
         float bottomOffset = 0.0f; // distance from pivot to lowest point
         if (s->primitive) {
             const auto& p = *s->primitive;
@@ -647,11 +647,11 @@ void MeshCraftApplication::dropSelectedToGroundPlane() {
 void MeshCraftApplication::groupScaleSelected() {
     const auto& sel = selection_.selection();
     if (sel.empty()) return;
-    if (!anySelectedUnlockedAlg(sel, lockedIds_)) return;
+    if (!anySelectedUnlockedAlg(sel, objectLockState_.ids())) return;
     const float f = groupScaleFactor_;
 
     pushUndo();
-    int scaled = groupScaleAlg(sel, lockedIds_, f);
+    int scaled = groupScaleAlg(sel, objectLockState_.ids(), f);
     modified_ = true; updateWindowTitle();
     setStatusMsg("Group scale ×" + std::to_string(f).substr(0, 5) +
                  " on " + std::to_string(scaled) + " object(s)", false, 2.0f);
@@ -678,7 +678,7 @@ void MeshCraftApplication::selectChildren() {
 void MeshCraftApplication::randomizeTransformSelected() {
     auto& sel = selection_.selection();
     if (sel.empty()) return;
-    if (!anySelectedUnlockedAlg(sel, lockedIds_)) return;
+    if (!anySelectedUnlockedAlg(sel, objectLockState_.ids())) return;
     pushUndo();
     std::mt19937 rng{std::random_device{}()};
     auto rand11 = [&]() -> float {
@@ -686,7 +686,7 @@ void MeshCraftApplication::randomizeTransformSelected() {
     };
     int count = 0;
     for (const auto& s : sel) {
-        if (lockedIds_.count(s->id)) continue;
+        if (objectLockState_.isLocked(s->id)) continue;
         for (int i = 0; i < 3; ++i) {
             if (scatterPosRange_[i] != 0.0f)
                 s->transform.position[i] += rand11() * scatterPosRange_[i];
@@ -721,7 +721,7 @@ void MeshCraftApplication::findReplaceNames() {
     if (findSelectedOnly_)
         for (const auto& s : selection_.selection()) selectedIds.insert(s->id);
 
-    int matchCount = countFindReplaceMatches(document_.objects, lockedIds_,
+    int matchCount = countFindReplaceMatches(document_.objects, objectLockState_.ids(),
                                              findStr, replStr, findCaseSensitive_,
                                              findSelectedOnly_, selectedIds);
     if (matchCount == 0) {
@@ -730,7 +730,7 @@ void MeshCraftApplication::findReplaceNames() {
     }
 
     pushUndo();
-    applyFindReplaceNames(document_.objects, lockedIds_,
+    applyFindReplaceNames(document_.objects, objectLockState_.ids(),
                           findStr, replStr, findCaseSensitive_,
                           findSelectedOnly_, selectedIds);
     modified_ = true;
@@ -844,11 +844,11 @@ void MeshCraftApplication::copyPropsToSelected() {
 void MeshCraftApplication::resetPivot() {
     using namespace Microsoft::Xna::Framework;
     if (!selection_.hasSelection()) return;
-    if (!anySelectedUnlockedAlg(selection_.selection(), lockedIds_)) return;
+    if (!anySelectedUnlockedAlg(selection_.selection(), objectLockState_.ids())) return;
     pushUndo();
     const float deg = std::numbers::pi_v<float> / 180.0f;
     for (const auto& s : selection_.selection()) {
-        if (lockedIds_.count(s->id)) continue;
+        if (objectLockState_.isLocked(s->id)) continue;
         const auto& p = s->transform.pivot;
         const auto& rot = s->transform.rotation;
         // Compensation: pos_new = pos + d*R - d  where d = -pivot (zeroing pivot)

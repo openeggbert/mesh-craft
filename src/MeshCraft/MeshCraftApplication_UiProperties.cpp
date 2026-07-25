@@ -16,7 +16,7 @@ void MeshCraftApplication::drawPropertiesPanel(float panelY, float panelH, int s
     Scene::PropertiesContext ctx{
         .document           = document_,
         .selection          = selection_,
-        .lockedIds          = lockedIds_,
+        .lockedIds          = objectLockState_.ids(),
         .renderer           = sceneRenderer_.get(),
         .showTimeline       = showTimeline_,
         .currentActionName  = currentActionName_,

@@ -1,12 +1,12 @@
 #pragma once
 
+#include "MeshCraft/Editor/ObjectLockState.hpp"
 #include "MeshCraft/Editor/SelectionManager.hpp"
 #include "MeshCraft/Mc3/Mc3Document.hpp"
 #include "MeshCraft/Mc3/Mc3Object.hpp"
 
 #include <functional>
 #include <memory>
-#include <set>
 #include <string>
 #include <vector>
 
@@ -27,7 +27,7 @@ public:
     explicit SceneHierarchyPanel(Mc3::Mc3Document& document);
 
     void draw(Editor::SelectionManager& selection,
-              std::set<std::string>& lockedIds,
+              Editor::ObjectLockState& objectLockState,
               const HierarchyCallbacks& cb);
 
     void scrollToObject(const std::string& id) { scrollToId_ = id; }

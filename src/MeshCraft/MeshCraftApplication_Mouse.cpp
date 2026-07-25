@@ -140,7 +140,7 @@ void MeshCraftApplication::handleMouseInput(const MouseState& ms, const MouseSta
             float delta = dx * (axScrX/len2d) + dy * (axScrY/len2d);
             delta *= L / len2d;
             for (const auto& s : selection_.selection()) {
-                if (lockedIds_.count(s->id)) continue;
+                if (objectLockState_.isLocked(s->id)) continue;
                 if (pivotEditMode_) {
                     // Move pivot only; compensate position so geometry stays in world space.
                     // pos_new = pos_old + d*R - d  (where d = delta*axis, R = object rotation matrix)
@@ -174,7 +174,7 @@ void MeshCraftApplication::handleMouseInput(const MouseState& ms, const MouseSta
                               Keyboard::GetState().IsKeyDown(Keys::RightShift));
             if (shiftHeld) {
                 float threshold = camera_.distance * 0.08f;
-                vertexSnapToNearestAlg(document_.objects, selection_.selection(), lockedIds_,
+            vertexSnapToNearestAlg(document_.objects, selection_.selection(), objectLockState_.ids(),
                                        sel0->transform.position[0],
                                        sel0->transform.position[1],
                                        sel0->transform.position[2],
@@ -183,7 +183,7 @@ void MeshCraftApplication::handleMouseInput(const MouseState& ms, const MouseSta
 
             // Proportional editing (H1): apply Gaussian falloff to nearby unselected objects
             if (propEditEnabled_ && propEditRadius_ > 0.0f) {
-                applyProportionalFalloffAlg(document_.objects, selection_.selection(), lockedIds_,
+            applyProportionalFalloffAlg(document_.objects, selection_.selection(), objectLockState_.ids(),
                                             delta * ax.X, delta * ax.Y, delta * ax.Z,
                                             propEditRadius_);
             }
@@ -191,7 +191,7 @@ void MeshCraftApplication::handleMouseInput(const MouseState& ms, const MouseSta
             // Surface snap (B8): snap Y to the top surface directly below each selected object
             if (surfaceSnapEnabled_) {
                 for (const auto& s : selection_.selection()) {
-                    if (lockedIds_.count(s->id)) continue;
+                    if (objectLockState_.isLocked(s->id)) continue;
                     float spx = s->transform.position[0];
                     float spz = s->transform.position[2];
                     float highY = s->transform.position[1] + 200.0f;
@@ -261,7 +261,7 @@ void MeshCraftApplication::handleMouseInput(const MouseState& ms, const MouseSta
         if (len3d > 0.5f) {
             float delta = (dx * (axScrX/len3d) + dy * (axScrY/len3d)) / len3d;
             for (const auto& s : selection_.selection()) {
-                if (lockedIds_.count(s->id)) continue;
+                if (objectLockState_.isLocked(s->id)) continue;
                 float& sc = s->transform.scale[axIdx];
                 sc = std::max(0.01f, sc + delta);
                 if (snapEnabled_)
@@ -310,7 +310,7 @@ void MeshCraftApplication::handleMouseInput(const MouseState& ms, const MouseSta
             float delta = (dx * tx + dy * ty) * degsPerPixel;
             bool ctrlHeld = (Keyboard::GetState().IsKeyDown(Keys::LeftControl) ||
                              Keyboard::GetState().IsKeyDown(Keys::RightControl));
-            applyRotationDragAlg(selection_.selection(), lockedIds_, axIdx, delta,
+            applyRotationDragAlg(selection_.selection(), objectLockState_.ids(), axIdx, delta,
                                  snapEnabled_ || ctrlHeld, snapRotate_);
             modified_ = true;
             updateWindowTitle();

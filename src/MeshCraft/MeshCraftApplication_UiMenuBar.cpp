@@ -272,7 +272,7 @@ float MeshCraftApplication::drawMenuBar()
                 auto doAlign = [&](int axis, float target) {
                     pushUndo();
                     for (const auto& s : selection_.selection()) {
-                        if (lockedIds_.count(s->id)) continue;
+                        if (objectLockState_.isLocked(s->id)) continue;
                         s->transform.position[axis] = target;
                     }
                     modified_ = true; updateWindowTitle();
@@ -315,7 +315,7 @@ float MeshCraftApplication::drawMenuBar()
                             float lo = objs.front()->transform.position[ax];
                             float hi = objs.back()->transform.position[ax];
                             for (int i = 1; i < n - 1; ++i) {
-                                if (lockedIds_.count(objs[i]->id)) continue;
+                                if (objectLockState_.isLocked(objs[i]->id)) continue;
                                 objs[i]->transform.position[ax] =
                                     lo + static_cast<float>(i) * (hi - lo) / static_cast<float>(n - 1);
                             }
@@ -334,7 +334,7 @@ float MeshCraftApplication::drawMenuBar()
                     int snapped = 0;
                     pushUndo();
                     for (const auto& s : selection_.selection()) {
-                        if (lockedIds_.count(s->id)) continue;
+                        if (objectLockState_.isLocked(s->id)) continue;
                         for (int i = 0; i < 3; ++i)
                             s->transform.position[i] =
                                 std::round(s->transform.position[i] / gridSpacing_) * gridSpacing_;
@@ -354,7 +354,7 @@ float MeshCraftApplication::drawMenuBar()
                         if (ImGui::MenuItem(flipLabel[ax])) {
                             pushUndo();
                             for (const auto& s : selection_.selection()) {
-                                if (lockedIds_.count(s->id)) continue;
+                                if (objectLockState_.isLocked(s->id)) continue;
                                 s->transform.scale[ax] = -s->transform.scale[ax];
                             }
                             modified_ = true; updateWindowTitle();
@@ -408,8 +408,7 @@ float MeshCraftApplication::drawMenuBar()
             ImGui::Separator();
             if (ImGui::MenuItem("Lock/Unlock Selected", "Ctrl+L", false, !selection_.selection().empty())) {
                 for (const auto& s : selection_.selection()) {
-                    if (lockedIds_.count(s->id)) lockedIds_.erase(s->id);
-                    else                          lockedIds_.insert(s->id);
+                    objectLockState_.toggle(s->id);
                 }
             }
             ImGui::Separator();
@@ -418,7 +417,7 @@ float MeshCraftApplication::drawMenuBar()
                 if (ImGui::MenuItem("Position", "Alt+G")) {
                     pushUndo();
                     for (const auto& s : selection_.selection()) {
-                        if (lockedIds_.count(s->id)) continue;
+                        if (objectLockState_.isLocked(s->id)) continue;
                         s->transform.position = {0.0f, 0.0f, 0.0f};
                     }
                     modified_ = true; updateWindowTitle();
@@ -426,7 +425,7 @@ float MeshCraftApplication::drawMenuBar()
                 if (ImGui::MenuItem("Rotation", "Alt+R")) {
                     pushUndo();
                     for (const auto& s : selection_.selection()) {
-                        if (lockedIds_.count(s->id)) continue;
+                        if (objectLockState_.isLocked(s->id)) continue;
                         s->transform.rotation = {0.0f, 0.0f, 0.0f};
                     }
                     modified_ = true; updateWindowTitle();
@@ -434,7 +433,7 @@ float MeshCraftApplication::drawMenuBar()
                 if (ImGui::MenuItem("Scale", "Alt+S")) {
                     pushUndo();
                     for (const auto& s : selection_.selection()) {
-                        if (lockedIds_.count(s->id)) continue;
+                        if (objectLockState_.isLocked(s->id)) continue;
                         s->transform.scale = {1.0f, 1.0f, 1.0f};
                     }
                     modified_ = true; updateWindowTitle();
@@ -443,7 +442,7 @@ float MeshCraftApplication::drawMenuBar()
                 if (ImGui::MenuItem("All")) {
                     pushUndo();
                     for (const auto& s : selection_.selection()) {
-                        if (lockedIds_.count(s->id)) continue;
+                        if (objectLockState_.isLocked(s->id)) continue;
                         s->transform.position = {0.0f, 0.0f, 0.0f};
                         s->transform.rotation = {0.0f, 0.0f, 0.0f};
                         s->transform.scale    = {1.0f, 1.0f, 1.0f};
@@ -461,7 +460,7 @@ float MeshCraftApplication::drawMenuBar()
             if (ImGui::MenuItem("Paste Transform", "Ctrl+Shift+V", false, hasSel && transformClipboard_.hasValue())) {
                 pushUndo();
                 for (const auto& s : selection_.selection()) {
-                    if (lockedIds_.count(s->id)) continue;
+                    if (objectLockState_.isLocked(s->id)) continue;
                     transformClipboard_.pasteTo(*s);
                 }
                 modified_ = true; updateWindowTitle();

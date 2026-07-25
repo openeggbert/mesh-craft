@@ -859,6 +859,17 @@ if(MESH_CRAFT_BUILD_TESTING AND UNIX AND NOT ANDROID AND NOT EMSCRIPTEN)
     add_test(NAME status_notification COMMAND status_notification_test)
     set_tests_properties(status_notification PROPERTIES TIMEOUT 15 LABELS "unit")
 
+    # SYS-W3-01 Phase 11: editor-session lock membership is independent of
+    # scene, selection, undo, and ImGui behavior.
+    add_executable(object_lock_state_test
+        ${CMAKE_CURRENT_SOURCE_DIR}/test/object_lock_state_test.cpp
+        ${CMAKE_CURRENT_SOURCE_DIR}/src/MeshCraft/Editor/ObjectLockState.cpp)
+    target_include_directories(object_lock_state_test PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/include)
+    target_compile_features(object_lock_state_test PRIVATE cxx_std_23)
+    add_test(NAME object_lock_state COMMAND object_lock_state_test)
+    set_tests_properties(object_lock_state PROPERTIES TIMEOUT 15 LABELS "unit")
+
     # SYS-W14-18 (2026-07-20): LuaScriptRunner -- executes Mc3Script
     # ("lua") source against a document. Unlike the CNA-coupled UI wiring
     # (Scripts tab / Triggers tab, tested via mirrors elsewhere), this

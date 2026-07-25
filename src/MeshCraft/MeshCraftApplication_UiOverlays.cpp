@@ -45,7 +45,7 @@ void MeshCraftApplication::drawStatsOverlay(int screenW, [[maybe_unused]] int sc
             for (const auto& o : list) {
                 ++totalObjs;
                 if (o->visible)                ++visibleObjs;
-                if (lockedIds_.count(o->id))   ++lockedObjs;
+                if (objectLockState_.isLocked(o->id)) ++lockedObjs;
                 countStats(o->children);
             }
         };
@@ -585,7 +585,7 @@ void MeshCraftApplication::drawDialogs()
                 // batchRenameObjects's unconditional `++idx`), so `i + 1`
                 // here already lines up positionally; only the locked
                 // object's own row needs to stop rendering a rename.
-                if (lockedIds_.count(obj->id)) {
+                if (objectLockState_.isLocked(obj->id)) {
                     ImGui::TextColored(ImVec4(0.6f, 0.6f, 0.6f, 1.0f),
                         "  %s  (locked, skipped)", obj->name.c_str());
                     continue;
@@ -951,7 +951,7 @@ void MeshCraftApplication::drawDialogs()
             std::function<void(const std::vector<std::shared_ptr<Mc3::Mc3Object>>&)> previewWalk;
             previewWalk = [&](const auto& list) {
                 for (const auto& o : list) {
-                    if (!lockedIds_.count(o->id)) {
+                    if (!objectLockState_.isLocked(o->id)) {
                         bool inScope = !findSelectedOnly_ || selection_.isSelected(o.get());
                         if (inScope) {
                             std::string replaced = previewReplace(o->name);

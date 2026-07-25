@@ -763,13 +763,13 @@ void MeshCraftApplication::Draw(const GameTime& /*gameTime*/) {
     }
 
     // Locked-object outline (red wireframe around every locked object)
-    if (!lockedIds_.empty()) {
+    if (!objectLockState_.empty()) {
         gd.SetDepthTestEnabled(false);
         Color lockColor(220, 60, 60, 180);
         std::function<void(const std::vector<std::shared_ptr<Mc3::Mc3Object>>&)> drawLocked;
         drawLocked = [&](const std::vector<std::shared_ptr<Mc3::Mc3Object>>& list) {
             for (const auto& obj : list) {
-                if (lockedIds_.count(obj->id))
+                if (objectLockState_.isLocked(obj->id))
                     sceneRenderer_->drawObjectWireframe(*obj, view, proj, lockColor);
                 if (!obj->children.empty()) drawLocked(obj->children);
             }

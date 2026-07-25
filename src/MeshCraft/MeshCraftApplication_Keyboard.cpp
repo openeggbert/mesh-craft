@@ -104,7 +104,7 @@ void MeshCraftApplication::handleKeyboardShortcuts(const KeyboardState& ks, cons
         if (selection_.hasSelection()) {
             pushUndo();
             for (const auto& s : selection_.selection()) {
-                if (lockedIds_.count(s->id)) continue;
+                if (objectLockState_.isLocked(s->id)) continue;
                 s->transform.position = {0.0f, 0.0f, 0.0f};
             }
             modified_ = true; updateWindowTitle();
@@ -115,7 +115,7 @@ void MeshCraftApplication::handleKeyboardShortcuts(const KeyboardState& ks, cons
         if (selection_.hasSelection()) {
             pushUndo();
             for (const auto& s : selection_.selection()) {
-                if (lockedIds_.count(s->id)) continue;
+                if (objectLockState_.isLocked(s->id)) continue;
                 s->transform.rotation = {0.0f, 0.0f, 0.0f};
             }
             modified_ = true; updateWindowTitle();
@@ -126,7 +126,7 @@ void MeshCraftApplication::handleKeyboardShortcuts(const KeyboardState& ks, cons
         if (selection_.hasSelection()) {
             pushUndo();
             for (const auto& s : selection_.selection()) {
-                if (lockedIds_.count(s->id)) continue;
+                if (objectLockState_.isLocked(s->id)) continue;
                 s->transform.scale = {1.0f, 1.0f, 1.0f};
             }
             modified_ = true; updateWindowTitle();
@@ -147,7 +147,7 @@ void MeshCraftApplication::handleKeyboardShortcuts(const KeyboardState& ks, cons
         if (transformClipboard_.hasValue() && selection_.hasSelection()) {
             pushUndo();
             for (const auto& s : selection_.selection()) {
-                if (lockedIds_.count(s->id)) continue;
+                if (objectLockState_.isLocked(s->id)) continue;
                 transformClipboard_.pasteTo(*s);
             }
             modified_ = true; updateWindowTitle();
@@ -179,8 +179,7 @@ void MeshCraftApplication::handleKeyboardShortcuts(const KeyboardState& ks, cons
     // Lock / unlock selected
     if (keybindings_.shortcutFired("edit.lock", ks, prevKs)) {
         for (const auto& s : selection_.selection()) {
-            if (lockedIds_.count(s->id)) lockedIds_.erase(s->id);
-            else                          lockedIds_.insert(s->id);
+            objectLockState_.toggle(s->id);
         }
         return;
     }
@@ -385,7 +384,7 @@ void MeshCraftApplication::handleKeyboardShortcuts(const KeyboardState& ks, cons
     if (anyNudgePressed) pushUndo();
     for (auto& selObj : selection_.selection()) {
         auto* obj = selObj.get();
-        if (lockedIds_.count(obj->id)) continue;
+        if (objectLockState_.isLocked(obj->id)) continue;
         if (justPressed(ks, prevKs, Keys::Left))     { obj->transform.position[0] -= nudge; nudged = true; }
         if (justPressed(ks, prevKs, Keys::Right))    { obj->transform.position[0] += nudge; nudged = true; }
         if (justPressed(ks, prevKs, Keys::Up))       { obj->transform.position[1] += nudge; nudged = true; }

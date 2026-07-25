@@ -500,7 +500,7 @@ inline Mc3::Mc3Object* flatFindByIdAlg(
 // descendant kept the definition template's original id verbatim, so
 // breaking a second Instance of the same definition produced exact
 // duplicate child ids (a real bug: id is used elsewhere as a set key,
-// e.g. `lockedIds_`). `assignedThisWalk` additionally guards against two
+// e.g. `ObjectLockState`). `assignedThisWalk` additionally guards against two
 // descendants in the *same* subtree colliding with each other.
 inline void regenerateSubtreeIdsAlg(
     Mc3::Mc3Object&                                      obj,

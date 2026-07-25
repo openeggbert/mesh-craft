@@ -10,6 +10,7 @@
 #include "MeshCraft/Editor/KeybindingManager.hpp"
 #include "MeshCraft/Editor/LuaScriptRunner.hpp"
 #include "MeshCraft/Editor/MacroRecorder.hpp"
+#include "MeshCraft/Editor/ObjectLockState.hpp"
 #include "MeshCraft/Editor/ObjectIndex.hpp"
 #include "MeshCraft/Editor/Preferences.hpp"
 #include "MeshCraft/Editor/SelectionManager.hpp"
@@ -560,8 +561,9 @@ private:
     void saveRecentFiles();
     void addRecentFile(const std::filesystem::path& path);
 
-    // Locked object IDs (lock prevents gizmo/nudge/delete; persists in memory only)
-    std::set<std::string> lockedIds_;
+    // SYS-W3-01 Phase 11: lock membership is separate from the document,
+    // selection, undo policy, and the UI paths that consume it.
+    Editor::ObjectLockState objectLockState_;
 
     // Isolation mode: hides all non-selected objects; Alt+I to toggle
     bool isolateActive_{false};

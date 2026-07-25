@@ -11,7 +11,7 @@ namespace MeshCraft::Editor {
 // SYS-W3-01 Phase 3: the macro recorder/player extracted out of
 // MeshCraftApplication (H12). Deferred from Phase 1/2 because
 // executeMacroStep() calls 8+ other MeshCraftApplication methods plus
-// direct field access (document_.objects, selection_, lockedIds_,
+// direct field access (document_.objects, selection_, objectLockState_,
 // modified_/updateWindowTitle) -- unlike KeybindingManager/Preferences,
 // which had no cross-domain entanglement, playback genuinely needs to call
 // back into its owner. Resolved with a PropertiesContext-style callback

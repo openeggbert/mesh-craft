@@ -50,10 +50,10 @@ Editor::MacroRecorder::Context MeshCraftApplication::macroContext() {
         updateWindowTitle();
     };
     ctx.lockSelected = [this] {
-        for (const auto& s : selection_.selection()) lockedIds_.insert(s->id);
+        for (const auto& s : selection_.selection()) objectLockState_.lock(s->id);
     };
     ctx.unlockSelected = [this] {
-        for (const auto& s : selection_.selection()) lockedIds_.erase(s->id);
+        for (const auto& s : selection_.selection()) objectLockState_.unlock(s->id);
     };
     ctx.setStatusMsg = [this](std::string msg, bool isError, float duration) {
         setStatusMsg(std::move(msg), isError, duration);

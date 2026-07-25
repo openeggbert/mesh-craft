@@ -18,7 +18,7 @@ SceneHierarchyPanel::SceneHierarchyPanel(Mc3::Mc3Document& document)
 {}
 
 void SceneHierarchyPanel::draw(Editor::SelectionManager& selection,
-                                std::set<std::string>& lockedIds,
+                                Editor::ObjectLockState& objectLockState,
                                 const HierarchyCallbacks& cb)
 {
     // --- Drag-and-drop helpers ---
@@ -302,7 +302,7 @@ void SceneHierarchyPanel::draw(Editor::SelectionManager& selection,
                 ImGui::ColorConvertHSVtoRGB(hue, sat, val, r, g, b);
                 nodeColor = ImVec4(r, g, b, 1.0f);
             }
-            bool isLocked = lockedIds.count(obj->id) > 0;
+            bool isLocked = objectLockState.isLocked(obj->id);
             std::string displayLabel = std::string(typePrefix) + (obj->name.empty() ? obj->id : obj->name);
 
             if (!renamingId_.empty() && obj->id == renamingId_) {
@@ -458,8 +458,7 @@ void SceneHierarchyPanel::draw(Editor::SelectionManager& selection,
                         cb.markModified();
                     }
                     if (ImGui::MenuItem(isLocked ? "Unlock\tCtrl+L" : "Lock\tCtrl+L")) {
-                        if (isLocked) lockedIds.erase(obj->id);
-                        else          lockedIds.insert(obj->id);
+                        objectLockState.toggle(obj->id);
                     }
                     ImGui::EndPopup();
                 }
@@ -479,8 +478,7 @@ void SceneHierarchyPanel::draw(Editor::SelectionManager& selection,
                         isLocked ? ImVec4(1.0f, 0.92f, 0.4f, 1.0f)
                                  : ImVec4(0.55f, 0.55f, 0.55f, 1.0f));
                     if (ImGui::SmallButton(isLocked ? "\xe2\x96\xa0##lk" : "\xe2\x96\xa1##lk")) {
-                        if (isLocked) lockedIds.erase(obj->id);
-                        else          lockedIds.insert(obj->id);
+                        objectLockState.toggle(obj->id);
                     }
                     ImGui::PopStyleColor(3);
                     if (ImGui::IsItemHovered())

@@ -65,7 +65,7 @@ void MeshCraftApplication::drawLeftPanel(float panelY, float panelH)
             cb.selectParent   = [this]() { selectParent(); };
             cb.selectChildren = [this]() { selectChildren(); };
             cb.openBatchRename = [this]() { batchRenameOpen_ = true; };
-            hierarchyPanel_->draw(selection_, lockedIds_, cb);
+            hierarchyPanel_->draw(selection_, objectLockState_, cb);
             ImGui::EndTabItem();
         }
 
@@ -1333,7 +1333,7 @@ void MeshCraftApplication::drawLeftPanel(float panelY, float panelH)
                 if (ImGui::SmallButton("Apply##matapply")) {
                     pushUndo();
                     for (const auto& s : selection_.selection()) {
-                        if (!lockedIds_.count(s->id))
+                        if (!objectLockState_.isLocked(s->id))
                             s->material = selectedMaterialKey_;
                     }
                     modified_ = true; updateWindowTitle();
