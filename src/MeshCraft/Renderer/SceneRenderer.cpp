@@ -7,6 +7,7 @@
 #include <Microsoft/Xna/Framework/Graphics/BufferUsage.hpp>
 #include <Microsoft/Xna/Framework/Graphics/IndexElementSize.hpp>
 #include <Microsoft/Xna/Framework/Graphics/PrimitiveType.hpp>
+#include <Microsoft/Xna/Framework/Graphics/SamplerState.hpp>
 #include <Microsoft/Xna/Framework/Graphics/VertexPositionColor.hpp>
 #include <Microsoft/Xna/Framework/Graphics/VertexPositionNormalTexture.hpp>
 #include <Microsoft/Xna/Framework/MathHelper.hpp>
@@ -57,6 +58,22 @@ void main() {
     fragColor = vec4(rawDepth, rawDepth, rawDepth, 1.0);
 }
 )";
+
+SamplerState samplerStateForSvg(const Mc3SvgTexture& texture) {
+    SamplerState sampler = texture.filter == "nearest"
+        ? SamplerState::PointWrap : SamplerState::LinearWrap;
+    auto addressMode = [](const std::string& value) {
+        if (value == "clamp") return TextureAddressMode::Clamp;
+        if (value == "mirror") return TextureAddressMode::Mirror;
+        return TextureAddressMode::Wrap;
+    };
+    sampler.setAddressUProperty(addressMode(texture.wrapU));
+    sampler.setAddressVProperty(addressMode(texture.wrapV));
+    // Texture2D::CreateFromPixels supplies only level zero. mipMaps is still
+    // preserved and honored by glTF export; generating a live CNA mip chain
+    // would require a CNA API this repository does not own.
+    return sampler;
+}
 
 } // namespace
 
@@ -490,7 +507,7 @@ void SceneRenderer::drawMesh(const RenderMesh& mesh,
 
 void SceneRenderer::drawMeshTextured(const RenderMesh& mesh,
                                       const Matrix& world, const Matrix& view, const Matrix& proj,
-                                      Color color, Texture2D* tex)
+                                      Color color, Texture2D* tex, const SamplerState* sampler)
 {
     if (!mesh.texVB || !mesh.texIB) {
         drawMesh(mesh, world, view, proj, color);
@@ -515,6 +532,13 @@ void SceneRenderer::drawMeshTextured(const RenderMesh& mesh,
         std::clamp(color.getBProperty() / 255.0f, 0.0f, 1.0f)});
     effect_->setAlphaProperty(std::clamp(color.getAProperty() / 255.0f, 0.0f, 1.0f));
 
+    std::optional<SamplerState> previousSampler;
+    if (tex && sampler) {
+        auto& samplerSlot = device_.getSamplerStatesProperty()[0];
+        previousSampler = samplerSlot;
+        samplerSlot = *sampler;
+    }
+
     for (auto& pass : effect_->getCurrentTechniqueProperty()->getPassesProperty())
         pass.Apply();
 
@@ -525,6 +549,9 @@ void SceneRenderer::drawMeshTextured(const RenderMesh& mesh,
         0, 0, n, 0, mesh.texPrimitiveCount);
     device_.SetVertexBuffer(nullptr);
     device_.SetIndexBuffer(nullptr);
+
+    if (previousSampler)
+        device_.getSamplerStatesProperty()[0] = *previousSampler;
 
     effect_->setTextureProperty(nullptr);
     effect_->setTextureEnabledProperty(false);
@@ -953,6 +980,7 @@ void SceneRenderer::drawObject(const Mc3Object& obj, const Mc3Document& doc,
 
     // Resolve baseColorTexture → GPU texture (null if none or failed to load)
     Texture2D* tex = nullptr;
+    std::optional<SamplerState> svgSampler;
     if (!obj.material.empty()) {
         auto matIt = doc.materials.find(obj.material);
         if (matIt != doc.materials.end() && !matIt->second.baseColorTexture.empty()) {
@@ -963,15 +991,28 @@ void SceneRenderer::drawObject(const Mc3Object& obj, const Mc3Document& doc,
             } else {
                 auto svgIt = doc.svgTextures.find(matIt->second.baseColorTexture);
                 if (svgIt != doc.svgTextures.end()) {
-                    // Inline text participates in the key, so an edit in the SVG
-                    // panel gets a fresh GPU texture instead of stale pixels.
-                    const std::string cacheKey = "svg:" + doc.sourcePath.string() + ":" +
-                                                 svgIt->first + ":" + svgIt->second.src + ":" +
-                                                 svgIt->second.inlineContent;
+                    const std::string cacheKey = mc3togltf::svgTextureCacheKey(svgIt->second,
+                                                                                 doc.sourcePath);
+                    const auto sourceStamp = mc3togltf::svgTextureLastWriteTime(svgIt->second,
+                                                                                  doc.sourcePath);
                     auto cached = textureCache_.find(cacheKey);
+                    auto cacheState = svgTextureCacheState_.find(cacheKey);
+                    const bool sourceChanged = svgIt->second.isExternal() &&
+                        cacheState != svgTextureCacheState_.end() &&
+                        cacheState->second.lastWriteTime != sourceStamp;
+                    if (sourceChanged) {
+                        textureCache_.erase(cacheKey);
+                        svgTextureCacheState_.erase(cacheKey);
+                        svgTextureFailureState_.erase(cacheKey);
+                        cached = textureCache_.end();
+                    }
+
+                    auto failed = svgTextureFailureState_.find(cacheKey);
+                    const bool unchangedFailure = failed != svgTextureFailureState_.end() &&
+                        failed->second.lastWriteTime == sourceStamp;
                     if (cached != textureCache_.end()) {
                         tex = &cached->second;
-                    } else {
+                    } else if (!unchangedFailure) {
                         std::string error;
                         auto raster = mc3togltf::rasterizeSvgTexture(svgIt->second,
                                                                        doc.sourcePath, &error);
@@ -981,18 +1022,23 @@ void SceneRenderer::drawObject(const Mc3Object& obj, const Mc3Document& doc,
                                                                        raster.height, raster.rgba));
                             (void)ok;
                             tex = &inserted->second;
+                            svgTextureCacheState_[cacheKey] = {sourceStamp};
+                            svgTextureFailureState_.erase(cacheKey);
                         } else {
                             std::cerr << "Warning: SVG texture '" << svgIt->first
                                       << "' skipped in viewport: " << error << "\n";
+                            svgTextureFailureState_[cacheKey] = {sourceStamp};
                         }
                     }
+                    svgSampler = samplerStateForSvg(svgIt->second);
                 }
             }
         }
     }
 
     auto drawAuto = [&](const RenderMesh& mesh, const Matrix& m) {
-        drawMeshTextured(mesh, m, view, proj, color, tex);
+        drawMeshTextured(mesh, m, view, proj, color, tex,
+                         svgSampler ? &*svgSampler : nullptr);
     };
 
     // G8: pick LOD level based on camera distance to object pivot
@@ -1176,7 +1222,8 @@ void SceneRenderer::drawObject(const Mc3Object& obj, const Mc3Document& doc,
             const RenderMesh* loaded = loadOrGetMesh(absPath);
             if (loaded) {
                 // Always use the lit VPNT path (proper normals); tex may be nullptr
-                drawMeshTextured(*loaded, deform * world, view, proj, color, tex);
+                drawMeshTextured(*loaded, deform * world, view, proj, color, tex,
+                                 svgSampler ? &*svgSampler : nullptr);
                 break;
             }
         }

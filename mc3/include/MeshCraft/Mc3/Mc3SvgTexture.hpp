@@ -11,6 +11,11 @@ struct Mc3SvgTexture {
     std::string id;
     std::string src;            // path to external .svg (empty when inline)
     std::string inlineContent;  // raw SVG markup (empty when external)
+    std::string wrapU{"repeat"};
+    std::string wrapV{"repeat"};
+    std::string filter{"linear"};
+    std::string colorSpace{"srgb"};
+    bool mipMaps{true};
 
     [[nodiscard]] bool isInline()   const { return src.empty() && !inlineContent.empty(); }
     [[nodiscard]] bool isExternal() const { return !src.empty(); }

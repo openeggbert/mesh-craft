@@ -4,6 +4,7 @@
 
 #include <cstdint>
 #include <filesystem>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -21,5 +22,17 @@ struct SvgRasterImage {
 SvgRasterImage rasterizeSvgTexture(const MeshCraft::Mc3::Mc3SvgTexture& texture,
                                    const std::filesystem::path& basePath,
                                    std::string* error = nullptr);
+
+// Compact deterministic identity for the raster cache. In particular, inline
+// markup is represented by a 64-bit FNV-1a digest rather than being copied
+// into a map key every frame.
+std::string svgTextureCacheKey(const MeshCraft::Mc3::Mc3SvgTexture& texture,
+                               const std::filesystem::path& basePath);
+
+// External SVGs are hot-reloaded when this timestamp changes. Inline SVGs do
+// not have a filesystem timestamp and return std::nullopt.
+std::optional<std::filesystem::file_time_type>
+svgTextureLastWriteTime(const MeshCraft::Mc3::Mc3SvgTexture& texture,
+                        const std::filesystem::path& basePath);
 
 } // namespace mc3togltf

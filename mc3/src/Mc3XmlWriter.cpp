@@ -643,6 +643,16 @@ void Mc3XmlWriter::write(const Mc3Document& doc, const std::filesystem::path& pa
             } else if (!svg.inlineContent.empty()) {
                 appendTextOrCData(xml, te, svg.inlineContent);
             }
+            if (svg.wrapU != "repeat")
+                te->SetAttribute("wrap_u", svg.wrapU.c_str());
+            if (svg.wrapV != "repeat")
+                te->SetAttribute("wrap_v", svg.wrapV.c_str());
+            if (svg.filter != "linear")
+                te->SetAttribute("filter", svg.filter.c_str());
+            if (svg.colorSpace != "srgb")
+                te->SetAttribute("color_space", svg.colorSpace.c_str());
+            if (!svg.mipMaps)
+                te->SetAttribute("mip_maps", false);
             tEl->InsertEndChild(te);
         }
         root->InsertEndChild(tEl);

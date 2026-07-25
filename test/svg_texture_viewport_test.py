@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""External SVG material texture must be visibly rasterized in the viewport."""
+"""External or inline SVG material texture must be visibly rasterized in the viewport."""
 import os
 import subprocess
 import sys
@@ -25,10 +25,10 @@ def parse_ppm(path):
 
 
 def main():
-    if len(sys.argv) != 3:
-        print(f"Usage: {sys.argv[0]} <MeshCraft> <svg-material-scene>")
+    if len(sys.argv) != 4:
+        print(f"Usage: {sys.argv[0]} <MeshCraft> <svg-material-scene> <red|blue>")
         sys.exit(1)
-    binary, scene = sys.argv[1:]
+    binary, scene, expected = sys.argv[1:]
     fd, screenshot = tempfile.mkstemp(suffix=".ppm", prefix="meshcraft_svg_")
     os.close(fd)
     try:
@@ -38,13 +38,15 @@ def main():
         result = subprocess.run(command, capture_output=True, text=True)
         assert result.returncode == 0, result.stdout + result.stderr
         width, height, pixels = parse_ppm(screenshot)
-        red = sum(
+        matching = sum(
             1 for y in range(0, height, 2) for x in range(0, width, 2)
-            if (lambda c: c[0] > 120 and c[1] < 80 and c[2] < 80)
+            if ((lambda c: c[0] > 120 and c[1] < 80 and c[2] < 80)
+                if expected == "red" else
+                (lambda c: c[2] > 120 and c[0] < 100 and c[1] < 140))
             (pixels[(y * width + x) * 3:(y * width + x) * 3 + 3])
         )
-        assert red > 100, f"expected rasterized red SVG material pixels, found {red}"
-        print(f"SVG viewport texture: PASS ({red} red samples)")
+        assert matching > 100, f"expected rasterized {expected} SVG material pixels, found {matching}"
+        print(f"SVG viewport texture: PASS ({matching} {expected} samples)")
     finally:
         if os.path.exists(screenshot):
             os.remove(screenshot)

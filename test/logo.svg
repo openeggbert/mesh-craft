@@ -1,3 +1,11 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64">
-  <rect width="64" height="64" fill="#e02020"/>
+<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256">
+  <rect width="256" height="256" fill="#10233f"/>
+  <path d="M0 38 L38 0 H132 L0 132 Z" fill="#e53935"/>
+  <path d="M256 0 L256 104 L152 0 Z" fill="#f6c945"/>
+  <path d="M0 256 L0 160 L96 256 Z" fill="#17a673"/>
+  <circle cx="128" cy="128" r="78" fill="#f7f3e8"/>
+  <circle cx="128" cy="128" r="60" fill="#2463a8"/>
+  <path d="M128 62 L143 108 L192 108 L153 137 L168 184 L128 155 L88 184 L103 137 L64 108 L113 108 Z" fill="#f6c945"/>
+  <circle cx="128" cy="128" r="17" fill="#e53935"/>
+  <path d="M20 222 H236" stroke="#f7f3e8" stroke-width="10"/>
 </svg>

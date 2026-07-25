@@ -1530,9 +1530,23 @@ if(MESH_CRAFT_BUILD_TESTING AND UNIX AND NOT ANDROID AND NOT EMSCRIPTEN)
                         "${CMAKE_CURRENT_SOURCE_DIR}/test/svg_texture_viewport_test.py"
                         $<TARGET_FILE:MeshCraft>
                         "${CMAKE_CURRENT_SOURCE_DIR}/test/svg_material.mc3.xml"
+                        red
                 WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
             )
             set_tests_properties(svg_texture_viewport_test PROPERTIES TIMEOUT 30 LABELS "render")
+        endif()
+
+        if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/test/svg_inline_material.mc3.xml")
+            add_test(
+                NAME svg_inline_texture_viewport_test
+                COMMAND "${PYTHON3_EXEC}"
+                        "${CMAKE_CURRENT_SOURCE_DIR}/test/svg_texture_viewport_test.py"
+                        $<TARGET_FILE:MeshCraft>
+                        "${CMAKE_CURRENT_SOURCE_DIR}/test/svg_inline_material.mc3.xml"
+                        blue
+                WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
+            )
+            set_tests_properties(svg_inline_texture_viewport_test PROPERTIES TIMEOUT 30 LABELS "render")
         endif()
 
         # STAB-0524: confirms the equirectangular skybox shader actually

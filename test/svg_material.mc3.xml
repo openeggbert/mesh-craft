@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <mc3 version="0.3" model="SvgMaterialTest">
   <textures>
-    <texture id="logo" type="svg" src="logo.svg"/>
+    <texture id="logo" type="svg" src="logo.svg" wrap_u="clamp" wrap_v="mirror" filter="nearest" mip_maps="false"/>
   </textures>
   <materials>
     <material id="logo_mat" roughness="0.5">

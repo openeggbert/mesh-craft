@@ -429,6 +429,30 @@ static const char* detectImageMimeType(const std::vector<unsigned char>& bytes, 
 // printed to stderr, misrepresenting export health. These free functions
 // don't take ExportCtx (most are reused/testable without one), so the
 // count is threaded through as a plain reference instead.
+static tinygltf::Sampler buildMc3Sampler(const std::string& wrapU,
+                                         const std::string& wrapV,
+                                         const std::string& filter,
+                                         bool mipMaps)
+{
+    auto wrapMode = [](const std::string& wrap) {
+        if (wrap == "clamp") return TINYGLTF_TEXTURE_WRAP_CLAMP_TO_EDGE;
+        if (wrap == "mirror") return TINYGLTF_TEXTURE_WRAP_MIRRORED_REPEAT;
+        return TINYGLTF_TEXTURE_WRAP_REPEAT;
+    };
+    const bool nearest = (filter == "nearest");
+    tinygltf::Sampler sampler;
+    sampler.wrapS = wrapMode(wrapU);
+    sampler.wrapT = wrapMode(wrapV);
+    sampler.minFilter = mipMaps
+        ? (nearest ? TINYGLTF_TEXTURE_FILTER_NEAREST_MIPMAP_NEAREST
+                   : TINYGLTF_TEXTURE_FILTER_LINEAR_MIPMAP_LINEAR)
+        : (nearest ? TINYGLTF_TEXTURE_FILTER_NEAREST
+                   : TINYGLTF_TEXTURE_FILTER_LINEAR);
+    sampler.magFilter = nearest ? TINYGLTF_TEXTURE_FILTER_NEAREST
+                                : TINYGLTF_TEXTURE_FILTER_LINEAR;
+    return sampler;
+}
+
 static std::unordered_map<std::string, int>
 buildTextures(tinygltf::Model& model,
               const std::map<std::string, Mc3Texture>& textures,
@@ -443,30 +467,13 @@ buildTextures(tinygltf::Model& model,
         // Untrusted-input containment: refuse a texture URI that escapes the
         // document root (see assertResourceAllowed) unless explicitly allowed.
         assertResourceAllowed(basePath, tex.uri, allowExternalResources, "texture uri");
-        auto wrapMode = [](const std::string& w) {
-            if (w == "clamp")  return TINYGLTF_TEXTURE_WRAP_CLAMP_TO_EDGE;
-            if (w == "mirror") return TINYGLTF_TEXTURE_WRAP_MIRRORED_REPEAT;
-            return TINYGLTF_TEXTURE_WRAP_REPEAT;
-        };
-        tinygltf::Sampler samp;
-        samp.wrapS = wrapMode(tex.wrapU);
-        samp.wrapT = wrapMode(tex.wrapV);
-        bool nearest = (tex.filter == "nearest");
         // SYS-W14-22: minFilter used to unconditionally request a mipmapped
         // filter regardless of tex.mipMaps -- a texture explicitly authored
         // with mipMaps="false" (e.g. pixel-art/UI textures where mip
         // blending is undesirable) still told glTF-conformant viewers to
         // generate and sample a mip chain for it. Honor the flag: only
         // request the *_MIPMAP_* variant when mipMaps is actually true.
-        if (tex.mipMaps) {
-            samp.minFilter = nearest ? TINYGLTF_TEXTURE_FILTER_NEAREST_MIPMAP_NEAREST
-                                      : TINYGLTF_TEXTURE_FILTER_LINEAR_MIPMAP_LINEAR;
-        } else {
-            samp.minFilter = nearest ? TINYGLTF_TEXTURE_FILTER_NEAREST
-                                      : TINYGLTF_TEXTURE_FILTER_LINEAR;
-        }
-        samp.magFilter = nearest ? TINYGLTF_TEXTURE_FILTER_NEAREST
-                                  : TINYGLTF_TEXTURE_FILTER_LINEAR;
+        tinygltf::Sampler samp = buildMc3Sampler(tex.wrapU, tex.wrapV, tex.filter, tex.mipMaps);
 
         int sampIdx = static_cast<int>(model.samplers.size());
         model.samplers.push_back(std::move(samp));
@@ -548,11 +555,8 @@ static void buildSvgTextures(tinygltf::Model& model,
             continue;
         }
 
-        tinygltf::Sampler sampler;
-        sampler.wrapS = TINYGLTF_TEXTURE_WRAP_REPEAT;
-        sampler.wrapT = TINYGLTF_TEXTURE_WRAP_REPEAT;
-        sampler.minFilter = TINYGLTF_TEXTURE_FILTER_LINEAR_MIPMAP_LINEAR;
-        sampler.magFilter = TINYGLTF_TEXTURE_FILTER_LINEAR;
+        tinygltf::Sampler sampler = buildMc3Sampler(svg.wrapU, svg.wrapV,
+                                                      svg.filter, svg.mipMaps);
         const int samplerIndex = static_cast<int>(model.samplers.size());
         model.samplers.push_back(std::move(sampler));
 

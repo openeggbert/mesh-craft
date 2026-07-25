@@ -2791,6 +2791,11 @@ static void testSvgTexture() {
         Mc3SvgTexture svg;
         svg.id  = "logo";
         svg.src = "images/logo.svg";
+        svg.wrapU = "clamp";
+        svg.wrapV = "mirror";
+        svg.filter = "nearest";
+        svg.colorSpace = "linear";
+        svg.mipMaps = false;
         doc.addSvgTexture(svg);
 
         auto rt = roundtrip(doc);
@@ -2799,6 +2804,11 @@ static void testSvgTexture() {
             CHECK(rt.svgTextures["logo"].src == "images/logo.svg", "svg tex external: src preserved");
             CHECK(rt.svgTextures["logo"].inlineContent.empty(),    "svg tex external: no inline content");
             CHECK(rt.svgTextures["logo"].isExternal(),             "svg tex external: isExternal()");
+            CHECK(rt.svgTextures["logo"].wrapU == "clamp",         "svg tex external: wrapU preserved");
+            CHECK(rt.svgTextures["logo"].wrapV == "mirror",        "svg tex external: wrapV preserved");
+            CHECK(rt.svgTextures["logo"].filter == "nearest",      "svg tex external: filter preserved");
+            CHECK(rt.svgTextures["logo"].colorSpace == "linear",   "svg tex external: colorSpace preserved");
+            CHECK(!rt.svgTextures["logo"].mipMaps,                   "svg tex external: mipMaps preserved");
         }
     }
     // Inline SVG

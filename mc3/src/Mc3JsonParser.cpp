@@ -653,6 +653,11 @@ Mc3Document Mc3JsonParser::parseString(const std::string& jsonText,
                 svg.src = te.value("src", "");
                 validateResourcePathIfConfined(svg.src, "SVG texture src");
                 svg.inlineContent = te.value("inlineContent", "");
+                svg.wrapU = te.value("wrapU", svg.wrapU);
+                svg.wrapV = te.value("wrapV", svg.wrapV);
+                svg.filter = te.value("filter", svg.filter);
+                svg.colorSpace = te.value("colorSpace", svg.colorSpace);
+                svg.mipMaps = te.value("mipMaps", svg.mipMaps);
                 doc.svgTextures[id] = svg;
             } else {
                 Mc3Texture tex;

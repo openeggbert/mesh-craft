@@ -36,7 +36,22 @@ if __name__ == "__main__":
             generated_png = os.path.join(tmpdir, image["uri"])
             assert os.path.exists(generated_png) and os.path.getsize(generated_png) > 0, \
                 "Rasterized SVG PNG was not written"
+            if i == 0:
+                sampler = gltf["samplers"][gltf["textures"][texture_index]["sampler"]]
+                assert sampler["wrapS"] == 33071 and sampler["wrapT"] == 33648, sampler
+                assert sampler["minFilter"] == 9728 and sampler["magFilter"] == 9728, sampler
             assert "SVG rasterization is not implemented" not in (r.stdout + r.stderr)
+
+        glb = os.path.join(tmpdir, "out.glb")
+        glb_result = run([mc3togltf, xml_paths[0], glb])
+        assert glb_result.returncode == 0, glb_result.stderr
+        with open(glb, "rb") as f:
+            header = f.read(12)
+            chunk_header = f.read(8)
+            json_chunk = f.read(int.from_bytes(chunk_header[:4], "little"))
+        assert header[:4] == b"glTF" and chunk_header[4:] == b"JSON", "invalid GLB"
+        glb_json = json.loads(json_chunk.decode("utf-8").rstrip(" \t\r\n\0"))
+        assert glb_json["materials"][0]["pbrMetallicRoughness"]["baseColorTexture"]["index"] >= 0
         print("SVG texture export: PASS (external and inline)")
 
     print("\nSVG texture export test: PASS")

@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<mc3 version="0.3" model="InvalidSvgMaterialTest">
+  <textures><texture id="bad" type="svg"><![CDATA[this is not SVG markup]]></texture></textures>
+  <materials><material id="bad_mat"><base_color_texture>bad</base_color_texture></material></materials>
+  <objects><box name="BadSvgBox" size="1 1 1" material="bad_mat"/></objects>
+</mc3>

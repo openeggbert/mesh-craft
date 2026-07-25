@@ -138,6 +138,12 @@ if(BUILD_TESTING)
     add_test(NAME mc3togltf_earclip COMMAND mc3togltf_earclip_test)
     set_tests_properties(mc3togltf_earclip PROPERTIES TIMEOUT 15 LABELS "export")
 
+    add_executable(mc3togltf_svg_rasterizer_test test/svg_rasterizer_test.cpp)
+    target_link_libraries(mc3togltf_svg_rasterizer_test PRIVATE mc3togltf_lib)
+    target_include_directories(mc3togltf_svg_rasterizer_test PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
+    add_test(NAME mc3togltf_svg_rasterizer COMMAND mc3togltf_svg_rasterizer_test)
+    set_tests_properties(mc3togltf_svg_rasterizer PROPERTIES TIMEOUT 15 LABELS "export")
+
     # SYS-W1-01 (pre-export integration point): GltfExporter::validation,
     # populated for documents that never went through a parser load at all.
     add_executable(mc3togltf_pre_export_validation_test test/pre_export_validation_test.cpp)
@@ -257,6 +263,8 @@ if(BUILD_TESTING)
         set(_empty_scene_xml          "${CMAKE_CURRENT_SOURCE_DIR}/../test/empty_scene.mc3.xml")
         set(_svg_material_xml         "${CMAKE_CURRENT_SOURCE_DIR}/../test/svg_material.mc3.xml")
         set(_svg_inline_material_xml  "${CMAKE_CURRENT_SOURCE_DIR}/../test/svg_inline_material.mc3.xml")
+        set(_svg_invalid_material_xml "${CMAKE_CURRENT_SOURCE_DIR}/../test/svg_invalid_material.mc3.xml")
+        set(_svg_large_material_xml   "${CMAKE_CURRENT_SOURCE_DIR}/../test/svg_large_material.mc3.xml")
         set(_anim_unsupported_xml     "${CMAKE_CURRENT_SOURCE_DIR}/../test/animation_unsupported.mc3.xml")
         set(_instance_variant_xml     "${CMAKE_CURRENT_SOURCE_DIR}/../test/instance_variant.mc3.xml")
         set(_glb_texture_embed_xml    "${CMAKE_CURRENT_SOURCE_DIR}/../test/glb_texture_embed.mc3.xml")
@@ -779,6 +787,17 @@ if(BUILD_TESTING)
                         "${_svg_inline_material_xml}"
             )
             set_tests_properties(mc3togltf_svg_texture_export PROPERTIES TIMEOUT 30 LABELS "export")
+        endif()
+        if(EXISTS "${_svg_invalid_material_xml}" AND EXISTS "${_svg_large_material_xml}")
+            add_test(
+                NAME mc3togltf_svg_texture_safety
+                COMMAND "${PYTHON3_EXEC}"
+                        "${CMAKE_CURRENT_SOURCE_DIR}/test/svg_texture_safety_test.py"
+                        "$<TARGET_FILE:mc3togltf>"
+                        "${_svg_invalid_material_xml}"
+                        "${_svg_large_material_xml}"
+            )
+            set_tests_properties(mc3togltf_svg_texture_safety PROPERTIES TIMEOUT 30 LABELS "export")
         endif()
         if(EXISTS "${_anim_unsupported_xml}")
             add_test(

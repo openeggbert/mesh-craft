@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<mc3 version="0.3" model="LargeSvgMaterialTest">
+  <textures><texture id="large" type="svg"><![CDATA[<svg xmlns="http://www.w3.org/2000/svg" width="100000" height="50000"><rect width="100000" height="50000" fill="#e02020"/></svg>]]></texture></textures>
+  <materials><material id="large_mat"><base_color_texture>large</base_color_texture></material></materials>
+  <objects><box name="LargeSvgBox" size="1 1 1" material="large_mat"/></objects>
+</mc3>

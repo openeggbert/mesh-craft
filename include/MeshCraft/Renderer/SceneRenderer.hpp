@@ -8,11 +8,13 @@
 #include <Microsoft/Xna/Framework/Graphics/BasicEffect.hpp>
 #include <Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp>
 #include <Microsoft/Xna/Framework/Graphics/IndexBuffer.hpp>
+#include <Microsoft/Xna/Framework/Graphics/SamplerState.hpp>
 #include <Microsoft/Xna/Framework/Graphics/ShaderEffect.hpp>
 #include <Microsoft/Xna/Framework/Graphics/Texture2D.hpp>
 #include <Microsoft/Xna/Framework/Graphics/VertexBuffer.hpp>
 #include <Microsoft/Xna/Framework/Matrix.hpp>
 #include <array>
+#include <filesystem>
 #include <map>
 #include <memory>
 #include <optional>
@@ -403,7 +405,8 @@ private:
                           const Microsoft::Xna::Framework::Matrix& view,
                           const Microsoft::Xna::Framework::Matrix& projection,
                           Microsoft::Xna::Framework::Color color,
-                          Microsoft::Xna::Framework::Graphics::Texture2D* tex);
+                          Microsoft::Xna::Framework::Graphics::Texture2D* tex,
+                          const Microsoft::Xna::Framework::Graphics::SamplerState* sampler = nullptr);
 
     Microsoft::Xna::Framework::Graphics::Texture2D* loadOrGetTexture(const std::string& absPath);
     const RenderMesh* loadOrGetMesh(const std::string& absPath);
@@ -414,6 +417,14 @@ private:
     bool isSelected(const Mc3::Mc3Object& obj, const std::vector<const Mc3::Mc3Object*>& sel) const;
 
     std::map<std::string, Microsoft::Xna::Framework::Graphics::Texture2D> textureCache_;
+    struct SvgCacheState {
+        std::optional<std::filesystem::file_time_type> lastWriteTime;
+    };
+    // Successful and failed SVG rasterizations both remember the source stamp:
+    // an unchanged bad file is not reparsed/logged every frame, while an edit
+    // invalidates either result immediately.
+    std::map<std::string, SvgCacheState> svgTextureCacheState_;
+    std::map<std::string, SvgCacheState> svgTextureFailureState_;
     std::map<std::string, RenderMesh> meshCache_;
     // AUD-061: per-object-ratio Torus/Capsule mesh caches, keyed on the
     // exact parameters that determine the mesh's shape (LOD segment counts +

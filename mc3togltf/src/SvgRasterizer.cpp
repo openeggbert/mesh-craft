@@ -10,6 +10,7 @@
 #include <algorithm>
 #include <cmath>
 #include <fstream>
+#include <iomanip>
 #include <limits>
 #include <sstream>
 
@@ -28,7 +29,42 @@ std::string loadTextFile(const std::filesystem::path& path) {
     stream << in.rdbuf();
     return stream.str();
 }
+
+std::filesystem::path sourcePath(const MeshCraft::Mc3::Mc3SvgTexture& texture,
+                                 const std::filesystem::path& basePath) {
+    return (basePath / texture.src).lexically_normal();
+}
+
+std::uint64_t fnv1a64(const std::string& text) {
+    std::uint64_t hash = 14695981039346656037ULL;
+    for (unsigned char c : text) {
+        hash ^= c;
+        hash *= 1099511628211ULL;
+    }
+    return hash;
+}
 } // namespace
+
+std::string svgTextureCacheKey(const MeshCraft::Mc3::Mc3SvgTexture& texture,
+                               const std::filesystem::path& basePath)
+{
+    const std::string identity = texture.isExternal()
+        ? "file:" + sourcePath(texture, basePath).generic_string()
+        : "inline:" + texture.inlineContent;
+    std::ostringstream key;
+    key << "svg:" << std::hex << fnv1a64(identity);
+    return key.str();
+}
+
+std::optional<std::filesystem::file_time_type>
+svgTextureLastWriteTime(const MeshCraft::Mc3::Mc3SvgTexture& texture,
+                        const std::filesystem::path& basePath)
+{
+    if (!texture.isExternal()) return std::nullopt;
+    std::error_code error;
+    const auto stamp = std::filesystem::last_write_time(sourcePath(texture, basePath), error);
+    return error ? std::nullopt : std::optional{stamp};
+}
 
 SvgRasterImage rasterizeSvgTexture(const MeshCraft::Mc3::Mc3SvgTexture& texture,
                                    const std::filesystem::path& basePath,
@@ -38,7 +74,7 @@ SvgRasterImage rasterizeSvgTexture(const MeshCraft::Mc3::Mc3SvgTexture& texture,
     if (texture.isInline()) {
         markup = texture.inlineContent;
     } else if (texture.isExternal()) {
-        const std::filesystem::path path = basePath / texture.src;
+        const std::filesystem::path path = sourcePath(texture, basePath);
         markup = loadTextFile(path);
         if (markup.empty()) {
             setError(error, "cannot read SVG file '" + path.string() + "'");

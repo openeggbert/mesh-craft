@@ -1101,6 +1101,11 @@ static void parseTextures(const XMLElement* el, Mc3Document& doc) {
             Mc3SvgTexture svg;
             svg.id  = id;
             svg.src = attr(c, "src");
+            svg.wrapU      = attr(c, "wrap_u",      "repeat");
+            svg.wrapV      = attr(c, "wrap_v",      "repeat");
+            svg.filter     = attr(c, "filter",      "linear");
+            svg.colorSpace = attr(c, "color_space", "srgb");
+            svg.mipMaps    = attrB(c, "mip_maps",   true);
             validateResourcePathIfConfined(c, svg.src, "SVG texture src");
             if (svg.src.empty()) {
                 const char* text = c->GetText();

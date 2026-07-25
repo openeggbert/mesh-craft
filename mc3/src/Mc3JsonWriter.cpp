@@ -426,6 +426,11 @@ std::string Mc3JsonWriter::toString(const Mc3Document& doc) {
             te["type"] = "svg";
             if (!svg.src.empty())            te["src"] = svg.src;
             if (!svg.inlineContent.empty())  te["inlineContent"] = svg.inlineContent;
+            te["wrapU"] = svg.wrapU;
+            te["wrapV"] = svg.wrapV;
+            te["filter"] = svg.filter;
+            te["colorSpace"] = svg.colorSpace;
+            te["mipMaps"] = svg.mipMaps;
             arr.push_back(std::move(te));
         }
         j["textures"] = std::move(arr);
