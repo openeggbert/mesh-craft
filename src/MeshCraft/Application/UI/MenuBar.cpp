@@ -450,11 +450,12 @@ float MeshCraftApplication::drawMenuBar()
             };
             UI::MenuBar::drawEditTransformClipboard(editTransformClipboardContext);
             ImGui::Separator();
-            if (ImGui::MenuItem(isolateActive_ ? "Exit Isolation" : "Isolate Selection",
-                               "Alt+I", false,
-                               isolateActive_ || !selection_.selection().empty())) {
-                toggleIsolate();
-            }
+            const UI::EditIsolateSelectionContext editIsolateSelectionContext{
+                .isActive = isolateActive_,
+                .canToggle = isolateActive_ || !selection_.selection().empty(),
+                .toggle = [this] { toggleIsolate(); },
+            };
+            UI::MenuBar::drawEditIsolateSelection(editIsolateSelectionContext);
             ImGui::Separator();
             if (ImGui::MenuItem("Hide Selected", "H", false, !selection_.selection().empty())) {
                 auto sel = selection_.selection();
@@ -855,6 +856,13 @@ void MenuBar::drawEditTransformClipboard(const EditTransformClipboardContext& co
     }
     if (ImGui::MenuItem("Paste Transform", "Ctrl+Shift+V", false, context.canPaste)) {
         context.paste();
+    }
+}
+
+void MenuBar::drawEditIsolateSelection(const EditIsolateSelectionContext& context) {
+    if (ImGui::MenuItem(context.isActive ? "Exit Isolation" : "Isolate Selection",
+                        "Alt+I", false, context.canToggle)) {
+        context.toggle();
     }
 }
 

@@ -197,6 +197,12 @@ struct EditTransformClipboardContext {
     std::function<void()> paste;
 };
 
+struct EditIsolateSelectionContext {
+    bool isActive;
+    bool canToggle;
+    std::function<void()> toggle;
+};
+
 class MenuBar final {
 public:
     static void drawAddMenu(const std::function<void(Mc3::ObjectType)>& addPrimitive);
@@ -223,6 +229,7 @@ public:
     static void drawEditLockSelection(const EditLockSelectionContext& context);
     static void drawEditResetTransform(const EditResetTransformContext& context);
     static void drawEditTransformClipboard(const EditTransformClipboardContext& context);
+    static void drawEditIsolateSelection(const EditIsolateSelectionContext& context);
     static void drawEditHistory(const EditHistoryContext& context);
     static void drawEditObjectActions(const EditObjectActionsContext& context);
     static void drawEditSelectionActions(const EditSelectionActionsContext& context);
