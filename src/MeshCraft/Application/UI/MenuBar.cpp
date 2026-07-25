@@ -222,15 +222,20 @@ float MeshCraftApplication::drawMenuBar()
                 .convert = [this] { convertToDefinition(); },
             };
             UI::MenuBar::drawEditConvertToDefinition(editConvertToDefinitionContext);
-            if (ImGui::MenuItem("Export Subtree as Template...", nullptr, false, !selection_.selection().empty())) {
-                auto* src = selection_.selection().front().get();
-                std::string suggested = src->name.empty() ? src->id : src->name;
-                std::strncpy(subtreeExportNameBuf_, suggested.c_str(), sizeof(subtreeExportNameBuf_)-1);
-                subtreeExportNameBuf_[sizeof(subtreeExportNameBuf_)-1] = '\0';
-                subtreeExportFileBuf_[0] = '\0';
-                subtreeExportErr_[0]     = '\0';
-                subtreeExportOpen_       = true;
-            }
+            const UI::EditExportSubtreeContext editExportSubtreeContext{
+                .canExport = !selection_.selection().empty(),
+                .openDialog = [this] {
+                    auto* src = selection_.selection().front().get();
+                    std::string suggested = src->name.empty() ? src->id : src->name;
+                    std::strncpy(subtreeExportNameBuf_, suggested.c_str(),
+                                 sizeof(subtreeExportNameBuf_) - 1);
+                    subtreeExportNameBuf_[sizeof(subtreeExportNameBuf_) - 1] = '\0';
+                    subtreeExportFileBuf_[0] = '\0';
+                    subtreeExportErr_[0] = '\0';
+                    subtreeExportOpen_ = true;
+                },
+            };
+            UI::MenuBar::drawEditExportSubtree(editExportSubtreeContext);
             {
                 bool isInst = !selection_.selection().empty() &&
                               selection_.selection().front()->type == Mc3::ObjectType::Instance;
@@ -692,6 +697,12 @@ void MenuBar::drawEditGrouping(const EditGroupingContext& context) {
 void MenuBar::drawEditConvertToDefinition(const EditConvertToDefinitionContext& context) {
     if (ImGui::MenuItem("Convert to Definition", nullptr, false, context.canConvert)) {
         context.convert();
+    }
+}
+
+void MenuBar::drawEditExportSubtree(const EditExportSubtreeContext& context) {
+    if (ImGui::MenuItem("Export Subtree as Template...", nullptr, false, context.canExport)) {
+        context.openDialog();
     }
 }
 

@@ -86,6 +86,11 @@ struct EditConvertToDefinitionContext {
     std::function<void()> convert;
 };
 
+struct EditExportSubtreeContext {
+    bool canExport;
+    std::function<void()> openDialog;
+};
+
 class MenuBar final {
 public:
     static void drawAddMenu(const std::function<void(Mc3::ObjectType)>& addPrimitive);
@@ -93,6 +98,7 @@ public:
     static void drawEditCopyProperties(const EditCopyPropertiesContext& context);
     static void drawEditGrouping(const EditGroupingContext& context);
     static void drawEditConvertToDefinition(const EditConvertToDefinitionContext& context);
+    static void drawEditExportSubtree(const EditExportSubtreeContext& context);
     static void drawEditHistory(const EditHistoryContext& context);
     static void drawEditObjectActions(const EditObjectActionsContext& context);
     static void drawEditSelectionActions(const EditSelectionActionsContext& context);
