@@ -2,6 +2,7 @@
 #include "MeshCraft/Renderer/CsgCacheAlg.hpp"
 #include "MeshCraft/Renderer/PrimitiveTessellationAlg.hpp"
 #include "MeshCraft/EditorAlgorithms.hpp"
+#include "MeshCraft/GraphicsBackendCheck.hpp"
 #include <iostream>
 
 #include <Microsoft/Xna/Framework/Graphics/BufferUsage.hpp>
@@ -412,10 +413,12 @@ SceneRenderer::SceneRenderer(GraphicsDevice& device)
     effect_->setPreferPerPixelLightingProperty(true); // smoother on curved surfaces if CNA supports
     effect_->setLightingEnabledProperty(false); // off by default; enabled per draw in drawMeshTextured
 
-    depthEffect_.emplace(device_, kDepthPassVertSrc, kDepthPassFragSrc);
-    if (!depthEffect_->IsEffectValid()) {
-        std::cerr << "[SSAO] Failed to compile depth-prepass shader\n";
-        depthEffect_.reset();
+    if (supportsTextShaderEffects()) {
+        depthEffect_.emplace(device_, kDepthPassVertSrc, kDepthPassFragSrc);
+        if (!depthEffect_->IsEffectValid()) {
+            std::cerr << "[SSAO] Failed to compile depth-prepass shader\n";
+            depthEffect_.reset();
+        }
     }
 
     buildUnitBox();

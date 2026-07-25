@@ -1,5 +1,6 @@
 #include "MeshCraft/MeshCraftApplication.hpp"
 #include "MeshCraft/EditorAlgorithms.hpp"
+#include "MeshCraft/GraphicsBackendCheck.hpp"
 #include "MeshCraftPrivate.hpp"
 
 #include <imgui.h>
@@ -147,6 +148,18 @@ void MeshCraftApplication::LoadContent() {
     auto benchmarkLoadStart = std::chrono::steady_clock::now();
 
     auto& gd = getGraphicsDeviceProperty();
+
+    if (!supportsTextShaderEffects()) {
+        // Do not feed GLSL source to CNA's Vulkan ShaderEffect path: it
+        // accepts SPIR-V only and cannot represent MeshCraft's named uniforms
+        // or 3D depth-prepass pipeline yet.  The editor, scene, and CNA ImGui
+        // renderer continue normally; only optional source-shader features
+        // are unavailable on this backend.
+        bloomEnabled_ = false;
+        ssaoEnabled_ = false;
+        std::cerr << "[MeshCraft] Source-GLSL ShaderEffects are unavailable on this backend; "
+                     "Bloom, SSAO, skybox shading, and material preview are disabled.\n";
+    }
 
     gridRenderer_  = std::make_unique<Renderer::GridRenderer>(gd);
     sceneRenderer_ = std::make_unique<Renderer::SceneRenderer>(gd);
@@ -1172,7 +1185,7 @@ namespace MeshCraft {
 
 void MeshCraftApplication::initBloom(int w, int h)
 {
-    if (w <= 0 || h <= 0) return;
+    if (!supportsTextShaderEffects() || w <= 0 || h <= 0) return;
     auto& gd = getGraphicsDeviceProperty();
 
     bloomRtA_.emplace(gd, w, h);
@@ -1193,6 +1206,7 @@ void MeshCraftApplication::initBloom(int w, int h)
 
 void MeshCraftApplication::initSkybox()
 {
+    if (!supportsTextShaderEffects()) return;
     auto& gd = getGraphicsDeviceProperty();
     skyboxFx_.emplace(gd, kBloomVertSrc, kSkyboxFragSrc);
     if (!skyboxFx_->IsEffectValid()) {
@@ -1328,7 +1342,7 @@ void MeshCraftApplication::applyBloom(
 
 void MeshCraftApplication::initSsao(int w, int h)
 {
-    if (w <= 0 || h <= 0 || !sceneRenderer_ || !sceneRenderer_->depthPassAvailable()) return;
+    if (!supportsTextShaderEffects() || w <= 0 || h <= 0 || !sceneRenderer_ || !sceneRenderer_->depthPassAvailable()) return;
     auto& gd = getGraphicsDeviceProperty();
     ssaoDepthRt_.emplace(gd, w, h, false, SurfaceFormat::Color, DepthFormat::Depth24);
     ssaoRt_.emplace(gd, w, h);
@@ -1461,7 +1475,7 @@ void MeshCraftApplication::renderShadowDebugFbo(const Matrix& lightView, const M
 // D7: Material preview sphere (128×128 FBO, SDF Blinn-Phong shader)
 // ---------------------------------------------------------------------------
 void MeshCraftApplication::initMatPreview() {
-    if (matPreviewRt_) return;  // already initialised
+    if (!supportsTextShaderEffects() || matPreviewRt_) return;  // already initialised/unavailable
 
     auto& gd = getGraphicsDeviceProperty();
     matPreviewRt_.emplace(gd, kMatPreviewRes, kMatPreviewRes);

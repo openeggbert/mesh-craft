@@ -9,6 +9,7 @@
 #include <string>
 
 using MeshCraft::isBackendSupportedAlg;
+using MeshCraft::supportsTextShaderEffectsAlg;
 
 static int failures = 0;
 static void check(bool cond, const std::string& msg) {
@@ -33,6 +34,13 @@ int main() {
               std::string(backend) + " cannot bypass qualification with the legacy override argument");
     }
     check(!isBackendSupportedAlg("UNKNOWN", false), "unknown backend is rejected");
+
+    check(supportsTextShaderEffectsAlg("EASYGL"),
+          "EASYGL supports MeshCraft's source-GLSL ShaderEffects");
+    for (const char* backend : {"VULKAN", "SDL_RENDERER", "BGFX", "WEBGPU"}) {
+        check(!supportsTextShaderEffectsAlg(backend),
+              std::string(backend) + " does not claim unsupported source-GLSL ShaderEffects");
+    }
 
     if (failures == 0) { std::cout << "All graphics-backend-check tests passed.\n"; return 0; }
     std::cerr << failures << " graphics-backend-check test(s) failed.\n";

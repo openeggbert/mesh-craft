@@ -653,9 +653,9 @@ portable through CNA rather than merely hiding its OpenGL dependency.
   editor renders correctly, including the CNA ImGui path. Automated preview
   screenshots remain blocked only by this host's unavailable display preflight.
 
-### SYS-W8-05 `[IN_PROGRESS]` `P1` · Qualify the CNA-backed editor UI on alternate graphics backends, then remove the EASYGL-only gate
+### SYS-W8-05 `[BLOCKED]` `P1` · Qualify the CNA-backed editor UI on alternate graphics backends, then remove the EASYGL-only gate
 - **Component:** backend selection in `CMakeLists.txt`/`main.cpp`/`GraphicsBackendCheck.hpp`, ImGui platform initialization, CI configuration, and render-test launchers.
-- **Evidence:** The current runtime gate rejects every backend except EASYGL because the active renderer is `imgui_impl_opengl3`. Vulkan/WebGPU cannot share that GL renderer or its native texture IDs even if CNA can render the scene. Their availability and toolchain requirements are owned by CNA and must be measured, not assumed.
+- **Evidence:** The renderer now consumes Dear ImGui draw data entirely through CNA and uses opaque CNA texture tokens, so it has no native-OpenGL renderer dependency. Vulkan/WebGPU availability and toolchain requirements are still owned by CNA and must be measured, not assumed.
 - **Outcome:** For every alternate CNA backend the sibling CNA checkout actually supports (target order: Vulkan, then WebGPU), select the appropriate SDL/ImGui platform mode while keeping rendering CNA-backed; configure, build, and run the editor without an OpenGL context. Remove the EASYGL-only rejection only for backends with a passing real editor smoke/screenshot test. Keep unsupported backends rejected with a precise capability message rather than an override that launches a blank UI. Revisit Android AUD-042 only after this qualification produces a supported mobile-capable path.
 - **Tests:** Add a backend matrix that always performs configure+build and, where a runner/GPU backend is available, runs a real editor screenshot including `ImGui::Image()` previews. Require CNA-native scene tests plus the new UI screenshot checks per enabled backend; retain EASYGL coverage. Do not claim Vulkan/WebGPU support until this matrix has passed on each backend's real runtime.
 - **Dependency/rule:** Requires SYS-W8-02 through SYS-W8-04. Any missing CNA backend, SDK, CI runner, or public CNA API is recorded as a concrete blocked subcondition, not bypassed with direct OpenGL or untested `MESH_CRAFT_ALLOW_UNSUPPORTED_BACKEND` launches.
@@ -668,8 +668,25 @@ portable through CNA rather than merely hiding its OpenGL dependency.
   launch reached `AMD Radeon 780M (RADV PHOENIX)` and initialized CNA's Vulkan
   backend. It also exposed a separate remaining portability gap: the SSAO
   depth-prepass feeds text GLSL to `ShaderEffect`, whereas the Vulkan backend
-  expects SPIR-V (`SPIR-V size must be a multiple of 4 bytes`), so SSAO cannot
-  be qualified there yet. SYS-W8-05 now exposes CNA's `WEBGPU` target too; it
+  expects SPIR-V (`SPIR-V size must be a multiple of 4 bytes`). MeshCraft now
+  detects this capability before constructing an effect: on Vulkan it keeps
+  the CNA scene/editor/ImGui path running, disables only Bloom, SSAO, skybox
+  shading, and the material-preview `ImGui::Image`, and labels those UI
+  limitations rather than emitting a shader-compile error or falling back to
+  native GL. This is a **CNA API blocker** for full qualification, not a
+  MeshCraft shader-conversion task: CNA needs a public cross-backend custom
+  effect contract with (1) GLSL-to-backend compilation or a documented SPIR-V
+  input path, (2) named uniform and multiple texture-slot binding, and (3) a
+  caller-selected 3D vertex layout plus depth-enabled pipeline, in addition
+  to its current narrow SpriteBatch-compatible Vulkan effect path. Until that
+  exists, the required real Vulkan screenshot including a material-preview
+  image cannot be produced honestly. The guarded Vulkan launch now reaches
+  CNA initialization without the prior SPIR-V error, but then receives
+  `SIGSEGV` in `CNA::Internal::Backends::Vulkan::VulkanGraphicsBackend::RecordCommandBuffer`
+  while `GraphicsDevice::Present()` records the first frame (Mesa RADV on AMD
+  Radeon 780M). That is a second, independent CNA Vulkan backend blocker;
+  its stack is outside MeshCraft, so no direct-GL workaround is permitted.
+  SYS-W8-05 now exposes CNA's `WEBGPU` target too; it
   downloaded CNA's pinned wgpu-native package, but has not yet completed a
   local configure or runtime check. CI now has a Vulkan configure/build matrix.
   Vulkan is enabled for this manual qualification; WebGPU and all other

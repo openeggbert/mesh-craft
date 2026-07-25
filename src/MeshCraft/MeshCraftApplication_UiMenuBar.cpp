@@ -1,4 +1,5 @@
 #include "MeshCraft/MeshCraftApplication.hpp"
+#include "MeshCraft/GraphicsBackendCheck.hpp"
 #include "MeshCraftPrivate.hpp"
 
 #include <imgui.h>
@@ -551,28 +552,32 @@ float MeshCraftApplication::drawMenuBar()
             ImGui::MenuItem("Edge Overlay",    "Alt+W", &showEdgeOverlay_);
             ImGui::MenuItem("Wireframe Mode",  nullptr,  &showWireframeMode_);
             ImGui::MenuItem("Stats Overlay",   nullptr,  &showStatsOverlay_);
-            ImGui::MenuItem("Bloom (emissive glow)", nullptr, &bloomEnabled_);
-            if (bloomEnabled_) {
-                ImGui::SetNextItemWidth(140);
-                // AlwaysClamp: without it, Ctrl+Click lets a typed value go
-                // out of [min,max] (incl. negative), which the composite
-                // shader has no other guard against (STAB-0325).
-                ImGui::SliderFloat("  Strength##bloom", &bloomStrength_, 0.5f, 8.0f, "%.1f",
-                                   ImGuiSliderFlags_AlwaysClamp);
-            }
-            ImGui::MenuItem("SSAO (ambient occlusion)", nullptr, &ssaoEnabled_);
-            if (ssaoEnabled_) {
-                ImGui::SetNextItemWidth(140);
-                // AlwaysClamp: same out-of-bounds-via-Ctrl+Click risk as
-                // bloom strength above (STAB-0326).
-                ImGui::SliderFloat("  Strength##ssao", &ssaoStrength_, 0.0f, 1.0f, "%.2f",
-                                   ImGuiSliderFlags_AlwaysClamp);
-                ImGui::SetNextItemWidth(140);
-                // Same fix applied here too: a negative/zero radius from an
-                // unclamped Ctrl+Click entry would break the SSAO sample
-                // kernel, same root cause as the two strength sliders above.
-                ImGui::SliderFloat("  Radius##ssao",   &ssaoRadius_,   0.05f, 2.0f, "%.2f",
-                                   ImGuiSliderFlags_AlwaysClamp);
+            if (supportsTextShaderEffects()) {
+                ImGui::MenuItem("Bloom (emissive glow)", nullptr, &bloomEnabled_);
+                if (bloomEnabled_) {
+                    ImGui::SetNextItemWidth(140);
+                    // AlwaysClamp: without it, Ctrl+Click lets a typed value go
+                    // out of [min,max] (incl. negative), which the composite
+                    // shader has no other guard against (STAB-0325).
+                    ImGui::SliderFloat("  Strength##bloom", &bloomStrength_, 0.5f, 8.0f, "%.1f",
+                                       ImGuiSliderFlags_AlwaysClamp);
+                }
+                ImGui::MenuItem("SSAO (ambient occlusion)", nullptr, &ssaoEnabled_);
+                if (ssaoEnabled_) {
+                    ImGui::SetNextItemWidth(140);
+                    // AlwaysClamp: same out-of-bounds-via-Ctrl+Click risk as
+                    // bloom strength above (STAB-0326).
+                    ImGui::SliderFloat("  Strength##ssao", &ssaoStrength_, 0.0f, 1.0f, "%.2f",
+                                       ImGuiSliderFlags_AlwaysClamp);
+                    ImGui::SetNextItemWidth(140);
+                    // Same fix applied here too: a negative/zero radius from an
+                    // unclamped Ctrl+Click entry would break the SSAO sample
+                    // kernel, same root cause as the two strength sliders above.
+                    ImGui::SliderFloat("  Radius##ssao",   &ssaoRadius_,   0.05f, 2.0f, "%.2f",
+                                       ImGuiSliderFlags_AlwaysClamp);
+                }
+            } else {
+                ImGui::TextDisabled("Bloom and SSAO require cross-backend ShaderEffect support");
             }
             ImGui::MenuItem("Shadow Map Debug",         nullptr, &shadowDebugEnabled_);
             ImGui::MenuItem("Snap to Grid", nullptr, &snapEnabled_);

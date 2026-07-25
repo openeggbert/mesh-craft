@@ -1,4 +1,5 @@
 #include "MeshCraft/EditorAlgorithms.hpp"
+#include "MeshCraft/GraphicsBackendCheck.hpp"
 #include "MeshCraft/MeshCraftApplication.hpp"
 #include "MeshCraftPrivate.hpp"
 #include "MeshCraft/Scene/SceneHierarchyPanel.hpp"
@@ -1431,16 +1432,20 @@ void MeshCraftApplication::drawLeftPanel(float panelY, float panelH)
                 ImGui::Separator();
 
                 // D7: Material preview sphere
-                initMatPreview();
-                renderMatPreview(mat.baseColor[0], mat.baseColor[1], mat.baseColor[2],
-                                 mat.roughness, mat.metallic);
-                if (matPreviewTextureToken_) {
-                    float avail = ImGui::GetContentRegionAvail().x;
-                    float sz = std::min(avail, (float)kMatPreviewRes);
-                    float off = (avail - sz) * 0.5f;
-                    if (off > 0.f) ImGui::SetCursorPosX(ImGui::GetCursorPosX() + off);
-                    ImGui::Image(static_cast<ImTextureID>(matPreviewTextureToken_), ImVec2(sz, sz));
-                    ImGui::Spacing();
+                if (supportsTextShaderEffects()) {
+                    initMatPreview();
+                    renderMatPreview(mat.baseColor[0], mat.baseColor[1], mat.baseColor[2],
+                                     mat.roughness, mat.metallic);
+                    if (matPreviewTextureToken_) {
+                        float avail = ImGui::GetContentRegionAvail().x;
+                        float sz = std::min(avail, (float)kMatPreviewRes);
+                        float off = (avail - sz) * 0.5f;
+                        if (off > 0.f) ImGui::SetCursorPosX(ImGui::GetCursorPosX() + off);
+                        ImGui::Image(static_cast<ImTextureID>(matPreviewTextureToken_), ImVec2(sz, sz));
+                        ImGui::Spacing();
+                    }
+                } else {
+                    ImGui::TextDisabled("Preview requires cross-backend ShaderEffect support");
                 }
 
                 // F8: an edit to a material merged in from an <include> must
