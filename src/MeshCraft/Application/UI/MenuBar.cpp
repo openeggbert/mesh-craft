@@ -90,16 +90,15 @@ float MeshCraftApplication::drawMenuBar()
             // black box (see runObjExport()'s own comment) rather than a
             // second from-scratch scene-traversal implementation.
             if (ImGui::MenuItem("Export OBJ...")) exportObj();
-            {
-                bool hasSel = !selection_.selection().empty();
-                if (!hasSel) ImGui::BeginDisabled();
-                if (ImGui::MenuItem("Export Selection...", nullptr, false, hasSel)) {
+            const UI::FileExportSelectionContext fileExportSelectionContext{
+                .canExport = !selection_.selection().empty(),
+                .openDialog = [this] {
                     selExportBuf_[0] = '\0';
                     selExportErr_[0] = '\0';
                     selExportOpen_   = true;
-                }
-                if (!hasSel) ImGui::EndDisabled();
-            }
+                },
+            };
+            UI::MenuBar::drawFileExportSelection(fileExportSelectionContext);
             const UI::FileMergeSceneContext fileMergeSceneContext{
                 .openDialog = [this] {
                     mergeSceneBuf_[0] = '\0';
@@ -584,6 +583,14 @@ void MenuBar::drawAddMenu(const std::function<void(Mc3::ObjectType)>& addPrimiti
 
 void MenuBar::drawFileMergeScene(const FileMergeSceneContext& context) {
     if (ImGui::MenuItem("Merge Scene...")) context.openDialog();
+}
+
+void MenuBar::drawFileExportSelection(const FileExportSelectionContext& context) {
+    if (!context.canExport) ImGui::BeginDisabled();
+    if (ImGui::MenuItem("Export Selection...", nullptr, false, context.canExport)) {
+        context.openDialog();
+    }
+    if (!context.canExport) ImGui::EndDisabled();
 }
 
 void MenuBar::drawEditHistory(const EditHistoryContext& context) {

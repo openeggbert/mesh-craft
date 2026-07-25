@@ -99,7 +99,7 @@ before when explicitly requested (`SYS-W14-##` rows).
 
 ## 2. Current status
 
-- **Last full build: clean after the current Phase 13 File-merge-scene
+- **Last full build: clean after the current Phase 13 File-export-selection
   slice.** Testing is enabled in the current Ninja Release tree, and
   `CCACHE_DISABLE=1 cmake --build b-release -j4` linked all targets successfully
   on EASYGL. Alternate-backend runtime qualification remains blocked.
@@ -790,8 +790,8 @@ Edit-snap-selection-to-grid, Edit-mirror-selection, Edit-group-scale,
 Edit-linear-array, Edit-scatter-along-curve, Edit-batch-rename,
 Edit-find-replace-names, Edit-randomize-transform, Edit-macro-recording,
 Edit-play-macro, Edit-macro-editor, Edit-lock-selection, Edit-reset-transform,
-Edit-transform-clipboard, Edit-isolate-selection, Edit-hide-selection, and
-Edit-show-all-hidden and File-merge-scene slices.
+Edit-transform-clipboard, Edit-isolate-selection, Edit-hide-selection,
+Edit-show-all-hidden, File-merge-scene, and File-export-selection slices.
 `EditHistoryContext` exposes only `canUndo`/`canRedo` plus Undo, Redo, and
 Open History callbacks; `Editor::UndoManager`, document replacement,
 selection restoration, dialog state, and keyboard handling remain
@@ -958,15 +958,15 @@ dispatch.
 buffers, source-file loading, document merging, undo, title and status updates,
 and error handling remain in their existing owners; `MenuBar` owns only the
 unchanged label and click dispatch.
+`FileExportSelectionContext` exposes only current-selection availability and one
+open-dialog callback. Selection state, dialog state and buffers, export
+implementation, document and error handling remain in their existing owners;
+`MenuBar` owns only the unchanged label, availability, and click dispatch.
 
-**Next candidate, not yet authorized:** continue Phase 13 with the single
-File-menu Export Selection… item, passing only current-selection availability
-and one open-dialog callback. Selection state, dialog state and buffers, export
-implementation, document and error handling would remain in their existing
-owners; `MenuBar` would own only the unchanged label, availability, and click
-dispatch. Other File items, later controls, and the View-menu Bloom/SSAO block
-remain outside that slice. Per `CLAUDE.md`, describe and confirm the
-Export-Selection item before implementing it.
+**Next candidate, not yet authorized:** identify the next narrow File-menu
+item before implementation. The remaining File controls and the View-menu
+Bloom/SSAO block remain outside this completed slice. Per `CLAUDE.md`, describe
+and confirm any next item before implementing it.
 
 ## 9. Do not do yet
 
