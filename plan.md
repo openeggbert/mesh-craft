@@ -577,6 +577,10 @@ _All items in this workstream are DONE — archived to [`docs/history/plan_20260
   Registry results table is likewise now `Application::UI::Registry`; it sees
   only entries plus Insert/Remove callbacks, while document mutation, undo,
   status reporting, and database lifetime remain in the application. The
+  first Toolbar slice, `Application::UI::Toolbar`, owns tool/primitive button
+  rendering and receives only active-tool state plus SelectTool/AddPrimitive
+  actions; snap, grid, and proportional-edit controls remain for the next
+  narrow slice. The
   historical audit references retain their former paths as time-accurate
   evidence.
   Static undo-audit and snapshot-lint path checks pass after their tracked

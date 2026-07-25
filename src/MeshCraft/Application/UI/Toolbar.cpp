@@ -1,4 +1,5 @@
 #include "MeshCraft/Application/MeshCraftApplication.hpp"
+#include "MeshCraft/Application/UI/Toolbar.hpp"
 #include "MeshCraft/MeshCraftPrivate.hpp"
 
 #include <imgui.h>
@@ -40,47 +41,12 @@ float MeshCraftApplication::drawToolbar(float menuBarH, int screenW)
         ImGuiWindowFlags_NoBringToFrontOnFocus | ImGuiWindowFlags_NoScrollbar |
         ImGuiWindowFlags_NoScrollWithMouse | ImGuiWindowFlags_NoSavedSettings);
 
-    // Tool buttons
-    struct { ActiveTool tool; const char* label; ImVec4 col; } toolBtns[] = {
-        { ActiveTool::Select,  "Select [Q]", ImVec4(0.31f,0.59f,0.82f,1.f) },
-        { ActiveTool::Move,    "Move   [G]", ImVec4(0.22f,0.74f,0.39f,1.f) },
-        { ActiveTool::Rotate,  "Rotate [R]", ImVec4(0.80f,0.65f,0.22f,1.f) },
-        { ActiveTool::Scale,   "Scale  [S]", ImVec4(0.82f,0.29f,0.29f,1.f) },
-        { ActiveTool::Measure, "Ruler",      ImVec4(0.60f,0.82f,0.82f,1.f) },
+    UI::ToolbarToolsContext toolsContext{
+        .activeTool = activeTool_,
+        .selectTool = [this](ActiveTool tool) { activeTool_ = tool; updateWindowTitle(); },
+        .addPrimitive = [this](Mc3::ObjectType type) { addPrimitive(type); },
     };
-    for (auto& tb : toolBtns) {
-        bool active = (activeTool_ == tb.tool);
-        if (active) ImGui::PushStyleColor(ImGuiCol_Button, tb.col);
-        if (ImGui::Button(tb.label, ImVec2(84, 30))) { activeTool_ = tb.tool; updateWindowTitle(); }
-        if (active) ImGui::PopStyleColor();
-        ImGui::SameLine();
-    }
-
-    ImGui::TextDisabled("|");
-    ImGui::SameLine();
-
-    // Add primitive buttons
-    struct { Mc3::ObjectType type; const char* label; ImVec4 col; } addBtns[] = {
-        { Mc3::ObjectType::Box,      "+Box",  ImVec4(0.82f,0.47f,0.22f,1.f) },
-        { Mc3::ObjectType::Sphere,   "+Sph",  ImVec4(0.22f,0.47f,0.82f,1.f) },
-        { Mc3::ObjectType::Cylinder, "+Cyl",  ImVec4(0.22f,0.73f,0.39f,1.f) },
-        { Mc3::ObjectType::Cone,     "+Con",  ImVec4(0.73f,0.22f,0.73f,1.f) },
-        { Mc3::ObjectType::Plane,    "+Pln",  ImVec4(0.80f,0.80f,0.22f,1.f) },
-        { Mc3::ObjectType::Torus,    "+Tor",  ImVec4(0.22f,0.70f,0.80f,1.f) },
-        { Mc3::ObjectType::Capsule,  "+Cap",  ImVec4(0.70f,0.35f,0.70f,1.f) },
-        { Mc3::ObjectType::Disk,     "+Dsk",  ImVec4(0.80f,0.65f,0.20f,1.f) },
-        { Mc3::ObjectType::Grid,     "+Grd",  ImVec4(0.30f,0.65f,0.50f,1.f) },
-        { Mc3::ObjectType::IcoSphere,"+Ico",  ImVec4(0.25f,0.55f,0.80f,1.f) },
-    };
-    for (auto& ab : addBtns) {
-        ImGui::PushStyleColor(ImGuiCol_Button, ab.col);
-        if (ImGui::Button(ab.label, ImVec2(40, 30))) addPrimitive(ab.type);
-        ImGui::PopStyleColor();
-        ImGui::SameLine();
-    }
-
-    ImGui::TextDisabled("|");
-    ImGui::SameLine();
+    UI::Toolbar::drawTools(toolsContext);
 
     // Local/World space toggle for gizmo
     {
@@ -250,3 +216,47 @@ float MeshCraftApplication::drawToolbar(float menuBarH, int screenW)
 
 
 } // namespace MeshCraft::Application
+
+namespace MeshCraft::Application::UI {
+
+void Toolbar::drawTools(ToolbarToolsContext& context) {
+    struct { ActiveTool tool; const char* label; ImVec4 color; } tools[] = {
+        {ActiveTool::Select, "Select [Q]", {0.31f, 0.59f, 0.82f, 1.f}},
+        {ActiveTool::Move, "Move   [G]", {0.22f, 0.74f, 0.39f, 1.f}},
+        {ActiveTool::Rotate, "Rotate [R]", {0.80f, 0.65f, 0.22f, 1.f}},
+        {ActiveTool::Scale, "Scale  [S]", {0.82f, 0.29f, 0.29f, 1.f}},
+        {ActiveTool::Measure, "Ruler", {0.60f, 0.82f, 0.82f, 1.f}},
+    };
+    for (const auto& tool : tools) {
+        const bool active = context.activeTool == tool.tool;
+        if (active) ImGui::PushStyleColor(ImGuiCol_Button, tool.color);
+        if (ImGui::Button(tool.label, ImVec2(84, 30))) context.selectTool(tool.tool);
+        if (active) ImGui::PopStyleColor();
+        ImGui::SameLine();
+    }
+    ImGui::TextDisabled("|");
+    ImGui::SameLine();
+
+    struct { Mc3::ObjectType type; const char* label; ImVec4 color; } primitives[] = {
+        {Mc3::ObjectType::Box, "+Box", {0.82f, 0.47f, 0.22f, 1.f}},
+        {Mc3::ObjectType::Sphere, "+Sph", {0.22f, 0.47f, 0.82f, 1.f}},
+        {Mc3::ObjectType::Cylinder, "+Cyl", {0.22f, 0.73f, 0.39f, 1.f}},
+        {Mc3::ObjectType::Cone, "+Con", {0.73f, 0.22f, 0.73f, 1.f}},
+        {Mc3::ObjectType::Plane, "+Pln", {0.80f, 0.80f, 0.22f, 1.f}},
+        {Mc3::ObjectType::Torus, "+Tor", {0.22f, 0.70f, 0.80f, 1.f}},
+        {Mc3::ObjectType::Capsule, "+Cap", {0.70f, 0.35f, 0.70f, 1.f}},
+        {Mc3::ObjectType::Disk, "+Dsk", {0.80f, 0.65f, 0.20f, 1.f}},
+        {Mc3::ObjectType::Grid, "+Grd", {0.30f, 0.65f, 0.50f, 1.f}},
+        {Mc3::ObjectType::IcoSphere, "+Ico", {0.25f, 0.55f, 0.80f, 1.f}},
+    };
+    for (const auto& primitive : primitives) {
+        ImGui::PushStyleColor(ImGuiCol_Button, primitive.color);
+        if (ImGui::Button(primitive.label, ImVec2(40, 30))) context.addPrimitive(primitive.type);
+        ImGui::PopStyleColor();
+        ImGui::SameLine();
+    }
+    ImGui::TextDisabled("|");
+    ImGui::SameLine();
+}
+
+} // namespace MeshCraft::Application::UI
