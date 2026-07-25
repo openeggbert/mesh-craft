@@ -51,6 +51,10 @@ struct FileSaveContext {
     std::function<void()> save;
 };
 
+struct FileSaveAsContext {
+    std::function<void()> openDialog;
+};
+
 struct EditHistoryContext {
     bool canUndo;
     bool canRedo;
@@ -241,6 +245,7 @@ public:
     static void drawFileExportGltf(const FileExportGltfContext& context);
     static void drawFileExportObj(const FileExportObjContext& context);
     static void drawFileSave(const FileSaveContext& context);
+    static void drawFileSaveAs(const FileSaveAsContext& context);
     static void drawEditClipboard(const EditClipboardContext& context);
     static void drawEditCopyProperties(const EditCopyPropertiesContext& context);
     static void drawEditGrouping(const EditGroupingContext& context);
