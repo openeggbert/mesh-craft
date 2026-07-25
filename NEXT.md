@@ -20,7 +20,7 @@ replacing the former flat `src/MeshCraft/MeshCraftApplication_*.cpp` layout.
 `MeshCraft::Application::MeshCraftApplication`; the old public include remains
 a compatibility forwarder. Actual UI components currently cover Validation,
 Registry results, Toolbar tools/display/snap-surface/proportional/grid controls,
-Properties delegation, Camera Preset Overlay, Gizmo Drag Overlay, Stats Overlay, and the View-menu panel/overlay/direction/focus/
+Properties delegation, Camera Preset Overlay, Gizmo Drag Overlay, Stats Overlay, Measurement Overlay, and the View-menu panel/overlay/direction/focus/
 Camera-Bookmarks/Walk-Mode/Bloom-SSAO presentation, plus the Add/CSG and Help menu
 presentation and the Edit-history, clipboard, object-action, and
 selection-action groups, the Select-by-Type/Tag/Material, Align-Selection,
@@ -105,7 +105,7 @@ before when explicitly requested (`SYS-W14-##` rows).
 ## 2. Current status
 
 - **Last full build: clean after the current Phase 13 File-open-recent,
-  View-Bloom/SSAO, SSAO-regression, Camera Preset Overlay, Gizmo Drag Overlay, and Stats Overlay slices.** Testing is enabled in the current Ninja Release tree, and
+  View-Bloom/SSAO, SSAO-regression, Camera Preset Overlay, Gizmo Drag Overlay, Stats Overlay, and Measurement Overlay slices.** Testing is enabled in the current Ninja Release tree, and
   `CCACHE_DISABLE=1 cmake --build b-release -j4` linked all targets successfully
   on EASYGL. Alternate-backend runtime qualification remains blocked.
 - **Tests:** the fresh Release tree registers 182 tests. All passed again after
@@ -174,7 +174,7 @@ before when explicitly requested (`SYS-W14-##` rows).
   application into `MeshCraft::Application`, organized implementation files
   by application/UI ownership, and is extracting UI presentation through
   narrow contexts. Validation, Registry results, Toolbar controls, Properties
-  delegation, Camera Preset Overlay, Gizmo Drag Overlay, Stats Overlay, and the View-menu directions/focus/overlays/panels/
+  delegation, Camera Preset Overlay, Gizmo Drag Overlay, Stats Overlay, Measurement Overlay, and the View-menu directions/focus/overlays/panels/
   Camera-Bookmarks/Walk-Mode/Bloom-SSAO presentation, plus the Add/CSG and Help menu
   presentation and the Edit-history, clipboard, object-action, and
   selection-action groups, the Select-by-Type/Tag/Material, Align-Selection,
@@ -241,6 +241,14 @@ before when explicitly requested (`SYS-W14-##` rows).
   component code has no document, renderer, or mutating callback. The header
   compiles independently and the focused `mc3_commands` plus Xvfb `smoke_test`
   regressions passed.
+- **Recently implemented (2026-07-25):** the measurement-ruler presentation
+  is now `Application::UI::MeasurementOverlay`. The application retains the
+  active-tool/point state and cached view-projection calculation, then provides
+  projected positions, immutable point coordinates, distance, and viewport
+  bounds. The component preserves point/line colors, distance label, second
+  point hint, and lower-left result panel without access to the camera,
+  document, or mutation paths. Its header compiles independently and focused
+  `mc3_commands` plus Xvfb `smoke_test` regressions passed.
 - **Recently implemented (2026-07-20 through 2026-07-25):** all 7
   raw-OpenGL(ES)-vs-CNA migrations, `AUD-082` through `AUD-088` — full
   detail with file:line evidence and
@@ -842,7 +850,7 @@ git stash pop && cmake --build b-release -j4 --target <affected-target>
 No actionable follow-up audit task remains: `AUD-089` through `AUD-092` are
 complete, while Android (`AUD-042`) is environment/owner deferred.
 `SYS-W3-01` has 12 completed subsystem phases and an active Phase 13 for
-application/UI ownership. The authorized Camera Bookmarks, Camera Preset Overlay, Gizmo Drag Overlay, Stats Overlay, Walk Mode, View
+application/UI ownership. The authorized Camera Bookmarks, Camera Preset Overlay, Gizmo Drag Overlay, Stats Overlay, Measurement Overlay, Walk Mode, View
 Bloom/SSAO, Help, Add/CSG, Edit-history, Edit-clipboard, and Edit-object-actions
 menu slices are implemented and verified, together with Edit-selection-actions,
 Edit-select-by-type/tag/material, Edit-copy-properties, Edit-grouping,
@@ -1100,7 +1108,12 @@ one item does not authorize the next.
    read-only scene, selection, camera, and renderer-statistics snapshot; ImGui
    presentation is component-owned.
 
-4. **Fresh post-overlay boundary audit.** Identify the next coherent
+4. **Third post-overlay follow-up — complete.** The measurement ruler's 2D
+   presentation is now `Application::UI::MeasurementOverlay`. The application
+   retains measurement state and world-to-screen projection, passing only
+   projected points, values, and viewport bounds to the component.
+
+5. **Fresh post-overlay boundary audit.** Identify the next coherent
    presentation-only cluster before changing `MeshCraftApplication`; avoid a
    broad `Overlays.cpp` extraction or a context that exposes document/renderer
    internals.

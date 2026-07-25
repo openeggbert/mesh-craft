@@ -1,6 +1,7 @@
 #include "MeshCraft/Application/MeshCraftApplication.hpp"
 #include "MeshCraft/Application/UI/CameraPresetOverlay.hpp"
 #include "MeshCraft/Application/UI/GizmoDragOverlay.hpp"
+#include "MeshCraft/Application/UI/MeasurementOverlay.hpp"
 #include "MeshCraft/Application/UI/StatsOverlay.hpp"
 #include "MeshCraft/MeshCraftPrivate.hpp"
 #include "MeshCraft/EditorAlgorithms.hpp"
@@ -120,56 +121,23 @@ void MeshCraftApplication::drawStatsOverlay(int screenW, [[maybe_unused]] int sc
             return {sx, sy};
         };
 
-        ImDrawList* dl = ImGui::GetBackgroundDrawList();
-        ImVec2 s1 = w2s(mPt1_[0], mPt1_[1], mPt1_[2]);
-        // Draw point 1 marker
-        dl->AddCircleFilled(s1, 5.0f, IM_COL32(80, 220, 220, 220));
-
-        if (mPt2Set_) {
-            ImVec2 s2 = w2s(mPt2_[0], mPt2_[1], mPt2_[2]);
-            // Draw line and point 2
-            dl->AddLine(s1, s2, IM_COL32(80, 220, 220, 200), 2.0f);
-            dl->AddCircleFilled(s2, 5.0f, IM_COL32(80, 220, 220, 220));
-
-            // Distance label near midpoint
-            float mx2 = (s1.x + s2.x) * 0.5f, my2 = (s1.y + s2.y) * 0.5f;
-            char buf[64];
-            std::snprintf(buf, sizeof(buf), "%.4g u", mDist_);
-            dl->AddText(ImVec2(mx2 + 8, my2 - 8), IM_COL32(200, 255, 200, 255), buf);
-        } else {
-            // Show hint
-            ImGui::SetNextWindowPos(ImVec2(s1.x + 12, s1.y - 24), ImGuiCond_Always);
-            ImGui::SetNextWindowBgAlpha(0.60f);
-            ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(4, 3));
-            ImGui::Begin("##mhint", nullptr,
-                ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoInputs |
-                ImGuiWindowFlags_NoNav | ImGuiWindowFlags_NoMove |
-                ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoSavedSettings |
-                ImGuiWindowFlags_NoBringToFrontOnFocus);
-            ImGui::TextDisabled("Click second point");
-            ImGui::End();
-            ImGui::PopStyleVar();
-        }
-
-        // Info panel bottom-left of viewport
-        if (mPt2Set_) {
-            ImGui::SetNextWindowPos(ImVec2(static_cast<float>(cachedVX_) + 8,
-                                          static_cast<float>(cachedVY_ + cachedVH_) - 8),
-                                    ImGuiCond_Always, ImVec2(0.0f, 1.0f));
-            ImGui::SetNextWindowBgAlpha(0.65f);
-            ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(8, 6));
-            ImGui::Begin("##minfo", nullptr,
-                ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoInputs |
-                ImGuiWindowFlags_NoNav | ImGuiWindowFlags_NoMove |
-                ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoSavedSettings |
-                ImGuiWindowFlags_NoBringToFrontOnFocus);
-            ImGui::TextColored(ImVec4(0.4f,1.0f,1.0f,1.0f), "Distance: %.4g u", mDist_);
-            ImGui::TextDisabled("A: %.2f, %.2f, %.2f", mPt1_[0], mPt1_[1], mPt1_[2]);
-            ImGui::TextDisabled("B: %.2f, %.2f, %.2f", mPt2_[0], mPt2_[1], mPt2_[2]);
-            ImGui::TextDisabled("Right-click to reset");
-            ImGui::End();
-            ImGui::PopStyleVar();
-        }
+        const ImVec2 firstScreenPoint = w2s(mPt1_[0], mPt1_[1], mPt1_[2]);
+        const ImVec2 secondScreenPoint = mPt2Set_
+            ? w2s(mPt2_[0], mPt2_[1], mPt2_[2])
+            : ImVec2{};
+        UI::MeasurementOverlay::draw({
+            .firstScreenX = firstScreenPoint.x,
+            .firstScreenY = firstScreenPoint.y,
+            .hasSecondPoint = mPt2Set_,
+            .secondScreenX = secondScreenPoint.x,
+            .secondScreenY = secondScreenPoint.y,
+            .distance = mDist_,
+            .firstPoint = mPt1_,
+            .secondPoint = mPt2_,
+            .viewportX = cachedVX_,
+            .viewportY = cachedVY_,
+            .viewportHeight = cachedVH_,
+        });
     }
 
     // Camera preset buttons — top-left corner of the 3D viewport.
