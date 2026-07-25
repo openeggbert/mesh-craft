@@ -178,6 +178,18 @@ struct EditLockSelectionContext {
     std::function<void()> toggle;
 };
 
+enum class EditResetTransformTarget {
+    Position,
+    Rotation,
+    Scale,
+    All,
+};
+
+struct EditResetTransformContext {
+    bool canReset;
+    std::function<void(EditResetTransformTarget)> reset;
+};
+
 class MenuBar final {
 public:
     static void drawAddMenu(const std::function<void(Mc3::ObjectType)>& addPrimitive);
@@ -202,6 +214,7 @@ public:
     static void drawEditPlayMacro(const EditPlayMacroContext& context);
     static void drawEditMacroEditor(const EditMacroEditorContext& context);
     static void drawEditLockSelection(const EditLockSelectionContext& context);
+    static void drawEditResetTransform(const EditResetTransformContext& context);
     static void drawEditHistory(const EditHistoryContext& context);
     static void drawEditObjectActions(const EditObjectActionsContext& context);
     static void drawEditSelectionActions(const EditSelectionActionsContext& context);

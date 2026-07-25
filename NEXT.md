@@ -99,7 +99,7 @@ before when explicitly requested (`SYS-W14-##` rows).
 
 ## 2. Current status
 
-- **Last full build: clean after the current Phase 13 Edit-lock-selection
+- **Last full build: clean after the current Phase 13 Edit-reset-transform
   slice.** Testing is enabled in the current Ninja Release tree, and
   `CCACHE_DISABLE=1 cmake --build b-release -j4` linked all targets successfully
   on EASYGL. Alternate-backend runtime qualification remains blocked.
@@ -789,7 +789,8 @@ Edit-align-selection, Edit-distribute-selection, Edit-drop-to-ground,
 Edit-snap-selection-to-grid, Edit-mirror-selection, Edit-group-scale,
 Edit-linear-array, Edit-scatter-along-curve, Edit-batch-rename,
 Edit-find-replace-names, Edit-randomize-transform, Edit-macro-recording,
-Edit-play-macro, Edit-macro-editor, and Edit-lock-selection slices.
+Edit-play-macro, Edit-macro-editor, Edit-lock-selection, and
+Edit-reset-transform slices.
 `EditHistoryContext` exposes only `canUndo`/`canRedo` plus Undo, Redo, and
 Open History callbacks; `Editor::UndoManager`, document replacement,
 selection restoration, dialog state, and keyboard handling remain
@@ -924,16 +925,22 @@ save/load behavior, and status reporting remain in their existing owners;
 toggle callback. Selection state, `Editor::ObjectLockState` mutation, and the
 Ctrl+L keyboard path remain in their existing owners; `MenuBar` owns only the
 unchanged label, shortcut, availability, and click dispatch.
-
-**Next candidate, not yet authorized:** continue Phase 13 with the single
-Reset Transform submenu, passing only current-selection availability and one
+`EditResetTransformContext` exposes only current-selection availability and a
 reset-target callback for Position, Rotation, Scale, or All. Selection state,
 `Editor::ObjectLockState` checks, undo, transform mutation, document updates,
-and the Alt+G/R/S keyboard paths would remain in their existing owners;
-`MenuBar` would own only the unchanged submenu, labels, shortcuts, separator,
-availability, and click dispatch. Later Edit controls and the View-menu
-Bloom/SSAO block remain outside that slice. Per `CLAUDE.md`, describe and
-confirm the Reset-Transform submenu slice before implementing it.
+and the Alt+G/R/S keyboard paths remain in their existing owners; `MenuBar`
+owns only the unchanged submenu, labels, shortcuts, separator, availability,
+and click dispatch.
+
+**Next candidate, not yet authorized:** continue Phase 13 with the Copy
+Transform/Paste Transform pair, passing only copy/paste availability and one
+callback for each action. `Editor::TransformClipboard` state, source-object
+selection, locked-object filtering, undo, transform mutation, document and
+title updates, status reporting, and the Ctrl+Shift+C/V keyboard paths would
+remain in their existing owners; `MenuBar` would own only the unchanged labels,
+shortcuts, availability, and click dispatch. Later Edit controls and the
+View-menu Bloom/SSAO block remain outside that slice. Per `CLAUDE.md`,
+describe and confirm the Transform-Clipboard menu pair before implementing it.
 
 ## 9. Do not do yet
 

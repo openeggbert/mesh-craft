@@ -402,44 +402,33 @@ float MeshCraftApplication::drawMenuBar()
             UI::MenuBar::drawEditLockSelection(editLockSelectionContext);
             ImGui::Separator();
             bool hasSel = !selection_.selection().empty();
-            if (ImGui::BeginMenu("Reset Transform", hasSel)) {
-                if (ImGui::MenuItem("Position", "Alt+G")) {
+            const UI::EditResetTransformContext editResetTransformContext{
+                .canReset = hasSel,
+                .reset = [this](UI::EditResetTransformTarget target) {
                     pushUndo();
                     for (const auto& s : selection_.selection()) {
                         if (objectLockState_.isLocked(s->id)) continue;
-                        s->transform.position = {0.0f, 0.0f, 0.0f};
+                        switch (target) {
+                            case UI::EditResetTransformTarget::Position:
+                                s->transform.position = {0.0f, 0.0f, 0.0f};
+                                break;
+                            case UI::EditResetTransformTarget::Rotation:
+                                s->transform.rotation = {0.0f, 0.0f, 0.0f};
+                                break;
+                            case UI::EditResetTransformTarget::Scale:
+                                s->transform.scale = {1.0f, 1.0f, 1.0f};
+                                break;
+                            case UI::EditResetTransformTarget::All:
+                                s->transform.position = {0.0f, 0.0f, 0.0f};
+                                s->transform.rotation = {0.0f, 0.0f, 0.0f};
+                                s->transform.scale    = {1.0f, 1.0f, 1.0f};
+                                break;
+                        }
                     }
                     modified_ = true; updateWindowTitle();
-                }
-                if (ImGui::MenuItem("Rotation", "Alt+R")) {
-                    pushUndo();
-                    for (const auto& s : selection_.selection()) {
-                        if (objectLockState_.isLocked(s->id)) continue;
-                        s->transform.rotation = {0.0f, 0.0f, 0.0f};
-                    }
-                    modified_ = true; updateWindowTitle();
-                }
-                if (ImGui::MenuItem("Scale", "Alt+S")) {
-                    pushUndo();
-                    for (const auto& s : selection_.selection()) {
-                        if (objectLockState_.isLocked(s->id)) continue;
-                        s->transform.scale = {1.0f, 1.0f, 1.0f};
-                    }
-                    modified_ = true; updateWindowTitle();
-                }
-                ImGui::Separator();
-                if (ImGui::MenuItem("All")) {
-                    pushUndo();
-                    for (const auto& s : selection_.selection()) {
-                        if (objectLockState_.isLocked(s->id)) continue;
-                        s->transform.position = {0.0f, 0.0f, 0.0f};
-                        s->transform.rotation = {0.0f, 0.0f, 0.0f};
-                        s->transform.scale    = {1.0f, 1.0f, 1.0f};
-                    }
-                    modified_ = true; updateWindowTitle();
-                }
-                ImGui::EndMenu();
-            }
+                },
+            };
+            UI::MenuBar::drawEditResetTransform(editResetTransformContext);
             ImGui::Separator();
             if (ImGui::MenuItem("Copy Transform", "Ctrl+Shift+C", false, hasSel)) {
                 const auto& src = selection_.selection().front();
@@ -836,6 +825,23 @@ void MenuBar::drawEditLockSelection(const EditLockSelectionContext& context) {
     if (ImGui::MenuItem("Lock/Unlock Selected", "Ctrl+L", false, context.canToggle)) {
         context.toggle();
     }
+}
+
+void MenuBar::drawEditResetTransform(const EditResetTransformContext& context) {
+    if (!ImGui::BeginMenu("Reset Transform", context.canReset)) return;
+
+    if (ImGui::MenuItem("Position", "Alt+G")) {
+        context.reset(EditResetTransformTarget::Position);
+    }
+    if (ImGui::MenuItem("Rotation", "Alt+R")) {
+        context.reset(EditResetTransformTarget::Rotation);
+    }
+    if (ImGui::MenuItem("Scale", "Alt+S")) {
+        context.reset(EditResetTransformTarget::Scale);
+    }
+    ImGui::Separator();
+    if (ImGui::MenuItem("All")) context.reset(EditResetTransformTarget::All);
+    ImGui::EndMenu();
 }
 
 void MenuBar::drawPanelToggles(bool& timeline, bool& registry, bool& ai, bool& validation) {
