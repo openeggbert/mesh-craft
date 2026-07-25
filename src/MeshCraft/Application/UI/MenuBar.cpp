@@ -84,7 +84,10 @@ float MeshCraftApplication::drawMenuBar()
             if (ImGui::MenuItem("Save",    "Ctrl+S")) saveFile();
             if (ImGui::MenuItem("Save As...","Ctrl+Shift+S")) saveFileAs();
             ImGui::Separator();
-            if (ImGui::MenuItem("Export GLB", "Ctrl+E")) exportGltf();
+            const UI::FileExportGltfContext fileExportGltfContext{
+                .openDialog = [this] { exportGltf(); },
+            };
+            UI::MenuBar::drawFileExportGltf(fileExportGltfContext);
             // STAB-0718: previously glTF/GLB was the only export format
             // from the editor GUI. Reuses the existing GltfExporter as a
             // black box (see runObjExport()'s own comment) rather than a
@@ -591,6 +594,10 @@ void MenuBar::drawFileExportSelection(const FileExportSelectionContext& context)
         context.openDialog();
     }
     if (!context.canExport) ImGui::EndDisabled();
+}
+
+void MenuBar::drawFileExportGltf(const FileExportGltfContext& context) {
+    if (ImGui::MenuItem("Export GLB", "Ctrl+E")) context.openDialog();
 }
 
 void MenuBar::drawEditHistory(const EditHistoryContext& context) {
