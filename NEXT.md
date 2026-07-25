@@ -23,12 +23,13 @@ Camera-Bookmarks/Walk-Mode presentation, plus the Add/CSG and Help menu
 presentation and the Edit-history, clipboard, object-action, and
 selection-action groups, the Select-by-Type/Tag/Material, Align-Selection, and
 Distribute-Selection submenus, and the Copy-Properties,
-Convert-to-Definition, Export-Subtree, and Break-Instance items plus the
-Group/Ungroup pair. The detailed Snap interval contents and the remaining
-MenuBar sections are still application-owned. Camera bookmark, walk, document,
-undo, clipboard, selection, grid, and dialog state have **not** moved again:
-they remain in their existing editor/application owners; the UI component only
-reads presentation state and invokes application-owned callbacks.
+Convert-to-Definition, Export-Subtree, Break-Instance, and Drop-to-Ground items
+plus the Group/Ungroup pair. The detailed Snap interval contents and the
+remaining MenuBar sections are still application-owned. Camera bookmark, walk,
+document, undo, clipboard, selection, grid, and dialog state have **not** moved
+again: they remain in their existing editor/application owners; the UI
+component only reads presentation state and invokes application-owned
+callbacks.
 Historical references below intentionally retain their then-current paths.
 
 ## 1. Project summary
@@ -97,7 +98,7 @@ before when explicitly requested (`SYS-W14-##` rows).
 
 ## 2. Current status
 
-- **Last full build: clean after the current Phase 13 Edit-distribute-selection
+- **Last full build: clean after the current Phase 13 Edit-drop-to-ground
   slice.** Testing is enabled in the current Ninja Release tree, and
   `CCACHE_DISABLE=1 cmake --build b-release -j4` linked all targets successfully
   on EASYGL. Alternate-backend runtime qualification remains blocked.
@@ -171,11 +172,11 @@ before when explicitly requested (`SYS-W14-##` rows).
   presentation and the Edit-history, clipboard, object-action, and
   selection-action groups, the Select-by-Type/Tag/Material, Align-Selection,
   and Distribute-Selection submenus, and the Copy-Properties,
-  Convert-to-Definition, Export-Subtree, and Break-Instance items plus the
-  Group/Ungroup pair are now component-owned. Bookmark, walk, document, undo,
-  clipboard, selection, grid, preferences, command-palette, and shortcut-dialog
-  state remain in their existing owners; the menu receives only read-only
-  state plus application-owned callbacks.
+  Convert-to-Definition, Export-Subtree, Break-Instance, and Drop-to-Ground
+  items plus the Group/Ungroup pair are now component-owned. Bookmark, walk,
+  document, undo, clipboard, selection, grid, preferences, command-palette, and
+  shortcut-dialog state remain in their existing owners; the menu receives
+  only read-only state plus application-owned callbacks.
 - **Recently implemented (2026-07-20 through 2026-07-25):** all 7
   raw-OpenGL(ES)-vs-CNA migrations, `AUD-082` through `AUD-088` — full
   detail with file:line evidence and
@@ -575,7 +576,7 @@ backlog (650+ STAB tasks, then a 57-finding audit, all archived DONE).
 verification.** `AUD-090` preflights `xvfb-run` with a real `xdpyinfo` client.
 The execution sandbox blocks the local sockets needed by Xvfb and the
 `mc3_ai` loopback mock server, but the permitted host run completed both
-partitions cleanly: 147/147 non-render tests (including `mc3_ai` in 1.39
+partitions cleanly: 147/147 non-render tests (including `mc3_ai` in 1.38
 seconds) and 34/34 render tests. CI explicitly installs `xvfb` and
 `x11-utils` for the same render path. `AUD-091` therefore remains closed as
 a stale-build false positive rather than hidden behind a longer timeout.
@@ -782,7 +783,8 @@ Add/CSG, Edit-history, Edit-clipboard, and Edit-object-actions menu slices are
 implemented and verified, together with Edit-selection-actions,
 Edit-select-by-type/tag/material, Edit-copy-properties, Edit-grouping,
 Edit-convert-to-definition, Edit-export-subtree, Edit-break-instance, and
-Edit-align-selection and Edit-distribute-selection slices.
+Edit-align-selection, Edit-distribute-selection, and Edit-drop-to-ground
+slices.
 `EditHistoryContext` exposes only `canUndo`/`canRedo` plus Undo, Redo, and
 Open History callbacks; `Editor::UndoManager`, document replacement,
 selection restoration, dialog state, and keyboard handling remain
@@ -851,15 +853,19 @@ axis callback. Selection copying and sorting, endpoint and spacing calculation,
 object-lock checks, undo, document mutation, and window-title updates remain
 application-owned; `MenuBar` owns only the unchanged three labels, order,
 availability, and click dispatch.
+`EditDropToGroundContext` exposes only current-selection availability and one
+action callback. Geometry-specific bottom-offset calculation, selection and
+object-lock state, undo, document mutation, window-title and status reporting,
+and the command-palette route remain application-owned; `MenuBar` owns only the
+unchanged label, availability, and click dispatch.
 
 **Next candidate, not yet authorized:** continue Phase 13 with the single
-Drop to Ground Plane item, passing only current-selection availability and one
-action callback. Geometry-specific bottom-offset calculation, selection and
-object-lock state, undo, document mutation, status reporting, and the
-command-palette route would remain application-owned. Grid and mirror actions
-plus the View-menu Bloom/SSAO block remain outside that slice. Per
-`CLAUDE.md`, describe and confirm the Drop-to-Ground slice before implementing
-it.
+Snap Selection to Grid item, passing only current-selection availability and
+one action callback. Selection and object-lock state, grid spacing, rounding,
+undo, document mutation, window-title updates, and status reporting would
+remain application-owned. Mirror actions and the View-menu Bloom/SSAO block
+remain outside that slice. Per `CLAUDE.md`, describe and confirm the
+Snap-Selection-to-Grid slice before implementing it.
 
 ## 9. Do not do yet
 

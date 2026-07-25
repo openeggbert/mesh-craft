@@ -114,6 +114,11 @@ struct EditDistributeSelectionContext {
     std::function<void(int)> distribute;
 };
 
+struct EditDropToGroundContext {
+    bool canDrop;
+    std::function<void()> drop;
+};
+
 class MenuBar final {
 public:
     static void drawAddMenu(const std::function<void(Mc3::ObjectType)>& addPrimitive);
@@ -125,6 +130,7 @@ public:
     static void drawEditBreakInstance(const EditBreakInstanceContext& context);
     static void drawEditAlignSelection(const EditAlignSelectionContext& context);
     static void drawEditDistributeSelection(const EditDistributeSelectionContext& context);
+    static void drawEditDropToGround(const EditDropToGroundContext& context);
     static void drawEditHistory(const EditHistoryContext& context);
     static void drawEditObjectActions(const EditObjectActionsContext& context);
     static void drawEditSelectionActions(const EditSelectionActionsContext& context);

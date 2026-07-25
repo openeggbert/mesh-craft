@@ -168,9 +168,9 @@ still internally consistent.
    Edit-object-actions, Edit-selection-actions, Edit-select-by-type,
    Edit-select-by-tag/material, Edit-copy-properties, Edit-grouping,
    Edit-convert-to-definition, Edit-export-subtree, Edit-break-instance, and
-   Edit-align-selection and Edit-distribute-selection menu slices are
-   implemented and verified. Their state remains in the existing
-   editor/application owners;
+   Edit-align-selection, Edit-distribute-selection, and Edit-drop-to-ground
+   menu slices are implemented and verified. Their state remains in the
+   existing editor/application owners;
    `Application::UI::MenuBar` receives only the read-only values and callbacks
    required for presentation. Any further slice requires its own confirmation
    per `CLAUDE.md`.
@@ -683,7 +683,12 @@ _All items in this workstream are DONE — archived to [`docs/history/plan_20260
   `EditDistributeSelectionContext`, which exposes only 2+-selection
   availability and one axis callback. Selection copying and sorting, endpoint
   and spacing calculation, object-lock checks, undo, document mutation, and
-  window-title updates remain application-owned. File, the remaining Edit
+  window-title updates remain application-owned. The following Drop to Ground
+  Plane item is now component-owned through `EditDropToGroundContext`, which
+  exposes only current-selection availability and one action callback.
+  Geometry-specific bottom-offset calculation, selection and object-lock
+  state, undo, document mutation, window-title and status reporting, and the
+  command-palette route remain application-owned. File, the remaining Edit
   groups, and the remaining View controls are still application-owned.
   The historical audit references retain their former paths as time-accurate
   evidence.
@@ -701,8 +706,9 @@ _All items in this workstream are DONE — archived to [`docs/history/plan_20260
   slices, the Select-by-Type allocation hardening, and the Edit-select-by-tag,
   Edit-select-by-material, Edit-copy-properties, Edit-grouping,
   Edit-convert-to-definition, Edit-export-subtree, Edit-break-instance, and
-  Edit-align-selection and Edit-distribute-selection slices, each incremental
-  Release link and the same 147/147 + 34/34 partitions pass again.
+  Edit-align-selection, Edit-distribute-selection, and Edit-drop-to-ground
+  slices, each incremental Release link and the same 147/147 + 34/34
+  partitions pass again.
   For the current MenuBar slices, the public UI header also compiles as a
   self-contained C++23 include, `undo_snapshot_lint_test.py` passes, and
   `git diff --check` is clean. A further Phase 13 slice requires separate

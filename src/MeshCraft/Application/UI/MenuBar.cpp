@@ -298,11 +298,13 @@ float MeshCraftApplication::drawMenuBar()
                 },
             };
             UI::MenuBar::drawEditDistributeSelection(editDistributeSelectionContext);
+            const UI::EditDropToGroundContext editDropToGroundContext{
+                .canDrop = !selection_.selection().empty(),
+                .drop = [this] { dropSelectedToGroundPlane(); },
+            };
+            UI::MenuBar::drawEditDropToGround(editDropToGroundContext);
             {
                 bool hasSel2c = !selection_.selection().empty();
-                if (ImGui::MenuItem("Drop to Ground Plane", nullptr, false, hasSel2c)) {
-                    dropSelectedToGroundPlane();
-                }
                 if (ImGui::MenuItem("Snap Selection to Grid", nullptr, false, hasSel2c)) {
                     int snapped = 0;
                     pushUndo();
@@ -738,6 +740,12 @@ void MenuBar::drawEditDistributeSelection(const EditDistributeSelectionContext& 
         if (ImGui::MenuItem(labels[axis])) context.distribute(axis);
     }
     ImGui::EndMenu();
+}
+
+void MenuBar::drawEditDropToGround(const EditDropToGroundContext& context) {
+    if (ImGui::MenuItem("Drop to Ground Plane", nullptr, false, context.canDrop)) {
+        context.drop();
+    }
 }
 
 void MenuBar::drawPanelToggles(bool& timeline, bool& registry, bool& ai, bool& validation) {
