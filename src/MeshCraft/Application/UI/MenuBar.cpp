@@ -550,9 +550,8 @@ float MeshCraftApplication::drawMenuBar()
                 if (walkController_.isActive()) exitWalkMode(); else enterWalkMode();
             }
             ImGui::Separator();
-            ImGui::MenuItem("Edge Overlay",    "Alt+W", &showEdgeOverlay_);
-            ImGui::MenuItem("Wireframe Mode",  nullptr,  &showWireframeMode_);
-            ImGui::MenuItem("Stats Overlay",   nullptr,  &showStatsOverlay_);
+            UI::MenuBar::drawOverlays(showEdgeOverlay_, showWireframeMode_,
+                                      showStatsOverlay_, shadowDebugEnabled_, snapEnabled_);
             if (supportsTextShaderEffects()) {
                 ImGui::MenuItem("Bloom (emissive glow)", nullptr, &bloomEnabled_);
                 if (bloomEnabled_) {
@@ -580,8 +579,6 @@ float MeshCraftApplication::drawMenuBar()
             } else {
                 ImGui::TextDisabled("Bloom and SSAO require cross-backend ShaderEffect support");
             }
-            ImGui::MenuItem("Shadow Map Debug",         nullptr, &shadowDebugEnabled_);
-            ImGui::MenuItem("Snap to Grid", nullptr, &snapEnabled_);
             UI::MenuBar::drawPanelToggles(showTimeline_, showRegistryPanel_,
                                           showAiPanel_, showValidationPanel_);
             ImGui::EndMenu();
@@ -609,6 +606,14 @@ void MenuBar::drawPanelToggles(bool& timeline, bool& registry, bool& ai, bool& v
     ImGui::MenuItem("Model Registry", nullptr, &registry);
     ImGui::MenuItem("AI Assistant", nullptr, &ai);
     ImGui::MenuItem("Validation", nullptr, &validation);
+}
+
+void MenuBar::drawOverlays(bool& edges, bool& wireframe, bool& stats, bool& shadowDebug, bool& snap) {
+    ImGui::MenuItem("Edge Overlay", "Alt+W", &edges);
+    ImGui::MenuItem("Wireframe Mode", nullptr, &wireframe);
+    ImGui::MenuItem("Stats Overlay", nullptr, &stats);
+    ImGui::MenuItem("Shadow Map Debug", nullptr, &shadowDebug);
+    ImGui::MenuItem("Snap to Grid", nullptr, &snap);
 }
 
 } // namespace MeshCraft::Application::UI
