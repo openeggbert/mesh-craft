@@ -99,7 +99,7 @@ before when explicitly requested (`SYS-W14-##` rows).
 
 ## 2. Current status
 
-- **Last full build: clean after the current Phase 13 Edit-show-all-hidden
+- **Last full build: clean after the current Phase 13 File-merge-scene
   slice.** Testing is enabled in the current Ninja Release tree, and
   `CCACHE_DISABLE=1 cmake --build b-release -j4` linked all targets successfully
   on EASYGL. Alternate-backend runtime qualification remains blocked.
@@ -791,7 +791,7 @@ Edit-linear-array, Edit-scatter-along-curve, Edit-batch-rename,
 Edit-find-replace-names, Edit-randomize-transform, Edit-macro-recording,
 Edit-play-macro, Edit-macro-editor, Edit-lock-selection, Edit-reset-transform,
 Edit-transform-clipboard, Edit-isolate-selection, Edit-hide-selection, and
-Edit-show-all-hidden slices.
+Edit-show-all-hidden and File-merge-scene slices.
 `EditHistoryContext` exposes only `canUndo`/`canRedo` plus Undo, Redo, and
 Open History callbacks; `Editor::UndoManager`, document replacement,
 selection restoration, dialog state, and keyboard handling remain
@@ -954,15 +954,19 @@ object visibility mutation, undo, document and title updates, macro playback,
 and the Alt+H keyboard path remain in their existing owners; `MenuBar` owns
 only the unchanged label, shortcut, always-enabled presentation, and click
 dispatch.
+`FileMergeSceneContext` exposes only one open-dialog callback. Dialog state and
+buffers, source-file loading, document merging, undo, title and status updates,
+and error handling remain in their existing owners; `MenuBar` owns only the
+unchanged label and click dispatch.
 
 **Next candidate, not yet authorized:** continue Phase 13 with the single
-File-menu Merge Scene… item, passing only one open-dialog callback. Dialog
-state and buffers, source-file loading, document merging, undo, title and
-status updates, and error handling would remain in their existing owners;
-`MenuBar` would own only the unchanged label and click dispatch. Other File
-items, later controls, and the View-menu Bloom/SSAO block remain outside that
-slice. Per `CLAUDE.md`, describe and confirm the Merge-Scene item before
-implementing it.
+File-menu Export Selection… item, passing only current-selection availability
+and one open-dialog callback. Selection state, dialog state and buffers, export
+implementation, document and error handling would remain in their existing
+owners; `MenuBar` would own only the unchanged label, availability, and click
+dispatch. Other File items, later controls, and the View-menu Bloom/SSAO block
+remain outside that slice. Per `CLAUDE.md`, describe and confirm the
+Export-Selection item before implementing it.
 
 ## 9. Do not do yet
 

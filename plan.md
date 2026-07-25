@@ -174,8 +174,8 @@ still internally consistent.
    Edit-find-replace-names, Edit-randomize-transform, Edit-macro-recording,
    Edit-play-macro, Edit-macro-editor, Edit-lock-selection,
    Edit-reset-transform, Edit-transform-clipboard, Edit-isolate-selection,
-   Edit-hide-selection, and Edit-show-all-hidden menu slices are implemented
-   and verified. Their state remains in the existing
+   Edit-hide-selection, Edit-show-all-hidden, and File-merge-scene menu slices
+   are implemented and verified. Their state remains in the existing
    editor/application owners;
    `Application::UI::MenuBar` receives only the read-only values and callbacks
    required for presentation. Any further slice requires its own confirmation
@@ -774,8 +774,8 @@ _All items in this workstream are DONE — archived to [`docs/history/plan_20260
   Edit-find-replace-names, Edit-randomize-transform, Edit-macro-recording,
   Edit-play-macro, Edit-macro-editor, Edit-lock-selection,
   Edit-reset-transform, Edit-transform-clipboard, Edit-isolate-selection,
-  Edit-hide-selection, and Edit-show-all-hidden slices, each incremental
-  Release link and the same 147/147 + 34/34 partitions pass again.
+  Edit-hide-selection, Edit-show-all-hidden, and File-merge-scene slices, each
+  incremental Release link and the same 147/147 + 34/34 partitions pass again.
   For the current MenuBar slices, the public UI header also compiles as a
   self-contained C++23 include, `undo_snapshot_lint_test.py` passes, and
   `git diff --check` is clean. A further Phase 13 slice requires separate

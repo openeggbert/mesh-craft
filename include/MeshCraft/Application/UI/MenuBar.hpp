@@ -30,6 +30,10 @@ struct HelpMenuContext {
     std::function<void()> openKeyboardShortcuts;
 };
 
+struct FileMergeSceneContext {
+    std::function<void()> openDialog;
+};
+
 struct EditHistoryContext {
     bool canUndo;
     bool canRedo;
@@ -215,6 +219,7 @@ struct EditShowAllHiddenContext {
 class MenuBar final {
 public:
     static void drawAddMenu(const std::function<void(Mc3::ObjectType)>& addPrimitive);
+    static void drawFileMergeScene(const FileMergeSceneContext& context);
     static void drawEditClipboard(const EditClipboardContext& context);
     static void drawEditCopyProperties(const EditCopyPropertiesContext& context);
     static void drawEditGrouping(const EditGroupingContext& context);

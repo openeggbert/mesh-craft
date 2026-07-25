@@ -100,11 +100,14 @@ float MeshCraftApplication::drawMenuBar()
                 }
                 if (!hasSel) ImGui::EndDisabled();
             }
-            if (ImGui::MenuItem("Merge Scene...")) {
-                mergeSceneBuf_[0] = '\0';
-                mergeSceneErr_[0] = '\0';
-                mergeSceneOpen_   = true;
-            }
+            const UI::FileMergeSceneContext fileMergeSceneContext{
+                .openDialog = [this] {
+                    mergeSceneBuf_[0] = '\0';
+                    mergeSceneErr_[0] = '\0';
+                    mergeSceneOpen_   = true;
+                },
+            };
+            UI::MenuBar::drawFileMergeScene(fileMergeSceneContext);
             ImGui::Separator();
             if (ImGui::MenuItem("Exit")) confirmIfModified(PendingAction::ExitApp);
             ImGui::EndMenu();
@@ -577,6 +580,10 @@ void MenuBar::drawAddMenu(const std::function<void(Mc3::ObjectType)>& addPrimiti
     }
 
     ImGui::EndMenu();
+}
+
+void MenuBar::drawFileMergeScene(const FileMergeSceneContext& context) {
+    if (ImGui::MenuItem("Merge Scene...")) context.openDialog();
 }
 
 void MenuBar::drawEditHistory(const EditHistoryContext& context) {
