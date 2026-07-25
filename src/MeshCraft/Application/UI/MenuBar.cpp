@@ -138,18 +138,21 @@ float MeshCraftApplication::drawMenuBar()
                 .deleteSelection = [this] { deleteSelected(); },
             };
             UI::MenuBar::drawEditObjectActions(editObjectActionsContext);
-            if (ImGui::MenuItem("Select All","Ctrl+A")) {
-                selection_.clear();
-                for (auto& o : document_.objects) selection_.select(o);
-                updateWindowTitle();
-            }
-            if (ImGui::MenuItem("Invert Selection", "Ctrl+I")) {
-                walkAll(document_.objects, [&](const auto& o) {
-                    if (selection_.isSelected(o.get())) selection_.deselect(o);
-                    else                                selection_.select(o);
-                });
-                updateWindowTitle();
-            }
+            const UI::EditSelectionActionsContext editSelectionActionsContext{
+                .selectAll = [this] {
+                    selection_.clear();
+                    for (auto& o : document_.objects) selection_.select(o);
+                    updateWindowTitle();
+                },
+                .invertSelection = [this, &walkAll] {
+                    walkAll(document_.objects, [&](const auto& o) {
+                        if (selection_.isSelected(o.get())) selection_.deselect(o);
+                        else                                selection_.select(o);
+                    });
+                    updateWindowTitle();
+                },
+            };
+            UI::MenuBar::drawEditSelectionActions(editSelectionActionsContext);
             if (ImGui::BeginMenu("Select by Type")) {
                 std::set<Mc3::ObjectType> presentTypes;
                 walkAll(document_.objects, [&](const auto& o) { presentTypes.insert(o->type); });
@@ -621,6 +624,11 @@ void MenuBar::drawEditObjectActions(const EditObjectActionsContext& context) {
     }
     if (ImGui::MenuItem("Delete", "Del")) context.deleteSelection();
     ImGui::Separator();
+}
+
+void MenuBar::drawEditSelectionActions(const EditSelectionActionsContext& context) {
+    if (ImGui::MenuItem("Select All", "Ctrl+A")) context.selectAll();
+    if (ImGui::MenuItem("Invert Selection", "Ctrl+I")) context.invertSelection();
 }
 
 void MenuBar::drawPanelToggles(bool& timeline, bool& registry, bool& ai, bool& validation) {

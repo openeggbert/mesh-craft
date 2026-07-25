@@ -165,11 +165,11 @@ still internally consistent.
 6. **SYS-W3-01 (P2/W3), Phase 13 is active:** application/UI ownership is
    being reduced one narrow presentation slice at a time. The authorized
    Camera Bookmarks, Walk Mode, Help, Add/CSG, Edit-history, Edit-clipboard,
-   and Edit-object-actions menu slices are implemented and verified. Their
-   state remains in the existing editor/application owners;
-   `Application::UI::MenuBar` receives only the read-only values and callbacks
-   required for presentation. Any further slice requires its own confirmation
-   per `CLAUDE.md`.
+   Edit-object-actions, and Edit-selection-actions menu slices are implemented
+   and verified. Their state remains in the existing editor/application
+   owners; `Application::UI::MenuBar` receives only the read-only values and
+   callbacks required for presentation. Any further slice requires its own
+   confirmation per `CLAUDE.md`.
 
 ---
 
@@ -621,8 +621,12 @@ _All items in this workstream are DONE — archived to [`docs/history/plan_20260
   exposes only Duplicate-at-Offset availability and three action callbacks.
   Offset calculation, grid spacing, selection, undo, status reporting,
   document mutation, and the Ctrl+D/Ctrl+Shift+D/Delete keyboard paths remain
-  application-owned. File, the remaining Edit groups, and the remaining View
-  controls are still application-owned.
+  application-owned. The adjacent Select All and Invert Selection pair is now
+  component-owned through `EditSelectionActionsContext`, which exposes only
+  two callbacks. Scene traversal, selection state, window-title updates, and
+  the Ctrl+A/Ctrl+I keyboard paths remain application-owned. File, the
+  remaining Edit groups, and the remaining View controls are still
+  application-owned.
   The historical audit references retain their former paths as time-accurate
   evidence.
   Static undo-audit and snapshot-lint path checks pass after their tracked
@@ -634,13 +638,13 @@ _All items in this workstream are DONE — archived to [`docs/history/plan_20260
   and `CCACHE_DISABLE=1 cmake --build b-release -j4` linked every target.
   The complete suite passed in two disjoint groups with the required local
   socket access: 147/147 non-render tests and 34/34 render-labelled tests
-  under Xvfb. After the Walk Mode, Help, Add, Edit-history, Edit-clipboard, and
-  Edit-object-actions menu slices, each incremental Release link and the same
-  147/147 + 34/34 partitions pass again. For the current MenuBar slices, the
-  public UI header also compiles as a self-contained C++23 include,
-  `undo_snapshot_lint_test.py` passes, and `git diff --check` is clean. A
-  further Phase 13 slice requires separate authorization and should keep using
-  the same narrow-context boundary.
+  under Xvfb. After the Walk Mode, Help, Add, Edit-history, Edit-clipboard,
+  Edit-object-actions, and Edit-selection-actions menu slices, each incremental
+  Release link and the same 147/147 + 34/34 partitions pass again. For the
+  current MenuBar slices, the public UI header also compiles as a self-contained
+  C++23 include, `undo_snapshot_lint_test.py` passes, and `git diff --check` is
+  clean. A further Phase 13 slice requires separate authorization and should
+  keep using the same narrow-context boundary.
   **SYS-W3-01 roadmap status after this session's investigation round:**
   Phases 1–12 done (Keybindings, Preferences, MacroRecorder, UndoManager,
   animation-override computation, WalkController, AudioPreview,

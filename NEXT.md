@@ -20,12 +20,12 @@ a compatibility forwarder. Actual UI components currently cover Validation,
 Registry results, Toolbar tools/display/snap-surface/proportional/grid controls,
 Properties delegation, and the View-menu panel/overlay/direction/focus/
 Camera-Bookmarks/Walk-Mode presentation, plus the Add/CSG and Help menu
-presentation and the Edit-history, clipboard, and object-action groups. The
-detailed Snap interval contents and the remaining MenuBar sections are still
-application-owned. Camera bookmark, walk, document, undo, clipboard, selection,
-grid, and dialog state have **not** moved again: they remain in their existing
-editor/application owners; the UI component only reads presentation state and
-invokes application-owned callbacks.
+presentation and the Edit-history, clipboard, object-action, and
+selection-action groups. The detailed Snap interval contents and the remaining
+MenuBar sections are still application-owned. Camera bookmark, walk, document,
+undo, clipboard, selection, grid, and dialog state have **not** moved again:
+they remain in their existing editor/application owners; the UI component only
+reads presentation state and invokes application-owned callbacks.
 Historical references below intentionally retain their then-current paths.
 
 ## 1. Project summary
@@ -94,7 +94,7 @@ before when explicitly requested (`SYS-W14-##` rows).
 
 ## 2. Current status
 
-- **Last full build: clean after the current Phase 13 Edit-object-actions
+- **Last full build: clean after the current Phase 13 Edit-selection-actions
   slice.** The current Ninja Release tree has testing enabled, and
   `CCACHE_DISABLE=1 cmake --build b-release -j4` linked all targets
   successfully on EASYGL. Alternate-backend runtime qualification remains
@@ -166,11 +166,11 @@ before when explicitly requested (`SYS-W14-##` rows).
   narrow contexts. Validation, Registry results, Toolbar controls, Properties
   delegation, and the View-menu directions/focus/overlays/panels/
   Camera-Bookmarks/Walk-Mode presentation, plus the Add/CSG and Help menu
-  presentation and the Edit-history, clipboard, and object-action groups, are
-  now component-owned. Bookmark, walk, document, undo, clipboard, selection,
-  grid, preferences, command-palette, and shortcut-dialog state remain in their
-  existing owners; the menu receives only read-only state plus
-  application-owned callbacks.
+  presentation and the Edit-history, clipboard, object-action, and
+  selection-action groups, are now component-owned. Bookmark, walk, document,
+  undo, clipboard, selection, grid, preferences, command-palette, and
+  shortcut-dialog state remain in their existing owners; the menu receives
+  only read-only state plus application-owned callbacks.
 - **Recently implemented (2026-07-20 through 2026-07-25):** all 7
   raw-OpenGL(ES)-vs-CNA migrations, `AUD-082` through `AUD-088` — full
   detail with file:line evidence and
@@ -774,7 +774,7 @@ complete, while Android (`AUD-042`) is environment/owner deferred.
 `SYS-W3-01` has 12 completed subsystem phases and an active Phase 13 for
 application/UI ownership. The authorized Camera Bookmarks, Walk Mode, Help,
 Add/CSG, Edit-history, Edit-clipboard, and Edit-object-actions menu slices are
-implemented and verified.
+implemented and verified, as is the Edit-selection-actions slice.
 `EditHistoryContext` exposes only `canUndo`/`canRedo` plus Undo, Redo, and
 Open History callbacks; `Editor::UndoManager`, document replacement,
 selection restoration, dialog state, and keyboard handling remain
@@ -786,13 +786,17 @@ remain application-owned.
 Duplicate, Duplicate at Offset, and Delete callbacks. Offset calculation, grid
 spacing, selection, undo, status reporting, document mutation, and the
 Ctrl+D/Ctrl+Shift+D/Delete keyboard paths remain application-owned.
+`EditSelectionActionsContext` exposes only Select All and Invert Selection
+callbacks; scene traversal, selection state, window-title updates, and the
+Ctrl+A/Ctrl+I keyboard paths remain application-owned.
 
 **Next candidate, not yet authorized:** continue Phase 13 with the compact
-Select All / Invert Selection presentation pair, passing only two action
-callbacks. Selection traversal and state, window-title updates, and the
-Ctrl+A/Ctrl+I keyboard paths would remain application-owned. Dynamic Select by
-Type/Tag/Material menus and the View-menu Bloom/SSAO block remain outside that
-slice. Per `CLAUDE.md`, describe and confirm the selection-actions slice before
+Select by Type submenu, passing a lazy read-only provider for the object types
+present in the scene plus one type-selection callback. Scene traversal,
+selection mutation, and window-title updates would remain application-owned,
+while type labels and empty-scene presentation would move to `MenuBar`. Select
+by Tag/Material and the View-menu Bloom/SSAO block remain outside that slice.
+Per `CLAUDE.md`, describe and confirm the Select-by-Type slice before
 implementing it.
 
 ## 9. Do not do yet

@@ -48,12 +48,18 @@ struct EditObjectActionsContext {
     std::function<void()> deleteSelection;
 };
 
+struct EditSelectionActionsContext {
+    std::function<void()> selectAll;
+    std::function<void()> invertSelection;
+};
+
 class MenuBar final {
 public:
     static void drawAddMenu(const std::function<void(Mc3::ObjectType)>& addPrimitive);
     static void drawEditClipboard(const EditClipboardContext& context);
     static void drawEditHistory(const EditHistoryContext& context);
     static void drawEditObjectActions(const EditObjectActionsContext& context);
+    static void drawEditSelectionActions(const EditSelectionActionsContext& context);
     static void drawPanelToggles(bool& timeline, bool& registry, bool& ai, bool& validation);
     static void drawOverlays(bool& edges, bool& wireframe, bool& stats, bool& shadowDebug, bool& snap);
     static void drawViewDirections(float& yaw, float& pitch);
