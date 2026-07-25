@@ -344,9 +344,11 @@ float MeshCraftApplication::drawMenuBar()
                 .openDialog = [this] { groupScaleOpen_ = true; },
             };
             UI::MenuBar::drawEditGroupScale(editGroupScaleContext);
-            if (ImGui::MenuItem("Linear Array...", nullptr, false,
-                                !selection_.selection().empty()))
-                arrayDupOpen_ = true;
+            const UI::EditLinearArrayContext editLinearArrayContext{
+                .canOpen = !selection_.selection().empty(),
+                .openDialog = [this] { arrayDupOpen_ = true; },
+            };
+            UI::MenuBar::drawEditLinearArray(editLinearArrayContext);
             if (ImGui::MenuItem("Scatter Along Curve...", nullptr, false,
                                 !selection_.selection().empty()))
                 scatterCurveOpen_ = true;
@@ -764,6 +766,12 @@ void MenuBar::drawEditMirrorSelection(const EditMirrorSelectionContext& context)
 
 void MenuBar::drawEditGroupScale(const EditGroupScaleContext& context) {
     if (ImGui::MenuItem("Group Scale…", nullptr, false, context.canScale)) {
+        context.openDialog();
+    }
+}
+
+void MenuBar::drawEditLinearArray(const EditLinearArrayContext& context) {
+    if (ImGui::MenuItem("Linear Array...", nullptr, false, context.canOpen)) {
         context.openDialog();
     }
 }
