@@ -1056,12 +1056,13 @@ if(MESH_CRAFT_BUILD_TESTING AND UNIX AND NOT ANDROID AND NOT EMSCRIPTEN)
     # ordinary drag-and-drop. Drives a REAL multi-frame ImGui drag gesture
     # (same technique as undo_gesture_frame_test.cpp's driveClickDragGesture)
     # between two actual tree rows rendered by the real SceneHierarchyPanel
-    # class, not a mock -- CNA-free (SceneHierarchyPanel.cpp only depends on
-    # imgui + EditorAlgorithms.hpp (header-only) + Mc3Object/SelectionManager),
-    # so this links Mc3 + imgui only, no CNA/window/GL context.
+    # class, not a mock -- CNA-free (its dependencies are imgui,
+    # EditorAlgorithms.hpp, Mc3Object/SelectionManager/ObjectLockState), so
+    # this links Mc3 + imgui only, no CNA/window/GL context.
     add_executable(scene_hierarchy_panel_test
         ${CMAKE_CURRENT_SOURCE_DIR}/test/scene_hierarchy_panel_test.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/src/MeshCraft/Scene/SceneHierarchyPanel.cpp
+        ${CMAKE_CURRENT_SOURCE_DIR}/src/MeshCraft/Editor/ObjectLockState.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/src/MeshCraft/Editor/SelectionManager.cpp)
     target_include_directories(scene_hierarchy_panel_test PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}/include

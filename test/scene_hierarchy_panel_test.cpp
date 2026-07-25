@@ -26,12 +26,12 @@
 #include "imgui.h"
 
 #include "MeshCraft/Scene/SceneHierarchyPanel.hpp"
+#include "MeshCraft/Editor/ObjectLockState.hpp"
 #include "MeshCraft/Editor/SelectionManager.hpp"
 #include <MeshCraft/Mc3/Mc3Document.hpp>
 #include <MeshCraft/Mc3/Mc3Object.hpp>
 
 #include <iostream>
-#include <set>
 #include <string>
 
 using namespace MeshCraft;
@@ -67,7 +67,7 @@ int main() {
 
     Scene::SceneHierarchyPanel panel(doc);
     Editor::SelectionManager selection;
-    std::set<std::string> lockedIds;
+    Editor::ObjectLockState objectLockState;
     Scene::HierarchyCallbacks cb;
     cb.pushUndo       = []{};
     cb.markModified   = []{};
@@ -84,7 +84,7 @@ int main() {
         ImGui::SetNextWindowPos(ImVec2(0, 0));
         ImGui::SetNextWindowSize(ImVec2(400, 500));
         ImGui::Begin("Hierarchy", nullptr, ImGuiWindowFlags_NoSavedSettings);
-        panel.draw(selection, lockedIds, cb);
+        panel.draw(selection, objectLockState, cb);
         ImVec2 mn = ImGui::GetItemRectMin(), mx2 = ImGui::GetItemRectMax();
         ImGui::End();
         ImGui::Render();
