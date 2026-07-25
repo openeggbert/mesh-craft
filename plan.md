@@ -525,10 +525,20 @@ _All items in this workstream are DONE — archived to [`docs/history/plan_20260
   test covers empty paste, full P/R/S round-trip, and pivot preservation.
   Targeted six-subsystem suite passes (6/6); full `MeshCraft` rebuild passes.
   **Resolved:** commit `221b845`.
+  **Phase 10 DONE (2026-07-25) — status notification:** extracted the
+  timed status-bar message's replacement and expiry state into
+  `Editor::StatusNotification` (`include/` + `src/MeshCraft/Editor/`).
+  Existing `setStatusMsg()` call sites remain unchanged, while the app now
+  delegates its once-per-frame tick and ImGui draws through the new class.
+  New CNA-free `status_notification` test covers initial state, expiration,
+  replacement of a still-live notification, error severity, and zero-duration
+  behavior. Targeted seven-subsystem suite passes (7/7); full `MeshCraft`
+  rebuild passes. **Resolved:** commit `d287bc8`.
   **SYS-W3-01 roadmap status after this session's investigation round:**
-  Phases 1–9 done (Keybindings, Preferences, MacroRecorder, UndoManager,
+  Phases 1–10 done (Keybindings, Preferences, MacroRecorder, UndoManager,
   animation-override computation, WalkController, AudioPreview,
-  CameraBookmarks, TransformClipboard, in-that-order). File dialogs and post-processing were each
+  CameraBookmarks, TransformClipboard, StatusNotification, in-that-order).
+  File dialogs and post-processing were each
   investigated and explicitly declined for different reasons (no
   testability win vs. real regression risk with no verification tool) —
   not silently skipped. `MeshCraftApplication` itself is still a large
