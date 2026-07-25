@@ -297,10 +297,10 @@ void MeshCraftApplication::drawStatusBar(int screenW, int screenH)
         ImGuiWindowFlags_NoScrollWithMouse | ImGuiWindowFlags_NoSavedSettings);
     {
         // Timed notification takes priority; falls back to scene info
-        if (statusMsgTimer_ > 0) {
-            ImVec4 col = statusMsgIsError_ ? ImVec4(1.0f, 0.45f, 0.45f, 1.0f)
-                                           : ImVec4(0.55f, 1.0f, 0.55f, 1.0f);
-            ImGui::TextColored(col, "%s", statusMsg_.c_str());
+        if (statusNotification_.active()) {
+            ImVec4 col = statusNotification_.isError() ? ImVec4(1.0f, 0.45f, 0.45f, 1.0f)
+                                                        : ImVec4(0.55f, 1.0f, 0.55f, 1.0f);
+            ImGui::TextColored(col, "%s", statusNotification_.message().c_str());
         } else {
             int totalObjs = 0;
             std::function<void(const std::vector<std::shared_ptr<Mc3::Mc3Object>>&)> countAll =

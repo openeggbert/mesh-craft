@@ -417,7 +417,7 @@ void MeshCraftApplication::Update(GameTime& gameTime) {
     // Status bar notification countdown + auto-save
     {
         float dt = static_cast<float>(gameTime.getElapsedGameTimeProperty().getTotalSecondsProperty());
-        if (statusMsgTimer_ > 0) statusMsgTimer_ -= dt;
+        statusNotification_.advance(dt);
 
         // AUD-031: was a hand-copied duplicate of autoSaveTickAlg's own
         // countdown logic; now delegates to it directly (single tested

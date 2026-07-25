@@ -146,9 +146,7 @@ Mc3::Mc3Document MeshCraftApplication::loadSceneFileDispatched(
 }
 
 void MeshCraftApplication::setStatusMsg(std::string msg, bool isError, float duration) {
-    statusMsg_ = std::move(msg);
-    statusMsgIsError_ = isError;
-    statusMsgTimer_ = duration;
+    statusNotification_.show(std::move(msg), isError, duration);
 }
 
 // STAB-0701/SYS-W14-14: see header comment. Non-fatal -- the file still

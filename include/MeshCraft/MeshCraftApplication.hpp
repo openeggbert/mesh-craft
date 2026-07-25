@@ -13,6 +13,7 @@
 #include "MeshCraft/Editor/ObjectIndex.hpp"
 #include "MeshCraft/Editor/Preferences.hpp"
 #include "MeshCraft/Editor/SelectionManager.hpp"
+#include "MeshCraft/Editor/StatusNotification.hpp"
 #include "MeshCraft/Editor/TransformGizmo.hpp"
 #include "MeshCraft/Editor/TransformClipboard.hpp"
 #include "MeshCraft/Editor/UndoManager.hpp"
@@ -701,10 +702,9 @@ private:
     void loadPrefs();
     void savePrefs();
 
-    // Timed status bar notification
-    std::string statusMsg_;
-    float statusMsgTimer_{0.0f};
-    bool  statusMsgIsError_{false};
+    // SYS-W3-01 Phase 10: timed notification storage/expiry is independent
+    // of the application's ImGui status-bar presentation.
+    Editor::StatusNotification statusNotification_;
     void setStatusMsg(std::string msg, bool isError = false, float duration = 3.0f);
 
     // STAB-0701: rotation_units="radians" / a non-default euler_order are
