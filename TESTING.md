@@ -1,8 +1,8 @@
 # Testing
 
-_Last updated: 2026-07-25. Counts below were produced from the live release build with `ctest -L <label> -N`, not carried over from an earlier revision. This document is derived from the actual `CMakeLists.txt` test registrations and test source files — if it drifts from `ctest -N`'s output, trust `ctest -N`, not this file's claimed count._
+_Last updated: 2026-07-25. Counts below were verified against a freshly configured Release build after the current `SYS-W3-01` Phase 13 slice. This document is derived from the actual `CMakeLists.txt` test registrations and test source files — if it drifts from a freshly configured build's `ctest -N` output, trust `ctest -N`, not this file's claimed count._
 
-MeshCraft's tests run through **CTest** — **180 tests registered** (`ctest --print-labels` label breakdown: `ai` 1, `commands` 1, `export` 71, `format` 37, `lint` 4, `perf` 2, `registry` 1, `render` 34, `unit` 31), mixing C++ assertion-based binaries and Python/bash subprocess-driven checks against the `mc3togltf`/`mc3tomcb` CLIs and the `MeshCraft` editor binary itself (headless `--screenshot` real-pixel-sampling tests, plus 3 tests that drive real headless Blender for GLB-import verification). `render_display_preflight` verifies an actual `xvfb-run` + `xdpyinfo` X client before the render subset; if unavailable, it reports a CTest skip and CMake disables only the other render-labelled tests. **Known gap:** the "CLI-driving Python tests" table below documents the most significant/representative tests in each category but is not exhaustively 1:1 with all registrations — `ctest -N` and `ctest --print-labels` are authoritative for the complete list.
+MeshCraft's tests run through **CTest** — **181 tests registered** (`ctest --print-labels` label breakdown after the new target: `ai` 1, `commands` 1, `export` 71, `format` 37, `lint` 4, `perf` 2, `registry` 1, `render` 34, `unit` 32), mixing C++ assertion-based binaries and Python/bash subprocess-driven checks against the `mc3togltf`/`mc3tomcb` CLIs and the `MeshCraft` editor binary itself (headless `--screenshot` real-pixel-sampling tests, plus 3 tests that drive real headless Blender for GLB-import verification). `render_display_preflight` verifies an actual `xvfb-run` + `xdpyinfo` X client before the render subset; if unavailable, it reports a CTest skip and CMake disables only the other render-labelled tests. **Known gap:** the "CLI-driving Python tests" table below documents the most significant/representative tests in each category but is not exhaustively 1:1 with all registrations — `ctest -N` and `ctest --print-labels` are authoritative for the complete list.
 
 ---
 
@@ -31,7 +31,7 @@ ctest --print-labels   # list all labels
 ctest --rerun-failed --output-on-failure
 ```
 
-Expected result: every registered test passes. The 180-registration count was checked 2026-07-25; the relevant focused suites are run with `-j4` after each change. A failing test prints its assertion/subprocess output inline with `--output-on-failure`; without that flag, CTest only shows pass/fail per test name.
+Expected result: every registered test passes. On 2026-07-25 the fresh Release build reported 181 registrations and passed all of them as two disjoint runs: 147/147 with `-LE render` and 34/34 with `-L render` under Xvfb. The focused suites are run with at most `-j4` after each change. A failing test prints its assertion/subprocess output inline with `--output-on-failure`; without that flag, CTest only shows pass/fail per test name.
 
 Each C++ test binary can also be run directly (bypassing CTest) for faster iteration:
 
@@ -74,6 +74,7 @@ Expected: `mc3` 1/1, `mcb` 1/1, `mc3togltf` 41/41, `mc3tomcb` 3/3 (re-verified 2
 | `transform_clipboard` | `transform_clipboard_test` | Editor transform clipboard | Copies only position/rotation/scale; empty paste is harmless and target pivot stays unchanged |
 | `status_notification` | `status_notification_test` | Timed status-bar notification state | Message/severity replacement and expiry behavior |
 | `object_lock_state` | `object_lock_state_test` | Editor-session object lock membership | Idempotent lock/unlock and toggle semantics |
+| `benchmark_progress` | `benchmark_progress_test` | Headless `--benchmark` frame-progress lifecycle | Frame count/sample order, one-shot completion, startup timing, and invalid-count clamping |
 
 Each assertion-based binary listed here prints one `PASS: <description>` or `FAIL: <description>` line per assertion and exits non-zero if any `FAIL:` occurred — grep for `^FAIL:` to find failures quickly in CI-style output.
 

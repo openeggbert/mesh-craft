@@ -52,10 +52,12 @@ lettered commit-message convention:
   individual definitions to the registry.
 - **N1–N7 — schema extensions**: SVG textures, embedded glTF, Lua
   scripts, sound/music, triggers, scene states, and a general-purpose
-  meta key/value map. All fully round-tripped (XML, MCB, XSD); N3–N7
-  are data-only so far — nothing in the editor executes them yet (no
-  Lua interpreter, no audio playback, no trigger-firing, no
-  state-switching — see `MC3_FORMAT.md`'s per-section status notes).
+  meta key/value map. All fully round-tripped (XML, MCB, XSD) and editable.
+  The editor rasterizes SVG textures, previews audio, runs sandboxed Lua on
+  explicit request, fires trigger steps explicitly, and applies scene-state
+  overrides interactively. Automatic collision/click/timer trigger events and
+  automatic state switching remain unimplemented; see `MC3_FORMAT.md`'s
+  per-section status notes.
 
 ## Earlier feature work
 

@@ -14,7 +14,16 @@ full evidence; older session history remains below and in `docs/history/`._
 _Source-layout note (2026-07-25): the editor application implementation is
 now at `src/MeshCraft/Application/` and `src/MeshCraft/Application/UI/`,
 replacing the former flat `src/MeshCraft/MeshCraftApplication_*.cpp` layout.
-Historical references below intentionally retain their then-current paths._
+`MeshCraftApplication` itself is now
+`MeshCraft::Application::MeshCraftApplication`; the old public include remains
+a compatibility forwarder. Actual UI components currently cover Validation,
+Registry results, Toolbar tools/display/snap-surface/proportional/grid controls,
+Properties delegation, and the View-menu panel/overlay/direction/focus/
+Camera-Bookmarks presentation. The detailed Snap interval contents and the
+remaining MenuBar sections are still application-owned. Camera bookmark state
+has **not** moved again: it remains `Editor::CameraBookmarks`; the UI component
+only reads slots and invokes application-owned Save/Restore callbacks.
+Historical references below intentionally retain their then-current paths.
 
 ## 1. Project summary
 
@@ -82,20 +91,24 @@ before when explicitly requested (`SYS-W14-##` rows).
 
 ## 2. Current status
 
-- **Build: clean**, `cmake --build b-release -j4` passed after SVG texture
-  support was added (EASYGL backend on Linux). The CNA-backed ImGui adapter
-  also builds there; alternate-backend runtime qualification remains blocked.
-- **Tests:** 181 tests are registered. SVG-specific verification passes with
-  `-j4`: external and inline SVG export to glTF PNGs, bounded/malformed input,
-  cache invalidation, and real headless viewport screenshots sampling the
-  rasterized material pixels. This session's own
+- **Last full build: clean after the current Phase 13 Camera Bookmarks
+  slice.** A fresh Ninja Release tree configured with testing enabled, and
+  `CCACHE_DISABLE=1 cmake --build b-release -j4` linked all targets
+  successfully on EASYGL. Alternate-backend runtime qualification remains
+  blocked.
+- **Tests:** the fresh Release tree registers 181 tests. All passed in two
+  disjoint groups: 147/147 non-render tests and 34/34 render-labelled tests
+  under Xvfb (with local loopback/X11 socket access). SVG-specific
+  verification passes with `-j4`: external and inline SVG export to glTF PNGs,
+  bounded/malformed input, cache invalidation, and real headless viewport
+  screenshots sampling the rasterized material pixels. This session's own
   `AUD-082`-`088` work added 3 brand-new ctest targets — `bloom_test`,
   `matpreview_test`, `shadowdebug_test` — one per migrated feature that
   previously had zero visual-correctness coverage (see §3). The 142
   count this file last recorded (2026-07-19) predates unrelated work not
   narrated here (a further audit pass and the `SYS-W14-18..27`
   mc3-format-vs-editor gap closures — see `plan.md`/memory, not fully
-  reflected in this file's own history) — don't treat 142→180 as this
+  reflected in this file's own history) — don't treat 142→181 as this
   session's own delta.
   All builds/tests this session used at most `-j4` (never `-j$(nproc)`), per
   the user's standing request (shared machine).
@@ -143,7 +156,15 @@ before when explicitly requested (`SYS-W14-##` rows).
   headless `--benchmark` frame-progress lifecycle into
   `Editor::BenchmarkProgress`. It has a direct CNA-free test for frame
   counting, samples, completion and startup timing; the application retains
-  rendering and benchmark-category presentation.
+  rendering and benchmark-category presentation (commit `2e87524`).
+- **In progress (2026-07-25):** `SYS-W3-01` Phase 13 moved the concrete
+  application into `MeshCraft::Application`, organized implementation files
+  by application/UI ownership, and is extracting UI presentation through
+  narrow contexts. Validation, Registry results, Toolbar controls, Properties
+  delegation, and the View-menu directions/focus/overlays/panels/
+  Camera-Bookmarks presentation are now component-owned. Bookmark state
+  remains `Editor::CameraBookmarks`; the menu receives only read-only state
+  plus Save/Restore callbacks.
 - **Recently implemented (2026-07-20 through 2026-07-25):** all 7
   raw-OpenGL(ES)-vs-CNA migrations, `AUD-082` through `AUD-088` — full
   detail with file:line evidence and
@@ -174,10 +195,10 @@ before when explicitly requested (`SYS-W14-##` rows).
     mutating a preset) + `ShaderEffect` + `SpriteBatch`, full-screen.
   - `AUD-087` — Material-preview swatch: raw FBO render + manual GL
     texture handle handed to `ImGui::Image()` replaced with
-    `RenderTarget2D` + `ShaderEffect`, bridged to ImGui via
-    `IRenderTargetBackend::GetColorGLHandle()` (the correct, documented,
-    cross-backend-safe way to get a native texture handle out of a CNA
-    render target — see §6).
+    `RenderTarget2D` + `ShaderEffect`. Its initial native-handle bridge was
+    subsequently superseded by `SYS-W8-04`'s opaque
+    `ImGuiTextureRegistry`; production UI code no longer consumes a GL
+    texture handle (see §6).
   - `AUD-088` — Shadow Map Debug overlay: raw FBO + separate color/depth
     texture pair replaced with one `RenderTarget2D(..., DepthFormat::
     Depth24)`; needs no custom `ShaderEffect` at all since it just
@@ -539,20 +560,20 @@ backlog (650+ STAB tasks, then a 57-finding audit, all archived DONE).
 
 ## 4. Current blocker / main problem
 
-**The release build is clean and the non-render suite is green.** `AUD-090`
-now preflights `xvfb-run` with a real `xdpyinfo` client at configure time.
-On this host that check reports a clear CTest skip and disables the 35 real
-render tests, instead of misreporting them as product failures; `ctest -LE
-render -j4` passes all 143 remaining tests. CI explicitly installs `xvfb`
-and `x11-utils`, so a healthy GitHub runner executes the render subset.
-The initially reported `mc3_ai` definitions-only timeout was invalidated by
-a forced rebuild: the unchanged test completed in 1.27 seconds, so `AUD-091`
-is closed as a stale-build false positive rather than hidden as a longer
-timeout.
+**The current Phase 13 slice has a clean full Release build and complete test
+verification.** `AUD-090` preflights `xvfb-run` with a real `xdpyinfo` client.
+The execution sandbox blocks the local sockets needed by Xvfb and the
+`mc3_ai` loopback mock server, but the permitted host run completed both
+partitions cleanly: 147/147 non-render tests (including `mc3_ai` in 1.27
+seconds) and 34/34 render tests. CI explicitly installs `xvfb` and
+`x11-utils` for the same render path. `AUD-091` therefore remains closed as
+a stale-build false positive rather than hidden behind a longer timeout.
 
-The only deferred audit item is Android (`AUD-042`): this workspace has no
-Android NDK, and selecting a real Android graphics path would require a CNA
-ownership decision. It is intentionally not being pursued in this session.
+The P1 alternate-backend qualification (`SYS-W8-05`) remains blocked by CNA's
+missing cross-backend custom-effect contract and a first-frame Vulkan backend
+crash outside this repository. The only deferred audit row is Android
+(`AUD-042`): this workspace has no Android NDK, and selecting a real Android
+graphics path would require a CNA ownership decision.
 
 ## 5. Known bugs and limitations
 
@@ -565,7 +586,8 @@ ownership decision. It is intentionally not being pursued in this session.
   dialogs and post-processing were investigated and explicitly declined as
   further extraction targets; `TransformClipboard`, `StatusNotification`,
   `ObjectLockState`, and `BenchmarkProgress` are now also separate (see
-  `plan.md`).
+  `plan.md`). Phase 13 is reorganizing application/UI ownership in small
+  slices; it does not move those subsystem states back into UI code.
 - **By-design, not bugs:** MC3 silently drops unrecognized XML
   attributes/elements on round-trip (`SYS-W5-03`, human-decided,
   documented in `MC3_FORMAT.md`); editor/exporter use different triangle
@@ -596,21 +618,20 @@ ownership decision. It is intentionally not being pursued in this session.
     gave false zero readings during debugging. Trust real
     `--screenshot` output (`GetBackBufferData`) for verification, not
     `GetData()`.
-  - `IRenderTargetBackend::GetColorGLHandle()`
-    (`CNA/Internal/Backends/Common/IGraphicsBackend.hpp:222`, reached via
-    `RenderTarget2D::GetRenderTargetBackend()`) is the correct,
-    documented, cross-backend-safe way to bridge a CNA render target to
-    `ImGui::Image()` (which needs a raw native texture handle) — not a
-    private `Internal/`-path detail to avoid, despite where it lives.
+  - CNA textures shown by `ImGui::Image()` now use monotonic opaque tokens
+    from `ImGuiTextureRegistry`, resolved by the CNA-backed ImGui renderer.
+    Production MeshCraft has no `GetColorGLHandle()` or native GL texture-id
+    bridge; `imgui_renderer_portability` guards against reintroducing one.
   - `SamplerState` only ships combined presets (`LinearWrap`,
     `LinearClamp`, etc. — same mode both axes). A mixed-axis mode (e.g.
     wrap-U/clamp-V for an equirect skybox) needs constructing a preset
     then calling `setAddressUProperty()`/`setAddressVProperty()`
     individually.
   - `drawImGuiUi()` only queues ImGui's draw list; actual rasterization
-    happens later, in `EndDraw()`'s `ImGui_ImplOpenGL3_RenderDrawData()`
-    call. Any test-only "blit on top of everything" hook must run AFTER
-    that call, not in `Draw()`, or it's silently overwritten.
+    happens later, when `EndDraw()` calls the MeshCraft-owned
+    `imguiRenderer_->render(ImGui::GetDrawData())`. Any test-only "blit on
+    top of everything" hook must run after that call, not in `Draw()`, or
+    it is silently overwritten.
 - **`Mc3Document`** (`mc3/include/MeshCraft/Mc3/Mc3Document.hpp`) — the
   canonical AST. CNA-free. Public API is depended on by `mc3togltf`,
   `mc3tomcb`, the editor, and every test fixture — **additive changes
@@ -742,25 +763,17 @@ git stash pop && cmake --build b-release -j4 --target <affected-target>
 
 ## 8. Next smallest tasks
 
-No currently authorized, actionable follow-up audit task remains. `AUD-090`
-is complete in commit `13c27a5`: it labels every editor-launching test as
-`render`, preflights a real Xvfb client, skips/disabled render tests only when
-the host cannot provide a display, and makes CI install its display tooling.
-`AUD-091` is closed as a stale-build false positive after a forced rebuild
-completed it in 1.27 seconds; its test now isolates parser, XSD, and full-
-pipeline stages (commit `64d187c`). `AUD-089` (truthful `--screenshot`
-failure/exit status) is complete in commit `5bcfbdc`. Android (`AUD-042`)
-remains deferred until an Android NDK is
-available and its CNA backend choice is explicitly in scope. `SYS-W3-01`
-(`MeshCraftApplication` decomposition)
-has 12 phases done; its investigation rounds also explicitly looked at the
-two originally remaining candidates (file dialogs, post-processing) and
-declined both (no testability win vs. real regression risk with no
-verification tool) — not silently skipped, but also not a ready "next phase"
-to just pick up without fresh investigation first.
+No actionable follow-up audit task remains: `AUD-089` through `AUD-091` are
+complete, while Android (`AUD-042`) is environment/owner deferred.
+`SYS-W3-01` has 12 completed subsystem phases and an active Phase 13 for
+application/UI ownership. The authorized Camera Bookmarks menu slice is
+implemented and verified: presentation moved behind a narrow context, while
+`Editor::CameraBookmarks`, camera mutation, keyboard shortcuts, and status
+messages stayed at their existing boundaries.
 
-**For a future session:** ask the user to select and authorize one audit row;
-do not implement any of these findings merely because they are documented.
+**Next candidate, not yet authorized:** continue Phase 13 with the adjacent
+View → Walk Mode menu item, passing only active state plus a toggle callback.
+Per `CLAUDE.md`, describe and confirm that slice before implementing it.
 
 ## 9. Do not do yet
 

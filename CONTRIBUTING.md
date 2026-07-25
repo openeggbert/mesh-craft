@@ -106,10 +106,9 @@ from this repo**:
 
 ## Workflow
 
-- Every change should be scoped to what its `STAB-XXXX` task in
-  `plan.md` actually asks for — no bundling unrelated cleanup into the
-  same change (this is a stabilization phase; scope creep here compounds
-  across hundreds of tasks).
+- Every change should be scoped to what its active `AUD-###`/`SYS-###` row in
+  `plan.md` actually asks for — no bundling unrelated cleanup into the same
+  change.
 - Add or update a test for the specific behavior you're changing;
   `plan.md`'s policy requires a task's status move to ✅ only once a
   test exists, is registered, runs, and passes.
@@ -123,7 +122,8 @@ Checked-in `.clang-format`/`.clang-tidy` at the repo root, scoped to first-party
 code (`mc3/`, `mcb/`, `mc3togltf/`, `mc3tomcb/`, `src/MeshCraft/`,
 `include/MeshCraft/`) — `../cna`/`../sharp-runtime` and every vendored
 `FetchContent` dependency are excluded via `.clang-tidy`'s `HeaderFilterRegex`.
-Neither is CI-enforced yet (CI itself is parked, `AUD-052`); run them locally:
+CI is active at `.github/workflows/ci.yml`, but neither tool is currently an
+enforced formatter/linter job; run them locally:
 
 ```bash
 # Format a file you touched (does not exist as a repo-wide pass — the

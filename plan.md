@@ -162,6 +162,12 @@ still internally consistent.
    UV box/sphere projection; MCB compression; light-brightness unit
    conversion; ambient-light export). Nothing left queued from that
    research pass.
+6. **SYS-W3-01 (P2/W3), Phase 13 is active:** application/UI ownership is
+   being reduced one narrow presentation slice at a time. The currently
+   authorized Camera Bookmarks menu slice is implemented and verified;
+   bookmark state remains in `Editor::CameraBookmarks`, with only read-only
+   slots and Save/Restore callbacks exposed to `Application::UI::MenuBar`.
+   Any further slice requires its own confirmation per `CLAUDE.md`.
 
 ---
 
@@ -556,7 +562,7 @@ _All items in this workstream are DONE — archived to [`docs/history/plan_20260
   order, completion delivery exactly once, post-completion rejection, and
   invalid count clamping. The focused test and both application source files
   that integrate it compiled with one job and ccache disabled to limit local
-  disk writes. **Resolved:** working tree, pending commit.
+  disk writes. **Resolved:** commit `2e87524`.
   **Phase 13 IN PROGRESS (2026-07-25) — application ownership/layout:**
   began the structural relocation requested for the remaining application
   implementation. The concrete class now lives at
@@ -577,21 +583,35 @@ _All items in this workstream are DONE — archived to [`docs/history/plan_20260
   Registry results table is likewise now `Application::UI::Registry`; it sees
   only entries plus Insert/Remove callbacks, while document mutation, undo,
   status reporting, and database lifetime remain in the application. The
-  first Toolbar slice, `Application::UI::Toolbar`, owns tool/primitive button
-  rendering and receives only active-tool state plus SelectTool/AddPrimitive
-  actions; snap, grid, and proportional-edit controls remain for the next
-  narrow slice. The
+  `Application::UI::Toolbar` component now owns the tool/primitive buttons,
+  display toggles, surface/snap controls, proportional-edit controls, grid
+  controls, and the snap popup shell. The detailed snap-interval contents
+  remain an application callback, so persistence and editor state ownership
+  have not leaked into the component. `Application::UI::Properties` is a
+  narrow delegation facade over the existing `Scene::PropertiesPanel`.
+  `Application::UI::MenuBar` now owns the View-menu panel toggles, overlay
+  toggles, direction choices, focus action, and Camera Bookmarks presentation.
+  The bookmark state remains the already-extracted
+  `Editor::CameraBookmarks`; a `CameraBookmarksContext` exposes only the
+  read-only slots plus Save/Restore callbacks, leaving camera mutation and
+  status reporting in the application. File/Edit/Add, the remaining View
+  controls, and Help are still application-owned. The
   historical audit references retain their former paths as time-accurate
   evidence.
   Static undo-audit and snapshot-lint path checks pass after their tracked
   source lists were updated. A serial, ccache-disabled `-fsyntax-only`
   compilation of all 17 relocated application sources plus `main.cpp`, using
   the existing Debug configuration's flags, also passes without producing
-  object files. Full link/runtime verification remains intentionally pending:
-  the local build directories were removed to reduce SSD writes; do not
-  recreate a large build tree without explicit approval. The next subphase is
-  another narrow `Application::UI` component extraction using the same
-  context boundary.
+  object files. After explicit approval to recreate the build tree, a fresh
+  Ninja Release configuration with `BUILD_TESTING=ON` registered 181 tests
+  and `CCACHE_DISABLE=1 cmake --build b-release -j4` linked every target.
+  The complete suite passed in two disjoint groups with the required local
+  socket access: 147/147 non-render tests and 34/34 render-labelled tests
+  under Xvfb. For the Camera Bookmarks slice, the public UI header also
+  compiles as a self-contained C++23 include,
+  `undo_snapshot_lint_test.py` passes, and `git diff --check` is clean. A
+  further Phase 13 slice requires separate authorization and should keep
+  using the same narrow-context boundary.
   **SYS-W3-01 roadmap status after this session's investigation round:**
   Phases 1–12 done (Keybindings, Preferences, MacroRecorder, UndoManager,
   animation-override computation, WalkController, AudioPreview,
@@ -2050,6 +2070,11 @@ post-processing call owned by this audit.
 - **Outcome:** Migrated to `RenderTarget2D` + `ShaderEffect` + `SpriteBatch`, same recipe as `AUD-084`/`AUD-086`, extracting the ImGui-consumable handle via `GetColorGLHandle()` above. `kMatPreviewFragSrc` is purely procedural (an SDF sphere with Blinn-Phong shading, no `texture()` calls at all) — `SpriteBatch::Draw()` still requires *some* `Texture2D&` argument, and it must not be `matPreviewRt_` itself (sampling a render target that is also the currently-bound draw target is a GL feedback-loop hazard, and semantically wrong even though the shader ignores it), so added a tiny throwaway 1x1 `matPreviewDummyTex_` (via `Texture2D::CreateFromPixels`) to satisfy the signature. Same `TexCoord`-based Y-flip as `AUD-086` (`v_uv = vec2(TexCoord.x, 1.0-TexCoord.y)`), and here it genuinely matters visually — the shader's light direction is Y-asymmetric (`L=(0.6,1.0,0.8)`), so a wrong flip would move the specular highlight to the wrong side, not just be invisible like `AUD-086`'s solid-color test texture. Also added a new `MESHCRAFT_TEST_FORCE_MATPREVIEW` test-only hook (`AUD-058`'s own established pattern) since this swatch is only ever drawn inside an ImGui panel gated on UI selection state, with no CLI/scene-file equivalent — headless `--screenshot` never exercised it before. **Found while wiring the hook**: `drawImGuiUi()` (called from `Draw()`) only queues ImGui's draw list — the actual pixel rasterization happens later, in `EndDraw()`'s `ImGui_ImplOpenGL3_RenderDrawData()` call — so the hook's on-screen blit had to move from `Draw()` (where it was silently overwritten by ImGui's own subsequent real render) to `EndDraw()`, after that call.
 - **Tests:** New `test/matpreview_test.py` (`matpreview_test` ctest, reuses the existing `light_shading.mc3.xml` fixture since the swatch's content comes entirely from the hook's own hardcoded color, not the scene) — real `--screenshot` pixel sampling with/without `MESHCRAFT_TEST_FORCE_MATPREVIEW=1`: swatch center is red-dominant only with the hook on, and the swatch corner (outside the SDF sphere's `discard`-clipped radius) shows the dark-gray clear color, confirming the sphere-shape logic survived the migration. Visual confirmation: the specular highlight sits in the upper-left of the swatch, matching the shader's own light direction — the orientation-sensitive check `AUD-086` couldn't do with its solid-color test texture. Full rebuild + 168/168 `ctest` (was 167; +1 for `matpreview_test`). No pre-existing test/hook existed to `git stash`-diff against (both the migration and the headless-testability hook are new together), so verification relies on the visual+automated checks above plus the pre-existing `gl_shutdown_leak_test` (part of the 168) confirming no new GL resource leak.
 - **Resolved:** commit `e47a846` — verify: `ctest -R matpreview_test`.
+- **Later superseded (2026-07-25):** `SYS-W8-04` removed both this
+  native-handle bridge and Shadow Debug's equivalent. Current production UI
+  uses opaque `ImGuiTextureRegistry` tokens resolved by the CNA-backed ImGui
+  renderer; the historical implementation/evidence above remains unchanged
+  to describe what `AUD-087` itself originally delivered.
 
 ### AUD-088 `[DONE]` `P2` `W8` · Shadow Map Debug overlay (I7) hand-rolls a raw-GL FBO instead of RenderTarget2D — and reuses the normal scene-render path, so it needs no ShaderEffect at all
 - **Component:** src/MeshCraft/MeshCraftApplication.cpp (`initShadowDebug()`, `renderShadowDebugFbo()`), src/MeshCraft/MeshCraftApplication_UiOverlays.cpp (`drawShadowDebugOverlay()`, unchanged), include/MeshCraft/MeshCraftApplication.hpp (`shadowDebugEnabled_`, `shadowDebugRt_`, `shadowDebugColorTex_`)

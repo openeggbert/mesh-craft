@@ -520,27 +520,12 @@ float MeshCraftApplication::drawMenuBar()
                 } else { camera_.reset(); }
             });
             ImGui::Separator();
-            if (ImGui::BeginMenu("Camera Bookmarks")) {
-                static const char* kSlotKeys[5] = {"Ctrl+F1","Ctrl+F2","Ctrl+F3","Ctrl+F4","Ctrl+F5"};
-                static const char* kRestKeys[5] = {"F6","F7","F8","F9","F10"};
-                for (int i = 0; i < 5; ++i) {
-                    const auto* bm = cameraBookmarks_.get(i);
-                    char saveLabel[48];
-                    std::snprintf(saveLabel, sizeof(saveLabel), "Save Slot %d", i + 1);
-                    if (ImGui::MenuItem(saveLabel, kSlotKeys[i]))
-                        saveCameraBookmark(i);
-                    char restLabel[80];
-                    if (bm && bm->valid)
-                        std::snprintf(restLabel, sizeof(restLabel),
-                            "Go to Slot %d  [%.1f,%.1f,%.1f]", i+1, bm->targetX, bm->targetY, bm->targetZ);
-                    else
-                        std::snprintf(restLabel, sizeof(restLabel), "Go to Slot %d  (empty)", i+1);
-                    if (ImGui::MenuItem(restLabel, kRestKeys[i], false, bm && bm->valid))
-                        restoreCameraBookmark(i);
-                    if (i < 4) ImGui::Separator();
-                }
-                ImGui::EndMenu();
-            }
+            const UI::CameraBookmarksContext cameraBookmarksContext{
+                .bookmarks = cameraBookmarks_,
+                .save = [this](int slot) { saveCameraBookmark(slot); },
+                .restore = [this](int slot) { restoreCameraBookmark(slot); },
+            };
+            UI::MenuBar::drawCameraBookmarks(cameraBookmarksContext);
             ImGui::Separator();
             if (ImGui::MenuItem("Walk Mode", "F5", walkController_.isActive())) {
                 if (walkController_.isActive()) exitWalkMode(); else enterWalkMode();
@@ -622,6 +607,39 @@ void MenuBar::drawViewDirections(float& yaw, float& pitch) {
 
 void MenuBar::drawFocusSelection(const std::function<void()>& focus) {
     if (ImGui::MenuItem("Focus on selection", "F")) focus();
+}
+
+void MenuBar::drawCameraBookmarks(const CameraBookmarksContext& context) {
+    if (!ImGui::BeginMenu("Camera Bookmarks")) return;
+
+    static const char* kSlotKeys[Editor::CameraBookmarks::kSlotCount] = {
+        "Ctrl+F1", "Ctrl+F2", "Ctrl+F3", "Ctrl+F4", "Ctrl+F5"
+    };
+    static const char* kRestoreKeys[Editor::CameraBookmarks::kSlotCount] = {
+        "F6", "F7", "F8", "F9", "F10"
+    };
+    for (int slot = 0; slot < Editor::CameraBookmarks::kSlotCount; ++slot) {
+        const auto* bookmark = context.bookmarks.get(slot);
+        char saveLabel[48];
+        std::snprintf(saveLabel, sizeof(saveLabel), "Save Slot %d", slot + 1);
+        if (ImGui::MenuItem(saveLabel, kSlotKeys[slot])) context.save(slot);
+
+        char restoreLabel[80];
+        if (bookmark && bookmark->valid) {
+            std::snprintf(restoreLabel, sizeof(restoreLabel),
+                          "Go to Slot %d  [%.1f,%.1f,%.1f]", slot + 1,
+                          bookmark->targetX, bookmark->targetY, bookmark->targetZ);
+        } else {
+            std::snprintf(restoreLabel, sizeof(restoreLabel),
+                          "Go to Slot %d  (empty)", slot + 1);
+        }
+        if (ImGui::MenuItem(restoreLabel, kRestoreKeys[slot], false,
+                            bookmark && bookmark->valid)) {
+            context.restore(slot);
+        }
+        if (slot + 1 < Editor::CameraBookmarks::kSlotCount) ImGui::Separator();
+    }
+    ImGui::EndMenu();
 }
 
 } // namespace MeshCraft::Application::UI
