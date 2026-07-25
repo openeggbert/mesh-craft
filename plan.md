@@ -172,8 +172,8 @@ still internally consistent.
    Edit-snap-selection-to-grid, Edit-mirror-selection, Edit-group-scale,
    Edit-linear-array, Edit-scatter-along-curve, Edit-batch-rename,
    Edit-find-replace-names, Edit-randomize-transform, Edit-macro-recording,
-   and Edit-play-macro menu slices are implemented and verified. Their state
-   remains in the existing editor/application owners;
+   Edit-play-macro, and Edit-macro-editor menu slices are implemented and
+   verified. Their state remains in the existing editor/application owners;
    `Application::UI::MenuBar` receives only the read-only values and callbacks
    required for presentation. Any further slice requires its own confirmation
    per `CLAUDE.md`.
@@ -742,7 +742,11 @@ _All items in this workstream are DONE — archived to [`docs/history/plan_20260
   Play Macro item is now component-owned through `EditPlayMacroContext`, which
   exposes only availability and one playback callback. Macro step storage,
   playback implementation, macro context, all invoked command effects, and the
-  macro-editor dialog state remain in their existing owners. File, the
+  macro-editor dialog state remain in their existing owners. The following
+  Macro Editor… item is now component-owned through `EditMacroEditorContext`,
+  which exposes only one open-dialog callback. Dialog state, macro steps,
+  recording and playback operations, macro context, file buffer, save/load
+  behavior, and status reporting remain in their existing owners. File, the
   remaining Edit groups, and the remaining View controls are still
   application-owned.
   The historical audit references retain their former paths as time-accurate
@@ -765,8 +769,8 @@ _All items in this workstream are DONE — archived to [`docs/history/plan_20260
   Edit-snap-selection-to-grid, Edit-mirror-selection, Edit-group-scale,
   Edit-linear-array, Edit-scatter-along-curve, Edit-batch-rename,
   Edit-find-replace-names, Edit-randomize-transform, Edit-macro-recording,
-  and Edit-play-macro slices, each incremental Release link and the same
-  147/147 + 34/34 partitions pass again.
+  Edit-play-macro, and Edit-macro-editor slices, each incremental Release link
+  and the same 147/147 + 34/34 partitions pass again.
   For the current MenuBar slices, the public UI header also compiles as a
   self-contained C++23 include, `undo_snapshot_lint_test.py` passes, and
   `git diff --check` is clean. A further Phase 13 slice requires separate

@@ -99,7 +99,7 @@ before when explicitly requested (`SYS-W14-##` rows).
 
 ## 2. Current status
 
-- **Last full build: clean after the current Phase 13 Edit-play-macro
+- **Last full build: clean after the current Phase 13 Edit-macro-editor
   slice.** Testing is enabled in the current Ninja Release tree, and
   `CCACHE_DISABLE=1 cmake --build b-release -j4` linked all targets successfully
   on EASYGL. Alternate-backend runtime qualification remains blocked.
@@ -788,8 +788,8 @@ Edit-convert-to-definition, Edit-export-subtree, Edit-break-instance,
 Edit-align-selection, Edit-distribute-selection, Edit-drop-to-ground,
 Edit-snap-selection-to-grid, Edit-mirror-selection, Edit-group-scale,
 Edit-linear-array, Edit-scatter-along-curve, Edit-batch-rename,
-Edit-find-replace-names, Edit-randomize-transform, Edit-macro-recording, and
-Edit-play-macro slices.
+Edit-find-replace-names, Edit-randomize-transform, Edit-macro-recording,
+Edit-play-macro, and Edit-macro-editor slices.
 `EditHistoryContext` exposes only `canUndo`/`canRedo` plus Undo, Redo, and
 Open History callbacks; `Editor::UndoManager`, document replacement,
 selection restoration, dialog state, and keyboard handling remain
@@ -916,15 +916,19 @@ presentation, and click dispatch.
 Macro step storage, playback implementation, macro context, all invoked command
 effects, and the macro-editor dialog state remain in their existing owners;
 `MenuBar` owns only the unchanged label, availability, and click dispatch.
+`EditMacroEditorContext` exposes only one open-dialog callback. Dialog state,
+macro steps, recording and playback operations, macro context, file buffer,
+save/load behavior, and status reporting remain in their existing owners;
+`MenuBar` owns only the unchanged label and click dispatch.
 
 **Next candidate, not yet authorized:** continue Phase 13 with the single
-Macro Editor… item, passing only one open-dialog callback. Dialog state,
-macro steps, recording and playback operations, macro context, file buffer,
-save/load behavior, and status reporting would remain in their existing owners;
-`MenuBar` would own only the unchanged label and click dispatch. The following
-Lock/Unlock Selected item, later Edit controls, and the View-menu Bloom/SSAO
-block remain outside that slice. Per `CLAUDE.md`, describe and confirm the
-Macro-Editor item slice before implementing it.
+Lock/Unlock Selected item, passing only current-selection availability and one
+toggle callback. Selection state, `Editor::ObjectLockState` mutation, and the
+Ctrl+L keyboard path would remain in their existing owners; `MenuBar` would own
+only the unchanged label, shortcut, availability, and click dispatch. The
+following Reset Transform submenu, later Edit controls, and the View-menu
+Bloom/SSAO block remain outside that slice. Per `CLAUDE.md`, describe and
+confirm the Lock-Selection item slice before implementing it.
 
 ## 9. Do not do yet
 

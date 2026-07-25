@@ -386,8 +386,10 @@ float MeshCraftApplication::drawMenuBar()
                 .play = [this] { macroRecorder_.play(macroContext()); },
             };
             UI::MenuBar::drawEditPlayMacro(editPlayMacroContext);
-            if (ImGui::MenuItem("Macro Editor…"))
-                macroOpen_ = true;
+            const UI::EditMacroEditorContext editMacroEditorContext{
+                .openDialog = [this] { macroOpen_ = true; },
+            };
+            UI::MenuBar::drawEditMacroEditor(editMacroEditorContext);
             ImGui::Separator();
             if (ImGui::MenuItem("Lock/Unlock Selected", "Ctrl+L", false, !selection_.selection().empty())) {
                 for (const auto& s : selection_.selection()) {
@@ -820,6 +822,10 @@ void MenuBar::drawEditMacroRecording(const EditMacroRecordingContext& context) {
 
 void MenuBar::drawEditPlayMacro(const EditPlayMacroContext& context) {
     if (ImGui::MenuItem("Play Macro", nullptr, false, context.canPlay)) context.play();
+}
+
+void MenuBar::drawEditMacroEditor(const EditMacroEditorContext& context) {
+    if (ImGui::MenuItem("Macro Editor…")) context.openDialog();
 }
 
 void MenuBar::drawPanelToggles(bool& timeline, bool& registry, bool& ai, bool& validation) {

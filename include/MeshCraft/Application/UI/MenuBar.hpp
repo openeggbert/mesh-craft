@@ -169,6 +169,10 @@ struct EditPlayMacroContext {
     std::function<void()> play;
 };
 
+struct EditMacroEditorContext {
+    std::function<void()> openDialog;
+};
+
 class MenuBar final {
 public:
     static void drawAddMenu(const std::function<void(Mc3::ObjectType)>& addPrimitive);
@@ -191,6 +195,7 @@ public:
     static void drawEditRandomizeTransform(const EditRandomizeTransformContext& context);
     static void drawEditMacroRecording(const EditMacroRecordingContext& context);
     static void drawEditPlayMacro(const EditPlayMacroContext& context);
+    static void drawEditMacroEditor(const EditMacroEditorContext& context);
     static void drawEditHistory(const EditHistoryContext& context);
     static void drawEditObjectActions(const EditObjectActionsContext& context);
     static void drawEditSelectionActions(const EditSelectionActionsContext& context);
