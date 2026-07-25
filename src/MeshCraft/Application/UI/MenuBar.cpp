@@ -212,8 +212,11 @@ float MeshCraftApplication::drawMenuBar()
                 .openDialog = [this] { copyPropsOpen_ = true; },
             };
             UI::MenuBar::drawEditCopyProperties(editCopyPropertiesContext);
-            if (ImGui::MenuItem("Group",   "Ctrl+G"))       groupSelected();
-            if (ImGui::MenuItem("Ungroup", "Ctrl+Shift+G")) ungroupSelected();
+            const UI::EditGroupingContext editGroupingContext{
+                .group = [this] { groupSelected(); },
+                .ungroup = [this] { ungroupSelected(); },
+            };
+            UI::MenuBar::drawEditGrouping(editGroupingContext);
             if (ImGui::MenuItem("Convert to Definition", nullptr, false, !selection_.selection().empty()))
                 convertToDefinition();
             if (ImGui::MenuItem("Export Subtree as Template...", nullptr, false, !selection_.selection().empty())) {
@@ -676,6 +679,11 @@ void MenuBar::drawEditCopyProperties(const EditCopyPropertiesContext& context) {
         context.openDialog();
     }
     ImGui::Separator();
+}
+
+void MenuBar::drawEditGrouping(const EditGroupingContext& context) {
+    if (ImGui::MenuItem("Group", "Ctrl+G")) context.group();
+    if (ImGui::MenuItem("Ungroup", "Ctrl+Shift+G")) context.ungroup();
 }
 
 void MenuBar::drawPanelToggles(bool& timeline, bool& registry, bool& ai, bool& validation) {

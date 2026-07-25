@@ -76,11 +76,17 @@ struct EditCopyPropertiesContext {
     std::function<void()> openDialog;
 };
 
+struct EditGroupingContext {
+    std::function<void()> group;
+    std::function<void()> ungroup;
+};
+
 class MenuBar final {
 public:
     static void drawAddMenu(const std::function<void(Mc3::ObjectType)>& addPrimitive);
     static void drawEditClipboard(const EditClipboardContext& context);
     static void drawEditCopyProperties(const EditCopyPropertiesContext& context);
+    static void drawEditGrouping(const EditGroupingContext& context);
     static void drawEditHistory(const EditHistoryContext& context);
     static void drawEditObjectActions(const EditObjectActionsContext& context);
     static void drawEditSelectionActions(const EditSelectionActionsContext& context);

@@ -22,11 +22,12 @@ Properties delegation, and the View-menu panel/overlay/direction/focus/
 Camera-Bookmarks/Walk-Mode presentation, plus the Add/CSG and Help menu
 presentation and the Edit-history, clipboard, object-action, and
 selection-action groups, the Select-by-Type/Tag/Material submenus, and the
-Copy-Properties item. The detailed Snap interval contents and the remaining
-MenuBar sections are still application-owned. Camera bookmark, walk, document,
-undo, clipboard, selection, grid, and dialog state have **not** moved again:
-they remain in their existing editor/application owners; the UI component only
-reads presentation state and invokes application-owned callbacks.
+Copy-Properties item and Group/Ungroup pair. The detailed Snap interval
+contents and the remaining MenuBar sections are still application-owned.
+Camera bookmark, walk, document, undo, clipboard, selection, grid, and dialog
+state have **not** moved again: they remain in their existing
+editor/application owners; the UI component only reads presentation state and
+invokes application-owned callbacks.
 Historical references below intentionally retain their then-current paths.
 
 ## 1. Project summary
@@ -95,7 +96,7 @@ before when explicitly requested (`SYS-W14-##` rows).
 
 ## 2. Current status
 
-- **Last full build: clean after the current Phase 13 Edit-copy-properties
+- **Last full build: clean after the current Phase 13 Edit-grouping
   slice.** Testing is enabled in the current Ninja Release tree, and
   `CCACHE_DISABLE=1 cmake --build b-release -j4` linked all targets successfully
   on EASYGL. Alternate-backend runtime qualification remains blocked.
@@ -168,10 +169,10 @@ before when explicitly requested (`SYS-W14-##` rows).
   Camera-Bookmarks/Walk-Mode presentation, plus the Add/CSG and Help menu
   presentation and the Edit-history, clipboard, object-action, and
   selection-action groups, the Select-by-Type/Tag/Material submenus, and the
-  Copy-Properties item, are now component-owned. Bookmark, walk, document,
-  undo, clipboard, selection, grid, preferences, command-palette, and
-  shortcut-dialog state remain in their existing owners; the menu receives
-  only read-only state plus application-owned callbacks.
+  Copy-Properties item and Group/Ungroup pair, are now component-owned.
+  Bookmark, walk, document, undo, clipboard, selection, grid, preferences,
+  command-palette, and shortcut-dialog state remain in their existing owners;
+  the menu receives only read-only state plus application-owned callbacks.
 - **Recently implemented (2026-07-20 through 2026-07-25):** all 7
   raw-OpenGL(ES)-vs-CNA migrations, `AUD-082` through `AUD-088` — full
   detail with file:line evidence and
@@ -571,7 +572,7 @@ backlog (650+ STAB tasks, then a 57-finding audit, all archived DONE).
 verification.** `AUD-090` preflights `xvfb-run` with a real `xdpyinfo` client.
 The execution sandbox blocks the local sockets needed by Xvfb and the
 `mc3_ai` loopback mock server, but the permitted host run completed both
-partitions cleanly: 147/147 non-render tests (including `mc3_ai` in 1.27
+partitions cleanly: 147/147 non-render tests (including `mc3_ai` in 1.33
 seconds) and 34/34 render tests. CI explicitly installs `xvfb` and
 `x11-utils` for the same render path. `AUD-091` therefore remains closed as
 a stale-build false positive rather than hidden behind a longer timeout.
@@ -776,7 +777,8 @@ complete, while Android (`AUD-042`) is environment/owner deferred.
 application/UI ownership. The authorized Camera Bookmarks, Walk Mode, Help,
 Add/CSG, Edit-history, Edit-clipboard, and Edit-object-actions menu slices are
 implemented and verified, as are the Edit-selection-actions and
-Edit-select-by-type/tag/material and Edit-copy-properties slices.
+Edit-select-by-type/tag/material, Edit-copy-properties, and Edit-grouping
+slices.
 `EditHistoryContext` exposes only `canUndo`/`canRedo` plus Undo, Redo, and
 Open History callbacks; `Editor::UndoManager`, document replacement,
 selection restoration, dialog state, and keyboard handling remain
@@ -813,14 +815,18 @@ material-item and empty-scene presentation.
 open-dialog callback. Selection state, dialog state and contents, property
 copying, and the Ctrl+Shift+P keyboard path remain application-owned;
 `MenuBar` owns the unchanged item presentation and following separator.
+`EditGroupingContext` exposes only Group and Ungroup callbacks. Selection
+state, undo, document mutation, status reporting, and the
+Ctrl+G/Ctrl+Shift+G keyboard paths remain application-owned; `MenuBar` owns
+only the unchanged labels, shortcuts, order, and click dispatch.
 
 **Next candidate, not yet authorized:** continue Phase 13 with the compact
-Group / Ungroup presentation pair, passing only two action callbacks. Selection
-state, undo, document mutation, status reporting, and the
-Ctrl+G/Ctrl+Shift+G keyboard paths would remain application-owned. Convert,
-template, and instance actions plus the View-menu Bloom/SSAO block remain
-outside that slice. Per `CLAUDE.md`, describe and confirm the Group/Ungroup
-slice before implementing it.
+Convert to Definition item, passing only current-selection availability and
+one action callback. Selection state, definition/instance transformation,
+undo, document mutation, status reporting, and the command-palette route would
+remain application-owned. Export Subtree, Break Instance, and the View-menu
+Bloom/SSAO block remain outside that slice. Per `CLAUDE.md`, describe and
+confirm the Convert-to-Definition slice before implementing it.
 
 ## 9. Do not do yet
 
