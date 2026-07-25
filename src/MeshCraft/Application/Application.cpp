@@ -81,9 +81,9 @@ MeshCraftApplication::MeshCraftApplication(std::filesystem::path filePath, std::
     , autoExportPath_(std::move(exportPath))
     , autoExportCountdown_(autoExportPath_.empty() ? 0 : 2)
 {
-    // Test-only hook: bloom/SSAO are UI-menu-only toggles with no CLI/scene-
-    // file equivalent. Force both on for a screenshot so their CNA render
-    // targets and effects are exercised in headless regression tests too.
+    // Test-only hooks: Bloom and SSAO are UI-menu-only toggles with no CLI/
+    // scene-file equivalent. Keep their force switches independent so each
+    // headless regression test exercises only the effect it intends to cover.
     if (std::getenv("MESHCRAFT_TEST_FORCE_POSTFX")) {
         bloomEnabled_ = true;
     }

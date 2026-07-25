@@ -25,6 +25,20 @@ struct WalkModeContext {
     std::function<void()> toggle;
 };
 
+struct ViewPostProcessingContext {
+    bool textShaderEffectsSupported;
+    bool bloomEnabled;
+    float bloomStrength;
+    bool ssaoEnabled;
+    float ssaoStrength;
+    float ssaoRadius;
+    std::function<void(bool)> setBloomEnabled;
+    std::function<void(float)> setBloomStrength;
+    std::function<void(bool)> setSsaoEnabled;
+    std::function<void(float)> setSsaoStrength;
+    std::function<void(float)> setSsaoRadius;
+};
+
 struct HelpMenuContext {
     std::function<void()> openPreferences;
     std::function<void()> openCommandPalette;
@@ -313,6 +327,7 @@ public:
     static void drawFocusSelection(const std::function<void()>& focus);
     static void drawCameraBookmarks(const CameraBookmarksContext& context);
     static void drawWalkMode(const WalkModeContext& context);
+    static void drawViewPostProcessing(const ViewPostProcessingContext& context);
     static void drawHelpMenu(const HelpMenuContext& context);
 };
 

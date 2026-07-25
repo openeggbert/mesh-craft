@@ -531,33 +531,20 @@ float MeshCraftApplication::drawMenuBar()
             ImGui::Separator();
             UI::MenuBar::drawOverlays(showEdgeOverlay_, showWireframeMode_,
                                       showStatsOverlay_, shadowDebugEnabled_, snapEnabled_);
-            if (supportsTextShaderEffects()) {
-                ImGui::MenuItem("Bloom (emissive glow)", nullptr, &bloomEnabled_);
-                if (bloomEnabled_) {
-                    ImGui::SetNextItemWidth(140);
-                    // AlwaysClamp: without it, Ctrl+Click lets a typed value go
-                    // out of [min,max] (incl. negative), which the composite
-                    // shader has no other guard against (STAB-0325).
-                    ImGui::SliderFloat("  Strength##bloom", &bloomStrength_, 0.5f, 8.0f, "%.1f",
-                                       ImGuiSliderFlags_AlwaysClamp);
-                }
-                ImGui::MenuItem("SSAO (ambient occlusion)", nullptr, &ssaoEnabled_);
-                if (ssaoEnabled_) {
-                    ImGui::SetNextItemWidth(140);
-                    // AlwaysClamp: same out-of-bounds-via-Ctrl+Click risk as
-                    // bloom strength above (STAB-0326).
-                    ImGui::SliderFloat("  Strength##ssao", &ssaoStrength_, 0.0f, 1.0f, "%.2f",
-                                       ImGuiSliderFlags_AlwaysClamp);
-                    ImGui::SetNextItemWidth(140);
-                    // Same fix applied here too: a negative/zero radius from an
-                    // unclamped Ctrl+Click entry would break the SSAO sample
-                    // kernel, same root cause as the two strength sliders above.
-                    ImGui::SliderFloat("  Radius##ssao",   &ssaoRadius_,   0.05f, 2.0f, "%.2f",
-                                       ImGuiSliderFlags_AlwaysClamp);
-                }
-            } else {
-                ImGui::TextDisabled("Bloom and SSAO require cross-backend ShaderEffect support");
-            }
+            const UI::ViewPostProcessingContext viewPostProcessingContext{
+                .textShaderEffectsSupported = supportsTextShaderEffects(),
+                .bloomEnabled = bloomEnabled_,
+                .bloomStrength = bloomStrength_,
+                .ssaoEnabled = ssaoEnabled_,
+                .ssaoStrength = ssaoStrength_,
+                .ssaoRadius = ssaoRadius_,
+                .setBloomEnabled = [this](bool enabled) { bloomEnabled_ = enabled; },
+                .setBloomStrength = [this](float strength) { bloomStrength_ = strength; },
+                .setSsaoEnabled = [this](bool enabled) { ssaoEnabled_ = enabled; },
+                .setSsaoStrength = [this](float strength) { ssaoStrength_ = strength; },
+                .setSsaoRadius = [this](float radius) { ssaoRadius_ = radius; },
+            };
+            UI::MenuBar::drawViewPostProcessing(viewPostProcessingContext);
             UI::MenuBar::drawPanelToggles(showTimeline_, showRegistryPanel_,
                                           showAiPanel_, showValidationPanel_);
             ImGui::EndMenu();
@@ -1028,6 +1015,52 @@ void MenuBar::drawCameraBookmarks(const CameraBookmarksContext& context) {
 
 void MenuBar::drawWalkMode(const WalkModeContext& context) {
     if (ImGui::MenuItem("Walk Mode", "F5", context.active)) context.toggle();
+}
+
+void MenuBar::drawViewPostProcessing(const ViewPostProcessingContext& context) {
+    if (!context.textShaderEffectsSupported) {
+        ImGui::TextDisabled("Bloom and SSAO require cross-backend ShaderEffect support");
+        return;
+    }
+
+    bool bloomEnabled = context.bloomEnabled;
+    if (ImGui::MenuItem("Bloom (emissive glow)", nullptr, &bloomEnabled)) {
+        context.setBloomEnabled(bloomEnabled);
+    }
+    if (bloomEnabled) {
+        float bloomStrength = context.bloomStrength;
+        ImGui::SetNextItemWidth(140);
+        // AlwaysClamp: without it, Ctrl+Click lets a typed value go out of
+        // [min,max] (including negative), which the composite shader has no
+        // other guard against (STAB-0325).
+        if (ImGui::SliderFloat("  Strength##bloom", &bloomStrength, 0.5f, 8.0f, "%.1f",
+                               ImGuiSliderFlags_AlwaysClamp)) {
+            context.setBloomStrength(bloomStrength);
+        }
+    }
+
+    bool ssaoEnabled = context.ssaoEnabled;
+    if (ImGui::MenuItem("SSAO (ambient occlusion)", nullptr, &ssaoEnabled)) {
+        context.setSsaoEnabled(ssaoEnabled);
+    }
+    if (ssaoEnabled) {
+        float ssaoStrength = context.ssaoStrength;
+        ImGui::SetNextItemWidth(140);
+        // AlwaysClamp: same out-of-bounds-via-Ctrl+Click risk as the bloom
+        // strength above (STAB-0326).
+        if (ImGui::SliderFloat("  Strength##ssao", &ssaoStrength, 0.0f, 1.0f, "%.2f",
+                               ImGuiSliderFlags_AlwaysClamp)) {
+            context.setSsaoStrength(ssaoStrength);
+        }
+        float ssaoRadius = context.ssaoRadius;
+        ImGui::SetNextItemWidth(140);
+        // A negative or zero radius from an unclamped Ctrl+Click entry would
+        // break the SSAO sample kernel; same root cause as the strength sliders.
+        if (ImGui::SliderFloat("  Radius##ssao", &ssaoRadius, 0.05f, 2.0f, "%.2f",
+                               ImGuiSliderFlags_AlwaysClamp)) {
+            context.setSsaoRadius(ssaoRadius);
+        }
+    }
 }
 
 void MenuBar::drawHelpMenu(const HelpMenuContext& context) {

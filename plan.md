@@ -164,7 +164,8 @@ still internally consistent.
    research pass.
 6. **SYS-W3-01 (P2/W3), Phase 13 is active:** application/UI ownership is
    being reduced one narrow presentation slice at a time. The authorized
-   Camera Bookmarks, Walk Mode, Help, Add/CSG, Edit-history, Edit-clipboard,
+   Camera Bookmarks, Walk Mode, View Bloom/SSAO, Help, Add/CSG, Edit-history,
+   Edit-clipboard,
    Edit-object-actions, Edit-selection-actions, Edit-select-by-type,
    Edit-select-by-tag/material, Edit-copy-properties, Edit-grouping,
    Edit-convert-to-definition, Edit-export-subtree, Edit-break-instance,
@@ -180,9 +181,8 @@ still internally consistent.
    File-exit menu slices are implemented and verified. Their state remains in
    the existing editor/application owners;
    `Application::UI::MenuBar` receives only the read-only values and callbacks
-   required for presentation. The remaining ordered Phase 13 queue is:
-   **View → Bloom/SSAO controls** (preserve the capability gate, ranges, and
-   clamping), then a fresh audit for a new narrow boundary.
+   required for presentation. The remaining ordered Phase 13 queue is a fresh
+   audit for a new narrow boundary.
    Every item requires its own confirmation per `CLAUDE.md`.
 
 ---
@@ -607,7 +607,10 @@ _All items in this workstream are DONE — archived to [`docs/history/plan_20260
   narrow delegation facade over the existing `Scene::PropertiesPanel`.
   `Application::UI::MenuBar` now owns the View-menu panel toggles, overlay
   toggles, direction choices, focus action, Camera Bookmarks presentation,
-  and the Walk Mode menu item. The bookmark state remains the already-extracted
+  and the Walk Mode menu item. `ViewPostProcessingContext` also owns the
+  Bloom/SSAO presentation, receiving only the capability result, value
+  snapshots, and setters; the application retains effect state and rendering.
+  The bookmark state remains the already-extracted
   `Editor::CameraBookmarks`; a `CameraBookmarksContext` exposes only the
   read-only slots plus Save/Restore callbacks, leaving camera mutation and
   status reporting in the application. Likewise, `WalkModeContext` exposes
@@ -753,9 +756,10 @@ _All items in this workstream are DONE — archived to [`docs/history/plan_20260
   Macro Editor… item is now component-owned through `EditMacroEditorContext`,
   which exposes only one open-dialog callback. Dialog state, macro steps,
   recording and playback operations, macro context, file buffer, save/load
-  behavior, and status reporting remain in their existing owners. File, the
-  remaining Edit groups, and the remaining View controls are still
-  application-owned.
+  behavior, and status reporting remain in their existing owners. The File-menu
+  action slices and the View menu presentation are now component-owned; any
+  remaining extraction target must be selected by a fresh, narrow boundary audit
+  rather than assumed from its location in the menu.
   The historical audit references retain their former paths as time-accurate
   evidence.
   Static undo-audit and snapshot-lint path checks pass after their tracked
@@ -781,7 +785,7 @@ _All items in this workstream are DONE — archived to [`docs/history/plan_20260
   Edit-hide-selection, Edit-show-all-hidden, File-merge-scene,
   File-export-selection, File-export-GLB, File-export-OBJ, File-save,
   File-save-as, File-import-OBJ, File-new, File-open, File-open-recent, and
-  File-exit slices,
+  File-exit slices, plus the Bloom/SSAO controls,
   each incremental Release link and the same 147/147 + 34/34 partitions pass
   again.
   For the current MenuBar slices, the public UI header also compiles as a

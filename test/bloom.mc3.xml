@@ -4,9 +4,9 @@
      halo point just outside the box's own rendered silhouette is pure
      background (no geometry there at all) with an SSAO ao=1.0 fast-path
      (kSsaoFS returns vec4(1.0) unconditionally when the depth sample is the
-     far clear value), so it is unaffected by SSAO even when
-     MESHCRAFT_TEST_FORCE_POSTFX forces both post-effects on together.
-     Any brightening there can only be Bloom's additive glow. -->
+     far clear value), so it would be unaffected even if an SSAO test enabled
+     its separate hook. MESHCRAFT_TEST_FORCE_POSTFX enables only Bloom here,
+     so any brightening at that point can only be Bloom's additive glow. -->
 <mc3 version="0.3" model="BloomFixture">
 
   <environment>

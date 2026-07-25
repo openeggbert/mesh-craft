@@ -19,13 +19,13 @@ replacing the former flat `src/MeshCraft/MeshCraftApplication_*.cpp` layout.
 a compatibility forwarder. Actual UI components currently cover Validation,
 Registry results, Toolbar tools/display/snap-surface/proportional/grid controls,
 Properties delegation, and the View-menu panel/overlay/direction/focus/
-Camera-Bookmarks/Walk-Mode presentation, plus the Add/CSG and Help menu
+Camera-Bookmarks/Walk-Mode/Bloom-SSAO presentation, plus the Add/CSG and Help menu
 presentation and the Edit-history, clipboard, object-action, and
 selection-action groups, the Select-by-Type/Tag/Material, Align-Selection,
 Distribute-Selection, and Mirror-Selection submenus, and the Copy-Properties,
 Convert-to-Definition, Export-Subtree, Break-Instance, Drop-to-Ground,
 Snap-to-Grid, Group-Scale, Linear-Array, and Scatter-Along-Curve items plus the
-Group/Ungroup pair, plus every File-menu action through Open Recent. The detailed
+Group/Ungroup pair and every File-menu action through Open Recent. The detailed
 toolbar Snap interval contents and the remaining MenuBar sections are still
 application-owned. Camera bookmark, walk,
 document, undo, clipboard, selection, grid, and dialog state have **not** moved
@@ -100,11 +100,12 @@ before when explicitly requested (`SYS-W14-##` rows).
 
 ## 2. Current status
 
-- **Last full build: clean after the current Phase 13 File-exit
-  slice.** Testing is enabled in the current Ninja Release tree, and
+- **Last full build: clean after the current Phase 13 File-open-recent and
+  View-Bloom/SSAO slices.** Testing is enabled in the current Ninja Release tree, and
   `CCACHE_DISABLE=1 cmake --build b-release -j4` linked all targets successfully
   on EASYGL. Alternate-backend runtime qualification remains blocked.
-- **Tests:** the fresh Release tree registers 181 tests. All passed in two
+- **Tests:** the fresh Release tree registers 181 tests. All passed again after
+  the current Phase 13 slices in two
   disjoint groups: 147/147 non-render tests and 34/34 render-labelled tests
   under Xvfb (with local loopback/X11 socket access). SVG-specific
   verification passes with `-j4`: external and inline SVG export to glTF PNGs,
@@ -170,7 +171,7 @@ before when explicitly requested (`SYS-W14-##` rows).
   by application/UI ownership, and is extracting UI presentation through
   narrow contexts. Validation, Registry results, Toolbar controls, Properties
   delegation, and the View-menu directions/focus/overlays/panels/
-  Camera-Bookmarks/Walk-Mode presentation, plus the Add/CSG and Help menu
+  Camera-Bookmarks/Walk-Mode/Bloom-SSAO presentation, plus the Add/CSG and Help menu
   presentation and the Edit-history, clipboard, object-action, and
   selection-action groups, the Select-by-Type/Tag/Material, Align-Selection,
   Distribute-Selection, and Mirror-Selection submenus, and the Copy-Properties,
@@ -191,6 +192,17 @@ before when explicitly requested (`SYS-W14-##` rows).
   --target MeshCraft` and `ctest --test-dir b-release -R '^mc3_commands$'
   --output-on-failure` passed; the latter already exercises recent-files'
   load, save, MRU de-duplication, cap, and restart round-trip contract.
+- **Recently implemented (2026-07-25):** `SYS-W3-01` Phase 13 moved the
+  `View → Bloom/SSAO` controls into `Application::UI::MenuBar` through
+  `ViewPostProcessingContext`. It receives the application-computed
+  ShaderEffect-capability gate and value snapshots, then reports changes only
+  through five setters; renderer capability checks and all post-processing
+  state remain application-owned. The supported/unsupported presentation,
+  labels, slider ranges, 140px widths, and `AlwaysClamp` safety guards are
+  unchanged. `CCACHE_DISABLE=1 cmake --build b-release -j4 --target MeshCraft`
+  and the Xvfb-hosted `bloom_test` render regression passed. The test-hook
+  comments now also correctly state that `MESHCRAFT_TEST_FORCE_POSTFX` forces
+  only Bloom; SSAO has its own `MESHCRAFT_TEST_FORCE_SSAO` hook.
 - **Recently implemented (2026-07-20 through 2026-07-25):** all 7
   raw-OpenGL(ES)-vs-CNA migrations, `AUD-082` through `AUD-088` — full
   detail with file:line evidence and
@@ -792,9 +804,9 @@ git stash pop && cmake --build b-release -j4 --target <affected-target>
 No actionable follow-up audit task remains: `AUD-089` through `AUD-091` are
 complete, while Android (`AUD-042`) is environment/owner deferred.
 `SYS-W3-01` has 12 completed subsystem phases and an active Phase 13 for
-application/UI ownership. The authorized Camera Bookmarks, Walk Mode, Help,
-Add/CSG, Edit-history, Edit-clipboard, and Edit-object-actions menu slices are
-implemented and verified, together with Edit-selection-actions,
+application/UI ownership. The authorized Camera Bookmarks, Walk Mode, View
+Bloom/SSAO, Help, Add/CSG, Edit-history, Edit-clipboard, and Edit-object-actions
+menu slices are implemented and verified, together with Edit-selection-actions,
 Edit-select-by-type/tag/material, Edit-copy-properties, Edit-grouping,
 Edit-convert-to-definition, Edit-export-subtree, Edit-break-instance,
 Edit-align-selection, Edit-distribute-selection, Edit-drop-to-ground,
@@ -1009,6 +1021,11 @@ pending-action state, dialog buffers and state, file loading, document
 replacement, selection and undo initialization, title and status updates, error
 handling, and the Ctrl+O keyboard route remain in their existing owners;
 `MenuBar` owns only the unchanged label, shortcut, and click dispatch.
+`ViewPostProcessingContext` exposes only the application-computed text-shader
+capability, Bloom/SSAO value snapshots, and setters. The application retains
+the capability check, effect state, CNA targets/effects, and rendering; the UI
+component preserves the supported/unsupported text, labels, ranges, widths,
+`AlwaysClamp` flags, and callback dispatch.
 `FileOpenRecentContext` exposes only current availability, a lazy recent-files
 provider, one open callback, and one clear callback. Recent-file storage and
 persistence, unsaved-change handling, pending-action state, file loading,
@@ -1027,13 +1044,8 @@ The sequence below is planning only. Per `CLAUDE.md`, each item must be
 described and explicitly confirmed immediately before implementation; finishing
 one item does not authorize the next.
 
-1. **View → Bloom/SSAO controls.** Audit and extract only the text-shader
-   effects block, including its supported and unsupported presentation. Preserve
-   the conditional controls, labels, slider ranges, `AlwaysClamp` flags, and
-   existing state changes; renderer-capability checks and effect state remain
-   application-owned.
-2. **Post-menu boundary audit.** Once the remaining File and View blocks are
-   complete, identify one new narrow presentation boundary before changing
+1. **Post-menu boundary audit.** The remaining File and View blocks are
+   complete; identify one new narrow presentation boundary before changing
    `MeshCraftApplication`. Do not start a broad application refactor.
 
 ### Tracked work that is not implementation-ready
