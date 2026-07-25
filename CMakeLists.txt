@@ -1376,6 +1376,22 @@ if(MESH_CRAFT_BUILD_TESTING AND UNIX AND NOT ANDROID AND NOT EMSCRIPTEN)
             set_tests_properties(bloom_test PROPERTIES TIMEOUT 30 LABELS "render")
         endif()
 
+        # AUD-092: SSAO's depth-to-color pre-pass, AO, blur, and multiplicative
+        # composite had a test-only hook but no pixel-level regression test.
+        # The existing red-sphere light fixture supplies a stable depth edge;
+        # the test compares a regular screenshot against the SSAO-hook result.
+        if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/test/light_shading.mc3.xml")
+            add_test(
+                NAME ssao_test
+                COMMAND "${PYTHON3_EXEC}"
+                        "${CMAKE_CURRENT_SOURCE_DIR}/test/ssao_test.py"
+                        $<TARGET_FILE:MeshCraft>
+                        "${CMAKE_CURRENT_SOURCE_DIR}/test/light_shading.mc3.xml"
+                WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
+            )
+            set_tests_properties(ssao_test PROPERTIES TIMEOUT 30 LABELS "render")
+        endif()
+
         # AUD-087: material-preview swatch (D7) migrated from a hand-rolled
         # raw-GL FBO+shader pipeline onto RenderTarget2D + ShaderEffect +
         # SpriteBatch -- no dedicated test existed before (it's only ever
