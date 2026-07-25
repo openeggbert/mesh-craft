@@ -164,7 +164,7 @@ still internally consistent.
    research pass.
 6. **SYS-W3-01 (P2/W3), Phase 13 is active:** application/UI ownership is
    being reduced one narrow presentation slice at a time. The authorized
-   Camera Bookmarks, Camera Preset Overlay, Walk Mode, View Bloom/SSAO, Help, Add/CSG, Edit-history,
+   Camera Bookmarks, Camera Preset Overlay, Gizmo Drag Overlay, Walk Mode, View Bloom/SSAO, Help, Add/CSG, Edit-history,
    Edit-clipboard,
    Edit-object-actions, Edit-selection-actions, Edit-select-by-type,
    Edit-select-by-tag/material, Edit-copy-properties, Edit-grouping,
@@ -187,7 +187,10 @@ still internally consistent.
    resulting camera-preset/projection/look-through control candidate is now
    component-owned as `Application::UI::CameraPresetOverlay`; the application
    still owns `EditorCamera`, document-camera lookup, selection, and rendering.
-   The next Phase 13 action is a fresh narrow boundary audit.
+   The following narrow audit also moved the gizmo drag-delta presentation into
+   `Application::UI::GizmoDragOverlay`; the application supplies only axis,
+   transform snapshots, and snap state. The next Phase 13 action is a fresh
+   narrow boundary audit.
 
 ---
 
@@ -619,6 +622,10 @@ _All items in this workstream are DONE — archived to [`docs/history/plan_20260
   presentation. Its context carries only projection/look-through snapshots,
   an optional selected-camera name, and callbacks; the application retains
   camera reset/orbit mutation, document access, and all render-state decisions.
+  `Application::UI::GizmoDragOverlay` likewise owns the cursor-following
+  drag-delta presentation, including axis color, signed delta, units, and the
+  rotation snap indicator. `Overlays.cpp` retains gizmo/selection inspection
+  and supplies a read-only snapshot; the component cannot mutate scene state.
   The bookmark state remains the already-extracted
   `Editor::CameraBookmarks`; a `CameraBookmarksContext` exposes only the
   read-only slots plus Save/Restore callbacks, leaving camera mutation and
@@ -794,7 +801,8 @@ _All items in this workstream are DONE — archived to [`docs/history/plan_20260
   Edit-hide-selection, Edit-show-all-hidden, File-merge-scene,
   File-export-selection, File-export-GLB, File-export-OBJ, File-save,
   File-save-as, File-import-OBJ, File-new, File-open, File-open-recent, and
-  File-exit slices, the Bloom/SSAO controls, and the CameraPresetOverlay,
+  File-exit slices, the Bloom/SSAO controls, CameraPresetOverlay, and
+  GizmoDragOverlay,
   each incremental Release link and the same 147/147 + 35/35 partitions pass
   again.
   For the current MenuBar slices, the public UI header also compiles as a
@@ -804,7 +812,9 @@ _All items in this workstream are DONE — archived to [`docs/history/plan_20260
   normal and `MESHCRAFT_TEST_FORCE_SSAO=1` renders, rather than merely proving
   that the SSAO path exits cleanly. The CameraPresetOverlay also preserves the
   tested shared preset table while reducing `Overlays.cpp` to state snapshots
-  and callbacks. The next Phase 13 action is a fresh narrow-boundary audit.
+  and callbacks. GizmoDragOverlay follows the same boundary for a pure
+  read-only drag snapshot. The next Phase 13 action is a fresh narrow-boundary
+  audit.
   **SYS-W3-01 roadmap status after this session's investigation round:**
   Phases 1–12 done (Keybindings, Preferences, MacroRecorder, UndoManager,
   animation-override computation, WalkController, AudioPreview,

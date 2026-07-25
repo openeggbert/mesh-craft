@@ -1,5 +1,6 @@
 #include "MeshCraft/Application/MeshCraftApplication.hpp"
 #include "MeshCraft/Application/UI/CameraPresetOverlay.hpp"
+#include "MeshCraft/Application/UI/GizmoDragOverlay.hpp"
 #include "MeshCraft/MeshCraftPrivate.hpp"
 #include "MeshCraft/EditorAlgorithms.hpp"
 #include "MeshCraft/Scene/SceneHierarchyPanel.hpp"
@@ -93,67 +94,36 @@ void MeshCraftApplication::drawStatsOverlay(int screenW, [[maybe_unused]] int sc
         (void)tlH2;
     }
 
-    // Gizmo drag delta overlay — shown near the mouse cursor while dragging
+    // Gizmo drag delta overlay — shown near the mouse cursor while dragging.
     if (gizmo_.isDragging() && selection_.hasSelection()) {
         const auto& sel0 = *selection_.selection().front();
-        int axIdx = gizmoDragAxisIdx_;
+        const int axisIndex = gizmoDragAxisIdx_;
         float curVal = 0.0f;
-        const char* unit = "";
-        const char* axName = "XYZ"[axIdx] == 'X' ? "X" : ("XYZ"[axIdx] == 'Y' ? "Y" : "Z");
-        static const char* kAxis[3] = {"X","Y","Z"};
+        std::string_view unit{""};
 
         switch (activeTool_) {
         case ActiveTool::Move:
-            curVal = sel0.transform.position[axIdx];
-            unit   = " u";
+            curVal = sel0.transform.position[axisIndex];
+            unit = " u";
             break;
         case ActiveTool::Rotate:
-            curVal = sel0.transform.rotation[axIdx];
-            unit   = "°";
+            curVal = sel0.transform.rotation[axisIndex];
+            unit = "°";
             break;
         case ActiveTool::Scale:
-            curVal = sel0.transform.scale[axIdx];
-            unit   = "";
+            curVal = sel0.transform.scale[axisIndex];
             break;
         default: break;
         }
-        float delta = curVal - gizmoDragStartVal_;
-
-        ImVec2 mp = ImGui::GetIO().MousePos;
-        ImGui::SetNextWindowPos(ImVec2(mp.x + 18.0f, mp.y - 10.0f), ImGuiCond_Always);
-        ImGui::SetNextWindowBgAlpha(0.75f);
-        ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(6, 4));
-        ImGui::Begin("##gizmoDelta", nullptr,
-            ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoInputs |
-            ImGuiWindowFlags_NoNav        | ImGuiWindowFlags_NoMove   |
-            ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoSavedSettings |
-            ImGuiWindowFlags_NoBringToFrontOnFocus);
-
-        // Axis label colored
-        static const ImVec4 kAxisCol[3] = {
-            {1.0f, 0.25f, 0.25f, 1.0f},
-            {0.25f, 1.0f, 0.25f, 1.0f},
-            {0.25f, 0.55f, 1.0f, 1.0f}
-        };
-        ImGui::TextColored(kAxisCol[axIdx], "%s", kAxis[axIdx]);
-        ImGui::SameLine(0, 4);
-        if (delta >= 0.0f)
-            ImGui::TextColored(ImVec4(0.8f, 1.0f, 0.8f, 1.0f), "+%.4g%s", delta, unit);
-        else
-            ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.8f, 1.0f), "%.4g%s", delta, unit);
-        ImGui::SameLine(0, 6);
-        ImGui::TextDisabled("(%.4g)", curVal);
-        // Show snap indicator for rotate when Ctrl or snap grid is active
-        if (activeTool_ == ActiveTool::Rotate) {
-            bool ctrlDown = ImGui::GetIO().KeyCtrl;
-            if (ctrlDown || snapEnabled_) {
-                ImGui::SameLine(0, 6);
-                ImGui::TextColored(ImVec4(1.0f, 0.85f, 0.3f, 1.0f), "[snap %.4g\xc2\xb0]", snapRotate_);
-            }
-        }
-        ImGui::End();
-        ImGui::PopStyleVar();
-        (void)axName;
+        UI::GizmoDragOverlay::draw({
+            .axisIndex = axisIndex,
+            .currentValue = curVal,
+            .startValue = gizmoDragStartVal_,
+            .unit = unit,
+            .isRotation = activeTool_ == ActiveTool::Rotate,
+            .snapEnabled = snapEnabled_,
+            .snapRotation = snapRotate_,
+        });
     }
 
     // Measurement tool overlay
