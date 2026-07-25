@@ -818,6 +818,7 @@ private:
     // than carried forward)
     // -----------------------------------------------------------------------
     Editor::WalkController walkController_;
+    std::vector<Editor::WalkCollider> walkColliders_;
     void  updateWalkMode(float dt, const Microsoft::Xna::Framework::Input::KeyboardState& ks,
                          int mouseDx, int mouseDy);
     void  enterWalkMode();

@@ -5,7 +5,8 @@
 // the ground-relative position seeding and the pitch sign flip on exit),
 // forward/backward movement following the current yaw, keyboard yaw
 // turning, mouse look, pitch clamping at +-85 degrees, jump + gravity +
-// ground collision settling back at y=0, Escape triggering an implicit
+// ground collision settling back at y=0, opt-in box-collider wall sliding,
+// platform landing and ceiling collision, Escape triggering an implicit
 // exit from update() (matching the pre-extraction updateWalkMode()'s own
 // early-return-on-Escape), and a differential check that viewMatrix()
 // actually incorporates position/yaw/height (rather than hand-deriving
@@ -17,6 +18,7 @@
 #include <Microsoft/Xna/Framework/Input/Keys.hpp>
 #include <Microsoft/Xna/Framework/Input/KeyboardState.hpp>
 
+#include <array>
 #include <cmath>
 #include <cstdio>
 
@@ -158,6 +160,54 @@ int main() {
         // re-armed by the ground-collision clamp above, not stuck false.
         wc.update(0.05f, jump, 0, 0);
         check(wc.posY() > 0.0f, "a second jump from the ground works (onGround_ correctly re-armed)");
+    }
+
+    // update(): swept player-cylinder collision prevents tunnelling through a
+    // thin wall, even with one long frame, and retains tangential motion for
+    // natural wall sliding.
+    {
+        const WalkCollider wall{-10.0f, 0.0f, -2.0f, 10.0f, 3.0f, -1.0f};
+        const std::array<WalkCollider, 1> colliders{wall};
+        KeyboardState fwd{Keys::W};
+
+        WalkController straight;
+        straight.speed = 20.0f;
+        straight.enter(Vector3(0.0f, straight.height, 0.0f), 0.0f);
+        straight.update(0.2f, fwd, 0, 0, colliders); // would move 4m without sweep
+        check(straight.posZ() > -0.71f && straight.posZ() < -0.69f,
+              "swept wall collision stops before an expanded wall face (no tunnelling)");
+
+        WalkController sliding;
+        sliding.speed = 20.0f;
+        sliding.enter(Vector3(0.0f, sliding.height, 0.0f), 0.5f);
+        sliding.update(0.2f, fwd, 0, 0, colliders);
+        check(sliding.posZ() > -0.71f,
+              "diagonal movement is blocked by the wall instead of passing through it");
+        check(sliding.posX() > 1.0f,
+              "diagonal movement preserves its tangent component and slides along the wall");
+    }
+
+    // update(): box colliders are also solid vertically -- the player lands
+    // on a platform and a jump cannot pass through a low ceiling.
+    {
+        const WalkCollider platform{-3.0f, 2.0f, -3.0f, 3.0f, 3.0f, 3.0f};
+        const std::array<WalkCollider, 1> colliders{platform};
+        KeyboardState noKeys{};
+        WalkController falling;
+        falling.enter(Vector3(0.0f, 6.8f, 0.0f), 0.0f); // feet at y=5
+        for (int i = 0; i < 30 && falling.posY() > 3.0f; ++i)
+            falling.update(0.05f, noKeys, 0, 0, colliders);
+        checkNear(falling.posY(), 3.0f, "falling lands on the top of a box collider rather than y=0");
+
+        const WalkCollider ceiling{-3.0f, 2.2f, -3.0f, 3.0f, 3.0f, 3.0f};
+        const std::array<WalkCollider, 1> ceilingColliders{ceiling};
+        KeyboardState jump{Keys::LeftControl};
+        WalkController jumping;
+        jumping.enter(Vector3(0.0f, jumping.height, 0.0f), 0.0f);
+        for (int i = 0; i < 5; ++i)
+            jumping.update(0.05f, jump, 0, 0, ceilingColliders);
+        check(jumping.posY() <= 0.4001f,
+              "jumping is stopped below a box-collider ceiling instead of passing through it");
     }
 
     // update(): Escape triggers an implicit exit, matching the

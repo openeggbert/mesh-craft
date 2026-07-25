@@ -5,8 +5,16 @@
 #include <Microsoft/Xna/Framework/Vector3.hpp>
 
 #include <optional>
+#include <span>
 
 namespace MeshCraft::Editor {
+
+// World-space axis-aligned solid used by walk mode. MeshCraft builds these
+// from opt-in MC3 objects with collision="box" when walk mode starts.
+struct WalkCollider {
+    float minX{0.0f}, minY{0.0f}, minZ{0.0f};
+    float maxX{0.0f}, maxY{0.0f}, maxZ{0.0f};
+};
 
 // SYS-W3-01 Phase 6: first-person "walk mode" extracted out of
 // MeshCraftApplication (H-series). Self-contained physics/camera state,
@@ -25,6 +33,7 @@ public:
     float speed{5.0f};        // movement speed (m/s)
     float turnSpeed{1.5f};    // keyboard yaw speed (rad/s)
     float mouseSens{0.003f};  // mouse sensitivity (rad/px)
+    float collisionRadius{0.30f}; // horizontal player-cylinder radius (m)
 
     [[nodiscard]] bool  isActive() const { return active_; }
     [[nodiscard]] float posX() const { return posX_; }
@@ -61,7 +70,8 @@ public:
     std::optional<ExitCameraState> update(
         float dt,
         const Microsoft::Xna::Framework::Input::KeyboardState& ks,
-        int mouseDx, int mouseDy);
+        int mouseDx, int mouseDy,
+        std::span<const WalkCollider> colliders = {});
 
     // First-person view matrix from the current position/yaw/pitch/height.
     // The projection matrix is deliberately NOT owned here -- walk mode

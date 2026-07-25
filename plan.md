@@ -823,7 +823,25 @@ portable through CNA rather than merely hiding its OpenGL dependency.
   coverage. **Resolved:** commits `8cb14be`, `026fc2d`.
 - **SYS-W14-05** `[DEFERRED]` `P3` — Safe `embed:` mesh/resource support end-to-end. (`AUD-025`)
 - **SYS-W14-06** `[DEFERRED]` `P3` — Improved CSG output (smooth normals/UVs/materials).
-- **SYS-W14-07** `[DEFERRED]` `P3` — Improved walk/navigation collision.
+- **SYS-W14-07** `[DONE]` `P3` — Improved walk/navigation collision.
+  Walk mode previously treated only the global `y=0` plane as solid, so it
+  could pass through every scene wall, floor and ceiling. It now snapshots
+  every primitive object explicitly marked `collision="box"` when entering
+  walk mode, transforms its eight local bounds corners through its complete
+  parent hierarchy into a world AABB, and supplies those colliders to
+  `Editor::WalkController`. The controller uses a swept, radius-expanded AABB
+  test for horizontal player-cylinder movement (prevents long-frame
+  tunnelling and preserves tangent movement for wall sliding), resolves a
+  start inside a newly enabled collider, lands on box tops, and stops jumps
+  at box ceilings while retaining the existing `y=0` ground behavior.
+  The Properties panel already exposes the `box` collision mode; the walk HUD
+  reports the active collider count and exposes the collision radius. Other
+  serialized proxy labels (`sphere`, `mesh`, `convex`, `capsule`) remain
+  deliberately unsupported by walk mode rather than being approximated
+  silently. The real `walk_controller_test` now covers swept-wall blocking,
+  diagonal wall sliding, platform landing and ceiling blocking in addition to
+  the prior movement/gravity coverage. EASYGL `MeshCraft` and the targeted
+  test built and passed with `-j4` on 2026-07-25.
 - **SYS-W14-08** `[DONE]` `P2` — AI change preview/diff before destructive
   replace. Before this, "Apply to Scene" replaced `document_` wholesale
   with only two safety nets: full Undo, and `STAB-0395`'s

@@ -426,6 +426,8 @@ void PropertiesPanel::draw(float panelX, float panelY, float panelW, float panel
         {
             bool colMixed = !allMatchStr([](const Mc3::Mc3Object* o){ return o->collision; });
             ImGui::TextDisabled("Collision");
+            if (ImGui::IsItemHovered())
+                ImGui::SetTooltip("Walk mode currently uses the box proxy as a solid obstacle.");
             if (colMixed) { ImGui::SameLine(); ImGui::TextColored(ImVec4(1.0f,0.75f,0.2f,1.0f),"~"); if (ImGui::IsItemHovered()) ImGui::SetTooltip("Values differ across selection"); }
             const char* colOpts[] = { "none", "box", "sphere", "mesh", "convex", "capsule" };
             int colIdx = 0;
