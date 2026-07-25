@@ -513,12 +513,12 @@ float MeshCraftApplication::drawMenuBar()
         if (ImGui::BeginMenu("View")) {
             UI::MenuBar::drawViewDirections(camera_.yaw, camera_.pitch);
             ImGui::Separator();
-            if (ImGui::MenuItem("Focus on selection", "F")) {
+            UI::MenuBar::drawFocusSelection([this] {
                 if (selection_.hasSelection()) {
                     auto* s = selection_.selection().front().get();
                     camera_.focusOn(s->transform.position[0], s->transform.position[1], s->transform.position[2]);
                 } else { camera_.reset(); }
-            }
+            });
             ImGui::Separator();
             if (ImGui::BeginMenu("Camera Bookmarks")) {
                 static const char* kSlotKeys[5] = {"Ctrl+F1","Ctrl+F2","Ctrl+F3","Ctrl+F4","Ctrl+F5"};
@@ -618,6 +618,10 @@ void MenuBar::drawViewDirections(float& yaw, float& pitch) {
     if (ImGui::MenuItem("Back", "Num5")) { yaw = std::numbers::pi_v<float>; pitch = 0.0f; }
     if (ImGui::MenuItem("Top", "Num7")) { yaw = 0.0f; pitch = 1.47f; }
     if (ImGui::MenuItem("Bottom", "Num9")) { yaw = 0.0f; pitch = -1.47f; }
+}
+
+void MenuBar::drawFocusSelection(const std::function<void()>& focus) {
+    if (ImGui::MenuItem("Focus on selection", "F")) focus();
 }
 
 } // namespace MeshCraft::Application::UI
