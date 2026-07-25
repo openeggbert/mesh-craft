@@ -515,10 +515,20 @@ _All items in this workstream are DONE — archived to [`docs/history/plan_20260
   target round-trip. Targeted `camera_bookmarks`, `keybinding_manager`,
   `preferences`, `walk_controller`, and `audio_preview` tests pass (5/5);
   full `MeshCraft` rebuild passes. **Resolved:** commit `239b43b`.
+  **Phase 9 DONE (2026-07-25) — transform clipboard:** fresh inspection found
+  the Ctrl+Shift+C/V state duplicated between the menu and keyboard paths.
+  Extracted `Editor::TransformClipboard` (`include/` +
+  `src/MeshCraft/Editor/`), which owns only position/rotation/scale as before;
+  it deliberately does not overwrite a target object's pivot. Selection,
+  locked-object filtering, undo, status messages, and title updates remain at
+  their existing application boundary. New CNA-free `transform_clipboard`
+  test covers empty paste, full P/R/S round-trip, and pivot preservation.
+  Targeted six-subsystem suite passes (6/6); full `MeshCraft` rebuild passes.
+  **Resolved:** commit `221b845`.
   **SYS-W3-01 roadmap status after this session's investigation round:**
-  Phases 1–8 done (Keybindings, Preferences, MacroRecorder, UndoManager,
+  Phases 1–9 done (Keybindings, Preferences, MacroRecorder, UndoManager,
   animation-override computation, WalkController, AudioPreview,
-  CameraBookmarks, in-that-order). File dialogs and post-processing were each
+  CameraBookmarks, TransformClipboard, in-that-order). File dialogs and post-processing were each
   investigated and explicitly declined for different reasons (no
   testability win vs. real regression risk with no verification tool) —
   not silently skipped. `MeshCraftApplication` itself is still a large
