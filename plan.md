@@ -87,7 +87,7 @@ P1s already being fixed in git history. This session:
    **Net across all 34 AUD-### rows remaining in this active backlog (61
    additional rows completed and archived to `docs/history/plan_20260718.md`
    on 2026-07-18 — see that file for their full evidence/resolution text):
-   28 DONE, 4 TODO, 2 DEFERRED** — 10 of the 28 DONE (`AUD-064` through
+   29 DONE, 3 TODO, 2 DEFERRED** — 10 of the 29 DONE (`AUD-064` through
    `AUD-073`) are fresh findings from a 2026-07-18 (later same day)
    independent re-audit, not part of the original 6 (`AUD-069` itself fixed
    2026-07-19, the day after it was filed); the other 14 (`AUD-074`
@@ -144,23 +144,20 @@ still internally consistent.
    out the two sibling repositories at the recorded verified SHAs, then
    configures, builds and runs the root CTest suite with at most two jobs.
    The standalone matrix uses the same job limit.
-3. **AUD-089 (P1/W11)** — `--screenshot` logs success and exits zero even
-   when its output cannot be written. This is the first approved follow-up
-   once the owner explicitly authorizes implementation.
-4. **AUD-091 (P1/W1)** — a definitions-only AI response makes `mc3_ai`
+3. **AUD-091 (P1/W1)** — a definitions-only AI response makes `mc3_ai`
    exceed its 30-second CTest timeout; it must be traced and bounded before
    treating the AI-response path as robust.
-5. **AUD-090 (P2/W11)** — render-dependent CTests need a working-display
+4. **AUD-090 (P2/W11)** — render-dependent CTests need a working-display
    preflight and complete `render` labels, so a non-render selection is
    actually headless-safe and CI failures are actionable.
-6. **AUD-042 (P2/W8)** — Android build path forces SDL_RENDERER; blocked
+5. **AUD-042 (P2/W8)** — Android build path forces SDL_RENDERER; blocked
    (no Android NDK in this environment; also intersects CNA backend
    behavior, out of scope per CLAUDE.md's "no CNA changes without owner
    permission").
-7. Android remains deferred because this environment has no Android NDK and
-   the work crosses the CNA ownership boundary; the three new audit rows do
+6. Android remains deferred because this environment has no Android NDK and
+   the work crosses the CNA ownership boundary; the two remaining audit rows do
    not authorize implementation by themselves.
-8. All 10 of the mc3-format-vs-editor gaps found 2026-07-20 (user
+7. All 10 of the mc3-format-vs-editor gaps found 2026-07-20 (user
    request: "co mc3 nabízí, ale MeshCraft to ještě neumí" -- "what does
    the mc3 format offer that MeshCraft doesn't yet handle") are now
    done: the two P1 gaps (trigger event-firing, Lua scripting execution),
@@ -1910,12 +1907,13 @@ as a CNA depth-to-color pre-pass (2026-07-25). The remaining direct
 - **Tests:** New `test/shadow_debug.mc3.xml` (one `cast_shadows="true"` directional light + one box) + `test/shadowdebug_test.py` (`shadowdebug_test` ctest) + a new `MESHCRAFT_TEST_FORCE_SHADOWDEBUG` test-only hook (`AUD-058`'s pattern — this toggle has no CLI/scene-file equivalent either) + a dedicated test-only corner blit (`AUD-087`'s pattern, deliberately not relying on the real "Shadow Frustum" ImGui overlay's own window-layout math for a test's pixel coordinates). Real `--screenshot` pixel sampling: the blitted corner shows the light-view clear color everywhere except a small ~8×8px cluster near its center — the box, correctly rendered small because it's a 2×2×2 object inside a ±50m ortho frustum (visually cross-checked against the real "Shadow Frustum" ImGui window in the same screenshot, which independently shows the identical small bright cluster at a different screen position, confirming both consumers read the same real render target content). No pre-existing test/hook existed to `git stash`-diff against (both the migration and the headless-testability hook are new together, same situation as `AUD-087`). Full rebuild + 169/169 `ctest` (was 168; +1 for `shadowdebug_test`), including `gl_shutdown_leak_test` confirming the destructor changes introduced no new GL resource leak. **`SDL_GL_GetProcAddress` now appears exactly once in `MeshCraftApplication.cpp`** (the `LD(...)` macro's own definition, still used by `initSsao()`) — `AUD-084`/`AUD-086`/`AUD-087`/`AUD-088` are the 4 of 5 `s_bloom` consumers now migrated; SSAO (`AUD-085`) is the sole holdout, so — per the shared preamble and `AUD-085`'s own row — the shared `BloomGL`/`s_bloom` struct itself is intentionally NOT deleted yet, since SSAO still depends on it.
 - **Resolved:** commit `95327bc` — verify: `ctest -R shadowdebug_test`; `grep -c SDL_GL_GetProcAddress src/MeshCraft/MeshCraftApplication.cpp` (expect exactly 1, the `LD` macro definition, until `AUD-085` also lands).
 
-### AUD-089 `[TODO]` `P1` `W11` · `--screenshot` reports a successful output even when the image cannot be written
+### AUD-089 `[DONE]` `P1` `W11` · `--screenshot` reports a successful output even when the image cannot be written
 - **Component:** `src/MeshCraft/MeshCraftApplication_Commands.cpp` (`saveScreenshot()`), `src/MeshCraft/MeshCraftApplication.cpp` (one-shot screenshot flow), `src/MeshCraft/main.cpp` (process exit status).
 - **Evidence:** `saveScreenshot()` returns `void`. Its PNG branch prints an error when `stbi_write_png()` fails but cannot propagate that failure; its PPM branch writes to an `std::ofstream` without checking open or write success and still prints `written`. The one-shot flow subsequently prints `Auto-screenshot saved` and exits, while `main.cpp` only maps export failure to a non-zero process status. Thus an unwritable screenshot destination can be reported as saved and return exit code zero, which is silent CLI output loss.
 - **Outcome:** Make screenshot writing report success/failure to the application, check PPM stream open/write errors and PNG encoder results, suppress success messages on failure, and make the one-shot CLI return non-zero when its requested screenshot was not produced.
 - **Tests:** Add a deterministic CLI regression test that requests a screenshot at a guaranteed-unwritable destination and asserts non-zero status plus an error; retain a normal writable-output success check. Run it in a known working virtual-display environment.
 - **Audit verification (2026-07-25):** source-path review followed the CNA readback migration (`AUD-083`); it found that pixel acquisition is no longer the risk, but output-result propagation was never added.
+- **Resolved:** commit `5bcfbdc` — `saveScreenshot()` now returns success/failure, checks invalid viewports, PPM open/write/close errors and PNG encoder results; the one-shot path prints `Auto-screenshot saved` only on success and `main()` maps screenshot failure to exit code 1. New `screenshot_error_test` passes a temporary directory as the output path (deterministically not a writable image file), requiring non-zero exit, a screenshot error, and no false saved message. The target builds and registers as CTest #68. Its end-to-end execution remains blocked only by this host's already-recorded unusable Xvfb listener (`AUD-090`), which aborts before rendering or output writing.
 
 ### AUD-090 `[TODO]` `P2` `W11` · Render-dependent CTests lack a reliable display preflight and complete `render` labels
 - **Component:** `CMakeLists.txt`, render-test Python launch helpers, and `.github/workflows/ci.yml`.

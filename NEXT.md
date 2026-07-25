@@ -80,7 +80,7 @@ before when explicitly requested (`SYS-W14-##` rows).
 - **Build: clean**, `cmake --build b-release -j4` passed after SVG texture
   support was added (EASYGL backend on Linux — the only backend buildable
   here).
-- **Tests:** 177 tests are registered. SVG-specific verification passes with
+- **Tests:** 178 tests are registered. SVG-specific verification passes with
   `-j4`: external and inline SVG export to glTF PNGs, bounded/malformed input,
   cache invalidation, and real headless viewport screenshots sampling the
   rasterized material pixels. This session's own
@@ -90,7 +90,7 @@ before when explicitly requested (`SYS-W14-##` rows).
   count this file last recorded (2026-07-19) predates unrelated work not
   narrated here (a further audit pass and the `SYS-W14-18..27`
   mc3-format-vs-editor gap closures — see `plan.md`/memory, not fully
-  reflected in this file's own history) — don't treat 142→177 as this
+  reflected in this file's own history) — don't treat 142→178 as this
   session's own delta.
   All builds/tests this session used `-j4` (not `-j$(nproc)`), per the
   user's standing request (shared machine).
@@ -727,11 +727,13 @@ git stash pop && cmake --build b-release -j4 --target <affected-target>
 
 ## 8. Next smallest tasks
 
-The follow-up audit has three implementation candidates, all awaiting the
-owner's explicit confirmation required by `CLAUDE.md`: `AUD-089` first
-(truthful `--screenshot` failure/exit status), then `AUD-091` (definitions-
+The follow-up audit has two implementation candidates awaiting the owner's
+explicit confirmation required by `CLAUDE.md`: `AUD-091` first (definitions-
 only AI-response timeout), then `AUD-090` (render CTest display preflight and
-labels). Android (`AUD-042`) remains deferred until an Android NDK is
+labels). `AUD-089` (truthful `--screenshot` failure/exit status) is complete
+in commit `5bcfbdc`; its new end-to-end CTest is registered but needs a
+working virtual display, tracked separately by `AUD-090`. Android (`AUD-042`)
+remains deferred until an Android NDK is
 available and its CNA backend choice is explicitly in scope. `SYS-W3-01`
 (`MeshCraftApplication` decomposition)
 has 11 phases done; its investigation rounds also explicitly looked at the
