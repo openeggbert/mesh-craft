@@ -1,4 +1,5 @@
 #include "MeshCraft/Application/MeshCraftApplication.hpp"
+#include "MeshCraft/Application/UI/Registry.hpp"
 #include "MeshCraft/ModelRegistry.hpp"
 
 #include <MeshCraft/Mc3/Mc3Document.hpp>
@@ -56,84 +57,36 @@ void MeshCraftApplication::drawRegistryPanel() {
 
     ImGui::Spacing();
 
-    // Results table
-    const float tableH = ImGui::GetContentRegionAvail().y - 36.0f;
-    if (ImGui::BeginTable("##regtable", 4,
-            ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg |
-            ImGuiTableFlags_ScrollY | ImGuiTableFlags_SizingStretchProp,
-            ImVec2(0, tableH)))
-    {
-        ImGui::TableSetupScrollFreeze(0, 1);
-        ImGui::TableSetupColumn("Group",   ImGuiTableColumnFlags_WidthStretch, 0.22f);
-        ImGui::TableSetupColumn("Name",    ImGuiTableColumnFlags_WidthStretch, 0.38f);
-        ImGui::TableSetupColumn("Variant", ImGuiTableColumnFlags_WidthStretch, 0.22f);
-        ImGui::TableSetupColumn("",        ImGuiTableColumnFlags_WidthFixed,   66.0f);
-        ImGui::TableHeadersRow();
-
-        for (auto& entry : regCachedResults_) {
-            ImGui::TableNextRow();
-            ImGui::TableSetColumnIndex(0); ImGui::TextUnformatted(entry.group.c_str());
-            ImGui::TableSetColumnIndex(1); ImGui::TextUnformatted(entry.name.c_str());
-            ImGui::TableSetColumnIndex(2); ImGui::TextUnformatted(entry.variant.c_str());
-            ImGui::TableSetColumnIndex(3);
-            ImGui::PushID(static_cast<int>(entry.id));
-            if (ImGui::SmallButton("Insert")) {
+    UI::RegistryResultsContext resultsContext{
+        .results = regCachedResults_,
+        .insert = [this](const ModelRegistry::Entry& entry) {
+            try {
+                pushUndo();
+                std::string defId;
                 try {
-                    // insertIntoScene() writes doc.textures/materials/definitions
-                    // directly (F7): pushUndo() must snapshot the document BEFORE
-                    // that call, not just before the objects.push_back() below,
-                    // or Ctrl+Z after an Insert leaves the imported definition and
-                    // its textures/materials permanently orphaned in the scene.
-                    // insertIntoScene() only ever throws before touching doc (temp
-                    // file I/O and the empty-definitions check both precede any
-                    // doc mutation), so on failure the just-pushed snapshot is
-                    // popped back off unapplied instead of leaving a no-op undo
-                    // step, mirroring this codebase's established no-op-undo rule.
-                    pushUndo();
-                    std::string defId;
-                    try {
-                        defId = registry_.insertIntoScene(document_, entry);
-                    } catch (...) {
-                        undoManager_.popUndoWithoutApplying();
-                        throw;
-                    }
-                    // Place an instance of the definition at the origin
-                    auto obj          = std::make_shared<Mc3::Mc3Object>();
-                    obj->type         = Mc3::ObjectType::Instance;
-                    obj->definition   = defId;
-                    obj->name         = entry.name +
-                                        (entry.variant.empty() ? "" : "_" + entry.variant);
-                    std::string base  = "reg_" + defId;
-                    obj->id           = base;
-                    int n             = 1;
-                    while (flatFindById(obj->id))
-                        obj->id = base + "_" + std::to_string(n++);
-
-                    document_.objects.push_back(obj);
-                    modified_ = true;
-                    setStatusMsg("Inserted '" + entry.name + "' from registry");
-                } catch (const std::exception& ex) {
-                    setStatusMsg(std::string("Insert failed: ") + ex.what(), true);
+                    defId = registry_.insertIntoScene(document_, entry);
+                } catch (...) {
+                    undoManager_.popUndoWithoutApplying();
+                    throw;
                 }
+                auto obj = std::make_shared<Mc3::Mc3Object>();
+                obj->type = Mc3::ObjectType::Instance;
+                obj->definition = defId;
+                obj->name = entry.name + (entry.variant.empty() ? "" : "_" + entry.variant);
+                std::string base = "reg_" + defId;
+                obj->id = base;
+                int n = 1;
+                while (flatFindById(obj->id)) obj->id = base + "_" + std::to_string(n++);
+                document_.objects.push_back(obj);
+                modified_ = true;
+                setStatusMsg("Inserted '" + entry.name + "' from registry");
+            } catch (const std::exception& ex) {
+                setStatusMsg(std::string("Insert failed: ") + ex.what(), true);
             }
-            // Delete button (right-click context or explicit —  keep visible for power users)
-            ImGui::SameLine(0, 4);
-            if (ImGui::SmallButton("X")) {
-                registry_.remove(entry.id);
-                regResultsDirty_ = true;
-            }
-            if (ImGui::IsItemHovered())
-                ImGui::SetTooltip("Remove from registry");
-            ImGui::PopID();
-        }
-
-        if (regCachedResults_.empty()) {
-            ImGui::TableNextRow();
-            ImGui::TableSetColumnIndex(0);
-            ImGui::TextDisabled("(empty)");
-        }
-        ImGui::EndTable();
-    }
+        },
+        .remove = [this](int64_t id) { registry_.remove(id); regResultsDirty_ = true; },
+    };
+    UI::Registry::drawResults(resultsContext);
 
     ImGui::Separator();
     if (ImGui::Button("Save Definition to Registry..."))
@@ -239,3 +192,42 @@ void MeshCraftApplication::drawRegistryPanel() {
 }
 
 } // namespace MeshCraft::Application
+
+namespace MeshCraft::Application::UI {
+
+void Registry::drawResults(RegistryResultsContext& context) {
+    const float tableH = ImGui::GetContentRegionAvail().y - 36.0f;
+    if (!ImGui::BeginTable("##regtable", 4,
+            ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg |
+            ImGuiTableFlags_ScrollY | ImGuiTableFlags_SizingStretchProp,
+            ImVec2(0, tableH))) return;
+
+    ImGui::TableSetupScrollFreeze(0, 1);
+    ImGui::TableSetupColumn("Group", ImGuiTableColumnFlags_WidthStretch, 0.22f);
+    ImGui::TableSetupColumn("Name", ImGuiTableColumnFlags_WidthStretch, 0.38f);
+    ImGui::TableSetupColumn("Variant", ImGuiTableColumnFlags_WidthStretch, 0.22f);
+    ImGui::TableSetupColumn("", ImGuiTableColumnFlags_WidthFixed, 66.0f);
+    ImGui::TableHeadersRow();
+
+    for (auto& entry : context.results) {
+        ImGui::TableNextRow();
+        ImGui::TableSetColumnIndex(0); ImGui::TextUnformatted(entry.group.c_str());
+        ImGui::TableSetColumnIndex(1); ImGui::TextUnformatted(entry.name.c_str());
+        ImGui::TableSetColumnIndex(2); ImGui::TextUnformatted(entry.variant.c_str());
+        ImGui::TableSetColumnIndex(3);
+        ImGui::PushID(static_cast<int>(entry.id));
+        if (ImGui::SmallButton("Insert")) context.insert(entry);
+        ImGui::SameLine(0, 4);
+        if (ImGui::SmallButton("X")) context.remove(entry.id);
+        if (ImGui::IsItemHovered()) ImGui::SetTooltip("Remove from registry");
+        ImGui::PopID();
+    }
+    if (context.results.empty()) {
+        ImGui::TableNextRow();
+        ImGui::TableSetColumnIndex(0);
+        ImGui::TextDisabled("(empty)");
+    }
+    ImGui::EndTable();
+}
+
+} // namespace MeshCraft::Application::UI

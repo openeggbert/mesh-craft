@@ -574,6 +574,9 @@ _All items in this workstream are DONE — archived to [`docs/history/plan_20260
   component is now `Application::UI::Validation`: it receives only a
   `ValidationContext` (visibility, source label, immutable validation result),
   while the application retains ownership and mutation of that state. The
+  Registry results table is likewise now `Application::UI::Registry`; it sees
+  only entries plus Insert/Remove callbacks, while document mutation, undo,
+  status reporting, and database lifetime remain in the application. The
   historical audit references retain their former paths as time-accurate
   evidence.
   Static undo-audit and snapshot-lint path checks pass after their tracked
