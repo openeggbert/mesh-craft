@@ -144,13 +144,14 @@ still internally consistent.
    out the two sibling repositories at the recorded verified SHAs, then
    configures, builds and runs the root CTest suite with at most two jobs.
    The standalone matrix uses the same job limit.
-3. **AUD-042 (P2/W8)** — Android build path forces SDL_RENDERER; blocked
-   (no Android NDK in this environment; also intersects CNA backend
-   behavior, out of scope per CLAUDE.md's "no CNA changes without owner
-   permission").
-4. Android remains deferred because this environment has no Android NDK and
-   the work crosses the CNA ownership boundary; no other approved audit row
-   remains.
+3. **SYS-W8-02 through SYS-W8-05 (P1/P2/W8)** — replace the editor's
+   OpenGL-specific ImGui renderer with a CNA-backed adapter, including an
+   opaque CNA texture bridge and real alternate-backend verification. These
+   are the approved portability path for Vulkan/WebGPU-class CNA backends;
+   complete them in order, not as a superficial backend-name switch.
+4. **AUD-042 (P2/W8)** — Android build path forces SDL_RENDERER; deferred
+   until an Android-capable environment exists. It can be reconsidered after
+   SYS-W8-02 through SYS-W8-05 provide a backend-neutral editor UI path.
 5. All 10 of the mc3-format-vs-editor gaps found 2026-07-20 (user
    request: "co mc3 nabízí, ale MeshCraft to ještě neumí" -- "what does
    the mc3 format offer that MeshCraft doesn't yet handle") are now
@@ -605,7 +606,39 @@ _All items in this workstream are DONE — archived to [`docs/history/plan_20260
 _All items in this workstream are DONE — archived to [`docs/history/plan_20260718.md`](docs/history/plan_20260718.md)._
 
 ### W8 — Backend truth
-_All items in this workstream are DONE — archived to [`docs/history/plan_20260718.md`](docs/history/plan_20260718.md)._
+
+The former backend-truth items are archived to
+[`docs/history/plan_20260718.md`](docs/history/plan_20260718.md). The tasks
+below were added by explicit user direction on 2026-07-25: make the editor UI
+portable through CNA rather than merely hiding its OpenGL dependency.
+
+### SYS-W8-02 `[TODO]` `P2` · Define a backend-neutral ImGui renderer seam owned by CNA-facing MeshCraft code
+- **Component:** the ImGui lifecycle in `MeshCraftApplication.cpp`, a new MeshCraft `ImGuiRenderer` interface/implementation boundary, and `GraphicsBackendCheck.hpp`.
+- **Evidence:** The editor currently obtains `SDL_GL_GetCurrentContext()`, calls `ImGui_ImplSDL3_InitForOpenGL` and `ImGui_ImplOpenGL3_Init`, then calls the OpenGL backend's NewFrame/RenderDrawData/Shutdown functions. `GraphicsBackendCheck.hpp` consequently permits only `EASYGL`. Dear ImGui's core instead produces backend-neutral `ImDrawData`; its selected platform and renderer backends are the API-specific parts.
+- **Outcome:** Introduce an explicit MeshCraft-owned renderer interface with `initialize`, `newFrame`, `render(ImDrawData&)`, `shutdown`, and opaque UI-texture registration/unregistration. Its public boundary may consume CNA `GraphicsDevice`/`Texture2D`/`RenderTarget2D` plus SDL window/input data, but must expose no GL context, `GLuint`, `SDL_GL_*`, or OpenGL ImGui backend type. Keep SDL event forwarding separate from rendering so each CNA graphics backend can select an appropriate platform mode without duplicating editor UI code.
+- **Tests:** Add context-free lifecycle/selection tests and compile the editor with the EASYGL implementation at `-j4`. Add static checks that application lifecycle code no longer names `ImGui_ImplOpenGL3` or `SDL_GL_GetCurrentContext`; those names may exist only in an explicitly temporary compatibility implementation until SYS-W8-03 is complete.
+- **Dependency/rule:** This is a MeshCraft refactor, not permission to alter `../cna`. If CNA lacks an operation needed by the adapter, record a precise CNA capability request and stop at that boundary rather than reintroducing native GL calls.
+
+### SYS-W8-03 `[TODO]` `P1` · Implement the ImGui `ImDrawData` renderer exclusively through CNA graphics primitives
+- **Component:** new CNA-backed ImGui renderer implementation, CMake source wiring, and public CNA graphics APIs consumed by it.
+- **Evidence:** Wrapping `imgui_impl_opengl3` behind an interface would hide, but not remove, the OpenGL dependency. A genuine portable renderer must upload ImGui's font atlas and each frame's vertices/indices as CNA textures/buffers, apply `ImDrawCmd` clip rectangles through CNA scissor state, bind command textures through CNA, and issue indexed draws through CNA.
+- **Outcome:** Render ordinary Dear ImGui draw lists with CNA only: dynamic vertex/index upload, font-atlas creation, alpha blending, orthographic projection, per-command texture selection, vertex/index offsets, and clipped scissor rectangles. Define deterministic handling for `ImDrawCmd::UserCallback` (support Dear ImGui's reset-render-state callback or reject/log unknown callbacks) so no plugin can smuggle backend-native drawing into a frame. Remove `imgui_impl_opengl3` from the production editor path once the CNA renderer is visually equivalent on EASYGL.
+- **Tests:** Unit-test draw-command translation, clip-rectangle clamping, texture lookup/lifetime, and callback policy without a graphics context. In a healthy virtual display, add a real screenshot regression exercising text, icons, clipping, alpha blending, and an image; run it with `-j4`. Compare a fixed fixture before/after on EASYGL, allowing only documented anti-aliasing tolerance.
+- **Dependency/rule:** First verify CNA exposes every required public operation. A missing dynamic-buffer, indexed-draw, scissor, or texture-binding capability becomes a bounded CNA request; do not use `ImGui_ImplOpenGL3` as a hidden fallback on a non-GL backend.
+
+### SYS-W8-04 `[TODO]` `P1` · Replace GL texture IDs handed to `ImGui::Image()` with an opaque CNA UI-texture registry
+- **Component:** material-preview/shadow-debug fields and rendering in `MeshCraftApplication.hpp`/`.cpp`, their UI panels, and the renderer from SYS-W8-02/03.
+- **Evidence:** `matPreviewTexId_` and `shadowDebugColorTex_` are GL texture names populated by `IRenderTargetBackend::GetColorGLHandle()` and cast to `ImTextureID`. That accessor cannot represent a Vulkan descriptor set, a WebGPU bind group, or another renderer-owned texture token.
+- **Outcome:** Make `ImTextureID` an opaque renderer token produced by a CNA texture registry. The registry retains/references CNA `Texture2D` or `RenderTarget2D` safely, validates lifetime/generation, and lets the CNA renderer resolve each UI draw command to its normal texture binding. Remove both `GetColorGLHandle()` calls and all GL-name fields while preserving material-preview and shadow-debug images.
+- **Tests:** Add registry tests for duplicate registration, stale/destroyed texture rejection, deregistration, and frame lifetime. Extend material-preview and shadow-debug screenshot tests to assert the images still draw through the registry on EASYGL; add a static check that production MeshCraft has no `GetColorGLHandle` use.
+- **Dependency:** SYS-W8-03 supplies renderer-side texture lookup; work may proceed in parallel only after SYS-W8-02 fixes the opaque-handle contract.
+
+### SYS-W8-05 `[TODO]` `P1` · Qualify the CNA-backed editor UI on alternate graphics backends, then remove the EASYGL-only gate
+- **Component:** backend selection in `CMakeLists.txt`/`main.cpp`/`GraphicsBackendCheck.hpp`, ImGui platform initialization, CI configuration, and render-test launchers.
+- **Evidence:** The current runtime gate rejects every backend except EASYGL because the active renderer is `imgui_impl_opengl3`. Vulkan/WebGPU cannot share that GL renderer or its native texture IDs even if CNA can render the scene. Their availability and toolchain requirements are owned by CNA and must be measured, not assumed.
+- **Outcome:** For every alternate CNA backend the sibling CNA checkout actually supports (target order: Vulkan, then WebGPU), select the appropriate SDL/ImGui platform mode while keeping rendering CNA-backed; configure, build, and run the editor without an OpenGL context. Remove the EASYGL-only rejection only for backends with a passing real editor smoke/screenshot test. Keep unsupported backends rejected with a precise capability message rather than an override that launches a blank UI. Revisit Android AUD-042 only after this qualification produces a supported mobile-capable path.
+- **Tests:** Add a backend matrix that always performs configure+build and, where a runner/GPU backend is available, runs a real editor screenshot including `ImGui::Image()` previews. Require CNA-native scene tests plus the new UI screenshot checks per enabled backend; retain EASYGL coverage. Do not claim Vulkan/WebGPU support until this matrix has passed on each backend's real runtime.
+- **Dependency/rule:** Requires SYS-W8-02 through SYS-W8-04. Any missing CNA backend, SDK, CI runner, or public CNA API is recorded as a concrete blocked subcondition, not bypassed with direct OpenGL or untested `MESH_CRAFT_ALLOW_UNSUPPORTED_BACKEND` launches.
 
 ### W9 — Undo & data-loss
 - **SYS-W9-01** `[DONE, via AUD-036b + SYS-W9-03 + SYS-W14-16]` `P0` — Full
