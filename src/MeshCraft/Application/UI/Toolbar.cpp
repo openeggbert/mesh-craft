@@ -1,5 +1,5 @@
-#include "MeshCraft/MeshCraftApplication.hpp"
-#include "MeshCraftPrivate.hpp"
+#include "MeshCraft/Application/MeshCraftApplication.hpp"
+#include "MeshCraft/MeshCraftPrivate.hpp"
 
 #include <imgui.h>
 
@@ -19,7 +19,7 @@
 #include <set>
 #include <string>
 
-namespace MeshCraft {
+namespace MeshCraft::Application {
 
 using namespace Microsoft::Xna::Framework;
 using namespace Microsoft::Xna::Framework::Input;
@@ -249,4 +249,4 @@ float MeshCraftApplication::drawToolbar(float menuBarH, int screenW)
 }
 
 
-} // namespace MeshCraft
+} // namespace MeshCraft::Application

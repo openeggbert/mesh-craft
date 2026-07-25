@@ -1,11 +1,11 @@
 #include "MeshCraft/EditorAlgorithms.hpp"
-#include "MeshCraft/MeshCraftApplication.hpp"
+#include "MeshCraft/Application/MeshCraftApplication.hpp"
 #include "MeshCraft/Scene/PropertiesPanel.hpp"
 
 #include <cstring>
 #include <filesystem>
 
-namespace MeshCraft {
+namespace MeshCraft::Application {
 
 void MeshCraftApplication::drawPropertiesPanel(float panelY, float panelH, int screenW, int screenH)
 {
@@ -88,4 +88,4 @@ std::string MeshCraftApplication::registerTextureFromPath(const std::string& pat
     return registerTextureFromPathAlg(path, document_);
 }
 
-} // namespace MeshCraft
+} // namespace MeshCraft::Application

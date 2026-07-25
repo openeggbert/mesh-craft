@@ -1,4 +1,4 @@
-#include "MeshCraft/MeshCraftApplication.hpp"
+#include "MeshCraft/Application/MeshCraftApplication.hpp"
 #include "MeshCraft/ModelRegistry.hpp"
 
 #include <MeshCraft/Mc3/Mc3Document.hpp>
@@ -8,7 +8,7 @@
 #include <cstring>
 #include <string>
 
-namespace MeshCraft {
+namespace MeshCraft::Application {
 
 void MeshCraftApplication::drawRegistryPanel() {
     if (!showRegistryPanel_) return;
@@ -238,4 +238,4 @@ void MeshCraftApplication::drawRegistryPanel() {
     ImGui::End();
 }
 
-} // namespace MeshCraft
+} // namespace MeshCraft::Application

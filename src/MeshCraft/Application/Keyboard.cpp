@@ -1,5 +1,5 @@
-#include "MeshCraft/MeshCraftApplication.hpp"
-#include "MeshCraftPrivate.hpp"
+#include "MeshCraft/Application/MeshCraftApplication.hpp"
+#include "MeshCraft/MeshCraftPrivate.hpp"
 #include "MeshCraft/EditorAlgorithms.hpp"
 
 #include <Microsoft/Xna/Framework/Input/Keys.hpp>
@@ -18,7 +18,7 @@
 #include <numbers>
 #include <string>
 
-namespace MeshCraft {
+namespace MeshCraft::Application {
 
 using namespace Microsoft::Xna::Framework;
 using namespace Microsoft::Xna::Framework::Input;
@@ -400,4 +400,4 @@ void MeshCraftApplication::handleKeyboardShortcuts(const KeyboardState& ks, cons
 // ---------------------------------------------------------------------------
 
 
-} // namespace MeshCraft
+} // namespace MeshCraft::Application

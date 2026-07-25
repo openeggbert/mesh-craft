@@ -557,6 +557,34 @@ _All items in this workstream are DONE — archived to [`docs/history/plan_20260
   invalid count clamping. The focused test and both application source files
   that integrate it compiled with one job and ccache disabled to limit local
   disk writes. **Resolved:** working tree, pending commit.
+  **Phase 13 IN PROGRESS (2026-07-25) — application ownership/layout:**
+  began the structural relocation requested for the remaining application
+  implementation. The concrete class now lives at
+  `MeshCraft::Application::MeshCraftApplication`; its public header is
+  `include/MeshCraft/Application/MeshCraftApplication.hpp`, while the old
+  `MeshCraft/MeshCraftApplication.hpp` remains a forwarding compatibility
+  include with a `MeshCraft::MeshCraftApplication` alias. Its implementation
+  moved from the flat `src/MeshCraft/MeshCraftApplication_*.cpp` naming into
+  `src/MeshCraft/Application/` (lifecycle/input/commands/etc.) and
+  `src/MeshCraft/Application/UI/` (Ai, LeftPanel, MenuBar, Overlays,
+  Properties, Registry, Toolbar, Validation). The application sources now
+  use the owning `MeshCraft::Application` namespace; member methods cannot
+  legally be placed in the child `Application::UI` namespace until they are
+  extracted into real UI components with explicit contexts. The first such
+  component is now `Application::UI::Validation`: it receives only a
+  `ValidationContext` (visibility, source label, immutable validation result),
+  while the application retains ownership and mutation of that state. The
+  historical audit references retain their former paths as time-accurate
+  evidence.
+  Static undo-audit and snapshot-lint path checks pass after their tracked
+  source lists were updated. A serial, ccache-disabled `-fsyntax-only`
+  compilation of all 17 relocated application sources plus `main.cpp`, using
+  the existing Debug configuration's flags, also passes without producing
+  object files. Full link/runtime verification remains intentionally pending:
+  the local build directories were removed to reduce SSD writes; do not
+  recreate a large build tree without explicit approval. The next subphase is
+  another narrow `Application::UI` component extraction using the same
+  context boundary.
   **SYS-W3-01 roadmap status after this session's investigation round:**
   Phases 1–12 done (Keybindings, Preferences, MacroRecorder, UndoManager,
   animation-override computation, WalkController, AudioPreview,

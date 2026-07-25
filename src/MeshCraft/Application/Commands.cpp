@@ -1,5 +1,5 @@
-#include "MeshCraft/MeshCraftApplication.hpp"
-#include "MeshCraftPrivate.hpp"
+#include "MeshCraft/Application/MeshCraftApplication.hpp"
+#include "MeshCraft/MeshCraftPrivate.hpp"
 #include "MeshCraft/EditorAlgorithms.hpp"
 
 #include <imgui.h>
@@ -32,7 +32,7 @@
 #include <random>
 #include <string>
 
-namespace MeshCraft {
+namespace MeshCraft::Application {
 
 using namespace Microsoft::Xna::Framework;
 using namespace Microsoft::Xna::Framework::Input;
@@ -881,4 +881,4 @@ void MeshCraftApplication::resetPivot() {
     setStatusMsg("Pivot reset to origin", false, 1.5f);
 }
 
-} // namespace MeshCraft
+} // namespace MeshCraft::Application

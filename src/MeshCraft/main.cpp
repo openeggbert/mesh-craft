@@ -1,6 +1,6 @@
 #include "MeshCraft/AiAssistant.hpp"
 #include "MeshCraft/GraphicsBackendCheck.hpp"
-#include "MeshCraft/MeshCraftApplication.hpp"
+#include "MeshCraft/Application/MeshCraftApplication.hpp"
 #include <chrono>
 #include <cstdlib>
 #include <filesystem>
@@ -106,10 +106,10 @@ int main(int argc, char* argv[]) {
     }
 
     if (benchmarkMode) {
-        MeshCraft::MeshCraftApplication app(std::filesystem::path(filePath), /*benchmarkMode=*/true);
+        MeshCraft::Application::MeshCraftApplication app(std::filesystem::path(filePath), /*benchmarkMode=*/true);
         app.Run();
     } else if (!filePath.empty() && (!screenshotPath.empty() || !exportPath.empty())) {
-        MeshCraft::MeshCraftApplication app(std::filesystem::path(filePath), screenshotPath, exportPath);
+        MeshCraft::Application::MeshCraftApplication app(std::filesystem::path(filePath), screenshotPath, exportPath);
         app.Run();
         if ((!exportPath.empty() && app.exportFailed()) ||
             (!screenshotPath.empty() && app.screenshotFailed()))
@@ -120,10 +120,10 @@ int main(int argc, char* argv[]) {
             std::cerr << "[MeshCraft] Starting with empty scene.\n";
         }
         std::filesystem::path p{filePath};
-        MeshCraft::MeshCraftApplication app(p);
+        MeshCraft::Application::MeshCraftApplication app(p);
         app.Run();
     } else {
-        MeshCraft::MeshCraftApplication app;
+        MeshCraft::Application::MeshCraftApplication app;
         app.Run();
     }
     return 0;

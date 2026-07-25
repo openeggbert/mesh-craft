@@ -1,7 +1,7 @@
-#include "MeshCraft/MeshCraftApplication.hpp"
+#include "MeshCraft/Application/MeshCraftApplication.hpp"
 #include "MeshCraft/AiAssistant.hpp"
 #include "MeshCraft/ModelRegistry.hpp"
-#include "AiResponseAlgorithms.hpp"
+#include "MeshCraft/AiResponseAlgorithms.hpp"
 
 #include <MeshCraft/Mc3/Mc3Document.hpp>
 #include <MeshCraft/TempFile.hpp>
@@ -14,7 +14,7 @@
 #include <sstream>
 #include <string>
 
-namespace MeshCraft {
+namespace MeshCraft::Application {
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -416,4 +416,4 @@ void MeshCraftApplication::drawAiPanel() {
     ImGui::End();
 }
 
-} // namespace MeshCraft
+} // namespace MeshCraft::Application

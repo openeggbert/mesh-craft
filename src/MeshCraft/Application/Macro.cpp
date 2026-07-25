@@ -1,11 +1,11 @@
-#include "MeshCraft/MeshCraftApplication.hpp"
+#include "MeshCraft/Application/MeshCraftApplication.hpp"
 #include "MeshCraft/EditorAlgorithms.hpp"
 
 #include <functional>
 #include <string>
 #include <vector>
 
-namespace MeshCraft {
+namespace MeshCraft::Application {
 
 // SYS-W3-01 Phase 3: MacroRecorder itself is now CNA-free (Editor/
 // MacroRecorder.cpp) -- the only thing left here is wiring its callback
@@ -61,4 +61,4 @@ Editor::MacroRecorder::Context MeshCraftApplication::macroContext() {
     return ctx;
 }
 
-} // namespace MeshCraft
+} // namespace MeshCraft::Application

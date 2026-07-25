@@ -11,6 +11,11 @@ session activated `.github/workflows/ci.yml` and added a root editor build
 and test job alongside the standalone component matrix. See `plan.md` for
 full evidence; older session history remains below and in `docs/history/`._
 
+_Source-layout note (2026-07-25): the editor application implementation is
+now at `src/MeshCraft/Application/` and `src/MeshCraft/Application/UI/`,
+replacing the former flat `src/MeshCraft/MeshCraftApplication_*.cpp` layout.
+Historical references below intentionally retain their then-current paths._
+
 ## 1. Project summary
 
 **MeshCraft** is a desktop 3D scene editor (C++23, built on the CNA game

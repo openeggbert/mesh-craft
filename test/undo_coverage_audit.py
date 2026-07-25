@@ -36,15 +36,15 @@ import sys
 
 FILES = [
     "src/MeshCraft/Scene/PropertiesPanel.cpp",
-    "src/MeshCraft/MeshCraftApplication_Anim.cpp",
-    "src/MeshCraft/MeshCraftApplication_Commands.cpp",
-    "src/MeshCraft/MeshCraftApplication_UiLeftPanel.cpp",
-    "src/MeshCraft/MeshCraftApplication_UiOverlays.cpp",
-    "src/MeshCraft/MeshCraftApplication_UiMenuBar.cpp",
-    "src/MeshCraft/MeshCraftApplication_UiProperties.cpp",
-    "src/MeshCraft/MeshCraftApplication_UiToolbar.cpp",
-    "src/MeshCraft/MeshCraftApplication_UiRegistry.cpp",
-    "src/MeshCraft/MeshCraftApplication_UiAi.cpp",
+    "src/MeshCraft/Application/Animation.cpp",
+    "src/MeshCraft/Application/Commands.cpp",
+    "src/MeshCraft/Application/UI/LeftPanel.cpp",
+    "src/MeshCraft/Application/UI/Overlays.cpp",
+    "src/MeshCraft/Application/UI/MenuBar.cpp",
+    "src/MeshCraft/Application/UI/Properties.cpp",
+    "src/MeshCraft/Application/UI/Toolbar.cpp",
+    "src/MeshCraft/Application/UI/Registry.cpp",
+    "src/MeshCraft/Application/UI/Ai.cpp",
     "src/MeshCraft/Scene/SceneHierarchyPanel.cpp",
 ]
 

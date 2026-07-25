@@ -1,7 +1,7 @@
-#include "MeshCraft/MeshCraftApplication.hpp"
+#include "MeshCraft/Application/MeshCraftApplication.hpp"
 #include "MeshCraft/EditorAlgorithms.hpp"
 #include "MeshCraft/GraphicsBackendCheck.hpp"
-#include "MeshCraftPrivate.hpp"
+#include "MeshCraft/MeshCraftPrivate.hpp"
 
 #include <imgui.h>
 #include <imgui_impl_sdl3.h>
@@ -38,12 +38,11 @@
 #include <iostream>
 #include <numbers>
 #include <stdexcept>
-#include "MeshCraftPrivate.hpp"
 #include <stb_image.h>
 
-namespace MeshCraft {
+namespace MeshCraft::Application {
 
-GetTypeNameCPP(MeshCraftApplication, "MeshCraft::MeshCraftApplication")
+GetTypeNameCPP(MeshCraftApplication, "MeshCraft::Application::MeshCraftApplication")
 
 using namespace Microsoft::Xna::Framework;
 using namespace Microsoft::Xna::Framework::Input;
@@ -1174,9 +1173,9 @@ void main() {
 }
 )";
 
-} // anonymous namespace
+} // namespace MeshCraft::Application
 
-namespace MeshCraft {
+namespace MeshCraft::Application {
 
 void MeshCraftApplication::initBloom(int w, int h)
 {
@@ -1508,4 +1507,4 @@ void MeshCraftApplication::renderMatPreview(float r, float g, float b,
         matPreviewTextureToken_ = imguiRenderer_->registerTexture(*matPreviewRt_);
 }
 
-} // namespace MeshCraft
+} // namespace MeshCraft::Application

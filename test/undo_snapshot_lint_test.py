@@ -37,8 +37,8 @@ ACT_RE = re.compile(r'^\s*if \(ImGui::IsItemActivated\(\)\)\s*(?:ctx\.)?pushUndo
 
 FILES = [
     "src/MeshCraft/Scene/PropertiesPanel.cpp",
-    "src/MeshCraft/MeshCraftApplication_UiLeftPanel.cpp",
-    "src/MeshCraft/MeshCraftApplication_Anim.cpp",
+    "src/MeshCraft/Application/UI/LeftPanel.cpp",
+    "src/MeshCraft/Application/Animation.cpp",
 ]
 
 

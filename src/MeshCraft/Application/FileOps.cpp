@@ -1,5 +1,5 @@
-#include "MeshCraft/MeshCraftApplication.hpp"
-#include "MeshCraftPrivate.hpp"
+#include "MeshCraft/Application/MeshCraftApplication.hpp"
+#include "MeshCraft/MeshCraftPrivate.hpp"
 #include "MeshCraft/EditorAlgorithms.hpp"
 #include "MeshCraft/Mc3/Mc3ImportResolver.hpp"
 #include "MeshCraft/Mcb/McbReader.hpp"
@@ -31,7 +31,7 @@
 #include <string>
 #include <vector>
 
-namespace MeshCraft {
+namespace MeshCraft::Application {
 
 void MeshCraftApplication::newScene() {
     document_ = Mc3::Mc3Document{};
@@ -810,4 +810,4 @@ void MeshCraftApplication::savePrefs() {
     savePrefsAlg(path, p);
 }
 
-} // namespace MeshCraft
+} // namespace MeshCraft::Application

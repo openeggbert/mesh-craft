@@ -1,4 +1,4 @@
-#include "MeshCraft/MeshCraftApplication.hpp"
+#include "MeshCraft/Application/MeshCraftApplication.hpp"
 #include "MeshCraft/EditorAlgorithms.hpp"
 
 #include <imgui.h>
@@ -11,7 +11,7 @@
 #include <string>
 #include <utility>
 
-namespace MeshCraft {
+namespace MeshCraft::Application {
 
 using namespace Microsoft::Xna::Framework;
 
@@ -936,4 +936,4 @@ void MeshCraftApplication::drawTimelinePanel(int screenW, int screenH) {
     ImGui::PopStyleVar();
 }
 
-} // namespace MeshCraft
+} // namespace MeshCraft::Application

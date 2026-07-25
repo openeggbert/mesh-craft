@@ -21,14 +21,14 @@
 // hook inside SceneRenderer's mesh/texture loaders); left as a smaller
 // follow-up rather than claiming a false precision this pass doesn't have.
 
-#include "MeshCraft/MeshCraftApplication.hpp"
+#include "MeshCraft/Application/MeshCraftApplication.hpp"
 
 #include <chrono>
 #include <functional>
 #include <iostream>
 #include <numeric>
 
-namespace MeshCraft {
+namespace MeshCraft::Application {
 
 namespace {
 template <typename Fn>
@@ -119,4 +119,4 @@ void MeshCraftApplication::runBenchmarkSuite() {
     }
 }
 
-} // namespace MeshCraft
+} // namespace MeshCraft::Application

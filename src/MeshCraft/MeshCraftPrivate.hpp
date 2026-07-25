@@ -1,5 +1,6 @@
 #pragma once
-// Private implementation helpers shared across MeshCraftApplication_*.cpp files.
+// Private implementation helpers shared across MeshCraft/Application/*.cpp
+// and MeshCraft/Application/UI/*.cpp files.
 // Do NOT include from public headers.
 
 #include "MeshCraft/Editor/ObjectTypeName.hpp"

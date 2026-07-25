@@ -1,7 +1,7 @@
 #include "MeshCraft/EditorAlgorithms.hpp"
 #include "MeshCraft/GraphicsBackendCheck.hpp"
-#include "MeshCraft/MeshCraftApplication.hpp"
-#include "MeshCraftPrivate.hpp"
+#include "MeshCraft/Application/MeshCraftApplication.hpp"
+#include "MeshCraft/MeshCraftPrivate.hpp"
 #include "MeshCraft/Scene/SceneHierarchyPanel.hpp"
 
 #include <imgui.h>
@@ -27,7 +27,7 @@
 #include <string>
 #include <vector>
 
-namespace MeshCraft {
+namespace MeshCraft::Application {
 
 using namespace Microsoft::Xna::Framework;
 using namespace Microsoft::Xna::Framework::Input;
@@ -2522,4 +2522,4 @@ void MeshCraftApplication::drawLeftPanel(float panelY, float panelH)
 }
 
 
-} // namespace MeshCraft
+} // namespace MeshCraft::Application

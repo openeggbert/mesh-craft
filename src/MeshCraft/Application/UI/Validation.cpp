@@ -1,9 +1,9 @@
-#include "MeshCraft/MeshCraftApplication.hpp"
+#include "MeshCraft/Application/MeshCraftApplication.hpp"
+#include "MeshCraft/Application/UI/Validation.hpp"
 
-#include <MeshCraft/Mc3/Mc3Validation.hpp>
 #include <imgui.h>
 
-namespace MeshCraft {
+namespace MeshCraft::Application {
 
 void MeshCraftApplication::recordValidation(std::string source, Mc3::Mc3Validation v) {
     lastValidationSource_ = std::move(source);
@@ -11,32 +11,45 @@ void MeshCraftApplication::recordValidation(std::string source, Mc3::Mc3Validati
 }
 
 void MeshCraftApplication::drawValidationPanel() {
-    if (!showValidationPanel_) return;
+    UI::ValidationContext context{
+        .visible = showValidationPanel_,
+        .source = lastValidationSource_,
+        .validation = lastValidation_,
+    };
+    UI::Validation::draw(context);
+}
+
+} // namespace MeshCraft::Application
+
+namespace MeshCraft::Application::UI {
+
+void Validation::draw(ValidationContext& context) {
+    if (!context.visible) return;
 
     ImGui::SetNextWindowSize(ImVec2(560, 360), ImGuiCond_FirstUseEver);
-    if (!ImGui::Begin("Validation", &showValidationPanel_)) {
+    if (!ImGui::Begin("Validation", &context.visible)) {
         ImGui::End();
         return;
     }
 
-    if (lastValidationSource_.empty()) {
+    if (context.source.empty()) {
         ImGui::TextDisabled("No load, save, or export has run yet this session.");
         ImGui::End();
         return;
     }
 
-    ImGui::Text("Last: %s", lastValidationSource_.c_str());
+    ImGui::Text("Last: %s", context.source.c_str());
     ImGui::SameLine();
-    if (lastValidation_.empty()) {
+    if (context.validation.empty()) {
         ImGui::TextColored(ImVec4(0.55f, 1.0f, 0.55f, 1.0f), "— no findings");
     } else {
         ImGui::TextColored(ImVec4(1.0f, 0.75f, 0.35f, 1.0f), "— %zu warning(s), %zu error(s)",
-                            lastValidation_.warningCount(), lastValidation_.errorCount());
+                            context.validation.warningCount(), context.validation.errorCount());
     }
 
     ImGui::Spacing();
 
-    if (lastValidation_.empty()) {
+    if (context.validation.empty()) {
         ImGui::End();
         return;
     }
@@ -55,7 +68,7 @@ void MeshCraftApplication::drawValidationPanel() {
         ImGui::TableSetupColumn("Repair",   ImGuiTableColumnFlags_WidthStretch, 0.26f);
         ImGui::TableHeadersRow();
 
-        for (const auto& e : lastValidation_.entries) {
+        for (const auto& e : context.validation.entries) {
             ImGui::TableNextRow();
             bool isError = e.severity == Mc3::Mc3ValidationSeverity::Error;
             ImVec4 col = isError ? ImVec4(1.0f, 0.45f, 0.45f, 1.0f) : ImVec4(1.0f, 0.75f, 0.35f, 1.0f);
@@ -76,4 +89,4 @@ void MeshCraftApplication::drawValidationPanel() {
     ImGui::End();
 }
 
-} // namespace MeshCraft
+} // namespace MeshCraft::Application::UI

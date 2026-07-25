@@ -1,5 +1,5 @@
-#include "MeshCraft/MeshCraftApplication.hpp"
-#include "MeshCraftPrivate.hpp"
+#include "MeshCraft/Application/MeshCraftApplication.hpp"
+#include "MeshCraft/MeshCraftPrivate.hpp"
 
 #include <Microsoft/Xna/Framework/Input/Keys.hpp>
 #include <Microsoft/Xna/Framework/Input/KeyboardState.hpp>
@@ -16,7 +16,7 @@
 
 #include <imgui.h>
 
-namespace MeshCraft {
+namespace MeshCraft::Application {
 
 using namespace Microsoft::Xna::Framework::Input;
 using namespace Microsoft::Xna::Framework;
@@ -198,4 +198,4 @@ void MeshCraftApplication::drawWalkModeHud(int screenW, int screenH) {
     ImGui::End();
 }
 
-} // namespace MeshCraft
+} // namespace MeshCraft::Application
