@@ -830,6 +830,18 @@ if(MESH_CRAFT_BUILD_TESTING AND UNIX AND NOT ANDROID AND NOT EMSCRIPTEN)
     add_test(NAME camera_bookmarks COMMAND camera_bookmarks_test)
     set_tests_properties(camera_bookmarks PROPERTIES TIMEOUT 15 LABELS "unit")
 
+    # SYS-W3-01 Phase 9: transform clipboard P/R/S capture and transfer is
+    # pure MC3 state, independently of selection, undo, and ImGui wiring.
+    add_executable(transform_clipboard_test
+        ${CMAKE_CURRENT_SOURCE_DIR}/test/transform_clipboard_test.cpp
+        ${CMAKE_CURRENT_SOURCE_DIR}/src/MeshCraft/Editor/TransformClipboard.cpp)
+    target_include_directories(transform_clipboard_test PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/include
+        ${CMAKE_CURRENT_SOURCE_DIR}/mc3/include)
+    target_compile_features(transform_clipboard_test PRIVATE cxx_std_23)
+    add_test(NAME transform_clipboard COMMAND transform_clipboard_test)
+    set_tests_properties(transform_clipboard PROPERTIES TIMEOUT 15 LABELS "unit")
+
     # SYS-W14-18 (2026-07-20): LuaScriptRunner -- executes Mc3Script
     # ("lua") source against a document. Unlike the CNA-coupled UI wiring
     # (Scripts tab / Triggers tab, tested via mirrors elsewhere), this

@@ -2,7 +2,7 @@
 
 _Last updated: 2026-07-25. Counts below were produced from the live release build with `ctest -L <label> -N`, not carried over from an earlier revision. This document is derived from the actual `CMakeLists.txt` test registrations and test source files — if it drifts from `ctest -N`'s output, trust `ctest -N`, not this file's claimed count._
 
-MeshCraft's tests run through **CTest** — **174 tests registered** (`ctest --print-labels` label breakdown: `ai` 1, `commands` 1, `export` 71, `format` 37, `lint` 3, `perf` 2, `registry` 1, `render` 32, `unit` 26), mixing C++ assertion-based binaries and Python/bash subprocess-driven checks against the `mc3togltf`/`mc3tomcb` CLIs and the `MeshCraft` editor binary itself (headless `--screenshot` real-pixel-sampling tests, plus 3 tests that drive real headless Blender for GLB-import verification). **Known gap:** the "CLI-driving Python tests" table below documents the most significant/representative tests in each category but is not exhaustively 1:1 with all registrations — `ctest -N` and `ctest --print-labels` are authoritative for the complete list.
+MeshCraft's tests run through **CTest** — **175 tests registered** (`ctest --print-labels` label breakdown: `ai` 1, `commands` 1, `export` 71, `format` 37, `lint` 3, `perf` 2, `registry` 1, `render` 32, `unit` 27), mixing C++ assertion-based binaries and Python/bash subprocess-driven checks against the `mc3togltf`/`mc3tomcb` CLIs and the `MeshCraft` editor binary itself (headless `--screenshot` real-pixel-sampling tests, plus 3 tests that drive real headless Blender for GLB-import verification). **Known gap:** the "CLI-driving Python tests" table below documents the most significant/representative tests in each category but is not exhaustively 1:1 with all registrations — `ctest -N` and `ctest --print-labels` are authoritative for the complete list.
 
 ---
 
@@ -71,8 +71,9 @@ Expected: `mc3` 1/1, `mcb` 1/1, `mc3togltf` 41/41, `mc3tomcb` 3/3 (re-verified 2
 | `mc3_commands` | `mc3_commands_test` | Editor command algorithms (rename incl. empty-pattern/backslash edge cases, find/replace, array-dup, duplicate, group/ungroup), undo/redo round-trips for every mutating command, auto-save/backup, Save-As/Export-Selection/drag-drop/invalid-file-load workflows, keybinding/preferences/macro persistence formats, hierarchy-panel filtering, material-color resolution, undo-stack depth capping, AI-panel + unsaved-changes-confirmation dialog lifecycles | 558 `PASS:` assertions (re-counted 2026-07-20; was 510 as of 2026-07-07) |
 | `mcb_roundtrip` | `mcb_roundtrip_test` | MCB binary encode/decode roundtrip for the base scene and all N1-N7 extension types, plus regression tests for a recursion-depth guard and a string-length sanity check | 236 `PASS:` assertions, ends with `All MCB roundtrip tests passed.` (re-counted 2026-07-20, later same day; was 234 earlier the same day, before the `SYS-W14-25` compression roundtrip cases landed, and 155 as of 2026-07-07) |
 | `camera_bookmarks` | `camera_bookmarks_test` | Editor camera-bookmark capture/restore state | Empty/invalid slots are rejected; all orbit-camera fields round-trip |
+| `transform_clipboard` | `transform_clipboard_test` | Editor transform clipboard | Copies only position/rotation/scale; empty paste is harmless and target pivot stays unchanged |
 
-All five print one `PASS: <description>` or `FAIL: <description>` line per assertion and exit non-zero if any `FAIL:` occurred — grep for `^FAIL:` to find failures quickly in CI-style output.
+Each assertion-based binary listed here prints one `PASS: <description>` or `FAIL: <description>` line per assertion and exits non-zero if any `FAIL:` occurred — grep for `^FAIL:` to find failures quickly in CI-style output.
 
 ### CLI-driving Python tests
 

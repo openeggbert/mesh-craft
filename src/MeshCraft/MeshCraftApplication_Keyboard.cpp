@@ -138,26 +138,21 @@ void MeshCraftApplication::handleKeyboardShortcuts(const KeyboardState& ks, cons
     if (ctrl && shift && justPressed(ks, prevKs, Keys::C)) {
         if (selection_.hasSelection()) {
             const auto& src = selection_.selection().front();
-            transformClipboard_.position = src->transform.position;
-            transformClipboard_.rotation = src->transform.rotation;
-            transformClipboard_.scale    = src->transform.scale;
-            transformClipboard_.valid    = true;
+            transformClipboard_.copyFrom(*src);
             setStatusMsg("Transform copied from \"" + src->name + "\"");
         }
         return;
     }
     if (ctrl && shift && justPressed(ks, prevKs, Keys::V)) {
-        if (transformClipboard_.valid && selection_.hasSelection()) {
+        if (transformClipboard_.hasValue() && selection_.hasSelection()) {
             pushUndo();
             for (const auto& s : selection_.selection()) {
                 if (lockedIds_.count(s->id)) continue;
-                s->transform.position = transformClipboard_.position;
-                s->transform.rotation = transformClipboard_.rotation;
-                s->transform.scale    = transformClipboard_.scale;
+                transformClipboard_.pasteTo(*s);
             }
             modified_ = true; updateWindowTitle();
             setStatusMsg("Transform pasted to " + std::to_string(selection_.selection().size()) + " object(s)");
-        } else if (!transformClipboard_.valid) {
+        } else if (!transformClipboard_.hasValue()) {
             setStatusMsg("Transform clipboard is empty — copy first with Ctrl+Shift+C", true);
         }
         return;

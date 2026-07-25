@@ -14,6 +14,7 @@
 #include "MeshCraft/Editor/Preferences.hpp"
 #include "MeshCraft/Editor/SelectionManager.hpp"
 #include "MeshCraft/Editor/TransformGizmo.hpp"
+#include "MeshCraft/Editor/TransformClipboard.hpp"
 #include "MeshCraft/Editor/UndoManager.hpp"
 #include "MeshCraft/Editor/WalkController.hpp"
 #include "MeshCraft/Mc3/Mc3Animation.hpp"
@@ -668,14 +669,9 @@ private:
     void saveCameraBookmark(int slot);
     void restoreCameraBookmark(int slot);
 
-    // Transform clipboard (Ctrl+Shift+C / Ctrl+Shift+V)
-    struct TransformClipboard {
-        std::array<float, 3> position{0, 0, 0};
-        std::array<float, 3> rotation{0, 0, 0};
-        std::array<float, 3> scale{1, 1, 1};
-        bool valid{false};
-    };
-    TransformClipboard transformClipboard_;
+    // SYS-W3-01 Phase 9: P/R/S clipboard state and its narrow transfer
+    // contract live in Editor::TransformClipboard.
+    Editor::TransformClipboard transformClipboard_;
 
     // Auto-save
     float autoSaveInterval_{60.0f};  // seconds; 0 = disabled (F5)

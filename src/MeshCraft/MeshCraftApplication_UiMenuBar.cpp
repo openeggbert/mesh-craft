@@ -455,19 +455,14 @@ float MeshCraftApplication::drawMenuBar()
             ImGui::Separator();
             if (ImGui::MenuItem("Copy Transform", "Ctrl+Shift+C", false, hasSel)) {
                 const auto& src = selection_.selection().front();
-                transformClipboard_.position = src->transform.position;
-                transformClipboard_.rotation = src->transform.rotation;
-                transformClipboard_.scale    = src->transform.scale;
-                transformClipboard_.valid    = true;
+                transformClipboard_.copyFrom(*src);
                 setStatusMsg("Transform copied from \"" + src->name + "\"");
             }
-            if (ImGui::MenuItem("Paste Transform", "Ctrl+Shift+V", false, hasSel && transformClipboard_.valid)) {
+            if (ImGui::MenuItem("Paste Transform", "Ctrl+Shift+V", false, hasSel && transformClipboard_.hasValue())) {
                 pushUndo();
                 for (const auto& s : selection_.selection()) {
                     if (lockedIds_.count(s->id)) continue;
-                    s->transform.position = transformClipboard_.position;
-                    s->transform.rotation = transformClipboard_.rotation;
-                    s->transform.scale    = transformClipboard_.scale;
+                    transformClipboard_.pasteTo(*s);
                 }
                 modified_ = true; updateWindowTitle();
                 setStatusMsg("Transform pasted to " + std::to_string(selection_.selection().size()) + " object(s)");
