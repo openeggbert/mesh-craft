@@ -21,6 +21,7 @@ public:
     static void drawSurfaceSnap(bool& enabled);
     static void drawSnapToggle(bool& enabled, float translate, float rotate, float scale);
     static void drawProportionalEdit(bool& enabled, float& radius);
+    static void drawGrid(float& spacing, const std::function<void(float)>& setSpacing);
 };
 
 } // namespace MeshCraft::Application::UI

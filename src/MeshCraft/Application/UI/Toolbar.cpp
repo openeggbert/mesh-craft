@@ -111,35 +111,7 @@ float MeshCraftApplication::drawToolbar(float menuBarH, int screenW)
 
     UI::Toolbar::drawProportionalEdit(propEditEnabled_, propEditRadius_);
 
-    // Grid cell size button (right-click to configure)
-    if (ImGui::Button("Grid", ImVec2(40, 30))) {}
-    if (ImGui::IsItemHovered())
-        ImGui::SetTooltip("Grid cell size: %.4g u\nRight-click to change", gridSpacing_);
-    if (ImGui::BeginPopupContextItem("##gridcfg")) {
-        ImGui::TextDisabled("Grid Cell Size");
-        ImGui::Separator();
-        for (float v : {0.25f, 0.5f, 1.0f, 2.0f, 5.0f, 10.0f}) {
-            bool sel = (gridSpacing_ == v);
-            if (sel) ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.20f, 0.45f, 0.20f, 1.f));
-            char lbl[32]; std::snprintf(lbl, sizeof(lbl), "%.4g u##g%.4g", v, v);
-            if (ImGui::Button(lbl, ImVec2(72, 0))) {
-                gridSpacing_ = v;
-                gridRenderer_->setSpacing(v);
-            }
-            if (sel) ImGui::PopStyleColor();
-        }
-        ImGui::Spacing();
-        ImGui::SetNextItemWidth(120);
-        float tmp = gridSpacing_;
-        // AlwaysClamp (AUDIT-0046): a zero/negative grid spacing would break
-        // GridRenderer::setSpacing() with no other downstream guard.
-        if (ImGui::DragFloat("##gs", &tmp, 0.05f, 0.05f, 50.0f, "%.4g u", ImGuiSliderFlags_AlwaysClamp)) {
-            gridSpacing_ = tmp;
-            gridRenderer_->setSpacing(tmp);
-        }
-        ImGui::EndPopup();
-    }
-    ImGui::SameLine();
+    UI::Toolbar::drawGrid(gridSpacing_, [this](float spacing) { gridRenderer_->setSpacing(spacing); });
 
     float toolbarH = ImGui::GetWindowHeight();
     imguiTopH_ = static_cast<int>(menuBarH + toolbarH);
@@ -254,6 +226,31 @@ void Toolbar::drawProportionalEdit(bool& enabled, float& radius) {
         ImGui::SetNextItemWidth(70);
         ImGui::SliderFloat("##propR", &radius, 0.5f, 50.0f, "R:%.1f", ImGuiSliderFlags_AlwaysClamp);
         if (ImGui::IsItemHovered()) ImGui::SetTooltip("Proportional edit radius (world units)");
+    }
+    ImGui::SameLine();
+}
+
+void Toolbar::drawGrid(float& spacing, const std::function<void(float)>& setSpacing) {
+    ImGui::Button("Grid", ImVec2(40, 30));
+    if (ImGui::IsItemHovered()) ImGui::SetTooltip("Grid cell size: %.4g u\nRight-click to change", spacing);
+    if (ImGui::BeginPopupContextItem("##gridcfg")) {
+        ImGui::TextDisabled("Grid Cell Size");
+        ImGui::Separator();
+        for (float value : {0.25f, 0.5f, 1.0f, 2.0f, 5.0f, 10.0f}) {
+            const bool selected = spacing == value;
+            if (selected) ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.20f, 0.45f, 0.20f, 1.f));
+            char label[32]; std::snprintf(label, sizeof(label), "%.4g u##g%.4g", value, value);
+            if (ImGui::Button(label, ImVec2(72, 0))) { spacing = value; setSpacing(value); }
+            if (selected) ImGui::PopStyleColor();
+        }
+        ImGui::Spacing();
+        ImGui::SetNextItemWidth(120);
+        float value = spacing;
+        if (ImGui::DragFloat("##gs", &value, 0.05f, 0.05f, 50.0f, "%.4g u", ImGuiSliderFlags_AlwaysClamp)) {
+            spacing = value;
+            setSpacing(value);
+        }
+        ImGui::EndPopup();
     }
     ImGui::SameLine();
 }
