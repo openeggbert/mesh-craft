@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<mc3 version="0.3" model="InlineSvgMaterialTest">
+  <textures>
+    <texture id="logo" type="svg"><![CDATA[<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32"><circle cx="16" cy="16" r="16" fill="#2060e0"/></svg>]]></texture>
+  </textures>
+  <materials>
+    <material id="logo_mat" roughness="0.5"><base_color_texture>logo</base_color_texture></material>
+  </materials>
+  <objects><box name="LogoBox" size="1 1 1" material="logo_mat"/></objects>
+</mc3>

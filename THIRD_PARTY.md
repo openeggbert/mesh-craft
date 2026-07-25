@@ -15,6 +15,7 @@ copied from memory.
 | [Manifold](https://github.com/elalish/manifold) | `v3.0.0` | Apache-2.0 | `CMakeLists.txt`, `mc3togltf/CMakeLists.txt` | Real CSG boolean evaluation (union/difference/intersection) |
 | [tinyobjloader](https://github.com/tinyobjloader/tinyobjloader) | `v2.0.0rc13` | MIT | `CMakeLists.txt`, `mc3togltf/CMakeLists.txt` | Loading `<mesh src="*.obj">` external meshes |
 | [tinygltf](https://github.com/syoyo/tinygltf) | `v2.9.3` | MIT | `mc3togltf/CMakeLists.txt` | Writing `.gltf`/`.glb` output |
+| [NanoSVG](https://github.com/memononen/nanosvg) | `25241c5a8f8451d41ab1b02ab2d865b01600d949` | zlib | `mc3togltf/CMakeLists.txt` | CPU rasterization of `<texture type="svg">` for the editor and glTF export |
 | [cpp-httplib](https://github.com/yhirose/cpp-httplib) | `v0.18.3` | MIT | `CMakeLists.txt` | HTTPS client for the AI Assistant's Claude API calls |
 | [nlohmann/json](https://github.com/nlohmann/json) | `v3.11.3` | MIT | `mc3/CMakeLists.txt` | `.mc3.json` parsing/writing (`Mc3JsonParser`/`Mc3JsonWriter`, R109) |
 | [Lua](https://github.com/lua/lua) | `v5.4.7` | MIT | `CMakeLists.txt` | Interpreter for `Mc3Script` (`type="lua"`) execution (`LuaScriptRunner`, SYS-W14-18) |

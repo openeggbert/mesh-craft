@@ -7,6 +7,7 @@
 #include "CsgEvaluator.hpp"
 #include "MathUtils.hpp"
 #include "MeshBuilder.hpp"
+#include "SvgRasterizer.hpp"
 
 #include <MeshCraft/Mc3/Mc3Document.hpp>
 #include <MeshCraft/Mc3/Mc3Light.hpp>
@@ -528,6 +529,58 @@ buildTextures(tinygltf::Model& model,
     return texIdx;
 }
 
+static void buildSvgTextures(tinygltf::Model& model,
+                             const std::map<std::string, Mc3SvgTexture>& textures,
+                             const std::filesystem::path& basePath,
+                             bool allowExternalResources,
+                             std::unordered_map<std::string, int>& texIdx,
+                             int& warningCount)
+{
+    for (const auto& [name, svg] : textures) {
+        if (svg.isExternal())
+            assertResourceAllowed(basePath, svg.src, allowExternalResources, "SVG texture src");
+
+        std::string error;
+        SvgRasterImage raster = rasterizeSvgTexture(svg, basePath, &error);
+        if (raster.rgba.empty()) {
+            std::cerr << "Warning: SVG texture '" << name << "' skipped: " << error << "\n";
+            ++warningCount;
+            continue;
+        }
+
+        tinygltf::Sampler sampler;
+        sampler.wrapS = TINYGLTF_TEXTURE_WRAP_REPEAT;
+        sampler.wrapT = TINYGLTF_TEXTURE_WRAP_REPEAT;
+        sampler.minFilter = TINYGLTF_TEXTURE_FILTER_LINEAR_MIPMAP_LINEAR;
+        sampler.magFilter = TINYGLTF_TEXTURE_FILTER_LINEAR;
+        const int samplerIndex = static_cast<int>(model.samplers.size());
+        model.samplers.push_back(std::move(sampler));
+
+        tinygltf::Image image;
+        image.name = name;
+        // tinygltf derives the output extension for a generated external
+        // image from mimeType; without this it tries to write `name.` and
+        // rejects the raw pixels as an unknown format.
+        image.mimeType = "image/png";
+        image.width = raster.width;
+        image.height = raster.height;
+        image.component = 4;
+        image.bits = 8;
+        image.pixel_type = TINYGLTF_COMPONENT_TYPE_UNSIGNED_BYTE;
+        image.image = std::move(raster.rgba);
+        const int imageIndex = static_cast<int>(model.images.size());
+        model.images.push_back(std::move(image));
+
+        tinygltf::Texture gltfTexture;
+        gltfTexture.name = name;
+        gltfTexture.source = imageIndex;
+        gltfTexture.sampler = samplerIndex;
+        const int textureIndex = static_cast<int>(model.textures.size());
+        model.textures.push_back(std::move(gltfTexture));
+        texIdx[name] = textureIndex;
+    }
+}
+
 // ---------------------------------------------------------------------------
 // Material helpers
 // ---------------------------------------------------------------------------
@@ -535,24 +588,11 @@ buildTextures(tinygltf::Model& model,
 static int buildMaterial(tinygltf::Model& model,
                          const Mc3Material& mat,
                          const std::unordered_map<std::string, int>& texIdx,
-                         const std::map<std::string, Mc3SvgTexture>& svgTextures,
                          const std::map<std::string, Mc3Texture>& textures,
                          int& warningCount)
 {
     tinygltf::Material m;
     m.name = mat.name;
-
-    // STAB-0440: SVG textures aren't rasterized (no code path reads
-    // doc.svgTextures at all), so a material referencing one resolves to
-    // nothing in texIdx. Name the reason instead of silently dropping it.
-    auto warnIfUnresolvedSvg = [&](const std::string& texRef, const char* slot) {
-        if (svgTextures.count(texRef)) {
-            std::cerr << "Warning: material '" << mat.name << "' references SVG texture '"
-                      << texRef << "' as " << slot
-                      << " — SVG rasterization is not implemented, texture skipped\n";
-            ++warningCount;
-        }
-    };
 
     // SYS-W14-23: glTF 2.0 requires baseColorTexture/emissiveTexture to be
     // sRGB-encoded and normalTexture/metallicRoughnessTexture/
@@ -593,8 +633,6 @@ static int buildMaterial(tinygltf::Model& model,
             pbr.baseColorTexture.index    = it->second;
             pbr.baseColorTexture.texCoord = 0;
             warnIfColorSpaceMismatch(mat.baseColorTexture, "base_color_texture", "srgb");
-        } else {
-            warnIfUnresolvedSvg(mat.baseColorTexture, "base_color_texture");
         }
     }
     if (!mat.metallicRoughnessTexture.empty()) {
@@ -603,8 +641,6 @@ static int buildMaterial(tinygltf::Model& model,
             pbr.metallicRoughnessTexture.index    = it->second;
             pbr.metallicRoughnessTexture.texCoord = 0;
             warnIfColorSpaceMismatch(mat.metallicRoughnessTexture, "metallic_roughness_texture", "linear");
-        } else {
-            warnIfUnresolvedSvg(mat.metallicRoughnessTexture, "metallic_roughness_texture");
         }
     }
     if (!mat.normalTexture.empty()) {
@@ -614,8 +650,6 @@ static int buildMaterial(tinygltf::Model& model,
             m.normalTexture.texCoord = 0;
             m.normalTexture.scale    = mat.normalScale;
             warnIfColorSpaceMismatch(mat.normalTexture, "normal_texture", "linear");
-        } else {
-            warnIfUnresolvedSvg(mat.normalTexture, "normal_texture");
         }
     }
     if (!mat.occlusionTexture.empty()) {
@@ -625,8 +659,6 @@ static int buildMaterial(tinygltf::Model& model,
             m.occlusionTexture.texCoord = 0;
             m.occlusionTexture.strength = mat.occlusionStrength;
             warnIfColorSpaceMismatch(mat.occlusionTexture, "occlusion_texture", "linear");
-        } else {
-            warnIfUnresolvedSvg(mat.occlusionTexture, "occlusion_texture");
         }
     }
     if (!mat.emissiveTexture.empty()) {
@@ -635,8 +667,6 @@ static int buildMaterial(tinygltf::Model& model,
             m.emissiveTexture.index    = it->second;
             m.emissiveTexture.texCoord = 0;
             warnIfColorSpaceMismatch(mat.emissiveTexture, "emissive_texture", "srgb");
-        } else {
-            warnIfUnresolvedSvg(mat.emissiveTexture, "emissive_texture");
         }
     }
 
@@ -1709,11 +1739,13 @@ void GltfExporter::exportDocument(const Mc3Document& doc,
     auto texIdx = buildTextures(model, doc.textures, doc.sourcePath,
                                  outputPath.parent_path(), embedImagesNow,
                                  allowExternalResources, preCtxWarnings);
+    buildSvgTextures(model, doc.svgTextures, doc.sourcePath,
+                     allowExternalResources, texIdx, preCtxWarnings);
 
     // Materials
     std::unordered_map<std::string, int> matNameToIdx;
     for (const auto& [name, mat] : doc.materials) {
-        int idx = buildMaterial(model, mat, texIdx, doc.svgTextures, doc.textures, preCtxWarnings);
+        int idx = buildMaterial(model, mat, texIdx, doc.textures, preCtxWarnings);
         matNameToIdx[name] = idx;
     }
 

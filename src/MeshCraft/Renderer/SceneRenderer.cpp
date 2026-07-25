@@ -24,6 +24,7 @@
 #include <manifold/manifold.h>
 #include <tiny_obj_loader.h>
 #include "MeshBuilder.hpp"  // mc3togltf_lib -- buildPrimitive(), shared with CsgEvaluator.cpp (STAB-0670)
+#include "SvgRasterizer.hpp"
 
 using namespace Microsoft::Xna::Framework;
 using namespace Microsoft::Xna::Framework::Graphics;
@@ -959,6 +960,33 @@ void SceneRenderer::drawObject(const Mc3Object& obj, const Mc3Document& doc,
             if (texIt != doc.textures.end() && !texIt->second.uri.empty()) {
                 auto absPath = (doc.sourcePath / texIt->second.uri).string();
                 tex = loadOrGetTexture(absPath);
+            } else {
+                auto svgIt = doc.svgTextures.find(matIt->second.baseColorTexture);
+                if (svgIt != doc.svgTextures.end()) {
+                    // Inline text participates in the key, so an edit in the SVG
+                    // panel gets a fresh GPU texture instead of stale pixels.
+                    const std::string cacheKey = "svg:" + doc.sourcePath.string() + ":" +
+                                                 svgIt->first + ":" + svgIt->second.src + ":" +
+                                                 svgIt->second.inlineContent;
+                    auto cached = textureCache_.find(cacheKey);
+                    if (cached != textureCache_.end()) {
+                        tex = &cached->second;
+                    } else {
+                        std::string error;
+                        auto raster = mc3togltf::rasterizeSvgTexture(svgIt->second,
+                                                                       doc.sourcePath, &error);
+                        if (!raster.rgba.empty()) {
+                            auto [inserted, ok] = textureCache_.emplace(
+                                cacheKey, Texture2D::CreateFromPixels(device_, raster.width,
+                                                                       raster.height, raster.rgba));
+                            (void)ok;
+                            tex = &inserted->second;
+                        } else {
+                            std::cerr << "Warning: SVG texture '" << svgIt->first
+                                      << "' skipped in viewport: " << error << "\n";
+                        }
+                    }
+                }
             }
         }
     }

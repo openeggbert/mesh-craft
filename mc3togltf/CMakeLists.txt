@@ -48,8 +48,17 @@ if(NOT tinygltf_POPULATED)
     set(TINYGLTF_BUILD_LOADER_EXAMPLE OFF CACHE BOOL "" FORCE)
     set(TINYGLTF_HEADER_ONLY          ON  CACHE BOOL "" FORCE)
     set(TINYGLTF_INSTALL              OFF CACHE BOOL "" FORCE)
-    FetchContent_MakeAvailable(tinygltf)
+FetchContent_MakeAvailable(tinygltf)
 endif()
+
+# NanoSVG is a pair of zlib-licensed headers. SvgRasterizer.cpp compiles its
+# implementation once and shares the resulting CPU RGBA image with both the
+# glTF exporter and the CNA editor viewport.
+FetchContent_Declare(nanosvg
+    GIT_REPOSITORY https://github.com/memononen/nanosvg.git
+    GIT_TAG        25241c5a8f8451d41ab1b02ab2d865b01600d949
+)
+FetchContent_MakeAvailable(nanosvg)
 
 # --------------------------------------------------------------------------
 # tinyobjloader — header-only OBJ mesh loader.
@@ -73,6 +82,7 @@ add_library(mc3togltf_lib STATIC
     src/MeshBuilder.cpp
     src/GltfExporter.cpp
     src/CsgEvaluator.cpp
+    src/SvgRasterizer.cpp
 )
 
 target_include_directories(mc3togltf_lib
@@ -85,6 +95,7 @@ target_include_directories(mc3togltf_lib
 target_include_directories(mc3togltf_lib SYSTEM PUBLIC
     ${tinygltf_SOURCE_DIR}
     ${tinyobjloader_SOURCE_DIR}
+    ${nanosvg_SOURCE_DIR}/src
 )
 
 target_link_libraries(mc3togltf_lib PUBLIC Mc3 tinyobjloader manifold)
@@ -245,6 +256,7 @@ if(BUILD_TESTING)
         set(_node_transform_xml       "${CMAKE_CURRENT_SOURCE_DIR}/../test/node_transform.mc3.xml")
         set(_empty_scene_xml          "${CMAKE_CURRENT_SOURCE_DIR}/../test/empty_scene.mc3.xml")
         set(_svg_material_xml         "${CMAKE_CURRENT_SOURCE_DIR}/../test/svg_material.mc3.xml")
+        set(_svg_inline_material_xml  "${CMAKE_CURRENT_SOURCE_DIR}/../test/svg_inline_material.mc3.xml")
         set(_anim_unsupported_xml     "${CMAKE_CURRENT_SOURCE_DIR}/../test/animation_unsupported.mc3.xml")
         set(_instance_variant_xml     "${CMAKE_CURRENT_SOURCE_DIR}/../test/instance_variant.mc3.xml")
         set(_glb_texture_embed_xml    "${CMAKE_CURRENT_SOURCE_DIR}/../test/glb_texture_embed.mc3.xml")
@@ -757,13 +769,14 @@ if(BUILD_TESTING)
             )
             set_tests_properties(mc3togltf_uv_mapping_export PROPERTIES TIMEOUT 30 LABELS "export")
         endif()
-        if(EXISTS "${_svg_material_xml}")
+        if(EXISTS "${_svg_material_xml}" AND EXISTS "${_svg_inline_material_xml}")
             add_test(
                 NAME mc3togltf_svg_texture_export
                 COMMAND "${PYTHON3_EXEC}"
                         "${CMAKE_CURRENT_SOURCE_DIR}/test/svg_texture_export_test.py"
                         "$<TARGET_FILE:mc3togltf>"
                         "${_svg_material_xml}"
+                        "${_svg_inline_material_xml}"
             )
             set_tests_properties(mc3togltf_svg_texture_export PROPERTIES TIMEOUT 30 LABELS "export")
         endif()

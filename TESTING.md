@@ -109,7 +109,8 @@ These spawn the built `mc3togltf`/`mc3tomcb` binaries as subprocesses and assert
 | `mc3togltf_release_sample_blender_import` | `mc3togltf/test/release_sample_blender_import_test.py` | A real, richly-authored scene (`medieval_castle.mc3.xml`) survives export → Blender import (added 2026-07-06, STAB-0642) | `FINISHED`, substantial mesh-object count |
 | `mc3togltf_texture_sampler` / `mc3togltf_material_pbr` / `mc3togltf_node_transform` | `mc3togltf/test/*.py` | Texture wrap/filter sampler settings; PBR material factor export; node TRS transform export | Exact enum/value assertions on parsed glTF JSON |
 | `mc3togltf_determinism` / `mc3togltf_golden` / `mc3togltf_no_partial_output` | `mc3togltf/test/*.py` | Two exports of the same input are byte-identical; output matches a golden file; a failed export never leaves a partial/corrupt file behind | Byte-identical diff; golden match; no output file on failure |
-| `mc3togltf_svg_texture_export` | `mc3togltf/test/*.py` | An SVG-referencing material exports with a clear per-texture warning (SVG rasterization is not implemented) rather than a silent drop | Warning names the material/slot/texture id, exit 0 |
+| `mc3togltf_svg_texture_export` | `mc3togltf/test/*.py` | External and inline SVG material textures rasterize into generated glTF PNG images | Each material keeps a valid texture/image reference and the PNG is written |
+| `svg_texture_viewport_test` | `test/svg_texture_viewport_test.py` | An external SVG material texture reaches the live CNA viewport | Headless screenshot contains the fixture's red SVG pixels |
 
 Blender-based tests (`mc3togltf_blender_import`, `mc3togltf_material_pbr_blender_import`, `mc3togltf_release_sample_blender_import`) are only registered when `find_program(BLENDER_EXEC blender)` finds a real `blender` binary at configure time — optional external tooling, not a hard build requirement.
 
