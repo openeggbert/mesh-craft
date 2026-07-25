@@ -3,6 +3,8 @@
 #include "MeshCraft/Editor/CameraBookmarks.hpp"
 
 #include <functional>
+#include <set>
+#include <string>
 #include <vector>
 
 namespace MeshCraft::Mc3 {
@@ -59,6 +61,11 @@ struct EditSelectByTypeContext {
     std::function<void(Mc3::ObjectType)> selectType;
 };
 
+struct EditSelectByTagContext {
+    std::function<std::set<std::string>()> getTags;
+    std::function<void(const std::string&)> selectTag;
+};
+
 class MenuBar final {
 public:
     static void drawAddMenu(const std::function<void(Mc3::ObjectType)>& addPrimitive);
@@ -67,6 +74,7 @@ public:
     static void drawEditObjectActions(const EditObjectActionsContext& context);
     static void drawEditSelectionActions(const EditSelectionActionsContext& context);
     static void drawEditSelectByType(const EditSelectByTypeContext& context);
+    static void drawEditSelectByTag(const EditSelectByTagContext& context);
     static void drawPanelToggles(bool& timeline, bool& registry, bool& ai, bool& validation);
     static void drawOverlays(bool& edges, bool& wireframe, bool& stats, bool& shadowDebug, bool& snap);
     static void drawViewDirections(float& yaw, float& pitch);

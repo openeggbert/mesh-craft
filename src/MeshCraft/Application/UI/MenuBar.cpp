@@ -171,29 +171,25 @@ float MeshCraftApplication::drawMenuBar()
                 },
             };
             UI::MenuBar::drawEditSelectByType(editSelectByTypeContext);
-            if (ImGui::BeginMenu("Select by Tag")) {
-                std::set<std::string> allTags;
-                walkAll(document_.objects, [&](const auto& o) {
-                    for (const auto& t : o->tags) allTags.insert(t);
-                });
-
-                if (allTags.empty()) {
-                    ImGui::TextDisabled("(no tags in scene)");
-                } else {
-                    for (const auto& tag : allTags) {
-                        if (ImGui::MenuItem(tag.c_str())) {
-                            selectBy([&](const auto& o) {
-                                return std::find(o->tags.begin(), o->tags.end(), tag) != o->tags.end();
-                            });
-                            char sbuf[96];
-                            std::snprintf(sbuf, sizeof(sbuf), "Selected %d object(s) with tag \"%s\"",
-                                          static_cast<int>(selection_.selection().size()), tag.c_str());
-                            setStatusMsg(sbuf);
-                        }
-                    }
-                }
-                ImGui::EndMenu();
-            }
+            const UI::EditSelectByTagContext editSelectByTagContext{
+                .getTags = [this, &walkAll] {
+                    std::set<std::string> allTags;
+                    walkAll(document_.objects, [&](const auto& o) {
+                        for (const auto& tag : o->tags) allTags.insert(tag);
+                    });
+                    return allTags;
+                },
+                .selectTag = [this, &selectBy](const std::string& tag) {
+                    selectBy([&tag](const auto& o) {
+                        return std::find(o->tags.begin(), o->tags.end(), tag) != o->tags.end();
+                    });
+                    char sbuf[96];
+                    std::snprintf(sbuf, sizeof(sbuf), "Selected %d object(s) with tag \"%s\"",
+                                  static_cast<int>(selection_.selection().size()), tag.c_str());
+                    setStatusMsg(sbuf);
+                },
+            };
+            UI::MenuBar::drawEditSelectByTag(editSelectByTagContext);
             if (ImGui::BeginMenu("Select by Material")) {
                 std::set<std::string> allMats;
                 walkAll(document_.objects, [&](const auto& o) {
@@ -647,6 +643,20 @@ void MenuBar::drawEditSelectByType(const EditSelectByTypeContext& context) {
         if (ImGui::MenuItem(typeName(type))) context.selectType(type);
     }
     if (!anyPresent) ImGui::TextDisabled("(scene is empty)");
+    ImGui::EndMenu();
+}
+
+void MenuBar::drawEditSelectByTag(const EditSelectByTagContext& context) {
+    if (!ImGui::BeginMenu("Select by Tag")) return;
+
+    const auto tags = context.getTags();
+    if (tags.empty()) {
+        ImGui::TextDisabled("(no tags in scene)");
+    } else {
+        for (const auto& tag : tags) {
+            if (ImGui::MenuItem(tag.c_str())) context.selectTag(tag);
+        }
+    }
     ImGui::EndMenu();
 }
 
