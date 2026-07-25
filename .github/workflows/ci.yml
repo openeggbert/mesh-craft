@@ -9,8 +9,10 @@
 #
 # The editor job below checks out the two required sibling repositories beside
 # this checkout, exactly matching the root CMake project layout
-# (`../cna`, `../sharp-runtime`). It runs the root CTest suite, including the
-# render/smoke/registry/AI/command coverage that standalone jobs cannot reach.
+# (`../cna`, `../sharp-runtime`). EASYGL runs the complete root CTest suite,
+# while the Vulkan matrix entry always configures and builds the real editor.
+# Vulkan is enabled for the explicit manual SYS-W8-05 qualification run;
+# WebGPU remains gated pending its own pixel-qualified runner.
 
 name: CI
 
@@ -73,8 +75,12 @@ jobs:
         run: ctest --test-dir build --output-on-failure -j2
 
   editor:
-    name: Editor build and tests
+    name: Editor (${{ matrix.backend }})
     runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        backend: [ EASYGL, VULKAN ]
     env:
       CC: gcc-14
       CXX: g++-14
@@ -108,28 +114,43 @@ jobs:
           sudo apt-get install -y --no-install-recommends \
             cmake ninja-build g++-14 python3 pkg-config \
             libgl1-mesa-dev libegl1-mesa-dev libglvnd-dev \
+            libvulkan-dev \
             libsqlite3-dev libssl-dev libxml2-dev xvfb x11-utils
 
       - name: Cache root CMake FetchContent downloads
         uses: actions/cache@v4
         with:
-          path: mesh-craft/build/_deps
-          key: ${{ runner.os }}-editor-fetchcontent-${{ hashFiles('mesh-craft/CMakeLists.txt', 'mesh-craft/mc3/CMakeLists.txt', 'cna/CMakeLists.txt', 'sharp-runtime/CMakeLists.txt') }}
+          path: mesh-craft/build-${{ matrix.backend }}/_deps
+          key: ${{ runner.os }}-editor-${{ matrix.backend }}-fetchcontent-${{ hashFiles('mesh-craft/CMakeLists.txt', 'mesh-craft/mc3/CMakeLists.txt', 'cna/CMakeLists.txt', 'sharp-runtime/CMakeLists.txt') }}
           restore-keys: |
-            ${{ runner.os }}-editor-fetchcontent-
+            ${{ runner.os }}-editor-${{ matrix.backend }}-fetchcontent-
 
       - name: Configure editor
         working-directory: mesh-craft
         run: >
-          cmake -S . -B build -G Ninja
+          cmake -S . -B build-${{ matrix.backend }} -G Ninja
           -DCMAKE_BUILD_TYPE=Release
           -DBUILD_TESTING=ON
+          -DMESH_CRAFT_GRAPHICS_BACKEND=${{ matrix.backend }}
           -DFETCHCONTENT_UPDATES_DISCONNECTED=ON
 
-      - name: Build editor and tests
+      - name: Build EASYGL editor and tests
+        if: matrix.backend == 'EASYGL'
         working-directory: mesh-craft
-        run: cmake --build build -j2
+        run: cmake --build build-EASYGL -j2
 
       - name: Test root project
+        if: matrix.backend == 'EASYGL'
         working-directory: mesh-craft
-        run: ctest --test-dir build --output-on-failure -j2
+        run: ctest --test-dir build-EASYGL --output-on-failure -j2
+
+      - name: Build Vulkan editor
+        if: matrix.backend == 'VULKAN'
+        working-directory: mesh-craft
+        run: cmake --build build-VULKAN --target MeshCraft -j2
+
+      - name: Assert Vulkan runtime gate is enabled
+        if: matrix.backend == 'VULKAN'
+        working-directory: mesh-craft
+        run: |
+          ./build-VULKAN/MeshCraft --version

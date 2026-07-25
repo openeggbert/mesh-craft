@@ -7,16 +7,16 @@
 #include <iostream>
 #include <string>
 
-// The ImGui draw lists are rendered through CNA, but alternate backends remain
-// gated until SYS-W8-05 completes a real editor screenshot qualification.
+// The ImGui draw lists are rendered through CNA. Vulkan is enabled for the
+// current explicit manual SYS-W8-05 qualification run; other backends remain
+// gated until their real editor screenshot qualification completes.
 static bool checkBackendSupported() {
 #ifdef MESH_CRAFT_GRAPHICS_BACKEND_STR
     static constexpr const char* kBackend = MESH_CRAFT_GRAPHICS_BACKEND_STR;
     if (MeshCraft::isBackendSupportedAlg(kBackend, false)) return true;
     std::cerr << "[MeshCraft] Error: this build was configured with "
-                 "MESH_CRAFT_GRAPHICS_BACKEND='" << kBackend << "'. The CNA ImGui renderer "
-                 "has no OpenGL dependency, but this backend has not yet passed MeshCraft's "
-                 "real editor screenshot qualification.\n";
+                 "MESH_CRAFT_GRAPHICS_BACKEND='" << kBackend << "'. This backend has not yet "
+                 "passed MeshCraft's real editor screenshot qualification.\n";
     return false;
 #else
     return true;

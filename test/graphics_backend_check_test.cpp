@@ -21,8 +21,12 @@ int main() {
           "EASYGL is always supported, no override needed");
     check(isBackendSupportedAlg("EASYGL", /*allowOverride=*/true),
           "EASYGL is supported even with override set (no-op)");
+    check(isBackendSupportedAlg("VULKAN", /*allowOverride=*/false),
+          "VULKAN is enabled for the explicit manual qualification run");
+    check(isBackendSupportedAlg("VULKAN", /*allowOverride=*/true),
+          "VULKAN does not require the legacy override argument");
 
-    for (const char* backend : {"SDL_RENDERER", "BGFX", "VULKAN"}) {
+    for (const char* backend : {"SDL_RENDERER", "BGFX", "WEBGPU"}) {
         check(!isBackendSupportedAlg(backend, /*allowOverride=*/false),
               std::string(backend) + " stays gated until screenshot qualification");
         check(!isBackendSupportedAlg(backend, /*allowOverride=*/true),

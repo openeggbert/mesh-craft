@@ -12,11 +12,11 @@
 
 namespace MeshCraft {
 
-// The renderer has no native-GL dependency, but a backend becomes launchable
-// only after SYS-W8-05's real screenshot qualification. EASYGL is qualified
-// now; the other CNA backends stay truthfully rejected until then.
+// EASYGL is fully qualified. Vulkan is explicitly enabled for the current
+// manual SYS-W8-05 qualification run; the remaining CNA backends stay closed
+// until they receive their own real editor screenshot qualification.
 inline bool isBackendSupportedAlg(const std::string& backend, bool /*allowOverride*/) {
-    return backend == "EASYGL";
+    return backend == "EASYGL" || backend == "VULKAN";
 }
 
 } // namespace MeshCraft

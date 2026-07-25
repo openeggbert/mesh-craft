@@ -653,19 +653,29 @@ portable through CNA rather than merely hiding its OpenGL dependency.
   editor renders correctly, including the CNA ImGui path. Automated preview
   screenshots remain blocked only by this host's unavailable display preflight.
 
-### SYS-W8-05 `[BLOCKED]` `P1` · Qualify the CNA-backed editor UI on alternate graphics backends, then remove the EASYGL-only gate
+### SYS-W8-05 `[IN_PROGRESS]` `P1` · Qualify the CNA-backed editor UI on alternate graphics backends, then remove the EASYGL-only gate
 - **Component:** backend selection in `CMakeLists.txt`/`main.cpp`/`GraphicsBackendCheck.hpp`, ImGui platform initialization, CI configuration, and render-test launchers.
 - **Evidence:** The current runtime gate rejects every backend except EASYGL because the active renderer is `imgui_impl_opengl3`. Vulkan/WebGPU cannot share that GL renderer or its native texture IDs even if CNA can render the scene. Their availability and toolchain requirements are owned by CNA and must be measured, not assumed.
 - **Outcome:** For every alternate CNA backend the sibling CNA checkout actually supports (target order: Vulkan, then WebGPU), select the appropriate SDL/ImGui platform mode while keeping rendering CNA-backed; configure, build, and run the editor without an OpenGL context. Remove the EASYGL-only rejection only for backends with a passing real editor smoke/screenshot test. Keep unsupported backends rejected with a precise capability message rather than an override that launches a blank UI. Revisit Android AUD-042 only after this qualification produces a supported mobile-capable path.
 - **Tests:** Add a backend matrix that always performs configure+build and, where a runner/GPU backend is available, runs a real editor screenshot including `ImGui::Image()` previews. Require CNA-native scene tests plus the new UI screenshot checks per enabled backend; retain EASYGL coverage. Do not claim Vulkan/WebGPU support until this matrix has passed on each backend's real runtime.
 - **Dependency/rule:** Requires SYS-W8-02 through SYS-W8-04. Any missing CNA backend, SDK, CI runner, or public CNA API is recorded as a concrete blocked subcondition, not bypassed with direct OpenGL or untested `MESH_CRAFT_ALLOW_UNSUPPORTED_BACKEND` launches.
 - **Blocked condition (2026-07-25):** CNA recognizes the `VULKAN` CMake
-  backend, but this host could not complete its fresh dependency provisioning
-  (the required FetchContent download did not finish), and it has no working
-  X virtual display for the required editor screenshot. The current CNA
-  selection exposes no MeshCraft WebGPU CMake backend. The EASYGL-only launch
-  gate therefore remains intentionally enabled until a Vulkan/WebGPU runner
-  completes a real editor screenshot including an `ImGui::Image` preview.
+  backend: its fresh configure, complete `MeshCraft` build, and the four
+  CNA-ImGui focused tests passed with `-j4`. The host cannot create an XCB
+  surface (`vulkaninfo --summary` and `xvfb-run ... vulkaninfo --summary` both
+  fail with XCB connection error 1), so it cannot run the required editor
+  screenshot. At the user's explicit request on 2026-07-25, the manual Vulkan
+  launch reached `AMD Radeon 780M (RADV PHOENIX)` and initialized CNA's Vulkan
+  backend. It also exposed a separate remaining portability gap: the SSAO
+  depth-prepass feeds text GLSL to `ShaderEffect`, whereas the Vulkan backend
+  expects SPIR-V (`SPIR-V size must be a multiple of 4 bytes`), so SSAO cannot
+  be qualified there yet. SYS-W8-05 now exposes CNA's `WEBGPU` target too; it
+  downloaded CNA's pinned wgpu-native package, but has not yet completed a
+  local configure or runtime check. CI now has a Vulkan configure/build matrix.
+  Vulkan is enabled for this manual qualification; WebGPU and all other
+  unqualified backends remain gated. Do not claim final Vulkan/WebGPU support
+  until a runner completes a real editor screenshot including an
+  `ImGui::Image` preview.
 
 ### W9 — Undo & data-loss
 - **SYS-W9-01** `[DONE, via AUD-036b + SYS-W9-03 + SYS-W14-16]` `P0` — Full
