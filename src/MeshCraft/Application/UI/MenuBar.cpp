@@ -50,7 +50,10 @@ float MeshCraftApplication::drawMenuBar()
     if (ImGui::BeginMainMenuBar()) {
         menuBarH = ImGui::GetWindowHeight();
         if (ImGui::BeginMenu("File")) {
-            if (ImGui::MenuItem("New",     "Ctrl+N")) confirmIfModified(PendingAction::NewScene);
+            const UI::FileNewContext fileNewContext{
+                .requestNewScene = [this] { confirmIfModified(PendingAction::NewScene); },
+            };
+            UI::MenuBar::drawFileNew(fileNewContext);
             if (ImGui::MenuItem("Open...", "Ctrl+O")) confirmIfModified(PendingAction::OpenFile);
             if (ImGui::BeginMenu("Open Recent", !recentFiles_.empty())) {
                 for (int i = 0; i < static_cast<int>(recentFiles_.size()); ++i) {
@@ -626,6 +629,10 @@ void MenuBar::drawFileSaveAs(const FileSaveAsContext& context) {
 
 void MenuBar::drawFileImportObj(const FileImportObjContext& context) {
     if (ImGui::MenuItem("Import OBJ...")) context.openDialog();
+}
+
+void MenuBar::drawFileNew(const FileNewContext& context) {
+    if (ImGui::MenuItem("New", "Ctrl+N")) context.requestNewScene();
 }
 
 void MenuBar::drawEditHistory(const EditHistoryContext& context) {

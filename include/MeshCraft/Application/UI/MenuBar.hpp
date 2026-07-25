@@ -59,6 +59,10 @@ struct FileImportObjContext {
     std::function<void()> openDialog;
 };
 
+struct FileNewContext {
+    std::function<void()> requestNewScene;
+};
+
 struct EditHistoryContext {
     bool canUndo;
     bool canRedo;
@@ -251,6 +255,7 @@ public:
     static void drawFileSave(const FileSaveContext& context);
     static void drawFileSaveAs(const FileSaveAsContext& context);
     static void drawFileImportObj(const FileImportObjContext& context);
+    static void drawFileNew(const FileNewContext& context);
     static void drawEditClipboard(const EditClipboardContext& context);
     static void drawEditCopyProperties(const EditCopyPropertiesContext& context);
     static void drawEditGrouping(const EditGroupingContext& context);

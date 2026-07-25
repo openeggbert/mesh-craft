@@ -99,7 +99,7 @@ before when explicitly requested (`SYS-W14-##` rows).
 
 ## 2. Current status
 
-- **Last full build: clean after the current Phase 13 File-import-OBJ
+- **Last full build: clean after the current Phase 13 File-new
   slice.** Testing is enabled in the current Ninja Release tree, and
   `CCACHE_DISABLE=1 cmake --build b-release -j4` linked all targets successfully
   on EASYGL. Alternate-backend runtime qualification remains blocked.
@@ -792,7 +792,7 @@ Edit-find-replace-names, Edit-randomize-transform, Edit-macro-recording,
 Edit-play-macro, Edit-macro-editor, Edit-lock-selection, Edit-reset-transform,
 Edit-transform-clipboard, Edit-isolate-selection, Edit-hide-selection,
 Edit-show-all-hidden, File-merge-scene, File-export-selection, File-export-GLB,
-File-export-OBJ, File-save, File-save-as, and File-import-OBJ slices.
+File-export-OBJ, File-save, File-save-as, File-import-OBJ, and File-new slices.
 `EditHistoryContext` exposes only `canUndo`/`canRedo` plus Undo, Redo, and
 Open History callbacks; `Editor::UndoManager`, document replacement,
 selection restoration, dialog state, and keyboard handling remain
@@ -986,14 +986,20 @@ shortcut, and click dispatch.
 and state, OBJ-file validation, mesh object creation, selection, undo, document
 and title updates, status reporting, and error handling remain in their
 existing owners; `MenuBar` owns only the unchanged label and click dispatch.
+`FileNewContext` exposes only one new-scene callback. Unsaved-change handling,
+pending-action state, document replacement, selection and undo initialization,
+title and status updates, and the Ctrl+N keyboard route remain in their
+existing owners; `MenuBar` owns only the unchanged label, shortcut, and click
+dispatch.
 
-**Next candidate, not yet authorized:** `File → New`, passing only one
-new-scene callback. Unsaved-change handling, pending-action state, document
-replacement, selection and undo initialization, title and status updates, and
-the Ctrl+N keyboard route would remain in their existing owners; `MenuBar`
-would own only the unchanged label, shortcut, and click dispatch. Other File
-items and the View-menu Bloom/SSAO block remain outside that slice. Per
-`CLAUDE.md`, describe and confirm the New item before implementing it.
+**Next candidate, not yet authorized:** `File → Open…`, passing only one
+open-file callback. Unsaved-change handling, pending-action state, dialog
+buffers and state, file loading, document replacement, selection and undo
+initialization, title and status updates, error handling, and the Ctrl+O
+keyboard route would remain in their existing owners; `MenuBar` would own only
+the unchanged label, shortcut, and click dispatch. Other File items and the
+View-menu Bloom/SSAO block remain outside that slice. Per `CLAUDE.md`, describe
+and confirm the Open item before implementing it.
 
 ## 9. Do not do yet
 
