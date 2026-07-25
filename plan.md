@@ -164,11 +164,11 @@ still internally consistent.
    research pass.
 6. **SYS-W3-01 (P2/W3), Phase 13 is active:** application/UI ownership is
    being reduced one narrow presentation slice at a time. The authorized
-   Camera Bookmarks, Walk Mode, and Help menu slices are implemented and
-   verified. Their state remains in the existing editor/application owners;
-   `Application::UI::MenuBar` receives only the read-only values and callbacks
-   required for presentation. Any further slice requires its own confirmation
-   per `CLAUDE.md`.
+   Camera Bookmarks, Walk Mode, Help, and Add/CSG menu slices are implemented
+   and verified. Their state remains in the existing editor/application
+   owners; `Application::UI::MenuBar` receives only the read-only values and
+   callbacks required for presentation. Any further slice requires its own
+   confirmation per `CLAUDE.md`.
 
 ---
 
@@ -602,7 +602,12 @@ _All items in this workstream are DONE — archived to [`docs/history/plan_20260
   presentation is also component-owned through `HelpMenuContext`, which
   exposes only Preferences, Command Palette, and Keyboard Shortcuts callbacks;
   preferences/dialog state and the Ctrl+P keyboard path remain
-  application-owned. File/Edit/Add and the remaining View controls are still
+  application-owned. The Add menu and its CSG submenu are now also
+  component-owned through `drawAddMenu()`, which receives one
+  `addPrimitive(Mc3::ObjectType)` callback. `ObjectType` is only forward
+  declared in the UI header; object creation, undo, selection, document
+  mutation, status reporting, and the F1–F5 keyboard path remain
+  application-owned. File/Edit and the remaining View controls are still
   application-owned. The
   historical audit references retain their former paths as time-accurate
   evidence.
@@ -615,7 +620,7 @@ _All items in this workstream are DONE — archived to [`docs/history/plan_20260
   and `CCACHE_DISABLE=1 cmake --build b-release -j4` linked every target.
   The complete suite passed in two disjoint groups with the required local
   socket access: 147/147 non-render tests and 34/34 render-labelled tests
-  under Xvfb. After both the Walk Mode and Help menu slices, the incremental
+  under Xvfb. After the Walk Mode, Help, and Add menu slices, each incremental
   Release link and the same 147/147 + 34/34 partitions pass again. For the
   current MenuBar slices, the public UI header also compiles as a
   self-contained C++23 include, `undo_snapshot_lint_test.py` passes, and

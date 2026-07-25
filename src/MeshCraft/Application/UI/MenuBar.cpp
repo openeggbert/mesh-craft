@@ -489,27 +489,8 @@ float MeshCraftApplication::drawMenuBar()
             }
             ImGui::EndMenu();
         }
-        if (ImGui::BeginMenu("Add")) {
-            if (ImGui::MenuItem("Box",      "F1")) addPrimitive(Mc3::ObjectType::Box);
-            if (ImGui::MenuItem("Sphere",   "F2")) addPrimitive(Mc3::ObjectType::Sphere);
-            if (ImGui::MenuItem("Cylinder", "F3")) addPrimitive(Mc3::ObjectType::Cylinder);
-            if (ImGui::MenuItem("Cone",     "F4")) addPrimitive(Mc3::ObjectType::Cone);
-            if (ImGui::MenuItem("Plane",    "F5")) addPrimitive(Mc3::ObjectType::Plane);
-            ImGui::Separator();
-            if (ImGui::MenuItem("Area"))     addPrimitive(Mc3::ObjectType::Area);
-            if (ImGui::MenuItem("Mesh"))     addPrimitive(Mc3::ObjectType::Mesh);
-            if (ImGui::MenuItem("Instance")) addPrimitive(Mc3::ObjectType::Instance);
-            if (ImGui::MenuItem("Extrude"))  addPrimitive(Mc3::ObjectType::Extrude);
-            if (ImGui::MenuItem("Group"))    addPrimitive(Mc3::ObjectType::Group);
-            ImGui::Separator();
-            if (ImGui::BeginMenu("CSG")) {
-                if (ImGui::MenuItem("Union"))        addPrimitive(Mc3::ObjectType::Union);
-                if (ImGui::MenuItem("Difference"))   addPrimitive(Mc3::ObjectType::Difference);
-                if (ImGui::MenuItem("Intersection")) addPrimitive(Mc3::ObjectType::Intersection);
-                ImGui::EndMenu();
-            }
-            ImGui::EndMenu();
-        }
+        UI::MenuBar::drawAddMenu(
+            [this](Mc3::ObjectType type) { addPrimitive(type); });
         if (ImGui::BeginMenu("View")) {
             UI::MenuBar::drawViewDirections(camera_.yaw, camera_.pitch);
             ImGui::Separator();
@@ -583,6 +564,31 @@ float MeshCraftApplication::drawMenuBar()
 } // namespace MeshCraft::Application
 
 namespace MeshCraft::Application::UI {
+
+void MenuBar::drawAddMenu(const std::function<void(Mc3::ObjectType)>& addPrimitive) {
+    if (!ImGui::BeginMenu("Add")) return;
+
+    if (ImGui::MenuItem("Box",      "F1")) addPrimitive(Mc3::ObjectType::Box);
+    if (ImGui::MenuItem("Sphere",   "F2")) addPrimitive(Mc3::ObjectType::Sphere);
+    if (ImGui::MenuItem("Cylinder", "F3")) addPrimitive(Mc3::ObjectType::Cylinder);
+    if (ImGui::MenuItem("Cone",     "F4")) addPrimitive(Mc3::ObjectType::Cone);
+    if (ImGui::MenuItem("Plane",    "F5")) addPrimitive(Mc3::ObjectType::Plane);
+    ImGui::Separator();
+    if (ImGui::MenuItem("Area"))     addPrimitive(Mc3::ObjectType::Area);
+    if (ImGui::MenuItem("Mesh"))     addPrimitive(Mc3::ObjectType::Mesh);
+    if (ImGui::MenuItem("Instance")) addPrimitive(Mc3::ObjectType::Instance);
+    if (ImGui::MenuItem("Extrude"))  addPrimitive(Mc3::ObjectType::Extrude);
+    if (ImGui::MenuItem("Group"))    addPrimitive(Mc3::ObjectType::Group);
+    ImGui::Separator();
+    if (ImGui::BeginMenu("CSG")) {
+        if (ImGui::MenuItem("Union"))        addPrimitive(Mc3::ObjectType::Union);
+        if (ImGui::MenuItem("Difference"))   addPrimitive(Mc3::ObjectType::Difference);
+        if (ImGui::MenuItem("Intersection")) addPrimitive(Mc3::ObjectType::Intersection);
+        ImGui::EndMenu();
+    }
+
+    ImGui::EndMenu();
+}
 
 void MenuBar::drawPanelToggles(bool& timeline, bool& registry, bool& ai, bool& validation) {
     ImGui::MenuItem("Timeline", "Ctrl+T", &timeline);

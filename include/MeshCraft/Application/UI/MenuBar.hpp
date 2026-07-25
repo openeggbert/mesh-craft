@@ -4,6 +4,10 @@
 
 #include <functional>
 
+namespace MeshCraft::Mc3 {
+enum class ObjectType;
+}
+
 namespace MeshCraft::Application::UI {
 
 struct CameraBookmarksContext {
@@ -25,6 +29,7 @@ struct HelpMenuContext {
 
 class MenuBar final {
 public:
+    static void drawAddMenu(const std::function<void(Mc3::ObjectType)>& addPrimitive);
     static void drawPanelToggles(bool& timeline, bool& registry, bool& ai, bool& validation);
     static void drawOverlays(bool& edges, bool& wireframe, bool& stats, bool& shadowDebug, bool& snap);
     static void drawViewDirections(float& yaw, float& pitch);
