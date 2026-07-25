@@ -379,14 +379,19 @@ private:
     void checkGlStateLeak(const char* where);
     bool lastGlErrorSeen_{false};
 
-    // SSAO post-processing (I5)
+    // AUD-085: CNA-native SSAO. The first target contains depth encoded into
+    // color by SceneRenderer::drawDepthPass(); the remaining two hold AO and
+    // its blur. No raw OpenGL FBO, shader, or depth-buffer readback remains.
     bool  ssaoEnabled_{false};
-    bool  ssaoGlReady_{false};
     float ssaoStrength_{0.8f};
     float ssaoRadius_{0.5f};
     int   ssaoFboW_{0}, ssaoFboH_{0};
+    std::optional<Microsoft::Xna::Framework::Graphics::RenderTarget2D> ssaoDepthRt_, ssaoRt_, ssaoBlurRt_;
+    std::optional<Microsoft::Xna::Framework::Graphics::ShaderEffect> ssaoFx_, ssaoBlurFx_, ssaoCompositeFx_;
     void initSsao(int w, int h);
-    void applySsao(int vx, int glViewY, int vw, int vh,
+    void applySsao(int vx, int viewY, int vw, int vh,
+                   const Microsoft::Xna::Framework::Matrix& view,
+                   const Microsoft::Xna::Framework::Matrix& projection,
                    float tanHalfFovX, float tanHalfFovY,
                    float nearPlane, float farPlane);
     // AUD-086: RenderTarget2D + ShaderEffect (CNA-native) instead of a raw-GL

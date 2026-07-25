@@ -231,15 +231,19 @@ static std::vector<Pt2> makeProfile(const Mc3CrossSection& cs) {
 void SceneRenderer::drawExtrudeDynamic(const Mc3Extrude& ex,
                                         const Matrix& world,
                                         const Matrix& view, const Matrix& proj,
-                                        Color color)
+                                        Color color, bool depthPass)
 {
+    auto fallback = [&] {
+        if (depthPass) drawDepthMesh(unitBox_, world, view, proj);
+        else drawMesh(unitBox_, world, view, proj, color);
+    };
     int pathSegs = std::max(3, ex.segments);
     auto frames  = makePathFrames(ex.path, pathSegs);
     auto profile = makeProfile(ex.crossSection);
 
     int M = static_cast<int>(frames.size());
     int N = static_cast<int>(profile.size());
-    if (M < 2 || N < 3) { drawMesh(unitBox_, world, view, proj, color); return; }
+    if (M < 2 || N < 3) { fallback(); return; }
 
     // AUD-073: radius==0 is a legal document value (the parser only rejects
     // negatives) -- without the radius>1e-6f guard, a hollow cross-section
@@ -270,7 +274,7 @@ void SceneRenderer::drawExtrudeDynamic(const Mc3Extrude& ex,
     // BEFORE doing any of that work, not after -- matching AUD-064's own
     // fix to the neighboring drawGridDynamic() in this same file.
     long long vertBudget = hollow ? 2LL * M * N : static_cast<long long>(M) * N + 2;
-    if (vertBudget > 65535) { drawMesh(unitBox_, world, view, proj, color); return; }
+    if (vertBudget > 65535) { fallback(); return; }
 
     float innerScale = hollow ? (ex.crossSection.innerRadius / ex.crossSection.radius) : 0.0f;
 
@@ -388,7 +392,7 @@ void SceneRenderer::drawExtrudeDynamic(const Mc3Extrude& ex,
         }
     }
 
-    if (indices.empty()) { drawMesh(unitBox_, world, view, proj, color); return; }
+    if (indices.empty()) { fallback(); return; }
 
     int numVerts = static_cast<int>(verts.size());
     int numTris  = static_cast<int>(indices.size()) / 3;
@@ -399,7 +403,12 @@ void SceneRenderer::drawExtrudeDynamic(const Mc3Extrude& ex,
     // Left in place as a cheap belt-and-suspenders check against the
     // uint16_t index buffer wrapping, in case the two vertex-count
     // formulas ever drift out of sync with each other.
-    if (numVerts > 65535) { drawMesh(unitBox_, world, view, proj, color); return; }
+    if (numVerts > 65535) { fallback(); return; }
+
+    if (depthPass) {
+        drawDepthTriangles(verts, indices, world, view, proj);
+        return;
+    }
 
     VertexBuffer tmpVB(device_, numVerts);
     tmpVB.SetData(verts.data(), numVerts);
@@ -451,6 +460,45 @@ void SceneRenderer::drawWireShape(const WireShape& wire,
     device_.SetVertexBuffer(nullptr);
 }
 
+void SceneRenderer::drawSilhouetteWireShape(const WireShape& wire,
+                                            const Matrix& world, const Matrix& view, const Matrix& proj,
+                                            const Vector3& lightDirection)
+{
+    if (wire.positions.size() < 2) return;
+    const Vector3 origin = Vector3::Transform(Vector3::Zero, world);
+    const Vector3 camera{camPosX_, camPosY_, camPosZ_};
+    std::vector<VertexPositionColor> visible;
+    visible.reserve(wire.positions.size());
+
+    for (size_t i = 0; i + 1 < wire.positions.size(); i += 2) {
+        const Vector3 a = Vector3::Transform(wire.positions[i], world);
+        const Vector3 b = Vector3::Transform(wire.positions[i + 1], world);
+        const Vector3 midpoint{(a.X + b.X) * 0.5f, (a.Y + b.Y) * 0.5f, (a.Z + b.Z) * 0.5f};
+        Vector3 normal{midpoint.X - origin.X, midpoint.Y - origin.Y, midpoint.Z - origin.Z};
+        Vector3 toCamera{camera.X - midpoint.X, camera.Y - midpoint.Y, camera.Z - midpoint.Z};
+        if (normal.Length() < 1e-5f || toCamera.Length() < 1e-5f) continue;
+        normal = Vector3::Normalize(normal);
+        toCamera = Vector3::Normalize(toCamera);
+
+        // P4: an edge whose estimated face direction is strongly facing away
+        // or toward the camera is interior clutter. Keep the transition band:
+        // this is the silhouette approximation for the prebuilt primitive
+        // cages (their line-only representation has no full triangle graph).
+        const float facing = std::abs(Vector3::Dot(normal, toCamera));
+        if (facing > 0.55f) continue;
+
+        // P3: darken edges turned away from the authored directional light,
+        // rather than painting every segment opaque black. The vector points
+        // along the light rays, hence the negation for surface-to-light.
+        const float ndl = std::max(0.0f, Vector3::Dot(normal, Vector3{-lightDirection.X, -lightDirection.Y, -lightDirection.Z}));
+        const int shade = static_cast<int>(45.0f + 145.0f * ndl);
+        const Color color(shade, shade, shade, 210);
+        visible.push_back({a, color});
+        visible.push_back({b, color});
+    }
+    if (!visible.empty()) drawLineList(visible, view, proj);
+}
+
 void SceneRenderer::drawObjectEdges(const Mc3Object& obj, const Mc3Document& doc,
                                      const Matrix& parentWorld, const Matrix& view, const Matrix& proj,
                                      int depth)
@@ -460,6 +508,17 @@ void SceneRenderer::drawObjectEdges(const Mc3Object& obj, const Mc3Document& doc
 
     Matrix world = objectWorldMatrix(obj.transform) * parentWorld;
     Color edgeColor(0, 0, 0, 220);
+    Vector3 edgeLightDirection{0.0f, -1.0f, 0.0f};
+    for (const auto& light : doc.lights) {
+        if (light.type == LightType::Directional) {
+            Vector3 candidate{light.direction[0], light.direction[1], light.direction[2]};
+            if (candidate.Length() > 1e-5f) edgeLightDirection = Vector3::Normalize(candidate);
+            break;
+        }
+    }
+    auto drawOverlay = [&](const WireShape& shape, const Matrix& matrix) {
+        drawSilhouetteWireShape(shape, matrix, view, proj, edgeLightDirection);
+    };
 
     // World-space scale of each local axis from the world matrix row magnitudes.
     float rowMagX = std::sqrt(world.M11*world.M11 + world.M12*world.M12 + world.M13*world.M13);
@@ -482,34 +541,34 @@ void SceneRenderer::drawObjectEdges(const Mc3Object& obj, const Mc3Document& doc
         float sy = obj.primitive ? obj.primitive->size[1] : 1.0f;
         float sz = obj.primitive ? obj.primitive->size[2] : 1.0f;
         Matrix m = deform * Matrix::CreateScale({sx*kPush, sy*kPush, sz*kPush}) * world;
-        drawWireShape(wireShapeBox_, m, view, proj, edgeColor);
+        drawOverlay(wireShapeBox_, m);
         break;
     }
     case ObjectType::Sphere: {
         float r = obj.primitive ? obj.primitive->radius * 2.0f : 1.0f;
         Matrix m = deform * Matrix::CreateScale({r*kPush, r*kPush, r*kPush}) * world;
-        drawWireShape(wireShapeSphere_, m, view, proj, edgeColor);
+        drawOverlay(wireShapeSphere_, m);
         break;
     }
     case ObjectType::Cylinder: {
         float r = obj.primitive ? obj.primitive->radius * 2.0f : 1.0f;
         float h = obj.primitive ? obj.primitive->height         : 1.0f;
         Matrix m = deform * Matrix::CreateScale({r*kPush, h*kPush, r*kPush}) * world;
-        drawWireShape(wireShapeCylinder_, m, view, proj, edgeColor);
+        drawOverlay(wireShapeCylinder_, m);
         break;
     }
     case ObjectType::Cone: {
         float r = obj.primitive ? obj.primitive->radius * 2.0f : 1.0f;
         float h = obj.primitive ? obj.primitive->height         : 1.0f;
         Matrix m = deform * Matrix::CreateScale({r*kPush, h*kPush, r*kPush}) * world;
-        drawWireShape(wireShapeCone_, m, view, proj, edgeColor);
+        drawOverlay(wireShapeCone_, m);
         break;
     }
     case ObjectType::Plane: {
         float w = obj.primitive ? obj.primitive->size[0] : 1.0f;
         float d = obj.primitive ? obj.primitive->size[2] : 1.0f;
         Matrix m = deform * Matrix::CreateScale({w*kPush, 1.0f, d*kPush}) * world;
-        drawWireShape(wireShapePlane_, m, view, proj, edgeColor);
+        drawOverlay(wireShapePlane_, m);
         break;
     }
     case ObjectType::Torus: {
@@ -518,7 +577,7 @@ void SceneRenderer::drawObjectEdges(const Mc3Object& obj, const Mc3Document& doc
         float sxz = R / 0.35f * kPush;
         float sy  = r / 0.15f * kPush;
         Matrix m = deform * Matrix::CreateScale({sxz, sy, sxz}) * world;
-        drawWireShape(wireShapeTorus_, m, view, proj, edgeColor);
+        drawOverlay(wireShapeTorus_, m);
         break;
     }
     case ObjectType::Capsule: {
@@ -527,28 +586,28 @@ void SceneRenderer::drawObjectEdges(const Mc3Object& obj, const Mc3Document& doc
         float sxz = r * kPush;
         float sy  = (h + r) / 2.0f * kPush;
         Matrix m = deform * Matrix::CreateScale({sxz, sy, sxz}) * world;
-        drawWireShape(wireShapeCapsule_, m, view, proj, edgeColor);
+        drawOverlay(wireShapeCapsule_, m);
         break;
     }
     case ObjectType::Disk: {
         float r = obj.primitive ? obj.primitive->radius : 0.5f;
         float s = r * 2.0f * kPush;
         Matrix m = deform * Matrix::CreateScale({s, 1.0f, s}) * world;
-        drawWireShape(wireShapeDisk_, m, view, proj, edgeColor);
+        drawOverlay(wireShapeDisk_, m);
         break;
     }
     case ObjectType::Grid: {
         float sx = obj.primitive ? obj.primitive->size[0] : 1.0f;
         float sz = obj.primitive ? obj.primitive->size[2] : 1.0f;
         Matrix m = deform * Matrix::CreateScale({sx*kPush, 1.0f, sz*kPush}) * world;
-        drawWireShape(wireShapeGrid_, m, view, proj, edgeColor);
+        drawOverlay(wireShapeGrid_, m);
         break;
     }
     case ObjectType::IcoSphere: {
         float r = obj.primitive ? obj.primitive->radius * 2.0f : 1.0f;
         float s = r * kPush;
         Matrix m = deform * Matrix::CreateScale({s, s, s}) * world;
-        drawWireShape(wireShapeSphere_, m, view, proj, edgeColor);
+        drawOverlay(wireShapeSphere_, m);
         break;
     }
     case ObjectType::Group:
@@ -564,7 +623,7 @@ void SceneRenderer::drawObjectEdges(const Mc3Object& obj, const Mc3Document& doc
         if (it != doc.definitions.end() && it->second)
             drawObjectEdges(*it->second, doc, world, view, proj, depth + 1);
         else
-            drawWireShape(wireShapeBox_, world, view, proj, edgeColor);
+            drawOverlay(wireShapeBox_, world);
         break;
     }
     case ObjectType::Extrude: {
@@ -677,7 +736,7 @@ void SceneRenderer::drawObjectEdges(const Mc3Object& obj, const Mc3Document& doc
 void SceneRenderer::drawDiskDynamic(float outerR, float innerR, int segments,
                                      const Matrix& world,
                                      const Matrix& view, const Matrix& proj,
-                                     Color color)
+                                     Color color, bool depthPass)
 {
     const int segs = std::max(3, segments);
     const float pi2 = 2.0f * std::numbers::pi_v<float>;
@@ -718,6 +777,10 @@ void SceneRenderer::drawDiskDynamic(float outerR, float innerR, int segments,
     }
 
     if (indices.empty()) return;
+    if (depthPass) {
+        drawDepthTriangles(verts, indices, world, view, proj);
+        return;
+    }
     int nv = static_cast<int>(verts.size());
     int nt = static_cast<int>(indices.size()) / 3;
 
@@ -743,7 +806,7 @@ void SceneRenderer::drawDiskDynamic(float outerR, float innerR, int segments,
 void SceneRenderer::drawGridDynamic(float sizeX, float sizeZ, int subX, int subZ,
                                      const Matrix& world,
                                      const Matrix& view, const Matrix& proj,
-                                     Color color)
+                                     Color color, bool depthPass)
 {
     subX = std::max(1, subX);
     subZ = std::max(1, subZ);
@@ -760,7 +823,8 @@ void SceneRenderer::drawGridDynamic(float sizeX, float sizeZ, int subX, int subZ
     // own numVerts>65535 fallback below -- also keeps the uint16_t index
     // buffer from silently wrapping.
     if (static_cast<long long>(cols) * static_cast<long long>(rows) > 65535) {
-        drawMesh(unitBox_, world, view, proj, color);
+        if (depthPass) drawDepthMesh(unitBox_, world, view, proj);
+        else drawMesh(unitBox_, world, view, proj, color);
         return;
     }
 
@@ -793,6 +857,10 @@ void SceneRenderer::drawGridDynamic(float sizeX, float sizeZ, int subX, int subZ
     }
 
     if (indices.empty()) return;
+    if (depthPass) {
+        drawDepthTriangles(verts, indices, world, view, proj);
+        return;
+    }
     int nv = static_cast<int>(verts.size());
     int nt = static_cast<int>(indices.size()) / 3;
 

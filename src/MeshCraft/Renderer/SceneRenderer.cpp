@@ -30,6 +30,35 @@ using namespace Microsoft::Xna::Framework::Graphics;
 using namespace MeshCraft::Mc3;
 using namespace MeshCraft::Renderer;
 
+namespace {
+
+// AUD-085.  ShaderEffect's 3D path supplies these matrices for an ordinary
+// DrawIndexedPrimitives call; writing gl_FragCoord.z keeps precisely the same
+// non-linear depth convention that the former sampled DEPTH_COMPONENT texture
+// used.  It is stored in a normal color RenderTarget2D because CNA deliberately
+// does not expose render-target depth attachments as Texture2D objects.
+constexpr const char* kDepthPassVertSrc = R"(#version 300 es
+precision highp float;
+layout(location = 0) in vec3 aPosition;
+uniform mat4 World;
+uniform mat4 View;
+uniform mat4 Projection;
+void main() {
+    gl_Position = Projection * View * World * vec4(aPosition, 1.0);
+}
+)";
+
+constexpr const char* kDepthPassFragSrc = R"(#version 300 es
+precision highp float;
+out vec4 fragColor;
+void main() {
+    float rawDepth = gl_FragCoord.z;
+    fragColor = vec4(rawDepth, rawDepth, rawDepth, 1.0);
+}
+)";
+
+} // namespace
+
 // ---------------------------------------------------------------------------
 // CSG helpers (file scope)
 // ---------------------------------------------------------------------------
@@ -365,6 +394,12 @@ SceneRenderer::SceneRenderer(GraphicsDevice& device)
     effect_->setPreferPerPixelLightingProperty(true); // smoother on curved surfaces if CNA supports
     effect_->setLightingEnabledProperty(false); // off by default; enabled per draw in drawMeshTextured
 
+    depthEffect_.emplace(device_, kDepthPassVertSrc, kDepthPassFragSrc);
+    if (!depthEffect_->IsEffectValid()) {
+        std::cerr << "[SSAO] Failed to compile depth-prepass shader\n";
+        depthEffect_.reset();
+    }
+
     buildUnitBox();
     buildUnitSphere(32, unitSphere_);    buildUnitSphere(16, unitSphereL1_);   buildUnitSphere(6,  unitSphereL2_);
     buildUnitCylinder(24, unitCylinder_); buildUnitCylinder(12, unitCylinderL1_); buildUnitCylinder(6, unitCylinderL2_);
@@ -496,6 +531,218 @@ void SceneRenderer::drawMeshTextured(const RenderMesh& mesh,
     effect_->VertexColorEnabled = true;
     effect_->setDiffuseColorProperty(Vector3{1,1,1});
     effect_->setAlphaProperty(1.0f);
+}
+
+bool SceneRenderer::depthPassAvailable() const
+{
+    return depthEffect_.has_value() && depthEffect_->IsEffectValid();
+}
+
+void SceneRenderer::drawDepthMesh(const RenderMesh& mesh,
+                                  const Matrix& world, const Matrix& view, const Matrix& proj)
+{
+    if (!depthPassAvailable() || !mesh.vb || !mesh.ib || mesh.primitiveCount <= 0) return;
+    depthEffect_->setWorldProperty(world);
+    depthEffect_->setViewProperty(view);
+    depthEffect_->setProjectionProperty(proj);
+    depthEffect_->Apply();
+    device_.SetVertexBuffer(mesh.vb.get());
+    device_.SetIndexBuffer(mesh.ib.get());
+    device_.DrawIndexedPrimitives(Graphics::PrimitiveType::TriangleList,
+                                  0, 0, mesh.vb->getVertexCountProperty(),
+                                  0, mesh.primitiveCount);
+    device_.SetVertexBuffer(nullptr);
+    device_.SetIndexBuffer(nullptr);
+}
+
+void SceneRenderer::drawDepthTriangles(const std::vector<VertexPositionColor>& vertices,
+                                       const std::vector<uint16_t>& indices,
+                                       const Matrix& world, const Matrix& view, const Matrix& proj)
+{
+    if (!depthPassAvailable() || vertices.empty() || indices.empty()) return;
+    VertexBuffer vb(device_, static_cast<int>(vertices.size()));
+    vb.SetData(const_cast<VertexPositionColor*>(vertices.data()), static_cast<int>(vertices.size()));
+    IndexBuffer ib(device_, static_cast<int>(indices.size()));
+    ib.SetData(const_cast<uint16_t*>(indices.data()), static_cast<int>(indices.size()));
+    depthEffect_->setWorldProperty(world);
+    depthEffect_->setViewProperty(view);
+    depthEffect_->setProjectionProperty(proj);
+    depthEffect_->Apply();
+    device_.SetVertexBuffer(&vb);
+    device_.SetIndexBuffer(&ib);
+    device_.DrawIndexedPrimitives(Graphics::PrimitiveType::TriangleList,
+                                  0, 0, static_cast<int>(vertices.size()), 0,
+                                  static_cast<int>(indices.size()) / 3);
+    device_.SetVertexBuffer(nullptr);
+    device_.SetIndexBuffer(nullptr);
+}
+
+void SceneRenderer::drawDepthObject(const Mc3Object& obj, const Mc3Document& doc,
+                                    const Matrix& parentWorld, const Matrix& view,
+                                    const Matrix& proj, int depth)
+{
+    if (depth > 16 || !obj.visible) return;
+
+    // Match the main draw's animated transform so the depth field never lags
+    // an animation frame. Material/deform color overrides are immaterial here;
+    // the deform scale itself still changes geometry and must be retained.
+    Mc3Transform transform = obj.transform;
+    std::array<float,3> deformScale{1.0f, 1.0f, 1.0f};
+    if (!obj.name.empty()) {
+        if (auto it = animOverrides_.find(obj.name); it != animOverrides_.end()) {
+            const auto& ov = it->second;
+            if (ov.visible && !*ov.visible) return;
+            if (ov.position) transform.position = *ov.position;
+            if (ov.rotation) transform.rotation = *ov.rotation;
+            if (ov.scale)    transform.scale = *ov.scale;
+            if (ov.deformScale) deformScale = *ov.deformScale;
+            else if (obj.deform) deformScale = obj.deform->scale;
+        } else if (obj.deform) {
+            deformScale = obj.deform->scale;
+        }
+    } else if (obj.deform) {
+        deformScale = obj.deform->scale;
+    }
+    const Matrix world = objectWorldMatrix(transform) * parentWorld;
+    const Matrix deform = Matrix::CreateScale({deformScale[0], deformScale[1], deformScale[2]});
+
+    auto depthStatic = [&](const RenderMesh& mesh, const Matrix& matrix) {
+        drawDepthMesh(mesh, matrix, view, proj);
+    };
+    switch (obj.type) {
+    case ObjectType::Box:
+    case ObjectType::Cube: {
+        const float sx = obj.primitive ? obj.primitive->size[0] : 1.0f;
+        const float sy = obj.primitive ? obj.primitive->size[1] : 1.0f;
+        const float sz = obj.primitive ? obj.primitive->size[2] : 1.0f;
+        depthStatic(unitBox_, deform * Matrix::CreateScale({sx, sy, sz}) * world);
+        break;
+    }
+    case ObjectType::Sphere: {
+        const float r = obj.primitive ? obj.primitive->radius * 2.0f : 1.0f;
+        depthStatic(unitSphere_, deform * Matrix::CreateScale({r, r, r}) * world);
+        break;
+    }
+    case ObjectType::Cylinder: {
+        const float r = obj.primitive ? obj.primitive->radius * 2.0f : 1.0f;
+        const float h = obj.primitive ? obj.primitive->height : 1.0f;
+        const std::string& axis = obj.primitive ? obj.primitive->axis : "y";
+        Matrix axisRotation = Matrix::getIdentityProperty();
+        if (axis == "x") axisRotation = Matrix::CreateRotationZ(-std::numbers::pi_v<float> / 2.0f);
+        else if (axis == "z") axisRotation = Matrix::CreateRotationX(std::numbers::pi_v<float> / 2.0f);
+        depthStatic(unitCylinder_, deform * Matrix::CreateScale({r, h, r}) * axisRotation * world);
+        break;
+    }
+    case ObjectType::Cone: {
+        const float r = obj.primitive ? obj.primitive->radius * 2.0f : 1.0f;
+        const float h = obj.primitive ? obj.primitive->height : 1.0f;
+        depthStatic(unitCone_, deform * Matrix::CreateScale({r, h, r}) * world);
+        break;
+    }
+    case ObjectType::Plane: {
+        const float w = obj.primitive ? obj.primitive->size[0] : 1.0f;
+        const float d = obj.primitive ? obj.primitive->size[2] : 1.0f;
+        depthStatic(unitPlane_, deform * Matrix::CreateScale({w, 1.0f, d}) * world);
+        break;
+    }
+    case ObjectType::Torus: {
+        const float major = obj.primitive ? obj.primitive->majorRadius : 0.35f;
+        const float minor = obj.primitive ? obj.primitive->minorRadius : 0.15f;
+        depthStatic(getOrBuildTorusMesh(32, 16, major, minor), deform * world);
+        break;
+    }
+    case ObjectType::Capsule: {
+        const float r = obj.primitive ? obj.primitive->radius : 0.5f;
+        const float h = obj.primitive ? obj.primitive->height : 1.0f;
+        depthStatic(getOrBuildCapsuleMesh(16, r, h), deform * world);
+        break;
+    }
+    case ObjectType::IcoSphere: {
+        const float r = obj.primitive ? obj.primitive->radius * 2.0f : 1.0f;
+        const int segments = obj.primitive ? obj.primitive->segments : 2;
+        depthStatic(icoSphereMeshForSegments(segments),
+                    deform * Matrix::CreateScale({r, r, r}) * world);
+        break;
+    }
+    case ObjectType::Group:
+    case ObjectType::Area:
+        for (const auto& child : obj.children)
+            if (child) drawDepthObject(*child, doc, world, view, proj, depth + 1);
+        break;
+    case ObjectType::Union:
+    case ObjectType::Intersection:
+    case ObjectType::Difference: {
+        std::size_t fingerprint = csgSubtreeHashAlg(obj, doc, 0);
+        auto mix = [&](float value) { fingerprint = csgHashMixAlg(fingerprint, std::hash<float>{}(value)); };
+        mix(parentWorld.M11); mix(parentWorld.M12); mix(parentWorld.M13); mix(parentWorld.M14);
+        mix(parentWorld.M21); mix(parentWorld.M22); mix(parentWorld.M23); mix(parentWorld.M24);
+        mix(parentWorld.M31); mix(parentWorld.M32); mix(parentWorld.M33); mix(parentWorld.M34);
+        mix(parentWorld.M41); mix(parentWorld.M42); mix(parentWorld.M43); mix(parentWorld.M44);
+        if (csgMeshCache_.size() > 128) csgMeshCache_.clear();
+        auto cached = csgMeshCache_.find(fingerprint);
+        if (cached == csgMeshCache_.end()) {
+            ++csgCacheEvaluations_;
+            csgMeshCache_[fingerprint] = manifoldToRenderMesh(device_, buildManifoldTree(obj, doc, parentWorld, 0));
+            cached = csgMeshCache_.find(fingerprint);
+        }
+        if (cached->second.vb) depthStatic(cached->second, Matrix::getIdentityProperty());
+        else for (const auto& child : obj.children)
+            if (child) drawDepthObject(*child, doc, world, view, proj, depth + 1);
+        break;
+    }
+    case ObjectType::Instance: {
+        auto it = doc.definitions.find(obj.resolvedInstanceDefinitionKey());
+        if (it != doc.definitions.end() && it->second)
+            drawDepthObject(*it->second, doc, world, view, proj, depth + 1);
+        else
+            depthStatic(unitBox_, world);
+        break;
+    }
+    case ObjectType::Mesh: {
+        if (!obj.meshSource.empty() && !doc.sourcePath.empty()) {
+            if (const RenderMesh* mesh = loadOrGetMesh((doc.sourcePath / obj.meshSource).string())) {
+                depthStatic(*mesh, deform * world);
+                break;
+            }
+        }
+        depthStatic(unitBox_, deform * world);
+        break;
+    }
+    case ObjectType::Disk: {
+        const float outer = obj.primitive ? obj.primitive->radius : 0.5f;
+        const float inner = obj.primitive ? obj.primitive->minorRadius : 0.0f;
+        const int segments = obj.primitive ? obj.primitive->segments : 32;
+        drawDiskDynamic(outer, inner, segments, deform * world, view, proj, Color::White, true);
+        break;
+    }
+    case ObjectType::Grid: {
+        const float sx = obj.primitive ? obj.primitive->size[0] : 1.0f;
+        const float sz = obj.primitive ? obj.primitive->size[2] : 1.0f;
+        const int subX = obj.primitive ? obj.primitive->subdivisionsX : 4;
+        const int subZ = obj.primitive ? obj.primitive->subdivisionsZ : 4;
+        drawGridDynamic(sx, sz, subX, subZ, deform * world, view, proj, Color::White, true);
+        break;
+    }
+    case ObjectType::Extrude:
+        if (obj.extrude) drawExtrudeDynamic(*obj.extrude, deform * world, view, proj, Color::White, true);
+        else depthStatic(unitBox_, deform * world);
+        break;
+    default:
+        depthStatic(unitBox_, deform * world);
+        break;
+    }
+}
+
+void SceneRenderer::drawDepthPass(const Mc3Document& doc, const Matrix& view, const Matrix& proj)
+{
+    if (!depthPassAvailable()) return;
+    device_.SetDepthTestEnabled(true);
+    device_.SetDepthWriteEnabled(true);
+    const Matrix identity = Matrix::getIdentityProperty();
+    for (const auto& object : doc.objects)
+        if (object) drawDepthObject(*object, doc, identity, view, proj);
+    device_.SetVertexBuffer(nullptr);
+    device_.SetIndexBuffer(nullptr);
 }
 
 Texture2D* SceneRenderer::loadOrGetTexture(const std::string& absPath)

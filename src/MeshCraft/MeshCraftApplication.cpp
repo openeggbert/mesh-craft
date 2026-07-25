@@ -83,16 +83,14 @@ MeshCraftApplication::MeshCraftApplication(std::filesystem::path filePath, std::
     , autoExportPath_(std::move(exportPath))
     , autoExportCountdown_(autoExportPath_.empty() ? 0 : 2)
 {
-    // Test-only hook (AUD-058): bloom/SSAO are UI-menu-only toggles with no
-    // CLI/scene-file equivalent, so a headless --screenshot run never
-    // allocates their GL resources and a shutdown-leak test against it would
-    // pass vacuously (nothing was ever allocated to leak). Setting this env
-    // var forces both on for the one headless frame the screenshot path
-    // renders, so test/gl_shutdown_leak_test.py actually exercises
-    // BloomGL's full resource pool before checking it was released.
+    // Test-only hook: bloom/SSAO are UI-menu-only toggles with no CLI/scene-
+    // file equivalent. Force both on for a screenshot so their CNA render
+    // targets and effects are exercised in headless regression tests too.
     if (std::getenv("MESHCRAFT_TEST_FORCE_POSTFX")) {
         bloomEnabled_ = true;
-        ssaoEnabled_  = true;
+    }
+    if (std::getenv("MESHCRAFT_TEST_FORCE_SSAO")) {
+        ssaoEnabled_ = true;
     }
     // AUD-088 test-only hook, same shape as AUD-058's above: Shadow Map
     // Debug is a UI-menu-only toggle with no CLI/scene-file equivalent, so
@@ -573,13 +571,6 @@ void MeshCraftApplication::Draw(const GameTime& /*gameTime*/) {
     int timelineH = showTimeline_ ? kTimelineH : 0;
     int viewH = std::max(1, screenH - topH - timelineH - kStatusH);
 
-    // AUD-082: glViewY is still needed (in GL bottom-left-origin form) by the
-    // as-yet-unmigrated raw-GL Bloom/SSAO passes below (AUD-084/AUD-085);
-    // the scissor rect and viewport themselves now go through GraphicsDevice
-    // directly in its native top-left-origin form -- EasyGLGraphicsBackend's
-    // SetScissorRect()/SetViewport() do their own Y-flip internally.
-    int glViewY = screenH - viewY - viewH;
-
     RasterizerState rsScissorOn = gd.getRasterizerStateProperty();
     rsScissorOn.setScissorTestEnableProperty(true);
     gd.setScissorRectangleProperty(Rectangle(viewX, viewY, viewW, viewH));
@@ -798,16 +789,15 @@ void MeshCraftApplication::Draw(const GameTime& /*gameTime*/) {
 
     // SSAO post-process (I5) — multiplicative ambient occlusion darkening
     if (ssaoEnabled_) {
-        if (ssaoFboW_ != viewW || ssaoFboH_ != viewH || !ssaoGlReady_)
+        if (ssaoFboW_ != viewW || ssaoFboH_ != viewH || !ssaoDepthRt_)
             initSsao(viewW, viewH);
         const float tanHalfFovY = std::tan(camera_.fovDegrees * 0.5f * std::numbers::pi_v<float> / 180.f);
-        applySsao(viewX, glViewY, viewW, viewH, tanHalfFovY * aspect, tanHalfFovY,
+        applySsao(viewX, viewY, viewW, viewH, view, proj,
+                  tanHalfFovY * aspect, tanHalfFovY,
                   camera_.nearPlane, camera_.farPlane);
     }
 
     // Bloom post-process (I6) — additive emissive glow
-    // AUD-084: applyBloom() now takes viewY (XNA top-left origin), not the
-    // GL-flipped glViewY the still-raw SSAO pass below needs.
     if (bloomEnabled_) {
         if (bloomFboW_ != viewW || bloomFboH_ != viewH)
             initBloom(viewW, viewH);
@@ -1012,14 +1002,6 @@ struct BloomGL {
     unsigned skyboxTex{0};
     std::string skyboxTexPath;
 
-    // SSAO
-    void     (*BlitFramebuffer)(int,int,int,int,int,int,int,int,unsigned,unsigned) = nullptr;
-    void     (*DrawBuffers)(int, const unsigned*) = nullptr;
-    unsigned ssaoDepthFbo{0}, ssaoDepthTex{0};
-    unsigned ssaoFbo{0},      ssaoTex{0};
-    unsigned ssaoBlurFbo{0},  ssaoBlurTex{0};
-    unsigned progSsao{0}, progSsaoBlur{0}, progSsaoComposite{0};
-
     // Material preview (D7)
     unsigned matPreviewFbo{0}, matPreviewTex{0};
     unsigned progMatPreview{0};
@@ -1075,8 +1057,6 @@ struct BloomGL {
         LD(Disable,                "glDisable");
         LD(GetError,               "glGetError");
         LD(ColorMask,              "glColorMask");
-        LD(BlitFramebuffer,        "glBlitFramebuffer");
-        LD(DrawBuffers,            "glDrawBuffers");
 #undef LD
         fnLoaded = GenFramebuffers && DrawArrays && UseProgram && CreateShader;
         if (!fnLoaded) std::cerr << "[Bloom] Failed to load GL functions\n";
@@ -1146,15 +1126,6 @@ struct BloomGL {
         if (skyboxTex)     { DeleteTextures(1, &skyboxTex); skyboxTex = 0; skyboxTexPath.clear(); }
         if (quadVAO) { DeleteVertexArrays(1, &quadVAO); quadVAO = 0; }
         if (quadVBO) { DeleteBuffers(1, &quadVBO);       quadVBO = 0; }
-        if (ssaoDepthFbo)      { DeleteFramebuffers(1, &ssaoDepthFbo);   ssaoDepthFbo = 0; }
-        if (ssaoDepthTex)      { DeleteTextures(1, &ssaoDepthTex);       ssaoDepthTex = 0; }
-        if (ssaoFbo)           { DeleteFramebuffers(1, &ssaoFbo);        ssaoFbo = 0; }
-        if (ssaoTex)           { DeleteTextures(1, &ssaoTex);            ssaoTex = 0; }
-        if (ssaoBlurFbo)       { DeleteFramebuffers(1, &ssaoBlurFbo);    ssaoBlurFbo = 0; }
-        if (ssaoBlurTex)       { DeleteTextures(1, &ssaoBlurTex);        ssaoBlurTex = 0; }
-        if (progSsao)          { DeleteProgram(progSsao);                progSsao = 0; }
-        if (progSsaoBlur)      { DeleteProgram(progSsaoBlur);            progSsaoBlur = 0; }
-        if (progSsaoComposite) { DeleteProgram(progSsaoComposite);       progSsaoComposite = 0; }
         if (matPreviewFbo)  { DeleteFramebuffers(1, &matPreviewFbo); matPreviewFbo = 0; }
         if (matPreviewTex)  { DeleteTextures(1, &matPreviewTex);     matPreviewTex = 0; }
         if (progMatPreview) { DeleteProgram(progMatPreview);          progMatPreview = 0; }
@@ -1171,9 +1142,7 @@ struct BloomGL {
     bool allReleased() const {
         return !fboA && !fboB && !texA && !texB && !progBlur && !progComposite &&
                !progSkybox && !skyboxTex && !quadVAO && !quadVBO &&
-               !ssaoDepthFbo && !ssaoDepthTex && !ssaoFbo && !ssaoTex &&
-               !ssaoBlurFbo && !ssaoBlurTex && !progSsao && !progSsaoBlur &&
-               !progSsaoComposite && !matPreviewFbo && !matPreviewTex && !progMatPreview;
+               !matPreviewFbo && !matPreviewTex && !progMatPreview;
     }
 
     void leakCheck(const char* where) const {
@@ -1184,11 +1153,6 @@ struct BloomGL {
         rep("progBlur",progBlur); rep("progComposite",progComposite);
         rep("progSkybox",progSkybox); rep("skyboxTex",skyboxTex);
         rep("quadVAO",quadVAO); rep("quadVBO",quadVBO);
-        rep("ssaoDepthFbo",ssaoDepthFbo); rep("ssaoDepthTex",ssaoDepthTex);
-        rep("ssaoFbo",ssaoFbo); rep("ssaoTex",ssaoTex);
-        rep("ssaoBlurFbo",ssaoBlurFbo); rep("ssaoBlurTex",ssaoBlurTex);
-        rep("progSsao",progSsao); rep("progSsaoBlur",progSsaoBlur);
-        rep("progSsaoComposite",progSsaoComposite);
         rep("matPreviewFbo",matPreviewFbo); rep("matPreviewTex",matPreviewTex);
         rep("progMatPreview",progMatPreview);
         std::cerr << "\n";
@@ -1196,17 +1160,6 @@ struct BloomGL {
 };
 BloomGL s_bloom;
 
-// Full-screen quad via gl_VertexID: no VBO or vertex attributes required.
-// IDs 0-3 in TRIANGLE_STRIP order give positions (-1,1),(-1,-1),(1,1),(1,-1).
-const char* kBloomVS = R"(#version 300 es
-out vec2 v_uv;
-void main() {
-    float x = float(gl_VertexID >> 1) * 2.0 - 1.0;
-    float y = 1.0 - float(gl_VertexID & 1) * 2.0;
-    v_uv = vec2(x * 0.5 + 0.5, y * 0.5 + 0.5);
-    gl_Position = vec4(x, y, 0.0, 1.0);
-}
-)";
 // AUD-084: Bloom's own blur/composite passes now go through CNA's
 // SpriteBatch + ShaderEffect (RenderTarget2D-backed) instead of the raw-GL
 // gl_VertexID/FBO machinery above -- SpriteBatch supplies its own vertex
@@ -1216,7 +1169,7 @@ void main() {
 // easygl_bloom_pipeline_test.cpp, a real passing end-to-end SpriteBatch+
 // RenderTarget2D+ShaderEffect bloom pipeline test in this exact
 // environment), so these need a different vertex-shader interface than
-// kBloomVS above, but the blur/composite math itself is unchanged from the
+// the former raw-GL full-screen quad, but the blur/composite math is unchanged from the
 // original kBloomBlurFS/kBloomCompositeFS (just u_tex -> texture1,
 // v_uv -> TexCoord).
 const char* kBloomVertSrc = R"(#version 300 es
@@ -1366,6 +1319,84 @@ in vec2 v_uv;
 out vec4 fragColor;
 void main() {
     float ao     = texture(u_ao, v_uv).r;
+    float factor = mix(1.0, ao, u_strength);
+    fragColor = vec4(factor, factor, factor, 1.0);
+}
+)";
+
+// AUD-085: the CNA-native SSAO variants use SpriteBatch's texture1/TexCoord
+// interface. TexCoord is top-left-origin, unlike the old raw-GL fullscreen
+// quad, hence the explicit Y conversion when projecting a sample position.
+const char* kSsaoCnaFragSrc = R"(#version 300 es
+precision highp float;
+uniform sampler2D texture1;
+uniform vec2      u_tanHalfFov;
+uniform float     u_near;
+uniform float     u_far;
+uniform float     u_radius;
+in vec2 TexCoord;
+out vec4 fragColor;
+float linDepth(float rawD) {
+    float z = rawD * 2.0 - 1.0;
+    return (2.0 * u_near * u_far) / (u_far + u_near - z * (u_far - u_near));
+}
+vec3 viewPos(vec2 uv, float ld) {
+    vec2 ndc = vec2(uv.x * 2.0 - 1.0, 1.0 - uv.y * 2.0);
+    return vec3(ndc * u_tanHalfFov * ld, -ld);
+}
+float rand(vec2 co) { return fract(sin(dot(co, vec2(12.9898, 78.233))) * 43758.5453); }
+void main() {
+    float rawD = texture(texture1, TexCoord).r;
+    if (rawD >= 0.9999) { fragColor = vec4(1.0); return; }
+    float ld = linDepth(rawD);
+    vec3 pos = viewPos(TexCoord, ld);
+    vec3 normal = normalize(cross(dFdx(pos), dFdy(pos)));
+    float occ = 0.0;
+    for (int i = 0; i < 16; ++i) {
+        float fi = float(i);
+        float r = rand(TexCoord + vec2(fi * 0.137, fi * 0.371)) * u_radius;
+        float phi = rand(TexCoord + vec2(fi * 0.721, fi * 0.173)) * 6.28318;
+        float cth = rand(TexCoord + vec2(fi * 0.531, fi * 0.979));
+        float sth = sqrt(max(0.0, 1.0 - cth * cth));
+        vec3 sampleDir = vec3(sth * cos(phi), sth * sin(phi), cth);
+        if (dot(sampleDir, normal) < 0.0) sampleDir = -sampleDir;
+        vec3 samplePos = pos + sampleDir * r;
+        vec2 sampleNdc = samplePos.xy / (-samplePos.z * u_tanHalfFov);
+        vec2 sampleUv = vec2(sampleNdc.x * 0.5 + 0.5, 0.5 - sampleNdc.y * 0.5);
+        if (any(lessThan(sampleUv, vec2(0.0))) || any(greaterThan(sampleUv, vec2(1.0)))) continue;
+        float sampleLinear = linDepth(texture(texture1, sampleUv).r);
+        float rangeCheck = smoothstep(0.0, 1.0, u_radius / abs(ld - sampleLinear + 0.001));
+        if (sampleLinear < ld - 0.025) occ += rangeCheck;
+    }
+    float ao = 1.0 - occ / 16.0;
+    fragColor = vec4(ao, ao, ao, 1.0);
+}
+)";
+
+const char* kSsaoCnaBlurFragSrc = R"(#version 300 es
+precision mediump float;
+uniform sampler2D texture1;
+uniform vec2 u_texelSize;
+in vec2 TexCoord;
+out vec4 fragColor;
+void main() {
+    float ao = 0.0;
+    for (int x = -2; x <= 2; ++x)
+        for (int y = -2; y <= 2; ++y)
+            ao += texture(texture1, TexCoord + vec2(float(x), float(y)) * u_texelSize).r;
+    ao /= 25.0;
+    fragColor = vec4(ao, ao, ao, 1.0);
+}
+)";
+
+const char* kSsaoCnaCompositeFragSrc = R"(#version 300 es
+precision mediump float;
+uniform sampler2D texture1;
+uniform float u_strength;
+in vec2 TexCoord;
+out vec4 fragColor;
+void main() {
+    float ao = texture(texture1, TexCoord).r;
     float factor = mix(1.0, ao, u_strength);
     fragColor = vec4(factor, factor, factor, 1.0);
 }
@@ -1568,164 +1599,80 @@ void MeshCraftApplication::applyBloom(
 
 void MeshCraftApplication::initSsao(int w, int h)
 {
-    if (w <= 0 || h <= 0) return;
-    auto& gl = s_bloom;
-    if (!gl.loadFunctions()) return;
-
-    // Clean up any existing SSAO resources without touching bloom/skybox
-    if (gl.ssaoDepthFbo)      { gl.DeleteFramebuffers(1, &gl.ssaoDepthFbo);   gl.ssaoDepthFbo = 0; }
-    if (gl.ssaoDepthTex)      { gl.DeleteTextures(1, &gl.ssaoDepthTex);       gl.ssaoDepthTex = 0; }
-    if (gl.ssaoFbo)           { gl.DeleteFramebuffers(1, &gl.ssaoFbo);        gl.ssaoFbo = 0; }
-    if (gl.ssaoTex)           { gl.DeleteTextures(1, &gl.ssaoTex);            gl.ssaoTex = 0; }
-    if (gl.ssaoBlurFbo)       { gl.DeleteFramebuffers(1, &gl.ssaoBlurFbo);    gl.ssaoBlurFbo = 0; }
-    if (gl.ssaoBlurTex)       { gl.DeleteTextures(1, &gl.ssaoBlurTex);        gl.ssaoBlurTex = 0; }
-    if (gl.progSsao)          { gl.DeleteProgram(gl.progSsao);                gl.progSsao = 0; }
-    if (gl.progSsaoBlur)      { gl.DeleteProgram(gl.progSsaoBlur);            gl.progSsaoBlur = 0; }
-    if (gl.progSsaoComposite) { gl.DeleteProgram(gl.progSsaoComposite);       gl.progSsaoComposite = 0; }
-
-    // Depth texture (DEPTH_COMPONENT24)
-    gl.GenTextures(1, &gl.ssaoDepthTex);
-    gl.BindTexture(kGL_TEXTURE_2D, gl.ssaoDepthTex);
-    gl.TexImage2D(kGL_TEXTURE_2D, 0, (int)kGL_DEPTH_COMPONENT24, w, h, 0,
-                  kGL_DEPTH_COMPONENT, kGL_UNSIGNED_INT, nullptr);
-    gl.TexParameteri(kGL_TEXTURE_2D, kGL_TEXTURE_MIN_FILTER, (int)kGL_NEAREST);
-    gl.TexParameteri(kGL_TEXTURE_2D, kGL_TEXTURE_MAG_FILTER, (int)kGL_NEAREST);
-    gl.TexParameteri(kGL_TEXTURE_2D, kGL_TEXTURE_WRAP_S,     (int)kGL_CLAMP_TO_EDGE);
-    gl.TexParameteri(kGL_TEXTURE_2D, kGL_TEXTURE_WRAP_T,     (int)kGL_CLAMP_TO_EDGE);
-
-    gl.GenFramebuffers(1, &gl.ssaoDepthFbo);
-    gl.BindFramebuffer(kGL_FRAMEBUFFER, gl.ssaoDepthFbo);
-    gl.FramebufferTexture2D(kGL_FRAMEBUFFER, kGL_DEPTH_ATTACHMENT,
-                            kGL_TEXTURE_2D, gl.ssaoDepthTex, 0);
-    if (gl.DrawBuffers) { unsigned none = kGL_ZERO; gl.DrawBuffers(1, &none); }
-    if (gl.CheckFramebufferStatus(kGL_FRAMEBUFFER) != kGL_FRAMEBUFFER_COMPLETE)
-        std::cerr << "[SSAO] Depth FBO incomplete\n";
-
-    // AO texture (R8)
-    gl.GenTextures(1, &gl.ssaoTex);
-    gl.BindTexture(kGL_TEXTURE_2D, gl.ssaoTex);
-    gl.TexImage2D(kGL_TEXTURE_2D, 0, (int)kGL_R8, w, h, 0,
-                  kGL_RED, kGL_UNSIGNED_BYTE, nullptr);
-    gl.TexParameteri(kGL_TEXTURE_2D, kGL_TEXTURE_MIN_FILTER, (int)kGL_LINEAR);
-    gl.TexParameteri(kGL_TEXTURE_2D, kGL_TEXTURE_MAG_FILTER, (int)kGL_LINEAR);
-    gl.TexParameteri(kGL_TEXTURE_2D, kGL_TEXTURE_WRAP_S,     (int)kGL_CLAMP_TO_EDGE);
-    gl.TexParameteri(kGL_TEXTURE_2D, kGL_TEXTURE_WRAP_T,     (int)kGL_CLAMP_TO_EDGE);
-
-    gl.GenFramebuffers(1, &gl.ssaoFbo);
-    gl.BindFramebuffer(kGL_FRAMEBUFFER, gl.ssaoFbo);
-    gl.FramebufferTexture2D(kGL_FRAMEBUFFER, kGL_COLOR_ATTACHMENT0,
-                            kGL_TEXTURE_2D, gl.ssaoTex, 0);
-    if (gl.CheckFramebufferStatus(kGL_FRAMEBUFFER) != kGL_FRAMEBUFFER_COMPLETE)
-        std::cerr << "[SSAO] AO FBO incomplete\n";
-
-    // Blur texture (R8)
-    gl.GenTextures(1, &gl.ssaoBlurTex);
-    gl.BindTexture(kGL_TEXTURE_2D, gl.ssaoBlurTex);
-    gl.TexImage2D(kGL_TEXTURE_2D, 0, (int)kGL_R8, w, h, 0,
-                  kGL_RED, kGL_UNSIGNED_BYTE, nullptr);
-    gl.TexParameteri(kGL_TEXTURE_2D, kGL_TEXTURE_MIN_FILTER, (int)kGL_LINEAR);
-    gl.TexParameteri(kGL_TEXTURE_2D, kGL_TEXTURE_MAG_FILTER, (int)kGL_LINEAR);
-    gl.TexParameteri(kGL_TEXTURE_2D, kGL_TEXTURE_WRAP_S,     (int)kGL_CLAMP_TO_EDGE);
-    gl.TexParameteri(kGL_TEXTURE_2D, kGL_TEXTURE_WRAP_T,     (int)kGL_CLAMP_TO_EDGE);
-
-    gl.GenFramebuffers(1, &gl.ssaoBlurFbo);
-    gl.BindFramebuffer(kGL_FRAMEBUFFER, gl.ssaoBlurFbo);
-    gl.FramebufferTexture2D(kGL_FRAMEBUFFER, kGL_COLOR_ATTACHMENT0,
-                            kGL_TEXTURE_2D, gl.ssaoBlurTex, 0);
-    if (gl.CheckFramebufferStatus(kGL_FRAMEBUFFER) != kGL_FRAMEBUFFER_COMPLETE)
-        std::cerr << "[SSAO] Blur FBO incomplete\n";
-
-    gl.BindFramebuffer(kGL_FRAMEBUFFER, 0);
-    gl.BindTexture(kGL_TEXTURE_2D, 0);
-
-    gl.progSsao          = gl.makeProgram(kBloomVS, kSsaoFS);
-    gl.progSsaoBlur      = gl.makeProgram(kBloomVS, kSsaoBlurFS);
-    gl.progSsaoComposite = gl.makeProgram(kBloomVS, kSsaoCompositeFS);
-    if (!gl.progSsao || !gl.progSsaoBlur || !gl.progSsaoComposite)
-        std::cerr << "[SSAO] Shader compile/link failed\n";
-
-    ssaoFboW_    = w;
-    ssaoFboH_    = h;
-    ssaoGlReady_ = (gl.progSsao && gl.progSsaoBlur && gl.progSsaoComposite
-                    && gl.ssaoDepthFbo && gl.ssaoFbo && gl.ssaoBlurFbo);
+    if (w <= 0 || h <= 0 || !sceneRenderer_ || !sceneRenderer_->depthPassAvailable()) return;
+    auto& gd = getGraphicsDeviceProperty();
+    ssaoDepthRt_.emplace(gd, w, h, false, SurfaceFormat::Color, DepthFormat::Depth24);
+    ssaoRt_.emplace(gd, w, h);
+    ssaoBlurRt_.emplace(gd, w, h);
+    ssaoFx_.emplace(gd, kBloomVertSrc, kSsaoCnaFragSrc);
+    ssaoBlurFx_.emplace(gd, kBloomVertSrc, kSsaoCnaBlurFragSrc);
+    ssaoCompositeFx_.emplace(gd, kBloomVertSrc, kSsaoCnaCompositeFragSrc);
+    if (!ssaoFx_->IsEffectValid() || !ssaoBlurFx_->IsEffectValid() || !ssaoCompositeFx_->IsEffectValid()) {
+        std::cerr << "[SSAO] Failed to compile CNA shaders\n";
+        ssaoDepthRt_.reset(); ssaoRt_.reset(); ssaoBlurRt_.reset();
+        ssaoFx_.reset(); ssaoBlurFx_.reset(); ssaoCompositeFx_.reset();
+        ssaoFboW_ = ssaoFboH_ = 0;
+        return;
+    }
+    ssaoFboW_ = w;
+    ssaoFboH_ = h;
 }
 
 void MeshCraftApplication::applySsao(
-    int vx, int glViewY, int vw, int vh,
-    float tanHalfFovX, float tanHalfFovY,
-    float nearPlane, float farPlane)
+    int vx, int viewY, int vw, int vh, const Matrix& view, const Matrix& proj,
+    float tanHalfFovX, float tanHalfFovY, float nearPlane, float farPlane)
 {
-    auto& gl = s_bloom;
-    if (!gl.BlitFramebuffer || !gl.ssaoDepthFbo || !gl.progSsao) return;
-    if (vw <= 0 || vh <= 0) return;
+    if (!ssaoDepthRt_ || !ssaoRt_ || !ssaoBlurRt_ || !ssaoFx_ || !ssaoBlurFx_ || !ssaoCompositeFx_ ||
+        vw <= 0 || vh <= 0 || !sceneRenderer_) return;
+    auto& gd = getGraphicsDeviceProperty();
+    const Rectangle targetRect(0, 0, vw, vh);
+    const Rectangle screenRect(vx, viewY, vw, vh);
 
-    constexpr unsigned kSSAO_SCISSOR_TEST = 0x0C11u;
-    constexpr unsigned kSSAO_CULL_FACE    = 0x0B44u;
-    constexpr unsigned kSSAO_STENCIL_TEST = 0x0B90u;
+    // Pass 1: redraw scene geometry with a depth-writing ShaderEffect into a
+    // color target. This is the CNA-supported replacement for reading the
+    // default framebuffer's private depth attachment.
+    gd.SetRenderTarget(&*ssaoDepthRt_);
+    gd.setViewportProperty(Viewport(0, 0, vw, vh));
+    gd.Clear(Color::White, 1.0f);
+    sceneRenderer_->drawDepthPass(document_, view, proj);
 
-    // Step 1: blit depth from default framebuffer into ssaoDepthFbo
-    gl.Disable(kSSAO_SCISSOR_TEST);
-    gl.BindFramebuffer(kGL_READ_FRAMEBUFFER, 0);
-    gl.BindFramebuffer(kGL_DRAW_FRAMEBUFFER, gl.ssaoDepthFbo);
-    gl.BlitFramebuffer(vx, glViewY, vx + vw, glViewY + vh,
-                       0, 0, vw, vh,
-                       kGL_DEPTH_BUFFER_BIT, kGL_NEAREST);
+    // Pass 2: depth -> ambient-occlusion mask.
+    gd.SetRenderTarget(&*ssaoRt_);
+    gd.setViewportProperty(Viewport(0, 0, vw, vh));
+    ssaoFx_->Apply();
+    ssaoFx_->SetUniformVec2("u_tanHalfFov", tanHalfFovX, tanHalfFovY);
+    ssaoFx_->SetUniformFloat("u_near", nearPlane);
+    ssaoFx_->SetUniformFloat("u_far", farPlane);
+    ssaoFx_->SetUniformFloat("u_radius", ssaoRadius_);
+    spriteBatch_->Begin(SpriteSortMode::Deferred, BlendState::Opaque, nullptr, nullptr, nullptr, &*ssaoFx_);
+    spriteBatch_->Draw(*ssaoDepthRt_, targetRect, Color::White);
+    spriteBatch_->End();
 
-    // Step 2: SSAO pass — depth → AO
-    gl.BindFramebuffer(kGL_FRAMEBUFFER, gl.ssaoFbo);
-    gl.Viewport(0, 0, vw, vh);
-    gl.Disable(kGL_BLEND);
-    gl.Disable(kGL_DEPTH_TEST);
-    gl.UseProgram(gl.progSsao);
-    gl.ActiveTexture(kGL_TEXTURE0);
-    gl.BindTexture(kGL_TEXTURE_2D, gl.ssaoDepthTex);
-    gl.Uniform1i(gl.GetUniformLocation(gl.progSsao, "u_depth"),      0);
-    gl.Uniform2f(gl.GetUniformLocation(gl.progSsao, "u_tanHalfFov"), tanHalfFovX, tanHalfFovY);
-    gl.Uniform1f(gl.GetUniformLocation(gl.progSsao, "u_near"),       nearPlane);
-    gl.Uniform1f(gl.GetUniformLocation(gl.progSsao, "u_far"),        farPlane);
-    gl.Uniform1f(gl.GetUniformLocation(gl.progSsao, "u_radius"),     ssaoRadius_);
-    gl.BindVertexArray(0);
-    gl.DrawArrays(kGL_TRIANGLE_STRIP, 0, 4);
+    // Pass 3: denoise the AO field.
+    gd.SetRenderTarget(&*ssaoBlurRt_);
+    gd.setViewportProperty(Viewport(0, 0, vw, vh));
+    ssaoBlurFx_->Apply();
+    ssaoBlurFx_->SetUniformVec2("u_texelSize", 1.0f / static_cast<float>(vw), 1.0f / static_cast<float>(vh));
+    spriteBatch_->Begin(SpriteSortMode::Deferred, BlendState::Opaque, nullptr, nullptr, nullptr, &*ssaoBlurFx_);
+    spriteBatch_->Draw(*ssaoRt_, targetRect, Color::White);
+    spriteBatch_->End();
 
-    // Step 3: blur AO
-    gl.BindFramebuffer(kGL_FRAMEBUFFER, gl.ssaoBlurFbo);
-    gl.Viewport(0, 0, vw, vh);
-    gl.UseProgram(gl.progSsaoBlur);
-    gl.ActiveTexture(kGL_TEXTURE0);
-    gl.BindTexture(kGL_TEXTURE_2D, gl.ssaoTex);
-    gl.Uniform1i(gl.GetUniformLocation(gl.progSsaoBlur, "u_ao"),        0);
-    gl.Uniform2f(gl.GetUniformLocation(gl.progSsaoBlur, "u_texelSize"),
-                 1.0f / static_cast<float>(vw), 1.0f / static_cast<float>(vh));
-    gl.BindVertexArray(0);
-    gl.DrawArrays(kGL_TRIANGLE_STRIP, 0, 4);
-
-    // Step 4: multiplicative composite onto scene
-    gl.BindFramebuffer(kGL_FRAMEBUFFER, 0);
-    gl.Viewport(vx, glViewY, vw, vh);
-    gl.Disable(kGL_DEPTH_TEST);
-    gl.Disable(kSSAO_CULL_FACE);
-    gl.Disable(kSSAO_STENCIL_TEST);
-    gl.Disable(kSSAO_SCISSOR_TEST);
-    gl.Enable(kGL_BLEND);
-    gl.BlendEquation(kGL_FUNC_ADD);
-    gl.BlendFunc(kGL_DST_COLOR, kGL_ZERO);
-    if (gl.ColorMask) gl.ColorMask(1, 1, 1, 1);
-    gl.UseProgram(gl.progSsaoComposite);
-    gl.ActiveTexture(kGL_TEXTURE0);
-    gl.BindTexture(kGL_TEXTURE_2D, gl.ssaoBlurTex);
-    gl.Uniform1i(gl.GetUniformLocation(gl.progSsaoComposite, "u_ao"),       0);
-    gl.Uniform1f(gl.GetUniformLocation(gl.progSsaoComposite, "u_strength"), ssaoStrength_);
-    gl.BindVertexArray(0);
-    gl.DrawArrays(kGL_TRIANGLE_STRIP, 0, 4);
-
-    // Restore GL state
-    gl.Disable(kGL_BLEND);
-    gl.Enable(kGL_DEPTH_TEST);
-    gl.BlendFunc(kGL_SRC_ALPHA, kGL_ONE_MINUS_SRC_ALPHA);
-    gl.BlendEquation(kGL_FUNC_ADD);
-    gl.UseProgram(0);
-    gl.BindTexture(kGL_TEXTURE_2D, 0);
-    gl.Viewport(0, 0, cachedScreenW_, cachedScreenH_);
+    // Pass 4: multiplicative composite in the editor viewport only.
+    BlendState multiply;
+    multiply.setColorSourceBlendProperty(Blend::DestinationColor);
+    multiply.setColorDestinationBlendProperty(Blend::Zero);
+    multiply.setAlphaSourceBlendProperty(Blend::One);
+    multiply.setAlphaDestinationBlendProperty(Blend::Zero);
+    gd.SetRenderTarget(nullptr);
+    gd.setViewportProperty(Viewport(vx, viewY, vw, vh));
+    gd.SetDepthTestEnabled(false);
+    ssaoCompositeFx_->Apply();
+    ssaoCompositeFx_->SetUniformFloat("u_strength", ssaoStrength_);
+    spriteBatch_->Begin(SpriteSortMode::Deferred, multiply, nullptr, nullptr, nullptr, &*ssaoCompositeFx_);
+    spriteBatch_->Draw(*ssaoBlurRt_, screenRect, Color::White);
+    spriteBatch_->End();
+    gd.SetDepthTestEnabled(true);
+    gd.setViewportProperty(Viewport(0, 0, cachedScreenW_, cachedScreenH_));
 }
 
 void MeshCraftApplication::initShadowDebug()
@@ -1761,25 +1708,15 @@ MeshCraftApplication::~MeshCraftApplication() {
     // no manual glDelete* call needed here anymore, matching bloomRtA_/
     // bloomRtB_/skyboxTex_/matPreviewRt_'s own established pattern.
 
-    // AUD-058: s_bloom.cleanup() releases the whole SSAO/shader/VAO/VBO/FBO/
-    // texture pool for whichever of s_bloom's consumers are still raw-GL
-    // (currently just SSAO -- AUD-084/086/087/088 all migrated off it) --
-    // previously it was only ever called mid-run (initBloom()'s rebuild-on-
-    // resize path and its shader-compile-failure path), never on shutdown,
-    // so every one of those GL objects leaked for the process lifetime. Safe
-    // to call unconditionally even if LoadContent's GL init never ran: every
-    // handle cleanup() guards on is zero-initialized, and it never got a
-    // chance to become non-zero without loadFunctions() having already
-    // populated the same function pointers cleanup() would use to delete it.
+    // The legacy raw-GL helper remains only for the independent frame-error
+    // diagnostic below. All post-processing resources are now RAII-managed
+    // CNA objects, so this cleanup is a no-op unless an old diagnostic path
+    // loaded the helper's function table.
     auto& gl = s_bloom;
     gl.cleanup();
 
-    // Real lifecycle verification, not just "the code compiles": leakCheck()
-    // reads back every handle cleanup() is supposed to have zeroed and prints
-    // exactly which one(s) survived if any did not. A future member added to
-    // BloomGL without a matching cleanup()/allReleased() update fails loudly
-    // here on every single run (see test/gl_shutdown_leak_test.py, which runs
-    // the smoke-test binary and asserts this never prints).
+    // Preserve the legacy GL-handle leak diagnostic for any future native
+    // interop, while ordinary post-process cleanup is handled by members.
     gl.leakCheck("MeshCraftApplication shutdown");
 }
 

@@ -1,0 +1,131 @@
+# MeshCraft CI.
+#
+# Scope: this skeleton builds and tests the CNA-independent libraries
+# (mc3, mcb, mc3togltf, mc3tomcb) as standalone CMake projects. These have no
+# CNA / SDL3 / OpenGL / ImGui dependency, so they cover the format/export tests
+# but NOT the editor (render/smoke/registry/ai/commands) tests. For the exact
+# live counts run `ctest -N` — they are deliberately not hard-coded here so this
+# comment cannot go stale (it did before: it claimed 66 tests / 46 covered).
+#
+# The editor job below checks out the two required sibling repositories beside
+# this checkout, exactly matching the root CMake project layout
+# (`../cna`, `../sharp-runtime`). It runs the root CTest suite, including the
+# render/smoke/registry/AI/command coverage that standalone jobs cannot reach.
+
+name: CI
+
+on:
+  push:
+    branches: [ master, develop ]
+  pull_request:
+    branches: [ master, develop ]
+
+# Cancel superseded runs for the same ref.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  standalone:
+    name: ${{ matrix.component }} (standalone)
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        component: [ mc3, mcb, mc3togltf, mc3tomcb ]
+    env:
+      CC: gcc-14
+      CXX: g++-14
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            cmake ninja-build g++-14 python3
+
+      # AUDIT-0051: cache CMake FetchContent downloads (tinyxml2/manifold/
+      # tinygltf/etc., fetched per-component into build/_deps). Keyed on BOTH the
+      # component's own CMakeLists.txt AND mc3/CMakeLists.txt: mcb/mc3togltf/
+      # mc3tomcb pull in mc3, which pins several of their real dependencies, so a
+      # dependency version bump in either file must invalidate the cache instead
+      # of silently reusing a stale fetch.
+      - name: Cache CMake FetchContent downloads
+        uses: actions/cache@v4
+        with:
+          path: build/_deps
+          key: ${{ runner.os }}-fetchcontent-${{ matrix.component }}-${{ hashFiles(format('{0}/CMakeLists.txt', matrix.component), 'mc3/CMakeLists.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-fetchcontent-${{ matrix.component }}-
+
+      - name: Configure (${{ matrix.component }})
+        run: >
+          cmake -S ${{ matrix.component }} -B build -G Ninja
+          -DCMAKE_BUILD_TYPE=Release
+          -DBUILD_TESTING=ON
+
+      - name: Build
+        run: cmake --build build -j
+
+      - name: Test
+        run: ctest --test-dir build --output-on-failure
+
+  editor:
+    name: Editor build and tests
+    runs-on: ubuntu-24.04
+    env:
+      CC: gcc-14
+      CXX: g++-14
+    steps:
+      # Keep the three repositories as siblings: root CMake deliberately uses
+      # add_subdirectory(../cna) and CNA uses ../sharp-runtime.
+      - name: Checkout MeshCraft
+        uses: actions/checkout@v4
+        with:
+          path: mesh-craft
+
+      - name: Checkout CNA
+        uses: actions/checkout@v4
+        with:
+          repository: openeggbert/cna
+          path: cna
+
+      - name: Checkout sharp-runtime
+        uses: actions/checkout@v4
+        with:
+          repository: openeggbert/sharp-runtime
+          path: sharp-runtime
+
+      - name: Install editor build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            cmake ninja-build g++-14 python3 pkg-config \
+            libgl1-mesa-dev libegl1-mesa-dev libglvnd-dev \
+            libsqlite3-dev libssl-dev libxml2-dev
+
+      - name: Cache root CMake FetchContent downloads
+        uses: actions/cache@v4
+        with:
+          path: mesh-craft/build/_deps
+          key: ${{ runner.os }}-editor-fetchcontent-${{ hashFiles('mesh-craft/CMakeLists.txt', 'mesh-craft/mc3/CMakeLists.txt', 'cna/CMakeLists.txt', 'sharp-runtime/CMakeLists.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-editor-fetchcontent-
+
+      - name: Configure editor
+        working-directory: mesh-craft
+        run: >
+          cmake -S . -B build -G Ninja
+          -DCMAKE_BUILD_TYPE=Release
+          -DBUILD_TESTING=ON
+          -DFETCHCONTENT_UPDATES_DISCONNECTED=ON
+
+      - name: Build editor and tests
+        working-directory: mesh-craft
+        run: cmake --build build -j2
+
+      - name: Test root project
+        working-directory: mesh-craft
+        run: ctest --test-dir build --output-on-failure -j2

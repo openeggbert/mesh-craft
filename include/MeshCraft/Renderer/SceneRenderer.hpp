@@ -8,6 +8,7 @@
 #include <Microsoft/Xna/Framework/Graphics/BasicEffect.hpp>
 #include <Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp>
 #include <Microsoft/Xna/Framework/Graphics/IndexBuffer.hpp>
+#include <Microsoft/Xna/Framework/Graphics/ShaderEffect.hpp>
 #include <Microsoft/Xna/Framework/Graphics/Texture2D.hpp>
 #include <Microsoft/Xna/Framework/Graphics/VertexBuffer.hpp>
 #include <Microsoft/Xna/Framework/Matrix.hpp>
@@ -179,6 +180,15 @@ public:
                           const Microsoft::Xna::Framework::Matrix& view,
                           const Microsoft::Xna::Framework::Matrix& projection);
 
+    // AUD-085: render the visible scene a second time into a color target,
+    // encoding the hardware depth in the red channel. CNA intentionally does
+    // not expose a backbuffer depth texture, so SSAO samples this pass rather
+    // than reaching around the graphics abstraction with glBlitFramebuffer.
+    void drawDepthPass(const Mc3::Mc3Document& doc,
+                       const Microsoft::Xna::Framework::Matrix& view,
+                       const Microsoft::Xna::Framework::Matrix& projection);
+    [[nodiscard]] bool depthPassAvailable() const;
+
     // Number of emissive objects drawn in the last drawEmissivePass call
     int emissiveDrawCount() const { return emissiveDrawCount_; }
 
@@ -212,6 +222,7 @@ public:
 private:
     Microsoft::Xna::Framework::Graphics::GraphicsDevice& device_;
     std::unique_ptr<Microsoft::Xna::Framework::Graphics::BasicEffect> effect_;
+    std::optional<Microsoft::Xna::Framework::Graphics::ShaderEffect> depthEffect_;
 
     // Pre-built unit shapes (full quality)
     RenderMesh unitBox_;
@@ -319,6 +330,22 @@ private:
                             const Microsoft::Xna::Framework::Matrix& projection,
                             int depth = 0);
 
+    void drawDepthObject(const Mc3::Mc3Object& obj,
+                         const Mc3::Mc3Document& doc,
+                         const Microsoft::Xna::Framework::Matrix& parentWorld,
+                         const Microsoft::Xna::Framework::Matrix& view,
+                         const Microsoft::Xna::Framework::Matrix& projection,
+                         int depth = 0);
+    void drawDepthMesh(const RenderMesh& mesh,
+                       const Microsoft::Xna::Framework::Matrix& world,
+                       const Microsoft::Xna::Framework::Matrix& view,
+                       const Microsoft::Xna::Framework::Matrix& projection);
+    void drawDepthTriangles(const std::vector<Microsoft::Xna::Framework::Graphics::VertexPositionColor>& vertices,
+                            const std::vector<uint16_t>& indices,
+                            const Microsoft::Xna::Framework::Matrix& world,
+                            const Microsoft::Xna::Framework::Matrix& view,
+                            const Microsoft::Xna::Framework::Matrix& projection);
+
     void drawObjectEdges(const Mc3::Mc3Object& obj,
                          const Mc3::Mc3Document& doc,
                          const Microsoft::Xna::Framework::Matrix& parentWorld,
@@ -332,23 +359,34 @@ private:
                        const Microsoft::Xna::Framework::Matrix& projection,
                        Microsoft::Xna::Framework::Color color);
 
+    // Renderer proposals P3/P4: shade edge segments from their outward
+    // direction and retain only camera-facing silhouettes for the overlay.
+    void drawSilhouetteWireShape(const WireShape& wire,
+                                 const Microsoft::Xna::Framework::Matrix& world,
+                                 const Microsoft::Xna::Framework::Matrix& view,
+                                 const Microsoft::Xna::Framework::Matrix& projection,
+                                 const Microsoft::Xna::Framework::Vector3& lightDirection);
+
     void drawExtrudeDynamic(const Mc3::Mc3Extrude& ex,
                             const Microsoft::Xna::Framework::Matrix& world,
                             const Microsoft::Xna::Framework::Matrix& view,
                             const Microsoft::Xna::Framework::Matrix& projection,
-                            Microsoft::Xna::Framework::Color color);
+                            Microsoft::Xna::Framework::Color color,
+                            bool depthPass = false);
 
     void drawDiskDynamic(float outerR, float innerR, int segments,
                          const Microsoft::Xna::Framework::Matrix& world,
                          const Microsoft::Xna::Framework::Matrix& view,
                          const Microsoft::Xna::Framework::Matrix& projection,
-                         Microsoft::Xna::Framework::Color color);
+                         Microsoft::Xna::Framework::Color color,
+                         bool depthPass = false);
 
     void drawGridDynamic(float sizeX, float sizeZ, int subX, int subZ,
                          const Microsoft::Xna::Framework::Matrix& world,
                          const Microsoft::Xna::Framework::Matrix& view,
                          const Microsoft::Xna::Framework::Matrix& projection,
-                         Microsoft::Xna::Framework::Color color);
+                         Microsoft::Xna::Framework::Color color,
+                         bool depthPass = false);
 
     void drawLineList(const std::vector<Microsoft::Xna::Framework::Graphics::VertexPositionColor>& verts,
                       const Microsoft::Xna::Framework::Matrix& view,
