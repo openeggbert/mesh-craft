@@ -511,11 +511,7 @@ float MeshCraftApplication::drawMenuBar()
             ImGui::EndMenu();
         }
         if (ImGui::BeginMenu("View")) {
-            if (ImGui::MenuItem("Front",  "Num1")) { camera_.yaw = 0.0f;                               camera_.pitch = 0.0f; }
-            if (ImGui::MenuItem("Right",  "Num3")) { camera_.yaw = std::numbers::pi_v<float> * 0.5f;  camera_.pitch = 0.0f; }
-            if (ImGui::MenuItem("Back",   "Num5")) { camera_.yaw = std::numbers::pi_v<float>;          camera_.pitch = 0.0f; }
-            if (ImGui::MenuItem("Top",    "Num7")) { camera_.yaw = 0.0f;                               camera_.pitch = 1.47f; }
-            if (ImGui::MenuItem("Bottom", "Num9")) { camera_.yaw = 0.0f;                               camera_.pitch =-1.47f; }
+            UI::MenuBar::drawViewDirections(camera_.yaw, camera_.pitch);
             ImGui::Separator();
             if (ImGui::MenuItem("Focus on selection", "F")) {
                 if (selection_.hasSelection()) {
@@ -614,6 +610,14 @@ void MenuBar::drawOverlays(bool& edges, bool& wireframe, bool& stats, bool& shad
     ImGui::MenuItem("Stats Overlay", nullptr, &stats);
     ImGui::MenuItem("Shadow Map Debug", nullptr, &shadowDebug);
     ImGui::MenuItem("Snap to Grid", nullptr, &snap);
+}
+
+void MenuBar::drawViewDirections(float& yaw, float& pitch) {
+    if (ImGui::MenuItem("Front", "Num1")) { yaw = 0.0f; pitch = 0.0f; }
+    if (ImGui::MenuItem("Right", "Num3")) { yaw = std::numbers::pi_v<float> * 0.5f; pitch = 0.0f; }
+    if (ImGui::MenuItem("Back", "Num5")) { yaw = std::numbers::pi_v<float>; pitch = 0.0f; }
+    if (ImGui::MenuItem("Top", "Num7")) { yaw = 0.0f; pitch = 1.47f; }
+    if (ImGui::MenuItem("Bottom", "Num9")) { yaw = 0.0f; pitch = -1.47f; }
 }
 
 } // namespace MeshCraft::Application::UI
