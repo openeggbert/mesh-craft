@@ -2214,50 +2214,65 @@ void MeshCraftApplication::drawDialogs()
 
 void MeshCraftApplication::drawPanelSplitters(int screenW, int screenH)
 {
-    // Full-screen pass-through window for splitter hit areas
-    ImGui::SetNextWindowPos(ImVec2(0, 0));
-    ImGui::SetNextWindowSize(ImVec2(static_cast<float>(screenW), static_cast<float>(screenH)));
-    ImGui::SetNextWindowBgAlpha(0.0f);
-    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0, 0));
-    ImGui::Begin("##splitters", nullptr,
-        ImGuiWindowFlags_NoTitleBar    | ImGuiWindowFlags_NoResize |
-        ImGuiWindowFlags_NoMove        | ImGuiWindowFlags_NoScrollbar |
-        ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoBringToFrontOnFocus |
-        ImGuiWindowFlags_NoNav         | ImGuiWindowFlags_NoDecoration |
-        ImGuiWindowFlags_NoBackground  | ImGuiWindowFlags_NoInputs);
-
+    // MeshCraft owns one application instance; keeping this ephemeral drag
+    // state beside its ImGui-only implementation avoids adding fields to the
+    // broadly included MeshCraftApplication header, which would otherwise
+    // force an unnecessary rebuild of most editor translation units.
+    static bool draggingLeft = false;
+    static bool draggingRight = false;
     const float panelY  = static_cast<float>(imguiTopH_);
     const int   tlH     = showTimeline_ ? kTimelineH : 0;
     const float panelH  = static_cast<float>(screenH - imguiTopH_ - kStatusH - tlH);
+    constexpr float kSplitHitWidth = 10.0f;
+    constexpr float kSplitVisualWidth = 1.0f;
+    const ImGuiIO& io = ImGui::GetIO();
+    const float leftX = static_cast<float>(kLeftPanelW);
+    const float rightX = static_cast<float>(screenW - kRightPanelW);
+    const auto hitSplitter = [&](float x) {
+        return io.MousePos.x >= x - kSplitHitWidth * 0.5f &&
+               io.MousePos.x <= x + kSplitHitWidth * 0.5f &&
+               io.MousePos.y >= panelY && io.MousePos.y < panelY + panelH;
+    };
+    const bool overLeft = hitSplitter(leftX);
+    const bool overRight = hitSplitter(rightX);
 
-    constexpr float kSplitW = 6.0f;
-
-    // Left panel splitter
-    ImGui::SetCursorScreenPos(ImVec2(static_cast<float>(kLeftPanelW) - kSplitW * 0.5f, panelY));
-    ImGui::InvisibleButton("##split_left", ImVec2(kSplitW, panelH));
-    if (ImGui::IsItemHovered() || ImGui::IsItemActive())
-        ImGui::SetMouseCursor(ImGuiMouseCursor_ResizeEW);
-    if (ImGui::IsItemActive()) {
-        kLeftPanelW += static_cast<int>(ImGui::GetIO().MouseDelta.x);
-        // STAB-0309: std::clamp(v, lo, hi) is undefined behavior if lo > hi.
-        // screenW/2-40 drops below 80 once screenW < 240 -- no SDL window
-        // minimum size is set anywhere, so a user can genuinely shrink the OS
-        // window below that. Clamp the upper bound to never go below lo.
-        kLeftPanelW  = std::clamp(kLeftPanelW, 80, std::max(80, screenW / 2 - 40));
+    // The previous implementation put InvisibleButton controls into an
+    // ImGuiWindowFlags_NoInputs window. Such a window deliberately rejects
+    // all hit tests, so its splitters could never become active. Handle the
+    // small hit areas directly instead: the viewport remains pass-through
+    // everywhere except an actively dragged divider.
+    if (ImGui::IsMouseClicked(ImGuiMouseButton_Left) && !ImGui::IsAnyItemActive()) {
+        draggingLeft = overLeft;
+        draggingRight = !draggingLeft && overRight;
+    }
+    if (!ImGui::IsMouseDown(ImGuiMouseButton_Left)) {
+        draggingLeft = false;
+        draggingRight = false;
     }
 
-    // Right panel splitter
-    ImGui::SetCursorScreenPos(ImVec2(static_cast<float>(screenW - kRightPanelW) - kSplitW * 0.5f, panelY));
-    ImGui::InvisibleButton("##split_right", ImVec2(kSplitW, panelH));
-    if (ImGui::IsItemHovered() || ImGui::IsItemActive())
+    if (overLeft || overRight || draggingLeft || draggingRight)
         ImGui::SetMouseCursor(ImGuiMouseCursor_ResizeEW);
-    if (ImGui::IsItemActive()) {
-        kRightPanelW -= static_cast<int>(ImGui::GetIO().MouseDelta.x);
-        kRightPanelW  = std::clamp(kRightPanelW, 80, std::max(80, screenW / 2 - 40));
+
+    // STAB-0309: std::clamp(v, lo, hi) is undefined behavior if lo > hi.
+    // A very narrow window can make screenW/2-40 less than 80, so preserve
+    // the minimum before clamping either independently-sized side panel.
+    const int maxPanelWidth = std::max(80, screenW / 2 - 40);
+    if (draggingLeft) {
+        kLeftPanelW += static_cast<int>(io.MouseDelta.x);
+        kLeftPanelW = std::clamp(kLeftPanelW, 80, maxPanelWidth);
+    }
+    if (draggingRight) {
+        kRightPanelW -= static_cast<int>(io.MouseDelta.x);
+        kRightPanelW = std::clamp(kRightPanelW, 80, maxPanelWidth);
     }
 
-    ImGui::End();
-    ImGui::PopStyleVar();
+    ImDrawList* drawList = ImGui::GetForegroundDrawList();
+    const ImU32 idle = IM_COL32(120, 120, 130, 95);
+    const ImU32 active = IM_COL32(245, 160, 60, 230);
+    drawList->AddLine(ImVec2(leftX, panelY), ImVec2(leftX, panelY + panelH),
+                      (overLeft || draggingLeft) ? active : idle, kSplitVisualWidth);
+    drawList->AddLine(ImVec2(rightX, panelY), ImVec2(rightX, panelY + panelH),
+                      (overRight || draggingRight) ? active : idle, kSplitVisualWidth);
 }
 
 void MeshCraftApplication::drawShadowDebugOverlay(int /*screenW*/, int screenH)
