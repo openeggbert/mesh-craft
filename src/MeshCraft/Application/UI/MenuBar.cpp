@@ -381,9 +381,11 @@ float MeshCraftApplication::drawMenuBar()
                 },
             };
             UI::MenuBar::drawEditMacroRecording(editMacroRecordingContext);
-            if (ImGui::MenuItem("Play Macro", nullptr, false,
-                                 macroRecorder_.stepCount() > 0 && !macroRecorder_.isRecording()))
-                macroRecorder_.play(macroContext());
+            const UI::EditPlayMacroContext editPlayMacroContext{
+                .canPlay = macroRecorder_.stepCount() > 0 && !macroRecorder_.isRecording(),
+                .play = [this] { macroRecorder_.play(macroContext()); },
+            };
+            UI::MenuBar::drawEditPlayMacro(editPlayMacroContext);
             if (ImGui::MenuItem("Macro Editor…"))
                 macroOpen_ = true;
             ImGui::Separator();
@@ -814,6 +816,10 @@ void MenuBar::drawEditMacroRecording(const EditMacroRecordingContext& context) {
     } else if (ImGui::MenuItem("Record Macro")) {
         context.startRecording();
     }
+}
+
+void MenuBar::drawEditPlayMacro(const EditPlayMacroContext& context) {
+    if (ImGui::MenuItem("Play Macro", nullptr, false, context.canPlay)) context.play();
 }
 
 void MenuBar::drawPanelToggles(bool& timeline, bool& registry, bool& ai, bool& validation) {

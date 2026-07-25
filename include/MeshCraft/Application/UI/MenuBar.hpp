@@ -164,6 +164,11 @@ struct EditMacroRecordingContext {
     std::function<void()> stopRecording;
 };
 
+struct EditPlayMacroContext {
+    bool canPlay;
+    std::function<void()> play;
+};
+
 class MenuBar final {
 public:
     static void drawAddMenu(const std::function<void(Mc3::ObjectType)>& addPrimitive);
@@ -185,6 +190,7 @@ public:
     static void drawEditFindReplaceNames(const EditFindReplaceNamesContext& context);
     static void drawEditRandomizeTransform(const EditRandomizeTransformContext& context);
     static void drawEditMacroRecording(const EditMacroRecordingContext& context);
+    static void drawEditPlayMacro(const EditPlayMacroContext& context);
     static void drawEditHistory(const EditHistoryContext& context);
     static void drawEditObjectActions(const EditObjectActionsContext& context);
     static void drawEditSelectionActions(const EditSelectionActionsContext& context);
