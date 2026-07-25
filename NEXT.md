@@ -19,11 +19,12 @@ replacing the former flat `src/MeshCraft/MeshCraftApplication_*.cpp` layout.
 a compatibility forwarder. Actual UI components currently cover Validation,
 Registry results, Toolbar tools/display/snap-surface/proportional/grid controls,
 Properties delegation, and the View-menu panel/overlay/direction/focus/
-Camera-Bookmarks/Walk-Mode presentation. The detailed Snap interval contents
-and the remaining MenuBar sections are still application-owned. Camera
-bookmark and walk state have **not** moved again: they remain in
-`Editor::CameraBookmarks` and `Editor::WalkController`; the UI component only
-reads presentation state and invokes application-owned callbacks.
+Camera-Bookmarks/Walk-Mode presentation, plus the Help menu presentation.
+The detailed Snap interval contents and the remaining MenuBar sections are
+still application-owned. Camera bookmark, walk, and dialog state have **not**
+moved again: they remain in their existing editor/application owners; the UI
+component only reads presentation state and invokes application-owned
+callbacks.
 Historical references below intentionally retain their then-current paths.
 
 ## 1. Project summary
@@ -92,8 +93,8 @@ before when explicitly requested (`SYS-W14-##` rows).
 
 ## 2. Current status
 
-- **Last full build: clean after the current Phase 13 Walk Mode
-  slice.** A fresh Ninja Release tree configured with testing enabled, and
+- **Last full build: clean after the current Phase 13 Help menu
+  slice.** The current Ninja Release tree has testing enabled, and
   `CCACHE_DISABLE=1 cmake --build b-release -j4` linked all targets
   successfully on EASYGL. Alternate-backend runtime qualification remains
   blocked.
@@ -163,10 +164,10 @@ before when explicitly requested (`SYS-W14-##` rows).
   by application/UI ownership, and is extracting UI presentation through
   narrow contexts. Validation, Registry results, Toolbar controls, Properties
   delegation, and the View-menu directions/focus/overlays/panels/
-  Camera-Bookmarks/Walk-Mode presentation are now component-owned. Bookmark
-  and walk state remain in `Editor::CameraBookmarks` and
-  `Editor::WalkController`; the menu receives only read-only state plus
-  application-owned callbacks.
+  Camera-Bookmarks/Walk-Mode presentation, plus the Help menu presentation,
+  are now component-owned. Bookmark, walk, preferences, command-palette, and
+  shortcut-dialog state remain in their existing owners; the menu receives
+  only read-only state plus application-owned callbacks.
 - **Recently implemented (2026-07-20 through 2026-07-25):** all 7
   raw-OpenGL(ES)-vs-CNA migrations, `AUD-082` through `AUD-088` — full
   detail with file:line evidence and
@@ -768,17 +769,17 @@ git stash pop && cmake --build b-release -j4 --target <affected-target>
 No actionable follow-up audit task remains: `AUD-089` through `AUD-091` are
 complete, while Android (`AUD-042`) is environment/owner deferred.
 `SYS-W3-01` has 12 completed subsystem phases and an active Phase 13 for
-application/UI ownership. The authorized Camera Bookmarks and Walk Mode menu
-slices are implemented and verified. `WalkModeContext` exposes only the
-active flag and a toggle callback; `Editor::WalkController`, enter/exit
-behavior, camera mutation, keyboard handling, and status messages remain
-application-owned.
+application/UI ownership. The authorized Camera Bookmarks, Walk Mode, and
+Help menu slices are implemented and verified. `HelpMenuContext` exposes only
+three actions; preferences, command-palette, and shortcut-dialog state and
+the Ctrl+P keyboard path remain application-owned.
 
 **Next candidate, not yet authorized:** continue Phase 13 with the compact
-Help menu presentation, passing only callbacks for Preferences, Command
-Palette, and Keyboard Shortcuts. The View-menu Bloom/SSAO block remains
-application-owned as previously decided. Per `CLAUDE.md`, describe and
-confirm the Help slice before implementing it.
+Add menu presentation, passing one `addPrimitive(ObjectType)` callback while
+document mutation, undo, selection, and status behavior remain in the
+application. The View-menu Bloom/SSAO block remains application-owned as
+previously decided. Per `CLAUDE.md`, describe and confirm the Add slice before
+implementing it.
 
 ## 9. Do not do yet
 

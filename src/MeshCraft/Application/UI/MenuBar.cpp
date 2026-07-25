@@ -568,14 +568,12 @@ float MeshCraftApplication::drawMenuBar()
                                           showAiPanel_, showValidationPanel_);
             ImGui::EndMenu();
         }
-        if (ImGui::BeginMenu("Help")) {
-            if (ImGui::MenuItem("Preferences...")) prefs_.setWindowOpen(true);
-            ImGui::Separator();
-            if (ImGui::MenuItem("Command Palette...", "Ctrl+P")) cmdPaletteOpen_ = true;
-            ImGui::Separator();
-            if (ImGui::MenuItem("Keyboard Shortcuts...")) showShortcutsDialog_ = true;
-            ImGui::EndMenu();
-        }
+        const UI::HelpMenuContext helpMenuContext{
+            .openPreferences = [this] { prefs_.setWindowOpen(true); },
+            .openCommandPalette = [this] { cmdPaletteOpen_ = true; },
+            .openKeyboardShortcuts = [this] { showShortcutsDialog_ = true; },
+        };
+        UI::MenuBar::drawHelpMenu(helpMenuContext);
         ImGui::EndMainMenuBar();
     }
     return menuBarH;
@@ -648,6 +646,18 @@ void MenuBar::drawCameraBookmarks(const CameraBookmarksContext& context) {
 
 void MenuBar::drawWalkMode(const WalkModeContext& context) {
     if (ImGui::MenuItem("Walk Mode", "F5", context.active)) context.toggle();
+}
+
+void MenuBar::drawHelpMenu(const HelpMenuContext& context) {
+    if (!ImGui::BeginMenu("Help")) return;
+
+    if (ImGui::MenuItem("Preferences...")) context.openPreferences();
+    ImGui::Separator();
+    if (ImGui::MenuItem("Command Palette...", "Ctrl+P")) context.openCommandPalette();
+    ImGui::Separator();
+    if (ImGui::MenuItem("Keyboard Shortcuts...")) context.openKeyboardShortcuts();
+
+    ImGui::EndMenu();
 }
 
 } // namespace MeshCraft::Application::UI

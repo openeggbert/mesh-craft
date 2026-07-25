@@ -17,6 +17,12 @@ struct WalkModeContext {
     std::function<void()> toggle;
 };
 
+struct HelpMenuContext {
+    std::function<void()> openPreferences;
+    std::function<void()> openCommandPalette;
+    std::function<void()> openKeyboardShortcuts;
+};
+
 class MenuBar final {
 public:
     static void drawPanelToggles(bool& timeline, bool& registry, bool& ai, bool& validation);
@@ -25,6 +31,7 @@ public:
     static void drawFocusSelection(const std::function<void()>& focus);
     static void drawCameraBookmarks(const CameraBookmarksContext& context);
     static void drawWalkMode(const WalkModeContext& context);
+    static void drawHelpMenu(const HelpMenuContext& context);
 };
 
 } // namespace MeshCraft::Application::UI
