@@ -3265,7 +3265,7 @@ static void testResolveClickSelection()
 // Camera view presets (STAB-0506)
 //
 // Verifies the actual preset table used by the "Front/Top/Right/Persp"
-// button row (MeshCraftApplication_UiOverlays.cpp, now shared via
+// button row (Application/UI/CameraPresetOverlay.cpp, now shared via
 // cameraPresetsAlg()) against cameraOrbitPositionAlg() — the same
 // spherical-to-Cartesian formula EditorCamera::position() uses — so the
 // resulting camera position for each preset is checked directly, not just

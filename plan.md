@@ -164,7 +164,7 @@ still internally consistent.
    research pass.
 6. **SYS-W3-01 (P2/W3), Phase 13 is active:** application/UI ownership is
    being reduced one narrow presentation slice at a time. The authorized
-   Camera Bookmarks, Walk Mode, View Bloom/SSAO, Help, Add/CSG, Edit-history,
+   Camera Bookmarks, Camera Preset Overlay, Walk Mode, View Bloom/SSAO, Help, Add/CSG, Edit-history,
    Edit-clipboard,
    Edit-object-actions, Edit-selection-actions, Edit-select-by-type,
    Edit-select-by-tag/material, Edit-copy-properties, Edit-grouping,
@@ -183,11 +183,11 @@ still internally consistent.
    `Application::UI::MenuBar` receives only the read-only values and callbacks
    required for presentation. The approved post-menu audit is complete: the
    top-level MenuBar shell intentionally remains the application's small
-   compositor, because extracting it would require a broad god-context. The
-   next narrow candidate is the camera-preset/projection/look-through control
-   cluster in `Application/UI/Overlays.cpp`; it is P2 follow-up work and is not
-   started without separate confirmation.
-   Every item requires its own confirmation per `CLAUDE.md`.
+   compositor, because extracting it would require a broad god-context. Its
+   resulting camera-preset/projection/look-through control candidate is now
+   component-owned as `Application::UI::CameraPresetOverlay`; the application
+   still owns `EditorCamera`, document-camera lookup, selection, and rendering.
+   The next Phase 13 action is a fresh narrow boundary audit.
 
 ---
 
@@ -614,6 +614,11 @@ _All items in this workstream are DONE — archived to [`docs/history/plan_20260
   and the Walk Mode menu item. `ViewPostProcessingContext` also owns the
   Bloom/SSAO presentation, receiving only the capability result, value
   snapshots, and setters; the application retains effect state and rendering.
+  `Application::UI::CameraPresetOverlay` now owns the top-left viewport's
+  Front/Top/Right/Persp, projection-toggle, and conditional look-through
+  presentation. Its context carries only projection/look-through snapshots,
+  an optional selected-camera name, and callbacks; the application retains
+  camera reset/orbit mutation, document access, and all render-state decisions.
   The bookmark state remains the already-extracted
   `Editor::CameraBookmarks`; a `CameraBookmarksContext` exposes only the
   read-only slots plus Save/Restore callbacks, leaving camera mutation and
@@ -789,7 +794,7 @@ _All items in this workstream are DONE — archived to [`docs/history/plan_20260
   Edit-hide-selection, Edit-show-all-hidden, File-merge-scene,
   File-export-selection, File-export-GLB, File-export-OBJ, File-save,
   File-save-as, File-import-OBJ, File-new, File-open, File-open-recent, and
-  File-exit slices, plus the Bloom/SSAO controls,
+  File-exit slices, the Bloom/SSAO controls, and the CameraPresetOverlay,
   each incremental Release link and the same 147/147 + 35/35 partitions pass
   again.
   For the current MenuBar slices, the public UI header also compiles as a
@@ -797,8 +802,9 @@ _All items in this workstream are DONE — archived to [`docs/history/plan_20260
   `git diff --check` is clean. The post-menu audit also found and closed
   `AUD-092`: `ssao_test` now detects actual red-channel darkening between the
   normal and `MESHCRAFT_TEST_FORCE_SSAO=1` renders, rather than merely proving
-  that the SSAO path exits cleanly. A further Phase 13 slice requires separate
-  authorization and should keep using the same narrow-context boundary.
+  that the SSAO path exits cleanly. The CameraPresetOverlay also preserves the
+  tested shared preset table while reducing `Overlays.cpp` to state snapshots
+  and callbacks. The next Phase 13 action is a fresh narrow-boundary audit.
   **SYS-W3-01 roadmap status after this session's investigation round:**
   Phases 1–12 done (Keybindings, Preferences, MacroRecorder, UndoManager,
   animation-override computation, WalkController, AudioPreview,

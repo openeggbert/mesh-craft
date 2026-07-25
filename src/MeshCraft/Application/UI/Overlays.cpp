@@ -1,4 +1,5 @@
 #include "MeshCraft/Application/MeshCraftApplication.hpp"
+#include "MeshCraft/Application/UI/CameraPresetOverlay.hpp"
 #include "MeshCraft/MeshCraftPrivate.hpp"
 #include "MeshCraft/EditorAlgorithms.hpp"
 #include "MeshCraft/Scene/SceneHierarchyPanel.hpp"
@@ -220,66 +221,27 @@ void MeshCraftApplication::drawStatsOverlay(int screenW, [[maybe_unused]] int sc
         }
     }
 
-    // Camera preset buttons — top-left corner of the 3D viewport
-    {
-        const float vpLeft = static_cast<float>(kLeftPanelW) + 8.0f;
-        const float vpTopY = static_cast<float>(imguiTopH_)  + 8.0f;
-        ImGui::SetNextWindowPos(ImVec2(vpLeft, vpTopY), ImGuiCond_Always);
-        ImGui::SetNextWindowBgAlpha(0.45f);
-        ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(4, 4));
-        ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing,   ImVec2(3, 3));
-        ImGui::Begin("##campresets", nullptr,
-            ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoNav |
-            ImGuiWindowFlags_NoMove | ImGuiWindowFlags_AlwaysAutoResize |
-            ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoBringToFrontOnFocus);
-
-        for (const auto& p : cameraPresetsAlg()) {
-            if (ImGui::Button(p.label, ImVec2(38, 18))) {
-                if (p.reset) { camera_.reset(); camera_.orthographic = false; }
-                else         { camera_.yaw = p.yaw; camera_.pitch = p.pitch; }
-            }
-            if (ImGui::IsItemHovered()) {
-                if (p.reset) ImGui::SetTooltip("Reset to default perspective view");
-                else         ImGui::SetTooltip("Set camera to %s view", p.label);
-            }
-            ImGui::SameLine();
-        }
-
-        // Orthographic / Perspective toggle
-        if (camera_.orthographic)
-            ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.25f, 0.55f, 0.80f, 1.f));
-        if (ImGui::Button(camera_.orthographic ? "Ortho" : "Persp", ImVec2(42, 18)))
-            camera_.orthographic = !camera_.orthographic;
-        if (camera_.orthographic)
-            ImGui::PopStyleColor();
-        if (ImGui::IsItemHovered())
-            ImGui::SetTooltip(camera_.orthographic
-                ? "Orthographic projection (click for Perspective)"
-                : "Perspective projection (click for Orthographic)");
-        ImGui::SameLine();
-
-        // Look-through-camera button (shown when a camera is selected in the Cameras tab)
-        if (selectedCameraIdx_ >= 0 &&
-            selectedCameraIdx_ < static_cast<int>(document_.cameras.size())) {
-            if (lookThroughCamera_)
-                ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.60f, 0.30f, 0.80f, 1.f));
-            if (ImGui::Button("Cam", ImVec2(34, 18)))
-                lookThroughCamera_ = !lookThroughCamera_;
-            if (lookThroughCamera_)
-                ImGui::PopStyleColor();
-            if (ImGui::IsItemHovered()) {
-                const auto& cam = document_.cameras[selectedCameraIdx_];
-                if (lookThroughCamera_)
-                    ImGui::SetTooltip("Looking through: %s\nClick to exit", cam.name.c_str());
-                else
-                    ImGui::SetTooltip("Look through camera: %s", cam.name.c_str());
-            }
-            ImGui::SameLine();
-        }
-
-        ImGui::End();
-        ImGui::PopStyleVar(2);
-    }
+    // Camera preset buttons — top-left corner of the 3D viewport.
+    const bool hasSelectedCamera = selectedCameraIdx_ >= 0 &&
+        selectedCameraIdx_ < static_cast<int>(document_.cameras.size());
+    const UI::CameraPresetOverlayContext cameraPresetContext{
+        .orthographic = camera_.orthographic,
+        .hasSelectedCamera = hasSelectedCamera,
+        .lookingThroughCamera = lookThroughCamera_,
+        .selectedCameraName = hasSelectedCamera
+            ? std::string_view(document_.cameras[selectedCameraIdx_].name)
+            : std::string_view{},
+        .resetCamera = [this] { camera_.reset(); camera_.orthographic = false; },
+        .setOrbitDirection = [this](float yaw, float pitch) {
+            camera_.yaw = yaw;
+            camera_.pitch = pitch;
+        },
+        .setOrthographic = [this](bool enabled) { camera_.orthographic = enabled; },
+        .toggleLookThroughCamera = [this] { lookThroughCamera_ = !lookThroughCamera_; },
+    };
+    UI::CameraPresetOverlay::draw(static_cast<float>(kLeftPanelW) + 8.0f,
+                                  static_cast<float>(imguiTopH_) + 8.0f,
+                                  cameraPresetContext);
 }
 
 void MeshCraftApplication::drawStatusBar(int screenW, int screenH)

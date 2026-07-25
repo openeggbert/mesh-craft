@@ -20,7 +20,7 @@ replacing the former flat `src/MeshCraft/MeshCraftApplication_*.cpp` layout.
 `MeshCraft::Application::MeshCraftApplication`; the old public include remains
 a compatibility forwarder. Actual UI components currently cover Validation,
 Registry results, Toolbar tools/display/snap-surface/proportional/grid controls,
-Properties delegation, and the View-menu panel/overlay/direction/focus/
+Properties delegation, Camera Preset Overlay, and the View-menu panel/overlay/direction/focus/
 Camera-Bookmarks/Walk-Mode/Bloom-SSAO presentation, plus the Add/CSG and Help menu
 presentation and the Edit-history, clipboard, object-action, and
 selection-action groups, the Select-by-Type/Tag/Material, Align-Selection,
@@ -105,7 +105,7 @@ before when explicitly requested (`SYS-W14-##` rows).
 ## 2. Current status
 
 - **Last full build: clean after the current Phase 13 File-open-recent,
-  View-Bloom/SSAO, and SSAO-regression slices.** Testing is enabled in the current Ninja Release tree, and
+  View-Bloom/SSAO, SSAO-regression, and Camera Preset Overlay slices.** Testing is enabled in the current Ninja Release tree, and
   `CCACHE_DISABLE=1 cmake --build b-release -j4` linked all targets successfully
   on EASYGL. Alternate-backend runtime qualification remains blocked.
 - **Tests:** the fresh Release tree registers 182 tests. All passed again after
@@ -174,7 +174,7 @@ before when explicitly requested (`SYS-W14-##` rows).
   application into `MeshCraft::Application`, organized implementation files
   by application/UI ownership, and is extracting UI presentation through
   narrow contexts. Validation, Registry results, Toolbar controls, Properties
-  delegation, and the View-menu directions/focus/overlays/panels/
+  delegation, Camera Preset Overlay, and the View-menu directions/focus/overlays/panels/
   Camera-Bookmarks/Walk-Mode/Bloom-SSAO presentation, plus the Add/CSG and Help menu
   presentation and the Edit-history, clipboard, object-action, and
   selection-action groups, the Select-by-Type/Tag/Material, Align-Selection,
@@ -215,6 +215,15 @@ before when explicitly requested (`SYS-W14-##` rows).
   The calibrated run observed 1,973 darkened pixels, so this detects a missing
   depth pre-pass, AO pass, blur, or multiplicative composite without depending
   on a fragile full-image golden file.
+- **Recently implemented (2026-07-25):** `SYS-W3-01` Phase 13 moved the
+  top-left viewport camera controls into `Application::UI::CameraPresetOverlay`.
+  `CameraPresetOverlayContext` has only the orthographic/look-through
+  snapshots, selected-camera name, and reset/orbit/projection/look-through
+  callbacks. The application still owns `EditorCamera`, selected-camera bounds
+  checks, document access, and render behavior. The existing `mc3_commands`
+  camera-preset regression still verifies the shared Front/Top/Right/Persp
+  table; the extracted header compiles independently and the Xvfb `smoke_test`
+  passed after the move.
 - **Recently implemented (2026-07-20 through 2026-07-25):** all 7
   raw-OpenGL(ES)-vs-CNA migrations, `AUD-082` through `AUD-088` — full
   detail with file:line evidence and
@@ -816,7 +825,7 @@ git stash pop && cmake --build b-release -j4 --target <affected-target>
 No actionable follow-up audit task remains: `AUD-089` through `AUD-092` are
 complete, while Android (`AUD-042`) is environment/owner deferred.
 `SYS-W3-01` has 12 completed subsystem phases and an active Phase 13 for
-application/UI ownership. The authorized Camera Bookmarks, Walk Mode, View
+application/UI ownership. The authorized Camera Bookmarks, Camera Preset Overlay, Walk Mode, View
 Bloom/SSAO, Help, Add/CSG, Edit-history, Edit-clipboard, and Edit-object-actions
 menu slices are implemented and verified, together with Edit-selection-actions,
 Edit-select-by-type/tag/material, Edit-copy-properties, Edit-grouping,
@@ -1059,12 +1068,15 @@ one item does not authorize the next.
 1. **Post-menu boundary audit — complete.** The top-level `MenuBar` remains
    an application-owned compositor intentionally: it constructs the narrow
    contexts and owns only the top-level menu structure, so extracting it would
-   create a broad god-context. The next candidate is the camera-preset,
-   projection-toggle, and conditional look-through-camera cluster in
-   `Application/UI/Overlays.cpp`. It needs a narrow presentation context with
-   camera snapshots and callbacks, while camera mutation, document-camera
-   lookup, and selection remain application-owned. This is P2 follow-up work;
-   do not start it without separate confirmation.
+   create a broad god-context. Its camera-preset, projection-toggle, and
+   conditional look-through-camera candidate is now complete as
+   `Application::UI::CameraPresetOverlay`; camera mutation, document-camera
+   lookup, selection, and rendering remain application-owned.
+
+2. **Fresh post-overlay boundary audit.** Identify the next coherent
+   presentation-only cluster before changing `MeshCraftApplication`; avoid a
+   broad `Overlays.cpp` extraction or a context that exposes document/renderer
+   internals.
 
 ### Tracked work that is not implementation-ready
 

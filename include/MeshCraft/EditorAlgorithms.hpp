@@ -995,7 +995,7 @@ inline void resolveClickSelectionAlg(
 // ── Camera view presets (STAB-0506) ──────────────────────────────────────────
 //
 // Single source of truth for the view-preset button row
-// (MeshCraftApplication_UiOverlays.cpp): each preset sets EditorCamera's yaw/
+// (Application/UI/CameraPresetOverlay.cpp): each preset sets EditorCamera's yaw/
 // pitch (or triggers a full reset for "Persp"). cameraOrbitPositionAlg()
 // mirrors EditorCamera::position()'s exact spherical-to-Cartesian formula
 // (include/MeshCraft/Editor/EditorCamera.hpp — that method just converts
