@@ -84,10 +84,10 @@ P1s already being fixed in git history. This session:
    is per-field only) not part of the original audit, filed as new `TODO`
    tasks.
 
-   **Net across all 34 AUD-### rows remaining in this active backlog (61
+   **Net across all 35 AUD-### rows remaining in this active backlog (61
    additional rows completed and archived to `docs/history/plan_20260718.md`
    on 2026-07-18 — see that file for their full evidence/resolution text):
-   31 DONE, 1 TODO, 2 DEFERRED** — 10 of the 31 DONE (`AUD-064` through
+   32 DONE, 1 TODO, 2 DEFERRED** — 10 of the 32 DONE (`AUD-064` through
    `AUD-073`) are fresh findings from a 2026-07-18 (later same day)
    independent re-audit, not part of the original 6 (`AUD-069` itself fixed
    2026-07-19, the day after it was filed); the other 14 (`AUD-074`
@@ -181,8 +181,12 @@ still internally consistent.
    File-exit menu slices are implemented and verified. Their state remains in
    the existing editor/application owners;
    `Application::UI::MenuBar` receives only the read-only values and callbacks
-   required for presentation. The remaining ordered Phase 13 queue is a fresh
-   audit for a new narrow boundary.
+   required for presentation. The approved post-menu audit is complete: the
+   top-level MenuBar shell intentionally remains the application's small
+   compositor, because extracting it would require a broad god-context. The
+   next narrow candidate is the camera-preset/projection/look-through control
+   cluster in `Application/UI/Overlays.cpp`; it is P2 follow-up work and is not
+   started without separate confirmation.
    Every item requires its own confirmation per `CLAUDE.md`.
 
 ---
@@ -767,10 +771,10 @@ _All items in this workstream are DONE — archived to [`docs/history/plan_20260
   compilation of all 17 relocated application sources plus `main.cpp`, using
   the existing Debug configuration's flags, also passes without producing
   object files. After explicit approval to recreate the build tree, a fresh
-  Ninja Release configuration with `BUILD_TESTING=ON` registered 181 tests
+  Ninja Release configuration with `BUILD_TESTING=ON` registered 182 tests
   and `CCACHE_DISABLE=1 cmake --build b-release -j4` linked every target.
   The complete suite passed in two disjoint groups with the required local
-  socket access: 147/147 non-render tests and 34/34 render-labelled tests
+  socket access: 147/147 non-render tests and 35/35 render-labelled tests
   under Xvfb. After the Walk Mode, Help, Add, Edit-history, Edit-clipboard,
   Edit-object-actions, Edit-selection-actions, and Edit-select-by-type menu
   slices, the Select-by-Type allocation hardening, and the Edit-select-by-tag,
@@ -786,11 +790,14 @@ _All items in this workstream are DONE — archived to [`docs/history/plan_20260
   File-export-selection, File-export-GLB, File-export-OBJ, File-save,
   File-save-as, File-import-OBJ, File-new, File-open, File-open-recent, and
   File-exit slices, plus the Bloom/SSAO controls,
-  each incremental Release link and the same 147/147 + 34/34 partitions pass
+  each incremental Release link and the same 147/147 + 35/35 partitions pass
   again.
   For the current MenuBar slices, the public UI header also compiles as a
   self-contained C++23 include, `undo_snapshot_lint_test.py` passes, and
-  `git diff --check` is clean. A further Phase 13 slice requires separate
+  `git diff --check` is clean. The post-menu audit also found and closed
+  `AUD-092`: `ssao_test` now detects actual red-channel darkening between the
+  normal and `MESHCRAFT_TEST_FORCE_SSAO=1` renders, rather than merely proving
+  that the SSAO path exits cleanly. A further Phase 13 slice requires separate
   authorization and should keep using the same narrow-context boundary.
   **SYS-W3-01 roadmap status after this session's investigation round:**
   Phases 1–12 done (Keybindings, Preferences, MacroRecorder, UndoManager,
@@ -2285,3 +2292,10 @@ post-processing call owned by this audit.
 - **Outcome:** No production parser or AI-response change is justified: the reported failure was an obsolete test binary, not a current-source non-termination. The test now separately asserts parsing, XSD validation, and full-pipeline acceptance, so any future failure identifies its stage rather than presenting as an opaque timeout.
 - **Tests:** `cmake --build b-release --target ai_test -j4` followed by `ctest --test-dir b-release -R '^mc3_ai$' --output-on-failure -j1` passes 1/1 in 1.26 seconds.
 - **Resolved:** commit `64d187c` — adds the parser/XSD/full-pipeline checks around `STAB-0410`; the audit finding is closed as a stale-build false positive, without weakening its 30-second timeout.
+
+### AUD-092 `[DONE]` `P1` `W8` · SSAO's CNA depth-prepass/AO/blur/composite path had no pixel-level regression test
+- **Component:** `test/ssao_test.py`, its `CMakeLists.txt` registration, and the existing `MESHCRAFT_TEST_FORCE_SSAO` path in `src/MeshCraft/Application/Application.cpp`.
+- **Evidence:** The test-only SSAO hook existed, but no CTest asserted that it changed a rendered pixel: `AUD-085` had only screenshot exit/GL-check coverage and `bloom_test` exercises Bloom alone. Two normal `light_shading.mc3.xml` screenshots were byte-identical, while the forced-SSAO image changed the red sphere's depth-discontinuity edge (1,973 red-channel pixels became darker in the calibrated run).
+- **Outcome:** `ssao_test` reuses the stable `light_shading.mc3.xml` fixture, renders it with SSAO off and forced on, parses both PPMs, and requires more than 1,000 red pixels to darken, more than 2,000 total red-channel darkening, and a maximum per-pixel reduction of at least two. This reaches the depth pre-pass, SSAO shader, blur, and multiplicative composition end-to-end; a broken render target or composite leaves the two images unchanged and fails the test.
+- **Tests:** After a fresh `cmake -S . -B b-release -DBUILD_TESTING=ON`, `ctest --test-dir b-release -R '^ssao_test$' --output-on-failure -j1` passed 1/1 under Xvfb.
+- **Resolved:** commit `577b43c` — adds the calibrated render regression and `render`-labelled CTest registration.

@@ -6,10 +6,12 @@ _Last updated: 2026-07-25. The raw-OpenGL(ES)-vs-CNA audit group
 re-draws scene geometry with a 3D `ShaderEffect` into a `RenderTarget2D`,
 then performs AO, blur and multiplicative composition through CNA APIs.
 This covers static and dynamic (Disk/Grid/Extrude) scene geometry; no
-SSAO `glBlitFramebuffer`, raw FBO, or raw shader path remains. The same
-session activated `.github/workflows/ci.yml` and added a root editor build
-and test job alongside the standalone component matrix. See `plan.md` for
-full evidence; older session history remains below and in `docs/history/`._
+SSAO `glBlitFramebuffer`, raw FBO, or raw shader path remains. `AUD-092` now
+adds a pixel-level regression that compares this fixture with SSAO off and
+forced on, rather than treating a clean screenshot exit as visual coverage.
+The same session activated `.github/workflows/ci.yml` and added a root editor
+build and test job alongside the standalone component matrix. See `plan.md`
+for full evidence; older session history remains below and in `docs/history/`._
 
 _Source-layout note (2026-07-25): the editor application implementation is
 now at `src/MeshCraft/Application/` and `src/MeshCraft/Application/UI/`,
@@ -27,7 +29,9 @@ Convert-to-Definition, Export-Subtree, Break-Instance, Drop-to-Ground,
 Snap-to-Grid, Group-Scale, Linear-Array, and Scatter-Along-Curve items plus the
 Group/Ungroup pair and every File-menu action through Open Recent. The detailed
 toolbar Snap interval contents and the remaining MenuBar sections are still
-application-owned. Camera bookmark, walk,
+application-owned. The post-menu audit deliberately keeps MenuBar's top-level
+shell there as a small composition layer; extracting it would create a broad
+context. Camera bookmark, walk,
 document, undo, clipboard, selection, grid, and dialog state have **not** moved
 again: they remain in their existing editor/application owners; the UI
 component only reads presentation state and invokes application-owned
@@ -100,24 +104,24 @@ before when explicitly requested (`SYS-W14-##` rows).
 
 ## 2. Current status
 
-- **Last full build: clean after the current Phase 13 File-open-recent and
-  View-Bloom/SSAO slices.** Testing is enabled in the current Ninja Release tree, and
+- **Last full build: clean after the current Phase 13 File-open-recent,
+  View-Bloom/SSAO, and SSAO-regression slices.** Testing is enabled in the current Ninja Release tree, and
   `CCACHE_DISABLE=1 cmake --build b-release -j4` linked all targets successfully
   on EASYGL. Alternate-backend runtime qualification remains blocked.
-- **Tests:** the fresh Release tree registers 181 tests. All passed again after
+- **Tests:** the fresh Release tree registers 182 tests. All passed again after
   the current Phase 13 slices in two
-  disjoint groups: 147/147 non-render tests and 34/34 render-labelled tests
+  disjoint groups: 147/147 non-render tests and 35/35 render-labelled tests
   under Xvfb (with local loopback/X11 socket access). SVG-specific
   verification passes with `-j4`: external and inline SVG export to glTF PNGs,
   bounded/malformed input, cache invalidation, and real headless viewport
   screenshots sampling the rasterized material pixels. This session's own
-  `AUD-082`-`088` work added 3 brand-new ctest targets — `bloom_test`,
-  `matpreview_test`, `shadowdebug_test` — one per migrated feature that
+  `AUD-082`-`092` work added 4 brand-new ctest targets — `bloom_test`,
+  `matpreview_test`, `shadowdebug_test`, `ssao_test` — one per migrated feature that
   previously had zero visual-correctness coverage (see §3). The 142
   count this file last recorded (2026-07-19) predates unrelated work not
   narrated here (a further audit pass and the `SYS-W14-18..27`
   mc3-format-vs-editor gap closures — see `plan.md`/memory, not fully
-  reflected in this file's own history) — don't treat 142→181 as this
+  reflected in this file's own history) — don't treat 142→182 as this
   session's own delta.
   All builds/tests this session used at most `-j4` (never `-j$(nproc)`), per
   the user's standing request (shared machine).
@@ -203,6 +207,14 @@ before when explicitly requested (`SYS-W14-##` rows).
   and the Xvfb-hosted `bloom_test` render regression passed. The test-hook
   comments now also correctly state that `MESHCRAFT_TEST_FORCE_POSTFX` forces
   only Bloom; SSAO has its own `MESHCRAFT_TEST_FORCE_SSAO` hook.
+- **Recently implemented (2026-07-25):** `AUD-092` adds `ssao_test`, a
+  `render`-labelled headless regression for the CNA SSAO pipeline. It renders
+  `light_shading.mc3.xml` normally and with `MESHCRAFT_TEST_FORCE_SSAO=1`, then
+  requires more than 1,000 red pixels to darken, more than 2,000 total
+  red-channel darkening, and a maximum per-pixel reduction of at least two.
+  The calibrated run observed 1,973 darkened pixels, so this detects a missing
+  depth pre-pass, AO pass, blur, or multiplicative composite without depending
+  on a fragile full-image golden file.
 - **Recently implemented (2026-07-20 through 2026-07-25):** all 7
   raw-OpenGL(ES)-vs-CNA migrations, `AUD-082` through `AUD-088` — full
   detail with file:line evidence and
@@ -603,7 +615,7 @@ verification.** `AUD-090` preflights `xvfb-run` with a real `xdpyinfo` client.
 The execution sandbox blocks the local sockets needed by Xvfb and the
 `mc3_ai` loopback mock server, but the permitted host run completed both
 partitions cleanly: 147/147 non-render tests (including `mc3_ai` in 1.27
-seconds) and 34/34 render tests. CI explicitly installs `xvfb` and
+seconds) and 35/35 render tests. CI explicitly installs `xvfb` and
 `x11-utils` for the same render path. `AUD-091` therefore remains closed as
 a stale-build false positive rather than hidden behind a longer timeout.
 
@@ -801,7 +813,7 @@ git stash pop && cmake --build b-release -j4 --target <affected-target>
 
 ## 8. Next smallest tasks
 
-No actionable follow-up audit task remains: `AUD-089` through `AUD-091` are
+No actionable follow-up audit task remains: `AUD-089` through `AUD-092` are
 complete, while Android (`AUD-042`) is environment/owner deferred.
 `SYS-W3-01` has 12 completed subsystem phases and an active Phase 13 for
 application/UI ownership. The authorized Camera Bookmarks, Walk Mode, View
@@ -1044,9 +1056,15 @@ The sequence below is planning only. Per `CLAUDE.md`, each item must be
 described and explicitly confirmed immediately before implementation; finishing
 one item does not authorize the next.
 
-1. **Post-menu boundary audit.** The remaining File and View blocks are
-   complete; identify one new narrow presentation boundary before changing
-   `MeshCraftApplication`. Do not start a broad application refactor.
+1. **Post-menu boundary audit — complete.** The top-level `MenuBar` remains
+   an application-owned compositor intentionally: it constructs the narrow
+   contexts and owns only the top-level menu structure, so extracting it would
+   create a broad god-context. The next candidate is the camera-preset,
+   projection-toggle, and conditional look-through-camera cluster in
+   `Application/UI/Overlays.cpp`. It needs a narrow presentation context with
+   camera snapshots and callbacks, while camera mutation, document-camera
+   lookup, and selection remain application-owned. This is P2 follow-up work;
+   do not start it without separate confirmation.
 
 ### Tracked work that is not implementation-ready
 
