@@ -91,13 +91,10 @@ set(MESH_CRAFT_GRAPHICS_BACKEND "EASYGL" CACHE STRING
 set_property(CACHE MESH_CRAFT_GRAPHICS_BACKEND PROPERTY STRINGS
         SDL_RENDERER EASYGL BGFX VULKAN WEBGPU)
 
-string(TOUPPER "${MESH_CRAFT_GRAPHICS_BACKEND}" MESH_CRAFT_GRAPHICS_BACKEND_UPPER)
-
-if(ANDROID)
-    set(MESH_CRAFT_GRAPHICS_BACKEND_UPPER "SDL_RENDERER")
-elseif(EMSCRIPTEN)
-    set(MESH_CRAFT_GRAPHICS_BACKEND_UPPER "EASYGL")
-endif()
+include("${CMAKE_CURRENT_SOURCE_DIR}/cmake/MeshCraftGraphicsBackend.cmake")
+meshcraft_select_graphics_backend(
+    "${MESH_CRAFT_GRAPHICS_BACKEND}" "${ANDROID}" "${EMSCRIPTEN}"
+    MESH_CRAFT_GRAPHICS_BACKEND_UPPER)
 
 if(EMSCRIPTEN)
     add_compile_options(-fwasm-exceptions)
@@ -909,6 +906,15 @@ if(MESH_CRAFT_BUILD_TESTING AND UNIX AND NOT ANDROID AND NOT EMSCRIPTEN)
     target_compile_features(graphics_backend_check_test PRIVATE cxx_std_23)
     add_test(NAME graphics_backend_check COMMAND graphics_backend_check_test)
     set_tests_properties(graphics_backend_check PROPERTIES TIMEOUT 15 LABELS "unit")
+
+    # AUD-042: Android's backend choice is a CMake-level platform decision,
+    # but an NDK is not installed on every developer/CI host.  Exercise it as
+    # a pure script so a future edit cannot silently restore SDL_RENDERER.
+    add_test(NAME graphics_backend_selection
+        COMMAND "${CMAKE_COMMAND}"
+            "-DMeshCraft_SOURCE_DIR=${CMAKE_CURRENT_SOURCE_DIR}"
+            -P "${CMAKE_CURRENT_SOURCE_DIR}/test/graphics_backend_selection_test.cmake")
+    set_tests_properties(graphics_backend_selection PROPERTIES TIMEOUT 15 LABELS "unit")
 
     add_executable(imgui_texture_registry_test
         ${CMAKE_CURRENT_SOURCE_DIR}/test/imgui_texture_registry_test.cpp)
