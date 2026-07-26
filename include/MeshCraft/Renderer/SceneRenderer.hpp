@@ -61,6 +61,21 @@ struct RenderMesh {
     int texPrimitiveCount{0};
 };
 
+// One cached CSG vertex buffer is shared by per-material index ranges. This
+// avoids multiplying generated Manifold vertex data merely to use different
+// child materials in the viewport.
+struct CsgPreviewMaterialRange {
+    std::string materialId;
+    std::unique_ptr<Microsoft::Xna::Framework::Graphics::IndexBuffer> indexBuffer;
+    int primitiveCount{0};
+};
+
+struct CsgPreviewCacheEntry {
+    RenderMesh mesh;
+    std::vector<CsgPreviewMaterialRange> materialRanges;
+    std::string warning;
+};
+
 // Line-list shape for edge overlay rendering
 struct WireShape {
     std::vector<Microsoft::Xna::Framework::Vector3> positions; // interleaved pairs (LineList)
@@ -373,14 +388,15 @@ private:
     // Called once per draw, so edits in the Lights panel are immediate.
     void applyDocumentLighting(const Mc3::Mc3Document& doc);
 
-    bool drawPunctualLightMesh(const RenderMesh& mesh,
-                               const Microsoft::Xna::Framework::Matrix& world,
+    bool drawPunctualLightMesh(const Microsoft::Xna::Framework::Matrix& world,
                                const Microsoft::Xna::Framework::Matrix& view,
                                const Microsoft::Xna::Framework::Matrix& projection,
                                Microsoft::Xna::Framework::Color color,
                                Microsoft::Xna::Framework::Graphics::Texture2D* texture,
                                const Microsoft::Xna::Framework::Graphics::SamplerState* sampler,
-                               Microsoft::Xna::Framework::Graphics::VertexBuffer* vertexBuffer);
+                               Microsoft::Xna::Framework::Graphics::VertexBuffer* vertexBuffer,
+                               Microsoft::Xna::Framework::Graphics::IndexBuffer* indexBuffer,
+                               int primitiveCount);
 
     void drawEmissiveObject(const Mc3::Mc3Object& obj,
                             const Mc3::Mc3Document& doc,
@@ -465,9 +481,14 @@ private:
                           Microsoft::Xna::Framework::Graphics::Texture2D* tex,
                           const Microsoft::Xna::Framework::Graphics::SamplerState* sampler = nullptr,
                           const Mc3::Mc3UvMapping* uvMapping = nullptr,
-                          std::array<float, 3> uvGeometryScale = {1.0f, 1.0f, 1.0f});
+                          std::array<float, 3> uvGeometryScale = {1.0f, 1.0f, 1.0f},
+                          Microsoft::Xna::Framework::Graphics::IndexBuffer* indexBuffer = nullptr,
+                          int primitiveCount = -1);
 
     Microsoft::Xna::Framework::Graphics::Texture2D* loadOrGetTexture(const std::string& absPath);
+    Microsoft::Xna::Framework::Graphics::Texture2D* textureForMaterial(
+        const std::string& materialId, const Mc3::Mc3Document& doc,
+        std::optional<Microsoft::Xna::Framework::Graphics::SamplerState>& svgSampler);
     const RenderMesh* loadOrGetMesh(const std::string& absPath);
     const RenderMesh* loadOrGetEmbeddedMesh(const Mc3::Mc3Document& doc,
                                             const std::string& embedReference);
@@ -492,7 +513,7 @@ private:
     // actual radii). See getOrBuildTorusMesh()/getOrBuildCapsuleMesh().
     std::map<std::tuple<int, int, float, float>, RenderMesh> torusMeshCache_;   // (ringSeg, tubeSeg, majorRadius, minorRadius)
     std::map<std::tuple<int, float, float>, RenderMesh> capsuleMeshCache_;      // (segments, radius, height)
-    std::unordered_map<std::size_t, RenderMesh> csgMeshCache_;
+    std::unordered_map<std::size_t, CsgPreviewCacheEntry> csgMeshCache_;
     std::unordered_map<std::string, int> csgTriCountMap_;   // obj.id → last rendered tri count (K4)
     std::unordered_map<std::string, std::string> csgWarningMap_;   // obj.id → last incomplete-preview reason, empty if none (STAB-0672)
     int csgCacheEvaluations_{0};   // cache-miss count (STAB-0522)

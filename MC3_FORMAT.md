@@ -876,7 +876,7 @@ Pass `--allow-approximate-csg` (CLI) or enable the "Allow approximate CSG export
 
 **Strict mode is the default** (`allowApproximateCSG = false` in `GltfExporter`; the `mc3togltf_csg_strict` test asserts this): a CSG node containing an unsupported child type fails the whole export with an error rather than silently producing wrong geometry. There is no separate "strict" flag to set — it's simply what happens unless `--allow-approximate-csg` is explicitly passed.
 
-**CSG output shading/material behavior** (`SYS-W14-06`):
+**CSG output shading/material behavior** (`SYS-W14-06`, `SYS-W14-34`):
 
 - Manifold calculates vertex normals after the boolean with its 60-degree
   sharp-edge threshold. Curved result surfaces shade smoothly; hard edges such
@@ -888,10 +888,13 @@ Pass `--allow-approximate-csg` (CLI) or enable the "Allow approximate CSG export
   that would require feeding UV-carrying `MeshGL` data for every analytic
   primitive and defining seam policy for boolean-created vertices.
 - An explicit material on the CSG root remains a full-result override. Without
-  one, `mc3togltf` restores the Manifold source relation as one glTF primitive
-  per effective child material, including cut faces associated with that input.
-  The live preview uses the CSG root material/texture only; its per-child
-  material split is export-only for now.
+  one, `mc3togltf` and the live preview restore the Manifold source relation
+  as material-index ranges per effective child material, including cut faces
+  associated with that input. The preview shares one generated vertex buffer
+  between those ranges and resolves each range's base color/texture normally;
+  an explicit root material deliberately collapses it back to one range. A
+  material edit is part of the CSG cache key, so it takes effect immediately
+  without waiting for a document reload.
 
 ---
 

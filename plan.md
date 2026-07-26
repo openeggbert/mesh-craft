@@ -135,12 +135,10 @@ sequentially. Per `CLAUDE.md`, recording this ordered backlog does **not**
 remove the requirement to describe and obtain explicit confirmation for each
 individual implementation task immediately before work begins.
 
-1. **SYS-W14-34 (P3/W14)** — deliver the remaining CSG child-material viewport
-   parity slice.
-2. **SYS-W14-30 (P2/W14)** — expand explicit walk-mode collision proxies.
-3. **SYS-W14-35/36 (P2/P3/W14)** — preserve material structure on OBJ import,
+1. **SYS-W14-30 (P2/W14)** — expand explicit walk-mode collision proxies.
+2. **SYS-W14-35/36 (P2/P3/W14)** — preserve material structure on OBJ import,
    then add a bounded editable self-contained GLB importer.
-4. **SYS-W14-37/38/39 and SYS-W9-04 (P3)** — export optimization controls,
+3. **SYS-W14-37/38/39 and SYS-W9-04 (P3)** — export optimization controls,
     animation/export policy, Model Registry v2, and scalable history/review
     tooling.
 
@@ -1156,7 +1154,8 @@ portable through CNA rather than merely hiding its OpenGL dependency.
   and XML writer now permit that mapping on CSG roots. An explicit CSG-root
   material remains a full-result override; otherwise Manifold source runs are
   emitted as separate glTF primitives for each child material. Operand unwraps
-  and per-child viewport material splitting remain intentionally unsupported.
+  remain intentionally unsupported; the separate `SYS-W14-34` subsequently
+  brought the same child-material splitting to the viewport.
   `mc3togltf_csg_shading_materials` reads GLB bytes to prove smooth normals,
   non-degenerate UVs, and red/blue child-material primitives; XML roundtrip,
   XSD validation, CSG export, and viewport-cache tests cover the surrounding
@@ -2121,13 +2120,31 @@ because it is listed: `CLAUDE.md` requires per-row user confirmation.
   screenshot CTest is registered but disabled here by the existing no-Xvfb
   preflight. Release build passed and all 160 non-render CTests passed.
 
-- **SYS-W14-34** `[TODO]` `P3` — Preview CSG child-material composition.
+- **SYS-W14-34** `[DONE]` `P3` — Preview CSG child-material composition.
   glTF output restores Manifold child-material runs when a CSG root has no
   material override, while the viewport shows only the root material. Extend
   the CNA preview cache/draw path to retain and draw the generated material
   ranges, preserving the root-material override rule. Add cache invalidation,
   material-range, and screenshot coverage; do not change the exporter’s
   established CSG semantics.
+  **Implemented 2026-07-26.** The viewport now consumes the exporter’s
+  existing `evaluateCsgNodeWithMaterials()` result, keeping one generated CNA
+  vertex buffer in each CSG cache entry and creating lightweight index buffers
+  for its material ranges. With no valid root material, every effective child
+  material (including its base-color texture/SVG sampler) draws its own range;
+  a valid root `material` or `material_override` deliberately remains a
+  one-range full-result override. Root SRT stays applied at draw time and root
+  `deform` remains excluded, matching the exporter’s established CSG rules;
+  operand transforms/deforms remain part of Manifold evaluation. Unsupported
+  operands retain the editor’s child-by-child fallback with the evaluator’s
+  named reason. `CsgCacheAlg.hpp` now hashes material and material-override
+  fields, so composition edits invalidate the cached ranges.
+  `CsgMaterialRangeAlgorithms.hpp` and `csg_material_range_algorithms` cover
+  child-range grouping, root override, malformed relation fallback, and both
+  cache-invalidation inputs. `csg_material_viewport_test` samples red/blue
+  child ranges and the green root override from real screenshots. It is
+  registered but disabled on this host by the existing no-Xvfb preflight.
+  Release build passed and all 161 non-render CTests passed.
 
 - **SYS-W14-35** `[TODO]` `P2` — Preserve OBJ material groups during import.
   Existing OBJ import flattens all `usemtl`/face groups into one MC3 mesh and

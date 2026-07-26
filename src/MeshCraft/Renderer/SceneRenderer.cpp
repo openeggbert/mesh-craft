@@ -3,6 +3,7 @@
 #include "MeshCraft/SceneSemanticsAlgorithms.hpp"
 #include "MeshCraft/UvMappingAlgorithms.hpp"
 #include "MeshCraft/Renderer/CsgCacheAlg.hpp"
+#include "MeshCraft/CsgMaterialRangeAlgorithms.hpp"
 #include "MeshCraft/Renderer/PrimitiveTessellationAlg.hpp"
 #include "MeshCraft/EditorAlgorithms.hpp"
 #include "MeshCraft/GraphicsBackendCheck.hpp"
@@ -397,16 +398,52 @@ static void applyCsgUvMapping(mc3togltf::MeshData& mesh, const Mc3Object& obj) {
     mesh.applyUvMapping(uv.scaleU, uv.scaleV, uv.offsetU, uv.offsetV, uv.rotation);
 }
 
-// Convert a Manifold result to the same smooth-normal/UV layout used by glTF
-// CSG export. `m` is already world-space in the viewport path, and therefore
-// its generated projection is world-anchored; the glTF exporter performs the
-// equivalent operation in the CSG root's local space before node transforms.
-static RenderMesh manifoldToRenderMesh(GraphicsDevice& device, const manifold::Manifold& m,
-                                       const Mc3Object& csgRoot) {
-    mc3togltf::MeshData data = mc3togltf::meshDataFromCsgManifold(m);
-    if (data.empty()) return {};
-    applyCsgUvMapping(data, csgRoot);
-    return uploadMeshData(device, data);
+// SYS-W14-34: use the exporter’s material-aware CSG result rather than the
+// older viewport-only Manifold conversion. The mesh upload expands every
+// triangle into a sequential CNA buffer, so ranges use the matching expanded
+// indices while sharing that one vertex buffer.
+static CsgPreviewCacheEntry buildCsgPreviewCacheEntry(
+    GraphicsDevice& device, const Mc3Object& csgRoot, const Mc3Document& doc)
+{
+    CsgPreviewCacheEntry entry;
+    try {
+        mc3togltf::CsgMeshData csg = mc3togltf::evaluateCsgNodeWithMaterials(
+            csgRoot, doc.definitions);
+        if (csg.empty()) return entry;
+        applyCsgUvMapping(csg.mesh, csgRoot);
+        entry.mesh = uploadMeshData(device, csg.mesh);
+        if (!entry.mesh.texVB || !entry.mesh.texIB) {
+            entry.warning = "CSG result exceeds the viewport mesh safety limit";
+            return entry;
+        }
+
+        std::vector<uint32_t> expandedIndices(csg.mesh.indices.size());
+        std::iota(expandedIndices.begin(), expandedIndices.end(), 0u);
+        std::string rootMaterial(MeshCraft::effectiveObjectMaterialIdAlg(csgRoot));
+        // Match glTF's known-material rule: a dangling root ID is warned by
+        // export and does not hide otherwise valid child material ranges.
+        if (!rootMaterial.empty() && doc.materials.find(rootMaterial) == doc.materials.end())
+            rootMaterial.clear();
+        for (const auto& rangeAlg : MeshCraft::csgMaterialRangesAlg(
+                 expandedIndices, csg.triangleMaterials, rootMaterial)) {
+            if (rangeAlg.indices.empty()) continue;
+            CsgPreviewMaterialRange range;
+            range.materialId = rangeAlg.materialId;
+            range.primitiveCount = static_cast<int>(rangeAlg.indices.size() / 3);
+            range.indexBuffer = std::make_unique<IndexBuffer>(
+                device, IndexElementSize::ThirtyTwoBits,
+                static_cast<int>(rangeAlg.indices.size()), BufferUsage::None);
+            range.indexBuffer->SetData(rangeAlg.indices.data(),
+                                       static_cast<int>(rangeAlg.indices.size()));
+            entry.materialRanges.push_back(std::move(range));
+        }
+    } catch (const std::exception& error) {
+        // The exporter intentionally fails for unsupported CSG operands. The
+        // editor preview retains its long-standing child-by-child fallback,
+        // but now exposes the same cause in its CSG warning state.
+        entry.warning = error.what();
+    }
+    return entry;
 }
 
 // ---------------------------------------------------------------------------
@@ -714,11 +751,12 @@ void SceneRenderer::drawMesh(const RenderMesh& mesh,
     device_.SetIndexBuffer(nullptr);
 }
 
-bool SceneRenderer::drawPunctualLightMesh(const RenderMesh& mesh,
-                                           const Matrix& world, const Matrix& view,
+bool SceneRenderer::drawPunctualLightMesh(const Matrix& world, const Matrix& view,
                                            const Matrix& projection, Color color,
                                            Texture2D* texture, const SamplerState* sampler,
-                                           VertexBuffer* vertexBuffer)
+                                           VertexBuffer* vertexBuffer,
+                                           IndexBuffer* indexBuffer,
+                                           int primitiveCount)
 {
     const bool shaderValid = pointSpotEffect_.has_value() && pointSpotEffect_->IsEffectValid();
     if (!pointSpotShaderEnabledAlg(supportsTextShaderEffects(), shaderValid,
@@ -802,10 +840,10 @@ bool SceneRenderer::drawPunctualLightMesh(const RenderMesh& mesh,
     }
     if (texture) effect.SetTexture(0, *texture);
     device_.SetVertexBuffer(vertexBuffer);
-    device_.SetIndexBuffer(mesh.texIB.get());
+    device_.SetIndexBuffer(indexBuffer);
     device_.DrawIndexedPrimitives(Graphics::PrimitiveType::TriangleList, 0, 0,
                                   vertexBuffer->getVertexCountProperty(), 0,
-                                  mesh.texPrimitiveCount);
+                                  primitiveCount);
     device_.SetVertexBuffer(nullptr);
     device_.SetIndexBuffer(nullptr);
     if (previousSampler) device_.getSamplerStatesProperty()[0] = *previousSampler;
@@ -816,12 +854,17 @@ void SceneRenderer::drawMeshTextured(const RenderMesh& mesh,
                                       const Matrix& world, const Matrix& view, const Matrix& proj,
                                       Color color, Texture2D* tex, const SamplerState* sampler,
                                       const Mc3UvMapping* uvMapping,
-                                      std::array<float, 3> uvGeometryScale)
+                                      std::array<float, 3> uvGeometryScale,
+                                      IndexBuffer* indexBuffer,
+                                      int primitiveCount)
 {
     if (!mesh.texVB || !mesh.texIB) {
         drawMesh(mesh, world, view, proj, color);
         return;
     }
+    IndexBuffer* activeIndexBuffer = indexBuffer ? indexBuffer : mesh.texIB.get();
+    const int activePrimitiveCount = primitiveCount >= 0 ? primitiveCount : mesh.texPrimitiveCount;
+    if (!activeIndexBuffer || activePrimitiveCount <= 0) return;
     int n = mesh.texVB->getVertexCountProperty();
 
     std::unique_ptr<VertexBuffer> mappedVertexBuffer;
@@ -848,8 +891,9 @@ void SceneRenderer::drawMeshTextured(const RenderMesh& mesh,
         mappedVertexBuffer->SetData(vertices.data(), n);
     }
 
-    if (drawPunctualLightMesh(mesh, world, view, proj, color, tex, sampler,
-                               mappedVertexBuffer ? mappedVertexBuffer.get() : mesh.texVB.get()))
+    if (drawPunctualLightMesh(world, view, proj, color, tex, sampler,
+                               mappedVertexBuffer ? mappedVertexBuffer.get() : mesh.texVB.get(),
+                               activeIndexBuffer, activePrimitiveCount))
         return;
 
     effect_->World      = world;
@@ -880,10 +924,10 @@ void SceneRenderer::drawMeshTextured(const RenderMesh& mesh,
         pass.Apply();
 
     device_.SetVertexBuffer(mappedVertexBuffer ? mappedVertexBuffer.get() : mesh.texVB.get());
-    device_.SetIndexBuffer(mesh.texIB.get());
+    device_.SetIndexBuffer(activeIndexBuffer);
     device_.DrawIndexedPrimitives(
         Graphics::PrimitiveType::TriangleList,
-        0, 0, n, 0, mesh.texPrimitiveCount);
+        0, 0, n, 0, activePrimitiveCount);
     device_.SetVertexBuffer(nullptr);
     device_.SetIndexBuffer(nullptr);
 
@@ -1047,11 +1091,11 @@ void SceneRenderer::drawDepthObject(const Mc3Object& obj, const Mc3Document& doc
         auto cached = csgMeshCache_.find(fingerprint);
         if (cached == csgMeshCache_.end()) {
             ++csgCacheEvaluations_;
-            csgMeshCache_[fingerprint] = manifoldToRenderMesh(
-                device_, buildManifoldTree(obj, doc, parentWorld, 0), obj);
+            csgMeshCache_[fingerprint] = buildCsgPreviewCacheEntry(device_, obj, doc);
             cached = csgMeshCache_.find(fingerprint);
         }
-        if (cached->second.vb) depthStatic(cached->second, Matrix::getIdentityProperty());
+        if (cached->second.mesh.vb)
+            depthStatic(cached->second.mesh, world);
         else for (const auto& child : obj.children)
             if (child) drawDepthObject(*child, doc, world, view, proj, depth + 1);
         break;
@@ -1134,6 +1178,62 @@ Texture2D* SceneRenderer::loadOrGetTexture(const std::string& absPath)
         // default invalid state. Just return nullptr and try again next frame (cheap miss).
         return nullptr;
     }
+}
+
+Texture2D* SceneRenderer::textureForMaterial(const std::string& materialId,
+                                             const Mc3Document& doc,
+                                             std::optional<SamplerState>& svgSampler)
+{
+    if (materialId.empty()) return nullptr;
+    auto matIt = doc.materials.find(materialId);
+    if (matIt == doc.materials.end() || matIt->second.baseColorTexture.empty()) return nullptr;
+
+    const std::string& textureId = matIt->second.baseColorTexture;
+    auto texIt = doc.textures.find(textureId);
+    if (texIt != doc.textures.end() && !texIt->second.uri.empty()) {
+        return loadOrGetTexture((doc.sourcePath / texIt->second.uri).string());
+    }
+
+    auto svgIt = doc.svgTextures.find(textureId);
+    if (svgIt == doc.svgTextures.end()) return nullptr;
+    const std::string cacheKey = mc3togltf::svgTextureCacheKey(svgIt->second, doc.sourcePath);
+    const auto sourceStamp = mc3togltf::svgTextureLastWriteTime(svgIt->second, doc.sourcePath);
+    auto cached = textureCache_.find(cacheKey);
+    auto cacheState = svgTextureCacheState_.find(cacheKey);
+    const bool sourceChanged = svgIt->second.isExternal() &&
+        cacheState != svgTextureCacheState_.end() &&
+        cacheState->second.lastWriteTime != sourceStamp;
+    if (sourceChanged) {
+        textureCache_.erase(cacheKey);
+        svgTextureCacheState_.erase(cacheKey);
+        svgTextureFailureState_.erase(cacheKey);
+        cached = textureCache_.end();
+    }
+
+    auto failed = svgTextureFailureState_.find(cacheKey);
+    const bool unchangedFailure = failed != svgTextureFailureState_.end() &&
+        failed->second.lastWriteTime == sourceStamp;
+    Texture2D* texture = nullptr;
+    if (cached != textureCache_.end()) {
+        texture = &cached->second;
+    } else if (!unchangedFailure) {
+        std::string error;
+        auto raster = mc3togltf::rasterizeSvgTexture(svgIt->second, doc.sourcePath, &error);
+        if (!raster.rgba.empty()) {
+            auto [inserted, ok] = textureCache_.emplace(
+                cacheKey, Texture2D::CreateFromPixels(device_, raster.width, raster.height, raster.rgba));
+            (void)ok;
+            texture = &inserted->second;
+            svgTextureCacheState_[cacheKey] = {sourceStamp};
+            svgTextureFailureState_.erase(cacheKey);
+        } else {
+            std::cerr << "Warning: SVG texture '" << svgIt->first
+                      << "' skipped in viewport: " << error << "\n";
+            svgTextureFailureState_[cacheKey] = {sourceStamp};
+        }
+    }
+    svgSampler = samplerStateForSvg(svgIt->second);
+    return texture;
 }
 
 const RenderMesh* SceneRenderer::loadOrGetMesh(const std::string& absPath)
@@ -1380,63 +1480,11 @@ void SceneRenderer::drawObject(const Mc3Object& obj, const Mc3Document& doc,
     }
     Matrix deform = Matrix::CreateScale({deformScale[0], deformScale[1], deformScale[2]});
 
-    // Resolve baseColorTexture → GPU texture (null if none or failed to load)
-    Texture2D* tex = nullptr;
+    // Resolve baseColorTexture → GPU texture (null if none or failed to load).
+    // CSG child-material ranges call the same helper below, so SVG cache
+    // invalidation and ordinary-material rendering stay one code path.
     std::optional<SamplerState> svgSampler;
-    if (!effectiveMaterial.empty()) {
-        auto matIt = doc.materials.find(std::string(effectiveMaterial));
-        if (matIt != doc.materials.end() && !matIt->second.baseColorTexture.empty()) {
-            auto texIt = doc.textures.find(matIt->second.baseColorTexture);
-            if (texIt != doc.textures.end() && !texIt->second.uri.empty()) {
-                auto absPath = (doc.sourcePath / texIt->second.uri).string();
-                tex = loadOrGetTexture(absPath);
-            } else {
-                auto svgIt = doc.svgTextures.find(matIt->second.baseColorTexture);
-                if (svgIt != doc.svgTextures.end()) {
-                    const std::string cacheKey = mc3togltf::svgTextureCacheKey(svgIt->second,
-                                                                                 doc.sourcePath);
-                    const auto sourceStamp = mc3togltf::svgTextureLastWriteTime(svgIt->second,
-                                                                                  doc.sourcePath);
-                    auto cached = textureCache_.find(cacheKey);
-                    auto cacheState = svgTextureCacheState_.find(cacheKey);
-                    const bool sourceChanged = svgIt->second.isExternal() &&
-                        cacheState != svgTextureCacheState_.end() &&
-                        cacheState->second.lastWriteTime != sourceStamp;
-                    if (sourceChanged) {
-                        textureCache_.erase(cacheKey);
-                        svgTextureCacheState_.erase(cacheKey);
-                        svgTextureFailureState_.erase(cacheKey);
-                        cached = textureCache_.end();
-                    }
-
-                    auto failed = svgTextureFailureState_.find(cacheKey);
-                    const bool unchangedFailure = failed != svgTextureFailureState_.end() &&
-                        failed->second.lastWriteTime == sourceStamp;
-                    if (cached != textureCache_.end()) {
-                        tex = &cached->second;
-                    } else if (!unchangedFailure) {
-                        std::string error;
-                        auto raster = mc3togltf::rasterizeSvgTexture(svgIt->second,
-                                                                       doc.sourcePath, &error);
-                        if (!raster.rgba.empty()) {
-                            auto [inserted, ok] = textureCache_.emplace(
-                                cacheKey, Texture2D::CreateFromPixels(device_, raster.width,
-                                                                       raster.height, raster.rgba));
-                            (void)ok;
-                            tex = &inserted->second;
-                            svgTextureCacheState_[cacheKey] = {sourceStamp};
-                            svgTextureFailureState_.erase(cacheKey);
-                        } else {
-                            std::cerr << "Warning: SVG texture '" << svgIt->first
-                                      << "' skipped in viewport: " << error << "\n";
-                            svgTextureFailureState_[cacheKey] = {sourceStamp};
-                        }
-                    }
-                    svgSampler = samplerStateForSvg(svgIt->second);
-                }
-            }
-        }
-    }
+    Texture2D* tex = textureForMaterial(std::string(effectiveMaterial), doc, svgSampler);
 
     const Mc3UvMapping* uvMapping = obj.uvMapping ? &*obj.uvMapping : nullptr;
     auto drawAuto = [&](const RenderMesh& mesh, const Matrix& m,
@@ -1455,31 +1503,36 @@ void SceneRenderer::drawObject(const Mc3Object& obj, const Mc3Document& doc,
     int lodLevel = (distSq > 40.0f*40.0f) ? 2 : (distSq > 10.0f*10.0f) ? 1 : 0;
     if (!objectIdentity.empty()) lodLevelMap_[objectIdentity] = lodLevel;
 
-    // I3: per-object fog — mix color toward fog color based on camera distance
+    // I3: per-object fog — mix color toward fog color based on camera distance.
+    // Keep the factor available for CSG child-material ranges below: all
+    // ranges share one generated object and therefore one object distance.
+    float fogFactor = 0.0f;
+    std::array<float, 3> fogColor{0.0f, 0.0f, 0.0f};
     if (doc.environment && doc.environment->fog) {
         const auto& f = *doc.environment->fog;
         float dist = std::sqrt(distSq);
-        float fogFactor = 0.0f;
+        fogColor = f.color;
         if (f.mode == Mc3::FogMode::Linear) {
             if (f.end > f.start)
                 fogFactor = std::clamp((dist - f.start) / (f.end - f.start), 0.0f, 1.0f);
         } else {
             fogFactor = std::clamp(1.0f - std::exp(-f.density * dist), 0.0f, 1.0f);
         }
-        if (fogFactor > 0.0f) {
-            float r = color.getRProperty() / 255.0f;
-            float g = color.getGProperty() / 255.0f;
-            float b = color.getBProperty() / 255.0f;
-            r += (f.color[0] - r) * fogFactor;
-            g += (f.color[1] - g) * fogFactor;
-            b += (f.color[2] - b) * fogFactor;
-            color = Color(
-                static_cast<int>(std::clamp(r, 0.0f, 1.0f) * 255),
-                static_cast<int>(std::clamp(g, 0.0f, 1.0f) * 255),
-                static_cast<int>(std::clamp(b, 0.0f, 1.0f) * 255),
-                static_cast<int>(color.getAProperty()));
-        }
     }
+    auto applyFog = [&](Color source) {
+        if (fogFactor <= 0.0f) return source;
+        float red = source.getRProperty() / 255.0f;
+        float green = source.getGProperty() / 255.0f;
+        float blue = source.getBProperty() / 255.0f;
+        red += (fogColor[0] - red) * fogFactor;
+        green += (fogColor[1] - green) * fogFactor;
+        blue += (fogColor[2] - blue) * fogFactor;
+        return Color(static_cast<int>(std::clamp(red, 0.0f, 1.0f) * 255),
+                     static_cast<int>(std::clamp(green, 0.0f, 1.0f) * 255),
+                     static_cast<int>(std::clamp(blue, 0.0f, 1.0f) * 255),
+                     static_cast<int>(source.getAProperty()));
+    };
+    color = applyFog(color);
 
     auto lodMesh = [&](const RenderMesh& hi, const RenderMesh& mid, const RenderMesh& lo)
         -> const RenderMesh& {
@@ -1594,17 +1647,34 @@ void SceneRenderer::drawObject(const Mc3Object& obj, const Mc3Document& doc,
         auto cit = csgMeshCache_.find(fp);
         if (cit == csgMeshCache_.end()) {
             ++csgCacheEvaluations_;
-            manifold::Manifold m = buildManifoldTree(obj, doc, parentWorld, 0);
-            csgMeshCache_[fp] = manifoldToRenderMesh(device_, m, obj);
+            csgMeshCache_[fp] = buildCsgPreviewCacheEntry(device_, obj, doc);
             cit = csgMeshCache_.find(fp);
         }
-        csgTriCountMap_[obj.id] = cit->second.primitiveCount;  // K4
-        csgWarningMap_[obj.id] = csgSubtreeWarning(obj, doc, 0);   // STAB-0672
-        if (cit->second.vb) {
-            drawMeshTextured(cit->second, Matrix::getIdentityProperty(), view, proj, color, tex,
-                             svgSampler ? &*svgSampler : nullptr);
+        CsgPreviewCacheEntry& cached = cit->second;
+        csgTriCountMap_[obj.id] = cached.mesh.primitiveCount;  // K4
+        csgWarningMap_[obj.id] = cached.warning.empty()
+            ? csgSubtreeWarning(obj, doc, 0) : cached.warning;
+        if (cached.mesh.vb && !cached.materialRanges.empty()) {
+            const bool rootOverrides = !effectiveMaterial.empty() &&
+                doc.materials.find(std::string(effectiveMaterial)) != doc.materials.end();
+            for (const CsgPreviewMaterialRange& range : cached.materialRanges) {
+                Color rangeColor = rootOverrides ? color
+                    : applyFog(materialColor(range.materialId, doc));
+                std::optional<SamplerState> rangeSampler;
+                Texture2D* rangeTexture = rootOverrides ? tex
+                    : textureForMaterial(range.materialId, doc, rangeSampler);
+                const SamplerState* sampler = rootOverrides
+                    ? (svgSampler ? &*svgSampler : nullptr)
+                    : (rangeSampler ? &*rangeSampler : nullptr);
+                // The evaluator returns root-local geometry. `world` applies
+                // the root SRT; root-level deform intentionally remains
+                // excluded, matching the established glTF CSG path.
+                drawMeshTextured(cached.mesh, world, view, proj, rangeColor, rangeTexture,
+                                 sampler, nullptr, {1.0f, 1.0f, 1.0f},
+                                 range.indexBuffer.get(), range.primitiveCount);
+            }
         } else {
-            // Fallback: manifold failed or empty — render children individually
+            // Fallback: real CSG failed or was empty — render children individually.
             for (const auto& child : obj.children)
                 drawObject(*child, doc, world, view, proj, selected, depth + 1);
         }

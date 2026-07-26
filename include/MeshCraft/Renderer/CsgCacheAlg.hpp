@@ -31,6 +31,12 @@ inline std::size_t csgSubtreeHashAlg(const Mc3::Mc3Object& obj, const Mc3::Mc3Do
     hi(static_cast<int>(obj.type));
     hi(obj.visible  ? 1 : 0);
     hi(obj.isCutter ? 1 : 0);
+    // SYS-W14-34: material relations do not alter Manifold topology, but do
+    // alter the cached preview's material-index ranges. Include both fields
+    // (rather than only the effective value) so changing precedence itself
+    // cannot leave a stale child-material composition on screen.
+    h = csgHashMixAlg(h, std::hash<std::string>{}(obj.material));
+    h = csgHashMixAlg(h, std::hash<std::string>{}(obj.materialOverride));
     const auto& t = obj.transform;
     hf(t.position[0]); hf(t.position[1]); hf(t.position[2]);
     hf(t.rotation[0]); hf(t.rotation[1]); hf(t.rotation[2]);

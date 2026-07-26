@@ -154,6 +154,14 @@ before when explicitly requested (`SYS-W14-##` rows).
   red/green pixel fixtures cover the change; the screenshot CTest is
   registered but disabled here by the no-Xvfb preflight. A Release build and
   all 160 non-render CTests pass.
+- **Recently implemented (2026-07-26):** `SYS-W14-34` gives the live CSG
+  preview the exporter’s child-material composition. A cached Manifold mesh
+  shares one CNA vertex buffer across material index ranges; a valid explicit
+  CSG-root material remains the full-result override. Material fields now
+  participate in the content hash, so edits invalidate the range cache.
+  CNA-free partition/cache tests and red/blue-versus-root-green pixel fixtures
+  cover both rules; the screenshot CTest is registered but disabled here by
+  the no-Xvfb preflight. A Release build and all 161 non-render CTests pass.
 - **Recently implemented (2026-07-26):** `SYS-W14-32` makes authored ordinary
   object UV mappings visible in the viewport. The new CNA-free helper applies
   the exporter-compatible default/planar, box, and sphere rules and UV
@@ -1188,7 +1196,8 @@ be a separately scoped subsystem, not another mechanical `Overlays.cpp` slice.
   normals/UVs, child-material glTF primitives when the root does not override
   them, valid CSG-root XML serialization for `uv_mapping` (the generic
   MCB/JSON object layouts already retained it), and the live preview shares
-  the new geometry/UV path (its material split remains export-only).
+  the new geometry/UV path. `SYS-W14-34` subsequently added the same
+  child-material split to the live preview.
 - **AUD-042:** commit `20a5473` replaces Android's forced `SDL_RENDERER` with
   GLES/EASYGL and adds the CMake-level regression test. The full Release build
   and 149/149 non-render + 36/36 render partitions pass; the absent NDK and

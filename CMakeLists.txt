@@ -931,6 +931,20 @@ if(MESH_CRAFT_BUILD_TESTING AND UNIX AND NOT ANDROID AND NOT EMSCRIPTEN)
     add_test(NAME point_spot_lighting_algorithms COMMAND point_spot_lighting_algorithms_test)
     set_tests_properties(point_spot_lighting_algorithms PROPERTIES TIMEOUT 15 LABELS "unit")
 
+    # SYS-W14-34: material-range partitioning and material-sensitive CSG cache
+    # keys must remain CNA-free so root overrides and child runs are covered
+    # without a graphics context.
+    add_executable(csg_material_range_algorithms_test
+        ${CMAKE_CURRENT_SOURCE_DIR}/test/csg_material_range_algorithms_test.cpp)
+    target_include_directories(csg_material_range_algorithms_test PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/include
+        ${CMAKE_CURRENT_SOURCE_DIR}/mc3/include)
+    target_link_libraries(csg_material_range_algorithms_test PRIVATE Mc3)
+    target_compile_features(csg_material_range_algorithms_test PRIVATE cxx_std_23)
+    target_compile_options(csg_material_range_algorithms_test PRIVATE -Wall -Wextra)
+    add_test(NAME csg_material_range_algorithms COMMAND csg_material_range_algorithms_test)
+    set_tests_properties(csg_material_range_algorithms PROPERTIES TIMEOUT 15 LABELS "unit")
+
     # AUD-042: Android's backend choice is a CMake-level platform decision,
     # but an NDK is not installed on every developer/CI host.  Exercise it as
     # a pure script so a future edit cannot silently restore SDL_RENDERER.
@@ -1647,6 +1661,22 @@ if(MESH_CRAFT_BUILD_TESTING AND UNIX AND NOT ANDROID AND NOT EMSCRIPTEN)
                 WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
             )
             set_tests_properties(csg_cache_test PROPERTIES TIMEOUT 30 LABELS "render")
+        endif()
+
+        # SYS-W14-34: an unmaterialed CSG root must render its Manifold child
+        # material ranges, while an explicit root material deliberately wins.
+        if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/test/csg_child_material_viewport.mc3.xml" AND
+           EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/test/csg_root_material_viewport.mc3.xml")
+            add_test(
+                NAME csg_material_viewport_test
+                COMMAND "${PYTHON3_EXEC}"
+                        "${CMAKE_CURRENT_SOURCE_DIR}/test/csg_material_viewport_test.py"
+                        $<TARGET_FILE:MeshCraft>
+                        "${CMAKE_CURRENT_SOURCE_DIR}/test/csg_child_material_viewport.mc3.xml"
+                        "${CMAKE_CURRENT_SOURCE_DIR}/test/csg_root_material_viewport.mc3.xml"
+                WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
+            )
+            set_tests_properties(csg_material_viewport_test PROPERTIES TIMEOUT 45 LABELS "render")
         endif()
 
         # STAB-0670: confirms the CSG live preview no longer silently treats

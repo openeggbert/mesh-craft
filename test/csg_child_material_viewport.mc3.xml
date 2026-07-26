@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- SYS-W14-34: unmaterialed CSG root must retain red/blue child ranges. -->
+<mc3 version="0.3" model="CsgChildMaterialViewport" default_camera="Camera">
+  <environment><background color="0.01 0.01 0.01"/></environment>
+  <lights><ambient color="1 1 1" brightness="1"/></lights>
+  <cameras><camera name="Camera" position="0 0 8" target="0 0 0" fov="45" near="0.1" far="100"/></cameras>
+  <materials>
+    <material id="red"><base_color>0.95 0.02 0.02 1</base_color></material>
+    <material id="blue"><base_color>0.02 0.08 0.95 1</base_color></material>
+  </materials>
+  <objects>
+    <union name="ChildMaterials">
+      <box name="RedOperand" size="1.6 1.6 1.6" position="-1.25 0 0" material="red"/>
+      <box name="BlueOperand" size="1.6 1.6 1.6" position="1.25 0 0" material="blue"/>
+    </union>
+  </objects>
+</mc3>
