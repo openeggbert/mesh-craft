@@ -357,9 +357,15 @@ private:
     bool glbExportOpen_{false};
     int  glbExportFmt_{0};                // 0 = GLB, 1 = GLTF
     bool glbAllowApproxCSG_{false};       // checkbox: allow approximate CSG export
+    bool glbQuantizeMeshAttributes_{false}; // opt-in KHR_mesh_quantization subset
     char glbExportOutBuf_[512]{};
     char glbExportErr_[256]{};
+    char glbExportEstimate_[256]{};
+    std::vector<std::string> glbExportPreflightReport_;
+    bool glbExportReportOpen_{false};
+    std::vector<std::string> glbExportReport_;
     void runGltfExport(const std::string& outPath);
+    void refreshGltfExportEstimate();
 
     // OBJ export dialog state (STAB-0718): the editor previously only
     // exported to glTF/GLB (via mc3togltf::GltfExporter) or a sub-scene

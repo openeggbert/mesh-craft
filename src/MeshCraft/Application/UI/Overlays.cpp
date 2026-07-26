@@ -1825,14 +1825,28 @@ void MeshCraftApplication::drawDialogs()
         ImGui::SeparatorText("Options");
         ImGui::Checkbox("Allow approximate CSG export", &glbAllowApproxCSG_);
         ImGui::SameLine(); ImGui::TextDisabled("(debug fallback: disables Manifold CSG; children exported separately)");
-        ImGui::BeginDisabled();
-        bool embedTex = true;
-        ImGui::Checkbox("Embed textures", &embedTex);
-        ImGui::SameLine(); ImGui::TextDisabled("(not yet supported by mc3togltf)");
-        bool quantize = false;
-        ImGui::Checkbox("Quantize meshes", &quantize);
-        ImGui::SameLine(); ImGui::TextDisabled("(not yet supported by mc3togltf)");
-        ImGui::EndDisabled();
+        ImGui::Checkbox("Quantize mesh attributes (16-bit)", &glbQuantizeMeshAttributes_);
+        ImGui::SetItemTooltip("Opt-in KHR_mesh_quantization: normalized normals/tangents use signed 16-bit "
+                              "(component error at most 1/32767), [0,1] UVs use unsigned 16-bit "
+                              "(at most 1/65535), and eligible indices use lossless UINT16. "
+                              "Positions remain float32 to preserve exact transforms and mesh reuse.");
+        if (glbExportFmt_ == 0) {
+            ImGui::TextDisabled("GLB: one file; readable texture bytes are embedded. Missing texture files remain warnings.");
+        } else {
+            ImGui::TextDisabled("glTF: JSON + .bin; normal image paths stay external/rebased, inline data URIs stay inline.");
+        }
+
+        if (ImGui::Button("Refresh pre-export estimate"))
+            refreshGltfExportEstimate();
+        ImGui::SameLine();
+        ImGui::TextDisabled("Approximate JSON overhead; geometry comes from the real export build.");
+        if (glbExportEstimate_[0])
+            ImGui::TextWrapped("%s", glbExportEstimate_);
+        if (!glbExportPreflightReport_.empty() && ImGui::TreeNode("Preflight compatibility notes")) {
+            for (const std::string& entry : glbExportPreflightReport_)
+                ImGui::BulletText("%s", entry.c_str());
+            ImGui::TreePop();
+        }
 
         if (glbExportErr_[0])
             ImGui::TextColored(ImVec4(1.f, 0.3f, 0.3f, 1.f), "%s", glbExportErr_);
@@ -1853,6 +1867,25 @@ void MeshCraftApplication::drawDialogs()
         if (!canExp) ImGui::EndDisabled();
         ImGui::SameLine();
         if (ImGui::Button("Cancel", ImVec2(90, 0)) || ImGui::IsKeyPressed(ImGuiKey_Escape, false))
+            ImGui::CloseCurrentPopup();
+        ImGui::EndPopup();
+    }
+
+    // The exporter returns structured, object-id-aware compatibility notes.
+    // Keep them visible after the export settings window closes instead of
+    // demoting a lossy opt-in fallback to a console-only warning.
+    if (glbExportReportOpen_) {
+        ImGui::OpenPopup("glTF Export Report##glbexpreport");
+        glbExportReportOpen_ = false;
+    }
+    if (ImGui::BeginPopupModal("glTF Export Report##glbexpreport", nullptr,
+                               ImGuiWindowFlags_AlwaysAutoResize)) {
+        ImGui::TextWrapped("Export completed with compatibility notes. Each note names its MC3 object id where available.");
+        ImGui::Separator();
+        for (const std::string& entry : glbExportReport_)
+            ImGui::BulletText("%s", entry.c_str());
+        ImGui::Spacing();
+        if (ImGui::Button("Close", ImVec2(100, 0)) || ImGui::IsKeyPressed(ImGuiKey_Escape, false))
             ImGui::CloseCurrentPopup();
         ImGui::EndPopup();
     }

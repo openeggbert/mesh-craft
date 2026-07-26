@@ -38,7 +38,11 @@ static void printUsage(const char* prog) {
               << "    scenes that legitimately reference files outside their own directory.\n"
               << "\n"
               << "  --stats\n"
-              << "    Print export statistics after writing the output file.\n";
+              << "    Print export statistics after writing the output file.\n"
+              << "\n"
+              << "  --quantize-mesh-attributes\n"
+              << "    Opt into deterministic KHR_mesh_quantization for normals/tangents,\n"
+              << "    in-range UVs, and lossless 16-bit indices. Positions remain float32.\n";
 }
 
 
@@ -46,6 +50,7 @@ int main(int argc, char* argv[]) {
     bool allowApproxCSG = false;
     bool showStats      = false;
     bool allowExternalResources = false;
+    bool quantizeMeshAttributes = false;
 
     // Collect non-flag arguments
     std::vector<std::string> args;
@@ -57,6 +62,7 @@ int main(int argc, char* argv[]) {
         } else if (a == "--allow-approximate-csg") allowApproxCSG = true;
         else if (a == "--allow-external-resources") allowExternalResources = true;
         else if (a == "--stats")            showStats = true;
+        else if (a == "--quantize-mesh-attributes") quantizeMeshAttributes = true;
         else args.push_back(a);
     }
 
@@ -98,6 +104,7 @@ int main(int argc, char* argv[]) {
         GltfExporter exporter;
         exporter.allowApproximateCSG = allowApproxCSG;
         exporter.allowExternalResources = allowExternalResources;
+        exporter.quantizeMeshAttributes = quantizeMeshAttributes;
         exporter.exportDocument(doc, outputPath, fmt);
 
         std::cout << "Written: " << outputPath << '\n';
@@ -114,6 +121,8 @@ int main(int argc, char* argv[]) {
                       << "  Total triangles:   " << s.totalTriangles       << "\n"
                       << "  OBJ files loaded:  " << s.objMeshesLoaded     << "\n"
                       << "  CSG evaluations:   " << s.csgMeshesEvaluated  << "\n"
+                      << "  Quantized attrs:    " << s.quantizedAttributeAccessors << "\n"
+                      << "  Narrowed indices:   " << s.narrowedIndexAccessors << "\n"
                       << "  Warnings:          " << s.warnings             << "\n";
 
             // SYS-W1-01: pre-export validation findings (documents that
@@ -133,6 +142,11 @@ int main(int argc, char* argv[]) {
                     std::cout << "\n";
                 }
             }
+        }
+        for (const auto& entry : exporter.report) {
+            std::cerr << "[mc3togltf] Export report"
+                      << (entry.objectId.empty() ? "" : " [" + entry.objectId + "]")
+                      << ": " << entry.message << '\n';
         }
     } catch (const std::exception& e) {
         std::cerr << "Error: " << e.what() << '\n';

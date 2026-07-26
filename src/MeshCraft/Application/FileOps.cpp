@@ -25,6 +25,7 @@
 #include <filesystem>
 #include <fstream>
 #include <functional>
+#include <iomanip>
 #include <iostream>
 #include <set>
 #include <sstream>
@@ -33,6 +34,27 @@
 #include <vector>
 
 namespace MeshCraft::Application {
+
+namespace {
+
+std::string readableByteEstimate(std::uint64_t bytes) {
+    std::ostringstream text;
+    text << std::fixed << std::setprecision(1);
+    if (bytes >= 1024ull * 1024ull)
+        text << static_cast<double>(bytes) / (1024.0 * 1024.0) << " MiB";
+    else if (bytes >= 1024ull)
+        text << static_cast<double>(bytes) / 1024.0 << " KiB";
+    else
+        text << bytes << " B";
+    return text.str();
+}
+
+std::string exportReportText(const mc3togltf::ExportReportEntry& entry) {
+    return (entry.objectId.empty() ? std::string("[document]") : "[" + entry.objectId + "]") +
+           " " + entry.message;
+}
+
+} // namespace
 
 void MeshCraftApplication::newScene() {
     document_ = Mc3::Mc3Document{};
@@ -491,6 +513,8 @@ void MeshCraftApplication::exportGltf() {
     std::strncpy(glbExportOutBuf_, outPath.c_str(), sizeof(glbExportOutBuf_) - 1);
     glbExportOutBuf_[sizeof(glbExportOutBuf_) - 1] = '\0';
     glbExportErr_[0]  = '\0';
+    glbExportEstimate_[0] = '\0';
+    glbExportPreflightReport_.clear();
     glbExportOpen_    = true;
 }
 
@@ -540,6 +564,31 @@ EM_JS(void, meshcraftWebDownloadFile, (const char* path, const char* filename), 
 } // namespace
 #endif
 
+void MeshCraftApplication::refreshGltfExportEstimate() {
+    glbExportEstimate_[0] = '\0';
+    glbExportPreflightReport_.clear();
+    const std::filesystem::path out(glbExportOutBuf_);
+    try {
+        const auto format = mc3togltf::outputFormatFromPath(out);
+        mc3togltf::GltfExporter exporter;
+        exporter.allowApproximateCSG = glbAllowApproxCSG_;
+        exporter.quantizeMeshAttributes = glbQuantizeMeshAttributes_;
+        const auto estimate = exporter.estimateDocument(document_, out, format);
+        const std::string total = readableByteEstimate(estimate.estimatedTotalBytes);
+        const std::string json = readableByteEstimate(estimate.estimatedJsonBytes);
+        const std::string binary = readableByteEstimate(estimate.estimatedBinaryBytes);
+        std::snprintf(glbExportEstimate_, sizeof(glbExportEstimate_),
+                      "Estimated %s total (JSON ~%s, geometry .bin ~%s)%s",
+                      total.c_str(), json.c_str(), binary.c_str(),
+                      estimate.embedsImages ? "; GLB image payload included" : "; external image files excluded");
+        for (const auto& entry : exporter.report)
+            glbExportPreflightReport_.push_back(exportReportText(entry));
+    } catch (const std::exception& error) {
+        std::snprintf(glbExportEstimate_, sizeof(glbExportEstimate_),
+                      "Estimate unavailable: %s", error.what());
+    }
+}
+
 void MeshCraftApplication::runGltfExport(const std::string& outPath) {
     std::filesystem::path out(outPath);
     // outputFormatFromPath throws std::runtime_error for unknown extensions;
@@ -550,15 +599,26 @@ void MeshCraftApplication::runGltfExport(const std::string& outPath) {
 
     mc3togltf::GltfExporter exporter;
     exporter.allowApproximateCSG = glbAllowApproxCSG_;
+    exporter.quantizeMeshAttributes = glbQuantizeMeshAttributes_;
     exporter.exportDocument(document_, out, fmt);
     // SYS-W1-01/SYS-W14-02 (pre-export integration point): see
     // GltfExporter::validation's doc comment.
     recordValidation("Export: " + out.filename().string(), exporter.validation);
 
     const auto& s = exporter.stats;
+    glbExportReport_.clear();
+    for (const auto& entry : exporter.report) {
+        glbExportReport_.push_back(exportReportText(entry));
+        std::cerr << "[MeshCraft] Export report: " << glbExportReport_.back() << '\n';
+    }
+    glbExportReportOpen_ = !glbExportReport_.empty();
     std::string statusMsg = "Exported " + out.filename().string()
         + " (" + std::to_string(s.uniqueMeshes) + " meshes"
         + (s.reusedMeshRefs > 0 ? ", " + std::to_string(s.reusedMeshRefs) + " reused" : "")
+        + (s.quantizedAttributeAccessors > 0
+            ? ", " + std::to_string(s.quantizedAttributeAccessors) + " attributes quantized" : "")
+        + (s.narrowedIndexAccessors > 0
+            ? ", " + std::to_string(s.narrowedIndexAccessors) + " index buffers narrowed" : "")
         + ")";
 
     // AUD-037: the exporter can drop/approximate geometry (e.g. an
@@ -576,6 +636,9 @@ void MeshCraftApplication::runGltfExport(const std::string& outPath) {
             + (s.warnings == 1 ? " warning" : " warnings")
             + " (export may be incomplete or approximate; see console)";
     }
+    if (!glbExportReport_.empty())
+        statusMsg += " — " + std::to_string(glbExportReport_.size()) +
+                     " compatibility note(s); opened Export Report";
 
 #ifdef __EMSCRIPTEN__
     if (fmt == mc3togltf::OutputFormat::GLB) {

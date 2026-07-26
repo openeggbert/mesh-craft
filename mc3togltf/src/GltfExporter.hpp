@@ -1,8 +1,10 @@
 #pragma once
 #include <MeshCraft/Mc3/Mc3Document.hpp>
 #include <MeshCraft/Mc3/Mc3Validation.hpp>
+#include <cstdint>
 #include <filesystem>
 #include <string>
+#include <vector>
 
 namespace mc3togltf {
 
@@ -23,7 +25,31 @@ struct ExportStats {
     int totalTriangles{0};     // triangle count summed over unique meshes
     int objMeshesLoaded{0};    // external OBJ files actually parsed (cache misses)
     int csgMeshesEvaluated{0}; // CSG boolean evaluations via Manifold
+    int quantizedAttributeAccessors{0}; // KHR_mesh_quantization accessors written
+    int narrowedIndexAccessors{0};      // lossless UINT32 -> UINT16 index accessors
     int warnings{0};           // non-fatal warnings emitted during export
+};
+
+// A deliberately conservative preflight estimate. It is constructed from the
+// same geometry/material model as export, but JSON serialization overhead is
+// necessarily estimated rather than promised byte-for-byte. `estimatedTotal`
+// covers the one-file GLB or the combined .gltf JSON + .bin payload; ordinary
+// externally referenced texture files are not counted because export retains
+// them by URI instead of copying them.
+struct ExportEstimate {
+    std::uint64_t estimatedTotalBytes{0};
+    std::uint64_t estimatedJsonBytes{0};
+    std::uint64_t estimatedBinaryBytes{0};
+    std::uint64_t embeddedImageBytes{0};
+    bool embedsImages{false};
+};
+
+// A compatibility/loss report associated with a source MC3 object whenever
+// possible. It is intentionally structured instead of stdout-only so the GUI
+// can show users exactly which object needs attention after export.
+struct ExportReportEntry {
+    std::string objectId;
+    std::string message;
 };
 
 class GltfExporter {
@@ -43,8 +69,19 @@ public:
     // scenes that legitimately reference files outside their own directory.
     bool allowExternalResources{false};
 
+    // Opt-in, deterministic KHR_mesh_quantization subset: normals/tangents
+    // become signed-normalized 16-bit values (component error <= 1/32767),
+    // in-range [0,1] UVs become unsigned-normalized 16-bit values (error <=
+    // 1/65535), and compatible indices become lossless UINT16. Positions stay
+    // float32 so node transforms and shared mesh reuse retain exact behavior.
+    bool quantizeMeshAttributes{false};
+
     // Populated after exportDocument() returns successfully.
     ExportStats stats;
+
+    // Cleared and repopulated for every estimate/export. Entries record
+    // opt-in quantization fallbacks and other represented downgrades.
+    std::vector<ExportReportEntry> report;
 
     // SYS-W1-01 (pre-export integration point): populated by exportDocument()
     // BEFORE it builds any glTF output, by re-validating `doc`'s current
@@ -58,6 +95,12 @@ public:
     void exportDocument(const MeshCraft::Mc3::Mc3Document& doc,
                         const std::filesystem::path& outputPath,
                         OutputFormat format);
+
+    // Runs the same deterministic model-building phase as export without
+    // creating output files. It refreshes `stats`, `validation`, and `report`.
+    ExportEstimate estimateDocument(const MeshCraft::Mc3::Mc3Document& doc,
+                                    const std::filesystem::path& outputPath,
+                                    OutputFormat format);
 };
 
 } // namespace mc3togltf

@@ -157,6 +157,14 @@ if(BUILD_TESTING)
     add_test(NAME mc3togltf_gltf_import COMMAND mc3togltf_gltf_import_test)
     set_tests_properties(mc3togltf_gltf_import PROPERTIES TIMEOUT 20 LABELS "export")
 
+    # SYS-W14-37: quantization accessors/extension, GLB-vs-glTF image
+    # behavior, deterministic output, estimate, and object-id report.
+    add_executable(mc3togltf_export_optimization_test test/gltf_export_optimization_test.cpp)
+    target_link_libraries(mc3togltf_export_optimization_test PRIVATE mc3togltf_lib)
+    target_include_directories(mc3togltf_export_optimization_test PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
+    add_test(NAME mc3togltf_export_optimization COMMAND mc3togltf_export_optimization_test)
+    set_tests_properties(mc3togltf_export_optimization PROPERTIES TIMEOUT 20 LABELS "export")
+
     add_executable(mc3togltf_svg_rasterizer_test test/svg_rasterizer_test.cpp)
     target_link_libraries(mc3togltf_svg_rasterizer_test PRIVATE mc3togltf_lib)
     target_include_directories(mc3togltf_svg_rasterizer_test PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)

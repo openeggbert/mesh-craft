@@ -23,6 +23,7 @@
 #include <array>
 #include <cctype>
 #include <cmath>
+#include <cstdint>
 #include <cstring>
 #include <iomanip>
 #include <iostream>
@@ -66,6 +67,8 @@ struct ExportCtx {
     std::filesystem::path basePath;  // directory of source .mc3.xml (for OBJ paths)
     bool allowApproximateCSG{false};
     bool allowExternalResources{false}; // permit out-of-root texture/mesh paths
+    bool quantizeMeshAttributes{false};
+    std::vector<ExportReportEntry>* report{nullptr};
     bool rotationIsRadians{false};   // STAB-0691: doc.rotationUnits == "radians"
     std::string eulerOrder{"XYZ"};   // STAB-0691: doc.eulerOrder
 
@@ -81,6 +84,11 @@ struct ExportCtx {
     // Accumulated export statistics — copied to GltfExporter::stats after export.
     ExportStats stats;
 };
+
+static void addExportReport(ExportCtx& ctx, const std::string& objectId,
+                            const std::string& message) {
+    if (ctx.report) ctx.report->push_back({objectId, message});
+}
 
 // ---------------------------------------------------------------------------
 // Instance cache key: definition ID + effective material + optional deform scale.
@@ -296,6 +304,78 @@ static int addAccessorVec4(tinygltf::Model& model,
     return static_cast<int>(model.accessors.size()) - 1;
 }
 
+static void markMeshQuantizationUsed(tinygltf::Model& model) {
+    if (std::find(model.extensionsUsed.begin(), model.extensionsUsed.end(),
+                  "KHR_mesh_quantization") == model.extensionsUsed.end())
+        model.extensionsUsed.push_back("KHR_mesh_quantization");
+}
+
+static bool valuesFitNormalizedRange(const std::vector<float>& data, float minimum, float maximum) {
+    return std::all_of(data.begin(), data.end(), [minimum, maximum](float value) {
+        return std::isfinite(value) && value >= minimum && value <= maximum;
+    });
+}
+
+static int addAccessorVec3NormalizedShort(tinygltf::Model& model,
+                                          const std::vector<float>& data)
+{
+    std::vector<int16_t> quantized;
+    quantized.reserve(data.size());
+    for (float value : data)
+        quantized.push_back(static_cast<int16_t>(std::lround(std::clamp(value, -1.0f, 1.0f) * 32767.0f)));
+    int bvIdx = addBufferView(model, quantized.data(), quantized.size() * sizeof(int16_t),
+                              TINYGLTF_TARGET_ARRAY_BUFFER);
+    tinygltf::Accessor acc;
+    acc.bufferView = bvIdx;
+    acc.componentType = TINYGLTF_COMPONENT_TYPE_SHORT;
+    acc.count = static_cast<int>(quantized.size() / 3);
+    acc.type = TINYGLTF_TYPE_VEC3;
+    acc.normalized = true;
+    model.accessors.push_back(std::move(acc));
+    markMeshQuantizationUsed(model);
+    return static_cast<int>(model.accessors.size()) - 1;
+}
+
+static int addAccessorVec2NormalizedUnsignedShort(tinygltf::Model& model,
+                                                   const std::vector<float>& data)
+{
+    std::vector<uint16_t> quantized;
+    quantized.reserve(data.size());
+    for (float value : data)
+        quantized.push_back(static_cast<uint16_t>(std::lround(std::clamp(value, 0.0f, 1.0f) * 65535.0f)));
+    int bvIdx = addBufferView(model, quantized.data(), quantized.size() * sizeof(uint16_t),
+                              TINYGLTF_TARGET_ARRAY_BUFFER);
+    tinygltf::Accessor acc;
+    acc.bufferView = bvIdx;
+    acc.componentType = TINYGLTF_COMPONENT_TYPE_UNSIGNED_SHORT;
+    acc.count = static_cast<int>(quantized.size() / 2);
+    acc.type = TINYGLTF_TYPE_VEC2;
+    acc.normalized = true;
+    model.accessors.push_back(std::move(acc));
+    markMeshQuantizationUsed(model);
+    return static_cast<int>(model.accessors.size()) - 1;
+}
+
+static int addAccessorVec4NormalizedShort(tinygltf::Model& model,
+                                          const std::vector<float>& data)
+{
+    std::vector<int16_t> quantized;
+    quantized.reserve(data.size());
+    for (float value : data)
+        quantized.push_back(static_cast<int16_t>(std::lround(std::clamp(value, -1.0f, 1.0f) * 32767.0f)));
+    int bvIdx = addBufferView(model, quantized.data(), quantized.size() * sizeof(int16_t),
+                              TINYGLTF_TARGET_ARRAY_BUFFER);
+    tinygltf::Accessor acc;
+    acc.bufferView = bvIdx;
+    acc.componentType = TINYGLTF_COMPONENT_TYPE_SHORT;
+    acc.count = static_cast<int>(quantized.size() / 4);
+    acc.type = TINYGLTF_TYPE_VEC4;
+    acc.normalized = true;
+    model.accessors.push_back(std::move(acc));
+    markMeshQuantizationUsed(model);
+    return static_cast<int>(model.accessors.size()) - 1;
+}
+
 // STAB-0664: TANGENT attribute for normal-mapped meshes. Not full MikkTSpace
 // (angle/area-weighted contributions with feature-vertex splitting) -- uses
 // the standard per-triangle-tangent-then-per-vertex-average-then-Gram-
@@ -388,8 +468,24 @@ static std::vector<float> computeTangents(const std::vector<float>& positions,
 }
 
 static int addAccessorIndices(tinygltf::Model& model,
-                              const std::vector<uint32_t>& indices)
+                              const std::vector<uint32_t>& indices,
+                              bool preferNarrow = false)
 {
+    if (preferNarrow && !indices.empty() &&
+        *std::max_element(indices.begin(), indices.end()) <= std::numeric_limits<uint16_t>::max()) {
+        std::vector<uint16_t> narrowed;
+        narrowed.reserve(indices.size());
+        for (uint32_t value : indices) narrowed.push_back(static_cast<uint16_t>(value));
+        int bvIdx = addBufferView(model, narrowed.data(), narrowed.size() * sizeof(uint16_t),
+                                  TINYGLTF_TARGET_ELEMENT_ARRAY_BUFFER);
+        tinygltf::Accessor acc;
+        acc.bufferView = bvIdx;
+        acc.componentType = TINYGLTF_COMPONENT_TYPE_UNSIGNED_SHORT;
+        acc.count = static_cast<int>(narrowed.size());
+        acc.type = TINYGLTF_TYPE_SCALAR;
+        model.accessors.push_back(std::move(acc));
+        return static_cast<int>(model.accessors.size()) - 1;
+    }
     int bvIdx = addBufferView(model, indices.data(),
                               indices.size() * sizeof(uint32_t),
                               TINYGLTF_TARGET_ELEMENT_ARRAY_BUFFER);
@@ -837,9 +933,32 @@ static int buildMesh(ExportCtx& ctx,
     // creation, even without changing any actual content, changes their
     // glTF indices and fails that byte-exact comparison.
     int posAcc = addAccessorVec3(model, md.positions, /*calcBounds=*/true);
-    int normAcc = !md.normals.empty()   ? addAccessorVec3(model, md.normals)   : -1;
-    int uvAcc   = !md.texcoords.empty() ? addAccessorVec2(model, md.texcoords) : -1;
-    int idxAcc = addAccessorIndices(model, md.indices);
+    const bool normalCanQuantize = !md.normals.empty() &&
+        valuesFitNormalizedRange(md.normals, -1.0f, 1.0f);
+    int normAcc = !md.normals.empty()
+        ? (ctx.quantizeMeshAttributes && normalCanQuantize
+            ? addAccessorVec3NormalizedShort(model, md.normals)
+            : addAccessorVec3(model, md.normals))
+        : -1;
+    if (ctx.quantizeMeshAttributes && normalCanQuantize) ++ctx.stats.quantizedAttributeAccessors;
+    if (ctx.quantizeMeshAttributes && !md.normals.empty() && !normalCanQuantize)
+        addExportReport(ctx, obj.id, "NORMAL stayed float32: values are outside the normalized [-1, 1] range");
+
+    const bool uvCanQuantize = !md.texcoords.empty() &&
+        valuesFitNormalizedRange(md.texcoords, 0.0f, 1.0f);
+    int uvAcc = !md.texcoords.empty()
+        ? (ctx.quantizeMeshAttributes && uvCanQuantize
+            ? addAccessorVec2NormalizedUnsignedShort(model, md.texcoords)
+            : addAccessorVec2(model, md.texcoords))
+        : -1;
+    if (ctx.quantizeMeshAttributes && uvCanQuantize) ++ctx.stats.quantizedAttributeAccessors;
+    if (ctx.quantizeMeshAttributes && !md.texcoords.empty() && !uvCanQuantize)
+        addExportReport(ctx, obj.id, "TEXCOORD_0 stayed float32: UVs extend outside the normalized [0, 1] range");
+
+    const bool narrowIndices = ctx.quantizeMeshAttributes && !md.indices.empty() &&
+        *std::max_element(md.indices.begin(), md.indices.end()) <= std::numeric_limits<uint16_t>::max();
+    int idxAcc = addAccessorIndices(model, md.indices, narrowIndices);
+    if (narrowIndices) ++ctx.stats.narrowedIndexAccessors;
 
     // STAB-0664: normal-mapped meshes need TANGENT for correct tangent-
     // space normal mapping (glTF viewers may fall back to derivative-based
@@ -855,8 +974,15 @@ static int buildMesh(ExportCtx& ctx,
         model.materials[materialIdx].normalTexture.index >= 0)
     {
         std::vector<float> tangents = computeTangents(md.positions, md.normals, md.texcoords, md.indices);
-        if (!tangents.empty())
-            tanAcc = addAccessorVec4(model, tangents);
+        if (!tangents.empty()) {
+            const bool tangentCanQuantize = valuesFitNormalizedRange(tangents, -1.0f, 1.0f);
+            tanAcc = ctx.quantizeMeshAttributes && tangentCanQuantize
+                ? addAccessorVec4NormalizedShort(model, tangents)
+                : addAccessorVec4(model, tangents);
+            if (ctx.quantizeMeshAttributes && tangentCanQuantize) ++ctx.stats.quantizedAttributeAccessors;
+            if (ctx.quantizeMeshAttributes && !tangentCanQuantize)
+                addExportReport(ctx, obj.id, "TANGENT stayed float32: values are outside the normalized [-1, 1] range");
+        }
     }
 
     tinygltf::Primitive prim;
@@ -908,7 +1034,8 @@ static void applyCsgUvMapping(MeshData& mesh, const Mc3Object& obj)
 // root itself has an explicit material, which remains a full-result override
 // for backwards-compatible authoring semantics.
 static int addCsgMeshDataToGltf(ExportCtx& ctx, CsgMeshData csg,
-                                const std::string& name, int rootMaterialIdx)
+                                const std::string& name, const std::string& objectId,
+                                int rootMaterialIdx)
 {
     MeshData& md = csg.mesh;
     if (md.empty()) return -1;
@@ -917,11 +1044,26 @@ static int addCsgMeshDataToGltf(ExportCtx& ctx, CsgMeshData csg,
 
     tinygltf::Model& model = ctx.model;
     int posAcc  = addAccessorVec3(model, md.positions, /*calcBounds=*/true);
-    int normAcc = !md.normals.empty() ? addAccessorVec3(model, md.normals) : -1;
-    int uvAcc = -1;
-    if (!md.texcoords.empty()) {
-        uvAcc = addAccessorVec2(model, md.texcoords);
-    }
+    const bool normalCanQuantize = !md.normals.empty() &&
+        valuesFitNormalizedRange(md.normals, -1.0f, 1.0f);
+    int normAcc = !md.normals.empty()
+        ? (ctx.quantizeMeshAttributes && normalCanQuantize
+            ? addAccessorVec3NormalizedShort(model, md.normals)
+            : addAccessorVec3(model, md.normals))
+        : -1;
+    if (ctx.quantizeMeshAttributes && normalCanQuantize) ++ctx.stats.quantizedAttributeAccessors;
+    if (ctx.quantizeMeshAttributes && !md.normals.empty() && !normalCanQuantize)
+        addExportReport(ctx, objectId, "CSG NORMAL stayed float32: values are outside the normalized [-1, 1] range");
+    const bool uvCanQuantize = !md.texcoords.empty() &&
+        valuesFitNormalizedRange(md.texcoords, 0.0f, 1.0f);
+    int uvAcc = !md.texcoords.empty()
+        ? (ctx.quantizeMeshAttributes && uvCanQuantize
+            ? addAccessorVec2NormalizedUnsignedShort(model, md.texcoords)
+            : addAccessorVec2(model, md.texcoords))
+        : -1;
+    if (ctx.quantizeMeshAttributes && uvCanQuantize) ++ctx.stats.quantizedAttributeAccessors;
+    if (ctx.quantizeMeshAttributes && !md.texcoords.empty() && !uvCanQuantize)
+        addExportReport(ctx, objectId, "CSG TEXCOORD_0 stayed float32: UVs extend outside the normalized [0, 1] range");
 
     struct PrimitiveGroup {
         int material{-1};
@@ -967,7 +1109,10 @@ static int addCsgMeshDataToGltf(ExportCtx& ctx, CsgMeshData csg,
         prim.attributes["POSITION"] = posAcc;
         if (normAcc >= 0) prim.attributes["NORMAL"] = normAcc;
         if (uvAcc >= 0) prim.attributes["TEXCOORD_0"] = uvAcc;
-        prim.indices = addAccessorIndices(model, group.indices);
+        const bool narrowIndices = ctx.quantizeMeshAttributes && !group.indices.empty() &&
+            *std::max_element(group.indices.begin(), group.indices.end()) <= std::numeric_limits<uint16_t>::max();
+        prim.indices = addAccessorIndices(model, group.indices, narrowIndices);
+        if (narrowIndices) ++ctx.stats.narrowedIndexAccessors;
         prim.mode = TINYGLTF_MODE_TRIANGLES;
         if (group.material >= 0) prim.material = group.material;
 
@@ -981,8 +1126,15 @@ static int addCsgMeshDataToGltf(ExportCtx& ctx, CsgMeshData csg,
         {
             std::vector<float> tangents = computeTangents(md.positions, md.normals,
                                                           md.texcoords, group.indices);
-            if (!tangents.empty())
-                prim.attributes["TANGENT"] = addAccessorVec4(model, tangents);
+            if (!tangents.empty()) {
+                const bool tangentCanQuantize = valuesFitNormalizedRange(tangents, -1.0f, 1.0f);
+                prim.attributes["TANGENT"] = ctx.quantizeMeshAttributes && tangentCanQuantize
+                    ? addAccessorVec4NormalizedShort(model, tangents)
+                    : addAccessorVec4(model, tangents);
+                if (ctx.quantizeMeshAttributes && tangentCanQuantize) ++ctx.stats.quantizedAttributeAccessors;
+                if (ctx.quantizeMeshAttributes && !tangentCanQuantize)
+                    addExportReport(ctx, objectId, "CSG TANGENT stayed float32: values are outside the normalized [-1, 1] range");
+            }
         }
         mesh.primitives.push_back(std::move(prim));
     }
@@ -1142,7 +1294,7 @@ static int buildNode(ExportCtx& ctx, const Mc3Object& obj, int depth)
             CsgMeshData csgData = evaluateCsgNodeWithMaterials(obj, ctx.definitions);
             if (!csgData.empty()) {
                 applyCsgUvMapping(csgData.mesh, obj);
-                directMesh = addCsgMeshDataToGltf(ctx, std::move(csgData), obj.name, matIdx);
+                directMesh = addCsgMeshDataToGltf(ctx, std::move(csgData), obj.name, obj.id, matIdx);
             }
             ctx.stats.csgMeshesEvaluated++;
             csgEvaluated = true;   // skip children — they are baked into the mesh
@@ -1153,6 +1305,7 @@ static int buildNode(ExportCtx& ctx, const Mc3Object& obj, int depth)
                       << (obj.name.empty() ? "(unnamed)" : obj.name)
                       << "' — approximate CSG mode; children exported as separate meshes.\n";
             ctx.stats.warnings++;
+            addExportReport(ctx, obj.id, "Approximate CSG fallback exported children separately");
         }
     }
 
@@ -1828,12 +1981,24 @@ static void exportAnimations(
 }
 
 // ---------------------------------------------------------------------------
-// GltfExporter::exportDocument
+// Shared deterministic model-building phase used by both real export and the
+// preflight estimator. Keeping one source of truth avoids a UI estimate that
+// quietly counts a different scene than the file writer actually emits.
 // ---------------------------------------------------------------------------
 
-void GltfExporter::exportDocument(const Mc3Document& doc,
-                                   const std::filesystem::path& outputPath,
-                                   OutputFormat format)
+struct GltfBuildResult {
+    tinygltf::Model model;
+    ExportStats stats;
+};
+
+static GltfBuildResult buildGltfModel(const Mc3Document& doc,
+                                      const std::filesystem::path& outputPath,
+                                      OutputFormat format,
+                                      bool allowApproximateCSG,
+                                      bool allowExternalResources,
+                                      bool quantizeMeshAttributes,
+                                      Mc3Validation& validation,
+                                      std::vector<ExportReportEntry>& report)
 {
     // SYS-W1-01: re-validate doc's current in-memory state before building
     // any glTF output -- see the `validation` member's doc comment. Runs
@@ -1841,31 +2006,9 @@ void GltfExporter::exportDocument(const Mc3Document& doc,
     // this function too, not just ones that export successfully.
     validation.clear();
     doc.validate(validation);
+    report.clear();
 
     tinygltf::Model model;
-    tinygltf::TinyGLTF writer;
-
-    // STAB-0416: tinygltf's default image writer (tinygltf::WriteImageData)
-    // truncates image.uri down to just its basename (GetBaseFilename) before
-    // writing it out — designed for the "auto-write image bytes next to the
-    // gltf" workflow, but it silently drops any subdirectory prefix (e.g.
-    // "textures/wall.png" -> "wall.png") for external-reference textures,
-    // which never had pixel data for it to write in the first place. Only
-    // override the external-reference case (image->image.empty()); delegate
-    // to the real default for embedded images so --embed/.glb is unaffected.
-    writer.SetImageWriter(
-        [](const std::string* basepath, const std::string* filename,
-           const tinygltf::Image* image, bool embedImages,
-           const tinygltf::FsCallbacks* fs_cb, const tinygltf::URICallbacks* uri_cb,
-           std::string* out_uri, void* user_data) -> bool {
-            if (image->image.empty()) {
-                *out_uri = image->uri;
-                return true;
-            }
-            return tinygltf::WriteImageData(basepath, filename, image, embedImages,
-                                             fs_cb, uri_cb, out_uri, user_data);
-        },
-        nullptr);
 
     model.buffers.emplace_back();
     model.buffers[0].name = "buffer0";
@@ -1910,6 +2053,7 @@ void GltfExporter::exportDocument(const Mc3Document& doc,
     ExportCtx ctx{model, matNameToIdx, doc.definitions, doc.embeds,
                   unitScaleFactor(doc.unit), doc.sourcePath,
                   allowApproximateCSG, allowExternalResources,
+                  quantizeMeshAttributes, &report,
                   doc.rotationUnits == "radians", doc.eulerOrder,
                   {}, {}, {}};
     ctx.stats.warnings += preCtxWarnings;
@@ -1987,35 +2131,102 @@ void GltfExporter::exportDocument(const Mc3Document& doc,
     model.scenes.push_back(std::move(scene));
     model.defaultScene = 0;
 
-    bool writeBinary = (format == OutputFormat::GLB);
-    bool embedImages = writeBinary;
-    bool prettyPrint = !writeBinary;
+    GltfBuildResult result;
+    result.stats = ctx.stats;
+    result.stats.gltfNodes     = static_cast<int>(model.nodes.size());
+    result.stats.uniqueMeshes  = static_cast<int>(model.meshes.size());
+    result.stats.materialCount = static_cast<int>(model.materials.size());
+    for (const auto& mesh : model.meshes) {
+        for (const auto& prim : mesh.primitives) {
+            auto posIt = prim.attributes.find("POSITION");
+            if (posIt != prim.attributes.end() &&
+                posIt->second >= 0 &&
+                posIt->second < static_cast<int>(model.accessors.size()))
+                result.stats.totalVertices += model.accessors[posIt->second].count;
+            if (prim.indices >= 0 &&
+                prim.indices < static_cast<int>(model.accessors.size()))
+                result.stats.totalTriangles += model.accessors[prim.indices].count / 3;
+        }
+    }
+    result.model = std::move(model);
+    return result;
+}
 
-    // AUDIT-0019: for GLB, the output is always a single self-contained
-    // file, so we can safely write to a sibling temp path and rename over
-    // the real destination only after a fully successful write -- a crash/
-    // disk-full/permission failure mid-write can then never leave a
-    // truncated .glb at the path the user asked to export to.
-    //
-    // For plain .gltf, tinygltf also writes a separate external .bin buffer
-    // (and possibly image files) alongside the JSON, with the buffer's
-    // on-disk name and the JSON's internal "uri" reference to it both
-    // derived from the given path's filename. Writing the JSON to a
-    // differently-named temp path would make tinygltf emit a buffer
-    // reference that no longer matches the real destination's expected
-    // sibling filename once renamed -- a subtler, worse corruption than the
-    // truncation this fix prevents. Left non-atomic for that multi-file
-    // case pending a proper multi-file-aware fix.
+static ExportEstimate estimateBuiltModel(const tinygltf::Model& model, OutputFormat format) {
+    auto align4 = [](std::uint64_t value) { return (value + 3u) & ~std::uint64_t{3}; };
+    ExportEstimate estimate;
+    estimate.embedsImages = format == OutputFormat::GLB;
+    for (const auto& buffer : model.buffers) estimate.estimatedBinaryBytes += buffer.data.size();
+
+    // The serialized JSON has fixed structural overhead plus named entries.
+    // tinygltf's whitespace/number formatting is intentionally not treated as
+    // a stable file-size contract, hence a conservative per-record allowance.
+    estimate.estimatedJsonBytes = 1024 +
+        static_cast<std::uint64_t>(model.nodes.size()) * 224 +
+        static_cast<std::uint64_t>(model.meshes.size()) * 192 +
+        static_cast<std::uint64_t>(model.accessors.size()) * 112 +
+        static_cast<std::uint64_t>(model.bufferViews.size()) * 88 +
+        static_cast<std::uint64_t>(model.materials.size()) * 640 +
+        static_cast<std::uint64_t>(model.textures.size() + model.images.size() + model.samplers.size()) * 128 +
+        static_cast<std::uint64_t>(model.animations.size()) * 256;
+    for (const auto& image : model.images) {
+        if (!image.image.empty()) {
+            estimate.embeddedImageBytes += image.image.size();
+            if (format == OutputFormat::GLB)
+                estimate.estimatedJsonBytes += ((image.image.size() + 2u) / 3u) * 4u +
+                                                image.mimeType.size() + 32u;
+        } else {
+            estimate.estimatedJsonBytes += image.uri.size() + image.name.size() + 24u;
+        }
+    }
+    if (format == OutputFormat::GLB) {
+        estimate.estimatedJsonBytes = align4(estimate.estimatedJsonBytes);
+        estimate.estimatedBinaryBytes = align4(estimate.estimatedBinaryBytes);
+        estimate.estimatedTotalBytes = 12u + 8u + estimate.estimatedJsonBytes +
+                                       8u + estimate.estimatedBinaryBytes;
+    } else {
+        estimate.estimatedTotalBytes = estimate.estimatedJsonBytes + estimate.estimatedBinaryBytes;
+    }
+    return estimate;
+}
+
+void GltfExporter::exportDocument(const Mc3Document& doc,
+                                  const std::filesystem::path& outputPath,
+                                  OutputFormat format)
+{
+    GltfBuildResult built = buildGltfModel(doc, outputPath, format,
+                                           allowApproximateCSG, allowExternalResources,
+                                           quantizeMeshAttributes, validation, report);
+    tinygltf::Model& model = built.model;
+    tinygltf::TinyGLTF writer;
+
+    // STAB-0416: retain a full relative URI for a non-embedded image instead
+    // of tinygltf reducing it to a basename. Embedded images keep tinygltf's
+    // normal writer path and therefore remain valid GLB data.
+    writer.SetImageWriter(
+        [](const std::string* basepath, const std::string* filename,
+           const tinygltf::Image* image, bool embedImages,
+           const tinygltf::FsCallbacks* fs_cb, const tinygltf::URICallbacks* uri_cb,
+           std::string* out_uri, void* user_data) -> bool {
+            if (image->image.empty()) {
+                *out_uri = image->uri;
+                return true;
+            }
+            return tinygltf::WriteImageData(basepath, filename, image, embedImages,
+                                             fs_cb, uri_cb, out_uri, user_data);
+        }, nullptr);
+
+    const bool writeBinary = format == OutputFormat::GLB;
+    const bool embedImages = writeBinary;
+    const bool prettyPrint = !writeBinary;
+    // AUDIT-0019: the one-file GLB is atomically replaced after a successful
+    // temporary write. Plain .gltf remains multi-file and is intentionally
+    // not made falsely atomic by renaming only its JSON sidecar.
     if (writeBinary) {
         std::filesystem::path tmpPath = outputPath;
         tmpPath += ".tmp";
-        std::string tmpPathStr = tmpPath.string();
-        bool ok = writer.WriteGltfSceneToFile(&model, tmpPathStr,
-                                               embedImages,
-                                               /*embedBuffers=*/writeBinary,
-                                               prettyPrint,
-                                               writeBinary);
-        if (!ok) {
+        const std::string tmpPathStr = tmpPath.string();
+        if (!writer.WriteGltfSceneToFile(&model, tmpPathStr, embedImages, true, prettyPrint, true)) {
             std::error_code ec;
             std::filesystem::remove(tmpPath, ec);
             throw std::runtime_error("tinygltf: failed to write " + tmpPathStr);
@@ -2027,33 +2238,22 @@ void GltfExporter::exportDocument(const Mc3Document& doc,
             throw std::runtime_error("Failed to finalize GLB export (rename): " + outputPath.string());
         }
     } else {
-        std::string path = outputPath.string();
-        bool ok = writer.WriteGltfSceneToFile(&model, path,
-                                               embedImages,
-                                               /*embedBuffers=*/writeBinary,
-                                               prettyPrint,
-                                               writeBinary);
-        if (!ok)
+        const std::string path = outputPath.string();
+        if (!writer.WriteGltfSceneToFile(&model, path, embedImages, false, prettyPrint, false))
             throw std::runtime_error("tinygltf: failed to write " + path);
     }
+    stats = std::move(built.stats);
+}
 
-    // Populate export statistics from accumulated ctx.stats + model aggregate counts.
-    stats = ctx.stats;
-    stats.gltfNodes     = static_cast<int>(model.nodes.size());
-    stats.uniqueMeshes  = static_cast<int>(model.meshes.size());
-    stats.materialCount = static_cast<int>(model.materials.size());
-    for (const auto& mesh : model.meshes) {
-        for (const auto& prim : mesh.primitives) {
-            auto posIt = prim.attributes.find("POSITION");
-            if (posIt != prim.attributes.end() &&
-                posIt->second >= 0 &&
-                posIt->second < static_cast<int>(model.accessors.size()))
-                stats.totalVertices += model.accessors[posIt->second].count;
-            if (prim.indices >= 0 &&
-                prim.indices < static_cast<int>(model.accessors.size()))
-                stats.totalTriangles += model.accessors[prim.indices].count / 3;
-        }
-    }
+ExportEstimate GltfExporter::estimateDocument(const Mc3Document& doc,
+                                               const std::filesystem::path& outputPath,
+                                               OutputFormat format)
+{
+    GltfBuildResult built = buildGltfModel(doc, outputPath, format,
+                                           allowApproximateCSG, allowExternalResources,
+                                           quantizeMeshAttributes, validation, report);
+    stats = built.stats;
+    return estimateBuiltModel(built.model, format);
 }
 
 } // namespace mc3togltf
