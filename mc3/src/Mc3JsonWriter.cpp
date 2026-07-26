@@ -1,4 +1,5 @@
 #include "Mc3JsonWriter.hpp"
+#include <MeshCraft/Mc3/Mc3AtomicFileWriter.hpp>
 #include <MeshCraft/Mc3/Mc3Document.hpp>
 #include <MeshCraft/Mc3/Mc3EventBinding.hpp>
 #include <MeshCraft/Mc3/Mc3Extrude.hpp>
@@ -655,25 +656,13 @@ std::string Mc3JsonWriter::toString(const Mc3Document& doc) {
 void Mc3JsonWriter::write(const Mc3Document& doc, const std::filesystem::path& path) {
     const std::string content = toString(doc);
 
-    // Same write-to-temp-then-rename pattern as Mc3XmlWriter::write() so a
-    // crash/disk-full mid-write can never leave a truncated file at `path`.
-    std::filesystem::path tmpPath = path;
-    tmpPath += ".tmp";
-    {
+    // AUDIT-0019/SYS-W9-06: same atomic write-then-replace primitive as
+    // Mc3XmlWriter::write() so a crash/disk-full mid-write can never leave a
+    // truncated file at `path`.
+    writeFileAtomically(path, [&](const std::filesystem::path& tmpPath) {
         std::ofstream out(tmpPath, std::ios::binary | std::ios::trunc);
         if (!out) throw std::runtime_error("Failed to save JSON: " + path.string());
         out << content;
-        if (!out) {
-            out.close();
-            std::error_code ec;
-            std::filesystem::remove(tmpPath, ec);
-            throw std::runtime_error("Failed to save JSON: " + path.string());
-        }
-    }
-    std::error_code ec;
-    std::filesystem::rename(tmpPath, path, ec);
-    if (ec) {
-        std::filesystem::remove(tmpPath, ec);
-        throw std::runtime_error("Failed to finalize JSON save (rename): " + path.string());
-    }
+        if (!out) throw std::runtime_error("Failed to save JSON: " + path.string());
+    });
 }

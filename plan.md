@@ -324,31 +324,43 @@ time; re-evaluate scope and blockers before starting each item.
   time without a fragile wall-clock threshold. Undo/redo/history and registry
   insertion regressions passed.
 
-- **SYS-W9-06** `[PROPOSED]` `P0` — Introduce one portable atomic-file
-  replacement primitive. `AUDIT-0019` (commit `cec267b`) already made
-  `Mc3XmlWriter`, `Mc3JsonWriter`, `McbWriter`, and the GLB path in
-  `GltfExporter` write-then-rename instead of writing the destination
-  directly; confirmed identical in all four
-  (`mc3/src/Mc3XmlWriter.cpp:933-949`, `mc3/src/Mc3JsonWriter.cpp:658-677`,
-  `mcb/src/McbWriter.cpp:747-770`, `mc3togltf/src/GltfExporter.cpp:2304-2320`).
-  The remaining gap is not "atomic vs. not" but portability and
-  collision-safety of that shared pattern, independently duplicated four
-  times: a fixed `<destination>.tmp` name can collide between two concurrent
-  saves of the same path (e.g. autosave racing a manual save); and
-  `std::filesystem::rename()` replacing an *existing* destination is not
-  proven equally reliable on Windows as on POSIX in this codebase — the
-  existing Windows CI job (`SYS-W11-06`) does not exercise a second save to
-  the same path. Replace the four duplicated call sites with one CNA-free
-  utility that: creates a unique sibling temporary file; never collides with
-  another concurrent save; fully closes and flushes the temporary output
-  before replacement; replaces an existing destination correctly on Linux and
-  Windows; preserves the old destination if writing or replacement fails;
-  removes temporary files after every handled failure; and returns a
-  diagnostic distinguishing write failure from finalization failure.
-  **Tests:** first save, overwrite existing destination, Unicode path,
-  injected writer failure, injected replacement failure, pre-existing
-  temporary file, two distinct concurrent temporary names, and a native
-  Windows XML/JSON/MCB/GLB overwrite qualification.
+- **SYS-W9-06** `[DONE]` `P0` — Added one portable atomic-file replacement
+  primitive, `MeshCraft::Mc3::writeFileAtomically()` +
+  `uniqueSiblingTempPath()` (`mc3/include/MeshCraft/Mc3/Mc3AtomicFileWriter.hpp`,
+  `mc3/src/Mc3AtomicFileWriter.cpp`), and replaced the four independently
+  duplicated fixed-`<destination>.tmp`-name write-then-rename call sites
+  (`Mc3XmlWriter.cpp`, `Mc3JsonWriter.cpp`, `McbWriter.cpp`,
+  `GltfExporter.cpp`'s GLB path) with calls to it. Each candidate temp name
+  combines a monotonic atomic counter with a steady-clock reading, so
+  concurrent saves of the same destination never collide, and a caller
+  requesting a fresh name automatically skips past any stale leftover temp
+  file rather than failing. The finalizing `rename()` retries up to 5 times
+  (20ms apart) to absorb a transient Windows sharing violation; on
+  irrecoverable finalize failure it throws `AtomicFinalizeError` (distinct
+  from a writer-stage exception, which propagates unchanged) and always
+  removes the temp file first, leaving any pre-existing destination
+  untouched. New `mc3/test/atomic_write_test.cpp` (registered as
+  `mc3_atomic_write`) covers first save, overwrite-existing, a Unicode
+  destination path, injected writer failure (with and without a pre-existing
+  destination), a genuine finalize-stage failure (renaming onto an existing
+  directory, which throws `AtomicFinalizeError` specifically), a stale
+  leftover `<dest>.tmp` file not blocking a new save, and two concurrent
+  calls producing distinct temp names. All 26 standalone `mc3` tests, all 11
+  standalone `mcb` tests, and 75/78 standalone `mc3togltf` tests passed (the
+  remaining 3 — `mc3togltf_blender_import` and its two PBR/release-sample
+  variants — fail only on a pre-existing, unrelated environment gap: this
+  sandbox's Blender lacks the `numpy` module its glTF importer needs; not a
+  regression from this change). The full root-project `MeshCraft` editor
+  target, plus the registry/undo/obj-export-cleanup tests that exercise
+  `Mc3Document::saveToFile()`/registry save paths transitively, also built
+  and passed. Native Windows overwrite qualification remains unverified in
+  this sandbox (no Wine); left for `SYS-W11-06`'s own Windows CI evidence.
+  Editor-side direct-write config files (preferences/keybindings/macros/
+  recent-files) were surveyed and found to have the same unprotected-
+  direct-write shape, but are intentionally left out of this task's scope —
+  regenerable config is a materially lower-severity gap than scene-file data
+  loss, and folding them in here would have widened one coherent task into
+  an unrelated sweep across the editor.
 
 - **SYS-W9-07** `[PROPOSED]` `P1` — Recover never-saved Untitled scenes.
   Confirmed at `FileOps.cpp:93`: `performAutoSave()` opens with

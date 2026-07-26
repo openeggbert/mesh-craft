@@ -1,6 +1,7 @@
 #include "MeshCraft/Mcb/McbWriter.hpp"
 #include "MeshCraft/Mcb/McbFormat.hpp"
 #include "MeshCraft/Mc3/Mc3Animation.hpp"
+#include "MeshCraft/Mc3/Mc3AtomicFileWriter.hpp"
 #include "MeshCraft/Mc3/Mc3Camera.hpp"
 #include "MeshCraft/Mc3/Mc3Environment.hpp"
 #include "MeshCraft/Mc3/Mc3Light.hpp"
@@ -745,30 +746,15 @@ void saveToBinary(const Mc3::Mc3Document& doc, std::ostream& out, bool compress)
 }
 
 void saveToFile(const Mc3::Mc3Document& doc, const std::filesystem::path& path, bool compress) {
-    // AUDIT-0019: write to a sibling temp file and rename over the real
-    // destination only after a fully successful write, so a crash/disk-full/
-    // permission failure mid-write can never leave a truncated or corrupt
-    // file at `path` (std::filesystem::rename is atomic within the same
-    // filesystem, which a sibling file in the same directory always is).
-    std::filesystem::path tmpPath = path;
-    tmpPath += ".tmp";
-    {
+    // AUDIT-0019/SYS-W9-06: same atomic write-then-replace primitive as
+    // Mc3XmlWriter::write() so a crash/disk-full/permission failure mid-write
+    // can never leave a truncated or corrupt file at `path`.
+    Mc3::writeFileAtomically(path, [&](const std::filesystem::path& tmpPath) {
         std::ofstream f(tmpPath, std::ios::binary | std::ios::trunc);
         if (!f) throw std::runtime_error("Cannot open for writing: " + tmpPath.string());
         saveToBinary(doc, f, compress);
-        if (!f) {
-            f.close();
-            std::error_code ec;
-            std::filesystem::remove(tmpPath, ec);
-            throw std::runtime_error("Write error: " + path.string());
-        }
-    }
-    std::error_code ec;
-    std::filesystem::rename(tmpPath, path, ec);
-    if (ec) {
-        std::filesystem::remove(tmpPath, ec);
-        throw std::runtime_error("Failed to finalize MCB save (rename): " + path.string());
-    }
+        if (!f) throw std::runtime_error("Write error: " + path.string());
+    });
 }
 
 } // namespace MeshCraft::Mcb

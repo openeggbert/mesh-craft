@@ -103,6 +103,7 @@ add_library(Mc3 STATIC
     src/Mc3JsonParser.cpp
     src/Mc3Sha256.cpp
     src/Mc3ImportResolver.cpp
+    src/Mc3AtomicFileWriter.cpp
 )
 
 target_include_directories(Mc3
@@ -370,6 +371,15 @@ if(BUILD_TESTING)
     target_link_libraries(mc3_cdata_injection_test PRIVATE Mc3)
     add_test(NAME mc3_cdata_injection COMMAND mc3_cdata_injection_test)
     set_tests_properties(mc3_cdata_injection PROPERTIES TIMEOUT 15 LABELS "format")
+
+    # SYS-W9-06: writeFileAtomically()/uniqueSiblingTempPath() -- the shared
+    # primitive Mc3XmlWriter, Mc3JsonWriter, McbWriter, and GltfExporter's
+    # GLB path all now use instead of their own duplicated fixed-name
+    # ".tmp" + rename() dance.
+    add_executable(mc3_atomic_write_test test/atomic_write_test.cpp)
+    target_link_libraries(mc3_atomic_write_test PRIVATE Mc3)
+    add_test(NAME mc3_atomic_write COMMAND mc3_atomic_write_test)
+    set_tests_properties(mc3_atomic_write PROPERTIES TIMEOUT 15 LABELS "format")
 
     # SYS-W1-04: include bombs -- depth (bounded by Mc3LoadPolicy::
     # maxIncludeDepth) and fan-out (bounded by the new DocumentBudget::

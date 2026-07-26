@@ -12,6 +12,7 @@
 #include <MeshCraft/AssetLodAlgorithms.hpp>
 #include <MeshCraft/CoordinateSystemAlgorithms.hpp>
 #include <MeshCraft/SceneSemanticsAlgorithms.hpp>
+#include <MeshCraft/Mc3/Mc3AtomicFileWriter.hpp>
 #include <MeshCraft/Mc3/Mc3Document.hpp>
 #include <MeshCraft/Mc3/Mc3Light.hpp>
 #include <MeshCraft/Mc3/Mc3Camera.hpp>
@@ -2301,24 +2302,16 @@ void GltfExporter::exportDocument(const Mc3Document& doc,
     const bool writeBinary = format == OutputFormat::GLB;
     const bool embedImages = writeBinary;
     const bool prettyPrint = !writeBinary;
-    // AUDIT-0019: the one-file GLB is atomically replaced after a successful
-    // temporary write. Plain .gltf remains multi-file and is intentionally
-    // not made falsely atomic by renaming only its JSON sidecar.
+    // AUDIT-0019/SYS-W9-06: the one-file GLB is atomically replaced after a
+    // successful temporary write. Plain .gltf remains multi-file and is
+    // intentionally not made falsely atomic by renaming only its JSON
+    // sidecar.
     if (writeBinary) {
-        std::filesystem::path tmpPath = outputPath;
-        tmpPath += ".tmp";
-        const std::string tmpPathStr = tmpPath.string();
-        if (!writer.WriteGltfSceneToFile(&model, tmpPathStr, embedImages, true, prettyPrint, true)) {
-            std::error_code ec;
-            std::filesystem::remove(tmpPath, ec);
-            throw std::runtime_error("tinygltf: failed to write " + tmpPathStr);
-        }
-        std::error_code ec;
-        std::filesystem::rename(tmpPath, outputPath, ec);
-        if (ec) {
-            std::filesystem::remove(tmpPath, ec);
-            throw std::runtime_error("Failed to finalize GLB export (rename): " + outputPath.string());
-        }
+        writeFileAtomically(outputPath, [&](const std::filesystem::path& tmpPath) {
+            const std::string tmpPathStr = tmpPath.string();
+            if (!writer.WriteGltfSceneToFile(&model, tmpPathStr, embedImages, true, prettyPrint, true))
+                throw std::runtime_error("tinygltf: failed to write " + tmpPathStr);
+        });
     } else {
         const std::string path = outputPath.string();
         if (!writer.WriteGltfSceneToFile(&model, path, embedImages, false, prettyPrint, false))
