@@ -61,7 +61,15 @@ time; re-evaluate scope and blockers before starting each item.
 1. **SYS-W11-06** `P2` — standalone Windows qualification. **In progress:**
    the release-readiness changes are published on `develop`; await the first
    native `windows-2022` CI CTest/artifact run before accepting the release
-   gate.
+   gate. **Amended acceptance (2026-07-26 review):** a green in-tree CTest run
+   alone does not prove the two published `.exe` files are a usable
+   standalone artifact. Before DONE, additionally: copy or download the
+   staged artifact into a clean directory outside all build trees and outside
+   `PATH`; run both executables with `--version` from there; perform one
+   MC3→MCB and one MC3→GLB conversion and verify the fixed fixture SHA-256;
+   confirm every third-party runtime DLL the two executables need (the root
+   `CMakeLists.txt` allows Manifold/tinyobjloader as shared runtime libraries)
+   is staged alongside them.
 
 ---
 
@@ -85,6 +93,32 @@ time; re-evaluate scope and blockers before starting each item.
   `capability_documentation` lint test; volatile CTest totals are no longer
   recorded as product truth.
 
+- **SYS-W13-03** `[PROPOSED]` `P1` — Remove documentation drift the
+  `capability_documentation` lint does not yet cover, confirmed by direct
+  read (not the full review list — two of its claims did not hold up: the
+  "click/timer event" gap it named is `SYS-W14-11`'s pre-existing JSON-only
+  scope, already accurate, and `RELEASE.md`'s "95 tests" mention is already
+  self-caveated as historical, not asserted as current):
+  - `CHANGELOG.md:58-59` still states "Automatic collision/click/timer
+    trigger events and automatic state switching remain unimplemented,"
+    which `SYS-W14-40` (`[DONE]`, Event Preview/Play) has since superseded.
+  - `missing.md` self-contradicts on `coordinate_system`: line 53 and the
+    matrix at line 177 say it is fully implemented and honored in the editor
+    and glTF export, while line 148 still says it is "not read anywhere
+    (`coordinate_system`, by design)".
+  - `RELEASE.md`'s docs-checklist references a `plan.md` "summary table"
+    recomputed from `✅`/`🟡`/`🧪`/`📋`/`🔴` row markers; `plan.md` no longer
+    uses that emoji-marker format (`SYS-W13-01` moved it to
+    `[DONE]`/`[IN_PROGRESS]`/`[BLOCKED]`/`[DEFERRED]` text markers), so that
+    checklist step no longer describes a real check.
+  - `new.md` (headed "prepared 2026-07-26 from the current source tree")
+    recommends "event bindings for Areas/triggers" as a next feature; that is
+    what `SYS-W14-40` already shipped, so the recommendation is stale despite
+    the file's date.
+  Extend the documentation validator with a small number of source-backed
+  negative assertions covering these four, rather than trying to make every
+  prose sentence a brittle static test.
+
 ### W5 — MC3 governance
 
 - **SYS-W5-06** `[DONE]` `P1` — The CNA-free rotation-convention helper is
@@ -102,6 +136,21 @@ time; re-evaluate scope and blockers before starting each item.
   do not add an extension bag without deciding between strict rejection,
   preservation, and lossiness.
 
+### W1 — Validation and diagnostics
+
+- **SYS-W1-08** `[PROPOSED]` `P1` — Add validation-capturing JSON load APIs.
+  `FileOps.cpp:179-182` documents that `Mc3JsonParser` has no
+  `Mc3Validation`-capturing overload, so the `.json` and `.mc3lib.json`
+  branches of `loadSceneFileDispatched()` silently return empty validation
+  (not populated, not an error) while the XML and MCB branches populate it.
+  Add `Mc3Validation&` overloads for JSON string/file loading and for
+  `.mc3lib.json`, routing parser clamps, defaults and hard rejections through
+  the same structured diagnostic surface XML and MCB already use, then update
+  `loadSceneFileDispatched()` so all four load paths populate the editor
+  validation history consistently. **Tests:** differential XML/JSON fixtures
+  for non-finite values, clamps, missing references, invalid enums, excessive
+  limits, library identity, hard rejection, and clean valid documents.
+
 ### W2 — AI / import sandbox
 
 - **SYS-W2-01** `[DONE]` `P1` — Lua scripts now run on a deep, isolated
@@ -113,6 +162,23 @@ time; re-evaluate scope and blockers before starting each item.
   state and undo/history untouched. Focused runner/trigger tests cover partial
   mutation followed by error, loops, excess allocation, non-finite transforms,
   invalid material references, placement and trigger-driven execution.
+
+- **SYS-W2-06** `[PROPOSED]` `P1` — Make the Lua allocator budget accounting
+  exact. `budgetedLuaAllocator()` (`LuaScriptRunner.cpp:33-48`) always treats
+  `oldSize` as the size of a previously-owned block:
+  `retained = oldSize <= budget.allocated ? budget.allocated - oldSize : 0`.
+  Per the Lua 5.4 `lua_Alloc` contract, when `pointer == nullptr` (a genuinely
+  new allocation) `oldSize` does not encode a real prior block size — it
+  encodes an object-kind tag. The current code still subtracts that tag value
+  from `budget.allocated` on every new allocation, so the aggregate budget
+  silently drifts low across many small allocations instead of tracking real
+  usage. Distinguish the new-allocation case from a resize before interpreting
+  `oldSize`, and prove peak Lua-owned memory cannot exceed the configured
+  16 MiB budget under realistic allocation patterns. **Tests:** one oversized
+  allocation (existing), many small tables, many short strings, table growth,
+  grow/shrink reallocations, collection followed by reallocation, failed
+  allocation rollback, and a successful transaction immediately below the
+  limit.
 
 ### W12 — Performance baselines
 
@@ -177,7 +243,43 @@ time; re-evaluate scope and blockers before starting each item.
 
 - **SYS-W11-07** `[DEFERRED]` `P3` — Improve dependency reproducibility with
   immutable revisions or verified archives, third-party notice/SBOM, and an
-  offline-cache release-build check.
+  offline-cache release-build check. **2026-07-26 review note:** revisit
+  deferring this once `SYS-W11-08` exists — a clean-room release artifact
+  built from movable FetchContent tags is a weaker reproducibility claim than
+  the artifact test alone suggests. Left `DEFERRED` here; changing that is a
+  scope decision for the user, not made in this pass.
+
+- **SYS-W11-08** `[PROPOSED]` `P2` — Produce and test clean-room CLI release
+  artifacts. Replace the current bare-executable-upload pattern (the
+  `windows-2022` job publishes only `mc3tomcb.exe`/`mc3togltf.exe`, no
+  runtime libraries or manifest) with one staged install tree containing both
+  CLI programs, their required runtime libraries, notices, licenses, package
+  metadata, and a manifest of SHA-256 hashes. Test the Linux and Windows
+  artifacts after copying them outside the build directory with build paths
+  removed from the environment. **Tests:** `--version`, MC3→MCB, MC3→GLB,
+  deterministic fixture hashes, missing-runtime detection, and archive
+  extraction into a path containing spaces and non-ASCII characters.
+
+- **SYS-W11-09** `[PROPOSED]` `P1` — Add first-party editor sanitizer CI.
+  `SYS-W11-04`'s sanitizer/fuzz CI covers `mc3`, `mcb`, `mc3togltf`, and
+  `mc3tomcb`; the editor's own `src/`+`include/` (35,682 lines, confirmed via
+  `find src include \( -name '*.cpp' -o -name '*.hpp' \) | xargs wc -l`) is
+  not in a regular sanitizer job — `SYS-W11-04` explicitly deferred the EASYGL
+  editor sanitizer job pending reliable dependencies. Root `CMakeLists.txt`
+  already has `-DMESHCRAFT_SANITIZE=ON` wired up (just not MSVC). Use it with
+  pinned CNA/sharp-runtime revisions: start with the CNA-free and non-render
+  editor tests, then add the smallest reliable EASYGL smoke/render subset.
+  **Acceptance:** sanitizer findings fail CI, no source test is silently
+  disabled because it was built through the editor root, and the selected
+  partition completes with fixed time and memory limits.
+
+- **SYS-W11-10** `[PROPOSED]` `P2` — Define and execute the first release
+  candidate process. Decide whether the first public release is `0.1.0`,
+  `1.0.0`, or another version; use one authoritative version source for the
+  root project, Mc3, Mcb, both CLI tools, package configs, `--version`,
+  archive names and the changelog. Produce an RC artifact set, execute
+  `RELEASE.md`, record the exact supported platform/backend matrix, and
+  distinguish unsupported platforms from temporarily blocked qualification.
 
 ### W3 — Architecture decomposition
 
@@ -201,6 +303,15 @@ time; re-evaluate scope and blockers before starting each item.
   `trigger_fire` additionally proves a post-Lua trigger step remains safe
   after the atomic document swap.
 
+- **SYS-W3-05** `[PROPOSED]` `P2` — Decompose `EditorAlgorithms.hpp`.
+  Confirmed at 2,514 lines, combining unrelated persistence, selection,
+  transform, command, event, preferences and utility algorithms behind one
+  header. Split into cohesive CNA-free modules and move non-template
+  implementation to `.cpp` files where practical; preserve existing tested
+  APIs or migrate call sites mechanically. Measure clean-build time and
+  incremental-rebuild fan-out before and after — do not accept a cosmetic
+  split that keeps one transitive mega-header.
+
 ### W9 — Undo and data-loss
 
 - **SYS-W9-05** `[DONE]` `P2` — Automatic history and exact undo now retain
@@ -212,6 +323,48 @@ time; re-evaluate scope and blockers before starting each item.
   4,197,506 duplicate-graph model; it also records an informational attach
   time without a fragile wall-clock threshold. Undo/redo/history and registry
   insertion regressions passed.
+
+- **SYS-W9-06** `[PROPOSED]` `P0` — Introduce one portable atomic-file
+  replacement primitive. `AUDIT-0019` (commit `cec267b`) already made
+  `Mc3XmlWriter`, `Mc3JsonWriter`, `McbWriter`, and the GLB path in
+  `GltfExporter` write-then-rename instead of writing the destination
+  directly; confirmed identical in all four
+  (`mc3/src/Mc3XmlWriter.cpp:933-949`, `mc3/src/Mc3JsonWriter.cpp:658-677`,
+  `mcb/src/McbWriter.cpp:747-770`, `mc3togltf/src/GltfExporter.cpp:2304-2320`).
+  The remaining gap is not "atomic vs. not" but portability and
+  collision-safety of that shared pattern, independently duplicated four
+  times: a fixed `<destination>.tmp` name can collide between two concurrent
+  saves of the same path (e.g. autosave racing a manual save); and
+  `std::filesystem::rename()` replacing an *existing* destination is not
+  proven equally reliable on Windows as on POSIX in this codebase — the
+  existing Windows CI job (`SYS-W11-06`) does not exercise a second save to
+  the same path. Replace the four duplicated call sites with one CNA-free
+  utility that: creates a unique sibling temporary file; never collides with
+  another concurrent save; fully closes and flushes the temporary output
+  before replacement; replaces an existing destination correctly on Linux and
+  Windows; preserves the old destination if writing or replacement fails;
+  removes temporary files after every handled failure; and returns a
+  diagnostic distinguishing write failure from finalization failure.
+  **Tests:** first save, overwrite existing destination, Unicode path,
+  injected writer failure, injected replacement failure, pre-existing
+  temporary file, two distinct concurrent temporary names, and a native
+  Windows XML/JSON/MCB/GLB overwrite qualification.
+
+- **SYS-W9-07** `[PROPOSED]` `P1` — Recover never-saved Untitled scenes.
+  Confirmed at `FileOps.cpp:93`: `performAutoSave()` opens with
+  `if (currentFile_.empty()) return;`, so a document that has never been
+  saved once (new scene, worked on, never given a path via Save As) has no
+  autosave and no recovery path if the editor or system crashes. The existing
+  `.autosave` sibling-file recovery (`SYS-W9-02`) only covers documents that
+  already have a path. Add a bounded session-recovery file in the MeshCraft
+  configuration directory for a modified document that has never been saved.
+  On next start, offer an explicit Recover / Discard decision. Recovery must
+  keep the document untitled and modified, must not add a synthetic path to
+  Recent Files, and must not overwrite an unrelated session; successful
+  Save As or explicit discard removes the recovery entry. **Tests:** modified
+  untitled recovery, clean shutdown cleanup, crash-marker simulation,
+  successful Save As cleanup, discard, corrupt recovery file, and coexistence
+  with the existing sibling `.autosave` recovery.
 
 ### W14 — Bounded new work
 
@@ -233,6 +386,19 @@ time; re-evaluate scope and blockers before starting each item.
 - **SYS-W8-05** `[BLOCKED]` `P1` — Broad alternate-backend editor
   qualification requires real backend screenshot/device evidence and CNA owner
   coordination; it is not a backend-name switch.
+
+- **SYS-W8-06** `[PROPOSED]` `P1` — Web editor and IDBFS end-to-end
+  qualification, split out from `SYS-W8-05` because it has its own specific
+  blocker and persistence contract rather than a generic backend-name gap.
+  Confirmed: the Emscripten pre-JS mount/syncfs IDBFS implementation exists
+  and is linked (`-lidbfs.js`), but `docs/CAPABILITY_MATRIX.md` and
+  `README.md` both already record that real persistence and editor usability
+  are unverified because the CNA web resize failure prevents a stable
+  session — this task tracks removing that caveat with evidence, not
+  re-implementing IDBFS. **Unblock requirements:** a CNA revision that
+  survives initial resize; successful Emscripten configure/build; headless-
+  browser editor startup; a persisted preference across reload; recovery-file
+  persistence; and one GLB export/download smoke test.
 
 ---
 
