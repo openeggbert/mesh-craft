@@ -1,6 +1,9 @@
 # NEXT.md
 
-_Last updated: 2026-07-26. The raw-OpenGL(ES)-vs-CNA audit group
+_Last updated: 2026-07-26. `SYS-W14-39` adds the local, dependency-aware
+Model Registry v2 asset-pack workflow; `SYS-W9-04` adds a separate,
+memory-budgeted local scene-review history with named checkpoints. The
+raw-OpenGL(ES)-vs-CNA audit group
 `AUD-082` through `AUD-088` is now complete. The final row, `AUD-085`
 (SSAO), was implemented as a CNA depth-to-color pre-pass: the renderer
 re-draws scene geometry with a 3D `ShaderEffect` into a `RenderTarget2D`,
@@ -105,12 +108,16 @@ before when explicitly requested (`SYS-W14-##` rows).
 
 ## 2. Current status
 
-- **Last full build: clean after `SYS-W14-38` animation clips and export policy.** Testing is enabled in the current Ninja Release tree, and
-  `CCACHE_DISABLE=1 cmake --build b-release -j4` linked successfully on
-  EASYGL. Alternate-backend runtime qualification remains blocked.
-- **Tests:** the current Release tree registers 209 tests. All 168 runnable
+- **Last full build: clean after `SYS-W9-04` scene history/checkpoints.** Testing is enabled in the current Ninja Release tree, and
+  `CCACHE_DISABLE=1 cmake --build b-release -j4 --target MeshCraft` linked
+  successfully on EASYGL. Alternate-backend runtime qualification remains
+  blocked.
+- **Tests:** the current Release tree registers 211 tests. All 171 runnable
   tests pass; the Xvfb preflight deterministically disables 40 render
   registrations on this host and one render display-preflight is skipped.
+  `SYS-W9-04` adds a CNA-free scene-history regression covering the logical
+  memory budget, eviction policy, named checkpoints, independent restore with
+  selection, large documents, and object/resource review diffs.
   `SYS-W14-38` adds pure playback-range/blend tests, XML/JSON/MCB clip
   round-trip coverage, and an actual glTF clip export test for TRS sampling,
   reverse/rate baking, deterministic JSON/binary output, portable policy, and
@@ -149,6 +156,21 @@ before when explicitly requested (`SYS-W14-##` rows).
   - Standalone libraries `mc3` (format/AST + XML/JSON parse-writer),
     `mcb` (binary format) — both buildable and testable without CNA via
     their own `mc3/build`/`mcb/build` trees (no live GPU/GL needed).
+- **Recently implemented (2026-07-26):** `SYS-W9-04` adds a local
+  `Editor::SceneHistory` timeline separate from the exact 20-entry undo/redo
+  stack. Every edit can capture a budgeted automatic restore point; **Edit →
+  History & Checkpoints** also creates named checkpoints, restores the stored
+  selection through an undoable operation, and compares a snapshot with the
+  current scene by stable object ID. The default 64 MiB is a documented
+  logical ownership estimate, not a resident-memory claim. History is scoped
+  to the current session and clears on New/Open/recovery; it is neither
+  persisted nor synchronized. Commit `7cc3e8d`.
+- **Recently implemented (2026-07-26):** `SYS-W14-39` upgrades the Model
+  Registry with structured metadata filters, deterministic cached catalog
+  tiles, import-conflict protection, material-health reporting, and filtered
+  export of a portable **local** asset pack containing only referenced
+  libraries. Accounts, remote storage, synchronization, and collaboration
+  remain deliberately out of scope. Commit `6394eae`.
 - **Recently implemented (2026-07-26):** `SYS-W14-35` preserves OBJ `usemtl`
   groups end to end. The editor imports each material assignment as a Mesh
   child under one source group, maps the safe MTL PBR subset into generated
@@ -771,8 +793,9 @@ blocked in sibling `sharp-runtime` before CNA graphics compile.
 - **By-design, not bugs:** MC3 silently drops unrecognized XML
   attributes/elements on round-trip (`SYS-W5-03`, human-decided,
   documented in `MC3_FORMAT.md`); editor/exporter use different triangle
-  winding deliberately; undo history is a bounded 20-entry stack
-  (`AUD-038`). Embedded self-contained GLB meshes are supported; loose glTF
+  winding deliberately; exact undo/redo is a bounded 20-entry stack
+  (`AUD-038`) while the separate local review history is a 64 MiB-budgeted,
+  non-persistent snapshot timeline (`SYS-W9-04`). Embedded self-contained GLB meshes are supported; loose glTF
   companion-file assets and other unsupported embedded-asset features are
   explicitly rejected with a warning (see `SYS-W14-05`).
 
@@ -949,7 +972,9 @@ git stash pop && cmake --build b-release -j4 --target <affected-target>
 ## 8. Next smallest tasks
 
 No actionable follow-up audit task remains: `AUD-089` through `AUD-092` are
-complete. Android (`AUD-042`) now chooses its GLES/EASYGL source path and
+complete, and the user-authorized `SYS-W14-39` and `SYS-W9-04` work is also
+complete. No additional user-authorized implementation task is currently
+queued. Android (`AUD-042`) now chooses its GLES/EASYGL source path and
 remains externally blocked only on NDK/dependency/package/device validation.
 `SYS-W3-01` has 12 completed subsystem phases; its Phase 13 application/UI
 ownership work is deferred by user priority. The completed Camera Bookmarks, Camera Preset Overlay, Gizmo Drag Overlay, Stats Overlay, Measurement Overlay, Status Bar, Walk Mode, View

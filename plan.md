@@ -2253,7 +2253,7 @@ because it is listed: `CLAUDE.md` requires per-row user confirmation.
   Xvfb preflight, and one display preflight skipped.
 
 - **SYS-W14-39** `[DONE]` `P3` — Model Registry v2 and dependency-aware asset packs.
-  **Implemented 2026-07-26.** SQLite entries now retain structured category,
+  **Implemented 2026-07-26 in commit `6394eae`.** SQLite entries now retain structured category,
   license and provenance fields alongside merged metadata tags. A deterministic
   64×64 RGBA catalog tile (FNV-1a XML fingerprint) is cached in new migrated
   `thumbnail_fingerprint`/`thumbnail_rgba` columns and regenerated on save or
@@ -2297,7 +2297,7 @@ because it is listed: `CLAUDE.md` requires per-row user confirmation.
   because this host has no usable Xvfb display.
 
 - **SYS-W9-04** `[DONE]` `P3` — Memory-budgeted history, named checkpoints, and scene review diffs.
-  **Implemented 2026-07-26.** New CNA-free `Editor::SceneHistory` is a
+  **Implemented 2026-07-26 in commit `7cc3e8d`.** New CNA-free `Editor::SceneHistory` is a
   deliberately separate review/checkpoint timeline; `UndoManager` remains the
   exact 20-entry deep-copy undo/redo stack with its paired selection restore
   and existing redo-invalidation behavior unchanged. Each capture-before-edit
