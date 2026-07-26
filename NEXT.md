@@ -36,13 +36,20 @@ distribution rather than missing editor breadth.
    its first real run already landed and found real issues.
 2. Autonomous continuation in progress on the freshly-added `[PROPOSED]`
    backlog (`SYS-W9-06/07`, `SYS-W1-08`, `SYS-W2-06`, `SYS-W11-08/09/10`,
-   `SYS-W13-03`, `SYS-W3-05`). **7 of 9 DONE as of this update**:
+   `SYS-W13-03`, `SYS-W3-05`). **8 of 9 DONE as of this update**:
    `SYS-W9-06`, `SYS-W2-06`, `SYS-W1-08`, `SYS-W9-07`, `SYS-W13-03`,
-   `SYS-W11-08` all landed, each its own commit, build-verified and tested
-   before committing. Remaining: `SYS-W11-09` (editor sanitizer CI — the
-   largest/most resource-intensive remaining item, an ASan+UBSan build of
-   the ~76k-line editor; watch RAM per the shared-machine guidance before
-   attempting a full build), `SYS-W11-10` (RC process/versioning), `SYS-W3-05`
+   `SYS-W11-08`, `SYS-W11-09` all landed, each its own commit, build-verified
+   and tested before committing.
+   **`SYS-W11-09` found a real heap-use-after-free bug** in
+   `EventPreviewRunner::execute()`'s RunScript step (`ff62004`) — a stale
+   `working.scripts` iterator read again after `LuaScriptRunner::run()`
+   already replaced `working` via move-assignment. Fixed. Also fixed 4
+   instances of a known-shape LeakSanitizer finding (deliberately cyclic
+   `shared_ptr` test fixtures) and guarded `package_consumer_smoke` out
+   under `MESHCRAFT_SANITIZE=ON` (structurally incompatible with that test's
+   own purpose, not a bug). `build-asan/` is ~5.7 GB on disk, kept for
+   incremental reuse rather than deleted.
+   Remaining: `SYS-W11-10` (RC process/versioning), `SYS-W3-05`
    (decompose `EditorAlgorithms.hpp`, doing this one last per the original
    review's own recommended ordering: architecture after correctness). See
    `plan.md` for full evidence on everything done so far.
