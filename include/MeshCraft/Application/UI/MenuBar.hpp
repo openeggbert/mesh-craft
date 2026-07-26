@@ -82,6 +82,14 @@ struct FileOpenContext {
     std::function<void()> requestOpenFile;
 };
 
+struct FileOpenLibraryContext {
+    std::function<void()> requestOpenLibrary;
+};
+
+struct FileSaveLibraryContext {
+    std::function<void()> openDialog;
+};
+
 struct FileOpenRecentContext {
     bool hasRecentFiles;
     std::function<const std::vector<std::filesystem::path>&()> getRecentFiles;
@@ -147,6 +155,11 @@ struct EditGroupingContext {
 struct EditConvertToDefinitionContext {
     bool canConvert;
     std::function<void()> convert;
+};
+
+struct EditCreateDefinitionContext {
+    bool canCreate;
+    std::function<void()> openDialog;
 };
 
 struct EditExportSubtreeContext {
@@ -287,12 +300,15 @@ public:
     static void drawFileImportObj(const FileImportObjContext& context);
     static void drawFileNew(const FileNewContext& context);
     static void drawFileOpen(const FileOpenContext& context);
+    static void drawFileOpenLibrary(const FileOpenLibraryContext& context);
+    static void drawFileSaveLibrary(const FileSaveLibraryContext& context);
     static void drawFileOpenRecent(const FileOpenRecentContext& context);
     static void drawFileExit(const FileExitContext& context);
     static void drawEditClipboard(const EditClipboardContext& context);
     static void drawEditCopyProperties(const EditCopyPropertiesContext& context);
     static void drawEditGrouping(const EditGroupingContext& context);
     static void drawEditConvertToDefinition(const EditConvertToDefinitionContext& context);
+    static void drawEditCreateDefinition(const EditCreateDefinitionContext& context);
     static void drawEditExportSubtree(const EditExportSubtreeContext& context);
     static void drawEditBreakInstance(const EditBreakInstanceContext& context);
     static void drawEditAlignSelection(const EditAlignSelectionContext& context);

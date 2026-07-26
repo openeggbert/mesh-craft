@@ -66,6 +66,16 @@ Mc3Document Mc3ImportResolver::loadLibrary(const std::string& source,
                               ? Mc3Document::loadFromLibraryJsonFile(path)
                               : Mc3Document::loadFromLibraryFile(path);
 
+    const auto [expectedNamespace, expectedVersion] = parseMc3LibSource(source);
+    if (!libDoc.library || libDoc.library->libraryNamespace != expectedNamespace ||
+        libDoc.library->version != expectedVersion) {
+        const std::string actual = libDoc.library
+            ? libDoc.library->libraryNamespace + "@" + libDoc.library->version
+            : "(missing library identity)";
+        throw std::runtime_error("Mc3ImportResolver: library identity mismatch for '" + source +
+                                 "' (resolved " + path.string() + ") -- declares " + actual);
+    }
+
     if (!expectedHash.empty()) {
         const std::string actual = "sha256:" + libDoc.computeLibraryContentHash();
         if (actual != expectedHash)
@@ -99,14 +109,28 @@ void Mc3ImportResolver::checkNoCycleAndDescend(const Mc3Document& libDoc,
 }
 
 std::map<std::string, std::shared_ptr<Mc3Object>> Mc3ImportResolver::resolve(const Mc3Document& doc) const {
-    std::map<std::string, std::shared_ptr<Mc3Object>> out;
+    return resolveWithHealth(doc).definitions;
+}
+
+Mc3ImportResolution Mc3ImportResolver::resolveWithHealth(const Mc3Document& doc) const {
+    Mc3ImportResolution out;
 
     for (const auto& imp : doc.imports) {
         std::vector<std::string> inProgress{imp.source};
+        const std::filesystem::path path = resolveSourceToPath(imp.source);
         const Mc3Document libDoc = loadLibrary(imp.source, imp.hash);
 
         for (const auto& [defId, obj] : libDoc.definitions)
-            out[imp.importNamespace + ":" + defId] = obj;
+            out.definitions[imp.importNamespace + ":" + defId] = obj;
+
+        out.imports.push_back(Mc3ResolvedImport{
+            imp,
+            path,
+            libDoc.library->libraryNamespace,
+            libDoc.library->version,
+            "sha256:" + libDoc.computeLibraryContentHash(),
+            libDoc.definitions.size(),
+        });
 
         // Recurse into the imported library's OWN imports purely for cycle
         // detection / missing-dependency validation (see class doc comment
@@ -118,7 +142,8 @@ std::map<std::string, std::shared_ptr<Mc3Object>> Mc3ImportResolver::resolve(con
 }
 
 void Mc3ImportResolver::resolveAndMergeInto(Mc3Document& doc) const {
-    for (auto& [key, obj] : resolve(doc)) doc.definitions[key] = std::move(obj);
+    auto resolution = resolveWithHealth(doc);
+    for (auto& [key, obj] : resolution.definitions) doc.definitions[key] = std::move(obj);
 }
 
 } // namespace MeshCraft::Mc3

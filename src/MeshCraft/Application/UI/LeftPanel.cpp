@@ -16,6 +16,7 @@
 #include <Microsoft/Xna/Framework/Audio/SoundState.hpp>
 
 #include <algorithm>
+#include <cctype>
 #include <cmath>
 #include <cstdio>
 #include <cstring>
@@ -898,6 +899,33 @@ void MeshCraftApplication::drawLeftPanel(float panelY, float panelH)
                                  " reference" + (cleared == 1 ? "" : "s") + ")");
             }
             ImGui::EndDisabled();
+            ImGui::SameLine();
+            ImGui::BeginDisabled(selectedDefId_.empty());
+            if (ImGui::SmallButton("Publish")) {
+                std::strncpy(publishDefinitionIdBuf_, selectedDefId_.c_str(),
+                             sizeof(publishDefinitionIdBuf_) - 1);
+                publishDefinitionIdBuf_[sizeof(publishDefinitionIdBuf_) - 1] = '\0';
+                const std::string libraryNamespace = document_.library
+                    ? document_.library->libraryNamespace : "library";
+                const std::string libraryVersion = document_.library
+                    ? document_.library->version : "1.0.0";
+                std::strncpy(publishLibraryNamespaceBuf_, libraryNamespace.c_str(),
+                             sizeof(publishLibraryNamespaceBuf_) - 1);
+                publishLibraryNamespaceBuf_[sizeof(publishLibraryNamespaceBuf_) - 1] = '\0';
+                std::strncpy(publishLibraryVersionBuf_, libraryVersion.c_str(),
+                             sizeof(publishLibraryVersionBuf_) - 1);
+                publishLibraryVersionBuf_[sizeof(publishLibraryVersionBuf_) - 1] = '\0';
+                const auto baseDir = currentFile_.empty() ? document_.sourcePath : currentFile_.parent_path();
+                const std::string output = (baseDir /
+                    (libraryNamespace + "-" + libraryVersion + ".mc3lib.xml")).string();
+                std::strncpy(publishLibraryPathBuf_, output.c_str(), sizeof(publishLibraryPathBuf_) - 1);
+                publishLibraryPathBuf_[sizeof(publishLibraryPathBuf_) - 1] = '\0';
+                publishDefinitionErr_[0] = '\0';
+                publishDefinitionDialogOpen_ = true;
+            }
+            ImGui::EndDisabled();
+            if (ImGui::IsItemHovered())
+                ImGui::SetTooltip("Write this definition and its referenced materials/textures as a reusable .mc3lib file");
 
             // List
             ImGui::Separator();
@@ -932,7 +960,7 @@ void MeshCraftApplication::drawLeftPanel(float panelY, float panelH)
                         document_.includedDefs.erase(selectedDefId_);
                     };
                     if (document_.includedDefs.count(selectedDefId_))
-                        ImGui::TextDisabled("(from <include> -- editing makes a local copy)");
+                        ImGui::TextDisabled("(from an external source -- editing makes a local copy)");
 
                     // ID (rename — updates map key + all Instance references)
                     ImGui::TextDisabled("ID");
@@ -2450,6 +2478,28 @@ void MeshCraftApplication::drawLeftPanel(float panelY, float panelH)
                                    "(useful after editing them -- this already runs "
                                    "automatically on every load)");
 
+            if (!importHealthError_.empty()) {
+                ImGui::Spacing();
+                ImGui::TextColored(ImVec4(1.0f, 0.35f, 0.3f, 1.0f),
+                                   "Import health error: %s", importHealthError_.c_str());
+                ImGui::TextDisabled("The last working imported definitions stay available; fix the row and resolve again.");
+            } else if (!importHealth_.empty()) {
+                ImGui::Spacing();
+                ImGui::TextDisabled("Resolved import health");
+                for (const auto& health : importHealth_) {
+                    ImGui::PushID(health.importNamespace.c_str());
+                    ImGui::Text("%s  <-  %s", health.importNamespace.c_str(), health.source.c_str());
+                    ImGui::TextDisabled("declares %s@%s; %zu direct definition%s",
+                                        health.libraryNamespace.c_str(), health.version.c_str(),
+                                        health.definitionCount,
+                                        health.definitionCount == 1 ? "" : "s");
+                    ImGui::TextDisabled("hash: %s", health.contentHash.c_str());
+                    if (ImGui::IsItemHovered())
+                        ImGui::SetTooltip("Resolved file: %s", health.resolvedPath.string().c_str());
+                    ImGui::PopID();
+                }
+            }
+
             ImGui::Spacing();
             ImGui::Separator();
             ImGui::Spacing();
@@ -2507,6 +2557,69 @@ void MeshCraftApplication::drawLeftPanel(float panelY, float panelH)
                 document_.imports.push_back(Mc3::Mc3Import{});
                 modified_ = true; updateWindowTitle();
             }
+
+            ImGui::Spacing();
+            ImGui::Separator();
+            ImGui::TextColored(ImVec4(0.75f, 0.85f, 1.0f, 1.0f), "Imported Definition Picker");
+            ImGui::TextDisabled("Search and place resolved imported definitions as Instances.");
+
+            auto filterText = [](const std::string& value, const char* filter) {
+                if (!filter[0]) return true;
+                std::string lowerValue = value;
+                std::string lowerFilter = filter;
+                std::transform(lowerValue.begin(), lowerValue.end(), lowerValue.begin(),
+                               [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+                std::transform(lowerFilter.begin(), lowerFilter.end(), lowerFilter.begin(),
+                               [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+                return lowerValue.find(lowerFilter) != std::string::npos;
+            };
+            auto tagsMatch = [&](const std::vector<std::string>& tags, const char* filter) {
+                if (!filter[0]) return true;
+                return std::any_of(tags.begin(), tags.end(), [&](const std::string& tag) {
+                    return filterText(tag, filter);
+                });
+            };
+
+            ImGui::SetNextItemWidth(-1);
+            ImGui::InputTextWithHint("##importdefsearch", "Name or definition id", importedDefinitionSearchBuf_,
+                                     sizeof(importedDefinitionSearchBuf_));
+            ImGui::SetNextItemWidth(-1);
+            ImGui::InputTextWithHint("##importdefcategory", "Category", importedDefinitionCategoryBuf_,
+                                     sizeof(importedDefinitionCategoryBuf_));
+            ImGui::SetNextItemWidth(-1);
+            ImGui::InputTextWithHint("##importdefsemantic", "Semantic tag", importedDefinitionSemanticTagBuf_,
+                                     sizeof(importedDefinitionSemanticTagBuf_));
+            ImGui::SetNextItemWidth(-1);
+            ImGui::InputTextWithHint("##importdefstyle", "Style tag", importedDefinitionStyleTagBuf_,
+                                     sizeof(importedDefinitionStyleTagBuf_));
+
+            if (!selectedImportedDefinition_.empty() &&
+                !importedDefinitionKeys_.count(selectedImportedDefinition_))
+                selectedImportedDefinition_.clear();
+            for (const auto& key : importedDefinitionKeys_) {
+                const auto it = document_.definitions.find(key);
+                if (it == document_.definitions.end() || !it->second) continue;
+                const auto& definition = *it->second;
+                const auto& metadata = definition.assetMetadata;
+                if (!filterText(key + " " + definition.name, importedDefinitionSearchBuf_)) continue;
+                if (importedDefinitionCategoryBuf_[0] &&
+                    (!metadata || !filterText(metadata->category, importedDefinitionCategoryBuf_))) continue;
+                if (importedDefinitionSemanticTagBuf_[0] &&
+                    (!metadata || !tagsMatch(metadata->semanticTags, importedDefinitionSemanticTagBuf_))) continue;
+                if (importedDefinitionStyleTagBuf_[0] &&
+                    (!metadata || !tagsMatch(metadata->styleTags, importedDefinitionStyleTagBuf_))) continue;
+                const bool selected = key == selectedImportedDefinition_;
+                if (ImGui::Selectable(key.c_str(), selected)) selectedImportedDefinition_ = key;
+                if (ImGui::IsItemHovered() && metadata) {
+                    ImGui::SetTooltip("category: %s\nsemantic tags: %zu\nstyle tags: %zu",
+                                      metadata->category.c_str(), metadata->semanticTags.size(),
+                                      metadata->styleTags.size());
+                }
+            }
+            ImGui::BeginDisabled(selectedImportedDefinition_.empty());
+            if (ImGui::Button("Place Selected Definition", ImVec2(-1, 0)))
+                placeImportedDefinition(selectedImportedDefinition_);
+            ImGui::EndDisabled();
 
             ImGui::EndTabItem();
         }

@@ -42,6 +42,7 @@
 #include <CNA/Devices/FileDialog.hpp>
 #include <System/Object.hpp>
 #include <array>
+#include <cstddef>
 #include <atomic>
 #include <cstdio>
 #include <filesystem>
@@ -256,6 +257,44 @@ private:
     bool saveDialogOpen_{false};
     char saveDialogBuf_[512]{};
     char saveDialogErr_[256]{};
+
+    // SYS-W14-28: dedicated reusable-library file workflow. Kept separate
+    // from ordinary scene Open/Save because .mc3lib files require a library
+    // identity and use the specialized Mc3Document I/O entry points.
+    bool openLibraryDialogOpen_{false};
+    char openLibraryDialogBuf_[512]{};
+    char openLibraryDialogErr_[256]{};
+    bool saveLibraryDialogOpen_{false};
+    char saveLibraryDialogBuf_[512]{};
+    char saveLibraryDialogErr_[256]{};
+
+    bool createDefinitionDialogOpen_{false};
+    char createDefinitionIdBuf_[128]{};
+    char createDefinitionErr_[256]{};
+    bool publishDefinitionDialogOpen_{false};
+    char publishDefinitionIdBuf_[128]{};
+    char publishLibraryNamespaceBuf_[128]{};
+    char publishLibraryVersionBuf_[32]{};
+    char publishLibraryPathBuf_[512]{};
+    char publishDefinitionErr_[256]{};
+
+    struct LibraryImportHealth {
+        std::string importNamespace;
+        std::string source;
+        std::filesystem::path resolvedPath;
+        std::string libraryNamespace;
+        std::string version;
+        std::string contentHash;
+        std::size_t definitionCount{0};
+    };
+    std::vector<LibraryImportHealth> importHealth_;
+    std::set<std::string> importedDefinitionKeys_;
+    std::string importHealthError_;
+    std::string selectedImportedDefinition_;
+    char importedDefinitionSearchBuf_[128]{};
+    char importedDefinitionCategoryBuf_[128]{};
+    char importedDefinitionSemanticTagBuf_[128]{};
+    char importedDefinitionStyleTagBuf_[128]{};
 
     // Material export/import dialog state (D5)
     bool        matExportOpen_{false};
@@ -564,12 +603,22 @@ private:
     char matFilter_[128]{};
 
     // Unsaved-changes guard
-    enum class PendingAction { None, NewScene, OpenFile, OpenRecentFile, ExitApp };
+    enum class PendingAction { None, NewScene, OpenFile, OpenLibrary, OpenRecentFile, ExitApp };
     PendingAction         pendingAction_{PendingAction::None};
     std::filesystem::path pendingOpenPath_;
     bool                  unsavedDlgOpen_{false};
     void confirmIfModified(PendingAction action, std::filesystem::path path = {});
     void executePendingAction();
+    void openLibraryFile();
+    void saveLibraryFileAs();
+    void saveLibraryFile(const std::filesystem::path& path);
+    void createDefinitionFromSelection(const std::string& definitionId);
+    void publishDefinitionAsLibrary(const std::string& definitionId,
+                                    const std::string& libraryNamespace,
+                                    const std::string& version,
+                                    const std::filesystem::path& path);
+    void placeImportedDefinition(const std::string& definitionId);
+    void resetImportHealth();
 
     // SYS-W9-02: crash-recovery guard. Offered whenever a file finishes
     // loading (startup, Open Recent, Open File dialog) and its `.autosave`

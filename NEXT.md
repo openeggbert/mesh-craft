@@ -108,9 +108,12 @@ before when explicitly requested (`SYS-W14-##` rows).
 - **Last full build: clean after `SYS-W14-06` CSG output support.** Testing is enabled in the current Ninja Release tree, and
   `CCACHE_DISABLE=1 cmake --build b-release -j4` linked all targets successfully
   on EASYGL. Alternate-backend runtime qualification remains blocked.
-- **Tests:** the fresh Release tree registers 185 tests. All passed after
-  `AUD-042` in two disjoint groups: 149/149 non-render tests and 36/36
-  render-labelled tests under Xvfb (with local loopback/X11 socket access).
+- **Tests:** the fresh Release tree registers 186 tests, including the
+  CNA-free `library_workflow` regression added by `SYS-W14-28`; this checkout
+  passed all 150 non-render tests. Its Xvfb preflight deterministically
+  disabled the 36 render-labelled tests. Before that additive test, an
+  Xvfb-qualified host passed all 185 registrations after `AUD-042` in two
+  disjoint groups: 149/149 non-render tests and 36/36 render-labelled tests.
   `mc3togltf_csg_shading_materials` reads a real GLB to assert smooth CSG
   normals, generated UVs, and preserved child-material primitives; the CSG
   viewport-cache/cutter render regressions also pass. The earlier embed export

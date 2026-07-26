@@ -1069,6 +1069,19 @@ if(MESH_CRAFT_BUILD_TESTING AND UNIX AND NOT ANDROID AND NOT EMSCRIPTEN)
     add_test(NAME resolve_imports COMMAND resolve_imports_test)
     set_tests_properties(resolve_imports PROPERTIES TIMEOUT 15 LABELS "unit")
 
+    # SYS-W14-28: native .mc3lib editor workflow remains CNA-free at its
+    # semantic core. Covers named definition creation, publication via the
+    # dedicated XML/JSON library APIs, import health, collisions, and URI
+    # identity validation without a window/ImGui dependency.
+    add_executable(library_workflow_test
+        ${CMAKE_CURRENT_SOURCE_DIR}/test/library_workflow_test.cpp)
+    target_include_directories(library_workflow_test PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/include)
+    target_link_libraries(library_workflow_test PRIVATE Mc3)
+    target_compile_features(library_workflow_test PRIVATE cxx_std_23)
+    add_test(NAME library_workflow COMMAND library_workflow_test)
+    set_tests_properties(library_workflow PROPERTIES TIMEOUT 15 LABELS "unit")
+
     # 2026-07-20 audit F2 (P0): SceneHierarchyPanel.cpp's drawHierarchy()
     # range-for-iterates over document_.objects/children by reference;
     # dragging an earlier sibling onto a later one in the same list used to

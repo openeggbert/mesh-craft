@@ -1,6 +1,7 @@
 #include "MeshCraft/Application/MeshCraftApplication.hpp"
 #include "MeshCraft/MeshCraftPrivate.hpp"
 #include "MeshCraft/EditorAlgorithms.hpp"
+#include "MeshCraft/LibraryWorkflowAlgorithms.hpp"
 #include "MeshCraft/Mc3/Mc3ImportResolver.hpp"
 #include "MeshCraft/Mcb/McbReader.hpp"
 #include "MeshCraft/Mcb/McbWriter.hpp"
@@ -35,6 +36,7 @@ namespace MeshCraft::Application {
 
 void MeshCraftApplication::newScene() {
     document_ = Mc3::Mc3Document{};
+    resetImportHealth();
     objectIndex_.invalidate();  // SYS-W5-04: wholesale document_ replacement
     document_.model = "Untitled";
     selection_.clear();
@@ -103,6 +105,7 @@ void MeshCraftApplication::recoverFromAutosave() {
         Mc3::Mc3Validation loadValidation;
         document_ = Mc3::Mc3Document::loadFromFile(autoSavePath(recoveryFilePath_),
                                                     Mc3::Mc3LoadPolicy::trusted(), loadValidation);
+        resetImportHealth();
         objectIndex_.invalidate();  // SYS-W5-04: wholesale document_ replacement
         if (!loadValidation.empty())
             std::cout << "[MeshCraft] Autosave recovery: " << loadValidation.warningCount()
@@ -138,6 +141,19 @@ void MeshCraftApplication::discardAutosave() {
 // itself, not introduced here.
 Mc3::Mc3Document MeshCraftApplication::loadSceneFileDispatched(
     const std::filesystem::path& path, Mc3::Mc3Validation& validation) {
+    LibraryFileFormatAlg libraryFormat{};
+    bool isLibraryPath = false;
+    try {
+        libraryFormat = libraryFileFormatFromPathAlg(path);
+        isLibraryPath = true;
+    } catch (const std::invalid_argument&) {
+        // Not a dedicated library suffix; continue with normal scene-format
+        // dispatch below.
+    }
+    if (isLibraryPath)
+        return libraryFormat == LibraryFileFormatAlg::Json
+            ? Mc3::Mc3Document::loadFromLibraryJsonFile(path)
+            : Mc3::Mc3Document::loadFromLibraryFile(path);
     if (path.extension() == ".mcb")
         return Mcb::loadFromFile(path, validation);
     if (path.extension() == ".json")
@@ -180,38 +196,71 @@ void MeshCraftApplication::checkRotationConventionNotice() {
                  /*isError=*/false, /*duration=*/7.0f);
 }
 
-// SYS-W14-21 (2026-07-20 audit): Mc3ImportResolver (R101, mc3/) is a
-// complete, tested, standalone implementation that resolves
-// doc.imports/mc3lib://name@version references and merges namespace-
-// qualified definitions into doc.definitions -- but nothing in this
-// editor ever called it, so an <instance definition="ns:id"> referencing
-// an imported (not locally-defined) definition rendered as nothing in the
-// live editor even though the data round-tripped correctly. Called once
-// after every successful document load (recoverFromAutosave(),
-// executePendingAction()'s OpenRecentFile case, Initialize()'s initial-
-// file-argument load, and the Open-file dialog's own confirm handler),
-// alongside checkRotationConventionNotice() -- and separately via the
-// Imports tab's own explicit "Resolve Imports" button, for re-resolving
-// after editing doc.imports without needing a full reload.
+// SYS-W14-21 / SYS-W14-28: Mc3ImportResolver resolves
+// doc.imports/mc3lib://name@version references after every successful load
+// (autosave recovery, Open Recent, initial file argument, normal Open, and
+// Open Library) and through the Imports tab's explicit refresh action.
+// The workflow adapter keeps imported definitions externally marked so they
+// render and can be placed without being silently serialized back into the
+// owning scene, while still reporting resolver health in the panel.
 //
 // A no-op if doc.imports is empty (the overwhelmingly common case --
 // don't touch anything or print a status message for a document that
 // doesn't use imports at all). A resolution failure (missing library
 // file, content-hash mismatch, an import cycle/depth-limit) does NOT
 // fail the whole document load -- it's reported via setStatusMsg and the
-// affected imports simply stay unresolved (same as before this fix),
+// affected imports simply stay unresolved (or retain the last successful
+// external definition set),
 // matching this session's own "a recoverable data issue shouldn't make
 // an otherwise-loadable document unopenable" precedent.
 void MeshCraftApplication::resolveImports() {
-    if (document_.imports.empty()) return;
+    importHealth_.clear();
+    importHealthError_.clear();
+    if (document_.imports.empty()) {
+        importedDefinitionKeys_.clear();
+        selectedImportedDefinition_.clear();
+        return;
+    }
     try {
-        Mc3::Mc3ImportResolver resolver({document_.sourcePath});
-        resolver.resolveAndMergeInto(document_);
+        const auto refreshed = refreshImportedDefinitionsAlg(
+            document_, {document_.sourcePath}, importedDefinitionKeys_);
+        importHealth_.reserve(refreshed.imports.size());
+        for (const auto& entry : refreshed.imports) {
+            importHealth_.push_back(LibraryImportHealth{
+                entry.request.importNamespace,
+                entry.request.source,
+                entry.resolvedPath,
+                entry.libraryNamespace,
+                entry.libraryVersion,
+                entry.contentHash,
+                entry.definitionCount,
+            });
+        }
         setStatusMsg("Resolved " + std::to_string(document_.imports.size()) +
-                     " import" + (document_.imports.size() == 1 ? "" : "s"),
+                     " import" + (document_.imports.size() == 1 ? "" : "s") +
+                     " (" + std::to_string(refreshed.definitionCount) + " definition" +
+                     (refreshed.definitionCount == 1 ? "" : "s") + ")",
                      /*isError=*/false, /*duration=*/3.0f);
     } catch (const std::exception& e) {
-        setStatusMsg(std::string("Import resolution failed: ") + e.what(), /*isError=*/true);
+        importHealthError_ = e.what();
+        setStatusMsg(std::string("Import resolution failed: ") + importHealthError_, /*isError=*/true);
+    }
+}
+
+void MeshCraftApplication::resetImportHealth() {
+    importHealth_.clear();
+    importedDefinitionKeys_.clear();
+    importHealthError_.clear();
+    selectedImportedDefinition_.clear();
+    // Undo/redo snapshots retain the external-source marker but not this
+    // editor-only set. Reconstruct only namespace-qualified imported keys;
+    // ordinary <include>-sourced definitions do not use that spelling.
+    for (const auto& request : document_.imports) {
+        const std::string prefix = request.importNamespace + ":";
+        for (const auto& key : document_.includedDefs) {
+            if (key.rfind(prefix, 0) == 0)
+                importedDefinitionKeys_.insert(key);
+        }
     }
 }
 
@@ -250,6 +299,9 @@ void MeshCraftApplication::executePendingAction() {
     case PendingAction::OpenFile:
         openFile();
         break;
+    case PendingAction::OpenLibrary:
+        openLibraryFile();
+        break;
     case PendingAction::OpenRecentFile:
         if (!pendingOpenPath_.empty()) {
             try {
@@ -257,6 +309,7 @@ void MeshCraftApplication::executePendingAction() {
                 // comment in MeshCraftApplication::Initialize().
                 Mc3::Mc3Validation loadValidation;
                 document_ = loadSceneFileDispatched(pendingOpenPath_, loadValidation);
+                resetImportHealth();
                 objectIndex_.invalidate();  // SYS-W5-04: wholesale document_ replacement
                 if (!loadValidation.empty())
                     std::cout << "[MeshCraft] Load: " << loadValidation.warningCount()
@@ -296,9 +349,66 @@ void MeshCraftApplication::openFile() {
     openDialogOpen_ = true;
 }
 
+void MeshCraftApplication::openLibraryFile() {
+    openLibraryDialogBuf_[0] = '\0';
+    openLibraryDialogErr_[0] = '\0';
+    openLibraryDialogOpen_ = true;
+}
+
+void MeshCraftApplication::saveLibraryFileAs() {
+    std::filesystem::path suggested;
+    try {
+        (void)libraryFileFormatFromPathAlg(currentFile_);
+        suggested = currentFile_;
+    } catch (const std::invalid_argument&) {
+        if (document_.library) {
+            const auto base = document_.library->libraryNamespace + "-" + document_.library->version;
+            suggested = (currentFile_.empty() ? document_.sourcePath : currentFile_.parent_path()) /
+                        (base + ".mc3lib.xml");
+        }
+    }
+    const std::string text = suggested.string();
+    std::strncpy(saveLibraryDialogBuf_, text.c_str(), sizeof(saveLibraryDialogBuf_) - 1);
+    saveLibraryDialogBuf_[sizeof(saveLibraryDialogBuf_) - 1] = '\0';
+    saveLibraryDialogErr_[0] = '\0';
+    saveLibraryDialogOpen_ = true;
+}
+
+void MeshCraftApplication::saveLibraryFile(const std::filesystem::path& path) {
+    if (!document_.library)
+        throw std::invalid_argument("Set Library namespace and semantic version in Scene Properties before saving a library");
+    requireLibraryIdentityAlg(*document_.library);
+    const auto format = libraryFileFormatFromPathAlg(path);
+    document_.library->contentHash = "sha256:" + document_.computeLibraryContentHash();
+    if (format == LibraryFileFormatAlg::Json)
+        document_.saveToLibraryJsonFile(path);
+    else
+        document_.saveToLibraryFile(path);
+
+    currentFile_ = path;
+    document_.sourcePath = path.parent_path();
+    addRecentFile(currentFile_);
+    modified_ = false;
+    autoSaveCountdown_ = autoSaveInterval_ > 0.0f ? autoSaveInterval_ : 60.0f;
+    { std::error_code ec; std::filesystem::remove(autoSavePath(currentFile_), ec); }
+    setStatusMsg("Saved library " + currentFile_.filename().string() + " (hash refreshed)", false, 2.5f);
+    updateWindowTitle();
+}
+
 void MeshCraftApplication::saveFile() {
     if (currentFile_.empty()) { saveFileAs(); return; }
     try {
+        bool currentPathIsLibrary = false;
+        try {
+            (void)libraryFileFormatFromPathAlg(currentFile_);
+            currentPathIsLibrary = true;
+        } catch (const std::invalid_argument&) {
+            // Ordinary scene path -- continue through the regular Save flow.
+        }
+        if (currentPathIsLibrary) {
+            saveLibraryFile(currentFile_);
+            return;
+        }
         // SYS-W1-01 (save integration point): re-validate the in-memory
         // document right before writing -- catches values that reached
         // memory via a path that bypasses Mc3XmlParser's own clamps (direct
@@ -342,9 +452,19 @@ void MeshCraftApplication::saveFile() {
         { std::error_code ec; std::filesystem::remove(autoSavePath(currentFile_), ec); }
         std::cout << "[MeshCraft] Saved: " << currentFile_ << "\n";
         std::string statusMsg = "Saved " + currentFile_.filename().string();
+        std::size_t localizedImportedDefinitions = 0;
+        for (const auto& key : importedDefinitionKeys_) {
+            if (document_.definitions.count(key) && !document_.includedDefs.count(key))
+                ++localizedImportedDefinitions;
+        }
+        if (localizedImportedDefinitions > 0) {
+            statusMsg += " — warning: " + std::to_string(localizedImportedDefinitions) +
+                " imported definition" + (localizedImportedDefinitions == 1 ? " was" : "s were") +
+                " edited locally and will shadow the source library";
+        }
         if (!validation.empty())
             statusMsg += " (" + std::to_string(validation.entries.size()) + " validation note(s), see console)";
-        setStatusMsg(statusMsg, false, 2.0f);
+        setStatusMsg(statusMsg, localizedImportedDefinitions > 0, 3.5f);
         updateWindowTitle();
     } catch (const std::exception& e) {
         std::cerr << "[MeshCraft] Save error: " << e.what() << "\n";

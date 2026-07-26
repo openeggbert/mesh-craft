@@ -58,6 +58,10 @@ float MeshCraftApplication::drawMenuBar()
                 .requestOpenFile = [this] { confirmIfModified(PendingAction::OpenFile); },
             };
             UI::MenuBar::drawFileOpen(fileOpenContext);
+            const UI::FileOpenLibraryContext fileOpenLibraryContext{
+                .requestOpenLibrary = [this] { confirmIfModified(PendingAction::OpenLibrary); },
+            };
+            UI::MenuBar::drawFileOpenLibrary(fileOpenLibraryContext);
             const UI::FileOpenRecentContext fileOpenRecentContext{
                 .hasRecentFiles = !recentFiles_.empty(),
                 .getRecentFiles = [this]() -> const std::vector<std::filesystem::path>& {
@@ -96,6 +100,10 @@ float MeshCraftApplication::drawMenuBar()
                 .openDialog = [this] { saveFileAs(); },
             };
             UI::MenuBar::drawFileSaveAs(fileSaveAsContext);
+            const UI::FileSaveLibraryContext fileSaveLibraryContext{
+                .openDialog = [this] { saveLibraryFileAs(); },
+            };
+            UI::MenuBar::drawFileSaveLibrary(fileSaveLibraryContext);
             ImGui::Separator();
             const UI::FileExportGltfContext fileExportGltfContext{
                 .openDialog = [this] { exportGltf(); },
@@ -246,6 +254,19 @@ float MeshCraftApplication::drawMenuBar()
                 .convert = [this] { convertToDefinition(); },
             };
             UI::MenuBar::drawEditConvertToDefinition(editConvertToDefinitionContext);
+            const UI::EditCreateDefinitionContext editCreateDefinitionContext{
+                .canCreate = !selection_.selection().empty(),
+                .openDialog = [this] {
+                    const auto& source = selection_.selection().front();
+                    const std::string suggested = source->name.empty() ? source->id : source->name;
+                    std::strncpy(createDefinitionIdBuf_, suggested.c_str(),
+                                 sizeof(createDefinitionIdBuf_) - 1);
+                    createDefinitionIdBuf_[sizeof(createDefinitionIdBuf_) - 1] = '\0';
+                    createDefinitionErr_[0] = '\0';
+                    createDefinitionDialogOpen_ = true;
+                },
+            };
+            UI::MenuBar::drawEditCreateDefinition(editCreateDefinitionContext);
             const UI::EditExportSubtreeContext editExportSubtreeContext{
                 .canExport = !selection_.selection().empty(),
                 .openDialog = [this] {
@@ -630,6 +651,14 @@ void MenuBar::drawFileOpen(const FileOpenContext& context) {
     if (ImGui::MenuItem("Open...", "Ctrl+O")) context.requestOpenFile();
 }
 
+void MenuBar::drawFileOpenLibrary(const FileOpenLibraryContext& context) {
+    if (ImGui::MenuItem("Open Library...")) context.requestOpenLibrary();
+}
+
+void MenuBar::drawFileSaveLibrary(const FileSaveLibraryContext& context) {
+    if (ImGui::MenuItem("Save as Library...")) context.openDialog();
+}
+
 void MenuBar::drawFileOpenRecent(const FileOpenRecentContext& context) {
     if (!ImGui::BeginMenu("Open Recent", context.hasRecentFiles)) return;
 
@@ -767,6 +796,12 @@ void MenuBar::drawEditGrouping(const EditGroupingContext& context) {
 void MenuBar::drawEditConvertToDefinition(const EditConvertToDefinitionContext& context) {
     if (ImGui::MenuItem("Convert to Definition", nullptr, false, context.canConvert)) {
         context.convert();
+    }
+}
+
+void MenuBar::drawEditCreateDefinition(const EditCreateDefinitionContext& context) {
+    if (ImGui::MenuItem("Create Definition from Selection...", nullptr, false, context.canCreate)) {
+        context.openDialog();
     }
 }
 

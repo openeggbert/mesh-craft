@@ -3,12 +3,30 @@
 #include "MeshCraft/Mc3/Mc3Document.hpp"
 
 #include <filesystem>
+#include <cstddef>
 #include <map>
 #include <memory>
 #include <string>
 #include <vector>
 
 namespace MeshCraft::Mc3 {
+
+// Metadata for one direct import after a successful resolution. Keeping this
+// alongside the definition map lets editor/CLI consumers explain exactly what
+// was loaded instead of treating a successful resolve as an opaque boolean.
+struct Mc3ResolvedImport {
+    Mc3Import request;
+    std::filesystem::path resolvedPath;
+    std::string libraryNamespace;
+    std::string libraryVersion;
+    std::string contentHash;
+    std::size_t definitionCount{0};
+};
+
+struct Mc3ImportResolution {
+    std::map<std::string, std::shared_ptr<Mc3Object>> definitions;
+    std::vector<Mc3ResolvedImport> imports;
+};
 
 // R101 -- resolves a document's <imports>/"imports" (Mc3Import, see
 // Mc3Document.hpp) into a namespace-qualified map of definitions, loading
@@ -46,6 +64,13 @@ public:
     //    actual hash),
     //  - an import cycle (message names the cyclic source chain).
     std::map<std::string, std::shared_ptr<Mc3Object>> resolve(const Mc3Document& doc) const;
+
+    // Same validation and definition resolution as resolve(), plus the
+    // resolved file path, declared library identity, effective content hash,
+    // and direct definition count for every direct import. This is useful for
+    // import-health UIs and command-line diagnostics; it deliberately does
+    // not flatten a nested library's definitions into the caller.
+    Mc3ImportResolution resolveWithHealth(const Mc3Document& doc) const;
 
     // R102 -- convenience that makes an import actually USABLE end-to-end
     // before R103's dynamic `<script>` placement exists: calls resolve(doc)

@@ -2,7 +2,7 @@
 
 _Last updated: 2026-07-26. Counts below were verified against a freshly configured Release build after `AUD-042` Android/EasyGL backend-selection coverage. This document is derived from the actual `CMakeLists.txt` test registrations and test source files — if it drifts from a freshly configured build's `ctest -N` output, trust `ctest -N`, not this file's claimed count._
 
-MeshCraft's tests run through **CTest** — **185 tests registered** (`ctest --print-labels` label breakdown after the new target: `ai` 1, `commands` 1, `export` 72, `format` 37, `lint` 4, `perf` 2, `registry` 1, `render` 36, `unit` 33), mixing C++ assertion-based binaries and Python/bash subprocess-driven checks against the `mc3togltf`/`mc3tomcb` CLIs and the `MeshCraft` editor binary itself (headless `--screenshot` real-pixel-sampling tests, plus 3 tests that drive real headless Blender for GLB-import verification). `render_display_preflight` verifies an actual `xvfb-run` + `xdpyinfo` X client before the render subset; if unavailable, it reports a CTest skip and CMake disables only the other render-labelled tests. **Known gap:** the "CLI-driving Python tests" table below documents the most significant/representative tests in each category but is not exhaustively 1:1 with all registrations — `ctest -N` and `ctest --print-labels` are authoritative for the complete list.
+MeshCraft's tests run through **CTest** — **186 tests registered** (`ctest --print-labels` label breakdown after the `library_workflow` target: `ai` 1, `commands` 1, `export` 72, `format` 37, `lint` 4, `perf` 2, `registry` 1, `render` 36, `unit` 34), mixing C++ assertion-based binaries and Python/bash subprocess-driven checks against the `mc3togltf`/`mc3tomcb` CLIs and the `MeshCraft` editor binary itself (headless `--screenshot` real-pixel-sampling tests, plus 3 tests that drive real headless Blender for GLB-import verification). `render_display_preflight` verifies an actual `xvfb-run` + `xdpyinfo` X client before the render subset; if unavailable, it reports a CTest skip and CMake disables only the other render-labelled tests. **Known gap:** the "CLI-driving Python tests" table below documents the most significant/representative tests in each category but is not exhaustively 1:1 with all registrations — `ctest -N` and `ctest --print-labels` are authoritative for the complete list.
 
 ---
 
@@ -31,7 +31,7 @@ ctest --print-labels   # list all labels
 ctest --rerun-failed --output-on-failure
 ```
 
-Expected result: every registered test passes. On 2026-07-26 the fresh Release build reported 185 registrations and passed all of them as two disjoint host runs: 149/149 with `-LE render` and 36/36 with `-L render` under Xvfb. The focused suites are run with at most `-j4` after each change. A failing test prints its assertion/subprocess output inline with `--output-on-failure`; without that flag, CTest only shows pass/fail per test name.
+Expected result: every registered test passes. On 2026-07-26, the current 186-registration Release tree passed all 150 non-render tests with `-LE render`; this host's Xvfb preflight disabled the 36 render-labelled tests deterministically. Before the additive `library_workflow` test, an Xvfb-qualified host passed the prior 185 registrations as 149/149 non-render plus 36/36 render tests. `library_workflow` covers named definition creation, publishing through the dedicated XML/JSON library I/O, import health, collision rejection, and library-identity verification. The focused suites are run with at most `-j4` after each change. A failing test prints its assertion/subprocess output inline with `--output-on-failure`; without that flag, CTest only shows pass/fail per test name.
 
 Each C++ test binary can also be run directly (bypassing CTest) for faster iteration:
 
@@ -41,6 +41,7 @@ Each C++ test binary can also be run directly (bypassing CTest) for faster itera
 ./cmake-build-debug/ai_test
 ./cmake-build-debug/mc3/mc3_roundtrip_test
 ./cmake-build-debug/mcb/mcb_roundtrip_test
+./cmake-build-debug/library_workflow_test
 ```
 
 ### Standalone (CNA-free) builds

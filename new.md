@@ -191,33 +191,33 @@ hide a real failure behind environmental noise.
 
 #### 1. Native library authoring, publishing, and import health
 
-**Why it is the best first feature:** the model and most of the core API
-already exist. Library metadata/import rows are editable, content hashes can
-be computed, and imports can be resolved after load. What is missing is a
-cohesive user workflow.
+**Status (implemented as `SYS-W14-28`, 2026-07-26):** the model and core API
+were already present; the editor workflow is now complete around them. The
+remaining deliberate limit is visual thumbnails: discovery is text-first and
+does not require a new rendering/cache subsystem.
 
 **Feature scope:**
 
-- Add Open Library / Save as Library actions for `.mc3lib.xml` and
-  `.mc3lib.json`, using the existing library I/O API rather than duplicating
-  serializers.
-- Add “Create Definition from Selection” and “Publish Definition” flows with
-  validation of definition id, namespace, semantic version, and metadata.
-- Provide an import browser that shows source, resolved version/hash, imported
-  definition count, cycles/missing files, and collision errors.
-- Add a definition picker/search panel for placing imported assets, with
-  category/style/semantic-tag filtering. Start text-first; thumbnails can be a
-  later enhancement.
-- Warn before saving a normal scene whose imported definitions were modified
-  locally in a way that will be lost or shadowed.
+- Open Library / Save as Library actions cover `.mc3lib.xml` and
+  `.mc3lib.json`, use the dedicated library I/O, validate identity, and refresh
+  the content hash.
+- “Create Definition from Selection” and “Publish Definition” validate the
+  definition id, namespace, and semantic version; publishing retains dependent
+  materials and textures in a self-contained library.
+- The import browser shows source, resolved file, declared version/hash,
+  definition count, and missing/hash/cycle/identity/collision errors.
+- The definition picker places imported assets with text, category, style, and
+  semantic-tag filtering. Thumbnails remain later scope.
+- Imported definitions stay external on scene save; a local edit that shadows
+  a source definition produces a visible warning.
 
 **Why it fits the architecture:** it primarily touches FileOps, MenuBar/UI,
 `Mc3ImportResolver`, and existing library APIs. It does not need a CNA change
 or a new geometry format.
 
-**Tests:** library XML/JSON round-trip, content-hash stability, successful and
-failed import resolution, duplicate/cycle diagnostics, selection-to-definition
-conversion, and a headless file workflow test.
+**Tests:** `library_workflow` covers XML/JSON publication, content hashes,
+successful/failing health resolution, collision/identity diagnostics, named
+selection-to-definition conversion, and external-definition save markers.
 
 ### Wave 2 — use asset metadata as executable scene intent
 

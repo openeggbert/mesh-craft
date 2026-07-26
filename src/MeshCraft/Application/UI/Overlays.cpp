@@ -6,6 +6,7 @@
 #include "MeshCraft/Application/UI/StatusBar.hpp"
 #include "MeshCraft/MeshCraftPrivate.hpp"
 #include "MeshCraft/EditorAlgorithms.hpp"
+#include "MeshCraft/LibraryWorkflowAlgorithms.hpp"
 #include "MeshCraft/Scene/SceneHierarchyPanel.hpp"
 
 #include "MeshCraft/Mcb/McbReader.hpp"
@@ -979,6 +980,7 @@ void MeshCraftApplication::drawDialogs()
                 auto entry = undoManager_.jumpTo(stepsAgo, deepCopyDoc(document_), currentSelectionIds());
                 if (entry) {
                     document_ = std::move(entry->doc);
+                    resetImportHealth();
                     objectIndex_.invalidate();  // SYS-W5-04: wholesale document_ replacement
                     restoreSelectionByIds(entry->selectionIds);
                     modified_ = true; updateWindowTitle();
@@ -1030,6 +1032,7 @@ void MeshCraftApplication::drawDialogs()
                 // Recent File via loadSceneFileDispatched().
                 Mc3::Mc3Validation loadValidation;
                 document_ = loadSceneFileDispatched(p, loadValidation);
+                resetImportHealth();
                 objectIndex_.invalidate();  // SYS-W5-04: wholesale document_ replacement
                 if (!loadValidation.empty())
                     std::cout << "[MeshCraft] Load: " << loadValidation.warningCount()
@@ -1057,6 +1060,46 @@ void MeshCraftApplication::drawDialogs()
             } catch (const std::exception& e) {
                 std::strncpy(openDialogErr_, e.what(), sizeof(openDialogErr_) - 1);
                 openDialogErr_[sizeof(openDialogErr_) - 1] = '\0';
+            }
+        }
+        ImGui::SameLine();
+        if (ImGui::Button("Cancel")) ImGui::CloseCurrentPopup();
+        ImGui::EndPopup();
+    }
+
+    if (openLibraryDialogOpen_) {
+        ImGui::OpenPopup("Open Library##dlg");
+        openLibraryDialogOpen_ = false;
+    }
+    if (ImGui::BeginPopupModal("Open Library##dlg", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
+        ImGui::Text("Library path (.mc3lib.xml or .mc3lib.json):");
+        ImGui::SetNextItemWidth(400);
+        ImGui::InputText("##openlibrarypath", openLibraryDialogBuf_, sizeof(openLibraryDialogBuf_));
+        if (openLibraryDialogErr_[0])
+            ImGui::TextColored(ImVec4(1,0.3f,0.3f,1), "%s", openLibraryDialogErr_);
+        if (ImGui::Button("Open") || ImGui::IsKeyPressed(ImGuiKey_Enter)) {
+            try {
+                const std::filesystem::path path{openLibraryDialogBuf_};
+                const auto format = libraryFileFormatFromPathAlg(path);
+                document_ = format == LibraryFileFormatAlg::Json
+                    ? Mc3::Mc3Document::loadFromLibraryJsonFile(path)
+                    : Mc3::Mc3Document::loadFromLibraryFile(path);
+                resetImportHealth();
+                objectIndex_.invalidate();
+                currentFile_ = path;
+                addRecentFile(currentFile_);
+                selection_.clear();
+                undoManager_.clear();
+                if (sceneRenderer_) sceneRenderer_->clearCsgCache();
+                modified_ = false;
+                openLibraryDialogErr_[0] = '\0';
+                setStatusMsg("Opened library " + currentFile_.filename().string(), false, 2.0f);
+                resolveImports();
+                updateWindowTitle();
+                ImGui::CloseCurrentPopup();
+            } catch (const std::exception& e) {
+                std::strncpy(openLibraryDialogErr_, e.what(), sizeof(openLibraryDialogErr_) - 1);
+                openLibraryDialogErr_[sizeof(openLibraryDialogErr_) - 1] = '\0';
             }
         }
         ImGui::SameLine();
@@ -1100,6 +1143,98 @@ void MeshCraftApplication::drawDialogs()
         }
         ImGui::SameLine();
         if (ImGui::Button("Cancel")) ImGui::CloseCurrentPopup();
+        ImGui::EndPopup();
+    }
+
+    if (saveLibraryDialogOpen_) {
+        ImGui::OpenPopup("Save as Library##dlg");
+        saveLibraryDialogOpen_ = false;
+    }
+    if (ImGui::BeginPopupModal("Save as Library##dlg", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
+        ImGui::Text("Library path (.mc3lib.xml or .mc3lib.json):");
+        ImGui::SetNextItemWidth(400);
+        ImGui::InputText("##savelibrarypath", saveLibraryDialogBuf_, sizeof(saveLibraryDialogBuf_));
+        if (saveLibraryDialogErr_[0])
+            ImGui::TextColored(ImVec4(1,0.3f,0.3f,1), "%s", saveLibraryDialogErr_);
+        if (ImGui::Button("Save") || ImGui::IsKeyPressed(ImGuiKey_Enter)) {
+            try {
+                saveLibraryFile(std::filesystem::path{saveLibraryDialogBuf_});
+                saveLibraryDialogErr_[0] = '\0';
+                ImGui::CloseCurrentPopup();
+            } catch (const std::exception& e) {
+                std::strncpy(saveLibraryDialogErr_, e.what(), sizeof(saveLibraryDialogErr_) - 1);
+                saveLibraryDialogErr_[sizeof(saveLibraryDialogErr_) - 1] = '\0';
+            }
+        }
+        ImGui::SameLine();
+        if (ImGui::Button("Cancel")) ImGui::CloseCurrentPopup();
+        ImGui::EndPopup();
+    }
+
+    if (createDefinitionDialogOpen_) {
+        ImGui::OpenPopup("Create Definition from Selection##dlg");
+        createDefinitionDialogOpen_ = false;
+    }
+    if (ImGui::BeginPopupModal("Create Definition from Selection##dlg", nullptr,
+                               ImGuiWindowFlags_AlwaysAutoResize)) {
+        ImGui::Text("Definition id:");
+        ImGui::SetNextItemWidth(340);
+        if (ImGui::IsWindowAppearing()) ImGui::SetKeyboardFocusHere();
+        ImGui::InputText("##createdefinitionid", createDefinitionIdBuf_, sizeof(createDefinitionIdBuf_));
+        ImGui::TextDisabled("Letters, digits, '.', '-' and '_' (must start with a letter or '_').");
+        if (createDefinitionErr_[0])
+            ImGui::TextColored(ImVec4(1,0.3f,0.3f,1), "%s", createDefinitionErr_);
+        if (ImGui::Button("Create") || ImGui::IsKeyPressed(ImGuiKey_Enter)) {
+            try {
+                createDefinitionFromSelection(createDefinitionIdBuf_);
+                createDefinitionErr_[0] = '\0';
+                ImGui::CloseCurrentPopup();
+            } catch (const std::exception& e) {
+                std::strncpy(createDefinitionErr_, e.what(), sizeof(createDefinitionErr_) - 1);
+                createDefinitionErr_[sizeof(createDefinitionErr_) - 1] = '\0';
+            }
+        }
+        ImGui::SameLine();
+        if (ImGui::Button("Cancel") || ImGui::IsKeyPressed(ImGuiKey_Escape, false))
+            ImGui::CloseCurrentPopup();
+        ImGui::EndPopup();
+    }
+
+    if (publishDefinitionDialogOpen_) {
+        ImGui::OpenPopup("Publish Definition##dlg");
+        publishDefinitionDialogOpen_ = false;
+    }
+    if (ImGui::BeginPopupModal("Publish Definition##dlg", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
+        ImGui::Text("Definition id:");
+        ImGui::SetNextItemWidth(420);
+        ImGui::InputText("##publishdefinitionid", publishDefinitionIdBuf_, sizeof(publishDefinitionIdBuf_));
+        ImGui::Text("Library namespace:");
+        ImGui::SetNextItemWidth(420);
+        ImGui::InputText("##publishlibrarynamespace", publishLibraryNamespaceBuf_,
+                         sizeof(publishLibraryNamespaceBuf_));
+        ImGui::Text("Version (major.minor.patch):");
+        ImGui::SetNextItemWidth(160);
+        ImGui::InputText("##publishlibraryversion", publishLibraryVersionBuf_,
+                         sizeof(publishLibraryVersionBuf_));
+        ImGui::Text("Output (.mc3lib.xml or .mc3lib.json):");
+        ImGui::SetNextItemWidth(420);
+        ImGui::InputText("##publishlibrarypath", publishLibraryPathBuf_, sizeof(publishLibraryPathBuf_));
+        if (publishDefinitionErr_[0])
+            ImGui::TextColored(ImVec4(1,0.3f,0.3f,1), "%s", publishDefinitionErr_);
+        if (ImGui::Button("Publish") || ImGui::IsKeyPressed(ImGuiKey_Enter)) {
+            try {
+                publishDefinitionAsLibrary(publishDefinitionIdBuf_, publishLibraryNamespaceBuf_,
+                                           publishLibraryVersionBuf_, publishLibraryPathBuf_);
+                publishDefinitionErr_[0] = '\0';
+                ImGui::CloseCurrentPopup();
+            } catch (const std::exception& e) {
+                std::strncpy(publishDefinitionErr_, e.what(), sizeof(publishDefinitionErr_) - 1);
+                publishDefinitionErr_[sizeof(publishDefinitionErr_) - 1] = '\0';
+            }
+        }
+        ImGui::SameLine();
+        if (ImGui::Button("Cancel") || ImGui::IsKeyPressed(ImGuiKey_Escape, false))
+            ImGui::CloseCurrentPopup();
         ImGui::EndPopup();
     }
 

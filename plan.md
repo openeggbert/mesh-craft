@@ -135,23 +135,21 @@ sequentially. Per `CLAUDE.md`, recording this ordered backlog does **not**
 remove the requirement to describe and obtain explicit confirmation for each
 individual implementation task immediately before work begins.
 
-1. **SYS-W14-28 (P2/W14)** — complete native MC3 library publishing and
-   consumption workflow.
-2. **SYS-W14-29 (P2/W14)** — make asset-metadata LOD references and maximum
+1. **SYS-W14-29 (P2/W14)** — make asset-metadata LOD references and maximum
    visibility distance operational with deterministic selection and culling.
-3. **SYS-W14-31 (P2/W14)** — add explicit Area/object event bindings to
+2. **SYS-W14-31 (P2/W14)** — add explicit Area/object event bindings to
    triggers and scene states.
-4. **SYS-W14-14 (P2/W14, reopened)** — implement the declared MC3 coordinate
+3. **SYS-W14-14 (P2/W14, reopened)** — implement the declared MC3 coordinate
    system consistently, not merely as a write-only document field.
-5. **SYS-W3-02 (P2/W3)** — introduce narrow shared semantic-evaluation
+4. **SYS-W3-02 (P2/W3)** — introduce narrow shared semantic-evaluation
    helpers required by transform/LOD/material parity, without a broad editor
    rewrite.
-6. **SYS-W14-32/33/34 (P2/P2/P3/W14)** — deliver viewport parity in separate
+5. **SYS-W14-32/33/34 (P2/P2/P3/W14)** — deliver viewport parity in separate
    UV-mapping, point/spot-light, and CSG child-material slices.
-7. **SYS-W14-30 (P2/W14)** — expand explicit walk-mode collision proxies.
-8. **SYS-W14-35/36 (P2/P3/W14)** — preserve material structure on OBJ import,
+6. **SYS-W14-30 (P2/W14)** — expand explicit walk-mode collision proxies.
+7. **SYS-W14-35/36 (P2/P3/W14)** — preserve material structure on OBJ import,
    then add a bounded editable self-contained GLB importer.
-9. **SYS-W14-37/38/39 and SYS-W9-04 (P3)** — export optimization controls,
+8. **SYS-W14-37/38/39 and SYS-W9-04 (P3)** — export optimization controls,
     animation/export policy, Model Registry v2, and scalable history/review
     tooling.
 
@@ -2039,17 +2037,33 @@ round-trip tests, and documentation together; all editor/export parity rows
 need focused differential or render coverage. Do not start a row merely
 because it is listed: `CLAUDE.md` requires per-row user confirmation.
 
-- **SYS-W14-28** `[TODO]` `P2` — Native MC3 library publishing and asset-consumption workflow.
-  The editor already edits `<library>` and `<imports>` data and resolves
-  imports after loading, but does not expose the existing dedicated
-  `.mc3lib.xml`/`.mc3lib.json` open/save API in the File workflow. Implement
-  Open Library, Save as Library, Create Definition from Selection, Publish
-  Definition, and an import-health/definition-picker UI. Reuse
-  `Mc3Document`'s existing library hash and resolver APIs; surface namespace,
-  version, hash, unresolved source, cycle, and definition-collision errors
-  rather than inventing another serialization path. Add headless workflow,
-  resolver, and selection-to-definition regression tests. No CNA change is
-  expected.
+- **SYS-W14-28** `[DONE]` `P2` — Native MC3 library publishing and asset-consumption workflow.
+  **Implementation:** File ▸ Open Library and Save as Library now use the
+  dedicated `.mc3lib.xml`/`.mc3lib.json` APIs (ordinary Open/Recent/CLI load
+  dispatch recognises those paths too). Saving validates namespace and strict
+  `major.minor.patch` version, refreshes the documented SHA-256 content hash,
+  and preserves the normal recent-file/dirty-state behaviour. Edit ▸ Create
+  Definition from Selection creates a validated, named local-space definition
+  and replaces the placement with an Instance; the Definitions tab's Publish
+  button writes one definition plus dependent materials/textures as a
+  self-contained library. `Mc3ImportResolver::resolveWithHealth()` exposes
+  resolved file, declared identity, effective hash, and direct definition
+  count and rejects a filename/URI whose internal library identity disagrees.
+  The Imports tab renders that health, names missing/hash/cycle/identity and
+  collision failures, preserves the last working imported set across a failed
+  refresh, filters imported definitions by text/category/semantic/style tags,
+  and places the chosen entry as an ordinary editable Instance. Imported
+  definitions are marked external so saving a scene does not bake them in;
+  deliberate local edits retain the existing local-copy behaviour and cause a
+  visible shadowing warning on normal Save. No CNA code changed.
+  **Tests:** new CNA-free `library_workflow` CTest covers named-definition
+  creation, duplicate/invalid-id rejection, XML/JSON library publication,
+  content hash, direct import-health metadata, external-definition marking,
+  local/imported collision preservation, and internal-identity mismatch
+  rejection. Fresh `CCACHE_DISABLE=1 cmake --build b-release --target
+  MeshCraft library_workflow_test -j4` succeeded; `ctest --test-dir b-release
+  -LE render --output-on-failure -j4` passed 150/150. The 36 render-labelled
+  tests are deterministically disabled here by the Xvfb preflight.
 
 - **SYS-W14-29** `[TODO]` `P2` — Metadata-driven asset LOD, distance culling, and deterministic variants.
   `assetMetadata.lods` and `max_visibility_distance` round-trip and are

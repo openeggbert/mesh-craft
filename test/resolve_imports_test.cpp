@@ -1,14 +1,8 @@
-// SYS-W14-21 (2026-07-20): MeshCraftApplication::resolveImports() wires the
-// already-tested Mc3ImportResolver (R101, mc3/src/Mc3ImportResolver.cpp,
-// exhaustively covered by mc3/test/import_resolver_test.cpp) into the
-// editor's load paths (initial launch, Open dialog, OpenRecentFile,
-// autosave recovery) plus an explicit "Resolve Imports" button in the
-// Imports tab. MeshCraftApplication itself is CNA-coupled and not
-// headlessly instantiable, so this mirrors resolveImports()'s exact
-// control-flow shape (empty-imports no-op, try/resolveAndMergeInto/catch,
-// status message construction) against a real Mc3Document and the real
-// Mc3ImportResolver -- matching trigger_fire_test.cpp/scene_state_apply_test.cpp's
-// established pattern for this session's other three UI-wired features.
+// SYS-W14-21's thin resolver-wiring regression. SYS-W14-28 extends the
+// production path with external-definition markers, health metadata, and
+// collision preservation; those current workflow semantics are covered by
+// library_workflow_test.cpp. This focused test retains the original direct
+// resolver/status behaviour against a real Mc3Document.
 
 #include <MeshCraft/Mc3/Mc3Document.hpp>
 #include <MeshCraft/Mc3/Mc3ImportResolver.hpp>

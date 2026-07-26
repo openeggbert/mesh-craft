@@ -1,6 +1,7 @@
 #include "MeshCraft/Application/MeshCraftApplication.hpp"
 #include "MeshCraft/MeshCraftPrivate.hpp"
 #include "MeshCraft/EditorAlgorithms.hpp"
+#include "MeshCraft/LibraryWorkflowAlgorithms.hpp"
 
 #include <imgui.h>
 
@@ -558,6 +559,51 @@ void MeshCraftApplication::convertToDefinition() {
     selection_.select(inst);
     modified_ = true; updateWindowTitle();
     setStatusMsg("Converted to definition: " + inst->definition, false, 2.5f);
+}
+
+void MeshCraftApplication::createDefinitionFromSelection(const std::string& definitionId) {
+    if (!selection_.hasSelection())
+        throw std::invalid_argument("Select an object before creating a definition");
+
+    pushUndo();
+    auto inst = createNamedDefinitionFromSelectionAlg(
+        document_, selection_.selection().front(), definitionId);
+    selection_.clear();
+    selection_.select(inst);
+    modified_ = true;
+    updateWindowTitle();
+    setStatusMsg("Created definition " + definitionId + " from selection", false, 2.5f);
+}
+
+void MeshCraftApplication::publishDefinitionAsLibrary(const std::string& definitionId,
+                                                       const std::string& libraryNamespace,
+                                                       const std::string& version,
+                                                       const std::filesystem::path& path) {
+    Mc3::Mc3Document published = publishDefinitionAsLibraryAlg(
+        document_, definitionId, libraryNamespace, version);
+    const auto format = libraryFileFormatFromPathAlg(path);
+    if (format == LibraryFileFormatAlg::Json)
+        published.saveToLibraryJsonFile(path);
+    else
+        published.saveToLibraryFile(path);
+    setStatusMsg("Published " + definitionId + " as " + path.filename().string() +
+                 " (" + published.library->contentHash + ")", false, 3.0f);
+}
+
+void MeshCraftApplication::placeImportedDefinition(const std::string& definitionId) {
+    if (!importedDefinitionKeys_.count(definitionId) || !document_.definitions.count(definitionId)) {
+        setStatusMsg("Imported definition is no longer resolved: " + definitionId, true);
+        return;
+    }
+    // addPrimitive owns the normal insertion/selection/undo behaviour and
+    // places at the camera target, so the picker creates a regular editable
+    // Instance rather than a special-case scene object.
+    addPrimitive(Mc3::ObjectType::Instance);
+    if (!selection_.hasSelection()) return;
+    auto inst = selection_.selection().front();
+    inst->definition = definitionId;
+    inst->name = definitionId;
+    setStatusMsg("Placed imported definition " + definitionId, false, 2.0f);
 }
 
 void MeshCraftApplication::exportSubtreeAsTemplate(const std::string& defName,

@@ -280,6 +280,7 @@ void MeshCraftApplication::LoadContent() {
             // `MeshCraft scene.mc3.json` on the command line now works too.
             Mc3::Mc3Validation loadValidation;
             document_ = loadSceneFileDispatched(currentFile_, loadValidation);
+            resetImportHealth();
             objectIndex_.invalidate();  // SYS-W5-04: wholesale document_ replacement
             if (!loadValidation.empty())
                 std::cout << "[MeshCraft] Load: " << loadValidation.warningCount() << " warning(s), "
