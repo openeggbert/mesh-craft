@@ -414,6 +414,21 @@ ALLOWLIST = {
               "Verified: Mc3XmlParser.cpp ke->Attribute(\"interp\") -> "
               "kf.interpolation, round-trips via Mc3XmlWriter.cpp.",
     "interpolation": "see 'interp' -- same pair, other direction.",
+    "start_time": "The short XML attribute 'start' on <clip> maps to the "
+                  "qualified Mc3ActionClip::startTime field (and MCB key "
+                  "'startTime'); it shares the generic name with other XML "
+                  "contexts, so the C++ representation keeps the time unit "
+                  "explicit. Verified in parseActions()/writeActions().",
+    "end_time": "The short XML attribute 'end' on <clip> maps to "
+                "Mc3ActionClip::endTime and the MCB key 'endTime'; see "
+                "start_time for the shared-name rationale.",
+    "transition": "The short XML attribute 'transition' on <clip> maps "
+                  "to the qualified Mc3ActionClip::transitionDuration "
+                  "field (and MCB key 'transitionDuration'), making the "
+                  "time meaning explicit in the shared C++ model. Verified "
+                  "in parseActions()/writeActions().",
+    "transition_duration": "see 'transition' -- same MC3 clip field, "
+                           "model/MCB naming direction.",
 
     # --- Group B: represented as a child XML *element* (text or its own "
     #     "attributes), not an attribute on the parent -- out of scope for "

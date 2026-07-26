@@ -90,6 +90,12 @@ static void addExportReport(ExportCtx& ctx, const std::string& objectId,
     if (ctx.report) ctx.report->push_back({objectId, message});
 }
 
+static void addExportReport(std::vector<ExportReportEntry>* report,
+                            const std::string& objectId,
+                            const std::string& message) {
+    if (report) report->push_back({objectId, message});
+}
+
 // ---------------------------------------------------------------------------
 // Instance cache key: definition ID + effective material + optional deform scale.
 // Two instances with different deform must NOT share a glTF mesh because deform
@@ -1697,6 +1703,17 @@ static void collectBaseTransforms(
     }
 }
 
+static void collectObjectIds(
+    const std::vector<std::shared_ptr<Mc3Object>>& objects,
+    std::unordered_map<std::string, std::string>& out)
+{
+    for (const auto& obj : objects) {
+        if (!obj) continue;
+        if (!obj->name.empty() && !obj->id.empty()) out[obj->name] = obj->id;
+        collectObjectIds(obj->children, out);
+    }
+}
+
 static void exportAnimations(
     tinygltf::Model& model,
     const std::map<std::string, Mc3Action>& actions,
@@ -1705,7 +1722,10 @@ static void exportAnimations(
     float unitScale,
     bool rotationIsRadians,
     const std::string& eulerOrder,
-    int& warningCount)
+    int& warningCount,
+    AnimationExportPolicy policy,
+    const std::unordered_map<std::string, std::string>& objectIds,
+    std::vector<ExportReportEntry>* report)
 {
     if (actions.empty()) return;
 
@@ -1731,10 +1751,16 @@ static void exportAnimations(
                 case AnimatedProperty::ScaleY:    path = "scale";       comp = 1; break;
                 case AnimatedProperty::ScaleZ:    path = "scale";       comp = 2; break;
                 default:
-                    std::cerr << "Warning: mc3togltf: action '" << actionName
-                              << "': channel property '" << animatedPropertyName(ch.property)
-                              << "' on target '" << ch.targetObject
-                              << "' has no glTF node-transform equivalent — channel skipped.\n";
+                    {
+                    const std::string message = "Animation '" + actionName + "': channel property '" +
+                        std::string(animatedPropertyName(ch.property)) + "' has no glTF core TRS equivalent; "
+                        "omitted by the selected animation export policy";
+                    std::cerr << "Warning: mc3togltf: " << message
+                              << " on target '" << ch.targetObject << "'.\n";
+                    addExportReport(report,
+                                    objectIds.count(ch.targetObject) ? objectIds.at(ch.targetObject) : std::string{},
+                                    message);
+                    }
                     ++warningCount;
                     continue;
             }
@@ -1745,8 +1771,26 @@ static void exportAnimations(
 
         if (groups.empty()) continue;
 
+        struct ExportSegment {
+            const Mc3ActionClip* clip{nullptr};
+            std::string name;
+        };
+        std::vector<ExportSegment> segments;
+        if (action.clips.empty()) {
+            segments.push_back({nullptr, action.name});
+        } else {
+            segments.reserve(action.clips.size());
+            for (const auto& clip : action.clips)
+                segments.push_back({&clip, action.name + "::" + clip.name});
+        }
+
+        // A target is shared by all clip-derived glTF animations.  Report a
+        // missing node once per authored channel group rather than emitting
+        // the same diagnosis for every named clip.
+        std::set<std::string> reportedMissingTargets;
+        for (const auto& segment : segments) {
         tinygltf::Animation anim;
-        anim.name = action.name;
+        anim.name = segment.name;
 
         for (const auto& [objName, pathMap] : groups) {
             auto nodeIt = nodeNameMap.find(objName);
@@ -1754,11 +1798,14 @@ static void exportAnimations(
                 // STAB-0682: was a silent no-op, unlike the unsupported-
                 // property skip a few lines above (which does warn) --
                 // a typo'd targetObject silently did nothing with no signal.
-                std::cerr << "Warning: mc3togltf: action '" << actionName
-                          << "': channel target '" << objName
-                          << "' does not match any exported node — channels "
-                             "for this target skipped.\n";
-                ++warningCount;
+                if (reportedMissingTargets.insert(objName).second) {
+                    const std::string message = "Animation '" + actionName + "': channel target '" + objName +
+                        "' does not match any exported node; omitted";
+                    std::cerr << "Warning: mc3togltf: " << message << ".\n";
+                    addExportReport(report,
+                                    objectIds.count(objName) ? objectIds.at(objName) : std::string{}, message);
+                    ++warningCount;
+                }
                 continue;
             }
             int nodeIdx = nodeIt->second;
@@ -1774,14 +1821,33 @@ static void exportAnimations(
                 std::set<float> timeSet;
                 bool hasCubic = false;
                 bool allStep  = true;
+                const float actionDuration = std::max(0.001f, action.duration);
+                float clipStart = segment.clip
+                    ? std::clamp(segment.clip->startTime, 0.0f, actionDuration) : 0.0f;
+                float clipEnd = segment.clip
+                    ? std::clamp(segment.clip->endTime, 0.0f, actionDuration) : 0.0f;
+                if (segment.clip && clipEnd <= clipStart) {
+                    clipStart = std::min(clipStart, actionDuration - 0.001f);
+                    clipEnd = std::max(clipStart + 0.001f, clipEnd);
+                }
 
                 for (int i = 0; i < 3; ++i) {
                     if (!pg.ch[i]) continue;
                     for (const auto& kf : pg.ch[i]->keyframes) {
+                        if (segment.clip && kf.interpolation == Interpolation::CubicBezier)
+                            hasCubic = true;
+                        if (segment.clip && (kf.time < clipStart || kf.time > clipEnd)) continue;
                         timeSet.insert(kf.time);
                         if (kf.interpolation == Interpolation::CubicBezier) hasCubic = true;
                         if (kf.interpolation != Interpolation::Step)        allStep  = false;
                     }
+                }
+                if (segment.clip) {
+                    // Boundary samples make each exported glTF animation an
+                    // actual named MC3 range, even if no original keyframe
+                    // falls exactly on the clip's start/end time.
+                    timeSet.insert(clipStart);
+                    timeSet.insert(clipEnd);
                 }
                 if (timeSet.empty()) continue;
 
@@ -1844,7 +1910,9 @@ static void exportAnimations(
                         timeSet.insert(t);
                 }
 
-                std::vector<float> times(timeSet.begin(), timeSet.end());
+                std::vector<float> sourceTimes(timeSet.begin(), timeSet.end());
+                if (segment.clip && segment.clip->reverse)
+                    std::reverse(sourceTimes.begin(), sourceTimes.end());
                 std::string interp = allStep ? "STEP" : "LINEAR";
 
                 // Base component values for non-animated axes.
@@ -1860,8 +1928,8 @@ static void exportAnimations(
                 // Build output value data.
                 std::vector<float> valueData;
                 if (path == "rotation") {
-                    valueData.reserve(times.size() * 4);
-                    for (float t : times) {
+                    valueData.reserve(sourceTimes.size() * 4);
+                    for (float t : sourceTimes) {
                         float euler[3];
                         for (int i = 0; i < 3; ++i)
                             euler[i] = pg.ch[i] ? evaluateChannel(*pg.ch[i], t) : base[i];
@@ -1873,8 +1941,8 @@ static void exportAnimations(
                     }
                 } else {
                     float tScale = (path == "translation") ? unitScale : 1.0f;
-                    valueData.reserve(times.size() * 3);
-                    for (float t : times) {
+                    valueData.reserve(sourceTimes.size() * 3);
+                    for (float t : sourceTimes) {
                         for (int i = 0; i < 3; ++i) {
                             float v = pg.ch[i] ? evaluateChannel(*pg.ch[i], t) : base[i];
                             // AUD-027: the static pose's node.translation is
@@ -1903,15 +1971,20 @@ static void exportAnimations(
                 // viewer -- which has no notion of "time scale" -- still
                 // reproduces the same real-time playback speed the editor
                 // shows (2x speed -> keyframe times halved -> exported
-                // animation finishes in half the real-world time). `times`
-                // itself must stay unscaled: it's also used above to sample
-                // evaluateChannel(), which binary-searches against the
-                // keyframes' own unscaled time domain.
+                // animation finishes in half the real-world time). Named
+                // clip exports additionally normalize their range to begin
+                // at zero and bake reverse playback into ordered samples.
                 {
-                    float invTimeScale = (action.timeScale > 1e-6f) ? 1.0f / action.timeScale : 1.0f;
+                    const float effectiveRate = std::max(1e-6f, action.timeScale *
+                        (segment.clip ? segment.clip->playbackRate : 1.0f));
                     std::vector<float> outTimes;
-                    outTimes.reserve(times.size());
-                    for (float t : times) outTimes.push_back(t * invTimeScale);
+                    outTimes.reserve(sourceTimes.size());
+                    for (float sourceTime : sourceTimes) {
+                        const float localTime = segment.clip
+                            ? (segment.clip->reverse ? clipEnd - sourceTime : sourceTime - clipStart)
+                            : sourceTime;
+                        outTimes.push_back(localTime / effectiveRate);
+                    }
 
                     int bv = addBufferView(model, outTimes.data(), outTimes.size() * sizeof(float), 0);
                     tinygltf::Accessor acc;
@@ -1960,22 +2033,26 @@ static void exportAnimations(
         }
 
         if (!anim.channels.empty()) {
-            // STAB-0681: glTF core animation spec has no "autoplay on load"
-            // or "loop" concept (a runtime/engine decision, not exportable
-            // data) -- preserved via extras instead, matching this file's
-            // own established convention (node tags/collision, light
-            // castShadows, environment, asset mc3_version) for otherwise-
-            // inexpressible mc3 data, which this was previously missing.
-            tinygltf::Value::Object extras;
-            extras["autoplay"]   = tinygltf::Value(action.autoplay);
-            extras["loop"]       = tinygltf::Value(action.loop);
-            // STAB-0460: the raw multiplier, for round-trip/tooling use --
-            // independent of the baked keyframe-time scaling above, which
-            // is what makes a plain glTF viewer actually play back at the
-            // right speed.
-            extras["time_scale"] = tinygltf::Value(static_cast<double>(action.timeScale));
-            anim.extras = tinygltf::Value(extras);
+            if (policy == AnimationExportPolicy::CoreTransformsWithMc3Metadata) {
+                // glTF core has no autoplay/loop/reverse/clip concept. The
+                // values below are optional, legal `extras` metadata only;
+                // no viewer-facing extension is claimed or required.
+                tinygltf::Value::Object extras;
+                extras["autoplay"] = tinygltf::Value(action.autoplay);
+                extras["loop"] = tinygltf::Value(segment.clip ? segment.clip->loop : action.loop);
+                extras["time_scale"] = tinygltf::Value(static_cast<double>(action.timeScale));
+                if (segment.clip) {
+                    extras["mc3_action"] = tinygltf::Value(action.name);
+                    extras["mc3_clip"] = tinygltf::Value(segment.clip->name);
+                    extras["mc3_clip_start"] = tinygltf::Value(static_cast<double>(segment.clip->startTime));
+                    extras["mc3_clip_end"] = tinygltf::Value(static_cast<double>(segment.clip->endTime));
+                    extras["mc3_clip_rate"] = tinygltf::Value(static_cast<double>(segment.clip->playbackRate));
+                    extras["mc3_clip_reverse"] = tinygltf::Value(segment.clip->reverse);
+                }
+                anim.extras = tinygltf::Value(extras);
+            }
             model.animations.push_back(std::move(anim));
+        }
         }
     }
 }
@@ -1997,6 +2074,7 @@ static GltfBuildResult buildGltfModel(const Mc3Document& doc,
                                       bool allowApproximateCSG,
                                       bool allowExternalResources,
                                       bool quantizeMeshAttributes,
+                                      AnimationExportPolicy animationExportPolicy,
                                       Mc3Validation& validation,
                                       std::vector<ExportReportEntry>& report)
 {
@@ -2103,6 +2181,8 @@ static GltfBuildResult buildGltfModel(const Mc3Document& doc,
     if (!doc.actions.empty()) {
         std::unordered_map<std::string, Mc3Transform> baseTransforms;
         collectBaseTransforms(doc.objects, baseTransforms);
+        std::unordered_map<std::string, std::string> objectIds;
+        collectObjectIds(doc.objects, objectIds);
 
         // STAB-0686: mc3 only enforces id uniqueness, not name uniqueness --
         // Mc3Channel::targetObject targets by NAME, so two same-named nodes
@@ -2122,7 +2202,8 @@ static GltfBuildResult buildGltfModel(const Mc3Document& doc,
         }
 
         exportAnimations(model, doc.actions, nodeNameMap, baseTransforms, ctx.unitScale,
-                          ctx.rotationIsRadians, ctx.eulerOrder, ctx.stats.warnings);
+                          ctx.rotationIsRadians, ctx.eulerOrder, ctx.stats.warnings,
+                          animationExportPolicy, objectIds, &report);
     }
 
     // Environment → scene extras
@@ -2196,7 +2277,8 @@ void GltfExporter::exportDocument(const Mc3Document& doc,
 {
     GltfBuildResult built = buildGltfModel(doc, outputPath, format,
                                            allowApproximateCSG, allowExternalResources,
-                                           quantizeMeshAttributes, validation, report);
+                                           quantizeMeshAttributes, animationExportPolicy,
+                                           validation, report);
     tinygltf::Model& model = built.model;
     tinygltf::TinyGLTF writer;
 
@@ -2251,7 +2333,8 @@ ExportEstimate GltfExporter::estimateDocument(const Mc3Document& doc,
 {
     GltfBuildResult built = buildGltfModel(doc, outputPath, format,
                                            allowApproximateCSG, allowExternalResources,
-                                           quantizeMeshAttributes, validation, report);
+                                           quantizeMeshAttributes, animationExportPolicy,
+                                           validation, report);
     stats = built.stats;
     return estimateBuiltModel(built.model, format);
 }

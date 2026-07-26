@@ -358,6 +358,7 @@ private:
     int  glbExportFmt_{0};                // 0 = GLB, 1 = GLTF
     bool glbAllowApproxCSG_{false};       // checkbox: allow approximate CSG export
     bool glbQuantizeMeshAttributes_{false}; // opt-in KHR_mesh_quantization subset
+    int  glbAnimationExportPolicy_{0};    // 0 = core TRS + optional MC3 extras; 1 = core TRS only
     char glbExportOutBuf_[512]{};
     char glbExportErr_[256]{};
     char glbExportEstimate_[256]{};
@@ -366,6 +367,8 @@ private:
     std::vector<std::string> glbExportReport_;
     void runGltfExport(const std::string& outPath);
     void refreshGltfExportEstimate();
+    void selectAnimationPreviewClip(std::string clipName);
+    void clearAnimationPreviewTransition();
 
     // OBJ export dialog state (STAB-0718): the editor previously only
     // exported to glTF/GLB (via mc3togltf::GltfExporter) or a sub-scene
@@ -514,8 +517,13 @@ private:
 
     // Animation playback state
     std::string currentActionName_;
+    std::string currentActionClipName_; // empty = the legacy whole-action range
     float       animTime_{0.0f};
     bool        animPlaying_{false};
+    std::string animTransitionFromClipName_;
+    float       animTransitionFromTime_{0.0f};
+    float       animTransitionElapsed_{0.0f};
+    float       animTransitionDuration_{0.0f};
     bool        showTimeline_{false};
 
     // Timeline keyframe drag & selection state
@@ -535,6 +543,8 @@ private:
     bool addChannelOpen_{false};
     char addChannelObjBuf_[128]{};
     int  addChannelPropIdx_{0};
+    bool editAnimationClipOpen_{false};
+    char editAnimationClipNameBuf_[128]{};
     // Rename Action dialog state
     bool renameActionOpen_{false};
     char renameActionBuf_[128]{};

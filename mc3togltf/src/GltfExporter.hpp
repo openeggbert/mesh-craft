@@ -10,6 +10,15 @@ namespace mc3togltf {
 
 enum class OutputFormat { GLTF, GLB };
 
+// glTF core can animate only node translation/rotation/scale. The default
+// keeps legal MC3 provenance in `extras` for MC3-aware tooling; PortableCoreTrs
+// omits that metadata completely. Neither policy advertises an experimental
+// animation extension.
+enum class AnimationExportPolicy {
+    CoreTransformsWithMc3Metadata,
+    PortableCoreTrs,
+};
+
 // Returns the OutputFormat implied by path's extension (.gltf / .glb, case-insensitive).
 // Throws std::runtime_error for any other extension.
 OutputFormat outputFormatFromPath(const std::filesystem::path& outputPath);
@@ -75,6 +84,13 @@ public:
     // 1/65535), and compatible indices become lossless UINT16. Positions stay
     // float32 so node transforms and shared mesh reuse retain exact behavior.
     bool quantizeMeshAttributes{false};
+
+    // Supported TRS channels are always baked non-destructively from the MC3
+    // action/clip. Visibility, deform, and material channels are diagnosed
+    // and omitted; this policy decides only whether MC3 playback/clip details
+    // are preserved in standard glTF `extras`.
+    AnimationExportPolicy animationExportPolicy{
+        AnimationExportPolicy::CoreTransformsWithMc3Metadata};
 
     // Populated after exportDocument() returns successfully.
     ExportStats stats;

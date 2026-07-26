@@ -359,6 +359,7 @@ struct DocumentBudget {
     long long totalEmbeds = 0;
     long long totalEmbedBytes = 0;
     long long totalActions = 0;
+    long long totalClips = 0;
     long long totalChannels = 0;
     long long totalKeyframes = 0;
     long long totalDefinitions = 0;
@@ -370,6 +371,7 @@ struct DocumentBudget {
     static constexpr long long kMaxTotalEmbeds = 1'000;
     static constexpr long long kMaxTotalEmbedBytes = 256ll * 1024 * 1024; // 256MB combined
     static constexpr long long kMaxTotalActions = 10'000;
+    static constexpr long long kMaxTotalClips = 100'000;
     static constexpr long long kMaxTotalChannels = 200'000;
     static constexpr long long kMaxTotalKeyframes = 2'000'000;
     static constexpr long long kMaxTotalDefinitions = 20'000;
@@ -436,6 +438,14 @@ struct DocumentBudget {
             throw std::runtime_error(msg);
         }
     }
+    void chargeClip() {
+        if (++totalClips > kMaxTotalClips) {
+            std::string msg = "MCB: document exceeds the total animation clip budget (" +
+                std::to_string(kMaxTotalClips) + ")";
+            reportError("clips", msg);
+            throw std::runtime_error(msg);
+        }
+    }
     void chargeChannel() {
         if (++totalChannels > kMaxTotalChannels) {
             std::string msg = "MCB: document exceeds the total channel budget (" +
@@ -464,7 +474,7 @@ struct DocumentBudget {
         totalObjects = 0; totalTessellationWeight = 0;
         totalMaterials = 0; totalTextures = 0;
         totalEmbeds = 0; totalEmbedBytes = 0;
-        totalActions = 0; totalChannels = 0; totalKeyframes = 0;
+        totalActions = 0; totalClips = 0; totalChannels = 0; totalKeyframes = 0;
         totalDefinitions = 0;
     }
 };
@@ -1295,6 +1305,28 @@ static Mc3::Mc3Channel readChannel(std::istream& in) {
     return ch;
 }
 
+static Mc3::Mc3ActionClip readActionClip(std::istream& in) {
+    Mc3::Mc3ActionClip clip;
+    while (true) {
+        std::string k = rKey(in); if (k.empty()) break;
+        uint8_t tag = rU8(in);
+        if      (k == "name")               { expectTag(tag, TAG_STR, "name");               clip.name = rRawStr(in); }
+        else if (k == "startTime")          { expectTag(tag, TAG_F32, "startTime");          clip.startTime = rF32(in); }
+        else if (k == "endTime")            { expectTag(tag, TAG_F32, "endTime");            clip.endTime = rF32(in); }
+        else if (k == "playbackRate")       { expectTag(tag, TAG_F32, "playbackRate");       clip.playbackRate = rF32(in); }
+        else if (k == "loop")               { expectTag(tag, TAG_BOOL, "loop");              clip.loop = rU8(in) != 0; }
+        else if (k == "reverse")            { expectTag(tag, TAG_BOOL, "reverse");           clip.reverse = rU8(in) != 0; }
+        else if (k == "transitionDuration") { expectTag(tag, TAG_F32, "transitionDuration"); clip.transitionDuration = rF32(in); }
+        else skipValue(in, tag);
+    }
+    // MCB is intentionally forward-compatible (unknown map keys are skipped),
+    // but malformed known clip values still get normalized before reaching
+    // the preview/export paths.
+    clip.playbackRate = std::max(1e-3f, clip.playbackRate);
+    clip.transitionDuration = std::clamp(clip.transitionDuration, 0.0f, 60.0f);
+    return clip;
+}
+
 static Mc3::Mc3Action readAction(std::istream& in) {
     Mc3::Mc3Action act;
     IdentityScope idScope;
@@ -1306,6 +1338,16 @@ static Mc3::Mc3Action readAction(std::istream& in) {
         else if (k == "loop")      { expectTag(tag, TAG_BOOL, "loop");     act.loop      = rU8(in) != 0; }
         else if (k == "autoplay")  { expectTag(tag, TAG_BOOL, "autoplay"); act.autoplay  = rU8(in) != 0; }
         else if (k == "timeScale") { expectTag(tag, TAG_F32, "timeScale"); act.timeScale = rF32(in); } // STAB-0460
+        else if (k == "clips") {
+            expectTag(tag, TAG_ARR, "clips");
+            uint32_t n = rU32Bounded(in);
+            act.clips.reserve(reserveHint(n));
+            for (uint32_t i = 0; i < n; ++i) {
+                uint8_t t = rU8(in);
+                if (t == TAG_OBJ) { g_budget.chargeClip(); act.clips.push_back(readActionClip(in)); }
+                else              skipValue(in, t);
+            }
+        }
         else if (k == "channels") {
             expectTag(tag, TAG_ARR, "channels");
             uint32_t n = rU32Bounded(in);
@@ -1317,6 +1359,16 @@ static Mc3::Mc3Action readAction(std::istream& in) {
             }
         }
         else skipValue(in, tag);
+    }
+    const float duration = std::max(1e-3f, act.duration);
+    act.timeScale = std::max(1e-3f, act.timeScale);
+    for (auto& clip : act.clips) {
+        clip.startTime = std::clamp(clip.startTime, 0.0f, duration);
+        clip.endTime = std::clamp(clip.endTime, 0.0f, duration);
+        if (clip.endTime <= clip.startTime) {
+            clip.startTime = std::min(clip.startTime, duration - 1e-3f);
+            clip.endTime = std::max(clip.startTime + 1e-3f, clip.endTime);
+        }
     }
     return act;
 }

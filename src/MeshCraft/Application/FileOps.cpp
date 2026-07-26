@@ -66,6 +66,8 @@ void MeshCraftApplication::newScene() {
     modified_ = false;
     currentFile_.clear();
     currentActionName_.clear();
+    currentActionClipName_.clear();
+    clearAnimationPreviewTransition();
     animTime_    = 0.0f;
     animPlaying_ = false;
     if (sceneRenderer_) {
@@ -128,6 +130,11 @@ void MeshCraftApplication::recoverFromAutosave() {
         Mc3::Mc3Validation loadValidation;
         document_ = Mc3::Mc3Document::loadFromFile(autoSavePath(recoveryFilePath_),
                                                     Mc3::Mc3LoadPolicy::trusted(), loadValidation);
+        currentActionName_.clear();
+        currentActionClipName_.clear();
+        clearAnimationPreviewTransition();
+        animTime_ = 0.0f;
+        animPlaying_ = false;
         resetEventBindingSimulation();
         resetImportHealth();
         objectIndex_.invalidate();  // SYS-W5-04: wholesale document_ replacement
@@ -139,7 +146,10 @@ void MeshCraftApplication::recoverFromAutosave() {
         addRecentFile(currentFile_);
         selection_.clear();
         undoManager_.clear();
-        if (sceneRenderer_) sceneRenderer_->clearCsgCache();
+        if (sceneRenderer_) {
+            sceneRenderer_->setAnimOverrides({});
+            sceneRenderer_->clearCsgCache();
+        }
         modified_ = true; // recovered content differs from what's saved at currentFile_
         setStatusMsg("Recovered unsaved changes from autosave", false, 3.0f);
         checkRotationConventionNotice();
@@ -326,6 +336,11 @@ void MeshCraftApplication::executePendingAction() {
                 // comment in MeshCraftApplication::Initialize().
                 Mc3::Mc3Validation loadValidation;
                 document_ = loadSceneFileDispatched(pendingOpenPath_, loadValidation);
+                currentActionName_.clear();
+                currentActionClipName_.clear();
+                clearAnimationPreviewTransition();
+                animTime_ = 0.0f;
+                animPlaying_ = false;
                 resetEventBindingSimulation();
                 resetImportHealth();
                 objectIndex_.invalidate();  // SYS-W5-04: wholesale document_ replacement
@@ -338,7 +353,10 @@ void MeshCraftApplication::executePendingAction() {
                 addRecentFile(currentFile_);
                 selection_.clear();
                 undoManager_.clear();
-                sceneRenderer_->clearCsgCache();
+                if (sceneRenderer_) {
+                    sceneRenderer_->setAnimOverrides({});
+                    sceneRenderer_->clearCsgCache();
+                }
                 modified_ = false;
                 setStatusMsg("Opened " + currentFile_.filename().string(), false, 2.0f);
                 checkRotationConventionNotice();
@@ -573,6 +591,9 @@ void MeshCraftApplication::refreshGltfExportEstimate() {
         mc3togltf::GltfExporter exporter;
         exporter.allowApproximateCSG = glbAllowApproxCSG_;
         exporter.quantizeMeshAttributes = glbQuantizeMeshAttributes_;
+        exporter.animationExportPolicy = glbAnimationExportPolicy_ == 0
+            ? mc3togltf::AnimationExportPolicy::CoreTransformsWithMc3Metadata
+            : mc3togltf::AnimationExportPolicy::PortableCoreTrs;
         const auto estimate = exporter.estimateDocument(document_, out, format);
         const std::string total = readableByteEstimate(estimate.estimatedTotalBytes);
         const std::string json = readableByteEstimate(estimate.estimatedJsonBytes);
@@ -600,6 +621,9 @@ void MeshCraftApplication::runGltfExport(const std::string& outPath) {
     mc3togltf::GltfExporter exporter;
     exporter.allowApproximateCSG = glbAllowApproxCSG_;
     exporter.quantizeMeshAttributes = glbQuantizeMeshAttributes_;
+    exporter.animationExportPolicy = glbAnimationExportPolicy_ == 0
+        ? mc3togltf::AnimationExportPolicy::CoreTransformsWithMc3Metadata
+        : mc3togltf::AnimationExportPolicy::PortableCoreTrs;
     exporter.exportDocument(document_, out, fmt);
     // SYS-W1-01/SYS-W14-02 (pre-export integration point): see
     // GltfExporter::validation's doc comment.

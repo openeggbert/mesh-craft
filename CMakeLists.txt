@@ -691,6 +691,27 @@ if(MESH_CRAFT_BUILD_TESTING AND UNIX AND NOT ANDROID AND NOT EMSCRIPTEN)
     add_test(NAME texture_from_path COMMAND texture_from_path_test)
     set_tests_properties(texture_from_path PROPERTIES TIMEOUT 15 LABELS "unit")
 
+    # SYS-W14-38: clip ranges, rate/reverse/loop boundary behavior, and
+    # malformed programmatic values are CNA-free deterministic math.
+    add_executable(animation_preview_algorithms_test
+        ${CMAKE_CURRENT_SOURCE_DIR}/test/animation_preview_algorithms_test.cpp)
+    target_include_directories(animation_preview_algorithms_test PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/include
+        ${CMAKE_CURRENT_SOURCE_DIR}/mc3/include)
+    target_compile_features(animation_preview_algorithms_test PRIVATE cxx_std_23)
+    add_test(NAME animation_preview_algorithms COMMAND animation_preview_algorithms_test)
+    set_tests_properties(animation_preview_algorithms PROPERTIES TIMEOUT 15 LABELS "unit")
+
+    add_executable(animation_clip_format_test
+        ${CMAKE_CURRENT_SOURCE_DIR}/test/animation_clip_format_test.cpp)
+    target_include_directories(animation_clip_format_test PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/mc3/include
+        ${CMAKE_CURRENT_SOURCE_DIR}/mcb/include)
+    target_link_libraries(animation_clip_format_test PRIVATE Mc3 Mcb)
+    target_compile_features(animation_clip_format_test PRIVATE cxx_std_23)
+    add_test(NAME animation_clip_format COMMAND animation_clip_format_test)
+    set_tests_properties(animation_clip_format PROPERTIES TIMEOUT 15 LABELS "format")
+
     # F10 (2026-07-20 audit): clear*ReferencesAlg()/removeTriggerStepsReferencingAlg()
     # (EditorAlgorithms.hpp), backing the Tex/Defs/Mat/Scripts/Sounds/Music/
     # Embeds Delete buttons' reference-integrity cleanup. CNA-free, matching

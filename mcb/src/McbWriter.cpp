@@ -524,6 +524,18 @@ static void writeChannel(std::ostream& o, const Mc3::Mc3Channel& ch) {
     wEnd(o);
 }
 
+static void writeActionClip(std::ostream& o, const Mc3::Mc3ActionClip& clip) {
+    const Mc3::Mc3ActionClip def;
+    wIfStr(o, "name",               clip.name,               "");
+    wIfF32(o, "startTime",          clip.startTime,          def.startTime);
+    wIfF32(o, "endTime",            clip.endTime,            def.endTime);
+    wIfF32(o, "playbackRate",       clip.playbackRate,       def.playbackRate);
+    wIfBool(o, "loop",              clip.loop,               def.loop);
+    wIfBool(o, "reverse",           clip.reverse,            def.reverse);
+    wIfF32(o, "transitionDuration", clip.transitionDuration, def.transitionDuration);
+    wEnd(o);
+}
+
 static void writeAction(std::ostream& o, const Mc3::Mc3Action& act) {
     const Mc3::Mc3Action def;
     wIfStr (o, "name",      act.name,      "");
@@ -531,6 +543,10 @@ static void writeAction(std::ostream& o, const Mc3::Mc3Action& act) {
     wIfBool(o, "loop",      act.loop,      def.loop);
     wIfBool(o, "autoplay",  act.autoplay,  def.autoplay);
     wIfF32 (o, "timeScale", act.timeScale, def.timeScale); // STAB-0460
+    if (!act.clips.empty()) {
+        wKeyArr(o, "clips", static_cast<uint32_t>(act.clips.size()));
+        for (const auto& clip : act.clips) { wU8(o, TAG_OBJ); writeActionClip(o, clip); }
+    }
     if (!act.channels.empty()) {
         wKeyArr(o, "channels", static_cast<uint32_t>(act.channels.size()));
         for (const auto& ch : act.channels) { wU8(o, TAG_OBJ); writeChannel(o, ch); }

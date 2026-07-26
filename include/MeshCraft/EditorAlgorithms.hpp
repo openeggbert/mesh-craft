@@ -1769,6 +1769,66 @@ inline std::unordered_map<std::string, AnimOverrideAlg> computeAnimOverridesAlg(
     return overrides;
 }
 
+// Cross-fades two evaluations of the same action (normally two named clip
+// ranges). Numeric transforms/material values interpolate; visibility changes
+// at the midpoint so it never becomes an invented fractional state. A target
+// present on only one side is retained until/after the midpoint respectively.
+inline std::unordered_map<std::string, AnimOverrideAlg> blendAnimOverridesAlg(
+    const std::unordered_map<std::string, AnimOverrideAlg>& from,
+    const std::unordered_map<std::string, AnimOverrideAlg>& to,
+    float amount)
+{
+    const float t = std::clamp(amount, 0.0f, 1.0f);
+    auto blendFloat = [t](const std::optional<float>& a, const std::optional<float>& b) {
+        if (a && b) return std::optional<float>{std::lerp(*a, *b, t)};
+        return t < 0.5f ? a : b;
+    };
+    auto blendBool = [t](const std::optional<bool>& a, const std::optional<bool>& b) {
+        if (a && b) return std::optional<bool>{t < 0.5f ? *a : *b};
+        return t < 0.5f ? a : b;
+    };
+    auto blendVec3 = [t](const std::optional<std::array<float, 3>>& a,
+                         const std::optional<std::array<float, 3>>& b) {
+        if (!a || !b) return t < 0.5f ? a : b;
+        std::array<float, 3> result{};
+        for (int i = 0; i < 3; ++i) result[i] = std::lerp((*a)[i], (*b)[i], t);
+        return std::optional<std::array<float, 3>>{result};
+    };
+    auto blendVec4 = [t](const std::optional<std::array<float, 4>>& a,
+                         const std::optional<std::array<float, 4>>& b) {
+        if (!a || !b) return t < 0.5f ? a : b;
+        std::array<float, 4> result{};
+        for (int i = 0; i < 4; ++i) result[i] = std::lerp((*a)[i], (*b)[i], t);
+        return std::optional<std::array<float, 4>>{result};
+    };
+
+    std::unordered_map<std::string, AnimOverrideAlg> result;
+    for (const auto& [target, before] : from) {
+        auto afterIt = to.find(target);
+        if (afterIt == to.end()) {
+            if (t < 0.5f) result.emplace(target, before);
+            continue;
+        }
+        const auto& after = afterIt->second;
+        AnimOverrideAlg blended;
+        blended.position = blendVec3(before.position, after.position);
+        blended.rotation = blendVec3(before.rotation, after.rotation);
+        blended.scale = blendVec3(before.scale, after.scale);
+        blended.visible = blendBool(before.visible, after.visible);
+        blended.baseColor = blendVec4(before.baseColor, after.baseColor);
+        blended.roughness = blendFloat(before.roughness, after.roughness);
+        blended.metallic = blendFloat(before.metallic, after.metallic);
+        blended.emissive = blendVec3(before.emissive, after.emissive);
+        blended.deformScale = blendVec3(before.deformScale, after.deformScale);
+        result.emplace(target, std::move(blended));
+    }
+    if (t >= 0.5f) {
+        for (const auto& [target, after] : to)
+            if (!from.count(target)) result.emplace(target, after);
+    }
+    return result;
+}
+
 // ── Keybinding persistence format (STAB-0286) ─────────────────────────────────
 //
 // Mirrors the persistence format used by Editor::KeyBind::toString()/

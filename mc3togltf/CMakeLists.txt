@@ -165,6 +165,14 @@ if(BUILD_TESTING)
     add_test(NAME mc3togltf_export_optimization COMMAND mc3togltf_export_optimization_test)
     set_tests_properties(mc3togltf_export_optimization PROPERTIES TIMEOUT 20 LABELS "export")
 
+    # SYS-W14-38: named ranges, rate/reverse baking, explicit core-vs-extras
+    # policy, deterministic output, and per-channel object-id diagnostics.
+    add_executable(mc3togltf_animation_clip_export_test test/animation_clip_export_test.cpp)
+    target_link_libraries(mc3togltf_animation_clip_export_test PRIVATE mc3togltf_lib)
+    target_include_directories(mc3togltf_animation_clip_export_test PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
+    add_test(NAME mc3togltf_animation_clip_export COMMAND mc3togltf_animation_clip_export_test)
+    set_tests_properties(mc3togltf_animation_clip_export PROPERTIES TIMEOUT 20 LABELS "export")
+
     add_executable(mc3togltf_svg_rasterizer_test test/svg_rasterizer_test.cpp)
     target_link_libraries(mc3togltf_svg_rasterizer_test PRIVATE mc3togltf_lib)
     target_include_directories(mc3togltf_svg_rasterizer_test PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)

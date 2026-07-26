@@ -42,7 +42,11 @@ static void printUsage(const char* prog) {
               << "\n"
               << "  --quantize-mesh-attributes\n"
               << "    Opt into deterministic KHR_mesh_quantization for normals/tangents,\n"
-              << "    in-range UVs, and lossless 16-bit indices. Positions remain float32.\n";
+              << "    in-range UVs, and lossless 16-bit indices. Positions remain float32.\n"
+              << "\n"
+              << "  --portable-animation-core\n"
+              << "    Export baked glTF-core TRS animation only; omit optional MC3 playback/clip\n"
+              << "    metadata from extras. Unsupported MC3 channels are still reported.\n";
 }
 
 
@@ -51,6 +55,7 @@ int main(int argc, char* argv[]) {
     bool showStats      = false;
     bool allowExternalResources = false;
     bool quantizeMeshAttributes = false;
+    bool portableAnimationCore = false;
 
     // Collect non-flag arguments
     std::vector<std::string> args;
@@ -63,6 +68,7 @@ int main(int argc, char* argv[]) {
         else if (a == "--allow-external-resources") allowExternalResources = true;
         else if (a == "--stats")            showStats = true;
         else if (a == "--quantize-mesh-attributes") quantizeMeshAttributes = true;
+        else if (a == "--portable-animation-core") portableAnimationCore = true;
         else args.push_back(a);
     }
 
@@ -105,6 +111,9 @@ int main(int argc, char* argv[]) {
         exporter.allowApproximateCSG = allowApproxCSG;
         exporter.allowExternalResources = allowExternalResources;
         exporter.quantizeMeshAttributes = quantizeMeshAttributes;
+        exporter.animationExportPolicy = portableAnimationCore
+            ? AnimationExportPolicy::PortableCoreTrs
+            : AnimationExportPolicy::CoreTransformsWithMc3Metadata;
         exporter.exportDocument(doc, outputPath, fmt);
 
         std::cout << "Written: " << outputPath << '\n';

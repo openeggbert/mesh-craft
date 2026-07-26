@@ -1038,6 +1038,7 @@
 
   <xs:complexType name="mc3ActionType">
     <xs:sequence>
+      <xs:element name="clip" type="mc3ActionClipType" minOccurs="0" maxOccurs="unbounded"/>
       <xs:element name="channel" type="mc3ChannelType" minOccurs="0" maxOccurs="unbounded"/>
     </xs:sequence>
     <xs:attribute name="name"       type="xs:string"  use="required"/>
@@ -1047,6 +1048,16 @@
     <!-- STAB-0460: playback-speed multiplier (2.0 = 2x speed). Optional,
          defaults to 1.0 (no-op). -->
     <xs:attribute name="time_scale" type="xs:float"   default="1.0"/>
+  </xs:complexType>
+
+  <xs:complexType name="mc3ActionClipType">
+    <xs:attribute name="name"          type="xs:string"  use="required"/>
+    <xs:attribute name="start"         type="xs:float"   use="required"/>
+    <xs:attribute name="end"           type="xs:float"   use="required"/>
+    <xs:attribute name="playback_rate" type="xs:float"   default="1.0"/>
+    <xs:attribute name="loop"          type="xs:boolean" default="false"/>
+    <xs:attribute name="reverse"       type="xs:boolean" default="false"/>
+    <xs:attribute name="transition"    type="xs:float"   default="0.0"/>
   </xs:complexType>
 
   <xs:complexType name="mc3ActionsType">

@@ -886,6 +886,20 @@ void Mc3XmlWriter::write(const Mc3Document& doc, const std::filesystem::path& pa
             if (act.timeScale != 1.0f) // STAB-0460: only write non-default
                 ae->SetAttribute("time_scale", fStr(act.timeScale).c_str());
 
+            for (const auto& clip : act.clips) {
+                XMLElement* ce = xml.NewElement("clip");
+                ce->SetAttribute("name", clip.name.c_str());
+                ce->SetAttribute("start", fStr(clip.startTime).c_str());
+                ce->SetAttribute("end", fStr(clip.endTime).c_str());
+                if (clip.playbackRate != 1.0f)
+                    ce->SetAttribute("playback_rate", fStr(clip.playbackRate).c_str());
+                if (clip.loop) ce->SetAttribute("loop", "true");
+                if (clip.reverse) ce->SetAttribute("reverse", "true");
+                if (clip.transitionDuration != 0.0f)
+                    ce->SetAttribute("transition", fStr(clip.transitionDuration).c_str());
+                ae->InsertEndChild(ce);
+            }
+
             for (const auto& ch : act.channels) {
                 XMLElement* ce = xml.NewElement("channel");
                 ce->SetAttribute("target",   ch.targetObject.c_str());

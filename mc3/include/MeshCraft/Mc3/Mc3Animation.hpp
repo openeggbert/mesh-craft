@@ -2,6 +2,7 @@
 
 #include <optional>
 #include <string>
+#include <utility>
 #include <vector>
 
 namespace MeshCraft::Mc3 {
@@ -68,6 +69,21 @@ struct Mc3Channel {
     std::vector<Mc3Keyframe> keyframes;
 };
 
+// A named, non-destructive playback range inside an action.  It reuses the
+// action's channels/keyframes; it never copies, trims, or rebakes them in the
+// MC3 document.  `playbackRate` multiplies the parent action's `timeScale`;
+// `transitionDuration` is the editor-preview cross-fade time used when this
+// clip is selected from another clip in the same action.
+struct Mc3ActionClip {
+    std::string name;
+    float startTime{0.0f};
+    float endTime{1.0f};
+    float playbackRate{1.0f};
+    bool loop{false};
+    bool reverse{false};
+    float transitionDuration{0.0f};
+};
+
 // A named animation clip containing any number of channels.
 struct Mc3Action {
     std::string name;
@@ -80,6 +96,9 @@ struct Mc3Action {
     // the action's own unscaled time domain. Defaults to 1.0 (no-op),
     // matching every scene authored before this field existed.
     float       timeScale{ 1.0f };
+    // Named ranges for preview/export. An empty vector preserves the legacy
+    // whole-action behavior exactly (0..duration, action loop/timeScale).
+    std::vector<Mc3ActionClip> clips;
     std::vector<Mc3Channel> channels;
 
     // --- Builder helpers --------------------------------------------------
@@ -97,6 +116,9 @@ struct Mc3Action {
     Mc3Action& withLoop(bool v = true)     { loop     = v; return *this; }
     Mc3Action& withAutoplay(bool v = true) { autoplay = v; return *this; }
     Mc3Action& withTimeScale(float v)      { timeScale = v; return *this; }
+    Mc3Action& addClip(Mc3ActionClip clip) {
+        clips.push_back(std::move(clip)); return *this;
+    }
 };
 
 // Property name ↔ enum conversions (XML attribute values).

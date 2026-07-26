@@ -1988,6 +1988,8 @@ void MeshCraftApplication::drawLeftPanel(float panelY, float panelH)
                     case Mc3::TriggerStepType::PlayAction:
                         if (document_.actions.count(step.ref)) {
                             currentActionName_ = step.ref;
+                            currentActionClipName_.clear();
+                            clearAnimationPreviewTransition();
                             animTime_    = 0.0f;
                             animPlaying_ = true;
                             ++fired;

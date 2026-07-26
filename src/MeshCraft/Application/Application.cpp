@@ -1,4 +1,5 @@
 #include "MeshCraft/Application/MeshCraftApplication.hpp"
+#include "MeshCraft/AnimationPreviewAlgorithms.hpp"
 #include "MeshCraft/CoordinateSystemAlgorithms.hpp"
 #include "MeshCraft/EditorAlgorithms.hpp"
 #include "MeshCraft/GraphicsBackendCheck.hpp"
@@ -296,6 +297,8 @@ void MeshCraftApplication::LoadContent() {
             for (const auto& [aname, act] : document_.actions) {
                 if (act.autoplay) {
                     currentActionName_ = aname;
+                    currentActionClipName_.clear();
+                    clearAnimationPreviewTransition();
                     animTime_    = 0.0f;
                     animPlaying_ = true;
                     break;
@@ -463,14 +466,23 @@ void MeshCraftApplication::Update(GameTime& gameTime) {
         if (it != document_.actions.end()) {
             float dt = static_cast<float>(
                 gameTime.getElapsedGameTimeProperty().getTotalSecondsProperty());
-            animTime_ += dt * it->second.timeScale; // STAB-0460
-            float dur = it->second.duration;
-            if (animTime_ >= dur) {
-                if (it->second.loop) animTime_ = std::fmod(animTime_, dur);
-                else { animTime_ = dur; animPlaying_ = false; }
+            const auto& action = it->second;
+            const auto* clip = findAnimationClip(action, currentActionClipName_);
+            const auto range = animationPreviewRange(action, clip);
+            animTime_ = advanceAnimationPreviewTime(range, animTime_, dt, animPlaying_);
+            if (animTransitionDuration_ > 0.0f) {
+                const auto* fromClip = findAnimationClip(action, animTransitionFromClipName_);
+                bool fromPlaying = true; // a completed source holds its endpoint until cross-fade ends
+                animTransitionFromTime_ = advanceAnimationPreviewTime(
+                    animationPreviewRange(action, fromClip), animTransitionFromTime_, dt, fromPlaying);
+                animTransitionElapsed_ += dt;
+                if (animTransitionElapsed_ >= animTransitionDuration_)
+                    clearAnimationPreviewTransition();
             }
             evaluateAndPushAnimOverrides();
         } else {
+            currentActionClipName_.clear();
+            clearAnimationPreviewTransition();
             animPlaying_ = false;
         }
     }

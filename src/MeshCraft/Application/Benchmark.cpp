@@ -103,6 +103,8 @@ void MeshCraftApplication::runBenchmarkSuite() {
     // Animation eval: only meaningful if the scene actually has an action.
     if (!document_.actions.empty()) {
         currentActionName_ = document_.actions.begin()->first;
+        currentActionClipName_.clear();
+        clearAnimationPreviewTransition();
         double ms = timeMs([&] { evaluateAndPushAnimOverrides(); });
         std::cout << "[Benchmark] animation eval (" << currentActionName_ << "): " << ms << " ms\n";
     } else {

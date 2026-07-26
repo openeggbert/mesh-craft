@@ -1,4 +1,5 @@
 #include "MeshCraft/Application/MeshCraftApplication.hpp"
+#include "MeshCraft/AnimationPreviewAlgorithms.hpp"
 #include "MeshCraft/EditorAlgorithms.hpp"
 
 #include <imgui.h>
@@ -15,6 +16,34 @@ namespace MeshCraft::Application {
 
 using namespace Microsoft::Xna::Framework;
 
+void MeshCraftApplication::clearAnimationPreviewTransition() {
+    animTransitionFromClipName_.clear();
+    animTransitionFromTime_ = 0.0f;
+    animTransitionElapsed_ = 0.0f;
+    animTransitionDuration_ = 0.0f;
+}
+
+void MeshCraftApplication::selectAnimationPreviewClip(std::string clipName) {
+    auto actionIt = document_.actions.find(currentActionName_);
+    if (actionIt == document_.actions.end()) return;
+    const auto& action = actionIt->second;
+    if (!clipName.empty() && !findAnimationClip(action, clipName)) return;
+    if (clipName == currentActionClipName_) return;
+
+    const auto* nextClip = findAnimationClip(action, clipName);
+    if (nextClip && nextClip->transitionDuration > 0.0f) {
+        animTransitionFromClipName_ = currentActionClipName_;
+        animTransitionFromTime_ = animTime_;
+        animTransitionElapsed_ = 0.0f;
+        animTransitionDuration_ = nextClip->transitionDuration;
+    } else {
+        clearAnimationPreviewTransition();
+    }
+    currentActionClipName_ = std::move(clipName);
+    animTime_ = animationPreviewInitialTime(animationPreviewRange(action, nextClip));
+    evaluateAndPushAnimOverrides();
+}
+
 // SYS-W3-01 Phase 5: the actual per-frame override computation now lives in
 // EditorAlgorithms.hpp's CNA-free, headlessly-testable computeAnimOverridesAlg()
 // (mirroring resolveObjectPropertyValueAlg's STAB-0715 precedent for the
@@ -29,6 +58,8 @@ void MeshCraftApplication::evaluateAndPushAnimOverrides() {
     // If the current action no longer exists in the document, clear it
     if (!currentActionName_.empty() && !document_.actions.count(currentActionName_)) {
         currentActionName_.clear();
+        currentActionClipName_.clear();
+        clearAnimationPreviewTransition();
         animPlaying_ = false;
     }
     if (currentActionName_.empty()) {
@@ -37,9 +68,23 @@ void MeshCraftApplication::evaluateAndPushAnimOverrides() {
     }
 
     const auto& action = document_.actions.at(currentActionName_);
+    if (!currentActionClipName_.empty() && !findAnimationClip(action, currentActionClipName_)) {
+        currentActionClipName_.clear();
+        clearAnimationPreviewTransition();
+    }
     auto overridesAlg = computeAnimOverridesAlg(
         action, animTime_, document_.materials,
         [this](const std::string& name) { return flatFindByName(name); });
+    if (animTransitionDuration_ > 0.0f &&
+        animTransitionElapsed_ < animTransitionDuration_ &&
+        (animTransitionFromClipName_.empty() ||
+         findAnimationClip(action, animTransitionFromClipName_))) {
+        auto fromOverrides = computeAnimOverridesAlg(
+            action, animTransitionFromTime_, document_.materials,
+            [this](const std::string& name) { return flatFindByName(name); });
+        overridesAlg = blendAnimOverridesAlg(fromOverrides, overridesAlg,
+            animTransitionElapsed_ / animTransitionDuration_);
+    }
 
     std::unordered_map<std::string, Renderer::AnimOverride> overrides;
     overrides.reserve(overridesAlg.size());
@@ -101,13 +146,15 @@ void MeshCraftApplication::drawTimelinePanel(int screenW, int screenH) {
         ImGui::SetNextItemWidth(140.0f);
         if (ImGui::BeginCombo("##asel", preview)) {
             if (ImGui::Selectable("(none)", currentActionName_.empty())) {
-                currentActionName_.clear(); animPlaying_ = false;
+                currentActionName_.clear(); currentActionClipName_.clear();
+                clearAnimationPreviewTransition(); animPlaying_ = false;
                 sceneRenderer_->setAnimOverrides({});
             }
             for (auto& [nm, act] : document_.actions) {
                 bool isSel = (nm == currentActionName_);
                 if (ImGui::Selectable(nm.c_str(), isSel)) {
-                    currentActionName_ = nm; animTime_ = 0.0f; animPlaying_ = false;
+                    currentActionName_ = nm; currentActionClipName_.clear();
+                    clearAnimationPreviewTransition(); animTime_ = 0.0f; animPlaying_ = false;
                     evaluateAndPushAnimOverrides();
                 }
                 if (isSel) ImGui::SetItemDefaultFocus();
@@ -120,7 +167,8 @@ void MeshCraftApplication::drawTimelinePanel(int screenW, int screenH) {
             do { nm = "Action" + std::to_string(n++); } while (document_.actions.count(nm));
             Mc3::Mc3Action act; act.name = nm; act.duration = 2.0f;
             pushUndo(); document_.actions[nm] = std::move(act);
-            currentActionName_ = nm; animTime_ = 0.0f; animPlaying_ = false;
+            currentActionName_ = nm; currentActionClipName_.clear();
+            clearAnimationPreviewTransition(); animTime_ = 0.0f; animPlaying_ = false;
             modified_ = true;
         }
         ImGui::SameLine();
@@ -128,7 +176,8 @@ void MeshCraftApplication::drawTimelinePanel(int screenW, int screenH) {
         if (!hasAct) ImGui::BeginDisabled();
         if (ImGui::SmallButton("Del##daact") && hasAct) {
             pushUndo(); document_.actions.erase(currentActionName_);
-            currentActionName_.clear(); animPlaying_ = false;
+            currentActionName_.clear(); currentActionClipName_.clear();
+            clearAnimationPreviewTransition(); animPlaying_ = false;
             sceneRenderer_->setAnimOverrides({}); modified_ = true;
         }
         ImGui::SameLine();
@@ -154,6 +203,8 @@ void MeshCraftApplication::drawTimelinePanel(int screenW, int screenH) {
 
         if (hasAct) {
             auto& act = document_.actions[currentActionName_];
+            const auto* selectedClip = findAnimationClip(act, currentActionClipName_);
+            const auto previewRange = animationPreviewRange(act, selectedClip);
             ImGui::SameLine(); ImGui::Text("|"); ImGui::SameLine();
             ImGui::Text("Dur:"); ImGui::SameLine();
             ImGui::SetNextItemWidth(55.0f);
@@ -220,23 +271,161 @@ void MeshCraftApplication::drawTimelinePanel(int screenW, int screenH) {
                 modified_     = true;
             } }
             ImGui::SameLine(); ImGui::Text("|"); ImGui::SameLine();
-            if (ImGui::SmallButton("|<##rew"))  { animTime_ = 0.0f; evaluateAndPushAnimOverrides(); }
+            if (ImGui::SmallButton("|<##rew"))  {
+                animTime_ = animationPreviewInitialTime(previewRange);
+                evaluateAndPushAnimOverrides();
+            }
             ImGui::SameLine();
             if (animPlaying_) { if (ImGui::SmallButton("||##pp")) animPlaying_ = false; }
             else              { if (ImGui::SmallButton("|>##pp")) animPlaying_ = true;  }
             ImGui::SameLine();
-            if (ImGui::SmallButton("[]##stp")) { animPlaying_ = false; animTime_ = 0.0f; evaluateAndPushAnimOverrides(); }
+            if (ImGui::SmallButton("[]##stp")) {
+                animPlaying_ = false;
+                animTime_ = animationPreviewInitialTime(previewRange);
+                evaluateAndPushAnimOverrides();
+            }
             ImGui::SameLine(); ImGui::Text("|"); ImGui::SameLine();
             ImGui::Text("T:"); ImGui::SameLine();
             ImGui::SetNextItemWidth(70.0f);
             // AlwaysClamp (AUDIT-0045): same reasoning as ##dur above -- the
             // callback already clamps defensively, this keeps the widget's
             // own displayed value consistent within the same frame.
-            if (ImGui::DragFloat("##at", &animTime_, 0.001f, 0.0f, act.duration, "%.3f", ImGuiSliderFlags_AlwaysClamp)) {
-                animTime_ = std::clamp(animTime_, 0.0f, act.duration);
+            if (ImGui::DragFloat("##at", &animTime_, 0.001f, previewRange.startTime, previewRange.endTime,
+                                 "%.3f", ImGuiSliderFlags_AlwaysClamp)) {
+                animTime_ = std::clamp(animTime_, previewRange.startTime, previewRange.endTime);
                 evaluateAndPushAnimOverrides();
             }
+
+            ImGui::SameLine(); ImGui::Text("Clip:"); ImGui::SameLine();
+            const char* clipPreview = currentActionClipName_.empty()
+                ? "Whole action" : currentActionClipName_.c_str();
+            ImGui::SetNextItemWidth(115.0f);
+            if (ImGui::BeginCombo("##clip-select", clipPreview)) {
+                if (ImGui::Selectable("Whole action", currentActionClipName_.empty()))
+                    selectAnimationPreviewClip({});
+                for (const auto& clip : act.clips) {
+                    const bool selected = clip.name == currentActionClipName_;
+                    if (ImGui::Selectable(clip.name.c_str(), selected))
+                        selectAnimationPreviewClip(clip.name);
+                    if (selected) ImGui::SetItemDefaultFocus();
+                }
+                ImGui::EndCombo();
+            }
+            ImGui::SameLine();
+            if (ImGui::SmallButton("+Clip##add")) {
+                pushUndo();
+                int n = 1;
+                std::string name;
+                do { name = "Clip" + std::to_string(n++); }
+                while (std::any_of(act.clips.begin(), act.clips.end(), [&](const auto& c) {
+                    return c.name == name;
+                }));
+                act.clips.push_back({name, 0.0f, std::max(0.01f, act.duration),
+                                     1.0f, act.loop, false, 0.0f});
+                currentActionClipName_ = name;
+                clearAnimationPreviewTransition();
+                animTime_ = 0.0f;
+                modified_ = true;
+                evaluateAndPushAnimOverrides();
+            }
+            if (!currentActionClipName_.empty()) {
+                ImGui::SameLine();
+                if (ImGui::SmallButton("Edit##clip")) {
+                    std::strncpy(editAnimationClipNameBuf_, currentActionClipName_.c_str(),
+                                 sizeof(editAnimationClipNameBuf_) - 1);
+                    editAnimationClipNameBuf_[sizeof(editAnimationClipNameBuf_) - 1] = '\0';
+                    editAnimationClipOpen_ = true;
+                }
+            }
         }
+    }
+
+    // Named ranges are persisted on the action but only affect preview/export
+    // when selected; editing them never rewrites channel keyframes.
+    if (editAnimationClipOpen_) {
+        ImGui::OpenPopup("Animation Clip##edit");
+        editAnimationClipOpen_ = false;
+    }
+    if (ImGui::BeginPopupModal("Animation Clip##edit", nullptr,
+                               ImGuiWindowFlags_AlwaysAutoResize)) {
+        auto actionIt = document_.actions.find(currentActionName_);
+        Mc3::Mc3ActionClip* clip = nullptr;
+        if (actionIt != document_.actions.end()) {
+            for (auto& candidate : actionIt->second.clips) {
+                if (candidate.name == currentActionClipName_) {
+                    clip = &candidate;
+                    break;
+                }
+            }
+        }
+        if (!clip) {
+            ImGui::TextUnformatted("The selected clip no longer exists.");
+            if (ImGui::Button("Close")) ImGui::CloseCurrentPopup();
+        } else {
+            auto& action = actionIt->second;
+            ImGui::InputText("Name", editAnimationClipNameBuf_, sizeof(editAnimationClipNameBuf_));
+            float start = clip->startTime, end = clip->endTime;
+            if (ImGui::DragFloatRange2("Range (seconds)", &start, &end, 0.01f,
+                                       0.0f, std::max(0.01f, action.duration),
+                                       "Start %.2f", "End %.2f", ImGuiSliderFlags_AlwaysClamp)) {
+                pushUndo();
+                clip->startTime = std::min(start, end - 0.001f);
+                clip->endTime = std::max(end, clip->startTime + 0.001f);
+                modified_ = true;
+                animTime_ = std::clamp(animTime_, clip->startTime, clip->endTime);
+                evaluateAndPushAnimOverrides();
+            }
+            float rate = clip->playbackRate;
+            if (ImGui::DragFloat("Playback rate", &rate, 0.01f, 0.05f, 10.0f,
+                                 "%.2fx", ImGuiSliderFlags_AlwaysClamp)) {
+                pushUndo(); clip->playbackRate = std::max(0.05f, rate); modified_ = true;
+            }
+            float transition = clip->transitionDuration;
+            if (ImGui::DragFloat("Transition preview", &transition, 0.01f, 0.0f, 10.0f,
+                                 "%.2fs", ImGuiSliderFlags_AlwaysClamp)) {
+                pushUndo(); clip->transitionDuration = std::max(0.0f, transition); modified_ = true;
+            }
+            bool clipLoop = clip->loop;
+            if (ImGui::Checkbox("Loop", &clipLoop)) {
+                pushUndo(); clip->loop = clipLoop; modified_ = true;
+            }
+            bool clipReverse = clip->reverse;
+            if (ImGui::Checkbox("Reverse", &clipReverse)) {
+                pushUndo(); clip->reverse = clipReverse; modified_ = true;
+            }
+            const std::string requestedName(editAnimationClipNameBuf_);
+            const bool nameAvailable = !requestedName.empty() &&
+                (requestedName == clip->name || std::none_of(action.clips.begin(), action.clips.end(),
+                    [&](const auto& other) { return other.name == requestedName; }));
+            if (!nameAvailable)
+                ImGui::TextColored(ImVec4(1, 0.45f, 0.2f, 1), "Enter a unique non-empty clip name.");
+            if (!nameAvailable) ImGui::BeginDisabled();
+            if (ImGui::Button("Apply name", ImVec2(110, 0))) {
+                if (requestedName != clip->name) {
+                    pushUndo();
+                    clip->name = requestedName;
+                    currentActionClipName_ = requestedName;
+                    modified_ = true;
+                }
+            }
+            if (!nameAvailable) ImGui::EndDisabled();
+            ImGui::SameLine();
+            if (ImGui::Button("Delete clip", ImVec2(110, 0))) {
+                pushUndo();
+                action.clips.erase(std::remove_if(action.clips.begin(), action.clips.end(),
+                    [&](const auto& other) { return other.name == currentActionClipName_; }), action.clips.end());
+                currentActionClipName_.clear();
+                clearAnimationPreviewTransition();
+                animTime_ = 0.0f;
+                modified_ = true;
+                evaluateAndPushAnimOverrides();
+                ImGui::CloseCurrentPopup();
+            }
+            ImGui::SameLine();
+            if (ImGui::Button("Close", ImVec2(90, 0)) || ImGui::IsKeyPressed(ImGuiKey_Escape, false))
+                ImGui::CloseCurrentPopup();
+        }
+        ImGui::EndPopup();
     }
 
     // ----- Channel list + timeline track (row 2+) -----

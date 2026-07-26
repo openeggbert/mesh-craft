@@ -1033,6 +1033,11 @@ void MeshCraftApplication::drawDialogs()
                 // Recent File via loadSceneFileDispatched().
                 Mc3::Mc3Validation loadValidation;
                 document_ = loadSceneFileDispatched(p, loadValidation);
+                currentActionName_.clear();
+                currentActionClipName_.clear();
+                clearAnimationPreviewTransition();
+                animTime_ = 0.0f;
+                animPlaying_ = false;
                 resetEventBindingSimulation();
                 resetImportHealth();
                 objectIndex_.invalidate();  // SYS-W5-04: wholesale document_ replacement
@@ -1049,7 +1054,10 @@ void MeshCraftApplication::drawDialogs()
                 // without this, a stale CSG preview cache entry from the
                 // previous document could collide (same content hash) with a
                 // CSG node in the newly-loaded scene and show wrong geometry.
-                if (sceneRenderer_) sceneRenderer_->clearCsgCache();
+                if (sceneRenderer_) {
+                    sceneRenderer_->setAnimOverrides({});
+                    sceneRenderer_->clearCsgCache();
+                }
                 modified_ = false;
                 openDialogErr_[0] = '\0';
                 std::cout << "[MeshCraft] Loaded: " << openDialogBuf_ << "\n";
@@ -1086,6 +1094,11 @@ void MeshCraftApplication::drawDialogs()
                 document_ = format == LibraryFileFormatAlg::Json
                     ? Mc3::Mc3Document::loadFromLibraryJsonFile(path)
                     : Mc3::Mc3Document::loadFromLibraryFile(path);
+                currentActionName_.clear();
+                currentActionClipName_.clear();
+                clearAnimationPreviewTransition();
+                animTime_ = 0.0f;
+                animPlaying_ = false;
                 resetEventBindingSimulation();
                 resetImportHealth();
                 objectIndex_.invalidate();
@@ -1093,7 +1106,10 @@ void MeshCraftApplication::drawDialogs()
                 addRecentFile(currentFile_);
                 selection_.clear();
                 undoManager_.clear();
-                if (sceneRenderer_) sceneRenderer_->clearCsgCache();
+                if (sceneRenderer_) {
+                    sceneRenderer_->setAnimOverrides({});
+                    sceneRenderer_->clearCsgCache();
+                }
                 modified_ = false;
                 openLibraryDialogErr_[0] = '\0';
                 setStatusMsg("Opened library " + currentFile_.filename().string(), false, 2.0f);
@@ -1830,6 +1846,17 @@ void MeshCraftApplication::drawDialogs()
                               "(component error at most 1/32767), [0,1] UVs use unsigned 16-bit "
                               "(at most 1/65535), and eligible indices use lossless UINT16. "
                               "Positions remain float32 to preserve exact transforms and mesh reuse.");
+        static const char* kAnimationExportPolicies[] = {
+            "Core TRS + MC3 playback metadata",
+            "Portable core TRS only"
+        };
+        ImGui::SetNextItemWidth(250.0f);
+        ImGui::Combo("Animation export", &glbAnimationExportPolicy_,
+                     kAnimationExportPolicies, IM_ARRAYSIZE(kAnimationExportPolicies));
+        ImGui::SetItemTooltip("Both policies bake supported transform channels and omit visible/deform/material "
+                              "channels with named reports. The first stores MC3 clip/loop/reverse metadata in "
+                              "legal glTF extras; the portable policy emits no MC3 animation metadata and neither "
+                              "policy claims an experimental animation extension.");
         if (glbExportFmt_ == 0) {
             ImGui::TextDisabled("GLB: one file; readable texture bytes are embedded. Missing texture files remain warnings.");
         } else {

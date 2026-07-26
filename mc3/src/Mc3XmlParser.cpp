@@ -258,6 +258,7 @@ struct DocumentBudget {
     long long totalEmbeds = 0;      // SYS-W1-03
     long long totalEmbedBytes = 0;  // SYS-W1-03: sum of every embed's base64Content.size()
     long long totalActions = 0;   // SYS-W1-03
+    long long totalClips = 0;     // SYS-W14-38
     long long totalChannels = 0;  // SYS-W1-03
     long long totalKeyframes = 0; // SYS-W1-03
     long long totalDefinitions = 0; // SYS-W1-03
@@ -308,6 +309,7 @@ struct DocumentBudget {
     // keyframes each) while still bounding worst-case vector/map memory
     // against a document that's all animation data and nothing else.
     static constexpr long long kMaxTotalActions = 10'000;
+    static constexpr long long kMaxTotalClips = 100'000;
     static constexpr long long kMaxTotalChannels = 200'000;
     static constexpr long long kMaxTotalKeyframes = 2'000'000;
 
@@ -391,6 +393,14 @@ struct DocumentBudget {
             throw std::runtime_error(msg);
         }
     }
+    void chargeClip() {
+        if (++totalClips > kMaxTotalClips) {
+            std::string msg = "MC3: document exceeds the total animation clip budget (" +
+                std::to_string(kMaxTotalClips) + ")";
+            reportErrorDoc("clips", msg);
+            throw std::runtime_error(msg);
+        }
+    }
     void chargeChannel() {
         if (++totalChannels > kMaxTotalChannels) {
             std::string msg = "MC3: document exceeds the total channel budget (" +
@@ -419,7 +429,7 @@ struct DocumentBudget {
         totalObjects = 0; totalTessellationWeight = 0; totalIncludes = 0;
         totalMaterials = 0; totalTextures = 0;
         totalEmbeds = 0; totalEmbedBytes = 0;
-        totalActions = 0; totalChannels = 0; totalKeyframes = 0;
+        totalActions = 0; totalClips = 0; totalChannels = 0; totalKeyframes = 0;
         totalDefinitions = 0;
     }
 };
@@ -1460,6 +1470,37 @@ static void parseActions(const XMLElement* el, Mc3Document& doc) {
                                      "must be > 0 (a zero/negative time_scale stalls or "
                                      "breaks playback)"); // STAB-0460
         if (action.name.empty()) continue;
+
+        // SYS-W14-38: a clip references an action-time interval rather than
+        // duplicating the action's channels. Clamp malformed ranges at load
+        // time so a hand-edited document cannot create a zero/negative span
+        // that stalls preview or makes an exporter's sampling ambiguous.
+        const float actionDuration = std::max(kMinTimeScale, action.duration);
+        for (const XMLElement* ce = ae->FirstChildElement("clip"); ce;
+             ce = ce->NextSiblingElement("clip")) {
+            g_budget.chargeClip();
+            Mc3ActionClip clip;
+            clip.name = attr(ce, "name");
+            if (clip.name.empty()) {
+                reportWarning(ce, "name", "empty animation clip name ignored");
+                continue;
+            }
+            clip.startTime = attrFClamped(ce, "start", 0.0f, 0.0f, actionDuration);
+            clip.endTime = attrFClamped(ce, "end", actionDuration, 0.0f, actionDuration);
+            if (clip.endTime <= clip.startTime) {
+                reportWarning(ce, "end", "clip end must be greater than clip start",
+                              "expanded to a non-zero range");
+                clip.startTime = std::min(clip.startTime, actionDuration - kMinTimeScale);
+                clip.endTime = std::max(clip.startTime + kMinTimeScale, clip.endTime);
+            }
+            clip.playbackRate = clampMin(ce, "playback_rate",
+                                         attrF(ce, "playback_rate", 1.0f), kMinTimeScale,
+                                         "must be > 0 (zero/negative rates are not valid)");
+            clip.loop = attrB(ce, "loop", false);
+            clip.reverse = attrB(ce, "reverse", false);
+            clip.transitionDuration = attrFClamped(ce, "transition", 0.0f, 0.0f, 60.0f);
+            action.clips.push_back(std::move(clip));
+        }
 
         for (const XMLElement* ce = ae->FirstChildElement("channel"); ce;
              ce = ce->NextSiblingElement("channel")) {

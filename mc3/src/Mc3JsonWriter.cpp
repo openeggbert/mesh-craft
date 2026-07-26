@@ -614,6 +614,15 @@ std::string Mc3JsonWriter::toString(const Mc3Document& doc) {
             ae["loop"]      = act.loop;
             ae["autoplay"]  = act.autoplay;
             ae["timeScale"] = act.timeScale;
+            json clips = json::array();
+            for (const auto& clip : act.clips) {
+                clips.push_back({
+                    {"name", clip.name}, {"start", clip.startTime}, {"end", clip.endTime},
+                    {"playbackRate", clip.playbackRate}, {"loop", clip.loop},
+                    {"reverse", clip.reverse}, {"transition", clip.transitionDuration}
+                });
+            }
+            ae["clips"] = std::move(clips);
             json channels = json::array();
             for (const auto& ch : act.channels) {
                 json ce = json::object();

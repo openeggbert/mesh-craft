@@ -63,6 +63,7 @@ struct DocumentBudget {
     long long totalEmbeds = 0;
     long long totalEmbedBytes = 0;
     long long totalActions = 0;
+    long long totalClips = 0;
     long long totalChannels = 0;
     long long totalKeyframes = 0;
     long long totalDefinitions = 0;
@@ -74,6 +75,7 @@ struct DocumentBudget {
     static constexpr long long kMaxTotalEmbeds = 1'000;
     static constexpr long long kMaxTotalEmbedBytes = 256ll * 1024 * 1024; // 256MB combined
     static constexpr long long kMaxTotalActions = 10'000;
+    static constexpr long long kMaxTotalClips = 100'000;
     static constexpr long long kMaxTotalChannels = 200'000;
     static constexpr long long kMaxTotalKeyframes = 2'000'000;
     static constexpr long long kMaxTotalDefinitions = 20'000;
@@ -120,6 +122,11 @@ struct DocumentBudget {
             throw std::runtime_error("MC3: document exceeds the total action budget (" +
                 std::to_string(kMaxTotalActions) + ")");
     }
+    void chargeClip() {
+        if (++totalClips > kMaxTotalClips)
+            throw std::runtime_error("MC3: document exceeds the total animation clip budget (" +
+                std::to_string(kMaxTotalClips) + ")");
+    }
     void chargeChannel() {
         if (++totalChannels > kMaxTotalChannels)
             throw std::runtime_error("MC3: document exceeds the total channel budget (" +
@@ -139,7 +146,7 @@ struct DocumentBudget {
         totalObjects = 0; totalTessellationWeight = 0;
         totalMaterials = 0; totalTextures = 0;
         totalEmbeds = 0; totalEmbedBytes = 0;
-        totalActions = 0; totalChannels = 0; totalKeyframes = 0;
+        totalActions = 0; totalClips = 0; totalChannels = 0; totalKeyframes = 0;
         totalDefinitions = 0;
     }
 };
@@ -826,6 +833,26 @@ Mc3Document Mc3JsonParser::parseString(const std::string& jsonText,
             act.loop      = ae.value("loop", false);
             act.autoplay  = ae.value("autoplay", false);
             act.timeScale = ae.value("timeScale", 1.0f);
+            if (ae.contains("clips")) {
+                const float duration = std::max(1e-3f, act.duration);
+                for (const auto& clipJson : ae["clips"]) {
+                    g_budget.chargeClip();
+                    Mc3ActionClip clip;
+                    clip.name = clipJson.value("name", "");
+                    if (clip.name.empty()) continue;
+                    clip.startTime = std::clamp(clipJson.value("start", 0.0f), 0.0f, duration);
+                    clip.endTime = std::clamp(clipJson.value("end", duration), 0.0f, duration);
+                    if (clip.endTime <= clip.startTime) {
+                        clip.startTime = std::min(clip.startTime, duration - 1e-3f);
+                        clip.endTime = std::max(clip.startTime + 1e-3f, clip.endTime);
+                    }
+                    clip.playbackRate = std::max(1e-3f, clipJson.value("playbackRate", 1.0f));
+                    clip.loop = clipJson.value("loop", false);
+                    clip.reverse = clipJson.value("reverse", false);
+                    clip.transitionDuration = std::clamp(clipJson.value("transition", 0.0f), 0.0f, 60.0f);
+                    act.clips.push_back(std::move(clip));
+                }
+            }
             if (ae.contains("channels")) {
                 for (const auto& ce : ae["channels"]) {
                     g_budget.chargeChannel();
