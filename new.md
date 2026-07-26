@@ -228,6 +228,17 @@ some primitives. Separately, `assetMetadata.lods` maps named tiers to
 definition ids and `max_visibility_distance` exists in the format. These
 should become one explicit asset-level system.
 
+**Status (implemented as `SYS-W14-29`, 2026-07-26):** Instances now resolve a
+portable FNV-1a identity-derived variant, then select the source definition's
+`near`/`mid`/`far` asset tier with configurable 25 m/75 m thresholds and 2 m
+hysteresis. A positive visibility maximum culls the viewport and the selected
+Instance panel states its tier, resolved definition, and fallback/cull reason.
+The source-definition choice is reused by normal, depth, emissive, and edge
+passes, while the pre-existing primitive tessellation LOD remains distinct.
+glTF/GLB and CSG export deliberately bake the explicit near/default tier (no
+camera context, no provisional LOD extension). Focused CNA-free, glTF, and
+display-gated viewport tests cover the contract.
+
 **Feature scope:**
 
 - Resolve an instance’s definition metadata into near/mid/far definitions.

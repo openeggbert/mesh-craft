@@ -619,7 +619,13 @@ void SceneRenderer::drawObjectEdges(const Mc3Object& obj, const Mc3Document& doc
             drawObjectEdges(*child, doc, world, view, proj, depth + 1);
         break;
     case ObjectType::Instance: {
-        auto it = doc.definitions.find(obj.resolvedInstanceDefinitionKey());
+        // Keep the overlay in lockstep with the main pass: a culled asset
+        // must not leave an otherwise invisible wireframe silhouette.
+        const auto selectedLod = assetLodSelectionMap_.find(obj.id);
+        if (selectedLod != assetLodSelectionMap_.end() && selectedLod->second.culled) return;
+        const std::string& definitionKey = selectedLod != assetLodSelectionMap_.end()
+            ? selectedLod->second.definitionId : obj.resolvedInstanceDefinitionKey();
+        auto it = doc.definitions.find(definitionKey);
         if (it != doc.definitions.end() && it->second)
             drawObjectEdges(*it->second, doc, world, view, proj, depth + 1);
         else

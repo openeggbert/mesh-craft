@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- SYS-W14-29: glTF has no camera-distance context, so it exports an
+     Instance's explicit near/default metadata tier, not viewport far/culling. -->
+<mc3 version="0.3" model="AssetLodExportFixture">
+  <definitions>
+    <definition id="tree.base">
+      <box name="BaseBox" size="1 1 1">
+        <assetMetadata max_visibility_distance="1">
+          <lods>
+            <lod tier="near" definition="tree.near"/>
+            <lod tier="far" definition="tree.far"/>
+          </lods>
+        </assetMetadata>
+      </box>
+    </definition>
+    <definition id="tree.near">
+      <sphere name="NearSphere" radius="0.5" segments="12"/>
+    </definition>
+    <definition id="tree.far">
+      <box name="FarBox" size="0.25 0.25 0.25"/>
+    </definition>
+  </definitions>
+  <objects>
+    <instance id="tree-export-instance" name="ExportTree" definition="tree.base" position="100 0 0"/>
+  </objects>
+</mc3>

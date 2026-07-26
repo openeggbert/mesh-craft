@@ -808,7 +808,13 @@ void SceneRenderer::drawDepthObject(const Mc3Object& obj, const Mc3Document& doc
         break;
     }
     case ObjectType::Instance: {
-        auto it = doc.definitions.find(obj.resolvedInstanceDefinitionKey());
+        // The normal scene pass records the selection for this frame. Reuse
+        // it so depth/SSAO cannot occlude a metadata-culled instance.
+        const auto selectedLod = assetLodSelectionMap_.find(obj.id);
+        if (selectedLod != assetLodSelectionMap_.end() && selectedLod->second.culled) return;
+        const std::string& definitionKey = selectedLod != assetLodSelectionMap_.end()
+            ? selectedLod->second.definitionId : obj.resolvedInstanceDefinitionKey();
+        auto it = doc.definitions.find(definitionKey);
         if (it != doc.definitions.end() && it->second)
             drawDepthObject(*it->second, doc, world, view, proj, depth + 1);
         else
@@ -1073,6 +1079,29 @@ void SceneRenderer::drawObject(const Mc3Object& obj, const Mc3Document& doc,
     Matrix world = objectWorldMatrix(tf) * parentWorld;
     bool  sel    = isSelected(obj, selected);
 
+    // SYS-W14-29: select an authored definition LOD before the regular draw
+    // path. This is deliberately here (rather than in the procedural LOD
+    // block below): one operation chooses a reusable definition/culls an
+    // Instance, while the other chooses sphere/cylinder tessellation.
+    std::optional<AssetLodSelection> assetLod;
+    if (obj.type == ObjectType::Instance) {
+        const float dx = camPosX_ - world.M41;
+        const float dy = camPosY_ - world.M42;
+        const float dz = camPosZ_ - world.M43;
+        const float distanceM = std::sqrt(dx * dx + dy * dy + dz * dz);
+        std::optional<AssetLodTier> previous;
+        if (const auto prev = assetLodPreviousTiers_.find(obj.id);
+            prev != assetLodPreviousTiers_.end())
+            previous = prev->second;
+        assetLod = resolveAssetLodForInstanceAlg(obj, doc.definitions, distanceM,
+                                                  assetLodConfig_, previous);
+        if (!obj.id.empty()) {
+            assetLodPreviousTiers_[obj.id] = assetLod->tier;
+            assetLodSelectionMap_[obj.id] = *assetLod;
+        }
+        if (assetLod->culled) return;
+    }
+
     // Resolve base color — may be overridden by a material animation channel
     Color color = materialColor(obj.material, doc);
     if (!obj.name.empty()) {
@@ -1327,7 +1356,9 @@ void SceneRenderer::drawObject(const Mc3Object& obj, const Mc3Document& doc,
         break;
     }
     case ObjectType::Instance: {
-        auto it = doc.definitions.find(obj.resolvedInstanceDefinitionKey());
+        const std::string& definitionKey = assetLod ? assetLod->definitionId
+                                                     : obj.resolvedInstanceDefinitionKey();
+        auto it = doc.definitions.find(definitionKey);
         if (it != doc.definitions.end() && it->second)
             drawObject(*it->second, doc, world, view, proj, selected, depth + 1);
         else
@@ -1592,7 +1623,11 @@ void SceneRenderer::drawEmissiveObject(
         recurseChildren = false;
         break;
     case ObjectType::Instance: {
-        auto it = doc.definitions.find(obj.resolvedInstanceDefinitionKey());
+        const auto selectedLod = assetLodSelectionMap_.find(obj.id);
+        if (selectedLod != assetLodSelectionMap_.end() && selectedLod->second.culled) return;
+        const std::string& definitionKey = selectedLod != assetLodSelectionMap_.end()
+            ? selectedLod->second.definitionId : obj.resolvedInstanceDefinitionKey();
+        auto it = doc.definitions.find(definitionKey);
         if (it != doc.definitions.end() && it->second)
             drawEmissiveObject(*it->second, doc, world, view, proj, depth + 1);
         recurseChildren = false;

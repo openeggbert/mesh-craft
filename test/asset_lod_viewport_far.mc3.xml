@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- SYS-W14-29 viewport coverage: camera distance chooses the authored far
+     definition, independently of the primitive tessellation LOD. -->
+<mc3 version="0.3" model="AssetLodViewportFar" default_camera="Main">
+  <cameras><camera name="Main" position="0 0 90" target="0 0 0" fov="50" near="0.05" far="200"/></cameras>
+  <definitions>
+    <definition id="tree.base"><box name="Base" size="1 1 1"><assetMetadata max_visibility_distance="100"><lods><lod tier="near" definition="tree.near"/><lod tier="mid" definition="tree.mid"/><lod tier="far" definition="tree.far"/></lods></assetMetadata></box></definition>
+    <definition id="tree.near"><sphere name="Near" radius="0.8" segments="16"/></definition>
+    <definition id="tree.mid"><cylinder name="Mid" radius="0.6" height="1.6" segments="12"/></definition>
+    <definition id="tree.far"><box name="Far" size="0.3 1.2 0.3"/></definition>
+  </definitions>
+  <objects><instance id="asset-lod-instance" name="Asset LOD instance" definition="tree.base"/></objects>
+</mc3>

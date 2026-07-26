@@ -9,6 +9,7 @@
 #include "MeshBuilder.hpp"
 #include "SvgRasterizer.hpp"
 
+#include <MeshCraft/AssetLodAlgorithms.hpp>
 #include <MeshCraft/Mc3/Mc3Document.hpp>
 #include <MeshCraft/Mc3/Mc3Light.hpp>
 #include <MeshCraft/Mc3/Mc3Camera.hpp>
@@ -1018,8 +1019,14 @@ static int buildNode(ExportCtx& ctx, const Mc3Object& obj, int depth)
     // plus Instance (resolved via definitions).
     int directMesh = -1;
 
-    if (obj.type == ObjectType::Instance && !obj.resolvedInstanceDefinitionKey().empty()) {
-        const std::string& defKey = obj.resolvedInstanceDefinitionKey();
+    // A glTF export has no camera distance, so use metadata's explicit
+    // Near/default authored tier. It deliberately does not bake viewport
+    // culling or the renderer's procedural tessellation LOD into the asset.
+    const auto defaultAssetLod = obj.type == ObjectType::Instance
+        ? MeshCraft::resolveDefaultAssetLodForInstanceAlg(obj, ctx.definitions)
+        : MeshCraft::AssetLodSelection{};
+    if (obj.type == ObjectType::Instance && !defaultAssetLod.definitionId.empty()) {
+        const std::string& defKey = defaultAssetLod.definitionId;
         auto it = ctx.definitions.find(defKey);
         if (it != ctx.definitions.end() && it->second) {
             const Mc3Object& defObj = *it->second;

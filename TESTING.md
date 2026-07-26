@@ -2,7 +2,7 @@
 
 _Last updated: 2026-07-26. Counts below were verified against a freshly configured Release build after `AUD-042` Android/EasyGL backend-selection coverage. This document is derived from the actual `CMakeLists.txt` test registrations and test source files — if it drifts from a freshly configured build's `ctest -N` output, trust `ctest -N`, not this file's claimed count._
 
-MeshCraft's tests run through **CTest** — **186 tests registered** (`ctest --print-labels` label breakdown after the `library_workflow` target: `ai` 1, `commands` 1, `export` 72, `format` 37, `lint` 4, `perf` 2, `registry` 1, `render` 36, `unit` 34), mixing C++ assertion-based binaries and Python/bash subprocess-driven checks against the `mc3togltf`/`mc3tomcb` CLIs and the `MeshCraft` editor binary itself (headless `--screenshot` real-pixel-sampling tests, plus 3 tests that drive real headless Blender for GLB-import verification). `render_display_preflight` verifies an actual `xvfb-run` + `xdpyinfo` X client before the render subset; if unavailable, it reports a CTest skip and CMake disables only the other render-labelled tests. **Known gap:** the "CLI-driving Python tests" table below documents the most significant/representative tests in each category but is not exhaustively 1:1 with all registrations — `ctest -N` and `ctest --print-labels` are authoritative for the complete list.
+MeshCraft's tests run through **CTest** — **189 tests registered** (`ctest --print-labels` label breakdown after `SYS-W14-29`: `ai` 1, `commands` 1, `export` 73, `format` 37, `lint` 4, `perf` 2, `registry` 1, `render` 37, `unit` 35), mixing C++ assertion-based binaries and Python/bash subprocess-driven checks against the `mc3togltf`/`mc3tomcb` CLIs and the `MeshCraft` editor binary itself (headless `--screenshot` real-pixel-sampling tests, plus 3 tests that drive real headless Blender for GLB-import verification). `render_display_preflight` verifies an actual `xvfb-run` + `xdpyinfo` X client before the render subset; if unavailable, it reports a CTest skip and CMake disables only the other render-labelled tests. **Known gap:** the "CLI-driving Python tests" table below documents the most significant/representative tests in each category but is not exhaustively 1:1 with all registrations — `ctest -N` and `ctest --print-labels` are authoritative for the complete list.
 
 ---
 
@@ -31,7 +31,7 @@ ctest --print-labels   # list all labels
 ctest --rerun-failed --output-on-failure
 ```
 
-Expected result: every registered test passes. On 2026-07-26, the current 186-registration Release tree passed all 150 non-render tests with `-LE render`; this host's Xvfb preflight disabled the 36 render-labelled tests deterministically. Before the additive `library_workflow` test, an Xvfb-qualified host passed the prior 185 registrations as 149/149 non-render plus 36/36 render tests. `library_workflow` covers named definition creation, publishing through the dedicated XML/JSON library I/O, import health, collision rejection, and library-identity verification. The focused suites are run with at most `-j4` after each change. A failing test prints its assertion/subprocess output inline with `--output-on-failure`; without that flag, CTest only shows pass/fail per test name.
+Expected result: every registered test passes. On 2026-07-26, the current 189-registration Release tree passed all 152 non-render tests with `-LE render`; this host's Xvfb preflight disabled 36 render executions (including `asset_lod_viewport_test`) and skipped its preflight probe deterministically. `asset_lod` covers tier selection, hysteresis, culling, safe fallbacks, and portable deterministic variants; `mc3togltf_asset_lod_export` proves the explicit near/default export tier. The focused suites are run with at most `-j4` after each change. A failing test prints its assertion/subprocess output inline with `--output-on-failure`; without that flag, CTest only shows pass/fail per test name.
 
 Each C++ test binary can also be run directly (bypassing CTest) for faster iteration:
 
@@ -42,6 +42,7 @@ Each C++ test binary can also be run directly (bypassing CTest) for faster itera
 ./cmake-build-debug/mc3/mc3_roundtrip_test
 ./cmake-build-debug/mcb/mcb_roundtrip_test
 ./cmake-build-debug/library_workflow_test
+./cmake-build-debug/asset_lod_test
 ```
 
 ### Standalone (CNA-free) builds
@@ -108,6 +109,7 @@ These spawn the built `mc3togltf`/`mc3tomcb` binaries as subprocesses and assert
 | `mc3togltf_csg_nested` | `mc3togltf/test/*.py` | Nested CSG operations (CSG-of-CSG) export correctly | Exported mesh matches expected nested-boolean result |
 | `mc3togltf_csg_semantics` / `mc3togltf_csg_mesh_child` / `mc3togltf_csg_stress` / `mc3togltf_csg_shading_materials` | `mc3togltf/test/*.py` | `isCutter`/world-transform/empty-result/material-on-node CSG semantics; a `<mesh>` child inside a CSG node; a deep/many-child CSG stress case; generated CSG UVs, smooth normals, and child-material glTF primitives | Calibrated geometry / GLB-buffer / structural assertions |
 | `mc3togltf_instance_deform_cache` | `mc3togltf/test/*.py` | Instances of the same definition with different `<deform>` produce separate cached meshes (not incorrectly shared) | Distinct mesh indices per distinct deform |
+| `asset_lod` / `asset_lod_viewport_test` / `mc3togltf_asset_lod_export` | `test/asset_lod_test.cpp`, `test/asset_lod_viewport_test.py`, `mc3togltf/test/asset_lod_export_test.py` | Authored near/mid/far definition resolution, hysteresis, max-distance culling and debug output in the live viewport; explicit near/default tier in glTF | Safe fallback on missing references; viewport emits the expected tier/cull record; glTF mesh is the near definition |
 | `mc3togltf_float_cache_key` / `mc3togltf_geom_cache_key` | `mc3togltf/test/*.py` | Two primitives with close-but-not-equal float dimensions produce 2 distinct meshes (cache key doesn't collide on float rounding); the geometry cache key's full construction is exercised directly | `len(meshes) == 2`; cache-key assertions |
 | `mc3togltf_obj_robustness` | `mc3togltf/test/obj_robustness_test.py` | Untrusted OBJ input: out-of-range negative vertex index and an infinite (`1e400`-overflow) coordinate must not crash the exporter | Exit 0, a `Warning:`/`non-finite` message per malformed file, valid mesh still exports geometry, no `null` (non-finite) values in any accessor `min`/`max` |
 | `mc3togltf_blender_import` | `mc3togltf/test/blender_import_test.py` | A synthetic 200-object generated scene imports cleanly into real headless Blender | Blender's glTF import operator reports `FINISHED`, expected mesh-object count |

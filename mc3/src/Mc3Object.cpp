@@ -1,6 +1,6 @@
 #include "MeshCraft/Mc3/Mc3Object.hpp"
 
-#include <functional>
+#include <cstdint>
 
 namespace MeshCraft::Mc3 {
 
@@ -15,6 +15,20 @@ std::shared_ptr<Mc3Object> makePrimitive(std::string name, Mc3Primitive prim,
     obj->primitive = std::move(prim);
     obj->material  = std::move(material);
     return obj;
+}
+
+// FNV-1a has a fully specified result, unlike std::hash<std::string>, whose
+// value may differ between standard libraries. Variant resolution is part of
+// the serialized Instance semantics, so it must be portable across editor and
+// exporter builds.
+std::uint64_t stableInstanceIdentityHash(std::string_view value)
+{
+    std::uint64_t hash = 14695981039346656037ull;
+    for (const unsigned char c : value) {
+        hash ^= c;
+        hash *= 1099511628211ull;
+    }
+    return hash;
 }
 
 } // anonymous namespace
@@ -231,7 +245,7 @@ Mc3Object& Mc3Object::withMetadata(std::string key, std::string value) {
 
 const std::string& Mc3Object::resolvedInstanceDefinitionKey() const {
     if (!variantDefinitions.empty()) {
-        std::size_t idx = std::hash<std::string>{}(id) % variantDefinitions.size();
+        std::size_t idx = stableInstanceIdentityHash(id) % variantDefinitions.size();
         return variantDefinitions[idx];
     }
     return definition;

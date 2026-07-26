@@ -1082,6 +1082,18 @@ if(MESH_CRAFT_BUILD_TESTING AND UNIX AND NOT ANDROID AND NOT EMSCRIPTEN)
     add_test(NAME library_workflow COMMAND library_workflow_test)
     set_tests_properties(library_workflow PROPERTIES TIMEOUT 15 LABELS "unit")
 
+    # SYS-W14-29: author metadata selects whole Instance definitions and
+    # culls them separately from the renderer's older primitive-tessellation
+    # LOD. This policy is intentionally CNA-free and directly unit-tested.
+    add_executable(asset_lod_test
+        ${CMAKE_CURRENT_SOURCE_DIR}/test/asset_lod_test.cpp)
+    target_include_directories(asset_lod_test PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/include)
+    target_link_libraries(asset_lod_test PRIVATE Mc3)
+    target_compile_features(asset_lod_test PRIVATE cxx_std_23)
+    add_test(NAME asset_lod COMMAND asset_lod_test)
+    set_tests_properties(asset_lod PROPERTIES TIMEOUT 15 LABELS "unit")
+
     # 2026-07-20 audit F2 (P0): SceneHierarchyPanel.cpp's drawHierarchy()
     # range-for-iterates over document_.objects/children by reference;
     # dragging an earlier sibling onto a later one in the same list used to
@@ -1679,6 +1691,23 @@ if(MESH_CRAFT_BUILD_TESTING AND UNIX AND NOT ANDROID AND NOT EMSCRIPTEN)
                 WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
             )
             set_tests_properties(lod_test PROPERTIES TIMEOUT 30 LABELS "render")
+        endif()
+
+        # SYS-W14-29: unlike lod_test's procedural primitive tessellation,
+        # this runs the live Instance metadata path: authored definition swap
+        # plus max-visibility culling and its debug record.
+        if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/test/asset_lod_viewport_far.mc3.xml" AND
+           EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/test/asset_lod_viewport_culled.mc3.xml")
+            add_test(
+                NAME asset_lod_viewport_test
+                COMMAND "${PYTHON3_EXEC}"
+                        "${CMAKE_CURRENT_SOURCE_DIR}/test/asset_lod_viewport_test.py"
+                        $<TARGET_FILE:MeshCraft>
+                        "${CMAKE_CURRENT_SOURCE_DIR}/test/asset_lod_viewport_far.mc3.xml"
+                        "${CMAKE_CURRENT_SOURCE_DIR}/test/asset_lod_viewport_culled.mc3.xml"
+                WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
+            )
+            set_tests_properties(asset_lod_viewport_test PROPERTIES TIMEOUT 45 LABELS "render")
         endif()
 
         # STAB-0526/0527/0528/0529: exercises the editor's --export CLI flag

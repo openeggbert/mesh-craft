@@ -398,6 +398,13 @@ void MeshCraftApplication::EndDraw() {
         std::cout << "[CsgCache] size: " << sceneRenderer_->csgMeshCacheSize() << "\n";
         if (!document_.objects.empty()) {
             std::cout << "[LOD] level=" << sceneRenderer_->lastLodLevel(document_.objects.front()->id) << "\n";
+            if (const auto assetLod = sceneRenderer_->lastAssetLodSelection(
+                    document_.objects.front()->id)) {
+                std::cout << "[AssetLOD] tier=" << assetLodTierNameAlg(assetLod->tier)
+                          << " culled=" << (assetLod->culled ? 1 : 0)
+                          << " definition=" << assetLod->definitionId
+                          << " reason=" << assetLod->reason << "\n";
+            }
             std::cout << "[CsgTriCount] count=" << sceneRenderer_->csgCachedTriCount(document_.objects.front()->id) << "\n";
         }
         Exit();

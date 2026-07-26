@@ -1493,6 +1493,37 @@ void PropertiesPanel::draw(float panelX, float panelY, float panelW, float panel
                 ImGui::EndCombo();
             }
 
+            // SYS-W14-29: this is a viewport policy, not serialized scene
+            // content, so it has no undo entry and does not mark the scene
+            // modified. It swaps authored definition tiers; the renderer's
+            // older primitive tessellation LOD remains separate.
+            if (ctx.renderer && ImGui::CollapsingHeader("Asset Definition LOD")) {
+                ImGui::TextDisabled("Authored definition tiers (not primitive tessellation)");
+                auto config = ctx.renderer->assetLodConfig();
+                bool configChanged = false;
+                configChanged |= ImGui::SliderFloat("Mid distance (m)##assetlod",
+                                                    &config.midDistanceM, 0.0f, 500.0f, "%.1f");
+                configChanged |= ImGui::SliderFloat("Far distance (m)##assetlod",
+                                                    &config.farDistanceM, 0.0f, 1000.0f, "%.1f");
+                configChanged |= ImGui::SliderFloat("Hysteresis (m)##assetlod",
+                                                    &config.hysteresisM, 0.0f, 50.0f, "%.1f");
+                if (configChanged) ctx.renderer->setAssetLodConfig(config);
+
+                const auto debug = ctx.renderer->lastAssetLodSelection(sel0->id);
+                if (!debug) {
+                    ImGui::TextDisabled("Debug: awaiting viewport draw");
+                } else {
+                    ImGui::Separator();
+                    ImGui::TextDisabled("Selected tier: %s",
+                                        std::string(assetLodTierNameAlg(debug->tier)).c_str());
+                    ImGui::TextDisabled("Resolved definition: %s",
+                                        debug->definitionId.empty() ? "(none)" : debug->definitionId.c_str());
+                    if (debug->culled)
+                        ImGui::TextColored(ImVec4(1.0f, 0.55f, 0.25f, 1.0f), "Culled");
+                    ImGui::TextWrapped("%s", debug->reason.c_str());
+                }
+            }
+
             // Definition content preview
             if (!sel0->definition.empty()) {
                 auto defIt = ctx.document.definitions.find(sel0->definition);

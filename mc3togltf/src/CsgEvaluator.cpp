@@ -1,6 +1,7 @@
 #include "CsgEvaluator.hpp"
 #include "MeshBuilder.hpp"
 
+#include <MeshCraft/AssetLodAlgorithms.hpp>
 #include <MeshCraft/Mc3/Mc3Object.hpp>
 #include <MeshCraft/Mc3/Mc3Primitive.hpp>
 
@@ -385,7 +386,11 @@ static manifold::Manifold buildManifoldNode(
 
     // --- Instance: resolve definition ---
     case ObjectType::Instance: {
-        const std::string& defKey = obj.resolvedInstanceDefinitionKey();
+        // CSG export has no camera distance either. Match GltfExporter.cpp's
+        // ordinary Instance path by baking the explicit Near/default authored
+        // tier, rather than making CSG a hidden exception to asset LOD.
+        const auto assetLod = MeshCraft::resolveDefaultAssetLodForInstanceAlg(obj, definitions);
+        const std::string& defKey = assetLod.definitionId;
         auto it = definitions.find(defKey);
         if (it != definitions.end() && it->second)
             return buildManifoldNode(*it->second, definitions, nodeMat, depth + 1,

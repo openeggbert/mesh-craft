@@ -105,14 +105,16 @@ before when explicitly requested (`SYS-W14-##` rows).
 
 ## 2. Current status
 
-- **Last full build: clean after `SYS-W14-06` CSG output support.** Testing is enabled in the current Ninja Release tree, and
-  `CCACHE_DISABLE=1 cmake --build b-release -j4` linked all targets successfully
-  on EASYGL. Alternate-backend runtime qualification remains blocked.
-- **Tests:** the fresh Release tree registers 186 tests, including the
-  CNA-free `library_workflow` regression added by `SYS-W14-28`; this checkout
-  passed all 150 non-render tests. Its Xvfb preflight deterministically
-  disabled the 36 render-labelled tests. Before that additive test, an
-  Xvfb-qualified host passed all 185 registrations after `AUD-042` in two
+- **Last full build: clean after `SYS-W14-29` asset-definition LOD support.** Testing is enabled in the current Ninja Release tree, and
+  `CCACHE_DISABLE=1 cmake --build b-release --target MeshCraft mc3togltf asset_lod_test -j4`
+  linked successfully on EASYGL. Alternate-backend runtime qualification remains blocked.
+- **Tests:** the fresh Release tree registers 189 tests, including new
+  CNA-free `asset_lod`, glTF-default-tier, and viewport LOD/culling regressions
+  from `SYS-W14-29`; this checkout passed all 152 non-render tests. Its Xvfb
+  preflight deterministically disabled 36 render executions (including the
+  new `asset_lod_viewport_test`) plus its own skipped preflight probe (37
+  render-labelled registrations in total).
+  Before that additive test, an Xvfb-qualified host passed all 185 registrations after `AUD-042` in two
   disjoint groups: 149/149 non-render tests and 36/36 render-labelled tests.
   `mc3togltf_csg_shading_materials` reads a real GLB to assert smooth CSG
   normals, generated UVs, and preserved child-material primitives; the CSG

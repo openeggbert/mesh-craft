@@ -4,6 +4,7 @@
 #include <MeshCraft/Mc3/Mc3Document.hpp>
 #include <MeshCraft/Mc3/Mc3Light.hpp>
 #include <MeshCraft/Mc3/Mc3Object.hpp>
+#include <MeshCraft/AssetLodAlgorithms.hpp>
 #include <Microsoft/Xna/Framework/Color.hpp>
 #include <Microsoft/Xna/Framework/Graphics/BasicEffect.hpp>
 #include <Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp>
@@ -72,7 +73,15 @@ public:
 
     // Clear the CSG content-hash cache (call on document load/close to free memory).
     // Normal edits do NOT need an explicit clear — the cache auto-invalidates via hash.
-    void clearCsgCache() { csgMeshCache_.clear(); csgTriCountMap_.clear(); }
+    void clearCsgCache() {
+        csgMeshCache_.clear();
+        csgTriCountMap_.clear();
+        // Callers use this on document replacement as well as CSG edits.
+        // Resetting LOD hysteresis then avoids carrying a prior document's
+        // instance IDs into a newly loaded scene.
+        assetLodPreviousTiers_.clear();
+        assetLodSelectionMap_.clear();
+    }
 
     // Triangle count of the last computed CSG result for the given object ID.
     // Returns -1 if the object has not been rendered yet this session.
@@ -112,6 +121,26 @@ public:
     int lastLodLevel(const std::string& objId) const {
         auto it = lodLevelMap_.find(objId);
         return it != lodLevelMap_.end() ? it->second : -1;
+    }
+
+    // Authored-definition LOD is intentionally independent of lastLodLevel:
+    // it can swap an Instance to another definition or cull it, while the
+    // older value only changes the tessellation of one primitive mesh.
+    void setAssetLodConfig(AssetLodConfig config) {
+        assetLodConfig_ = normaliseAssetLodConfigAlg(config);
+        assetLodPreviousTiers_.clear();
+        assetLodSelectionMap_.clear();
+    }
+    [[nodiscard]] const AssetLodConfig& assetLodConfig() const { return assetLodConfig_; }
+    [[nodiscard]] std::optional<AssetLodSelection>
+    lastAssetLodSelection(const std::string& objId) const {
+        auto it = assetLodSelectionMap_.find(objId);
+        return it != assetLodSelectionMap_.end() ? std::optional<AssetLodSelection>{it->second}
+                                                 : std::nullopt;
+    }
+    void clearAssetLodState() {
+        assetLodPreviousTiers_.clear();
+        assetLodSelectionMap_.clear();
     }
 
     // Export the computed CSG result for obj to an OBJ file at path.
@@ -254,6 +283,10 @@ private:
 
     // Camera world position stored by draw() for use in drawObject() LOD (G8)
     float camPosX_{0.0f}, camPosY_{0.0f}, camPosZ_{0.0f};
+
+    AssetLodConfig assetLodConfig_{};
+    std::unordered_map<std::string, AssetLodTier> assetLodPreviousTiers_;
+    std::unordered_map<std::string, AssetLodSelection> assetLodSelectionMap_;
 
     // Wire box for selection highlight
     std::unique_ptr<Microsoft::Xna::Framework::Graphics::VertexBuffer> wireBoxVB_;

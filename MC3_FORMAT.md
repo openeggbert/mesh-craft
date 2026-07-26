@@ -911,6 +911,20 @@ Child elements (all optional):
 | `<sockets>` | zero or more `<socket name="..." position="x y z"/>` | Named anchor points/attachment sockets in local space |
 | `<lods>` | zero or more `<lod tier="..." definition="..."/>` | LOD tier name → definition id (e.g. `tier="near"` → a higher-detail definition); `definition` may reference an id in an imported library, not just this document |
 
+**Runtime semantics (SYS-W14-29):** for an `<instance>`, the consumer first
+chooses its deterministic variant (FNV-1a of the serialized instance id; not
+an implementation-defined `std::hash` or per-frame random value), then reads
+that base definition's metadata. The live viewport treats `near`, `mid`, and
+`far` as authored definition tiers, using configurable 25 m / 75 m defaults
+and 2 m hysteresis. A missing `mid` or `far` tier falls back to the next finer
+authored tier; a missing target definition falls back safely to the base and
+is reported in the selected Instance's **Asset Definition LOD** debug panel.
+`max_visibility_distance` culls only the live viewport when positive. This is
+separate from the renderer's older primitive-tessellation LOD, which never
+changes an authored definition. glTF/GLB export has no camera-distance context
+and therefore exports the explicit `near`/default tier (including CSG
+instances), not viewport culling or a provisional LOD extension.
+
 ---
 
 ## Animations

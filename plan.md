@@ -135,21 +135,19 @@ sequentially. Per `CLAUDE.md`, recording this ordered backlog does **not**
 remove the requirement to describe and obtain explicit confirmation for each
 individual implementation task immediately before work begins.
 
-1. **SYS-W14-29 (P2/W14)** — make asset-metadata LOD references and maximum
-   visibility distance operational with deterministic selection and culling.
-2. **SYS-W14-31 (P2/W14)** — add explicit Area/object event bindings to
+1. **SYS-W14-31 (P2/W14)** — add explicit Area/object event bindings to
    triggers and scene states.
-3. **SYS-W14-14 (P2/W14, reopened)** — implement the declared MC3 coordinate
+2. **SYS-W14-14 (P2/W14, reopened)** — implement the declared MC3 coordinate
    system consistently, not merely as a write-only document field.
-4. **SYS-W3-02 (P2/W3)** — introduce narrow shared semantic-evaluation
+3. **SYS-W3-02 (P2/W3)** — introduce narrow shared semantic-evaluation
    helpers required by transform/LOD/material parity, without a broad editor
    rewrite.
-5. **SYS-W14-32/33/34 (P2/P2/P3/W14)** — deliver viewport parity in separate
+4. **SYS-W14-32/33/34 (P2/P2/P3/W14)** — deliver viewport parity in separate
    UV-mapping, point/spot-light, and CSG child-material slices.
-6. **SYS-W14-30 (P2/W14)** — expand explicit walk-mode collision proxies.
-7. **SYS-W14-35/36 (P2/P3/W14)** — preserve material structure on OBJ import,
+5. **SYS-W14-30 (P2/W14)** — expand explicit walk-mode collision proxies.
+6. **SYS-W14-35/36 (P2/P3/W14)** — preserve material structure on OBJ import,
    then add a bounded editable self-contained GLB importer.
-8. **SYS-W14-37/38/39 and SYS-W9-04 (P3)** — export optimization controls,
+7. **SYS-W14-37/38/39 and SYS-W9-04 (P3)** — export optimization controls,
     animation/export policy, Model Registry v2, and scalable history/review
     tooling.
 
@@ -2065,18 +2063,30 @@ because it is listed: `CLAUDE.md` requires per-row user confirmation.
   -LE render --output-on-failure -j4` passed 150/150. The 36 render-labelled
   tests are deterministically disabled here by the Xvfb preflight.
 
-- **SYS-W14-29** `[TODO]` `P2` — Metadata-driven asset LOD, distance culling, and deterministic variants.
-  `assetMetadata.lods` and `max_visibility_distance` round-trip and are
-  editable, while the viewport separately reduces primitive tessellation by
-  distance. Make the metadata contract operational for instances: resolve
-  near/mid/far definition ids, select tiers with configurable thresholds and
-  hysteresis, cull at the declared maximum distance, and expose a debug view
-  showing selected tier and cull reason. Keep definition-level LOD distinct
-  from the existing procedural tessellation LOD. Variant choice must use a
-  stable identity-derived seed, never per-frame randomness. Begin glTF support
-  by exporting an explicit selected/default tier; an optional LOD extension is
-  a later compatibility decision. Add CNA-free resolution tests plus viewport
-  LOD/culling coverage.
+- **SYS-W14-29** `[DONE]` `P2` — Metadata-driven asset LOD, distance culling, and deterministic variants.
+  **Implementation:** `AssetLodAlgorithms.hpp` resolves an Instance's stable
+  FNV-1a ID-derived variant before selecting metadata `near`/`mid`/`far`
+  definitions. The live viewport uses configurable 25 m/75 m thresholds and
+  2 m hysteresis (Properties ▸ Instance ▸ Asset Definition LOD), culls at a
+  positive `max_visibility_distance`, reuses the result in depth, emissive,
+  and edge-overlay passes, and shows the selected tier, definition, fallback
+  or cull reason. This authored-definition selection remains explicitly
+  separate from `lastLodLevel()`'s procedural primitive tessellation. Missing
+  tiers use a finer authored fallback; unresolved targets retain the base
+  definition with a named diagnostic. `Mc3Object` variants no longer depend
+  on implementation-defined `std::hash`. glTF/GLB (including CSG instances)
+  exports the explicit near/default definition because it has no camera
+  distance; no unproven glTF LOD extension was added. No CNA code changed.
+  **Tests:** new CNA-free `asset_lod` CTest covers resolution, case-insensitive
+  tier keys, hysteresis, culling, safe fallback, configuration normalization,
+  and portable deterministic variants; `mc3togltf_asset_lod_export` checks
+  the near/default mesh; `asset_lod_viewport_test` checks live far-tier and
+  culling stdout/screenshot coverage when a display is available. Fresh
+  `CCACHE_DISABLE=1 cmake --build b-release --target MeshCraft mc3togltf
+  asset_lod_test -j4` passed; `ctest --test-dir b-release -LE render
+  --output-on-failure -j4` passed 152/152. The 37 render-labelled tests are
+  unavailable here (36 disabled, preflight skipped) because Xvfb cannot
+  establish a display.
 
 - **SYS-W14-30** `[TODO]` `P2` — Explicit collision-proxy support beyond boxes in Walk Mode.
   Walk Mode currently honors only `collision="box"`, although MC3 can describe
