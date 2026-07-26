@@ -32,11 +32,74 @@ distribution rather than missing editor breadth.
 
 1. Obtain native standalone Windows qualification (`SYS-W11-06`). The
    release-readiness changes are published on `develop`; await the first
-   remote `windows-2022` CTest/artifact evidence.
+   remote `windows-2022` CTest/artifact evidence — see "Session log" below,
+   its first real run already landed and found real issues.
+2. Autonomous continuation in progress on the freshly-added `[PROPOSED]`
+   backlog (`SYS-W9-06/07`, `SYS-W1-08`, `SYS-W2-06`, `SYS-W11-08/09/10`,
+   `SYS-W13-03`, `SYS-W3-05`). `SYS-W9-06`, `SYS-W2-06`, `SYS-W1-08` are DONE
+   as of this update; `SYS-W9-07` is next. See `plan.md` for full evidence.
 
 `SYS-W14-40` is complete: the explicit bounded Event Preview/Play mode is
 covered by `event_preview_runner`. See `plan.md` for the remaining Windows
 qualification evidence and the full release-gate order.
+
+## Session log (2026-07-26, autonomous continuation)
+
+User explicitly authorized an unattended multi-hour session over the
+freshly-merged `[PROPOSED]` backlog, with one carved-out exception to
+"leave general CI-red alone for now": fixing the Editor (EASYGL/VULKAN) CI
+job's missing `cna` submodule checkout (mesh-craft's own workflow file, not
+CNA source — `submodules: true` added to `.github/workflows/ci.yml`'s
+Checkout CNA step).
+
+**The first real `develop` CI run (before tonight's push) surfaced 6 concrete
+regressions, deliberately left alone per the user's instruction, tracked here
+for the next pass that picks them up:**
+1. Windows: `mc3togltf`'s test suite almost entirely fails with
+   `STATUS_DLL_NOT_FOUND (0xC0000135)` — a required runtime DLL isn't next to
+   the exe on the CI runner itself, not just in a downloaded artifact.
+2. Windows: `mc3_roundtrip` — `std::filesystem::remove()` on a temp file
+   throws "cannot remove: ... being used by another process".
+3. Windows: `mcb_load_policy` — one assertion's expected rejection-message
+   text differs because of POSIX- vs Windows-style absolute-path handling.
+4. Windows: `mc3togltf_large_obj_stress` — the Python test harness does
+   `import resource` unconditionally; that module doesn't exist on Windows.
+5. Linux ASan+UBSan: `mc3_roundtrip`'s cyclic-children-graph test leaks by
+   construction (LeakSanitizer correctly flags the test fixture itself).
+6. Linux ASan+UBSan: `mc3_json_document_budget` times out at the 30s CTest
+   ceiling — confirmed (via `git stash` isolating the change) this is
+   pre-existing on unmodified code, caused by `-DCMAKE_BUILD_TYPE=Debug`
+   (~50-55s) vs. a `Release`-flagged build (~8-10s), not anything from
+   tonight's `SYS-W1-08` work.
+
+Completed and pushed, one commit each, in this order:
+- **CI fix**: `cna` submodule checkout in the Editor matrix job (`084af6f`).
+- **`SYS-W9-06`** (`edcc677`): one portable atomic-file-replace primitive
+  (`Mc3::writeFileAtomically`/`uniqueSiblingTempPath`,
+  `mc3/include/MeshCraft/Mc3/Mc3AtomicFileWriter.hpp`) replacing the 4
+  duplicated fixed-`.tmp`-name write-then-rename call sites in
+  `Mc3XmlWriter`/`Mc3JsonWriter`/`McbWriter`/`GltfExporter`'s GLB path.
+- **`SYS-W2-06`** (`a7ecc90`): fixed `budgetedLuaAllocator()`'s new-allocation
+  accounting bug (a new object's `oldSize` is Lua's type tag, not a real
+  prior size — confirmed against the vendored Lua 5.4 source). Moved to
+  header-only `include/MeshCraft/Editor/LuaMemoryBudget.hpp`.
+- **`SYS-W1-08`** (`a0b4530`): `Mc3JsonParser` gained the same
+  `Mc3Validation`-capturing diagnostics `Mc3XmlParser` already had; wired
+  `loadSceneFileDispatched()` and both `.mc3lib` loaders through it.
+
+Each commit built and tested clean (standalone `mc3`/`mcb`/`mc3togltf`, the
+full root `MeshCraft` editor target, and the affected root-project test
+subset) before committing. The 3 pre-existing `mc3togltf_blender_import`
+family failures (missing `numpy` in this sandbox's Blender) are unrelated
+environment gaps, not regressions, and were left alone.
+
+**Next up in this continuation**: `SYS-W9-07` (untitled-scene crash
+recovery), then `SYS-W11-08`/`SYS-W11-09`/`SYS-W13-03`/`SYS-W11-10`/
+`SYS-W3-05` in that order (see `plan.md`'s recommended ordering note on
+`SYS-W11-06`). If this file wasn't updated further after this paragraph and
+the session ended, check `git log` on `develop` and `plan.md`'s own
+`[DONE]`/`[IN_PROGRESS]` markers for the true current state before assuming
+anything below this point is stale.
 
 ## Known release blockers and decisions
 
