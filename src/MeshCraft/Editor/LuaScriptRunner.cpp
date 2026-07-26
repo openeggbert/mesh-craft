@@ -1,6 +1,7 @@
 #include "MeshCraft/Editor/LuaScriptRunner.hpp"
 
 #include "MeshCraft/EditorAlgorithms.hpp"
+#include "MeshCraft/Editor/LuaMemoryBudget.hpp"
 #include "MeshCraft/Mc3/Mc3Object.hpp"
 
 #define SOL_ALL_SAFETIES_ON 1
@@ -20,33 +21,6 @@ using namespace MeshCraft::Mc3;
 namespace MeshCraft::Editor {
 
 namespace {
-
-constexpr std::size_t kLuaMemoryBudgetBytes = 16U * 1024U * 1024U;
-
-struct LuaMemoryBudget {
-    std::size_t allocated{0};
-};
-
-// Lua uses this allocator for every VM allocation.  Its `oldSize` contract
-// lets the runner enforce a strict aggregate budget without exposing a custom
-// allocator or an unbounded auxiliary allocation map to script code.
-void* budgetedLuaAllocator(void* userData, void* pointer, std::size_t oldSize,
-                           std::size_t newSize) noexcept
-{
-    auto& budget = *static_cast<LuaMemoryBudget*>(userData);
-    const std::size_t retained = oldSize <= budget.allocated
-        ? budget.allocated - oldSize : 0;
-    if (newSize == 0) {
-        std::free(pointer);
-        budget.allocated = retained;
-        return nullptr;
-    }
-    if (newSize > kLuaMemoryBudgetBytes - retained) return nullptr;
-    void* replacement = std::realloc(pointer, newSize);
-    if (!replacement) return nullptr;
-    budget.allocated = retained + newSize;
-    return replacement;
-}
 
 bool finite(float value) { return std::isfinite(value); }
 

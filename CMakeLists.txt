@@ -1038,6 +1038,20 @@ if(MESH_CRAFT_BUILD_TESTING AND UNIX AND NOT ANDROID AND NOT EMSCRIPTEN)
     add_test(NAME lua_script_runner COMMAND lua_script_runner_test)
     set_tests_properties(lua_script_runner PROPERTIES TIMEOUT 30 LABELS "unit")
 
+    # SYS-W2-06: budgetedLuaAllocator() exercised directly against Lua's real
+    # lua_Alloc contract (hand-crafted call sequences matching
+    # luaM_malloc_/luaM_realloc_/luaM_free_'s exact pointer/oldSize/newSize
+    # shapes) rather than indirectly through real Lua execution, whose GC
+    # scheduling makes deterministically forcing a specific accounting
+    # sequence impractical. Header-only, no Lua/sol2 dependency.
+    add_executable(lua_memory_budget_test
+        ${CMAKE_CURRENT_SOURCE_DIR}/test/lua_memory_budget_test.cpp)
+    target_include_directories(lua_memory_budget_test PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/include)
+    target_compile_features(lua_memory_budget_test PRIVATE cxx_std_23)
+    add_test(NAME lua_memory_budget COMMAND lua_memory_budget_test)
+    set_tests_properties(lua_memory_budget PROPERTIES TIMEOUT 15 LABELS "unit")
+
     # Pure unit test: ObjectType <-> display-name round-trip. Header-only.
     # Regression guard for the Torus/Capsule/Disk/Grid/IcoSphere -> "Object"
     # mislabel and the lossy macro round-trip.

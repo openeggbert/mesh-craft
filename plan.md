@@ -163,22 +163,39 @@ time; re-evaluate scope and blockers before starting each item.
   mutation followed by error, loops, excess allocation, non-finite transforms,
   invalid material references, placement and trigger-driven execution.
 
-- **SYS-W2-06** `[PROPOSED]` `P1` — Make the Lua allocator budget accounting
-  exact. `budgetedLuaAllocator()` (`LuaScriptRunner.cpp:33-48`) always treats
-  `oldSize` as the size of a previously-owned block:
-  `retained = oldSize <= budget.allocated ? budget.allocated - oldSize : 0`.
-  Per the Lua 5.4 `lua_Alloc` contract, when `pointer == nullptr` (a genuinely
-  new allocation) `oldSize` does not encode a real prior block size — it
-  encodes an object-kind tag. The current code still subtracts that tag value
-  from `budget.allocated` on every new allocation, so the aggregate budget
-  silently drifts low across many small allocations instead of tracking real
-  usage. Distinguish the new-allocation case from a resize before interpreting
-  `oldSize`, and prove peak Lua-owned memory cannot exceed the configured
-  16 MiB budget under realistic allocation patterns. **Tests:** one oversized
-  allocation (existing), many small tables, many short strings, table growth,
-  grow/shrink reallocations, collection followed by reallocation, failed
-  allocation rollback, and a successful transaction immediately below the
-  limit.
+- **SYS-W2-06** `[DONE]` `P1` — Made the Lua allocator budget accounting
+  exact. `budgetedLuaAllocator()` always treated `oldSize` as the size of a
+  previously-owned block, even when `pointer == nullptr` (a genuinely new
+  allocation), for which Lua's `lua_Alloc` contract instead passes an
+  object-kind tag (confirmed against the vendored Lua 5.4 source: `luaC_newobj`
+  → `luaM_malloc_(L, size, tag)` → `frealloc(ud, NULL, tag, size)`, versus
+  `luaM_realloc_`/`luaM_free_`'s `lua_assert((osize == 0) == (block == NULL))`,
+  which holds only for a real resize/free of an existing block). Subtracting
+  that tag from `budget.allocated` on every new allocation silently eroded the
+  tracked total below real usage across many small allocations. Moved the
+  allocator out of `LuaScriptRunner.cpp`'s anonymous namespace into a new
+  header-only `include/MeshCraft/Editor/LuaMemoryBudget.hpp` (no other call
+  site changes needed; `LuaScriptRunner.cpp` is compiled directly into 4
+  different test targets, not linked as a shared library) and made it branch
+  on `pointer == nullptr` before computing `retained`.
+  New `test/lua_memory_budget_test.cpp` (`lua_memory_budget`, header-only, no
+  Lua/sol2 dependency) calls the allocator directly with hand-crafted
+  call sequences matching each of `luaM_malloc_`/`luaM_realloc_`/`luaM_free_`'s
+  exact `(pointer, oldSize, newSize)` shapes — deterministic and independent
+  of Lua's own GC scheduling, unlike probing this through real script
+  execution. Covers many small held table/string-shaped allocations (exact
+  tracked-total equality after each), table growth, grow/shrink
+  reallocations, collection followed by reallocation reclaiming real
+  headroom, failed-allocation/failed-resize rollback leaving the tracked
+  total untouched, and a successful transaction at exactly the 16 MiB limit
+  plus rejection at limit+1. Verified discriminating: temporarily reverting
+  just the `pointer == nullptr` branch reproduces 4 failing assertions
+  (the exact-equality checks after many small held allocations, and the
+  15 MiB-held-before-collection check), confirming the fix — not just the new
+  test file's presence — is what the tests depend on. `lua_memory_budget`,
+  `lua_script_runner`, `automation_workspace`, `trigger_fire`, and
+  `event_preview_runner` (the 4 targets that compile `LuaScriptRunner.cpp`)
+  all built and passed after the move.
 
 ### W12 — Performance baselines
 
