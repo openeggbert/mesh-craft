@@ -135,7 +135,7 @@ sequentially. Per `CLAUDE.md`, recording this ordered backlog does **not**
 remove the requirement to describe and obtain explicit confirmation for each
 individual implementation task immediately before work begins.
 
-1. **SYS-W9-04 (P3)** — scalable history/review tooling.
+No further user-authorized implementation task remains in this queue.
 
 The existing platform tasks (`SYS-W8-05`, `AUD-042`, `SYS-W14-09`) remain
 their own owner/toolchain-gated work and are intentionally not duplicated.
@@ -2296,14 +2296,42 @@ because it is listed: `CLAUDE.md` requires per-row user confirmation.
   (158/158). Render tests remain preflight-disabled locally
   because this host has no usable Xvfb display.
 
-- **SYS-W9-04** `[TODO]` `P3` — Memory-budgeted history, named checkpoints, and scene review diffs.
-  The current 20-entry whole-document deep-copy undo stack is safe but limits
-  long sessions. Design a separate history subsystem with an explicit memory
-  budget, named checkpoints, restore points, and object-level scene-diff
-  review, while preserving exact current undo/redo behavior and selection
-  restore. Do not weaken capture-before-mutation guarantees or introduce a
-  broad command-pattern rewrite without measured benefit. Add eviction,
-  checkpoint, restore, diff, redo-invalidation, and large-document tests.
+- **SYS-W9-04** `[DONE]` `P3` — Memory-budgeted history, named checkpoints, and scene review diffs.
+  **Implemented 2026-07-26.** New CNA-free `Editor::SceneHistory` is a
+  deliberately separate review/checkpoint timeline; `UndoManager` remains the
+  exact 20-entry deep-copy undo/redo stack with its paired selection restore
+  and existing redo-invalidation behavior unchanged. Each capture-before-edit
+  point also offers a separate automatic review snapshot, while the dialog can
+  capture the current scene as a named checkpoint. Its explicit default is a
+  64 MiB **logical ownership estimate** (not a false claim of allocator-exact
+  resident memory): automatic capture evicts oldest automatic snapshots first;
+  named checkpoints are preserved from ordinary automatic eviction, and an
+  automatic point that cannot fit is rejected without deleting prior history.
+  A new checkpoint or a lowered explicit budget may evict the oldest remaining
+  checkpoint so the configured cap is never advisory; a single oversize
+  snapshot is rejected.
+
+  **Edit → History & Checkpoints...** retains the existing Undo jump list and
+  adds budget controls, named checkpoint creation, undoable restore (document
+  plus stored selection), removal, and a capped review list. Review compares a
+  selected snapshot with the current scene by stable object ID (path fallback
+  for empty/duplicate IDs), reports added/removed/modified objects and changed
+  scene resources, and caps displayed detail at 256 while retaining totals.
+  Restore rehydrates local imports and reports a resolution issue rather than
+  silently claiming success. New/Open/autosave recovery clear both undo and
+  review history, preventing cross-document restore. No command-pattern
+  rewrite, persistence, account, sync, or external collaboration was added.
+
+  **Tests:** new `scene_history_test` covers budget eviction, checkpoint
+  retention, rejected automatic capture without collateral eviction,
+  restore-with-selection and deep-copy independence, oversize/large-document
+  behavior, and object/resource diff review (13 assertions). The existing
+  real `undo_manager_test` continues to cover exact redo invalidation. Release
+  build and full CTest after the change: 171/171 runnable passed, 40
+  display-dependent registrations disabled by the host's Xvfb preflight, and
+  one display preflight skipped (0 failures); `ctest -N` registers 211 tests.
+  `README.md`, `docs/USER_GUIDE.md`, `NEXT.md`, and `TESTING.md` document the
+  separate scope and lifetime.
 
 ## Audit-derived tasks (AUD-###)
 

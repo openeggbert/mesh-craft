@@ -648,10 +648,24 @@ void MeshCraftApplication::restoreSelectionByIds(const std::vector<std::string>&
 }
 
 // SYS-W3-01 Phase 4: the stack push-then-trim-to-cap mechanism itself now
-// lives in Editor::UndoManager (AUD-031's pushWithCapAlg moved with it) --
-// this just prepares an independent copy of the current state for it.
+// lives in Editor::UndoManager (AUD-031's pushWithCapAlg moved with it).
+// SYS-W9-04 additionally keeps an independent, memory-budgeted review
+// timeline. The two snapshots must not share object pointers: a later
+// in-place editor mutation must never alter either undo or checkpoint state.
 void MeshCraftApplication::pushUndo() {
-    undoManager_.push(deepCopyDoc(document_), currentSelectionIds());
+    auto selectionIds = currentSelectionIds();
+    auto historySnapshot = deepCopyDoc(document_);
+    undoManager_.push(deepCopyDoc(historySnapshot), selectionIds);
+    const auto captured = sceneHistory_.capture(std::move(historySnapshot), std::move(selectionIds),
+                                                "Before edit", Editor::SceneHistory::SnapshotKind::Automatic);
+    if (!captured.stored) {
+        historyNotice_ = captured.message;
+    } else if (captured.evictedCount > 0) {
+        historyNotice_ = "Automatic history evicted " + std::to_string(captured.evictedCount) +
+                         " older snapshot(s) to stay within budget";
+    } else {
+        historyNotice_.clear();
+    }
     // CSG cache no longer cleared here: hash-based invalidation handles it (K1)
     // SYS-W5-04: called before virtually every mutating command, so this is
     // objectIndex_'s single invalidation choke point for in-place tree edits.
@@ -700,6 +714,48 @@ void MeshCraftApplication::performRedo() {
     modified_ = true;
     updateWindowTitle();
     evaluateAndPushAnimOverrides();
+}
+
+void MeshCraftApplication::captureSceneCheckpoint(const std::string& label) {
+    const auto captured = sceneHistory_.capture(
+        deepCopyDoc(document_), currentSelectionIds(), label, Editor::SceneHistory::SnapshotKind::Checkpoint);
+    if (!captured.stored) {
+        historyNotice_ = captured.message;
+        setStatusMsg("Checkpoint was not stored: " + captured.message, true);
+        return;
+    }
+    historyNotice_ = captured.evictedCount == 0 ? std::string{} :
+        "Checkpoint storage evicted " + std::to_string(captured.evictedCount) + " older snapshot(s)";
+    setStatusMsg("Stored checkpoint '" +
+                 (label.empty() ? std::string("Checkpoint") : label) + "'");
+}
+
+void MeshCraftApplication::restoreSceneHistorySnapshot(Editor::SceneHistory::SnapshotId id) {
+    const auto restored = sceneHistory_.restore(id);
+    if (!restored) {
+        setStatusMsg("History snapshot is no longer available", true);
+        return;
+    }
+    // Restoring a review point is itself a document mutation. Preserve the
+    // current scene in the unchanged exact undo stack first, so Ctrl+Z can
+    // return from a checkpoint restore just like it can from every editor
+    // command (and capture the same pre-restore state for review history).
+    pushUndo();
+    document_ = std::move(restored->doc);
+    objectIndex_.invalidate();
+    resetEventBindingSimulation();
+    resetImportHealth();
+    restoreSelectionByIds(restored->selectionIds);
+    if (!document_.imports.empty()) resolveImports();
+    modified_ = true;
+    updateWindowTitle();
+    evaluateAndPushAnimOverrides();
+    if (importHealthError_.empty()) {
+        setStatusMsg("Restored scene-history snapshot");
+    } else {
+        setStatusMsg("Restored scene-history snapshot, but import resolution needs attention: " +
+                     importHealthError_, true);
+    }
 }
 
 // ---------------------------------------------------------------------------

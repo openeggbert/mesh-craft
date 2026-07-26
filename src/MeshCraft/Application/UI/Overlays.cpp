@@ -950,18 +950,20 @@ void MeshCraftApplication::drawDialogs()
     }
 
     // -----------------------------------------------------------------------
-    // Undo History dialog
+    // Undo/history review dialog. The first section preserves the existing
+    // short exact undo stack; the second exposes SYS-W9-04's separately
+    // budgeted session snapshots and named checkpoints.
     // -----------------------------------------------------------------------
     if (undoHistoryOpen_) {
-        ImGui::OpenPopup("Undo History##uhdlg");
+        ImGui::OpenPopup("History & Checkpoints##uhdlg");
         undoHistoryOpen_ = false;
     }
-    if (ImGui::BeginPopupModal("Undo History##uhdlg", nullptr,
+    if (ImGui::BeginPopupModal("History & Checkpoints##uhdlg", nullptr,
                                ImGuiWindowFlags_AlwaysAutoResize)) {
         int n = undoManager_.undoCount();
-        ImGui::TextDisabled("%d step(s) available  (newest first)", n);
+        ImGui::TextDisabled("Undo: %d exact step(s), newest first", n);
         ImGui::Separator();
-        ImGui::BeginChild("##uhscroll", ImVec2(340, std::min(n * 22 + 8, 300)), false);
+        ImGui::BeginChild("##uhscroll", ImVec2(620, std::clamp(n * 22 + 8, 42, 180)), false);
 
         // Current state (top of stack = most recent undo point)
         ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.55f, 1.0f, 0.55f, 1.0f));
@@ -990,6 +992,92 @@ void MeshCraftApplication::drawDialogs()
             }
         }
         ImGui::EndChild();
+
+        ImGui::Separator();
+        const auto mib = [](std::size_t bytes) {
+            return static_cast<double>(bytes) / (1024.0 * 1024.0);
+        };
+        ImGui::Text("Session history: %zu snapshot(s), %.1f / %.1f MiB",
+                    sceneHistory_.snapshotCount(), mib(sceneHistory_.usedBytes()),
+                    mib(sceneHistory_.budgetBytes()));
+        ImGui::SameLine();
+        ImGui::SetNextItemWidth(110.0f);
+        if (ImGui::DragInt("Budget MiB##history", &historyBudgetMiB_, 1.0f, 1, 1024)) {
+            const auto result = sceneHistory_.setBudgetBytes(
+                static_cast<std::size_t>(historyBudgetMiB_) * 1024u * 1024u);
+            if (result.evictedCount > 0)
+                historyNotice_ = "Budget change evicted " + std::to_string(result.evictedCount) + " snapshot(s)";
+        }
+        if (!historyNotice_.empty())
+            ImGui::TextDisabled("%s", historyNotice_.c_str());
+
+        ImGui::SetNextItemWidth(350.0f);
+        ImGui::InputTextWithHint("##checkpointname", "Checkpoint name (optional)",
+                                 historyCheckpointNameBuf_, sizeof(historyCheckpointNameBuf_));
+        ImGui::SameLine();
+        if (ImGui::Button("Create checkpoint")) {
+            captureSceneCheckpoint(historyCheckpointNameBuf_);
+            historyCheckpointNameBuf_[0] = '\0';
+        }
+
+        const auto snapshots = sceneHistory_.snapshots();
+        ImGui::BeginChild("##historysnapshots", ImVec2(620, std::clamp(
+                          28.0f * static_cast<float>(snapshots.size()) + 8.0f, 52.0f, 220.0f)), true);
+        if (snapshots.empty()) {
+            ImGui::TextDisabled("No session snapshots yet. Edits create automatic restore points.");
+        }
+        for (auto it = snapshots.rbegin(); it != snapshots.rend(); ++it) {
+            const auto& snapshot = *it;
+            ImGui::PushID(static_cast<int>(snapshot.id));
+            ImGui::Text("%s  #%llu  · %zu object%s · %.1f KiB",
+                        snapshot.kind == Editor::SceneHistory::SnapshotKind::Checkpoint ? "Checkpoint" : "Auto",
+                        static_cast<unsigned long long>(snapshot.id), snapshot.objectCount,
+                        snapshot.objectCount == 1 ? "" : "s",
+                        static_cast<double>(snapshot.estimatedBytes) / 1024.0);
+            ImGui::SameLine();
+            ImGui::TextDisabled("%s", snapshot.label.c_str());
+            ImGui::SameLine();
+            if (ImGui::SmallButton("Restore")) {
+                restoreSceneHistorySnapshot(snapshot.id);
+                historyReviewSnapshotId_.reset();
+            }
+            ImGui::SameLine();
+            if (ImGui::SmallButton("Review")) historyReviewSnapshotId_ = snapshot.id;
+            ImGui::SameLine();
+            if (ImGui::SmallButton("X")) {
+                sceneHistory_.remove(snapshot.id);
+                if (historyReviewSnapshotId_ && *historyReviewSnapshotId_ == snapshot.id)
+                    historyReviewSnapshotId_.reset();
+            }
+            if (ImGui::IsItemHovered()) ImGui::SetTooltip("Remove this session snapshot");
+            ImGui::PopID();
+        }
+        ImGui::EndChild();
+
+        if (historyReviewSnapshotId_) {
+            const auto diff = sceneHistory_.diffAgainst(*historyReviewSnapshotId_, document_);
+            if (!diff) {
+                historyReviewSnapshotId_.reset();
+            } else {
+                ImGui::Separator();
+                ImGui::Text("Scene review: %zu added, %zu removed, %zu modified%s",
+                            diff->addedCount, diff->removedCount, diff->modifiedCount,
+                            diff->truncated ? " (list truncated)" : "");
+                ImGui::BeginChild("##historydiff", ImVec2(620, 150), true);
+                for (const auto& change : diff->changes) {
+                    const char* verb = change.kind == Editor::SceneHistory::ChangeKind::Added ? "Added" :
+                        (change.kind == Editor::SceneHistory::ChangeKind::Removed ? "Removed" : "Modified");
+                    const ImVec4 color = change.kind == Editor::SceneHistory::ChangeKind::Added
+                        ? ImVec4(0.45f, 0.95f, 0.55f, 1.0f)
+                        : (change.kind == Editor::SceneHistory::ChangeKind::Removed
+                            ? ImVec4(1.0f, 0.50f, 0.45f, 1.0f) : ImVec4(1.0f, 0.82f, 0.40f, 1.0f));
+                    ImGui::TextColored(color, "%s", verb);
+                    ImGui::SameLine();
+                    ImGui::Text("%s — %s", change.objectId.c_str(), change.detail.c_str());
+                }
+                ImGui::EndChild();
+            }
+        }
         ImGui::Separator();
         if (ImGui::Button("Close", ImVec2(100, 0)) || ImGui::IsKeyPressed(ImGuiKey_Escape, false))
             ImGui::CloseCurrentPopup();
@@ -1050,6 +1138,9 @@ void MeshCraftApplication::drawDialogs()
                 addRecentFile(currentFile_);
                 selection_.clear();
                 undoManager_.clear();
+                sceneHistory_.clear();
+                historyReviewSnapshotId_.reset();
+                historyNotice_.clear();
                 // STAB-0250: same rationale as the "Open Recent File" path —
                 // without this, a stale CSG preview cache entry from the
                 // previous document could collide (same content hash) with a
@@ -1106,6 +1197,9 @@ void MeshCraftApplication::drawDialogs()
                 addRecentFile(currentFile_);
                 selection_.clear();
                 undoManager_.clear();
+                sceneHistory_.clear();
+                historyReviewSnapshotId_.reset();
+                historyNotice_.clear();
                 if (sceneRenderer_) {
                     sceneRenderer_->setAnimOverrides({});
                     sceneRenderer_->clearCsgCache();

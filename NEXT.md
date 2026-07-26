@@ -862,10 +862,14 @@ blocked in sibling `sharp-runtime` before CNA graphics compile.
   `allowIncludes`/`confineIncludesToRoot`/`maxIncludeDepth` are XML-only
   — `.mc3.json`'s `includes` field is an inert passthrough list with no
   merge behavior to gate.
-- **Undo/redo:** whole-document snapshot-based (deep copy on every
-  mutating command), not command/diff-based, in `Editor::UndoManager`.
-  `pushUndo()`/`performUndo()`/`performRedo()` on
-  `MeshCraftApplication` are thin wrappers. 20-entry cap, by design.
+- **Undo/redo and review history:** `Editor::UndoManager` remains the exact
+  whole-document snapshot undo/redo mechanism (20 entries, selection paired
+  with each state). `Editor::SceneHistory` is intentionally separate: each
+  mutation also offers a bounded, local review restore point, with a 64 MiB
+  default logical-memory budget, named checkpoints, restore-with-selection,
+  and object/resource diff review. It is not a command-pattern rewrite, does
+  not affect redo invalidation, is cleared on New/Open/recovery, and is never
+  synced or persisted across sessions.
 - **`mc3.xsd` is compiled into the binary at configure time** — editing
   it requires a reconfigure, not just a rebuild.
 - **XML comment gotcha:** a literal `--` inside an XML comment is

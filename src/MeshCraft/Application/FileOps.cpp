@@ -58,6 +58,10 @@ std::string exportReportText(const mc3togltf::ExportReportEntry& entry) {
 
 void MeshCraftApplication::newScene() {
     document_ = Mc3::Mc3Document{};
+    undoManager_.clear();
+    sceneHistory_.clear();
+    historyReviewSnapshotId_.reset();
+    historyNotice_.clear();
     resetEventBindingSimulation();
     resetImportHealth();
     objectIndex_.invalidate();  // SYS-W5-04: wholesale document_ replacement
@@ -146,6 +150,9 @@ void MeshCraftApplication::recoverFromAutosave() {
         addRecentFile(currentFile_);
         selection_.clear();
         undoManager_.clear();
+        sceneHistory_.clear();
+        historyReviewSnapshotId_.reset();
+        historyNotice_.clear();
         if (sceneRenderer_) {
             sceneRenderer_->setAnimOverrides({});
             sceneRenderer_->clearCsgCache();
@@ -353,6 +360,9 @@ void MeshCraftApplication::executePendingAction() {
                 addRecentFile(currentFile_);
                 selection_.clear();
                 undoManager_.clear();
+                sceneHistory_.clear();
+                historyReviewSnapshotId_.reset();
+                historyNotice_.clear();
                 if (sceneRenderer_) {
                     sceneRenderer_->setAnimOverrides({});
                     sceneRenderer_->clearCsgCache();

@@ -781,6 +781,21 @@ if(MESH_CRAFT_BUILD_TESTING AND UNIX AND NOT ANDROID AND NOT EMSCRIPTEN)
     add_test(NAME undo_manager COMMAND undo_manager_test)
     set_tests_properties(undo_manager PROPERTIES TIMEOUT 15 LABELS "unit")
 
+    # SYS-W9-04: a separately-budgeted review/checkpoint timeline must keep
+    # the exact UndoManager contract untouched. CNA-free: it owns MC3 value
+    # snapshots only, so eviction, restore and object-level diff behavior can
+    # be tested without an editor window.
+    add_executable(scene_history_test
+        ${CMAKE_CURRENT_SOURCE_DIR}/test/scene_history_test.cpp
+        ${CMAKE_CURRENT_SOURCE_DIR}/src/MeshCraft/Editor/SceneHistory.cpp)
+    target_include_directories(scene_history_test PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/include
+        ${CMAKE_CURRENT_SOURCE_DIR}/mc3/include)
+    target_link_libraries(scene_history_test PRIVATE Mc3)
+    target_compile_features(scene_history_test PRIVATE cxx_std_23)
+    add_test(NAME scene_history COMMAND scene_history_test)
+    set_tests_properties(scene_history PROPERTIES TIMEOUT 15 LABELS "unit")
+
     # F7 (2026-07-20 audit): Model Registry Insert's undo ordering.
     # drawRegistryPanel()'s Insert handler (MeshCraftApplication_UiRegistry.cpp)
     # is not headlessly callable (full ImGui panel tied into the

@@ -16,6 +16,7 @@
 #include "MeshCraft/Editor/ObjectIndex.hpp"
 #include "MeshCraft/Editor/Preferences.hpp"
 #include "MeshCraft/Editor/SelectionManager.hpp"
+#include "MeshCraft/Editor/SceneHistory.hpp"
 #include "MeshCraft/Editor/StatusNotification.hpp"
 #include "MeshCraft/Editor/TransformGizmo.hpp"
 #include "MeshCraft/Editor/TransformClipboard.hpp"
@@ -673,8 +674,13 @@ private:
     // Help dialog
     bool showShortcutsDialog_{false};
 
-    // Undo history dialog
+    // Undo/history review dialog. UndoManager remains the exact short undo
+    // stack; SceneHistory is a separately budgeted checkpoint/review timeline.
     bool undoHistoryOpen_{false};
+    char historyCheckpointNameBuf_[128]{};
+    int historyBudgetMiB_{64};
+    std::optional<Editor::SceneHistory::SnapshotId> historyReviewSnapshotId_;
+    std::string historyNotice_;
 
     // Command palette
     bool cmdPaletteOpen_{false};
@@ -816,11 +822,14 @@ private:
     // they need selection_/flatFindSharedById(), which UndoManager has no
     // dependency on by design.
     Editor::UndoManager undoManager_;
+    Editor::SceneHistory sceneHistory_;
     [[nodiscard]] std::vector<std::string> currentSelectionIds() const;
     void restoreSelectionByIds(const std::vector<std::string>& ids);
     void pushUndo();
     void performUndo();
     void performRedo();
+    void captureSceneCheckpoint(const std::string& label);
+    void restoreSceneHistorySnapshot(Editor::SceneHistory::SnapshotId id);
 
     // AUD-036b: central helper for the mutating-widget undo pattern. Call
     // immediately after a Drag*/ColorEdit*/Input* widget, passing its own

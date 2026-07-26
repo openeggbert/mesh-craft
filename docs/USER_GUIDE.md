@@ -118,9 +118,13 @@ separate animations and leave the MC3 action's source keyframes unchanged.
 
 ## Next steps
 
-- **Undo/redo**: every mutating command (add, delete, transform, ...)
-  pushes an undo entry — `Ctrl+Z`/`Ctrl+Y` (Edit menu also has
-  "Undo History..." to see the stack).
+- **Undo/redo and checkpoints**: every mutating command (add, delete,
+  transform, ...) pushes an exact undo entry — `Ctrl+Z`/`Ctrl+Y`. **Edit →
+  History & Checkpoints...** also shows a separate 64 MiB session-history
+  timeline. Create a named checkpoint, restore it (including the stored
+  selection; restoring is itself undoable), or review added/removed/modified
+  objects against the current scene. The budget can be adjusted in the dialog; this history is local to
+  the current open scene and is cleared by New/Open/recovery.
 - **Materials**: assign one in the Properties panel once you've
   created a material (Materials panel, not covered here).
 - **Groups, instances, CSG booleans, animation**: see `MC3_FORMAT.md`

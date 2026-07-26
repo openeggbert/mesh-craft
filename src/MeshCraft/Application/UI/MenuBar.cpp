@@ -694,7 +694,7 @@ void MenuBar::drawFileExit(const FileExitContext& context) {
 void MenuBar::drawEditHistory(const EditHistoryContext& context) {
     if (ImGui::MenuItem("Undo", "Ctrl+Z", false, context.canUndo)) context.undo();
     if (ImGui::MenuItem("Redo", "Ctrl+Y", false, context.canRedo)) context.redo();
-    if (ImGui::MenuItem("Undo History...", nullptr, false, context.canUndo)) {
+    if (ImGui::MenuItem("History & Checkpoints...")) {
         context.openHistory();
     }
     ImGui::Separator();

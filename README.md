@@ -270,7 +270,7 @@ reference.
 - Fog, environment background, emissive bloom post-process
 - First-person walk mode
 - GLB export settings UI; headless screenshot mode
-- Undo/redo (20-step deep-copy stack)
+- Undo/redo (exact 20-step deep-copy stack) plus a separate local, memory-budgeted session-history/checkpoint review dialog
 - Auto-save with rotating backups
 - MCB binary format (`mc3tomcb`)
 - glTF/GLB export (`mc3togltf`) with geometry reuse — repeated identical primitives, OBJ meshes, extrude shapes, and `<instance>` nodes share one glTF mesh buffer per unique geometry+material combination
