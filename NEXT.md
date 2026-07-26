@@ -1,6 +1,6 @@
 # NEXT.md
 
-_Last updated: 2026-07-25. The raw-OpenGL(ES)-vs-CNA audit group
+_Last updated: 2026-07-26. The raw-OpenGL(ES)-vs-CNA audit group
 `AUD-082` through `AUD-088` is now complete. The final row, `AUD-085`
 (SSAO), was implemented as a CNA depth-to-color pre-pass: the renderer
 re-draws scene geometry with a 3D `ShaderEffect` into a `RenderTarget2D`,
@@ -72,8 +72,9 @@ depth-to-color pre-pass. `plan.md`'s remaining
 `AUD-###` rows were all `DONE`/`DEFERRED` except `AUD-042` (Android) until
 the 2026-07-25 follow-up audit filed `AUD-089` through `AUD-091`: CLI
 screenshot failure reporting, render-test environment/labels, and an AI
-definitions-only response timeout. Android remains deferred for a future
-Android-capable environment.
+definitions-only response timeout. Android is a supported product target:
+commit `20a5473` now selects its GLES/EASYGL source path, while NDK,
+packaging, and device validation remain externally blocked.
 The project is in an **ongoing hardening / bug-fixing** phase, not
 active new-feature development, though scoped new features have landed
 before when explicitly requested (`SYS-W14-##` rows).
@@ -107,8 +108,8 @@ before when explicitly requested (`SYS-W14-##` rows).
 - **Last full build: clean after `SYS-W14-06` CSG output support.** Testing is enabled in the current Ninja Release tree, and
   `CCACHE_DISABLE=1 cmake --build b-release -j4` linked all targets successfully
   on EASYGL. Alternate-backend runtime qualification remains blocked.
-- **Tests:** the fresh Release tree registers 184 tests. All passed after
-  `SYS-W14-06` in two disjoint groups: 148/148 non-render tests and 36/36
+- **Tests:** the fresh Release tree registers 185 tests. All passed after
+  `AUD-042` in two disjoint groups: 149/149 non-render tests and 36/36
   render-labelled tests under Xvfb (with local loopback/X11 socket access).
   `mc3togltf_csg_shading_materials` reads a real GLB to assert smooth CSG
   normals, generated UVs, and preserved child-material primitives; the CSG
@@ -669,8 +670,9 @@ The P1 alternate-backend qualification (`SYS-W8-05`) remains blocked by CNA's
 missing cross-backend custom-effect contract and a first-frame Vulkan backend
 crash outside this repository. Broad backend qualification is now deliberately
 postponed by user priority. Android (`AUD-042`) is an intended supported
-platform, but this workspace has no Android NDK and a real GLES/EASYGL editor
-path still requires CNA/backend validation.
+platform. Commit `20a5473` forces its source build to GLES/EASYGL rather than
+SDL_RENDERER; this workspace still has no Android NDK, and validation is
+blocked in sibling `sharp-runtime` before CNA graphics compile.
 
 ## 5. Known bugs and limitations
 
@@ -862,8 +864,8 @@ git stash pop && cmake --build b-release -j4 --target <affected-target>
 ## 8. Next smallest tasks
 
 No actionable follow-up audit task remains: `AUD-089` through `AUD-092` are
-complete. Android (`AUD-042`) remains environment-blocked, but is now an
-explicit supported-platform goal rather than a possible rejection path.
+complete. Android (`AUD-042`) now chooses its GLES/EASYGL source path and
+remains externally blocked only on NDK/dependency/package/device validation.
 `SYS-W3-01` has 12 completed subsystem phases; its Phase 13 application/UI
 ownership work is deferred by user priority. The completed Camera Bookmarks, Camera Preset Overlay, Gizmo Drag Overlay, Stats Overlay, Measurement Overlay, Status Bar, Walk Mode, View
 Bloom/SSAO, Help, Add/CSG, Edit-history, Edit-clipboard, and Edit-object-actions
@@ -1152,18 +1154,24 @@ be a separately scoped subsystem, not another mechanical `Overlays.cpp` slice.
   them, valid CSG-root XML serialization for `uv_mapping` (the generic
   MCB/JSON object layouts already retained it), and the live preview shares
   the new geometry/UV path (its material split remains export-only).
-- **Next autonomous starting point:** reassess remaining plan `[TODO]` items
-  after the completed W14 priority slice; do not reopen the deferred backend,
-  Android-toolchain, or broad `SYS-W3-01` work without their documented
-  external prerequisites.
+- **AUD-042:** commit `20a5473` replaces Android's forced `SDL_RENDERER` with
+  GLES/EASYGL and adds the CMake-level regression test. The full Release build
+  and 149/149 non-render + 36/36 render partitions pass; the absent NDK and
+  sibling `sharp-runtime` cross-compile failure prevent an APK/device claim.
+- **Next autonomous starting point:** install/provide a working Android NDK
+  after the sibling `sharp-runtime` Android errors are resolved, then run an
+  arm64-v8a configure/build, package through SDLActivity/Gradle, and smoke-test
+  the editor on a device/emulator. Keep broad alternate-backend and `SYS-W3-01`
+  work deferred by the recorded user priority.
 
 ### Tracked work that is not implementation-ready
 
 - **SYS-W8-05:** broad alternate-backend support is intentionally postponed
   while the current W14 feature work has priority; it still needs the
   appropriate backend environment and CNA owner coordination.
-- **AUD-042:** Android is a supported product target but remains blocked until
-  an Android-capable toolchain and viable graphics-backend path are available.
+- **AUD-042:** Android is a supported product target and now has a viable
+  GLES/EASYGL source selection; it remains blocked on the Android NDK,
+  sibling `sharp-runtime` cross-build repair, packaging, and device validation.
 - **Deferred, decision-dependent work:** `SYS-W5-03` and `SYS-W14-14` retain
   their documented human decisions. `SYS-W14-05`/`06` are no longer deferred.
 

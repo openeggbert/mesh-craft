@@ -87,7 +87,7 @@ P1s already being fixed in git history. This session:
    **Net across all 35 AUD-### rows remaining in this active backlog (61
    additional rows completed and archived to `docs/history/plan_20260718.md`
    on 2026-07-18 — see that file for their full evidence/resolution text):
-   33 DONE, 1 TODO, 1 DEFERRED** — 10 of the 33 DONE (`AUD-064` through
+   33 DONE, 0 TODO, 1 DEFERRED, 1 BLOCKED** — 10 of the 33 DONE (`AUD-064` through
    `AUD-073`) are fresh findings from a 2026-07-18 (later same day)
    independent re-audit, not part of the original 6 (`AUD-069` itself fixed
    2026-07-19, the day after it was filed); the other 14 (`AUD-074`
@@ -144,13 +144,14 @@ still internally consistent.
    out the two sibling repositories at the recorded verified SHAs, then
    configures, builds and runs the root CTest suite with at most two jobs.
    The standalone matrix uses the same job limit.
-3. **SYS-W8-05 (P1/W8)** — EASYGL's CNA ImGui adapter and opaque texture
-   bridge are visually qualified. Complete real alternate-backend
-   qualification before enabling another backend; do not treat this as a
-   superficial backend-name switch.
-4. **AUD-042 (P2/W8)** — Android build path forces SDL_RENDERER; deferred
-   until an Android-capable environment exists. It can be reconsidered after
-   SYS-W8-02 through SYS-W8-05 provide a backend-neutral editor UI path.
+3. **SYS-W8-05 (P1/W8)** — broad alternate-backend qualification remains
+   deferred. Do not treat that as a superficial backend-name switch; it needs
+   real screenshot/device evidence and CNA owner coordination.
+4. **AUD-042 (P2/W8)** — Android is a supported target. Its CMake route now
+   selects the GLES-capable EASYGL editor backend rather than SDL_RENDERER
+   (commit `20a5473`), but NDK configure/build and device validation are
+   blocked by the absent toolchain and the sibling `sharp-runtime` Android
+   failures documented below.
 5. All 10 of the mc3-format-vs-editor gaps found 2026-07-20 (user
    request: "co mc3 nabízí, ale MeshCraft to ještě neumí" -- "what does
    the mc3 format offer that MeshCraft doesn't yet handle") are now
@@ -162,8 +163,8 @@ still internally consistent.
    UV box/sphere projection; MCB compression; light-brightness unit
    conversion; ambient-light export). Nothing left queued from that
    research pass.
-6. **SYS-W3-01 (P2/W3), Phase 13 is active:** application/UI ownership is
-   being reduced one narrow presentation slice at a time. The authorized
+6. **SYS-W3-01 (P2/W3) is deferred by user priority.** Its completed
+   application/UI presentation slices remain documented here for continuity:
    Camera Bookmarks, Camera Preset Overlay, Gizmo Drag Overlay, Stats Overlay, Measurement Overlay, Status Bar, Walk Mode, View Bloom/SSAO, Help, Add/CSG, Edit-history,
    Edit-clipboard,
    Edit-object-actions, Edit-selection-actions, Edit-select-by-type,
@@ -950,7 +951,7 @@ portable through CNA rather than merely hiding its OpenGL dependency.
 ### SYS-W8-05 `[BLOCKED]` `P1` · Qualify the CNA-backed editor UI on alternate graphics backends, then remove the EASYGL-only gate
 - **Component:** backend selection in `CMakeLists.txt`/`main.cpp`/`GraphicsBackendCheck.hpp`, ImGui platform initialization, CI configuration, and render-test launchers.
 - **Evidence:** The renderer now consumes Dear ImGui draw data entirely through CNA and uses opaque CNA texture tokens, so it has no native-OpenGL renderer dependency. Vulkan/WebGPU availability and toolchain requirements are still owned by CNA and must be measured, not assumed.
-- **Outcome:** For every alternate CNA backend the sibling CNA checkout actually supports (target order: Vulkan, then WebGPU), select the appropriate SDL/ImGui platform mode while keeping rendering CNA-backed; configure, build, and run the editor without an OpenGL context. Remove the EASYGL-only rejection only for backends with a passing real editor smoke/screenshot test. Keep unsupported backends rejected with a precise capability message rather than an override that launches a blank UI. Revisit Android AUD-042 only after this qualification produces a supported mobile-capable path.
+- **Outcome:** For every alternate CNA backend the sibling CNA checkout actually supports (target order: Vulkan, then WebGPU), select the appropriate SDL/ImGui platform mode while keeping rendering CNA-backed; configure, build, and run the editor without an OpenGL context. Remove the EASYGL-only rejection only for backends with a passing real editor smoke/screenshot test. Keep unsupported backends rejected with a precise capability message rather than an override that launches a blank UI. Android's source-level GLES/EASYGL selection is independently completed in `AUD-042`; it still needs its own NDK/device qualification.
 - **Tests:** Add a backend matrix that always performs configure+build and, where a runner/GPU backend is available, runs a real editor screenshot including `ImGui::Image()` previews. Require CNA-native scene tests plus the new UI screenshot checks per enabled backend; retain EASYGL coverage. Do not claim Vulkan/WebGPU support until this matrix has passed on each backend's real runtime.
 - **Dependency/rule:** Requires SYS-W8-02 through SYS-W8-04. Any missing CNA backend, SDK, CI runner, or public CNA API is recorded as a concrete blocked subcondition, not bypassed with direct OpenGL or untested `MESH_CRAFT_ALLOW_UNSUPPORTED_BACKEND` launches.
 - **Blocked condition (2026-07-25):** CNA recognizes the `VULKAN` CMake
@@ -2053,15 +2054,13 @@ actual pixel difference — see its own row for the full story.
 - **Verify note:** The `static constexpr int kUndoMax = 20;` is at include/MeshCraft/MeshCraftApplication.hpp:632, NOT line 629 (line 629 is the unrelated `void checkRotationConventionNotice();` declaration). The pushUndo() body spans Commands.cpp:331-337 and uses `static_cast<int>(undoStack_.size()) > kUndoMax` (the paraphrase omitted the cast, but the semantics match). Severity P3/informational is appropriate.
 - **Status note:** By-design bounded history; audit's own correction confirms no code change is required for correctness.
 
-### AUD-042 `[TODO]` `P2` `W8` · Android build path force-selects SDL_RENDERER, guaranteeing the editor UI would not render if built for Android
-- **Component:** CMakeLists.txt (Android backend auto-select)
-- **Evidence:** CMakeLists.txt:101-102 `if(ANDROID) set(MESH_CRAFT_GRAPHICS_BACKEND_UPPER "SDL_RENDERER")`. Combined with the fact (Finding 1) that the editor's ImGui UI and post-FX only work through ImGui_ImplOpenGL3 + SDL_GL_GetProcAddress (which need an SDL GL context, not an SDL_Renderer), an Android build would compile against a backend the editor cannot render on. README.md:211 correctly marks Android as `never attempted` so it is not falsely claimed working, but the CMake default choice bakes in a non-functional editor for the one platform that is forced onto SDL_RENDERER.
-- **Outcome:** If Android support is intended, wire the editor to a backend it can actually render on (e.g. GLES via EASYGL) or gate the GUI editor off on Android with a clear message, rather than auto-selecting SDL_RENDERER which the UI layer cannot drive.
-- **Tests:** An Android NDK configure that either selects a GL-capable backend or errors clearly; not currently testable here (no NDK installed).
-- **Verify note:** Refinement (does not change the verdict): the editor↔SDL_RENDERER incompatibility is not Android-specific — the identical breakage occurs for ANY build configured with -DMESH_CRAFT_GRAPHICS_BACKEND=SDL_RENDERER on desktop, since the editor's ImGui path (MeshCraftApplication.cpp:212-213) is hardwired to OpenGL3 with no SDL_Renderer branch. What is Android-specific is that the force at CMakeLists.txt:101-102 makes SDL_RENDERER non-optional there (the user cannot pick EASYGL). So the finding is slightly understated in scope but accurate as stated. Severity P2 stands.
-- **Blocked:** No Android NDK in this environment; also intersects CNA backend behavior (out of scope).
-- **Status note:** `AUD-039b`'s runtime check (commit `58a7f03`) now means an Android build (if one were attempted) would refuse to launch the editor UI with a clear error, rather than silently opening a non-functional window -- so the "renders nothing with no indication why" consequence this finding warns about is closed. The CMake-level force-select itself (`if(ANDROID) set(...SDL_RENDERER)`) is unchanged; this task stays `TODO` because the root cause (Android has no path to a GL-capable backend at all) is still open and untestable here (no NDK).
-- **Status note:** Android force-selects SDL_RENDERER (a backend the editor cannot render on); no NDK available to test in this environment. Depends on the AUD-039b decision (hard failure vs. real backend) for a principled fix.
+### AUD-042 `[BLOCKED]` `P2` `W8` · Android source path selects GLES/EASYGL; NDK build and device validation remain unavailable
+- **Component:** `CMakeLists.txt`, `cmake/MeshCraftGraphicsBackend.cmake`, and `test/graphics_backend_selection_test.cmake`.
+- **Evidence:** Before commit `20a5473`, the root CMake path unconditionally changed every Android configure to `SDL_RENDERER`; MeshCraft's runtime gate correctly rejects that unqualified editor backend. CNA's EasyGL backend explicitly requests an SDL OpenGL ES 3.0 context, which is the source-GLSL route the MeshCraft scene renderer and optional effects require. The extracted selection function now forces Android (and Emscripten) to `EASYGL`, while preserving an explicitly requested backend for desktop.
+- **Outcome:** Android is a supported product target, and its MeshCraft source configuration no longer guarantees a rejected/non-functional editor. The existing Android target remains the shared library named `main`; a real APK/device claim still requires an Android NDK configure/build, SDLActivity/Gradle packaging verification, and an on-device editor smoke test.
+- **Tests:** `graphics_backend_selection` is a context-free CMake regression test: it proves Android maps both the default and an attempted `VULKAN` override to `EASYGL`, Emscripten keeps `EASYGL`, and desktop preserves `VULKAN`. It passed together with `graphics_backend_check`; the Release tree now registers 185 tests.
+- **Blocked:** This workspace has no Android NDK. CNA's own current Android-graphics audit also records that the sibling `sharp-runtime` fails the available NDK cross-build before CNA graphics compile, and sibling changes are out of scope here. Do not claim an APK or device-rendered editor until that dependency is repaired and the NDK/device matrix has passed.
+- **Status note (2026-07-26):** source-level remediation completed in commit `20a5473`; the remaining external validation and packaging work is deliberately tracked as blocked rather than treated as desktop evidence.
 - **Product decision (2026-07-26):** Android is a supported target, not an
   intentionally unsupported platform. When an Android-capable environment
   and viable CNA graphics route are available, the intended solution is a

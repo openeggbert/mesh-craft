@@ -56,16 +56,23 @@ cmake -S . -B cmake-build-debug -G Ninja
 ninja -C cmake-build-debug
 ```
 
-### Graphics backend (editor GUI requires EASYGL)
+### Graphics backend
 
 `MESH_CRAFT_GRAPHICS_BACKEND` selects the **CNA engine** backend
-(`EASYGL` | `SDL_RENDERER` | `BGFX` | `VULKAN`, default `EASYGL`). It is **not**
-the editor GUI backend: the MeshCraft editor's ImGui layer is hard-wired to
-OpenGL/GLES3, so the **GUI editor only renders under `EASYGL`** (desktop GL, or
-its WebGL2 variant on Emscripten). Building with `SDL_RENDERER`/`BGFX`/`VULKAN`
-compiles, but the editor UI will not render (a configure-time warning says so);
-those backends are for CNA-level experimentation only. The CNA-free CLI tools
+(`EASYGL` | `SDL_RENDERER` | `BGFX` | `VULKAN` | `WEBGPU`, default `EASYGL`).
+The editor's ImGui renderer consumes CNA draw primitives rather than native GL
+calls. `EASYGL` is the fully supported source-GLSL route; the current runtime
+gate also permits the separately qualified Vulkan editor path, while other
+backends remain deliberately rejected until they receive real screenshot
+qualification. Android and Emscripten force `EASYGL`: that selects GLES 3.0 /
+WebGL 2 rather than the non-qualified SDL renderer. The CNA-free CLI tools
 (`mc3togltf`, `mc3tomcb`) do not depend on the backend at all.
+
+Android is a supported target at the source-configuration level, but no APK or
+on-device run is claimed yet: this workspace has no Android NDK and CNA's
+current Android cross-build is blocked in the sibling `sharp-runtime` before
+graphics code compiles. See `plan.md` `AUD-042` for the exact remaining
+validation and packaging work.
 
 ```sh
 # Working editor (default):
@@ -308,7 +315,7 @@ available to test with).
 
 | Feature | Linux | Windows (MinGW) | Web (Emscripten) | Android |
 |---|---|---|---|---|
-| Full desktop/native build | ✅ | 🟡 the full GUI editor (`MeshCraft.exe`) still fails, but on the same pre-existing CNA-side `GLES3/gl3.h` header gap as before (`imgui_impl_opengl3.cpp` — CNA configures `-DIMGUI_IMPL_OPENGL_ES3` unconditionally for the `EASYGL` backend regardless of target platform), **plus** 3 separate `../sharp-runtime`-side `-Werror` build failures in its `System.Net.Sockets`/`System.Xml` namespaces (`afunix.h`'s `ADDRESS_FAMILY` on this MinGW version, an unused-function warning, a sign-compare warning) — none of these are in this project's own source, all out of scope to fix without CNA/sharp-runtime maintainer involvement. **New finding**: the two CNA-free CLI tools (`mc3togltf.exe`, `mc3tomcb.exe`) build and link successfully as real Windows PE32+ executables, since neither links SHARP_RUNTIME or CNA at all — confirmed by running `file` on the actual output binaries, not just a partial object count | 🟡 **update 2026-07-09**: the *last-known-good* build (2026-07-06 artifacts) still builds/runs fine, but a *fresh* rebuild now fails — `../sharp-runtime` gained a new Emscripten-only regression since then (16 `-Werror` failures + 1 hard `std::chrono::clock_cast` compile error). See `docs/history/web_issues.md` (archived). | ❓ never attempted (no Android NDK installed here) |
+| Full desktop/native build | ✅ | 🟡 the full GUI editor (`MeshCraft.exe`) still fails, but on the same pre-existing CNA-side `GLES3/gl3.h` header gap as before (`imgui_impl_opengl3.cpp` — CNA configures `-DIMGUI_IMPL_OPENGL_ES3` unconditionally for the `EASYGL` backend regardless of target platform), **plus** 3 separate `../sharp-runtime`-side `-Werror` build failures in its `System.Net.Sockets`/`System.Xml` namespaces (`afunix.h`'s `ADDRESS_FAMILY` on this MinGW version, an unused-function warning, a sign-compare warning) — none of these are in this project's own source, all out of scope to fix without CNA/sharp-runtime maintainer involvement. **New finding**: the two CNA-free CLI tools (`mc3togltf.exe`, `mc3tomcb.exe`) build and link successfully as real Windows PE32+ executables, since neither links SHARP_RUNTIME or CNA at all — confirmed by running `file` on the actual output binaries, not just a partial object count | 🟡 **update 2026-07-09**: the *last-known-good* build (2026-07-06 artifacts) still builds/runs fine, but a *fresh* rebuild now fails — `../sharp-runtime` gained a new Emscripten-only regression since then (16 `-Werror` failures + 1 hard `std::chrono::clock_cast` compile error). See `docs/history/web_issues.md` (archived). | 🟡 source selects GLES/EASYGL; no NDK configure, APK package, or on-device test yet. CNA's current NDK cross-build is blocked in sibling `sharp-runtime` before graphics compile |
 | App launches / runs | ✅ | ❌ (build doesn't complete) | ❌ loads and initializes (`SDL_CreateWindow`, WebGL2 context, scene creation) but then **crashes on the first resize event**, before any frame renders — see below | ❓ |
 | 3D viewport rendering | ✅ | ❌ (build doesn't complete) | ❌ never reached. **Root cause (re-diagnosed 2026-07-11, supersedes the earlier "canvas 0×0" theory)**: an uncaught `std::runtime_error` from CNA's `GameWindow::queryClientBoundsFromSDL()` — `SDL_GetWindowSize()` reports "Video subsystem has not been initialized" on the first `SDL_EVENT_WINDOW_RESIZED`, killing the wasm module. 100% inside CNA; not fixable from this repo. Full trace in `NEXT.md` §4. | ❓ |
 | Shaders (GLSL ES 3.00 / WebGL2) | ✅ (desktop GL) | ❌ (build doesn't complete) | ✅ all 7 CNA EasyGL 3D shader programs are `#version 300 es` and compile/link cleanly | ❓ |
