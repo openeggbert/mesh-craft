@@ -46,6 +46,15 @@ void MeshData::applyUvMapping(float scaleU, float scaleV,
     }
 }
 
+void MeshData::applyPlanarProjectionUv() {
+    texcoords.clear();
+    texcoords.reserve(static_cast<size_t>(vertexCount()) * 2);
+    for (size_t i = 0; i + 2 < positions.size(); i += 3) {
+        texcoords.push_back(positions[i]);
+        texcoords.push_back(positions[i + 2]);
+    }
+}
+
 namespace {
 // Local bounding-box center, used by both projections below: as the
 // position-based fallback axis source for box projection when a vertex

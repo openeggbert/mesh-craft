@@ -2,7 +2,7 @@
 
 _Last updated: 2026-07-26. Counts below were verified against a freshly configured Release build after `SYS-W14-05` embedded-GLB support. This document is derived from the actual `CMakeLists.txt` test registrations and test source files — if it drifts from a freshly configured build's `ctest -N` output, trust `ctest -N`, not this file's claimed count._
 
-MeshCraft's tests run through **CTest** — **183 tests registered** (`ctest --print-labels` label breakdown after the new target: `ai` 1, `commands` 1, `export` 71, `format` 37, `lint` 4, `perf` 2, `registry` 1, `render` 36, `unit` 32), mixing C++ assertion-based binaries and Python/bash subprocess-driven checks against the `mc3togltf`/`mc3tomcb` CLIs and the `MeshCraft` editor binary itself (headless `--screenshot` real-pixel-sampling tests, plus 3 tests that drive real headless Blender for GLB-import verification). `render_display_preflight` verifies an actual `xvfb-run` + `xdpyinfo` X client before the render subset; if unavailable, it reports a CTest skip and CMake disables only the other render-labelled tests. **Known gap:** the "CLI-driving Python tests" table below documents the most significant/representative tests in each category but is not exhaustively 1:1 with all registrations — `ctest -N` and `ctest --print-labels` are authoritative for the complete list.
+MeshCraft's tests run through **CTest** — **184 tests registered** (`ctest --print-labels` label breakdown after the new target: `ai` 1, `commands` 1, `export` 72, `format` 37, `lint` 4, `perf` 2, `registry` 1, `render` 36, `unit` 32), mixing C++ assertion-based binaries and Python/bash subprocess-driven checks against the `mc3togltf`/`mc3tomcb` CLIs and the `MeshCraft` editor binary itself (headless `--screenshot` real-pixel-sampling tests, plus 3 tests that drive real headless Blender for GLB-import verification). `render_display_preflight` verifies an actual `xvfb-run` + `xdpyinfo` X client before the render subset; if unavailable, it reports a CTest skip and CMake disables only the other render-labelled tests. **Known gap:** the "CLI-driving Python tests" table below documents the most significant/representative tests in each category but is not exhaustively 1:1 with all registrations — `ctest -N` and `ctest --print-labels` are authoritative for the complete list.
 
 ---
 
@@ -21,7 +21,7 @@ ctest -N
 
 # Run one test by name (regex match)
 ctest -R mc3_commands --output-on-failure
-ctest -R mc3togltf_csg --output-on-failure   # matches all 4 CSG tests
+ctest -R mc3togltf_csg --output-on-failure   # matches all CSG export tests
 
 # Run one group by label (format/export/render/registry/ai/commands/lint/perf/unit)
 ctest -L export --output-on-failure
@@ -31,7 +31,7 @@ ctest --print-labels   # list all labels
 ctest --rerun-failed --output-on-failure
 ```
 
-Expected result: every registered test passes. On 2026-07-26 the fresh Release build reported 183 registrations and passed all of them as two disjoint host runs: 147/147 with `-LE render` and 36/36 with `-L render` under Xvfb. The focused suites are run with at most `-j4` after each change. A failing test prints its assertion/subprocess output inline with `--output-on-failure`; without that flag, CTest only shows pass/fail per test name.
+Expected result: every registered test passes. On 2026-07-26 the fresh Release build reported 184 registrations and passed all of them as two disjoint host runs: 148/148 with `-LE render` and 36/36 with `-L render` under Xvfb. The focused suites are run with at most `-j4` after each change. A failing test prints its assertion/subprocess output inline with `--output-on-failure`; without that flag, CTest only shows pass/fail per test name.
 
 Each C++ test binary can also be run directly (bypassing CTest) for faster iteration:
 
@@ -105,7 +105,7 @@ These spawn the built `mc3togltf`/`mc3tomcb` binaries as subprocesses and assert
 | `mc3togltf_csg_export` | `mc3togltf/test/*.py` | Union/difference/intersection evaluated by Manifold and exported as real merged geometry | Exported mesh has expected triangle count / bounds |
 | `mc3togltf_csg_unsupported` | `mc3togltf/test/*.py` | An unsupported CSG child type (Plane, Disk, Grid, Mesh, Extrude) is detected and reported | Error names the unsupported type |
 | `mc3togltf_csg_nested` | `mc3togltf/test/*.py` | Nested CSG operations (CSG-of-CSG) export correctly | Exported mesh matches expected nested-boolean result |
-| `mc3togltf_csg_semantics` / `mc3togltf_csg_mesh_child` / `mc3togltf_csg_stress` | `mc3togltf/test/*.py` | `isCutter`/world-transform/empty-result/material-on-node CSG semantics; a `<mesh>` child inside a CSG node; a deep/many-child CSG stress case | Calibrated vertex-count / structural assertions |
+| `mc3togltf_csg_semantics` / `mc3togltf_csg_mesh_child` / `mc3togltf_csg_stress` / `mc3togltf_csg_shading_materials` | `mc3togltf/test/*.py` | `isCutter`/world-transform/empty-result/material-on-node CSG semantics; a `<mesh>` child inside a CSG node; a deep/many-child CSG stress case; generated CSG UVs, smooth normals, and child-material glTF primitives | Calibrated geometry / GLB-buffer / structural assertions |
 | `mc3togltf_instance_deform_cache` | `mc3togltf/test/*.py` | Instances of the same definition with different `<deform>` produce separate cached meshes (not incorrectly shared) | Distinct mesh indices per distinct deform |
 | `mc3togltf_float_cache_key` / `mc3togltf_geom_cache_key` | `mc3togltf/test/*.py` | Two primitives with close-but-not-equal float dimensions produce 2 distinct meshes (cache key doesn't collide on float rounding); the geometry cache key's full construction is exercised directly | `len(meshes) == 2`; cache-key assertions |
 | `mc3togltf_obj_robustness` | `mc3togltf/test/obj_robustness_test.py` | Untrusted OBJ input: out-of-range negative vertex index and an infinite (`1e400`-overflow) coordinate must not crash the exporter | Exit 0, a `Warning:`/`non-finite` message per malformed file, valid mesh still exports geometry, no `null` (non-finite) values in any accessor `min`/`max` |

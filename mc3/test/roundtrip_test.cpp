@@ -454,11 +454,9 @@ static void testGroupChildren() {
         CHECK(rt.objects[0]->children[2]->name == "Child2", "group: child[2].name");
 }
 
-// STAB-0656: mc3.xsd only declares <uv_mapping> on primitive/mesh/extrude
-// complexTypes -- writing it for a Group (or Union/Difference/Intersection/
-// Instance/Area) would be schema-invalid XML. Not reachable via the editor
-// UI today, but nothing structurally prevented obj->uvMapping from being
-// set on any object type, so verify the writer actually skips it.
+// SYS-W14-06: groups remain non-geometry containers, so their uvMapping is
+// intentionally not serialised. CSG roots are tested separately below: they
+// now own a generated-result mapping in their dedicated XSD type.
 static void testUvMappingNotWrittenForGroup() {
     Mc3Document doc;
     auto grp  = std::make_shared<Mc3Object>();
@@ -488,6 +486,8 @@ static void testUnionAndIntersectionRoundtrip() {
         auto node = std::make_shared<Mc3Object>();
         node->id = "csg1"; node->type = type;
         node->csgOperation = Mc3CsgOperation{.csgType = csgType};
+        node->uvMapping = Mc3UvMapping{.projection = UvProjection::Sphere,
+                                        .scaleU = 2.0f, .offsetV = 0.25f};
         for (const char* childId : {"a", "b"}) {
             auto child = std::make_shared<Mc3Object>();
             child->id = childId; child->type = ObjectType::Box;
@@ -503,6 +503,11 @@ static void testUnionAndIntersectionRoundtrip() {
         CHECK(rt.objects[0]->csgOperation.has_value() &&
               rt.objects[0]->csgOperation->csgType == csgType,
               std::string(label) + ": csgType preserved");
+        CHECK(rt.objects[0]->uvMapping.has_value() &&
+              rt.objects[0]->uvMapping->projection == UvProjection::Sphere &&
+              rt.objects[0]->uvMapping->scaleU == 2.0f &&
+              rt.objects[0]->uvMapping->offsetV == 0.25f,
+              std::string(label) + ": generated-result uv_mapping preserved");
         CHECK(rt.objects[0]->children.size() == 2, std::string(label) + ": child count==2");
     }
 }

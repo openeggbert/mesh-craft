@@ -23,6 +23,7 @@
 #include <cstring>
 #include <iomanip>
 #include <iostream>
+#include <iterator>
 #include <limits>
 #include <map>
 #include <numbers>
@@ -832,50 +833,112 @@ static int buildMesh(ExportCtx& ctx,
 }
 
 // ---------------------------------------------------------------------------
-// Add a pre-built MeshData to the glTF model.  Applies ctx.unitScale.
-// Returns the glTF mesh index, or -1 if md is empty.
+// Apply an explicit CSG-root UV mapping, or the stable box projection used by
+// default CSG output. Boolean topology has no universally correct unwrap, so
+// this is deliberately procedural rather than claiming to retain the source
+// primitive's discontinuous UV seams.
 // ---------------------------------------------------------------------------
 
-static int addMeshDataToGltf(ExportCtx& ctx, MeshData md,
-                              const std::string& name, int materialIdx)
+static void applyCsgUvMapping(MeshData& mesh, const Mc3Object& obj)
 {
+    if (!obj.uvMapping.has_value()) {
+        mesh.applyBoxProjectionUv();
+        return;
+    }
+    const auto& uv = *obj.uvMapping;
+    if (uv.projection == UvProjection::Box) {
+        mesh.applyBoxProjectionUv();
+    } else if (uv.projection == UvProjection::Sphere) {
+        mesh.applySphereProjectionUv();
+    } else {
+        mesh.applyPlanarProjectionUv();
+    }
+    mesh.applyUvMapping(uv.scaleU, uv.scaleV, uv.offsetU, uv.offsetV, uv.rotation);
+}
+
+// Add a Manifold-evaluated mesh to glTF. The source relation returned by
+// Manifold is restored as one glTF primitive per child material unless the CSG
+// root itself has an explicit material, which remains a full-result override
+// for backwards-compatible authoring semantics.
+static int addCsgMeshDataToGltf(ExportCtx& ctx, CsgMeshData csg,
+                                const std::string& name, int rootMaterialIdx)
+{
+    MeshData& md = csg.mesh;
     if (md.empty()) return -1;
     if (ctx.unitScale != 1.0f)
         md.applyScale(ctx.unitScale, ctx.unitScale, ctx.unitScale);
 
     tinygltf::Model& model = ctx.model;
     int posAcc  = addAccessorVec3(model, md.positions, /*calcBounds=*/true);
-    int normAcc = addAccessorVec3(model, md.normals);
-    int idxAcc  = addAccessorIndices(model, md.indices);
-
-    tinygltf::Primitive prim;
-    prim.attributes["POSITION"] = posAcc;
-    prim.attributes["NORMAL"]   = normAcc;
+    int normAcc = !md.normals.empty() ? addAccessorVec3(model, md.normals) : -1;
     int uvAcc = -1;
     if (!md.texcoords.empty()) {
         uvAcc = addAccessorVec2(model, md.texcoords);
-        prim.attributes["TEXCOORD_0"] = uvAcc;
     }
-    // STAB-0664: same TANGENT generation as buildMesh() -- see that
-    // function's comment for the algorithm/rationale. CSG-evaluated meshes
-    // (this function's only caller) can carry a normal-mapped material too.
-    if (uvAcc >= 0 && materialIdx >= 0 &&
-        materialIdx < static_cast<int>(model.materials.size()) &&
-        model.materials[materialIdx].normalTexture.index >= 0)
-    {
-        std::vector<float> tangents = computeTangents(md.positions, md.normals, md.texcoords, md.indices);
-        if (!tangents.empty()) {
-            int tanAcc = addAccessorVec4(model, tangents);
-            prim.attributes["TANGENT"] = tanAcc;
+
+    struct PrimitiveGroup {
+        int material{-1};
+        std::vector<uint32_t> indices;
+    };
+    std::vector<PrimitiveGroup> groups;
+    const size_t triangleCount = md.indices.size() / 3;
+    const bool rootOverrides = rootMaterialIdx >= 0 ||
+        csg.triangleMaterials.size() != triangleCount;
+    std::set<std::string> warnedMissingMaterials;
+
+    auto materialForTriangle = [&](size_t triangle) {
+        if (rootOverrides) return rootMaterialIdx;
+        const std::string& materialName = csg.triangleMaterials[triangle];
+        if (materialName.empty()) return -1;
+        auto it = ctx.matNameToIdx.find(materialName);
+        if (it != ctx.matNameToIdx.end()) return it->second;
+        if (warnedMissingMaterials.insert(materialName).second) {
+            std::cerr << "Warning: CSG output '" << name << "' references unknown child material '"
+                      << materialName << "' — affected triangles export without a material.\n";
+            ctx.stats.warnings++;
         }
+        return -1;
+    };
+    for (size_t triangle = 0; triangle < triangleCount; ++triangle) {
+        const int material = materialForTriangle(triangle);
+        auto group = std::find_if(groups.begin(), groups.end(),
+                                  [material](const PrimitiveGroup& value) {
+                                      return value.material == material;
+                                  });
+        if (group == groups.end()) {
+            groups.push_back({material, {}});
+            group = std::prev(groups.end());
+        }
+        const size_t index = triangle * 3;
+        group->indices.insert(group->indices.end(), md.indices.begin() + index, md.indices.begin() + index + 3);
     }
-    prim.indices = idxAcc;
-    prim.mode    = TINYGLTF_MODE_TRIANGLES;
-    if (materialIdx >= 0) prim.material = materialIdx;
 
     tinygltf::Mesh mesh;
     mesh.name = name;
-    mesh.primitives.push_back(std::move(prim));
+    for (const PrimitiveGroup& group : groups) {
+        tinygltf::Primitive prim;
+        prim.attributes["POSITION"] = posAcc;
+        if (normAcc >= 0) prim.attributes["NORMAL"] = normAcc;
+        if (uvAcc >= 0) prim.attributes["TEXCOORD_0"] = uvAcc;
+        prim.indices = addAccessorIndices(model, group.indices);
+        prim.mode = TINYGLTF_MODE_TRIANGLES;
+        if (group.material >= 0) prim.material = group.material;
+
+        // Tangents are generated per primitive because a shared CSG vertex
+        // can legitimately be referenced by two material groups. Unreferenced
+        // entries in each accessor are harmless; referenced ones are derived
+        // from exactly that primitive's triangles.
+        if (normAcc >= 0 && uvAcc >= 0 && group.material >= 0 &&
+            group.material < static_cast<int>(model.materials.size()) &&
+            model.materials[group.material].normalTexture.index >= 0)
+        {
+            std::vector<float> tangents = computeTangents(md.positions, md.normals,
+                                                          md.texcoords, group.indices);
+            if (!tangents.empty())
+                prim.attributes["TANGENT"] = addAccessorVec4(model, tangents);
+        }
+        mesh.primitives.push_back(std::move(prim));
+    }
     model.meshes.push_back(std::move(mesh));
     return static_cast<int>(model.meshes.size()) - 1;
 }
@@ -1016,11 +1079,15 @@ static int buildNode(ExportCtx& ctx, const Mc3Object& obj, int depth)
                        :                                        "intersection";
 
         if (!ctx.allowApproximateCSG) {
-            // Real CSG: evaluate with Manifold, produce a single merged mesh.
-            // Throws on error so the export fails loudly rather than silently wrong.
-            MeshData csgData = evaluateCsgNode(obj, ctx.definitions);
-            if (!csgData.empty())
-                directMesh = addMeshDataToGltf(ctx, std::move(csgData), obj.name, matIdx);
+            // Real CSG: evaluate with Manifold, generate a usable procedural
+            // UV projection, and restore source-material runs as glTF
+            // primitives. Throws on error so the export fails loudly rather
+            // than silently wrong.
+            CsgMeshData csgData = evaluateCsgNodeWithMaterials(obj, ctx.definitions);
+            if (!csgData.empty()) {
+                applyCsgUvMapping(csgData.mesh, obj);
+                directMesh = addCsgMeshDataToGltf(ctx, std::move(csgData), obj.name, matIdx);
+            }
             ctx.stats.csgMeshesEvaluated++;
             csgEvaluated = true;   // skip children — they are baked into the mesh
         } else {

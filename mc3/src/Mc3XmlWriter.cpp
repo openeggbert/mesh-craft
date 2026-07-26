@@ -147,15 +147,13 @@ static XMLElement* writeObject(XMLDocument& xmlDoc, const std::shared_ptr<Mc3Obj
         el->InsertEndChild(de);
     }
 
-    // STAB-0656: mc3.xsd only declares <uv_mapping> for primitive/mesh/
-    // extrude complexTypes, not for group/union/difference/intersection/
-    // instance/area -- writing it for those would produce schema-invalid
-    // XML even though obj->uvMapping isn't reachable there via the editor
-    // UI today.
+    // SYS-W14-06: CSG roots now have their own schema container type with a
+    // generated-result <uv_mapping>. Group, Instance, and Area still do not
+    // own generated geometry, so serializing a mapping for them remains
+    // schema-invalid and semantically meaningless.
     const bool uvMappingAllowedForType =
-        obj->type != ObjectType::Group        && obj->type != ObjectType::Union &&
-        obj->type != ObjectType::Difference   && obj->type != ObjectType::Intersection &&
-        obj->type != ObjectType::Instance     && obj->type != ObjectType::Area;
+        obj->type != ObjectType::Group && obj->type != ObjectType::Instance &&
+        obj->type != ObjectType::Area;
     if (obj->uvMapping && uvMappingAllowedForType) {
         const auto& m = *obj->uvMapping;
         XMLElement* uve = xmlDoc.NewElement("uv_mapping");

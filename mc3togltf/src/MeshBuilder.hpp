@@ -51,6 +51,12 @@ struct MeshData {
                         float offsetU, float offsetV,
                         float rotationDegrees);
 
+    // Regenerates TEXCOORD_0 by projecting local X/Z coordinates. This is
+    // intentionally simple and unnormalised: it is the procedural baseline
+    // for meshes (notably CSG results) that have no authored unwrap, and the
+    // caller may still apply scale/offset/rotation afterwards.
+    void applyPlanarProjectionUv();
+
     // SYS-W14-24: regenerates TEXCOORD_0 via an axis-aligned box/triplanar
     // projection -- per vertex, picks the dominant axis (from that vertex's
     // own normal, or the direction from the mesh's local bounding-box

@@ -185,6 +185,7 @@ if(BUILD_TESTING)
         set(_csg_semantics_xml        "${CMAKE_CURRENT_SOURCE_DIR}/../test/csg_semantics.mc3.xml")
         set(_csg_mesh_child_xml       "${CMAKE_CURRENT_SOURCE_DIR}/../test/csg_mesh_child.mc3.xml")
         set(_csg_stress_xml           "${CMAKE_CURRENT_SOURCE_DIR}/../test/csg_stress.mc3.xml")
+        set(_csg_shading_materials_xml "${CMAKE_CURRENT_SOURCE_DIR}/../test/csg_shading_materials.mc3.xml")
         set(_instance_deform_xml      "${CMAKE_CURRENT_SOURCE_DIR}/../test/instance_deform_cache.mc3.xml")
         set(_close_dimensions_xml     "${CMAKE_CURRENT_SOURCE_DIR}/../test/close_dimensions.mc3.xml")
         set(_geom_cache_key_xml       "${CMAKE_CURRENT_SOURCE_DIR}/../test/geom_cache_key.mc3.xml")
@@ -403,6 +404,16 @@ if(BUILD_TESTING)
                         "${_csg_stress_xml}"
             )
             set_tests_properties(mc3togltf_csg_stress PROPERTIES TIMEOUT 30 LABELS "export")
+        endif()
+        if(EXISTS "${_csg_shading_materials_xml}")
+            add_test(
+                NAME mc3togltf_csg_shading_materials
+                COMMAND "${PYTHON3_EXEC}"
+                        "${CMAKE_CURRENT_SOURCE_DIR}/test/csg_shading_materials_test.py"
+                        "$<TARGET_FILE:mc3togltf>"
+                        "${_csg_shading_materials_xml}"
+            )
+            set_tests_properties(mc3togltf_csg_shading_materials PROPERTIES TIMEOUT 30 LABELS "export")
         endif()
         if(EXISTS "${_instance_deform_xml}")
             add_test(

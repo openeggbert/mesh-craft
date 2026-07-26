@@ -12,6 +12,7 @@
 #include <iostream>
 #include <numbers>
 #include <stdexcept>
+#include <unordered_map>
 
 using namespace MeshCraft::Mc3;
 
@@ -116,48 +117,63 @@ static Mat4 computeObjMat(const Mc3Object& obj) {
 }
 
 // ---------------------------------------------------------------------------
-// Convert Manifold → MeshData (flat face normals, no UVs).
+// Convert Manifold → MeshData. Manifold calculates vertex normals after the
+// boolean, retaining a 60-degree crease threshold: curved inputs shade
+// smoothly while cube-like edges remain hard. Unlike the former triangle-soup
+// path, the returned indexed geometry shares these normal-aware vertices.
 // ---------------------------------------------------------------------------
 
-static MeshData manifoldToMeshData(const manifold::Manifold& mfd) {
+static MeshData meshDataFromCsgMeshGl(const manifold::MeshGL& gl) {
     MeshData result;
-    if (mfd.IsEmpty()) return result;
-
-    manifold::MeshGL gl = mfd.GetMeshGL();
     int np    = static_cast<int>(gl.numProp);
+    int nVerts = np > 0 ? static_cast<int>(gl.vertProperties.size()) / np : 0;
     int nTris = static_cast<int>(gl.triVerts.size()) / 3;
-    if (nTris <= 0 || np < 3) return result;
+    if (nTris <= 0 || nVerts <= 0 || np < 6) return result;
 
-    result.positions.reserve(static_cast<size_t>(nTris) * 9);
-    result.normals  .reserve(static_cast<size_t>(nTris) * 9);
-    result.texcoords.reserve(static_cast<size_t>(nTris) * 6);
-    result.indices  .reserve(static_cast<size_t>(nTris) * 3);
-
-    for (int t = 0; t < nTris; ++t) {
-        auto i0 = static_cast<size_t>(gl.triVerts[3 * t + 0]);
-        auto i1 = static_cast<size_t>(gl.triVerts[3 * t + 1]);
-        auto i2 = static_cast<size_t>(gl.triVerts[3 * t + 2]);
-
-        float x0 = gl.vertProperties[i0 * np + 0], y0 = gl.vertProperties[i0 * np + 1], z0 = gl.vertProperties[i0 * np + 2];
-        float x1 = gl.vertProperties[i1 * np + 0], y1 = gl.vertProperties[i1 * np + 1], z1 = gl.vertProperties[i1 * np + 2];
-        float x2 = gl.vertProperties[i2 * np + 0], y2 = gl.vertProperties[i2 * np + 1], z2 = gl.vertProperties[i2 * np + 2];
-
-        // Face normal via cross product
-        float ax = x1 - x0, ay = y1 - y0, az = z1 - z0;
-        float bx = x2 - x0, by = y2 - y0, bz = z2 - z0;
-        float nx = ay * bz - az * by;
-        float ny = az * bx - ax * bz;
-        float nz = ax * by - ay * bx;
-        float len = std::sqrt(nx * nx + ny * ny + nz * nz);
-        if (len > 1e-10f) { nx /= len; ny /= len; nz /= len; }
-
-        auto base = static_cast<uint32_t>(result.positions.size() / 3);
-        result.positions.insert(result.positions.end(), {x0,y0,z0, x1,y1,z1, x2,y2,z2});
-        result.normals  .insert(result.normals  .end(), {nx,ny,nz, nx,ny,nz, nx,ny,nz});
-        result.texcoords.insert(result.texcoords.end(), {0,0, 0,0, 0,0});
-        result.indices  .insert(result.indices  .end(), {base, base+1, base+2});
+    result.positions.reserve(static_cast<size_t>(nVerts) * 3);
+    result.normals.reserve(static_cast<size_t>(nVerts) * 3);
+    result.indices.reserve(gl.triVerts.size());
+    for (int vertex = 0; vertex < nVerts; ++vertex) {
+        const size_t offset = static_cast<size_t>(vertex) * np;
+        result.positions.insert(result.positions.end(), {
+            gl.vertProperties[offset + 0], gl.vertProperties[offset + 1], gl.vertProperties[offset + 2]});
+        result.normals.insert(result.normals.end(), {
+            gl.vertProperties[offset + 3], gl.vertProperties[offset + 4], gl.vertProperties[offset + 5]});
     }
+    result.indices.assign(gl.triVerts.begin(), gl.triVerts.end());
 
+    return result;
+}
+
+MeshData meshDataFromCsgManifold(const manifold::Manifold& mfd) {
+    if (mfd.IsEmpty()) return {};
+    return meshDataFromCsgMeshGl(
+        mfd.CalculateNormals(/*normalIdx=*/0).GetMeshGL(/*normalIdx=*/0));
+}
+
+static CsgMeshData manifoldToCsgMeshData(
+    const manifold::Manifold& mfd,
+    const std::unordered_map<uint32_t, std::string>& materialByOriginal)
+{
+    CsgMeshData result;
+    // CalculateNormals() changes the vertex-property layout but preserves the
+    // Manifold relation runs. The runs are sorted by source original ID and
+    // cover every output triangle, including newly-created boolean cut faces.
+    const manifold::MeshGL gl = mfd.CalculateNormals(/*normalIdx=*/0).GetMeshGL(/*normalIdx=*/0);
+    result.mesh = meshDataFromCsgMeshGl(gl);
+    if (result.mesh.empty()) return result;
+    const size_t triCount = result.mesh.indices.size() / 3;
+    result.triangleMaterials.assign(triCount, {});
+    if (gl.runIndex.size() != gl.runOriginalID.size() + 1) return result;
+    for (size_t run = 0; run < gl.runOriginalID.size(); ++run) {
+        const size_t begin = gl.runIndex[run] / 3;
+        const size_t end = gl.runIndex[run + 1] / 3;
+        if (begin > end || end > triCount) continue;
+        auto material = materialByOriginal.find(gl.runOriginalID[run]);
+        if (material == materialByOriginal.end()) continue;
+        for (size_t tri = begin; tri < end; ++tri)
+            result.triangleMaterials[tri] = material->second;
+    }
     return result;
 }
 
@@ -175,7 +191,9 @@ static manifold::Manifold buildManifoldNode(
     const std::map<std::string, std::shared_ptr<Mc3Object>>& definitions,
     const Mat4& parentMat,
     int depth,
-    const std::string& csgRootName)
+    const std::string& csgRootName,
+    const std::string& rootMaterial,
+    std::unordered_map<uint32_t, std::string>& materialByOriginal)
 {
     using namespace manifold;
 
@@ -192,7 +210,20 @@ static manifold::Manifold buildManifoldNode(
     Mat4 nodeMat = parentMat * computeObjMat(obj);
     auto xf = nodeMat.toManifold();
 
-    auto applyXf = [&](Manifold m) { return m.Transform(xf); };
+    auto applyXf = [&](Manifold m) {
+        // Manifold's analytic constructors and MeshGL constructor both assign
+        // an OriginalID. Record it before Transform() turns this leaf into a
+        // product manifold; GetMeshGL() later uses the surviving relation to
+        // partition the boolean result into material primitives.
+        const int originalId = m.OriginalID();
+        if (originalId >= 0) {
+            const std::string& material = !obj.materialOverride.empty() ? obj.materialOverride
+                                        : !obj.material.empty() ? obj.material
+                                        : rootMaterial;
+            materialByOriginal.emplace(static_cast<uint32_t>(originalId), material);
+        }
+        return m.Transform(xf);
+    };
 
     switch (obj.type) {
     // --- Analytic primitives ---
@@ -298,7 +329,8 @@ static manifold::Manifold buildManifoldNode(
     case ObjectType::Union: {
         Manifold result;
         for (const auto& child : obj.children)
-            if (child) result = result + buildManifoldNode(*child, definitions, nodeMat, depth + 1, csgRootName);
+            if (child) result = result + buildManifoldNode(*child, definitions, nodeMat, depth + 1,
+                                                            csgRootName, rootMaterial, materialByOriginal);
         return result;
     }
     case ObjectType::Intersection: {
@@ -311,10 +343,12 @@ static manifold::Manifold buildManifoldNode(
         size_t first = 0;
         while (first < obj.children.size() && !obj.children[first]) ++first;
         if (first >= obj.children.size()) return Manifold{};
-        Manifold result = buildManifoldNode(*obj.children[first], definitions, nodeMat, depth + 1, csgRootName);
+        Manifold result = buildManifoldNode(*obj.children[first], definitions, nodeMat, depth + 1,
+                                             csgRootName, rootMaterial, materialByOriginal);
         for (size_t i = first + 1; i < obj.children.size(); ++i)
             if (obj.children[i])
-                result = result ^ buildManifoldNode(*obj.children[i], definitions, nodeMat, depth + 1, csgRootName);
+                result = result ^ buildManifoldNode(*obj.children[i], definitions, nodeMat, depth + 1,
+                                                     csgRootName, rootMaterial, materialByOriginal);
         return result;
     }
     case ObjectType::Difference: {
@@ -322,7 +356,8 @@ static manifold::Manifold buildManifoldNode(
         Manifold base;
         for (const auto& child : obj.children)
             if (child && !child->isCutter) {
-                base = base + buildManifoldNode(*child, definitions, nodeMat, depth + 1, csgRootName);
+                base = base + buildManifoldNode(*child, definitions, nodeMat, depth + 1,
+                                                 csgRootName, rootMaterial, materialByOriginal);
                 hasBase = true;
             }
         if (!hasBase)
@@ -333,7 +368,8 @@ static manifold::Manifold buildManifoldNode(
                 "Use --allow-approximate-csg to export children separately as a debug fallback.");
         for (const auto& child : obj.children)
             if (child && child->isCutter)
-                base = base - buildManifoldNode(*child, definitions, nodeMat, depth + 1, csgRootName);
+                base = base - buildManifoldNode(*child, definitions, nodeMat, depth + 1,
+                                                 csgRootName, rootMaterial, materialByOriginal);
         return base;
     }
 
@@ -342,7 +378,8 @@ static manifold::Manifold buildManifoldNode(
     case ObjectType::Area: {
         Manifold result;
         for (const auto& child : obj.children)
-            if (child) result = result + buildManifoldNode(*child, definitions, nodeMat, depth + 1, csgRootName);
+            if (child) result = result + buildManifoldNode(*child, definitions, nodeMat, depth + 1,
+                                                            csgRootName, rootMaterial, materialByOriginal);
         return result;
     }
 
@@ -351,7 +388,8 @@ static manifold::Manifold buildManifoldNode(
         const std::string& defKey = obj.resolvedInstanceDefinitionKey();
         auto it = definitions.find(defKey);
         if (it != definitions.end() && it->second)
-            return buildManifoldNode(*it->second, definitions, nodeMat, depth + 1, csgRootName);
+            return buildManifoldNode(*it->second, definitions, nodeMat, depth + 1,
+                                     csgRootName, rootMaterial, materialByOriginal);
         throw std::runtime_error(
             std::string("CSG evaluation failed for '") + csgRootName +
             "':\ninstance '" + obj.name + "' references unknown definition '" + defKey +
@@ -371,7 +409,7 @@ static manifold::Manifold buildManifoldNode(
 // Public API
 // ---------------------------------------------------------------------------
 
-MeshData evaluateCsgNode(
+CsgMeshData evaluateCsgNodeWithMaterials(
     const Mc3Object& csgObj,
     const std::map<std::string, std::shared_ptr<Mc3Object>>& definitions)
 {
@@ -386,19 +424,24 @@ MeshData evaluateCsgNode(
     // The CSG root's own transform is carried by the glTF node TRS, not baked here.
     const Mat4 identity = Mat4::identity();
     const std::string& rootName = csgObj.name;
+    const std::string& rootMaterial = !csgObj.materialOverride.empty() ? csgObj.materialOverride
+                                    : csgObj.material;
+    std::unordered_map<uint32_t, std::string> materialByOriginal;
 
     Manifold result;
 
     if (csgObj.type == ObjectType::Union) {
         for (const auto& child : csgObj.children)
-            if (child) result = result + buildManifoldNode(*child, definitions, identity, 0, rootName);
+            if (child) result = result + buildManifoldNode(*child, definitions, identity, 0,
+                                                            rootName, rootMaterial, materialByOriginal);
 
     } else if (csgObj.type == ObjectType::Difference) {
         bool hasBase = false;
         Manifold base;
         for (const auto& child : csgObj.children)
             if (child && !child->isCutter) {
-                base = base + buildManifoldNode(*child, definitions, identity, 0, rootName);
+                base = base + buildManifoldNode(*child, definitions, identity, 0,
+                                                 rootName, rootMaterial, materialByOriginal);
                 hasBase = true;
             }
         if (!hasBase)
@@ -409,14 +452,16 @@ MeshData evaluateCsgNode(
                 "--allow-approximate-csg as a debug fallback.");
         for (const auto& child : csgObj.children)
             if (child && child->isCutter)
-                base = base - buildManifoldNode(*child, definitions, identity, 0, rootName);
+                base = base - buildManifoldNode(*child, definitions, identity, 0,
+                                                 rootName, rootMaterial, materialByOriginal);
         result = base;
 
     } else { // Intersection
         bool first = true;
         for (const auto& child : csgObj.children) {
             if (!child) continue;
-            Manifold m = buildManifoldNode(*child, definitions, identity, 0, rootName);
+            Manifold m = buildManifoldNode(*child, definitions, identity, 0,
+                                            rootName, rootMaterial, materialByOriginal);
             if (first) { result = m; first = false; }
             else        result = result ^ m;
         }
@@ -436,7 +481,14 @@ MeshData evaluateCsgNode(
                      "(no geometry; check for non-overlapping inputs).\n";
     }
 
-    return manifoldToMeshData(result);
+    return manifoldToCsgMeshData(result, materialByOriginal);
+}
+
+MeshData evaluateCsgNode(
+    const Mc3Object& csgObj,
+    const std::map<std::string, std::shared_ptr<Mc3Object>>& definitions)
+{
+    return evaluateCsgNodeWithMaterials(csgObj, definitions).mesh;
 }
 
 } // namespace mc3togltf

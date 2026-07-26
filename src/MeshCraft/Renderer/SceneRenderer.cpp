@@ -26,6 +26,7 @@
 
 #include <manifold/manifold.h>
 #include <tiny_obj_loader.h>
+#include "CsgEvaluator.hpp"
 #include "MeshBuilder.hpp"  // mc3togltf_lib -- buildPrimitive(), shared with CsgEvaluator.cpp (STAB-0670)
 #include "SvgRasterizer.hpp"
 
@@ -82,6 +83,11 @@ SamplerState samplerStateForSvg(const Mc3SvgTexture& texture) {
 // ---------------------------------------------------------------------------
 // CSG helpers (file scope)
 // ---------------------------------------------------------------------------
+
+// Defined below the OBJ loader. Keeping this forward declaration here lets the
+// CSG path share the same guarded MeshData-to-CNA upload used by embedded GLB
+// meshes instead of maintaining a second, flat-shaded buffer builder.
+static RenderMesh uploadMeshData(GraphicsDevice& device, const mc3togltf::MeshData& source);
 
 // XNA row-major → manifold mat3x4 (3 rows × 4 cols, linalg column-major storage)
 // XNA: v' = v * M  →  manifold Transform: v' = M * (v,1)
@@ -267,36 +273,32 @@ static std::string csgSubtreeWarning(const Mc3Object& obj, const Mc3Document& do
     }
 }
 
-// Convert a manifold::Manifold to a RenderMesh (VertexPositionColor, world-space)
-static RenderMesh manifoldToRenderMesh(GraphicsDevice& device, const manifold::Manifold& m) {
-    RenderMesh mesh;
-    if (m.IsEmpty()) return mesh;
-
-    manifold::MeshGL gl = m.GetMeshGL();
-    int nVerts = static_cast<int>(gl.vertProperties.size()) / static_cast<int>(gl.numProp);
-    int nTris  = static_cast<int>(gl.triVerts.size()) / 3;
-    if (nVerts <= 0 || nTris <= 0) return mesh;
-
-    Color c(180, 180, 180, 255);
-    std::vector<VertexPositionColor> verts(nVerts);
-    mesh.positions.reserve(nVerts);
-    for (int i = 0; i < nVerts; ++i) {
-        float x = gl.vertProperties[i * gl.numProp + 0];
-        float y = gl.vertProperties[i * gl.numProp + 1];
-        float z = gl.vertProperties[i * gl.numProp + 2];
-        verts[i] = {Vector3{x, y, z}, c};
-        mesh.positions.push_back({x, y, z});
+static void applyCsgUvMapping(mc3togltf::MeshData& mesh, const Mc3Object& obj) {
+    if (!obj.uvMapping.has_value()) {
+        mesh.applyBoxProjectionUv();
+        return;
     }
+    const auto& uv = *obj.uvMapping;
+    if (uv.projection == UvProjection::Box) {
+        mesh.applyBoxProjectionUv();
+    } else if (uv.projection == UvProjection::Sphere) {
+        mesh.applySphereProjectionUv();
+    } else {
+        mesh.applyPlanarProjectionUv();
+    }
+    mesh.applyUvMapping(uv.scaleU, uv.scaleV, uv.offsetU, uv.offsetV, uv.rotation);
+}
 
-    // Use 32-bit indices to handle large manifold output
-    std::vector<uint32_t> idx32(gl.triVerts.begin(), gl.triVerts.end());
-
-    mesh.vb = std::make_unique<VertexBuffer>(device, nVerts);
-    mesh.vb->SetData(verts.data(), nVerts);
-    mesh.ib = std::make_unique<IndexBuffer>(device, IndexElementSize::ThirtyTwoBits, nTris * 3, BufferUsage::None);
-    mesh.ib->SetData(idx32.data(), nTris * 3);
-    mesh.primitiveCount = nTris;
-    return mesh;
+// Convert a Manifold result to the same smooth-normal/UV layout used by glTF
+// CSG export. `m` is already world-space in the viewport path, and therefore
+// its generated projection is world-anchored; the glTF exporter performs the
+// equivalent operation in the CSG root's local space before node transforms.
+static RenderMesh manifoldToRenderMesh(GraphicsDevice& device, const manifold::Manifold& m,
+                                       const Mc3Object& csgRoot) {
+    mc3togltf::MeshData data = mc3togltf::meshDataFromCsgManifold(m);
+    if (data.empty()) return {};
+    applyCsgUvMapping(data, csgRoot);
+    return uploadMeshData(device, data);
 }
 
 // ---------------------------------------------------------------------------
@@ -796,7 +798,8 @@ void SceneRenderer::drawDepthObject(const Mc3Object& obj, const Mc3Document& doc
         auto cached = csgMeshCache_.find(fingerprint);
         if (cached == csgMeshCache_.end()) {
             ++csgCacheEvaluations_;
-            csgMeshCache_[fingerprint] = manifoldToRenderMesh(device_, buildManifoldTree(obj, doc, parentWorld, 0));
+            csgMeshCache_[fingerprint] = manifoldToRenderMesh(
+                device_, buildManifoldTree(obj, doc, parentWorld, 0), obj);
             cached = csgMeshCache_.find(fingerprint);
         }
         if (cached->second.vb) depthStatic(cached->second, Matrix::getIdentityProperty());
@@ -1308,13 +1311,14 @@ void SceneRenderer::drawObject(const Mc3Object& obj, const Mc3Document& doc,
         if (cit == csgMeshCache_.end()) {
             ++csgCacheEvaluations_;
             manifold::Manifold m = buildManifoldTree(obj, doc, parentWorld, 0);
-            csgMeshCache_[fp] = manifoldToRenderMesh(device_, m);
+            csgMeshCache_[fp] = manifoldToRenderMesh(device_, m, obj);
             cit = csgMeshCache_.find(fp);
         }
         csgTriCountMap_[obj.id] = cit->second.primitiveCount;  // K4
         csgWarningMap_[obj.id] = csgSubtreeWarning(obj, doc, 0);   // STAB-0672
         if (cit->second.vb) {
-            drawMesh(cit->second, Matrix::getIdentityProperty(), view, proj, color);
+            drawMeshTextured(cit->second, Matrix::getIdentityProperty(), view, proj, color, tex,
+                             svgSampler ? &*svgSampler : nullptr);
         } else {
             // Fallback: manifold failed or empty — render children individually
             for (const auto& child : obj.children)
@@ -1972,10 +1976,15 @@ bool SceneRenderer::exportCsgMesh(const Mc3Object& obj, const Mc3Document& doc,
     try {
         manifold::Manifold m = buildManifoldTree(obj, doc, Matrix::getIdentityProperty(), 0);
         if (m.IsEmpty()) { err = "CSG result is empty"; return false; }
-        manifold::MeshGL gl = m.GetMeshGL();
-        int nVerts = (int)gl.vertProperties.size() / (int)gl.numProp;
-        int nTris  = (int)gl.triVerts.size() / 3;
-        if (nVerts <= 0 || nTris <= 0) { err = "Mesh has no geometry"; return false; }
+        mc3togltf::MeshData mesh = mc3togltf::meshDataFromCsgManifold(m);
+        if (mesh.empty() || mesh.positions.size() % 3 != 0 ||
+            mesh.normals.size() != mesh.positions.size()) {
+            err = "Mesh has no geometry";
+            return false;
+        }
+        applyCsgUvMapping(mesh, obj);
+        const int nVerts = mesh.vertexCount();
+        const int nTris = static_cast<int>(mesh.indices.size() / 3);
 
         std::ofstream f(path);
         if (!f) { err = "Cannot open file for writing: " + path; return false; }
@@ -1985,34 +1994,24 @@ bool SceneRenderer::exportCsgMesh(const Mc3Object& obj, const Mc3Document& doc,
         f << std::fixed;
 
         for (int i = 0; i < nVerts; ++i) {
-            float x = gl.vertProperties[i * gl.numProp + 0];
-            float y = gl.vertProperties[i * gl.numProp + 1];
-            float z = gl.vertProperties[i * gl.numProp + 2];
+            float x = mesh.positions[i * 3 + 0];
+            float y = mesh.positions[i * 3 + 1];
+            float z = mesh.positions[i * 3 + 2];
             f << "v " << x << " " << y << " " << z << "\n";
         }
-
-        // Per-face normals via cross product
-        for (int ti = 0; ti < nTris; ++ti) {
-            uint32_t i0 = gl.triVerts[ti * 3 + 0];
-            uint32_t i1 = gl.triVerts[ti * 3 + 1];
-            uint32_t i2 = gl.triVerts[ti * 3 + 2];
-            float ax = gl.vertProperties[i0*gl.numProp], ay = gl.vertProperties[i0*gl.numProp+1], az = gl.vertProperties[i0*gl.numProp+2];
-            float bx = gl.vertProperties[i1*gl.numProp], by = gl.vertProperties[i1*gl.numProp+1], bz = gl.vertProperties[i1*gl.numProp+2];
-            float cx = gl.vertProperties[i2*gl.numProp], cy = gl.vertProperties[i2*gl.numProp+1], cz = gl.vertProperties[i2*gl.numProp+2];
-            float ux = bx-ax, uy = by-ay, uz = bz-az;
-            float vx = cx-ax, vy = cy-ay, vz = cz-az;
-            float nx = uy*vz - uz*vy, ny = uz*vx - ux*vz, nz = ux*vy - uy*vx;
-            float len = std::sqrt(nx*nx + ny*ny + nz*nz);
-            if (len > 1e-9f) { nx /= len; ny /= len; nz /= len; }
-            f << "vn " << nx << " " << ny << " " << nz << "\n";
+        for (int i = 0; i < nVerts; ++i) {
+            f << "vt " << mesh.texcoords[i * 2] << " " << mesh.texcoords[i * 2 + 1] << "\n";
+            f << "vn " << mesh.normals[i * 3] << " " << mesh.normals[i * 3 + 1]
+              << " " << mesh.normals[i * 3 + 2] << "\n";
         }
 
         for (int ti = 0; ti < nTris; ++ti) {
-            uint32_t i0 = gl.triVerts[ti*3+0] + 1;  // OBJ is 1-indexed
-            uint32_t i1 = gl.triVerts[ti*3+1] + 1;
-            uint32_t i2 = gl.triVerts[ti*3+2] + 1;
-            int ni = ti + 1;
-            f << "f " << i0 << "//" << ni << " " << i1 << "//" << ni << " " << i2 << "//" << ni << "\n";
+            uint32_t i0 = mesh.indices[ti*3+0] + 1;  // OBJ is 1-indexed
+            uint32_t i1 = mesh.indices[ti*3+1] + 1;
+            uint32_t i2 = mesh.indices[ti*3+2] + 1;
+            f << "f " << i0 << "/" << i0 << "/" << i0
+              << " " << i1 << "/" << i1 << "/" << i1
+              << " " << i2 << "/" << i2 << "/" << i2 << "\n";
         }
 
         return true;

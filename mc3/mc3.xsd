@@ -626,9 +626,44 @@
         <xs:element name="instance"     type="instanceType"/>
         <xs:element name="area"         type="areaType"/>
         <xs:element name="group"        type="objectsContainerType"/>
-        <xs:element name="union"        type="objectsContainerType"/>
-        <xs:element name="difference"   type="objectsContainerType"/>
-        <xs:element name="intersection" type="objectsContainerType"/>
+        <xs:element name="union"        type="csgContainerType"/>
+        <xs:element name="difference"   type="csgContainerType"/>
+        <xs:element name="intersection" type="csgContainerType"/>
+      </xs:choice>
+    </xs:sequence>
+    <xs:attributeGroup ref="objectAttrs"/>
+  </xs:complexType>
+
+  <!-- CSG roots are containers like groups, but own a generated-result UV
+       mapping. This stays separate from objectsContainerType because that
+       type is also used by top-level <objects> and ordinary <group>. -->
+  <xs:complexType name="csgContainerType">
+    <xs:sequence>
+      <xs:element name="deform"     type="deformType"    minOccurs="0"/>
+      <xs:element name="uv_mapping" type="uvMappingType" minOccurs="0"/>
+      <xs:element name="metadata"   type="metadataType"  minOccurs="0"/>
+      <xs:element name="assetMetadata" type="assetMetadataType" minOccurs="0"/>
+      <xs:element name="state"      type="objectStateType" minOccurs="0" maxOccurs="unbounded"/>
+      <xs:choice minOccurs="0" maxOccurs="unbounded">
+        <xs:element name="box"          type="boxType"/>
+        <xs:element name="cube"         type="cubeType"/>
+        <xs:element name="sphere"       type="sphereType"/>
+        <xs:element name="cylinder"     type="cylinderType"/>
+        <xs:element name="cone"         type="coneType"/>
+        <xs:element name="plane"        type="planeType"/>
+        <xs:element name="torus"        type="torusType"/>
+        <xs:element name="capsule"      type="capsuleType"/>
+        <xs:element name="disk"         type="diskType"/>
+        <xs:element name="grid"         type="gridType"/>
+        <xs:element name="icosphere"    type="icosphereType"/>
+        <xs:element name="mesh"         type="meshType"/>
+        <xs:element name="extrude"      type="extrudeType"/>
+        <xs:element name="instance"     type="instanceType"/>
+        <xs:element name="area"         type="areaType"/>
+        <xs:element name="group"        type="objectsContainerType"/>
+        <xs:element name="union"        type="csgContainerType"/>
+        <xs:element name="difference"   type="csgContainerType"/>
+        <xs:element name="intersection" type="csgContainerType"/>
       </xs:choice>
     </xs:sequence>
     <xs:attributeGroup ref="objectAttrs"/>
@@ -918,9 +953,9 @@
         <xs:element name="mesh"         type="meshType"/>
         <xs:element name="extrude"      type="extrudeType"/>
         <xs:element name="group"        type="objectsContainerType"/>
-        <xs:element name="union"        type="objectsContainerType"/>
-        <xs:element name="difference"   type="objectsContainerType"/>
-        <xs:element name="intersection" type="objectsContainerType"/>
+        <xs:element name="union"        type="csgContainerType"/>
+        <xs:element name="difference"   type="csgContainerType"/>
+        <xs:element name="intersection" type="csgContainerType"/>
       </xs:choice>
     </xs:sequence>
     <xs:attribute name="id" type="xs:ID" use="required"/>

@@ -1,11 +1,29 @@
 #pragma once
 #include "MeshBuilder.hpp"
 #include <MeshCraft/Mc3/Mc3Object.hpp>
+#include <manifold/manifold.h>
 #include <map>
 #include <memory>
 #include <string>
+#include <vector>
 
 namespace mc3togltf {
+
+// Geometry from a real CSG evaluation plus the source material name for each
+// output triangle. `triangleMaterials` is intentionally parallel to
+// `mesh.indices / 3`; an empty name means the triangle has no material.
+// The CSG root's own material remains an explicit exporter override.
+struct CsgMeshData {
+    MeshData mesh;
+    std::vector<std::string> triangleMaterials;
+
+    bool empty() const { return mesh.empty(); }
+};
+
+// Converts a Manifold result to indexed MeshData with Manifold-generated
+// smooth normals (60-degree sharp-edge threshold). Shared by the glTF export
+// and live viewport so they do not regress to different CSG shading rules.
+MeshData meshDataFromCsgManifold(const manifold::Manifold& manifold);
 
 // Evaluate a CSG boolean tree rooted at 'csgObj' (Union/Difference/Intersection)
 // using the Manifold library.
@@ -34,6 +52,12 @@ namespace mc3togltf {
 // Returns empty MeshData when the boolean result is geometrically empty
 // (e.g., intersection of non-overlapping shapes); a warning is printed to stderr.
 MeshData evaluateCsgNode(
+    const MeshCraft::Mc3::Mc3Object& csgObj,
+    const std::map<std::string, std::shared_ptr<MeshCraft::Mc3::Mc3Object>>& definitions);
+
+// Same boolean evaluation as evaluateCsgNode(), retaining the Manifold source
+// relation needed by the glTF exporter to restore child-material primitives.
+CsgMeshData evaluateCsgNodeWithMaterials(
     const MeshCraft::Mc3::Mc3Object& csgObj,
     const std::map<std::string, std::shared_ptr<MeshCraft::Mc3::Mc3Object>>& definitions);
 

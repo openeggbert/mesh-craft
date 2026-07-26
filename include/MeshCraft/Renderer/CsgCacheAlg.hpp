@@ -47,6 +47,17 @@ inline std::size_t csgSubtreeHashAlg(const Mc3::Mc3Object& obj, const Mc3::Mc3Do
     if (obj.deform) {
         hf(obj.deform->scale[0]); hf(obj.deform->scale[1]); hf(obj.deform->scale[2]);
     }
+    // CSG results now generate TEXCOORD_0 from the root's UV projection, so
+    // changing any mapping parameter must rebuild the cached textured vertex
+    // buffer even though the boolean topology itself is unchanged.
+    if (obj.uvMapping) {
+        hi(static_cast<int>(obj.uvMapping->projection));
+        hf(obj.uvMapping->scaleU);   hf(obj.uvMapping->scaleV);
+        hf(obj.uvMapping->offsetU);  hf(obj.uvMapping->offsetV);
+        hf(obj.uvMapping->rotation);
+    } else {
+        hi(-1);
+    }
     // csgOperation: a Union/Difference/Intersection node's own operation type
     // must be part of its hash — otherwise switching an existing CSG group's
     // operation (with no geometry change) produces an identical hash and the

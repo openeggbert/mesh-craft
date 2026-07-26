@@ -710,8 +710,8 @@ All five are supported by the MeshCraft editor and exported by `mc3togltf`.
 
 ### `<uv_mapping>` — per-object UV override
 
-Optional child element on most primitives (box/sphere/cylinder/cone/plane/
-cube/torus/capsule/disk/grid/icosphere/mesh/extrude/group/CSG roots),
+Optional child element on geometry-producing primitives (box/sphere/cylinder/
+cone/plane/cube/torus/capsule/disk/grid/icosphere/mesh/extrude) and CSG roots,
 overriding that object's default UV generation.
 
 ```xml
@@ -727,9 +727,10 @@ overriding that object's default UV generation.
 | `offset_u` / `offset_v` | float | `0.0` | Per-axis UV offset |
 | `rotation` | float (degrees) | `0.0` | UV rotation |
 
-**`projection` (`SYS-W14-24`, 2026-07-20):** `"box"` and `"sphere"` are
-implemented by `mc3togltf` (editor-viewport parity is intentionally out
-of scope — the exported glTF is the ground truth for appearance).
+**`projection` (`SYS-W14-24`, `SYS-W14-06`):** `"box"` and `"sphere"` are
+implemented by `mc3togltf`. Ordinary primitive viewport projection remains
+export-only, but CSG roots use the same generated projection in both the
+exporter and live CSG preview.
 `"box"`/triplanar picks, per vertex, the dominant axis of that vertex's
 normal (or its direction from the mesh's local bounding-box center if
 normals are absent) and projects onto the other two axes using **raw,
@@ -741,11 +742,12 @@ mesh's local bounding-box center, normalized to `[0, 1]` on both axes.
 `scale_u`/`scale_v`/`offset_u`/`offset_v`/`rotation` are still applied
 on top of either regenerated projection, same as for `"planar"`.
 
-Per-object UV mapping is ignored on CSG boolean output (see
-[CSG operations](#csg-operations)'s "UV coordinates are not real"
-limitation) — it only affects primitives whose geometry is generated
-directly, not the Manifold-evaluated result of a `<union>`/`<difference>`/
-`<intersection>`.
+For a CSG root, `uv_mapping` is applied **after** the Manifold boolean to the
+generated result: `"planar"` projects local X/Z, `"box"` uses the dominant
+normal axis, and `"sphere"` is the documented equirectangular projection.
+Without it, a CSG result defaults to box projection. This is generated mapping,
+not a retained authored unwrap from the operands; see [CSG operations](#csg-operations)
+for that remaining limitation.
 
 ### `<mesh>` — external OBJ file
 
@@ -832,12 +834,22 @@ Pass `--allow-approximate-csg` (CLI) or enable the "Allow approximate CSG export
 
 **Strict mode is the default** (`allowApproximateCSG = false` in `GltfExporter`; the `mc3togltf_csg_strict` test asserts this): a CSG node containing an unsupported child type fails the whole export with an error rather than silently producing wrong geometry. There is no separate "strict" flag to set — it's simply what happens unless `--allow-approximate-csg` is explicitly passed.
 
-**Limitations of CSG output** (the Manifold-evaluated result mesh, not the approximate-fallback path), per `CsgEvaluator.cpp`'s `manifoldToMeshData()`:
-- **UV coordinates are not real** — a texcoord channel is present (same vertex count as positions/normals), but every value is a hardcoded `(0, 0)` placeholder, not an actual UV unwrap. Any material with texture slots (base color, normal, etc.) samples the same texel everywhere on a CSG result.
-- **Normals are not preserved from the child geometry** — flat per-face normals are recomputed from each triangle's winding via cross product; there is no smooth-shading / vertex-normal-interpolation option for CSG output.
-- Child material assignments are not preserved — the CSG root's material is used for the entire merged mesh, regardless of what materials the children had.
+**CSG output shading/material behavior** (`SYS-W14-06`):
 
-**Investigated: could UV be preserved (STAB-0225)?** Not without a real feature addition. Every `Manifold` fed into a boolean op in `CsgEvaluator.cpp` is built either from Manifold's own built-in primitive generators (`Manifold::Cube`/`Sphere`/`Cylinder`, which carry no UV data at all) or from a `MeshGL` with `numProp = 3` (position-only) for the Torus/Capsule/IcoSphere path — no UV channel is ever fed in for Manifold to carry through the boolean op in the first place. Manifold v3's `MeshGL` *does* support extra per-vertex properties beyond position (and interpolates them across new cut edges during boolean ops), so preserving UVs is technically possible — but it would require rebuilding every CSG-eligible primitive with a UV-carrying `MeshGL` (including writing new UV-aware constructors for the cases currently using Manifold's built-in generators) and handling the interpolated-but-unwrapped seams that boolean cuts create. That's a real, non-trivial feature, out of scope for this stabilization effort — documented as an explicit limitation above rather than attempted.
+- Manifold calculates vertex normals after the boolean with its 60-degree
+  sharp-edge threshold. Curved result surfaces shade smoothly; hard edges such
+  as box corners stay sharp. This is generated result geometry, so it does not
+  retain arbitrary authored normal vectors from inputs.
+- The output always has usable generated UVs: default box projection or the
+  CSG root's explicit `uv_mapping`. It intentionally does **not** preserve the
+  operands' original UV seams/unwrapping through new cut surfaces. Retaining
+  that would require feeding UV-carrying `MeshGL` data for every analytic
+  primitive and defining seam policy for boolean-created vertices.
+- An explicit material on the CSG root remains a full-result override. Without
+  one, `mc3togltf` restores the Manifold source relation as one glTF primitive
+  per effective child material, including cut faces associated with that input.
+  The live preview uses the CSG root material/texture only; its per-child
+  material split is export-only for now.
 
 ---
 

@@ -9,8 +9,9 @@ top-level cutter child, so Difference silently treated it as a second
 was fully inside the base box, the "union" degenerated to just the box
 alone (36 vertices) and this test's old assertions (vertex count > 0,
 index count > 0) passed anyway without ever proving a real cut happened.
-Fixed by adding role="cutter" and asserting a vertex count high enough
-that it could only come from a genuinely hollowed-out result.
+Fixed by adding role="cutter" and asserting a geometry count high enough
+that it could only come from a genuinely hollowed-out result. The geometry is
+now indexed, so vertex count is no longer a triangle-soup proxy.
 """
 import json
 import os
@@ -59,14 +60,13 @@ def test_nested_csg(mc3togltf, xml_path, tmpdir):
     assert vc > 0, f"NestedCsg has 0 vertices after CSG eval"
 
     # STAB-0206: prove a *real* 3-level cut happened, not a silent no-op.
-    # BoxBase alone is 12 triangles = 36 vertices; a genuinely hollowed-out
-    # box (3 cavities carved via a 3-level Difference->Union->Union cutter
-    # tree) must have far more geometry than that.
-    assert vc > 1000, (
-        f"NestedCsg has only {vc} vertices -- expected a real hollowed-out "
-        f"result (thousands of vertices from 3 carved cavities), not a "
-        f"near-bare box (36v would mean the cutter was silently ignored, "
-        f"e.g. a missing role=\"cutter\" flag)"
+    # A bare source box has only 12 triangles / 36 indices. The indexed CSG
+    # result has fewer vertices than the historical triangle soup but still
+    # needs hundreds of normal-aware vertices for its three cavities.
+    assert vc > 500, (
+        f"NestedCsg has only {vc} indexed vertices -- expected a real "
+        f"hollowed-out result, not a near-bare box caused by a missing "
+        f"role=\"cutter\" flag"
     )
 
     idx_acc = prims[0].get("indices")
