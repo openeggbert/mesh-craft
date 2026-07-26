@@ -36,8 +36,16 @@ distribution rather than missing editor breadth.
    its first real run already landed and found real issues.
 2. Autonomous continuation in progress on the freshly-added `[PROPOSED]`
    backlog (`SYS-W9-06/07`, `SYS-W1-08`, `SYS-W2-06`, `SYS-W11-08/09/10`,
-   `SYS-W13-03`, `SYS-W3-05`). `SYS-W9-06`, `SYS-W2-06`, `SYS-W1-08` are DONE
-   as of this update; `SYS-W9-07` is next. See `plan.md` for full evidence.
+   `SYS-W13-03`, `SYS-W3-05`). **7 of 9 DONE as of this update**:
+   `SYS-W9-06`, `SYS-W2-06`, `SYS-W1-08`, `SYS-W9-07`, `SYS-W13-03`,
+   `SYS-W11-08` all landed, each its own commit, build-verified and tested
+   before committing. Remaining: `SYS-W11-09` (editor sanitizer CI — the
+   largest/most resource-intensive remaining item, an ASan+UBSan build of
+   the ~76k-line editor; watch RAM per the shared-machine guidance before
+   attempting a full build), `SYS-W11-10` (RC process/versioning), `SYS-W3-05`
+   (decompose `EditorAlgorithms.hpp`, doing this one last per the original
+   review's own recommended ordering: architecture after correctness). See
+   `plan.md` for full evidence on everything done so far.
 
 `SYS-W14-40` is complete: the explicit bounded Event Preview/Play mode is
 covered by `event_preview_runner`. See `plan.md` for the remaining Windows
@@ -93,12 +101,22 @@ subset) before committing. The 3 pre-existing `mc3togltf_blender_import`
 family failures (missing `numpy` in this sandbox's Blender) are unrelated
 environment gaps, not regressions, and were left alone.
 
-**Next up in this continuation**: `SYS-W9-07` (untitled-scene crash
-recovery), then `SYS-W11-08`/`SYS-W11-09`/`SYS-W13-03`/`SYS-W11-10`/
-`SYS-W3-05` in that order (see `plan.md`'s recommended ordering note on
-`SYS-W11-06`). If this file wasn't updated further after this paragraph and
-the session ended, check `git log` on `develop` and `plan.md`'s own
-`[DONE]`/`[IN_PROGRESS]` markers for the true current state before assuming
+Continuing (each its own commit, in this order after the above): **`SYS-W9-07`**
+(`bdd3d03`, untitled-scene crash recovery), **`SYS-W13-03`** (`2c2ce4f`, 4
+verified doc-drift fixes), **`SYS-W11-08`** (`fbaf683`, clean-room CLI
+release artifacts). `SYS-W11-08` found a real functional gap along the
+way, not just a testing gap: **neither `mc3tomcb` nor `mc3togltf` supported
+`--version` at all** (usage text / "input file not found" respectively) —
+fixed for both. Also fixed a self-referential bug in the new SHA-256
+manifest generator (a stale manifest from a previous run got its own old
+hash included in the new one). Windows got the same manifest/notices staged
+additively in CI, without touching the already-deferred DLL-not-found gap.
+
+Remaining: `SYS-W11-09`, `SYS-W11-10`, `SYS-W3-05` in that order (see
+`plan.md`'s recommended ordering note on `SYS-W11-06`). If this file wasn't
+updated further after this paragraph and the session ended, check `git log`
+on `develop` and `plan.md`'s own `[DONE]`/`[IN_PROGRESS]` markers for the
+true current state before assuming
 anything below this point is stale.
 
 ## Known release blockers and decisions
