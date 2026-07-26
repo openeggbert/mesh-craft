@@ -1,6 +1,6 @@
 #include "MeshCraft/Scene/PropertiesPanel.hpp"
 #include "MeshCraft/Renderer/SceneRenderer.hpp"
-#include "MeshCraft/EditorAlgorithms.hpp"
+#include "MeshCraft/EditorCommandAlgorithms.hpp"
 
 #include <imgui.h>
 

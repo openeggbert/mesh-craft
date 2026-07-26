@@ -2,7 +2,9 @@
 // picking-ray inversion and the explicit Normalize to Y-up command.
 
 #include "MeshCraft/CoordinateSystemAlgorithms.hpp"
-#include "MeshCraft/EditorAlgorithms.hpp"
+#include "MeshCraft/EditorCommandAlgorithms.hpp"
+#include "MeshCraft/EditorEventAlgorithms.hpp"
+#include "MeshCraft/EditorSelectionAlgorithms.hpp"
 
 #include <cmath>
 #include <cstdio>

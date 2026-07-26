@@ -11,7 +11,7 @@
 // only needs Mc3Document/Mc3Object (header-only), matching
 // object_index_test/texture_from_path_test's precedent.
 
-#include "MeshCraft/EditorAlgorithms.hpp"
+#include "MeshCraft/EditorCommandAlgorithms.hpp"
 
 #include <cstdio>
 

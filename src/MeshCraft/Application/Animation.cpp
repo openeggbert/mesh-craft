@@ -1,6 +1,7 @@
 #include "MeshCraft/Application/MeshCraftApplication.hpp"
 #include "MeshCraft/AnimationPreviewAlgorithms.hpp"
-#include "MeshCraft/EditorAlgorithms.hpp"
+#include "MeshCraft/EditorEventAlgorithms.hpp"
+#include "MeshCraft/EditorUtilityAlgorithms.hpp"
 
 #include <imgui.h>
 

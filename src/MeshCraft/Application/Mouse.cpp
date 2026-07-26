@@ -3,7 +3,8 @@
 #include "MeshCraft/RotationConventionCna.hpp"
 #include "MeshCraft/RotationConventionAlgorithms.hpp"
 #include "MeshCraft/MeshCraftPrivate.hpp"
-#include "MeshCraft/EditorAlgorithms.hpp"
+#include "MeshCraft/EditorSelectionAlgorithms.hpp"
+#include "MeshCraft/EditorTransformAlgorithms.hpp"
 
 #include <Microsoft/Xna/Framework/Input/Keys.hpp>
 #include <Microsoft/Xna/Framework/Input/KeyboardState.hpp>

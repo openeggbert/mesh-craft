@@ -1,5 +1,6 @@
 #include "MeshCraft/Scene/SceneHierarchyPanel.hpp"
-#include "MeshCraft/EditorAlgorithms.hpp"
+#include "MeshCraft/EditorCommandAlgorithms.hpp"
+#include "MeshCraft/EditorSelectionAlgorithms.hpp"
 
 #include <imgui.h>
 

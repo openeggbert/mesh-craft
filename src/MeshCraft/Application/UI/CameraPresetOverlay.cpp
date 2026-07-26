@@ -1,5 +1,5 @@
 #include "MeshCraft/Application/UI/CameraPresetOverlay.hpp"
-#include "MeshCraft/EditorAlgorithms.hpp"
+#include "MeshCraft/EditorTransformAlgorithms.hpp"
 
 #include <imgui.h>
 

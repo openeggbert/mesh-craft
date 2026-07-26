@@ -1,6 +1,7 @@
 #include "MeshCraft/Application/MeshCraftApplication.hpp"
 #include "MeshCraft/MeshCraftPrivate.hpp"
-#include "MeshCraft/EditorAlgorithms.hpp"
+#include "MeshCraft/EditorPersistenceAlgorithms.hpp"
+#include "MeshCraft/EditorPreferencesAlgorithms.hpp"
 #include "MeshCraft/LibraryWorkflowAlgorithms.hpp"
 #include "MeshCraft/Mc3/Mc3ImportResolver.hpp"
 #include "MeshCraft/Mcb/McbReader.hpp"

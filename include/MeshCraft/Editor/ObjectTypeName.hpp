@@ -6,15 +6,17 @@
 // This is the single source of truth. It replaces two divergent copies that
 // both silently mishandled five primitive types:
 //   * objectTypeName()     in src/MeshCraft/MeshCraftPrivate.hpp
-//   * objectTypeNameAlg()  in include/MeshCraft/EditorAlgorithms.hpp
+//   * objectTypeNameAlg()  in include/MeshCraft/EditorCommandAlgorithms.hpp
+//                          (formerly EditorAlgorithms.hpp before its SYS-W3-05
+//                          split into per-concern headers)
 // Both used `default: return "Object"` and omitted Torus, Capsule, Disk, Grid
 // and IcoSphere, so those types displayed as "Object" in the outliner and,
 // critically, the macro recorder wrote `add Object` for them. On replay
 // objectTypeFromName("Object") fell through to Box, so recording "add Torus"
 // and replaying it produced a Box — a silent, lossy round-trip.
 //
-// Depends only on Mc3Object.hpp (the enum), so it is safe to include from the
-// CNA/ImGui-free EditorAlgorithms.hpp and unit-testable standalone.
+// Depends only on Mc3Object.hpp (the enum), so it is safe to include from any
+// CNA/ImGui-free Editor*Algorithms.hpp header and unit-testable standalone.
 
 #include <MeshCraft/Mc3/Mc3Object.hpp>
 

@@ -1,5 +1,5 @@
 #include "MeshCraft/AnimationPreviewAlgorithms.hpp"
-#include "MeshCraft/EditorAlgorithms.hpp"
+#include "MeshCraft/EditorEventAlgorithms.hpp"
 
 #include <cmath>
 #include <iostream>

@@ -1,6 +1,6 @@
 #include "MeshCraft/Editor/MacroRecorder.hpp"
 #include "MeshCraft/Editor/ObjectTypeName.hpp"
-#include "MeshCraft/EditorAlgorithms.hpp"
+#include "MeshCraft/EditorPreferencesAlgorithms.hpp"
 
 #include <cstdio>
 #include <filesystem>

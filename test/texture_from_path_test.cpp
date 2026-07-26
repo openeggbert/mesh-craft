@@ -17,7 +17,7 @@
 // (header-only), matching object_index_test/macro_recorder_test's
 // precedent -- no Mc3/CNA linking required.
 
-#include "MeshCraft/EditorAlgorithms.hpp"
+#include "MeshCraft/EditorCommandAlgorithms.hpp"
 
 #include <cstdio>
 

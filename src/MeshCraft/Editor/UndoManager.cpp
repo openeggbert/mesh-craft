@@ -1,5 +1,5 @@
 #include "MeshCraft/Editor/UndoManager.hpp"
-#include "MeshCraft/EditorAlgorithms.hpp"
+#include "MeshCraft/EditorCommandAlgorithms.hpp"
 
 namespace MeshCraft::Editor {
 

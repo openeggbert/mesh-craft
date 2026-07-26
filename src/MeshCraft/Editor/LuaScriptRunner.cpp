@@ -1,6 +1,6 @@
 #include "MeshCraft/Editor/LuaScriptRunner.hpp"
 
-#include "MeshCraft/EditorAlgorithms.hpp"
+#include "MeshCraft/EditorCommandAlgorithms.hpp"
 #include "MeshCraft/Editor/LuaMemoryBudget.hpp"
 #include "MeshCraft/Mc3/Mc3Object.hpp"
 

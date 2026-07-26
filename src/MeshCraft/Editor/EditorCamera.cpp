@@ -1,5 +1,5 @@
 #include "MeshCraft/Editor/EditorCamera.hpp"
-#include "MeshCraft/EditorAlgorithms.hpp"
+#include "MeshCraft/EditorTransformAlgorithms.hpp"
 
 #include <Microsoft/Xna/Framework/MathHelper.hpp>
 #include <algorithm>

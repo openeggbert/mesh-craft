@@ -1,6 +1,6 @@
 #include "MeshCraft/Application/UI/AutomationWorkspace.hpp"
 
-#include "MeshCraft/EditorAlgorithms.hpp"
+#include "MeshCraft/EditorCommandAlgorithms.hpp"
 #include "MeshCraft/EventBindingAlgorithms.hpp"
 
 #include <imgui.h>

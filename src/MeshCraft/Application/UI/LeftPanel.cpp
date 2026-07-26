@@ -1,4 +1,4 @@
-#include "MeshCraft/EditorAlgorithms.hpp"
+#include "MeshCraft/EditorCommandAlgorithms.hpp"
 #include "MeshCraft/GraphicsBackendCheck.hpp"
 #include "MeshCraft/Application/MeshCraftApplication.hpp"
 #include "MeshCraft/Application/UI/AutomationWorkspace.hpp"

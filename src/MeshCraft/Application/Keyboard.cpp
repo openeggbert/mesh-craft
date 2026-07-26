@@ -1,6 +1,6 @@
 #include "MeshCraft/Application/MeshCraftApplication.hpp"
 #include "MeshCraft/MeshCraftPrivate.hpp"
-#include "MeshCraft/EditorAlgorithms.hpp"
+#include "MeshCraft/EditorCommandAlgorithms.hpp"
 
 #include <Microsoft/Xna/Framework/Input/Keys.hpp>
 #include <Microsoft/Xna/Framework/Input/KeyboardState.hpp>

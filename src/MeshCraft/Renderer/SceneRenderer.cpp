@@ -7,7 +7,7 @@
 #include "MeshCraft/Renderer/CsgCacheAlg.hpp"
 #include "MeshCraft/CsgMaterialRangeAlgorithms.hpp"
 #include "MeshCraft/Renderer/PrimitiveTessellationAlg.hpp"
-#include "MeshCraft/EditorAlgorithms.hpp"
+#include "MeshCraft/EditorUtilityAlgorithms.hpp"
 #include "MeshCraft/GraphicsBackendCheck.hpp"
 #include <iostream>
 

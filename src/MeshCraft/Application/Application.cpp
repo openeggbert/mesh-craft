@@ -1,7 +1,8 @@
 #include "MeshCraft/Application/MeshCraftApplication.hpp"
 #include "MeshCraft/AnimationPreviewAlgorithms.hpp"
 #include "MeshCraft/CoordinateSystemAlgorithms.hpp"
-#include "MeshCraft/EditorAlgorithms.hpp"
+#include "MeshCraft/EditorPersistenceAlgorithms.hpp"
+#include "MeshCraft/EditorTransformAlgorithms.hpp"
 #include "MeshCraft/GraphicsBackendCheck.hpp"
 #include "MeshCraft/MeshCraftPrivate.hpp"
 

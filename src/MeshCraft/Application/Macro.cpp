@@ -1,5 +1,4 @@
 #include "MeshCraft/Application/MeshCraftApplication.hpp"
-#include "MeshCraft/EditorAlgorithms.hpp"
 
 #include <functional>
 #include <string>

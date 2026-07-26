@@ -126,6 +126,27 @@ on `develop` and `plan.md`'s own `[DONE]`/`[IN_PROGRESS]` markers for the
 true current state before assuming
 anything below this point is stale.
 
+`SYS-W11-09` and `SYS-W11-10` landed (see `plan.md`, both `[DONE]`). Then
+**`SYS-W3-05`** (real refactor, not cosmetic): split the 2,514-line
+`EditorAlgorithms.hpp` into 7 cohesive, CNA-free headers
+(`EditorCommandAlgorithms.hpp`/`EditorSelectionAlgorithms.hpp`/
+`EditorTransformAlgorithms.hpp`/`EditorPersistenceAlgorithms.hpp`/
+`EditorEventAlgorithms.hpp`/`EditorPreferencesAlgorithms.hpp`/
+`EditorUtilityAlgorithms.hpp`), moved `findParentListAlg`/`removeFromListAlg`
+into Commands (not Selection as first proposed) once grep proved every call
+site is a Commands/Transform mutator, and migrated all 30 flagged consumer
+files individually — 14 now need exactly 1 new header, 8 need 2, 1 needs 3,
+1 (`Commands.cpp`) needs 4; one (`Macro.cpp`) had a dead include removed
+outright; 5 were comment-only false positives needing no change. No facade
+left behind; the original header is deleted. `MeshCraft` plus all 13
+affected test targets built clean with zero missing-include errors;
+`ctest -LE render` is 181 tests / 163 passed, with only the two
+already-known pre-existing exceptions (`mc3_json_document_budget` timeout,
+3 Blender-`numpy` import tests) plus 14 unrelated `mcb_*`/`mc3togltf_*`
+tests that were simply never built in this reused `cmake-build-debug`
+(spot-built 3 to confirm — pre-existing gap, not a regression). See
+`plan.md`'s `SYS-W3-05` entry for full line-count/fan-out evidence.
+
 ## Known release blockers and decisions
 
 | Area | Live state |

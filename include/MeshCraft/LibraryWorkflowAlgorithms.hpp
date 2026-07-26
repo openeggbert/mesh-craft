@@ -4,7 +4,8 @@
 // these directly; the same functions are exercised by library_workflow_test
 // so publishing/import behaviour is not only proven through ImGui widgets.
 
-#include "MeshCraft/EditorAlgorithms.hpp"
+#include "MeshCraft/EditorCommandAlgorithms.hpp"
+#include "MeshCraft/EditorPersistenceAlgorithms.hpp"
 #include <MeshCraft/Mc3/Mc3ImportResolver.hpp>
 
 #include <cctype>

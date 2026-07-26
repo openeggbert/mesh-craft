@@ -502,14 +502,65 @@ time; re-evaluate scope and blockers before starting each item.
   `trigger_fire` additionally proves a post-Lua trigger step remains safe
   after the atomic document swap.
 
-- **SYS-W3-05** `[PROPOSED]` `P2` — Decompose `EditorAlgorithms.hpp`.
-  Confirmed at 2,514 lines, combining unrelated persistence, selection,
-  transform, command, event, preferences and utility algorithms behind one
-  header. Split into cohesive CNA-free modules and move non-template
-  implementation to `.cpp` files where practical; preserve existing tested
-  APIs or migrate call sites mechanically. Measure clean-build time and
-  incremental-rebuild fan-out before and after — do not accept a cosmetic
-  split that keeps one transitive mega-header.
+- **SYS-W3-05** `[DONE]` `P2` — Split `EditorAlgorithms.hpp` (2,514 lines,
+  CNA-free) into 7 cohesive headers under `include/MeshCraft/`, grouped by
+  verified cross-reference rather than blind guessing: `EditorCommandAlgorithms.hpp`
+  (857 lines — rename/duplicate/group/ungroup/convert-to-definition/
+  break-instance, F9/F10 reference cleanup, undo-stack cap, coordinate/rotation
+  normalization; also absorbs the two tree helpers `findParentListAlg`/
+  `removeFromListAlg`, moved here from the originally-proposed Selection group
+  once grep showed every one of their 10 call sites is a Commands- or
+  Transform-group mutator, never Selection), `EditorSelectionAlgorithms.hpp`
+  (326 — select-children, lock-aware dry-run, STAB-0503 ray-cast picking,
+  hierarchy filter), `EditorTransformAlgorithms.hpp` (363 — align/scatter/
+  falloff/vertex-snap/rotate-drag/group-scale/camera presets; depends on
+  Commands for `findParentListAlg`+`deepCopyObjectAlg` via
+  `scatterAlongCurveAlg`), `EditorPersistenceAlgorithms.hpp` (479 — autosave/
+  backup/merge/Save-As/export-selection-or-template-or-material/drag-drop/
+  recent-files; depends on Commands for `deepCopyObjectAlg` via
+  `exportSelectionAlg`), `EditorEventAlgorithms.hpp` (308 — AI panel
+  lifecycle, keyframe insertion, SYS-W3-01 Phase 5 anim-override eval/blend;
+  depends on Utility for `resolveObjectPropertyValueAlg` via
+  `insertAnimKeyframesAlg`), `EditorPreferencesAlgorithms.hpp` (238 —
+  keybind/prefs/macro persistence formats; the one group with zero Mc3
+  dependency at all), `EditorUtilityAlgorithms.hpp` (108 — live
+  object-property resolution, material-color fallback). Every function/struct
+  body is byte-identical to the original (verified with a line-range diff
+  against each new file before deleting it — only intentional blank-line
+  reformatting differs); 2,679 total lines vs. 2,514 (+165, entirely the 7x
+  duplicated `#pragma once`/doc-comment/`#include` preamble, not duplicated
+  logic).
+  Fan-out evidence: of the 30 files the initial grep flagged, 5 were
+  comment-only false positives needing no change (`ObjectTypeName.hpp`,
+  `ObjectIndex.cpp`, `AiResponseAlgorithms.hpp`, `registry_insert_undo_test.cpp`,
+  `MeshCraftPrivate.hpp` — each only *mentions* `EditorAlgorithms.hpp` in a
+  comment, never `#include`s it) and `Macro.cpp`'s include was entirely dead
+  (zero symbols used) and removed with no replacement. Of the 25 genuine
+  consumers: 14 need exactly 1 new header, 8 need 2, 1 (`coordinate_system_test`)
+  needs 3, and 1 (`Commands.cpp`, the largest consumer) needs 4 — so 60% of
+  real consumers now pull one narrow ~100–860 line module instead of the
+  former 2,514-line monolith, and even the heaviest consumer pulls at most
+  4 of 7. No facade was left behind; `include/MeshCraft/EditorAlgorithms.hpp`
+  is deleted.
+  Compiler-driven verification: the by-call-site symbol grep against every
+  candidate header was accurate on the first try — `MeshCraft` (30 sources)
+  built with zero missing-include errors, as did all 13 affected test
+  targets (`coordinate_system_test`, `texture_from_path_test`,
+  `animation_preview_algorithms_test`, `delete_reference_integrity_test`,
+  `registry_insert_undo_test`, `macro_recorder_test`, `undo_manager_test`,
+  `scene_history_test`, `automation_workspace_test`, `camera_bookmarks_test`,
+  `lua_script_runner_test`, `trigger_fire_test`, `event_preview_runner_test`).
+  `ctest -LE render`: 181 tests, 163 passed. Failures are exactly the two
+  pre-authorized, unrelated exceptions (`mc3_json_document_budget` Debug-build
+  timeout; the 3 `mc3togltf_*blender_import` tests, blocked on this sandbox's
+  Blender lacking `numpy`) plus 14 `mcb_*`/`mc3togltf_*` tests reported
+  "Not Run" solely because their binaries had never been built in this reused
+  `cmake-build-debug` — spot-built 3 of them (`mc3_invalid_utf8`,
+  `mcb_corruption`, `mc3togltf_csg_null_child`) and all passed unchanged with
+  no other recompilation triggered, confirming this is a pre-existing
+  build-directory gap (none of the 14 consume any `Editor*Algorithms.hpp`
+  header), not a regression; left unbuilt per this task's explicit
+  mc3togltf/mc3tomcb-out-of-scope instruction. Zero real test regressions.
 
 ### W9 — Undo and data-loss
 
