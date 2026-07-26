@@ -139,6 +139,15 @@ if(BUILD_TESTING)
     add_test(NAME mc3togltf_earclip COMMAND mc3togltf_earclip_test)
     set_tests_properties(mc3togltf_earclip PROPERTIES TIMEOUT 15 LABELS "export")
 
+    # SYS-W14-35: direct parser/import coverage (multi-usemtl splitting,
+    # MTL subset mapping/warnings, missing MTL, hostile OBJ indices).
+    add_executable(mc3togltf_obj_material_import_test test/obj_material_import_test.cpp)
+    target_link_libraries(mc3togltf_obj_material_import_test PRIVATE mc3togltf_lib)
+    target_include_directories(mc3togltf_obj_material_import_test PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
+    add_test(NAME mc3togltf_obj_material_import
+             COMMAND mc3togltf_obj_material_import_test "${CMAKE_CURRENT_SOURCE_DIR}/../test")
+    set_tests_properties(mc3togltf_obj_material_import PROPERTIES TIMEOUT 15 LABELS "export")
+
     add_executable(mc3togltf_svg_rasterizer_test test/svg_rasterizer_test.cpp)
     target_link_libraries(mc3togltf_svg_rasterizer_test PRIVATE mc3togltf_lib)
     target_include_directories(mc3togltf_svg_rasterizer_test PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
@@ -258,6 +267,7 @@ if(BUILD_TESTING)
         )
         set_tests_properties(mc3togltf_large_obj_stress PROPERTIES TIMEOUT 90 LABELS "export")
         set(_obj_robustness_xml       "${CMAKE_CURRENT_SOURCE_DIR}/../test/obj_robustness.mc3.xml")
+        set(_obj_material_groups_xml  "${CMAKE_CURRENT_SOURCE_DIR}/../test/obj_material_groups.mc3.xml")
         set(_texture_sampler_xml      "${CMAKE_CURRENT_SOURCE_DIR}/../test/texture_sampler.mc3.xml")
         set(_color_space_export_xml   "${CMAKE_CURRENT_SOURCE_DIR}/../test/color_space_export.mc3.xml")
         set(_material_pbr_xml         "${CMAKE_CURRENT_SOURCE_DIR}/../test/material_pbr.mc3.xml")
@@ -468,6 +478,16 @@ if(BUILD_TESTING)
                         "${_obj_robustness_xml}"
             )
             set_tests_properties(mc3togltf_obj_robustness PROPERTIES TIMEOUT 30 LABELS "export")
+        endif()
+        if(EXISTS "${_obj_material_groups_xml}")
+            add_test(
+                NAME mc3togltf_obj_material_groups_export
+                COMMAND "${PYTHON3_EXEC}"
+                        "${CMAKE_CURRENT_SOURCE_DIR}/test/obj_material_groups_export_test.py"
+                        "$<TARGET_FILE:mc3togltf>"
+                        "${_obj_material_groups_xml}"
+            )
+            set_tests_properties(mc3togltf_obj_material_groups_export PROPERTIES TIMEOUT 30 LABELS "export")
         endif()
         if(EXISTS "${_texture_sampler_xml}")
             add_test(

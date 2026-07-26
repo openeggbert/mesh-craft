@@ -1,0 +1,7 @@
+# Missing MTL is non-fatal: the unassigned geometry remains importable.
+mtllib obj_missing_material_file.mtl
+v 0 0 0
+v 1 0 0
+v 0 1 0
+usemtl does_not_exist
+f 1 2 3

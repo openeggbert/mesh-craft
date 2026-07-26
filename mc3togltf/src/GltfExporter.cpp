@@ -30,6 +30,7 @@
 #include <limits>
 #include <map>
 #include <numbers>
+#include <optional>
 #include <set>
 #include <sstream>
 #include <stdexcept>
@@ -738,8 +739,19 @@ static int buildMesh(ExportCtx& ctx,
         // warning like a merely-missing file.
         assertResourceAllowed(ctx.basePath, obj.meshSource, ctx.allowExternalResources,
                               "mesh source");
+        std::optional<int> objMaterialIndex;
+        if (const auto selector = obj.metadata.find(std::string(kObjMaterialIndexMetadataKey));
+            selector != obj.metadata.end()) {
+            objMaterialIndex = parseObjMaterialIndex(selector->second);
+            if (!objMaterialIndex.has_value()) {
+                std::cerr << "Warning: mesh object '" << obj.name << "' has invalid OBJ material "
+                          << "selector metadata — skipped\n";
+                ctx.stats.warnings++;
+                return -1;
+            }
+        }
         try {
-            md = loadObjMesh(ctx.basePath, obj.meshSource);
+            md = loadObjMesh(ctx.basePath, obj.meshSource, objMaterialIndex);
         } catch (const std::exception& e) {
             std::cerr << "Warning: " << e.what() << '\n';
             ctx.stats.warnings++;

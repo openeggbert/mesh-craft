@@ -799,19 +799,41 @@ for that remaining limitation.
 
 **Note:** The attribute is `src` (not `source`).
 
-**Single material only:** a `<mesh>` object always uses its own `material`
-attribute (or none) for the *entire* imported OBJ — this is intentional, not
-a bug. If the source OBJ file assigns multiple materials per face/group
-(`usemtl` groups, `.mtl`-referenced materials), those per-face assignments
-are read by the OBJ parser but discarded: `mc3togltf`'s `loadObjMesh()`
-flattens all faces into one triangle list with no material information, and
-the single mc3-declared material (if any) is applied uniformly to the whole
-mesh on export. Splitting such an OBJ into multiple glTF primitives/
-materials on import would require deciding how OBJ `.mtl` material
-properties map onto mc3's own material model — a real modeling decision, not
-a mechanical fix — so for now, multi-material OBJ meshes should be
-pre-split into separate single-material `<mesh>` objects (or `<group>`
-children) if per-face materials are needed in the exported glTF.
+**Material-aware OBJ import:** MeshCraft's File → Import OBJ command creates
+a `<group>` and one `<mesh>` child for every populated `usemtl` assignment.
+Each child keeps the source `src`, receives one generated MC3 material, and
+carries the opaque source-import selector below. The viewport and
+`mc3togltf` read that selector, so each child loads only its own faces rather
+than re-flattening the OBJ during a later preview/export.
+
+```xml
+<group name="tree">
+  <mesh name="tree_bark" src="meshes/tree.obj" material="tree_bark">
+    <metadata>
+      <property name="meshcraft.obj.material_index" value="0"/>
+    </metadata>
+  </mesh>
+</group>
+```
+
+`value` is the non-negative OBJ material-table index; `-1` represents faces
+with no resolvable `usemtl` material. It is an importer-owned opaque metadata
+key and should be kept unchanged when manually reorganising imported mesh
+children. A normal `<mesh>` without this key retains the backwards-compatible
+behaviour of loading every face from its OBJ source.
+
+The importer maps MTL `Kd`, `d`/`Tr`, `Ke`, `Pr`, and `Pm` into MC3 base
+color/alpha, emissive color, roughness, and metallic values. It explicitly
+warns for fields it cannot faithfully preserve (for example classic
+specular/illumination terms and texture-map paths) instead of claiming a
+lossless conversion. Missing MTL files leave a safely parsed unassigned mesh
+group; malformed vertex, normal, and UV indices reject the import.
+
+The source path itself still follows the regular resource policy. A selected
+OBJ inside the current scene directory is saved as a relative `src`; an
+external selected OBJ remains absolute, so safe glTF export rejects it unless
+external resources are explicitly enabled. Import does not turn an external
+path into a `..` traversal or otherwise bypass resource containment.
 
 ### `<extrude>` — path extrusion
 

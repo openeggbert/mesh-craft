@@ -2071,8 +2071,8 @@ void MeshCraftApplication::drawDialogs()
     }
 
     // -----------------------------------------------------------------------
-    // Import OBJ dialog (STAB-0717) — creates a new Mesh object referencing
-    // the chosen file, added to the current scene (not a new-scene import).
+    // Import OBJ dialog — preserves usemtl groups as Mesh children with
+    // mapped MC3 materials instead of flattening every face into one object.
     // -----------------------------------------------------------------------
     if (importObjDialogOpen_) {
         ImGui::OpenPopup("Import OBJ##importobjdlg");
@@ -2091,21 +2091,12 @@ void MeshCraftApplication::drawDialogs()
         bool canImport = importObjDialogBuf_[0] != '\0';
         if (!canImport) ImGui::BeginDisabled();
         if ((enter || ImGui::Button("Import", ImVec2(90, 0))) && canImport) {
-            std::error_code ec;
-            if (!std::filesystem::exists(importObjDialogBuf_, ec) || ec) {
-                std::strncpy(importObjDialogErr_, "File does not exist.", sizeof(importObjDialogErr_)-1);
-            } else {
-                // addPrimitive() already calls pushUndo()/adds to the scene/
-                // selects the new object/sets modified_+updateWindowTitle() --
-                // setting meshSource afterward on the just-selected object
-                // folds into the SAME undo step (pushUndo() snapshotted the
-                // document before addPrimitive() touched it at all), so no
-                // separate pushUndo() call is needed here.
-                addPrimitive(Mc3::ObjectType::Mesh);
-                if (selection_.hasSelection())
-                    selection_.selection().front()->meshSource = importObjDialogBuf_;
-                setStatusMsg("Imported " + std::filesystem::path(importObjDialogBuf_).filename().string(), false, 2.0f);
+            std::string error;
+            if (importObjWithMaterials(importObjDialogBuf_, error)) {
                 ImGui::CloseCurrentPopup();
+            } else {
+                std::strncpy(importObjDialogErr_, error.c_str(), sizeof(importObjDialogErr_) - 1);
+                importObjDialogErr_[sizeof(importObjDialogErr_) - 1] = '\0';
             }
         }
         if (!canImport) ImGui::EndDisabled();

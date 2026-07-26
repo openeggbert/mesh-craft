@@ -1,0 +1,15 @@
+# The directly mappable PBR subset is intentionally varied for regression.
+newmtl red_paint
+Kd 0.8 0.1 0.2
+Ke 0.05 0.01 0.0
+Pr 0.35
+Pm 0.15
+d 0.75
+Ka 0.1 0.1 0.1
+map_Kd red.png
+
+newmtl blue_metal
+Kd 0.1 0.2 0.8
+Pr 0.2
+Pm 0.9
+Ns 80

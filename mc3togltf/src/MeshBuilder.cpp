@@ -6,6 +6,7 @@
 
 #include <algorithm>
 #include <array>
+#include <charconv>
 #include <cmath>
 #include <cctype>
 #include <cstring>
@@ -1783,126 +1784,244 @@ MeshData loadEmbeddedGltfMesh(const std::filesystem::path& basePath,
 // OBJ mesh loading
 // ---------------------------------------------------------------------------
 
-MeshData loadObjMesh(const std::filesystem::path& basePath, const std::string& source)
+std::optional<int> parseObjMaterialIndex(std::string_view value)
+{
+    if (value.empty()) return std::nullopt;
+    int parsed = 0;
+    const auto [end, error] = std::from_chars(value.data(), value.data() + value.size(), parsed);
+    if (error != std::errc{} || end != value.data() + value.size()) return std::nullopt;
+    return parsed;
+}
+
+namespace {
+
+float objMaterialValue(float value, const std::filesystem::path& path,
+                       const std::string& materialName, const char* property)
+{
+    if (std::isfinite(value)) return std::clamp(value, 0.0f, 1.0f);
+    throw std::runtime_error("OBJ load failed (" + path.string() + "): MTL material '" +
+                             materialName + "' has non-finite " + property);
+}
+
+bool differsFromZero(const float (&values)[3])
+{
+    return values[0] != 0.0f || values[1] != 0.0f || values[2] != 0.0f;
+}
+
+void addUnsupportedMaterialWarnings(const tinyobj::material_t& source,
+                                    std::vector<std::string>& warnings)
+{
+    const std::string materialName = source.name.empty() ? "<unnamed>" : source.name;
+    auto warn = [&](const std::string& property) {
+        warnings.push_back("MTL material '" + materialName + "': " + property +
+                           " is not faithfully represented in MC3");
+    };
+    if (differsFromZero(source.ambient))       warn("ambient color (Ka)");
+    if (differsFromZero(source.specular))      warn("specular color (Ks)");
+    if (differsFromZero(source.transmittance)) warn("transmittance color (Tf)");
+    if (source.shininess != 0.0f)              warn("specular exponent (Ns)");
+    if (source.ior != 1.0f)                    warn("index of refraction (Ni)");
+    if (source.illum != 0)                     warn("illumination model (illum)");
+    for (const auto& [name, value] : std::initializer_list<std::pair<const char*, const std::string*>>{
+             {"ambient texture (map_Ka)", &source.ambient_texname},
+             {"diffuse texture (map_Kd)", &source.diffuse_texname},
+             {"specular texture (map_Ks)", &source.specular_texname},
+             {"specular-highlight texture (map_Ns)", &source.specular_highlight_texname},
+             {"bump texture (map_bump)", &source.bump_texname},
+             {"displacement texture (disp)", &source.displacement_texname},
+             {"alpha texture (map_d)", &source.alpha_texname},
+             {"reflection texture (refl)", &source.reflection_texname},
+             {"roughness texture (map_Pr)", &source.roughness_texname},
+             {"metallic texture (map_Pm)", &source.metallic_texname},
+             {"sheen texture (map_Ps)", &source.sheen_texname},
+             {"emissive texture (map_Ke)", &source.emissive_texname},
+             {"normal texture (norm)", &source.normal_texname},
+         }) {
+        if (!value->empty()) warn(name);
+    }
+    if (source.sheen != 0.0f)               warn("sheen (Ps)");
+    if (source.clearcoat_thickness != 0.0f) warn("clearcoat thickness (Pc)");
+    if (source.clearcoat_roughness != 0.0f) warn("clearcoat roughness (Pcr)");
+    if (source.anisotropy != 0.0f)          warn("anisotropy (aniso)");
+    if (source.anisotropy_rotation != 0.0f) warn("anisotropy rotation (anisor)");
+    for (const auto& [name, _] : source.unknown_parameter) warn("unknown property '" + name + "'");
+}
+
+MeshCraft::Mc3::Mc3Material mapObjMaterial(const tinyobj::material_t& source,
+                                           const std::filesystem::path& path,
+                                           std::vector<std::string>& warnings)
+{
+    MeshCraft::Mc3::Mc3Material target;
+    target.name = source.name;
+    target.baseColor = {
+        objMaterialValue(source.diffuse[0], path, source.name, "diffuse red"),
+        objMaterialValue(source.diffuse[1], path, source.name, "diffuse green"),
+        objMaterialValue(source.diffuse[2], path, source.name, "diffuse blue"),
+        objMaterialValue(source.dissolve, path, source.name, "dissolve"),
+    };
+    target.roughness = objMaterialValue(source.roughness, path, source.name, "roughness");
+    target.metallic = objMaterialValue(source.metallic, path, source.name, "metallic");
+    target.emissiveColor = {
+        objMaterialValue(source.emission[0], path, source.name, "emission red"),
+        objMaterialValue(source.emission[1], path, source.name, "emission green"),
+        objMaterialValue(source.emission[2], path, source.name, "emission blue"),
+    };
+    if (target.baseColor[3] < 1.0f) target.alphaMode = "blend";
+    addUnsupportedMaterialWarnings(source, warnings);
+    return target;
+}
+
+} // namespace
+
+ObjMaterialImportResult importObjMaterialGroups(const std::filesystem::path& basePath,
+                                                const std::string& source)
 {
     std::filesystem::path objPath = source;
-    if (objPath.is_relative()) objPath = basePath / source;
+    if (objPath.is_relative()) objPath = basePath / objPath;
 
     tinyobj::ObjReaderConfig cfg;
-    cfg.mtl_search_path = basePath.string();
-    cfg.triangulate     = true;
+    cfg.mtl_search_path = objPath.parent_path().string();
+    cfg.triangulate = true;
 
     tinyobj::ObjReader reader;
     if (!reader.ParseFromFile(objPath.string(), cfg)) {
         throw std::runtime_error("OBJ load failed (" + objPath.string() + "): " + reader.Error());
     }
-    if (!reader.Warning().empty())
-        std::cerr << "OBJ warning: " << reader.Warning() << '\n';
 
+    ObjMaterialImportResult imported;
+    if (!reader.Warning().empty()) imported.warnings.push_back("OBJ parser: " + reader.Warning());
     const auto& attrib = reader.GetAttrib();
     const auto& shapes = reader.GetShapes();
+    const auto& materials = reader.GetMaterials();
 
     // Reject non-finite vertex coordinates (e.g. "1e400" overflowing to inf)
     // rather than silently exporting a spec-invalid glTF (inf in the binary
     // buffer, null in the JSON accessor min/max).
-    for (float v : attrib.vertices) {
-        if (!std::isfinite(v)) {
+    for (float value : attrib.vertices) {
+        if (!std::isfinite(value)) {
             throw std::runtime_error("OBJ load failed (" + objPath.string() +
-                                      "): non-finite vertex coordinate");
+                                     "): non-finite vertex coordinate");
         }
     }
 
-    // AUD-002: tinyobjloader validates vertex_index against the vertex count
-    // for the quad/polygon triangulation paths, but a plain 3-vertex face
-    // (npolys==3, the common case) bypasses those guards entirely and only
-    // emits a non-fatal warning (already surfaced above) for an out-of-range
-    // index -- it does not reject the face. normal_index/texcoord_index are
-    // likewise only checked against -1 ("absent"), never against an upper
-    // bound. A malformed/hostile .obj referenced by an mc3 <mesh src=...> can
-    // therefore drive an out-of-bounds read on attrib.vertices/normals/
-    // texcoords. Reject any out-of-range index with a clear error instead of
-    // reading past the array.
-    auto checkIndex = [&](int idx, size_t arraySize, int stride, const char* what) {
-        if (idx < 0 || static_cast<size_t>(idx) * static_cast<size_t>(stride) + static_cast<size_t>(stride - 1)
-                >= arraySize) {
-            throw std::runtime_error("OBJ load failed (" + objPath.string() +
-                                      "): " + what + " index " + std::to_string(idx) +
-                                      " out of range (array has " +
-                                      std::to_string(arraySize / static_cast<size_t>(stride)) +
-                                      " entries)");
+    // AUD-002: tinyobjloader's plain triangle fast path does not reject all
+    // out-of-range indices. Validate every source index before dereferencing.
+    auto checkIndex = [&](int index, size_t arraySize, int stride, const char* what) {
+        if (index < 0 || static_cast<size_t>(index) * static_cast<size_t>(stride) +
+                             static_cast<size_t>(stride - 1) >= arraySize) {
+            throw std::runtime_error("OBJ load failed (" + objPath.string() + "): " + what +
+                                     " index " + std::to_string(index) + " out of range (array has " +
+                                     std::to_string(arraySize / static_cast<size_t>(stride)) + " entries)");
         }
     };
 
-    MeshData m;
-    // STAB-0667: shape.mesh.material_ids (per-face OBJ material assignment)
-    // is intentionally not read here -- all shapes/faces are flattened into
-    // one MeshData with no material info, and the caller applies mc3's own
-    // single `material` attribute (if any) uniformly to the whole result.
-    // Multi-material OBJ imports therefore silently lose their per-face
-    // material assignments; this is a deliberate accepted limitation (see
-    // MC3_FORMAT.md's "Single material only" note under <mesh>), not an
-    // oversight -- properly supporting it means mapping OBJ .mtl material
-    // properties onto mc3's own material model, a real modeling decision
-    // out of scope for this loader.
-    for (const auto& shape : shapes) {
-        const auto& idxList = shape.mesh.indices;
-        // tinyobjloader already triangulates, iterate in steps of 3
-        for (size_t i = 0; i + 2 < idxList.size(); i += 3) {
-            const tinyobj::index_t* tri[3] = {&idxList[i], &idxList[i+1], &idxList[i+2]};
+    auto groupFor = [&](int materialIndex) -> ObjMaterialGroup& {
+        auto existing = std::find_if(imported.groups.begin(), imported.groups.end(),
+                                     [materialIndex](const ObjMaterialGroup& group) {
+                                         return group.materialIndex == materialIndex;
+                                     });
+        if (existing != imported.groups.end()) return *existing;
+        ObjMaterialGroup group;
+        group.materialIndex = materialIndex;
+        if (materialIndex >= 0 && static_cast<size_t>(materialIndex) < materials.size()) {
+            group.materialName = materials[static_cast<size_t>(materialIndex)].name;
+            group.material = mapObjMaterial(materials[static_cast<size_t>(materialIndex)], objPath,
+                                            imported.warnings);
+        } else if (materialIndex >= 0) {
+            imported.warnings.push_back("OBJ face references unavailable MTL material index " +
+                                        std::to_string(materialIndex));
+        }
+        imported.groups.push_back(std::move(group));
+        return imported.groups.back();
+    };
 
-            // Compute face normal when any vertex is missing a normal
+    for (const auto& shape : shapes) {
+        const auto& indices = shape.mesh.indices;
+        size_t offset = 0;
+        for (size_t face = 0; face < shape.mesh.num_face_vertices.size(); ++face) {
+            const size_t vertexCount = shape.mesh.num_face_vertices[face];
+            if (offset + vertexCount > indices.size()) {
+                throw std::runtime_error("OBJ load failed (" + objPath.string() +
+                                         "): face index list is truncated");
+            }
+            if (vertexCount != 3) {
+                throw std::runtime_error("OBJ load failed (" + objPath.string() +
+                                         "): triangulation produced a non-triangle face");
+            }
+            const int materialIndex = face < shape.mesh.material_ids.size()
+                ? shape.mesh.material_ids[face] : -1;
+            ObjMaterialGroup& group = groupFor(materialIndex);
+            const tinyobj::index_t* triangle[3] = {
+                &indices[offset], &indices[offset + 1], &indices[offset + 2]};
+
             std::array<float,3> faceNormal{0.0f, 1.0f, 0.0f};
-            bool needFaceNormal = (tri[0]->normal_index < 0 ||
-                                   tri[1]->normal_index < 0 ||
-                                   tri[2]->normal_index < 0);
+            const bool needFaceNormal = triangle[0]->normal_index < 0 ||
+                                        triangle[1]->normal_index < 0 ||
+                                        triangle[2]->normal_index < 0;
             if (needFaceNormal) {
-                auto pos = [&](int k) -> std::array<float,3> {
-                    checkIndex(tri[k]->vertex_index, attrib.vertices.size(), 3, "vertex");
-                    auto vi = static_cast<size_t>(tri[k]->vertex_index);
-                    return {attrib.vertices[3*vi], attrib.vertices[3*vi+1], attrib.vertices[3*vi+2]};
+                auto position = [&](int corner) -> std::array<float,3> {
+                    checkIndex(triangle[corner]->vertex_index, attrib.vertices.size(), 3, "vertex");
+                    const size_t index = static_cast<size_t>(triangle[corner]->vertex_index);
+                    return {attrib.vertices[index * 3], attrib.vertices[index * 3 + 1],
+                            attrib.vertices[index * 3 + 2]};
                 };
-                auto p0 = pos(0), p1 = pos(1), p2 = pos(2);
-                std::array<float,3> e1{p1[0]-p0[0], p1[1]-p0[1], p1[2]-p0[2]};
-                std::array<float,3> e2{p2[0]-p0[0], p2[1]-p0[1], p2[2]-p0[2]};
-                faceNormal = cross3(e1, e2);
+                const auto p0 = position(0), p1 = position(1), p2 = position(2);
+                faceNormal = cross3({p1[0] - p0[0], p1[1] - p0[1], p1[2] - p0[2]},
+                                    {p2[0] - p0[0], p2[1] - p0[1], p2[2] - p0[2]});
                 norm3(faceNormal);
             }
 
-            for (int k = 0; k < 3; ++k) {
-                const auto& idx = *tri[k];
-                checkIndex(idx.vertex_index, attrib.vertices.size(), 3, "vertex");
-                auto vi = static_cast<size_t>(idx.vertex_index);
-                m.positions.push_back(attrib.vertices[3*vi+0]);
-                m.positions.push_back(attrib.vertices[3*vi+1]);
-                m.positions.push_back(attrib.vertices[3*vi+2]);
-
-                if (idx.normal_index >= 0) {
-                    checkIndex(idx.normal_index, attrib.normals.size(), 3, "normal");
-                    auto ni = static_cast<size_t>(idx.normal_index);
-                    m.normals.push_back(attrib.normals[3*ni+0]);
-                    m.normals.push_back(attrib.normals[3*ni+1]);
-                    m.normals.push_back(attrib.normals[3*ni+2]);
+            for (int corner = 0; corner < 3; ++corner) {
+                const auto& index = *triangle[corner];
+                checkIndex(index.vertex_index, attrib.vertices.size(), 3, "vertex");
+                const size_t vertex = static_cast<size_t>(index.vertex_index);
+                group.mesh.positions.insert(group.mesh.positions.end(), {
+                    attrib.vertices[vertex * 3], attrib.vertices[vertex * 3 + 1],
+                    attrib.vertices[vertex * 3 + 2]});
+                if (index.normal_index >= 0) {
+                    checkIndex(index.normal_index, attrib.normals.size(), 3, "normal");
+                    const size_t normal = static_cast<size_t>(index.normal_index);
+                    group.mesh.normals.insert(group.mesh.normals.end(), {
+                        attrib.normals[normal * 3], attrib.normals[normal * 3 + 1],
+                        attrib.normals[normal * 3 + 2]});
                 } else {
-                    m.normals.push_back(faceNormal[0]);
-                    m.normals.push_back(faceNormal[1]);
-                    m.normals.push_back(faceNormal[2]);
+                    group.mesh.normals.insert(group.mesh.normals.end(),
+                                              {faceNormal[0], faceNormal[1], faceNormal[2]});
                 }
-
-                if (idx.texcoord_index >= 0) {
-                    checkIndex(idx.texcoord_index, attrib.texcoords.size(), 2, "texcoord");
-                    auto ti = static_cast<size_t>(idx.texcoord_index);
-                    m.texcoords.push_back(attrib.texcoords[2*ti+0]);
-                    m.texcoords.push_back(1.0f - attrib.texcoords[2*ti+1]); // flip V
+                if (index.texcoord_index >= 0) {
+                    checkIndex(index.texcoord_index, attrib.texcoords.size(), 2, "texcoord");
+                    const size_t texcoord = static_cast<size_t>(index.texcoord_index);
+                    group.mesh.texcoords.insert(group.mesh.texcoords.end(), {
+                        attrib.texcoords[texcoord * 2], 1.0f - attrib.texcoords[texcoord * 2 + 1]});
                 } else {
-                    m.texcoords.push_back(0.0f);
-                    m.texcoords.push_back(0.0f);
+                    group.mesh.texcoords.insert(group.mesh.texcoords.end(), {0.0f, 0.0f});
                 }
-
-                m.indices.push_back(static_cast<uint32_t>(m.indices.size()));
+                group.mesh.indices.push_back(static_cast<uint32_t>(group.mesh.indices.size()));
             }
+            offset += vertexCount;
+        }
+        if (offset != indices.size()) {
+            throw std::runtime_error("OBJ load failed (" + objPath.string() +
+                                     "): face index list has trailing entries");
         }
     }
-    return m;
+    return imported;
+}
+
+MeshData loadObjMesh(const std::filesystem::path& basePath, const std::string& source,
+                     std::optional<int> materialIndex)
+{
+    ObjMaterialImportResult imported = importObjMaterialGroups(basePath, source);
+    MeshData merged;
+    for (auto& group : imported.groups) {
+        if (materialIndex.has_value() && group.materialIndex != *materialIndex) continue;
+        const uint32_t offset = static_cast<uint32_t>(merged.positions.size() / 3);
+        merged.positions.insert(merged.positions.end(), group.mesh.positions.begin(), group.mesh.positions.end());
+        merged.normals.insert(merged.normals.end(), group.mesh.normals.begin(), group.mesh.normals.end());
+        merged.texcoords.insert(merged.texcoords.end(), group.mesh.texcoords.begin(), group.mesh.texcoords.end());
+        for (uint32_t index : group.mesh.indices) merged.indices.push_back(offset + index);
+    }
+    return merged;
 }
 
 } // namespace mc3togltf

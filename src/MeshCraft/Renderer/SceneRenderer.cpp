@@ -30,7 +30,6 @@
 #include <vector>
 
 #include <manifold/manifold.h>
-#include <tiny_obj_loader.h>
 #include "CsgEvaluator.hpp"
 #include "MeshBuilder.hpp"  // mc3togltf_lib -- buildPrimitive(), shared with CsgEvaluator.cpp (STAB-0670)
 #include "SvgRasterizer.hpp"
@@ -451,100 +450,48 @@ static CsgPreviewCacheEntry buildCsgPreviewCacheEntry(
 // OBJ mesh loader
 // ---------------------------------------------------------------------------
 
-// Load an OBJ file and return a RenderMesh with both a VertexPositionColor VB
-// (for flat-colour rendering) and a VertexPositionNormalTexture VB (for lit/
-// textured rendering). Both use triangle-soup layout with sequential uint32
-// indices to avoid vertex-count limits.
-// Returns an empty RenderMesh (no vb) on failure.
-static RenderMesh loadObjMesh(GraphicsDevice& device, const std::string& path)
+static RenderMesh uploadMeshData(GraphicsDevice& device, const mc3togltf::MeshData& source);
+
+// The viewport deliberately consumes the same hardened parser and material
+// selector as the exporter. This keeps imported usemtl children visually
+// separate and removes the old preview-only unchecked tinyobj dereferences.
+static RenderMesh loadObjMesh(GraphicsDevice& device, const std::string& path,
+                              std::optional<int> materialIndex)
 {
-    RenderMesh mesh;
-
-    tinyobj::ObjReaderConfig cfg;
-    cfg.triangulate     = true;
-    cfg.mtl_search_path = std::filesystem::path(path).parent_path().string();
-
-    tinyobj::ObjReader reader;
-    if (!reader.ParseFromFile(path, cfg)) return mesh;  // error → empty
-
-    const auto& attrib = reader.GetAttrib();
-    const auto& shapes = reader.GetShapes();
-    if (shapes.empty() || attrib.vertices.empty()) return mesh;
-
-    // Guard against enormous meshes
-    size_t totalTris = 0;
-    for (const auto& s : shapes)
-        for (auto fv : s.mesh.num_face_vertices)
-            if (fv == 3) ++totalTris;
-    if (totalTris > 300000) return mesh;   // too large for live preview
-
-    Color grey(180, 180, 180, 255);
-    std::vector<VertexPositionColor>          cverts;
-    std::vector<VertexPositionNormalTexture>  tverts;
-
-    for (const auto& shape : shapes) {
-        size_t off = 0;
-        for (size_t f = 0; f < shape.mesh.num_face_vertices.size(); ++f) {
-            int fv = shape.mesh.num_face_vertices[f];
-            if (fv != 3) { off += fv; continue; }
-
-            Vector3 p[3];
-            for (int v = 0; v < 3; ++v) {
-                int vi = shape.mesh.indices[off + v].vertex_index;
-                p[v] = {attrib.vertices[3*vi], attrib.vertices[3*vi+1], attrib.vertices[3*vi+2]};
-                cverts.push_back({p[v], grey});
-            }
-
-            // Face normal fallback
-            Vector3 e1 = {p[1].X-p[0].X, p[1].Y-p[0].Y, p[1].Z-p[0].Z};
-            Vector3 e2 = {p[2].X-p[0].X, p[2].Y-p[0].Y, p[2].Z-p[0].Z};
-            Vector3 faceN = Vector3::Cross(e1, e2);
-            faceN.Normalize();
-
-            for (int v = 0; v < 3; ++v) {
-                const auto& idx = shape.mesh.indices[off + v];
-                Vector3 n = faceN;
-                if (idx.normal_index >= 0) {
-                    int ni = idx.normal_index;
-                    n = {attrib.normals[3*ni], attrib.normals[3*ni+1], attrib.normals[3*ni+2]};
-                }
-                Vector2 uv = {0.0f, 0.0f};
-                if (idx.texcoord_index >= 0) {
-                    int ti = idx.texcoord_index;
-                    uv = {attrib.texcoords[2*ti], 1.0f - attrib.texcoords[2*ti+1]};
-                }
-                tverts.push_back({p[v], n, uv});
-            }
-            off += fv;
-        }
+    try {
+        return uploadMeshData(device, mc3togltf::loadObjMesh({}, path, materialIndex));
+    } catch (const std::exception& error) {
+        std::cerr << "Warning: failed to load mesh \"" << path << "\": " << error.what() << '\n';
+        return {};
     }
+}
 
-    if (cverts.empty()) return mesh;
+static bool tryObjMaterialIndex(const Mc3Object& object, std::optional<int>& materialIndex)
+{
+    const auto selector = object.metadata.find(std::string(mc3togltf::kObjMaterialIndexMetadataKey));
+    if (selector == object.metadata.end()) {
+        materialIndex.reset();
+        return true;
+    }
+    materialIndex = mc3togltf::parseObjMaterialIndex(selector->second);
+    if (materialIndex.has_value()) return true;
+    std::cerr << "Warning: mesh object '" << object.name
+              << "' has invalid OBJ material selector metadata\n";
+    return false;
+}
 
-    const int nV = static_cast<int>(cverts.size());  // = nTris * 3
+static std::string objMeshCacheKey(const std::string& path, std::optional<int> materialIndex)
+{
+    return materialIndex.has_value()
+        ? path + "\x1fobj-material=" + std::to_string(*materialIndex)
+        : path;
+}
 
-    // Sequential triangle-soup indices (same for both VBs)
-    std::vector<uint32_t> seq(nV);
-    std::iota(seq.begin(), seq.end(), 0u);
-
-    // Colored VB / IB
-    mesh.positions.reserve(nV);
-    for (auto& v : cverts) mesh.positions.push_back(v.Position);
-    mesh.vb = std::make_unique<VertexBuffer>(device, nV);
-    mesh.vb->SetData(cverts.data(), nV);
-    mesh.ib = std::make_unique<IndexBuffer>(device, IndexElementSize::ThirtyTwoBits, nV, BufferUsage::None);
-    mesh.ib->SetData(seq.data(), nV);
-    mesh.primitiveCount = nV / 3;
-
-    // Lit / textured VB / IB
-    mesh.texVB = std::make_unique<VertexBuffer>(device, nV);
-    mesh.texVB->SetData(tverts.data(), nV);
-    mesh.texIB = std::make_unique<IndexBuffer>(device, IndexElementSize::ThirtyTwoBits, nV, BufferUsage::None);
-    mesh.texIB->SetData(seq.data(), nV);
-    mesh.texPrimitiveCount = nV / 3;
-    mesh.texturedVertices = tverts;
-
-    return mesh;
+static std::string resolveObjMeshPath(const Mc3Document& document, const Mc3Object& object)
+{
+    std::filesystem::path path(object.meshSource);
+    if (path.is_relative() && !document.sourcePath.empty()) path = document.sourcePath / path;
+    return path.string();
 }
 
 // Convert the CNA-independent MeshData shared with mc3togltf into the two
@@ -1119,8 +1066,11 @@ void SceneRenderer::drawDepthObject(const Mc3Object& obj, const Mc3Document& doc
         const RenderMesh* mesh = nullptr;
         if (obj.meshSource.rfind("embed:", 0) == 0)
             mesh = loadOrGetEmbeddedMesh(doc, obj.meshSource);
-        else if (!obj.meshSource.empty() && !doc.sourcePath.empty())
-            mesh = loadOrGetMesh((doc.sourcePath / obj.meshSource).string());
+        else if (!obj.meshSource.empty()) {
+            std::optional<int> materialIndex;
+            if (tryObjMaterialIndex(obj, materialIndex))
+                mesh = loadOrGetMesh(resolveObjMeshPath(doc, obj), materialIndex);
+        }
         if (mesh) {
             depthStatic(*mesh, deform * world);
             break;
@@ -1237,17 +1187,19 @@ Texture2D* SceneRenderer::textureForMaterial(const std::string& materialId,
     return texture;
 }
 
-const RenderMesh* SceneRenderer::loadOrGetMesh(const std::string& absPath)
+const RenderMesh* SceneRenderer::loadOrGetMesh(const std::string& absPath,
+                                               std::optional<int> materialIndex)
 {
-    auto it = meshCache_.find(absPath);
+    const std::string cacheKey = objMeshCacheKey(absPath, materialIndex);
+    auto it = meshCache_.find(cacheKey);
     if (it != meshCache_.end()) return it->second.vb ? &it->second : nullptr;
 
-    RenderMesh loaded = loadObjMesh(device_, absPath);
+    RenderMesh loaded = loadObjMesh(device_, absPath, materialIndex);
     if (!loaded.vb) {
         std::cerr << "Warning: failed to load mesh \"" << absPath
                    << "\" — rendering placeholder box\n";
     }
-    auto [ins, ok] = meshCache_.emplace(absPath, std::move(loaded));
+    auto [ins, ok] = meshCache_.emplace(cacheKey, std::move(loaded));
     (void)ok;
     return ins->second.vb ? &ins->second : nullptr;
 }
@@ -1794,8 +1746,11 @@ void SceneRenderer::drawObject(const Mc3Object& obj, const Mc3Document& doc,
         const RenderMesh* loaded = nullptr;
         if (obj.meshSource.rfind("embed:", 0) == 0)
             loaded = loadOrGetEmbeddedMesh(doc, obj.meshSource);
-        else if (!obj.meshSource.empty() && !doc.sourcePath.empty())
-            loaded = loadOrGetMesh((doc.sourcePath / obj.meshSource).string());
+        else if (!obj.meshSource.empty()) {
+            std::optional<int> materialIndex;
+            if (tryObjMaterialIndex(obj, materialIndex))
+                loaded = loadOrGetMesh(resolveObjMeshPath(doc, obj), materialIndex);
+        }
         if (loaded) {
             // Always use the lit VPNT path (proper normals); tex may be nullptr
             drawMeshTextured(*loaded, deform * world, view, proj, color, tex,

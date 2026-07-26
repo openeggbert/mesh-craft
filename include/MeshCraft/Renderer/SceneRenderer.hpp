@@ -500,7 +500,8 @@ private:
     Microsoft::Xna::Framework::Graphics::Texture2D* textureForMaterial(
         const std::string& materialId, const Mc3::Mc3Document& doc,
         std::optional<Microsoft::Xna::Framework::Graphics::SamplerState>& svgSampler);
-    const RenderMesh* loadOrGetMesh(const std::string& absPath);
+    const RenderMesh* loadOrGetMesh(const std::string& absPath,
+                                    std::optional<int> materialIndex = std::nullopt);
     const RenderMesh* loadOrGetEmbeddedMesh(const Mc3::Mc3Document& doc,
                                             const std::string& embedReference);
 

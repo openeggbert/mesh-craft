@@ -555,6 +555,7 @@ private:
     void groupSelected();
     void ungroupSelected();
     void addPrimitive(Mc3::ObjectType type);
+    bool importObjWithMaterials(const std::string& path, std::string& error);
     void generateSimpleCollisionProxy();
     void handleKeyboardShortcuts(const Microsoft::Xna::Framework::Input::KeyboardState& ks,
                                  const Microsoft::Xna::Framework::Input::KeyboardState& prevKs);

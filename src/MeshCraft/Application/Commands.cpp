@@ -2,6 +2,7 @@
 #include "MeshCraft/MeshCraftPrivate.hpp"
 #include "MeshCraft/EditorAlgorithms.hpp"
 #include "MeshCraft/LibraryWorkflowAlgorithms.hpp"
+#include "MeshBuilder.hpp"
 
 #include <imgui.h>
 
@@ -22,6 +23,7 @@
 
 #include <algorithm>
 #include <chrono>
+#include <cctype>
 #include <cmath>
 #include <cstdio>
 #include <cstring>
@@ -118,6 +120,131 @@ void MeshCraftApplication::addPrimitive(Mc3::ObjectType type) {
     modified_ = true;
     updateWindowTitle();
     macroRecorder_.recordStep("add", {objectTypeName(type)});
+}
+
+bool MeshCraftApplication::importObjWithMaterials(const std::string& path, std::string& error) {
+    error.clear();
+    if (path.empty()) {
+        error = "Choose an OBJ file first.";
+        return false;
+    }
+
+    mc3togltf::ObjMaterialImportResult imported;
+    try {
+        // The explicit editor import is permitted to read the selected source.
+        // Persisted/exported documents remain subject to GltfExporter's strict
+        // resource-path policy below: sources outside document_.sourcePath are
+        // deliberately retained as absolute paths and rejected unless the
+        // caller opts into external resources.
+        imported = mc3togltf::importObjMaterialGroups(document_.sourcePath, path);
+    } catch (const std::exception& exception) {
+        error = exception.what();
+        return false;
+    }
+    if (imported.groups.empty()) {
+        error = "OBJ contains no triangulated faces.";
+        return false;
+    }
+
+    auto safeToken = [](std::string value, const std::string& fallback) {
+        for (char& ch : value) {
+            const unsigned char byte = static_cast<unsigned char>(ch);
+            if (!std::isalnum(byte) && ch != '_' && ch != '-') ch = '_';
+        }
+        while (!value.empty() && value.back() == '_') value.pop_back();
+        return value.empty() ? fallback : value;
+    };
+    const std::filesystem::path inputPath(path);
+    const std::string sourceStem = safeToken(inputPath.stem().string(), "obj");
+
+    // MC3 stores resources relative to its document directory. Preserve that
+    // form only when the selected file is actually inside the document root;
+    // never manufacture a `..` path to make an external OBJ look trusted.
+    std::filesystem::path resolvedInput = inputPath;
+    if (resolvedInput.is_relative() && !document_.sourcePath.empty())
+        resolvedInput = document_.sourcePath / resolvedInput;
+    std::error_code filesystemError;
+    const std::filesystem::path absoluteInput = std::filesystem::absolute(resolvedInput, filesystemError);
+    if (filesystemError) {
+        error = "Cannot resolve OBJ path: " + filesystemError.message();
+        return false;
+    }
+    std::filesystem::path storedSource = absoluteInput;
+    if (!document_.sourcePath.empty()) {
+        filesystemError.clear();
+        const std::filesystem::path absoluteRoot =
+            std::filesystem::absolute(document_.sourcePath, filesystemError);
+        if (!filesystemError) {
+            const std::filesystem::path relative =
+                std::filesystem::relative(absoluteInput, absoluteRoot, filesystemError);
+            if (!filesystemError && !relative.empty() && !relative.is_absolute() &&
+                *relative.begin() != "..") {
+                storedSource = relative.lexically_normal();
+            }
+        }
+    }
+
+    // Parsing/validation above completed without changing the document. The
+    // material registry and object tree below are one undoable operation.
+    pushUndo();
+    auto importedRoot = std::make_shared<Mc3::Mc3Object>();
+    importedRoot->type = Mc3::ObjectType::Group;
+    importedRoot->name = sourceStem;
+    importedRoot->transform.position = {camera_.target.X, camera_.target.Y + 0.5f, camera_.target.Z};
+
+    int materialGroups = 0;
+    for (const auto& group : imported.groups) {
+        const std::string groupToken = safeToken(group.materialName,
+                                                 group.materialIndex < 0 ? "unassigned" : "material");
+        auto child = Mc3::Mc3Object::makeMesh(sourceStem + "_" + groupToken,
+                                              storedSource.generic_string());
+        child->metadata[std::string(mc3togltf::kObjMaterialIndexMetadataKey)] =
+            std::to_string(group.materialIndex);
+        if (!group.material.name.empty()) {
+            std::string materialId = sourceStem + "_" + groupToken;
+            int suffix = 2;
+            while (document_.materials.count(materialId))
+                materialId = sourceStem + "_" + groupToken + "_" + std::to_string(suffix++);
+            Mc3::Mc3Material material = group.material;
+            material.name = materialId;
+            document_.materials[materialId] = std::move(material);
+            child->material = materialId;
+        }
+        importedRoot->children.push_back(std::move(child));
+        ++materialGroups;
+    }
+
+    std::set<std::string> assignedIds;
+    regenerateSubtreeIdsAlg(*importedRoot, document_.objects, assignedIds);
+    if (selection_.hasSelection()) {
+        const auto& destination = selection_.selection().front();
+        const bool acceptsChildren = destination->type == Mc3::ObjectType::Group ||
+                                     destination->type == Mc3::ObjectType::Union ||
+                                     destination->type == Mc3::ObjectType::Difference ||
+                                     destination->type == Mc3::ObjectType::Intersection ||
+                                     !destination->children.empty();
+        if (acceptsChildren) destination->children.push_back(importedRoot);
+        else document_.objects.push_back(importedRoot);
+    } else {
+        document_.objects.push_back(importedRoot);
+    }
+    selection_.clear();
+    selection_.select(importedRoot);
+    objectIndex_.invalidate();
+    modified_ = true;
+    updateWindowTitle();
+
+    for (const std::string& warning : imported.warnings)
+        std::cerr << "OBJ import warning: " << warning << '\n';
+    std::string message = "Imported " + inputPath.filename().string() + " (" +
+                          std::to_string(materialGroups) + " material group" +
+                          (materialGroups == 1 ? ")" : "s)");
+    if (!imported.warnings.empty())
+        message += "; " + std::to_string(imported.warnings.size()) + " MTL property warning(s), see log";
+    if (storedSource.is_absolute())
+        message += "; external source remains blocked by safe export policy";
+    setStatusMsg(message, false, 4.0f);
+    return true;
 }
 
 void MeshCraftApplication::generateSimpleCollisionProxy() {

@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<mc3 version="0.3" model="ObjMaterialGroups">
+  <materials>
+    <material id="red_paint" roughness="0.35" metallic="0.15" alpha_mode="blend">
+      <base_color>0.8 0.1 0.2 0.75</base_color>
+      <emissive_color>0.05 0.01 0</emissive_color>
+    </material>
+    <material id="blue_metal" roughness="0.2" metallic="0.9">
+      <base_color>0.1 0.2 0.8 1</base_color>
+    </material>
+  </materials>
+  <objects>
+    <group name="ImportedObj">
+      <mesh name="RedGroup" src="obj_material_groups.obj" material="red_paint">
+        <metadata><property name="meshcraft.obj.material_index" value="0"/></metadata>
+      </mesh>
+      <mesh name="BlueGroup" src="obj_material_groups.obj" material="blue_metal">
+        <metadata><property name="meshcraft.obj.material_index" value="1"/></metadata>
+      </mesh>
+    </group>
+  </objects>
+</mc3>

@@ -1,11 +1,14 @@
 #pragma once
 #include <MeshCraft/Mc3/Mc3Extrude.hpp>
 #include <MeshCraft/Mc3/Mc3EmbedGltf.hpp>
+#include <MeshCraft/Mc3/Mc3Material.hpp>
 #include <MeshCraft/Mc3/Mc3Primitive.hpp>
 #include <array>
 #include <cstdint>
 #include <filesystem>
+#include <optional>
 #include <string>
+#include <string_view>
 #include <vector>
 
 namespace mc3togltf {
@@ -76,13 +79,54 @@ struct MeshData {
     void applySphereProjectionUv();
 };
 
+// Metadata written by the editor's OBJ importer on each generated Mesh child.
+// The value is the tinyobjloader material index for faces that child owns;
+// -1 represents faces which had no resolvable `usemtl` assignment.  Storing
+// the selector as metadata keeps the serialized `src` a real filesystem path,
+// so normal resource-path validation is never bypassed by URI fragments.
+inline constexpr std::string_view kObjMaterialIndexMetadataKey =
+    "meshcraft.obj.material_index";
+
+// A safely triangulated OBJ material group. `material` is populated only when
+// materialIndex names a material actually loaded from the companion MTL file;
+// unassigned/missing-MTL groups keep material.name empty and use MC3's normal
+// no-material fallback.
+struct ObjMaterialGroup {
+    int materialIndex{-1};
+    std::string materialName;
+    MeshCraft::Mc3::Mc3Material material;
+    MeshData mesh;
+};
+
+// Result of a material-aware OBJ import. Warnings enumerate MTL properties
+// that have no faithful MC3 equivalent; callers should show or log them rather
+// than silently claiming a lossless conversion.
+struct ObjMaterialImportResult {
+    std::vector<ObjMaterialGroup> groups;
+    std::vector<std::string> warnings;
+};
+
+// Strictly parse the persisted material-group selector. It intentionally
+// accepts only a base-10 signed integer so malformed metadata is rejected by
+// consumers instead of silently falling back to the whole source OBJ.
+std::optional<int> parseObjMaterialIndex(std::string_view value);
+
+// Parse an OBJ once, validate every referenced vertex/normal/UV index, split
+// its triangulated faces by usemtl material assignment, and map the safe MTL
+// PBR subset onto MC3 materials. source may be absolute or relative to
+// basePath; resource-policy validation remains the caller's responsibility.
+ObjMaterialImportResult importObjMaterialGroups(const std::filesystem::path& basePath,
+                                                const std::string& source);
+
 MeshData buildPrimitive(const MeshCraft::Mc3::Mc3Primitive& prim);
 MeshData buildExtrude(const MeshCraft::Mc3::Mc3Extrude& ext);
 
-// Load an OBJ file and return its triangulated geometry.
-// source may be an absolute path or relative to basePath.
+// Load an OBJ file and return its triangulated geometry. If materialIndex is
+// supplied, only faces assigned to that usemtl material (or -1 for unassigned
+// faces) are returned. source may be an absolute path or relative to basePath.
 MeshData loadObjMesh(const std::filesystem::path& basePath,
-                     const std::string& source);
+                     const std::string& source,
+                     std::optional<int> materialIndex = std::nullopt);
 
 // Load the triangle geometry of a self-contained GLB asset referenced by an
 // MC3 <embed>.  The asset's scene-node transforms are flattened into the

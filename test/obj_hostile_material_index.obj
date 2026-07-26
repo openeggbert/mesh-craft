@@ -1,0 +1,7 @@
+# tinyobjloader's triangle fast path can leave this invalid index non-fatal.
+mtllib obj_material_groups.mtl
+v 0 0 0
+v 1 0 0
+v 0 1 0
+usemtl red_paint
+f 1 2 99999

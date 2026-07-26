@@ -1,0 +1,13 @@
+# SYS-W14-35: two usemtl groups must stay distinct after MC3 import/export.
+mtllib obj_material_groups.mtl
+o TwoMaterialTriangles
+v 0 0 0
+v 1 0 0
+v 0 1 0
+v 2 0 0
+v 3 0 0
+v 2 1 0
+usemtl red_paint
+f 1 2 3
+usemtl blue_metal
+f 4 5 6
