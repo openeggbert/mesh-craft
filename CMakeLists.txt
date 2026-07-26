@@ -1953,6 +1953,23 @@ if(MESH_CRAFT_BUILD_TESTING AND UNIX AND NOT ANDROID AND NOT EMSCRIPTEN)
         set_tests_properties(mc3_registry PROPERTIES TIMEOUT 15 LABELS "registry")
     endif()
 
+    # SYS-W14-39: the local pack and material-inspection helpers deliberately
+    # remain useful on builds that do not ship SQLite (web/mobile). Compile
+    # ModelRegistry.cpp without MESHCRAFT_HAS_SQLITE3 so the real fallback
+    # branch is exercised rather than inferred from the desktop test target.
+    add_executable(model_registry_no_sqlite_test
+        ${CMAKE_CURRENT_SOURCE_DIR}/test/model_registry_no_sqlite_test.cpp
+        ${CMAKE_CURRENT_SOURCE_DIR}/src/MeshCraft/ModelRegistry.cpp
+    )
+    target_include_directories(model_registry_no_sqlite_test PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/include
+        ${CMAKE_CURRENT_SOURCE_DIR}/src/MeshCraft
+    )
+    target_link_libraries(model_registry_no_sqlite_test PRIVATE Mc3)
+    target_compile_features(model_registry_no_sqlite_test PRIVATE cxx_std_23)
+    add_test(NAME model_registry_no_sqlite COMMAND model_registry_no_sqlite_test)
+    set_tests_properties(model_registry_no_sqlite PROPERTIES TIMEOUT 15 LABELS "registry")
+
     # AI Assistant unit + mock-HTTP-server tests (Gate 4, STAB-0371..0376).
     # AiResponseAlgorithms.hpp (extractXml/repairXml/parseXml/validate) has
     # no CNA/ImGui/network dependency, so this always builds; the mock HTTP

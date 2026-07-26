@@ -870,6 +870,10 @@ private:
     ModelRegistry registry_;
     bool showRegistryPanel_{false};
     char regSearchBuf_[128]{};
+    char regTagFilterBuf_[96]{};
+    char regCategoryFilterBuf_[96]{};
+    char regLicenseFilterBuf_[96]{};
+    char regProvenanceFilterBuf_[128]{};
     bool regSaveDlgOpen_{false};
     char regSaveGroupBuf_[64]{};
     char regSaveNameBuf_[64]{};
@@ -881,6 +885,9 @@ private:
     bool        regSaveFromAi_{false};  // when true, save dialog reads from aiPendingDoc_
     std::vector<ModelRegistry::Entry> regCachedResults_;
     bool regResultsDirty_{true};
+    bool regPackDlgOpen_{false};
+    char regPackPathBuf_[512]{};
+    std::string regPackErr_;
     void drawRegistryPanel();
 
     // H5 — pivot edit mode

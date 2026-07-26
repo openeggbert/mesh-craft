@@ -9,6 +9,7 @@
 #include <fstream>
 #include <iostream>
 #include <string>
+#include <vector>
 
 #ifdef MESHCRAFT_HAS_SQLITE3
 #include <sqlite3.h>
@@ -636,6 +637,12 @@ static void testMigrationFromLegacySchema() {
             CHECK(results[0].name == "LegacyWidget", "legacy migration: name preserved");
             CHECK(results[0].description.empty(), "legacy migration: description defaults to empty after ADD COLUMN");
             CHECK(results[0].source.empty(), "legacy migration: source defaults to empty after ADD COLUMN");
+            CHECK(results[0].category.empty() && results[0].license.empty() && results[0].provenance.empty(),
+                  "legacy migration: new metadata defaults to empty");
+            CHECK(results[0].thumbnailRgba.size() ==
+                      static_cast<std::size_t>(ModelRegistry::kThumbnailWidth) *
+                      ModelRegistry::kThumbnailHeight * 4,
+                  "legacy migration: missing preview cache is generated lazily");
         }
         reg.close();
     }
@@ -643,43 +650,61 @@ static void testMigrationFromLegacySchema() {
 }
 
 // ---------------------------------------------------------------------------
-// STAB-0351 — thumbnails are explicitly unsupported (design placeholder only,
-// see m1m2m3.md: "Not yet implemented: thumbnail column"). `Entry` having no
-// `thumbnail` member is a compile-time fact (verified by reading
-// ModelRegistry.hpp), not something a runtime test can assert without C++
-// reflection — but the *schema* is a runtime fact this test CAN check
-// directly: query the real `models` table via `PRAGMA table_info` and
-// confirm no column named "thumbnail" exists, so a future accidental
-// addition wouldn't silently drift from the documented design.
+// SYS-W14-39: previews are deterministic catalog tiles, persisted after an
+// initial or stale-cache search. Inspect the actual schema here as migration
+// coverage, then verify saving changed XML invalidates its fingerprint.
 // ---------------------------------------------------------------------------
 
-static void testNoThumbnailColumn() {
+static void testThumbnailCacheAndSchema() {
     namespace fs = std::filesystem;
-    auto dbPath = fs::temp_directory_path() / "mc3_reg_no_thumbnail.sqlite3";
+    auto dbPath = fs::temp_directory_path() / "mc3_reg_thumbnail.sqlite3";
     fs::remove(dbPath);
 
     ModelRegistry reg;
     reg.open(dbPath); // creates the schema
 
+    auto doc = makeDocWithDef();
+    auto saved = reg.entryFromDefinition(doc, "crate", "G", "Preview", "", "", "", "handmade");
+    const int64_t id = reg.save(saved);
+    CHECK(id > 0, "thumbnail: entry saved");
+    auto found = reg.search("Preview");
+    CHECK(found.size() == 1, "thumbnail: saved entry is searchable");
+    std::string originalFingerprint;
+    if (!found.empty()) {
+        originalFingerprint = found[0].thumbnailFingerprint;
+        CHECK(found[0].thumbnailRgba.size() ==
+                  static_cast<std::size_t>(ModelRegistry::kThumbnailWidth) *
+                  ModelRegistry::kThumbnailHeight * 4,
+              "thumbnail: returned RGBA cache has the documented dimensions");
+        found[0].xml += "\n<!-- revised -->\n";
+        CHECK(reg.save(found[0]) == id, "thumbnail: changed entry updates");
+    }
+    const auto refreshed = reg.search("Preview");
+    if (!refreshed.empty())
+        CHECK(refreshed[0].thumbnailFingerprint != originalFingerprint,
+              "thumbnail: XML change invalidates and refreshes fingerprint");
+
     sqlite3* raw = nullptr;
     CHECK(sqlite3_open_v2(dbPath.string().c_str(), &raw, SQLITE_OPEN_READONLY, nullptr) == SQLITE_OK,
-          "no-thumbnail: can reopen the DB file directly for schema inspection");
+          "thumbnail: can reopen the DB file directly for schema inspection");
 
     sqlite3_stmt* stmt = nullptr;
     sqlite3_prepare_v2(raw, "PRAGMA table_info(models);", -1, &stmt, nullptr);
-    bool hasThumbnailColumn = false;
+    bool hasFingerprintColumn = false;
+    bool hasRgbaColumn = false;
     int  columnCount = 0;
     while (sqlite3_step(stmt) == SQLITE_ROW) {
         ++columnCount;
         const auto* name = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 1)); // column 1 = name
-        if (name && std::string(name) == "thumbnail") hasThumbnailColumn = true;
+        if (name && std::string(name) == "thumbnail_fingerprint") hasFingerprintColumn = true;
+        if (name && std::string(name) == "thumbnail_rgba") hasRgbaColumn = true;
     }
     sqlite3_finalize(stmt);
     sqlite3_close(raw);
 
-    CHECK(columnCount > 0, "no-thumbnail: table_info returned the models table's columns");
-    CHECK(!hasThumbnailColumn,
-          "no-thumbnail: the 'models' table schema has no thumbnail column (design placeholder only)");
+    CHECK(columnCount > 0, "thumbnail: table_info returned the models table's columns");
+    CHECK(hasFingerprintColumn && hasRgbaColumn,
+          "thumbnail: migration creates fingerprint and RGBA cache columns");
 
     reg.close();
     fs::remove(dbPath);
@@ -1098,6 +1123,150 @@ static void testDefaultPathEnvOverride() {
 }
 #endif
 
+static void testRegistryMetadataFilters() {
+    namespace fs = std::filesystem;
+    const auto dbPath = fs::temp_directory_path() / "mc3_reg_metadata.sqlite3";
+    fs::remove(dbPath);
+
+    ModelRegistry reg;
+    reg.open(dbPath);
+    auto doc = makeDocWithDef();
+    Mc3AssetMetadata metadata;
+    metadata.category = "furniture";
+    metadata.license = "CC-BY-4.0";
+    metadata.provenance = "Example Studio";
+    metadata.semanticTags = {"seating", "indoor"};
+    metadata.styleTags = {"rustic"};
+    doc.definitions.at("crate")->assetMetadata = metadata;
+
+    auto entry = reg.entryFromDefinition(doc, "crate", "Catalog", "Tagged crate", "", "manual",
+                                         "metadata filter fixture", "imported");
+    CHECK(entry.category == "furniture" && entry.license == "CC-BY-4.0" &&
+              entry.provenance == "Example Studio",
+          "metadata: entry preserves category, license and provenance");
+    CHECK(entry.tags.find("manual") != std::string::npos && entry.tags.find("rustic") != std::string::npos,
+          "metadata: authored tags merge with structured asset tags");
+    CHECK(reg.save(entry) > 0, "metadata: entry saves");
+
+    ModelRegistry::SearchFilter filter;
+    filter.category = "furn";
+    CHECK(reg.search(filter).size() == 1, "metadata: category filter matches");
+    filter = {};
+    filter.license = "cc-by";
+    CHECK(reg.search(filter).size() == 1, "metadata: license filter is case-insensitive");
+    filter = {};
+    filter.provenance = "studio";
+    CHECK(reg.search(filter).size() == 1, "metadata: provenance filter matches");
+    filter = {};
+    filter.tag = "rustic";
+    CHECK(reg.search(filter).size() == 1, "metadata: tag filter matches merged structured tags");
+
+    reg.close();
+    fs::remove(dbPath);
+}
+
+static void testMaterialReport() {
+    Mc3Document doc;
+    Mc3Material original;
+    original.baseColor = {0.4f, 0.3f, 0.2f, 1.0f};
+    original.roughness = 0.7f;
+    doc.materials["wood"] = original;
+    doc.materials["wood_duplicate"] = original;
+    doc.materials["unused"] = Mc3Material{};
+
+    auto box = std::make_shared<Mc3Object>();
+    box->id = "box";
+    box->type = ObjectType::Box;
+    box->primitive = Mc3Primitive{};
+    box->material = "wood";
+    doc.objects.push_back(box);
+
+    const auto report = ModelRegistry::inspectMaterials(doc);
+    bool foundDuplicate = false;
+    for (const auto& group : report.duplicateMaterialGroups) {
+        bool hasWood = false;
+        bool hasCopy = false;
+        for (const auto& id : group) {
+            hasWood = hasWood || id == "wood";
+            hasCopy = hasCopy || id == "wood_duplicate";
+        }
+        foundDuplicate = foundDuplicate || (hasWood && hasCopy);
+    }
+    bool foundUnused = false;
+    for (const auto& id : report.unusedMaterialIds) foundUnused = foundUnused || id == "unused";
+    CHECK(foundDuplicate, "material report: identical serialized PBR materials are grouped");
+    CHECK(foundUnused, "material report: unreferenced material is reported");
+}
+
+static void testAssetPackWithResolvedDependency() {
+    namespace fs = std::filesystem;
+    const auto root = fs::temp_directory_path() / "mc3_registry_asset_pack";
+    const auto dbPath = root / "registry.sqlite3";
+    const auto libraryPath = root / "city-core.mc3lib.xml";
+    const auto packPath = root / "crate-pack";
+    fs::remove_all(root);
+    fs::create_directories(root);
+    {
+        std::ofstream library(libraryPath, std::ios::binary);
+        library << "verified local library fixture\n";
+    }
+
+    ModelRegistry reg;
+    reg.open(dbPath);
+    auto doc = makeDocWithDef();
+    doc.imports.push_back({"city", "mc3lib://city-core@1.0.0", "sha256:fixture"});
+    auto imported = std::make_shared<Mc3Object>();
+    imported->id = "street_lamp";
+    imported->type = ObjectType::Instance;
+    imported->definition = "city:lamp";
+    doc.definitions.at("crate")->children.push_back(imported);
+    const auto entry = reg.entryFromDefinition(doc, "crate", "City", "Crate with lamp", "", "", "", "imported");
+    CHECK(entry.xml.find("mc3lib://city-core@1.0.0") != std::string::npos,
+          "asset pack: entry retains its direct imported-library declaration");
+
+    const auto result = ModelRegistry::exportAssetPack(
+        packPath, {entry}, {{"city", "mc3lib://city-core@1.0.0", "sha256:fixture", libraryPath}});
+    CHECK(result.entryCount == 1 && result.dependencyCount == 1,
+          "asset pack: reports one entry and one resolved dependency");
+    CHECK(fs::is_regular_file(result.manifestPath), "asset pack: manifest is written");
+    CHECK(fs::is_regular_file(packPath / "entries" / "1-Crate_with_lamp.mc3.xml"),
+          "asset pack: entry XML is copied into the pack");
+    CHECK(fs::is_regular_file(packPath / "thumbnails" / "1-Crate_with_lamp.rgba"),
+          "asset pack: deterministic preview cache is copied into the pack");
+    std::ifstream manifest(result.manifestPath, std::ios::binary);
+    const std::string manifestText((std::istreambuf_iterator<char>(manifest)), {});
+    CHECK(manifestText.find("meshcraft-asset-pack") != std::string::npos &&
+              manifestText.find("mc3lib://city-core@1.0.0") != std::string::npos &&
+              manifestText.find(libraryPath.string()) == std::string::npos,
+          "asset pack: manifest records portable dependency metadata without host paths");
+
+    bool wrongHashRejected = false;
+    try {
+        (void)ModelRegistry::exportAssetPack(
+            root / "wrong-hash-pack", {entry},
+            {{"city", "mc3lib://city-core@1.0.0", "sha256:not-the-fixture", libraryPath}});
+    } catch (const std::exception&) {
+        wrongHashRejected = true;
+    }
+    CHECK(wrongHashRejected, "asset pack: a pinned import rejects a mismatched resolved hash");
+
+    Mc3Document scene;
+    CHECK(!reg.insertIntoScene(scene, entry).empty() && scene.imports.size() == 1,
+          "asset pack: inserting entry merges its compatible import declaration");
+    Mc3Document conflictingScene;
+    conflictingScene.imports.push_back({"city", "mc3lib://other@1.0.0", "sha256:other"});
+    bool conflictThrown = false;
+    try {
+        (void)reg.insertIntoScene(conflictingScene, entry);
+    } catch (const std::exception&) {
+        conflictThrown = true;
+    }
+    CHECK(conflictThrown, "asset pack: conflicting import alias is rejected before scene mutation");
+
+    reg.close();
+    fs::remove_all(root);
+}
+
 #endif // MESHCRAFT_HAS_SQLITE3
 
 int main() {
@@ -1116,7 +1285,10 @@ int main() {
     testSearchMatchesEachFieldIndependently();
     testSearchCaseInsensitiveByName();
     testSearchBySourceField();
-    testNoThumbnailColumn();
+    testThumbnailCacheAndSchema();
+    testRegistryMetadataFilters();
+    testMaterialReport();
+    testAssetPackWithResolvedDependency();
     testCreatedTimestampIsUnixEpoch();
     testLargeXmlContent();
     testSpecialCharsInNameAndTags();

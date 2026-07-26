@@ -135,8 +135,7 @@ sequentially. Per `CLAUDE.md`, recording this ordered backlog does **not**
 remove the requirement to describe and obtain explicit confirmation for each
 individual implementation task immediately before work begins.
 
-1. **SYS-W14-39 and SYS-W9-04 (P3)** — Model Registry v2 and scalable
-    history/review tooling.
+1. **SYS-W9-04 (P3)** — scalable history/review tooling.
 
 The existing platform tasks (`SYS-W8-05`, `AUD-042`, `SYS-W14-09`) remain
 their own owner/toolchain-gated work and are intentionally not duplicated.
@@ -2253,14 +2252,33 @@ because it is listed: `CLAUDE.md` requires per-row user confirmation.
   CTest run pass: 168 passed, 40 render registrations disabled by the host's
   Xvfb preflight, and one display preflight skipped.
 
-- **SYS-W14-39** `[TODO]` `P3` — Model Registry v2 and dependency-aware asset packs.
-  The local registry has no thumbnails, pack workflow, or dependency-aware
-  inspection. Add cached generated thumbnails, metadata/tag filters,
-  license/provenance visibility, duplicate/unused-material reports, and a
-  local asset-pack export that records resolved library dependencies. Keep
-  synchronization/cloud collaboration out of scope pending a separate product
-  and credential design. Add SQLite-migration, thumbnail-invalidation, search,
-  and pack-manifest tests with graceful no-SQLite behavior.
+- **SYS-W14-39** `[DONE]` `P3` — Model Registry v2 and dependency-aware asset packs.
+  **Implemented 2026-07-26.** SQLite entries now retain structured category,
+  license and provenance fields alongside merged metadata tags. A deterministic
+  64×64 RGBA catalog tile (FNV-1a XML fingerprint) is cached in new migrated
+  `thumbnail_fingerprint`/`thumbnail_rgba` columns and regenerated on save or
+  stale search; it is intentionally not presented as a GPU-rendered thumbnail.
+  The Registry panel adds independent text/tag/category/license/provenance
+  filters, category/license/provenance visibility, a compact preview and a
+  material-health disclosure for serially identical and unused materials.
+  Definition entries retain only direct referenced library imports. Insertion
+  carries compatible import declarations into the scene and rejects a
+  same-alias source/hash conflict before mutation. "Export filtered asset
+  pack" creates an explicit new/empty **local** directory containing a
+  portable `manifest.json`, entry XML, raw previews and only the resolved
+  library files required by the selected entries; manifest records relative
+  file names plus namespace/source/content hash, never local absolute paths.
+  Synchronization, accounts, remote storage and collaboration remain out of
+  scope pending a separate product and credential design.
+  **Tests:** `mc3_registry_test` now covers legacy migration, lazy cache and
+  invalidation, structured filters, material report, pack manifest, import
+  merge/conflict; new `model_registry_no_sqlite_test` compiles and runs the
+  actual no-SQLite branch while exporting a local pack. Targeted Release CTest:
+  both registry tests pass (190 assertions total); `ctest -N` registers 210
+  tests with two `registry`-labelled tests. Documentation updated in
+  `m1m2m3.md`, `README.md` and `TESTING.md`. Full Release CTest after the
+  change: 170 passed, 39 display-dependent registrations disabled by the
+  host's Xvfb preflight, and one display preflight skipped (0 failures).
 
 - **SYS-W3-02** `[DONE]` `P2` — Shared CNA-free semantic-evaluation helpers for parity-sensitive consumers.
   **Implemented 2026-07-26.** `SceneSemanticsAlgorithms.hpp` now supplies
