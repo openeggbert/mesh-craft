@@ -3634,6 +3634,16 @@ static void testSaveRejectsCyclicChildrenInsteadOfCrashing() {
           "instead of crashing (stack overflow) on save");
     CHECK(what.find("256") != std::string::npos,
           "saveToFile: the exception names the nesting-depth limit that was hit");
+
+    // SYS-W11-09: a's/b's shared_ptr 2-cycle keeps both alive forever
+    // (neither's refcount ever reaches 0) -- a real LeakSanitizer finding,
+    // but an accepted by-design artifact of deliberately constructing a
+    // cyclic graph to test the depth guard above, not a product bug. Break
+    // it explicitly so the objects are actually freed once this function
+    // returns, rather than leaving every test using this pattern to show up
+    // as a sanitizer failure.
+    a->children.clear();
+    b->children.clear();
 }
 
 // ---------------------------------------------------------------------------

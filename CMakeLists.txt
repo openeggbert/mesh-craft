@@ -383,6 +383,16 @@ add_custom_target(meshcraft_cli_release
     COMMENT "Creating the relocatable MeshCraft CLI release archive")
 
 if(BUILD_TESTING)
+    # SYS-W11-09: this test's entire purpose is proving a PLAIN external
+    # consumer (no special compiler/linker flags) can use the installed
+    # Mc3/Mcb libraries via find_package(). That is structurally
+    # incompatible with MESHCRAFT_SANITIZE=ON: the installed .a files are
+    # instrumented, so their object code references __asan_*/__ubsan_*
+    # symbols a plain, non-instrumented consumer executable never links
+    # against, and the link fails -- not a real product bug, just an
+    # unrepresentative test for this configuration. Skipped only in that
+    # configuration; still registered and required in every other one.
+    if(NOT MESHCRAFT_SANITIZE)
     add_test(
         NAME package_consumer_smoke
         COMMAND "${CMAKE_COMMAND}"
@@ -392,6 +402,7 @@ if(BUILD_TESTING)
     set_tests_properties(package_consumer_smoke PROPERTIES
         TIMEOUT 60
         LABELS "package")
+    endif()
 
     # SYS-W11-06: fixed binary hashes produced from a checked-in scene are a
     # compact cross-platform contract for both standalone CLI tools.  The
@@ -695,6 +706,7 @@ if(MESH_CRAFT_BUILD_TESTING AND UNIX AND NOT ANDROID AND NOT EMSCRIPTEN)
     target_include_directories(active_tool_test PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}/include)
     target_compile_features(active_tool_test PRIVATE cxx_std_23)
+    meshcraft_apply_sanitize(active_tool_test)
     add_test(NAME active_tool COMMAND active_tool_test)
     set_tests_properties(active_tool PROPERTIES TIMEOUT 15 LABELS "unit")
 
@@ -709,6 +721,7 @@ if(MESH_CRAFT_BUILD_TESTING AND UNIX AND NOT ANDROID AND NOT EMSCRIPTEN)
         ${CMAKE_CURRENT_SOURCE_DIR}/mc3/include)
     target_link_libraries(coordinate_system_test PRIVATE Mc3)
     target_compile_features(coordinate_system_test PRIVATE cxx_std_23)
+    meshcraft_apply_sanitize(coordinate_system_test)
     add_test(NAME coordinate_system COMMAND coordinate_system_test)
     set_tests_properties(coordinate_system PROPERTIES TIMEOUT 15 LABELS "unit")
 
@@ -720,6 +733,7 @@ if(MESH_CRAFT_BUILD_TESTING AND UNIX AND NOT ANDROID AND NOT EMSCRIPTEN)
     target_include_directories(rotation_convention_algorithms_test PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}/include)
     target_compile_features(rotation_convention_algorithms_test PRIVATE cxx_std_23)
+    meshcraft_apply_sanitize(rotation_convention_algorithms_test)
     target_compile_options(rotation_convention_algorithms_test PRIVATE -Wall -Wextra)
     add_test(NAME rotation_convention_algorithms COMMAND rotation_convention_algorithms_test)
     set_tests_properties(rotation_convention_algorithms PROPERTIES TIMEOUT 15 LABELS "unit")
@@ -740,6 +754,7 @@ if(MESH_CRAFT_BUILD_TESTING AND UNIX AND NOT ANDROID AND NOT EMSCRIPTEN)
     target_link_libraries(keybinding_manager_test PRIVATE
         CNA ${_cna_backend_target} SHARP_RUNTIME)
     target_compile_features(keybinding_manager_test PRIVATE cxx_std_23)
+    meshcraft_apply_sanitize(keybinding_manager_test)
     add_test(NAME keybinding_manager COMMAND keybinding_manager_test)
     set_tests_properties(keybinding_manager PROPERTIES TIMEOUT 15 LABELS "unit")
 
@@ -754,6 +769,7 @@ if(MESH_CRAFT_BUILD_TESTING AND UNIX AND NOT ANDROID AND NOT EMSCRIPTEN)
         ${CMAKE_CURRENT_SOURCE_DIR}/include)
     target_link_libraries(preferences_test PRIVATE imgui)
     target_compile_features(preferences_test PRIVATE cxx_std_23)
+    meshcraft_apply_sanitize(preferences_test)
     add_test(NAME preferences COMMAND preferences_test)
     set_tests_properties(preferences PROPERTIES TIMEOUT 15 LABELS "unit")
 
@@ -770,6 +786,7 @@ if(MESH_CRAFT_BUILD_TESTING AND UNIX AND NOT ANDROID AND NOT EMSCRIPTEN)
         ${CMAKE_CURRENT_SOURCE_DIR}/include
         ${CMAKE_CURRENT_SOURCE_DIR}/mc3/include)
     target_compile_features(object_index_test PRIVATE cxx_std_23)
+    meshcraft_apply_sanitize(object_index_test)
     add_test(NAME object_index COMMAND object_index_test)
     set_tests_properties(object_index PROPERTIES TIMEOUT 15 LABELS "unit")
 
@@ -783,6 +800,7 @@ if(MESH_CRAFT_BUILD_TESTING AND UNIX AND NOT ANDROID AND NOT EMSCRIPTEN)
         ${CMAKE_CURRENT_SOURCE_DIR}/include
         ${CMAKE_CURRENT_SOURCE_DIR}/mc3/include)
     target_compile_features(texture_from_path_test PRIVATE cxx_std_23)
+    meshcraft_apply_sanitize(texture_from_path_test)
     add_test(NAME texture_from_path COMMAND texture_from_path_test)
     set_tests_properties(texture_from_path PROPERTIES TIMEOUT 15 LABELS "unit")
 
@@ -794,6 +812,7 @@ if(MESH_CRAFT_BUILD_TESTING AND UNIX AND NOT ANDROID AND NOT EMSCRIPTEN)
         ${CMAKE_CURRENT_SOURCE_DIR}/include
         ${CMAKE_CURRENT_SOURCE_DIR}/mc3/include)
     target_compile_features(animation_preview_algorithms_test PRIVATE cxx_std_23)
+    meshcraft_apply_sanitize(animation_preview_algorithms_test)
     add_test(NAME animation_preview_algorithms COMMAND animation_preview_algorithms_test)
     set_tests_properties(animation_preview_algorithms PROPERTIES TIMEOUT 15 LABELS "unit")
 
@@ -804,6 +823,7 @@ if(MESH_CRAFT_BUILD_TESTING AND UNIX AND NOT ANDROID AND NOT EMSCRIPTEN)
         ${CMAKE_CURRENT_SOURCE_DIR}/mcb/include)
     target_link_libraries(animation_clip_format_test PRIVATE Mc3 Mcb)
     target_compile_features(animation_clip_format_test PRIVATE cxx_std_23)
+    meshcraft_apply_sanitize(animation_clip_format_test)
     add_test(NAME animation_clip_format COMMAND animation_clip_format_test)
     set_tests_properties(animation_clip_format PROPERTIES TIMEOUT 15 LABELS "format")
 
@@ -817,6 +837,7 @@ if(MESH_CRAFT_BUILD_TESTING AND UNIX AND NOT ANDROID AND NOT EMSCRIPTEN)
         ${CMAKE_CURRENT_SOURCE_DIR}/include
         ${CMAKE_CURRENT_SOURCE_DIR}/mc3/include)
     target_compile_features(delete_reference_integrity_test PRIVATE cxx_std_23)
+    meshcraft_apply_sanitize(delete_reference_integrity_test)
     add_test(NAME delete_reference_integrity COMMAND delete_reference_integrity_test)
     set_tests_properties(delete_reference_integrity PROPERTIES TIMEOUT 15 LABELS "unit")
 
@@ -832,6 +853,7 @@ if(MESH_CRAFT_BUILD_TESTING AND UNIX AND NOT ANDROID AND NOT EMSCRIPTEN)
     target_include_directories(obj_export_temp_cleanup_test PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}/include)
     target_compile_features(obj_export_temp_cleanup_test PRIVATE cxx_std_23)
+    meshcraft_apply_sanitize(obj_export_temp_cleanup_test)
     add_test(NAME obj_export_temp_cleanup COMMAND obj_export_temp_cleanup_test)
     set_tests_properties(obj_export_temp_cleanup PROPERTIES TIMEOUT 15 LABELS "unit")
 
@@ -851,6 +873,7 @@ if(MESH_CRAFT_BUILD_TESTING AND UNIX AND NOT ANDROID AND NOT EMSCRIPTEN)
         ${CMAKE_CURRENT_SOURCE_DIR}/include
         ${CMAKE_CURRENT_SOURCE_DIR}/mc3/include)
     target_compile_features(macro_recorder_test PRIVATE cxx_std_23)
+    meshcraft_apply_sanitize(macro_recorder_test)
     add_test(NAME macro_recorder COMMAND macro_recorder_test)
     set_tests_properties(macro_recorder PROPERTIES TIMEOUT 15 LABELS "unit")
 
@@ -873,6 +896,7 @@ if(MESH_CRAFT_BUILD_TESTING AND UNIX AND NOT ANDROID AND NOT EMSCRIPTEN)
         ${CMAKE_CURRENT_SOURCE_DIR}/include
         ${CMAKE_CURRENT_SOURCE_DIR}/mc3/include)
     target_compile_features(undo_manager_test PRIVATE cxx_std_23)
+    meshcraft_apply_sanitize(undo_manager_test)
     add_test(NAME undo_manager COMMAND undo_manager_test)
     set_tests_properties(undo_manager PROPERTIES TIMEOUT 15 LABELS "unit")
 
@@ -889,6 +913,7 @@ if(MESH_CRAFT_BUILD_TESTING AND UNIX AND NOT ANDROID AND NOT EMSCRIPTEN)
         ${CMAKE_CURRENT_SOURCE_DIR}/mc3/include)
     target_link_libraries(scene_history_test PRIVATE Mc3)
     target_compile_features(scene_history_test PRIVATE cxx_std_23)
+    meshcraft_apply_sanitize(scene_history_test)
     add_test(NAME scene_history COMMAND scene_history_test)
     set_tests_properties(scene_history PROPERTIES TIMEOUT 15 LABELS "unit")
 
@@ -906,6 +931,7 @@ if(MESH_CRAFT_BUILD_TESTING AND UNIX AND NOT ANDROID AND NOT EMSCRIPTEN)
         ${CMAKE_CURRENT_SOURCE_DIR}/include
         ${CMAKE_CURRENT_SOURCE_DIR}/mc3/include)
     target_compile_features(registry_insert_undo_test PRIVATE cxx_std_23)
+    meshcraft_apply_sanitize(registry_insert_undo_test)
     add_test(NAME registry_insert_undo COMMAND registry_insert_undo_test)
     set_tests_properties(registry_insert_undo PROPERTIES TIMEOUT 15 LABELS "unit")
 
@@ -920,6 +946,7 @@ if(MESH_CRAFT_BUILD_TESTING AND UNIX AND NOT ANDROID AND NOT EMSCRIPTEN)
         ${CMAKE_CURRENT_SOURCE_DIR}/src/MeshCraft)
     target_link_libraries(registry_workspace_test PRIVATE Mc3)
     target_compile_features(registry_workspace_test PRIVATE cxx_std_23)
+    meshcraft_apply_sanitize(registry_workspace_test)
     add_test(NAME registry_workspace COMMAND registry_workspace_test)
     set_tests_properties(registry_workspace PROPERTIES TIMEOUT 15 LABELS "unit;registry")
 
@@ -935,6 +962,7 @@ if(MESH_CRAFT_BUILD_TESTING AND UNIX AND NOT ANDROID AND NOT EMSCRIPTEN)
         ${CMAKE_CURRENT_SOURCE_DIR}/mc3/include)
     target_link_libraries(automation_workspace_test PRIVATE Mc3 lua54 sol2::sol2)
     target_compile_features(automation_workspace_test PRIVATE cxx_std_23)
+    meshcraft_apply_sanitize(automation_workspace_test)
     add_test(NAME automation_workspace COMMAND automation_workspace_test)
     set_tests_properties(automation_workspace PROPERTIES TIMEOUT 15 LABELS "unit;automation")
 
@@ -953,6 +981,7 @@ if(MESH_CRAFT_BUILD_TESTING AND UNIX AND NOT ANDROID AND NOT EMSCRIPTEN)
     target_link_libraries(walk_controller_test PRIVATE
         CNA ${_cna_backend_target} SHARP_RUNTIME)
     target_compile_features(walk_controller_test PRIVATE cxx_std_23)
+    meshcraft_apply_sanitize(walk_controller_test)
     add_test(NAME walk_controller COMMAND walk_controller_test)
     set_tests_properties(walk_controller PROPERTIES TIMEOUT 15 LABELS "unit")
 
@@ -970,6 +999,7 @@ if(MESH_CRAFT_BUILD_TESTING AND UNIX AND NOT ANDROID AND NOT EMSCRIPTEN)
     target_link_libraries(audio_preview_test PRIVATE
         CNA ${_cna_backend_target} SHARP_RUNTIME)
     target_compile_features(audio_preview_test PRIVATE cxx_std_23)
+    meshcraft_apply_sanitize(audio_preview_test)
     add_test(NAME audio_preview COMMAND audio_preview_test)
     # The test deliberately exercises invalid-file failure paths only; use
     # SDL's dummy backend so a missing PulseAudio server cannot block those
@@ -992,6 +1022,7 @@ if(MESH_CRAFT_BUILD_TESTING AND UNIX AND NOT ANDROID AND NOT EMSCRIPTEN)
     target_link_libraries(camera_bookmarks_test PRIVATE
         CNA ${_cna_backend_target} SHARP_RUNTIME)
     target_compile_features(camera_bookmarks_test PRIVATE cxx_std_23)
+    meshcraft_apply_sanitize(camera_bookmarks_test)
     add_test(NAME camera_bookmarks COMMAND camera_bookmarks_test)
     set_tests_properties(camera_bookmarks PROPERTIES TIMEOUT 15 LABELS "unit")
 
@@ -1004,6 +1035,7 @@ if(MESH_CRAFT_BUILD_TESTING AND UNIX AND NOT ANDROID AND NOT EMSCRIPTEN)
         ${CMAKE_CURRENT_SOURCE_DIR}/include
         ${CMAKE_CURRENT_SOURCE_DIR}/mc3/include)
     target_compile_features(transform_clipboard_test PRIVATE cxx_std_23)
+    meshcraft_apply_sanitize(transform_clipboard_test)
     add_test(NAME transform_clipboard COMMAND transform_clipboard_test)
     set_tests_properties(transform_clipboard PROPERTIES TIMEOUT 15 LABELS "unit")
 
@@ -1015,6 +1047,7 @@ if(MESH_CRAFT_BUILD_TESTING AND UNIX AND NOT ANDROID AND NOT EMSCRIPTEN)
     target_include_directories(status_notification_test PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}/include)
     target_compile_features(status_notification_test PRIVATE cxx_std_23)
+    meshcraft_apply_sanitize(status_notification_test)
     add_test(NAME status_notification COMMAND status_notification_test)
     set_tests_properties(status_notification PROPERTIES TIMEOUT 15 LABELS "unit")
 
@@ -1026,6 +1059,7 @@ if(MESH_CRAFT_BUILD_TESTING AND UNIX AND NOT ANDROID AND NOT EMSCRIPTEN)
     target_include_directories(object_lock_state_test PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}/include)
     target_compile_features(object_lock_state_test PRIVATE cxx_std_23)
+    meshcraft_apply_sanitize(object_lock_state_test)
     add_test(NAME object_lock_state COMMAND object_lock_state_test)
     set_tests_properties(object_lock_state PROPERTIES TIMEOUT 15 LABELS "unit")
 
@@ -1037,6 +1071,7 @@ if(MESH_CRAFT_BUILD_TESTING AND UNIX AND NOT ANDROID AND NOT EMSCRIPTEN)
     target_include_directories(benchmark_progress_test PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}/include)
     target_compile_features(benchmark_progress_test PRIVATE cxx_std_23)
+    meshcraft_apply_sanitize(benchmark_progress_test)
     add_test(NAME benchmark_progress COMMAND benchmark_progress_test)
     set_tests_properties(benchmark_progress PROPERTIES TIMEOUT 15 LABELS "unit")
 
@@ -1055,6 +1090,7 @@ if(MESH_CRAFT_BUILD_TESTING AND UNIX AND NOT ANDROID AND NOT EMSCRIPTEN)
         ${CMAKE_CURRENT_SOURCE_DIR}/mc3/include)
     target_link_libraries(lua_script_runner_test PRIVATE Mc3 lua54 sol2::sol2)
     target_compile_features(lua_script_runner_test PRIVATE cxx_std_23)
+    meshcraft_apply_sanitize(lua_script_runner_test)
     add_test(NAME lua_script_runner COMMAND lua_script_runner_test)
     set_tests_properties(lua_script_runner PROPERTIES TIMEOUT 30 LABELS "unit")
 
@@ -1069,6 +1105,7 @@ if(MESH_CRAFT_BUILD_TESTING AND UNIX AND NOT ANDROID AND NOT EMSCRIPTEN)
     target_include_directories(lua_memory_budget_test PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}/include)
     target_compile_features(lua_memory_budget_test PRIVATE cxx_std_23)
+    meshcraft_apply_sanitize(lua_memory_budget_test)
     add_test(NAME lua_memory_budget COMMAND lua_memory_budget_test)
     set_tests_properties(lua_memory_budget PROPERTIES TIMEOUT 15 LABELS "unit")
 
@@ -1082,6 +1119,7 @@ if(MESH_CRAFT_BUILD_TESTING AND UNIX AND NOT ANDROID AND NOT EMSCRIPTEN)
         ${CMAKE_CURRENT_SOURCE_DIR}/mc3/include)
     target_link_libraries(object_type_name_test PRIVATE Mc3)
     target_compile_features(object_type_name_test PRIVATE cxx_std_23)
+    meshcraft_apply_sanitize(object_type_name_test)
     add_test(NAME object_type_name COMMAND object_type_name_test)
     set_tests_properties(object_type_name PROPERTIES TIMEOUT 15 LABELS "unit")
 
@@ -1092,6 +1130,7 @@ if(MESH_CRAFT_BUILD_TESTING AND UNIX AND NOT ANDROID AND NOT EMSCRIPTEN)
     target_include_directories(graphics_backend_check_test PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}/include)
     target_compile_features(graphics_backend_check_test PRIVATE cxx_std_23)
+    meshcraft_apply_sanitize(graphics_backend_check_test)
     add_test(NAME graphics_backend_check COMMAND graphics_backend_check_test)
     set_tests_properties(graphics_backend_check PROPERTIES TIMEOUT 15 LABELS "unit")
 
@@ -1102,6 +1141,7 @@ if(MESH_CRAFT_BUILD_TESTING AND UNIX AND NOT ANDROID AND NOT EMSCRIPTEN)
     target_include_directories(point_spot_lighting_algorithms_test PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}/include)
     target_compile_features(point_spot_lighting_algorithms_test PRIVATE cxx_std_23)
+    meshcraft_apply_sanitize(point_spot_lighting_algorithms_test)
     target_compile_options(point_spot_lighting_algorithms_test PRIVATE -Wall -Wextra)
     add_test(NAME point_spot_lighting_algorithms COMMAND point_spot_lighting_algorithms_test)
     set_tests_properties(point_spot_lighting_algorithms PROPERTIES TIMEOUT 15 LABELS "unit")
@@ -1116,6 +1156,7 @@ if(MESH_CRAFT_BUILD_TESTING AND UNIX AND NOT ANDROID AND NOT EMSCRIPTEN)
         ${CMAKE_CURRENT_SOURCE_DIR}/mc3/include)
     target_link_libraries(csg_material_range_algorithms_test PRIVATE Mc3)
     target_compile_features(csg_material_range_algorithms_test PRIVATE cxx_std_23)
+    meshcraft_apply_sanitize(csg_material_range_algorithms_test)
     target_compile_options(csg_material_range_algorithms_test PRIVATE -Wall -Wextra)
     add_test(NAME csg_material_range_algorithms COMMAND csg_material_range_algorithms_test)
     set_tests_properties(csg_material_range_algorithms PROPERTIES TIMEOUT 15 LABELS "unit")
@@ -1134,6 +1175,7 @@ if(MESH_CRAFT_BUILD_TESTING AND UNIX AND NOT ANDROID AND NOT EMSCRIPTEN)
     target_include_directories(imgui_texture_registry_test PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}/include)
     target_compile_features(imgui_texture_registry_test PRIVATE cxx_std_23)
+    meshcraft_apply_sanitize(imgui_texture_registry_test)
     add_test(NAME imgui_texture_registry COMMAND imgui_texture_registry_test)
     set_tests_properties(imgui_texture_registry PROPERTIES TIMEOUT 15 LABELS "unit")
 
@@ -1142,6 +1184,7 @@ if(MESH_CRAFT_BUILD_TESTING AND UNIX AND NOT ANDROID AND NOT EMSCRIPTEN)
     target_include_directories(imgui_draw_translation_test PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}/include)
     target_compile_features(imgui_draw_translation_test PRIVATE cxx_std_23)
+    meshcraft_apply_sanitize(imgui_draw_translation_test)
     add_test(NAME imgui_draw_translation COMMAND imgui_draw_translation_test)
     set_tests_properties(imgui_draw_translation PROPERTIES TIMEOUT 15 LABELS "unit")
 
@@ -1157,6 +1200,7 @@ if(MESH_CRAFT_BUILD_TESTING AND UNIX AND NOT ANDROID AND NOT EMSCRIPTEN)
         ${CMAKE_CURRENT_SOURCE_DIR}/include)
     target_link_libraries(differential_geometry_test PRIVATE mc3togltf_lib)
     target_compile_features(differential_geometry_test PRIVATE cxx_std_23)
+    meshcraft_apply_sanitize(differential_geometry_test)
     target_compile_options(differential_geometry_test PRIVATE -Wall -Wextra)
     add_test(NAME differential_geometry COMMAND differential_geometry_test)
     set_tests_properties(differential_geometry PROPERTIES TIMEOUT 30 LABELS "unit")
@@ -1169,6 +1213,7 @@ if(MESH_CRAFT_BUILD_TESTING AND UNIX AND NOT ANDROID AND NOT EMSCRIPTEN)
         ${CMAKE_CURRENT_SOURCE_DIR}/include)
     target_link_libraries(uv_mapping_algorithms_test PRIVATE mc3togltf_lib)
     target_compile_features(uv_mapping_algorithms_test PRIVATE cxx_std_23)
+    meshcraft_apply_sanitize(uv_mapping_algorithms_test)
     target_compile_options(uv_mapping_algorithms_test PRIVATE -Wall -Wextra)
     add_test(NAME uv_mapping_algorithms COMMAND uv_mapping_algorithms_test)
     set_tests_properties(uv_mapping_algorithms PROPERTIES TIMEOUT 30 LABELS "unit")
@@ -1185,6 +1230,7 @@ if(MESH_CRAFT_BUILD_TESTING AND UNIX AND NOT ANDROID AND NOT EMSCRIPTEN)
         ${CMAKE_CURRENT_SOURCE_DIR}/include)
     target_link_libraries(primitive_zero_segments_test PRIVATE mc3togltf_lib)
     target_compile_features(primitive_zero_segments_test PRIVATE cxx_std_23)
+    meshcraft_apply_sanitize(primitive_zero_segments_test)
     target_compile_options(primitive_zero_segments_test PRIVATE -Wall -Wextra)
     add_test(NAME primitive_zero_segments COMMAND primitive_zero_segments_test)
     set_tests_properties(primitive_zero_segments PROPERTIES TIMEOUT 15 LABELS "unit")
@@ -1199,6 +1245,7 @@ if(MESH_CRAFT_BUILD_TESTING AND UNIX AND NOT ANDROID AND NOT EMSCRIPTEN)
         ${CMAKE_CURRENT_SOURCE_DIR}/test/extrude_hollow_zero_radius_test.cpp)
     target_link_libraries(extrude_hollow_zero_radius_test PRIVATE Mc3)
     target_compile_features(extrude_hollow_zero_radius_test PRIVATE cxx_std_23)
+    meshcraft_apply_sanitize(extrude_hollow_zero_radius_test)
     target_compile_options(extrude_hollow_zero_radius_test PRIVATE -Wall -Wextra)
     add_test(NAME extrude_hollow_zero_radius COMMAND extrude_hollow_zero_radius_test)
     set_tests_properties(extrude_hollow_zero_radius PROPERTIES TIMEOUT 15 LABELS "unit")
@@ -1211,6 +1258,7 @@ if(MESH_CRAFT_BUILD_TESTING AND UNIX AND NOT ANDROID AND NOT EMSCRIPTEN)
     target_include_directories(extrude_edge_overlay_budget_test PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}/include)
     target_compile_features(extrude_edge_overlay_budget_test PRIVATE cxx_std_23)
+    meshcraft_apply_sanitize(extrude_edge_overlay_budget_test)
     target_compile_options(extrude_edge_overlay_budget_test PRIVATE -Wall -Wextra)
     add_test(NAME extrude_edge_overlay_budget COMMAND extrude_edge_overlay_budget_test)
     set_tests_properties(extrude_edge_overlay_budget PROPERTIES TIMEOUT 15 LABELS "unit")
@@ -1228,6 +1276,7 @@ if(MESH_CRAFT_BUILD_TESTING AND UNIX AND NOT ANDROID AND NOT EMSCRIPTEN)
         ${CMAKE_CURRENT_SOURCE_DIR}/test/undo_gesture_frame_test.cpp)
     target_link_libraries(undo_gesture_frame_test PRIVATE imgui)
     target_compile_features(undo_gesture_frame_test PRIVATE cxx_std_23)
+    meshcraft_apply_sanitize(undo_gesture_frame_test)
     add_test(NAME undo_gesture_frame COMMAND undo_gesture_frame_test)
     set_tests_properties(undo_gesture_frame PROPERTIES TIMEOUT 15 LABELS "unit")
 
@@ -1244,6 +1293,7 @@ if(MESH_CRAFT_BUILD_TESTING AND UNIX AND NOT ANDROID AND NOT EMSCRIPTEN)
         ${CMAKE_CURRENT_SOURCE_DIR}/mc3/include)
     target_link_libraries(fog_start_end_cross_clamp_test PRIVATE imgui)
     target_compile_features(fog_start_end_cross_clamp_test PRIVATE cxx_std_23)
+    meshcraft_apply_sanitize(fog_start_end_cross_clamp_test)
     add_test(NAME fog_start_end_cross_clamp COMMAND fog_start_end_cross_clamp_test)
     set_tests_properties(fog_start_end_cross_clamp PROPERTIES TIMEOUT 15 LABELS "unit")
 
@@ -1263,6 +1313,7 @@ if(MESH_CRAFT_BUILD_TESTING AND UNIX AND NOT ANDROID AND NOT EMSCRIPTEN)
         ${CMAKE_CURRENT_SOURCE_DIR}/mc3/include)
     target_link_libraries(trigger_fire_test PRIVATE Mc3 lua54 sol2::sol2)
     target_compile_features(trigger_fire_test PRIVATE cxx_std_23)
+    meshcraft_apply_sanitize(trigger_fire_test)
     add_test(NAME trigger_fire COMMAND trigger_fire_test)
     set_tests_properties(trigger_fire PROPERTIES TIMEOUT 15 LABELS "unit")
 
@@ -1276,6 +1327,7 @@ if(MESH_CRAFT_BUILD_TESTING AND UNIX AND NOT ANDROID AND NOT EMSCRIPTEN)
     target_include_directories(scene_state_apply_test PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}/mc3/include)
     target_compile_features(scene_state_apply_test PRIVATE cxx_std_23)
+    meshcraft_apply_sanitize(scene_state_apply_test)
     add_test(NAME scene_state_apply COMMAND scene_state_apply_test)
     set_tests_properties(scene_state_apply PROPERTIES TIMEOUT 15 LABELS "unit")
 
@@ -1289,6 +1341,7 @@ if(MESH_CRAFT_BUILD_TESTING AND UNIX AND NOT ANDROID AND NOT EMSCRIPTEN)
         ${CMAKE_CURRENT_SOURCE_DIR}/include
         ${CMAKE_CURRENT_SOURCE_DIR}/mc3/include)
     target_compile_features(event_binding_dispatch_test PRIVATE cxx_std_23)
+    meshcraft_apply_sanitize(event_binding_dispatch_test)
     add_test(NAME event_binding_dispatch COMMAND event_binding_dispatch_test)
     set_tests_properties(event_binding_dispatch PROPERTIES TIMEOUT 15 LABELS "unit")
 
@@ -1303,6 +1356,7 @@ if(MESH_CRAFT_BUILD_TESTING AND UNIX AND NOT ANDROID AND NOT EMSCRIPTEN)
         ${CMAKE_CURRENT_SOURCE_DIR}/mc3/include)
     target_link_libraries(event_preview_runner_test PRIVATE Mc3 lua54 sol2::sol2)
     target_compile_features(event_preview_runner_test PRIVATE cxx_std_23)
+    meshcraft_apply_sanitize(event_preview_runner_test)
     add_test(NAME event_preview_runner COMMAND event_preview_runner_test)
     set_tests_properties(event_preview_runner PROPERTIES TIMEOUT 15 LABELS "unit")
 
@@ -1318,6 +1372,7 @@ if(MESH_CRAFT_BUILD_TESTING AND UNIX AND NOT ANDROID AND NOT EMSCRIPTEN)
         ${CMAKE_CURRENT_SOURCE_DIR}/test/resolve_imports_test.cpp)
     target_link_libraries(resolve_imports_test PRIVATE Mc3)
     target_compile_features(resolve_imports_test PRIVATE cxx_std_23)
+    meshcraft_apply_sanitize(resolve_imports_test)
     add_test(NAME resolve_imports COMMAND resolve_imports_test)
     set_tests_properties(resolve_imports PROPERTIES TIMEOUT 15 LABELS "unit")
 
@@ -1331,6 +1386,7 @@ if(MESH_CRAFT_BUILD_TESTING AND UNIX AND NOT ANDROID AND NOT EMSCRIPTEN)
         ${CMAKE_CURRENT_SOURCE_DIR}/include)
     target_link_libraries(library_workflow_test PRIVATE Mc3)
     target_compile_features(library_workflow_test PRIVATE cxx_std_23)
+    meshcraft_apply_sanitize(library_workflow_test)
     add_test(NAME library_workflow COMMAND library_workflow_test)
     set_tests_properties(library_workflow PROPERTIES TIMEOUT 15 LABELS "unit")
 
@@ -1343,6 +1399,7 @@ if(MESH_CRAFT_BUILD_TESTING AND UNIX AND NOT ANDROID AND NOT EMSCRIPTEN)
         ${CMAKE_CURRENT_SOURCE_DIR}/include)
     target_link_libraries(asset_lod_test PRIVATE Mc3)
     target_compile_features(asset_lod_test PRIVATE cxx_std_23)
+    meshcraft_apply_sanitize(asset_lod_test)
     add_test(NAME asset_lod COMMAND asset_lod_test)
     set_tests_properties(asset_lod PROPERTIES TIMEOUT 15 LABELS "unit")
 
@@ -1355,6 +1412,7 @@ if(MESH_CRAFT_BUILD_TESTING AND UNIX AND NOT ANDROID AND NOT EMSCRIPTEN)
         ${CMAKE_CURRENT_SOURCE_DIR}/include)
     target_link_libraries(scene_semantics_test PRIVATE Mc3)
     target_compile_features(scene_semantics_test PRIVATE cxx_std_23)
+    meshcraft_apply_sanitize(scene_semantics_test)
     add_test(NAME scene_semantics COMMAND scene_semantics_test)
     set_tests_properties(scene_semantics PROPERTIES TIMEOUT 15 LABELS "unit")
 
@@ -1379,6 +1437,7 @@ if(MESH_CRAFT_BUILD_TESTING AND UNIX AND NOT ANDROID AND NOT EMSCRIPTEN)
         ${CMAKE_CURRENT_SOURCE_DIR}/mc3/include)
     target_link_libraries(scene_hierarchy_panel_test PRIVATE Mc3 imgui)
     target_compile_features(scene_hierarchy_panel_test PRIVATE cxx_std_23)
+    meshcraft_apply_sanitize(scene_hierarchy_panel_test)
     add_test(NAME scene_hierarchy_panel COMMAND scene_hierarchy_panel_test)
     set_tests_properties(scene_hierarchy_panel PROPERTIES TIMEOUT 15 LABELS "unit")
 
@@ -2126,6 +2185,7 @@ if(MESH_CRAFT_BUILD_TESTING AND UNIX AND NOT ANDROID AND NOT EMSCRIPTEN)
         target_link_libraries(mc3_registry_test PRIVATE Mc3 ${SQLite3_LIBRARIES})
         target_compile_definitions(mc3_registry_test PRIVATE MESHCRAFT_HAS_SQLITE3)
         target_compile_features(mc3_registry_test PRIVATE cxx_std_23)
+        meshcraft_apply_sanitize(mc3_registry_test)
         add_test(NAME mc3_registry COMMAND mc3_registry_test)
         set_tests_properties(mc3_registry PROPERTIES TIMEOUT 15 LABELS "registry")
     endif()
@@ -2144,6 +2204,7 @@ if(MESH_CRAFT_BUILD_TESTING AND UNIX AND NOT ANDROID AND NOT EMSCRIPTEN)
     )
     target_link_libraries(model_registry_no_sqlite_test PRIVATE Mc3)
     target_compile_features(model_registry_no_sqlite_test PRIVATE cxx_std_23)
+    meshcraft_apply_sanitize(model_registry_no_sqlite_test)
     add_test(NAME model_registry_no_sqlite COMMAND model_registry_no_sqlite_test)
     set_tests_properties(model_registry_no_sqlite PROPERTIES TIMEOUT 15 LABELS "registry")
 
@@ -2173,6 +2234,7 @@ if(MESH_CRAFT_BUILD_TESTING AND UNIX AND NOT ANDROID AND NOT EMSCRIPTEN)
             target_link_libraries(ai_test PRIVATE ${LIBXML2_LIBRARIES})
         endif()
         target_compile_features(ai_test PRIVATE cxx_std_23)
+        meshcraft_apply_sanitize(ai_test)
         find_package(Threads REQUIRED)
         target_link_libraries(ai_test PRIVATE Threads::Threads)
         add_test(NAME mc3_ai COMMAND ai_test)

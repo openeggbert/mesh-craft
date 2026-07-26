@@ -123,6 +123,13 @@ int main() {
             threw = true;
         }
         check(threw, "cyclic children graph throws instead of crashing");
+
+        // SYS-W11-09: x's/y's shared_ptr 2-cycle keeps both alive forever --
+        // an accepted by-design LeakSanitizer finding for this deliberately
+        // cyclic test fixture, not a product bug. Break it so they're
+        // actually freed.
+        x->children.clear();
+        y->children.clear();
     }
 
     if (failures == 0) std::printf("All ObjectIndex tests passed.\n");

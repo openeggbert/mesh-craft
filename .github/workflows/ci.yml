@@ -307,3 +307,97 @@ jobs:
         working-directory: mesh-craft
         run: |
           ./build-VULKAN/MeshCraft --version
+
+  # SYS-W11-09: SYS-W11-04's sanitizer/fuzz job only covers the CNA-free
+  # standalone components (mc3/mcb/mc3togltf/mc3tomcb); the editor's own
+  # ~35,700 lines of src/+include/ had no sanitizer coverage at all until
+  # this job. Uses the same MESHCRAFT_SANITIZE=ON root CMake support the
+  # standalone job already exercises, now also applied to every first-party
+  # editor test executable (not just the main MeshCraft binary), with the
+  # SAME pinned CNA/sharp-runtime revisions as the plain `editor` job above
+  # so a sanitizer finding can't be blamed on an unrelated sibling-repo
+  # version drift. Starts with the CNA-free and non-render editor tests
+  # (the vast majority), then adds the smallest reliable EASYGL render
+  # smoke test under Xvfb -- not the full render suite, which needs a much
+  # larger, separately-justified time/memory budget.
+  editor-sanitizer:
+    name: Editor (EASYGL) ASan+UBSan
+    runs-on: ubuntu-24.04
+    env:
+      CC: clang
+      CXX: clang++
+      ASAN_OPTIONS: detect_leaks=1:halt_on_error=1
+      UBSAN_OPTIONS: halt_on_error=1:print_stacktrace=1
+    steps:
+      - name: Checkout MeshCraft
+        uses: actions/checkout@v4
+        with:
+          path: mesh-craft
+
+      - name: Checkout CNA
+        uses: actions/checkout@v4
+        with:
+          repository: openeggbert/cna
+          path: cna
+          ref: d0c21ee613ebd8f8b0055f7868103dd5c5c30fc7
+          submodules: true
+
+      - name: Checkout sharp-runtime
+        uses: actions/checkout@v4
+        with:
+          repository: openeggbert/sharp-runtime
+          path: sharp-runtime
+          ref: 5cdaafb2bace46dce5393da21dad9ff9f8ad3c58
+
+      - name: Install editor build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            clang cmake ninja-build python3 pkg-config \
+            libgl1-mesa-dev libegl1-mesa-dev libglvnd-dev \
+            libsqlite3-dev libssl-dev libxml2-dev xvfb x11-utils
+
+      - name: Cache root CMake FetchContent downloads
+        uses: actions/cache@v4
+        with:
+          path: mesh-craft/build-sanitize/_deps
+          key: ${{ runner.os }}-editor-sanitize-fetchcontent-${{ hashFiles('mesh-craft/CMakeLists.txt', 'mesh-craft/mc3/CMakeLists.txt', 'cna/CMakeLists.txt', 'sharp-runtime/CMakeLists.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-editor-sanitize-fetchcontent-
+
+      - name: Configure editor with MESHCRAFT_SANITIZE
+        working-directory: mesh-craft
+        run: >
+          cmake -S . -B build-sanitize -G Ninja
+          -DCMAKE_BUILD_TYPE=Debug
+          -DBUILD_TESTING=ON
+          -DMESH_CRAFT_GRAPHICS_BACKEND=EASYGL
+          -DMESHCRAFT_SANITIZE=ON
+          -DFETCHCONTENT_UPDATES_DISCONNECTED=ON
+
+      - name: Build editor and tests under ASan+UBSan
+        working-directory: mesh-craft
+        run: cmake --build build-sanitize -j2
+
+      - name: Test non-render, CNA-free-and-editor targets
+        working-directory: mesh-craft
+        run: ctest --test-dir build-sanitize --output-on-failure -j2 -LE render
+
+      - name: Test one EASYGL render smoke case
+        working-directory: mesh-craft
+        # smoke_test.sh wraps itself in xvfb-run when available (same
+        # convention the plain `editor` job's ctest invocation above relies
+        # on), so no outer xvfb-run wrapper is needed here either.
+        #
+        # detect_leaks=0 ONLY for this one render test: confirmed locally
+        # that every leak this specific test reports traces into libasan.so
+        # itself or an unknown (stripped) system module -- Mesa/llvmpipe's
+        # software-rasterizer driver stack under Xvfb, not any first-party,
+        # CNA, or sharp-runtime symbol anywhere in the stack. A narrow,
+        # documented exclusion for a known third-party/system noise source,
+        # not a blanket leak-detection disable -- every other sanitizer
+        # target in this job (and ASan's own crash/corruption detection
+        # here) keeps full leak detection.
+        run: >
+          ASAN_OPTIONS=detect_leaks=0
+          ctest --test-dir build-sanitize --output-on-failure -R "^smoke_test$"

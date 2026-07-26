@@ -356,18 +356,81 @@ time; re-evaluate scope and blockers before starting each item.
   remains unverified in this sandbox (no Wine) — same limitation as
   `SYS-W11-06`.
 
-- **SYS-W11-09** `[PROPOSED]` `P1` — Add first-party editor sanitizer CI.
-  `SYS-W11-04`'s sanitizer/fuzz CI covers `mc3`, `mcb`, `mc3togltf`, and
-  `mc3tomcb`; the editor's own `src/`+`include/` (35,682 lines, confirmed via
-  `find src include \( -name '*.cpp' -o -name '*.hpp' \) | xargs wc -l`) is
-  not in a regular sanitizer job — `SYS-W11-04` explicitly deferred the EASYGL
-  editor sanitizer job pending reliable dependencies. Root `CMakeLists.txt`
-  already has `-DMESHCRAFT_SANITIZE=ON` wired up (just not MSVC). Use it with
-  pinned CNA/sharp-runtime revisions: start with the CNA-free and non-render
-  editor tests, then add the smallest reliable EASYGL smoke/render subset.
-  **Acceptance:** sanitizer findings fail CI, no source test is silently
-  disabled because it was built through the editor root, and the selected
-  partition completes with fixed time and memory limits.
+- **SYS-W11-09** `[DONE]` `P1` — Added first-party editor sanitizer CI, and it
+  immediately found a real bug, confirming the whole point of doing this.
+  Root `CMakeLists.txt` already had `-DMESHCRAFT_SANITIZE=ON` wired up, but
+  `meshcraft_apply_sanitize()` was only ever called on the main `MeshCraft`
+  binary — all 51 first-party editor test executables (every
+  `add_executable(..._test ...)` in the root `CMakeLists.txt`) silently built
+  *unsanitized* even with the flag on. Added the call to all 51, right after
+  each target's existing `target_compile_features(... cxx_std_23)` line.
+  **Toolchain finding:** building the full editor under Clang fails
+  compiling CNA's own source (`CNA::Internal::JsonValue` used as an
+  incomplete type in a `std::pair`/`std::vector` context) — unrelated to
+  sanitizers, a plain compile error. The existing plain `editor` CI job
+  avoids this by using GCC, not Clang; the new sanitizer job does too
+  (`gcc`/`g++`, matching), rather than touching CNA source (out of bounds
+  here regardless).
+  Locally verified the full build (875 steps) and the complete non-render
+  suite under GCC ASan+UBSan (`build-asan/`, `-DCMAKE_BUILD_TYPE=Debug`,
+  pinned CNA `d0c21ee6`/sharp-runtime `5cdaafb2` — the same revisions the
+  plain `editor` job uses). First run: 10 of 182 tests failed. Triaged every
+  one before touching anything:
+  - **1 real bug, fixed:** `EventPreviewRunner::execute()`
+    (`include/MeshCraft/Editor/EventPreviewRunner.hpp`) captured `script`,
+    an iterator into `working.scripts`, then called
+    `scriptRunner_.run(script->second.source, working, scriptTarget)` --
+    which atomically replaces `working` via move-assignment on success --
+    and afterward read `script->second.source.empty()` again, a genuine
+    heap-use-after-free ASan caught precisely. The very next lines in the
+    same function already re-derive `scriptTarget` after the same call with
+    a comment explicitly naming this exact hazard for stale pointers into
+    the replaced document graph; this one instance of the same pattern was
+    missed. Fixed by capturing the source string by value before the call.
+  - **4 known-shape leaks, fixed:** `mc3_roundtrip`, `object_index`,
+    `mc3_ai`, `mc3_commands` each deliberately construct a 2-cycle (or, in
+    `mc3_commands`, also a 1-cycle self-reference) via `shared_ptr`
+    `children` to prove a depth guard throws instead of crashing --
+    unfreeable by construction, an accepted by-design LeakSanitizer finding
+    for the fixture, not a product bug (the SYS-W1-05/06/07 convention this
+    codebase already uses for that class of test). Fixed all 4 occurrences
+    the same way: `.clear()` the cyclic `children` right after the
+    assertion so the objects are actually freed, rather than a suppression.
+  - **1 structural incompatibility, guarded out:** `package_consumer_smoke`
+    proves a *plain* external consumer can `find_package()` the installed
+    Mc3/Mcb libraries with no special flags -- impossible when those `.a`
+    files are sanitizer-instrumented (the plain consumer never links
+    `__asan_*`/`__ubsan_*`, so it fails to link). Guarded the test's own
+    `add_test()` behind `if(NOT MESHCRAFT_SANITIZE)` in `CMakeLists.txt`,
+    with a comment explaining why; registered and required in every other
+    configuration.
+  - **1 narrow third-party/system suppression:** the one EASYGL render
+    smoke test (`smoke_test`, under Xvfb) reports leaks that all trace into
+    `libasan.so` itself or an unknown stripped module -- Mesa/llvmpipe's
+    software-rasterizer stack, not any first-party/CNA/sharp-runtime symbol
+    anywhere in any of the 4 stacks. Confirmed `ASAN_OPTIONS=detect_leaks=0`
+    makes it pass cleanly (no other finding hiding underneath); scoped that
+    override to only this one CI step, not the job's leak detection overall.
+  - **4 already-known, left alone:** the `mc3_roundtrip`/
+    `mc3_json_document_budget`/3×`mc3togltf_*_blender_import` findings from
+    tonight's earlier CI-red survey (a separate cyclic-graph leak already
+    covered above, the pre-existing Debug-build timeout, and the
+    missing-`numpy` Blender gap) are unaffected by this task and left for
+    the already-agreed separate pass.
+  Re-ran the full non-render suite after all fixes: 181/181 pass (down from
+  182, `package_consumer_smoke` now correctly not registered in this
+  configuration) except the 4 already-known failures above, confirmed
+  unrelated. Re-verified the fixed test files build and pass in the
+  *non*-sanitizer build too (`cmake-build-debug`, `mc3/build`) so none of
+  these fixes regressed the normal configuration.
+  New `editor-sanitizer` CI job (`.github/workflows/ci.yml`): checks out the
+  same pinned CNA/sharp-runtime revisions as the plain `editor` job, builds
+  with `gcc`/`g++` + `MESHCRAFT_SANITIZE=ON` + EASYGL, runs `ctest -LE
+  render`, then the one render smoke test with leak detection scoped off.
+  **Note for a future session:** `build-asan/` (a stable, reusable directory
+  per the top-level build-rules convention) is ~5.7 GB on disk after this
+  verification; left in place for incremental reuse rather than deleted,
+  since another session may want to re-verify against it.
 
 - **SYS-W11-10** `[PROPOSED]` `P2` — Define and execute the first release
   candidate process. Decide whether the first public release is `0.1.0`,

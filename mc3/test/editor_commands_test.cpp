@@ -3087,6 +3087,14 @@ static void testDeepCopyObjectAlgRejectsCyclicChildren()
     }
     CHECK(selfThrew,
           "deepCopyObjectAlg: a direct self-cycle (obj is its own child) is also caught");
+
+    // SYS-W11-09: a/b's 2-cycle and self's 1-cycle each keep their
+    // shared_ptr(s) alive forever -- accepted by-design LeakSanitizer
+    // findings for these deliberately cyclic test fixtures, not product
+    // bugs. Break them so everything is actually freed.
+    a->children.clear();
+    b->children.clear();
+    self->children.clear();
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

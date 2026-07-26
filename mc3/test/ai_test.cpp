@@ -400,6 +400,12 @@ static void testComputeAiChangeSummaryCyclicChildrenThrows() {
         threw = true;
     }
     CHECK(threw, "computeAiChangeSummaryAlg: a cyclic children graph throws instead of crashing");
+
+    // SYS-W11-09: x's/y's shared_ptr 2-cycle keeps both alive forever -- an
+    // accepted by-design LeakSanitizer finding for this deliberately cyclic
+    // test fixture, not a product bug. Break it so they're actually freed.
+    x->children.clear();
+    y->children.clear();
 }
 
 // STAB-0410 — a response with only <definitions> and no top-level <objects>
