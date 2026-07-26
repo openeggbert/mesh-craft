@@ -135,8 +135,7 @@ sequentially. Per `CLAUDE.md`, recording this ordered backlog does **not**
 remove the requirement to describe and obtain explicit confirmation for each
 individual implementation task immediately before work begins.
 
-1. **SYS-W14-35/36 (P2/P3/W14)** — preserve material structure on OBJ import,
-   then add a bounded editable self-contained GLB importer.
+1. **SYS-W14-36 (P3/W14)** — add a bounded editable self-contained GLB importer.
 2. **SYS-W14-37/38/39 and SYS-W9-04 (P3)** — export optimization controls,
     animation/export policy, Model Registry v2, and scalable history/review
     tooling.
@@ -2164,13 +2163,23 @@ because it is listed: `CLAUDE.md` requires per-row user confirmation.
   registered but disabled on this host by the existing no-Xvfb preflight.
   Release build passed and all 161 non-render CTests passed.
 
-- **SYS-W14-35** `[TODO]` `P2` — Preserve OBJ material groups during import.
-  Existing OBJ import flattens all `usemtl`/face groups into one MC3 mesh and
-  material. Import each safely representable group as a distinct MC3 object or
-  grouped child with mapped material data, warn for MTL properties that MC3
-  cannot faithfully map, and preserve the current safe path policy. Add
-  fixtures for multi-group/multi-material OBJ, missing MTL, hostile indices,
-  and glTF export of the imported result.
+- **SYS-W14-35** `[DONE]` `P2` — Preserve OBJ material groups during import.
+  **Implemented 2026-07-26 in commit `69b0516`.** File → Import OBJ now parses
+  once, creates an imported parent group with one Mesh child per populated
+  `usemtl` material assignment, records a strict material-index selector in
+  opaque metadata, and adds mapped MC3 PBR materials. `Kd`, dissolve, `Ke`,
+  `Pr`, and `Pm` map to the safe MC3 subset; unmappable MTL terms/maps are
+  surfaced as status/log warnings. The shared parser rejects malformed vertex,
+  normal, and UV indices before dereferencing them; the viewport and glTF
+  exporter consume the same selector so a later preview/export cannot flatten
+  the children again. Sources are only made relative when inside the scene
+  directory; external paths remain absolute and the existing safe glTF export
+  policy continues to reject them unless explicitly enabled. Added fixtures
+  and regressions for two-material OBJ, missing MTL, hostile index, direct
+  group mapping, and exported glTF material/node separation. Release
+  `MeshCraft`/`mc3togltf` builds and all 163 non-render CTests passed
+  (80/80 + 83/83); 41 render-labelled tests remain disabled by the existing
+  no-Xvfb preflight.
 
 - **SYS-W14-36** `[TODO]` `P3` — Bounded editable self-contained GLB import.
   The current `embed:` loader safely flattens a constrained self-contained GLB

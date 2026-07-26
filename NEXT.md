@@ -105,15 +105,14 @@ before when explicitly requested (`SYS-W14-##` rows).
 
 ## 2. Current status
 
-- **Last full build: clean after `SYS-W14-31` event bindings.** Testing is enabled in the current Ninja Release tree, and
-  `CCACHE_DISABLE=1 cmake --build b-release --target MeshCraft mc3togltf event_binding_dispatch_test -j4`
+- **Last full build: clean after `SYS-W14-35` OBJ material-group import.** Testing is enabled in the current Ninja Release tree, and
+  `CCACHE_DISABLE=1 cmake --build b-release --target MeshCraft mc3togltf mc3togltf_obj_material_import_test -j4`
   linked successfully on EASYGL. Alternate-backend runtime qualification remains blocked.
-- **Tests:** the fresh Release tree registers 191 tests, including the
-  CNA-free event-binding dispatcher and the glTF omission regression from
-  `SYS-W14-31`; this checkout passed all 154 non-render tests. Its Xvfb
-  preflight deterministically disabled 36 render executions (including the
-  new `asset_lod_viewport_test`) plus its own skipped preflight probe (37
-  render-labelled registrations in total).
+- **Tests:** the current Release tree registers 204 tests. All 163 non-render
+  tests pass in two `-LE render` partitions (80/80 + 83/83); the Xvfb
+  preflight deterministically disables the 41 render-labelled registrations
+  on this host. `SYS-W14-35` added direct hardened-OBJ import coverage plus
+  an end-to-end glTF material-group regression.
   Before that additive test, an Xvfb-qualified host passed all 185 registrations after `AUD-042` in two
   disjoint groups: 149/149 non-render tests and 36/36 render-labelled tests.
   `mc3togltf_csg_shading_materials` reads a real GLB to assert smooth CSG
@@ -144,6 +143,15 @@ before when explicitly requested (`SYS-W14-##` rows).
   - Standalone libraries `mc3` (format/AST + XML/JSON parse-writer),
     `mcb` (binary format) — both buildable and testable without CNA via
     their own `mc3/build`/`mcb/build` trees (no live GPU/GL needed).
+- **Recently implemented (2026-07-26):** `SYS-W14-35` preserves OBJ `usemtl`
+  groups end to end. The editor imports each material assignment as a Mesh
+  child under one source group, maps the safe MTL PBR subset into generated
+  MC3 materials, and clearly warns about lossy MTL fields. The hardened
+  shared parser validates hostile indices and is reused by the viewport and
+  exporter, whose material-index metadata selector prevents a later flatten.
+  Fixtures cover multi-material and missing-MTL input, hostile indices, and
+  the exported glTF node/material split. External sources retain the existing
+  safe-export rejection rather than being rewritten as traversal paths.
 - **Recently implemented (2026-07-26):** `SYS-W14-33` adds a capability-gated,
   CNA-only point/spot-light preview. On a valid source-GLSL `ShaderEffect`
   backend, the first eight document-order punctual lights affect normal/UV
