@@ -36,6 +36,7 @@ void MeshCraftApplication::drawPropertiesPanel(float panelY, float panelH, int s
                               },
         .resetPivot         = [this]{ resetPivot(); },
         .setPivotMoveTool   = [this]{ activeTool_ = ActiveTool::Move; },
+        .generateSimpleCollisionProxy = [this]{ generateSimpleCollisionProxy(); },
         .openCsgExport      = [this](const Mc3::Mc3Object* obj) {
             std::filesystem::path base = currentFile_.empty()
                 ? std::filesystem::current_path() / "csg_export.obj"

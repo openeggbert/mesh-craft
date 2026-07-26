@@ -555,6 +555,7 @@ private:
     void groupSelected();
     void ungroupSelected();
     void addPrimitive(Mc3::ObjectType type);
+    void generateSimpleCollisionProxy();
     void handleKeyboardShortcuts(const Microsoft::Xna::Framework::Input::KeyboardState& ks,
                                  const Microsoft::Xna::Framework::Input::KeyboardState& prevKs);
     void handleMouseInput(const Microsoft::Xna::Framework::Input::MouseState& ms,
@@ -866,6 +867,8 @@ private:
     // -----------------------------------------------------------------------
     Editor::WalkController walkController_;
     std::vector<Editor::WalkCollider> walkColliders_;
+    int walkUnsupportedProxyCount_{0};
+    int walkProxyBudgetDroppedCount_{0};
     void  updateWalkMode(float dt, const Microsoft::Xna::Framework::Input::KeyboardState& ks,
                          int mouseDx, int mouseDy);
     void  enterWalkMode();

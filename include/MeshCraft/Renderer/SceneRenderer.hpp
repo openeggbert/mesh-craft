@@ -21,10 +21,13 @@
 #include <map>
 #include <memory>
 #include <optional>
+#include <span>
 #include <string>
 #include <tuple>
 #include <unordered_map>
 #include <vector>
+
+namespace MeshCraft::Editor { struct WalkCollider; }
 
 namespace MeshCraft::Renderer {
 
@@ -208,6 +211,14 @@ public:
                           const Microsoft::Xna::Framework::Matrix& view,
                           const Microsoft::Xna::Framework::Matrix& projection,
                           Microsoft::Xna::Framework::Color color);
+
+    // Draw the active world-space Walk Mode collision proxies as one bounded
+    // line batch. These coordinates already include the MC3 coordinate-system
+    // root, so this deliberately takes no Mc3Document and applies no second
+    // root transform.
+    void drawWalkCollisionDebug(std::span<const Editor::WalkCollider> colliders,
+                                const Microsoft::Xna::Framework::Matrix& view,
+                                const Microsoft::Xna::Framework::Matrix& projection);
 
     // Render scene-level gizmos (lights / cameras)
     void drawLightGizmos(const Mc3::Mc3Document& doc,

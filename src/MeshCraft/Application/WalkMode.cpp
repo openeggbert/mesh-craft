@@ -7,6 +7,7 @@
 #include <Microsoft/Xna/Framework/Matrix.hpp>
 #include <Microsoft/Xna/Framework/Vector3.hpp>
 
+#include <algorithm>
 #include <array>
 #include <cmath>
 #include <cstdio>
@@ -14,6 +15,8 @@
 #include <limits>
 #include <numbers>
 #include <optional>
+#include <string>
+#include <vector>
 
 #include <imgui.h>
 
@@ -76,26 +79,134 @@ std::optional<std::array<float, 3>> walkColliderHalfExtents(const Mc3::Mc3Object
     return std::nullopt;
 }
 
-std::vector<Editor::WalkCollider> buildWalkColliders(const Mc3::Mc3Document& doc) {
+float vectorLength(const Vector3& v) {
+    return std::sqrt(v.X * v.X + v.Y * v.Y + v.Z * v.Z);
+}
+
+bool finiteVector(const Vector3& v) {
+    return std::isfinite(v.X) && std::isfinite(v.Y) && std::isfinite(v.Z);
+}
+
+Vector3 transformedDirection(const Vector3& local, const Matrix& world) {
+    return Vector3::Transform(local, world) - Vector3::Transform(Vector3{}, world);
+}
+
+bool orthogonalScaledAxes(const Vector3& a, const Vector3& b, const Vector3& c) {
+    const float al = vectorLength(a), bl = vectorLength(b), cl = vectorLength(c);
+    constexpr float tolerance = 1.0e-3f;
+    return al > tolerance && bl > tolerance && cl > tolerance &&
+           std::abs(Vector3::Dot(a, b)) <= tolerance * al * bl &&
+           std::abs(Vector3::Dot(a, c)) <= tolerance * al * cl &&
+           std::abs(Vector3::Dot(b, c)) <= tolerance * bl * cl;
+}
+
+std::optional<Editor::WalkCollider> buildBoxWalkCollider(const Mc3::Mc3Object& obj,
+                                                          const Matrix& world) {
+    const auto extents = walkColliderHalfExtents(obj);
+    if (!extents) return std::nullopt;
+    Editor::WalkCollider collider;
+    collider.minX = collider.minY = collider.minZ = std::numeric_limits<float>::infinity();
+    collider.maxX = collider.maxY = collider.maxZ = -std::numeric_limits<float>::infinity();
+    for (int sx : {-1, 1}) for (int sy : {-1, 1}) for (int sz : {-1, 1}) {
+        const Vector3 p = Vector3::Transform(
+            Vector3(sx * (*extents)[0], sy * (*extents)[1], sz * (*extents)[2]), world);
+        collider.minX = std::min(collider.minX, p.X); collider.maxX = std::max(collider.maxX, p.X);
+        collider.minY = std::min(collider.minY, p.Y); collider.maxY = std::max(collider.maxY, p.Y);
+        collider.minZ = std::min(collider.minZ, p.Z); collider.maxZ = std::max(collider.maxZ, p.Z);
+    }
+    return collider;
+}
+
+std::optional<Editor::WalkCollider> buildSphereWalkCollider(const Mc3::Mc3Object& obj,
+                                                             const Matrix& world) {
+    if (!obj.primitive || (obj.primitive->primitiveType != Mc3::PrimitiveType::Sphere &&
+                           obj.primitive->primitiveType != Mc3::PrimitiveType::IcoSphere))
+        return std::nullopt;
+    const Vector3 xAxis = transformedDirection({1.0f, 0.0f, 0.0f}, world);
+    const Vector3 yAxis = transformedDirection({0.0f, 1.0f, 0.0f}, world);
+    const Vector3 zAxis = transformedDirection({0.0f, 0.0f, 1.0f}, world);
+    if (!finiteVector(xAxis) || !finiteVector(yAxis) || !finiteVector(zAxis) ||
+        !orthogonalScaledAxes(xAxis, yAxis, zAxis))
+        return std::nullopt;
+    const float sx = vectorLength(xAxis), sy = vectorLength(yAxis), sz = vectorLength(zAxis);
+    constexpr float tolerance = 1.0e-3f;
+    if (std::abs(sx - sy) > tolerance * sx || std::abs(sx - sz) > tolerance * sx)
+        return std::nullopt; // a non-uniformly scaled sphere is an ellipsoid, not a sphere proxy
+    const Vector3 centre = Vector3::Transform(Vector3{}, world);
+    const float radius = std::abs(obj.primitive->radius) * sx;
+    if (!finiteVector(centre) || !std::isfinite(radius) || radius <= tolerance)
+        return std::nullopt;
+    return Editor::WalkCollider::sphere(centre.X, centre.Y, centre.Z, radius);
+}
+
+std::optional<Editor::WalkCollider> buildCapsuleWalkCollider(const Mc3::Mc3Object& obj,
+                                                              const Matrix& world) {
+    if (!obj.primitive || obj.primitive->primitiveType != Mc3::PrimitiveType::Capsule)
+        return std::nullopt;
+    const auto& p = *obj.primitive;
+    Vector3 axis{0.0f, 1.0f, 0.0f};
+    Vector3 radialA{1.0f, 0.0f, 0.0f};
+    Vector3 radialB{0.0f, 0.0f, 1.0f};
+    if (p.axis == "x") {
+        axis = {1.0f, 0.0f, 0.0f}; radialA = {0.0f, 1.0f, 0.0f}; radialB = {0.0f, 0.0f, 1.0f};
+    } else if (p.axis == "z") {
+        axis = {0.0f, 0.0f, 1.0f}; radialA = {1.0f, 0.0f, 0.0f}; radialB = {0.0f, 1.0f, 0.0f};
+    }
+    const Vector3 worldAxis = transformedDirection(axis, world);
+    const Vector3 worldRadialA = transformedDirection(radialA, world);
+    const Vector3 worldRadialB = transformedDirection(radialB, world);
+    if (!finiteVector(worldAxis) || !finiteVector(worldRadialA) || !finiteVector(worldRadialB) ||
+        !orthogonalScaledAxes(worldAxis, worldRadialA, worldRadialB))
+        return std::nullopt;
+    const float axisScale = vectorLength(worldAxis);
+    const float radialScaleA = vectorLength(worldRadialA);
+    const float radialScaleB = vectorLength(worldRadialB);
+    constexpr float tolerance = 1.0e-3f;
+    if (std::abs(radialScaleA - radialScaleB) > tolerance * radialScaleA ||
+        std::abs(worldAxis.X) > tolerance * axisScale ||
+        std::abs(worldAxis.Z) > tolerance * axisScale)
+        return std::nullopt; // tilted/elliptical capsules have no exact walk-mode meaning yet
+    const float halfHeight = std::abs(p.height) * 0.5f;
+    const Vector3 start = Vector3::Transform(axis * -halfHeight, world);
+    const Vector3 end = Vector3::Transform(axis * halfHeight, world);
+    const float radius = std::abs(p.radius) * radialScaleA;
+    if (!finiteVector(start) || !finiteVector(end) || !std::isfinite(radius) || radius <= tolerance)
+        return std::nullopt;
+    return Editor::WalkCollider::capsule((start.X + end.X) * 0.5f,
+                                         std::min(start.Y, end.Y), std::max(start.Y, end.Y),
+                                         (start.Z + end.Z) * 0.5f, radius);
+}
+
+struct WalkColliderBuildReport {
     std::vector<Editor::WalkCollider> colliders;
+    int unsupportedProxyCount{0};
+    int budgetDroppedCount{0};
+};
+
+WalkColliderBuildReport buildWalkColliders(const Mc3::Mc3Document& doc) {
+    WalkColliderBuildReport report;
     const Matrix identity = coordinateSystemRootMatrixForWalk(doc);
     std::function<void(const Mc3::Mc3Object&, const Matrix&, int)> visit;
     visit = [&](const Mc3::Mc3Object& obj, const Matrix& parentWorld, int depth) {
         if (depth > 16) return; // same graph-safety bound as SceneRenderer
         const Matrix world = walkColliderWorldMatrix(obj.transform) * parentWorld;
-        if (obj.collision == "box") {
-            if (const auto extents = walkColliderHalfExtents(obj)) {
-                Editor::WalkCollider collider;
-                collider.minX = collider.minY = collider.minZ = std::numeric_limits<float>::infinity();
-                collider.maxX = collider.maxY = collider.maxZ = -std::numeric_limits<float>::infinity();
-                for (int sx : {-1, 1}) for (int sy : {-1, 1}) for (int sz : {-1, 1}) {
-                    const Vector3 p = Vector3::Transform(
-                        Vector3(sx * (*extents)[0], sy * (*extents)[1], sz * (*extents)[2]), world);
-                    collider.minX = std::min(collider.minX, p.X); collider.maxX = std::max(collider.maxX, p.X);
-                    collider.minY = std::min(collider.minY, p.Y); collider.maxY = std::max(collider.maxY, p.Y);
-                    collider.minZ = std::min(collider.minZ, p.Z); collider.maxZ = std::max(collider.maxZ, p.Z);
-                }
-                colliders.push_back(collider);
+        if (!obj.collision.empty() && obj.collision != "none") {
+            std::optional<Editor::WalkCollider> collider;
+            if (obj.collision == "box")
+                collider = buildBoxWalkCollider(obj, world);
+            else if (obj.collision == "sphere")
+                collider = buildSphereWalkCollider(obj, world);
+            else if (obj.collision == "capsule")
+                collider = buildCapsuleWalkCollider(obj, world);
+            // mesh/convex (and unknown values) deliberately do not fall back
+            // to a box: doing so would hide a changed collision contract from
+            // the author.
+            if (!collider) {
+                ++report.unsupportedProxyCount;
+            } else if (report.colliders.size() >= Editor::WalkController::maxCollisionProxies) {
+                ++report.budgetDroppedCount;
+            } else {
+                report.colliders.push_back(*collider);
             }
         }
         for (const auto& child : obj.children)
@@ -103,7 +214,7 @@ std::vector<Editor::WalkCollider> buildWalkColliders(const Mc3::Mc3Document& doc
     };
     for (const auto& obj : doc.objects)
         if (obj) visit(*obj, identity, 0);
-    return colliders;
+    return report;
 }
 
 } // namespace
@@ -119,15 +230,25 @@ std::vector<Editor::WalkCollider> buildWalkColliders(const Mc3::Mc3Document& doc
 // themselves).
 
 void MeshCraftApplication::enterWalkMode() {
-    walkColliders_ = buildWalkColliders(document_);
+    auto report = buildWalkColliders(document_);
+    walkColliders_ = std::move(report.colliders);
+    walkUnsupportedProxyCount_ = report.unsupportedProxyCount;
+    walkProxyBudgetDroppedCount_ = report.budgetDroppedCount;
     walkController_.enter(camera_.position(), camera_.yaw);
-    setStatusMsg("Walk mode — " + std::to_string(walkColliders_.size()) +
-                 " box collider(s), Esc to exit", false, 3.0f);
+    std::string status = "Walk mode — " + std::to_string(walkColliders_.size()) +
+                         " active collision proxy/proxies, Esc to exit";
+    if (walkUnsupportedProxyCount_ > 0)
+        status += "; " + std::to_string(walkUnsupportedProxyCount_) + " unsupported/incompatible ignored";
+    if (walkProxyBudgetDroppedCount_ > 0)
+        status += "; " + std::to_string(walkProxyBudgetDroppedCount_) + " over 256-proxy budget ignored";
+    setStatusMsg(status, walkUnsupportedProxyCount_ > 0 || walkProxyBudgetDroppedCount_ > 0, 3.0f);
 }
 
 void MeshCraftApplication::exitWalkMode() {
     auto s = walkController_.exit();
     walkColliders_.clear();
+    walkUnsupportedProxyCount_ = 0;
+    walkProxyBudgetDroppedCount_ = 0;
     camera_.target   = s.target;
     camera_.yaw      = s.yaw;
     camera_.pitch    = s.pitch;
@@ -141,6 +262,8 @@ void MeshCraftApplication::updateWalkMode(float dt,
 {
     if (auto exitState = walkController_.update(dt, ks, mouseDx, mouseDy, walkColliders_)) {
         walkColliders_.clear();
+        walkUnsupportedProxyCount_ = 0;
+        walkProxyBudgetDroppedCount_ = 0;
         camera_.target   = exitState->target;
         camera_.yaw      = exitState->yaw;
         camera_.pitch    = exitState->pitch;
@@ -175,6 +298,16 @@ void MeshCraftApplication::drawWalkModeHud(int screenW, int screenH) {
                   walkController_.posX(), walkController_.posY(), walkController_.posZ(),
                   walkController_.height);
     ImGui::TextDisabled("%s", buf);
+    ImGui::TextDisabled("Collision proxies: %d active (debug outlines shown)",
+                        static_cast<int>(walkColliders_.size()));
+    if (walkUnsupportedProxyCount_ > 0)
+        ImGui::TextColored(ImVec4(1.0f, 0.45f, 0.35f, 1.0f),
+                           "%d unsupported/incompatible proxy/proxies ignored (mesh/convex are not approximated)",
+                           walkUnsupportedProxyCount_);
+    if (walkProxyBudgetDroppedCount_ > 0)
+        ImGui::TextColored(ImVec4(1.0f, 0.45f, 0.35f, 1.0f),
+                           "%d proxy/proxies ignored after the 256-proxy budget",
+                           walkProxyBudgetDroppedCount_);
     ImGui::End();
 
     // Settings popup (click to open)

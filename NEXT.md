@@ -162,6 +162,20 @@ before when explicitly requested (`SYS-W14-##` rows).
   CNA-free partition/cache tests and red/blue-versus-root-green pixel fixtures
   cover both rules; the screenshot CTest is registered but disabled here by
   the no-Xvfb preflight. A Release build and all 161 non-render CTests pass.
+- **Recently implemented (2026-07-26):** `SYS-W14-30` extends Walk Mode’s
+  explicit collision contract from boxes to exact uniform Sphere/IcoSphere
+  and upright circular Capsule proxies. Swept side contacts use the rounded
+  cross-section and vertical contacts use the real spherical-cap surface;
+  the original swept-box behavior remains intact. Active proxies have
+  color-coded world-space debug outlines, a 256-proxy document-order budget,
+  and a persistent HUD warning for unsupported, incompatible, or over-budget
+  proxies. `mesh` and `convex` remain visibly unsupported rather than being
+  silently boxed. The Properties panel’s **Generate Simple Proxy** command
+  assigns the appropriate proxy to supported selected primitives in one undo
+  step. Expanded `walk_controller` coverage verifies rounded wall/floor/
+  ceiling behavior and both budget sides. Release build and all 161
+  non-render CTests passed; render CTests remain disabled by the no-Xvfb
+  preflight on this host.
 - **Recently implemented (2026-07-26):** `SYS-W14-32` makes authored ordinary
   object UV mappings visible in the viewport. The new CNA-free helper applies
   the exporter-compatible default/planar, box, and sphere rules and UV

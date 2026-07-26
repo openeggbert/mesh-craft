@@ -1,5 +1,6 @@
 #include "MeshCraft/Renderer/SceneRenderer.hpp"
 #include "MeshCraft/CoordinateSystemAlgorithms.hpp"
+#include "MeshCraft/Editor/WalkController.hpp"
 #include "MeshCraft/SceneSemanticsAlgorithms.hpp"
 #include "MeshCraft/UvMappingAlgorithms.hpp"
 #include "MeshCraft/Renderer/CsgCacheAlg.hpp"
@@ -1396,6 +1397,91 @@ void SceneRenderer::drawWireSphereAt(const Vector3& center, float radius, const 
     Matrix wireWorld = Matrix::CreateScale({ radius * 2.0f, radius * 2.0f, radius * 2.0f }) *
                         Matrix::CreateTranslation(center) * coordinateSystemRootMatrix(doc);
     drawWireShape(wireShapeSphere_, wireWorld, view, proj, color);
+}
+
+void SceneRenderer::drawWalkCollisionDebug(std::span<const Editor::WalkCollider> colliders,
+                                           const Matrix& view, const Matrix& proj)
+{
+    const std::size_t count = std::min(colliders.size(), Editor::WalkController::maxCollisionProxies);
+    if (count == 0) return;
+    std::vector<VertexPositionColor> lines;
+    lines.reserve(count * 96);
+    auto addLine = [&](const Vector3& a, const Vector3& b, Color color) {
+        lines.push_back({a, color});
+        lines.push_back({b, color});
+    };
+    constexpr int segments = 16;
+    constexpr float twoPi = 2.0f * std::numbers::pi_v<float>;
+    auto horizontalCircle = [&](float x, float y, float z, float radius, Color color) {
+        for (int i = 0; i < segments; ++i) {
+            const float a0 = twoPi * static_cast<float>(i) / segments;
+            const float a1 = twoPi * static_cast<float>(i + 1) / segments;
+            addLine({x + radius * std::cos(a0), y, z + radius * std::sin(a0)},
+                    {x + radius * std::cos(a1), y, z + radius * std::sin(a1)}, color);
+        }
+    };
+    auto sphere = [&](float x, float y, float z, float radius, Color color) {
+        for (int i = 0; i < segments; ++i) {
+            const float a0 = twoPi * static_cast<float>(i) / segments;
+            const float a1 = twoPi * static_cast<float>(i + 1) / segments;
+            addLine({x + radius * std::cos(a0), y + radius * std::sin(a0), z},
+                    {x + radius * std::cos(a1), y + radius * std::sin(a1), z}, color);
+            addLine({x, y + radius * std::sin(a0), z + radius * std::cos(a0)},
+                    {x, y + radius * std::sin(a1), z + radius * std::cos(a1)}, color);
+            addLine({x + radius * std::cos(a0), y, z + radius * std::sin(a0)},
+                    {x + radius * std::cos(a1), y, z + radius * std::sin(a1)}, color);
+        }
+    };
+
+    for (std::size_t colliderIndex = 0; colliderIndex < count; ++colliderIndex) {
+        const auto& c = colliders[colliderIndex];
+        if (c.type == Editor::WalkColliderType::Box) {
+            const Color color(60, 220, 255, 210);
+            const Vector3 p[] = {
+                {c.minX, c.minY, c.minZ}, {c.maxX, c.minY, c.minZ},
+                {c.maxX, c.maxY, c.minZ}, {c.minX, c.maxY, c.minZ},
+                {c.minX, c.minY, c.maxZ}, {c.maxX, c.minY, c.maxZ},
+                {c.maxX, c.maxY, c.maxZ}, {c.minX, c.maxY, c.maxZ},
+            };
+            constexpr int edges[][2] = {
+                {0, 1}, {1, 2}, {2, 3}, {3, 0}, {4, 5}, {5, 6},
+                {6, 7}, {7, 4}, {0, 4}, {1, 5}, {2, 6}, {3, 7},
+            };
+            for (const auto& edge : edges) addLine(p[edge[0]], p[edge[1]], color);
+        } else if (c.type == Editor::WalkColliderType::Sphere) {
+            if (c.radius > 0.0f)
+                sphere(c.centerX, c.axisMinY, c.centerZ, c.radius, Color(255, 215, 65, 210));
+        } else if (c.type == Editor::WalkColliderType::Capsule && c.radius > 0.0f) {
+            const Color color(230, 90, 255, 210);
+            horizontalCircle(c.centerX, c.axisMinY, c.centerZ, c.radius, color);
+            horizontalCircle(c.centerX, c.axisMaxY, c.centerZ, c.radius, color);
+            for (int q = 0; q < 4; ++q) {
+                const float a = twoPi * static_cast<float>(q) / 4.0f;
+                const float x = c.centerX + c.radius * std::cos(a);
+                const float z = c.centerZ + c.radius * std::sin(a);
+                addLine({x, c.axisMinY, z}, {x, c.axisMaxY, z}, color);
+            }
+            for (int plane = 0; plane < 2; ++plane) {
+                for (int i = 0; i < segments / 2; ++i) {
+                    const float a0 = std::numbers::pi_v<float> * static_cast<float>(i) / (segments / 2);
+                    const float a1 = std::numbers::pi_v<float> * static_cast<float>(i + 1) / (segments / 2);
+                    const auto top = [&](float a) {
+                        return plane == 0
+                            ? Vector3{c.centerX + c.radius * std::cos(a), c.axisMaxY + c.radius * std::sin(a), c.centerZ}
+                            : Vector3{c.centerX, c.axisMaxY + c.radius * std::sin(a), c.centerZ + c.radius * std::cos(a)};
+                    };
+                    const auto bottom = [&](float a) {
+                        return plane == 0
+                            ? Vector3{c.centerX + c.radius * std::cos(a), c.axisMinY - c.radius * std::sin(a), c.centerZ}
+                            : Vector3{c.centerX, c.axisMinY - c.radius * std::sin(a), c.centerZ + c.radius * std::cos(a)};
+                    };
+                    addLine(top(a0), top(a1), color);
+                    addLine(bottom(a0), bottom(a1), color);
+                }
+            }
+        }
+    }
+    drawLineList(lines, view, proj);
 }
 
 void SceneRenderer::drawObject(const Mc3Object& obj, const Mc3Document& doc,

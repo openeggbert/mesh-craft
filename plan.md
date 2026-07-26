@@ -135,10 +135,9 @@ sequentially. Per `CLAUDE.md`, recording this ordered backlog does **not**
 remove the requirement to describe and obtain explicit confirmation for each
 individual implementation task immediately before work begins.
 
-1. **SYS-W14-30 (P2/W14)** — expand explicit walk-mode collision proxies.
-2. **SYS-W14-35/36 (P2/P3/W14)** — preserve material structure on OBJ import,
+1. **SYS-W14-35/36 (P2/P3/W14)** — preserve material structure on OBJ import,
    then add a bounded editable self-contained GLB importer.
-3. **SYS-W14-37/38/39 and SYS-W9-04 (P3)** — export optimization controls,
+2. **SYS-W14-37/38/39 and SYS-W9-04 (P3)** — export optimization controls,
     animation/export policy, Model Registry v2, and scalable history/review
     tooling.
 
@@ -2047,7 +2046,7 @@ because it is listed: `CLAUDE.md` requires per-row user confirmation.
   unavailable here (36 disabled, preflight skipped) because Xvfb cannot
   establish a display.
 
-- **SYS-W14-30** `[TODO]` `P2` — Explicit collision-proxy support beyond boxes in Walk Mode.
+- **SYS-W14-30** `[DONE]` `P2` — Explicit collision-proxy support beyond boxes in Walk Mode.
   Walk Mode currently honors only `collision="box"`, although MC3 can describe
   other collision intent. Add opt-in sphere and capsule proxies first, then a
   strictly budgeted static mesh/convex-proxy path only if its semantics can be
@@ -2055,6 +2054,25 @@ because it is listed: `CLAUDE.md` requires per-row user confirmation.
   Proxy command for supported primitives. Unsupported authored proxies must
   remain visibly unsupported, never silently approximated. Extend
   `WalkController` tests with rounded-object, ceiling/floor, and budget cases.
+  **Implemented 2026-07-26.** `collision="sphere"` now creates an exact
+  uniform-scale Sphere/IcoSphere proxy and `collision="capsule"` an exact
+  upright, circular Capsule proxy. The controller preserves the existing swept
+  box behavior, performs rounded side sweeps from the real horizontal
+  cross-section, and derives curved floor/ceiling contact from the spherical
+  cap at the player's footprint. A fixed document-order cap of 256 active
+  proxies bounds both building and controller input. Active boxes, spheres,
+  and capsules draw as color-coded world-space outlines during Walk Mode; the
+  HUD persistently reports mesh/convex/unknown/incompatible authored proxies
+  and over-budget entries as ignored. No mesh/convex fallback was added because
+  a deterministic static-mesh contract is not yet defined. Properties now has
+  **Generate Simple Proxy**, which assigns box to Box/Cube, sphere to
+  Sphere/IcoSphere, and capsule to Capsule in one undoable operation while
+  leaving locked and unsupported selections unchanged. **Tests:** expanded
+  `walk_controller` covers an exact rounded wall, sphere floor, capsule
+  ceiling, and both sides of the 256-proxy order/budget boundary. Release
+  `MeshCraft`/`walk_controller_test` build passed and all 161 non-render CTests
+  passed; render-labelled tests remain unavailable here because Xvfb cannot
+  establish a display.
 
 - **SYS-W14-31** `[DONE]` `P2` — Explicit event bindings from Areas/objects to triggers and scene states.
   **Implementation:** `Mc3EventBinding` persists an `id`, source object/Area

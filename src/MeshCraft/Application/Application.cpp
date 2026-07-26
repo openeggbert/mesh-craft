@@ -751,6 +751,15 @@ void MeshCraftApplication::Draw(const GameTime& /*gameTime*/) {
         gd.SetDepthTestEnabled(true);
     }
 
+    // SYS-W14-30: while walking, show the exact active collision shapes in
+    // world space. Unsupported authored proxy types are deliberately omitted
+    // here and called out persistently by the Walk Mode HUD instead.
+    if (walkController_.isActive() && !walkColliders_.empty()) {
+        gd.SetDepthTestEnabled(false);
+        sceneRenderer_->drawWalkCollisionDebug(walkColliders_, view, proj);
+        gd.SetDepthTestEnabled(true);
+    }
+
     if (selection_.hasSelection()) {
         float gizmoLen = camera_.distance * 0.15f;
         auto* sel0 = selection_.selection().front().get();

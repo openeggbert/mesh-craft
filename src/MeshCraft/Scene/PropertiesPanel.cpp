@@ -45,6 +45,23 @@ static void drawAxisCombo(const PropertiesContext& ctx, Mc3::Mc3Primitive& p, co
     }
 }
 
+static const char* simpleWalkCollisionType(const Mc3::Mc3Object& obj)
+{
+    if (!obj.primitive) return nullptr;
+    switch (obj.primitive->primitiveType) {
+    case Mc3::PrimitiveType::Box:
+    case Mc3::PrimitiveType::Cube:
+        return "box";
+    case Mc3::PrimitiveType::Sphere:
+    case Mc3::PrimitiveType::IcoSphere:
+        return "sphere";
+    case Mc3::PrimitiveType::Capsule:
+        return "capsule";
+    default:
+        return nullptr;
+    }
+}
+
 void PropertiesPanel::draw(float panelX, float panelY, float panelW, float panelH,
                            const PropertiesContext& ctx)
 {
@@ -427,7 +444,8 @@ void PropertiesPanel::draw(float panelX, float panelY, float panelW, float panel
             bool colMixed = !allMatchStr([](const Mc3::Mc3Object* o){ return o->collision; });
             ImGui::TextDisabled("Collision");
             if (ImGui::IsItemHovered())
-                ImGui::SetTooltip("Walk mode currently uses the box proxy as a solid obstacle.");
+                ImGui::SetTooltip("Walk Mode supports box, sphere, and vertical capsule proxies.\n"
+                                  "mesh/convex and incompatible transforms are visibly ignored, never approximated.");
             if (colMixed) { ImGui::SameLine(); ImGui::TextColored(ImVec4(1.0f,0.75f,0.2f,1.0f),"~"); if (ImGui::IsItemHovered()) ImGui::SetTooltip("Values differ across selection"); }
             const char* colOpts[] = { "none", "box", "sphere", "mesh", "convex", "capsule" };
             int colIdx = 0;
@@ -439,6 +457,20 @@ void PropertiesPanel::draw(float panelX, float panelY, float panelW, float panel
                 for (const auto& s : selAll) s->collision = colOpts[colIdx];
                 ctx.markModified();
             }
+            bool canGenerateSimpleProxy = false;
+            for (const auto& s : selAll) {
+                if (!ctx.lockedIds.count(s->id) && simpleWalkCollisionType(*s)) {
+                    canGenerateSimpleProxy = true;
+                    break;
+                }
+            }
+            if (!canGenerateSimpleProxy) ImGui::BeginDisabled();
+            if (ImGui::Button("Generate Simple Proxy", ImVec2(-1, 0)))
+                ctx.generateSimpleCollisionProxy();
+            if (!canGenerateSimpleProxy) ImGui::EndDisabled();
+            if (ImGui::IsItemHovered())
+                ImGui::SetTooltip("Assign box to Box/Cube, sphere to Sphere/IcoSphere, or capsule to Capsule.\n"
+                                  "Only unlocked supported primitives are changed.");
         }
 
         // Layer (E7)

@@ -120,6 +120,59 @@ void MeshCraftApplication::addPrimitive(Mc3::ObjectType type) {
     macroRecorder_.recordStep("add", {objectTypeName(type)});
 }
 
+void MeshCraftApplication::generateSimpleCollisionProxy() {
+    const auto& selected = selection_.selection();
+    if (selected.empty()) {
+        setStatusMsg("Select a supported primitive first", true, 2.0f);
+        return;
+    }
+    auto desiredProxy = [](const Mc3::Mc3Object& obj) -> const char* {
+        if (!obj.primitive) return nullptr;
+        switch (obj.primitive->primitiveType) {
+        case Mc3::PrimitiveType::Box:
+        case Mc3::PrimitiveType::Cube:
+            return "box";
+        case Mc3::PrimitiveType::Sphere:
+        case Mc3::PrimitiveType::IcoSphere:
+            return "sphere";
+        case Mc3::PrimitiveType::Capsule:
+            return "capsule";
+        default:
+            return nullptr;
+        }
+    };
+
+    int changed = 0, supported = 0, unsupported = 0, locked = 0;
+    for (const auto& object : selected) {
+        if (objectLockState_.isLocked(object->id)) { ++locked; continue; }
+        const char* proxy = desiredProxy(*object);
+        if (!proxy) { ++unsupported; continue; }
+        ++supported;
+        if (object->collision != proxy) ++changed;
+    }
+    if (changed == 0) {
+        std::string message = supported > 0
+            ? "Simple collision proxies already assigned"
+            : "No selected primitive supports a simple collision proxy";
+        if (locked > 0) message += "; " + std::to_string(locked) + " locked skipped";
+        if (unsupported > 0) message += "; " + std::to_string(unsupported) + " unsupported skipped";
+        setStatusMsg(message, supported == 0, 2.5f);
+        return;
+    }
+
+    pushUndo();
+    for (const auto& object : selected) {
+        if (objectLockState_.isLocked(object->id)) continue;
+        if (const char* proxy = desiredProxy(*object)) object->collision = proxy;
+    }
+    modified_ = true;
+    updateWindowTitle();
+    std::string message = "Generated simple collision proxy for " + std::to_string(changed) + " object(s)";
+    if (locked > 0) message += "; " + std::to_string(locked) + " locked skipped";
+    if (unsupported > 0) message += "; " + std::to_string(unsupported) + " unsupported skipped";
+    setStatusMsg(message, false, 2.5f);
+}
+
 // (removeFromList is defined in MeshCraftPrivate.hpp)
 
 void MeshCraftApplication::deleteSelected() {

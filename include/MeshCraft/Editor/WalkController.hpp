@@ -4,16 +4,52 @@
 #include <Microsoft/Xna/Framework/Matrix.hpp>
 #include <Microsoft/Xna/Framework/Vector3.hpp>
 
+#include <cstddef>
 #include <optional>
 #include <span>
 
 namespace MeshCraft::Editor {
 
-// World-space axis-aligned solid used by walk mode. MeshCraft builds these
-// from opt-in MC3 objects with collision="box" when walk mode starts.
+enum class WalkColliderType {
+    Box,
+    Sphere,
+    Capsule,
+};
+
+// World-space solid used by walk mode. Box is axis-aligned; sphere and
+// capsule are deliberately limited to round shapes that retain their exact
+// world-space semantics. For capsules, axisMinY/axisMaxY describe the two
+// centres of the hemispherical end caps (the capsule's central vertical axis).
 struct WalkCollider {
     float minX{0.0f}, minY{0.0f}, minZ{0.0f};
     float maxX{0.0f}, maxY{0.0f}, maxZ{0.0f};
+
+    WalkColliderType type{WalkColliderType::Box};
+    float centerX{0.0f}, centerZ{0.0f};
+    float axisMinY{0.0f}, axisMaxY{0.0f};
+    float radius{0.0f};
+
+    [[nodiscard]] static WalkCollider sphere(float x, float y, float z, float r) {
+        WalkCollider result;
+        result.type = WalkColliderType::Sphere;
+        result.centerX = x;
+        result.centerZ = z;
+        result.axisMinY = result.axisMaxY = y;
+        result.radius = r;
+        return result;
+    }
+
+    [[nodiscard]] static WalkCollider capsule(float x, float minAxisY, float maxAxisY,
+                                               float z, float r) {
+        WalkCollider result;
+        result.type = WalkColliderType::Capsule;
+        result.centerX = x;
+        result.centerZ = z;
+        result.axisMinY = minAxisY;
+        result.axisMaxY = maxAxisY;
+        result.radius = r;
+        return result;
+    }
 };
 
 // SYS-W3-01 Phase 6: first-person "walk mode" extracted out of
@@ -29,6 +65,11 @@ struct WalkCollider {
 // these, same as the camera's own widgets bind to EditorCamera's fields.
 class WalkController {
 public:
+    // The application reports and omits excess authored proxies when entering
+    // walk mode. Retaining this defensive controller-side cap keeps direct
+    // callers deterministic as well.
+    static constexpr std::size_t maxCollisionProxies{256};
+
     float height{1.8f};       // eye height above ground (meters)
     float speed{5.0f};        // movement speed (m/s)
     float turnSpeed{1.5f};    // keyboard yaw speed (rad/s)

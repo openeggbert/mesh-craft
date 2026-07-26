@@ -21,6 +21,7 @@
 #include <array>
 #include <cmath>
 #include <cstdio>
+#include <vector>
 
 using namespace MeshCraft::Editor;
 using namespace Microsoft::Xna::Framework;
@@ -208,6 +209,68 @@ int main() {
             jumping.update(0.05f, jump, 0, 0, ceilingColliders);
         check(jumping.posY() <= 0.4001f,
               "jumping is stopped below a box-collider ceiling instead of passing through it");
+    }
+
+    // update(): exact rounded proxies use their curved side surface for
+    // horizontal movement and their spherical caps for floor/ceiling contact;
+    // they are not reduced to the proxy's enclosing AABB.
+    {
+        const WalkCollider roundWall = WalkCollider::sphere(0.0f, 0.9f, -2.0f, 0.75f);
+        const std::array<WalkCollider, 1> wallColliders{roundWall};
+        KeyboardState fwd{Keys::W};
+        WalkController walking;
+        walking.speed = 20.0f;
+        walking.enter(Vector3(0.0f, walking.height, 0.0f), 0.0f);
+        walking.update(0.2f, fwd, 0, 0, wallColliders);
+        check(walking.posZ() > -0.951f && walking.posZ() < -0.949f,
+              "a sphere proxy blocks at its exact rounded side surface");
+
+        const WalkCollider roundFloor = WalkCollider::sphere(0.0f, 2.0f, 0.0f, 1.0f);
+        const std::array<WalkCollider, 1> floorColliders{roundFloor};
+        KeyboardState noKeys{};
+        WalkController falling;
+        falling.enter(Vector3(0.0f, 6.8f, 0.0f), 0.0f); // feet at y=5
+        for (int i = 0; i < 30 && falling.posY() > 3.0f; ++i)
+            falling.update(0.05f, noKeys, 0, 0, floorColliders);
+        checkNear(falling.posY(), 3.0f,
+                  "falling lands on the curved top of a sphere proxy");
+
+        const WalkCollider roundCeiling = WalkCollider::capsule(0.0f, 2.5f, 3.5f, 0.0f, 0.5f);
+        const std::array<WalkCollider, 1> ceilingColliders{roundCeiling};
+        KeyboardState jump{Keys::LeftControl};
+        WalkController jumping;
+        jumping.enter(Vector3(0.0f, jumping.height, 0.0f), 0.0f);
+        for (int i = 0; i < 5; ++i)
+            jumping.update(0.05f, jump, 0, 0, ceilingColliders);
+        check(jumping.posY() <= 0.2001f,
+              "jumping is stopped by the curved bottom of a capsule proxy");
+    }
+
+    // update(): the fixed 256-proxy budget keeps direct callers deterministic
+    // too. The first proxies retain their document order; excess proxies are
+    // ignored (the application reports that overflow in the Walk Mode HUD).
+    {
+        std::vector<WalkCollider> colliders;
+        colliders.reserve(WalkController::maxCollisionProxies + 1);
+        for (std::size_t i = 0; i < WalkController::maxCollisionProxies; ++i)
+            colliders.push_back(WalkCollider::sphere(1000.0f + static_cast<float>(i), 0.9f, -2.0f, 0.75f));
+        colliders.push_back(WalkCollider::sphere(0.0f, 0.9f, -2.0f, 0.75f));
+        KeyboardState fwd{Keys::W};
+        WalkController overflowIgnored;
+        overflowIgnored.speed = 20.0f;
+        overflowIgnored.enter(Vector3(0.0f, overflowIgnored.height, 0.0f), 0.0f);
+        overflowIgnored.update(0.2f, fwd, 0, 0, colliders);
+        check(overflowIgnored.posZ() < -3.9f,
+              "a proxy after the fixed collision budget is ignored deterministically");
+
+        colliders.front() = WalkCollider::sphere(0.0f, 0.9f, -2.0f, 0.75f);
+        colliders.back() = WalkCollider::sphere(10000.0f, 0.9f, -2.0f, 0.75f);
+        WalkController firstRetained;
+        firstRetained.speed = 20.0f;
+        firstRetained.enter(Vector3(0.0f, firstRetained.height, 0.0f), 0.0f);
+        firstRetained.update(0.2f, fwd, 0, 0, colliders);
+        check(firstRetained.posZ() > -0.951f && firstRetained.posZ() < -0.949f,
+              "the first proxy inside the fixed collision budget remains active");
     }
 
     // update(): Escape triggers an implicit exit, matching the

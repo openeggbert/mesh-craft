@@ -43,6 +43,7 @@ struct PropertiesContext {
                                  insertKeyframes;
     std::function<void()>        resetPivot;
     std::function<void()>        setPivotMoveTool;
+    std::function<void()>        generateSimpleCollisionProxy;
     std::function<void(const Mc3::Mc3Object*)>  openCsgExport;
     std::function<void(const std::string&)>     openMeshBrowse;
     // SYS-W14-15: opens a native OS file-open dialog for a material's texture
