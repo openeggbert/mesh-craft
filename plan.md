@@ -58,10 +58,9 @@ architecture, distribution, or measurable performance work. `P3` is polish.
 The user authorized this queue on 2026-07-26. Work proceeds one task at a
 time; re-evaluate scope and blockers before starting each item.
 
-1. **SYS-W11-06** `P2` — standalone Windows qualification. **BLOCKED /
-   needs human:** the workflow and local cross-build evidence are ready, but
-   final acceptance requires a maintainer to publish the current changes and
-   obtain the first native `windows-2022` CI CTest/artifact run.
+1. **SYS-W11-06** `P2` — standalone Windows qualification. **In progress:**
+   commit `34bc0de` is published on `develop`; await the first native
+   `windows-2022` CI CTest/artifact run before accepting the release gate.
 
 ---
 
@@ -161,7 +160,7 @@ time; re-evaluate scope and blockers before starting each item.
   smoke plus MC3/MCB and CLI round trips; the installed glTF CLI resolves its
   bundled Manifold runtime through `$ORIGIN/../lib`.
 
-- **SYS-W11-06** `[BLOCKED]` `P2` — Qualify standalone MC3/MCB/tooling builds and
+- **SYS-W11-06** `[IN_PROGRESS]` `P2` — Qualify standalone MC3/MCB/tooling builds and
   tests on a current Windows runner, independent of CNA editor backend
   blockers. The new `windows-2022` CI job configures, builds, and CTests all
   four standalone components, verifies a fixed MC3→MCB/GLB SHA-256 fixture,
@@ -170,9 +169,9 @@ time; re-evaluate scope and blockers before starting each item.
   use the configured emulator. This also exposed and fixed all four
   narrow-string uses of `path::native()` in confinement checks;
   `generic_string()` now works on Windows-wide paths. The local sandbox blocks
-  Wine itself with `SIGSYS`, so it cannot supply runtime evidence. **Needs
-  human:** publish the current worktree and review the first GitHub Windows
-  CTest/artifact run before marking this task done.
+  Wine itself with `SIGSYS`, so it cannot supply runtime evidence. Commit
+  `34bc0de` is now pushed to `origin/develop`; await and review the first
+  GitHub Windows CTest/artifact run before marking this task done.
 
 - **SYS-W11-07** `[DEFERRED]` `P3` — Improve dependency reproducibility with
   immutable revisions or verified archives, third-party notice/SBOM, and an
