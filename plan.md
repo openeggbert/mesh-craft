@@ -59,8 +59,9 @@ The user authorized this queue on 2026-07-26. Work proceeds one task at a
 time; re-evaluate scope and blockers before starting each item.
 
 1. **SYS-W11-06** `P2` — standalone Windows qualification. **In progress:**
-   commit `34bc0de` is published on `develop`; await the first native
-   `windows-2022` CI CTest/artifact run before accepting the release gate.
+   the release-readiness changes are published on `develop`; await the first
+   native `windows-2022` CI CTest/artifact run before accepting the release
+   gate.
 
 ---
 
@@ -169,9 +170,10 @@ time; re-evaluate scope and blockers before starting each item.
   use the configured emulator. This also exposed and fixed all four
   narrow-string uses of `path::native()` in confinement checks;
   `generic_string()` now works on Windows-wide paths. The local sandbox blocks
-  Wine itself with `SIGSYS`, so it cannot supply runtime evidence. Commit
-  `34bc0de` is now pushed to `origin/develop`; await and review the first
-  GitHub Windows CTest/artifact run before marking this task done.
+  Wine itself with `SIGSYS`, so it cannot supply runtime evidence. The
+  release-readiness changes are now pushed to `origin/develop`; await and
+  review the first GitHub Windows CTest/artifact run before marking this task
+  done.
 
 - **SYS-W11-07** `[DEFERRED]` `P3` — Improve dependency reproducibility with
   immutable revisions or verified archives, third-party notice/SBOM, and an

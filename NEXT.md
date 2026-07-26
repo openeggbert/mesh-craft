@@ -30,9 +30,9 @@ distribution rather than missing editor breadth.
 
 ## Current priorities
 
-1. Obtain native standalone Windows qualification (`SYS-W11-06`). Commit
-   `34bc0de` is published on `develop`; await the first remote
-   `windows-2022` CTest/artifact evidence.
+1. Obtain native standalone Windows qualification (`SYS-W11-06`). The
+   release-readiness changes are published on `develop`; await the first
+   remote `windows-2022` CTest/artifact evidence.
 
 `SYS-W14-40` is complete: the explicit bounded Event Preview/Play mode is
 covered by `event_preview_runner`. See `plan.md` for the remaining Windows
@@ -114,8 +114,9 @@ non-system runtime libraries used by the glTF exporter.
 `SYS-W11-06` is in progress. Its Windows CI job remains CNA-independent,
 builds and CTests all four standalone components, verifies a fixed
 MC3→MCB/GLB fixture before artifact upload, and publishes only the qualified
-Windows CLI executables. Commit `34bc0de` is pushed to `origin/develop`.
-This session reconfigured the local MinGW 14 tree with `BUILD_TESTING=ON`,
+Windows CLI executables. The release-readiness changes are pushed to
+`origin/develop`. This session reconfigured the local MinGW 14 tree with
+`BUILD_TESTING=ON`,
 confirmed its CTest registration uses the configured cross-test emulator, and
 compiled the affected standalone targets. The sandbox blocks Wine itself with
 `SIGSYS`, so it cannot provide runtime evidence. The native Linux
@@ -180,5 +181,5 @@ normal compiler-cache location is read-only in this environment, and Wine is
 blocked by sandbox `SIGSYS`, so neither a fresh full suite nor native Windows
 runtime tests were completed here. That is not evidence of a source failure.
 The next session should start by reviewing the first `standalone-windows`
-GitHub Actions run for commit `34bc0de`; use its CTest/artifact result to
-complete or diagnose `SYS-W11-06`.
+GitHub Actions run for the current `develop` head; use its CTest/artifact
+result to complete or diagnose `SYS-W11-06`.
