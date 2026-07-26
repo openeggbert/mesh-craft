@@ -74,6 +74,10 @@ struct FileImportObjContext {
     std::function<void()> openDialog;
 };
 
+struct FileImportGlbContext {
+    std::function<void()> openDialog;
+};
+
 struct FileNewContext {
     std::function<void()> requestNewScene;
 };
@@ -298,6 +302,7 @@ public:
     static void drawFileSave(const FileSaveContext& context);
     static void drawFileSaveAs(const FileSaveAsContext& context);
     static void drawFileImportObj(const FileImportObjContext& context);
+    static void drawFileImportGlb(const FileImportGlbContext& context);
     static void drawFileNew(const FileNewContext& context);
     static void drawFileOpen(const FileOpenContext& context);
     static void drawFileOpenLibrary(const FileOpenLibraryContext& context);

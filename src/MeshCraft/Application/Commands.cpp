@@ -2,6 +2,7 @@
 #include "MeshCraft/MeshCraftPrivate.hpp"
 #include "MeshCraft/EditorAlgorithms.hpp"
 #include "MeshCraft/LibraryWorkflowAlgorithms.hpp"
+#include "GltfImporter.hpp"
 #include "MeshBuilder.hpp"
 
 #include <imgui.h>
@@ -31,6 +32,7 @@
 #include <fstream>
 #include <functional>
 #include <iostream>
+#include <iterator>
 #include <numbers>
 #include <random>
 #include <string>
@@ -245,6 +247,135 @@ bool MeshCraftApplication::importObjWithMaterials(const std::string& path, std::
         message += "; external source remains blocked by safe export policy";
     setStatusMsg(message, false, 4.0f);
     return true;
+}
+
+bool MeshCraftApplication::importGltfWithTrustChoice(const std::string& path,
+                                                      bool trustExternalGltf,
+                                                      std::string& error) {
+    error.clear();
+    if (path.empty()) {
+        error = "Choose a GLB file first.";
+        return false;
+    }
+
+    mc3togltf::GltfImportResult imported;
+    try {
+        std::string extension = std::filesystem::path(path).extension().string();
+        std::transform(extension.begin(), extension.end(), extension.begin(), [](unsigned char ch) {
+            return static_cast<char>(std::tolower(ch));
+        });
+        if (extension == ".glb") {
+            imported = mc3togltf::importSelfContainedGlb(path);
+        } else if (extension == ".gltf" && trustExternalGltf) {
+            imported = mc3togltf::importTrustedGltf(path);
+        } else if (extension == ".gltf") {
+            error = "External-resource .gltf needs the explicit Trusted import option.";
+            return false;
+        } else {
+            error = "Choose a .glb file, or a .gltf file with Trusted import enabled.";
+            return false;
+        }
+    } catch (const std::exception& exception) {
+        error = exception.what();
+        return false;
+    }
+    if (imported.document.objects.empty() || imported.document.embeds.size() != 1) {
+        error = "GLB contains no importable scene objects.";
+        return false;
+    }
+
+    const std::filesystem::path inputPath(path);
+    const std::string sourceStem = inputPath.stem().empty() ? "glb" : inputPath.stem().string();
+    auto uniqueKey = [](const auto& registry, std::string base) {
+        if (base.empty()) base = "import";
+        std::string candidate = base;
+        for (int suffix = 2; registry.count(candidate); ++suffix)
+            candidate = base + "_" + std::to_string(suffix);
+        return candidate;
+    };
+
+    // Validation above has finished without changing the current document.
+    // Apply each imported registry after making every reference document-unique
+    // so undo sees one coherent, reversible edit.
+    pushUndo();
+    const std::string sourceEmbedId = imported.document.embeds.begin()->first;
+    const std::string embedId = uniqueKey(document_.embeds, sourceStem + "_source");
+    document_.embeds[embedId] = std::move(imported.document.embeds.begin()->second);
+    document_.embeds[embedId].id = embedId;
+
+    std::map<std::string, std::string> textureIds;
+    for (auto& [oldId, texture] : imported.document.textures) {
+        const std::string newId = uniqueKey(document_.textures, sourceStem + "_" + oldId);
+        texture.name = newId;
+        document_.textures[newId] = std::move(texture);
+        textureIds[oldId] = newId;
+    }
+    auto remapTexture = [&textureIds](std::string& id) {
+        if (const auto found = textureIds.find(id); found != textureIds.end()) id = found->second;
+    };
+    std::map<std::string, std::string> materialIds;
+    for (auto& [oldId, material] : imported.document.materials) {
+        remapTexture(material.baseColorTexture);
+        remapTexture(material.metallicRoughnessTexture);
+        remapTexture(material.normalTexture);
+        remapTexture(material.occlusionTexture);
+        remapTexture(material.emissiveTexture);
+        const std::string newId = uniqueKey(document_.materials, sourceStem + "_" + oldId);
+        material.name = newId;
+        document_.materials[newId] = std::move(material);
+        materialIds[oldId] = newId;
+    }
+    std::function<void(Mc3::Mc3Object&)> remapObject = [&](Mc3::Mc3Object& object) {
+        if (object.meshSource == "embed:" + sourceEmbedId)
+            object.meshSource = "embed:" + embedId;
+        if (const auto found = materialIds.find(object.material); found != materialIds.end())
+            object.material = found->second;
+        for (auto& child : object.children)
+            if (child) remapObject(*child);
+    };
+
+    auto importedRoot = Mc3::Mc3Object::makeGroup(sourceStem);
+    importedRoot->children = std::move(imported.document.objects);
+    remapObject(*importedRoot);
+    std::set<std::string> assignedIds;
+    regenerateSubtreeIdsAlg(*importedRoot, document_.objects, assignedIds);
+    if (selection_.hasSelection()) {
+        const auto& destination = selection_.selection().front();
+        const bool acceptsChildren = destination->type == Mc3::ObjectType::Group ||
+                                     destination->type == Mc3::ObjectType::Union ||
+                                     destination->type == Mc3::ObjectType::Difference ||
+                                     destination->type == Mc3::ObjectType::Intersection ||
+                                     !destination->children.empty();
+        if (acceptsChildren) destination->children.push_back(importedRoot);
+        else document_.objects.push_back(importedRoot);
+    } else {
+        document_.objects.push_back(importedRoot);
+    }
+    document_.cameras.insert(document_.cameras.end(),
+                             std::make_move_iterator(imported.document.cameras.begin()),
+                             std::make_move_iterator(imported.document.cameras.end()));
+    document_.lights.insert(document_.lights.end(),
+                            std::make_move_iterator(imported.document.lights.begin()),
+                            std::make_move_iterator(imported.document.lights.end()));
+    selection_.clear();
+    selection_.select(importedRoot);
+    objectIndex_.invalidate();
+    modified_ = true;
+    updateWindowTitle();
+
+    for (const std::string& warning : imported.warnings)
+        std::cerr << "GLB import warning: " << warning << '\n';
+    std::string message = "Imported " + inputPath.filename().string() + " (" +
+                          std::to_string(imported.triangleCount) + " triangles";
+    if (!imported.warnings.empty())
+        message += ", " + std::to_string(imported.warnings.size()) + " warning(s), see log";
+    message += ")";
+    setStatusMsg(message, false, 4.0f);
+    return true;
+}
+
+bool MeshCraftApplication::importSelfContainedGlb(const std::string& path, std::string& error) {
+    return importGltfWithTrustChoice(path, false, error);
 }
 
 void MeshCraftApplication::generateSimpleCollisionProxy() {

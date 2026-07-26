@@ -81,6 +81,7 @@ endif()
 add_library(mc3togltf_lib STATIC
     src/MeshBuilder.cpp
     src/GltfExporter.cpp
+    src/GltfImporter.cpp
     src/CsgEvaluator.cpp
     src/SvgRasterizer.cpp
 )
@@ -147,6 +148,14 @@ if(BUILD_TESTING)
     add_test(NAME mc3togltf_obj_material_import
              COMMAND mc3togltf_obj_material_import_test "${CMAKE_CURRENT_SOURCE_DIR}/../test")
     set_tests_properties(mc3togltf_obj_material_import PROPERTIES TIMEOUT 15 LABELS "export")
+
+    # SYS-W14-36: direct self-contained GLB import, explicit trusted .gltf
+    # conversion, unsupported-mode rejection, and MC3 -> GLB round trip.
+    add_executable(mc3togltf_gltf_import_test test/gltf_import_test.cpp)
+    target_link_libraries(mc3togltf_gltf_import_test PRIVATE mc3togltf_lib)
+    target_include_directories(mc3togltf_gltf_import_test PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
+    add_test(NAME mc3togltf_gltf_import COMMAND mc3togltf_gltf_import_test)
+    set_tests_properties(mc3togltf_gltf_import PROPERTIES TIMEOUT 20 LABELS "export")
 
     add_executable(mc3togltf_svg_rasterizer_test test/svg_rasterizer_test.cpp)
     target_link_libraries(mc3togltf_svg_rasterizer_test PRIVATE mc3togltf_lib)

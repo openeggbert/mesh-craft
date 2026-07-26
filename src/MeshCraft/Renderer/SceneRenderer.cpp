@@ -21,6 +21,7 @@
 #include <Microsoft/Xna/Framework/Vector3.hpp>
 #include <algorithm>
 #include <cmath>
+#include <cstdint>
 #include <filesystem>
 #include <fstream>
 #include <functional>
@@ -28,6 +29,9 @@
 #include <numbers>
 #include <optional>
 #include <vector>
+
+#include <stb_image.h>
+#include <tiny_gltf.h>
 
 #include <manifold/manifold.h>
 #include "CsgEvaluator.hpp"
@@ -167,20 +171,30 @@ void main() {
 }
 )";
 
-SamplerState samplerStateForSvg(const Mc3SvgTexture& texture) {
-    SamplerState sampler = texture.filter == "nearest"
+SamplerState samplerStateForTextureFields(const std::string& filter,
+                                          const std::string& wrapU,
+                                          const std::string& wrapV) {
+    SamplerState sampler = filter == "nearest"
         ? SamplerState::PointWrap : SamplerState::LinearWrap;
     auto addressMode = [](const std::string& value) {
         if (value == "clamp") return TextureAddressMode::Clamp;
         if (value == "mirror") return TextureAddressMode::Mirror;
         return TextureAddressMode::Wrap;
     };
-    sampler.setAddressUProperty(addressMode(texture.wrapU));
-    sampler.setAddressVProperty(addressMode(texture.wrapV));
+    sampler.setAddressUProperty(addressMode(wrapU));
+    sampler.setAddressVProperty(addressMode(wrapV));
     // Texture2D::CreateFromPixels supplies only level zero. mipMaps is still
     // preserved and honored by glTF export; generating a live CNA mip chain
     // would require a CNA API this repository does not own.
     return sampler;
+}
+
+SamplerState samplerStateForSvg(const Mc3SvgTexture& texture) {
+    return samplerStateForTextureFields(texture.filter, texture.wrapU, texture.wrapV);
+}
+
+SamplerState samplerStateForTexture(const Mc3Texture& texture) {
+    return samplerStateForTextureFields(texture.filter, texture.wrapU, texture.wrapV);
 }
 
 } // namespace
@@ -480,6 +494,26 @@ static bool tryObjMaterialIndex(const Mc3Object& object, std::optional<int>& mat
     return false;
 }
 
+static bool tryEmbeddedGltfSelection(const Mc3Object& object,
+                                     std::optional<std::pair<int, int>>& selection)
+{
+    const bool hasSelector =
+        object.metadata.count(std::string(mc3togltf::kGltfMeshIndexMetadataKey)) != 0 ||
+        object.metadata.count(std::string(mc3togltf::kGltfPrimitiveIndexMetadataKey)) != 0;
+    const auto parsed = mc3togltf::parseEmbeddedGltfSelection(object.metadata);
+    if (!hasSelector) {
+        selection.reset();
+        return true;
+    }
+    if (!parsed) {
+        std::cerr << "Warning: mesh object '" << object.name
+                  << "' has invalid embedded-GLB selector metadata\n";
+        return false;
+    }
+    selection = std::pair{parsed->meshIndex, parsed->primitiveIndex};
+    return true;
+}
+
 static std::string objMeshCacheKey(const std::string& path, std::optional<int> materialIndex)
 {
     return materialIndex.has_value()
@@ -567,10 +601,15 @@ static RenderMesh uploadMeshData(GraphicsDevice& device, const mc3togltf::MeshDa
 
 static RenderMesh loadEmbeddedGltfMesh(GraphicsDevice& device,
                                        const std::filesystem::path& basePath,
-                                       const Mc3EmbedGltf& embed)
+                                       const Mc3EmbedGltf& embed,
+                                       std::optional<std::pair<int, int>> selection)
 {
     try {
-        return uploadMeshData(device, mc3togltf::loadEmbeddedGltfMesh(basePath, embed));
+        const auto embeddedSelection = selection
+            ? std::optional<mc3togltf::EmbeddedGltfSelection>{
+                  mc3togltf::EmbeddedGltfSelection{selection->first, selection->second}}
+            : std::nullopt;
+        return uploadMeshData(device, mc3togltf::loadEmbeddedGltfMesh(basePath, embed, embeddedSelection));
     } catch (const std::exception& error) {
         std::cerr << "Warning: " << error.what() << '\n';
         return {};
@@ -1064,8 +1103,11 @@ void SceneRenderer::drawDepthObject(const Mc3Object& obj, const Mc3Document& doc
     }
     case ObjectType::Mesh: {
         const RenderMesh* mesh = nullptr;
-        if (obj.meshSource.rfind("embed:", 0) == 0)
-            mesh = loadOrGetEmbeddedMesh(doc, obj.meshSource);
+        if (obj.meshSource.rfind("embed:", 0) == 0) {
+            std::optional<std::pair<int, int>> selection;
+            if (tryEmbeddedGltfSelection(obj, selection))
+                mesh = loadOrGetEmbeddedMesh(doc, obj.meshSource, selection);
+        }
         else if (!obj.meshSource.empty()) {
             std::optional<int> materialIndex;
             if (tryObjMaterialIndex(obj, materialIndex))
@@ -1142,6 +1184,49 @@ Texture2D* SceneRenderer::textureForMaterial(const std::string& materialId,
     const std::string& textureId = matIt->second.baseColorTexture;
     auto texIt = doc.textures.find(textureId);
     if (texIt != doc.textures.end() && !texIt->second.uri.empty()) {
+        svgSampler = samplerStateForTexture(texIt->second);
+        if (texIt->second.uri.rfind("data:", 0) == 0) {
+            // SYS-W14-36: editable GLB import preserves embedded image bytes
+            // as MC3 data URIs. Decode them in memory -- never reinterpret the
+            // URI as a path -- and cap the decoded pixels before allocating a
+            // CNA texture so an apparently small compressed image cannot make
+            // the live viewport allocate without bound.
+            constexpr size_t kMaxInlineImageBytes = 16ull * 1024ull * 1024ull;
+            constexpr int kMaxInlineImagePixels = 16 * 1024 * 1024;
+            const std::string cacheKey = "inline-data:" + textureId;
+            if (auto cached = textureCache_.find(cacheKey); cached != textureCache_.end())
+                return &cached->second;
+            std::vector<unsigned char> encoded;
+            std::string mimeType;
+            if (!tinygltf::DecodeDataURI(&encoded, mimeType, texIt->second.uri, 0, false) ||
+                encoded.empty() || encoded.size() > kMaxInlineImageBytes) {
+                std::cerr << "Warning: inline texture '" << textureId
+                          << "' is malformed or exceeds the 16 MiB viewport limit\n";
+                return nullptr;
+            }
+            int width = 0, height = 0, components = 0;
+            if (!stbi_info_from_memory(encoded.data(), static_cast<int>(encoded.size()),
+                                       &width, &height, &components) || width <= 0 || height <= 0 ||
+                width > kMaxInlineImagePixels / height) {
+                std::cerr << "Warning: inline texture '" << textureId
+                          << "' has unsupported or over-budget image dimensions\n";
+                return nullptr;
+            }
+            unsigned char* decoded = stbi_load_from_memory(encoded.data(), static_cast<int>(encoded.size()),
+                                                            &width, &height, &components, 4);
+            if (!decoded) {
+                std::cerr << "Warning: inline texture '" << textureId
+                          << "' could not be decoded for the viewport\n";
+                return nullptr;
+            }
+            const size_t rgbaBytes = static_cast<size_t>(width) * static_cast<size_t>(height) * 4;
+            std::vector<std::uint8_t> rgba(decoded, decoded + rgbaBytes);
+            stbi_image_free(decoded);
+            auto [inserted, ok] = textureCache_.emplace(
+                cacheKey, Texture2D::CreateFromPixels(device_, width, height, rgba));
+            (void)ok;
+            return &inserted->second;
+        }
         return loadOrGetTexture((doc.sourcePath / texIt->second.uri).string());
     }
 
@@ -1205,7 +1290,8 @@ const RenderMesh* SceneRenderer::loadOrGetMesh(const std::string& absPath,
 }
 
 const RenderMesh* SceneRenderer::loadOrGetEmbeddedMesh(const Mc3Document& doc,
-                                                        const std::string& embedReference)
+                                                        const std::string& embedReference,
+                                                        std::optional<std::pair<int, int>> selection)
 {
     const std::string embedId = embedReference.substr(std::string("embed:").size());
     const auto embedIt = doc.embeds.find(embedId);
@@ -1221,11 +1307,14 @@ const RenderMesh* SceneRenderer::loadOrGetEmbeddedMesh(const Mc3Document& doc,
     const std::string& identity = embed.isInline() ? embed.base64Content : embed.src;
     const std::string cacheKey = "embed:" + doc.sourcePath.generic_string() + ":" + embedId + ":" +
                                  std::to_string(identity.size()) + ":" +
-                                 std::to_string(std::hash<std::string>{}(identity));
+                                 std::to_string(std::hash<std::string>{}(identity)) +
+                                 (selection ? ":mesh=" + std::to_string(selection->first) +
+                                              ":primitive=" + std::to_string(selection->second)
+                                            : std::string());
     auto it = meshCache_.find(cacheKey);
     if (it != meshCache_.end()) return it->second.vb ? &it->second : nullptr;
 
-    RenderMesh loaded = loadEmbeddedGltfMesh(device_, doc.sourcePath, embed);
+    RenderMesh loaded = loadEmbeddedGltfMesh(device_, doc.sourcePath, embed, selection);
     if (!loaded.vb)
         std::cerr << "Warning: failed to load embedded mesh '" << embedId
                   << "' — rendering placeholder box\n";
@@ -1744,8 +1833,11 @@ void SceneRenderer::drawObject(const Mc3Object& obj, const Mc3Document& doc,
     }
     case ObjectType::Mesh: {
         const RenderMesh* loaded = nullptr;
-        if (obj.meshSource.rfind("embed:", 0) == 0)
-            loaded = loadOrGetEmbeddedMesh(doc, obj.meshSource);
+        if (obj.meshSource.rfind("embed:", 0) == 0) {
+            std::optional<std::pair<int, int>> selection;
+            if (tryEmbeddedGltfSelection(obj, selection))
+                loaded = loadOrGetEmbeddedMesh(doc, obj.meshSource, selection);
+        }
         else if (!obj.meshSource.empty()) {
             std::optional<int> materialIndex;
             if (tryObjMaterialIndex(obj, materialIndex))

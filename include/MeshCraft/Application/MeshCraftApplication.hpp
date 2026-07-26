@@ -326,6 +326,15 @@ private:
     char importObjDialogBuf_[512]{};
     char importObjDialogErr_[256]{};
 
+    // SYS-W14-36: imports a bounded, self-contained GLB into editable MC3
+    // hierarchy/material records. Deliberately separate from the OBJ dialog:
+    // a GLB is retained inline and never becomes an arbitrary filesystem
+    // mesh reference in the saved document.
+    bool importGlbDialogOpen_{false};
+    char importGlbDialogBuf_[512]{};
+    char importGlbDialogErr_[256]{};
+    bool importGlbTrustExternalGltf_{false};
+
     // Export selection dialog state (F3)
     bool selExportOpen_{false};
     char selExportBuf_[512]{};
@@ -556,6 +565,8 @@ private:
     void ungroupSelected();
     void addPrimitive(Mc3::ObjectType type);
     bool importObjWithMaterials(const std::string& path, std::string& error);
+    bool importSelfContainedGlb(const std::string& path, std::string& error);
+    bool importGltfWithTrustChoice(const std::string& path, bool trustExternalGltf, std::string& error);
     void generateSimpleCollisionProxy();
     void handleKeyboardShortcuts(const Microsoft::Xna::Framework::Input::KeyboardState& ks,
                                  const Microsoft::Xna::Framework::Input::KeyboardState& prevKs);

@@ -487,7 +487,24 @@ buildTextures(tinygltf::Model& model,
         tinygltf::Image img;
         img.name = tex.name;
 
-        if (embedImages) {
+        const bool isInlineDataImage = tex.uri.rfind("data:", 0) == 0;
+        if (isInlineDataImage && embedImages) {
+            // SYS-W14-36: GLB imports preserve their embedded images as
+            // data: URIs in MC3. Decode those bytes directly instead of
+            // treating the URI as a filename, then let tinygltf put them in
+            // the output GLB buffer just like a conventional local texture.
+            std::string mimeType;
+            if (!tinygltf::DecodeDataURI(&img.image, mimeType, tex.uri, 0, false)) {
+                img.uri = tex.uri;
+                std::cerr << "[mc3togltf] Warning: invalid inline texture data URI: "
+                          << tex.name << "\n";
+                ++warningCount;
+            } else {
+                img.as_is = true;
+                img.mimeType = mimeType.empty() ? detectImageMimeType(img.image, warningCount)
+                                                : mimeType;
+            }
+        } else if (embedImages) {
             // GLB: load raw bytes so tinygltf can embed them as a data URI.
             // Without pixel data, tinygltf's embed path silently strips the
             // directory prefix and emits a bare filename URI that Blender can't find.
@@ -505,6 +522,10 @@ buildTextures(tinygltf::Model& model,
                           << imgPath << "\n";
                 ++warningCount;
             }
+        } else if (isInlineDataImage) {
+            // A textual .gltf can retain an existing data URI verbatim; it
+            // has no path to rebase and never causes a filesystem read.
+            img.uri = tex.uri;
         } else {
             // GLTF: STAB-0677 -- tex.uri is relative to basePath (the
             // source .mc3.xml's directory), not necessarily to outDir
@@ -726,8 +747,18 @@ static int buildMesh(ExportCtx& ctx,
             if (embed.isExternal())
                 assertResourceAllowed(ctx.basePath, embed.src, ctx.allowExternalResources,
                                       "embedded GLB source");
+            const bool hasEmbedSelection =
+                obj.metadata.count(std::string(kGltfMeshIndexMetadataKey)) != 0 ||
+                obj.metadata.count(std::string(kGltfPrimitiveIndexMetadataKey)) != 0;
+            const auto embedSelection = parseEmbeddedGltfSelection(obj.metadata);
+            if (hasEmbedSelection && !embedSelection) {
+                std::cerr << "Warning: mesh object '" << obj.name
+                          << "' has invalid embedded-GLB selector metadata — skipped\n";
+                ctx.stats.warnings++;
+                return -1;
+            }
             try {
-                md = loadEmbeddedGltfMesh(ctx.basePath, embed);
+                md = loadEmbeddedGltfMesh(ctx.basePath, embed, embedSelection);
             } catch (const std::exception& e) {
                 std::cerr << "Warning: " << e.what() << '\n';
                 ctx.stats.warnings++;

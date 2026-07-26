@@ -2107,6 +2107,46 @@ void MeshCraftApplication::drawDialogs()
     }
 
     // -----------------------------------------------------------------------
+    // Import GLB/glTF dialog -- normal GLB import stays self-contained. The
+    // sole .gltf path requires a visible, per-import trust acknowledgement;
+    // any external resources are then converted into a bounded inline embed.
+    // -----------------------------------------------------------------------
+    if (importGlbDialogOpen_) {
+        ImGui::OpenPopup("Import GLB / glTF##importglbdlg");
+        importGlbDialogOpen_ = false;
+    }
+    if (ImGui::BeginPopupModal("Import GLB / glTF##importglbdlg", nullptr,
+                               ImGuiWindowFlags_AlwaysAutoResize)) {
+        ImGui::Text("Path to .glb or .gltf file:");
+        ImGui::SetNextItemWidth(420);
+        if (ImGui::IsWindowAppearing()) ImGui::SetKeyboardFocusHere();
+        bool enter = ImGui::InputText("##importglbpath", importGlbDialogBuf_, sizeof(importGlbDialogBuf_),
+                                      ImGuiInputTextFlags_EnterReturnsTrue);
+        ImGui::Checkbox("Trusted external .gltf import", &importGlbTrustExternalGltf_);
+        ImGui::TextDisabled(".glb is self-contained (48 MiB maximum). Trusted .gltf reads its declared resources once,");
+        ImGui::TextDisabled("then embeds them into the MC3 document (JSON 16 MiB; decoded payload 48 MiB maximum). ");
+        if (importGlbDialogErr_[0])
+            ImGui::TextColored(ImVec4(1.f, 0.3f, 0.3f, 1.f), "%s", importGlbDialogErr_);
+        ImGui::Spacing();
+        bool canImport = importGlbDialogBuf_[0] != '\0';
+        if (!canImport) ImGui::BeginDisabled();
+        if ((enter || ImGui::Button("Import", ImVec2(90, 0))) && canImport) {
+            std::string error;
+            if (importGltfWithTrustChoice(importGlbDialogBuf_, importGlbTrustExternalGltf_, error)) {
+                ImGui::CloseCurrentPopup();
+            } else {
+                std::strncpy(importGlbDialogErr_, error.c_str(), sizeof(importGlbDialogErr_) - 1);
+                importGlbDialogErr_[sizeof(importGlbDialogErr_) - 1] = '\0';
+            }
+        }
+        if (!canImport) ImGui::EndDisabled();
+        ImGui::SameLine();
+        if (ImGui::Button("Cancel", ImVec2(90, 0)) || ImGui::IsKeyPressed(ImGuiKey_Escape, false))
+            ImGui::CloseCurrentPopup();
+        ImGui::EndPopup();
+    }
+
+    // -----------------------------------------------------------------------
     // Subtree Export as Template dialog (E8)
     // -----------------------------------------------------------------------
     if (subtreeExportOpen_) {

@@ -6,6 +6,7 @@
 #include <array>
 #include <cstdint>
 #include <filesystem>
+#include <map>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -106,6 +107,27 @@ struct ObjMaterialImportResult {
     std::vector<std::string> warnings;
 };
 
+// Metadata written by the editable GLB importer on an embed-backed Mesh.
+// Unlike an ordinary `embed:id` Mesh (which deliberately flattens an entire
+// GLB scene for backwards compatibility), this pair selects exactly one
+// triangle primitive in the GLB's mesh table. The MC3 object hierarchy then
+// owns the original node transforms and remains editable.
+inline constexpr std::string_view kGltfMeshIndexMetadataKey =
+    "meshcraft.gltf.mesh_index";
+inline constexpr std::string_view kGltfPrimitiveIndexMetadataKey =
+    "meshcraft.gltf.primitive_index";
+
+struct EmbeddedGltfSelection {
+    int meshIndex{-1};
+    int primitiveIndex{-1};
+};
+
+// Returns nullopt unless both persisted values are strict non-negative base-10
+// integers. Consumers must treat malformed/partial metadata as invalid rather
+// than silently flattening the whole embedded asset.
+std::optional<EmbeddedGltfSelection>
+parseEmbeddedGltfSelection(const std::map<std::string, std::string>& metadata);
+
 // Strictly parse the persisted material-group selector. It intentionally
 // accepts only a base-10 signed integer so malformed metadata is rejected by
 // consumers instead of silently falling back to the whole source OBJ.
@@ -136,7 +158,8 @@ MeshData loadObjMesh(const std::filesystem::path& basePath,
 // supported.  Throws std::runtime_error for malformed, unsupported, or
 // resource-exhausting input.
 MeshData loadEmbeddedGltfMesh(const std::filesystem::path& basePath,
-                              const MeshCraft::Mc3::Mc3EmbedGltf& embed);
+                              const MeshCraft::Mc3::Mc3EmbedGltf& embed,
+                              std::optional<EmbeddedGltfSelection> selection = std::nullopt);
 
 // Individual primitives (used by buildPrimitive)
 MeshData buildBox      (float w, float h, float d);

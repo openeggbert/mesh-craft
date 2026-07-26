@@ -503,7 +503,8 @@ private:
     const RenderMesh* loadOrGetMesh(const std::string& absPath,
                                     std::optional<int> materialIndex = std::nullopt);
     const RenderMesh* loadOrGetEmbeddedMesh(const Mc3::Mc3Document& doc,
-                                            const std::string& embedReference);
+                                            const std::string& embedReference,
+                                            std::optional<std::pair<int, int>> selection = std::nullopt);
 
     Microsoft::Xna::Framework::Matrix objectWorldMatrix(const Mc3::Mc3Transform& t) const;
     Microsoft::Xna::Framework::Color  materialColor(const std::string& matId,

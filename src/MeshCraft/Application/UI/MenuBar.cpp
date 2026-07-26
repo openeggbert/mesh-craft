@@ -91,6 +91,15 @@ float MeshCraftApplication::drawMenuBar()
                 },
             };
             UI::MenuBar::drawFileImportObj(fileImportObjContext);
+            const UI::FileImportGlbContext fileImportGlbContext{
+                .openDialog = [this] {
+                    importGlbDialogBuf_[0] = '\0';
+                    importGlbDialogErr_[0] = '\0';
+                    importGlbTrustExternalGltf_ = false;
+                    importGlbDialogOpen_ = true;
+                },
+            };
+            UI::MenuBar::drawFileImportGlb(fileImportGlbContext);
             ImGui::Separator();
             const UI::FileSaveContext fileSaveContext{
                 .save = [this] { saveFile(); },
@@ -641,6 +650,10 @@ void MenuBar::drawFileSaveAs(const FileSaveAsContext& context) {
 
 void MenuBar::drawFileImportObj(const FileImportObjContext& context) {
     if (ImGui::MenuItem("Import OBJ...")) context.openDialog();
+}
+
+void MenuBar::drawFileImportGlb(const FileImportGlbContext& context) {
+    if (ImGui::MenuItem("Import GLB / glTF...")) context.openDialog();
 }
 
 void MenuBar::drawFileNew(const FileNewContext& context) {

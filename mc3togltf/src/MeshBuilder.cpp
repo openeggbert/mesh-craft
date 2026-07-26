@@ -1748,10 +1748,49 @@ MeshData flattenEmbeddedGlb(const tinygltf::Model& model, const std::string& sou
     return result;
 }
 
+MeshData selectEmbeddedGlbPrimitive(const tinygltf::Model& model,
+                                    const EmbeddedGltfSelection& selection,
+                                    const std::string& source) {
+    if (selection.meshIndex < 0 || selection.meshIndex >= static_cast<int>(model.meshes.size()))
+        glbError(source, "selected mesh index is invalid");
+    const auto& mesh = model.meshes[static_cast<size_t>(selection.meshIndex)];
+    if (selection.primitiveIndex < 0 ||
+        selection.primitiveIndex >= static_cast<int>(mesh.primitives.size()))
+        glbError(source, "selected primitive index is invalid");
+    MeshData result;
+    const GlbMat4 identity{};
+    appendPrimitive(result, model, mesh.primitives[static_cast<size_t>(selection.primitiveIndex)],
+                    identity, source);
+    if (result.empty()) glbError(source, "selected primitive contains no triangle geometry");
+    return result;
+}
+
 } // namespace
 
+std::optional<EmbeddedGltfSelection>
+parseEmbeddedGltfSelection(const std::map<std::string, std::string>& metadata)
+{
+    const auto mesh = metadata.find(std::string(kGltfMeshIndexMetadataKey));
+    const auto primitive = metadata.find(std::string(kGltfPrimitiveIndexMetadataKey));
+    if (mesh == metadata.end() && primitive == metadata.end()) return std::nullopt;
+    if (mesh == metadata.end() || primitive == metadata.end()) return std::nullopt;
+    auto parse = [](const std::string& value) -> std::optional<int> {
+        if (value.empty()) return std::nullopt;
+        int parsed = -1;
+        const auto [end, error] = std::from_chars(value.data(), value.data() + value.size(), parsed);
+        if (error != std::errc{} || end != value.data() + value.size() || parsed < 0)
+            return std::nullopt;
+        return parsed;
+    };
+    const auto meshIndex = parse(mesh->second);
+    const auto primitiveIndex = parse(primitive->second);
+    if (!meshIndex || !primitiveIndex) return std::nullopt;
+    return EmbeddedGltfSelection{*meshIndex, *primitiveIndex};
+}
+
 MeshData loadEmbeddedGltfMesh(const std::filesystem::path& basePath,
-                              const MeshCraft::Mc3::Mc3EmbedGltf& embed) {
+                              const MeshCraft::Mc3::Mc3EmbedGltf& embed,
+                              std::optional<EmbeddedGltfSelection> selection) {
     const std::string source = embed.id.empty() ? "unnamed embed" : "embed:" + embed.id;
     tinygltf::Model model;
     tinygltf::TinyGLTF loader;
@@ -1777,7 +1816,8 @@ MeshData loadEmbeddedGltfMesh(const std::filesystem::path& basePath,
     }
     if (!loaded) glbError(source, error.empty() ? "tinygltf rejected the GLB" : error);
     if (!warning.empty()) std::cerr << "Embedded GLB warning (" << source << "): " << warning << '\n';
-    return flattenEmbeddedGlb(model, source);
+    return selection ? selectEmbeddedGlbPrimitive(model, *selection, source)
+                     : flattenEmbeddedGlb(model, source);
 }
 
 // ---------------------------------------------------------------------------
