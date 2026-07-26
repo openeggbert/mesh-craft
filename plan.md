@@ -135,9 +135,8 @@ sequentially. Per `CLAUDE.md`, recording this ordered backlog does **not**
 remove the requirement to describe and obtain explicit confirmation for each
 individual implementation task immediately before work begins.
 
-1. **SYS-W14-37/38/39 and SYS-W9-04 (P3)** — export optimization controls,
-    animation/export policy, Model Registry v2, and scalable history/review
-    tooling.
+1. **SYS-W14-38/39 and SYS-W9-04 (P3)** — animation/export policy, Model
+    Registry v2, and scalable history/review tooling.
 
 The existing platform tasks (`SYS-W8-05`, `AUD-042`, `SYS-W14-09`) remain
 their own owner/toolchain-gated work and are intentionally not duplicated.
@@ -2204,14 +2203,34 @@ because it is listed: `CLAUDE.md` requires per-row user confirmation.
   build and all 164 non-render CTests passed (80/80 + 84/84); 41
   render-labelled tests remain disabled by the no-Xvfb preflight.
 
-- **SYS-W14-37** `[TODO]` `P3` — Truthful glTF export optimization controls and report.
-  The Export dialog displays disabled quantization/texture controls. Replace
-  placeholders with only options the exporter actually implements: opt-in
-  mesh quantization with documented precision bounds, accurate `.gltf` versus
-  `.glb` texture behavior, pre-export size estimates, and an object-id-aware
-  downgrade/warning report. Keep output deterministic and use structural GLB
-  tests; defer heavyweight codecs until a distribution/compatibility decision
-  exists.
+- **SYS-W14-37** `[DONE]` `P3` — Truthful glTF export optimization controls and report.
+  **Implemented 2026-07-26 in commit `cf4420e`.** The Export dialog no longer presents disabled
+  placeholder controls. Its opt-in **Quantize mesh attributes (16-bit)**
+  setting writes the deterministic, documented `KHR_mesh_quantization`
+  subset: normalized normals/tangents become signed `SHORT` (component error
+  at most 1/32767); `[0,1]` UVs become unsigned normalized `SHORT` (at most
+  1/65535); and eligible indices become lossless `UNSIGNED_SHORT`. Positions
+  deliberately remain float32. Out-of-range attributes retain float32 and
+  produce a structured, object-ID-aware compatibility note; approximate CSG
+  fallback is reported by the same mechanism.
+
+  The `.glb`/textual `.gltf` difference is now stated truthfully in the UI:
+  GLB embeds readable image bytes, whereas normal `.gltf` image paths remain
+  external/rebased and existing data URIs remain inline. **Refresh pre-export
+  estimate** builds the identical deterministic model without writing files;
+  it reports generated binary data exactly and a clearly labelled structural
+  JSON-size estimate, including GLB image payload. The resulting report stays
+  visible after export and is also emitted by the CLI; `--quantize-mesh-attributes`
+  enables the same option there and `--stats` reports quantized attributes and
+  narrowed index accessors. Heavyweight texture/geometry codecs remain
+  intentionally deferred pending a distribution and compatibility decision.
+
+  New structural `mc3togltf_export_optimization` coverage verifies the
+  extension declaration, normalized 16-bit accessors and indices, GLB image
+  embedding, textual-glTF data URI preservation, deterministic bytes,
+  preflight sizing, and ID-bearing fallback report. Release build and all
+  164 runnable non-render CTests passed; 41 render-labelled tests remain
+  disabled by the no-Xvfb preflight and one display preflight is skipped.
 
 - **SYS-W14-38** `[TODO]` `P3` — Animation clips, preview controls, and explicit export policy.
   MC3 authoring supports transform, visibility, deform, and material channels,

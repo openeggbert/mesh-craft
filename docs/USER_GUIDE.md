@@ -78,6 +78,26 @@ export.
 The exported file is a standard glTF/GLB you can open in Blender, a
 glTF viewer, or any engine that imports glTF.
 
+The export dialog offers only controls that the exporter can perform. Choose
+**Quantize mesh attributes (16-bit)** to opt into
+`KHR_mesh_quantization`: normals and tangents use signed normalized 16-bit
+components (at most 1/32767 component error), UVs in the `[0, 1]` range use
+unsigned normalized 16-bit components (at most 1/65535 error), and index
+buffers with at most 65,536 vertices use lossless 16-bit indices. Positions
+remain 32-bit floats. UVs outside `[0, 1]` (for example tiled UVs), and any
+other attribute outside its supported range, stay 32-bit floats; the Export
+Report identifies the affected MC3 object ID.
+
+Use **Refresh pre-export estimate** to build the same scene representation the
+exporter will write and show an approximate JSON overhead plus exact generated
+geometry-buffer size. It is intentionally an estimate, not a byte-for-byte
+promise, because the JSON serializer controls final formatting. A `.glb`
+embeds readable texture bytes in its one file. A textual `.gltf` writes JSON
+and a `.bin`: regular image paths remain external/rebased, while existing
+inline `data:` images remain inline. Texture codecs and general-purpose
+compression are not offered until their distribution and viewer-compatibility
+policy has been decided.
+
 ## Next steps
 
 - **Undo/redo**: every mutating command (add, delete, transform, ...)

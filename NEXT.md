@@ -105,13 +105,17 @@ before when explicitly requested (`SYS-W14-##` rows).
 
 ## 2. Current status
 
-- **Last full build: clean after `SYS-W14-36` editable GLB/glTF import.** Testing is enabled in the current Ninja Release tree, and
+- **Last full build: clean after `SYS-W14-37` truthful glTF export controls.** Testing is enabled in the current Ninja Release tree, and
   `CCACHE_DISABLE=1 cmake --build b-release -j4` linked successfully on
   EASYGL. Alternate-backend runtime qualification remains blocked.
-- **Tests:** the current Release tree registers 205 tests. All 164 non-render
-  tests pass in two `-LE render` partitions (80/80 + 84/84); the Xvfb
-  preflight deterministically disables the 41 render-labelled registrations
-  on this host. `SYS-W14-36` added direct bounded GLB import, explicit trusted
+- **Tests:** the current Release tree registers 206 tests. The 164 runnable
+  non-render tests pass in two disjoint numeric partitions (47 passed + 117
+  passed); the Xvfb preflight deterministically disables the 41
+  render-labelled registrations on this host and one display preflight is
+  skipped. `SYS-W14-37` added structural coverage for `KHR_mesh_quantization`,
+  16-bit index/accessor encoding, deterministic output, explicit GLB versus
+  textual-glTF image treatment, preflight estimation, and object-ID reports.
+  `SYS-W14-36` added direct bounded GLB import, explicit trusted
   external-gltf confinement, rejection, and MC3→GLB round-trip coverage.
   Before that additive test, an Xvfb-qualified host passed all 185 registrations after `AUD-042` in two
   disjoint groups: 149/149 non-render tests and 36/36 render-labelled tests.
