@@ -84,10 +84,10 @@ P1s already being fixed in git history. This session:
    is per-field only) not part of the original audit, filed as new `TODO`
    tasks.
 
-   **Net across all 35 AUD-### rows remaining in this active backlog (61
+   **Net across all 36 AUD-### rows remaining in this active backlog (61
    additional rows completed and archived to `docs/history/plan_20260718.md`
    on 2026-07-18 — see that file for their full evidence/resolution text):
-   33 DONE, 0 TODO, 1 DEFERRED, 1 BLOCKED** — 10 of the 33 DONE (`AUD-064` through
+   34 DONE, 0 TODO, 1 DEFERRED, 1 BLOCKED** — 10 of the 34 DONE (`AUD-064` through
    `AUD-073`) are fresh findings from a 2026-07-18 (later same day)
    independent re-audit, not part of the original 6 (`AUD-069` itself fixed
    2026-07-19, the day after it was filed); the other 14 (`AUD-074`
@@ -127,6 +127,36 @@ still internally consistent.
 ---
 
 ## Priority execution queue (next up, in order)
+
+### Newly authorized roadmap (2026-07-26)
+
+The user authorized recording and then implementing the following tasks
+sequentially. Per `CLAUDE.md`, recording this ordered backlog does **not**
+remove the requirement to describe and obtain explicit confirmation for each
+individual implementation task immediately before work begins.
+
+1. **SYS-W14-28 (P2/W14)** — complete native MC3 library publishing and
+   consumption workflow.
+2. **SYS-W14-29 (P2/W14)** — make asset-metadata LOD references and maximum
+   visibility distance operational with deterministic selection and culling.
+3. **SYS-W14-31 (P2/W14)** — add explicit Area/object event bindings to
+   triggers and scene states.
+4. **SYS-W14-14 (P2/W14, reopened)** — implement the declared MC3 coordinate
+   system consistently, not merely as a write-only document field.
+5. **SYS-W3-02 (P2/W3)** — introduce narrow shared semantic-evaluation
+   helpers required by transform/LOD/material parity, without a broad editor
+   rewrite.
+6. **SYS-W14-32/33/34 (P2/P2/P3/W14)** — deliver viewport parity in separate
+   UV-mapping, point/spot-light, and CSG child-material slices.
+7. **SYS-W14-30 (P2/W14)** — expand explicit walk-mode collision proxies.
+8. **SYS-W14-35/36 (P2/P3/W14)** — preserve material structure on OBJ import,
+   then add a bounded editable self-contained GLB importer.
+9. **SYS-W14-37/38/39 and SYS-W9-04 (P3)** — export optimization controls,
+    animation/export policy, Model Registry v2, and scalable history/review
+    tooling.
+
+The existing platform tasks (`SYS-W8-05`, `AUD-042`, `SYS-W14-09`) remain
+their own owner/toolchain-gated work and are intentionally not duplicated.
 
 1. The raw-OpenGL(ES)-vs-CNA migration group is complete: panel
    scissor/viewport clip, `--screenshot` readback, Bloom, SSAO, Skybox,
@@ -1333,7 +1363,7 @@ portable through CNA rather than merely hiding its OpenGL dependency.
   level test needed). `test/validate_xsd.py` against a hand-built fixture
   with `<library>`/`<imports>` populated; manual `--screenshot` smoke test
   loading it (no crash, clean GL state).
-- **SYS-W14-14** `[DEFERRED, human-authorized-precedent decision — see note]`
+- **SYS-W14-14** `[TODO]`
   `P2` — Wire up `coordinate_system` so it actually affects something. The
   invalid `"left_handed_y_up"` combo option was already removed
   (`STAB-0713`, combo now only offers the 2 XSD-valid values), but
@@ -1381,6 +1411,13 @@ portable through CNA rather than merely hiding its OpenGL dependency.
   `ctest -j"$(nproc)"` (126/126, unchanged), `test/validate_xsd.py` against
   a hand-built `coordinate_system="right_handed_z_up"` fixture (valid),
   manual `--screenshot` smoke test loading it (no crash, clean GL state).
+  **Reopened (2026-07-26, user authorization):** the documented-only prior
+  decision is superseded. Implement the real convention through a small
+  shared CNA-free helper, then apply it consistently in editor rendering,
+  picking, gizmos, world-position UI, walk collision, CSG, and glTF export.
+  Add a Normalize to Y-up command rather than silently rewriting documents on
+  load. Require transform, picking, screenshot, and glTF-node fixtures before
+  marking this task done; a missed consumer is a correctness failure.
 - **SYS-W14-15** `[DONE, material texture slots only — see scope note]` `P3`
   — Native file-browse dialog for texture/mesh path fields (currently plain
   `ImGui::InputText` boxes everywhere, including the Import OBJ dialog and
@@ -1993,6 +2030,149 @@ portable through CNA rather than merely hiding its OpenGL dependency.
 
 ---
 
+### Newly authorized roadmap tasks (2026-07-26)
+
+The following rows turn the deep product analysis in `new.md` into bounded
+implementation units. They are deliberately ordered by the priority queue
+above. All format-affecting rows must update XML, XSD, JSON, MCB, validation,
+round-trip tests, and documentation together; all editor/export parity rows
+need focused differential or render coverage. Do not start a row merely
+because it is listed: `CLAUDE.md` requires per-row user confirmation.
+
+- **SYS-W14-28** `[TODO]` `P2` — Native MC3 library publishing and asset-consumption workflow.
+  The editor already edits `<library>` and `<imports>` data and resolves
+  imports after loading, but does not expose the existing dedicated
+  `.mc3lib.xml`/`.mc3lib.json` open/save API in the File workflow. Implement
+  Open Library, Save as Library, Create Definition from Selection, Publish
+  Definition, and an import-health/definition-picker UI. Reuse
+  `Mc3Document`'s existing library hash and resolver APIs; surface namespace,
+  version, hash, unresolved source, cycle, and definition-collision errors
+  rather than inventing another serialization path. Add headless workflow,
+  resolver, and selection-to-definition regression tests. No CNA change is
+  expected.
+
+- **SYS-W14-29** `[TODO]` `P2` — Metadata-driven asset LOD, distance culling, and deterministic variants.
+  `assetMetadata.lods` and `max_visibility_distance` round-trip and are
+  editable, while the viewport separately reduces primitive tessellation by
+  distance. Make the metadata contract operational for instances: resolve
+  near/mid/far definition ids, select tiers with configurable thresholds and
+  hysteresis, cull at the declared maximum distance, and expose a debug view
+  showing selected tier and cull reason. Keep definition-level LOD distinct
+  from the existing procedural tessellation LOD. Variant choice must use a
+  stable identity-derived seed, never per-frame randomness. Begin glTF support
+  by exporting an explicit selected/default tier; an optional LOD extension is
+  a later compatibility decision. Add CNA-free resolution tests plus viewport
+  LOD/culling coverage.
+
+- **SYS-W14-30** `[TODO]` `P2` — Explicit collision-proxy support beyond boxes in Walk Mode.
+  Walk Mode currently honors only `collision="box"`, although MC3 can describe
+  other collision intent. Add opt-in sphere and capsule proxies first, then a
+  strictly budgeted static mesh/convex-proxy path only if its semantics can be
+  made deterministic. Provide active-proxy debug drawing and a Generate Simple
+  Proxy command for supported primitives. Unsupported authored proxies must
+  remain visibly unsupported, never silently approximated. Extend
+  `WalkController` tests with rounded-object, ceiling/floor, and budget cases.
+
+- **SYS-W14-31** `[TODO]` `P2` — Explicit event bindings from Areas/objects to triggers and scene states.
+  Triggers can currently be fired manually and states can be applied manually;
+  an Area has no schema-level relationship to either. Add a compact binding
+  model with source object/Area, event kind (`enter`, `exit`, `click`,
+  `timer`), target trigger or state, enabled flag, cooldown, and one-shot
+  behavior. Deliver enter/exit and timer first, with an editor simulation
+  overlay. Event dispatch needs a recursion guard, execution budget, dangling
+  target diagnostics, and a play/simulate mode that does not mutate the
+  authored document or undo history. This is MC3/MCB-only runtime semantics;
+  glTF must continue to warn/omit it explicitly. Add parser/writer/MCB tests
+  and CNA-free dispatch tests before viewport interaction coverage.
+
+- **SYS-W14-32** `[TODO]` `P2` — Honor ordinary-object UV mapping in the live viewport.
+  `mc3togltf` already regenerates and transforms box/sphere/planar UVs, but
+  the normal viewport shows default primitive UVs except for the CSG path.
+  Apply projection, scale, offset, and rotation to viewport geometry using
+  the same documented semantics as the exporter, while retaining deliberate
+  preview/export winding differences. Add differential mesh-data coverage and
+  an Xvfb screenshot fixture that distinguishes default, box, and sphere
+  mapping.
+
+- **SYS-W14-33** `[TODO]` `P2` — Faithful live preview for authored point and spot lights.
+  Point and spot lights export correctly but currently remain gizmo-only in
+  the BasicEffect-based viewport. Add a capability-gated CNA ShaderEffect
+  lighting path with position, attenuation, spot cone, color, and authored
+  brightness semantics; retain a clearly labelled fallback on unqualified
+  backends. Do not reintroduce raw OpenGL. Add pixel tests for point and spot
+  influence, attenuation/cone boundaries, and unsupported-backend behavior.
+
+- **SYS-W14-34** `[TODO]` `P3` — Preview CSG child-material composition.
+  glTF output restores Manifold child-material runs when a CSG root has no
+  material override, while the viewport shows only the root material. Extend
+  the CNA preview cache/draw path to retain and draw the generated material
+  ranges, preserving the root-material override rule. Add cache invalidation,
+  material-range, and screenshot coverage; do not change the exporter’s
+  established CSG semantics.
+
+- **SYS-W14-35** `[TODO]` `P2` — Preserve OBJ material groups during import.
+  Existing OBJ import flattens all `usemtl`/face groups into one MC3 mesh and
+  material. Import each safely representable group as a distinct MC3 object or
+  grouped child with mapped material data, warn for MTL properties that MC3
+  cannot faithfully map, and preserve the current safe path policy. Add
+  fixtures for multi-group/multi-material OBJ, missing MTL, hostile indices,
+  and glTF export of the imported result.
+
+- **SYS-W14-36** `[TODO]` `P3` — Bounded editable self-contained GLB import.
+  The current `embed:` loader safely flattens a constrained self-contained GLB
+  but is not a native editable import workflow. Add a File Import GLB route
+  that maps nodes, triangle meshes, cameras, punctual lights, material
+  factors, images, and transforms into native MC3 objects/materials, with an
+  explicit trusted mode for external-resource `.gltf`. Start with
+  self-contained triangle GLB; reject or clearly report skins, morph targets,
+  animations, and unsupported primitive modes. Keep input size/triangle/path
+  limits and add import-to-MC3-to-glTF round-trip tests.
+
+- **SYS-W14-37** `[TODO]` `P3` — Truthful glTF export optimization controls and report.
+  The Export dialog displays disabled quantization/texture controls. Replace
+  placeholders with only options the exporter actually implements: opt-in
+  mesh quantization with documented precision bounds, accurate `.gltf` versus
+  `.glb` texture behavior, pre-export size estimates, and an object-id-aware
+  downgrade/warning report. Keep output deterministic and use structural GLB
+  tests; defer heavyweight codecs until a distribution/compatibility decision
+  exists.
+
+- **SYS-W14-38** `[TODO]` `P3` — Animation clips, preview controls, and explicit export policy.
+  MC3 authoring supports transform, visibility, deform, and material channels,
+  while glTF core exports only TRS. Add named clip ranges, playback rate,
+  reverse/loop and transition preview. Provide an explicit non-destructive
+  bake/export policy for channels that can be represented, optional extension
+  use only behind a compatibility choice, and per-channel diagnostics for
+  skipped data. Do not promise universal glTF equivalence. Add evaluator,
+  clip, determinism, and exporter tests.
+
+- **SYS-W14-39** `[TODO]` `P3` — Model Registry v2 and dependency-aware asset packs.
+  The local registry has no thumbnails, pack workflow, or dependency-aware
+  inspection. Add cached generated thumbnails, metadata/tag filters,
+  license/provenance visibility, duplicate/unused-material reports, and a
+  local asset-pack export that records resolved library dependencies. Keep
+  synchronization/cloud collaboration out of scope pending a separate product
+  and credential design. Add SQLite-migration, thumbnail-invalidation, search,
+  and pack-manifest tests with graceful no-SQLite behavior.
+
+- **SYS-W3-02** `[TODO]` `P2` — Shared CNA-free semantic-evaluation helpers for parity-sensitive consumers.
+  Do not merge the entire renderer and exporter. Instead extract narrow,
+  independently tested helpers for coordinate convention, parent/instance
+  transform accumulation, effective visibility/material, definition/variant/
+  LOD resolution, and stable object identity. The helpers must not alter the
+  `Mc3Document` public API without auditing every consumer. Use them only
+  where both editor and exporter need equal semantics, with differential
+  fixtures; preserve intentional triangle-winding differences.
+
+- **SYS-W9-04** `[TODO]` `P3` — Memory-budgeted history, named checkpoints, and scene review diffs.
+  The current 20-entry whole-document deep-copy undo stack is safe but limits
+  long sessions. Design a separate history subsystem with an explicit memory
+  budget, named checkpoints, restore points, and object-level scene-diff
+  review, while preserving exact current undo/redo behavior and selection
+  restore. Do not weaken capture-before-mutation guarantees or introduce a
+  broad command-pattern rewrite without measured benefit. Add eviction,
+  checkpoint, restore, diff, redo-invalidation, and large-document tests.
+
 ## Audit-derived tasks (AUD-###)
 
 67 tasks were created in total originally (see the Session log's "Net
@@ -2380,3 +2560,24 @@ post-processing call owned by this audit.
 - **Outcome:** `ssao_test` reuses the stable `light_shading.mc3.xml` fixture, renders it with SSAO off and forced on, parses both PPMs, and requires more than 1,000 red pixels to darken, more than 2,000 total red-channel darkening, and a maximum per-pixel reduction of at least two. This reaches the depth pre-pass, SSAO shader, blur, and multiplicative composition end-to-end; a broken render target or composite leaves the two images unchanged and fails the test.
 - **Tests:** After a fresh `cmake -S . -B b-release -DBUILD_TESTING=ON`, `ctest --test-dir b-release -R '^ssao_test$' --output-on-failure -j1` passed 1/1 under Xvfb.
 - **Resolved:** commit `577b43c` — adds the calibrated render regression and `render`-labelled CTest registration.
+
+### AUD-093 `[DONE]` `P1` `W2` · Bound `mc3_ai` mock-server readiness and skip unavailable loopback integration tests
+- **Component:** `mc3/test/ai_test.cpp`.
+- **Evidence:** The apparent traversal-include stall was a misleading effect
+  of buffered test output. Tracing showed the untrusted include is ignored and
+  the XSD pipeline completes; the later mock HTTP helper then looped forever
+  in `waitUntilServerRunning()` when a restricted environment could not start
+  a loopback listener.
+- **Outcome:** `waitUntilServerRunning()` now has a one-second deadline. A
+  startup probe gates only the listener-dependent integration cases, emitting
+  a clear skip if loopback listeners are unavailable; pure parsing, XSD, and
+  connection-refused coverage still runs. Normal environments keep the full
+  mock-server suite.
+- **Tests:** `CCACHE_DISABLE=1 cmake --build b-release --target ai_test -j4`
+  followed by `ctest --test-dir b-release -R '^mc3_ai$' --output-on-failure -j1`
+  passes without waiting for CTest's 30-second safety timeout. The existing
+  untrusted normal/traversal-include tests continue to run under the same
+  untrusted load policy.
+- **Resolved:** commit `c9c962f` — bounds mock-server startup readiness and
+  skips only loopback-dependent integration tests when the listener is
+  unavailable.
