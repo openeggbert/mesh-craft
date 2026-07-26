@@ -1128,9 +1128,20 @@ portable through CNA rather than merely hiding its OpenGL dependency.
   and inline export plus node-transform flattening; `embed_mesh_viewport_test`
   proves actual CNA viewport rendering. Full Release validation passed
   147/147 non-render and 36/36 render tests. **Resolved:** commit `7e93b92`.
-- **SYS-W14-06** `[TODO, user-authorized 2026-07-26]` `P3` — Improved CSG
-  output (smooth normals/UVs/materials). Next coherent feature slice after
-  `SYS-W14-05` validation.
+- **SYS-W14-06** `[DONE]` `P3` — Improved CSG output normals, UVs, and
+  materials. Manifold now calculates smooth vertex normals with a 60-degree
+  crease threshold, and both glTF export and the live CSG preview consume the
+  same indexed normal-aware geometry. CSG results generate a default box UV
+  projection or honor the root's planar/box/sphere `uv_mapping`; the schema
+  and XML writer now permit that mapping on CSG roots. An explicit CSG-root
+  material remains a full-result override; otherwise Manifold source runs are
+  emitted as separate glTF primitives for each child material. Operand unwraps
+  and per-child viewport material splitting remain intentionally unsupported.
+  `mc3togltf_csg_shading_materials` reads GLB bytes to prove smooth normals,
+  non-degenerate UVs, and red/blue child-material primitives; XML roundtrip,
+  XSD validation, CSG export, and viewport-cache tests cover the surrounding
+  paths. Release validation passed 148/148 non-render and 36/36 render tests.
+  **Resolved:** commit `c4665af`.
 - **SYS-W14-07** `[DONE]` `P3` — Improved walk/navigation collision.
   Walk mode previously treated only the global `y=0` plane as solid, so it
   could pass through every scene wall, floor and ceiling. It now snapshots

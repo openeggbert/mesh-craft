@@ -104,15 +104,18 @@ before when explicitly requested (`SYS-W14-##` rows).
 
 ## 2. Current status
 
-- **Last full build: clean after `SYS-W14-05` embedded GLB support.** Testing is enabled in the current Ninja Release tree, and
+- **Last full build: clean after `SYS-W14-06` CSG output support.** Testing is enabled in the current Ninja Release tree, and
   `CCACHE_DISABLE=1 cmake --build b-release -j4` linked all targets successfully
   on EASYGL. Alternate-backend runtime qualification remains blocked.
-- **Tests:** the fresh Release tree registers 183 tests. All passed after
-  `SYS-W14-05` in two disjoint groups: 147/147 non-render tests and 36/36
+- **Tests:** the fresh Release tree registers 184 tests. All passed after
+  `SYS-W14-06` in two disjoint groups: 148/148 non-render tests and 36/36
   render-labelled tests under Xvfb (with local loopback/X11 socket access).
-  The new export test creates an external and inline GLB at runtime and checks
-  its flattened geometry; the new screenshot test proves the viewport loads
-  that same embed without falling back to a placeholder. SVG-specific
+  `mc3togltf_csg_shading_materials` reads a real GLB to assert smooth CSG
+  normals, generated UVs, and preserved child-material primitives; the CSG
+  viewport-cache/cutter render regressions also pass. The earlier embed export
+  test creates an external and inline GLB at runtime and checks its flattened
+  geometry; the screenshot test proves the viewport loads that same embed
+  without falling back to a placeholder. SVG-specific
   verification passes with `-j4`: external and inline SVG export to glTF PNGs,
   bounded/malformed input, cache invalidation, and real headless viewport
   screenshots sampling the rasterized material pixels. This session's own
@@ -122,7 +125,7 @@ before when explicitly requested (`SYS-W14-##` rows).
   count this file last recorded (2026-07-19) predates unrelated work not
   narrated here (a further audit pass and the `SYS-W14-18..27`
   mc3-format-vs-editor gap closures — see `plan.md`/memory, not fully
-  reflected in this file's own history) — don't treat 142→183 as this
+  reflected in this file's own history) — don't treat 142→184 as this
   session's own delta.
   All builds/tests this session used at most `-j4` (never `-j$(nproc)`), per
   the user's standing request (shared machine).
@@ -1144,8 +1147,15 @@ be a separately scoped subsystem, not another mechanical `Overlays.cpp` slice.
 - **SYS-W14-05:** complete in commit `7e93b92`: embedded external/inline GLB
   support accepts self-contained triangle GLBs only, with a 64 MiB /
   300,000-triangle ceiling; MC3 materials remain authoritative.
-- **SYS-W14-06:** improved CSG normals/UVs/materials is the current authorized
-  next task.
+- **SYS-W14-06:** complete in commit `c4665af`: CSG has generated smooth
+  normals/UVs, child-material glTF primitives when the root does not override
+  them, valid CSG-root XML serialization for `uv_mapping` (the generic
+  MCB/JSON object layouts already retained it), and the live preview shares
+  the new geometry/UV path (its material split remains export-only).
+- **Next autonomous starting point:** reassess remaining plan `[TODO]` items
+  after the completed W14 priority slice; do not reopen the deferred backend,
+  Android-toolchain, or broad `SYS-W3-01` work without their documented
+  external prerequisites.
 
 ### Tracked work that is not implementation-ready
 
