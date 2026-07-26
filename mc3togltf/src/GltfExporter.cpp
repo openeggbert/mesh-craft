@@ -11,6 +11,7 @@
 
 #include <MeshCraft/AssetLodAlgorithms.hpp>
 #include <MeshCraft/CoordinateSystemAlgorithms.hpp>
+#include <MeshCraft/SceneSemanticsAlgorithms.hpp>
 #include <MeshCraft/Mc3/Mc3Document.hpp>
 #include <MeshCraft/Mc3/Mc3Light.hpp>
 #include <MeshCraft/Mc3/Mc3Camera.hpp>
@@ -965,27 +966,27 @@ static int buildNode(ExportCtx& ctx, const Mc3Object& obj, int depth)
             " levels — possible cyclic <instance> definition");
 
     // Invisible objects (and their entire subtree) are skipped
-    if (!obj.visible) return -1;
+    if (!MeshCraft::effectiveObjectVisibilityAlg(obj.visible)) return -1;
 
     tinygltf::Node node;
     node.name = obj.name;
 
     const auto& t = obj.transform;
-    const bool hasPivot = (t.pivot[0] != 0.0f || t.pivot[1] != 0.0f || t.pivot[2] != 0.0f);
+    const auto transformSemantics = MeshCraft::objectTransformSemanticsAlg(t);
+    const bool hasPivot = transformSemantics.hasPivot;
 
     // --- Transform ---
     // With a non-zero pivot, the rotation/scale centre is at (position + pivot) in parent space.
     // We represent this as:
     //   outer node: T(position + pivot), R, S
     //   inner "origin" child: T(-pivot)       ← mesh and logical children live here
-    if (!hasPivot) {
-        if (t.position[0] != 0.0f || t.position[1] != 0.0f || t.position[2] != 0.0f)
-            node.translation = {t.position[0], t.position[1], t.position[2]};
-    } else {
+    if (transformSemantics.outerTranslation[0] != 0.0f ||
+        transformSemantics.outerTranslation[1] != 0.0f ||
+        transformSemantics.outerTranslation[2] != 0.0f) {
         node.translation = {
-            t.position[0] + t.pivot[0],
-            t.position[1] + t.pivot[1],
-            t.position[2] + t.pivot[2]
+            transformSemantics.outerTranslation[0],
+            transformSemantics.outerTranslation[1],
+            transformSemantics.outerTranslation[2]
         };
     }
 
@@ -1000,7 +1001,7 @@ static int buildNode(ExportCtx& ctx, const Mc3Object& obj, int depth)
 
     // --- Material (materialOverride takes priority) ---
     int matIdx = -1;
-    const std::string& matName = !obj.materialOverride.empty() ? obj.materialOverride : obj.material;
+    const std::string matName(MeshCraft::effectiveObjectMaterialIdAlg(obj));
     if (!matName.empty()) {
         auto it = ctx.matNameToIdx.find(matName);
         if (it != ctx.matNameToIdx.end()) {
@@ -1023,45 +1024,48 @@ static int buildNode(ExportCtx& ctx, const Mc3Object& obj, int depth)
     // A glTF export has no camera distance, so use metadata's explicit
     // Near/default authored tier. It deliberately does not bake viewport
     // culling or the renderer's procedural tessellation LOD into the asset.
-    const auto defaultAssetLod = obj.type == ObjectType::Instance
-        ? MeshCraft::resolveDefaultAssetLodForInstanceAlg(obj, ctx.definitions)
-        : MeshCraft::AssetLodSelection{};
-    if (obj.type == ObjectType::Instance && !defaultAssetLod.definitionId.empty()) {
-        const std::string& defKey = defaultAssetLod.definitionId;
-        auto it = ctx.definitions.find(defKey);
-        if (it != ctx.definitions.end() && it->second) {
-            const Mc3Object& defObj = *it->second;
+    const auto instanceSemantics = obj.type == ObjectType::Instance
+        ? MeshCraft::resolveDefaultInstanceSemanticsAlg(obj, ctx.definitions)
+        : MeshCraft::ResolvedInstanceSemantics{};
+    if (obj.type == ObjectType::Instance && instanceSemantics.definition) {
+        const std::string& defKey = instanceSemantics.lod.definitionId;
+        const Mc3Object& defObj = *instanceSemantics.definition;
 
-            int effectiveMat = matIdx >= 0 ? matIdx : [&]{
-                auto jt = ctx.matNameToIdx.find(defObj.material);
-                return jt != ctx.matNameToIdx.end() ? jt->second : -1;
-            }();
+        const std::string effectiveMaterial(
+            MeshCraft::effectiveInstanceMaterialIdAlg(obj, defObj));
+        int effectiveMat = matIdx >= 0 ? matIdx : [&]{
+            auto jt = ctx.matNameToIdx.find(effectiveMaterial);
+            return jt != ctx.matNameToIdx.end() ? jt->second : -1;
+        }();
 
-            // Reuse cached mesh if same definition+material+deform was already built
-            auto cacheKey = buildDefCacheKey(defKey, effectiveMat, obj.deform);
-            auto cacheIt  = ctx.defMeshCache.find(cacheKey);
-            if (cacheIt != ctx.defMeshCache.end()) {
-                directMesh = cacheIt->second;
-                ctx.stats.reusedMeshRefs++;
-            } else {
-                Mc3Object tmp = defObj;
-                if (matIdx >= 0) tmp.material = matName;
-                if (obj.deform.has_value()) tmp.deform = obj.deform;
-                directMesh = buildMesh(ctx, tmp, effectiveMat);
-                ctx.defMeshCache[cacheKey] = directMesh;
-            }
-
-            // Recurse into definition's children
-            for (const auto& child : defObj.children) {
-                if (!child) continue;
-                int ci = buildNode(ctx, *child, depth + 1);
-                if (ci >= 0) node.children.push_back(ci);
-            }
+        // Reuse cached mesh if same definition+material+deform was already built
+        auto cacheKey = buildDefCacheKey(defKey, effectiveMat, obj.deform);
+        auto cacheIt  = ctx.defMeshCache.find(cacheKey);
+        if (cacheIt != ctx.defMeshCache.end()) {
+            directMesh = cacheIt->second;
+            ctx.stats.reusedMeshRefs++;
         } else {
-            std::cerr << "Warning: instance references unknown definition '"
-                      << defKey << "'\n";
-            ctx.stats.warnings++;
+            Mc3Object tmp = defObj;
+            if (!effectiveMaterial.empty()) {
+                tmp.material = effectiveMaterial;
+                tmp.materialOverride.clear();
+            }
+            if (obj.deform.has_value()) tmp.deform = obj.deform;
+            directMesh = buildMesh(ctx, tmp, effectiveMat);
+            ctx.defMeshCache[cacheKey] = directMesh;
         }
+
+        // Recurse into definition's children
+        for (const auto& child : defObj.children) {
+            if (!child) continue;
+            int ci = buildNode(ctx, *child, depth + 1);
+            if (ci >= 0) node.children.push_back(ci);
+        }
+    } else if (obj.type == ObjectType::Instance &&
+               !instanceSemantics.lod.definitionId.empty()) {
+        std::cerr << "Warning: instance references unknown definition '"
+                  << instanceSemantics.lod.definitionId << "'\n";
+        ctx.stats.warnings++;
     } else if (obj.primitive.has_value() || obj.extrude.has_value() ||
                (obj.type == ObjectType::Mesh && !obj.meshSource.empty())) {
         std::string geomKey = buildGeomCacheKey(obj, matIdx);
@@ -1122,9 +1126,9 @@ static int buildNode(ExportCtx& ctx, const Mc3Object& obj, int depth)
         tinygltf::Node originNode;
         originNode.name        = obj.name + "_origin";
         originNode.translation = {
-            -t.pivot[0] * ctx.unitScale,
-            -t.pivot[1] * ctx.unitScale,
-            -t.pivot[2] * ctx.unitScale
+            transformSemantics.childOriginOffset[0] * ctx.unitScale,
+            transformSemantics.childOriginOffset[1] * ctx.unitScale,
+            transformSemantics.childOriginOffset[2] * ctx.unitScale
         };
         originNode.mesh        = directMesh;
         originNode.children    = node.children;

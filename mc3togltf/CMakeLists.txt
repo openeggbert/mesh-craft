@@ -270,6 +270,7 @@ if(BUILD_TESTING)
         set(_anim_unsupported_xml     "${CMAKE_CURRENT_SOURCE_DIR}/../test/animation_unsupported.mc3.xml")
         set(_instance_variant_xml     "${CMAKE_CURRENT_SOURCE_DIR}/../test/instance_variant.mc3.xml")
         set(_asset_lod_export_xml     "${CMAKE_CURRENT_SOURCE_DIR}/../test/asset_lod_export.mc3.xml")
+        set(_scene_semantics_export_xml "${CMAKE_CURRENT_SOURCE_DIR}/../test/scene_semantics_export.mc3.xml")
         set(_glb_texture_embed_xml    "${CMAKE_CURRENT_SOURCE_DIR}/../test/glb_texture_embed.mc3.xml")
         set(_scene_with_include_xml   "${CMAKE_CURRENT_SOURCE_DIR}/../test/scene_with_include.mc3.xml")
         set(_embed_mesh_source_xml    "${CMAKE_CURRENT_SOURCE_DIR}/../test/embed_mesh_source.mc3.xml")
@@ -859,6 +860,16 @@ if(BUILD_TESTING)
                         "${_asset_lod_export_xml}"
             )
             set_tests_properties(mc3togltf_asset_lod_export PROPERTIES TIMEOUT 30 LABELS "export")
+        endif()
+        if(EXISTS "${_scene_semantics_export_xml}")
+            add_test(
+                NAME mc3togltf_scene_semantics_export
+                COMMAND "${PYTHON3_EXEC}"
+                        "${CMAKE_CURRENT_SOURCE_DIR}/test/scene_semantics_export_test.py"
+                        "$<TARGET_FILE:mc3togltf>"
+                        "${_scene_semantics_export_xml}"
+            )
+            set_tests_properties(mc3togltf_scene_semantics_export PROPERTIES TIMEOUT 30 LABELS "export")
         endif()
         add_test(
             NAME mc3togltf_large_scene_generated

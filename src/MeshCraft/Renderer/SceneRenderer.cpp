@@ -1,5 +1,6 @@
 #include "MeshCraft/Renderer/SceneRenderer.hpp"
 #include "MeshCraft/CoordinateSystemAlgorithms.hpp"
+#include "MeshCraft/SceneSemanticsAlgorithms.hpp"
 #include "MeshCraft/Renderer/CsgCacheAlg.hpp"
 #include "MeshCraft/Renderer/PrimitiveTessellationAlg.hpp"
 #include "MeshCraft/EditorAlgorithms.hpp"
@@ -120,11 +121,15 @@ static manifold::mat3x4 xnaToManifoldMat(const Matrix& m) {
 static Matrix computeObjWorldMatrix(const Mc3Object& obj) {
     const auto& t = obj.transform;
     constexpr float d = std::numbers::pi_v<float> / 180.0f;
-    float px = t.pivot[0], py = t.pivot[1], pz = t.pivot[2];
-    return Matrix::CreateTranslation({-px,-py,-pz}) *
+    const auto semantics = MeshCraft::objectTransformSemanticsAlg(t);
+    return Matrix::CreateTranslation({semantics.childOriginOffset[0],
+                                      semantics.childOriginOffset[1],
+                                      semantics.childOriginOffset[2]}) *
            Matrix::CreateScale({t.scale[0], t.scale[1], t.scale[2]}) *
            Matrix::CreateFromYawPitchRoll(t.rotation[1]*d, t.rotation[0]*d, t.rotation[2]*d) *
-           Matrix::CreateTranslation({t.position[0]+px, t.position[1]+py, t.position[2]+pz});
+           Matrix::CreateTranslation({semantics.outerTranslation[0],
+                                      semantics.outerTranslation[1],
+                                      semantics.outerTranslation[2]});
 }
 
 // Content-based CSG cache invalidation (K1): csgSubtreeHashAlg()/csgHashMixAlg()
@@ -141,7 +146,7 @@ static manifold::Manifold buildManifoldTree(
     const Matrix& parentToWorld, int depth)
 {
     using namespace manifold;
-    if (depth > 12 || !obj.visible) return Manifold{};
+    if (depth > 12 || !MeshCraft::effectiveObjectVisibilityAlg(obj.visible)) return Manifold{};
 
     // STAB-0671: matches mc3togltf/src/CsgEvaluator.cpp's CSG_SEGMENTS (was
     // 24 here vs 32 there) -- curved-primitive CSG previews were visibly
@@ -245,9 +250,9 @@ static manifold::Manifold buildManifoldTree(
         return result;
     }
     case ObjectType::Instance: {
-        auto it = doc.definitions.find(obj.resolvedInstanceDefinitionKey());
-        if (it != doc.definitions.end() && it->second)
-            return buildManifoldTree(*it->second, doc, objWorld, depth + 1);
+        const auto resolved = MeshCraft::resolveDefaultInstanceSemanticsAlg(obj, doc.definitions);
+        if (resolved.definition)
+            return buildManifoldTree(*resolved.definition, doc, objWorld, depth + 1);
         return Manifold{};
     }
     default:
@@ -261,7 +266,7 @@ static manifold::Manifold buildManifoldTree(
 // leaving the author to guess from "Tris: 0" alone whether that's a
 // legitimate empty result or an unsupported child being ignored.
 static std::string csgSubtreeWarning(const Mc3Object& obj, const Mc3Document& doc, int depth) {
-    if (!obj.visible) return {};   // matches buildManifoldTree: hidden subtrees contribute nothing, not an error
+    if (!MeshCraft::effectiveObjectVisibilityAlg(obj.visible)) return {}; // matches buildManifoldTree: hidden subtrees contribute nothing, not an error
     if (depth > 12) return "max CSG nesting depth (12) exceeded — deeper content is dropped";
 
     switch (obj.type) {
@@ -279,9 +284,9 @@ static std::string csgSubtreeWarning(const Mc3Object& obj, const Mc3Document& do
         }
         return {};
     case ObjectType::Instance: {
-        auto it = doc.definitions.find(obj.resolvedInstanceDefinitionKey());
-        if (it != doc.definitions.end() && it->second)
-            return csgSubtreeWarning(*it->second, doc, depth + 1);
+        const auto resolved = MeshCraft::resolveDefaultInstanceSemanticsAlg(obj, doc.definitions);
+        if (resolved.definition)
+            return csgSubtreeWarning(*resolved.definition, doc, depth + 1);
         return {};
     }
     default:
@@ -549,11 +554,15 @@ Matrix SceneRenderer::objectWorldMatrix(const Mc3Transform& t) const {
     float rz = t.rotation[2] * (std::numbers::pi_v<float> / 180.0f);
 
     // Pivot: world = T(-pivot) * S * R * T(pos + pivot)
-    float px = t.pivot[0], py = t.pivot[1], pz = t.pivot[2];
-    return Matrix::CreateTranslation({-px, -py, -pz}) *
+    const auto semantics = objectTransformSemanticsAlg(t);
+    return Matrix::CreateTranslation({semantics.childOriginOffset[0],
+                                      semantics.childOriginOffset[1],
+                                      semantics.childOriginOffset[2]}) *
            Matrix::CreateScale({t.scale[0], t.scale[1], t.scale[2]}) *
            Matrix::CreateFromYawPitchRoll(ry, rx, rz) *
-           Matrix::CreateTranslation({t.position[0] + px, t.position[1] + py, t.position[2] + pz});
+           Matrix::CreateTranslation({semantics.outerTranslation[0],
+                                      semantics.outerTranslation[1],
+                                      semantics.outerTranslation[2]});
 }
 
 // AUD-031: was a hand-copied duplicate of materialColorAlg's own
@@ -826,13 +835,13 @@ void SceneRenderer::drawDepthObject(const Mc3Object& obj, const Mc3Document& doc
     case ObjectType::Instance: {
         // The normal scene pass records the selection for this frame. Reuse
         // it so depth/SSAO cannot occlude a metadata-culled instance.
-        const auto selectedLod = assetLodSelectionMap_.find(obj.id);
+        const auto selectedLod = assetLodSelectionMap_.find(stableObjectIdentityKeyAlg(obj));
         if (selectedLod != assetLodSelectionMap_.end() && selectedLod->second.culled) return;
-        const std::string& definitionKey = selectedLod != assetLodSelectionMap_.end()
-            ? selectedLod->second.definitionId : obj.resolvedInstanceDefinitionKey();
-        auto it = doc.definitions.find(definitionKey);
-        if (it != doc.definitions.end() && it->second)
-            drawDepthObject(*it->second, doc, world, view, proj, depth + 1);
+        const Mc3Object* definition = selectedLod != assetLodSelectionMap_.end()
+            ? resolvedDefinitionForAssetLodAlg(selectedLod->second, doc.definitions)
+            : resolveDefaultInstanceSemanticsAlg(obj, doc.definitions).definition;
+        if (definition)
+            drawDepthObject(*definition, doc, world, view, proj, depth + 1);
         else
             depthStatic(unitBox_, world);
         break;
@@ -1074,13 +1083,13 @@ void SceneRenderer::drawObject(const Mc3Object& obj, const Mc3Document& doc,
     if (depth > 16) return; // guard against infinite instance recursion
 
     // Apply per-object animation overrides (transform + visibility)
-    bool effectiveVisible = obj.visible;
+    std::optional<bool> visibilityOverride;
     std::optional<Mc3Transform> animTransform;
     if (!obj.name.empty()) {
         auto oit = animOverrides_.find(obj.name);
         if (oit != animOverrides_.end()) {
             const auto& ov = oit->second;
-            if (ov.visible) effectiveVisible = *ov.visible;
+            visibilityOverride = ov.visible;
             if (ov.position || ov.rotation || ov.scale) {
                 animTransform = obj.transform;
                 if (ov.position) animTransform->position = *ov.position;
@@ -1089,7 +1098,7 @@ void SceneRenderer::drawObject(const Mc3Object& obj, const Mc3Document& doc,
             }
         }
     }
-    if (!effectiveVisible) return;
+    if (!effectiveObjectVisibilityAlg(obj.visible, visibilityOverride)) return;
 
     const Mc3Transform& tf = animTransform.has_value() ? *animTransform : obj.transform;
     Matrix world = objectWorldMatrix(tf) * parentWorld;
@@ -1099,27 +1108,29 @@ void SceneRenderer::drawObject(const Mc3Object& obj, const Mc3Document& doc,
     // path. This is deliberately here (rather than in the procedural LOD
     // block below): one operation chooses a reusable definition/culls an
     // Instance, while the other chooses sphere/cylinder tessellation.
-    std::optional<AssetLodSelection> assetLod;
+    std::optional<ResolvedInstanceSemantics> instanceSemantics;
+    const std::string objectIdentity = stableObjectIdentityKeyAlg(obj);
     if (obj.type == ObjectType::Instance) {
         const float dx = camPosX_ - world.M41;
         const float dy = camPosY_ - world.M42;
         const float dz = camPosZ_ - world.M43;
         const float distanceM = std::sqrt(dx * dx + dy * dy + dz * dz);
         std::optional<AssetLodTier> previous;
-        if (const auto prev = assetLodPreviousTiers_.find(obj.id);
+        if (const auto prev = assetLodPreviousTiers_.find(objectIdentity);
             prev != assetLodPreviousTiers_.end())
             previous = prev->second;
-        assetLod = resolveAssetLodForInstanceAlg(obj, doc.definitions, distanceM,
-                                                  assetLodConfig_, previous);
-        if (!obj.id.empty()) {
-            assetLodPreviousTiers_[obj.id] = assetLod->tier;
-            assetLodSelectionMap_[obj.id] = *assetLod;
+        instanceSemantics = resolveInstanceSemanticsAlg(obj, doc.definitions, distanceM,
+                                                         assetLodConfig_, previous);
+        if (!objectIdentity.empty()) {
+            assetLodPreviousTiers_[objectIdentity] = instanceSemantics->lod.tier;
+            assetLodSelectionMap_[objectIdentity] = instanceSemantics->lod;
         }
-        if (assetLod->culled) return;
+        if (instanceSemantics->lod.culled) return;
     }
 
     // Resolve base color — may be overridden by a material animation channel
-    Color color = materialColor(obj.material, doc);
+    const std::string_view effectiveMaterial = effectiveObjectMaterialIdAlg(obj);
+    Color color = materialColor(std::string(effectiveMaterial), doc);
     if (!obj.name.empty()) {
         auto oit = animOverrides_.find(obj.name);
         if (oit != animOverrides_.end() && oit->second.baseColor) {
@@ -1148,8 +1159,8 @@ void SceneRenderer::drawObject(const Mc3Object& obj, const Mc3Document& doc,
     // Resolve baseColorTexture → GPU texture (null if none or failed to load)
     Texture2D* tex = nullptr;
     std::optional<SamplerState> svgSampler;
-    if (!obj.material.empty()) {
-        auto matIt = doc.materials.find(obj.material);
+    if (!effectiveMaterial.empty()) {
+        auto matIt = doc.materials.find(std::string(effectiveMaterial));
         if (matIt != doc.materials.end() && !matIt->second.baseColorTexture.empty()) {
             auto texIt = doc.textures.find(matIt->second.baseColorTexture);
             if (texIt != doc.textures.end() && !texIt->second.uri.empty()) {
@@ -1214,7 +1225,7 @@ void SceneRenderer::drawObject(const Mc3Object& obj, const Mc3Document& doc,
     float distSq = dx*dx + dy*dy + dz*dz;
     // 0 = full quality (<10 units), 1 = mid (10..40), 2 = lo (>40)
     int lodLevel = (distSq > 40.0f*40.0f) ? 2 : (distSq > 10.0f*10.0f) ? 1 : 0;
-    lodLevelMap_[obj.id] = lodLevel;
+    if (!objectIdentity.empty()) lodLevelMap_[objectIdentity] = lodLevel;
 
     // I3: per-object fog — mix color toward fog color based on camera distance
     if (doc.environment && doc.environment->fog) {
@@ -1372,11 +1383,20 @@ void SceneRenderer::drawObject(const Mc3Object& obj, const Mc3Document& doc,
         break;
     }
     case ObjectType::Instance: {
-        const std::string& definitionKey = assetLod ? assetLod->definitionId
-                                                     : obj.resolvedInstanceDefinitionKey();
-        auto it = doc.definitions.find(definitionKey);
-        if (it != doc.definitions.end() && it->second)
-            drawObject(*it->second, doc, world, view, proj, selected, depth + 1);
+        const auto resolved = instanceSemantics
+            ? *instanceSemantics : resolveDefaultInstanceSemanticsAlg(obj, doc.definitions);
+        if (resolved.definition) {
+            // Export already applied this precedence for an Instance's direct
+            // definition geometry. Mirror it in the live viewport rather than
+            // dropping materialOverride/material on the instance boundary.
+            Mc3Object renderedDefinition = *resolved.definition;
+            const std::string_view materialId = effectiveInstanceMaterialIdAlg(obj, *resolved.definition);
+            if (!materialId.empty()) {
+                renderedDefinition.material = std::string(materialId);
+                renderedDefinition.materialOverride.clear();
+            }
+            drawObject(renderedDefinition, doc, world, view, proj, selected, depth + 1);
+        }
         else
             drawMesh(unitBox_, world, view, proj, color); // definition not found
         break;
@@ -1542,8 +1562,9 @@ void SceneRenderer::drawEmissiveObject(
     // Only render if the material has a non-zero emissive color
     Color eCol(0, 0, 0, 255);
     bool  hasEmissive = false;
-    if (!obj.material.empty()) {
-        auto matIt = doc.materials.find(obj.material);
+    const std::string_view effectiveMaterial = effectiveObjectMaterialIdAlg(obj);
+    if (!effectiveMaterial.empty()) {
+        auto matIt = doc.materials.find(std::string(effectiveMaterial));
         if (matIt != doc.materials.end()) {
             const auto& ec = matIt->second.emissiveColor;
             if (ec[0] > 0.005f || ec[1] > 0.005f || ec[2] > 0.005f) {
@@ -1639,13 +1660,20 @@ void SceneRenderer::drawEmissiveObject(
         recurseChildren = false;
         break;
     case ObjectType::Instance: {
-        const auto selectedLod = assetLodSelectionMap_.find(obj.id);
+        const auto selectedLod = assetLodSelectionMap_.find(stableObjectIdentityKeyAlg(obj));
         if (selectedLod != assetLodSelectionMap_.end() && selectedLod->second.culled) return;
-        const std::string& definitionKey = selectedLod != assetLodSelectionMap_.end()
-            ? selectedLod->second.definitionId : obj.resolvedInstanceDefinitionKey();
-        auto it = doc.definitions.find(definitionKey);
-        if (it != doc.definitions.end() && it->second)
-            drawEmissiveObject(*it->second, doc, world, view, proj, depth + 1);
+        const Mc3Object* definition = selectedLod != assetLodSelectionMap_.end()
+            ? resolvedDefinitionForAssetLodAlg(selectedLod->second, doc.definitions)
+            : resolveDefaultInstanceSemanticsAlg(obj, doc.definitions).definition;
+        if (definition) {
+            Mc3Object renderedDefinition = *definition;
+            const std::string_view materialId = effectiveInstanceMaterialIdAlg(obj, *definition);
+            if (!materialId.empty()) {
+                renderedDefinition.material = std::string(materialId);
+                renderedDefinition.materialOverride.clear();
+            }
+            drawEmissiveObject(renderedDefinition, doc, world, view, proj, depth + 1);
+        }
         recurseChildren = false;
         break;
     }

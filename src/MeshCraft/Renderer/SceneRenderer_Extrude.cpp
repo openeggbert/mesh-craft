@@ -1,5 +1,6 @@
 #include "MeshCraft/Renderer/SceneRenderer.hpp"
 #include "MeshCraft/CoordinateSystemAlgorithms.hpp"
+#include "MeshCraft/SceneSemanticsAlgorithms.hpp"
 #include "MeshCraft/Renderer/PrimitiveTessellationAlg.hpp"
 
 #include <Microsoft/Xna/Framework/Graphics/BufferUsage.hpp>
@@ -628,13 +629,13 @@ void SceneRenderer::drawObjectEdges(const Mc3Object& obj, const Mc3Document& doc
     case ObjectType::Instance: {
         // Keep the overlay in lockstep with the main pass: a culled asset
         // must not leave an otherwise invisible wireframe silhouette.
-        const auto selectedLod = assetLodSelectionMap_.find(obj.id);
+        const auto selectedLod = assetLodSelectionMap_.find(stableObjectIdentityKeyAlg(obj));
         if (selectedLod != assetLodSelectionMap_.end() && selectedLod->second.culled) return;
-        const std::string& definitionKey = selectedLod != assetLodSelectionMap_.end()
-            ? selectedLod->second.definitionId : obj.resolvedInstanceDefinitionKey();
-        auto it = doc.definitions.find(definitionKey);
-        if (it != doc.definitions.end() && it->second)
-            drawObjectEdges(*it->second, doc, world, view, proj, depth + 1);
+        const Mc3Object* definition = selectedLod != assetLodSelectionMap_.end()
+            ? resolvedDefinitionForAssetLodAlg(selectedLod->second, doc.definitions)
+            : resolveDefaultInstanceSemanticsAlg(obj, doc.definitions).definition;
+        if (definition)
+            drawObjectEdges(*definition, doc, world, view, proj, depth + 1);
         else
             drawOverlay(wireShapeBox_, world);
         break;

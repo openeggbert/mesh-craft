@@ -144,6 +144,17 @@ before when explicitly requested (`SYS-W14-##` rows).
   - Standalone libraries `mc3` (format/AST + XML/JSON parse-writer),
     `mcb` (binary format) — both buildable and testable without CNA via
     their own `mc3/build`/`mcb/build` trees (no live GPU/GL needed).
+- **Recently implemented (2026-07-26):** `SYS-W3-02` adds the narrow,
+  CNA-free `SceneSemanticsAlgorithms.hpp` contract shared by the viewport and
+  glTF export: pivot transform parts, material/visibility precedence, stable
+  object identity, and resolved instance variant/LOD/definition selection.
+  The normal/depth/edge/emissive/CSG editor paths and both glTF paths now use
+  it without merging their separate mesh generators or changing `Mc3Document`.
+  `scene_semantics` verifies the pure contract; an additional actual-export
+  fixture verifies inherited-definition material, instance material, and
+  instance `material_override` precedence. A Release build and all 158
+  locally registered non-render tests pass. Render CTests remain disabled by the no-Xvfb
+  preflight on this host.
 - **Recently implemented (2026-07-25):** `SYS-W14-04` rasterizes external
   and inline SVG texture entries through pinned NanoSVG code. The resulting
   RGBA pixels are used by the live CNA viewport and generated as PNG images

@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- SYS-W3-02: direct instance geometry must use the same material precedence
+     in the live viewport and glTF export. -->
+<mc3 version="0.3" model="SceneSemanticsExportFixture">
+  <materials>
+    <material id="definition-base"><base_color>0.1 0.1 0.1 1.0</base_color></material>
+    <material id="instance-base"><base_color>0.5 0.6 0.7 1.0</base_color></material>
+    <material id="instance-override"><base_color>0.8 0.1 0.2 1.0</base_color></material>
+  </materials>
+  <definitions>
+    <definition id="crate">
+      <box name="CrateDefinition" size="1 1 1" material="definition-base"/>
+    </definition>
+  </definitions>
+  <objects>
+    <instance name="InheritedDefinitionMaterial" definition="crate" position="-2 0 0"/>
+    <instance name="InstanceMaterial" definition="crate" material="instance-base" position="0 0 0"/>
+    <instance name="InstanceOverride" definition="crate" material="instance-base"
+              material_override="instance-override" position="2 0 0"/>
+  </objects>
+</mc3>

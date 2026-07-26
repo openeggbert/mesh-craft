@@ -2,6 +2,7 @@
 #include "MeshBuilder.hpp"
 
 #include <MeshCraft/AssetLodAlgorithms.hpp>
+#include <MeshCraft/SceneSemanticsAlgorithms.hpp>
 #include <MeshCraft/Mc3/Mc3Object.hpp>
 #include <MeshCraft/Mc3/Mc3Primitive.hpp>
 
@@ -99,14 +100,16 @@ struct Mat4 {
 
 static Mat4 computeObjMat(const Mc3Object& obj) {
     const auto& t = obj.transform;
-    float px = t.pivot[0], py = t.pivot[1], pz = t.pivot[2];
+    const auto semantics = MeshCraft::objectTransformSemanticsAlg(t);
 
-    Mat4 srt = Mat4::translation(t.position[0] + px,
-                                 t.position[1] + py,
-                                 t.position[2] + pz)
+    Mat4 srt = Mat4::translation(semantics.outerTranslation[0],
+                                 semantics.outerTranslation[1],
+                                 semantics.outerTranslation[2])
              * Mat4::rotationXYZ(t.rotation[0], t.rotation[1], t.rotation[2])
              * Mat4::scaling(t.scale[0], t.scale[1], t.scale[2])
-             * Mat4::translation(-px, -py, -pz);
+             * Mat4::translation(semantics.childOriginOffset[0],
+                                 semantics.childOriginOffset[1],
+                                 semantics.childOriginOffset[2]);
 
     if (obj.deform) {
         Mat4 def = Mat4::scaling(obj.deform->scale[0],
@@ -205,7 +208,7 @@ static manifold::Manifold buildManifoldNode(
             " levels (possible infinite recursion or excessively deep hierarchy).\n"
             "Use --allow-approximate-csg to export children separately as a debug fallback.");
 
-    if (!obj.visible) return Manifold{};
+    if (!MeshCraft::effectiveObjectVisibilityAlg(obj.visible)) return Manifold{};
 
     // Accumulated transform: parentMat * this object's SRT
     Mat4 nodeMat = parentMat * computeObjMat(obj);
@@ -218,9 +221,8 @@ static manifold::Manifold buildManifoldNode(
         // partition the boolean result into material primitives.
         const int originalId = m.OriginalID();
         if (originalId >= 0) {
-            const std::string& material = !obj.materialOverride.empty() ? obj.materialOverride
-                                        : !obj.material.empty() ? obj.material
-                                        : rootMaterial;
+            const std::string_view effective = MeshCraft::effectiveObjectMaterialIdAlg(obj);
+            const std::string material = !effective.empty() ? std::string(effective) : rootMaterial;
             materialByOriginal.emplace(static_cast<uint32_t>(originalId), material);
         }
         return m.Transform(xf);
@@ -429,8 +431,7 @@ CsgMeshData evaluateCsgNodeWithMaterials(
     // The CSG root's own transform is carried by the glTF node TRS, not baked here.
     const Mat4 identity = Mat4::identity();
     const std::string& rootName = csgObj.name;
-    const std::string& rootMaterial = !csgObj.materialOverride.empty() ? csgObj.materialOverride
-                                    : csgObj.material;
+    const std::string rootMaterial(MeshCraft::effectiveObjectMaterialIdAlg(csgObj));
     std::unordered_map<uint32_t, std::string> materialByOriginal;
 
     Manifold result;

@@ -1120,6 +1120,18 @@ if(MESH_CRAFT_BUILD_TESTING AND UNIX AND NOT ANDROID AND NOT EMSCRIPTEN)
     add_test(NAME asset_lod COMMAND asset_lod_test)
     set_tests_properties(asset_lod PROPERTIES TIMEOUT 15 LABELS "unit")
 
+    # SYS-W3-02: pivot, material/visibility precedence, stable identity, and
+    # Instance LOD binding are semantic decisions shared by the live viewport
+    # and glTF export. Keep their contract CNA-free and independently tested.
+    add_executable(scene_semantics_test
+        ${CMAKE_CURRENT_SOURCE_DIR}/test/scene_semantics_test.cpp)
+    target_include_directories(scene_semantics_test PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/include)
+    target_link_libraries(scene_semantics_test PRIVATE Mc3)
+    target_compile_features(scene_semantics_test PRIVATE cxx_std_23)
+    add_test(NAME scene_semantics COMMAND scene_semantics_test)
+    set_tests_properties(scene_semantics PROPERTIES TIMEOUT 15 LABELS "unit")
+
     # 2026-07-20 audit F2 (P0): SceneHierarchyPanel.cpp's drawHierarchy()
     # range-for-iterates over document_.objects/children by reference;
     # dragging an earlier sibling onto a later one in the same list used to

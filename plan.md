@@ -135,15 +135,12 @@ sequentially. Per `CLAUDE.md`, recording this ordered backlog does **not**
 remove the requirement to describe and obtain explicit confirmation for each
 individual implementation task immediately before work begins.
 
-1. **SYS-W3-02 (P2/W3)** — introduce narrow shared semantic-evaluation
-   helpers required by transform/LOD/material parity, without a broad editor
-   rewrite.
-2. **SYS-W14-32/33/34 (P2/P2/P3/W14)** — deliver viewport parity in separate
+1. **SYS-W14-32/33/34 (P2/P2/P3/W14)** — deliver viewport parity in separate
    UV-mapping, point/spot-light, and CSG child-material slices.
-3. **SYS-W14-30 (P2/W14)** — expand explicit walk-mode collision proxies.
-4. **SYS-W14-35/36 (P2/P3/W14)** — preserve material structure on OBJ import,
+2. **SYS-W14-30 (P2/W14)** — expand explicit walk-mode collision proxies.
+3. **SYS-W14-35/36 (P2/P3/W14)** — preserve material structure on OBJ import,
    then add a bounded editable self-contained GLB importer.
-5. **SYS-W14-37/38/39 and SYS-W9-04 (P3)** — export optimization controls,
+4. **SYS-W14-37/38/39 and SYS-W9-04 (P3)** — export optimization controls,
     animation/export policy, Model Registry v2, and scalable history/review
     tooling.
 
@@ -2148,14 +2145,21 @@ because it is listed: `CLAUDE.md` requires per-row user confirmation.
   and credential design. Add SQLite-migration, thumbnail-invalidation, search,
   and pack-manifest tests with graceful no-SQLite behavior.
 
-- **SYS-W3-02** `[TODO]` `P2` — Shared CNA-free semantic-evaluation helpers for parity-sensitive consumers.
-  Do not merge the entire renderer and exporter. Instead extract narrow,
-  independently tested helpers for coordinate convention, parent/instance
-  transform accumulation, effective visibility/material, definition/variant/
-  LOD resolution, and stable object identity. The helpers must not alter the
-  `Mc3Document` public API without auditing every consumer. Use them only
-  where both editor and exporter need equal semantics, with differential
-  fixtures; preserve intentional triangle-winding differences.
+- **SYS-W3-02** `[DONE]` `P2` — Shared CNA-free semantic-evaluation helpers for parity-sensitive consumers.
+  **Implemented 2026-07-26.** `SceneSemanticsAlgorithms.hpp` now supplies
+  the MC3 pivot transform parts, material and visibility precedence, stable
+  object identity, and one-step resolved instance (stable variant + LOD +
+  definition pointer) without moving geometry generation or modifying the
+  `Mc3Document` API. `SceneRenderer` uses it for the normal, depth, edge,
+  emissive, and CSG paths; `mc3togltf` and its CSG evaluator use the same
+  transform/material/visibility/definition decisions. Intentional editor vs
+  exporter triangle-winding differences remain untouched. Coverage includes
+  the CNA-free `scene_semantics` contract test and an actual glTF fixture for
+  inherited instance material, instance material, and `material_override`
+  precedence (`mc3togltf_scene_semantics_export`). Verified by a Release
+  build and `ctest --test-dir b-release --output-on-failure -LE render`
+  (158/158). Render tests remain preflight-disabled locally
+  because this host has no usable Xvfb display.
 
 - **SYS-W9-04** `[TODO]` `P3` — Memory-budgeted history, named checkpoints, and scene review diffs.
   The current 20-entry whole-document deep-copy undo stack is safe but limits
