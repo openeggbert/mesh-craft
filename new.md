@@ -122,7 +122,7 @@ This is the largest functional theme in the codebase.
 | Point/spot lights | Exported, but the live BasicEffect preview only has directional/ambient lighting; point/spot remain largely gizmo-only | Lighting design cannot be judged faithfully in the editor |
 | CSG child materials | Exporter preserves child-material primitives when the CSG root has no override; the viewport uses the root material | Preview does not show final material composition |
 | Asset metadata LOD references / max visibility distance | Serialized and edited. The renderer has separate procedural tessellation LOD, but metadata definition references and visibility-distance hints are not the scene-selection contract | The format promises reusable asset tiers that authoring does not yet exploit |
-| Triggers and states | Their steps/overrides work from explicit buttons; no event binding connects an Area, click, timer, or collision to a trigger/state | The data model stops short of interactive scene behavior |
+| Triggers and states | Explicit bindings now connect objects/Areas to trigger or state targets and have safe dry-run enter/exit/timer simulation; viewport collisions/picking still do not emit live events | Authoring semantics are present without claiming a full game runtime |
 | Collision labels | Walk mode supports explicit `collision="box"`; other declared proxy modes are not simulated | Walkthrough scenes cannot use their richer collision intent |
 
 These are not all bugs. Several are documented scope choices. Together,
@@ -304,6 +304,16 @@ decision.
 **Export note:** this is MC3/MCB runtime semantics; glTF has no equivalent.
 The exporter should preserve its current explicit warning/omission behavior.
 
+**Implemented (SYS-W14-31, 2026-07-26):** XML/XSD, semantic JSON, and MCB
+now preserve bindings with source, event, target kind/id, enabled, cooldown,
+one-shot, and timer interval. The editor exposes an Events tab and dry-run
+timer/manual simulation report. Its CNA-free dispatcher limits each call to
+32 successful dispatches, blocks nested dispatch, reports dangling sources
+and targets, and never executes trigger/state effects or mutates the document
+or undo history. glTF prints one omission warning instead of silently losing
+the semantics. Live collision/picking event production remains intentionally
+outside this first slice.
+
 ### Wave 4 — reduce “preview looks different from export” surprises
 
 #### 5. Coordinate-system support as a scene convention feature
@@ -464,7 +474,7 @@ MeshCraft-only feature implementation until their sibling blockers are fixed.
 | 0 | Fix AI-test timeout and robust render-test gating | Restores trustworthy evidence for later work |
 | 1 | Native library publish/open/import-health workflow | High user value, leverages stable existing APIs, low graphics risk |
 | 2 | Metadata-driven definition LOD and distance culling | Converts existing asset metadata into visible performance value |
-| 3 | Event bindings for Areas/triggers/states | Converts authored scene data into controlled interactivity |
+| 3 | Event bindings for Areas/triggers/states | **Implemented (`SYS-W14-31`)** — controlled authored bindings plus safe simulation; live world input remains follow-up work |
 | 4 | Coordinate convention plus first preview/export parity slices | Removes the most surprising correctness gaps before visual expansion |
 | 5 | Multi-material OBJ and self-contained GLB import | Expands adoption once imported content can be published as libraries |
 | 6 | Collision proxies, export optimization, richer animation/registry work | Valuable, but larger design/compatibility surface |

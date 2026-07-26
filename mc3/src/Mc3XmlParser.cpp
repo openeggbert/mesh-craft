@@ -1231,6 +1231,39 @@ static void parseTriggers(const XMLElement* el, Mc3Document& doc) {
     }
 }
 
+static EventBindingEvent parseEventBindingEvent(const std::string& event) {
+    if (event == "exit")  return EventBindingEvent::Exit;
+    if (event == "click") return EventBindingEvent::Click;
+    if (event == "timer") return EventBindingEvent::Timer;
+    return EventBindingEvent::Enter;
+}
+
+static EventBindingTarget parseEventBindingTarget(const std::string& target) {
+    return target == "state" ? EventBindingTarget::SceneState
+                             : EventBindingTarget::Trigger;
+}
+
+static void parseEventBindings(const XMLElement* el, Mc3Document& doc) {
+    for (const XMLElement* b = el->FirstChildElement("binding"); b;
+         b = b->NextSiblingElement("binding")) {
+        Mc3EventBinding binding;
+        binding.id = attr(b, "id");
+        binding.sourceObjectId = attr(b, "source");
+        binding.event = parseEventBindingEvent(attr(b, "event", "enter"));
+        binding.targetType = parseEventBindingTarget(attr(b, "target_type", "trigger"));
+        binding.targetId = attr(b, "target");
+        binding.enabled = attrB(b, "enabled", true);
+        binding.cooldown = attrF(b, "cooldown", 0.0f);
+        binding.once = attrB(b, "once", false);
+        binding.interval = attrF(b, "interval", 1.0f);
+        if (binding.id.empty() || binding.sourceObjectId.empty() || binding.targetId.empty()) {
+            reportWarning(b, "binding", "event binding requires id, source, and target; ignored");
+            continue;
+        }
+        doc.eventBindings.push_back(std::move(binding));
+    }
+}
+
 static void parseSounds(const XMLElement* el, Mc3Document& doc) {
     for (const XMLElement* c = el->FirstChildElement("sound"); c;
          c = c->NextSiblingElement("sound")) {
@@ -1952,6 +1985,7 @@ static Mc3Document buildDocumentFromRoot(const XMLElement* root,
     if (const XMLElement* mus  = root->FirstChildElement("music"))        parseMusic(mus,        doc);
     if (const XMLElement* trgs = root->FirstChildElement("triggers"))     parseTriggers(trgs,    doc);
     if (const XMLElement* sts  = root->FirstChildElement("states"))       parseStates(sts,       doc);
+    if (const XMLElement* ebs  = root->FirstChildElement("event-bindings")) parseEventBindings(ebs, doc);
     if (const XMLElement* objs = root->FirstChildElement("objects"))      parseObjects(objs,     doc);
     if (const XMLElement* acts = root->FirstChildElement("actions"))      parseActions(acts,     doc);
 

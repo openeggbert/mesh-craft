@@ -980,6 +980,7 @@ void MeshCraftApplication::drawDialogs()
                 auto entry = undoManager_.jumpTo(stepsAgo, deepCopyDoc(document_), currentSelectionIds());
                 if (entry) {
                     document_ = std::move(entry->doc);
+                    resetEventBindingSimulation();
                     resetImportHealth();
                     objectIndex_.invalidate();  // SYS-W5-04: wholesale document_ replacement
                     restoreSelectionByIds(entry->selectionIds);
@@ -1032,6 +1033,7 @@ void MeshCraftApplication::drawDialogs()
                 // Recent File via loadSceneFileDispatched().
                 Mc3::Mc3Validation loadValidation;
                 document_ = loadSceneFileDispatched(p, loadValidation);
+                resetEventBindingSimulation();
                 resetImportHealth();
                 objectIndex_.invalidate();  // SYS-W5-04: wholesale document_ replacement
                 if (!loadValidation.empty())
@@ -1084,6 +1086,7 @@ void MeshCraftApplication::drawDialogs()
                 document_ = format == LibraryFileFormatAlg::Json
                     ? Mc3::Mc3Document::loadFromLibraryJsonFile(path)
                     : Mc3::Mc3Document::loadFromLibraryFile(path);
+                resetEventBindingSimulation();
                 resetImportHealth();
                 objectIndex_.invalidate();
                 currentFile_ = path;

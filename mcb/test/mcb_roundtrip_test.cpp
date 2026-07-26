@@ -6,6 +6,7 @@
 #include "MeshCraft/Mc3/Mc3Deform.hpp"
 #include "MeshCraft/Mc3/Mc3Document.hpp"
 #include "MeshCraft/Mc3/Mc3EmbedGltf.hpp"
+#include "MeshCraft/Mc3/Mc3EventBinding.hpp"
 #include "MeshCraft/Mc3/Mc3Extrude.hpp"
 #include "MeshCraft/Mc3/Mc3Object.hpp"
 #include "MeshCraft/Mc3/Mc3Primitive.hpp"
@@ -504,6 +505,47 @@ static void testSceneState() {
             if (o.rotation) CHECKF((*o.rotation)[1], 90.0f, "state: rotation.y survives");
             CHECK(o.material.has_value() && *o.material == "NightMat", "state: material survives");
         }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// SYS-W14-31 — document-level event bindings retain all dispatch controls.
+// ---------------------------------------------------------------------------
+
+static void testEventBinding() {
+    Mc3Document doc;
+    Mc3EventBinding enter;
+    enter.id = "door_enter";
+    enter.sourceObjectId = "door_area";
+    enter.event = EventBindingEvent::Enter;
+    enter.targetType = EventBindingTarget::Trigger;
+    enter.targetId = "open_door";
+    enter.cooldown = 0.75f;
+
+    Mc3EventBinding timer;
+    timer.id = "night_timer";
+    timer.sourceObjectId = "clock";
+    timer.event = EventBindingEvent::Timer;
+    timer.targetType = EventBindingTarget::SceneState;
+    timer.targetId = "night";
+    timer.enabled = false;
+    timer.once = true;
+    timer.interval = 2.5f;
+    doc.eventBindings = {enter, timer};
+
+    auto rt = roundtrip(doc);
+    CHECK(rt.eventBindings.size() == 2, "event bindings: both entries survive");
+    if (rt.eventBindings.size() == 2) {
+        const auto& first = rt.eventBindings[0];
+        const auto& second = rt.eventBindings[1];
+        CHECK(first.id == "door_enter" && first.sourceObjectId == "door_area", "event binding: id and source survive");
+        CHECK(first.event == EventBindingEvent::Enter && first.targetType == EventBindingTarget::Trigger &&
+              first.targetId == "open_door", "event binding: enter trigger target survives");
+        CHECKF(first.cooldown, 0.75f, "event binding: cooldown survives");
+        CHECK(second.event == EventBindingEvent::Timer && second.targetType == EventBindingTarget::SceneState,
+              "event binding: timer state target survives");
+        CHECK(!second.enabled && second.once, "event binding: enabled and one-shot survive");
+        CHECKF(second.interval, 2.5f, "event binding: timer interval survives");
     }
 }
 
@@ -1509,6 +1551,7 @@ int main() {
     testMusic();
     testTrigger();
     testSceneState();
+    testEventBinding();
     testMeta();
     testIncludesList();
     testLegacyMetadataMap();

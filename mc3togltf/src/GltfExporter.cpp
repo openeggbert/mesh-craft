@@ -1865,6 +1865,16 @@ void GltfExporter::exportDocument(const Mc3Document& doc,
                   doc.rotationUnits == "radians", doc.eulerOrder,
                   {}, {}, {}};
     ctx.stats.warnings += preCtxWarnings;
+
+    // SYS-W14-31: event bindings are MC3 runtime/editor semantics.  glTF has
+    // no portable equivalent for dispatching MC3 triggers or applying MC3
+    // scene states, so omit them explicitly rather than pretending they were
+    // exported.  One document-level warning is enough regardless of count.
+    if (!doc.eventBindings.empty()) {
+        std::cerr << "[mc3togltf] Warning: " << doc.eventBindings.size()
+                  << " MC3 event binding(s) omitted; glTF has no equivalent runtime semantics.\n";
+        ctx.stats.warnings++;
+    }
     for (const auto& objPtr : doc.objects) {
         if (!objPtr) continue;
         int nodeIdx = buildNode(ctx, *objPtr);

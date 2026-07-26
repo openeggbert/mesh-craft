@@ -7,6 +7,7 @@
 #include "MeshCraft/Mc3/Mc3Material.hpp"
 #include "MeshCraft/Mc3/Mc3Object.hpp"
 #include "MeshCraft/Mc3/Mc3EmbedGltf.hpp"
+#include "MeshCraft/Mc3/Mc3EventBinding.hpp"
 #include "MeshCraft/Mc3/Mc3Music.hpp"
 #include "MeshCraft/Mc3/Mc3SceneState.hpp"
 #include "MeshCraft/Mc3/Mc3Script.hpp"
@@ -404,6 +405,34 @@ static void writeTrigger(std::ostream& o, const Mc3::Mc3Trigger& trig) {
     wEnd(o);
 }
 
+static const char* eventBindingEventStr(Mc3::EventBindingEvent event) {
+    switch (event) {
+    case Mc3::EventBindingEvent::Enter: return "enter";
+    case Mc3::EventBindingEvent::Exit:  return "exit";
+    case Mc3::EventBindingEvent::Click: return "click";
+    case Mc3::EventBindingEvent::Timer: return "timer";
+    }
+    return "enter";
+}
+
+static const char* eventBindingTargetStr(Mc3::EventBindingTarget target) {
+    return target == Mc3::EventBindingTarget::SceneState ? "state" : "trigger";
+}
+
+static void writeEventBinding(std::ostream& o, const Mc3::Mc3EventBinding& binding) {
+    const Mc3::Mc3EventBinding def;
+    wIfStr(o, "id", binding.id, "");
+    wIfStr(o, "source", binding.sourceObjectId, "");
+    wIfStr(o, "event", eventBindingEventStr(binding.event), "enter");
+    wIfStr(o, "targetType", eventBindingTargetStr(binding.targetType), "trigger");
+    wIfStr(o, "target", binding.targetId, "");
+    wIfBool(o, "enabled", binding.enabled, def.enabled);
+    wIfF32(o, "cooldown", binding.cooldown, def.cooldown);
+    wIfBool(o, "once", binding.once, def.once);
+    wIfF32(o, "interval", binding.interval, def.interval);
+    wEnd(o);
+}
+
 static void writeMaterial(std::ostream& o, const Mc3::Mc3Material& m) {
     const Mc3::Mc3Material def;
     wIfStr (o, "name",                     m.name,                     "");
@@ -616,6 +645,10 @@ static void writeDocument(std::ostream& o, const Mc3::Mc3Document& doc) {
     if (!doc.sceneStates.empty()) {
         wKeyMap(o, "sceneStates", static_cast<uint32_t>(doc.sceneStates.size()));
         for (const auto& [k, v] : doc.sceneStates) { wRawStr(o, k); wU8(o, TAG_OBJ); writeSceneState(o, v); }
+    }
+    if (!doc.eventBindings.empty()) {
+        wKeyArr(o, "eventBindings", static_cast<uint32_t>(doc.eventBindings.size()));
+        for (const auto& binding : doc.eventBindings) { wU8(o, TAG_OBJ); writeEventBinding(o, binding); }
     }
     if (!doc.materials.empty()) {
         wKeyMap(o, "materials", static_cast<uint32_t>(doc.materials.size()));

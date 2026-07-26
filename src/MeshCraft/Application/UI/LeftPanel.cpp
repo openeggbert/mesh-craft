@@ -2455,6 +2455,174 @@ void MeshCraftApplication::drawLeftPanel(float panelY, float panelH)
             ImGui::EndTabItem();
         }
 
+        // -------------------------------------------------------------------
+        // Tab: Events (SYS-W14-31) — document-level event bindings.  This
+        // panel deliberately has a separate dry-run simulation surface: it
+        // reports what target would be dispatched but does not call the
+        // mutating Triggers/States panel actions or touch undo history.
+        // -------------------------------------------------------------------
+        if (ImGui::BeginTabItem("Events")) {
+            ImGui::TextDisabled("Bind an object or Area event to a named trigger or state.");
+            ImGui::TextDisabled("Simulation is dry-run only: it never edits the scene or undo history.");
+
+            bool simulation = eventSimulationEnabled_;
+            if (ImGui::Checkbox("Simulate timers (dry run)", &simulation)) {
+                eventSimulationEnabled_ = simulation;
+                eventBindingRuntime_.reset();
+                eventBindingSimulationReport_ = {};
+            }
+            if (ImGui::IsItemHovered())
+                ImGui::SetTooltip("When enabled, Timer bindings are evaluated each frame but only report what would run.");
+
+            if (ImGui::SmallButton("+ Add Binding")) {
+                pushUndo();
+                Mc3::Mc3EventBinding binding;
+                int n = 1;
+                do {
+                    binding.id = "event_" + std::to_string(n++);
+                } while (std::any_of(document_.eventBindings.begin(), document_.eventBindings.end(),
+                                     [&binding](const Mc3::Mc3EventBinding& other) { return other.id == binding.id; }));
+                if (selection_.hasSelection()) binding.sourceObjectId = selection_.selection().front()->id;
+                if (!document_.triggers.empty()) binding.targetId = document_.triggers.begin()->first;
+                else if (!document_.sceneStates.empty()) {
+                    binding.targetType = Mc3::EventBindingTarget::SceneState;
+                    binding.targetId = document_.sceneStates.begin()->first;
+                }
+                document_.eventBindings.push_back(std::move(binding));
+                selectedEventBindingIndex_ = static_cast<int>(document_.eventBindings.size()) - 1;
+                eventBindingRuntime_.reset();
+                eventBindingSimulationReport_ = {};
+                modified_ = true; updateWindowTitle();
+            }
+            ImGui::SameLine();
+            if (ImGui::SmallButton("- Remove Binding") && selectedEventBindingIndex_ >= 0 &&
+                selectedEventBindingIndex_ < static_cast<int>(document_.eventBindings.size())) {
+                pushUndo();
+                document_.eventBindings.erase(document_.eventBindings.begin() + selectedEventBindingIndex_);
+                selectedEventBindingIndex_ = std::min(selectedEventBindingIndex_,
+                    static_cast<int>(document_.eventBindings.size()) - 1);
+                eventBindingRuntime_.reset();
+                eventBindingSimulationReport_ = {};
+                modified_ = true; updateWindowTitle();
+            }
+
+            ImGui::Separator();
+            for (int i = 0; i < static_cast<int>(document_.eventBindings.size()); ++i) {
+                const auto& binding = document_.eventBindings[static_cast<size_t>(i)];
+                const char* eventName = binding.event == Mc3::EventBindingEvent::Enter ? "enter" :
+                    binding.event == Mc3::EventBindingEvent::Exit ? "exit" :
+                    binding.event == Mc3::EventBindingEvent::Click ? "click" : "timer";
+                const char* targetName = binding.targetType == Mc3::EventBindingTarget::Trigger ? "trigger" : "state";
+                std::string label = binding.id + "  " + eventName + " -> " + targetName + ":" + binding.targetId;
+                if (ImGui::Selectable(label.c_str(), selectedEventBindingIndex_ == i))
+                    selectedEventBindingIndex_ = i;
+            }
+
+            if (selectedEventBindingIndex_ >= 0 &&
+                selectedEventBindingIndex_ < static_cast<int>(document_.eventBindings.size())) {
+                auto& binding = document_.eventBindings[static_cast<size_t>(selectedEventBindingIndex_)];
+                auto authoredChanged = [&]() {
+                    eventBindingRuntime_.reset();
+                    eventBindingSimulationReport_ = {};
+                    modified_ = true;
+                    updateWindowTitle();
+                };
+
+                ImGui::Separator();
+                ImGui::PushID(selectedEventBindingIndex_);
+
+                char idBuf[128];
+                std::strncpy(idBuf, binding.id.c_str(), sizeof(idBuf) - 1); idBuf[127] = '\0';
+                ImGui::TextDisabled("Binding ID");
+                ImGui::SetNextItemWidth(-1);
+                if (undoOnActivate(ImGui::InputText("##eventid", idBuf, sizeof(idBuf),
+                                                    ImGuiInputTextFlags_EnterReturnsTrue))) {
+                    binding.id = idBuf; authoredChanged();
+                }
+
+                char sourceBuf[128];
+                std::strncpy(sourceBuf, binding.sourceObjectId.c_str(), sizeof(sourceBuf) - 1); sourceBuf[127] = '\0';
+                ImGui::TextDisabled("Source object / Area ID");
+                ImGui::SetNextItemWidth(-1);
+                if (undoOnActivate(ImGui::InputText("##eventsource", sourceBuf, sizeof(sourceBuf),
+                                                    ImGuiInputTextFlags_EnterReturnsTrue))) {
+                    binding.sourceObjectId = sourceBuf; authoredChanged();
+                }
+                if (!binding.sourceObjectId.empty() && !flatFindById(binding.sourceObjectId))
+                    ImGui::TextColored(ImVec4(1.0f, 0.55f, 0.25f, 1.0f), "Source is currently missing.");
+
+                static const char* kEvents[] = {"Enter", "Exit", "Click", "Timer"};
+                int eventIndex = static_cast<int>(binding.event);
+                ImGui::TextDisabled("Event"); ImGui::SameLine();
+                ImGui::SetNextItemWidth(120);
+                if (ImGui::Combo("##eventkind", &eventIndex, kEvents, 4)) {
+                    pushUndo(); binding.event = static_cast<Mc3::EventBindingEvent>(eventIndex); authoredChanged();
+                }
+
+                static const char* kTargetTypes[] = {"Trigger", "Scene State"};
+                int targetType = static_cast<int>(binding.targetType);
+                ImGui::TextDisabled("Target kind"); ImGui::SameLine();
+                ImGui::SetNextItemWidth(120);
+                if (ImGui::Combo("##eventtargetkind", &targetType, kTargetTypes, 2)) {
+                    pushUndo(); binding.targetType = static_cast<Mc3::EventBindingTarget>(targetType); authoredChanged();
+                }
+
+                char targetBuf[128];
+                std::strncpy(targetBuf, binding.targetId.c_str(), sizeof(targetBuf) - 1); targetBuf[127] = '\0';
+                ImGui::TextDisabled("Target ID");
+                ImGui::SetNextItemWidth(-1);
+                if (undoOnActivate(ImGui::InputText("##eventtarget", targetBuf, sizeof(targetBuf),
+                                                    ImGuiInputTextFlags_EnterReturnsTrue))) {
+                    binding.targetId = targetBuf; authoredChanged();
+                }
+                if (!Editor::eventBindingTargetExistsAlg(document_, binding))
+                    ImGui::TextColored(ImVec4(1.0f, 0.55f, 0.25f, 1.0f), "Target is currently missing.");
+
+                bool enabled = binding.enabled;
+                if (ImGui::Checkbox("Enabled", &enabled)) {
+                    pushUndo(); binding.enabled = enabled; authoredChanged();
+                }
+                bool oneShot = binding.once;
+                if (ImGui::Checkbox("One-shot", &oneShot)) {
+                    pushUndo(); binding.once = oneShot; authoredChanged();
+                }
+                float cooldown = binding.cooldown;
+                ImGui::SetNextItemWidth(140);
+                if (undoOnActivate(ImGui::DragFloat("Cooldown (s)", &cooldown, 0.05f, 0.0f, 3600.0f))) {
+                    binding.cooldown = cooldown; authoredChanged();
+                }
+                if (binding.event == Mc3::EventBindingEvent::Timer) {
+                    float interval = binding.interval;
+                    ImGui::SetNextItemWidth(140);
+                    if (undoOnActivate(ImGui::DragFloat("Timer interval (s)", &interval, 0.05f, 0.01f, 3600.0f))) {
+                        binding.interval = interval; authoredChanged();
+                    }
+                }
+
+                if (ImGui::Button("Simulate selected event (dry run)", ImVec2(-1, 0))) {
+                    eventBindingSimulationReport_ = Editor::dispatchEventBindingsAlg(
+                        document_, eventBindingRuntime_, binding.sourceObjectId, binding.event);
+                }
+                if (ImGui::IsItemHovered())
+                    ImGui::SetTooltip("Reports which targets would be dispatched. Does not fire trigger steps or apply state overrides.");
+                ImGui::PopID();
+            }
+
+            if (!eventBindingSimulationReport_.dispatches.empty() ||
+                !eventBindingSimulationReport_.diagnostics.empty()) {
+                ImGui::Separator();
+                ImGui::TextDisabled("Simulation report");
+                for (const auto& dispatch : eventBindingSimulationReport_.dispatches) {
+                    ImGui::Text("Would dispatch %s '%s' from binding '%s'.",
+                        dispatch.targetType == Mc3::EventBindingTarget::Trigger ? "trigger" : "state",
+                        dispatch.targetId.c_str(), dispatch.bindingId.c_str());
+                }
+                for (const auto& diagnostic : eventBindingSimulationReport_.diagnostics)
+                    ImGui::TextColored(ImVec4(1.0f, 0.55f, 0.25f, 1.0f), "%s", diagnostic.message.c_str());
+            }
+            ImGui::EndTabItem();
+        }
+
         // ---------------------------------------------------------------
         // Tab: Imports (R101/SYS-W14-13) -- doc.imports (std::vector<Mc3Import>,
         // an ordered list rather than a map like scripts/triggers/sounds, so no

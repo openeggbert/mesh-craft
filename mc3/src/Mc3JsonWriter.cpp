@@ -1,5 +1,6 @@
 #include "Mc3JsonWriter.hpp"
 #include <MeshCraft/Mc3/Mc3Document.hpp>
+#include <MeshCraft/Mc3/Mc3EventBinding.hpp>
 #include <MeshCraft/Mc3/Mc3Extrude.hpp>
 #include <MeshCraft/Mc3/Mc3SceneState.hpp>
 #include <MeshCraft/Mc3/Mc3Trigger.hpp>
@@ -21,6 +22,20 @@ namespace {
 
 json vec3(const std::array<float, 3>& v) { return json::array({v[0], v[1], v[2]}); }
 json vec4(const std::array<float, 4>& v) { return json::array({v[0], v[1], v[2], v[3]}); }
+
+const char* eventBindingEventName(EventBindingEvent event) {
+    switch (event) {
+    case EventBindingEvent::Enter: return "enter";
+    case EventBindingEvent::Exit:  return "exit";
+    case EventBindingEvent::Click: return "click";
+    case EventBindingEvent::Timer: return "timer";
+    }
+    return "enter";
+}
+
+const char* eventBindingTargetName(EventBindingTarget target) {
+    return target == EventBindingTarget::SceneState ? "state" : "trigger";
+}
 
 json transformJson(const Mc3Transform& t) {
     json j = json::object();
@@ -552,6 +567,24 @@ std::string Mc3JsonWriter::toString(const Mc3Document& doc) {
             arr.push_back(std::move(se));
         }
         j["states"] = std::move(arr);
+    }
+
+    if (!doc.eventBindings.empty()) {
+        json arr = json::array();
+        for (const auto& binding : doc.eventBindings) {
+            json be = json::object();
+            be["id"] = binding.id;
+            be["source"] = binding.sourceObjectId;
+            be["event"] = eventBindingEventName(binding.event);
+            be["targetType"] = eventBindingTargetName(binding.targetType);
+            be["target"] = binding.targetId;
+            be["enabled"] = binding.enabled;
+            be["cooldown"] = binding.cooldown;
+            be["once"] = binding.once;
+            be["timerInterval"] = binding.interval;
+            arr.push_back(std::move(be));
+        }
+        j["eventBindings"] = std::move(arr);
     }
 
     if (!doc.definitions.empty()) {

@@ -4,6 +4,7 @@
 #include "MeshCraft/Mc3/Mc3Camera.hpp"
 #include "MeshCraft/Mc3/Mc3EmbedGltf.hpp"
 #include "MeshCraft/Mc3/Mc3Environment.hpp"
+#include "MeshCraft/Mc3/Mc3EventBinding.hpp"
 #include "MeshCraft/Mc3/Mc3Light.hpp"
 #include "MeshCraft/Mc3/Mc3LoadPolicy.hpp"
 #include "MeshCraft/Mc3/Mc3Material.hpp"
@@ -103,6 +104,7 @@ public:
     std::map<std::string, Mc3Music>      musicTracks;
     std::map<std::string, Mc3Trigger>    triggers;
     std::map<std::string, Mc3SceneState> sceneStates;
+    std::vector<Mc3EventBinding>          eventBindings;
     std::map<std::string, Mc3Material>   materials;
     std::map<std::string, std::shared_ptr<Mc3Object>> definitions;
     std::vector<std::shared_ptr<Mc3Object>> objects;

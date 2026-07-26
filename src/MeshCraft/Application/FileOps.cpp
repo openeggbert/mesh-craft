@@ -36,6 +36,7 @@ namespace MeshCraft::Application {
 
 void MeshCraftApplication::newScene() {
     document_ = Mc3::Mc3Document{};
+    resetEventBindingSimulation();
     resetImportHealth();
     objectIndex_.invalidate();  // SYS-W5-04: wholesale document_ replacement
     document_.model = "Untitled";
@@ -105,6 +106,7 @@ void MeshCraftApplication::recoverFromAutosave() {
         Mc3::Mc3Validation loadValidation;
         document_ = Mc3::Mc3Document::loadFromFile(autoSavePath(recoveryFilePath_),
                                                     Mc3::Mc3LoadPolicy::trusted(), loadValidation);
+        resetEventBindingSimulation();
         resetImportHealth();
         objectIndex_.invalidate();  // SYS-W5-04: wholesale document_ replacement
         if (!loadValidation.empty())
@@ -309,6 +311,7 @@ void MeshCraftApplication::executePendingAction() {
                 // comment in MeshCraftApplication::Initialize().
                 Mc3::Mc3Validation loadValidation;
                 document_ = loadSceneFileDispatched(pendingOpenPath_, loadValidation);
+                resetEventBindingSimulation();
                 resetImportHealth();
                 objectIndex_.invalidate();  // SYS-W5-04: wholesale document_ replacement
                 if (!loadValidation.empty())

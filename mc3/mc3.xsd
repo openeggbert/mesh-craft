@@ -845,6 +845,42 @@
     </xs:sequence>
   </xs:complexType>
 
+  <!-- ── Event bindings ───────────────────────────────────────── -->
+
+  <xs:simpleType name="eventBindingEventType">
+    <xs:restriction base="xs:string">
+      <xs:enumeration value="enter"/>
+      <xs:enumeration value="exit"/>
+      <xs:enumeration value="click"/>
+      <xs:enumeration value="timer"/>
+    </xs:restriction>
+  </xs:simpleType>
+
+  <xs:simpleType name="eventBindingTargetType">
+    <xs:restriction base="xs:string">
+      <xs:enumeration value="trigger"/>
+      <xs:enumeration value="state"/>
+    </xs:restriction>
+  </xs:simpleType>
+
+  <xs:complexType name="eventBindingType">
+    <xs:attribute name="id"          type="xs:ID"                     use="required"/>
+    <xs:attribute name="source"      type="xs:string"                 use="required"/>
+    <xs:attribute name="event"       type="eventBindingEventType"     use="required"/>
+    <xs:attribute name="target_type" type="eventBindingTargetType"    use="required"/>
+    <xs:attribute name="target"      type="xs:string"                 use="required"/>
+    <xs:attribute name="enabled"     type="xs:boolean"                default="true"/>
+    <xs:attribute name="cooldown"    type="xs:float"                  default="0"/>
+    <xs:attribute name="once"        type="xs:boolean"                default="false"/>
+    <xs:attribute name="interval"    type="xs:float"                  default="1"/>
+  </xs:complexType>
+
+  <xs:complexType name="eventBindingsType">
+    <xs:sequence>
+      <xs:element name="binding" type="eventBindingType" minOccurs="0" maxOccurs="unbounded"/>
+    </xs:sequence>
+  </xs:complexType>
+
   <!-- ── Triggers ─────────────────────────────────────────────── -->
 
   <xs:complexType name="triggerStepRefType">
@@ -1047,6 +1083,7 @@
         <xs:element name="music"       type="musicType"            minOccurs="0"/>
         <xs:element name="triggers"    type="triggersType"         minOccurs="0"/>
         <xs:element name="states"      type="statesType"           minOccurs="0"/>
+        <xs:element name="event-bindings" type="eventBindingsType"  minOccurs="0"/>
         <xs:element name="definitions" type="definitionsType"      minOccurs="0"/>
         <xs:element name="objects"     type="objectsContainerType" minOccurs="0"/>
         <xs:element name="actions"     type="mc3ActionsType"       minOccurs="0"/>

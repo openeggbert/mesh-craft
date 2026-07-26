@@ -339,6 +339,7 @@ void MeshCraftApplication::drawAiPanel() {
             } else {
                 pushUndo();
                 document_ = *aiPendingDoc_;
+                resetEventBindingSimulation();
                 resetImportHealth();
                 objectIndex_.invalidate();  // SYS-W5-04: wholesale document_ replacement
                 modified_ = true;

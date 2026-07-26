@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<mc3 version="0.3" model="EventBindings">
+  <triggers>
+    <trigger id="open_door">
+      <play-action ref="open_animation"/>
+    </trigger>
+  </triggers>
+  <states>
+    <state name="night">
+      <object-override id="lamp" visible="false"/>
+    </state>
+  </states>
+  <event-bindings>
+    <binding id="door_enter" source="door_area" event="enter"
+             target_type="trigger" target="open_door" cooldown="0.25"/>
+    <binding id="clock_tick" source="clock" event="timer"
+             target_type="state" target="night" enabled="false" once="true" interval="2"/>
+  </event-bindings>
+  <objects>
+    <area id="door_area" name="Door Area" size="2 2 2"/>
+    <box id="clock" name="Clock" size="1 1 1"/>
+    <box id="lamp" name="Lamp" size="1 1 1"/>
+  </objects>
+</mc3>

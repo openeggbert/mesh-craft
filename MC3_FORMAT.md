@@ -542,7 +542,7 @@ Named sequences of steps — references into `<actions>`, `<sounds>`, `<scripts>
 
 A `<trigger>` can contain any number of steps in any order/combination. `ref` values are plain strings in the schema (not `IDREF`) — cross-references are not validated at parse time.
 
-**Status:** data model, parser, writer, MCB round-trip, and XSD validation are complete (STAB-0043). As of `SYS-W14-19` (2026-07-20), the editor's Triggers tab has an explicit "Fire" action (a per-row button, and a "Fire Trigger" button in the detail view) that actually executes a trigger's steps in order: `<play-action>` drives the same Timeline playback state the Play button uses, `<play-sound>`/`<play-music>` call `Editor::AudioPreview::play()`, `<run-script>` runs via `LuaScriptRunner` ([Scripts (N3)](#scripts-n3)). There is still no automatic in-scene event system (collision/click/timer) that fires a trigger without this explicit manual action, and only one "current action"/one shared audio-preview slot exists, so multiple `<play-action>` (or multiple `<play-sound>`/`<play-music>`) steps in one trigger replace rather than layer.
+**Status:** data model, parser, writer, MCB round-trip, and XSD validation are complete (STAB-0043). As of `SYS-W14-19` (2026-07-20), the editor's Triggers tab has an explicit "Fire" action (a per-row button, and a "Fire Trigger" button in the detail view) that actually executes a trigger's steps in order: `<play-action>` drives the same Timeline playback state the Play button uses, `<play-sound>`/`<play-music>` call `Editor::AudioPreview::play()`, `<run-script>` runs via `LuaScriptRunner` ([Scripts (N3)](#scripts-n3)). `SYS-W14-31` adds authored event bindings below, but the editor currently previews them as dry-run dispatch records: it deliberately does **not** execute trigger steps. The manual Fire action remains the only editor operation that executes a trigger, and only one "current action"/one shared audio-preview slot exists, so multiple `<play-action>` (or multiple `<play-sound>`/`<play-music>`) steps in one trigger replace rather than layer.
 
 ---
 
@@ -573,7 +573,53 @@ Named snapshots of per-object property overrides (visibility, transform, materia
 
 Only the attributes present on `<object-override>` are overridden; everything else keeps the target object's base value.
 
-**Status:** data model, parser, writer, MCB round-trip, and XSD validation are complete (STAB-0044). As of `SYS-W14-20` (2026-07-20), the editor's States tab has an "Apply State" button that writes a state's overrides onto the matching live objects (by id) right now, so a state can be previewed interactively. Only the SET fields on an override are applied — an unset field leaves the target object's existing value untouched, matching this section's own "only the attributes present... are overridden" contract exactly. Still no automatic state-switching (e.g. triggered by a game event) — only this explicit manual action.
+**Status:** data model, parser, writer, MCB round-trip, and XSD validation are complete (STAB-0044). As of `SYS-W14-20` (2026-07-20), the editor's States tab has an "Apply State" button that writes a state's overrides onto the matching live objects (by id) right now, so a state can be previewed interactively. Only the SET fields on an override are applied — an unset field leaves the target object's existing value untouched, matching this section's own "only the attributes present... are overridden" contract exactly. `SYS-W14-31` can target a named state in an authored event binding, but editor simulation is dry-run and does **not** apply the overrides; Apply State remains the mutating preview action.
+
+---
+
+## Event Bindings (SYS-W14-31)
+
+`<event-bindings>` stores explicit document-level links from an ordinary
+object or Area to a named trigger or scene state. It avoids implicit
+name-based gameplay rules and is preserved by XML, semantic `.mc3.json`, and
+MCB.
+
+```xml
+<event-bindings>
+  <binding id="door_enter" source="door_area" event="enter"
+           target_type="trigger" target="open_door" cooldown="0.25"/>
+  <binding id="night_tick" source="clock" event="timer"
+           target_type="state" target="night" enabled="false"
+           once="true" interval="2"/>
+</event-bindings>
+```
+
+| Attribute | Type / values | Required | Default | Meaning |
+|-----------|---------------|----------|---------|---------|
+| `id` | XML ID | yes | — | persistent binding identity; must be unique in the XML document |
+| `source` | string | yes | — | object or Area `id` that emits the event |
+| `event` | `enter`, `exit`, `click`, `timer` | yes | — | event kind |
+| `target_type` | `trigger`, `state` | yes | — | target namespace |
+| `target` | string | yes | — | trigger `id` or state `name` |
+| `enabled` | bool | no | `true` | disabled bindings are ignored |
+| `cooldown` | float seconds | no | `0` | minimum time after a successful dispatch before the binding can dispatch again |
+| `once` | bool | no | `false` | successful dispatch is allowed only once per runtime/simulation session |
+| `interval` | float seconds | no | `1` | timer period; only used when `event="timer"` |
+
+The editor's **Events** tab has a selected-binding simulation button and an
+optional timer simulation mode. Both are intentionally **dry-run**: they
+produce a “would dispatch trigger/state” report and dangling-source/target
+diagnostics, while never firing trigger steps, applying state overrides,
+changing the authored document, or creating undo entries. The dispatcher has
+a recursion guard and a 32-dispatch budget per call. Timer catch-up is also
+bounded to one attempt per binding per frame. `enter`, `exit`, and `timer`
+are delivered by this authoring/simulation slice; `click` is serialised and
+can be manually dry-run, but viewport picking does not yet generate live
+click events.
+
+Event bindings are MC3/MCB runtime semantics only. `mc3togltf` emits one
+explicit warning and omits all bindings because glTF has no portable
+equivalent for MC3 triggers or state application.
 
 ---
 
@@ -999,7 +1045,7 @@ curve in a short time window could in principle be under-sampled.
 | `TANGENT` accessor (for `normal_texture`-mapped meshes) | ✅ (STAB-0664) — computed per-vertex (standard per-triangle-then-averaged-then-Gram-Schmidt-orthogonalized algorithm, not a full MikkTSpace port), only when a mesh has both `NORMAL`/`TEXCOORD_0` and its material sets `normal_texture`; meshes without a normal map get no `TANGENT` (not needed) |
 | SVG textures (N1, `<textures><texture>` with an SVG source) | ✅ — external and inline SVG are rasterized into bounded PNG pixels for both glTF export and the live viewport. See the Textures section for the 2048px safety cap and cache/sampler details. |
 | Embedded GLB (N2, `<mesh src="embed:id"/>`) | ✅ (`SYS-W14-05`) — external self-contained `.glb` files and inline base64 GLB are decoded, their default-scene node transforms are flattened, and triangle geometry reaches both `mc3togltf` and the live viewport. The MC3 object's material remains authoritative: source GLB materials/textures, skins, morph targets, animations, non-triangle primitives, loose `.gltf` companion-file assets, singular transforms, and geometry beyond 64 MiB/300,000 triangles are deliberately rejected with a named warning rather than partially or unsafely imported. |
-| Scripts, Sounds, Music, Triggers, Scene States, Meta (N3-N7) | ❌ (no glTF equivalent — these are MCB/XML-only data, round-tripped but not translated to any glTF concept; see [Scripts (N3)](#scripts-n3) etc. above) |
+| Scripts, Sounds, Music, Triggers, Scene States, Event Bindings, Meta (N3-N7) | ❌ (no glTF equivalent — these are MC3/MCB-only data, round-tripped but not translated to any glTF concept; exporting event bindings emits one explicit omission warning; see [Scripts (N3)](#scripts-n3) etc. above) |
 
 ### Export scalability (STAB-0699)
 
@@ -1091,7 +1137,7 @@ ceiling before being used to size any buffer — the same zip-bomb
 defense already applied to every other length-prefixed field in this
 reader (`kMcbMaxStringLen`/`kMcbMaxCollectionCount`).
 
-**Payload encoding:** every value is a 1-byte type tag followed by its data — `TAG_BOOL`/`TAG_I32`/`TAG_F32` (fixed-size), `TAG_STR` (uint32 length + UTF-8 bytes, no null terminator), `TAG_VEC3`/`TAG_VEC4` (3 or 4 float32), `TAG_OBJ` (key/value pairs terminated by a zero-length key), `TAG_ARR` (uint32 count + that many tagged values), `TAG_MAP` (uint32 count + that many `STR key` + tagged value pairs). Every `Mc3Document` field (objects, materials, textures, definitions, scripts, sounds, music, triggers, states, meta, etc. — including all N1-N7 extensions) is written under a string key matching its XML element/attribute name, so the two formats stay structurally parallel.
+**Payload encoding:** every value is a 1-byte type tag followed by its data — `TAG_BOOL`/`TAG_I32`/`TAG_F32` (fixed-size), `TAG_STR` (uint32 length + UTF-8 bytes, no null terminator), `TAG_VEC3`/`TAG_VEC4` (3 or 4 float32), `TAG_OBJ` (key/value pairs terminated by a zero-length key), `TAG_ARR` (uint32 count + that many tagged values), `TAG_MAP` (uint32 count + that many `STR key` + tagged value pairs). Every `Mc3Document` field (objects, materials, textures, definitions, scripts, sounds, music, triggers, states, event bindings, meta, etc. — including all N1-N7 extensions) is written under a string key matching its XML element/attribute name, so the two formats stay structurally parallel.
 
 **Relationship to `.mc3.xml`:** MCB is a runtime-loading optimization, not an authoring format — there is no MCB-specific editor UI; you edit `.mc3.xml` and convert to `.mcb` as a build/export step (or open a `.mcb` directly, which the app transparently round-trips through the same `Mc3Document` model). Compression (flags bit 0) is opt-in via `saveToBinary`/`saveToFile`'s `compress` parameter — there is no editor UI toggle for it (out of scope for `SYS-W14-25`); a compressed `.mcb` produced by another caller still loads transparently through the normal `loadFromFile()` path either way.
 

@@ -135,19 +135,17 @@ sequentially. Per `CLAUDE.md`, recording this ordered backlog does **not**
 remove the requirement to describe and obtain explicit confirmation for each
 individual implementation task immediately before work begins.
 
-1. **SYS-W14-31 (P2/W14)** — add explicit Area/object event bindings to
-   triggers and scene states.
-2. **SYS-W14-14 (P2/W14, reopened)** — implement the declared MC3 coordinate
+1. **SYS-W14-14 (P2/W14, reopened)** — implement the declared MC3 coordinate
    system consistently, not merely as a write-only document field.
-3. **SYS-W3-02 (P2/W3)** — introduce narrow shared semantic-evaluation
+2. **SYS-W3-02 (P2/W3)** — introduce narrow shared semantic-evaluation
    helpers required by transform/LOD/material parity, without a broad editor
    rewrite.
-4. **SYS-W14-32/33/34 (P2/P2/P3/W14)** — deliver viewport parity in separate
+3. **SYS-W14-32/33/34 (P2/P2/P3/W14)** — deliver viewport parity in separate
    UV-mapping, point/spot-light, and CSG child-material slices.
-5. **SYS-W14-30 (P2/W14)** — expand explicit walk-mode collision proxies.
-6. **SYS-W14-35/36 (P2/P3/W14)** — preserve material structure on OBJ import,
+4. **SYS-W14-30 (P2/W14)** — expand explicit walk-mode collision proxies.
+5. **SYS-W14-35/36 (P2/P3/W14)** — preserve material structure on OBJ import,
    then add a bounded editable self-contained GLB importer.
-7. **SYS-W14-37/38/39 and SYS-W9-04 (P3)** — export optimization controls,
+6. **SYS-W14-37/38/39 and SYS-W9-04 (P3)** — export optimization controls,
     animation/export policy, Model Registry v2, and scalable history/review
     tooling.
 
@@ -2097,17 +2095,23 @@ because it is listed: `CLAUDE.md` requires per-row user confirmation.
   remain visibly unsupported, never silently approximated. Extend
   `WalkController` tests with rounded-object, ceiling/floor, and budget cases.
 
-- **SYS-W14-31** `[TODO]` `P2` — Explicit event bindings from Areas/objects to triggers and scene states.
-  Triggers can currently be fired manually and states can be applied manually;
-  an Area has no schema-level relationship to either. Add a compact binding
-  model with source object/Area, event kind (`enter`, `exit`, `click`,
-  `timer`), target trigger or state, enabled flag, cooldown, and one-shot
-  behavior. Deliver enter/exit and timer first, with an editor simulation
-  overlay. Event dispatch needs a recursion guard, execution budget, dangling
-  target diagnostics, and a play/simulate mode that does not mutate the
-  authored document or undo history. This is MC3/MCB-only runtime semantics;
-  glTF must continue to warn/omit it explicitly. Add parser/writer/MCB tests
-  and CNA-free dispatch tests before viewport interaction coverage.
+- **SYS-W14-31** `[DONE]` `P2` — Explicit event bindings from Areas/objects to triggers and scene states.
+  **Implementation:** `Mc3EventBinding` persists an `id`, source object/Area
+  id, `enter`/`exit`/`click`/`timer` event, trigger-or-state target, enabled,
+  cooldown, one-shot, and timer interval. XML/XSD (`<event-bindings>`),
+  semantic JSON (`eventBindings`), and MCB (`eventBindings`) share the same
+  model. The Events editor tab supports authoring and reports a selected
+  binding's dry-run dispatch; an opt-in timer simulation advances in Update.
+  `EventBindingAlgorithms.hpp` is CNA-free and deliberately returns only
+  “would dispatch” records: it has a recursion guard, a 32-dispatch budget,
+  cooldown/one-shot state, bounded timer catch-up, and dangling source/target
+  diagnostics, while never executing trigger steps, applying states, mutating
+  `Mc3Document`, or creating undo history. Its transient state resets on
+  document replacement and undo/redo. `mc3togltf` warns once and omits the
+  bindings, since glTF has no equivalent runtime semantics.
+  **Tests:** XML and semantic-JSON round trips, MCB round trip, XSD fixture,
+  CNA-free dispatch/guard/budget/no-mutation test, and CLI export warning /
+  omission regression.
 
 - **SYS-W14-32** `[TODO]` `P2` — Honor ordinary-object UV mapping in the live viewport.
   `mc3togltf` already regenerates and transforms box/sphere/planar UVs, but

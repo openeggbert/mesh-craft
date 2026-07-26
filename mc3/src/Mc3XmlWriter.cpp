@@ -1,6 +1,7 @@
 #include "Mc3XmlWriter.hpp"
 #include <MeshCraft/Mc3/Mc3Animation.hpp>
 #include <MeshCraft/Mc3/Mc3Document.hpp>
+#include <MeshCraft/Mc3/Mc3EventBinding.hpp>
 #include <MeshCraft/Mc3/Mc3Extrude.hpp>
 #include <MeshCraft/Mc3/Mc3SceneState.hpp>
 #include <MeshCraft/Mc3/Mc3Trigger.hpp>
@@ -32,6 +33,24 @@ static std::string fStr(float f) {
     char buf[32];
     std::snprintf(buf, sizeof(buf), "%.6g", f);
     return buf;
+}
+
+static const char* eventBindingEventStr(EventBindingEvent event) {
+    switch (event) {
+    case EventBindingEvent::Enter: return "enter";
+    case EventBindingEvent::Exit:  return "exit";
+    case EventBindingEvent::Click: return "click";
+    case EventBindingEvent::Timer: return "timer";
+    }
+    return "enter";
+}
+
+static const char* eventBindingTargetStr(EventBindingTarget target) {
+    switch (target) {
+    case EventBindingTarget::Trigger:    return "trigger";
+    case EventBindingTarget::SceneState: return "state";
+    }
+    return "trigger";
 }
 
 // AUD-070: appends `text` as a child text node of `parent`, using a CDATA
@@ -797,6 +816,30 @@ void Mc3XmlWriter::write(const Mc3Document& doc, const std::filesystem::path& pa
             stEl->InsertEndChild(se);
         }
         root->InsertEndChild(stEl);
+    }
+
+    // Document-level event bindings.  They intentionally carry no runtime
+    // implementation details: MC3 consumers can dispatch to the named
+    // trigger/state using their own engine semantics.
+    if (!doc.eventBindings.empty()) {
+        XMLElement* ebEl = xml.NewElement("event-bindings");
+        for (const auto& binding : doc.eventBindings) {
+            XMLElement* be = xml.NewElement("binding");
+            be->SetAttribute("id", binding.id.c_str());
+            be->SetAttribute("source", binding.sourceObjectId.c_str());
+            be->SetAttribute("event", eventBindingEventStr(binding.event));
+            be->SetAttribute("target_type", eventBindingTargetStr(binding.targetType));
+            be->SetAttribute("target", binding.targetId.c_str());
+            if (!binding.enabled) be->SetAttribute("enabled", "false");
+            if (binding.cooldown != 0.0f)
+                be->SetAttribute("cooldown", fStr(binding.cooldown).c_str());
+            if (binding.once) be->SetAttribute("once", "true");
+            if (binding.event == EventBindingEvent::Timer &&
+                binding.interval != 1.0f)
+                be->SetAttribute("interval", fStr(binding.interval).c_str());
+            ebEl->InsertEndChild(be);
+        }
+        root->InsertEndChild(ebEl);
     }
 
     // Definitions — skip entries that came from <include> files

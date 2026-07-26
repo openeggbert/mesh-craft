@@ -566,6 +566,19 @@ inline std::vector<std::string> compareDocuments(const Mc3Document& a, const Mc3
             }
         }
     }
+    if (a.eventBindings.size() != b.eventBindings.size()) {
+        errors.push_back("event bindings count mismatch");
+    } else {
+        for (size_t i = 0; i < a.eventBindings.size(); ++i) {
+            const auto& ea = a.eventBindings[i];
+            const auto& eb = b.eventBindings[i];
+            if (ea.id != eb.id || ea.sourceObjectId != eb.sourceObjectId || ea.event != eb.event ||
+                ea.targetType != eb.targetType || ea.targetId != eb.targetId || ea.enabled != eb.enabled ||
+                ea.once != eb.once || !nearlyEqual(ea.cooldown, eb.cooldown) ||
+                !nearlyEqual(ea.interval, eb.interval))
+                errors.push_back("event binding[" + std::to_string(i) + "] mismatch");
+        }
+    }
     return errors;
 }
 

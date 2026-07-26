@@ -347,6 +347,12 @@ void MeshCraftApplication::pushUndo() {
     objectIndex_.invalidate();
 }
 
+void MeshCraftApplication::resetEventBindingSimulation() {
+    eventSimulationEnabled_ = false;
+    eventBindingRuntime_.reset();
+    eventBindingSimulationReport_ = {};
+}
+
 bool MeshCraftApplication::undoOnActivate(bool widgetChanged) {
     if (ImGui::IsItemActivated()) pushUndo();
     return widgetChanged;
@@ -366,6 +372,7 @@ void MeshCraftApplication::performUndo() {
     if (!entry) return;
     document_ = std::move(entry->doc);
     objectIndex_.invalidate();  // SYS-W5-04: wholesale document_ replacement
+    resetEventBindingSimulation();
     restoreSelectionByIds(entry->selectionIds);
     modified_ = true;
     updateWindowTitle();
@@ -377,6 +384,7 @@ void MeshCraftApplication::performRedo() {
     if (!entry) return;
     document_ = std::move(entry->doc);
     objectIndex_.invalidate();  // SYS-W5-04: wholesale document_ replacement
+    resetEventBindingSimulation();
     restoreSelectionByIds(entry->selectionIds);
     modified_ = true;
     updateWindowTitle();

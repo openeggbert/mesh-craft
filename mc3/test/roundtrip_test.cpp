@@ -1,6 +1,7 @@
 #include <MeshCraft/Mc3/Mc3Animation.hpp>
 #include <MeshCraft/Mc3/Mc3Document.hpp>
 #include <MeshCraft/Mc3/Mc3EmbedGltf.hpp>
+#include <MeshCraft/Mc3/Mc3EventBinding.hpp>
 #include <MeshCraft/Mc3/Mc3Music.hpp>
 #include <MeshCraft/Mc3/Mc3SceneState.hpp>
 #include <MeshCraft/Mc3/Mc3Script.hpp>
@@ -2590,6 +2591,70 @@ static void testTrigger() {
     }
 }
 
+// SYS-W14-31 — MC3 event bindings connect object/Area events to named
+// triggers or scene states.  This intentionally tests both all non-default
+// controls and writer omission of harmless defaults.
+static void testEventBindings() {
+    Mc3Document doc;
+    Mc3EventBinding enter;
+    enter.id = "door_enter";
+    enter.sourceObjectId = "door_area";
+    enter.event = EventBindingEvent::Enter;
+    enter.targetType = EventBindingTarget::Trigger;
+    enter.targetId = "open_door";
+    enter.cooldown = 0.5f;
+
+    Mc3EventBinding timer;
+    timer.id = "night_tick";
+    timer.sourceObjectId = "clock";
+    timer.event = EventBindingEvent::Timer;
+    timer.targetType = EventBindingTarget::SceneState;
+    timer.targetId = "night";
+    timer.enabled = false;
+    timer.once = true;
+    timer.interval = 2.0f;
+
+    Mc3EventBinding click;
+    click.id = "button_click";
+    click.sourceObjectId = "button";
+    click.event = EventBindingEvent::Click;
+    click.targetType = EventBindingTarget::SceneState;
+    click.targetId = "pressed";
+    doc.eventBindings = {enter, timer, click};
+
+    auto rt = roundtrip(doc);
+    CHECK(rt.eventBindings.size() == 3, "event bindings: all entries present");
+    if (rt.eventBindings.size() == 3) {
+        const auto& first = rt.eventBindings[0];
+        const auto& second = rt.eventBindings[1];
+        const auto& third = rt.eventBindings[2];
+        CHECK(first.id == "door_enter" && first.sourceObjectId == "door_area", "event bindings: id/source round-trip");
+        CHECK(first.event == EventBindingEvent::Enter && first.targetType == EventBindingTarget::Trigger &&
+              first.targetId == "open_door", "event bindings: enter trigger round-trip");
+        CHECKF(first.cooldown, 0.5f, "event bindings: cooldown round-trip");
+        CHECK(second.event == EventBindingEvent::Timer && second.targetType == EventBindingTarget::SceneState &&
+              second.targetId == "night", "event bindings: timer state round-trip");
+        CHECK(!second.enabled && second.once, "event bindings: enabled/once round-trip");
+        CHECKF(second.interval, 2.0f, "event bindings: interval round-trip");
+        CHECK(third.event == EventBindingEvent::Click && third.targetType == EventBindingTarget::SceneState &&
+              third.targetId == "pressed", "event bindings: click state target round-trip");
+    }
+
+    auto p = tmpPath();
+    Mc3Document defaults;
+    Mc3EventBinding defaultBinding;
+    defaultBinding.id = "defaults";
+    defaultBinding.sourceObjectId = "area";
+    defaultBinding.targetId = "trigger";
+    defaults.eventBindings.push_back(defaultBinding);
+    defaults.saveToFile(p);
+    std::ifstream file(p);
+    std::string text((std::istreambuf_iterator<char>(file)), {});
+    std::filesystem::remove(p);
+    CHECK(text.find("cooldown=") == std::string::npos && text.find("once=") == std::string::npos &&
+          text.find("interval=") == std::string::npos, "event bindings: default controls omitted from XML");
+}
+
 static void testSoundMusic() {
     // Sound with default loop (false)
     {
@@ -3611,6 +3676,7 @@ int main(int argc, char* argv[]) {
     testScript();
     testSoundMusic();
     testTrigger();
+    testEventBindings();
     testSceneState();
     testMeta();
     testAllPrimitiveTypes();

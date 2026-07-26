@@ -1054,6 +1054,19 @@ if(MESH_CRAFT_BUILD_TESTING AND UNIX AND NOT ANDROID AND NOT EMSCRIPTEN)
     add_test(NAME scene_state_apply COMMAND scene_state_apply_test)
     set_tests_properties(scene_state_apply PROPERTIES TIMEOUT 15 LABELS "unit")
 
+    # SYS-W14-31: bindings are authorable MC3 metadata, while editor/runtime
+    # simulation is deliberately a side-effect-free dry run.  This test stays
+    # CNA-free and locks dispatch eligibility, diagnostics, guards, and the
+    # no-document-mutation contract.
+    add_executable(event_binding_dispatch_test
+        ${CMAKE_CURRENT_SOURCE_DIR}/test/event_binding_dispatch_test.cpp)
+    target_include_directories(event_binding_dispatch_test PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/include
+        ${CMAKE_CURRENT_SOURCE_DIR}/mc3/include)
+    target_compile_features(event_binding_dispatch_test PRIVATE cxx_std_23)
+    add_test(NAME event_binding_dispatch COMMAND event_binding_dispatch_test)
+    set_tests_properties(event_binding_dispatch PROPERTIES TIMEOUT 15 LABELS "unit")
+
     # SYS-W14-21 (2026-07-20): the Imports tab's new "Resolve Imports" button
     # and the automatic post-load resolution -- resolveImports() wires the
     # already-tested Mc3ImportResolver (R101) into the editor. CNA-free

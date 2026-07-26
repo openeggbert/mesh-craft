@@ -8,6 +8,7 @@
 #include "MeshCraft/Mc3/Mc3Material.hpp"
 #include "MeshCraft/Mc3/Mc3Object.hpp"
 #include "MeshCraft/Mc3/Mc3EmbedGltf.hpp"
+#include "MeshCraft/Mc3/Mc3EventBinding.hpp"
 #include "MeshCraft/Mc3/Mc3Music.hpp"
 #include "MeshCraft/Mc3/Mc3SceneState.hpp"
 #include "MeshCraft/Mc3/Mc3Script.hpp"
@@ -1064,6 +1065,37 @@ static Mc3::Mc3Trigger readTrigger(std::istream& in, const std::string& id) {
     return trig;
 }
 
+static Mc3::EventBindingEvent parseEventBindingEvent(const std::string& event) {
+    if (event == "exit")  return Mc3::EventBindingEvent::Exit;
+    if (event == "click") return Mc3::EventBindingEvent::Click;
+    if (event == "timer") return Mc3::EventBindingEvent::Timer;
+    return Mc3::EventBindingEvent::Enter;
+}
+
+static Mc3::EventBindingTarget parseEventBindingTarget(const std::string& target) {
+    return target == "state" ? Mc3::EventBindingTarget::SceneState
+                             : Mc3::EventBindingTarget::Trigger;
+}
+
+static Mc3::Mc3EventBinding readEventBinding(std::istream& in) {
+    Mc3::Mc3EventBinding binding;
+    while (true) {
+        std::string k = rKey(in); if (k.empty()) break;
+        uint8_t tag = rU8(in);
+        if      (k == "id")            { expectTag(tag, TAG_STR, "id"); binding.id = rRawStr(in); }
+        else if (k == "source")        { expectTag(tag, TAG_STR, "source"); binding.sourceObjectId = rRawStr(in); }
+        else if (k == "event")         { expectTag(tag, TAG_STR, "event"); binding.event = parseEventBindingEvent(rRawStr(in)); }
+        else if (k == "targetType")    { expectTag(tag, TAG_STR, "targetType"); binding.targetType = parseEventBindingTarget(rRawStr(in)); }
+        else if (k == "target")        { expectTag(tag, TAG_STR, "target"); binding.targetId = rRawStr(in); }
+        else if (k == "enabled")       { expectTag(tag, TAG_BOOL, "enabled"); binding.enabled = rU8(in) != 0; }
+        else if (k == "cooldown") { expectTag(tag, TAG_F32, "cooldown"); binding.cooldown = rF32(in); }
+        else if (k == "once")     { expectTag(tag, TAG_BOOL, "once"); binding.once = rU8(in) != 0; }
+        else if (k == "interval") { expectTag(tag, TAG_F32, "interval"); binding.interval = rF32(in); }
+        else                             skipValue(in, tag);
+    }
+    return binding;
+}
+
 static Mc3::Mc3Sound readSound(std::istream& in, const std::string& id) {
     IdentityScope idScope(id);
     Mc3::Mc3Sound snd;
@@ -1507,6 +1539,15 @@ static Mc3::Mc3Document readDocument(std::istream& in) {
                 uint8_t t = rU8(in);
                 if (t == TAG_OBJ) doc.sceneStates[mk] = readSceneState(in, mk);
                 else               skipValue(in, t);
+            }
+        }
+        else if (k == "eventBindings") {
+            expectTag(tag, TAG_ARR, "eventBindings");
+            uint32_t n = rU32Bounded(in);
+            for (uint32_t i = 0; i < n; ++i) {
+                uint8_t t = rU8(in);
+                if (t == TAG_OBJ) doc.eventBindings.push_back(readEventBinding(in));
+                else              skipValue(in, t);
             }
         }
         else if (k == "materials") {

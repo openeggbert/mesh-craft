@@ -280,6 +280,7 @@ void MeshCraftApplication::LoadContent() {
             // `MeshCraft scene.mc3.json` on the command line now works too.
             Mc3::Mc3Validation loadValidation;
             document_ = loadSceneFileDispatched(currentFile_, loadValidation);
+            resetEventBindingSimulation();
             resetImportHealth();
             objectIndex_.invalidate();  // SYS-W5-04: wholesale document_ replacement
             if (!loadValidation.empty())
@@ -443,6 +444,16 @@ void MeshCraftApplication::Update(GameTime& gameTime) {
                              dt, autoSaveCountdown_)) {
             performAutoSave();
         }
+    }
+
+    // SYS-W14-31: timer bindings are only previewed in this explicit editor
+    // mode.  The dispatcher returns "would dispatch" records; it never runs
+    // trigger steps or writes scene-state overrides into document_.
+    if (eventSimulationEnabled_) {
+        const float dt = static_cast<float>(gameTime.getElapsedGameTimeProperty().getTotalSecondsProperty());
+        auto report = Editor::advanceEventBindingRuntimeAlg(document_, eventBindingRuntime_, dt);
+        if (!report.dispatches.empty() || !report.diagnostics.empty())
+            eventBindingSimulationReport_ = std::move(report);
     }
 
     // Advance animation clock

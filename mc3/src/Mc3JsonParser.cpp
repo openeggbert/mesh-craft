@@ -1,5 +1,6 @@
 #include "Mc3JsonParser.hpp"
 #include <MeshCraft/Mc3/Mc3Extrude.hpp>
+#include <MeshCraft/Mc3/Mc3EventBinding.hpp>
 #include <MeshCraft/Mc3/Mc3SceneState.hpp>
 #include <MeshCraft/Mc3/Mc3Trigger.hpp>
 #include <nlohmann/json.hpp>
@@ -778,6 +779,28 @@ Mc3Document Mc3JsonParser::parseString(const std::string& jsonText,
                 }
             }
             doc.sceneStates[state.name] = state;
+        }
+    }
+
+    if (j.contains("eventBindings")) {
+        for (const auto& be : j["eventBindings"]) {
+            Mc3EventBinding binding;
+            binding.id = be.value("id", "");
+            binding.sourceObjectId = be.value("source", "");
+            const std::string event = be.value("event", "enter");
+            if (event == "exit") binding.event = EventBindingEvent::Exit;
+            else if (event == "click") binding.event = EventBindingEvent::Click;
+            else if (event == "timer") binding.event = EventBindingEvent::Timer;
+            const std::string targetType = be.value("targetType", "trigger");
+            binding.targetType = targetType == "state" ? EventBindingTarget::SceneState
+                                                        : EventBindingTarget::Trigger;
+            binding.targetId = be.value("target", "");
+            binding.enabled = be.value("enabled", true);
+            binding.cooldown = be.value("cooldown", 0.0f);
+            binding.once = be.value("once", false);
+            binding.interval = be.value("timerInterval", 1.0f);
+            if (!binding.id.empty() && !binding.sourceObjectId.empty() && !binding.targetId.empty())
+                doc.eventBindings.push_back(std::move(binding));
         }
     }
 

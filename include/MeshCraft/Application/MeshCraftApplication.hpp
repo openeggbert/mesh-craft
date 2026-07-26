@@ -8,6 +8,7 @@
 #include "MeshCraft/Editor/CameraBookmarks.hpp"
 #include "MeshCraft/Editor/EditorCamera.hpp"
 #include "MeshCraft/Editor/EditorTool.hpp"
+#include "MeshCraft/EventBindingAlgorithms.hpp"
 #include "MeshCraft/Editor/KeybindingManager.hpp"
 #include "MeshCraft/Editor/LuaScriptRunner.hpp"
 #include "MeshCraft/Editor/MacroRecorder.hpp"
@@ -229,6 +230,14 @@ private:
 
     // Scene states panel selection (STAB-0708)
     std::string selectedSceneStateKey_;
+
+    // SYS-W14-31: authored bindings are document data; this separate state
+    // powers a dry-run preview and is never saved or put on the undo stack.
+    int selectedEventBindingIndex_{-1};
+    bool eventSimulationEnabled_{false};
+    Editor::EventBindingRuntimeState eventBindingRuntime_;
+    Editor::EventBindingDispatchReport eventBindingSimulationReport_;
+    void resetEventBindingSimulation();
 
     // Audio panel selection + preview playback (STAB-0706, SYS-W3-01
     // Phase 7: extracted into Editor::AudioPreview).

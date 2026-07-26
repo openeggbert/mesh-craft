@@ -30,6 +30,7 @@
 #include "RandomMc3DocumentGenerator.hpp"
 
 #include <MeshCraft/Mc3/Mc3Document.hpp>
+#include <MeshCraft/Mc3/Mc3EventBinding.hpp>
 #include <MeshCraft/Mc3/Mc3SceneState.hpp>
 #include <MeshCraft/Mc3/Mc3Trigger.hpp>
 
@@ -100,6 +101,15 @@ static Mc3Document buildFeatureDocument() {
     ovr.material = "stone";
     state.overrides.push_back(ovr);
     doc.addSceneState(state);
+
+    Mc3EventBinding binding;
+    binding.id = "door_enter";
+    binding.sourceObjectId = "door_01";
+    binding.event = EventBindingEvent::Enter;
+    binding.targetType = EventBindingTarget::Trigger;
+    binding.targetId = "door_open";
+    binding.cooldown = 0.25f;
+    doc.eventBindings.push_back(binding);
 
     auto door = Mc3Object::makeBox("door_def", {1.f, 2.f, 0.1f}, "chrome");
     door->withUvMapping(UvProjection::Box, 2.f, 2.f);

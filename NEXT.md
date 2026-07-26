@@ -105,12 +105,12 @@ before when explicitly requested (`SYS-W14-##` rows).
 
 ## 2. Current status
 
-- **Last full build: clean after `SYS-W14-29` asset-definition LOD support.** Testing is enabled in the current Ninja Release tree, and
-  `CCACHE_DISABLE=1 cmake --build b-release --target MeshCraft mc3togltf asset_lod_test -j4`
+- **Last full build: clean after `SYS-W14-31` event bindings.** Testing is enabled in the current Ninja Release tree, and
+  `CCACHE_DISABLE=1 cmake --build b-release --target MeshCraft mc3togltf event_binding_dispatch_test -j4`
   linked successfully on EASYGL. Alternate-backend runtime qualification remains blocked.
-- **Tests:** the fresh Release tree registers 189 tests, including new
-  CNA-free `asset_lod`, glTF-default-tier, and viewport LOD/culling regressions
-  from `SYS-W14-29`; this checkout passed all 152 non-render tests. Its Xvfb
+- **Tests:** the fresh Release tree registers 191 tests, including the
+  CNA-free event-binding dispatcher and the glTF omission regression from
+  `SYS-W14-31`; this checkout passed all 154 non-render tests. Its Xvfb
   preflight deterministically disabled 36 render executions (including the
   new `asset_lod_viewport_test`) plus its own skipped preflight probe (37
   render-labelled registrations in total).
