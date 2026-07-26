@@ -98,6 +98,24 @@ inline `data:` images remain inline. Texture codecs and general-purpose
 compression are not offered until their distribution and viewer-compatibility
 policy has been decided.
 
+For animations, choose one of the two **Animation export** policies. **Core
+TRS + MC3 playback metadata** (the default) exports supported transform
+channels and stores MC3 playback hints in legal glTF `extras`; normal glTF
+viewers may ignore those hints. **Portable core TRS only** exports the same
+baked transform animation without that metadata. Both policies report every
+skipped MC3 visibility, deform, or material channel in the Export Report,
+including the MC3 object ID when available. They do not claim that glTF can
+represent all MC3 animation behavior.
+
+## 8. Preview named animation clips
+
+In the Timeline, select an action, then use **Clip** to choose the whole
+action or a named range. **+ Clip** creates a range; **Edit** sets its name,
+start/end time, playback rate, loop, reverse, and preview transition. A
+transition blends from the preceding clip selection in the editor preview;
+it is not exported as a portable glTF transition. Exported named clips become
+separate animations and leave the MC3 action's source keyframes unchanged.
+
 ## Next steps
 
 - **Undo/redo**: every mutating command (add, delete, transform, ...)

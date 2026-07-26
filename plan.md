@@ -135,8 +135,8 @@ sequentially. Per `CLAUDE.md`, recording this ordered backlog does **not**
 remove the requirement to describe and obtain explicit confirmation for each
 individual implementation task immediately before work begins.
 
-1. **SYS-W14-38/39 and SYS-W9-04 (P3)** — animation/export policy, Model
-    Registry v2, and scalable history/review tooling.
+1. **SYS-W14-39 and SYS-W9-04 (P3)** — Model Registry v2 and scalable
+    history/review tooling.
 
 The existing platform tasks (`SYS-W8-05`, `AUD-042`, `SYS-W14-09`) remain
 their own owner/toolchain-gated work and are intentionally not duplicated.
@@ -2232,14 +2232,26 @@ because it is listed: `CLAUDE.md` requires per-row user confirmation.
   164 runnable non-render CTests passed; 41 render-labelled tests remain
   disabled by the no-Xvfb preflight and one display preflight is skipped.
 
-- **SYS-W14-38** `[TODO]` `P3` — Animation clips, preview controls, and explicit export policy.
-  MC3 authoring supports transform, visibility, deform, and material channels,
-  while glTF core exports only TRS. Add named clip ranges, playback rate,
-  reverse/loop and transition preview. Provide an explicit non-destructive
-  bake/export policy for channels that can be represented, optional extension
-  use only behind a compatibility choice, and per-channel diagnostics for
-  skipped data. Do not promise universal glTF equivalence. Add evaluator,
-  clip, determinism, and exporter tests.
+- **SYS-W14-38** `[DONE]` `P3` — Animation clips, preview controls, and explicit export policy.
+  **Implemented 2026-07-26 in commit `a8c6832`.** `Mc3Action` now owns
+  non-destructive named clips (range, rate, loop, reverse and preview
+  transition), round-tripped through XML, semantic JSON and MCB with XSD and
+  bounded-reader validation. The Timeline can select the whole action or a
+  clip, edit its fields, preview rate/direction/loop, and cross-fade from the
+  previous selection; replacing a document clears any stale preview override.
+
+  `mc3togltf` exports only supported core TRS channels. A named range becomes
+  a separate zero-based `Action::Clip` animation with boundaries, action ×
+  clip rate, and reverse baked without modifying MC3 keyframes. The explicit
+  choice is **Core TRS + MC3 playback metadata** (legal `extras`, no claimed
+  extension) or **Portable core TRS only** (`--portable-animation-core`);
+  neither promises universal MC3/glTF equivalence. Visibility, deform and
+  material channels remain omitted with structured per-channel diagnostics
+  carrying an MC3 object ID when available. New pure evaluator/blend,
+  XML/JSON/MCB clip-format, actual-export, determinism, field-matrix and
+  existing-export regressions cover the contract. Release build and the full
+  CTest run pass: 168 passed, 40 render registrations disabled by the host's
+  Xvfb preflight, and one display preflight skipped.
 
 - **SYS-W14-39** `[TODO]` `P3` — Model Registry v2 and dependency-aware asset packs.
   The local registry has no thumbnails, pack workflow, or dependency-aware

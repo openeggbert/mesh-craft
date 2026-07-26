@@ -998,7 +998,10 @@ instances), not viewport culling or a provisional LOD extension.
 
 ```xml
 <actions>
-  <action name="Spin" duration="2.0" loop="true" autoplay="false">
+  <action name="Spin" duration="2.0" loop="true" autoplay="false" time_scale="1.0">
+    <clip name="Intro" start="0.0" end="0.5" playback_rate="1.0"/>
+    <clip name="ReverseLoop" start="0.5" end="2.0"
+          playback_rate="0.75" loop="true" reverse="true" transition="0.2"/>
     <channel target="Wheel" property="rotation.y">
       <keyframe time="0" value="0"   interp="linear"/>
       <keyframe time="2" value="360" interp="linear"/>
@@ -1007,9 +1010,36 @@ instances), not viewport culling or a provisional LOD extension.
 </actions>
 ```
 
-| Attribute | Type | Default | Description |
-|-----------|------|---------|--------------|
+| `<action>` attribute | Type | Default | Description |
+|----------------------|------|---------|--------------|
+| `name` | string | required | Stable action name |
+| `duration` | seconds | `1.0` | Time domain shared by all channels and clips |
+| `loop` | bool | `false` | Whole-action preview loop mode (used when no named clip is selected) |
 | `autoplay` | bool | `false` | Whether this action starts playing automatically when the document loads |
+| `time_scale` | positive float | `1.0` | Whole-action playback-speed multiplier |
+
+`<clip>` is an optional named, non-destructive playback range placed before
+the action's `<channel>` children. It references the existing channel data;
+creating, editing, or exporting a clip never trims or duplicates the action's
+keyframes. XML, semantic JSON (`clips` with camel-case `playbackRate`), and
+MCB all retain the same data.
+
+| `<clip>` attribute | Type | Default | Description |
+|--------------------|------|---------|--------------|
+| `name` | string | required | Unique clip name within the action |
+| `start`, `end` | seconds | required | Inclusive range in the parent action's time domain |
+| `playback_rate` | positive float | `1.0` | Multiplies the action's `time_scale` for this clip |
+| `loop` | bool | `false` | Loop mode for this clip, independent of the whole action |
+| `reverse` | bool | `false` | Starts at `end` and plays toward `start` |
+| `transition` | seconds | `0.0` | Editor-preview cross-fade time when switching into this clip |
+
+The reader clamps ranges to the action duration, expands a degenerate range to
+a minimal non-zero interval, requires a non-empty name and positive rate, and
+clamps transition time to `0..60` seconds. The Timeline's **Clip** selector
+offers the whole action and each named clip; **+ Clip** and **Edit** author
+these fields. Selecting a clip with a positive transition cross-fades numeric
+overrides from the preceding selection, while visibility changes at the
+midpoint. This is preview behavior, not a separate blend-tree format.
 
 **Animated properties** (`property` attribute — dot notation, not underscores; see
 `Mc3Animation.cpp`'s `animatedPropertyName()`/`animatedPropertyFromName()`, the
@@ -1024,11 +1054,25 @@ single source of truth both the parser and the editor's Timeline/Anim panel use)
 
 **Interpolation:** `linear`, `step`, `cubic` (cubic bezier with `<handle_left dt dv/>` and `<handle_right dt dv/>`)
 
-**Units:** `duration` and keyframe `time` are already in **seconds** — there
-is no frame-rate concept anywhere in the format, so `mc3togltf` passes
-keyframe times straight through into glTF's animation sampler `input`
-accessor (which the glTF spec also requires to be in seconds) with no
-conversion needed or applied.
+**Units:** `duration`, clip ranges, and keyframe `time` are already in
+**seconds** — there is no frame-rate concept anywhere in the format. For a
+whole action, `mc3togltf` bakes `time_scale` into the output sampler times.
+For a named clip it inserts boundary samples, starts the glTF animation at
+zero, bakes the effective action × clip speed, and bakes reverse ordering.
+This preserves the supported transform playback timing without changing MC3
+keyframes.
+
+**glTF animation policy:** glTF core can animate only TRS here. The exporter
+therefore always omits MC3 `visible`, `deform.*`, and `material.*` channels
+and emits a per-channel diagnostic (with the MC3 object ID when known).
+Named clips become separate animations named `Action::Clip`; preview-only
+transitions have no portable glTF equivalent. The export dialog and CLI offer
+two honest choices: **Core TRS + MC3 playback metadata** (default) retains
+MC3 playback hints such as loop, autoplay, clip name/range/rate, and reverse
+in legal `animation.extras`; **Portable core TRS only** (`mc3togltf
+--portable-animation-core`) writes only the baked core animation. Neither
+choice claims or requires a glTF extension, and ordinary glTF viewers may
+ignore `extras`; neither is universal MC3 animation equivalence.
 
 **`cubic` (bezier) export:** glTF's own `CUBICSPLINE` sampler mode requires
 real in/out tangent data in a strict triple-per-keyframe layout, which mc3's
@@ -1055,8 +1099,9 @@ curve in a short time window could in principle be under-sampled.
 | Materials (PBR, textures) | ✅ |
 | Lights | ✅ |
 | Cameras | ✅ |
-| Animations (position/rotation/scale) | ✅ |
-| Animations (`visible`, `deform.x/y/z`, all `material.*` channels) | ❌ (no glTF core-spec equivalent — glTF animation channels can only target `translation`/`rotation`/`scale`/`weights`). The channel is skipped with a warning naming it; no fallback is attempted (e.g. `visible` is not approximated via a scale-to-zero animation) — this is a deliberate, accepted limitation, not a bug. |
+| Transform animations (`position`/`rotation`/`scale`) and named clips | ✅ — named clips are non-destructively baked to separate zero-based `Action::Clip` glTF animations; rate and reverse are baked into sampler timing/value order |
+| MC3 playback hints (`loop`, `autoplay`, clip range/rate/reverse) | ✅ optional metadata only — **Core TRS + MC3 playback metadata** writes legal `animation.extras`; **Portable core TRS only** intentionally omits it. Neither is a glTF extension or a promise that viewers will apply it. |
+| Animations (`visible`, `deform.x/y/z`, all `material.*` channels) | ❌ (no glTF core-spec equivalent — glTF animation channels can only target `translation`/`rotation`/`scale`/`weights`). The channel is skipped with an explicit per-channel report, carrying the MC3 object ID when it can be resolved; no fallback is attempted (e.g. `visible` is not approximated via a scale-to-zero animation). |
 | Torus, Capsule, Disk, Grid, IcoSphere | ✅ |
 | CSG (union/difference/intersection) | ✅ (evaluated by Manifold; unsupported child types fail the export; `--allow-approximate-csg` exports children separately as debug fallback) |
 | Instance (via definitions) | ✅ |

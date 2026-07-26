@@ -105,14 +105,16 @@ before when explicitly requested (`SYS-W14-##` rows).
 
 ## 2. Current status
 
-- **Last full build: clean after `SYS-W14-37` truthful glTF export controls.** Testing is enabled in the current Ninja Release tree, and
+- **Last full build: clean after `SYS-W14-38` animation clips and export policy.** Testing is enabled in the current Ninja Release tree, and
   `CCACHE_DISABLE=1 cmake --build b-release -j4` linked successfully on
   EASYGL. Alternate-backend runtime qualification remains blocked.
-- **Tests:** the current Release tree registers 206 tests. The 164 runnable
-  non-render tests pass in two disjoint numeric partitions (47 passed + 117
-  passed); the Xvfb preflight deterministically disables the 41
-  render-labelled registrations on this host and one display preflight is
-  skipped. `SYS-W14-37` added structural coverage for `KHR_mesh_quantization`,
+- **Tests:** the current Release tree registers 209 tests. All 168 runnable
+  tests pass; the Xvfb preflight deterministically disables 40 render
+  registrations on this host and one render display-preflight is skipped.
+  `SYS-W14-38` adds pure playback-range/blend tests, XML/JSON/MCB clip
+  round-trip coverage, and an actual glTF clip export test for TRS sampling,
+  reverse/rate baking, deterministic JSON/binary output, portable policy, and
+  ID-bearing unsupported-channel reports. `SYS-W14-37` added structural coverage for `KHR_mesh_quantization`,
   16-bit index/accessor encoding, deterministic output, explicit GLB versus
   textual-glTF image treatment, preflight estimation, and object-ID reports.
   `SYS-W14-36` added direct bounded GLB import, explicit trusted
