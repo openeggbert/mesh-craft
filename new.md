@@ -3,6 +3,14 @@
 _Prepared 2026-07-26 from the current source tree, the format specification,
 the test/build configuration, and the current Release build._
 
+**Status note (`SYS-W13-03`):** this is a point-in-time proposal snapshot,
+not live planning — `plan.md` is authoritative for current work. Its
+recommended "event bindings for Areas/triggers" feature has since shipped as
+bounded Event Preview/Play (`SYS-W14-40`, `[DONE]` in `plan.md`): timer
+bindings, Walk Mode Area enter/exit, and viewport-picked object clicks all
+dispatch automatically now. Treat the rest of this analysis as historical
+context, not a current gap list.
+
 ## Executive summary
 
 MeshCraft is already a substantial, safety-conscious 3D scene editor rather

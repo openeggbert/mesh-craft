@@ -145,7 +145,8 @@ file-browse dialog, undo/redo coverage, and Area's properties panel (the
 4 findings originally in this section) were all resolved or formally
 closed 2026-07-18; see "Resolved since 2026-07-18" above for exactly what
 changed and what's still intentionally not a structural guarantee
-(undo/redo) or not read anywhere (`coordinate_system`, by design).
+(undo/redo). `coordinate_system` is fully implemented, not merely
+declared — see the Summary table below and `SYS-W14-14`.
 
 ## 4. Non-gaps (re-confirmed 2026-07-18, no regressions)
 

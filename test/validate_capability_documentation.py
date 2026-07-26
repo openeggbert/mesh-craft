@@ -50,6 +50,10 @@ def main() -> int:
     format_doc = read(repo, "MC3_FORMAT.md")
     testing = read(repo, "TESTING.md")
     matrix = read(repo, "docs/CAPABILITY_MATRIX.md")
+    changelog = read(repo, "CHANGELOG.md")
+    missing_doc = read(repo, "missing.md")
+    release_doc = read(repo, "RELEASE.md")
+    new_doc = read(repo, "new.md")
 
     for proxy in ('obj.collision == "box"', 'obj.collision == "sphere"',
                   'obj.collision == "capsule"'):
@@ -123,6 +127,21 @@ def main() -> int:
                        "README no longer claims bindings are dry-run only")
     failures += forbid(format_doc, "viewport picking does not yet generate live",
                        "format documentation no longer claims click events are absent")
+
+    # SYS-W13-03: 4 documentation-drift claims found and fixed in a
+    # second-review pass, each verified against source before fixing.
+    failures += forbid(changelog, "trigger events and\n  automatic state switching remain unimplemented",
+                       "CHANGELOG no longer claims automatic trigger events/state switching are absent")
+    failures += require(changelog, "SYS-W14-40",
+                        "CHANGELOG credits bounded Event Preview/Play for automatic dispatch")
+    failures += forbid(missing_doc, "not read anywhere (`coordinate_system`, by design)",
+                       "missing.md no longer self-contradicts on coordinate_system being unread")
+    failures += forbid(release_doc, "`✅`/`🟡`/`🧪`/`📋`/`🔴`",
+                       "RELEASE.md no longer references the retired emoji-marker summary table")
+    failures += require(release_doc, "validate_plan_consistency.py",
+                        "RELEASE.md's docs checklist points at the real plan.md consistency check")
+    failures += require(new_doc, "SYS-W14-40",
+                        "new.md's status note credits the shipped Event Preview/Play feature")
 
     if failures:
         print(f"{failures} capability-documentation check(s) failed.", file=sys.stderr)

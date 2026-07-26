@@ -93,31 +93,34 @@ time; re-evaluate scope and blockers before starting each item.
   `capability_documentation` lint test; volatile CTest totals are no longer
   recorded as product truth.
 
-- **SYS-W13-03** `[PROPOSED]` `P1` — Remove documentation drift the
-  `capability_documentation` lint does not yet cover, confirmed by direct
-  read (not the full review list — two of its claims did not hold up: the
-  "click/timer event" gap it named is `SYS-W14-11`'s pre-existing JSON-only
-  scope, already accurate, and `RELEASE.md`'s "95 tests" mention is already
-  self-caveated as historical, not asserted as current):
-  - `CHANGELOG.md:58-59` still states "Automatic collision/click/timer
-    trigger events and automatic state switching remain unimplemented,"
-    which `SYS-W14-40` (`[DONE]`, Event Preview/Play) has since superseded.
-  - `missing.md` self-contradicts on `coordinate_system`: line 53 and the
-    matrix at line 177 say it is fully implemented and honored in the editor
-    and glTF export, while line 148 still says it is "not read anywhere
-    (`coordinate_system`, by design)".
-  - `RELEASE.md`'s docs-checklist references a `plan.md` "summary table"
-    recomputed from `✅`/`🟡`/`🧪`/`📋`/`🔴` row markers; `plan.md` no longer
-    uses that emoji-marker format (`SYS-W13-01` moved it to
-    `[DONE]`/`[IN_PROGRESS]`/`[BLOCKED]`/`[DEFERRED]` text markers), so that
-    checklist step no longer describes a real check.
-  - `new.md` (headed "prepared 2026-07-26 from the current source tree")
-    recommends "event bindings for Areas/triggers" as a next feature; that is
-    what `SYS-W14-40` already shipped, so the recommendation is stale despite
-    the file's date.
-  Extend the documentation validator with a small number of source-backed
-  negative assertions covering these four, rather than trying to make every
-  prose sentence a brittle static test.
+- **SYS-W13-03** `[DONE]` `P1` — Removed 4 verified documentation-drift
+  claims (not the full external-review list — two of its claims did not
+  hold up on direct read: the "click/timer event" gap it named is
+  `SYS-W14-11`'s pre-existing JSON-only scope, already accurate, and
+  `RELEASE.md`'s "95 tests" mention is already self-caveated as historical,
+  not asserted as current — left both alone):
+  - `CHANGELOG.md` no longer claims automatic trigger/state-switching events
+    are unimplemented; credits `SYS-W14-40` (Event Preview/Play) for
+    automatic timer/Area/click dispatch.
+  - `missing.md` no longer self-contradicts on `coordinate_system` — removed
+    the stale "not read anywhere... by design" clause that contradicted its
+    own Summary table two sections earlier.
+  - `RELEASE.md`'s docs checklist no longer references the retired
+    emoji-marker (`✅`/`🟡`/`🧪`/`📋`/`🔴`) summary-table format; points at
+    `test/validate_plan_consistency.py` instead, which is the real check.
+  - `new.md` gained a status note crediting `SYS-W14-40` for the "event
+    bindings for Areas/triggers" feature it recommends, so the recommendation
+    reads as historical rather than a live gap despite the file's date.
+  Extended `test/validate_capability_documentation.py` with 6 source-backed
+  assertions covering all four (2 of the 4 needed both a `forbid` the stale
+  text is gone and a `require` the replacement is present). Caught and fixed
+  2 vacuous checks along the way — both `forbid` needles for CHANGELOG.md
+  and `missing.md` failed to match the actual pre-fix text on the first
+  attempt (a missing 2-space Markdown continuation indent, and a spurious
+  literal `\n` where the source had a space), which would have made the
+  check pass regardless of whether the fix was ever applied; verified each
+  needle against `git show HEAD:<file>` before trusting it. All 6 new checks
+  plus the pre-existing checks pass.
 
 ### W5 — MC3 governance
 

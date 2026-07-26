@@ -55,8 +55,10 @@ lettered commit-message convention:
   meta key/value map. All fully round-tripped (XML, MCB, XSD) and editable.
   The editor rasterizes SVG textures, previews audio, runs sandboxed Lua on
   explicit request, fires trigger steps explicitly, and applies scene-state
-  overrides interactively. Automatic collision/click/timer trigger events and
-  automatic state switching remain unimplemented; see `MC3_FORMAT.md`'s
+  overrides interactively. Bounded Event Preview/Play (`SYS-W14-40`)
+  additionally dispatches timer bindings, Walk Mode Area enter/exit
+  transitions, and viewport-picked object clicks automatically, each through
+  one isolated, validated document transaction; see `MC3_FORMAT.md`'s
   per-section status notes.
 
 ## Earlier feature work

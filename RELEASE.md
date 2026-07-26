@@ -49,10 +49,14 @@ process.
 
 - [ ] `NEXT.md` reflects actual current state (status/blocker/next
       task) — not stale from a prior session.
-- [ ] `plan.md`'s summary table matches the actual row markers (a
-      `python3` one-liner recomputing `✅`/`🟡`/`🧪`/`📋`/`🔴` counts per
-      section from the row markers is the reliable way to check this —
-      the table has drifted from hand-editing before).
+- [ ] `plan.md` is internally consistent — run
+      `python3 test/validate_plan_consistency.py .` (add a build directory
+      and `--run-tests` to also catch live CTest drift, not just registered
+      counts). `plan.md` (`SYS-W13-01`) is a bounded active plan using
+      `[DONE]`/`[IN_PROGRESS]`/`[BLOCKED]`/`[DEFERRED]`/`[PROPOSED]` text
+      markers on each row, not an emoji-marker summary table — that older
+      format was retired when `plan.md` was cut down from 2,743 lines;
+      historical detail lives in `docs/history/`.
 - [ ] `README.md`'s "Current Features"/"Current Limitations" reflect
       what actually works — spot-check a few claims against the code,
       don't just trust the prose (this has caught real staleness
