@@ -104,14 +104,15 @@ before when explicitly requested (`SYS-W14-##` rows).
 
 ## 2. Current status
 
-- **Last full build: clean after the current Phase 13 File-open-recent,
-  View-Bloom/SSAO, SSAO-regression, Camera Preset Overlay, Gizmo Drag Overlay, Stats Overlay, Measurement Overlay, and Status Bar slices.** Testing is enabled in the current Ninja Release tree, and
+- **Last full build: clean after `SYS-W14-05` embedded GLB support.** Testing is enabled in the current Ninja Release tree, and
   `CCACHE_DISABLE=1 cmake --build b-release -j4` linked all targets successfully
   on EASYGL. Alternate-backend runtime qualification remains blocked.
-- **Tests:** the fresh Release tree registers 182 tests. All passed again after
-  the current Phase 13 slices in two
-  disjoint groups: 147/147 non-render tests and 35/35 render-labelled tests
-  under Xvfb (with local loopback/X11 socket access). SVG-specific
+- **Tests:** the fresh Release tree registers 183 tests. All passed after
+  `SYS-W14-05` in two disjoint groups: 147/147 non-render tests and 36/36
+  render-labelled tests under Xvfb (with local loopback/X11 socket access).
+  The new export test creates an external and inline GLB at runtime and checks
+  its flattened geometry; the new screenshot test proves the viewport loads
+  that same embed without falling back to a placeholder. SVG-specific
   verification passes with `-j4`: external and inline SVG export to glTF PNGs,
   bounded/malformed input, cache invalidation, and real headless viewport
   screenshots sampling the rasterized material pixels. This session's own
@@ -121,7 +122,7 @@ before when explicitly requested (`SYS-W14-##` rows).
   count this file last recorded (2026-07-19) predates unrelated work not
   narrated here (a further audit pass and the `SYS-W14-18..27`
   mc3-format-vs-editor gap closures — see `plan.md`/memory, not fully
-  reflected in this file's own history) — don't treat 142→182 as this
+  reflected in this file's own history) — don't treat 142→183 as this
   session's own delta.
   All builds/tests this session used at most `-j4` (never `-j$(nproc)`), per
   the user's standing request (shared machine).
@@ -652,12 +653,12 @@ backlog (650+ STAB tasks, then a 57-finding audit, all archived DONE).
 
 ## 4. Current blocker / main problem
 
-**The current Phase 13 slice has a clean full Release build and complete test
-verification.** `AUD-090` preflights `xvfb-run` with a real `xdpyinfo` client.
+**The current `SYS-W14-05` slice has a clean full Release build and complete
+test verification.** `AUD-090` preflights `xvfb-run` with a real `xdpyinfo` client.
 The execution sandbox blocks the local sockets needed by Xvfb and the
 `mc3_ai` loopback mock server, but the permitted host run completed both
-partitions cleanly: 147/147 non-render tests (including `mc3_ai` in 1.27
-seconds) and 35/35 render tests. CI explicitly installs `xvfb` and
+partitions cleanly: 147/147 non-render tests (including `mc3_ai` in 1.28
+seconds) and 36/36 render tests. CI explicitly installs `xvfb` and
 `x11-utils` for the same render path. `AUD-091` therefore remains closed as
 a stale-build false positive rather than hidden behind a longer timeout.
 
@@ -685,8 +686,9 @@ path still requires CNA/backend validation.
   attributes/elements on round-trip (`SYS-W5-03`, human-decided,
   documented in `MC3_FORMAT.md`); editor/exporter use different triangle
   winding deliberately; undo history is a bounded 20-entry stack
-  (`AUD-038`); `embed:` mesh references aren't resolved on export
-  (`AUD-025`, deferred).
+  (`AUD-038`). Embedded self-contained GLB meshes are supported; loose glTF
+  companion-file assets and other unsupported embedded-asset features are
+  explicitly rejected with a warning (see `SYS-W14-05`).
 
 ## 6. Architecture notes
 
@@ -859,8 +861,8 @@ git stash pop && cmake --build b-release -j4 --target <affected-target>
 No actionable follow-up audit task remains: `AUD-089` through `AUD-092` are
 complete. Android (`AUD-042`) remains environment-blocked, but is now an
 explicit supported-platform goal rather than a possible rejection path.
-`SYS-W3-01` has 12 completed subsystem phases and an active Phase 13 for
-application/UI ownership. The authorized Camera Bookmarks, Camera Preset Overlay, Gizmo Drag Overlay, Stats Overlay, Measurement Overlay, Status Bar, Walk Mode, View
+`SYS-W3-01` has 12 completed subsystem phases; its Phase 13 application/UI
+ownership work is deferred by user priority. The completed Camera Bookmarks, Camera Preset Overlay, Gizmo Drag Overlay, Stats Overlay, Measurement Overlay, Status Bar, Walk Mode, View
 Bloom/SSAO, Help, Add/CSG, Edit-history, Edit-clipboard, and Edit-object-actions
 menu slices are implemented and verified, together with Edit-selection-actions,
 Edit-select-by-type/tag/material, Edit-copy-properties, Edit-grouping,
@@ -1139,11 +1141,11 @@ be a separately scoped subsystem, not another mechanical `Overlays.cpp` slice.
 
 ### Current authorized work
 
-- **SYS-W14-05:** embedded external/inline GLB support is implemented and
-  under final validation. It safely accepts self-contained triangle GLBs only,
-  with a 64 MiB / 300,000-triangle ceiling; MC3 materials remain authoritative.
-- **SYS-W14-06:** improved CSG normals/UVs/materials is the next authorized
-  task once the `SYS-W14-05` validation/commit is complete.
+- **SYS-W14-05:** complete in commit `7e93b92`: embedded external/inline GLB
+  support accepts self-contained triangle GLBs only, with a 64 MiB /
+  300,000-triangle ceiling; MC3 materials remain authoritative.
+- **SYS-W14-06:** improved CSG normals/UVs/materials is the current authorized
+  next task.
 
 ### Tracked work that is not implementation-ready
 

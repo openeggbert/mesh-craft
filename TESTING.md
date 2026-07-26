@@ -31,7 +31,7 @@ ctest --print-labels   # list all labels
 ctest --rerun-failed --output-on-failure
 ```
 
-Expected result: every registered test passes. On 2026-07-26 the fresh Release build reported 183 registrations; the new embedded-GLB export and viewport tests passed after a host configure/build. The preceding complete run passed 147/147 with `-LE render` and 35/35 with `-L render`; re-run both partitions after this change for the final 147/147 + 36/36 confirmation. The focused suites are run with at most `-j4` after each change. A failing test prints its assertion/subprocess output inline with `--output-on-failure`; without that flag, CTest only shows pass/fail per test name.
+Expected result: every registered test passes. On 2026-07-26 the fresh Release build reported 183 registrations and passed all of them as two disjoint host runs: 147/147 with `-LE render` and 36/36 with `-L render` under Xvfb. The focused suites are run with at most `-j4` after each change. A failing test prints its assertion/subprocess output inline with `--output-on-failure`; without that flag, CTest only shows pass/fail per test name.
 
 Each C++ test binary can also be run directly (bypassing CTest) for faster iteration:
 

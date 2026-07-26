@@ -87,7 +87,7 @@ P1s already being fixed in git history. This session:
    **Net across all 35 AUD-### rows remaining in this active backlog (61
    additional rows completed and archived to `docs/history/plan_20260718.md`
    on 2026-07-18 — see that file for their full evidence/resolution text):
-   32 DONE, 1 TODO, 2 DEFERRED** — 10 of the 32 DONE (`AUD-064` through
+   33 DONE, 1 TODO, 1 DEFERRED** — 10 of the 33 DONE (`AUD-064` through
    `AUD-073`) are fresh findings from a 2026-07-18 (later same day)
    independent re-audit, not part of the original 6 (`AUD-069` itself fixed
    2026-07-19, the day after it was filed); the other 14 (`AUD-074`
@@ -1119,11 +1119,15 @@ portable through CNA rather than merely hiding its OpenGL dependency.
   CNA exposes no mip-chain generation for pixel-created textures. Added
   malformed/capped-dimension, cache-invalidation, inline viewport, and GLB
   coverage. **Resolved:** commits `8cb14be`, `026fc2d`.
-- **SYS-W14-05** `[IN_PROGRESS, user-authorized 2026-07-26]` `P3` — Safe
-  `embed:` mesh/resource support end-to-end. (`AUD-025`) External
-  self-contained GLB and inline base64 GLB now resolve through a shared,
-  bounded loader in both exporter and viewport; final whole-suite validation
-  and status closure follow this implementation slice.
+- **SYS-W14-05** `[DONE]` `P3` — Safe `embed:` mesh/resource support
+  end-to-end. (`AUD-025`) External self-contained GLB and inline base64 GLB
+  resolve through a shared, bounded loader in both exporter and viewport. It
+  flattens default-scene transforms, retains MC3 material ownership, rejects
+  companion-file/unsupported GLB features explicitly, and caps source data at
+  64 MiB / 300,000 triangles. `mc3togltf_embed_mesh_source` proves external
+  and inline export plus node-transform flattening; `embed_mesh_viewport_test`
+  proves actual CNA viewport rendering. Full Release validation passed
+  147/147 non-render and 36/36 render tests. **Resolved:** commit `7e93b92`.
 - **SYS-W14-06** `[TODO, user-authorized 2026-07-26]` `P3` — Improved CSG
   output (smooth normals/UVs/materials). Next coherent feature slice after
   `SYS-W14-05` validation.
@@ -2009,13 +2013,26 @@ the audit's own initial P1/P2 "visibly double-applied" framing to P2
 "dead/incorrect code" after direct empirical investigation found zero
 actual pixel difference — see its own row for the full story.
 
-### AUD-025 `[DEFERRED]` `P2` `W7` · embed: mesh source is treated as a literal OBJ path — node exports with no mesh while export exits 0 'Written'
-- **Component:** mc3togltf/src/GltfExporter.cpp buildMesh()
-- **Evidence:** GltfExporter.cpp:586-593: `if (obj.type == ObjectType::Mesh && !obj.meshSource.empty()) { try { md = loadObjMesh(ctx.basePath, obj.meshSource); } catch (...) { std::cerr << Warning ...; ctx.stats.warnings++; return -1; } }`. The exporter never checks for the `embed:<id>` form the mc3 parser/writer round-trip (Mc3XmlParser.cpp:743-749). `loadObjMesh` tries to open a file literally named 'embed:tree', fails, warning printed, node gets no mesh. main.cpp:93 then prints 'Written:' and returns 0. Documented (MC3_FORMAT.md, STAB-0194/0549) and a warning + stats.warnings signal it, so not fully silent — but the tool still reports success with dropped geometry.
-- **Outcome:** Resolve embed:<id> against doc.embeds (parse the referenced/inline GLB and merge its meshes), or make the missing-geometry case a non-zero exit / clearer failure rather than 'Written' success.
-- **Tests:** The existing embed_mesh_source_test.py locks in the degraded behavior; add resolution or assert a distinct exit/status when geometry is dropped.
-- **Verify note:** Evidence is accurate; no correction needed. Severity P2 is appropriate: the geometry loss is signalled by a stderr Warning and the stats.warnings counter (only shown with --show-stats), and the behavior is documented in MC3_FORMAT.md and locked in by a passing test (mc3togltf/test/embed_mesh_source_test.py, STAB-0549) that asserts exit 0 + warning + empty node is the intended, accepted limitation. It is therefore a low-severity known limitation rather than a silent data-loss bug, but the core claim (tool reports 'Written'/exit 0 while dropping the embed:-referenced mesh) is factually correct.
-- **Status note:** Existing embed_mesh_source_test.py locks in the current documented-limitation behavior (exit 0 + warning + empty node); the adversarial re-verify pass judged this an accepted limitation, not a defect requiring a code change. Left TODO-eligible for W14 embed: resolution work (SYS-W14-05).
+### AUD-025 `[DONE]` `P2` `W7` · Resolve `embed:` mesh sources instead of dropping geometry during export
+- **Component:** `mc3togltf/src/MeshBuilder.cpp` shared GLB loader,
+  `GltfExporter.cpp` and `SceneRenderer.cpp` consumers.
+- **Evidence:** `embed:<id>` was preserved by the MC3 parser/writer but the
+  exporter handed it to the OBJ loader as a literal filename, warning and
+  emitting a meshless node while returning success.
+- **Outcome:** Resolve the id through `doc.embeds`; safely load either an
+  external self-contained `.glb` or inline base64 GLB; flatten its default
+  scene's triangle geometry and transforms into `MeshData`; then use the same
+  data in both export and CNA viewport upload. MC3 material assignment remains
+  authoritative. Loose `.gltf` companion resources, non-triangle primitives,
+  animation/skin/morph data, singular transforms, malformed accessors, and
+  assets exceeding 64 MiB/300,000 triangles fail with a named warning rather
+  than silently producing a partial import.
+- **Tests:** Replaced the former degraded-behaviour test with external and
+  inline GLB export checks that inspect the resulting transformed positions;
+  added `embed_mesh_viewport_test`, a real screenshot test that proves the
+  viewport did not fall back to its placeholder. Full Release CTest passed
+  147/147 non-render + 36/36 render.
+- **Resolved:** commit `7e93b92` — verify: `ctest -R 'mc3togltf_embed_mesh_source|embed_mesh_viewport_test' --output-on-failure`.
 
 ### AUD-038 `[DEFERRED]` `P3` `W9` · Undo history is a bounded 20-entry whole-document deep-copy stack; oldest entries are silently dropped (informational — answers the audit question, by-design)
 - **Component:** include/MeshCraft/MeshCraftApplication.hpp, src/MeshCraft/MeshCraftApplication_Commands.cpp
