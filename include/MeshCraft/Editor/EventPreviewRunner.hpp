@@ -296,12 +296,22 @@ public:
                             ++result.skippedTriggerSteps;
                             break;
                         }
-                        const std::string error = scriptRunner_.run(script->second.source, working,
+                        // Copy the source out by value BEFORE calling run():
+                        // LuaScriptRunner atomically replaces `working` via
+                        // move-assignment on success, so `script` (an
+                        // iterator into working.scripts) is dangling the
+                        // instant run() returns -- same hazard the
+                        // scriptTarget re-lookup below already guards
+                        // against, just missed here (confirmed by ASan:
+                        // heap-use-after-free reading script->second.source
+                        // after this exact call, SYS-W11-09).
+                        const std::string scriptSource = script->second.source;
+                        const std::string error = scriptRunner_.run(scriptSource, working,
                                                                     scriptTarget);
                         if (!error.empty())
                             throw std::runtime_error("trigger '" + triggerId +
                                                      "' script '" + step.ref + "' failed: " + error);
-                        documentChanged |= !script->second.source.empty();
+                        documentChanged |= !scriptSource.empty();
                         // LuaScriptRunner atomically replaced `working`, so a
                         // pointer into its old object graph must not be reused
                         // by a later RunScript step in this same trigger.
