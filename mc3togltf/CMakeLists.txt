@@ -145,6 +145,7 @@ target_include_directories(mc3togltf PRIVATE
 )
 
 target_link_libraries(mc3togltf PRIVATE mc3togltf_lib)
+target_compile_definitions(mc3togltf PRIVATE MESHCRAFT_VERSION="${PROJECT_VERSION}")
 
 # AUD-054: the executable itself (a thin main.cpp wrapper) previously had
 # no warning flags; mc3togltf_lib above already did.

@@ -305,16 +305,56 @@ time; re-evaluate scope and blockers before starting each item.
   the artifact test alone suggests. Left `DEFERRED` here; changing that is a
   scope decision for the user, not made in this pass.
 
-- **SYS-W11-08** `[PROPOSED]` `P2` — Produce and test clean-room CLI release
-  artifacts. Replace the current bare-executable-upload pattern (the
-  `windows-2022` job publishes only `mc3tomcb.exe`/`mc3togltf.exe`, no
-  runtime libraries or manifest) with one staged install tree containing both
-  CLI programs, their required runtime libraries, notices, licenses, package
-  metadata, and a manifest of SHA-256 hashes. Test the Linux and Windows
-  artifacts after copying them outside the build directory with build paths
-  removed from the environment. **Tests:** `--version`, MC3→MCB, MC3→GLB,
-  deterministic fixture hashes, missing-runtime detection, and archive
-  extraction into a path containing spaces and non-ASCII characters.
+- **SYS-W11-08** `[DONE]` `P2` — Produced and tested clean-room CLI release
+  artifacts, on Linux fully, on Windows partially (see below).
+  Discovered along the way (neither tool had it at all — a real functional
+  gap, not just a testing gap): **`--version` did not exist.**
+  `mc3tomcb --version` printed the usage text and exited 1;
+  `mc3togltf --version` treated `--version` as an input filename and failed
+  with "input file not found". Added it to both (`MESHCRAFT_VERSION`, a new
+  per-tool `target_compile_definitions` using each standalone project's own
+  `PROJECT_VERSION` — not yet unified across projects; that is `SYS-W11-10`'s
+  job). This directly affects `SYS-W11-06`'s own amended acceptance criteria,
+  which already assumed `--version` worked.
+  `cmake/CreateCliRelease.cmake` (used by both the `meshcraft_cli_release`
+  target and the new test below) now additionally: bundles `LICENSE` and
+  `THIRD_PARTY.md` into the archive, and writes a `sha256sum -c`-compatible
+  `SHA256SUMS.txt` manifest covering every installed file. Found and fixed a
+  real bug in the manifest generation itself while building it: `cmake
+  --install` never wipes its destination, so a stale `SHA256SUMS.txt` left
+  by a previous run of the script was picked up by the file-listing glob
+  with its OLD hash, then silently overwritten by the new manifest —
+  a self-referential mismatch on every second run. Fixed by removing any
+  existing manifest before globbing.
+  New `clean_room_cli_release_smoke` CTest (builds the archive fresh,
+  extracts it into `build-dir/clean room café` — outside the build tree,
+  with a space and a non-ASCII character in the name — then runs
+  `test/clean_room_cli_release_test.py` against the extracted copy with
+  `PATH` set to `/usr/bin:/bin` only, i.e. no build-tree directory in the
+  environment at all) verifies: both notices and the manifest are present;
+  every manifest entry's hash matches the actual extracted file; `--version`
+  succeeds for both tools; a real MC3→MCB and MC3→GLB conversion from the
+  extracted binaries is byte-identical to the existing in-tree fixture
+  hashes; and removing `libmanifold`/`libtinyobjloader` from a second copy
+  of the extracted tree makes `mc3togltf` fail cleanly (non-zero exit, not a
+  hang) rather than silently succeeding or crashing with no diagnostic.
+  Verified on both the root-project build and each tool's own standalone
+  build (`mc3tomcb/build`, `mc3togltf/build`); all pass, and the pre-existing
+  3 Blender/`numpy` failures in `mc3togltf`'s standalone suite are unrelated
+  (same environment gap as `SYS-W9-06`/`SYS-W1-08`'s writeups).
+  **Windows remains partial, honestly:** added a "Stage release manifest and
+  notices" step to the `windows-2022` CI job (SHA-256 manifest + notices
+  bundled into the uploaded artifact, same shape as the Linux archive) —
+  this is a safe, additive change with no dependency on the DLL-staging gap.
+  Deliberately did NOT attempt to fix `mc3togltf.exe`'s
+  `STATUS_DLL_NOT_FOUND` failure (confirmed present even for the in-tree
+  ctest run, not just a downloaded artifact) as part of this task: that is
+  one of the 6 general CI-red regressions from tonight's survey, explicitly
+  left for a separate pass per the user's standing instruction, and this
+  task's own manifest-generation work does not depend on it being fixed
+  first. Native Windows clean-room extraction/`--version`/conversion
+  remains unverified in this sandbox (no Wine) — same limitation as
+  `SYS-W11-06`.
 
 - **SYS-W11-09** `[PROPOSED]` `P1` — Add first-party editor sanitizer CI.
   `SYS-W11-04`'s sanitizer/fuzz CI covers `mc3`, `mcb`, `mc3togltf`, and

@@ -377,6 +377,7 @@ add_custom_target(meshcraft_cli_release
             "-DMC_RELEASE_BUILD_DIR=${CMAKE_BINARY_DIR}"
             "-DMC_RELEASE_VERSION=${PROJECT_VERSION}"
             "-DMC_RELEASE_SYSTEM=${CMAKE_SYSTEM_NAME}"
+            "-DMC_RELEASE_SOURCE_DIR=${CMAKE_CURRENT_SOURCE_DIR}"
             -P "${CMAKE_CURRENT_SOURCE_DIR}/cmake/CreateCliRelease.cmake"
     DEPENDS mc3tomcb mc3togltf
     COMMENT "Creating the relocatable MeshCraft CLI release archive")
@@ -409,6 +410,25 @@ if(BUILD_TESTING)
         set_tests_properties(cli_cross_platform_fixture PROPERTIES
             TIMEOUT 30
             LABELS "export;portability")
+
+        # SYS-W11-08: proves the .tar.gz release archive itself -- not just
+        # the in-tree build products cli_cross_platform_fixture above
+        # exercises -- is a self-contained artifact: builds it fresh,
+        # extracts it into a path with a space and a non-ASCII character
+        # outside the build tree, and runs both CLI tools with a PATH that
+        # contains no build-tree directory at all.
+        add_test(
+            NAME clean_room_cli_release_smoke
+            COMMAND "${CMAKE_COMMAND}"
+                    "-DMC_RELEASE_BUILD_DIR=${CMAKE_BINARY_DIR}"
+                    "-DMC_RELEASE_SOURCE_DIR=${CMAKE_CURRENT_SOURCE_DIR}"
+                    "-DMC_RELEASE_VERSION=${PROJECT_VERSION}"
+                    "-DMC_RELEASE_SYSTEM=${CMAKE_SYSTEM_NAME}"
+                    "-DMC_RELEASE_PYTHON3=${MESHCRAFT_PYTHON3}"
+                    -P "${CMAKE_CURRENT_SOURCE_DIR}/test/cmake/clean_room_cli_release_smoke.cmake")
+        set_tests_properties(clean_room_cli_release_smoke PROPERTIES
+            TIMEOUT 120
+            LABELS "package;portability")
     endif()
 endif()
 

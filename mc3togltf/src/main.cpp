@@ -64,6 +64,9 @@ int main(int argc, char* argv[]) {
         if (a == "--help" || a == "-h") {
             printUsage(argv[0]);
             return 0;
+        } else if (a == "--version") {
+            std::cout << "mc3togltf " << MESHCRAFT_VERSION << "\n";
+            return 0;
         } else if (a == "--allow-approximate-csg") allowApproxCSG = true;
         else if (a == "--allow-external-resources") allowExternalResources = true;
         else if (a == "--stats")            showStats = true;

@@ -114,6 +114,27 @@ jobs:
           test/house.mc3.xml
           build/cli-cross-platform-fixture
 
+      # SYS-W11-08: bundle the same notices/SHA-256 manifest the Linux
+      # meshcraft_cli_release archive gets, so the Windows artifact isn't a
+      # bare, unverifiable pair of executables. Does not attempt to stage
+      # Manifold/tinyobjloader runtime DLLs here -- that is a separate,
+      # already-tracked gap (the in-tree ctest run above can currently fail
+      # with STATUS_DLL_NOT_FOUND for the same underlying reason), and adding
+      # a manifest for an incomplete artifact is still strictly better than
+      # no manifest at all.
+      - name: Stage release manifest and notices
+        shell: pwsh
+        run: |
+          Copy-Item LICENSE build/
+          Copy-Item THIRD_PARTY.md build/
+          $files = @('build/mc3tomcb/mc3tomcb.exe', 'build/mc3togltf/mc3togltf.exe',
+                     'build/LICENSE', 'build/THIRD_PARTY.md')
+          $lines = foreach ($f in $files) {
+            $hash = (Get-FileHash -Algorithm SHA256 $f).Hash.ToLower()
+            "$hash  $(Split-Path -Leaf $f)"
+          }
+          Set-Content -Path build/SHA256SUMS.txt -Value $lines
+
       - name: Publish qualified Windows CLI artifacts
         uses: actions/upload-artifact@v4
         with:
@@ -122,6 +143,9 @@ jobs:
           path: |
             build/mc3tomcb/mc3tomcb.exe
             build/mc3togltf/mc3togltf.exe
+            build/LICENSE
+            build/THIRD_PARTY.md
+            build/SHA256SUMS.txt
 
   sanitizers-and-fuzz:
     name: Clang ASan+UBSan and bounded fuzz

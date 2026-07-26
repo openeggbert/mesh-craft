@@ -29,6 +29,7 @@ add_executable(mc3tomcb
 )
 
 target_link_libraries(mc3tomcb PRIVATE Mcb Mc3)
+target_compile_definitions(mc3tomcb PRIVATE MESHCRAFT_VERSION="${PROJECT_VERSION}")
 
 # AUD-054/AUD-055: previously had no warning flags.
 if(MSVC)
