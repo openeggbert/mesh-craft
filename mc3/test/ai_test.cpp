@@ -672,9 +672,27 @@ static bool pollUntilDone(AiAssistant& ai, int timeoutMs) {
     return true;
 }
 
-static void waitUntilServerRunning(httplib::Server& svr) {
-    while (!svr.is_running())
+static bool waitUntilServerRunning(httplib::Server& svr,
+                                   std::chrono::milliseconds timeout = std::chrono::seconds(1)) {
+    const auto deadline = std::chrono::steady_clock::now() + timeout;
+    while (!svr.is_running() && std::chrono::steady_clock::now() < deadline)
         std::this_thread::sleep_for(std::chrono::milliseconds(2));
+    return svr.is_running();
+}
+
+// Sandboxed CI environments can disallow a loopback listener altogether. The
+// HTTP integration coverage is not meaningful there, but a missing listener
+// must not turn the whole AI test into an unbounded wait.
+static bool mockHttpServerAvailable() {
+    httplib::Server probe;
+    if (probe.bind_to_any_port("127.0.0.1") < 0)
+        return false;
+
+    std::thread serverThread([&] { probe.listen_after_bind(); });
+    const bool ready = waitUntilServerRunning(probe);
+    probe.stop();
+    serverThread.join();
+    return ready;
 }
 
 static void testMockServerSuccessRoundTrip() {
@@ -1232,18 +1250,22 @@ int main() {
     std::cout << "SKIP: XSD-rejection tests require MESHCRAFT_HAS_LIBXML2\n";
 #endif
 #ifdef MESHCRAFT_HAS_AI
-    testMockServerSuccessRoundTrip();
-    testMockServerTruncatedResponse();
-    testMockServerHttpErrorStatus();
-    testMockServerOversizedErrorBodyIsBounded();
-    testMockServerResponseExceedingCapIsAborted();
-    testMockServerResponseUnderCapStillSucceeds();
-    testModelNameSentInRequestBody();
     testConnectionRefusedProducesUserVisibleError();
-    testMalformedJsonResponseHandledGracefully();
-    testBackToBackSendAsyncCallsDoNotCrash();
-    testNetworkTimeoutPreventsIndefiniteHang();
-    testWaitForAllInFlightBoundedThenCompletes();
+    if (mockHttpServerAvailable()) {
+        testMockServerSuccessRoundTrip();
+        testMockServerTruncatedResponse();
+        testMockServerHttpErrorStatus();
+        testMockServerOversizedErrorBodyIsBounded();
+        testMockServerResponseExceedingCapIsAborted();
+        testMockServerResponseUnderCapStillSucceeds();
+        testModelNameSentInRequestBody();
+        testMalformedJsonResponseHandledGracefully();
+        testBackToBackSendAsyncCallsDoNotCrash();
+        testNetworkTimeoutPreventsIndefiniteHang();
+        testWaitForAllInFlightBoundedThenCompletes();
+    } else {
+        std::cout << "SKIP: mock HTTP server tests require a usable loopback listener\n";
+    }
 #else
     std::cout << "SKIP: mock HTTP server tests require MESHCRAFT_HAS_AI\n";
 #endif
