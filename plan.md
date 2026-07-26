@@ -135,8 +135,7 @@ sequentially. Per `CLAUDE.md`, recording this ordered backlog does **not**
 remove the requirement to describe and obtain explicit confirmation for each
 individual implementation task immediately before work begins.
 
-1. **SYS-W14-36 (P3/W14)** — add a bounded editable self-contained GLB importer.
-2. **SYS-W14-37/38/39 and SYS-W9-04 (P3)** — export optimization controls,
+1. **SYS-W14-37/38/39 and SYS-W9-04 (P3)** — export optimization controls,
     animation/export policy, Model Registry v2, and scalable history/review
     tooling.
 
@@ -2181,15 +2180,29 @@ because it is listed: `CLAUDE.md` requires per-row user confirmation.
   (80/80 + 83/83); 41 render-labelled tests remain disabled by the existing
   no-Xvfb preflight.
 
-- **SYS-W14-36** `[TODO]` `P3` — Bounded editable self-contained GLB import.
-  The current `embed:` loader safely flattens a constrained self-contained GLB
-  but is not a native editable import workflow. Add a File Import GLB route
-  that maps nodes, triangle meshes, cameras, punctual lights, material
-  factors, images, and transforms into native MC3 objects/materials, with an
-  explicit trusted mode for external-resource `.gltf`. Start with
-  self-contained triangle GLB; reject or clearly report skins, morph targets,
-  animations, and unsupported primitive modes. Keep input size/triangle/path
-  limits and add import-to-MC3-to-glTF round-trip tests.
+- **SYS-W14-36** `[DONE]` `P3` — Bounded editable self-contained GLB import.
+  **Implemented 2026-07-26 in commit `20a41e6`.** File → Import GLB / glTF creates an editable
+  MC3 group hierarchy rather than flattening the source: each supported
+  triangle primitive becomes a Mesh child pointing at a strict mesh/primitive
+  selector on one bounded inline GLB embed. Node transforms, material factors
+  and texture slots, embedded images, cameras, and `KHR_lights_punctual`
+  lights become native MC3 records. Inline image textures render directly in
+  the viewport after an in-memory decode bounded to 16 MiB encoded and
+  16-million pixels, and re-export as embedded GLB images.
+
+  Normal import accepts only a self-contained `.glb` (48 MiB input, 4,096
+  nodes, depth 64, and the shared 300,000-triangle embedded-mesh ceiling).
+  The visibly unchecked **Trusted external .gltf import** option is the sole
+  external-resource path: it limits JSON to 16 MiB, resolved resource payload
+  to 48 MiB, confines companions to the selected `.gltf` directory, converts
+  the complete model to the same inline GLB, and retains no external path in
+  the saved MC3. Skins and morph primitives are skipped with named warnings;
+  animations warn; non-triangle primitives are rejected before document
+  mutation. The new direct CTest builds GLB and external-gltf fixtures,
+  verifies native hierarchy/material/image/camera/light mapping, source-root
+  confinement, unsupported-mode rejection, and MC3-to-GLB round trip. Release
+  build and all 164 non-render CTests passed (80/80 + 84/84); 41
+  render-labelled tests remain disabled by the no-Xvfb preflight.
 
 - **SYS-W14-37** `[TODO]` `P3` — Truthful glTF export optimization controls and report.
   The Export dialog displays disabled quantization/texture controls. Replace

@@ -51,7 +51,22 @@ Every subsequent save rotates a 2-slot backup
 `README.md`'s "Backup and Recovery" section if you ever need to
 recover from one.
 
-## 6. Export to glTF/GLB
+## 6. Import a GLB or glTF scene
+
+Choose **File → Import GLB / glTF...**. A normal import accepts a
+self-contained `.glb` and creates a selected editable MC3 group: its node
+hierarchy, triangle primitives, transforms, PBR materials, embedded images,
+cameras, and punctual lights are retained. The source is stored inside the
+MC3 document, so later saves and exports do not depend on the original GLB.
+
+For a textual `.gltf`, first enable **Trusted external .gltf import** in the
+dialog. This is deliberately off by default. It reads only companion files in
+the selected glTF's directory, applies size limits, then embeds the resolved
+result into the MC3 document. Use it only for assets you trust. Skins, morph
+targets, and animations are reported as lossy; non-triangle primitives are
+rejected before anything is added to the scene.
+
+## 7. Export to glTF/GLB
 
 **File → Export GLB** (`Ctrl+E`). This requires the scene to already
 be saved (it derives the default output path from the current

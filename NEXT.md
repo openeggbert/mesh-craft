@@ -105,14 +105,14 @@ before when explicitly requested (`SYS-W14-##` rows).
 
 ## 2. Current status
 
-- **Last full build: clean after `SYS-W14-35` OBJ material-group import.** Testing is enabled in the current Ninja Release tree, and
-  `CCACHE_DISABLE=1 cmake --build b-release --target MeshCraft mc3togltf mc3togltf_obj_material_import_test -j4`
-  linked successfully on EASYGL. Alternate-backend runtime qualification remains blocked.
-- **Tests:** the current Release tree registers 204 tests. All 163 non-render
-  tests pass in two `-LE render` partitions (80/80 + 83/83); the Xvfb
+- **Last full build: clean after `SYS-W14-36` editable GLB/glTF import.** Testing is enabled in the current Ninja Release tree, and
+  `CCACHE_DISABLE=1 cmake --build b-release -j4` linked successfully on
+  EASYGL. Alternate-backend runtime qualification remains blocked.
+- **Tests:** the current Release tree registers 205 tests. All 164 non-render
+  tests pass in two `-LE render` partitions (80/80 + 84/84); the Xvfb
   preflight deterministically disables the 41 render-labelled registrations
-  on this host. `SYS-W14-35` added direct hardened-OBJ import coverage plus
-  an end-to-end glTF material-group regression.
+  on this host. `SYS-W14-36` added direct bounded GLB import, explicit trusted
+  external-gltf confinement, rejection, and MC3→GLB round-trip coverage.
   Before that additive test, an Xvfb-qualified host passed all 185 registrations after `AUD-042` in two
   disjoint groups: 149/149 non-render tests and 36/36 render-labelled tests.
   `mc3togltf_csg_shading_materials` reads a real GLB to assert smooth CSG
@@ -152,6 +152,16 @@ before when explicitly requested (`SYS-W14-##` rows).
   Fixtures cover multi-material and missing-MTL input, hostile indices, and
   the exported glTF node/material split. External sources retain the existing
   safe-export rejection rather than being rewritten as traversal paths.
+- **Recently implemented (2026-07-26):** `SYS-W14-36` adds File → Import
+  GLB / glTF as an editable, portable workflow. A normal self-contained GLB
+  becomes one inline source embed plus a native MC3 node/primitive hierarchy,
+  PBR materials, embedded image textures, cameras, and punctual lights;
+  explicit selectors keep each Mesh from later flattening on preview/export.
+  The visible trusted-gltf opt-in reads only same-directory companions under
+  strict JSON/payload limits, then converts them to that same inline source —
+  no external path remains after import. Skins/morphs/animations are named
+  lossy cases and non-triangles reject before mutation. Inline image data now
+  also decodes directly in the viewport with encoded-byte and pixel caps.
 - **Recently implemented (2026-07-26):** `SYS-W14-33` adds a capability-gated,
   CNA-only point/spot-light preview. On a valid source-GLSL `ShaderEffect`
   backend, the first eight document-order punctual lights affect normal/UV
