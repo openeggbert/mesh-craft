@@ -961,6 +961,18 @@ if(MESH_CRAFT_BUILD_TESTING AND UNIX AND NOT ANDROID AND NOT EMSCRIPTEN)
     add_test(NAME differential_geometry COMMAND differential_geometry_test)
     set_tests_properties(differential_geometry PROPERTIES TIMEOUT 30 LABELS "unit")
 
+    # SYS-W14-32: the viewport's per-object UV projection must match the
+    # independently generated MeshBuilder TEXCOORD_0 used by glTF export.
+    add_executable(uv_mapping_algorithms_test
+        ${CMAKE_CURRENT_SOURCE_DIR}/test/uv_mapping_algorithms_test.cpp)
+    target_include_directories(uv_mapping_algorithms_test PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/include)
+    target_link_libraries(uv_mapping_algorithms_test PRIVATE mc3togltf_lib)
+    target_compile_features(uv_mapping_algorithms_test PRIVATE cxx_std_23)
+    target_compile_options(uv_mapping_algorithms_test PRIVATE -Wall -Wextra)
+    add_test(NAME uv_mapping_algorithms COMMAND uv_mapping_algorithms_test)
+    set_tests_properties(uv_mapping_algorithms PROPERTIES TIMEOUT 30 LABELS "unit")
+
     # 2026-07-20 audit finding #2 (P1): segments in {0,1} made several
     # primitive tessellators -- in BOTH independent geometry generators
     # (mc3togltf::MeshBuilder.cpp and PrimitiveTessellationAlg.hpp) --
@@ -1438,6 +1450,23 @@ if(MESH_CRAFT_BUILD_TESTING AND UNIX AND NOT ANDROID AND NOT EMSCRIPTEN)
                 WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
             )
             set_tests_properties(coordinate_system_viewport_test PROPERTIES TIMEOUT 30 LABELS "render")
+        endif()
+
+        # SYS-W14-32: box and sphere UV projection must visibly differ from
+        # the same primitive's default unwrap in the live viewport.
+        if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/test/uv_mapping_viewport_plain.mc3.xml" AND
+           EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/test/uv_mapping_viewport_box.mc3.xml" AND
+           EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/test/uv_mapping_viewport_sphere.mc3.xml")
+            add_test(
+                NAME uv_mapping_viewport_test
+                COMMAND "${PYTHON3_EXEC}"
+                        "${CMAKE_CURRENT_SOURCE_DIR}/test/uv_mapping_viewport_test.py"
+                        $<TARGET_FILE:MeshCraft>
+                        "${CMAKE_CURRENT_SOURCE_DIR}/test/uv_mapping_viewport_plain.mc3.xml"
+                        "${CMAKE_CURRENT_SOURCE_DIR}/test/uv_mapping_viewport_box.mc3.xml"
+                        "${CMAKE_CURRENT_SOURCE_DIR}/test/uv_mapping_viewport_sphere.mc3.xml"
+            )
+            set_tests_properties(uv_mapping_viewport_test PROPERTIES TIMEOUT 45 LABELS "render")
         endif()
 
         # AUD-084: Bloom post-processing (I6) migrated from a hand-rolled

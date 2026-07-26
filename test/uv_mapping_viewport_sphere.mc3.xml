@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- SYS-W14-32: identical geometry and camera, spherical projection. -->
+<mc3 version="0.3" model="UvViewportSphere" default_camera="Camera">
+  <environment><background color="0.03 0.03 0.03"/></environment>
+  <lights><ambient color="1 1 1" brightness="1"/></lights>
+  <cameras><camera name="Camera" position="0 0 5" target="0 0 0" fov="40" near="0.1" far="100"/></cameras>
+  <textures><texture id="logo" type="svg" src="logo.svg" filter="nearest"/></textures>
+  <materials><material id="logoMat"><base_color_texture>logo</base_color_texture></material></materials>
+  <objects>
+    <box name="UvTarget" size="2 2 2" material="logoMat"><uv_mapping projection="sphere"/></box>
+  </objects>
+</mc3>

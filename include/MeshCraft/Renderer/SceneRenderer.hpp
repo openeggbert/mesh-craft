@@ -13,6 +13,7 @@
 #include <Microsoft/Xna/Framework/Graphics/ShaderEffect.hpp>
 #include <Microsoft/Xna/Framework/Graphics/Texture2D.hpp>
 #include <Microsoft/Xna/Framework/Graphics/VertexBuffer.hpp>
+#include <Microsoft/Xna/Framework/Graphics/VertexPositionNormalTexture.hpp>
 #include <Microsoft/Xna/Framework/Matrix.hpp>
 #include <array>
 #include <filesystem>
@@ -53,6 +54,9 @@ struct RenderMesh {
     // UV+normal variant for texture rendering (VertexPositionNormalTexture)
     std::unique_ptr<Microsoft::Xna::Framework::Graphics::VertexBuffer> texVB;
     std::unique_ptr<Microsoft::Xna::Framework::Graphics::IndexBuffer>  texIB;
+    // CPU mirror of texVB. It permits per-object UV projection to upload a
+    // temporary mapped buffer without reading data back from the GPU.
+    std::vector<Microsoft::Xna::Framework::Graphics::VertexPositionNormalTexture> texturedVertices;
     int texPrimitiveCount{0};
 };
 
@@ -440,7 +444,9 @@ private:
                           const Microsoft::Xna::Framework::Matrix& projection,
                           Microsoft::Xna::Framework::Color color,
                           Microsoft::Xna::Framework::Graphics::Texture2D* tex,
-                          const Microsoft::Xna::Framework::Graphics::SamplerState* sampler = nullptr);
+                          const Microsoft::Xna::Framework::Graphics::SamplerState* sampler = nullptr,
+                          const Mc3::Mc3UvMapping* uvMapping = nullptr,
+                          std::array<float, 3> uvGeometryScale = {1.0f, 1.0f, 1.0f});
 
     Microsoft::Xna::Framework::Graphics::Texture2D* loadOrGetTexture(const std::string& absPath);
     const RenderMesh* loadOrGetMesh(const std::string& absPath);

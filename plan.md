@@ -135,8 +135,8 @@ sequentially. Per `CLAUDE.md`, recording this ordered backlog does **not**
 remove the requirement to describe and obtain explicit confirmation for each
 individual implementation task immediately before work begins.
 
-1. **SYS-W14-32/33/34 (P2/P2/P3/W14)** — deliver viewport parity in separate
-   UV-mapping, point/spot-light, and CSG child-material slices.
+1. **SYS-W14-33/34 (P2/P3/W14)** — deliver the remaining viewport parity in
+   separate point/spot-light and CSG child-material slices.
 2. **SYS-W14-30 (P2/W14)** — expand explicit walk-mode collision proxies.
 3. **SYS-W14-35/36 (P2/P3/W14)** — preserve material structure on OBJ import,
    then add a bounded editable self-contained GLB importer.
@@ -2075,7 +2075,7 @@ because it is listed: `CLAUDE.md` requires per-row user confirmation.
   CNA-free dispatch/guard/budget/no-mutation test, and CLI export warning /
   omission regression.
 
-- **SYS-W14-32** `[TODO]` `P2` — Honor ordinary-object UV mapping in the live viewport.
+- **SYS-W14-32** `[DONE]` `P2` — Honor ordinary-object UV mapping in the live viewport.
   `mc3togltf` already regenerates and transforms box/sphere/planar UVs, but
   the normal viewport shows default primitive UVs except for the CSG path.
   Apply projection, scale, offset, and rotation to viewport geometry using
@@ -2083,6 +2083,18 @@ because it is listed: `CLAUDE.md` requires per-row user confirmation.
   preview/export winding differences. Add differential mesh-data coverage and
   an Xvfb screenshot fixture that distinguishes default, box, and sphere
   mapping.
+  **Implemented 2026-07-26.** `UvMappingAlgorithms.hpp` provides the narrow,
+  CNA-free planar/default, box, and sphere projection rules plus the shared
+  scale → rotate → offset transform. The normal textured-rendering paths keep
+  a CPU vertex mirror and upload a mapped temporary buffer for an authored UV
+  mapping, with primitive dimensions and deform scale included in projection
+  space; CSG keeps its independently generated, already-mapped cache and is
+  deliberately not remapped. `uv_mapping_algorithms` compares all three
+  projection choices and transform order against independently generated
+  exporter mesh data. `uv_mapping_viewport_test` registers the default/box/
+  sphere screenshot regression; this host correctly disables it through the
+  existing no-Xvfb preflight. Release build passed and all 159 non-render
+  CTests passed.
 
 - **SYS-W14-33** `[TODO]` `P2` — Faithful live preview for authored point and spot lights.
   Point and spot lights export correctly but currently remain gizmo-only in

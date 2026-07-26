@@ -1,6 +1,7 @@
 #include "MeshCraft/Renderer/SceneRenderer.hpp"
 #include "MeshCraft/CoordinateSystemAlgorithms.hpp"
 #include "MeshCraft/SceneSemanticsAlgorithms.hpp"
+#include "MeshCraft/UvMappingAlgorithms.hpp"
 #include "MeshCraft/Renderer/CsgCacheAlg.hpp"
 #include "MeshCraft/Renderer/PrimitiveTessellationAlg.hpp"
 #include "MeshCraft/EditorAlgorithms.hpp"
@@ -417,6 +418,7 @@ static RenderMesh loadObjMesh(GraphicsDevice& device, const std::string& path)
     mesh.texIB = std::make_unique<IndexBuffer>(device, IndexElementSize::ThirtyTwoBits, nV, BufferUsage::None);
     mesh.texIB->SetData(seq.data(), nV);
     mesh.texPrimitiveCount = nV / 3;
+    mesh.texturedVertices = tverts;
 
     return mesh;
 }
@@ -488,6 +490,7 @@ static RenderMesh uploadMeshData(GraphicsDevice& device, const mc3togltf::MeshDa
                                                nVerts, BufferUsage::None);
     mesh.texIB->SetData(sequential.data(), nVerts);
     mesh.texPrimitiveCount = nVerts / 3;
+    mesh.texturedVertices = tverts;
     return mesh;
 }
 
@@ -620,13 +623,39 @@ void SceneRenderer::drawMesh(const RenderMesh& mesh,
 
 void SceneRenderer::drawMeshTextured(const RenderMesh& mesh,
                                       const Matrix& world, const Matrix& view, const Matrix& proj,
-                                      Color color, Texture2D* tex, const SamplerState* sampler)
+                                      Color color, Texture2D* tex, const SamplerState* sampler,
+                                      const Mc3UvMapping* uvMapping,
+                                      std::array<float, 3> uvGeometryScale)
 {
     if (!mesh.texVB || !mesh.texIB) {
         drawMesh(mesh, world, view, proj, color);
         return;
     }
     int n = mesh.texVB->getVertexCountProperty();
+
+    std::unique_ptr<VertexBuffer> mappedVertexBuffer;
+    if (uvMapping && tex && mesh.texturedVertices.size() == static_cast<size_t>(n)) {
+        std::vector<UvPositionAlg> positions;
+        std::vector<UvPositionAlg> normals;
+        std::vector<UvCoordinateAlg> defaultCoordinates;
+        positions.reserve(mesh.texturedVertices.size());
+        normals.reserve(mesh.texturedVertices.size());
+        defaultCoordinates.reserve(mesh.texturedVertices.size());
+        for (const auto& vertex : mesh.texturedVertices) {
+            positions.push_back({vertex.Position.X * uvGeometryScale[0],
+                                 vertex.Position.Y * uvGeometryScale[1],
+                                 vertex.Position.Z * uvGeometryScale[2]});
+            normals.push_back({vertex.Normal.X, vertex.Normal.Y, vertex.Normal.Z});
+            defaultCoordinates.push_back({vertex.TextureCoordinate.X, vertex.TextureCoordinate.Y});
+        }
+        const std::vector<UvCoordinateAlg> mapped = mapObjectUvsAlg(
+            positions, normals, defaultCoordinates, *uvMapping);
+        std::vector<VertexPositionNormalTexture> vertices = mesh.texturedVertices;
+        for (size_t index = 0; index < vertices.size(); ++index)
+            vertices[index].TextureCoordinate = {mapped[index][0], mapped[index][1]};
+        mappedVertexBuffer = std::make_unique<VertexBuffer>(device_, n);
+        mappedVertexBuffer->SetData(vertices.data(), n);
+    }
 
     effect_->World      = world;
     effect_->View       = view;
@@ -655,7 +684,7 @@ void SceneRenderer::drawMeshTextured(const RenderMesh& mesh,
     for (auto& pass : effect_->getCurrentTechniqueProperty()->getPassesProperty())
         pass.Apply();
 
-    device_.SetVertexBuffer(mesh.texVB.get());
+    device_.SetVertexBuffer(mappedVertexBuffer ? mappedVertexBuffer.get() : mesh.texVB.get());
     device_.SetIndexBuffer(mesh.texIB.get());
     device_.DrawIndexedPrimitives(
         Graphics::PrimitiveType::TriangleList,
@@ -1214,9 +1243,13 @@ void SceneRenderer::drawObject(const Mc3Object& obj, const Mc3Document& doc,
         }
     }
 
-    auto drawAuto = [&](const RenderMesh& mesh, const Matrix& m) {
+    const Mc3UvMapping* uvMapping = obj.uvMapping ? &*obj.uvMapping : nullptr;
+    auto drawAuto = [&](const RenderMesh& mesh, const Matrix& m,
+                        std::array<float, 3> primitiveScale = {1.0f, 1.0f, 1.0f}) {
+        for (int axis = 0; axis < 3; ++axis)
+            primitiveScale[axis] *= deformScale[axis];
         drawMeshTextured(mesh, m, view, proj, color, tex,
-                         svgSampler ? &*svgSampler : nullptr);
+                         svgSampler ? &*svgSampler : nullptr, uvMapping, primitiveScale);
     };
 
     // G8: pick LOD level based on camera distance to object pivot
@@ -1264,13 +1297,13 @@ void SceneRenderer::drawObject(const Mc3Object& obj, const Mc3Document& doc,
         float sx = obj.primitive ? obj.primitive->size[0] : 1.0f;
         float sy = obj.primitive ? obj.primitive->size[1] : 1.0f;
         float sz = obj.primitive ? obj.primitive->size[2] : 1.0f;
-        drawAuto(unitBox_, deform * Matrix::CreateScale({sx,sy,sz}) * world);
+        drawAuto(unitBox_, deform * Matrix::CreateScale({sx,sy,sz}) * world, {sx, sy, sz});
         break;
     }
     case ObjectType::Sphere: {
         float r = obj.primitive ? obj.primitive->radius * 2.0f : 1.0f;
         drawAuto(lodMesh(unitSphere_, unitSphereL1_, unitSphereL2_),
-                 deform * Matrix::CreateScale({r,r,r}) * world);
+                 deform * Matrix::CreateScale({r,r,r}) * world, {r, r, r});
         break;
     }
     case ObjectType::Cylinder: {
@@ -1281,20 +1314,20 @@ void SceneRenderer::drawObject(const Mc3Object& obj, const Mc3Document& doc,
         if      (cylAxis == "x") axisRot = Matrix::CreateRotationZ(-std::numbers::pi_v<float> / 2.0f);
         else if (cylAxis == "z") axisRot = Matrix::CreateRotationX( std::numbers::pi_v<float> / 2.0f);
         drawAuto(lodMesh(unitCylinder_, unitCylinderL1_, unitCylinderL2_),
-                 deform * Matrix::CreateScale({r,h,r}) * axisRot * world);
+                 deform * Matrix::CreateScale({r,h,r}) * axisRot * world, {r, h, r});
         break;
     }
     case ObjectType::Cone: {
         float r = obj.primitive ? obj.primitive->radius * 2.0f : 1.0f;
         float h = obj.primitive ? obj.primitive->height         : 1.0f;
         drawAuto(lodMesh(unitCone_, unitConeL1_, unitConeL2_),
-                 deform * Matrix::CreateScale({r,h,r}) * world);
+                 deform * Matrix::CreateScale({r,h,r}) * world, {r, h, r});
         break;
     }
     case ObjectType::Plane: {
         float w = obj.primitive ? obj.primitive->size[0] : 1.0f;
         float d = obj.primitive ? obj.primitive->size[2] : 1.0f;
-        drawAuto(unitPlane_, deform * Matrix::CreateScale({w,1.0f,d}) * world);
+        drawAuto(unitPlane_, deform * Matrix::CreateScale({w,1.0f,d}) * world, {w, 1.0f, d});
         break;
     }
     case ObjectType::Torus: {
@@ -1343,7 +1376,7 @@ void SceneRenderer::drawObject(const Mc3Object& obj, const Mc3Document& doc,
         float r = obj.primitive ? obj.primitive->radius * 2.0f : 1.0f;
         int segments = obj.primitive ? obj.primitive->segments : 2;
         drawAuto(icoSphereMeshForSegments(segments),
-                 deform * Matrix::CreateScale({r,r,r}) * world);
+                 deform * Matrix::CreateScale({r,r,r}) * world, {r, r, r});
         break;
     }
     case ObjectType::Group:
@@ -1415,7 +1448,7 @@ void SceneRenderer::drawObject(const Mc3Object& obj, const Mc3Document& doc,
         if (loaded) {
             // Always use the lit VPNT path (proper normals); tex may be nullptr
             drawMeshTextured(*loaded, deform * world, view, proj, color, tex,
-                             svgSampler ? &*svgSampler : nullptr);
+                             svgSampler ? &*svgSampler : nullptr, uvMapping, deformScale);
             break;
         }
         drawMesh(unitBox_, deform * world, view, proj, color);  // fallback placeholder

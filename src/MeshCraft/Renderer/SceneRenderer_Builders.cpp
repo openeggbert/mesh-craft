@@ -98,6 +98,7 @@ void SceneRenderer::buildUnitBox() {
     unitBox_.texIB = std::make_unique<IndexBuffer>(device_, 36);
     unitBox_.texIB->SetData(tidx.data(), 36);
     unitBox_.texPrimitiveCount = 12;
+    unitBox_.texturedVertices = tverts;
 }
 
 void SceneRenderer::buildUnitSphere(int segments, RenderMesh& target) {
@@ -146,6 +147,7 @@ void SceneRenderer::buildUnitSphere(int segments, RenderMesh& target) {
         target.texIB = std::make_unique<IndexBuffer>(device_, static_cast<int>(indices.size()));
         target.texIB->SetData(indices.data(), static_cast<int>(indices.size()));
         target.texPrimitiveCount = static_cast<int>(indices.size()) / 3;
+        target.texturedVertices = std::move(tv);
     }
 }
 
@@ -224,6 +226,7 @@ void SceneRenderer::buildUnitCylinder(int segments, RenderMesh& target) {
         target.texIB = std::make_unique<IndexBuffer>(device_, static_cast<int>(ti.size()));
         target.texIB->SetData(ti.data(), static_cast<int>(ti.size()));
         target.texPrimitiveCount = static_cast<int>(ti.size()) / 3;
+        target.texturedVertices = std::move(tv);
     }
 }
 
@@ -290,6 +293,7 @@ void SceneRenderer::buildUnitCone(int segments, RenderMesh& target) {
         target.texIB = std::make_unique<IndexBuffer>(device_, static_cast<int>(ti.size()));
         target.texIB->SetData(ti.data(), static_cast<int>(ti.size()));
         target.texPrimitiveCount = static_cast<int>(ti.size()) / 3;
+        target.texturedVertices = std::move(tv);
     }
 }
 
@@ -328,6 +332,7 @@ void SceneRenderer::buildUnitPlane() {
         unitPlane_.texIB = std::make_unique<IndexBuffer>(device_, 6);
         unitPlane_.texIB->SetData(IDX.data(), 6);
         unitPlane_.texPrimitiveCount = 2;
+        unitPlane_.texturedVertices.assign(tv, tv + 4);
     }
 }
 
@@ -393,6 +398,7 @@ void SceneRenderer::buildUnitTorus(int ringSeg, int tubeSeg, RenderMesh& target,
         target.texIB = std::make_unique<IndexBuffer>(device_, ni);
         target.texIB->SetData(indices.data(), ni);
         target.texPrimitiveCount = ni / 3;
+        target.texturedVertices = std::move(tv);
     }
 }
 
@@ -488,6 +494,7 @@ void SceneRenderer::buildUnitCapsule(int segments, RenderMesh& target,
         target.texIB = std::make_unique<IndexBuffer>(device_, static_cast<int>(indices.size()));
         target.texIB->SetData(indices.data(), static_cast<int>(indices.size()));
         target.texPrimitiveCount = static_cast<int>(indices.size()) / 3;
+        target.texturedVertices = std::move(tv);
     }
 }
 

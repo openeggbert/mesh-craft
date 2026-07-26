@@ -144,6 +144,15 @@ before when explicitly requested (`SYS-W14-##` rows).
   - Standalone libraries `mc3` (format/AST + XML/JSON parse-writer),
     `mcb` (binary format) — both buildable and testable without CNA via
     their own `mc3/build`/`mcb/build` trees (no live GPU/GL needed).
+- **Recently implemented (2026-07-26):** `SYS-W14-32` makes authored ordinary
+  object UV mappings visible in the viewport. The new CNA-free helper applies
+  the exporter-compatible default/planar, box, and sphere rules and UV
+  transform order to the existing texture-capable render meshes, while CSG
+  preserves its separately generated mapping cache and both consumers retain
+  their intentional winding differences. Differential exporter comparison
+  covers all three mappings; the default/box/sphere screenshot test is
+  registered but disabled here by the established no-Xvfb preflight. A Release
+  build and all 159 non-render CTests pass.
 - **Recently implemented (2026-07-26):** `SYS-W3-02` adds the narrow,
   CNA-free `SceneSemanticsAlgorithms.hpp` contract shared by the viewport and
   glTF export: pivot transform parts, material/visibility precedence, stable
@@ -152,9 +161,9 @@ before when explicitly requested (`SYS-W14-##` rows).
   it without merging their separate mesh generators or changing `Mc3Document`.
   `scene_semantics` verifies the pure contract; an additional actual-export
   fixture verifies inherited-definition material, instance material, and
-  instance `material_override` precedence. A Release build and all 158
-  locally registered non-render tests pass. Render CTests remain disabled by the no-Xvfb
-  preflight on this host.
+  instance `material_override` precedence. Its full then-current non-render
+  suite passed; render CTests remain disabled by the no-Xvfb preflight on this
+  host.
 - **Recently implemented (2026-07-25):** `SYS-W14-04` rasterizes external
   and inline SVG texture entries through pinned NanoSVG code. The resulting
   RGBA pixels are used by the live CNA viewport and generated as PNG images

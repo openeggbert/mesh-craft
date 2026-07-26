@@ -768,9 +768,10 @@ static int buildMesh(ExportCtx& ctx,
     // (MeshData::applyBoxProjectionUv()/applySphereProjectionUv(),
     // MeshBuilder.cpp) before scale/offset/rotation is applied on top,
     // instead of only ever emitting the primitive's default planar unwrap
-    // with a "not implemented" warning. Editor-viewport parity is
-    // intentionally out of scope (per the tracked task's own outcome) --
-    // mc3togltf's export is the ground truth for exported appearance.
+    // with a "not implemented" warning. SYS-W14-32 mirrors these MC3 rules
+    // in the live viewport through its CNA-free UvMappingAlgorithms.hpp;
+    // the two consumers still keep their deliberately independent mesh and
+    // triangle-winding implementations.
     if (obj.uvMapping.has_value()) {
         const auto& uv = *obj.uvMapping;
         if (uv.projection == UvProjection::Box) {
