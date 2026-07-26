@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- SYS-W14-33: the left sphere is inside the red point light's range; the
+     matched right sphere lies beyond it. Ambient black removes the legacy
+     BasicEffect default rig, so screenshot pixels measure this light alone. -->
+<mc3 version="0.3" model="PointLightViewportFixture" default_camera="Camera">
+  <environment><background color="0.01 0.01 0.01"/></environment>
+  <lights>
+    <ambient color="0 0 0" brightness="0"/>
+    <point name="NearRed" color="1 0 0" brightness="10" position="-1.6 0 3" range="3"/>
+  </lights>
+  <cameras><camera name="Camera" position="0 0 7" target="0 0 0" fov="45" near="0.1" far="100"/></cameras>
+  <materials><material id="white"><base_color>0.9 0.9 0.9 1</base_color></material></materials>
+  <objects>
+    <sphere name="InRange" radius="1" segments="32" position="-1.6 0 0" material="white"/>
+    <sphere name="OutOfRange" radius="1" segments="32" position="1.6 0 0" material="white"/>
+  </objects>
+</mc3>

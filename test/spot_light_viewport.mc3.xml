@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- SYS-W14-33: the left sphere lies on the green spotlight axis; the right
+     sphere is deliberately beyond the 20-degree outer cone. The black ambient
+     control means any green geometry must come from the spot ShaderEffect. -->
+<mc3 version="0.3" model="SpotLightViewportFixture" default_camera="Camera">
+  <environment><background color="0.01 0.01 0.01"/></environment>
+  <lights>
+    <ambient color="0 0 0" brightness="0"/>
+    <spot name="AxisGreen" color="0 1 0" brightness="10" position="-1.6 0 3"
+          direction="0 0 -1" angle="20" falloff="0.5" range="6"/>
+  </lights>
+  <cameras><camera name="Camera" position="0 0 7" target="0 0 0" fov="45" near="0.1" far="100"/></cameras>
+  <materials><material id="white"><base_color>0.9 0.9 0.9 1</base_color></material></materials>
+  <objects>
+    <sphere name="InCone" radius="1" segments="32" position="-1.6 0 0" material="white"/>
+    <sphere name="OutsideCone" radius="1" segments="32" position="1.6 0 0" material="white"/>
+  </objects>
+</mc3>

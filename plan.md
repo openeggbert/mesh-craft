@@ -135,8 +135,8 @@ sequentially. Per `CLAUDE.md`, recording this ordered backlog does **not**
 remove the requirement to describe and obtain explicit confirmation for each
 individual implementation task immediately before work begins.
 
-1. **SYS-W14-33/34 (P2/P3/W14)** — deliver the remaining viewport parity in
-   separate point/spot-light and CSG child-material slices.
+1. **SYS-W14-34 (P3/W14)** — deliver the remaining CSG child-material viewport
+   parity slice.
 2. **SYS-W14-30 (P2/W14)** — expand explicit walk-mode collision proxies.
 3. **SYS-W14-35/36 (P2/P3/W14)** — preserve material structure on OBJ import,
    then add a bounded editable self-contained GLB importer.
@@ -2096,13 +2096,30 @@ because it is listed: `CLAUDE.md` requires per-row user confirmation.
   existing no-Xvfb preflight. Release build passed and all 159 non-render
   CTests passed.
 
-- **SYS-W14-33** `[TODO]` `P2` — Faithful live preview for authored point and spot lights.
+- **SYS-W14-33** `[DONE]` `P2` — Faithful live preview for authored point and spot lights.
   Point and spot lights export correctly but currently remain gizmo-only in
   the BasicEffect-based viewport. Add a capability-gated CNA ShaderEffect
   lighting path with position, attenuation, spot cone, color, and authored
   brightness semantics; retain a clearly labelled fallback on unqualified
   backends. Do not reintroduce raw OpenGL. Add pixel tests for point and spot
   influence, attenuation/cone boundaries, and unsupported-backend behavior.
+  **Implemented 2026-07-26.** A bounded, CNA-only `ShaderEffect` path now
+  previews the first eight document-order point/spot lights on the existing
+  normal/UV mesh draw path whenever the EasyGL source-shader contract is
+  available and compilation succeeds. It preserves the active BasicEffect
+  directional/ambient contribution, adds `color × brightness` with
+  inverse-square attenuation and hard range cutoff, and applies the authored
+  spot outer angle plus smooth inner cone (`angle × (1 - falloff)`). The
+  unsupported or failed-compile path emits one clear fallback diagnostic and
+  retains BasicEffect plus light gizmos; no raw OpenGL was introduced.
+  `PointSpotLightingAlgorithms.hpp` keeps capability selection, attenuation,
+  and cone-boundary arithmetic CNA-free. `point_spot_lighting_algorithms`
+  covers point attenuation/range, spot inner/outer/hard boundaries, and the
+  unsupported-backend decision. `point_spot_light_viewport_test` uses two
+  gizmo-free pixel fixtures to assert a red point light affects only its
+  in-range sphere and a green spotlight affects only its in-cone sphere. The
+  screenshot CTest is registered but disabled here by the existing no-Xvfb
+  preflight. Release build passed and all 160 non-render CTests passed.
 
 - **SYS-W14-34** `[TODO]` `P3` — Preview CSG child-material composition.
   glTF output restores Manifold child-material runs when a CSG root has no

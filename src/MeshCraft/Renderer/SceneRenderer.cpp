@@ -80,6 +80,92 @@ void main() {
 }
 )";
 
+// SYS-W14-33: CNA ShaderEffect is the narrow capability-gated route for
+// positional lights. VertexPositionNormalTexture uses locations 0/1/2 on all
+// qualified CNA EasyGL draws (position/normal/UV); no raw graphics API state
+// or program management is used here.
+constexpr const char* kPointSpotLightingVertSrc = R"(#version 300 es
+precision highp float;
+layout(location = 0) in vec3 aPosition;
+layout(location = 1) in vec3 aNormal;
+layout(location = 2) in vec2 aTexCoord;
+uniform mat4 World;
+uniform mat4 View;
+uniform mat4 Projection;
+out vec3 vWorldPosition;
+out vec3 vNormal;
+out vec2 vTexCoord;
+void main() {
+    vec4 worldPosition = World * vec4(aPosition, 1.0);
+    vWorldPosition = worldPosition.xyz;
+    // The renderer's existing primitive paths use orthogonal transforms and
+    // finite non-zero scales; normalizing after World handles their regular
+    // non-uniform scale well enough for the live preview.
+    vNormal = normalize(mat3(World) * aNormal);
+    vTexCoord = aTexCoord;
+    gl_Position = Projection * View * worldPosition;
+}
+)";
+
+constexpr const char* kPointSpotLightingFragSrc = R"(#version 300 es
+precision highp float;
+in vec3 vWorldPosition;
+in vec3 vNormal;
+in vec2 vTexCoord;
+uniform sampler2D uDiffuseTexture;
+uniform int uHasTexture;
+uniform vec4 uMaterialColor;
+uniform vec3 uAmbientLight;
+uniform vec3 uDirectionalDirection0;
+uniform vec3 uDirectionalDirection1;
+uniform vec3 uDirectionalDirection2;
+uniform vec3 uDirectionalColor0;
+uniform vec3 uDirectionalColor1;
+uniform vec3 uDirectionalColor2;
+const int MAX_PUNCTUAL_LIGHTS = 8;
+uniform int uPunctualLightCount;
+uniform vec4 uPunctualPositionRange[MAX_PUNCTUAL_LIGHTS];
+uniform vec4 uPunctualDirectionOuter[MAX_PUNCTUAL_LIGHTS];
+uniform vec4 uPunctualColorBrightness[MAX_PUNCTUAL_LIGHTS];
+uniform vec2 uPunctualCone[MAX_PUNCTUAL_LIGHTS]; // inner cosine, isSpot
+out vec4 fragColor;
+
+void main() {
+    vec4 material = uMaterialColor;
+    if (uHasTexture != 0) material *= texture(uDiffuseTexture, vTexCoord);
+    vec3 normal = normalize(vNormal);
+    vec3 illumination = uAmbientLight;
+    illumination += uDirectionalColor0 * max(dot(normal, -uDirectionalDirection0), 0.0);
+    illumination += uDirectionalColor1 * max(dot(normal, -uDirectionalDirection1), 0.0);
+    illumination += uDirectionalColor2 * max(dot(normal, -uDirectionalDirection2), 0.0);
+
+    for (int index = 0; index < MAX_PUNCTUAL_LIGHTS; ++index) {
+        if (index >= uPunctualLightCount) break;
+        vec3 toLight = uPunctualPositionRange[index].xyz - vWorldPosition;
+        float distanceSquared = dot(toLight, toLight);
+        float distanceToLight = sqrt(distanceSquared);
+        float range = uPunctualPositionRange[index].w;
+        if (range > 0.0 && distanceToLight >= range) continue;
+        vec3 lightDirection = toLight / max(distanceToLight, 0.0001);
+        float cone = 1.0;
+        if (uPunctualCone[index].y > 0.5) {
+            vec3 rayFromLight = -lightDirection;
+            float outerCos = uPunctualDirectionOuter[index].w;
+            float directionCos = dot(rayFromLight, uPunctualDirectionOuter[index].xyz);
+            if (directionCos <= outerCos) continue;
+            float innerCos = uPunctualCone[index].x;
+            cone = innerCos <= outerCos + 0.00001
+                ? 1.0 : smoothstep(outerCos, innerCos, directionCos);
+        }
+        float attenuation = 1.0 / max(distanceSquared, 0.01);
+        float diffuse = max(dot(normal, lightDirection), 0.0);
+        illumination += uPunctualColorBrightness[index].rgb *
+                        uPunctualColorBrightness[index].w * attenuation * cone * diffuse;
+    }
+    fragColor = vec4(material.rgb * illumination, material.a);
+}
+)";
+
 SamplerState samplerStateForSvg(const Mc3SvgTexture& texture) {
     SamplerState sampler = texture.filter == "nearest"
         ? SamplerState::PointWrap : SamplerState::LinearWrap;
@@ -528,6 +614,13 @@ SceneRenderer::SceneRenderer(GraphicsDevice& device)
             std::cerr << "[SSAO] Failed to compile depth-prepass shader\n";
             depthEffect_.reset();
         }
+
+        pointSpotEffect_.emplace(device_, kPointSpotLightingVertSrc, kPointSpotLightingFragSrc);
+        if (!pointSpotEffect_->IsEffectValid()) {
+            std::cerr << "[Lighting] Point/spot ShaderEffect compilation failed; "
+                         "the BasicEffect/gizmo fallback remains active.\n";
+            pointSpotEffect_.reset();
+        }
     }
 
     buildUnitBox();
@@ -621,6 +714,104 @@ void SceneRenderer::drawMesh(const RenderMesh& mesh,
     device_.SetIndexBuffer(nullptr);
 }
 
+bool SceneRenderer::drawPunctualLightMesh(const RenderMesh& mesh,
+                                           const Matrix& world, const Matrix& view,
+                                           const Matrix& projection, Color color,
+                                           Texture2D* texture, const SamplerState* sampler,
+                                           VertexBuffer* vertexBuffer)
+{
+    const bool shaderValid = pointSpotEffect_.has_value() && pointSpotEffect_->IsEffectValid();
+    if (!pointSpotShaderEnabledAlg(supportsTextShaderEffects(), shaderValid,
+                                   punctualPreviewLightCount_))
+        return false;
+
+    auto& effect = *pointSpotEffect_;
+    effect.setWorldProperty(world);
+    effect.setViewProperty(view);
+    effect.setProjectionProperty(projection);
+    // CNA binds the source ShaderEffect's program in Apply(). Its named
+    // uniform API must therefore run after that activation, not while the
+    // previous BasicEffect program is still current.
+    effect.Apply();
+    effect.SetUniformVec4("uMaterialColor",
+                          std::clamp(color.getRProperty() / 255.0f, 0.0f, 1.0f),
+                          std::clamp(color.getGProperty() / 255.0f, 0.0f, 1.0f),
+                          std::clamp(color.getBProperty() / 255.0f, 0.0f, 1.0f),
+                          std::clamp(color.getAProperty() / 255.0f, 0.0f, 1.0f));
+    const Vector3 ambient = effect_->getAmbientLightColorProperty();
+    effect.SetUniformVec3("uAmbientLight", ambient.X, ambient.Y, ambient.Z);
+    effect.SetUniformInt("uHasTexture", texture ? 1 : 0);
+    effect.SetUniformInt("uDiffuseTexture", 0);
+
+    const DirectionalLight* directionalLights[3] = {
+        &effect_->DirectionalLight0, &effect_->DirectionalLight1, &effect_->DirectionalLight2
+    };
+    static constexpr const char* kDirectionUniforms[3] = {
+        "uDirectionalDirection0", "uDirectionalDirection1", "uDirectionalDirection2"
+    };
+    static constexpr const char* kColorUniforms[3] = {
+        "uDirectionalColor0", "uDirectionalColor1", "uDirectionalColor2"
+    };
+    for (int index = 0; index < 3; ++index) {
+        const Vector3 direction = directionalLights[index]->getDirectionProperty();
+        const Vector3 lightColor = directionalLights[index]->getEnabledProperty()
+            ? directionalLights[index]->getDiffuseColorProperty() : Vector3::Zero;
+        effect.SetUniformVec3(kDirectionUniforms[index], direction.X, direction.Y, direction.Z);
+        effect.SetUniformVec3(kColorUniforms[index], lightColor.X, lightColor.Y, lightColor.Z);
+    }
+
+    static constexpr const char* kPositionRangeUniforms[kViewportPunctualLightLimit] = {
+        "uPunctualPositionRange[0]", "uPunctualPositionRange[1]",
+        "uPunctualPositionRange[2]", "uPunctualPositionRange[3]",
+        "uPunctualPositionRange[4]", "uPunctualPositionRange[5]",
+        "uPunctualPositionRange[6]", "uPunctualPositionRange[7]"
+    };
+    static constexpr const char* kDirectionOuterUniforms[kViewportPunctualLightLimit] = {
+        "uPunctualDirectionOuter[0]", "uPunctualDirectionOuter[1]",
+        "uPunctualDirectionOuter[2]", "uPunctualDirectionOuter[3]",
+        "uPunctualDirectionOuter[4]", "uPunctualDirectionOuter[5]",
+        "uPunctualDirectionOuter[6]", "uPunctualDirectionOuter[7]"
+    };
+    static constexpr const char* kColorBrightnessUniforms[kViewportPunctualLightLimit] = {
+        "uPunctualColorBrightness[0]", "uPunctualColorBrightness[1]",
+        "uPunctualColorBrightness[2]", "uPunctualColorBrightness[3]",
+        "uPunctualColorBrightness[4]", "uPunctualColorBrightness[5]",
+        "uPunctualColorBrightness[6]", "uPunctualColorBrightness[7]"
+    };
+    static constexpr const char* kConeUniforms[kViewportPunctualLightLimit] = {
+        "uPunctualCone[0]", "uPunctualCone[1]", "uPunctualCone[2]", "uPunctualCone[3]",
+        "uPunctualCone[4]", "uPunctualCone[5]", "uPunctualCone[6]", "uPunctualCone[7]"
+    };
+    effect.SetUniformInt("uPunctualLightCount", punctualPreviewLightCount_);
+    for (int index = 0; index < punctualPreviewLightCount_; ++index) {
+        const PunctualPreviewLight& light = punctualPreviewLights_[index];
+        effect.SetUniformVec4(kPositionRangeUniforms[index], light.position[0], light.position[1],
+                              light.position[2], light.range);
+        effect.SetUniformVec4(kDirectionOuterUniforms[index], light.direction[0], light.direction[1],
+                              light.direction[2], light.outerConeCos);
+        effect.SetUniformVec4(kColorBrightnessUniforms[index], light.color[0], light.color[1],
+                              light.color[2], light.brightness);
+        effect.SetUniformVec2(kConeUniforms[index], light.innerConeCos, light.spot ? 1.0f : 0.0f);
+    }
+
+    std::optional<SamplerState> previousSampler;
+    if (texture && sampler) {
+        auto& samplerSlot = device_.getSamplerStatesProperty()[0];
+        previousSampler = samplerSlot;
+        samplerSlot = *sampler;
+    }
+    if (texture) effect.SetTexture(0, *texture);
+    device_.SetVertexBuffer(vertexBuffer);
+    device_.SetIndexBuffer(mesh.texIB.get());
+    device_.DrawIndexedPrimitives(Graphics::PrimitiveType::TriangleList, 0, 0,
+                                  vertexBuffer->getVertexCountProperty(), 0,
+                                  mesh.texPrimitiveCount);
+    device_.SetVertexBuffer(nullptr);
+    device_.SetIndexBuffer(nullptr);
+    if (previousSampler) device_.getSamplerStatesProperty()[0] = *previousSampler;
+    return true;
+}
+
 void SceneRenderer::drawMeshTextured(const RenderMesh& mesh,
                                       const Matrix& world, const Matrix& view, const Matrix& proj,
                                       Color color, Texture2D* tex, const SamplerState* sampler,
@@ -656,6 +847,10 @@ void SceneRenderer::drawMeshTextured(const RenderMesh& mesh,
         mappedVertexBuffer = std::make_unique<VertexBuffer>(device_, n);
         mappedVertexBuffer->SetData(vertices.data(), n);
     }
+
+    if (drawPunctualLightMesh(mesh, world, view, proj, color, tex, sampler,
+                               mappedVertexBuffer ? mappedVertexBuffer.get() : mesh.texVB.get()))
+        return;
 
     effect_->World      = world;
     effect_->View       = view;
@@ -1471,37 +1666,84 @@ void SceneRenderer::drawObject(const Mc3Object& obj, const Mc3Document& doc,
 // Public draw
 // ---------------------------------------------------------------------------
 
-// 2026-07-20 audit finding #4: see the declaration comment
-// (SceneRenderer.hpp) for the full rationale. Maps up to the first 3
-// Directional lights onto BasicEffect's DirectionalLight0-2 and the first
-// Ambient light onto AmbientLightColor; falls back to the original fixed
-// 3-point default rig (set up once in the constructor via
-// EnableDefaultLighting()) when the document has no Directional/Ambient
-// lights to represent, preserving today's look for the common case of an
-// unlit-by-design scene.
+// Directional/Ambient retain BasicEffect's established representation. Point
+// and Spot are collected separately because BasicEffect has no positional
+// API; drawPunctualLightMesh() selects the capability-gated ShaderEffect only
+// for normal/UV mesh buffers that can actually use it.
 void SceneRenderer::applyDocumentLighting(const Mc3Document& doc)
 {
     const Mc3Light* dirLights[3] = {nullptr, nullptr, nullptr};
     int dirCount = 0;
     const Mc3Light* ambientLight = nullptr;
+    punctualPreviewLightCount_ = 0;
 
     for (const auto& light : doc.lights) {
         if (light.type == LightType::Directional && dirCount < 3) {
             dirLights[dirCount++] = &light;
         } else if (light.type == LightType::Ambient && !ambientLight) {
             ambientLight = &light;
+        } else if ((light.type == LightType::Point || light.type == LightType::Spot) &&
+                   punctualPreviewLightCount_ < kViewportPunctualLightLimit) {
+            PunctualPreviewLight& preview = punctualPreviewLights_[punctualPreviewLightCount_++];
+            const Vector3 position = coordinateSystemDirectionToYUp(doc, light.position);
+            Vector3 direction = coordinateSystemDirectionToYUp(doc, light.direction);
+            direction = direction.Length() > 1e-5f
+                ? Vector3::Normalize(direction) : Vector3{0.0f, -1.0f, 0.0f};
+            preview.position = {position.X, position.Y, position.Z};
+            preview.direction = {direction.X, direction.Y, direction.Z};
+            preview.color = {std::max(0.0f, std::isfinite(light.color[0]) ? light.color[0] : 0.0f),
+                             std::max(0.0f, std::isfinite(light.color[1]) ? light.color[1] : 0.0f),
+                             std::max(0.0f, std::isfinite(light.color[2]) ? light.color[2] : 0.0f)};
+            preview.brightness = std::max(0.0f,
+                std::isfinite(light.brightness) ? light.brightness : 0.0f);
+            preview.range = std::max(0.0f, std::isfinite(light.range) ? light.range : 0.0f);
+            preview.spot = light.type == LightType::Spot;
+            if (preview.spot) {
+                const SpotConeParametersAlg cone = spotConeParametersAlg(light.angle, light.falloff);
+                preview.innerConeCos = cone.innerCos;
+                preview.outerConeCos = cone.outerCos;
+            } else {
+                preview.innerConeCos = 1.0f;
+                preview.outerConeCos = 1.0f;
+            }
         }
     }
 
-    if (dirCount == 0 && !ambientLight) {
-        // Nothing this API can represent -- keep the default rig
-        // (already applied once in the constructor) untouched.
-        return;
+    const bool shaderValid = pointSpotEffect_.has_value() && pointSpotEffect_->IsEffectValid();
+    const bool punctualShaderEnabled = pointSpotShaderEnabledAlg(
+        supportsTextShaderEffects(), shaderValid, punctualPreviewLightCount_);
+    if (punctualPreviewLightCount_ > 0 && !punctualShaderEnabled) {
+        if (!punctualPreviewFallbackWarned_) {
+            std::cerr << "[Lighting] Point/spot viewport preview fallback: this backend does not "
+                         "provide a usable source-GLSL ShaderEffect; BasicEffect directional/ambient "
+                         "lighting and light gizmos remain active.\n";
+            punctualPreviewFallbackWarned_ = true;
+        }
+    } else {
+        punctualPreviewFallbackWarned_ = false;
     }
 
     DirectionalLight* slots[3] = {
         &effect_->DirectionalLight0, &effect_->DirectionalLight1, &effect_->DirectionalLight2
     };
+    if (dirCount == 0 && !ambientLight) {
+        if (punctualShaderEnabled) {
+            // A usable point/spot preview must not add the old default rig:
+            // a point/spot-only document has authored every light that this
+            // ShaderEffect should represent. The no-shader fallback below
+            // deliberately keeps the established default appearance.
+            for (DirectionalLight* slot : slots) slot->setEnabledProperty(false);
+            effect_->setAmbientLightColorProperty(Vector3::Zero);
+            return;
+        }
+        // A document can replace the previous frame without recreating the
+        // renderer. Restore the original rig instead of accidentally keeping
+        // a prior document's authored directional slots.
+        effect_->EnableDefaultLighting();
+        effect_->setAmbientLightColorProperty(Vector3{0.35f, 0.35f, 0.35f});
+        return;
+    }
+
     for (int i = 0; i < 3; ++i) {
         if (i >= dirCount) {
             slots[i]->setEnabledProperty(false);

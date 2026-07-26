@@ -144,6 +144,16 @@ before when explicitly requested (`SYS-W14-##` rows).
   - Standalone libraries `mc3` (format/AST + XML/JSON parse-writer),
     `mcb` (binary format) — both buildable and testable without CNA via
     their own `mc3/build`/`mcb/build` trees (no live GPU/GL needed).
+- **Recently implemented (2026-07-26):** `SYS-W14-33` adds a capability-gated,
+  CNA-only point/spot-light preview. On a valid source-GLSL `ShaderEffect`
+  backend, the first eight document-order punctual lights affect normal/UV
+  viewport geometry with authored color/brightness, inverse-square range
+  attenuation, and spotlight cone/falloff; directional/ambient contribution
+  remains intact. Unsupported or failed shader paths clearly retain the
+  BasicEffect-plus-gizmo fallback. CNA-free boundary/selection tests and
+  red/green pixel fixtures cover the change; the screenshot CTest is
+  registered but disabled here by the no-Xvfb preflight. A Release build and
+  all 160 non-render CTests pass.
 - **Recently implemented (2026-07-26):** `SYS-W14-32` makes authored ordinary
   object UV mappings visible in the viewport. The new CNA-free helper applies
   the exporter-compatible default/planar, box, and sphere rules and UV

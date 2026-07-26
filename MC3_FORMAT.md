@@ -329,25 +329,28 @@ instead of just silently going dark. A warning is still printed naming
 each ambient light and explaining that it was baked rather than
 exported as a light.
 
-**Live-viewport shading (`AUD-077`, 2026-07-20):** the editor's own
-BasicEffect-based renderer (`SceneRenderer.cpp`) now actually shades the
-live preview using `doc.lights`, instead of always using a fixed 3-point
-default rig regardless of what's authored — `applyDocumentLighting()`
-maps up to the first 3 `directional` lights onto BasicEffect's real
-`DirectionalLight0`/`1`/`2` slots (`direction`, `color × brightness`
-clamped to `[0,1]`, applied as both diffuse and specular) and the first
-`ambient` light onto `AmbientLightColor`. **`point`/`spot` remain
-gizmo-only in the live preview** — BasicEffect (a faithful port of real
-XNA's fixed-function lighting model) has no position/attenuation API at
-all, only up to 3 directional slots plus one ambient color, so there is
-no way to represent them without a custom shader (a materially larger
-change, out of scope here). If the document has no `directional`/
-`ambient` lights to represent (including documents with only `point`/
-`spot` lights, or no lights at all), the viewport falls back to the
-original fixed default rig, preserving the existing look for the common
-unlit-by-design case. `mc3togltf`'s export already handles every light
-type correctly (see above) — this section is specifically about what the
-live viewport, a separate and less capable renderer, can and can't show.
+**Live-viewport shading (`AUD-077`, `SYS-W14-33`, 2026-07-26):** the
+editor maps up to three `directional` lights to BasicEffect's real
+`DirectionalLight0`/`1`/`2` slots and the first `ambient` light to
+`AmbientLightColor`. On CNA backends with a working source-GLSL
+`ShaderEffect` contract (currently EasyGL), it additionally previews the
+first eight document-order `point`/`spot` lights on normal-and-UV mesh
+paths. Point lights use `color × brightness`, inverse-square attenuation,
+and a hard `range` cutoff (`range="0"` is unlimited). Spot lights add an
+outer cone of `angle` degrees and a smooth inner cone at
+`angle × (1 - falloff)`; `falloff="0"` is a hard cone edge. This preview
+does not model shadows or photometric unit conversion: `brightness` is the
+same authored non-negative multiplier used by the editor, while export keeps
+its separately documented glTF conversion.
+
+Backends without that source-shader capability, or where the shader does not
+compile, explicitly log that point/spot preview has fallen back; they retain
+BasicEffect directional/ambient shading and the normal light gizmos. Geometry
+that does not use the normal/UV mesh path also retains BasicEffect. A
+point/spot-only scene with a usable shader has no inherited default rig;
+without that shader (or with no authored lights), the viewport restores its
+original default rig instead of inheriting a previously opened document's
+lights. `mc3togltf` remains the ground truth for exported lighting.
 
 ---
 

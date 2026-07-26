@@ -5,6 +5,7 @@
 #include <MeshCraft/Mc3/Mc3Light.hpp>
 #include <MeshCraft/Mc3/Mc3Object.hpp>
 #include <MeshCraft/AssetLodAlgorithms.hpp>
+#include <MeshCraft/PointSpotLightingAlgorithms.hpp>
 #include <Microsoft/Xna/Framework/Color.hpp>
 #include <Microsoft/Xna/Framework/Graphics/BasicEffect.hpp>
 #include <Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp>
@@ -259,6 +260,23 @@ private:
     Microsoft::Xna::Framework::Graphics::GraphicsDevice& device_;
     std::unique_ptr<Microsoft::Xna::Framework::Graphics::BasicEffect> effect_;
     std::optional<Microsoft::Xna::Framework::Graphics::ShaderEffect> depthEffect_;
+    // SYS-W14-33: BasicEffect has no positional-light API. This optional
+    // source-GLSL effect is available only on CNA backends that implement the
+    // complete named-uniform 3D contract; all others retain BasicEffect.
+    std::optional<Microsoft::Xna::Framework::Graphics::ShaderEffect> pointSpotEffect_;
+    struct PunctualPreviewLight {
+        std::array<float, 3> position{};
+        std::array<float, 3> direction{0.0f, -1.0f, 0.0f};
+        std::array<float, 3> color{1.0f, 1.0f, 1.0f};
+        float brightness{1.0f};
+        float range{0.0f};
+        float innerConeCos{1.0f};
+        float outerConeCos{1.0f};
+        bool spot{false};
+    };
+    std::array<PunctualPreviewLight, MeshCraft::kViewportPunctualLightLimit> punctualPreviewLights_{};
+    int punctualPreviewLightCount_{0};
+    bool punctualPreviewFallbackWarned_{false};
 
     // Pre-built unit shapes (full quality)
     RenderMesh unitBox_;
@@ -350,18 +368,19 @@ private:
                     const std::vector<const Mc3::Mc3Object*>& selected,
                     int depth = 0);
 
-    // 2026-07-20 audit finding #4: maps the document's authored lights onto
-    // BasicEffect's real lighting API (up to 3 Directional lights ->
-    // DirectionalLight0-2, the first Ambient light -> AmbientLightColor) so
-    // the live viewport's shading actually reflects doc.lights instead of
-    // always using the fixed 3-point default rig regardless of what's
-    // authored. Point/Spot lights have no BasicEffect equivalent (no
-    // position/attenuation API at all) and remain gizmo-only in the live
-    // preview -- see MC3_FORMAT.md's Lights section for the documented
-    // scope of this limitation. Called once per draw() (cheap -- a handful
-    // of float writes, no allocation), not cached, so edits via the Lights
-    // tab are reflected immediately.
+    // Maps Directional/Ambient lights to BasicEffect and collects up to eight
+    // authored Point/Spot lights for the optional CNA ShaderEffect path.
+    // Called once per draw, so edits in the Lights panel are immediate.
     void applyDocumentLighting(const Mc3::Mc3Document& doc);
+
+    bool drawPunctualLightMesh(const RenderMesh& mesh,
+                               const Microsoft::Xna::Framework::Matrix& world,
+                               const Microsoft::Xna::Framework::Matrix& view,
+                               const Microsoft::Xna::Framework::Matrix& projection,
+                               Microsoft::Xna::Framework::Color color,
+                               Microsoft::Xna::Framework::Graphics::Texture2D* texture,
+                               const Microsoft::Xna::Framework::Graphics::SamplerState* sampler,
+                               Microsoft::Xna::Framework::Graphics::VertexBuffer* vertexBuffer);
 
     void drawEmissiveObject(const Mc3::Mc3Object& obj,
                             const Mc3::Mc3Document& doc,

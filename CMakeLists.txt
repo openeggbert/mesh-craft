@@ -920,6 +920,17 @@ if(MESH_CRAFT_BUILD_TESTING AND UNIX AND NOT ANDROID AND NOT EMSCRIPTEN)
     add_test(NAME graphics_backend_check COMMAND graphics_backend_check_test)
     set_tests_properties(graphics_backend_check PROPERTIES TIMEOUT 15 LABELS "unit")
 
+    # SYS-W14-33: keep source-shader fallback selection, inverse-square range
+    # attenuation, and spotlight inner/outer-cone math CNA-free and testable.
+    add_executable(point_spot_lighting_algorithms_test
+        ${CMAKE_CURRENT_SOURCE_DIR}/test/point_spot_lighting_algorithms_test.cpp)
+    target_include_directories(point_spot_lighting_algorithms_test PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/include)
+    target_compile_features(point_spot_lighting_algorithms_test PRIVATE cxx_std_23)
+    target_compile_options(point_spot_lighting_algorithms_test PRIVATE -Wall -Wextra)
+    add_test(NAME point_spot_lighting_algorithms COMMAND point_spot_lighting_algorithms_test)
+    set_tests_properties(point_spot_lighting_algorithms PROPERTIES TIMEOUT 15 LABELS "unit")
+
     # AUD-042: Android's backend choice is a CMake-level platform decision,
     # but an NDK is not installed on every developer/CI host.  Exercise it as
     # a pure script so a future edit cannot silently restore SDL_RENDERER.
@@ -1557,6 +1568,24 @@ if(MESH_CRAFT_BUILD_TESTING AND UNIX AND NOT ANDROID AND NOT EMSCRIPTEN)
                 WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
             )
             set_tests_properties(light_shading_test PROPERTIES TIMEOUT 30 LABELS "render")
+        endif()
+
+        # SYS-W14-33: unlike BasicEffect's directional-only API, the
+        # capability-gated ShaderEffect path must make a near point light and
+        # an in-cone spotlight visibly affect geometry, while their range and
+        # outer cone leave matched control geometry unlit.
+        if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/test/point_light_viewport.mc3.xml" AND
+           EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/test/spot_light_viewport.mc3.xml")
+            add_test(
+                NAME point_spot_light_viewport_test
+                COMMAND "${PYTHON3_EXEC}"
+                        "${CMAKE_CURRENT_SOURCE_DIR}/test/point_spot_light_viewport_test.py"
+                        $<TARGET_FILE:MeshCraft>
+                        "${CMAKE_CURRENT_SOURCE_DIR}/test/point_light_viewport.mc3.xml"
+                        "${CMAKE_CURRENT_SOURCE_DIR}/test/spot_light_viewport.mc3.xml"
+                WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
+            )
+            set_tests_properties(point_spot_light_viewport_test PROPERTIES TIMEOUT 45 LABELS "render")
         endif()
 
         # STAB-0512: drawLightGizmos() is called unconditionally in the main

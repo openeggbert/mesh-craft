@@ -740,12 +740,16 @@ void MeshCraftApplication::Draw(const GameTime& /*gameTime*/) {
         sceneRenderer_->drawEdgeOverlay(document_, view, proj);
     }
 
-    // Scene-level gizmos (lights / cameras)
-    gd.SetDepthTestEnabled(false);
-    sceneRenderer_->drawLightGizmos(document_, view, proj);
-    sceneRenderer_->drawCameraGizmos(document_, view, proj);
-    sceneRenderer_->drawCsgGizmos(document_, view, proj);
-    gd.SetDepthTestEnabled(true);
+    // Screenshot regressions for lighting need to measure shaded geometry,
+    // not the deliberately bright editor overlays. This test-only switch does
+    // not change normal editor behaviour or the dedicated gizmo fixtures.
+    if (!std::getenv("MESHCRAFT_TEST_HIDE_SCENE_GIZMOS")) {
+        gd.SetDepthTestEnabled(false);
+        sceneRenderer_->drawLightGizmos(document_, view, proj);
+        sceneRenderer_->drawCameraGizmos(document_, view, proj);
+        sceneRenderer_->drawCsgGizmos(document_, view, proj);
+        gd.SetDepthTestEnabled(true);
+    }
 
     if (selection_.hasSelection()) {
         float gizmoLen = camera_.distance * 0.15f;
