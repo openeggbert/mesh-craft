@@ -223,6 +223,12 @@ jobs:
           # Keep the editor job on the sibling revision recorded and tested
           # by this repository (AUD-057), rather than an arbitrary branch tip.
           ref: d0c21ee613ebd8f8b0055f7868103dd5c5c30fc7
+          # cna/cmake/ThirdPartySDL.cmake vendors SDL/SDL_image/SDL_mixer as
+          # submodules and fails configure without them. Non-recursive: those
+          # submodules' own nested submodules are optional codec dependencies
+          # this project's CMAKE_ARGS disable, so recursing into them would
+          # only add a slower, unused fetch.
+          submodules: true
 
       - name: Checkout sharp-runtime
         uses: actions/checkout@v4
