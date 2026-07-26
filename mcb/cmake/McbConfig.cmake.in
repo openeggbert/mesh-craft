@@ -2,7 +2,7 @@
 
 include(CMakeFindDependencyMacro)
 
-find_dependency(Mc3 0.1.0 CONFIG)
+find_dependency(Mc3 @PROJECT_VERSION@ CONFIG)
 
 # Older exports produced by CMake can retain the build-tree target spelling
 # (`Mc3`) in Mcb's static link interface.  Present a local forwarding target

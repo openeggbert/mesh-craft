@@ -1,5 +1,11 @@
 cmake_minimum_required(VERSION 3.21)
-project(Mc3 VERSION 0.1.0 LANGUAGES CXX)
+
+# SYS-W11-10: one authoritative version source shared with the repo root
+# (see its own CMakeLists.txt for the full rationale) -- ../VERSION resolves
+# correctly whether this file is configured standalone or add_subdirectory()'d
+# from the root, since CMAKE_CURRENT_SOURCE_DIR always points at mc3/ itself.
+file(STRINGS "${CMAKE_CURRENT_SOURCE_DIR}/../VERSION" MESHCRAFT_VERSION_STRING LIMIT_COUNT 1)
+project(Mc3 VERSION ${MESHCRAFT_VERSION_STRING} LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)

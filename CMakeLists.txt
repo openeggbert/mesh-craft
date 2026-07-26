@@ -1,5 +1,13 @@
 cmake_minimum_required(VERSION 3.21)
-project(MeshCraft VERSION 0.1.0 LANGUAGES C CXX)
+
+# SYS-W11-10: one authoritative version source (the repo-root VERSION file)
+# for MeshCraft/Mc3/Mcb/mc3togltf/mc3tomcb, so the root project, each
+# standalone-buildable component, package configs, --version, release
+# archive names, and the changelog can never drift out of sync with each
+# other. Read before project() since project(VERSION ...) needs the value
+# directly, not a variable set afterward.
+file(STRINGS "${CMAKE_CURRENT_SOURCE_DIR}/VERSION" MESHCRAFT_VERSION_STRING LIMIT_COUNT 1)
+project(MeshCraft VERSION ${MESHCRAFT_VERSION_STRING} LANGUAGES C CXX)
 
 include(CTest)
 include(GNUInstallDirs)

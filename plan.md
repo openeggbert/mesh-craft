@@ -432,13 +432,53 @@ time; re-evaluate scope and blockers before starting each item.
   verification; left in place for incremental reuse rather than deleted,
   since another session may want to re-verify against it.
 
-- **SYS-W11-10** `[PROPOSED]` `P2` — Define and execute the first release
-  candidate process. Decide whether the first public release is `0.1.0`,
-  `1.0.0`, or another version; use one authoritative version source for the
-  root project, Mc3, Mcb, both CLI tools, package configs, `--version`,
-  archive names and the changelog. Produce an RC artifact set, execute
-  `RELEASE.md`, record the exact supported platform/backend matrix, and
-  distinguish unsupported platforms from temporarily blocked qualification.
+- **SYS-W11-10** `[DONE]` `P2` — Wired one authoritative version source: a
+  new root-level `VERSION` file (currently `0.1.0`, the existing value —
+  deliberately not changed; deciding the actual first-release version number
+  is a product decision, not made here, see `SYS-W11-11` below), read via
+  `file(STRINGS ...)` before each of the 5 `project(... VERSION ...)` calls
+  (root, `mc3/`, `mcb/`, `mc3togltf/`, `mc3tomcb/` — each reads
+  `../VERSION` relative to its own `CMAKE_CURRENT_SOURCE_DIR`, which resolves
+  correctly whether built standalone or as a root subdirectory).
+  Found and fixed a real, previously-undetected drift risk while wiring
+  this: `mcb/cmake/McbConfig.cmake.in` hardcoded
+  `find_dependency(Mc3 0.1.0 CONFIG)` — a second, independent copy of the
+  version number that `configure_package_config_file()` never touched, so
+  it would have silently gone stale the next time the version changed. Now
+  substitutes `@PROJECT_VERSION@`. Also updated
+  `test/cmake/package_consumer/CMakeLists.txt` (an external-consumer smoke
+  test that would otherwise hardcode its own pin, same drift risk) to read
+  the same shared file. `--version` (both CLI tools and the main editor),
+  package configs, and the CLI release archive name all confirmed to
+  correctly reflect the shared source with no further changes needed — they
+  already read `${PROJECT_VERSION}`/`MESHCRAFT_VERSION` derived from it.
+  `CHANGELOG.md`'s existing `## [Unreleased] — 0.1.0` heading already
+  matches; left alone (prose, not a second machine-read source, so it
+  cannot drift the same way).
+  Verified: all 5 `project()` calls configure cleanly (standalone `mc3`/
+  `mcb`/`mc3togltf`/`mc3tomcb` and the root project), `mc3tomcb --version`/
+  `mc3togltf --version`/`MeshCraft --version` all report `0.1.0`,
+  `package_consumer_smoke` and `clean_room_cli_release_smoke` both still
+  pass end to end, and the release archive is still named
+  `MeshCraft-0.1.0-Linux-cli.tar.gz`.
+  **Deliberately not done here — a product decision, not mechanical
+  plumbing:** deciding whether the first public release is `0.1.0`, `1.0.0`,
+  or another version, and actually executing an RC process end to end. See
+  the new `SYS-W11-11` below.
+
+- **SYS-W11-11** `[BLOCKED]` `P2` — Execute the first release candidate,
+  once the version-number decision below is made. Produce an RC artifact
+  set from the now-unified version source (`SYS-W11-10`), execute
+  `RELEASE.md`'s checklist for real, record the exact supported
+  platform/backend matrix, and distinguish unsupported platforms from
+  temporarily blocked qualification.
+  **Blocked on a decision only the user can make:** is the first public
+  release `0.1.0` (honest about remaining platform/qualification gaps —
+  `SYS-W8-05`, `SYS-W8-06`, `AUD-042`, `SYS-W11-06`'s Windows evidence, this
+  session's own left-for-later CI-red survey) or `1.0.0` (implying those
+  gaps are closed first)? Bumping the root `VERSION` file once decided
+  updates all 5 projects, `--version`, package configs, and archive names
+  in one place (`SYS-W11-10`); nothing else needs to change.
 
 ### W3 — Architecture decomposition
 
