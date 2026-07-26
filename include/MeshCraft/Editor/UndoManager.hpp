@@ -1,6 +1,6 @@
 #pragma once
 
-#include "MeshCraft/Mc3/Mc3Document.hpp"
+#include "MeshCraft/Editor/DocumentSnapshot.hpp"
 
 #include <optional>
 #include <string>
@@ -18,9 +18,10 @@ namespace MeshCraft::Editor {
 // restoreSelectionByIds(), modified_/updateWindowTitle(),
 // evaluateAndPushAnimOverrides()) stays the CALLER's responsibility,
 // before/after calling in here. In particular this class never calls
-// deepCopyDoc() (a MeshCraftPrivate.hpp helper) itself -- every Document
-// passed in must already be an independent copy the caller made -- so it
-// has zero dependency on MeshCraftPrivate.hpp, matching the
+// deepCopyDoc() (a MeshCraftPrivate.hpp helper) itself -- callers provide an
+// already-independent document, frozen by DocumentSnapshot. This permits an
+// automatic SceneHistory entry and the matching undo entry to share one
+// immutable graph while keeping the manager CNA-free, matching the
 // KeybindingManager precedent of keeping extracted classes' dependency
 // footprint minimal.
 class UndoManager {
@@ -28,7 +29,7 @@ public:
     static constexpr int kMax = 20;
 
     struct Entry {
-        Mc3::Mc3Document          doc;
+        DocumentSnapshot          snapshot;
         std::vector<std::string> selectionIds;
     };
 
@@ -37,16 +38,27 @@ public:
     [[nodiscard]] bool canUndo() const { return !undoStack_.empty(); }
     [[nodiscard]] bool canRedo() const { return !redoStack_.empty(); }
 
-    // `doc`/`selectionIds` must already be independent copies (the
-    // caller's responsibility). Caps at kMax and clears the redo stack --
-    // a new action invalidates any previously-undone-past history.
-    void push(Mc3::Mc3Document doc, std::vector<std::string> selectionIds);
+    // `snapshot` is an immutable document made from an independent deep copy.
+    // It may be shared with SceneHistory. Caps at kMax and clears redo.
+    void push(DocumentSnapshot snapshot, std::vector<std::string> selectionIds);
+    void push(Mc3::Mc3Document independentDocument, std::vector<std::string> selectionIds) {
+        push(freezeDocument(std::move(independentDocument)), std::move(selectionIds));
+    }
 
-    // Pops the most recent undo entry, first pushing `currentDoc`/
-    // `currentSelectionIds` (already-independent copies) onto the redo
-    // stack. std::nullopt (no-op) if canUndo() is false.
-    std::optional<Entry> undo(Mc3::Mc3Document currentDoc, std::vector<std::string> currentSelectionIds);
-    std::optional<Entry> redo(Mc3::Mc3Document currentDoc, std::vector<std::string> currentSelectionIds);
+    // Pops the most recent undo entry, first pushing `currentSnapshot` and
+    // current selection onto redo. std::nullopt if canUndo() is false.
+    std::optional<Entry> undo(DocumentSnapshot currentSnapshot,
+                              std::vector<std::string> currentSelectionIds);
+    std::optional<Entry> redo(DocumentSnapshot currentSnapshot,
+                              std::vector<std::string> currentSelectionIds);
+    std::optional<Entry> undo(Mc3::Mc3Document independentDocument,
+                              std::vector<std::string> currentSelectionIds) {
+        return undo(freezeDocument(std::move(independentDocument)), std::move(currentSelectionIds));
+    }
+    std::optional<Entry> redo(Mc3::Mc3Document independentDocument,
+                              std::vector<std::string> currentSelectionIds) {
+        return redo(freezeDocument(std::move(independentDocument)), std::move(currentSelectionIds));
+    }
 
     // Jumps directly to the undo entry `stepsAgo` positions back from the
     // top of the undo stack (1 = the most recent undo point, same target
@@ -55,8 +67,13 @@ public:
     // AND every undo entry newer than the target onto the redo stack
     // (capped at kMax, oldest evicted first), then returns the target
     // entry. std::nullopt (no-op) if stepsAgo is out of [1, undoCount()].
-    std::optional<Entry> jumpTo(int stepsAgo, Mc3::Mc3Document currentDoc,
+    std::optional<Entry> jumpTo(int stepsAgo, DocumentSnapshot currentSnapshot,
                                  std::vector<std::string> currentSelectionIds);
+    std::optional<Entry> jumpTo(int stepsAgo, Mc3::Mc3Document independentDocument,
+                                std::vector<std::string> currentSelectionIds) {
+        return jumpTo(stepsAgo, freezeDocument(std::move(independentDocument)),
+                      std::move(currentSelectionIds));
+    }
 
     // Removes the most-recently-pushed undo entry without applying it
     // (SYS-W12-02's benchmark measures push()'s deep-copy cost, then must
@@ -69,8 +86,8 @@ public:
     void clear();
 
 private:
-    std::vector<Mc3::Mc3Document>         undoStack_;
-    std::vector<Mc3::Mc3Document>         redoStack_;
+    std::vector<DocumentSnapshot>         undoStack_;
+    std::vector<DocumentSnapshot>         redoStack_;
     std::vector<std::vector<std::string>> undoSelectionStack_;
     std::vector<std::vector<std::string>> redoSelectionStack_;
 };

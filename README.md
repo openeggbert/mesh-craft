@@ -25,7 +25,9 @@ Key capabilities:
 - fog and environment settings
 - export: glTF/GLB via `mc3togltf`; binary MCB via `mc3tomcb`
 
-See [MC3_FORMAT.md](MC3_FORMAT.md) for the full specification.
+See [MC3_FORMAT.md](MC3_FORMAT.md) for the full specification and
+[`docs/CAPABILITY_MATRIX.md`](docs/CAPABILITY_MATRIX.md) for the current
+format/editor/exporter/platform capability boundary.
 
 ## Architecture
 
@@ -86,6 +88,21 @@ ninja -C cmake-build-debug
 > `cmake -S . -B cmake-build-debug` configure step before building —
 > `ninja` alone will not pick it up.
 
+### Install MC3/MCB libraries and create the CLI archive
+
+The `release` component installs `Mc3` and `Mcb` with
+`MeshCraft::Mc3`/`MeshCraft::Mcb` CMake targets and both conversion tools:
+
+```sh
+cmake --install cmake-build-debug --prefix "$PWD/meshcraft-install" --component release
+cmake --build cmake-build-debug --target meshcraft_cli_release -j2
+```
+
+The latter writes a relocatable `MeshCraft-<version>-<system>-cli.tar.gz` in
+the build directory. An external CMake project can use the installed libraries
+with `find_package(Mc3 CONFIG REQUIRED)` and `find_package(Mcb CONFIG REQUIRED)`,
+then link `MeshCraft::Mc3` and `MeshCraft::Mcb`.
+
 ### Build (Windows, MinGW cross-compile from Linux)
 
 Requires the `x86_64-w64-mingw32-gcc`/`g++` toolchain (Debian/Ubuntu:
@@ -105,7 +122,7 @@ set(CMAKE_FIND_ROOT_PATH_MODE_INCLUDE ONLY)
 
 ```sh
 cmake -S . -B b-mingw -G Ninja -DCMAKE_TOOLCHAIN_FILE=mingw-toolchain.cmake -DBUILD_TESTING=OFF
-cmake --build b-mingw -j$(nproc)
+cmake --build b-mingw -j4
 ```
 
 **Known blocker (as of this writing):** configure succeeds and the
@@ -129,7 +146,7 @@ Requires the [Emscripten SDK](https://emscripten.org/docs/getting_started/downlo
 
 ```sh
 emcmake cmake -S . -B b-web -G Ninja -DBUILD_TESTING=OFF
-cmake --build b-web -j$(nproc)
+cmake --build b-web -j4
 cd b-web && python3 -m http.server 8765   # then open http://localhost:8765/MeshCraft.html
 ```
 
@@ -281,10 +298,12 @@ reference.
   passes; visibility still depends on authored emissive brightness. Custom
   text-shader effects are disabled on Vulkan until CNA exposes a complete
   cross-backend effect contract.
-- Walk mode always retains the y=0 ground plane and now collides with scene
-  primitives explicitly marked `collision="box"` (walls, platforms, and
-  ceilings, including parent transforms). Other collision proxy labels remain
-  unsupported rather than being approximated silently.
+- Walk mode always retains the y=0 ground plane and collides with scene
+  primitives explicitly marked `collision="box"`, uniform
+  `collision="sphere"`/IcoSphere, or compatible upright
+  `collision="capsule"` (including parent transforms). `mesh`, `convex`,
+  incompatible shapes, and over-budget proxies are reported and ignored rather
+  than being approximated silently.
 - Preferences dialog: auto-save interval, snap (translate/rotate/scale), grid spacing, and theme are all persisted (`savePrefsAlg`/`loadPrefsAlg`)
 - Headless screenshot: a `.png` path writes a real PNG (`stbi_write_png`); every other extension (e.g. `.ppm`) writes raw PPM (P6) bytes regardless of what the extension actually says
 - MCB: as of `SYS-W14-25` (2026-07-20), compression is implemented — `MeshCraft::Mcb::saveToBinary`/`saveToFile` take an opt-in `compress` parameter (default `false`, unchanged output) that zlib-deflates the document payload; `loadFromBinary`/`loadFromFile` transparently detect and decompress it. Requires this build to have been compiled with zlib available (system package, optional — see `THIRD_PARTY.md`); degrades to a clear "requires zlib"/"compiled without zlib support" error rather than misparsing a compressed file or silently ignoring the `compress` request. No editor UI toggle — see `MC3_FORMAT.md`'s MCB section for the full header layout
@@ -295,7 +314,7 @@ reference.
 - SVG textures (`<texture type="svg">`): external `.svg` files and inline CDATA markup are rasterized by NanoSVG (maximum output dimension 2048px) for both the live editor viewport and glTF export. The live cache has compact content-hash keys and automatically re-rasterizes an external SVG when its file changes; malformed input is warned once per unchanged source. `wrap_u`, `wrap_v`, and `filter` round-trip and affect both the viewport sampler and glTF sampler; `mip_maps` affects glTF, while the live CNA texture remains level-zero because its available API cannot generate a mip chain. `.gltf` exports write a generated PNG beside the document; `.glb` embeds it. Unsupported or malformed SVG is skipped with a named warning rather than dropping the material silently.
 - Embedded GLB (`<mesh src="embed:id"/>`): external self-contained `.glb` files and inline base64 GLB both resolve in `mc3togltf` and in the live viewport. The asset's default-scene transforms are flattened into the Mesh object's local geometry; MC3 retains authority over the material. The loader rejects loose companion-file `.gltf`, non-triangle primitives, animation/skin/morph data, malformed paths/data, and assets over the documented 64 MiB/300,000-triangle limits with a named warning instead of importing an unsafe partial asset.
 - Editable GLB/glTF import (`SYS-W14-36`): **File → Import GLB / glTF...** maps a bounded self-contained triangle GLB into native MC3 hierarchy, material/inline-image, camera, and punctual-light records. Mesh children preserve their source primitive with strict metadata selectors, so later preview/export does not flatten them again. The separate, unchecked **Trusted external .gltf import** option accepts only source-directory companions under 16 MiB JSON/48 MiB payload limits, converts them immediately to the same portable inline GLB, and never persists external paths. Inline image data has a 16 MiB encoded/16-million-pixel viewport decode cap. Skins/morphs/animations are explicitly reported as lossy, while non-triangle primitives reject before mutation.
-- N3–N7 scene data (scripts, sounds, music, triggers, scene states, meta) and `SYS-W14-31` event bindings are fully round-tripped (XML/JSON/MCB/XSD) and editable. Scripts (`type="lua"`) actually run through the sandboxed `LuaScriptRunner`; explicit Triggers **Fire** and States **Apply State** actions perform their real effects. The Events tab stores object/Area bindings to trigger/state targets with enabled, cooldown, one-shot, and timer controls, then provides dry-run enter/exit/click/timer simulation. Dry-run simulation reports what would dispatch, is guarded/budgeted, and never fires a trigger, applies a state, changes the document, or creates undo history. The live viewport does not yet generate collision or picking events automatically; glTF warns once and omits bindings. See `MC3_FORMAT.md` and `plan.md` for the exact scope.
+- N3–N7 scene data (scripts, sounds, music, triggers, scene states, meta) and event bindings are fully round-tripped (XML/JSON/MCB/XSD) and editable. Scripts (`type="lua"`) run through the sandboxed `LuaScriptRunner`; explicit Triggers **Fire** and States **Apply State** actions perform their real effects. The Events tab's explicit **Preview / Play events** mode delivers timers, Walk Mode Area enter/exit, and picked-object clicks while respecting enabled/cooldown/one-shot/dispatch limits. Trigger, state, and script work runs as one isolated, validated document transaction: a failed script rolls back the complete batch, selection/undo history stay unchanged, and pending audio/action effects are suppressed. Normal editing does not dispatch bindings; this is a bounded preview, not a general game runtime. glTF warns once and omits bindings. See `MC3_FORMAT.md` and `plan.md` for the exact scope.
 - `<library>`/`<imports>` (R101/R110, `Mc3ImportResolver`): `SYS-W14-28` completes the editor workflow around the existing format APIs. File ▸ Open Library and Save as Library use the dedicated `.mc3lib.xml`/`.mc3lib.json` loaders and writers; Save refreshes the content hash and requires a valid namespace plus `major.minor.patch` version. A selected scene object can become a named definition, and any definition can be published with its referenced materials/textures as a self-contained library. Imports resolve automatically after load and via the Imports tab; its health view reports the resolved file, declared namespace/version, effective SHA-256 hash, direct definition count, and missing/hash/cycle/identity/collision errors. Imported definitions remain external when a scene is saved, the picker can place them as editable Instances with text/category/semantic/style filters, and an edit that turns one into a local override is warned before saving rather than silently shadowing its source library.
 - `<texture mip_maps="...">`: as of `SYS-W14-22` (2026-07-20), honored by `mc3togltf` — `false` makes the exporter emit a plain (non-mipmap) glTF sampler `minFilter` instead of unconditionally requesting a mipmapped one. **Not honored by the live editor viewport** — CNA's `Texture2D` asset-loading path has no mipmap-generation option (confirmed in CNA's own OpenGL backend: it explicitly does not generate mipmaps by default for the filter that path uses), and closing that would need a CNA-side API change, out of scope per this repo's CNA boundary. See `MC3_FORMAT.md`'s Textures section for the full writeup.
 - `<texture color_space="...">`: as of `SYS-W14-23` (2026-07-20), `mc3togltf` still doesn't re-encode pixels at export time (glTF 2.0's per-slot encoding — baseColor/emissive sRGB, normal/metallic-roughness/occlusion linear — is spec-mandated and has no per-texture override), but now warns when a texture's declared `color_space` conflicts with its slot's mandated encoding (e.g. a normal map declared `color_space="srgb"`), naming the material, texture, slot, and both the declared and required values, instead of silently doing nothing with the mismatch.
@@ -304,7 +323,11 @@ reference.
 - `<ambient>` light: glTF 2.0 core + `KHR_lights_punctual` have no ambient-light concept at all (a real spec gap). As of `SYS-W14-27` (2026-07-20), instead of being dropped outright it's approximated — every `<ambient>` light's `color × brightness` in the document is summed and baked into every material's own `emissiveFactor`, tinted by that material's `base_color` and clamped to `[0,1]`, so a glTF-conformant viewer isn't fully unlit wherever an ambient fill was authored. A lossy approximation, not real global illumination — see `MC3_FORMAT.md`'s Lights section for the full formula.
 - Live-viewport light shading (`AUD-077`, `SYS-W14-33`, 2026-07-26): directional (up to three) and first ambient lights use CNA `BasicEffect`; on source-GLSL-capable CNA backends, the first eight authored `point`/`spot` lights also preview through `ShaderEffect`, with inverse-square attenuation, range cutoff, spotlight cone/falloff, color, and authored brightness. Backends without that capability log a clear BasicEffect-plus-gizmo fallback. This is an unshadowed editor preview; `mc3togltf` remains the ground truth for exported lighting. See `MC3_FORMAT.md`'s Lights section for details.
 
-## Platform Support Matrix
+## Historical platform verification record
+
+[`docs/CAPABILITY_MATRIX.md`](docs/CAPABILITY_MATRIX.md) is the authoritative
+current capability matrix. The table below is retained as dated build/runtime
+evidence and must not be read as a competing live status source.
 
 Status as of the S16 (Cross-Platform Stability) stabilization pass, re-verified
 2026-07-07 against a fresh MinGW cross-compile attempt (with the
@@ -323,7 +346,7 @@ available to test with).
 | App launches / runs | ✅ | ❌ (build doesn't complete) | ❌ loads and initializes (`SDL_CreateWindow`, WebGL2 context, scene creation) but then **crashes on the first resize event**, before any frame renders — see below | ❓ |
 | 3D viewport rendering | ✅ | ❌ (build doesn't complete) | ❌ never reached. **Root cause (re-diagnosed 2026-07-11, supersedes the earlier "canvas 0×0" theory)**: an uncaught `std::runtime_error` from CNA's `GameWindow::queryClientBoundsFromSDL()` — `SDL_GetWindowSize()` reports "Video subsystem has not been initialized" on the first `SDL_EVENT_WINDOW_RESIZED`, killing the wasm module. 100% inside CNA; not fixable from this repo. Full trace in `NEXT.md` §4. | ❓ |
 | Shaders (GLSL ES 3.00 / WebGL2) | ✅ (desktop GL) | ❌ (build doesn't complete) | ✅ all 7 CNA EasyGL 3D shader programs are `#version 300 es` and compile/link cleanly | ❓ |
-| Config/prefs/recent-files/keybindings persistence | ✅ `~/.config/meshcraft` | ✅ `%APPDATA%\meshcraft` (code-verified; no working build to run it against yet) | ❌ **correction 2026-07-09**: not actually persisted. `meshcraftConfigDir()` (`src/MeshCraft/MeshCraftPrivate.hpp`) has only `_WIN32`/POSIX branches, no `__EMSCRIPTEN__` branch, so it resolves into Emscripten's in-memory MEMFS. `-lidbfs.js` is linked (`CMakeLists.txt`) but `FS.mount`/`FS.syncfs` are never called anywhere in this repo or `../cna` — prefs/recent-files/keybindings/macros are silently lost on every reload. See `plan_deep_audit.md` AUDIT-0050 for the tracked implementation (currently blocked on the Emscripten crash — see `NEXT.md` §4). | ❓ (falls through to the same non-Windows `$HOME`-based logic as Linux; not verified on-device) |
+| Config/prefs/recent-files/keybindings persistence | ✅ `~/.config/meshcraft` | ✅ `%APPDATA%\meshcraft` (code-verified; no working build to run it against yet) | 🟡 the web pre-JS mounts IDBFS at Emscripten's `$HOME` and syncs it on startup/unload, so the intended persistent filesystem route is implemented. End-to-end persistence remains unverified because the CNA resize crash prevents a usable editor session. | ❓ (falls through to the same non-Windows `$HOME`-based logic as Linux; not verified on-device) |
 | SQLite Model Registry | ✅ (or gracefully stubbed if SQLite3 dev package absent) | 🟡 gracefully stubbed when SQLite3 absent (code-verified; no working build to run it against yet) | ❌ always stubbed (`MESHCRAFT_HAS_SQLITE3` never defined) | ❌ always stubbed (same guard as Web) |
 | AI Assistant (Claude API) | ✅ (or gracefully stubbed if OpenSSL absent) | 🟡 same as SQLite3 above | ❌ always stubbed (`MESHCRAFT_HAS_AI` never defined) | ❌ always stubbed (same guard as Web) |
 | File dialogs (text-path-field fallback) | ✅ | ✅ (no native OS dialog anywhere — plain `ImGui::InputText`, platform-agnostic by construction) | ✅ | ✅ |
@@ -374,14 +397,12 @@ no separate cache/config directory for them.
   `scene.mc3.xml.autosave` (interval configurable in Preferences,
   default 60s). This file is deleted automatically on the next explicit
   Save — it's a crash-recovery net, not a permanent artifact.
-- **Recovering after a crash**: reopen `scene.mc3.xml` normally. If a
-  `.autosave` file exists and is newer than the saved file, the status
-  bar shows "Autosave found — may be newer than saved file: ..." for a
-  few seconds — this is a **notification only**, not an automatic
-  prompt with a restore button. To actually recover: open
-  `scene.mc3.xml.autosave` directly (File → Open, or rename it to end
-  in `.mc3.xml` first since the app expects that extension), check it
-  looks right, then Save As over the original filename.
+- **Recovering after a crash**: reopen `scene.mc3.xml` normally. If its
+  `.autosave` sibling is newer, the editor opens **Recover Unsaved Changes**.
+  Choose **Recover** to load the autosave while retaining the original file as
+  the save target, or **Discard Autosave** to remove it. Recovered content is
+  marked modified and the autosave remains as a safety net until an explicit
+  successful Save.
 - **Backup rotation on every explicit Save**: before writing, the
   previous on-disk content is preserved as `scene.mc3.xml.backup.1`
   (most recent prior version); if a `.backup.1` already existed, it's

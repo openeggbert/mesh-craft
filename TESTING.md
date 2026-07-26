@@ -1,8 +1,18 @@
 # Testing
 
-_Last updated: 2026-07-26. Counts below were verified against a freshly configured Release build after `SYS-W9-04` scene-history coverage. This document is derived from the actual `CMakeLists.txt` test registrations and test source files — if it drifts from a freshly configured build's `ctest -N` output, trust `ctest -N`, not this file's claimed count._
+_Last updated: 2026-07-26. This document is derived from the actual
+`CMakeLists.txt` registrations and test source files. Test registration and
+pass totals are intentionally not recorded here: trust `ctest -N` and a fresh
+CTest run in the build tree being reported._
 
-MeshCraft's tests run through **CTest** — **211 tests registered** (`ctest --print-labels` label breakdown after `SYS-W9-04`: `ai` 1, `commands` 1, `export` 81, `format` 38, `lint` 4, `perf` 2, `registry` 2, `render` 41, `unit` 43), mixing C++ assertion-based binaries and Python/bash subprocess-driven checks against the `mc3togltf`/`mc3tomcb` CLIs and the `MeshCraft` editor binary itself (headless `--screenshot` real-pixel-sampling tests, plus 3 tests that drive real headless Blender for GLB-import verification). `render_display_preflight` verifies an actual `xvfb-run` + `xdpyinfo` X client before the render subset; if unavailable, it reports a CTest skip and CMake disables only the other render-labelled tests. **Known gap:** the "CLI-driving Python tests" table below documents the most significant/representative tests in each category but is not exhaustively 1:1 with all registrations — `ctest -N` and `ctest --print-labels` are authoritative for the complete list.
+MeshCraft's tests run through **CTest**, mixing C++ assertion binaries and
+Python/bash subprocess-driven checks against the `mc3togltf`/`mc3tomcb` CLIs
+and the `MeshCraft` editor (including headless real-pixel checks and optional
+headless Blender verification). `render_display_preflight` verifies an actual
+`xvfb-run` + `xdpyinfo` X client before render tests; if unavailable, it
+reports a CTest skip and CMake disables only the other render-labelled tests.
+The tables below are representative rather than a one-to-one test registry;
+`ctest -N` and `ctest --print-labels` are authoritative.
 
 ---
 
@@ -31,13 +41,24 @@ ctest --print-labels   # list all labels
 ctest --rerun-failed --output-on-failure
 ```
 
-Expected result: every registered test passes. On 2026-07-26, the current 191-registration Release tree passed all 154 non-render tests with `-LE render`; this host's Xvfb preflight disabled 36 render executions (including `asset_lod_viewport_test`) and skipped its preflight probe deterministically. `asset_lod` covers tier selection, hysteresis, culling, safe fallbacks, and portable deterministic variants; `mc3togltf_asset_lod_export` proves the explicit near/default export tier. `event_binding_dispatch` locks the dry-run/no-document-mutation dispatch contract, and `mc3togltf_event_bindings_omitted` locks explicit glTF omission. The focused suites are run with at most `-j4` after each change. A failing test prints its assertion/subprocess output inline with `--output-on-failure`; without that flag, CTest only shows pass/fail per test name.
+Expected result: every test selected in the current build passes. A host without
+a working display can intentionally skip/disable the render-labelled subset;
+record that environment result with the CTest output instead of treating it as
+product coverage. `asset_lod` covers tier selection, hysteresis, culling, safe
+fallbacks, and portable deterministic variants; `mc3togltf_asset_lod_export`
+proves the explicit near/default export tier. `event_binding_dispatch` locks
+pure eligibility/diagnostic behavior, `event_preview_runner` locks atomic
+Preview/Play execution and rollback, and `mc3togltf_event_bindings_omitted`
+locks explicit glTF omission. Run focused
+suites with at most `-j4`. A failing test prints its assertion/subprocess
+output inline with `--output-on-failure`.
 
 Each C++ test binary can also be run directly (bypassing CTest) for faster iteration:
 
 ```sh
 ./cmake-build-debug/mc3/mc3_commands_test
 ./cmake-build-debug/mc3_registry_test
+./cmake-build-debug/registry_workspace_test
 ./cmake-build-debug/ai_test
 ./cmake-build-debug/mc3/mc3_roundtrip_test
 ./cmake-build-debug/mcb/mcb_roundtrip_test
@@ -57,7 +78,61 @@ for c in mc3 mcb mc3togltf mc3tomcb; do
 done
 ```
 
-Expected: `mc3` 1/1, `mcb` 1/1, `mc3togltf` 42/42, `mc3tomcb` 3/3. (`mc3`'s standalone build registers only `mc3_roundtrip_test` — `mc3_commands_test` needs `EditorAlgorithms.hpp` from the editor tree and is skipped outside the root build; this is intended, not a bug.)
+Expected: every test registered by each standalone build passes. (`mc3`'s
+standalone build omits `mc3_commands_test` because it needs
+`EditorAlgorithms.hpp` from the editor tree; this is intended, not a bug.)
+
+### Installed CMake packages and CLI archive
+
+`Mc3` and `Mcb` install under the `release` component with
+`MeshCraft::Mc3` and `MeshCraft::Mcb` imported targets. The root CTest
+`package_consumer_smoke` installs that component into the active build tree,
+then configures and runs a separate consumer project using `find_package`.
+
+```sh
+ctest --test-dir cmake-build-debug -R '^package_consumer_smoke$' --output-on-failure
+cmake --build cmake-build-debug --target meshcraft_cli_release -j2
+```
+
+The second command writes
+`cmake-build-debug/MeshCraft-<version>-<system>-cli.tar.gz`. Its prefix
+contains `bin/mc3tomcb`, `bin/mc3togltf`, the MC3/MCB headers and static
+libraries, package configs, and non-system glTF-exporter runtime libraries.
+
+`cli_cross_platform_fixture` writes `house.mcb` and `house.glb` under the
+active build directory and compares their SHA-256 values with fixed source
+contracts. The `windows-2022` CI job runs the same fixture only after all four
+CNA-free standalone builds and CTests succeed; its `mc3tomcb.exe` and
+`mc3togltf.exe` artifacts are therefore published only after that comparison.
+
+### Sanitizer and fuzz qualification
+
+CI runs each CNA-free standalone component under Clang AddressSanitizer and
+UndefinedBehaviorSanitizer. It then runs four deterministic libFuzzer smoke
+targets for XML, JSON, MCB, and self-contained GLB import. Each target has a
+seed corpus, a 20-second total-time limit, a 5-second per-input timeout, a
+512 MiB RSS limit, and a 1 MiB input limit. The MCB and GLB seed files are
+generated from checked-in scenes immediately before the smoke run, so no
+opaque binary blob is committed.
+
+To reproduce the parser portion locally, use a stable build directory (not a
+temporary directory) and Clang:
+
+```sh
+cmake -S mc3 -B cmake-build-verification-clang-sanitize/mc3 -G Ninja \
+  -DCMAKE_BUILD_TYPE=Debug -DBUILD_TESTING=ON \
+  -DCMAKE_CXX_COMPILER=clang++ -DMESHCRAFT_FUZZ=ON
+cmake --build cmake-build-verification-clang-sanitize/mc3 \
+  --target mc3_xml_libfuzzer mc3_json_libfuzzer -j4
+python3 test/run_fuzz_smoke.py --seconds 20 --rss-mib 512 \
+  --work-dir cmake-build-verification-clang-sanitize/fuzz-work \
+  --target cmake-build-verification-clang-sanitize/mc3/mc3_xml_libfuzzer mc3/test/fuzz/corpus/xml \
+  --target cmake-build-verification-clang-sanitize/mc3/mc3_json_libfuzzer mc3/test/fuzz/corpus/json
+```
+
+These fuzzers are deliberately CI/manual targets rather than ordinary CTest
+tests: their strict resource limits make failures actionable without adding a
+fragile wall-clock gate to every local edit.
 
 ---
 
@@ -69,12 +144,14 @@ Expected: `mc3` 1/1, `mcb` 1/1, `mc3togltf` 42/42, `mc3tomcb` 3/3. (`mc3`'s stan
 |------|--------|--------|----------------|
 | `mc3_registry` | `mc3_registry_test` | `ModelRegistry` (SQLite): open/save/search/remove, legacy-schema migration, deterministic preview cache invalidation, metadata/tag filters, duplicate/unused-material inspection, dependency-aware local asset-pack manifest and pinned-hash check, import-conflict rejection, unavailable-registry/DB-open edges, a mock AI-response → registry pipeline, and malformed-entry temp-file cleanup | 181 `PASS:` assertions, 0 `FAIL:` (re-counted 2026-07-26) |
 | `model_registry_no_sqlite` | `model_registry_no_sqlite_test` | The real `#ifndef MESHCRAFT_HAS_SQLITE3` branch: harmless database API fallbacks plus local asset-pack/preview output without SQLite | 9 `PASS:` assertions, 0 `FAIL:` (2026-07-26) |
+| `registry_workspace` | `registry_workspace_test` | CNA-free RegistryWorkspace lifecycle: panel ownership, deterministic AI-definition prefill, and closing only an AI-owned save dialog | All lifecycle assertions pass; no database or ImGui dependency |
 | `scene_history` | `scene_history_test` | Separate memory-budgeted review timeline: automatic eviction, checkpoint retention/rejection, restore-with-selection and snapshot independence, large-document budget handling, and object/resource diff review. Existing `undo_manager` coverage continues to assert redo invalidation for the untouched exact undo stack. | 13 `PASS:` assertions, 0 `FAIL:` (2026-07-26) |
 | `mc3_ai` | `ai_test` | `AiAssistant`'s JSON helpers; the AI-response validation pipeline (extract markdown/prose → repair → parse → reject-if-empty → validate against `mc3.xsd`); mock-HTTP-server round-trips (success, truncation, HTTP error, indefinite-hang timeout, model-name-on-the-wire, connection-refused, malformed-JSON-body, back-to-back-calls) — no real network call | 122 `PASS:` assertions, 0 `FAIL:` (re-counted 2026-07-20; was 73 as of 2026-07-07). The mock-server and libxml2-dependent cases are skipped (with a `SKIP:` line, not a failure) on builds without `MESHCRAFT_HAS_AI`/`MESHCRAFT_HAS_LIBXML2` |
 | `mc3_roundtrip` | `mc3_roundtrip_test` | Full `.mc3.xml` parser/writer roundtrip for every element type, including all N1-N7 extensions, UTF-8/space-containing paths, and edge cases (legacy attribute forms, defaults) | 577 `PASS:` assertions, ends with `All tests passed.` (re-counted 2026-07-20; was 542 as of 2026-07-07) |
 | `mc3_commands` | `mc3_commands_test` | Editor command algorithms (rename incl. empty-pattern/backslash edge cases, find/replace, array-dup, duplicate, group/ungroup), undo/redo round-trips for every mutating command, auto-save/backup, Save-As/Export-Selection/drag-drop/invalid-file-load workflows, keybinding/preferences/macro persistence formats, hierarchy-panel filtering, material-color resolution, undo-stack depth capping, AI-panel + unsaved-changes-confirmation dialog lifecycles | 558 `PASS:` assertions (re-counted 2026-07-20; was 510 as of 2026-07-07) |
 | `mcb_roundtrip` | `mcb_roundtrip_test` | MCB binary encode/decode roundtrip for the base scene and all N1-N7 extension types, plus regression tests for a recursion-depth guard and a string-length sanity check | 236 `PASS:` assertions, ends with `All MCB roundtrip tests passed.` (re-counted 2026-07-20, later same day; was 234 earlier the same day, before the `SYS-W14-25` compression roundtrip cases landed, and 155 as of 2026-07-07) |
 | `event_binding_dispatch` | `event_binding_dispatch_test` | CNA-free dry-run event binding dispatch: enter/exit/timer, cooldown, one-shot, dangling targets, recursion guard, execution budget, and authored-document immutability | Valid targets are reported as “would dispatch”; no trigger/state effect or document mutation occurs |
+| `event_preview_runner` | `event_preview_runner_test` | CNA-free Preview/Play execution: nested Area enter/exit, timers, click fan-out, effects staged until commit, atomic state/script mutation, and failed-script rollback | A successful batch commits at most once; failed scripts preserve the live document and runtime eligibility while suppressing pending effects |
 | `camera_bookmarks` | `camera_bookmarks_test` | Editor camera-bookmark capture/restore state | Empty/invalid slots are rejected; all orbit-camera fields round-trip |
 | `transform_clipboard` | `transform_clipboard_test` | Editor transform clipboard | Copies only position/rotation/scale; empty paste is harmless and target pivot stays unchanged |
 | `status_notification` | `status_notification_test` | Timed status-bar notification state | Message/severity replacement and expiry behavior |
@@ -86,6 +163,31 @@ Each assertion-based binary listed here prints one `PASS: <description>` or `FAI
 ### CLI-driving Python tests
 
 These spawn the built `mc3togltf`/`mc3tomcb` binaries as subprocesses and assert on their output (exit code, generated glTF/GLB JSON structure, or file diffs). They need `PYTHON3_EXEC` (auto-detected by CMake) and are skipped entirely if no `python3` is found.
+
+`capability_documentation` is a fast `lint` test that compares a small set of
+mechanically-verifiable capability claims with their source anchors. It guards
+Walk Mode proxy support, the web IDBFS bootstrap, autosave recovery, and
+ordinary-object viewport UV mapping, plus the shared rotation-convention path;
+it deliberately contains no volatile test or benchmark totals.
+
+`lua_script_runner` and `trigger_fire` are CNA-free unit tests of the real Lua
+runner and its trigger call path. They cover atomic rollback after a script
+error, the instruction and 16 MiB allocation limits, finite values and material
+references, successful placement, and the rule that a failed trigger script
+does not create undo/dirty state.
+
+`benchmark_editor` uses `uv_buffer_cache_large.mc3.xml`, a 100-instance
+textured scene with one authored UV projection. Its warm-frame assertion
+requires zero ordinary tint/authored-UV buffer creations and a mapped-UV cache
+hit; it also requires the direct CPU mesh-generation, cold/warm CSG, and
+live texture decode/upload category lines. It deliberately does not impose a
+wall-clock threshold.
+
+`scene_history` also covers the shared snapshot contract used by automatic
+history and UndoManager: a 1,000-object fixture must retain one immutable
+graph, restore a writable independent document and preserve paired selection.
+It prints an informational attach-time/logical-retained-byte comparison rather
+than enforcing a host-dependent RSS or wall-clock limit.
 
 | Test | Script | Covers | Pass criteria |
 |------|--------|--------|----------------|

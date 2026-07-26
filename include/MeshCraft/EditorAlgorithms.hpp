@@ -4,6 +4,7 @@
 
 #include <MeshCraft/Editor/ObjectTypeName.hpp>
 #include <MeshCraft/CoordinateSystemAlgorithms.hpp>
+#include <MeshCraft/RotationConventionAlgorithms.hpp>
 #include <MeshCraft/Editor/SelectionManager.hpp>
 #include <MeshCraft/Mc3/Mc3Document.hpp>
 #include <MeshCraft/Mc3/Mc3Object.hpp>
@@ -16,6 +17,7 @@
 #include <filesystem>
 #include <fstream>
 #include <functional>
+#include <limits>
 #include <map>
 #include <memory>
 #include <numbers>
@@ -26,6 +28,7 @@
 #include <string>
 #include <string_view>
 #include <unordered_map>
+#include <unordered_set>
 #include <utility>
 #include <vector>
 
@@ -53,16 +56,9 @@ inline bool normalizeCoordinateSystemToYUpAlg(Mc3::Mc3Document& document)
 
     for (auto& camera : document.cameras) {
         if (camera.rotation.has_value()) {
-            // Roll does not affect an MC3 camera's look direction. This
-            // matches SceneRenderer::cameraForwardFromRotation()'s purpose
-            // without pulling CNA math into this header-only algorithm.
-            constexpr float radiansPerDegree = std::numbers::pi_v<float> / 180.0f;
-            const float pitch = (*camera.rotation)[0] * radiansPerDegree;
-            const float yaw   = (*camera.rotation)[1] * radiansPerDegree;
-            const std::array<float, 3> forward{
-                std::sin(yaw) * std::cos(pitch),
-                std::sin(pitch),
-                -std::cos(yaw) * std::cos(pitch)};
+            const auto forward = rotateDirectionAlg(
+                {0.0f, 0.0f, -1.0f}, rotationMatrix3Alg(
+                    *camera.rotation, document.rotationUnits, document.eulerOrder));
             camera.target = {camera.position[0] + forward[0],
                              camera.position[1] + forward[1],
                              camera.position[2] + forward[2]};
@@ -75,10 +71,61 @@ inline bool normalizeCoordinateSystemToYUpAlg(Mc3::Mc3Document& document)
     auto conversionRoot = std::make_shared<Mc3::Mc3Object>();
     conversionRoot->type = Mc3::ObjectType::Group;
     conversionRoot->name = "Coordinate system normalized to Y-up";
-    conversionRoot->transform.rotation[0] = -90.0f;
+    conversionRoot->transform.rotation[0] =
+        degreesInRotationUnitsAlg(-90.0f, document.rotationUnits);
     conversionRoot->children = std::move(document.objects);
     document.objects = {std::move(conversionRoot)};
     document.coordinateSystem = std::string(kRightHandedYUpCoordinateSystem);
+    return true;
+}
+
+// Rotation conventions are document-wide.  A document can be made portable to
+// older degrees/XYZ-only consumers by baking each *static* rotation into that
+// convention.  Rotating Euler animation channels cannot be converted
+// losslessly to three independently interpolated XYZ scalar channels (the
+// conversion is nonlinear), so refuse that case rather than silently changing
+// animation.  The live editor itself honours those animated conventions; this
+// helper only powers the explicit normalization command.
+inline bool hasAnimatedRotationAlg(const Mc3::Mc3Document& document)
+{
+    using AP = Mc3::AnimatedProperty;
+    for (const auto& [_, action] : document.actions) {
+        for (const auto& channel : action.channels) {
+            if (channel.property == AP::RotationX || channel.property == AP::RotationY ||
+                channel.property == AP::RotationZ)
+                return true;
+        }
+    }
+    return false;
+}
+
+inline bool normalizeRotationConventionToDegreesXYZAlg(Mc3::Mc3Document& document)
+{
+    if (document.rotationUnits == "degrees" &&
+        normalisedEulerOrderAlg(document.eulerOrder) == "XYZ")
+        return false;
+    if (hasAnimatedRotationAlg(document)) return false;
+
+    const auto normalize = [&](std::array<float, 3>& rotation) {
+        rotation = rotationAsDegreesXYZAlg(
+            rotation, document.rotationUnits, document.eulerOrder);
+    };
+    std::unordered_set<const Mc3::Mc3Object*> visited;
+    std::function<void(const std::shared_ptr<Mc3::Mc3Object>&, int)> visit;
+    visit = [&](const std::shared_ptr<Mc3::Mc3Object>& object, int depth) {
+        if (!object || depth > 256 || !visited.insert(object.get()).second) return;
+        normalize(object->transform.rotation);
+        for (auto& [_, state] : object->states)
+            if (state.rotation) normalize(*state.rotation);
+        for (const auto& child : object->children) visit(child, depth + 1);
+    };
+    for (const auto& object : document.objects) visit(object, 0);
+    for (const auto& [_, definition] : document.definitions) visit(definition, 0);
+    for (auto& camera : document.cameras)
+        if (camera.rotation) normalize(*camera.rotation);
+
+    document.rotationUnits = "degrees";
+    document.eulerOrder = "XYZ";
     return true;
 }
 
@@ -947,18 +994,70 @@ inline int groupScaleAlg(
 // (MeshCraftApplication_Mouse.cpp). Any visible object gets a default
 // 0.5-unit half-extent AABB (scaled by its transform scale); primitive
 // shapes (Box/Sphere/Cylinder/Cone/Plane) use their actual dimensions
-// instead. This must NOT be gated on `obj.primitive` being set — an
+// instead. Bounds are transformed through the complete parent chain using the
+// document's rotation convention and pivot semantics. This must NOT be gated
+// on `obj.primitive` being set — an
 // earlier version of the real code only tested primitive-typed objects,
 // silently making every Instance/Mesh/Group/Extrude/CSG object unclickable
 // in the viewport (found and fixed by STAB-0503), inconsistent with
 // box-select, which already selects by screen position regardless of type.
 
+struct ObjectAffineTransformAlg {
+    RotationMatrix3Alg linear{{{1.0f, 0.0f, 0.0f},
+                                {0.0f, 1.0f, 0.0f},
+                                {0.0f, 0.0f, 1.0f}}};
+    std::array<float, 3> translation{0.0f, 0.0f, 0.0f};
+};
+
+inline std::array<float, 3> transformPointAlg(
+    const std::array<float, 3>& point, const ObjectAffineTransformAlg& transform)
+{
+    const auto transformed = rotateDirectionAlg(point, transform.linear);
+    return {transformed[0] + transform.translation[0],
+            transformed[1] + transform.translation[1],
+            transformed[2] + transform.translation[2]};
+}
+
+inline ObjectAffineTransformAlg localObjectTransformAlg(
+    const Mc3::Mc3Transform& transform, std::string_view rotationUnits,
+    std::string_view eulerOrder)
+{
+    ObjectAffineTransformAlg result;
+    const auto rotation = rotationMatrix3Alg(transform.rotation, rotationUnits, eulerOrder);
+    for (int row = 0; row < 3; ++row)
+        for (int col = 0; col < 3; ++col)
+            result.linear[row][col] = transform.scale[row] * rotation[row][col];
+    const std::array<float, 3> childOrigin{-transform.pivot[0], -transform.pivot[1],
+                                           -transform.pivot[2]};
+    const auto pivotOffset = rotateDirectionAlg(childOrigin, result.linear);
+    result.translation = {pivotOffset[0] + transform.position[0] + transform.pivot[0],
+                          pivotOffset[1] + transform.position[1] + transform.pivot[1],
+                          pivotOffset[2] + transform.position[2] + transform.pivot[2]};
+    return result;
+}
+
+inline ObjectAffineTransformAlg composeObjectTransformsAlg(
+    const ObjectAffineTransformAlg& local, const ObjectAffineTransformAlg& parent)
+{
+    ObjectAffineTransformAlg result;
+    for (int row = 0; row < 3; ++row) {
+        for (int col = 0; col < 3; ++col) {
+            result.linear[row][col] = local.linear[row][0] * parent.linear[0][col] +
+                                      local.linear[row][1] * parent.linear[1][col] +
+                                      local.linear[row][2] * parent.linear[2][col];
+        }
+    }
+    const auto inheritedTranslation = rotateDirectionAlg(local.translation, parent.linear);
+    result.translation = {inheritedTranslation[0] + parent.translation[0],
+                          inheritedTranslation[1] + parent.translation[1],
+                          inheritedTranslation[2] + parent.translation[2]};
+    return result;
+}
+
 inline void objectAABBAlg(const Mc3::Mc3Object& obj,
+                           const ObjectAffineTransformAlg& worldTransform,
                            std::array<float,3>& bMin, std::array<float,3>& bMax)
 {
-    const auto& t = obj.transform;
-    float opx = t.position[0], opy = t.position[1], opz = t.position[2];
-    float osx = t.scale[0],    osy = t.scale[1],    osz = t.scale[2];
     float hx = 0.5f, hy = 0.5f, hz = 0.5f;
     if (obj.primitive) {
         const auto& p = *obj.primitive;
@@ -974,9 +1073,26 @@ inline void objectAABBAlg(const Mc3::Mc3Object& obj,
         default: break;
         }
     }
-    hx *= std::abs(osx); hy *= std::abs(osy); hz *= std::abs(osz);
-    bMin = {opx-hx, opy-hy, opz-hz};
-    bMax = {opx+hx, opy+hy, opz+hz};
+    bMin = {std::numeric_limits<float>::max(), std::numeric_limits<float>::max(),
+            std::numeric_limits<float>::max()};
+    bMax = {std::numeric_limits<float>::lowest(), std::numeric_limits<float>::lowest(),
+            std::numeric_limits<float>::lowest()};
+    for (const float x : {-hx, hx}) for (const float y : {-hy, hy}) for (const float z : {-hz, hz}) {
+        const auto corner = transformPointAlg({x, y, z}, worldTransform);
+        for (int axis = 0; axis < 3; ++axis) {
+            bMin[axis] = std::min(bMin[axis], corner[axis]);
+            bMax[axis] = std::max(bMax[axis], corner[axis]);
+        }
+    }
+}
+
+inline void objectAABBAlg(const Mc3::Mc3Object& obj,
+                           std::array<float,3>& bMin, std::array<float,3>& bMax,
+                           std::string_view rotationUnits = "degrees",
+                           std::string_view eulerOrder = "XYZ")
+{
+    objectAABBAlg(obj, localObjectTransformAlg(obj.transform, rotationUnits, eulerOrder),
+                  bMin, bMax);
 }
 
 inline bool rayAABBIntersectAlg(
@@ -1006,25 +1122,31 @@ inline bool rayAABBIntersectAlg(
 // real click-to-select handler.
 inline std::shared_ptr<Mc3::Mc3Object> pickObjectByRayAlg(
     const std::vector<std::shared_ptr<Mc3::Mc3Object>>& rootObjects,
-    const std::array<float,3>& rayOrig, const std::array<float,3>& rayDir)
+    const std::array<float,3>& rayOrig, const std::array<float,3>& rayDir,
+    std::string_view rotationUnits = "degrees", std::string_view eulerOrder = "XYZ")
 {
     float bestT = 1e30f;
     std::shared_ptr<Mc3::Mc3Object> bestObj;
 
-    std::function<void(const std::vector<std::shared_ptr<Mc3::Mc3Object>>&)> testList;
-    testList = [&](const std::vector<std::shared_ptr<Mc3::Mc3Object>>& list) {
+    std::function<void(const std::vector<std::shared_ptr<Mc3::Mc3Object>>&,
+                       const ObjectAffineTransformAlg&, int)> testList;
+    testList = [&](const std::vector<std::shared_ptr<Mc3::Mc3Object>>& list,
+                   const ObjectAffineTransformAlg& parentTransform, int depth) {
+        if (depth > 256) return;
         for (const auto& obj : list) {
             if (!obj || !obj->visible) continue;
+            const auto worldTransform = composeObjectTransformsAlg(
+                localObjectTransformAlg(obj->transform, rotationUnits, eulerOrder), parentTransform);
             std::array<float,3> bMin, bMax;
-            objectAABBAlg(*obj, bMin, bMax);
+            objectAABBAlg(*obj, worldTransform, bMin, bMax);
             float tHit = 0.0f;
             if (rayAABBIntersectAlg(rayOrig, rayDir, bMin, bMax, tHit) && tHit < bestT) {
                 bestT = tHit; bestObj = obj;
             }
-            if (!obj->children.empty()) testList(obj->children);
+            if (!obj->children.empty()) testList(obj->children, worldTransform, depth + 1);
         }
     };
-    testList(rootObjects);
+    testList(rootObjects, {}, 0);
     return bestObj;
 }
 
@@ -1148,33 +1270,30 @@ inline void rotateBackupsAlg(const std::filesystem::path& file)
 // ── AI panel dialog lifecycle (STAB-0299/0300/0301) ───────────────────────────
 //
 // Mirrors the Reset / Apply to Scene / Save-to-Registry state transitions in
-// MeshCraftApplication::drawAiPanel() (MeshCraftApplication_UiAi.cpp:264-380).
-// Those transitions are plain field assignments, but they live directly
-// inside `if (ImGui::Button(...))` blocks with no separable function today,
-// so this mirror tracks presence/absence of the real fields with bools
-// (the actual document/error/dialog content isn't what's under test —
-// std::optional<Mc3Document> aiPendingDoc_ / std::string aiValidationError_
-// / bool regSaveFromAi_ / bool regSaveDlgOpen_).
+// drawAiPanel() and RegistryWorkspace. The ImGui code remains separate, so
+// this small model tracks only the presence/absence of the actual state
+// (aiPendingDoc_, aiValidationError_, RegistryWorkspace's AI save source and
+// save-dialog flag), not document or widget contents.
 
 struct AiPanelStateAlg {
     bool        aiPendingDocSet    = false;  // aiPendingDoc_.has_value()
     bool        validationErrorSet = false;  // !aiValidationError_.empty()
-    bool        regSaveFromAi      = false;
-    bool        regSaveDlgOpen     = false;
-    std::string regSaveDefId;                // regSaveDefId_
+    bool        registrySaveFromAi  = false;
+    bool        registrySaveDlgOpen = false;
+    std::string registrySaveDefId;
 };
 
 // Mirrors the "Reset" button body (MeshCraftApplication_UiAi.cpp:369-379):
 // always clears the pending result and any validation error; additionally
 // closes the registry save dialog, but ONLY if it was opened from this AI
-// result (regSaveFromAi_) — a dialog opened independently is left alone.
+// result — a dialog opened independently is left alone.
 inline void aiResetAlg(AiPanelStateAlg& st)
 {
     st.aiPendingDocSet    = false;
     st.validationErrorSet = false;
-    if (st.regSaveFromAi) {
-        st.regSaveDlgOpen = false;
-        st.regSaveFromAi  = false;
+    if (st.registrySaveFromAi) {
+        st.registrySaveDlgOpen = false;
+        st.registrySaveFromAi  = false;
     }
 }
 
@@ -1187,26 +1306,26 @@ inline void aiApplyToSceneAlg(AiPanelStateAlg& st)
 }
 
 // Mirrors the "Save to Registry…" button's Ai-tracking assignments
-// (MeshCraftApplication_UiAi.cpp:350-361, the `if (regReady)` body): records
-// which definition id to pre-fill and marks the save as AI-sourced. Note
+// (RegistryWorkspace::prepareAiSave()): records which definition id to
+// pre-fill and marks the save as AI-sourced. Note
 // what this does NOT depend on: it doesn't check or set any "applied to
 // scene" flag — the button's visibility gate (line 329) and this handler
 // both reference `aiPendingDoc_` alone (STAB-0348: works without a prior
 // Apply). `defId` mirrors `aiPendingDoc_->definitions.begin()->first`.
 inline void aiSaveToRegistryClickAlg(AiPanelStateAlg& st, const std::string& defId)
 {
-    st.regSaveDefId  = defId;
-    st.regSaveFromAi = true;
+    st.registrySaveDefId  = defId;
+    st.registrySaveFromAi = true;
 }
 
 // Mirrors the definition-source ternary in the "Save Definition to
 // Registry" dialog (MeshCraftApplication_UiRegistry.cpp:137-139): when the
-// save was initiated from an AI result (regSaveFromAi_) AND that result is
-// still present, list aiPendingDoc_'s definitions; otherwise list the scene
-// document's (document_.definitions) — STAB-0347.
+// save was initiated from an AI result AND that result is still present, list
+// aiPendingDoc_'s definitions; otherwise list the scene document's
+// definitions — STAB-0347.
 inline bool registrySaveUsesAiDefinitionsAlg(const AiPanelStateAlg& st)
 {
-    return st.regSaveFromAi && st.aiPendingDocSet;
+    return st.registrySaveFromAi && st.aiPendingDocSet;
 }
 
 // ── Unsaved-changes confirmation (STAB-0264) ──────────────────────────────────

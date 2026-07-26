@@ -1,11 +1,12 @@
 # MeshCraft CI.
 #
-# Scope: this skeleton builds and tests the CNA-independent libraries
+# Scope: Linux and Windows jobs build and test the CNA-independent libraries
 # (mc3, mcb, mc3togltf, mc3tomcb) as standalone CMake projects. These have no
-# CNA / SDL3 / OpenGL / ImGui dependency, so they cover the format/export tests
-# but NOT the editor (render/smoke/registry/ai/commands) tests. For the exact
-# live counts run `ctest -N` — they are deliberately not hard-coded here so this
-# comment cannot go stale (it did before: it claimed 66 tests / 46 covered).
+# CNA / SDL3 / OpenGL / ImGui dependency, so they cover format/export tests but
+# NOT editor (render/smoke/registry/ai/commands) tests. The Windows job also
+# publishes only CLI binaries that passed the deterministic cross-platform
+# fixture. For exact live counts run `ctest -N`; they are deliberately not
+# hard-coded here.
 #
 # The editor job below checks out the two required sibling repositories beside
 # this checkout, exactly matching the root CMake project layout
@@ -73,6 +74,128 @@ jobs:
 
       - name: Test
         run: ctest --test-dir build --output-on-failure -j2
+
+  standalone-windows:
+    name: Standalone Windows qualification
+    runs-on: windows-2022
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # Each standalone component owns a FetchContent tree. Cache all four
+      # without checking out CNA or sharp-runtime: this qualification must
+      # remain independent of the editor backend blockers.
+      - name: Cache CMake FetchContent downloads
+        uses: actions/cache@v4
+        with:
+          path: build/*/_deps
+          key: ${{ runner.os }}-standalone-fetchcontent-${{ hashFiles('mc3/CMakeLists.txt', 'mcb/CMakeLists.txt', 'mc3togltf/CMakeLists.txt', 'mc3tomcb/CMakeLists.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-standalone-fetchcontent-
+
+      - name: Configure, build, and test every standalone component
+        shell: pwsh
+        run: |
+          $components = @('mc3', 'mcb', 'mc3togltf', 'mc3tomcb')
+          foreach ($component in $components) {
+            $buildDir = "build/$component"
+            cmake -S $component -B $buildDir -G Ninja `
+              -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=ON
+            cmake --build $buildDir --parallel 2
+            ctest --test-dir $buildDir --output-on-failure --parallel 2
+          }
+
+      - name: Verify deterministic CLI fixture before publishing
+        shell: pwsh
+        run: >
+          python test/cross_platform_cli_fixture_test.py
+          build/mc3tomcb/mc3tomcb.exe
+          build/mc3togltf/mc3togltf.exe
+          test/house.mc3.xml
+          build/cli-cross-platform-fixture
+
+      - name: Publish qualified Windows CLI artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: meshcraft-cli-windows
+          if-no-files-found: error
+          path: |
+            build/mc3tomcb/mc3tomcb.exe
+            build/mc3togltf/mc3togltf.exe
+
+  sanitizers-and-fuzz:
+    name: Clang ASan+UBSan and bounded fuzz
+    runs-on: ubuntu-24.04
+    env:
+      CC: clang
+      CXX: clang++
+      ASAN_OPTIONS: detect_leaks=1:halt_on_error=1
+      UBSAN_OPTIONS: halt_on_error=1:print_stacktrace=1
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            clang cmake ninja-build ccache python3 zlib1g-dev
+
+      # The sanitizer and fuzz configurations reuse their component-local
+      # FetchContent trees. The key covers every standalone component because
+      # mc3 is a transitive dependency of three of them.
+      - name: Cache CMake FetchContent downloads
+        uses: actions/cache@v4
+        with:
+          path: |
+            build-sanitize/mc3/_deps
+            build-sanitize/mcb/_deps
+            build-sanitize/mc3togltf/_deps
+            build-sanitize/mc3tomcb/_deps
+          key: ${{ runner.os }}-clang-sanitize-fetchcontent-${{ hashFiles('mc3/CMakeLists.txt', 'mcb/CMakeLists.txt', 'mc3togltf/CMakeLists.txt', 'mc3tomcb/CMakeLists.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-clang-sanitize-fetchcontent-
+
+      - name: Configure, build, and test all standalone components under ASan+UBSan
+        run: |
+          sanitize_flags='-fsanitize=address,undefined -fno-omit-frame-pointer -g'
+          for component in mc3 mcb mc3togltf mc3tomcb; do
+            build_dir="build-sanitize/$component"
+            cmake -S "$component" -B "$build_dir" -G Ninja \
+              -DCMAKE_BUILD_TYPE=Debug \
+              -DBUILD_TESTING=ON \
+              -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
+              -DCMAKE_CXX_FLAGS="$sanitize_flags" \
+              -DCMAKE_EXE_LINKER_FLAGS="$sanitize_flags"
+            cmake --build "$build_dir" -j2
+            ctest --test-dir "$build_dir" --output-on-failure -j2
+          done
+
+      - name: Build bounded libFuzzer targets
+        run: |
+          for component in mc3 mcb mc3togltf; do
+            cmake -S "$component" -B "build-sanitize/$component" \
+              -DMESHCRAFT_FUZZ=ON
+          done
+          cmake --build build-sanitize/mc3 --target mc3_xml_libfuzzer mc3_json_libfuzzer -j2
+          cmake --build build-sanitize/mcb --target mcb_libfuzzer -j2
+          cmake --build build-sanitize/mc3togltf --target mc3togltf_glb_libfuzzer -j2
+
+      - name: Run corpus-seeded fuzz smoke tests
+        run: |
+          mkdir -p build-sanitize/fuzz-corpus/mcb build-sanitize/fuzz-corpus/glb
+          build-sanitize/mc3tomcb/mc3tomcb \
+            mc3/test/fuzz/corpus/xml/basic_scene.mc3.xml \
+            build-sanitize/fuzz-corpus/mcb/basic_scene.mcb
+          build-sanitize/mc3togltf/mc3togltf \
+            mc3togltf/test/golden/basic_scene.mc3.xml \
+            build-sanitize/fuzz-corpus/glb/basic_scene.glb
+          python3 test/run_fuzz_smoke.py --seconds 20 --rss-mib 512 \
+            --work-dir build-sanitize/fuzz-work \
+            --target build-sanitize/mc3/mc3_xml_libfuzzer mc3/test/fuzz/corpus/xml \
+            --target build-sanitize/mc3/mc3_json_libfuzzer mc3/test/fuzz/corpus/json \
+            --target build-sanitize/mcb/mcb_libfuzzer build-sanitize/fuzz-corpus/mcb \
+            --target build-sanitize/mc3togltf/mc3togltf_glb_libfuzzer build-sanitize/fuzz-corpus/glb
 
   editor:
     name: Editor (${{ matrix.backend }})

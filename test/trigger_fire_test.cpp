@@ -45,6 +45,16 @@ static void check(bool cond, const std::string& msg) {
     else      { std::printf("FAIL: %s\n", msg.c_str()); ++failures; }
 }
 
+static Mc3Object* findById(const std::vector<std::shared_ptr<Mc3Object>>& objects,
+                            const std::string& id) {
+    for (const auto& object : objects) {
+        if (!object) continue;
+        if (object->id == id) return object.get();
+        if (auto* child = findById(object->children, id)) return child;
+    }
+    return nullptr;
+}
+
 // Mirrors the real fireTrigger()'s mock-able surface: the "current action"
 // playback trio (currentActionName_/animTime_/animPlaying_), a recorder
 // standing in for audioPreview_.play() calls, and counters standing in
@@ -64,8 +74,8 @@ static std::string resolveTriggerSrc(const Mc3Document& doc, const std::string& 
     return p.is_absolute() ? p.string() : (doc.sourcePath / p).string();
 }
 
-// Byte-for-byte mirror of MeshCraftApplication_UiLeftPanel.cpp's
-// fireTrigger() lambda, with document_/currentActionName_/animTime_/
+// Mirrors AutomationWorkspacePanel::drawTriggers()'s fireTrigger() lambda,
+// with document_/currentActionName_/animTime_/
 // animPlaying_/audioPreview_.play()/pushUndo()/modified_/
 // updateWindowTitle()/selection_/setStatusMsg() replaced by their mock
 // equivalents -- EXCEPT luaScriptRunner_, which is the real
@@ -73,15 +83,22 @@ static std::string resolveTriggerSrc(const Mc3Document& doc, const std::string& 
 static std::string fireTrigger(Mc3Document& doc, MockPlaybackState& state,
                                 LuaScriptRunner& scriptRunner, Mc3Object* selectedTarget,
                                 const Mc3Trigger& trig) {
+    // LuaScriptRunner publishes success by swapping doc. Preserve the trigger
+    // instructions before the first RunScript can invalidate `trig`.
+    const std::string triggerId = trig.id;
+    const auto steps = trig.steps;
     int fired = 0, missing = 0, scriptErrors = 0;
     std::string lastScriptError;
 
-    bool hasScriptStep = false;
-    for (const auto& step : trig.steps)
-        if (step.type == TriggerStepType::RunScript) { hasScriptStep = true; break; }
-    if (hasScriptStep) ++state.pushUndoCalls;
+    bool scriptCommitted = false;
+    const auto beforeScriptCommit = [&] {
+        if (!scriptCommitted) {
+            ++state.pushUndoCalls;
+            scriptCommitted = true;
+        }
+    };
 
-    for (const auto& step : trig.steps) {
+    for (const auto& step : steps) {
         switch (step.type) {
         case TriggerStepType::PlayAction:
             if (doc.actions.count(step.ref)) {
@@ -106,22 +123,23 @@ static std::string fireTrigger(Mc3Document& doc, MockPlaybackState& state,
             } else ++missing;
             break;
         case TriggerStepType::RunScript:
-            if (doc.scripts.count(step.ref)) {
-                std::string err = scriptRunner.run(doc.scripts[step.ref].source, doc, selectedTarget);
+            if (const auto script = doc.scripts.find(step.ref); script != doc.scripts.end()) {
+                const std::string source = script->second.source;
+                std::string err = scriptRunner.run(source, doc, selectedTarget, beforeScriptCommit);
                 if (err.empty()) ++fired;
                 else { ++scriptErrors; lastScriptError = err; }
             } else ++missing;
             break;
         }
     }
-    std::string msg = "Trigger '" + trig.id + "' fired: " +
+    std::string msg = "Trigger '" + triggerId + "' fired: " +
         std::to_string(fired) + " step" + (fired == 1 ? "" : "s") + " ran";
     if (missing > 0)
         msg += ", " + std::to_string(missing) + " skipped (ref not found)";
     if (scriptErrors > 0)
         msg += ", " + std::to_string(scriptErrors) + " script error" +
                (scriptErrors == 1 ? "" : "s") + " (" + lastScriptError + ")";
-    if (hasScriptStep) state.modifiedCalled = true;
+    if (scriptCommitted) state.modifiedCalled = true;
     return msg;
 }
 
@@ -237,7 +255,9 @@ int main() {
         std::string msg = fireTrigger(doc, state, scriptRunner, target.get(), trig);
         check(msg.find("1 step ran") != std::string::npos,
               "RunScript: 1 step ran (real Lua execution succeeded) (got: " + msg + ")");
-        check(!target->visible, "RunScript: the script's mutation actually applied to the real object");
+        Mc3Object* committed = findById(doc.objects, "obj1");
+        check(committed && !committed->visible,
+              "RunScript: the script's mutation committed to the transaction result");
         check(state.pushUndoCalls == 1,
               "RunScript trigger: exactly one undo snapshot pushed (covers the script's mutation)");
         check(state.modifiedCalled, "RunScript trigger: modified_ set (document_ was mutated)");
@@ -264,6 +284,8 @@ int main() {
               "RunScript (broken): status message reports exactly 1 script error (got: " + msg + ")");
         check(msg.find("Lua error") != std::string::npos,
               "RunScript (broken): the underlying Lua error text is included (got: " + msg + ")");
+        check(state.pushUndoCalls == 0 && !state.modifiedCalled,
+              "RunScript (broken): failed transaction creates no undo or dirty state");
     }
     {
         Mc3Document doc;
@@ -305,6 +327,35 @@ int main() {
               "Multi-step: 1 skipped for a missing ref (got: " + msg + ")");
         check(state.pushUndoCalls == 1,
               "Multi-step: exactly one undo snapshot pushed (trigger has a RunScript step)");
+    }
+
+    // A successful Lua run swaps doc. The trigger itself may be stored in
+    // that document, so a later step must come from a copied instruction list
+    // rather than the invalidated Mc3Trigger reference.
+    {
+        Mc3Document doc;
+        auto target = std::make_shared<Mc3Object>();
+        target->id = "stable_target";
+        doc.objects.push_back(target);
+        doc.actions["AfterSwap"] = Mc3Action{};
+        Mc3Script script;
+        script.type = "lua";
+        script.source = "scene:find('stable_target'):set_visible(false)";
+        doc.scripts["swap_doc"] = script;
+        auto& storedTrigger = doc.triggers["t9"];
+        storedTrigger.id = "t9";
+        storedTrigger.steps.push_back({TriggerStepType::RunScript, "swap_doc"});
+        storedTrigger.steps.push_back({TriggerStepType::PlayAction, "AfterSwap"});
+
+        MockPlaybackState state;
+        const std::string msg = fireTrigger(doc, state, scriptRunner, target.get(), storedTrigger);
+        check(msg.find("2 steps ran") != std::string::npos,
+              "post-script step: copied trigger instructions survive document swap (got: " + msg + ")");
+        check(state.currentActionName == "AfterSwap",
+              "post-script step: action after Lua commit still plays");
+        const Mc3Object* committed = findById(doc.objects, "stable_target");
+        check(committed && !committed->visible,
+              "post-script step: Lua mutation still commits before later playback");
     }
 
     if (failures == 0) { std::printf("All trigger-fire tests passed.\n"); return 0; }

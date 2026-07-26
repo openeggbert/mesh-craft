@@ -1,6 +1,7 @@
 #include "MeshCraft/EditorAlgorithms.hpp"
 #include "MeshCraft/GraphicsBackendCheck.hpp"
 #include "MeshCraft/Application/MeshCraftApplication.hpp"
+#include "MeshCraft/Application/UI/AutomationWorkspace.hpp"
 #include "MeshCraft/MeshCraftPrivate.hpp"
 #include "MeshCraft/Scene/SceneHierarchyPanel.hpp"
 
@@ -37,6 +38,8 @@ using namespace Microsoft::Xna::Framework::Graphics;
 
 void MeshCraftApplication::drawLeftPanel(float panelY, float panelH)
 {
+    // SYS-W3-04: this renderer is still hosted by the left-panel window, but
+    // the shared resource-tab state belongs to AutomationWorkspace. Local
     int tlPanelH = showTimeline_ ? kTimelineH : 0;
     (void)tlPanelH;
     // -----------------------------------------------------------------------
@@ -1614,113 +1617,24 @@ void MeshCraftApplication::drawLeftPanel(float panelY, float panelH)
             ImGui::EndTabItem();
         }
 
-        // -------------------------------------------------------------------
-        // Tab: Scripts (STAB-0705, N3) — minimal: list + plain-text source
-        // editor, no syntax highlighting/validation. doc.scripts already
-        // parses/round-trips/exports correctly; this was the only missing
-        // piece (zero editor UI existed for it before).
-        // -------------------------------------------------------------------
         if (ImGui::BeginTabItem("Scripts")) {
-            if (!selectedScriptKey_.empty() && !document_.scripts.count(selectedScriptKey_))
-                selectedScriptKey_.clear();
-
-            if (ImGui::SmallButton("+##scriptadd")) {
-                pushUndo();
-                int n = 1;
-                std::string key;
-                do { key = "script_" + std::to_string(n++); }
-                while (document_.scripts.count(key));
-                Mc3::Mc3Script script;
-                script.id   = key;
-                script.type = "lua";
-                document_.scripts[key] = script;
-                selectedScriptKey_ = key;
-                modified_ = true; updateWindowTitle();
-            }
-            if (ImGui::IsItemHovered()) ImGui::SetTooltip("Add script");
-            ImGui::SameLine();
-            if (ImGui::SmallButton("-##scriptremove") && !selectedScriptKey_.empty()) {
-                pushUndo();
-                // F10: clear dangling Mc3Object::scriptId refs and remove
-                // now-useless RunScript trigger steps before erasing.
-                int cleared = clearScriptReferencesAlg(document_, selectedScriptKey_);
-                document_.scripts.erase(selectedScriptKey_);
-                selectedScriptKey_.clear();
-                modified_ = true; updateWindowTitle();
-                if (cleared > 0)
-                    setStatusMsg("Script deleted (cleared " + std::to_string(cleared) +
-                                 " reference" + (cleared == 1 ? "" : "s") + ")");
-            }
-
-            ImGui::Separator();
-            for (const auto& [key, script] : document_.scripts) {
-                bool sel = (key == selectedScriptKey_);
-                std::string label = key + "  (" + (script.type.empty() ? "lua" : script.type) + ")";
-                ImGui::PushID(("script_" + key).c_str());
-                if (ImGui::Selectable(label.c_str(), sel))
-                    selectedScriptKey_ = key;
-                ImGui::PopID();
-            }
-
-            if (!selectedScriptKey_.empty() && document_.scripts.count(selectedScriptKey_)) {
-                auto& script = document_.scripts[selectedScriptKey_];
-                ImGui::Separator();
-                ImGui::Spacing();
-
-                ImGui::TextDisabled("ID");
-                ImGui::SameLine();
-                if (ImGui::SmallButton("Copy##scriptid"))
-                    ImGui::SetClipboardText(selectedScriptKey_.c_str());
-                ImGui::TextUnformatted(selectedScriptKey_.c_str());
-
-                ImGui::TextDisabled("Type");
-                {
-                    char buf[64];
-                    std::strncpy(buf, script.type.c_str(), sizeof(buf)-1); buf[63]='\0';
-                    ImGui::SetNextItemWidth(-1);
-                    if (ImGui::InputText("##scripttype", buf, sizeof(buf),
-                            ImGuiInputTextFlags_EnterReturnsTrue)) {
-                        pushUndo(); script.type = buf; modified_ = true; updateWindowTitle();
-                    }
-                }
-
-                ImGui::TextDisabled("Source (no syntax highlighting)");
-                {
-                    char buf[16384];
-                    std::strncpy(buf, script.source.c_str(), sizeof(buf)-1); buf[16383]='\0';
-                    ImGui::SetNextItemWidth(-1);
-                    if (ImGui::InputTextMultiline("##scriptsource", buf, sizeof(buf),
-                            ImVec2(-1, 240), ImGuiInputTextFlags_EnterReturnsTrue)) {
-                        pushUndo(); script.source = buf; modified_ = true; updateWindowTitle();
-                    }
-                }
-
-                // SYS-W14-18 (2026-07-20 audit): scripts were fully
-                // editable but nothing ever interpreted a script's source
-                // -- there was no Lua interpreter anywhere in this
-                // codebase. This is the smallest useful slice: an
-                // explicit "Run" action for authoring/testing, mirroring
-                // the Triggers tab's own "Fire" pattern. `target` is the
-                // current selection's first object if any is selected
-                // (so def:place()/place_at()/has_socket() have something
-                // to operate on), else nullptr (def:place() then reports
-                // a clear error; scene:find()/property read-write still
-                // work fine with no selection either way).
-                if (ImGui::Button("\xe2\x96\xb6 Run Script", ImVec2(-1, 0))) {
-                    Mc3::Mc3Object* target = selection_.hasSelection()
-                        ? selection_.selection().front().get() : nullptr;
-                    pushUndo();
-                    std::string err = luaScriptRunner_.run(script.source, document_, target);
-                    modified_ = true; updateWindowTitle();
-                    if (err.empty())
-                        setStatusMsg("Script '" + selectedScriptKey_ + "' ran successfully");
-                    else
-                        setStatusMsg("Script '" + selectedScriptKey_ + "' failed: " + err, /*isError=*/true);
-                }
-                if (ImGui::IsItemHovered())
-                    ImGui::SetTooltip("Runs this script's source now, against the current "
-                                       "selection (if any) as its 'def' target");
-            }
+            UI::AutomationWorkspacePanel::drawScripts(
+                automationWorkspace_, UI::AutomationWorkspaceScriptFrame{
+                    .document = document_,
+                    .pushUndo = [this] { pushUndo(); },
+                    .markModified = [this] { modified_ = true; updateWindowTitle(); },
+                    .reportStatus = [this](std::string message, bool isError) {
+                        setStatusMsg(std::move(message), isError);
+                    },
+                    .selectedTarget = [this] {
+                        return selection_.hasSelection() ? selection_.selection().front().get() : nullptr;
+                    },
+                    .currentSelectionIds = [this] { return currentSelectionIds(); },
+                    .invalidateObjectIndex = [this] { objectIndex_.invalidate(); },
+                    .restoreSelection = [this](const std::vector<std::string>& ids) {
+                        restoreSelectionByIds(ids);
+                    },
+                });
 
             ImGui::EndTabItem();
         }
@@ -1922,211 +1836,34 @@ void MeshCraftApplication::drawLeftPanel(float panelY, float panelH)
             ImGui::EndTabItem();
         }
 
-        // -------------------------------------------------------------------
-        // Tab: Triggers (STAB-0707, N5) — a trigger is a named sequence of
-        // steps (play-action/play-sound/run-script/play-music, each with a
-        // `ref` id pointing at an entity in the corresponding collection).
-        // doc.triggers already parses/round-trips/exports correctly; this
-        // was the only missing piece.
-        // -------------------------------------------------------------------
         if (ImGui::BeginTabItem("Triggers")) {
-            if (!selectedTriggerKey_.empty() && !document_.triggers.count(selectedTriggerKey_))
-                selectedTriggerKey_.clear();
-
-            // SYS-W14-19 (2026-07-20 audit): triggers had zero event-firing
-            // path anywhere -- no in-scene event system exists yet to call
-            // one automatically, but there was also no way to fire one even
-            // manually, so the feature was untestable/unusable in the
-            // editor despite being fully editable. This "Fire" action is
-            // the smallest useful slice: execute a trigger's steps for
-            // real, right now, on demand.
-            //
-            // Resolves a Mc3Sound/Mc3Music's `src` the same way the Audio
-            // tab's own resolveSrc lambda does (duplicated locally --
-            // that one is scoped to the Audio tab's own block above).
-            auto resolveTriggerSrc = [&](const std::string& src) -> std::string {
-                if (src.empty()) return src;
-                std::filesystem::path p(src);
-                return p.is_absolute() ? p.string() : (document_.sourcePath / p).string();
-            };
-            // Executes every step in order. PlayAction/PlaySound/PlayMusic
-            // reuse the SAME single "current" playback state the Timeline/
-            // Audio tab already use (currentActionName_/animPlaying_,
-            // audioPreview_) -- there is only ever one active action and
-            // one active sound/music preview in this editor, so a trigger
-            // with multiple PlayAction (or multiple PlaySound/PlayMusic)
-            // steps has each later one replace the previous, not layer on
-            // top of it. That's an existing editor-wide constraint (see
-            // AudioPreview's own "one-shared-preview-at-a-time" doc
-            // comment), not something new introduced here. RunScript steps
-            // (SYS-W14-18) run via luaScriptRunner_, with the current
-            // selection's first object (if any) as the 'def' target --
-            // same convention as the Scripts tab's own "Run Script"
-            // button, since a trigger step has no object of its own to
-            // bind as target.
-            auto fireTrigger = [&](const Mc3::Mc3Trigger& trig) {
-                int fired = 0, missing = 0, scriptErrors = 0;
-                std::string lastScriptError;
-                // Only RunScript steps can mutate document_ (def:place()/
-                // scene:find() property writes) -- Play*/PlaySound/
-                // PlayMusic only touch ephemeral playback state
-                // (currentActionName_/animPlaying_/audioPreview_), not
-                // document_ itself, so a script-free trigger must not
-                // push a needless undo snapshot or mark the document
-                // modified (matches this trigger-firing feature's own
-                // original, already-shipped behavior for those 3 step
-                // types). Snapshotting BEFORE the loop, not after, so
-                // Ctrl+Z covers a script's mutations even if a LATER
-                // step in the same trigger then errors.
-                bool hasScriptStep = false;
-                for (const auto& step : trig.steps)
-                    if (step.type == Mc3::TriggerStepType::RunScript) { hasScriptStep = true; break; }
-                if (hasScriptStep) pushUndo();
-
-                for (const auto& step : trig.steps) {
-                    switch (step.type) {
-                    case Mc3::TriggerStepType::PlayAction:
-                        if (document_.actions.count(step.ref)) {
-                            currentActionName_ = step.ref;
-                            currentActionClipName_.clear();
-                            clearAnimationPreviewTransition();
-                            animTime_    = 0.0f;
-                            animPlaying_ = true;
-                            ++fired;
-                        } else ++missing;
-                        break;
-                    case Mc3::TriggerStepType::PlaySound:
-                        if (document_.sounds.count(step.ref)) {
-                            const auto& snd = document_.sounds[step.ref];
-                            audioPreview_.play(step.ref, resolveTriggerSrc(snd.src), snd.loop);
-                            ++fired;
-                        } else ++missing;
-                        break;
-                    case Mc3::TriggerStepType::PlayMusic:
-                        if (document_.musicTracks.count(step.ref)) {
-                            const auto& mus = document_.musicTracks[step.ref];
-                            audioPreview_.play(step.ref, resolveTriggerSrc(mus.src), mus.loop);
-                            ++fired;
-                        } else ++missing;
-                        break;
-                    case Mc3::TriggerStepType::RunScript:
-                        if (document_.scripts.count(step.ref)) {
-                            Mc3::Mc3Object* target = selection_.hasSelection()
-                                ? selection_.selection().front().get() : nullptr;
-                            std::string err = luaScriptRunner_.run(
-                                document_.scripts[step.ref].source, document_, target);
-                            if (err.empty()) ++fired;
-                            else { ++scriptErrors; lastScriptError = err; }
-                        } else ++missing;
-                        break;
-                    }
-                }
-                std::string msg = "Trigger '" + trig.id + "' fired: " +
-                    std::to_string(fired) + " step" + (fired == 1 ? "" : "s") + " ran";
-                if (missing > 0)
-                    msg += ", " + std::to_string(missing) + " skipped (ref not found)";
-                if (scriptErrors > 0)
-                    msg += ", " + std::to_string(scriptErrors) + " script error" +
-                           (scriptErrors == 1 ? "" : "s") + " (" + lastScriptError + ")";
-                if (hasScriptStep) { modified_ = true; updateWindowTitle(); }
-                setStatusMsg(msg, /*isError=*/missing > 0 || scriptErrors > 0);
-            };
-
-            if (ImGui::SmallButton("+##triggeradd")) {
-                pushUndo();
-                int n = 1;
-                std::string key;
-                do { key = "trigger_" + std::to_string(n++); }
-                while (document_.triggers.count(key));
-                Mc3::Mc3Trigger trigger;
-                trigger.id = key;
-                document_.triggers[key] = trigger;
-                selectedTriggerKey_ = key;
-                modified_ = true; updateWindowTitle();
-            }
-            if (ImGui::IsItemHovered()) ImGui::SetTooltip("Add trigger");
-            ImGui::SameLine();
-            if (ImGui::SmallButton("-##triggerremove") && !selectedTriggerKey_.empty()) {
-                pushUndo();
-                document_.triggers.erase(selectedTriggerKey_);
-                selectedTriggerKey_.clear();
-                modified_ = true; updateWindowTitle();
-            }
-
-            ImGui::Separator();
-            for (const auto& [key, trigger] : document_.triggers) {
-                bool sel = (key == selectedTriggerKey_);
-                std::string label = key + "  (" + std::to_string(trigger.steps.size()) + " step"
-                                   + (trigger.steps.size() == 1 ? "" : "s") + ")";
-                ImGui::PushID(("trigger_" + key).c_str());
-                if (ImGui::SmallButton("▶")) fireTrigger(trigger);
-                if (ImGui::IsItemHovered()) ImGui::SetTooltip("Fire this trigger now");
-                ImGui::SameLine();
-                if (ImGui::Selectable(label.c_str(), sel))
-                    selectedTriggerKey_ = key;
-                ImGui::PopID();
-            }
-
-            if (!selectedTriggerKey_.empty() && document_.triggers.count(selectedTriggerKey_)) {
-                auto& trigger = document_.triggers[selectedTriggerKey_];
-                ImGui::Separator();
-                ImGui::Spacing();
-
-                ImGui::TextDisabled("ID");
-                ImGui::SameLine();
-                if (ImGui::SmallButton("Copy##triggerid"))
-                    ImGui::SetClipboardText(selectedTriggerKey_.c_str());
-                ImGui::TextUnformatted(selectedTriggerKey_.c_str());
-
-                if (ImGui::Button("▶ Fire Trigger", ImVec2(-1, 0)))
-                    fireTrigger(trigger);
-                if (ImGui::IsItemHovered())
-                    ImGui::SetTooltip("Executes every step below, right now, in order "
-                                       "(no in-scene event system exists yet -- this is "
-                                       "manual/on-demand firing)");
-
-                ImGui::Spacing();
-                ImGui::TextDisabled("Steps");
-
-                static const char* kStepTypeNames[] = { "Play Action", "Play Sound", "Run Script", "Play Music" };
-                int removeIdx = -1;
-                for (size_t i = 0; i < trigger.steps.size(); ++i) {
-                    auto& step = trigger.steps[i];
-                    ImGui::PushID(static_cast<int>(i));
-
-                    int typeIdx = static_cast<int>(step.type);
-                    ImGui::SetNextItemWidth(120);
-                    if (ImGui::Combo("##steptype", &typeIdx, kStepTypeNames, 4)) {
-                        pushUndo();
-                        step.type = static_cast<Mc3::TriggerStepType>(typeIdx);
-                        modified_ = true; updateWindowTitle();
-                    }
-                    ImGui::SameLine();
-
-                    char buf[256];
-                    std::strncpy(buf, step.ref.c_str(), sizeof(buf)-1); buf[255]='\0';
-                    ImGui::SetNextItemWidth(120);
-                    if (ImGui::InputText("##stepref", buf, sizeof(buf),
-                            ImGuiInputTextFlags_EnterReturnsTrue)) {
-                        pushUndo(); step.ref = buf; modified_ = true; updateWindowTitle();
-                    }
-                    ImGui::SameLine();
-                    if (ImGui::SmallButton("x")) removeIdx = static_cast<int>(i);
-
-                    ImGui::PopID();
-                }
-                if (removeIdx >= 0) {
-                    pushUndo();
-                    trigger.steps.erase(trigger.steps.begin() + removeIdx);
-                    modified_ = true; updateWindowTitle();
-                }
-
-                if (ImGui::SmallButton("+ Add Step")) {
-                    pushUndo();
-                    trigger.steps.push_back(Mc3::Mc3TriggerStep{});
-                    modified_ = true; updateWindowTitle();
-                }
-            }
+            UI::AutomationWorkspacePanel::drawTriggers(
+                automationWorkspace_, UI::AutomationWorkspaceTriggerFrame{
+                    .document = document_,
+                    .pushUndo = [this] { pushUndo(); },
+                    .markModified = [this] { modified_ = true; updateWindowTitle(); },
+                    .reportStatus = [this](std::string message, bool isError) {
+                        setStatusMsg(std::move(message), isError);
+                    },
+                    .selectedTarget = [this] {
+                        return selection_.hasSelection() ? selection_.selection().front().get() : nullptr;
+                    },
+                    .currentSelectionIds = [this] { return currentSelectionIds(); },
+                    .invalidateObjectIndex = [this] { objectIndex_.invalidate(); },
+                    .restoreSelection = [this](const std::vector<std::string>& ids) {
+                        restoreSelectionByIds(ids);
+                    },
+                    .playAction = [this](const std::string& actionId) {
+                        currentActionName_ = actionId;
+                        currentActionClipName_.clear();
+                        clearAnimationPreviewTransition();
+                        animTime_ = 0.0f;
+                        animPlaying_ = true;
+                    },
+                    .playAudio = [this](const std::string& key, const std::string& path, bool loop) {
+                        audioPreview_.play(key, path, loop);
+                    },
+                });
 
             ImGui::EndTabItem();
         }
@@ -2250,378 +1987,36 @@ void MeshCraftApplication::drawLeftPanel(float panelY, float panelH)
             ImGui::EndTabItem();
         }
 
-        // -------------------------------------------------------------------
-        // Tab: States (STAB-0708, N6) — a scene state is a named set of
-        // per-object property overrides (visible/position/rotation/
-        // material, each independently optional). doc.sceneStates already
-        // parses/round-trips/exports correctly; this was the only missing
-        // piece. `name` is treated as read-only (like every other N-
-        // extension tab's id/key field this session), since it doubles as
-        // the doc.sceneStates map key and renaming would need map-key-
-        // rehoming logic this codebase doesn't have anywhere yet.
-        // -------------------------------------------------------------------
         if (ImGui::BeginTabItem("States")) {
-            if (!selectedSceneStateKey_.empty() && !document_.sceneStates.count(selectedSceneStateKey_))
-                selectedSceneStateKey_.clear();
-
-            if (ImGui::SmallButton("+##stateadd")) {
-                pushUndo();
-                int n = 1;
-                std::string key;
-                do { key = "state_" + std::to_string(n++); }
-                while (document_.sceneStates.count(key));
-                Mc3::Mc3SceneState state;
-                state.name = key;
-                document_.sceneStates[key] = state;
-                selectedSceneStateKey_ = key;
-                modified_ = true; updateWindowTitle();
-            }
-            if (ImGui::IsItemHovered()) ImGui::SetTooltip("Add scene state");
-            ImGui::SameLine();
-            if (ImGui::SmallButton("-##stateremove") && !selectedSceneStateKey_.empty()) {
-                pushUndo();
-                document_.sceneStates.erase(selectedSceneStateKey_);
-                selectedSceneStateKey_.clear();
-                modified_ = true; updateWindowTitle();
-            }
-
-            ImGui::Separator();
-            for (const auto& [key, state] : document_.sceneStates) {
-                bool sel = (key == selectedSceneStateKey_);
-                std::string label = key + "  (" + std::to_string(state.overrides.size()) + " override"
-                                   + (state.overrides.size() == 1 ? "" : "s") + ")";
-                ImGui::PushID(("state_" + key).c_str());
-                if (ImGui::Selectable(label.c_str(), sel))
-                    selectedSceneStateKey_ = key;
-                ImGui::PopID();
-            }
-
-            if (!selectedSceneStateKey_.empty() && document_.sceneStates.count(selectedSceneStateKey_)) {
-                auto& state = document_.sceneStates[selectedSceneStateKey_];
-                ImGui::Spacing();
-
-                ImGui::TextDisabled("Name");
-                ImGui::SameLine();
-                if (ImGui::SmallButton("Copy##stateid"))
-                    ImGui::SetClipboardText(selectedSceneStateKey_.c_str());
-                ImGui::TextUnformatted(selectedSceneStateKey_.c_str());
-
-                // SYS-W14-20 (2026-07-20 audit): states were fully
-                // editable but selecting/applying one never touched the
-                // live document_ objects -- there was no runtime "apply
-                // state" logic at all, only the round-tripped overrides
-                // data. Writes each override's set fields onto the
-                // matching live object (by id), so state transitions
-                // ("day"/"night" etc.) become previewable in the editor
-                // itself, not just stored data.
-                if (ImGui::Button("\xe2\x96\xb6 Apply State", ImVec2(-1, 0))) {
-                    bool anyResolvable = false;
-                    for (const auto& ov : state.overrides)
-                        if (flatFindById(ov.id)) { anyResolvable = true; break; }
-                    if (anyResolvable) pushUndo();
-
-                    int applied = 0, missing = 0;
-                    for (const auto& ov : state.overrides) {
-                        Mc3::Mc3Object* obj = flatFindById(ov.id);
-                        if (!obj) { ++missing; continue; }
-                        if (ov.visible.has_value())  obj->visible = *ov.visible;
-                        if (ov.position.has_value()) obj->transform.position = *ov.position;
-                        if (ov.rotation.has_value()) obj->transform.rotation = *ov.rotation;
-                        if (ov.material.has_value()) obj->material = *ov.material;
-                        ++applied;
-                    }
-                    if (applied > 0) { modified_ = true; updateWindowTitle(); }
-
-                    std::string msg = "State '" + selectedSceneStateKey_ + "' applied: " +
-                        std::to_string(applied) + " object" + (applied == 1 ? "" : "s") + " updated";
-                    if (missing > 0)
-                        msg += ", " + std::to_string(missing) + " skipped (object id not found)";
-                    setStatusMsg(msg, /*isError=*/missing > 0);
-                }
-                if (ImGui::IsItemHovered())
-                    ImGui::SetTooltip("Writes this state's overrides onto the matching live "
-                                       "objects (by id), right now");
-
-                ImGui::Spacing();
-                ImGui::TextDisabled("Object Overrides");
-
-                int removeIdx = -1;
-                for (size_t i = 0; i < state.overrides.size(); ++i) {
-                    auto& ov = state.overrides[i];
-                    ImGui::PushID(static_cast<int>(i));
-                    ImGui::Separator();
-
-                    char idBuf[128];
-                    std::strncpy(idBuf, ov.id.c_str(), sizeof(idBuf)-1); idBuf[127]='\0';
-                    ImGui::TextDisabled("Object ID");
-                    ImGui::SameLine();
-                    ImGui::SetNextItemWidth(-40);
-                    if (ImGui::InputText("##ovid", idBuf, sizeof(idBuf),
-                            ImGuiInputTextFlags_EnterReturnsTrue)) {
-                        pushUndo(); ov.id = idBuf; modified_ = true; updateWindowTitle();
-                    }
-                    ImGui::SameLine();
-                    if (ImGui::SmallButton("x##ovrm")) removeIdx = static_cast<int>(i);
-
-                    // Visible (optional<bool>)
-                    {
-                        bool has = ov.visible.has_value();
-                        if (ImGui::Checkbox("Override Visible##ovvis", &has)) {
-                            pushUndo();
-                            ov.visible = has ? std::optional<bool>(true) : std::nullopt;
-                            modified_ = true; updateWindowTitle();
-                        }
-                        if (ov.visible.has_value()) {
-                            ImGui::SameLine();
-                            bool v = *ov.visible;
-                            if (ImGui::Checkbox("Value##ovvisval", &v)) {
-                                pushUndo(); ov.visible = v; modified_ = true; updateWindowTitle();
-                            }
-                        }
-                    }
-
-                    // Position (optional<array<float,3>>)
-                    {
-                        bool has = ov.position.has_value();
-                        if (ImGui::Checkbox("Override Position##ovpos", &has)) {
-                            pushUndo();
-                            ov.position = has ? std::optional<std::array<float,3>>({0,0,0}) : std::nullopt;
-                            modified_ = true; updateWindowTitle();
-                        }
-                        if (ov.position.has_value()) {
-                            ImGui::SameLine();
-                            ImGui::SetNextItemWidth(180);
-                            { bool _undoCh1792 = ImGui::DragFloat3("##ovposval", ov.position->data(), 0.01f);
-                            if (ImGui::IsItemActivated()) pushUndo();
-                            if (_undoCh1792) {
-                                modified_ = true; updateWindowTitle();
-                            } }
-                        }
-                    }
-
-                    // Rotation (optional<array<float,3>>)
-                    {
-                        bool has = ov.rotation.has_value();
-                        if (ImGui::Checkbox("Override Rotation##ovrot", &has)) {
-                            pushUndo();
-                            ov.rotation = has ? std::optional<std::array<float,3>>({0,0,0}) : std::nullopt;
-                            modified_ = true; updateWindowTitle();
-                        }
-                        if (ov.rotation.has_value()) {
-                            ImGui::SameLine();
-                            ImGui::SetNextItemWidth(180);
-                            { bool _undoCh1810 = ImGui::DragFloat3("##ovrotval", ov.rotation->data(), 0.5f);
-                            if (ImGui::IsItemActivated()) pushUndo();
-                            if (_undoCh1810) {
-                                modified_ = true; updateWindowTitle();
-                            } }
-                        }
-                    }
-
-                    // Material (optional<string>)
-                    {
-                        bool has = ov.material.has_value();
-                        if (ImGui::Checkbox("Override Material##ovmat", &has)) {
-                            pushUndo();
-                            ov.material = has ? std::optional<std::string>("") : std::nullopt;
-                            modified_ = true; updateWindowTitle();
-                        }
-                        if (ov.material.has_value()) {
-                            ImGui::SameLine();
-                            char matBuf[128];
-                            std::strncpy(matBuf, ov.material->c_str(), sizeof(matBuf)-1); matBuf[127]='\0';
-                            ImGui::SetNextItemWidth(150);
-                            if (ImGui::InputText("##ovmatval", matBuf, sizeof(matBuf),
-                                    ImGuiInputTextFlags_EnterReturnsTrue)) {
-                                pushUndo(); ov.material = std::string(matBuf); modified_ = true; updateWindowTitle();
-                            }
-                        }
-                    }
-
-                    ImGui::PopID();
-                }
-                if (removeIdx >= 0) {
-                    pushUndo();
-                    state.overrides.erase(state.overrides.begin() + removeIdx);
-                    modified_ = true; updateWindowTitle();
-                }
-
-                ImGui::Separator();
-                if (ImGui::SmallButton("+ Add Override")) {
-                    pushUndo();
-                    state.overrides.push_back(Mc3::Mc3ObjectOverride{});
-                    modified_ = true; updateWindowTitle();
-                }
-            }
+            UI::AutomationWorkspacePanel::drawStates(
+                automationWorkspace_, UI::AutomationWorkspaceStateFrame{
+                    .document = document_,
+                    .pushUndo = [this] { pushUndo(); },
+                    .markModified = [this] { modified_ = true; updateWindowTitle(); },
+                    .reportStatus = [this](std::string message, bool isError) {
+                        setStatusMsg(std::move(message), isError);
+                    },
+                    .findObjectById = [this](const std::string& id) { return flatFindById(id); },
+                });
 
             ImGui::EndTabItem();
         }
 
-        // -------------------------------------------------------------------
-        // Tab: Events (SYS-W14-31) — document-level event bindings.  This
-        // panel deliberately has a separate dry-run simulation surface: it
-        // reports what target would be dispatched but does not call the
-        // mutating Triggers/States panel actions or touch undo history.
-        // -------------------------------------------------------------------
         if (ImGui::BeginTabItem("Events")) {
-            ImGui::TextDisabled("Bind an object or Area event to a named trigger or state.");
-            ImGui::TextDisabled("Simulation is dry-run only: it never edits the scene or undo history.");
-
-            bool simulation = eventSimulationEnabled_;
-            if (ImGui::Checkbox("Simulate timers (dry run)", &simulation)) {
-                eventSimulationEnabled_ = simulation;
-                eventBindingRuntime_.reset();
-                eventBindingSimulationReport_ = {};
-            }
-            if (ImGui::IsItemHovered())
-                ImGui::SetTooltip("When enabled, Timer bindings are evaluated each frame but only report what would run.");
-
-            if (ImGui::SmallButton("+ Add Binding")) {
-                pushUndo();
-                Mc3::Mc3EventBinding binding;
-                int n = 1;
-                do {
-                    binding.id = "event_" + std::to_string(n++);
-                } while (std::any_of(document_.eventBindings.begin(), document_.eventBindings.end(),
-                                     [&binding](const Mc3::Mc3EventBinding& other) { return other.id == binding.id; }));
-                if (selection_.hasSelection()) binding.sourceObjectId = selection_.selection().front()->id;
-                if (!document_.triggers.empty()) binding.targetId = document_.triggers.begin()->first;
-                else if (!document_.sceneStates.empty()) {
-                    binding.targetType = Mc3::EventBindingTarget::SceneState;
-                    binding.targetId = document_.sceneStates.begin()->first;
-                }
-                document_.eventBindings.push_back(std::move(binding));
-                selectedEventBindingIndex_ = static_cast<int>(document_.eventBindings.size()) - 1;
-                eventBindingRuntime_.reset();
-                eventBindingSimulationReport_ = {};
-                modified_ = true; updateWindowTitle();
-            }
-            ImGui::SameLine();
-            if (ImGui::SmallButton("- Remove Binding") && selectedEventBindingIndex_ >= 0 &&
-                selectedEventBindingIndex_ < static_cast<int>(document_.eventBindings.size())) {
-                pushUndo();
-                document_.eventBindings.erase(document_.eventBindings.begin() + selectedEventBindingIndex_);
-                selectedEventBindingIndex_ = std::min(selectedEventBindingIndex_,
-                    static_cast<int>(document_.eventBindings.size()) - 1);
-                eventBindingRuntime_.reset();
-                eventBindingSimulationReport_ = {};
-                modified_ = true; updateWindowTitle();
-            }
-
-            ImGui::Separator();
-            for (int i = 0; i < static_cast<int>(document_.eventBindings.size()); ++i) {
-                const auto& binding = document_.eventBindings[static_cast<size_t>(i)];
-                const char* eventName = binding.event == Mc3::EventBindingEvent::Enter ? "enter" :
-                    binding.event == Mc3::EventBindingEvent::Exit ? "exit" :
-                    binding.event == Mc3::EventBindingEvent::Click ? "click" : "timer";
-                const char* targetName = binding.targetType == Mc3::EventBindingTarget::Trigger ? "trigger" : "state";
-                std::string label = binding.id + "  " + eventName + " -> " + targetName + ":" + binding.targetId;
-                if (ImGui::Selectable(label.c_str(), selectedEventBindingIndex_ == i))
-                    selectedEventBindingIndex_ = i;
-            }
-
-            if (selectedEventBindingIndex_ >= 0 &&
-                selectedEventBindingIndex_ < static_cast<int>(document_.eventBindings.size())) {
-                auto& binding = document_.eventBindings[static_cast<size_t>(selectedEventBindingIndex_)];
-                auto authoredChanged = [&]() {
-                    eventBindingRuntime_.reset();
-                    eventBindingSimulationReport_ = {};
-                    modified_ = true;
-                    updateWindowTitle();
-                };
-
-                ImGui::Separator();
-                ImGui::PushID(selectedEventBindingIndex_);
-
-                char idBuf[128];
-                std::strncpy(idBuf, binding.id.c_str(), sizeof(idBuf) - 1); idBuf[127] = '\0';
-                ImGui::TextDisabled("Binding ID");
-                ImGui::SetNextItemWidth(-1);
-                if (undoOnActivate(ImGui::InputText("##eventid", idBuf, sizeof(idBuf),
-                                                    ImGuiInputTextFlags_EnterReturnsTrue))) {
-                    binding.id = idBuf; authoredChanged();
-                }
-
-                char sourceBuf[128];
-                std::strncpy(sourceBuf, binding.sourceObjectId.c_str(), sizeof(sourceBuf) - 1); sourceBuf[127] = '\0';
-                ImGui::TextDisabled("Source object / Area ID");
-                ImGui::SetNextItemWidth(-1);
-                if (undoOnActivate(ImGui::InputText("##eventsource", sourceBuf, sizeof(sourceBuf),
-                                                    ImGuiInputTextFlags_EnterReturnsTrue))) {
-                    binding.sourceObjectId = sourceBuf; authoredChanged();
-                }
-                if (!binding.sourceObjectId.empty() && !flatFindById(binding.sourceObjectId))
-                    ImGui::TextColored(ImVec4(1.0f, 0.55f, 0.25f, 1.0f), "Source is currently missing.");
-
-                static const char* kEvents[] = {"Enter", "Exit", "Click", "Timer"};
-                int eventIndex = static_cast<int>(binding.event);
-                ImGui::TextDisabled("Event"); ImGui::SameLine();
-                ImGui::SetNextItemWidth(120);
-                if (ImGui::Combo("##eventkind", &eventIndex, kEvents, 4)) {
-                    pushUndo(); binding.event = static_cast<Mc3::EventBindingEvent>(eventIndex); authoredChanged();
-                }
-
-                static const char* kTargetTypes[] = {"Trigger", "Scene State"};
-                int targetType = static_cast<int>(binding.targetType);
-                ImGui::TextDisabled("Target kind"); ImGui::SameLine();
-                ImGui::SetNextItemWidth(120);
-                if (ImGui::Combo("##eventtargetkind", &targetType, kTargetTypes, 2)) {
-                    pushUndo(); binding.targetType = static_cast<Mc3::EventBindingTarget>(targetType); authoredChanged();
-                }
-
-                char targetBuf[128];
-                std::strncpy(targetBuf, binding.targetId.c_str(), sizeof(targetBuf) - 1); targetBuf[127] = '\0';
-                ImGui::TextDisabled("Target ID");
-                ImGui::SetNextItemWidth(-1);
-                if (undoOnActivate(ImGui::InputText("##eventtarget", targetBuf, sizeof(targetBuf),
-                                                    ImGuiInputTextFlags_EnterReturnsTrue))) {
-                    binding.targetId = targetBuf; authoredChanged();
-                }
-                if (!Editor::eventBindingTargetExistsAlg(document_, binding))
-                    ImGui::TextColored(ImVec4(1.0f, 0.55f, 0.25f, 1.0f), "Target is currently missing.");
-
-                bool enabled = binding.enabled;
-                if (ImGui::Checkbox("Enabled", &enabled)) {
-                    pushUndo(); binding.enabled = enabled; authoredChanged();
-                }
-                bool oneShot = binding.once;
-                if (ImGui::Checkbox("One-shot", &oneShot)) {
-                    pushUndo(); binding.once = oneShot; authoredChanged();
-                }
-                float cooldown = binding.cooldown;
-                ImGui::SetNextItemWidth(140);
-                if (undoOnActivate(ImGui::DragFloat("Cooldown (s)", &cooldown, 0.05f, 0.0f, 3600.0f))) {
-                    binding.cooldown = cooldown; authoredChanged();
-                }
-                if (binding.event == Mc3::EventBindingEvent::Timer) {
-                    float interval = binding.interval;
-                    ImGui::SetNextItemWidth(140);
-                    if (undoOnActivate(ImGui::DragFloat("Timer interval (s)", &interval, 0.05f, 0.01f, 3600.0f))) {
-                        binding.interval = interval; authoredChanged();
-                    }
-                }
-
-                if (ImGui::Button("Simulate selected event (dry run)", ImVec2(-1, 0))) {
-                    eventBindingSimulationReport_ = Editor::dispatchEventBindingsAlg(
-                        document_, eventBindingRuntime_, binding.sourceObjectId, binding.event);
-                }
-                if (ImGui::IsItemHovered())
-                    ImGui::SetTooltip("Reports which targets would be dispatched. Does not fire trigger steps or apply state overrides.");
-                ImGui::PopID();
-            }
-
-            if (!eventBindingSimulationReport_.dispatches.empty() ||
-                !eventBindingSimulationReport_.diagnostics.empty()) {
-                ImGui::Separator();
-                ImGui::TextDisabled("Simulation report");
-                for (const auto& dispatch : eventBindingSimulationReport_.dispatches) {
-                    ImGui::Text("Would dispatch %s '%s' from binding '%s'.",
-                        dispatch.targetType == Mc3::EventBindingTarget::Trigger ? "trigger" : "state",
-                        dispatch.targetId.c_str(), dispatch.bindingId.c_str());
-                }
-                for (const auto& diagnostic : eventBindingSimulationReport_.diagnostics)
-                    ImGui::TextColored(ImVec4(1.0f, 0.55f, 0.25f, 1.0f), "%s", diagnostic.message.c_str());
-            }
+            UI::AutomationWorkspacePanel::drawEvents(
+                automationWorkspace_, UI::AutomationWorkspaceEventFrame{
+                    .document = document_,
+                    .pushUndo = [this] { pushUndo(); },
+                    .markModified = [this] { modified_ = true; updateWindowTitle(); },
+                    .undoOnActivate = [this](bool changed) { return undoOnActivate(changed); },
+                    .selectedObjectId = [this] {
+                        return selection_.hasSelection() ? selection_.selection().front()->id : std::string{};
+                    },
+                    .findObjectById = [this](const std::string& id) { return flatFindById(id); },
+                    .executePreview = [this](Editor::EventBindingDispatchReport dispatch) {
+                        executeEventPreview(std::move(dispatch));
+                    },
+                });
             ImGui::EndTabItem();
         }
 

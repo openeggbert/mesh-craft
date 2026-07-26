@@ -132,18 +132,11 @@ above.
 
 ## 2. Total gaps — document-level attributes
 
-- **`rotation_units` / `euler_order`**: still no *editing* UI anywhere (no
-  combo/input field — confirmed no change since 2026-07-10), and rendering
-  still hardcodes degrees/XYZ regardless of the document's declared
-  convention. **Upgraded from "zero UI anywhere" to "read-only notice
-  added"**: `checkRotationConventionNotice()` (`STAB-0701`,
-  `MeshCraftApplication_FileOps.cpp`) now shows a 6-second status-bar toast
-  on every load path naming the file's declared convention and stating the
-  editor's live preview doesn't honor it. **Confirmed still won't-fix by
-  design** — `NEXT.md` explicitly lists this as "Confirmed, by design,
-  deferred ... won't-fix, tracked as `STAB-0701`"; no open task adds actual
-  editing UI for these fields, and a related item (`STAB-0710`) was closed
-  as won't-fix "superseded by STAB-0701's decision."
+None remaining. `rotation_units` and `euler_order` now have Scene Properties
+controls and are honored by rendering, picking, gizmos, cameras, Walk Mode and
+animated transforms (`SYS-W5-06`). Static rotations can explicitly normalize
+to degrees/XYZ; the action refuses animated Euler channels rather than change
+their motion with a lossy conversion.
 
 ## 3. Partial gaps — UI exists but incomplete, inconsistent, or buggy
 
@@ -178,7 +171,7 @@ changed and what's still intentionally not a structural guarantee
 | N9 Library metadata / imports (`.mc3lib`) | ✅ resolved (`SYS-W14-13`) |
 | N10 Semantic JSON file I/O (`.mc3.json`) | ✅ resolved (`SYS-W14-11`) |
 | N11 Asset metadata (`assetMetadata`) | ✅ resolved (`SYS-W14-12`) |
-| `rotation_units`/`euler_order` | 🟡 read-only load-time notice only; no editing UI; won't-fix by design (`STAB-0701`) |
+| `rotation_units`/`euler_order` | ✅ declared units/order honored across the editor; static degrees/XYZ normalization is explicit, while animated Euler curves remain authored (`SYS-W5-06`) |
 | IcoSphere subdivision level | ✅ resolved (`STAB-0711`) |
 | Primitive `axis` | ✅ resolved (`STAB-0712`) |
 | `coordinate_system` | ✅ right-handed Y-up and Z-up honored in the editor and glTF export; explicit Normalize to Y-up command (`SYS-W14-14`) |

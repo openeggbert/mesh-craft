@@ -62,7 +62,7 @@ void MeshCraftApplication::newScene() {
     sceneHistory_.clear();
     historyReviewSnapshotId_.reset();
     historyNotice_.clear();
-    resetEventBindingSimulation();
+    resetEventPreview();
     resetImportHealth();
     objectIndex_.invalidate();  // SYS-W5-04: wholesale document_ replacement
     document_.model = "Untitled";
@@ -139,7 +139,7 @@ void MeshCraftApplication::recoverFromAutosave() {
         clearAnimationPreviewTransition();
         animTime_ = 0.0f;
         animPlaying_ = false;
-        resetEventBindingSimulation();
+        resetEventPreview();
         resetImportHealth();
         objectIndex_.invalidate();  // SYS-W5-04: wholesale document_ replacement
         if (!loadValidation.empty())
@@ -206,28 +206,9 @@ void MeshCraftApplication::setStatusMsg(std::string msg, bool isError, float dur
     statusNotification_.show(std::move(msg), isError, duration);
 }
 
-// STAB-0701: rotation units/order remain non-fatal compatibility notices.
-// coordinate_system is deliberately absent: SYS-W14-14 now honors both MC3
-// right-handed coordinate systems throughout the editor and glTF exporter.
+// SYS-W5-06: conventions are honored live. Keep the common load hook so its
+// existing call sites remain one place for future declaration diagnostics.
 void MeshCraftApplication::checkRotationConventionNotice() {
-    const bool nonDefaultUnits  = document_.rotationUnits != "degrees";
-    const bool nonDefaultOrder  = document_.eulerOrder != "XYZ";
-    if (!nonDefaultUnits && !nonDefaultOrder) return;
-
-    std::vector<std::string> declared;
-    if (nonDefaultUnits)  declared.push_back("rotation_units=\"" + document_.rotationUnits + "\"");
-    if (nonDefaultOrder)  declared.push_back("euler_order=\"" + document_.eulerOrder + "\"");
-
-    std::string what;
-    for (size_t i = 0; i < declared.size(); ++i) {
-        if (i > 0) what += (i + 1 == declared.size()) ? " and " : ", ";
-        what += declared[i];
-    }
-    setStatusMsg("Note: this file declares " + what +
-                 " -- the editor's live preview always renders rotations as degrees "
-                 "in XYZ order regardless (rotation_units/euler_order are export-only, "
-                 "STAB-0701 -- see MC3_FORMAT.md)",
-                 /*isError=*/false, /*duration=*/7.0f);
 }
 
 // SYS-W14-21 / SYS-W14-28: Mc3ImportResolver resolves
@@ -348,7 +329,7 @@ void MeshCraftApplication::executePendingAction() {
                 clearAnimationPreviewTransition();
                 animTime_ = 0.0f;
                 animPlaying_ = false;
-                resetEventBindingSimulation();
+                resetEventPreview();
                 resetImportHealth();
                 objectIndex_.invalidate();  // SYS-W5-04: wholesale document_ replacement
                 if (!loadValidation.empty())

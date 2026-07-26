@@ -56,7 +56,7 @@ int main() {
         check(mgr.undoCount() == 2, "a second push() adds a second undo entry");
 
         auto e1 = mgr.undo(makeDoc("current"), {"x"});
-        check(e1.has_value() && tagOf(e1->doc) == "v2", "undo() returns the most recently pushed document");
+        check(e1.has_value() && tagOf(*e1->snapshot) == "v2", "undo() returns the most recently pushed document");
         check(e1->selectionIds.size() == 2 && e1->selectionIds[0] == "a" && e1->selectionIds[1] == "b",
               "undo() returns the selection ids paired with that document");
         check(mgr.canRedo() && mgr.redoCount() == 1, "undo() moves the current state onto the redo stack");
@@ -76,7 +76,7 @@ int main() {
         check(mgr.canRedo(), "redo stack has one entry after undo()");
 
         auto redone = mgr.redo(makeDoc("v1-restored"), {"a"});
-        check(redone.has_value() && tagOf(redone->doc) == "v2", "redo() returns the document undo() had displaced");
+        check(redone.has_value() && tagOf(*redone->snapshot) == "v2", "redo() returns the document undo() had displaced");
         check(redone->selectionIds.size() == 1 && redone->selectionIds[0] == "b",
               "redo() returns the selection ids paired with that document");
         check(!mgr.canRedo(), "redo() pops the redo stack back to empty");
@@ -100,7 +100,7 @@ int main() {
             mgr.push(makeDoc("v" + std::to_string(i)), {});
         check(mgr.undoCount() == UndoManager::kMax, "push() caps the undo stack at kMax entries");
         auto e = mgr.undo(makeDoc("current"), {});
-        check(e.has_value() && tagOf(e->doc) == ("v" + std::to_string(UndoManager::kMax + 9)),
+        check(e.has_value() && tagOf(*e->snapshot) == ("v" + std::to_string(UndoManager::kMax + 9)),
               "the cap keeps the most recent entries, not the oldest");
     }
 
@@ -117,7 +117,7 @@ int main() {
         // stepsAgo=1 is the most recent (v3); jump to stepsAgo=3 (v1, the
         // oldest), which must push current+v3+v2 onto the redo stack.
         auto jumped = mgr.jumpTo(3, makeDoc("current"), {"cur"});
-        check(jumped.has_value() && tagOf(jumped->doc) == "v1", "jumpTo(3) returns the oldest (3rd-from-top) entry");
+        check(jumped.has_value() && tagOf(*jumped->snapshot) == "v1", "jumpTo(3) returns the oldest (3rd-from-top) entry");
         check(jumped->selectionIds.size() == 1 && jumped->selectionIds[0] == "1",
               "jumpTo() returns the selection ids paired with the target entry");
         check(mgr.undoCount() == 0, "jumpTo() to the oldest entry empties the undo stack");
@@ -127,11 +127,11 @@ int main() {
         // "newer" -- current first (most recently redo()-able is v2, then
         // v3, then the pre-jump current state).
         auto r1 = mgr.redo(makeDoc("after-v1"), {"1"});
-        check(r1.has_value() && tagOf(r1->doc) == "v2", "after jumpTo(oldest), first redo() restores v2");
+        check(r1.has_value() && tagOf(*r1->snapshot) == "v2", "after jumpTo(oldest), first redo() restores v2");
         auto r2 = mgr.redo(makeDoc("after-v2"), {"2"});
-        check(r2.has_value() && tagOf(r2->doc) == "v3", "after jumpTo(oldest), second redo() restores v3");
+        check(r2.has_value() && tagOf(*r2->snapshot) == "v3", "after jumpTo(oldest), second redo() restores v3");
         auto r3 = mgr.redo(makeDoc("after-v3"), {"3"});
-        check(r3.has_value() && tagOf(r3->doc) == "current", "after jumpTo(oldest), third redo() restores the pre-jump current state");
+        check(r3.has_value() && tagOf(*r3->snapshot) == "current", "after jumpTo(oldest), third redo() restores the pre-jump current state");
         check(!mgr.canRedo(), "redo stack is empty after redoing everything jumpTo() had pushed");
     }
 

@@ -31,12 +31,19 @@ add_executable(mc3tomcb
 target_link_libraries(mc3tomcb PRIVATE Mcb Mc3)
 
 # AUD-054/AUD-055: previously had no warning flags.
-target_compile_options(mc3tomcb PRIVATE -Wall -Wextra)
+if(MSVC)
+    target_compile_options(mc3tomcb PRIVATE /W4)
+else()
+    target_compile_options(mc3tomcb PRIVATE -Wall -Wextra)
+endif()
 if(COMMAND meshcraft_apply_sanitize)
     meshcraft_apply_sanitize(mc3tomcb)
 endif()
 
-install(TARGETS mc3tomcb RUNTIME DESTINATION bin)
+include(GNUInstallDirs)
+install(TARGETS mc3tomcb
+        RUNTIME DESTINATION "${CMAKE_INSTALL_BINDIR}"
+        COMPONENT release)
 
 # --------------------------------------------------------------------------
 # Tests — STAB-0058: drive the CLI through mc3.xml -> mcb -> mc3.xml and back,
@@ -45,7 +52,7 @@ install(TARGETS mc3tomcb RUNTIME DESTINATION bin)
 include(CTest)
 
 if(BUILD_TESTING)
-    find_program(PYTHON3_EXEC python3)
+    find_program(PYTHON3_EXEC NAMES python3 python)
     if(PYTHON3_EXEC)
         set(_rt_fixtures
             "${CMAKE_CURRENT_SOURCE_DIR}/../test/features.mc3.xml"

@@ -23,10 +23,15 @@ MC3 (MeshCraft 3D) is an XML-based scene format (`.mc3.xml`). It describes a 3D 
 | `euler_order` | `"XYZ"`, `"XZY"`, `"YXZ"`, `"YZX"`, `"ZXY"`, `"ZYX"` | `"XYZ"` |
 | `default_camera` | string (references a `<camera>`'s `name`) | — (see [Cameras](#cameras)) |
 
-**`rotation_units`/`euler_order` are export-only** — honored by `mc3togltf`,
-but the live editor's transform gizmo, keyboard nudging, and mouse-drag
-rotation always assume degrees in a fixed XYZ order regardless of what a
-loaded document declares (won't-fix, tracked as `STAB-0701`).
+`rotation_units`/`euler_order` are preserved by the format readers/writers and
+honored consistently by MCB, `mc3togltf`, and the live editor: rendering,
+CSG, picking, gizmos, object/world transforms, cameras, Walk Mode and animated
+transform overrides all use the authored convention. Scene Properties exposes
+both declarations. Its explicit **Normalize rotation to degrees/XYZ** action
+bakes static object, state, definition and camera rotations without changing
+their visual result. It is intentionally unavailable when Euler rotation
+channels are animated, because converting three independently interpolated
+channels losslessly would otherwise change the animation.
 
 **`coordinate_system` is operational** (`SYS-W14-14`). The editor's native
 rendering space is right-handed Y-up. For a
@@ -373,8 +378,8 @@ attribute instead of `<cameras default="...">`. If both are present,
 in document order is used. The writer always outputs the `<cameras default>`
 form on save, regardless of which spelling was used on load.
 
-`rotation` (optional `[x, y, z]` degrees, same axis convention as every
-other rotation field in this format) is an **alternative to `target`** for
+`rotation` (optional `[x, y, z]` in the document's `rotation_units` and
+`euler_order`) is an **alternative to `target`** for
 aiming the camera — set one or the other, not both meaningfully at once
 (if `rotation` is present, it takes priority over `target`). **Live-editor
 status (`AUD-079`, 2026-07-20):** both the camera gizmo and Look-Through-Camera
@@ -478,7 +483,7 @@ Inline Lua source, referenced by id from `<triggers>` (`<run-script ref="..."/>`
 | `id` | ID | yes | Referenced by `<run-script ref="...">` |
 | `type` | string | yes | Only `"lua"` is currently defined |
 
-**Status:** data model, parser, writer, MCB round-trip, and XSD validation are complete (STAB-0032). As of `SYS-W14-18` (2026-07-20), a real sandboxed Lua 5.4 interpreter (`LuaScriptRunner`, Lua + sol2) IS embedded in the editor — run explicitly via the Scripts tab's "Run Script" button, or a trigger's `<run-script>` step ([Triggers (N5)](#triggers-n5)). Two globals are bound while a script runs: `def` (compose-time socket placement — `place`/`place_at`/`has_socket`, mirroring `../mesh-world`'s own established R103/R104 API) and `scene` (broader: `scene:find(idOrName)` returns a handle to read/write any object's position/rotation/scale/visible/material). No automatic execution exists yet (e.g. running a definition's script the moment it's placed/composed) — only the two explicit entry points above. Exporters (`mc3togltf`/`mc3tomcb`) still never execute scripts.
+**Status:** data model, parser, writer, MCB round-trip, and XSD validation are complete (STAB-0032). A sandboxed Lua 5.4 interpreter (`LuaScriptRunner`, Lua + sol2) runs explicitly from the Scripts tab or a trigger's `<run-script>` step ([Triggers (N5)](#triggers-n5)). Each non-empty run gets an isolated deep document copy, a 16 MiB Lua allocation cap, and a 50-million-instruction ceiling; it re-resolves the selected target by unique object ID, validates the resulting complete document, then commits atomically. A failure therefore does not leave a partial document edit, undo snapshot, selection change, or dirty state. Two globals are bound while a script runs: `def` (compose-time socket placement — `place`/`place_at`/`has_socket`, mirroring `../mesh-world`'s own established R103/R104 API) and `scene` (broader: `scene:find(idOrName)` returns a handle to read/write any object's position/rotation/scale/visible/material). No automatic execution exists yet (e.g. running a definition's script the moment it's placed/composed) — only the two explicit entry points above. Exporters (`mc3togltf`/`mc3tomcb`) still never execute scripts.
 
 ---
 
@@ -538,7 +543,7 @@ Named sequences of steps — references into `<actions>`, `<sounds>`, `<scripts>
 
 A `<trigger>` can contain any number of steps in any order/combination. `ref` values are plain strings in the schema (not `IDREF`) — cross-references are not validated at parse time.
 
-**Status:** data model, parser, writer, MCB round-trip, and XSD validation are complete (STAB-0043). As of `SYS-W14-19` (2026-07-20), the editor's Triggers tab has an explicit "Fire" action (a per-row button, and a "Fire Trigger" button in the detail view) that actually executes a trigger's steps in order: `<play-action>` drives the same Timeline playback state the Play button uses, `<play-sound>`/`<play-music>` call `Editor::AudioPreview::play()`, `<run-script>` runs via `LuaScriptRunner` ([Scripts (N3)](#scripts-n3)). `SYS-W14-31` adds authored event bindings below, but the editor currently previews them as dry-run dispatch records: it deliberately does **not** execute trigger steps. The manual Fire action remains the only editor operation that executes a trigger, and only one "current action"/one shared audio-preview slot exists, so multiple `<play-action>` (or multiple `<play-sound>`/`<play-music>`) steps in one trigger replace rather than layer.
+**Status:** data model, parser, writer, MCB round-trip, and XSD validation are complete (STAB-0043). As of `SYS-W14-19` (2026-07-20), the editor's Triggers tab has an explicit "Fire" action (a per-row button, and a "Fire Trigger" button in the detail view) that actually executes a trigger's steps in order: `<play-action>` drives the same Timeline playback state the Play button uses, `<play-sound>`/`<play-music>` call `Editor::AudioPreview::play()`, `<run-script>` runs via `LuaScriptRunner` ([Scripts (N3)](#scripts-n3)). `SYS-W14-40` also invokes trigger steps from explicit Event Preview/Play, but stages their playback until the whole event batch validates and commits. Only one "current action"/one shared audio-preview slot exists, so multiple `<play-action>` (or multiple `<play-sound>`/`<play-music>`) steps in one trigger replace rather than layer.
 
 ---
 
@@ -569,11 +574,11 @@ Named snapshots of per-object property overrides (visibility, transform, materia
 
 Only the attributes present on `<object-override>` are overridden; everything else keeps the target object's base value.
 
-**Status:** data model, parser, writer, MCB round-trip, and XSD validation are complete (STAB-0044). As of `SYS-W14-20` (2026-07-20), the editor's States tab has an "Apply State" button that writes a state's overrides onto the matching live objects (by id) right now, so a state can be previewed interactively. Only the SET fields on an override are applied — an unset field leaves the target object's existing value untouched, matching this section's own "only the attributes present... are overridden" contract exactly. `SYS-W14-31` can target a named state in an authored event binding, but editor simulation is dry-run and does **not** apply the overrides; Apply State remains the mutating preview action.
+**Status:** data model, parser, writer, MCB round-trip, and XSD validation are complete (STAB-0044). As of `SYS-W14-20` (2026-07-20), the editor's States tab has an "Apply State" button that writes a state's overrides onto the matching live objects (by id) right now, so a state can be previewed interactively. Only the SET fields on an override are applied — an unset field leaves the target object's existing value untouched, matching this section's own "only the attributes present... are overridden" contract exactly. `SYS-W14-40` lets an explicit Event Preview/Play binding target a named state through the same isolated, validated batch as trigger scripts; a failed later script rolls the state change back instead of publishing a partial event result.
 
 ---
 
-## Event Bindings (SYS-W14-31)
+## Event Bindings (SYS-W14-31 / SYS-W14-40)
 
 `<event-bindings>` stores explicit document-level links from an ordinary
 object or Area to a named trigger or scene state. It avoids implicit
@@ -602,16 +607,17 @@ MCB.
 | `once` | bool | no | `false` | successful dispatch is allowed only once per runtime/simulation session |
 | `interval` | float seconds | no | `1` | timer period; only used when `event="timer"` |
 
-The editor's **Events** tab has a selected-binding simulation button and an
-optional timer simulation mode. Both are intentionally **dry-run**: they
-produce a “would dispatch trigger/state” report and dangling-source/target
-diagnostics, while never firing trigger steps, applying state overrides,
-changing the authored document, or creating undo entries. The dispatcher has
-a recursion guard and a 32-dispatch budget per call. Timer catch-up is also
-bounded to one attempt per binding per frame. `enter`, `exit`, and `timer`
-are delivered by this authoring/simulation slice; `click` is serialised and
-can be manually dry-run, but viewport picking does not yet generate live
-click events.
+The editor's **Events** tab has an explicit **Preview / Play events** mode.
+Normal editing does not dispatch bindings. While Preview/Play is enabled,
+timers advance once per binding per frame, Walk Mode produces Area `enter` /
+`exit` events from the walk camera, and ordinary viewport picking produces
+`click` events. The dispatcher has a recursion guard and a 32-dispatch budget
+per call; enabled, cooldown, and one-shot controls are retained only after a
+successful execution. Trigger steps, state overrides, and Lua scripts run on
+one isolated copy of the document, validate as a batch, and commit once with
+one undo/history boundary. A failed script rolls back all earlier state/script
+changes in that batch and suppresses pending action/audio effects. This is an
+editor preview, not a general game runtime.
 
 Event bindings are MC3/MCB runtime semantics only. `mc3togltf` emits one
 explicit warning and omits all bindings because glTF has no portable
@@ -630,10 +636,10 @@ All objects share common transform attributes:
 | `material` | string | `""` | Material id |
 | `visible` | bool | `true` | Visibility |
 | `position` | vec3 | `0 0 0` | Translation |
-| `rotation` | vec3 | `0 0 0` | XYZ Euler angles in degrees |
+| `rotation` | vec3 | `0 0 0` | Euler angles in the document's `rotation_units` and `euler_order` (degrees/XYZ by default) |
 | `scale` | vec3 or float | `1 1 1` | Non-uniform or uniform scale |
 | `pivot` | vec3 | `0 0 0` | Rotation/scale pivot offset from position |
-| `collision` | string | `"none"` | `"none"`, `"box"`, `"mesh"` |
+| `collision` | string | `"none"` | `"none"`, `"box"`, `"sphere"`, `"capsule"`, `"mesh"`, `"convex"`; Walk Mode accepts only the compatible subset described in the capability matrix |
 | `tags` | space-separated | `""` | Arbitrary tags |
 | `layer` | string | `""` | Named layer |
 | `role` | string | `""` | `"cutter"` marks this object as a CSG cutter (see [CSG operations](#csg-operations)) |
@@ -1105,7 +1111,7 @@ curve in a short time window could in principle be under-sampled.
 | Torus, Capsule, Disk, Grid, IcoSphere | ✅ |
 | CSG (union/difference/intersection) | ✅ (evaluated by Manifold; unsupported child types fail the export; `--allow-approximate-csg` exports children separately as debug fallback) |
 | Instance (via definitions) | ✅ |
-| Per-object UV mapping (`<uv_mapping scale_u/scale_v/offset_u/offset_v/rotation>`) | ✅ (`AUD-024`) — applied to generated `TEXCOORD_0` (scale, then rotate about the UV origin, then offset). `projection="box"`/`"sphere"` (`SYS-W14-24`, 2026-07-20) actually regenerate `TEXCOORD_0` in `mc3togltf` before scale/offset/rotation is applied — no longer a warn-only no-op. `<uv_mapping>` in general (any attribute, any projection mode) is `mc3togltf`-only — `SceneRenderer.cpp` never reads it, so the live editor viewport always shows each primitive's default planar unwrap regardless of what's authored. |
+| Per-object UV mapping (`<uv_mapping scale_u/scale_v/offset_u/offset_v/rotation>`) | ✅ (`AUD-024`) — applied to generated `TEXCOORD_0` (scale, then rotate about the UV origin, then offset). `projection="box"`/`"sphere"` (`SYS-W14-24`) regenerate `TEXCOORD_0` in `mc3togltf` before scale/offset/rotation. The live editor also previews default/box/sphere mapping with scale, rotation, and offset for ordinary normal/UV geometry (`SYS-W14-32`); its independently generated CSG mapping cache remains a separate path. |
 | Per-object `metadata` (`<metadata><property name="..." value="..."/></metadata>`) | ✅ (`AUD-029`) — serialized into `node.extras.metadata`, alongside the pre-existing `tags`/`collision` extras |
 | `--stats` "Warnings" count | ✅ truthful (`AUD-026`) — every `"Warning:"` print site in `GltfExporter.cpp` increments the shared counter (verified by grep, not spot-checked); previously several paths (unknown material, SVG-slot warnings, ambient-light drop, duplicate node name, image-format detection, missing embed texture, action warnings) printed a warning without counting it |
 | `TANGENT` accessor (for `normal_texture`-mapped meshes) | ✅ (STAB-0664) — computed per-vertex (standard per-triangle-then-averaged-then-Gram-Schmidt-orthogonalized algorithm, not a full MikkTSpace port), only when a mesh has both `NORMAL`/`TEXCOORD_0` and its material sets `normal_texture`; meshes without a normal map get no `TANGENT` (not needed) |

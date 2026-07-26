@@ -16,6 +16,7 @@
 #include <limits>
 #include <numbers>
 #include <optional>
+#include <span>
 #include <stdexcept>
 #include <string>
 #include <vector>
@@ -62,7 +63,7 @@ std::string safeToken(std::string value, const std::string& fallback) {
     return value.empty() ? fallback : value;
 }
 
-std::string base64Encode(const std::vector<unsigned char>& bytes) {
+std::string base64Encode(std::span<const unsigned char> bytes) {
     static constexpr char alphabet[] =
         "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
     std::string encoded;
@@ -344,18 +345,13 @@ float clampedFinite(double value, float minimum, float maximum,
 
 } // namespace
 
-GltfImportResult importSelfContainedGlb(const std::filesystem::path& path) {
+GltfImportResult importSelfContainedGlbBytes(std::span<const unsigned char> bytes,
+                                             const std::string& label) {
+    const std::filesystem::path path(label);
     if (lowerExtension(path) != ".glb")
         importError(path, "only self-contained .glb input is accepted (external .gltf is not trusted by this route)");
-    std::error_code errorCode;
-    const uintmax_t fileSize = std::filesystem::file_size(path, errorCode);
-    if (errorCode) importError(path, "cannot inspect input file");
-    if (fileSize == 0 || fileSize > kMaxImportGlbBytes)
+    if (bytes.empty() || bytes.size() > kMaxImportGlbBytes)
         importError(path, "input exceeds the 48 MiB inline-embed safety limit");
-    std::ifstream stream(path, std::ios::binary);
-    if (!stream) importError(path, "cannot open input file");
-    std::vector<unsigned char> bytes((std::istreambuf_iterator<char>(stream)), {});
-    if (bytes.size() != fileSize) importError(path, "could not read the complete input file");
 
     tinygltf::TinyGLTF loader;
     loader.SetImageLoader(preserveImageBytes, nullptr);
@@ -651,6 +647,21 @@ GltfImportResult importSelfContainedGlb(const std::filesystem::path& path) {
     }
     }
     return result;
+}
+
+GltfImportResult importSelfContainedGlb(const std::filesystem::path& path) {
+    if (lowerExtension(path) != ".glb")
+        importError(path, "only self-contained .glb input is accepted (external .gltf is not trusted by this route)");
+    std::error_code errorCode;
+    const uintmax_t fileSize = std::filesystem::file_size(path, errorCode);
+    if (errorCode) importError(path, "cannot inspect input file");
+    if (fileSize == 0 || fileSize > kMaxImportGlbBytes)
+        importError(path, "input exceeds the 48 MiB inline-embed safety limit");
+    std::ifstream stream(path, std::ios::binary);
+    if (!stream) importError(path, "cannot open input file");
+    std::vector<unsigned char> bytes((std::istreambuf_iterator<char>(stream)), {});
+    if (bytes.size() != fileSize) importError(path, "could not read the complete input file");
+    return importSelfContainedGlbBytes(bytes, path.filename().string());
 }
 
 GltfImportResult importTrustedGltf(const std::filesystem::path& path) {

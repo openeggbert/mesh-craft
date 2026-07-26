@@ -282,7 +282,7 @@ void MeshCraftApplication::LoadContent() {
             // `MeshCraft scene.mc3.json` on the command line now works too.
             Mc3::Mc3Validation loadValidation;
             document_ = loadSceneFileDispatched(currentFile_, loadValidation);
-            resetEventBindingSimulation();
+            resetEventPreview();
             resetImportHealth();
             objectIndex_.invalidate();  // SYS-W5-04: wholesale document_ replacement
             if (!loadValidation.empty())
@@ -450,14 +450,18 @@ void MeshCraftApplication::Update(GameTime& gameTime) {
         }
     }
 
-    // SYS-W14-31: timer bindings are only previewed in this explicit editor
-    // mode.  The dispatcher returns "would dispatch" records; it never runs
-    // trigger steps or writes scene-state overrides into document_.
-    if (eventSimulationEnabled_) {
+    // SYS-W14-40: Preview/Play is the only event-execution route.  Timers
+    // and Walk Mode Area transitions are both sent through the same bounded,
+    // transactional runner; ordinary editing never dispatches bindings.
+    if (automationWorkspace_.previewEnabled) {
         const float dt = static_cast<float>(gameTime.getElapsedGameTimeProperty().getTotalSecondsProperty());
-        auto report = Editor::advanceEventBindingRuntimeAlg(document_, eventBindingRuntime_, dt);
-        if (!report.dispatches.empty() || !report.diagnostics.empty())
-            eventBindingSimulationReport_ = std::move(report);
+        executeEventPreview(automationWorkspace_.previewRunner.advanceTimers(document_, dt));
+        if (walkController_.isActive()) {
+            const auto authoredPosition = coordinateFromYUpAlg(
+                document_.coordinateSystem,
+                {walkController_.posX(), walkController_.posY(), walkController_.posZ()});
+            executeEventPreview(automationWorkspace_.previewRunner.updateAreaTransitions(document_, authoredPosition));
+        }
     }
 
     // Advance animation clock
@@ -686,7 +690,7 @@ void MeshCraftApplication::Draw(const GameTime& /*gameTime*/) {
         // distance produces the same view direction).
         Vector3 camTarget;
         if (cam.rotation.has_value()) {
-            Vector3 fwd = Renderer::SceneRenderer::cameraForwardFromRotation(*cam.rotation);
+            Vector3 fwd = Renderer::SceneRenderer::cameraForwardFromRotation(document_, *cam.rotation);
             const auto fwdYUp = coordinateToYUpAlg(document_.coordinateSystem,
                                                     {fwd.X, fwd.Y, fwd.Z});
             fwd = {fwdYUp[0], fwdYUp[1], fwdYUp[2]};
@@ -744,8 +748,11 @@ void MeshCraftApplication::Draw(const GameTime& /*gameTime*/) {
 
     gd.SetDepthTestEnabled(true);
     auto selPtrs = selectedPointers();
-    if (!showWireframeMode_)
+    if (!showWireframeMode_) {
         sceneRenderer_->draw(document_, view, proj, selPtrs);
+        if (benchmarkProgress_.recordingFrames())
+            benchmarkTextureStats_.push_back(sceneRenderer_->lastTextureProcessingStats());
+    }
 
     if (showEdgeOverlay_ || showWireframeMode_) {
         gd.SetDepthTestEnabled(true);

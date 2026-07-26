@@ -1,0 +1,16 @@
+{
+  "format": "mc3",
+  "version": "0.3",
+  "model": "fuzz-seed",
+  "unit": "meters",
+  "coordinateSystem": "Y_UP_RH",
+  "rotationUnits": "degrees",
+  "eulerOrder": "XYZ",
+  "objects": [
+    {
+      "id": "seed-box",
+      "type": "box",
+      "primitive": {"primitiveType": "box", "size": [1, 1, 1]}
+    }
+  ]
+}

@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<mc3 version="0.3" model="fuzz-seed">
+    <materials>
+        <material id="seed" roughness="0.7" metallic="0">
+            <base_color>0.6 0.4 0.2 1</base_color>
+        </material>
+    </materials>
+    <objects>
+        <box id="seed-box" material="seed" position="0 0 0"/>
+        <sphere id="seed-sphere" radius="0.75"/>
+    </objects>
+</mc3>

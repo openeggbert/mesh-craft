@@ -2,6 +2,7 @@
 
 #include "MeshCraft/Mc3/Mc3Document.hpp"
 
+#include <functional>
 #include <string>
 
 namespace MeshCraft::Editor {
@@ -44,17 +45,20 @@ namespace MeshCraft::Editor {
 // hang the whole interactive editor UI thread).
 class LuaScriptRunner {
 public:
-    // Fresh sol::state per call, no persistent state carried between runs
-    // (matches mesh-world's own Mc3ScriptRunner::run()). `target` may be
-    // nullptr (there is no single well-defined "current object" for
-    // e.g. a trigger's run-script step or the Scripts tab's own preview
-    // button when nothing is selected) -- def:place()/place_at() then
-    // report a clear error rather than crashing. Mutates `doc` (and
-    // `target`, if non-null and it's one of doc's own objects) in place.
-    // An empty `source` is a legitimate no-op (matches
-    // Mc3Script::hasSource()'s own established convention), not an error.
-    // Returns "" on success, an error description otherwise -- never throws.
-    std::string run(const std::string& source, Mc3::Mc3Document& doc, Mc3::Mc3Object* target);
+    // Fresh, memory-bounded sol::state per call, with no state carried
+    // between runs. The script always sees an isolated deep copy of `doc`.
+    // `target`, when present, is resolved again in that copy by its unique
+    // object id; a detached, id-less, or ambiguous target is rejected rather
+    // than risking a commit to a different object. After the script and whole
+    // document validation succeed, `beforeCommit` runs while `doc` is still
+    // unchanged (the editor uses it to capture undo/history), then the copy is
+    // swapped in atomically. The hook is never called on failure. `target`
+    // may be nullptr; def:place()/place_at() then report a clear error.
+    // Empty source is a legitimate no-op. Returns "" on success, an error
+    // description otherwise; never throws.
+    std::string run(const std::string& source, Mc3::Mc3Document& doc,
+                    Mc3::Mc3Object* target,
+                    const std::function<void()>& beforeCommit = {});
 };
 
 } // namespace MeshCraft::Editor

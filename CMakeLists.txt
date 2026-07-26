@@ -2,6 +2,7 @@ cmake_minimum_required(VERSION 3.21)
 project(MeshCraft VERSION 0.1.0 LANGUAGES C CXX)
 
 include(CTest)
+include(GNUInstallDirs)
 
 message(STATUS "Project: ${PROJECT_NAME}")
 message(STATUS "Platform: ${CMAKE_SYSTEM_NAME}")
@@ -366,6 +367,51 @@ FetchContent_MakeAvailable(sol2)
 # mc3togltf — MC3 to glTF/GLB export tool (uses Mc3 + tinyobjloader already fetched above)
 add_subdirectory(mc3togltf)
 
+# SYS-W11-05: build only the two standalone tools and their format libraries
+# before creating the relocatable release archive.  CPack's default `package`
+# target depends on the entire editor graph, which would make a CLI release
+# depend on unrelated CNA backends and tooling.  This target deliberately
+# uses the normal install rules but keeps its build dependency narrow.
+add_custom_target(meshcraft_cli_release
+    COMMAND "${CMAKE_COMMAND}"
+            "-DMC_RELEASE_BUILD_DIR=${CMAKE_BINARY_DIR}"
+            "-DMC_RELEASE_VERSION=${PROJECT_VERSION}"
+            "-DMC_RELEASE_SYSTEM=${CMAKE_SYSTEM_NAME}"
+            -P "${CMAKE_CURRENT_SOURCE_DIR}/cmake/CreateCliRelease.cmake"
+    DEPENDS mc3tomcb mc3togltf
+    COMMENT "Creating the relocatable MeshCraft CLI release archive")
+
+if(BUILD_TESTING)
+    add_test(
+        NAME package_consumer_smoke
+        COMMAND "${CMAKE_COMMAND}"
+                "-DMC_PACKAGE_BUILD_DIR=${CMAKE_BINARY_DIR}"
+                "-DMC_PACKAGE_SOURCE_DIR=${CMAKE_CURRENT_SOURCE_DIR}/test/cmake/package_consumer"
+                -P "${CMAKE_CURRENT_SOURCE_DIR}/test/cmake/package_consumer_smoke.cmake")
+    set_tests_properties(package_consumer_smoke PROPERTIES
+        TIMEOUT 60
+        LABELS "package")
+
+    # SYS-W11-06: fixed binary hashes produced from a checked-in scene are a
+    # compact cross-platform contract for both standalone CLI tools.  The
+    # Windows artifact job below runs the same source-backed fixture before
+    # publishing its executables.
+    find_program(MESHCRAFT_PYTHON3 NAMES python3 python)
+    if(MESHCRAFT_PYTHON3)
+        add_test(
+            NAME cli_cross_platform_fixture
+            COMMAND "${MESHCRAFT_PYTHON3}"
+                    "${CMAKE_CURRENT_SOURCE_DIR}/test/cross_platform_cli_fixture_test.py"
+                    "$<TARGET_FILE:mc3tomcb>"
+                    "$<TARGET_FILE:mc3togltf>"
+                    "${CMAKE_CURRENT_SOURCE_DIR}/test/house.mc3.xml"
+                    "${CMAKE_BINARY_DIR}/cli-cross-platform-fixture")
+        set_tests_properties(cli_cross_platform_fixture PROPERTIES
+            TIMEOUT 30
+            LABELS "export;portability")
+    endif()
+endif()
+
 # SQLite3 — model registry persistence (desktop builds only). Optional,
 # not REQUIRED: ModelRegistry.cpp's MESHCRAFT_HAS_SQLITE3 guard already
 # provides safe no-op stubs for its absence (STAB-0008/0366/0552/0563),
@@ -382,9 +428,25 @@ if(NOT EMSCRIPTEN AND NOT ANDROID)
     endif()
 endif()
 
+# mc3togltf is linked against these shared third-party libraries in the
+# default desktop build.  Ship their runtime files in the same release
+# component so the CLI archive is usable outside the build tree.
+foreach(MESHCRAFT_CLI_RUNTIME_TARGET IN ITEMS manifold tinyobjloader)
+    if(TARGET ${MESHCRAFT_CLI_RUNTIME_TARGET})
+        install(TARGETS ${MESHCRAFT_CLI_RUNTIME_TARGET}
+                ARCHIVE DESTINATION "${CMAKE_INSTALL_LIBDIR}" COMPONENT release
+                LIBRARY DESTINATION "${CMAKE_INSTALL_LIBDIR}" COMPONENT release
+                RUNTIME DESTINATION "${CMAKE_INSTALL_BINDIR}" COMPONENT release)
+    endif()
+endforeach()
+
 # cpp-httplib + OpenSSL — AI Assistant (desktop builds only)
 if(NOT EMSCRIPTEN AND NOT ANDROID)
     set(HTTPLIB_USE_BROTLI_IF_AVAILABLE OFF CACHE BOOL "" FORCE)
+    # MeshCraft packages its own CLI and format-library surface.  Do not let
+    # this FetchContent-only editor dependency add an unrelated install tree
+    # or invoke CPack with its defaults.
+    set(HTTPLIB_INSTALL OFF CACHE BOOL "" FORCE)
     FetchContent_Declare(httplib
         GIT_REPOSITORY https://github.com/yhirose/cpp-httplib.git
         GIT_TAG        v0.18.3
@@ -625,9 +687,22 @@ if(MESH_CRAFT_BUILD_TESTING AND UNIX AND NOT ANDROID AND NOT EMSCRIPTEN)
     target_include_directories(coordinate_system_test PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}/include
         ${CMAKE_CURRENT_SOURCE_DIR}/mc3/include)
+    target_link_libraries(coordinate_system_test PRIVATE Mc3)
     target_compile_features(coordinate_system_test PRIVATE cxx_std_23)
     add_test(NAME coordinate_system COMMAND coordinate_system_test)
     set_tests_properties(coordinate_system PROPERTIES TIMEOUT 15 LABELS "unit")
+
+    # SYS-W5-06: document-level degrees/radians and all six Euler orders are
+    # interpreted by one CNA-free helper shared with mc3togltf. The test also
+    # locks the degrees/XYZ normalization math used by the explicit command.
+    add_executable(rotation_convention_algorithms_test
+        ${CMAKE_CURRENT_SOURCE_DIR}/test/rotation_convention_algorithms_test.cpp)
+    target_include_directories(rotation_convention_algorithms_test PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/include)
+    target_compile_features(rotation_convention_algorithms_test PRIVATE cxx_std_23)
+    target_compile_options(rotation_convention_algorithms_test PRIVATE -Wall -Wextra)
+    add_test(NAME rotation_convention_algorithms COMMAND rotation_convention_algorithms_test)
+    set_tests_properties(rotation_convention_algorithms PROPERTIES TIMEOUT 15 LABELS "unit")
 
     # SYS-W3-01: Editor::KeybindingManager, extracted from
     # MeshCraftApplication (H9). No test existed for this subsystem before
@@ -787,7 +862,8 @@ if(MESH_CRAFT_BUILD_TESTING AND UNIX AND NOT ANDROID AND NOT EMSCRIPTEN)
     # be tested without an editor window.
     add_executable(scene_history_test
         ${CMAKE_CURRENT_SOURCE_DIR}/test/scene_history_test.cpp
-        ${CMAKE_CURRENT_SOURCE_DIR}/src/MeshCraft/Editor/SceneHistory.cpp)
+        ${CMAKE_CURRENT_SOURCE_DIR}/src/MeshCraft/Editor/SceneHistory.cpp
+        ${CMAKE_CURRENT_SOURCE_DIR}/src/MeshCraft/Editor/UndoManager.cpp)
     target_include_directories(scene_history_test PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}/include
         ${CMAKE_CURRENT_SOURCE_DIR}/mc3/include)
@@ -812,6 +888,35 @@ if(MESH_CRAFT_BUILD_TESTING AND UNIX AND NOT ANDROID AND NOT EMSCRIPTEN)
     target_compile_features(registry_insert_undo_test PRIVATE cxx_std_23)
     add_test(NAME registry_insert_undo COMMAND registry_insert_undo_test)
     set_tests_properties(registry_insert_undo PROPERTIES TIMEOUT 15 LABELS "unit")
+
+    # SYS-W3-03: RegistryWorkspace owns registry dialog lifecycle without
+    # pulling MeshCraftApplication or ImGui into the controller-level test.
+    add_executable(registry_workspace_test
+        ${CMAKE_CURRENT_SOURCE_DIR}/test/registry_workspace_test.cpp
+        ${CMAKE_CURRENT_SOURCE_DIR}/src/MeshCraft/Application/RegistryWorkspace.cpp
+        ${CMAKE_CURRENT_SOURCE_DIR}/src/MeshCraft/ModelRegistry.cpp)
+    target_include_directories(registry_workspace_test PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/include
+        ${CMAKE_CURRENT_SOURCE_DIR}/src/MeshCraft)
+    target_link_libraries(registry_workspace_test PRIVATE Mc3)
+    target_compile_features(registry_workspace_test PRIVATE cxx_std_23)
+    add_test(NAME registry_workspace COMMAND registry_workspace_test)
+    set_tests_properties(registry_workspace PROPERTIES TIMEOUT 15 LABELS "unit;registry")
+
+    # SYS-W3-04: Scripts/Triggers/States/Events now share one CNA-free
+    # automation workspace. Its transient selection/preview lifecycle and
+    # state-application semantics remain testable without an ImGui window.
+    add_executable(automation_workspace_test
+        ${CMAKE_CURRENT_SOURCE_DIR}/test/automation_workspace_test.cpp
+        ${CMAKE_CURRENT_SOURCE_DIR}/src/MeshCraft/Application/AutomationWorkspace.cpp
+        ${CMAKE_CURRENT_SOURCE_DIR}/src/MeshCraft/Editor/LuaScriptRunner.cpp)
+    target_include_directories(automation_workspace_test PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/include
+        ${CMAKE_CURRENT_SOURCE_DIR}/mc3/include)
+    target_link_libraries(automation_workspace_test PRIVATE Mc3 lua54 sol2::sol2)
+    target_compile_features(automation_workspace_test PRIVATE cxx_std_23)
+    add_test(NAME automation_workspace COMMAND automation_workspace_test)
+    set_tests_properties(automation_workspace PROPERTIES TIMEOUT 15 LABELS "unit;automation")
 
     # SYS-W3-01 Phase 6: Editor::WalkController, extracted from
     # MeshCraftApplication (H15, first-person walk mode). No test existed
@@ -928,7 +1033,7 @@ if(MESH_CRAFT_BUILD_TESTING AND UNIX AND NOT ANDROID AND NOT EMSCRIPTEN)
     target_include_directories(lua_script_runner_test PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}/include
         ${CMAKE_CURRENT_SOURCE_DIR}/mc3/include)
-    target_link_libraries(lua_script_runner_test PRIVATE lua54 sol2::sol2)
+    target_link_libraries(lua_script_runner_test PRIVATE Mc3 lua54 sol2::sol2)
     target_compile_features(lua_script_runner_test PRIVATE cxx_std_23)
     add_test(NAME lua_script_runner COMMAND lua_script_runner_test)
     set_tests_properties(lua_script_runner PROPERTIES TIMEOUT 30 LABELS "unit")
@@ -1122,7 +1227,7 @@ if(MESH_CRAFT_BUILD_TESTING AND UNIX AND NOT ANDROID AND NOT EMSCRIPTEN)
     target_include_directories(trigger_fire_test PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}/include
         ${CMAKE_CURRENT_SOURCE_DIR}/mc3/include)
-    target_link_libraries(trigger_fire_test PRIVATE lua54 sol2::sol2)
+    target_link_libraries(trigger_fire_test PRIVATE Mc3 lua54 sol2::sol2)
     target_compile_features(trigger_fire_test PRIVATE cxx_std_23)
     add_test(NAME trigger_fire COMMAND trigger_fire_test)
     set_tests_properties(trigger_fire PROPERTIES TIMEOUT 15 LABELS "unit")
@@ -1152,6 +1257,20 @@ if(MESH_CRAFT_BUILD_TESTING AND UNIX AND NOT ANDROID AND NOT EMSCRIPTEN)
     target_compile_features(event_binding_dispatch_test PRIVATE cxx_std_23)
     add_test(NAME event_binding_dispatch COMMAND event_binding_dispatch_test)
     set_tests_properties(event_binding_dispatch PROPERTIES TIMEOUT 15 LABELS "unit")
+
+    # SYS-W14-40: explicit Preview/Play turns dry-run binding eligibility into
+    # an atomic batch.  This CNA-free test covers Area enter/exit, timer
+    # bounds, click dispatch, state application, and failed-script rollback.
+    add_executable(event_preview_runner_test
+        ${CMAKE_CURRENT_SOURCE_DIR}/test/event_preview_runner_test.cpp
+        ${CMAKE_CURRENT_SOURCE_DIR}/src/MeshCraft/Editor/LuaScriptRunner.cpp)
+    target_include_directories(event_preview_runner_test PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/include
+        ${CMAKE_CURRENT_SOURCE_DIR}/mc3/include)
+    target_link_libraries(event_preview_runner_test PRIVATE Mc3 lua54 sol2::sol2)
+    target_compile_features(event_preview_runner_test PRIVATE cxx_std_23)
+    add_test(NAME event_preview_runner COMMAND event_preview_runner_test)
+    set_tests_properties(event_preview_runner PROPERTIES TIMEOUT 15 LABELS "unit")
 
     # SYS-W14-21 (2026-07-20): the Imports tab's new "Resolve Imports" button
     # and the automatic post-load resolution -- resolveImports() wires the
@@ -1258,6 +1377,15 @@ if(MESH_CRAFT_BUILD_TESTING AND UNIX AND NOT ANDROID AND NOT EMSCRIPTEN)
                          "${CMAKE_BINARY_DIR}")
         set_tests_properties(plan_consistency PROPERTIES TIMEOUT 30 LABELS "lint")
 
+        # SYS-W13-02: bounded documentation/source drift detector. It protects
+        # a few claims that were demonstrably stale without turning volatile
+        # test totals or broad prose into a fragile static assertion suite.
+        add_test(NAME capability_documentation
+                 COMMAND "${PYTHON3_FOR_LINT}"
+                         "${CMAKE_CURRENT_SOURCE_DIR}/test/validate_capability_documentation.py"
+                         "${CMAKE_CURRENT_SOURCE_DIR}")
+        set_tests_properties(capability_documentation PROPERTIES TIMEOUT 30 LABELS "lint")
+
         # SYS-W5-01: machine-readable cross-layer MC3 field matrix. Extracts
         # field/attribute names from XSD, the C++ model, the XML reader/
         # writer, and the MCB reader/writer, and CI-fails if a field is
@@ -1282,7 +1410,7 @@ if(MESH_CRAFT_BUILD_TESTING AND UNIX AND NOT ANDROID AND NOT EMSCRIPTEN)
     )
     set_tests_properties(smoke_test PROPERTIES TIMEOUT 30 LABELS "render")
 
-    # SYS-W12-02: smoke test for the new `--benchmark` headless mode (see
+    # SYS-W12-02/03: smoke test for the new `--benchmark` headless mode (see
     # MeshCraftApplication_Benchmark.cpp) -- informational, same philosophy
     # as SYS-W12-01's own test/benchmark.py (checks it runs to completion
     # and prints every expected category, not that any timing is fast).
@@ -1290,7 +1418,7 @@ if(MESH_CRAFT_BUILD_TESTING AND UNIX AND NOT ANDROID AND NOT EMSCRIPTEN)
         NAME benchmark_editor
         COMMAND bash ${CMAKE_CURRENT_SOURCE_DIR}/test/benchmark_editor_test.sh
                 $<TARGET_FILE:MeshCraft>
-                ${CMAKE_CURRENT_SOURCE_DIR}/test/house.mc3.xml
+                ${CMAKE_CURRENT_SOURCE_DIR}/test/uv_buffer_cache_large.mc3.xml
         WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
     )
     # This starts the editor and therefore needs an SDL video display even

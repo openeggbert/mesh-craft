@@ -100,7 +100,7 @@ int main() {
         auto entry = undoMgr.undo(doc, {});
         check(entry.has_value(), "Undo: an entry is available after one Insert");
         if (entry) {
-            const Mc3Document& restored = entry->doc;
+            const Mc3Document& restored = *entry->snapshot;
             check(restored.textures.empty(),
                   "Undo: reverts the texture insertIntoScene() added (not just the object)");
             check(restored.materials.empty(),
@@ -154,10 +154,10 @@ int main() {
         auto entry = undoMgr.undo(doc, {});
         check(entry.has_value(), "Two Inserts: undo after the second Insert returns an entry");
         if (entry) {
-            check(entry->doc.definitions.count("def1") == 1,
+            check(entry->snapshot->definitions.count("def1") == 1,
                   "Two Inserts: undoing the second Insert leaves the first Insert's "
                   "definition intact");
-            check(entry->doc.definitions.count("def2") == 0,
+            check(entry->snapshot->definitions.count("def2") == 0,
                   "Two Inserts: undoing the second Insert removes only that Insert's "
                   "definition");
         }

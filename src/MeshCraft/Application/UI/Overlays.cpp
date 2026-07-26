@@ -7,6 +7,7 @@
 #include "MeshCraft/MeshCraftPrivate.hpp"
 #include "MeshCraft/EditorAlgorithms.hpp"
 #include "MeshCraft/LibraryWorkflowAlgorithms.hpp"
+#include "MeshCraft/RotationConventionAlgorithms.hpp"
 #include "MeshCraft/Scene/SceneHierarchyPanel.hpp"
 
 #include "MeshCraft/Mcb/McbReader.hpp"
@@ -92,7 +93,7 @@ void MeshCraftApplication::drawStatsOverlay(int screenW, [[maybe_unused]] int sc
             break;
         case ActiveTool::Rotate:
             curVal = sel0.transform.rotation[axisIndex];
-            unit = "°";
+            unit = MeshCraft::rotationUnitLabelAlg(document_.rotationUnits);
             break;
         case ActiveTool::Scale:
             curVal = sel0.transform.scale[axisIndex];
@@ -106,7 +107,8 @@ void MeshCraftApplication::drawStatsOverlay(int screenW, [[maybe_unused]] int sc
             .unit = unit,
             .isRotation = activeTool_ == ActiveTool::Rotate,
             .snapEnabled = snapEnabled_,
-            .snapRotation = snapRotate_,
+            .snapRotation = MeshCraft::degreesInRotationUnitsAlg(
+                snapRotate_, document_.rotationUnits),
         });
     }
 
@@ -981,8 +983,8 @@ void MeshCraftApplication::drawDialogs()
                 // enforcement) internally now.
                 auto entry = undoManager_.jumpTo(stepsAgo, deepCopyDoc(document_), currentSelectionIds());
                 if (entry) {
-                    document_ = std::move(entry->doc);
-                    resetEventBindingSimulation();
+                    document_ = deepCopyDoc(*entry->snapshot);
+                    resetEventPreview();
                     resetImportHealth();
                     objectIndex_.invalidate();  // SYS-W5-04: wholesale document_ replacement
                     restoreSelectionByIds(entry->selectionIds);
@@ -1126,7 +1128,7 @@ void MeshCraftApplication::drawDialogs()
                 clearAnimationPreviewTransition();
                 animTime_ = 0.0f;
                 animPlaying_ = false;
-                resetEventBindingSimulation();
+                resetEventPreview();
                 resetImportHealth();
                 objectIndex_.invalidate();  // SYS-W5-04: wholesale document_ replacement
                 if (!loadValidation.empty())
@@ -1190,7 +1192,7 @@ void MeshCraftApplication::drawDialogs()
                 clearAnimationPreviewTransition();
                 animTime_ = 0.0f;
                 animPlaying_ = false;
-                resetEventBindingSimulation();
+                resetEventPreview();
                 resetImportHealth();
                 objectIndex_.invalidate();
                 currentFile_ = path;

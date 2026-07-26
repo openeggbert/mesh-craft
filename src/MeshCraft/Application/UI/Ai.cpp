@@ -339,7 +339,7 @@ void MeshCraftApplication::drawAiPanel() {
             } else {
                 pushUndo();
                 document_ = *aiPendingDoc_;
-                resetEventBindingSimulation();
+                resetEventPreview();
                 resetImportHealth();
                 objectIndex_.invalidate();  // SYS-W5-04: wholesale document_ replacement
                 modified_ = true;
@@ -360,41 +360,14 @@ void MeshCraftApplication::drawAiPanel() {
     }
 
     // ---- Save AI result to Registry ----
-    // Visible whenever aiPendingDoc_ has definitions; does NOT require registry_.isOpen().
+    // RegistryWorkspace owns database availability and dialog state; this
+    // panel only supplies the pending document and its status callback.
     if (aiPendingDoc_.has_value() && !aiPendingDoc_->definitions.empty()) {
         ImGui::SameLine();
         if (ImGui::Button("Save to Registry…")) {
-            // Ensure the registry is open; open the default DB if needed.
-            bool regReady = registry_.isOpen();
-            if (!regReady) {
-                bool openThrew = false;
-                try {
-                    registry_.open(ModelRegistry::defaultPath());
-                } catch (const std::exception& ex) {
-                    setStatusMsg(std::string("Registry open failed: ") + ex.what(), true);
-                    openThrew = true;
-                }
-                if (!openThrew) {
-                    regReady = registry_.isOpen();
-                    if (regReady)
-                        regResultsDirty_ = true;
-                    else
-                        setStatusMsg("Model Registry is not available in this build", true);
-                }
-            }
-            if (regReady) {
-                showRegistryPanel_ = true;
-                regSaveDlgOpen_    = true;
-                const std::string& defId = aiPendingDoc_->definitions.begin()->first;
-                copyToBuf(regSaveNameBuf_,   defId.c_str());
-                copyToBuf(regSaveGroupBuf_,  "AI");
-                copyToBuf(regSaveSourceBuf_, "ai_generated");
-                regSaveDescBuf_[0]    = '\0';
-                regSaveVariantBuf_[0] = '\0';
-                regSaveTagsBuf_[0]    = '\0';
-                regSaveDefId_  = defId;
-                regSaveFromAi_ = true;
-            }
+            registryWorkspace_.beginAiSave(*aiPendingDoc_, [this](std::string message, bool error) {
+                setStatusMsg(std::move(message), error);
+            });
         }
     }
 
@@ -406,12 +379,9 @@ void MeshCraftApplication::drawAiPanel() {
             aiPendingDoc_.reset();
             aiValidationError_.clear();
             aiApplyConfirmPending_ = false;
-            // If the registry save dialog was pre-filled from this AI result, close it
-            // so it cannot fall back to listing scene definitions.
-            if (regSaveFromAi_) {
-                regSaveDlgOpen_ = false;
-                regSaveFromAi_  = false;
-            }
+            // An AI-owned registry dialog must not fall back to the scene
+            // after its source result was cleared.
+            registryWorkspace_.dismissAiSave();
         }
     }
 

@@ -5,6 +5,26 @@ set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
+# SYS-W11-04: libFuzzer is intentionally opt-in and Clang-only. Declare the
+# shared option before adding mc3/ so all standalone tool configurations agree
+# on it. The ordinary ASan+UBSan qualification in CI is independent of this
+# option and covers all four CNA-free components.
+option(MESHCRAFT_FUZZ
+       "Build opt-in libFuzzer corpus-driven MC3/MCB/GLB parser harnesses. Requires Clang."
+       OFF)
+if(MESHCRAFT_FUZZ AND NOT CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+    message(WARNING "MESHCRAFT_FUZZ requires Clang (libFuzzer); "
+                    "CMAKE_CXX_COMPILER_ID is '${CMAKE_CXX_COMPILER_ID}' -- "
+                    "skipping GLB fuzzing.")
+    set(MESHCRAFT_FUZZ OFF)
+endif()
+if(MESHCRAFT_FUZZ)
+    set(MESHCRAFT_FUZZ_COMPILE_OPTIONS -fsanitize=fuzzer-no-link,address,undefined -fno-omit-frame-pointer -g)
+    # mc3/ is a child directory in a standalone tool build, so its own
+    # directory-scoped link options do not reach this directory's tests.
+    add_link_options(-fsanitize=address,undefined)
+endif()
+
 include(FetchContent)
 
 # --------------------------------------------------------------------------
@@ -102,9 +122,17 @@ target_include_directories(mc3togltf_lib SYSTEM PUBLIC
 
 target_link_libraries(mc3togltf_lib PUBLIC Mc3 tinyobjloader manifold)
 
-target_compile_options(mc3togltf_lib PRIVATE -Wall -Wextra)
+if(MSVC)
+    set(MESHCRAFT_STANDALONE_WARNING_FLAGS /W4)
+else()
+    set(MESHCRAFT_STANDALONE_WARNING_FLAGS -Wall -Wextra)
+endif()
+target_compile_options(mc3togltf_lib PRIVATE ${MESHCRAFT_STANDALONE_WARNING_FLAGS})
 if(COMMAND meshcraft_apply_sanitize)
     meshcraft_apply_sanitize(mc3togltf_lib)
+endif()
+if(MESHCRAFT_FUZZ)
+    target_compile_options(mc3togltf_lib PRIVATE ${MESHCRAFT_FUZZ_COMPILE_OPTIONS})
 endif()
 
 # --------------------------------------------------------------------------
@@ -120,12 +148,28 @@ target_link_libraries(mc3togltf PRIVATE mc3togltf_lib)
 
 # AUD-054: the executable itself (a thin main.cpp wrapper) previously had
 # no warning flags; mc3togltf_lib above already did.
-target_compile_options(mc3togltf PRIVATE -Wall -Wextra)
+target_compile_options(mc3togltf PRIVATE ${MESHCRAFT_STANDALONE_WARNING_FLAGS})
 if(COMMAND meshcraft_apply_sanitize)
     meshcraft_apply_sanitize(mc3togltf)
 endif()
 
-install(TARGETS mc3togltf RUNTIME DESTINATION bin)
+# SYS-W11-04: direct bounded fuzz entry point for self-contained binary GLB
+# import. The importer accepts bytes in memory, therefore this harness cannot
+# leave a hostile temporary file behind and covers the same path as uploads.
+if(MESHCRAFT_FUZZ)
+    add_executable(mc3togltf_glb_libfuzzer test/fuzz/gltf_glb_libfuzzer.cpp)
+    target_link_libraries(mc3togltf_glb_libfuzzer PRIVATE mc3togltf_lib)
+    target_include_directories(mc3togltf_glb_libfuzzer PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
+    target_compile_options(mc3togltf_glb_libfuzzer PRIVATE -fsanitize=fuzzer,address,undefined -fno-omit-frame-pointer -g)
+    target_link_options(mc3togltf_glb_libfuzzer PRIVATE -fsanitize=fuzzer,address,undefined)
+endif()
+
+include(GNUInstallDirs)
+set_target_properties(mc3togltf PROPERTIES
+    INSTALL_RPATH "$ORIGIN/../${CMAKE_INSTALL_LIBDIR}")
+install(TARGETS mc3togltf
+        RUNTIME DESTINATION "${CMAKE_INSTALL_BINDIR}"
+        COMPONENT release)
 
 # --------------------------------------------------------------------------
 # Tests
@@ -203,7 +247,7 @@ if(BUILD_TESTING)
     add_test(NAME mc3togltf_csg_null_child COMMAND mc3togltf_csg_null_child_test)
     set_tests_properties(mc3togltf_csg_null_child PROPERTIES TIMEOUT 15 LABELS "export")
 
-    find_program(PYTHON3_EXEC python3)
+    find_program(PYTHON3_EXEC NAMES python3 python)
     find_program(BLENDER_EXEC blender)
     if(PYTHON3_EXEC)
         set(_anim_xml        "${CMAKE_CURRENT_SOURCE_DIR}/../test/animation_test.mc3.xml")

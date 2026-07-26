@@ -1,16 +1,15 @@
 #pragma once
 
 #include "MeshCraft/AiAssistant.hpp"
-#include "MeshCraft/ModelRegistry.hpp"
+#include "MeshCraft/Application/AutomationWorkspace.hpp"
+#include "MeshCraft/Application/RegistryWorkspace.hpp"
 #include "MeshCraft/Editor/ActiveTool.hpp"
 #include "MeshCraft/Editor/AudioPreview.hpp"
 #include "MeshCraft/Editor/BenchmarkProgress.hpp"
 #include "MeshCraft/Editor/CameraBookmarks.hpp"
 #include "MeshCraft/Editor/EditorCamera.hpp"
 #include "MeshCraft/Editor/EditorTool.hpp"
-#include "MeshCraft/EventBindingAlgorithms.hpp"
 #include "MeshCraft/Editor/KeybindingManager.hpp"
-#include "MeshCraft/Editor/LuaScriptRunner.hpp"
 #include "MeshCraft/Editor/MacroRecorder.hpp"
 #include "MeshCraft/Editor/ObjectLockState.hpp"
 #include "MeshCraft/Editor/ObjectIndex.hpp"
@@ -206,6 +205,7 @@ private:
     // SYS-W12-02: headless one-shot benchmark lifecycle and its real Draw()
     // samples are owned by the narrow, independently tested progress object.
     Editor::BenchmarkProgress benchmarkProgress_;
+    std::vector<Renderer::TextureProcessingStats> benchmarkTextureStats_;
     void runBenchmarkSuite();
 
     // Lights panel selection
@@ -220,37 +220,20 @@ private:
     // SVG textures panel selection (STAB-0703)
     std::string selectedSvgTextureKey_;
 
-    // Scripts panel selection (STAB-0705)
-    std::string selectedScriptKey_;
-
-    // Triggers panel selection (STAB-0707)
-    std::string selectedTriggerKey_;
-
     // Embedded glTF panel selection (STAB-0704)
     std::string selectedEmbedKey_;
 
-    // Scene states panel selection (STAB-0708)
-    std::string selectedSceneStateKey_;
-
-    // SYS-W14-31: authored bindings are document data; this separate state
-    // powers a dry-run preview and is never saved or put on the undo stack.
-    int selectedEventBindingIndex_{-1};
-    bool eventSimulationEnabled_{false};
-    Editor::EventBindingRuntimeState eventBindingRuntime_;
-    Editor::EventBindingDispatchReport eventBindingSimulationReport_;
-    void resetEventBindingSimulation();
+    // Scripts/Triggers/States/Events own their selections, Lua runner, and
+    // explicit Preview/Play lifecycle behind one tested workspace boundary.
+    AutomationWorkspace automationWorkspace_;
+    void resetEventPreview();
+    void executeEventPreview(Editor::EventBindingDispatchReport dispatch);
 
     // Audio panel selection + preview playback (STAB-0706, SYS-W3-01
     // Phase 7: extracted into Editor::AudioPreview).
     std::string selectedSoundKey_;
     std::string selectedMusicKey_;
     Editor::AudioPreview audioPreview_;
-
-    // SYS-W14-18 (2026-07-20): executes Mc3Script ("lua") source against
-    // document_. Stateless across calls (a fresh sol::state per run), so
-    // a single shared instance is fine to reuse from both the Scripts
-    // tab's "Run Script" button and the Triggers tab's run-script step.
-    Editor::LuaScriptRunner luaScriptRunner_;
 
     // Materials panel selection
     std::string selectedMaterialKey_;
@@ -792,11 +775,9 @@ private:
     Editor::StatusNotification statusNotification_;
     void setStatusMsg(std::string msg, bool isError = false, float duration = 3.0f);
 
-    // STAB-0701: rotation_units="radians" / a non-default euler_order are
-    // export/interchange-only fields -- the editor's own rendering, gizmos,
-    // and mouse-drag rotation all assume degrees + a fixed XNA axis order
-    // and do not consult these document-level settings. Warns the author
-    // once per load rather than silently rendering such a file wrong.
+    // Retained as a load hook so malformed legacy declarations can still be
+    // surfaced if needed. Normal document conventions are honored throughout
+    // the editor by RotationConventionAlgorithms.
     void checkRotationConventionNotice();
 
     // SYS-W14-21: resolves doc.imports (mc3lib://name@version references)
@@ -875,28 +856,9 @@ private:
     // always reflects "what just happened", not a stale earlier run.
     void recordValidation(std::string source, Mc3::Mc3Validation v);
 
-    // Model Registry (M2)
-    ModelRegistry registry_;
-    bool showRegistryPanel_{false};
-    char regSearchBuf_[128]{};
-    char regTagFilterBuf_[96]{};
-    char regCategoryFilterBuf_[96]{};
-    char regLicenseFilterBuf_[96]{};
-    char regProvenanceFilterBuf_[128]{};
-    bool regSaveDlgOpen_{false};
-    char regSaveGroupBuf_[64]{};
-    char regSaveNameBuf_[64]{};
-    char regSaveVariantBuf_[64]{};
-    char regSaveTagsBuf_[128]{};
-    char regSaveDescBuf_[256]{};
-    char regSaveSourceBuf_[64]{"handmade"};
-    std::string regSaveDefId_;
-    bool        regSaveFromAi_{false};  // when true, save dialog reads from aiPendingDoc_
-    std::vector<ModelRegistry::Entry> regCachedResults_;
-    bool regResultsDirty_{true};
-    bool regPackDlgOpen_{false};
-    char regPackPathBuf_[512]{};
-    std::string regPackErr_;
+    // Registry database, filters, save state and asset-pack workflow are
+    // isolated here; MeshCraftApplication supplies document/status callbacks.
+    RegistryWorkspace registryWorkspace_;
     void drawRegistryPanel();
 
     // H5 — pivot edit mode

@@ -1,9 +1,12 @@
 cmake_minimum_required(VERSION 3.21)
-project(Mcb LANGUAGES CXX)
+project(Mcb VERSION 0.1.0 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
+
+include(GNUInstallDirs)
+include(CMakePackageConfigHelpers)
 
 # --------------------------------------------------------------------------
 # Mc3 library (from parent repo)
@@ -17,7 +20,7 @@ if(NOT TARGET Mc3)
 endif()
 
 # -----------------------------------------------------------------------------
-# SYS-W11-05: opt-in genuine libFuzzer corpus-driven harness (mcb_libfuzzer)
+# SYS-W11-04: opt-in genuine libFuzzer corpus-driven harness (mcb_libfuzzer)
 # over McbReader, mirroring mc3/CMakeLists.txt's MESHCRAFT_FUZZ block (see
 # there for full rationale -- same option, same reasoning, applied here to
 # the Mcb static library instead of Mc3). This option() call is a no-op when
@@ -67,10 +70,12 @@ target_link_libraries(Mcb PUBLIC Mc3)
 # misparses) a compressed file it's asked to read. MESHCRAFT_HAS_ZLIB is
 # PUBLIC so any translation unit that sees McbWriter.hpp/McbReader.cpp's
 # #ifdef-guarded code paths agrees on whether zlib support is compiled in.
+set(MESHCRAFT_MCB_WITH_ZLIB OFF)
 find_package(ZLIB)
 if(ZLIB_FOUND)
     target_link_libraries(Mcb PUBLIC ZLIB::ZLIB)
     target_compile_definitions(Mcb PUBLIC MESHCRAFT_HAS_ZLIB=1)
+    set(MESHCRAFT_MCB_WITH_ZLIB ON)
     message(STATUS "zlib found: MCB compression (SYS-W14-25) enabled")
 else()
     message(STATUS "zlib not found -- MCB compression (SYS-W14-25) unavailable at runtime")
@@ -78,12 +83,49 @@ endif()
 
 # AUD-054/AUD-055: Mcb (the binary reader/writer -- untrusted-input parsing
 # surface) previously had no warning flags at all.
-target_compile_options(Mcb PRIVATE -Wall -Wextra)
+if(MSVC)
+    target_compile_options(Mcb PRIVATE /W4)
+else()
+    target_compile_options(Mcb PRIVATE -Wall -Wextra)
+endif()
+
+# SYS-W11-05: ship Mcb as a separate package that imports Mc3 through its
+# own package config.  The public target names intentionally remain stable
+# across build-tree and installed consumers: MeshCraft::Mcb / MeshCraft::Mc3.
+install(DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/include/"
+        DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}"
+        COMPONENT release)
+install(TARGETS Mcb
+        EXPORT McbTargets
+        ARCHIVE DESTINATION "${CMAKE_INSTALL_LIBDIR}" COMPONENT release
+        LIBRARY DESTINATION "${CMAKE_INSTALL_LIBDIR}" COMPONENT release
+        RUNTIME DESTINATION "${CMAKE_INSTALL_BINDIR}" COMPONENT release
+        )
+
+set(MCB_CMAKE_INSTALL_DIR "${CMAKE_INSTALL_LIBDIR}/cmake/Mcb")
+configure_package_config_file(
+    "${CMAKE_CURRENT_SOURCE_DIR}/cmake/McbConfig.cmake.in"
+    "${CMAKE_CURRENT_BINARY_DIR}/McbConfig.cmake"
+    INSTALL_DESTINATION "${MCB_CMAKE_INSTALL_DIR}")
+write_basic_package_version_file(
+    "${CMAKE_CURRENT_BINARY_DIR}/McbConfigVersion.cmake"
+    VERSION "${PROJECT_VERSION}"
+    COMPATIBILITY SameMajorVersion)
+install(EXPORT McbTargets
+        FILE McbTargets.cmake
+        NAMESPACE MeshCraft::
+        DESTINATION "${MCB_CMAKE_INSTALL_DIR}"
+        COMPONENT release)
+install(FILES
+        "${CMAKE_CURRENT_BINARY_DIR}/McbConfig.cmake"
+        "${CMAKE_CURRENT_BINARY_DIR}/McbConfigVersion.cmake"
+        DESTINATION "${MCB_CMAKE_INSTALL_DIR}"
+        COMPONENT release)
 if(COMMAND meshcraft_apply_sanitize)
     meshcraft_apply_sanitize(Mcb)
 endif()
 
-# SYS-W11-05: see the MESHCRAFT_FUZZ block above -- instruments Mcb's own
+# SYS-W11-04: see the MESHCRAFT_FUZZ block above -- instruments Mcb's own
 # object code for libFuzzer coverage-guided fuzzing when opted in.
 if(MESHCRAFT_FUZZ)
     target_compile_options(Mcb PRIVATE ${MESHCRAFT_FUZZ_COMPILE_OPTIONS})
@@ -177,7 +219,7 @@ if(BUILD_TESTING)
     add_test(NAME mcb_validation COMMAND mcb_validation_test)
     set_tests_properties(mcb_validation PROPERTIES TIMEOUT 15 LABELS "format")
 
-    # SYS-W11-05: property-based (randomized, seeded) MCB round-trip test --
+    # Seeded property-based MCB round-trip test --
     # the McbReader/McbWriter differential half of this task, sharing the
     # same random-document generator mc3_random_roundtrip_test (mc3/test/)
     # uses for the XML side. See mcb_random_roundtrip_test.cpp's header
@@ -215,7 +257,7 @@ if(BUILD_TESTING)
     add_test(NAME mcb_compression COMMAND mcb_compression_test)
     set_tests_properties(mcb_compression PROPERTIES TIMEOUT 15 LABELS "format")
 
-    # SYS-W11-05: opt-in libFuzzer harness (see the MESHCRAFT_FUZZ block near
+    # SYS-W11-04: opt-in libFuzzer harness (see the MESHCRAFT_FUZZ block near
     # the top of this file). Deliberately NOT registered as a ctest test --
     # a corpus-driven deep-fuzzing target for longer, occasional/manual or
     # CI-scheduled runs, not a fast per-commit gate; only builds under Clang.

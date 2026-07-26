@@ -1,0 +1,118 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- SYS-W12-03: repeated ordinary textured geometry for the warm-buffer
+     benchmark. Every instance shares one authored UV mapping, so the first
+     frame creates one mapped buffer and every warm frame must reuse it. -->
+<mc3 version="0.3" model="UvBufferCacheLarge" default_camera="Camera">
+  <environment><background color="0.03 0.03 0.03"/></environment>
+  <lights><ambient color="1 1 1" brightness="1"/></lights>
+  <cameras><camera name="Camera" position="6 9 20" target="6 0 0" fov="45" near="0.1" far="100"/></cameras>
+  <textures><texture id="logo" type="svg" src="logo.svg" filter="nearest"/></textures>
+  <materials><material id="logoMat"><base_color_texture>logo</base_color_texture></material></materials>
+  <definitions>
+    <definition id="mapped_tile">
+      <box name="MappedTile" size="1 1 1" material="logoMat"><uv_mapping projection="box" scale_u="1.25" offset_v="0.1"/></box>
+    </definition>
+  </definitions>
+  <objects>
+    <instance name="Tile_00" definition="mapped_tile" position="0 0 0"/>
+    <instance name="Tile_01" definition="mapped_tile" position="1.2 0 0"/>
+    <instance name="Tile_02" definition="mapped_tile" position="2.4 0 0"/>
+    <instance name="Tile_03" definition="mapped_tile" position="3.6 0 0"/>
+    <instance name="Tile_04" definition="mapped_tile" position="4.8 0 0"/>
+    <instance name="Tile_05" definition="mapped_tile" position="6.0 0 0"/>
+    <instance name="Tile_06" definition="mapped_tile" position="7.2 0 0"/>
+    <instance name="Tile_07" definition="mapped_tile" position="8.4 0 0"/>
+    <instance name="Tile_08" definition="mapped_tile" position="9.6 0 0"/>
+    <instance name="Tile_09" definition="mapped_tile" position="10.8 0 0"/>
+    <instance name="Tile_10" definition="mapped_tile" position="0 0 -1.2"/>
+    <instance name="Tile_11" definition="mapped_tile" position="1.2 0 -1.2"/>
+    <instance name="Tile_12" definition="mapped_tile" position="2.4 0 -1.2"/>
+    <instance name="Tile_13" definition="mapped_tile" position="3.6 0 -1.2"/>
+    <instance name="Tile_14" definition="mapped_tile" position="4.8 0 -1.2"/>
+    <instance name="Tile_15" definition="mapped_tile" position="6.0 0 -1.2"/>
+    <instance name="Tile_16" definition="mapped_tile" position="7.2 0 -1.2"/>
+    <instance name="Tile_17" definition="mapped_tile" position="8.4 0 -1.2"/>
+    <instance name="Tile_18" definition="mapped_tile" position="9.6 0 -1.2"/>
+    <instance name="Tile_19" definition="mapped_tile" position="10.8 0 -1.2"/>
+    <instance name="Tile_20" definition="mapped_tile" position="0 0 -2.4"/>
+    <instance name="Tile_21" definition="mapped_tile" position="1.2 0 -2.4"/>
+    <instance name="Tile_22" definition="mapped_tile" position="2.4 0 -2.4"/>
+    <instance name="Tile_23" definition="mapped_tile" position="3.6 0 -2.4"/>
+    <instance name="Tile_24" definition="mapped_tile" position="4.8 0 -2.4"/>
+    <instance name="Tile_25" definition="mapped_tile" position="6.0 0 -2.4"/>
+    <instance name="Tile_26" definition="mapped_tile" position="7.2 0 -2.4"/>
+    <instance name="Tile_27" definition="mapped_tile" position="8.4 0 -2.4"/>
+    <instance name="Tile_28" definition="mapped_tile" position="9.6 0 -2.4"/>
+    <instance name="Tile_29" definition="mapped_tile" position="10.8 0 -2.4"/>
+    <instance name="Tile_30" definition="mapped_tile" position="0 0 -3.6"/>
+    <instance name="Tile_31" definition="mapped_tile" position="1.2 0 -3.6"/>
+    <instance name="Tile_32" definition="mapped_tile" position="2.4 0 -3.6"/>
+    <instance name="Tile_33" definition="mapped_tile" position="3.6 0 -3.6"/>
+    <instance name="Tile_34" definition="mapped_tile" position="4.8 0 -3.6"/>
+    <instance name="Tile_35" definition="mapped_tile" position="6.0 0 -3.6"/>
+    <instance name="Tile_36" definition="mapped_tile" position="7.2 0 -3.6"/>
+    <instance name="Tile_37" definition="mapped_tile" position="8.4 0 -3.6"/>
+    <instance name="Tile_38" definition="mapped_tile" position="9.6 0 -3.6"/>
+    <instance name="Tile_39" definition="mapped_tile" position="10.8 0 -3.6"/>
+    <instance name="Tile_40" definition="mapped_tile" position="0 0 -4.8"/>
+    <instance name="Tile_41" definition="mapped_tile" position="1.2 0 -4.8"/>
+    <instance name="Tile_42" definition="mapped_tile" position="2.4 0 -4.8"/>
+    <instance name="Tile_43" definition="mapped_tile" position="3.6 0 -4.8"/>
+    <instance name="Tile_44" definition="mapped_tile" position="4.8 0 -4.8"/>
+    <instance name="Tile_45" definition="mapped_tile" position="6.0 0 -4.8"/>
+    <instance name="Tile_46" definition="mapped_tile" position="7.2 0 -4.8"/>
+    <instance name="Tile_47" definition="mapped_tile" position="8.4 0 -4.8"/>
+    <instance name="Tile_48" definition="mapped_tile" position="9.6 0 -4.8"/>
+    <instance name="Tile_49" definition="mapped_tile" position="10.8 0 -4.8"/>
+    <instance name="Tile_50" definition="mapped_tile" position="0 0 -6.0"/>
+    <instance name="Tile_51" definition="mapped_tile" position="1.2 0 -6.0"/>
+    <instance name="Tile_52" definition="mapped_tile" position="2.4 0 -6.0"/>
+    <instance name="Tile_53" definition="mapped_tile" position="3.6 0 -6.0"/>
+    <instance name="Tile_54" definition="mapped_tile" position="4.8 0 -6.0"/>
+    <instance name="Tile_55" definition="mapped_tile" position="6.0 0 -6.0"/>
+    <instance name="Tile_56" definition="mapped_tile" position="7.2 0 -6.0"/>
+    <instance name="Tile_57" definition="mapped_tile" position="8.4 0 -6.0"/>
+    <instance name="Tile_58" definition="mapped_tile" position="9.6 0 -6.0"/>
+    <instance name="Tile_59" definition="mapped_tile" position="10.8 0 -6.0"/>
+    <instance name="Tile_60" definition="mapped_tile" position="0 0 -7.2"/>
+    <instance name="Tile_61" definition="mapped_tile" position="1.2 0 -7.2"/>
+    <instance name="Tile_62" definition="mapped_tile" position="2.4 0 -7.2"/>
+    <instance name="Tile_63" definition="mapped_tile" position="3.6 0 -7.2"/>
+    <instance name="Tile_64" definition="mapped_tile" position="4.8 0 -7.2"/>
+    <instance name="Tile_65" definition="mapped_tile" position="6.0 0 -7.2"/>
+    <instance name="Tile_66" definition="mapped_tile" position="7.2 0 -7.2"/>
+    <instance name="Tile_67" definition="mapped_tile" position="8.4 0 -7.2"/>
+    <instance name="Tile_68" definition="mapped_tile" position="9.6 0 -7.2"/>
+    <instance name="Tile_69" definition="mapped_tile" position="10.8 0 -7.2"/>
+    <instance name="Tile_70" definition="mapped_tile" position="0 0 -8.4"/>
+    <instance name="Tile_71" definition="mapped_tile" position="1.2 0 -8.4"/>
+    <instance name="Tile_72" definition="mapped_tile" position="2.4 0 -8.4"/>
+    <instance name="Tile_73" definition="mapped_tile" position="3.6 0 -8.4"/>
+    <instance name="Tile_74" definition="mapped_tile" position="4.8 0 -8.4"/>
+    <instance name="Tile_75" definition="mapped_tile" position="6.0 0 -8.4"/>
+    <instance name="Tile_76" definition="mapped_tile" position="7.2 0 -8.4"/>
+    <instance name="Tile_77" definition="mapped_tile" position="8.4 0 -8.4"/>
+    <instance name="Tile_78" definition="mapped_tile" position="9.6 0 -8.4"/>
+    <instance name="Tile_79" definition="mapped_tile" position="10.8 0 -8.4"/>
+    <instance name="Tile_80" definition="mapped_tile" position="0 0 -9.6"/>
+    <instance name="Tile_81" definition="mapped_tile" position="1.2 0 -9.6"/>
+    <instance name="Tile_82" definition="mapped_tile" position="2.4 0 -9.6"/>
+    <instance name="Tile_83" definition="mapped_tile" position="3.6 0 -9.6"/>
+    <instance name="Tile_84" definition="mapped_tile" position="4.8 0 -9.6"/>
+    <instance name="Tile_85" definition="mapped_tile" position="6.0 0 -9.6"/>
+    <instance name="Tile_86" definition="mapped_tile" position="7.2 0 -9.6"/>
+    <instance name="Tile_87" definition="mapped_tile" position="8.4 0 -9.6"/>
+    <instance name="Tile_88" definition="mapped_tile" position="9.6 0 -9.6"/>
+    <instance name="Tile_89" definition="mapped_tile" position="10.8 0 -9.6"/>
+    <instance name="Tile_90" definition="mapped_tile" position="0 0 -10.8"/>
+    <instance name="Tile_91" definition="mapped_tile" position="1.2 0 -10.8"/>
+    <instance name="Tile_92" definition="mapped_tile" position="2.4 0 -10.8"/>
+    <instance name="Tile_93" definition="mapped_tile" position="3.6 0 -10.8"/>
+    <instance name="Tile_94" definition="mapped_tile" position="4.8 0 -10.8"/>
+    <instance name="Tile_95" definition="mapped_tile" position="6.0 0 -10.8"/>
+    <instance name="Tile_96" definition="mapped_tile" position="7.2 0 -10.8"/>
+    <instance name="Tile_97" definition="mapped_tile" position="8.4 0 -10.8"/>
+    <instance name="Tile_98" definition="mapped_tile" position="9.6 0 -10.8"/>
+    <instance name="Tile_99" definition="mapped_tile" position="10.8 0 -10.8"/>
+  </objects>
+</mc3>

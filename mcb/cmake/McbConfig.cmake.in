@@ -1,0 +1,20 @@
+@PACKAGE_INIT@
+
+include(CMakeFindDependencyMacro)
+
+find_dependency(Mc3 0.1.0 CONFIG)
+
+# Older exports produced by CMake can retain the build-tree target spelling
+# (`Mc3`) in Mcb's static link interface.  Present a local forwarding target
+# as well as the public MeshCraft::Mc3 target so both export forms work.
+if(NOT TARGET Mc3)
+    add_library(Mc3 INTERFACE IMPORTED)
+    set_property(TARGET Mc3 PROPERTY INTERFACE_LINK_LIBRARIES MeshCraft::Mc3)
+endif()
+
+if(@MESHCRAFT_MCB_WITH_ZLIB@)
+    find_dependency(ZLIB)
+endif()
+
+include("${CMAKE_CURRENT_LIST_DIR}/McbTargets.cmake")
+check_required_components(Mcb)

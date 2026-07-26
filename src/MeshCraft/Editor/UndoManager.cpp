@@ -3,46 +3,46 @@
 
 namespace MeshCraft::Editor {
 
-void UndoManager::push(Mc3::Mc3Document doc, std::vector<std::string> selectionIds) {
-    pushWithCapAlg(undoStack_, std::move(doc), kMax);
+void UndoManager::push(DocumentSnapshot snapshot, std::vector<std::string> selectionIds) {
+    pushWithCapAlg(undoStack_, std::move(snapshot), kMax);
     pushWithCapAlg(undoSelectionStack_, std::move(selectionIds), kMax);
     redoStack_.clear();
     redoSelectionStack_.clear();
 }
 
-std::optional<UndoManager::Entry> UndoManager::undo(Mc3::Mc3Document currentDoc,
+std::optional<UndoManager::Entry> UndoManager::undo(DocumentSnapshot currentSnapshot,
                                                       std::vector<std::string> currentSelectionIds) {
     if (undoStack_.empty()) return std::nullopt;
-    pushWithCapAlg(redoStack_, std::move(currentDoc), kMax);
+    pushWithCapAlg(redoStack_, std::move(currentSnapshot), kMax);
     pushWithCapAlg(redoSelectionStack_, std::move(currentSelectionIds), kMax);
     Entry result;
-    result.doc = std::move(undoStack_.back());
+    result.snapshot = std::move(undoStack_.back());
     undoStack_.pop_back();
     result.selectionIds = std::move(undoSelectionStack_.back());
     undoSelectionStack_.pop_back();
     return result;
 }
 
-std::optional<UndoManager::Entry> UndoManager::redo(Mc3::Mc3Document currentDoc,
+std::optional<UndoManager::Entry> UndoManager::redo(DocumentSnapshot currentSnapshot,
                                                       std::vector<std::string> currentSelectionIds) {
     if (redoStack_.empty()) return std::nullopt;
-    pushWithCapAlg(undoStack_, std::move(currentDoc), kMax);
+    pushWithCapAlg(undoStack_, std::move(currentSnapshot), kMax);
     pushWithCapAlg(undoSelectionStack_, std::move(currentSelectionIds), kMax);
     Entry result;
-    result.doc = std::move(redoStack_.back());
+    result.snapshot = std::move(redoStack_.back());
     redoStack_.pop_back();
     result.selectionIds = std::move(redoSelectionStack_.back());
     redoSelectionStack_.pop_back();
     return result;
 }
 
-std::optional<UndoManager::Entry> UndoManager::jumpTo(int stepsAgo, Mc3::Mc3Document currentDoc,
+std::optional<UndoManager::Entry> UndoManager::jumpTo(int stepsAgo, DocumentSnapshot currentSnapshot,
                                                         std::vector<std::string> currentSelectionIds) {
     const int n = static_cast<int>(undoStack_.size());
     const int i = n - stepsAgo;
     if (stepsAgo < 1 || i < 0 || i >= n) return std::nullopt;
 
-    redoStack_.push_back(std::move(currentDoc));
+    redoStack_.push_back(std::move(currentSnapshot));
     redoSelectionStack_.push_back(std::move(currentSelectionIds));
     for (int j = n - 1; j > i; --j) {
         redoStack_.push_back(std::move(undoStack_[static_cast<size_t>(j)]));
@@ -54,7 +54,7 @@ std::optional<UndoManager::Entry> UndoManager::jumpTo(int stepsAgo, Mc3::Mc3Docu
         redoSelectionStack_.erase(redoSelectionStack_.begin());
 
     Entry result;
-    result.doc = std::move(undoStack_[static_cast<size_t>(i)]);
+    result.snapshot = std::move(undoStack_[static_cast<size_t>(i)]);
     result.selectionIds = std::move(undoSelectionStack_[static_cast<size_t>(i)]);
     undoStack_.resize(static_cast<size_t>(i));
     undoSelectionStack_.resize(static_cast<size_t>(i));

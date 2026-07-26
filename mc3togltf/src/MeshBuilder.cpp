@@ -1205,7 +1205,7 @@ void assertResourceAllowed(const std::filesystem::path& basePath,
     auto root = std::filesystem::weakly_canonical(effectiveBase, ec);
     std::error_code ec2;
     auto rel = std::filesystem::relative(cand, root, ec2);
-    if (ec || ec2 || rel.empty() || rel.native().rfind("..", 0) == 0)
+    if (ec || ec2 || rel.empty() || rel.generic_string().rfind("..", 0) == 0)
         throw std::runtime_error(
             std::string("mc3togltf: ") + kind + " '" + rawPath +
             "' escapes the document root; refusing to read it "

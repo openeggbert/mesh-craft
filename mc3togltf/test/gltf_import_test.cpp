@@ -204,7 +204,14 @@ int main() {
         check(imported.document.cameras.size() == 1 && imported.document.lights.size() == 1,
               "camera and KHR_lights_punctual light are imported from active nodes (got " +
               std::to_string(imported.document.cameras.size()) + " camera(s), " +
-              std::to_string(imported.document.lights.size()) + " light(s))");
+                  std::to_string(imported.document.lights.size()) + " light(s))");
+
+        std::ifstream glbInput(glb, std::ios::binary);
+        const std::vector<unsigned char> glbBytes{std::istreambuf_iterator<char>(glbInput), {}};
+        const auto importedBytes = importSelfContainedGlbBytes(glbBytes, "memory-seed.glb");
+        check(importedBytes.triangleCount == imported.triangleCount &&
+              importedBytes.document.objects.size() == imported.document.objects.size(),
+              "in-memory GLB import matches the file route");
 
         GltfExporter exporter;
         exporter.exportDocument(imported.document, roundTrip, OutputFormat::GLB);

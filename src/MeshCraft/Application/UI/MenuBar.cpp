@@ -575,7 +575,7 @@ float MeshCraftApplication::drawMenuBar()
                 .setSsaoRadius = [this](float radius) { ssaoRadius_ = radius; },
             };
             UI::MenuBar::drawViewPostProcessing(viewPostProcessingContext);
-            UI::MenuBar::drawPanelToggles(showTimeline_, showRegistryPanel_,
+            UI::MenuBar::drawPanelToggles(showTimeline_, registryWorkspace_.panelOpen(),
                                           showAiPanel_, showValidationPanel_);
             ImGui::EndMenu();
         }

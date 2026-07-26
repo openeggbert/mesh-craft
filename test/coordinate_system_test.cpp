@@ -82,6 +82,104 @@ int main() {
            "normalization converts cameras and removes lossy Euler rotation", failures);
     expect(!normalizeCoordinateSystemToYUpAlg(document), "Y-up normalization is idempotent", failures);
 
+    // Rotation normalization is deliberately lossless for static rotations:
+    // transform, object-state, definition and camera values are all baked to
+    // degrees/XYZ while their matrices remain identical.
+    Mc3Document rotations;
+    rotations.rotationUnits = "radians";
+    rotations.eulerOrder = "YZX";
+    auto rotatedObject = std::make_shared<Mc3Object>();
+    rotatedObject->transform.rotation = {0.25f, -0.5f, 0.75f};
+    rotatedObject->states["open"].rotation = std::array<float, 3>{-0.3f, 0.2f, 0.1f};
+    auto definition = std::make_shared<Mc3Object>();
+    definition->transform.rotation = {0.4f, 0.1f, -0.2f};
+    rotations.objects.push_back(rotatedObject);
+    rotations.definitions["definition"] = definition;
+    Mc3Camera rotationCamera;
+    rotationCamera.rotation = std::array<float, 3>{0.1f, 0.2f, 0.3f};
+    rotations.cameras.push_back(rotationCamera);
+    const auto objectMatrix = rotationMatrix3Alg(rotatedObject->transform.rotation,
+                                                 rotations.rotationUnits, rotations.eulerOrder);
+    const auto stateMatrix = rotationMatrix3Alg(*rotatedObject->states["open"].rotation,
+                                                rotations.rotationUnits, rotations.eulerOrder);
+    const auto definitionMatrix = rotationMatrix3Alg(definition->transform.rotation,
+                                                     rotations.rotationUnits, rotations.eulerOrder);
+    const auto cameraMatrix = rotationMatrix3Alg(*rotationCamera.rotation,
+                                                 rotations.rotationUnits, rotations.eulerOrder);
+    expect(normalizeRotationConventionToDegreesXYZAlg(rotations),
+           "static rotation convention normalizes", failures);
+    expect(rotations.rotationUnits == "degrees" && rotations.eulerOrder == "XYZ",
+           "rotation normalization declares degrees/XYZ", failures);
+    const auto matrixSame = [](const RotationMatrix3Alg& left, const RotationMatrix3Alg& right) {
+        for (int row = 0; row < 3; ++row)
+            for (int col = 0; col < 3; ++col)
+                if (!close(left[row][col], right[row][col])) return false;
+        return true;
+    };
+    expect(matrixSame(objectMatrix, rotationMatrix3Alg(rotatedObject->transform.rotation,
+                                                       rotations.rotationUnits, rotations.eulerOrder)) &&
+               matrixSame(stateMatrix, rotationMatrix3Alg(*rotatedObject->states["open"].rotation,
+                                                          rotations.rotationUnits, rotations.eulerOrder)) &&
+               matrixSame(definitionMatrix, rotationMatrix3Alg(definition->transform.rotation,
+                                                               rotations.rotationUnits, rotations.eulerOrder)) &&
+               matrixSame(cameraMatrix, rotationMatrix3Alg(*rotations.cameras.front().rotation,
+                                                           rotations.rotationUnits, rotations.eulerOrder)),
+           "normalization preserves all static rotation matrices", failures);
+
+    Mc3Document animatedRotations;
+    animatedRotations.rotationUnits = "radians";
+    animatedRotations.eulerOrder = "ZYX";
+    Mc3Action animatedAction;
+    animatedAction.channels.push_back({"target", AnimatedProperty::RotationY,
+                                       {Mc3Keyframe::linear(0.0f, 0.0f),
+                                        Mc3Keyframe::linear(1.0f, 1.0f)}});
+    animatedRotations.actions["turn"] = animatedAction;
+    expect(hasAnimatedRotationAlg(animatedRotations) &&
+               !normalizeRotationConventionToDegreesXYZAlg(animatedRotations) &&
+               animatedRotations.rotationUnits == "radians" && animatedRotations.eulerOrder == "ZYX",
+           "normalization refuses animated Euler rotations rather than changing motion", failures);
+
+    // Picking uses the same radian/Euler transform through both a parent and
+    // a pivot. The child lands at x=2,z=1 only after the complete hierarchy
+    // is composed, so this also catches a regression to local-only picking.
+    auto rotatedParent = std::make_shared<Mc3Object>();
+    rotatedParent->type = ObjectType::Group;
+    rotatedParent->transform.position = {2.0f, 0.0f, 0.0f};
+    rotatedParent->transform.rotation = {0.0f, std::numbers::pi_v<float> * 0.5f, 0.0f};
+    rotatedParent->transform.pivot = {1.0f, 0.0f, 0.0f};
+    auto rotatedChild = std::make_shared<Mc3Object>();
+    rotatedChild->transform.position = {0.0f, 0.0f, -1.0f};
+    rotatedParent->children.push_back(rotatedChild);
+    expect(pickObjectByRayAlg({rotatedParent}, {2.0f, 0.0f, -10.0f}, {0.0f, 0.0f, 1.0f},
+                              "radians", "XYZ") == rotatedChild,
+           "radian picking composes nested transforms and pivots", failures);
+
+    // Animation writes the authored raw values into an override; the
+    // renderer then interprets that triple with the same document convention
+    // as static transforms. This is a headless differential check of that
+    // hand-off for a non-XYZ radian document.
+    Mc3Document animationDocument;
+    animationDocument.rotationUnits = "radians";
+    animationDocument.eulerOrder = "ZXY";
+    auto animatedObject = std::make_shared<Mc3Object>();
+    animatedObject->name = "animated";
+    animatedObject->transform.rotation = {0.2f, 0.3f, 0.4f};
+    Mc3Action animationAction;
+    animationAction.channels.push_back({"animated", AnimatedProperty::RotationY,
+                                        {Mc3Keyframe::step(0.0f, -0.6f)}});
+    const auto overrides = computeAnimOverridesAlg(
+        animationAction, 0.0f, animationDocument.materials,
+        [&](const std::string& name) -> Mc3Object* {
+            return name == animatedObject->name ? animatedObject.get() : nullptr;
+        });
+    const auto animationOverride = overrides.find("animated");
+    expect(animationOverride != overrides.end() && animationOverride->second.rotation.has_value() &&
+               matrixSame(rotationMatrix3Alg(*animationOverride->second.rotation,
+                                             animationDocument.rotationUnits,
+                                             animationDocument.eulerOrder),
+                          rotationMatrix3Alg({0.2f, -0.6f, 0.4f}, "radians", "ZXY")),
+           "animated rotation override retains the document convention", failures);
+
     if (failures == 0) std::puts("All coordinate-system tests passed.");
     else std::fprintf(stderr, "%d coordinate-system test(s) failed.\n", failures);
     return failures == 0 ? 0 : 1;

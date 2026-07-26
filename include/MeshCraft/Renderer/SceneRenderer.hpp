@@ -18,6 +18,7 @@
 #include <Microsoft/Xna/Framework/Matrix.hpp>
 #include <array>
 #include <filesystem>
+#include <functional>
 #include <map>
 #include <memory>
 #include <optional>
@@ -79,6 +80,28 @@ struct CsgPreviewCacheEntry {
     std::string warning;
 };
 
+// Per-main-scene-draw instrumentation for buffer creation that used to happen
+// routinely in the object render loop. Dynamic geometry, overlays and other
+// deliberately transient tools are outside these counters: their allocation
+// lifetime is a separate optimisation problem.
+struct GpuBufferCacheStats {
+    int ordinaryTintBufferCreations{0};
+    int ordinaryTintCacheHits{0};
+    int authoredUvBufferCreations{0};
+    int authoredUvCacheHits{0};
+};
+
+// Per-draw texture work. `decodeUploadMs` surrounds only a cache miss's
+// decode/rasterization and Texture2D creation path, not ordinary material
+// lookup or draw calls, so --benchmark can distinguish real texture work from
+// a stable cache hit without relying on a machine-specific time threshold.
+struct TextureProcessingStats {
+    double decodeUploadMs{0.0};
+    int cacheHits{0};
+    int cacheMisses{0};
+    int gpuUploads{0};
+};
+
 // Line-list shape for edge overlay rendering
 struct WireShape {
     std::vector<Microsoft::Xna::Framework::Vector3> positions; // interleaved pairs (LineList)
@@ -99,6 +122,7 @@ public:
     void clearCsgCache() {
         csgMeshCache_.clear();
         csgTriCountMap_.clear();
+        clearGpuBufferCaches();
         // Callers use this on document replacement as well as CSG edits.
         // Resetting LOD hysteresis then avoids carrying a prior document's
         // instance IDs into a newly loaded scene.
@@ -137,6 +161,19 @@ public:
     // as 129 (128 existing + 1 just-inserted, checked before the *next*
     // insertion) before the next unique CSG subtree triggers a full clear.
     int csgMeshCacheSize() const { return static_cast<int>(csgMeshCache_.size()); }
+
+    // Counters for the latest call to draw(). A stable ordinary scene should
+    // report zero creations after its warm-up frame; cache hits make the
+    // authored-UV reuse observable in the benchmark output.
+    [[nodiscard]] const GpuBufferCacheStats& lastGpuBufferCacheStats() const {
+        return lastGpuBufferCacheStats_;
+    }
+    [[nodiscard]] int authoredUvBufferCacheSize() const {
+        return static_cast<int>(authoredUvBufferCache_.size());
+    }
+    [[nodiscard]] const TextureProcessingStats& lastTextureProcessingStats() const {
+        return lastTextureProcessingStats_;
+    }
 
     // LOD tier (0=full, 1=mid, 2=low) picked for the given object ID on
     // its last draw, based on camera distance (G8). Returns -1 if the
@@ -272,15 +309,11 @@ public:
     // instead, so a camera authored with only `rotation` (target left at
     // its {0,0,0} default) silently pointed at the origin in the live
     // preview, while mc3togltf's export already handled it correctly.
-    // Converts a rotation triple (degrees, same [pitch,yaw,roll] axis
-    // convention as every other rotation field in this codebase --
-    // objectWorldMatrix()'s own CreateFromYawPitchRoll(rotation[1],
-    // rotation[0], rotation[2])) into a forward direction, starting from
-    // this project's right_handed_y_up "looks down -Z at identity
-    // rotation" convention. Static (no instance state needed) so
-    // MeshCraftApplication.cpp's Look-Through-Camera code can call it too.
+    // Converts a document-authored rotation triple into a forward direction,
+    // honoring the document's rotation units and Euler order. Static (no
+    // instance state needed) so Look-Through-Camera uses the same convention.
     static Microsoft::Xna::Framework::Vector3 cameraForwardFromRotation(
-        const std::array<float, 3>& rotationDegrees);
+        const Mc3::Mc3Document& document, const std::array<float, 3>& rotation);
 
 private:
     Microsoft::Xna::Framework::Graphics::GraphicsDevice& device_;
@@ -496,6 +529,51 @@ private:
                           Microsoft::Xna::Framework::Graphics::IndexBuffer* indexBuffer = nullptr,
                           int primitiveCount = -1);
 
+    struct AuthoredUvBufferKey {
+        const RenderMesh* mesh{nullptr};
+        int projection{0};
+        float mappingScaleU{1.0f};
+        float mappingScaleV{1.0f};
+        float mappingOffsetU{0.0f};
+        float mappingOffsetV{0.0f};
+        float mappingRotation{0.0f};
+        std::array<float, 3> geometryScale{1.0f, 1.0f, 1.0f};
+
+        [[nodiscard]] bool operator<(const AuthoredUvBufferKey& other) const {
+            const std::less<const RenderMesh*> less;
+            if (less(mesh, other.mesh)) return true;
+            if (less(other.mesh, mesh)) return false;
+            return std::tie(projection, mappingScaleU, mappingScaleV, mappingOffsetU,
+                            mappingOffsetV, mappingRotation, geometryScale) <
+                   std::tie(other.projection, other.mappingScaleU, other.mappingScaleV,
+                            other.mappingOffsetU, other.mappingOffsetV,
+                            other.mappingRotation, other.geometryScale);
+        }
+    };
+
+    struct TintedMeshBufferKey {
+        const RenderMesh* mesh{nullptr};
+        int red{255};
+        int green{255};
+        int blue{255};
+        int alpha{255};
+
+        [[nodiscard]] bool operator<(const TintedMeshBufferKey& other) const {
+            const std::less<const RenderMesh*> less;
+            if (less(mesh, other.mesh)) return true;
+            if (less(other.mesh, mesh)) return false;
+            return std::tie(red, green, blue, alpha) <
+                   std::tie(other.red, other.green, other.blue, other.alpha);
+        }
+    };
+
+    Microsoft::Xna::Framework::Graphics::VertexBuffer* getOrBuildAuthoredUvBuffer(
+        const RenderMesh& mesh, const Mc3::Mc3UvMapping& mapping,
+        std::array<float, 3> geometryScale);
+    Microsoft::Xna::Framework::Graphics::VertexBuffer* getOrBuildTintedMeshBuffer(
+        const RenderMesh& mesh, Microsoft::Xna::Framework::Color color);
+    void clearGpuBufferCaches();
+
     Microsoft::Xna::Framework::Graphics::Texture2D* loadOrGetTexture(const std::string& absPath);
     Microsoft::Xna::Framework::Graphics::Texture2D* textureForMaterial(
         const std::string& materialId, const Mc3::Mc3Document& doc,
@@ -506,7 +584,8 @@ private:
                                             const std::string& embedReference,
                                             std::optional<std::pair<int, int>> selection = std::nullopt);
 
-    Microsoft::Xna::Framework::Matrix objectWorldMatrix(const Mc3::Mc3Transform& t) const;
+    Microsoft::Xna::Framework::Matrix objectWorldMatrix(
+        const Mc3::Mc3Transform& t, const Mc3::Mc3Document& document) const;
     Microsoft::Xna::Framework::Color  materialColor(const std::string& matId,
                                                      const Mc3::Mc3Document& doc) const;
     bool isSelected(const Mc3::Mc3Object& obj, const std::vector<const Mc3::Mc3Object*>& sel) const;
@@ -521,6 +600,20 @@ private:
     std::map<std::string, SvgCacheState> svgTextureCacheState_;
     std::map<std::string, SvgCacheState> svgTextureFailureState_;
     std::map<std::string, RenderMesh> meshCache_;
+    // Bounded persistent replacements for the former temporary per-draw
+    // buffers. The mapping key includes all geometry/mapping inputs, so an
+    // edit invalidates naturally while a stable warm frame only reuses GPU
+    // resources. `drawMesh()` normally uses a VPNT effect parameter path;
+    // its tint cache is only a fallback for a malformed/legacy mesh lacking
+    // that layout.
+    std::map<AuthoredUvBufferKey,
+             std::unique_ptr<Microsoft::Xna::Framework::Graphics::VertexBuffer>>
+        authoredUvBufferCache_;
+    std::map<TintedMeshBufferKey,
+             std::unique_ptr<Microsoft::Xna::Framework::Graphics::VertexBuffer>>
+        tintedMeshBufferCache_;
+    GpuBufferCacheStats lastGpuBufferCacheStats_{};
+    TextureProcessingStats lastTextureProcessingStats_{};
     // AUD-061: per-object-ratio Torus/Capsule mesh caches, keyed on the
     // exact parameters that determine the mesh's shape (LOD segment counts +
     // actual radii). See getOrBuildTorusMesh()/getOrBuildCapsuleMesh().

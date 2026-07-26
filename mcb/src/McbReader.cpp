@@ -145,7 +145,7 @@ static bool includePathWithinRoot(const std::filesystem::path& candidate,
 
     auto rel = std::filesystem::relative(c, r, ec);
     if (ec || rel.empty()) return false;
-    return rel.native().rfind("..", 0) != 0; // does not start with ".."
+    return rel.generic_string().rfind("..", 0) != 0; // does not start with ".."
 }
 
 // Validates a texture/SVG/mesh/embed/sound/music `src`/`uri` field against

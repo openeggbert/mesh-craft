@@ -1593,7 +1593,7 @@ static bool includePathWithinRoot(const std::filesystem::path& candidate,
 
     auto rel = std::filesystem::relative(c, r, ec);
     if (ec || rel.empty()) return false;
-    return rel.native().rfind("..", 0) != 0;  // does not start with ".."
+    return rel.generic_string().rfind("..", 0) != 0;  // does not start with ".."
 }
 
 // AUD-006b: current parse's resource-confinement state, set once at the top of

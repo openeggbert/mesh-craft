@@ -1,5 +1,7 @@
 #include "MeshCraft/Editor/SceneHistory.hpp"
+#include "MeshCraft/Editor/UndoManager.hpp"
 
+#include <chrono>
 #include <cstdio>
 #include <string>
 #include <vector>
@@ -25,6 +27,21 @@ static Mc3Document makeDoc(const std::string& id, const std::string& padding = {
     return doc;
 }
 
+static Mc3Document makeLargeDoc() {
+    Mc3Document doc;
+    doc.model = "Large snapshot fixture";
+    const std::string padding(128, 'p');
+    for (int index = 0; index < 1000; ++index) {
+        auto object = std::make_shared<Mc3Object>();
+        object->id = "large_" + std::to_string(index);
+        object->name = padding;
+        object->type = ObjectType::Box;
+        object->primitive = Mc3Primitive{};
+        doc.objects.push_back(std::move(object));
+    }
+    return doc;
+}
+
 static bool containsSnapshot(const std::vector<SceneHistory::SnapshotInfo>& snapshots,
                              SceneHistory::SnapshotId id) {
     for (const auto& snapshot : snapshots)
@@ -41,6 +58,53 @@ static bool hasChange(const SceneHistory::Diff& diff, SceneHistory::ChangeKind k
 
 int main() {
     const std::size_t unitBytes = SceneHistory::estimateDocumentBytes(makeDoc("aa"));
+
+    // SYS-W9-05: one deeply independent document graph is frozen once and
+    // shared by the exact undo stack and automatic review history. Both
+    // consumers must still restore independently writable document values.
+    {
+        auto snapshot = freezeDocument(makeDoc("shared"));
+        UndoManager undo;
+        SceneHistory history;
+        undo.push(snapshot, {"shared"});
+        const auto captured = history.capture(snapshot, {"shared"}, "Shared", SceneHistory::SnapshotKind::Automatic);
+        check(captured.stored && snapshot.use_count() >= 3,
+              "undo and automatic history retain one shared immutable snapshot");
+        const auto undoEntry = undo.undo(freezeDocument(makeDoc("after")), {"after"});
+        const auto restored = history.restore(captured.id);
+        check(undoEntry.has_value() && restored.has_value() &&
+                  undoEntry->snapshot->objects.front()->id == "shared" &&
+                  restored->doc.objects.front()->id == "shared" &&
+                  restored->selectionIds == std::vector<std::string>{"shared"},
+              "shared undo/history snapshot preserves document and selection restoration");
+        if (restored) restored->doc.objects.front()->id = "edited-restore";
+        const auto restoredAgain = history.restore(captured.id);
+        check(restoredAgain.has_value() && restoredAgain->doc.objects.front()->id == "shared",
+              "editing a restored document never mutates the shared snapshot");
+    }
+
+    // This is a deterministic retained-memory comparison, rather than a
+    // machine-dependent RSS assertion: the old workflow retained two deep
+    // graphs of this snapshot (one per owner), whereas the shared workflow
+    // retains one graph with two owners. The elapsed time is informational.
+    {
+        auto snapshot = freezeDocument(makeLargeDoc());
+        const std::size_t documentBytes = SceneHistory::estimateDocumentBytes(*snapshot);
+        UndoManager undo;
+        SceneHistory history(documentBytes + 1024u);
+        const auto started = std::chrono::steady_clock::now();
+        undo.push(snapshot, {});
+        const auto captured = history.capture(snapshot, {}, "Large shared", SceneHistory::SnapshotKind::Automatic);
+        const auto elapsed = std::chrono::duration<double, std::milli>(
+            std::chrono::steady_clock::now() - started).count();
+        const std::size_t sharedRetainedBytes = documentBytes;
+        const std::size_t formerDuplicateBytes = documentBytes * 2u;
+        check(captured.stored && snapshot.use_count() >= 3 && documentBytes > 0 &&
+                  sharedRetainedBytes < formerDuplicateBytes,
+              "large-scene undo/history retains one logical document graph instead of two");
+        std::printf("INFO: shared large snapshot attach: %.3f ms; retained logical bytes: %zu vs former %zu\n",
+                    elapsed, sharedRetainedBytes, formerDuplicateBytes);
+    }
 
     // Automatic snapshots respect the hard budget and evict the oldest
     // automatic entry first, giving long sessions more history than the

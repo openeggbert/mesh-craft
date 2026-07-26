@@ -30,6 +30,16 @@ static std::shared_ptr<Mc3Object> makeObj(const std::string& id, const std::stri
     return o;
 }
 
+static Mc3Object* findById(const std::vector<std::shared_ptr<Mc3Object>>& objects,
+                            const std::string& id) {
+    for (const auto& object : objects) {
+        if (!object) continue;
+        if (object->id == id) return object.get();
+        if (auto* child = findById(object->children, id)) return child;
+    }
+    return nullptr;
+}
+
 int main() {
     LuaScriptRunner runner;
 
@@ -116,6 +126,7 @@ int main() {
         Mc3Document doc;
         auto obj = makeObj("obj1", "Obj1");
         doc.objects.push_back(obj);
+        doc.materials["brick"] = Mc3Material{};
 
         std::string err = runner.run(
             "local h = scene:find('obj1')\n"
@@ -126,14 +137,18 @@ int main() {
             "h:set_material('brick')\n",
             doc, nullptr);
         check(err.empty(), "Property read/write script: runs without error (got: " + err + ")");
-        check(obj->transform.position[0] == 1.0f && obj->transform.position[1] == 2.0f &&
-              obj->transform.position[2] == 3.0f, "set_position() mutated the real object's transform");
-        check(obj->transform.rotation[0] == 10.0f && obj->transform.rotation[1] == 20.0f &&
-              obj->transform.rotation[2] == 30.0f, "set_rotation() mutated the real object's transform");
-        check(obj->transform.scale[0] == 2.0f && obj->transform.scale[1] == 2.0f &&
-              obj->transform.scale[2] == 2.0f, "set_scale() mutated the real object's transform");
-        check(!obj->visible, "set_visible(false) mutated the real object");
-        check(obj->material == "brick", "set_material() mutated the real object");
+        Mc3Object* committed = findById(doc.objects, "obj1");
+        check(committed && committed->transform.position[0] == 1.0f &&
+              committed->transform.position[1] == 2.0f && committed->transform.position[2] == 3.0f,
+              "set_position() committed the transaction's transform");
+        check(committed && committed->transform.rotation[0] == 10.0f &&
+              committed->transform.rotation[1] == 20.0f && committed->transform.rotation[2] == 30.0f,
+              "set_rotation() committed the transaction's transform");
+        check(committed && committed->transform.scale[0] == 2.0f &&
+              committed->transform.scale[1] == 2.0f && committed->transform.scale[2] == 2.0f,
+              "set_scale() committed the transaction's transform");
+        check(committed && !committed->visible, "set_visible(false) committed the transaction");
+        check(committed && committed->material == "brick", "set_material() committed the transaction");
     }
 
     // --- get_* round-trips what was set directly in C++ (not just what
@@ -176,13 +191,15 @@ int main() {
         target->assetMetadata = Mc3AssetMetadata{};
         target->assetMetadata->sockets["door_socket"] = {1.0f, 0.0f, 0.5f};
         doc.definitions["door.simple"] = makeObj("door.simple", "door.simple");
+        doc.objects.push_back(target);
 
         std::string err = runner.run(
             "def:place('front_door', 'door.simple', 'door_socket')", doc, target.get());
         check(err.empty(), "def:place() with a valid socket+definition: succeeds (got: " + err + ")");
-        check(target->children.size() == 1, "def:place(): exactly one child was placed");
-        if (!target->children.empty()) {
-            auto& placed = target->children[0];
+        Mc3Object* committed = findById(doc.objects, "wall1");
+        check(committed && committed->children.size() == 1, "def:place(): exactly one child was placed");
+        if (committed && !committed->children.empty()) {
+            auto& placed = committed->children[0];
             check(placed->type == ObjectType::Instance, "def:place(): placed child is an Instance");
             check(placed->definition == "door.simple", "def:place(): Instance references the right definition");
             check(placed->transform.position[0] == 1.0f && placed->transform.position[2] == 0.5f,
@@ -195,13 +212,15 @@ int main() {
         Mc3Document doc;
         auto target = makeObj("wall2", "Wall2");
         doc.definitions["module.a"] = makeObj("module.a", "module.a");
+        doc.objects.push_back(target);
 
         std::string err = runner.run(
             "def:place_at('m1', 'module.a', 4.0, 0.0, 0.0)", doc, target.get());
         check(err.empty(), "def:place_at(): succeeds without any assetMetadata/sockets required "
               "(got: " + err + ")");
-        check(target->children.size() == 1 &&
-              target->children[0]->transform.position[0] == 4.0f,
+        Mc3Object* committed = findById(doc.objects, "wall2");
+        check(committed && committed->children.size() == 1 &&
+              committed->children[0]->transform.position[0] == 4.0f,
               "def:place_at(): Instance placed at the raw coordinates given");
     }
 
@@ -211,6 +230,7 @@ int main() {
         auto target = makeObj("wall3", "Wall3");
         target->assetMetadata = Mc3AssetMetadata{};
         target->assetMetadata->sockets["s1"] = {0.0f, 0.0f, 0.0f};
+        doc.objects.push_back(target);
 
         std::string err = runner.run(
             "if not def:has_socket('s1') then error('s1 should exist') end\n"
@@ -227,6 +247,7 @@ int main() {
         auto target = makeObj("wall4", "Wall4");
         target->assetMetadata = Mc3AssetMetadata{};
         target->assetMetadata->sockets["s1"] = {0.0f, 0.0f, 0.0f};
+        doc.objects.push_back(target);
 
         std::string err = runner.run(
             "def:place('c', 'never_defined', 's1')", doc, target.get());
@@ -235,6 +256,60 @@ int main() {
               "def:place() with an unresolved definitionRef: names the reason (got: " + err + ")");
         check(target->children.empty(),
               "def:place() with an unresolved definitionRef: no dangling child was created anyway");
+    }
+
+    // A failure after an earlier mutation is the central transaction
+    // contract: the original object graph survives unchanged and the
+    // before-commit hook is never invoked.
+    {
+        Mc3Document doc;
+        auto object = makeObj("atomic", "Atomic");
+        doc.objects.push_back(object);
+        int commits = 0;
+        std::string err = runner.run(
+            "scene:find('atomic'):set_visible(false)\nerror('stop after mutation')",
+            doc, nullptr, [&] { ++commits; });
+        check(!err.empty(), "Partial mutation followed by error: reports failure");
+        check(object->visible, "Partial mutation followed by error: original document is unchanged");
+        check(commits == 0, "Partial mutation followed by error: commit hook was not called");
+    }
+
+    // Lua can manufacture Inf/NaN even though parsed MC3 input sanitizes it.
+    // The transaction rejects it before commit rather than poisoning renderer
+    // transforms.
+    {
+        Mc3Document doc;
+        auto object = makeObj("finite", "Finite");
+        doc.objects.push_back(object);
+        std::string err = runner.run(
+            "scene:find('finite'):set_position(math.huge, 0, 0)", doc, nullptr);
+        check(!err.empty() && err.find("finite") != std::string::npos,
+              "Non-finite transform: rejected with a finite-value error (got: " + err + ")");
+        check(object->transform.position[0] == 0.0f,
+              "Non-finite transform: original position remains unchanged");
+    }
+
+    {
+        Mc3Document doc;
+        auto object = makeObj("material", "Material");
+        doc.objects.push_back(object);
+        std::string err = runner.run("scene:find('material'):set_material('missing')", doc, nullptr);
+        check(!err.empty() && err.find("unknown material") != std::string::npos,
+              "Invalid material reference: rejected before commit (got: " + err + ")");
+        check(object->material.empty(), "Invalid material reference: original material remains unchanged");
+    }
+
+    // The allocator cap applies to Lua-owned strings/tables as well as VM
+    // bookkeeping. A request larger than 16 MiB must fail without committing.
+    {
+        Mc3Document doc;
+        auto object = makeObj("memory", "Memory");
+        doc.objects.push_back(object);
+        std::string err = runner.run(
+            "local too_large = string.rep('x', 20 * 1024 * 1024)\n"
+            "scene:find('memory'):set_visible(false)", doc, nullptr);
+        check(!err.empty(), "Excessive Lua allocation: rejected by the memory budget");
+        check(object->visible, "Excessive Lua allocation: original document remains unchanged");
     }
 
     if (failures == 0) { std::printf("All LuaScriptRunner tests passed.\n"); return 0; }

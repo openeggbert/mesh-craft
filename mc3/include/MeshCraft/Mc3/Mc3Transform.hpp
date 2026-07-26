@@ -4,11 +4,11 @@
 
 namespace MeshCraft::Mc3 {
 
-// Local transform of an MC3 object.
-// Rotation is stored as extrinsic XYZ Euler angles in degrees.
+// Local transform of an MC3 object. Rotation values use the owning
+// Mc3Document's rotationUnits and eulerOrder (degrees/XYZ by default).
 struct Mc3Transform {
     std::array<float, 3> position{0.0f, 0.0f, 0.0f};
-    std::array<float, 3> rotation{0.0f, 0.0f, 0.0f}; // pitch, yaw, roll (XYZ extrinsic)
+    std::array<float, 3> rotation{0.0f, 0.0f, 0.0f}; // X/Y/Z angle components
     std::array<float, 3> scale{1.0f, 1.0f, 1.0f};
     std::array<float, 3> pivot{0.0f, 0.0f, 0.0f};
 

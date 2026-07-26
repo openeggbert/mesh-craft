@@ -1,4 +1,4 @@
-# Benchmark baseline (SYS-W12-01 Phase 1 + SYS-W12-02 Phase 2)
+# Benchmark baseline (SYS-W12-01 Phase 1 + SYS-W12-02 / W12-04 editor phases)
 
 Reference numbers from `test/benchmark.py`, for a human (or a future
 session) to eyeball against a fresh run and notice anything wildly off —
@@ -69,13 +69,33 @@ objects, 713 verts / 1290 tris), Release build:
 | animation eval | skipped (scene has no actions — see `test/animation_demo.mc3.xml` for a populated reading) |
 | registry (open + search) | ~0.9 ms |
 
-**Honesty note:** mesh-gen, CSG + cache, and texture processing are NOT
-isolated into their own separate timings — they're reflected in the
-first-vs-warm frame delta (~1.6 ms here), since all three populate their
-respective caches during those same early frames. Fully isolating them
-would need deeper per-subsystem instrumentation (e.g. a hook inside
-`SceneRenderer`'s own mesh/texture loaders); left as a smaller follow-up,
-not claimed as done. Traversal/picking/undo-snapshot/registry numbers on
-this tiny fixture are near the timer's own resolution floor — meaningful
-relative comparisons need a larger fixture (`test/medieval_castle.mc3.xml`
-or similar), not these absolute values.
+**Scope update (SYS-W12-04, 2026-07-26):** the former combined mesh/CSG/
+texture claim is no longer used. `--benchmark` now prints three direct lines:
+
+- `mesh generation`: a CPU-only call to the primitive builder for each unique
+  primitive object, including vertex/triangle and failure counts;
+- `CSG CPU evaluator`: cold evaluation for each CSG object plus a distinct
+  warm-cache map lookup, including cache/failure counts;
+- `texture decode/upload`: per-frame cache-miss decode/rasterization plus
+  `Texture2D` creation, including hit/miss/upload counts.
+
+These are local diagnostics, not CI time thresholds. On this sandbox's
+2026-07-26 EasyGL Debug build, `test/csg_test.mc3.xml` reported 1.67 ms for
+six primitive builds, 37.84 ms for three cold CSG evaluations, and 0.00065 ms
+for three warm CSG cache lookups. That scene has no textures, so the texture
+line correctly reported zero work. The 100-instance authored-UV fixture is
+the automated warm-frame allocation/reuse check; it requires the category
+lines, zero ordinary tint/authored-UV creations, and an authored-UV cache hit,
+but no wall-clock result.
+
+## `SYS-W9-05` — shared undo/history snapshot accounting (2026-07-26)
+
+`pushUndo()` now makes one deep `Mc3Document` copy and freezes it into an
+immutable shared snapshot used by both the exact undo stack and automatic
+review history. Restoring either owner still deep-copies the frozen source
+before the live editor can mutate it. `scene_history_test` uses a 1,000-object
+fixture to report attach time and verify deterministic logical retained bytes:
+one document graph rather than the prior two. This is intentionally a
+representation/count assertion rather than a host-RSS threshold. The editor
+benchmark labels the corresponding live measurement `undo snapshot (one deep
+copy, shared history)`.

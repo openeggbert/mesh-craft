@@ -2,6 +2,7 @@
 #include "MeshCraft/MeshCraftPrivate.hpp"
 #include "MeshCraft/EditorAlgorithms.hpp"
 #include "MeshCraft/LibraryWorkflowAlgorithms.hpp"
+#include "MeshCraft/RotationConventionCna.hpp"
 #include "GltfImporter.hpp"
 #include "MeshBuilder.hpp"
 
@@ -650,13 +651,14 @@ void MeshCraftApplication::restoreSelectionByIds(const std::vector<std::string>&
 // SYS-W3-01 Phase 4: the stack push-then-trim-to-cap mechanism itself now
 // lives in Editor::UndoManager (AUD-031's pushWithCapAlg moved with it).
 // SYS-W9-04 additionally keeps an independent, memory-budgeted review
-// timeline. The two snapshots must not share object pointers: a later
-// in-place editor mutation must never alter either undo or checkpoint state.
+// timeline. SYS-W9-05 freezes one deep copy as an immutable shared snapshot,
+// so matching undo/history entries share no mutable state with the live scene
+// and no longer duplicate the same object graph.
 void MeshCraftApplication::pushUndo() {
     auto selectionIds = currentSelectionIds();
-    auto historySnapshot = deepCopyDoc(document_);
-    undoManager_.push(deepCopyDoc(historySnapshot), selectionIds);
-    const auto captured = sceneHistory_.capture(std::move(historySnapshot), std::move(selectionIds),
+    auto snapshot = Editor::freezeDocument(deepCopyDoc(document_));
+    undoManager_.push(snapshot, selectionIds);
+    const auto captured = sceneHistory_.capture(std::move(snapshot), std::move(selectionIds),
                                                 "Before edit", Editor::SceneHistory::SnapshotKind::Automatic);
     if (!captured.stored) {
         historyNotice_ = captured.message;
@@ -672,10 +674,8 @@ void MeshCraftApplication::pushUndo() {
     objectIndex_.invalidate();
 }
 
-void MeshCraftApplication::resetEventBindingSimulation() {
-    eventSimulationEnabled_ = false;
-    eventBindingRuntime_.reset();
-    eventBindingSimulationReport_ = {};
+void MeshCraftApplication::resetEventPreview() {
+    automationWorkspace_.resetPreview();
 }
 
 bool MeshCraftApplication::undoOnActivate(bool widgetChanged) {
@@ -693,11 +693,11 @@ bool MeshCraftApplication::undoOnActivate(bool widgetChanged) {
 // selection-id stacks in lockstep with the document stacks internally now
 // (SYS-W3-01 Phase 4), returning both together as one Entry.
 void MeshCraftApplication::performUndo() {
-    auto entry = undoManager_.undo(deepCopyDoc(document_), currentSelectionIds());
+    auto entry = undoManager_.undo(Editor::freezeDocument(deepCopyDoc(document_)), currentSelectionIds());
     if (!entry) return;
-    document_ = std::move(entry->doc);
+    document_ = deepCopyDoc(*entry->snapshot);
     objectIndex_.invalidate();  // SYS-W5-04: wholesale document_ replacement
-    resetEventBindingSimulation();
+    resetEventPreview();
     restoreSelectionByIds(entry->selectionIds);
     modified_ = true;
     updateWindowTitle();
@@ -705,11 +705,11 @@ void MeshCraftApplication::performUndo() {
 }
 
 void MeshCraftApplication::performRedo() {
-    auto entry = undoManager_.redo(deepCopyDoc(document_), currentSelectionIds());
+    auto entry = undoManager_.redo(Editor::freezeDocument(deepCopyDoc(document_)), currentSelectionIds());
     if (!entry) return;
-    document_ = std::move(entry->doc);
+    document_ = deepCopyDoc(*entry->snapshot);
     objectIndex_.invalidate();  // SYS-W5-04: wholesale document_ replacement
-    resetEventBindingSimulation();
+    resetEventPreview();
     restoreSelectionByIds(entry->selectionIds);
     modified_ = true;
     updateWindowTitle();
@@ -718,7 +718,8 @@ void MeshCraftApplication::performRedo() {
 
 void MeshCraftApplication::captureSceneCheckpoint(const std::string& label) {
     const auto captured = sceneHistory_.capture(
-        deepCopyDoc(document_), currentSelectionIds(), label, Editor::SceneHistory::SnapshotKind::Checkpoint);
+        Editor::freezeDocument(deepCopyDoc(document_)), currentSelectionIds(), label,
+        Editor::SceneHistory::SnapshotKind::Checkpoint);
     if (!captured.stored) {
         historyNotice_ = captured.message;
         setStatusMsg("Checkpoint was not stored: " + captured.message, true);
@@ -743,7 +744,7 @@ void MeshCraftApplication::restoreSceneHistorySnapshot(Editor::SceneHistory::Sna
     pushUndo();
     document_ = std::move(restored->doc);
     objectIndex_.invalidate();
-    resetEventBindingSimulation();
+    resetEventPreview();
     resetImportHealth();
     restoreSelectionByIds(restored->selectionIds);
     if (!document_.imports.empty()) resolveImports();
@@ -1281,14 +1282,13 @@ void MeshCraftApplication::resetPivot() {
     if (!selection_.hasSelection()) return;
     if (!anySelectedUnlockedAlg(selection_.selection(), objectLockState_.ids())) return;
     pushUndo();
-    const float deg = std::numbers::pi_v<float> / 180.0f;
     for (const auto& s : selection_.selection()) {
         if (objectLockState_.isLocked(s->id)) continue;
         const auto& p = s->transform.pivot;
         const auto& rot = s->transform.rotation;
         // Compensation: pos_new = pos + d*R - d  where d = -pivot (zeroing pivot)
         float dX = -p[0], dY = -p[1], dZ = -p[2];
-        Matrix R = Matrix::CreateFromYawPitchRoll(rot[1]*deg, rot[0]*deg, rot[2]*deg);
+        Matrix R = MeshCraft::rotationMatrixForDocumentAlg(document_, rot);
         float rX = dX*R.M11 + dY*R.M21 + dZ*R.M31;
         float rY = dX*R.M12 + dY*R.M22 + dZ*R.M32;
         float rZ = dX*R.M13 + dY*R.M23 + dZ*R.M33;

@@ -1,5 +1,7 @@
 #include "MeshCraft/Application/MeshCraftApplication.hpp"
 #include "MeshCraft/CoordinateSystemAlgorithms.hpp"
+#include "MeshCraft/RotationConventionCna.hpp"
+#include "MeshCraft/RotationConventionAlgorithms.hpp"
 #include "MeshCraft/MeshCraftPrivate.hpp"
 #include "MeshCraft/EditorAlgorithms.hpp"
 
@@ -89,9 +91,7 @@ void MeshCraftApplication::handleMouseInput(const MouseState& ms, const MouseSta
     // Helper: compute local or world axis vectors for a given object
     auto getLocalAxes = [&](const Mc3::Mc3Object* obj, Vector3 axes[3]) {
         if (gizmoLocalSpace_) {
-            const float d = std::numbers::pi_v<float> / 180.0f;
-            Matrix rotM = Matrix::CreateFromYawPitchRoll(
-                obj->transform.rotation[1]*d, obj->transform.rotation[0]*d, obj->transform.rotation[2]*d);
+            Matrix rotM = MeshCraft::rotationMatrixForDocumentAlg(document_, obj->transform.rotation);
             axes[0] = rotM.getRightProperty();
             axes[1] = rotM.getUpProperty();
             Vector3 fwd = rotM.getForwardProperty();
@@ -147,9 +147,8 @@ void MeshCraftApplication::handleMouseInput(const MouseState& ms, const MouseSta
                 if (pivotEditMode_) {
                     // Move pivot only; compensate position so geometry stays in world space.
                     // pos_new = pos_old + d*R - d  (where d = delta*axis, R = object rotation matrix)
-                    const float deg = std::numbers::pi_v<float> / 180.0f;
                     const auto& rot = s->transform.rotation;
-                    Matrix R = Matrix::CreateFromYawPitchRoll(rot[1]*deg, rot[0]*deg, rot[2]*deg);
+                    Matrix R = MeshCraft::rotationMatrixForDocumentAlg(document_, rot);
                     float dX = delta * ax.X, dY = delta * ax.Y, dZ = delta * ax.Z;
                     // d * R (row vector × matrix)
                     float rX = dX*R.M11 + dY*R.M21 + dZ*R.M31;
@@ -314,11 +313,13 @@ void MeshCraftApplication::handleMouseInput(const MouseState& ms, const MouseSta
         if (radLen > 2.0f) {
             float tx = -radY/radLen, ty = radX/radLen;
             float degsPerPixel = 180.0f / (std::numbers::pi_v<float> * r_screen);
-            float delta = (dx * tx + dy * ty) * degsPerPixel;
+            float delta = MeshCraft::degreesInRotationUnitsAlg(
+                (dx * tx + dy * ty) * degsPerPixel, document_.rotationUnits);
             bool ctrlHeld = (Keyboard::GetState().IsKeyDown(Keys::LeftControl) ||
                              Keyboard::GetState().IsKeyDown(Keys::RightControl));
             applyRotationDragAlg(selection_.selection(), objectLockState_.ids(), axIdx, delta,
-                                 snapEnabled_ || ctrlHeld, snapRotate_);
+                                 snapEnabled_ || ctrlHeld,
+                                 MeshCraft::degreesInRotationUnitsAlg(snapRotate_, document_.rotationUnits));
             modified_ = true;
             updateWindowTitle();
         }
@@ -453,9 +454,16 @@ void MeshCraftApplication::handleMouseInput(const MouseState& ms, const MouseSta
 
             auto bestObj = pickObjectByRayAlg(
                 document_.objects,
-                authoredRayOrig, authoredRayDir);
+                authoredRayOrig, authoredRayDir,
+                document_.rotationUnits, document_.eulerOrder);
 
             resolveClickSelectionAlg(selection_, bestObj, ctrl);
+            // SYS-W14-40: an object click can dispatch only while the user
+            // deliberately enabled Preview/Play mode.  Selection still
+            // follows the ordinary editor rule; the event's own mutations
+            // are isolated by EventPreviewRunner before they are committed.
+            if (automationWorkspace_.previewEnabled && bestObj && !bestObj->id.empty())
+                executeEventPreview(automationWorkspace_.previewRunner.dispatchClick(document_, bestObj->id));
             updateWindowTitle();
         }
     }

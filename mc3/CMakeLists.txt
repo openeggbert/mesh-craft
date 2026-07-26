@@ -1,9 +1,12 @@
 cmake_minimum_required(VERSION 3.21)
-project(Mc3 LANGUAGES CXX)
+project(Mc3 VERSION 0.1.0 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
+
+include(GNUInstallDirs)
+include(CMakePackageConfigHelpers)
 
 # -----------------------------------------------------------------------------
 # tinyxml2 — XML parser for mc3.xml I/O
@@ -42,8 +45,8 @@ if(NOT TARGET nlohmann_json::nlohmann_json)
 endif()
 
 # -----------------------------------------------------------------------------
-# SYS-W11-05: opt-in genuine libFuzzer corpus-driven harness (mc3_xml_libfuzzer)
-# over Mc3XmlParser, complementing the always-on, fast, seeded-mutation
+# SYS-W11-04: opt-in genuine libFuzzer corpus-driven harnesses over the XML
+# and JSON MC3 parsers, complementing the always-on, fast, seeded-mutation
 # mc3_xml_mutation_fuzz_test CTest target below. OFF by default; requires
 # Clang (libFuzzer/-fsanitize=fuzzer is a Clang/LLVM feature -- this
 # environment has Debian clang 19.1.7, verified working). Self-contained to
@@ -53,11 +56,11 @@ endif()
 # is directory-scoped and only applies to targets defined in THIS file.
 #
 #   cmake -S mc3 -B <dir> -DCMAKE_CXX_COMPILER=clang++ -DMESHCRAFT_FUZZ=ON
-#   cmake --build <dir> --target mc3_xml_libfuzzer
-#   <dir>/mc3_xml_libfuzzer -max_total_time=60 -seed=1
+#   cmake --build <dir> --target mc3_xml_libfuzzer mc3_json_libfuzzer
+#   <dir>/mc3_xml_libfuzzer test/fuzz/corpus/xml -max_total_time=60 -seed=1
 # -----------------------------------------------------------------------------
 option(MESHCRAFT_FUZZ
-       "Build the opt-in libFuzzer corpus-driven harness (mc3_xml_libfuzzer) over Mc3XmlParser. Requires Clang."
+       "Build opt-in libFuzzer corpus-driven MC3/MCB/GLB parser harnesses. Requires Clang."
        OFF)
 if(MESHCRAFT_FUZZ AND NOT CMAKE_CXX_COMPILER_ID MATCHES "Clang")
     message(WARNING "MESHCRAFT_FUZZ requires Clang (libFuzzer); "
@@ -110,9 +113,96 @@ target_include_directories(Mc3
         ${CMAKE_CURRENT_SOURCE_DIR}/src
 )
 
-target_link_libraries(Mc3 PRIVATE tinyxml2::tinyxml2 nlohmann_json::nlohmann_json)
+target_link_libraries(Mc3 PRIVATE tinyxml2::tinyxml2)
+# nlohmann/json is header-only and used only by Mc3 implementation files.  Do
+# not put its build target in a static library's exported link interface;
+# consumers do not need it once libMc3 has been built.
+get_target_property(_mc3_nlohmann_json_include_dirs
+                    nlohmann_json::nlohmann_json
+                    INTERFACE_INCLUDE_DIRECTORIES)
+target_include_directories(Mc3 SYSTEM PRIVATE ${_mc3_nlohmann_json_include_dirs})
 
-target_compile_options(Mc3 PRIVATE -Wall -Wextra)
+if(MSVC)
+    target_compile_options(Mc3 PRIVATE /W4)
+else()
+    target_compile_options(Mc3 PRIVATE -Wall -Wextra)
+endif()
+
+# SYS-W11-05: Mc3 is shipped as a genuinely relocatable static package.  The
+# parser's tinyxml2 dependency is normally supplied by the current build (by
+# SharpRuntime in the full editor, or by FetchContent in a standalone Mc3
+# build).  When that dependency is a concrete local target, install it beside
+# Mc3 so an external consumer does not need the parent editor checkout.  The
+# only public header it exposes is tinyxml2.h, so replacing its build-tree
+# include path with a build/install pair is safe and keeps the export free of
+# an absolute sibling-repository path.
+set(MC3_BUNDLE_TINYXML2 OFF)
+if(TARGET tinyxml2)
+    set(MC3_BUNDLE_TINYXML2 ON)
+    get_target_property(_mc3_tinyxml2_source_dir tinyxml2 SOURCE_DIR)
+    get_target_property(_mc3_tinyxml2_sources tinyxml2 SOURCES)
+    set(_mc3_tinyxml2_header "")
+    foreach(_mc3_tinyxml2_source IN LISTS _mc3_tinyxml2_sources)
+        if(IS_ABSOLUTE "${_mc3_tinyxml2_source}")
+            set(_mc3_tinyxml2_candidate "${_mc3_tinyxml2_source}")
+        else()
+            set(_mc3_tinyxml2_candidate
+                "${_mc3_tinyxml2_source_dir}/${_mc3_tinyxml2_source}")
+        endif()
+        if(_mc3_tinyxml2_candidate MATCHES "tinyxml2\\.cpp$")
+            get_filename_component(_mc3_tinyxml2_include_dir
+                                   "${_mc3_tinyxml2_candidate}" DIRECTORY)
+            set(_mc3_tinyxml2_header
+                "${_mc3_tinyxml2_include_dir}/tinyxml2.h")
+            break()
+        endif()
+    endforeach()
+    if(NOT EXISTS "${_mc3_tinyxml2_header}")
+        message(FATAL_ERROR
+            "Mc3 package installation could not locate tinyxml2.h for target tinyxml2")
+    endif()
+
+    set_property(TARGET tinyxml2 PROPERTY INTERFACE_INCLUDE_DIRECTORIES
+        "$<BUILD_INTERFACE:${_mc3_tinyxml2_include_dir}>;$<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>")
+    install(FILES "${_mc3_tinyxml2_header}"
+            DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}"
+            COMPONENT release)
+endif()
+
+install(DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/include/"
+        DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}"
+        COMPONENT release)
+
+set(_mc3_install_targets Mc3)
+if(MC3_BUNDLE_TINYXML2)
+    list(APPEND _mc3_install_targets tinyxml2)
+endif()
+install(TARGETS ${_mc3_install_targets}
+        EXPORT Mc3Targets
+        ARCHIVE DESTINATION "${CMAKE_INSTALL_LIBDIR}" COMPONENT release
+        LIBRARY DESTINATION "${CMAKE_INSTALL_LIBDIR}" COMPONENT release
+        RUNTIME DESTINATION "${CMAKE_INSTALL_BINDIR}" COMPONENT release
+        )
+
+set(MC3_CMAKE_INSTALL_DIR "${CMAKE_INSTALL_LIBDIR}/cmake/Mc3")
+configure_package_config_file(
+    "${CMAKE_CURRENT_SOURCE_DIR}/cmake/Mc3Config.cmake.in"
+    "${CMAKE_CURRENT_BINARY_DIR}/Mc3Config.cmake"
+    INSTALL_DESTINATION "${MC3_CMAKE_INSTALL_DIR}")
+write_basic_package_version_file(
+    "${CMAKE_CURRENT_BINARY_DIR}/Mc3ConfigVersion.cmake"
+    VERSION "${PROJECT_VERSION}"
+    COMPATIBILITY SameMajorVersion)
+install(EXPORT Mc3Targets
+        FILE Mc3Targets.cmake
+        NAMESPACE MeshCraft::
+        DESTINATION "${MC3_CMAKE_INSTALL_DIR}"
+        COMPONENT release)
+install(FILES
+        "${CMAKE_CURRENT_BINARY_DIR}/Mc3Config.cmake"
+        "${CMAKE_CURRENT_BINARY_DIR}/Mc3ConfigVersion.cmake"
+        DESTINATION "${MC3_CMAKE_INSTALL_DIR}"
+        COMPONENT release)
 
 # AUD-055: meshcraft_apply_sanitize() is defined by the root CMakeLists.txt
 # and only visible when this file is processed via its add_subdirectory()
@@ -121,7 +211,7 @@ if(COMMAND meshcraft_apply_sanitize)
     meshcraft_apply_sanitize(Mc3)
 endif()
 
-# SYS-W11-05: see the MESHCRAFT_FUZZ block above -- instruments Mc3's own
+# SYS-W11-04: see the MESHCRAFT_FUZZ block above -- instruments Mc3's own
 # object code for libFuzzer coverage-guided fuzzing when opted in.
 if(MESHCRAFT_FUZZ)
     target_compile_options(Mc3 PRIVATE ${MESHCRAFT_FUZZ_COMPILE_OPTIONS})
@@ -340,7 +430,7 @@ if(BUILD_TESTING)
     add_test(NAME mc3_autosave_recovery COMMAND mc3_autosave_recovery_test)
     set_tests_properties(mc3_autosave_recovery PROPERTIES TIMEOUT 15 LABELS "format")
 
-    # SYS-W11-05: property-based (randomized, seeded) round-trip test --
+    # Seeded property-based round-trip test --
     # generates many random documents (RandomMc3DocumentGenerator.hpp) and
     # asserts XML round-trip fidelity, complementing mc3_roundtrip's fixed-
     # fixture coverage with random parameter-value/feature combinations.
@@ -349,7 +439,7 @@ if(BUILD_TESTING)
     add_test(NAME mc3_random_roundtrip COMMAND mc3_random_roundtrip_test)
     set_tests_properties(mc3_random_roundtrip PROPERTIES TIMEOUT 30 LABELS "format")
 
-    # SYS-W11-05: seeded mutation/random-byte fuzz harness over
+    # SYS-W11-04: seeded mutation/random-byte fuzz harness over
     # Mc3XmlParser (via Mc3Document::loadFromString) -- the primary gap this
     # task exists to close (MCB already had mcb_corruption_test's byte-fuzz;
     # the XML parser had none). See the file's header comment for the two
@@ -360,7 +450,7 @@ if(BUILD_TESTING)
     add_test(NAME mc3_xml_mutation_fuzz COMMAND mc3_xml_mutation_fuzz_test)
     set_tests_properties(mc3_xml_mutation_fuzz PROPERTIES TIMEOUT 30 LABELS "format")
 
-    # SYS-W11-05: opt-in libFuzzer harness (see the MESHCRAFT_FUZZ block near
+    # SYS-W11-04: opt-in libFuzzer harnesses (see the MESHCRAFT_FUZZ block near
     # the top of this file). Deliberately NOT registered as a ctest test --
     # it's a corpus-driven deep-fuzzing target meant for longer, occasional/
     # manual or CI-scheduled runs (`-max_total_time=...`), not a fast
@@ -371,6 +461,11 @@ if(BUILD_TESTING)
         target_link_libraries(mc3_xml_libfuzzer PRIVATE Mc3)
         target_compile_options(mc3_xml_libfuzzer PRIVATE -fsanitize=fuzzer,address,undefined -fno-omit-frame-pointer -g)
         target_link_options(mc3_xml_libfuzzer PRIVATE -fsanitize=fuzzer,address,undefined)
+
+        add_executable(mc3_json_libfuzzer test/fuzz/mc3_json_libfuzzer.cpp)
+        target_link_libraries(mc3_json_libfuzzer PRIVATE Mc3)
+        target_compile_options(mc3_json_libfuzzer PRIVATE -fsanitize=fuzzer,address,undefined -fno-omit-frame-pointer -g)
+        target_link_options(mc3_json_libfuzzer PRIVATE -fsanitize=fuzzer,address,undefined)
     endif()
 
     # editor_commands_test pulls in MeshCraft/EditorAlgorithms.hpp from the

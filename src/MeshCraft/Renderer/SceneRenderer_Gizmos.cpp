@@ -1,5 +1,6 @@
 #include "MeshCraft/Renderer/SceneRenderer.hpp"
 #include "MeshCraft/CoordinateSystemAlgorithms.hpp"
+#include "MeshCraft/RotationConventionCna.hpp"
 
 #include <Microsoft/Xna/Framework/Graphics/BufferUsage.hpp>
 #include <Microsoft/Xna/Framework/Graphics/IndexElementSize.hpp>
@@ -48,9 +49,7 @@ void SceneRenderer::drawGizmo(const Mc3Object* obj, const Mc3Document& doc,
     // Compute axis directions (world or local)
     Vector3 axX{1,0,0}, axY{0,1,0}, axZ{0,0,1};
     if (localSpace) {
-        const float d = std::numbers::pi_v<float> / 180.0f;
-        Matrix rotM = Matrix::CreateFromYawPitchRoll(
-            obj->transform.rotation[1]*d, obj->transform.rotation[0]*d, obj->transform.rotation[2]*d);
+        Matrix rotM = MeshCraft::rotationMatrixForDocumentAlg(doc, obj->transform.rotation);
         axX = rotM.getRightProperty();
         axY = rotM.getUpProperty();
         // -Forward = +Z in local space
@@ -115,9 +114,7 @@ void SceneRenderer::drawScaleGizmo(const Mc3Object* obj, const Mc3Document& doc,
 
     Vector3 axX{1,0,0}, axY{0,1,0}, axZ{0,0,1};
     if (localSpace) {
-        const float d = std::numbers::pi_v<float> / 180.0f;
-        Matrix rotM = Matrix::CreateFromYawPitchRoll(
-            obj->transform.rotation[1]*d, obj->transform.rotation[0]*d, obj->transform.rotation[2]*d);
+        Matrix rotM = MeshCraft::rotationMatrixForDocumentAlg(doc, obj->transform.rotation);
         axX = rotM.getRightProperty();
         axY = rotM.getUpProperty();
         Vector3 fwd = rotM.getForwardProperty();
@@ -185,9 +182,7 @@ void SceneRenderer::drawRotateGizmo(const Mc3Object* obj, const Mc3Document& doc
     // Local axis vectors (used as circle plane basis)
     Vector3 axX{1,0,0}, axY{0,1,0}, axZ{0,0,1};
     if (localSpace) {
-        const float d = std::numbers::pi_v<float> / 180.0f;
-        Matrix rotM = Matrix::CreateFromYawPitchRoll(
-            obj->transform.rotation[1]*d, obj->transform.rotation[0]*d, obj->transform.rotation[2]*d);
+        Matrix rotM = MeshCraft::rotationMatrixForDocumentAlg(doc, obj->transform.rotation);
         axX = rotM.getRightProperty();
         axY = rotM.getUpProperty();
         Vector3 fwd = rotM.getForwardProperty();

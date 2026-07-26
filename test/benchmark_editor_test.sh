@@ -24,13 +24,23 @@ else
 fi
 
 fail=0
-for category in "startup" "first frame" "warm frame" "traversal" "picking" \
-                "undo snapshot" "animation eval" "registry"; do
+for category in "startup" "first frame" "warm frame" "mesh generation" \
+                "CSG CPU evaluator" "texture decode/upload" "traversal" "picking" \
+                "GPU buffers" "undo snapshot" "animation eval" "registry"; do
     if ! grep -q "\[Benchmark\] $category" "$OUT"; then
         echo "FAIL: missing expected '[Benchmark] $category' line"
         fail=1
     fi
 done
+
+# The last of ten benchmark frames is warm. Ordinary meshes must not rebuild
+# tint buffers there. The 100-instance fixture has one repeated authored UV
+# projection, so it also proves the mapped GPU buffer is reused rather than
+# reallocated across a representative repeated-geometry scene.
+if ! grep -Eq '\[Benchmark\] GPU buffers .*tint created 0.*authored UV created 0.*authored UV cache hits [1-9][0-9]*' "$OUT"; then
+    echo "FAIL: warm GPU-buffer metrics did not show zero creations and an authored-UV cache hit"
+    fail=1
+fi
 
 if [ "$fail" -ne 0 ]; then
     echo "--- full output ---"

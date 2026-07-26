@@ -3,6 +3,7 @@
 #include <MeshCraft/Mc3/Mc3Document.hpp>
 
 #include <filesystem>
+#include <span>
 #include <string>
 #include <vector>
 
@@ -24,6 +25,13 @@ struct GltfImportResult {
 // existing 64 MiB inline-embed parser limit. External .gltf/buffer/image
 // resources are intentionally not accepted by this untrusted route.
 GltfImportResult importSelfContainedGlb(const std::filesystem::path& path);
+
+// In-memory equivalent of importSelfContainedGlb(). This keeps browser and
+// upload callers, plus the bounded fuzz harness, on the exact same parser and
+// import limits without first materialising untrusted bytes on disk. `label`
+// is used only for diagnostics and generated MC3 identifiers.
+GltfImportResult importSelfContainedGlbBytes(std::span<const unsigned char> bytes,
+                                             const std::string& label = "input.glb");
 
 // Explicitly trusted route for a textual glTF and its declared resources.
 // The source is converted to the same bounded inline GLB representation as

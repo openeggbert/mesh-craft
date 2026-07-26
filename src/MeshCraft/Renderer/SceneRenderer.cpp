@@ -1,5 +1,6 @@
 #include "MeshCraft/Renderer/SceneRenderer.hpp"
 #include "MeshCraft/CoordinateSystemAlgorithms.hpp"
+#include "MeshCraft/RotationConventionCna.hpp"
 #include "MeshCraft/Editor/WalkController.hpp"
 #include "MeshCraft/SceneSemanticsAlgorithms.hpp"
 #include "MeshCraft/UvMappingAlgorithms.hpp"
@@ -20,6 +21,7 @@
 #include <Microsoft/Xna/Framework/Vector2.hpp>
 #include <Microsoft/Xna/Framework/Vector3.hpp>
 #include <algorithm>
+#include <chrono>
 #include <cmath>
 #include <cstdint>
 #include <filesystem>
@@ -44,6 +46,19 @@ using namespace MeshCraft::Mc3;
 using namespace MeshCraft::Renderer;
 
 namespace {
+
+struct TextureMissTimer {
+    TextureProcessingStats& stats;
+    std::chrono::steady_clock::time_point started{std::chrono::steady_clock::now()};
+    bool uploaded{false};
+
+    ~TextureMissTimer() {
+        stats.decodeUploadMs += std::chrono::duration<double, std::milli>(
+            std::chrono::steady_clock::now() - started).count();
+        ++stats.cacheMisses;
+        if (uploaded) ++stats.gpuUploads;
+    }
+};
 
 // CNA's Matrix is intentionally kept out of CoordinateSystemAlgorithms.hpp.
 // This is the renderer adapter from the shared MC3 convention to a row-vector
@@ -220,15 +235,14 @@ static manifold::mat3x4 xnaToManifoldMat(const Matrix& m) {
     );
 }
 
-static Matrix computeObjWorldMatrix(const Mc3Object& obj) {
+static Matrix computeObjWorldMatrix(const Mc3Object& obj, const Mc3Document& doc) {
     const auto& t = obj.transform;
-    constexpr float d = std::numbers::pi_v<float> / 180.0f;
     const auto semantics = MeshCraft::objectTransformSemanticsAlg(t);
     return Matrix::CreateTranslation({semantics.childOriginOffset[0],
                                       semantics.childOriginOffset[1],
                                       semantics.childOriginOffset[2]}) *
            Matrix::CreateScale({t.scale[0], t.scale[1], t.scale[2]}) *
-           Matrix::CreateFromYawPitchRoll(t.rotation[1]*d, t.rotation[0]*d, t.rotation[2]*d) *
+           MeshCraft::rotationMatrixForDocumentAlg(doc, t.rotation) *
            Matrix::CreateTranslation({semantics.outerTranslation[0],
                                       semantics.outerTranslation[1],
                                       semantics.outerTranslation[2]});
@@ -254,7 +268,7 @@ static manifold::Manifold buildManifoldTree(
     // 24 here vs 32 there) -- curved-primitive CSG previews were visibly
     // less smooth than the final export for no functional reason.
     constexpr int SEG = 32;
-    Matrix objWorld = computeObjWorldMatrix(obj) * parentToWorld;
+    Matrix objWorld = computeObjWorldMatrix(obj, doc) * parentToWorld;
     Matrix deformMat = obj.deform
         ? Matrix::CreateScale({obj.deform->scale[0], obj.deform->scale[1], obj.deform->scale[2]})
         : Matrix::getIdentityProperty();
@@ -668,18 +682,15 @@ SceneRenderer::SceneRenderer(GraphicsDevice& device)
 // Draw helpers
 // ---------------------------------------------------------------------------
 
-Matrix SceneRenderer::objectWorldMatrix(const Mc3Transform& t) const {
-    float rx = t.rotation[0] * (std::numbers::pi_v<float> / 180.0f);
-    float ry = t.rotation[1] * (std::numbers::pi_v<float> / 180.0f);
-    float rz = t.rotation[2] * (std::numbers::pi_v<float> / 180.0f);
-
+Matrix SceneRenderer::objectWorldMatrix(const Mc3Transform& t,
+                                        const Mc3Document& document) const {
     // Pivot: world = T(-pivot) * S * R * T(pos + pivot)
     const auto semantics = objectTransformSemanticsAlg(t);
     return Matrix::CreateTranslation({semantics.childOriginOffset[0],
                                       semantics.childOriginOffset[1],
                                       semantics.childOriginOffset[2]}) *
            Matrix::CreateScale({t.scale[0], t.scale[1], t.scale[2]}) *
-           Matrix::CreateFromYawPitchRoll(ry, rx, rz) *
+           MeshCraft::rotationMatrixForDocumentAlg(document, t.rotation) *
            Matrix::CreateTranslation({semantics.outerTranslation[0],
                                       semantics.outerTranslation[1],
                                       semantics.outerTranslation[2]});
@@ -704,18 +715,58 @@ void SceneRenderer::drawMesh(const RenderMesh& mesh,
                               const Matrix& world, const Matrix& view, const Matrix& proj,
                               Color color)
 {
-    int n = mesh.vb->getVertexCountProperty();
+    // The ordinary path has a permanent position/normal/UV mesh. BasicEffect
+    // can apply a uniform material color directly, so never rebuild a color
+    // vertex buffer merely to tint geometry. In addition to avoiding a GPU
+    // allocation per object/frame, this keeps gizmos and emissive draws on
+    // the same stable buffer path.
+    if (mesh.texVB && mesh.texIB && mesh.texPrimitiveCount > 0) {
+        const bool previousVertexColor = effect_->VertexColorEnabled;
+        const bool previousLighting = effect_->getLightingEnabledProperty();
+        const bool previousTextureEnabled = effect_->getTextureEnabledProperty();
+        Texture2D* previousTexture = effect_->getTextureProperty();
+        const Vector3 previousDiffuse = effect_->getDiffuseColorProperty();
+        const float previousAlpha = effect_->getAlphaProperty();
 
-    // Build a temporary VB tinted with the material color (cheap for small meshes)
-    std::vector<VertexPositionColor> tinted(n);
-    // We don't have a way to read back VB data, so we store the original verts in RenderMesh.
-    // For now, use the color directly as a uniform tint by building a new VB.
-    // This works because our unit shapes have few vertices.
-    for (int i = 0; i < n; ++i)
-        tinted[i] = { mesh.positions[i], color };
+        effect_->World      = world;
+        effect_->View       = view;
+        effect_->Projection = proj;
+        effect_->VertexColorEnabled = false;
+        effect_->setLightingEnabledProperty(false);
+        effect_->setTextureEnabledProperty(false);
+        effect_->setTextureProperty(nullptr);
+        effect_->setDiffuseColorProperty(Vector3{
+            std::clamp(color.getRProperty() / 255.0f, 0.0f, 1.0f),
+            std::clamp(color.getGProperty() / 255.0f, 0.0f, 1.0f),
+            std::clamp(color.getBProperty() / 255.0f, 0.0f, 1.0f)});
+        effect_->setAlphaProperty(std::clamp(color.getAProperty() / 255.0f, 0.0f, 1.0f));
 
-    VertexBuffer tmpVB(device_, n);
-    tmpVB.SetData(tinted.data(), n);
+        for (auto& pass : effect_->getCurrentTechniqueProperty()->getPassesProperty())
+            pass.Apply();
+
+        device_.SetVertexBuffer(mesh.texVB.get());
+        device_.SetIndexBuffer(mesh.texIB.get());
+        device_.DrawIndexedPrimitives(Graphics::PrimitiveType::TriangleList, 0, 0,
+                                      mesh.texVB->getVertexCountProperty(), 0,
+                                      mesh.texPrimitiveCount);
+        device_.SetVertexBuffer(nullptr);
+        device_.SetIndexBuffer(nullptr);
+
+        effect_->setAlphaProperty(previousAlpha);
+        effect_->setDiffuseColorProperty(previousDiffuse);
+        effect_->setTextureProperty(previousTexture);
+        effect_->setTextureEnabledProperty(previousTextureEnabled);
+        effect_->setLightingEnabledProperty(previousLighting);
+        effect_->VertexColorEnabled = previousVertexColor;
+        return;
+    }
+
+    // All current builders/uploaders provide the VPNT path above. Preserve
+    // legacy/defensive rendering without reverting to a temporary buffer:
+    // cache the rare VPC-only color variant by mesh + exact material color.
+    if (!mesh.vb || !mesh.ib || mesh.primitiveCount <= 0) return;
+    VertexBuffer* tinted = getOrBuildTintedMeshBuffer(mesh, color);
+    if (!tinted) return;
 
     effect_->World      = world;
     effect_->View       = view;
@@ -726,16 +777,86 @@ void SceneRenderer::drawMesh(const RenderMesh& mesh,
         pass.Apply();
     }
 
-    device_.SetVertexBuffer(&tmpVB);
+    device_.SetVertexBuffer(tinted);
     device_.SetIndexBuffer(mesh.ib.get());
     device_.DrawIndexedPrimitives(
         Graphics::PrimitiveType::TriangleList,
         0, 0,
-        n,
+        tinted->getVertexCountProperty(),
         0,
         mesh.primitiveCount);
     device_.SetVertexBuffer(nullptr);
     device_.SetIndexBuffer(nullptr);
+}
+
+void SceneRenderer::clearGpuBufferCaches()
+{
+    authoredUvBufferCache_.clear();
+    tintedMeshBufferCache_.clear();
+}
+
+VertexBuffer* SceneRenderer::getOrBuildTintedMeshBuffer(const RenderMesh& mesh, Color color)
+{
+    const TintedMeshBufferKey key{&mesh, color.getRProperty(), color.getGProperty(),
+                                  color.getBProperty(), color.getAProperty()};
+    if (auto it = tintedMeshBufferCache_.find(key); it != tintedMeshBufferCache_.end()) {
+        ++lastGpuBufferCacheStats_.ordinaryTintCacheHits;
+        return it->second.get();
+    }
+    if (mesh.positions.empty()) return nullptr;
+    if (tintedMeshBufferCache_.size() >= 256) tintedMeshBufferCache_.clear();
+
+    std::vector<VertexPositionColor> vertices;
+    vertices.reserve(mesh.positions.size());
+    for (const Vector3& position : mesh.positions)
+        vertices.push_back({position, color});
+    auto buffer = std::make_unique<VertexBuffer>(device_, static_cast<int>(vertices.size()));
+    buffer->SetData(vertices.data(), static_cast<int>(vertices.size()));
+    auto [inserted, ok] = tintedMeshBufferCache_.emplace(key, std::move(buffer));
+    (void)ok;
+    ++lastGpuBufferCacheStats_.ordinaryTintBufferCreations;
+    return inserted->second.get();
+}
+
+VertexBuffer* SceneRenderer::getOrBuildAuthoredUvBuffer(
+    const RenderMesh& mesh, const Mc3UvMapping& mapping,
+    std::array<float, 3> geometryScale)
+{
+    const AuthoredUvBufferKey key{
+        &mesh, static_cast<int>(mapping.projection), mapping.scaleU, mapping.scaleV,
+        mapping.offsetU, mapping.offsetV, mapping.rotation, geometryScale};
+    if (auto it = authoredUvBufferCache_.find(key); it != authoredUvBufferCache_.end()) {
+        ++lastGpuBufferCacheStats_.authoredUvCacheHits;
+        return it->second.get();
+    }
+    if (mesh.texturedVertices.empty()) return nullptr;
+    if (authoredUvBufferCache_.size() >= 256) authoredUvBufferCache_.clear();
+
+    std::vector<UvPositionAlg> positions;
+    std::vector<UvPositionAlg> normals;
+    std::vector<UvCoordinateAlg> defaultCoordinates;
+    positions.reserve(mesh.texturedVertices.size());
+    normals.reserve(mesh.texturedVertices.size());
+    defaultCoordinates.reserve(mesh.texturedVertices.size());
+    for (const auto& vertex : mesh.texturedVertices) {
+        positions.push_back({vertex.Position.X * geometryScale[0],
+                             vertex.Position.Y * geometryScale[1],
+                             vertex.Position.Z * geometryScale[2]});
+        normals.push_back({vertex.Normal.X, vertex.Normal.Y, vertex.Normal.Z});
+        defaultCoordinates.push_back({vertex.TextureCoordinate.X, vertex.TextureCoordinate.Y});
+    }
+    const std::vector<UvCoordinateAlg> mapped = mapObjectUvsAlg(
+        positions, normals, defaultCoordinates, mapping);
+    std::vector<VertexPositionNormalTexture> vertices = mesh.texturedVertices;
+    for (size_t index = 0; index < vertices.size(); ++index)
+        vertices[index].TextureCoordinate = {mapped[index][0], mapped[index][1]};
+
+    auto buffer = std::make_unique<VertexBuffer>(device_, static_cast<int>(vertices.size()));
+    buffer->SetData(vertices.data(), static_cast<int>(vertices.size()));
+    auto [inserted, ok] = authoredUvBufferCache_.emplace(key, std::move(buffer));
+    (void)ok;
+    ++lastGpuBufferCacheStats_.authoredUvBufferCreations;
+    return inserted->second.get();
 }
 
 bool SceneRenderer::drawPunctualLightMesh(const Matrix& world, const Matrix& view,
@@ -854,32 +975,13 @@ void SceneRenderer::drawMeshTextured(const RenderMesh& mesh,
     if (!activeIndexBuffer || activePrimitiveCount <= 0) return;
     int n = mesh.texVB->getVertexCountProperty();
 
-    std::unique_ptr<VertexBuffer> mappedVertexBuffer;
+    VertexBuffer* mappedVertexBuffer = nullptr;
     if (uvMapping && tex && mesh.texturedVertices.size() == static_cast<size_t>(n)) {
-        std::vector<UvPositionAlg> positions;
-        std::vector<UvPositionAlg> normals;
-        std::vector<UvCoordinateAlg> defaultCoordinates;
-        positions.reserve(mesh.texturedVertices.size());
-        normals.reserve(mesh.texturedVertices.size());
-        defaultCoordinates.reserve(mesh.texturedVertices.size());
-        for (const auto& vertex : mesh.texturedVertices) {
-            positions.push_back({vertex.Position.X * uvGeometryScale[0],
-                                 vertex.Position.Y * uvGeometryScale[1],
-                                 vertex.Position.Z * uvGeometryScale[2]});
-            normals.push_back({vertex.Normal.X, vertex.Normal.Y, vertex.Normal.Z});
-            defaultCoordinates.push_back({vertex.TextureCoordinate.X, vertex.TextureCoordinate.Y});
-        }
-        const std::vector<UvCoordinateAlg> mapped = mapObjectUvsAlg(
-            positions, normals, defaultCoordinates, *uvMapping);
-        std::vector<VertexPositionNormalTexture> vertices = mesh.texturedVertices;
-        for (size_t index = 0; index < vertices.size(); ++index)
-            vertices[index].TextureCoordinate = {mapped[index][0], mapped[index][1]};
-        mappedVertexBuffer = std::make_unique<VertexBuffer>(device_, n);
-        mappedVertexBuffer->SetData(vertices.data(), n);
+        mappedVertexBuffer = getOrBuildAuthoredUvBuffer(mesh, *uvMapping, uvGeometryScale);
     }
 
     if (drawPunctualLightMesh(world, view, proj, color, tex, sampler,
-                               mappedVertexBuffer ? mappedVertexBuffer.get() : mesh.texVB.get(),
+                               mappedVertexBuffer ? mappedVertexBuffer : mesh.texVB.get(),
                                activeIndexBuffer, activePrimitiveCount))
         return;
 
@@ -910,7 +1012,7 @@ void SceneRenderer::drawMeshTextured(const RenderMesh& mesh,
     for (auto& pass : effect_->getCurrentTechniqueProperty()->getPassesProperty())
         pass.Apply();
 
-    device_.SetVertexBuffer(mappedVertexBuffer ? mappedVertexBuffer.get() : mesh.texVB.get());
+    device_.SetVertexBuffer(mappedVertexBuffer ? mappedVertexBuffer : mesh.texVB.get());
     device_.SetIndexBuffer(activeIndexBuffer);
     device_.DrawIndexedPrimitives(
         Graphics::PrimitiveType::TriangleList,
@@ -999,7 +1101,7 @@ void SceneRenderer::drawDepthObject(const Mc3Object& obj, const Mc3Document& doc
     } else if (obj.deform) {
         deformScale = obj.deform->scale;
     }
-    const Matrix world = objectWorldMatrix(transform) * parentWorld;
+    const Matrix world = objectWorldMatrix(transform, doc) * parentWorld;
     const Matrix deform = Matrix::CreateScale({deformScale[0], deformScale[1], deformScale[2]});
 
     auto depthStatic = [&](const RenderMesh& mesh, const Matrix& matrix) {
@@ -1160,11 +1262,16 @@ void SceneRenderer::drawDepthPass(const Mc3Document& doc, const Matrix& view, co
 Texture2D* SceneRenderer::loadOrGetTexture(const std::string& absPath)
 {
     auto it = textureCache_.find(absPath);
-    if (it != textureCache_.end()) return &it->second;
+    if (it != textureCache_.end()) {
+        ++lastTextureProcessingStats_.cacheHits;
+        return &it->second;
+    }
+    TextureMissTimer timer{lastTextureProcessingStats_};
     try {
         Texture2D tex(absPath, device_);
         auto [ins, ok] = textureCache_.emplace(absPath, std::move(tex));
         (void)ok;
+        timer.uploaded = true;
         return &ins->second;
     } catch (...) {
         // Mark as failed with a sentinel by inserting an empty slot — but Texture2D has no
@@ -1194,8 +1301,11 @@ Texture2D* SceneRenderer::textureForMaterial(const std::string& materialId,
             constexpr size_t kMaxInlineImageBytes = 16ull * 1024ull * 1024ull;
             constexpr int kMaxInlineImagePixels = 16 * 1024 * 1024;
             const std::string cacheKey = "inline-data:" + textureId;
-            if (auto cached = textureCache_.find(cacheKey); cached != textureCache_.end())
+            if (auto cached = textureCache_.find(cacheKey); cached != textureCache_.end()) {
+                ++lastTextureProcessingStats_.cacheHits;
                 return &cached->second;
+            }
+            TextureMissTimer timer{lastTextureProcessingStats_};
             std::vector<unsigned char> encoded;
             std::string mimeType;
             if (!tinygltf::DecodeDataURI(&encoded, mimeType, texIt->second.uri, 0, false) ||
@@ -1225,6 +1335,7 @@ Texture2D* SceneRenderer::textureForMaterial(const std::string& materialId,
             auto [inserted, ok] = textureCache_.emplace(
                 cacheKey, Texture2D::CreateFromPixels(device_, width, height, rgba));
             (void)ok;
+            timer.uploaded = true;
             return &inserted->second;
         }
         return loadOrGetTexture((doc.sourcePath / texIt->second.uri).string());
@@ -1251,8 +1362,10 @@ Texture2D* SceneRenderer::textureForMaterial(const std::string& materialId,
         failed->second.lastWriteTime == sourceStamp;
     Texture2D* texture = nullptr;
     if (cached != textureCache_.end()) {
+        ++lastTextureProcessingStats_.cacheHits;
         texture = &cached->second;
     } else if (!unchangedFailure) {
+        TextureMissTimer timer{lastTextureProcessingStats_};
         std::string error;
         auto raster = mc3togltf::rasterizeSvgTexture(svgIt->second, doc.sourcePath, &error);
         if (!raster.rgba.empty()) {
@@ -1260,6 +1373,7 @@ Texture2D* SceneRenderer::textureForMaterial(const std::string& materialId,
                 cacheKey, Texture2D::CreateFromPixels(device_, raster.width, raster.height, raster.rgba));
             (void)ok;
             texture = &inserted->second;
+            timer.uploaded = true;
             svgTextureCacheState_[cacheKey] = {sourceStamp};
             svgTextureFailureState_.erase(cacheKey);
         } else {
@@ -1345,7 +1459,10 @@ const RenderMesh& SceneRenderer::getOrBuildTorusMesh(int ringSeg, int tubeSeg,
     auto it = torusMeshCache_.find(key);
     if (it != torusMeshCache_.end()) return it->second;
 
-    if (torusMeshCache_.size() > 128) torusMeshCache_.clear();
+    if (torusMeshCache_.size() > 128) {
+        torusMeshCache_.clear();
+        clearGpuBufferCaches();
+    }
     RenderMesh mesh;
     buildUnitTorus(ringSeg, tubeSeg, mesh, majorRadius, minorRadius);
     auto [ins, ok] = torusMeshCache_.emplace(key, std::move(mesh));
@@ -1359,7 +1476,10 @@ const RenderMesh& SceneRenderer::getOrBuildCapsuleMesh(int segments, float radiu
     auto it = capsuleMeshCache_.find(key);
     if (it != capsuleMeshCache_.end()) return it->second;
 
-    if (capsuleMeshCache_.size() > 128) capsuleMeshCache_.clear();
+    if (capsuleMeshCache_.size() > 128) {
+        capsuleMeshCache_.clear();
+        clearGpuBufferCaches();
+    }
     RenderMesh mesh;
     buildUnitCapsule(segments, mesh, radius, height);
     auto [ins, ok] = capsuleMeshCache_.emplace(key, std::move(mesh));
@@ -1409,10 +1529,7 @@ void SceneRenderer::drawObjectWireframe(const Mc3Object& obj, const Mc3Document&
     Matrix scaleM = Matrix::CreateScale({ sx * obj.transform.scale[0],
                                           sy * obj.transform.scale[1],
                                           sz * obj.transform.scale[2] });
-    float rx = obj.transform.rotation[0] * (std::numbers::pi_v<float> / 180.0f);
-    float ry = obj.transform.rotation[1] * (std::numbers::pi_v<float> / 180.0f);
-    float rz = obj.transform.rotation[2] * (std::numbers::pi_v<float> / 180.0f);
-    Matrix rotM = Matrix::CreateFromYawPitchRoll(ry, rx, rz);
+    Matrix rotM = MeshCraft::rotationMatrixForDocumentAlg(doc, obj.transform.rotation);
     Matrix transM = Matrix::getIdentityProperty();
     transM.setTranslationProperty({ obj.transform.position[0],
                                     obj.transform.position[1],
@@ -1552,7 +1669,7 @@ void SceneRenderer::drawObject(const Mc3Object& obj, const Mc3Document& doc,
     if (!effectiveObjectVisibilityAlg(obj.visible, visibilityOverride)) return;
 
     const Mc3Transform& tf = animTransform.has_value() ? *animTransform : obj.transform;
-    Matrix world = objectWorldMatrix(tf) * parentWorld;
+    Matrix world = objectWorldMatrix(tf, doc) * parentWorld;
     bool  sel    = isSelected(obj, selected);
 
     // SYS-W14-29: select an authored definition LOD before the regular draw
@@ -1989,6 +2106,8 @@ void SceneRenderer::draw(const Mc3Document& doc,
                           const Matrix& view, const Matrix& proj,
                           const std::vector<const Mc3Object*>& selected)
 {
+    lastGpuBufferCacheStats_ = {};
+    lastTextureProcessingStats_ = {};
     device_.SetDepthTestEnabled(true);
     device_.SetDepthWriteEnabled(true);
 
@@ -2032,7 +2151,7 @@ void SceneRenderer::drawEmissiveObject(
     if (depth > 16 || !obj.visible) return;
 
     const Mc3Transform& tf = obj.transform;
-    Matrix world  = objectWorldMatrix(tf) * parentWorld;
+    Matrix world  = objectWorldMatrix(tf, doc) * parentWorld;
     Matrix deform = obj.deform
         ? Matrix::CreateScale({obj.deform->scale[0], obj.deform->scale[1], obj.deform->scale[2]})
         : Matrix::getIdentityProperty();
@@ -2327,10 +2446,9 @@ void SceneRenderer::drawLightGizmos(
         drawLineList(lines, view, proj);
 }
 
-Vector3 SceneRenderer::cameraForwardFromRotation(const std::array<float,3>& rotationDegrees) {
-    constexpr float d = std::numbers::pi_v<float> / 180.0f;
-    Matrix rot = Matrix::CreateFromYawPitchRoll(
-        rotationDegrees[1] * d, rotationDegrees[0] * d, rotationDegrees[2] * d);
+Vector3 SceneRenderer::cameraForwardFromRotation(const Mc3Document& document,
+                                                 const std::array<float,3>& rotation) {
+    Matrix rot = MeshCraft::rotationMatrixForDocumentAlg(document, rotation);
     return Vector3::TransformNormal(Vector3{0.0f, 0.0f, -1.0f}, rot);
 }
 
@@ -2360,7 +2478,7 @@ void SceneRenderer::drawCameraGizmos(
         // position, silently pointing it at the origin.
         float dx, dy, dz;
         if (cam.rotation.has_value()) {
-            Vector3 fwd = cameraForwardFromRotation(*cam.rotation);
+            Vector3 fwd = cameraForwardFromRotation(doc, *cam.rotation);
             dx = fwd.X; dy = fwd.Y; dz = fwd.Z;
         } else {
             dx = cam.target[0]-p[0]; dy = cam.target[1]-p[1]; dz = cam.target[2]-p[2];
@@ -2425,7 +2543,7 @@ void SceneRenderer::drawCsgGizmos(const Mc3::Mc3Document& doc,
     std::function<void(const Mc3Object&, const Matrix&, int)> visit;
     visit = [&](const Mc3Object& obj, const Matrix& parentWorld, int depth) {
         if (depth > 16) return;  // SYS-W1-07: guard against a cyclic children graph
-        Matrix world = objectWorldMatrix(obj.transform) * parentWorld;
+        Matrix world = objectWorldMatrix(obj.transform, doc) * parentWorld;
 
         if (obj.type == ObjectType::Union ||
             obj.type == ObjectType::Difference ||
@@ -2464,7 +2582,7 @@ Matrix SceneRenderer::computeObjectWorldMatrix(const Mc3Object& target,
     find = [&](const std::vector<std::shared_ptr<Mc3Object>>& list, const Matrix& parent, int depth) -> bool {
         if (depth > 16) return false;  // SYS-W1-07: guard against a cyclic children graph
         for (const auto& obj : list) {
-            Matrix world = objectWorldMatrix(obj->transform) * parent;
+            Matrix world = objectWorldMatrix(obj->transform, doc) * parent;
             if (obj.get() == &target) { result = world; return true; }
             if (!obj->children.empty() && find(obj->children, world, depth + 1)) return true;
         }

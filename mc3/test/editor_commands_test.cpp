@@ -1541,18 +1541,18 @@ static void testAiPanelResetRegistryDialogBehavior()
     // Registry dialog opened FROM this AI result: Reset must close it.
     AiPanelStateAlg st;
     st.aiPendingDocSet = true;
-    st.regSaveFromAi   = true;
-    st.regSaveDlgOpen  = true;
+    st.registrySaveFromAi   = true;
+    st.registrySaveDlgOpen  = true;
     aiResetAlg(st);
-    CHECK(!st.regSaveDlgOpen, "AI Reset closes the registry save dialog opened from this AI result");
-    CHECK(!st.regSaveFromAi,  "AI Reset clears regSaveFromAi_");
+    CHECK(!st.registrySaveDlgOpen, "AI Reset closes the registry save dialog opened from this AI result");
+    CHECK(!st.registrySaveFromAi,  "AI Reset clears the RegistryWorkspace AI save source");
 
     // Registry dialog opened independently (not from AI): Reset must leave it alone.
     AiPanelStateAlg st2;
-    st2.regSaveFromAi = false;
-    st2.regSaveDlgOpen = true;
+    st2.registrySaveFromAi = false;
+    st2.registrySaveDlgOpen = true;
     aiResetAlg(st2);
-    CHECK(st2.regSaveDlgOpen, "AI Reset leaves an independently-opened registry dialog alone");
+    CHECK(st2.registrySaveDlgOpen, "AI Reset leaves an independently-opened registry dialog alone");
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1565,9 +1565,9 @@ static void testAiSaveToRegistryUsesAiPendingDoc()
     st.aiPendingDocSet = true;
     aiSaveToRegistryClickAlg(st, "goblinHut");
 
-    CHECK(st.regSaveDefId == "goblinHut",
+    CHECK(st.registrySaveDefId == "goblinHut",
           "AI Save to Registry: records the AI result's definition id to pre-fill");
-    CHECK(st.regSaveFromAi,
+    CHECK(st.registrySaveFromAi,
           "AI Save to Registry: marks the pending save as AI-sourced");
     CHECK(registrySaveUsesAiDefinitionsAlg(st),
           "STAB-0347: after Save to Registry from AI, the save dialog sources definitions "
@@ -1590,7 +1590,7 @@ static void testAiSaveToRegistryWorksWithoutApply()
     AiPanelStateAlg st;
     st.aiPendingDocSet = true; // AI response validated — this alone is the gate
     aiSaveToRegistryClickAlg(st, "def1"); // no aiApplyToSceneAlg(st) call before this
-    CHECK(st.regSaveFromAi,
+    CHECK(st.registrySaveFromAi,
           "STAB-0348: Save to Registry succeeds without a prior Apply to Scene");
 }
 
@@ -3196,16 +3196,27 @@ static void testPickObjectByRay()
     CHECK(pickObjectByRayAlg(rootsE, rayOrig, rayDir) == near,
           "of two objects along the same ray, the nearer one wins regardless of list order");
 
-    // Recursion: a child object in the ray's path is found even when its
-    // parent (elsewhere in space) is not itself hit.
+    // Recursion: a child inherits its parent's transform. Its local offset
+    // cancels the parent's position here, placing the child at the ray while
+    // the parent itself remains elsewhere.
     auto parent = makeObj("group1", "Group1", Mc3::ObjectType::Group);
     parent->transform.position = {50.0f, 50.0f, 50.0f};
     auto child = makeObj("child1", "Child1", Mc3::ObjectType::Instance);
-    child->transform.position = {0.0f, 0.0f, 0.0f};
+    child->transform.position = {-50.0f, -50.0f, -50.0f};
     parent->children.push_back(child);
     std::vector<std::shared_ptr<Mc3Object>> rootsF{parent};
     CHECK(pickObjectByRayAlg(rootsF, rayOrig, rayDir) == child,
-          "a child object in the ray's path is found by recursion, even though its parent isn't hit");
+          "a child inherits its parent transform and is found at its world-space position");
+
+    // A radians/Y-axis rotation turns this long X box so its world-space X
+    // extent is tiny.  The off-axis ray must miss only when the document's
+    // declared convention is applied.
+    auto rotated = makeObj("rotated", "Rotated", Mc3::ObjectType::Box);
+    rotated->primitive = Mc3::Mc3Primitive::box({4.0f, 1.0f, 0.2f});
+    rotated->transform.rotation = {0.0f, std::numbers::pi_v<float> * 0.5f, 0.0f};
+    std::array<float,3> rotationRayOrig{0.5f, 0.0f, -10.0f};
+    CHECK(pickObjectByRayAlg({rotated}, rotationRayOrig, rayDir, "radians", "XYZ") == nullptr,
+          "picking applies radians and Euler order when forming world bounds");
 
     // Empty scene / no hit at all.
     std::vector<std::shared_ptr<Mc3Object>> rootsG{};

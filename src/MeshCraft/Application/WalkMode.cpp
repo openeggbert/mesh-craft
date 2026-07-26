@@ -1,6 +1,7 @@
 #include "MeshCraft/Application/MeshCraftApplication.hpp"
 #include "MeshCraft/CoordinateSystemAlgorithms.hpp"
 #include "MeshCraft/MeshCraftPrivate.hpp"
+#include "MeshCraft/RotationConventionCna.hpp"
 
 #include <Microsoft/Xna/Framework/Input/Keys.hpp>
 #include <Microsoft/Xna/Framework/Input/KeyboardState.hpp>
@@ -27,14 +28,11 @@ using namespace Microsoft::Xna::Framework;
 
 namespace {
 
-Matrix walkColliderWorldMatrix(const Mc3::Mc3Transform& t) {
-    constexpr float radiansPerDegree = std::numbers::pi_v<float> / 180.0f;
+Matrix walkColliderWorldMatrix(const Mc3::Mc3Transform& t, const Mc3::Mc3Document& doc) {
     const float px = t.pivot[0], py = t.pivot[1], pz = t.pivot[2];
     return Matrix::CreateTranslation({-px, -py, -pz}) *
            Matrix::CreateScale({t.scale[0], t.scale[1], t.scale[2]}) *
-           Matrix::CreateFromYawPitchRoll(t.rotation[1] * radiansPerDegree,
-                                          t.rotation[0] * radiansPerDegree,
-                                          t.rotation[2] * radiansPerDegree) *
+           MeshCraft::rotationMatrixForDocumentAlg(doc, t.rotation) *
            Matrix::CreateTranslation({t.position[0] + px, t.position[1] + py, t.position[2] + pz});
 }
 
@@ -189,7 +187,7 @@ WalkColliderBuildReport buildWalkColliders(const Mc3::Mc3Document& doc) {
     std::function<void(const Mc3::Mc3Object&, const Matrix&, int)> visit;
     visit = [&](const Mc3::Mc3Object& obj, const Matrix& parentWorld, int depth) {
         if (depth > 16) return; // same graph-safety bound as SceneRenderer
-        const Matrix world = walkColliderWorldMatrix(obj.transform) * parentWorld;
+        const Matrix world = walkColliderWorldMatrix(obj.transform, doc) * parentWorld;
         if (!obj.collision.empty() && obj.collision != "none") {
             std::optional<Editor::WalkCollider> collider;
             if (obj.collision == "box")
@@ -246,6 +244,7 @@ void MeshCraftApplication::enterWalkMode() {
 
 void MeshCraftApplication::exitWalkMode() {
     auto s = walkController_.exit();
+    automationWorkspace_.clearPreviewAreaMembership();
     walkColliders_.clear();
     walkUnsupportedProxyCount_ = 0;
     walkProxyBudgetDroppedCount_ = 0;
@@ -261,6 +260,7 @@ void MeshCraftApplication::updateWalkMode(float dt,
                                            int mouseDx, int mouseDy)
 {
     if (auto exitState = walkController_.update(dt, ks, mouseDx, mouseDy, walkColliders_)) {
+        automationWorkspace_.clearPreviewAreaMembership();
         walkColliders_.clear();
         walkUnsupportedProxyCount_ = 0;
         walkProxyBudgetDroppedCount_ = 0;

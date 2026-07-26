@@ -2237,6 +2237,59 @@ void PropertiesPanel::draw(float panelX, float panelY, float panelW, float panel
             }
         }
 
+        // Rotation convention. Changing either declaration intentionally
+        // changes the interpretation of authored triples; use the explicit
+        // Normalize action when a static document should retain its current
+        // visual result while moving to degrees/XYZ.
+        {
+            const char* unitOpts[] = {"degrees", "radians"};
+            int unitIdx = ctx.document.rotationUnits == "radians" ? 1 : 0;
+            ImGui::TextDisabled("Rotation Units");
+            ImGui::SetNextItemWidth(-1);
+            if (ImGui::Combo("##scrotationunits", &unitIdx, unitOpts, 2)) {
+                ctx.pushUndo();
+                ctx.document.rotationUnits = unitOpts[unitIdx];
+                ctx.markModified();
+            }
+            ImGui::SetItemTooltip(
+                "Honored by rendering, picking, gizmos, cameras and animation. "
+                "Changing this declaration does not convert existing values.");
+
+            const char* orderOpts[] = {"XYZ", "XZY", "YXZ", "YZX", "ZXY", "ZYX"};
+            int orderIdx = 0;
+            for (int i = 0; i < 6; ++i)
+                if (ctx.document.eulerOrder == orderOpts[i]) { orderIdx = i; break; }
+            ImGui::TextDisabled("Euler Order");
+            ImGui::SetNextItemWidth(-1);
+            if (ImGui::Combo("##sceulerorder", &orderIdx, orderOpts, 6)) {
+                ctx.pushUndo();
+                ctx.document.eulerOrder = orderOpts[orderIdx];
+                ctx.markModified();
+            }
+            ImGui::SetItemTooltip(
+                "The order in which X/Y/Z rotations are applied. "
+                "Changing it does not convert existing values.");
+
+            const bool alreadyNormal = ctx.document.rotationUnits == "degrees" &&
+                normalisedEulerOrderAlg(ctx.document.eulerOrder) == "XYZ";
+            const bool animatedRotation = hasAnimatedRotationAlg(ctx.document);
+            const bool canNormalize = !alreadyNormal && !animatedRotation;
+            if (!canNormalize) ImGui::BeginDisabled();
+            if (ImGui::Button("Normalize rotation to degrees/XYZ")) {
+                ctx.pushUndo();
+                normalizeRotationConventionToDegreesXYZAlg(ctx.document);
+                ctx.markModified();
+            }
+            if (!canNormalize) ImGui::EndDisabled();
+            ImGui::SetItemTooltip(animatedRotation
+                ? "Unavailable: Euler rotation animation is preserved unchanged. "
+                  "The live editor already honors its document convention."
+                : alreadyNormal
+                    ? "This document already uses degrees/XYZ."
+                    : "Bake static object, state, definition and camera rotations into degrees/XYZ "
+                      "without changing their visual result.");
+        }
+
         // Default camera
         if (!ctx.document.cameras.empty()) {
             ImGui::TextDisabled("Default Camera");

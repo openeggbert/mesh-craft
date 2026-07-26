@@ -298,11 +298,12 @@ std::size_t SceneHistory::evictFor(std::size_t requiredBytes, SnapshotKind incom
     return evicted;
 }
 
-SceneHistory::CaptureResult SceneHistory::capture(Mc3::Mc3Document doc,
+SceneHistory::CaptureResult SceneHistory::capture(DocumentSnapshot snapshot,
                                                    std::vector<std::string> selectionIds,
                                                    std::string label,
                                                    SnapshotKind kind) {
-    const std::size_t bytes = estimateDocumentBytes(doc) +
+    if (!snapshot) return {false, 0, 0, "Snapshot document is empty"};
+    const std::size_t bytes = estimateDocumentBytes(*snapshot) +
         selectionIds.capacity() * sizeof(std::string) +
         std::accumulate(selectionIds.begin(), selectionIds.end(), std::size_t{0},
                         [](std::size_t sum, const std::string& id) { return sum + estimateString(id); });
@@ -326,18 +327,18 @@ SceneHistory::CaptureResult SceneHistory::capture(Mc3::Mc3Document doc,
     if (usedBytes_ + bytes > budgetBytes_) {
         return {false, 0, evicted, "Automatic history is preserving named checkpoints within the budget"};
     }
-    Snapshot snapshot;
-    snapshot.info.id = nextId_++;
-    snapshot.info.kind = kind;
-    snapshot.info.label = label.empty() ? (kind == SnapshotKind::Checkpoint ? "Checkpoint" : "Before edit")
+    Snapshot storedSnapshot;
+    storedSnapshot.info.id = nextId_++;
+    storedSnapshot.info.kind = kind;
+    storedSnapshot.info.label = label.empty() ? (kind == SnapshotKind::Checkpoint ? "Checkpoint" : "Before edit")
                                         : std::move(label);
-    snapshot.info.estimatedBytes = bytes;
-    snapshot.info.objectCount = countObjects(doc);
-    snapshot.doc = std::move(doc);
-    snapshot.selectionIds = std::move(selectionIds);
+    storedSnapshot.info.estimatedBytes = bytes;
+    storedSnapshot.info.objectCount = countObjects(*snapshot);
+    storedSnapshot.snapshot = std::move(snapshot);
+    storedSnapshot.selectionIds = std::move(selectionIds);
     usedBytes_ += bytes;
-    const SnapshotId id = snapshot.info.id;
-    snapshots_.push_back(std::move(snapshot));
+    const SnapshotId id = storedSnapshot.info.id;
+    snapshots_.push_back(std::move(storedSnapshot));
     return {true, id, evicted, {}};
 }
 
@@ -376,7 +377,7 @@ std::optional<SceneHistory::RestoredState> SceneHistory::restore(SnapshotId id) 
         return snapshot.info.id == id;
     });
     if (it == snapshots_.end()) return std::nullopt;
-    return RestoredState{cloneDocument(it->doc), it->selectionIds};
+    return RestoredState{cloneDocument(*it->snapshot), it->selectionIds};
 }
 
 std::optional<SceneHistory::Diff> SceneHistory::diffAgainst(SnapshotId id,
@@ -388,7 +389,7 @@ std::optional<SceneHistory::Diff> SceneHistory::diffAgainst(SnapshotId id,
 
     std::map<std::string, FlatObject> before;
     std::map<std::string, FlatObject> after;
-    flattenObjects(it->doc.objects, "root", before);
+    flattenObjects(it->snapshot->objects, "root", before);
     flattenObjects(current.objects, "root", after);
     Diff diff;
     auto addChange = [&](ChangeKind kind, const FlatObject& object, std::string detail) {
@@ -410,7 +411,7 @@ std::optional<SceneHistory::Diff> SceneHistory::diffAgainst(SnapshotId id,
     for (const auto& [key, object] : after) {
         if (!before.contains(key)) addChange(ChangeKind::Added, object, "present only in the current scene");
     }
-    diff.sceneResourcesChanged = sceneResourceSignature(it->doc) != sceneResourceSignature(current);
+    diff.sceneResourcesChanged = sceneResourceSignature(*it->snapshot) != sceneResourceSignature(current);
     if (diff.sceneResourcesChanged) {
         FlatObject scene{"[scene resources]", {}};
         addChange(ChangeKind::Modified, scene, "materials, metadata, imports, cameras, lights or other scene resources changed");

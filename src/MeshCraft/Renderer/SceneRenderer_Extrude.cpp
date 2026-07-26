@@ -514,7 +514,7 @@ void SceneRenderer::drawObjectEdges(const Mc3Object& obj, const Mc3Document& doc
     if (!obj.visible) return;
     if (depth > 16) return;
 
-    Matrix world = objectWorldMatrix(obj.transform) * parentWorld;
+    Matrix world = objectWorldMatrix(obj.transform, doc) * parentWorld;
     Color edgeColor(0, 0, 0, 220);
     Vector3 edgeLightDirection{0.0f, -1.0f, 0.0f};
     for (const auto& light : doc.lights) {

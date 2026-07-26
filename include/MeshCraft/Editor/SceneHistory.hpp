@@ -1,6 +1,6 @@
 #pragma once
 
-#include "MeshCraft/Mc3/Mc3Document.hpp"
+#include "MeshCraft/Editor/DocumentSnapshot.hpp"
 
 #include <cstddef>
 #include <cstdint>
@@ -72,13 +72,20 @@ public:
     [[nodiscard]] std::size_t snapshotCount() const { return snapshots_.size(); }
     [[nodiscard]] std::vector<SnapshotInfo> snapshots() const;
 
-    // `doc` must already be a deep, independent snapshot. Automatic entries
+    // `snapshot` must have been frozen from a deep, independent document.
+    // Automatic entries may share it with UndoManager. Automatic entries
     // evict only older automatic entries; named checkpoints first evict older
     // automatic entries and, only if necessary, the oldest checkpoint, so the
     // configured budget is never exceeded. A single oversize snapshot is
     // rejected rather than weakening the budget.
-    CaptureResult capture(Mc3::Mc3Document doc, std::vector<std::string> selectionIds,
+    CaptureResult capture(DocumentSnapshot snapshot, std::vector<std::string> selectionIds,
                           std::string label, SnapshotKind kind);
+    CaptureResult capture(Mc3::Mc3Document independentDocument,
+                          std::vector<std::string> selectionIds,
+                          std::string label, SnapshotKind kind) {
+        return capture(freezeDocument(std::move(independentDocument)), std::move(selectionIds),
+                       std::move(label), kind);
+    }
     BudgetResult setBudgetBytes(std::size_t bytes);
     bool remove(SnapshotId id);
     void clear();
@@ -94,7 +101,7 @@ public:
 private:
     struct Snapshot {
         SnapshotInfo info;
-        Mc3::Mc3Document doc;
+        DocumentSnapshot snapshot;
         std::vector<std::string> selectionIds;
     };
 

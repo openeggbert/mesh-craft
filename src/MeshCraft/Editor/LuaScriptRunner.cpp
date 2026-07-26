@@ -1,14 +1,18 @@
 #include "MeshCraft/Editor/LuaScriptRunner.hpp"
 
+#include "MeshCraft/EditorAlgorithms.hpp"
 #include "MeshCraft/Mc3/Mc3Object.hpp"
 
 #define SOL_ALL_SAFETIES_ON 1
 #include <sol/sol.hpp>
 
 #include <array>
+#include <cmath>
+#include <cstdlib>
 #include <memory>
 #include <stdexcept>
 #include <tuple>
+#include <unordered_set>
 #include <vector>
 
 using namespace MeshCraft::Mc3;
@@ -16,6 +20,140 @@ using namespace MeshCraft::Mc3;
 namespace MeshCraft::Editor {
 
 namespace {
+
+constexpr std::size_t kLuaMemoryBudgetBytes = 16U * 1024U * 1024U;
+
+struct LuaMemoryBudget {
+    std::size_t allocated{0};
+};
+
+// Lua uses this allocator for every VM allocation.  Its `oldSize` contract
+// lets the runner enforce a strict aggregate budget without exposing a custom
+// allocator or an unbounded auxiliary allocation map to script code.
+void* budgetedLuaAllocator(void* userData, void* pointer, std::size_t oldSize,
+                           std::size_t newSize) noexcept
+{
+    auto& budget = *static_cast<LuaMemoryBudget*>(userData);
+    const std::size_t retained = oldSize <= budget.allocated
+        ? budget.allocated - oldSize : 0;
+    if (newSize == 0) {
+        std::free(pointer);
+        budget.allocated = retained;
+        return nullptr;
+    }
+    if (newSize > kLuaMemoryBudgetBytes - retained) return nullptr;
+    void* replacement = std::realloc(pointer, newSize);
+    if (!replacement) return nullptr;
+    budget.allocated = retained + newSize;
+    return replacement;
+}
+
+bool finite(float value) { return std::isfinite(value); }
+
+void requireFinite(const std::array<float, 3>& values, const char* field)
+{
+    for (const float value : values) {
+        if (!finite(value))
+            throw std::runtime_error(std::string(field) + " must contain only finite values");
+    }
+}
+
+Mc3Document deepCopyDocumentForScript(const Mc3Document& source)
+{
+    Mc3Document copy = source;
+    copy.objects.clear();
+    for (const auto& object : source.objects) {
+        if (!object) throw std::runtime_error("document contains a null root object");
+        copy.objects.push_back(MeshCraft::deepCopyObjectAlg(*object));
+    }
+    copy.definitions.clear();
+    for (const auto& [key, object] : source.definitions) {
+        if (!object) throw std::runtime_error("document definition '" + key + "' is null");
+        copy.definitions[key] = MeshCraft::deepCopyObjectAlg(*object);
+    }
+    return copy;
+}
+
+void collectObjectsById(std::vector<std::shared_ptr<Mc3Object>>& objects,
+                        const std::string& id, std::vector<Mc3Object*>& matches,
+                        int depth = 0)
+{
+    if (depth > 256) throw std::runtime_error("object nesting exceeds 256 levels");
+    for (const auto& object : objects) {
+        if (!object) throw std::runtime_error("document contains a null object");
+        if (object->id == id) matches.push_back(object.get());
+        collectObjectsById(object->children, id, matches, depth + 1);
+    }
+}
+
+Mc3Object* resolveTransactionalTarget(Mc3Document& source, Mc3Document& working,
+                                      Mc3Object* target)
+{
+    if (!target) return nullptr;
+    if (target->id.empty())
+        throw std::runtime_error("script target needs a non-empty unique object id");
+
+    std::vector<Mc3Object*> sourceMatches;
+    collectObjectsById(source.objects, target->id, sourceMatches);
+    if (sourceMatches.size() != 1 || sourceMatches.front() != target)
+        throw std::runtime_error("script target is detached or its object id is ambiguous");
+
+    std::vector<Mc3Object*> workingMatches;
+    collectObjectsById(working.objects, target->id, workingMatches);
+    if (workingMatches.size() != 1)
+        throw std::runtime_error("could not resolve the script target in the transaction copy");
+    return workingMatches.front();
+}
+
+void validateScriptObjectTree(const std::vector<std::shared_ptr<Mc3Object>>& objects,
+                              const Mc3Document& document,
+                              std::unordered_set<const Mc3Object*>& visited,
+                              int depth = 0)
+{
+    if (depth > 256) throw std::runtime_error("validation rejected object nesting beyond 256 levels");
+    for (const auto& object : objects) {
+        if (!object) throw std::runtime_error("validation rejected a null object");
+        if (!visited.insert(object.get()).second)
+            throw std::runtime_error("validation rejected a repeated/cyclic object reference");
+        requireFinite(object->transform.position, "object position");
+        requireFinite(object->transform.rotation, "object rotation");
+        requireFinite(object->transform.scale, "object scale");
+        requireFinite(object->transform.pivot, "object pivot");
+        if (!object->material.empty() && !document.materials.count(object->material))
+            throw std::runtime_error("validation rejected unknown material: " + object->material);
+        if (!object->materialOverride.empty() && !document.materials.count(object->materialOverride))
+            throw std::runtime_error("validation rejected unknown material override: " +
+                                     object->materialOverride);
+        for (const auto& [_, state] : object->states) {
+            if (state.position) requireFinite(*state.position, "state position");
+            if (state.rotation) requireFinite(*state.rotation, "state rotation");
+            if (state.scale) requireFinite(*state.scale, "state scale");
+        }
+        validateScriptObjectTree(object->children, document, visited, depth + 1);
+    }
+}
+
+void validateScriptResult(const Mc3Document& document)
+{
+    std::unordered_set<const Mc3Object*> visited;
+    validateScriptObjectTree(document.objects, document, visited);
+    for (const auto& [_, definition] : document.definitions) {
+        if (!definition) throw std::runtime_error("validation rejected a null definition");
+        validateScriptObjectTree({definition}, document, visited);
+    }
+
+    // Re-use the format validator as the final whole-document validation
+    // boundary. The semantic checks above additionally reject values that Lua
+    // can create directly but a parse-time sanitizer would otherwise repair.
+    Mc3Validation validation;
+    document.validate(validation);
+    if (validation.hasErrors()) {
+        for (const auto& entry : validation.entries) {
+            if (entry.severity == Mc3ValidationSeverity::Error)
+                throw std::runtime_error("validation rejected script result: " + entry.message);
+        }
+    }
+}
 
 // No equivalent already exists on Mc3Document itself (MeshCraftApplication's
 // own flatFindById/flatFindByName are private members of that CNA-coupled
@@ -64,6 +202,7 @@ struct PlacementApi {
         if (!doc->definitions.count(definitionRef))
             throw std::runtime_error(
                 "unknown definition (not resolved/imported): " + definitionRef);
+        requireFinite(position, "placement position");
 
         auto instance                = std::make_shared<Mc3Object>();
         instance->type               = ObjectType::Instance;
@@ -107,6 +246,7 @@ struct PlacementApi {
 // dangle mid-script).
 struct ObjectHandle {
     Mc3Object* obj;
+    const Mc3Document* doc;
 
     std::string get_name() const { return obj->name; }
     std::string get_id()   const { return obj->id; }
@@ -114,23 +254,39 @@ struct ObjectHandle {
     std::tuple<float, float, float> get_position() const {
         return {obj->transform.position[0], obj->transform.position[1], obj->transform.position[2]};
     }
-    void set_position(float x, float y, float z) { obj->transform.position = {x, y, z}; }
+    void set_position(float x, float y, float z) {
+        const std::array<float, 3> value{x, y, z};
+        requireFinite(value, "position");
+        obj->transform.position = value;
+    }
 
     std::tuple<float, float, float> get_rotation() const {
         return {obj->transform.rotation[0], obj->transform.rotation[1], obj->transform.rotation[2]};
     }
-    void set_rotation(float x, float y, float z) { obj->transform.rotation = {x, y, z}; }
+    void set_rotation(float x, float y, float z) {
+        const std::array<float, 3> value{x, y, z};
+        requireFinite(value, "rotation");
+        obj->transform.rotation = value;
+    }
 
     std::tuple<float, float, float> get_scale() const {
         return {obj->transform.scale[0], obj->transform.scale[1], obj->transform.scale[2]};
     }
-    void set_scale(float x, float y, float z) { obj->transform.scale = {x, y, z}; }
+    void set_scale(float x, float y, float z) {
+        const std::array<float, 3> value{x, y, z};
+        requireFinite(value, "scale");
+        obj->transform.scale = value;
+    }
 
     bool get_visible() const { return obj->visible; }
     void set_visible(bool v) { obj->visible = v; }
 
     std::string get_material() const { return obj->material; }
-    void set_material(const std::string& m) { obj->material = m; }
+    void set_material(const std::string& m) {
+        if (!m.empty() && !doc->materials.count(m))
+            throw std::runtime_error("unknown material: " + m);
+        obj->material = m;
+    }
 };
 
 // The `scene` global itself -- broader than mesh-world's scope, added
@@ -142,7 +298,7 @@ struct SceneApi {
     sol::object find(const std::string& key, sol::this_state ts) const {
         Mc3Object* found = findByIdOrName(*doc, key);
         if (!found) return sol::nil;
-        return sol::make_object(ts, ObjectHandle{found});
+        return sol::make_object(ts, ObjectHandle{found, doc});
     }
 };
 
@@ -171,11 +327,17 @@ void instructionBudgetHook(lua_State* L, lua_Debug*) {
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Warray-bounds"
 #endif
-std::string LuaScriptRunner::run(const std::string& source, Mc3Document& doc, Mc3Object* target) {
+std::string LuaScriptRunner::run(const std::string& source, Mc3Document& doc,
+                                 Mc3Object* target,
+                                 const std::function<void()>& beforeCommit) {
     if (source.empty()) return ""; // matches Mc3Script::hasSource()'s own "empty is a no-op" convention
 
     try {
-        sol::state lua;
+        Mc3Document working = deepCopyDocumentForScript(doc);
+        Mc3Object* workingTarget = resolveTransactionalTarget(doc, working, target);
+
+        LuaMemoryBudget memoryBudget;
+        sol::state lua(sol::default_at_panic, budgetedLuaAllocator, &memoryBudget);
         lua.open_libraries(sol::lib::base, sol::lib::math, sol::lib::string, sol::lib::table);
 
         // Sandbox: identical discipline to mesh-world's LuaRuntime/
@@ -216,10 +378,10 @@ std::string LuaScriptRunner::run(const std::string& source, Mc3Document& doc, Mc
             sol::no_constructor,
             "find", &SceneApi::find);
 
-        PlacementApi placementApi{target, &doc};
+        PlacementApi placementApi{workingTarget, &working};
         lua["def"] = &placementApi;
 
-        SceneApi sceneApi{&doc};
+        SceneApi sceneApi{&working};
         lua["scene"] = &sceneApi;
 
         auto result = lua.safe_script(source, sol::script_pass_on_error);
@@ -227,6 +389,9 @@ std::string LuaScriptRunner::run(const std::string& source, Mc3Document& doc, Mc
             sol::error err = result;
             return std::string("Lua error: ") + err.what();
         }
+        validateScriptResult(working);
+        if (beforeCommit) beforeCommit();
+        doc = std::move(working);
         return "";
     } catch (const std::exception& e) {
         return std::string("LuaScriptRunner error: ") + e.what();
