@@ -663,15 +663,16 @@ a stale-build false positive rather than hidden behind a longer timeout.
 
 The P1 alternate-backend qualification (`SYS-W8-05`) remains blocked by CNA's
 missing cross-backend custom-effect contract and a first-frame Vulkan backend
-crash outside this repository. The only deferred audit row is Android
-(`AUD-042`): this workspace has no Android NDK, and selecting a real Android
-graphics path would require a CNA ownership decision.
+crash outside this repository. Broad backend qualification is now deliberately
+postponed by user priority. Android (`AUD-042`) is an intended supported
+platform, but this workspace has no Android NDK and a real GLES/EASYGL editor
+path still requires CNA/backend validation.
 
 ## 5. Known bugs and limitations
 
 - **Web/Windows build status: needs re-verification**, not checked this
   session — see §2's caveat and README.md's own platform table.
-- **`SYS-W3-01` (in progress, not a bug):** `MeshCraftApplication` god
+- **`SYS-W3-01` (deferred by user priority, not a bug):** `MeshCraftApplication` god
   object, 12 subsystems extracted so far (`KeybindingManager`,
   `Preferences`, `MacroRecorder`, `UndoManager`, animation-override
   computation, `WalkController`, `AudioPreview`, `CameraBookmarks`). File
@@ -856,7 +857,8 @@ git stash pop && cmake --build b-release -j4 --target <affected-target>
 ## 8. Next smallest tasks
 
 No actionable follow-up audit task remains: `AUD-089` through `AUD-092` are
-complete, while Android (`AUD-042`) is environment/owner deferred.
+complete. Android (`AUD-042`) remains environment-blocked, but is now an
+explicit supported-platform goal rather than a possible rejection path.
 `SYS-W3-01` has 12 completed subsystem phases and an active Phase 13 for
 application/UI ownership. The authorized Camera Bookmarks, Camera Preset Overlay, Gizmo Drag Overlay, Stats Overlay, Measurement Overlay, Status Bar, Walk Mode, View
 Bloom/SSAO, Help, Add/CSG, Edit-history, Edit-clipboard, and Edit-object-actions
@@ -1135,15 +1137,23 @@ light lookup. Splitting any one without a new, broader ownership design would
 create a god-context or relocate application state into UI. The next work should
 be a separately scoped subsystem, not another mechanical `Overlays.cpp` slice.
 
+### Current authorized work
+
+- **SYS-W14-05:** embedded external/inline GLB support is implemented and
+  under final validation. It safely accepts self-contained triangle GLBs only,
+  with a 64 MiB / 300,000-triangle ceiling; MC3 materials remain authoritative.
+- **SYS-W14-06:** improved CSG normals/UVs/materials is the next authorized
+  task once the `SYS-W14-05` validation/commit is complete.
+
 ### Tracked work that is not implementation-ready
 
-- **SYS-W8-05:** alternate-backend runtime qualification needs the appropriate
-  backend environment and owner coordination.
-- **AUD-042:** Android remains deferred until an Android-capable toolchain and
-  a viable graphics-backend path are available.
-- **Deferred, decision-dependent work:** `SYS-W5-03`, `SYS-W14-05`,
-  `SYS-W14-06`, and `SYS-W14-14` require the documented human/owner decision;
-  they are not automatic follow-ups to Phase 13.
+- **SYS-W8-05:** broad alternate-backend support is intentionally postponed
+  while the current W14 feature work has priority; it still needs the
+  appropriate backend environment and CNA owner coordination.
+- **AUD-042:** Android is a supported product target but remains blocked until
+  an Android-capable toolchain and viable graphics-backend path are available.
+- **Deferred, decision-dependent work:** `SYS-W5-03` and `SYS-W14-14` retain
+  their documented human decisions. `SYS-W14-05`/`06` are no longer deferred.
 
 ## 9. Do not do yet
 

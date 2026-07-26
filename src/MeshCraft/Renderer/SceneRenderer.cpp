@@ -18,6 +18,7 @@
 #include <cmath>
 #include <filesystem>
 #include <fstream>
+#include <functional>
 #include <numeric>
 #include <numbers>
 #include <optional>
@@ -397,6 +398,88 @@ static RenderMesh loadObjMesh(GraphicsDevice& device, const std::string& path)
     return mesh;
 }
 
+// Convert the CNA-independent MeshData shared with mc3togltf into the two
+// viewport buffer layouts.  GLB embeds are flattened into triangle soup by
+// loadEmbeddedGltfMesh(), but this routine deliberately accepts indexed data
+// too so the bounds checks remain at the renderer boundary.
+static RenderMesh uploadMeshData(GraphicsDevice& device, const mc3togltf::MeshData& source)
+{
+    RenderMesh mesh;
+    if (source.indices.empty() || source.indices.size() % 3 != 0 ||
+        source.positions.size() % 3 != 0 || source.indices.size() / 3 > 300000)
+        return mesh;
+    const size_t vertexCount = source.positions.size() / 3;
+    const bool hasNormals = source.normals.size() == source.positions.size();
+    const bool hasTexcoords = source.texcoords.size() == vertexCount * 2;
+    Color grey(180, 180, 180, 255);
+    std::vector<VertexPositionColor> cverts;
+    std::vector<VertexPositionNormalTexture> tverts;
+    cverts.reserve(source.indices.size());
+    tverts.reserve(source.indices.size());
+
+    for (size_t tri = 0; tri < source.indices.size(); tri += 3) {
+        Vector3 points[3];
+        for (int corner = 0; corner < 3; ++corner) {
+            const uint32_t index = source.indices[tri + corner];
+            if (index >= vertexCount) return RenderMesh{};
+            points[corner] = {source.positions[index * 3], source.positions[index * 3 + 1],
+                              source.positions[index * 3 + 2]};
+            if (!std::isfinite(points[corner].X) || !std::isfinite(points[corner].Y) ||
+                !std::isfinite(points[corner].Z)) return RenderMesh{};
+        }
+        Vector3 fallbackNormal{0.0f, 1.0f, 0.0f};
+        if (!hasNormals) {
+            fallbackNormal = Vector3::Cross(
+                {points[1].X - points[0].X, points[1].Y - points[0].Y, points[1].Z - points[0].Z},
+                {points[2].X - points[0].X, points[2].Y - points[0].Y, points[2].Z - points[0].Z});
+            fallbackNormal.Normalize();
+        }
+        for (int corner = 0; corner < 3; ++corner) {
+            const uint32_t index = source.indices[tri + corner];
+            Vector3 normal = fallbackNormal;
+            if (hasNormals)
+                normal = {source.normals[index * 3], source.normals[index * 3 + 1],
+                          source.normals[index * 3 + 2]};
+            Vector2 uv{0.0f, 0.0f};
+            if (hasTexcoords) uv = {source.texcoords[index * 2], source.texcoords[index * 2 + 1]};
+            cverts.push_back({points[corner], grey});
+            tverts.push_back({points[corner], normal, uv});
+        }
+    }
+    if (cverts.empty()) return mesh;
+
+    const int nVerts = static_cast<int>(cverts.size());
+    std::vector<uint32_t> sequential(static_cast<size_t>(nVerts));
+    std::iota(sequential.begin(), sequential.end(), 0u);
+    mesh.positions.reserve(cverts.size());
+    for (const auto& vertex : cverts) mesh.positions.push_back(vertex.Position);
+    mesh.vb = std::make_unique<VertexBuffer>(device, nVerts);
+    mesh.vb->SetData(cverts.data(), nVerts);
+    mesh.ib = std::make_unique<IndexBuffer>(device, IndexElementSize::ThirtyTwoBits,
+                                            nVerts, BufferUsage::None);
+    mesh.ib->SetData(sequential.data(), nVerts);
+    mesh.primitiveCount = nVerts / 3;
+    mesh.texVB = std::make_unique<VertexBuffer>(device, nVerts);
+    mesh.texVB->SetData(tverts.data(), nVerts);
+    mesh.texIB = std::make_unique<IndexBuffer>(device, IndexElementSize::ThirtyTwoBits,
+                                               nVerts, BufferUsage::None);
+    mesh.texIB->SetData(sequential.data(), nVerts);
+    mesh.texPrimitiveCount = nVerts / 3;
+    return mesh;
+}
+
+static RenderMesh loadEmbeddedGltfMesh(GraphicsDevice& device,
+                                       const std::filesystem::path& basePath,
+                                       const Mc3EmbedGltf& embed)
+{
+    try {
+        return uploadMeshData(device, mc3togltf::loadEmbeddedGltfMesh(basePath, embed));
+    } catch (const std::exception& error) {
+        std::cerr << "Warning: " << error.what() << '\n';
+        return {};
+    }
+}
+
 namespace MeshCraft::Renderer {
 
 // ---------------------------------------------------------------------------
@@ -730,11 +813,14 @@ void SceneRenderer::drawDepthObject(const Mc3Object& obj, const Mc3Document& doc
         break;
     }
     case ObjectType::Mesh: {
-        if (!obj.meshSource.empty() && !doc.sourcePath.empty()) {
-            if (const RenderMesh* mesh = loadOrGetMesh((doc.sourcePath / obj.meshSource).string())) {
-                depthStatic(*mesh, deform * world);
-                break;
-            }
+        const RenderMesh* mesh = nullptr;
+        if (obj.meshSource.rfind("embed:", 0) == 0)
+            mesh = loadOrGetEmbeddedMesh(doc, obj.meshSource);
+        else if (!obj.meshSource.empty() && !doc.sourcePath.empty())
+            mesh = loadOrGetMesh((doc.sourcePath / obj.meshSource).string());
+        if (mesh) {
+            depthStatic(*mesh, deform * world);
+            break;
         }
         depthStatic(unitBox_, deform * world);
         break;
@@ -803,6 +889,36 @@ const RenderMesh* SceneRenderer::loadOrGetMesh(const std::string& absPath)
                    << "\" — rendering placeholder box\n";
     }
     auto [ins, ok] = meshCache_.emplace(absPath, std::move(loaded));
+    (void)ok;
+    return ins->second.vb ? &ins->second : nullptr;
+}
+
+const RenderMesh* SceneRenderer::loadOrGetEmbeddedMesh(const Mc3Document& doc,
+                                                        const std::string& embedReference)
+{
+    const std::string embedId = embedReference.substr(std::string("embed:").size());
+    const auto embedIt = doc.embeds.find(embedId);
+    if (embedId.empty() || embedIt == doc.embeds.end()) {
+        std::cerr << "Warning: mesh references unknown embed '" << embedId << "'\n";
+        return nullptr;
+    }
+    const auto& embed = embedIt->second;
+    // A compact content key avoids retaining a potentially 64 MiB inline
+    // base64 payload in meshCache_, while still replacing the viewport mesh
+    // when the editor changes the embed.  External meshes retain the same
+    // explicit-reload semantics as ordinary OBJ mesh sources.
+    const std::string& identity = embed.isInline() ? embed.base64Content : embed.src;
+    const std::string cacheKey = "embed:" + doc.sourcePath.generic_string() + ":" + embedId + ":" +
+                                 std::to_string(identity.size()) + ":" +
+                                 std::to_string(std::hash<std::string>{}(identity));
+    auto it = meshCache_.find(cacheKey);
+    if (it != meshCache_.end()) return it->second.vb ? &it->second : nullptr;
+
+    RenderMesh loaded = loadEmbeddedGltfMesh(device_, doc.sourcePath, embed);
+    if (!loaded.vb)
+        std::cerr << "Warning: failed to load embedded mesh '" << embedId
+                  << "' — rendering placeholder box\n";
+    auto [ins, ok] = meshCache_.emplace(cacheKey, std::move(loaded));
     (void)ok;
     return ins->second.vb ? &ins->second : nullptr;
 }
@@ -1220,15 +1336,16 @@ void SceneRenderer::drawObject(const Mc3Object& obj, const Mc3Document& doc,
         break;
     }
     case ObjectType::Mesh: {
-        if (!obj.meshSource.empty() && !doc.sourcePath.empty()) {
-            auto absPath = (doc.sourcePath / obj.meshSource).string();
-            const RenderMesh* loaded = loadOrGetMesh(absPath);
-            if (loaded) {
-                // Always use the lit VPNT path (proper normals); tex may be nullptr
-                drawMeshTextured(*loaded, deform * world, view, proj, color, tex,
-                                 svgSampler ? &*svgSampler : nullptr);
-                break;
-            }
+        const RenderMesh* loaded = nullptr;
+        if (obj.meshSource.rfind("embed:", 0) == 0)
+            loaded = loadOrGetEmbeddedMesh(doc, obj.meshSource);
+        else if (!obj.meshSource.empty() && !doc.sourcePath.empty())
+            loaded = loadOrGetMesh((doc.sourcePath / obj.meshSource).string());
+        if (loaded) {
+            // Always use the lit VPNT path (proper normals); tex may be nullptr
+            drawMeshTextured(*loaded, deform * world, view, proj, color, tex,
+                             svgSampler ? &*svgSampler : nullptr);
+            break;
         }
         drawMesh(unitBox_, deform * world, view, proj, color);  // fallback placeholder
         break;

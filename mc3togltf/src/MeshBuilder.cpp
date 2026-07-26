@@ -2,11 +2,16 @@
 
 #define TINYOBJLOADER_IMPLEMENTATION
 #include <tiny_obj_loader.h>
+#include <tiny_gltf.h>
 
 #include <algorithm>
+#include <array>
 #include <cmath>
+#include <cctype>
+#include <cstring>
 #include <filesystem>
 #include <iostream>
+#include <limits>
 #include <map>
 #include <numbers>
 #include <stdexcept>
@@ -1352,6 +1357,417 @@ MeshData buildPrimitive(const MeshCraft::Mc3::Mc3Primitive& p) {
     case PT::IcoSphere: return buildIcoSphere(p.radius, std::max(1, std::min(4, p.segments/8)));
     }
     return {};
+}
+
+// ---------------------------------------------------------------------------
+// Embedded GLB loading
+// ---------------------------------------------------------------------------
+//
+// MC3 embeds are deliberately self-contained GLB assets.  Supporting a
+// loose .gltf here would let tinygltf follow arbitrary buffer/image URIs from
+// an MC3 document, bypassing the resource-path policy enforced by the caller.
+// It would also make an inline <embed> ambiguous because it has no directory
+// in which to resolve companion files.  A GLB has one binary payload and is
+// therefore both portable and safely bounded as one resource.
+namespace {
+
+constexpr size_t kMaxEmbeddedGlbBytes = 64ull * 1024ull * 1024ull;
+constexpr size_t kMaxEmbeddedTriangles = 300'000; // matches live-preview cap
+constexpr int kMaxEmbeddedNodeDepth = 64;
+
+[[noreturn]] void glbError(const std::string& source, const std::string& detail) {
+    throw std::runtime_error("Embedded GLB load failed (" + source + "): " + detail);
+}
+
+std::string lowerExtension(const std::filesystem::path& path) {
+    std::string ext = path.extension().string();
+    std::transform(ext.begin(), ext.end(), ext.begin(), [](unsigned char c) {
+        return static_cast<char>(std::tolower(c));
+    });
+    return ext;
+}
+
+std::vector<unsigned char> decodeEmbedBase64(const std::string& encoded,
+                                             const std::string& source) {
+    std::string compact;
+    compact.reserve(encoded.size());
+    for (unsigned char ch : encoded) {
+        if (std::isspace(ch)) continue;
+        if ((ch >= 'A' && ch <= 'Z') || (ch >= 'a' && ch <= 'z') ||
+            (ch >= '0' && ch <= '9') || ch == '+' || ch == '/' || ch == '=') {
+            compact.push_back(static_cast<char>(ch));
+        } else {
+            glbError(source, "inline base64 contains an invalid character");
+        }
+    }
+    if (compact.empty() || compact.size() % 4 != 0)
+        glbError(source, "inline base64 has an invalid length");
+
+    size_t padding = 0;
+    if (!compact.empty() && compact.back() == '=') ++padding;
+    if (compact.size() > 1 && compact[compact.size() - 2] == '=') ++padding;
+    const size_t firstPadding = compact.find('=');
+    if (padding > 2 || (padding == 0 ? firstPadding != std::string::npos
+                                     : firstPadding != compact.size() - padding))
+        glbError(source, "inline base64 has invalid padding");
+    const size_t decodedBytes = compact.size() / 4 * 3 - padding;
+    if (decodedBytes > kMaxEmbeddedGlbBytes)
+        glbError(source, "decoded inline GLB exceeds the 64 MiB safety limit");
+
+    auto sextet = [&](char ch) -> unsigned char {
+        if (ch >= 'A' && ch <= 'Z') return static_cast<unsigned char>(ch - 'A');
+        if (ch >= 'a' && ch <= 'z') return static_cast<unsigned char>(ch - 'a' + 26);
+        if (ch >= '0' && ch <= '9') return static_cast<unsigned char>(ch - '0' + 52);
+        if (ch == '+') return 62;
+        if (ch == '/') return 63;
+        glbError(source, "inline base64 has invalid padding placement");
+    };
+
+    std::vector<unsigned char> bytes;
+    bytes.reserve(decodedBytes);
+    for (size_t i = 0; i < compact.size(); i += 4) {
+        const char c2 = compact[i + 2];
+        const char c3 = compact[i + 3];
+        if ((c2 == '=' || c3 == '=') && i + 4 != compact.size())
+            glbError(source, "inline base64 padding appears before the final quartet");
+        const unsigned char a = sextet(compact[i]);
+        const unsigned char b = sextet(compact[i + 1]);
+        const unsigned char c = c2 == '=' ? 0 : sextet(c2);
+        const unsigned char d = c3 == '=' ? 0 : sextet(c3);
+        bytes.push_back(static_cast<unsigned char>((a << 2) | (b >> 4)));
+        if (c2 != '=') bytes.push_back(static_cast<unsigned char>((b << 4) | (c >> 2)));
+        if (c3 != '=') bytes.push_back(static_cast<unsigned char>((c << 6) | d));
+    }
+    return bytes;
+}
+
+struct GlbMat4 {
+    // Column-major, matching glTF's matrix storage and p' = M * p.
+    std::array<double, 16> m{1.0, 0.0, 0.0, 0.0,
+                             0.0, 1.0, 0.0, 0.0,
+                             0.0, 0.0, 1.0, 0.0,
+                             0.0, 0.0, 0.0, 1.0};
+
+    static GlbMat4 multiply(const GlbMat4& a, const GlbMat4& b) {
+        GlbMat4 out{};
+        for (int col = 0; col < 4; ++col)
+            for (int row = 0; row < 4; ++row) {
+                out.m[col * 4 + row] = 0.0;
+                for (int k = 0; k < 4; ++k)
+                    out.m[col * 4 + row] += a.m[k * 4 + row] * b.m[col * 4 + k];
+            }
+        return out;
+    }
+
+    static GlbMat4 fromNode(const tinygltf::Node& node) {
+        if (node.matrix.size() == 16) {
+            GlbMat4 result{};
+            std::copy(node.matrix.begin(), node.matrix.end(), result.m.begin());
+            return result;
+        }
+        const double tx = node.translation.size() == 3 ? node.translation[0] : 0.0;
+        const double ty = node.translation.size() == 3 ? node.translation[1] : 0.0;
+        const double tz = node.translation.size() == 3 ? node.translation[2] : 0.0;
+        const double qx = node.rotation.size() == 4 ? node.rotation[0] : 0.0;
+        const double qy = node.rotation.size() == 4 ? node.rotation[1] : 0.0;
+        const double qz = node.rotation.size() == 4 ? node.rotation[2] : 0.0;
+        const double qw = node.rotation.size() == 4 ? node.rotation[3] : 1.0;
+        const double sx = node.scale.size() == 3 ? node.scale[0] : 1.0;
+        const double sy = node.scale.size() == 3 ? node.scale[1] : 1.0;
+        const double sz = node.scale.size() == 3 ? node.scale[2] : 1.0;
+        const double xx = qx * qx, yy = qy * qy, zz = qz * qz;
+        const double xy = qx * qy, xz = qx * qz, yz = qy * qz;
+        const double wx = qw * qx, wy = qw * qy, wz = qw * qz;
+        GlbMat4 result{};
+        result.m = {
+            (1.0 - 2.0 * (yy + zz)) * sx, (2.0 * (xy + wz)) * sx,       (2.0 * (xz - wy)) * sx,       0.0,
+            (2.0 * (xy - wz)) * sy,       (1.0 - 2.0 * (xx + zz)) * sy, (2.0 * (yz + wx)) * sy,       0.0,
+            (2.0 * (xz + wy)) * sz,       (2.0 * (yz - wx)) * sz,       (1.0 - 2.0 * (xx + yy)) * sz, 0.0,
+            tx,                             ty,                             tz,                             1.0
+        };
+        return result;
+    }
+
+    std::array<float, 3> transformPoint(const std::array<float, 3>& p) const {
+        return {
+            static_cast<float>(m[0] * p[0] + m[4] * p[1] + m[8]  * p[2] + m[12]),
+            static_cast<float>(m[1] * p[0] + m[5] * p[1] + m[9]  * p[2] + m[13]),
+            static_cast<float>(m[2] * p[0] + m[6] * p[1] + m[10] * p[2] + m[14])
+        };
+    }
+
+    std::array<float, 3> transformNormal(const std::array<float, 3>& n,
+                                         const std::string& source) const {
+        const double a00 = m[0], a01 = m[4], a02 = m[8];
+        const double a10 = m[1], a11 = m[5], a12 = m[9];
+        const double a20 = m[2], a21 = m[6], a22 = m[10];
+        const double c00 = a11 * a22 - a12 * a21;
+        const double c01 = a12 * a20 - a10 * a22;
+        const double c02 = a10 * a21 - a11 * a20;
+        const double c10 = a02 * a21 - a01 * a22;
+        const double c11 = a00 * a22 - a02 * a20;
+        const double c12 = a01 * a20 - a00 * a21;
+        const double c20 = a01 * a12 - a02 * a11;
+        const double c21 = a02 * a10 - a00 * a12;
+        const double c22 = a00 * a11 - a01 * a10;
+        const double determinant = a00 * c00 + a01 * c01 + a02 * c02;
+        if (std::fabs(determinant) < 1e-12)
+            glbError(source, "a scene node has a singular transform, so normals are undefined");
+        std::array<float, 3> out{
+            static_cast<float>((c00 * n[0] + c01 * n[1] + c02 * n[2]) / determinant),
+            static_cast<float>((c10 * n[0] + c11 * n[1] + c12 * n[2]) / determinant),
+            static_cast<float>((c20 * n[0] + c21 * n[1] + c22 * n[2]) / determinant)
+        };
+        const float length = std::sqrt(out[0] * out[0] + out[1] * out[1] + out[2] * out[2]);
+        if (!(length > 1e-12f) || !std::isfinite(length))
+            glbError(source, "a scene node produced a non-finite normal");
+        out[0] /= length; out[1] /= length; out[2] /= length;
+        return out;
+    }
+};
+
+const tinygltf::Accessor& checkedAccessor(const tinygltf::Model& model, int index,
+                                          int componentType, int type,
+                                          const std::string& source, const char* label) {
+    if (index < 0 || index >= static_cast<int>(model.accessors.size()))
+        glbError(source, std::string(label) + " accessor index is invalid");
+    const auto& accessor = model.accessors[index];
+    if (accessor.componentType != componentType || accessor.type != type ||
+        accessor.bufferView < 0 || accessor.sparse.isSparse)
+        glbError(source, std::string(label) + " must be a non-sparse supported accessor");
+    if (accessor.bufferView >= static_cast<int>(model.bufferViews.size()))
+        glbError(source, std::string(label) + " buffer view index is invalid");
+    const auto& view = model.bufferViews[accessor.bufferView];
+    if (view.buffer < 0 || view.buffer >= static_cast<int>(model.buffers.size()))
+        glbError(source, std::string(label) + " buffer index is invalid");
+    const size_t elementBytes = type == TINYGLTF_TYPE_VEC3 ? 12 : 8;
+    const size_t stride = view.byteStride ? view.byteStride : elementBytes;
+    if (stride < elementBytes || accessor.byteOffset > view.byteLength ||
+        accessor.count > (std::numeric_limits<size_t>::max() - accessor.byteOffset) / stride ||
+        accessor.count * stride > view.byteLength - accessor.byteOffset)
+        glbError(source, std::string(label) + " range exceeds its buffer view");
+    if (view.byteOffset > model.buffers[view.buffer].data.size() ||
+        view.byteLength > model.buffers[view.buffer].data.size() - view.byteOffset)
+        glbError(source, std::string(label) + " buffer view exceeds its buffer");
+    return accessor;
+}
+
+std::array<float, 3> readVec3(const tinygltf::Model& model, const tinygltf::Accessor& accessor,
+                              size_t element, const std::string& source, const char* label) {
+    const auto& view = model.bufferViews[accessor.bufferView];
+    const auto& buffer = model.buffers[view.buffer];
+    const size_t stride = view.byteStride ? view.byteStride : 12;
+    const size_t offset = view.byteOffset + accessor.byteOffset + element * stride;
+    std::array<float, 3> value{};
+    std::memcpy(value.data(), buffer.data.data() + offset, sizeof(float) * 3);
+    for (float component : value)
+        if (!std::isfinite(component)) glbError(source, std::string(label) + " contains a non-finite value");
+    return value;
+}
+
+std::array<float, 2> readVec2(const tinygltf::Model& model, const tinygltf::Accessor& accessor,
+                              size_t element, const std::string& source) {
+    const auto& view = model.bufferViews[accessor.bufferView];
+    const auto& buffer = model.buffers[view.buffer];
+    const size_t stride = view.byteStride ? view.byteStride : 8;
+    const size_t offset = view.byteOffset + accessor.byteOffset + element * stride;
+    std::array<float, 2> value{};
+    std::memcpy(value.data(), buffer.data.data() + offset, sizeof(float) * 2);
+    for (float component : value)
+        if (!std::isfinite(component)) glbError(source, "TEXCOORD_0 contains a non-finite value");
+    return value;
+}
+
+const tinygltf::Accessor& checkedIndexAccessor(const tinygltf::Model& model, int index,
+                                                const std::string& source) {
+    if (index < 0 || index >= static_cast<int>(model.accessors.size()))
+        glbError(source, "index accessor index is invalid");
+    const auto& accessor = model.accessors[index];
+    if ((accessor.componentType != TINYGLTF_COMPONENT_TYPE_UNSIGNED_BYTE &&
+         accessor.componentType != TINYGLTF_COMPONENT_TYPE_UNSIGNED_SHORT &&
+         accessor.componentType != TINYGLTF_COMPONENT_TYPE_UNSIGNED_INT) ||
+        accessor.type != TINYGLTF_TYPE_SCALAR || accessor.bufferView < 0 || accessor.sparse.isSparse)
+        glbError(source, "indices must use an unsigned non-sparse scalar accessor");
+    if (accessor.bufferView >= static_cast<int>(model.bufferViews.size()))
+        glbError(source, "index accessor buffer view index is invalid");
+    const auto& view = model.bufferViews[accessor.bufferView];
+    if (view.buffer < 0 || view.buffer >= static_cast<int>(model.buffers.size()))
+        glbError(source, "index accessor buffer index is invalid");
+    const size_t bytes = accessor.componentType == TINYGLTF_COMPONENT_TYPE_UNSIGNED_BYTE ? 1
+                       : accessor.componentType == TINYGLTF_COMPONENT_TYPE_UNSIGNED_SHORT ? 2 : 4;
+    const size_t stride = view.byteStride ? view.byteStride : bytes;
+    if (stride < bytes || accessor.byteOffset > view.byteLength ||
+        accessor.count > (std::numeric_limits<size_t>::max() - accessor.byteOffset) / stride ||
+        accessor.count * stride > view.byteLength - accessor.byteOffset ||
+        view.byteOffset > model.buffers[view.buffer].data.size() ||
+        view.byteLength > model.buffers[view.buffer].data.size() - view.byteOffset)
+        glbError(source, "index accessor range exceeds its buffer");
+    return accessor;
+}
+
+uint32_t readIndex(const tinygltf::Model& model, const tinygltf::Accessor& accessor, size_t element) {
+    const auto& view = model.bufferViews[accessor.bufferView];
+    const auto& buffer = model.buffers[view.buffer];
+    const size_t bytes = accessor.componentType == TINYGLTF_COMPONENT_TYPE_UNSIGNED_BYTE ? 1
+                       : accessor.componentType == TINYGLTF_COMPONENT_TYPE_UNSIGNED_SHORT ? 2 : 4;
+    const size_t stride = view.byteStride ? view.byteStride : bytes;
+    const unsigned char* ptr = buffer.data.data() + view.byteOffset + accessor.byteOffset + element * stride;
+    if (bytes == 1) return *ptr;
+    if (bytes == 2) {
+        uint16_t value{};
+        std::memcpy(&value, ptr, sizeof(value));
+        return value;
+    }
+    uint32_t value{};
+    std::memcpy(&value, ptr, sizeof(value));
+    return value;
+}
+
+std::array<float, 3> faceNormal(const std::array<float, 3>& p0,
+                                const std::array<float, 3>& p1,
+                                const std::array<float, 3>& p2,
+                                const std::string& source) {
+    std::array<float, 3> normal{
+        (p1[1] - p0[1]) * (p2[2] - p0[2]) - (p1[2] - p0[2]) * (p2[1] - p0[1]),
+        (p1[2] - p0[2]) * (p2[0] - p0[0]) - (p1[0] - p0[0]) * (p2[2] - p0[2]),
+        (p1[0] - p0[0]) * (p2[1] - p0[1]) - (p1[1] - p0[1]) * (p2[0] - p0[0])
+    };
+    const float length = std::sqrt(normal[0] * normal[0] + normal[1] * normal[1] + normal[2] * normal[2]);
+    if (!(length > 1e-12f) || !std::isfinite(length))
+        glbError(source, "contains a degenerate triangle without normals");
+    normal[0] /= length; normal[1] /= length; normal[2] /= length;
+    return normal;
+}
+
+void appendPrimitive(MeshData& out, const tinygltf::Model& model,
+                     const tinygltf::Primitive& primitive, const GlbMat4& world,
+                     const std::string& source) {
+    if (primitive.mode != TINYGLTF_MODE_TRIANGLES)
+        glbError(source, "contains a non-triangle mesh primitive");
+    auto posIt = primitive.attributes.find("POSITION");
+    if (posIt == primitive.attributes.end())
+        glbError(source, "a mesh primitive has no POSITION accessor");
+    const auto& positions = checkedAccessor(model, posIt->second, TINYGLTF_COMPONENT_TYPE_FLOAT,
+                                            TINYGLTF_TYPE_VEC3, source, "POSITION");
+    const tinygltf::Accessor* normals = nullptr;
+    if (auto it = primitive.attributes.find("NORMAL"); it != primitive.attributes.end()) {
+        normals = &checkedAccessor(model, it->second, TINYGLTF_COMPONENT_TYPE_FLOAT,
+                                   TINYGLTF_TYPE_VEC3, source, "NORMAL");
+        if (normals->count != positions.count)
+            glbError(source, "NORMAL count does not match POSITION count");
+    }
+    const tinygltf::Accessor* texcoords = nullptr;
+    if (auto it = primitive.attributes.find("TEXCOORD_0"); it != primitive.attributes.end()) {
+        texcoords = &checkedAccessor(model, it->second, TINYGLTF_COMPONENT_TYPE_FLOAT,
+                                     TINYGLTF_TYPE_VEC2, source, "TEXCOORD_0");
+        if (texcoords->count != positions.count)
+            glbError(source, "TEXCOORD_0 count does not match POSITION count");
+    }
+
+    std::vector<uint32_t> indices;
+    if (primitive.indices >= 0) {
+        const auto& indexAccessor = checkedIndexAccessor(model, primitive.indices, source);
+        if (indexAccessor.count % 3 != 0) glbError(source, "index count is not divisible by three");
+        indices.reserve(indexAccessor.count);
+        for (size_t i = 0; i < indexAccessor.count; ++i) {
+            const uint32_t value = readIndex(model, indexAccessor, i);
+            if (value >= positions.count) glbError(source, "an index is outside POSITION");
+            indices.push_back(value);
+        }
+    } else {
+        if (positions.count % 3 != 0) glbError(source, "non-indexed POSITION count is not divisible by three");
+        indices.reserve(positions.count);
+        for (size_t i = 0; i < positions.count; ++i) indices.push_back(static_cast<uint32_t>(i));
+    }
+    if (indices.size() / 3 > kMaxEmbeddedTriangles - out.indices.size() / 3)
+        glbError(source, "combined embedded geometry exceeds the 300000-triangle safety limit");
+
+    for (size_t i = 0; i < indices.size(); i += 3) {
+        std::array<std::array<float, 3>, 3> points{};
+        for (int vertex = 0; vertex < 3; ++vertex)
+            points[vertex] = world.transformPoint(readVec3(model, positions, indices[i + vertex], source, "POSITION"));
+        const std::array<float, 3> fallbackNormal = normals
+            ? std::array<float, 3>{0.0f, 0.0f, 0.0f}
+            : faceNormal(points[0], points[1], points[2], source);
+        for (int vertex = 0; vertex < 3; ++vertex) {
+            const uint32_t sourceIndex = indices[i + vertex];
+            const auto normal = normals
+                ? world.transformNormal(readVec3(model, *normals, sourceIndex, source, "NORMAL"), source)
+                : fallbackNormal;
+            const auto uv = texcoords
+                ? readVec2(model, *texcoords, sourceIndex, source)
+                : std::array<float, 2>{0.0f, 0.0f};
+            out.positions.insert(out.positions.end(), points[vertex].begin(), points[vertex].end());
+            out.normals.insert(out.normals.end(), normal.begin(), normal.end());
+            out.texcoords.insert(out.texcoords.end(), uv.begin(), uv.end());
+            out.indices.push_back(static_cast<uint32_t>(out.indices.size()));
+        }
+    }
+}
+
+void appendNode(MeshData& out, const tinygltf::Model& model, int nodeIndex,
+                const GlbMat4& parent, std::vector<bool>& active,
+                int depth, const std::string& source) {
+    if (depth > kMaxEmbeddedNodeDepth) glbError(source, "scene hierarchy exceeds depth 64");
+    if (nodeIndex < 0 || nodeIndex >= static_cast<int>(model.nodes.size()))
+        glbError(source, "scene references an invalid node");
+    if (active[nodeIndex]) glbError(source, "scene hierarchy contains a node cycle");
+    active[nodeIndex] = true;
+    const auto& node = model.nodes[nodeIndex];
+    const GlbMat4 world = GlbMat4::multiply(parent, GlbMat4::fromNode(node));
+    if (node.mesh >= 0) {
+        if (node.mesh >= static_cast<int>(model.meshes.size())) glbError(source, "node references an invalid mesh");
+        for (const auto& primitive : model.meshes[node.mesh].primitives)
+            appendPrimitive(out, model, primitive, world, source);
+    }
+    for (int child : node.children)
+        appendNode(out, model, child, world, active, depth + 1, source);
+    active[nodeIndex] = false;
+}
+
+MeshData flattenEmbeddedGlb(const tinygltf::Model& model, const std::string& source) {
+    if (model.scenes.empty()) glbError(source, "has no scene to import");
+    const int sceneIndex = model.defaultScene >= 0 ? model.defaultScene : 0;
+    if (sceneIndex >= static_cast<int>(model.scenes.size())) glbError(source, "default scene index is invalid");
+    MeshData result;
+    std::vector<bool> active(model.nodes.size(), false);
+    const GlbMat4 identity{};
+    for (int node : model.scenes[sceneIndex].nodes)
+        appendNode(result, model, node, identity, active, 0, source);
+    if (result.empty()) glbError(source, "default scene contains no triangle geometry");
+    return result;
+}
+
+} // namespace
+
+MeshData loadEmbeddedGltfMesh(const std::filesystem::path& basePath,
+                              const MeshCraft::Mc3::Mc3EmbedGltf& embed) {
+    const std::string source = embed.id.empty() ? "unnamed embed" : "embed:" + embed.id;
+    tinygltf::Model model;
+    tinygltf::TinyGLTF loader;
+    std::string error, warning;
+    bool loaded = false;
+    if (embed.isExternal()) {
+        std::filesystem::path path = embed.src;
+        if (path.is_relative()) path = basePath / path;
+        if (lowerExtension(path) != ".glb")
+            glbError(source, "external embeds must be self-contained .glb files");
+        std::error_code ec;
+        const uintmax_t bytes = std::filesystem::file_size(path, ec);
+        if (ec) glbError(source, "cannot inspect external GLB '" + path.string() + "'");
+        if (bytes > kMaxEmbeddedGlbBytes)
+            glbError(source, "external GLB exceeds the 64 MiB safety limit");
+        loaded = loader.LoadBinaryFromFile(&model, &error, &warning, path.string());
+    } else if (embed.isInline()) {
+        const std::vector<unsigned char> bytes = decodeEmbedBase64(embed.base64Content, source);
+        loaded = loader.LoadBinaryFromMemory(&model, &error, &warning, bytes.data(),
+                                              static_cast<unsigned int>(bytes.size()), basePath.string());
+    } else {
+        glbError(source, "has neither an external source nor inline base64 data");
+    }
+    if (!loaded) glbError(source, error.empty() ? "tinygltf rejected the GLB" : error);
+    if (!warning.empty()) std::cerr << "Embedded GLB warning (" << source << "): " << warning << '\n';
+    return flattenEmbeddedGlb(model, source);
 }
 
 // ---------------------------------------------------------------------------

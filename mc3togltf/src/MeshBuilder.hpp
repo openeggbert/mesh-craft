@@ -1,5 +1,6 @@
 #pragma once
 #include <MeshCraft/Mc3/Mc3Extrude.hpp>
+#include <MeshCraft/Mc3/Mc3EmbedGltf.hpp>
 #include <MeshCraft/Mc3/Mc3Primitive.hpp>
 #include <array>
 #include <cstdint>
@@ -76,6 +77,16 @@ MeshData buildExtrude(const MeshCraft::Mc3::Mc3Extrude& ext);
 // source may be an absolute path or relative to basePath.
 MeshData loadObjMesh(const std::filesystem::path& basePath,
                      const std::string& source);
+
+// Load the triangle geometry of a self-contained GLB asset referenced by an
+// MC3 <embed>.  The asset's scene-node transforms are flattened into the
+// returned local geometry; source materials, textures, skins, morph targets,
+// and animations deliberately remain owned by MC3 rather than being merged
+// into the document.  `embed.src` and inline `base64Content` are both
+// supported.  Throws std::runtime_error for malformed, unsupported, or
+// resource-exhausting input.
+MeshData loadEmbeddedGltfMesh(const std::filesystem::path& basePath,
+                              const MeshCraft::Mc3::Mc3EmbedGltf& embed);
 
 // Individual primitives (used by buildPrimitive)
 MeshData buildBox      (float w, float h, float d);

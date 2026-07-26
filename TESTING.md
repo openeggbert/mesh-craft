@@ -1,8 +1,8 @@
 # Testing
 
-_Last updated: 2026-07-25. Counts below were verified against a freshly configured Release build after the current `SYS-W3-01` Phase 13 slice. This document is derived from the actual `CMakeLists.txt` test registrations and test source files — if it drifts from a freshly configured build's `ctest -N` output, trust `ctest -N`, not this file's claimed count._
+_Last updated: 2026-07-26. Counts below were verified against a freshly configured Release build after `SYS-W14-05` embedded-GLB support. This document is derived from the actual `CMakeLists.txt` test registrations and test source files — if it drifts from a freshly configured build's `ctest -N` output, trust `ctest -N`, not this file's claimed count._
 
-MeshCraft's tests run through **CTest** — **182 tests registered** (`ctest --print-labels` label breakdown after the new target: `ai` 1, `commands` 1, `export` 71, `format` 37, `lint` 4, `perf` 2, `registry` 1, `render` 35, `unit` 32), mixing C++ assertion-based binaries and Python/bash subprocess-driven checks against the `mc3togltf`/`mc3tomcb` CLIs and the `MeshCraft` editor binary itself (headless `--screenshot` real-pixel-sampling tests, plus 3 tests that drive real headless Blender for GLB-import verification). `render_display_preflight` verifies an actual `xvfb-run` + `xdpyinfo` X client before the render subset; if unavailable, it reports a CTest skip and CMake disables only the other render-labelled tests. **Known gap:** the "CLI-driving Python tests" table below documents the most significant/representative tests in each category but is not exhaustively 1:1 with all registrations — `ctest -N` and `ctest --print-labels` are authoritative for the complete list.
+MeshCraft's tests run through **CTest** — **183 tests registered** (`ctest --print-labels` label breakdown after the new target: `ai` 1, `commands` 1, `export` 71, `format` 37, `lint` 4, `perf` 2, `registry` 1, `render` 36, `unit` 32), mixing C++ assertion-based binaries and Python/bash subprocess-driven checks against the `mc3togltf`/`mc3tomcb` CLIs and the `MeshCraft` editor binary itself (headless `--screenshot` real-pixel-sampling tests, plus 3 tests that drive real headless Blender for GLB-import verification). `render_display_preflight` verifies an actual `xvfb-run` + `xdpyinfo` X client before the render subset; if unavailable, it reports a CTest skip and CMake disables only the other render-labelled tests. **Known gap:** the "CLI-driving Python tests" table below documents the most significant/representative tests in each category but is not exhaustively 1:1 with all registrations — `ctest -N` and `ctest --print-labels` are authoritative for the complete list.
 
 ---
 
@@ -31,7 +31,7 @@ ctest --print-labels   # list all labels
 ctest --rerun-failed --output-on-failure
 ```
 
-Expected result: every registered test passes. On 2026-07-25 the fresh Release build reported 182 registrations and passed all of them as two disjoint runs: 147/147 with `-LE render` and 35/35 with `-L render` under Xvfb. The focused suites are run with at most `-j4` after each change. A failing test prints its assertion/subprocess output inline with `--output-on-failure`; without that flag, CTest only shows pass/fail per test name.
+Expected result: every registered test passes. On 2026-07-26 the fresh Release build reported 183 registrations; the new embedded-GLB export and viewport tests passed after a host configure/build. The preceding complete run passed 147/147 with `-LE render` and 35/35 with `-L render`; re-run both partitions after this change for the final 147/147 + 36/36 confirmation. The focused suites are run with at most `-j4` after each change. A failing test prints its assertion/subprocess output inline with `--output-on-failure`; without that flag, CTest only shows pass/fail per test name.
 
 Each C++ test binary can also be run directly (bypassing CTest) for faster iteration:
 
@@ -118,6 +118,7 @@ These spawn the built `mc3togltf`/`mc3tomcb` binaries as subprocesses and assert
 | `mc3togltf_svg_texture_safety` | `mc3togltf/test/svg_texture_safety_test.py` | Malformed and hostile-dimension SVG inputs | Named non-fatal warning; no texture for malformed input; generated PNG is capped at 2048px |
 | `mc3togltf_svg_rasterizer` | `mc3togltf/test/svg_rasterizer_test.cpp` | Compact SVG cache key plus external source timestamp invalidation | No inline markup in the key; changing the file changes its timestamp and rasterized pixels |
 | `svg_texture_viewport_test` / `svg_inline_texture_viewport_test` | `test/svg_texture_viewport_test.py` | External and inline SVG material textures reach the live CNA viewport | Headless screenshots contain the fixtures' red and blue SVG pixels |
+| `mc3togltf_embed_mesh_source` / `embed_mesh_viewport_test` | `mc3togltf/test/embed_mesh_source_test.py` | External self-contained and inline-base64 GLB `embed:` mesh sources; default-scene transform flattening; shared exporter/viewport loader | Both exported GLBs contain the transformed triangle without warnings; a real editor screenshot has visible embedded geometry and never falls back to the placeholder |
 
 Blender-based tests (`mc3togltf_blender_import`, `mc3togltf_material_pbr_blender_import`, `mc3togltf_release_sample_blender_import`) are only registered when `find_program(BLENDER_EXEC blender)` finds a real `blender` binary at configure time — optional external tooling, not a hard build requirement.
 

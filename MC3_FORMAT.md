@@ -217,17 +217,14 @@ are covered by this same skip-set (fixed in STAB-0091 — the writer's
 SVG-texture loop was previously missing this check and silently
 re-inlined included SVG textures on every save).
 
-**Known limitation — `<embeds>` is not include-aware (STAB-0092):**
-unlike definitions/materials/textures, an included file's own `<embeds>`
-section is **never merged** — only the main document's own top-level
-`<embeds>` is parsed. If a `<definition>` merged from an included file
-references `<mesh src="embed:xyz"/>` where `xyz` is declared in *that
-same included file's* `<embeds>` section (rather than the main
-document's), the reference silently fails to resolve. This is a narrow,
-accepted limitation (embedding glTF data specifically inside a
-shared/included asset library), not implemented — would need an
-`includedEmbeds` tracking set plus an `<embeds>` merge block in
-`mergeInclude()`, mirroring the existing definitions-merge pattern.
+**`<embeds>` are include-aware (STAB-0092):** embeds declared by an included
+file are merged alongside its definitions. Their external `src` paths are
+rebased from the included file's directory to the main document's directory,
+and `includedEmbeds` ensures an unchanged included embed is not inlined when
+the main document is saved. A local edit makes it local content, matching the
+existing definitions/materials/textures ownership rule. Duplicate ids use the
+same documented last-write-wins rule as other included resources and emit a
+named warning.
 
 ---
 
@@ -974,8 +971,8 @@ curve in a short time window could in principle be under-sampled.
 | Per-object `metadata` (`<metadata><property name="..." value="..."/></metadata>`) | ✅ (`AUD-029`) — serialized into `node.extras.metadata`, alongside the pre-existing `tags`/`collision` extras |
 | `--stats` "Warnings" count | ✅ truthful (`AUD-026`) — every `"Warning:"` print site in `GltfExporter.cpp` increments the shared counter (verified by grep, not spot-checked); previously several paths (unknown material, SVG-slot warnings, ambient-light drop, duplicate node name, image-format detection, missing embed texture, action warnings) printed a warning without counting it |
 | `TANGENT` accessor (for `normal_texture`-mapped meshes) | ✅ (STAB-0664) — computed per-vertex (standard per-triangle-then-averaged-then-Gram-Schmidt-orthogonalized algorithm, not a full MikkTSpace port), only when a mesh has both `NORMAL`/`TEXCOORD_0` and its material sets `normal_texture`; meshes without a normal map get no `TANGENT` (not needed) |
-| SVG textures (N1, `<textures><texture>` with an SVG source) | ❌ — `svgTextures` is a separate map in `Mc3Document` that `GltfExporter` never rasterizes (rasterization isn't implemented anywhere yet, editor viewport included); since STAB-0440, a material referencing an SVG texture prints a warning naming the material/slot/texture id instead of dropping it silently, but the texture itself is still omitted from the export |
-| Embedded glTF (N2, `<mesh src="embed:id"/>`) | ❌ — treated as a literal OBJ file path, which fails to parse; the export doesn't crash but continues with **no mesh on that node** (`Warning: OBJ load failed (...)` on stderr, `stats.warnings` incremented). See STAB-0194 for the tracked automated test of this exact behavior |
+| SVG textures (N1, `<textures><texture>` with an SVG source) | ✅ — external and inline SVG are rasterized into bounded PNG pixels for both glTF export and the live viewport. See the Textures section for the 2048px safety cap and cache/sampler details. |
+| Embedded GLB (N2, `<mesh src="embed:id"/>`) | ✅ (`SYS-W14-05`) — external self-contained `.glb` files and inline base64 GLB are decoded, their default-scene node transforms are flattened, and triangle geometry reaches both `mc3togltf` and the live viewport. The MC3 object's material remains authoritative: source GLB materials/textures, skins, morph targets, animations, non-triangle primitives, loose `.gltf` companion-file assets, singular transforms, and geometry beyond 64 MiB/300,000 triangles are deliberately rejected with a named warning rather than partially or unsafely imported. |
 | Scripts, Sounds, Music, Triggers, Scene States, Meta (N3-N7) | ❌ (no glTF equivalent — these are MCB/XML-only data, round-tripped but not translated to any glTF concept; see [Scripts (N3)](#scripts-n3) etc. above) |
 
 ### Export scalability (STAB-0699)

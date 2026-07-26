@@ -410,6 +410,8 @@ private:
 
     Microsoft::Xna::Framework::Graphics::Texture2D* loadOrGetTexture(const std::string& absPath);
     const RenderMesh* loadOrGetMesh(const std::string& absPath);
+    const RenderMesh* loadOrGetEmbeddedMesh(const Mc3::Mc3Document& doc,
+                                            const std::string& embedReference);
 
     Microsoft::Xna::Framework::Matrix objectWorldMatrix(const Mc3::Mc3Transform& t) const;
     Microsoft::Xna::Framework::Color  materialColor(const std::string& matId,

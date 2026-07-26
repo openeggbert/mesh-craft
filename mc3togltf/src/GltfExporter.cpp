@@ -56,6 +56,7 @@ struct ExportCtx {
     tinygltf::Model& model;
     const std::unordered_map<std::string, int>& matNameToIdx;
     const std::map<std::string, std::shared_ptr<Mc3Object>>& definitions;
+    const std::map<std::string, Mc3EmbedGltf>& embeds;
     float unitScale{1.0f};           // conversion factor to metres
     std::filesystem::path basePath;  // directory of source .mc3.xml (for OBJ paths)
     bool allowApproximateCSG{false};
@@ -703,6 +704,31 @@ static int buildMesh(ExportCtx& ctx,
     MeshData md;
 
     if (obj.type == ObjectType::Mesh && !obj.meshSource.empty()) {
+        if (obj.meshSource.rfind("embed:", 0) == 0) {
+            const std::string embedId = obj.meshSource.substr(std::string("embed:").size());
+            const auto embedIt = ctx.embeds.find(embedId);
+            if (embedId.empty() || embedIt == ctx.embeds.end()) {
+                std::cerr << "Warning: mesh object '" << obj.name << "' references unknown embed '"
+                          << embedId << "'\n";
+                ctx.stats.warnings++;
+                return -1;
+            }
+            const Mc3EmbedGltf& embed = embedIt->second;
+            // Keep external embedded assets inside the same resource policy as
+            // ordinary OBJ meshes.  `embed:` itself is only an in-document
+            // identifier, so validating it as a filesystem path would be both
+            // wrong and a path-traversal bypass for embed.src.
+            if (embed.isExternal())
+                assertResourceAllowed(ctx.basePath, embed.src, ctx.allowExternalResources,
+                                      "embedded GLB source");
+            try {
+                md = loadEmbeddedGltfMesh(ctx.basePath, embed);
+            } catch (const std::exception& e) {
+                std::cerr << "Warning: " << e.what() << '\n';
+                ctx.stats.warnings++;
+                return -1;
+            }
+        } else {
         // Untrusted-input containment: a path-traversal / absolute mesh source is
         // a hard error (thrown outside the try below), not a silently-skipped
         // warning like a merely-missing file.
@@ -714,6 +740,7 @@ static int buildMesh(ExportCtx& ctx,
             std::cerr << "Warning: " << e.what() << '\n';
             ctx.stats.warnings++;
             return -1;
+        }
         }
     } else if (obj.extrude.has_value()) {
         md = buildExtrude(*obj.extrude);
@@ -1758,7 +1785,7 @@ void GltfExporter::exportDocument(const Mc3Document& doc,
     scene.name = doc.model.empty() ? "Scene" : doc.model;
 
     // Object nodes (recursive)
-    ExportCtx ctx{model, matNameToIdx, doc.definitions,
+    ExportCtx ctx{model, matNameToIdx, doc.definitions, doc.embeds,
                   unitScaleFactor(doc.unit), doc.sourcePath,
                   allowApproximateCSG, allowExternalResources,
                   doc.rotationUnits == "radians", doc.eulerOrder,

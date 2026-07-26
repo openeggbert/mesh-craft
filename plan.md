@@ -214,7 +214,7 @@ _All items in this workstream are DONE — archived to [`docs/history/plan_20260
 _All items in this workstream are DONE — archived to [`docs/history/plan_20260718.md`](docs/history/plan_20260718.md)._
 
 ### W3 — Architecture decomposition
-- **SYS-W3-01** `[IN_PROGRESS]` `P2` — Extract from `MeshCraftApplication` (a god
+- **SYS-W3-01** `[DEFERRED, user priority 2026-07-26]` `P2` — Extract from `MeshCraftApplication` (a god
   object split across .cpp files, not by responsibility): document/session,
   command/undo, selection, transform/gizmo, camera, animation, import/export,
   file/autosave, preferences, render pipeline, AI, registry, audio,
@@ -987,6 +987,10 @@ portable through CNA rather than merely hiding its OpenGL dependency.
   unqualified backends remain gated. Do not claim final Vulkan/WebGPU support
   until a runner completes a real editor screenshot including an
   `ImGui::Image` preview.
+- **Priority decision (2026-07-26):** broad backend support remains a product
+  direction, but this qualification is deliberately postponed while the
+  now-authorized user-facing `SYS-W14-05`/`06` work is completed. Its CNA
+  contract and runner blockers remain unchanged.
 
 ### W9 — Undo & data-loss
 - **SYS-W9-01** `[DONE, via AUD-036b + SYS-W9-03 + SYS-W14-16]` `P0` — Full
@@ -1115,8 +1119,14 @@ portable through CNA rather than merely hiding its OpenGL dependency.
   CNA exposes no mip-chain generation for pixel-created textures. Added
   malformed/capped-dimension, cache-invalidation, inline viewport, and GLB
   coverage. **Resolved:** commits `8cb14be`, `026fc2d`.
-- **SYS-W14-05** `[DEFERRED]` `P3` — Safe `embed:` mesh/resource support end-to-end. (`AUD-025`)
-- **SYS-W14-06** `[DEFERRED]` `P3` — Improved CSG output (smooth normals/UVs/materials).
+- **SYS-W14-05** `[IN_PROGRESS, user-authorized 2026-07-26]` `P3` — Safe
+  `embed:` mesh/resource support end-to-end. (`AUD-025`) External
+  self-contained GLB and inline base64 GLB now resolve through a shared,
+  bounded loader in both exporter and viewport; final whole-suite validation
+  and status closure follow this implementation slice.
+- **SYS-W14-06** `[TODO, user-authorized 2026-07-26]` `P3` — Improved CSG
+  output (smooth normals/UVs/materials). Next coherent feature slice after
+  `SYS-W14-05` validation.
 - **SYS-W14-07** `[DONE]` `P3` — Improved walk/navigation collision.
   Walk mode previously treated only the global `y=0` plane as solid, so it
   could pass through every scene wall, floor and ceiling. It now snapshots
@@ -2024,6 +2034,10 @@ actual pixel difference — see its own row for the full story.
 - **Blocked:** No Android NDK in this environment; also intersects CNA backend behavior (out of scope).
 - **Status note:** `AUD-039b`'s runtime check (commit `58a7f03`) now means an Android build (if one were attempted) would refuse to launch the editor UI with a clear error, rather than silently opening a non-functional window -- so the "renders nothing with no indication why" consequence this finding warns about is closed. The CMake-level force-select itself (`if(ANDROID) set(...SDL_RENDERER)`) is unchanged; this task stays `TODO` because the root cause (Android has no path to a GL-capable backend at all) is still open and untestable here (no NDK).
 - **Status note:** Android force-selects SDL_RENDERER (a backend the editor cannot render on); no NDK available to test in this environment. Depends on the AUD-039b decision (hard failure vs. real backend) for a principled fix.
+- **Product decision (2026-07-26):** Android is a supported target, not an
+  intentionally unsupported platform. When an Android-capable environment
+  and viable CNA graphics route are available, the intended solution is a
+  real GLES/EASYGL-capable editor path, not a permanent CMake rejection.
 
 ### AUD-052 `[DONE]` `P1` `W11` · CI was parked under `.github_/`, so GitHub Actions never ran
 - **Component:** .github/workflows/ci.yml

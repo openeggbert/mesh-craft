@@ -1614,6 +1614,24 @@ if(MESH_CRAFT_BUILD_TESTING AND UNIX AND NOT ANDROID AND NOT EMSCRIPTEN)
             set_tests_properties(svg_inline_texture_viewport_test PROPERTIES TIMEOUT 30 LABELS "render")
         endif()
 
+        # SYS-W14-05: <mesh src="embed:id"> must resolve the document's
+        # external GLB in the live CNA viewport as well as in mc3togltf.  The
+        # exporter test builds the small asset and additionally checks inline
+        # base64; this render-labelled invocation proves the shared loader is
+        # actually wired into SceneRenderer rather than export-only.
+        if(TARGET mc3togltf AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/mc3togltf/test/embed_mesh_source_test.py")
+            add_test(
+                NAME embed_mesh_viewport_test
+                COMMAND "${PYTHON3_EXEC}"
+                        "${CMAKE_CURRENT_SOURCE_DIR}/mc3togltf/test/embed_mesh_source_test.py"
+                        $<TARGET_FILE:mc3togltf>
+                        "${CMAKE_CURRENT_SOURCE_DIR}/test/embed_mesh_source.mc3.xml"
+                        $<TARGET_FILE:MeshCraft>
+                WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
+            )
+            set_tests_properties(embed_mesh_viewport_test PROPERTIES TIMEOUT 30 LABELS "render")
+        endif()
+
         # STAB-0524: confirms the equirectangular skybox shader actually
         # renders a document-driven skybox_texture.
         if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/test/skybox_texture.mc3.xml")
