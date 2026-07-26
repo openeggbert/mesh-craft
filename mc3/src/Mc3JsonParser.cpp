@@ -7,6 +7,7 @@
 #include <algorithm>
 #include <filesystem>
 #include <fstream>
+#include <set>
 #include <sstream>
 #include <stdexcept>
 
@@ -33,8 +34,76 @@ namespace {
 // validateResourcePathIfConfined below (AUD-068).
 constexpr int kMaxTessellation = 4096;
 
-int clampTess(int v, int minv, int maxv = kMaxTessellation) {
-    return std::clamp(v, minv, maxv);
+// SYS-W1-08: mirrors Mc3XmlParser.cpp's own g_validation/reportWarning/
+// reportError/reportWarningDoc/reportErrorDoc thread_local pattern exactly
+// (same reasoning: toObject/toPrimitive/toCrossSection/toPath/toExtrude form
+// a recursive call graph with no existing context-object parameter to thread
+// a diagnostics sink through). `g_validation` is set once per top-level
+// parse()/parseString() call (nullptr when the caller didn't ask for
+// diagnostics -- every report*() call below is then a no-op).
+thread_local Mc3Validation* g_validation = nullptr;
+thread_local std::filesystem::path g_currentSourceFile;
+
+struct ValidationScope {
+    explicit ValidationScope(Mc3Validation* v) { g_validation = v; }
+    ~ValidationScope() { g_validation = nullptr; }
+    ValidationScope(const ValidationScope&) = delete;
+};
+
+// Best-effort object identity for a diagnostic: an object's "id" if present
+// and non-empty, else its "name". Unlike Mc3XmlParser.cpp (which always has
+// an XMLElement to fall back to the tag name), a JSON object's own type name
+// is read as a plain field rather than being intrinsic to the node, so there
+// is no equivalent fallback here -- callers that already know it (e.g.
+// toObject, which has just read "type") pass it as `field`/`message` text
+// instead.
+std::string jsonObjectIdentity(const json& j) {
+    if (!j.is_object()) return {};
+    if (auto it = j.find("id"); it != j.end() && it->is_string() && !it->get<std::string>().empty())
+        return it->get<std::string>();
+    if (auto it = j.find("name"); it != j.end() && it->is_string() && !it->get<std::string>().empty())
+        return it->get<std::string>();
+    return {};
+}
+
+void reportWarning(const std::string& identity, const char* field,
+                    const std::string& message, const std::string& repair = {}) {
+    if (!g_validation) return;
+    g_validation->addWarning(g_currentSourceFile.string(), identity, field, message, repair);
+}
+
+void reportError(const std::string& identity, const char* field,
+                  const std::string& message, const std::string& repair = {}) {
+    if (!g_validation) return;
+    g_validation->addError(g_currentSourceFile.string(), identity, field, message, repair);
+}
+
+// Whole-document findings (no single object is responsible), e.g. a
+// document-wide budget overflow. Unlike Mc3XmlParser.cpp, there is no
+// reportWarningDoc() counterpart here: JSON has no <include>-equivalent
+// merge concept (this file's own established scope decision, see
+// validateResourcePathIfConfined's header comment), which is the only thing
+// XML's reportWarningDoc() is used for.
+void reportErrorDoc(const char* field, const std::string& message,
+                     const std::string& repair = {}) {
+    if (!g_validation) return;
+    g_validation->addError(g_currentSourceFile.string(), std::string{}, field, message, repair);
+}
+
+// `ownerIdentity` is the enclosing object's id/name (JSON nests
+// segments/sides/subdivisions under "primitive"/"crossSection"/"extrude"
+// sub-objects that have no id/name of their own, unlike XML's flat
+// attributes on the object element itself -- see Mc3XmlParser.cpp's
+// attrCount(), which this mirrors).
+int clampTess(const std::string& ownerIdentity, const char* field, int v,
+              int minv, int maxv = kMaxTessellation) {
+    int clamped = std::clamp(v, minv, maxv);
+    if (clamped != v)
+        reportWarning(ownerIdentity, field,
+                      "value " + std::to_string(v) + " is outside the allowed range [" +
+                      std::to_string(minv) + ", " + std::to_string(maxv) + "]",
+                      "clamped to " + std::to_string(clamped));
+    return clamped;
 }
 
 // 2026-07-20 audit F4: the "separate, larger follow-up" flagged in the
@@ -82,65 +151,96 @@ struct DocumentBudget {
 
     void chargeObject() {
         if (++totalObjects > kMaxTotalObjects) {
-            throw std::runtime_error("MC3: document exceeds the total object budget (" +
+            std::string msg = "MC3: document exceeds the total object budget (" +
                 std::to_string(kMaxTotalObjects) + ") -- rejected before allocating "
-                "geometry for all of them");
+                "geometry for all of them";
+            reportErrorDoc("objects", msg);
+            throw std::runtime_error(msg);
         }
     }
     void chargeTessellation(int weight) {
         totalTessellationWeight += weight;
         if (totalTessellationWeight > kMaxTotalTessellationWeight) {
-            throw std::runtime_error("MC3: document's total tessellation complexity (sum of all "
+            std::string msg = "MC3: document's total tessellation complexity (sum of all "
                 "segments/sides/subdivisions values, " + std::to_string(totalTessellationWeight) +
                 ") exceeds the budget (" + std::to_string(kMaxTotalTessellationWeight) +
-                ") -- rejected before allocating geometry for all of it");
+                ") -- rejected before allocating geometry for all of it";
+            reportErrorDoc("tessellation", msg);
+            throw std::runtime_error(msg);
         }
     }
     void chargeMaterial() {
-        if (++totalMaterials > kMaxTotalMaterials)
-            throw std::runtime_error("MC3: document exceeds the total material budget (" +
-                std::to_string(kMaxTotalMaterials) + ")");
+        if (++totalMaterials > kMaxTotalMaterials) {
+            std::string msg = "MC3: document exceeds the total material budget (" +
+                std::to_string(kMaxTotalMaterials) + ")";
+            reportErrorDoc("materials", msg);
+            throw std::runtime_error(msg);
+        }
     }
     void chargeTexture() {
-        if (++totalTextures > kMaxTotalTextures)
-            throw std::runtime_error("MC3: document exceeds the total texture budget (" +
-                std::to_string(kMaxTotalTextures) + ")");
+        if (++totalTextures > kMaxTotalTextures) {
+            std::string msg = "MC3: document exceeds the total texture budget (" +
+                std::to_string(kMaxTotalTextures) + ")";
+            reportErrorDoc("textures", msg);
+            throw std::runtime_error(msg);
+        }
     }
     void chargeEmbed(size_t base64Bytes) {
-        if (++totalEmbeds > kMaxTotalEmbeds)
-            throw std::runtime_error("MC3: document exceeds the total embed budget (" +
-                std::to_string(kMaxTotalEmbeds) + ")");
+        if (++totalEmbeds > kMaxTotalEmbeds) {
+            std::string msg = "MC3: document exceeds the total embed budget (" +
+                std::to_string(kMaxTotalEmbeds) + ")";
+            reportErrorDoc("embeds", msg);
+            throw std::runtime_error(msg);
+        }
         totalEmbedBytes += static_cast<long long>(base64Bytes);
-        if (totalEmbedBytes > kMaxTotalEmbedBytes)
-            throw std::runtime_error("MC3: document's total embed base64 content (" +
+        if (totalEmbedBytes > kMaxTotalEmbedBytes) {
+            std::string msg = "MC3: document's total embed base64 content (" +
                 std::to_string(totalEmbedBytes) + " bytes) exceeds the combined budget (" +
                 std::to_string(kMaxTotalEmbedBytes) + " bytes) -- rejected before holding "
-                "it all in memory (many embeds each individually under the per-embed cap?)");
+                "it all in memory (many embeds each individually under the per-embed cap?)";
+            reportErrorDoc("embeds", msg);
+            throw std::runtime_error(msg);
+        }
     }
     void chargeAction() {
-        if (++totalActions > kMaxTotalActions)
-            throw std::runtime_error("MC3: document exceeds the total action budget (" +
-                std::to_string(kMaxTotalActions) + ")");
+        if (++totalActions > kMaxTotalActions) {
+            std::string msg = "MC3: document exceeds the total action budget (" +
+                std::to_string(kMaxTotalActions) + ")";
+            reportErrorDoc("actions", msg);
+            throw std::runtime_error(msg);
+        }
     }
     void chargeClip() {
-        if (++totalClips > kMaxTotalClips)
-            throw std::runtime_error("MC3: document exceeds the total animation clip budget (" +
-                std::to_string(kMaxTotalClips) + ")");
+        if (++totalClips > kMaxTotalClips) {
+            std::string msg = "MC3: document exceeds the total animation clip budget (" +
+                std::to_string(kMaxTotalClips) + ")";
+            reportErrorDoc("clips", msg);
+            throw std::runtime_error(msg);
+        }
     }
     void chargeChannel() {
-        if (++totalChannels > kMaxTotalChannels)
-            throw std::runtime_error("MC3: document exceeds the total channel budget (" +
-                std::to_string(kMaxTotalChannels) + ")");
+        if (++totalChannels > kMaxTotalChannels) {
+            std::string msg = "MC3: document exceeds the total channel budget (" +
+                std::to_string(kMaxTotalChannels) + ")";
+            reportErrorDoc("channels", msg);
+            throw std::runtime_error(msg);
+        }
     }
     void chargeKeyframe() {
-        if (++totalKeyframes > kMaxTotalKeyframes)
-            throw std::runtime_error("MC3: document exceeds the total keyframe budget (" +
-                std::to_string(kMaxTotalKeyframes) + ")");
+        if (++totalKeyframes > kMaxTotalKeyframes) {
+            std::string msg = "MC3: document exceeds the total keyframe budget (" +
+                std::to_string(kMaxTotalKeyframes) + ")";
+            reportErrorDoc("keyframes", msg);
+            throw std::runtime_error(msg);
+        }
     }
     void chargeDefinition() {
-        if (++totalDefinitions > kMaxTotalDefinitions)
-            throw std::runtime_error("MC3: document exceeds the total definition budget (" +
-                std::to_string(kMaxTotalDefinitions) + ")");
+        if (++totalDefinitions > kMaxTotalDefinitions) {
+            std::string msg = "MC3: document exceeds the total definition budget (" +
+                std::to_string(kMaxTotalDefinitions) + ")";
+            reportErrorDoc("definitions", msg);
+            throw std::runtime_error(msg);
+        }
     }
     void reset() {
         totalObjects = 0; totalTessellationWeight = 0;
@@ -160,11 +260,13 @@ thread_local DocumentBudget g_budget;
 // on top of an already-oversized document.
 constexpr uintmax_t kMaxDocumentBytes = 512ull * 1024ull * 1024ull;
 
-void checkDocumentByteBudget(uintmax_t bytes) {
+void checkDocumentByteBudget(uintmax_t bytes, const std::string& sourceDescription) {
     if (bytes <= kMaxDocumentBytes) return;
-    throw std::runtime_error("MC3: document (" + std::to_string(bytes) +
+    std::string msg = "MC3: " + sourceDescription + " (" + std::to_string(bytes) +
         " bytes) exceeds the maximum document size (" + std::to_string(kMaxDocumentBytes) +
-        " bytes) -- rejected before parsing");
+        " bytes) -- rejected before parsing";
+    reportErrorDoc("bytes", msg);
+    throw std::runtime_error(msg);
 }
 
 // AUD-068: parseString()'s policy parameter used to be entirely unused
@@ -231,22 +333,25 @@ bool includePathWithinRoot(const std::filesystem::path& candidate,
 // Validates a texture/SVG/mesh/embed/sound/music `src`/`uri` field against
 // the current parse's confinement policy. No-op when not confining or when
 // `rawPath` is empty or a non-filesystem pseudo-path (`embed:`/`data:`).
-void validateResourcePathIfConfined(const std::string& rawPath, const char* kind) {
+void validateResourcePathIfConfined(const std::string& rawPath, const char* kind,
+                                     const std::string& identity = {}) {
     if (!g_confineResourcePaths || rawPath.empty()) return;
     if (rawPath.rfind("embed:", 0) == 0 || rawPath.rfind("data:", 0) == 0) return;
 
     std::filesystem::path p(rawPath);
     if (p.is_absolute()) {
-        throw std::runtime_error(
-            std::string("MC3: ") + kind + " '" + rawPath +
+        std::string msg = std::string("MC3: ") + kind + " '" + rawPath +
             "' is an absolute path outside the document root; rejected "
-            "under the untrusted-content load policy");
+            "under the untrusted-content load policy";
+        reportError(identity, kind, msg);
+        throw std::runtime_error(msg);
     }
     if (!includePathWithinRoot(g_resourceRoot / p, g_resourceRoot)) {
-        throw std::runtime_error(
-            std::string("MC3: ") + kind + " '" + rawPath +
+        std::string msg = std::string("MC3: ") + kind + " '" + rawPath +
             "' escapes the document root; rejected under the "
-            "untrusted-content load policy");
+            "untrusted-content load policy";
+        reportError(identity, kind, msg);
+        throw std::runtime_error(msg);
     }
 }
 
@@ -306,26 +411,26 @@ PrimitiveType primitiveTypeFromName(const std::string& s) {
     return PrimitiveType::Box;
 }
 
-Mc3Primitive toPrimitive(const json& j) {
+Mc3Primitive toPrimitive(const json& j, const std::string& ownerIdentity) {
     Mc3Primitive p;
     if (!j.is_object()) return p;
     if (j.contains("primitiveType")) p.primitiveType = primitiveTypeFromName(j["primitiveType"].get<std::string>());
     if (j.contains("size"))          p.size          = toVec3(j["size"], {1.f,1.f,1.f});
     if (j.contains("radius"))        p.radius        = j["radius"].get<float>();
     if (j.contains("height"))        p.height        = j["height"].get<float>();
-    if (j.contains("segments"))      p.segments      = clampTess(j["segments"].get<int>(), 0);
+    if (j.contains("segments"))      p.segments      = clampTess(ownerIdentity, "segments", j["segments"].get<int>(), 0);
     if (j.contains("axis"))          p.axis          = j["axis"].get<std::string>();
     if (j.contains("majorRadius"))   p.majorRadius   = j["majorRadius"].get<float>();
     if (j.contains("minorRadius"))   p.minorRadius   = j["minorRadius"].get<float>();
-    if (j.contains("subdivisionsX")) p.subdivisionsX = clampTess(j["subdivisionsX"].get<int>(), 1);
-    if (j.contains("subdivisionsZ")) p.subdivisionsZ = clampTess(j["subdivisionsZ"].get<int>(), 1);
+    if (j.contains("subdivisionsX")) p.subdivisionsX = clampTess(ownerIdentity, "subdivisionsX", j["subdivisionsX"].get<int>(), 1);
+    if (j.contains("subdivisionsZ")) p.subdivisionsZ = clampTess(ownerIdentity, "subdivisionsZ", j["subdivisionsZ"].get<int>(), 1);
     g_budget.chargeTessellation(p.segments);
     g_budget.chargeTessellation(p.subdivisionsX);
     g_budget.chargeTessellation(p.subdivisionsZ);
     return p;
 }
 
-Mc3CrossSection toCrossSection(const json& j) {
+Mc3CrossSection toCrossSection(const json& j, const std::string& ownerIdentity) {
     Mc3CrossSection cs;
     if (!j.is_object()) return cs;
     const std::string t = j.value("type", "rect");
@@ -338,8 +443,8 @@ Mc3CrossSection toCrossSection(const json& j) {
     if (j.contains("height"))      cs.height      = j["height"].get<float>();
     if (j.contains("radius"))      cs.radius      = j["radius"].get<float>();
     if (j.contains("innerRadius")) cs.innerRadius = j["innerRadius"].get<float>();
-    if (j.contains("sides"))       cs.sides       = clampTess(j["sides"].get<int>(), 3);
-    if (j.contains("segments"))    cs.segments    = clampTess(j["segments"].get<int>(), 1);
+    if (j.contains("sides"))       cs.sides       = clampTess(ownerIdentity, "sides", j["sides"].get<int>(), 3);
+    if (j.contains("segments"))    cs.segments    = clampTess(ownerIdentity, "segments", j["segments"].get<int>(), 1);
     g_budget.chargeTessellation(cs.sides);
     g_budget.chargeTessellation(cs.segments);
     // 2026-07-20 audit F6: mirrors Mc3XmlParser.cpp's own parseCrossSection()
@@ -347,16 +452,19 @@ Mc3CrossSection toCrossSection(const json& j) {
     // count cap at all.
     if (j.contains("customPoints")) {
         for (const auto& pt : j["customPoints"]) {
-            if (static_cast<long long>(cs.customPoints.size()) >= kMaxTessellation)
-                throw std::runtime_error("MC3: crossSection exceeds the maximum "
-                    "customPoints count (" + std::to_string(kMaxTessellation) + ")");
+            if (static_cast<long long>(cs.customPoints.size()) >= kMaxTessellation) {
+                std::string msg = "MC3: crossSection exceeds the maximum "
+                    "customPoints count (" + std::to_string(kMaxTessellation) + ")";
+                reportError(ownerIdentity, "customPoints", msg);
+                throw std::runtime_error(msg);
+            }
             cs.customPoints.push_back({pt.at(0).get<float>(), pt.at(1).get<float>()});
         }
     }
     return cs;
 }
 
-Mc3ExtrudePath toPath(const json& j) {
+Mc3ExtrudePath toPath(const json& j, const std::string& ownerIdentity) {
     Mc3ExtrudePath path;
     if (!j.is_object()) return path;
     const std::string t = j.value("type", "line");
@@ -376,9 +484,12 @@ Mc3ExtrudePath toPath(const json& j) {
     // exactly -- unbounded <path> point list.
     if (j.contains("points")) {
         for (const auto& pe : j["points"]) {
-            if (static_cast<long long>(path.points.size()) >= kMaxTessellation)
-                throw std::runtime_error("MC3: path exceeds the maximum points count (" +
-                    std::to_string(kMaxTessellation) + ")");
+            if (static_cast<long long>(path.points.size()) >= kMaxTessellation) {
+                std::string msg = "MC3: path exceeds the maximum points count (" +
+                    std::to_string(kMaxTessellation) + ")";
+                reportError(ownerIdentity, "points", msg);
+                throw std::runtime_error(msg);
+            }
             Mc3PathPoint pt;
             if (pe.contains("position"))  pt.position  = toVec3(pe["position"]);
             if (pe.contains("controlIn")) pt.controlIn = toVec3(pe["controlIn"]);
@@ -388,13 +499,13 @@ Mc3ExtrudePath toPath(const json& j) {
     return path;
 }
 
-Mc3Extrude toExtrude(const json& j) {
+Mc3Extrude toExtrude(const json& j, const std::string& ownerIdentity) {
     Mc3Extrude ex;
     if (!j.is_object()) return ex;
-    if (j.contains("crossSection")) ex.crossSection = toCrossSection(j["crossSection"]);
-    if (j.contains("path"))         ex.path         = toPath(j["path"]);
+    if (j.contains("crossSection")) ex.crossSection = toCrossSection(j["crossSection"], ownerIdentity);
+    if (j.contains("path"))         ex.path         = toPath(j["path"], ownerIdentity);
     if (j.contains("twist"))        ex.twist        = j["twist"].get<float>();
-    if (j.contains("segments"))     ex.segments     = clampTess(j["segments"].get<int>(), 1);
+    if (j.contains("segments"))     ex.segments     = clampTess(ownerIdentity, "segments", j["segments"].get<int>(), 1);
     if (j.contains("smooth"))       ex.smooth       = j["smooth"].get<bool>();
     if (j.contains("caps"))         ex.caps         = j["caps"].get<bool>();
     g_budget.chargeTessellation(ex.segments);
@@ -415,12 +526,32 @@ Mc3UvMapping toUvMapping(const json& j) {
     return m;
 }
 
+// Recognized `type` field values (objectTypeFromName's own mapping, minus
+// its "unknown -> Group" fallback branch).
+bool isKnownObjectTypeName(const std::string& s) {
+    static const std::set<std::string> kKnown = {
+        "group", "box", "cube", "sphere", "cylinder", "cone", "plane", "torus",
+        "capsule", "disk", "grid", "icosphere", "mesh", "extrude", "instance",
+        "union", "difference", "intersection", "area",
+    };
+    return kKnown.count(s) != 0;
+}
+
 std::shared_ptr<Mc3Object> toObject(const json& j) {
     g_budget.chargeObject();
     auto obj = std::make_shared<Mc3Object>();
     if (!j.is_object()) return obj;
 
-    obj->type = objectTypeFromName(j.value("type", "group"));
+    // Only computed when a validation sink is actually active: this is
+    // called once per object across the whole document tree, so for the
+    // overwhelmingly common case (no Mc3Validation& passed at all) it must
+    // stay a no-op rather than pay for a JSON lookup nothing will ever read.
+    const std::string identity = g_validation ? jsonObjectIdentity(j) : std::string{};
+    const std::string rawType = j.value("type", "group");
+    if (g_validation && !isKnownObjectTypeName(rawType))
+        reportWarning(identity, "type", "unknown object type '" + rawType + "'",
+                      "defaulted to group");
+    obj->type = objectTypeFromName(rawType);
     obj->id       = j.value("id", "");
     obj->name     = j.value("name", "");
     if (j.contains("transform")) obj->transform = toTransform(j["transform"]);
@@ -436,8 +567,8 @@ std::shared_ptr<Mc3Object> toObject(const json& j) {
     if (j.contains("deform"))
         obj->deform = Mc3Deform{ toVec3(j["deform"].value("scale", json::array({1.f,1.f,1.f})), {1.f,1.f,1.f}) };
     if (j.contains("uvMapping")) obj->uvMapping = toUvMapping(j["uvMapping"]);
-    if (j.contains("primitive")) obj->primitive = toPrimitive(j["primitive"]);
-    if (j.contains("extrude"))   obj->extrude   = toExtrude(j["extrude"]);
+    if (j.contains("primitive")) obj->primitive = toPrimitive(j["primitive"], identity);
+    if (j.contains("extrude"))   obj->extrude   = toExtrude(j["extrude"], identity);
     if (j.contains("csgOperation")) {
         const std::string t = j["csgOperation"].value("csgType", "union");
         Mc3CsgOperation csg;
@@ -449,7 +580,7 @@ std::shared_ptr<Mc3Object> toObject(const json& j) {
 
     if (j.contains("meshSource")) {
         obj->meshSource = j["meshSource"].get<std::string>();
-        validateResourcePathIfConfined(obj->meshSource, "mesh source");
+        validateResourcePathIfConfined(obj->meshSource, "mesh source", identity);
     }
 
     if (obj->type == ObjectType::Instance) {
@@ -522,22 +653,24 @@ std::shared_ptr<Mc3Object> toObject(const json& j) {
     return obj;
 }
 
-} // namespace
-
-Mc3Document Mc3JsonParser::parseString(const std::string& jsonText,
-                                       const std::filesystem::path& sourceDir,
-                                       const Mc3LoadPolicy& policy) {
-    // 2026-07-20 audit F4: checked before json::parse() touches the
-    // already-in-memory string, same as Mc3XmlParser.cpp's parseString().
-    checkDocumentByteBudget(jsonText.size());
-
-    json j;
+json parseJsonOrThrow(const std::string& jsonText) {
     try {
-        j = json::parse(jsonText);
+        return json::parse(jsonText);
     } catch (const json::parse_error& e) {
-        throw std::runtime_error(std::string("Failed to parse mc3.json: ") + e.what());
+        std::string msg = std::string("Failed to parse mc3.json: ") + e.what();
+        reportErrorDoc("parse", msg);
+        throw std::runtime_error(msg);
     }
+}
 
+// SYS-W1-08: shared by parse()/parseString() below -- each of those installs
+// its OWN ValidationScope/g_currentSourceFile/byte-budget check first (a real
+// file gets tagged with its real path; an in-memory parse gets a synthetic
+// "in-memory.mc3.json" path), matching Mc3XmlParser.cpp's independent
+// parse()/parseString() entry points rather than having one delegate to the
+// other and stomp on the other's source-file tag.
+Mc3Document buildDocumentFromJson(const json& j, const std::filesystem::path& sourceDir,
+                                   const Mc3LoadPolicy& policy) {
     // AUD-068: set the resource-confinement state for this parse before any
     // texture/SVG/mesh/embed/sound/music field is read (matches
     // Mc3XmlParser.cpp's buildDocumentFromRoot() ordering).
@@ -659,7 +792,7 @@ Mc3Document Mc3JsonParser::parseString(const std::string& jsonText,
                 Mc3SvgTexture svg;
                 svg.id = id;
                 svg.src = te.value("src", "");
-                validateResourcePathIfConfined(svg.src, "SVG texture src");
+                validateResourcePathIfConfined(svg.src, "SVG texture src", id);
                 svg.inlineContent = te.value("inlineContent", "");
                 svg.wrapU = te.value("wrapU", svg.wrapU);
                 svg.wrapV = te.value("wrapV", svg.wrapV);
@@ -671,7 +804,7 @@ Mc3Document Mc3JsonParser::parseString(const std::string& jsonText,
                 Mc3Texture tex;
                 tex.name = te.value("name", id);
                 tex.uri  = te.value("uri", "");
-                validateResourcePathIfConfined(tex.uri, "texture uri");
+                validateResourcePathIfConfined(tex.uri, "texture uri", id);
                 tex.wrapU = te.value("wrapU", tex.wrapU);
                 tex.wrapV = te.value("wrapV", tex.wrapV);
                 tex.filter = te.value("filter", tex.filter);
@@ -711,7 +844,7 @@ Mc3Document Mc3JsonParser::parseString(const std::string& jsonText,
             Mc3EmbedGltf em;
             em.id = ee.value("id", "");
             em.src = ee.value("src", "");
-            validateResourcePathIfConfined(em.src, "embed src");
+            validateResourcePathIfConfined(em.src, "embed src", em.id);
             em.base64Content = ee.value("base64Content", "");
             g_budget.chargeEmbed(em.base64Content.size());
             doc.embeds[em.id] = em;
@@ -733,7 +866,7 @@ Mc3Document Mc3JsonParser::parseString(const std::string& jsonText,
             Mc3Sound snd;
             snd.id   = se.value("id", "");
             snd.src  = se.value("src", "");
-            validateResourcePathIfConfined(snd.src, "sound src");
+            validateResourcePathIfConfined(snd.src, "sound src", snd.id);
             snd.loop = se.value("loop", false);
             doc.sounds[snd.id] = snd;
         }
@@ -744,7 +877,7 @@ Mc3Document Mc3JsonParser::parseString(const std::string& jsonText,
             Mc3Music mus;
             mus.id   = te.value("id", "");
             mus.src  = te.value("src", "");
-            validateResourcePathIfConfined(mus.src, "music src");
+            validateResourcePathIfConfined(mus.src, "music src", mus.id);
             mus.loop = te.value("loop", true);
             doc.musicTracks[mus.id] = mus;
         }
@@ -896,21 +1029,51 @@ Mc3Document Mc3JsonParser::parseString(const std::string& jsonText,
     return doc;
 }
 
-Mc3Document Mc3JsonParser::parse(const std::filesystem::path& path, const Mc3LoadPolicy& policy) {
+} // namespace
+
+Mc3Document Mc3JsonParser::parseString(const std::string& jsonText,
+                                       const std::filesystem::path& sourceDir,
+                                       const Mc3LoadPolicy& policy,
+                                       Mc3Validation* validation) {
+    // SYS-W1-08: set the diagnostics sink and current-source-file before the
+    // very first thing that can fail, mirroring Mc3XmlParser.cpp's own
+    // parseString().
+    ValidationScope vscope(validation);
+    g_currentSourceFile = sourceDir / "in-memory.mc3.json";
+
+    // 2026-07-20 audit F4: checked before json::parse() touches the
+    // already-in-memory string, same as Mc3XmlParser.cpp's parseString().
+    checkDocumentByteBudget(jsonText.size(), "in-memory JSON document");
+
+    return buildDocumentFromJson(parseJsonOrThrow(jsonText), sourceDir, policy);
+}
+
+Mc3Document Mc3JsonParser::parse(const std::filesystem::path& path, const Mc3LoadPolicy& policy,
+                                  Mc3Validation* validation) {
+    // SYS-W1-08: set the diagnostics sink and current-source-file before the
+    // very first thing that can fail, mirroring Mc3XmlParser.cpp's own
+    // parse().
+    ValidationScope vscope(validation);
+    g_currentSourceFile = path;
+
     // 2026-07-20 audit F4: checked via file_size() BEFORE the file is ever
     // opened for reading, same as Mc3XmlParser.cpp's parse() -- unlike
-    // parseString()'s check below (which still has to hold the string in
+    // parseString()'s check above (which still has to hold the string in
     // memory first, since the caller already does), this one avoids ever
     // buffering an oversized file into memory at all.
     {
         std::error_code ec;
         auto sz = std::filesystem::file_size(path, ec);
-        if (!ec) checkDocumentByteBudget(sz);
+        if (!ec) checkDocumentByteBudget(sz, "document '" + path.string() + "'");
     }
 
     std::ifstream in(path, std::ios::binary);
-    if (!in) throw std::runtime_error("Failed to open mc3.json: " + path.string());
+    if (!in) {
+        std::string msg = "Failed to open mc3.json: " + path.string();
+        reportErrorDoc("file", msg);
+        throw std::runtime_error(msg);
+    }
     std::ostringstream ss;
     ss << in.rdbuf();
-    return parseString(ss.str(), path.parent_path(), policy);
+    return buildDocumentFromJson(parseJsonOrThrow(ss.str()), path.parent_path(), policy);
 }

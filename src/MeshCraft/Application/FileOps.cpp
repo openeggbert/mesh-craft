@@ -176,10 +176,11 @@ void MeshCraftApplication::discardAutosave() {
     recoveryDlgOpen_ = false;
 }
 
-// SYS-W14-11: see header comment. Mc3JsonParser has no Mc3Validation-
-// capturing overload yet, so validation stays empty (not populated, not an
-// error) for the .json branch -- a pre-existing gap in the JSON parser
-// itself, not introduced here.
+// SYS-W1-08: XML, JSON, MCB, and both library forms all populate
+// `validation` consistently now -- Mc3JsonParser gained its own
+// Mc3Validation-capturing overload (Mc3JsonParser.hpp), closing what used to
+// be the one load path that silently dropped every clamp/default/rejection
+// diagnostic instead of surfacing it here.
 Mc3::Mc3Document MeshCraftApplication::loadSceneFileDispatched(
     const std::filesystem::path& path, Mc3::Mc3Validation& validation) {
     LibraryFileFormatAlg libraryFormat{};
@@ -193,12 +194,12 @@ Mc3::Mc3Document MeshCraftApplication::loadSceneFileDispatched(
     }
     if (isLibraryPath)
         return libraryFormat == LibraryFileFormatAlg::Json
-            ? Mc3::Mc3Document::loadFromLibraryJsonFile(path)
-            : Mc3::Mc3Document::loadFromLibraryFile(path);
+            ? Mc3::Mc3Document::loadFromLibraryJsonFile(path, validation)
+            : Mc3::Mc3Document::loadFromLibraryFile(path, validation);
     if (path.extension() == ".mcb")
         return Mcb::loadFromFile(path, validation);
     if (path.extension() == ".json")
-        return Mc3::Mc3Document::loadFromJsonFile(path, Mc3::Mc3LoadPolicy::trusted());
+        return Mc3::Mc3Document::loadFromJsonFile(path, Mc3::Mc3LoadPolicy::trusted(), validation);
     return Mc3::Mc3Document::loadFromFile(path, Mc3::Mc3LoadPolicy::trusted(), validation);
 }
 

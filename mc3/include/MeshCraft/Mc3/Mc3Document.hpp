@@ -154,6 +154,19 @@ public:
                                           const std::filesystem::path& sourceDir = {},
                                           const Mc3LoadPolicy& policy = Mc3LoadPolicy::untrusted());
 
+    // SYS-W1-08: validation-capturing counterparts, same semantics as the
+    // loadFromFile/loadFromString `Mc3Validation&` overloads above -- until
+    // this, the JSON load path was the one integration point that silently
+    // dropped every clamp/default/rejection diagnostic Mc3JsonParser now
+    // produces (see Mc3JsonParser.hpp), while XML and MCB populated one.
+    static Mc3Document loadFromJsonFile(const std::filesystem::path& path,
+                                        const Mc3LoadPolicy& policy,
+                                        Mc3Validation& validation);
+    static Mc3Document loadFromJsonString(const std::string& json,
+                                          const std::filesystem::path& sourceDir,
+                                          const Mc3LoadPolicy& policy,
+                                          Mc3Validation& validation);
+
     // Save to XML
     void saveToFile(const std::filesystem::path& path) const;
 
@@ -186,6 +199,13 @@ public:
     void saveToLibraryJsonFile(const std::filesystem::path& path) const;
     static Mc3Document loadFromLibraryFile(const std::filesystem::path& path);
     static Mc3Document loadFromLibraryJsonFile(const std::filesystem::path& path);
+
+    // SYS-W1-08: validation-capturing counterparts (both formats -- neither
+    // library loader had one before this, not just the JSON side).
+    static Mc3Document loadFromLibraryFile(const std::filesystem::path& path,
+                                           Mc3Validation& validation);
+    static Mc3Document loadFromLibraryJsonFile(const std::filesystem::path& path,
+                                               Mc3Validation& validation);
 
     // R110 -- sha256 (see Mc3Sha256.hpp) of this document's canonical
     // mc3.json body (definitions/materials/textures/etc.), EXCLUDING the

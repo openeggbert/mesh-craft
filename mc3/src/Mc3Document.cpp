@@ -112,6 +112,21 @@ Mc3Document Mc3Document::loadFromJsonString(const std::string& jsonText,
     return parser.parseString(jsonText, sourceDir, policy);
 }
 
+Mc3Document Mc3Document::loadFromJsonFile(const std::filesystem::path& path,
+                                          const Mc3LoadPolicy& policy,
+                                          Mc3Validation& validation) {
+    Internal::Mc3JsonParser parser;
+    return parser.parse(path, policy, &validation);
+}
+
+Mc3Document Mc3Document::loadFromJsonString(const std::string& jsonText,
+                                            const std::filesystem::path& sourceDir,
+                                            const Mc3LoadPolicy& policy,
+                                            Mc3Validation& validation) {
+    Internal::Mc3JsonParser parser;
+    return parser.parseString(jsonText, sourceDir, policy, &validation);
+}
+
 void Mc3Document::saveToJsonFile(const std::filesystem::path& path) const {
     Internal::Mc3JsonWriter writer;
     writer.write(*this, path);
@@ -147,6 +162,20 @@ Mc3Document Mc3Document::loadFromLibraryFile(const std::filesystem::path& path) 
 
 Mc3Document Mc3Document::loadFromLibraryJsonFile(const std::filesystem::path& path) {
     Mc3Document doc = loadFromJsonFile(path);
+    requireLibraryInfo(doc);
+    return doc;
+}
+
+Mc3Document Mc3Document::loadFromLibraryFile(const std::filesystem::path& path,
+                                             Mc3Validation& validation) {
+    Mc3Document doc = loadFromFile(path, Mc3LoadPolicy::trusted(), validation);
+    requireLibraryInfo(doc);
+    return doc;
+}
+
+Mc3Document Mc3Document::loadFromLibraryJsonFile(const std::filesystem::path& path,
+                                                 Mc3Validation& validation) {
+    Mc3Document doc = loadFromJsonFile(path, Mc3LoadPolicy::trusted(), validation);
     requireLibraryInfo(doc);
     return doc;
 }

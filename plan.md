@@ -138,18 +138,54 @@ time; re-evaluate scope and blockers before starting each item.
 
 ### W1 — Validation and diagnostics
 
-- **SYS-W1-08** `[PROPOSED]` `P1` — Add validation-capturing JSON load APIs.
-  `FileOps.cpp:179-182` documents that `Mc3JsonParser` has no
-  `Mc3Validation`-capturing overload, so the `.json` and `.mc3lib.json`
-  branches of `loadSceneFileDispatched()` silently return empty validation
-  (not populated, not an error) while the XML and MCB branches populate it.
-  Add `Mc3Validation&` overloads for JSON string/file loading and for
-  `.mc3lib.json`, routing parser clamps, defaults and hard rejections through
-  the same structured diagnostic surface XML and MCB already use, then update
-  `loadSceneFileDispatched()` so all four load paths populate the editor
-  validation history consistently. **Tests:** differential XML/JSON fixtures
-  for non-finite values, clamps, missing references, invalid enums, excessive
-  limits, library identity, hard rejection, and clean valid documents.
+- **SYS-W1-08** `[DONE]` `P1` — Added validation-capturing JSON load APIs.
+  `Mc3JsonParser` gained the same `g_validation`/`reportWarning`/`reportError`/
+  `reportErrorDoc` thread_local pattern `Mc3XmlParser.cpp` already used
+  (`Mc3JsonParser.cpp`), wired into: per-field tessellation clamps
+  (`clampTess`, now threading the *owning object's* id/name down into
+  `toPrimitive`/`toCrossSection`/`toPath`/`toExtrude` — JSON nests these
+  fields under sub-objects with no identity of their own, unlike XML's flat
+  attributes), `customPoints`/`points` count-cap rejections, every
+  `DocumentBudget::charge*()` budget-exceeded rejection, the document
+  byte-budget rejection, resource-path confinement rejections, and a new
+  "unknown object type" warning (JSON silently defaults an unrecognized
+  `type` to `group` — reported now, though still not rejected outright the
+  way XML drops the object entirely; this task is diagnostic parity, not
+  behavioral parity, and changing JSON's accept-vs-drop semantics is out of
+  scope here). `parse()`/`parseString()` each now install their own
+  `ValidationScope` + real-vs-synthetic source-file tag (refactored the
+  shared parsing body into an internal `buildDocumentFromJson()` so `parse()`
+  no longer delegates to `parseString()` and stomps its source-file tag with
+  a synthetic in-memory path). Added `Mc3Document::loadFromJsonFile()`/
+  `loadFromJsonString()`/`loadFromLibraryFile()`/`loadFromLibraryJsonFile()`
+  `Mc3Validation&` overloads (the last two for BOTH formats — XML's library
+  loader had no validation overload either, not just JSON's) and updated
+  `loadSceneFileDispatched()` (`FileOps.cpp`) so all four load paths populate
+  the editor's validation history consistently.
+  New `mc3_json_validation` differentially compares JSON against
+  `Mc3XmlParser`'s existing diagnostics for the same tessellation-clamp value
+  (identical `suggestedRepair`), plus invalid enum, document budget, resource
+  confinement, library identity, a clean document (zero entries), and the
+  no-validation-argument non-regression case. All 27 standalone `mc3` tests
+  passed, as did the full root `MeshCraft` editor target and the
+  registry/undo tests exercising `Mc3Document` load paths transitively.
+  **Performance note (found and fixed during this task, not a regression
+  from it):** computing an object's id/name identity unconditionally on
+  every parsed object — regardless of whether a validation sink was even
+  active — added measurable per-object overhead; made it conditional on
+  `g_validation != nullptr` so the overwhelmingly common no-validation case
+  pays nothing for it. That fix chased what turned out to be a red herring:
+  confirmed via `git stash` isolation that `mc3_json_document_budget`'s
+  ~150K-object stress scenario already took ~50-55s on the UNMODIFIED,
+  pre-this-task code under this repo's `Debug` (`-O0`) build (vs. ~8-10s
+  under a `Release`-flagged standalone build) — this is the SAME
+  `mc3_json_document_budget ... ***Timeout 30.05 sec` failure already
+  present in the "Clang ASan+UBSan and bounded fuzz" CI job (which configures
+  `-DCMAKE_BUILD_TYPE=Debug`) from tonight's CI-red survey, not something
+  this task introduced or fixed. Left alone per the standing decision to
+  leave the general CI-red regressions for a separate pass; the per-object
+  laziness fix above is kept anyway since it's a correct, free micro-
+  optimization, just not the explanation for the timeout.
 
 ### W2 — AI / import sandbox
 

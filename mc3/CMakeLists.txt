@@ -381,6 +381,16 @@ if(BUILD_TESTING)
     add_test(NAME mc3_atomic_write COMMAND mc3_atomic_write_test)
     set_tests_properties(mc3_atomic_write PROPERTIES TIMEOUT 15 LABELS "format")
 
+    # SYS-W1-08: Mc3JsonParser's new Mc3Validation-capturing load path,
+    # differentially compared against Mc3XmlParser's existing one for the
+    # same underlying conditions (tessellation clamp, invalid enum, document
+    # budget, resource confinement, library identity, clean document, and
+    # the no-validation-argument non-regression case).
+    add_executable(mc3_json_validation_test test/json_validation_test.cpp)
+    target_link_libraries(mc3_json_validation_test PRIVATE Mc3)
+    add_test(NAME mc3_json_validation COMMAND mc3_json_validation_test)
+    set_tests_properties(mc3_json_validation PROPERTIES TIMEOUT 15 LABELS "format")
+
     # SYS-W1-04: include bombs -- depth (bounded by Mc3LoadPolicy::
     # maxIncludeDepth) and fan-out (bounded by the new DocumentBudget::
     # chargeInclude); cycles are already covered by mc3_roundtrip's
