@@ -3,6 +3,7 @@
 // Included by MeshCraftApplication_Commands.cpp and editor_commands_test.cpp.
 
 #include <MeshCraft/Editor/ObjectTypeName.hpp>
+#include <MeshCraft/CoordinateSystemAlgorithms.hpp>
 #include <MeshCraft/Editor/SelectionManager.hpp>
 #include <MeshCraft/Mc3/Mc3Document.hpp>
 #include <MeshCraft/Mc3/Mc3Object.hpp>
@@ -29,6 +30,57 @@
 #include <vector>
 
 namespace MeshCraft {
+
+// Convert a document in-place to the editor's native right-handed Y-up
+// convention without silently changing it merely on load.  Object trees are
+// preserved under one explicit -90 degree X-rotation group, which avoids
+// lossy Euler decomposition and keeps animations/instances/CSG semantics
+// intact. Scene-level values that are not children (lights and cameras) are
+// converted directly. A rotation-authored camera is made target-authored:
+// the editor uses only its forward vector for this representation, so this
+// preserves the actual view direction while removing an otherwise lossy
+// Euler basis conversion.
+inline bool normalizeCoordinateSystemToYUpAlg(Mc3::Mc3Document& document)
+{
+    if (!usesRightHandedZUpAlg(document.coordinateSystem)) return false;
+
+    for (auto& light : document.lights) {
+        if (light.type == Mc3::LightType::Directional || light.type == Mc3::LightType::Spot)
+            light.direction = coordinateToYUpAlg(document.coordinateSystem, light.direction);
+        if (light.type == Mc3::LightType::Point || light.type == Mc3::LightType::Spot)
+            light.position = coordinateToYUpAlg(document.coordinateSystem, light.position);
+    }
+
+    for (auto& camera : document.cameras) {
+        if (camera.rotation.has_value()) {
+            // Roll does not affect an MC3 camera's look direction. This
+            // matches SceneRenderer::cameraForwardFromRotation()'s purpose
+            // without pulling CNA math into this header-only algorithm.
+            constexpr float radiansPerDegree = std::numbers::pi_v<float> / 180.0f;
+            const float pitch = (*camera.rotation)[0] * radiansPerDegree;
+            const float yaw   = (*camera.rotation)[1] * radiansPerDegree;
+            const std::array<float, 3> forward{
+                std::sin(yaw) * std::cos(pitch),
+                std::sin(pitch),
+                -std::cos(yaw) * std::cos(pitch)};
+            camera.target = {camera.position[0] + forward[0],
+                             camera.position[1] + forward[1],
+                             camera.position[2] + forward[2]};
+            camera.rotation.reset();
+        }
+        camera.position = coordinateToYUpAlg(document.coordinateSystem, camera.position);
+        camera.target   = coordinateToYUpAlg(document.coordinateSystem, camera.target);
+    }
+
+    auto conversionRoot = std::make_shared<Mc3::Mc3Object>();
+    conversionRoot->type = Mc3::ObjectType::Group;
+    conversionRoot->name = "Coordinate system normalized to Y-up";
+    conversionRoot->transform.rotation[0] = -90.0f;
+    conversionRoot->children = std::move(document.objects);
+    document.objects = {std::move(conversionRoot)};
+    document.coordinateSystem = std::string(kRightHandedYUpCoordinateSystem);
+    return true;
+}
 
 // ── Object type name ──────────────────────────────────────────────────────────
 

@@ -1,4 +1,5 @@
 #include "MeshCraft/Renderer/SceneRenderer.hpp"
+#include "MeshCraft/CoordinateSystemAlgorithms.hpp"
 #include "MeshCraft/Renderer/PrimitiveTessellationAlg.hpp"
 
 #include <Microsoft/Xna/Framework/Graphics/BufferUsage.hpp>
@@ -26,6 +27,12 @@ namespace MeshCraft::Renderer {
 // ---------------------------------------------------------------------------
 
 namespace {
+
+Matrix coordinateSystemRootMatrixForEdges(const Mc3Document& doc) {
+    return usesRightHandedZUpAlg(doc.coordinateSystem)
+        ? Matrix::CreateRotationX(-std::numbers::pi_v<float> / 2.0f)
+        : Matrix::getIdentityProperty();
+}
 
 struct ExtFrame { Vector3 pos, tan, nor, bi; };
 
@@ -892,7 +899,7 @@ void SceneRenderer::drawGridDynamic(float sizeX, float sizeZ, int subX, int subZ
 void SceneRenderer::drawEdgeOverlay(const Mc3Document& doc,
                                      const Matrix& view, const Matrix& proj)
 {
-    Matrix identity = Matrix::getIdentityProperty();
+    Matrix identity = coordinateSystemRootMatrixForEdges(doc);
     for (const auto& obj : doc.objects)
         drawObjectEdges(*obj, doc, identity, view, proj);
 }

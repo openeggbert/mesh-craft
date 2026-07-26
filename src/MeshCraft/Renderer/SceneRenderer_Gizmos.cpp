@@ -1,4 +1,5 @@
 #include "MeshCraft/Renderer/SceneRenderer.hpp"
+#include "MeshCraft/CoordinateSystemAlgorithms.hpp"
 
 #include <Microsoft/Xna/Framework/Graphics/BufferUsage.hpp>
 #include <Microsoft/Xna/Framework/Graphics/IndexElementSize.hpp>
@@ -20,11 +21,20 @@ using namespace MeshCraft::Renderer;
 
 namespace MeshCraft::Renderer {
 
+namespace {
+
+Vector3 gizmoPointToYUp(const Mc3Document& doc, float x, float y, float z) {
+    const auto p = coordinateToYUpAlg(doc.coordinateSystem, {x, y, z});
+    return {p[0], p[1], p[2]};
+}
+
+} // namespace
+
 // ---------------------------------------------------------------------------
 // Gizmo
 // ---------------------------------------------------------------------------
 
-void SceneRenderer::drawGizmo(const Mc3Object* obj,
+void SceneRenderer::drawGizmo(const Mc3Object* obj, const Mc3Document& doc,
                                const Matrix& view, const Matrix& proj,
                                float gizmoLength, bool localSpace)
 {
@@ -53,12 +63,12 @@ void SceneRenderer::drawGizmo(const Mc3Object* obj,
     float wx = px+L*axZ.X, wy = py+L*axZ.Y, wz = pz+L*axZ.Z;
 
     VertexPositionColor lineVerts[6] = {
-        { {px, py, pz}, Color(210, 60,  60,  255) },
-        { {tx, ty, tz}, Color(210, 60,  60,  255) },
-        { {px, py, pz}, Color(60,  210, 60,  255) },
-        { {ux, uy, uz}, Color(60,  210, 60,  255) },
-        { {px, py, pz}, Color(60,  60,  210, 255) },
-        { {wx, wy, wz}, Color(60,  60,  210, 255) },
+        { gizmoPointToYUp(doc, px, py, pz), Color(210, 60,  60,  255) },
+        { gizmoPointToYUp(doc, tx, ty, tz), Color(210, 60,  60,  255) },
+        { gizmoPointToYUp(doc, px, py, pz), Color(60,  210, 60,  255) },
+        { gizmoPointToYUp(doc, ux, uy, uz), Color(60,  210, 60,  255) },
+        { gizmoPointToYUp(doc, px, py, pz), Color(60,  60,  210, 255) },
+        { gizmoPointToYUp(doc, wx, wy, wz), Color(60,  60,  210, 255) },
     };
 
     VertexBuffer lineVB(device_, 6);
@@ -86,12 +96,13 @@ void SceneRenderer::drawGizmo(const Mc3Object* obj,
     float tips[3][3] = { {tx, ty, tz}, {ux, uy, uz}, {wx, wy, wz} };
     for (int i = 0; i < 3; ++i) {
         Matrix world = Matrix::CreateScale(hs) *
-                       Matrix::CreateTranslation({tips[i][0], tips[i][1], tips[i][2]});
+                       Matrix::CreateTranslation(gizmoPointToYUp(
+                           doc, tips[i][0], tips[i][1], tips[i][2]));
         drawMesh(unitBox_, world, view, proj, tipCols[i]);
     }
 }
 
-void SceneRenderer::drawScaleGizmo(const Mc3Object* obj,
+void SceneRenderer::drawScaleGizmo(const Mc3Object* obj, const Mc3Document& doc,
                                     const Matrix& view, const Matrix& proj,
                                     float gizmoLength, bool localSpace)
 {
@@ -118,12 +129,12 @@ void SceneRenderer::drawScaleGizmo(const Mc3Object* obj,
     float wx = px+L*axZ.X, wy = py+L*axZ.Y, wz = pz+L*axZ.Z;
 
     VertexPositionColor lineVerts[6] = {
-        { {px, py, pz}, Color(210, 60,  60,  255) },
-        { {tx, ty, tz}, Color(210, 60,  60,  255) },
-        { {px, py, pz}, Color(60,  210, 60,  255) },
-        { {ux, uy, uz}, Color(60,  210, 60,  255) },
-        { {px, py, pz}, Color(60,  60,  210, 255) },
-        { {wx, wy, wz}, Color(60,  60,  210, 255) },
+        { gizmoPointToYUp(doc, px, py, pz), Color(210, 60,  60,  255) },
+        { gizmoPointToYUp(doc, tx, ty, tz), Color(210, 60,  60,  255) },
+        { gizmoPointToYUp(doc, px, py, pz), Color(60,  210, 60,  255) },
+        { gizmoPointToYUp(doc, ux, uy, uz), Color(60,  210, 60,  255) },
+        { gizmoPointToYUp(doc, px, py, pz), Color(60,  60,  210, 255) },
+        { gizmoPointToYUp(doc, wx, wy, wz), Color(60,  60,  210, 255) },
     };
 
     VertexBuffer lineVB(device_, 6);
@@ -153,12 +164,13 @@ void SceneRenderer::drawScaleGizmo(const Mc3Object* obj,
     Vector3 tipScales[3] = { {thin, hs, hs}, {hs, thin, hs}, {hs, hs, thin} };
     for (int i = 0; i < 3; ++i) {
         Matrix world = Matrix::CreateScale(tipScales[i]) *
-                       Matrix::CreateTranslation({tips[i][0], tips[i][1], tips[i][2]});
+                       Matrix::CreateTranslation(gizmoPointToYUp(
+                           doc, tips[i][0], tips[i][1], tips[i][2]));
         drawMesh(unitBox_, world, view, proj, tipCols[i]);
     }
 }
 
-void SceneRenderer::drawRotateGizmo(const Mc3Object* obj,
+void SceneRenderer::drawRotateGizmo(const Mc3Object* obj, const Mc3Document& doc,
                                      const Matrix& view, const Matrix& proj,
                                      float gizmoLength, bool localSpace)
 {
@@ -207,7 +219,7 @@ void SceneRenderer::drawRotateGizmo(const Mc3Object* obj,
             float wx = px + L*(c*planeU[ax].X + s*planeV[ax].X);
             float wy = py + L*(c*planeU[ax].Y + s*planeV[ax].Y);
             float wz = pz + L*(c*planeU[ax].Z + s*planeV[ax].Z);
-            verts[j] = { {wx, wy, wz}, cols[ax] };
+            verts[j] = { gizmoPointToYUp(doc, wx, wy, wz), cols[ax] };
         }
         VertexBuffer circleVB(device_, N + 1);
         circleVB.SetData(verts.data(), N + 1);

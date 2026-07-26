@@ -135,17 +135,15 @@ sequentially. Per `CLAUDE.md`, recording this ordered backlog does **not**
 remove the requirement to describe and obtain explicit confirmation for each
 individual implementation task immediately before work begins.
 
-1. **SYS-W14-14 (P2/W14, reopened)** — implement the declared MC3 coordinate
-   system consistently, not merely as a write-only document field.
-2. **SYS-W3-02 (P2/W3)** — introduce narrow shared semantic-evaluation
+1. **SYS-W3-02 (P2/W3)** — introduce narrow shared semantic-evaluation
    helpers required by transform/LOD/material parity, without a broad editor
    rewrite.
-3. **SYS-W14-32/33/34 (P2/P2/P3/W14)** — deliver viewport parity in separate
+2. **SYS-W14-32/33/34 (P2/P2/P3/W14)** — deliver viewport parity in separate
    UV-mapping, point/spot-light, and CSG child-material slices.
-4. **SYS-W14-30 (P2/W14)** — expand explicit walk-mode collision proxies.
-5. **SYS-W14-35/36 (P2/P3/W14)** — preserve material structure on OBJ import,
+3. **SYS-W14-30 (P2/W14)** — expand explicit walk-mode collision proxies.
+4. **SYS-W14-35/36 (P2/P3/W14)** — preserve material structure on OBJ import,
    then add a bounded editable self-contained GLB importer.
-6. **SYS-W14-37/38/39 and SYS-W9-04 (P3)** — export optimization controls,
+5. **SYS-W14-37/38/39 and SYS-W9-04 (P3)** — export optimization controls,
     animation/export policy, Model Registry v2, and scalable history/review
     tooling.
 
@@ -1357,61 +1355,26 @@ portable through CNA rather than merely hiding its OpenGL dependency.
   level test needed). `test/validate_xsd.py` against a hand-built fixture
   with `<library>`/`<imports>` populated; manual `--screenshot` smoke test
   loading it (no crash, clean GL state).
-- **SYS-W14-14** `[TODO]`
-  `P2` — Wire up `coordinate_system` so it actually affects something. The
-  invalid `"left_handed_y_up"` combo option was already removed
-  (`STAB-0713`, combo now only offers the 2 XSD-valid values), but
-  `Mc3Document::coordinateSystem` is still write-only — stored and
-  editable, but never read anywhere in `mc3togltf/` or `src/MeshCraft/`
-  (confirmed by direct grep, no read sites found). A user can correctly set
-  this field through the GUI and it has zero effect on rendering or export.
-  Found via `missing.md`'s 2026-07-18 update.
-  **Investigation + decision (2026-07-18):** this row's own text offered
-  two paths — implement the real conversion, or document as declarative-
-  only (matching `SYS-W5-03`'s precedent). Investigated what "implement
-  the real conversion" would actually require: `right_handed_z_up` vs.
-  `right_handed_y_up` differ only in which axis is "up," so a single
-  root-transform (axis swap) applied once at the scene root would in
-  principle be enough — mechanically simple. But that root transform would
-  need to be applied **consistently across every independent root-matrix
-  call site**: `SceneRenderer::draw()`, `drawEmissivePass()`,
-  `drawCsgGizmos()`, and `computeObjectWorldMatrix()` (used by picking and
-  the Properties panel's world-position display) in the editor, plus
-  `GltfExporter.cpp`'s own root node construction — matching this
-  project's own already-documented "two independent geometry generators"
-  risk (`NEXT.md`'s architecture notes: the editor and exporter build
-  geometry independently with no shared code, and are known to require
-  careful manual sync, e.g. deliberately-opposite triangle winding).
-  Missing even one of these call sites would make gizmos/picking silently
-  disagree with rendered geometry — a worse, harder-to-notice bug than
-  today's "field does nothing" gap. Chose the same resolution as
-  `SYS-W5-03`'s precedent: **documented as a known, by-design limitation
-  rather than implemented**, since a correct implementation needs the same
-  careful multi-site consistency discipline `SYS-W1-05`/`06`/`07` used for
-  cycle-guards, not a single-file quick fix, and a "why not just do it"
-  investigation belongs in this file even when the answer is "not yet."
-  **What DID ship, matching the `rotation_units`/`euler_order` precedent
-  exactly (`STAB-0701`):** `checkRotationConventionNotice()`
-  (`MeshCraftApplication_FileOps.cpp`) now also checks `coordinateSystem`
-  and includes it in the combined load-time status-bar notice (was
-  rotation-only, now covers all 3 declarative-but-unhonored conventions in
-  one combined message when more than one applies). `MC3_FORMAT.md`
-  updated: `coordinate_system`'s value table was missing
-  `right_handed_z_up` entirely (a pre-existing doc bug, fixed in passing),
-  plus a new paragraph stating plainly that this field is honored
-  **nowhere**, not even by the exporter (a weaker guarantee than
-  `rotation_units`/`euler_order`, which are at least export-honored), with
-  the same reasoning as above for why. Verify: full rebuild +
-  `ctest -j"$(nproc)"` (126/126, unchanged), `test/validate_xsd.py` against
-  a hand-built `coordinate_system="right_handed_z_up"` fixture (valid),
-  manual `--screenshot` smoke test loading it (no crash, clean GL state).
-  **Reopened (2026-07-26, user authorization):** the documented-only prior
-  decision is superseded. Implement the real convention through a small
-  shared CNA-free helper, then apply it consistently in editor rendering,
-  picking, gizmos, world-position UI, walk collision, CSG, and glTF export.
-  Add a Normalize to Y-up command rather than silently rewriting documents on
-  load. Require transform, picking, screenshot, and glTF-node fixtures before
-  marking this task done; a missed consumer is a correctness failure.
+- **SYS-W14-14** `[DONE]` `P2` — `coordinate_system` is operational
+  (implemented 2026-07-26). `CoordinateSystemAlgorithms.hpp` is the shared,
+  CNA-free source of truth for the right-handed Z-up → Y-up rotation
+  `(x,y,z) → (x,z,-y)` and its inverse. The renderer uses the corresponding
+  root matrix consistently for normal, depth, emissive, edge, CSG and
+  world-position paths; light/camera/gizmo/bounding/proportional overlays and
+  walk collision use the same conversion. Picking converts the native-Y-up
+  screen ray back into authored document space before the existing pure AABB
+  picker runs, so its result agrees with the viewport.
+  `mc3togltf` exports a named -90° X root node above object, camera and light
+  roots, preserving local transforms and animation channels. Scene Properties
+  now accurately describes the field and exposes **Normalize to Y-up** for
+  Z-up scenes; this explicit, undoable command converts scene-level cameras
+  and lights and wraps authored roots in a -90° X group rather than silently
+  rewriting files at load. The stale load-time warning was removed.
+  **Coverage:** CNA-free transform/picking/normalization test
+  (`coordinate_system`), glTF node fixture (`mc3togltf_coordinate_system`),
+  and a registered real-pixel Z-up viewport fixture
+  (`coordinate_system_viewport_test`; disabled locally with the other render
+  tests when Xvfb preflight fails). `MC3_FORMAT.md` documents the contract.
 - **SYS-W14-15** `[DONE, material texture slots only — see scope note]` `P3`
   — Native file-browse dialog for texture/mesh path fields (currently plain
   `ImGui::InputText` boxes everywhere, including the Import OBJ dialog and
@@ -1988,8 +1951,10 @@ portable through CNA rather than merely hiding its OpenGL dependency.
   any `LightType::Ambient` light -- glTF 2.0 core + `KHR_lights_punctual`
   genuinely has no ambient-light equivalent, so this is a real spec gap,
   not an oversight, and the current behavior (warn, don't silently drop)
-  is already honest. Filed as an open task, not closed as won't-fix like
-  `coordinate_system`/`rotation_units` (`STAB-0701`/`SYS-W14-14`),
+  is already honest. This was initially filed as an open task rather than
+  closed as won't-fix like `rotation_units` (`STAB-0701`) or the then-
+  deferred `coordinate_system` work (`SYS-W14-14`, subsequently
+  implemented),
   because unlike those two a *lossy but useful* approximation is
   possible here (e.g. bake the ambient contribution into every affected
   material's emissive channel at export time) -- worth a real

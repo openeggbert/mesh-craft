@@ -1,4 +1,5 @@
 #include "MeshCraft/Application/MeshCraftApplication.hpp"
+#include "MeshCraft/CoordinateSystemAlgorithms.hpp"
 #include "MeshCraft/MeshCraftPrivate.hpp"
 
 #include <Microsoft/Xna/Framework/Input/Keys.hpp>
@@ -32,6 +33,12 @@ Matrix walkColliderWorldMatrix(const Mc3::Mc3Transform& t) {
                                           t.rotation[0] * radiansPerDegree,
                                           t.rotation[2] * radiansPerDegree) *
            Matrix::CreateTranslation({t.position[0] + px, t.position[1] + py, t.position[2] + pz});
+}
+
+Matrix coordinateSystemRootMatrixForWalk(const Mc3::Mc3Document& doc) {
+    return usesRightHandedZUpAlg(doc.coordinateSystem)
+        ? Matrix::CreateRotationX(-std::numbers::pi_v<float> / 2.0f)
+        : Matrix::getIdentityProperty();
 }
 
 std::optional<std::array<float, 3>> walkColliderHalfExtents(const Mc3::Mc3Object& obj) {
@@ -71,7 +78,7 @@ std::optional<std::array<float, 3>> walkColliderHalfExtents(const Mc3::Mc3Object
 
 std::vector<Editor::WalkCollider> buildWalkColliders(const Mc3::Mc3Document& doc) {
     std::vector<Editor::WalkCollider> colliders;
-    const Matrix identity = Matrix::getIdentityProperty();
+    const Matrix identity = coordinateSystemRootMatrixForWalk(doc);
     std::function<void(const Mc3::Mc3Object&, const Matrix&, int)> visit;
     visit = [&](const Mc3::Mc3Object& obj, const Matrix& parentWorld, int depth) {
         if (depth > 16) return; // same graph-safety bound as SceneRenderer

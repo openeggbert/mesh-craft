@@ -28,28 +28,21 @@ but the live editor's transform gizmo, keyboard nudging, and mouse-drag
 rotation always assume degrees in a fixed XYZ order regardless of what a
 loaded document declares (won't-fix, tracked as `STAB-0701`).
 
-**`coordinate_system` is declarative metadata only — not honored anywhere,
-not even by `mc3togltf`** (won't-fix, tracked as `SYS-W14-14`; a weaker
-guarantee than `rotation_units`/`euler_order` above, which are at least
-export-honored). Both the live editor and the exporter always treat scene
-geometry, cameras, and lights as right-handed Y-up (matching glTF's own
-fixed convention) regardless of what a document declares. Setting
-`right_handed_z_up` parses, round-trips, and is settable through the
-Scene Properties panel, but has zero effect on rendering or export.
-Actually honoring it would mean applying a consistent axis-conversion
-transform across every renderer/exporter/picking/gizmo entry point that
-walks the scene graph — `SceneRenderer.cpp` alone has several independent
-root-transform call sites (`draw()`, `drawEmissivePass()`,
-`drawCsgGizmos()`, `computeObjectWorldMatrix()`) that would all need the
-exact same conversion applied consistently, matching this project's own
-documented "two independent geometry generators" risk (see the
-architecture notes in `NEXT.md`) — getting even one of them wrong would
-make gizmos/picking silently disagree with rendered geometry, a worse bug
-than today's inert-field gap. Loading a document with a non-default
-`coordinate_system` (or `rotation_units`/`euler_order`) now shows a
-combined status-bar notice naming every declared-but-unhonored
-convention (`checkRotationConventionNotice()`,
-`MeshCraftApplication_FileOps.cpp`).
+**`coordinate_system` is operational** (`SYS-W14-14`). The editor's native
+rendering space is right-handed Y-up. For a
+`right_handed_z_up` document, every authored point and direction is rotated
+by -90° around X — `(x, y, z) → (x, z, -y)` — before rendering; this is
+also used by viewport picking, gizmos, walk collision, CSG overlays,
+world-position display, document cameras and lights. `mc3togltf` emits the
+same conversion as one named root node above all exported scene roots,
+cameras and punctual lights, preserving local transforms and animation
+channels.
+
+Changing the dropdown changes the declaration only, because it is a
+semantic choice about already-authored values. For an existing Z-up scene,
+Scene Properties offers **Normalize to Y-up**: it converts scene-level
+cameras/lights and wraps all root objects in an explicit -90° X group, so
+the visible scene is retained without silently rewriting a file on load.
 
 ---
 

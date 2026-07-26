@@ -1,4 +1,5 @@
 #include "MeshCraft/Renderer/SceneRenderer.hpp"
+#include "MeshCraft/CoordinateSystemAlgorithms.hpp"
 #include "MeshCraft/Renderer/CsgCacheAlg.hpp"
 #include "MeshCraft/Renderer/PrimitiveTessellationAlg.hpp"
 #include "MeshCraft/EditorAlgorithms.hpp"
@@ -36,6 +37,21 @@ using namespace MeshCraft::Mc3;
 using namespace MeshCraft::Renderer;
 
 namespace {
+
+// CNA's Matrix is intentionally kept out of CoordinateSystemAlgorithms.hpp.
+// This is the renderer adapter from the shared MC3 convention to a row-vector
+// world matrix: authored Z-up values are rotated into native Y-up space.
+Matrix coordinateSystemRootMatrix(const Mc3Document& doc) {
+    return MeshCraft::usesRightHandedZUpAlg(doc.coordinateSystem)
+        ? Matrix::CreateRotationX(-std::numbers::pi_v<float> / 2.0f)
+        : Matrix::getIdentityProperty();
+}
+
+Vector3 coordinateSystemDirectionToYUp(const Mc3Document& doc,
+                                       const std::array<float, 3>& value) {
+    const auto converted = MeshCraft::coordinateToYUpAlg(doc.coordinateSystem, value);
+    return {converted[0], converted[1], converted[2]};
+}
 
 // AUD-085.  ShaderEffect's 3D path supplies these matrices for an ordinary
 // DrawIndexedPrimitives call; writing gl_FragCoord.z keeps precisely the same
@@ -864,7 +880,7 @@ void SceneRenderer::drawDepthPass(const Mc3Document& doc, const Matrix& view, co
     if (!depthPassAvailable()) return;
     device_.SetDepthTestEnabled(true);
     device_.SetDepthWriteEnabled(true);
-    const Matrix identity = Matrix::getIdentityProperty();
+    const Matrix identity = coordinateSystemRootMatrix(doc);
     for (const auto& object : doc.objects)
         if (object) drawDepthObject(*object, doc, identity, view, proj);
     device_.SetVertexBuffer(nullptr);
@@ -982,7 +998,7 @@ const RenderMesh& SceneRenderer::icoSphereMeshForSegments(int segments) const
     return unitIcoSpheres_[subdivisions - 1];
 }
 
-void SceneRenderer::drawObjectWireframe(const Mc3Object& obj,
+void SceneRenderer::drawObjectWireframe(const Mc3Object& obj, const Mc3Document& doc,
                                          const Matrix& view, const Matrix& proj, Color color)
 {
     // Scale wire shape to object's bounding size
@@ -1026,7 +1042,7 @@ void SceneRenderer::drawObjectWireframe(const Mc3Object& obj,
     transM.setTranslationProperty({ obj.transform.position[0],
                                     obj.transform.position[1],
                                     obj.transform.position[2] });
-    Matrix wireWorld = scaleM * rotM * transM;
+    Matrix wireWorld = scaleM * rotM * transM * coordinateSystemRootMatrix(doc);
 
     const WireShape* ws = &wireShapeBox_;
     if      (obj.type == ObjectType::Sphere)   ws = &wireShapeSphere_;
@@ -1041,11 +1057,11 @@ void SceneRenderer::drawObjectWireframe(const Mc3Object& obj,
     drawWireShape(*ws, wireWorld, view, proj, color);
 }
 
-void SceneRenderer::drawWireSphereAt(const Vector3& center, float radius,
+void SceneRenderer::drawWireSphereAt(const Vector3& center, float radius, const Mc3Document& doc,
                                       const Matrix& view, const Matrix& proj, Color color)
 {
     Matrix wireWorld = Matrix::CreateScale({ radius * 2.0f, radius * 2.0f, radius * 2.0f }) *
-                        Matrix::CreateTranslation(center);
+                        Matrix::CreateTranslation(center) * coordinateSystemRootMatrix(doc);
     drawWireShape(wireShapeSphere_, wireWorld, view, proj, color);
 }
 
@@ -1393,7 +1409,7 @@ void SceneRenderer::drawObject(const Mc3Object& obj, const Mc3Document& doc,
     if (sel) {
         // Draw bright wireframe always-on-top (depth test off) for Blender-like visibility
         device_.SetDepthTestEnabled(false);
-        drawObjectWireframe(obj, view, proj, Color(255, 210, 0, 255));
+        drawObjectWireframe(obj, doc, view, proj, Color(255, 210, 0, 255));
         device_.SetDepthTestEnabled(true);
     }
 }
@@ -1439,7 +1455,7 @@ void SceneRenderer::applyDocumentLighting(const Mc3Document& doc)
             continue;
         }
         const Mc3Light& l = *dirLights[i];
-        Vector3 dir{l.direction[0], l.direction[1], l.direction[2]};
+        Vector3 dir = coordinateSystemDirectionToYUp(doc, l.direction);
         // A hostile/malformed document could author direction="0 0 0" --
         // Vector3::Normalize on a zero vector is undefined, so fall back
         // to the struct's own documented default (straight down), matching
@@ -1501,7 +1517,7 @@ void SceneRenderer::draw(const Mc3Document& doc,
     camPosY_ = -(view.M41*view.M12 + view.M42*view.M22 + view.M43*view.M32);
     camPosZ_ = -(view.M41*view.M13 + view.M42*view.M23 + view.M43*view.M33);
 
-    Matrix identity = Matrix::getIdentityProperty();
+    Matrix identity = coordinateSystemRootMatrix(doc);
 
     for (const auto& obj : doc.objects)
         drawObject(*obj, doc, identity, view, proj, selected);
@@ -1651,7 +1667,7 @@ void SceneRenderer::drawEmissivePass(
     // Flat unlit rendering — emissive color must not be modulated by directional light
     const bool prevLighting = effect_->getLightingEnabledProperty();
     effect_->setLightingEnabledProperty(false);
-    Matrix identity = Matrix::getIdentityProperty();
+    Matrix identity = coordinateSystemRootMatrix(doc);
     for (const auto& obj : doc.objects)
         drawEmissiveObject(*obj, doc, identity, view, proj, 0);
     effect_->setLightingEnabledProperty(prevLighting);
@@ -1686,13 +1702,18 @@ void SceneRenderer::drawLineList(
 }
 
 void SceneRenderer::drawLightGizmos(
-    const std::vector<Mc3::Mc3Light>& lights,
+    const Mc3Document& doc,
     const Matrix& view, const Matrix& proj)
 {
+    const auto& lights = doc.lights;
     std::vector<VertexPositionColor> lines;
 
-    auto vc = [](std::array<float,3> p, Color c) -> VertexPositionColor {
-        return { Vector3{p[0], p[1], p[2]}, c };
+    const auto authoredUpArray = coordinateFromYUpAlg(doc.coordinateSystem, {0.0f, 1.0f, 0.0f});
+    const Vector3 authoredUp{authoredUpArray[0], authoredUpArray[1], authoredUpArray[2]};
+
+    auto vc = [&](std::array<float,3> p, Color c) -> VertexPositionColor {
+        const auto yUp = coordinateToYUpAlg(doc.coordinateSystem, p);
+        return { Vector3{yUp[0], yUp[1], yUp[2]}, c };
     };
     auto addLine = [&](std::array<float,3> a, std::array<float,3> b, Color c) {
         lines.push_back(vc(a, c));
@@ -1721,7 +1742,8 @@ void SceneRenderer::drawLightGizmos(
             std::array<float,3> offsets[] = {{-1.0f,0,-1.0f},{0,0,0},{1.0f,0,1.0f}};
             for (auto& o : offsets) {
                 // anchor arrows up in the sky at a fixed symbolic position
-                std::array<float,3> from = { o[0], 6.0f + o[2], o[0] };
+                std::array<float,3> from = coordinateFromYUpAlg(
+                    doc.coordinateSystem, {o[0], 6.0f + o[2], o[0]});
                 std::array<float,3> to   = { from[0]+dx*shaftLen,
                                              from[1]+dy*shaftLen,
                                              from[2]+dz*shaftLen };
@@ -1734,7 +1756,8 @@ void SceneRenderer::drawLightGizmos(
             const auto& p = li.position;
             // Solid sphere gizmo in light color
             Matrix sph = Matrix::CreateScale({0.13f, 0.13f, 0.13f}) *
-                         Matrix::CreateTranslation({p[0], p[1], p[2]});
+                         Matrix::CreateTranslation({p[0], p[1], p[2]}) *
+                         coordinateSystemRootMatrix(doc);
             drawMesh(unitSphere_, sph, view, proj, col);
             // Diamond ray lines radiating outward
             const float r = 0.28f;
@@ -1752,7 +1775,8 @@ void SceneRenderer::drawLightGizmos(
             const auto& p = li.position;
             // Small sphere at spotlight apex
             Matrix spotSph = Matrix::CreateScale({0.10f, 0.10f, 0.10f}) *
-                             Matrix::CreateTranslation({p[0], p[1], p[2]});
+                             Matrix::CreateTranslation({p[0], p[1], p[2]}) *
+                             coordinateSystemRootMatrix(doc);
             drawMesh(unitSphere_, spotSph, view, proj, col);
 
             float dx = li.direction[0], dy = li.direction[1], dz = li.direction[2];
@@ -1766,7 +1790,8 @@ void SceneRenderer::drawLightGizmos(
 
             // Build a perpendicular basis
             Vector3 dir{dx, dy, dz};
-            Vector3 up = (std::abs(dy) < 0.9f) ? Vector3{0,1,0} : Vector3{1,0,0};
+            Vector3 up = (std::abs(Vector3::Dot(dir, authoredUp)) < 0.9f)
+                ? authoredUp : Vector3{1,0,0};
             Vector3 right = Vector3::Cross(dir, up);
             right = Vector3::Normalize(right);
             Vector3 up2  = Vector3::Cross(right, dir);
@@ -1804,15 +1829,20 @@ Vector3 SceneRenderer::cameraForwardFromRotation(const std::array<float,3>& rota
 }
 
 void SceneRenderer::drawCameraGizmos(
-    const std::vector<Mc3::Mc3Camera>& cameras,
+    const Mc3Document& doc,
     const Matrix& view, const Matrix& proj)
 {
+    const auto& cameras = doc.cameras;
     std::vector<VertexPositionColor> lines;
     Color col(180, 220, 255, 220); // light-blue
+    const auto authoredUpArray = coordinateFromYUpAlg(doc.coordinateSystem, {0.0f, 1.0f, 0.0f});
+    const Vector3 authoredUp{authoredUpArray[0], authoredUpArray[1], authoredUpArray[2]};
 
     auto addLine = [&](std::array<float,3> a, std::array<float,3> b) {
-        lines.push_back({ Vector3{a[0],a[1],a[2]}, col });
-        lines.push_back({ Vector3{b[0],b[1],b[2]}, col });
+        const auto aYUp = coordinateToYUpAlg(doc.coordinateSystem, a);
+        const auto bYUp = coordinateToYUpAlg(doc.coordinateSystem, b);
+        lines.push_back({ Vector3{aYUp[0],aYUp[1],aYUp[2]}, col });
+        lines.push_back({ Vector3{bYUp[0],bYUp[1],bYUp[2]}, col });
     };
 
     for (const auto& cam : cameras) {
@@ -1840,7 +1870,8 @@ void SceneRenderer::drawCameraGizmos(
         dx /= len; dy /= len; dz /= len;
 
         Vector3 dir{dx, dy, dz};
-        Vector3 worldUp = (std::abs(dy) < 0.9f) ? Vector3{0,1,0} : Vector3{1,0,0};
+        Vector3 worldUp = (std::abs(Vector3::Dot(dir, authoredUp)) < 0.9f)
+            ? authoredUp : Vector3{1,0,0};
         Vector3 right = Vector3::Normalize(Vector3::Cross(dir, worldUp));
         Vector3 up    = Vector3::Cross(right, dir);
 
@@ -1910,7 +1941,7 @@ void SceneRenderer::drawCsgGizmos(const Mc3::Mc3Document& doc,
             visit(*child, world, depth + 1);
     };
 
-    Matrix identity = Matrix::getIdentityProperty();
+    Matrix identity = coordinateSystemRootMatrix(doc);
     for (const auto& obj : doc.objects)
         visit(*obj, identity, 0);
 
@@ -1933,7 +1964,7 @@ Matrix SceneRenderer::computeObjectWorldMatrix(const Mc3Object& target,
         }
         return false;
     };
-    find(doc.objects, Matrix::getIdentityProperty(), 0);
+    find(doc.objects, coordinateSystemRootMatrix(doc), 0);
     return result;
 }
 

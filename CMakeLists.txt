@@ -616,6 +616,19 @@ if(MESH_CRAFT_BUILD_TESTING AND UNIX AND NOT ANDROID AND NOT EMSCRIPTEN)
     add_test(NAME active_tool COMMAND active_tool_test)
     set_tests_properties(active_tool PROPERTIES TIMEOUT 15 LABELS "unit")
 
+    # SYS-W14-14: the shared coordinate conversion must remain CNA-free so
+    # render, picking and the Normalize-to-Y-up command share one exact axis
+    # mapping. This fixture covers transform inversion, picking-ray inversion
+    # and normalization's scene-level camera/light handling.
+    add_executable(coordinate_system_test
+        ${CMAKE_CURRENT_SOURCE_DIR}/test/coordinate_system_test.cpp)
+    target_include_directories(coordinate_system_test PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/include
+        ${CMAKE_CURRENT_SOURCE_DIR}/mc3/include)
+    target_compile_features(coordinate_system_test PRIVATE cxx_std_23)
+    add_test(NAME coordinate_system COMMAND coordinate_system_test)
+    set_tests_properties(coordinate_system PROPERTIES TIMEOUT 15 LABELS "unit")
+
     # SYS-W3-01: Editor::KeybindingManager, extracted from
     # MeshCraftApplication (H9). No test existed for this subsystem before
     # the extraction. Needs real Microsoft::Xna::Framework::Input::Keys/
@@ -1399,6 +1412,20 @@ if(MESH_CRAFT_BUILD_TESTING AND UNIX AND NOT ANDROID AND NOT EMSCRIPTEN)
                 WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
             )
             set_tests_properties(camera_rotation_test PROPERTIES TIMEOUT 30 LABELS "render")
+        endif()
+
+        # SYS-W14-14: a Z-up fixture must be converted consistently for its
+        # object, document camera and light before the live viewport draws.
+        if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/test/coordinate_system_viewport.mc3.xml")
+            add_test(
+                NAME coordinate_system_viewport_test
+                COMMAND "${PYTHON3_EXEC}"
+                        "${CMAKE_CURRENT_SOURCE_DIR}/test/coordinate_system_viewport_test.py"
+                        $<TARGET_FILE:MeshCraft>
+                        "${CMAKE_CURRENT_SOURCE_DIR}/test/coordinate_system_viewport.mc3.xml"
+                WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
+            )
+            set_tests_properties(coordinate_system_viewport_test PROPERTIES TIMEOUT 30 LABELS "render")
         endif()
 
         # AUD-084: Bloom post-processing (I6) migrated from a hand-rolled

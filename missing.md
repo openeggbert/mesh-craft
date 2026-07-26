@@ -50,17 +50,11 @@ this file's own last edit (`SYS-W14-10` through `SYS-W14-17`,
   the 5 material texture-slot fields, using CNA's own `FileDialog`
   device (previously fully implemented but never called from this repo)
   (`SYS-W14-15`, `7229b63`).
-- **`coordinate_system`** — investigated implementing real axis-swap
-  conversion (would need touching every independent root-matrix call
-  site in `SceneRenderer` AND `GltfExporter`'s own root node
-  construction — missing even one would make gizmos/picking silently
-  disagree with rendered geometry, worse than today's inert-field gap).
-  **Confirmed by-design won't-fix**, same resolution as
-  `rotation_units`/`euler_order`'s existing precedent — the load-time
-  notice (`checkRotationConventionNotice()`) now also names
-  `coordinateSystem` (`SYS-W14-14`, `43c40e8`). The field is still never
-  *read* for rendering/export, but this is now a documented, accepted
-  limitation, not an open gap.
+- **`coordinate_system`** — fully implemented (`SYS-W14-14`, 2026-07-26).
+  A shared CNA-free helper drives Z-up ↔ Y-up conversion for rendering,
+  picking, gizmos, walk collision, cameras/lights and glTF export. Existing
+  Z-up documents can be explicitly normalized to Y-up from Scene Properties;
+  there is no silent load-time rewrite.
 - **Area properties panel** — investigated whether Area objects carry
   distinct data beyond size, or whether `doc.triggers` links back to a
   specific object; confirmed neither (no `ObjectType::Area` parser case
@@ -187,7 +181,7 @@ changed and what's still intentionally not a structural guarantee
 | `rotation_units`/`euler_order` | 🟡 read-only load-time notice only; no editing UI; won't-fix by design (`STAB-0701`) |
 | IcoSphere subdivision level | ✅ resolved (`STAB-0711`) |
 | Primitive `axis` | ✅ resolved (`STAB-0712`) |
-| `coordinate_system` | 🟡 confirmed by-design won't-fix (`SYS-W14-14`), same precedent as `rotation_units` — still never read anywhere, but now a documented limitation, not an open gap |
+| `coordinate_system` | ✅ right-handed Y-up and Z-up honored in the editor and glTF export; explicit Normalize to Y-up command (`SYS-W14-14`) |
 | Animation `autoplay` | ✅ resolved (`STAB-0714`) |
 | Animation Deform/Material channel initial value | ✅ resolved (`STAB-0715`) |
 | Camera orthographic `xmag`/`ymag` | ✅ resolved (`STAB-0695`) |

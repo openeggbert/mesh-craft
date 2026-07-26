@@ -415,9 +415,9 @@ before when explicitly requested (`SYS-W14-##` rows).
   undocumented in `README.md`, only in `--help`'s own usage text).
   Refreshed `missing.md`: verified via grep that `N8`/`N9`/`N10`/`N11`
   and the texture file-browse dialog are now implemented
-  (`SYS-W14-10`/`11`/`12`/`13`/`15`); `coordinate_system` and Area's
-  properties panel were formally closed as by-design won't-fix /
-  confirmed-complete (`SYS-W14-14`/`17`, docs-only decisions); undo/redo
+  (`SYS-W14-10`/`11`/`12`/`13`/`15`); Area's properties panel was formally
+  confirmed complete (`SYS-W14-17`), while `coordinate_system` was later
+  implemented end-to-end (`SYS-W14-14`, 2026-07-26); undo/redo
   coverage had 27 further gaps closed (`SYS-W14-16`) but is still
   intentionally a manual discipline, not structural. Updated `render.md`:
   verified via grep that P1 (lighting) and P2 (dynamic edge-overlay push)
@@ -1177,8 +1177,9 @@ be a separately scoped subsystem, not another mechanical `Overlays.cpp` slice.
 - **AUD-042:** Android is a supported product target and now has a viable
   GLES/EASYGL source selection; it remains blocked on the Android NDK,
   sibling `sharp-runtime` cross-build repair, packaging, and device validation.
-- **Deferred, decision-dependent work:** `SYS-W5-03` and `SYS-W14-14` retain
-  their documented human decisions. `SYS-W14-05`/`06` are no longer deferred.
+- **Deferred, decision-dependent work:** `SYS-W5-03` retains its documented
+  human decision. `SYS-W14-14` is no longer deferred; it is implemented.
+  `SYS-W14-05`/`06` are no longer deferred.
 
 ## 9. Do not do yet
 

@@ -167,34 +167,27 @@ void MeshCraftApplication::setStatusMsg(std::string msg, bool isError, float dur
     statusNotification_.show(std::move(msg), isError, duration);
 }
 
-// STAB-0701/SYS-W14-14: see header comment. Non-fatal -- the file still
-// loads and displays/edits fine, only the *interpretation* of these 3
-// declared conventions during live rendering (and, for coordinate_system,
-// export too) differs from what the file declares.
+// STAB-0701: rotation units/order remain non-fatal compatibility notices.
+// coordinate_system is deliberately absent: SYS-W14-14 now honors both MC3
+// right-handed coordinate systems throughout the editor and glTF exporter.
 void MeshCraftApplication::checkRotationConventionNotice() {
     const bool nonDefaultUnits  = document_.rotationUnits != "degrees";
     const bool nonDefaultOrder  = document_.eulerOrder != "XYZ";
-    const bool nonDefaultCoords = document_.coordinateSystem != "right_handed_y_up";
-    if (!nonDefaultUnits && !nonDefaultOrder && !nonDefaultCoords) return;
+    if (!nonDefaultUnits && !nonDefaultOrder) return;
 
     std::vector<std::string> declared;
     if (nonDefaultUnits)  declared.push_back("rotation_units=\"" + document_.rotationUnits + "\"");
     if (nonDefaultOrder)  declared.push_back("euler_order=\"" + document_.eulerOrder + "\"");
-    if (nonDefaultCoords) declared.push_back("coordinate_system=\"" + document_.coordinateSystem + "\"");
 
     std::string what;
     for (size_t i = 0; i < declared.size(); ++i) {
         if (i > 0) what += (i + 1 == declared.size()) ? " and " : ", ";
         what += declared[i];
     }
-    std::string honored = nonDefaultUnits || nonDefaultOrder
-        ? "renders rotations as degrees in XYZ order and treats geometry as right-handed Y-up"
-        : "treats geometry as right-handed Y-up";
     setStatusMsg("Note: this file declares " + what +
-                 " -- the editor's live preview always " + honored +
-                 " regardless (rotation_units/euler_order are export-only, "
-                 "STAB-0701; coordinate_system is never honored anywhere, "
-                 "not even by mc3togltf, SYS-W14-14 -- see MC3_FORMAT.md)",
+                 " -- the editor's live preview always renders rotations as degrees "
+                 "in XYZ order regardless (rotation_units/euler_order are export-only, "
+                 "STAB-0701 -- see MC3_FORMAT.md)",
                  /*isError=*/false, /*duration=*/7.0f);
 }
 

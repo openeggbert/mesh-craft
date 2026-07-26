@@ -1,4 +1,5 @@
 #include "MeshCraft/Application/MeshCraftApplication.hpp"
+#include "MeshCraft/CoordinateSystemAlgorithms.hpp"
 #include "MeshCraft/EditorAlgorithms.hpp"
 #include "MeshCraft/GraphicsBackendCheck.hpp"
 #include "MeshCraft/MeshCraftPrivate.hpp"
@@ -662,7 +663,8 @@ void MeshCraftApplication::Draw(const GameTime& /*gameTime*/) {
         selectedCameraIdx_ < static_cast<int>(document_.cameras.size())) {
         const auto& cam = document_.cameras[selectedCameraIdx_];
         const float pi = std::numbers::pi_v<float>;
-        Vector3 camPos(cam.position[0], cam.position[1], cam.position[2]);
+        const auto camPosYUp = coordinateToYUpAlg(document_.coordinateSystem, cam.position);
+        Vector3 camPos(camPosYUp[0], camPosYUp[1], camPosYUp[2]);
         Vector3 up(0.0f, 1.0f, 0.0f);
         // 2026-07-20 audit finding #6: a camera authored with `rotation`
         // instead of `target` (target left at its {0,0,0} default) used to
@@ -673,9 +675,13 @@ void MeshCraftApplication::Draw(const GameTime& /*gameTime*/) {
         Vector3 camTarget;
         if (cam.rotation.has_value()) {
             Vector3 fwd = Renderer::SceneRenderer::cameraForwardFromRotation(*cam.rotation);
+            const auto fwdYUp = coordinateToYUpAlg(document_.coordinateSystem,
+                                                    {fwd.X, fwd.Y, fwd.Z});
+            fwd = {fwdYUp[0], fwdYUp[1], fwdYUp[2]};
             camTarget = camPos + fwd;
         } else {
-            camTarget = Vector3(cam.target[0], cam.target[1], cam.target[2]);
+            const auto targetYUp = coordinateToYUpAlg(document_.coordinateSystem, cam.target);
+            camTarget = Vector3(targetYUp[0], targetYUp[1], targetYUp[2]);
         }
         view = Matrix::CreateLookAt(camPos, camTarget, up);
         if (cam.type == Mc3::CameraType::Orthographic) {
@@ -700,7 +706,8 @@ void MeshCraftApplication::Draw(const GameTime& /*gameTime*/) {
     if (shadowDebugEnabled_) {
         for (const auto& l : document_.lights) {
             if (l.type == Mc3::LightType::Directional && l.castShadows) {
-                Vector3 ldir(l.direction[0], l.direction[1], l.direction[2]);
+                const auto dirYUp = coordinateToYUpAlg(document_.coordinateSystem, l.direction);
+                Vector3 ldir(dirYUp[0], dirYUp[1], dirYUp[2]);
                 ldir = Vector3::Normalize(ldir);
                 constexpr float kShadowDist = 50.f;
                 Vector3 center(0.f, 0.f, 0.f);
@@ -735,8 +742,8 @@ void MeshCraftApplication::Draw(const GameTime& /*gameTime*/) {
 
     // Scene-level gizmos (lights / cameras)
     gd.SetDepthTestEnabled(false);
-    sceneRenderer_->drawLightGizmos(document_.lights, view, proj);
-    sceneRenderer_->drawCameraGizmos(document_.cameras, view, proj);
+    sceneRenderer_->drawLightGizmos(document_, view, proj);
+    sceneRenderer_->drawCameraGizmos(document_, view, proj);
     sceneRenderer_->drawCsgGizmos(document_, view, proj);
     gd.SetDepthTestEnabled(true);
 
@@ -752,16 +759,16 @@ void MeshCraftApplication::Draw(const GameTime& /*gameTime*/) {
                     pivProxy.transform.position[i] += pivProxy.transform.pivot[i];
                     pivProxy.transform.pivot[i] = 0.0f;
                 }
-                sceneRenderer_->drawGizmo(&pivProxy, view, proj, gizmoLen, gizmoLocalSpace_);
+                sceneRenderer_->drawGizmo(&pivProxy, document_, view, proj, gizmoLen, gizmoLocalSpace_);
             } else {
-                sceneRenderer_->drawGizmo(sel0, view, proj, gizmoLen, gizmoLocalSpace_);
+                sceneRenderer_->drawGizmo(sel0, document_, view, proj, gizmoLen, gizmoLocalSpace_);
             }
         } else if (activeTool_ == ActiveTool::Scale) {
             gd.SetDepthTestEnabled(false);
-            sceneRenderer_->drawScaleGizmo(sel0, view, proj, gizmoLen, gizmoLocalSpace_);
+            sceneRenderer_->drawScaleGizmo(sel0, document_, view, proj, gizmoLen, gizmoLocalSpace_);
         } else if (activeTool_ == ActiveTool::Rotate) {
             gd.SetDepthTestEnabled(false);
-            sceneRenderer_->drawRotateGizmo(sel0, view, proj, gizmoLen, gizmoLocalSpace_);
+            sceneRenderer_->drawRotateGizmo(sel0, document_, view, proj, gizmoLen, gizmoLocalSpace_);
         }
 
         // Bounding box overlay (cyan wire box for each selected object)
@@ -769,7 +776,7 @@ void MeshCraftApplication::Draw(const GameTime& /*gameTime*/) {
             gd.SetDepthTestEnabled(false);
             Color bboxColor(80, 220, 255, 200);
             for (const auto& selObj : selection_.selection())
-                sceneRenderer_->drawObjectWireframe(*selObj, view, proj, bboxColor);
+                sceneRenderer_->drawObjectWireframe(*selObj, document_, view, proj, bboxColor);
         }
     }
 
@@ -786,7 +793,7 @@ void MeshCraftApplication::Draw(const GameTime& /*gameTime*/) {
         }
         float n = static_cast<float>(selection_.selection().size());
         Color propColor(255, 170, 60, 140);
-        sceneRenderer_->drawWireSphereAt({cx / n, cy / n, cz / n}, propEditRadius_,
+        sceneRenderer_->drawWireSphereAt({cx / n, cy / n, cz / n}, propEditRadius_, document_,
                                           view, proj, propColor);
     }
 
@@ -798,7 +805,7 @@ void MeshCraftApplication::Draw(const GameTime& /*gameTime*/) {
         drawLocked = [&](const std::vector<std::shared_ptr<Mc3::Mc3Object>>& list) {
             for (const auto& obj : list) {
                 if (objectLockState_.isLocked(obj->id))
-                    sceneRenderer_->drawObjectWireframe(*obj, view, proj, lockColor);
+                    sceneRenderer_->drawObjectWireframe(*obj, document_, view, proj, lockColor);
                 if (!obj->children.empty()) drawLocked(obj->children);
             }
         };

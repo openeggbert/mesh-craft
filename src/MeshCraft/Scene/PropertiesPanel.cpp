@@ -2171,15 +2171,12 @@ void PropertiesPanel::draw(float panelX, float panelY, float panelW, float panel
             }
         }
 
-        // Coordinate system
-        // STAB-0713: was 3 options including "left_handed_y_up", which
-        // mc3.xsd's coordinateSystemType does not actually permit (only
-        // right_handed_y_up/right_handed_z_up) -- selecting it produced a
-        // document that fails XSD validation. Removed. Separately (not a
-        // UI bug, but worth flagging here since it's not otherwise
-        // discoverable): coordinateSystem is currently write-only -- no
-        // rendering or export code anywhere in this codebase reads it, so
-        // changing this value has no visible effect yet.
+        // Coordinate system. STAB-0713 removed the old invalid
+        // left_handed_y_up option: mc3.xsd permits only these two right-handed
+        // conventions. Both are now honored by the viewport, interaction and
+        // glTF export. Changing the declaration is intentionally semantic; the
+        // explicit Normalize action below is available when authored values
+        // should be converted to Y-up instead.
         {
             const char* csOpts[] = {
                 "right_handed_y_up",
@@ -2195,7 +2192,17 @@ void PropertiesPanel::draw(float panelX, float panelY, float panelW, float panel
                 ctx.document.coordinateSystem = csOpts[csIdx];
                 ctx.markModified();
             }
-            ImGui::SetItemTooltip("Reserved for future use -- not yet read by rendering or export.");
+            ImGui::SetItemTooltip("Honored by the viewport, picking, walk collision and glTF export.");
+            if (usesRightHandedZUpAlg(ctx.document.coordinateSystem)) {
+                if (ImGui::Button("Normalize to Y-up")) {
+                    ctx.pushUndo();
+                    normalizeCoordinateSystemToYUpAlg(ctx.document);
+                    ctx.markModified();
+                }
+                ImGui::SetItemTooltip(
+                    "Convert scene-level cameras/lights and wrap authored objects in an explicit "
+                    "-90 degree X group so the visible scene stays unchanged.");
+            }
         }
 
         // Default camera

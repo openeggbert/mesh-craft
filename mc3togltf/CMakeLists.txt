@@ -583,6 +583,17 @@ if(BUILD_TESTING)
             )
             set_tests_properties(mc3togltf_rotation_convention PROPERTIES TIMEOUT 30 LABELS "export")
         endif()
+        set(_coordinate_system_xml "${CMAKE_CURRENT_SOURCE_DIR}/../test/coordinate_system_export.mc3.xml")
+        if(EXISTS "${_coordinate_system_xml}")
+            add_test(
+                NAME mc3togltf_coordinate_system
+                COMMAND "${PYTHON3_EXEC}"
+                        "${CMAKE_CURRENT_SOURCE_DIR}/test/coordinate_system_export_test.py"
+                        "$<TARGET_FILE:mc3togltf>"
+                        "${_coordinate_system_xml}"
+            )
+            set_tests_properties(mc3togltf_coordinate_system PROPERTIES TIMEOUT 30 LABELS "export")
+        endif()
         set(_duplicate_name_xml "${CMAKE_CURRENT_SOURCE_DIR}/../test/duplicate_object_name_anim.mc3.xml")
         if(EXISTS "${_duplicate_name_xml}")
             add_test(

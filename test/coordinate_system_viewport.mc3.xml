@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- SYS-W14-14 screenshot fixture. The camera, light and box are authored
+     in right-handed Z-up. The box's (0,0,2) must be converted consistently
+     with the camera's target, otherwise it is not centered in the render. -->
+<mc3 version="0.3" model="CoordinateSystemViewport" coordinate_system="right_handed_z_up"
+     default_camera="ZUpCamera">
+  <lights>
+    <ambient color="0.5 0.5 0.5" brightness="1.0"/>
+    <directional name="Sun" color="1 1 1" brightness="1.5" direction="0 -1 -1"/>
+  </lights>
+  <cameras>
+    <camera name="ZUpCamera" position="0 -10 4" target="0 0 2" fov="45" near="0.1" far="100"/>
+  </cameras>
+  <materials>
+    <material id="yellow"><base_color>1.0 0.8 0.05 1.0</base_color></material>
+  </materials>
+  <objects>
+    <box name="ZUpTarget" size="2 2 2" position="0 0 2" material="yellow"/>
+  </objects>
+</mc3>

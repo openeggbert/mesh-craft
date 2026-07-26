@@ -1,4 +1,5 @@
 #include "MeshCraft/Application/MeshCraftApplication.hpp"
+#include "MeshCraft/CoordinateSystemAlgorithms.hpp"
 #include "MeshCraft/MeshCraftPrivate.hpp"
 #include "MeshCraft/EditorAlgorithms.hpp"
 
@@ -111,6 +112,8 @@ void MeshCraftApplication::handleMouseInput(const MouseState& ms, const MouseSta
         Matrix vp = vw * pr;
 
         auto w2s = [&](float wx, float wy, float wz) -> std::pair<float,float> {
+            const auto yUp = coordinateToYUpAlg(document_.coordinateSystem, {wx, wy, wz});
+            wx = yUp[0]; wy = yUp[1]; wz = yUp[2];
             float cX = wx*vp.M11 + wy*vp.M21 + wz*vp.M31 + vp.M41;
             float cY = wx*vp.M12 + wy*vp.M22 + wz*vp.M32 + vp.M42;
             float cW = wx*vp.M14 + wy*vp.M24 + wz*vp.M34 + vp.M44;
@@ -236,6 +239,8 @@ void MeshCraftApplication::handleMouseInput(const MouseState& ms, const MouseSta
         Matrix vp = vw * pr;
 
         auto w2s = [&](float wx, float wy, float wz) -> std::pair<float,float> {
+            const auto yUp = coordinateToYUpAlg(document_.coordinateSystem, {wx, wy, wz});
+            wx = yUp[0]; wy = yUp[1]; wz = yUp[2];
             float cX = wx*vp.M11 + wy*vp.M21 + wz*vp.M31 + vp.M41;
             float cY = wx*vp.M12 + wy*vp.M22 + wz*vp.M32 + vp.M42;
             float cW = wx*vp.M14 + wy*vp.M24 + wz*vp.M34 + vp.M44;
@@ -282,6 +287,8 @@ void MeshCraftApplication::handleMouseInput(const MouseState& ms, const MouseSta
         Matrix vp = vw * pr;
 
         auto w2s = [&](float wx, float wy, float wz) -> std::pair<float,float> {
+            const auto yUp = coordinateToYUpAlg(document_.coordinateSystem, {wx, wy, wz});
+            wx = yUp[0]; wy = yUp[1]; wz = yUp[2];
             float cX = wx*vp.M11 + wy*vp.M21 + wz*vp.M31 + vp.M41;
             float cY = wx*vp.M12 + wy*vp.M22 + wz*vp.M32 + vp.M42;
             float cW = wx*vp.M14 + wy*vp.M24 + wz*vp.M34 + vp.M44;
@@ -342,6 +349,8 @@ void MeshCraftApplication::handleMouseInput(const MouseState& ms, const MouseSta
                 Matrix gvp = gvw * gpr;
 
                 auto gw2s = [&](float wx, float wy, float wz) -> std::pair<float,float> {
+                    const auto yUp = coordinateToYUpAlg(document_.coordinateSystem, {wx, wy, wz});
+                    wx = yUp[0]; wy = yUp[1]; wz = yUp[2];
                     float cX = wx*gvp.M11 + wy*gvp.M21 + wz*gvp.M31 + gvp.M41;
                     float cY = wx*gvp.M12 + wy*gvp.M22 + wz*gvp.M32 + gvp.M42;
                     float cW = wx*gvp.M14 + wy*gvp.M24 + wz*gvp.M34 + gvp.M44;
@@ -386,6 +395,8 @@ void MeshCraftApplication::handleMouseInput(const MouseState& ms, const MouseSta
                 Matrix gvp = gvw * gpr;
 
                 auto gw2s = [&](float wx, float wy, float wz) -> std::pair<float,float> {
+                    const auto yUp = coordinateToYUpAlg(document_.coordinateSystem, {wx, wy, wz});
+                    wx = yUp[0]; wy = yUp[1]; wz = yUp[2];
                     float cX = wx*gvp.M11 + wy*gvp.M21 + wz*gvp.M31 + gvp.M41;
                     float cY = wx*gvp.M12 + wy*gvp.M22 + wz*gvp.M32 + gvp.M42;
                     float cW = wx*gvp.M14 + wy*gvp.M24 + wz*gvp.M34 + gvp.M44;
@@ -431,10 +442,18 @@ void MeshCraftApplication::handleMouseInput(const MouseState& ms, const MouseSta
             Vector3 rayOrig = camera_.position();
             Vector3 rayDir  = camera_.screenRayDirection(ndcX, ndcY, asp);
 
+            // The camera/ray is in the editor's native Y-up space, whereas
+            // pickObjectByRayAlg intentionally evaluates the document's
+            // authored AABBs. Rotate the ray back into document space so
+            // Z-up scenes select the same object the viewport displays.
+            const auto authoredRayOrig = coordinateFromYUpAlg(
+                document_.coordinateSystem, {rayOrig.X, rayOrig.Y, rayOrig.Z});
+            const auto authoredRayDir = coordinateFromYUpAlg(
+                document_.coordinateSystem, {rayDir.X, rayDir.Y, rayDir.Z});
+
             auto bestObj = pickObjectByRayAlg(
                 document_.objects,
-                {rayOrig.X, rayOrig.Y, rayOrig.Z},
-                {rayDir.X, rayDir.Y, rayDir.Z});
+                authoredRayOrig, authoredRayDir);
 
             resolveClickSelectionAlg(selection_, bestObj, ctrl);
             updateWindowTitle();
@@ -463,6 +482,8 @@ void MeshCraftApplication::handleMouseInput(const MouseState& ms, const MouseSta
             Matrix vpB = vwB * prB;
 
             auto w2sB = [&](float wx, float wy, float wz) -> std::pair<float,float> {
+                const auto yUp = coordinateToYUpAlg(document_.coordinateSystem, {wx, wy, wz});
+                wx = yUp[0]; wy = yUp[1]; wz = yUp[2];
                 float cX = wx*vpB.M11 + wy*vpB.M21 + wz*vpB.M31 + vpB.M41;
                 float cY = wx*vpB.M12 + wy*vpB.M22 + wz*vpB.M32 + vpB.M42;
                 float cW = wx*vpB.M14 + wy*vpB.M24 + wz*vpB.M34 + vpB.M44;

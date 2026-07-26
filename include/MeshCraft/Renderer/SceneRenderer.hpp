@@ -154,28 +154,28 @@ public:
     }
 
     // Render translate gizmo (X/Y/Z axis lines + cube tips) for a selected object
-    void drawGizmo(const Mc3::Mc3Object* obj,
+    void drawGizmo(const Mc3::Mc3Object* obj, const Mc3::Mc3Document& doc,
                    const Microsoft::Xna::Framework::Matrix& view,
                    const Microsoft::Xna::Framework::Matrix& projection,
                    float gizmoLength,
                    bool localSpace = false);
 
     // Render scale gizmo (X/Y/Z axis lines + flat-square tips) for a selected object
-    void drawScaleGizmo(const Mc3::Mc3Object* obj,
+    void drawScaleGizmo(const Mc3::Mc3Object* obj, const Mc3::Mc3Document& doc,
                         const Microsoft::Xna::Framework::Matrix& view,
                         const Microsoft::Xna::Framework::Matrix& projection,
                         float gizmoLength,
                         bool localSpace = false);
 
     // Render rotate gizmo (X/Y/Z circles) for a selected object
-    void drawRotateGizmo(const Mc3::Mc3Object* obj,
+    void drawRotateGizmo(const Mc3::Mc3Object* obj, const Mc3::Mc3Document& doc,
                          const Microsoft::Xna::Framework::Matrix& view,
                          const Microsoft::Xna::Framework::Matrix& projection,
                          float gizmoLength,
                          bool localSpace = false);
 
     // Render a single object's bounding box (wireframe)
-    void drawObjectWireframe(const Mc3::Mc3Object& obj,
+    void drawObjectWireframe(const Mc3::Mc3Object& obj, const Mc3::Mc3Document& doc,
                              const Microsoft::Xna::Framework::Matrix& view,
                              const Microsoft::Xna::Framework::Matrix& projection,
                              Microsoft::Xna::Framework::Color color);
@@ -184,16 +184,17 @@ public:
     // and radius (e.g. proportional-editing falloff radius indicator)
     void drawWireSphereAt(const Microsoft::Xna::Framework::Vector3& center,
                           float radius,
+                          const Mc3::Mc3Document& doc,
                           const Microsoft::Xna::Framework::Matrix& view,
                           const Microsoft::Xna::Framework::Matrix& projection,
                           Microsoft::Xna::Framework::Color color);
 
     // Render scene-level gizmos (lights / cameras)
-    void drawLightGizmos(const std::vector<Mc3::Mc3Light>& lights,
+    void drawLightGizmos(const Mc3::Mc3Document& doc,
                          const Microsoft::Xna::Framework::Matrix& view,
                          const Microsoft::Xna::Framework::Matrix& projection);
 
-    void drawCameraGizmos(const std::vector<Mc3::Mc3Camera>& cameras,
+    void drawCameraGizmos(const Mc3::Mc3Document& doc,
                           const Microsoft::Xna::Framework::Matrix& view,
                           const Microsoft::Xna::Framework::Matrix& projection);
 

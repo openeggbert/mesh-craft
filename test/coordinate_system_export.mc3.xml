@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- SYS-W14-14 glTF fixture: every scene root, including camera/light nodes,
+     must be parented by the generated Z-up -> Y-up conversion node. -->
+<mc3 version="0.3" model="CoordinateSystemExport" coordinate_system="right_handed_z_up">
+  <lights>
+    <spot name="Spot" position="1 2 3" direction="0 -1 0" angle="30"/>
+  </lights>
+  <cameras>
+    <camera name="Camera" position="4 5 6" target="0 0 0" fov="60"/>
+  </cameras>
+  <objects>
+    <box name="ZUpBox" size="2 2 2" position="0 0 2"/>
+  </objects>
+</mc3>

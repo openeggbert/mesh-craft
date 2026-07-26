@@ -10,6 +10,7 @@
 #include "SvgRasterizer.hpp"
 
 #include <MeshCraft/AssetLodAlgorithms.hpp>
+#include <MeshCraft/CoordinateSystemAlgorithms.hpp>
 #include <MeshCraft/Mc3/Mc3Document.hpp>
 #include <MeshCraft/Mc3/Mc3Light.hpp>
 #include <MeshCraft/Mc3/Mc3Camera.hpp>
@@ -1237,9 +1238,8 @@ static void addLights(tinygltf::Model& model,
 
     // SYS-W14-27 (2026-07-20): glTF 2.0 core + KHR_lights_punctual has no
     // ambient-light concept at all -- a real spec gap, not an oversight
-    // (STAB-0696 already warned rather than silently dropping it). Unlike
-    // coordinate_system/rotation_units (won't-fix, no meaningful
-    // approximation exists), a lossy-but-useful one DOES exist here: sum
+    // (STAB-0696 already warned rather than silently dropping it). A
+    // lossy-but-useful approximation exists: sum
     // every <ambient> light's color*brightness in the document (multiple
     // ambients combine the same way multiple real fill lights would) and
     // bake that flat contribution into every material's own emissive
@@ -1891,6 +1891,21 @@ void GltfExporter::exportDocument(const Mc3Document& doc,
     addCameraNodes(model, doc.cameras, cameraNodes,
                     ctx.unitScale, ctx.rotationIsRadians, ctx.eulerOrder);
     for (int i : cameraNodes) scene.nodes.push_back(i);
+
+    // glTF is right-handed Y-up. Keep every authored local transform intact
+    // and put one conversion node above all scene roots, lights and cameras.
+    // This is equivalent to the editor's root matrix and avoids independently
+    // rewriting Euler rotations, animation channels or light directions.
+    if (MeshCraft::usesRightHandedZUpAlg(doc.coordinateSystem)) {
+        tinygltf::Node coordinateRoot;
+        coordinateRoot.name = "MC3 right-handed Z-up to Y-up";
+        const double s = std::sqrt(0.5);
+        coordinateRoot.rotation = {-s, 0.0, 0.0, s};
+        coordinateRoot.children = std::move(scene.nodes);
+        const int coordinateRootIndex = static_cast<int>(model.nodes.size());
+        model.nodes.push_back(std::move(coordinateRoot));
+        scene.nodes = {coordinateRootIndex};
+    }
 
     // Animations
     if (!doc.actions.empty()) {
