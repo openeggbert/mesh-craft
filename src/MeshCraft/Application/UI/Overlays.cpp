@@ -1241,6 +1241,12 @@ void MeshCraftApplication::drawDialogs()
                 case SaveAsFormat::Json: document_.saveToJsonFile(path);  break;
                 case SaveAsFormat::Xml:  document_.saveToFile(path);      break;
                 }
+                // SYS-W9-07: this may be the transition out of "Untitled" --
+                // the document now has a real path, so the separate
+                // untitled-recovery safety net (which only tracked it while
+                // currentFile_ was empty) no longer applies. Harmless no-op
+                // remove() if it never existed (currentFile_ was already set).
+                { std::error_code ec; std::filesystem::remove(untitledRecoveryPath(), ec); }
                 currentFile_ = path;
                 addRecentFile(currentFile_);
                 modified_ = false;
@@ -1424,6 +1430,40 @@ void MeshCraftApplication::drawDialogs()
         }
         ImGui::SameLine();
         if (ImGui::Button("Keep Saved File", ImVec2(120, 0)) || ImGui::IsKeyPressed(ImGuiKey_Escape, false)) {
+            ImGui::CloseCurrentPopup();
+        }
+        ImGui::EndPopup();
+    }
+
+    // -----------------------------------------------------------------------
+    // Untitled-scene recovery dialog (SYS-W9-07) -- offered once at startup
+    // when a previous session's never-saved document left its recovery file
+    // behind (see performUntitledRecoverySave()/checkForUntitledRecovery()/
+    // recoverUntitledScene()/discardUntitledRecovery() in FileOps.cpp).
+    // Dismissing with Escape leaves the file in place for a later prompt,
+    // matching "Keep Saved File" above; only Discard removes it here.
+    // -----------------------------------------------------------------------
+    if (untitledRecoveryDlgOpen_) {
+        ImGui::OpenPopup("Recover Unsaved Scene##untitledrecoverdlg");
+        untitledRecoveryDlgOpen_ = false;
+    }
+    if (ImGui::BeginPopupModal("Recover Unsaved Scene##untitledrecoverdlg", nullptr,
+                               ImGuiWindowFlags_AlwaysAutoResize)) {
+        ImGui::Text("A previous session has an unsaved, never-saved scene.");
+        ImGui::Text("This usually means the editor closed or crashed before");
+        ImGui::Text("that scene was ever saved to a file. Recover it?");
+        ImGui::Spacing();
+        if (ImGui::Button("Recover", ImVec2(90, 0))) {
+            recoverUntitledScene();
+            ImGui::CloseCurrentPopup();
+        }
+        ImGui::SameLine();
+        if (ImGui::Button("Discard", ImVec2(90, 0))) {
+            discardUntitledRecovery();
+            ImGui::CloseCurrentPopup();
+        }
+        ImGui::SameLine();
+        if (ImGui::Button("Not Now", ImVec2(90, 0)) || ImGui::IsKeyPressed(ImGuiKey_Escape, false)) {
             ImGui::CloseCurrentPopup();
         }
         ImGui::EndPopup();

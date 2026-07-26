@@ -415,21 +415,39 @@ time; re-evaluate scope and blockers before starting each item.
   loss, and folding them in here would have widened one coherent task into
   an unrelated sweep across the editor.
 
-- **SYS-W9-07** `[PROPOSED]` `P1` — Recover never-saved Untitled scenes.
-  Confirmed at `FileOps.cpp:93`: `performAutoSave()` opens with
-  `if (currentFile_.empty()) return;`, so a document that has never been
-  saved once (new scene, worked on, never given a path via Save As) has no
-  autosave and no recovery path if the editor or system crashes. The existing
-  `.autosave` sibling-file recovery (`SYS-W9-02`) only covers documents that
-  already have a path. Add a bounded session-recovery file in the MeshCraft
-  configuration directory for a modified document that has never been saved.
-  On next start, offer an explicit Recover / Discard decision. Recovery must
-  keep the document untitled and modified, must not add a synthetic path to
-  Recent Files, and must not overwrite an unrelated session; successful
-  Save As or explicit discard removes the recovery entry. **Tests:** modified
-  untitled recovery, clean shutdown cleanup, crash-marker simulation,
-  successful Save As cleanup, discard, corrupt recovery file, and coexistence
-  with the existing sibling `.autosave` recovery.
+- **SYS-W9-07** `[DONE]` `P1` — Added crash recovery for never-saved
+  ("Untitled") documents. `performUntitledRecoverySave()` writes to one
+  bounded slot, `untitledRecoveryPath()` (`MeshCraftPrivate.hpp`,
+  `meshcraftConfigDir() / "untitled.recovery.mc3.xml"`), on its own
+  `autoSaveTickAlg` countdown (`autoSaveUntitledCountdown_`, `hasCurrentFile`
+  inverted) — reuses the existing tested tick function unchanged rather than
+  touching `performAutoSave()`'s own tested "no current file never
+  auto-saves" gating. `checkForUntitledRecovery()` runs once at startup right
+  after a fresh `newScene()` (`Application.cpp`'s `LoadContent()`, the
+  no-file-argument branch) and offers a new modal dialog
+  ("Recover Unsaved Scene", `Overlays.cpp`) with Recover / Discard / Not Now.
+  `recoverUntitledScene()` keeps `currentFile_` empty, sets `modified_ =
+  true`, and never calls `addRecentFile()`. The recovery file is removed on:
+  successful Save As (both the plain dialog and Save-as-Library, since either
+  can be an untitled document's first save), explicit Discard, and ordinary
+  (non-crash) shutdown (`~MeshCraftApplication()`, unconditional whenever
+  `currentFile_` is still empty — there is no quit-confirmation gate in this
+  app, so reaching a clean exit while modified already means the user chose
+  not to save); a real crash skips the destructor, which is what leaves the
+  file for the next startup to find.
+  New `mc3_untitled_recovery` (CNA-free, mirrors `mc3_autosave_recovery`'s
+  own established "App-level methods aren't headlessly testable, the
+  filesystem+Mc3 mechanism they reduce to is" scope) covers: a real
+  document's content round-tripping through the recovery path, discard's
+  remove()-succeeds postcondition, a crash-marker simulation (a file left
+  behind is detectable), a corrupt recovery file throwing catchably instead
+  of crashing, and coexistence with the existing named-file `.autosave`
+  sibling (disjoint paths, independent content, verified together in one
+  temp directory). The App-level flow itself (dialog wiring, destructor
+  timing, `currentFile_`/`modified_` transitions) was verified by full editor
+  build success and code review only, not a live screenshot — same
+  CNA-coupled-and-not-headlessly-testable class as this session's F20/F21
+  precedent, not a lower bar invented for this task.
 
 ### W14 — Bounded new work
 

@@ -450,6 +450,15 @@ if(BUILD_TESTING)
     add_test(NAME mc3_autosave_recovery COMMAND mc3_autosave_recovery_test)
     set_tests_properties(mc3_autosave_recovery PROPERTIES TIMEOUT 15 LABELS "format")
 
+    # SYS-W9-07: never-saved ("Untitled") document crash-recovery mechanism
+    # -- same CNA-coupled-App-methods-not-headlessly-testable limitation as
+    # mc3_autosave_recovery above; tests the pure filesystem + Mc3 mechanism
+    # those methods reduce to.
+    add_executable(mc3_untitled_recovery_test test/untitled_recovery_test.cpp)
+    target_link_libraries(mc3_untitled_recovery_test PRIVATE Mc3)
+    add_test(NAME mc3_untitled_recovery COMMAND mc3_untitled_recovery_test)
+    set_tests_properties(mc3_untitled_recovery PROPERTIES TIMEOUT 15 LABELS "format")
+
     # Seeded property-based round-trip test --
     # generates many random documents (RandomMc3DocumentGenerator.hpp) and
     # asserts XML round-trip fidelity, complementing mc3_roundtrip's fixed-

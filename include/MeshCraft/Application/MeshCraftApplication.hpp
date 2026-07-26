@@ -748,6 +748,23 @@ private:
     void  performAutoSave();
     static std::filesystem::path autoSavePath(const std::filesystem::path& file);
 
+    // SYS-W9-07: crash recovery for a modified document that has never been
+    // saved (currentFile_ empty, so performAutoSave()'s own sibling-file
+    // scheme has nowhere to place a sibling). Ticks on its own countdown
+    // (autoSaveTickAlg with hasCurrentFile inverted) so it doesn't disturb
+    // the tested named-file autosave gating. Offered once per startup, via
+    // checkForUntitledRecovery() right after a fresh newScene() at launch;
+    // recoverUntitledScene() keeps the document untitled/modified and never
+    // touches Recent Files. Cleaned up on successful Save As, explicit
+    // Discard, and ordinary (non-crash) shutdown -- a real crash skips the
+    // destructor, which is what leaves the file for the next startup to find.
+    float autoSaveUntitledCountdown_{60.0f};
+    bool  untitledRecoveryDlgOpen_{false};
+    void  performUntitledRecoverySave();
+    void  checkForUntitledRecovery();
+    void  recoverUntitledScene();
+    void  discardUntitledRecovery();
+
     // Customizable keybindings (H9, SYS-W3-01: extracted into KeybindingManager)
     Editor::KeybindingManager keybindings_;
     std::string keyCaptureAction_;   // non-empty = waiting for next keypress

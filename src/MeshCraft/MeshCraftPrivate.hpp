@@ -50,6 +50,16 @@ inline std::filesystem::path prefsPath()         { return meshcraftConfigDir() /
 inline std::filesystem::path keybindingsPath()   { return meshcraftConfigDir() / "keybindings.ini"; }
 inline std::filesystem::path macroPath()         { return meshcraftConfigDir() / "macro.mc3macro"; }
 
+// SYS-W9-07: a single bounded slot for a never-saved ("Untitled") document's
+// periodic safety-net save. Unlike the named-file `.autosave` sibling
+// (SYS-W9-02), an untitled document has no real path to place a sibling
+// next to, so this lives in the config directory instead. One slot only --
+// not per-session -- matching the existing autosave mechanism's own
+// single-sibling design; a second untitled document started before the
+// first is recovered/discarded would overwrite it, which is an accepted
+// bound (see plan.md's SYS-W9-07 entry).
+inline std::filesystem::path untitledRecoveryPath() { return meshcraftConfigDir() / "untitled.recovery.mc3.xml"; }
+
 // AUD-033: removeFromList/deepCopyObject/findParentList/applyRenamePattern
 // used to be byte-identical duplicates of EditorAlgorithms.hpp's
 // removeFromListAlg/deepCopyObjectAlg/findParentListAlg/

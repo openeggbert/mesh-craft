@@ -327,6 +327,12 @@ void MeshCraftApplication::LoadContent() {
         }
     } else {
         newScene();
+        // SYS-W9-07: offer recovery for a previous session's never-saved
+        // document -- checked once, right after the fresh untitled scene
+        // newScene() just created, matching checkForNewerAutosave()'s own
+        // "offered whenever a load finishes" placement for the named-file
+        // case above.
+        checkForUntitledRecovery();
     }
 
     updateWindowTitle();
@@ -447,6 +453,14 @@ void MeshCraftApplication::Update(GameTime& gameTime) {
         if (autoSaveTickAlg(!currentFile_.empty(), modified_, autoSaveInterval_,
                              dt, autoSaveCountdown_)) {
             performAutoSave();
+        }
+        // SYS-W9-07: same tick logic, own countdown, inverted hasCurrentFile
+        // so a never-saved document gets its own periodic safety-net save
+        // without touching autoSaveTickAlg's tested "no current file never
+        // auto-saves" behavior above.
+        if (autoSaveTickAlg(currentFile_.empty(), modified_, autoSaveInterval_,
+                             dt, autoSaveUntitledCountdown_)) {
+            performUntitledRecoverySave();
         }
     }
 
@@ -1485,6 +1499,19 @@ void MeshCraftApplication::initShadowDebug()
 // are still valid here. Ordering mirrors LoadContent in reverse.
 // ---------------------------------------------------------------------------
 MeshCraftApplication::~MeshCraftApplication() {
+    // SYS-W9-07: an ordinary (non-crash) shutdown reaches this destructor,
+    // which is exactly the signal used to distinguish "the user closed the
+    // app" from "the app crashed" -- a crash skips this entirely, leaving
+    // the file for the next startup's checkForUntitledRecovery() to find.
+    // Removed unconditionally whenever the document is still untitled,
+    // regardless of `modified_`: there is no quit-confirmation gate in this
+    // app, so reaching a clean exit while modified already means the user
+    // chose to close without saving.
+    if (currentFile_.empty()) {
+        std::error_code ec;
+        std::filesystem::remove(untitledRecoveryPath(), ec);
+    }
+
     // Remove the event watch first so the callback can never fire against this
     // half-destroyed object. Harmless if it was never added.
     SDL_RemoveEventWatch(reinterpret_cast<SDL_EventFilter>(sdlEventWatch), this);

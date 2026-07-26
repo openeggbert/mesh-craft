@@ -176,6 +176,84 @@ void MeshCraftApplication::discardAutosave() {
     recoveryDlgOpen_ = false;
 }
 
+// SYS-W9-07: silent background safety net for a document that has never
+// been saved -- performAutoSave() can't help here since it needs a real
+// currentFile_ to place a `.autosave` sibling next to. Only writes while
+// still untitled; a later successful Save As switches the document over to
+// the named-file autosave scheme and removes this file (see the "Save As"
+// dialog handler in Overlays.cpp).
+void MeshCraftApplication::performUntitledRecoverySave() {
+    if (!currentFile_.empty()) return;
+    try {
+        document_.saveToFile(untitledRecoveryPath());
+    } catch (const std::exception& e) {
+        std::cerr << "[MeshCraft] Untitled-scene recovery save error: " << e.what() << "\n";
+    }
+}
+
+// Called once at startup right after a fresh newScene() -- if a prior
+// session's untitled-recovery file is still on disk, it wasn't cleaned up
+// by a clean shutdown, which is the same crash signal checkForNewerAutosave()
+// uses for named files.
+void MeshCraftApplication::checkForUntitledRecovery() {
+    std::error_code ec;
+    if (std::filesystem::exists(untitledRecoveryPath(), ec))
+        untitledRecoveryDlgOpen_ = true;
+}
+
+// Recovery keeps the document untitled and modified -- currentFile_ stays
+// empty and Recent Files is untouched, unlike recoverFromAutosave()'s
+// named-file case. The recovery file itself is intentionally NOT removed
+// here (mirrors recoverFromAutosave() leaving its own `.autosave` sibling in
+// place): it stays as the safety net until a real Save As succeeds, so a
+// second crash right after recovering doesn't lose the recovered content.
+void MeshCraftApplication::recoverUntitledScene() {
+    try {
+        Mc3::Mc3Validation loadValidation;
+        document_ = Mc3::Mc3Document::loadFromFile(untitledRecoveryPath(),
+                                                    Mc3::Mc3LoadPolicy::trusted(), loadValidation);
+        currentActionName_.clear();
+        currentActionClipName_.clear();
+        clearAnimationPreviewTransition();
+        animTime_ = 0.0f;
+        animPlaying_ = false;
+        resetEventPreview();
+        resetImportHealth();
+        objectIndex_.invalidate();
+        if (!loadValidation.empty())
+            std::cout << "[MeshCraft] Untitled recovery: " << loadValidation.warningCount()
+                      << " warning(s), " << loadValidation.errorCount() << " error(s)\n";
+        recordValidation("Untitled recovery", loadValidation);
+        document_.model = document_.model.empty() ? "Untitled" : document_.model;
+        currentFile_.clear();
+        selection_.clear();
+        undoManager_.clear();
+        sceneHistory_.clear();
+        historyReviewSnapshotId_.reset();
+        historyNotice_.clear();
+        if (sceneRenderer_) {
+            sceneRenderer_->setAnimOverrides({});
+            sceneRenderer_->clearCsgCache();
+        }
+        modified_ = true; // recovered content was never saved anywhere
+        setStatusMsg("Recovered unsaved changes from a previous session", false, 3.0f);
+        checkRotationConventionNotice();
+        resolveImports();
+        updateWindowTitle();
+    } catch (const std::exception& e) {
+        std::cerr << "[MeshCraft] Untitled recovery error: " << e.what() << "\n";
+        setStatusMsg(std::string("Failed to recover: ") + e.what(), true);
+    }
+    untitledRecoveryDlgOpen_ = false;
+}
+
+void MeshCraftApplication::discardUntitledRecovery() {
+    std::error_code ec;
+    std::filesystem::remove(untitledRecoveryPath(), ec);
+    setStatusMsg("Discarded recovered scene", false, 2.0f);
+    untitledRecoveryDlgOpen_ = false;
+}
+
 // SYS-W1-08: XML, JSON, MCB, and both library forms all populate
 // `validation` consistently now -- Mc3JsonParser gained its own
 // Mc3Validation-capturing overload (Mc3JsonParser.hpp), closing what used to
@@ -413,6 +491,9 @@ void MeshCraftApplication::saveLibraryFile(const std::filesystem::path& path) {
     else
         document_.saveToLibraryFile(path);
 
+    // SYS-W9-07: same "no longer untitled" transition as the plain Save As
+    // dialog handler -- see its own comment.
+    { std::error_code ec; std::filesystem::remove(untitledRecoveryPath(), ec); }
     currentFile_ = path;
     document_.sourcePath = path.parent_path();
     addRecentFile(currentFile_);
