@@ -116,7 +116,7 @@ if __name__ == "__main__":
         assert len(nodes) >= total, (
             f"Expected at least {total} glTF nodes, got {len(nodes)}"
         )
-        print(f"Node count: {len(nodes)} (expected ≥ {total}) — PASS")
+        print(f"Node count: {len(nodes)} (expected >= {total}) — PASS")
 
         # ----------------------------------------------------------------
         # Mesh reuse: 3 unique mesh geometries for 200 nodes.
@@ -127,7 +127,7 @@ if __name__ == "__main__":
             f"got {len(meshes)} — geometry reuse is not working"
         )
         assert len(nodes) >= len(meshes) * 10, (
-            f"Expected nodes ({len(nodes)}) ≥ 10× meshes ({len(meshes)})"
+            f"Expected nodes ({len(nodes)}) >= 10x meshes ({len(meshes)})"
         )
         print(f"Unique meshes: {len(meshes)} vs {len(nodes)} nodes — PASS")
 

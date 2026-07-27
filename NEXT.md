@@ -333,6 +333,34 @@ known (not new) failures, not yet fixed:
   any of tonight's work), a CI-runner apt-package gap unrelated to anything
   fixed this session.
 
+User asked to keep going on the remaining 4 items. Fixed 2 more:
+- **Python `UnicodeEncodeError`**: 2 files (`instance_deform_cache_test.py`,
+  `large_scene_generated_test.py` — the latter backs all 3 `_generated`/
+  `_500`/`_1000` CTest names) printed `≠`/`≥` in PASS messages; Windows'
+  default console codepage (cp1252) can't encode those. Replaced with
+  `!=`/`>=`. Verified unchanged behavior on Linux (still 100% pass);
+  correctness of the fix itself doesn't depend on Windows-specific
+  verification since removing non-ASCII output is unconditionally safe on
+  any codepage.
+- **Windows write-protection test assumption**: `mc3togltf_no_partial_output`
+  (STAB-0546b) and `mc3tomcb_error_handling` (STAB-0538) simulated an
+  unwritable output directory via `os.chmod(dir, ...)` with POSIX mode
+  bits — on Windows, `os.chmod()` can only toggle `FILE_ATTRIBUTE_READONLY`,
+  which Windows ignores for directories, so it never actually blocked
+  writes there. Replaced with a directory-permission-independent
+  mechanism: point the output path at a parent directory that's simply
+  never created. This fails identically on every platform (the exporter's
+  file-open-for-write call gets "no such file or directory") and tests the
+  exact same downstream code path ("does a write failure leave partial
+  output or a non-zero exit"), without relying on OS permission-model
+  differences at all. Verified via the same MinGW+Wine repro technique as
+  the `mc3_roundtrip` fix above — built `mc3togltf.exe`/`mc3tomcb.exe` for
+  Windows and ran both Python test scripts against them through Wine (via
+  a small wrapper script, since this sandbox has no binfmt_misc handler
+  for `.exe`): both STAB-0546a/b and STAB-0537/0538 cases pass. Also
+  reconfirmed the full `mc3togltf_*`/`mc3tomcb_*` suite on Linux (77/80,
+  same 3 already-known Blender/`numpy` failures, zero regressions).
+
 ## Known release blockers and decisions
 
 | Area | Live state |

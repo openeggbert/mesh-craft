@@ -9,14 +9,16 @@ attempted. This test confirms that holds for two real failure modes:
 
   1. Malformed input XML (Mc3Document::loadFromFile() throws before
      exportDocument() is even called).
-  2. A write-protected output directory (WriteGltfSceneToFile() fails at
-     the file-open step; verified empirically to create zero bytes on
-     disk, not a truncated/partial file).
+  2. An unwritable output path -- its parent directory is never created,
+     so WriteGltfSceneToFile() fails at the file-open step; verified
+     empirically to create zero bytes on disk, not a truncated/partial
+     file. (Not a chmod'd read-only directory: Windows' os.chmod() can
+     only toggle FILE_ATTRIBUTE_READONLY, which Windows ignores for
+     directories, so that wouldn't actually block writes there.)
 
 Usage: no_partial_output_test.py <mc3togltf> <fixture.mc3.xml>
 """
 import os
-import stat
 import subprocess
 import sys
 import tempfile
@@ -52,23 +54,17 @@ if __name__ == "__main__":
         )
         print(f"PASS (STAB-0546a): malformed input rejected -- exit {r.returncode}, no output file")
 
-    # STAB-0546b: write-protected output directory.
+    # STAB-0546b: unwritable output path (parent directory never created).
     with tempfile.TemporaryDirectory() as tmpdir:
-        readonly_dir = os.path.join(tmpdir, "readonly")
-        os.mkdir(readonly_dir)
-        os.chmod(readonly_dir, stat.S_IRUSR | stat.S_IXUSR)  # r-x, no write
-        try:
-            out_glb = os.path.join(readonly_dir, "out.glb")
-            r = run([mc3togltf, fixture, out_glb])
-            assert r.returncode != 0, (
-                f"expected a non-zero exit for a write-protected output path, got 0.\n"
-                f"stdout={r.stdout}\nstderr={r.stderr}"
-            )
-            assert r.stderr.strip(), "expected an error message on stderr for a write-protected output path"
-            assert not os.path.exists(out_glb), (
-                "expected no output file for a write-protected output path, but one was created "
-                "(even a zero-length/partial file)"
-            )
-            print(f"PASS (STAB-0546b): write-protected output rejected -- exit {r.returncode}, no output file")
-        finally:
-            os.chmod(readonly_dir, stat.S_IRWXU)  # restore so TemporaryDirectory cleanup can remove it
+        out_glb = os.path.join(tmpdir, "does_not_exist", "out.glb")
+        r = run([mc3togltf, fixture, out_glb])
+        assert r.returncode != 0, (
+            f"expected a non-zero exit for an unwritable output path, got 0.\n"
+            f"stdout={r.stdout}\nstderr={r.stderr}"
+        )
+        assert r.stderr.strip(), "expected an error message on stderr for an unwritable output path"
+        assert not os.path.exists(out_glb), (
+            "expected no output file for an unwritable output path, but one was created "
+            "(even a zero-length/partial file)"
+        )
+        print(f"PASS (STAB-0546b): unwritable output path rejected -- exit {r.returncode}, no output file")

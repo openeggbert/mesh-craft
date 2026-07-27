@@ -77,19 +77,19 @@ if __name__ == "__main__":
             f"Undeformed block (mesh {block_a_mesh}) and wide-deformed block "
             f"(mesh {wide_a_mesh}) must NOT share a mesh"
         )
-        print(f"No-deform mesh ({block_a_mesh}) ≠ wide-deform mesh ({wide_a_mesh}) — PASS")
+        print(f"No-deform mesh ({block_a_mesh}) != wide-deform mesh ({wide_a_mesh}) — PASS")
 
         assert wide_a_mesh != tall_mesh, (
             f"Wide-deformed block (mesh {wide_a_mesh}) and tall-deformed block "
             f"(mesh {tall_mesh}) must NOT share a mesh"
         )
-        print(f"Wide-deform mesh ({wide_a_mesh}) ≠ tall-deform mesh ({tall_mesh}) — PASS")
+        print(f"Wide-deform mesh ({wide_a_mesh}) != tall-deform mesh ({tall_mesh}) — PASS")
 
         assert block_a_mesh != tall_mesh, (
             f"Undeformed block (mesh {block_a_mesh}) and tall-deformed block "
             f"(mesh {tall_mesh}) must NOT share a mesh"
         )
-        print(f"No-deform mesh ({block_a_mesh}) ≠ tall-deform mesh ({tall_mesh}) — PASS")
+        print(f"No-deform mesh ({block_a_mesh}) != tall-deform mesh ({tall_mesh}) — PASS")
 
         # Total unique meshes: 3 (undeformed, wide, tall)
         assert len(meshes) == 3, (

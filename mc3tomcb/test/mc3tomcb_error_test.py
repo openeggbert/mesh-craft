@@ -7,16 +7,19 @@ this test confirms that actually holds for two real failure modes:
 
   STAB-0537: a missing input file (Mc3Document::loadFromFile() throws
              tinyxml2's XML_ERROR_FILE_NOT_FOUND).
-  STAB-0538: a write-protected output directory (Mcb::saveToFile() /
+  STAB-0538: an unwritable output path (Mcb::saveToFile() /
              Mc3Document::saveToFile() throw "Cannot open for writing").
-             Uses a fresh temp dir with its write bit stripped (chmod
-             0o555) rather than a hardcoded root-owned path, so this
-             test doesn't depend on the runner's privilege level.
+             Uses a fresh temp dir with a never-created subdirectory
+             component in the output path, rather than a hardcoded
+             root-owned path or a chmod'd read-only directory -- the
+             former depends on the runner's privilege level, and the
+             latter doesn't work on Windows (os.chmod() there can only
+             toggle FILE_ATTRIBUTE_READONLY, which Windows ignores for
+             directories, so it wouldn't actually block writes).
 
 Usage: mc3tomcb_error_test.py <mc3tomcb-exe> <fixture.mc3.xml>
 """
 import os
-import stat
 import subprocess
 import sys
 import tempfile
@@ -41,23 +44,17 @@ def main():
         assert not os.path.exists(out_mcb), "expected no output file for a missing input file"
         print(f"PASS (STAB-0537): missing input rejected -- exit {r.returncode}, stderr: {r.stderr.strip()[:80]}")
 
-    # STAB-0538: write-protected output directory.
+    # STAB-0538: unwritable output path (parent directory never created).
     with tempfile.TemporaryDirectory() as tmpdir:
-        readonly_dir = os.path.join(tmpdir, "readonly")
-        os.mkdir(readonly_dir)
-        os.chmod(readonly_dir, stat.S_IRUSR | stat.S_IXUSR)  # r-x, no write
-        try:
-            out_mcb = os.path.join(readonly_dir, "out.mcb")
-            r = subprocess.run([exe, fixture, out_mcb], capture_output=True, text=True)
-            assert r.returncode != 0, (
-                f"expected a non-zero exit for a write-protected output path, got 0.\n"
-                f"stdout={r.stdout}\nstderr={r.stderr}"
-            )
-            assert r.stderr.strip(), "expected an error message on stderr for a write-protected output path"
-            assert not os.path.exists(out_mcb), "expected no output file for a write-protected output path"
-            print(f"PASS (STAB-0538): write-protected output rejected -- exit {r.returncode}, stderr: {r.stderr.strip()[:80]}")
-        finally:
-            os.chmod(readonly_dir, stat.S_IRWXU)  # restore so TemporaryDirectory cleanup can remove it
+        out_mcb = os.path.join(tmpdir, "does_not_exist", "out.mcb")
+        r = subprocess.run([exe, fixture, out_mcb], capture_output=True, text=True)
+        assert r.returncode != 0, (
+            f"expected a non-zero exit for an unwritable output path, got 0.\n"
+            f"stdout={r.stdout}\nstderr={r.stderr}"
+        )
+        assert r.stderr.strip(), "expected an error message on stderr for an unwritable output path"
+        assert not os.path.exists(out_mcb), "expected no output file for an unwritable output path"
+        print(f"PASS (STAB-0538): unwritable output path rejected -- exit {r.returncode}, stderr: {r.stderr.strip()[:80]}")
 
 
 if __name__ == "__main__":
