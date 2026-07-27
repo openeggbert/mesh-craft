@@ -8,10 +8,13 @@
 # fixture. For exact live counts run `ctest -N`; they are deliberately not
 # hard-coded here.
 #
-# The editor job below checks out the two required sibling repositories beside
-# this checkout, exactly matching the root CMake project layout
-# (`../cna`, `../sharp-runtime`). EASYGL runs the complete root CTest suite,
-# while the Vulkan matrix entry always configures and builds the real editor.
+# The editor job below checks out the three required sibling repositories
+# beside this checkout, exactly matching the root CMake project layout
+# (`../cna`, `../sharp-runtime`, `../easy-gl` -- the last one only because
+# CNA's own CNA_BACKEND_EASY_GL option, which every matrix entry enables,
+# requires it as a sibling checkout). EASYGL runs the complete root CTest
+# suite, while the Vulkan matrix entry always configures and builds the real
+# editor.
 # Vulkan is enabled for the explicit manual SYS-W8-05 qualification run;
 # WebGPU remains gated pending its own pixel-qualified runner.
 
@@ -261,6 +264,20 @@ jobs:
           path: sharp-runtime
           ref: 5cdaafb2bace46dce5393da21dad9ff9f8ad3c58
 
+      # CNA's CNA_BACKEND_EASY_GL option (which the EASYGL backend this job
+      # matrix builds turns on) requires a sibling 'easy-gl' checkout --
+      # CNA's own CMakeLists.txt hard-fails configure without it
+      # ("Missing sibling repository 'easy-gl'"). Every matrix entry needs
+      # it, not just EASYGL: the single "Configure editor" step below always
+      # configures both backends (it's followed by both an EASYGL-only build
+      # step and an unconditioned "Build Vulkan editor" step).
+      - name: Checkout easy-gl
+        uses: actions/checkout@v4
+        with:
+          repository: openeggbert/easy-gl
+          path: easy-gl
+          ref: 62c0a248a6c4144abaf92c0530cc2a2395e5fd37
+
       - name: Install editor build dependencies
         run: |
           sudo apt-get update
@@ -350,6 +367,16 @@ jobs:
           repository: openeggbert/sharp-runtime
           path: sharp-runtime
           ref: 5cdaafb2bace46dce5393da21dad9ff9f8ad3c58
+
+      # See the "editor" job's own "Checkout easy-gl" step comment: CNA's
+      # CNA_BACKEND_EASY_GL option (which this EASYGL-specific job enables)
+      # requires a sibling 'easy-gl' checkout or configure hard-fails.
+      - name: Checkout easy-gl
+        uses: actions/checkout@v4
+        with:
+          repository: openeggbert/easy-gl
+          path: easy-gl
+          ref: 62c0a248a6c4144abaf92c0530cc2a2395e5fd37
 
       - name: Install editor build dependencies
         run: |
