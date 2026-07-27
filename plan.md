@@ -375,7 +375,7 @@ report and defer rather than fix).
   linking the standalone Windows build. See `SYS-W11-06` for the full
   verification.
 
-- **SYS-W11-09** `[DONE]` `P1` — Added first-party editor sanitizer CI, and it
+- **SYS-W11-09** `[IN_PROGRESS]` `P1` — Added first-party editor sanitizer CI, and it
   immediately found a real bug, confirming the whole point of doing this.
   Root `CMakeLists.txt` already had `-DMESHCRAFT_SANITIZE=ON` wired up, but
   `meshcraft_apply_sanitize()` was only ever called on the main `MeshCraft`
@@ -444,12 +444,29 @@ report and defer rather than fix).
   these fixes regressed the normal configuration.
   New `editor-sanitizer` CI job (`.github/workflows/ci.yml`): checks out the
   same pinned CNA/sharp-runtime revisions as the plain `editor` job, builds
-  with `gcc`/`g++` + `MESHCRAFT_SANITIZE=ON` + EASYGL, runs `ctest -LE
-  render`, then the one render smoke test with leak detection scoped off.
+  with `MESHCRAFT_SANITIZE=ON` + EASYGL, runs `ctest -LE render`, then the
+  one render smoke test with leak detection scoped off.
   **Note for a future session:** `build-asan/` (a stable, reusable directory
   per the top-level build-rules convention) is ~5.7 GB on disk after this
   verification; left in place for incremental reuse rather than deleted,
   since another session may want to re-verify against it.
+
+  **Correction (2026-07-27, external review caught this):** the paragraph
+  above originally claimed the new CI job builds with `gcc`/`g++` "matching"
+  the plain `editor` job — false. The job used `clang`/`clang++` from its
+  very first commit; only the *local* verification (`build-asan/`, the
+  181/181 result above) actually used GCC. This is now fixed for real
+  (`CC: gcc-14`/`CXX: g++-14` in `ci.yml`, not just corrected prose), but
+  **downgrading this task's status to `[IN_PROGRESS]`**: the `editor-
+  sanitizer` CI job itself has never had a fully green run on real CI —
+  every run through 2026-07-27 failed, first on unrelated environment gaps
+  (fixed separately, see the CI-red session log in `NEXT.md`), now on
+  `SYS-W8-08`'s `sharp-runtime` API mismatch (unrelated to compiler choice,
+  will likely still block after the GCC switch). The code fixes described
+  above (heap-use-after-free, 4 leak fixtures, `package_consumer_smoke`
+  guard, `meshcraft_apply_sanitize()` wiring) are real and independently
+  verified locally; only the CI-job-itself claim was wrong. Re-promote to
+  `[DONE]` once a real `editor-sanitizer` run is green.
 
 - **SYS-W11-10** `[DONE]` `P2` — Wired one authoritative version source: a
   new root-level `VERSION` file (currently `0.1.0`, the existing value —

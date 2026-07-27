@@ -30,24 +30,36 @@ distribution rather than missing editor breadth.
 
 ## Current priorities
 
-1. Obtain native standalone Windows qualification (`SYS-W11-06`). The
-   release-readiness changes are published on `develop`; await the next
-   remote `windows-2022` CTest/artifact evidence run — the first real run
-   found 6 concrete regressions (see "Session log" below), all 6 now fixed
-   and pushed, but none re-verified on an actual Windows runner yet (no
-   Wine in this sandbox).
-2. The freshly-added `[PROPOSED]` backlog (`SYS-W9-06/07`, `SYS-W1-08`,
-   `SYS-W2-06`, `SYS-W11-08/09/10`, `SYS-W13-03`, `SYS-W3-05`) is
-   **all 9 DONE**. `SYS-W11-09` found a real heap-use-after-free bug in
-   `EventPreviewRunner::execute()`'s RunScript step (`ff62004`) — a stale
-   `working.scripts` iterator read again after `LuaScriptRunner::run()`
-   already replaced `working` via move-assignment. Fixed. See `plan.md` for
-   full evidence on everything done.
-3. All 6 of the deferred CI-red regressions from that first Windows run are
-   now fixed and pushed (see "Session log" below for each one's root cause
-   and evidence) — still awaiting real Windows re-verification for the 3
-   Windows-specific fixes (`mc3_roundtrip`, `mcb_load_policy`, `mc3togltf`
-   DLL staging).
+_(This section is a summary snapshot — it was left stale for several hours
+during the 2026-07-27 session while only the "Session log" further down got
+updated. Corrected once, after an external review caught the contradiction;
+if you're reading this much later, re-check `plan.md`'s own status markers
+before trusting anything below.)_
+
+1. **`SYS-W11-06` (standalone Windows qualification) is `[DONE]`**, verified
+   for real against the actual published `windows-2022` CI artifact
+   (downloaded via `gh run download`, run through Wine in this sandbox —
+   Wine is NOT blocked here for console binaries, only the full GUI editor
+   hits `SIGSYS`). See `plan.md`'s own entry for the full evidence trail,
+   including a genuine first-attempt failure (`STATUS_DLL_NOT_FOUND`) that
+   led to statically linking the whole standalone-Windows build.
+2. The `[PROPOSED]` backlog from the 2026-07-26 review (`SYS-W9-06/07`,
+   `SYS-W1-08`, `SYS-W2-06`, `SYS-W11-08/10`, `SYS-W13-03`, `SYS-W3-05`) is
+   done. **`SYS-W11-09` is `[IN_PROGRESS]`, not done** — its code fixes (a
+   real heap-use-after-free in `EventPreviewRunner::execute()`, 4 leak
+   fixtures, `meshcraft_apply_sanitize()` wiring) are real and locally
+   verified, but the new `editor-sanitizer` CI job itself has never had a
+   fully green run: it used `clang`/`clang++` despite `plan.md` claiming
+   otherwise (corrected 2026-07-27, now `gcc-14`/`g++-14`), and currently
+   fails on `SYS-W8-08`'s unrelated `sharp-runtime` API mismatch.
+3. All 6 originally-deferred CI-red regressions, plus 10 more layers
+   cascading from fixing them, are fixed and confirmed on real CI (see
+   "Session log" below) — `Clang ASan+UBSan and bounded fuzz` and
+   `Standalone Windows qualification` are fully green. The 3 Editor CI jobs
+   now get all the way through CMake configure and fail only at build, on
+   2 real `sharp-runtime` bugs tracked as `SYS-W8-07`/`SYS-W8-08` —
+   deliberately not fixed (sibling repository, outside authorized scope;
+   user chose to report and defer).
 4. `SYS-W11-11` (the first-release version-number decision) is deliberately
    left `[BLOCKED]` per the user's explicit choice not to decide yet.
 

@@ -367,8 +367,17 @@ jobs:
     name: Editor (EASYGL) ASan+UBSan
     runs-on: ubuntu-24.04
     env:
-      CC: clang
-      CXX: clang++
+      # Corrected 2026-07-27: this job used clang/clang++ since its very
+      # first commit, contradicting this file's own SYS-W11-09 writeup in
+      # plan.md ("the new sanitizer job [uses gcc/g++] too, matching" the
+      # plain `editor` job below) -- that claim described intent that was
+      # never actually applied here. GCC's ASan+UBSan support is equally
+      # complete; switching removes the untested risk of hitting the
+      # documented Clang/CNA::Internal::JsonValue incompatibility, and keeps
+      # this job on the same toolchain as the plain `editor` job for a
+      # sanitizer finding that can't be blamed on a compiler difference.
+      CC: gcc-14
+      CXX: g++-14
       ASAN_OPTIONS: detect_leaks=1:halt_on_error=1
       UBSAN_OPTIONS: halt_on_error=1:print_stacktrace=1
     steps:
@@ -414,7 +423,7 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
-            clang cmake ninja-build python3 pkg-config \
+            g++-14 cmake ninja-build python3 pkg-config \
             libgl1-mesa-dev libegl1-mesa-dev libglvnd-dev \
             libx11-dev libxext-dev libxrandr-dev libxcursor-dev \
             libxi-dev libxfixes-dev libxss-dev libxtst-dev \
