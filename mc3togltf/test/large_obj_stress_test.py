@@ -7,18 +7,23 @@ Generates a >1,000,000-triangle OBJ file on the fly (a subdivided grid --
 710x710 quads = 1,008,200 triangles, ~28MB as text; not committed as a
 static fixture to avoid repo bloat) and exports it through mc3togltf,
 measuring the subprocess's actual peak RSS via resource.getrusage()
-(Linux/macOS; ru_maxrss is in KB).
+(Linux/macOS; ru_maxrss is in KB). The `resource` module is POSIX-only
+(ModuleNotFoundError on Windows), so the peak-RSS assertion is skipped
+there -- the returncode/timing/output-exists checks still run
+everywhere, keeping the "doesn't crash or hang" coverage on Windows too.
 
 Measured in this environment: ~2.4s wall time, ~350MB peak RSS -- this
 test asserts the row's own 2GB bound with headroom, not the exact
 measured value (memory use will vary by platform/allocator).
 """
 import os
-import resource
 import subprocess
 import sys
 import tempfile
 import time
+
+if os.name != "nt":
+    import resource
 
 N = 710  # (N+1)^2 vertices, N*N*2 = 1,008,200 triangles
 MAX_SECONDS = 60.0
@@ -70,10 +75,6 @@ if __name__ == "__main__":
         r = subprocess.run([mc3togltf, xml_path, out], capture_output=True, text=True,
                             timeout=MAX_SECONDS)
         elapsed = time.monotonic() - started
-        # ru_maxrss (RUSAGE_CHILDREN) is the largest peak RSS seen across all
-        # reaped child processes so far -- since this is the only subprocess
-        # this test spawns, it's exactly this export's peak RSS.
-        peak_rss_kb = resource.getrusage(resource.RUSAGE_CHILDREN).ru_maxrss
 
         assert r.returncode == 0, (
             f"Export of a {triangle_count}-triangle OBJ failed "
@@ -84,12 +85,25 @@ if __name__ == "__main__":
             f"Export of {triangle_count} triangles took {elapsed:.2f}s, expected < {MAX_SECONDS:.0f}s"
         )
 
-        assert peak_rss_kb < MAX_RSS_KB, (
-            f"mc3togltf peak RSS was {peak_rss_kb / 1024:.0f}MB, expected < "
-            f"{MAX_RSS_KB / 1024:.0f}MB (STAB-0257)"
-        )
-
-        print(f"STAB-0257: {triangle_count}-triangle OBJ exported in {elapsed:.2f}s, "
-              f"peak RSS ~{peak_rss_kb / 1024:.0f}MB (< {MAX_RSS_KB / 1024:.0f}MB) — PASS")
+        if os.name != "nt":
+            # ru_maxrss (RUSAGE_CHILDREN) is the largest peak RSS seen across
+            # all reaped child processes so far -- since this is the only
+            # subprocess this test spawns, it's exactly this export's peak RSS.
+            peak_rss_kb = resource.getrusage(resource.RUSAGE_CHILDREN).ru_maxrss
+            assert peak_rss_kb < MAX_RSS_KB, (
+                f"mc3togltf peak RSS was {peak_rss_kb / 1024:.0f}MB, expected < "
+                f"{MAX_RSS_KB / 1024:.0f}MB (STAB-0257)"
+            )
+            print(f"STAB-0257: {triangle_count}-triangle OBJ exported in {elapsed:.2f}s, "
+                  f"peak RSS ~{peak_rss_kb / 1024:.0f}MB (< {MAX_RSS_KB / 1024:.0f}MB) — PASS")
+        else:
+            # No `resource` module on Windows and no stdlib equivalent -- the
+            # returncode/timing/output-exists checks above already cover
+            # "doesn't crash or hang exporting a 1M+ triangle mesh", just
+            # without the peak-RSS bound this platform can't measure without
+            # a new dependency (psutil or ctypes+GetProcessMemoryInfo), which
+            # isn't worth adding for one test's memory measurement.
+            print(f"STAB-0257: {triangle_count}-triangle OBJ exported in {elapsed:.2f}s "
+                  f"(peak-RSS check skipped on Windows: no `resource` module) — PASS")
 
     print("\nLarge OBJ stress test: PASS")

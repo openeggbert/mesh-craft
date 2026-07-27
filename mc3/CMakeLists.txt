@@ -342,7 +342,18 @@ if(BUILD_TESTING)
     add_executable(mc3_json_document_budget_test test/json_document_budget_test.cpp)
     target_link_libraries(mc3_json_document_budget_test PRIVATE Mc3)
     add_test(NAME mc3_json_document_budget COMMAND mc3_json_document_budget_test)
-    set_tests_properties(mc3_json_document_budget PROPERTIES TIMEOUT 30 LABELS "format")
+    # 2026-07-27: this fixture's ~150K-object stress scenario is genuinely
+    # slow without optimization, not hung -- measured ~50-55s in a plain
+    # Debug (-O0) build and ~96.7s under Clang/GCC ASan+UBSan instrumentation
+    # (both confirmed via direct timing, isolated from any source change via
+    # git stash -- see SYS-W1-08's plan.md writeup). The prior 30s TIMEOUT
+    # was calibrated against a Release build's ~8-10s and had already caused
+    # a real "Clang ASan+UBSan and bounded fuzz" CI failure. Same fix
+    # pattern as F28 (2026-07-20 audit) raising mc3togltf_pre_export_validation
+    # from 15s to 60s for the identical reason: raise the ceiling, don't
+    # shrink the fixture's real budget-boundary coverage. 200s gives ~2x
+    # headroom over the slowest measured case for CI runner variability.
+    set_tests_properties(mc3_json_document_budget PROPERTIES TIMEOUT 200 LABELS "format")
 
     # 2026-07-20 audit F8: editing an <include>-sourced material/texture/
     # definition/embed in the GUI editor and saving used to silently drop
