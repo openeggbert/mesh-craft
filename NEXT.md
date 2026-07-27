@@ -200,8 +200,35 @@ place. Progress, each its own commit:
   already-known Blender/`numpy` gap, unrelated) still passing unchanged.
   Windows-side reasoning follows documented `std::filesystem` semantics
   (cppreference), not executable in this sandbox (no Wine).
-- Remaining: **#1** (`mc3togltf.exe` `STATUS_DLL_NOT_FOUND`, needs CMake
-  DLL-staging/install-rule changes).
+- **#1** (`mc3togltf.exe` `STATUS_DLL_NOT_FOUND`): root cause is that
+  Manifold's own `CMakeLists.txt` defaults `BUILD_SHARED_LIBS` to `ON`, and
+  `tinyobjloader`'s `add_library()` call has no explicit `STATIC`/`SHARED`,
+  so it inherits that same global cache value — both build as DLLs on
+  Windows. Linux/macOS never hit this: CMake automatically adds build-tree
+  RPATH entries to every executable pointing at its shared-library
+  dependencies' own build output, and Windows PE executables have no
+  equivalent (the loader only searches the exe's own directory, CWD,
+  `System32`, and `PATH` — never `_deps/manifold-build/...`). The root
+  `CMakeLists.txt` already knew about this for the *installed* tree
+  (`install(TARGETS manifold tinyobjloader ...)`, staging both next to the
+  installed binaries for the CLI release archive/`clean_room_cli_release`),
+  which is why that path already worked — but the `standalone-windows` CI
+  job runs `ctest` directly against the raw, un-installed build tree, which
+  had no equivalent staging.
+  Added `mc3togltf_stage_runtime_dlls(target)` to `mc3togltf/CMakeLists.txt`
+  — a `WIN32`-guarded `POST_BUILD` copy of `$<TARGET_RUNTIME_DLLS:target>`
+  (CMake 3.21+ generator expression, the project's existing minimum) next to
+  each target — and called it after all 9 affected executables (`mc3togltf`
+  itself, `mc3togltf_glb_libfuzzer`, and the 7 C++ test binaries that link
+  `mc3togltf_lib`). A no-op on Linux/macOS (`$<TARGET_RUNTIME_DLLS:...>`
+  resolves to nothing there), confirmed by rebuilding both the standalone
+  `mc3togltf/build` (75/78 pass, 3 already-known Blender/`numpy` failures)
+  and the full root `MeshCraft` editor + `cmake-build-debug`'s
+  `mc3togltf_*`/`package_consumer_smoke`/`clean_room_cli_release_smoke`
+  (all pass, packaging path unaffected) with zero build or test changes.
+  Unverified on real Windows in this sandbox (no Wine) — the DLL-copy
+  mechanism itself is standard CMake, not something this project invented.
+  **All 6 of tonight's deferred CI-red regressions are now addressed.**
 
 ## Known release blockers and decisions
 

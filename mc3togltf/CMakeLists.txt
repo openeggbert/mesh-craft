@@ -99,6 +99,28 @@ if(NOT tinyobjloader_POPULATED)
     FetchContent_MakeAvailable(tinyobjloader)
 endif()
 
+# Windows STATUS_DLL_NOT_FOUND (part of tonight's CI-red survey): Manifold's
+# own CMakeLists.txt defaults BUILD_SHARED_LIBS to ON, and tinyobjloader's
+# add_library() call has no explicit STATIC/SHARED, so it inherits that same
+# global cache value -- both build as DLLs on Windows. Linux/macOS need no
+# fix: CMake adds build-tree RPATH entries to every executable pointing at
+# its shared-library dependencies automatically, and Windows PE executables
+# have no equivalent mechanism (the loader only searches the exe's own
+# directory, CWD, System32, and PATH -- nothing under _deps/). Copy each
+# affected executable's transitive DLL dependencies next to it after linking;
+# $<TARGET_RUNTIME_DLLS:...> (CMake 3.21+, the minimum this project already
+# requires) resolves to nothing on non-Windows, so this is a no-op there.
+function(mc3togltf_stage_runtime_dlls target)
+    if(WIN32)
+        add_custom_command(TARGET ${target} POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                    $<TARGET_RUNTIME_DLLS:${target}>
+                    $<TARGET_FILE_DIR:${target}>
+            COMMAND_EXPAND_LISTS
+        )
+    endif()
+endfunction()
+
 # --------------------------------------------------------------------------
 # Static library — GltfExporter + MeshBuilder (used by mc3togltf AND MeshCraft)
 # --------------------------------------------------------------------------
@@ -150,6 +172,7 @@ target_include_directories(mc3togltf PRIVATE
 
 target_link_libraries(mc3togltf PRIVATE mc3togltf_lib)
 target_compile_definitions(mc3togltf PRIVATE MESHCRAFT_VERSION="${PROJECT_VERSION}")
+mc3togltf_stage_runtime_dlls(mc3togltf)
 
 # AUD-054: the executable itself (a thin main.cpp wrapper) previously had
 # no warning flags; mc3togltf_lib above already did.
@@ -167,6 +190,7 @@ if(MESHCRAFT_FUZZ)
     target_include_directories(mc3togltf_glb_libfuzzer PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
     target_compile_options(mc3togltf_glb_libfuzzer PRIVATE -fsanitize=fuzzer,address,undefined -fno-omit-frame-pointer -g)
     target_link_options(mc3togltf_glb_libfuzzer PRIVATE -fsanitize=fuzzer,address,undefined)
+    mc3togltf_stage_runtime_dlls(mc3togltf_glb_libfuzzer)
 endif()
 
 include(GNUInstallDirs)
@@ -188,6 +212,7 @@ if(BUILD_TESTING)
     target_include_directories(mc3togltf_earclip_test PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
     add_test(NAME mc3togltf_earclip COMMAND mc3togltf_earclip_test)
     set_tests_properties(mc3togltf_earclip PROPERTIES TIMEOUT 15 LABELS "export")
+    mc3togltf_stage_runtime_dlls(mc3togltf_earclip_test)
 
     # SYS-W14-35: direct parser/import coverage (multi-usemtl splitting,
     # MTL subset mapping/warnings, missing MTL, hostile OBJ indices).
@@ -197,6 +222,7 @@ if(BUILD_TESTING)
     add_test(NAME mc3togltf_obj_material_import
              COMMAND mc3togltf_obj_material_import_test "${CMAKE_CURRENT_SOURCE_DIR}/../test")
     set_tests_properties(mc3togltf_obj_material_import PROPERTIES TIMEOUT 15 LABELS "export")
+    mc3togltf_stage_runtime_dlls(mc3togltf_obj_material_import_test)
 
     # SYS-W14-36: direct self-contained GLB import, explicit trusted .gltf
     # conversion, unsupported-mode rejection, and MC3 -> GLB round trip.
@@ -205,6 +231,7 @@ if(BUILD_TESTING)
     target_include_directories(mc3togltf_gltf_import_test PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
     add_test(NAME mc3togltf_gltf_import COMMAND mc3togltf_gltf_import_test)
     set_tests_properties(mc3togltf_gltf_import PROPERTIES TIMEOUT 20 LABELS "export")
+    mc3togltf_stage_runtime_dlls(mc3togltf_gltf_import_test)
 
     # SYS-W14-37: quantization accessors/extension, GLB-vs-glTF image
     # behavior, deterministic output, estimate, and object-id report.
@@ -213,6 +240,7 @@ if(BUILD_TESTING)
     target_include_directories(mc3togltf_export_optimization_test PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
     add_test(NAME mc3togltf_export_optimization COMMAND mc3togltf_export_optimization_test)
     set_tests_properties(mc3togltf_export_optimization PROPERTIES TIMEOUT 20 LABELS "export")
+    mc3togltf_stage_runtime_dlls(mc3togltf_export_optimization_test)
 
     # SYS-W14-38: named ranges, rate/reverse baking, explicit core-vs-extras
     # policy, deterministic output, and per-channel object-id diagnostics.
@@ -221,12 +249,14 @@ if(BUILD_TESTING)
     target_include_directories(mc3togltf_animation_clip_export_test PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
     add_test(NAME mc3togltf_animation_clip_export COMMAND mc3togltf_animation_clip_export_test)
     set_tests_properties(mc3togltf_animation_clip_export PROPERTIES TIMEOUT 20 LABELS "export")
+    mc3togltf_stage_runtime_dlls(mc3togltf_animation_clip_export_test)
 
     add_executable(mc3togltf_svg_rasterizer_test test/svg_rasterizer_test.cpp)
     target_link_libraries(mc3togltf_svg_rasterizer_test PRIVATE mc3togltf_lib)
     target_include_directories(mc3togltf_svg_rasterizer_test PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
     add_test(NAME mc3togltf_svg_rasterizer COMMAND mc3togltf_svg_rasterizer_test)
     set_tests_properties(mc3togltf_svg_rasterizer PROPERTIES TIMEOUT 15 LABELS "export")
+    mc3togltf_stage_runtime_dlls(mc3togltf_svg_rasterizer_test)
 
     # SYS-W1-01 (pre-export integration point): GltfExporter::validation,
     # populated for documents that never went through a parser load at all.
@@ -241,6 +271,7 @@ if(BUILD_TESTING)
     # related. 60s matches the convention this file already uses for its
     # other heavier tests (mc3togltf_csg_export, mc3togltf_export_verification).
     set_tests_properties(mc3togltf_pre_export_validation PROPERTIES TIMEOUT 60 LABELS "export")
+    mc3togltf_stage_runtime_dlls(mc3togltf_pre_export_validation_test)
 
     # NEXT.md task (2026-07-19): CsgEvaluator.cpp's Intersection case null
     # first-child guard. Built the same way as pre_export_validation_test.cpp
@@ -251,6 +282,7 @@ if(BUILD_TESTING)
     target_include_directories(mc3togltf_csg_null_child_test PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
     add_test(NAME mc3togltf_csg_null_child COMMAND mc3togltf_csg_null_child_test)
     set_tests_properties(mc3togltf_csg_null_child PROPERTIES TIMEOUT 15 LABELS "export")
+    mc3togltf_stage_runtime_dlls(mc3togltf_csg_null_child_test)
 
     find_program(PYTHON3_EXEC NAMES python3 python)
     find_program(BLENDER_EXEC blender)
