@@ -306,6 +306,33 @@ pattern as this whole session):
   session — a real cross-compiled binary actually executing the real code
   path, not just source-level reasoning.
 
+**Confirmed on the next real `windows-2022` CI run after pushing:**
+`mc3_roundtrip` now passes 100% (28/28, up from 27/28) — the Unicode-fopen
+fix works on real Windows, not just the Wine repro. `mcb` standalone is also
+100% (11/11). Also confirmed on the same push's Linux job: `mc3togltf`
+standalone now passes 100% (75/75) under Clang ASan+UBSan — the
+tinyobjloader ODR-violation fix is fully verified on real CI. Remaining
+known (not new) failures, not yet fixed:
+- `mc3togltf` standalone: 5/75 fail — `mc3togltf_no_partial_output`,
+  4x Python `UnicodeEncodeError` printing `≥`/`≠` to a Windows cp1252
+  console (`mc3togltf_instance_deform_cache`,
+  `mc3togltf_large_scene_generated/_500/_1000`).
+- `mc3tomcb` standalone: 1/13 fails — `mc3tomcb_error_handling`, same
+  write-protection-assumption class as `mc3togltf_no_partial_output`
+  (Windows doesn't enforce a chmod-based write-protection simulation the
+  way the test expects).
+- Newly reached (Linux Clang ASan+UBSan job, later "Build bounded libFuzzer
+  targets"/fuzz-smoke step, only reachable now that the ODR violation no
+  longer aborts the job earlier): `mcb_libfuzzer` hit libFuzzer's OOM guard
+  (550MB against a 512MB `rss_limit_mb`) during the 20s corpus-seeded fuzz
+  run — not yet triaged as a real unbounded-allocation bug vs. just a
+  too-tight memory ceiling for legitimate corpus growth.
+- Editor (EASYGL/VULKAN, both plain and ASan+UBSan) jobs still fail at
+  CMake configure: "SDL could not find X11 or Wayland development
+  libraries" — confirmed pre-existing (reproduces on a CI run from before
+  any of tonight's work), a CI-runner apt-package gap unrelated to anything
+  fixed this session.
+
 ## Known release blockers and decisions
 
 | Area | Live state |
