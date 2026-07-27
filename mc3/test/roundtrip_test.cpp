@@ -8,6 +8,7 @@
 #include <MeshCraft/Mc3/Mc3Sound.hpp>
 #include <MeshCraft/Mc3/Mc3Trigger.hpp>
 
+#include <chrono>
 #include <cmath>
 #include <filesystem>
 #include <fstream>
@@ -17,6 +18,7 @@
 #include <memory>
 #include <sstream>
 #include <string>
+#include <thread>
 
 using namespace MeshCraft::Mc3;
 
@@ -34,11 +36,27 @@ static std::filesystem::path tmpPath() {
            ("mc3_rt_" + std::to_string(tmpIdx++) + ".mc3.xml");
 }
 
+// Windows CI observed remove() throwing "cannot remove: ... used by another
+// process" for a just-written temp fixture. Same class of transient lock
+// Mc3::writeFileAtomically's finalize step already retries around on the
+// write side (SYS-W9-06) -- absorb it here too instead of letting an
+// uncaught filesystem_error terminate() the whole test binary over cleanup.
+// Cleanup failing outright is harmless: a leftover file in the OS temp
+// directory, not a test-correctness signal.
+static void removeTestFile(const std::filesystem::path& p) {
+    std::error_code ec;
+    for (int attempt = 0; attempt < 10; ++attempt) {
+        std::filesystem::remove(p, ec);
+        if (!ec) return;
+        std::this_thread::sleep_for(std::chrono::milliseconds(20));
+    }
+}
+
 static Mc3Document roundtrip(Mc3Document doc) {
     auto p = tmpPath();
     doc.saveToFile(p);
     auto loaded = Mc3Document::loadFromFile(p);
-    std::filesystem::remove(p);
+    removeTestFile(p);
     return loaded;
 }
 
@@ -48,7 +66,7 @@ static Mc3Document roundtrip(Mc3Document doc) {
 static Mc3Document roundtripAt(Mc3Document doc, const std::filesystem::path& p) {
     doc.saveToFile(p);
     auto loaded = Mc3Document::loadFromFile(p);
-    std::filesystem::remove(p);
+    removeTestFile(p);
     return loaded;
 }
 
@@ -161,7 +179,7 @@ static void testUnnamedMaterialHandledGracefully() {
     }
     try {
         auto doc = Mc3Document::loadFromFile(xmlPath);
-        std::filesystem::remove(xmlPath);
+        removeTestFile(xmlPath);
 
         CHECK(doc.materials.count("") == 1,
               "unnamed material: no crash, exactly one '' entry (last-write-wins on collision)");
@@ -176,7 +194,7 @@ static void testUnnamedMaterialHandledGracefully() {
                   "unnamed material: materialless object's material field stays empty, "
                   "not accidentally resolved to the unnamed material");
     } catch (const std::exception& e) {
-        std::filesystem::remove(xmlPath);
+        removeTestFile(xmlPath);
         fail(std::string("unnamed material: threw unexpectedly: ") + e.what());
     }
 }
@@ -207,7 +225,7 @@ static void testDuplicateKeyframeTimePolicy() {
     }
     try {
         auto doc = Mc3Document::loadFromFile(xmlPath);
-        std::filesystem::remove(xmlPath);
+        removeTestFile(xmlPath);
 
         CHECK(doc.actions.count("Snap") == 1, "duplicate kf time: action present");
         if (!doc.actions.count("Snap")) return;
@@ -229,7 +247,7 @@ static void testDuplicateKeyframeTimePolicy() {
         float v2 = evaluateChannel(ch, 0.75f);
         CHECK(std::isfinite(v2), "duplicate kf time: evaluateChannel(0.75) is finite, not NaN/Inf");
     } catch (const std::exception& e) {
-        std::filesystem::remove(xmlPath);
+        removeTestFile(xmlPath);
         fail(std::string("duplicate kf time: threw unexpectedly: ") + e.what());
     }
 }
@@ -470,7 +488,8 @@ static void testUvMappingNotWrittenForGroup() {
     doc.saveToFile(p);
     std::ifstream saved(p);
     std::string content((std::istreambuf_iterator<char>(saved)), std::istreambuf_iterator<char>());
-    std::filesystem::remove(p);
+    saved.close();
+    removeTestFile(p);
 
     CHECK(content.find("uv_mapping") == std::string::npos,
           "uv_mapping: not written for a Group object, even when set on the in-memory model");
@@ -620,7 +639,7 @@ static void testActionTimeScaleDefaultNotWritten() {
     std::ifstream f(p);
     std::string saved((std::istreambuf_iterator<char>(f)), {});
     f.close();
-    std::filesystem::remove(p);
+    removeTestFile(p);
 
     CHECK(saved.find("time_scale") == std::string::npos,
           "action timeScale: default (1.0) is NOT written to XML");
@@ -932,7 +951,7 @@ static void testIncludeOverride(const std::string& featuresXmlPath) {
                   "override rt: local stone definition written to saved file");
         }
         auto rt = Mc3Document::loadFromFile(savedPath);
-        std::filesystem::remove(savedPath);
+        removeTestFile(savedPath);
         CHECK(rt.materials.count("stone") == 1, "override rt: stone present after reload");
         if (rt.materials.count("stone"))
             CHECKF(rt.materials.at("stone").baseColor[0], 0.9f,
@@ -979,7 +998,7 @@ static void testIncludeNested(const std::string& featuresXmlPath) {
 
         // Reload: assets from both lib_a and lib_b must still be accessible
         auto rt = Mc3Document::loadFromFile(savedPath);
-        std::filesystem::remove(savedPath);
+        removeTestFile(savedPath);
 
         CHECK(rt.definitions.count("widget") == 1,
               "nested rt: 'widget' accessible after reload");
@@ -1063,7 +1082,7 @@ static void testInclude(const std::string& featuresXmlPath) {
 
         // Reload: definitions should still be accessible via the re-emitted <include>
         auto rt = Mc3Document::loadFromFile(savedPath);
-        std::filesystem::remove(savedPath);
+        removeTestFile(savedPath);
 
         CHECK(rt.definitions.count("pillar") == 1, "include rt: 'pillar' accessible after reload");
         CHECK(rt.materials.count("stone")    == 1, "include rt: 'stone' accessible after reload");
@@ -1315,7 +1334,7 @@ static void testDanglingReferencesDoNotThrowAtParseTime() {
     } catch (const std::exception&) {
         threw = true;
     }
-    std::filesystem::remove(xmlPath);
+    removeTestFile(xmlPath);
 
     CHECK(!threw, "dangling references: loadFromFile() does not throw on any of "
                   "materialOverride / meshSource=\"embed:...\" / channel targetObject "
@@ -1593,7 +1612,7 @@ static void testMalformedXmlParseErrorIsClean() {
         threw = true;
         message = e.what();
     }
-    std::filesystem::remove(xmlPath);
+    removeTestFile(xmlPath);
 
     CHECK(threw, "malformed xml: throws cleanly (not a crash/hang)");
     CHECK(!message.empty(), "malformed xml: exception message is non-empty");
@@ -1613,12 +1632,13 @@ static void testWriterEmitsVersionCorrectly() {
     doc.saveToFile(p);
     std::ifstream f(p);
     std::string text((std::istreambuf_iterator<char>(f)), {});
+    f.close();
 
     CHECK(text.find(R"(version="0.3")") != std::string::npos,
           "writer version: saved file's <mc3> root has version=\"0.3\"");
 
     auto rt = Mc3Document::loadFromFile(p);
-    std::filesystem::remove(p);
+    removeTestFile(p);
     CHECK(rt.version == "0.3", "writer version: roundtrips back as \"0.3\"");
 }
 
@@ -1789,7 +1809,7 @@ static void testRootDefaultCameraAttribute() {
     } catch (const std::exception& e) {
         fail(std::string("root default_camera test threw: ") + e.what());
     }
-    std::filesystem::remove(xmlPath);
+    removeTestFile(xmlPath);
 
     // <cameras default="..."> must win when both spellings are present.
     auto xmlPath2 = tmpPath();
@@ -1811,7 +1831,7 @@ static void testRootDefaultCameraAttribute() {
     } catch (const std::exception& e) {
         fail(std::string("root default_camera override test threw: ") + e.what());
     }
-    std::filesystem::remove(xmlPath2);
+    removeTestFile(xmlPath2);
 }
 
 // STAB-0118: Mc3Environment's actual serialized fields — background color/
@@ -2115,7 +2135,7 @@ static void testDiskLegacyMinorRadius() {
     }
     try {
         auto doc = Mc3Document::loadFromFile(xmlPath);
-        std::filesystem::remove(xmlPath);
+        removeTestFile(xmlPath);
 
         CHECK(!doc.objects.empty(),           "disk legacy: object loaded");
         if (doc.objects.empty()) return;
@@ -2134,7 +2154,7 @@ static void testDiskLegacyMinorRadius() {
             CHECKF(ro->primitive->minorRadius, 0.2f,
                    "disk legacy rt: inner_radius preserved through save/load");
     } catch (const std::exception& e) {
-        std::filesystem::remove(xmlPath);
+        removeTestFile(xmlPath);
         fail(std::string("disk legacy: exception: ") + e.what());
     }
 }
@@ -2492,7 +2512,8 @@ static void testSceneState() {
         doc.saveToFile(p);
         std::ifstream f(p);
         std::string text((std::istreambuf_iterator<char>(f)), {});
-        std::filesystem::remove(p);
+        f.close();
+        removeTestFile(p);
 
         CHECK(text.find("position") == std::string::npos, "state only-visible: no position attribute written");
         CHECK(text.find("rotation") == std::string::npos, "state only-visible: no rotation attribute written");
@@ -2650,7 +2671,8 @@ static void testEventBindings() {
     defaults.saveToFile(p);
     std::ifstream file(p);
     std::string text((std::istreambuf_iterator<char>(file)), {});
-    std::filesystem::remove(p);
+    file.close();
+    removeTestFile(p);
     CHECK(text.find("cooldown=") == std::string::npos && text.find("once=") == std::string::npos &&
           text.find("interval=") == std::string::npos, "event bindings: default controls omitted from XML");
 }
@@ -2739,7 +2761,8 @@ static void testSoundMusic() {
         doc.saveToFile(p);
         std::ifstream f(p);
         std::string text((std::istreambuf_iterator<char>(f)), {});
-        std::filesystem::remove(p);
+        f.close();
+        removeTestFile(p);
 
         CHECK(text.find("loop") == std::string::npos,
               "sound/music defaults: loop attribute genuinely omitted from XML text, not just "
@@ -2975,7 +2998,7 @@ static void testTextureMipMapsAttribute() {
     } catch (const std::exception& e) {
         fail(std::string("mip_maps test threw: ") + e.what());
     }
-    std::filesystem::remove(xmlPath);
+    removeTestFile(xmlPath);
 
     // Default (true, omitted attribute) must NOT be written out explicitly.
     Mc3Document doc2;
@@ -3001,7 +3024,7 @@ static void testDiskInnerRadius() {
           << R"(</mc3>)" "\n";
     }
     auto doc = Mc3Document::loadFromFile(xmlPath);
-    std::filesystem::remove(xmlPath);
+    removeTestFile(xmlPath);
 
     CHECK(!doc.objects.empty(), "disk inner_radius: object present");
     if (!doc.objects.empty() && doc.objects[0]->primitive) {
@@ -3055,11 +3078,11 @@ static void testAllPrimitiveTypes() {
         try {
             doc = Mc3Document::loadFromFile(xmlPath);
         } catch (const std::exception& e) {
-            std::filesystem::remove(xmlPath);
+            removeTestFile(xmlPath);
             fail(std::string("all_primitives: load threw for ") + c.tag + ": " + e.what());
             continue;
         }
-        std::filesystem::remove(xmlPath);
+        removeTestFile(xmlPath);
 
         std::string label = std::string("all_primitives[") + c.tag + "]";
         CHECK(!doc.objects.empty(), label + ": object present");
@@ -3098,7 +3121,7 @@ static void testUnknownTopLevelElement() {
     } catch (...) {
         threw = true;
     }
-    std::filesystem::remove(xmlPath);
+    removeTestFile(xmlPath);
 
     CHECK(!threw,                   "unknown tag: no exception thrown");
     CHECK(doc.objects.size() == 1,  "unknown tag: known objects still parsed");
@@ -3124,7 +3147,7 @@ static void testUnknownAttributeOnKnownElement() {
     } catch (...) {
         threw = true;
     }
-    std::filesystem::remove(xmlPath);
+    removeTestFile(xmlPath);
 
     CHECK(!threw, "unknown attribute: no exception thrown");
     CHECK(doc.objects.size() == 1, "unknown attribute: object still parsed");
@@ -3163,7 +3186,7 @@ static void testMalformedNumericAttributesDoNotCrash() {
     } catch (...) {
         threw = true;
     }
-    std::filesystem::remove(xmlPath);
+    removeTestFile(xmlPath);
 
     CHECK(!threw, "malformed numeric attrs: no exception thrown, whole file still loads");
     CHECK(doc.objects.size() == 4, "malformed numeric attrs: all 4 objects still parsed");
@@ -3211,7 +3234,7 @@ static void testMissingIdDoesNotCrash() {
     } catch (...) {
         threw = true;
     }
-    std::filesystem::remove(xmlPath);
+    removeTestFile(xmlPath);
 
     CHECK(!threw, "missing id: no exception thrown");
     CHECK(doc.objects.size() == 2, "missing id: both objects still parsed (id is genuinely optional per mc3.xsd)");
@@ -3239,7 +3262,7 @@ static void testDuplicateObjectIdBothCoexist() {
           << R"(</mc3>)" "\n";
     }
     Mc3Document doc = Mc3Document::loadFromFile(xmlPath);
-    std::filesystem::remove(xmlPath);
+    removeTestFile(xmlPath);
 
     CHECK(doc.objects.size() == 2, "duplicate object id: both objects survive (no dedup/override)");
     if (doc.objects.size() == 2) {
@@ -3270,7 +3293,7 @@ static void testDuplicateMaterialIdLastWins() {
           << R"(</mc3>)" "\n";
     }
     Mc3Document doc = Mc3Document::loadFromFile(xmlPath);
-    std::filesystem::remove(xmlPath);
+    removeTestFile(xmlPath);
 
     CHECK(doc.materials.count("dup") == 1, "duplicate material id: exactly one entry (map semantics)");
     if (doc.materials.count("dup")) {
@@ -3296,7 +3319,7 @@ static void testGridSubdivisions() {
           << R"(</mc3>)" "\n";
     }
     auto doc = Mc3Document::loadFromFile(xmlPath);
-    std::filesystem::remove(xmlPath);
+    removeTestFile(xmlPath);
 
     CHECK(!doc.objects.empty(), "grid: object present");
     if (!doc.objects.empty() && doc.objects[0]->primitive) {
@@ -3330,7 +3353,7 @@ static void testIcoSphereSegments() {
           << R"(</mc3>)" "\n";
     }
     auto doc = Mc3Document::loadFromFile(xmlPath);
-    std::filesystem::remove(xmlPath);
+    removeTestFile(xmlPath);
 
     CHECK(!doc.objects.empty(), "icosphere: object present");
     if (!doc.objects.empty() && doc.objects[0]->primitive) {
@@ -3364,7 +3387,7 @@ static void testCapsuleRadiusHeight() {
           << R"(</mc3>)" "\n";
     }
     auto doc = Mc3Document::loadFromFile(xmlPath);
-    std::filesystem::remove(xmlPath);
+    removeTestFile(xmlPath);
 
     CHECK(!doc.objects.empty(), "capsule: object present");
     if (!doc.objects.empty() && doc.objects[0]->primitive) {
@@ -3399,7 +3422,7 @@ static void testTorusMinorRadius() {
           << R"(</mc3>)" "\n";
     }
     auto doc = Mc3Document::loadFromFile(xmlPath);
-    std::filesystem::remove(xmlPath);
+    removeTestFile(xmlPath);
 
     CHECK(!doc.objects.empty(), "torus: object present");
     if (!doc.objects.empty() && doc.objects[0]->primitive) {
@@ -3462,7 +3485,7 @@ static void testPlaneSizeLegacyVec3() {
           << R"(</mc3>)"                                  "\n";
     }
     auto doc  = Mc3Document::loadFromFile(p);
-    std::filesystem::remove(p);
+    removeTestFile(p);
 
     CHECK(!doc.objects.empty(), "plane legacy: object present");
     if (!doc.objects.empty() && doc.objects[0]->primitive) {
@@ -3563,7 +3586,8 @@ static void testGoldenFileBasicScene() {
     std::ifstream produced(p);
     std::string producedContent((std::istreambuf_iterator<char>(produced)),
                                  std::istreambuf_iterator<char>());
-    std::filesystem::remove(p);
+    produced.close();
+    removeTestFile(p);
 
     auto goldenPath = std::filesystem::path(__FILE__).parent_path() / "golden" / "basic_scene.mc3.xml";
     std::ifstream golden(goldenPath);
@@ -3627,7 +3651,7 @@ static void testSaveRejectsCyclicChildrenInsteadOfCrashing() {
         threw = true;
         what = e.what();
     }
-    std::filesystem::remove(p);
+    removeTestFile(p);
 
     CHECK(threw,
           "saveToFile: a cyclic children graph throws a catchable exception "

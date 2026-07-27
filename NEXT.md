@@ -1,6 +1,6 @@
 # MeshCraft — Current Handoff
 
-_Last updated: 2026-07-26._ Read this before resuming work. The authoritative
+_Last updated: 2026-07-27._ Read this before resuming work. The authoritative
 active queue is [`plan.md`](plan.md); historical detail is in
 [`docs/history/`](docs/history/).
 
@@ -146,6 +146,39 @@ already-known pre-existing exceptions (`mc3_json_document_budget` timeout,
 tests that were simply never built in this reused `cmake-build-debug`
 (spot-built 3 to confirm — pre-existing gap, not a regression). See
 `plan.md`'s `SYS-W3-05` entry for full line-count/fan-out evidence.
+
+All 9 `[PROPOSED]` backlog tasks are now `[DONE]`. User asked what's next;
+chose to work through the 6 deferred CI-red regressions from this session's
+earlier survey (see the numbered list above), leaving `SYS-W11-11`'s
+version-number decision deliberately undecided and keeping `build-asan/` in
+place. Progress, each its own commit:
+- **#4 + #6** (`fc0fbd4`): `mc3togltf_large_obj_stress`'s Python harness now
+  guards `import resource` behind `os.name != "nt"`; `mc3_json_document_budget`'s
+  CTest `TIMEOUT` raised 30s→200s (measured ~50-55s Debug / ~96-100s
+  ASan+UBSan, pre-existing, not a regression from tonight's work).
+- **#5** was already fixed as a side effect of `SYS-W11-09`'s cyclic-leak
+  cleanup (same file, same `.clear()` pattern).
+- **#2** (`mc3_roundtrip`'s Windows "used by another process" on `remove()`):
+  root cause is NOT a transient lock — 6 of the file's helper/test blocks
+  opened an `std::ifstream` on the temp file to read its contents back, then
+  called `std::filesystem::remove()` on the same path while that `ifstream`
+  was still in scope (its destructor runs later, at the end of the
+  enclosing block). POSIX allows unlinking an open file; Windows'
+  `DeleteFile` does not without `FILE_SHARE_DELETE`, so this fails
+  deterministically there, not flakily. Fixed by adding an explicit
+  `.close()` immediately before each such `remove()`. Also added a shared
+  `removeTestFile()` helper (bounded retry via the non-throwing
+  `std::error_code` overload, matching `Mc3::writeFileAtomically`'s
+  finalize-step precedent from `SYS-W9-06`) and swapped every bare
+  `std::filesystem::remove(...)` call in the file to use it, as a backstop
+  against any remaining external transient lock (AV/indexing) this
+  diagnosis doesn't explain. Verified: `mc3_roundtrip` and the full
+  non-render `mc3_*` suite (29 tests) pass clean under ASan+UBSan
+  (`build-asan/`), no new leak/UB findings from the added `.close()` calls.
+  Unverified on real Windows (no Wine in this sandbox).
+- Remaining: **#3** (`mcb_load_policy` POSIX- vs Windows-style absolute-path
+  message text) and **#1** (`mc3togltf.exe` `STATUS_DLL_NOT_FOUND`, needs
+  CMake DLL-staging/install-rule changes).
 
 ## Known release blockers and decisions
 
