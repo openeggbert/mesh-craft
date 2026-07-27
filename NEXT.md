@@ -205,8 +205,9 @@ place. Progress, each its own commit:
   always false on POSIX, so `has_root_directory() && !has_root_name()` is
   already implied by the existing `is_absolute()` there — zero behavior
   change on Linux/macOS, confirmed by the full `mc3_*`/`mcb_*`/
-  `mc3togltf_*` non-render suite (115/118 pass, the 3 failures are the
-  already-known Blender/`numpy` gap, unrelated) still passing unchanged.
+  `mc3togltf_*` non-render suite (115 of 118 tests passed, the 3 failures
+  are the already-known Blender/`numpy` gap, unrelated) still passing
+  unchanged.
   Windows-side reasoning follows documented `std::filesystem` semantics
   (cppreference), not executable in this sandbox (no Wine).
 - **#1** (`mc3togltf.exe` `STATUS_DLL_NOT_FOUND`): root cause is that
@@ -231,8 +232,8 @@ place. Progress, each its own commit:
   itself, `mc3togltf_glb_libfuzzer`, and the 7 C++ test binaries that link
   `mc3togltf_lib`). A no-op on Linux/macOS (`$<TARGET_RUNTIME_DLLS:...>`
   resolves to nothing there), confirmed by rebuilding both the standalone
-  `mc3togltf/build` (75/78 pass, 3 already-known Blender/`numpy` failures)
-  and the full root `MeshCraft` editor + `cmake-build-debug`'s
+  `mc3togltf/build` (75 of 78 tests passed, 3 already-known Blender/`numpy`
+  failures) and the full root `MeshCraft` editor + `cmake-build-debug`'s
   `mc3togltf_*`/`package_consumer_smoke`/`clean_room_cli_release_smoke`
   (all pass, packaging path unaffected) with zero build or test changes.
   Unverified on real Windows in this sandbox (no Wine) — the DLL-copy
@@ -269,8 +270,9 @@ pattern as this whole session):
   release-artifact DLL/shared-library install loop, since nothing links it
   at runtime anymore. Verified: rebuilt the standalone `mc3togltf` component
   under Clang ASan+UBSan matching CI's exact flags (`build-sanitize/mc3togltf`)
-  — 75/78 pass (up from 8/78), the 3 failures are the already-known
-  Blender/`numpy` gap; the full root `MeshCraft` editor (`cmake-build-debug`)
+  — 75 of 78 tests passed (up from 8 of 78), the 3 failures are the
+  already-known Blender/`numpy` gap; the full root `MeshCraft` editor
+  (`cmake-build-debug`)
   still links and runs (`--version` works), and OBJ import specifically
   (`mc3togltf_obj_material_import`/`_obj_robustness`/`_large_obj_stress`)
   still passes, confirming tinyobjloader itself still works correctly
