@@ -607,6 +607,39 @@ report and defer rather than fix).
   header), not a regression; left unbuilt per this task's explicit
   mc3togltf/mc3tomcb-out-of-scope instruction. Zero real test regressions.
 
+- **SYS-W3-06** `[PROPOSED]` `P2` — A single-source-of-truth "primitive
+  descriptor" registry (display name, tessellation clamp, MCB enum-count
+  bound) for each `ObjectType`/`PrimitiveType`, replacing today's ~4
+  independently-duplicated switch/magic-number sites. Found 2026-07-27 while
+  researching how much code a brand-new primitive type touches: adding one
+  today requires edits across ~25 sites in 8 subsystems (enum/struct, XML/
+  JSON/MCB parser+writer, 2 independent mesh tessellators — the exporter's
+  `MeshBuilder.cpp` and the live-viewport's `SceneRenderer_Builders.cpp` —
+  CSG, 6+ editor-UI surfaces, and docs). This is not a hypothetical
+  concern: `include/MeshCraft/Editor/ObjectTypeName.hpp`'s own header
+  comment documents a real incident where two divergent copies of
+  `objectTypeName()` both silently mishandled 5 primitive types (Torus,
+  Capsule, Disk, Grid, IcoSphere), so macro record/replay silently turned a
+  Torus into a Box. **Deliberately scoped:** a registry for the
+  serialization-adjacent *metadata* (name/clamp/enum-bound) would eliminate
+  that class of bug; it would NOT and should not try to unify the two
+  independent mesh-tessellation implementations, which genuinely differ per
+  rendering backend and would need a much larger, separately-justified
+  refactor to merge. Not started — needs the usual per-task confirmation
+  before implementation.
+
+- **SYS-W14-41** `[PROPOSED]` `P3` — `MenuBar::drawFileImportObj`/
+  `drawFileImportGlb` (`src/MeshCraft/Application/UI/MenuBar.cpp:651-656`)
+  open a dialog with a plain ImGui text buffer for the file path
+  (`importObjDialogBuf_`/`importGlbDialogBuf_`) — no native OS file-picker
+  "Browse..." button, unlike the material-texture Browse flow elsewhere in
+  the editor (AUD-era F9's native-dialog integration). OS-level drag-and-
+  drop (`SDL_EVENT_DROP_FILE`) already works as the low-friction path; this
+  task is only about the fallback dialog for when drag-drop isn't
+  convenient (e.g. the file isn't visible in an open file-manager window).
+  Low-risk, UI-only change — reuse the existing native-dialog helper rather
+  than adding a new file-picker dependency. Not started.
+
 ### W9 — Undo and data-loss
 
 - **SYS-W9-05** `[DONE]` `P2` — Automatic history and exact undo now retain

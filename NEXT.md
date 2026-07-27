@@ -611,3 +611,63 @@ runs MinGW-cross-compiled console/test binaries fine in this sandbox; only
 the full GUI editor hits the documented `SIGSYS` block. This was the key
 technique that let 2 of tonight's Windows-only bugs (items 2-3 above) get
 *real* verification instead of source-level reasoning alone.
+
+## Session log (2026-07-27, continued): SYS-W8-08 was CNA, not sharp-runtime; SYS-W8-09 found; 2 external-review corrections
+
+An external review of the work above caught 2 real documentation errors
+(not code errors): `SYS-W11-09`'s `editor-sanitizer` CI job claimed to use
+`gcc`/`g++` "matching" the plain editor job, but `git log -S` showed it had
+used `clang`/`clang++` since its very first commit — the claim was never
+actually applied. Fixed for real (switched to `gcc-14`/`g++-14`, confirmed
+on the next CI run: configure now succeeds with zero Clang/CNA
+incompatibility). Also fixed this file's own "Current priorities" section,
+which had gone stale mid-session (still said "no Wine"/"awaiting Windows
+run" long after both were resolved) while only this "Session log" kept
+getting updated — downgraded `SYS-W11-09` from the incorrectly-implied
+"done" to `[IN_PROGRESS]` in `plan.md` to match reality.
+
+Investigating `SYS-W8-08` further (the `ShaderEffect` API mismatch) found
+the ORIGINAL diagnosis wrong: `ShaderEffect` lives in **CNA**
+(`cna/include/Microsoft/Xna/Framework/Graphics/ShaderEffect.hpp`), not
+`sharp-runtime`. The CI-pinned CNA commit (`d0c21ee6`) genuinely lacked the
+4 methods mesh-craft's source calls, AND turned out to not even be an
+ancestor of CNA's current `develop` branch (its history was rewritten after
+being recorded here) — it predated CNA's own Task 1079 commit
+(`b08c7aa8`, 2026-07-16) that added them. **User confirmed bumping the
+CI-pinned CNA revision** to CNA's current `develop` tip
+(`ac3aaaeb2a5ba27dbd9e22e782c7041e6e40947c`) before it was made, given it
+reverses a deliberate AUD-057 pinning decision. Verified locally first
+(full editor rebuild, 176 of 180 tests passed, same 4 already-known
+Blender/`numpy` failures), then confirmed on real CI: the `ShaderEffect`
+error is completely gone from both `Editor (EASYGL) ASan+UBSan` and
+`Editor (VULKAN)`. `SYS-W8-08` is genuinely `[DONE]` now.
+
+That same CI run surfaced a **third**, different CNA-internal build
+failure, only on the sanitizer job: `cna/include/CNA/Internal/Xnb/
+DecimalDateTimeContentTypeReaders.hpp:32` calls
+`ContentReader::ReadDecimal()`, rejected by the runner's compiler. Tried
+hard to reproduce locally before filing this as `SYS-W8-09` `[BLOCKED]`: an
+isolated single-file compile, a full `CNA` target rebuild under the exact
+same flags, and a ccache-cleared from-scratch rebuild all succeeded
+cleanly in this sandbox — looks like a GCC-version-sensitive difference
+between this sandbox and the GitHub Actions runner, not a straightforward
+missing-method bug. `Editor (VULKAN)`/`Editor (EASYGL)` (non-sanitizer)
+are unaffected — they still fail earlier on `SYS-W8-07`'s unrelated
+`chdir()` issue.
+
+Also fixed a `plan_consistency` CTest failure (`test/validate_plan_
+consistency.py`'s ctest-count check): 3 legitimate partial-pass sentences
+in this file (e.g. "115 of 118, 3 known failures", written at the time as
+an N/N-style ratio) tripped a regex meant to catch stale "fully green N/N"
+claims. Reworded to "X of Y tests passed"
+phrasing — no content change, just avoids the false positive.
+
+Separately, a conversation about editor modeling workflow (how to add a
+roof or a fence) turned up 2 real, evidenced gaps, filed as `[PROPOSED]`
+in `plan.md` (not started, no implementation without the usual
+confirmation): `SYS-W3-06` (a primitive-type metadata registry — adding
+one new primitive today touches ~25 sites across 8 subsystems, and
+`ObjectTypeName.hpp`'s own header comment documents a real past bug from
+this exact scatter) and `SYS-W14-41` (the Import OBJ/GLB dialogs have a
+raw text-buffer path field, no native file-picker, unlike the
+material-texture Browse flow elsewhere in the editor).
