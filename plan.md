@@ -461,8 +461,13 @@ report and defer rather than fix).
   sanitizer` CI job itself has never had a fully green run on real CI —
   every run through 2026-07-27 failed, first on unrelated environment gaps
   (fixed separately, see the CI-red session log in `NEXT.md`), now on
-  `SYS-W8-08`'s `sharp-runtime` API mismatch (unrelated to compiler choice,
-  will likely still block after the GCC switch). The code fixes described
+  `SYS-W8-08`'s `sharp-runtime` API mismatch. **Confirmed on the very next
+  CI run after the GCC switch**: configure now succeeds with no Clang/CNA
+  incompatibility at all, and the build fails on the exact same
+  `ShaderEffect::setWorldProperty`/etc. errors as the plain `editor` job's
+  `VULKAN` entry — consistent, compiler-independent evidence that
+  `SYS-W8-08` (not a toolchain issue) is now the sole remaining blocker for
+  this job. The code fixes described
   above (heap-use-after-free, 4 leak fixtures, `package_consumer_smoke`
   guard, `meshcraft_apply_sanitize()` wiring) are real and independently
   verified locally; only the CI-job-itself claim was wrong. Re-promote to
