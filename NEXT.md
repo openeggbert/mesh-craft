@@ -263,14 +263,48 @@ pattern as this whole session):
   (`mc3togltf_obj_material_import`/`_obj_robustness`/`_large_obj_stress`)
   still passes, confirming tinyobjloader itself still works correctly
   through its single remaining (header-only) code path.
-- **Windows: `mc3_roundtrip` still crashes, but for a different, new reason**
-  than tonight's earlier fix. `terminate() after throwing
-  MeshCraft::Mc3::AtomicFinalizeError`: `Mc3::writeFileAtomically()`'s
-  finalize `rename()` step fails with "Input/output error" for a path
-  containing non-ASCII characters (`mc3_rt_čeština_日本.mc3.xml`, the
-  STAB-0555/0556 UTF-8-filename case, reached via `roundtripAt()`). This is
-  a bug in the `SYS-W9-06` atomic-write primitive itself, unrelated to the
-  ifstream/`remove()` bug fixed above — investigating next.
+- **Windows: `mc3_roundtrip` still crashed, for a different, new reason**
+  than tonight's earlier fix — root-caused and fixed with real evidence, not
+  guesswork. Discovered that **Wine actually runs trivial MinGW-cross-compiled
+  console programs fine in this sandbox** (only the full GUI editor hits the
+  previously-documented SIGSYS block) — found an existing, unused
+  `cmake-build-verification-windows-standalone/` + Wine-prefix setup from an
+  earlier session and reused it (`CMAKE_SYSTEM_NAME=Windows`,
+  `CMAKE_CXX_COMPILER=x86_64-w64-mingw32-g++`,
+  `CMAKE_CROSSCOMPILING_EMULATOR=/usr/bin/wine`) to get a real, faithful
+  local repro of the exact CI failure. First repro attempt (a minimal
+  `writeFileAtomically()`-only program) surprisingly PASSED — meaning the bug
+  isn't in the atomic-write primitive itself. Running the *actual*
+  `mc3_roundtrip_test.exe` under Wine reproduced it with a clearer message:
+  "No such file or directory" (not "Input/output error" — Wine's fopen()
+  behavior differs slightly from real Windows here, same underlying bug).
+  Root cause: `Mc3XmlWriter.cpp`/`Mc3XmlParser.cpp` called tinyxml2's
+  `SaveFile(const char*)`/`LoadFile(const char*)` with `path.string()` — a
+  UTF-8-encoded narrow string. tinyxml2 opens that with plain `fopen()`,
+  which on Windows converts narrow strings via the process's ANSI code page,
+  **not UTF-8** — for a Czech+Japanese filename (STAB-0555's test case) this
+  mismatch means `fopen()` opens/creates a different, mangled path than the
+  one `std::filesystem::rename()` expects afterward. `Mc3JsonWriter`/
+  `Mc3JsonParser` never had this bug (they already used
+  `std::ifstream`/`std::ofstream` directly with the `path` object, which
+  libstdc++ opens via the native wide string on Windows, correctly).
+  Fixed by adding `saveXmlFileUnicodeSafe()`/`loadXmlFileUnicodeSafe()`
+  helpers (one in each file, `#ifdef _WIN32`) that open the file themselves
+  via `_wfopen(path.c_str(), ...)` (the path's native wide representation,
+  no narrow conversion at all) and hand tinyxml2 the `FILE*` overload
+  instead; POSIX keeps the original narrow-string call unchanged. Also
+  widened `Mc3::writeFileAtomically()`'s finalize retry budget from 5×20ms
+  to 20×50ms as defense-in-depth (real Windows CI's original "Input/output
+  error" symptom, before this deeper root cause was found, is consistent
+  with a slower antivirus-scan lock on top of the encoding bug).
+  Verified: `mc3_roundtrip`/`mc3_atomic_write`/`mc3_load_policy`/
+  `mc3_json_load_policy` all pass under the real MinGW+Wine repro (including
+  the exact `utf8 filename`/`path with spaces`/`non-ascii name` cases), and
+  the full 28-test standalone `mc3` suite passes there too. Also re-verified
+  clean under Linux Clang ASan+UBSan (29/29 `mc3_*` tests, zero regressions).
+  This is the strongest verification any Windows-only fix has had this
+  session — a real cross-compiled binary actually executing the real code
+  path, not just source-level reasoning.
 
 ## Known release blockers and decisions
 

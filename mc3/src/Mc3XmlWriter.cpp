@@ -18,6 +18,30 @@ using namespace MeshCraft::Mc3::Internal;
 // Helpers
 // ---------------------------------------------------------------------------
 
+// tinyxml2::XMLDocument::SaveFile(const char*) opens the file with a plain
+// fopen(), which on Windows converts the narrow string via the process's
+// ANSI code page -- not UTF-8. A path.string() for a non-ASCII filename
+// (e.g. STAB-0555's Czech+Japanese roundtrip case) is UTF-8, so that
+// conversion mismatch makes fopen() create a different, mangled-name file
+// (or fail outright), and writeFileAtomically's subsequent rename() of the
+// exact intended tmp path then fails with "No such file or directory" --
+// confirmed via a MinGW+Wine repro of this exact scenario. Opening the file
+// ourselves via the path's native (wide) representation and handing tinyxml2
+// the FILE* sidesteps the narrow conversion entirely. POSIX has no such
+// mismatch (the native narrow encoding already is what path.string()
+// returns), so the plain SaveFile(const char*) overload stays correct there.
+static XMLError saveXmlFileUnicodeSafe(XMLDocument& xml, const std::filesystem::path& path) {
+#ifdef _WIN32
+    FILE* fp = _wfopen(path.c_str(), L"wb");
+    if (!fp) return XML_ERROR_FILE_COULD_NOT_BE_OPENED;
+    const XMLError err = xml.SaveFile(fp);
+    std::fclose(fp);
+    return err;
+#else
+    return xml.SaveFile(path.string().c_str());
+#endif
+}
+
 static std::string vec3Str(const std::array<float,3>& v) {
     char buf[64];
     std::snprintf(buf, sizeof(buf), "%.6g %.6g %.6g", v[0], v[1], v[2]);
@@ -936,7 +960,7 @@ void Mc3XmlWriter::write(const Mc3Document& doc, const std::filesystem::path& pa
     // crash/disk-full/permission failure mid-write can never leave a
     // truncated or corrupt file at `path`.
     writeFileAtomically(path, [&](const std::filesystem::path& tmpPath) {
-        if (xml.SaveFile(tmpPath.string().c_str()) != XML_SUCCESS)
+        if (saveXmlFileUnicodeSafe(xml, tmpPath) != XML_SUCCESS)
             throw std::runtime_error("Failed to save XML: " + path.string());
     });
 }

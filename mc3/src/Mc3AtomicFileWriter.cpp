@@ -23,8 +23,18 @@ std::filesystem::path candidateSiblingTempPath(const std::filesystem::path& dest
 // makes a single rename() attempt flaky rather than reliably atomic. POSIX
 // rename() does not have this failure mode, so the loop below is a no-op
 // there (it succeeds on the first attempt).
-constexpr int kFinalizeRetryAttempts = 5;
-constexpr std::chrono::milliseconds kFinalizeRetryDelay{20};
+//
+// Real windows-2022 CI observed this exceeding a 5x20ms (100ms) budget for
+// a multi-script Unicode filename (STAB-0555's Czech+Japanese roundtrip
+// case) with "Input/output error" -- confirmed via a faithful MinGW+Wine
+// repro that the path/encoding itself round-trips correctly (libstdc++'s
+// char8_t path constructor already guarantees UTF-8, independent of
+// locale), so the failure is a genuinely slower transient lock on that
+// runner (e.g. Defender's real-time scan taking longer on an unusual
+// filename), not a string-corruption bug. Widened to give real Windows AV
+// scans more headroom; still a no-op on the fast path everywhere else.
+constexpr int kFinalizeRetryAttempts = 20;
+constexpr std::chrono::milliseconds kFinalizeRetryDelay{50};
 
 } // namespace
 

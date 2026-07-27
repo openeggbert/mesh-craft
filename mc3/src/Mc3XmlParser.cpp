@@ -15,6 +15,7 @@
 #include <iostream>
 #include <map>
 #include <set>
+#include <cstdio>
 #include <sstream>
 #include <stdexcept>
 #include <string>
@@ -26,6 +27,29 @@ using namespace MeshCraft::Mc3::Internal;
 // ---------------------------------------------------------------------------
 // Tiny helpers
 // ---------------------------------------------------------------------------
+
+// tinyxml2::XMLDocument::LoadFile(const char*) opens the file with a plain
+// fopen(), which on Windows converts the narrow string via the process's
+// ANSI code page -- not UTF-8. A path.string() for a non-ASCII filename is
+// UTF-8, so that conversion mismatch means fopen() looks for (or opens) a
+// different, mangled path than the one actually on disk. Mirrors
+// Mc3XmlWriter.cpp's saveXmlFileUnicodeSafe() fix for the identical class of
+// bug on the write side (confirmed via a MinGW+Wine repro of a Czech+
+// Japanese filename). Opening the file ourselves via the path's native
+// (wide) representation and handing tinyxml2 the FILE* sidesteps the narrow
+// conversion entirely. POSIX has no such mismatch, so the plain
+// LoadFile(const char*) overload stays correct there.
+static XMLError loadXmlFileUnicodeSafe(XMLDocument& xml, const std::filesystem::path& path) {
+#ifdef _WIN32
+    FILE* fp = _wfopen(path.c_str(), L"rb");
+    if (!fp) return XML_ERROR_FILE_NOT_FOUND;
+    const XMLError err = xml.LoadFile(fp);
+    std::fclose(fp);
+    return err;
+#else
+    return xml.LoadFile(path.string().c_str());
+#endif
+}
 
 static const char* attr(const XMLElement* el, const char* name, const char* def = "") {
     const char* v = el->Attribute(name);
@@ -1733,7 +1757,7 @@ static void mergeInclude(const std::filesystem::path& includePath,
     }
 
     XMLDocument xml;
-    if (xml.LoadFile(includePath.string().c_str()) != XML_SUCCESS) {
+    if (loadXmlFileUnicodeSafe(xml, includePath) != XML_SUCCESS) {
         std::string msg = "Failed to load <include> file '" +
                            includePath.string() + "': " + xml.ErrorStr();
         reportErrorDoc("include", msg);
@@ -2058,7 +2082,7 @@ Mc3Document Mc3XmlParser::parse(const std::filesystem::path& path,
     }
 
     XMLDocument xml;
-    if (xml.LoadFile(path.string().c_str()) != XML_SUCCESS) {
+    if (loadXmlFileUnicodeSafe(xml, path) != XML_SUCCESS) {
         std::string msg = "Failed to load XML: " + path.string() + ": " + xml.ErrorStr();
         reportErrorDoc("file", msg);
         throw std::runtime_error(msg);
