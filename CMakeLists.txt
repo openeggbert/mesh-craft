@@ -467,10 +467,14 @@ if(NOT EMSCRIPTEN AND NOT ANDROID)
     endif()
 endif()
 
-# mc3togltf is linked against these shared third-party libraries in the
-# default desktop build.  Ship their runtime files in the same release
+# mc3togltf is linked against this shared third-party library in the
+# default desktop build.  Ship its runtime files in the same release
 # component so the CLI archive is usable outside the build tree.
-foreach(MESHCRAFT_CLI_RUNTIME_TARGET IN ITEMS manifold tinyobjloader)
+# tinyobjloader is deliberately NOT listed here: mc3togltf_lib only ever uses
+# it as a single-header library (see mc3togltf/CMakeLists.txt's
+# TINYOBJLOADER_IMPLEMENTATION note) and no longer links its separately
+# compiled target, so there is no runtime tinyobjloader artifact to ship.
+foreach(MESHCRAFT_CLI_RUNTIME_TARGET IN ITEMS manifold)
     if(TARGET ${MESHCRAFT_CLI_RUNTIME_TARGET})
         install(TARGETS ${MESHCRAFT_CLI_RUNTIME_TARGET}
                 ARCHIVE DESTINATION "${CMAKE_INSTALL_LIBDIR}" COMPONENT release
@@ -655,14 +659,13 @@ elseif(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang" AND NOT WIN32 AND NOT ANDROID)
         mc3togltf_lib
         imgui
         manifold
-        tinyobjloader
         lua54
         sol2::sol2)
     if(SQLite3_FOUND)
         target_link_libraries(${_target} PRIVATE ${SQLite3_LIBRARIES})
     endif()
 else()
-    target_link_libraries(${_target} PRIVATE CNA ${_cna_backend_target} SHARP_RUNTIME Mc3 Mcb mc3togltf_lib imgui manifold tinyobjloader lua54 sol2::sol2)
+    target_link_libraries(${_target} PRIVATE CNA ${_cna_backend_target} SHARP_RUNTIME Mc3 Mcb mc3togltf_lib imgui manifold lua54 sol2::sol2)
     if(SQLite3_FOUND)
         target_link_libraries(${_target} PRIVATE ${SQLite3_LIBRARIES})
     endif()

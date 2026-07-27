@@ -100,16 +100,15 @@ if(NOT tinyobjloader_POPULATED)
 endif()
 
 # Windows STATUS_DLL_NOT_FOUND (part of tonight's CI-red survey): Manifold's
-# own CMakeLists.txt defaults BUILD_SHARED_LIBS to ON, and tinyobjloader's
-# add_library() call has no explicit STATIC/SHARED, so it inherits that same
-# global cache value -- both build as DLLs on Windows. Linux/macOS need no
-# fix: CMake adds build-tree RPATH entries to every executable pointing at
-# its shared-library dependencies automatically, and Windows PE executables
-# have no equivalent mechanism (the loader only searches the exe's own
-# directory, CWD, System32, and PATH -- nothing under _deps/). Copy each
-# affected executable's transitive DLL dependencies next to it after linking;
-# $<TARGET_RUNTIME_DLLS:...> (CMake 3.21+, the minimum this project already
-# requires) resolves to nothing on non-Windows, so this is a no-op there.
+# own CMakeLists.txt defaults BUILD_SHARED_LIBS to ON, so it builds as a DLL
+# on Windows. Linux/macOS need no fix: CMake adds build-tree RPATH entries to
+# every executable pointing at its shared-library dependencies automatically,
+# and Windows PE executables have no equivalent mechanism (the loader only
+# searches the exe's own directory, CWD, System32, and PATH -- nothing under
+# _deps/). Copy each affected executable's transitive DLL dependencies next
+# to it after linking; $<TARGET_RUNTIME_DLLS:...> (CMake 3.21+, the minimum
+# this project already requires) resolves to nothing on non-Windows, so this
+# is a no-op there.
 function(mc3togltf_stage_runtime_dlls target)
     if(WIN32)
         add_custom_command(TARGET ${target} POST_BUILD
@@ -146,7 +145,17 @@ target_include_directories(mc3togltf_lib SYSTEM PUBLIC
     ${nanosvg_SOURCE_DIR}/src
 )
 
-target_link_libraries(mc3togltf_lib PUBLIC Mc3 tinyobjloader manifold)
+# tinyobjloader is used as a single-header library here (MeshBuilder.cpp
+# defines TINYOBJLOADER_IMPLEMENTATION and #includes it directly), so only
+# its include dir (added above) is needed -- deliberately NOT linking the
+# separately-compiled `tinyobjloader` CMake target too. That target also
+# compiles tiny_obj_loader.cc into its own library (shared, by inheriting
+# Manifold's BUILD_SHARED_LIBS=ON default), so linking both would give the
+# final binary two live definitions of the same class/vtable: a genuine ODR
+# violation, caught by AddressSanitizer's odr-violation detector (crashes
+# every mc3togltf sanitizer test at process startup, before any test code
+# even runs) and undefined behavior on any build, sanitized or not.
+target_link_libraries(mc3togltf_lib PUBLIC Mc3 manifold)
 
 if(MSVC)
     set(MESHCRAFT_STANDALONE_WARNING_FLAGS /W4)

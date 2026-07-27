@@ -227,6 +227,51 @@ place. Progress, each its own commit:
   mechanism itself is standard CMake, not something this project invented.
   **All 6 of tonight's deferred CI-red regressions are now addressed.**
 
+**Real CI evidence landed after pushing the above.** Confirmed working on an
+actual `windows-2022` runner: `mc3togltf.exe` now starts (no more
+`STATUS_DLL_NOT_FOUND`) and `mc3_load_policy`/`mc3_json_load_policy`/
+`mcb_load_policy` all pass. But clearing those earlier blockers let both the
+Windows and Linux sanitizer jobs run further than ever before, surfacing 2
+new, previously-unreachable bugs (same "fixing one bug unmasks the next"
+pattern as this whole session):
+
+- **Linux Clang ASan+UBSan: ~67 of 75 `mc3togltf_*` tests crashed at process
+  startup** with an AddressSanitizer odr-violation on
+  `typeinfo name for tinyobj::MaterialFileReader` between
+  `mc3togltf/src/MeshBuilder.cpp` and `libtinyobjloader.so.2`. Root cause:
+  `MeshBuilder.cpp` defines `TINYOBJLOADER_IMPLEMENTATION` and `#include`s
+  the header directly (compiling its own copy into `mc3togltf_lib`), while
+  `mc3togltf_lib` ALSO linked the separately-compiled `tinyobjloader` CMake
+  target — which builds as a shared library for the same
+  Manifold-`BUILD_SHARED_LIBS`-default reason as the Windows DLL bug above.
+  Two live definitions of the same class/vtable in one process is genuine
+  undefined behavior, not just an ASan nitpick. This was always latent but
+  never reached in CI before tonight: the standalone-component loop always
+  died earlier at `mc3`'s `mc3_json_document_budget` timeout (CI-red #6,
+  now fixed), before ever building/running `mc3togltf`'s own tests.
+  Fixed by dropping the `tinyobjloader` *link* dependency everywhere
+  (`mc3togltf/CMakeLists.txt`'s `mc3togltf_lib`, and both branches of the
+  root `CMakeLists.txt`'s main editor target) — only the include directory
+  is needed since `MeshBuilder.cpp` already provides the one-and-only
+  implementation. Also dropped `tinyobjloader` from the root project's
+  release-artifact DLL/shared-library install loop, since nothing links it
+  at runtime anymore. Verified: rebuilt the standalone `mc3togltf` component
+  under Clang ASan+UBSan matching CI's exact flags (`build-sanitize/mc3togltf`)
+  — 75/78 pass (up from 8/78), the 3 failures are the already-known
+  Blender/`numpy` gap; the full root `MeshCraft` editor (`cmake-build-debug`)
+  still links and runs (`--version` works), and OBJ import specifically
+  (`mc3togltf_obj_material_import`/`_obj_robustness`/`_large_obj_stress`)
+  still passes, confirming tinyobjloader itself still works correctly
+  through its single remaining (header-only) code path.
+- **Windows: `mc3_roundtrip` still crashes, but for a different, new reason**
+  than tonight's earlier fix. `terminate() after throwing
+  MeshCraft::Mc3::AtomicFinalizeError`: `Mc3::writeFileAtomically()`'s
+  finalize `rename()` step fails with "Input/output error" for a path
+  containing non-ASCII characters (`mc3_rt_čeština_日本.mc3.xml`, the
+  STAB-0555/0556 UTF-8-filename case, reached via `roundtripAt()`). This is
+  a bug in the `SYS-W9-06` atomic-write primitive itself, unrelated to the
+  ifstream/`remove()` bug fixed above — investigating next.
+
 ## Known release blockers and decisions
 
 | Area | Live state |
