@@ -48,18 +48,24 @@ before trusting anything below.)_
    done. **`SYS-W11-09` is `[IN_PROGRESS]`, not done** — its code fixes (a
    real heap-use-after-free in `EventPreviewRunner::execute()`, 4 leak
    fixtures, `meshcraft_apply_sanitize()` wiring) are real and locally
-   verified, but the new `editor-sanitizer` CI job itself has never had a
-   fully green run: it used `clang`/`clang++` despite `plan.md` claiming
-   otherwise (corrected 2026-07-27, now `gcc-14`/`g++-14`), and currently
-   fails on `SYS-W8-08`'s unrelated `sharp-runtime` API mismatch.
-3. All 6 originally-deferred CI-red regressions, plus 10 more layers
+   verified, but the `editor-sanitizer` CI job itself has never had a fully
+   green run. It used `clang`/`clang++` despite `plan.md` claiming
+   otherwise (corrected 2026-07-27, now `gcc-14`/`g++-14`, confirmed
+   working on real CI); then hit `SYS-W8-08`'s `ShaderEffect` mismatch
+   (misattributed to `sharp-runtime` at first — actually CNA, fixed by
+   bumping a stale CI-pinned CNA revision, confirmed gone on real CI); now
+   blocked on a *third*, different CNA-internal build failure
+   (`SYS-W8-09`, not locally reproducible despite trying).
+3. All 6 originally-deferred CI-red regressions, plus many more layers
    cascading from fixing them, are fixed and confirmed on real CI (see
    "Session log" below) — `Clang ASan+UBSan and bounded fuzz` and
    `Standalone Windows qualification` are fully green. The 3 Editor CI jobs
-   now get all the way through CMake configure and fail only at build, on
-   2 real `sharp-runtime` bugs tracked as `SYS-W8-07`/`SYS-W8-08` —
-   deliberately not fixed (sibling repository, outside authorized scope;
-   user chose to report and defer).
+   now get all the way through CMake configure and fail only at build:
+   `SYS-W8-07` (`sharp-runtime`'s own `chdir()`/`-Werror`, blocks the 2
+   non-sanitizer jobs) and `SYS-W8-09` (CNA-internal, sanitizer job only)
+   remain `[BLOCKED]` — deliberately not fixed further (sibling repository
+   source, or not locally reproducible; user chose to report and defer for
+   the former).
 4. `SYS-W11-11` (the first-release version-number decision) is deliberately
    left `[BLOCKED]` per the user's explicit choice not to decide yet.
 

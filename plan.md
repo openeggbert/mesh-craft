@@ -461,13 +461,17 @@ report and defer rather than fix).
   sanitizer` CI job itself has never had a fully green run on real CI —
   every run through 2026-07-27 failed, first on unrelated environment gaps
   (fixed separately, see the CI-red session log in `NEXT.md`), now on
-  `SYS-W8-08`'s `sharp-runtime` API mismatch. **Confirmed on the very next
-  CI run after the GCC switch**: configure now succeeds with no Clang/CNA
-  incompatibility at all, and the build fails on the exact same
-  `ShaderEffect::setWorldProperty`/etc. errors as the plain `editor` job's
-  `VULKAN` entry — consistent, compiler-independent evidence that
-  `SYS-W8-08` (not a toolchain issue) is now the sole remaining blocker for
-  this job. The code fixes described
+  `SYS-W8-08`'s `ShaderEffect` mismatch (originally misattributed to
+  `sharp-runtime`; actually CNA — see `SYS-W8-08`'s own entry). **Confirmed
+  on the very next CI run after the GCC switch**: configure now succeeds
+  with no Clang/CNA incompatibility at all, and the build failed on the
+  exact same `ShaderEffect::setWorldProperty`/etc. errors as the plain
+  `editor` job's `VULKAN` entry — consistent, compiler-independent evidence
+  that this wasn't a toolchain issue. `SYS-W8-08` is now fixed (CNA pin
+  bumped) and confirmed gone on real CI, but a *different* CNA-internal
+  build failure took its place, specific to this sanitizer job — see
+  `SYS-W8-09`. This job remains `[IN_PROGRESS]` until that's resolved too.
+  The code fixes described
   above (heap-use-after-free, 4 leak fixtures, `package_consumer_smoke`
   guard, `meshcraft_apply_sanitize()` wiring) are real and independently
   verified locally; only the CI-job-itself claim was wrong. Re-promote to
@@ -772,9 +776,33 @@ report and defer rather than fix).
   locally before pushing: full `MeshCraft` editor rebuilt clean against this
   CNA revision (already the sandbox's own local `../cna` checkout), and the
   non-render suite passed 176/180 (the 4 failures are the already-known
-  unrelated Blender/`numpy` gap). Real-CI confirmation pending — check the
-  next `develop` CI run's `Editor (EASYGL) ASan+UBSan`/`Editor (VULKAN)`
-  jobs before fully trusting this `[DONE]` marker.
+  unrelated Blender/`numpy` gap). **Confirmed on the real CI run right
+  after pushing**: the `ShaderEffect` error is completely gone from both
+  `Editor (EASYGL) ASan+UBSan` and `Editor (VULKAN)` — this task is
+  genuinely done, not just locally verified.
+
+- **SYS-W8-09** `[BLOCKED]` `P2` — Bumping the CNA pin for `SYS-W8-08` above
+  unmasked a *different* CNA-internal build failure, only on
+  `Editor (EASYGL) ASan+UBSan`:
+  `cna/include/CNA/Internal/Xnb/DecimalDateTimeContentTypeReaders.hpp:32`
+  calls `ContentReader::ReadDecimal()`, which the runner's compiler rejects
+  as not existing. **Deliberately not chased further — this is not
+  locally reproducible despite genuinely trying:** an isolated single-file
+  compile, a full `CNA` target rebuild under the exact same flags
+  (`MESHCRAFT_SANITIZE=ON`, `g++-14`, same CNA revision), and a
+  ccache-cleared from-scratch rebuild of that target all succeeded cleanly
+  in this sandbox. The method call itself is real (`DecimalReader::Read()`
+  in the same header, guarded `#if !defined(_MSC_VER)`, matching this
+  GCC-only job), so this looks like a genuine GCC-version-sensitive
+  difference between this sandbox's `g++-14` and the GitHub Actions
+  `ubuntu-24.04` runner's `g++-14` (or some other runner-specific factor
+  this session couldn't isolate) rather than a simple missing-method bug.
+  `Editor (VULKAN)`/`Editor (EASYGL)` (non-sanitizer) don't hit this at
+  all — they still fail earlier, on `SYS-W8-07`'s unrelated `chdir()`
+  issue. Needs a future session with either CI-side debug instrumentation
+  (print the exact GCC version, dump preprocessed output as a build
+  artifact) or owner-side CNA investigation — deliberately not guessed at
+  further here.
 
 ---
 
