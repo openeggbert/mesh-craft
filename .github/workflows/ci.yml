@@ -269,7 +269,7 @@ jobs:
             libgl1-mesa-dev libegl1-mesa-dev libglvnd-dev \
             libvulkan-dev \
             libx11-dev libxext-dev libxrandr-dev libxcursor-dev \
-            libxi-dev libxfixes-dev libxss-dev \
+            libxi-dev libxfixes-dev libxss-dev libxtst-dev \
             libsqlite3-dev libssl-dev libxml2-dev xvfb x11-utils
 
       - name: Cache root CMake FetchContent downloads
@@ -358,7 +358,7 @@ jobs:
             clang cmake ninja-build python3 pkg-config \
             libgl1-mesa-dev libegl1-mesa-dev libglvnd-dev \
             libx11-dev libxext-dev libxrandr-dev libxcursor-dev \
-            libxi-dev libxfixes-dev libxss-dev \
+            libxi-dev libxfixes-dev libxss-dev libxtst-dev \
             libsqlite3-dev libssl-dev libxml2-dev xvfb x11-utils
 
       - name: Cache root CMake FetchContent downloads
