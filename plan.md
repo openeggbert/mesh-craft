@@ -58,18 +58,14 @@ architecture, distribution, or measurable performance work. `P3` is polish.
 The user authorized this queue on 2026-07-26. Work proceeds one task at a
 time; re-evaluate scope and blockers before starting each item.
 
-1. **SYS-W11-06** `P2` — standalone Windows qualification. **In progress:**
-   the release-readiness changes are published on `develop`; await the first
-   native `windows-2022` CI CTest/artifact run before accepting the release
-   gate. **Amended acceptance (2026-07-26 review):** a green in-tree CTest run
-   alone does not prove the two published `.exe` files are a usable
-   standalone artifact. Before DONE, additionally: copy or download the
-   staged artifact into a clean directory outside all build trees and outside
-   `PATH`; run both executables with `--version` from there; perform one
-   MC3→MCB and one MC3→GLB conversion and verify the fixed fixture SHA-256;
-   confirm every third-party runtime DLL the two executables need (the root
-   `CMakeLists.txt` allows Manifold/tinyobjloader as shared runtime libraries)
-   is staged alongside them.
+This queue is currently empty: the standalone-Windows-qualification task that
+occupied it is done (see the "Active roadmap" section below for its full
+verification evidence). Every other tracked item is `[BLOCKED]` (external
+dependency, sibling-repository owner coordination, or a user decision) or
+`[DEFERRED]` (intentional) — including 2 real third-party bugs found while
+verifying the Editor CI jobs this same pass, deliberately not fixed here
+(sibling repository, outside this session's authorized scope; user chose to
+report and defer rather than fix).
 
 ---
 
@@ -283,19 +279,45 @@ time; re-evaluate scope and blockers before starting each item.
   smoke plus MC3/MCB and CLI round trips; the installed glTF CLI resolves its
   bundled Manifold runtime through `$ORIGIN/../lib`.
 
-- **SYS-W11-06** `[IN_PROGRESS]` `P2` — Qualify standalone MC3/MCB/tooling builds and
+- **SYS-W11-06** `[DONE]` `P2` — Qualify standalone MC3/MCB/tooling builds and
   tests on a current Windows runner, independent of CNA editor backend
-  blockers. The new `windows-2022` CI job configures, builds, and CTests all
-  four standalone components, verifies a fixed MC3→MCB/GLB SHA-256 fixture,
-  then publishes the two Windows CLI executables. Local MinGW 14 cross builds
-  compiled the standalone targets, and their CTest registrations correctly
-  use the configured emulator. This also exposed and fixed all four
-  narrow-string uses of `path::native()` in confinement checks;
-  `generic_string()` now works on Windows-wide paths. The local sandbox blocks
-  Wine itself with `SIGSYS`, so it cannot supply runtime evidence. The
-  release-readiness changes are now pushed to `origin/develop`; await and
-  review the first GitHub Windows CTest/artifact run before marking this task
-  done.
+  blockers. The `windows-2022` CI job configures, builds, and CTests all four
+  standalone components, verifies a fixed MC3→MCB/GLB SHA-256 fixture, then
+  publishes the two Windows CLI executables. This also exposed and fixed all
+  four narrow-string uses of `path::native()` in confinement checks;
+  `generic_string()` now works on Windows-wide paths.
+  **Amended acceptance criteria (2026-07-26 review) verified for real,
+  2026-07-27**, against the actual artifact published by the first fully
+  green `windows-2022` run — not just an in-tree CTest pass. Correction to
+  this file's own prior belief: **Wine is not blocked in this sandbox** for
+  plain console/test binaries (only the full GUI editor hits `SIGSYS`), so
+  this was verified directly rather than deferred:
+  - Downloaded `meshcraft-cli-windows` via `gh run download`, extracted into
+    a scratch directory outside every build tree and outside `PATH`.
+  - `sha256sum` on all 4 manifest entries matches `SHA256SUMS.txt` exactly
+    (the manifest itself uses bare filenames rather than the `tool/tool.exe`
+    subpaths the archive actually has — a cosmetic manifest nit, not a hash
+    mismatch).
+  - Both `mc3tomcb.exe --version`/`mc3togltf.exe --version` succeed under
+    Wine with `PATH` forced to `/usr/bin:/bin` only (no build-tree fallback
+    possible).
+  - A real MC3→MCB and MC3→GLB conversion of `test/house.mc3.xml` from the
+    extracted binaries reproduced the exact existing fixture hashes
+    (`4157f107e277a4...`/`0ef25953c8bce5...`) byte-for-byte.
+  - **First download attempt (pre-existing artifact) failed outright**:
+    `mc3togltf.exe` wouldn't even start (`STATUS_DLL_NOT_FOUND` under the
+    same Wine repro) — the published artifact had zero DLLs bundled, but
+    `mc3togltf.exe` dynamically linked Manifold, tinyxml2, and the MinGW
+    runtime itself. Root-caused and fixed by statically linking the entire
+    standalone-Windows build (`-DBUILD_SHARED_LIBS=OFF` +
+    `-static -static-libgcc -static-libstdc++` in `ci.yml`'s shared
+    configure step) rather than trying to enumerate and stage every DLL —
+    re-verified after the fix with the same repro, now passing every check
+    above with zero DLL dependencies at all. See `NEXT.md` for the full
+    diagnostic trail and a CMake gotcha this surfaced
+    (`$<TARGET_RUNTIME_DLLS:...>` expanding to nothing broke the existing
+    DLL-copy POST_BUILD command outright; fixed with the documented
+    `$<IF:$<BOOL:...>,copy_if_different,true>` workaround).
 
 - **SYS-W11-07** `[DEFERRED]` `P3` — Improve dependency reproducibility with
   immutable revisions or verified archives, third-party notice/SBOM, and an
@@ -342,19 +364,16 @@ time; re-evaluate scope and blockers before starting each item.
   build (`mc3tomcb/build`, `mc3togltf/build`); all pass, and the pre-existing
   3 Blender/`numpy` failures in `mc3togltf`'s standalone suite are unrelated
   (same environment gap as `SYS-W9-06`/`SYS-W1-08`'s writeups).
-  **Windows remains partial, honestly:** added a "Stage release manifest and
-  notices" step to the `windows-2022` CI job (SHA-256 manifest + notices
-  bundled into the uploaded artifact, same shape as the Linux archive) —
-  this is a safe, additive change with no dependency on the DLL-staging gap.
-  Deliberately did NOT attempt to fix `mc3togltf.exe`'s
-  `STATUS_DLL_NOT_FOUND` failure (confirmed present even for the in-tree
-  ctest run, not just a downloaded artifact) as part of this task: that is
-  one of the 6 general CI-red regressions from tonight's survey, explicitly
-  left for a separate pass per the user's standing instruction, and this
-  task's own manifest-generation work does not depend on it being fixed
-  first. Native Windows clean-room extraction/`--version`/conversion
-  remains unverified in this sandbox (no Wine) — same limitation as
-  `SYS-W11-06`.
+  Added a "Stage release manifest and notices" step to the `windows-2022` CI
+  job (SHA-256 manifest + notices bundled into the uploaded artifact, same
+  shape as the Linux archive). At the time this task was originally done,
+  `mc3togltf.exe`'s `STATUS_DLL_NOT_FOUND` failure was deliberately left for
+  a separate pass; **that gap (and the Windows clean-room verification this
+  task's own writeup called "unverified — no Wine") is now closed by
+  `SYS-W11-06`'s later evidence** — Wine does work in this sandbox for
+  console binaries, and the underlying DLL problem is fixed by statically
+  linking the standalone Windows build. See `SYS-W11-06` for the full
+  verification.
 
 - **SYS-W11-09** `[DONE]` `P1` — Added first-party editor sanitizer CI, and it
   immediately found a real bug, confirming the whole point of doing this.
@@ -603,8 +622,13 @@ time; re-evaluate scope and blockers before starting each item.
   regression from this change). The full root-project `MeshCraft` editor
   target, plus the registry/undo/obj-export-cleanup tests that exercise
   `Mc3Document::saveToFile()`/registry save paths transitively, also built
-  and passed. Native Windows overwrite qualification remains unverified in
-  this sandbox (no Wine); left for `SYS-W11-06`'s own Windows CI evidence.
+  and passed. **Update (2026-07-27): native Windows overwrite qualification
+  is no longer unverified** — Wine does run console binaries in this
+  sandbox after all, and a real MinGW+Wine repro of `mc3_atomic_write`
+  passed cleanly (see `SYS-W11-06`'s later evidence), plus this primitive's
+  finalize-retry budget was separately widened after a real Windows CI run
+  hit a slower-than-expected transient lock (unrelated Unicode-path bug,
+  also fixed — see `NEXT.md`).
   Editor-side direct-write config files (preferences/keybindings/macros/
   recent-files) were surveyed and found to have the same unprotected-
   direct-write shape, but are intentionally left out of this task's scope —
