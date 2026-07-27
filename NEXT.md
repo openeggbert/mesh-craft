@@ -176,9 +176,32 @@ place. Progress, each its own commit:
   non-render `mc3_*` suite (29 tests) pass clean under ASan+UBSan
   (`build-asan/`), no new leak/UB findings from the added `.close()` calls.
   Unverified on real Windows (no Wine in this sandbox).
-- Remaining: **#3** (`mcb_load_policy` POSIX- vs Windows-style absolute-path
-  message text) and **#1** (`mc3togltf.exe` `STATUS_DLL_NOT_FOUND`, needs
-  CMake DLL-staging/install-rule changes).
+- **#3** (`mcb_load_policy`'s POSIX- vs Windows-style absolute-path message
+  text): root cause is `std::filesystem::path::is_absolute()` itself, not
+  the test. On Windows it requires BOTH a root-name (drive letter/UNC) AND
+  a root-directory; a POSIX-style rooted path like `/etc/passwd` has a
+  root-directory but no root-name, so `is_absolute()` is false there even
+  though it's exactly the filesystem-root-escape attempt the check exists
+  to catch. The untrusted policy still rejected it on Windows (the
+  `includePathWithinRoot()` fallback catches it as "escapes the document
+  root" instead), just with a different message than the `mcb_load_policy`
+  test's stricter substring assertion expected — `mc3_load_policy`/
+  `mc3_json_load_policy`'s sibling tests only assert `threw`, not the
+  message text, so they stayed green despite having the identical
+  semantic gap. Fixed all 3 mirrored `is_absolute()` checks
+  (`mcb/src/McbReader.cpp`, `mc3/src/Mc3XmlParser.cpp`,
+  `mc3/src/Mc3JsonParser.cpp` — same names, same logic by design) to also
+  treat "has a root-directory but no root-name" as absolute, so the
+  rejection message is the same on every platform. `has_root_name()` is
+  always false on POSIX, so `has_root_directory() && !has_root_name()` is
+  already implied by the existing `is_absolute()` there — zero behavior
+  change on Linux/macOS, confirmed by the full `mc3_*`/`mcb_*`/
+  `mc3togltf_*` non-render suite (115/118 pass, the 3 failures are the
+  already-known Blender/`numpy` gap, unrelated) still passing unchanged.
+  Windows-side reasoning follows documented `std::filesystem` semantics
+  (cppreference), not executable in this sandbox (no Wine).
+- Remaining: **#1** (`mc3togltf.exe` `STATUS_DLL_NOT_FOUND`, needs CMake
+  DLL-staging/install-rule changes).
 
 ## Known release blockers and decisions
 

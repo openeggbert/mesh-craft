@@ -156,7 +156,13 @@ static void validateResourcePathIfConfined(const std::string& rawPath, const cha
     if (rawPath.rfind("embed:", 0) == 0 || rawPath.rfind("data:", 0) == 0) return;
 
     std::filesystem::path p(rawPath);
-    if (p.is_absolute()) {
+    // is_absolute() requires a root-name (e.g. a Windows drive letter) AND a
+    // root-directory on Windows, so a POSIX-style rooted path like
+    // "/etc/passwd" -- exactly the same filesystem-root escape attempt
+    // is_absolute() exists to catch on POSIX -- is false there. Treat
+    // root-directory-without-root-name as absolute too, so an untrusted MCB
+    // document is rejected with the same message on every platform.
+    if (p.is_absolute() || (p.has_root_directory() && !p.has_root_name())) {
         std::string msg = std::string("MCB: ") + kind + " '" + rawPath +
             "' is an absolute path outside the document root; rejected "
             "under the untrusted-content load policy";
