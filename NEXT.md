@@ -500,9 +500,94 @@ This session configured the existing root Debug tree and freshly built the
 focused standalone/path-confinement targets with `CCACHE_DISABLE=1`; its
 configured sibling CNA and sharp-runtime revisions differ from the historical
 verified SHAs and must not be treated as a full-editor qualification. The
-normal compiler-cache location is read-only in this environment, and Wine is
-blocked by sandbox `SIGSYS`, so neither a fresh full suite nor native Windows
-runtime tests were completed here. That is not evidence of a source failure.
+normal compiler-cache location is read-only in this environment, so a fresh
+full suite wasn't completed here. That is not evidence of a source failure.
+**Correction (2026-07-27): Wine is NOT blocked in this sandbox for
+MinGW-cross-compiled console/test binaries** — only the full GUI editor hits
+the previously-documented `SIGSYS` block. See
+`cmake-build-verification-windows-standalone/` (an existing, reusable
+MinGW+Wine build/verification setup) and the "MinGW+Wine repro" writeups
+below for the technique; use it before assuming any Windows-only bug is
+unverifiable here.
 The next session should start by reviewing the first `standalone-windows`
 GitHub Actions run for the current `develop` head; use its CTest/artifact
 result to complete or diagnose `SYS-W11-06`.
+
+## Session log (2026-07-27, CI-red deep dive — all env/config layers fixed, 2 real third-party bugs found and deferred)
+
+Continuing from the 6-CI-red-regression work above: pushing those fixes
+triggered real CI, which itself cascaded through **9 more previously-hidden
+layers**, each one only reachable because the previous layer's fix let the
+pipeline progress further than any earlier run ever had. Every fix here is
+its own commit on `develop`:
+
+1. Confirmed on real CI: DLL staging (`STATUS_DLL_NOT_FOUND`) and
+   `is_absolute()` fixes both work on actual `windows-2022` hardware.
+2. Found + fixed: `tinyobjloader` ODR violation (Linux Clang ASan+UBSan) —
+   crashed ~67/75 `mc3togltf_*` tests at startup; `MeshBuilder.cpp` compiled
+   its own copy via `TINYOBJLOADER_IMPLEMENTATION` while also linking the
+   separately-compiled, shared `tinyobjloader` CMake target. Fixed by
+   dropping the link dependency everywhere (`mc3togltf/CMakeLists.txt`, root
+   `CMakeLists.txt`'s editor target, the release-artifact install loop).
+3. Found + fixed: `Mc3::writeFileAtomically()`'s finalize `rename()` failed
+   ("No such file or directory" under a real MinGW+Wine repro, "Input/output
+   error" on real CI) for the STAB-0555 Czech+Japanese filename case. Real
+   root cause, found via the repro, not guesswork: `Mc3XmlWriter.cpp`/
+   `Mc3XmlParser.cpp` called tinyxml2's `SaveFile`/`LoadFile(const char*)`
+   with a UTF-8 `path.string()`; tinyxml2's `fopen()` converts that via the
+   Windows ANSI code page, not UTF-8, mangling non-ASCII paths. Fixed with
+   `_wfopen`-based `#ifdef _WIN32` helpers handing tinyxml2 a `FILE*` instead.
+4. Fixed 2 minor Windows test-portability gaps: Python `UnicodeEncodeError`
+   (`≠`/`≥` in PASS messages, cp1252 console) and a write-protection test
+   assumption (`os.chmod()` on a directory is a no-op for blocking writes on
+   Windows) — replaced with a platform-independent "parent directory never
+   created" mechanism.
+5. Found + fixed: `mcb_libfuzzer` OOM (550MB against a 512MB `rss_limit_mb`).
+   Root-caused via local repro (NOT a per-input security bug — replaying the
+   exact CI "oom-" artifact 2000x in one process leaked nothing): ordinary
+   coverage-guided-fuzzing corpus growth + ASan overhead. Raised the shared
+   `--rss-mib` ceiling 512→2048 in `run_fuzz_smoke.py`/`ci.yml`.
+6. Found + fixed: Editor (EASYGL/VULKAN) jobs failing at CMake configure —
+   CNA's vendored SDL3 needs X11 (or Wayland) dev headers, never installed.
+   Added `libx11-dev`/`libxext-dev`/`libxrandr-dev`/`libxcursor-dev`/
+   `libxi-dev`/`libxfixes-dev`/`libxss-dev` to both editor jobs.
+7. Found + fixed: SDL3 also needs `libxtst-dev` for its X11 XTEST extension
+   (missed in step 6) — added.
+8. Found + fixed: CNA's `CNA_BACKEND_EASY_GL` option (enabled by every
+   matrix entry, since the shared "Configure editor" step always configures
+   both backends) requires a sibling `../easy-gl` checkout — CI never
+   checked it out. Added a "Checkout easy-gl" step (pinned to this sandbox's
+   local easy-gl sibling's HEAD) to both editor jobs.
+9. Found + fixed: CNA also needs FFmpeg dev packages
+   (`libavcodec-dev`/`libavformat-dev`/`libavutil-dev`/`libswresample-dev`)
+   for an unconditional `pkg_check_modules(... REQUIRED ...)` — added.
+10. Found + fixed: `easy-gl` itself needs a sibling `../meta-gl` checkout —
+    one layer deeper than step 8. Added a "Checkout meta-gl" step (pinned to
+    this sandbox's local meta-gl sibling's HEAD) to both editor jobs.
+
+**Result after all of the above:** `Clang ASan+UBSan and bounded fuzz` and
+`Standalone Windows qualification` are now **fully green** on real CI — the
+first time either has passed completely this session. All 4 `standalone`
+matrix jobs (`mc3`/`mcb`/`mc3togltf`/`mc3tomcb`) are green. The 3 Editor jobs
+now all get **all the way through CMake configure** (never happened before
+tonight) and fail only at the *build* step, on two genuinely different,
+real third-party-repository bugs — filed as `SYS-W8-07`/`SYS-W8-08` in
+`plan.md` rather than guessed at or fixed here:
+
+- **`SYS-W8-07`**: `sharp-runtime/src/System/Environment.cpp:307` ignores
+  `chdir()`'s return value; `-Werror=unused-result` (Editor VULKAN + plain
+  EASYGL jobs) turns that into a hard build failure. A one-line fix, but
+  inside `sharp-runtime`'s own source — outside this session's authorized
+  scope. **User explicitly chose to report and defer, not fix**, when asked.
+- **`SYS-W8-08`**: the Editor EASYGL ASan+UBSan job fails differently —
+  `src/MeshCraft/Renderer/SceneRenderer.cpp` calls `ShaderEffect` methods
+  (`setWorldProperty`/etc.) that don't exist on the CI-pinned `sharp-runtime`
+  revision. Not yet triaged (source drift vs. stale pin vs. cache
+  staleness) — needs investigation before any fix.
+
+Also corrected a stale belief recorded in this file's own "Verification
+caveat" section above (see the correction inserted there): Wine actually
+runs MinGW-cross-compiled console/test binaries fine in this sandbox; only
+the full GUI editor hits the documented `SIGSYS` block. This was the key
+technique that let 2 of tonight's Windows-only bugs (items 2-3 above) get
+*real* verification instead of source-level reasoning alone.

@@ -680,6 +680,39 @@ time; re-evaluate scope and blockers before starting each item.
   browser editor startup; a persisted preference across reload; recovery-file
   persistence; and one GLB export/download smoke test.
 
+- **SYS-W8-07** `[BLOCKED]` `P2` — `sharp-runtime`'s own source fails to
+  compile under the Editor (VULKAN) and Editor (EASYGL) (non-sanitizer) CI
+  jobs: `sharp-runtime/src/System/Environment.cpp:307` ignores `chdir()`'s
+  return value, which `-Werror=unused-result` (enabled by these jobs'
+  compiler flags) turns into a hard build failure. Confirmed via a real
+  2026-07-27 CI run, after fixing 5 unrelated CI-environment gaps in this
+  same session let the Editor jobs progress this far for the first time
+  (missing X11/XTEST/FFmpeg dev packages, and missing `easy-gl`/`meta-gl`
+  sibling checkouts — all fixed in `.github/workflows/ci.yml`, see `NEXT.md`
+  for the full trail). **Blocked: the fix is one line inside
+  `sharp-runtime`'s own source** (check `chdir()`'s return value, or cast to
+  `void` if truly don't-care), a sibling repository outside this session's
+  authorized scope (`CLAUDE.md`: no changes to CNA/sharp-runtime without
+  owner permission) — user explicitly chose to report and defer, not fix,
+  when asked 2026-07-27.
+
+- **SYS-W8-08** `[BLOCKED]` `P2` — The Editor (EASYGL) ASan+UBSan CI job
+  fails to build for a different reason than `SYS-W8-07` above: mesh-craft's
+  own `src/MeshCraft/Renderer/SceneRenderer.cpp` (multiple call sites, e.g.
+  line 875) calls `Microsoft::Xna::Framework::Graphics::ShaderEffect`
+  methods (`setWorldProperty`/`setViewProperty`/`setProjectionProperty`/
+  `SetTexture`) that don't exist on the CI-pinned `sharp-runtime` revision
+  (`5cdaafb2bace46dce5393da21dad9ff9f8ad3c58`) — an apparent version
+  mismatch between this repository's current source and the sibling revision
+  CI pins, surfaced for the first time by the same 2026-07-27 CI run as
+  `SYS-W8-07` (the sanitizer job's build step was never reached before
+  tonight's environment-gap fixes). Not yet triaged: unclear whether
+  mesh-craft's source has drifted ahead of what the pinned `sharp-runtime`
+  ref supports, whether the pin itself is stale, or whether this is a
+  FetchContent-cache staleness artifact specific to the sanitizer job's
+  build directory. Needs investigation before a fix — deliberately not
+  guessed at here.
+
 ---
 
 ## Audit-derived carryovers
