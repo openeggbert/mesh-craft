@@ -102,8 +102,22 @@ jobs:
           $components = @('mc3', 'mcb', 'mc3togltf', 'mc3tomcb')
           foreach ($component in $components) {
             $buildDir = "build/$component"
+            # BUILD_SHARED_LIBS=OFF + static-linking the MinGW runtime: without
+            # this, mc3togltf.exe links against Manifold/tinyxml2 as DLLs
+            # (they inherit Manifold's own BUILD_SHARED_LIBS=ON default) AND
+            # the MinGW toolchain's own runtime (libgcc_s_seh-1.dll/
+            # libwinpthread-1.dll/libstdc++-6.dll) -- none of which the
+            # "Publish qualified Windows CLI artifacts" step below stages
+            # alongside the .exe, so the *published* artifact fails to start
+            # at all with STATUS_DLL_NOT_FOUND outside this build tree.
+            # Confirmed via a real downloaded artifact + MinGW/Wine repro
+            # (2026-07-27, SYS-W11-06 verification): fully static removes
+            # every DLL dependency and produces byte-identical MC3->MCB/GLB
+            # output to the dynamic build.
             cmake -S $component -B $buildDir -G Ninja `
-              -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=ON
+              -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=ON `
+              -DBUILD_SHARED_LIBS=OFF `
+              -DCMAKE_EXE_LINKER_FLAGS="-static -static-libgcc -static-libstdc++"
             cmake --build $buildDir --parallel 2
             ctest --test-dir $buildDir --output-on-failure --parallel 2
           }
@@ -119,12 +133,11 @@ jobs:
 
       # SYS-W11-08: bundle the same notices/SHA-256 manifest the Linux
       # meshcraft_cli_release archive gets, so the Windows artifact isn't a
-      # bare, unverifiable pair of executables. Does not attempt to stage
-      # Manifold/tinyobjloader runtime DLLs here -- that is a separate,
-      # already-tracked gap (the in-tree ctest run above can currently fail
-      # with STATUS_DLL_NOT_FOUND for the same underlying reason), and adding
-      # a manifest for an incomplete artifact is still strictly better than
-      # no manifest at all.
+      # bare, unverifiable pair of executables. No runtime DLLs to stage
+      # (fixed 2026-07-27, SYS-W11-06 verification): the configure step above
+      # now links everything -- Manifold, tinyxml2, and the MinGW runtime
+      # itself -- statically, so these two .exe files have zero third-party
+      # DLL dependencies at all.
       - name: Stage release manifest and notices
         shell: pwsh
         run: |

@@ -111,8 +111,16 @@ endif()
 # is a no-op there.
 function(mc3togltf_stage_runtime_dlls target)
     if(WIN32)
+        # $<TARGET_RUNTIME_DLLS:...> expands to nothing when a target has no
+        # DLL dependencies at all (e.g. a fully statically-linked build) --
+        # `cmake -E copy_if_different` with zero source arguments is itself
+        # an error (prints usage, fails the build), not a harmless no-op. Pick
+        # the `true` no-op subcommand instead of `copy_if_different` in that
+        # case via $<IF:$<BOOL:...>,...>, a documented workaround for this
+        # exact generator-expression gotcha.
         add_custom_command(TARGET ${target} POST_BUILD
-            COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            COMMAND ${CMAKE_COMMAND} -E
+                    $<IF:$<BOOL:$<TARGET_RUNTIME_DLLS:${target}>>,copy_if_different,true>
                     $<TARGET_RUNTIME_DLLS:${target}>
                     $<TARGET_FILE_DIR:${target}>
             COMMAND_EXPAND_LISTS
