@@ -262,7 +262,19 @@ jobs:
           path: cna
           # Keep the editor job on the sibling revision recorded and tested
           # by this repository (AUD-057), rather than an arbitrary branch tip.
-          ref: d0c21ee613ebd8f8b0055f7868103dd5c5c30fc7
+          # Bumped 2026-07-27 (SYS-W8-08): the previous pin (d0c21ee6) turned
+          # out to not even be an ancestor of CNA's current develop branch
+          # (its history was rewritten after that commit was recorded here),
+          # and predates CNA's Task 1079 ("wire ShaderEffect into
+          # GraphicsDevice's 3D draw path", commit b08c7aa8) adding
+          # ShaderEffect::setWorldProperty/setViewProperty/
+          # setProjectionProperty/SetTexture -- methods
+          # src/MeshCraft/Renderer/SceneRenderer.cpp already calls. This
+          # revision is CNA's own current develop tip, confirmed building
+          # and passing the full non-render MeshCraft suite locally
+          # (176/180, the 4 failures being the already-known unrelated
+          # Blender/numpy gap) together with mesh-craft's current source.
+          ref: ac3aaaeb2a5ba27dbd9e22e782c7041e6e40947c
           # cna/cmake/ThirdPartySDL.cmake vendors SDL/SDL_image/SDL_mixer as
           # submodules and fails configure without them. Non-recursive: those
           # submodules' own nested submodules are optional codec dependencies
@@ -391,7 +403,10 @@ jobs:
         with:
           repository: openeggbert/cna
           path: cna
-          ref: d0c21ee613ebd8f8b0055f7868103dd5c5c30fc7
+          # See the "editor" job's own "Checkout CNA" step comment: bumped
+          # 2026-07-27 (SYS-W8-08) to CNA's current develop tip, since the
+          # old pin predated the ShaderEffect API mesh-craft's source uses.
+          ref: ac3aaaeb2a5ba27dbd9e22e782c7041e6e40947c
           submodules: true
 
       - name: Checkout sharp-runtime

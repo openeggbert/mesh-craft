@@ -742,22 +742,39 @@ report and defer rather than fix).
   owner permission) — user explicitly chose to report and defer, not fix,
   when asked 2026-07-27.
 
-- **SYS-W8-08** `[BLOCKED]` `P2` — The Editor (EASYGL) ASan+UBSan CI job
-  fails to build for a different reason than `SYS-W8-07` above: mesh-craft's
-  own `src/MeshCraft/Renderer/SceneRenderer.cpp` (multiple call sites, e.g.
-  line 875) calls `Microsoft::Xna::Framework::Graphics::ShaderEffect`
-  methods (`setWorldProperty`/`setViewProperty`/`setProjectionProperty`/
-  `SetTexture`) that don't exist on the CI-pinned `sharp-runtime` revision
-  (`5cdaafb2bace46dce5393da21dad9ff9f8ad3c58`) — an apparent version
-  mismatch between this repository's current source and the sibling revision
-  CI pins, surfaced for the first time by the same 2026-07-27 CI run as
-  `SYS-W8-07` (the sanitizer job's build step was never reached before
-  tonight's environment-gap fixes). Not yet triaged: unclear whether
-  mesh-craft's source has drifted ahead of what the pinned `sharp-runtime`
-  ref supports, whether the pin itself is stale, or whether this is a
-  FetchContent-cache staleness artifact specific to the sanitizer job's
-  build directory. Needs investigation before a fix — deliberately not
-  guessed at here.
+- **SYS-W8-08** `[DONE]` `P2` — The Editor (EASYGL) ASan+UBSan CI job failed
+  to build for a different reason than `SYS-W8-07` above: mesh-craft's own
+  `src/MeshCraft/Renderer/SceneRenderer.cpp` (multiple call sites, e.g. line
+  875) calls `ShaderEffect::setWorldProperty`/`setViewProperty`/
+  `setProjectionProperty`/`SetTexture`, surfaced for the first time by the
+  same 2026-07-27 CI run as `SYS-W8-07`.
+  **Corrected misdiagnosis:** the initial writeup blamed `sharp-runtime` for
+  this (matching the `Microsoft::Xna::Framework` namespace convention) — that
+  was wrong. `ShaderEffect` is actually implemented in **CNA**
+  (`cna/include/Microsoft/Xna/Framework/Graphics/ShaderEffect.hpp`), not
+  `sharp-runtime`. Confirmed with `git show <ref>:<path>` directly against
+  the CI-pinned CNA commit (`d0c21ee613ebd8f8b0055f7868103dd5c5c30fc7`): none
+  of the 4 methods existed there at all. Further confirmed that pin was
+  **not even an ancestor of CNA's current `develop` branch**
+  (`git merge-base --is-ancestor d0c21ee6 <current-HEAD>` → false) — its
+  history was rewritten after that commit was recorded (the same class of
+  issue `SYS-W13-03`'s AUD-064..073 hash-orphaning finding hit earlier this
+  project). The methods were added by CNA's own Task 1079 (commit
+  `b08c7aa88f6ccbdf9afae3a25d9bd25bb9620f4d`, "wire ShaderEffect into
+  GraphicsDevice's 3D draw path", 2026-07-16) — well after the stale pin's
+  2026-07-11 recording.
+  **Fix:** bumped the CI-pinned CNA revision (both editor jobs in
+  `.github/workflows/ci.yml`) from `d0c21ee6` to CNA's current `develop` tip
+  (`ac3aaaeb2a5ba27dbd9e22e782c7041e6e40947c`) — a mesh-craft-side CI
+  configuration change, not a CNA source edit, so within this session's
+  authorized scope even under the no-CNA-changes-without-permission rule.
+  User explicitly confirmed this pin bump before it was made. Verified
+  locally before pushing: full `MeshCraft` editor rebuilt clean against this
+  CNA revision (already the sandbox's own local `../cna` checkout), and the
+  non-render suite passed 176/180 (the 4 failures are the already-known
+  unrelated Blender/`numpy` gap). Real-CI confirmation pending — check the
+  next `develop` CI run's `Editor (EASYGL) ASan+UBSan`/`Editor (VULKAN)`
+  jobs before fully trusting this `[DONE]` marker.
 
 ---
 
