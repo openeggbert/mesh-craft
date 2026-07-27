@@ -31,28 +31,25 @@ distribution rather than missing editor breadth.
 ## Current priorities
 
 1. Obtain native standalone Windows qualification (`SYS-W11-06`). The
-   release-readiness changes are published on `develop`; await the first
-   remote `windows-2022` CTest/artifact evidence — see "Session log" below,
-   its first real run already landed and found real issues.
-2. Autonomous continuation in progress on the freshly-added `[PROPOSED]`
-   backlog (`SYS-W9-06/07`, `SYS-W1-08`, `SYS-W2-06`, `SYS-W11-08/09/10`,
-   `SYS-W13-03`, `SYS-W3-05`). **8 of 9 DONE as of this update**:
-   `SYS-W9-06`, `SYS-W2-06`, `SYS-W1-08`, `SYS-W9-07`, `SYS-W13-03`,
-   `SYS-W11-08`, `SYS-W11-09` all landed, each its own commit, build-verified
-   and tested before committing.
-   **`SYS-W11-09` found a real heap-use-after-free bug** in
+   release-readiness changes are published on `develop`; await the next
+   remote `windows-2022` CTest/artifact evidence run — the first real run
+   found 6 concrete regressions (see "Session log" below), all 6 now fixed
+   and pushed, but none re-verified on an actual Windows runner yet (no
+   Wine in this sandbox).
+2. The freshly-added `[PROPOSED]` backlog (`SYS-W9-06/07`, `SYS-W1-08`,
+   `SYS-W2-06`, `SYS-W11-08/09/10`, `SYS-W13-03`, `SYS-W3-05`) is
+   **all 9 DONE**. `SYS-W11-09` found a real heap-use-after-free bug in
    `EventPreviewRunner::execute()`'s RunScript step (`ff62004`) — a stale
    `working.scripts` iterator read again after `LuaScriptRunner::run()`
-   already replaced `working` via move-assignment. Fixed. Also fixed 4
-   instances of a known-shape LeakSanitizer finding (deliberately cyclic
-   `shared_ptr` test fixtures) and guarded `package_consumer_smoke` out
-   under `MESHCRAFT_SANITIZE=ON` (structurally incompatible with that test's
-   own purpose, not a bug). `build-asan/` is ~5.7 GB on disk, kept for
-   incremental reuse rather than deleted.
-   Remaining: `SYS-W11-10` (RC process/versioning), `SYS-W3-05`
-   (decompose `EditorAlgorithms.hpp`, doing this one last per the original
-   review's own recommended ordering: architecture after correctness). See
-   `plan.md` for full evidence on everything done so far.
+   already replaced `working` via move-assignment. Fixed. See `plan.md` for
+   full evidence on everything done.
+3. All 6 of the deferred CI-red regressions from that first Windows run are
+   now fixed and pushed (see "Session log" below for each one's root cause
+   and evidence) — still awaiting real Windows re-verification for the 3
+   Windows-specific fixes (`mc3_roundtrip`, `mcb_load_policy`, `mc3togltf`
+   DLL staging).
+4. `SYS-W11-11` (the first-release version-number decision) is deliberately
+   left `[BLOCKED]` per the user's explicit choice not to decide yet.
 
 `SYS-W14-40` is complete: the explicit bounded Event Preview/Play mode is
 covered by `event_preview_runner`. See `plan.md` for the remaining Windows
