@@ -278,6 +278,16 @@ jobs:
           path: easy-gl
           ref: 62c0a248a6c4144abaf92c0530cc2a2395e5fd37
 
+      # easy-gl's own CMakeLists.txt in turn add_subdirectory(../meta-gl)s --
+      # a second, one-deeper sibling requirement discovered the same way as
+      # easy-gl itself above.
+      - name: Checkout meta-gl
+        uses: actions/checkout@v4
+        with:
+          repository: openeggbert/meta-gl
+          path: meta-gl
+          ref: d51fcd7f455de8e3df3549edbed84f2b5527f18a
+
       - name: Install editor build dependencies
         run: |
           sudo apt-get update
@@ -369,15 +379,23 @@ jobs:
           path: sharp-runtime
           ref: 5cdaafb2bace46dce5393da21dad9ff9f8ad3c58
 
-      # See the "editor" job's own "Checkout easy-gl" step comment: CNA's
-      # CNA_BACKEND_EASY_GL option (which this EASYGL-specific job enables)
-      # requires a sibling 'easy-gl' checkout or configure hard-fails.
+      # See the "editor" job's own "Checkout easy-gl"/"Checkout meta-gl" step
+      # comments: CNA's CNA_BACKEND_EASY_GL option (which this EASYGL-
+      # specific job enables) requires a sibling 'easy-gl' checkout, which in
+      # turn requires a sibling 'meta-gl' checkout, or configure hard-fails.
       - name: Checkout easy-gl
         uses: actions/checkout@v4
         with:
           repository: openeggbert/easy-gl
           path: easy-gl
           ref: 62c0a248a6c4144abaf92c0530cc2a2395e5fd37
+
+      - name: Checkout meta-gl
+        uses: actions/checkout@v4
+        with:
+          repository: openeggbert/meta-gl
+          path: meta-gl
+          ref: d51fcd7f455de8e3df3549edbed84f2b5527f18a
 
       - name: Install editor build dependencies
         run: |
