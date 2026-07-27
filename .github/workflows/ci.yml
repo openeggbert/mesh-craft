@@ -214,7 +214,7 @@ jobs:
           build-sanitize/mc3togltf/mc3togltf \
             mc3togltf/test/golden/basic_scene.mc3.xml \
             build-sanitize/fuzz-corpus/glb/basic_scene.glb
-          python3 test/run_fuzz_smoke.py --seconds 20 --rss-mib 512 \
+          python3 test/run_fuzz_smoke.py --seconds 20 --rss-mib 2048 \
             --work-dir build-sanitize/fuzz-work \
             --target build-sanitize/mc3/mc3_xml_libfuzzer mc3/test/fuzz/corpus/xml \
             --target build-sanitize/mc3/mc3_json_libfuzzer mc3/test/fuzz/corpus/json \

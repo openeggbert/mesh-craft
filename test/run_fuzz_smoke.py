@@ -15,7 +15,19 @@ def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--seconds", type=int, default=20,
                         help="maximum libFuzzer run time per target")
-    parser.add_argument("--rss-mib", type=int, default=512,
+    # 512 (the original default) is too tight: a normal, non-malicious ASan
+    # run legitimately grows RSS well past it just from libFuzzer's own
+    # retained in-memory corpus (it keeps every input that finds new
+    # coverage) plus ASan's own instrumentation overhead -- confirmed via
+    # local repro (peaked at 505MB/20s and 822MB/20s across two seeds, 668MB
+    # over a longer 40s run, zero crashes/leaks in any of them), matching a
+    # CI run that hit 550MB and got killed by the old 512MB ceiling. Not a
+    # per-input security bug (replaying the exact CI-reported "oom-" input
+    # 2000x in one process found no leak). 2048 leaves real headroom above
+    # the highest local measurement rather than just clearing one observed
+    # number -- raise the ceiling, don't shrink real fuzzing coverage, same
+    # fix pattern as mc3_json_document_budget's CTest TIMEOUT.
+    parser.add_argument("--rss-mib", type=int, default=2048,
                         help="libFuzzer resident-memory ceiling per target")
     parser.add_argument("--work-dir", type=Path, required=True,
                         help="generated working corpora and crash artifacts; never a source corpus")
