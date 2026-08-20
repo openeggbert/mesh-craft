@@ -11,6 +11,11 @@ covered by `plan.md`'s `AUD-###`/`SYS-W7-##` rows. This is specifically about
 editor UI gaps: format features that parse/round-trip correctly but have no
 interactive editing surface, or have one that's incomplete.
 
+One exception to that scope is recorded deliberately: the
+"Backend gap" section immediately below documents a CNA Vulkan renderer defect
+found while qualifying the VULKAN backend. It is kept here so it is not lost,
+and is marked as out-of-scope where it appears.
+
 Findings are grouped by severity: **still-open total gaps** (zero UI,
 XML-hand-edit only) first, then **still-open partial gaps** (UI exists but
 incomplete or buggy), then **non-gaps** worth noting for context, then two
@@ -18,6 +23,122 @@ resolved-history lists (**2026-07-18**, then the earlier **2026-07-10**
 round) for historical credit, then a summary table. As of this refresh,
 sections 1 and 2 below have no remaining open findings — everything that
 was open as of 2026-07-18 closed the same day.
+
+---
+
+## Backend gap: the CNA Vulkan renderer overruns its per-draw uniform buffers
+
+*Scope note: everything else in this file is about mc3 format coverage in the
+editor UI. This section is a deliberate exception — it records a rendering
+defect found while qualifying the VULKAN backend, so it is not lost. It is a
+**CNA-side** bug (`cna/modules/renderers/vulkan`), not a MeshCraft one, and
+per this repo's `CLAUDE.md` ("No CNA changes without owner permission") it is
+reported here rather than fixed.*
+
+Found 2026-08-20 against CNA `develop` @ `1bb2145d9`, on real hardware
+(Intel Iris Xe Graphics, ADL GT2; Mesa, Vulkan 1.4.305).
+
+### Symptom
+
+Building MeshCraft with `-DMESH_CRAFT_GRAPHICS_BACKEND=VULKAN` works and the
+editor runs, but **lighting on some objects flickers frame to frame** in
+scenes with many lit objects. It is not the whole scene — only a tail of the
+objects drawn in each frame is affected. Observed interactively on
+`test/medieval_castle.mc3.xml` (272 instances, 202 boxes, 89 cylinders,
+31 spheres).
+
+The application does not crash; a `timeout 20` run had to be killed, it never
+exited on its own.
+
+### Evidence
+
+The Vulkan validation layer reports, every frame:
+
+```
+vkCmdBindDescriptorSets(): pDynamicOffsets[0] is 131072, which when added to
+the buffer descriptor's range (256) and offset (0) is greater than the size
+of the buffer (131072) in descriptorSet #0 binding #1 descriptor[0].
+VUID-vkCmdBindDescriptorSets-pDescriptorSets-01979
+```
+
+Reported offsets run 131072 → 133376 in steps of 256, i.e. ring-buffer slots
+512–521: ten draws per frame past the end of a 512-slot buffer.
+
+### Root cause
+
+`cna/modules/renderers/vulkan/src/VulkanRenderer.cpp:9210` (the lit-textured
+path, the one that carries lighting constants):
+
+```cpp
+const uint32_t slot   = litTexturedUBOSlot++;
+const uint32_t uboOff = slot * kLitTexturedUBOStride;
+if (uboOff + 256 <= kLitTexturedUBOStride * kLitTexturedUBOMaxDraws) {
+    std::memcpy(static_cast<uint8_t*>(litTexturedUBOPtr_[currentFrame_]) + uboOff,
+                draw.litUboData, 256);          // <-- bounds-checked
+}
+vkCmdBindDescriptorSets(cb, VK_PIPELINE_BIND_POINT_GRAPHICS,
+                        pipelineLayoutLitTextured3D_, 0, 1,
+                        &draw.litTexturedDescSet, 1, &uboOff);   // <-- NOT checked
+```
+
+The ring buffer is `kLitTexturedUBOStride (256) * kLitTexturedUBOMaxDraws (512)`
+= 131072 bytes. Once a frame issues more than 512 lit-textured draws, the guard
+correctly skips the host-side write — but the descriptor bind still happens at
+the out-of-range offset. Those draws therefore read whatever memory follows the
+buffer instead of their own lighting constants, and since that memory changes
+between frames, the affected objects flicker. That the guard covers only the
+`memcpy` is exactly why the failure is a *visual* one rather than a host-memory
+corruption.
+
+### Scope: all six per-draw UBO paths share the pattern
+
+The bind sits outside the bounds guard in every one of them, so this is a
+pattern to fix once, not a single site:
+
+| Path | `VulkanRenderer.cpp` | Slots (`stride × maxDraws`) |
+|------|----------------------|-----------------------------|
+| DualTexFog  | 9101 | 256 × 512 |
+| EnvMap      | 9116 | 256 × 512 |
+| Skinned     | 9132 | 4608 × **32** |
+| SkinnedFog  | 9146 | 256 × **32** |
+| LitTextured | 9212 | 256 × 512 |
+| FogTex3D    | 9231 | 256 × 512 |
+
+`Skinned`/`SkinnedFog` cap at 32 draws, so they break far earlier than the
+512-slot paths — a scene with more than 32 skinned draws in a frame is already
+past the end.
+
+### Possible fixes (for whoever picks this up)
+
+1. **Grow the ring buffer on demand**, appending chunks as the cursor runs past
+   the current allocation. This is the approach the compiled-effect path in the
+   same file already takes (`EnsureCompiledEffectUniformChunkEXT`,
+   `VulkanRenderer.cpp:6865`), so it is a pattern the renderer already carries
+   rather than a new mechanism. Preferred: it is the only option that keeps
+   rendering correct at any scene size.
+2. **Move the bind inside the guard**, skipping the draw entirely when the slot
+   is out of range. Correctness-safe but visibly lossy — affected objects
+   disappear instead of flickering — and silently so.
+
+Whichever is chosen, an overflow should not be silent: at minimum log once per
+frame that N draws exceeded the capacity.
+
+### What does work on VULKAN
+
+For the record, so the scope of this defect is not overstated:
+
+- MeshCraft configures, builds and links clean against
+  `-DMESH_CRAFT_GRAPHICS_BACKEND=VULKAN` (zero compile errors).
+- `MeshCraft --version` runs; `isBackendSupportedAlg()` already admits VULKAN.
+- A headless `--screenshot` render of `test/all_primitives.mc3.xml` is
+  **pixel-correct and produces zero validation errors** — a single frame never
+  reaches slot 512, which is precisely why the defect hides in one-shot renders
+  and only shows up in sustained interactive use.
+- Source-GLSL ShaderEffects (Bloom, SSAO, skybox shading, material preview)
+  are unavailable on this backend and disable themselves with a startup
+  message. That is a separate, already-documented limitation
+  (`supportsTextShaderEffectsAlg()` in `include/MeshCraft/GraphicsBackendCheck.hpp`),
+  not part of this defect.
 
 ---
 
@@ -167,6 +288,7 @@ declared — see the Summary table below and `SYS-W14-14`.
 
 | Area | Status |
 |------|--------|
+| CNA Vulkan renderer: per-draw UBO overrun (lighting flicker) | 🔴 open, CNA-side — see "Backend gap" section above |
 | N1-N7 (SVG textures, embeds, scripts, audio, triggers, scene states, meta) | ✅ resolved (`STAB-0703`..`0709`) |
 | N8 Object `scriptId` attachment | ✅ resolved (`SYS-W14-10`) |
 | N9 Library metadata / imports (`.mc3lib`) | ✅ resolved (`SYS-W14-13`) |
