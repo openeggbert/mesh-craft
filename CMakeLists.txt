@@ -118,42 +118,48 @@ endif()
 
 message(STATUS "MeshCraft graphics backend (CNA engine): ${MESH_CRAFT_GRAPHICS_BACKEND_UPPER}")
 
+# CNA no longer has a CNA_GRAPHICS_BACKEND string or CNA_BACKEND_<NAME> options:
+# graphics implementations were modularized into modules/renderers/<family>,
+# selected by the single CNA_GRAPHICS_RENDERER identity in CNA's own
+# cmake/RendererSelection.cmake, and the library targets were renamed from
+# cna_backend_graphics_<family> to cna_renderer_<family>. Setting the old
+# variables was silently ignored, so CNA always built its platform default
+# renderer while this file still tried to link the vanished
+# cna_backend_graphics_* target.
+#
+# MeshCraft keeps its own five-value MESH_CRAFT_GRAPHICS_BACKEND vocabulary
+# (it is what GraphicsBackendCheck and MESH_CRAFT_GRAPHICS_BACKEND_STR speak)
+# and maps it here, in one place, onto both the CNA identity to select and the
+# CNA target to link.
 if(MESH_CRAFT_GRAPHICS_BACKEND_UPPER STREQUAL "SDL_RENDERER")
-    set(CNA_BACKEND_SDL_RENDERER ON  CACHE BOOL "" FORCE)
-    set(CNA_BACKEND_EASY_GL      OFF CACHE BOOL "" FORCE)
-    set(CNA_BACKEND_BGFX         OFF CACHE BOOL "" FORCE)
-    set(CNA_BACKEND_VULKAN       OFF CACHE BOOL "" FORCE)
-    set(CNA_BACKEND_WEBGPU       OFF CACHE BOOL "" FORCE)
-    set(CNA_GRAPHICS_BACKEND "SDL_RENDERER" CACHE STRING "" FORCE)
+    set(_cna_renderer_identity "SDL_RENDERER")
+    set(_cna_backend_target cna_renderer_sdl_renderer)
 elseif(MESH_CRAFT_GRAPHICS_BACKEND_UPPER STREQUAL "EASYGL")
-    set(CNA_BACKEND_SDL_RENDERER OFF CACHE BOOL "" FORCE)
-    set(CNA_BACKEND_EASY_GL      ON  CACHE BOOL "" FORCE)
-    set(CNA_BACKEND_BGFX         OFF CACHE BOOL "" FORCE)
-    set(CNA_BACKEND_VULKAN       OFF CACHE BOOL "" FORCE)
-    set(CNA_BACKEND_WEBGPU       OFF CACHE BOOL "" FORCE)
-    set(CNA_GRAPHICS_BACKEND "EASYGL" CACHE STRING "" FORCE)
+    # EasyGL is an internal implementation family in CNA now, not a public
+    # identity: it is reached through one of five GL-profile names. WEBGL2 is
+    # the Emscripten one; OPENGLES3 is CNA's own Linux default for the same
+    # family, which is the profile MeshCraft has been building all along.
+    if(EMSCRIPTEN)
+        set(_cna_renderer_identity "WEBGL2")
+    else()
+        set(_cna_renderer_identity "OPENGLES3")
+    endif()
+    set(_cna_backend_target cna_renderer_easygl)
 elseif(MESH_CRAFT_GRAPHICS_BACKEND_UPPER STREQUAL "BGFX")
-    set(CNA_BACKEND_SDL_RENDERER OFF CACHE BOOL "" FORCE)
-    set(CNA_BACKEND_EASY_GL      OFF CACHE BOOL "" FORCE)
-    set(CNA_BACKEND_BGFX         ON  CACHE BOOL "" FORCE)
-    set(CNA_BACKEND_VULKAN       OFF CACHE BOOL "" FORCE)
-    set(CNA_BACKEND_WEBGPU       OFF CACHE BOOL "" FORCE)
-    set(CNA_GRAPHICS_BACKEND "BGFX" CACHE STRING "" FORCE)
+    set(_cna_renderer_identity "BGFX")
+    set(_cna_backend_target cna_renderer_bgfx)
 elseif(MESH_CRAFT_GRAPHICS_BACKEND_UPPER STREQUAL "VULKAN")
-    set(CNA_BACKEND_SDL_RENDERER OFF CACHE BOOL "" FORCE)
-    set(CNA_BACKEND_EASY_GL      OFF CACHE BOOL "" FORCE)
-    set(CNA_BACKEND_BGFX         OFF CACHE BOOL "" FORCE)
-    set(CNA_BACKEND_VULKAN       ON  CACHE BOOL "" FORCE)
-    set(CNA_BACKEND_WEBGPU       OFF CACHE BOOL "" FORCE)
-    set(CNA_GRAPHICS_BACKEND "VULKAN" CACHE STRING "" FORCE)
+    set(_cna_renderer_identity "VULKAN")
+    set(_cna_backend_target cna_renderer_vulkan)
 elseif(MESH_CRAFT_GRAPHICS_BACKEND_UPPER STREQUAL "WEBGPU")
-    set(CNA_BACKEND_SDL_RENDERER OFF CACHE BOOL "" FORCE)
-    set(CNA_BACKEND_EASY_GL      OFF CACHE BOOL "" FORCE)
-    set(CNA_BACKEND_BGFX         OFF CACHE BOOL "" FORCE)
-    set(CNA_BACKEND_VULKAN       OFF CACHE BOOL "" FORCE)
-    set(CNA_BACKEND_WEBGPU       ON  CACHE BOOL "" FORCE)
-    set(CNA_GRAPHICS_BACKEND "WEBGPU" CACHE STRING "" FORCE)
+    set(_cna_renderer_identity "WEBGPU")
+    set(_cna_backend_target cna_renderer_webgpu)
 endif()
+
+set(CNA_GRAPHICS_RENDERER "${_cna_renderer_identity}" CACHE STRING "" FORCE)
+message(STATUS
+    "MeshCraft: CNA graphics renderer identity: ${_cna_renderer_identity} "
+    "(target ${_cna_backend_target})")
 
 # -----------------------------------------------------------------------------
 # Dependencies
@@ -233,6 +239,51 @@ set(CNA_DEVICES ON CACHE BOOL "" FORCE)
 
 # CNA — XNA-like runtime (window, input, audio, graphics)
 add_subdirectory(../cna CNA_dep)
+
+# -----------------------------------------------------------------------------
+# The slice of CNA and sharp-runtime MeshCraft actually consumes
+# -----------------------------------------------------------------------------
+#
+# `CNA` is an umbrella INTERFACE target meaning "the whole framework": runtime,
+# devices, devices-ext, graphics-ext, cnaext, storage, content, media, audio,
+# input, graphics core, core, math, platform and the selected renderer. This
+# editor includes headers from six of those modules and no others:
+#
+#   Microsoft/Xna/Framework/{Game,GameTime}.hpp              -> cna_runtime
+#   Microsoft/Xna/Framework/Graphics/*                       -> cna_graphics_core
+#   Microsoft/Xna/Framework/Input/*                          -> cna_input
+#   Microsoft/Xna/Framework/Audio/*                          -> cna_audio
+#   Microsoft/Xna/Framework/{Color,Matrix,Vector3,...}.hpp   -> cna_math
+#   CNA/Devices/FileDialog.hpp                               -> cna_devices_ext
+#
+# All six are named explicitly rather than leaning on the PUBLIC edges between
+# them, so a later change to CNA's internal wiring cannot quietly pull a module
+# out from under MeshCraft. Relative to the umbrella this drops cna_devices,
+# cna_graphics_ext, cna_cnaext and cna_storage -- MeshCraft includes no header
+# from any of them. cna_core/cna_platform/cna_content/cna_media still arrive as
+# PUBLIC dependencies of the six above; those are CNA's own internal edges, not
+# a MeshCraft dependency to declare.
+set(MESHCRAFT_CNA_MODULES
+    cna_runtime
+    cna_graphics_core
+    cna_input
+    cna_audio
+    cna_math
+    cna_devices_ext)
+
+# sharp-runtime is consumed the same way. CNA already narrows it from the
+# default `All` selection to its own ten-component closure and rebuilds a
+# compatibility SHARP_RUNTIME umbrella over that closure, so nothing here has to
+# fight the `All` build. MeshCraft's own sources reach sharp-runtime for
+# System/Object.hpp alone, so they name that one component and let everything
+# else arrive through the CNA modules that declare it. The else branch mirrors
+# CNA's own shape detection for a pre-modularization (monolithic) checkout,
+# where the per-component targets do not exist at all.
+if(TARGET SharpRuntime::Core.Base)
+    set(MESHCRAFT_SHARP_RUNTIME_TARGETS SharpRuntime::Core.Base)
+else()
+    set(MESHCRAFT_SHARP_RUNTIME_TARGETS SHARP_RUNTIME)
+endif()
 
 set(BUILD_TESTING "${MESH_CRAFT_BUILD_TESTING}" CACHE BOOL "" FORCE)
 
@@ -612,31 +663,30 @@ endif()
 # Link
 # -----------------------------------------------------------------------------
 #
-# CNA provides: windowing, input, audio, graphics (XNA-style API).
-# SHARP_RUNTIME provides: math (Matrix, Vector3, …) used by the CNA backend.
+# ${MESHCRAFT_CNA_MODULES} provides: windowing/game loop, input, audio,
+# graphics (XNA-style API) and the file dialog -- the six CNA modules this
+# editor includes headers from, named and justified where the variable is set.
+# ${MESHCRAFT_SHARP_RUNTIME_TARGETS} provides System/Object.hpp; every other
+# sharp-runtime component MeshCraft ends up using arrives through the CNA
+# module that declares it.
 # Mc3 provides: MC3 format data structures (pure C++).
 #
-# CNA and the graphics backend may have circular symbol references on Linux,
-# so wrap them in a linker group (GNU ld / Clang ld on non-Windows).
+# The CNA modules and the graphics renderer may have circular symbol references
+# on Linux, so wrap them in a linker group (GNU ld / Clang ld on non-Windows).
 # -----------------------------------------------------------------------------
 
-if(MESH_CRAFT_GRAPHICS_BACKEND_UPPER STREQUAL "SDL_RENDERER")
-    set(_cna_backend_target cna_backend_graphics_sdl_renderer)
-elseif(MESH_CRAFT_GRAPHICS_BACKEND_UPPER STREQUAL "EASYGL")
-    set(_cna_backend_target cna_backend_graphics_easygl)
-elseif(MESH_CRAFT_GRAPHICS_BACKEND_UPPER STREQUAL "BGFX")
-    set(_cna_backend_target cna_backend_graphics_bgfx)
-elseif(MESH_CRAFT_GRAPHICS_BACKEND_UPPER STREQUAL "VULKAN")
-    set(_cna_backend_target cna_backend_graphics_vulkan)
-elseif(MESH_CRAFT_GRAPHICS_BACKEND_UPPER STREQUAL "WEBGPU")
-    set(_cna_backend_target cna_backend_graphics_webgpu)
-endif()
+# ${_cna_backend_target} is resolved once, next to the CNA_GRAPHICS_RENDERER
+# identity it has to agree with, near the top of this file. It used to be
+# mapped a second time here, which is how the two drifted apart when CNA
+# renamed its renderer targets: the identity mapping was updated and this copy
+# was not.
 
 if(EMSCRIPTEN)
     # SDL3 imported targets are directory-scoped; re-declare them in this scope.
     find_package(SDL3 REQUIRED CONFIG)
     target_link_libraries(${_target} PRIVATE
-        CNA ${_cna_backend_target} SHARP_RUNTIME Mc3 Mcb mc3togltf_lib imgui SDL3::SDL3-static
+        ${MESHCRAFT_CNA_MODULES} ${_cna_backend_target} ${MESHCRAFT_SHARP_RUNTIME_TARGETS}
+        Mc3 Mcb mc3togltf_lib imgui SDL3::SDL3-static
         lua54 sol2::sol2)
     target_link_options(${_target} PRIVATE
         -sALLOW_MEMORY_GROWTH=1
@@ -652,8 +702,8 @@ if(EMSCRIPTEN)
     )
 elseif(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang" AND NOT WIN32 AND NOT ANDROID)
     target_link_libraries(${_target} PRIVATE
-        -Wl,--start-group CNA ${_cna_backend_target} -Wl,--end-group
-        SHARP_RUNTIME
+        -Wl,--start-group ${MESHCRAFT_CNA_MODULES} ${_cna_backend_target} -Wl,--end-group
+        ${MESHCRAFT_SHARP_RUNTIME_TARGETS}
         Mc3
         Mcb
         mc3togltf_lib
@@ -665,7 +715,9 @@ elseif(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang" AND NOT WIN32 AND NOT ANDROID)
         target_link_libraries(${_target} PRIVATE ${SQLite3_LIBRARIES})
     endif()
 else()
-    target_link_libraries(${_target} PRIVATE CNA ${_cna_backend_target} SHARP_RUNTIME Mc3 Mcb mc3togltf_lib imgui manifold lua54 sol2::sol2)
+    target_link_libraries(${_target} PRIVATE
+        ${MESHCRAFT_CNA_MODULES} ${_cna_backend_target} ${MESHCRAFT_SHARP_RUNTIME_TARGETS}
+        Mc3 Mcb mc3togltf_lib imgui manifold lua54 sol2::sol2)
     if(SQLite3_FOUND)
         target_link_libraries(${_target} PRIVATE ${SQLite3_LIBRARIES})
     endif()
@@ -763,7 +815,7 @@ if(MESH_CRAFT_BUILD_TESTING AND UNIX AND NOT ANDROID AND NOT EMSCRIPTEN)
     target_include_directories(keybinding_manager_test PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}/include)
     target_link_libraries(keybinding_manager_test PRIVATE
-        CNA ${_cna_backend_target} SHARP_RUNTIME)
+        ${MESHCRAFT_CNA_MODULES} ${_cna_backend_target} ${MESHCRAFT_SHARP_RUNTIME_TARGETS})
     target_compile_features(keybinding_manager_test PRIVATE cxx_std_23)
     meshcraft_apply_sanitize(keybinding_manager_test)
     add_test(NAME keybinding_manager COMMAND keybinding_manager_test)
@@ -990,7 +1042,7 @@ if(MESH_CRAFT_BUILD_TESTING AND UNIX AND NOT ANDROID AND NOT EMSCRIPTEN)
     target_include_directories(walk_controller_test PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}/include)
     target_link_libraries(walk_controller_test PRIVATE
-        CNA ${_cna_backend_target} SHARP_RUNTIME)
+        ${MESHCRAFT_CNA_MODULES} ${_cna_backend_target} ${MESHCRAFT_SHARP_RUNTIME_TARGETS})
     target_compile_features(walk_controller_test PRIVATE cxx_std_23)
     meshcraft_apply_sanitize(walk_controller_test)
     add_test(NAME walk_controller COMMAND walk_controller_test)
@@ -1008,7 +1060,7 @@ if(MESH_CRAFT_BUILD_TESTING AND UNIX AND NOT ANDROID AND NOT EMSCRIPTEN)
     target_include_directories(audio_preview_test PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}/include)
     target_link_libraries(audio_preview_test PRIVATE
-        CNA ${_cna_backend_target} SHARP_RUNTIME)
+        ${MESHCRAFT_CNA_MODULES} ${_cna_backend_target} ${MESHCRAFT_SHARP_RUNTIME_TARGETS})
     target_compile_features(audio_preview_test PRIVATE cxx_std_23)
     meshcraft_apply_sanitize(audio_preview_test)
     add_test(NAME audio_preview COMMAND audio_preview_test)
@@ -1031,7 +1083,7 @@ if(MESH_CRAFT_BUILD_TESTING AND UNIX AND NOT ANDROID AND NOT EMSCRIPTEN)
         ${CMAKE_CURRENT_SOURCE_DIR}/include
         ${CMAKE_CURRENT_SOURCE_DIR}/mc3/include)
     target_link_libraries(camera_bookmarks_test PRIVATE
-        CNA ${_cna_backend_target} SHARP_RUNTIME)
+        ${MESHCRAFT_CNA_MODULES} ${_cna_backend_target} ${MESHCRAFT_SHARP_RUNTIME_TARGETS})
     target_compile_features(camera_bookmarks_test PRIVATE cxx_std_23)
     meshcraft_apply_sanitize(camera_bookmarks_test)
     add_test(NAME camera_bookmarks COMMAND camera_bookmarks_test)
