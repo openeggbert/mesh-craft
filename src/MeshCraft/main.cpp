@@ -58,8 +58,33 @@ struct AiShutdownWaiter {
     }
 };
 
+// Every `app` below is an owning raw pointer with an explicit `delete` after Run(), and that shape
+// is load-bearing under Emscripten -- do NOT "modernise" it into a local, a unique_ptr, or anything
+// else with a destructor.
+//
+// Game::Run() ends in emscripten_set_main_loop(callback, 0, /*simulateInfiniteLoop=*/1), which the
+// Emscripten runtime implements as a raw JavaScript `throw 'unwind'`: the browser takes over and
+// calls the registered callback once per animation frame from then on. Both this project and CNA
+// compile with -fwasm-exceptions, under which the cleanup landing pad generated for a local with a
+// non-trivial destructor genuinely catches that foreign JS throw -- so a stack-allocated
+// MeshCraftApplication is destroyed for real at the emscripten_set_main_loop call site, before the
+// first tick. That tears down CNA's platform along with it, which quits SDL's video subsystem,
+// and the first window event the browser then delivers dies on a window whose subsystem is gone
+// ("SDL_GetWindowSize failed: Video subsystem has not been initialized") -- misread for a long
+// time as a canvas-sizing problem. See ../cna/docs/emscripten-mainloop-game-lifetime.md.
+//
+// A raw pointer has no landing pad, so the unwind cannot destroy it; and the `delete` is simply
+// never reached under Emscripten (the throw propagates out of Run()), which is exactly right for an
+// object that must live as long as the page. Native builds are unaffected: Run() returns normally
+// there and the delete happens at the same point the old local's destructor did.
+
 int main(int argc, char* argv[]) {
+#if !defined(__EMSCRIPTEN__)
+    // Left out of the Emscripten build on purpose: main() never returns there, so this can never
+    // do its job -- it could only fire at the wrong moment, during the unwind described above,
+    // blocking the browser's JS thread for up to 5s before the first frame.
     AiShutdownWaiter aiShutdownWaiter;
+#endif
     if (!checkBackendSupported()) return 1;
 
     std::string filePath;
@@ -106,25 +131,31 @@ int main(int argc, char* argv[]) {
     }
 
     if (benchmarkMode) {
-        MeshCraft::Application::MeshCraftApplication app(std::filesystem::path(filePath), /*benchmarkMode=*/true);
-        app.Run();
+        auto* app = new MeshCraft::Application::MeshCraftApplication(
+            std::filesystem::path(filePath), /*benchmarkMode=*/true);
+        app->Run();
+        delete app;
     } else if (!filePath.empty() && (!screenshotPath.empty() || !exportPath.empty())) {
-        MeshCraft::Application::MeshCraftApplication app(std::filesystem::path(filePath), screenshotPath, exportPath);
-        app.Run();
-        if ((!exportPath.empty() && app.exportFailed()) ||
-            (!screenshotPath.empty() && app.screenshotFailed()))
-            return 1;
+        auto* app = new MeshCraft::Application::MeshCraftApplication(
+            std::filesystem::path(filePath), screenshotPath, exportPath);
+        app->Run();
+        const bool failed = (!exportPath.empty() && app->exportFailed()) ||
+                            (!screenshotPath.empty() && app->screenshotFailed());
+        delete app;
+        if (failed) return 1;
     } else if (!filePath.empty()) {
         if (!std::filesystem::exists(filePath)) {
             std::cerr << "[MeshCraft] File not found: " << filePath << "\n";
             std::cerr << "[MeshCraft] Starting with empty scene.\n";
         }
         std::filesystem::path p{filePath};
-        MeshCraft::Application::MeshCraftApplication app(p);
-        app.Run();
+        auto* app = new MeshCraft::Application::MeshCraftApplication(p);
+        app->Run();
+        delete app;
     } else {
-        MeshCraft::Application::MeshCraftApplication app;
-        app.Run();
+        auto* app = new MeshCraft::Application::MeshCraftApplication();
+        app->Run();
+        delete app;
     }
     return 0;
 }
