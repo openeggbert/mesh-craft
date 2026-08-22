@@ -106,8 +106,14 @@ meshcraft_select_graphics_backend(
     MESH_CRAFT_GRAPHICS_BACKEND_UPPER)
 
 if(EMSCRIPTEN)
-    add_compile_options(-fwasm-exceptions)
-    add_link_options(-fwasm-exceptions)
+    # -sWASM_LEGACY_EXCEPTIONS=0 must match CNA, which sets it in its own root CMakeLists: it
+    # selects the standardized try_table exception ABI over Emscripten's still-default legacy
+    # `try`. Without it, MeshCraft's own objects and its third-party subtrees (lua54, imgui,
+    # manifold, tinygltf) are built on the legacy ABI while everything under CNA_dep uses the
+    # standardized one, and the browser refuses the linked module outright:
+    # "module uses a mix of legacy and new exception handling instructions".
+    add_compile_options(-fwasm-exceptions -sWASM_LEGACY_EXCEPTIONS=0)
+    add_link_options(-fwasm-exceptions -sWASM_LEGACY_EXCEPTIONS=0)
 endif()
 
 if(NOT MESH_CRAFT_GRAPHICS_BACKEND_UPPER MATCHES "^(SDL_RENDERER|EASYGL|BGFX|VULKAN|WEBGPU)$")
@@ -415,9 +421,14 @@ else()
     target_compile_options(lua54 PRIVATE /w)
 endif()
 
+# v3.3.0 and v3.3.1 do not compile with a current clang: optional<T&>::emplace calls a
+# this->construct() that specialization does not have, and since optional<T&> is a full
+# specialization the lookup is not deferred, so newer clang reports it even though nothing
+# instantiates it. v3.5.0 replaced that body with a placement-new that returns properly.
+# Found when the Emscripten build (emsdk 5.0.7) stopped on LuaScriptRunner.cpp.
 FetchContent_Declare(sol2
     GIT_REPOSITORY https://github.com/ThePhD/sol2.git
-    GIT_TAG        v3.3.0
+    GIT_TAG        v3.5.0
     GIT_SHALLOW    TRUE
 )
 FetchContent_MakeAvailable(sol2)
