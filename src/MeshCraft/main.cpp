@@ -130,6 +130,27 @@ int main(int argc, char* argv[]) {
         return 1;
     }
 
+#if defined(__EMSCRIPTEN__)
+    // Web builds only. A browser tab has no command line to pass a scene on, and the Open dialog
+    // can reach nothing but Emscripten's virtual filesystem -- whose entire contents are whatever
+    // CMakeLists.txt preloaded from test/ at build time (--preload-file ... @/test). So the page
+    // opened on an empty document and looked like it had failed to load anything. Open one of the
+    // bundled scenes instead, and one with real geometry and textures rather than a primitive.
+    //
+    // Deliberately only when nothing else was requested: --screenshot/--export/--benchmark all
+    // demand their own scene argument and are rejected above without one, so reaching here with
+    // an empty filePath means the plain interactive start.
+    if (filePath.empty()) {
+        constexpr const char* kWebStartupScene = "/test/medieval_castle.mc3.xml";
+        if (std::filesystem::exists(kWebStartupScene)) {
+            filePath = kWebStartupScene;
+        } else {
+            std::cerr << "[MeshCraft] Bundled startup scene missing from the virtual filesystem: "
+                      << kWebStartupScene << " — starting with an empty scene.\n";
+        }
+    }
+#endif
+
     if (benchmarkMode) {
         auto* app = new MeshCraft::Application::MeshCraftApplication(
             std::filesystem::path(filePath), /*benchmarkMode=*/true);
